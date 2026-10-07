@@ -77,3 +77,11 @@ valley sides rising at ~10°, measured from the valley axis (cheap; no wide rive
 
 `/code-review high` per `AGENTS.md`: another round only while a round finds a severe issue;
 redesign after 3.
+
+### Round 1 (9 findings: 3 severe)
+Fixed: trough flattened the central hill (now a fading trough, axis moved west); riffle phase
+not accumulated (now accumulated + curvature and riffle smoothed; max step 0.51 → 0.08); river
+crossed formation zones (0 samples in KEEP_CLEAR now); channel left its floodplain (cubic
+restoring term; max offset 27.2 m < 30 m); `tools/shot.mjs` tap/error handling; REACH sized
+to callers and allocation-free query; one river query per terrain vertex; tree crowns over water.
+Deferred: per-vertex bank colours are coarse on the far ring (moderate) → replaced by the W3 bake.
