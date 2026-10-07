@@ -242,3 +242,20 @@ Load time (5 paired runs): main median 2.86 s, W1 3.03 s (+170 ms).
 | 9 | light | Async wrapper with nothing to await | Sync IIFE; `shot.mjs` change reverted |
 
 Load time (5 paired runs): main median 2.80 s, W1 2.88 s (+85 ms; the far ring lost 6.7k triangles).
+
+### Post-redesign-2 review round 3 — stop
+
+9 findings. Severe ones mean a 4th round, so the workflow says **stop and redesign**. None of them are in the
+river geometry (the stitching held). They come from extents that are set in several places since the tile grew:
+
+| # | Sev. | Finding |
+|---|---|---|
+| 1 | severe | Sun shadow frustum (±0.65·SMW) misses the tile corners (needs ±0.703·SMW); corner trees unshadowed / edge streaks in the bake |
+| 2 | moderate | Far ring still built with yOff −0.9 (left over from layering): 0.9 m ramp round the whole apron, FAR bushes float 0.9 m |
+| 3 | severe | Pan clamp only bounds target x/z; vertical drags lift target y without limit (reproduced: y 8 → 94 m in 60 frames) |
+| 4 | moderate | AO/mist rings clamp to the tile's height grid within 40 m of the edge |
+| 5 | light | Render-check reachability ignores lowerBetaLimit and target y |
+| 6 | moderate | Reflection canvas still uses a canvas blur filter (the context-loss risk), now at 1536 px |
+| 7 | light | River mask builds unused mipmaps; far line shimmers when minified |
+| 8 | light | `updateCoordinateHeights()` on the tile is unused load work |
+| 9 | light | Far-line probes beyond the far ring (±1300 m) project at y = 0 |
