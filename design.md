@@ -214,6 +214,49 @@ flat, the fallback is a *very subtle* depth of field at the closest zoom only.
 
 ---
 
+## 6c. Water: the lowland meander
+
+**The one river type we build first** (decided Oct 2026). It's the Goldbach at Austerlitz and
+the most common Napoleonic battlefield stream. Other types (stony brook, wide slow river, braided
+gravel) come later and reuse the same system. Technique: `research/stylized-water.md`.
+
+### Shape
+| Element | Rule |
+|---|---|
+| Width | 5–8 m of water, varying along the course; wider in straight reaches, narrower at bends |
+| Bends | Meanders that **turn back on themselves**; each bend differs in size and spacing (about 11 widths apart, ±35%) |
+| Pools | At each bend apex: deep, calm, **dark** water |
+| Riffles | Between bends: shallow, fast, **light** water with foam. They are the **fords** (gameplay crossings) |
+| Banks | Outside of a bend: a steep **cut bank** of bare earth. Inside: a shallow, pale **gravel point bar** |
+| Valley | The stream winds through a **flat floodplain meadow** (~80 m) whose sides rise gently into the surrounding land; it never cuts canyons and never crosses hills |
+| Water level | Only ever drops downstream; water never floats above its banks |
+
+### What sits where
+- **Nothing in the water except stones.** No trees, bushes, wheat, buildings or units stand in
+  the water or on the wet bank. Stones and boulders are the one exception (in riffles and at
+  the foot of cut banks), where they make foam.
+- **Along the banks:** willows and alders in a broken line, reeds and cattails at the water's
+  edge, damp darker grass on the floodplain.
+- **On the floodplain:** open meadow, scattered trees. Fields and villages sit on the valley
+  sides, above the floodplain.
+- **Formation zones, the central hill and village sites are protected:** the valley is placed
+  around them, never through them.
+
+### Look (painted, top-down)
+- **Depth reads as value:** pale turquoise shallows → mid teal → dark deep pools, in three
+  painted bands with grain-broken edges.
+- **Banks are painted shapes:** a dark wet line at the water, bare earth on cut banks, pale gravel
+  on bars, reeds as small painted accents.
+- **Life on the surface:** flow strokes along the current (stretched on riffles, bunched in pools),
+  broken white foam lines on riffles and around stones, golden sun glitter, crisp tree reflections
+  in pools.
+- **Seasons:** autumn leaves drift in pools; in winter the stream freezes pale with snowy edges
+  (§4b).
+- **Readable from 260 m:** at the widest zoom the river must still read as one continuous
+  winding blue-teal line, with no dashes or gaps.
+
+---
+
 ## 7. Brush library
 
 The style's most important asset, and where the craft goes.

@@ -100,3 +100,40 @@ back (θ₀ 1.5, cap 1.85 → 225 backtracking samples, 31 near the scene); far 
 (coarse trench → 0/1090 hidden); trough could raise land (clamped); shot.mjs hang/cleanup/load
 wait; dead D/v stores (`boxSmooth`); stale comments and this plan. Willows inside tight bends.
 Load time 2.8–3.1 s.
+
+### Round 3 (10 findings: 2 severe) → STOP AND REDESIGN (workflow limit reached)
+Severe: wheat in the water (a scatter loop with no river check); floodplain level keyed by
+world z let a doubled-back bend sit below its own water. Root cause: the river was retrofitted
+into a scene with hand-placed features, and every scatter loop carried its own exclusion rule,
+so each fix that moved the river collided with the next hand-placed feature.
+
+## Redesign (after round 3)
+
+Target fixed in `design.md` §6c: **the lowland meander**. Rule: **nothing in the water except
+stones.**
+
+1. **One placement test** `placeable(x, z, r, kind)`: rejects anything within the wet channel +
+   bank (+ its own radius) unless `kind === 'stone'`, and rejects formation zones. Every scatter
+   loop (trees, willows, bushes, plants, wheat, far woods) goes through it; no loop keeps its
+   own river rule. The unused village and its rules are removed (villages are not drawn yet).
+2. **Floodplain level from the nearest river sample** near the channel (bank ≥ local water by
+   construction), blended into the per-z level farther out. Doubled-back bends are safe by design.
+3. **Far ring without a trench**: the water ribbon beyond the detailed tile sits on the far-ring
+   surface (shared `farRingH()` helper), and its edge columns dive below it.
+4. **Checks that fail**: `tools/river-check.js` asserts thresholds (non-zero exit), including
+   "no scattered instance in the water" across every scatter group; it reuses the page's helpers
+   instead of copying formulas.
+5. **Same-marker timing** on main and branch for the load-time criterion.
+
+The review count restarts at round 1 after this redesign.
+
+### Redesign result
+- `placeable()` is the only placement rule (12 scatter call sites); the village and its rules are
+  gone; berry bushes now appear everywhere at 1/3.
+- Floodplain follows the nearest pass's water level near the channel.
+- Far ring: no trench; the ribbon is draped on the far surface per vertex (a row straddling the
+  tile edge previously produced 10 NaN vertices that culled the whole river; now checked).
+- `tools/river-check.js` asserts 10 limits and fails the run: all pass.
+- Load time with the same marker, interleaved runs: main 2.78–2.79 s, branch 2.86–2.89 s (≈ +90 ms).
+
+Review count restarts here.

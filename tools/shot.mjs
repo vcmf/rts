@@ -24,7 +24,7 @@ let chrome, ws, pageErrors = 0
 // close the socket, stop Chrome, wait for it to exit (it flushes the profile on the way out), then remove the profile
 async function cleanup() {
   try { ws?.close() } catch {}
-  if (chrome && chrome.exitCode === null) {
+  if (chrome && chrome.exitCode === null && chrome.signalCode === null) {   // already dead from a signal: 'exit' has fired
     const exited = new Promise(r => chrome.once('exit', r))
     chrome.kill()
     await Promise.race([exited, sleep(5000)])

@@ -107,7 +107,7 @@ function baseH(x,z){
 const J0=x=>{let s=0;for(let i=0;i<64;i++){const t=(i+0.5)/64*Math.PI;s+=Math.cos(x*Math.sin(t));}return s/64;};   // Bessel J0: sinuosity = 1/J0(theta0)
 const RIVER=(()=>{
   const P={id:'goldbach',W0:6,D0:1.0,bankH:1.1,floodplainW:84,beltW:58,valleySlope:0.18,valleyFade:22,theta0:1.5,Js:0.03,Jf:0.02,v0:0.6,seed:7,z0:-1350,z1:1350};
-  // gentle valley axis west of the hill and the formation zones; checked at load by riverClearance()
+  // gentle valley axis west of the hill and the formation zones (verified by tools/river-check.js)
   // (radius > 1 km, so the frame never folds)
   const axisX=z=>-108+8*Math.sin(z*0.0035+0.6)+3*Math.sin(z*0.011);
   const axisD=z=>8*0.0035*Math.cos(z*0.0035+0.6)+3*0.011*Math.cos(z*0.011);
@@ -166,9 +166,13 @@ const RIVER=(()=>{
   for(let b=1;b<nb;b++)if(!isFinite(fp[b]))fp[b]=fp[b-1];for(let b=nb-2;b>=0;b--)if(!isFinite(fp[b]))fp[b]=fp[b+1];
   // land h lowered toward the floodplain: full strength inside it, fading to none valleyFade m beyond
   // (a fade, not a plane, so neighbouring hills keep their shape). Never raises h.
-  C.trough=(x,z,h)=>{const zc=Math.max(P.z0,Math.min(P.z1,z)),d=Math.abs(x-axisX(zc))/Math.hypot(1,axisD(zc)),half=P.floodplainW/2;
+  // Near the channel (q = riverQuery) the floodplain sits on the NEAREST pass's own water level, so
+  // a bend that doubles back can never have banks below its water; farther out, the per-z level.
+  C.trough=(x,z,h,q)=>{const zc=Math.max(P.z0,Math.min(P.z1,z)),d=Math.abs(x-axisX(zc))/Math.hypot(1,axisD(zc)),half=P.floodplainW/2;
     if(d>half+P.valleyFade)return h;
-    const t=Math.max(0,Math.min(nb-1.001,(z-P.z0)/FZ)),b=Math.floor(t),f=t-b,lv=fp[b]+(fp[b+1]-fp[b])*f;
+    const t=Math.max(0,Math.min(nb-1.001,(z-P.z0)/FZ)),b=Math.floor(t),f=t-b;
+    let lv=fp[b]+(fp[b+1]-fp[b])*f;
+    if(q){const wn=1-sstep(0.5*C.REACH,C.REACH,q.dist);lv=lv+(lerpA(C.zw,q)+P.bankH-lv)*wn;}
     const v=lv+Math.max(0,d-half)*P.valleySlope;                        // flat floodplain, valley sides rising at ~10°
     if(v>=h)return h;
     const w=1-sstep(half,half+P.valleyFade,d);
@@ -181,7 +185,6 @@ const RIVER=(()=>{
     for(let cx=Math.floor(x0/CELL);cx<=Math.floor(x1/CELL);cx++)for(let cz=Math.floor(z0/CELL);cz<=Math.floor(z1/CELL);cz++){
       const k=key(cx,cz);let b=grid.get(k);if(!b)grid.set(k,b=[]);b.push(i);}}
   C.grid=grid;C.CELL=CELL;C.REACH=REACH;C.key=key;C.axisX=axisX;
-  C.valleyReach=z=>Math.abs(axisX(z))-P.floodplainW/2-P.valleyFade;   // how far east of x=0 the trough stops (negative = west)
   return C;
 })();
 // nearest river segment within REACH: {i,t,n (signed, + = left of flow),dist,s} or null
@@ -197,17 +200,17 @@ function riverQuery(x,z){
 const lerpA=(arr,q)=>arr[q.i]+(arr[q.i+1]-arr[q.i])*q.t;
 // valley + floodplain + symmetric channel carve (W1); the asymmetric cut bank / point bar is W2
 function carve(x,z,q){                                         // q = riverQuery(x,z), passed in so callers query once
-  const h=RIVER.trough(x,z,baseH(x,z));if(!q)return h;            // valley trough only lowers, never raises hills
+  const h=RIVER.trough(x,z,baseH(x,z),q);if(!q)return h;          // valley trough only lowers, never raises hills
   const hw=lerpA(RIVER.W,q)/2,bw=0.7*hw,m=q.dist,zw=lerpA(RIVER.zw,q);
   if(m>hw+bw)return h;
   const g=m<hw?-lerpA(RIVER.D,q)*(1-(m/hw)**2):RIVER.P.bankH*sstep(0,1,(m-hw)/bw);
   return Math.min(h,zw+g);
 }
 function H(x,z){return carve(x,z,riverQuery(x,z));}
+// bank distance in half-widths (≤0 = inside the channel), for terrain colouring
 const bandOf=q=>{if(!q)return 8;const hw=lerpA(RIVER.W,q)/2;return Math.min(8,(q.dist-hw)/hw);};
 // "is (x,z) within d m of the water's edge (+6 m, the old stream half-width convention)?"
 const nearStream=(x,z,d)=>{const q=riverQuery(x,z);return !!q&&q.dist<lerpA(RIVER.W,q)/2+(d-6);};
-// bank distance in half-widths (≤0 = inside the channel), for terrain colouring
 
 /* =========================================================================
    PAINT GRAIN TEXTURE (tileable, 512²)
@@ -396,13 +399,20 @@ void main(){vec3 N=normalize(vN);vec4 lm=LM(vW);
   vec3 c=paint(albedo(vW,N),N,vW,occ,0.12,1.0,sh);
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}`;
 const terrainMat=mat('terrain',TER_VS,TER_FS,{attributes:['position','normal','aRiver']});
+// the far ring's rendered surface (bilinear over its 15 m grid); Infinity inside the detailed tile
+let FAR_RING=null;
+function farRingH(x,z){const F=FAR_RING;if(!F||(Math.abs(x)<F.inner&&Math.abs(z)<F.inner))return Infinity;
+  const fx=Math.max(0,Math.min(F.sub-1e-3,(x+F.size/2)/F.cell)),fz=Math.max(0,Math.min(F.sub-1e-3,(z+F.size/2)/F.cell)),gx=Math.floor(fx),gz=Math.floor(fz),u=fx-gx,v=fz-gz,N=F.N,h=F.hg;
+  return h[gz*N+gx]*(1-u)*(1-v)+h[gz*N+gx+1]*u*(1-v)+h[(gz+1)*N+gx]*(1-u)*v+h[(gz+1)*N+gx+1]*u*v;}
 function buildTerrain(size,sub,yOff){
   const g=B.MeshBuilder.CreateGround('t',{width:size,height:size,subdivisions:sub,updatable:true},scene);
   const p=g.getVerticesData(B.VertexBuffer.PositionKind);const inner=SMW/2-14;
   const rv=new Float32Array(p.length/3);
-  const coarse=size>SMW;   // far ring: 15 m vertices can't resolve a 6 m channel, so open a wide shallow trench below the water
   for(let i=0;i<p.length;i+=3){const q=riverQuery(p[i],p[i+2]);p[i+1]=carve(p[i],p[i+2],q)+yOff;rv[i/3]=bandOf(q);
-    if(coarse&&q&&q.dist<lerpA(RIVER.W,q)/2+16)p[i+1]=Math.min(p[i+1],lerpA(RIVER.zw,q)-0.8);if(size>SMW&&Math.abs(p[i])<inner&&Math.abs(p[i+2])<inner)p[i+1]-=25;}   // far ring sinks under the detailed terrain
+    if(size>SMW&&Math.abs(p[i])<inner&&Math.abs(p[i+2])<inner)p[i+1]-=25;}   // far ring sinks under the detailed terrain
+  if(size>SMW){const N=sub+1,cell=size/sub,hg=new Float32Array(N*N);   // far-ring height grid, read by farRingH()
+    for(let i=0;i<p.length;i+=3){const xi=Math.round((p[i]+size/2)/cell),zi=Math.round((p[i+2]+size/2)/cell);hg[zi*N+xi]=p[i+1];}
+    FAR_RING={size,sub,cell,N,hg,inner};}
   g.updateVerticesData(B.VertexBuffer.PositionKind,p);const n=[];B.VertexData.ComputeNormals(p,g.getIndices(),n);g.updateVerticesData(B.VertexBuffer.NormalKind,n);
   g.setVerticesData('aRiver',rv,false,1);
   g.material=terrainMat;return g;
@@ -466,10 +476,15 @@ const reflTrees=[];const reflAdd=(x,z,r)=>{if(nearStream(x,z,26))reflTrees.push(
 let waterMat;
 {const pos=[],uv=[],dep=[],idx=[],C=RIVER,COLS=12;let k=0;
  for(let i=0;i<C.n;i+=(Math.abs(C.pz[i])<360&&Math.abs(C.px[i])<360?1:4)){
-   const hw=C.W[i]/2,y=C.zw[i],nx=-C.tz[i],nz=C.tx[i];                // left normal of the flow
+   const hw=C.W[i]/2,nx=-C.tz[i],nz=C.tx[i];                         // left normal of the flow
+   const y=C.zw[i];
    for(let c=0;c<=COLS;c++){const a=(c/COLS*2-1)*hw*1.35,x=C.px[i]+nx*a,zz=C.pz[i]+nz*a;
-     const h=H(x,zz),yy=Math.abs(a)>hw?Math.min(y,h-0.35):y;           // outer columns dive under the bank: terrain cuts the shoreline
-     pos.push(x,yy,zz);uv.push(a,C.s[i]);dep.push(y-h);}
+     // detailed tile: flat water at zw, outer columns dive under the carved bank.
+     // far ring (15 m grid, too coarse to hold a channel): the ribbon is draped on its surface, so it can never float.
+     // Decided per VERTEX: a row can straddle the tile edge.
+     const far=Math.abs(x)>=SMW/2||Math.abs(zz)>=SMW/2;
+     const h=far?farRingH(x,zz):H(x,zz),yy=far?h+(Math.abs(a)>hw?-0.35:0.12):(Math.abs(a)>hw?Math.min(y,h-0.35):y);
+     pos.push(x,yy,zz);uv.push(a,C.s[i]);dep.push(far?0.9:y-h);}
    if(k)for(let c=0;c<COLS;c++){const a=(k-1)*(COLS+1)+c,b=k*(COLS+1)+c;idx.push(a,b,a+1,a+1,b,b+1);}
    k++;}
  const m=new B.Mesh('water',scene),vd=new B.VertexData();vd.positions=pos;vd.uvs=uv;vd.indices=idx;const n=[];B.VertexData.ComputeNormals(pos,idx,n);vd.normals=n;vd.applyToMesh(m);
@@ -585,14 +600,19 @@ function place(model,material,items){            // items: [x,z,scale,yaw,tint,(
 
 /* ---------- scattering: composition follows the north star ---------- */
 const R=mulberry(77),rr=()=>R();
-const HOUSES=[[-178,22,0.3],[-188,10,-0.2],[-176,40,0.9],[-194,31,0.1]];   // village west of the valley (not drawn yet)
-const nearVillage=(x,z,d)=>HOUSES.some(([hx,hz])=>(hx-x)**2+(hz-z)**2<d*d);
 const KEEP_CLEAR=(x,z)=>(Math.abs(x+5)<20&&z>-44&&z<-2)||(z>7&&z<19&&x>-14&&x<26)||((x-34)**2+(z+24)**2<160);  // formations
+// THE placement rule (design.md §6c): nothing in the water or on the wet bank except stones,
+// nothing in the formation zones. r = the object's footprint/crown radius. Every scatter loop uses it.
+function placeable(x,z,r=0,kind=''){
+  if(KEEP_CLEAR(x,z))return false;
+  if(kind==='stone')return true;
+  const q=riverQuery(x,z);return !q||q.dist>=lerpA(RIVER.W,q)/2*1.7+r;
+}
 const groups={};const add=(model,item)=>(groups[model]=groups[model]||[]).push(item);
 const TREE_MODELS=['CommonTree_1','CommonTree_2','CommonTree_3','CommonTree_4','CommonTree_5'];
 const clusters=[[-62,-22,7],[-128,4,9],[-74,58,6],[42,56,8],[82,32,6],[-22,72,7],[112,-12,5],[-150,62,8],[150,72,7],[-42,122,10],[62,112,8],[18,-80,6],[-95,-70,7],[120,-70,6]];
 for(const [cx,cz,n] of clusters)for(let i=0;i<n;i++){
-  const x=cx+(rr()-0.5)*42,z=cz+(rr()-0.5)*32;if(nearStream(x,z,13)||nearVillage(x,z,10)||KEEP_CLEAR(x,z))continue;   // crowns (r up to ~5 m) must not overhang the water
+  const x=cx+(rr()-0.5)*42,z=cz+(rr()-0.5)*32;if(!placeable(x,z,5))continue;
   const birch=rr()<0.22,mdl=birch?'BirchTree_'+(1+Math.floor(rr()*5)):TREE_MODELS[Math.floor(rr()*5)],s=3.4+rr()*1.4;
   add(mdl,[x,z,s,rr()*6.28,rr()]);
   const M=window.NATURE[mdl];smTree(x,z,(M.max[1]*0.62)*s,(Math.max(M.max[0]-M.min[0],M.max[2]-M.min[2])*0.45)*s);
@@ -602,34 +622,34 @@ for(let i=0,step=0;i<RIVER.n;i+=step){                     // willows follow the
   step=Math.round((7+rr()*9)/(RIVER.P.W0/4));const C=RIVER;
   if(Math.abs(C.px[i])>175||Math.abs(C.pz[i])>175||rr()<0.45)continue;
   const side=rr()<0.5?-1:1,off=C.W[i]/2+3+rr()*4,x=C.px[i]-C.tz[i]*side*off,z=C.pz[i]+C.tx[i]*side*off;
-  const q=riverQuery(x,z);if(nearVillage(x,z,9)||(q&&q.dist<lerpA(C.W,q)/2+2.5))continue;   // inside a tight bend the nearest water may be another loop
+  if(!placeable(x,z,2.5))continue;
   const mdl='Willow_'+(1+Math.floor(rr()*3)),s=3.6+rr()*1.2;add(mdl,[x,z,s,rr()*6.28,0.2+rr()*0.5]);
   const M=window.NATURE[mdl];smTree(x,z,M.max[1]*0.6*s,(M.max[0]-M.min[0])*0.45*s);
 }
-for(let i=0;i<5;i++){const x=150+(rr()-0.5)*30,z=-40+(rr()-0.5)*30;add('PineTree_'+(1+Math.floor(rr()*3)),[x,z,3.6+rr(),rr()*6.28,rr()]);smTree(x,z,6,3.5);}
-for(let i=0;i<90;i++){                                       // bushes, berries near the village
-  const a=rr()*6.28,r=14+rr()*120,x=Math.cos(a)*r+8,z=Math.sin(a)*r;if(nearStream(x,z,7)||KEEP_CLEAR(x,z)||nearVillage(x,z,7))continue;
-  const s=1.8+rr()*1.4;add(nearVillage(x,z,40)&&rr()<0.5?'BushBerries_'+(1+Math.floor(rr()*2)):'Bush_'+(1+Math.floor(rr()*2)),[x,z,s,rr()*6.28,rr()]);smBlob(x,z,s*0.6);
+for(let i=0;i<5;i++){const x=150+(rr()-0.5)*30,z=-40+(rr()-0.5)*30;if(!placeable(x,z,4))continue;add('PineTree_'+(1+Math.floor(rr()*3)),[x,z,3.6+rr(),rr()*6.28,rr()]);smTree(x,z,6,3.5);}
+for(let i=0;i<90;i++){                                       // bushes, a third of them with berries
+  const a=rr()*6.28,r=14+rr()*120,x=Math.cos(a)*r+8,z=Math.sin(a)*r,s=1.8+rr()*1.4;if(!placeable(x,z,s*0.7))continue;
+  add(rr()<0.33?'BushBerries_'+(1+Math.floor(rr()*2)):'Bush_'+(1+Math.floor(rr()*2)),[x,z,s,rr()*6.28,rr()]);smBlob(x,z,s*0.6);
 }
-for(let i=0;i<46;i++){const a=rr()*6.28,r=10+rr()*110,x=Math.cos(a)*r,z=Math.sin(a)*r;if(nearStream(x,z,6)||KEEP_CLEAR(x,z))continue;
+for(let i=0;i<46;i++){const a=rr()*6.28,r=10+rr()*110,x=Math.cos(a)*r,z=Math.sin(a)*r;if(!placeable(x,z,0,'stone'))continue;
   const s=1.6+rr()*2.4;add(rr()<0.7?'Rock_Moss_'+(1+Math.floor(rr()*4)):'Rock_'+(1+Math.floor(rr()*2)),[x,z,s,rr()*6.28,rr(),-0.15*s]);smBlob(x,z,s*0.35);}
-for(let i=0;i<5;i++){const x=-20+(rr()-0.5)*120,z=60+(rr()-0.5)*80;if(nearStream(x,z,8))continue;add(i%2?'TreeStump':'WoodLog_Moss',[x,z,2.2,rr()*6.28,rr()]);}
+for(let i=0;i<5;i++){const x=-20+(rr()-0.5)*120,z=60+(rr()-0.5)*80;if(!placeable(x,z,1.5))continue;add(i%2?'TreeStump':'WoodLog_Moss',[x,z,2.2,rr()*6.28,rr()]);}
 // grass tufts & flowers over the whole near field, densest around the hill
 for(let i=0;i<4200;i++){
   const a=rr()*6.28,r=4+Math.pow(rr(),0.8)*175,x=Math.cos(a)*r,z=Math.sin(a)*r*0.9+4;
-  if(nearStream(x,z,6.5)||KEEP_CLEAR(x,z)||nearVillage(x,z,6))continue;
+  if(!placeable(x,z,0.5))continue;
   const flowery=fbm(x*0.03+4,z*0.03-2)>0.58,k=rr();
   const mdl=flowery&&k<0.5?'Flowers':k<0.88?'Grass_Short':'Plant_1';
   add(mdl,[x,z,mdl==='Plant_1'?1.3:mdl==='Flowers'?1.4:1.6+rr()*0.8,rr()*6.28,rr()]);
 }
-// a wheat field by the village
-for(let u=0;u<46;u+=1.25)for(let v=0;v<22;v+=1.3){const x=-128+u*0.95+v*0.25,z=-34+v-u*0.12;if(rr()<0.08)continue;add('Wheat',[x+(rr()-0.5)*0.5,z+(rr()-0.5)*0.5,1.5+rr()*0.4,rr()*6.28,rr()]);}
+// a wheat field west of the hill (clipped by the placement rule where the floodplain reaches it)
+for(let u=0;u<46;u+=1.25)for(let v=0;v<22;v+=1.3){const x=-128+u*0.95+v*0.25+(rr()-0.5)*0.5,z=-34+v-u*0.12+(rr()-0.5)*0.5;if(rr()<0.08||!placeable(x,z,0.5))continue;add('Wheat',[x,z,1.5+rr()*0.4,rr()*6.28,rr()]);}
 // far woods & hedgerows from cheap bush crowns
 const FAR=[];
 for(let k=-8;k<=8;k++)for(let t=-560;t<=560;t+=6){const qx=k*70+(hash(k,t)-0.5)*2,qy=t,x=0.8*qx-0.6*qy,z=0.6*qx+0.8*qy,r=Math.hypot(x,z);
-  if(r<190||r>640||hash(k*7,Math.floor(t/60))<0.35||nearStream(x,z,11))continue;FAR.push([x,z,3.6+hash(k,t*3)*2.0,hash(t,k)*6.28,hash(k,t)]);}
+  if(r<190||r>640||hash(k*7,Math.floor(t/60))<0.35||!placeable(x,z,6))continue;FAR.push([x,z,3.6+hash(k,t*3)*2.0,hash(t,k)*6.28,hash(k,t)]);}
 for(let w=0;w<20;w++){const a=hash(w,51)*6.283,r=230+hash(w,52)*320,cx=Math.cos(a)*r,cz=Math.sin(a)*r;
-  for(let i=0;i<34;i++){const x=cx+(hash(w,i)-0.5)*80,z=cz+(hash(i,w)-0.5)*55;if(nearStream(x,z,11))continue;FAR.push([x,z,5+hash(i+w,9)*3,hash(i,w*3)*6.28,hash(w,i*2)]);}}
+  for(let i=0;i<34;i++){const x=cx+(hash(w,i)-0.5)*80,z=cz+(hash(i,w)-0.5)*55;if(!placeable(x,z,7))continue;FAR.push([x,z,5+hash(i+w,9)*3,hash(i,w*3)*6.28,hash(w,i*2)]);}}
 for(const [k,items] of Object.entries(groups)){
   const material=/Grass|Flowers|Plant_1|Wheat/.test(k)?grassMat:/Birch/.test(k)?birchMat:/Pine/.test(k)?pineMat:treeMat;place(k,material,items);}
 place('Bush_1',farMat,FAR.filter((_,i)=>i%4===0));place('Bush_2',farMat,FAR.filter((_,i)=>i%4===2));
