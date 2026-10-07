@@ -282,9 +282,10 @@ const STREAM=[];for(let z=TZ;z>=STREAM_Z0;z-=5)STREAM.push([xs(z),z]);
 
 function bakeHachures(){
   // Lehmann: strokes start on contour rows (every DH m), run downhill to the next row; width grows with slope
-  const DH=3,SP=3.6,occC=SP*0.8,ow=Math.ceil(2*MX/occC)+1,oh=Math.ceil(2*MZ/occC)+1,occ=new Int32Array(ow*oh).fill(-1),ptsX=[],ptsZ=[];
+  // one accepted start per occupancy cell; the 2.95 m reject radius spans two cells, so search 5×5
+  const DH=3,SP=3.6,occC=SP*0.82/Math.SQRT2,ow=Math.ceil(2*MX/occC)+1,oh=Math.ceil(2*MZ/occC)+1,occ=new Int32Array(ow*oh).fill(-1),ptsX=[],ptsZ=[];
   const near=(x,z)=>{const ci=Math.floor((x+MX)/occC),cj=Math.floor((z+MZ)/occC);
-    for(let b=-1;b<=1;b++)for(let a=-1;a<=1;a++){const ii=ci+a,jj=cj+b;if(ii<0||jj<0||ii>=ow||jj>=oh)continue;const k=occ[jj*ow+ii];if(k>=0&&Math.hypot(ptsX[k]-x,ptsZ[k]-z)<SP*0.82)return true;}
+    for(let b=-2;b<=2;b++)for(let a=-2;a<=2;a++){const ii=ci+a,jj=cj+b;if(ii<0||jj<0||ii>=ow||jj>=oh)continue;const k=occ[jj*ow+ii];if(k>=0&&Math.hypot(ptsX[k]-x,ptsZ[k]-z)<SP*0.82)return true;}
     occ[cj*ow+ci]=ptsX.length;ptsX.push(x);ptsZ.push(z);return false;};
   const i0=Math.round((TX-MX)/CELL),j0=Math.round((TZ-MZ)/CELL),ni=Math.round(2*MX/CELL),nj=Math.round(2*MZ/CELL);
   const starts=[];
@@ -493,7 +494,7 @@ void main(){
   inst=aInst;
   #endif
   float s=clamp((uSprout-inst.y*0.55)/0.45,0.0,1.0);
-  s=1.0+2.7*pow(s-1.0,3.0)+1.7*pow(s-1.0,2.0);
+  float q=s-1.0;s=1.0+2.7*q*q*q+1.7*q*q;   /* back-ease; pow is undefined for a negative base */
   vec3 p=position*vec3(1.0,max(s,0.0),1.0)*mix(0.6,1.0,clamp(s,0.0,1.0));
   vec4 w=finalWorld*vec4(p,1.0);w.y+=inst.x*uRise;
   vec3 sc=vec3(length(finalWorld[0].xyz),length(finalWorld[1].xyz),length(finalWorld[2].xyz));
@@ -561,7 +562,7 @@ void main(){
   #ifdef INSTANCES
   inf=aInfo;
   #endif
-  float s=clamp((uStand-inf.x*0.4)/0.6,0.0,1.0);s=1.0+2.7*pow(s-1.0,3.0)+1.7*pow(s-1.0,2.0);
+  float s=clamp((uStand-inf.x*0.4)/0.6,0.0,1.0);float q=s-1.0;s=1.0+2.7*q*q*q+1.7*q*q;
   float step12=floor(uTime*12.0+inf.x*20.0);
   float bob=inf.y*abs(sin(step12*0.9))*0.07;
   vec3 p=position;p.y=p.y*max(s,0.0)+bob*s;
@@ -850,14 +851,14 @@ function drawSmoke(now,mapA,worldA){
 }
 function textAlong(P,text,font,col,off){
   // lay letters along a projected polyline (water names)
-  const S=P.map(p=>P2(p[0]+off,p[1]));if(S[S.length-1][1]<S[0][1])S.reverse();
+  const S=P.map(p=>P2(p[0]+off,p[1]));if(offView(S))return;if(S[S.length-1][1]<S[0][1])S.reverse();
   ink.font=font;ink.fillStyle=col;ink.textBaseline='middle';const ws=[...text].map(ch=>ink.measureText(ch).width+3.5),tot=ws.reduce((a,b)=>a+b,0);
   const cum=[0];for(let i=1;i<S.length;i++)cum.push(cum[i-1]+Math.hypot(S[i][0]-S[i-1][0],S[i][1]-S[i-1][1]));if(cum[cum.length-1]<tot+20)return;
   let s=cum[cum.length-1]/2-tot/2;
   [...text].forEach((ch,k)=>{const m=s+ws[k]/2;let i=1;while(i<cum.length-1&&cum[i]<m)i++;const t=(m-cum[i-1])/Math.max(1e-3,cum[i]-cum[i-1]),x=lerp(S[i-1][0],S[i][0],t),y=lerp(S[i-1][1],S[i][1],t),a=Math.atan2(S[i][1]-S[i-1][1],S[i][0]-S[i-1][0]);
     ink.save();ink.translate(x,y);ink.rotate(a);ink.fillText(ch,-ws[k]/2+1.75,0);ink.restore();s+=ws[k];});
 }
-function label(x,z,txt,font,col,dx=0,dy=0,ls='0px',align='left'){const p=P2(x,z);ink.font=font;ink.letterSpacing=ls;ink.fillStyle=col;ink.textAlign=align;ink.textBaseline='middle';ink.fillText(txt,p[0]+dx,p[1]+dy);ink.letterSpacing='0px';ink.textAlign='left';}
+function label(x,z,txt,font,col,dx=0,dy=0,ls='0px',align='left'){const p=P2(x,z);if(behind(p))return;ink.font=font;ink.letterSpacing=ls;ink.fillStyle=col;ink.textAlign=align;ink.textBaseline='middle';ink.fillText(txt,p[0]+dx,p[1]+dy);ink.letterSpacing='0px';ink.textAlign='left';}
 const SEG_GOLD=STREAM.filter(p=>p[1]<-330&&p[1]>-700);
 function drawNames(a){
   if(!SHOW_NAMES||a<0.01)return;ink.globalAlpha=a;const c='#2b2824';
@@ -873,7 +874,7 @@ function drawCorpsLabels(a){
   if(a<0.01)return;const groups={};
   for(const u of UNITS){if(u.gone)continue;const k=u.corps==='ART4'?null:u.corps;if(!k)continue;(groups[k]=groups[k]||[]).push(u);}
   ink.font='500 10px "JetBrains Mono"';const placed=[];
-  const L=Object.keys(groups).map(k=>{const us=groups[k];let minY=1e9,sx=0;for(const u of us){const p=P2(u.x,u.z);sx+=p[0];minY=Math.min(minY,p[1]);}return{k,us,sx:sx/us.length,minY};}).sort((a,b)=>a.minY-b.minY);
+  const L=Object.keys(groups).map(k=>{const us=groups[k];let minY=1e9,sx=0,back=false;for(const u of us){const p=P2(u.x,u.z);back=back||behind(p);sx+=p[0];minY=Math.min(minY,p[1]);}return{k,us,sx:sx/us.length,minY,back};}).filter(g=>!g.back).sort((a,b)=>a.minY-b.minY);
   for(const{k,us,sx,minY}of L){const cp=CORPS[k],t1=cp.title.toUpperCase(),t2=' · '+cp.leader.toUpperCase();
     ink.globalAlpha=a;ink.letterSpacing='0.1em';const w1=ink.measureText(t1).width,w2=ink.measureText(t2).width,x0=sx-(w1+w2+10)/2;
     let ly=minY-30;for(let tries=0;tries<8;tries++){const hit=placed.some(r=>x0-5<r[2]&&x0+w1+w2+15>r[0]&&ly-8<r[3]&&ly+8>r[1]);if(!hit)break;ly-=18;}
@@ -883,22 +884,23 @@ function drawCorpsLabels(a){
     if(cp.side==='AU'){ink.strokeStyle=css(SIDES[2].e);ink.lineWidth=1;ink.strokeRect(x0,ly-3.5,7,7);}
     ink.fillStyle='#211f1c';ink.textBaseline='middle';ink.fillText(t1,x0+11,ly+0.5);ink.fillStyle='#5f5a52';ink.fillText(t2,x0+11+w1,ly+0.5);
     ink.strokeStyle='rgba(33,31,28,0.55)';ink.lineWidth=0.7;ink.beginPath();ink.moveTo(sx,ly+8);ink.lineTo(sx,minY-6);ink.stroke();ink.letterSpacing='0px';}
-  for(const h of HQ){const p=P2(h.x,h.z);ink.globalAlpha=a;ink.strokeStyle='#211f1c';ink.lineWidth=1;ink.beginPath();ink.moveTo(p[0],p[1]);ink.lineTo(p[0],p[1]-22);ink.stroke();
+  for(const h of HQ){const p=P2(h.x,h.z);if(behind(p))continue;ink.globalAlpha=a;ink.strokeStyle='#211f1c';ink.lineWidth=1;ink.beginPath();ink.moveTo(p[0],p[1]);ink.lineTo(p[0],p[1]-22);ink.stroke();
     ink.fillStyle=css(SIDES[h.side].c);ink.fillRect(p[0],p[1]-22,11,7);ink.font='500 9px "JetBrains Mono"';ink.letterSpacing='0.12em';ink.fillStyle='#211f1c';ink.fillText(h.name,p[0]+14,p[1]-18);ink.letterSpacing='0px';}
   ink.globalAlpha=1;
 }
 function drawNeatline(a){
   if(a<0.01)return;ink.globalAlpha=a;ink.strokeStyle='#2b2824';
-  const ring=(o)=>{const P=[[-MX-o,-MZ-o],[MX+o,-MZ-o],[MX+o,MZ+o],[-MX-o,MZ+o]];ink.beginPath();for(let s=0;s<4;s++){const a0=P[s],a1=P[(s+1)%4];for(let k=0;k<=20;k++){const t=k/20,p=P2(a0[0]+(a1[0]-a0[0])*t,a0[1]+(a1[1]-a0[1])*t);(s||k)?ink.lineTo(p[0],p[1]):ink.moveTo(p[0],p[1]);}}ink.closePath();ink.stroke();};
+  let pen=false;const ring=(o)=>{pen=false;const P=[[-MX-o,-MZ-o],[MX+o,-MZ-o],[MX+o,MZ+o],[-MX-o,MZ+o]];ink.beginPath();for(let s=0;s<4;s++){const a0=P[s],a1=P[(s+1)%4];for(let k=0;k<=20;k++){const t=k/20,p=P2(a0[0]+(a1[0]-a0[0])*t,a0[1]+(a1[1]-a0[1])*t);if(behind(p)){pen=false;continue;}pen?ink.lineTo(p[0],p[1]):ink.moveTo(p[0],p[1]);pen=true;}}ink.stroke();};
   ink.lineWidth=1.6;ring(28);ink.lineWidth=0.6;ring(0);
   ink.font='400 9px "JetBrains Mono"';ink.fillStyle='#5f5a52';ink.lineWidth=0.7;
-  for(let x=-MX+500;x<MX;x+=500){const a0=P2(x,MZ),a1=P2(x,MZ+28),b0=P2(x,-MZ),b1=P2(x,-MZ-28);ink.beginPath();ink.moveTo(a0[0],a0[1]);ink.lineTo(a1[0],a1[1]);ink.moveTo(b0[0],b0[1]);ink.lineTo(b1[0],b1[1]);ink.stroke();
+  const tick=(a,b)=>{if(behind(a)||behind(b))return false;ink.beginPath();ink.moveTo(a[0],a[1]);ink.lineTo(b[0],b[1]);ink.stroke();return true;};
+  for(let x=-MX+500;x<MX;x+=500){const a0=P2(x,MZ),a1=P2(x,MZ+28),b0=P2(x,-MZ),b1=P2(x,-MZ-28);tick(b0,b1);if(!tick(a0,a1))continue;
     if(MPP<9){ink.textAlign='center';ink.fillText(((x+MX)/1000).toFixed(1),a1[0],a1[1]-8);}}
-  for(let z=-MZ+500;z<MZ;z+=500){const a0=P2(-MX,z),a1=P2(-MX-28,z),b0=P2(MX,z),b1=P2(MX+28,z);ink.beginPath();ink.moveTo(a0[0],a0[1]);ink.lineTo(a1[0],a1[1]);ink.moveTo(b0[0],b0[1]);ink.lineTo(b1[0],b1[1]);ink.stroke();
+  for(let z=-MZ+500;z<MZ;z+=500){const a0=P2(-MX,z),a1=P2(-MX-28,z),b0=P2(MX,z),b1=P2(MX+28,z);tick(b0,b1);if(!tick(a0,a1))continue;
     if(MPP<9){ink.textAlign='right';ink.fillText(((z+MZ)/1000).toFixed(1),a1[0]-5,a1[1]+3);}}
   ink.textAlign='left';
   // crosshair corners
-  for(const[cx,cz]of[[-MX-28,-MZ-28],[MX+28,-MZ-28],[MX+28,MZ+28],[-MX-28,MZ+28]]){const p=P2(cx,cz);ink.lineWidth=0.8;ink.beginPath();ink.moveTo(p[0]-9,p[1]);ink.lineTo(p[0]+9,p[1]);ink.moveTo(p[0],p[1]-9);ink.lineTo(p[0],p[1]+9);ink.stroke();}
+  for(const[cx,cz]of[[-MX-28,-MZ-28],[MX+28,-MZ-28],[MX+28,MZ+28],[-MX-28,MZ+28]]){const p=P2(cx,cz);if(behind(p))continue;ink.lineWidth=0.8;ink.beginPath();ink.moveTo(p[0]-9,p[1]);ink.lineTo(p[0]+9,p[1]);ink.moveTo(p[0],p[1]-9);ink.lineTo(p[0],p[1]+9);ink.stroke();}
   ink.globalAlpha=1;
 }
 let HOVER=null,SHOW_TRAILS=true,SHOW_NAMES=true,DRAW=null;
