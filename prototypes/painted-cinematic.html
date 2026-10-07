@@ -285,7 +285,7 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
 }
 // REAL sun shadow from the depth pass; PCF taps jittered by the paint grain,
 // so shadow edges come out brushy instead of pixel-sharp.
-uniform sampler2D uShadowMap;uniform mat4 uLightVP;uniform vec2 uSMTexel;uniform float uShadowsOn;
+uniform sampler2D uShadowMap;uniform mat4 uLightVP;uniform vec2 uSMTexel,uSMFade;uniform float uShadowsOn;
 float shadowAt(vec3 wp,vec3 n){
   vec4 lp=uLightVP*vec4(wp+n*0.6,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
   if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;   // outside the sun's view (incl. beyond its far plane) = lit
@@ -293,7 +293,8 @@ float shadowAt(vec3 wp,vec3 n){
   vec2 j=(vec2(texture2D(uGrain,wp.xz*0.6).r,texture2D(uGrain,wp.zx*0.6+0.3).r)-0.5)*3.0;
   float s=0.0;
   for(int x=0;x<2;x++)for(int y=0;y<2;y++)s+=step(texture2D(uShadowMap,uv+(vec2(float(x),float(y))*2.0-1.0+j)*uSMTexel).r,d);
-  return s/4.0*uShadowsOn;}
+  vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,uSMFade.x,e.x)*smoothstep(0.0,uSMFade.y,e.y);   // soft edge: far foliage past the box fades to lit
+  return s/4.0*uShadowsOn*fade;}
 // BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask.
 uniform sampler2D uLM;uniform mat4 uLMVP;uniform float uAO,uMist,uShafts,uBack;
 vec4 LM(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);vec2 uv=p.xy/p.w*0.5+0.5;
@@ -349,7 +350,7 @@ vec3 atmos(vec3 c,vec3 wp){
   float warm=max(dot(normalize(dv+1e-4),normalize(uSunDir.xz)),0.0);
   return mix(c,mix(uHazeCool,uHazeWarm,warm*0.65),f);
 }`;
-const COMMON=['uLMVP','uAO','uMist','uShafts','uBack','uSeason','uLightVP','uSMTexel','uShadowsOn','uSunDir','uSunCol','uShadowCol','uHazeCool','uHazeWarm','uCamPos','uFocus','uTime','uGrainAmt','uEdges','uClouds'];
+const COMMON=['uLMVP','uAO','uMist','uShafts','uBack','uSeason','uLightVP','uSMTexel','uSMFade','uShadowsOn','uSunDir','uSunCol','uShadowCol','uHazeCool','uHazeWarm','uCamPos','uFocus','uTime','uGrainAmt','uEdges','uClouds'];
 const mats=[];
 function mat(name,vs,fs,{attributes=['position','normal'],uniforms=[],samplers=[],alpha=false,defines=[]}={}){
   const m=new B.ShaderMaterial(name,scene,{vertexSource:vs,fragmentSource:fs},
@@ -716,14 +717,16 @@ waterMat.setTexture('uRefl',reflTex);
    SHADOW PASS: orthographic camera at the sun, depth of every caster into a
    float target, rendered ONCE (the landscape is static).
    ========================================================================= */
-const SMN=3072;
+const SMN=3072;let SM_TEXEL,SM_FADE;
 const lightCam=new B.FreeCamera('lightCam',SUN.scale(700),scene);lightCam.setTarget(V3.Zero());
 // fit the ortho box to the tile: project its corners (lowest ground to 60 m above the highest, above any caster) into light space
 {const tp=tileGround.getVerticesData(B.VertexBuffer.PositionKind);let lo=Infinity,hi=-Infinity;for(let k=1;k<tp.length;k+=3){lo=Math.min(lo,tp[k]);hi=Math.max(hi,tp[k]);}
  const V=lightCam.getViewMatrix(true),h=SMW/2;let ex=0,ey=0,z0=Infinity,z1=-Infinity;
  for(const x of [-h,h])for(const z of [-h,h])for(const y of [lo,hi+60]){const v=V3.TransformCoordinates(new V3(x,y,z),V);ex=Math.max(ex,Math.abs(v.x));ey=Math.max(ey,Math.abs(v.y));z0=Math.min(z0,v.z);z1=Math.max(z1,v.z);}
  if(z0<LZ0+5||z1>LZ1-5)throw Error(`shadow depth range ${LZ0}..${LZ1} misses the tile (${z0.toFixed(0)}..${z1.toFixed(0)})`);   // SBIAS is derived from LZ0/LZ1
- ex+=4;ey+=4;Object.assign(lightCam,{mode:B.Camera.ORTHOGRAPHIC_CAMERA,orthoLeft:-ex,orthoRight:ex,orthoTop:ey,orthoBottom:-ey,minZ:LZ0,maxZ:LZ1});
+ ex+=40;ey+=40;   // the outer 32 m fade the shadow out (shadowAt), outside the tile
+ const t=2*Math.max(ex,ey)/SMN;SM_TEXEL=new B.Vector2(t/(2*ex),t/(2*ey));SM_FADE=new B.Vector2(32/(2*ex),32/(2*ey));   // PCF steps equal in metres on both axes
+ Object.assign(lightCam,{mode:B.Camera.ORTHOGRAPHIC_CAMERA,orthoLeft:-ex,orthoRight:ex,orthoTop:ey,orthoBottom:-ey,minZ:LZ0,maxZ:LZ1});
  window.__shadowFit={ex,ey,z0,z1,texel:2*Math.max(ex,ey)/SMN};}
 const DEPTH_VS=`precision highp float;attribute vec3 position;
 #include<instancesDeclaration>
@@ -745,7 +748,7 @@ shadowRT.refreshRate=B.RenderTargetTexture.REFRESHRATE_RENDER_ONCE;shadowRT.upda
 scene.customRenderTargets.push(shadowRT);
 lightCam.computeWorldMatrix(true);
 const lightVP=lightCam.getViewMatrix(true).multiply(lightCam.getProjectionMatrix(true));
-for(const m of mats){m.setTexture('uShadowMap',shadowRT);m.setMatrix('uLightVP',lightVP);m.setVector2('uSMTexel',new B.Vector2(1/SMN,1/SMN));}
+for(const m of mats){m.setTexture('uShadowMap',shadowRT);m.setMatrix('uLightVP',lightVP);m.setVector2('uSMTexel',SM_TEXEL);m.setVector2('uSMFade',SM_FADE);}
 
 /* ---------- AO + valley-mist mask (CPU, once) ---------- */
 {const N=Math.round(SMW/4),tmp=document.createElement('canvas');   // ~4 m cells: finer than the 5-8 m channel
@@ -778,7 +781,7 @@ void main(){vec3 N=normalize(vN);
   vec4 a=texture2D(uAOTex,(vW.xz+${(SMW/2).toFixed(1)})/${SMW.toFixed(1)});
   gl_FragColor=vec4(vis,a.g,a.b,1.0);}`;
 const bakeMat=mat('bake',TER_VS,BAKE_FS,{attributes:['position','normal','aRiver'],samplers:['uAOTex']});mats.splice(mats.indexOf(bakeMat),1);   // never bind uLM (its own target) or update it per frame
-bakeMat.setTexture('uAOTex',aoTex);bakeMat.setTexture('uShadowMap',shadowRT);bakeMat.setMatrix('uLightVP',lightVP);bakeMat.setVector2('uSMTexel',new B.Vector2(1/SMN,1/SMN));
+bakeMat.setTexture('uAOTex',aoTex);bakeMat.setTexture('uShadowMap',shadowRT);bakeMat.setMatrix('uLightVP',lightVP);bakeMat.setVector2('uSMTexel',SM_TEXEL);
 const lmCam=new B.FreeCamera('lmCam',new V3(0,500,0),scene);lmCam.setTarget(new V3(0,0,0.01));
 lmCam.mode=B.Camera.ORTHOGRAPHIC_CAMERA;Object.assign(lmCam,{orthoLeft:-SMW/2,orthoRight:SMW/2,orthoTop:SMW/2,orthoBottom:-SMW/2,minZ:1,maxZ:1000});
 const lightMap=new B.RenderTargetTexture('lightmap',3072,   // ~0.26 m texels over the 800 m tile
@@ -794,8 +797,8 @@ for(const m of mats){m.setTexture('uLM',lightMap);m.setMatrix('uLMVP',lmVP);}
 /* ---------- camera: top-down RTS view only ---------- */
 const camera=new B.ArcRotateCamera('cam',-Math.PI/2-0.35,0.80,125,new V3(-10,8,2),scene);
 scene.activeCamera=camera;camera.attachControl(canvas,true);camera.lowerRadiusLimit=45;
-// pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the play area at a fixed height
-camera.mapPanning=true;const PLAY=250,FOCUS_Y=camera.target.y;scene.onBeforeRenderObservable.add(()=>{const t=camera.target;t.x=Math.max(-PLAY,Math.min(PLAY,t.x));t.z=Math.max(-PLAY,Math.min(PLAY,t.z));t.y=FOCUS_Y;});
+// pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the play area
+camera.mapPanning=true;const PLAY=250,FOCUS_Y=camera.target.y;scene.onBeforeRenderObservable.add(()=>{const t=camera.target;t.x=Math.max(-PLAY,Math.min(PLAY,t.x));t.z=Math.max(-PLAY,Math.min(PLAY,t.z));});
 camera.upperRadiusLimit=260;camera.lowerBetaLimit=0.3;camera.upperBetaLimit=0.98;
 camera.wheelDeltaPercentage=0.01;
 camera.panningSensibility=30;camera.minZ=0.5;camera.maxZ=5000;camera.fov=0.62;camera.inertia=0.88;
