@@ -259,3 +259,17 @@ river geometry (the stitching held). They come from extents that are set in seve
 | 7 | light | River mask builds unused mipmaps; far line shimmers when minified |
 | 8 | light | `updateCoordinateHeights()` on the tile is unused load work |
 | 9 | light | Far-line probes beyond the far ring (±1300 m) project at y = 0 |
+
+### Closing W1 (after `engine-design.md`)
+
+The engine design (`docs/engine-design` branch) takes over the round-3 findings: the moderate and
+light ones go to E0-lite (`engine-design.md` §10), and pre-existing ones to its known issues (§9).
+W1 closes with the two severe fixes:
+- **Shadow box fitted** to the tile: corners (lowest ground to 60 m above the highest) projected
+  into light space; ±566 × ±329 m, depth 163–1201 inside 100–1600 (asserted at load).
+- **Ground-plane pan** (`mapPanning`) with the focus held in the play area at a fixed height.
+- New render-check items: pan from every play-area corner in four directions stays in bounds;
+  every tile corner lies inside the shadow box. Negative run on the old code: the target climbed
+  to 65 m and the corners fell outside the box.
+
+Then one confirming review round under the AGENTS.md rules (findings in pre-existing code do not block).
