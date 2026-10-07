@@ -23,9 +23,11 @@
     { name: 'mid', alpha: -Math.PI / 2 - 0.35, beta: 0.8, radius: 125, t: [-70, 8, 0] },
     { name: 'close', alpha: -Math.PI / 2 - 0.2, beta: 0.6, radius: 80, t: [-95, 8, -60] },
     { name: 'wide', alpha: -Math.PI / 2, beta: 0.7, radius: 260, t: [-100, 8, 150] },
-    { name: 'far', alpha: Math.PI / 2 - 0.3, beta: 1.05, radius: 300, t: [-110, 8, -250] },   // looks out past the tile edge (-z)
+    { name: 'far', alpha: Math.PI / 2 - 0.3, beta: 0.98, radius: 260, t: [-110, 8, -250] },   // looks out past the tile edge (-z); at the camera limits
   ]
-  const half = SMW / 2
+  const half = SMW / 2, saved = { alpha: cam.alpha, beta: cam.beta, radius: cam.radius, target: cam.target.clone() }
+  // views must be ones the player can reach: the camera clamps beta/radius on render, which would silently move the view
+  for (const v of views) if (v.beta > cam.upperBetaLimit || v.radius > cam.upperRadiusLimit || v.radius < cam.lowerRadiusLimit) fail.push(`${v.name}: outside the camera limits`)
   try {
     for (const v of views) {
       cam.alpha = v.alpha; cam.beta = v.beta; cam.radius = v.radius; cam.target.set(...v.t)
@@ -44,7 +46,7 @@
           for (const side of [-1, 1]) { const o = C.W[i] / 2 * 1.7 + 12, x = C.px[i] - C.tz[i] * side * o, z = C.pz[i] + C.tx[i] * side * o, q = riverQuery(x, z)
             if (q && q.dist < C.W[i] / 2 * 1.7 + 6) continue   // another pass of a doubled-back bend
             add('bank', delta(new B.Vector3(x, H(x, z), z))) }
-        } else if (farOut) add('farLine', delta(new B.Vector3(C.px[i], H(C.px[i], C.pz[i]), C.pz[i])))
+        } else if (farOut) add('farLine', delta(new B.Vector3(C.px[i], farGround.getHeightAtCoordinates(C.px[i], C.pz[i]), C.pz[i])))   // the drawn far surface
       }
       const frac = ([a, n]) => (n ? +(a / n).toFixed(2) : null)
       out[v.name] = { water: frac(stat.water), waterN: stat.water[1], bank: frac(stat.bank), bankN: stat.bank[1], farLine: frac(stat.farLine), farN: stat.farLine[1] }
@@ -52,7 +54,10 @@
       if (stat.bank[1] >= 20 && stat.bank[0] / stat.bank[1] > 0.15) fail.push(`${v.name}.bank=${frac(stat.bank)}`)
       if (stat.farLine[1] >= 20 && stat.farLine[0] / stat.farLine[1] < 0.6) fail.push(`${v.name}.farLine=${frac(stat.farLine)}`)
     }
-  } finally { water.isVisible = true; farTerrainMat.setTexture('uRiverMask', riverMask); blank.dispose() }
+  } finally {
+    water.isVisible = true; farTerrainMat.setTexture('uRiverMask', riverMask); blank.dispose()
+    cam.alpha = saved.alpha; cam.beta = saved.beta; cam.radius = saved.radius; cam.target.copyFrom(saved.target)
+  }
   // each limit must actually have been exercised somewhere
   if (!views.some(v => out[v.name]?.waterN >= 20)) fail.push('no view tested near water')
   if (!views.some(v => out[v.name]?.bankN >= 20)) fail.push('no view tested the banks')

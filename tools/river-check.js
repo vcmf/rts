@@ -80,7 +80,27 @@
   check('waterOutsideTile', outside === 0, outside)
   check('uphillSteps', rises === 0, rises)
 
-  // 7b. no cliffs on the floodplain: outside the channel, the detailed terrain rises < 1.2 m per metre
+  // 7a. the far ring never covers the tile: sampled every 2 m over the tile, its drawn surface stays below the tile's
+  //     (replaces the old far-hidden check, from both meshes' real triangle heights); and along the tile edge it is
+  //     never above the tile edge (the apron stitches the two edges above it)
+  let farOver = 0, edgeSlit = 0
+  const half = SMW / 2
+  for (let x = -half + 1; x < half; x += 2) for (let z = -half + 1; z < half; z += 2)
+    if (farGround.getHeightAtCoordinates(x, z) > tileGround.getHeightAtCoordinates(x, z) - 0.05) farOver++
+  for (let t = -half; t <= half; t += 0.5) for (const [x, z] of [[t, -half], [t, half], [-half, t], [half, t]]) {
+    const xi = Math.max(-half + 1e-3, Math.min(half - 1e-3, x)), zi = Math.max(-half + 1e-3, Math.min(half - 1e-3, z))
+    if (farGround.getHeightAtCoordinates(xi, zi) > tileGround.getHeightAtCoordinates(xi, zi) + 0.01) edgeSlit++ }
+  check('farOverTile', farOver === 0, farOver)
+  check('edgeSlit', edgeSlit === 0, edgeSlit)
+  // 7b. the apron is stitched: its inner row lies on the tile surface, its outer row on the far ring
+  const ap = scene.getMeshByName('apron').getVerticesData(B.VertexBuffer.PositionKind), clampIn = v => Math.max(-half + 1e-3, Math.min(half - 1e-3, v))
+  let unstitched = 0
+  for (let k = 0; k < ap.length; k += 6) {
+    if (Math.abs(ap[k + 1] - tileGround.getHeightAtCoordinates(clampIn(ap[k]), clampIn(ap[k + 2]))) > 0.01) unstitched++
+    if (Math.abs(ap[k + 4] - farGround.getHeightAtCoordinates(ap[k + 3], ap[k + 5])) > 0.01) unstitched++ }
+  check('apronUnstitched', unstitched === 0, unstitched)
+
+  // 7c. no cliffs on the floodplain: outside the channel, the detailed terrain rises < 1.2 m per metre
   let cliffs = 0, steepest = 0
   for (let i = 0; i < C.n; i += 3) { if (!detailed(C.px[i], C.pz[i])) continue
     for (let a = -30; a <= 30; a += 1) { const x = C.px[i] - C.tz[i] * a, z = C.pz[i] + C.tx[i] * a, q = riverQuery(x, z)
