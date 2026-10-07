@@ -172,7 +172,7 @@ const RIVER=(()=>{
     if(d>half+P.valleyFade)return h;
     const t=Math.max(0,Math.min(nb-1.001,(z-P.z0)/FZ)),b=Math.floor(t),f=t-b;
     let lv=fp[b]+(fp[b+1]-fp[b])*f;
-    if(q){const wn=1-sstep(0.5*C.REACH,C.REACH,q.dist);lv=lv+(q.level+P.bankH-lv)*wn;}
+    if(q){if(q.level===undefined)throw Error('trough needs riverQuery(x,z,true)');const wn=1-sstep(0.5*C.REACH,C.REACH,q.dist);lv=lv+(q.level+P.bankH-lv)*wn;}
     const v=lv+Math.max(0,d-half)*P.valleySlope;                        // flat floodplain, valley sides rising at ~10°
     if(v>=h)return h;
     const w=1-sstep(half,half+P.valleyFade,d);
@@ -198,7 +198,7 @@ function riverQuery(x,z,wantLevel=false){   // wantLevel: also blend the water l
     // two passes of a doubled-back bend meet, and the nearest pass dominates at its own bank
     if(wantLevel&&d<R2){const dd=Math.sqrt(d),w=Math.exp(-dd/3)*(1-sstep(0.5*C.REACH,C.REACH,dd));ws+=w;wl+=w*(C.zw[i]+(C.zw[i+1]-C.zw[i])*t);}}
   const dist=Math.sqrt(bd);if(bi<0||dist>C.REACH)return null;
-  const q={i:bi,t:bt,dist,n:bsg*dist,level:ws>1e-9?wl/ws:lerpA(C.zw,{i:bi,t:bt})};q.s=lerpA(C.s,q);return q;
+  const q={i:bi,t:bt,dist,n:bsg*dist};if(wantLevel)q.level=ws>1e-9?wl/ws:lerpA(C.zw,q);q.s=lerpA(C.s,q);return q;
 }
 const lerpA=(arr,q)=>arr[q.i]+(arr[q.i+1]-arr[q.i])*q.t;
 // valley + floodplain + symmetric channel carve (W1); the asymmetric cut bank / point bar is W2
@@ -404,7 +404,7 @@ void main(){vec3 N=normalize(vN);vec4 lm=LM(vW);
   #ifdef FARRING
   float rm=texture2D(uRiverMask,vW.xz/${FARW.toFixed(1)}+0.5).r;                   // painted river line on the far ring
   alb=mix(alb,alb*vec3(0.72,0.78,0.70),smoothstep(0.0,0.15,rm));
-  alb=mix(alb,vec3(0.17,0.38,0.44),smoothstep(0.3,0.6,rm));
+  alb=mix(alb,vec3(0.40,0.55,0.58),smoothstep(0.3,0.6,rm));   // the water mid tone after its sky tint, so the line matches the river at the tile edge
   #endif
   vec3 c=paint(alb,N,vW,occ,0.12,1.0,sh);
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}`;
@@ -420,16 +420,35 @@ const farTerrainMat=mat('farTerrain',TER_VS,TER_FS,{attributes:['position','norm
 function buildTerrain(size,sub,yOff){
   const g=B.MeshBuilder.CreateGround('t',{width:size,height:size,subdivisions:sub,updatable:true},scene);
   const p=g.getVerticesData(B.VertexBuffer.PositionKind);
-  const coarse=size>SMW,inner=SMW/2-size/sub*Math.SQRT2;   // far vertices whose triangles stay under the tile sink below it
+  const coarse=size>SMW,cell=size/sub,E2=SMW/2,eps=0.01;
+  if(coarse&&Math.abs((size/2-E2)/cell-Math.round((size/2-E2)/cell))>1e-6)throw Error('far grid must have lines on the tile edge');
   const rv=new Float32Array(p.length/3);
-  // far ring (15 m grid): valley trough only, no channel and no water; the river is a painted line there (FARRING)
+  // far ring (FARW/182 = 14.3 m grid, lines exactly on the tile edge): valley trough only, no channel and no water; the river is
+  // a painted line there (FARRING). No far triangle overlaps the tile: vertices inside it sink, vertices on its edge drop to
+  // the lowest detailed height along their two edge segments, so the far ring never rises above the tile edge (the skirt
+  // below fills the step).
   for(let i=0;i<p.length;i+=3){const x=p[i],z=p[i+2],q=riverQuery(x,z,true);p[i+1]=(coarse?RIVER.trough(x,z,baseH(x,z),q):carve(x,z,q))+yOff;rv[i/3]=bandOf(q);
-    if(coarse&&Math.abs(x)<inner&&Math.abs(z)<inner)p[i+1]-=25;}
-  g.updateVerticesData(B.VertexBuffer.PositionKind,p);const n=[];B.VertexData.ComputeNormals(p,g.getIndices(),n);g.updateVerticesData(B.VertexBuffer.NormalKind,n);
+    if(!coarse)continue;const ax=Math.abs(x),az=Math.abs(z);
+    if(ax<E2-eps&&az<E2-eps)p[i+1]-=25;
+    else if(ax<E2+eps&&az<E2+eps){let lo=Infinity;const onEdge=(u,v)=>Math.max(Math.abs(u),Math.abs(v))>E2-eps&&Math.abs(u)<E2+eps&&Math.abs(v)<E2+eps;
+      for(let s=-cell;s<=cell+1e-6;s+=cell/16){if(onEdge(x+s,z))lo=Math.min(lo,H(x+s,z));if(onEdge(x,z+s))lo=Math.min(lo,H(x,z+s));}
+      p[i+1]=Math.min(p[i+1],lo-0.5);}}   // under the apron below, which stitches the two edges
+  g.updateVerticesData(B.VertexBuffer.PositionKind,p);g.updateCoordinateHeights();const n=[];B.VertexData.ComputeNormals(p,g.getIndices(),n);g.updateVerticesData(B.VertexBuffer.NormalKind,n);
   g.setVerticesData('aRiver',rv,false,1);
   g.material=coarse?farTerrainMat:terrainMat;return g;
 }
-buildTerrain(SMW,460,0);buildTerrain(FARW,170,-0.9);
+const tileGround=buildTerrain(SMW,460,0),farGround=buildTerrain(FARW,182,-0.9);
+// apron: one far cell (14.3 m) around the tile, stitched vertex for vertex to the tile edge (inside) and to the far ring's
+// first grid line (outside), so the two resolutions meet without a slit or a wall. It covers the dipped far edge cell and
+// draws with the far material, so the painted river line runs across it.
+{const pos=[],rv=[],idx=[],N=460,E2=SMW/2,F=E2+FARW/182;let k=0;
+ for(const [sx,sz,dx,dz] of [[-1,-1,1,0],[1,-1,0,1],[1,1,-1,0],[-1,1,0,-1]]){   // corner, then along the edge
+   for(let j=0;j<=N;j++){const t=j/N*2;const ix=E2*(sx+dx*t),iz=E2*(sz+dz*t),ox=ix/E2*F,oz=iz/E2*F;   // outer row fans out to cover the corners
+     pos.push(ix,tileGround.getHeightAtCoordinates(Math.max(-E2+1e-3,Math.min(E2-1e-3,ix)),Math.max(-E2+1e-3,Math.min(E2-1e-3,iz))),iz,ox,farGround.getHeightAtCoordinates(ox,oz),oz);
+     rv.push(bandOf(riverQuery(ix,iz)),bandOf(riverQuery(ox,oz)));
+     if(j){const a=k-2,b=k;idx.push(a,b,a+1,a+1,b,b+1,a,a+1,b,a+1,b+1,b);}k+=2;}}   // both windings: the order differs per side
+ const m=new B.Mesh('apron',scene),vd=new B.VertexData();vd.positions=pos;vd.indices=idx;vd.normals=pos.map((_,i)=>i%3===1?1:0);vd.applyToMesh(m);
+ m.setVerticesData('aRiver',new Float32Array(rv),false,1);m.material=farTerrainMat;}
 
 
 /* =========================================================================
@@ -487,14 +506,15 @@ const REFN=1536,reflCanvas=document.createElement('canvas');reflCanvas.width=ref
 const reflG=reflCanvas.getContext('2d');reflG.fillStyle='#000';reflG.fillRect(0,0,REFN,REFN);reflG.filter='blur(3px)';
 const reflTrees=[];const reflAdd=(x,z,r)=>{const q=riverQuery(x,z);if(q&&q.dist<lerpA(RIVER.W,q)/2+20)reflTrees.push([x,z,r]);};   // crowns within 20 m of the water
 let waterMat;
-{const pos=[],uv=[],dep=[],idx=[],C=RIVER,COLS=12,lim=SMW/2-12;let k=0;
- for(let i=0;i<C.n;i++){if(Math.abs(C.px[i])>lim||Math.abs(C.pz[i])>lim)continue;   // the water lives in the detailed tile only
+{const pos=[],uv=[],dep=[],idx=[],C=RIVER,COLS=12,E2=SMW/2-0.01,lim=SMW/2+6;let k=0;   // samples up to 6 m past the edge (1.35 half-widths), vertices clamped onto it
+ for(let i=0,join=false;i<C.n;i++){if(Math.abs(C.px[i])>lim||Math.abs(C.pz[i])>lim){join=false;continue;}   // the water lives in the detailed tile only; a re-entry starts a new strip
    const hw=C.W[i]/2,nx=-C.tz[i],nz=C.tx[i],y=C.zw[i];               // left normal of the flow; water is flat at zw
-   for(let c=0;c<=COLS;c++){const a=(c/COLS*2-1)*hw*1.35,x=C.px[i]+nx*a,zz=C.pz[i]+nz*a;
+   for(let c=0;c<=COLS;c++){const a=(c/COLS*2-1)*hw*1.35;let x=C.px[i]+nx*a,zz=C.pz[i]+nz*a;
+     x=Math.max(-E2,Math.min(E2,x));zz=Math.max(-E2,Math.min(E2,zz));   // the ribbon ends exactly on the tile edge, where the painted line starts
      const h=H(x,zz),yy=Math.abs(a)>hw?Math.min(y,h-0.35):y;           // outer columns dive under the carved bank
      pos.push(x,yy,zz);uv.push(a,C.s[i]);dep.push(y-h);}
-   if(k)for(let c=0;c<COLS;c++){const a=(k-1)*(COLS+1)+c,b=k*(COLS+1)+c;idx.push(a,b,a+1,a+1,b,b+1);}
-   k++;}
+   if(join)for(let c=0;c<COLS;c++){const a=(k-1)*(COLS+1)+c,b=k*(COLS+1)+c;idx.push(a,b,a+1,a+1,b,b+1);}
+   k++;join=true;}
  const m=new B.Mesh('water',scene),vd=new B.VertexData();vd.positions=pos;vd.uvs=uv;vd.indices=idx;const n=[];B.VertexData.ComputeNormals(pos,idx,n);vd.normals=n;vd.applyToMesh(m);
  m.setVerticesData('aDepth',new Float32Array(dep),false,1);
  waterMat=mat('water',WAT_VS,WAT_FS,{attributes:['position','uv','aDepth'],samplers:['uRefl']});m.material=waterMat;m.material.backFaceCulling=false;}
@@ -617,7 +637,9 @@ const footprint=(model,s)=>{let r=REACH_OF[model];if(r===undefined){const p=wind
 // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
 function addPlaced(model,item,kind=''){const [x,z,s]=item;if(!placeable(x,z,footprint(model,s),kind))return false;add(model,item);return true;}
 // does a footprint of radius r around (x,z) touch a formation zone? (centre + 12 points on its rim)
-const touchesZone=(x,z,r)=>{if(KEEP_CLEAR(x,z))return true;for(let k=0;k<12;k++){const a=k/12*6.2832;if(KEEP_CLEAR(x+Math.cos(a)*r,z+Math.sin(a)*r))return true;}return false;};
+// exact: does the disc (x,z,r) overlap any formation zone? (the two boxes and the circle of KEEP_CLEAR)
+const boxD=(x,z,x0,x1,z0,z1)=>Math.hypot(Math.max(x0-x,0,x-x1),Math.max(z0-z,0,z-z1));
+const touchesZone=(x,z,r)=>KEEP_CLEAR(x,z)||boxD(x,z,-25,15,-44,-2)<r||boxD(x,z,-14,26,7,19)<r||Math.hypot(x-34,z+24)<Math.sqrt(160)+r;
 function placeable(x,z,r=0,kind=''){
   if(touchesZone(x,z,r))return false;
   const q=riverQuery(x,z);
@@ -680,7 +702,7 @@ waterMat.setTexture('uRefl',reflTex);
    SHADOW PASS: orthographic camera at the sun, depth of every caster into a
    float target, rendered ONCE (the landscape is static).
    ========================================================================= */
-const SMN=2048,E=SMW*0.65;   // sun shadow covers the whole detailed tile seen obliquely
+const SMN=3072,E=SMW*0.65;   // sun shadow covers the whole detailed tile seen obliquely; 0.34 m texels
 const lightCam=new B.FreeCamera('lightCam',SUN.scale(700),scene);lightCam.setTarget(V3.Zero());
 lightCam.mode=B.Camera.ORTHOGRAPHIC_CAMERA;Object.assign(lightCam,{orthoLeft:-E,orthoRight:E,orthoTop:E,orthoBottom:-E,minZ:100,maxZ:1600});
 const DEPTH_VS=`precision highp float;attribute vec3 position;
@@ -697,7 +719,7 @@ shadowRT.activeCamera=lightCam;shadowRT.clearColor=new C4(1,1,1,1);
 const terrains=scene.meshes.filter(m=>m.name==='t');
 // terrain is NOT a shadow caster: it self-shadowed into diagonal 'acne' stripes; slopes facing away are already dark via N·L
 // small plants don't cast either: thousands of tuft shadows streaked the ground along the sun direction
-shadowRT.renderList=scene.meshes.filter(m=>m.name!=='water'&&(m.name!=='t'||m===terrains[0])&&!/Grass|Flowers|Plant|Wheat/.test(m.name));
+shadowRT.renderList=scene.meshes.filter(m=>m.name!=='water'&&m.name!=='apron'&&(m.name!=='t'||m===terrains[0])&&!/Grass|Flowers|Plant|Wheat/.test(m.name));
 for(const m of shadowRT.renderList)shadowRT.setMaterialForRendering(m,depthMat);
 shadowRT.refreshRate=B.RenderTargetTexture.REFRESHRATE_RENDER_ONCE;shadowRT.updateSamplingMode(B.Texture.NEAREST_SAMPLINGMODE);
 scene.customRenderTargets.push(shadowRT);
@@ -706,9 +728,14 @@ const lightVP=lightCam.getViewMatrix(true).multiply(lightCam.getProjectionMatrix
 for(const m of mats){m.setTexture('uShadowMap',shadowRT);m.setMatrix('uLightVP',lightVP);m.setVector2('uSMTexel',new B.Vector2(1/SMN,1/SMN));}
 
 /* ---------- AO + valley-mist mask (CPU, once) ---------- */
-{const N=128,tmp=document.createElement('canvas');tmp.width=tmp.height=N;const tg=tmp.getContext('2d'),img=tg.createImageData(N,N),d=img.data;
- const ring=(x,z,r)=>{let s=0;for(let k=0;k<6;k++){const a=k/6*6.283;s+=H(x+Math.cos(a)*r,z+Math.sin(a)*r);}return s/6;};
- for(let j=0;j<N;j++)for(let i=0;i<N;i++){const x=(i+0.5)/N*SMW-SMW/2,z=(j+0.5)/N*SMW-SMW/2,h=H(x,z);
+{const N=Math.round(SMW/4),tmp=document.createElement('canvas');   // ~4 m cells: finer than the 5-8 m channel
+ tmp.width=tmp.height=N;const tg=tmp.getContext('2d'),img=tg.createImageData(N,N),d=img.data;
+ // H once per cell into a height grid; the ring averages read it bilinearly (13 H calls per cell cost ~0.25 s at N=200)
+ const hg=new Float32Array(N*N),cs=SMW/N;for(let j=0;j<N;j++)for(let i=0;i<N;i++)hg[j*N+i]=H((i+0.5)*cs-SMW/2,(j+0.5)*cs-SMW/2);
+ const hAt=(x,z)=>{const u=Math.max(0,Math.min(N-1.001,(x+SMW/2)/cs-0.5)),v=Math.max(0,Math.min(N-1.001,(z+SMW/2)/cs-0.5)),i=u|0,j=v|0,fu=u-i,fv=v-j,k=j*N+i;
+   return (hg[k]*(1-fu)+hg[k+1]*fu)*(1-fv)+(hg[k+N]*(1-fu)+hg[k+N+1]*fu)*fv;};
+ const ring=(x,z,r)=>{let s=0;for(let k=0;k<6;k++){const a=k/6*6.283;s+=hAt(x+Math.cos(a)*r,z+Math.sin(a)*r);}return s/6;};
+ for(let j=0;j<N;j++)for(let i=0;i<N;i++){const x=(i+0.5)/N*SMW-SMW/2,z=(j+0.5)/N*SMW-SMW/2,h=hg[j*N+i];
    const near=ring(x,z,7),far=ring(x,z,40);
    const ao=1-Math.min(0.35,Math.max(0,(near-h)*0.10));                       // hollows & stream banks
    const valley=Math.min(1,Math.max(0,(far-h)/3.2));                            // low ground relative to 40 m around
