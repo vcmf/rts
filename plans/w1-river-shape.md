@@ -224,3 +224,21 @@ Review count restarts.
 Also seen on close screenshots at the exits (camera limits lifted): a 0.9 m wall along the tile edge, a dry 6 m channel
 end and a darker painted line; all fixed by the apron, the clamped ribbon and a far-line colour matching the water.
 Load time (5 paired runs): main median 2.86 s, W1 3.03 s (+170 ms).
+
+### Post-redesign-2 review round 2
+
+9 findings, 1 severe → round 3 (the last before a redesign).
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | severe | Clamped outer water columns at the exits decided to dive from their pre-clamp offset and sank under the bed mid-channel (dry wedges) | A moved column decides from where it landed (`riverQuery`); new check `waterUnderBed` (fails with 62 vertices on the old rule) |
+| 2 | moderate | Sun-camera range grew, fixed depth bias doubled in metres | `SBIAS` = 0.96 m / depth range |
+| 3 | moderate | Light map still 2048 over 800 m | 3072 (0.26 m texels) |
+| 4 | moderate | Bank colours (`bandOf`) beaded along the far line on the 14 m grid | Far ring and the apron's outer row use 8 (no bank colours) |
+| 5 | moderate | Flat apron normals; fanned outer row could z-fight with the far cell | **Exact stitching:** tile grid 448 (8 tile cells per far cell); the far ring drops its triangles inside the band; apron vertices are copies of tile/far vertices (position, normal, bank value); corner squares close the corners. No layering, no lowering |
+| 6 | moderate | `apronUnstitched` and `waterOutsideTile` could not fail | Replaced: `farInBand`, `apronForeignVerts`, `apronUnusedEdgeVerts`, `apronArea` (matches the band exactly) |
+| 7 | light | Render-check reachability ignored the pan clamp | Fails on `|t| > PLAY` too; probes now run up to the tile edge |
+| 8 | light | Stale `touchesZone` comment | Removed |
+| 9 | light | Async wrapper with nothing to await | Sync IIFE; `shot.mjs` change reverted |
+
+Load time (5 paired runs): main median 2.80 s, W1 2.88 s (+85 ms; the far ring lost 6.7k triangles).
