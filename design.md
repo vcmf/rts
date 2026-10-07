@@ -26,7 +26,8 @@ assets, surfaces, lighting and effects authored to look painted, explicitly
 These are decisions, not preferences. Don't propose against them.
 
 1. **Camera:** always the top-down, zoomed-out RTS view. There are no
-   ground-level or horizon shots.
+   ground-level or horizon shots. At its farthest zoom the world becomes the
+   **staff map** (`staff-map/design.md`).
 2. **No sky in the game, ever.** Atmosphere has to come from the ground (§6).
 3. **Tone:** epic, not cozy, not dark. Not Total War's realistic, dingy look.
 4. **The painterly look lives in the assets and materials,** not in a
@@ -257,6 +258,21 @@ gravel) come later and reuse the same system. Technique: `research/stylized-wate
 
 ---
 
+## 6d. The far zoom: the staff map
+
+Zoomed all the way out, the painted world turns into a drawn map: ink on warm
+paper, Lehmann hachures for relief, armies as flat blocks, orders as pencil
+arrows. The zoom between the two runs in stages (the land rises, the soldiers
+stand up out of their blocks), never as a crossfade. Its own docs:
+
+- `staff-map/design.md`: art direction (paper, terrain, seasons, army symbols, orders, zoom, UI)
+- `staff-map/implementation.md`: how it is built (map bake, `mapness`, ink overlay)
+- `staff-map/plan.md`: phases
+
+The `season` value (§4b) and the army colours (§4) drive the map too.
+
+---
+
 ## 7. Brush library
 
 The style's most important asset, and where the craft goes.
@@ -291,6 +307,8 @@ scanned. The prototype accepts a dropped PNG to test a grain live.
   the landscape).
 - **12 fps stepped animation** for marching and fighting.
 - **No gore:** casualties fall and remain as painted shapes.
+- At the far zoom a unit is a flat block whose shape is its formation's
+  footprint (`staff-map/design.md` §6).
 
 ---
 

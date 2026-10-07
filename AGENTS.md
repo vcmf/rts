@@ -14,6 +14,8 @@ Status: **prototyping the look**. No game code yet; prototypes are single HTML f
   20 Hz tick, Babylon.js setup). Read it before writing game code.
 - `prototype-plan.md`: what the prototypes are for, the phases, and the current workstream.
 - `asset-sources.md`: where to find and how to judge 3D assets, brushes and licences.
+- `staff-map/`: the far-zoom staff map (design, implementation, plan). Read its `design.md`
+  before touching the map or the zoom transition.
 - `research/`: deep-research reports (`cheap-painterly-postfx.md`, `stylized-water.md`).
 - `prototypes/`: single-file Babylon.js 9 prototypes. `painted-cinematic.html` is the current one;
   the others are earlier steps kept for comparison. `*.data.js` are generated model data.

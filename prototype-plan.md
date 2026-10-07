@@ -31,6 +31,7 @@ battlefield that runs at 60 fps in a browser (game tier) and renders at film qua
 | Performance pass (tiling, LOD, measured frame time) | ⏳ | after water |
 | Real terrain + historical import | ⏳ | after water |
 | Units and buildings | ⏳ | Tripo / TRELLIS |
+| **Staff map** (far zoom, zoom transition) | 🟡 feel prototype | `staff-map/plan.md`, `prototypes/staff-map.html` |
 
 ## 3. Process
 
@@ -115,4 +116,5 @@ water. W5 and W6 can be reordered after a look review.
 2. Brush library v1 from Procreate (grain, grass, foliage fills).
 3. First Tripo assets (one tree, one building) under the shaders.
 4. Real terrain + historical import beyond Austerlitz.
-5. Exit-criteria review → start the game repo structure (`web-rts-architecture.md` §2).
+5. Staff map SM1–SM4 (`staff-map/plan.md`), after the SM0 feel review.
+6. Exit-criteria review → start the game repo structure (`web-rts-architecture.md` §2).
