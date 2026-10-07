@@ -166,3 +166,40 @@ not what is drawn. The "darker banks at the seam" noted after round 2 were this 
 missing light map. Also: corridor overlaps the detailed tile (z-fight), load time +200–370 ms
 (over the 300 ms limit in some runs), zone and stone tests ignore footprints, corridor in the
 shadow casters, a latent far-ring margin. Decision pending (see PR).
+
+## Redesign 2 (after post-redesign round 3)
+
+**Cause:** almost every severe finding since the first redesign came from carrying the river
+across two terrain resolutions (detailed tile + coarse far ring). **Remove the second resolution
+from the river:**
+
+1. **One fine terrain holds the river.** Detailed tile enlarged from 520 m to **800 m** (same
+   ~1.74 m grid). The camera target is clamped to the play area (±250 m), so at max zoom the
+   river on screen is almost always inside the tile.
+2. **The far ring has no channel and no water.** It gets the valley trough only, sinks under the
+   detailed tile with a margin ≥ one far cell × √2, and shows the river as a **painted line**:
+   a river mask texture (canvas stroke of the samples at their widths) sampled by the far-ring
+   material. No corridor, no draping, no far water code.
+3. **The water ribbon ends inside the tile.**
+4. **Render checks** (`tools/render-check.js`): render the scene at fixed cameras, read the
+   framebuffer twice per view (as is, then with the water mesh hidden and the far mask blanked) and
+   confirm projected river points change while bank points don't, including the painted line on
+   the far ring. A colour test was tried first and rejected: graded water and land in shadow
+   overlap in colour. Catches culled, missing or hidden geometry that
+   height checks can't see.
+5. Round-3 fixes kept: zone and stone tests use the footprint; the blended water level is computed
+   only when the trough asks for it (load time); corridor shadows/overlap disappear with the
+   corridor.
+
+Acceptance adds: render-check passes; load time ≤ main + 300 ms (paired runs, same marker).
+Review count restarts.
+
+### Implementation notes
+
+- The first build lost the WebGL context in SwiftShader (black frame; `river-check` still passed,
+  which is why the render check exists). Cause: the river mask was drawn as one canvas stroke per
+  sample with `filter='blur()'`. Fixed by one path per run of equal width and no canvas filter;
+  bilinear sampling softens the edge.
+- Results: `river-check` all pass; `render-check` water 0.91–1.0, banks 0, far line 0.95; the
+  check fails as expected with the water sunk 3 m and the mask blanked.
+- Load time (4 paired runs, same marker): main ≈ 2.81 s, W1 ≈ 2.97 s (+150 ms, limit +300 ms).
