@@ -203,3 +203,24 @@ Review count restarts.
 - Results: `river-check` all pass; `render-check` water 0.91–1.0, banks 0, far line 0.95; the
   check fails as expected with the water sunk 3 m and the mask blanked.
 - Load time (4 paired runs, same marker): main ≈ 2.81 s, W1 ≈ 2.97 s (+150 ms, limit +300 ms).
+
+### Post-redesign-2 review round 1
+
+10 findings, 1 severe → another round.
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | severe | Far-ring vertices just inside the tile (378–400 m) stayed at trough height and covered the last metres of water at both exits | Far grid aligned to the tile edge (FARW/182 = 14.3 m, lines at ±400 m): no far triangle overlaps the tile. Vertices inside sink, edge vertices drop below the lowest tile-edge height, and an **apron** (one far cell, far material) stitches the two edges vertex for vertex. The water ribbon is clamped onto the tile edge, so it meets the painted line |
+| 2 | moderate | No geometric check replaced the removed far-hidden check | `farOverTile`, `edgeSlit`, `apronUnstitched` (from both meshes' real triangle heights) |
+| 3 | moderate | The render check's far view was outside the camera limits (silently clamped) | Views within limits; the check fails if a view isn't reachable |
+| 4 | moderate | Far-line points projected at the channel bed, not the drawn far surface | Projected at `farGround.getHeightAtCoordinates` |
+| 5 | moderate (latent) | The water strip joined across a skipped stretch | A re-entry starts a new strip |
+| 6 | moderate | AO grid cells grew to 6.25 m | ~4 m cells (N = SMW/4); H sampled once per cell into a height grid, rings read it bilinearly (keeps load time) |
+| 7 | moderate | Shadow texels grew to 0.51 m | SMN 3072 (0.34 m) |
+| 8 | moderate | touchesZone sampled 12 rim points (misses enclosed zones) | Exact disc-vs-box / disc-vs-disc test |
+| 9 | light | `riverQuery()` returned a nearest-pass `level` silently | `level` only with `wantLevel`; `trough` throws without it |
+| 10 | light | The render check left the camera at its last view | Restored in `finally` |
+
+Also seen on close screenshots at the exits (camera limits lifted): a 0.9 m wall along the tile edge, a dry 6 m channel
+end and a darker painted line; all fixed by the apron, the clamped ribbon and a far-line colour matching the water.
+Load time (5 paired runs): main median 2.86 s, W1 3.03 s (+170 ms).
