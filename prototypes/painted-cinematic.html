@@ -70,6 +70,7 @@ input[type=range]{width:120px;accent-color:var(--accent)}
      paper, dither. Depth of field is presentation/video-only per design.md.
    Visual test only: no sim/render split (see web-rts-architecture.md).
    ========================================================================= */
+const T0=performance.now();   // load-time measurement (window.__buildMs)
 const B=BABYLON,V3=B.Vector3,C3=B.Color3,C4=B.Color4;
 if(!window.NATURE){document.body.innerHTML='<p style="padding:30px">nature-pack.data.js missing: run <code>node tools/obj-to-js.mjs</code></p>';throw new Error('no data');}
 const canvas=document.getElementById('c');
@@ -89,17 +90,112 @@ function vn(x,y){const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi,u=xf*xf
 function fbm(x,y){let s=0,a=0.5;for(let i=0;i<4;i++){s+=a*vn(x,y);x=x*2.03+11.3;y=y*2.03-7.1;a*=0.5;}return s;}
 function mulberry(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 const sstep=(a,b,x)=>{const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t);};
-const STREAM=[-38,10,0.03,3.5,0.083,1.0];   // centre-line: a + b·sin(c·z) + d·sin(e·z + f), shared by JS and GLSL
-const streamX=z=>STREAM[0]+STREAM[1]*Math.sin(z*STREAM[2])+STREAM[3]*Math.sin(z*STREAM[4]+STREAM[5]);
-const f1=v=>v.toFixed(4),STREAM_GLSL=`(${f1(STREAM[0])}+${f1(STREAM[1])}*sin(wp.z*${f1(STREAM[2])})+${f1(STREAM[3])}*sin(wp.z*${f1(STREAM[4])}+${f1(STREAM[5])}))`;
-function H(x,z){
+/* =========================================================================
+   RIVER (plans/w1-river-shape.md, research/stylized-water.md §2.1–2.4).
+   One channel, generated once at load into dense per-sample arrays. Every
+   consumer (carve, terrain colours, water mesh, scatter, reflections) asks
+   riverQuery(); nothing re-derives the river from a formula.
+   ========================================================================= */
+// terrain before the river is carved
+function baseH(x,z){
   let h=7*fbm(x*0.0045+3,z*0.0045)+2*fbm(x*0.02+5,z*0.02);
   h+=15*Math.exp(-((x/50)**2+((z-6)/36)**2));
   h+=6*Math.exp(-(((x-70)/40)**2+((z+20)/40)**2));
-  h-=3.4*(1-sstep(3,11,Math.abs(x-streamX(z))));
   const r=Math.hypot(x,z);h+=28*Math.min(1,Math.max(0,(r-220)/380))*fbm(x*0.003-9,z*0.003+4);
   return h;
 }
+const J0=x=>{let s=0;for(let i=0;i<64;i++){const t=(i+0.5)/64*Math.PI;s+=Math.cos(x*Math.sin(t));}return s/64;};   // Bessel J0: sinuosity = 1/J0(theta0)
+const RIVER=(()=>{
+  const P={id:'goldbach',W0:6,D0:1.0,bankH:1.1,floodplainW:70,valleySlope:0.18,theta0:1.25,Js:0.03,Jf:0.02,v0:0.6,seed:7,z0:-1350,z1:1350};
+  // gentle valley axis west of the hill (radius > 1 km, so the frame never folds)
+  const axisX=z=>-42+22*Math.sin(z*0.0035+0.6)+8*Math.sin(z*0.011);
+  const axisD=z=>22*0.0035*Math.cos(z*0.0035+0.6)+8*0.011*Math.cos(z*0.011);
+  // 1. Kinoshita centre line in the valley frame (u along, v across), phase accumulated, per-bend jitter
+  const ds=P.W0/4,U=[],Vv=[];
+  let u=0,v=0,ph=mulberry(P.seed)()*6.283;
+  const nA=k=>vn(k*1.3+P.seed,3.1),nL=k=>vn(k*1.1+P.seed,7.7);
+  while(u<P.z1-P.z0){
+    const bend=ph/Math.PI;
+    const th0=Math.min(1.6,P.theta0*(0.55+0.9*nA(bend)));        // ±45% amplitude per bend, capped below self-touching
+    const lam=11*P.W0*(0.65+0.7*nL(bend))/J0(th0);                // valley wavelength ≈ 11 W (±35%) × sinuosity
+    let th=th0*Math.sin(ph)+th0**3*(P.Js*Math.cos(3*ph)-P.Jf*Math.sin(3*ph));
+    th-=0.6*v/P.floodplainW;                                       // restoring term: stay inside the meander belt
+    u+=Math.cos(th)*ds;v+=Math.sin(th)*ds;ph+=2*Math.PI*ds/lam;
+    U.push(u);Vv.push(v);
+  }
+  // 2. onto the valley axis: P = A(z) + N(z)·v
+  const n=U.length,F=k=>new Float32Array(k);
+  const C={P,n,px:F(n),pz:F(n),tx:F(n),tz:F(n),s:F(n),kappa:F(n),W:F(n),D:F(n),A:F(n),riffle:F(n),zw:F(n),v:F(n),tau:F(n)};
+  for(let i=0;i<n;i++){const z=P.z0+U[i],d=axisD(z),l=Math.hypot(1,d);C.px[i]=axisX(z)+Vv[i]/l;C.pz[i]=z-Vv[i]*d/l;}
+  // flow from the higher end to the lower end, so the water surface follows the land
+  if(baseH(C.px[0],C.pz[0])<baseH(C.px[n-1],C.pz[n-1])){C.px.reverse();C.pz.reverse();}
+  // 3. tangents, arc length, signed curvature (smoothed over ~1 W)
+  const ang=F(n);
+  for(let i=0;i<n;i++){const a=Math.max(0,i-1),b=Math.min(n-1,i+1),ex=C.px[b]-C.px[a],ez=C.pz[b]-C.pz[a],l=Math.hypot(ex,ez)||1;
+    C.tx[i]=ex/l;C.tz[i]=ez/l;ang[i]=Math.atan2(ez,ex);if(i)C.s[i]=C.s[i-1]+Math.hypot(C.px[i]-C.px[i-1],C.pz[i]-C.pz[i-1]);}
+  const k0=F(n);for(let i=1;i<n-1;i++){let d=ang[i+1]-ang[i-1];d=Math.atan2(Math.sin(d),Math.cos(d));k0[i]=d/(C.s[i+1]-C.s[i-1]);}
+  const R=4;for(let i=0;i<n;i++){let a=0,c=0;for(let k=-R;k<=R;k++){const j=i+k;if(j>=0&&j<n){a+=k0[j];c++;}}C.kappa[i]=a/c;}
+  // 4. attributes (research §2.3). Q grows slowly downstream (unseen tributaries)
+  for(let i=0;i<n;i++){
+    const Q=0.8+0.5*C.s[i]/C.s[n-1];
+    const k=C.kappa[Math.max(0,i-2)];                              // sampled ~0.5 W upstream: pools sit just past the apex
+    const bendness=Math.min(1,Math.abs(k)*P.W0*2.3);
+    const W=P.W0*Math.sqrt(Q)*(1+0.12*bendness)*(0.7+0.6*vn(C.s[i]/(4*P.W0),1.7));
+    const straight=0.5+0.5*Math.cos(2*Math.PI*C.s[i]/(6*W));
+    const riffle=Math.max(1-Math.min(1,bendness*1.6),(1-bendness)*straight);
+    C.W[i]=W;C.riffle[i]=riffle;
+    C.D[i]=P.D0*Math.pow(Q,0.4)*(1.45-1.0*riffle);
+    C.A[i]=Math.max(-1,Math.min(1,-k*W*1.6));                      // + : outer (cut) bank on the +n side; used in W2
+    C.v[i]=P.v0*Math.pow(Q,0.1)*(0.55+1.1*riffle);
+  }
+  // 5. water surface: running minimum of the land downstream, drop concentrated on riffles
+  const raw=F(n);let zmin=Infinity;for(let i=0;i<n;i++){zmin=Math.min(zmin,baseH(C.px[i],C.pz[i])-P.bankH);raw[i]=zmin;}
+  let wsum=0;for(let i=1;i<n;i++)wsum+=0.25+C.riffle[i];
+  const drop=raw[0]-raw[n-1];C.zw[0]=raw[0];
+  for(let i=1;i<n;i++)C.zw[i]=C.zw[i-1]-drop*(0.25+C.riffle[i])/wsum;
+  for(let i=0;i<n;i++)C.zw[i]=Math.min(C.zw[i],raw[i]);
+  for(let i=1;i<n;i++)C.tau[i]=C.tau[i-1]+(C.s[i]-C.s[i-1])/C.v[i];
+  // 6. floodplain level along the valley axis: per 4 m of z, the lowest water level there (+ bank height)
+  const FZ=4,nb=Math.ceil((P.z1-P.z0)/FZ)+1,fp=new Float32Array(nb).fill(Infinity);
+  for(let i=0;i<n;i++){const b=Math.max(0,Math.min(nb-1,Math.round((C.pz[i]-P.z0)/FZ)));fp[b]=Math.min(fp[b],C.zw[i]+P.bankH);}
+  for(let b=1;b<nb;b++)if(!isFinite(fp[b]))fp[b]=fp[b-1];for(let b=nb-2;b>=0;b--)if(!isFinite(fp[b]))fp[b]=fp[b+1];
+  // lowered height of the valley trough at (x,z), or Infinity when the trough is above the land h anyway
+  C.trough=(x,z,h)=>{const zc=Math.max(P.z0,Math.min(P.z1,z)),d=Math.abs(x-axisX(zc))/Math.hypot(1,axisD(zc));
+    const t=Math.max(0,Math.min(nb-1.001,(z-P.z0)/FZ)),b=Math.floor(t),f=t-b,lv=fp[b]+(fp[b+1]-fp[b])*f;
+    const v=lv+Math.max(0,d-P.floodplainW/2)*P.valleySlope;            // flat floodplain, valley sides rising at ~10°
+    return v-0.15>h?Infinity:v+0.25*(vn(x*0.05,z*0.05)-0.5);};          // swales only where the trough actually cuts
+  // 7. bucket grid: each segment registered in every 16 m cell within REACH of it
+  const CELL=16,REACH=32,grid=new Map(),key=(cx,cz)=>cx*65536+cz;
+  for(let i=0;i<n-1;i++){
+    const x0=Math.min(C.px[i],C.px[i+1])-REACH,x1=Math.max(C.px[i],C.px[i+1])+REACH,z0=Math.min(C.pz[i],C.pz[i+1])-REACH,z1=Math.max(C.pz[i],C.pz[i+1])+REACH;
+    for(let cx=Math.floor(x0/CELL);cx<=Math.floor(x1/CELL);cx++)for(let cz=Math.floor(z0/CELL);cz<=Math.floor(z1/CELL);cz++){
+      const k=key(cx,cz);let b=grid.get(k);if(!b)grid.set(k,b=[]);b.push(i);}}
+  C.grid=grid;C.CELL=CELL;C.REACH=REACH;C.key=key;
+  return C;
+})();
+// nearest river segment within REACH: {i,t,n (signed, + = left of flow),dist,s} or null
+function riverQuery(x,z){
+  const C=RIVER,b=C.grid.get(C.key(Math.floor(x/C.CELL),Math.floor(z/C.CELL)));if(!b)return null;
+  let best=null,bd=Infinity;
+  for(const i of b){const ax=C.px[i],az=C.pz[i],ex=C.px[i+1]-ax,ez=C.pz[i+1]-az,L2=ex*ex+ez*ez||1;
+    const t=Math.max(0,Math.min(1,((x-ax)*ex+(z-az)*ez)/L2)),dx=x-(ax+ex*t),dz=z-(az+ez*t),d=dx*dx+dz*dz;
+    if(d<bd){bd=d;best={i,t,n:Math.sign(ex*dz-ez*dx)*Math.sqrt(d),dist:Math.sqrt(d)};}}
+  if(!best||best.dist>C.REACH)return null;
+  best.s=lerpA(C.s,best);return best;
+}
+const lerpA=(arr,q)=>arr[q.i]+(arr[q.i+1]-arr[q.i])*q.t;
+// valley + floodplain + symmetric channel carve (W1); the asymmetric cut bank / point bar is W2
+function H(x,z){
+  const b=baseH(x,z),h=Math.min(b,RIVER.trough(x,z,b)),q=riverQuery(x,z);if(!q)return h;   // valley trough only lowers, never raises hills
+  const hw=lerpA(RIVER.W,q)/2,bw=0.7*hw,m=q.dist,zw=lerpA(RIVER.zw,q);
+  if(m>hw+bw)return h;
+  const g=m<hw?-lerpA(RIVER.D,q)*(1-(m/hw)**2):RIVER.P.bankH*sstep(0,1,(m-hw)/bw);
+  return Math.min(h,zw+g);
+}
+// "is (x,z) within d m of the water's edge (+6 m, the old stream half-width convention)?"
+const nearStream=(x,z,d)=>{const q=riverQuery(x,z);return !!q&&q.dist<lerpA(RIVER.W,q)/2+(d-6);};
+// bank distance in half-widths (≤0 = inside the channel), for terrain colouring
+const riverBand=(x,z)=>{const q=riverQuery(x,z);if(!q)return 8;const hw=lerpA(RIVER.W,q)/2;return Math.min(8,(q.dist-hw)/hw);};
 
 /* =========================================================================
    PAINT GRAIN TEXTURE (tileable, 512²)
@@ -252,9 +348,9 @@ const canopy=[];const smTree=(x,z,_crownY,cr)=>{canopy.push([x,z,cr*1.15,0.42]);
 /* =========================================================================
    TERRAIN
    ========================================================================= */
-const TER_VS=`precision highp float;attribute vec3 position;attribute vec3 normal;uniform mat4 world,viewProjection;
-varying vec3 vW,vN;void main(){vec4 w=world*vec4(position,1.0);vW=w.xyz;vN=normalize(mat3(world)*normal);gl_Position=viewProjection*w;}`;
-const TER_FS=`precision highp float;varying vec3 vW,vN;${GLSL}
+const TER_VS=`precision highp float;attribute vec3 position;attribute vec3 normal;attribute float aRiver;uniform mat4 world,viewProjection;
+varying vec3 vW,vN;varying float vRiver;void main(){vec4 w=world*vec4(position,1.0);vW=w.xyz;vN=normalize(mat3(world)*normal);vRiver=aRiver;gl_Position=viewProjection*w;}`;
+const TER_FS=`precision highp float;varying vec3 vW,vN;varying float vRiver;${GLSL}
 vec3 albedo(vec3 wp,vec3 n){
   float n1=G(wp.xz/150.0).g,n2=G(wp.xz/53.0+0.31).g,n3=G(wp.xz/19.0+0.7).g;
   vec3 c=mix(vec3(0.33,0.45,0.20),vec3(0.55,0.58,0.27),smoothstep(0.35,0.66,n1));      // meadow → yellow-green
@@ -268,10 +364,10 @@ vec3 albedo(vec3 wp,vec3 n){
   float fl=step(0.86,G(wp.xz/1.6).r)*fpat;c=mix(c,vec3(0.99,0.56,0.14),fl);
   c=mix(c,vec3(0.96,0.93,0.84),step(0.93,G(wp.xz/1.3+0.5).r)*fpat*0.8);
   // stream banks
-  float sx=${STREAM_GLSL},d=abs(wp.x-sx);
-  c=mix(c*vec3(0.72,0.78,0.70),c,smoothstep(6.5,11.0,d+(G(wp.xz/3.0).r-0.5)*2.0));   // damp ground near the water
-  c=mix(vec3(0.20,0.36,0.22),c,smoothstep(5.0,8.5,d));
-  c=mix(vec3(0.42,0.34,0.22),c,smoothstep(3.6,5.4,d));
+  float rb=vRiver+(G(wp.xz/3.0).r-0.5)*0.35;                                   // distance to the bank in half-widths
+  c=mix(c*vec3(0.72,0.78,0.70),c,smoothstep(0.1,0.9,rb));                       // damp ground near the water
+  c=mix(vec3(0.20,0.36,0.22),c,smoothstep(-0.05,0.4,rb));
+  c=mix(vec3(0.42,0.34,0.22),c,smoothstep(-0.35,-0.05,rb));
   // dirt road to the village
   float road=abs(wp.z-(14.0+0.12*(wp.x+50.0))-2.0*sin(wp.x*0.07));
   c=mix(vec3(0.70,0.56,0.36)*(0.9+0.2*st),c,clamp(smoothstep(1.4,2.6,road+(G(wp.xz/4.0).r-0.5)*1.2)+step(-40.0,wp.x)+step(wp.x,-130.0),0.0,1.0));   // clamped: an unclamped weight extrapolated the road's streaks over the whole map
@@ -290,12 +386,13 @@ void main(){vec3 N=normalize(vN);vec4 lm=LM(vW);
   float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,lm.g,uAO);
   vec3 c=paint(albedo(vW,N),N,vW,occ,0.12,1.0,sh);
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}`;
-const terrainMat=mat('terrain',TER_VS,TER_FS);
+const terrainMat=mat('terrain',TER_VS,TER_FS,{attributes:['position','normal','aRiver']});
 function buildTerrain(size,sub,yOff){
   const g=B.MeshBuilder.CreateGround('t',{width:size,height:size,subdivisions:sub,updatable:true},scene);
   const p=g.getVerticesData(B.VertexBuffer.PositionKind);const inner=SMW/2-14;
   for(let i=0;i<p.length;i+=3){p[i+1]=H(p[i],p[i+2])+yOff;if(size>SMW&&Math.abs(p[i])<inner&&Math.abs(p[i+2])<inner)p[i+1]-=25;}   // far ring sinks under the detailed terrain
   g.updateVerticesData(B.VertexBuffer.PositionKind,p);const n=[];B.VertexData.ComputeNormals(p,g.getIndices(),n);g.updateVerticesData(B.VertexBuffer.NormalKind,n);
+  const rv=new Float32Array(p.length/3);for(let i=0;i<rv.length;i++)rv[i]=riverBand(p[i*3],p[i*3+2]);g.setVerticesData('aRiver',rv,false,1);
   g.material=terrainMat;return g;
 }
 buildTerrain(SMW,300,0);buildTerrain(2600,170,-0.9);
@@ -353,16 +450,14 @@ void main(){
 // reflection mask: crown discs of trees near the stream (filled once the scatter is known)
 const REFN=1024,reflCanvas=document.createElement('canvas');reflCanvas.width=reflCanvas.height=REFN;
 const reflG=reflCanvas.getContext('2d');reflG.fillStyle='#000';reflG.fillRect(0,0,REFN,REFN);reflG.filter='blur(3px)';
-const reflTrees=[];const reflAdd=(x,z,r)=>{if(Math.abs(x-streamX(z))<26)reflTrees.push([x,z,r]);};
+const reflTrees=[];const reflAdd=(x,z,r)=>{if(nearStream(x,z,26))reflTrees.push([x,z,r]);};
 let waterMat;
-{const pos=[],uv=[],dep=[],idx=[],W=30,COLS=15;let k=0;
- for(let z=-1300;z<=1300;z+=(Math.abs(z)<300?2.5:12)){
-   const cx=streamX(z),y=H(cx,z)+2.0;
-   const tx=(streamX(z+0.5)-streamX(z-0.5)),tl=Math.hypot(tx,1),nx=1/tl,nz=-tx/tl;   // normal to the centre-line
-   for(let c=0;c<=COLS;c++){const a=(c/COLS-0.5)*W,x=cx+nx*a,zz=z+nz*a;
-     const h=H(x,zz),edge=Math.max(0,(Math.abs(a)-9)/6);
-     const yy=edge>0?Math.min(y,h-0.4*edge):y;          // outer columns dive under the bank: the terrain cuts a natural shoreline, no ribbon edge
-     pos.push(x,yy,zz);uv.push(a,z);dep.push(y-h);}
+{const pos=[],uv=[],dep=[],idx=[],C=RIVER,COLS=12;let k=0;
+ for(let i=0;i<C.n;i+=(Math.abs(C.pz[i])<360&&Math.abs(C.px[i])<360?1:4)){
+   const hw=C.W[i]/2,y=C.zw[i],nx=-C.tz[i],nz=C.tx[i];                // left normal of the flow
+   for(let c=0;c<=COLS;c++){const a=(c/COLS*2-1)*hw*1.35,x=C.px[i]+nx*a,zz=C.pz[i]+nz*a;
+     const h=H(x,zz),yy=Math.abs(a)>hw?Math.min(y,h-0.35):y;           // outer columns dive under the bank: terrain cuts the shoreline
+     pos.push(x,yy,zz);uv.push(a,C.s[i]);dep.push(y-h);}
    if(k)for(let c=0;c<COLS;c++){const a=(k-1)*(COLS+1)+c,b=k*(COLS+1)+c;idx.push(a,b,a+1,a+1,b,b+1);}
    k++;}
  const m=new B.Mesh('water',scene),vd=new B.VertexData();vd.positions=pos;vd.uvs=uv;vd.indices=idx;const n=[];B.VertexData.ComputeNormals(pos,idx,n);vd.normals=n;vd.applyToMesh(m);
@@ -478,7 +573,6 @@ function place(model,material,items){            // items: [x,z,scale,yaw,tint,(
 
 /* ---------- scattering: composition follows the north star ---------- */
 const R=mulberry(77),rr=()=>R();
-const nearStream=(x,z,d)=>Math.abs(x-streamX(z))<d;
 const HOUSES=[[-56,22,0.3],[-66,10,-0.2],[-54,40,0.9],[-72,31,0.1]];
 const nearVillage=(x,z,d)=>HOUSES.some(([hx,hz])=>(hx-x)**2+(hz-z)**2<d*d);
 const KEEP_CLEAR=(x,z)=>(Math.abs(x+5)<20&&z>-44&&z<-2)||(z>7&&z<19&&x>-14&&x<26)||((x-34)**2+(z+24)**2<160);  // formations
@@ -492,8 +586,10 @@ for(const [cx,cz,n] of clusters)for(let i=0;i<n;i++){
   const M=window.NATURE[mdl];smTree(x,z,(M.max[1]*0.62)*s,(Math.max(M.max[0]-M.min[0],M.max[2]-M.min[2])*0.45)*s);
   if(rr()<0.5){const fx=x+(rr()-0.5)*6,fz=z+(rr()-0.5)*6;add('Plant_1',[fx,fz,1.6+rr(),rr()*6.28,rr()]);}
 }
-for(let z=-170;z<=170;z+=7+rr()*9){                       // willows follow the stream
-  if(rr()<0.45)continue;const side=rr()<0.5?-1:1,x=streamX(z)+side*(9+rr()*4);if(nearVillage(x,z,9))continue;
+for(let i=0,step=0;i<RIVER.n;i+=step){                     // willows follow the river banks
+  step=Math.round((7+rr()*9)/(RIVER.P.W0/4));const C=RIVER;
+  if(Math.abs(C.px[i])>175||Math.abs(C.pz[i])>175||rr()<0.45)continue;
+  const side=rr()<0.5?-1:1,off=C.W[i]/2+3+rr()*4,x=C.px[i]-C.tz[i]*side*off,z=C.pz[i]+C.tx[i]*side*off;if(nearVillage(x,z,9))continue;
   const mdl='Willow_'+(1+Math.floor(rr()*3)),s=3.6+rr()*1.2;add(mdl,[x,z,s,rr()*6.28,0.2+rr()*0.5]);
   const M=window.NATURE[mdl];smTree(x,z,M.max[1]*0.6*s,(M.max[0]-M.min[0])*0.45*s);
 }
@@ -584,7 +680,7 @@ void main(){vec3 N=normalize(vN);
   vis=smoothstep(0.35,0.65,vis+(G(vW.xz/3.0).r-0.5)*0.35);                  // painted edge, decided once
   vec4 a=texture2D(uAOTex,(vW.xz+${(SMW/2).toFixed(1)})/${SMW.toFixed(1)});
   gl_FragColor=vec4(vis,a.g,a.b,1.0);}`;
-const bakeMat=mat('bake',TER_VS,BAKE_FS,{samplers:['uAOTex']});mats.splice(mats.indexOf(bakeMat),1);   // never bind uLM (its own target) or update it per frame
+const bakeMat=mat('bake',TER_VS,BAKE_FS,{attributes:['position','normal','aRiver'],samplers:['uAOTex']});mats.splice(mats.indexOf(bakeMat),1);   // never bind uLM (its own target) or update it per frame
 bakeMat.setTexture('uAOTex',aoTex);bakeMat.setTexture('uShadowMap',shadowRT);bakeMat.setMatrix('uLightVP',lightVP);bakeMat.setVector2('uSMTexel',new B.Vector2(1/SMN,1/SMN));
 const lmCam=new B.FreeCamera('lmCam',new V3(0,500,0),scene);lmCam.setTarget(new V3(0,0,0.01));
 lmCam.mode=B.Camera.ORTHOGRAPHIC_CAMERA;Object.assign(lmCam,{orthoLeft:-SMW/2,orthoRight:SMW/2,orthoTop:SMW/2,orthoBottom:-SMW/2,minZ:1,maxZ:1000});
@@ -676,7 +772,11 @@ scene.onBeforeRenderObservable.add(()=>{
 });
 engine.runRenderLoop(()=>scene.render());
 addEventListener('resize',()=>engine.resize());
+if(new URLSearchParams(location.search).get('river')==='debug'){   // centre line: light = riffle, dark blue = pool
+  const pts=[],cols=[],C=RIVER;for(let i=0;i<C.n;i+=2){pts.push(new V3(C.px[i],C.zw[i]+0.4,C.pz[i]));const r=C.riffle[i];cols.push(new C4(0.15+0.85*r,0.25+0.75*r,0.6+0.4*r,1));}
+  B.MeshBuilder.CreateLines('riverDebug',{points:pts,colors:cols},scene);}
 window.__proto={S,scene,camera,buildPost};
+window.__buildMs=performance.now()-T0;
 </script>
 </body>
 </html>
