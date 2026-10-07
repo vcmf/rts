@@ -32,7 +32,7 @@ covered its tile), and the camera drift exists on main. Rules for this are in §
 | Play area | **1–1.5 km** square (the prototype stays at 500 m until the chunk step, §10) | Detail terrain ≈ play + 2 × ~150 m margin ≈ **1.8 km**; uniform chunks needed (§4) |
 | Units | **20–40 formations × 100–200 figures** = 2k–8k figures | Instanced figures with LOD, stepped vertex animation, own shadows (§7) |
 | Camera | **Locked down**: short zoom, pitch from zoom, **yaw ±45°** around a default | No distance LOD or streaming, ever; the sun stays behind the scene for the backlit look |
-| Min-spec | **Mid-range laptops**: Intel Iris Xe / AMD Radeon 680M class, Apple M1 as the Mac reference; WebGL2, 1080p | Memory and texture limits (§6); frame budget (§8) |
+| Min-spec | **Gaming laptop, RTX 3060 (laptop) or better**: 6 GB VRAM, WebGL2, 1080p at 60 fps | Bake memory and texture size are not the constraint (§6); frame budget (§8). The dev Macs are not the target: they serve as a conservative proxy until a 3060 laptop is measured |
 
 ## 3. Principles
 
@@ -83,11 +83,11 @@ today, from elevation + river data in W6), then read by everything:
 - **Gameplay layers** live on the same grid as sim data, never as render bakes: water depth
   (fords are riffles shallow enough to cross), passability and slope, later ice by season.
 
-**Chunks.** At 1.8 km and 1.79 m cells the detail terrain is ~1M vertices / 2M triangles. The
-camera sees a ~800 m footprint, so the heightfield is cut into ~100 m chunks and only visible ones
-draw (culling, not LOD: every chunk has the same resolution, as in Age of Empires III, Company of
-Heroes, StarCraft II). Chunk edges share vertices, so seams are exact. Bakes go per chunk or into
-one atlas (§6).
+**Chunks.** At 1.8 km and 1.79 m cells the detail terrain is ~1M vertices / 2M triangles, which a
+3060 draws easily in one mesh. Chunks (~100 m, every chunk the same resolution, as in Age of Empires
+III, Company of Heroes, StarCraft II) are still worth it for **scatter**: grass, wheat and trees
+grow with the area (~13× today's counts at 1.8 km), and culling instances per chunk keeps them in
+budget. Chunk edges share vertices, so seams are exact. Bakes stay single textures (§6).
 
 **The far ring** is a render-only backdrop: coarse grid, valley trough only, the river painted as
 a line, stitched exactly to the detail edge (the W1 apron). Nothing in gameplay touches it.
@@ -125,13 +125,11 @@ later). Each declares coverage, texel target, inputs and consumers.
 - **Fitted shadow frustum:** project the coverage corners (at min and max height) into light
   space for the ortho box and depth range; bias in metres.
 - **No canvas filters or per-element strokes** (they lost the WebGL context in SwiftShader).
-- **Min-spec limits:** textures ≤ 4096² per bake (8192 allowed only if measured fine on Iris Xe);
-  **bake memory ≤ 150 MB** resident. At 1.8 km a single 0.26 m light map would be 6900² (190 MB),
-  so large maps use per-chunk light maps streamed in a ring around the camera (the camera is
-  locked, so the ring is small) **or** a 0.5 m light map (3600², 52 MB). Choose by screenshot at
-  the chunk step.
-- **Budgets measured, not asserted:** bake time per bake (headless in CI, plus manual numbers on
-  M1 and an Iris Xe laptop).
+- **Min-spec limits (RTX 3060 laptop):** textures ≤ 8192² per bake; **bake memory ≤ 600 MB**
+  resident (of 6 GB VRAM). At 1.8 km a single 0.26 m light map is 6900² (190 MB): it fits, so the
+  light map stays one texture. The shadow depth map is disposed after the bake.
+- **Budgets measured, not asserted:** bake time per bake (headless in CI, plus manual numbers on a
+  3060 laptop; a dev Mac as a conservative proxy until then).
 
 ## 7. Units (rendering side)
 
@@ -139,7 +137,7 @@ later). Each declares coverage, texel target, inputs and consumers.
 - **Thin instances** per figure type, matrices written in place each frame
   (`web-rts-architecture.md` §3).
 - **Figure LOD:** at max zoom a 1.8 m figure is ~8 px tall, so far figures drop to a very low-poly
-  mesh or an impostor; full mesh only at close zoom. Budget to measure: ≤ 1.5M triangles for units.
+  mesh or an impostor; full mesh only at close zoom. Budget to measure: ≤ 3M triangles for units.
 - **Animation:** stepped at 12 fps (`design.md`), vertex animation textures, no skeletons on the
   CPU.
 - **Shadows:** units are not in the static shadow map. Instanced contact blobs per figure (cheap),
@@ -155,9 +153,10 @@ later). Each declares coverage, texel target, inputs and consumers.
 | Pixels | differential render (river visible, banks dry, far line); golden screenshots, time frozen | headless, every PR |
 | Budgets | load and bake time, GPU memory; GPU frame time per pass on min-spec hardware | per PR / per milestone |
 
-**Frame budget (min-spec, 1080p, 60 fps = 16.7 ms; target ≤ 12 ms GPU):** terrain ~2 ms, scatter
-~3 ms, units ~3 ms, water ~1 ms, post ~2 ms, headroom ~1 ms. Render scale down to 0.75 is the
-allowed fallback. Numbers are estimates until the performance pass measures them.
+**Frame budget (RTX 3060 laptop, 1080p, 60 fps = 16.7 ms; target ≤ 12 ms GPU):** terrain ~1.5 ms,
+scatter ~3 ms, units ~3 ms, water ~1 ms, post ~2 ms, headroom ~1.5 ms. The 4 ms left under 16.7 ms
+is the margin for 1440p screens and video-tier effects. Numbers are estimates until the performance
+pass measures them.
 
 - Every check gets a **negative test** when written.
 - Where a check reuses the code it checks, add an independent oracle for the critical cases.
@@ -190,8 +189,8 @@ blocking an unrelated PR (§11).
 6. **Units placeholder**: a few formations as thin instances with LOD, contact shadows and picking.
    Before water: it tests camera, readability and terrain data where the game will use them.
 7. **W2–W5** water.
-8. **Chunks + bakes at scale**: grow the play area to 1–1.5 km, chunk culling, per-chunk or
-   coarser light map; measured on min-spec.
+8. **Scale up**: grow the play area to 1–1.5 km, scatter culling by chunk, light map at full size;
+   measured on a 3060 laptop.
 9. **Performance pass** with per-pass budgets (§8), full unit count (8k figures).
 10. **Video-tier frame** from a presentation camera.
 11. **W6** Austerlitz from real data; defines the map file format (heightfield, river samples,
@@ -210,7 +209,7 @@ blocking an unrelated PR (§11).
 - A finding about code that already exists on main does not block the PR. If it is grave, it is
   recorded in §9 with a planned fix.
 - The review round count restarts after a redesign (unchanged).
-- Proposed, not yet agreed: a redesign should cut scope or split the PR rather than widen it.
+- A redesign may widen or cut scope: it can find a miss that must be built, or a simpler design.
 
 ## 12. Adversarial review: what changed
 
