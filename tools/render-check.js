@@ -59,19 +59,32 @@
     water.isVisible = true; farTerrainMat.setTexture('uRiverMask', riverMask); blank.dispose()
     cam.alpha = saved.alpha; cam.beta = saved.beta; cam.radius = saved.radius; cam.target.copyFrom(saved.target)
   }
-  // camera: panning in any direction from any play-area corner keeps the focus in the play area at its height
-  const t0 = cam.target.clone()
-  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) for (const [px, py] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) {
-    cam.target.set(sx * PLAY, FOCUS_Y, sz * PLAY)
-    for (let f = 0; f < 40; f++) { cam.inertialPanningX = px; cam.inertialPanningY = py; scene.render() }
-    const t = cam.target
-    if (Math.abs(t.x) > PLAY + 1e-6 || Math.abs(t.z) > PLAY + 1e-6 || Math.abs(t.y - FOCUS_Y) > 1e-6) { fail.push(`pan from ${sx},${sz} by ${px},${py} left the bounds: ${[t.x, t.y, t.z].map(v => v.toFixed(1))}`); break } }
-  cam.inertialPanningX = cam.inertialPanningY = 0; cam.target.copyFrom(t0)
-  // shadow box: every tile corner (ground low point to caster top) projects inside the light camera's ortho box and depth range
-  { const V = lightCam.getViewMatrix(true), h = SMW / 2, gy = tileGround.getVerticesData(B.VertexBuffer.PositionKind).filter((_, k) => k % 3 === 1)
-    const lo = Math.min(...gy), hi = Math.max(...gy) + 40   // trees are well under 40 m
-    for (const x of [-h, h]) for (const z of [-h, h]) for (const y of [lo, hi]) { const v = B.Vector3.TransformCoordinates(new B.Vector3(x, y, z), V)
-      if (v.x < lightCam.orthoLeft || v.x > lightCam.orthoRight || v.y < lightCam.orthoBottom || v.y > lightCam.orthoTop || v.z < lightCam.minZ || v.z > lightCam.maxZ) fail.push(`tile corner ${x},${y},${z} outside the shadow box`) } }
+  // camera: from the centre every pan direction moves the focus; from every play-area corner, panning any way keeps the
+  // focus in the play area and on the ground plane (no clamp forces y: mapPanning has to do it)
+  const t0 = cam.target.clone(), dirs = [[2, 0], [-2, 0], [0, 2], [0, -2]]
+  const pan = ([px, py], frames) => { for (let f = 0; f < frames; f++) { cam.inertialPanningX = px; cam.inertialPanningY = py; scene.render() } cam.inertialPanningX = cam.inertialPanningY = 0 }
+  for (const d of dirs) { cam.target.set(0, FOCUS_Y, 0); pan(d, 10); const m = Math.hypot(cam.target.x, cam.target.z)
+    if (m < 1) fail.push(`pan ${d} from the centre moved the focus only ${m.toFixed(2)} m`) }
+  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) for (const d of dirs) {
+    cam.target.set(sx * PLAY, FOCUS_Y, sz * PLAY); pan(d, 40); const t = cam.target
+    if (Math.abs(t.x) > PLAY + 1e-6 || Math.abs(t.z) > PLAY + 1e-6 || Math.abs(t.y - FOCUS_Y) > 1e-3) { fail.push(`pan from ${sx},${sz} by ${d} left the bounds: ${[t.x, t.y, t.z].map(v => v.toFixed(1))}`); break } }
+  cam.target.copyFrom(t0)
+  // shadow box: every real caster on the tile (each instance's transformed bounding box) lies inside the light camera's box,
+  // clear of the 32 m fade band, and inside its depth range
+  { const V = lightCam.getViewMatrix(true), h = SMW / 2, fade = 32
+    let outside = 0, tested = 0
+    const inBox = p => { const v = B.Vector3.TransformCoordinates(p, V)
+      return v.x > lightCam.orthoLeft + fade && v.x < lightCam.orthoRight - fade && v.y > lightCam.orthoBottom + fade && v.y < lightCam.orthoTop - fade && v.z > lightCam.minZ && v.z < lightCam.maxZ }
+    for (const m of shadowRT.renderList) {
+      const pos = m.getVerticesData(B.VertexBuffer.PositionKind); if (!pos) continue
+      const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
+      for (let k = 0; k < pos.length; k += 3) for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], pos[k + a]); hi[a] = Math.max(hi[a], pos[k + a]) }
+      const corners = []; for (const x of [lo[0], hi[0]]) for (const y of [lo[1], hi[1]]) for (const z of [lo[2], hi[2]]) corners.push(new B.Vector3(x, y, z))
+      const worlds = m.thinInstanceCount > 0 ? m.thinInstanceGetWorldMatrices() : [m.computeWorldMatrix(true)]
+      for (const W of worlds) { const o = W.getTranslation(); if (m.thinInstanceCount > 0 && (Math.abs(o.x) > h || Math.abs(o.z) > h)) continue   // far-ring foliage fades out
+        tested++; if (!corners.every(c => inBox(B.Vector3.TransformCoordinates(c, W)))) outside++ } }
+    if (tested < 100) fail.push(`shadow box: only ${tested} casters tested`)
+    if (outside) fail.push(`shadow box: ${outside} of ${tested} tile casters outside it`) }
   // each limit must actually have been exercised somewhere
   if (!views.some(v => out[v.name]?.waterN >= 20)) fail.push('no view tested near water')
   if (!views.some(v => out[v.name]?.bankN >= 20)) fail.push('no view tested the banks')
