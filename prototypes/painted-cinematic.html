@@ -71,6 +71,7 @@ input[type=range]{width:120px;accent-color:var(--accent)}
    Visual test only: no sim/render split (see web-rts-architecture.md).
    ========================================================================= */
 const T0=performance.now();   // load-time measurement (window.__buildMs)
+const LZ0=100,LZ1=1600,SBIAS=(0.96/(LZ1-LZ0)).toFixed(6);   // sun camera depth range; shadow bias = 0.96 m in its depth
 const B=BABYLON,V3=B.Vector3,C3=B.Color3,C4=B.Color4;
 if(!window.NATURE){document.body.innerHTML='<p style="padding:30px">nature-pack.data.js missing: run <code>node tools/obj-to-js.mjs</code></p>';throw new Error('no data');}
 const canvas=document.getElementById('c');
@@ -288,7 +289,7 @@ uniform sampler2D uShadowMap;uniform mat4 uLightVP;uniform vec2 uSMTexel;uniform
 float shadowAt(vec3 wp,vec3 n){
   vec4 lp=uLightVP*vec4(wp+n*0.6,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
   if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;   // outside the sun's view (incl. beyond its far plane) = lit
-  float d=q.z*0.5+0.5-0.0012;
+  float d=q.z*0.5+0.5-${SBIAS};
   vec2 j=(vec2(texture2D(uGrain,wp.xz*0.6).r,texture2D(uGrain,wp.zx*0.6+0.3).r)-0.5)*3.0;
   float s=0.0;
   for(int x=0;x<2;x++)for(int y=0;y<2;y++)s+=step(texture2D(uShadowMap,uv+(vec2(float(x),float(y))*2.0-1.0+j)*uSMTexel).r,d);
@@ -417,37 +418,49 @@ const MASKN=2048,riverMaskCanvas=document.createElement('canvas');riverMaskCanva
  for(let i=0;i<C.n-1;){const lw=w(i);g.lineWidth=lw;g.beginPath();g.moveTo(X(i),Z(i));let j=i+1;for(;j<C.n-1&&w(j)===lw;j++)g.lineTo(X(j),Z(j));g.lineTo(X(j),Z(j));g.stroke();i=j;}}
 const riverMask=new B.DynamicTexture('riverMask',riverMaskCanvas,scene,true,B.Texture.BILINEAR_SAMPLINGMODE);riverMask.wrapU=riverMask.wrapV=B.Texture.CLAMP_ADDRESSMODE;riverMask.update(false);
 const farTerrainMat=mat('farTerrain',TER_VS,TER_FS,{attributes:['position','normal','aRiver'],samplers:['uRiverMask'],defines:['#define FARRING']});farTerrainMat.setTexture('uRiverMask',riverMask);
+// Two grids that meet exactly: the tile (SMW/448 = 1.79 m) and the far ring (FARW/182 = 14.3 m) both have lines on the tile
+// edge, and one far cell spans exactly 8 tile cells. The far ring drops every triangle inside the band one far cell beyond
+// the tile; the apron fills that band, joining the tile's edge vertices to the far ring's vertices one for one.
+const TSUB=448,FSUB=182,FCELL=FARW/FSUB,BAND=SMW/2+FCELL;
 function buildTerrain(size,sub,yOff){
   const g=B.MeshBuilder.CreateGround('t',{width:size,height:size,subdivisions:sub,updatable:true},scene);
-  const p=g.getVerticesData(B.VertexBuffer.PositionKind);
-  const coarse=size>SMW,cell=size/sub,E2=SMW/2,eps=0.01;
-  if(coarse&&Math.abs((size/2-E2)/cell-Math.round((size/2-E2)/cell))>1e-6)throw Error('far grid must have lines on the tile edge');
+  const p=g.getVerticesData(B.VertexBuffer.PositionKind),coarse=size>SMW;
   const rv=new Float32Array(p.length/3);
-  // far ring (FARW/182 = 14.3 m grid, lines exactly on the tile edge): valley trough only, no channel and no water; the river is
-  // a painted line there (FARRING). No far triangle overlaps the tile: vertices inside it sink, vertices on its edge drop to
-  // the lowest detailed height along their two edge segments, so the far ring never rises above the tile edge (the skirt
-  // below fills the step).
-  for(let i=0;i<p.length;i+=3){const x=p[i],z=p[i+2],q=riverQuery(x,z,true);p[i+1]=(coarse?RIVER.trough(x,z,baseH(x,z),q):carve(x,z,q))+yOff;rv[i/3]=bandOf(q);
-    if(!coarse)continue;const ax=Math.abs(x),az=Math.abs(z);
-    if(ax<E2-eps&&az<E2-eps)p[i+1]-=25;
-    else if(ax<E2+eps&&az<E2+eps){let lo=Infinity;const onEdge=(u,v)=>Math.max(Math.abs(u),Math.abs(v))>E2-eps&&Math.abs(u)<E2+eps&&Math.abs(v)<E2+eps;
-      for(let s=-cell;s<=cell+1e-6;s+=cell/16){if(onEdge(x+s,z))lo=Math.min(lo,H(x+s,z));if(onEdge(x,z+s))lo=Math.min(lo,H(x,z+s));}
-      p[i+1]=Math.min(p[i+1],lo-0.5);}}   // under the apron below, which stitches the two edges
-  g.updateVerticesData(B.VertexBuffer.PositionKind,p);g.updateCoordinateHeights();const n=[];B.VertexData.ComputeNormals(p,g.getIndices(),n);g.updateVerticesData(B.VertexBuffer.NormalKind,n);
+  // far ring: valley trough only, no channel and no water; the river is a painted line there (FARRING). rv=8 (no bank
+  // colours): on a 14 m grid they would bead along the line
+  for(let i=0;i<p.length;i+=3){const x=p[i],z=p[i+2],q=riverQuery(x,z,true);p[i+1]=(coarse?RIVER.trough(x,z,baseH(x,z),q):carve(x,z,q))+yOff;rv[i/3]=coarse?8:bandOf(q);}
+  g.updateVerticesData(B.VertexBuffer.PositionKind,p);g.updateCoordinateHeights();
+  if(coarse){const ix=g.getIndices(),keep=[];
+    for(let t=0;t<ix.length;t+=3){const cx=(p[ix[t]*3]+p[ix[t+1]*3]+p[ix[t+2]*3])/3,cz=(p[ix[t]*3+2]+p[ix[t+1]*3+2]+p[ix[t+2]*3+2])/3;
+      if(Math.max(Math.abs(cx),Math.abs(cz))>BAND)keep.push(ix[t],ix[t+1],ix[t+2]);}
+    g.setIndices(keep);}
+  const n=[];B.VertexData.ComputeNormals(p,g.getIndices(),n);g.updateVerticesData(B.VertexBuffer.NormalKind,n);
   g.setVerticesData('aRiver',rv,false,1);
   g.material=coarse?farTerrainMat:terrainMat;return g;
 }
-const tileGround=buildTerrain(SMW,460,0),farGround=buildTerrain(FARW,182,-0.9);
-// apron: one far cell (14.3 m) around the tile, stitched vertex for vertex to the tile edge (inside) and to the far ring's
-// first grid line (outside), so the two resolutions meet without a slit or a wall. It covers the dipped far edge cell and
-// draws with the far material, so the painted river line runs across it.
-{const pos=[],rv=[],idx=[],N=460,E2=SMW/2,F=E2+FARW/182;let k=0;
- for(const [sx,sz,dx,dz] of [[-1,-1,1,0],[1,-1,0,1],[1,1,-1,0],[-1,1,0,-1]]){   // corner, then along the edge
-   for(let j=0;j<=N;j++){const t=j/N*2;const ix=E2*(sx+dx*t),iz=E2*(sz+dz*t),ox=ix/E2*F,oz=iz/E2*F;   // outer row fans out to cover the corners
-     pos.push(ix,tileGround.getHeightAtCoordinates(Math.max(-E2+1e-3,Math.min(E2-1e-3,ix)),Math.max(-E2+1e-3,Math.min(E2-1e-3,iz))),iz,ox,farGround.getHeightAtCoordinates(ox,oz),oz);
-     rv.push(bandOf(riverQuery(ix,iz)),bandOf(riverQuery(ox,oz)));
-     if(j){const a=k-2,b=k;idx.push(a,b,a+1,a+1,b,b+1,a,a+1,b,a+1,b+1,b);}k+=2;}}   // both windings: the order differs per side
- const m=new B.Mesh('apron',scene),vd=new B.VertexData();vd.positions=pos;vd.indices=idx;vd.normals=pos.map((_,i)=>i%3===1?1:0);vd.applyToMesh(m);
+const tileGround=buildTerrain(SMW,TSUB,0),farGround=buildTerrain(FARW,FSUB,-0.9);
+// vertex index of grid point (x,z) in a CreateGround mesh (rows run from +z to -z)
+const gridV=(size,sub,x,z)=>{const c=size/sub,col=Math.round((x+size/2)/c),row=sub-Math.round((z+size/2)/c);return row*(sub+1)+col;};
+{const tp=tileGround.getVerticesData(B.VertexBuffer.PositionKind),tn=tileGround.getVerticesData(B.VertexBuffer.NormalKind),tr=tileGround.getVerticesData('aRiver');
+ const fp=farGround.getVerticesData(B.VertexBuffer.PositionKind),fn=farGround.getVerticesData(B.VertexBuffer.NormalKind);
+ const pos=[],nor=[],rv=[],idx=[],E2=SMW/2,R=Math.round(TSUB*FCELL/SMW);   // 8 tile cells per far cell
+ // each apron vertex is a copy of a tile or far vertex (position, normal, bank value), so the seams are exact
+ const add=(src,sn,k,r,x,z)=>{if(Math.abs(src[k*3]-x)>1e-3||Math.abs(src[k*3+2]-z)>1e-3)throw Error(`apron: no grid vertex at ${x},${z}`);pos.push(src[k*3],src[k*3+1],src[k*3+2]);nor.push(sn[k*3],sn[k*3+1],sn[k*3+2]);rv.push(r);return pos.length/3-1;};
+ const T=(x,z)=>{const k=gridV(SMW,TSUB,x,z);return add(tp,tn,k,tr[k],x,z);},Fv=(x,z)=>add(fp,fn,gridV(FARW,FSUB,x,z),8,x,z);
+ // same winding as the ground meshes (their face normals point up)
+ const ti=tileGround.getIndices(),up=(a,b,c,P)=>{const ax=P[b*3]-P[a*3],az=P[b*3+2]-P[a*3+2],bx=P[c*3]-P[a*3],bz=P[c*3+2]-P[a*3+2];return az*bx-ax*bz;};
+ const sgn=Math.sign(up(ti[0],ti[1],ti[2],tp)),tri=(a,b,c)=>{if(Math.sign(up(a,b,c,pos))===sgn)idx.push(a,b,c);else idx.push(a,c,b);};
+ for(const [ux,uz,ox,oz] of [[1,0,0,-1],[0,1,1,0],[-1,0,0,1],[0,-1,-1,0]]){   // edge direction, outward normal
+   for(let s=0;s<Math.round(FSUB*SMW/FARW);s++){                                            // one far cell along the edge
+     const at=(t,o)=>[(-ux*E2+ox*E2)+ux*t+ox*o,(-uz*E2+oz*E2)+uz*t+oz*o],cell=SMW/TSUB;
+     const I=[];for(let k=0;k<=R;k++)I.push(T(...at((s*R+k)*cell,0)));
+     const O0=Fv(...at(s*FCELL,FCELL)),O1=Fv(...at((s+1)*FCELL,FCELL));
+     for(let k=0;k<R;k++)tri(I[k],I[k+1],k<R/2?O0:O1);
+     tri(I[R/2],O1,O0);}
+   // corner square beyond the end of this edge: tile corner + three far vertices
+   const c=[ux*E2+ox*E2,uz*E2+oz*E2],a=T(...c),b=Fv(c[0]+ox*FCELL,c[1]+oz*FCELL),d=Fv(c[0]+ox*FCELL+ux*FCELL,c[1]+oz*FCELL+uz*FCELL),e=Fv(c[0]+ux*FCELL,c[1]+uz*FCELL);
+   tri(a,b,d);tri(a,d,e);}
+ const m=new B.Mesh('apron',scene),vd=new B.VertexData();vd.positions=pos;vd.normals=nor;vd.indices=idx;vd.applyToMesh(m);
  m.setVerticesData('aRiver',new Float32Array(rv),false,1);m.material=farTerrainMat;}
 
 
@@ -510,8 +523,10 @@ let waterMat;
  for(let i=0,join=false;i<C.n;i++){if(Math.abs(C.px[i])>lim||Math.abs(C.pz[i])>lim){join=false;continue;}   // the water lives in the detailed tile only; a re-entry starts a new strip
    const hw=C.W[i]/2,nx=-C.tz[i],nz=C.tx[i],y=C.zw[i];               // left normal of the flow; water is flat at zw
    for(let c=0;c<=COLS;c++){const a=(c/COLS*2-1)*hw*1.35;let x=C.px[i]+nx*a,zz=C.pz[i]+nz*a;
-     x=Math.max(-E2,Math.min(E2,x));zz=Math.max(-E2,Math.min(E2,zz));   // the ribbon ends exactly on the tile edge, where the painted line starts
-     const h=H(x,zz),yy=Math.abs(a)>hw?Math.min(y,h-0.35):y;           // outer columns dive under the carved bank
+     const cx=Math.max(-E2,Math.min(E2,x)),cz=Math.max(-E2,Math.min(E2,zz)),moved=cx!==x||cz!==zz;x=cx;zz=cz;   // the ribbon ends exactly on the tile edge, where the painted line starts
+     // outer columns dive under the carved bank; a column the clamp moved decides from where it landed (it may now be mid-channel)
+     let dive=Math.abs(a)>hw;if(moved){const q=riverQuery(x,zz);dive=!(q&&q.dist<lerpA(C.W,q)/2);}
+     const h=H(x,zz),yy=dive?Math.min(y,h-0.35):y;
      pos.push(x,yy,zz);uv.push(a,C.s[i]);dep.push(y-h);}
    if(join)for(let c=0;c<COLS;c++){const a=(k-1)*(COLS+1)+c,b=k*(COLS+1)+c;idx.push(a,b,a+1,a+1,b,b+1);}
    k++;join=true;}
@@ -636,7 +651,6 @@ const REACH_OF={};   // largest distance of any vertex from the model pivot in p
 const footprint=(model,s)=>{let r=REACH_OF[model];if(r===undefined){const p=window.NATURE[model].pos;r=0;for(let i=0;i<p.length;i+=3)r=Math.max(r,Math.hypot(p[i],p[i+2]));REACH_OF[model]=r;}return r*s;};
 // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
 function addPlaced(model,item,kind=''){const [x,z,s]=item;if(!placeable(x,z,footprint(model,s),kind))return false;add(model,item);return true;}
-// does a footprint of radius r around (x,z) touch a formation zone? (centre + 12 points on its rim)
 // exact: does the disc (x,z,r) overlap any formation zone? (the two boxes and the circle of KEEP_CLEAR)
 const boxD=(x,z,x0,x1,z0,z1)=>Math.hypot(Math.max(x0-x,0,x-x1),Math.max(z0-z,0,z-z1));
 const touchesZone=(x,z,r)=>KEEP_CLEAR(x,z)||boxD(x,z,-25,15,-44,-2)<r||boxD(x,z,-14,26,7,19)<r||Math.hypot(x-34,z+24)<Math.sqrt(160)+r;
@@ -704,7 +718,7 @@ waterMat.setTexture('uRefl',reflTex);
    ========================================================================= */
 const SMN=3072,E=SMW*0.65;   // sun shadow covers the whole detailed tile seen obliquely; 0.34 m texels
 const lightCam=new B.FreeCamera('lightCam',SUN.scale(700),scene);lightCam.setTarget(V3.Zero());
-lightCam.mode=B.Camera.ORTHOGRAPHIC_CAMERA;Object.assign(lightCam,{orthoLeft:-E,orthoRight:E,orthoTop:E,orthoBottom:-E,minZ:100,maxZ:1600});
+lightCam.mode=B.Camera.ORTHOGRAPHIC_CAMERA;Object.assign(lightCam,{orthoLeft:-E,orthoRight:E,orthoTop:E,orthoBottom:-E,minZ:LZ0,maxZ:LZ1});
 const DEPTH_VS=`precision highp float;attribute vec3 position;
 #include<instancesDeclaration>
 uniform mat4 viewProjection;varying float vD;
@@ -750,7 +764,7 @@ const aoTex=new B.DynamicTexture('ao',aoCanvas,scene,true,B.Texture.BILINEAR_SAM
 /* ---------- LIGHT-MAP BAKE: top-down ortho render of the terrain, once ---------- */
 const BAKE_FS=`precision highp float;varying vec3 vW,vN;uniform sampler2D uAOTex;${GLSL}
 void main(){vec3 N=normalize(vN);
-  vec4 lp=uLightVP*vec4(vW+N*0.35,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;float d=q.z*0.5+0.5-0.0012;
+  vec4 lp=uLightVP*vec4(vW+N*0.35,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;float d=q.z*0.5+0.5-${SBIAS};
   float s=0.0;for(int i=0;i<12;i++){float a=float(i)*2.39996;float r=sqrt(float(i)+0.5)*1.2;
     s+=step(texture2D(uShadowMap,uv+vec2(cos(a),sin(a))*r*uSMTexel).r,d);}
   float vis=1.0-s/12.0;
@@ -761,7 +775,8 @@ const bakeMat=mat('bake',TER_VS,BAKE_FS,{attributes:['position','normal','aRiver
 bakeMat.setTexture('uAOTex',aoTex);bakeMat.setTexture('uShadowMap',shadowRT);bakeMat.setMatrix('uLightVP',lightVP);bakeMat.setVector2('uSMTexel',new B.Vector2(1/SMN,1/SMN));
 const lmCam=new B.FreeCamera('lmCam',new V3(0,500,0),scene);lmCam.setTarget(new V3(0,0,0.01));
 lmCam.mode=B.Camera.ORTHOGRAPHIC_CAMERA;Object.assign(lmCam,{orthoLeft:-SMW/2,orthoRight:SMW/2,orthoTop:SMW/2,orthoBottom:-SMW/2,minZ:1,maxZ:1000});
-const lightMap=new B.RenderTargetTexture('lightmap',2048,scene,false,true,B.Constants.TEXTURETYPE_UNSIGNED_BYTE,false,B.Texture.BILINEAR_SAMPLINGMODE);
+const lightMap=new B.RenderTargetTexture('lightmap',3072,   // ~0.26 m texels over the 800 m tile
+  scene,false,true,B.Constants.TEXTURETYPE_UNSIGNED_BYTE,false,B.Texture.BILINEAR_SAMPLINGMODE);
 lightMap.activeCamera=lmCam;lightMap.clearColor=new C4(1,1,0,1);lightMap.renderList=[terrains[0]];lightMap.setMaterialForRendering(terrains[0],bakeMat);
 lightMap.refreshRate=B.RenderTargetTexture.REFRESHRATE_RENDER_ONCE;scene.customRenderTargets.push(lightMap);
 // the bake must see a COMPLETE shadow map: re-bake every time the shadow pass actually renders
