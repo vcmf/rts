@@ -1,0 +1,22 @@
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Raw third-party asset packs: large, restorable (see README "Assets")
+*.zip
+assets/nature-pack/
+assets/painted-foliage/
+assets/**/*.blend
+assets/**/*.blend1
+
+# Build / tooling output (for later game code)
+node_modules/
+dist/
+coverage/
+*.log
+
+# Local renders and scratch
+renders/
+scratch/
+*.mp4
