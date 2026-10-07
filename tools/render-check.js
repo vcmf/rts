@@ -59,6 +59,19 @@
     water.isVisible = true; farTerrainMat.setTexture('uRiverMask', riverMask); blank.dispose()
     cam.alpha = saved.alpha; cam.beta = saved.beta; cam.radius = saved.radius; cam.target.copyFrom(saved.target)
   }
+  // camera: panning in any direction from any play-area corner keeps the focus in the play area at its height
+  const t0 = cam.target.clone()
+  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) for (const [px, py] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) {
+    cam.target.set(sx * PLAY, FOCUS_Y, sz * PLAY)
+    for (let f = 0; f < 40; f++) { cam.inertialPanningX = px; cam.inertialPanningY = py; scene.render() }
+    const t = cam.target
+    if (Math.abs(t.x) > PLAY + 1e-6 || Math.abs(t.z) > PLAY + 1e-6 || Math.abs(t.y - FOCUS_Y) > 1e-6) { fail.push(`pan from ${sx},${sz} by ${px},${py} left the bounds: ${[t.x, t.y, t.z].map(v => v.toFixed(1))}`); break } }
+  cam.inertialPanningX = cam.inertialPanningY = 0; cam.target.copyFrom(t0)
+  // shadow box: every tile corner (ground low point to caster top) projects inside the light camera's ortho box and depth range
+  { const V = lightCam.getViewMatrix(true), h = SMW / 2, gy = tileGround.getVerticesData(B.VertexBuffer.PositionKind).filter((_, k) => k % 3 === 1)
+    const lo = Math.min(...gy), hi = Math.max(...gy) + 40   // trees are well under 40 m
+    for (const x of [-h, h]) for (const z of [-h, h]) for (const y of [lo, hi]) { const v = B.Vector3.TransformCoordinates(new B.Vector3(x, y, z), V)
+      if (v.x < lightCam.orthoLeft || v.x > lightCam.orthoRight || v.y < lightCam.orthoBottom || v.y > lightCam.orthoTop || v.z < lightCam.minZ || v.z > lightCam.maxZ) fail.push(`tile corner ${x},${y},${z} outside the shadow box`) } }
   // each limit must actually have been exercised somewhere
   if (!views.some(v => out[v.name]?.waterN >= 20)) fail.push('no view tested near water')
   if (!views.some(v => out[v.name]?.bankN >= 20)) fail.push('no view tested the banks')
