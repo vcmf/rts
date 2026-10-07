@@ -144,9 +144,11 @@ const RIVER=(()=>{
     const Q=0.8+0.5*C.s[i]/C.s[n-1];
     const k=C.kappa[Math.max(0,i-2)];                              // sampled ~0.5 W upstream: pools sit just past the apex
     const bendness=Math.min(1,Math.abs(k)*P.W0*2.3);
-    const W=Math.max(5,Math.min(8,P.W0*Math.sqrt(Q)*(1.08-0.2*bendness)*(0.85+0.3*vn(C.s[i]/(4*P.W0),1.7))));   // design.md §6c: 5–8 m, narrower at bends
-    if(i)rph+=2*Math.PI*(C.s[i]-C.s[i-1])/(6*W);
+    if(i)rph+=2*Math.PI*(C.s[i]-C.s[i-1])/(6*P.W0);
     const straight=0.5+0.5*Math.cos(rph);
+    // design.md §6c: 4–11 m. Each stretch of 2–3 bends has its own width (slow noise), bends narrow, straight riffles widen
+    const reach=0.75+0.5*vn(C.s[i]/(28*P.W0),3.1);
+    const W=Math.max(4,Math.min(11,P.W0*Math.sqrt(Q)*reach*(1.2-0.5*bendness)*(1+0.35*straight*(1-bendness))));
     const riffle=Math.max(1-Math.min(1,bendness*1.6),(1-bendness)*straight);
     C.W[i]=W;C.riffle[i]=riffle;
     C.A[i]=Math.max(-1,Math.min(1,-k*W*1.6));                      // + : outer (cut) bank on the +n side; used in W2

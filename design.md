@@ -223,7 +223,7 @@ gravel) come later and reuse the same system. Technique: `research/stylized-wate
 ### Shape
 | Element | Rule |
 |---|---|
-| Width | 5–8 m of water, varying along the course; wider in straight reaches, narrower at bends |
+| Width | 4–11 m of water, **visibly** varying: each stretch of 2–3 bends has its own width, bends are narrower, straight riffles wider (wide and shallow). The widest stretches are about twice the narrowest |
 | Bends | Meanders that **turn back on themselves**; each bend differs in size and spacing (about 11 widths apart, ±35%) |
 | Pools | At each bend apex: deep, calm, **dark** water |
 | Riffles | Between bends: shallow, fast, **light** water with foam. They are the **fords** (gameplay crossings) |
