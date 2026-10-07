@@ -27,3 +27,20 @@ Out of scope: banks, point bars and depth (W2).
 - `widthContrast` ≥ 1.8 (experiment: 4.1 → 9.0 m, 2.2×); every existing check still passes.
 - Screenshots (top and mid views, before/after) show visibly different widths between stretches.
 - Load time within noise of main.
+
+## Review round 1 — stop (no severe findings)
+
+10 findings, none severe. Fixed:
+- Width jumped up to 1.3 m between samples (stronger bend term, no smoothing): width smoothed over ~2 W;
+  new check `maxWidthStep` < 0.25 m/m (now 0.19).
+- `widthContrast` passed even with the per-stretch noise removed (bend/straight alternation alone): replaced
+  by `stretchContrast`, widths averaged over one bend wavelength, widest ≥ 1.7× narrowest (now 4.7 → 8.5 m,
+  1.8×). Negative run with the per-stretch noise off: 1.36×, fails.
+- Riffle spacing in local widths (~6 W) instead of a fixed 36 m.
+- Soft limits at 4 and 11 m (no flat 4 m plateaus); per-stretch noise on its own noise row.
+- AO grid cells 2.7 m (finer than the narrowest channel); water-ribbon margin derived from the max width.
+- Empty-tile guard in the check.
+Kept: bend spacing in `W0` units (the centre line is built before widths); `widthRange` asserts the clamp only;
+`REACH` tied to the max width (pre-existing).
+
+Results: river-check and render-check exit 0. Load time ≈ +130 ms vs main (4 paired runs; the finer AO grid).
