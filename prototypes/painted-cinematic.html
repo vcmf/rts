@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painted Nature · Cinematic</title>
+<style>
+:root{--ink:#eceae4;--mute:#8e8b84;--accent:#d9a35b}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#0d0e10;overflow:hidden;font-family:ui-monospace,'JetBrains Mono',Menlo,monospace;color:var(--ink)}
+#c{width:100%;height:100%;display:block;outline:none;touch-action:none}
+#panel{position:fixed;left:16px;bottom:16px;display:flex;flex-direction:column;gap:9px;padding:14px 16px;background:rgba(12,13,15,.74);border:1px solid rgba(255,255,255,.1);border-radius:10px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:11px;letter-spacing:.05em;min-width:250px}
+#panel h1{font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.tg{background:none;border:1px solid rgba(255,255,255,.16);border-radius:6px;color:var(--mute);font:inherit;padding:5px 10px;cursor:pointer;min-width:52px}
+.tg.on{background:var(--ink);color:#111;border-color:var(--ink)}
+input[type=range]{width:120px;accent-color:var(--accent)}
+.hint{color:var(--mute);font-size:10px;line-height:1.6}
+#fps{position:fixed;right:14px;top:12px;font-size:10px;color:var(--mute)}
+#drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(10,10,12,.6);font-size:13px;letter-spacing:.12em;text-transform:uppercase;pointer-events:none}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@9.29.0/babylon.js"></script>
+<script src="nature-pack.data.js"></script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="fps"></div>
+<div id="drop">Drop a PNG to use as the paint grain</div>
+<div id="panel">
+  <h1>Painted nature · cinematic</h1>
+  <div class="row"><span>Season</span><span id="slabel" style="color:var(--accent)">Summer</span></div>
+  <div class="row"><input id="season" type="range" min="0" max="3" step="0.01" value="0" style="width:100%"></div>
+  <div class="row"><span>Paint grain</span><button class="tg on" data-k="grain">On</button></div>
+  <div class="row"><span>Grain strength</span><input id="gamt" type="range" min="0" max="1.5" step="0.05" value="0.9"></div>
+  <div class="row"><span>Painted edges</span><button class="tg on" data-k="edges">On</button></div>
+  <div class="row"><span>Cloud shadows</span><button class="tg on" data-k="clouds">On</button></div>
+  <div class="row"><span>Real shadows</span><button class="tg on" data-k="shadows">On</button></div>
+  <div class="row"><span>Baked occlusion</span><button class="tg on" data-k="ao">On</button></div>
+  <div class="row"><span>Valley mist</span><button class="tg on" data-k="mist">On</button></div>
+  <div class="row"><span>Light shafts</span><button class="tg on" data-k="shafts">On</button></div>
+  <div class="row"><span>Golden backlight</span><button class="tg on" data-k="back">On</button></div>
+  <div class="row"><span>Cinematic grade</span><button class="tg on" data-k="grade">On</button></div>
+  <div class="row"><span>Bloom</span><button class="tg on" data-k="bloom">On</button></div>
+  <div class="row"><span>Depth of field <em style="color:var(--mute);font-style:normal">(video / presentation)</em></span><button class="tg" data-k="dof">Off</button></div>
+  <div class="row"><span>Blur strength</span><input id="dofamt" type="range" min="0.2" max="2" step="0.05" value="1"></div>
+  <div class="row"><span>Render scale</span><select id="res" style="background:#111;color:#ddd;border:1px solid #444;border-radius:5px;font:inherit;padding:3px"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.5">1.5× (Retina)</option></select></div>
+  <div class="hint">drag to orbit · right-drag to pan · scroll to zoom<br>drop a PNG (e.g. from Procreate) to replace the grain</div>
+</div>
+
+<script>
+'use strict';
+/* =========================================================================
+   Painted Nature · CINEMATIC: style prototype (design direction: Puss in Boots: The
+   Last Wish, top-down camera, no sky).
+   - Models: Quaternius Ultimate Nature (CC0), converted by tools/obj-to-js.mjs.
+     The pack's colours are ignored; every material maps to a "role" and our
+     palette paints it.
+   - One shared painting function (paint) for everything: hue-shifted light
+     (warm lit, cool saturated shadow), banded values whose edges are broken
+     by a world-anchored paint GRAIN texture, graphic rim, cloud shadows.
+   - The grain texture is generated procedurally and can be replaced by
+     dropping a PNG on the page.
+   CINEMATIC (see research/cheap-painterly-postfx.md, design.md §6b):
+   - Static light is BAKED once into a world-space light map
+     (R sun visibility · G occlusion · B valley-mist mask): no live SSAO.
+     Trees keep a small runtime shadow lookup for self-shadowing.
+   - Valley mist + light shafts and golden backlight live in the materials.
+   - Materials write view distance into alpha → depth of field without a
+     second scene render. One fused finishing pass: grade, bloom, vignette,
+     paper, dither. Depth of field is presentation/video-only per design.md.
+   Visual test only: no sim/render split (see web-rts-architecture.md).
+   ========================================================================= */
+const B=BABYLON,V3=B.Vector3,C3=B.Color3,C4=B.Color4;
+if(!window.NATURE){document.body.innerHTML='<p style="padding:30px">nature-pack.data.js missing: run <code>node tools/obj-to-js.mjs</code></p>';throw new Error('no data');}
+const canvas=document.getElementById('c');
+const engine=new B.Engine(canvas,false,{preserveDrawingBuffer:false,stencil:false},false);
+engine.setHardwareScalingLevel(1);
+const scene=new B.Scene(engine);scene.skipPointerMovePicking=true;
+
+const S={grain:1,gamt:0.9,edges:1,clouds:1,shadows:1,ao:1,mist:1,shafts:1,back:1,grade:1,bloom:1,dof:0,dofAmt:1,res:1,season:0,t:0};
+const SUN=new V3(-0.70,0.45,0.55).normalize();               // low side-back light, ~27° elevation
+const PAL={sun:new C3(1.00,0.84,0.60),shadow:new C3(0.45,0.57,0.76),hazeCool:new C3(0.60,0.69,0.78),hazeWarm:new C3(0.95,0.80,0.58)};
+scene.clearColor=new C4(PAL.hazeCool.r,PAL.hazeCool.g,PAL.hazeCool.b,1);
+
+/* ---------- small JS noise for terrain & scattering ---------- */
+function hash(x,y){const h=Math.sin(x*127.1+y*311.7)*43758.5453;return h-Math.floor(h);}
+function vn(x,y){const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
+  const a=hash(xi,yi),b=hash(xi+1,yi),c=hash(xi,yi+1),d=hash(xi+1,yi+1);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;}
+function fbm(x,y){let s=0,a=0.5;for(let i=0;i<4;i++){s+=a*vn(x,y);x=x*2.03+11.3;y=y*2.03-7.1;a*=0.5;}return s;}
+function mulberry(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const sstep=(a,b,x)=>{const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t);};
+const STREAM=[-38,10,0.03,3.5,0.083,1.0];   // centre-line: a + b·sin(c·z) + d·sin(e·z + f), shared by JS and GLSL
+const streamX=z=>STREAM[0]+STREAM[1]*Math.sin(z*STREAM[2])+STREAM[3]*Math.sin(z*STREAM[4]+STREAM[5]);
+const f1=v=>v.toFixed(4),STREAM_GLSL=`(${f1(STREAM[0])}+${f1(STREAM[1])}*sin(wp.z*${f1(STREAM[2])})+${f1(STREAM[3])}*sin(wp.z*${f1(STREAM[4])}+${f1(STREAM[5])}))`;
+function H(x,z){
+  let h=7*fbm(x*0.0045+3,z*0.0045)+2*fbm(x*0.02+5,z*0.02);
+  h+=15*Math.exp(-((x/50)**2+((z-6)/36)**2));
+  h+=6*Math.exp(-(((x-70)/40)**2+((z+20)/40)**2));
+  h-=3.4*(1-sstep(3,11,Math.abs(x-streamX(z))));
+  const r=Math.hypot(x,z);h+=28*Math.min(1,Math.max(0,(r-220)/380))*fbm(x*0.003-9,z*0.003+4);
+  return h;
+}
+
+/* =========================================================================
+   PAINT GRAIN TEXTURE (tileable, 512²)
+   R: fine gouache/paper grain + speckles   (value jitter, band-edge breakup)
+   G: large soft blotches                   (colour patches, cloud shapes)
+   B: dry-brush streaks                     (directional marks on ground)
+   ========================================================================= */
+function pnoise(N,cx,cy,seed){
+  const r=mulberry(seed),L=new Float32Array(cx*cy);for(let i=0;i<L.length;i++)L[i]=r();
+  const out=new Float32Array(N*N);
+  for(let y=0;y<N;y++){const fy=y/N*cy,iy=Math.floor(fy),ty=fy-iy,sy=ty*ty*(3-2*ty),y0=iy%cy,y1=(iy+1)%cy;
+    for(let x=0;x<N;x++){const fx=x/N*cx,ix=Math.floor(fx),tx=fx-ix,sx=tx*tx*(3-2*tx),x0=ix%cx,x1=(ix+1)%cx;
+      const a=L[y0*cx+x0],b=L[y0*cx+x1],c=L[y1*cx+x0],d=L[y1*cx+x1];
+      out[y*N+x]=a+(b-a)*sx+(c-a)*sy+(a-b-c+d)*sx*sy;}}
+  return out;
+}
+const cl=v=>v<0?0:v>1?1:v;
+function makeGrainCanvas(userLum){
+  const N=512,c=document.createElement('canvas');c.width=c.height=N;const g=c.getContext('2d'),img=g.createImageData(N,N),d=img.data;
+  const fA=pnoise(N,256,256,1),fB=pnoise(N,128,128,2),b1=pnoise(N,4,4,3),b2=pnoise(N,8,8,4),b3=pnoise(N,16,16,5),b4=pnoise(N,32,32,6),s1=pnoise(N,6,128,7),s2=pnoise(N,12,256,8);
+  const r=mulberry(9),fine=new Float32Array(N*N);
+  for(let i=0;i<N*N;i++)fine[i]=0.4*r()+0.35*fA[i]+0.25*fB[i];
+  for(let k=0;k<2600;k++){const cx=Math.floor(r()*N),cy=Math.floor(r()*N),rad=1+r()*1.8,val=(r()<0.5?-1:1)*(0.18+r()*0.2);   // paint specks
+    for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){if(dx*dx+dy*dy>rad*rad)continue;const i=((cy+dy+N)%N)*N+((cx+dx+N)%N);fine[i]+=val;}}
+  for(let i=0;i<N*N;i++){
+    const f=userLum?userLum[i]:cl((fine[i]-0.5)*1.8+0.5);
+    const bl=cl((0.5*b1[i]+0.25*b2[i]+0.15*b3[i]+0.1*b4[i]-0.5)*1.7+0.5);
+    const st=cl((0.6*s1[i]+0.4*s2[i]-0.5)*2.4+0.5);
+    d[i*4]=f*255;d[i*4+1]=bl*255;d[i*4+2]=st*255;d[i*4+3]=255;}
+  g.putImageData(img,0,0);return c;
+}
+function grainTexture(canvasEl){
+  const t=new B.DynamicTexture('grain',canvasEl,scene,true,B.Texture.TRILINEAR_SAMPLINGMODE);
+  t.wrapU=t.wrapV=B.Texture.WRAP_ADDRESSMODE;t.anisotropicFilteringLevel=4;t.update(false);return t;
+}
+let grainTex=grainTexture(makeGrainCanvas(null));
+
+/* =========================================================================
+   SHARED GLSL: the painter
+   ========================================================================= */
+const GLSL=`
+uniform sampler2D uGrain;
+uniform vec3 uSunDir,uSunCol,uShadowCol,uHazeCool,uHazeWarm,uCamPos,uFocus;
+uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason;
+
+vec3 G(vec2 uv){return texture2D(uGrain,uv).rgb;}
+vec3 grainW(vec3 wp,vec3 n,float sc){vec2 p=abs(n.y)>0.6?wp.xz:(abs(n.x)>abs(n.z)?wp.zy:wp.xy);return G(p/sc);}
+// SEASON (design.md §4b): 0 summer · 1 early autumn · 2 late autumn · 3 winter.
+// Snow settles on whatever faces up, broken by the grain, so it reads as painted.
+float snowAt(vec3 N,vec3 wp){float s=clamp(uSeason-2.0,0.0,1.0);if(s<=0.0)return 0.0;
+  return smoothstep(0.55,0.72,N.y*1.15*s+(grainW(wp,N,4.0).r-0.5)*0.4+(s-1.0)*0.35);}
+// Per-tree foliage colour. t = per-instance random; kind: 0 deciduous, 1 evergreen, 2 grass.
+vec3 foliage(vec3 a,vec3 b,float t,float kind){
+  vec3 summer=mix(a,b,t);
+  float h=fract(t*7.13);
+  summer=mix(summer,vec3(0.36,0.18,0.24),step(0.95,h)*step(kind,0.5));   // a rare copper beech, all year
+  if(kind>1.5){                                                            // grass: one field colour per season
+    vec3 au=mix(summer,vec3(0.72,0.62,0.32),0.55),la=mix(summer,vec3(0.55,0.44,0.26),0.7),wi=vec3(0.50,0.45,0.34);
+    return uSeason<1.0?mix(summer,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
+  if(kind>0.5)return mix(summer,summer*vec3(0.78,0.88,0.95),clamp(uSeason-2.0,0.0,1.0));   // conifers stay green
+  vec3 au=h<0.30?mix(vec3(0.86,0.46,0.12),vec3(0.96,0.62,0.18),t)      // orange
+         :h<0.55?mix(vec3(0.92,0.74,0.22),vec3(0.98,0.85,0.40),t)      // yellow
+         :h<0.72?mix(vec3(0.70,0.17,0.10),vec3(0.84,0.30,0.14),t)      // red
+         :h<0.76?vec3(0.48,0.20,0.34)                                  // purple, rare
+         :h<0.95?mix(summer,vec3(0.72,0.62,0.22),0.45)                 // still turning
+         :vec3(0.36,0.18,0.24);
+  vec3 la=mix(au*vec3(0.80,0.62,0.50),vec3(0.46,0.30,0.18),0.45);       // late autumn: browner, duller
+  vec3 wi=vec3(0.34,0.29,0.24);                                         // winter: bare-looking, snow does the rest
+  return uSeason<1.0?mix(summer,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);
+}
+// REAL sun shadow from the depth pass; PCF taps jittered by the paint grain,
+// so shadow edges come out brushy instead of pixel-sharp.
+uniform sampler2D uShadowMap;uniform mat4 uLightVP;uniform vec2 uSMTexel;uniform float uShadowsOn;
+float shadowAt(vec3 wp,vec3 n){
+  vec4 lp=uLightVP*vec4(wp+n*0.6,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
+  if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;   // outside the sun's view (incl. beyond its far plane) = lit
+  float d=q.z*0.5+0.5-0.0012;
+  vec2 j=(vec2(texture2D(uGrain,wp.xz*0.6).r,texture2D(uGrain,wp.zx*0.6+0.3).r)-0.5)*3.0;
+  float s=0.0;
+  for(int x=0;x<2;x++)for(int y=0;y<2;y++)s+=step(texture2D(uShadowMap,uv+(vec2(float(x),float(y))*2.0-1.0+j)*uSMTexel).r,d);
+  return s/4.0*uShadowsOn;}
+// BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask.
+uniform sampler2D uLM;uniform mat4 uLMVP;uniform float uAO,uMist,uShafts,uBack;
+vec4 LM(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);vec2 uv=p.xy/p.w*0.5+0.5;
+  if(uv.x<0.002||uv.y<0.002||uv.x>0.998||uv.y>0.998)return vec4(1.0,1.0,0.0,0.0);
+  return texture2D(uLM,uv);}
+// Valley mist: warm where the air is sunlit, cool where it's shadowed. Light shafts =
+// the air column's sun visibility, read from the light map at 3 heights along the view ray.
+vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
+  float m=lm.b*uMist*exp(-hAbove*0.12);if(m<0.01)return c;
+  float air=lm.r;
+  if(uShafts>0.5){vec3 v=normalize(uCamPos-wp);float s=0.0;
+    for(int i=0;i<3;i++){float h=(float(i)+0.5)/3.0*7.0;vec3 q=wp+v*(h/max(v.y,0.25));
+      s+=LM(q-uSunDir*((q.y-wp.y)/uSunDir.y)).r;}
+    air=s/3.0;}
+  float n=G(wp.xz/55.0+uTime*vec2(0.004,0.0015)).g;
+  float t=clamp(m*(0.35+0.55*n),0.0,0.42);
+  return mix(c,mix(vec3(0.58,0.67,0.78),vec3(1.0,0.86,0.63),air),t);}
+// view distance in alpha → depth of field without re-rendering the scene
+float depthA(vec3 wp){return clamp(length(wp-uCamPos)/1000.0,0.0,1.0);}
+// Big painted cloud shadows drifting over the land: the top-down camera's only "sky".
+float cloud(vec3 wp){
+  vec2 p=wp.xz+uTime*vec2(2.2,0.8);
+  float c=0.62*G(p/330.0).g+0.38*G(p/131.0+vec2(0.37,0.11)).g;
+  return smoothstep(0.60,0.635,c+(G(wp.xz/5.0).r-0.5)*0.06)*uClouds;
+}
+// Cool, more saturated shadow version of a colour (hue shift, never plain darkening).
+vec3 shadowOf(vec3 a){float l=dot(a,vec3(0.3,0.59,0.11));return clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80+vec3(0.02,0.04,0.07);}
+// THE paint function. jitter: how loose the brushwork is (1 = landscape, 0.3 = crisp units).
+// sh: extra shadow from the painted shadow map (0..1).
+vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh){
+  float snow=snowAt(N,wp);alb=mix(alb,vec3(0.80,0.81,0.84),snow);                           // snow: lit warm white, shadowed cool blue by the ramp
+  vec3 g=grainW(wp,N,5.5),g2=grainW(wp,N,21.0);
+  float gr=(g.r-0.5)*uGrainAmt;
+  float ndl=dot(N,uSunDir);
+  float l=ndl+gr*0.55*jitter+(g2.g-0.5)*0.3*jitter;
+  l-=cloud(wp)*0.40+sh*1.25+(1.0-occ)*0.55;
+  float t=smoothstep(-0.10,-0.02,l)*0.55+smoothstep(0.30,0.38,l)*0.45;   // shadow | mid | light, grain-broken edges
+  vec3 shc=shadowOf(alb);
+  vec3 mid=alb*mix(vec3(0.86,0.92,0.98),uSunCol,0.30);
+  vec3 lt=alb*uSunCol*mix(1.16,1.02,snow)+vec3(0.03,0.025,0.0)*(1.0-snow);
+  vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
+  c*=1.0+gr*0.38;                                                           // gouache grain in the value
+  vec3 V=normalize(uCamPos-wp);
+  float fres=1.0-max(dot(N,V),0.0);
+  float rim=smoothstep(0.58,0.64,fres+(g.r-0.5)*0.2)*smoothstep(-0.35,0.2,ndl);
+  c+=uSunCol*vec3(1.0,0.86,0.6)*rim*rimAmt*0.55*(1.0-cloud(wp)*0.7)*(1.0-sh);       // graphic warm rim
+  return c;
+}
+// Top-down atmosphere: colour cools (and warms toward the sun side) away from the focus.
+vec3 atmos(vec3 c,vec3 wp){
+  vec2 dv=wp.xz-uFocus.xz;float d=length(dv);
+  float f=smoothstep(110.0,420.0,d)*0.72;
+  float warm=max(dot(normalize(dv+1e-4),normalize(uSunDir.xz)),0.0);
+  return mix(c,mix(uHazeCool,uHazeWarm,warm*0.65),f);
+}`;
+const COMMON=['uLMVP','uAO','uMist','uShafts','uBack','uSeason','uLightVP','uSMTexel','uShadowsOn','uSunDir','uSunCol','uShadowCol','uHazeCool','uHazeWarm','uCamPos','uFocus','uTime','uGrainAmt','uEdges','uClouds'];
+const mats=[];
+function mat(name,vs,fs,{attributes=['position','normal'],uniforms=[],samplers=[],alpha=false,defines=[]}={}){
+  const m=new B.ShaderMaterial(name,scene,{vertexSource:vs,fragmentSource:fs},
+    {attributes,uniforms:['world','viewProjection',...COMMON,...uniforms],samplers:['uGrain','uShadowMap','uLM',...samplers.filter(x=>x!=='uShadowMap'&&x!=='uLM')],needAlphaBlending:alpha,defines});
+  m.setVector3('uSunDir',SUN);m.setColor3('uSunCol',PAL.sun);m.setColor3('uShadowCol',PAL.shadow);
+  m.setColor3('uHazeCool',PAL.hazeCool);m.setColor3('uHazeWarm',PAL.hazeWarm);m.setTexture('uGrain',grainTex);
+  mats.push(m);return m;
+}
+
+const SMW=520,AON=512;                                // canopy footprints → G channel of the baked light map
+const aoCanvas=document.createElement('canvas');aoCanvas.width=aoCanvas.height=AON;const aog=aoCanvas.getContext('2d');
+const canopy=[];const smTree=(x,z,_crownY,cr)=>{canopy.push([x,z,cr*1.15,0.42]);reflAdd(x,z,cr*1.1);},smBlob=(x,z,r)=>canopy.push([x,z,r*1.4,0.30]);
+/* =========================================================================
+   TERRAIN
+   ========================================================================= */
+const TER_VS=`precision highp float;attribute vec3 position;attribute vec3 normal;uniform mat4 world,viewProjection;
+varying vec3 vW,vN;void main(){vec4 w=world*vec4(position,1.0);vW=w.xyz;vN=normalize(mat3(world)*normal);gl_Position=viewProjection*w;}`;
+const TER_FS=`precision highp float;varying vec3 vW,vN;${GLSL}
+vec3 albedo(vec3 wp,vec3 n){
+  float n1=G(wp.xz/150.0).g,n2=G(wp.xz/53.0+0.31).g,n3=G(wp.xz/19.0+0.7).g;
+  vec3 c=mix(vec3(0.33,0.45,0.20),vec3(0.55,0.58,0.27),smoothstep(0.35,0.66,n1));      // meadow → yellow-green
+  c=mix(c,vec3(0.70,0.64,0.40),smoothstep(0.62,0.76,n2)*0.45);                         // dry gold
+  c=mix(c,vec3(0.24,0.40,0.33),smoothstep(0.64,0.80,1.0-n1)*0.6);                      // teal-green hollows
+  // dry-brush grass marks: directional streaks, two angles
+  vec2 q=mat2(0.82,-0.57,0.57,0.82)*wp.xz;float st=G(q/9.0).b;
+  // (directional dry-brush streaks removed: the paint grain carries the grass texture)
+  // flower patches: orange and white flecks (complementary accents)
+  float fpat=smoothstep(0.60,0.68,G(wp.xz/70.0+vec2(0.71,0.13)).g);
+  float fl=step(0.86,G(wp.xz/1.6).r)*fpat;c=mix(c,vec3(0.99,0.56,0.14),fl);
+  c=mix(c,vec3(0.96,0.93,0.84),step(0.93,G(wp.xz/1.3+0.5).r)*fpat*0.8);
+  // stream banks
+  float sx=${STREAM_GLSL},d=abs(wp.x-sx);
+  c=mix(c*vec3(0.72,0.78,0.70),c,smoothstep(6.5,11.0,d+(G(wp.xz/3.0).r-0.5)*2.0));   // damp ground near the water
+  c=mix(vec3(0.20,0.36,0.22),c,smoothstep(5.0,8.5,d));
+  c=mix(vec3(0.42,0.34,0.22),c,smoothstep(3.6,5.4,d));
+  // dirt road to the village
+  float road=abs(wp.z-(14.0+0.12*(wp.x+50.0))-2.0*sin(wp.x*0.07));
+  c=mix(vec3(0.70,0.56,0.36)*(0.9+0.2*st),c,clamp(smoothstep(1.4,2.6,road+(G(wp.xz/4.0).r-0.5)*1.2)+step(-40.0,wp.x)+step(wp.x,-130.0),0.0,1.0));   // clamped: an unclamped weight extrapolated the road's streaks over the whole map
+  // strip fields in the distance
+  float r=length(wp.xz);vec2 f=mat2(0.8,-0.6,0.6,0.8)*wp.xz;
+  float id=fract(sin(dot(floor(vec2(f.x/70.0,f.y/22.0)),vec2(12.9898,78.233)))*43758.5453);
+  vec3 fc=id<0.25?vec3(0.78,0.64,0.30):id<0.5?vec3(0.42,0.56,0.20):id<0.75?vec3(0.58,0.42,0.28):vec3(0.30,0.48,0.24);
+  float fm=smoothstep(170.0,250.0,r);
+  c=mix(c,fc*(0.96+0.06*G(vec2(f.x/40.0,f.y/3.0)).b),fm*0.85);   // faint furrows on distant fields only
+  c=mix(c,vec3(0.55,0.52,0.46),smoothstep(0.80,0.62,n.y)*0.5);
+  vec3 au=mix(c,vec3(0.70,0.60,0.34),0.45),la=mix(c,vec3(0.52,0.42,0.27),0.6),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
+  c=uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);                          // steep: stony
+  return c;
+}
+void main(){vec3 N=normalize(vN);vec4 lm=LM(vW);
+  float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,lm.g,uAO);
+  vec3 c=paint(albedo(vW,N),N,vW,occ,0.12,1.0,sh);
+  gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}`;
+const terrainMat=mat('terrain',TER_VS,TER_FS);
+function buildTerrain(size,sub,yOff){
+  const g=B.MeshBuilder.CreateGround('t',{width:size,height:size,subdivisions:sub,updatable:true},scene);
+  const p=g.getVerticesData(B.VertexBuffer.PositionKind);const inner=SMW/2-14;
+  for(let i=0;i<p.length;i+=3){p[i+1]=H(p[i],p[i+2])+yOff;if(size>SMW&&Math.abs(p[i])<inner&&Math.abs(p[i+2])<inner)p[i+1]-=25;}   // far ring sinks under the detailed terrain
+  g.updateVerticesData(B.VertexBuffer.PositionKind,p);const n=[];B.VertexData.ComputeNormals(p,g.getIndices(),n);g.updateVerticesData(B.VertexBuffer.NormalKind,n);
+  g.material=terrainMat;return g;
+}
+buildTerrain(SMW,300,0);buildTerrain(2600,170,-0.9);
+
+/* =========================================================================
+   WATER (design.md §6): painted, top-down. Opaque ribbon wide enough that the
+   TERRAIN cuts the real shoreline; per-vertex depth drives everything:
+   shallow turquoise → deep teal, foam at the shore, flow strokes along the
+   stream, baked tree reflections, sun glitter, tree & cloud shadows.
+   ========================================================================= */
+const WAT_VS=`precision highp float;attribute vec3 position;attribute vec2 uv;attribute float aDepth;uniform mat4 world,viewProjection;
+varying vec3 vW;varying vec2 vUv;varying float vDepth;
+void main(){vec4 w=world*vec4(position,1.0);vW=w.xyz;vUv=uv;vDepth=aDepth;gl_Position=viewProjection*w;}`;
+const WAT_FS=`precision highp float;varying vec3 vW;varying vec2 vUv;varying float vDepth;uniform sampler2D uRefl;${GLSL}
+float reflAt(vec2 xz){vec2 uv=(xz+${(260).toFixed(1)})/520.0;if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0)return 0.0;return texture2D(uRefl,uv).r;}
+void main(){
+  vec3 V=normalize(uCamPos-vW);
+  float depth=max(vDepth,0.0);
+  float across=vUv.x,along=vUv.y;                                           // stream-space coordinates (metres)
+  // 1. depth colour: wet shore → turquoise shallows → deep teal
+  vec3 deep=vec3(0.07,0.24,0.31),mid=vec3(0.20,0.46,0.50),shal=vec3(0.48,0.66,0.58),wet=vec3(0.34,0.33,0.22);
+  float dn=depth+(G(vW.xz/6.0).g-0.5)*0.35;
+  vec3 c=dn<0.25?mix(wet,shal,smoothstep(0.0,0.25,dn)):dn<0.9?mix(shal,mid,smoothstep(0.25,0.9,dn)):mix(mid,deep,smoothstep(0.9,1.9,dn));
+  // 2. sky reflection at grazing view (painted sky colour, no real sky)
+  float fr=pow(1.0-max(V.y,0.0),2.5);c=mix(c,vec3(0.62,0.74,0.86),fr*0.45*smoothstep(0.2,0.6,dn));
+  // 3. tree reflections: trace the mirrored view ray up to crown height, read the baked canopy mask
+  vec3 R=reflect(-V,vec3(0.0,1.0,0.0));
+  float wob=(G(vec2(across*0.6,along*0.25-uTime*0.25)).r-0.5)*0.9;
+  vec2 o=R.xz/max(R.y,0.2);
+  float rf=max(reflAt(vW.xz+o*4.0+vec2(wob,0.0)),reflAt(vW.xz+o*7.5+vec2(wob*1.5,0.0)));
+  c=mix(c,vec3(0.08,0.17,0.13),smoothstep(0.25,0.6,rf)*0.62*smoothstep(0.15,0.5,dn));
+  // 4. flow strokes along the current (scrolling with the water, stretched along the stream)
+  float flow=G(vec2(along*0.035-uTime*0.02,across*0.12)).b;
+  float flow2=G(vec2(along*0.06-uTime*0.03+0.3,across*0.2+0.2)).g;
+  float fl=smoothstep(0.62,0.82,flow*0.55+flow2*0.45)*smoothstep(0.3,0.8,dn);
+  c=mix(c,c*1.15+vec3(0.03,0.05,0.05),fl*0.45);
+  // shadows (trees + clouds) cool the water
+  vec4 lm=LM(vW);float cs=max(cloud(vW)*0.6,(1.0-lm.r)*uShadowsOn);c=mix(c,c*vec3(0.55,0.70,0.88),cs);
+  // 5. sun glitter: painted dabs only where the sun reflects toward the camera
+  float spec=pow(max(dot(R,uSunDir),0.0),5.0);
+  float dab=step(0.80,G(vec2(along*0.45-uTime*0.12,across*0.9)).r)*step(0.55,G(vW.xz/2.3+uTime*0.015).g);
+  c+=uSunCol*vec3(1.0,0.86,0.58)*dab*(0.25+spec*1.6)*(1.0-cs)*smoothstep(0.3,0.8,dn);
+  // 6. foam: broken painted line at the shore, plus a faint second line
+  float g=G(vW.xz/1.4).r,gf=G(vec2(along*0.5-uTime*0.05,across)).g;
+  float foam=smoothstep(0.08,0.02,abs(dn-0.12-(gf-0.5)*0.1))*step(0.42,g);
+  foam=max(foam,smoothstep(0.05,0.0,abs(dn-0.42-(gf-0.5)*0.15))*step(0.62,g)*0.6);
+  c=mix(c,vec3(0.92,0.92,0.84)*mix(1.0,0.8,cs),foam*0.85);
+  // season: winter ice (pale, cracked), snow at the edges
+  float ice=clamp(uSeason-2.3,0.0,0.7)/0.7;
+  if(ice>0.0){vec3 ic=mix(vec3(0.66,0.76,0.82),vec3(0.84,0.88,0.90),smoothstep(0.5,0.0,dn));
+    float crack=smoothstep(0.03,0.0,abs(G(vW.xz/9.0).g-0.5))*0.5;ic*=1.0-crack;ic=mix(ic,ic*vec3(0.62,0.72,0.88),cs);
+    c=mix(c,ic,ice*0.9);}
+  c*=1.0+(G(vW.xz/4.0).r-0.5)*uGrainAmt*0.14;
+  gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}`;
+// reflection mask: crown discs of trees near the stream (filled once the scatter is known)
+const REFN=1024,reflCanvas=document.createElement('canvas');reflCanvas.width=reflCanvas.height=REFN;
+const reflG=reflCanvas.getContext('2d');reflG.fillStyle='#000';reflG.fillRect(0,0,REFN,REFN);reflG.filter='blur(3px)';
+const reflTrees=[];const reflAdd=(x,z,r)=>{if(Math.abs(x-streamX(z))<26)reflTrees.push([x,z,r]);};
+let waterMat;
+{const pos=[],uv=[],dep=[],idx=[],W=30,COLS=15;let k=0;
+ for(let z=-1300;z<=1300;z+=(Math.abs(z)<300?2.5:12)){
+   const cx=streamX(z),y=H(cx,z)+2.0;
+   const tx=(streamX(z+0.5)-streamX(z-0.5)),tl=Math.hypot(tx,1),nx=1/tl,nz=-tx/tl;   // normal to the centre-line
+   for(let c=0;c<=COLS;c++){const a=(c/COLS-0.5)*W,x=cx+nx*a,zz=z+nz*a;
+     const h=H(x,zz),edge=Math.max(0,(Math.abs(a)-9)/6);
+     const yy=edge>0?Math.min(y,h-0.4*edge):y;          // outer columns dive under the bank: the terrain cuts a natural shoreline, no ribbon edge
+     pos.push(x,yy,zz);uv.push(a,z);dep.push(y-h);}
+   if(k)for(let c=0;c<COLS;c++){const a=(k-1)*(COLS+1)+c,b=k*(COLS+1)+c;idx.push(a,b,a+1,a+1,b,b+1);}
+   k++;}
+ const m=new B.Mesh('water',scene),vd=new B.VertexData();vd.positions=pos;vd.uvs=uv;vd.indices=idx;const n=[];B.VertexData.ComputeNormals(pos,idx,n);vd.normals=n;vd.applyToMesh(m);
+ m.setVerticesData('aDepth',new Float32Array(dep),false,1);
+ waterMat=mat('water',WAT_VS,WAT_FS,{attributes:['position','uv','aDepth'],samplers:['uRefl']});m.material=waterMat;m.material.backFaceCulling=false;}
+
+/* =========================================================================
+   NATURE PACK: per-role painting, soft crown normals, painted silhouettes
+   role ids (tools/obj-to-js.mjs): 0 foliage 1 dark foliage 2 wood 3 rock
+   4 birch bark 5 bark mark 6 warm flower 7 white flower 8 wheat 9 berry
+   ========================================================================= */
+const NAT_VS=`precision highp float;attribute vec3 position;attribute vec3 normal;attribute float aRole;attribute vec3 aCrown;
+#include<instancesDeclaration>
+uniform mat4 viewProjection;uniform vec3 uCamPos;
+#ifdef INSTANCES
+attribute float aTint;
+#endif
+varying vec3 vW,vN;varying float vRole,vTint,vOcc,vH;
+void main(){
+  #include<instancesVertex>
+  vec3 pp=position;
+  #ifdef GRASSY
+  pp*=1.0-smoothstep(120.0,165.0,length(finalWorld[3].xyz-uCamPos));
+  #endif
+  vec4 w=finalWorld*vec4(pp,1.0);vH=w.y-finalWorld[3].y;
+  vec3 n=normal;
+  #ifdef GRASSY
+  n=normalize(mix(n,vec3(0.0,1.0,0.0),0.7));                 // grass shades like the ground it grows from
+  vOcc=clamp(0.45+position.y*0.9,0.0,1.0);
+  #else
+  if(aRole<1.5){n=normalize(mix(n,normalize(position-aCrown),0.75));   // soft, rounded crowns
+    vOcc=clamp(0.62+(position.y-aCrown.y)*0.55+length(position.xz-aCrown.xz)*0.25,0.0,1.0);}
+  else vOcc=1.0;
+  #endif
+  vN=normalize(mat3(finalWorld)*n);vW=w.xyz;vRole=aRole;
+  float t=0.5;
+  #ifdef INSTANCES
+  t=aTint;
+  #endif
+  vTint=t;gl_Position=viewProjection*w;}`;
+const NAT_FS=`precision highp float;varying vec3 vW,vN;varying float vRole,vTint,vOcc,vH;uniform vec3 uFolA,uFolB;uniform float uRim,uKind;${GLSL}
+vec3 roleCol(float r,float t){
+  vec3 fol=foliage(uFolA,uFolB,t,uKind);
+  if(r<0.5)return fol;
+  if(r<1.5)return fol*vec3(0.72,0.86,0.92);
+  if(r<2.5)return vec3(0.36,0.24,0.17);
+  if(r<3.5)return vec3(0.66,0.62,0.55);
+  if(r<4.5)return vec3(0.90,0.87,0.80);
+  if(r<5.5)return vec3(0.20,0.18,0.17);
+  if(r<6.5)return vec3(0.99,0.56,0.14);
+  if(r<7.5)return vec3(0.97,0.95,0.88);
+  if(r<8.5)return mix(vec3(0.86,0.66,0.28),vec3(0.95,0.80,0.40),t);
+  return vec3(0.84,0.16,0.12);
+}
+void main(){
+  vec3 N=normalize(vN);
+  vec4 lm=LM(vW);
+  #ifdef GRASSY
+  float sh=(1.0-lm.r)*uShadowsOn;
+  #else
+  float sh=shadowAt(vW,N);
+  #endif
+  #ifndef GRASSY
+  if(vRole<1.5&&uEdges>0.5){                                   // painted silhouette: crowns break up like dabs
+    vec3 V=normalize(uCamPos-vW);float fres=1.0-abs(dot(N,V));
+    float g=grainW(vW,N,2.4).g*0.75+grainW(vW,N,0.9).r*0.25;
+    if(fres>0.42&&g<(fres-0.42)*1.9)discard;
+  }
+  #endif
+  vec3 c=paint(roleCol(vRole,vTint),N,vW,vOcc*mix(1.0,lm.g,uAO*0.6),uRim,1.0,sh);
+  #ifndef GRASSY
+  if(vRole<1.5){                                                // golden backlight: crowns glow when the sun is behind them
+    vec3 V=normalize(uCamPos-vW);
+    float back=clamp(dot(-normalize(V.xz+1e-4),normalize(uSunDir.xz)),0.0,1.0);back*=back;
+    float edge=smoothstep(0.35,0.75,(1.0-abs(dot(N,V)))+(grainW(vW,N,2.4).r-0.5)*0.25);
+    c+=uSunCol*vec3(1.0,0.78,0.45)*back*edge*uBack*0.55*(1.0-sh);}
+  #endif
+  gl_FragColor=vec4(atmos(mist(c,vW,lm,vH),vW),depthA(vW));}`;
+function natMat(name,folA,folB,{rim=0.8,grassy=false,kind=grassy?2:0}={}){
+  const m=mat(name,NAT_VS,NAT_FS,{attributes:['position','normal','aRole','aCrown','aTint'],uniforms:['uFolA','uFolB','uRim','uKind'],
+    samplers:[],defines:grassy?['#define GRASSY']:[]});
+  m.setColor3('uFolA',C3.FromHexString(folA));m.setColor3('uFolB',C3.FromHexString(folB));m.setFloat('uRim',rim);m.setFloat('uKind',kind);return m;
+}
+const treeMat=natMat('trees','#4a7330','#97a043',{rim:0.9});
+const birchMat=natMat('birch','#7a9a3c','#bcae55',{rim:0.9});
+const pineMat=natMat('pines','#2f5a36','#4f7a3e',{rim:0.8,kind:1});
+const farMat=natMat('far','#3c6640','#6b8648',{rim:0.4});
+const grassMat=natMat('grass','#5a7a30','#a3a346',{rim:0.5,grassy:true});
+
+const FLIP=true;   // OBJ winding is opposite to Babylon's default
+function buildModel(name){
+  const d=window.NATURE[name],m=new B.Mesh(name,scene);
+  const idx=FLIP?d.idx.slice().reverse():d.idx;
+  m.setVerticesData(B.VertexBuffer.PositionKind,d.pos);m.setIndices(idx);
+  const nrm=[];B.VertexData.ComputeNormals(d.pos,idx,nrm);m.setVerticesData(B.VertexBuffer.NormalKind,nrm);
+  m.setVerticesData('aRole',new Float32Array(d.role),false,1);
+  let cx=0,cy=0,cz=0,n=0;for(let i=0;i<d.role.length;i++)if(d.role[i]<=1){cx+=d.pos[i*3];cy+=d.pos[i*3+1];cz+=d.pos[i*3+2];n++;}
+  if(!n){cx=0;cy=d.max[1]*0.6;cz=0;n=1;}
+  const cr=new Float32Array(d.role.length*3);for(let i=0;i<d.role.length;i++){cr[i*3]=cx/n;cr[i*3+1]=cy/n;cr[i*3+2]=cz/n;}
+  m.setVerticesData('aCrown',cr,false,3);
+  m.userData={h:d.max[1]-d.min[1],w:Math.max(d.max[0]-d.min[0],d.max[2]-d.min[2]),crownY:cy/n};
+  return m;
+}
+const _m=new B.Matrix(),_q=new B.Quaternion(),_s=new V3(),_t=new V3();
+function place(model,material,items){            // items: [x,z,scale,yaw,tint,(dy)]
+  if(!items.length)return;
+  const m=buildModel(model);m.material=material;m.alwaysSelectAsActiveMesh=true;
+  const buf=new Float32Array(items.length*16),tint=new Float32Array(items.length);
+  items.forEach(([x,z,s,yaw,t,dy=0],i)=>{_t.set(x,H(x,z)+dy,z);B.Quaternion.RotationYawPitchRollToRef(yaw,0,0,_q);_s.set(s,s,s);B.Matrix.ComposeToRef(_s,_q,_t,_m);_m.copyToArray(buf,i*16);tint[i]=t;});
+  m.thinInstanceSetBuffer('matrix',buf,16,true);m.thinInstanceSetBuffer('aTint',tint,1,true);
+  return m;
+}
+
+/* ---------- scattering: composition follows the north star ---------- */
+const R=mulberry(77),rr=()=>R();
+const nearStream=(x,z,d)=>Math.abs(x-streamX(z))<d;
+const HOUSES=[[-56,22,0.3],[-66,10,-0.2],[-54,40,0.9],[-72,31,0.1]];
+const nearVillage=(x,z,d)=>HOUSES.some(([hx,hz])=>(hx-x)**2+(hz-z)**2<d*d);
+const KEEP_CLEAR=(x,z)=>(Math.abs(x+5)<20&&z>-44&&z<-2)||(z>7&&z<19&&x>-14&&x<26)||((x-34)**2+(z+24)**2<160);  // formations
+const groups={};const add=(model,item)=>(groups[model]=groups[model]||[]).push(item);
+const TREE_MODELS=['CommonTree_1','CommonTree_2','CommonTree_3','CommonTree_4','CommonTree_5'];
+const clusters=[[-62,-22,7],[-128,4,9],[-74,58,6],[42,56,8],[82,32,6],[-22,72,7],[112,-12,5],[-150,62,8],[150,72,7],[-42,122,10],[62,112,8],[18,-80,6],[-95,-70,7],[120,-70,6]];
+for(const [cx,cz,n] of clusters)for(let i=0;i<n;i++){
+  const x=cx+(rr()-0.5)*42,z=cz+(rr()-0.5)*32;if(nearStream(x,z,9)||nearVillage(x,z,10)||KEEP_CLEAR(x,z))continue;
+  const birch=rr()<0.22,mdl=birch?'BirchTree_'+(1+Math.floor(rr()*5)):TREE_MODELS[Math.floor(rr()*5)],s=3.4+rr()*1.4;
+  add(mdl,[x,z,s,rr()*6.28,rr()]);
+  const M=window.NATURE[mdl];smTree(x,z,(M.max[1]*0.62)*s,(Math.max(M.max[0]-M.min[0],M.max[2]-M.min[2])*0.45)*s);
+  if(rr()<0.5){const fx=x+(rr()-0.5)*6,fz=z+(rr()-0.5)*6;add('Plant_1',[fx,fz,1.6+rr(),rr()*6.28,rr()]);}
+}
+for(let z=-170;z<=170;z+=7+rr()*9){                       // willows follow the stream
+  if(rr()<0.45)continue;const side=rr()<0.5?-1:1,x=streamX(z)+side*(9+rr()*4);if(nearVillage(x,z,9))continue;
+  const mdl='Willow_'+(1+Math.floor(rr()*3)),s=3.6+rr()*1.2;add(mdl,[x,z,s,rr()*6.28,0.2+rr()*0.5]);
+  const M=window.NATURE[mdl];smTree(x,z,M.max[1]*0.6*s,(M.max[0]-M.min[0])*0.45*s);
+}
+for(let i=0;i<5;i++){const x=150+(rr()-0.5)*30,z=-40+(rr()-0.5)*30;add('PineTree_'+(1+Math.floor(rr()*3)),[x,z,3.6+rr(),rr()*6.28,rr()]);smTree(x,z,6,3.5);}
+for(let i=0;i<90;i++){                                       // bushes, berries near the village
+  const a=rr()*6.28,r=14+rr()*120,x=Math.cos(a)*r+8,z=Math.sin(a)*r;if(nearStream(x,z,7)||KEEP_CLEAR(x,z)||nearVillage(x,z,7))continue;
+  const s=1.8+rr()*1.4;add(nearVillage(x,z,40)&&rr()<0.5?'BushBerries_'+(1+Math.floor(rr()*2)):'Bush_'+(1+Math.floor(rr()*2)),[x,z,s,rr()*6.28,rr()]);smBlob(x,z,s*0.6);
+}
+for(let i=0;i<46;i++){const a=rr()*6.28,r=10+rr()*110,x=Math.cos(a)*r,z=Math.sin(a)*r;if(nearStream(x,z,6)||KEEP_CLEAR(x,z))continue;
+  const s=1.6+rr()*2.4;add(rr()<0.7?'Rock_Moss_'+(1+Math.floor(rr()*4)):'Rock_'+(1+Math.floor(rr()*2)),[x,z,s,rr()*6.28,rr(),-0.15*s]);smBlob(x,z,s*0.35);}
+for(let i=0;i<5;i++){const x=-20+(rr()-0.5)*120,z=60+(rr()-0.5)*80;if(nearStream(x,z,8))continue;add(i%2?'TreeStump':'WoodLog_Moss',[x,z,2.2,rr()*6.28,rr()]);}
+// grass tufts & flowers over the whole near field, densest around the hill
+for(let i=0;i<4200;i++){
+  const a=rr()*6.28,r=4+Math.pow(rr(),0.8)*175,x=Math.cos(a)*r,z=Math.sin(a)*r*0.9+4;
+  if(nearStream(x,z,6.5)||KEEP_CLEAR(x,z)||nearVillage(x,z,6))continue;
+  const flowery=fbm(x*0.03+4,z*0.03-2)>0.58,k=rr();
+  const mdl=flowery&&k<0.5?'Flowers':k<0.88?'Grass_Short':'Plant_1';
+  add(mdl,[x,z,mdl==='Plant_1'?1.3:mdl==='Flowers'?1.4:1.6+rr()*0.8,rr()*6.28,rr()]);
+}
+// a wheat field by the village
+for(let u=0;u<46;u+=1.25)for(let v=0;v<22;v+=1.3){const x=-128+u*0.95+v*0.25,z=-34+v-u*0.12;if(rr()<0.08)continue;add('Wheat',[x+(rr()-0.5)*0.5,z+(rr()-0.5)*0.5,1.5+rr()*0.4,rr()*6.28,rr()]);}
+// far woods & hedgerows from cheap bush crowns
+const FAR=[];
+for(let k=-8;k<=8;k++)for(let t=-560;t<=560;t+=6){const qx=k*70+(hash(k,t)-0.5)*2,qy=t,x=0.8*qx-0.6*qy,z=0.6*qx+0.8*qy,r=Math.hypot(x,z);
+  if(r<190||r>640||hash(k*7,Math.floor(t/60))<0.35||nearStream(x,z,11))continue;FAR.push([x,z,3.6+hash(k,t*3)*2.0,hash(t,k)*6.28,hash(k,t)]);}
+for(let w=0;w<20;w++){const a=hash(w,51)*6.283,r=230+hash(w,52)*320,cx=Math.cos(a)*r,cz=Math.sin(a)*r;
+  for(let i=0;i<34;i++){const x=cx+(hash(w,i)-0.5)*80,z=cz+(hash(i,w)-0.5)*55;if(nearStream(x,z,11))continue;FAR.push([x,z,5+hash(i+w,9)*3,hash(i,w*3)*6.28,hash(w,i*2)]);}}
+for(const [k,items] of Object.entries(groups)){
+  const material=/Grass|Flowers|Plant_1|Wheat/.test(k)?grassMat:/Birch/.test(k)?birchMat:/Pine/.test(k)?pineMat:treeMat;place(k,material,items);}
+place('Bush_1',farMat,FAR.filter((_,i)=>i%4===0));place('Bush_2',farMat,FAR.filter((_,i)=>i%4===2));
+
+for(const [x,z,r] of reflTrees){const px=(x+260)/520*REFN,pz=(z+260)/520*REFN,pr=Math.max(2,r/520*REFN);
+  reflG.fillStyle='#fff';reflG.beginPath();reflG.ellipse(px,pz,pr,pr*0.9,0,0,7);reflG.fill();}
+const reflTex=new B.DynamicTexture('refl',reflCanvas,scene,true,B.Texture.BILINEAR_SAMPLINGMODE);reflTex.wrapU=reflTex.wrapV=B.Texture.CLAMP_ADDRESSMODE;reflTex.update(false);
+waterMat.setTexture('uRefl',reflTex);
+
+/* =========================================================================
+   SHADOW PASS: orthographic camera at the sun, depth of every caster into a
+   float target, rendered ONCE (the landscape is static).
+   ========================================================================= */
+const SMN=2048,E=380;
+const lightCam=new B.FreeCamera('lightCam',SUN.scale(700),scene);lightCam.setTarget(V3.Zero());
+lightCam.mode=B.Camera.ORTHOGRAPHIC_CAMERA;Object.assign(lightCam,{orthoLeft:-E,orthoRight:E,orthoTop:E,orthoBottom:-E,minZ:300,maxZ:1100});
+const DEPTH_VS=`precision highp float;attribute vec3 position;
+#include<instancesDeclaration>
+uniform mat4 viewProjection;varying float vD;
+void main(){
+  #include<instancesVertex>
+  vec4 p=viewProjection*finalWorld*vec4(position,1.0);vD=p.z/p.w*0.5+0.5;gl_Position=p;}`;
+const DEPTH_FS=`precision highp float;varying float vD;void main(){gl_FragColor=vec4(vD,vD,vD,1.0);}`;
+const depthMat=new B.ShaderMaterial('depth',scene,{vertexSource:DEPTH_VS,fragmentSource:DEPTH_FS},{attributes:['position'],uniforms:['world','viewProjection']});
+depthMat.backFaceCulling=true;depthMat.sideOrientation=B.Material.CounterClockWiseSideOrientation;   // render BACK faces into the depth map: kills self-shadow acne on lit faces
+const shadowRT=new B.RenderTargetTexture('shadowRT',SMN,scene,false,true,B.Constants.TEXTURETYPE_FLOAT,false,B.Texture.NEAREST_SAMPLINGMODE,true,false,false,B.Constants.TEXTUREFORMAT_R);
+shadowRT.activeCamera=lightCam;shadowRT.clearColor=new C4(1,1,1,1);
+const terrains=scene.meshes.filter(m=>m.name==='t');
+// terrain is NOT a shadow caster: it self-shadowed into diagonal 'acne' stripes; slopes facing away are already dark via N·L
+// small plants don't cast either: thousands of tuft shadows streaked the ground along the sun direction
+shadowRT.renderList=scene.meshes.filter(m=>m.name!=='water'&&(m.name!=='t'||m===terrains[0])&&!/Grass|Flowers|Plant|Wheat/.test(m.name));
+for(const m of shadowRT.renderList)shadowRT.setMaterialForRendering(m,depthMat);
+shadowRT.refreshRate=B.RenderTargetTexture.REFRESHRATE_RENDER_ONCE;shadowRT.updateSamplingMode(B.Texture.NEAREST_SAMPLINGMODE);
+scene.customRenderTargets.push(shadowRT);
+lightCam.computeWorldMatrix(true);
+const lightVP=lightCam.getViewMatrix(true).multiply(lightCam.getProjectionMatrix(true));
+for(const m of mats){m.setTexture('uShadowMap',shadowRT);m.setMatrix('uLightVP',lightVP);m.setVector2('uSMTexel',new B.Vector2(1/SMN,1/SMN));}
+
+/* ---------- AO + valley-mist mask (CPU, once) ---------- */
+{const N=128,tmp=document.createElement('canvas');tmp.width=tmp.height=N;const tg=tmp.getContext('2d'),img=tg.createImageData(N,N),d=img.data;
+ const ring=(x,z,r)=>{let s=0;for(let k=0;k<6;k++){const a=k/6*6.283;s+=H(x+Math.cos(a)*r,z+Math.sin(a)*r);}return s/6;};
+ for(let j=0;j<N;j++)for(let i=0;i<N;i++){const x=(i+0.5)/N*SMW-SMW/2,z=(j+0.5)/N*SMW-SMW/2,h=H(x,z);
+   const near=ring(x,z,7),far=ring(x,z,40);
+   const ao=1-Math.min(0.35,Math.max(0,(near-h)*0.10));                       // hollows & stream banks
+   const valley=Math.min(1,Math.max(0,(far-h)/3.2));                            // low ground relative to 40 m around
+   const k=(j*N+i)*4;d[k]=255;d[k+1]=ao*255;d[k+2]=valley*valley*(3-2*valley)*255;d[k+3]=255;}
+ tg.putImageData(img,0,0);aog.imageSmoothingEnabled=true;aog.drawImage(tmp,0,0,AON,AON);
+ aog.globalCompositeOperation='multiply';
+ for(const [x,z,r,a] of canopy){const px=(x+SMW/2)/SMW*AON,pz=(z+SMW/2)/SMW*AON,pr=Math.max(1.5,r/SMW*AON);
+   const gr=aog.createRadialGradient(px,pz,0,px,pz,pr);gr.addColorStop(0,`rgb(255,${Math.round(255*(1-a))},255)`);gr.addColorStop(1,'rgb(255,255,255)');
+   aog.fillStyle=gr;aog.beginPath();aog.arc(px,pz,pr,0,7);aog.fill();}}
+const aoTex=new B.DynamicTexture('ao',aoCanvas,scene,true,B.Texture.BILINEAR_SAMPLINGMODE);aoTex.wrapU=aoTex.wrapV=B.Texture.CLAMP_ADDRESSMODE;aoTex.update(false);
+
+/* ---------- LIGHT-MAP BAKE: top-down ortho render of the terrain, once ---------- */
+const BAKE_FS=`precision highp float;varying vec3 vW,vN;uniform sampler2D uAOTex;${GLSL}
+void main(){vec3 N=normalize(vN);
+  vec4 lp=uLightVP*vec4(vW+N*0.35,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;float d=q.z*0.5+0.5-0.0012;
+  float s=0.0;for(int i=0;i<12;i++){float a=float(i)*2.39996;float r=sqrt(float(i)+0.5)*1.2;
+    s+=step(texture2D(uShadowMap,uv+vec2(cos(a),sin(a))*r*uSMTexel).r,d);}
+  float vis=1.0-s/12.0;
+  vis=smoothstep(0.35,0.65,vis+(G(vW.xz/3.0).r-0.5)*0.35);                  // painted edge, decided once
+  vec4 a=texture2D(uAOTex,(vW.xz+${(SMW/2).toFixed(1)})/${SMW.toFixed(1)});
+  gl_FragColor=vec4(vis,a.g,a.b,1.0);}`;
+const bakeMat=mat('bake',TER_VS,BAKE_FS,{samplers:['uAOTex']});mats.splice(mats.indexOf(bakeMat),1);   // never bind uLM (its own target) or update it per frame
+bakeMat.setTexture('uAOTex',aoTex);bakeMat.setTexture('uShadowMap',shadowRT);bakeMat.setMatrix('uLightVP',lightVP);bakeMat.setVector2('uSMTexel',new B.Vector2(1/SMN,1/SMN));
+const lmCam=new B.FreeCamera('lmCam',new V3(0,500,0),scene);lmCam.setTarget(new V3(0,0,0.01));
+lmCam.mode=B.Camera.ORTHOGRAPHIC_CAMERA;Object.assign(lmCam,{orthoLeft:-SMW/2,orthoRight:SMW/2,orthoTop:SMW/2,orthoBottom:-SMW/2,minZ:1,maxZ:1000});
+const lightMap=new B.RenderTargetTexture('lightmap',2048,scene,false,true,B.Constants.TEXTURETYPE_UNSIGNED_BYTE,false,B.Texture.BILINEAR_SAMPLINGMODE);
+lightMap.activeCamera=lmCam;lightMap.clearColor=new C4(1,1,0,1);lightMap.renderList=[terrains[0]];lightMap.setMaterialForRendering(terrains[0],bakeMat);
+lightMap.refreshRate=B.RenderTargetTexture.REFRESHRATE_RENDER_ONCE;scene.customRenderTargets.push(lightMap);
+// the bake must see a COMPLETE shadow map: re-bake every time the shadow pass actually renders
+shadowRT.onAfterRenderObservable.add(()=>lightMap.resetRefreshCounter());
+lmCam.computeWorldMatrix(true);
+const lmVP=lmCam.getViewMatrix(true).multiply(lmCam.getProjectionMatrix(true));
+for(const m of mats){m.setTexture('uLM',lightMap);m.setMatrix('uLMVP',lmVP);}
+
+/* ---------- camera: top-down RTS view only ---------- */
+const camera=new B.ArcRotateCamera('cam',-Math.PI/2-0.35,0.80,125,new V3(-10,8,2),scene);
+scene.activeCamera=camera;camera.attachControl(canvas,true);camera.lowerRadiusLimit=45;camera.upperRadiusLimit=260;camera.lowerBetaLimit=0.3;camera.upperBetaLimit=0.98;
+camera.wheelDeltaPercentage=0.01;
+camera.panningSensibility=30;camera.minZ=0.5;camera.maxZ=5000;camera.fov=0.62;camera.inertia=0.88;
+
+/* ---------- post: [depth of field H, V] → one fused finishing pass ---------- */
+B.Effect.ShadersStore.dofFragmentShader=`precision highp float;varying vec2 vUV;uniform sampler2D textureSampler;uniform vec2 uTexel,uDir;uniform float uFocus,uRange,uMaxPx;
+float coc(float d){return clamp(abs(d-uFocus)/uRange,0.0,1.0);}
+void main(){vec4 c0=texture2D(textureSampler,vUV);float r=coc(c0.a)*uMaxPx;vec3 acc=c0.rgb;float w=1.0;
+  for(int i=1;i<=4;i++){float o=float(i)/4.0*r;for(int s=-1;s<=1;s+=2){vec4 t=texture2D(textureSampler,vUV+uDir*uTexel*o*float(s));float wt=coc(t.a);acc+=t.rgb*wt;w+=wt;}}
+  gl_FragColor=vec4(acc/w,c0.a);}`;
+B.Effect.ShadersStore.uberFragmentShader=`precision highp float;varying vec2 vUV;uniform sampler2D textureSampler,uGrain;uniform vec2 uRes;uniform float uGrade,uGrainOn,uBloom;
+vec3 shoulder(vec3 c){float m=max(c.r,max(c.g,c.b));if(m<=0.8)return c;float mm=0.8+0.2*(1.0-exp(-(m-0.8)/0.2));return c*(mm/m);}
+float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+void main(){vec3 c=texture2D(textureSampler,vUV).rgb;
+  if(uBloom>0.0){vec3 b=vec3(0.0);                                  // fused cheap bloom: highlights gathered on two rings
+    for(int i=0;i<12;i++){float a=float(i)*0.5236+(i<6?0.0:0.26);float r=(i<6?6.0:16.0)*uRes.y/1080.0;
+      vec3 s=texture2D(textureSampler,vUV+vec2(cos(a),sin(a))*r/uRes).rgb;b+=max(s-vec3(0.70),0.0)*(i<6?1.0:0.6);}
+    c+=b*0.11*uBloom;}
+  if(uGrade>0.0){float l=dot(c,vec3(0.2126,0.7152,0.0722));
+    float green=clamp((c.g-max(c.r,c.b))*3.0,0.0,1.0);
+    vec3 g=mix(c,vec3(l)*vec3(1.03,1.0,0.88)+(c-vec3(l))*0.5,green*0.85);
+    g=mix(vec3(dot(g,vec3(0.2126,0.7152,0.0722))),g,0.9);      // muted, warmer greens
+    g*=mix(vec3(0.92,0.99,1.06),vec3(1.08,1.0,0.85),smoothstep(0.08,0.75,l));  // split tone: teal shadows, amber highlights
+    g+=vec3(0.03,0.02,0.0)*(1.0-l);                                           // warm lift in the darks
+    g=mix(g,vec3(0.72,0.76,0.82)*(0.85+l*0.35),smoothstep(0.60,1.0,vUV.y)*0.20); // cooler, hazier toward the top (depth by painting)
+    c=mix(c,g,uGrade);}
+  c=shoulder(c);
+  vec2 q=(vUV-0.5)*vec2(uRes.x/uRes.y,1.0);c=mix(c,c*vec3(0.80,0.87,0.98),smoothstep(0.45,1.05,length(q))*0.55);
+  c*=1.0+(texture2D(uGrain,gl_FragCoord.xy/512.0).r-0.5)*0.06*uGrainOn;     // static paper
+  c+=(h(gl_FragCoord.xy)+h(gl_FragCoord.yx+17.3)-1.0)/255.0;                 // dither against banding in mist & vignette
+  gl_FragColor=vec4(c,1.0);}`;
+let posts=[];
+function buildPost(){
+  posts.forEach(p=>p.dispose(camera));posts=[];
+  const HF=B.Constants.TEXTURETYPE_HALF_FLOAT;
+  const pp=(name,uni,smp,type)=>{const p=new B.PostProcess(name,name,uni,smp,1.0,camera,B.Texture.BILINEAR_SAMPLINGMODE,engine,false,null,type);if(!posts.length)p.samples=4;posts.push(p);return p;};
+  if(S.dof)for(const dir of [[1,0],[0,1]]){const p=pp('dof',['uTexel','uDir','uFocus','uRange','uMaxPx'],[],HF);
+    p.onApply=e=>{const f=camera.radius/1000;e.setFloat2('uTexel',1/p.width,1/p.height);e.setFloat2('uDir',dir[0],dir[1]);
+      e.setFloat('uFocus',f);e.setFloat('uRange',f*0.32+0.012);e.setFloat('uMaxPx',9*S.dofAmt*p.height/1080);};}
+  const u=pp('uber',['uRes','uGrade','uGrainOn','uBloom'],['uGrain'],HF);
+  u.onApply=e=>{e.setFloat2('uRes',u.width,u.height);e.setFloat('uGrade',S.grade);e.setFloat('uGrainOn',S.grain);e.setFloat('uBloom',S.bloom);e.setTexture('uGrain',grainTex);};
+}
+buildPost();
+document.getElementById('dofamt').oninput=e=>S.dofAmt=+e.target.value;
+document.getElementById('res').onchange=e=>{S.res=+e.target.value;engine.setHardwareScalingLevel(1/S.res);};
+
+/* ---------- UI ---------- */
+document.querySelectorAll('.tg').forEach(b=>b.onclick=()=>{const k=b.dataset.k;S[k]=S[k]?0:1;b.classList.toggle('on',!!S[k]);b.textContent=S[k]?'On':'Off';if(k==='dof')buildPost();});
+document.getElementById('gamt').oninput=e=>S.gamt=+e.target.value;
+const SEASONS=['Summer','Early autumn','Late autumn','Winter'];
+document.getElementById('season').oninput=e=>{S.season=+e.target.value;document.getElementById('slabel').textContent=SEASONS[Math.min(3,Math.round(S.season))];};
+const dropEl=document.getElementById('drop');
+addEventListener('dragover',e=>{e.preventDefault();dropEl.style.display='flex';});
+addEventListener('dragleave',()=>dropEl.style.display='none');
+addEventListener('drop',e=>{e.preventDefault();dropEl.style.display='none';const f=e.dataTransfer.files[0];if(!f||!/image/.test(f.type))return;
+  const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=c.height=512;const g=c.getContext('2d');g.drawImage(img,0,0,512,512);
+    const d=g.getImageData(0,0,512,512).data,lum=new Float32Array(512*512);let mn=1,mx=0;
+    for(let i=0;i<lum.length;i++){const a=d[i*4+3]/255,v=(0.3*d[i*4]+0.59*d[i*4+1]+0.11*d[i*4+2])/255*a+(1-a)*0.5;lum[i]=v;mn=Math.min(mn,v);mx=Math.max(mx,v);}
+    for(let i=0;i<lum.length;i++)lum[i]=(lum[i]-mn)/Math.max(1e-3,mx-mn);         // normalize: only the variation matters
+    const old=grainTex;grainTex=grainTexture(makeGrainCanvas(lum));for(const m of mats)m.setTexture('uGrain',grainTex);bakeMat.setTexture('uGrain',grainTex);lightMap.resetRefreshCounter();old.dispose();};
+  img.src=URL.createObjectURL(f);});
+
+/* ---------- loop ---------- */
+const fpsEl=document.getElementById('fps');
+// sun colour follows the season: warm gold in summer/autumn → pale gold in winter (keeps snow white, not yellow)
+const SUNCOL=PAL.sun.clone(),WINTER_SUN=new C3(0.98,0.95,0.88);
+scene.onBeforeRenderObservable.add(()=>{const w=Math.max(0,Math.min(1,S.season-2));
+  SUNCOL.copyFrom(B.Color3.Lerp(PAL.sun,WINTER_SUN,w));});
+scene.onBeforeRenderObservable.add(()=>{
+  S.t+=Math.min(engine.getDeltaTime()/1000,0.05);
+  for(const m of mats){m.setVector3('uCamPos',camera.position);m.setVector3('uFocus',camera.target);m.setFloat('uTime',S.t);
+    m.setFloat('uGrainAmt',S.grain?S.gamt:0);m.setFloat('uShadowsOn',S.shadows);m.setFloat('uSeason',S.season);m.setColor3('uSunCol',SUNCOL);m.setFloat('uEdges',S.edges);m.setFloat('uClouds',S.clouds);
+    m.setFloat('uAO',S.ao);m.setFloat('uMist',S.mist);m.setFloat('uShafts',S.shafts);m.setFloat('uBack',S.back);}
+  fpsEl.textContent=engine.getFps().toFixed(0)+' fps';
+});
+engine.runRenderLoop(()=>scene.render());
+addEventListener('resize',()=>engine.resize());
+window.__proto={S,scene,camera,buildPost};
+</script>
+</body>
+</html>

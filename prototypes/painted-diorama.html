@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painted Diorama · Style Prototype</title>
+<style>
+:root{--ink:#eceae4;--mute:#8e8b84;--accent:#d9a35b}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#0d0e10;overflow:hidden;font-family:ui-monospace,'JetBrains Mono',Menlo,monospace;color:var(--ink)}
+#c{width:100%;height:100%;display:block;outline:none;touch-action:none}
+#panel{position:fixed;left:16px;bottom:16px;display:flex;flex-direction:column;gap:10px;padding:14px 16px;background:rgba(12,13,15,.72);border:1px solid rgba(255,255,255,.1);border-radius:10px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:11px;letter-spacing:.06em;min-width:250px}
+#panel h1{font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.seg{display:flex;border:1px solid rgba(255,255,255,.16);border-radius:6px;overflow:hidden}
+.seg button{background:none;border:0;color:var(--mute);font:inherit;padding:6px 10px;cursor:pointer}
+.seg button.on{background:var(--ink);color:#111}
+input[type=range]{width:120px;accent-color:var(--accent)}
+.hint{color:var(--mute);font-size:10px;line-height:1.6}
+#fps{position:fixed;right:14px;top:12px;font-size:10px;color:var(--mute)}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@9.29.0/babylon.js"></script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="fps"></div>
+<div id="panel">
+  <h1>Style prototype</h1>
+  <div class="row"><span>Style</span><div class="seg" id="style"><button data-v="0">Diorama</button><button data-v="1" class="on">Painted</button></div></div>
+  <div class="row"><span>Bases</span><div class="seg" id="bases"><button data-v="1">On</button><button data-v="0" class="on">Off</button></div></div>
+  <div class="row"><span>Focus band</span><input id="focus" type="range" min="0.25" max="0.75" step="0.01" value="0.52"></div>
+  <div class="row"><span>Brush size</span><input id="brush" type="range" min="1" max="7" step="1" value="3"></div>
+  <div class="hint">1 / 2 style · B bases · Space pause<br>drag to orbit · scroll to zoom</div>
+</div>
+
+<script>
+'use strict';
+/* =====================================================================
+   Painted Diorama — style prototype.
+   Visual test only: no sim/render split here (see web-rts-architecture.md
+   for the real game structure). One shared GLSL lighting model drives
+   every object; uPaint blends Diorama (0) ↔ Painted (1).
+   ===================================================================== */
+const B=BABYLON, V3=B.Vector3, C3=B.Color3, C4=B.Color4;
+const canvas=document.getElementById('c');
+const engine=new B.Engine(canvas,true,{preserveDrawingBuffer:true,stencil:false},false);
+engine.setHardwareScalingLevel(1/Math.min(window.devicePixelRatio||1,1.5));
+const scene=new B.Scene(engine);
+scene.clearColor=new C4(0.86,0.70,0.48,1);
+
+/* ---------- state ---------- */
+const S={paint:1,bases:0,focus:0.5,brush:3,paused:false,t:0};
+
+/* ---------- light & palette (design.md §3–4) ---------- */
+const SUN=new V3(-0.45,0.30,0.84).normalize();      // low sun, behind-left of the hill
+const PAL={
+  sun:new C3(1.00,0.74,0.46), sky:new C3(0.38,0.50,0.58), ground:new C3(0.40,0.33,0.20),
+  hazeWarm:new C3(0.93,0.73,0.48), hazeCool:new C3(0.68,0.72,0.72), shadow:new C3(0.10,0.20,0.22),
+};
+
+/* ---------- terrain height (shared by placement & mesh) ---------- */
+function hash(x,y){const h=Math.sin(x*127.1+y*311.7)*43758.5453;return h-Math.floor(h);}
+function vn(x,y){const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
+  const a=hash(xi,yi),b=hash(xi+1,yi),c=hash(xi,yi+1),d=hash(xi+1,yi+1);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;}
+function fbm(x,y){let s=0,a=0.5;for(let i=0;i<4;i++){s+=a*vn(x,y);x=x*2.03+11.3;y=y*2.03-7.1;a*=0.5;}return s;}
+const streamX=z=>-38+10*Math.sin(z*0.03)+3.5*Math.sin(z*0.083+1.0);
+const sstep=(a,b,x)=>{const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t);};
+function H(x,z){
+  let h=7*fbm(x*0.0045+3,z*0.0045)+2*fbm(x*0.02+5,z*0.02);
+  h+=15*Math.exp(-((x/50)**2+((z-6)/36)**2));                 // the hill
+  h+=6*Math.exp(-(((x-70)/40)**2+((z+20)/40)**2));            // a shoulder for the cavalry
+  const d=Math.abs(x-streamX(z));h-=3.4*(1-sstep(3,11,d));          // stream: flat bed, gentle banks
+  const r=Math.hypot(x,z);h+=28*Math.min(1,Math.max(0,(r-220)/380))*fbm(x*0.003-9,z*0.003+4); // far hills
+  return h;
+}
+
+/* ---------- shared GLSL ---------- */
+const GLSL_COMMON=`
+uniform vec3 uSunDir,uSunCol,uSkyCol,uGroundCol,uHazeWarm,uHazeCool,uCamPos;
+uniform float uPaint,uTime,uStroke;
+float hh(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
+  return mix(mix(hh(i),hh(i+vec2(1,0)),f.x),mix(hh(i+vec2(0,1)),hh(i+vec2(1,1)),f.x),f.y);}
+float fbm2(vec2 p){float s=0.0,a=0.5;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.03+vec2(3.1,1.7);a*=0.5;}return s;}
+// World-anchored brush field: elongated, direction-varying strokes. Anchored to
+// the world (not the screen) so strokes never "swim" when the camera moves.
+float strokeField(vec3 wp,vec3 n){
+  vec2 p=abs(n.y)>0.55?wp.xz:(abs(n.x)>abs(n.z)?wp.zy:wp.xy);
+  float dist=length(wp-uCamPos);
+  p/=uStroke*(1.0+max(dist-60.0,0.0)/55.0);      // a painter loosens up in the distance
+  float a=0.6+(vn(p*0.07)-0.5)*1.1;
+  mat2 R=mat2(cos(a),-sin(a),sin(a),cos(a));
+  vec2 q=R*p*vec2(0.45,2.6);
+  return vn(q)*0.65+vn(q*2.1+5.0)*0.35;
+}
+vec3 haze(vec3 col,vec3 wp){
+  vec3 v=wp-uCamPos;float d=length(v);
+  float f=1.0-exp(-d*0.0018);
+  float mist=exp(-max(wp.y-2.0,0.0)*0.25)*smoothstep(110.0,320.0,d)*0.32;   // valley mist pools low, in the distance
+  f=clamp(f+mist,0.0,0.92);
+  vec3 hz=mix(uHazeCool,uHazeWarm,pow(max(dot(normalize(v),uSunDir),0.0),1.6));
+  return mix(col,hz,f);
+}
+// The one lighting model. uPaint: 0 = smooth diorama light, 1 = painted bands.
+vec3 shade(vec3 albedo,vec3 N,vec3 wp,float rimAmt,float crisp){
+  vec3 V=normalize(uCamPos-wp);
+  float ndl=dot(N,uSunDir);
+  float s=strokeField(wp,N);
+  float litS=smoothstep(-0.25,0.55,ndl);
+  float far=smoothstep(140.0,320.0,length(wp-uCamPos));
+  float l=ndl+(s-0.5)*0.30*(1.0-crisp*0.6)*(1.0-0.6*far);      // brushy band edges
+  float litP=smoothstep(-0.10,-0.05,l)*0.48+smoothstep(0.28,0.33,l)*0.52;
+  float lit=mix(litS,litP,uPaint);
+  float hemi=N.y*0.5+0.5;
+  vec3 amb=mix(uGroundCol,uSkyCol,hemi);
+  vec3 col=albedo*(amb*0.80+uSunCol*lit*1.05);
+  // painted: per-stroke value & hue jitter, like pigment variation
+  col*=mix(1.0,0.90+0.18*s,uPaint*(1.0-crisp*0.7));
+  col=mix(col,col*vec3(1.04,1.0,0.93),uPaint*(s-0.5));
+  // backlit rim
+  float back=max(dot(-V,uSunDir),0.0);
+  float rim=pow(1.0-max(dot(N,V),0.0),3.0);
+  col+=uSunCol*rim*(0.25+back*0.9)*rimAmt;
+  return haze(col,wp);
+}`;
+const COMMON_UNIFORMS=['uSunDir','uSunCol','uSkyCol','uGroundCol','uHazeWarm','uHazeCool','uCamPos','uPaint','uTime','uStroke'];
+const mats=[];
+function mat(name,vs,fs,{attributes=['position','normal'],uniforms=[],samplers=[],alpha=false,stroke=1.5,instanced=false}={}){
+  const m=new B.ShaderMaterial(name,scene,{vertexSource:vs,fragmentSource:fs},{
+    attributes,uniforms:['world','viewProjection',...COMMON_UNIFORMS,...uniforms],samplers,needAlphaBlending:alpha});
+  m.setVector3('uSunDir',SUN);m.setColor3('uSunCol',PAL.sun);m.setColor3('uSkyCol',PAL.sky);m.setColor3('uGroundCol',PAL.ground);
+  m.setColor3('uHazeWarm',PAL.hazeWarm);m.setColor3('uHazeCool',PAL.hazeCool);m.setFloat('uStroke',stroke);
+  mats.push(m);return m;
+}
+
+/* ---------- terrain ---------- */
+const TERRAIN_VS=`precision highp float;attribute vec3 position;attribute vec3 normal;uniform mat4 world,viewProjection;
+varying vec3 vW,vN;void main(){vec4 w=world*vec4(position,1.0);vW=w.xyz;vN=normalize(mat3(world)*normal);gl_Position=viewProjection*w;}`;
+const TERRAIN_FS=`precision highp float;varying vec3 vW,vN;${GLSL_COMMON}
+vec3 albedo(vec3 wp,vec3 n){
+  float n1=fbm2(wp.xz*0.025),n2=fbm2(wp.xz*0.09+7.0);
+  vec3 c=mix(vec3(0.34,0.40,0.16),vec3(0.52,0.52,0.22),smoothstep(0.32,0.66,n1));
+  c=mix(c,vec3(0.70,0.60,0.33),smoothstep(0.58,0.74,n2)*0.8);           // dry tufts
+  c=mix(c,vec3(0.24,0.30,0.13),smoothstep(0.62,0.80,1.0-n1)*0.5);       // deep patches
+  float sx=-38.0+10.0*sin(wp.z*0.03)+3.5*sin(wp.z*0.083+1.0),d=abs(wp.x-sx);
+  c=mix(vec3(0.30,0.33,0.16),c,smoothstep(5.0,8.5,d));                  // damp grassy banks, narrow
+  c=mix(vec3(0.36,0.31,0.20),c,smoothstep(3.5,5.5,d));                  // thin mud line at the water
+  // dirt road to the village
+  float road=abs(wp.z-(14.0+0.12*(wp.x+50.0))-2.0*sin(wp.x*0.07));
+  c=mix(vec3(0.62,0.50,0.33),c,smoothstep(1.2,2.4,road)+step(-40.0,wp.x)+step(wp.x,-95.0));
+  // distant strip fields
+  float r=length(wp.xz);vec2 q=mat2(0.8,-0.6,0.6,0.8)*wp.xz;
+  float fid=hh(floor(vec2(q.x/70.0,q.y/22.0)));
+  vec3 fc=fid<0.25?vec3(0.62,0.55,0.28):fid<0.5?vec3(0.44,0.52,0.20):fid<0.75?vec3(0.55,0.43,0.26):vec3(0.36,0.46,0.18);
+  c=mix(c,fc,smoothstep(170.0,260.0,r)*0.85);
+  c=mix(c,vec3(0.52,0.48,0.40),smoothstep(0.80,0.62,n.y)*0.55);         // rocky steeps
+  return c;
+}
+void main(){vec3 N=normalize(vN);gl_FragColor=vec4(shade(albedo(vW,N),N,vW,0.15,0.0),1.0);}`;
+function buildTerrain(size,sub,yOff){
+  const g=B.MeshBuilder.CreateGround('t',{width:size,height:size,subdivisions:sub,updatable:true},scene);
+  const p=g.getVerticesData(B.VertexBuffer.PositionKind);
+  for(let i=0;i<p.length;i+=3)p[i+1]=H(p[i],p[i+2])+yOff;
+  g.updateVerticesData(B.VertexBuffer.PositionKind,p);
+  const n=[];B.VertexData.ComputeNormals(p,g.getIndices(),n);g.updateVerticesData(B.VertexBuffer.NormalKind,n);
+  g.material=terrainMat;return g;
+}
+const terrainMat=mat('terrain',TERRAIN_VS,TERRAIN_FS,{stroke:2.4});
+buildTerrain(520,260,0);
+const far=buildTerrain(2600,160,-0.8);
+
+/* ---------- sky ---------- */
+const SKY_VS=`precision highp float;attribute vec3 position;uniform mat4 world,viewProjection;varying vec3 vD;
+void main(){vec4 w=world*vec4(position,1.0);vD=position;gl_Position=viewProjection*w;}`;
+const SKY_FS=`precision highp float;varying vec3 vD;${GLSL_COMMON}
+void main(){vec3 d=normalize(vD);float y=d.y;
+  vec3 c=mix(uHazeWarm,vec3(0.55,0.62,0.70),smoothstep(0.02,0.55,y));
+  float s=max(dot(d,uSunDir),0.0);c+=uSunCol*(pow(s,8.0)*0.45+pow(s,120.0)*0.8);
+  float cl=fbm2(vec2(atan(d.z,d.x)*3.0,y*9.0)+uTime*0.003);
+  float band=mix(cl,floor(cl*4.0)/4.0,uPaint);
+  c=mix(c,vec3(1.0,0.86,0.66),smoothstep(0.45,0.8,band)*smoothstep(0.0,0.25,y)*0.45);
+  gl_FragColor=vec4(c,1.0);}`;
+const sky=B.MeshBuilder.CreateSphere('sky',{diameter:6000,segments:24,sideOrientation:B.Mesh.BACKSIDE},scene);
+sky.material=mat('sky',SKY_VS,SKY_FS);sky.infiniteDistance=true;sky.material.backFaceCulling=false;
+
+/* ---------- water ---------- */
+const WATER_FS=`precision highp float;varying vec3 vW,vN;${GLSL_COMMON}
+void main(){vec3 V=normalize(uCamPos-vW);vec3 R=reflect(-V,vec3(0,1,0));
+  vec3 c=mix(vec3(0.09,0.25,0.33),vec3(0.36,0.55,0.66),pow(1.0-max(V.y,0.0),2.0));
+  float spec=pow(max(dot(R,uSunDir),0.0),10.0);
+  float g=vn(vW.xz*vec2(4.0,1.2)+vec2(0.0,uTime*1.5))*vn(vW.xz*vec2(1.6,5.0)-vec2(uTime*0.8,0.0));
+  float sparkle=smoothstep(0.62,0.8,g)*(0.3+spec);
+  c=mix(c,uSunCol*vec3(0.9,0.68,0.40),spec*0.45);c+=uSunCol*vec3(1.0,0.85,0.55)*sparkle*1.6;
+  float s=strokeField(vW,vec3(0,1,0));c*=mix(1.0,0.88+0.24*s,uPaint);
+  gl_FragColor=vec4(mix(c,haze(c,vW),0.3),1.0);}`;
+{
+  const pos=[],idx=[],W=12.5;let k=0;
+  for(let z=-260;z<=260;z+=3){const x=streamX(z),y=H(x,z)+1.3;pos.push(x-W/2,y,z,x+W/2,y,z);if(k)idx.push(k*2-2,k*2-1,k*2,k*2-1,k*2+1,k*2);k++;}
+  const m=new B.Mesh('water',scene),vd=new B.VertexData();vd.positions=pos;vd.indices=idx;const n=[];B.VertexData.ComputeNormals(pos,idx,n);vd.normals=n;vd.applyToMesh(m);
+  m.material=mat('water',TERRAIN_VS,WATER_FS);m.material.backFaceCulling=false;
+}
+
+/* ---------- vertex-coloured prop & figure building ---------- */
+function colorize(mesh,hex){const c=C3.FromHexString(hex),n=mesh.getTotalVertices(),a=new Float32Array(n*4);for(let i=0;i<n;i++){a[i*4]=c.r;a[i*4+1]=c.g;a[i*4+2]=c.b;a[i*4+3]=1;}mesh.setVerticesData(B.VertexBuffer.ColorKind,a);return mesh;}
+function box(w,h,d,x,y,z,hex,rx=0,ry=0,rz=0){const m=B.MeshBuilder.CreateBox('b',{width:w,height:h,depth:d},scene);m.position.set(x,y,z);m.rotation.set(rx,ry,rz);return colorize(m,hex);}
+function sph(dm,x,y,z,hex,sy=1){const m=B.MeshBuilder.CreateSphere('s',{diameter:dm,segments:8},scene);m.position.set(x,y,z);m.scaling.y=sy;return colorize(m,hex);}
+function cyl(dt,db,h,x,y,z,hex,rx=0,rz=0,tess=10){const m=B.MeshBuilder.CreateCylinder('c',{diameterTop:dt,diameterBottom:db,height:h,tessellation:tess},scene);m.position.set(x,y,z);m.rotation.set(rx,0,rz);return colorize(m,hex);}
+const merge=a=>B.Mesh.MergeMeshes(a,true,true);
+
+const PROP_VS=`precision highp float;attribute vec3 position;attribute vec3 normal;attribute vec4 color;
+#include<instancesDeclaration>
+uniform mat4 viewProjection;
+#ifdef INSTANCES
+attribute float aJit;
+#endif
+varying vec3 vW,vN,vC;
+void main(){
+  #include<instancesVertex>
+  vec4 w=finalWorld*vec4(position,1.0);vW=w.xyz;vN=normalize(mat3(finalWorld)*normal);
+  float j=1.0;
+  #ifdef INSTANCES
+  j=aJit;
+  #endif
+  vC=color.rgb*j;gl_Position=viewProjection*w;}`;
+const PROP_FS=`precision highp float;varying vec3 vW,vN,vC;uniform float uRim,uCrisp;${GLSL_COMMON}
+void main(){vec3 N=normalize(vN);gl_FragColor=vec4(shade(vC,N,vW,uRim,uCrisp),1.0);}`;
+function propMat(name,rim,crisp,stroke){const m=mat(name,PROP_VS,PROP_FS,{attributes:['position','normal','color','aJit'],uniforms:['uRim','uCrisp'],stroke});m.setFloat('uRim',rim);m.setFloat('uCrisp',crisp);return m;}
+const staticMat=propMat('static',0.25,0.2,0.9);
+const unitMat=propMat('units',0.9,1.0,0.45);
+
+/* ---------- village, wall, rocks, trunks ---------- */
+const statics=[],shadowStatic=[];
+const HOUSES=[[-56,22,0.3],[-66,10,-0.2],[-54,40,0.9],[-72,31,0.1]];
+for(const [x,z,r] of HOUSES){
+  const y=H(x,z),w=7,d=5.2,h=3.8;
+  const walls=box(w,h,d,0,h/2,0,'#cdbfa6');
+  // triangular prism roof: a 3-sided cylinder lying along the house's long axis
+  const rf=B.MeshBuilder.CreateCylinder('r',{diameter:d*1.25,height:w+0.6,tessellation:3},scene);
+  rf.position.set(0,h+d*0.18,0);rf.rotation=new V3(Math.PI/2,0,Math.PI/2);colorize(rf,'#c9512a');
+  const ch=box(0.7,1.6,0.7,w*0.28,h+1.6,0.6,'#a89884');
+  const door=box(1.0,1.8,0.1,-0.8,0.9,-d/2-0.02,'#5b3f2a');
+  const win1=box(0.9,0.8,0.1,1.7,2.1,-d/2-0.02,'#3a3226');
+  const hm=merge([walls,rf,ch,door,win1]);hm.position.set(x,y-0.3,z);hm.rotation.y=r;hm.bakeCurrentTransformIntoVertices();statics.push(hm);
+  shadowStatic.push([x,z,6.5,4.5,10]);
+}
+// stone wall along the crest
+for(let i=0;i<34;i++){const x=-6+i*0.75,z=10.5+Math.sin(i*0.4)*0.6,y=H(x,z);const s=box(0.8,0.55+hash(i,2)*0.2,0.6,x,y+0.25,z,hash(i,3)>0.5?'#a39a88':'#8e8676',0,hash(i,4)*0.5);statics.push(s);}
+// rocks
+for(let i=0;i<40;i++){const a=hash(i,9)*6.28,r=20+hash(i,8)*110,x=Math.cos(a)*r,z=Math.sin(a)*r;if(Math.abs(x-streamX(z))<7)continue;statics.push(sph(0.8+hash(i,7)*1.6,x,H(x,z)+0.1,z,'#8f897c',0.55));}
+// stone bridge
+{const z=24,x=streamX(z),y=H(x+8,z);const deck=box(15,0.8,3.2,x,y-0.2,z,'#b7aa92');const a1=box(2,2.6,3.4,x-4,y-1.6,z,'#a79a83'),a2=box(2,2.6,3.4,x+4,y-1.6,z,'#a79a83');statics.push(deck,a1,a2);}
+// fences
+for(let i=0;i<16;i++){const x=-70-i*2.2,z=-2+i*0.4;statics.push(box(2.2,0.12,0.12,x,H(x,z)+0.7,z,'#6b5238',0,0.18),box(0.15,1.0,0.15,x,H(x,z)+0.5,z,'#5d4630'));}
+
+/* ---------- trees & bushes: brush-dab foliage cards ---------- */
+const TREES=[],BUSHES=[];
+{const rng=(i,s)=>hash(i*1.7,s*3.1);
+ const clusters=[[-60,-20,7],[-130,5,9],[-70,55,6],[40,55,8],[80,30,6],[-20,70,7],[110,-10,5],[-150,60,8],[150,70,7],[-40,120,10],[60,110,8]];
+ let k=0;for(const [cx,cz,n] of clusters)for(let i=0;i<n;i++,k++){const x=cx+(rng(k,1)-0.5)*40,z=cz+(rng(k,2)-0.5)*30;if(Math.abs(x-streamX(z))<8)continue;TREES.push([x,z,3.2+rng(k,3)*2.2]);}
+ for(let i=0;i<70;i++){const a=rng(i,5)*6.28,r=14+rng(i,6)*90,x=Math.cos(a)*r+10,z=Math.sin(a)*r;if(Math.abs(x-streamX(z))<6||(Math.abs(x+4)<18&&z>-36&&z<-4))continue;BUSHES.push([x,z,1.0+rng(i,7)*1.1]);}
+ for(const [x,z,s] of TREES){statics.push(cyl(0.35*s/3,0.55*s/3,s*1.3,x,H(x,z)+s*0.6,z,'#4e3a28'));shadowStatic.push([x,z,s*1.6,s*1.4,s*3.2]);}
+}
+const staticMesh=merge(statics);staticMesh.material=staticMat;
+
+const dabTex=new B.DynamicTexture('dab',{width:256,height:256},scene,true);
+{const g=dabTex.getContext();g.clearRect(0,0,256,256);
+ for(let q=0;q<4;q++){const ox=(q%2)*128+64,oy=Math.floor(q/2)*128+64;g.fillStyle='#fff';
+   for(let k=0;k<7;k++){const a=hash(q,k)*6.28,r=10+hash(k,q)*22;g.beginPath();g.ellipse(ox+Math.cos(a)*r*0.8,oy+Math.sin(a)*r*0.6,26+hash(q+k,1)*14,15+hash(q,k+2)*10,a,0,7);g.fill();}
+   for(let k=0;k<26;k++){const a=hash(q+9,k)*6.28,r=40+hash(k+9,q)*16;g.beginPath();g.arc(ox+Math.cos(a)*r,oy+Math.sin(a)*r*0.85,3+hash(k,q+5)*6,0,7);g.fill();}}
+ dabTex.hasAlpha=true;dabTex.update();}
+const FOL_VS=`precision highp float;attribute vec3 position;attribute vec2 corner;attribute vec4 crown;attribute vec2 fdata;
+uniform mat4 viewProjection;uniform vec3 uCamRight,uCamUp;varying vec2 vUv;varying vec3 vW,vN;varying float vAo,vSeed,vR;
+void main(){vec3 wp=position+(uCamRight*corner.x+uCamUp*corner.y)*fdata.x;
+  vec3 d=position-crown.xyz;vN=normalize(d+vec3(0.0,0.35*crown.w,0.0));vAo=clamp(length(d)/crown.w,0.0,1.0);
+  vW=wp;vSeed=fdata.y;vR=crown.w;vUv=corner*0.5+0.5;gl_Position=viewProjection*vec4(wp,1.0);}`;
+const FOL_FS=`precision highp float;varying vec2 vUv;varying vec3 vW,vN;varying float vAo,vSeed,vR;uniform sampler2D uDab;${GLSL_COMMON}
+void main(){vec2 o=vec2(step(0.5,fract(vSeed*7.0)),step(0.5,fract(vSeed*13.0)))*0.5;
+  float a=texture2D(uDab,vUv*0.5+o).a;if(a<0.5)discard;
+  vec3 alb=mix(vec3(0.27,0.40,0.12),vec3(0.55,0.60,0.20),fract(vSeed*3.7));
+  alb=mix(alb,vec3(0.70,0.58,0.24),step(0.86,fract(vSeed*5.3))*0.6);
+  if(vR<0.8)alb=mix(vec3(0.26,0.34,0.12),vec3(0.42,0.46,0.17),fract(vSeed*3.7));   // grass tufts
+  vec3 c=shade(alb*(0.55+0.45*vAo),normalize(vN),vW,0.6,0.0);
+  gl_FragColor=vec4(c,1.0);}`;
+const folMat=mat('foliage',FOL_VS,FOL_FS,{attributes:['position','corner','crown','fdata'],uniforms:['uCamRight','uCamUp'],samplers:['uDab'],stroke:0.7});
+folMat.setTexture('uDab',dabTex);folMat.backFaceCulling=false;
+{const P=[],CO=[],CR=[],FD=[],I=[];let v=0;
+ const add=(cx,cy,cz,R,cards,sz)=>{for(let i=0;i<cards;i++){const u=hash(cx+i,cz)*2-1,th=hash(cz+i,cx)*6.283,r=Math.sqrt(1-u*u),k=Math.cbrt(0.35+0.65*hash(i,cx+cz));
+   const px=cx+Math.cos(th)*r*R*k,py=cy+u*R*0.75*k,pz=cz+Math.sin(th)*r*R*k,seed=hash(i*3.3,cx*0.1+cz);
+   for(const [a,b] of [[-1,-1],[1,-1],[1,1],[-1,1]]){P.push(px,py,pz);CO.push(a,b);CR.push(cx,cy,cz,R);FD.push(sz*(0.75+0.5*hash(i,7)),seed);}
+   I.push(v,v+1,v+2,v,v+2,v+3);v+=4;}};
+ for(const [x,z,s] of TREES)add(x,H(x,z)+s*1.55,z,s*1.05,46,s*0.62);
+ for(const [x,z,s] of BUSHES)add(x,H(x,z)+s*0.55,z,s*0.9,14,s*0.7);
+ // grass tufts: small painted clumps that break up the hill's surface near the camera
+ for(let i=0;i<650;i++){const a=hash(i,31)*6.283,r=6+Math.sqrt(hash(i,32))*85,x=Math.cos(a)*r,z=Math.sin(a)*r*0.8+4;
+   if(Math.abs(x-streamX(z))<7||(Math.abs(x+5)<12&&z>-40&&z<-2)||(z>9&&z<17&&x>-8&&x<22))continue;
+   const s=0.28+hash(i,33)*0.3;add(x,H(x,z)+s*0.35,z,s,4,s*0.9);}
+ // hedgerows along the distant strip fields + far woods: layered depth like the north star
+ for(let k=-7;k<=7;k++)for(let t=-480;t<=480;t+=5.5){
+   const qx=k*70+(hash(k,t)-0.5)*2,qy=t,x=0.8*qx-0.6*qy,z=0.6*qx+0.8*qy,r=Math.hypot(x,z);
+   if(r<175||r>520||hash(k*7,Math.floor(t/60))<0.35||Math.abs(x-streamX(z))<10)continue;
+   const s=1.8+hash(k,t*3)*1.4;add(x,H(x,z)+s*0.8,z,s*1.1,7,s*1.0);}
+ for(let w=0;w<14;w++){const a=hash(w,51)*6.283,r=200+hash(w,52)*260,cx=Math.cos(a)*r,cz=Math.abs(Math.sin(a))*r+40;
+   for(let i=0;i<26;i++){const x=cx+(hash(w,i)-0.5)*70,z=cz+(hash(i,w)-0.5)*45;if(Math.abs(x-streamX(z))<10)continue;const s=4+hash(i+w,9)*3;add(x,H(x,z)+s*1.3,z,s*1.1,10,s*1.2);}}
+ const m=new B.Mesh('foliage',scene);m.setVerticesData(B.VertexBuffer.PositionKind,P);m.setVerticesData('corner',CO,false,2);m.setVerticesData('crown',CR,false,4);m.setVerticesData('fdata',FD,false,2);m.setIndices(I);
+ m.material=folMat;m.alwaysSelectAsActiveMesh=true;}
+
+/* ---------- units ---------- */
+const SCALE=1.35; // heroic scale (design.md §6)
+function infantry(coat,legs,hat,plume){return merge([
+  box(0.34,0.85,0.22,0,0.43,0,legs),box(0.46,0.62,0.30,0,1.15,0,coat),box(0.48,0.06,0.32,0,1.06,0,'#e8e2d4'),
+  box(0.32,0.36,0.16,0,1.2,-0.22,'#5a4128'),sph(0.27,0,1.62,0,'#e0b896'),cyl(0.25,0.26,0.30,0,1.86,0,hat),
+  sph(0.11,0,2.05,0.02,plume),box(0.05,1.55,0.05,0.27,1.25,0.07,'#4a3a2a',0.12),box(0.03,0.30,0.03,0.27,2.1,0.18,'#d9dee6',0.12)]);}
+function hussar(coat,legs){return merge([
+  box(0.5,0.62,1.7,0,1.22,0,'#6b4a33'),box(0.26,0.64,0.32,0,1.62,0.8,'#6b4a33',-0.55),box(0.22,0.26,0.54,0,1.88,1.07,'#5d3f2b'),
+  box(0.12,0.95,0.12,0.18,0.48,0.62,'#4a3424'),box(0.12,0.95,0.12,-0.18,0.48,0.62,'#4a3424'),box(0.12,0.95,0.12,0.18,0.48,-0.62,'#4a3424'),box(0.12,0.95,0.12,-0.18,0.48,-0.62,'#4a3424'),
+  box(0.1,0.55,0.1,0,1.2,-0.92,'#2e2018',0.5),box(0.56,0.12,0.9,0,1.56,0,'#b23a2c'),
+  box(0.42,0.6,0.28,0,1.9,-0.04,coat),box(0.44,0.24,0.62,0,1.52,0,legs),sph(0.24,0,2.32,0,'#e0b896'),cyl(0.24,0.27,0.36,0,2.55,0,'#151515'),sph(0.12,0,2.8,0.02,'#c4302a'),
+  box(0.03,0.9,0.03,0.27,2.1,0.28,'#d9dee6',0.9)]);}
+const baseGeo=()=>merge([cyl(0.62,0.62,0.10,0,0.05,0,'#6f7d3c',0,0,18)]);
+const UNIT_KINDS={
+  fr:infantry('#2c4fa8','#ebe5d8','#161616','#c4302a'),
+  ru:infantry('#2f6b3c','#e2dccb','#161616','#2f6b3c'),
+  hu:hussar('#2c4fa8','#ebe5d8'),
+};
+const FORMS=[
+  {kind:'fr',rows:5,cols:12,dx:1.25,dz:1.35,from:[-8,-36],to:[-3,-6],dur:34,face:0,flag:'fr'},
+  {kind:'ru',rows:2,cols:15,dx:1.2,dz:1.2,from:[6,13.2],to:[6,13.2],dur:1,face:Math.PI,flag:'ru',fire:true},
+  {kind:'hu',rows:2,cols:4,dx:2.3,dz:3.2,from:[34,-24],to:[34,-24],dur:1,face:-0.6},
+];
+for(const k in UNIT_KINDS){const m=UNIT_KINDS[k];m.material=unitMat;m.alwaysSelectAsActiveMesh=true;}
+const baseMesh={};
+const _m=new B.Matrix(),_q=new B.Quaternion(),_s=new V3(),_t=new V3();
+for(const F of FORMS){
+  F.n=F.rows*F.cols;F.mesh=UNIT_KINDS[F.kind];F.off=0;
+  F.mesh.userData=F.mesh.userData||{n:0};F.off=F.mesh.userData.n;F.mesh.userData.n+=F.n;
+}
+for(const k in UNIT_KINDS){const m=UNIT_KINDS[k],n=m.userData.n;m.userData.buf=new Float32Array(n*16);m.thinInstanceSetBuffer('matrix',m.userData.buf,16,false);
+  const j=new Float32Array(n);for(let i=0;i<n;i++)j[i]=0.88+hash(i,k.length)*0.24;m.thinInstanceSetBuffer('aJit',j,1,true);
+  const b=baseGeo();b.material=staticMat;b.alwaysSelectAsActiveMesh=true;b.userData={buf:new Float32Array(n*16)};b.thinInstanceSetBuffer('matrix',b.userData.buf,16,false);
+  const bj=new Float32Array(n).fill(1);b.thinInstanceSetBuffer('aJit',bj,1,true);baseMesh[k]=b;}
+
+// flags
+function flagTex(kind){const t=new B.DynamicTexture('f'+kind,{width:96,height:64},scene,true),g=t.getContext();
+  if(kind==='fr'){g.fillStyle='#24418f';g.fillRect(0,0,32,64);g.fillStyle='#efe9dc';g.fillRect(32,0,32,64);g.fillStyle='#c22e2a';g.fillRect(64,0,32,64);}
+  else{g.fillStyle='#efe9dc';g.fillRect(0,0,96,64);g.strokeStyle='#2c55a8';g.lineWidth=11;g.beginPath();g.moveTo(0,0);g.lineTo(96,64);g.moveTo(96,0);g.lineTo(0,64);g.stroke();}
+  t.update();return t;}
+const FLAG_VS=`precision highp float;attribute vec3 position;attribute vec2 uv;uniform mat4 world,viewProjection;varying vec2 vUv;varying vec3 vW;
+void main(){vec4 w=world*vec4(position,1.0);vW=w.xyz;vUv=uv;gl_Position=viewProjection*w;}`;
+const FLAG_FS=`precision highp float;varying vec2 vUv;varying vec3 vW;uniform sampler2D uTex;${GLSL_COMMON}
+void main(){vec3 a=texture2D(uTex,vUv).rgb;float s=strokeField(vW*3.0,vec3(0,0,1));
+  float l=0.6+0.4*sin(vUv.x*9.0-uTime*6.0);vec3 c=a*(0.55+0.55*mix(l,floor(l*3.0)/3.0,uPaint))*uSunCol*1.1;c*=mix(1.0,0.9+0.2*s,uPaint);
+  gl_FragColor=vec4(haze(c,vW),1.0);}`;
+const flags=[];
+for(const F of FORMS){if(!F.flag)continue;
+  const fm=mat('flag'+F.flag,FLAG_VS,FLAG_FS,{attributes:['position','uv'],samplers:['uTex']});fm.setTexture('uTex',flagTex(F.flag));fm.backFaceCulling=false;
+  const pl=B.MeshBuilder.CreateGround('fl',{width:1.7,height:1.1,subdivisions:8,updatable:true},scene);pl.rotation.x=-Math.PI/2;pl.bakeCurrentTransformIntoVertices();
+  pl.material=fm;const base=pl.getVerticesData(B.VertexBuffer.PositionKind).slice();
+  const pole=cyl(0.06,0.06,4.2,0,2.1,0,'#3b2c1e');pole.material=staticMat;pole.thinInstanceSetBuffer('aJit',new Float32Array([1]),1,true);pole.thinInstanceAddSelf();
+  flags.push({F,pl,base,pole});}
+
+/* ---------- painted shadows (design: shadows as painted shapes) ---------- */
+const SH_VS=`precision highp float;attribute vec3 position;attribute vec2 uv;uniform mat4 viewProjection;varying vec2 vUv;varying vec3 vW;
+void main(){vUv=uv;vW=position;gl_Position=viewProjection*vec4(position,1.0);}`;
+const SH_FS=`precision highp float;varying vec2 vUv;varying vec3 vW;uniform vec3 uShadow;${GLSL_COMMON}
+void main(){float x=vUv.x,y=abs(vUv.y);
+  float a=smoothstep(1.0,0.55,y/(1.0-0.45*x))*smoothstep(1.0,0.6,x)*smoothstep(0.0,0.08,x);
+  float n=strokeField(vW*1.5,vec3(0,1,0));
+  float ap=step(0.5,a+(n-0.5)*0.55);
+  a=mix(a,ap*0.95,uPaint);
+  float fade=1.0-smoothstep(90.0,220.0,length(vW-uCamPos));
+  gl_FragColor=vec4(uShadow,a*0.42*fade);}`;
+const shMat=mat('shadow',SH_VS,SH_FS,{attributes:['position','uv'],uniforms:['uShadow'],alpha:true});
+shMat.setColor3('uShadow',PAL.shadow);shMat.backFaceCulling=false;shMat.zOffset=-2;shMat.disableDepthWrite=true;
+const totalUnits=FORMS.reduce((a,F)=>a+F.n,0),SHN=totalUnits+shadowStatic.length;
+const shPos=new Float32Array(SHN*12),shUv=new Float32Array(SHN*8),shIdx=[];
+for(let i=0;i<SHN;i++){shUv.set([0,-1,0,1,1,1,1,-1],i*8);const v=i*4;shIdx.push(v,v+1,v+2,v,v+2,v+3);}
+const shadowMesh=new B.Mesh('shadows',scene);shadowMesh.setVerticesData(B.VertexBuffer.PositionKind,shPos,true);shadowMesh.setVerticesData(B.VertexBuffer.UVKind,shUv,false,2);shadowMesh.setIndices(shIdx);
+shadowMesh.material=shMat;shadowMesh.alwaysSelectAsActiveMesh=true;
+const SD=new V3(-SUN.x,0,-SUN.z).normalize(),SP=new V3(-SD.z,0,SD.x),SLEN=1/Math.tan(Math.asin(SUN.y));
+function putShadow(i,x,z,len,wid){const o=i*12,ex=x+SD.x*len,ez=z+SD.z*len,w=wid/2;
+  const pts=[[x+SP.x*w,z+SP.z*w],[x-SP.x*w,z-SP.z*w],[ex-SP.x*w*0.6,ez-SP.z*w*0.6],[ex+SP.x*w*0.6,ez+SP.z*w*0.6]];
+  for(let k=0;k<4;k++){const [px,pz]=pts[k];shPos[o+k*3]=px;shPos[o+k*3+1]=H(px,pz)+0.08;shPos[o+k*3+2]=pz;}}
+shadowStatic.forEach((s,i)=>{const [x,z,wid,_h,len]=s;putShadow(totalUnits+i,x-SD.x*wid*0.3,z-SD.z*wid*0.3,len*SLEN*0.32,wid);});
+
+/* ---------- smoke & muzzle flashes ---------- */
+function puffTex(soft){const t=new B.DynamicTexture('puff'+soft,{width:128,height:128},scene,true),g=t.getContext();g.clearRect(0,0,128,128);
+  for(let k=0;k<9;k++){const x=64+(hash(k,soft)-0.5)*44,y=64+(hash(soft,k)-0.5)*36,r=20+hash(k,k)*18;const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,'rgba(255,255,255,0.9)');gr.addColorStop(soft?1:0.8,'rgba(255,255,255,0)');if(!soft)gr.addColorStop(0.79,'rgba(255,255,255,0.85)');g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,7);g.fill();}
+  t.hasAlpha=true;t.update();return t;}
+let shooters=[];
+const smoke=new B.ParticleSystem('smoke',900,scene);
+smoke.particleTexture=puffTex(1);smoke.emitter=V3.Zero();smoke.manualEmitCount=0;
+smoke.minLifeTime=3.5;smoke.maxLifeTime=6.5;smoke.minSize=1.0;smoke.maxSize=2.2;smoke.addSizeGradient(0,1.0);smoke.addSizeGradient(1,3.6);
+smoke.color1=new C4(1,0.93,0.82,0.55);smoke.color2=new C4(0.98,0.88,0.74,0.45);smoke.colorDead=new C4(1,0.9,0.8,0);
+smoke.direction1=new V3(-0.3,0.4,-0.6);smoke.direction2=new V3(0.3,0.9,-0.2);smoke.minEmitPower=0.6;smoke.maxEmitPower=1.6;smoke.gravity=new V3(0.35,0.12,0.1);
+smoke.minAngularSpeed=-0.3;smoke.maxAngularSpeed=0.3;smoke.blendMode=B.ParticleSystem.BLENDMODE_STANDARD;smoke.updateSpeed=0.016;
+smoke.startPositionFunction=(wm,pos)=>{const s=shooters[Math.floor(Math.random()*shooters.length)]||[0,0,0];pos.copyFromFloats(s[0]+(Math.random()-0.5),s[1]+1.9,s[2]-0.8);};
+smoke.start();
+const flash=new B.ParticleSystem('flash',300,scene);
+flash.particleTexture=puffTex(1);flash.emitter=V3.Zero();flash.manualEmitCount=0;flash.minLifeTime=0.06;flash.maxLifeTime=0.14;flash.minSize=0.5;flash.maxSize=1.0;
+flash.color1=new C4(1,0.75,0.35,1);flash.color2=new C4(1,0.9,0.6,1);flash.colorDead=new C4(1,0.5,0.2,0);flash.minEmitPower=0;flash.maxEmitPower=0.2;flash.blendMode=B.ParticleSystem.BLENDMODE_ADD;
+flash.startPositionFunction=smoke.startPositionFunction;flash.start();
+// chimney smoke
+const chimney=new B.ParticleSystem('chim',120,scene);chimney.particleTexture=puffTex(1);
+{const [x,z,r]=HOUSES[0];chimney.emitter=new V3(x+Math.cos(r)*7*0.28,H(x,z)+6.4,z-Math.sin(r)*7*0.28);}
+chimney.emitRate=2;chimney.blendMode=B.ParticleSystem.BLENDMODE_STANDARD;chimney.minLifeTime=5;chimney.maxLifeTime=8;chimney.minSize=0.8;chimney.maxSize=1.4;chimney.addSizeGradient(0,0.8);chimney.addSizeGradient(1,4);
+chimney.color1=new C4(1.0,0.9,0.78,0.14);chimney.color2=new C4(0.95,0.86,0.76,0.09);chimney.colorDead=new C4(0.9,0.85,0.8,0);
+chimney.direction1=new V3(0.1,1,0);chimney.direction2=new V3(0.3,1.2,0.1);chimney.minEmitPower=0.5;chimney.maxEmitPower=0.9;chimney.gravity=new V3(0.4,0,0.1);chimney.start();
+
+/* ---------- update units, flags, shadows ---------- */
+function updateUnits(t){
+  const ease=u=>u*u*(3-2*u);let si=0;shooters=[];
+  for(const F of FORMS){
+    const u=F.dur>1?ease((t%F.dur)/F.dur):0,cx=F.from[0]+(F.to[0]-F.from[0])*u,cz=F.from[1]+(F.to[1]-F.from[1])*u;
+    const moving=F.dur>1,c=Math.cos(F.face),s=Math.sin(F.face);F.c=[cx,cz];
+    const buf=F.mesh.userData.buf,bb=baseMesh[F.kind].userData.buf,lift=S.bases?0.1:0;
+    for(let r=0;r<F.rows;r++)for(let k=0;k<F.cols;k++){
+      const i=r*F.cols+k,j1=hash(i,F.off+3),j2=hash(F.off+i,7);
+      const lx=(k-(F.cols-1)/2)*F.dx+(j1-0.5)*0.25,lz=-(r-(F.rows-1)/2)*F.dz+(j2-0.5)*0.25;
+      const x=cx+lx*c+lz*s,z=cz-lx*s+lz*c;
+      const bob=moving?Math.abs(Math.sin(t*6.5+j1*6))*0.08:Math.sin(t*1.3+j1*6)*0.01;
+      const y=H(x,z)+lift+bob;
+      _t.set(x,y,z);B.Quaternion.RotationYawPitchRollToRef(F.face+(j2-0.5)*0.08,0,0,_q);_s.set(SCALE,SCALE,SCALE);
+      B.Matrix.ComposeToRef(_s,_q,_t,_m);_m.copyToArray(buf,(F.off+i)*16);
+      _t.y=H(x,z);_s.set(SCALE*(F.kind==='hu'?1.7:1),SCALE,SCALE*(F.kind==='hu'?2.6:1));B.Matrix.ComposeToRef(_s,_q,_t,_m);_m.copyToArray(bb,(F.off+i)*16);
+      putShadow(si++,x,z,(F.kind==='hu'?2.9:2.4)*SCALE*SLEN*0.55,F.kind==='hu'?1.3:0.75);
+      if(F.fire&&r===0)shooters.push([x,y,z]);
+    }
+    F.mesh.thinInstanceBufferUpdated('matrix');baseMesh[F.kind].thinInstanceBufferUpdated('matrix');
+  }
+  for(const k in baseMesh)baseMesh[k].setEnabled(!!S.bases);
+  shadowMesh.updateVerticesData(B.VertexBuffer.PositionKind,shPos);
+  for(const fl of flags){const F=fl.F,[cx,cz]=F.c,fx=cx+(F.kind==='fr'?0.5:3),fz=cz+(F.kind==='fr'?F.dz*2.8:-0.4),y=H(fx,fz)+(S.bases?0.1:0);
+    fl.pole.position.set(fx,y,fz);fl.pl.position.set(fx,y+3.55,fz);fl.pl.rotation.y=-0.4;
+    const p=fl.pl.getVerticesData(B.VertexBuffer.PositionKind),b=fl.base;
+    for(let i=0;i<p.length;i+=3){const ux=b[i]+0.85;p[i]=b[i]+0.85;p[i+2]=Math.sin(ux*3.2-t*5.5)*ux*0.16;p[i+1]=b[i+1]-ux*0.08;}
+    fl.pl.updateVerticesData(B.VertexBuffer.PositionKind,p);}
+}
+let nextVolley=1.5;
+function volleys(t){if(t>=nextVolley){smoke.manualEmitCount=46;flash.manualEmitCount=22;nextVolley=t+3.2+Math.random()*1.5;}}
+
+/* ---------- camera ---------- */
+const camera=new B.ArcRotateCamera('cam',-Math.PI/2-0.25,1.2,74,new V3(-6,10,6),scene);
+camera.attachControl(canvas,true);camera.lowerRadiusLimit=35;camera.upperRadiusLimit=230;camera.lowerBetaLimit=0.35;camera.upperBetaLimit=1.32;
+camera.wheelDeltaPercentage=0.01;camera.panningSensibility=40;camera.minZ=0.5;camera.maxZ=9000;camera.fov=0.62;camera.inertia=0.88;
+
+/* ---------- post-processing ---------- */
+B.Effect.ShadersStore.tiltFragmentShader=`precision highp float;varying vec2 vUV;uniform sampler2D textureSampler;uniform vec2 uDir,uTexel;uniform float uFocus,uMax;
+void main(){float d=abs(vUV.y-uFocus);float r=uMax*smoothstep(0.08,0.42,d);vec4 c=vec4(0.0);float ws=0.0;
+  for(int i=-7;i<=7;i++){float f=float(i);float w=exp(-f*f/24.0);c+=texture2D(textureSampler,vUV+uDir*uTexel*f*r/7.0)*w;ws+=w;}gl_FragColor=c/ws;}`;
+// Kuwahara: picks the most uniform quadrant → flat painted patches. Radius grows
+// away from the focus band: detail where the eye looks, loose strokes elsewhere.
+B.Effect.ShadersStore.kuwaFragmentShader=`precision highp float;varying vec2 vUV;uniform sampler2D textureSampler;uniform vec2 uTexel;uniform float uFocus,uRMin,uRMax;
+void main(){float d=abs(vUV.y-uFocus);int R=int(mix(uRMin,uRMax,smoothstep(0.06,0.45,d))+0.5);
+  vec3 m0=vec3(0),m1=vec3(0),m2=vec3(0),m3=vec3(0),s0=vec3(0),s1=vec3(0),s2=vec3(0),s3=vec3(0);float n0=0.,n1=0.,n2=0.,n3=0.;
+  for(int j=-8;j<=8;j++){if(j<-R||j>R)continue;for(int i=-8;i<=8;i++){if(i<-R||i>R)continue;
+    vec3 c=texture2D(textureSampler,vUV+vec2(float(i),float(j))*uTexel).rgb;
+    if(i<=0&&j<=0){m0+=c;s0+=c*c;n0+=1.;}if(i>=0&&j<=0){m1+=c;s1+=c*c;n1+=1.;}
+    if(i<=0&&j>=0){m2+=c;s2+=c*c;n2+=1.;}if(i>=0&&j>=0){m3+=c;s3+=c*c;n3+=1.;}}}
+  m0/=n0;m1/=n1;m2/=n2;m3/=n3;
+  float v0=dot(s0/n0-m0*m0,vec3(1)),v1=dot(s1/n1-m1*m1,vec3(1)),v2=dot(s2/n2-m2*m2,vec3(1)),v3=dot(s3/n3-m3*m3,vec3(1));
+  vec3 r=m0;float mv=v0;if(v1<mv){mv=v1;r=m1;}if(v2<mv){mv=v2;r=m2;}if(v3<mv){r=m3;}
+  gl_FragColor=vec4(r,1.0);}`;
+B.Effect.ShadersStore.gradeFragmentShader=`precision highp float;varying vec2 vUV;uniform sampler2D textureSampler;uniform float uPaint,uTime;uniform vec2 uRes;
+float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+void main(){vec3 c=texture2D(textureSampler,vUV).rgb;float l=dot(c,vec3(0.299,0.587,0.114));
+  c=mix(vec3(l),c,1.08);c*=mix(vec3(0.94,0.99,1.05),vec3(1.05,1.0,0.90),smoothstep(0.1,0.7,l));
+  vec2 q=vUV-0.5;c*=1.0-dot(q,q)*0.75;
+  vec2 px=vUV*uRes;float canvas=(h(floor(px*vec2(0.5,0.5)))-0.5)*0.035+(sin(px.x*1.7)*sin(px.y*1.7))*0.012;
+  c+=canvas*uPaint;c+=(h(px+fract(uTime)*91.7)-0.5)*0.02*(1.0-uPaint);
+  gl_FragColor=vec4(c,1.0);}`;
+let posts=[];
+function buildPost(){
+  posts.forEach(p=>p.dispose());posts=[];
+  if(S.paint){
+    const k=new B.PostProcess('kuwa','kuwa',['uTexel','uFocus','uRMin','uRMax'],null,1.0,camera);k.samples=4;
+    k.onApply=e=>{e.setFloat2('uTexel',1/k.width,1/k.height);e.setFloat('uFocus',1-S.focus);e.setFloat('uRMin',Math.max(1,S.brush-3));e.setFloat('uRMax',S.brush+2);};
+    posts.push(k);
+  }else{
+    for(const dir of [[1,0],[0,1]]){const p=new B.PostProcess('tilt','tilt',['uDir','uTexel','uFocus','uMax'],null,1.0,camera);if(!posts.length)p.samples=4;
+      p.onApply=e=>{e.setFloat2('uDir',dir[0],dir[1]);e.setFloat2('uTexel',1/p.width,1/p.height);e.setFloat('uFocus',1-S.focus);e.setFloat('uMax',9.0);};posts.push(p);}
+  }
+  const g=new B.PostProcess('grade','grade',['uPaint','uTime','uRes'],null,1.0,camera);
+  g.onApply=e=>{e.setFloat('uPaint',S.paint);e.setFloat('uTime',S.t);e.setFloat2('uRes',g.width,g.height);};posts.push(g);
+}
+buildPost();
+
+/* ---------- UI ---------- */
+function seg(id,key,after){const el=document.getElementById(id);el.querySelectorAll('button').forEach(b=>b.onclick=()=>{S[key]=+b.dataset.v;sync();after&&after();});}
+function sync(){for(const [id,key] of [['style','paint'],['bases','bases']])document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',+b.dataset.v===S[key]));}
+seg('style','paint',buildPost);seg('bases','bases');
+document.getElementById('focus').oninput=e=>S.focus=+e.target.value;
+document.getElementById('brush').oninput=e=>S.brush=+e.target.value;
+addEventListener('keydown',e=>{if(e.key==='1'){S.paint=0;sync();buildPost();}if(e.key==='2'){S.paint=1;sync();buildPost();}if(e.key==='b'||e.key==='B'){S.bases=S.bases?0:1;sync();}if(e.code==='Space'){S.paused=!S.paused;e.preventDefault();}});
+
+/* ---------- loop ---------- */
+const right=new V3(),up=new V3(),fpsEl=document.getElementById('fps');
+scene.onBeforeRenderObservable.add(()=>{
+  const dt=engine.getDeltaTime()/1000;if(!S.paused)S.t+=Math.min(dt,0.05);
+  updateUnits(S.t);volleys(S.t);
+  camera.getDirectionToRef(B.Axis.X,right);camera.getDirectionToRef(B.Axis.Y,up);
+  for(const m of mats){m.setVector3('uCamPos',camera.position);m.setFloat('uPaint',S.paint);m.setFloat('uTime',S.t);}
+  folMat.setVector3('uCamRight',right);folMat.setVector3('uCamUp',up);
+  fpsEl.textContent=engine.getFps().toFixed(0)+' fps';
+});
+engine.runRenderLoop(()=>scene.render());
+addEventListener('resize',()=>engine.resize());
+window.__proto={S,scene,camera,buildPost,sync};
+</script>
+</body>
+</html>
