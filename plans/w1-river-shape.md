@@ -292,3 +292,11 @@ Check runs now print the whole output and the exit code.
 | 6 | moderate | Non-square box on a square map stretched the PCF and bake taps | Per-axis `uSMTexel`: equal steps in metres |
 
 Negative run on the old code: target climbs to 65 m; 33 of 921 tile casters outside the old box.
+
+### Closing review round 2 — stop (no severe findings)
+
+The reviewer ran both checks (both exit 0). 10 findings, none severe. Fixed: per-axis PCF step
+reverted (the sun foreshortens light-y on the ground, so equal light-space metres made ground
+shadows *less* round); the fade width is one constant (`SM_FADE_M`) read by the check; the check
+prints its shadow-box and pan results; dead debug state removed. Kept: the 40 m pad (6% coarser
+shadow texels), hand-built bounding boxes in the check, commit-scope notes (squash merge).
