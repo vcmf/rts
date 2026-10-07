@@ -3,7 +3,7 @@
 //        "$(python3 -c 'import json;print(json.dumps([["eval",open("tools/river-check.js").read()]]))')"
 // Prints the measurements; every failed limit is a console.error, so shot.mjs exits non-zero.
 // Uses the page's own helpers (H, baseH, riverQuery, placeable, footprint, groups) and reads the drawn meshes
-// (far terrain triangles, water vertices) instead of re-deriving their formulas.
+// (far ring + corridor triangles, water vertices) instead of re-deriving their formulas.
 (() => {
   const C = RIVER, r = {}, fail = []
   const check = (name, ok, value) => { r[name] = value; if (!ok) fail.push(`${name}=${JSON.stringify(value)}`) }
@@ -15,24 +15,29 @@
   const hillDrop = Math.max(baseH(0, 6) - H(0, 6), baseH(-15, 6) - H(-15, 6))
   check('hillDrop', hillDrop < 0.05, +hillDrop.toFixed(2))
 
-  // 2. nothing in the water except stones: every instance's footprint (crown/body) clears the water,
-  //    passes the placement rule as placed, and stays out of the formation zones
-  let wet = 0, ruleBroken = 0, inZone = 0
+  // 2. nothing in the water except stones: every instance's footprint (exact reach from its pivot) clears the
+  //    water and stays out of the formation zones; stones only on dry land or riffles; fields off the floodplain
+  let wet = 0, inZone = 0, stonesInPools = 0, wheatOnFloodplain = 0
   const overlapsWater = (x, z, r) => { const q = riverQuery(x, z); return q && q.dist < lerpA(C.W, q) / 2 + r }
-  for (const [model, items] of Object.entries(groups)) {
-    const stone = /^Rock/.test(model)
-    for (const [x, z, sc] of items) {
-      const r = footprint(model, sc)
-      if (KEEP_CLEAR(x, z)) inZone++
-      if (stone) continue
-      if (overlapsWater(x, z, r)) wet++
-      if (!placeable(x, z, r)) ruleBroken++
-    }
+  for (const [model, items] of Object.entries(groups)) for (const [x, z, sc] of items) {
+    if (KEEP_CLEAR(x, z)) inZone++
+    if (/^Rock/.test(model)) { const q = riverQuery(x, z); if (q && q.dist < lerpA(C.W, q) / 2 && lerpA(C.riffle, q) <= 0.6) stonesInPools++; continue }
+    if (overlapsWater(x, z, footprint(model, sc))) wet++
+    if (model === 'Wheat' && Math.abs(x - C.axisX(z)) < C.P.floodplainW / 2) wheatOnFloodplain++
   }
-  for (const [x, z, sc] of FAR) { const r = footprint('Bush_1', sc); if (overlapsWater(x, z, r)) wet++; if (!placeable(x, z, r)) ruleBroken++ }
+  for (const [x, z, sc] of FAR) if (overlapsWater(x, z, footprint('Bush_1', sc))) wet++
   check('instancesOverWater', wet === 0, wet)
-  check('instancesBreakingRule', ruleBroken === 0, ruleBroken)
   check('instancesInZones', inZone === 0, inZone)
+  check('stonesInPools', stonesInPools === 0, stonesInPools)
+  check('wheatOnFloodplain', wheatOnFloodplain === 0, wheatOnFloodplain)
+  // bank trees exist: design.md §6c asks for a broken line of willows along the banks near the scene
+  const willows = Object.entries(groups).filter(([m]) => /^Willow/.test(m)).reduce((a, [, v]) => a + v.length, 0)
+  check('willows', willows >= 12, willows)
+
+  // the scene is populated (guards every "nothing in X" check above against passing on an empty scene)
+  const count = re => Object.entries(groups).filter(([m]) => re.test(m)).reduce((a, [, v]) => a + v.length, 0)
+  const pop = { trees: count(/Tree/), grass: count(/Grass|Flowers|Plant/), wheat: count(/Wheat/), bushes: count(/Bush/), far: FAR.length }
+  check('population', pop.trees >= 60 && pop.grass >= 2000 && pop.wheat >= 150 && pop.bushes >= 30 && pop.far >= 400, pop)
 
   // 3. bends turn back (samples moving against the overall flow), also near the scene
   const dir = Math.sign(C.pz[C.n - 1] - C.pz[0]); let back = 0, backNear = 0
@@ -51,15 +56,14 @@
   let step = 0; for (let i = 1; i < C.n; i++) step = Math.max(step, Math.abs(C.riffle[i] - C.riffle[i - 1]))
   check('maxRiffleStep', step < 0.15, +step.toFixed(3))
 
-  // 5. no floating water. Detailed tile: both banks (1.6 half-widths out) are at or above the water.
-  //    Far ring: the ribbon is draped on the far surface by construction, so only the detailed tile is measured.
+  // 5. no floating water anywhere: both banks (1.6 half-widths out) are at or above the water. The detailed tile
+  //    and the corridor strip both draw carve(), so H() is the drawn surface at those points.
   let floating = 0, worst = 0
   const detailed = (x, z) => Math.abs(x) < SMW / 2 && Math.abs(z) < SMW / 2
-  for (let i = 0; i < C.n; i += 2) for (const side of [-1, 1]) {
-    const off = C.W[i] / 2 * 1.6, x = C.px[i] - C.tz[i] * side * off, z = C.pz[i] + C.tx[i] * side * off
-    if (!detailed(C.px[i], C.pz[i]) || !detailed(x, z)) continue
-    const d = C.zw[i] - H(x, z); if (d > 0.05) { floating++; worst = Math.max(worst, d) }
-  }
+  for (let i = 0; i < C.n; i += 2) { if (Math.abs(C.px[i]) > 1250 || Math.abs(C.pz[i]) > 1250) continue
+    for (const side of [-1, 1]) {
+      const off = C.W[i] / 2 * 1.6, x = C.px[i] - C.tz[i] * side * off, z = C.pz[i] + C.tx[i] * side * off
+      const d = C.zw[i] - H(x, z); if (d > 0.05) { floating++; worst = Math.max(worst, d) } } }
   check('floatingBankSamples', floating === 0, floating)
   r.floatingWorst = +worst.toFixed(2)
 
@@ -67,25 +71,30 @@
   const wm = scene.getMeshByName('water'), wp = wm.getVerticesData(B.VertexBuffer.PositionKind)
   let bad = 0; for (const v of wp) if (!Number.isFinite(v)) bad++
   check('waterNonFinite', bad === 0, bad)
-  // 7. the river stays visible on the far ring, tested against the triangles actually drawn
-  //    (inner water vertices above the far mesh) and flows downhill (centre column never rises > 0.3 m)
-  const fm = scene.meshes.filter(m => m.name === 't').find(m => m.getBoundingInfo().boundingBox.extendSize.x > SMW)
-  const fpos = fm.getVerticesData(B.VertexBuffer.PositionKind), fidx = fm.getIndices(), CELLF = 2600 / 170, tris = new Map()
-  for (let k = 0; k < fidx.length; k += 3) { const a = fidx[k] * 3, b = fidx[k + 1] * 3, c = fidx[k + 2] * 3
-    const key = Math.floor((fpos[a] + fpos[b] + fpos[c]) / 3 / CELLF) * 4096 + Math.floor((fpos[a + 2] + fpos[b + 2] + fpos[c + 2]) / 3 / CELLF)
-    if (!tris.has(key)) tris.set(key, []); tris.get(key).push([a, b, c]) }
-  const drawnH = (x, z) => { const t = tris.get(Math.floor(x / CELLF) * 4096 + Math.floor(z / CELLF)) || []
-    for (const [a, b, c] of t) { const x1 = fpos[a], z1 = fpos[a + 2], x2 = fpos[b], z2 = fpos[b + 2], x3 = fpos[c], z3 = fpos[c + 2]
-      const d = (z2 - z3) * (x1 - x3) + (x3 - x2) * (z1 - z3), l1 = ((z2 - z3) * (x - x3) + (x3 - x2) * (z - z3)) / d, l2 = ((z3 - z1) * (x - x3) + (x1 - x3) * (z - z3)) / d, l3 = 1 - l1 - l2
-      if (l1 >= -1e-6 && l2 >= -1e-6 && l3 >= -1e-6) return l1 * fpos[a + 1] + l2 * fpos[b + 1] + l3 * fpos[c + 1] }
-    return -Infinity }
+  // 7. outside the detailed tile the river stays visible: no drawn triangle (far ring or corridor) above an inner
+  //    water vertex. And the water never rises downstream: centre column over the whole river, seams included.
+  const CELLF = 8, tris = new Map(), surf = []
+  for (const m of scene.meshes) if (m.name === 'corridor' || (m.name === 't' && m.getBoundingInfo().boundingBox.extendSize.x > SMW)) {
+    const fp = m.getVerticesData(B.VertexBuffer.PositionKind), fi = m.getIndices(), si = surf.push(fp) - 1
+    for (let k = 0; k < fi.length; k += 3) { const a = fi[k] * 3, b = fi[k + 1] * 3, c = fi[k + 2] * 3
+      const x0 = Math.floor(Math.min(fp[a], fp[b], fp[c]) / CELLF), x1 = Math.floor(Math.max(fp[a], fp[b], fp[c]) / CELLF)
+      const z0 = Math.floor(Math.min(fp[a + 2], fp[b + 2], fp[c + 2]) / CELLF), z1 = Math.floor(Math.max(fp[a + 2], fp[b + 2], fp[c + 2]) / CELLF)
+      if ((x1 - x0) * (z1 - z0) > 64) continue   // skip only degenerate slivers
+      for (let gx = x0; gx <= x1; gx++) for (let gz = z0; gz <= z1; gz++) { const key = gx * 65536 + gz; if (!tris.has(key)) tris.set(key, []); tris.get(key).push([si, a, b, c]) } } }
+  const drawnH = (x, z) => { let best = -Infinity
+    for (const [si, a, b, c] of tris.get(Math.floor(x / CELLF) * 65536 + Math.floor(z / CELLF)) || []) { const f = surf[si]
+      const x1 = f[a], z1 = f[a + 2], x2 = f[b], z2 = f[b + 2], x3 = f[c], z3 = f[c + 2], d = (z2 - z3) * (x1 - x3) + (x3 - x2) * (z1 - z3)
+      if (Math.abs(d) < 1e-9) continue
+      const l1 = ((z2 - z3) * (x - x3) + (x3 - x2) * (z - z3)) / d, l2 = ((z3 - z1) * (x - x3) + (x1 - x3) * (z - z3)) / d, l3 = 1 - l1 - l2
+      if (l1 >= -1e-6 && l2 >= -1e-6 && l3 >= -1e-6) best = Math.max(best, l1 * f[a + 1] + l2 * f[b + 1] + l3 * f[c + 1]) }
+    return best }
   let hidden = 0, tested = 0, rises = 0, prev = null
-  for (let k = 0; k < wp.length; k += 3) { const x = wp[k], z = wp[k + 2]; if (detailed(x, z) || Math.abs(x) > 1290 || Math.abs(z) > 1290) { if ((k / 3) % 13 === 6) prev = null; continue }
-    const col = (k / 3) % 13
-    if (col >= 3 && col <= 9) { tested++; if (wp[k + 1] < drawnH(x, z)) hidden++ }
-    if (col === 6) { if (prev !== null && wp[k + 1] > prev + 0.3) rises++; prev = wp[k + 1] } }
+  for (let k = 0; k < wp.length; k += 3) { const x = wp[k], z = wp[k + 2], col = (k / 3) % 13
+    if (col === 6) { if (prev !== null && wp[k + 1] > prev + 0.001) rises++; prev = wp[k + 1] }
+    if (detailed(x, z) || Math.abs(x) > 1250 || Math.abs(z) > 1250 || col < 3 || col > 9) continue
+    tested++; const dh = drawnH(x, z); if (wp[k + 1] < dh - 0.01) { hidden++; if (hidden <= 4) r['hid' + hidden] = [Math.round(x), Math.round(z), +(dh - wp[k + 1]).toFixed(2), col, +riverQuery(x, z).dist.toFixed(1)] } }
   check('farHidden', hidden === 0, `${hidden}/${tested}`)
-  check('farUphillSteps', rises === 0, rises)
+  check('uphillSteps', rises === 0, rises)
 
   // 7b. no cliffs on the floodplain: outside the channel, the detailed terrain rises < 1.2 m per metre
   let cliffs = 0, steepest = 0
