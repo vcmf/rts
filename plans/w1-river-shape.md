@@ -144,4 +144,17 @@ rises downstream (upstream-raising pass); width clamped to 5–8 m and narrower 
 (5.59 vs 6.31 m); floodplain level distance-weighted over all passes (no cliffs, steepest
 0.82 m/m); every scatter add goes through `addPlaced()` with the model's real footprint
 (willow crowns, Plant_1 under trees); `nearStream` removed. river-check now measures the
-drawn far triangles, widths, cliffs, footprints and zones: 17 limits, all pass.
+drawn far triangles, widths, cliffs, footprints and zones: 16 limits, all pass (an earlier note said 17).
+
+### Post-redesign round 2 (10 findings: water step-up at the tile exit, floating far ledges, willows gone, wheat on the floodplain)
+Root cause of the far-ring findings: special-case water logic for the coarse ring. Replaced by a
+**river corridor** (research §2.5): fine 64 m patches on the same 1.78 m grid and `carve()` as the
+detailed tile wherever the river runs outside it; the far ring sinks under them. The water now has
+**one code path everywhere** (flat at `zw`, edges dive under the carved bank), so it is downhill
+and non-floating by construction. Also: `footprint()` is the exact reach from the pivot (models
+are off-centre); willows step outward until the rule accepts them (26 now); stones only on dry
+land or riffles; wheat moved to the valley side; `riverQuery` returns the blended level (one scan).
+A regression found while fixing (a merged line made `placeable()` reject everything but stones,
+and the checks passed on the empty scene) led to a **population** check.
+river-check: 19 limits, all pass. Known look gap (moderate): corridor banks outside the detailed
+tile have no baked light map yet, so they paint darker at the seam → W3.
