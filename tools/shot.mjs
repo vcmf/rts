@@ -21,8 +21,17 @@ if (!fs.existsSync(CHROME)) { console.error(`Chrome not found at ${CHROME} (set 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-'))
 let chrome, ws, pageErrors = 0
-const cleanup = () => { try { ws?.close() } catch {} ; try { chrome?.kill() } catch {} ; fs.rmSync(profile, { recursive: true, force: true }) }
-process.on('SIGINT', () => { cleanup(); process.exit(130) })
+// close the socket, stop Chrome, wait for it to exit (it flushes the profile on the way out), then remove the profile
+async function cleanup() {
+  try { ws?.close() } catch {}
+  if (chrome && chrome.exitCode === null) {
+    const exited = new Promise(r => chrome.once('exit', r))
+    chrome.kill()
+    await Promise.race([exited, sleep(5000)])
+  }
+  try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }) } catch (e) { console.warn('shot.mjs: could not remove profile', e.message) }
+}
+process.on('SIGINT', async () => { await cleanup(); process.exit(130) })
 
 try {
   fs.mkdirSync(outDir, { recursive: true })
@@ -41,21 +50,29 @@ try {
   if (!page) throw new Error('no page target')
   ws = new WebSocket(page.webSocketDebuggerUrl)
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('DevTools socket failed')) })
-  let id = 0
+  let id = 0, loaded = false
   const pend = {}
+  // a dropped socket (Chrome crash) fails every pending call instead of hanging forever
+  ws.onclose = () => { for (const k in pend) { pend[k]({ error: { message: 'DevTools socket closed (Chrome exited?)' } }); delete pend[k] } }
   ws.onmessage = e => {
     const m = JSON.parse(e.data)
     if (m.id && pend[m.id]) { pend[m.id](m); delete pend[m.id] }
+    if (m.method === 'Page.loadEventFired') loaded = true
     if (m.method === 'Runtime.exceptionThrown') { pageErrors++; console.log('EXC', JSON.stringify(m.params.exceptionDetails).slice(0, 600)) }
     if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') { pageErrors++; console.log('ERR', JSON.stringify(m.params.args.map(a => a.value)).slice(0, 400)) }
   }
+  const TIMEOUT = 60000
   const send = (method, params = {}) => new Promise((res, rej) => {
-    const i = ++id; pend[i] = m => (m.error ? rej(new Error(`${method}: ${m.error.message}`)) : res(m.result)); ws.send(JSON.stringify({ id: i, method, params }))
+    const i = ++id
+    const t = setTimeout(() => { delete pend[i]; rej(new Error(`${method}: no reply in ${TIMEOUT / 1000}s`)) }, TIMEOUT)
+    pend[i] = m => { clearTimeout(t); m.error ? rej(new Error(`${method}: ${m.error.message}`)) : res(m.result) }
+    ws.send(JSON.stringify({ id: i, method, params }))
   })
   await send('Runtime.enable'); await send('Page.enable')
   await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +h, deviceScaleFactor: 1, mobile: false })
   await send('Page.navigate', { url })
-  await sleep(1500)
+  for (let i = 0; i < 240 && !loaded; i++) await sleep(250)   // the page's own script (scene build) runs before the load event
+  if (!loaded) throw new Error('page did not finish loading in 60s')
   for (const [op, a, b] of steps) {
     if (op === 'wait') await sleep(a)
     else if (op === 'eval') {
@@ -74,7 +91,7 @@ try {
     }
   }
 } catch (e) {
-  console.error('shot.mjs:', e.message); cleanup(); process.exit(1)
+  console.error('shot.mjs:', e.message); await cleanup(); process.exit(1)
 }
-cleanup()
+await cleanup()
 process.exit(pageErrors ? 1 : 0)

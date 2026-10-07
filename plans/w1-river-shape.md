@@ -16,10 +16,10 @@ colours in GLSL, water mesh, scatter, reflections) re-derives distance from that
    floodplainW, seed) and processed into dense per-sample arrays: `px pz tx tz s kappa W D A
    riffle zw v tau`.
 2. **Centre line**: a Kinoshita curve integrated in a valley frame (u along, v across), with
-   per-bend jitter of amplitude (±25%) and wavelength (±20%), a restoring term that keeps it
-   inside the floodplain, and θ₀ ≤ 1.6 (no self-touching loops). Mapped onto a gentle valley axis
-   that runs west of the hill, as the current stream does. Chaikin-smoothed, curvature smoothed
-   over ~1 W.
+   per-bend jitter of amplitude (±35%) and wavelength (±35%), a cubic restoring term that keeps
+   it inside the meander belt, and θ₀ ≤ 1.85 (bends turn back, loops never touch). Mapped onto a
+   gentle valley axis west of the hill and the formation zones. Curvature box-smoothed over ±8
+   samples (~2 W); no Chaikin pass (the 1.5 m sampling is already smooth).
 3. **Attribute rules** (research §2.3): width ∝ √Q with bend factor and noise; riffles at the
    crossings between bends; pool and riffle depth; bank asymmetry from curvature (computed now,
    used in W2); a monotonic water surface (running minimum of the base terrain, drop concentrated
@@ -28,7 +28,8 @@ colours in GLSL, water mesh, scatter, reflections) re-derives distance from that
    plus `lerpA` for attributes. **The one source of truth**: every consumer goes through it.
 5. **Rewire consumers**:
    - `H()`: a **symmetric** variable-width, variable-depth channel carve (smooth bowl to `D`,
-     banks rising to `bankH` within ~0.6 W). The asymmetric carve and the valley are W2.
+     banks rising to `bankH` within 0.7 half-widths). The asymmetric carve is W2; the valley moved
+     into W1 (see "Scope change").
    - Terrain bank colours: the GLSL formula `STREAM_GLSL` is removed. Each terrain vertex gets an
      `aRiver` attribute (distance to the bank in half-widths, from `riverQuery`); the shader uses
      it for the damp, mud and bank bands.
@@ -42,7 +43,12 @@ colours in GLSL, water mesh, scatter, reflections) re-derives distance from that
 Without it the monotonic water surface trenched 5–10 m canyons wherever the noise hills rose
 along the path (seen in the first W1 render), so W1 could not meet its own acceptance criteria.
 Implemented as `RIVER.trough()`: a flat floodplain at the local water level + bank height, with
-valley sides rising at ~10°, measured from the valley axis (cheap; no wide river query needed).
+valley sides rising at ~10°, measured from the valley axis, and **faded out** over 22 m beyond the
+floodplain so it never cuts neighbouring hills (cheap; no wide river query needed).
+
+**Numeric acceptance**: `tools/river-check.js` (run with `tools/shot.mjs`) measures the formation
+zones and hill (must be untouched), houses (dry), backtracking samples, riffle smoothness, far-ring
+visibility and channel containment.
 
 **Out (later PRs):** asymmetric cut banks and point bars, finer bank geometry (W2); the baked water texture (W3); the new water shader (W4); rocks, fords and ice
 (W5); the OSM import (W6). The existing water shader stays; only its inputs change.
@@ -85,3 +91,12 @@ crossed formation zones (0 samples in KEEP_CLEAR now); channel left its floodpla
 restoring term; max offset 27.2 m < 30 m); `tools/shot.mjs` tap/error handling; REACH sized
 to callers and allocation-free query; one river query per terrain vertex; tree crowns over water.
 Deferred: per-vertex bank colours are coarse on the far ring (moderate) → replaced by the W3 bake.
+
+### Round 2 (10 findings: 2 severe + 2 acceptance failures)
+Fixed: the trough fade still cut the hill flank and formation zone (axis moved to x≈-108,
+floodplain 84 m, fade 22 m → 0 lowered cells in KEEP_CLEAR, hill unchanged); the valley ran
+through the village (village relocated west of the valley, dead road removed); bends did not turn
+back (θ₀ 1.5, cap 1.85 → 225 backtracking samples, 31 near the scene); far ring hid the river
+(coarse trench → 0/1090 hidden); trough could raise land (clamped); shot.mjs hang/cleanup/load
+wait; dead D/v stores (`boxSmooth`); stale comments and this plan. Willows inside tight bends.
+Load time 2.8–3.1 s.

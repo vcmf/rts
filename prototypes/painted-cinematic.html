@@ -106,17 +106,18 @@ function baseH(x,z){
 }
 const J0=x=>{let s=0;for(let i=0;i<64;i++){const t=(i+0.5)/64*Math.PI;s+=Math.cos(x*Math.sin(t));}return s/64;};   // Bessel J0: sinuosity = 1/J0(theta0)
 const RIVER=(()=>{
-  const P={id:'goldbach',W0:6,D0:1.0,bankH:1.1,floodplainW:60,beltW:44,valleySlope:0.18,valleyFade:30,theta0:1.25,Js:0.03,Jf:0.02,v0:0.6,seed:7,z0:-1350,z1:1350};
-  // gentle valley axis well west of the hill and the formation zones (radius > 1 km, so the frame never folds)
-  const axisX=z=>-66+14*Math.sin(z*0.0035+0.6)+5*Math.sin(z*0.011);
-  const axisD=z=>14*0.0035*Math.cos(z*0.0035+0.6)+5*0.011*Math.cos(z*0.011);
+  const P={id:'goldbach',W0:6,D0:1.0,bankH:1.1,floodplainW:84,beltW:58,valleySlope:0.18,valleyFade:22,theta0:1.5,Js:0.03,Jf:0.02,v0:0.6,seed:7,z0:-1350,z1:1350};
+  // gentle valley axis west of the hill and the formation zones; checked at load by riverClearance()
+  // (radius > 1 km, so the frame never folds)
+  const axisX=z=>-108+8*Math.sin(z*0.0035+0.6)+3*Math.sin(z*0.011);
+  const axisD=z=>8*0.0035*Math.cos(z*0.0035+0.6)+3*0.011*Math.cos(z*0.011);
   // 1. Kinoshita centre line in the valley frame (u along, v across), phase accumulated, per-bend jitter
   const ds=P.W0/4,U=[],Vv=[];
   let u=0,v=0,ph=mulberry(P.seed)()*6.283;
   const nA=k=>vn(k*1.3+P.seed,3.1),nL=k=>vn(k*1.1+P.seed,7.7);
   while(u<P.z1-P.z0){
     const bend=ph/Math.PI;
-    const th0=Math.min(1.6,P.theta0*(0.55+0.9*nA(bend)));        // ±45% amplitude per bend, capped below self-touching
+    const th0=Math.min(1.85,P.theta0*(0.65+0.7*nA(bend)));       // ±35% amplitude per bend; >π/2 makes bends turn back, ≤1.85 keeps loops from touching
     const lam=11*P.W0*(0.65+0.7*nL(bend))/J0(th0);                // valley wavelength ≈ 11 W (±35%) × sinuosity
     let th=th0*Math.sin(ph)+th0**3*(P.Js*Math.cos(3*ph)-P.Jf*Math.sin(3*ph));
     const vb=v/(P.beltW/2);th-=1.2*vb*vb*vb;                        // cubic restoring term: free in the middle, firm at the belt edge
@@ -134,7 +135,8 @@ const RIVER=(()=>{
   for(let i=0;i<n;i++){const a=Math.max(0,i-1),b=Math.min(n-1,i+1),ex=C.px[b]-C.px[a],ez=C.pz[b]-C.pz[a],l=Math.hypot(ex,ez)||1;
     C.tx[i]=ex/l;C.tz[i]=ez/l;ang[i]=Math.atan2(ez,ex);if(i)C.s[i]=C.s[i-1]+Math.hypot(C.px[i]-C.px[i-1],C.pz[i]-C.pz[i-1]);}
   const k0=F(n);for(let i=1;i<n-1;i++){let d=ang[i+1]-ang[i-1];d=Math.atan2(Math.sin(d),Math.cos(d));k0[i]=d/(C.s[i+1]-C.s[i-1]);}
-  const R=8;for(let i=0;i<n;i++){let a=0,c=0;for(let k=-R;k<=R;k++){const j=i+k;if(j>=0&&j<n){a+=k0[j];c++;}}C.kappa[i]=a/c;}
+  const boxSmooth=(src,dst,R)=>{for(let i=0;i<n;i++){let a=0,c=0;for(let k=-R;k<=R;k++){const j=i+k;if(j>=0&&j<n){a+=src[j];c++;}}dst[i]=a/c;}};
+  boxSmooth(k0,C.kappa,8);
   // 4. attributes (research §2.3). Q grows slowly downstream (unseen tributaries)
   let rph=0;                                                       // straight-reach riffle phase, accumulated along s
   for(let i=0;i<n;i++){
@@ -146,13 +148,11 @@ const RIVER=(()=>{
     const straight=0.5+0.5*Math.cos(rph);
     const riffle=Math.max(1-Math.min(1,bendness*1.6),(1-bendness)*straight);
     C.W[i]=W;C.riffle[i]=riffle;
-    C.D[i]=P.D0*Math.pow(Q,0.4)*(1.45-1.0*riffle);
     C.A[i]=Math.max(-1,Math.min(1,-k*W*1.6));                      // + : outer (cut) bank on the +n side; used in W2
-    C.v[i]=P.v0*Math.pow(Q,0.1)*(0.55+1.1*riffle);
   }
   // pool/riffle must alternate smoothly: smooth riffle over ~1.5 W, then derive depth and speed from it
-  {const r=Float32Array.from(C.riffle),RS=6;for(let i=0;i<n;i++){let a=0,c=0;for(let k=-RS;k<=RS;k++){const j=i+k;if(j>=0&&j<n){a+=r[j];c++;}}C.riffle[i]=a/c;}
-   for(let i=0;i<n;i++){const Q=0.8+0.5*C.s[i]/C.s[n-1];C.D[i]=P.D0*Math.pow(Q,0.4)*(1.45-1.0*C.riffle[i]);C.v[i]=P.v0*Math.pow(Q,0.1)*(0.55+1.1*C.riffle[i]);}}
+  boxSmooth(Float32Array.from(C.riffle),C.riffle,6);
+  for(let i=0;i<n;i++){const Q=0.8+0.5*C.s[i]/C.s[n-1];C.D[i]=P.D0*Math.pow(Q,0.4)*(1.45-1.0*C.riffle[i]);C.v[i]=P.v0*Math.pow(Q,0.1)*(0.55+1.1*C.riffle[i]);}
   // 5. water surface: running minimum of the land downstream, drop concentrated on riffles
   const raw=F(n);let zmin=Infinity;for(let i=0;i<n;i++){zmin=Math.min(zmin,baseH(C.px[i],C.pz[i])-P.bankH);raw[i]=zmin;}
   let wsum=0;for(let i=1;i<n;i++)wsum+=0.25+C.riffle[i];
@@ -164,16 +164,15 @@ const RIVER=(()=>{
   const FZ=4,nb=Math.ceil((P.z1-P.z0)/FZ)+1,fp=new Float32Array(nb).fill(Infinity);
   for(let i=0;i<n;i++){const b=Math.max(0,Math.min(nb-1,Math.round((C.pz[i]-P.z0)/FZ)));fp[b]=Math.min(fp[b],C.zw[i]+P.bankH);}
   for(let b=1;b<nb;b++)if(!isFinite(fp[b]))fp[b]=fp[b-1];for(let b=nb-2;b>=0;b--)if(!isFinite(fp[b]))fp[b]=fp[b+1];
-  // lowered height of the valley trough at (x,z), or Infinity when the trough is above the land h anyway
-  // terrain lowered toward the floodplain: full strength inside it, fading to none valleyFade m beyond
-  // (a fade, not a plane, so neighbouring hills keep their shape)
+  // land h lowered toward the floodplain: full strength inside it, fading to none valleyFade m beyond
+  // (a fade, not a plane, so neighbouring hills keep their shape). Never raises h.
   C.trough=(x,z,h)=>{const zc=Math.max(P.z0,Math.min(P.z1,z)),d=Math.abs(x-axisX(zc))/Math.hypot(1,axisD(zc)),half=P.floodplainW/2;
     if(d>half+P.valleyFade)return h;
     const t=Math.max(0,Math.min(nb-1.001,(z-P.z0)/FZ)),b=Math.floor(t),f=t-b,lv=fp[b]+(fp[b+1]-fp[b])*f;
     const v=lv+Math.max(0,d-half)*P.valleySlope;                        // flat floodplain, valley sides rising at ~10°
     if(v>=h)return h;
     const w=1-sstep(half,half+P.valleyFade,d);
-    return h-(h-v-0.25*(vn(x*0.05,z*0.05)-0.5))*w*w;};
+    return Math.min(h,h-(h-v-0.25*(vn(x*0.05,z*0.05)-0.5))*w*w);};
   // 7. bucket grid: each segment registered in every 16 m cell within REACH of it
   let Wmax=0;for(let i=0;i<n;i++)Wmax=Math.max(Wmax,C.W[i]);
   const CELL=16,REACH=Math.ceil(Wmax/2+22),grid=new Map(),key=(cx,cz)=>cx*65536+cz;   // widest caller: nearStream(..,26) = hw+20
@@ -182,6 +181,7 @@ const RIVER=(()=>{
     for(let cx=Math.floor(x0/CELL);cx<=Math.floor(x1/CELL);cx++)for(let cz=Math.floor(z0/CELL);cz<=Math.floor(z1/CELL);cz++){
       const k=key(cx,cz);let b=grid.get(k);if(!b)grid.set(k,b=[]);b.push(i);}}
   C.grid=grid;C.CELL=CELL;C.REACH=REACH;C.key=key;C.axisX=axisX;
+  C.valleyReach=z=>Math.abs(axisX(z))-P.floodplainW/2-P.valleyFade;   // how far east of x=0 the trough stops (negative = west)
   return C;
 })();
 // nearest river segment within REACH: {i,t,n (signed, + = left of flow),dist,s} or null
@@ -380,9 +380,6 @@ vec3 albedo(vec3 wp,vec3 n){
   c=mix(c*vec3(0.72,0.78,0.70),c,smoothstep(0.1,0.9,rb));                       // damp ground near the water
   c=mix(vec3(0.20,0.36,0.22),c,smoothstep(-0.05,0.4,rb));
   c=mix(vec3(0.42,0.34,0.22),c,smoothstep(-0.35,-0.05,rb));
-  // dirt road to the village
-  float road=abs(wp.z-(14.0+0.12*(wp.x+50.0))-2.0*sin(wp.x*0.07));
-  c=mix(vec3(0.70,0.56,0.36)*(0.9+0.2*st),c,clamp(smoothstep(1.4,2.6,road+(G(wp.xz/4.0).r-0.5)*1.2)+step(-40.0,wp.x)+step(wp.x,-130.0),0.0,1.0));   // clamped: an unclamped weight extrapolated the road's streaks over the whole map
   // strip fields in the distance
   float r=length(wp.xz);vec2 f=mat2(0.8,-0.6,0.6,0.8)*wp.xz;
   float id=fract(sin(dot(floor(vec2(f.x/70.0,f.y/22.0)),vec2(12.9898,78.233)))*43758.5453);
@@ -403,7 +400,9 @@ function buildTerrain(size,sub,yOff){
   const g=B.MeshBuilder.CreateGround('t',{width:size,height:size,subdivisions:sub,updatable:true},scene);
   const p=g.getVerticesData(B.VertexBuffer.PositionKind);const inner=SMW/2-14;
   const rv=new Float32Array(p.length/3);
-  for(let i=0;i<p.length;i+=3){const q=riverQuery(p[i],p[i+2]);p[i+1]=carve(p[i],p[i+2],q)+yOff;rv[i/3]=bandOf(q);if(size>SMW&&Math.abs(p[i])<inner&&Math.abs(p[i+2])<inner)p[i+1]-=25;}   // far ring sinks under the detailed terrain
+  const coarse=size>SMW;   // far ring: 15 m vertices can't resolve a 6 m channel, so open a wide shallow trench below the water
+  for(let i=0;i<p.length;i+=3){const q=riverQuery(p[i],p[i+2]);p[i+1]=carve(p[i],p[i+2],q)+yOff;rv[i/3]=bandOf(q);
+    if(coarse&&q&&q.dist<lerpA(RIVER.W,q)/2+16)p[i+1]=Math.min(p[i+1],lerpA(RIVER.zw,q)-0.8);if(size>SMW&&Math.abs(p[i])<inner&&Math.abs(p[i+2])<inner)p[i+1]-=25;}   // far ring sinks under the detailed terrain
   g.updateVerticesData(B.VertexBuffer.PositionKind,p);const n=[];B.VertexData.ComputeNormals(p,g.getIndices(),n);g.updateVerticesData(B.VertexBuffer.NormalKind,n);
   g.setVerticesData('aRiver',rv,false,1);
   g.material=terrainMat;return g;
@@ -586,7 +585,7 @@ function place(model,material,items){            // items: [x,z,scale,yaw,tint,(
 
 /* ---------- scattering: composition follows the north star ---------- */
 const R=mulberry(77),rr=()=>R();
-const HOUSES=[[-56,22,0.3],[-66,10,-0.2],[-54,40,0.9],[-72,31,0.1]];
+const HOUSES=[[-178,22,0.3],[-188,10,-0.2],[-176,40,0.9],[-194,31,0.1]];   // village west of the valley (not drawn yet)
 const nearVillage=(x,z,d)=>HOUSES.some(([hx,hz])=>(hx-x)**2+(hz-z)**2<d*d);
 const KEEP_CLEAR=(x,z)=>(Math.abs(x+5)<20&&z>-44&&z<-2)||(z>7&&z<19&&x>-14&&x<26)||((x-34)**2+(z+24)**2<160);  // formations
 const groups={};const add=(model,item)=>(groups[model]=groups[model]||[]).push(item);
@@ -602,7 +601,8 @@ for(const [cx,cz,n] of clusters)for(let i=0;i<n;i++){
 for(let i=0,step=0;i<RIVER.n;i+=step){                     // willows follow the river banks
   step=Math.round((7+rr()*9)/(RIVER.P.W0/4));const C=RIVER;
   if(Math.abs(C.px[i])>175||Math.abs(C.pz[i])>175||rr()<0.45)continue;
-  const side=rr()<0.5?-1:1,off=C.W[i]/2+3+rr()*4,x=C.px[i]-C.tz[i]*side*off,z=C.pz[i]+C.tx[i]*side*off;if(nearVillage(x,z,9))continue;
+  const side=rr()<0.5?-1:1,off=C.W[i]/2+3+rr()*4,x=C.px[i]-C.tz[i]*side*off,z=C.pz[i]+C.tx[i]*side*off;
+  const q=riverQuery(x,z);if(nearVillage(x,z,9)||(q&&q.dist<lerpA(C.W,q)/2+2.5))continue;   // inside a tight bend the nearest water may be another loop
   const mdl='Willow_'+(1+Math.floor(rr()*3)),s=3.6+rr()*1.2;add(mdl,[x,z,s,rr()*6.28,0.2+rr()*0.5]);
   const M=window.NATURE[mdl];smTree(x,z,M.max[1]*0.6*s,(M.max[0]-M.min[0])*0.45*s);
 }
