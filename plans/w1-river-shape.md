@@ -273,3 +273,22 @@ W1 closes with the two severe fixes:
   to 65 m and the corners fell outside the box.
 
 Then one confirming review round under the AGENTS.md rules (findings in pre-existing code do not block).
+
+**Correction:** the closing commit's render check did not pass. It threw (`Math.min(...)` over 201,601
+heights overflows the stack), and the run was misread because only "FAILED" lines were grepped.
+Check runs now print the whole output and the exit code.
+
+### Closing review round 1
+
+6 findings, 1 severe → another round.
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | severe | render-check threw (stack overflow on a 201k spread) | Plain loop |
+| 2 | moderate (pre-existing) | Up/down pans move cos(pitch) as fast as left/right | Known issue in `engine-design.md` §9 (own camera controller) |
+| 3 | moderate | Far-ring bushes past the fitted box lost shadows with a hard cut | Box padded 40 m; shadows fade out over its outer 32 m |
+| 4 | moderate | Pan test could not fail (a y clamp duplicated mapPanning); never tested that panning moves | y clamp removed; check that every direction moves the focus |
+| 5 | moderate | Shadow-box check re-tested the fit's own corners | Tests every real caster on the tile (instance bounding boxes, 921) against the box minus the fade band |
+| 6 | moderate | Non-square box on a square map stretched the PCF and bake taps | Per-axis `uSMTexel`: equal steps in metres |
+
+Negative run on the old code: target climbs to 65 m; 33 of 921 tile casters outside the old box.
