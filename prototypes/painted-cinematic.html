@@ -717,17 +717,17 @@ waterMat.setTexture('uRefl',reflTex);
    SHADOW PASS: orthographic camera at the sun, depth of every caster into a
    float target, rendered ONCE (the landscape is static).
    ========================================================================= */
-const SMN=3072;let SM_TEXEL,SM_FADE;
+const SMN=3072,SM_FADE_M=32;let SM_TEXEL,SM_FADE;   // SM_FADE_M: shadows fade out over the box's outer metres
 const lightCam=new B.FreeCamera('lightCam',SUN.scale(700),scene);lightCam.setTarget(V3.Zero());
 // fit the ortho box to the tile: project its corners (lowest ground to 60 m above the highest, above any caster) into light space
 {const tp=tileGround.getVerticesData(B.VertexBuffer.PositionKind);let lo=Infinity,hi=-Infinity;for(let k=1;k<tp.length;k+=3){lo=Math.min(lo,tp[k]);hi=Math.max(hi,tp[k]);}
  const V=lightCam.getViewMatrix(true),h=SMW/2;let ex=0,ey=0,z0=Infinity,z1=-Infinity;
  for(const x of [-h,h])for(const z of [-h,h])for(const y of [lo,hi+60]){const v=V3.TransformCoordinates(new V3(x,y,z),V);ex=Math.max(ex,Math.abs(v.x));ey=Math.max(ey,Math.abs(v.y));z0=Math.min(z0,v.z);z1=Math.max(z1,v.z);}
  if(z0<LZ0+5||z1>LZ1-5)throw Error(`shadow depth range ${LZ0}..${LZ1} misses the tile (${z0.toFixed(0)}..${z1.toFixed(0)})`);   // SBIAS is derived from LZ0/LZ1
- ex+=40;ey+=40;   // the outer 32 m fade the shadow out (shadowAt), outside the tile
- const t=2*Math.max(ex,ey)/SMN;SM_TEXEL=new B.Vector2(t/(2*ex),t/(2*ey));SM_FADE=new B.Vector2(32/(2*ex),32/(2*ey));   // PCF steps equal in metres on both axes
- Object.assign(lightCam,{mode:B.Camera.ORTHOGRAPHIC_CAMERA,orthoLeft:-ex,orthoRight:ex,orthoTop:ey,orthoBottom:-ey,minZ:LZ0,maxZ:LZ1});
- window.__shadowFit={ex,ey,z0,z1,texel:2*Math.max(ex,ey)/SMN};}
+ ex+=SM_FADE_M+8;ey+=SM_FADE_M+8;   // the fade band (shadowAt) lies outside the tile
+ SM_TEXEL=new B.Vector2(1/SMN,1/SMN);   // one texel per tap in uv: the sun foreshortens light-y on the ground, so this is closer to round there than equal light-space metres
+ SM_FADE=new B.Vector2(SM_FADE_M/(2*ex),SM_FADE_M/(2*ey));
+ Object.assign(lightCam,{mode:B.Camera.ORTHOGRAPHIC_CAMERA,orthoLeft:-ex,orthoRight:ex,orthoTop:ey,orthoBottom:-ey,minZ:LZ0,maxZ:LZ1});}
 const DEPTH_VS=`precision highp float;attribute vec3 position;
 #include<instancesDeclaration>
 uniform mat4 viewProjection;varying float vD;
@@ -798,7 +798,7 @@ for(const m of mats){m.setTexture('uLM',lightMap);m.setMatrix('uLMVP',lmVP);}
 const camera=new B.ArcRotateCamera('cam',-Math.PI/2-0.35,0.80,125,new V3(-10,8,2),scene);
 scene.activeCamera=camera;camera.attachControl(canvas,true);camera.lowerRadiusLimit=45;
 // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the play area
-camera.mapPanning=true;const PLAY=250,FOCUS_Y=camera.target.y;scene.onBeforeRenderObservable.add(()=>{const t=camera.target;t.x=Math.max(-PLAY,Math.min(PLAY,t.x));t.z=Math.max(-PLAY,Math.min(PLAY,t.z));});
+camera.mapPanning=true;const PLAY=250;scene.onBeforeRenderObservable.add(()=>{const t=camera.target;t.x=Math.max(-PLAY,Math.min(PLAY,t.x));t.z=Math.max(-PLAY,Math.min(PLAY,t.z));});
 camera.upperRadiusLimit=260;camera.lowerBetaLimit=0.3;camera.upperBetaLimit=0.98;
 camera.wheelDeltaPercentage=0.01;
 camera.panningSensibility=30;camera.minZ=0.5;camera.maxZ=5000;camera.fov=0.62;camera.inertia=0.88;
