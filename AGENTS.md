@@ -10,6 +10,8 @@ Status: **prototyping the look**. No game code yet; prototypes are single HTML f
 
 - `design.md`: the art bible. Fixed constraints, palette, light, seasons, depth rules, asset contract.
   Read it before any visual change.
+- `engine-design.md`: the world, camera and bakes (world spec, heightfield, coverage rules), scale
+  and hardware targets, known issues, and the order of engine work. Read it before engine changes.
 - `web-rts-architecture.md`: how the game will be built (sim/render split, typed arrays, commands,
   20 Hz tick, Babylon.js setup). Read it before writing game code.
 - `prototype-plan.md`: what the prototypes are for, the phases, and the current workstream.
@@ -40,7 +42,9 @@ Status: **prototyping the look**. No game code yet; prototypes are single HTML f
    - If a round finds **at least one severe issue**, fix and run another round.
    - If a round finds only moderate or light issues, fix what's worth fixing and **stop**.
    - **More than 3 rounds = stop and redesign.** Repeated severe findings mean the design is wrong,
-     not the code; go back to the plan.
+     not the code; go back to the plan. The round count restarts after a redesign.
+   - A finding about code that already exists on main does not block the PR. If it is grave,
+     record it in `engine-design.md` §9 (Known issues) with a planned fix.
 
 ## Commits and PRs
 
