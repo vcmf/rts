@@ -137,3 +137,11 @@ The review count restarts at round 1 after this redesign.
 - Load time with the same marker, interleaved runs: main 2.78–2.79 s, branch 2.86–2.89 s (≈ +90 ms).
 
 Review count restarts here.
+
+### Post-redesign round 1 (10 findings: severe far-ring dashes/uphill water, width rule, cliffs, willow crowns)
+Fixed: far ring gets the trough only (no pits); far water sits above the drawn cell and never
+rises downstream (upstream-raising pass); width clamped to 5–8 m and narrower at bends
+(5.59 vs 6.31 m); floodplain level distance-weighted over all passes (no cliffs, steepest
+0.82 m/m); every scatter add goes through `addPlaced()` with the model's real footprint
+(willow crowns, Plant_1 under trees); `nearStream` removed. river-check now measures the
+drawn far triangles, widths, cliffs, footprints and zones: 17 limits, all pass.
