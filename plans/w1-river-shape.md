@@ -158,3 +158,11 @@ A regression found while fixing (a merged line made `placeable()` reject everyth
 and the checks passed on the empty scene) led to a **population** check.
 river-check: 19 limits, all pass. Known look gap (moderate): corridor banks outside the detailed
 tile have no baked light map yet, so they paint darker at the seam → W3.
+
+### Post-redesign round 3 (8 findings, 1 severe) → STOP (workflow limit reached a second time)
+Severe: the corridor patches were wound the wrong way, so they faced down and were culled; the river
+outside the detailed tile floated over a 25 m pit. river-check passed because it measures heights,
+not what is drawn. The "darker banks at the seam" noted after round 2 were this bug, misread as a
+missing light map. Also: corridor overlaps the detailed tile (z-fight), load time +200–370 ms
+(over the 300 ms limit in some runs), zone and stone tests ignore footprints, corridor in the
+shadow casters, a latent far-ring margin. Decision pending (see PR).
