@@ -61,17 +61,18 @@
   }
   // camera: from the centre every pan direction moves the focus; from every play-area corner, panning any way keeps the
   // focus in the play area and on the ground plane (no clamp forces y: mapPanning has to do it)
-  const t0 = cam.target.clone(), dirs = [[2, 0], [-2, 0], [0, 2], [0, -2]]
+  const t0 = cam.target.clone(), FOCUS_Y = t0.y, dirs = [[2, 0], [-2, 0], [0, 2], [0, -2]]
   const pan = ([px, py], frames) => { for (let f = 0; f < frames; f++) { cam.inertialPanningX = px; cam.inertialPanningY = py; scene.render() } cam.inertialPanningX = cam.inertialPanningY = 0 }
-  for (const d of dirs) { cam.target.set(0, FOCUS_Y, 0); pan(d, 10); const m = Math.hypot(cam.target.x, cam.target.z)
+  for (const d of dirs) { cam.target.set(0, FOCUS_Y, 0); pan(d, 10); const m = Math.hypot(cam.target.x, cam.target.z); (out.panFromCentre ||= []).push(+m.toFixed(1))
     if (m < 1) fail.push(`pan ${d} from the centre moved the focus only ${m.toFixed(2)} m`) }
   for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) for (const d of dirs) {
     cam.target.set(sx * PLAY, FOCUS_Y, sz * PLAY); pan(d, 40); const t = cam.target
-    if (Math.abs(t.x) > PLAY + 1e-6 || Math.abs(t.z) > PLAY + 1e-6 || Math.abs(t.y - FOCUS_Y) > 1e-3) { fail.push(`pan from ${sx},${sz} by ${d} left the bounds: ${[t.x, t.y, t.z].map(v => v.toFixed(1))}`); break } }
+    if (Math.abs(t.x) > PLAY + 1e-6 || Math.abs(t.z) > PLAY + 1e-6 || Math.abs(t.y - FOCUS_Y) > 1e-3) fail.push(`pan from ${sx},${sz} by ${d} left the bounds: ${[t.x, t.y, t.z].map(v => v.toFixed(1))}`)   // x/z are clamped by the page; y is the real test (mapPanning)
+  }
   cam.target.copyFrom(t0)
   // shadow box: every real caster on the tile (each instance's transformed bounding box) lies inside the light camera's box,
   // clear of the 32 m fade band, and inside its depth range
-  { const V = lightCam.getViewMatrix(true), h = SMW / 2, fade = 32
+  { const V = lightCam.getViewMatrix(true), h = SMW / 2, fade = SM_FADE_M
     let outside = 0, tested = 0
     const inBox = p => { const v = B.Vector3.TransformCoordinates(p, V)
       return v.x > lightCam.orthoLeft + fade && v.x < lightCam.orthoRight - fade && v.y > lightCam.orthoBottom + fade && v.y < lightCam.orthoTop - fade && v.z > lightCam.minZ && v.z < lightCam.maxZ }
@@ -83,6 +84,7 @@
       const worlds = m.thinInstanceCount > 0 ? m.thinInstanceGetWorldMatrices() : [m.computeWorldMatrix(true)]
       for (const W of worlds) { const o = W.getTranslation(); if (m.thinInstanceCount > 0 && (Math.abs(o.x) > h || Math.abs(o.z) > h)) continue   // far-ring foliage fades out
         tested++; if (!corners.every(c => inBox(B.Vector3.TransformCoordinates(c, W)))) outside++ } }
+    out.shadowBox = { tested, outside }
     if (tested < 100) fail.push(`shadow box: only ${tested} casters tested`)
     if (outside) fail.push(`shadow box: ${outside} of ${tested} tile casters outside it`) }
   // each limit must actually have been exercised somewhere
