@@ -72,33 +72,40 @@
   const wm = scene.getMeshByName('water'), wp = wm.getVerticesData(B.VertexBuffer.PositionKind)
   let bad = 0; for (const v of wp) if (!Number.isFinite(v)) bad++
   check('waterNonFinite', bad === 0, bad)
-  // 7. the water lives only in the detailed tile, and never rises downstream (centre column, whole ribbon)
-  let outside = 0, rises = 0, prev = null
+  // 7. the water never rises downstream (centre column), and inside the channel no water vertex sits below the bed
+  //    (a dived column there would show the dry bed through the water)
+  let rises = 0, prev = null, underBed = 0
   for (let k = 0; k < wp.length; k += 3) { const col = (k / 3) % 13
-    if (!detailed(wp[k], wp[k + 2])) outside++
-    if (col === 6) { if (prev !== null && wp[k + 1] > prev + 0.001) rises++; prev = wp[k + 1] } }
-  check('waterOutsideTile', outside === 0, outside)
+    const q = riverQuery(wp[k], wp[k + 2]), inChannel = q && q.dist < lerpA(C.W, q) / 2 - 0.3
+    if (col === 6 && inChannel) { if (prev !== null && wp[k + 1] > prev + 0.001) rises++; prev = wp[k + 1] }   // clamped rows at the tile edge can put the centre on the bank (dived: not surface)
+    if (inChannel && wp[k + 1] < H(wp[k], wp[k + 2]) - 0.01) underBed++ }
   check('uphillSteps', rises === 0, rises)
+  check('waterUnderBed', underBed === 0, underBed)
 
-  // 7a. the far ring never covers the tile: sampled every 2 m over the tile, its drawn surface stays below the tile's
-  //     (replaces the old far-hidden check, from both meshes' real triangle heights); and along the tile edge it is
-  //     never above the tile edge (the apron stitches the two edges above it)
-  let farOver = 0, edgeSlit = 0
-  const half = SMW / 2
-  for (let x = -half + 1; x < half; x += 2) for (let z = -half + 1; z < half; z += 2)
-    if (farGround.getHeightAtCoordinates(x, z) > tileGround.getHeightAtCoordinates(x, z) - 0.05) farOver++
-  for (let t = -half; t <= half; t += 0.5) for (const [x, z] of [[t, -half], [t, half], [-half, t], [half, t]]) {
-    const xi = Math.max(-half + 1e-3, Math.min(half - 1e-3, x)), zi = Math.max(-half + 1e-3, Math.min(half - 1e-3, z))
-    if (farGround.getHeightAtCoordinates(xi, zi) > tileGround.getHeightAtCoordinates(xi, zi) + 0.01) edgeSlit++ }
-  check('farOverTile', farOver === 0, farOver)
-  check('edgeSlit', edgeSlit === 0, edgeSlit)
-  // 7b. the apron is stitched: its inner row lies on the tile surface, its outer row on the far ring
-  const ap = scene.getMeshByName('apron').getVerticesData(B.VertexBuffer.PositionKind), clampIn = v => Math.max(-half + 1e-3, Math.min(half - 1e-3, v))
-  let unstitched = 0
-  for (let k = 0; k < ap.length; k += 6) {
-    if (Math.abs(ap[k + 1] - tileGround.getHeightAtCoordinates(clampIn(ap[k]), clampIn(ap[k + 2]))) > 0.01) unstitched++
-    if (Math.abs(ap[k + 4] - farGround.getHeightAtCoordinates(ap[k + 3], ap[k + 5])) > 0.01) unstitched++ }
-  check('apronUnstitched', unstitched === 0, unstitched)
+  // 7a. the two grids meet exactly (no overlap, no slit, no T-junction): no far triangle inside the band; every apron
+  //     vertex IS a tile or far vertex; every tile-edge vertex and every far vertex on the band line is used by the
+  //     apron; and the apron's area equals the band's (no gap, no double cover)
+  const half = SMW / 2, key = (x, z) => `${Math.round(x * 1000)},${Math.round(z * 1000)}`
+  const verts = g => { const p = g.getVerticesData(B.VertexBuffer.PositionKind), m = new Map(); for (let k = 0; k < p.length; k += 3) m.set(key(p[k], p[k + 2]), p[k + 1]); return m }
+  const tv = verts(tileGround), fv = verts(farGround)
+  const fp = farGround.getVerticesData(B.VertexBuffer.PositionKind), fi = farGround.getIndices()
+  let farInBand = 0
+  for (let t = 0; t < fi.length; t += 3) { const cx = (fp[fi[t] * 3] + fp[fi[t + 1] * 3] + fp[fi[t + 2] * 3]) / 3, cz = (fp[fi[t] * 3 + 2] + fp[fi[t + 1] * 3 + 2] + fp[fi[t + 2] * 3 + 2]) / 3
+    if (Math.max(Math.abs(cx), Math.abs(cz)) < BAND) farInBand++ }
+  const apron = scene.getMeshByName('apron'), ap = apron.getVerticesData(B.VertexBuffer.PositionKind), ai = apron.getIndices()
+  let foreign = 0, area = 0; const used = new Set()
+  for (let k = 0; k < ap.length; k += 3) { const id = key(ap[k], ap[k + 2]), y = tv.has(id) ? tv.get(id) : fv.get(id)
+    if (y === undefined || Math.abs(y - ap[k + 1]) > 1e-4) foreign++; used.add(id) }
+  for (let t = 0; t < ai.length; t += 3) { const a = ai[t] * 3, b = ai[t + 1] * 3, c = ai[t + 2] * 3
+    area += Math.abs((ap[b] - ap[a]) * (ap[c + 2] - ap[a + 2]) - (ap[c] - ap[a]) * (ap[b + 2] - ap[a + 2])) / 2 }
+  let unused = 0
+  for (const [m, line] of [[tv, half], [fv, BAND]]) for (const id of m.keys()) { const [x, z] = id.split(',').map(v => v / 1000)
+    if (Math.abs(Math.max(Math.abs(x), Math.abs(z)) - line) < 1e-3 && !used.has(id)) unused++ }
+  check('farInBand', farInBand === 0, farInBand)
+  check('apronForeignVerts', foreign === 0, foreign)
+  check('apronUnusedEdgeVerts', unused === 0, unused)
+  const bandArea = (2 * BAND) ** 2 - SMW ** 2
+  check('apronArea', Math.abs(area - bandArea) < 1, [Math.round(area), Math.round(bandArea)])
 
   // 7c. no cliffs on the floodplain: outside the channel, the detailed terrain rises < 1.2 m per metre
   let cliffs = 0, steepest = 0

@@ -9,7 +9,7 @@
 // once as is, once with the water mesh hidden and the far-ring mask blanked. A river point must CHANGE
 // between the two frames (the water is what the camera sees there); a bank point must NOT (no water
 // spills onto the land, nothing covers it).
-(async () => {
+(() => {
   const C = RIVER, cam = __proto.camera, gl = engine._gl, out = {}, fail = []
   const W = engine.getRenderWidth(true), Hh = engine.getRenderHeight(true)   // true: the screen, not the last bound render target
   const water = scene.getMeshByName('water'), blank = new B.DynamicTexture('blankMask', 4, scene, false)
@@ -27,7 +27,7 @@
   ]
   const half = SMW / 2, saved = { alpha: cam.alpha, beta: cam.beta, radius: cam.radius, target: cam.target.clone() }
   // views must be ones the player can reach: the camera clamps beta/radius on render, which would silently move the view
-  for (const v of views) if (v.beta > cam.upperBetaLimit || v.radius > cam.upperRadiusLimit || v.radius < cam.lowerRadiusLimit) fail.push(`${v.name}: outside the camera limits`)
+  for (const v of views) if (v.beta > cam.upperBetaLimit || v.radius > cam.upperRadiusLimit || v.radius < cam.lowerRadiusLimit || Math.abs(v.t[0]) > PLAY || Math.abs(v.t[2]) > PLAY) fail.push(`${v.name}: outside the camera limits`)
   try {
     for (const v of views) {
       cam.alpha = v.alpha; cam.beta = v.beta; cam.radius = v.radius; cam.target.set(...v.t)
@@ -40,11 +40,12 @@
       const stat = { water: [0, 0], bank: [0, 0], farLine: [0, 0] }
       const add = (s, d) => { if (d !== null) { stat[s][1]++; if (hit(d)) stat[s][0]++ } }
       for (let i = 0; i < C.n; i += 3) {
-        const inTile = Math.abs(C.px[i]) < half - 15 && Math.abs(C.pz[i]) < half - 15, farOut = Math.abs(C.px[i]) > half + 20 || Math.abs(C.pz[i]) > half + 20
+        const inTile = Math.abs(C.px[i]) < half - 1 && Math.abs(C.pz[i]) < half - 1,   // up to the edge: the exits are where the meshes meet
+          farOut = Math.abs(C.px[i]) > half + 20 || Math.abs(C.pz[i]) > half + 20
         if (inTile) {
           add('water', delta(new B.Vector3(C.px[i], C.zw[i], C.pz[i])))
           for (const side of [-1, 1]) { const o = C.W[i] / 2 * 1.7 + 12, x = C.px[i] - C.tz[i] * side * o, z = C.pz[i] + C.tx[i] * side * o, q = riverQuery(x, z)
-            if (q && q.dist < C.W[i] / 2 * 1.7 + 6) continue   // another pass of a doubled-back bend
+            if (q && q.dist < C.W[i] / 2 * 1.7 + 6 || Math.abs(x) > half || Math.abs(z) > half) continue   // another pass of a doubled-back bend, or off the tile
             add('bank', delta(new B.Vector3(x, H(x, z), z))) }
         } else if (farOut) add('farLine', delta(new B.Vector3(C.px[i], farGround.getHeightAtCoordinates(C.px[i], C.pz[i]), C.pz[i])))   // the drawn far surface
       }
