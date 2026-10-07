@@ -46,11 +46,15 @@
   check('backtrack', back >= 100, back)
   check('backtrackNear', backNear >= 10, backNear)
 
-  // 4. width: 5–8 m of water, narrower at bends than in straight reaches (design.md §6c)
+  // 4. width: 4–11 m of water, narrower at bends than in straight reaches, visibly varied (design.md §6c)
   let wmin = Infinity, wmax = 0, bendW = 0, bendN = 0, strW = 0, strN = 0
   for (let i = 0; i < C.n; i++) { const w = C.W[i], b = Math.min(1, Math.abs(C.kappa[i]) * C.P.W0 * 2.3)
     wmin = Math.min(wmin, w); wmax = Math.max(wmax, w); if (b > 0.7) { bendW += w; bendN++ } else if (b < 0.3) { strW += w; strN++ } }
-  check('widthRange', wmin >= 4.99 && wmax <= 8.01, [+wmin.toFixed(2), +wmax.toFixed(2)])
+  check('widthRange', wmin >= 3.99 && wmax <= 11.01, [+wmin.toFixed(2), +wmax.toFixed(2)])
+  // the widest stretches in the tile read about twice the narrowest (the W1 rule gave 1.3x: it looked constant)
+  const tw = []; for (let i = 0; i < C.n; i++) if (Math.abs(C.px[i]) < SMW / 2 && Math.abs(C.pz[i]) < SMW / 2) tw.push(C.W[i])
+  tw.sort((a, b) => a - b); const pct = p => tw[Math.floor(p * (tw.length - 1))]
+  check('widthContrast', pct(0.95) / pct(0.05) >= 1.8, [+pct(0.05).toFixed(2), +pct(0.95).toFixed(2)])
   check('bendNarrowerThanReach', bendW / bendN < strW / strN, [+(bendW / bendN).toFixed(2), +(strW / strN).toFixed(2)])
 
   // 4b. pools and riffles alternate smoothly
