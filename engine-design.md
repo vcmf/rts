@@ -171,6 +171,7 @@ blocking an unrelated PR (§11).
 |---|---|---|
 | Camera pans in view space; the target can climb without limit | main, camera setup | W1 close (§10 step 1): ground-plane pan + focus clamp |
 | Reflection canvas uses a canvas blur filter (the context-loss pattern) | main, reflection bake | E0-lite bake rules (§10 step 3) |
+| Up/down pans move the map cos(pitch) as fast as left/right (0.56× at the steepest pitch) | main, Babylon panning | Own camera controller: drag keeps the grabbed ground point under the cursor (§5) |
 
 ## 10. Order of work
 
