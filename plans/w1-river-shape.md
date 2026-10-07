@@ -1,0 +1,302 @@
+# W1: River shape (kill the "scarf")
+
+Workstream: water (`prototype-plan.md` §4). Research: `research/stylized-water.md` §2.1–2.3.
+Branch: `feat/water-w1-river-shape`.
+
+## Problem
+
+The stream is `x = f(z)`: a sum of two sines with a constant-width cut (`H()` line 99). It can't
+turn back on itself, its width never changes, and every consumer (terrain carve, terrain bank
+colours in GLSL, water mesh, scatter, reflections) re-derives distance from that formula.
+
+## Scope
+
+**In:**
+1. **River data model**: one channel (`goldbach`) described by parameters (W0, D0, bankH,
+   floodplainW, seed) and processed into dense per-sample arrays: `px pz tx tz s kappa W D A
+   riffle zw v tau`.
+2. **Centre line**: a Kinoshita curve integrated in a valley frame (u along, v across), with
+   per-bend jitter of amplitude (±35%) and wavelength (±35%), a cubic restoring term that keeps
+   it inside the meander belt, and θ₀ ≤ 1.85 (bends turn back, loops never touch). Mapped onto a
+   gentle valley axis west of the hill and the formation zones. Curvature box-smoothed over ±8
+   samples (~2 W); no Chaikin pass (the 1.5 m sampling is already smooth).
+3. **Attribute rules** (research §2.3): width ∝ √Q with bend factor and noise; riffles at the
+   crossings between bends; pool and riffle depth; bank asymmetry from curvature (computed now,
+   used in W2); a monotonic water surface (running minimum of the base terrain, drop concentrated
+   on riffles); time of travel `tau`.
+4. **`riverQuery(x,z)`**: nearest segment via a 16 m bucket grid → `{i, t, n (signed), s, dist}`,
+   plus `lerpA` for attributes. **The one source of truth**: every consumer goes through it.
+5. **Rewire consumers**:
+   - `H()`: a **symmetric** variable-width, variable-depth channel carve (smooth bowl to `D`,
+     banks rising to `bankH` within 0.7 half-widths). The asymmetric carve is W2; the valley moved
+     into W1 (see "Scope change").
+   - Terrain bank colours: the GLSL formula `STREAM_GLSL` is removed. Each terrain vertex gets an
+     `aRiver` attribute (distance to the bank in half-widths, from `riverQuery`); the shader uses
+     it for the damp, mud and bank bands.
+   - Water mesh: a ribbon that follows the samples, with per-sample width and water level `zw`;
+     outer columns dive under the bank; `aDepth = zw − H`; UV = (across m, along s).
+   - Scatter (`nearStream`, the willow line along the stream), reflection candidates (`reflAdd`).
+6. **Debug view**: `?river=debug` overlays samples coloured by riffle (light) vs pool (dark) and
+   the centre line, for review.
+
+**Scope change during implementation:** the valley and floodplain carve moved from W2 into W1.
+Without it the monotonic water surface trenched 5–10 m canyons wherever the noise hills rose
+along the path (seen in the first W1 render), so W1 could not meet its own acceptance criteria.
+Implemented as `RIVER.trough()`: a flat floodplain at the local water level + bank height, with
+valley sides rising at ~10°, measured from the valley axis, and **faded out** over 22 m beyond the
+floodplain so it never cuts neighbouring hills (cheap; no wide river query needed).
+
+**Numeric acceptance**: `tools/river-check.js` (run with `tools/shot.mjs`) measures the formation
+zones and hill (must be untouched), houses (dry), backtracking samples, riffle smoothness, far-ring
+visibility and channel containment.
+
+**Out (later PRs):** asymmetric cut banks and point bars, finer bank geometry (W2); the baked water texture (W3); the new water shader (W4); rocks, fords and ice
+(W5); the OSM import (W6). The existing water shader stays; only its inputs change.
+
+## Approach notes
+
+- The arrays are plain `Float32Array`s, built once at load (the future `sim/` style).
+- The river flows from the higher end to the lower end of `baseH` along the line, so the running
+  minimum doesn't create a trench against the slope.
+- `H()` = `baseH()` + carve. The carve only lowers (`min`); it never raises hills.
+- Performance: `H()` is called about 450k times at load (two terrain meshes, AO mask, scatter,
+  water). The bucket grid keeps each call to about 4–10 segment tests. Measure load time
+  before and after (headless, `performance.now()` around the build) and report it.
+
+## Acceptance (screenshot-verified, before/after at three camera positions)
+
+- [ ] Bends **turn back** (the centre line is not a function of z); sinuosity visibly > 1.3.
+- [ ] Bends differ from each other (amplitude and length jitter visible); no regular rhythm.
+- [ ] Water width varies along the river (narrow at riffles and bends, wider in reaches).
+- [ ] Pools read darker (deeper) than riffles with the existing depth ramp.
+- [ ] No floating water and no water running uphill; the shoreline is cut by terrain everywhere.
+- [ ] Terrain bank colours, scatter exclusion and reflections follow the new river (no leftover
+      references to `streamX`/`STREAM`).
+- [ ] Load time regression ≤ +300 ms (headless measurement).
+
+## Result
+
+- Load time (headless, 3 runs): baseline 2.7–2.9 s, W1 2.9–3.2 s (≈ +250 ms).
+- Screenshots: `renders/w1-before/`, `renders/w1-after/` (not committed; attached to the PR).
+
+## Review
+
+`/code-review high` per `AGENTS.md`: another round only while a round finds a severe issue;
+redesign after 3.
+
+### Round 1 (9 findings: 3 severe)
+Fixed: trough flattened the central hill (now a fading trough, axis moved west); riffle phase
+not accumulated (now accumulated + curvature and riffle smoothed; max step 0.51 → 0.08); river
+crossed formation zones (0 samples in KEEP_CLEAR now); channel left its floodplain (cubic
+restoring term; max offset 27.2 m < 30 m); `tools/shot.mjs` tap/error handling; REACH sized
+to callers and allocation-free query; one river query per terrain vertex; tree crowns over water.
+Deferred: per-vertex bank colours are coarse on the far ring (moderate) → replaced by the W3 bake.
+
+### Round 2 (10 findings: 2 severe + 2 acceptance failures)
+Fixed: the trough fade still cut the hill flank and formation zone (axis moved to x≈-108,
+floodplain 84 m, fade 22 m → 0 lowered cells in KEEP_CLEAR, hill unchanged); the valley ran
+through the village (village relocated west of the valley, dead road removed); bends did not turn
+back (θ₀ 1.5, cap 1.85 → 225 backtracking samples, 31 near the scene); far ring hid the river
+(coarse trench → 0/1090 hidden); trough could raise land (clamped); shot.mjs hang/cleanup/load
+wait; dead D/v stores (`boxSmooth`); stale comments and this plan. Willows inside tight bends.
+Load time 2.8–3.1 s.
+
+### Round 3 (10 findings: 2 severe) → STOP AND REDESIGN (workflow limit reached)
+Severe: wheat in the water (a scatter loop with no river check); floodplain level keyed by
+world z let a doubled-back bend sit below its own water. Root cause: the river was retrofitted
+into a scene with hand-placed features, and every scatter loop carried its own exclusion rule,
+so each fix that moved the river collided with the next hand-placed feature.
+
+## Redesign (after round 3)
+
+Target fixed in `design.md` §6c: **the lowland meander**. Rule: **nothing in the water except
+stones.**
+
+1. **One placement test** `placeable(x, z, r, kind)`: rejects anything within the wet channel +
+   bank (+ its own radius) unless `kind === 'stone'`, and rejects formation zones. Every scatter
+   loop (trees, willows, bushes, plants, wheat, far woods) goes through it; no loop keeps its
+   own river rule. The unused village and its rules are removed (villages are not drawn yet).
+2. **Floodplain level from the nearest river sample** near the channel (bank ≥ local water by
+   construction), blended into the per-z level farther out. Doubled-back bends are safe by design.
+3. **Far ring without a trench**: the water ribbon beyond the detailed tile sits on the far-ring
+   surface (shared `farRingH()` helper), and its edge columns dive below it.
+4. **Checks that fail**: `tools/river-check.js` asserts thresholds (non-zero exit), including
+   "no scattered instance in the water" across every scatter group; it reuses the page's helpers
+   instead of copying formulas.
+5. **Same-marker timing** on main and branch for the load-time criterion.
+
+The review count restarts at round 1 after this redesign.
+
+### Redesign result
+- `placeable()` is the only placement rule (12 scatter call sites); the village and its rules are
+  gone; berry bushes now appear everywhere at 1/3.
+- Floodplain follows the nearest pass's water level near the channel.
+- Far ring: no trench; the ribbon is draped on the far surface per vertex (a row straddling the
+  tile edge previously produced 10 NaN vertices that culled the whole river; now checked).
+- `tools/river-check.js` asserts 10 limits and fails the run: all pass.
+- Load time with the same marker, interleaved runs: main 2.78–2.79 s, branch 2.86–2.89 s (≈ +90 ms).
+
+Review count restarts here.
+
+### Post-redesign round 1 (10 findings: severe far-ring dashes/uphill water, width rule, cliffs, willow crowns)
+Fixed: far ring gets the trough only (no pits); far water sits above the drawn cell and never
+rises downstream (upstream-raising pass); width clamped to 5–8 m and narrower at bends
+(5.59 vs 6.31 m); floodplain level distance-weighted over all passes (no cliffs, steepest
+0.82 m/m); every scatter add goes through `addPlaced()` with the model's real footprint
+(willow crowns, Plant_1 under trees); `nearStream` removed. river-check now measures the
+drawn far triangles, widths, cliffs, footprints and zones: 16 limits, all pass (an earlier note said 17).
+
+### Post-redesign round 2 (10 findings: water step-up at the tile exit, floating far ledges, willows gone, wheat on the floodplain)
+Root cause of the far-ring findings: special-case water logic for the coarse ring. Replaced by a
+**river corridor** (research §2.5): fine 64 m patches on the same 1.78 m grid and `carve()` as the
+detailed tile wherever the river runs outside it; the far ring sinks under them. The water now has
+**one code path everywhere** (flat at `zw`, edges dive under the carved bank), so it is downhill
+and non-floating by construction. Also: `footprint()` is the exact reach from the pivot (models
+are off-centre); willows step outward until the rule accepts them (26 now); stones only on dry
+land or riffles; wheat moved to the valley side; `riverQuery` returns the blended level (one scan).
+A regression found while fixing (a merged line made `placeable()` reject everything but stones,
+and the checks passed on the empty scene) led to a **population** check.
+river-check: 19 limits, all pass. Known look gap (moderate): corridor banks outside the detailed
+tile have no baked light map yet, so they paint darker at the seam → W3.
+
+### Post-redesign round 3 (8 findings, 1 severe) → STOP (workflow limit reached a second time)
+Severe: the corridor patches were wound the wrong way, so they faced down and were culled; the river
+outside the detailed tile floated over a 25 m pit. river-check passed because it measures heights,
+not what is drawn. The "darker banks at the seam" noted after round 2 were this bug, misread as a
+missing light map. Also: corridor overlaps the detailed tile (z-fight), load time +200–370 ms
+(over the 300 ms limit in some runs), zone and stone tests ignore footprints, corridor in the
+shadow casters, a latent far-ring margin. Decision pending (see PR).
+
+## Redesign 2 (after post-redesign round 3)
+
+**Cause:** almost every severe finding since the first redesign came from carrying the river
+across two terrain resolutions (detailed tile + coarse far ring). **Remove the second resolution
+from the river:**
+
+1. **One fine terrain holds the river.** Detailed tile enlarged from 520 m to **800 m** (same
+   ~1.74 m grid). The camera target is clamped to the play area (±250 m), so at max zoom the
+   river on screen is almost always inside the tile.
+2. **The far ring has no channel and no water.** It gets the valley trough only, sinks under the
+   detailed tile with a margin ≥ one far cell × √2, and shows the river as a **painted line**:
+   a river mask texture (canvas stroke of the samples at their widths) sampled by the far-ring
+   material. No corridor, no draping, no far water code.
+3. **The water ribbon ends inside the tile.**
+4. **Render checks** (`tools/render-check.js`): render the scene at fixed cameras, read the
+   framebuffer twice per view (as is, then with the water mesh hidden and the far mask blanked) and
+   confirm projected river points change while bank points don't, including the painted line on
+   the far ring. A colour test was tried first and rejected: graded water and land in shadow
+   overlap in colour. Catches culled, missing or hidden geometry that
+   height checks can't see.
+5. Round-3 fixes kept: zone and stone tests use the footprint; the blended water level is computed
+   only when the trough asks for it (load time); corridor shadows/overlap disappear with the
+   corridor.
+
+Acceptance adds: render-check passes; load time ≤ main + 300 ms (paired runs, same marker).
+Review count restarts.
+
+### Implementation notes
+
+- The first build lost the WebGL context in SwiftShader (black frame; `river-check` still passed,
+  which is why the render check exists). Cause: the river mask was drawn as one canvas stroke per
+  sample with `filter='blur()'`. Fixed by one path per run of equal width and no canvas filter;
+  bilinear sampling softens the edge.
+- Results: `river-check` all pass; `render-check` water 0.91–1.0, banks 0, far line 0.95; the
+  check fails as expected with the water sunk 3 m and the mask blanked.
+- Load time (4 paired runs, same marker): main ≈ 2.81 s, W1 ≈ 2.97 s (+150 ms, limit +300 ms).
+
+### Post-redesign-2 review round 1
+
+10 findings, 1 severe → another round.
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | severe | Far-ring vertices just inside the tile (378–400 m) stayed at trough height and covered the last metres of water at both exits | Far grid aligned to the tile edge (FARW/182 = 14.3 m, lines at ±400 m): no far triangle overlaps the tile. Vertices inside sink, edge vertices drop below the lowest tile-edge height, and an **apron** (one far cell, far material) stitches the two edges vertex for vertex. The water ribbon is clamped onto the tile edge, so it meets the painted line |
+| 2 | moderate | No geometric check replaced the removed far-hidden check | `farOverTile`, `edgeSlit`, `apronUnstitched` (from both meshes' real triangle heights) |
+| 3 | moderate | The render check's far view was outside the camera limits (silently clamped) | Views within limits; the check fails if a view isn't reachable |
+| 4 | moderate | Far-line points projected at the channel bed, not the drawn far surface | Projected at `farGround.getHeightAtCoordinates` |
+| 5 | moderate (latent) | The water strip joined across a skipped stretch | A re-entry starts a new strip |
+| 6 | moderate | AO grid cells grew to 6.25 m | ~4 m cells (N = SMW/4); H sampled once per cell into a height grid, rings read it bilinearly (keeps load time) |
+| 7 | moderate | Shadow texels grew to 0.51 m | SMN 3072 (0.34 m) |
+| 8 | moderate | touchesZone sampled 12 rim points (misses enclosed zones) | Exact disc-vs-box / disc-vs-disc test |
+| 9 | light | `riverQuery()` returned a nearest-pass `level` silently | `level` only with `wantLevel`; `trough` throws without it |
+| 10 | light | The render check left the camera at its last view | Restored in `finally` |
+
+Also seen on close screenshots at the exits (camera limits lifted): a 0.9 m wall along the tile edge, a dry 6 m channel
+end and a darker painted line; all fixed by the apron, the clamped ribbon and a far-line colour matching the water.
+Load time (5 paired runs): main median 2.86 s, W1 3.03 s (+170 ms).
+
+### Post-redesign-2 review round 2
+
+9 findings, 1 severe → round 3 (the last before a redesign).
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | severe | Clamped outer water columns at the exits decided to dive from their pre-clamp offset and sank under the bed mid-channel (dry wedges) | A moved column decides from where it landed (`riverQuery`); new check `waterUnderBed` (fails with 62 vertices on the old rule) |
+| 2 | moderate | Sun-camera range grew, fixed depth bias doubled in metres | `SBIAS` = 0.96 m / depth range |
+| 3 | moderate | Light map still 2048 over 800 m | 3072 (0.26 m texels) |
+| 4 | moderate | Bank colours (`bandOf`) beaded along the far line on the 14 m grid | Far ring and the apron's outer row use 8 (no bank colours) |
+| 5 | moderate | Flat apron normals; fanned outer row could z-fight with the far cell | **Exact stitching:** tile grid 448 (8 tile cells per far cell); the far ring drops its triangles inside the band; apron vertices are copies of tile/far vertices (position, normal, bank value); corner squares close the corners. No layering, no lowering |
+| 6 | moderate | `apronUnstitched` and `waterOutsideTile` could not fail | Replaced: `farInBand`, `apronForeignVerts`, `apronUnusedEdgeVerts`, `apronArea` (matches the band exactly) |
+| 7 | light | Render-check reachability ignored the pan clamp | Fails on `|t| > PLAY` too; probes now run up to the tile edge |
+| 8 | light | Stale `touchesZone` comment | Removed |
+| 9 | light | Async wrapper with nothing to await | Sync IIFE; `shot.mjs` change reverted |
+
+Load time (5 paired runs): main median 2.80 s, W1 2.88 s (+85 ms; the far ring lost 6.7k triangles).
+
+### Post-redesign-2 review round 3 — stop
+
+9 findings. Severe ones mean a 4th round, so the workflow says **stop and redesign**. None of them are in the
+river geometry (the stitching held). They come from extents that are set in several places since the tile grew:
+
+| # | Sev. | Finding |
+|---|---|---|
+| 1 | severe | Sun shadow frustum (±0.65·SMW) misses the tile corners (needs ±0.703·SMW); corner trees unshadowed / edge streaks in the bake |
+| 2 | moderate | Far ring still built with yOff −0.9 (left over from layering): 0.9 m ramp round the whole apron, FAR bushes float 0.9 m |
+| 3 | severe | Pan clamp only bounds target x/z; vertical drags lift target y without limit (reproduced: y 8 → 94 m in 60 frames) |
+| 4 | moderate | AO/mist rings clamp to the tile's height grid within 40 m of the edge |
+| 5 | light | Render-check reachability ignores lowerBetaLimit and target y |
+| 6 | moderate | Reflection canvas still uses a canvas blur filter (the context-loss risk), now at 1536 px |
+| 7 | light | River mask builds unused mipmaps; far line shimmers when minified |
+| 8 | light | `updateCoordinateHeights()` on the tile is unused load work |
+| 9 | light | Far-line probes beyond the far ring (±1300 m) project at y = 0 |
+
+### Closing W1 (after `engine-design.md`)
+
+The engine design (`docs/engine-design` branch) takes over the round-3 findings: the moderate and
+light ones go to E0-lite (`engine-design.md` §10), and pre-existing ones to its known issues (§9).
+W1 closes with the two severe fixes:
+- **Shadow box fitted** to the tile: corners (lowest ground to 60 m above the highest) projected
+  into light space; ±566 × ±329 m, depth 163–1201 inside 100–1600 (asserted at load).
+- **Ground-plane pan** (`mapPanning`) with the focus held in the play area at a fixed height.
+- New render-check items: pan from every play-area corner in four directions stays in bounds;
+  every tile corner lies inside the shadow box. Negative run on the old code: the target climbed
+  to 65 m and the corners fell outside the box.
+
+Then one confirming review round under the AGENTS.md rules (findings in pre-existing code do not block).
+
+**Correction:** the closing commit's render check did not pass. It threw (`Math.min(...)` over 201,601
+heights overflows the stack), and the run was misread because only "FAILED" lines were grepped.
+Check runs now print the whole output and the exit code.
+
+### Closing review round 1
+
+6 findings, 1 severe → another round.
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | severe | render-check threw (stack overflow on a 201k spread) | Plain loop |
+| 2 | moderate (pre-existing) | Up/down pans move cos(pitch) as fast as left/right | Known issue in `engine-design.md` §9 (own camera controller) |
+| 3 | moderate | Far-ring bushes past the fitted box lost shadows with a hard cut | Box padded 40 m; shadows fade out over its outer 32 m |
+| 4 | moderate | Pan test could not fail (a y clamp duplicated mapPanning); never tested that panning moves | y clamp removed; check that every direction moves the focus |
+| 5 | moderate | Shadow-box check re-tested the fit's own corners | Tests every real caster on the tile (instance bounding boxes, 921) against the box minus the fade band |
+| 6 | moderate | Non-square box on a square map stretched the PCF and bake taps | Per-axis `uSMTexel`: equal steps in metres |
+
+Negative run on the old code: target climbs to 65 m; 33 of 921 tile casters outside the old box.
+
+### Closing review round 2 — stop (no severe findings)
+
+The reviewer ran both checks (both exit 0). 10 findings, none severe. Fixed: per-axis PCF step
+reverted (the sun foreshortens light-y on the ground, so equal light-space metres made ground
+shadows *less* round); the fade width is one constant (`SM_FADE_M`) read by the check; the check
+prints its shadow-box and pan results; dead debug state removed. Kept: the 40 m pad (6% coarser
+shadow texels), hand-built bounding boxes in the check, commit-scope notes (squash merge).

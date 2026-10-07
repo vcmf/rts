@@ -89,7 +89,7 @@ Source: `research/stylized-water.md` (§1.4 order of work, §2 implementation pl
 | PR | Scope | Research ref | Acceptance (screenshot-verified) | Est. |
 |---|---|---|---|---|
 | **W1** | `feat(water)`: river data model, Kinoshita centre line, attribute rules, `riverAt()` query; the existing water shader renders on the new path | §2.1–2.3 | Bends turn back on themselves; width visibly varies; pools and riffles alternate; no "scarf" at any zoom | 0.5–1 d |
-| **W2** | `feat(terrain)`: valley and floodplain, asymmetric channel carve, finer bank geometry | §2.4–2.5 | River sits in a valley; cut banks steep, point bars shallow; no terrain stair-steps at banks | 1.5–2 d |
+| **W2** | `feat(terrain)`: asymmetric channel carve, finer bank geometry (valley + floodplain moved into W1) | §2.4–2.5 | Cut banks steep, point bars shallow; no terrain stair-steps at banks | 1–1.5 d |
 | **W3** | `feat(water)`: water-data bake (depth, SDF, flow, foam) bound to terrain and water | §2.6 | Debug view shows correct depth, SDF and flow arrows; no per-frame cost added | 1 d |
 | **W4** | `feat(water)`: ribbon mesh per channel + pond polygons, opaque bed-painting shader, all layers | §2.7–2.8 | No shoreline seam or flicker; pools read dark and calm, riffles light and foamy; 60 fps holds | 1.5–2 d |
 | **W5** | `feat(water)`: banks painting, rocks, weirs, fords, reeds; seasons (ice, autumn leaves) | §2.9, §4.4, §4.10 | Banks read wet/bare/gravel; foam around rocks; winter freezes ponds cleanly | 1–1.5 d |
