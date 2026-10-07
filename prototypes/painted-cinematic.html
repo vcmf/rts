@@ -139,20 +139,24 @@ const RIVER=(()=>{
   const boxSmooth=(src,dst,R)=>{for(let i=0;i<n;i++){let a=0,c=0;for(let k=-R;k<=R;k++){const j=i+k;if(j>=0&&j<n){a+=src[j];c++;}}dst[i]=a/c;}};
   boxSmooth(k0,C.kappa,8);
   // 4. attributes (research §2.3). Q grows slowly downstream (unseen tributaries)
+  const WMIN=4,WMAX=11,softClamp=(x,lo,hi)=>{const k=1.5,sm=(a,b)=>0.5*(a+b+Math.sqrt((a-b)**2+k*k));x=sm(x,lo);return -sm(-x,-hi);};
   let rph=0;                                                       // straight-reach riffle phase, accumulated along s
   for(let i=0;i<n;i++){
     const Q=0.8+0.5*C.s[i]/C.s[n-1];
     const k=C.kappa[Math.max(0,i-2)];                              // sampled ~0.5 W upstream: pools sit just past the apex
     const bendness=Math.min(1,Math.abs(k)*P.W0*2.3);
-    if(i)rph+=2*Math.PI*(C.s[i]-C.s[i-1])/(6*P.W0);
+    if(i)rph+=2*Math.PI*(C.s[i]-C.s[i-1])/(6*C.W[i-1]);              // riffles about 6 local widths apart
     const straight=0.5+0.5*Math.cos(rph);
-    // design.md §6c: 4–11 m. Each stretch of 2–3 bends has its own width (slow noise), bends narrow, straight riffles widen
-    const reach=0.75+0.5*vn(C.s[i]/(28*P.W0),3.1);
-    const W=Math.max(4,Math.min(11,P.W0*Math.sqrt(Q)*reach*(1.2-0.5*bendness)*(1+0.35*straight*(1-bendness))));
+    // design.md §6c: 4–11 m. Each stretch of 2–3 bends has its own width (slow noise), bends narrow, straight riffles widen.
+    // Soft limits: the narrowest bends ease into 4 m instead of sitting flat on it
+    const reach=0.55+0.9*vn(C.s[i]/(28*P.W0),5.3);
+    const W=softClamp(P.W0*Math.sqrt(Q)*reach*(1.2-0.45*bendness)*(1+0.35*straight*(1-bendness)),WMIN,WMAX);
     const riffle=Math.max(1-Math.min(1,bendness*1.6),(1-bendness)*straight);
     C.W[i]=W;C.riffle[i]=riffle;
     C.A[i]=Math.max(-1,Math.min(1,-k*W*1.6));                      // + : outer (cut) bank on the +n side; used in W2
   }
+  // width changes over ~2 W, never per sample (a jump notches both banks)
+  boxSmooth(Float32Array.from(C.W),C.W,8);for(let i=0;i<n;i++)C.W[i]=Math.max(WMIN,Math.min(WMAX,C.W[i]));C.WMAX=WMAX;
   // pool/riffle must alternate smoothly: smooth riffle over ~1.5 W, then derive depth and speed from it
   boxSmooth(Float32Array.from(C.riffle),C.riffle,6);
   for(let i=0;i<n;i++){const Q=0.8+0.5*C.s[i]/C.s[n-1];C.D[i]=P.D0*Math.pow(Q,0.4)*(1.45-1.0*C.riffle[i]);C.v[i]=P.v0*Math.pow(Q,0.1)*(0.55+1.1*C.riffle[i]);}
@@ -522,7 +526,7 @@ const REFN=1536,reflCanvas=document.createElement('canvas');reflCanvas.width=ref
 const reflG=reflCanvas.getContext('2d');reflG.fillStyle='#000';reflG.fillRect(0,0,REFN,REFN);reflG.filter='blur(3px)';
 const reflTrees=[];const reflAdd=(x,z,r)=>{const q=riverQuery(x,z);if(q&&q.dist<lerpA(RIVER.W,q)/2+20)reflTrees.push([x,z,r]);};   // crowns within 20 m of the water
 let waterMat;
-{const pos=[],uv=[],dep=[],idx=[],C=RIVER,COLS=12,E2=SMW/2-0.01,lim=SMW/2+6;let k=0;   // samples up to 6 m past the edge (1.35 half-widths), vertices clamped onto it
+{const pos=[],uv=[],dep=[],idx=[],C=RIVER,COLS=12,E2=SMW/2-0.01,lim=SMW/2+1.35*RIVER.WMAX/2+0.5;let k=0;   // samples whose ribbon (1.35 half-widths) reaches the tile; vertices clamped onto it
  for(let i=0,join=false;i<C.n;i++){if(Math.abs(C.px[i])>lim||Math.abs(C.pz[i])>lim){join=false;continue;}   // the water lives in the detailed tile only; a re-entry starts a new strip
    const hw=C.W[i]/2,nx=-C.tz[i],nz=C.tx[i],y=C.zw[i];               // left normal of the flow; water is flat at zw
    for(let c=0;c<=COLS;c++){const a=(c/COLS*2-1)*hw*1.35;let x=C.px[i]+nx*a,zz=C.pz[i]+nz*a;
@@ -753,7 +757,7 @@ const lightVP=lightCam.getViewMatrix(true).multiply(lightCam.getProjectionMatrix
 for(const m of mats){m.setTexture('uShadowMap',shadowRT);m.setMatrix('uLightVP',lightVP);m.setVector2('uSMTexel',SM_TEXEL);m.setVector2('uSMFade',SM_FADE);}
 
 /* ---------- AO + valley-mist mask (CPU, once) ---------- */
-{const N=Math.round(SMW/4),tmp=document.createElement('canvas');   // ~4 m cells: finer than the 5-8 m channel
+{const N=Math.round(SMW/3),tmp=document.createElement('canvas');   // ~2.7 m cells: finer than the narrowest (4 m) channel
  tmp.width=tmp.height=N;const tg=tmp.getContext('2d'),img=tg.createImageData(N,N),d=img.data;
  // H once per cell into a height grid; the ring averages read it bilinearly (13 H calls per cell cost ~0.25 s at N=200)
  const hg=new Float32Array(N*N),cs=SMW/N;for(let j=0;j<N;j++)for(let i=0;i<N;i++)hg[j*N+i]=H((i+0.5)*cs-SMW/2,(j+0.5)*cs-SMW/2);
