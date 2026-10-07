@@ -46,11 +46,20 @@
   check('backtrack', back >= 100, back)
   check('backtrackNear', backNear >= 10, backNear)
 
-  // 4. width: 5–8 m of water, narrower at bends than in straight reaches (design.md §6c)
+  // 4. width: 4–11 m of water, narrower at bends than in straight reaches, visibly varied (design.md §6c)
   let wmin = Infinity, wmax = 0, bendW = 0, bendN = 0, strW = 0, strN = 0
   for (let i = 0; i < C.n; i++) { const w = C.W[i], b = Math.min(1, Math.abs(C.kappa[i]) * C.P.W0 * 2.3)
     wmin = Math.min(wmin, w); wmax = Math.max(wmax, w); if (b > 0.7) { bendW += w; bendN++ } else if (b < 0.3) { strW += w; strN++ } }
-  check('widthRange', wmin >= 4.99 && wmax <= 8.01, [+wmin.toFixed(2), +wmax.toFixed(2)])
+  check('widthRange', wmin >= 3.99 && wmax <= 11.01, [+wmin.toFixed(2), +wmax.toFixed(2)])
+  // stretches differ (the owner's complaint): width averaged over one bend wavelength (~11 W0, ±22 samples), widest stretch
+  // vs narrowest in the tile. Pointwise percentiles would pass on the bend/straight alternation alone.
+  const inTileIdx = []; for (let i = 0; i < C.n; i++) if (Math.abs(C.px[i]) < SMW / 2 && Math.abs(C.pz[i]) < SMW / 2) inTileIdx.push(i)
+  const avgs = []; for (let k = 22; k < inTileIdx.length - 22; k += 5) { let a = 0; for (let j = -22; j <= 22; j++) a += C.W[inTileIdx[k + j]]; avgs.push(a / 45) }
+  if (avgs.length < 10) check('stretchContrast', false, `only ${avgs.length} stretches in the tile`)
+  else check('stretchContrast', Math.max(...avgs) / Math.min(...avgs) >= 1.7, [+Math.min(...avgs).toFixed(2), +Math.max(...avgs).toFixed(2)])
+  // width changes smoothly along the river (a per-sample jump notches both banks)
+  let wstep = 0; for (let i = 1; i < C.n; i++) wstep = Math.max(wstep, Math.abs(C.W[i] - C.W[i - 1]) / (C.s[i] - C.s[i - 1]))
+  check('maxWidthStep', wstep < 0.25, +wstep.toFixed(3))
   check('bendNarrowerThanReach', bendW / bendN < strW / strN, [+(bendW / bendN).toFixed(2), +(strW / strN).toFixed(2)])
 
   // 4b. pools and riffles alternate smoothly
