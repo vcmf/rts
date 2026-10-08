@@ -20,24 +20,52 @@ function walk(dir, out = []) {
   return out
 }
 
-// a repo path is anything starting with a top-level folder or a root doc; placeholders and globs are skipped
-const ROOT_PATH = /(?<![\w./-])((?:docs|prototypes|tools|design)\/[\w./-]*[\w/]|(?:AGENTS|CLAUDE|README)\.md)(?![\w])/g
-const MD_LINK = /\]\(([^)\s#]+)(#[^)]*)?\)/g
-const exists = p => fs.existsSync(p)
+// Which tokens are references:
+// - in code (html/js/mjs/py): repo-root paths (docs/, prototypes/, tools/, design/) and any *.md name
+// - in docs: the same, plus every backticked file name with a doc or code extension, plus Markdown links
+// A token resolves against the file's own folder, then the repo root, with exact letter case (macOS
+// file systems ignore case; GitHub and Linux do not). Placeholders (<x>, *, |, NNNN) are skipped.
+const ROOT_PATH = /(?<![\w./@-])((?:docs|prototypes|tools|design)\/[\w./-]*[\w/])(?![\w])/g
+const MD_NAME = /(?<![\w./-])([\w-]+(?:\/[\w.-]+)*\.md)(?![\w])/g
+const TICKED = /`@?([\w./-]+\.(?:md|html|js|mjs|py))`/g
+const AT_IMPORT = /^@([\w./-]+)$/gm
+const MD_LINK = /\]\(([^)\s#]+)(#[^)\s]*)?(?:\s+"[^"]*")?\)/g
+
+// exact-case existence, segment by segment
+function existsExact(p) {
+  const parts = path.relative(root, p).split(path.sep)
+  if (parts[0] === '..') return fs.existsSync(p)
+  let dir = root
+  for (const part of parts) {
+    if (part === '' || part === '.') continue
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory() || !fs.readdirSync(dir).includes(part)) return false
+    dir = path.join(dir, part)
+  }
+  return true
+}
+const resolves = (file, token) => existsExact(path.resolve(path.dirname(file), token)) || existsExact(path.join(root, token))
+const placeholder = t => /[<*|]|NNNN|YYYY/.test(t)
 
 for (const file of walk(root)) {
   const text = fs.readFileSync(file, 'utf8'), r = rel(file)
-  // research reports quote other projects' paths (0 A.D., OpenRA): only their Markdown links are checked
-  const checkRootPaths = !r.startsWith('docs/research/') && !r.startsWith('docs/templates/') && r !== 'tools/check-docs.mjs'
-  if (checkRootPaths) for (const m of text.matchAll(ROOT_PATH)) {
-    const p = m[1]
-    if (/[<*|]|NNNN/.test(p)) continue
-    if (!exists(path.join(root, p))) problems.push(`${r}: missing path ${p}`)
+  if (r.startsWith('docs/templates/') || r === 'tools/check-docs.mjs') continue
+  const isDoc = file.endsWith('.md')
+  // research reports quote other projects' files (0 A.D., OpenRA): there only our own docs/ paths are checked
+  const research = r.startsWith('docs/research/')
+  const tokens = new Set()
+  for (const m of text.matchAll(ROOT_PATH)) if (!research || m[1].startsWith('docs/')) tokens.add(m[1])
+  if (!research) {
+    if (!isDoc) for (const m of text.matchAll(MD_NAME)) tokens.add(m[1])
+    else for (const m of text.replace(/```[\s\S]*?```/g, '').matchAll(TICKED)) tokens.add(m[1])
   }
-  if (file.endsWith('.md')) for (const m of text.replace(/```[\s\S]*?```/g, '').matchAll(MD_LINK)) {   // links inside code blocks are code
+  for (const t of tokens) if (!placeholder(t) && !resolves(file, t)) problems.push(`${r}: missing path ${t}`)
+  // @imports (CLAUDE.md bridges) must resolve from their own folder
+  if (path.basename(file) === 'CLAUDE.md') for (const m of text.matchAll(AT_IMPORT))
+    if (!existsExact(path.resolve(path.dirname(file), m[1]))) problems.push(`${r}: missing import ${m[1]}`)
+  if (isDoc) for (const m of text.replace(/```[\s\S]*?```/g, '').matchAll(MD_LINK)) {   // links inside code blocks are code
     const target = m[1]
-    if (/^[a-z]+:/i.test(target) || /[<*|]/.test(target)) continue   // URLs, placeholders
-    if (!exists(path.resolve(path.dirname(file), target))) problems.push(`${r}: broken link ${target}`)
+    if (/^[a-z]+:/i.test(target) || placeholder(target)) continue   // URLs, placeholders
+    if (!existsExact(path.resolve(path.dirname(file), target))) problems.push(`${r}: broken link ${target}`)
   }
 }
 
