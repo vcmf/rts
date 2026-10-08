@@ -20,7 +20,8 @@ The ones to read before touching a given area:
 | a built system | its doc in `docs/systems/` |
 | anything | `docs/decisions/` (accepted records are binding; proposed ones are open) |
 
-Prototype-specific rules live in `prototypes/AGENTS.md`. Conventions (commits, units, docs) are in
+Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in the git-ignored
+`assets/` folder (how to restore them: `README.md`); reference images in `design/refs/`. Conventions (commits, units, docs) are in
 `docs/conventions.md`; terms in `docs/glossary.md`.
 
 ## Commands
@@ -47,10 +48,9 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Conventions (commits, u
 
 ## Commits and PRs
 
-- Conventional Commits: `type(scope): subject`, scope mandatory and specific (`water`, `terrain`,
-  `sim`, `docs`, `tools`, …), imperative, lowercase, no trailing period. One logical change per commit.
-- PR titles in the same format (PRs are squash-merged).
-- **No AI attribution** (`Co-Authored-By`, "Generated with …") in commits or PRs.
+Conventional Commits with a mandatory scope; PR titles in the same format (squash-merged). The full
+rules are in `docs/conventions.md`. **No AI attribution** (`Co-Authored-By`, "Generated with …") in
+commits or PRs.
 
 ## Invariants
 
@@ -60,5 +60,6 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Conventions (commits, u
 - **Readable first**: armies are the most saturated objects on screen; never hide a formation.
 - **Pack colours are never used**: materials map to roles and our palette paints them.
 - **Static light is baked once per map**; only moving things get runtime lighting.
-- **The simulation is deterministic and never imports the renderer** (`docs/decisions/`).
+- **The simulation never imports the renderer** and changes only through commands (decision 0005,
+  `docs/architecture.md`); its determinism rules are proposed (decisions 0006, 0013).
 - **Measure, don't assume**: performance claims need a measurement or are labelled estimates.

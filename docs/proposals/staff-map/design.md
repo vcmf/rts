@@ -1,5 +1,5 @@
 ---
-status: draft
+status: accepted
 last_reviewed: 2026-10-08
 ---
 

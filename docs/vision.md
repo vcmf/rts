@@ -27,7 +27,7 @@ renderer produces cinematic history videos.
 
 - 20–40 battalions per battle, about 100 soldiers each, one figure per soldier (`docs/decisions/`).
 - Play area 1–1.5 km; a battle takes 30–45 minutes of real time.
-- Single-player first; min-spec a gaming laptop with an RTX 3060.
+- Min-spec a gaming laptop with an RTX 3060. Single-player first (proposed, decision 0013).
 
 ## Non-goals
 

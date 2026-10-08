@@ -31,7 +31,7 @@ last_reviewed: 2026-10-08
 
 - **Tick:** one simulation step (50 ms of battle time). **Command:** the only input into the
   simulation. **Replay:** a command log played back to the same state hashes.
-- **Restricted float64:** the simulation's number rules (decision 0006).
+- **Restricted float64:** the proposed number rules for the simulation (decision 0006, proposed).
 - **Heightfield:** the sampled ground height grid, the one authority for height.
 - **Detail tile, far ring, apron:** the full-resolution terrain, the coarse backdrop beyond it, and
   the strip that stitches them.
