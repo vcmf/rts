@@ -26,7 +26,7 @@ Builds on `prototypes/formation-core.js` and `prototypes/formation-map.html` (F0
     travel (Tobler, capped at drill pace) and water depth folded in;
   - q per bin from its worst ground class (open / light rough / hard);
   - V = min(V0, max-lag limit, mean-lag limit); lags renormalised to the leading point each tick;
-    V ≥ 0; deep water (g = 0) stops the battalion at the bank (order cancelled after a few seconds);
+    V ≥ 0; impassable ground (deep water) is enforced by one footprint gate (see Redesign);
   - three order presets: keep order, normal, push on;
   - disorder accrues from lag spread and recovers when dressed (shown, not yet used).
 - **Soldiers:** each soldier's slot is set back by his bin's lag, so the line visibly bows around a
@@ -57,7 +57,9 @@ fire and morale.
 - With the Speed overlay on, slow ground and the line's bulge around it are visible.
 - All existing formation checks still pass; `node tools/check-docs.mjs` passes.
 
-## Results (headless, `tools/formation-measure.js`, after review round 2)
+## Results (headless, `tools/formation-measure.js`, after the redesign)
+
+Run with `SHOT_TIMEOUT_S=900` (the run takes several minutes; `tools/shot.mjs` waits 60 s per call by default).
 
 - **Partial bad ground** (a line marches 60 m; a strip of woods exactly 10 m deep, g = 0.55, q = 1,
   covers the files of n of its 12 sample points; time lost against the same march without it):
@@ -78,26 +80,41 @@ fire and morale.
   the mean-lag limit that ignores files already catching up, which over-slows the battalion. The
   engine solves the limit exactly (`n·V − Σ min(cap, V + l/τ) ≤ n (Lmean − l̄)/τ`, one pass over the
   sorted breakpoints), so with 3 of 12 points held the mean lag sits at Lmean and costs 0.5 s.
-- **Deep water**, crossed obliquely and along the whole front: the battalion stops, reports "halted:
-  impassable ground", dresses back from the edge; no man's place is in deep water at any point on
-  the way (a man stops 0.5 m short of it). A march column stopped there keeps its companies 6.85 m
-  apart along its trail, all facing on. A wheel toward the stream stops short of it; a square that
-  would stand in it is refused ("cannot form: impassable ground").
+- **Impassable ground** (no man's place ever on it; sampled every 0.25–0.5 s, men checked at the end):
+  - deep water crossed obliquely and along the whole front: "halted: impassable ground", 0 places
+    on the way, 0 men;
+  - a march column halted there keeps its companies 6.85 m apart along its trail, all facing on;
+  - a wheel toward the stream turns 0.33 rad and stops short of it;
+  - a line at the bank: a square is refused ("cannot form: impassable ground"), 12 m back it is
+    accepted; column then square 5 s later: the square is refused, 0 places in the water;
+  - the same line ordered north (a turn in place): halted, 0 places; a march column turning toward
+    the stream 8, 9 and 10 m from it: halted, 0 places, 0 men;
+  - a 4 m deep strip across part of the front, push order (Lmax 12 m): halted, nobody crosses;
+  - the ford is crossed and the battalion ends in line on the far bank.
 - **Casualties:** a bin emptied by casualties takes no part in the limits; a line wholly in woods
   then keeps every file in place (lag 0, disorder 0; it was 1.6 m and 0.6 before).
 - **Bridge:** the deck is level for a column (g = 1 along it); narrow, cross the 4 m bridge, deploy
-  beyond: 196 s, mostly the two formation changes.
-- **Accordion**, from the shape's geometry (a bin wholly behind another and overlapping it across the
-  line of travel stays at least 0.6 m behind it): a march column whose head is held up at a hedge
-  bunches from 1.65 m to 0.6 m between companies, never closer; a square pushing into the wood keeps
-  0.68 m between faces (0.98 m at rest; it fell to 0.13 m before).
-- **Earlier checks** still pass; the march column's turn is back to 1.2 m worst distance from slot.
+  32 m beyond (the column's rear off the bridge: deploying with it on the deck would wheel companies
+  over the water, and the gate refuses that): 202.5 s, mostly the two formation changes.
+- **Accordion**, from the shape's geometry (a bin wholly behind another, with men less than 0.6 m
+  apart across the line of travel, stays at least 0.6 m behind it): a march column whose head is
+  held up at a hedge bunches from 1.65 m to 0.6 m between companies, never closer; the same column
+  turned 90° with 4.3 m of lag keeps 0.6 m (0.03 m before); a square pushing into the wood keeps
+  0.68 m between faces (0.98 m at rest; 0.13 m before round 2).
+- **Earlier checks** still pass; the march column's turn: 1.24 m worst distance from slot.
 - **Negative runs:** the round-0 code fails deep water along the whole front (stuck, men in the
   water), the bridge deck (g = 0.06) and the accordion (0.00 m). With the round-2 fixes disabled
   (look-ahead, trail trim, wheel check, empty bins, accordion) the checks fail on each: 36 and 27
   places in deep water on the way, the column folded (2.72 m gap, head facing 0), the wheel 63 places
   in the water, the emptied bin 1.64 m lag and 0.72 disorder, the column 0.00 m, the square 0.13 m.
-- **Cost, 40 battalions:** simulation 1.7 ms per frame, drawing 0.9 ms.
+- **Negative run of the redesign** (gate, change-path check, soldier guard and turn-radius cap
+  disabled): fails the wheel (63 places in the water), the square at the bank (accepted), the change
+  during a change (50 places, 37 men), the turn at the bank (48 places, 40 men) and men in the water
+  after halts (1 man each). Not caught by it: the narrow strip (held by the lag model and the halt's
+  step back, not the gate) and the turn-radius cap (centring the ranks already keeps the bend at
+  0.6 m; the cap is a margin).
+- **Cost, 40 battalions:** simulation 1.9 ms per frame (1.7–1.8 ms before the gate; budget 4 ms,
+  checked), drawing 0.9 ms.
 
 ## Review round 1
 
@@ -150,25 +167,33 @@ fire and morale.
 | 9 | light | Core still names 'normal', 'march', 'line' (default style, bridge and ford orders, rebalance, closeRanks) |
 | 10 | light | Road pace from one point per company flickers at road edges |
 
-## Redesign (proposed after round 3)
+## Redesign (after round 3; the review count restarts)
 
 Every severe finding since round 1 is the same rule (no man on impassable ground) enforced separately,
 after the fact, in each kind of motion: advance, turn, wheel, change, halt. The redesign enforces it
 once, before the fact:
 
-- **One footprint gate.** Every change of pose (anchor step, turn, wheel step, change step) and every
-  lag change goes through one function that checks the men's places (slot − lag) of the next pose.
-  A step that would put a place on impassable ground is clipped (a fixed number of halvings,
-  deterministic) and the order halts. Nothing can enter, so `dressBack` and the 0.5 m look-ahead go.
-- **Per-bin gating in the lag model.** A bin whose places would enter is held exactly at the edge (its
-  lag grows); on halt the anchor moves back by the held lag, so slots return to where the men stand
-  and nothing crosses narrow ground.
-- **Changes checked along their path** (sampled poses of the transition), at the start and at every
-  interrupt.
-- **Lag along the trail** for trail shapes: a company lagging l stands on the trail at its gap + l, so
-  the accordion holds in bends (the straight-layout pairs stay for the other shapes, with a metre
-  tolerance).
-- **Era names out of the core:** default preset and scenario orders (bridge, ford) from the ruleset
-  or the map; rebalance and closeRanks keyed on the formation kind.
-- **Checks** for each finding of round 3, each with a negative run.
-
+- **One footprint gate** (`gate`, `wetBins`): every change of pose (the turn and the advance of a
+  move, a wheel step) is tried through one function that checks the men's places (slot − lag) of the
+  next pose. A step that would put a place on impassable ground is cut back by halving (6 halvings,
+  deterministic); a turn or wheel that cannot proceed halts the order. Far from impassable ground
+  (a distance grid baked with the terrain) the check is one lookup. `dressBack` and the 0.5 m
+  look-ahead are gone; a man's ground is sampled one step ahead.
+- **Per-bin holding in the advance:** a bin whose places would enter is held where it stands (its lag
+  grows by the step); on halt the anchor steps back by the largest held lag, so the slots come back
+  to where the held men stand and nothing crosses narrow ground.
+- **Changes checked along their path** (`changeWet`: 128 poses of the transition, its end included),
+  when ordered and at every interrupt.
+- **Trail shapes man by man:** every man of a march column stands on the trail at his own distance
+  behind the head (his place in the straight layout plus his lag), across it by his rank's offset;
+  the ranks are centred on the trail and the head turns on a radius of at least the half-width plus
+  0.6 m. The accordion's straight-layout pairs then hold in bends.
+- **Soldiers** (the cosmetic layer) never step onto impassable ground either.
+- **Era names out of the core:** start shape and order preset, the passage shapes (narrow, deploy) and
+  `closeAcross` (which shape closes across company boundaries) are ruleset data. The shape geometry
+  (`SHAPES`) and change times (`CHANGE_TIME`) are still in the core: to move into the ruleset with the
+  S-phase shape system.
+- **Smaller round-3 items:** pair tolerance in metres (men closer than 0.6 m across travel); halted
+  files close at the quick step and idle battalions with no lag skip the work; the readout's mean lag
+  counts live bins; binN counts men; route step only while every man stands on a road.
+- **Checks** for each round-3 finding; negative run above.
