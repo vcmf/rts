@@ -55,7 +55,7 @@ input[type=range]{width:120px;accent-color:var(--accent)}
    HYBRID: the physics of light comes from a real shadow pass (a depth map
    rendered once from the sun, shared by every material) + Babylon SSAO;
    our shader only decides how that light is PAINTED (ramp, grain, edges).
-   Visual test only: no sim/render split (see web-rts-architecture.md).
+   Visual test only: no sim/render split (see docs/architecture.md).
    ========================================================================= */
 const B=BABYLON,V3=B.Vector3,C3=B.Color3,C4=B.Color4;
 if(!window.NATURE){document.body.innerHTML='<p style="padding:30px">nature-pack.data.js missing: run <code>node tools/obj-to-js.mjs</code></p>';throw new Error('no data');}
@@ -132,7 +132,7 @@ uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason;
 
 vec3 G(vec2 uv){return texture2D(uGrain,uv).rgb;}
 vec3 grainW(vec3 wp,vec3 n,float sc){vec2 p=abs(n.y)>0.6?wp.xz:(abs(n.x)>abs(n.z)?wp.zy:wp.xy);return G(p/sc);}
-// SEASON (design.md §4b): 0 summer · 1 early autumn · 2 late autumn · 3 winter.
+// SEASON (docs/art-bible.md §4b): 0 summer · 1 early autumn · 2 late autumn · 3 winter.
 // Snow settles on whatever faces up, broken by the grain, so it reads as painted.
 float snowAt(vec3 N,vec3 wp){float s=clamp(uSeason-2.0,0.0,1.0);if(s<=0.0)return 0.0;
   return smoothstep(0.55,0.72,N.y*1.15*s+(grainW(wp,N,4.0).r-0.5)*0.4+(s-1.0)*0.35);}

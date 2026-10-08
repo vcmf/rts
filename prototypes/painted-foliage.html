@@ -50,7 +50,7 @@ input[type=range]{width:120px;accent-color:var(--accent)}
      by a world-anchored paint GRAIN texture, graphic rim, cloud shadows.
    - The grain texture is generated procedurally and can be replaced by
      dropping a PNG on the page.
-   Visual test only: no sim/render split (see web-rts-architecture.md).
+   Visual test only: no sim/render split (see docs/architecture.md).
    ========================================================================= */
 const B=BABYLON,V3=B.Vector3,C3=B.Color3,C4=B.Color4;
 if(!window.FOLIAGE){document.body.innerHTML='<p style="padding:30px">foliage-*.data.js missing: run tools/blend-to-js.py (see header)</p>';throw new Error('no data');}
@@ -376,7 +376,7 @@ function place(model,material,items){            // items: [x,z,scale,yaw,tint]
 }
 
 /* =========================================================================
-   LAYOUT: vegetation in STRUCTURES (design.md §11), the hill kept open
+   LAYOUT: vegetation in STRUCTURES (docs/art-bible.md §11), the hill kept open
    ========================================================================= */
 const R=mulberry(77),rr=()=>R(),pick=a=>a[Math.floor(rr()*a.length)];
 const F=window.FOLIAGE;

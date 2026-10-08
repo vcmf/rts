@@ -12,21 +12,17 @@ Prototyping the look. Open `prototypes/painted-cinematic.html` in Chrome; no bui
 
 | Prototype | What it shows |
 |---|---|
-| `painted-cinematic.html` | **Current.** Baked light map, painted water, valley mist, light shafts, golden backlight, cinematic grade, seasons, optional depth of field |
-| `staff-map.html` | **Feel prototype** of the far-zoom staff map and the zoom into the world |
-| `painted-hybrid.html` | Real sun shadows + SSAO under painterly shading (superseded) |
-| `painted-foliage.html` | Leaf-card trees from a stylized `.blend` pack (superseded) |
-| `painted-nature.html` | First painterly pass on the Quaternius pack (superseded) |
-| `painted-diorama.html` | The retired tin-soldier diorama direction |
+| `prototypes/painted-cinematic.html` | **Current.** Baked light map, painted water, valley mist, light shafts, golden backlight, cinematic grade, seasons, optional depth of field |
+| `prototypes/staff-map.html` | **Feel prototype** of the far-zoom staff map and the zoom into the world |
+| `prototypes/painted-hybrid.html` | Real sun shadows + SSAO under painterly shading (superseded) |
+| `prototypes/painted-foliage.html` | Leaf-card trees from a stylized `.blend` pack (superseded) |
+| `prototypes/painted-nature.html` | First painterly pass on the Quaternius pack (superseded) |
+| `prototypes/painted-diorama.html` | The retired tin-soldier diorama direction |
 
 ## Docs
 
-- [`design.md`](design.md): art bible
-- [`web-rts-architecture.md`](web-rts-architecture.md): game architecture
-- [`prototype-plan.md`](prototype-plan.md): prototype phases and the current workstream
-- [`asset-sources.md`](asset-sources.md): asset sources and licences
-- [`staff-map/`](staff-map/design.md): the far-zoom staff map
-- [`research/`](research/): post-processing and water research
+Start at [`docs/INDEX.md`](docs/INDEX.md): vision, art bible, architecture, decisions, system docs,
+proposals, plans and research, one line each. Agents start at [`AGENTS.md`](AGENTS.md).
 
 ## Assets
 

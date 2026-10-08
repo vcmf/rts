@@ -145,10 +145,10 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
 <script>
 'use strict';
 /* =========================================================================
-   STAFF MAP · FEEL PROTOTYPE (staff-map/design.md, staff-map/plan.md SM0)
+   STAFF MAP · FEEL PROTOTYPE (docs/proposals/staff-map/design.md, docs/plans/active/staff-map.md SM0)
    - The far zoom is a drawn map: paper, Lehmann hachures, woods stipple,
-     water, roads, villages. Baked ONCE into two textures (staff-map/
-     implementation.md §3); the season only changes shader colours.
+     water, roads, villages. Baked ONCE into two textures (docs/proposals/staff-map/implementation.md
+     §3); the season only changes shader colours.
    - Live ink (blocks, orders, trails, smoke, labels) is a 2D canvas over
      WebGL, redrawn every frame from the little sim below.
    - One value, mapness, follows the camera distance; every stage of the
@@ -270,7 +270,7 @@ for(const w of WOODS){const R=w.R*1.6;for(let x=w.x-R;x<w.x+R;x+=11)for(let z=w.
 for(let z=1500;z>STREAM_Z0;z-=17){if(RND()<0.45)continue;const side=RND()<0.5?-1:1;const x=xs(z)+side*(13+RND()*12);TREES.push({x,z,s:0.7+RND()*0.4,con:false,wood:0});}
 
 /* =========================================================================
-   THE MAP BAKE (implementation.md §3)
+   THE MAP BAKE (docs/proposals/staff-map/implementation.md §3)
    tex A: R hachures · G woods (area 70, marks 255) · B water
    tex B: R line ink (banks, roads, wood edges, houses) · G roads · B village yards
    ========================================================================= */
