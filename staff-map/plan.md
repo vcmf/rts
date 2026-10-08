@@ -83,3 +83,25 @@ through a single clipped helper that every overlay draw uses.
 
 Stopped after round 3. Lesson: two inline-comment accidents in this file. Put comments on their
 own line in minified-style code.
+
+## SM0c: routing flicker and orphan traces (art director feedback)
+
+**Feedback:** a routing block blinked "very hard and fast"; dotted traces ended where no block was.
+
+**Cause:** routing units re-aimed at the nearest enemy every sim step (up to ~30 snaps per real
+second at 30×); traces stayed after their troops moved on without a shown order.
+
+**Review:** round 1 and 2 fixes (cached heading, home pull, order-membership orphan test with
+chains and stop points) each failed the next round with severe findings, so after round 3 the
+two mechanisms were **redesigned** to the simple rules now in `design.md` §6–7: flee away
+from the enemies in reach (the escape direction turns at most 0.5 rad per game second; the drawn
+block eases on the frame clock), and a trace shows only while one of its own battalions stands
+within 250 m of its end (a later chain rule was dropped too:
+two traces could keep each other alive). Measured after the
+redesign: 1 step out of 2,927 rout steps moved toward an enemy; no NaN; every shown trace leads
+to troops or fades in about a second.
+
+SM0c continued: rounds 1–3 on the redesign each found edge cases (a trace pair keeping each other
+alive, the map corner, a vector blend that cannot turn about, figures frozen mid-turn when paused).
+All fixed; stopped after round 3. Remaining known gap: smoke spawns at the sim facing, a fraction
+of a second ahead of the drawn block while it eases.

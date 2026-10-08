@@ -53,8 +53,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
 #legend{left:24px;bottom:98px;width:236px}
 #legend .li{display:flex;align-items:center;gap:10px;font:400 10.5px/1.3 var(--mono);color:var(--ink-2);margin:6px 0}
 #legend svg{flex:none}
-@keyframes blink{0%,49%{fill:#2C4FA8}50%,100%{fill:#fbfaf6}}
-.blink{animation:blink .52s steps(1) infinite}
+@keyframes blink{0%,17%{fill:#2C4FA8}33%,67%{fill:#fbfaf6}83%,100%{fill:#2C4FA8}}
+.blink{animation:blink 1.1s ease-in-out infinite}
 /* selection card */
 #card{right:24px;bottom:48px;width:268px;display:none}
 #card .nm{font:600 22px/1 var(--display);font-stretch:80%;margin:2px 0 4px}
@@ -614,7 +614,7 @@ function corps(key,side,title,leader,list,cx,cz,face){
 }
 let UID=0;
 function mkUnit(side,type,corps,name,x,z,face){const N=TYPE[type].n;
-  return{id:UID++,side,sideI:side==='FR'?0:side==='RU'?1:2,type,corps,name,x,z,face,N,str:1,mor:1,form:'line',prev:'line',morph:1,
+  return{dface:face,id:UID++,side,sideI:side==='FR'?0:side==='RU'?1:2,type,corps,name,x,z,face,N,str:1,mor:1,form:'line',prev:'line',morph:1,
     path:null,pi:0,prog:0,order:null,state:'idle',hit:-1e9,firing:0,routT:0,gone:0,fx:null,sel:false,rand:hash(UID,7)};}
 const E=Math.PI/2,W=-Math.PI/2;
 // France (player)
@@ -701,7 +701,16 @@ let scriptI=0;
 /* ---------- the tick ---------- */
 let GT=0;                                                     // game seconds since 07:30
 const SMOKE=[];
-function nearestEnemy(u,maxD,filter){let b=null,bd=maxD;for(const e of UNITS){if(e.gone||e.sideI===u.sideI||(e.sideI>0)===(u.sideI>0))continue;if(filter&&!filter(e))continue;const d=Math.hypot(e.x-u.x,e.z-u.z);if(d<bd){bd=d;b=e;}}return b?{e:b,d:bd}:null;}
+const isEnemy=(u,e)=>!e.gone&&(e.sideI>0)!==(u.sideI>0);
+function nearestEnemy(u,maxD,filter){let b=null,bd=maxD;for(const e of UNITS){if(!isEnemy(u,e))continue;if(filter&&!filter(e))continue;const d=Math.hypot(e.x-u.x,e.z-u.z);if(d<bd){bd=d;b=e;}}return b?{e:b,d:bd}:null;}
+// away from the enemies in reach, closer ones pushing harder
+function fleeHeading(u){let vx=0,vz=0;
+  for(const e of UNITS){if(!isEnemy(u,e))continue;const dx=u.x-e.x,dz=u.z-e.z,d=Math.hypot(dx,dz);if(d<700&&d>1){const w=(1-d/700)**2/d;vx+=dx*w;vz+=dz*w;}}
+  if(Math.hypot(vx,vz)<1e-6)return u.sideI===0?-Math.PI/2:Math.PI/2;   // pinched or alone: toward the own rear
+  // near the map edge, the part of the escape that points into it is dropped (the unit runs along the edge);
+  // in a corner nothing is left, so it keeps the full escape and the map clamp holds it
+  const ax=vx,az=vz,E=150;if(u.x>MX-E&&vx>0||u.x<-MX+E&&vx<0)vx=0;if(u.z>MZ-E&&vz>0||u.z<-MZ+E&&vz<0)vz=0;
+  return Math.hypot(vx,vz)<1e-6?Math.atan2(ax,az):Math.atan2(vx,vz);}
 function setForm(u,f){if(u.form===f)return;u.prev=u.form;u.form=f;u.morph=0;}
 function angTo(a,b){let d=b-a;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d;}
 function simStep(dt){
@@ -715,7 +724,9 @@ function simStep(dt){
     // routing
     if(u.state==='rout'){u.mor=Math.min(1,u.mor+dt*0.0025);const ne=nearestEnemy(u,700);
       if(!ne||u.mor>0.55){u.state='idle';finishOrder(u);u.path=null;setForm(u,'line');u.mor=Math.max(u.mor,0.5);}
-      else{const a=Math.atan2(u.x-ne.e.x,u.z-ne.e.z);u.face=a;u.x+=Math.sin(a)*T.speed*1.4*dt;u.z+=Math.cos(a)*T.speed*1.4*dt;}
+      // the escape direction is smoothed so it never snaps when the set of enemies in reach changes
+      else{const t=fleeHeading(u),k=Math.min(1,dt*0.3),vx=lerp(Math.sin(u.face),Math.sin(t),k),vz=lerp(Math.cos(u.face),Math.cos(t),k),sp=T.speed*1.4*dt;
+        if(Math.hypot(vx,vz)>1e-3)u.face=Math.atan2(vx,vz);u.x+=Math.sin(u.face)*sp;u.z+=Math.cos(u.face)*sp;}
       endStep(u);continue;}
     const cavNear=u.type==='inf'?nearestEnemy(u,230,e=>e.type==='cav'&&e.state!=='rout'):null;
     // movement
@@ -756,7 +767,7 @@ function simStep(dt){
       if(e.form==='square'){u.mor-=0.012*dt;u.str-=0.002*dt;}else{e.mor-=0.03*dt*u.str;e.str-=0.004*dt*u.str;u.str-=0.001*dt;e.hit=GT;}u.hit=GT;}}
     // morale
     if(GT-u.hit>25)u.mor=Math.min(1,u.mor+dt*0.004);
-    if(u.mor<0.2&&u.state!=='rout'){u.state='rout';finishOrder(u);u.path=null;setForm(u,'column');}
+    if(u.mor<0.2&&u.state!=='rout'){u.state='rout';finishOrder(u);u.path=null;setForm(u,'column');u.face=fleeHeading(u);}   // turns its back once, as it breaks
     endStep(u);
   }
   // hidden-behind lines: armies do not stack on top of each other
@@ -795,18 +806,20 @@ function hatch(side,level){const k=side+':'+level;if(PATS[k])return PATS[k];cons
 function blockCorners(u,extra=0){
   const n=alive(u),a=shown(u,u.prev,n),b=shown(u,u.form,n),e=easeIO(u.morph);let fw=lerp(a[0],b[0],e),fd=lerp(a[1],b[1],e);
   fd=Math.max(fd,5*MPP);
-  const f=[Math.sin(u.face),Math.cos(u.face)],r=[Math.cos(u.face),-Math.sin(u.face)],hw=fw/2+extra*MPP,front=extra*MPP,back=-fd-extra*MPP;
+  const f=[Math.sin(u.dface),Math.cos(u.dface)],r=[Math.cos(u.dface),-Math.sin(u.dface)],hw=fw/2+extra*MPP,front=extra*MPP,back=-fd-extra*MPP;
   const C=[[-hw,front],[hw,front],[hw,back],[-hw,back]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
   return{C,fw,fd,f,r};
 }
 function pathPoly(C){ink.beginPath();ink.moveTo(C[0][0],C[0][1]);for(let i=1;i<C.length;i++)ink.lineTo(C[i][0],C[i][1]);ink.closePath();}
+const PULSE_WHITE=hex('#fbfaf6'),PULSE_MS=1100;   // the legend swatch (.blink) pulses at the same period, not in phase
 function drawBlock(u,alpha,now){
   const s=SIDES[u.sideI],{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
   const lvl=u.mor>0.6?-1:u.mor>0.45?0:u.mor>0.3?1:2;
   if(u.state==='rout'){
-    // routing: blinks between the army colour and white, the colour of surrender
-    // blink on the frame clock passed in, so an exporter controls the phase
-    const on=Math.floor(now/260)%2===0;pathPoly(C);ink.fillStyle=on?css(s.e||s.c):'#fbfaf6';ink.fill();
+    // routing: pulses between the army colour and white, the colour of surrender
+    // a soft pulse on the frame clock passed in, so an exporter controls the phase
+    const pk=sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI));
+    pathPoly(C);ink.fillStyle=css(mix3(s.e||s.c,PULSE_WHITE,pk));ink.fill();
     ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);}
   else if(u.type==='art'){
     // bar + gun dot on the facing side
@@ -841,27 +854,32 @@ function strokePath(P,s0,s1){let acc=0,first=true;ink.beginPath();
 function along(P,s){let acc=0;for(let i=1;i<P.length;i++){const a=P[i-1],b=P[i],l=Math.hypot(b[0]-a[0],b[1]-a[1]);if(acc+l>=s||i===P.length-1){const t=clamp((s-acc)/(l||1),0,1);return[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];}acc+=l;}return P[P.length-1];}
 // footprints: render-side history sampled from the units of each shown order, never sim state
 const FOOT_FADE=2400,FOOTS=new Map();                       // game seconds until a footprint is gone
-// a footprint is the order's own path, stamped as far as the troops got: it cannot jump when
-// a battalion leaves, routs or rejoins, because it never follows a centroid
+// a footprint is the order's own path, stamped as far as the troops got (never a centroid, which jumps)
 function sampleFootprints(){
-  for(const o of ORDERS){if(o.quiet)continue;let f=FOOTS.get(o);if(!f)FOOTS.set(o,f={side:o.side,pts:[[...o.P[0],GT]],s:0,first:0,reach:0});
-    // a group average jumps when a battalion leaves; the drawn reach follows it at marching pace (6 m per game second) at most
-    f.reach=Math.min(Math.max(f.reach,o.prog),f.reach+6);
+  for(const o of ORDERS){if(o.quiet)continue;let f=FOOTS.get(o);if(!f)FOOTS.set(o,f={side:o.side,pts:[[...o.P[0],GT]],s:0,first:0,reach:0,vis:1,led:true,o,ids:o.units.slice()});
+    f.reach=o.done?Math.max(f.reach,o.prog):Math.min(Math.max(f.reach,o.prog),f.reach+12);   // the group average jumps when a battalion leaves: follow at a pace, settle on finish
     if(f.reach-f.s>16||(o.done&&f.reach>f.s)){f.pts.push([...along(o.P,f.reach),GT]);f.s=f.reach;}}
-  for(const[o,f]of FOOTS){while(f.first<f.pts.length-1&&GT-f.pts[f.first+1][2]>FOOT_FADE)f.first++;
+  // a trace must lead to a block: shown while one of its own battalions stands within 250 m of its end
+  for(const f of FOOTS.values()){while(f.first<f.pts.length-1&&GT-f.pts[f.first+1][2]>FOOT_FADE)f.first++;
+    const end=f.pts[f.pts.length-1];f.led=!f.o.done||f.ids.some(id=>{const u=UNITS[id];return!u.gone&&Math.hypot(u.x-end[0],u.z-end[1])<250;});}
+}
+// per frame on the frame clock: visibility eases toward led (about 1 s); a trace is dropped once its last step ages out
+let FOOT_NOW=0;
+function cleanFootprints(now){const dt=clamp((now-(FOOT_NOW||now))/1000,0,0.1);FOOT_NOW=now;
+  for(const[o,f]of FOOTS){f.vis+=((f.led?1:0)-f.vis)*Math.min(1,dt*4);
     if(o.removed&&GT-f.pts[f.pts.length-1][2]>FOOT_FADE)FOOTS.delete(o);}
 }
 function drawOrders(now,alpha){
   ink.lineJoin='round';
   // footprints: dotted, batched into a few age buckets, older steps fading out
   if(SHOW_TRAILS){ink.lineCap='round';ink.setLineDash([0.1,5.5]);ink.lineWidth=2;const NB=6;
-    for(const f of FOOTS.values()){if(f.pts.length-f.first<2)continue;const col=css(SIDES[f.side].i),S=[],paths=Array.from({length:NB},()=>new Path2D());
+    for(const f of FOOTS.values()){if(f.pts.length-f.first<2||f.vis<0.01)continue;const col=css(SIDES[f.side].i),S=[],paths=Array.from({length:NB},()=>new Path2D());
       for(let i=f.first;i<f.pts.length;i++)S[i]=P2(f.pts[i][0],f.pts[i][1]);
       let pb=-1,pi=-1;
       for(let i=f.first+1;i<f.pts.length;i++){const age=GT-f.pts[i][2];if(age>FOOT_FADE||behind(S[i-1])||behind(S[i]))continue;
         const b=Math.min(NB-1,Math.floor(sstep(0,FOOT_FADE,age)*NB));if(b!==pb||pi!==i-1)paths[b].moveTo(S[i-1][0],S[i-1][1]);   // runs stay one subpath so the dots stay even
         paths[b].lineTo(S[i][0],S[i][1]);pb=b;pi=i;}
-      ink.strokeStyle=col;paths.forEach((p,b)=>{ink.globalAlpha=alpha*0.85*(1-(b+0.5)/NB);ink.stroke(p);});}
+      const oa=f.vis;ink.strokeStyle=col;paths.forEach((p,b)=>{ink.globalAlpha=alpha*oa*0.85*(1-(b+0.5)/NB);ink.stroke(p);});}
     ink.setLineDash([]);}
   // command: where the units are going (own army only), a translucent band with a filled head
   for(const o of ORDERS){
@@ -996,9 +1014,9 @@ function updateFigures(force){
   const key=GT+':'+RISE().toFixed(4)+':'+st('stand').toFixed(3);if(!force&&key===figKey)return;figKey=key;
   const on=st('stand')>0;for(const k in FIGS){FIGS[k].n=0;}
   if(on){const rise=RISE(),e3=[0,0,0],e4=[0,0,0];
-    for(const u of UNITS){if(u.gone)continue;const n=alive(u),f=[Math.sin(u.face),Math.cos(u.face)],r=[Math.cos(u.face),-Math.sin(u.face)],e=easeIO(u.morph),mv=u.state!=='idle'?1:0;
+    for(const u of UNITS){if(u.gone)continue;const n=alive(u),f=[Math.sin(u.dface),Math.cos(u.dface)],r=[Math.cos(u.dface),-Math.sin(u.dface)],e=easeIO(u.morph),mv=u.state!=='idle'?1:0;
       const put=(F,i,nn,ox=0,oz=0,yawAdd=0)=>{slot(u,u.prev,i,nn,e3);slot(u,u.form,i,nn,e4);const sx=lerp(e3[0],e4[0],e)+ox,sz=lerp(e3[1],e4[1],e)+oz,ya=lerp(e3[2],e4[2],e)+yawAdd;
-        const x=u.x+r[0]*sx+f[0]*sz,z=u.z+r[1]*sx+f[1]*sz;putFig(F,x,Hs(x,z)*rise,z,u.face+ya,hash(u.id,i),mv,u.sideI);};
+        const x=u.x+r[0]*sx+f[0]*sz,z=u.z+r[1]*sx+f[1]*sz;putFig(F,x,Hs(x,z)*rise,z,u.dface+ya,hash(u.id,i),mv,u.sideI);};
       if(u.type==='inf')for(let i=0;i<n;i++)put(FIGS.inf,i,n);
       else if(u.type==='cav')for(let i=0;i<n;i++)put(FIGS.cav,i,n);
       else for(let i=0;i<n;i++){put(FIGS.gun,i,n);for(let c=0;c<4;c++)put(FIGS.inf,i,n,(c%2?1.4:-1.4),-2.4-Math.floor(c/2)*1.3);}
@@ -1083,6 +1101,7 @@ function frame(){
   const ps=CUR.R*0.9*dt,vy=CUR.yaw*stage(0.2,0.9),fwd=(KEYS.KeyW||KEYS.ArrowUp?1:0)-(KEYS.KeyS||KEYS.ArrowDown?1:0),rgt=(KEYS.KeyD||KEYS.ArrowRight?1:0)-(KEYS.KeyA||KEYS.ArrowLeft?1:0);
   CAMS.T.x+=(Math.sin(vy)*fwd+Math.cos(vy)*rgt)*ps;CAMS.T.z+=(Math.cos(vy)*fwd-Math.sin(vy)*rgt)*ps;
   if(KEYS.KeyQ)CAMS.yaw-=dt*1.2;if(KEYS.KeyE)CAMS.yaw+=dt*1.2;CAMS.T.x=clamp(CAMS.T.x,-MX,MX);CAMS.T.z=clamp(CAMS.T.z,-MZ,MZ);
+  for(const u of UNITS)u.dface+=angTo(u.dface,u.face)*Math.min(1,dt*6);   // drawn facing eases on the frame clock
   updateCamera(dt);SYMK=stage(0.15,0.48);SYMZ=clamp(Math.pow(CUR.R/FIT.R,0.6),0.3,1);
   // sim: one 1-second game step per accumulated game second (SPEED game seconds per real second)
   acc+=dt*SPEED;let steps=0;while(acc>=1&&steps<120){simStep(1);sampleFootprints();acc-=1;steps++;}
@@ -1101,7 +1120,7 @@ function frame(){
   scene.render();
   VP=scene.getTransformMatrix().m;
   MPP=2*CUR.R*tanH/SH;
-  drawInk(now);
+  cleanFootprints(now);drawInk(now);
   // DOM (cheap, every few frames)
   if((frameN++&7)===0){
     const ck=fmtClock(GT);$('clock').textContent=ck;$('sclock').textContent=ck;

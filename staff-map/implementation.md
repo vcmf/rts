@@ -96,8 +96,8 @@ on. If closer map zooms are needed, bake tiles instead of one texture.
 - Drawn size = `lerp(symbol × zoomScale, trueFootprint, stage(0.15, 0.48))`, where
   `zoomScale = clamp((mpp / mppTheatre)^0.6, 0.3, 1)` keeps symbols near a steady screen size.
   Depth is never under 5 px (`design.md` §6).
-- Hatching for morale uses a canvas pattern; spacing grows as morale falls. Routing blinks at
-  ~2 Hz (260 ms per phase).
+- Hatching for morale uses a canvas pattern; spacing grows as morale falls. Routing pulses between the
+  army colour and white on a 1.1 s eased cycle, driven by the frame clock passed in.
 
 ### Soldiers
 - Thin instances, one buffer per figure type (`../web-rts-architecture.md` §3, `unitRenderer.ts`).
@@ -118,6 +118,9 @@ on. If closer map zooms are needed, bake tiles instead of one texture.
   rejoins). Each dotted segment's opacity falls with its age, batched into six age buckets. They
   are render-side history, not sim state: the sim drops an order one step after it finishes, and
   the renderer keeps its footprint until it fades.
+- A trace's visibility is one geometric test per sim step (one of its own battalions within 250 m
+  of its end), eased toward 0 or 1 per frame on the frame clock (~1 s). No timers, chains or order
+  bookkeeping: earlier designs based on order membership and trace chains kept failing review.
 - The sim knows nothing about symbols: its spacing (45 m same side, 32 m enemies) and smoke
   (stored as a fraction along the unit's front) are independent of the zoom.
 

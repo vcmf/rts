@@ -144,7 +144,7 @@ Blocks are flat, sharp-cornered, with no shadow, bevel or outline glow.
 |---|---|
 | **Losses** | The block shortens as the frontage shrinks |
 | **Morale** | Solid fill above 60%; below it the fill **drains into hatching** that gets sparser as morale falls |
-| **Routing** | **Blinks between the army colour and white** (the colour of surrender, as in Total War), with a **dashed edge** so its white phase never reads as an Austrian block; drifts away from the enemy |
+| **Routing** | **Pulses between the army colour and white** (the colour of surrender, as in Total War; a soft ~1.1 s cycle, never a hard flicker), with a **dashed edge** so its white phase never reads as an Austrian block. It turns its back as it breaks, then flees away from the enemies in reach (closer ones push harder; when pinched, toward its own rear), running along the map edge rather than into it; its escape direction and the drawn block both turn smoothly |
 | Firing | Small pencil smoke curls in front of the block, fading in a few seconds |
 | Selected | Thin double outline in ink, plus an expanded label (§8) |
 
@@ -170,7 +170,7 @@ Two different marks, never confused:
 | Mark | Meaning | Look |
 |---|---|---|
 | **Command** | Where the units are going | A broad, **solid but translucent** band in the army colour (~36% opacity, so it never competes with the blocks), ending in a **filled triangular head** with a thin paper-white edge (Epic History's campaign arrows). It covers only the distance still to go, and disappears on arrival |
-| **Footprints** | Where the units actually went | A **thin dotted line** in the army ink colour along the commanded path, as far as the troops got. Each step fades with age and is gone after ~40 game minutes, so old movements disappear while the recent ones read clearly |
+| **Footprints** | Where the units actually went | A **thin dotted line** in the army ink colour along the commanded path, as far as the troops got. Each step fades with age and is gone after ~40 game minutes, so old movements disappear while the recent ones read clearly. **A trace always leads to a block:** it shows only while one of its own battalions stands within 250 m of its end; otherwise it fades out in about a second, and comes back if they return. Older legs of a chain of orders fade as the troops move on |
 
 1. A command draws itself along the path the player dragged (~0.5 s reveal), head last.
 2. Paths curve; they never snap to straight polylines. A group order is one wide band for the
