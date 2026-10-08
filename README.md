@@ -14,6 +14,7 @@ Prototyping the look. Open `prototypes/painted-cinematic.html` in Chrome; no bui
 |---|---|
 | `prototypes/painted-cinematic.html` | **Current.** Baked light map, painted water, valley mist, light shafts, golden backlight, cinematic grade, seasons, optional depth of field |
 | `prototypes/staff-map.html` | **Feel prototype** of the far-zoom staff map and the zoom into the world |
+| `prototypes/formation-map.html` | **Formation test** on a contour map: one battalion of 100 soldiers as circles, drill changes, wood, ford, casualties, 40 battalions benchmark |
 | `prototypes/painted-hybrid.html` | Real sun shadows + SSAO under painterly shading (superseded) |
 | `prototypes/painted-foliage.html` | Leaf-card trees from a stylized `.blend` pack (superseded) |
 | `prototypes/painted-nature.html` | First painterly pass on the Quaternius pack (superseded) |

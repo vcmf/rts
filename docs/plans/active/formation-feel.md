@@ -23,33 +23,28 @@ about 100, one figure per soldier) and 0005 (sim/render split).
 
 ## Scope
 
-A new single-file prototype, `prototypes/formation-feel.html` (`prototypes/AGENTS.md` rules):
-- **Ground:** a flat-to-gentle heightfield with a small wood (tree trunks as obstacles) and a
-  shallow stream with a ford. Simple painted shading (ramp + grain), not the full world prototype.
-- **One battalion of 100 soldiers** as instanced low-poly figures (body, shako, musket), side
-  colour, a colour party in the centre. Soldiers are cosmetic: placed by the per-soldier layer.
-- **Formation layer** (20 Hz, plain JS, written as the sim will be: no `Math.sin` etc. needed for
-  the feel test but kept separate from rendering):
-  - anchor with path, speed and turn-rate limits;
-  - 4 companies, each with a guide;
-  - slot table: soldier → (company, file, rank), stable identity;
-  - shapes: line (3 ranks), attack column, square, march column;
-  - timed transitions: each company moves to its new place in sequence (wheel or file off), then
-    dresses; regulation times scaled by a drill factor (`docs/proposals/sim-design.md` §5).
-- **Per-soldier layer** (frame rate):
-  - steer to the slot extrapolated a short time ahead; speed matched along the direction of march;
-  - small personal drift; separation from neighbours in the same battalion (spatial hash);
-  - avoid tree trunks (gaps open, then close); slow and bunch at the ford; snap to height;
-  - gait: walk / run cycle from speed (simple bob, no skeletal animation yet).
-- **Casualties:** a button kills N random soldiers; the man behind steps up into each gap, ranks
-  close toward the centre; no global reshuffle.
-- **Controls:** buttons and keys for line / column / square / march column; click to move; wheel
-  left/right; "march through the wood"; "cross the ford"; casualties; a drill-factor slider;
-  **"40 battalions"** to spawn the full battle size for the performance measure.
-- **Debug overlay:** anchor, guides, slots, company colours, transition progress, frame time.
+**Redirected by the owner (2026-10-08):** no 3D for this test (placeholder figures looked worse than
+helpful). The formation logic is drawn on a **2D staff-style map** instead, which is simpler to read,
+to verify and to benchmark. The first 3D version and its two review rounds shaped the logic below.
 
-Out of scope: combat, morale, AI, the painted world's lighting and bakes, figure models and
-animation beyond a placeholder, the deterministic sim spine (S0).
+- `prototypes/formation-core.js` (plain script, no rendering): terrain data, the formation layer and
+  the soldier layer.
+  - **Terrain:** four hills, a stream with one ford, a road, a wood (trees as obstacles), rocks
+    (obstacles). Heights are sampled once into a 1 m grid (decision 0012); slope slows troops.
+  - **Formation layer (20 Hz):** anchor with path, speed and turn limits; 4 companies of 25 with a
+    stable (company, file, rank) slot table; line, column of divisions, pinwheel square, march
+    column (a snake that follows its head's trail); timed changes, company by company, wheeling
+    round the turning flank; interrupts; closing ranks toward the colours.
+  - **Soldier layer (every frame):** slot chasing with drift, separation, obstacle avoidance,
+    ground speed.
+- `prototypes/formation-map.html` (Canvas 2D): paper and ink map with **contour lines** (2 m, index
+  every 10 m with heights), spot heights, the wood as tree symbols, rocks, the stream and ford, the
+  road, a 100 m grid, scale bar and north arrow. Each soldier is a **small open circle**, the fallen
+  are small crosses, the colours a small flag; "Slots" shows slots and company guides.
+- Controls: shapes, wheels, through the wood, cross the ford, casualties, drill factor, speed,
+  follow, 40 battalions; click to march, drag to pan, scroll to zoom. `window.F` for headless runs.
+
+Out of scope: combat, morale, AI, the deterministic simulation spine (S0), 3D.
 
 ## Acceptance
 
@@ -63,39 +58,26 @@ animation beyond a placeholder, the deterministic sim spine (S0).
   with the SwiftShader caveat), plus a manual number on the dev Mac; recorded in this plan.
 - The page loads with no errors; `node tools/check-docs.mjs` passes.
 
-## Results (headless)
+## Results (headless, 2D map)
 
-Measured with `F.slotError()` (how far soldiers are from their slots, sampled every 0.5 s, worst over
-the run) and `F.measure()` (per-soldier CPU per frame: steering plus figure matrices), after review
-round 2.
+`F.slotError()`: how far soldiers are from their slots. `F.measure()`: simulation CPU per frame
+(formation ticks + steering). `F.drawMs()`: drawing all soldiers.
 
-| Scenario | Worst distance from slot | Worst mean |
+| Scenario | Worst distance from slot (sampled at the end of each step) | Mean |
 |---|---|---|
-| Line turning 90° to a new target | 1.7 m | 0.56 m |
-| Wheel 45° | 0.25 m | 0.13 m |
-| Line through the wood | 3–5 m (men held up behind trunks) | 0.8 m |
-| Cross the ford (march column, turn, deploy) | 3.5 m | 1.3 m |
-| March column marching straight | 0.15 m | 0.11 m |
-| March column turning 90° | 1.75 m | 0.48 m |
-| 40 battalions over 2 minutes | 10.7 m (battalions that start inside the wood or the stream; a single moment is ≈ 2 m) | 0.63 m |
+| In line, square or column at rest | 0.15 m | 0.11 m |
+| Line → square, half-way | 0.52 m | 0.16 m |
+| March column turning (slope on the way) | 1.7 m | 0.46 m |
+| Line through the wood | 2.4 m | 0.68 m |
+| Cross the ford, deploying on the far bank | 2.5 m | 0.35 m |
 
-- **March column as a snake:** each company stands on the head's trail and faces along it, so the
-  column turns where its head turned (the first version turned as a rigid 23 m stick: 28.8 m error).
-- **Drill timings** come from the timing table (set, not measured): line → square 100 s, column →
-  square 60 s, line ↔ column 30 / 40 s, march column 20 / 60 s. Companies start one after another
-  and wheel around their turning flank.
-- **Interrupted changes:** a new shape order mid-change takes over at once. Its time is the table
-  time scaled by how far the companies still have to go, measured on the company furthest from its
-  new place: square ordered then line 30 s in → 17.6 s back. Move orders wait until a change ends.
-- **Square:** a pinwheel layout (each face shifted along its line by half its depth) closes the corners.
-- **Casualties:** the man behind steps up; then ranks close. In line the whole half-battalion closes
-  toward the colours (across company boundaries): after 80 killed the front rank is 18 men, 12.3 m
-  wide, with no gap wider than the normal 1.3 m between companies. In other shapes each company
-  closes toward its own centre (a square keeps its corners). Ranks also close when a change ends.
-- **Per-soldier CPU** (headless Chrome): 0.02 ms per frame for 1 battalion, **1.3 ms for 40
-  battalions (4,000 soldiers)**, steering and figure matrices together (first version: 8.6 ms for
-  steering alone). Rendering frame rate in headless SwiftShader is not meaningful; a manual number
-  on the dev Mac is still owed.
+- **Drill timings** are set by the table (line → square 100 s, column → square 60 s, line ↔ column
+  30 / 40 s, march column 20 / 60 s); companies start one after another.
+- **Casualties:** 80 killed → 53 stepped up, 36 closed toward the colours; the 20 left stand as one
+  closed line.
+- **Cost, 40 battalions (4,000 soldiers):** simulation **1.7 ms** per frame (slope and road lookups
+  added since the 3D version), drawing all circles **0.9 ms** (Canvas 2D, one path per battalion).
+  One battalion: 0.05 ms and 0.06 ms.
 
 **Known limitations (later):** no countermarch (a march column ordered to turn back walks through its
 own head, facings flip at the turn point); a bent march column that starts to deploy and is reversed
