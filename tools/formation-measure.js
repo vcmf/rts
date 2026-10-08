@@ -1,4 +1,4 @@
-// Formation measurements (docs/plans/active/formation-feel.md, Results). Evaluated in
+// Formation measurements (docs/plans/done/formation-feel.md, Results). Evaluated in
 // prototypes/formation-map.html, which it drives through window.F (the page loop is paused while it runs):
 //   node tools/shot.mjs prototypes/formation-map.html <outDir> 1400 860 \
 //     "$(python3 -c 'import json;print(json.dumps([["eval",open("tools/formation-measure.js").read()]]))')"
@@ -43,6 +43,27 @@
   reload(); F.order('square'); F.advance(20); F.kill(30); F.advance(100); { const z = [0, 0, 0, 0]; for (const s of FCm.main.soldiers) if (s.alive) z[s.c]++
     out.killDuringChange = { squareCompanies: z, tableErrors: tableOk(FCm.main) }
     if (Math.max(...z) - Math.min(...z) > 1 || out.killDuringChange.tableErrors) fail.push(`kills during the change: faces ${z}, table errors ${out.killDuringChange.tableErrors}`) }
+  // MOVEMENT OVER TERRAIN (docs/plans/active/terrain-movement.md). A line marches 60 m north; a 10 m deep
+  // strip of woods crosses part of its front. Time lost against the same march with no strip.
+  const march = (frac, style) => {
+    const x = -40, z = -90; FCm.place(x, z, 0); F.follow(false); F.order('style', style)
+    const half = 12.7; if (frac > 0) FCm.paintTerrain(x - half - 0.5, z + 15, x - half + frac * 2 * half - 0.5, z + 25, 'woods')
+    F.order('move', { x, z: z + 60 }); let t = 0; while (FCm.main.orders.length && t < 300) { F.advance(0.5); t += 0.5 }
+    const lag = FCm.stats(); if (frac > 0) FCm.paintTerrain(x - 20, z + 10, x + 20, z + 30, null); return t
+  }
+  out.thicket = {}
+  for (const style of ['keep', 'normal']) { const base = march(0, style), row = {}
+    for (const n of [1, 3, 6, 12]) row[n + '/12'] = +(march(n / 12, style) - base).toFixed(1)
+    out.thicket[style] = row
+    if (!(row['1/12'] < row['3/12'] + 0.01 && row['3/12'] < row['6/12'] + 0.01 && row['6/12'] < row['12/12'])) fail.push(`thicket delay does not grow with the share held up (${style}): ${JSON.stringify(row)}`) }
+  // deep water: a line ordered straight across the stream stops at the bank
+  FCm.place(40, -30, Math.PI / 2); F.follow(false); F.order('move', { x: 100, z: -30 }); F.advance(80)
+  out.deepWater = { x: +FCm.main.x.toFixed(1), status: FCm.main.status, bank: +(FCm.STREAM_X(-30) - FCm.WATER_HALF).toFixed(1) }
+  if (FCm.main.x > FCm.STREAM_X(-30) - 1) fail.push(`the line crossed deep water (x ${out.deepWater.x})`)
+  // the bridge: narrow, cross, deploy beyond
+  FCm.place(0, FCm.BRIDGE.z, Math.PI / 2); F.follow(false); F.order('bridge'); let tb = 0; while ((FCm.main.orders.length || FCm.main.trans) && tb < 400) { F.advance(1); tb++ }
+  out.bridge = { seconds: tb, x: +FCm.main.x.toFixed(1), shape: F.stats().shape }
+  if (FCm.main.x < FCm.BRIDGE.x1 || F.stats().shape !== 'line') fail.push(`bridge not crossed: ${JSON.stringify(out.bridge)}`)
   // cost: 40 battalions
   reload(); F.setMany(true); F.advance(30); F.view(-10, -40, 2.6); out.many = { soldiers: F.stats().soldiers, simMs: F.measure(60), drawMsAllInView: F.drawMs() }
   F.setMany(false); reload()
