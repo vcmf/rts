@@ -1,6 +1,6 @@
 // Formation measurements (docs/plans/done/formation-feel.md, Results). Evaluated in
 // prototypes/formation-map.html, which it drives through window.F (the page loop is paused while it runs):
-//   SHOT_TIMEOUT_S=600 node tools/shot.mjs prototypes/formation-map.html <outDir> 1400 860 \
+//   SHOT_TIMEOUT_S=1200 node tools/shot.mjs prototypes/formation-map.html <outDir> 1400 860 \
 //     "$(python3 -c 'import json;print(json.dumps([["eval",open("tools/formation-measure.js").read()]]))')"
 // Prints a JSON table. Limits that must hold are console.error, so shot.mjs exits non-zero when one fails.
 (() => {
@@ -146,6 +146,32 @@
       worst = Math.max(worst, watch(40)) }
     out.thinnedAtBank = { accepted, refused, placesInDeep: worst }
     if (worst || accepted < 5) fail.push(`thinned line into column at the bank: ${JSON.stringify(out.thinnedAtBank)}`) }
+  // a unit halted at the water can leave: a line backs off to turn, a march column countermarches
+  out.leaveBank = []
+  for (const shape of ['line', 'march']) {
+    FCm.place(30, -30, Math.PI / 2); F.follow(false); if (shape !== 'line') { F.order(shape); F.advance(25) }
+    F.order('move', { x: 100, z: -30 }); F.advance(90); const halted = FCm.main.status
+    F.order('move', { x: 0, z: -30 }); const worst = watch(150), b = FCm.main
+    const r = { shape, halted, status: b.status, left: +(Math.hypot(b.x - 0, b.z + 30)).toFixed(1), placesInDeep: worst }
+    out.leaveBank.push(r)
+    if (halted !== 'halted: impassable ground' || r.left > 1 || worst) fail.push(`leaving the bank: ${JSON.stringify(r)}`) }
+  // a march column ordered inside its turning circle ends the order instead of circling; it cannot wheel
+  { FCm.place(-20, -60, 0); F.follow(false); F.order('march'); F.advance(25); F.order('move', { x: FCm.main.x + 3, z: FCm.main.z }); F.advance(30)
+    out.insideTurn = { orders: FCm.main.orders.length, status: FCm.main.status }
+    const w0 = closestWithin(FCm.main); F.order('wheelL'); F.advance(5)
+    out.wheelColumn = { status: FCm.main.status, withinCompany: +Math.min(w0, closestWithin(FCm.main)).toFixed(2) }
+    if (out.insideTurn.orders) fail.push(`target inside the turning circle: ${JSON.stringify(out.insideTurn)}`)
+    if (!out.wheelColumn.status.startsWith('cannot wheel') || out.wheelColumn.withinCompany < 0.6) fail.push(`wheel on a march column: ${JSON.stringify(out.wheelColumn)}`) }
+  // empty slots over the water: a thinned line whose emptied files stand over the stream is not let form
+  // column (the men spread into those slots); if it may, no place enters the water
+  { let x = 35, found = false
+    const thin = () => { const b = FCm.main; b.soldiers.forEach((s, j) => { if (s.c === 3 && s.f >= 7) { s.alive = false; b.grid[s.c][s.r][s.f] = -1 } }) }
+    for (; x < 70 && !found; x += 0.25) { FCm.place(x, -30, 0); thin(); const b = FCm.main
+      const empties = []; const fr = FCm.companyFrames(b, 0, FCm.alpha); for (const s of b.soldiers) if (!s.alive) empties.push(FCm.soldierPlace(b, fr[s.c], s))
+      found = !FCm.wetBins(b) && empties.every(p => deep(p[0], p[1])) }
+    F.follow(false); F.order('column'); const worst = watch(60)
+    out.emptySlotsOverWater = { found, x: +(x - 0.25).toFixed(2), status: FCm.main.status, placesInDeep: worst }
+    if (!found || worst) fail.push(`empty slots over the water: ${JSON.stringify(out.emptySlotsOverWater)}`) }
   // turning at the bank: a line facing the water ordered north turns in place without a place entering it
   { const x = atBank(); F.order('move', { x, z: 10 }); const worst = watch(90)
     out.turnAtBank = { status: FCm.main.status, placesInDeep: worst, menInDeepWater: deepMen() }
@@ -173,8 +199,13 @@
     FCm.place(-47, -40, 0); F.follow(false); F.order('move', { x: -47, z: 0 }); let worst = 0
     for (let n = 0; n < 120; n++) { F.advance(0.5); worst = Math.max(worst, places(FCm.main).filter(p => FCm.groundG(p[0], p[1], 'line', 0, 0) <= 0).length) }
     out.kindImpassable = { status: FCm.main.status, placesOnIt: worst }
+    // a column standing on the hedge may not form line there
+    FCm.place(-47, -40, 0); F.follow(false); F.order('column'); F.advance(40); F.order('move', { x: -47, z: -22.5 }); F.advance(60)   // the column's front rank on the hedge line
+    const onHedge = places(FCm.main).filter(p => FCm.TERR[FCm.cellK(p[0], p[1])] === FCm.CLASSES.indexOf('hedge')).length
+    F.order('line'); F.advance(3); out.kindImpassable.lineOnHedge = { columnPlacesOnHedge: onHedge, status: FCm.main.status, shape: F.stats().shape }
     H.line = keep; FCm.bakeImpassable()
-    if (worst || out.kindImpassable.status !== 'halted: impassable ground') fail.push(`hedge a line cannot enter: ${JSON.stringify(out.kindImpassable)}`) }
+    if (worst || out.kindImpassable.status !== 'halted: impassable ground') fail.push(`hedge a line cannot enter: ${JSON.stringify(out.kindImpassable)}`)
+    if (!onHedge || out.kindImpassable.lineOnHedge.status !== 'cannot form: impassable ground') fail.push(`line formed on a hedge a line cannot enter: ${JSON.stringify(out.kindImpassable.lineOnHedge)}`) }
   // a company bin emptied by casualties takes no part: a line wholly in woods slows evenly, in order
   { FCm.place(-40, -90, 0); F.follow(false); F.order('style', 'normal'); const b = FCm.main
     b.soldiers.forEach(s => { if (s.c === 3 && s.f >= 6) s.alive = false }); b.soldiers.forEach((s, j) => { if (!s.alive) b.grid[s.c][s.r][s.f] = -1 })
