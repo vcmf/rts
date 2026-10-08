@@ -15,7 +15,7 @@ We will tune march speeds and casualty rates so a battle takes 30–45 minutes, 
 
 ## Consequences
 
-Calibration targets time-to-break, not historical hit rates.
+March speeds and casualty rates must be tuned to fit (the calibration method is in `docs/proposals/sim-design.md` §8, a draft).
 
 ## Alternatives considered
 

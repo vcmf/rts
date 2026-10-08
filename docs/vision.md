@@ -34,4 +34,4 @@ renderer produces cinematic history videos.
 - No sky, no ground-level camera, no strategic 3D zoom (the far zoom is the staff map).
 - No economy, base building or production: battles only.
 - No couriers or order delay.
-- Not a simulation of every musket ball: fire is resolved per battalion.
+- Not a simulation of every musket ball: musketry is resolved per battalion.

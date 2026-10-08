@@ -42,8 +42,8 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
    - Only moderate or light issues: fix what is worth fixing and **stop**.
    - **More than 3 rounds = stop and redesign** (the design is wrong, not the code). The round count
      restarts after a redesign.
-   - A finding about code already on main does not block the PR; if grave, record it in the known
-     issues (`docs/proposals/engine-design.md` §9) with a planned fix.
+   - A finding about code already on main does not block the PR; if grave, record it in
+     `docs/known-issues.md` with a planned fix.
 4. Check runs print their **full output and exit code**; never judge a run by grepping for "FAILED".
 
 ## Commits and PRs

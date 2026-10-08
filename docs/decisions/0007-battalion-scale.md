@@ -15,7 +15,7 @@ We will make the battalion the player's unit and the simulation's unit: about 10
 
 ## Consequences
 
-Fire is resolved per battalion; individual soldiers are cosmetic. Brigade group moves are deferred. (Whether the simulation also keeps a per-soldier slot table, for identical casualties in replays, is open: `docs/research/formation-movement-and-doc-systems.md` §4.)
+Musketry is resolved per battalion; roundshot is a ray bouncing on the heightfield; individual soldiers are cosmetic. Brigade group moves are deferred. (Whether the simulation also keeps a per-soldier slot table, for identical casualties in replays, is open: `docs/research/formation-movement-and-doc-systems.md` §4.)
 
 ## Alternatives considered
 

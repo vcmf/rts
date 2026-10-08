@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-08
 ---
 
@@ -96,3 +96,23 @@ Rule added to `docs/conventions.md`: run the docs check after the last edit, bef
 Negative run: a bare stale name in prose, an old folder, angle and reference links, a relative and
 two bare stale names in code, a status mismatch, an unlisted doc and an impossible date are all
 reported (exit 1).
+
+## Review round 3 — stop (no severe findings)
+
+4 moderate, 5 light. Fixed:
+- INDEX and conventions said all decisions bind: now accepted bind, proposed are open.
+- The index check matched bare file names as substrings (~~design.md~~ inside ~~sim-design.md~~): now
+  the exact link target or repo path.
+- The checker trusted the local disk: now it resolves against what git tracks (staged files count),
+  so an un-added doc fails.
+- Accepted records said more than was decided: 0009 no longer fixes the calibration method; 0007
+  and the vision say musketry (not all fire) is resolved per battalion; 0012's rationale no longer
+  presents proposed determinism as settled.
+- Known issues moved out of a frozen proposal into the living `docs/known-issues.md`.
+- Real-date check, decision slugs in system front matter, strike-through only skipped in Markdown,
+  one walk over tracked files.
+
+Kept: link anchors are not checked.
+
+Negative run: two unlisted docs (named like existing ones), an impossible date, an unknown decision
+slug, a reference to an un-added file and a path between `~~` in JS are all reported (exit 1).

@@ -6,7 +6,7 @@ last_reviewed: 2026-10-08
 # Docs index
 
 One line per document. **Types:** *vision* and *conventions* frame everything; *system* docs describe
-what is built **now** and are kept true; *decisions* are binding until superseded; *proposals* are
+what is built **now** and are kept true; *decisions*: accepted records are binding until superseded, proposed ones are open; *proposals* are
 designs written before building (frozen once built, their lasting content moves into system docs);
 *plans* are per-PR or per-workstream; *research* is background, not authoritative.
 
@@ -19,6 +19,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`conventions.md`](conventions.md): commits, units and numbers, prototypes, docs. *(current)*
 - [`glossary.md`](glossary.md): drill and engine terms. *(current)*
 - [`asset-sources.md`](asset-sources.md): where assets come from, licences. *(current)*
+- [`known-issues.md`](known-issues.md): grave pre-existing issues with their planned fixes. *(current)*
 
 ## Decisions
 
@@ -39,8 +40,8 @@ designs written before building (frozen once built, their lasting content moves 
 ## Plans
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
-  [`plans/active/staff-map.md`](plans/active/staff-map.md), [`plans/active/docs-restructure.md`](plans/active/docs-restructure.md).
-- Done: [`plans/done/w1-river-shape.md`](plans/done/w1-river-shape.md), [`plans/done/w1b-river-width.md`](plans/done/w1b-river-width.md).
+  [`plans/active/staff-map.md`](plans/active/staff-map.md).
+- Done: [`plans/done/w1-river-shape.md`](plans/done/w1-river-shape.md), [`plans/done/w1b-river-width.md`](plans/done/w1b-river-width.md), [`plans/done/docs-restructure.md`](plans/done/docs-restructure.md).
 
 ## Research (background)
 

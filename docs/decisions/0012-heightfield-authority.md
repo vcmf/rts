@@ -7,7 +7,7 @@ date: 2026-10-08
 
 ## Context
 
-The W1 reviews found several answers to "how high is the ground here" (formula, mesh, checks), and per-browser evaluation of the formula breaks determinism.
+The W1 reviews found several answers to "how high is the ground here" (formula, mesh, checks), and evaluating the formula in each browser would give each browser its own inputs (which matters if the proposed determinism rules, 0006, are adopted).
 
 ## Decision
 
