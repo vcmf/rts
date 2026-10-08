@@ -2,76 +2,62 @@
 
 A browser real-time strategy game about Napoleonic battles, rendered as a painterly 3D world (the
 look of *Puss in Boots: The Last Wish*, seen from a top-down RTS camera). The same rendering also
-serves cinematic history videos, exported frame by frame.
+serves cinematic history videos.
 
-Status: **prototyping the look**. No game code yet; prototypes are single HTML files.
+Status: **prototyping**. No game code yet; prototypes are single HTML files in `prototypes/`.
 
-## Repo map
+## Where things are
 
-- `design.md`: the art bible. Fixed constraints, palette, light, seasons, depth rules, asset contract.
-  Read it before any visual change.
-- `engine-map.md`: every engine part (core, simulation, presentation, content, platform) with its owner
-  doc, phase and status, and the decisions it rests on. Start here for engine work.
-- `engine-design.md`: the world, camera and bakes (world spec, heightfield, coverage rules), scale
-  and hardware targets, known issues, and the order of engine work. Read it before engine changes.
-- `web-rts-architecture.md`: how the game will be built (sim/render split, typed arrays, commands,
-  20 Hz tick, Babylon.js setup). Read it before writing game code.
-- `prototype-plan.md`: what the prototypes are for, the phases, and the current workstream.
-- `asset-sources.md`: where to find and how to judge 3D assets, brushes and licences.
-- `staff-map/`: the far-zoom staff map (design, implementation, plan). Read its `design.md`
-  before touching the map or the zoom transition.
-- `research/`: deep-research reports (`cheap-painterly-postfx.md`, `stylized-water.md`,
-  `rts-engine-subsystems.md`).
-- `prototypes/`: single-file Babylon.js 9 prototypes. `painted-cinematic.html` is the current one;
-  the others are earlier steps kept for comparison. `*.data.js` are generated model data.
-- `tools/`: asset converters (`obj-to-js.mjs`, `blend-to-js.py`).
-- `assets/`: raw third-party packs. Git-ignored (large); see README for how to restore them.
-- `design/refs/`: reference images (north star, painterly style, mood).
+**Start at [`docs/INDEX.md`](docs/INDEX.md)**: one line per document, with its type and status.
+The ones to read before touching a given area:
+
+| Before you change… | Read |
+|---|---|
+| anything visual | `docs/art-bible.md` |
+| engine, world, camera, bakes | `docs/engine-map.md`, then `docs/proposals/engine-design.md` |
+| simulation, units, combat | `docs/proposals/sim-design.md`, `docs/architecture.md` |
+| the far-zoom map | `docs/proposals/staff-map/design.md` |
+| a built system | its doc in `docs/systems/` |
+| anything | the decisions in `docs/decisions/` (they are binding until superseded) |
+
+Prototype-specific rules live in `prototypes/AGENTS.md`. Conventions (commits, units, docs) are in
+`docs/conventions.md`; terms in `docs/glossary.md`.
 
 ## Commands
 
-- Open a prototype: open `prototypes/painted-cinematic.html` in Chrome (works from `file://`).
-- Regenerate model data:
-  - `node tools/obj-to-js.mjs` (Quaternius OBJ → `prototypes/nature-pack.data.js`)
-  - `blender -b assets/painted-foliage/Trees.blend --python tools/blend-to-js.py -- trees`
-- Headless check: render the page in Chrome headless and look at the screenshot; there are no
-  automated tests for the prototypes yet.
+- Open a prototype: `prototypes/painted-cinematic.html` in Chrome (works from `file://`).
+- Headless screenshots and checks: `node tools/shot.mjs <page> <outDir> [w] [h] '<steps JSON>'`;
+  river and render checks: see the headers of `tools/river-check.js` and `tools/render-check.js`.
+- Docs check: `node tools/check-docs.mjs` (every doc path resolves, front matter, decision numbers).
+- Regenerate model data: `node tools/obj-to-js.mjs`; `tools/blend-to-js.py` with Blender (see its header).
 
 ## Workflow (every PR)
 
-1. **Plan**: write the plan (scope, approach, acceptance criteria) before code.
-2. **Implement**.
+1. **Plan**: a plan in `docs/plans/active/` (scope, approach, acceptance) before code.
+2. **Implement**. Update the system doc in `docs/systems/` and add a decision record for any new
+   decision; move the plan to `docs/plans/done/` when merged.
 3. **Review**: run `/code-review high`.
-   - If a round finds **at least one severe issue**, fix and run another round.
-   - If a round finds only moderate or light issues, fix what's worth fixing and **stop**.
-   - **More than 3 rounds = stop and redesign.** Repeated severe findings mean the design is wrong,
-     not the code; go back to the plan. The round count restarts after a redesign.
-   - A finding about code that already exists on main does not block the PR. If it is grave,
-     record it in `engine-design.md` §9 (Known issues) with a planned fix.
+   - A round with **at least one severe issue**: fix and run another round.
+   - Only moderate or light issues: fix what is worth fixing and **stop**.
+   - **More than 3 rounds = stop and redesign** (the design is wrong, not the code). The round count
+     restarts after a redesign.
+   - A finding about code already on main does not block the PR; if grave, record it in the known
+     issues (`docs/proposals/engine-design.md` §9) with a planned fix.
+4. Check runs print their **full output and exit code**; never judge a run by grepping for "FAILED".
 
 ## Commits and PRs
 
-- Conventional Commits / Commitizen: `type(scope): subject`. Scope mandatory and specific
-  (`water`, `terrain`, `foliage`, `postfx`, `design`, `tools`, …); subject imperative, lowercase,
-  no trailing period; breaking → `!` or `BREAKING CHANGE:`. One logical change per commit. No emoji.
-- PR titles in the same format (PRs are squash-merged, the title becomes the commit).
-- No AI attribution lines (`Co-Authored-By`, "Generated with …") in commits or PRs.
+- Conventional Commits: `type(scope): subject`, scope mandatory and specific (`water`, `terrain`,
+  `sim`, `docs`, `tools`, …), imperative, lowercase, no trailing period. One logical change per commit.
+- PR titles in the same format (PRs are squash-merged).
+- **No AI attribution** (`Co-Authored-By`, "Generated with …") in commits or PRs.
 
-## Conventions
+## Invariants
 
-- Prototypes stay single-file and runnable from `file://` (no build step, Babylon from the CDN,
-  pinned version). Generated data goes in `*.data.js`.
-- One short comment on non-obvious code: the why, not the how.
-- GLSL in template strings: no apostrophes or words like `ground's` in comments inside shader
-  source (Babylon's preprocessor chokes on some comment text); keep shader comments minimal.
-- Measure, don't assume: performance claims need a frame-time measurement or are labelled estimates.
-
-## Invariants (from `design.md`)
-
-- **Camera is always the top-down RTS view; there is no sky, ever.**
+- **Camera is always the top-down RTS view; there is no sky, ever.** Far zoom is the staff map.
 - **No optical blur during gameplay.** Depth of field only in presentation modes and video export.
 - **The painterly look lives in assets and materials**, not in a heavy full-screen filter.
 - **Readable first**: armies are the most saturated objects on screen; never hide a formation.
-- **Pack colours are never used**: materials map to roles and our palette paints them.
-- **Static light is baked once per map** (light map); only moving things get runtime lighting.
-- Game code (later) follows `web-rts-architecture.md`: `sim/` never imports the renderer.
+- **Static light is baked once per map**; only moving things get runtime lighting.
+- **The simulation is deterministic and never imports the renderer** (`docs/decisions/`).
+- **Measure, don't assume**: performance claims need a measurement or are labelled estimates.
