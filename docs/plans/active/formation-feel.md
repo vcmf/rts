@@ -60,24 +60,27 @@ Out of scope: combat, morale, AI, the deterministic simulation spine (S0), 3D.
 
 ## Results (headless, 2D map)
 
-`F.slotError()`: how far soldiers are from their slots. `F.measure()`: simulation CPU per frame
-(formation ticks + steering). `F.drawMs()`: drawing all soldiers.
+Produced by `tools/formation-measure.js` (run it as its header says; it pauses the page loop, advances
+in whole frames and fails on the limits below). Worst distance from slot is sampled every 0.5 s.
 
-| Scenario | Worst distance from slot (sampled at the end of each step) | Mean |
+| Scenario | Worst distance from slot | Worst mean |
 |---|---|---|
-| In line, square or column at rest | 0.15 m | 0.11 m |
-| Line → square, half-way | 0.52 m | 0.16 m |
-| March column turning (slope on the way) | 1.7 m | 0.46 m |
-| Line through the wood | 2.4 m | 0.68 m |
-| Cross the ford, deploying on the far bank | 2.5 m | 0.35 m |
+| Halted in the open | 0 m (the ranks come to rest) | 0 m |
+| Line → square (100 s) | 0.85 m | 0.21 m |
+| March column turning (slope on the way) | 1.8 m | 0.46 m |
+| Line through the wood | 3.4 m | 0.54 m |
+| **Halted inside the wood** | 0.4 m (slots inside trunks moved to their edge); mean speed **0 m/s** | 0.08 m |
+| Cross the ford (march column, crossing, deploying) | 4.7 m | 1.28 m |
 
+- **Limits checked by the script:** soldiers halted in the wood come to rest (mean speed ≤ 0.05 m/s;
+  the owner saw them fidget forever before); the slot table stays consistent after heavy casualties;
+  a square formed after them has four equal faces. Negative run with the old code: the first two fail.
+- **Casualties:** 80 killed in line (5 × 10, then 30), then square: 20 men in four faces of 5, slot
+  table consistent.
 - **Drill timings** are set by the table (line → square 100 s, column → square 60 s, line ↔ column
   30 / 40 s, march column 20 / 60 s); companies start one after another.
-- **Casualties:** 80 killed → 53 stepped up, 36 closed toward the colours; the 20 left stand as one
-  closed line.
-- **Cost, 40 battalions (4,000 soldiers):** simulation **1.7 ms** per frame (slope and road lookups
-  added since the 3D version), drawing all circles **0.9 ms** (Canvas 2D, one path per battalion).
-  One battalion: 0.05 ms and 0.06 ms.
+- **Cost, 40 battalions (4,000 soldiers):** simulation **1.1 ms** per frame (ground speed baked into a
+  grid at load), drawing all circles in view **0.85 ms** (Canvas 2D, one path per battalion).
 
 **Known limitations (later):** no countermarch (a march column ordered to turn back walks through its
 own head, facings flip at the turn point); a bent march column that starts to deploy and is reversed
@@ -111,3 +114,19 @@ bookkeeping ("line → line", reversal-of-a-reversal timing) now uses the distan
 extrapolation while turning in place; slot error, debug and colours reuse the per-company frames.
 Left as known limitations: countermarch, re-straightened column after a reversed deployment,
 company order on reversal.
+
+## Review round on the 2D rework
+
+10 findings, 1 severe → another round. Owner feedback in the same round: in the wood the soldiers
+"never stop".
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | severe | Closing ranks cleared only the receiving companies: duplicated soldiers in the slot table | Every company involved is cleared; checked by the measurement script |
+| owner | — | Soldiers in the wood never settle | Sway only while the battalion is busy (eases out on halt); a slot inside a trunk moves to its edge; trunk avoidance only while walking; arrived soldiers are damped to rest |
+| 2 | moderate | First frame could step time backwards | Frame time clamped at 0, first frame skipped |
+| 3 | moderate | Results not reproducible (page loop ran between evals, overshooting frames) | `tools/formation-measure.js`; headless runs pause the loop and advance whole frames |
+| 4 | moderate | Reset left the 40-battalion mode on | Reset clears it |
+| 5 | moderate | Closing toward the colours drained the outer companies (a square lost a face) | Companies are evened out when the battalion leaves line |
+| 6 | moderate | Ground speed recomputed per soldier per frame; slope charged even along contours | Baked grid; slope charged along the direction of travel |
+| 7–10 | light | Input guards, contour labels per level, culling margin, scale bar, dead 3D state | Fixed; follow still redraws the map while it moves (about 1 ms) |
