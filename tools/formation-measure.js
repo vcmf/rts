@@ -146,22 +146,55 @@
       worst = Math.max(worst, watch(40)) }
     out.thinnedAtBank = { accepted, refused, placesInDeep: worst }
     if (worst || accepted < 5) fail.push(`thinned line into column at the bank: ${JSON.stringify(out.thinnedAtBank)}`) }
-  // a unit halted at the water can leave: a line backs off to turn, a march column countermarches
-  out.leaveBank = []
-  for (const shape of ['line', 'march']) {
-    FCm.place(30, -30, Math.PI / 2); F.follow(false); if (shape !== 'line') { F.order(shape); F.advance(25) }
-    F.order('move', { x: 100, z: -30 }); F.advance(90); const halted = FCm.main.status
-    F.order('move', { x: 0, z: -30 }); const worst = watch(150), b = FCm.main
-    const r = { shape, halted, status: b.status, left: +(Math.hypot(b.x - 0, b.z + 30)).toFixed(1), placesInDeep: worst }
-    out.leaveBank.push(r)
-    if (halted !== 'halted: impassable ground' || r.left > 1 || worst) fail.push(`leaving the bank: ${JSON.stringify(r)}`) }
-  // a march column ordered inside its turning circle ends the order instead of circling; it cannot wheel
-  { FCm.place(-20, -60, 0); F.follow(false); F.order('march'); F.advance(25); F.order('move', { x: FCm.main.x + 3, z: FCm.main.z }); F.advance(30)
+  // a unit halted at the water: any further move order ends (halted or arrived) without oscillating
+  // and without a place entering the water; Face about lets it leave; Retire steps it back in order
+  const halt = shape => { FCm.place(30, -30, Math.PI / 2); F.follow(false); if (shape !== 'line') { F.order(shape); F.advance(25) }
+    F.order('move', { x: 100, z: -30 }); F.advance(90); return FCm.main.status }
+  // over `sec` s: the most places in deep water, heading reversals between 0.25 s samples, orders left
+  const track = sec => { let worst = 0, flips = 0, h = FCm.main.heading
+    for (let n = 0; n < sec * 4; n++) { F.advance(0.25); worst = Math.max(worst, placesInDeep(FCm.main)); const d = Math.atan2(Math.sin(FCm.main.heading - h), Math.cos(FCm.main.heading - h)); if (Math.abs(d) > 2) flips++; h = FCm.main.heading }
+    return { worst, flips, orders: FCm.main.orders.length } }
+  out.haltedAtBank = []
+  for (const shape of ['line', 'march']) for (const deg of [60, 90, 120, 180]) {
+    const halted = halt(shape), h = FCm.main.heading + deg * Math.PI / 180
+    F.order('move', { x: FCm.main.x + Math.sin(h) * 40, z: FCm.main.z + Math.cos(h) * 40 }); const t = track(60)
+    const r = { shape, deg, halted, status: FCm.main.status, ...t }
+    out.haltedAtBank.push(r)
+    if (halted !== 'halted: impassable ground' || t.worst || t.flips || t.orders) fail.push(`order at the bank: ${JSON.stringify(r)}`) }
+  out.faceAboutLeaves = []
+  for (const shape of ['line', 'march']) { halt(shape); F.order('face'); F.advance(4); F.order('move', { x: 0, z: -30 }); const t = track(150), b = FCm.main
+    const r = { shape, status: b.status, left: +Math.hypot(b.x, b.z + 30).toFixed(1), ...t }
+    out.faceAboutLeaves.push(r)
+    if (r.left > 1 || t.worst || t.flips) fail.push(`face about and leave: ${JSON.stringify(r)}`) }
+  { const x = atBank(), h0 = FCm.main.heading; F.order('retire', 30); const t = track(120), b = FCm.main
+    const back = (x - b.x) * Math.sin(h0) + (-30 - b.z) * Math.cos(h0), dh = Math.atan2(Math.sin(b.heading - h0), Math.cos(b.heading - h0))
+    out.retire = { back: +back.toFixed(2), headingChange: +dh.toFixed(3), status: b.status, ...t }
+    if (Math.abs(back - 30) > 0.5 || Math.abs(dh) > 1e-6 || b.status || t.worst || t.orders) fail.push(`retire 30 m: ${JSON.stringify(out.retire)}`) }
+  // face about keeps every man's place (bar the few who step up) and leaves no rank hole; it carries into line
+  { FCm.place(-20, -100, 0); F.follow(false); F.order('march'); F.advance(25); F.kill(10); F.advance(2); const b = FCm.main
+    const at = () => { const fr = FCm.companyFrames(b, 0, FCm.alpha); return b.soldiers.map(s => s.alive ? FCm.soldierPlace(b, fr[s.c], s) : null) }
+    const holes = () => { let n = 0; for (let c = 0; c < 4; c++) for (let f = 0; f < FCm.FILES; f++) for (let r = 0; r < FCm.RANKS - 1; r++) if (b.grid[c][r][f] < 0 && b.grid[c].slice(r + 1).some(rank => rank[f] >= 0)) n++; return n }
+    const p0 = at(), rank0 = b.soldiers.map(s => s.r); F.order('face'); F.advance(0.1); const p1 = at()
+    let kept = 0, stepped = 0, worstKept = 0
+    b.soldiers.forEach((s, i) => { if (!p0[i]) return; const d = Math.hypot(p1[i][0] - p0[i][0], p1[i][1] - p0[i][1]); if (d < 1e-6) kept++; else stepped++; if (d < 1.5) worstKept = Math.max(worstKept, d) })
+    const holesAfterFace = holes(); F.advance(4); F.order('line'); F.advance(70)
+    out.faceAboutPlaces = { kept, stepped, holesAfterFace, holesInLine: holes(), heading: +b.heading.toFixed(3) }
+    // at most two men step up per man lost
+    if (stepped > 20 || holesAfterFace || out.faceAboutPlaces.holesInLine) fail.push(`face about: ${JSON.stringify(out.faceAboutPlaces)}`) }
+  // a march column ordered a short way behind it loops round on its turning radius and arrives (no flip-flop);
+  // one ordered inside its turning circle halts; it cannot wheel
+  { FCm.place(-20, -60, 0); F.follow(false); F.order('march'); F.advance(25); F.order('move', { x: FCm.main.x + 3, z: FCm.main.z - 10 }); const t = track(120)
+    out.shortBehind = { status: FCm.main.status, ...t }
+    if (t.flips || t.orders) fail.push(`column ordered a short way behind: ${JSON.stringify(out.shortBehind)}`) }
+  { FCm.place(-20, -60, 0); F.follow(false); F.order('march'); F.advance(25); F.order('move', { x: FCm.main.x + 3, z: FCm.main.z }); F.advance(5)
     out.insideTurn = { orders: FCm.main.orders.length, status: FCm.main.status }
+    FCm.place(-20, -60, 0); F.order('march'); F.advance(25); F.order('move', { x: FCm.main.x + 12, z: FCm.main.z }); F.advance(60)
+    out.outsideTurn = { orders: FCm.main.orders.length, status: FCm.main.status }
     const w0 = closestWithin(FCm.main); F.order('wheelL'); F.advance(5)
-    out.wheelColumn = { status: FCm.main.status, withinCompany: +Math.min(w0, closestWithin(FCm.main)).toFixed(2) }
-    if (out.insideTurn.orders) fail.push(`target inside the turning circle: ${JSON.stringify(out.insideTurn)}`)
-    if (!out.wheelColumn.status.startsWith('cannot wheel') || out.wheelColumn.withinCompany < 0.6) fail.push(`wheel on a march column: ${JSON.stringify(out.wheelColumn)}`) }
+    out.wheelColumn = { status: FCm.main.status, before: +w0.toFixed(2), withinCompany: +closestWithin(FCm.main).toFixed(2) }
+    if (out.insideTurn.status !== 'halted: target inside the turning circle') fail.push(`target inside the turning circle: ${JSON.stringify(out.insideTurn)}`)
+    if (out.outsideTurn.orders || out.outsideTurn.status) fail.push(`target just outside the turning circle: ${JSON.stringify(out.outsideTurn)}`)
+    if (!out.wheelColumn.status.startsWith('cannot wheel') || out.wheelColumn.withinCompany < w0 - 0.01) fail.push(`wheel on a march column: ${JSON.stringify(out.wheelColumn)}`) }
   // empty slots over the water: a thinned line whose emptied files stand over the stream is not let form
   // column (the men spread into those slots); if it may, no place enters the water
   { let x = 35, found = false
@@ -179,10 +212,10 @@
   // a march column beside the stream turning toward it, 8 to 10 m from its edge
   out.columnTurnAtBank = []
   for (const d of [8, 9, 10]) { let e = 30; while (!deep(e, -110) && e < 150) e += 0.25   // away from the bridge (z -60)
-    FCm.place(e - d, -140, 0); F.follow(false); F.order('march'); F.advance(25); F.order('move', { x: e - d, z: -110 }); F.advance(10)
+    FCm.place(e - d - 15, -140, 0); F.follow(false); F.order('march'); F.advance(25); F.order('move', { x: e - d, z: -110 }); F.advance(25)   // formed on dry ground, then beside the stream
     F.order('move', { x: e + 30, z: FCm.main.z }); const worst = watch(60)
-    out.columnTurnAtBank.push({ d, status: FCm.main.status, placesInDeep: worst, menInDeepWater: deepMen() })
-    if (worst || deepMen()) fail.push(`column turning ${d} m from deep water: ${worst} places in it`) }
+    out.columnTurnAtBank.push({ d, shape: F.stats().shape, status: FCm.main.status, placesInDeep: worst, menInDeepWater: deepMen() })
+    if (worst || deepMen() || F.stats().shape !== 'march') fail.push(`column turning ${d} m from deep water: ${worst} places in it`) }
   // impassable ground narrower than Lmax across part of the front: nobody crosses it
   { FCm.place(-40, -90, 0); F.follow(false); F.order('style', 'push'); FCm.paintDepth(-55, -78, -40, -75, 1.5)
     F.order('move', { x: -40, z: -20 }); const worst = watch(90)
