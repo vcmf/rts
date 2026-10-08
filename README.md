@@ -21,12 +21,8 @@ Prototyping the look. Open `prototypes/painted-cinematic.html` in Chrome; no bui
 
 ## Docs
 
-- [`design.md`](design.md): art bible
-- [`web-rts-architecture.md`](web-rts-architecture.md): game architecture
-- [`prototype-plan.md`](prototype-plan.md): prototype phases and the current workstream
-- [`asset-sources.md`](asset-sources.md): asset sources and licences
-- [`staff-map/`](staff-map/design.md): the far-zoom staff map
-- [`research/`](research/): post-processing and water research
+Start at [`docs/INDEX.md`](docs/INDEX.md): vision, art bible, architecture, decisions, system docs,
+proposals, plans and research, one line each. Agents start at [`AGENTS.md`](AGENTS.md).
 
 ## Assets
 

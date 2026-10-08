@@ -1,0 +1,46 @@
+---
+status: current
+last_reviewed: 2026-10-08
+---
+
+# Conventions
+
+## Commits and PRs
+
+- Conventional Commits: `type(scope): subject`. Scope mandatory and specific (`water`, `terrain`,
+  `foliage`, `postfx`, `sim`, `camera`, `docs`, `tools`, …); subject imperative, lowercase, no
+  trailing period; breaking → `!` or `BREAKING CHANGE:`. One logical change per commit. No emoji.
+- PR titles in the same format; PRs are squash-merged, so the title becomes the commit.
+- No AI attribution lines in commits or PRs.
+
+## Units and numbers
+
+- **Metres, seconds, radians, men** in all authored data; converted once at load (never author in
+  ticks: `docs/architecture.md` §4).
+- **World axes:** y up, x and z on the ground; the battle area is centred on the origin.
+- **Simulation numbers:** restricted float64 (`docs/decisions/0006-restricted-float64.md`): no
+  `Math.sin/cos/pow/exp/log/atan2/hypot/random` or `**` in sim code; own trig; build-time input data.
+- **Tick:** 20 Hz, 50 ms of battle time; the rate lives in one constant.
+
+## Code
+
+- One short comment on non-obvious code: the why, not the how.
+- Reference docs by repo path in comments (`docs/art-bible.md` §6c), never by bare file name.
+- Prototype-only rules: `prototypes/AGENTS.md`.
+
+## Docs
+
+- **Types** (see `docs/INDEX.md`): vision, conventions, system (current, kept true), decision
+  (binding, append-only), proposal (before building, frozen after), plan (active/done), research
+  (background).
+- **Front matter** on every doc under `docs/`: `status` and `last_reviewed` (YYYY-MM-DD).
+  System docs also list `code:` paths and `decisions:`.
+- **One fact, one home.** Link instead of copying; tuning values live in code or data and are
+  linked, not copied.
+- **Decisions are never edited** after acceptance: a changed decision gets a new record that
+  supersedes the old one (`docs/decisions/README.md`).
+- **When a proposal ships,** its lasting content moves into `docs/systems/<x>.md` and the proposal
+  is marked implemented.
+- **Paths:** reference docs by repo-root path in backticks (`docs/proposals/sim-design.md`);
+  `node tools/check-docs.mjs` checks that every such path exists.
+- Keep `AGENTS.md` a short map (≤ 100 lines); detail goes in docs or folder `AGENTS.md` files.

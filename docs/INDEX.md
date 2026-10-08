@@ -1,0 +1,54 @@
+---
+status: current
+last_reviewed: 2026-10-08
+---
+
+# Docs index
+
+One line per document. **Types:** *vision* and *conventions* frame everything; *system* docs describe
+what is built **now** and are kept true; *decisions* are binding until superseded; *proposals* are
+designs written before building (frozen once built, their lasting content moves into system docs);
+*plans* are per-PR or per-workstream; *research* is background, not authoritative.
+
+## Frame
+
+- [`vision.md`](vision.md): pitch, pillars, scale, non-goals. *(draft)*
+- [`art-bible.md`](art-bible.md): the look: fixed constraints, palette, light, seasons, water, assets. *(current)*
+- [`architecture.md`](architecture.md): sim/render split, data model, commands, tick, Babylon setup. *(current; parts superseded by `docs/proposals/sim-design.md`)*
+- [`engine-map.md`](engine-map.md): every engine part with its owner doc, phase and status. *(current)*
+- [`conventions.md`](conventions.md): commits, units and numbers, prototypes, docs. *(current)*
+- [`glossary.md`](glossary.md): drill and engine terms. *(current)*
+- [`asset-sources.md`](asset-sources.md): where assets come from, licences. *(current)*
+
+## Decisions
+
+- [`decisions/`](decisions/README.md): numbered decision records; the list is in its README.
+
+## Systems (built, current behaviour)
+
+- [`systems/river.md`](systems/river.md): the lowland meander river (W1, W1b).
+- More appear as systems are built; see [`systems/README.md`](systems/README.md).
+
+## Proposals (designs before building)
+
+- [`proposals/engine-design.md`](proposals/engine-design.md): world spec, heightfield, camera, bakes, scale, known issues, order of engine work.
+- [`proposals/sim-design.md`](proposals/sim-design.md): the battle simulation (battalions, drill, fire, morale, determinism, phases).
+- [`proposals/staff-map/design.md`](proposals/staff-map/design.md): the far-zoom staff map, art direction.
+- [`proposals/staff-map/implementation.md`](proposals/staff-map/implementation.md): how the staff map is built.
+
+## Plans
+
+- Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
+  [`plans/active/staff-map.md`](plans/active/staff-map.md), [`plans/active/docs-restructure.md`](plans/active/docs-restructure.md).
+- Done: [`plans/done/w1-river-shape.md`](plans/done/w1-river-shape.md), [`plans/done/w1b-river-width.md`](plans/done/w1b-river-width.md).
+
+## Research (background)
+
+- [`research/rts-engine-subsystems.md`](research/rts-engine-subsystems.md): RTS engine parts, Napoleonic simulation, browser concerns.
+- [`research/formation-movement-and-doc-systems.md`](research/formation-movement-and-doc-systems.md): fluid formations, historical drill, doc systems.
+- [`research/stylized-water.md`](research/stylized-water.md): painted water and river shape.
+- [`research/cheap-painterly-postfx.md`](research/cheap-painterly-postfx.md): cheap painterly post-processing.
+
+## Templates
+
+- [`templates/`](templates/): system doc, decision record, plan, proposal.
