@@ -1,6 +1,6 @@
 // Formation measurements (docs/plans/done/formation-feel.md, Results). Evaluated in
 // prototypes/formation-map.html, which it drives through window.F (the page loop is paused while it runs):
-//   node tools/shot.mjs prototypes/formation-map.html <outDir> 1400 860 \
+//   SHOT_TIMEOUT_S=600 node tools/shot.mjs prototypes/formation-map.html <outDir> 1400 860 \
 //     "$(python3 -c 'import json;print(json.dumps([["eval",open("tools/formation-measure.js").read()]]))')"
 // Prints a JSON table. Limits that must hold are console.error, so shot.mjs exits non-zero when one fails.
 (() => {
@@ -31,7 +31,8 @@
     if (!halted || inWood < 50) fail.push(`halt at ${ox},${oz} not tested: halted ${halted}, in wood ${inWood}`)
     if (moved > 0.05) fail.push(`halt at ${ox},${oz}: a soldier still moves ${moved.toFixed(2)} m in 10 s`)
   }
-  reload(); F.order('ford'); out.ford = run(260)
+  reload(); F.order('ford'); out.ford = run(260); for (let t = 0; (FCm.main.orders.length || FCm.main.trans) && t < 200; t += 0.5) F.advance(0.5); out.ford.shape = F.stats().shape; out.ford.x = +FCm.main.x.toFixed(1); out.ford.status = FCm.main.status
+  if (out.ford.shape !== 'line' || out.ford.x < FCm.STREAM_X(0) + 15 || out.ford.status) fail.push(`ford not crossed: ${JSON.stringify(out.ford)}`)
   // casualties in line, then a square: the slot table stays consistent, the square keeps four faces
   reload(); for (let n = 0; n < 5; n++) { F.kill(10); F.advance(3) } F.kill(30); F.advance(5)
   out.casualties = { alive: F.stats().alive, tableErrors: tableOk(FCm.main) }
@@ -47,7 +48,7 @@
   const R = FCm.RULESET, until = (sec, step = 0.1) => { let t = 0; while ((FCm.main.orders.length || FCm.main.trans) && t < sec) { F.advance(step); t += step } return +t.toFixed(1) }
   const live = b => [...b.lags].filter((l, j) => b.binN[j])
   // every live man's place this frame (slot set back by his file's lag), with his company
-  const places = b => { const fr = FCm.companyFrames(b, 0, FCm.alpha); return b.soldiers.filter(s => s.alive).map(s => [...FCm.soldierPlace(b, fr[s.c], s), s.c]) }
+  const places = b => { const fr = FCm.companyFrames(b, 0, FCm.alpha); return b.soldiers.filter(s => s.alive).map(s => { const p = FCm.soldierPlace(b, fr[s.c], s); return [p[0], p[1], s.c] }) }
   const deep = (x, z) => FCm.WDEPTH[FCm.cellK(x, z)] > R.water.limit
   const placesInDeep = b => places(b).filter(p => deep(p[0], p[1])).length
   // closest places of men in different companies (metres)
@@ -114,12 +115,42 @@
   // a wheel toward the stream stops short of it; a square that would stand in it is refused
   { FCm.place(FCm.STREAM_X(-30) - 12, -30, Math.PI / 2); F.follow(false); F.order('wheelR'); let worst = 0
     for (let n = 0; n < 120; n++) { F.advance(0.5); worst = Math.max(worst, placesInDeep(FCm.main)) }
-    out.wheelToWater = { status: FCm.main.status, placesInDeep: worst }
-    if (FCm.main.status !== 'halted: impassable ground' || worst) fail.push(`wheel toward deep water: ${JSON.stringify(out.wheelToWater)}`) }
-  { let x = 40; FCm.place(x, -30, Math.PI / 2); while (!FCm.wetMen(FCm.main)) FCm.place(x += 0.25, -30, Math.PI / 2)
-    FCm.place(x -= 0.25, -30, Math.PI / 2); F.follow(false); F.order('square'); F.advance(5)   // the line as close to deep water as it can stand, facing it
+    out.wheelToWater = { status: FCm.main.status, placesInDeep: worst, turned: +Math.abs(Math.PI / 2 - FCm.main.heading).toFixed(2) }
+    if (FCm.main.status !== 'halted: impassable ground' || worst || out.wheelToWater.turned < 0.1) fail.push(`wheel toward deep water: ${JSON.stringify(out.wheelToWater)}`) }
+  // `watch`: the most places in deep water at any 0.25 s step over `sec` seconds
+  const watch = (sec, then) => { let worst = 0; for (let n = 0; n < sec * 4; n++) { if (then && n === then[0] * 4) then[1](); F.advance(0.25); worst = Math.max(worst, placesInDeep(FCm.main)) } return worst }
+  // the line as close to deep water as it can stand, facing it (east, at z = -30)
+  const atBank = () => { let x = 40; FCm.place(x, -30, Math.PI / 2); while (!FCm.wetBins(FCm.main) && x < 150) FCm.place(x += 0.25, -30, Math.PI / 2)
+    FCm.place(x -= 0.25, -30, Math.PI / 2); F.follow(false); return x }
+  { atBank(); F.order('square'); F.advance(5)
     out.squareAtWater = { status: FCm.main.status, shape: F.stats().shape, placesInDeep: placesInDeep(FCm.main) }
     if (out.squareAtWater.status !== 'cannot form: impassable ground' || out.squareAtWater.shape !== 'line') fail.push(`square at deep water: ${JSON.stringify(out.squareAtWater)}`) }
+  // 12 m further back the same square is accepted
+  { const x = atBank(); FCm.place(x - 12, -30, Math.PI / 2); F.order('square'); F.advance(5)
+    out.squareBackFromWater = { status: FCm.main.status, shape: F.stats().shape }
+    if (out.squareBackFromWater.status || out.squareBackFromWater.shape !== 'line → square') fail.push(`square 12 m from deep water: ${JSON.stringify(out.squareBackFromWater)}`) }
+  // a shape ordered during a change is checked too: column, then square 5 s later, at the bank
+  { atBank(); F.order('column'); const worst = watch(120, [5, () => F.order('square')])
+    out.changeDuringChange = { status: FCm.main.status, shape: F.stats().shape, placesInDeep: worst, menInDeepWater: deepMen() }
+    if (worst || out.changeDuringChange.menInDeepWater) fail.push(`change during a change at the bank: ${JSON.stringify(out.changeDuringChange)}`) }
+  // turning at the bank: a line facing the water ordered north turns in place without a place entering it
+  { const x = atBank(); F.order('move', { x, z: 10 }); const worst = watch(90)
+    out.turnAtBank = { status: FCm.main.status, placesInDeep: worst, menInDeepWater: deepMen() }
+    if (worst || out.turnAtBank.menInDeepWater) fail.push(`turn at the bank: ${JSON.stringify(out.turnAtBank)}`) }
+  // a march column beside the stream turning toward it, 8 to 10 m from its edge
+  out.columnTurnAtBank = []
+  for (const d of [8, 9, 10]) { let e = 30; while (!deep(e, -110) && e < 150) e += 0.25   // away from the bridge (z -60)
+    FCm.place(e - d, -140, 0); F.follow(false); F.order('march'); F.advance(25); F.order('move', { x: e - d, z: -110 }); F.advance(10)
+    F.order('move', { x: e + 30, z: FCm.main.z }); const worst = watch(60)
+    out.columnTurnAtBank.push({ d, status: FCm.main.status, placesInDeep: worst, menInDeepWater: deepMen() })
+    if (worst || deepMen()) fail.push(`column turning ${d} m from deep water: ${worst} places in it`) }
+  // impassable ground narrower than Lmax across part of the front: nobody crosses it
+  { FCm.place(-40, -90, 0); F.follow(false); F.order('style', 'push'); FCm.paintDepth(-55, -78, -40, -75, 1.5)
+    F.order('move', { x: -40, z: -20 }); const worst = watch(90)
+    const crossed = FCm.main.soldiers.filter(s => s.alive && s.x > -55 && s.x < -40 && s.z > -75).length
+    out.narrowDitch = { status: FCm.main.status, placesInDeep: worst, crossed }
+    FCm.paintDepth(-55, -78, -40, -75, null)
+    if (worst || crossed || out.narrowDitch.status !== 'halted: impassable ground') fail.push(`narrow ditch: ${JSON.stringify(out.narrowDitch)}`) }
   // a company bin emptied by casualties takes no part: a line wholly in woods slows evenly, in order
   { FCm.place(-40, -90, 0); F.follow(false); F.order('style', 'normal'); const b = FCm.main
     b.soldiers.forEach(s => { if (s.c === 3 && s.f >= 6) s.alive = false }); b.soldiers.forEach((s, j) => { if (!s.alive) b.grid[s.c][s.r][s.f] = -1 })
@@ -143,6 +174,12 @@
   out.accordion = { closestAtRest: +rest.toFixed(2), closestPlacesBetweenCompanies: +closest.toFixed(2) }
   if (closest < 0.4) fail.push(`march column companies walked through each other (closest places ${closest.toFixed(2)} m)`)
   if (rest - closest < 0.5) fail.push(`accordion never engaged: closest ${closest.toFixed(2)} m against ${rest.toFixed(2)} m at rest`)
+  // the same column turned 90° west while its head is held: lagging companies follow the bend
+  { FCm.place(-60, -40, 0); F.follow(false); F.order('march'); F.advance(22); F.order('style', 'push'); F.order('move', { x: -60, z: 0 }); F.advance(15)
+    const lag0 = Math.max(...live(FCm.main)); F.order('move', { x: -110, z: FCm.main.z }); let closest = Infinity, lagMax = lag0
+    for (let n = 0; n < 120 && FCm.main.orders.length; n++) { F.advance(0.5); closest = Math.min(closest, closestBetween(FCm.main)); lagMax = Math.max(lagMax, ...live(FCm.main)) }
+    out.accordionBend = { lagAtTurn: +lag0.toFixed(2), lagMax: +lagMax.toFixed(2), closest: +closest.toFixed(2) }
+    if (closest < 0.4 || lagMax < 1) fail.push(`march column in a bend: ${JSON.stringify(out.accordionBend)}`) }
   // a square pushing into the wood: a held face never falls back into the others
   { FCm.place(-52, 30, 0); F.follow(false); F.order('square'); F.advance(110); F.order('style', 'push'); const rest = closestBetween(FCm.main)
     F.order('move', { x: -52, z: 90 }); let closest = Infinity, lagMax = 0
@@ -151,6 +188,7 @@
     if (closest < Math.min(0.4, rest - 0.1) || lagMax < 1) fail.push(`square in the wood: ${JSON.stringify(out.squareAccordion)}`) }
   // cost: 40 battalions
   reload(); F.setMany(true); F.advance(30); F.view(-10, -40, 2.6); out.many = { soldiers: F.stats().soldiers, simMs: F.measure(60), drawMsAllInView: F.drawMs() }
+  if (out.many.simMs > 4) fail.push(`40 battalions: simulation ${out.many.simMs} ms per frame (budget 4 ms)`)
   F.setMany(false); reload()
   if (fail.length) console.error('formation-measure FAILED: ' + fail.join('; '))
   return JSON.stringify(out)
