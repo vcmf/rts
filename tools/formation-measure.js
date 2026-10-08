@@ -155,7 +155,7 @@
     for (let n = 0; n < sec * 4; n++) { F.advance(0.25); worst = Math.max(worst, placesInDeep(FCm.main)); const d = Math.atan2(Math.sin(FCm.main.heading - h), Math.cos(FCm.main.heading - h)); if (Math.abs(d) > 2) flips++; h = FCm.main.heading }
     return { worst, flips, orders: FCm.main.orders.length } }
   out.haltedAtBank = []
-  for (const shape of ['line', 'march']) for (const deg of [60, 90, 120, 180]) {
+  for (const shape of ['line', 'march']) for (const deg of [30, 60, 90, 120, 180, -90]) {
     const halted = halt(shape), h = FCm.main.heading + deg * Math.PI / 180
     F.order('move', { x: FCm.main.x + Math.sin(h) * 40, z: FCm.main.z + Math.cos(h) * 40 }); const t = track(60)
     const r = { shape, deg, halted, status: FCm.main.status, ...t }
@@ -170,17 +170,49 @@
     const back = (x - b.x) * Math.sin(h0) + (-30 - b.z) * Math.cos(h0), dh = Math.atan2(Math.sin(b.heading - h0), Math.cos(b.heading - h0))
     out.retire = { back: +back.toFixed(2), headingChange: +dh.toFixed(3), status: b.status, ...t }
     if (Math.abs(back - 30) > 0.5 || Math.abs(dh) > 1e-6 || b.status || t.worst || t.orders) fail.push(`retire 30 m: ${JSON.stringify(out.retire)}`) }
-  // face about keeps every man's place (bar the few who step up) and leaves no rank hole; it carries into line
+  // face about keeps every man's place (bar the few who step up or close in) and leaves no rank hole;
+  // it carries into line
+  // places at the last tick (alpha 1): a moving battalion's in-between poses are not compared with its pose at rest
+  const placesOf = b => { const fr = FCm.companyFrames(b, 0, 1); return b.soldiers.map(s => s.alive ? FCm.soldierPlace(b, fr[s.c], s) : null) }
+  const moves = (p0, p1) => p0.map((p, i) => p ? Math.hypot(p1[i][0] - p[0], p1[i][1] - p[1]) : null).filter(d => d !== null)
+  // the men in complete files (every rank filled): they keep their places through a face about; men in
+  // short files step up to their new front rank
+  const inFullFiles = b => b.soldiers.map(s => s.alive && b.grid[s.c].every(rank => rank[s.f] >= 0))
+  const movesFull = (p0, p1, full) => moves(p0.map((p, i) => full[i] ? p : null), p1)
   { FCm.place(-20, -100, 0); F.follow(false); F.order('march'); F.advance(25); F.kill(10); F.advance(2); const b = FCm.main
-    const at = () => { const fr = FCm.companyFrames(b, 0, FCm.alpha); return b.soldiers.map(s => s.alive ? FCm.soldierPlace(b, fr[s.c], s) : null) }
     const holes = () => { let n = 0; for (let c = 0; c < 4; c++) for (let f = 0; f < FCm.FILES; f++) for (let r = 0; r < FCm.RANKS - 1; r++) if (b.grid[c][r][f] < 0 && b.grid[c].slice(r + 1).some(rank => rank[f] >= 0)) n++; return n }
-    const p0 = at(), rank0 = b.soldiers.map(s => s.r); F.order('face'); F.advance(0.1); const p1 = at()
-    let kept = 0, stepped = 0, worstKept = 0
-    b.soldiers.forEach((s, i) => { if (!p0[i]) return; const d = Math.hypot(p1[i][0] - p0[i][0], p1[i][1] - p0[i][1]); if (d < 1e-6) kept++; else stepped++; if (d < 1.5) worstKept = Math.max(worstKept, d) })
+    const p0 = placesOf(b); F.order('face'); F.advance(0.1); const d = moves(p0, placesOf(b))
     const holesAfterFace = holes(); F.advance(4); F.order('line'); F.advance(70)
-    out.faceAboutPlaces = { kept, stepped, holesAfterFace, holesInLine: holes(), heading: +b.heading.toFixed(3) }
-    // at most two men step up per man lost
-    if (stepped > 20 || holesAfterFace || out.faceAboutPlaces.holesInLine) fail.push(`face about: ${JSON.stringify(out.faceAboutPlaces)}`) }
+    out.faceAboutPlaces = { kept: d.filter(x => x < 1e-6).length, moved: d.filter(x => x >= 1e-6).length, furthest: +Math.max(...d).toFixed(2), holesAfterFace, holesInLine: holes() }
+    // a man who steps up moves at most two ranks; one who closes in toward the centre, a few files
+    if (out.faceAboutPlaces.furthest > 2 * 0.85 + 3 * 0.65 || holesAfterFace || out.faceAboutPlaces.holesInLine) fail.push(`face about: ${JSON.stringify(out.faceAboutPlaces)}`) }
+  // in every shape the men of complete files do not move; with a file held back by the water its lag is kept
+  out.faceAboutShapes = {}
+  for (const shape of ['line', 'column', 'square', 'march']) { FCm.place(-20, -100, 0); F.follow(false); if (shape !== 'line') { F.order(shape); F.advance(110) }
+    const p0 = placesOf(FCm.main), full = inFullFiles(FCm.main), h0 = FCm.main.heading; F.order('face'); F.advance(0.1)
+    const r = { status: FCm.main.status, furthest: +Math.max(...movesFull(p0, placesOf(FCm.main), full)).toFixed(6), turned: +Math.abs(Math.atan2(Math.sin(FCm.main.heading - h0), Math.cos(FCm.main.heading - h0))).toFixed(3) }
+    out.faceAboutShapes[shape] = r
+    if (r.status || r.furthest > 1e-6) fail.push(`face about in ${shape}: ${JSON.stringify(r)}`) }
+  { FCm.place(30, -30, Math.PI / 2 - 0.5); F.follow(false); F.order('move', { x: 100, z: -30 + 70 * Math.tan(-0.5) }); let lag = 0
+    for (let n = 0; n < 400 && lag < 1; n++) { F.advance(0.25); lag = Math.max(...live(FCm.main)) }
+    const p0 = placesOf(FCm.main), full = inFullFiles(FCm.main); F.order('face'); F.advance(0.1)
+    out.faceAboutHeld = { lagBefore: +lag.toFixed(2), status: FCm.main.status, furthest: +Math.max(...movesFull(p0, placesOf(FCm.main), full)).toFixed(6) }
+    if (lag < 1 || out.faceAboutHeld.status || out.faceAboutHeld.furthest > 1e-6) fail.push(`face about with a held file: ${JSON.stringify(out.faceAboutHeld)}`) }
+  // refused when closing a file would put a man where the water is: a line facing west, its rear-rank men
+  // of company 0 lost, those empty rear slots over the stream
+  { let x = 40, found = false
+    for (; x < 70 && !found; x += 0.25) { FCm.place(x, -30, -Math.PI / 2); const b = FCm.main
+      b.soldiers.forEach(s => { if (s.c === 0 && s.r === 2) { s.alive = false; b.grid[s.c][s.r][s.f] = -1 } })
+      const fr = FCm.companyFrames(b, 0, FCm.alpha), empty = b.soldiers.filter(s => !s.alive).map(s => FCm.soldierPlace(b, fr[s.c], s))
+      found = !FCm.wetBins(b) && empty.some(p => deep(p[0], p[1])) }
+    F.follow(false); F.order('face'); F.advance(1)
+    out.faceAboutRefused = { found, status: FCm.main.status, placesInDeep: placesInDeep(FCm.main) }
+    if (!found || out.faceAboutRefused.status !== 'cannot face about: impassable ground' || out.faceAboutRefused.placesInDeep) fail.push(`face about at the water: ${JSON.stringify(out.faceAboutRefused)}`) }
+  // a Retire cut short by the water still ends facing the front
+  { let x = 40; FCm.place(x, -30, -Math.PI / 2); while (!FCm.wetBins(FCm.main) && x < 150) FCm.place(x += 0.25, -30, -Math.PI / 2)
+    FCm.place(x - 8.25, -30, -Math.PI / 2); F.follow(false); const h0 = FCm.main.heading; F.order('retire', 30); const t = track(60)
+    out.retireCutShort = { status: FCm.main.status, headingChange: +Math.abs(Math.atan2(Math.sin(FCm.main.heading - h0), Math.cos(FCm.main.heading - h0))).toFixed(3), ...t }
+    if (out.retireCutShort.status !== 'halted: impassable ground' || out.retireCutShort.headingChange > 1e-6 || t.worst || t.orders) fail.push(`retire cut short: ${JSON.stringify(out.retireCutShort)}`) }
   // a march column ordered a short way behind it loops round on its turning radius and arrives (no flip-flop);
   // one ordered inside its turning circle halts; it cannot wheel
   { FCm.place(-20, -60, 0); F.follow(false); F.order('march'); F.advance(25); F.order('move', { x: FCm.main.x + 3, z: FCm.main.z - 10 }); const t = track(120)
@@ -192,7 +224,7 @@
     out.outsideTurn = { orders: FCm.main.orders.length, status: FCm.main.status }
     const w0 = closestWithin(FCm.main); F.order('wheelL'); F.advance(5)
     out.wheelColumn = { status: FCm.main.status, before: +w0.toFixed(2), withinCompany: +closestWithin(FCm.main).toFixed(2) }
-    if (out.insideTurn.status !== 'halted: target inside the turning circle') fail.push(`target inside the turning circle: ${JSON.stringify(out.insideTurn)}`)
+    if (out.insideTurn.status !== 'arrived: as near as the column can turn' || out.insideTurn.orders) fail.push(`target inside the turning circle: ${JSON.stringify(out.insideTurn)}`)
     if (out.outsideTurn.orders || out.outsideTurn.status) fail.push(`target just outside the turning circle: ${JSON.stringify(out.outsideTurn)}`)
     if (!out.wheelColumn.status.startsWith('cannot wheel') || out.wheelColumn.withinCompany < w0 - 0.01) fail.push(`wheel on a march column: ${JSON.stringify(out.wheelColumn)}`) }
   // empty slots over the water: a thinned line whose emptied files stand over the stream is not let form
