@@ -43,27 +43,56 @@
   reload(); F.order('square'); F.advance(20); F.kill(30); F.advance(100); { const z = [0, 0, 0, 0]; for (const s of FCm.main.soldiers) if (s.alive) z[s.c]++
     out.killDuringChange = { squareCompanies: z, tableErrors: tableOk(FCm.main) }
     if (Math.max(...z) - Math.min(...z) > 1 || out.killDuringChange.tableErrors) fail.push(`kills during the change: faces ${z}, table errors ${out.killDuringChange.tableErrors}`) }
-  // MOVEMENT OVER TERRAIN (docs/plans/active/terrain-movement.md). A line marches 60 m north; a 10 m deep
-  // strip of woods crosses part of its front. Time lost against the same march with no strip.
-  const march = (frac, style) => {
+  // MOVEMENT OVER TERRAIN (docs/plans/active/terrain-movement.md)
+  const R = FCm.RULESET, until = (sec, step = 0.1) => { let t = 0; while ((FCm.main.orders.length || FCm.main.trans) && t < sec) { F.advance(step); t += step } return +t.toFixed(1) }
+  // a line marches 60 m north; a strip of woods exactly 10 m deep crosses the files of n of its 12 sample
+  // points (each point covers 3 files); time lost against the same march with no strip
+  const march = (n, style) => {
     const x = -40, z = -90; FCm.place(x, z, 0); F.follow(false); F.order('style', style)
-    const half = 12.7; if (frac > 0) FCm.paintTerrain(x - half - 0.5, z + 15, x - half + frac * 2 * half - 0.5, z + 25, 'woods')
-    F.order('move', { x, z: z + 60 }); let t = 0; while (FCm.main.orders.length && t < 300) { F.advance(0.5); t += 0.5 }
-    const lag = FCm.stats(); if (frac > 0) FCm.paintTerrain(x - 20, z + 10, x + 20, z + 30, null); return t
+    const files = FCm.main.soldiers.filter(s => s.r === 0).map(s => s.x).sort((a, b) => a - b)   // front-rank x, west to east
+    if (n > 0) FCm.paintTerrain(files[0] - 0.3, z + 15, files[n * 3 - 1] + 0.3, z + 24, 'woods')   // cells z+15..z+24: 10 m
+    F.order('move', { x, z: z + 60 }); const t = until(300)
+    if (n > 0) FCm.paintTerrain(x - 20, z + 10, x + 20, z + 30, null); return t
   }
+  // the research's simulation used Lmax 10 m, Lmean 2 m, τ 3 s: same tolerances for the comparison
+  R.orders.research = { Lmax: 10, Lmean: 2, tau: 3 }
   out.thicket = {}
-  for (const style of ['keep', 'normal']) { const base = march(0, style), row = {}
-    for (const n of [1, 3, 6, 12]) row[n + '/12'] = +(march(n / 12, style) - base).toFixed(1)
+  for (const style of ['research', 'keep', 'normal']) { const base = march(0, style), row = {}
+    for (const n of [1, 3, 6, 12]) row[n + '/12'] = +(march(n, style) - base).toFixed(1)
     out.thicket[style] = row
-    if (!(row['1/12'] < row['3/12'] + 0.01 && row['3/12'] < row['6/12'] + 0.01 && row['6/12'] < row['12/12'])) fail.push(`thicket delay does not grow with the share held up (${style}): ${JSON.stringify(row)}`) }
-  // deep water: a line ordered straight across the stream stops at the bank
-  FCm.place(40, -30, Math.PI / 2); F.follow(false); F.order('move', { x: 100, z: -30 }); F.advance(80)
-  out.deepWater = { x: +FCm.main.x.toFixed(1), status: FCm.main.status, bank: +(FCm.STREAM_X(-30) - FCm.WATER_HALF).toFixed(1) }
-  if (FCm.main.x > FCm.STREAM_X(-30) - 1) fail.push(`the line crossed deep water (x ${out.deepWater.x})`)
-  // the bridge: narrow, cross, deploy beyond
-  FCm.place(0, FCm.BRIDGE.z, Math.PI / 2); F.follow(false); F.order('bridge'); let tb = 0; while ((FCm.main.orders.length || FCm.main.trans) && tb < 400) { F.advance(1); tb++ }
-  out.bridge = { seconds: tb, x: +FCm.main.x.toFixed(1), shape: F.stats().shape }
-  if (FCm.main.x < FCm.BRIDGE.x1 || F.stats().shape !== 'line') fail.push(`bridge not crossed: ${JSON.stringify(out.bridge)}`)
+    if (!(row['1/12'] <= row['3/12'] && row['3/12'] <= row['6/12'] && row['6/12'] <= row['12/12'])) fail.push(`thicket delay does not grow with the share held up (${style}): ${JSON.stringify(row)}`) }
+  // the full front has no choice: the delay is the strip's own, 10 m at the woods' speed against 10 m
+  // at the pace (q = 1 in woods). Part of the front held up costs less, and one file almost nothing
+  // with the research's tolerances. (The research's own figures used an approximation of the mean-lag
+  // limit that ignores files already catching up; the engine solves it exactly: see the plan.)
+  const g = R.terrain.woods.g.line * (R.q.ordinary || R.q)[R.terrain.woods.q], V0 = R.pace.ordinary, full = 10 / (V0 * g) - 10 / V0
+  out.thicket.fullFrontPhysics = +full.toFixed(1)
+  for (const style of ['research', 'keep', 'normal']) { const got = out.thicket[style]['12/12']
+    if (Math.abs(got - full) > 0.2 * full) fail.push(`thicket 12/12 (${style}): ${got} s, the strip itself costs ${full.toFixed(1)} s`) }
+  if (out.thicket.research['1/12'] > 1.5) fail.push(`one file in the strip costs ${out.thicket.research['1/12']} s with the research's tolerances`)
+  delete R.orders.research
+  const deepMen = () => FCm.main.soldiers.filter(s => s.alive && FCm.WDEPTH[FCm.cellK(s.x, s.z)] > R.water.limit).length
+  // deep water, oblique and along the whole front: the line stops at the bank, nobody in deep water
+  out.deepWater = []
+  for (const [x, z, h, tx, tz] of [[40, -30, Math.PI / 2, 100, -30], [FCm.STREAM_X(52) - 25, 52, Math.PI / 2, 110, 52]]) {
+    FCm.place(x, z, h); F.follow(false); F.order('move', { x: tx, z: tz }); F.advance(90)
+    const r = { start: [+x.toFixed(1), z], status: FCm.main.status, orders: FCm.main.orders.length, menInDeepWater: deepMen() }
+    out.deepWater.push(r)
+    if (r.status !== 'halted: impassable ground' || r.orders || r.menInDeepWater) fail.push(`deep water from ${r.start}: ${JSON.stringify(r)}`) }
+  // the bridge deck is level ground for a column; crossing: narrow, cross, deploy beyond
+  let deck = 1; for (let x = FCm.BRIDGE.x0 + 0.5; x < FCm.BRIDGE.x1; x += 0.5) deck = Math.min(deck, FCm.groundG(x, FCm.BRIDGE.z, 'column', 1, 0))   // the whole deck, eastward
+  FCm.place(0, FCm.BRIDGE.z, Math.PI / 2); F.follow(false); F.order('bridge'); const tb = until(400, 0.5)
+  out.bridge = { seconds: tb, deckG: +deck.toFixed(2), x: +FCm.main.x.toFixed(1), shape: F.stats().shape }
+  if (deck < 0.99 || FCm.main.x < FCm.BRIDGE.x1 || F.stats().shape !== 'line' || tb > 240) fail.push(`bridge: ${JSON.stringify(out.bridge)}`)
+  // the accordion: a march column whose head is held up at a hedge never walks through its own companies
+  FCm.place(-60, -40, 0); F.follow(false); F.order('march'); F.advance(22); F.order('style', 'push'); F.order('move', { x: -60, z: 0 })
+  let closest = Infinity
+  for (let n = 0; n < 300 && FCm.main.orders.length; n++) { F.advance(0.1); const b = FCm.main, fr = FCm.companyFrames(b, 0, FCm.alpha)
+    for (let c = 1; c < 4; c++) { const a = b.soldiers.filter(s => s.alive && s.c === c - 1), f = b.soldiers.filter(s => s.alive && s.c === c)
+      const back = a.map(s => FCm.soldierPlace(b, fr[s.c], s)), front = f.map(s => FCm.soldierPlace(b, fr[s.c], s))
+      for (const p of back) for (const q of front) closest = Math.min(closest, Math.hypot(p[0] - q[0], p[1] - q[1])) } }
+  out.accordion = { closestPlacesBetweenCompanies: +closest.toFixed(2) }
+  if (closest < 0.4) fail.push(`march column companies walked through each other (closest places ${closest.toFixed(2)} m)`)
   // cost: 40 battalions
   reload(); F.setMany(true); F.advance(30); F.view(-10, -40, 2.6); out.many = { soldiers: F.stats().soldiers, simMs: F.measure(60), drawMsAllInView: F.drawMs() }
   F.setMany(false); reload()
