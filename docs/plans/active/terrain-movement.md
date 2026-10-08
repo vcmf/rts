@@ -93,12 +93,15 @@ Run with `SHOT_TIMEOUT_S=1200` (the run takes several minutes; `tools/shot.mjs` 
   - thinned lines (41, 50, 59 losses) at the bank ordered into column over a grid of positions and
     headings: 15 accepted, 27 refused, 0 places in the water (empty slots are checked too); a line
     whose two emptied files stand over the stream is refused column (the men would spread into them);
-  - a unit halted at the water and ordered on at 60°, 90°, 120° or 180° (line and march column):
+  - a unit halted at the water and ordered on at 30°, 60°, 90°, 120°, 180° or −90° (line and march column):
     every order ends within 60 s (halted or arrived), no heading flip, 0 places in the water;
   - Face about, then a move: line and column both reach a target 58 m back; Retire 30 m: the line
     steps back 29.6 m in order and faces the front again;
-  - Face about keeps every man's place except the few who step up to close a file (18 of 90 after 10
-    losses), leaves no rank hole, and none carries into line;
+  - Face about keeps the place of every man in a complete file, in line, column, square and march
+    column (0 m), also when a file is held back by the water (its lag is kept); men in short files step
+    up at most two ranks or close in a few files (1.82 m at most after 10 losses); no rank hole, none
+    carried into line; refused ("cannot face about: impassable ground") when closing a file would put
+    a man over the water; a Retire cut short by the water still ends facing the front;
   - ground a line cannot enter (a test ruleset with hedges g = 0 for a line): halted, 0 places on it;
     a column standing across that hedge is refused line;
   - places are checked both now and as the soldiers aim for them (0.6 s ahead);
@@ -305,7 +308,10 @@ planning, the pathfinding phase's job, done piecemeal inside this PR.
     rank. The whole result goes through the gate once; refused if anyone would stand on impassable
     ground. The battalion then stands 3 s.
   - *Retire N m*: face about, march N m (an ordinary move, so terrain speed and the lag model apply),
-    face about again.
+    halt and dress, face about again. A halt on the way keeps the last two steps (orders marked
+    `finish`), so the battalion always ends facing the front.
+  - Face about keeps lags: the anchor steps back by the largest lag and each file's new lag is that
+    lag less its old one, so no man moves; bins are mapped through the half-turn for the gate.
 - **Change check simplified:** no exemptions. A change is refused if any slot, filled or empty, would
   be on impassable ground at any sampled pose, before or after `rebalance`. A unit already standing on
   such ground (only possible through scenario setup) must first move off it.
@@ -313,4 +319,25 @@ planning, the pathfinding phase's job, done piecemeal inside this PR.
   moves to the pathfinding phase, with its own plan.
 - **Checks:** the halt is final and stable (no oscillation over 60 s for any target angle at the bank);
   Retire and Face about each with a negative run; rank packing after Face about.
+
+## Review round 1 after redesign 2
+
+10 findings, none severe → stop (fix what is worth fixing).
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | moderate | Face about dropped every lag: refused with a file held at the water | Lags kept (anchor back by the largest lag; new lag = that less the old); check with a held file |
+| 2 | moderate | The gate compared bins under old and new labels | `before` mapped through the half-turn's bin map |
+| 3 | moderate | A halt during Retire dropped the final Face about | Drill-finishing orders survive a halt; Retire also dresses before facing the front; check |
+| 4 | moderate | Refusals, other shapes and other angles untested | Checks for refusal, every shape, a held file, a cut-short Retire, angles 30° and −90°; negative run |
+| 5 | light | Mirrored files left companies off-centre for `closeRanks` | `closeRanks` runs inside Face about, under the same gate check |
+| 6 | light | Every refusal said "impassable ground" | The reason is given (no half-turn symmetry, changing shape, off-centre trail, impassable ground) |
+| 7 | light | The turning-circle halt dropped the rest of a multi-step order | That move ends ("arrived: as near as the column can turn") and the next order goes on |
+| 8 | light | `blockedFor` carried over between orders | Reset on a new order and when Face about starts |
+| 9 | light | Unused variables; moved men's distance unchecked | Distance limit checked; variables gone |
+| 10 | light | Rank closing and pose save/restore written three and two times | Not changed: to fold into the S-phase casualty system |
+
+**Negative run of round 1 after redesign 2** (lags dropped, every order dropped on a halt, no dress):
+the held file moves 1.11 m and the cut-short Retire ends facing the rear. Without the dress step alone
+the Retire still measures 29.6 m (it matters only with the lag-keeping anchor step).
 
