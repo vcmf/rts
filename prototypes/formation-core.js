@@ -517,41 +517,52 @@ function stepBack(b, d) {
 // old tail. Then each file closes toward its new front rank, so a few men step up. The result is
 // checked through the gate as a whole; refused if it would put anyone on impassable ground.
 const FACE_TIME = 3;   // s the battalion stands while it faces about
+const DRESS_TIME = 30;   // s at most to dress before the next drill order
 function halfTurnOf(shape) {
-  const L = binsOf(shape); if (L.turnMap !== undefined) return L.turnMap;
+  const L = binsOf(shape); if (L.turnMap !== undefined) return L.turnMap;   // { cx, cz, m: slot map, bin: bin map } or null
   const all = []; let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (let c = 0; c < COMPANIES; c++) for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++) { const [x, z] = L.pos[c][r][f]; all.push([c, r, f, x, z]);
     x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, m = [];
   for (const [c, r, f, x, z] of all) { const q = all.find(a => Math.abs(a[3] - (2 * cx - x)) < 1e-6 && Math.abs(a[4] - (2 * cz - z)) < 1e-6);
     if (!q) return (L.turnMap = null); ((m[c] = m[c] || [])[r] = m[c][r] || [])[f] = [q[0], q[1], q[2]]; }
-  return (L.turnMap = { cx, cz, m });
+  const bin = []; for (const [c, r, f] of all) { const [c2, r2, f2] = m[c][r][f]; bin[c * 3 + L.of[c][r][f]] = c2 * 3 + L.of[c2][r2][f2]; }
+  return (L.turnMap = { cx, cz, m, bin });
 }
+// returns '' when done, else why not
 function faceAbout(b) {
-  const T = halfTurnOf(b.shape); if (!T || b.trans) return false;
-  const snake = snakes(b); if (snake && Math.abs(T.cx) > 1e-6) return false;   // a trail shape turns about its trail
-  const keep = [b.x, b.z, b.heading, b.trail, b.trailLen, b.lags.slice(), b.soldiers.map(s => [s.c, s.r, s.f]), b.grid.map(g => g.map(r => r.slice()))], before = wetBins(b);
-  if (snake) {   // the new head is the point of the trail the old tail's mirror stands on
-    const Dt = -2 * T.cz, ctx = arcOf(b, b.x, b.z, b.heading, {}), p = trailPoint(ctx, Dt, [0, 0]), pa = trailPoint(ctx, Dt - 1, [0, 0]), pb = trailPoint(ctx, Dt + 1, [0, 0]);
+  const T = halfTurnOf(b.shape); if (!T) return 'the shape has no half-turn symmetry'; if (b.trans) return 'changing shape';
+  const snake = snakes(b); if (snake && Math.abs(T.cx) > 1e-6) return 'the column is not centred on its trail';
+  const keep = [b.x, b.z, b.heading, b.trail, b.trailLen, b.lags.slice(), b.soldiers.map(s => [s.c, s.r, s.f]), b.grid.map(g => g.map(r => r.slice()))], before0 = wetBins(b);
+  // lags: a file l behind its place stands L − l ahead of its mirrored place once the anchor steps back
+  // by L, the largest lag; so every man keeps his place
+  let L = 0; for (let j = 0; j < NB; j++) if (b.binN[j]) L = Math.max(L, b.lags[j]);
+  const lag1 = new Float64Array(NB); for (let j = 0; j < NB; j++) lag1[T.bin[j]] = b.binN[j] ? L - b.lags[j] : 0;
+  let before = 0; for (let j = 0; j < NB; j++) if (before0 & (1 << j)) before |= 1 << T.bin[j];   // the same men, new labels
+  if (snake) {   // the new head is the trail point the old tail's mirror stands on, L further back
+    const Dt = -2 * T.cz + L, ctx = arcOf(b, b.x, b.z, b.heading, {}), p = trailPoint(ctx, Dt, [0, 0]), pa = trailPoint(ctx, Dt - 1, [0, 0]), pb = trailPoint(ctx, Dt + 1, [0, 0]);
     const trail = []; for (let D = -15; D < Dt; D += 0.25) { const q = trailPoint(ctx, D, [0, 0]); trail.push({ x: q[0], z: q[1] }); }
     b.x = p[0]; b.z = p[1]; b.heading = Math.atan2(pb[0] - pa[0], pb[1] - pa[1]); b.trail = trail;
     b.trailLen = 0; for (let k = 1; k < trail.length; k++) b.trailLen += Math.hypot(trail[k].x - trail[k - 1].x, trail[k].z - trail[k - 1].z);
-  } else { const o = rot2(T.cx, T.cz, -b.heading); b.x += 2 * o[0]; b.z += 2 * o[1]; b.heading += Math.PI; }
-  b.lags.fill(0);
+  } else { const o = rot2(T.cx, T.cz, -b.heading); b.x += 2 * o[0] - Math.sin(b.heading) * L; b.z += 2 * o[1] - Math.cos(b.heading) * L; b.heading += Math.PI; }
+  b.lags.set(lag1);
   for (const g of b.grid) for (const rank of g) rank.fill(-1);
   b.soldiers.forEach((s, i) => { [s.c, s.r, s.f] = T.m[s.c][s.r][s.f]; if (s.alive) b.grid[s.c][s.r][s.f] = i; });
   for (let c = 0; c < COMPANIES; c++) for (let f = 0; f < FILES; f++) {   // close each file toward its front rank
     const men = []; for (let r = 0; r < RANKS; r++) if (b.grid[c][r][f] >= 0) men.push(b.grid[c][r][f]);
     for (let r = 0; r < RANKS; r++) b.grid[c][r][f] = r < men.length ? men[r] : -1;
     men.forEach((i, r) => { b.soldiers[i].r = r; }); }
+  closeRanks(b);   // files back to the centring casualties close toward (the mirror moves them); gated with the rest
   if (wetBins(b) & ~before) {
-    [b.x, b.z, b.heading, b.trail, b.trailLen] = keep; b.lags.set(keep[5]); b.soldiers.forEach((s, i) => { [s.c, s.r, s.f] = keep[6][i]; }); b.grid = keep[7]; return false; }
-  b.px = b.x; b.pz = b.z; b.ph = b.heading; b.rateOff = true; b.allOnRoad = false; return true;
+    [b.x, b.z, b.heading, b.trail, b.trailLen] = keep; b.lags.set(keep[5]); b.soldiers.forEach((s, i) => { [s.c, s.r, s.f] = keep[6][i]; }); b.grid = keep[7]; return 'impassable ground'; }
+  b.px = b.x; b.pz = b.z; b.ph = b.heading; b.rateOff = true; b.allOnRoad = false; return '';
 }
 // stopped by impassable ground: the order ends and the slots come back to where the held men stand
 // (the anchor steps back by the largest held lag; the other files dress back with them)
+// a halt drops the rest of the orders except those that finish a drill (Retire's last Face about)
+const haltOrders = b => { b.orders = b.orders.filter(o => o.finish); };
 function haltAtEdge(b, held) {
-  b.orders = []; b.vx = b.vz = 0; b.omega = 0; b.status = 'halted: impassable ground'; b.blockedFor = 0; b.rateOff = true;
+  haltOrders(b); b.vx = b.vz = 0; b.omega = 0; b.status = 'halted: impassable ground'; b.blockedFor = 0; b.rateOff = true;
   let d = 0; for (let j = 0; j < NB; j++) if (held & (1 << j)) d = Math.max(d, b.lags[j]);
   if (d > 0) { const before = wetBins(b), keep = [b.x, b.z, b.heading, b.trail.slice(), b.trailLen, b.lags.slice()];
     stepBack(b, d); for (let j = 0; j < NB; j++) b.lags[j] = Math.max(0, b.lags[j] - d);
@@ -618,10 +629,10 @@ function formationStep(b) {
     // the turn, through the gate: a straight shape turns first (in place when the turn is large); a trail
     // shape turns only as its head advances, on a radius of at least turnRadius (after the advance below)
     const snake = snakes(b);
-    // a trail shape cannot reach a target inside its turning circle on the side it turns to: it halts
-    // (no automatic manoeuvre: the player re-orders, faces about or re-forms)
+    // a trail shape cannot reach a target inside its turning circle on the side it turns to: this move
+    // ends there (no automatic manoeuvre: the player re-orders, faces about or re-forms)
     if (snake) { const R0 = turnRadius(b), sd = dh > 0 ? 1 : -1, cx = b.x + Math.cos(b.heading) * R0 * sd, cz = b.z - Math.sin(b.heading) * R0 * sd;
-      if (Math.hypot(o.x - cx, o.z - cz) < R0) { b.orders = []; b.vx = b.vz = 0; b.status = 'halted: target inside the turning circle'; return; } }
+      if (Math.hypot(o.x - cx, o.z - cz) < R0) { b.orders.shift(); b.vx = b.vz = 0; b.status = 'arrived: as near as the column can turn'; return; } }   // the next order goes on
     const before = wetBins(b); let turnHeld = false;
     const turnBy = lim => { const h1 = b.heading, turn = Math.max(-lim, Math.min(lim, dh)), ut = gate(b, before, u => { b.heading = h1 + turn * u; }); turnHeld = Math.abs(turn) > 1e-4 && ut < 1; };
     if (!snake) turnBy(wmax);
@@ -647,9 +658,13 @@ function formationStep(b) {
     // stopped by impassable ground: held and not advancing (or not able to turn) for a while
     if ((held || turnHeld) && (moved < STALL * TICK || turnHeld) && (want0 > 0 || turnHeld)) { b.blockedFor += TICK; if (b.blockedFor > HALT_AFTER) haltAtEdge(b, held); }
     else { b.blockedFor = 0; if (moved > 0.001) b.status = ''; }
+  } else if (o.type === 'dress') {   // halt and dress: lagging files close up (at most DRESS_TIME)
+    b.vx = b.vz = 0; lagSettle(b); if (o.t0 === undefined) o.t0 = simTime;
+    let lmax = 0; for (let j = 0; j < NB; j++) if (b.binN[j]) lmax = Math.max(lmax, b.lags[j]);
+    if (lmax < 0.05 || simTime - o.t0 > DRESS_TIME) b.orders.shift();
   } else if (o.type === 'face') {   // face about, then stand while the men turn
     b.vx = b.vz = 0;
-    if (o.t0 === undefined) { if (!faceAbout(b)) { b.orders = []; b.status = 'cannot face about: impassable ground'; return; } o.t0 = simTime; b.status = ''; }
+    if (o.t0 === undefined) { const why = faceAbout(b); if (why) { b.orders = []; b.status = 'cannot face about: ' + why; return; } o.t0 = simTime; b.blockedFor = 0; }
     if (simTime - o.t0 >= FACE_TIME * drill) b.orders.shift();
   } else if (o.type === 'wheel') {   // rotate the whole battalion around the flank it turns to
     if (snakes(b)) { b.orders.shift(); b.status = 'cannot wheel: a column of route turns as it marches'; return; }
@@ -810,12 +825,12 @@ function reset(x = -20, z = -40, heading = 0) {
 }
 function order(name, a) {
   const b = main;
-  b.status = '';
+  b.status = ''; b.blockedFor = 0;
   if (SHAPES[name]) { b.orders = [{ type: 'form', shape: name }]; return; }
   if (name === 'move') { b.orders = [{ type: 'move', x: a.x, z: a.z }]; return; }
   if (name === 'face') { b.orders = [{ type: 'face' }]; return; }
-  // retire: face about, march a ≥ metres, face the front again (all through the gate)
-  if (name === 'retire') { b.orders = [{ type: 'face' }, { type: 'move', ahead: a || 30 }, { type: 'face' }]; return; }
+  // retire: face about, march a metres, halt and dress, face the front again (all through the gate)
+  if (name === 'retire') { b.orders = [{ type: 'face' }, { type: 'move', ahead: a || 30 }, { type: 'dress', finish: true }, { type: 'face', finish: true }]; return; }
   if (name === 'wheelL') { b.orders = [{ type: 'wheel', angle: Math.PI / 4 }]; return; }
   if (name === 'wheelR') { b.orders = [{ type: 'wheel', angle: -Math.PI / 4 }]; return; }
   if (name === 'wood') { b.orders = [{ type: 'move', x: WOOD.x, z: WOOD.z - WOOD.r - 12 }, { type: 'move', x: WOOD.x, z: WOOD.z + WOOD.r + 14 }]; return; }
