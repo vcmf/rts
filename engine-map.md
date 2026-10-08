@@ -16,7 +16,7 @@ command language. Everything else sits around that core:
                               │
                               ▼
    ┌──────────── SIMULATION (worker, 20 Hz, deterministic float64) ─────────────────┐
-   │ formations · orders & couriers · movement · fire · melee · morale · vision ... │
+   │ formations · orders · commanders · movement · fire · melee · morale · vision   │
    └───────────────────────────────┬────────────────────────────────────────────────┘
                                    │ snapshots (per tick)
                                    ▼
@@ -36,9 +36,9 @@ without the renderer.
 |---|---|---|
 | D1 | **The formation is the simulation's unit.** A battalion is one entity (line shape, strength, share loaded, morale, fatigue, ammunition). The 100–200 figures are placed and animated by the renderer from that state. Musketry is resolved per formation, statistically; roundshot is a real ray bouncing on the heightfield | agreed (Oct 2026) |
 | D2 | **Deterministic numbers in the simulation.** Revised after the sim-design review: **restricted float64** (IEEE `+ − × /` and `sqrt` only; `Math.sin`, `pow` and the like banned by lint; own trig; build-time input data; seeded integer RNG; index-ordered iteration) instead of Q16.16 fixed-point, which overflowed and was mis-specified (`sim-design.md` §2, §19) | revised, proposed |
-| D3 | **Orders travel**: an order is a courier entity in the simulation and takes effect on arrival. How much delay applies (none, above brigade, everywhere) is a difficulty setting | agreed in principle; default level to playtest |
+| D3 | **No couriers: orders apply immediately.** Couriers would need trajectories, blocking and interception; too costly to do well. Generals still matter on the field (rally, morale) | agreed (Oct 2026) |
 | D4 | **Single-player first, multiplayer-capable**: determinism, hashing and command logs are built as if lockstep were coming, so it stays a transport problem | proposed |
-| D5 | **Battle clock with time compression** (real battles last hours). Time of day is chosen per scenario and baked; the sun does not move during a battle (static light is baked once per map, `design.md`) | proposed |
+| D5 | **A battle takes 30–45 minutes of real time** (real battles lasted hours): a battle clock with speed controls (pause, 1×, 2×, 4–8×). Time of day is chosen per scenario and baked; the sun does not move during a battle | agreed (Oct 2026) |
 | D6 | **The camera is locked down** (short 3D zoom); the far zoom is the staff map | agreed (`engine-design.md`, `staff-map/`) |
 
 ## 3. The map
@@ -67,7 +67,7 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 | Heightfield and terrain layers | Height, slope, cover, roads, water depth and fords as sim data | `engine-design.md` §4 | E0 | 🟡 (`H()`, river data) |
 | Spatial index | Who is near whom, per formation (figures are not simulated, D1) | `sim-design.md` | P | ⬜ |
 | Formations and drill | Line, column, square, skirmish; frontage per file; **timed formation changes** (square ≈ 60–100 s) with a penalty while changing | `sim-design.md` | P | ⬜ |
-| Orders and couriers | Order queue per formation; couriers travel the command hierarchy (D3) | `sim-design.md` | P | ⬜ |
+| Orders and commanders | Order queue per formation (immediate); brigade group moves; generals rally and steady nearby troops | `sim-design.md` §6 | P | ⬜ |
 | Movement | Formation paths over the heightfield; wheeling, line deformation over terrain; local separation | `sim-design.md`, `web-rts-architecture.md` §7 | P | ⬜ |
 | Fire | Musketry per formation (share loaded, volleys, 1 hit per 300–800 rounds in battle); artillery rays with ricochet, canister cones | `sim-design.md` | P | ⬜ |
 | Melee and charges | Impact, square vs cavalry, breach chance on a morale failure | `sim-design.md` | P | ⬜ |
@@ -127,7 +127,7 @@ Phases as revised in `sim-design.md` §17:
 - **S0 short spine** (2–3 days): number rules and lint, tables, commands, RNG, hash, Node replay,
   build step for the sim heightfield and cost grid.
 - **S1 fun slice** (main thread, with the units placeholder): infantry, one cavalry regiment, one
-  battery, morale, standing behaviour, couriers behind a toggle. Acceptance: a 20-minute brigade
+  battery, morale, standing behaviour, brigade group moves. Acceptance: a 20-minute brigade
   fight is fun at 2× speed.
 - **S2 hardening:** worker, vision, smoke, group moves, cross-browser replays.
 - **S3 a real battle:** order of battle, scenarios, AI, saves.
@@ -137,7 +137,7 @@ performance, video tier, W6). The two tracks meet at the units placeholder.
 
 ## 5. Open questions
 
-1. Courier delay default (D3): none, above brigade, or everywhere?
-2. Time compression range and the battle length target (D5).
-3. Whether figures ever matter to the simulation (e.g. a single officer figure as the courier
-   target or the general's position), or everything stays per formation.
+1. What the player commands: battalions or brigades (`sim-design.md` §18).
+2. Default game speed within the 30–45 minute battle length (D5).
+3. Whether figures ever matter to the simulation (e.g. the general's figure), or everything stays
+   per formation.

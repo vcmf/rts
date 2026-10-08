@@ -21,12 +21,12 @@ decisions in `engine-map.md` §2. Evidence and parameters: `research/rts-engine-
 |---|---|
 | **Formations**: battalions, cavalry regiments, batteries (D1) | The 100–200 figures of a formation, their animation, who falls |
 | **Commanders**: generals, one rider each, with position | Flags, drummers, officers inside a formation |
-| **Couriers** riding with orders (D3) | Musket balls, flashes |
+| | Musket balls, flashes |
 | **Roundshot** in flight (rays bouncing on the heightfield) | Dust, debris, bodies |
 | **Smoke puffs** (position, radius, density) | The painted smoke clouds drawn from the puffs |
 | Sim heightfield, cost grid, terrain layers (build-time data, §2) | Vegetation, water look, the far ring |
 
-Scale per battle: ≤ 128 formations, ≤ 64 commanders, ≤ 256 couriers, ≤ 256 roundshot, ≤ 512 smoke
+Scale per battle: ≤ 128 formations, ≤ 64 commanders, ≤ 256 roundshot, ≤ 512 smoke
 puffs. The sim works on tens of entities, not thousands. A figure stands for about 3–8 men (R§3).
 
 ## 2. Numbers, inputs, time, randomness
@@ -61,8 +61,8 @@ versions, R§4). So:
 ## 3. Entities
 
 Tables of typed arrays per kind. Handles carry a **kind tag** (`kind:3 | index:9 | gen:19`) so a
-target or a courier destination is unambiguous across tables (`web-rts-architecture.md` §3 used a
-single 12-bit index). Variable-length data (waypoints, order queues, courier payloads) lives in
+target or an order's recipient is unambiguous across tables (`web-rts-architecture.md` §3 used a
+single 12-bit index). Variable-length data (waypoints, order queues) lives in
 **typed-array pools** with free lists, so every byte of state is in arrays that the hash and saves
 cover, including the RNG state and the free lists.
 
@@ -81,8 +81,7 @@ cover, including the RNG state and the free lists.
 | Orders | pool handle, last order sequence number |
 
 **Commander**: side, parent, rank (army, corps, division, brigade), position, quality (initiative,
-command radius, rally), alive, successor rule. **Courier**: order payload (pool), from, to,
-position, preparation ticks. **Roundshot**: position, velocity, energy, battery. **Smoke puff**:
+command radius, rally), alive, successor rule. **Roundshot**: position, velocity, energy, battery. **Smoke puff**:
 position, radius, density.
 
 ## 4. Commands
@@ -131,25 +130,25 @@ Orders to formations go through command and control (§6).
 - **Skirmish order** is for light companies and light battalions only: lower rate of fire, low
   density, helpless against cavalry.
 
-## 6. Command and control (couriers)
+## 6. Command and control
 
-- **Orders go down the chain.** A player order to a formation goes to its **brigade commander**.
-  If the formation is within the brigadier's radius, it applies at once (voice, drum, bugle);
-  otherwise the brigadier sends a courier. Between the army commander (the player) and the
-  brigadier, the **delay level** decides (D3):
-  - **off:** orders reach brigadiers instantly;
-  - **above brigade (default proposal):** a courier rides from the army commander to the brigadier;
-  - **everywhere:** couriers at every level, including division and corps.
-- **Courier:** preparation time (commander quality, ≈ 10–40 s), then rides toward the recipient's
-  *current* position (≈ 5–7 m/s, unsourced), around enemy formations.
-- **Order sequence numbers:** every order carries the issuing sequence; an older order arriving
-  after a newer one is dropped. Orders are **replace** (default) or **append**.
-- **Timing check:** 500–1000 m at 6 m/s plus preparation is ≈ 2–4 minutes. Cavalry arrives in about
-  60 s, so reactions come from **standing behaviour** (§12), not from orders. That is the intended
-  game: the player commands intentions; brigades react.
-- **Succession:** a dead commander is replaced by the next in the chain after a delay (orders in
-  his hands are lost). If the player's own commander falls, the army commander's successor takes
-  over with a long delay.
+**No couriers** (decided Oct 2026): orders apply immediately. A courier system would also need
+trajectories, blocking, interception and their edge cases; it is not worth it for this game.
+Command still matters through the commanders on the field:
+
+- **Commanders** are entities with a position: the army commander (the player) and the brigade,
+  division and corps generals of the order of battle.
+- **Rally and morale:** formations within a commander's radius get a morale bonus and can be
+  rallied when routing (§10). Riding a general forward helps a wavering line, at the risk of his
+  life.
+- **Brigades as groups:** a brigade order lays out its battalions (a line, a column of battalions,
+  a supporting second line) through `group-move`; battalions can still be ordered one by one.
+- **Orders** are **replace** (default) or **append** (queued waypoints).
+- **Standing behaviour** (§12) still matters: troops react on their own to cavalry, fire and
+  disorder between the player's orders.
+- **Succession:** a dead general is replaced by the next in the chain after a delay; his
+  formations lose the rally bonus meanwhile. If the army commander falls, the player keeps control
+  (no game over), but the army takes a morale shock.
 
 ## 7. Movement
 
@@ -238,7 +237,7 @@ steady ──► shaken ──► wavering ──► routing ──► rallying 
   staggered (each formation ≈ 2×/s). Woods and villages block; height helps (R§3). Budget measured
   at the maximum count before raising rates.
 - **Uses:** targeting, AI knowledge, later fog of war. **The player sees everything** until the S2
-  playtests decide otherwise (full visibility weakens couriers and smoke; noted).
+  playtests decide otherwise.
 - **Smoke puffs** (≤ 512): volleys and guns emit puffs that drift with a fixed wind and decay.
   Sight rays and fire through puffs lose range and accuracy (to ≈ 45 m in heavy fighting, R§3).
   The renderer draws the same puffs as painted clouds. (A gridded, advected field is cut.)
@@ -252,7 +251,7 @@ steady ──► shaken ──► wavering ──► routing ──► rallying 
     stay formed for a delay after the threat (feinting cavalry costs the enemy too);
   - halt to restore cohesion; fall back when wavering.
 - **Enemy AI:** the enemy's plan is **scripted per scenario** (objectives, timing, which brigades
-  attack where). Brigade-level AI executes it through commands and couriers: lines, supports,
+  attack where). Brigade-level AI executes it through commands: lines, supports,
   attack and defend points, time-sliced (≈ 1 s). Army-level AI is later.
 - **Fair:** the AI knows only what its side sees.
 
@@ -295,7 +294,7 @@ cases to need one.
 After the fun slice (§17) the sim runs in a **Web Worker**.
 - The worker posts **the latest snapshot once per render frame** (not per tick: at 8× that would be
   160 posts/s), as a transferable buffer, plus an **event ring** since the last post: volleys,
-  grazes, casualties per formation, morale breaks, couriers arriving.
+  grazes, casualties per formation, morale breaks.
 - The snapshot carries what figures need: centre, facing, kind, **transition progress**, frontage,
   ranks, files, men, **killed since last post**, morale state, smoke puffs. Figures re-slot and fall
   stably from it; the renderer interpolates positions between the last two snapshots.
@@ -305,7 +304,7 @@ After the fun slice (§17) the sim runs in a **Web Worker**.
 
 ```
 1  apply stamped commands                          9  roundshot flight and hits
-2  couriers: prepare, ride, deliver                 10 melee
+2  commanders: movement, succession               10 melee
 3  enemy AI (time-sliced)                           11 apply casualties, shrink frontage
 4  standing behaviour                               12 morale and cohesion (from start-of-step state)
 5  orders → formation state (transitions)           13 smoke: emit, drift, decay
@@ -324,21 +323,20 @@ The goal is to learn **"is it fun?"** as early as possible without building dete
 | Phase | Scope | Acceptance |
 |---|---|---|
 | **S0 short spine** (2–3 days) | restricted-float64 rules + lint, entity tables and pools, handles with kind tags, commands and stamping, RNG, hash, Node replay test, build step for the sim heightfield and cost grid | A scripted fight of moving blocks replays to the same hashes in Node |
-| **S1 fun slice** (main thread) | infantry line, column, square; one cavalry regiment; one battery with roundshot; musketry calibrated on time to break; morale and cohesion; standing behaviour; couriers behind a toggle; an end condition; drawn by the prototype (units placeholder) | **A 20-minute brigade fight is fun at 2× speed**; cavalry catches a forming square; a square holds; artillery punishes columns |
+| **S1 fun slice** (main thread) | infantry line, column, square; one cavalry regiment; one battery with roundshot; musketry calibrated on time to break; morale and cohesion; standing behaviour; brigade group moves; an end condition; drawn by the prototype (units placeholder) | **A 20-minute brigade fight is fun at 2× speed**; cavalry catches a forming square; a square holds; artillery punishes columns |
 | **S2 hardening** | worker + snapshot + event ring; vision; smoke puffs; group moves; commanders and succession; Firefox/WebKit nightly replays | Same battle in the worker; replays match across browsers |
 | **S3 a real battle** | ammunition and fatigue; order of battle and scenarios; scripted enemy plan with brigade AI; saves; victory rules | One historical scenario playable start to end against the AI |
 
 ## 18. Open questions
 
-1. **What does the player command: battalions or brigades?** And how many decisions a minute is
-   the core loop built for? This drives couriers, the UI, group moves and the AI. (Most important;
-   raised by the review.)
-2. **Courier default** (§6): proposal "above brigade", with brigadiers relaying.
-3. **Battle length and speed:** proposal 30–45 real minutes per scenario, default 2×, 4–8× for
-   approach marches; casualty rates tuned to fit.
-4. **Fog of war for the player:** full visibility until S2 playtests.
-5. **Couriers killed or captured:** later; for now they ride around enemy formations.
-6. **Casualty display:** proposal: figures fall in proportion and ranks close, bodies stay on the
+**Decided (Oct 2026):** no couriers (§6); a battle takes **30–45 minutes of real time** (speed
+controls: pause, 1×, 2×, 4–8× for approach marches; march speeds and casualty rates are tuned to
+fit).
+
+1. **What does the player command: battalions or brigades?** Proposal: brigades as the main level
+   (`group-move`), battalions orderable one by one. Drives the UI, group moves and the AI.
+2. **Fog of war for the player:** full visibility until S2 playtests.
+3. **Casualty display:** proposal: figures fall in proportion and ranks close, bodies stay on the
    ground, plus a strength bar.
 
 ## 19. Adversarial review: what changed
@@ -349,7 +347,7 @@ The goal is to learn **"is it fun?"** as early as possible without building dete
 | Sim inputs (`H()`, cost grid, decay factors) computed per browser with `Math.sin`/`pow` | Accepted: build-time data, hashed into the data version (§2) |
 | Commands across the worker: who stamps the tick; AI commands applied twice on replay; variable-length state outside the hash | Accepted: sim stamps and quantizes; only external commands logged; pools for variable data (§3, §4) |
 | Musketry calibration: 1.4–5 casualties/min, battle would look static; the research misread Duhèsme (3–4 casualties per whole firefight, not per minute) | Accepted: calibrate on time to break (§8); the research report is corrected in the same PR |
-| Courier rule degenerate (almost every order by courier from the army commander; brigadiers do nothing) | Accepted: orders down the chain, sequence numbers, replace/append (§6) |
+| Courier rule degenerate (almost every order by courier from the army commander; brigadiers do nothing) | Superseded: the owner dropped couriers; orders apply immediately (§6) |
 | 120 m rigid lines: centre-point A*, misaligned 8 m grid, 174 m wheel sweeps, jittery reservation, no passage of lines | Accepted: clearance grids, column for turns, change front, 7.16 m aligned grid, interpenetration rules (§7) |
 | Snapshot per tick at 8× = 160 posts/s; events lost | Accepted: snapshot per frame + event ring (§16) |
 | Missing: targeting, arcs, friendly fire, cohesion vs morale, ammunition, map edges, group moves, succession, frontage shrink | Accepted (§3–§10) |
