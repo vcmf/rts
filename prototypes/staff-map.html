@@ -709,8 +709,8 @@ function fleeHeading(u){let vx=0,vz=0;
   if(Math.hypot(vx,vz)<1e-6)return u.sideI===0?-Math.PI/2:Math.PI/2;   // pinched or alone: toward the own rear
   // near the map edge, the part of the escape that points into it is dropped (the unit runs along the edge);
   // in a corner nothing is left, so it keeps the full escape and the map clamp holds it
-  const ax=vx,az=vz,E=150;if(u.x>MX-E&&vx>0||u.x<-MX+E&&vx<0)vx=0;if(u.z>MZ-E&&vz>0||u.z<-MZ+E&&vz<0)vz=0;
-  return Math.hypot(vx,vz)<1e-6?Math.atan2(ax,az):Math.atan2(vx,vz);}
+  const ax=vx,az=vz,EDGE=150;if(u.x>MX-EDGE&&vx>0||u.x<-MX+EDGE&&vx<0)vx=0;if(u.z>MZ-EDGE&&vz>0||u.z<-MZ+EDGE&&vz<0)vz=0;
+  return Math.hypot(vx,vz)<0.2*Math.hypot(ax,az)?Math.atan2(ax,az):Math.atan2(vx,vz);}   // too little left along the edge: its sign is noise
 function setForm(u,f){if(u.form===f)return;u.prev=u.form;u.form=f;u.morph=0;}
 function angTo(a,b){let d=b-a;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d;}
 function simStep(dt){
@@ -724,9 +724,8 @@ function simStep(dt){
     // routing
     if(u.state==='rout'){u.mor=Math.min(1,u.mor+dt*0.0025);const ne=nearestEnemy(u,700);
       if(!ne||u.mor>0.55){u.state='idle';finishOrder(u);u.path=null;setForm(u,'line');u.mor=Math.max(u.mor,0.5);}
-      // the escape direction is smoothed so it never snaps when the set of enemies in reach changes
-      else{const t=fleeHeading(u),k=Math.min(1,dt*0.3),vx=lerp(Math.sin(u.face),Math.sin(t),k),vz=lerp(Math.cos(u.face),Math.cos(t),k),sp=T.speed*1.4*dt;
-        if(Math.hypot(vx,vz)>1e-3)u.face=Math.atan2(vx,vz);u.x+=Math.sin(u.face)*sp;u.z+=Math.cos(u.face)*sp;}
+      // the escape direction turns at most 0.5 rad per game second, so it never snaps when the enemies in reach change
+      else{const t=fleeHeading(u),sp=T.speed*1.4*dt;u.face+=clamp(angTo(u.face,t),-0.5*dt,0.5*dt);u.x+=Math.sin(u.face)*sp;u.z+=Math.cos(u.face)*sp;}
       endStep(u);continue;}
     const cavNear=u.type==='inf'?nearestEnemy(u,230,e=>e.type==='cav'&&e.state!=='rout'):null;
     // movement
@@ -858,15 +857,16 @@ const FOOT_FADE=2400,FOOTS=new Map();                       // game seconds unti
 function sampleFootprints(){
   for(const o of ORDERS){if(o.quiet)continue;let f=FOOTS.get(o);if(!f)FOOTS.set(o,f={side:o.side,pts:[[...o.P[0],GT]],s:0,first:0,reach:0,vis:1,led:true,o,ids:o.units.slice()});
     f.reach=o.done?Math.max(f.reach,o.prog):Math.min(Math.max(f.reach,o.prog),f.reach+12);   // the group average jumps when a battalion leaves: follow at a pace, settle on finish
-    if(f.reach-f.s>16||(o.done&&f.reach>f.s)){f.pts.push([...along(o.P,f.reach),GT]);f.s=f.reach;}}
-  // a trace must lead to a block: shown while one of its own battalions stands within 250 m of its end
-  for(const f of FOOTS.values()){while(f.first<f.pts.length-1&&GT-f.pts[f.first+1][2]>FOOT_FADE)f.first++;
-    const end=f.pts[f.pts.length-1];f.led=!f.o.done||f.ids.some(id=>{const u=UNITS[id];return!u.gone&&Math.hypot(u.x-end[0],u.z-end[1])<250;});}
+    while(f.reach-f.s>16){f.s+=16;f.pts.push([...along(o.P,f.s),GT]);}   // stamps follow the curve, never a chord
+    if(o.done&&f.reach>f.s){f.s=f.reach;f.pts.push([...along(o.P,f.s),GT]);}}
 }
 // per frame on the frame clock: visibility eases toward led (about 1 s); a trace is dropped once its last step ages out
 let FOOT_NOW=0;
 function cleanFootprints(now){const dt=clamp((now-(FOOT_NOW||now))/1000,0,0.1);FOOT_NOW=now;
-  for(const[o,f]of FOOTS){f.vis+=((f.led?1:0)-f.vis)*Math.min(1,dt*4);
+  for(const[o,f]of FOOTS){while(f.first<f.pts.length-1&&GT-f.pts[f.first+1][2]>FOOT_FADE)f.first++;
+    // a trace must lead to a block: shown while one of its own battalions stands within 250 m of its end
+    const end=f.pts[f.pts.length-1];f.led=!o.done||f.ids.some(id=>{const u=UNITS[id];return!u.gone&&Math.hypot(u.x-end[0],u.z-end[1])<250;});
+    f.vis+=((f.led?1:0)-f.vis)*Math.min(1,dt*4);
     if(o.removed&&GT-f.pts[f.pts.length-1][2]>FOOT_FADE)FOOTS.delete(o);}
 }
 function drawOrders(now,alpha){
@@ -1011,7 +1011,8 @@ function putFig(F,x,y,z,yaw,rand,moving,side){const k=F.n++,o=k*16,c=Math.cos(ya
   F.info[k*4]=rand;F.info[k*4+1]=moving;F.info[k*4+2]=side;}
 let figKey='';
 function updateFigures(force){
-  const key=GT+':'+RISE().toFixed(4)+':'+st('stand').toFixed(3);if(!force&&key===figKey)return;figKey=key;
+  const easing=UNITS.some(u=>!u.gone&&Math.abs(angTo(u.dface,u.face))>1e-3);
+  const key=GT+':'+RISE().toFixed(4)+':'+st('stand').toFixed(3);if(!force&&!easing&&key===figKey)return;figKey=key;
   const on=st('stand')>0;for(const k in FIGS){FIGS[k].n=0;}
   if(on){const rise=RISE(),e3=[0,0,0],e4=[0,0,0];
     for(const u of UNITS){if(u.gone)continue;const n=alive(u),f=[Math.sin(u.dface),Math.cos(u.dface)],r=[Math.cos(u.dface),-Math.sin(u.dface)],e=easeIO(u.morph),mv=u.state!=='idle'?1:0;
@@ -1147,7 +1148,8 @@ setTimeout(()=>{
   // URL params for headless checks: ?R=900&x=..&z=..&simto=1800&season=0
   if(Q.has('R')){CAMS.R=CUR.R=+Q.get('R');}if(Q.has('x')){CAMS.T.x=CUR.x=+Q.get('x');CAMS.T.z=CUR.z=+(Q.get('z')||0);}
   if(Q.has('yaw')){CAMS.yaw=CUR.yaw=+Q.get('yaw');}
-  if(Q.has('simto')){const n=+Q.get('simto');for(let i=0;i<n;i++){simStep(1);sampleFootprints();}}
+  if(Q.has('simto')){const n=+Q.get('simto');for(let i=0;i<n;i++){simStep(1);sampleFootprints();}
+    for(const u of UNITS)u.dface=u.face;cleanFootprints(performance.now());for(const f of FOOTS.values())f.vis=f.led?1:0;}   // a jump settles drawn state at once
   if(Q.has('speed'))setSpeed(+Q.get('speed'));
   if(Q.has('follow')){const us=byCorps(Q.get('follow'));if(us.length){const u=us[+(Q.get('i')||0)%us.length];CAMS.T.x=CUR.x=u.x;CAMS.T.z=CUR.z=u.z;}}
   if(Q.has('sel')){const u=UNITS.find(u=>u.corps===Q.get('sel'));if(u){byCorps(u.corps).forEach(v=>v.sel=true);updateCard();}}
