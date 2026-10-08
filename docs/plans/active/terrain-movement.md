@@ -262,3 +262,43 @@ the casualty system (S-phase).
 | 9 | light | The trail arc built twice; allocations in the hot path | Not changed: measured cost within budget; to go with the S0 rewrite |
 | 10 | light | Run instructions disagreed on the timeout; stale plan figures | 1200 s everywhere; figures updated |
 
+## Review round 3 after the redesign
+
+10 findings, 2 severe. Third round in a row with severe findings: stop and redesign (proposal below).
+
+| # | Sev. | Finding |
+|---|---|---|
+| 1 | severe | Countermarch flip-flops every tick for a target behind the head within the column's length |
+| 2 | severe | A column halted at the water still cannot leave for targets 60–110° off its heading (only targets behind work) |
+| 3 | moderate | The countermarch mirror (rank r → 2 − r) leaves front-rank holes that persist into line |
+| 4 | moderate | The countermarch's gate check compares bins under old and new labels |
+| 5 | moderate | `changeWet` exempts an occupied wet slot at every pose, decided before `rebalance` moves men |
+| 6 | moderate | Checks miss 1–3; several assertions pass in states they should reject |
+| 7 | moderate | The retire moves at full pace, outside terrain speed and the lag model |
+| 8 | light | Retire starts only when a turn cannot move at all; its budget can exceed three half-widths |
+| 9 | light | Retire always goes straight back, even when the ground behind blocks the turn |
+| 10 | light | A refused countermarch is retried every tick at full cost |
+
+## Redesign 2 (proposed after round 3 of the redesign)
+
+The gate holds: since the redesign, no review found a man's place on impassable ground through
+ordinary motion. The severe findings of the last two rounds are all about getting a blocked unit
+moving again (stuck at the bank, countermarch flip-flops), and each fix was another automatic
+controller (retire, countermarch, turning-circle arrival) added to the move order. That is manoeuvre
+planning, the pathfinding phase's job, done piecemeal inside this PR.
+
+- **This PR stops at the rule:** a move that cannot proceed halts with a clear status; it never
+  oscillates and never leaves anyone on impassable ground. No automatic retire or countermarch.
+- **Two explicit, gated drill orders** for the player instead: *Retire* (step back N metres: along the
+  heading for a straight shape, back along the trail for a column; at the ground's speed through the
+  lag model) and *Face about* (a column countermarches with a rank-preserving relabel: files and
+  companies mirrored, each file's men repacked front to back; a line faces about by turning 180° on
+  its centre). Each is checked through the gate once, as a whole, before it starts.
+- **Change check simplified:** no exemptions. A change is refused if any slot, filled or empty, would
+  be on impassable ground at any sampled pose, before or after `rebalance`. A unit already standing on
+  such ground (only possible through scenario setup) must first move off it.
+- **Manoeuvre planning** (choosing retire, wheel, countermarch or a path around water automatically)
+  moves to the pathfinding phase, with its own plan.
+- **Checks:** the halt is final and stable (no oscillation over 60 s for any target angle at the bank);
+  Retire and Face about each with a negative run; rank packing after Face about.
+
