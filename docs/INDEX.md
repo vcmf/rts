@@ -40,7 +40,8 @@ designs written before building (frozen once built, their lasting content moves 
 ## Plans
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
-  [`plans/active/staff-map.md`](plans/active/staff-map.md).
+  [`plans/active/staff-map.md`](plans/active/staff-map.md),
+  [`plans/active/formation-feel.md`](plans/active/formation-feel.md) (F0).
 - Done: [`plans/done/w1-river-shape.md`](plans/done/w1-river-shape.md), [`plans/done/w1b-river-width.md`](plans/done/w1b-river-width.md), [`plans/done/docs-restructure.md`](plans/done/docs-restructure.md).
 
 ## Research (background)
