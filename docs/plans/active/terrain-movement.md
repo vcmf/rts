@@ -59,7 +59,7 @@ fire and morale.
 
 ## Results (headless, `tools/formation-measure.js`, after the redesign)
 
-Run with `SHOT_TIMEOUT_S=900` (the run takes several minutes; `tools/shot.mjs` waits 60 s per call by default).
+Run with `SHOT_TIMEOUT_S=1200` (the run takes several minutes; `tools/shot.mjs` waits 60 s per call by default).
 
 - **Partial bad ground** (a line marches 60 m; a strip of woods exactly 10 m deep, g = 0.55, q = 1,
   covers the files of n of its 12 sample points; time lost against the same march without it):
@@ -73,7 +73,7 @@ Run with `SHOT_TIMEOUT_S=900` (the run takes several minutes; `tools/shot.mjs` w
   The full front cannot avoid the strip: 10 m at 0.495 m/s against 10 m at 0.9 m/s is 9.1 s, and the
   model gives 9.0 s. Part of the front costs less; one file almost nothing with wide tolerances, and
   nearly the whole strip with "keep order" (the slowest file sets the pace, as drilled). Counting
-  until every file is back in its place, the research's tolerances cost 0.6 / 0.8 / 4.6 / 9.0 s
+  until every file is back in its place, the research's tolerances cost 0.5 / 0.7 / 4.6 / 9.0 s
   (the files left behind re-dress after arrival); the other rows do not change. Through every run
   the mean lag stays at or under Lmean and no file passes Lmax.
   **Departure from the research:** its table (0.5 / 2.2 / 6.3 / 10.5 s) came from an approximation of
@@ -91,8 +91,12 @@ Run with `SHOT_TIMEOUT_S=900` (the run takes several minutes; `tools/shot.mjs` w
     the stream 8, 9 and 10 m from it: halted, 0 places, 0 men;
   - a 4 m deep strip across part of the front, push order (Lmax 12 m): halted, nobody crosses;
   - thinned lines (41, 50, 59 losses) at the bank ordered into column over a grid of positions and
-    headings: 15 accepted, 27 refused, 0 places in the water (empty slots are checked too);
+    headings: 15 accepted, 27 refused, 0 places in the water (empty slots are checked too); a line
+    whose two emptied files stand over the stream is refused column (the men would spread into them);
+  - units halted at the water can leave: a line retires its half-width and turns, a march column
+    countermarches (the rear leads; every man keeps his place); both reach a target 58 m back;
   - ground a line cannot enter (a test ruleset with hedges g = 0 for a line): halted, 0 places on it;
+    a column standing across that hedge is refused line;
   - places are checked both now and as the soldiers aim for them (0.6 s ahead);
   - the same run twice gives the same state, bit for bit.
   - the ford is crossed and the battalion ends in line on the far bank.
@@ -105,7 +109,9 @@ Run with `SHOT_TIMEOUT_S=900` (the run takes several minutes; `tools/shot.mjs` w
   apart across the line of travel, stays at least 0.6 m behind it): a march column whose head is
   held up at a hedge bunches from 1.65 m to 0.6 m between companies, never closer; the same column
   turned 90° on push keeps 0.6 m between companies (0.03 m before) and 0.51 m between men of one
-  company (0.65 m at rest; 0.21 m before the turn radius); a square pushing into the wood keeps
+  company (0.65 m at rest; 0.21 m before the turn radius, which aims at 0.52 m: the trail's 0.25 m
+  points cost about a centimetre); a march column ordered inside its turning circle ends the order
+  ("arrived: as near as the column can turn") and refuses to wheel; a square pushing into the wood keeps
   0.68 m between faces (0.98 m at rest; 0.13 m before round 2).
 - **Earlier checks** still pass; the march column's turn: 0.52 m worst distance from slot (it was 1.24 m:
   the column no longer turns in place).
@@ -124,7 +130,11 @@ Run with `SHOT_TIMEOUT_S=900` (the run takes several minutes; `tools/shot.mjs` w
   target fall-back, one impassable grid for every kind): thinned lines put 2 places in the water, the
   bend folds to 0.16 m within a company, the hedge test 36 places on it, soldier targets 3, 2, 3, 2
   and 18 in the water.
-- **Cost, 40 battalions** (all four formations, 9 march columns moving): simulation 2.1 ms per frame
+- **Negative run after review round 2 of the redesign** (no countermarch, no retiring, every wet slot
+  exempt, no turning-circle arrival, wheels allowed in column): the line and the column stay stuck at
+  the bank (58.4 and 56.9 m from the target), the column circles its target, a wheeled column folds to
+  0.46 m, the thinned line forms column with 3 places in the water.
+- **Cost, 40 battalions** (all four formations, 9 march columns moving): simulation 2.2 ms per frame
   (1.7–1.8 ms before the gate; budget 4 ms, checked), drawing 0.9 ms.
 
 ## Review round 1
@@ -199,7 +209,11 @@ once, before the fact:
   behind the head (his place in the straight layout plus his lag), across it by his rank's offset;
   the ranks are centred on the trail. The head turns only as it advances, on a radius that keeps men
   one file apart at least 0.52 m apart on the inside of the bend (4.25 m for this column). The
-  accordion's straight-layout pairs then hold in bends.
+  accordion's straight-layout pairs then hold in bends. With its target well behind, a column
+  countermarches (the rear leads back along the trail; company, file and rank are mirrored, so every
+  man keeps his place); a target inside its turning circle ends the order; it does not wheel.
+- **Leaving impassable ground:** a straight shape whose turn cannot move at all retires straight back
+  by its half-width and a metre (up to three half-widths in one order), then turns.
 - **Soldiers** (the cosmetic layer) never step onto impassable ground either.
 - **Era names out of the core:** start shape and order preset, the passage shapes (narrow, deploy) and
   `closeAcross` (which shape closes across company boundaries) are ruleset data. The shape geometry
@@ -230,4 +244,21 @@ once, before the fact:
 Known and left: closing ranks after casualties (`closeRanks`) moves men sideways without the gate; at a
 bank parallel to the line a closed file could stand on impassable ground. To fold into the gate with
 the casualty system (S-phase).
+
+## Review round 2 after the redesign
+
+10 findings, 2 severe → round 3 (the last before another redesign).
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | severe | A unit halted at the water could not leave: a line could not turn, a column could not advance | A line retires its half-width to turn; a column countermarches; leave-the-bank checks |
+| 2 | severe | Round-1 #1 back: empty slots already over the water were exempt, then filled | Only a slot whose man already stands there is exempt; check with both emptied files over the stream |
+| 3 | moderate | A march column ordered inside its turning circle circled for ever | The order ends with "arrived: as near as the column can turn" |
+| 4 | moderate | A wheel on a march column folded its head company | Trail shapes refuse wheels |
+| 5 | moderate | Checks missing for the above; bend threshold looser than the claim | Checks added; the claim states 0.51 m measured against the 0.52 m aim |
+| 6 | light | During a change the guards used the old shape's kind; exemptions crossed kinds | The new shape's kind during a change (`kindOf`); the change check per the new kind |
+| 7 | light | Road flag kept across changes and steps back | Reset when a change starts, on a step back and a countermarch |
+| 8 | light | Transcendental functions in the 20 Hz layer (decision 0006) | Recorded in `docs/known-issues.md`: the S0 sim spine replaces them |
+| 9 | light | The trail arc built twice; allocations in the hot path | Not changed: measured cost within budget; to go with the S0 rewrite |
+| 10 | light | Run instructions disagreed on the timeout; stale plan figures | 1200 s everywhere; figures updated |
 
