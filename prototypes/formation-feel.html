@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Formation feel</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #c9c2a8; font: 13px/1.35 ui-monospace, Menlo, monospace; }
+  canvas { width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+  #panel { position: absolute; top: 12px; left: 12px; width: 250px; padding: 12px; background: rgba(250, 247, 238, 0.93);
+           border: 1px solid #b9b19a; border-radius: 6px; color: #2c2a24; }
+  #panel h1 { font-size: 13px; margin: 0 0 8px; letter-spacing: 0.08em; }
+  #panel .row { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+  #panel button { font: inherit; padding: 3px 7px; border: 1px solid #8d8570; background: #fff; border-radius: 4px; cursor: pointer; }
+  #panel button.on { background: #2c2a24; color: #fff; }
+  #panel label { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin: 4px 0; }
+  #panel input[type=range] { width: 110px; }
+  #stats { margin-top: 8px; white-space: pre; font-size: 12px; color: #4a463c; }
+  #hint { position: absolute; bottom: 10px; left: 12px; color: #4a463c; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@9.29.0/babylon.js"></script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <h1>FORMATION FEEL · F0</h1>
+  <div class="row">
+    <button data-form="line">Line</button><button data-form="column">Column</button>
+    <button data-form="square">Square</button><button data-form="march">March col.</button>
+  </div>
+  <div class="row">
+    <button data-cmd="wheelL">Wheel ⟲</button><button data-cmd="wheelR">Wheel ⟳</button>
+    <button data-cmd="wood">Through wood</button><button data-cmd="ford">Cross ford</button>
+  </div>
+  <div class="row">
+    <button data-cmd="kill">Casualties ×10</button><button data-cmd="reset">Reset</button>
+  </div>
+  <label>Drill factor <input id="drill" type="range" min="0.5" max="3" step="0.1" value="1"><span id="drillv">1.0</span></label>
+  <div class="row">
+    <button data-speed="1" class="on">1×</button><button data-speed="4">4×</button><button data-speed="10">10×</button>
+    <button data-cmd="many">40 battalions</button><button data-cmd="debug">Debug</button><button data-cmd="crowns">Crowns</button>
+  </div>
+  <div id="stats"></div>
+</div>
+<div id="hint">click the ground to move · drag to orbit · right-drag to pan · scroll to zoom</div>
+<script>
+/* =========================================================================
+   FORMATION FEEL PROTOTYPE (docs/plans/active/formation-feel.md)
+   Two layers, as recommended in docs/research/formation-movement-and-doc-systems.md §4:
+   - FORMATION layer at 20 Hz: anchor (path, speed, turn limits), 4 companies, a slot table with
+     stable identity (company, file, rank), shapes as company placements, timed drill transitions.
+   - SOLDIER layer every frame: each soldier steers to his slot extrapolated a little ahead, with
+     drift, separation, tree avoidance, terrain speed and height. Cosmetic: it never feeds back.
+   A feel test only: no combat or morale, no deterministic number rules (docs/proposals/sim-design.md §2).
+   ========================================================================= */
+const B = BABYLON, V3 = B.Vector3, C3 = B.Color3;
+
+/* ---------- seeded RNG (cosmetic here, but repeatable screenshots) ---------- */
+function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+/* ---------- terrain: gentle ground, a stream with one ford, a wood ---------- */
+const STREAM_X = z => 70 + 6 * Math.sin(z * 0.03);
+const FORD = { z0: -9, z1: 9 };
+const WOOD = { x: -45, z: 55, r: 30 };
+function baseH(x, z) { return 1.2 * Math.sin(x * 0.021) * Math.cos(z * 0.017) + 0.6 * Math.sin(x * 0.047 + z * 0.031); }
+const WATER_HALF = 5;
+function streamDepth(x, z) {   // depth below the banks: 0 outside the channel
+  const d = Math.abs(x - STREAM_X(z)); if (d > WATER_HALF + 2) return 0;
+  const bed = z > FORD.z0 && z < FORD.z1 ? 0.45 : 1.1;
+  const k = Math.min(1, Math.max(0, (WATER_HALF + 2 - d) / 2.5));
+  return bed * k * k * (3 - 2 * k);
+}
+const H = (x, z) => baseH(x, z) - streamDepth(x, z);
+const waterLevel = z => baseH(STREAM_X(z), z) - 0.25;
+const inWater = (x, z) => Math.abs(x - STREAM_X(z)) < WATER_HALF && H(x, z) < waterLevel(z);
+const inWood = (x, z) => (x - WOOD.x) ** 2 + (z - WOOD.z) ** 2 < WOOD.r * WOOD.r;
+// ground speed factor for soldiers and for the formation anchor
+const groundSpeed = (x, z) => (inWater(x, z) ? 0.45 : 1) * (inWood(x, z) ? 0.75 : 1);
+
+const canvas = document.getElementById('c');
+const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+const scene = new B.Scene(engine);
+scene.clearColor = new B.Color4(0.79, 0.76, 0.66, 1);
+const camera = new B.ArcRotateCamera('cam', -Math.PI / 2 - 0.3, 0.72, 70, new V3(0, 0, 0), scene);
+camera.attachControl(canvas, true); camera.lowerRadiusLimit = 15; camera.upperRadiusLimit = 260;
+camera.lowerBetaLimit = 0.2; camera.upperBetaLimit = 1.1; camera.wheelDeltaPercentage = 0.01; camera.panningSensibility = 40;
+camera.mapPanning = true; camera.minZ = 0.5; camera.maxZ = 2000;
+const sun = new B.DirectionalLight('sun', new V3(-0.6, -1, 0.45), scene); sun.intensity = 1.05; sun.diffuse = new C3(1, 0.95, 0.85);
+const sky = new B.HemisphericLight('hemi', new V3(0, 1, 0), scene); sky.intensity = 0.55; sky.groundColor = new C3(0.45, 0.42, 0.36);
+
+const ground = B.MeshBuilder.CreateGround('ground', { width: 360, height: 360, subdivisions: 220, updatable: true }, scene);
+{ const p = ground.getVerticesData(B.VertexBuffer.PositionKind), col = [];
+  for (let i = 0; i < p.length; i += 3) { const x = p[i], z = p[i + 2], h = H(x, z); p[i + 1] = h;
+    const wet = streamDepth(x, z) > 0.05, wood = inWood(x, z), n = 0.5 + 0.5 * Math.sin(x * 0.13 + z * 0.07) * Math.sin(z * 0.11 - x * 0.05);
+    const c = wet ? [0.42, 0.40, 0.30] : wood ? [0.36 + 0.05 * n, 0.43 + 0.05 * n, 0.24] : [0.55 + 0.08 * n, 0.58 + 0.06 * n, 0.33 + 0.04 * n];
+    col.push(c[0], c[1], c[2], 1); }
+  ground.updateVerticesData(B.VertexBuffer.PositionKind, p); ground.setVerticesData(B.VertexBuffer.ColorKind, col);
+  const n = []; B.VertexData.ComputeNormals(p, ground.getIndices(), n); ground.updateVerticesData(B.VertexBuffer.NormalKind, n); }
+const groundMat = new B.StandardMaterial('gm', scene); groundMat.specularColor = new C3(0, 0, 0); ground.material = groundMat;
+
+// water: a ribbon along the stream at its level
+{ const paths = [];
+  for (const side of [-1, 1]) { const path = []; for (let z = -180; z <= 180; z += 3) path.push(new V3(STREAM_X(z) + side * (WATER_HALF + 0.6), waterLevel(z), z)); paths.push(path); }
+  const water = B.MeshBuilder.CreateRibbon('water', { pathArray: paths, sideOrientation: B.Mesh.DOUBLESIDE }, scene);
+  const wm = new B.StandardMaterial('wm', scene); wm.diffuseColor = new C3(0.36, 0.52, 0.56); wm.specularColor = new C3(0.25, 0.25, 0.25); wm.alpha = 0.92; water.material = wm; }
+
+// wood: trunks are the obstacles soldiers avoid; crowns can be hidden to watch the men under them
+const TREES = [];
+{ const r = rng(11);
+  for (let i = 0; i < 600 && TREES.length < 120; i++) { const a = r() * Math.PI * 2, d = Math.sqrt(r()) * WOOD.r, x = WOOD.x + Math.cos(a) * d, z = WOOD.z + Math.sin(a) * d;
+    if (TREES.every(t => (t.x - x) ** 2 + (t.z - z) ** 2 > 16)) TREES.push({ x, z, r: 0.3 + r() * 0.15 }); } }
+const trunk = B.MeshBuilder.CreateCylinder('trunk', { height: 4, diameterTop: 0.5, diameterBottom: 0.8, tessellation: 7 }, scene);
+const crown = B.MeshBuilder.CreateSphere('crown', { diameter: 3.6, segments: 6 }, scene);
+{ const tm = new B.StandardMaterial('tm', scene); tm.diffuseColor = new C3(0.33, 0.25, 0.17); tm.specularColor = new C3(0, 0, 0); trunk.material = tm;
+  const cm = new B.StandardMaterial('cm', scene); cm.diffuseColor = new C3(0.30, 0.42, 0.20); cm.specularColor = new C3(0, 0, 0); crown.material = cm;
+  const mt = new Float32Array(TREES.length * 16), mc = new Float32Array(TREES.length * 16);
+  TREES.forEach((t, i) => { B.Matrix.Translation(t.x, H(t.x, t.z) + 2, t.z).copyToArray(mt, i * 16); B.Matrix.Translation(t.x, H(t.x, t.z) + 4.6, t.z).copyToArray(mc, i * 16); });
+  trunk.thinInstanceSetBuffer('matrix', mt, 16, true); crown.thinInstanceSetBuffer('matrix', mc, 16, true); }
+// numeric grids over the whole field (no string keys in the per-soldier loop)
+const FIELD = 360, HALF = FIELD / 2;
+const TREE_CELL = 4, TREE_N = FIELD / TREE_CELL, treeCells = Array.from({ length: TREE_N * TREE_N }, () => []);
+const treeCell = (x, z) => { const i = Math.floor((x + HALF) / TREE_CELL), j = Math.floor((z + HALF) / TREE_CELL); return i < 0 || j < 0 || i >= TREE_N || j >= TREE_N ? -1 : i * TREE_N + j; };
+for (const t of TREES) treeCells[treeCell(t.x, t.z)].push(t);
+
+/* =========================================================================
+   FORMATION LAYER (20 Hz)
+   A battalion = 4 companies × 25 men. A company is a block of 9 files × 3 ranks; every shape is a
+   placement (x, z, rotation) of the four blocks in the battalion frame, so a soldier keeps his
+   (company, file, rank) in every shape. Changing shape moves each company in turn from its old
+   placement to its new one, wheeling around a flank when it turns (drill, not a swarm).
+   ========================================================================= */
+const TICK = 0.05, FS = 0.65, RS = 0.85, COMPANIES = 4, PER = 25, FILES = 9, RANKS = 3;
+const BW = FILES * FS;   // company frontage
+const SHAPES = {
+  // companies side by side, one file between them
+  line: () => [0, 1, 2, 3].map(c => ({ x: (c - 1.5) * (BW + FS), z: 0, rot: 0, face: 0 })),
+  // column of divisions: two companies wide, two deep
+  column: () => [0, 1, 2, 3].map(c => ({ x: ((c % 2) - 0.5) * (BW + FS), z: c < 2 ? 0 : -(RANKS * RS + 3.2), rot: 0, face: 0 })),
+  // each company is one face, facing out. Pinwheel: each face is shifted along its line by half its
+  // depth, so its end meets the next face's rear rank and the corners close
+  square: () => { const s = (RANKS - 1) * RS / 2 + 0.3, D = BW / 2 + s;
+    return [0, -Math.PI / 2, Math.PI, Math.PI / 2].map(rot => { const p = rot2(-s, D, rot); return { x: p[0], z: p[1], rot, face: rot }; }); },
+  // by files: each company turns its block so files run front to back; the men face the march
+  march: () => [0, 1, 2, 3].map(c => ({ x: 0, z: -c * (BW + 1.0), rot: -Math.PI / 2, face: 0 })),
+};
+// regulation-like times in seconds at drill factor 1 (docs/proposals/sim-design.md §5; research §2)
+const CHANGE_TIME = {
+  'line>column': 30, 'column>line': 40, 'column>square': 30, 'line>square': 100, 'square>line': 60, 'square>column': 30,
+  'line>march': 20, 'march>line': 60, 'column>march': 20, 'march>column': 30, 'march>square': 60, 'square>march': 40,
+};
+const rot2 = (x, z, a) => [x * Math.cos(a) - z * Math.sin(a), x * Math.sin(a) + z * Math.cos(a)];
+const blockLocal = (f, r) => [(f - (FILES - 1) / 2) * FS, -r * RS];   // front rank at 0, rear ranks behind
+
+let simTime = 0, drill = 1;
+const battalions = [];
+
+function makeBattalion(x, z, heading, colour, seed) {
+  const b = {
+    x, z, heading, px: x, pz: z, ph: heading, vx: 0, vz: 0, shape: 'line', place: SHAPES.line(),
+    trans: null, orders: [], colour, rand: rng(seed), soldiers: [], grid: [], moved: 0, log: [],
+  };
+  // slot table: grid[company][rank][file] = soldier index or -1
+  for (let c = 0; c < COMPANIES; c++) {
+    const g = []; for (let r = 0; r < RANKS; r++) g.push(new Array(FILES).fill(-1)); b.grid.push(g);
+    for (let k = 0; k < PER; k++) { const r = Math.floor(k / FILES), f = k % FILES; g[r][f] = b.soldiers.length;
+      b.soldiers.push({ c, f, r, x: 0, z: 0, vx: 0, vz: 0, yaw: heading, alive: true, phase: b.rand() * 6.28, dx: b.rand() * 6.28, dz: b.rand() * 6.28, gait: 0 }); }
+  }
+  b.soldiers.forEach(s => { const p = slotWorld(b, s, 0); s.x = p[0]; s.z = p[1]; });
+  battalions.push(b); return b;
+}
+
+// company placement at this moment (interpolated during a change: wheel around the turning flank)
+function companyPlace(b, c) {
+  const t = b.trans; if (!t) return b.place[c];
+  const p0 = t.from[c], p1 = t.to[c], u0 = (simTime - t.start - t.delay[c]) / t.dur;
+  const u = Math.min(1, Math.max(0, u0)), e = u * u * (3 - 2 * u);
+  let d = p1.rot - p0.rot; d = Math.atan2(Math.sin(d), Math.cos(d));
+  if (Math.abs(d) < 1e-3) return { x: p0.x + (p1.x - p0.x) * e, z: p0.z + (p1.z - p0.z) * e, rot: p0.rot, face: p0.face + (p1.face - p0.face) * e };
+  // pivot: the end of the front rank on the side the company turns to
+  const pl = [d > 0 ? -BW / 2 : BW / 2, 0];
+  const a0 = rot2(pl[0], pl[1], p0.rot), a1 = rot2(pl[0], pl[1], p1.rot);
+  const piv = [p0.x + a0[0] + (p1.x + a1[0] - p0.x - a0[0]) * e, p0.z + a0[1] + (p1.z + a1[1] - p0.z - a0[1]) * e];
+  const rot = p0.rot + d * e, o = rot2(pl[0], pl[1], rot);
+  let df = p1.face - p0.face; df = Math.atan2(Math.sin(df), Math.cos(df));
+  return { x: piv[0] - o[0], z: piv[1] - o[1], rot, face: p0.face + df * e };
+}
+// a soldier's slot in world space; ahead = seconds of extrapolation along the battalion's velocity
+function slotWorld(b, s, ahead, alpha = 1) {
+  const pl = companyPlace(b, s.c), l = blockLocal(s.f, s.r), q = rot2(l[0], l[1], pl.rot);
+  const hx = b.px + (b.x - b.px) * alpha, hz = b.pz + (b.z - b.pz) * alpha;
+  let dh = b.heading - b.ph; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); const h = b.ph + dh * alpha;
+  // battalion frame: x right, z forward; heading is the forward direction measured from +z toward +x
+  const w = rot2(pl.x + q[0], pl.z + q[1], -h);
+  // face is a block rotation (counter-clockwise); headings turn clockwise, hence the minus
+  return [hx + w[0] + b.vx * ahead, hz + w[1] + b.vz * ahead, h - pl.face];
+}
+
+function startChange(b, shape) {
+  if (shape === b.shape && !b.trans) return false;
+  const from = [0, 1, 2, 3].map(c => companyPlace(b, c)), to = SHAPES[shape]();
+  const T = (CHANGE_TIME[b.shape + '>' + shape] || 30) * drill;
+  // companies start in sequence; the last one finishes at T
+  const dur = T * 0.55, delay = [0, 1, 2, 3].map(c => c * T * 0.15);
+  b.trans = { from, to, start: simTime, dur, delay, shape, T, from_shape: b.shape };
+  b.log.push({ change: b.shape + '>' + shape, start: simTime, planned: T });
+  return true;
+}
+
+function formationTick(b) {
+  b.px = b.x; b.pz = b.z; b.ph = b.heading;
+  if (b.trans) {   // no marching while the companies change places
+    b.vx = b.vz = 0;
+    if (simTime >= b.trans.start + b.trans.delay[3] + b.trans.dur) {
+      b.place = b.trans.to; b.shape = b.trans.shape; b.log[b.log.length - 1].took = simTime - b.trans.start; b.trans = null;
+    }
+    return;
+  }
+  const o = b.orders[0]; if (!o) { b.vx = b.vz = 0; return; }
+  if (o.type === 'form') { b.orders.shift(); startChange(b, o.shape); return; }
+  const v = (b.shape === 'march' ? 1.25 : 1.0) * groundSpeed(b.x, b.z);   // ordinary pace ≈ 61 m/min; march column faster
+  const halfW = b.shape === 'line' ? (BW * 2 + FS * 1.5) : b.shape === 'march' ? 1.5 : BW;
+  if (o.type === 'move') {
+    const dx = o.x - b.x, dz = o.z - b.z, dist = Math.hypot(dx, dz);
+    if (dist < 0.4) { b.orders.shift(); b.vx = b.vz = 0; return; }
+    let want = Math.atan2(dx, dz), dh = want - b.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+    const wmax = 1.2 * v / halfW * TICK;   // the outer flank may not outrun the quick step: long lines turn slowly
+    b.heading += Math.max(-wmax, Math.min(wmax, dh));
+    const go = Math.abs(dh) < 1.0 ? Math.min(v, dist / TICK) : 0;   // turn before advancing
+    b.vx = Math.sin(b.heading) * go; b.vz = Math.cos(b.heading) * go;
+    b.x += b.vx * TICK; b.z += b.vz * TICK;
+  } else if (o.type === 'wheel') {   // rotate the whole battalion around the flank it turns to
+    if (o.left === undefined) { o.left = o.angle > 0; const piv = rot2(o.left ? -halfW : halfW, 0, -b.heading); o.px = b.x + piv[0]; o.pz = b.z + piv[1]; o.done = 0; }
+    const w = Math.min(Math.abs(o.angle) - o.done, 1.0 * v / (2 * halfW) * TICK);   // outer flank at marching pace
+    const sgn = o.angle > 0 ? -1 : 1, dx = b.x - o.px, dz = b.z - o.pz, r = rot2(dx, dz, -sgn * w);
+    const nx = o.px + r[0], nz = o.pz + r[1]; b.vx = (nx - b.x) / TICK; b.vz = (nz - b.z) / TICK; b.x = nx; b.z = nz;
+    b.heading += sgn * w; o.done += w;
+    if (o.done >= Math.abs(o.angle) - 1e-6) { b.orders.shift(); b.vx = b.vz = 0; }
+  }
+}
+
+// casualties: the man behind steps up into the gap; nobody else changes slot
+function kill(b, n) {
+  let moved = 0;
+  const alive = b.soldiers.map((s, i) => i).filter(i => b.soldiers[i].alive);
+  for (let k = 0; k < n && alive.length; k++) {
+    const i = alive.splice(Math.floor(b.rand() * alive.length), 1)[0], s = b.soldiers[i];
+    s.alive = false; s.deadAt = simTime; const g = b.grid[s.c];
+    for (let r = s.r; r < RANKS - 1; r++) { const j = g[r + 1][s.f]; g[r][s.f] = j; if (j >= 0) { b.soldiers[j].r = r; moved++; } }
+    g[RANKS - 1][s.f] = -1;
+  }
+  b.moved += moved; return moved;
+}
+
+/* =========================================================================
+   SOLDIER LAYER (every frame, cosmetic)
+   ========================================================================= */
+// each company's frame in world space, computed once per battalion per frame (not per soldier)
+function companyFrames(b, ahead, alpha) {
+  const hx = b.px + (b.x - b.px) * alpha + b.vx * ahead, hz = b.pz + (b.z - b.pz) * alpha + b.vz * ahead;
+  let dh = b.heading - b.ph; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); const h = b.ph + dh * alpha;
+  const out = b.frames || (b.frames = [{}, {}, {}, {}]);
+  for (let c = 0; c < COMPANIES; c++) {
+    const pl = companyPlace(b, c), o = rot2(pl.x, pl.z, -h), a = pl.rot - h, f = out[c];
+    f.x = hx + o[0]; f.z = hz + o[1]; f.cos = Math.cos(a); f.sin = Math.sin(a); f.face = h - pl.face;
+  }
+  return out;
+}
+const SC = 0.5, SN = FIELD / SC, cellHead = new Int32Array(SN * SN), cellNext = new Int32Array(41 * COMPANIES * PER);
+let flat = [];
+const AHEAD = 0.6, WALK = 1.35, RUN = 3.2, SEP = 0.52;
+function soldierStep(dt, alpha) {
+  // neighbour grid: 0.5 m cells, linked lists in typed arrays, rebuilt every frame
+  flat.length = 0; cellHead.fill(-1);
+  for (const b of battalions) for (const s of b.soldiers) if (s.alive) {
+    const i = Math.floor((s.x + HALF) / SC), j = Math.floor((s.z + HALF) / SC); s.cell = i >= 0 && j >= 0 && i < SN && j < SN ? i * SN + j : -1;
+    const k = flat.length; flat.push(s); if (s.cell >= 0) { cellNext[k] = cellHead[s.cell]; cellHead[s.cell] = k; }
+  }
+  const t = simTime * 0.35;
+  for (const b of battalions) {
+    const fr = companyFrames(b, AHEAD, alpha);
+    for (const s of b.soldiers) {
+      if (!s.alive) continue;
+      const f = fr[s.c], lx = (s.f - (FILES - 1) / 2) * FS, lz = -s.r * RS;
+      const sx = f.x + lx * f.cos - lz * f.sin, sz = f.z + lx * f.sin + lz * f.cos;   // origin + rot2(lx, lz, rot - h): same as slotWorld
+      const wood = inWood(s.x, s.z), amp = wood ? 0.45 : 0.12;   // personal drift: the ranks loosen in woods
+      const tx = sx + amp * Math.sin(t + s.dx), tz = sz + amp * Math.sin(t * 0.8 + s.dz);
+      const dx = tx - s.x, dz = tz - s.z, dist = Math.sqrt(dx * dx + dz * dz), gs = groundSpeed(s.x, s.z);
+      const top = (dist > 2.5 ? RUN : WALK) * gs, want = dist < 0.03 ? 0 : Math.min(top, dist / 0.7);
+      let wx = dist > 1e-6 ? dx / dist * want : 0, wz = dist > 1e-6 ? dz / dist * want : 0;
+      // separation from neighbours (same and other battalions)
+      const ci = Math.floor((s.x + HALF) / SC), cj = Math.floor((s.z + HALF) / SC);
+      for (let i = ci - 1; i <= ci + 1; i++) for (let j = cj - 1; j <= cj + 1; j++) {
+        if (i < 0 || j < 0 || i >= SN || j >= SN) continue;
+        for (let k = cellHead[i * SN + j]; k >= 0; k = cellNext[k]) { const o = flat[k]; if (o === s) continue;
+          const ex = s.x - o.x, ez = s.z - o.z, d2 = ex * ex + ez * ez;
+          if (d2 < SEP * SEP && d2 > 1e-8) { const d = Math.sqrt(d2), push = (SEP - d) / SEP * 1.8; wx += ex / d * push; wz += ez / d * push; } }
+      }
+      // trees: steer around trunks ahead, never stand inside one
+      const tc = wood ? treeCell(s.x, s.z) : -1;
+      if (tc >= 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[tc + i * TREE_N + j]; if (!cell) continue;
+        for (const tr of cell) { const ex = s.x - tr.x, ez = s.z - tr.z, d = Math.sqrt(ex * ex + ez * ez), R = tr.r + 0.35;
+          if (d < R + 1.2 && d > 1e-6) { const push = (R + 1.2 - d) / 1.2 * 1.6; wx += ex / d * push; wz += ez / d * push; } } }
+      const k = Math.min(1, dt * 5); s.vx += (wx - s.vx) * k; s.vz += (wz - s.vz) * k;
+      const sp2 = s.vx * s.vx + s.vz * s.vz, cap = RUN * gs; if (sp2 > cap * cap) { const r = cap / Math.sqrt(sp2); s.vx *= r; s.vz *= r; }
+      s.x += s.vx * dt; s.z += s.vz * dt;
+      if (tc >= 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[tc + i * TREE_N + j]; if (!cell) continue;
+        for (const tr of cell) { const ex = s.x - tr.x, ez = s.z - tr.z, d = Math.sqrt(ex * ex + ez * ez), R = tr.r + 0.3; if (d < R && d > 1e-6) { s.x = tr.x + ex / d * R; s.z = tr.z + ez / d * R; } } }
+      // face the slot direction once close, else the way he walks
+      const spd = Math.sqrt(s.vx * s.vx + s.vz * s.vz), face = dist < 1.0 || spd < 0.2 ? f.face : Math.atan2(s.vx, s.vz);
+      let dy = face - s.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); s.yaw += dy * Math.min(1, dt * 6);
+      s.gait += spd * dt * 5.5;
+    }
+  }
+}
+
+/* ---------- figures: one instanced mesh for every soldier (body, belts, head, shako, musket) ---------- */
+function figureMesh(name, coat) {
+  const parts = [];
+  const add = (m, col) => { const n = m.getTotalVertices(), c = []; for (let i = 0; i < n; i++) c.push(col[0], col[1], col[2], 1); m.setVerticesData(B.VertexBuffer.ColorKind, c); parts.push(m); };
+  const legs = B.MeshBuilder.CreateBox('l', { width: 0.36, height: 0.8, depth: 0.24 }, scene); legs.position.y = 0.4; add(legs, [0.86, 0.84, 0.78]);
+  const body = B.MeshBuilder.CreateBox('b', { width: 0.46, height: 0.62, depth: 0.28 }, scene); body.position.y = 1.1; add(body, coat);
+  const belt = B.MeshBuilder.CreateBox('x', { width: 0.48, height: 0.08, depth: 0.3 }, scene); belt.position.y = 1.18; belt.rotation.z = 0.6; add(belt, [0.93, 0.92, 0.88]);
+  const head = B.MeshBuilder.CreateSphere('h', { diameter: 0.24, segments: 4 }, scene); head.position.y = 1.55; add(head, [0.86, 0.68, 0.55]);
+  const shako = B.MeshBuilder.CreateCylinder('s', { height: 0.26, diameterTop: 0.27, diameterBottom: 0.23, tessellation: 6 }, scene); shako.position.y = 1.74; add(shako, [0.12, 0.11, 0.12]);
+  const musket = B.MeshBuilder.CreateBox('m', { width: 0.05, height: 1.5, depth: 0.05 }, scene); musket.position.set(0.2, 1.25, 0.05); musket.rotation.x = -0.12; add(musket, [0.32, 0.22, 0.14]);
+  const m = B.Mesh.MergeMeshes(parts, true, true); m.name = name;
+  const mat = new B.StandardMaterial(name + 'm', scene); mat.specularColor = new C3(0, 0, 0); m.material = mat;
+  return m;
+}
+const MAXN = 41 * COMPANIES * PER;
+const fig = figureMesh('fig', [0.17, 0.27, 0.55]);
+const figM = new Float32Array(MAXN * 16); fig.thinInstanceSetBuffer('matrix', figM, 16, false); fig.thinInstanceCount = 0;
+fig.alwaysSelectAsActiveMesh = true;   // thin instances are culled all-or-nothing; the battle area is always in view
+const flag = (() => { const pole = B.MeshBuilder.CreateCylinder('pole', { height: 3.2, diameter: 0.06 }, scene); pole.position.y = 1.6;
+  const cloth = B.MeshBuilder.CreatePlane('cloth', { width: 1.1, height: 0.8, sideOrientation: B.Mesh.DOUBLESIDE }, scene); cloth.position.set(0.58, 2.7, 0);
+  const pm = new B.StandardMaterial('pm', scene); pm.diffuseColor = new C3(0.3, 0.25, 0.2); pole.material = pm;
+  const fm = new B.StandardMaterial('fm', scene); fm.diffuseColor = new C3(0.85, 0.82, 0.78); fm.emissiveColor = new C3(0.25, 0.2, 0.2); cloth.material = fm;
+  const root = new B.TransformNode('flag', scene); pole.parent = root; cloth.parent = root; return root; })();
+
+const tmpM = new B.Matrix(), tmpQ = new B.Quaternion(), tmpS = new V3(1, 1, 1), tmpT = new V3();
+function writeFigures() {
+  let n = 0;
+  for (const b of battalions) for (const s of b.soldiers) {
+    const y = H(s.x, s.z), o = n * 16;
+    if (s.alive) {
+      const bob = Math.abs(Math.sin(s.gait)) * 0.05, c = Math.cos(s.yaw), sn = Math.sin(s.yaw);
+      figM[o] = c; figM[o + 1] = 0; figM[o + 2] = -sn; figM[o + 3] = 0; figM[o + 4] = 0; figM[o + 5] = 1; figM[o + 6] = 0; figM[o + 7] = 0;
+      figM[o + 8] = sn; figM[o + 9] = 0; figM[o + 10] = c; figM[o + 11] = 0; figM[o + 12] = s.x; figM[o + 13] = y + bob; figM[o + 14] = s.z; figM[o + 15] = 1;
+    } else {   // fallen: lying on the ground where he fell
+      const k = Math.min(1, (simTime - s.deadAt) / 0.8);
+      B.Quaternion.FromEulerAnglesToRef(-k * Math.PI / 2, s.yaw, 0, tmpQ); tmpT.set(s.x, y + 0.12 * k, s.z);
+      B.Matrix.ComposeToRef(tmpS, tmpQ, tmpT, tmpM); tmpM.copyToArray(figM, o);
+    }
+    n++;
+  }
+  fig.thinInstanceCount = n; fig.thinInstanceBufferUpdated('matrix');
+  const b = battalions[0], p = slotWorld(b, { c: 1, f: FILES - 1, r: 0 }, 0, 1);   // colours between companies 1 and 2
+  flag.position.set(p[0] + 0.3, H(p[0], p[1]), p[1]); flag.rotation.y = p[2];
+}
+
+/* ---------- debug: anchor, company guides, slots ---------- */
+const dbg = { on: false };
+const slotDot = B.MeshBuilder.CreateDisc('slot', { radius: 0.12, tessellation: 6 }, scene); slotDot.rotation.x = Math.PI / 2; slotDot.bakeCurrentTransformIntoVertices();
+{ const m = new B.StandardMaterial('sm', scene); m.emissiveColor = new C3(0.9, 0.2, 0.2); m.disableLighting = true; slotDot.material = m; }
+const slotM = new Float32Array(MAXN * 16); slotDot.thinInstanceSetBuffer('matrix', slotM, 16, false); slotDot.thinInstanceCount = 0; slotDot.alwaysSelectAsActiveMesh = true;
+const guideDot = B.MeshBuilder.CreateCylinder('guide', { height: 2.4, diameter: 0.25 }, scene);
+{ const m = new B.StandardMaterial('gdm', scene); m.emissiveColor = new C3(0.95, 0.75, 0.1); m.disableLighting = true; guideDot.material = m; }
+const guideM = new Float32Array(41 * 4 * 16); guideDot.thinInstanceSetBuffer('matrix', guideM, 16, false); guideDot.thinInstanceCount = 0; guideDot.alwaysSelectAsActiveMesh = true;
+function writeDebug(alpha) {
+  slotDot.isVisible = guideDot.isVisible = dbg.on;
+  if (!dbg.on) return;
+  let n = 0, g = 0;
+  for (const b of battalions) {
+    for (const s of b.soldiers) if (s.alive) { const p = slotWorld(b, s, 0, alpha); B.Matrix.Translation(p[0], H(p[0], p[1]) + 0.05, p[1]).copyToArray(slotM, n++ * 16); }
+    for (let c = 0; c < COMPANIES; c++) { const p = slotWorld(b, { c, f: c % 2 ? 0 : FILES - 1, r: 0 }, 0, alpha); B.Matrix.Translation(p[0], H(p[0], p[1]) + 1.2, p[1]).copyToArray(guideM, g++ * 16); }
+  }
+  slotDot.thinInstanceCount = n; slotDot.thinInstanceBufferUpdated('matrix'); guideDot.thinInstanceCount = g; guideDot.thinInstanceBufferUpdated('matrix');
+}
+
+/* ---------- commands ---------- */
+let main;
+function reset() {
+  battalions.length = 0; simTime = 0;
+  main = makeBattalion(-20, -40, 0, 0, 7);
+}
+function order(name, a) {
+  const b = main;
+  if (SHAPES[name]) { b.orders = [{ type: 'form', shape: name }]; return; }
+  if (name === 'move') { b.orders = [{ type: 'move', x: a.x, z: a.z }]; return; }
+  if (name === 'wheelL') { b.orders = [{ type: 'wheel', angle: Math.PI / 4 }]; return; }
+  if (name === 'wheelR') { b.orders = [{ type: 'wheel', angle: -Math.PI / 4 }]; return; }
+  if (name === 'wood') { b.orders = [{ type: 'move', x: WOOD.x, z: WOOD.z - WOOD.r - 12 }, { type: 'move', x: WOOD.x, z: WOOD.z + WOOD.r + 14 }]; return; }
+  if (name === 'ford') {   // narrow to files, cross, deploy again on the far bank
+    const zf = 0, xe = STREAM_X(zf) - 22, xx = STREAM_X(zf) + 24;
+    b.orders = [{ type: 'move', x: xe - 30, z: zf }, { type: 'form', shape: 'march' }, { type: 'move', x: xe, z: zf }, { type: 'move', x: xx, z: zf }, { type: 'form', shape: 'line' }];
+    return;
+  }
+  if (name === 'kill') return kill(b, 10);
+}
+let manyOn = false;
+function setMany(on) {
+  manyOn = on; battalions.length = 1;
+  if (!on) return;
+  const r = rng(99);
+  for (let i = 0; i < 39; i++) { const gx = i % 8, gz = Math.floor(i / 8), x = -150 + gx * 38, z = -150 + gz * 55;   // rows clear of a 27 m march column
+    const b = makeBattalion(x, z, 0, 0, 100 + i); const shapes = ['line', 'column', 'march'];
+    b.orders = [{ type: 'form', shape: shapes[i % 3] }, { type: 'move', x: x + (r() - 0.5) * 30, z: z + 40 }]; }
+}
+
+/* ---------- loop: formation at 20 Hz, soldiers every frame ---------- */
+let acc = 0, speed = 1, lastSoldierMs = 0;
+const soldierMs = [];
+function advance(dt) {
+  const step = Math.min(dt * speed, 0.25); acc += step;
+  while (acc >= TICK) { for (const b of battalions) formationTick(b); simTime += TICK; acc -= TICK; }
+  const t0 = performance.now(); soldierStep(step, acc / TICK); lastSoldierMs = performance.now() - t0;
+  soldierMs.push(lastSoldierMs); if (soldierMs.length > 60) soldierMs.shift();
+}
+function frame() {
+  advance(engine.getDeltaTime() / 1000);
+  writeFigures(); writeDebug(acc / TICK);
+  if (follow) { const b = main; camera.target.x += (b.x - camera.target.x) * 0.05; camera.target.z += (b.z - camera.target.z) * 0.05; camera.target.y = H(b.x, b.z); }
+  updateStats();
+}
+let follow = true;
+
+/* ---------- UI ---------- */
+const statsEl = document.getElementById('stats');
+function stats() {
+  const b = main, alive = b.soldiers.filter(s => s.alive).length, avg = soldierMs.reduce((a, x) => a + x, 0) / Math.max(1, soldierMs.length);
+  return { shape: b.trans ? b.trans.from_shape + ' → ' + b.trans.shape : b.shape, alive, moved: b.moved, simTime: +simTime.toFixed(1),
+    changes: b.log.map(l => ({ change: l.change, planned: +l.planned.toFixed(1), took: l.took !== undefined ? +l.took.toFixed(1) : null })),
+    soldiers: battalions.reduce((a, x) => a + x.soldiers.length, 0), soldierMs: +avg.toFixed(2), fps: +engine.getFps().toFixed(0) };
+}
+function updateStats() {
+  const s = stats(), last = s.changes[s.changes.length - 1];
+  statsEl.textContent = `shape    ${s.shape}\nalive    ${s.alive} / 100   stepped up ${s.moved}\n` +
+    (last ? `change   ${last.change}  ${last.took ?? '…'} / ${last.planned} s\n` : '') +
+    `soldiers ${s.soldiers}   soldier layer ${s.soldierMs} ms\nfps      ${s.fps}   time ${s.simTime} s`;
+}
+document.querySelectorAll('[data-form]').forEach(el => el.onclick = () => order(el.dataset.form));
+document.querySelectorAll('[data-cmd]').forEach(el => el.onclick = () => {
+  const c = el.dataset.cmd;
+  if (c === 'reset') { reset(); setMany(false); document.querySelector('[data-cmd=many]').classList.remove('on'); }
+  else if (c === 'many') { setMany(!manyOn); el.classList.toggle('on', manyOn); }
+  else if (c === 'debug') { dbg.on = !dbg.on; el.classList.toggle('on', dbg.on); }
+  else if (c === 'crowns') { crown.setEnabled(!crown.isEnabled()); el.classList.toggle('on', !crown.isEnabled()); }
+  else order(c);
+});
+document.querySelectorAll('[data-speed]').forEach(el => el.onclick = () => { speed = +el.dataset.speed; document.querySelectorAll('[data-speed]').forEach(e => e.classList.toggle('on', e === el)); });
+const drillEl = document.getElementById('drill'); drillEl.oninput = () => { drill = +drillEl.value; document.getElementById('drillv').textContent = drill.toFixed(1); };
+let down = null;
+scene.onPointerObservable.add(pi => {
+  if (pi.type === B.PointerEventTypes.POINTERDOWN && pi.event.button === 0) down = [pi.event.clientX, pi.event.clientY];
+  if (pi.type === B.PointerEventTypes.POINTERUP && down && Math.hypot(pi.event.clientX - down[0], pi.event.clientY - down[1]) < 5) {
+    const hit = scene.pick(scene.pointerX, scene.pointerY, m => m === ground); if (hit.hit) order('move', { x: hit.pickedPoint.x, z: hit.pickedPoint.z });
+    down = null;
+  }
+});
+
+reset();
+engine.runRenderLoop(() => { frame(); scene.render(); });
+window.addEventListener('resize', () => engine.resize());
+
+// headless hooks (tools/shot.mjs): issue orders and advance battle time without real time passing
+// consistency check: the per-frame company frames must give the same slots as slotWorld
+function slotCheck() {
+  let worst = 0;
+  for (const b of battalions) { const fr = companyFrames(b, 0, 1);
+    for (const s of b.soldiers) { const f = fr[s.c], lx = (s.f - (FILES - 1) / 2) * FS, lz = -s.r * RS, p = slotWorld(b, s, 0, 1);
+      worst = Math.max(worst, Math.hypot(f.x + lx * f.cos - lz * f.sin - p[0], f.z + lx * f.sin + lz * f.cos - p[1]), Math.abs(Math.atan2(Math.sin(f.face - p[2]), Math.cos(f.face - p[2])))); } }
+  return worst;
+}
+window.F = { slotCheck,
+  order, kill: n => kill(main, n), setDrill: d => { drill = d; }, setMany, stats, battalions, get main() { return main; },
+  debug: on => { dbg.on = on; }, crowns: on => crown.setEnabled(on), follow: on => { follow = on; },
+  advance: sec => { const s = speed; speed = 1; for (let t = 0; t < sec; t += 1 / 30) advance(1 / 30); speed = s; writeFigures(); writeDebug(1); return stats(); },
+  view: (alpha, beta, radius) => { camera.alpha = alpha; camera.beta = beta; camera.radius = radius; const b = main; camera.target.set(b.x, H(b.x, b.z), b.z); },
+};
+</script>
+</body>
+</html>
