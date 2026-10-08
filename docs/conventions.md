@@ -18,7 +18,7 @@ last_reviewed: 2026-10-08
 - **Metres, seconds, radians, men** in all authored data; converted once at load (never author in
   ticks: `docs/architecture.md` §4).
 - **World axes:** y up, x and z on the ground; the battle area is centred on the origin.
-- **Simulation numbers (proposed):** restricted float64, decision 0006; the full list of allowed
+- **Simulation numbers:** restricted float64, decision 0006; the full list of allowed
   and banned operations is in `docs/proposals/sim-design.md` §2 (one home, not copied here).
 - **Tick:** 20 Hz, 50 ms of battle time; the rate lives in one constant.
 
