@@ -53,6 +53,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
 #legend{left:24px;bottom:98px;width:236px}
 #legend .li{display:flex;align-items:center;gap:10px;font:400 10.5px/1.3 var(--mono);color:var(--ink-2);margin:6px 0}
 #legend svg{flex:none}
+@keyframes blink{0%,49%{fill:#2C4FA8}50%,100%{fill:#fbfaf6}}
+.blink{animation:blink .52s steps(1) infinite}
 /* selection card */
 #card{right:24px;bottom:48px;width:268px;display:none}
 #card .nm{font:600 22px/1 var(--display);font-stretch:80%;margin:2px 0 4px}
@@ -111,9 +113,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
   <div class="li"><svg width="44" height="10"><rect x="6" y="1" width="32" height="8" fill="#2C4FA8"/><path d="M7 9 L37 1" stroke="#f3efe6" stroke-width="1.4"/></svg>cavalry</div>
   <div class="li"><svg width="44" height="12"><rect x="4" y="6" width="36" height="4" fill="#2C4FA8"/><circle cx="22" cy="3" r="2.4" fill="#2C4FA8"/></svg>artillery</div>
   <div class="li"><svg width="44" height="10"><defs><pattern id="h" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.4" height="4" fill="#2C4FA8"/></pattern></defs><rect x="2" y="2" width="40" height="6" fill="url(#h)" stroke="#2C4FA8" stroke-width=".8"/></svg>wavering (morale)</div>
-  <div class="li"><svg width="44" height="10"><rect x="2.5" y="2.5" width="39" height="5" fill="none" stroke="#2C4FA8" stroke-width="1.2" stroke-dasharray="3 2.5"/></svg>routing</div>
-  <div class="li"><svg width="44" height="10"><path d="M2 5 C 14 1, 28 9, 40 5" stroke="#8a847a" stroke-width="1.2" fill="none"/><path d="M36 2 L41 5 L36 8" stroke="#8a847a" stroke-width="1.2" fill="none"/></svg>order (pencil)</div>
-  <div class="li"><svg width="44" height="10"><path d="M2 5 C 14 1, 28 9, 40 5" stroke="#1f3a80" stroke-width="2" fill="none"/></svg>carried out (ink)</div>
+  <div class="li"><svg width="44" height="10"><rect class="blink" x="2.5" y="2.5" width="39" height="5" stroke="#2C4FA8" stroke-width="1.2"/></svg>routing</div>
+  <div class="li"><svg width="44" height="16"><path d="M2 8 L28 8" stroke="#2C4FA8" stroke-opacity=".36" stroke-width="7"/><path d="M42 8 L28 0 L28 16 Z" fill="#2C4FA8" fill-opacity=".55" stroke="#fbfaf6" stroke-width="1"/></svg>command</div>
+  <div class="li"><svg width="44" height="10"><path d="M2 5 L42 5" stroke="#1f3a80" stroke-width="2" stroke-linecap="round" stroke-dasharray="0.1 5.5"/></svg>footprints (fade)</div>
   <div class="li"><svg width="44" height="10"><rect x="4" y="2" width="9" height="6" fill="#2C4FA8"/><rect x="18" y="2" width="9" height="6" fill="#2F6B3C"/><rect x="32" y="2" width="9" height="6" fill="#fbfaf6" stroke="#4f6279" stroke-width="1.4"/></svg>France · Russia · Austria</div>
 </div>
 
@@ -606,7 +608,7 @@ function corps(key,side,title,leader,list,cx,cz,face){
   // list: [type,count]; laid out in two lines 110 m apart, 125 m between battalions
   CORPS[key]={key,side,title,leader};const all=[];list.forEach(([t,c])=>{for(let i=0;i<c;i++)all.push(t);});
   const per=Math.ceil(all.length/2),f=[Math.sin(face),Math.cos(face)],r=[Math.cos(face),-Math.sin(face)];
-  all.forEach((t,i)=>{const row=Math.floor(i/per),col=i%per,cnt=row?all.length-per:per,sx=(col-(cnt-1)/2)*(t==='cav'?95:125),sz=-row*130;
+  all.forEach((t,i)=>{const row=Math.floor(i/per),col=i%per,cnt=row?all.length-per:per,sx=(col-(cnt-1)/2)*(t==='cav'?115:125),sz=-row*130;
     const nl=side==='FR'?FR_N:side==='RU'?RU_N:AU_N,nm=t==='inf'?nl[nameI[side]++%nl.length]:t==='cav'?(side==='FR'?['5e Hussards','Cuirassiers','Chasseurs à cheval','Dragons'][i%4]:['Chevalier Guard','Uhlans','Hussars','Cuirassiers'][i%4]):'Foot battery';
     UNITS.push(mkUnit(side,t,key,nm+(t==='inf'?(i%2?' · 2e bat':' · 1er bat'):''),cx+r[0]*sx+f[0]*sz,cz+r[1]*sx+f[1]*sz,face));});
 }
@@ -642,6 +644,13 @@ function dims(u,form,n){
   if(u.type==='cav'){if(form==='line'){const f=Math.ceil(n/2);return[f*1.7,6.4];}const f=6;return[f*1.7,Math.ceil(n/f)*3.2];}
   if(form==='line')return[n*14,12];return[3,n*13];
 }
+// map symbols (metres): readable at the far zoom, equal visual weight across formations
+const SYM={inf:{line:[104,32],column:[62,56],square:[72,72]},cav:{line:[96,30],column:[50,60]},art:{line:[86,20],column:[24,62]}};
+const SQ_RING=[18,3.3];                                   // square ring thickness: symbol, true
+let SYMK=0,SYMZ=1;                                        // per frame: 0 symbol .. 1 true footprint; symbol zoom scale
+// symbols keep a steady on-screen size: they shrink in world terms as the camera closes in
+function shown(u,form,n){const t=dims(u,form,n),sy=(SYM[u.type][form]||SYM[u.type].line),loss=0.45+0.55*u.str,sq=form==='square'?Math.sqrt(loss):1;
+  return[lerp(sy[0]*SYMZ*(form==='square'?sq:loss),t[0],SYMK),lerp(sy[1]*SYMZ*sq,t[1],SYMK)];}
 function slot(u,form,i,n,out){
   if(u.type==='inf'){
     if(form==='line'){const f=Math.ceil(n/3);out[0]=(i%f-(f-1)/2)*0.9;out[1]=-Math.floor(i/f)*1.1-0.5;out[2]=0;return;}
@@ -750,16 +759,15 @@ function simStep(dt){
     endStep(u);
   }
   // hidden-behind lines: armies do not stack on top of each other
-  for(let a=0;a<UNITS.length;a++)for(let b=a+1;b<UNITS.length;b++){const u=UNITS[a],v=UNITS[b];if(u.gone||v.gone)continue;const dx=v.x-u.x,dz=v.z-u.z,d=Math.hypot(dx,dz),m=u.sideI===v.sideI||(u.sideI>0&&v.sideI>0)?38:28;
+  for(let a=0;a<UNITS.length;a++)for(let b=a+1;b<UNITS.length;b++){const u=UNITS[a],v=UNITS[b];if(u.gone||v.gone)continue;const dx=v.x-u.x,dz=v.z-u.z,d=Math.hypot(dx,dz),m=u.sideI===v.sideI||(u.sideI>0&&v.sideI>0)?45:32;
     if(d<m&&d>0.01){const p=(m-d)*0.5*Math.min(1,dt);u.x-=dx/d*p;u.z-=dz/d*p;v.x+=dx/d*p;v.z+=dz/d*p;}}
-  for(let i=ORDERS.length-1;i>=0;i--){const o=ORDERS[i];if(o.done&&(o.quiet||o.prog<20))ORDERS.splice(i,1);}
-  for(const o of ORDERS){if(o.done)continue;const us=o.units.map(id=>UNITS[id]).filter(u=>u.order===o);if(!us.length){o.done=true;continue;}o.prog=us.reduce((s,u)=>s+u.prog/Math.max(1,u.plen),0)/us.length*o.len;}
+  for(let i=ORDERS.length-1;i>=0;i--)if(ORDERS[i].done&&ORDERS[i].doneAt<GT)ORDERS.splice(i,1);   // kept one step so the renderer sees the final progress
+  for(const o of ORDERS){if(o.done)continue;const us=o.units.map(id=>UNITS[id]).filter(u=>u.order===o);if(!us.length){o.done=true;o.doneAt=GT;continue;}o.prog=us.reduce((s,u)=>s+u.prog/Math.max(1,u.plen),0)/us.length*o.len;}
 }
 function endStep(u){if(u.str<0.2){u.gone=0.001;finishOrder(u);}u.mor=clamp(u.mor,0,1);clampIn(u);}
-function finishOrder(u){const o=u.order;if(!o)return;u.order=null;o.units=o.units.filter(id=>id!==u.id);if(!o.units.length){o.done=true;}}
+function finishOrder(u){const o=u.order;if(!o)return;u.order=null;o.units=o.units.filter(id=>id!==u.id);if(!o.units.length){o.done=true;o.doneAt=GT;}}
 function clampIn(u){u.x=clamp(u.x,-MX+60,MX-60);u.z=clamp(u.z,-MZ+60,MZ-60);if(inPond(u.x,u.z,1.1)){const p=PONDS.find(p=>pondE(p,u.x,u.z)<1.1);const a=Math.atan2((u.z-p.z)/p.rz,(u.x-p.x)/p.rx);u.x=p.x+Math.cos(a)*p.rx*1.12;u.z=p.z+Math.sin(a)*p.rz*1.12;}}
-function puff(u){const[fw]=dims(u,u.form,alive(u)),f=[Math.sin(u.face),Math.cos(u.face)],r=[Math.cos(u.face),-Math.sin(u.face)],o=(Math.random()-0.5)*fw*0.9;
-  SMOKE.push({x:u.x+r[0]*o+f[0]*(u.type==='art'?14:8),z:u.z+r[1]*o+f[1]*(u.type==='art'?14:8),t0:performance.now(),big:u.type==='art',rot:Math.random()*6.28});if(SMOKE.length>500)SMOKE.shift();}
+function puff(u){SMOKE.push({u,frac:(Math.random()-0.5)*0.9,t0:performance.now(),big:u.type==='art',rot:Math.random()*6.28});if(SMOKE.length>500)SMOKE.shift();}
 
 /* =========================================================================
    THE INK OVERLAY: blocks, orders, trails, smoke, names, neatline
@@ -769,7 +777,7 @@ const scr=[0,0,0];
 function proj(x,y,z){const m=VP;const cx=x*m[0]+y*m[4]+z*m[8]+m[12],cy=x*m[1]+y*m[5]+z*m[9]+m[13],w=x*m[3]+y*m[7]+z*m[11]+m[15];
   scr[0]=(cx/w*0.5+0.5)*SW;scr[1]=(1-(cy/w*0.5+0.5))*SH;scr[2]=w;return scr;}
 const RISE=()=>stage(0.15,0.7);
-const STAGE={wash:[0.1,0.6],sprout:[0.3,0.8],stand:[0.4,0.85],blocks:[0.5,0.85],ink:[0.35,0.85],names:[0.35,0.7],corps:[0.4,0.75]};
+const STAGE={wash:[0.1,0.6],sprout:[0.3,0.8],stand:[0.5,0.88],blocks:[0.55,0.88],ink:[0.35,0.85],names:[0.35,0.7],corps:[0.4,0.75]};
 const st=k=>stage(STAGE[k][0],STAGE[k][1]);
 function P2(x,z){const p=proj(x,Hs(x,z)*RISE()+0.3,z);return[p[0],p[1],p[2]];}
 const behind=p=>p[2]<=cam.minZ;
@@ -781,29 +789,31 @@ function hatch(side,level){const k=side+':'+level;if(PATS[k])return PATS[k];cons
   const p=ink.createPattern(c,'repeat');p.setTransform(new DOMMatrix().scale(1/DPR));return PATS[k]=p;}
 // world-space corners of a unit footprint (exaggerated depth), projected
 function blockCorners(u,extra=0){
-  const n=alive(u),a=dims(u,u.prev,n),b=dims(u,u.form,n),e=easeIO(u.morph);let fw=lerp(a[0],b[0],e),fd=lerp(a[1],b[1],e);
+  const n=alive(u),a=shown(u,u.prev,n),b=shown(u,u.form,n),e=easeIO(u.morph);let fw=lerp(a[0],b[0],e),fd=lerp(a[1],b[1],e);
   fd=Math.max(fd,5*MPP);
   const f=[Math.sin(u.face),Math.cos(u.face)],r=[Math.cos(u.face),-Math.sin(u.face)],hw=fw/2+extra*MPP,front=extra*MPP,back=-fd-extra*MPP;
   const C=[[-hw,front],[hw,front],[hw,back],[-hw,back]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
   return{C,fw,fd,f,r};
 }
 function pathPoly(C){ink.beginPath();ink.moveTo(C[0][0],C[0][1]);for(let i=1;i<C.length;i++)ink.lineTo(C[i][0],C[i][1]);ink.closePath();}
-function drawBlock(u,alpha){
+function drawBlock(u,alpha,now){
   const s=SIDES[u.sideI],{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
   const lvl=u.mor>0.6?-1:u.mor>0.45?0:u.mor>0.3?1:2;
-  if(u.state==='rout'){pathPoly(C);ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.3;ink.stroke();ink.setLineDash([]);}
+  if(u.state==='rout'){
+    // routing: blinks between the army colour and white, the colour of surrender
+    const on=Math.floor(now/260)%2===0;                      // the frame clock: an exporter passes its ownpathPoly(C);ink.fillStyle=on?css(s.e||s.c):'#fbfaf6';ink.fill();
+    ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);}
   else if(u.type==='art'){
     // bar + gun dot on the facing side
-    const n=alive(u),barD=Math.max(4*MPP,6),c0=P2(u.x,u.z);
-    const bw=lerp(dims(u,u.prev,n)[0],dims(u,u.form,n)[0],easeIO(u.morph));const B=[[-bw/2,-2],[bw/2,-2],[bw/2,-2-barD],[-bw/2,-2-barD]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
-    pathPoly(B);ink.fillStyle=css(s.f);ink.fill();if(s.e){ink.strokeStyle=css(s.e);ink.lineWidth=1.4;ink.stroke();}
-    const d=P2(u.x+f[0]*(3.5*MPP+2),u.z+f[1]*(3.5*MPP+2));ink.beginPath();ink.arc(d[0],d[1],2.6,0,6.2832);ink.fill();if(s.e)ink.stroke();
+    pathPoly(C);ink.fillStyle=css(s.f);ink.fill();if(s.e){ink.strokeStyle=css(s.e);ink.lineWidth=1.4;ink.stroke();}
+    const fr=[(C[0][0]+C[1][0])/2,(C[0][1]+C[1][1])/2],bk=[(C[2][0]+C[3][0])/2,(C[2][1]+C[3][1])/2],dl=Math.hypot(fr[0]-bk[0],fr[1]-bk[1])||1;
+    ink.beginPath();ink.arc(fr[0]+(fr[0]-bk[0])/dl*5,fr[1]+(fr[1]-bk[1])/dl*5,3,0,6.2832);ink.fillStyle=css(s.f);ink.fill();if(s.e)ink.stroke();
   }
   else{
     pathPoly(C);
     if(u.form==='square'&&u.morph>0.5){
       // hollow square: the inner hole
-      const k=Math.max(3.3,2.2*MPP),hw=fw/2-k,I=[[-hw,-k],[hw,-k],[hw,-fd+k],[-hw,-fd+k]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
+      const k=Math.min(Math.max(lerp(SQ_RING[0]*SYMZ*Math.sqrt(0.45+0.55*u.str),SQ_RING[1],SYMK),2.2*MPP),fw*0.35,fd*0.35),hw=fw/2-k,I=[[-hw,-k],[hw,-k],[hw,-fd+k],[-hw,-fd+k]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
       ink.moveTo(I[0][0],I[0][1]);for(let i=3;i>=0;i--)ink.lineTo(I[i][0],I[i][1]);ink.closePath();
     }
     ink.fillStyle=lvl<0?css(s.f):hatch(u.sideI,lvl);ink.fill('evenodd');
@@ -822,29 +832,49 @@ function strokePath(P,s0,s1,jit=0){let acc=0,first=true;ink.beginPath();
     if(first){const p=P2(a[0]+(b[0]-a[0])*t0,a[1]+(b[1]-a[1])*t0);if(!behind(p)){ink.moveTo(p[0]+jit,p[1]+jit*0.6);first=false;}}
     const q=P2(a[0]+(b[0]-a[0])*t1,a[1]+(b[1]-a[1])*t1);if(behind(q))first=true;else if(first){ink.moveTo(q[0]+jit,q[1]+jit*0.6);first=false;}else ink.lineTo(q[0]+jit,q[1]+jit*0.6);acc+=l;}
   ink.stroke();}
-function arrowHead(P,col,w){const n=P.length,a=P2(P[n-2][0],P[n-2][1]),b=P2(P[n-1][0],P[n-1][1]);if(behind(a)||behind(b))return;const ang=Math.atan2(b[1]-a[1],b[0]-a[0]),L=9+w*1.5;
-  ink.strokeStyle=col;ink.lineWidth=w;ink.beginPath();ink.moveTo(b[0]-Math.cos(ang-0.42)*L,b[1]-Math.sin(ang-0.42)*L);ink.lineTo(b[0],b[1]);ink.lineTo(b[0]-Math.cos(ang+0.42)*L,b[1]-Math.sin(ang+0.42)*L);ink.stroke();}
+// point and heading at s metres along a world path
+function along(P,s){let acc=0;for(let i=1;i<P.length;i++){const a=P[i-1],b=P[i],l=Math.hypot(b[0]-a[0],b[1]-a[1]);if(acc+l>=s||i===P.length-1){const t=clamp((s-acc)/(l||1),0,1);return[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];}acc+=l;}return P[P.length-1];}
+// footprints: render-side history sampled from the units of each shown order, never sim state
+const FOOT_FADE=2400,FOOTS=new Map();                       // game seconds until a footprint is gone
+// a footprint is the order's own path, stamped as far as the troops got: it cannot jump when
+// a battalion leaves, routs or rejoins, because it never follows a centroid
+function sampleFootprints(){
+  for(const o of ORDERS){if(o.quiet)continue;let f=FOOTS.get(o);if(!f)FOOTS.set(o,f={side:o.side,P:o.P,pts:[[...o.P[0],GT]],s:0});
+    const s=Math.max(f.s,o.prog);if(s-f.s>16||(o.done&&s>f.s)){f.pts.push([...along(o.P,s),GT]);f.s=s;}}
+  for(const[o,f]of FOOTS){const l=f.pts[f.pts.length-1];if(!ORDERS.includes(o)&&GT-l[2]>FOOT_FADE)FOOTS.delete(o);}
+}
 function drawOrders(now,alpha){
-  ink.lineCap='round';ink.lineJoin='round';
+  ink.lineJoin='round';
+  // footprints: dotted, batched into a few age buckets, older steps fading out
+  if(SHOW_TRAILS){ink.lineCap='round';ink.setLineDash([0.1,5.5]);ink.lineWidth=2;const NB=6;
+    for(const f of FOOTS.values()){const col=css(SIDES[f.side].i),S=f.pts.map(p=>P2(p[0],p[1])),paths=Array.from({length:NB},()=>new Path2D());
+      let pb=-1,pi=-1;
+      for(let i=1;i<S.length;i++){const age=GT-f.pts[i][2];if(age>FOOT_FADE||behind(S[i-1])||behind(S[i]))continue;
+        const b=Math.min(NB-1,Math.floor(sstep(0,FOOT_FADE,age)*NB));if(b!==pb||pi!==i-1)paths[b].moveTo(S[i-1][0],S[i-1][1]);   // runs stay one subpath so the dots stay even
+        paths[b].lineTo(S[i][0],S[i][1]);pb=b;pi=i;}
+      ink.strokeStyle=col;paths.forEach((p,b)=>{ink.globalAlpha=alpha*0.85*(1-(b+0.5)/NB);ink.stroke(p);});}
+    ink.setLineDash([]);}
+  // command: where the units are going (own army only), a translucent band with a filled head
   for(const o of ORDERS){
-    if(o.quiet)continue;                                   // automatic moves leave no mark
-    const s=SIDES[o.side],reveal=easeIO(clamp((now-o.t0)/550,0,1))*o.len,w=o.group?2.6:1.7;
-    if(o.done){if(!SHOW_TRAILS||o.prog<20)continue;ink.globalAlpha=alpha*0.3;ink.strokeStyle=css(s.i);ink.lineWidth=w*0.75;strokePath(o.P,0,o.prog);
-      if(o.prog>o.len*0.9){arrowHead(o.P,css(s.i),w*0.75);}continue;}
-    // ink behind the units, pencil ahead
-    ink.globalAlpha=alpha;ink.strokeStyle=css(s.i);ink.lineWidth=w;strokePath(o.P,0,Math.min(o.prog,reveal));
-    if(o.side>0)continue;                                  // enemy plans are never pencilled: only what they did
-    ink.strokeStyle='rgba(138,132,122,0.85)';ink.lineWidth=1.25;strokePath(o.P,o.prog,reveal);
-    ink.strokeStyle='rgba(138,132,122,0.35)';ink.lineWidth=0.8;strokePath(o.P,o.prog,reveal,0.9);
-    if(reveal>=o.len-1)arrowHead(o.P,'rgba(110,104,96,0.9)',1.25);
+    if(o.quiet||o.done||o.side>0)continue;
+    const s=SIDES[o.side],band=clamp((o.group?36:24)/MPP,o.group?8:6,o.group?20:14),left=o.len-o.prog,headM=Math.min(band*1.7*MPP,left*0.6),headW=band*2.3*Math.min(1,headM/(band*1.7*MPP));
+    if(left<4)continue;
+    const reveal=easeIO(clamp((now-o.t0)/550,0,1))*o.len,end=Math.min(reveal,o.len),bandEnd=Math.max(o.prog,end-headM);
+    ink.globalAlpha=alpha*0.36;ink.strokeStyle=css(s.c);ink.lineCap='butt';ink.lineWidth=band;if(bandEnd>o.prog)strokePath(o.P,o.prog,bandEnd);
+    if(end<o.len-1)continue;
+    const tip=P2(...along(o.P,o.len)),base=P2(...along(o.P,Math.max(0,o.len-headM)));if(behind(tip)||behind(base))continue;
+    const dx=tip[0]-base[0],dy=tip[1]-base[1],dl=Math.hypot(dx,dy)||1,nx=-dy/dl,ny=dx/dl;
+    ink.beginPath();ink.moveTo(tip[0],tip[1]);ink.lineTo(base[0]+nx*headW/2,base[1]+ny*headW/2);ink.lineTo(base[0]-nx*headW/2,base[1]-ny*headW/2);ink.closePath();
+    ink.globalAlpha=alpha*0.55;ink.fillStyle=css(s.c);ink.fill();ink.globalAlpha=alpha*0.6;ink.strokeStyle='rgba(251,250,246,0.9)';ink.lineWidth=1;ink.stroke();
   }
-  ink.globalAlpha=1;
+  ink.globalAlpha=1;ink.lineCap='round';
 }
 function drawSmoke(now,mapA,worldA){
-  for(const p of SMOKE){const age=(now-p.t0)/1000,life=p.big?6:4.2;if(age>life)continue;const k=age/life,c=P2(p.x,p.z);if(behind(c))continue;
+  for(const p of SMOKE){const age=(now-p.t0)/1000,life=p.big?6:4.2;if(age>life)continue;const k=age/life,u=p.u,o=p.frac*shown(u,u.form,alive(u))[0],fo=p.big?14:8;
+    const c=P2(u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo,u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo);if(behind(c))continue;
     if(mapA>0.01){ink.globalAlpha=mapA*(1-k)*0.8;ink.strokeStyle='#8a847a';ink.lineWidth=0.8;ink.beginPath();const r0=(p.big?3:2)+k*(p.big?7:5);
       for(let a=0;a<=8.5;a+=0.35){const rr=r0*(0.35+a/8.5*0.65),x=c[0]+Math.cos(a+p.rot)*rr,y=c[1]+Math.sin(a+p.rot)*rr*0.8-k*6;a?ink.lineTo(x,y):ink.moveTo(x,y);}ink.stroke();}
-    if(worldA>0.01){const rw=(p.big?9:5)+k*(p.big?16:10),e=P2(p.x+rw,p.z),r=Math.max(1,Math.hypot(e[0]-c[0],e[1]-c[1]));
+    if(worldA>0.01){const rw=(p.big?9:5)+k*(p.big?16:10),e=P2(u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo+rw,u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo),r=Math.max(1,Math.hypot(e[0]-c[0],e[1]-c[1]));
       ink.globalAlpha=worldA*(1-k)*(1-k)*0.55;ink.fillStyle='#f2efe8';ink.beginPath();ink.arc(c[0],c[1]-r*0.6*k,r,0,6.2832);ink.fill();
       ink.globalAlpha*=0.5;ink.fillStyle='#c9c9cc';ink.beginPath();ink.arc(c[0]+r*0.25,c[1]-r*0.6*k+r*0.3,r*0.75,0,6.2832);ink.fill();}}
   ink.globalAlpha=1;
@@ -909,7 +939,7 @@ function drawInk(now){
   const inkA=1-st('ink'),blockA=1-st('blocks'),nameA=1-st('names');
   drawNeatline(inkA);drawNames(nameA);
   drawOrders(now,Math.max(0.35,1-stage(0.7,1)));
-  for(const u of UNITS)if(!u.gone||u.gone<1)drawBlock(u,blockA);
+  for(const u of UNITS)if(!u.gone||u.gone<1)drawBlock(u,blockA,now);
   drawSmoke(now,blockA,1-blockA);
   drawCorpsLabels(1-st('corps'));
   if(TT>0.5){for(const u of UNITS){if(!u.sel||u.gone)continue;const D=blockCorners(u,5).C;if(offView(D))continue;ink.globalAlpha=st('blocks');ink.strokeStyle='rgba(33,31,28,0.7)';ink.lineWidth=1;ink.setLineDash([4,3]);pathPoly(D);ink.stroke();ink.setLineDash([]);ink.globalAlpha=1;}}
@@ -1045,9 +1075,9 @@ function frame(){
   const ps=CUR.R*0.9*dt,vy=CUR.yaw*stage(0.2,0.9),fwd=(KEYS.KeyW||KEYS.ArrowUp?1:0)-(KEYS.KeyS||KEYS.ArrowDown?1:0),rgt=(KEYS.KeyD||KEYS.ArrowRight?1:0)-(KEYS.KeyA||KEYS.ArrowLeft?1:0);
   CAMS.T.x+=(Math.sin(vy)*fwd+Math.cos(vy)*rgt)*ps;CAMS.T.z+=(Math.cos(vy)*fwd-Math.sin(vy)*rgt)*ps;
   if(KEYS.KeyQ)CAMS.yaw-=dt*1.2;if(KEYS.KeyE)CAMS.yaw+=dt*1.2;CAMS.T.x=clamp(CAMS.T.x,-MX,MX);CAMS.T.z=clamp(CAMS.T.z,-MZ,MZ);
-  updateCamera(dt);
+  updateCamera(dt);SYMK=stage(0.15,0.48);SYMZ=clamp(Math.pow(CUR.R/FIT.R,0.6),0.3,1);
   // sim: one 1-second game step per accumulated game second (SPEED game seconds per real second)
-  acc+=dt*SPEED;let steps=0;while(acc>=1&&steps<120){simStep(1);acc-=1;steps++;}
+  acc+=dt*SPEED;let steps=0;while(acc>=1&&steps<120){simStep(1);sampleFootprints();acc-=1;steps++;}
   // uniforms
   const s=SEASON,mist=1-sstep(1800,4500,GT),sunK=sstep(1500,3600,GT);
   const set3=(m,n,v)=>{const k=m.name+n,c=COLS[k]||(COLS[k]=new C3());c.set(v[0],v[1],v[2]);m.setColor3(n,c);};   // setColor3 keeps the reference
@@ -1090,7 +1120,7 @@ setTimeout(()=>{
   // URL params for headless checks: ?R=900&x=..&z=..&simto=1800&season=0
   if(Q.has('R')){CAMS.R=CUR.R=+Q.get('R');}if(Q.has('x')){CAMS.T.x=CUR.x=+Q.get('x');CAMS.T.z=CUR.z=+(Q.get('z')||0);}
   if(Q.has('yaw')){CAMS.yaw=CUR.yaw=+Q.get('yaw');}
-  if(Q.has('simto')){const n=+Q.get('simto');for(let i=0;i<n;i++)simStep(1);}
+  if(Q.has('simto')){const n=+Q.get('simto');for(let i=0;i<n;i++){simStep(1);sampleFootprints();}}
   if(Q.has('speed'))setSpeed(+Q.get('speed'));
   if(Q.has('follow')){const us=byCorps(Q.get('follow'));if(us.length){const u=us[+(Q.get('i')||0)%us.length];CAMS.T.x=CUR.x=u.x;CAMS.T.z=CUR.z=u.z;}}
   if(Q.has('sel')){const u=UNITS.find(u=>u.corps===Q.get('sel'));if(u){byCorps(u.corps).forEach(v=>v.sel=true);updateCard();}}

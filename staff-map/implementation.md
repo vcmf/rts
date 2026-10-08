@@ -40,12 +40,13 @@ material and by the ink overlay. Tuned values live in one table, not scattered i
 | Tilt | 0.00 – 1.00 |
 | Wash soaks | 0.10 – 0.60 |
 | Relief rises | 0.15 – 0.70 |
+| Symbols shrink to footprints | 0.15 – 0.48 (done before soldiers stand) |
 | Trees and houses sprout | 0.30 – 0.80, staggered per instance |
 | Place names fade | 0.35 – 0.70 |
 | Ink lifts | 0.35 – 0.85 |
-| Soldiers stand | 0.40 – 0.85, staggered per figure |
+| Soldiers stand | 0.50 – 0.88, staggered per figure |
 | Corps labels fade | 0.40 – 0.75 |
-| Blocks fade | 0.50 – 0.85 |
+| Blocks fade | 0.55 – 0.88 |
 
 Hachures also thin out (to 50%) as the camera closes from 2400 m to 900 m, because the baked
 strokes get heavy when the texture is magnified.
@@ -92,8 +93,11 @@ on. If closer map zooms are needed, bake tiles instead of one texture.
 - Corners are computed in world space (frontage × depth, rotated by facing), raised to the
   terrain height × relief stage, then projected. In map view the projection is exact; during the
   transition the blocks stay glued to the rising ground.
-- Drawn depth = `max(trueDepth, 5 px × metresPerPixel)` (`design.md` §6).
-- Hatching for morale uses a canvas pattern; spacing grows as morale falls.
+- Drawn size = `lerp(symbol × zoomScale, trueFootprint, stage(0.15, 0.48))`, where
+  `zoomScale = clamp((mpp / mppTheatre)^0.6, 0.3, 1)` keeps symbols near a steady screen size.
+  Depth is never under 5 px (`design.md` §6).
+- Hatching for morale uses a canvas pattern; spacing grows as morale falls. Routing blinks at
+  ~2 Hz (260 ms per phase).
 
 ### Soldiers
 - Thin instances, one buffer per figure type (`../web-rts-architecture.md` §3, `unitRenderer.ts`).
@@ -106,11 +110,16 @@ on. If closer map zooms are needed, bake tiles instead of one texture.
 
 ## 5. Orders, trails, smoke
 
-- An order is a path (world points). The overlay draws it as pencil, with a stroke-reveal
-  animation (`setLineDash` offset) over ~0.4 s.
-- The sim reports progress along the path; the overlay inks the part behind the unit.
-- Finished paths become trails: kept in a list, drawn at low opacity. In the game they are a
-  render-side history derived from the replay, not sim state.
+- An order is a path (world points). The command band is the path from the units' progress to
+  the end, stroked at a screen width (8–20 px for a group), stopping where the head starts so the
+  translucent band and head never overlap and double their opacity.
+- Footprints are the order's own path, stamped every ~16 m of progress with the game time, up to
+  how far the troops got (never a centroid of units, which jumps when a battalion leaves, routs or
+  rejoins). Each dotted segment's opacity falls with its age, batched into six age buckets. They
+  are render-side history, not sim state: the sim drops an order one step after it finishes, and
+  the renderer keeps its footprint until it fades.
+- The sim knows nothing about symbols: its spacing (45 m same side, 32 m enemies) and smoke
+  (stored as a fraction along the unit's front) are independent of the zoom.
 
 ---
 

@@ -4,7 +4,7 @@ The look of the game at its farthest zoom. Companion to the art bible (`../desig
 covers the painted 3D world. This document covers the **map**.
 
 > **The promise:** *zoom out and the battle becomes the map a general would have drawn: ink on
-> warm paper, armies as flat coloured blocks, orders as pencil arrows. Zoom in and the same map
+> warm paper, armies as flat coloured blocks, orders as broad translucent arrows. Zoom in and the same map
 > rises into the painted world, and every block unfolds into its soldiers.*
 
 Decided Oct 2026. Implementation: `implementation.md`. Phases: `plan.md`.
@@ -104,12 +104,32 @@ make the washes run and the ink fade.
 Blocks are flat, sharp-cornered, with no shadow, bevel or outline glow.
 
 ### Shape is the formation
-- A block is the **formation's real footprint**: true frontage, true facing.
-- **Depth is exaggerated:** a battalion in line is 3 ranks (≈ 2 m) deep, invisible from 3 km.
-  The drawn depth is the larger of the true depth and **5 screen pixels**. Frontage is never
-  exaggerated, so relative widths stay true.
-- The block **changes shape when the formation changes**: line → long thin bar, column → short
-  thick block, square → square. The morph is animated (§9).
+- **At the map zoom a block is a symbol, not a footprint.** A true battalion line is ~70 m by
+  3 m: unreadable from 3 km. The symbol is sized to be read, and every formation keeps about
+  the **same visual weight**, so a column or a square never looks like a smaller unit than a line:
+
+  | Formation | Symbol (at the theatre zoom) |
+  |---|---|
+  | Infantry line | 104 × 32 m bar |
+  | Infantry column | 62 × 56 m block |
+  | Infantry square | 72 m hollow square, 18 m ring |
+  | Cavalry line / column | 96 × 30 m / 50 × 60 m, with the diagonal |
+  | Artillery deployed / limbered | 86 × 20 m bar / 24 × 62 m, with the gun dot |
+
+  Symbols are narrower than the spacing inside a corps (125 m), so a corps reads as separate
+  blocks. Blocks in contact with the enemy may touch; layering rules are an open question (§11).
+
+  (In reality a square is far smaller than the same battalion's line: the men spread over four
+  faces. The map favours readability over that truth.)
+- Symbols keep a **steady on-screen size**: they shrink in world terms as the camera closes in
+  (full at the theatre zoom, about half at the map zoom).
+- **Zooming in, the symbol shrinks to the true footprint** (true frontage and depth, true facing)
+  before the soldiers stand up in it (§9). In the painted world, block and soldiers always agree.
+- Losses shorten the symbol's frontage (to about 55% when the unit breaks at 20% strength); a
+  square shrinks on both sides so it stays a hollow square.
+- Drawn depth is never under 5 screen pixels, at any zoom.
+- The block **changes shape when the formation changes**: line → long bar, column → thick block,
+  square → hollow square. The morph is animated (§9).
 
 ### Type
 | Type | Symbol |
@@ -124,15 +144,15 @@ Blocks are flat, sharp-cornered, with no shadow, bevel or outline glow.
 |---|---|
 | **Losses** | The block shortens as the frontage shrinks |
 | **Morale** | Solid fill above 60%; below it the fill **drains into hatching** that gets sparser as morale falls |
-| **Routing** | Dashed outline only, drifting away from the enemy |
+| **Routing** | **Blinks between the army colour and white** (the colour of surrender, as in Total War), with a **dashed edge** so its white phase never reads as an Austrian block; drifts away from the enemy |
 | Firing | Small pencil smoke curls in front of the block, fading in a few seconds |
 | Selected | Thin double outline in ink, plus an expanded label (§8) |
 
 ### Colours
 From `../design.md` §4: France `#2C4FA8`, Russia `#2F6B3C`, Britain `#B3302A`.
 **Austria** (`#E9E3D3`) would vanish on winter paper, so Austrian blocks are filled a brighter
-white (`#fbfaf6`) and always carry a bold grey-blue edge (`#4f6279`). Routing is a *dashed*
-outline so it never reads like an Austrian block. Every army colour is checked against every
+white (`#fbfaf6`) and always carry a bold grey-blue edge (`#4f6279`); a routing Austrian block
+blinks between that grey-blue and white. Every army colour is checked against every
 season's paper.
 
 ### Command
@@ -143,20 +163,22 @@ season's paper.
 
 ---
 
-## 7. Orders are drawing
+## 7. Orders and footprints
 
-This is the core of the motion design.
+Two different marks, never confused:
 
-1. An order appears as a **pencil arrow**, drawn with an animated stroke from the unit to the
-   target, along the path the player dragged.
-2. As the unit moves, the path behind it is **inked** in the army colour.
-3. On arrival, the ink stays as a **faint trail**. Over the battle, the trails accumulate into
-   the story of the day, like an atlas plate. This is also the replay.
-4. Arrow heads are small, open, and drawn in two strokes. Paths curve; they never snap to
-   straight polylines.
-5. **Only the player's plans are pencilled.** Enemy movements appear as ink once carried out,
-   never as intentions. Automatic moves (a battalion closing on an enemy by itself) leave no mark,
-   or the map fills with noise.
+| Mark | Meaning | Look |
+|---|---|---|
+| **Command** | Where the units are going | A broad, **solid but translucent** band in the army colour (~36% opacity, so it never competes with the blocks), ending in a **filled triangular head** with a thin paper-white edge (Epic History's campaign arrows). It covers only the distance still to go, and disappears on arrival |
+| **Footprints** | Where the units actually went | A **thin dotted line** in the army ink colour along the commanded path, as far as the troops got. Each step fades with age and is gone after ~40 game minutes, so old movements disappear while the recent ones read clearly |
+
+1. A command draws itself along the path the player dragged (~0.5 s reveal), head last.
+2. Paths curve; they never snap to straight polylines. A group order is one wide band for the
+   whole corps, a single-battalion order a narrower one.
+3. **Only the player's commands are shown.** Enemy movements appear as footprints once carried
+   out, never as intentions. Automatic moves (a battalion closing on an enemy by itself) leave
+   no mark, or the map fills with noise.
+4. Later, a replay scrubber can redraw footprints from the recorded orders.
 
 ---
 
