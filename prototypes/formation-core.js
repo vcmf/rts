@@ -267,23 +267,19 @@ function layoutDistance(A, B) {
 }
 // does any pose of the change `trans` (CHANGE_SAMPLES along it, its end included) put a slot on impassable
 // ground for the new shape's kind? Every slot counts, empty ones too (casualties are spread over the
-// companies when the change starts and ends); only a slot whose man already stands on it may stay.
-const CHANGE_SAMPLES = 128, slotWet = new Uint8Array(COMPANIES * RANKS * FILES);
+// companies when the change starts and ends), with no exemption: a battalion standing on such ground
+// must move off it before it changes shape.
+const CHANGE_SAMPLES = 128;
 function changeWet(b, trans) {
   const kind = R.formations[trans.shape].kind, imp = IMP[kind];
   let reach = 0; for (let c = 0; c < COMPANIES; c++) reach = Math.max(reach, Math.hypot(trans.from[c].x, trans.from[c].z), Math.hypot(trans.to[c].x, trans.to[c].z));
   let lmax = 0; for (let j = 0; j < NB; j++) lmax = Math.max(lmax, b.lags[j]);
   if (IMPD[kind][cellK(b.x, b.z)] > reach + BW + lmax + 2) return false;
-  const ctx = b.trans ? null : ctxNow(b);
-  for (let c = 0, i = 0; c < COMPANIES; c++) { const w = placeWorld(b, c, b.x, b.z, b.heading, 0), ca = Math.cos(w.a), sa = Math.sin(w.a);
-    for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++, i++) { let p;
-      if (ctx) p = placeAt(ctx, c, r, f); else { const [lx, lz] = blockLocal(f, r); p = [w.x + lx * ca - lz * sa, w.z + lx * sa + lz * ca]; }
-      slotWet[i] = b.grid[c][r][f] >= 0 && imp[cellK(p[0], p[1])] ? 1 : 0; } }
   const keep = [simTime, b.trans]; let wet = false; b.trans = trans;
   const span = trans.delay[3] + trans.dur;
   for (let k = 0; k <= CHANGE_SAMPLES && !wet; k++) { simTime = trans.start + span * k / CHANGE_SAMPLES;
     for (let c = 0, i = 0; c < COMPANIES && !wet; c++) { const w = placeWorld(b, c, b.x, b.z, b.heading, 0), ca = Math.cos(w.a), sa = Math.sin(w.a);
-      for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++, i++) { if (slotWet[i]) continue; const [lx, lz] = blockLocal(f, r);
+      for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++, i++) { const [lx, lz] = blockLocal(f, r);
         if (imp[cellK(w.x + lx * ca - lz * sa, w.z + lx * sa + lz * ca)]) { wet = true; break; } } } }
   [simTime, b.trans] = keep; return wet;
 }
@@ -515,28 +511,40 @@ function stepBack(b, d) {
     left -= s; px = q.x; pz = q.z; if (k === 0) { b.x = px; b.z = pz; t.length = 1; } }
   t.push({ x: b.x, z: b.z }); b.trailLen = 0; for (let k = 1; k < t.length; k++) b.trailLen += Math.hypot(t[k].x - t[k - 1].x, t[k].z - t[k - 1].z);
 }
-// countermarch: a trail shape faces about and its rear leads back along its own trail. Every man keeps
-// his place (company, file and rank mirrored), so only the dropped lags can move anyone, and the gate is
-// asked. Needs a layout symmetric under the turn-about (mirrorOf); else the order goes on as it is.
-function mirrorOf(shape) {
-  const L = binsOf(shape); if (L.mirror !== undefined) return L.mirror;
-  let lo = Infinity, hi = -Infinity; const all = [];
-  for (let c = 0; c < COMPANIES; c++) for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++) { const [x, z] = L.pos[c][r][f]; all.push([c, r, f, x, -z]); lo = Math.min(lo, -z); hi = Math.max(hi, -z); }
-  const Dt = lo + hi, m = [];
-  for (const [c, r, f, x, D] of all) { const q = all.find(a => Math.abs(a[4] - (Dt - D)) < 1e-6 && Math.abs(a[3] + x) < 1e-6);
-    if (!q) return (L.mirror = null); ((m[c] = m[c] || [])[r] = m[c][r] || [])[f] = [q[0], q[1], q[2]]; }
-  return (L.mirror = { Dt, m });
+// FACE ABOUT: the battalion turns about where it stands. Every man keeps his place: company, file and
+// rank are relabelled by the shape's half-turn symmetry (a slot maps to the slot at its point reflection
+// through the layout's centre) and the anchor moves to match; a trail shape's trail is rebuilt from its
+// old tail. Then each file closes toward its new front rank, so a few men step up. The result is
+// checked through the gate as a whole; refused if it would put anyone on impassable ground.
+const FACE_TIME = 3;   // s the battalion stands while it faces about
+function halfTurnOf(shape) {
+  const L = binsOf(shape); if (L.turnMap !== undefined) return L.turnMap;
+  const all = []; let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let c = 0; c < COMPANIES; c++) for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++) { const [x, z] = L.pos[c][r][f]; all.push([c, r, f, x, z]);
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, m = [];
+  for (const [c, r, f, x, z] of all) { const q = all.find(a => Math.abs(a[3] - (2 * cx - x)) < 1e-6 && Math.abs(a[4] - (2 * cz - z)) < 1e-6);
+    if (!q) return (L.turnMap = null); ((m[c] = m[c] || [])[r] = m[c][r] || [])[f] = [q[0], q[1], q[2]]; }
+  return (L.turnMap = { cx, cz, m });
 }
-function countermarch(b) {
-  const M = mirrorOf(b.shape); if (!M) return false;
-  const ctx = arcOf(b, b.x, b.z, b.heading, {}), p = trailPoint(ctx, M.Dt, [0, 0]), pa = trailPoint(ctx, M.Dt - 1, [0, 0]), pb = trailPoint(ctx, M.Dt + 1, [0, 0]);
-  const trail = []; for (let D = -15; D < M.Dt; D += 0.25) { const q = trailPoint(ctx, D, [0, 0]); trail.push({ x: q[0], z: q[1] }); }   // beyond the old head back to the new one
+function faceAbout(b) {
+  const T = halfTurnOf(b.shape); if (!T || b.trans) return false;
+  const snake = snakes(b); if (snake && Math.abs(T.cx) > 1e-6) return false;   // a trail shape turns about its trail
   const keep = [b.x, b.z, b.heading, b.trail, b.trailLen, b.lags.slice(), b.soldiers.map(s => [s.c, s.r, s.f]), b.grid.map(g => g.map(r => r.slice()))], before = wetBins(b);
-  b.x = p[0]; b.z = p[1]; b.heading = Math.atan2(pb[0] - pa[0], pb[1] - pa[1]); b.trail = trail; b.lags.fill(0);
-  b.trailLen = 0; for (let k = 1; k < trail.length; k++) b.trailLen += Math.hypot(trail[k].x - trail[k - 1].x, trail[k].z - trail[k - 1].z);
+  if (snake) {   // the new head is the point of the trail the old tail's mirror stands on
+    const Dt = -2 * T.cz, ctx = arcOf(b, b.x, b.z, b.heading, {}), p = trailPoint(ctx, Dt, [0, 0]), pa = trailPoint(ctx, Dt - 1, [0, 0]), pb = trailPoint(ctx, Dt + 1, [0, 0]);
+    const trail = []; for (let D = -15; D < Dt; D += 0.25) { const q = trailPoint(ctx, D, [0, 0]); trail.push({ x: q[0], z: q[1] }); }
+    b.x = p[0]; b.z = p[1]; b.heading = Math.atan2(pb[0] - pa[0], pb[1] - pa[1]); b.trail = trail;
+    b.trailLen = 0; for (let k = 1; k < trail.length; k++) b.trailLen += Math.hypot(trail[k].x - trail[k - 1].x, trail[k].z - trail[k - 1].z);
+  } else { const o = rot2(T.cx, T.cz, -b.heading); b.x += 2 * o[0]; b.z += 2 * o[1]; b.heading += Math.PI; }
+  b.lags.fill(0);
   for (const g of b.grid) for (const rank of g) rank.fill(-1);
-  b.soldiers.forEach((s, i) => { [s.c, s.r, s.f] = M.m[s.c][s.r][s.f]; if (s.alive) b.grid[s.c][s.r][s.f] = i; });
-  if (wetBins(b) & ~before) {   // the dropped lags would put someone on impassable ground: no countermarch
+  b.soldiers.forEach((s, i) => { [s.c, s.r, s.f] = T.m[s.c][s.r][s.f]; if (s.alive) b.grid[s.c][s.r][s.f] = i; });
+  for (let c = 0; c < COMPANIES; c++) for (let f = 0; f < FILES; f++) {   // close each file toward its front rank
+    const men = []; for (let r = 0; r < RANKS; r++) if (b.grid[c][r][f] >= 0) men.push(b.grid[c][r][f]);
+    for (let r = 0; r < RANKS; r++) b.grid[c][r][f] = r < men.length ? men[r] : -1;
+    men.forEach((i, r) => { b.soldiers[i].r = r; }); }
+  if (wetBins(b) & ~before) {
     [b.x, b.z, b.heading, b.trail, b.trailLen] = keep; b.lags.set(keep[5]); b.soldiers.forEach((s, i) => { [s.c, s.r, s.f] = keep[6][i]; }); b.grid = keep[7]; return false; }
   b.px = b.x; b.pz = b.z; b.ph = b.heading; b.rateOff = true; b.allOnRoad = false; return true;
 }
@@ -602,6 +610,7 @@ function formationStep(b) {
   const v = V0;   // turning rate uses the base pace
   const halfW = halfWidth(b);
   if (o.type === 'move') {
+    if (o.x === undefined) { o.x = b.x + Math.sin(b.heading) * o.ahead; o.z = b.z + Math.cos(b.heading) * o.ahead; }
     const dx = o.x - b.x, dz = o.z - b.z, dist = Math.hypot(dx, dz);
     if (dist < 0.4) { b.orders.shift(); b.vx = b.vz = 0; return; }
     let want = Math.atan2(dx, dz), dh = want - b.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
@@ -609,23 +618,13 @@ function formationStep(b) {
     // the turn, through the gate: a straight shape turns first (in place when the turn is large); a trail
     // shape turns only as its head advances, on a radius of at least turnRadius (after the advance below)
     const snake = snakes(b);
-    // a trail shape with its target well behind countermarches; with its target inside the turning circle
-    // on the side it turns to, it has come as near as it can turn
-    if (snake && Math.abs(dh) > 2 * Math.PI / 3 && countermarch(b)) { b.vx = b.vz = 0; return; }
+    // a trail shape cannot reach a target inside its turning circle on the side it turns to: it halts
+    // (no automatic manoeuvre: the player re-orders, faces about or re-forms)
     if (snake) { const R0 = turnRadius(b), sd = dh > 0 ? 1 : -1, cx = b.x + Math.cos(b.heading) * R0 * sd, cz = b.z - Math.sin(b.heading) * R0 * sd;
-      if (Math.hypot(o.x - cx, o.z - cz) < R0) { b.orders.shift(); b.vx = b.vz = 0; b.status = 'arrived: as near as the column can turn'; return; } }
-    const before = wetBins(b); let turnHeld = false, turnStuck = false;
-    const turnBy = lim => { const h1 = b.heading, turn = Math.max(-lim, Math.min(lim, dh)), ut = gate(b, before, u => { b.heading = h1 + turn * u; }); turnHeld = Math.abs(turn) > 1e-4 && ut < 1; turnStuck = turnHeld && ut === 0; };
-    if (!snake) {
-      // a turn that cannot move at all for impassable ground: the line retires straight back by its
-      // half-width and a metre (its flanks then swing clear), at most three times its half-width in one order
-      if (!(o.retire > (o.backed || 0))) turnBy(wmax);
-      if (turnStuck && !(o.retire > (o.backed || 0)) && (o.backed || 0) < 3 * halfW) o.retire = (o.backed || 0) + halfW + 1;
-      if (o.retire > (o.backed || 0)) { const xb = b.x, zb = b.z, sb = Math.min(V0 * TICK, o.retire - (o.backed || 0));
-        const ub = gate(b, before, u => { b.x = xb - Math.sin(b.heading) * sb * u; b.z = zb - Math.cos(b.heading) * sb * u; });
-        if (ub > 0) { o.backed = (o.backed || 0) + sb * ub; b.vx = (b.x - xb) / TICK; b.vz = (b.z - zb) / TICK; b.blockedFor = 0; b.status = ''; return; }
-        o.retire = 0; turnHeld = true; }   // cannot retire either: held
-    }
+      if (Math.hypot(o.x - cx, o.z - cz) < R0) { b.orders = []; b.vx = b.vz = 0; b.status = 'halted: target inside the turning circle'; return; } }
+    const before = wetBins(b); let turnHeld = false;
+    const turnBy = lim => { const h1 = b.heading, turn = Math.max(-lim, Math.min(lim, dh)), ut = gate(b, before, u => { b.heading = h1 + turn * u; }); turnHeld = Math.abs(turn) > 1e-4 && ut < 1; };
+    if (!snake) turnBy(wmax);
     // the advance: lags and speed from the lag model, then the gate holds any bin whose places would
     // reach impassable ground (its lag grows by the step: its men stand still) and cuts back the rest
     sampleBins(b, paceName, V0);
@@ -648,6 +647,10 @@ function formationStep(b) {
     // stopped by impassable ground: held and not advancing (or not able to turn) for a while
     if ((held || turnHeld) && (moved < STALL * TICK || turnHeld) && (want0 > 0 || turnHeld)) { b.blockedFor += TICK; if (b.blockedFor > HALT_AFTER) haltAtEdge(b, held); }
     else { b.blockedFor = 0; if (moved > 0.001) b.status = ''; }
+  } else if (o.type === 'face') {   // face about, then stand while the men turn
+    b.vx = b.vz = 0;
+    if (o.t0 === undefined) { if (!faceAbout(b)) { b.orders = []; b.status = 'cannot face about: impassable ground'; return; } o.t0 = simTime; b.status = ''; }
+    if (simTime - o.t0 >= FACE_TIME * drill) b.orders.shift();
   } else if (o.type === 'wheel') {   // rotate the whole battalion around the flank it turns to
     if (snakes(b)) { b.orders.shift(); b.status = 'cannot wheel: a column of route turns as it marches'; return; }
     lagSettle(b);
@@ -810,6 +813,9 @@ function order(name, a) {
   b.status = '';
   if (SHAPES[name]) { b.orders = [{ type: 'form', shape: name }]; return; }
   if (name === 'move') { b.orders = [{ type: 'move', x: a.x, z: a.z }]; return; }
+  if (name === 'face') { b.orders = [{ type: 'face' }]; return; }
+  // retire: face about, march a ≥ metres, face the front again (all through the gate)
+  if (name === 'retire') { b.orders = [{ type: 'face' }, { type: 'move', ahead: a || 30 }, { type: 'face' }]; return; }
   if (name === 'wheelL') { b.orders = [{ type: 'wheel', angle: Math.PI / 4 }]; return; }
   if (name === 'wheelR') { b.orders = [{ type: 'wheel', angle: -Math.PI / 4 }]; return; }
   if (name === 'wood') { b.orders = [{ type: 'move', x: WOOD.x, z: WOOD.z - WOOD.r - 12 }, { type: 'move', x: WOOD.x, z: WOOD.z + WOOD.r + 14 }]; return; }
