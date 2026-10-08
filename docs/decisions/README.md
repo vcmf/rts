@@ -27,3 +27,4 @@ recorded here on 2026-10-08.
 | [0012](0012-heightfield-authority.md) | One heightfield is the authority for height, built offline | accepted |
 | [0013](0013-single-player-first.md) | Single-player first, multiplayer-capable | accepted |
 | [0014](0014-review-workflow.md) | Plan, implement, review in rounds, redesign after three | accepted |
+| [0015](0015-era-generic-engine.md) | The engine is era-generic, from antiquity to the Napoleonic era | accepted |

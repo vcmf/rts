@@ -63,4 +63,6 @@ commits or PRs.
 - **The simulation never imports the renderer** and changes only through commands (decision 0005,
   `docs/architecture.md`), and it is deterministic: restricted float64, replays match across
   browsers (decisions 0006, 0013).
+- **Era-generic engine** (decision 0015): engine code never names an era's unit, weapon or formation;
+  era content is ruleset data. Antiquity to Napoleon; no modern warfare.
 - **Measure, don't assume**: performance claims need a measurement or are labelled estimates.

@@ -29,6 +29,8 @@ last_reviewed: 2026-10-08
 
 ## Engine
 
+- **Era ruleset:** the data for one historical era (unit types, formations and drill, weapons,
+  movement factors, morale); the engine itself is era-generic (decision 0015).
 - **Tick:** one simulation step (50 ms of battle time). **Command:** the only input into the
   simulation. **Replay:** a command log played back to the same state hashes.
 - **Restricted float64:** the simulation's number rules (decision 0006).

@@ -6,7 +6,10 @@ last_reviewed: 2026-10-08
 # Simulation Design
 
 Status: **draft for discussion, revised after an adversarial review** (Oct 2026; §19). The battle
-simulation: what it holds, how a tick runs, and how Napoleonic warfare is modelled. Builds on
+simulation: what it holds, how a tick runs, and how Napoleonic warfare is modelled. Since decision 0015
+the engine is era-generic (antiquity to Napoleon): what follows for Napoleonic units, weapons and
+drill is the **first era ruleset**, data on generic systems; melee in particular must become a
+first-class system for older eras. Builds on
 `docs/architecture.md` (sim/render split, typed arrays, handles, commands, 20 Hz tick) and the
 decisions in `docs/engine-map.md` §2. Evidence and parameters: `docs/research/rts-engine-subsystems.md`
 (cited as **R§n**).
