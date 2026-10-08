@@ -65,33 +65,42 @@ animation beyond a placeholder, the deterministic sim spine (S0).
 
 ## Results (headless)
 
-Measured with `F.slotError()` (how far soldiers are from their slots) and `F.measure()` (per-soldier
-CPU per frame: steering plus figure matrices), after review round 1.
+Measured with `F.slotError()` (how far soldiers are from their slots, sampled every 0.5 s, worst over
+the run) and `F.measure()` (per-soldier CPU per frame: steering plus figure matrices), after review
+round 2.
 
 | Scenario | Worst distance from slot | Worst mean |
 |---|---|---|
-| Line turning 90° to a new target | 1.71 m | 0.56 m |
+| Line turning 90° to a new target | 1.7 m | 0.56 m |
 | Wheel 45° | 0.25 m | 0.13 m |
-| Line through the wood | 5.0 m (men held up behind trunks) | 0.83 m |
-| Cross the ford (march column, turn, deploy) | 3.6 m | 1.26 m |
-| March column turning 90° | 0.98 m | |
-| 40 battalions on the move | 2.4 m | 0.40 m |
+| Line through the wood | 3–5 m (men held up behind trunks) | 0.8 m |
+| Cross the ford (march column, turn, deploy) | 3.5 m | 1.3 m |
+| March column marching straight | 0.15 m | 0.11 m |
+| March column turning 90° | 1.75 m | 0.48 m |
+| 40 battalions over 2 minutes | 10.7 m (battalions that start inside the wood or the stream; a single moment is ≈ 2 m) | 0.63 m |
 
 - **March column as a snake:** each company stands on the head's trail and faces along it, so the
   column turns where its head turned (the first version turned as a rigid 23 m stick: 28.8 m error).
-- **Drill timings** come from the timing table (they are set, not measured): line → square 100 s,
-  column → square 60 s, line ↔ column 30 / 40 s, march column 20 / 60 s. Companies start one after
-  another and wheel around their turning flank.
-- **Interrupted changes:** a new shape order mid-change takes over at once; reversing (square ordered,
-  line ordered 30 s in) takes only the share already done (18 s), and orders to move wait until the
-  change ends (troops do not march while re-forming).
+- **Drill timings** come from the timing table (set, not measured): line → square 100 s, column →
+  square 60 s, line ↔ column 30 / 40 s, march column 20 / 60 s. Companies start one after another
+  and wheel around their turning flank.
+- **Interrupted changes:** a new shape order mid-change takes over at once. Its time is the table
+  time scaled by how far the companies still have to go, measured on the company furthest from its
+  new place: square ordered then line 30 s in → 17.6 s back. Move orders wait until a change ends.
 - **Square:** a pinwheel layout (each face shifted along its line by half its depth) closes the corners.
-- **Casualties:** the man behind steps up, then empty files close toward the colours. 30 killed: 27
-  stepped up, 18 moved one or more files inward; 80 killed: no hole left inside the line.
-- **Per-soldier CPU** (headless Chrome): 0.02 ms per frame for 1 battalion, **1.34 ms for 40
+- **Casualties:** the man behind steps up; then ranks close. In line the whole half-battalion closes
+  toward the colours (across company boundaries): after 80 killed the front rank is 18 men, 12.3 m
+  wide, with no gap wider than the normal 1.3 m between companies. In other shapes each company
+  closes toward its own centre (a square keeps its corners). Ranks also close when a change ends.
+- **Per-soldier CPU** (headless Chrome): 0.02 ms per frame for 1 battalion, **1.3 ms for 40
   battalions (4,000 soldiers)**, steering and figure matrices together (first version: 8.6 ms for
   steering alone). Rendering frame rate in headless SwiftShader is not meaningful; a manual number
   on the dev Mac is still owed.
+
+**Known limitations (later):** no countermarch (a march column ordered to turn back walks through its
+own head, facings flip at the turn point); a bent march column that starts to deploy and is reversed
+returns to a straight column behind its head; on a reversal the companies restart in the usual order,
+not the order in which they had moved.
 
 ## Review round 1
 
@@ -109,3 +118,14 @@ CPU per frame: steering plus figure matrices), after review round 1.
 | 8 | light | Slot check had no negative test and could not fail | Removed (both paths now share one function); `F.slotError()` measures following |
 | 9 | light | Neighbour cells smaller than the separation radius | 0.6 m cells (≥ 0.52 m) |
 | 10 | light | Grid cleared in full each frame; cost left out figure work | Only touched cells cleared; cost includes figures |
+
+## Review round 2 — stop (no severe findings)
+
+5 moderate, 5 light. Fixed: march slots were extrapolated twice (men 0.6 m ahead of their places);
+closing ranks per company opened holes between companies, and closed toward the wrong edges outside
+line (now half-battalion toward the colours in line, company centre otherwise, and on every
+re-forming); the 40-battalion figure was a single moment (now the worst over the run); reversal
+bookkeeping ("line → line", reversal-of-a-reversal timing) now uses the distance still to go; no turn
+extrapolation while turning in place; slot error, debug and colours reuse the per-company frames.
+Left as known limitations: countermarch, re-straightened column after a reversed deployment,
+company order on reversal.
