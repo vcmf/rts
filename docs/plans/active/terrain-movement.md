@@ -90,6 +90,11 @@ Run with `SHOT_TIMEOUT_S=900` (the run takes several minutes; `tools/shot.mjs` w
   - the same line ordered north (a turn in place): halted, 0 places; a march column turning toward
     the stream 8, 9 and 10 m from it: halted, 0 places, 0 men;
   - a 4 m deep strip across part of the front, push order (Lmax 12 m): halted, nobody crosses;
+  - thinned lines (41, 50, 59 losses) at the bank ordered into column over a grid of positions and
+    headings: 15 accepted, 27 refused, 0 places in the water (empty slots are checked too);
+  - ground a line cannot enter (a test ruleset with hedges g = 0 for a line): halted, 0 places on it;
+  - places are checked both now and as the soldiers aim for them (0.6 s ahead);
+  - the same run twice gives the same state, bit for bit.
   - the ford is crossed and the battalion ends in line on the far bank.
 - **Casualties:** a bin emptied by casualties takes no part in the limits; a line wholly in woods
   then keeps every file in place (lag 0, disorder 0; it was 1.6 m and 0.6 before).
@@ -99,9 +104,11 @@ Run with `SHOT_TIMEOUT_S=900` (the run takes several minutes; `tools/shot.mjs` w
 - **Accordion**, from the shape's geometry (a bin wholly behind another, with men less than 0.6 m
   apart across the line of travel, stays at least 0.6 m behind it): a march column whose head is
   held up at a hedge bunches from 1.65 m to 0.6 m between companies, never closer; the same column
-  turned 90° with 4.3 m of lag keeps 0.6 m (0.03 m before); a square pushing into the wood keeps
+  turned 90° on push keeps 0.6 m between companies (0.03 m before) and 0.51 m between men of one
+  company (0.65 m at rest; 0.21 m before the turn radius); a square pushing into the wood keeps
   0.68 m between faces (0.98 m at rest; 0.13 m before round 2).
-- **Earlier checks** still pass; the march column's turn: 1.24 m worst distance from slot.
+- **Earlier checks** still pass; the march column's turn: 0.52 m worst distance from slot (it was 1.24 m:
+  the column no longer turns in place).
 - **Negative runs:** the round-0 code fails deep water along the whole front (stuck, men in the
   water), the bridge deck (g = 0.06) and the accordion (0.00 m). With the round-2 fixes disabled
   (look-ahead, trail trim, wheel check, empty bins, accordion) the checks fail on each: 36 and 27
@@ -113,8 +120,12 @@ Run with `SHOT_TIMEOUT_S=900` (the run takes several minutes; `tools/shot.mjs` w
   after halts (1 man each). Not caught by it: the narrow strip (held by the lag model and the halt's
   step back, not the gate) and the turn-radius cap (centring the ranks already keeps the bend at
   0.6 m; the cap is a margin).
-- **Cost, 40 battalions:** simulation 1.9 ms per frame (1.7–1.8 ms before the gate; budget 4 ms,
-  checked), drawing 0.9 ms.
+- **Negative run after review round 1 of the redesign** (empty slots unchecked, no turn radius, no
+  target fall-back, one impassable grid for every kind): thinned lines put 2 places in the water, the
+  bend folds to 0.16 m within a company, the hedge test 36 places on it, soldier targets 3, 2, 3, 2
+  and 18 in the water.
+- **Cost, 40 battalions** (all four formations, 9 march columns moving): simulation 2.1 ms per frame
+  (1.7–1.8 ms before the gate; budget 4 ms, checked), drawing 0.9 ms.
 
 ## Review round 1
 
@@ -186,8 +197,9 @@ once, before the fact:
   when ordered and at every interrupt.
 - **Trail shapes man by man:** every man of a march column stands on the trail at his own distance
   behind the head (his place in the straight layout plus his lag), across it by his rank's offset;
-  the ranks are centred on the trail and the head turns on a radius of at least the half-width plus
-  0.6 m. The accordion's straight-layout pairs then hold in bends.
+  the ranks are centred on the trail. The head turns only as it advances, on a radius that keeps men
+  one file apart at least 0.52 m apart on the inside of the bend (4.25 m for this column). The
+  accordion's straight-layout pairs then hold in bends.
 - **Soldiers** (the cosmetic layer) never step onto impassable ground either.
 - **Era names out of the core:** start shape and order preset, the passage shapes (narrow, deploy) and
   `closeAcross` (which shape closes across company boundaries) are ruleset data. The shape geometry
@@ -197,3 +209,25 @@ once, before the fact:
   files close at the quick step and idle battalions with no lag skip the work; the readout's mean lag
   counts live bins; binN counts men; route step only while every man stands on a road.
 - **Checks** for each round-3 finding; negative run above.
+
+## Review round 1 after the redesign
+
+10 findings, 1 severe → another round.
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | severe | A change was checked against the slot table before casualties were spread into empty slots | The change check covers every slot, empty ones too, for the new shape's kind; thinned-line grid check |
+| 2 | moderate | A march column turning 1 rad or more turned in place: inner rank folded to 0.21 m | Trail shapes turn only as the head advances, radius from the layout (inner men ≥ 0.52 m); within-company check |
+| 3 | moderate | Soldier targets 0.6 s ahead went past the edge while the places did not | Lags extrapolated with their rate; a target on impassable ground falls back to the place now; targets checked |
+| 4 | moderate | Ground impassable for one formation kind only was not gated | Impassable grids per kind; test ruleset check |
+| 5 | moderate | The cost run had no march columns | All formations in the cost run (9 march columns moving) |
+| 6 | moderate | Claims untested: radius cap, narrow strip, targets, determinism | Within-company, targets, replay checks; negative run above. The narrow strip is held by the lag model and the halt's step back: the gate is its second line |
+| 7 | light | The change check was skipped whenever any bin was already on impassable ground | Per slot: a slot already on it may stay, every other must stay off |
+| 8 | light | Places worked out several times a tick (road pace, sampling, gate tries) | Road pace from the last sampling; one trail walker with a cache. Gate tries still rebuild the places (measured cost above) |
+| 9 | light | Two trail walkers that disagreed at the trail's end | `trailAt` uses the arc table and `trailPoint` |
+| 10 | light | Half-width assumed a three-rank layout; paired 1.2 factors | Half-width from the layout once (`binsOf`); turn radius from it |
+
+Known and left: closing ranks after casualties (`closeRanks`) moves men sideways without the gate; at a
+bank parallel to the line a closed file could stand on impassable ground. To fold into the gate with
+the casualty system (S-phase).
+
