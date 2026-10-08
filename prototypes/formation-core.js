@@ -1,4 +1,4 @@
-// Formation core (docs/plans/active/formation-feel.md): terrain data, the 20 Hz formation layer and the
+// Formation core (docs/plans/done/formation-feel.md): terrain data, the 20 Hz formation layer and the
 // per-frame soldier layer, with no rendering. Loaded by prototypes/formation-map.html (a plain script,
 // so it runs from file://). Exposes the global FC.
 // The layers follow docs/research/formation-movement-and-doc-systems.md §4. A feel and benchmark test:
@@ -30,7 +30,7 @@ function baseH(x, z) {
 }
 function streamDepth(x, z) {   // depth below the banks: 0 outside the channel
   const d = Math.abs(x - STREAM_X(z)); if (d > WATER_HALF + 2) return 0;
-  const bed = z > FORD.z0 && z < FORD.z1 ? 0.45 : 1.1;
+  const bed = z > FORD.z0 && z < FORD.z1 ? 0.65 : 1.6;   // water ≈ 0.4 m at the ford (knee), ≈ 1.35 m elsewhere (deep)
   const k = Math.min(1, Math.max(0, (WATER_HALF + 2 - d) / 2.5));
   return bed * k * k * (3 - 2 * k);
 }
@@ -44,25 +44,16 @@ function H(x, z) {
   return (heights[k] * (1 - fu) + heights[k + 1] * fu) * (1 - fv) + (heights[k + HN] * (1 - fu) + heights[k + HN + 1] * fu) * fv;
 }
 const waterLevel = z => baseH(STREAM_X(z), z) - 0.25;
-const inWater = (x, z) => Math.abs(x - STREAM_X(z)) < WATER_HALF && streamDepth(x, z) > 0.25;
+const BRIDGE = { z: -60, half: 2, x0: STREAM_X(-60) - 8, x1: STREAM_X(-60) + 8 };   // a 4 m wide bridge
+const onBridge = (x, z) => Math.abs(z - BRIDGE.z) <= BRIDGE.half && x >= BRIDGE.x0 && x <= BRIDGE.x1;
+const waterDepth = (x, z) => onBridge(x, z) ? 0 : Math.max(0, streamDepth(x, z) - 0.25);
+const inWater = (x, z) => waterDepth(x, z) > 0;
 const inWood = (x, z) => (x - WOOD.x) ** 2 + (z - WOOD.z) ** 2 < WOOD.r * WOOD.r;
 function roadDist(x, z) {
   let m = Infinity;
   for (let k = 0; k + 1 < ROAD.length; k++) { const [ax, az] = ROAD[k], [bx, bz] = ROAD[k + 1], ex = bx - ax, ez = bz - az;
     const t = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez))); m = Math.min(m, Math.hypot(x - ax - ex * t, z - az - ez * t)); }
   return m;
-}
-// ground speed, baked once on the height grid (the terrain is static): water and woods slow, roads
-// help a little; the slope is charged along the direction of travel (climbing slows, a gentle descent
-// does not, a steep one does), so a line walking along a contour is not slowed
-const GROUND = new Float32Array(HN * HN), GX = new Float32Array(HN * HN), GZ = new Float32Array(HN * HN);
-for (let j = 0; j < HN; j++) for (let i = 0; i < HN; i++) { const x = i * HG - HALF, z = j * HG - HALF, k = j * HN + i;
-  GROUND[k] = (inWater(x, z) ? 0.45 : 1) * (inWood(x, z) ? 0.75 : 1) * (roadDist(x, z) < 3 ? 1.1 : 1);
-  GX[k] = (H(x + HG, z) - H(x - HG, z)) / (2 * HG); GZ[k] = (H(x, z + HG) - H(x, z - HG)) / (2 * HG); }
-function groundSpeed(x, z, dx, dz) {   // (dx, dz): unit direction of travel, or 0, 0
-  const i = Math.min(HN - 1, Math.max(0, Math.round((x + HALF) / HG))), j = Math.min(HN - 1, Math.max(0, Math.round((z + HALF) / HG))), k = j * HN + i;
-  const up = GX[k] * dx + GZ[k] * dz;
-  return GROUND[k] / (1 + 3 * Math.max(0, up) + 1.2 * Math.max(0, -up - 0.2));
 }
 // obstacles soldiers walk around: tree trunks in the wood, rocks on the hills and by the stream
 const TREES = [], ROCKS = [];
@@ -76,6 +67,54 @@ const TREES = [], ROCKS = [];
     const pts = []; const m = 5 + (r() * 3 | 0); for (let q = 0; q < m; q++) { const ang = q / m * Math.PI * 2 + r() * 0.5; pts.push([Math.cos(ang) * R * (0.7 + r() * 0.4), Math.sin(ang) * R * (0.7 + r() * 0.4)]); }
     ROCKS.push({ x, z, r: R, pts }); k++; }
 }
+/* =========================================================================
+   TERRAIN CLASSES (era-generic: the era ruleset gives each class its speed factors)
+   A 1 m grid of classes, baked once: open, road, crops, ploughed, rough, woods, denseWood, marsh,
+   hedge, bridge, water (with its depth).
+   ========================================================================= */
+const R = window.RULESET;   // loaded before this file (prototypes/ruleset-napoleonic.js)
+const CLASSES = ['open', 'road', 'crops', 'ploughed', 'rough', 'woods', 'denseWood', 'marsh', 'hedge', 'bridge', 'water'];
+const CROPS = [[-160, 20, -80, 62], [96, -46, 152, -12], [-60, -150, 0, -108]];   // x0 z0 x1 z1
+const PLOUGHED = [[-150, -112, -96, -76], [104, 60, 160, 104]];
+const MARSH = { x: 46, z: -118, rx: 20, rz: 12 };
+const DENSE = { x: -52, z: 62, r: 12 };
+const HEDGES = [[[-70, -24], [-24, -22]], [[-18, -22], [26, -20]], [[30, -96], [32, -34]]];   // a gap at x −24..−18
+const segDist = (x, z, [ax, az], [bx, bz]) => { const ex = bx - ax, ez = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez))); return Math.hypot(x - ax - ex * t, z - az - ez * t); };
+const TERR = new Uint8Array(HN * HN), WDEPTH = new Float32Array(HN * HN), GX = new Float32Array(HN * HN), GZ = new Float32Array(HN * HN);
+function classAt(x, z) {
+  if (onBridge(x, z)) return 'bridge';
+  if (waterDepth(x, z) > 0) return 'water';
+  if (roadDist(x, z) < 3) return 'road';
+  if (HEDGES.some(([a, b]) => segDist(x, z, a, b) < 0.8)) return 'hedge';
+  if (Math.hypot(x - DENSE.x, z - DENSE.z) < DENSE.r) return 'denseWood';
+  if (inWood(x, z)) return 'woods';
+  if (((x - MARSH.x) / MARSH.rx) ** 2 + ((z - MARSH.z) / MARSH.rz) ** 2 < 1) return 'marsh';
+  if (ROCKS.some(o => Math.hypot(o.x - x, o.z - z) < o.r + 3) || Math.hypot(x - HILLS[0].x, z - HILLS[0].z) < 16) return 'rough';
+  if (PLOUGHED.some(([a, b, c, d]) => x >= a && x <= c && z >= b && z <= d)) return 'ploughed';
+  if (CROPS.some(([a, b, c, d]) => x >= a && x <= c && z >= b && z <= d)) return 'crops';
+  return 'open';
+}
+function bakeTerrain() {
+  for (let j = 0; j < HN; j++) for (let i = 0; i < HN; i++) { const x = i * HG - HALF, z = j * HG - HALF, k = j * HN + i;
+    TERR[k] = CLASSES.indexOf(classAt(x, z)); WDEPTH[k] = waterDepth(x, z);
+    GX[k] = (H(x + HG, z) - H(x - HG, z)) / (2 * HG); GZ[k] = (H(x, z + HG) - H(x, z - HG)) / (2 * HG); }
+}
+const cellK = (x, z) => Math.min(HN - 1, Math.max(0, Math.round((z + HALF) / HG))) * HN + Math.min(HN - 1, Math.max(0, Math.round((x + HALF) / HG)));
+const waterG = d => { const c = R.water.curve; if (d <= 0) return 1; if (d > R.water.limit) return 0;
+  for (let n = 1; n < c.length; n++) if (d <= c[n][0]) return c[n - 1][1] + (c[n][1] - c[n - 1][1]) * (d - c[n - 1][0]) / (c[n][0] - c[n - 1][0]);
+  return c[c.length - 1][1]; };
+// slope factor along the direction of travel: Tobler's hiking curve, capped at the drill pace
+const slopeG = s => Math.min(1, R.slopeK * Math.exp(-3.5 * (Math.abs(s + 0.05) - 0.05)));
+// speed factor g of the ground at (x, z) for a formation kind ('line' | 'column' | 'skirmish'), moving along (dx, dz)
+function groundG(x, z, kind, dx, dz) {
+  const k = cellK(x, z), t = R.terrain[CLASSES[TERR[k]]];
+  return t.g[kind] * waterG(WDEPTH[k]) * slopeG(GX[k] * dx + GZ[k] * dz);
+}
+bakeTerrain();
+const groundQ = (x, z) => R.q[R.terrain[CLASSES[TERR[cellK(x, z)]]].q];
+// cosmetic soldiers: the same table (column values), never quite zero so nobody freezes mid-step
+const groundSpeed = (x, z, dx, dz) => Math.max(0.15, groundG(x, z, 'column', dx, dz));
+
 const TREE_CELL = 4, TREE_N = FIELD / TREE_CELL, treeCells = Array.from({ length: TREE_N * TREE_N }, () => []);
 const treeCell = (x, z) => { const i = Math.floor((x + HALF) / TREE_CELL), j = Math.floor((z + HALF) / TREE_CELL); return i < 0 || j < 0 || i >= TREE_N || j >= TREE_N ? -1 : i * TREE_N + j; };
 for (const t of TREES) treeCells[treeCell(t.x, t.z)].push(t);
@@ -122,6 +161,7 @@ function makeBattalion(x, z, heading, colour, seed) {
   const b = {
     x, z, heading, px: x, pz: z, ph: heading, vx: 0, vz: 0, shape: 'line', place: SHAPES.line(),
     trans: null, orders: [], colour, rand: rng(seed), soldiers: [], grid: [], moved: 0, log: [], omega: 0, trail: [],
+    style: 'normal', lags: new Float64Array(COMPANIES * 3), binG: new Float64Array(COMPANIES * 3), binOf: [], disorder: 0, blockedFor: 0, status: '',
   };
   resetTrail(b);
   // slot table: grid[company][rank][file] = soldier index or -1
@@ -234,10 +274,65 @@ function startChange(b, shape) {
   return true;
 }
 
+/* =========================================================================
+   MOVEMENT OVER TERRAIN: the lag model (docs/research/terrain-movement-speed-models.md §4, §6)
+   12 sample points per battalion (3 lateral bins per company). Each bin's ground factor g is the
+   harmonic mean over its men's ground (so a column's depth counts), with slope along the direction
+   of travel and water depth. A held-up bin falls behind (lag), hurries at the ground's quick step to
+   catch up, and the battalion slows only as much as needed to keep one file within Lmax and the
+   line on average within Lmean of its place. Era numbers come from the ruleset.
+   ========================================================================= */
+function sampleBins(b, dirX, dirZ) {
+  const kind = R.formationKind[b.shape];
+  for (let c = 0; c < COMPANIES; c++) {
+    const w = placeWorld(b, c, b.x, b.z, b.heading, 0), ca = Math.cos(w.a), sa = Math.sin(w.a);
+    const rx = Math.cos(w.face), rz = -Math.sin(w.face);   // the company's right, across its facing
+    const pos = [], lat = []; let lo = Infinity, hi = -Infinity;
+    for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++) { const lx = (f - (FILES - 1) / 2) * FS, lz = -r * RS;
+      const px = w.x + lx * ca - lz * sa, pz = w.z + lx * sa + lz * ca, l = (px - w.x) * rx + (pz - w.z) * rz;
+      pos.push([px, pz, r, f]); lat.push(l); lo = Math.min(lo, l); hi = Math.max(hi, l); }
+    const inv = [0, 0, 0], n = [0, 0, 0], blocked = [false, false, false], q = [Infinity, Infinity, Infinity];
+    const binOf = b.binOf[c] || (b.binOf[c] = [[], [], []]);
+    pos.forEach(([px, pz, r, f], k) => { const bin = Math.min(2, Math.floor((lat[k] - lo) / Math.max(1e-6, hi - lo) * 3)); binOf[r][f] = bin;
+      if (b.grid[c][r][f] < 0) return;   // only where men stand
+      const g = groundG(px, pz, kind, dirX, dirZ); if (g <= 0) blocked[bin] = true; else { inv[bin] += 1 / g; n[bin]++; }
+      q[bin] = Math.min(q[bin], groundQ(px, pz)); });
+    for (let bin = 0; bin < 3; bin++) { const j = c * 3 + bin;
+      b.binG[j] = blocked[bin] ? 0 : n[bin] ? n[bin] / inv[bin] : 1; b.binQ = b.binQ || new Float64Array(COMPANIES * 3); b.binQ[j] = q[bin] === Infinity ? R.q.open : q[bin]; }
+  }
+}
+// battalion speed this tick (m/s), given its base pace V0; advances the lags. 0 = held at an obstacle
+function lagStep(b, V0, moving) {
+  const P = R.orders[b.style], n = COMPANIES * 3, cap = new Float64Array(n);
+  for (let j = 0; j < n; j++) cap[j] = V0 * b.binG[j] * b.binQ[j];
+  let V = moving;
+  for (let j = 0; j < n; j++) V = Math.min(V, cap[j] + (P.Lmax - b.lags[j]) / P.tau);
+  V = Math.max(0, V);
+  for (let it = 0; it < 3; it++) {   // mean-lag limit: the held-up points must not let the line bow too far
+    const held = []; for (let j = 0; j < n; j++) if (cap[j] < V) held.push(j);
+    if (!held.length) break;
+    let lbar = 0; for (let j = 0; j < n; j++) lbar += b.lags[j]; lbar /= n;
+    let sc = 0; for (const j of held) sc += cap[j];
+    V = Math.max(0, Math.min(V, (sc + n * (P.Lmean - lbar) / P.tau) / held.length));
+  }
+  for (let j = 0; j < n; j++) { const u = Math.min(cap[j], V + b.lags[j] / P.tau); b.lags[j] = Math.max(0, b.lags[j] + (V - u) * TICK); }
+  let m = Infinity; for (let j = 0; j < n; j++) m = Math.min(m, b.lags[j]);
+  for (let j = 0; j < n; j++) b.lags[j] -= m;   // keep the reference on the leading file (and the anchor with its men)
+  // disorder: grows with a file far behind and with the line's bow, recovers once dressed
+  const D = R.disorder, kind = R.formationKind[b.shape]; let lmax = 0, lsum = 0; for (let j = 0; j < n; j++) { lmax = Math.max(lmax, b.lags[j]); lsum += b.lags[j]; }
+  const grow = D.kLag * Math.max(0, lmax - D.Lok) / D.Lok * (V / Math.max(1e-6, V0)) + D.kBow * Math.max(0, lsum / n - D.Lok / 3) / D.Lok;
+  const rec = lmax < D.Lok ? D.kRec * (V < 0.05 ? 3 : 1) : 0;
+  b.disorder = Math.min(1, Math.max(0, b.disorder + (grow * D.scale[kind] - rec) * TICK));
+  return { V, back: m };
+}
+// a halted battalion: lagging files close up to their places
+function lagSettle(b) { const P = R.orders[b.style]; for (let j = 0; j < b.lags.length; j++) b.lags[j] = Math.max(0, b.lags[j] - Math.min(R.pace.ordinary * b.binG[j], b.lags[j] / P.tau) * TICK);
+  const D = R.disorder; let lmax = 0; for (const l of b.lags) lmax = Math.max(lmax, l); if (lmax < D.Lok) b.disorder = Math.max(0, b.disorder - D.kRec * 3 * TICK); }
+
 function formationTick(b) {
   b.px = b.x; b.pz = b.z; b.ph = b.heading; b.omega = 0;
   if (b.trans) {   // no marching while the companies change places; a new shape order interrupts the change
-    b.vx = b.vz = 0;
+    b.vx = b.vz = 0; if (b.binOf.length) lagSettle(b);
     if (b.orders[0] && b.orders[0].type === 'form') { startChange(b, b.orders.shift().shape); return; }
     if (simTime >= b.trans.start + b.trans.delay[3] + b.trans.dur) {
       b.place = b.trans.to; b.shape = b.trans.shape; b.log[b.log.length - 1].took = simTime - b.trans.start; b.trans = null;
@@ -247,10 +342,12 @@ function formationTick(b) {
     }
     return;
   }
-  const o = b.orders[0]; if (!o) { b.vx = b.vz = 0; return; }
+  const o = b.orders[0]; if (!o) { b.vx = b.vz = 0; if (b.binOf.length) lagSettle(b); return; }
   const h0 = b.heading;
   if (o.type === 'form') { b.orders.shift(); startChange(b, o.shape); return; }
-  const v = (b.shape === 'march' ? 1.25 : 1.0) * groundSpeed(b.x, b.z, Math.sin(b.heading), Math.cos(b.heading));   // ordinary pace ≈ 61 m/min; march column faster
+  const V0 = b.shape === 'march' ? R.pace.routeStep : R.pace.ordinary;
+  sampleBins(b, Math.sin(b.heading), Math.cos(b.heading));
+  const v = V0;   // turning rate uses the base pace
   const halfW = b.shape === 'line' ? (BW * 2 + FS * 1.5) : b.shape === 'march' ? 1.5 : BW;
   if (o.type === 'move') {
     const dx = o.x - b.x, dz = o.z - b.z, dist = Math.hypot(dx, dz);
@@ -258,9 +355,14 @@ function formationTick(b) {
     let want = Math.atan2(dx, dz), dh = want - b.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
     const wmax = 1.2 * v / halfW * TICK;   // the outer flank may not outrun the quick step: long lines turn slowly
     b.heading += Math.max(-wmax, Math.min(wmax, dh));
-    const go = Math.abs(dh) < 1.0 ? Math.min(v, dist / TICK) : 0;   // turn before advancing
-    b.vx = Math.sin(b.heading) * go; b.vz = Math.cos(b.heading) * go;
+    const want0 = Math.abs(dh) < 1.0 ? Math.min(V0, dist / TICK) : 0;   // turn before advancing
+    const { V, back } = lagStep(b, V0, want0);
+    const step = V * TICK - back;   // renormalised: the anchor stays with its leading file
+    b.vx = Math.sin(b.heading) * step / TICK; b.vz = Math.cos(b.heading) * step / TICK;
     b.x += b.vx * TICK; b.z += b.vz * TICK; pushTrail(b);
+    // held at impassable ground (deep water): give up after a few seconds
+    if (want0 > 0 && V < 0.02 && b.binG.some(g => g === 0)) { b.blockedFor += TICK; if (b.blockedFor > 4) { b.orders = []; b.vx = b.vz = 0; b.status = 'halted: impassable ground'; } }
+    else { b.blockedFor = 0; if (V > 0.02) b.status = ''; }
   } else if (o.type === 'wheel') {   // rotate the whole battalion around the flank it turns to
     if (o.left === undefined) { o.left = o.angle > 0; const piv = rot2(o.left ? -halfW : halfW, 0, -b.heading); o.px = b.x + piv[0]; o.pz = b.z + piv[1]; o.done = 0; }
     const w = Math.min(Math.abs(o.angle) - o.done, 1.0 * v / (2 * halfW) * TICK);   // outer flank at marching pace
@@ -334,6 +436,10 @@ function closeRanks(b) {
 /* =========================================================================
    SOLDIER LAYER (every frame, cosmetic)
    ========================================================================= */
+// how far a soldier's file has fallen behind (metres), from his bin's lag
+const lagOf = (b, s) => b.binOf.length && b.binOf[s.c] ? b.lags[s.c * 3 + b.binOf[s.c][s.r][s.f]] || 0 : 0;
+// his place this frame: the slot, set back along the company's facing by his file's lag
+function soldierPlace(b, f, s) { const p = frameSlot(f, s.f, s.r), l = lagOf(b, s); return [p[0] - Math.sin(f.face) * l, p[1] - Math.cos(f.face) * l]; }
 const frameSlot = (f, file, rank) => { const lx = (file - (FILES - 1) / 2) * FS, lz = -rank * RS; return [f.x + lx * f.cos - lz * f.sin, f.z + lx * f.sin + lz * f.cos]; };
 // each company's frame in world space, computed once per battalion per frame (not per soldier)
 function companyFrames(b, ahead, alpha) {
@@ -359,8 +465,7 @@ function soldierStep(dt, alpha) {
     b.sway = (b.sway || 0) + ((busy ? 1 : 0) - (b.sway || 0)) * Math.min(1, dt * 0.8);
     for (const s of b.soldiers) {
       if (!s.alive) continue;
-      const f = fr[s.c], lx = (s.f - (FILES - 1) / 2) * FS, lz = -s.r * RS;
-      const sx = f.x + lx * f.cos - lz * f.sin, sz = f.z + lx * f.sin + lz * f.cos;   // origin + rot2(lx, lz, rot - h): same as slotWorld
+      const f = fr[s.c], [sx, sz] = soldierPlace(b, f, s);   // the slot, set back by his file's lag
       const amp = (inWood(s.x, s.z) ? 0.3 : 0.1) * b.sway;   // personal drift: the ranks loosen in woods
       let tx = sx + amp * Math.sin(t + s.dx), tz = sz + amp * Math.sin(t * 0.8 + s.dz);
       // a slot inside a trunk or rock moves to its edge: a stable place to stand, not a tug of war
@@ -399,12 +504,13 @@ function soldierStep(dt, alpha) {
 
 /* ---------- commands ---------- */
 let main;
-function reset() {
+function reset(x = -20, z = -40, heading = 0) {
   battalions.length = 0; simTime = 0; acc = 0; manyOn = false;
-  main = makeBattalion(-20, -40, 0, 0, 7);
+  main = makeBattalion(x, z, heading, 0, 7);
 }
 function order(name, a) {
   const b = main;
+  b.status = '';
   if (SHAPES[name]) { b.orders = [{ type: 'form', shape: name }]; return; }
   if (name === 'move') { b.orders = [{ type: 'move', x: a.x, z: a.z }]; return; }
   if (name === 'wheelL') { b.orders = [{ type: 'wheel', angle: Math.PI / 4 }]; return; }
@@ -416,6 +522,12 @@ function order(name, a) {
     return;
   }
   if (name === 'kill') return kill(b, 10);
+  if (name === 'bridge') {   // narrow to a march column, cross the 4 m bridge, deploy beyond
+    const xe = BRIDGE.x0 - 12, xx = BRIDGE.x1 + 16;
+    b.orders = [{ type: 'move', x: xe - 30, z: BRIDGE.z }, { type: 'form', shape: 'march' }, { type: 'move', x: xe, z: BRIDGE.z }, { type: 'move', x: xx, z: BRIDGE.z }, { type: 'form', shape: 'line' }];
+    return;
+  }
+  if (name === 'style') { b.style = a; return; }
 }
 let manyOn = false;
 function setMany(on) {
@@ -440,13 +552,14 @@ function stats() {
   const b = main, alive = b.soldiers.filter(s => s.alive).length, avg = steerMs.reduce((a, x) => a + x, 0) / Math.max(1, steerMs.length);
   return { shape: b.trans ? b.trans.fromLabel + ' → ' + b.trans.shape : b.shape, alive, moved: b.moved, closed: b.closed || 0, simTime: +simTime.toFixed(1),
     changes: b.log.map(l => ({ change: l.change, planned: +l.planned.toFixed(1), took: l.took != null ? +l.took.toFixed(1) : null, interrupted: l.interrupted })),
-    soldiers: battalions.reduce((a, x) => a + x.soldiers.length, 0), steerMs: +avg.toFixed(2) };
+    soldiers: battalions.reduce((a, x) => a + x.soldiers.length, 0), steerMs: +avg.toFixed(2),
+    style: b.style, lagMax: +Math.max(...b.lags).toFixed(2), lagMean: +(b.lags.reduce((a, x) => a + x, 0) / b.lags.length).toFixed(2), disorder: +b.disorder.toFixed(2), status: b.status };
 }
 // how far soldiers are from their slots (a measurement, not a pass/fail check): max and mean, metres
 function slotError() {
   let max = 0, sum = 0, n = 0;
   for (const b of battalions) { const fr = companyFrames(b, 0, acc / TICK);
-    for (const s of b.soldiers) if (s.alive) { const p = frameSlot(fr[s.c], s.f, s.r), d = Math.hypot(s.x - p[0], s.z - p[1]); max = Math.max(max, d); sum += d; n++; } }
+    for (const s of b.soldiers) if (s.alive) { const p = soldierPlace(b, fr[s.c], s), d = Math.hypot(s.x - p[0], s.z - p[1]); max = Math.max(max, d); sum += d; n++; } }
   return { max: +max.toFixed(2), mean: +(sum / Math.max(1, n)).toFixed(2) };
 }
 // simulation CPU per frame (formation ticks + steering) over `frames` frames of 1/60 s
@@ -454,10 +567,15 @@ function measure(frames = 60) {
   let t = 0; for (let k = 0; k < frames; k++) { const t0 = performance.now(); advance(1 / 60); t += performance.now() - t0; }
   return +(t / frames).toFixed(2);
 }
+function paintTerrain(x0, z0, x1, z1, cls) {
+  const id = cls === null ? -1 : CLASSES.indexOf(cls);
+  for (let z = Math.ceil(z0); z <= z1; z++) for (let x = Math.ceil(x0); x <= x1; x++) { const k = cellK(x, z); TERR[k] = id < 0 ? CLASSES.indexOf(classAt(x, z)) : id; }
+}
 reset();
-window.FC = {
+window.FC = { paintTerrain, place: (x, z, h) => reset(x, z, h),
   FIELD, HALF, H, heights, HN, HG, STREAM_X, FORD, WOOD, WATER_HALF, HILLS, ROAD, TREES, ROCKS, inWater, inWood,
-  FILES, RANKS, COMPANIES, battalions, groundSpeed, get main() { return main; }, get simTime() { return simTime; }, get alpha() { return acc / TICK; },
+  FILES, RANKS, COMPANIES, battalions, groundSpeed, groundG, CLASSES, TERR, WDEPTH, CROPS, PLOUGHED, MARSH, DENSE, HEDGES, BRIDGE, RULESET: R,
+  soldierPlace, lagOf, cellK, get main() { return main; }, get simTime() { return simTime; }, get alpha() { return acc / TICK; },
   get speed() { return speed; }, set speed(v) { speed = v; }, get drill() { return drill; }, set drill(v) { drill = v; },
   order, reset, setMany, kill: n => kill(main, n), advance, stats, slotError, measure, companyFrames, frameSlot,
   get manyOn() { return manyOn; },
