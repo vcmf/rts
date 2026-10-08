@@ -200,7 +200,7 @@ function trailAt(b, hx, hz, h, back) {
 // a company's pose in world space: origin, block rotation a (counter-clockwise) and facing (a heading)
 function placeWorld(b, c, hx, hz, h, ahead) {
   if (!b.trans && b.shape === 'march') {
-    const back = c * MARCH_GAP - Math.hypot(b.vx, b.vz) * ahead;
+    const back = c * MARCH_GAP;   // the head (hx, hz) is already extrapolated
     const p = trailAt(b, hx, hz, h, back), p1 = trailAt(b, hx, hz, h, back + 2), p0 = trailAt(b, hx, hz, h, back - 2);
     const ch = Math.atan2(p0[0] - p1[0], p0[1] - p1[1]);
     return { x: p[0], z: p[1], a: -Math.PI / 2 - ch, face: ch };
@@ -239,23 +239,33 @@ function slotWorld(b, s, ahead, alpha = 1) {
   return [w.x + l[0] * Math.cos(w.a) - l[1] * Math.sin(w.a), w.z + l[0] * Math.sin(w.a) + l[1] * Math.cos(w.a), w.face];
 }
 
+// how far the companies must move between two layouts (metres, a turn counted at the flank)
+function layoutDistance(A, B) {
+  let m = 0;
+  for (let c = 0; c < COMPANIES; c++) { let d = B[c].rot - A[c].rot; d = Math.atan2(Math.sin(d), Math.cos(d));
+    m = Math.max(m, Math.hypot(A[c].x - B[c].x, A[c].z - B[c].z) + Math.abs(d) * BW / 2); }
+  return m;
+}
 function startChange(b, shape) {
   if (shape === b.shape && !b.trans) return false;
   if (b.trans && shape === b.trans.shape) return false;   // already changing to it
   const from = [0, 1, 2, 3].map(c => companyPlace(b, c)), to = SHAPES[shape]();
-  let T = (CHANGE_TIME[b.shape + '>' + shape] || 30) * drill;
-  let interruptedFrom = null;
-  if (b.trans) {   // interrupted mid-change: reversing undoes only what was done; anything else starts over
-    const done = Math.min(1, (simTime - b.trans.start) / b.trans.T), last = b.log[b.log.length - 1];
-    last.took = null; last.interrupted = +(simTime - b.trans.start).toFixed(1);
-    if (shape === b.trans.from_shape) T = Math.max(3, done * (CHANGE_TIME[b.trans.shape + '>' + shape] || 30) * drill);
-    interruptedFrom = b.trans.shape; b.shape = b.trans.from_shape; b.trans = null;
+  // b.shape stays the last completed shape; an interrupted change times the new one by the distance
+  // the companies still have to cover, against a full change of the same kind (a reversal 30% in takes
+  // about 30% of the time; reversing that again takes what is left)
+  const base = shape === b.shape && b.trans ? b.trans.shape : b.shape;
+  let T = (CHANGE_TIME[base + '>' + shape] || 30) * drill, fromLabel = b.shape;
+  if (b.trans) {
+    const last = b.log[b.log.length - 1]; last.took = null; last.interrupted = +(simTime - b.trans.start).toFixed(1);
+    const full = layoutDistance(SHAPES[base](), to);
+    T = Math.max(3, T * Math.min(1, layoutDistance(from, to) / Math.max(1e-6, full)));
+    fromLabel = b.trans.shape + ' (part)'; b.trans = null;
   }
   b.vx = b.vz = 0; b.omega = 0;
   // companies start in sequence; the last one finishes at T
   const dur = T * 0.55, delay = [0, 1, 2, 3].map(c => c * T * 0.15);
-  b.trans = { from, to, start: simTime, dur, delay, shape, T, from_shape: b.shape };
-  b.log.push({ change: (interruptedFrom ? interruptedFrom + ' (part)' : b.shape) + '>' + shape, start: simTime, planned: T });
+  b.trans = { from, to, start: simTime, dur, delay, shape, T, fromLabel };
+  b.log.push({ change: fromLabel + '>' + shape, start: simTime, planned: T });
   return true;
 }
 
@@ -267,6 +277,7 @@ function formationTick(b) {
     if (simTime >= b.trans.start + b.trans.delay[3] + b.trans.dur) {
       b.place = b.trans.to; b.shape = b.trans.shape; b.log[b.log.length - 1].took = simTime - b.trans.start; b.trans = null;
       if (b.shape === 'march') resetTrail(b);   // the column stands straight behind its head
+      closeRanks(b);   // re-forming is when the files dress and close
     }
     return;
   }
@@ -292,7 +303,7 @@ function formationTick(b) {
     b.heading += sgn * w; o.done += w; pushTrail(b);
     if (o.done >= Math.abs(o.angle) - 1e-6) { b.orders.shift(); b.vx = b.vz = 0; }
   }
-  let dh = b.heading - h0; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); b.omega = dh / TICK;
+  let dh = b.heading - h0; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); b.omega = b.vx || b.vz ? dh / TICK : 0;   // a turn in place is not extrapolated
 }
 
 // casualties: the man behind steps up into the gap; nobody else changes slot
@@ -305,22 +316,42 @@ function kill(b, n) {
     for (let r = s.r; r < RANKS - 1; r++) { const j = g[r + 1][s.f]; g[r][s.f] = j; if (j >= 0) { b.soldiers[j].r = r; moved++; } }
     g[RANKS - 1][s.f] = -1;
   }
-  // close toward the centre: empty files are taken by the files outside them (companies 0-1 sit left
-  // of the colours, 2-3 right), so the line shrinks instead of keeping holes
+  closeRanks(b);
+  b.moved += moved; return moved;
+}
+/* close the ranks after losses: empty files are taken by the files beyond them.
+   In line the battalion closes toward the colours (between companies 1 and 2) across company
+   boundaries, so no hole stays inside the line; in other shapes each company closes toward its own
+   centre, so a square keeps its corners and a column its alignment. Also run when a change ends. */
+function closeRanks(b) {
   let closed = 0;
-  for (let c = 0; c < COMPANIES; c++) {
-    const g = b.grid[c], files = [];
-    for (let f = 0; f < FILES; f++) if (g.some(rank => rank[f] >= 0)) files.push(g.map(rank => rank[f]));
-    const start = c < 2 ? FILES - files.length : 0;   // pack against the inner edge
-    for (let r = 0; r < RANKS; r++) g[r].fill(-1);
-    files.forEach((col, k) => { const f = start + k; col.forEach((j, r) => { g[r][f] = j; if (j >= 0 && b.soldiers[j].f !== f) { b.soldiers[j].f = f; closed++; } }); });
+  const fileOf = (c, f) => b.grid[c].map(rank => rank[f]);
+  const place = (cols, slots) => {   // put the non-empty files `cols` into `slots` = [[c, f], ...] in order
+    for (const c of new Set(slots.map(([c]) => c))) for (let r = 0; r < RANKS; r++) b.grid[c][r].fill(-1);   // whole companies: old places too
+    cols.forEach((col, k) => { const [c, f] = slots[k]; col.forEach((j, r) => { b.grid[c][r][f] = j;
+      if (j >= 0) { const s = b.soldiers[j]; if (s.c !== c || s.f !== f) { s.c = c; s.f = f; closed++; } } }); });
+  };
+  if (b.shape === 'line' && !b.trans) {
+    for (const half of [[0, 1], [2, 3]]) {
+      const all = []; for (const c of half) for (let f = 0; f < FILES; f++) all.push([c, f]);
+      const cols = all.map(([c, f]) => fileOf(c, f)).filter(col => col.some(j => j >= 0));
+      const slots = half[0] === 0 ? all.slice(all.length - cols.length) : all.slice(0, cols.length);   // against the colours
+      place(cols, slots);
+    }
+  } else if (!b.trans) {
+    for (let c = 0; c < COMPANIES; c++) {
+      const cols = []; for (let f = 0; f < FILES; f++) { const col = fileOf(c, f); if (col.some(j => j >= 0)) cols.push(col); }
+      const start = Math.floor((FILES - cols.length) / 2), slots = []; for (let k = 0; k < cols.length; k++) slots.push([c, start + k]);
+      place(cols, slots);
+    }
   }
-  b.moved += moved; b.closed = (b.closed || 0) + closed; return moved;
+  b.closed = (b.closed || 0) + closed; return closed;
 }
 
 /* =========================================================================
    SOLDIER LAYER (every frame, cosmetic)
    ========================================================================= */
+const frameSlot = (f, file, rank) => { const lx = (file - (FILES - 1) / 2) * FS, lz = -rank * RS; return [f.x + lx * f.cos - lz * f.sin, f.z + lx * f.sin + lz * f.cos]; };
 // each company's frame in world space, computed once per battalion per frame (not per soldier)
 function companyFrames(b, ahead, alpha) {
   const [hx, hz, h] = anchorAt(b, alpha, ahead), out = b.frames || (b.frames = [{}, {}, {}, {}]);
@@ -416,7 +447,7 @@ function writeFigures() {
     n++;
   }
   fig.thinInstanceCount = n; fig.thinInstanceBufferUpdated('matrix');
-  const b = battalions[0], p = slotWorld(b, { c: 1, f: FILES - 1, r: 0 }, 0, 1);   // colours between companies 1 and 2
+  const b = battalions[0], fr = companyFrames(b, 0, acc / TICK), p = frameSlot(fr[1], FILES - 1, 0); p[2] = fr[1].face;   // colours between companies 1 and 2
   flag.position.set(p[0] + 0.3, H(p[0], p[1]), p[1]); flag.rotation.y = p[2];
 }
 
@@ -433,8 +464,9 @@ function writeDebug(alpha) {
   if (!dbg.on) return;
   let n = 0, g = 0;
   for (const b of battalions) {
-    for (const s of b.soldiers) if (s.alive) { const p = slotWorld(b, s, 0, alpha); B.Matrix.Translation(p[0], H(p[0], p[1]) + 0.05, p[1]).copyToArray(slotM, n++ * 16); }
-    for (let c = 0; c < COMPANIES; c++) { const p = slotWorld(b, { c, f: c % 2 ? 0 : FILES - 1, r: 0 }, 0, alpha); B.Matrix.Translation(p[0], H(p[0], p[1]) + 1.2, p[1]).copyToArray(guideM, g++ * 16); }
+    const fr = companyFrames(b, 0, alpha);   // once per battalion, not per soldier
+    for (const s of b.soldiers) if (s.alive) { const p = frameSlot(fr[s.c], s.f, s.r); B.Matrix.Translation(p[0], H(p[0], p[1]) + 0.05, p[1]).copyToArray(slotM, n++ * 16); }
+    for (let c = 0; c < COMPANIES; c++) { const p = frameSlot(fr[c], c % 2 ? 0 : FILES - 1, 0); B.Matrix.Translation(p[0], H(p[0], p[1]) + 1.2, p[1]).copyToArray(guideM, g++ * 16); }
   }
   slotDot.thinInstanceCount = n; slotDot.thinInstanceBufferUpdated('matrix'); guideDot.thinInstanceCount = g; guideDot.thinInstanceBufferUpdated('matrix');
 }
@@ -492,7 +524,7 @@ let follow = true;
 const statsEl = document.getElementById('stats');
 function stats() {
   const b = main, alive = b.soldiers.filter(s => s.alive).length, avg = soldierMs.reduce((a, x) => a + x, 0) / Math.max(1, soldierMs.length);
-  return { shape: b.trans ? b.trans.from_shape + ' → ' + b.trans.shape : b.shape, alive, moved: b.moved, closed: b.closed || 0, simTime: +simTime.toFixed(1),
+  return { shape: b.trans ? b.trans.fromLabel + ' → ' + b.trans.shape : b.shape, alive, moved: b.moved, closed: b.closed || 0, simTime: +simTime.toFixed(1),
     changes: b.log.map(l => ({ change: l.change, planned: +l.planned.toFixed(1), took: l.took != null ? +l.took.toFixed(1) : null, interrupted: l.interrupted })),
     soldiers: battalions.reduce((a, x) => a + x.soldiers.length, 0), steerMs: +avg.toFixed(2), frameSoldierMs: +frameSoldierMs.toFixed(2), fps: +engine.getFps().toFixed(0) };
 }
@@ -530,7 +562,8 @@ window.addEventListener('resize', () => engine.resize());
 // how far soldiers are from their slots (a measurement, not a pass/fail check): max and mean, metres
 function slotError() {
   let max = 0, sum = 0, n = 0;
-  for (const b of battalions) for (const s of b.soldiers) if (s.alive) { const p = slotWorld(b, s, 0, 1), d = Math.hypot(s.x - p[0], s.z - p[1]); max = Math.max(max, d); sum += d; n++; }
+  for (const b of battalions) { const fr = companyFrames(b, 0, 1);
+    for (const s of b.soldiers) if (s.alive) { const p = frameSlot(fr[s.c], s.f, s.r), d = Math.hypot(s.x - p[0], s.z - p[1]); max = Math.max(max, d); sum += d; n++; } }
   return { max: +max.toFixed(2), mean: +(sum / Math.max(1, n)).toFixed(2) };
 }
 // per-soldier CPU per frame: steering plus writing the figure matrices, over `frames` frames of 1/60 s
