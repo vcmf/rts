@@ -196,7 +196,7 @@ const statsEl = document.getElementById('stats');
 function updateStats() {
   const s = FC.stats(), lastC = s.changes[s.changes.length - 1];
   statsEl.textContent = `shape     ${s.shape}\nalive     ${s.alive}/100  up ${s.moved}  closed ${s.closed}\n` + (lastC ? `change    ${lastC.change} ${lastC.took ?? '…'}/${lastC.planned}s\n` : '') +
-    `soldiers  ${s.soldiers}\nsim       ${simMsAvg.toFixed(2)} ms\ndraw      ${drawMs.toFixed(2)} ms\nfps       ${fps.toFixed(0)}   t ${s.simTime}s`;
+    `soldiers  ${s.soldiers}\nsim       ${simMsAvg.toFixed(2)} ms\ndraw      ${drawMs.toFixed(2)} ms\nfps       ${fps.toFixed(0)}   t ${s.simTime}s` + (paused ? '\nPAUSED by a script · F.resume()' : '');
 }
 
 /* ---------- input ---------- */
@@ -227,7 +227,7 @@ unitC.addEventListener('wheel', e => { e.preventDefault(); const [x, z] = toW(e.
 window.F = {
   order: FC.order, kill: FC.kill, setMany: FC.setMany, stats: FC.stats, slotError: FC.slotError, measure: FC.measure,
   setDrill: d => { FC.drill = d; }, slots: on => { showSlots = on; document.querySelector('[data-cmd=debug]').classList.toggle('on', on); },
-  follow: on => { follow = on; document.querySelector('[data-cmd=follow]').classList.toggle('on', on); }, pause: on => { paused = on; },
+  follow: on => { follow = on; document.querySelector('[data-cmd=follow]').classList.toggle('on', on); }, pause: on => { paused = on; }, resume: () => { paused = false; },
   view: (cx, cz, k) => { view.cx = cx; view.cz = cz; if (k) view.k = k; mapDirty = true; drawMap(); mapDirty = false; drawUnits(); },
   // a script driving time pauses the page loop, so nothing advances between evals; whole 1/30 s frames
   advance: sec => { paused = true; const sp = FC.speed; FC.speed = 1; for (let n = Math.round(sec * 30); n > 0; n--) FC.advance(1 / 30); FC.speed = sp; if (follow) { view.cx = FC.main.x; view.cz = FC.main.z; mapDirty = true; } if (mapDirty) { drawMap(); mapDirty = false; } drawUnits(); return FC.stats(); },

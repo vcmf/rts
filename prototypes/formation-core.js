@@ -79,6 +79,11 @@ const TREES = [], ROCKS = [];
 const TREE_CELL = 4, TREE_N = FIELD / TREE_CELL, treeCells = Array.from({ length: TREE_N * TREE_N }, () => []);
 const treeCell = (x, z) => { const i = Math.floor((x + HALF) / TREE_CELL), j = Math.floor((z + HALF) / TREE_CELL); return i < 0 || j < 0 || i >= TREE_N || j >= TREE_N ? -1 : i * TREE_N + j; };
 for (const t of TREES) treeCells[treeCell(t.x, t.z)].push(t);
+// every obstacle in the 3×3 cells around (x, z)
+function eachObstacle(x, z, fn) {
+  const c = treeCell(x, z); if (c < 0) return;
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[c + i * TREE_N + j]; if (cell) for (const o of cell) fn(o); }
+}
 for (const o of ROCKS) treeCells[treeCell(o.x, o.z)].push(o);   // same grid: an obstacle is a circle
 
 /* =========================================================================
@@ -237,6 +242,7 @@ function formationTick(b) {
     if (simTime >= b.trans.start + b.trans.delay[3] + b.trans.dur) {
       b.place = b.trans.to; b.shape = b.trans.shape; b.log[b.log.length - 1].took = simTime - b.trans.start; b.trans = null;
       if (b.shape === 'march') resetTrail(b);   // the column stands straight behind its head
+      if (b.shape !== 'line') rebalance(b);   // casualties during the change: even the companies again
       closeRanks(b);   // re-forming is when the files dress and close
     }
     return;
@@ -279,13 +285,12 @@ function kill(b, n) {
   closeRanks(b);
   b.moved += moved; return moved;
 }
-/* even out the companies when the battalion leaves line: closing toward the colours moves men between
-   companies, so the outer ones drain; a square or a column needs four equal companies. Men keep their
-   order along the line; each company fills its files front to back, centred. */
+/* even out the companies when a shape other than line starts or ends: closing toward the colours moves
+   men between companies, and casualties during a change thin them unevenly; a square or a column needs
+   four equal, centred companies. Men keep their order along the line; files fill front to back. */
 function rebalance(b) {
   const alive = []; for (let i = 0; i < b.soldiers.length; i++) if (b.soldiers[i].alive) alive.push(i);
   const size = [0, 0, 0, 0]; for (const i of alive) size[b.soldiers[i].c]++;
-  if (Math.max(...size) - Math.min(...size) <= 1) return 0;
   const key = i => { const s = b.soldiers[i]; return (s.c * FILES + s.f) * RANKS + s.r; };
   alive.sort((p, q) => key(p) - key(q));
   for (let c = 0; c < COMPANIES; c++) for (let r = 0; r < RANKS; r++) b.grid[c][r].fill(-1);
@@ -359,10 +364,14 @@ function soldierStep(dt, alpha) {
       const amp = (inWood(s.x, s.z) ? 0.3 : 0.1) * b.sway;   // personal drift: the ranks loosen in woods
       let tx = sx + amp * Math.sin(t + s.dx), tz = sz + amp * Math.sin(t * 0.8 + s.dz);
       // a slot inside a trunk or rock moves to its edge: a stable place to stand, not a tug of war
-      const tc = treeCell(tx, tz);
-      if (tc >= 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[tc + i * TREE_N + j]; if (!cell) continue;
-        for (const o of cell) { const ex = tx - o.x, ez = tz - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.4; if (d < R) { const u = d > 1e-6 ? 1 / d : 0; tx = o.x + (u ? ex * u : 1) * R; tz = o.z + (u ? ez * u : 0) * R; } } }
+      eachObstacle(tx, tz, o => { const ex = tx - o.x, ez = tz - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.4;
+        if (d < R) { if (d > 1e-6) { tx = o.x + ex / d * R; tz = o.z + ez / d * R; } else tx = o.x + R; } });
+      // settled: a man who reached his place while the battalion is halted holds still (no steering, no
+      // pushing) until his place moves; this is what lets the ranks come to rest among trees
+      if (s.settled && (busy || Math.hypot(tx - s.hx, tz - s.hz) > 0.3)) s.settled = false;
+      if (s.settled) { s.vx = s.vz = 0; continue; }
       const dx = tx - s.x, dz = tz - s.z, dist = Math.sqrt(dx * dx + dz * dz);
+      if (!busy && b.sway < 0.05 && dist < 0.25) { s.settled = true; s.hx = tx; s.hz = tz; s.vx = s.vz = 0; continue; }
       const gs = dist > 1e-6 ? groundSpeed(s.x, s.z, dx / dist, dz / dist) : groundSpeed(s.x, s.z, 0, 0);
       const top = (dist > 2.5 ? RUN : WALK) * gs, want = dist < 0.08 ? 0 : Math.min(top, dist / 0.7);
       let wx = dist > 1e-6 ? dx / dist * want : 0, wz = dist > 1e-6 ? dz / dist * want : 0;
@@ -374,17 +383,16 @@ function soldierStep(dt, alpha) {
           const ex = s.x - o.x, ez = s.z - o.z, d2 = ex * ex + ez * ez;
           if (d2 < SEP * SEP && d2 > 1e-8) { const d = Math.sqrt(d2), push = (SEP - d) / SEP * 1.8; wx += ex / d * push; wz += ez / d * push; } }
       }
-      // obstacles (trunks, rocks): while walking, steer round the ones just ahead; never stand inside one
-      const spd0 = Math.sqrt(s.vx * s.vx + s.vz * s.vz), walking = Math.min(1, spd0 / 0.5), oc = treeCell(s.x, s.z);
-      if (oc >= 0 && walking > 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[oc + i * TREE_N + j]; if (!cell) continue;
-        for (const o of cell) { const ex = s.x - o.x, ez = s.z - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.35;
-          if (d < R + 0.8 && d > 1e-6) { const push = (R + 0.8 - d) / 0.8 * 1.4 * walking; wx += ex / d * push; wz += ez / d * push; } } }
+      // obstacles (trunks, rocks): while walking, steer round the ones just ahead
+      const walking = Math.min(1, Math.sqrt(s.vx * s.vx + s.vz * s.vz) / 0.5);
+      if (walking > 0) eachObstacle(s.x, s.z, o => { const ex = s.x - o.x, ez = s.z - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.35;
+        if (d < R + 0.8 && d > 1e-6) { const push = (R + 0.8 - d) / 0.8 * 1.4 * walking; wx += ex / d * push; wz += ez / d * push; } });
       const k = Math.min(1, dt * 5); s.vx += (wx - s.vx) * k; s.vz += (wz - s.vz) * k;
       if (dist < 0.08) { const damp = Math.max(0, 1 - dt * 8); s.vx *= damp; s.vz *= damp; }   // arrived: come to rest
       const sp2 = s.vx * s.vx + s.vz * s.vz, cap = RUN * gs; if (sp2 > cap * cap) { const r = cap / Math.sqrt(sp2); s.vx *= r; s.vz *= r; }
       s.x += s.vx * dt; s.z += s.vz * dt;
-      if (oc >= 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[oc + i * TREE_N + j]; if (!cell) continue;
-        for (const o of cell) { const ex = s.x - o.x, ez = s.z - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.3; if (d < R && d > 1e-6) { s.x = o.x + ex / d * R; s.z = o.z + ez / d * R; } } }
+      eachObstacle(s.x, s.z, o => { const ex = s.x - o.x, ez = s.z - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.3;   // never inside one
+        if (d < R && d > 1e-6) { s.x = o.x + ex / d * R; s.z = o.z + ez / d * R; } });
     }
   }
 }
