@@ -74,8 +74,10 @@ interface WorldSpec {
 - Every bake fits the min-spec texture and memory limits (§6); the spec fails rather than going
   coarse silently.
 
-**The heightfield** is a `Float32Array` on the `cell` grid over `detail`, built once (from `H()`
-today, from elevation + river data in W6), then read by everything:
+**The heightfield** is an array on the `cell` grid over `detail`, **built offline by a Node build
+step** (from `H()` today, from elevation + river data in W6) and shipped as data, then read by
+everything. Building it in each browser would make the sim's input depend on that browser's
+`Math.sin` (`sim-design.md` §2):
 - `heightAt(x,z)`, `normalAt(x,z)` interpolate it with **the same triangle split as the mesh**,
   so the ground drawn and the ground used are equal by construction.
 - The detail mesh is built from it vertex for vertex. Scatter, units, picking, camera focus height,

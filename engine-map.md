@@ -15,7 +15,7 @@ command language. Everything else sits around that core:
             commands (player, AI, scripts, replay, debug)
                               │
                               ▼
-   ┌──────────── SIMULATION (worker, 20 Hz, fixed-point, deterministic) ────────────┐
+   ┌──────────── SIMULATION (worker, 20 Hz, deterministic float64)  ────────────┐
    │ formations · orders & couriers · movement · fire · melee · morale · vision ... │
    └───────────────────────────────┬────────────────────────────────────────────────┘
                                    │ snapshots (per tick)
@@ -35,7 +35,7 @@ without the renderer.
 | # | Decision | Status |
 |---|---|---|
 | D1 | **The formation is the simulation's unit.** A battalion is one entity (line shape, strength, share loaded, morale, fatigue, ammunition). The 100–200 figures are placed and animated by the renderer from that state. Musketry is resolved per formation, statistically; roundshot is a real ray bouncing on the heightfield | agreed (Oct 2026) |
-| D2 | **Fixed-point maths in the simulation** (Q16.16 in `Int32Array`, own trig tables, seeded RNG, ID-ordered iteration). Browsers do not agree on `Math.sin`, even across Chrome versions | agreed |
+| D2 | **Deterministic numbers in the simulation.** Revised after the sim-design review: **restricted float64** (IEEE `+ − × /` and `sqrt` only; `Math.sin`, `pow` and the like banned by lint; own trig; build-time input data; seeded integer RNG; index-ordered iteration) instead of Q16.16 fixed-point, which overflowed and was mis-specified (`sim-design.md` §2, §19) | revised, proposed |
 | D3 | **Orders travel**: an order is a courier entity in the simulation and takes effect on arrival. How much delay applies (none, above brigade, everywhere) is a difficulty setting | agreed in principle; default level to playtest |
 | D4 | **Single-player first, multiplayer-capable**: determinism, hashing and command logs are built as if lockstep were coming, so it stays a transport problem | proposed |
 | D5 | **Battle clock with time compression** (real battles last hours). Time of day is chosen per scenario and baked; the sun does not move during a battle (static light is baked once per map, `design.md`) | proposed |
@@ -52,7 +52,7 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 | Part | What it does | Owner doc | Phase | Status |
 |---|---|---|---|---|
 | Tick loop and command pipeline | Fixed 20 Hz tick; every change enters as a tick-stamped command | `web-rts-architecture.md` §4 | S0 | ⬜ |
-| Deterministic maths | Fixed-point types, trig tables, no `Math.random` in the sim | `web-rts-architecture.md` (to extend) | S0 | ⬜ |
+| Deterministic maths | Restricted float64, own trig, lint against banned functions, build-time input data | `sim-design.md` §2 | S0 | ⬜ |
 | Split RNG | Seeded sim RNG; separate cosmetic RNG for the renderer | `web-rts-architecture.md` | S0 | ⬜ |
 | Entity storage | Typed arrays, generational handles | `web-rts-architecture.md` §3 | S0 | ⬜ |
 | Serialization and state hash | One serializer for saves, hashes and debug dumps | new: `sim-design.md` | S0 | ⬜ |
@@ -65,7 +65,7 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 | Part | What it does | Owner doc | Phase | Status |
 |---|---|---|---|---|
 | Heightfield and terrain layers | Height, slope, cover, roads, water depth and fords as sim data | `engine-design.md` §4 | E0 | 🟡 (`H()`, river data) |
-| Spatial index | Who is near whom: formation broadphase, then figures only between engaged formations | `sim-design.md` | P | ⬜ |
+| Spatial index | Who is near whom, per formation (figures are not simulated, D1) | `sim-design.md` | P | ⬜ |
 | Formations and drill | Line, column, square, skirmish; frontage per file; **timed formation changes** (square ≈ 60–100 s) with a penalty while changing | `sim-design.md` | P | ⬜ |
 | Orders and couriers | Order queue per formation; couriers travel the command hierarchy (D3) | `sim-design.md` | P | ⬜ |
 | Movement | Formation paths over the heightfield; wheeling, line deformation over terrain; local separation | `sim-design.md`, `web-rts-architecture.md` §7 | P | ⬜ |
@@ -83,7 +83,7 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 
 | Part | What it does | Owner doc | Phase | Status |
 |---|---|---|---|---|
-| Sim → render bridge | Reads snapshots, interpolates between ticks | `web-rts-architecture.md` §4 | S0 | ⬜ |
+| Sim → render bridge | Reads snapshots (once per frame) and an event ring, interpolates | `sim-design.md` §16 | S1 (direct), S2 (worker) | ⬜ |
 | World rendering | Terrain, river, vegetation, painterly shading, bakes | `engine-design.md`, `design.md` | E0 | ✅ prototype |
 | Figures | Instanced figures placed from formation state; LOD; stepped animation (vertex animation textures); casualties | `engine-design.md` §7 | P | ⬜ |
 | Effects | Musket smoke, muzzle flashes, roundshot dust, painted | `design.md` §9 | P | ⬜ |
@@ -110,7 +110,7 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 
 | Part | What it does | Owner doc | Phase | Status |
 |---|---|---|---|---|
-| Sim worker | The simulation in a Web Worker; snapshots as transferables (no special headers) | `sim-design.md` | S0 | ⬜ |
+| Sim worker | The simulation in a Web Worker; snapshots as transferables (no special headers) | `sim-design.md` §16 | S2 | ⬜ |
 | Build | Vite + TypeScript, Babylon deep or `/pure` imports | `web-rts-architecture.md` §5 | prototype exit | ⬜ |
 | Saves | Seed + scenario + command log + snapshots; exportable files (Safari clears storage after 7 days unused) | `sim-design.md` | A | ⬜ |
 | Input | Bindings by `KeyboardEvent.code`; right-click and edge-pan handling | to write | P | 🟡 |
@@ -123,13 +123,14 @@ The render side has a plan (`engine-design.md` §10). The simulation side has no
 the part the research says costs most to add late. Proposal: two tracks.
 
 **Track S (simulation), new:**
-- **S0 — sim spine** (small PRs, headless, tested in Node): tick loop and commands, fixed-point
-  types and trig, split RNG, entity storage, state hash, replay, metering. Acceptance: a scripted
-  battle of moving blocks replays to the same hash in Node, Chrome, Firefox and Safari.
-- **S1 — first battle** (with the units placeholder, `engine-design.md` §10 step 6): formations,
-  movement, musketry, morale, orders, in the worker, drawn by the prototype.
-- Before S0: write `sim-design.md` (formations, fire, morale, orders and couriers, data, order of
-  battle) and challenge it with an adversarial review, as for `engine-design.md`.
+Phases as revised in `sim-design.md` §17:
+- **S0 short spine** (2–3 days): number rules and lint, tables, commands, RNG, hash, Node replay,
+  build step for the sim heightfield and cost grid.
+- **S1 fun slice** (main thread, with the units placeholder): infantry, one cavalry regiment, one
+  battery, morale, standing behaviour, couriers behind a toggle. Acceptance: a 20-minute brigade
+  fight is fun at 2× speed.
+- **S2 hardening:** worker, vision, smoke, group moves, cross-browser replays.
+- **S3 a real battle:** order of battle, scenarios, AI, saves.
 
 **Track E (engine spine and the look):** unchanged (E0-lite, then water W2–W5, scale-up,
 performance, video tier, W6). The two tracks meet at the units placeholder.
