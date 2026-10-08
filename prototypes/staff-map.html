@@ -649,7 +649,8 @@ const SYM={inf:{line:[104,32],column:[62,56],square:[72,72]},cav:{line:[96,30],c
 const SQ_RING=[18,3.3];                                   // square ring thickness: symbol, true
 let SYMK=0,SYMZ=1;                                        // per frame: 0 symbol .. 1 true footprint; symbol zoom scale
 // symbols keep a steady on-screen size: they shrink in world terms as the camera closes in
-function shown(u,form,n){const t=dims(u,form,n),sy=(SYM[u.type][form]||SYM[u.type].line),loss=0.45+0.55*u.str,sq=form==='square'?Math.sqrt(loss):1;
+const lossK=u=>0.45+0.55*u.str;                           // symbol frontage left after losses
+function shown(u,form,n){const t=dims(u,form,n),sy=(SYM[u.type][form]||SYM[u.type].line),loss=lossK(u),sq=form==='square'?Math.sqrt(loss):1;
   return[lerp(sy[0]*SYMZ*(form==='square'?sq:loss),t[0],SYMK),lerp(sy[1]*SYMZ*sq,t[1],SYMK)];}
 function slot(u,form,i,n,out){
   if(u.type==='inf'){
@@ -677,7 +678,7 @@ function issue(units,P,{script=false,quiet=false}={}){
   if(P.length<2)return;
   P=smoothPath(P);
   const o={units:units.map(u=>u.id),P,len:plen(P),t0:performance.now(),prog:0,done:false,side:units[0].sideI,group:units.length>1,script,quiet};
-  for(const u of units){if(u.order){const old=u.order;old.units=old.units.filter(id=>id!==u.id);if(!old.units.length)old.done=true;}
+  for(const u of units){if(u.order)finishOrder(u);
     const ox=u.x-cx,oz=u.z-cz;u.path=P.map(p=>[p[0]+ox,p[1]+oz]);u.pi=1;u.prog=0;u.plen=plen(u.path);u.order=o;u.state='move';}
   ORDERS.push(o);return o;
 }
@@ -759,15 +760,18 @@ function simStep(dt){
     endStep(u);
   }
   // hidden-behind lines: armies do not stack on top of each other
-  for(let a=0;a<UNITS.length;a++)for(let b=a+1;b<UNITS.length;b++){const u=UNITS[a],v=UNITS[b];if(u.gone||v.gone)continue;const dx=v.x-u.x,dz=v.z-u.z,d=Math.hypot(dx,dz),m=u.sideI===v.sideI||(u.sideI>0&&v.sideI>0)?45:32;
+  for(let a=0;a<UNITS.length;a++)for(let b=a+1;b<UNITS.length;b++){const u=UNITS[a],v=UNITS[b];if(u.gone||v.gone)continue;const dx=v.x-u.x,dz=v.z-u.z,d=Math.hypot(dx,dz),m=u.sideI===v.sideI||(u.sideI>0&&v.sideI>0)?60:32;
     if(d<m&&d>0.01){const p=(m-d)*0.5*Math.min(1,dt);u.x-=dx/d*p;u.z-=dz/d*p;v.x+=dx/d*p;v.z+=dz/d*p;}}
-  for(let i=ORDERS.length-1;i>=0;i--)if(ORDERS[i].done&&ORDERS[i].doneAt<GT)ORDERS.splice(i,1);   // kept one step so the renderer sees the final progress
-  for(const o of ORDERS){if(o.done)continue;const us=o.units.map(id=>UNITS[id]).filter(u=>u.order===o);if(!us.length){o.done=true;o.doneAt=GT;continue;}o.prog=us.reduce((s,u)=>s+u.prog/Math.max(1,u.plen),0)/us.length*o.len;}
+  for(let i=ORDERS.length-1;i>=0;i--)if(ORDERS[i].done&&ORDERS[i].doneAt<GT){ORDERS[i].removed=true;ORDERS.splice(i,1);}   // kept one step so the renderer sees the final reach
+  for(const o of ORDERS){if(o.done)continue;const us=o.units.map(id=>UNITS[id]).filter(u=>u.order===o);if(!us.length){closeOrder(o);continue;}o.prog=us.reduce((s,u)=>s+u.prog/Math.max(1,u.plen),0)/us.length*o.len;}
 }
 function endStep(u){if(u.str<0.2){u.gone=0.001;finishOrder(u);}u.mor=clamp(u.mor,0,1);clampIn(u);}
-function finishOrder(u){const o=u.order;if(!o)return;u.order=null;o.units=o.units.filter(id=>id!==u.id);if(!o.units.length){o.done=true;o.doneAt=GT;}}
+function closeOrder(o){o.done=true;o.doneAt=GT;}
+function finishOrder(u){const o=u.order;if(!o)return;o.prog=Math.max(o.prog,u.prog/Math.max(1,u.plen)*o.len);   // the final reach, before the unit leaves
+  u.order=null;o.units=o.units.filter(id=>id!==u.id);if(!o.units.length)closeOrder(o);}
 function clampIn(u){u.x=clamp(u.x,-MX+60,MX-60);u.z=clamp(u.z,-MZ+60,MZ-60);if(inPond(u.x,u.z,1.1)){const p=PONDS.find(p=>pondE(p,u.x,u.z)<1.1);const a=Math.atan2((u.z-p.z)/p.rz,(u.x-p.x)/p.rx);u.x=p.x+Math.cos(a)*p.rx*1.12;u.z=p.z+Math.sin(a)*p.rz*1.12;}}
-function puff(u){SMOKE.push({u,frac:(Math.random()-0.5)*0.9,t0:performance.now(),big:u.type==='art',rot:Math.random()*6.28});if(SMOKE.length>500)SMOKE.shift();}
+function puff(u){const fw=dims(u,u.form,alive(u))[0],o=(Math.random()-0.5)*fw*0.9,fo=u.type==='art'?14:8;
+  SMOKE.push({x:u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo,z:u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo,t0:performance.now(),big:u.type==='art',rot:Math.random()*6.28});if(SMOKE.length>500)SMOKE.shift();}
 
 /* =========================================================================
    THE INK OVERLAY: blocks, orders, trails, smoke, names, neatline
@@ -801,7 +805,8 @@ function drawBlock(u,alpha,now){
   const lvl=u.mor>0.6?-1:u.mor>0.45?0:u.mor>0.3?1:2;
   if(u.state==='rout'){
     // routing: blinks between the army colour and white, the colour of surrender
-    const on=Math.floor(now/260)%2===0;                      // the frame clock: an exporter passes its ownpathPoly(C);ink.fillStyle=on?css(s.e||s.c):'#fbfaf6';ink.fill();
+    // blink on the frame clock passed in, so an exporter controls the phase
+    const on=Math.floor(now/260)%2===0;pathPoly(C);ink.fillStyle=on?css(s.e||s.c):'#fbfaf6';ink.fill();
     ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);}
   else if(u.type==='art'){
     // bar + gun dot on the facing side
@@ -813,7 +818,7 @@ function drawBlock(u,alpha,now){
     pathPoly(C);
     if(u.form==='square'&&u.morph>0.5){
       // hollow square: the inner hole
-      const k=Math.min(Math.max(lerp(SQ_RING[0]*SYMZ*Math.sqrt(0.45+0.55*u.str),SQ_RING[1],SYMK),2.2*MPP),fw*0.35,fd*0.35),hw=fw/2-k,I=[[-hw,-k],[hw,-k],[hw,-fd+k],[-hw,-fd+k]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
+      const k=Math.min(Math.max(lerp(SQ_RING[0]*SYMZ*Math.sqrt(lossK(u)),SQ_RING[1],SYMK),2.2*MPP),fw*0.35,fd*0.35),hw=fw/2-k,I=[[-hw,-k],[hw,-k],[hw,-fd+k],[-hw,-fd+k]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
       ink.moveTo(I[0][0],I[0][1]);for(let i=3;i>=0;i--)ink.lineTo(I[i][0],I[i][1]);ink.closePath();
     }
     ink.fillStyle=lvl<0?css(s.f):hatch(u.sideI,lvl);ink.fill('evenodd');
@@ -826,30 +831,34 @@ function drawBlock(u,alpha,now){
   ink.globalAlpha=1;
 }
 // stroke a world path partially: from s0 to s1 metres along it
-function strokePath(P,s0,s1,jit=0){let acc=0,first=true;ink.beginPath();
+function strokePath(P,s0,s1){let acc=0,first=true;ink.beginPath();
   for(let i=1;i<P.length;i++){const a=P[i-1],b=P[i],l=Math.hypot(b[0]-a[0],b[1]-a[1]);if(acc+l<s0){acc+=l;continue;}if(acc>s1)break;
     const t0=clamp((s0-acc)/l,0,1),t1=clamp((s1-acc)/l,0,1);
-    if(first){const p=P2(a[0]+(b[0]-a[0])*t0,a[1]+(b[1]-a[1])*t0);if(!behind(p)){ink.moveTo(p[0]+jit,p[1]+jit*0.6);first=false;}}
-    const q=P2(a[0]+(b[0]-a[0])*t1,a[1]+(b[1]-a[1])*t1);if(behind(q))first=true;else if(first){ink.moveTo(q[0]+jit,q[1]+jit*0.6);first=false;}else ink.lineTo(q[0]+jit,q[1]+jit*0.6);acc+=l;}
+    if(first){const p=P2(a[0]+(b[0]-a[0])*t0,a[1]+(b[1]-a[1])*t0);if(!behind(p)){ink.moveTo(p[0],p[1]);first=false;}}
+    const q=P2(a[0]+(b[0]-a[0])*t1,a[1]+(b[1]-a[1])*t1);if(behind(q))first=true;else if(first){ink.moveTo(q[0],q[1]);first=false;}else ink.lineTo(q[0],q[1]);acc+=l;}
   ink.stroke();}
-// point and heading at s metres along a world path
+// point at s metres along a world path
 function along(P,s){let acc=0;for(let i=1;i<P.length;i++){const a=P[i-1],b=P[i],l=Math.hypot(b[0]-a[0],b[1]-a[1]);if(acc+l>=s||i===P.length-1){const t=clamp((s-acc)/(l||1),0,1);return[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];}acc+=l;}return P[P.length-1];}
 // footprints: render-side history sampled from the units of each shown order, never sim state
 const FOOT_FADE=2400,FOOTS=new Map();                       // game seconds until a footprint is gone
 // a footprint is the order's own path, stamped as far as the troops got: it cannot jump when
 // a battalion leaves, routs or rejoins, because it never follows a centroid
 function sampleFootprints(){
-  for(const o of ORDERS){if(o.quiet)continue;let f=FOOTS.get(o);if(!f)FOOTS.set(o,f={side:o.side,P:o.P,pts:[[...o.P[0],GT]],s:0});
-    const s=Math.max(f.s,o.prog);if(s-f.s>16||(o.done&&s>f.s)){f.pts.push([...along(o.P,s),GT]);f.s=s;}}
-  for(const[o,f]of FOOTS){const l=f.pts[f.pts.length-1];if(!ORDERS.includes(o)&&GT-l[2]>FOOT_FADE)FOOTS.delete(o);}
+  for(const o of ORDERS){if(o.quiet)continue;let f=FOOTS.get(o);if(!f)FOOTS.set(o,f={side:o.side,pts:[[...o.P[0],GT]],s:0,first:0,reach:0});
+    // a group average jumps when a battalion leaves; the drawn reach follows it at marching pace (6 m per game second) at most
+    f.reach=Math.min(Math.max(f.reach,o.prog),f.reach+6);
+    if(f.reach-f.s>16||(o.done&&f.reach>f.s)){f.pts.push([...along(o.P,f.reach),GT]);f.s=f.reach;}}
+  for(const[o,f]of FOOTS){while(f.first<f.pts.length-1&&GT-f.pts[f.first+1][2]>FOOT_FADE)f.first++;
+    if(o.removed&&GT-f.pts[f.pts.length-1][2]>FOOT_FADE)FOOTS.delete(o);}
 }
 function drawOrders(now,alpha){
   ink.lineJoin='round';
   // footprints: dotted, batched into a few age buckets, older steps fading out
   if(SHOW_TRAILS){ink.lineCap='round';ink.setLineDash([0.1,5.5]);ink.lineWidth=2;const NB=6;
-    for(const f of FOOTS.values()){const col=css(SIDES[f.side].i),S=f.pts.map(p=>P2(p[0],p[1])),paths=Array.from({length:NB},()=>new Path2D());
+    for(const f of FOOTS.values()){if(f.pts.length-f.first<2)continue;const col=css(SIDES[f.side].i),S=[],paths=Array.from({length:NB},()=>new Path2D());
+      for(let i=f.first;i<f.pts.length;i++)S[i]=P2(f.pts[i][0],f.pts[i][1]);
       let pb=-1,pi=-1;
-      for(let i=1;i<S.length;i++){const age=GT-f.pts[i][2];if(age>FOOT_FADE||behind(S[i-1])||behind(S[i]))continue;
+      for(let i=f.first+1;i<f.pts.length;i++){const age=GT-f.pts[i][2];if(age>FOOT_FADE||behind(S[i-1])||behind(S[i]))continue;
         const b=Math.min(NB-1,Math.floor(sstep(0,FOOT_FADE,age)*NB));if(b!==pb||pi!==i-1)paths[b].moveTo(S[i-1][0],S[i-1][1]);   // runs stay one subpath so the dots stay even
         paths[b].lineTo(S[i][0],S[i][1]);pb=b;pi=i;}
       ink.strokeStyle=col;paths.forEach((p,b)=>{ink.globalAlpha=alpha*0.85*(1-(b+0.5)/NB);ink.stroke(p);});}
@@ -870,11 +879,10 @@ function drawOrders(now,alpha){
   ink.globalAlpha=1;ink.lineCap='round';
 }
 function drawSmoke(now,mapA,worldA){
-  for(const p of SMOKE){const age=(now-p.t0)/1000,life=p.big?6:4.2;if(age>life)continue;const k=age/life,u=p.u,o=p.frac*shown(u,u.form,alive(u))[0],fo=p.big?14:8;
-    const c=P2(u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo,u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo);if(behind(c))continue;
+  for(const p of SMOKE){const age=(now-p.t0)/1000,life=p.big?6:4.2;if(age>life)continue;const k=age/life,c=P2(p.x,p.z);if(behind(c))continue;
     if(mapA>0.01){ink.globalAlpha=mapA*(1-k)*0.8;ink.strokeStyle='#8a847a';ink.lineWidth=0.8;ink.beginPath();const r0=(p.big?3:2)+k*(p.big?7:5);
       for(let a=0;a<=8.5;a+=0.35){const rr=r0*(0.35+a/8.5*0.65),x=c[0]+Math.cos(a+p.rot)*rr,y=c[1]+Math.sin(a+p.rot)*rr*0.8-k*6;a?ink.lineTo(x,y):ink.moveTo(x,y);}ink.stroke();}
-    if(worldA>0.01){const rw=(p.big?9:5)+k*(p.big?16:10),e=P2(u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo+rw,u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo),r=Math.max(1,Math.hypot(e[0]-c[0],e[1]-c[1]));
+    if(worldA>0.01){const rw=(p.big?9:5)+k*(p.big?16:10),e=P2(p.x+rw,p.z),r=Math.max(1,Math.hypot(e[0]-c[0],e[1]-c[1]));
       ink.globalAlpha=worldA*(1-k)*(1-k)*0.55;ink.fillStyle='#f2efe8';ink.beginPath();ink.arc(c[0],c[1]-r*0.6*k,r,0,6.2832);ink.fill();
       ink.globalAlpha*=0.5;ink.fillStyle='#c9c9cc';ink.beginPath();ink.arc(c[0]+r*0.25,c[1]-r*0.6*k+r*0.3,r*0.75,0,6.2832);ink.fill();}}
   ink.globalAlpha=1;
