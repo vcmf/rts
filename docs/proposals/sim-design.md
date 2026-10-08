@@ -1,12 +1,17 @@
+---
+status: accepted
+last_reviewed: 2026-10-08
+---
+
 # Simulation Design
 
 Status: **draft for discussion, revised after an adversarial review** (Oct 2026; §19). The battle
 simulation: what it holds, how a tick runs, and how Napoleonic warfare is modelled. Builds on
-`web-rts-architecture.md` (sim/render split, typed arrays, handles, commands, 20 Hz tick) and the
-decisions in `engine-map.md` §2. Evidence and parameters: `research/rts-engine-subsystems.md`
+`docs/architecture.md` (sim/render split, typed arrays, handles, commands, 20 Hz tick) and the
+decisions in `docs/engine-map.md` §2. Evidence and parameters: `docs/research/rts-engine-subsystems.md`
 (cited as **R§n**).
 
-**Supersedes in `web-rts-architecture.md`:**
+**Supersedes in `docs/architecture.md`:**
 - §4 "floats are fine for single-player / fixed-point for lockstep": the sim uses **restricted
   float64** (§2), deterministic across browsers without fixed-point.
 - §4 the main-thread loop (`advanceTick` in `runRenderLoop`, `renderer.sync(world)`, `prevX`
@@ -57,7 +62,7 @@ versions, R§4). So:
   table run **once in a Node build step** that writes the sim heightfield (on the 1.79 m grid), the
   cost grid, trig tables and decay constants as binary files. The renderer and the sim load the
   same files; their hash is part of the **data version** (§15) and the runtime asserts it. This
-  makes `engine-design.md` §4's heightfield an offline product, not a per-browser computation.
+  makes `docs/proposals/engine-design.md` §4's heightfield an offline product, not a per-browser computation.
 - **Time:** one tick = 50 ms of battle time, always (`TICK_HZ = 20`). Game speed changes how many
   ticks run per real second (pause, 1×, 2×, 4×, 8×), never the tick length.
 - **Battle clock:** `start + tick × 50 ms`; time of day fixed per scenario, the sun does not move (D5).
@@ -67,7 +72,7 @@ versions, R§4). So:
 ## 3. Entities
 
 Tables of typed arrays per kind. Handles carry a **kind tag** (`kind:3 | index:9 | gen:19`) so a
-target or an order's recipient is unambiguous across tables (`web-rts-architecture.md` §3 used a
+target or an order's recipient is unambiguous across tables (`docs/architecture.md` §3 used a
 single 12-bit index). Variable-length data (waypoints, order queues) lives in
 **typed-array pools** with free lists, so every byte of state is in arrays that the hash and saves
 cover, including the RNG state and the free lists.

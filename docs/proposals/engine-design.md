@@ -1,7 +1,12 @@
+---
+status: accepted
+last_reviewed: 2026-10-08
+---
+
 # Engine Design: World, Camera, Bakes
 
 Status: **agreed direction, details open** (Oct 2026). The full list of engine parts, including the
-simulation, is in `engine-map.md`. Companion to `web-rts-architecture.md`, which
+simulation, is in `docs/engine-map.md`. Companion to `docs/architecture.md`, which
 covers the sim/render split, the data model and the tick. This document covers the **world** the
 renderer draws, the **camera** that looks at it and the **baked data** that lights it, and splits
 the work into what the prototype needs now and what the engine needs later. An adversarial review
@@ -9,7 +14,7 @@ of the first draft is folded in (§12).
 
 ## 1. Why this document exists
 
-The W1 river PR stopped three times (`plans/w1-river-shape.md`). Two causes, both real:
+The W1 river PR stopped three times (`docs/plans/done/w1-river-shape.md`). Two causes, both real:
 
 **Missing engine concepts.** Many severe findings came from things no module owned:
 
@@ -77,12 +82,12 @@ interface WorldSpec {
 **The heightfield** is an array on the `cell` grid over `detail`, **built offline by a Node build
 step** (from `H()` today, from elevation + river data in W6) and shipped as data, then read by
 everything. Building it in each browser would make the sim's input depend on that browser's
-`Math.sin` (`sim-design.md` §2):
+`Math.sin` (`docs/proposals/sim-design.md` §2):
 - `heightAt(x,z)`, `normalAt(x,z)` interpolate it with **the same triangle split as the mesh**,
   so the ground drawn and the ground used are equal by construction.
 - The detail mesh is built from it vertex for vertex. Scatter, units, picking, camera focus height,
   water edges and checks read it. `sim/` gets it as plain data, so terrain is deterministic data,
-  not trig evaluated per JS engine (`web-rts-architecture.md` §4).
+  not trig evaluated per JS engine (`docs/architecture.md` §4).
 - **Gameplay layers** live on the same grid as sim data, never as render bakes: water depth
   (fords are riffles shallow enough to cross), passability and slope, later ice by season.
 
@@ -101,14 +106,14 @@ a line, stitched exactly to the detail edge (the W1 apron). Nothing in gameplay 
   Focus height = heightfield, smoothed over ~30 m so the view does not bob.
 - **Pitch from distance** in a narrow band, **capped** so the top of the frame never reaches the
   horizon: `pitch(d) ≤ π/2 − fov/2 − margin` (≈ 1.15 rad from vertical at fov 0.62). This is the
-  no-sky rule (`design.md` §1.2) as an invariant.
+  no-sky rule (`docs/art-bible.md` §1.2) as an invariant.
 - **Pan in the ground plane** (speed ∝ d): the camera cannot drift up. Prototype: Babylon's
   `mapPanning` plus the focus clamp; our own controller at prototype exit.
 - **Footprint `R`** = the largest ground distance from the focus to a frame corner over all allowed
   `d`, pitch, yaw, the widest supported aspect and the lowest terrain. Computed, not typed
   (~400 m today at 16:9). It feeds §4.
 - **Picking:** screen ray against the heightfield, then unit bounds.
-- **Far zoom is the staff map** (`staff-map/`): past the 3D range the camera tilts toward straight
+- **Far zoom is the staff map** (`docs/proposals/staff-map/`): past the 3D range the camera tilts toward straight
   down and the world turns into a drawn map, driven by one value, `mapness`. Each kind of 3D content
   (vegetation, units, shadows, water detail) draws only above its own `mapness` threshold, so the
   footprint rule above applies to whatever 3D content is still drawn, and the map view is the
@@ -141,12 +146,12 @@ later). Each declares coverage, texel target, inputs and consumers.
 
 ## 7. Units (rendering side)
 
-2k–4k figures, readable first (`design.md` pillar 1).
+2k–4k figures, readable first (`docs/art-bible.md` pillar 1).
 - **Thin instances** per figure type, matrices written in place each frame
-  (`web-rts-architecture.md` §3).
+  (`docs/architecture.md` §3).
 - **Figure LOD:** at max zoom a 1.8 m figure is ~8 px tall, so far figures drop to a very low-poly
   mesh or an impostor; full mesh only at close zoom. Budget to measure: ≤ 3M triangles for units.
-- **Animation:** stepped at 12 fps (`design.md`), vertex animation textures, no skeletons on the
+- **Animation:** stepped at 12 fps (`docs/art-bible.md`), vertex animation textures, no skeletons on the
   CPU.
 - **Shadows:** units are not in the static shadow map. Instanced contact blobs per figure (cheap),
   optionally one projected shadow per formation. Units without shadows look pasted on.
@@ -185,7 +190,7 @@ blocking an unrelated PR (§11).
 
 ### Now
 1. ~~**Close W1.**~~ Done (#1, #2): fitted shadow box, ground-plane pan, then W1b width variation.
-   The simulation track (S0, S1) runs beside this one: see `engine-map.md` §4.
+   The simulation track (S0, S1) runs beside this one: see `docs/engine-map.md` §4.
 
 ### E0-lite (engine spine, small PRs)
 2. `SPEC` object with derived sizes and load-time invariants (incl. footprint, pitch cap, yaw range).
@@ -208,7 +213,7 @@ blocking an unrelated PR (§11).
 ### At prototype exit / later
 | Item | Trigger |
 |---|---|
-| Vite + TypeScript game structure (`web-rts-architecture.md`), our own camera controller | prototype exit |
+| Vite + TypeScript game structure (`docs/architecture.md`), our own camera controller | prototype exit |
 | Shipped bake files (KTX2) | W6 / bake time over budget |
 | River network (tributaries, ponds, mill dams) | W6 |
 | GPU or worker bakes | measured need |

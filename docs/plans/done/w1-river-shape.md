@@ -1,6 +1,11 @@
+---
+status: done
+last_reviewed: 2026-10-08
+---
+
 # W1: River shape (kill the "scarf")
 
-Workstream: water (`prototype-plan.md` §4). Research: `research/stylized-water.md` §2.1–2.3.
+Workstream: water (`docs/plans/active/prototype-plan.md` §4). Research: `docs/research/stylized-water.md` §2.1–2.3.
 Branch: `feat/water-w1-river-shape`.
 
 ## Problem
@@ -109,7 +114,7 @@ so each fix that moved the river collided with the next hand-placed feature.
 
 ## Redesign (after round 3)
 
-Target fixed in `design.md` §6c: **the lowland meander**. Rule: **nothing in the water except
+Target fixed in `docs/art-bible.md` §6c: **the lowland meander**. Rule: **nothing in the water except
 stones.**
 
 1. **One placement test** `placeable(x, z, r, kind)`: rejects anything within the wet channel +
@@ -260,10 +265,10 @@ river geometry (the stitching held). They come from extents that are set in seve
 | 8 | light | `updateCoordinateHeights()` on the tile is unused load work |
 | 9 | light | Far-line probes beyond the far ring (±1300 m) project at y = 0 |
 
-### Closing W1 (after `engine-design.md`)
+### Closing W1 (after `docs/proposals/engine-design.md`)
 
-The engine design (`docs/engine-design` branch) takes over the round-3 findings: the moderate and
-light ones go to E0-lite (`engine-design.md` §10), and pre-existing ones to its known issues (§9).
+The engine design (the engine-design branch, now `docs/proposals/engine-design.md`) takes over the round-3 findings: the moderate and
+light ones go to E0-lite (`docs/proposals/engine-design.md` §10), and pre-existing ones to its known issues (§9).
 W1 closes with the two severe fixes:
 - **Shadow box fitted** to the tile: corners (lowest ground to 60 m above the highest) projected
   into light space; ±566 × ±329 m, depth 163–1201 inside 100–1600 (asserted at load).
@@ -285,7 +290,7 @@ Check runs now print the whole output and the exit code.
 | # | Sev. | Finding | Fix |
 |---|---|---|---|
 | 1 | severe | render-check threw (stack overflow on a 201k spread) | Plain loop |
-| 2 | moderate (pre-existing) | Up/down pans move cos(pitch) as fast as left/right | Known issue in `engine-design.md` §9 (own camera controller) |
+| 2 | moderate (pre-existing) | Up/down pans move cos(pitch) as fast as left/right | Known issue in `docs/proposals/engine-design.md` §9 (own camera controller) |
 | 3 | moderate | Far-ring bushes past the fitted box lost shadows with a hard cut | Box padded 40 m; shadows fade out over its outer 32 m |
 | 4 | moderate | Pan test could not fail (a y clamp duplicated mapPanning); never tested that panning moves | y clamp removed; check that every direction moves the focus |
 | 5 | moderate | Shadow-box check re-tested the fit's own corners | Tests every real caster on the tile (instance bounding boxes, 921) against the box minus the fade band |

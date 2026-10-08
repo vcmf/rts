@@ -1,10 +1,15 @@
+---
+status: research
+last_reviewed: 2026-10-08
+---
+
 # Cheap painterly post-FX for a top-down Babylon.js RTS
 
 Research notes, October 2026. Scope: which finishing effects give the most
 "cinematic / painterly / golden-hour diorama" for the least GPU time on mid-range
 laptop GPUs (Apple M1/M2 integrated, GTX 1650 class) at 1080p–1440p and 60 fps,
 using Babylon.js 9.x on WebGL2 now and WebGPU later. Written against
-`design.md` (the art bible) and `prototypes/painted-hybrid.html`.
+`docs/art-bible.md` (the art bible) and `prototypes/painted-hybrid.html`.
 
 **How to read the confidence tags**
 
@@ -16,12 +21,12 @@ using Babylon.js 9.x on WebGL2 now and WebGPU later. Written against
 | **[U]** | Could not verify. Treat as a lead, not a fact |
 
 > **Two conflicts with the brief to flag up front.**
-> 1. The brief asks for "tilt-shift-like depth of field". `design.md` (Oct 2026
+> 1. The brief asks for "tilt-shift-like depth of field". `docs/art-bible.md` (Oct 2026
 >    revision) retires tilt-shift and says "**Never blur.**" Detail should fall
 >    away from the focus through looser strokes and cooler colour instead (§3, §6).
 >    Below, DoF is costed and specified, but recommended **only for the cinematic
 >    export tier**, and only with art-director sign-off.
-> 2. `design.md` §1.4: "The painterly look lives in the assets and materials,
+> 2. `docs/art-bible.md` §1.4: "The painterly look lives in the assets and materials,
 >    not in a full-screen filter." That rules Kuwahara-style filters out of the
 >    game tier. The ranking below follows the art bible.
 
@@ -429,7 +434,7 @@ estimates.
 
 | Alternative | Cost **[E]** | Notes |
 |---|---|---|
-| **World-space brush stamps in the material** (design.md §7), scaled up with distance from focus | Fetches already paid | The film's "stamp maps" and periphery treatment ("objects further on the peripheral sides of the frame ... more impressionistic") ([AWN](https://www.awn.com/animationworld/puss-boots-last-wish-returns-its-fairy-tale-illustration-roots)) **[V-doc]**. No temporal issues |
+| **World-space brush stamps in the material** (docs/art-bible.md §7), scaled up with distance from focus | Fetches already paid | The film's "stamp maps" and periphery treatment ("objects further on the peripheral sides of the frame ... more impressionistic") ([AWN](https://www.awn.com/animationworld/puss-boots-last-wish-returns-its-fairy-tale-illustration-roots)) **[V-doc]**. No temporal issues |
 | Edge-aware 5×5 bilateral on far / out-of-focus regions only (masked by depth or `uFocus` distance) | 0.4–0.8 ms | Softens detail without a filter look; cinematic tier |
 | Posterize in luma (quantise L, keep chroma) | ≈0 ms fused | Reads as a Photoshop filter; avoid |
 | Structure-tensor flow + line-integral-convolution strokes / XDoG (Winnemöller, Kyprianidis, Olsen 2012, [PDF](https://users.cs.northwestern.edu/~sco590/winnemoeller-cag2012.pdf)) | 2–5 ms, 3–5 passes | Cinematic tier at most |

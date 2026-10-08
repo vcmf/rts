@@ -1,6 +1,11 @@
+---
+status: current
+last_reviewed: 2026-10-08
+---
+
 # Art Direction: "The Painted Campaign"
 
-The visual design bible for the RTS. Companion to `web-rts-architecture.md`
+The visual design bible for the RTS. Companion to `docs/architecture.md`
 (how the game is built). This document covers how it **looks**.
 
 > **The promise:** *a living storybook illustration of history. It's real
@@ -27,7 +32,7 @@ These are decisions, not preferences. Don't propose against them.
 
 1. **Camera:** always the top-down, zoomed-out RTS view. There are no
    ground-level or horizon shots. At its farthest zoom the world becomes the
-   **staff map** (`staff-map/design.md`).
+   **staff map** (`docs/proposals/staff-map/design.md`).
 2. **No sky in the game, ever.** Atmosphere has to come from the ground (§6).
 3. **Tone:** epic, not cozy, not dark. Not Total War's realistic, dingy look.
 4. **The painterly look lives in the assets and materials,** not in a
@@ -203,7 +208,7 @@ follows the action) and in-game presentation modes. Gameplay depth of field
 exists only as an off-by-default setting. If playtests show the field feels
 flat, the fallback is a *very subtle* depth of field at the closest zoom only.
 
-**The cheap cinematic stack** (from `research/cheap-painterly-postfx.md`):
+**The cheap cinematic stack** (from `docs/research/cheap-painterly-postfx.md`):
 - **Bake what doesn't move:** terrain ambient occlusion, canopy contact
   shading and (later) sun shadow, baked once per map. No live SSAO.
 - **One merged finishing pass:** warm amber grade with split toning, soft
@@ -219,7 +224,7 @@ flat, the fallback is a *very subtle* depth of field at the closest zoom only.
 
 **The one river type we build first** (decided Oct 2026). It's the Goldbach at Austerlitz and
 the most common Napoleonic battlefield stream. Other types (stony brook, wide slow river, braided
-gravel) come later and reuse the same system. Technique: `research/stylized-water.md`.
+gravel) come later and reuse the same system. Technique: `docs/research/stylized-water.md`.
 
 ### Shape
 | Element | Rule |
@@ -265,9 +270,9 @@ paper, Lehmann hachures for relief, armies as flat blocks, orders as pencil
 arrows. The zoom between the two runs in stages (the land rises, the soldiers
 stand up out of their blocks), never as a crossfade. Its own docs:
 
-- `staff-map/design.md`: art direction (paper, terrain, seasons, army symbols, orders, zoom, UI)
-- `staff-map/implementation.md`: how it is built (map bake, `mapness`, ink overlay)
-- `staff-map/plan.md`: phases
+- `docs/proposals/staff-map/design.md`: art direction (paper, terrain, seasons, army symbols, orders, zoom, UI)
+- `docs/proposals/staff-map/implementation.md`: how it is built (map bake, `mapness`, ink overlay)
+- `docs/plans/active/staff-map.md`: phases
 
 The `season` value (§4b) and the army colours (§4) drive the map too.
 
@@ -308,7 +313,7 @@ scanned. The prototype accepts a dropped PNG to test a grain live.
 - **12 fps stepped animation** for marching and fighting.
 - **No gore:** casualties fall and remain as painted shapes.
 - At the far zoom a unit is a flat block whose shape is its formation's
-  footprint (`staff-map/design.md` §6).
+  footprint (`docs/proposals/staff-map/design.md` §6).
 
 ---
 

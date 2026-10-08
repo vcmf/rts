@@ -1,6 +1,11 @@
+---
+status: done
+last_reviewed: 2026-10-08
+---
+
 # W1b: River width variation
 
-Follow-up to W1 (`plans/w1-river-shape.md`). Owner feedback on the merged prototype: "the width of
+Follow-up to W1 (`docs/plans/done/w1-river-shape.md`). Owner feedback on the merged prototype: "the width of
 the river is still the same everywhere".
 
 ## Problem
@@ -16,7 +21,7 @@ only by a mild bend narrowing (−20%) and small fast noise.
   - bends narrow by up to 40%;
   - straight riffle stretches widen by up to 35% (riffles are wide and shallow);
   - clamp 4–11 m. The riffle phase is measured in `W0` units (it no longer depends on `W`).
-- **Art bible** (`design.md` §6c): width 4–11 m, with the three rules above.
+- **Art bible** (`docs/art-bible.md` §6c): width 4–11 m, with the three rules above.
 - **Checks** (`tools/river-check.js`): `widthRange` 4–11 m; new `widthContrast`: in the tile, the
   95th percentile width is at least 1.8× the 5th; `bendNarrowerThanReach` kept.
 

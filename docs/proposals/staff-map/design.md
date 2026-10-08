@@ -1,13 +1,18 @@
+---
+status: draft
+last_reviewed: 2026-10-08
+---
+
 # Staff Map: Art Direction
 
-The look of the game at its farthest zoom. Companion to the art bible (`../design.md`), which
+The look of the game at its farthest zoom. Companion to the art bible (`docs/art-bible.md`), which
 covers the painted 3D world. This document covers the **map**.
 
 > **The promise:** *zoom out and the battle becomes the map a general would have drawn: ink on
 > warm paper, armies as flat coloured blocks, orders as broad translucent arrows. Zoom in and the same map
 > rises into the painted world, and every block unfolds into its soldiers.*
 
-Decided Oct 2026. Implementation: `implementation.md`. Phases: `plan.md`.
+Decided Oct 2026. Implementation: `docs/proposals/staff-map/implementation.md`. Phases: `docs/plans/active/staff-map.md`.
 
 ---
 
@@ -84,7 +89,7 @@ The hachures are what make the map feel drawn. They replace hillshade completely
 
 ## 5. Seasons: a wash on the paper
 
-The `season` value from `../design.md` §4b drives the map too. Colour is a **watercolour wash**
+The `season` value from `docs/art-bible.md` §4b drives the map too. Colour is a **watercolour wash**
 over visible paper, never a full fill.
 
 | Season | Wash | Woods | Ink |
@@ -149,7 +154,7 @@ Blocks are flat, sharp-cornered, with no shadow, bevel or outline glow.
 | Selected | Thin double outline in ink, plus an expanded label (§8) |
 
 ### Colours
-From `../design.md` §4: France `#2C4FA8`, Russia `#2F6B3C`, Britain `#B3302A`.
+From `docs/art-bible.md` §4: France `#2C4FA8`, Russia `#2F6B3C`, Britain `#B3302A`.
 **Austria** (`#E9E3D3`) would vanish on winter paper, so Austrian blocks are filled a brighter
 white (`#fbfaf6`) and always carry a bold grey-blue edge (`#4f6279`); a routing Austrian block
 blinks between that grey-blue and white. Every army colour is checked against every

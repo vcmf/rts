@@ -1,4 +1,4 @@
-// Render checks (plans/w1-river-shape.md, Redesign 2): render the real scene at fixed cameras, read the
+// Render checks (docs/plans/done/w1-river-shape.md, Redesign 2): render the real scene at fixed cameras, read the
 // framebuffer, and test the PIXELS at projected river points. Catches what height checks can't:
 // culled, missing, hidden or wrongly coloured geometry, and the painted river line on the far ring.
 // Run: node tools/shot.mjs prototypes/painted-cinematic.html renders/tmp 1280 720 \

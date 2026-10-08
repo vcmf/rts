@@ -1,11 +1,16 @@
+---
+status: active
+last_reviewed: 2026-10-08
+---
+
 # Staff Map: Plan
 
-Phases for the staff map. Design: `design.md`. Approach: `implementation.md`.
-Every PR follows `../AGENTS.md` → Workflow (plan → implement → `/code-review high`).
+Phases for the staff map. Design: `docs/proposals/staff-map/design.md`. Approach: `docs/proposals/staff-map/implementation.md`.
+Every PR follows `AGENTS.md` → Workflow (plan → implement → `/code-review high`).
 
 ## SM0: feel prototype (this PR)
 
-Status: built. Open `prototypes/staff-map.html`. Measured numbers: `implementation.md` §7.
+Status: built. Open `prototypes/staff-map.html`. Measured numbers: `docs/proposals/staff-map/implementation.md` §7.
 
 **Goal:** judge the *feel* of the map, the blocks, the orders and the zoom before committing to
 any of it. Not the final rendering: the 3D side is a stand-in for `painted-cinematic.html`.
@@ -35,7 +40,7 @@ any of it. Not the final rendering: the 3D side is a stand-in for `painted-cinem
 - [ ] The blocks and the soldiers occupy the same footprint during the transition.
 - [ ] 60 fps at the far zoom on an M1-class Mac (measured in the page, labelled).
 
-**Out of scope:** fog of war (see `design.md` §10), real terrain import, the painterly 3D
+**Out of scope:** fog of war (see `docs/proposals/staff-map/design.md` §10), real terrain import, the painterly 3D
 shading of `painted-cinematic.html`, the real sim.
 
 ## SM0b: readability pass (art director feedback, Oct 2026)
@@ -56,7 +61,7 @@ footprints fade out over ~40 game minutes; in the painted world block = footprin
 | Phase | Scope |
 |---|---|
 | SM1 | Port the zoom transition into `painted-cinematic.html`: its terrain, light and river under the map texture |
-| SM2 | Map bake in a worker; real heightmap and OSM features (shares the W6 importer in `../prototype-plan.md`) |
+| SM2 | Map bake in a worker; real heightmap and OSM features (shares the W6 importer in `docs/plans/active/prototype-plan.md`) |
 | SM3 | Unit symbols driven by the real `sim/` once it exists; overlap and layering rules |
 | SM4 | Video export: directed map camera, trails as replay |
 
@@ -68,7 +73,7 @@ footprints fade out over ~40 game minutes; in the painted world block = footprin
 | 2 | 10 | 2 | Routing units skipped the destruction check; other overlay draws still projected from behind the camera. All fixed, plus roof normals, key panning, panel blur (gameplay invariant), order pruning. |
 | 3 | 10 staff-map + W1b | 1 | `pow` on a negative base in the sprout and stand-up shaders; labels and neatline behind the camera; hachure occupancy grid. Fixed. W1b findings belong to the water branch. |
 
-Stopped after round 3 (`../AGENTS.md`: more than 3 rounds means redesign). The round 3 fixes
+Stopped after round 3 (`AGENTS.md`: more than 3 rounds means redesign). The round 3 fixes
 were verified by screenshot at theatre, map and mid-zoom, not by a fourth review round. The
 repeated finding class (projection behind the camera) points at one design fix for SM1: project
 through a single clipped helper that every overlay draw uses.
@@ -93,7 +98,7 @@ second at 30×); traces stayed after their troops moved on without a shown order
 
 **Review:** round 1 and 2 fixes (cached heading, home pull, order-membership orphan test with
 chains and stop points) each failed the next round with severe findings, so after round 3 the
-two mechanisms were **redesigned** to the simple rules now in `design.md` §6–7: flee away
+two mechanisms were **redesigned** to the simple rules now in `docs/proposals/staff-map/design.md` §6–7: flee away
 from the enemies in reach (the escape direction turns at most 0.5 rad per game second; the drawn
 block eases on the frame clock), and a trace shows only while one of its own battalions stands
 within 250 m of its end (a later chain rule was dropped too:

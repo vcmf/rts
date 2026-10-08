@@ -1,4 +1,4 @@
-// River acceptance checks (plans/w1-river-shape.md, design.md §6c), evaluated inside the page.
+// River acceptance checks (docs/plans/done/w1-river-shape.md, docs/art-bible.md §6c), evaluated inside the page.
 // Run: node tools/shot.mjs prototypes/painted-cinematic.html renders/tmp 800 600 \
 //        "$(python3 -c 'import json;print(json.dumps([["eval",open("tools/river-check.js").read()]]))')"
 // Prints the measurements; every failed limit is a console.error, so shot.mjs exits non-zero.
@@ -31,7 +31,7 @@
   check('instancesInZones', inZone === 0, inZone)
   check('stonesInPools', stonesInPools === 0, stonesInPools)
   check('wheatOnFloodplain', wheatOnFloodplain === 0, wheatOnFloodplain)
-  // bank trees exist: design.md §6c asks for a broken line of willows along the banks near the scene
+  // bank trees exist: docs/art-bible.md §6c asks for a broken line of willows along the banks near the scene
   const willows = Object.entries(groups).filter(([m]) => /^Willow/.test(m)).reduce((a, [, v]) => a + v.length, 0)
   check('willows', willows >= 12, willows)
 
@@ -46,7 +46,7 @@
   check('backtrack', back >= 100, back)
   check('backtrackNear', backNear >= 10, backNear)
 
-  // 4. width: 4–11 m of water, narrower at bends than in straight reaches, visibly varied (design.md §6c)
+  // 4. width: 4–11 m of water, narrower at bends than in straight reaches, visibly varied (docs/art-bible.md §6c)
   let wmin = Infinity, wmax = 0, bendW = 0, bendN = 0, strW = 0, strN = 0
   for (let i = 0; i < C.n; i++) { const w = C.W[i], b = Math.min(1, Math.abs(C.kappa[i]) * C.P.W0 * 2.3)
     wmin = Math.min(wmin, w); wmax = Math.max(wmax, w); if (b > 0.7) { bendW += w; bendN++ } else if (b < 0.3) { strW += w; strN++ } }

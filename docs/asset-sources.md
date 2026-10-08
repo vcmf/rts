@@ -1,11 +1,16 @@
+---
+status: current
+last_reviewed: 2026-10-08
+---
+
 # Asset Sources
 
 Where to find 3D assets, textures and brushes for the RTS, and how to judge
-whether an asset fits. Companion to `design.md`, the art bible (see §5 "the 3D
+whether an asset fits. Companion to `docs/art-bible.md`, the art bible (see §5 "the 3D
 model contract" and §10 "asset generation pipeline").
 
 > **Rule of thumb:** judge **shape language** first, colour last. Our painterly
-> shader repaints every model with the palette in `design.md`, so a pack's
+> shader repaints every model with the palette in `docs/art-bible.md`, so a pack's
 > colours don't matter. Its silhouettes, proportions and level of detail do.
 
 ---
@@ -47,7 +52,7 @@ model contract" and §10 "asset generation pipeline").
 
 | Tool | Use | Notes |
 |---|---|---|
-| **OpenAI image generation → Tripo** | Concept image, then 3D model | Prompts in `design.md` §12. The image must be **evenly lit with no cast shadows**, or the shading gets baked into the texture. |
+| **OpenAI image generation → Tripo** | Concept image, then 3D model | Prompts in `docs/art-bible.md` §12. The image must be **evenly lit with no cast shadows**, or the shading gets baked into the texture. |
 | **Tripo API** | Multiview to 3D, low-poly P-series, `convert_model` (GLB/OBJ/FBX, `face_limit`), auto-rigging | Paid per credit. Rigging: biped and quadruped, Mixamo-compatible bones. |
 | **TRELLIS.2** (Microsoft) | Image to 3D, open source | **MIT licence.** Needs a large NVIDIA GPU: use the Hugging Face Space or a rented GPU. Single image only, for now. |
 | **Hunyuan3D 2.1** (Tencent) | Image to 3D, open weights | ⚠️ Licence excludes the **EU, UK and South Korea**. Avoid for published work there. |
@@ -55,7 +60,7 @@ model contract" and §10 "asset generation pipeline").
 
 ---
 
-## 4. Brushes & painted textures (the brush library, `design.md` §7)
+## 4. Brushes & painted textures (the brush library, `docs/art-bible.md` §7)
 
 | Source | What | Licence |
 |---|---|---|

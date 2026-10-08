@@ -1,7 +1,12 @@
+---
+status: draft
+last_reviewed: 2026-10-08
+---
+
 # Staff Map: Implementation
 
-How the staff map (`design.md`) is built in Babylon.js, and how it fits the sim/render split in
-`../web-rts-architecture.md`. Status: **approach, validated only by the feel prototype**
+How the staff map (`docs/proposals/staff-map/design.md`) is built in Babylon.js, and how it fits the sim/render split in
+`docs/architecture.md`. Status: **approach, validated only by the feel prototype**
 (`../prototypes/staff-map.html`).
 
 ---
@@ -13,7 +18,7 @@ How the staff map (`design.md`) is built in Babylon.js, and how it fits the sim/
 | **Paper** | Paper grain, hachures, woods, water, roads, villages, seasonal wash | A **map texture baked once per map**, sampled by the terrain shader | It must ride on the terrain when the relief rises, so it belongs to the ground |
 | **Live ink** | Army blocks, orders, trails, smoke curls, labels, cartouche | A **2D canvas over the WebGL canvas**, redrawn every frame from sim state, with world points projected to screen | Crisp at any DPI, cheap patterns (hatching), easy text; it changes every frame |
 
-The paper is baked, like the light map (`../design.md`: static things are baked once per map).
+The paper is baked, like the light map (`docs/art-bible.md`: static things are baked once per map).
 The live ink is UI-like and lives in `render/` (projection) and `ui/` (text and panels).
 
 ---
@@ -32,7 +37,7 @@ stage(a, b) = smoothstep(a, b, t)
 `FAR_MAP` is set by the map texture: below ~1700 m the 1 m texels start to magnify, so the map
 must already be handing over to the world.
 
-Every stage in `design.md` §9 is a `stage(a, b)` window on `t`, read as a uniform by every
+Every stage in `docs/proposals/staff-map/design.md` §9 is a `stage(a, b)` window on `t`, read as a uniform by every
 material and by the ink overlay. Tuned values live in one table, not scattered in shaders:
 
 | Stage | Window on `t` (prototype values) |
@@ -95,12 +100,12 @@ on. If closer map zooms are needed, bake tiles instead of one texture.
   transition the blocks stay glued to the rising ground.
 - Drawn size = `lerp(symbol × zoomScale, trueFootprint, stage(0.15, 0.48))`, where
   `zoomScale = clamp((mpp / mppTheatre)^0.6, 0.3, 1)` keeps symbols near a steady screen size.
-  Depth is never under 5 px (`design.md` §6).
+  Depth is never under 5 px (`docs/proposals/staff-map/design.md` §6).
 - Hatching for morale uses a canvas pattern; spacing grows as morale falls. Routing pulses between the
   army colour and white on a 1.1 s eased cycle, driven by the frame clock passed in.
 
 ### Soldiers
-- Thin instances, one buffer per figure type (`../web-rts-architecture.md` §3, `unitRenderer.ts`).
+- Thin instances, one buffer per figure type (`docs/architecture.md` §3, `unitRenderer.ts`).
 - Each figure's slot inside the formation is derived from the same footprint as the block, so
   the block and the soldiers always agree.
 - "Standing up" is a per-figure Y scale from 0 to 1 across the soldiers stage, offset by a

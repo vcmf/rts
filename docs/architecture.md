@@ -1,3 +1,8 @@
+---
+status: current
+last_reviewed: 2026-10-08
+---
+
 # Web RTS — Architecture & Babylon.js Setup
 
 Reference doc for building a browser-based RTS with Babylon.js, structured for
@@ -87,7 +92,7 @@ src/
   render/
     engine.ts         # Babylon Engine + Scene bootstrap
     camera.ts         # RTS camera: pan, edge-scroll, zoom, rotate; derives `mapness`
-    staffMap.ts       # far-zoom map: baked map texture + ink overlay (staff-map/implementation.md)
+    staffMap.ts       # far-zoom map: baked map texture + ink overlay (docs/proposals/staff-map/implementation.md)
     terrain.ts        # heightmap ground
     unitRenderer.ts   # thin instances, one buffer per unit type
     selection.ts      # picking, drag-box, selection decals

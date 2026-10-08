@@ -1,3 +1,8 @@
+---
+status: research
+last_reviewed: 2026-10-08
+---
+
 # Rivers, ponds and painted water for the top-down RTS
 
 Research notes, October 2026. Scope: how to (1) **shape** streams, rivers and ponds
@@ -5,8 +10,8 @@ so they stop looking like "a scarf, same width everywhere", and (2) **render** t
 so they look painted (*Puss in Boots: The Last Wish* direction) and read clearly
 from the fixed top-down camera (pitch about 40–55°, distance 45–260 m, no sky).
 Target: Babylon.js 9.29 on WebGL2 now, WebGPU later, custom GLSL
-`ShaderMaterial`s. Written against `design.md`,
-`research/cheap-painterly-postfx.md` and `prototypes/painted-cinematic.html`.
+`ShaderMaterial`s. Written against `docs/art-bible.md`,
+`docs/research/cheap-painterly-postfx.md` and `prototypes/painted-cinematic.html`.
 
 **Confidence tags** (same scheme as `cheap-painterly-postfx.md`, plus [O])
 
@@ -110,7 +115,7 @@ Target: Babylon.js 9.29 on WebGL2 now, WebGPU later, custom GLSL
    `srcA + dstA`, which would corrupt it **[V-src]**.
 3. **A painted depth ramp in 3 bands with grain-broken thresholds**: warm
    ochre-green shallows → turquoise → deep teal/blue-violet. This is the §4 shading
-   ramp rule from `design.md` applied to depth instead of light.
+   ramp rule from `docs/art-bible.md` applied to depth instead of light.
 4. **Flow strokes aligned with the current**, using (across, along) ribbon UVs and
    a baked **time-of-travel** coordinate so strokes stretch in fast reaches and
    bunch in pools without shearing. Use a two-phase flow map (Valve, Portal 2)
@@ -622,7 +627,7 @@ erosion at this resolution doesn't model.
 
 Pitfalls: not art-directable; results change globally when you edit one hill;
 slow in JS at 1M cells; fills the map with gullies that compete with
-formations for readability (`design.md` pillar 1).
+formations for readability (`docs/art-bible.md` pillar 1).
 
 ### 3.2 Graph / flow accumulation (drainage networks)
 
@@ -761,7 +766,7 @@ decals (instanced quads with a foam ring) instead.
 Use a painted 3-band ramp, not physical absorption: shallow warm green-ochre
 (bed showing), turquoise middle, deep teal leaning blue-violet. Break the band
 edges with the paint grain (same mechanism as the light bands in `paint()`).
-Pick the colours from the palette, not from physics; `design.md` asks for
+Pick the colours from the palette, not from physics; `docs/art-bible.md` asks for
 "chosen colours rather than computed ones".
 
 Pitfalls: if the deepest colour is too dark, pools read as holes. Keep deep
@@ -771,7 +776,7 @@ variant: shadowed deep water goes blue-violet, not black.
 ### 4.3 Flow: ribbon UVs, time of travel, flow maps
 
 - **Ribbon UVs** (n across, s along) are free and ideal for "long smooth
-  horizontals" (`design.md` §7 water fill).
+  horizontals" (`docs/art-bible.md` §7 water fill).
 - **Time of travel**: with varying speed, `pattern(s·k − t·v(s))` shears and
   compresses over time. `pattern(τ − t)` with τ = ∫ds/v stays continuous, and
   features are automatically longer where water is faster **[E, derivation]**.
@@ -897,7 +902,7 @@ galleries), placed by SDF distance 1–6 m and gaps for fords.
   on screen; **(2)** graphic edge: dark wet band outside, light meniscus/foam
   inside; **(3)** value structure: dark pools, bright riffles. That gives rhythm,
   and riffles mark fords; **(4)** water is less saturated than army colours
-  (`design.md` pillar 1).
+  (`docs/art-bible.md` pillar 1).
 - Grade check: the finishing pass's teal-shadow split tone pushes water toward
   the shadows' hue. Test water in shadow vs. in light so it doesn't vanish into
   shadowed grass.

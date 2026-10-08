@@ -1,3 +1,8 @@
+---
+status: active
+last_reviewed: 2026-10-08
+---
+
 # Prototype Plan
 
 What the prototypes are for, how they are built, and the current workstream (**water**).
@@ -7,14 +12,14 @@ What the prototypes are for, how they are built, and the current workstream (**w
 The prototypes lock the **look** before any game code: a painterly, top-down Napoleonic
 battlefield that runs at 60 fps in a browser (game tier) and renders at film quality offline
 (video tier). When the look is locked, the rendering code moves into `render/` of the real game
-(`web-rts-architecture.md`), behind the sim/render split.
+(`docs/architecture.md`), behind the sim/render split.
 
 **Exit criteria for the prototype phase** (the look is "locked" when):
 - [ ] A screenshot of the game-tier view holds up next to `design/refs/north-star.png` for light,
       colour, depth and composition (judged by the art director).
-- [ ] Terrain, vegetation, water and seasons all follow `design.md` without per-asset hacks.
+- [ ] Terrain, vegetation, water and seasons all follow `docs/art-bible.md` without per-asset hacks.
 - [ ] 60 fps measured at 1080p on min-spec hardware (gaming laptop, RTX 3060 or better), GPU
-      frame time ≤ 12 ms, with 2k–4k unit figures (`engine-design.md` §2).
+      frame time ≤ 12 ms, with 2k–4k unit figures (`docs/proposals/engine-design.md` §2).
 - [ ] The same scene renders a video-tier frame with depth of field, mist and light shafts.
 - [ ] Real elevation and real rivers load for at least one historical battlefield.
 
@@ -25,14 +30,14 @@ battlefield that runs at 60 fps in a browser (game tier) and renders at film qua
 | Painterly shading (ramp, grain, edges, rim, backlight) | ✅ done | `painted-cinematic.html` |
 | Light: baked light map, sun shadows, occlusion | ✅ done | review round 1 fixed (10 findings) |
 | Cinematic layer (grade, bloom, mist, shafts, DOF option) | ✅ first pass | tuning pending |
-| Seasons and tree colour variety | ✅ done | `design.md` §4b |
+| Seasons and tree colour variety | ✅ done | `docs/art-bible.md` §4b |
 | Vegetation assets | 🟡 placeholder | Quaternius pack; Tripo assets later |
 | **Water** | 🔴 **in progress** | the river "looks like a scarf"; this plan |
 | Brush library (painted grain/fill textures) | ⏳ waiting | user paints in Procreate |
 | Performance pass (tiling, LOD, measured frame time) | ⏳ | after water |
 | Real terrain + historical import | ⏳ | after water |
 | Units and buildings | ⏳ | Tripo / TRELLIS |
-| **Staff map** (far zoom, zoom transition) | 🟡 feel prototype | `staff-map/plan.md`, `prototypes/staff-map.html` |
+| **Staff map** (far zoom, zoom transition) | 🟡 feel prototype | `docs/plans/active/staff-map.md`, `prototypes/staff-map.html` |
 
 ## 3. Process
 
@@ -43,7 +48,7 @@ positions (before and after) attached to the PR.
 
 ## 4. Water workstream
 
-Source: `research/stylized-water.md` (§1.4 order of work, §2 implementation plan).
+Source: `docs/research/stylized-water.md` (§1.4 order of work, §2 implementation plan).
 
 ### 4.1 Problem
 
@@ -117,5 +122,5 @@ water. W5 and W6 can be reordered after a look review.
 2. Brush library v1 from Procreate (grain, grass, foliage fills).
 3. First Tripo assets (one tree, one building) under the shaders.
 4. Real terrain + historical import beyond Austerlitz.
-5. Staff map SM1–SM4 (`staff-map/plan.md`), after the SM0 feel review.
-6. Exit-criteria review → start the game repo structure (`web-rts-architecture.md` §2).
+5. Staff map SM1–SM4 (`docs/plans/active/staff-map.md`), after the SM0 feel review.
+6. Exit-criteria review → start the game repo structure (`docs/architecture.md` §2).
