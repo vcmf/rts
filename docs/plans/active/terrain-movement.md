@@ -51,25 +51,48 @@ fire and morale.
 - With the Speed overlay on, slow ground and the line's bulge around it are visible.
 - All existing formation checks still pass; `node tools/check-docs.mjs` passes.
 
-## Results (headless, `tools/formation-measure.js`)
+## Results (headless, `tools/formation-measure.js`, after review round 1)
 
-- **Partial bad ground** (a line marches 60 m; a 10 m strip of woods, g = 0.55 for a line, crosses n
-  of its 12 sample points; time lost against the same march without the strip):
+- **Partial bad ground** (a line marches 60 m; a strip of woods exactly 10 m deep, g = 0.55, q = 1,
+  covers the files of n of its 12 sample points; time lost against the same march without it):
 
-  | Order style | 1/12 | 3/12 | 6/12 | 12/12 |
+  | Tolerances | 1/12 | 3/12 | 6/12 | 12/12 |
   |---|---|---|---|---|
-  | Normal (Lmax 4 m, Lmean 1.5 m) | 0.5 s | 2.5 s | 4.5 s | 10 s |
-  | Keep order (1.5 m, 0.5 m) | 4.5 s | 7.5 s | 8.5 s | 10 s |
+  | Research's (Lmax 10 m, Lmean 2 m) | 0 s | 0.5 s | 4.6 s | 9.0 s |
+  | Normal (4 m, 1.5 m) | 4.6 s | 4.7 s | 5.7 s | 9.0 s |
+  | Keep order (1.5 m, 0.5 m) | 7.4 s | 7.5 s | 7.9 s | 9.0 s |
 
-  The research's simulation gave 0.5 / 2.2 / 6.3 / 10.5 s for its middle tolerances: same scaling.
-  The check fails if the delay does not grow with the share held up.
-- **Deep water:** a line ordered straight across the stream stops at the bank (x 60.8 against the
-  bank at 60.3) and reports "halted: impassable ground".
-- **Bridge:** narrows to a march column, crosses the 4 m bridge, deploys into line beyond: 177 s.
-- **Visible:** with "Push on", a company held up in the strip falls 3.8 m behind the line and catches
-  up after it (screenshot in the PR); the speed overlay tints slow ground and marks deep water.
-- **Existing checks** still pass (rest in the wood at six points, slot table, square faces). The march
-  column's worst distance from slot rose to 4.6 m: its path now crosses a hedge, and the files that
-  meet it fall back about 3.5 m (the "fall back by sections" behaviour).
-- **Cost, 40 battalions:** simulation 1.8 ms per frame (sampling 108 ground points per battalion per
-  tick), drawing 0.85 ms.
+  The full front cannot avoid the strip: 10 m at 0.495 m/s against 10 m at 0.9 m/s is 9.1 s, and the
+  model gives 9.0 s. Part of the front costs less; one file almost nothing with wide tolerances, and
+  nearly the whole strip with "keep order" (the slowest file sets the pace, as drilled).
+  **Departure from the research:** its table (0.5 / 2.2 / 6.3 / 10.5 s) came from an approximation of
+  the mean-lag limit that ignores files already catching up, which over-slows the battalion. The
+  engine solves the limit exactly (`n·V − Σ min(cap, V + l/τ) ≤ n (Lmean − l̄)/τ`, one pass over the
+  sorted breakpoints), so with 3 of 12 points held the mean lag sits at Lmean and costs 0.5 s.
+- **Deep water**, crossed obliquely and along the whole front: the battalion stops, reports "halted:
+  impassable ground", dresses back from the edge; no man stands in deep water.
+- **Bridge:** the deck is level for a column (g = 1 along it); narrow, cross the 4 m bridge, deploy
+  beyond: 198.5 s, mostly the two formation changes.
+- **Accordion:** a march column whose head is held up at a hedge bunches up; its companies' places
+  never come closer than 1.15 m (they used to pass through each other).
+- **Earlier checks** still pass; the march column's turn is back to 1.2 m worst distance from slot.
+- **Negative run** with the round-0 code: fails deep water along the whole front (stuck, men in the
+  water), the bridge deck (g = 0.06) and the accordion (0.00 m).
+- **Cost, 40 battalions:** simulation 1.8 ms per frame, drawing 0.9 ms.
+
+## Review round 1
+
+10 findings, 3 severe → another round.
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | severe | Whole front at deep water: stuck for ever (the halt test watched V, not the anchor) | Halt when the anchor stops advancing; then dress back from the edge |
+| 2 | severe | Lagging files read the ground at their slot, not where their men stand | Ground sampled at slot − lag along the direction of travel |
+| 3 | severe | Bridge deck took the stream valley's slope | Deck cells are level |
+| 4 | moderate | Lag offsets and bins followed company facing (a moving square's rear face drawn inside it) | Offsets along the direction of travel; bins across it |
+| 5 | moderate | Columns walked through their own companies | Accordion: a company's lag ≥ the lag of the one ahead minus the room between them (ruleset data) |
+| 6 | moderate | Lags and disorder never recovered at impassable ground; frozen in wheels; stale through changes | Settle during wheels and changes, skip blocked bins, reset lags when a change starts |
+| 7 | moderate | Checks did not test the claims; no negative tests | Exact strip, bin-aligned shares, 0.1 s steps, whole-front water, men-in-water, level deck, accordion; negative run above |
+| 8 | moderate | The core named paces and formations; route step on all ground; q not per pace | Formations, paces, road pace, q per pace and the accordion in the ruleset; route step only on roads |
+| 9 | light | Mean-lag limit approximated in three passes | Exact one-pass solve |
+| 10 | light | `Math.exp` and allocations per sample | Slope table; preallocated arrays |
