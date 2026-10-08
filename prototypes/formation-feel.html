@@ -145,7 +145,7 @@ const SHAPES = {
 };
 // regulation-like times in seconds at drill factor 1 (docs/proposals/sim-design.md §5; research §2)
 const CHANGE_TIME = {
-  'line>column': 30, 'column>line': 40, 'column>square': 30, 'line>square': 100, 'square>line': 60, 'square>column': 30,
+  'line>column': 30, 'column>line': 40, 'column>square': 60, 'line>square': 100, 'square>line': 60, 'square>column': 30,
   'line>march': 20, 'march>line': 60, 'column>march': 20, 'march>column': 30, 'march>square': 60, 'square>march': 40,
 };
 const rot2 = (x, z, a) => [x * Math.cos(a) - z * Math.sin(a), x * Math.sin(a) + z * Math.cos(a)];
@@ -157,8 +157,9 @@ const battalions = [];
 function makeBattalion(x, z, heading, colour, seed) {
   const b = {
     x, z, heading, px: x, pz: z, ph: heading, vx: 0, vz: 0, shape: 'line', place: SHAPES.line(),
-    trans: null, orders: [], colour, rand: rng(seed), soldiers: [], grid: [], moved: 0, log: [],
+    trans: null, orders: [], colour, rand: rng(seed), soldiers: [], grid: [], moved: 0, log: [], omega: 0, trail: [],
   };
+  resetTrail(b);
   // slot table: grid[company][rank][file] = soldier index or -1
   for (let c = 0; c < COMPANIES; c++) {
     const g = []; for (let r = 0; r < RANKS; r++) g.push(new Array(FILES).fill(-1)); b.grid.push(g);
@@ -169,9 +170,52 @@ function makeBattalion(x, z, heading, colour, seed) {
   battalions.push(b); return b;
 }
 
-// company placement at this moment (interpolated during a change: wheel around the turning flank)
+/* march column as a snake: the head leaves a trail; each company stands on the trail at its distance
+   behind the head and faces along it, so the column turns where its head turned (not as a rigid stick) */
+const MARCH_GAP = BW + 1.0;
+function resetTrail(b) {   // a straight trail behind the head, along the current heading
+  b.trail.length = 0; const n = 8;
+  for (let k = n; k >= 0; k--) b.trail.push({ x: b.x - Math.sin(b.heading) * k * 6, z: b.z - Math.cos(b.heading) * k * 6 });
+  b.trailLen = n * 6;
+}
+function pushTrail(b) {
+  const last = b.trail[b.trail.length - 1], d = Math.hypot(b.x - last.x, b.z - last.z);
+  if (d < 0.25) return;
+  b.trail.push({ x: b.x, z: b.z }); b.trailLen += d;
+  while (b.trail.length > 2 && b.trailLen - Math.hypot(b.trail[1].x - b.trail[0].x, b.trail[1].z - b.trail[0].z) > 5 * MARCH_GAP + 12) {
+    b.trailLen -= Math.hypot(b.trail[1].x - b.trail[0].x, b.trail[1].z - b.trail[0].z); b.trail.shift(); }
+}
+// point on the trail `back` metres behind (hx, hz), the head this frame; negative = ahead of the head
+function trailAt(b, hx, hz, h, back) {
+  if (back <= 0) return [hx - Math.sin(h) * back, hz - Math.cos(h) * back];
+  let px = hx, pz = hz, left = back;
+  for (let k = b.trail.length - 1; k >= 0; k--) {
+    const q = b.trail[k], d = Math.hypot(px - q.x, pz - q.z);
+    if (d >= left && d > 1e-9) return [px + (q.x - px) * left / d, pz + (q.z - pz) * left / d];
+    left -= d; px = q.x; pz = q.z;
+  }
+  const a = b.trail[0], c = b.trail[1] || { x: hx, z: hz }, d = Math.hypot(c.x - a.x, c.z - a.z) || 1;   // past the end: straight on
+  return [a.x - (c.x - a.x) / d * left, a.z - (c.z - a.z) / d * left];
+}
+// a company's pose in world space: origin, block rotation a (counter-clockwise) and facing (a heading)
+function placeWorld(b, c, hx, hz, h, ahead) {
+  if (!b.trans && b.shape === 'march') {
+    const back = c * MARCH_GAP - Math.hypot(b.vx, b.vz) * ahead;
+    const p = trailAt(b, hx, hz, h, back), p1 = trailAt(b, hx, hz, h, back + 2), p0 = trailAt(b, hx, hz, h, back - 2);
+    const ch = Math.atan2(p0[0] - p1[0], p0[1] - p1[1]);
+    return { x: p[0], z: p[1], a: -Math.PI / 2 - ch, face: ch };
+  }
+  const pl = companyPlace(b, c), o = rot2(pl.x, pl.z, -h);
+  return { x: hx + o[0], z: hz + o[1], a: pl.rot - h, face: h - pl.face };
+}
+// company placement in the battalion frame (interpolated during a change: wheel around the turning flank)
 function companyPlace(b, c) {
-  const t = b.trans; if (!t) return b.place[c];
+  const t = b.trans;
+  if (!t && b.shape === 'march') {   // the snake, expressed in the battalion frame
+    const w = placeWorld(b, c, b.x, b.z, b.heading, 0), l = rot2(w.x - b.x, w.z - b.z, b.heading);
+    return { x: l[0], z: l[1], rot: w.a + b.heading, face: b.heading - w.face };
+  }
+  if (!t) return b.place[c];
   const p0 = t.from[c], p1 = t.to[c], u0 = (simTime - t.start - t.delay[c]) / t.dur;
   const u = Math.min(1, Math.max(0, u0)), e = u * u * (3 - 2 * u);
   let d = p1.rot - p0.rot; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -184,38 +228,50 @@ function companyPlace(b, c) {
   let df = p1.face - p0.face; df = Math.atan2(Math.sin(df), Math.cos(df));
   return { x: piv[0] - o[0], z: piv[1] - o[1], rot, face: p0.face + df * e };
 }
-// a soldier's slot in world space; ahead = seconds of extrapolation along the battalion's velocity
+// the battalion's anchor this frame: interpolated between ticks, extrapolated `ahead` seconds (position and turn)
+function anchorAt(b, alpha, ahead) {
+  let dh = b.heading - b.ph; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+  return [b.px + (b.x - b.px) * alpha + b.vx * ahead, b.pz + (b.z - b.pz) * alpha + b.vz * ahead, b.ph + dh * alpha + b.omega * ahead];
+}
+// a soldier's slot in world space (the reference the per-frame company frames must reproduce)
 function slotWorld(b, s, ahead, alpha = 1) {
-  const pl = companyPlace(b, s.c), l = blockLocal(s.f, s.r), q = rot2(l[0], l[1], pl.rot);
-  const hx = b.px + (b.x - b.px) * alpha, hz = b.pz + (b.z - b.pz) * alpha;
-  let dh = b.heading - b.ph; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); const h = b.ph + dh * alpha;
-  // battalion frame: x right, z forward; heading is the forward direction measured from +z toward +x
-  const w = rot2(pl.x + q[0], pl.z + q[1], -h);
-  // face is a block rotation (counter-clockwise); headings turn clockwise, hence the minus
-  return [hx + w[0] + b.vx * ahead, hz + w[1] + b.vz * ahead, h - pl.face];
+  const [hx, hz, h] = anchorAt(b, alpha, ahead), w = placeWorld(b, s.c, hx, hz, h, ahead), l = blockLocal(s.f, s.r);
+  return [w.x + l[0] * Math.cos(w.a) - l[1] * Math.sin(w.a), w.z + l[0] * Math.sin(w.a) + l[1] * Math.cos(w.a), w.face];
 }
 
 function startChange(b, shape) {
   if (shape === b.shape && !b.trans) return false;
+  if (b.trans && shape === b.trans.shape) return false;   // already changing to it
   const from = [0, 1, 2, 3].map(c => companyPlace(b, c)), to = SHAPES[shape]();
-  const T = (CHANGE_TIME[b.shape + '>' + shape] || 30) * drill;
+  let T = (CHANGE_TIME[b.shape + '>' + shape] || 30) * drill;
+  let interruptedFrom = null;
+  if (b.trans) {   // interrupted mid-change: reversing undoes only what was done; anything else starts over
+    const done = Math.min(1, (simTime - b.trans.start) / b.trans.T), last = b.log[b.log.length - 1];
+    last.took = null; last.interrupted = +(simTime - b.trans.start).toFixed(1);
+    if (shape === b.trans.from_shape) T = Math.max(3, done * (CHANGE_TIME[b.trans.shape + '>' + shape] || 30) * drill);
+    interruptedFrom = b.trans.shape; b.shape = b.trans.from_shape; b.trans = null;
+  }
+  b.vx = b.vz = 0; b.omega = 0;
   // companies start in sequence; the last one finishes at T
   const dur = T * 0.55, delay = [0, 1, 2, 3].map(c => c * T * 0.15);
   b.trans = { from, to, start: simTime, dur, delay, shape, T, from_shape: b.shape };
-  b.log.push({ change: b.shape + '>' + shape, start: simTime, planned: T });
+  b.log.push({ change: (interruptedFrom ? interruptedFrom + ' (part)' : b.shape) + '>' + shape, start: simTime, planned: T });
   return true;
 }
 
 function formationTick(b) {
-  b.px = b.x; b.pz = b.z; b.ph = b.heading;
-  if (b.trans) {   // no marching while the companies change places
+  b.px = b.x; b.pz = b.z; b.ph = b.heading; b.omega = 0;
+  if (b.trans) {   // no marching while the companies change places; a new shape order interrupts the change
     b.vx = b.vz = 0;
+    if (b.orders[0] && b.orders[0].type === 'form') { startChange(b, b.orders.shift().shape); return; }
     if (simTime >= b.trans.start + b.trans.delay[3] + b.trans.dur) {
       b.place = b.trans.to; b.shape = b.trans.shape; b.log[b.log.length - 1].took = simTime - b.trans.start; b.trans = null;
+      if (b.shape === 'march') resetTrail(b);   // the column stands straight behind its head
     }
     return;
   }
   const o = b.orders[0]; if (!o) { b.vx = b.vz = 0; return; }
+  const h0 = b.heading;
   if (o.type === 'form') { b.orders.shift(); startChange(b, o.shape); return; }
   const v = (b.shape === 'march' ? 1.25 : 1.0) * groundSpeed(b.x, b.z);   // ordinary pace ≈ 61 m/min; march column faster
   const halfW = b.shape === 'line' ? (BW * 2 + FS * 1.5) : b.shape === 'march' ? 1.5 : BW;
@@ -227,15 +283,16 @@ function formationTick(b) {
     b.heading += Math.max(-wmax, Math.min(wmax, dh));
     const go = Math.abs(dh) < 1.0 ? Math.min(v, dist / TICK) : 0;   // turn before advancing
     b.vx = Math.sin(b.heading) * go; b.vz = Math.cos(b.heading) * go;
-    b.x += b.vx * TICK; b.z += b.vz * TICK;
+    b.x += b.vx * TICK; b.z += b.vz * TICK; pushTrail(b);
   } else if (o.type === 'wheel') {   // rotate the whole battalion around the flank it turns to
     if (o.left === undefined) { o.left = o.angle > 0; const piv = rot2(o.left ? -halfW : halfW, 0, -b.heading); o.px = b.x + piv[0]; o.pz = b.z + piv[1]; o.done = 0; }
     const w = Math.min(Math.abs(o.angle) - o.done, 1.0 * v / (2 * halfW) * TICK);   // outer flank at marching pace
     const sgn = o.angle > 0 ? -1 : 1, dx = b.x - o.px, dz = b.z - o.pz, r = rot2(dx, dz, -sgn * w);
     const nx = o.px + r[0], nz = o.pz + r[1]; b.vx = (nx - b.x) / TICK; b.vz = (nz - b.z) / TICK; b.x = nx; b.z = nz;
-    b.heading += sgn * w; o.done += w;
+    b.heading += sgn * w; o.done += w; pushTrail(b);
     if (o.done >= Math.abs(o.angle) - 1e-6) { b.orders.shift(); b.vx = b.vz = 0; }
   }
+  let dh = b.heading - h0; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); b.omega = dh / TICK;
 }
 
 // casualties: the man behind steps up into the gap; nobody else changes slot
@@ -248,7 +305,17 @@ function kill(b, n) {
     for (let r = s.r; r < RANKS - 1; r++) { const j = g[r + 1][s.f]; g[r][s.f] = j; if (j >= 0) { b.soldiers[j].r = r; moved++; } }
     g[RANKS - 1][s.f] = -1;
   }
-  b.moved += moved; return moved;
+  // close toward the centre: empty files are taken by the files outside them (companies 0-1 sit left
+  // of the colours, 2-3 right), so the line shrinks instead of keeping holes
+  let closed = 0;
+  for (let c = 0; c < COMPANIES; c++) {
+    const g = b.grid[c], files = [];
+    for (let f = 0; f < FILES; f++) if (g.some(rank => rank[f] >= 0)) files.push(g.map(rank => rank[f]));
+    const start = c < 2 ? FILES - files.length : 0;   // pack against the inner edge
+    for (let r = 0; r < RANKS; r++) g[r].fill(-1);
+    files.forEach((col, k) => { const f = start + k; col.forEach((j, r) => { g[r][f] = j; if (j >= 0 && b.soldiers[j].f !== f) { b.soldiers[j].f = f; closed++; } }); });
+  }
+  b.moved += moved; b.closed = (b.closed || 0) + closed; return moved;
 }
 
 /* =========================================================================
@@ -256,24 +323,19 @@ function kill(b, n) {
    ========================================================================= */
 // each company's frame in world space, computed once per battalion per frame (not per soldier)
 function companyFrames(b, ahead, alpha) {
-  const hx = b.px + (b.x - b.px) * alpha + b.vx * ahead, hz = b.pz + (b.z - b.pz) * alpha + b.vz * ahead;
-  let dh = b.heading - b.ph; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); const h = b.ph + dh * alpha;
-  const out = b.frames || (b.frames = [{}, {}, {}, {}]);
-  for (let c = 0; c < COMPANIES; c++) {
-    const pl = companyPlace(b, c), o = rot2(pl.x, pl.z, -h), a = pl.rot - h, f = out[c];
-    f.x = hx + o[0]; f.z = hz + o[1]; f.cos = Math.cos(a); f.sin = Math.sin(a); f.face = h - pl.face;
-  }
+  const [hx, hz, h] = anchorAt(b, alpha, ahead), out = b.frames || (b.frames = [{}, {}, {}, {}]);
+  for (let c = 0; c < COMPANIES; c++) { const w = placeWorld(b, c, hx, hz, h, ahead), f = out[c]; f.x = w.x; f.z = w.z; f.cos = Math.cos(w.a); f.sin = Math.sin(w.a); f.face = w.face; }
   return out;
 }
-const SC = 0.5, SN = FIELD / SC, cellHead = new Int32Array(SN * SN), cellNext = new Int32Array(41 * COMPANIES * PER);
-let flat = [];
+const SC = 0.6, SN = Math.ceil(FIELD / SC), cellHead = new Int32Array(SN * SN).fill(-1), cellNext = new Int32Array(41 * COMPANIES * PER);   // SC ≥ SEP: the 3×3 search sees every neighbour
+let flat = [], touched = [];
 const AHEAD = 0.6, WALK = 1.35, RUN = 3.2, SEP = 0.52;
 function soldierStep(dt, alpha) {
-  // neighbour grid: 0.5 m cells, linked lists in typed arrays, rebuilt every frame
-  flat.length = 0; cellHead.fill(-1);
+  // neighbour grid: 0.6 m cells, linked lists in typed arrays, rebuilt every frame
+  for (const c of touched) cellHead[c] = -1; flat.length = 0; touched.length = 0;   // clear only the cells used last frame
   for (const b of battalions) for (const s of b.soldiers) if (s.alive) {
     const i = Math.floor((s.x + HALF) / SC), j = Math.floor((s.z + HALF) / SC); s.cell = i >= 0 && j >= 0 && i < SN && j < SN ? i * SN + j : -1;
-    const k = flat.length; flat.push(s); if (s.cell >= 0) { cellNext[k] = cellHead[s.cell]; cellHead[s.cell] = k; }
+    const k = flat.length; flat.push(s); if (s.cell >= 0) { if (cellHead[s.cell] < 0) touched.push(s.cell); cellNext[k] = cellHead[s.cell]; cellHead[s.cell] = k; }
   }
   const t = simTime * 0.35;
   for (const b of battalions) {
@@ -296,7 +358,7 @@ function soldierStep(dt, alpha) {
           if (d2 < SEP * SEP && d2 > 1e-8) { const d = Math.sqrt(d2), push = (SEP - d) / SEP * 1.8; wx += ex / d * push; wz += ez / d * push; } }
       }
       // trees: steer around trunks ahead, never stand inside one
-      const tc = wood ? treeCell(s.x, s.z) : -1;
+      const tc = treeCell(s.x, s.z);   // every soldier: edge trunks stand outside the wood circle
       if (tc >= 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[tc + i * TREE_N + j]; if (!cell) continue;
         for (const tr of cell) { const ex = s.x - tr.x, ez = s.z - tr.z, d = Math.sqrt(ex * ex + ez * ez), R = tr.r + 0.35;
           if (d < R + 1.2 && d > 1e-6) { const push = (R + 1.2 - d) / 1.2 * 1.6; wx += ex / d * push; wz += ez / d * push; } } }
@@ -408,7 +470,7 @@ function setMany(on) {
 }
 
 /* ---------- loop: formation at 20 Hz, soldiers every frame ---------- */
-let acc = 0, speed = 1, lastSoldierMs = 0;
+let acc = 0, speed = 1, lastSoldierMs = 0, frameSoldierMs = 0;
 const soldierMs = [];
 function advance(dt) {
   const step = Math.min(dt * speed, 0.25); acc += step;
@@ -417,8 +479,10 @@ function advance(dt) {
   soldierMs.push(lastSoldierMs); if (soldierMs.length > 60) soldierMs.shift();
 }
 function frame() {
-  advance(engine.getDeltaTime() / 1000);
-  writeFigures(); writeDebug(acc / TICK);
+  const t0 = performance.now();
+  advance(engine.getDeltaTime() / 1000); writeFigures();
+  frameSoldierMs = performance.now() - t0;   // steering + figure matrices (+ the few formation ticks)
+  writeDebug(acc / TICK);
   if (follow) { const b = main; camera.target.x += (b.x - camera.target.x) * 0.05; camera.target.z += (b.z - camera.target.z) * 0.05; camera.target.y = H(b.x, b.z); }
   updateStats();
 }
@@ -428,15 +492,15 @@ let follow = true;
 const statsEl = document.getElementById('stats');
 function stats() {
   const b = main, alive = b.soldiers.filter(s => s.alive).length, avg = soldierMs.reduce((a, x) => a + x, 0) / Math.max(1, soldierMs.length);
-  return { shape: b.trans ? b.trans.from_shape + ' → ' + b.trans.shape : b.shape, alive, moved: b.moved, simTime: +simTime.toFixed(1),
-    changes: b.log.map(l => ({ change: l.change, planned: +l.planned.toFixed(1), took: l.took !== undefined ? +l.took.toFixed(1) : null })),
-    soldiers: battalions.reduce((a, x) => a + x.soldiers.length, 0), soldierMs: +avg.toFixed(2), fps: +engine.getFps().toFixed(0) };
+  return { shape: b.trans ? b.trans.from_shape + ' → ' + b.trans.shape : b.shape, alive, moved: b.moved, closed: b.closed || 0, simTime: +simTime.toFixed(1),
+    changes: b.log.map(l => ({ change: l.change, planned: +l.planned.toFixed(1), took: l.took != null ? +l.took.toFixed(1) : null, interrupted: l.interrupted })),
+    soldiers: battalions.reduce((a, x) => a + x.soldiers.length, 0), steerMs: +avg.toFixed(2), frameSoldierMs: +frameSoldierMs.toFixed(2), fps: +engine.getFps().toFixed(0) };
 }
 function updateStats() {
   const s = stats(), last = s.changes[s.changes.length - 1];
-  statsEl.textContent = `shape    ${s.shape}\nalive    ${s.alive} / 100   stepped up ${s.moved}\n` +
+  statsEl.textContent = `shape    ${s.shape}\nalive    ${s.alive} / 100   stepped up ${s.moved}  closed ${s.closed}\n` +
     (last ? `change   ${last.change}  ${last.took ?? '…'} / ${last.planned} s\n` : '') +
-    `soldiers ${s.soldiers}   soldier layer ${s.soldierMs} ms\nfps      ${s.fps}   time ${s.simTime} s`;
+    `soldiers ${s.soldiers}   soldier layer ${s.frameSoldierMs} ms\nfps      ${s.fps}   time ${s.simTime} s`;
 }
 document.querySelectorAll('[data-form]').forEach(el => el.onclick = () => order(el.dataset.form));
 document.querySelectorAll('[data-cmd]').forEach(el => el.onclick = () => {
@@ -463,15 +527,18 @@ engine.runRenderLoop(() => { frame(); scene.render(); });
 window.addEventListener('resize', () => engine.resize());
 
 // headless hooks (tools/shot.mjs): issue orders and advance battle time without real time passing
-// consistency check: the per-frame company frames must give the same slots as slotWorld
-function slotCheck() {
-  let worst = 0;
-  for (const b of battalions) { const fr = companyFrames(b, 0, 1);
-    for (const s of b.soldiers) { const f = fr[s.c], lx = (s.f - (FILES - 1) / 2) * FS, lz = -s.r * RS, p = slotWorld(b, s, 0, 1);
-      worst = Math.max(worst, Math.hypot(f.x + lx * f.cos - lz * f.sin - p[0], f.z + lx * f.sin + lz * f.cos - p[1]), Math.abs(Math.atan2(Math.sin(f.face - p[2]), Math.cos(f.face - p[2])))); } }
-  return worst;
+// how far soldiers are from their slots (a measurement, not a pass/fail check): max and mean, metres
+function slotError() {
+  let max = 0, sum = 0, n = 0;
+  for (const b of battalions) for (const s of b.soldiers) if (s.alive) { const p = slotWorld(b, s, 0, 1), d = Math.hypot(s.x - p[0], s.z - p[1]); max = Math.max(max, d); sum += d; n++; }
+  return { max: +max.toFixed(2), mean: +(sum / Math.max(1, n)).toFixed(2) };
 }
-window.F = { slotCheck,
+// per-soldier CPU per frame: steering plus writing the figure matrices, over `frames` frames of 1/60 s
+function measure(frames = 60) {
+  let t = 0; for (let k = 0; k < frames; k++) { const t0 = performance.now(); advance(1 / 60); writeFigures(); t += performance.now() - t0; }
+  return +(t / frames).toFixed(2);
+}
+window.F = { slotError, measure,
   order, kill: n => kill(main, n), setDrill: d => { drill = d; }, setMany, stats, battalions, get main() { return main; },
   debug: on => { dbg.on = on; }, crowns: on => crown.setEnabled(on), follow: on => { follow = on; },
   advance: sec => { const s = speed; speed = 1; for (let t = 0; t < sec; t += 1 / 30) advance(1 / 30); speed = s; writeFigures(); writeDebug(1); return stats(); },
