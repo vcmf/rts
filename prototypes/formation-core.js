@@ -52,10 +52,17 @@ function roadDist(x, z) {
     const t = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez))); m = Math.min(m, Math.hypot(x - ax - ex * t, z - az - ez * t)); }
   return m;
 }
-// ground speed factor: water and woods slow, slopes slow (steeper = slower), roads help a little
-function groundSpeed(x, z) {
-  const gx = (H(x + 1, z) - H(x - 1, z)) / 2, gz = (H(x, z + 1) - H(x, z - 1)) / 2, slope = Math.sqrt(gx * gx + gz * gz);
-  return (inWater(x, z) ? 0.45 : 1) * (inWood(x, z) ? 0.75 : 1) / (1 + 2.5 * slope) * (roadDist(x, z) < 3 ? 1.1 : 1);
+// ground speed, baked once on the height grid (the terrain is static): water and woods slow, roads
+// help a little; the slope is charged along the direction of travel (climbing slows, a gentle descent
+// does not, a steep one does), so a line walking along a contour is not slowed
+const GROUND = new Float32Array(HN * HN), GX = new Float32Array(HN * HN), GZ = new Float32Array(HN * HN);
+for (let j = 0; j < HN; j++) for (let i = 0; i < HN; i++) { const x = i * HG - HALF, z = j * HG - HALF, k = j * HN + i;
+  GROUND[k] = (inWater(x, z) ? 0.45 : 1) * (inWood(x, z) ? 0.75 : 1) * (roadDist(x, z) < 3 ? 1.1 : 1);
+  GX[k] = (H(x + HG, z) - H(x - HG, z)) / (2 * HG); GZ[k] = (H(x, z + HG) - H(x, z - HG)) / (2 * HG); }
+function groundSpeed(x, z, dx, dz) {   // (dx, dz): unit direction of travel, or 0, 0
+  const i = Math.min(HN - 1, Math.max(0, Math.round((x + HALF) / HG))), j = Math.min(HN - 1, Math.max(0, Math.round((z + HALF) / HG))), k = j * HN + i;
+  const up = GX[k] * dx + GZ[k] * dz;
+  return GROUND[k] / (1 + 3 * Math.max(0, up) + 1.2 * Math.max(0, -up - 0.2));
 }
 // obstacles soldiers walk around: tree trunks in the wood, rocks on the hills and by the stream
 const TREES = [], ROCKS = [];
@@ -116,7 +123,7 @@ function makeBattalion(x, z, heading, colour, seed) {
   for (let c = 0; c < COMPANIES; c++) {
     const g = []; for (let r = 0; r < RANKS; r++) g.push(new Array(FILES).fill(-1)); b.grid.push(g);
     for (let k = 0; k < PER; k++) { const r = Math.floor(k / FILES), f = k % FILES; g[r][f] = b.soldiers.length;
-      b.soldiers.push({ c, f, r, x: 0, z: 0, vx: 0, vz: 0, yaw: heading, alive: true, phase: b.rand() * 6.28, dx: b.rand() * 6.28, dz: b.rand() * 6.28, gait: 0 }); }
+      b.soldiers.push({ c, f, r, x: 0, z: 0, vx: 0, vz: 0, alive: true, dx: b.rand() * 6.28, dz: b.rand() * 6.28 }); }
   }
   b.soldiers.forEach(s => { const p = slotWorld(b, s, 0); s.x = p[0]; s.z = p[1]; });
   battalions.push(b); return b;
@@ -214,6 +221,7 @@ function startChange(b, shape) {
     fromLabel = b.trans.shape + ' (part)'; b.trans = null;
   }
   b.vx = b.vz = 0; b.omega = 0;
+  if (shape !== 'line') rebalance(b);   // the men walk to their new places during the change
   // companies start in sequence; the last one finishes at T
   const dur = T * 0.55, delay = [0, 1, 2, 3].map(c => c * T * 0.15);
   b.trans = { from, to, start: simTime, dur, delay, shape, T, fromLabel };
@@ -236,7 +244,7 @@ function formationTick(b) {
   const o = b.orders[0]; if (!o) { b.vx = b.vz = 0; return; }
   const h0 = b.heading;
   if (o.type === 'form') { b.orders.shift(); startChange(b, o.shape); return; }
-  const v = (b.shape === 'march' ? 1.25 : 1.0) * groundSpeed(b.x, b.z);   // ordinary pace ≈ 61 m/min; march column faster
+  const v = (b.shape === 'march' ? 1.25 : 1.0) * groundSpeed(b.x, b.z, Math.sin(b.heading), Math.cos(b.heading));   // ordinary pace ≈ 61 m/min; march column faster
   const halfW = b.shape === 'line' ? (BW * 2 + FS * 1.5) : b.shape === 'march' ? 1.5 : BW;
   if (o.type === 'move') {
     const dx = o.x - b.x, dz = o.z - b.z, dist = Math.hypot(dx, dz);
@@ -264,12 +272,30 @@ function kill(b, n) {
   const alive = b.soldiers.map((s, i) => i).filter(i => b.soldiers[i].alive);
   for (let k = 0; k < n && alive.length; k++) {
     const i = alive.splice(Math.floor(b.rand() * alive.length), 1)[0], s = b.soldiers[i];
-    s.alive = false; s.deadAt = simTime; const g = b.grid[s.c];
+    s.alive = false; const g = b.grid[s.c];
     for (let r = s.r; r < RANKS - 1; r++) { const j = g[r + 1][s.f]; g[r][s.f] = j; if (j >= 0) { b.soldiers[j].r = r; moved++; } }
     g[RANKS - 1][s.f] = -1;
   }
   closeRanks(b);
   b.moved += moved; return moved;
+}
+/* even out the companies when the battalion leaves line: closing toward the colours moves men between
+   companies, so the outer ones drain; a square or a column needs four equal companies. Men keep their
+   order along the line; each company fills its files front to back, centred. */
+function rebalance(b) {
+  const alive = []; for (let i = 0; i < b.soldiers.length; i++) if (b.soldiers[i].alive) alive.push(i);
+  const size = [0, 0, 0, 0]; for (const i of alive) size[b.soldiers[i].c]++;
+  if (Math.max(...size) - Math.min(...size) <= 1) return 0;
+  const key = i => { const s = b.soldiers[i]; return (s.c * FILES + s.f) * RANKS + s.r; };
+  alive.sort((p, q) => key(p) - key(q));
+  for (let c = 0; c < COMPANIES; c++) for (let r = 0; r < RANKS; r++) b.grid[c][r].fill(-1);
+  let k = 0, moved = 0;
+  for (let c = 0; c < COMPANIES; c++) {
+    const m = Math.floor(alive.length / COMPANIES) + (c < alive.length % COMPANIES ? 1 : 0), files = Math.ceil(m / RANKS), start = Math.floor((FILES - files) / 2);
+    for (let q = 0; q < m; q++, k++) { const s = b.soldiers[alive[k]], f = start + Math.floor(q / RANKS), r = q % RANKS;
+      if (s.c !== c || s.f !== f || s.r !== r) moved++; s.c = c; s.f = f; s.r = r; b.grid[c][r][f] = alive[k]; }
+  }
+  b.closed = (b.closed || 0) + moved; return moved;
 }
 /* close the ranks after losses: empty files are taken by the files beyond them.
    In line the battalion closes toward the colours (between companies 1 and 2) across company
@@ -278,8 +304,8 @@ function kill(b, n) {
 function closeRanks(b) {
   let closed = 0;
   const fileOf = (c, f) => b.grid[c].map(rank => rank[f]);
-  const place = (cols, slots) => {   // put the non-empty files `cols` into `slots` = [[c, f], ...] in order
-    for (const c of new Set(slots.map(([c]) => c))) for (let r = 0; r < RANKS; r++) b.grid[c][r].fill(-1);   // whole companies: old places too
+  const place = (cols, slots, companies) => {   // put the non-empty files `cols` into `slots` = [[c, f], ...] in order
+    for (const c of companies) for (let r = 0; r < RANKS; r++) b.grid[c][r].fill(-1);   // every company the files come from or go to
     cols.forEach((col, k) => { const [c, f] = slots[k]; col.forEach((j, r) => { b.grid[c][r][f] = j;
       if (j >= 0) { const s = b.soldiers[j]; if (s.c !== c || s.f !== f) { s.c = c; s.f = f; closed++; } } }); });
   };
@@ -288,13 +314,13 @@ function closeRanks(b) {
       const all = []; for (const c of half) for (let f = 0; f < FILES; f++) all.push([c, f]);
       const cols = all.map(([c, f]) => fileOf(c, f)).filter(col => col.some(j => j >= 0));
       const slots = half[0] === 0 ? all.slice(all.length - cols.length) : all.slice(0, cols.length);   // against the colours
-      place(cols, slots);
+      place(cols, slots, half);
     }
   } else if (!b.trans) {
     for (let c = 0; c < COMPANIES; c++) {
       const cols = []; for (let f = 0; f < FILES; f++) { const col = fileOf(c, f); if (col.some(j => j >= 0)) cols.push(col); }
       const start = Math.floor((FILES - cols.length) / 2), slots = []; for (let k = 0; k < cols.length; k++) slots.push([c, start + k]);
-      place(cols, slots);
+      place(cols, slots, [c]);
     }
   }
   b.closed = (b.closed || 0) + closed; return closed;
@@ -323,14 +349,22 @@ function soldierStep(dt, alpha) {
   const t = simTime * 0.35;
   for (const b of battalions) {
     const fr = companyFrames(b, AHEAD, alpha);
+    // sway only while the battalion is busy; it eases out when it halts, so the ranks come to rest
+    const busy = !!(b.trans || b.orders.length);
+    b.sway = (b.sway || 0) + ((busy ? 1 : 0) - (b.sway || 0)) * Math.min(1, dt * 0.8);
     for (const s of b.soldiers) {
       if (!s.alive) continue;
       const f = fr[s.c], lx = (s.f - (FILES - 1) / 2) * FS, lz = -s.r * RS;
       const sx = f.x + lx * f.cos - lz * f.sin, sz = f.z + lx * f.sin + lz * f.cos;   // origin + rot2(lx, lz, rot - h): same as slotWorld
-      const wood = inWood(s.x, s.z), amp = wood ? 0.45 : 0.12;   // personal drift: the ranks loosen in woods
-      const tx = sx + amp * Math.sin(t + s.dx), tz = sz + amp * Math.sin(t * 0.8 + s.dz);
-      const dx = tx - s.x, dz = tz - s.z, dist = Math.sqrt(dx * dx + dz * dz), gs = groundSpeed(s.x, s.z);
-      const top = (dist > 2.5 ? RUN : WALK) * gs, want = dist < 0.03 ? 0 : Math.min(top, dist / 0.7);
+      const amp = (inWood(s.x, s.z) ? 0.3 : 0.1) * b.sway;   // personal drift: the ranks loosen in woods
+      let tx = sx + amp * Math.sin(t + s.dx), tz = sz + amp * Math.sin(t * 0.8 + s.dz);
+      // a slot inside a trunk or rock moves to its edge: a stable place to stand, not a tug of war
+      const tc = treeCell(tx, tz);
+      if (tc >= 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[tc + i * TREE_N + j]; if (!cell) continue;
+        for (const o of cell) { const ex = tx - o.x, ez = tz - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.4; if (d < R) { const u = d > 1e-6 ? 1 / d : 0; tx = o.x + (u ? ex * u : 1) * R; tz = o.z + (u ? ez * u : 0) * R; } } }
+      const dx = tx - s.x, dz = tz - s.z, dist = Math.sqrt(dx * dx + dz * dz);
+      const gs = dist > 1e-6 ? groundSpeed(s.x, s.z, dx / dist, dz / dist) : groundSpeed(s.x, s.z, 0, 0);
+      const top = (dist > 2.5 ? RUN : WALK) * gs, want = dist < 0.08 ? 0 : Math.min(top, dist / 0.7);
       let wx = dist > 1e-6 ? dx / dist * want : 0, wz = dist > 1e-6 ? dz / dist * want : 0;
       // separation from neighbours (same and other battalions)
       const ci = Math.floor((s.x + HALF) / SC), cj = Math.floor((s.z + HALF) / SC);
@@ -340,20 +374,17 @@ function soldierStep(dt, alpha) {
           const ex = s.x - o.x, ez = s.z - o.z, d2 = ex * ex + ez * ez;
           if (d2 < SEP * SEP && d2 > 1e-8) { const d = Math.sqrt(d2), push = (SEP - d) / SEP * 1.8; wx += ex / d * push; wz += ez / d * push; } }
       }
-      // obstacles (trunks, rocks): steer around them, never stand inside one
-      const tc = treeCell(s.x, s.z);   // every soldier: edge trunks and rocks stand anywhere
-      if (tc >= 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[tc + i * TREE_N + j]; if (!cell) continue;
-        for (const tr of cell) { const ex = s.x - tr.x, ez = s.z - tr.z, d = Math.sqrt(ex * ex + ez * ez), R = tr.r + 0.35;
-          if (d < R + 1.2 && d > 1e-6) { const push = (R + 1.2 - d) / 1.2 * 1.6; wx += ex / d * push; wz += ez / d * push; } } }
+      // obstacles (trunks, rocks): while walking, steer round the ones just ahead; never stand inside one
+      const spd0 = Math.sqrt(s.vx * s.vx + s.vz * s.vz), walking = Math.min(1, spd0 / 0.5), oc = treeCell(s.x, s.z);
+      if (oc >= 0 && walking > 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[oc + i * TREE_N + j]; if (!cell) continue;
+        for (const o of cell) { const ex = s.x - o.x, ez = s.z - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.35;
+          if (d < R + 0.8 && d > 1e-6) { const push = (R + 0.8 - d) / 0.8 * 1.4 * walking; wx += ex / d * push; wz += ez / d * push; } } }
       const k = Math.min(1, dt * 5); s.vx += (wx - s.vx) * k; s.vz += (wz - s.vz) * k;
+      if (dist < 0.08) { const damp = Math.max(0, 1 - dt * 8); s.vx *= damp; s.vz *= damp; }   // arrived: come to rest
       const sp2 = s.vx * s.vx + s.vz * s.vz, cap = RUN * gs; if (sp2 > cap * cap) { const r = cap / Math.sqrt(sp2); s.vx *= r; s.vz *= r; }
       s.x += s.vx * dt; s.z += s.vz * dt;
-      if (tc >= 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[tc + i * TREE_N + j]; if (!cell) continue;
-        for (const tr of cell) { const ex = s.x - tr.x, ez = s.z - tr.z, d = Math.sqrt(ex * ex + ez * ez), R = tr.r + 0.3; if (d < R && d > 1e-6) { s.x = tr.x + ex / d * R; s.z = tr.z + ez / d * R; } } }
-      // face the slot direction once close, else the way he walks
-      const spd = Math.sqrt(s.vx * s.vx + s.vz * s.vz), face = dist < 1.0 || spd < 0.2 ? f.face : Math.atan2(s.vx, s.vz);
-      let dy = face - s.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); s.yaw += dy * Math.min(1, dt * 6);
-      s.gait += spd * dt * 5.5;
+      if (oc >= 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[oc + i * TREE_N + j]; if (!cell) continue;
+        for (const o of cell) { const ex = s.x - o.x, ez = s.z - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.3; if (d < R && d > 1e-6) { s.x = o.x + ex / d * R; s.z = o.z + ez / d * R; } } }
     }
   }
 }
@@ -361,7 +392,7 @@ function soldierStep(dt, alpha) {
 /* ---------- commands ---------- */
 let main;
 function reset() {
-  battalions.length = 0; simTime = 0;
+  battalions.length = 0; simTime = 0; acc = 0; manyOn = false;
   main = makeBattalion(-20, -40, 0, 0, 7);
 }
 function order(name, a) {
@@ -389,7 +420,7 @@ function setMany(on) {
 }
 
 /* ---------- loop: formation at 20 Hz, soldiers every frame ---------- */
-let acc = 0, speed = 1, follow = true;
+let acc = 0, speed = 1;
 const steerMs = [];
 function advance(dt) {
   const step = Math.min(dt * speed, 0.25); acc += step;
@@ -406,7 +437,7 @@ function stats() {
 // how far soldiers are from their slots (a measurement, not a pass/fail check): max and mean, metres
 function slotError() {
   let max = 0, sum = 0, n = 0;
-  for (const b of battalions) { const fr = companyFrames(b, 0, 1);
+  for (const b of battalions) { const fr = companyFrames(b, 0, acc / TICK);
     for (const s of b.soldiers) if (s.alive) { const p = frameSlot(fr[s.c], s.f, s.r), d = Math.hypot(s.x - p[0], s.z - p[1]); max = Math.max(max, d); sum += d; n++; } }
   return { max: +max.toFixed(2), mean: +(sum / Math.max(1, n)).toFixed(2) };
 }
@@ -417,8 +448,8 @@ function measure(frames = 60) {
 }
 reset();
 window.FC = {
-  FIELD, HALF, H, heights, HN, HG, STREAM_X, FORD, WOOD, WATER_HALF, HILLS, ROAD, TREES, ROCKS, waterLevel, inWater, inWood,
-  FILES, RANKS, COMPANIES, battalions, get main() { return main; }, get simTime() { return simTime; }, get alpha() { return acc / TICK; },
+  FIELD, HALF, H, heights, HN, HG, STREAM_X, FORD, WOOD, WATER_HALF, HILLS, ROAD, TREES, ROCKS, inWater, inWood,
+  FILES, RANKS, COMPANIES, battalions, groundSpeed, get main() { return main; }, get simTime() { return simTime; }, get alpha() { return acc / TICK; },
   get speed() { return speed; }, set speed(v) { speed = v; }, get drill() { return drill; }, set drill(v) { drill = v; },
   order, reset, setMany, kill: n => kill(main, n), advance, stats, slotError, measure, companyFrames, frameSlot,
   get manyOn() { return manyOn; },
