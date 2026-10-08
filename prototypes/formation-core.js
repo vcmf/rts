@@ -115,6 +115,18 @@ function groundG(x, z, kind, dx, dz) {
   return t.g[kind] * waterG(WDEPTH[k]) * slopeG(GX[k] * dx + GZ[k] * dz);
 }
 bakeTerrain();
+// impassable cells (too deep to wade, or a class no formation can enter) and, per cell, the distance in
+// metres to the nearest one (two-pass chamfer): the footprint gate's quick reject
+const IMP = new Uint8Array(HN * HN), IMPD = new Float32Array(HN * HN);
+function bakeImpassable() {
+  for (let k = 0; k < HN * HN; k++) { const t = R.terrain[CLASSES[TERR[k]]]; IMP[k] = WDEPTH[k] > R.water.limit || Object.values(t.g).every(g => g <= 0) ? 1 : 0; IMPD[k] = IMP[k] ? 0 : 1e9; }
+  const D2 = Math.SQRT2 * HG, rel = (k, j, d) => { if (IMPD[j] + d < IMPD[k]) IMPD[k] = IMPD[j] + d; };
+  for (let j = 0; j < HN; j++) for (let i = 0; i < HN; i++) { const k = j * HN + i;
+    if (i > 0) rel(k, k - 1, HG); if (j > 0) { rel(k, k - HN, HG); if (i > 0) rel(k, k - HN - 1, D2); if (i < HN - 1) rel(k, k - HN + 1, D2); } }
+  for (let j = HN - 1; j >= 0; j--) for (let i = HN - 1; i >= 0; i--) { const k = j * HN + i;
+    if (i < HN - 1) rel(k, k + 1, HG); if (j < HN - 1) { rel(k, k + HN, HG); if (i < HN - 1) rel(k, k + HN + 1, D2); if (i > 0) rel(k, k + HN - 1, D2); } }
+}
+bakeImpassable();
 const groundQ = (x, z, pace) => R.q[pace][R.terrain[CLASSES[TERR[cellK(x, z)]]].q];
 const onRoad = (x, z) => !!R.terrain[CLASSES[TERR[cellK(x, z)]]].road;
 // cosmetic soldiers: the same table, for their battalion's formation kind; impassable stays impassable
@@ -148,8 +160,9 @@ const SHAPES = {
   // depth, so its end meets the next face's rear rank and the corners close
   square: () => { const s = (RANKS - 1) * RS / 2 + 0.3, D = BW / 2 + s;
     return [0, -Math.PI / 2, Math.PI, Math.PI / 2].map(rot => { const p = rot2(-s, D, rot); return { x: p[0], z: p[1], rot, face: rot }; }); },
-  // by files: each company turns its block so files run front to back; the men face the march
-  march: () => [0, 1, 2, 3].map(c => ({ x: 0, z: -c * (BW + 1.0), rot: -Math.PI / 2, face: 0 })),
+  // by files: each company turns its block so files run front to back; the men face the march; the
+  // ranks centred on the line of march (the trail)
+  march: () => [0, 1, 2, 3].map(c => ({ x: (RANKS - 1) * RS / 2, z: -c * (BW + 1.0), rot: -Math.PI / 2, face: 0 })),
 };
 // regulation-like times in seconds at drill factor 1 (docs/proposals/sim-design.md §5; research §2)
 const CHANGE_TIME = {
@@ -164,9 +177,9 @@ const battalions = [];
 
 function makeBattalion(x, z, heading, colour, seed) {
   const b = {
-    x, z, heading, px: x, pz: z, ph: heading, vx: 0, vz: 0, shape: 'line', place: SHAPES.line(),
+    x, z, heading, px: x, pz: z, ph: heading, vx: 0, vz: 0, shape: R.start.shape, place: SHAPES[R.start.shape](),
     trans: null, orders: [], colour, rand: rng(seed), soldiers: [], grid: [], moved: 0, log: [], omega: 0, trail: [],
-    style: 'normal', lags: new Float64Array(COMPANIES * 3), binG: new Float64Array(COMPANIES * 3).fill(1), binQ: new Float64Array(COMPANIES * 3).fill(1), binOf: [], binN: new Int32Array(COMPANIES * 3), disorder: 0, blockedFor: 0, status: '',
+    style: R.start.orders, lags: new Float64Array(COMPANIES * 3), binG: new Float64Array(COMPANIES * 3).fill(1), binQ: new Float64Array(COMPANIES * 3).fill(1), binN: new Int32Array(COMPANIES * 3), disorder: 0, blockedFor: 0, status: '',
   };
   resetTrail(b);
   // slot table: grid[company][rank][file] = soldier index or -1
@@ -186,13 +199,6 @@ function resetTrail(b) {   // a straight trail behind the head, along the curren
   b.trail.length = 0; const n = 8;
   for (let k = n; k >= 0; k--) b.trail.push({ x: b.x - Math.sin(b.heading) * k * 6, z: b.z - Math.cos(b.heading) * k * 6 });
   b.trailLen = n * 6;
-}
-// the head stepped back along its heading: drop the trail ahead of it, so the column does not fold
-function trimTrail(b) {
-  const dx = Math.sin(b.heading), dz = Math.cos(b.heading), t = b.trail;
-  while (t.length > 1 && (t[t.length - 1].x - b.x) * dx + (t[t.length - 1].z - b.z) * dz > -1e-6) t.pop();
-  t.push({ x: b.x, z: b.z }); b.trailLen = 0;
-  for (let k = 1; k < t.length; k++) b.trailLen += Math.hypot(t[k].x - t[k - 1].x, t[k].z - t[k - 1].z);
 }
 function pushTrail(b) {
   const last = b.trail[b.trail.length - 1], d = Math.hypot(b.x - last.x, b.z - last.z);
@@ -214,9 +220,9 @@ function trailAt(b, hx, hz, h, back) {
   return [a.x - (c.x - a.x) / d * left, a.z - (c.z - a.z) / d * left];
 }
 // a company's pose in world space: origin, block rotation a (counter-clockwise) and facing (a heading)
-function placeWorld(b, c, hx, hz, h, ahead) {
+function placeWorld(b, c, hx, hz, h, ahead, extra = 0) {
   if (snakes(b)) {
-    const back = c * MARCH_GAP;   // the head (hx, hz) is already extrapolated
+    const back = c * MARCH_GAP + extra;   // the head (hx, hz) is already extrapolated; extra: a lag along the trail
     const p = trailAt(b, hx, hz, h, back), p1 = trailAt(b, hx, hz, h, back + 2), p0 = trailAt(b, hx, hz, h, back - 2);
     const ch = Math.atan2(p0[0] - p1[0], p0[1] - p1[1]);
     return { x: p[0], z: p[1], a: -Math.PI / 2 - ch, face: ch };
@@ -262,27 +268,38 @@ function layoutDistance(A, B) {
     m = Math.max(m, Math.hypot(A[c].x - B[c].x, A[c].z - B[c].z) + Math.abs(d) * BW / 2); }
   return m;
 }
+// does any pose of the change `trans` (CHANGE_SAMPLES along it, its end included) put a man on impassable ground?
+const CHANGE_SAMPLES = 128;
+function changeWet(b, trans) {
+  const keep = [simTime, b.trans]; let wet = false; b.trans = trans;
+  const span = trans.delay[3] + trans.dur;
+  for (let k = 0; k <= CHANGE_SAMPLES && !wet; k++) { simTime = trans.start + span * k / CHANGE_SAMPLES; wet = wetBins(b) !== 0; }
+  [simTime, b.trans] = keep; return wet;
+}
 function startChange(b, shape) {
   if (shape === b.shape && !b.trans) return false;
   if (b.trans && shape === b.trans.shape) return false;   // already changing to it
   const from = [0, 1, 2, 3].map(c => companyPlace(b, c)), to = SHAPES[shape]();
-  if (!b.trans && !wetMen(b) && wetIf(b, shape, to)) { b.orders = []; b.status = 'cannot form: impassable ground'; return false; }
   // b.shape stays the last completed shape; an interrupted change times the new one by the distance
   // the companies still have to cover, against a full change of the same kind (a reversal 30% in takes
   // about 30% of the time; reversing that again takes what is left)
   const base = shape === b.shape && b.trans ? b.trans.shape : b.shape;
   let T = (CHANGE_TIME[base + '>' + shape] || 30) * drill, fromLabel = b.shape;
   if (b.trans) {
-    const last = b.log[b.log.length - 1]; last.took = null; last.interrupted = +(simTime - b.trans.start).toFixed(1);
     const full = layoutDistance(SHAPES[base](), to);
     T = Math.max(3, T * Math.min(1, layoutDistance(from, to) / Math.max(1e-6, full)));
-    fromLabel = b.trans.shape + ' (part)'; b.trans = null;
+    fromLabel = b.trans.shape + ' (part)';
   }
-  b.vx = b.vz = 0; b.omega = 0; b.lags.fill(0);   // new places: the men walk there anyway
-  if (shape !== 'line') rebalance(b);   // the men walk to their new places during the change
   // companies start in sequence; the last one finishes at T
   const dur = T * 0.55, delay = [0, 1, 2, 3].map(c => c * T * 0.15);
-  b.trans = { from, to, start: simTime, dur, delay, shape, T, fromLabel };
+  const trans = { from, to, start: simTime, dur, delay, shape, T, fromLabel };
+  // the gate for a change: every pose along its path (the men at their slots: lags are dropped), checked
+  // before it starts or interrupts; refused if any would put a man on impassable ground
+  if (!wetBins(b) && changeWet(b, trans)) { b.orders = []; b.status = 'cannot form: impassable ground'; return false; }
+  if (b.trans) { const last = b.log[b.log.length - 1]; last.took = null; last.interrupted = +(simTime - b.trans.start).toFixed(1); }
+  b.vx = b.vz = 0; b.omega = 0; b.lags.fill(0);   // new places: the men walk there anyway
+  if (!R.formations[shape].closeAcross) rebalance(b);   // the men walk to their new places during the change
+  b.trans = trans;
   b.log.push({ change: fromLabel + '>' + shape, start: simTime, planned: T });
   return true;
 }
@@ -297,85 +314,132 @@ function startChange(b, shape) {
    ========================================================================= */
 // formations whose companies follow the head's trail (ruleset `trail`), while not changing shape
 function snakes(b) { return !b.trans && !!FORM(b).trail; }
-// the direction a company travels: along the battalion's heading, or along the trail
-const travelOf = (b, w, h = b.heading) => snakes(b) ? w.face : h;
 const FORM = b => R.formations[b.shape];
-// pace (m/s) and its name: a formation with a road pace uses it while every company is on a road
-function paceOf(b) {
-  const F = FORM(b); let road = !!F.roadPace;
-  for (let c = 0; c < COMPANIES && road; c++) { const w = placeWorld(b, c, b.x, b.z, b.heading, 0); road = onRoad(w.x, w.z); }
-  const name = road ? F.roadPace : F.pace; return [R.pace[name], name];
-}
-// how many live men stand on impassable ground at their slots (the battalion as placed now)
-function wetMen(b) {
-  const kind = FORM(b).kind; let n = 0;
-  for (let c = 0; c < COMPANIES; c++) { const w = placeWorld(b, c, b.x, b.z, b.heading, 0), ca = Math.cos(w.a), sa = Math.sin(w.a);
-    for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++) { if (b.grid[c][r][f] < 0) continue;
-      const lx = (f - (FILES - 1) / 2) * FS, lz = -r * RS; if (groundG(w.x + lx * ca - lz * sa, w.z + lx * sa + lz * ca, kind, 0, 0) <= 0) n++; } }
-  return n;
-}
-// would the battalion, formed as `shape` (placements `to`) where it stands, have men on impassable ground?
-function wetIf(b, shape, to) {
-  const keep = [b.shape, b.place, b.trail.slice(), b.trailLen];
-  b.shape = shape; b.place = to; if (FORM(b).trail) resetTrail(b);
-  const n = wetMen(b);
-  [b.shape, b.place] = keep; b.trail = keep[2]; b.trailLen = keep[3];
-  return n > 0;
-}
-const NB = COMPANIES * 3, gTmp = new Float64Array(NB), nTmp = new Int32Array(NB), qTmp = new Float64Array(NB), blkTmp = new Uint8Array(NB);
-const LOOK = 0.5;   // m: a man stops this far short of impassable ground (he sees the bank before he steps off it)
-// sample the ground for the 12 bins: each man's ground where he actually stands (his slot set back by
-// his bin's lag), along the direction of travel; bins are lateral thirds of each company across that
-// direction. A bin's g is the harmonic mean over its men; q is set by its worst ground class. A bin is
-// held (g = 0) when one of its men has impassable ground underfoot or LOOK ahead; a bin with no live
-// men is empty (binN = 0) and left out of the solve.
-function sampleBins(b, paceName) {
-  const kind = FORM(b).kind;
-  gTmp.fill(0); nTmp.fill(0); qTmp.fill(Infinity); blkTmp.fill(0);
-  for (let c = 0; c < COMPANIES; c++) {
-    const w = placeWorld(b, c, b.x, b.z, b.heading, 0), ca = Math.cos(w.a), sa = Math.sin(w.a), tr = travelOf(b, w);
-    const dx = Math.sin(tr), dz = Math.cos(tr), rx = dz, rz = -dx;   // travel direction and its right
-    let lo = Infinity, hi = -Infinity;
-    for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++) { const lx = (f - (FILES - 1) / 2) * FS, lz = -r * RS, l = (lx * ca - lz * sa) * rx + (lx * sa + lz * ca) * rz; lo = Math.min(lo, l); hi = Math.max(hi, l); }
-    const binOf = b.binOf[c] || (b.binOf[c] = [[], [], []]);
-    for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++) {
-      const lx = (f - (FILES - 1) / 2) * FS, lz = -r * RS, ox = lx * ca - lz * sa, oz = lx * sa + lz * ca;
-      const bin = Math.min(2, Math.floor(((ox * rx + oz * rz) - lo) / Math.max(1e-6, hi - lo) * 3)); binOf[r][f] = bin;
-      if (b.grid[c][r][f] < 0) continue;   // only where men stand
-      const j = c * 3 + bin, lag = b.lags[j], px = w.x + ox - dx * lag, pz = w.z + oz - dz * lag;
-      const g = groundG(px, pz, kind, dx, dz);
-      if (g <= 0 || groundG(px + dx * LOOK, pz + dz * LOOK, kind, dx, dz) <= 0) blkTmp[j] = 1; else { gTmp[j] += 1 / g; nTmp[j]++; }
-      qTmp[j] = Math.min(qTmp[j], groundQ(px, pz, paceName));
-    }
-  }
-  for (let j = 0; j < NB; j++) { b.binN[j] = nTmp[j] + blkTmp[j]; b.binG[j] = blkTmp[j] ? 0 : nTmp[j] ? nTmp[j] / gTmp[j] : 1; b.binQ[j] = qTmp[j] === Infinity ? 1 : qTmp[j]; }
-}
-// the accordion: a bin cannot walk through a bin wholly ahead of it that it overlaps across the line of
-// travel, so its lag is at least that bin's lag less the room between them. Pairs and rooms come from
-// the shape's geometry (straight, in the battalion frame; a trail shape is straight along its trail),
-// once per shape; listed with the rear bin after every bin ahead of it, so one pass settles a chain.
-const ACC_GAP = 0.6;   // m: the closest two men's places may come, one behind the other
-const accPairs = {};
-function accordionPairs(shape) {
-  if (accPairs[shape]) return accPairs[shape];
-  const pl = SHAPES[shape](), box = [];
+// bins: each company's slots in lateral thirds across the direction of travel, from the shape's
+// straight layout (a trail shape is straight along its trail). `of[c][r][f]` is a slot's bin, `pos` its
+// place in that layout. The accordion pairs come from the same boxes: a bin wholly behind another, with
+// men less than ACC_GAP apart across the line of travel, stays at least ACC_GAP behind it; listed
+// rear-most last, so one pass settles a chain.
+const ACC_GAP = 0.6, shapeBins = {};
+function binsOf(shape) {
+  if (shapeBins[shape]) return shapeBins[shape];
+  const pl = SHAPES[shape](), of = [], pos = [], box = [];
   for (let c = 0; c < COMPANIES; c++) {
     const ca = Math.cos(pl[c].rot), sa = Math.sin(pl[c].rot), pts = [];
-    for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++) { const lx = (f - (FILES - 1) / 2) * FS, lz = -r * RS; pts.push([pl[c].x + lx * ca - lz * sa, pl[c].z + lx * sa + lz * ca]); }
-    const lo = Math.min(...pts.map(p => p[0])), hi = Math.max(...pts.map(p => p[0]));   // across travel: x; along: z (heading 0)
+    for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++) { const [lx, lz] = blockLocal(f, r); pts.push([r, f, pl[c].x + lx * ca - lz * sa, pl[c].z + lx * sa + lz * ca]); }
+    const lo = Math.min(...pts.map(p => p[2])), hi = Math.max(...pts.map(p => p[2]));   // across travel: x; along: z (heading 0)
+    of[c] = [[], [], []]; pos[c] = [[], [], []];
     for (let k = 0; k < 3; k++) box.push({ j: c * 3 + k, x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity });
-    for (const p of pts) { const bx = box[c * 3 + Math.min(2, Math.floor((p[0] - lo) / Math.max(1e-6, hi - lo) * 3))];
-      bx.x0 = Math.min(bx.x0, p[0]); bx.x1 = Math.max(bx.x1, p[0]); bx.z0 = Math.min(bx.z0, p[1]); bx.z1 = Math.max(bx.z1, p[1]); }
+    for (const [r, f, x, z] of pts) { const k = Math.min(2, Math.floor((x - lo) / Math.max(1e-6, hi - lo) * 3)), bx = box[c * 3 + k]; of[c][r][f] = k; pos[c][r][f] = [x, z];
+      bx.x0 = Math.min(bx.x0, x); bx.x1 = Math.max(bx.x1, x); bx.z0 = Math.min(bx.z0, z); bx.z1 = Math.max(bx.z1, z); }
   }
   const pairs = [];
   for (const rb of [...box].sort((p, q) => q.z1 - p.z1 || p.j - q.j)) for (const ab of box)
-    if (Math.floor(ab.j / 3) !== Math.floor(rb.j / 3) && ab.z0 > rb.z1 && ab.x0 < rb.x1 + FS && rb.x0 < ab.x1 + FS)
+    if (Math.floor(ab.j / 3) !== Math.floor(rb.j / 3) && ab.z0 > rb.z1 && ab.x0 < rb.x1 + ACC_GAP && rb.x0 < ab.x1 + ACC_GAP)
       pairs.push([ab.j, rb.j, ab.z0 - rb.z1 - ACC_GAP]);
-  return (accPairs[shape] = pairs);
+  return (shapeBins[shape] = { of, pos, pairs });
 }
+const binOfSlot = (b, c, r, f) => binsOf(b.shape).of[c][r][f];
+// where each man stands: his slot set back by his bin's lag. A straight shape: per-bin frames, the lag
+// along the heading. A trail shape: every man on the trail at his own distance behind the head (his
+// place in the straight layout plus his lag) and across it by his lateral offset, so the column follows
+// its head's bends file by file and a lagging company stays on the trail.
+function binFrame(b, c, k, hx, hz, h, ahead, out) {
+  const lag = b.trans ? 0 : b.lags[c * 3 + k], w = placeWorld(b, c, hx, hz, h, ahead);
+  out.x = w.x - Math.sin(h) * lag; out.z = w.z - Math.cos(h) * lag; out.cos = Math.cos(w.a); out.sin = Math.sin(w.a); out.travel = h; return out;
+}
+function placesCtx(b, hx, hz, h, ahead, ctx) {
+  ctx.b = b; ctx.snake = snakes(b); ctx.hx = hx; ctx.hz = hz; ctx.h = h;
+  if (ctx.snake) {   // arc length from the head back along the trail
+    const t = b.trail, P = ctx.P || (ctx.P = []), S = ctx.S || (ctx.S = []); P.length = S.length = 0;
+    let px = hx, pz = hz, acc = 0; P.push(px, pz); S.push(0);
+    for (let k = t.length - 1; k >= 0; k--) { const d = Math.hypot(t[k].x - px, t[k].z - pz); if (d < 1e-6) continue; acc += d; px = t[k].x; pz = t[k].z; P.push(px, pz); S.push(acc); }
+  } else { const F = ctx.F || (ctx.F = Array.from({ length: COMPANIES * 3 }, () => ({}))); for (let j = 0; j < COMPANIES * 3; j++) binFrame(b, Math.floor(j / 3), j % 3, hx, hz, h, ahead, F[j]); }
+  return ctx;
+}
+// the point D metres back along the trail (negative: ahead of the head, along its heading)
+function trailPoint(ctx, D, out) {
+  const P = ctx.P, S = ctx.S, n = S.length;
+  if (D <= 0 || n < 2) { out[0] = ctx.hx - Math.sin(ctx.h) * D; out[1] = ctx.hz - Math.cos(ctx.h) * D; return out; }
+  if (D >= S[n - 1]) { const ax = P[2 * n - 2], az = P[2 * n - 1], dx = ax - P[2 * n - 4], dz = az - P[2 * n - 3], l = Math.hypot(dx, dz) || 1, e = D - S[n - 1];
+    out[0] = ax + dx / l * e; out[1] = az + dz / l * e; return out; }
+  let lo = 0, hi = n - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m] <= D) lo = m; else hi = m; }
+  const u = (D - S[lo]) / (S[hi] - S[lo]); out[0] = P[2 * lo] + (P[2 * hi] - P[2 * lo]) * u; out[1] = P[2 * lo + 1] + (P[2 * hi + 1] - P[2 * lo + 1]) * u; return out;
+}
+const tpA = [0, 0], tpB = [0, 0];
+// a man's place [x, z, direction of travel] in a context from placesCtx
+function placeAt(ctx, c, r, f) {
+  const b = ctx.b, k = binOfSlot(b, c, r, f);
+  if (!ctx.snake) { const F = ctx.F[c * 3 + k], p = frameSlot(F, f, r); p.push(F.travel); return p; }
+  const [lx, lz] = binsOf(b.shape).pos[c][r][f], D = -lz + b.lags[c * 3 + k];
+  trailPoint(ctx, D - 1, tpA); trailPoint(ctx, D + 1, tpB);
+  const t = Math.atan2(tpA[0] - tpB[0], tpA[1] - tpB[1]); trailPoint(ctx, D, tpA);
+  return [tpA[0] + Math.cos(t) * lx, tpA[1] - Math.sin(t) * lx, t];
+}
+const tickCtx = {};
+const ctxNow = b => placesCtx(b, b.x, b.z, b.heading, 0, tickCtx);
+// pace (m/s) and its name: a formation with a road pace uses it while every man stands on a road
+function paceOf(b) {
+  const F = FORM(b); let road = !!F.roadPace && !b.trans;
+  if (road) { const ctx = ctxNow(b);
+    for (let c = 0; c < COMPANIES && road; c++) for (let r = 0; r < RANKS && road; r++) for (let f = 0; f < FILES; f++) {
+      if (b.grid[c][r][f] < 0) continue; const p = placeAt(ctx, c, r, f); if (!onRoad(p[0], p[1])) { road = false; break; } } }
+  const name = road ? F.roadPace : F.pace; return [R.pace[name], name];
+}
+
+/* FOOTPRINT GATE: no man's place (his slot less his file's lag) ever moves onto impassable ground.
+   Every change of pose or of lags is tried through `gate`; a step that would put a place there is cut
+   back by halving (a fixed count, so deterministic). Far from impassable ground (IMPD, baked with the
+   terrain) the check is one lookup. */
+const GATE_HALVINGS = 6;
+// bitmask of bins with a live man's place on impassable ground, for the pose as it is now
+function wetBins(b) {
+  let reach = 0; for (let c = 0; c < COMPANIES; c++) { const w = placeWorld(b, c, b.x, b.z, b.heading, 0); reach = Math.max(reach, Math.hypot(w.x - b.x, w.z - b.z)); }
+  let lmax = 0; for (let j = 0; j < NB; j++) lmax = Math.max(lmax, b.lags[j]);
+  if (IMPD[cellK(b.x, b.z)] > reach + BW + lmax + 2) return 0;   // nothing impassable within reach
+  let mask = 0;
+  if (b.trans) {   // lags are zero during a change: company frames
+    for (let c = 0; c < COMPANIES; c++) { const w = placeWorld(b, c, b.x, b.z, b.heading, 0), ca = Math.cos(w.a), sa = Math.sin(w.a);
+      for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++) { if (b.grid[c][r][f] < 0) continue; const [lx, lz] = blockLocal(f, r);
+        if (IMP[cellK(w.x + lx * ca - lz * sa, w.z + lx * sa + lz * ca)]) mask |= 1 << (c * 3); } }
+    return mask;
+  }
+  const ctx = ctxNow(b);
+  for (let c = 0; c < COMPANIES; c++) for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++) {
+    if (b.grid[c][r][f] < 0) continue; const j = c * 3 + binOfSlot(b, c, r, f); if (mask & (1 << j)) continue;
+    const p = placeAt(ctx, c, r, f); if (IMP[cellK(p[0], p[1])]) mask |= 1 << j;
+  }
+  return mask;
+}
+// apply(u) sets the pose for the fraction u of a step (u = 0: as before). Keeps the largest of 1, ½, …
+// that puts no bin newly on impassable ground (`before`: the bins already there), else 0.
+function gate(b, before, apply) {
+  for (let k = 0, u = 1; k <= GATE_HALVINGS; k++, u /= 2) { apply(u); if (!(wetBins(b) & ~before)) return u; }
+  apply(0); return 0;
+}
+
+const NB = COMPANIES * 3, gTmp = new Float64Array(NB), nTmp = new Int32Array(NB), qTmp = new Float64Array(NB), blkTmp = new Int32Array(NB);
+const QMAX = Math.max(...Object.values(R.q).flatMap(t => Object.values(t)));
+// sample the ground for the 12 bins: each man's ground where he stands (his place), along his
+// direction of travel. A bin's g is the harmonic mean over its men; q is set by its worst ground class.
+// A bin is held (g = 0) when one of its men has impassable ground underfoot or within one step ahead
+// (the gate would stop him there anyway); binN counts its live men (0: empty, left out of the solve).
+function sampleBins(b, paceName, V0) {
+  const kind = FORM(b).kind, look = V0 * QMAX * TICK, ctx = ctxNow(b);
+  gTmp.fill(0); nTmp.fill(0); qTmp.fill(Infinity); blkTmp.fill(0);
+  for (let c = 0; c < COMPANIES; c++) for (let r = 0; r < RANKS; r++) for (let f = 0; f < FILES; f++) {
+    if (b.grid[c][r][f] < 0) continue;
+    const j = c * 3 + binOfSlot(b, c, r, f), [px, pz, tr] = placeAt(ctx, c, r, f), dx = Math.sin(tr), dz = Math.cos(tr);
+    const g = groundG(px, pz, kind, dx, dz);
+    if (g <= 0 || IMP[cellK(px + dx * look, pz + dz * look)]) blkTmp[j]++; else { gTmp[j] += 1 / g; nTmp[j]++; }
+    qTmp[j] = Math.min(qTmp[j], groundQ(px, pz, paceName));
+  }
+  for (let j = 0; j < NB; j++) { b.binN[j] = nTmp[j] + blkTmp[j]; b.binG[j] = blkTmp[j] ? 0 : nTmp[j] ? nTmp[j] / gTmp[j] : 1; b.binQ[j] = qTmp[j] === Infinity ? 1 : qTmp[j]; }
+}
+// the accordion: a bin's lag is at least the lag of each bin wholly ahead of it, less the room between
 function accordion(b) {
   if (b.trans) return;
-  for (const [a, j, room] of accordionPairs(b.shape)) if (b.binN[a] && b.binN[j]) b.lags[j] = Math.max(b.lags[j], b.lags[a] - room);
+  for (const [a, j, room] of binsOf(b.shape).pairs) if (b.binN[a] && b.binN[j]) b.lags[j] = Math.max(b.lags[j], b.lags[a] - room);
 }
 const capTmp = new Float64Array(NB), ordTmp = [];
 // battalion speed this tick (m/s) toward `want`, given its pace V0; advances the lags and the disorder.
@@ -420,49 +484,67 @@ function updateDisorder(b, V, V0) {
   const rec = lmax < D.Lok ? D.kRec * (V < 0.05 ? 3 : 1) : 0;
   b.disorder = Math.min(1, Math.max(0, b.disorder + (grow * D.scale[FORM(b).kind] - rec) * TICK));
 }
-// halted by impassable ground: the battalion dresses back from the edge (steps back along its heading
-// until no man's place is on impassable ground; a trail shape drops the trail ahead of its head), lags cleared
-function dressBack(b) {
-  const dx = Math.sin(b.heading), dz = Math.cos(b.heading), trail = !!FORM(b).trail;
-  b.lags.fill(0);
-  for (let back = 0; back < 20 && wetMen(b); back += 0.25) { b.x -= dx * 0.25; b.z -= dz * 0.25; if (trail) trimTrail(b); }
-  b.px = b.x; b.pz = b.z;
+// move the anchor d metres back: along the trail for a trail shape (the trail ahead of it dropped),
+// else along the heading
+function stepBack(b, d) {
+  if (!snakes(b)) { b.x -= Math.sin(b.heading) * d; b.z -= Math.cos(b.heading) * d; return; }
+  const t = b.trail; let px = b.x, pz = b.z, left = d;
+  for (let k = t.length - 1; k >= 0; k--) { const q = t[k], s = Math.hypot(px - q.x, pz - q.z);
+    if (s >= left && s > 1e-9) { b.x = px + (q.x - px) * left / s; b.z = pz + (q.z - pz) * left / s; b.heading = Math.atan2(b.x - q.x, b.z - q.z); t.length = k + 1; break; }
+    left -= s; px = q.x; pz = q.z; if (k === 0) { b.x = px; b.z = pz; t.length = 1; } }
+  t.push({ x: b.x, z: b.z }); b.trailLen = 0; for (let k = 1; k < t.length; k++) b.trailLen += Math.hypot(t[k].x - t[k - 1].x, t[k].z - t[k - 1].z);
 }
-// a battalion not marching forward (halted, wheeling, changing formation): lagging files walk up to
-// their places at their ground's pace; files held at impassable ground stay at its edge
+// stopped by impassable ground: the order ends and the slots come back to where the held men stand
+// (the anchor steps back by the largest held lag; the other files dress back with them)
+function haltAtEdge(b, held) {
+  b.orders = []; b.vx = b.vz = 0; b.omega = 0; b.status = 'halted: impassable ground'; b.blockedFor = 0;
+  let d = 0; for (let j = 0; j < NB; j++) if (held & (1 << j)) d = Math.max(d, b.lags[j]);
+  if (d > 0) { const before = wetBins(b), keep = [b.x, b.z, b.heading, b.trail.slice(), b.trailLen, b.lags.slice()];
+    stepBack(b, d); for (let j = 0; j < NB; j++) b.lags[j] = Math.max(0, b.lags[j] - d);
+    if (wetBins(b) & ~before) { [b.x, b.z, b.heading] = keep; b.trail = keep[3]; b.trailLen = keep[4]; b.lags.set(keep[5]); } }
+  b.px = b.x; b.pz = b.z; b.ph = b.heading;
+}
+// a battalion not marching forward (halted, wheeling): lagging files walk up to their places at their
+// ground's quick step; a file whose place would reach impassable ground stays where it is
+const lagTmp = new Float64Array(NB);
 function lagSettle(b) {
-  const [V0, paceName] = paceOf(b);
-  if (!b.trans) sampleBins(b, paceName);   // the ground where the men now stand (bins are fixed during a change)
-  for (let j = 0; j < NB; j++) if (b.binG[j] > 0) b.lags[j] = Math.max(0, b.lags[j] - V0 * b.binG[j] * TICK);
+  if (b.trans) return;
+  let any = false; for (let j = 0; j < NB; j++) if (b.lags[j] > 0) any = true;
+  if (!any) { if (b.disorder > 0) updateDisorder(b, 0, R.pace[FORM(b).pace]); return; }
+  const [V0, paceName] = paceOf(b); sampleBins(b, paceName, V0);
+  const before = wetBins(b); lagTmp.set(b.lags);
+  for (let j = 0; j < NB; j++) if (b.binG[j] > 0) b.lags[j] = Math.max(0, b.lags[j] - V0 * b.binG[j] * b.binQ[j] * TICK);
   accordion(b);
+  const wet = wetBins(b) & ~before; for (let j = 0; j < NB; j++) if (wet & (1 << j)) b.lags[j] = lagTmp[j];
   updateDisorder(b, 0, V0);
 }
-// the shape's half-width across its heading (for the turning rate): a trail shape turns at its head
+// the shape's half-width across its heading (for the turning rate). A trail shape turns at its head on
+// a radius of at least its half-width plus ACC_GAP, so the inner rank of a bend never folds onto itself
 function halfWidth(b) {
-  if (snakes(b)) return 1.5;
+  if (snakes(b)) { let w = 0; for (const comp of binsOf(b.shape).pos) for (const rank of comp) for (const p of rank) w = Math.max(w, Math.abs(p[0] - binsOf(b.shape).pos[0][1][0][0])); return 1.2 * (w + ACC_GAP); }
   let w = 0; for (let c = 0; c < COMPANIES; c++) w = Math.max(w, Math.abs(companyPlace(b, c).x));
   return w + BW / 2;
 }
 const STALL = 0.04;   // m/s: an anchor slower than this, with a held bin, is stopped by impassable ground
+const HALT_AFTER = 1;   // s held and stalled before the order is given up
 
 function formationTick(b) {
   b.px = b.x; b.pz = b.z; b.ph = b.heading; b.omega = 0;
   if (b.trans) {   // no marching while the companies change places; a new shape order interrupts the change
-    b.vx = b.vz = 0; if (b.binOf.length) lagSettle(b);
+    b.vx = b.vz = 0;
     if (b.orders[0] && b.orders[0].type === 'form') { startChange(b, b.orders.shift().shape); return; }
     if (simTime >= b.trans.start + b.trans.delay[3] + b.trans.dur) {
       b.place = b.trans.to; b.shape = b.trans.shape; b.log[b.log.length - 1].took = simTime - b.trans.start; b.trans = null;
       if (FORM(b).trail) resetTrail(b);   // the column stands straight behind its head
-      if (b.shape !== 'line') rebalance(b);   // casualties during the change: even the companies again
+      if (!FORM(b).closeAcross) rebalance(b);   // casualties during the change: even the companies again
       closeRanks(b);   // re-forming is when the files dress and close
     }
     return;
   }
-  const o = b.orders[0]; if (!o) { b.vx = b.vz = 0; if (b.binOf.length) lagSettle(b); return; }
+  const o = b.orders[0]; if (!o) { b.vx = b.vz = 0; lagSettle(b); return; }
   const h0 = b.heading;
   if (o.type === 'form') { b.orders.shift(); startChange(b, o.shape); return; }
   const [V0, paceName] = paceOf(b);
-  if (o.type === 'move') sampleBins(b, paceName);
   const v = V0;   // turning rate uses the base pace
   const halfW = halfWidth(b);
   if (o.type === 'move') {
@@ -470,26 +552,40 @@ function formationTick(b) {
     if (dist < 0.4) { b.orders.shift(); b.vx = b.vz = 0; return; }
     let want = Math.atan2(dx, dz), dh = want - b.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
     const wmax = 1.2 * v / halfW * TICK;   // the outer flank may not outrun the quick step: long lines turn slowly
-    b.heading += Math.max(-wmax, Math.min(wmax, dh));
-    const want0 = Math.abs(dh) < 1.0 ? Math.min(V0, dist / TICK) : 0;   // turn before advancing
+    // the turn, through the gate
+    const turn = Math.max(-wmax, Math.min(wmax, dh)), before = wetBins(b);
+    const ut = gate(b, before, u => { b.heading = h0 + turn * u; });
+    const turnHeld = Math.abs(turn) > 1e-4 && ut < 1;
+    // the advance: lags and speed from the lag model, then the gate holds any bin whose places would
+    // reach impassable ground (its lag grows by the step: its men stand still) and cuts back the rest
+    sampleBins(b, paceName, V0);
+    const want0 = Math.abs(dh) < 1.0 && !turnHeld ? Math.min(V0, dist / TICK) : 0;   // turn before advancing
+    const lag0 = b.lags.slice(), x0 = b.x, z0 = b.z;
     const { V, back } = lagStep(b, V0, want0);
     const step = V * TICK - back;   // renormalised: the anchor stays with its leading file
-    b.vx = Math.sin(b.heading) * step / TICK; b.vz = Math.cos(b.heading) * step / TICK;
-    b.x += b.vx * TICK; b.z += b.vz * TICK; pushTrail(b);
-    // held at impassable ground (deep water): the anchor stops advancing; give up after a few seconds
-    if (want0 > 0 && step < STALL * TICK && b.binG.some(g => g === 0)) { b.blockedFor += TICK; if (b.blockedFor > 4) { b.orders = []; b.vx = b.vz = 0; b.status = 'halted: impassable ground'; dressBack(b); } }
-    else { b.blockedFor = 0; if (step > 0.001) b.status = ''; }
+    const lag1 = b.lags.slice(), sx = Math.sin(b.heading) * step, sz = Math.cos(b.heading) * step;
+    const set = u => { b.x = x0 + sx * u; b.z = z0 + sz * u; for (let j = 0; j < NB; j++) b.lags[j] = lag0[j] + (lag1[j] - lag0[j]) * u; };
+    set(1);
+    let held = 0;
+    if (step > 0) { const wet = wetBins(b) & ~before;
+      if (wet) { for (let j = 0; j < NB; j++) if (wet & (1 << j)) { lag1[j] = lag0[j] + step; held |= 1 << j; } set(1); accordion(b); lag1.set(b.lags); } }
+    const ua = gate(b, before, set);
+    pushTrail(b);
+    const moved = step * ua;
+    b.vx = (b.x - x0) / TICK; b.vz = (b.z - z0) / TICK;
+    for (let j = 0; j < NB; j++) if (b.binN[j] && b.binG[j] <= 0) held |= 1 << j;
+    // stopped by impassable ground: held and not advancing (or not able to turn) for a while
+    if ((held || turnHeld) && (moved < STALL * TICK || turnHeld) && (want0 > 0 || turnHeld)) { b.blockedFor += TICK; if (b.blockedFor > HALT_AFTER) haltAtEdge(b, held); }
+    else { b.blockedFor = 0; if (moved > 0.001) b.status = ''; }
   } else if (o.type === 'wheel') {   // rotate the whole battalion around the flank it turns to
-    if (b.binOf.length) lagSettle(b);
-    if (o.left === undefined) { o.left = o.angle > 0; const piv = rot2(o.left ? -halfW : halfW, 0, -b.heading); o.px = b.x + piv[0]; o.pz = b.z + piv[1]; o.done = 0; o.dry = !wetMen(b); }
+    lagSettle(b);
+    if (o.left === undefined) { o.left = o.angle > 0; const piv = rot2(o.left ? -halfW : halfW, 0, -b.heading); o.px = b.x + piv[0]; o.pz = b.z + piv[1]; o.done = 0; }
     const w = Math.min(Math.abs(o.angle) - o.done, 1.0 * v / (2 * halfW) * TICK);   // outer flank at marching pace
-    const sgn = o.angle > 0 ? -1 : 1, dx = b.x - o.px, dz = b.z - o.pz, r = rot2(dx, dz, -sgn * w);
-    const nx = o.px + r[0], nz = o.pz + r[1], was = [b.x, b.z, b.heading];
-    b.x = nx; b.z = nz; b.heading += sgn * w;
-    if (o.dry && wetMen(b)) {   // the wheel would put men on impassable ground: stop short of it
-      [b.x, b.z, b.heading] = was; b.orders = []; b.vx = b.vz = 0; b.status = 'halted: impassable ground'; b.omega = 0; return; }
-    b.vx = (nx - was[0]) / TICK; b.vz = (nz - was[1]) / TICK; o.done += w; pushTrail(b);
-    if (o.done >= Math.abs(o.angle) - 1e-6) { b.orders.shift(); b.vx = b.vz = 0; }
+    const sgn = o.angle > 0 ? -1 : 1, x0 = b.x, z0 = b.z, before = wetBins(b);
+    const uw = gate(b, before, u => { const r = rot2(x0 - o.px, z0 - o.pz, -sgn * w * u); b.x = o.px + r[0]; b.z = o.pz + r[1]; b.heading = h0 + sgn * w * u; });
+    b.vx = (b.x - x0) / TICK; b.vz = (b.z - z0) / TICK; o.done += w * uw; pushTrail(b);
+    if (uw === 0) haltAtEdge(b, 0);   // the wheel would put men on impassable ground: it stops short of it
+    else if (o.done >= Math.abs(o.angle) - 1e-6) { b.orders.shift(); b.vx = b.vz = 0; }
   }
   let dh = b.heading - h0; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); b.omega = b.vx || b.vz ? dh / TICK : 0;   // a turn in place is not extrapolated
 }
@@ -536,7 +632,7 @@ function closeRanks(b) {
     cols.forEach((col, k) => { const [c, f] = slots[k]; col.forEach((j, r) => { b.grid[c][r][f] = j;
       if (j >= 0) { const s = b.soldiers[j]; if (s.c !== c || s.f !== f) { s.c = c; s.f = f; closed++; } } }); });
   };
-  if (b.shape === 'line' && !b.trans) {
+  if (FORM(b).closeAcross && !b.trans) {
     for (const half of [[0, 1], [2, 3]]) {
       const all = []; for (const c of half) for (let f = 0; f < FILES; f++) all.push([c, f]);
       const cols = all.map(([c, f]) => fileOf(c, f)).filter(col => col.some(j => j >= 0));
@@ -557,14 +653,16 @@ function closeRanks(b) {
    SOLDIER LAYER (every frame, cosmetic)
    ========================================================================= */
 // how far a soldier's file has fallen behind (metres), from his bin's lag
-const lagOf = (b, s) => b.binOf.length && b.binOf[s.c] && b.binOf[s.c][s.r][s.f] !== undefined ? b.lags[s.c * 3 + b.binOf[s.c][s.r][s.f]] : 0;
+const lagOf = (b, s) => b.trans ? 0 : b.lags[s.c * 3 + binOfSlot(b, s.c, s.r, s.f)];
 // his place this frame: the slot, set back along the company's facing by his file's lag
-function soldierPlace(b, f, s) { const p = frameSlot(f, s.f, s.r), l = lagOf(b, s); return [p[0] - Math.sin(f.travel) * l, p[1] - Math.cos(f.travel) * l]; }   // set back along the direction of travel
+function soldierPlace(b, f, s) { return placeAt(f.ctx, s.c, s.r, s.f); }   // f.ctx: the frame's places context (companyFrames)
 const frameSlot = (f, file, rank) => { const lx = (file - (FILES - 1) / 2) * FS, lz = -rank * RS; return [f.x + lx * f.cos - lz * f.sin, f.z + lx * f.sin + lz * f.cos]; };
 // each company's frame in world space, computed once per battalion per frame (not per soldier)
 function companyFrames(b, ahead, alpha) {
   const [hx, hz, h] = anchorAt(b, alpha, ahead), out = b.frames || (b.frames = [{}, {}, {}, {}]);
-  for (let c = 0; c < COMPANIES; c++) { const w = placeWorld(b, c, hx, hz, h, ahead), f = out[c]; f.x = w.x; f.z = w.z; f.cos = Math.cos(w.a); f.sin = Math.sin(w.a); f.face = w.face; f.travel = travelOf(b, w, h); }
+  b.frameCtx = placesCtx(b, hx, hz, h, ahead, b.frameCtx || {});
+  for (let c = 0; c < COMPANIES; c++) { const w = placeWorld(b, c, hx, hz, h, ahead), f = out[c]; f.x = w.x; f.z = w.z; f.cos = Math.cos(w.a); f.sin = Math.sin(w.a); f.face = w.face;
+    f.ctx = b.frameCtx; }
   return out;
 }
 const SC = 0.6, SN = Math.ceil(FIELD / SC), cellHead = new Int32Array(SN * SN).fill(-1), cellNext = new Int32Array(41 * COMPANIES * PER);   // SC ≥ SEP: the 3×3 search sees every neighbour
@@ -615,7 +713,8 @@ function soldierStep(dt, alpha) {
       const k = Math.min(1, dt * 5); s.vx += (wx - s.vx) * k; s.vz += (wz - s.vz) * k;
       if (dist < 0.08) { const damp = Math.max(0, 1 - dt * 8); s.vx *= damp; s.vz *= damp; }   // arrived: come to rest
       const sp2 = s.vx * s.vx + s.vz * s.vz, cap = RUN * gs; if (sp2 > cap * cap) { const r = cap / Math.sqrt(sp2); s.vx *= r; s.vz *= r; }
-      s.x += s.vx * dt; s.z += s.vz * dt;
+      const nx = s.x + s.vx * dt, nz = s.z + s.vz * dt;
+      if (IMP[cellK(nx, nz)] && !IMP[cellK(s.x, s.z)]) { s.vx = s.vz = 0; } else { s.x = nx; s.z = nz; }   // never onto impassable ground
       eachObstacle(s.x, s.z, o => { const ex = s.x - o.x, ez = s.z - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.3;   // never inside one
         if (d < R && d > 1e-6) { s.x = o.x + ex / d * R; s.z = o.z + ez / d * R; } });
     }
@@ -636,17 +735,11 @@ function order(name, a) {
   if (name === 'wheelL') { b.orders = [{ type: 'wheel', angle: Math.PI / 4 }]; return; }
   if (name === 'wheelR') { b.orders = [{ type: 'wheel', angle: -Math.PI / 4 }]; return; }
   if (name === 'wood') { b.orders = [{ type: 'move', x: WOOD.x, z: WOOD.z - WOOD.r - 12 }, { type: 'move', x: WOOD.x, z: WOOD.z + WOOD.r + 14 }]; return; }
-  if (name === 'ford') {   // narrow to files, cross, deploy again on the far bank
-    const zf = 0, xe = STREAM_X(zf) - 22, xx = STREAM_X(zf) + 24;
-    b.orders = [{ type: 'move', x: xe - 30, z: zf }, { type: 'form', shape: 'march' }, { type: 'move', x: xe, z: zf }, { type: 'move', x: xx, z: zf }, { type: 'form', shape: 'line' }];
-    return;
-  }
+  // a passage (the ruleset's narrow and deploy shapes): narrow short of it, cross, deploy beyond
+  const cross = (xe, xx, zc) => { b.orders = [{ type: 'move', x: xe - 30, z: zc }, { type: 'form', shape: R.passage.narrow }, { type: 'move', x: xe, z: zc }, { type: 'move', x: xx, z: zc }, { type: 'form', shape: R.passage.deploy }]; };
+  if (name === 'ford') return cross(STREAM_X(0) - 22, STREAM_X(0) + 24, 0);
   if (name === 'kill') return kill(b, 10);
-  if (name === 'bridge') {   // narrow to a march column, cross the 4 m bridge, deploy beyond
-    const xe = BRIDGE.x0 - 12, xx = BRIDGE.x1 + 16;
-    b.orders = [{ type: 'move', x: xe - 30, z: BRIDGE.z }, { type: 'form', shape: 'march' }, { type: 'move', x: xe, z: BRIDGE.z }, { type: 'move', x: xx, z: BRIDGE.z }, { type: 'form', shape: 'line' }];
-    return;
-  }
+  if (name === 'bridge') return cross(BRIDGE.x0 - 12, BRIDGE.x1 + 32, BRIDGE.z);   // deploy with the column's rear off the bridge
   if (name === 'style') { b.style = a; return; }
 }
 let manyOn = false;
@@ -655,7 +748,7 @@ function setMany(on) {
   if (!on) return;
   const r = rng(99);
   for (let i = 0; i < 39; i++) { const gx = i % 8, gz = Math.floor(i / 8), x = -150 + gx * 38, z = -150 + gz * 55;   // rows clear of a 27 m march column
-    const b = makeBattalion(x, z, 0, 0, 100 + i); const shapes = ['line', 'column', 'march'];
+    const b = makeBattalion(x, z, 0, 0, 100 + i); const shapes = Object.keys(R.formations);
     b.orders = [{ type: 'form', shape: shapes[i % 3] }, { type: 'move', x: x + (r() - 0.5) * 30, z: z + 40 }]; }
 }
 
@@ -673,7 +766,7 @@ function stats() {
   return { shape: b.trans ? b.trans.fromLabel + ' → ' + b.trans.shape : b.shape, alive, moved: b.moved, closed: b.closed || 0, simTime: +simTime.toFixed(1),
     changes: b.log.map(l => ({ change: l.change, planned: +l.planned.toFixed(1), took: l.took != null ? +l.took.toFixed(1) : null, interrupted: l.interrupted })),
     soldiers: battalions.reduce((a, x) => a + x.soldiers.length, 0), steerMs: +avg.toFixed(2),
-    style: b.style, lagMax: +Math.max(...b.lags).toFixed(2), lagMean: +(b.lags.reduce((a, x) => a + x, 0) / b.lags.length).toFixed(2), disorder: +b.disorder.toFixed(2), status: b.status };
+    style: b.style, lagMax: +Math.max(...b.lags).toFixed(2), lagMean: +([...b.lags].filter((l, j) => b.binN[j]).reduce((a, x, k, A) => a + x / A.length, 0)).toFixed(2), disorder: +b.disorder.toFixed(2), status: b.status };
 }
 // how far soldiers are from their slots (a measurement, not a pass/fail check): max and mean, metres
 function slotError() {
@@ -687,15 +780,20 @@ function measure(frames = 60) {
   let t = 0; for (let k = 0; k < frames; k++) { const t0 = performance.now(); advance(1 / 60); t += performance.now() - t0; }
   return +(t / frames).toFixed(2);
 }
+// test hook: water depth over a rectangle (null: the map's own); rebakes the impassable grid
+function paintDepth(x0, z0, x1, z1, d) {
+  for (let z = Math.ceil(z0); z <= z1; z++) for (let x = Math.ceil(x0); x <= x1; x++) WDEPTH[cellK(x, z)] = d === null ? waterDepth(x, z) : d;
+  bakeImpassable();
+}
 function paintTerrain(x0, z0, x1, z1, cls) {
   const id = cls === null ? -1 : CLASSES.indexOf(cls);
   for (let z = Math.ceil(z0); z <= z1; z++) for (let x = Math.ceil(x0); x <= x1; x++) { const k = cellK(x, z); TERR[k] = id < 0 ? CLASSES.indexOf(classAt(x, z)) : id; }
 }
 reset();
-window.FC = { paintTerrain, place: (x, z, h) => reset(x, z, h),
+window.FC = { paintTerrain, paintDepth, IMP, place: (x, z, h) => reset(x, z, h),
   FIELD, HALF, H, heights, HN, HG, STREAM_X, FORD, WOOD, WATER_HALF, HILLS, ROAD, TREES, ROCKS, inWater, inWood,
   FILES, RANKS, COMPANIES, battalions, groundSpeed, groundG, CLASSES, TERR, WDEPTH, CROPS, PLOUGHED, MARSH, DENSE, HEDGES, BRIDGE, RULESET: R,
-  soldierPlace, lagOf, cellK, wetMen, get main() { return main; }, get simTime() { return simTime; }, get alpha() { return acc / TICK; },
+  soldierPlace, lagOf, cellK, wetBins, get main() { return main; }, get simTime() { return simTime; }, get alpha() { return acc / TICK; },
   get speed() { return speed; }, set speed(v) { speed = v; }, get drill() { return drill; }, set drill(v) { drill = v; },
   order, reset, setMany, kill: n => kill(main, n), advance, stats, slotError, measure, companyFrames, frameSlot,
   get manyOn() { return manyOn; },

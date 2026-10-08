@@ -11,12 +11,17 @@ window.RULESET = {
   q: { ordinary: { open: 1.3, light: 1.1, hard: 1.0 }, routeStep: { open: 1.15, light: 1.0, hard: 1.0 } },
   // formations: terrain column used, pace off and on roads (a road pace only while every company is on
   // a road), and whether the companies follow the head's trail (a column of route)
+  // closeAcross: casualties close toward the colours across company boundaries (else each company
+  // closes on its own centre, and the companies are evened out when the shape starts or ends)
   formations: {
-    line:   { kind: 'line',   pace: 'ordinary' },
+    line:   { kind: 'line',   pace: 'ordinary', closeAcross: true },
     square: { kind: 'column', pace: 'ordinary' },
     column: { kind: 'column', pace: 'ordinary' },
     march:  { kind: 'column', pace: 'ordinary', roadPace: 'routeStep', trail: true },
   },
+  // a new battalion's shape and order preset; the shapes to narrow to for a passage and to deploy beyond it
+  start: { shape: 'line', orders: 'normal' },
+  passage: { narrow: 'march', deploy: 'line' },
   // slope: g = min(1, k · exp(-3.5 (|s + 0.05| - 0.05))), s = rise over run along the travel direction
   slopeK: 1.3,
   // terrain classes: g per formation (relative to the pace on firm level open ground) and the ground
