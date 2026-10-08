@@ -86,7 +86,8 @@ src/
     index.ts
   render/
     engine.ts         # Babylon Engine + Scene bootstrap
-    camera.ts         # RTS camera: pan, edge-scroll, zoom, rotate
+    camera.ts         # RTS camera: pan, edge-scroll, zoom, rotate; derives `mapness`
+    staffMap.ts       # far-zoom map: baked map texture + ink overlay (staff-map/implementation.md)
     terrain.ts        # heightmap ground
     unitRenderer.ts   # thin instances, one buffer per unit type
     selection.ts      # picking, drag-box, selection decals
