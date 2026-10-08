@@ -108,6 +108,11 @@ a line, stitched exactly to the detail edge (the W1 apron). Nothing in gameplay 
   `d`, pitch, yaw, the widest supported aspect and the lowest terrain. Computed, not typed
   (~400 m today at 16:9). It feeds §4.
 - **Picking:** screen ray against the heightfield, then unit bounds.
+- **Far zoom is the staff map** (`staff-map/`): past the 3D range the camera tilts toward straight
+  down and the world turns into a drawn map, driven by one value, `mapness`. Each kind of 3D content
+  (vegetation, units, shadows, water detail) draws only above its own `mapness` threshold, so the
+  footprint rule above applies to whatever 3D content is still drawn, and the map view is the
+  cheapest view. The map texture is one more bake, built from the same heightfield and river data.
 - **Presentation cameras** (photo mode, replays, video export) are separate controllers, may leave
   the gameplay bounds but not `far`, and still never show sky.
 

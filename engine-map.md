@@ -88,7 +88,7 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 | Figures | Instanced figures placed from formation state; LOD; stepped animation (vertex animation textures); casualties | `engine-design.md` §7 | P | ⬜ |
 | Effects | Musket smoke, muzzle flashes, roundshot dust, painted | `design.md` §9 | P | ⬜ |
 | Camera | Locked RTS camera; presentation cameras | `engine-design.md` §5 | E0 | 🟡 |
-| Staff map | Far zoom as a drawn map; `mapness` transition | `staff-map/` (in progress) | P | 🟡 feel prototype |
+| Staff map | Far zoom as a drawn map; `mapness` transition | `staff-map/` | P | 🟡 feel prototype (#4) |
 | Selection and orders UI | Click, drag-box, groups; drawing orders (also on the staff map) | `sim-design.md`, `staff-map/` | P | ⬜ |
 | HUD | Formation cards (strength, morale, ammunition), notifications, battle clock | to write | A | ⬜ |
 | Audio | Volleys, cannon, drums; a voice budget per battle | to write | A | ⬜ |
