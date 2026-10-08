@@ -1,6 +1,7 @@
 # Engine Design: World, Camera, Bakes
 
-Status: **agreed direction, details open** (Oct 2026). Companion to `web-rts-architecture.md`, which
+Status: **agreed direction, details open** (Oct 2026). The full list of engine parts, including the
+simulation, is in `engine-map.md`. Companion to `web-rts-architecture.md`, which
 covers the sim/render split, the data model and the tick. This document covers the **world** the
 renderer draws, the **camera** that looks at it and the **baked data** that lights it, and splits
 the work into what the prototype needs now and what the engine needs later. An adversarial review
@@ -169,15 +170,15 @@ blocking an unrelated PR (§11).
 
 | Issue | Where | Planned fix |
 |---|---|---|
-| Camera pans in view space; the target can climb without limit | main, camera setup | W1 close (§10 step 1): ground-plane pan + focus clamp |
+| ~~Camera pans in view space; the target can climb without limit~~ | main, camera setup | **Fixed in W1** (#1): ground-plane pan + focus clamp, checked by render-check |
 | Reflection canvas uses a canvas blur filter (the context-loss pattern) | main, reflection bake | E0-lite bake rules (§10 step 3) |
 | Up/down pans move the map cos(pitch) as fast as left/right (0.56× at the steepest pitch) | main, Babylon panning | Own camera controller: drag keeps the grabbed ground point under the cursor (§5) |
 
 ## 10. Order of work
 
 ### Now
-1. **Close W1.** Fit the shadow box to the tile corners; ground-plane pan with the focus clamp.
-   One confirming review round, then merge.
+1. ~~**Close W1.**~~ Done (#1, #2): fitted shadow box, ground-plane pan, then W1b width variation.
+   The simulation track (S0, S1) runs beside this one: see `engine-map.md` §4.
 
 ### E0-lite (engine spine, small PRs)
 2. `SPEC` object with derived sizes and load-time invariants (incl. footprint, pitch cap, yaw range).

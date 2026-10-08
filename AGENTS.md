@@ -10,6 +10,8 @@ Status: **prototyping the look**. No game code yet; prototypes are single HTML f
 
 - `design.md`: the art bible. Fixed constraints, palette, light, seasons, depth rules, asset contract.
   Read it before any visual change.
+- `engine-map.md`: every engine part (core, simulation, presentation, content, platform) with its owner
+  doc, phase and status, and the decisions it rests on. Start here for engine work.
 - `engine-design.md`: the world, camera and bakes (world spec, heightfield, coverage rules), scale
   and hardware targets, known issues, and the order of engine work. Read it before engine changes.
 - `web-rts-architecture.md`: how the game will be built (sim/render split, typed arrays, commands,
@@ -18,7 +20,8 @@ Status: **prototyping the look**. No game code yet; prototypes are single HTML f
 - `asset-sources.md`: where to find and how to judge 3D assets, brushes and licences.
 - `staff-map/`: the far-zoom staff map (design, implementation, plan). Read its `design.md`
   before touching the map or the zoom transition.
-- `research/`: deep-research reports (`cheap-painterly-postfx.md`, `stylized-water.md`).
+- `research/`: deep-research reports (`cheap-painterly-postfx.md`, `stylized-water.md`,
+  `rts-engine-subsystems.md`).
 - `prototypes/`: single-file Babylon.js 9 prototypes. `painted-cinematic.html` is the current one;
   the others are earlier steps kept for comparison. `*.data.js` are generated model data.
 - `tools/`: asset converters (`obj-to-js.mjs`, `blend-to-js.py`).
