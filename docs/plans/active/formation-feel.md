@@ -63,21 +63,49 @@ animation beyond a placeholder, the deterministic sim spine (S0).
   with the SwiftShader caveat), plus a manual number on the dev Mac; recorded in this plan.
 - The page loads with no errors; `node tools/check-docs.mjs` passes.
 
-## Results (headless, before review)
+## Results (headless)
 
-- **Two layers work.** Every soldier stays within about 1.4 m of his slot while marching and changing
-  formation; the per-frame company frames match the reference slot formula to within 1e-14
-  (`F.slotCheck()`), mid-wheel, mid-change, in square and in march column.
-- **Drill timings** (drill factor 1, measured in the page): line → square 100 s, square → line 60 s,
-  line → column 30 s, column → line 40 s, line → march column 20 s, march column → line 60 s, all as
-  planned. Companies start one after another and wheel around their turning flank.
-- **Square:** the first layout left the corners open; a pinwheel layout (each face shifted along its
-  line by half its depth) closes them.
-- **Wood:** the line goes ragged, men pass between trunks and gaps open and close, then the line
-  re-dresses past the trees. **Ford:** the battalion files off into march column, crosses, the tail
-  bunches in the water, then deploys into line on the far bank.
-- **Casualties:** 30 killed → 27 soldiers stepped up into gaps, nobody else changed slot.
-- **Per-soldier layer cost** (headless Chrome, CPU): 0.05 ms per frame for 1 battalion, **0.7 ms for
-  40 battalions (4,000 soldiers)**, after caching each company's frame per frame and replacing
-  string-keyed neighbour maps with numeric grids (first version: 8.6 ms). Rendering frame rate in
-  headless SwiftShader is not meaningful; a manual number on the dev Mac is still owed.
+Measured with `F.slotError()` (how far soldiers are from their slots) and `F.measure()` (per-soldier
+CPU per frame: steering plus figure matrices), after review round 1.
+
+| Scenario | Worst distance from slot | Worst mean |
+|---|---|---|
+| Line turning 90° to a new target | 1.71 m | 0.56 m |
+| Wheel 45° | 0.25 m | 0.13 m |
+| Line through the wood | 5.0 m (men held up behind trunks) | 0.83 m |
+| Cross the ford (march column, turn, deploy) | 3.6 m | 1.26 m |
+| March column turning 90° | 0.98 m | |
+| 40 battalions on the move | 2.4 m | 0.40 m |
+
+- **March column as a snake:** each company stands on the head's trail and faces along it, so the
+  column turns where its head turned (the first version turned as a rigid 23 m stick: 28.8 m error).
+- **Drill timings** come from the timing table (they are set, not measured): line → square 100 s,
+  column → square 60 s, line ↔ column 30 / 40 s, march column 20 / 60 s. Companies start one after
+  another and wheel around their turning flank.
+- **Interrupted changes:** a new shape order mid-change takes over at once; reversing (square ordered,
+  line ordered 30 s in) takes only the share already done (18 s), and orders to move wait until the
+  change ends (troops do not march while re-forming).
+- **Square:** a pinwheel layout (each face shifted along its line by half its depth) closes the corners.
+- **Casualties:** the man behind steps up, then empty files close toward the colours. 30 killed: 27
+  stepped up, 18 moved one or more files inward; 80 killed: no hole left inside the line.
+- **Per-soldier CPU** (headless Chrome): 0.02 ms per frame for 1 battalion, **1.34 ms for 40
+  battalions (4,000 soldiers)**, steering and figure matrices together (first version: 8.6 ms for
+  steering alone). Rendering frame rate in headless SwiftShader is not meaningful; a manual number
+  on the dev Mac is still owed.
+
+## Review round 1
+
+10 findings, 1 severe → another round.
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | severe | March column turned as a rigid stick around its head (tail 28.8 m off its slot) | Snake: companies follow the head's trail |
+| 2 | moderate | Orders during a change waited for the whole change | Shape orders interrupt; reversal takes the share done |
+| 3 | moderate | The "within 1.4 m" result was untrue | Replaced by measured worst cases per scenario |
+| 4 | moderate | Ranks never closed toward the centre (holes in the front rank) | Empty files close toward the colours |
+| 5 | moderate | column → square 30 s, the sim design says ≈ 60 s; timings "measured" were the table | 60 s; results say the times are set |
+| 6 | light | Turning not extrapolated | Anchor angular speed extrapolated with position |
+| 7 | light | Trunks at the wood's edge ignored | Tree checks for every soldier |
+| 8 | light | Slot check had no negative test and could not fail | Removed (both paths now share one function); `F.slotError()` measures following |
+| 9 | light | Neighbour cells smaller than the separation radius | 0.6 m cells (≥ 0.52 m) |
+| 10 | light | Grid cleared in full each frame; cost left out figure work | Only touched cells cleared; cost includes figures |
