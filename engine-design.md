@@ -31,7 +31,7 @@ covered its tile), and the camera drift exists on main. Rules for this are in §
 | Target | Value | Consequence |
 |---|---|---|
 | Play area | **1–1.5 km** square (the prototype stays at 500 m until the chunk step, §10) | Detail terrain ≈ play + 2 × ~150 m margin ≈ **1.8 km**; uniform chunks needed (§4) |
-| Units | **20–40 formations × 100–200 figures** = 2k–8k figures | Instanced figures with LOD, stepped vertex animation, own shadows (§7) |
+| Units | **20–40 battalions × ~100 figures** = 2k–4k figures (decided Oct 2026: a middle scale between Total War and Age of Empires) | Instanced figures with LOD, stepped vertex animation, own shadows (§7) |
 | Camera | **Locked down**: short zoom, pitch from zoom, **yaw ±45°** around a default | No distance LOD or streaming, ever; the sun stays behind the scene for the backlit look |
 | Min-spec | **Gaming laptop, RTX 3060 (laptop) or better**: 6 GB VRAM, WebGL2, 1080p at 60 fps | Bake memory and texture size are not the constraint (§6); frame budget (§8). The dev Macs are not the target: they serve as a conservative proxy until a 3060 laptop is measured |
 
@@ -136,7 +136,7 @@ later). Each declares coverage, texel target, inputs and consumers.
 
 ## 7. Units (rendering side)
 
-2k–8k figures, readable first (`design.md` pillar 1).
+2k–4k figures, readable first (`design.md` pillar 1).
 - **Thin instances** per figure type, matrices written in place each frame
   (`web-rts-architecture.md` §3).
 - **Figure LOD:** at max zoom a 1.8 m figure is ~8 px tall, so far figures drop to a very low-poly
@@ -195,7 +195,7 @@ blocking an unrelated PR (§11).
 7. **W2–W5** water.
 8. **Scale up**: grow the play area to 1–1.5 km, scatter culling by chunk, light map at full size;
    measured on a 3060 laptop.
-9. **Performance pass** with per-pass budgets (§8), full unit count (8k figures).
+9. **Performance pass** with per-pass budgets (§8), full unit count (4k figures).
 10. **Video-tier frame** from a presentation camera.
 11. **W6** Austerlitz from real data; defines the map file format (heightfield, river samples,
     zones, gameplay layers).

@@ -14,7 +14,7 @@ battlefield that runs at 60 fps in a browser (game tier) and renders at film qua
       colour, depth and composition (judged by the art director).
 - [ ] Terrain, vegetation, water and seasons all follow `design.md` without per-asset hacks.
 - [ ] 60 fps measured at 1080p on min-spec hardware (gaming laptop, RTX 3060 or better), GPU
-      frame time ≤ 12 ms, with 2k–8k unit figures (`engine-design.md` §2).
+      frame time ≤ 12 ms, with 2k–4k unit figures (`engine-design.md` §2).
 - [ ] The same scene renders a video-tier frame with depth of field, mist and light shafts.
 - [ ] Real elevation and real rivers load for at least one historical battlefield.
 

@@ -34,7 +34,7 @@ without the renderer.
 
 | # | Decision | Status |
 |---|---|---|
-| D1 | **The formation is the simulation's unit.** A battalion is one entity (line shape, strength, share loaded, morale, fatigue, ammunition). The 100–200 figures are placed and animated by the renderer from that state. Musketry is resolved per formation, statistically; roundshot is a real ray bouncing on the heightfield | agreed (Oct 2026) |
+| D1 | **The battalion is the simulation's unit and the player's unit.** About 100 figures each, 20–40 per battle (2k–4k figures). One entity per battalion (line shape, strength, share loaded, morale, cohesion); the figures are placed and animated by the renderer from that state. Musketry is resolved per battalion; roundshot is a real ray bouncing on the heightfield | agreed (Oct 2026) |
 | D2 | **Deterministic numbers in the simulation.** Revised after the sim-design review: **restricted float64** (IEEE `+ − × /` and `sqrt` only; `Math.sin`, `pow` and the like banned by lint; own trig; build-time input data; seeded integer RNG; index-ordered iteration) instead of Q16.16 fixed-point, which overflowed and was mis-specified (`sim-design.md` §2, §19) | revised, proposed |
 | D3 | **No couriers: orders apply immediately.** Couriers would need trajectories, blocking and interception; too costly to do well. Generals still matter on the field (rally, morale) | agreed (Oct 2026) |
 | D4 | **Single-player first, multiplayer-capable**: determinism, hashing and command logs are built as if lockstep were coming, so it stays a transport problem | proposed |
@@ -67,7 +67,7 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 | Heightfield and terrain layers | Height, slope, cover, roads, water depth and fords as sim data | `engine-design.md` §4 | E0 | 🟡 (`H()`, river data) |
 | Spatial index | Who is near whom, per formation (figures are not simulated, D1) | `sim-design.md` | P | ⬜ |
 | Formations and drill | Line, column, square, skirmish; frontage per file; **timed formation changes** (square ≈ 60–100 s) with a penalty while changing | `sim-design.md` | P | ⬜ |
-| Orders and commanders | Order queue per formation (immediate); brigade group moves; generals rally and steady nearby troops | `sim-design.md` §6 | P | ⬜ |
+| Orders and commanders | The player orders battalions (immediate, multi-selection); generals rally and steady nearby troops | `sim-design.md` §6 | P | ⬜ |
 | Movement | Formation paths over the heightfield; wheeling, line deformation over terrain; local separation | `sim-design.md`, `web-rts-architecture.md` §7 | P | ⬜ |
 | Fire | Musketry per formation (share loaded, volleys, 1 hit per 300–800 rounds in battle); artillery rays with ricochet, canister cones | `sim-design.md` | P | ⬜ |
 | Melee and charges | Impact, square vs cavalry, breach chance on a morale failure | `sim-design.md` | P | ⬜ |
@@ -127,8 +127,8 @@ Phases as revised in `sim-design.md` §17:
 - **S0 short spine** (2–3 days): number rules and lint, tables, commands, RNG, hash, Node replay,
   build step for the sim heightfield and cost grid.
 - **S1 fun slice** (main thread, with the units placeholder): infantry, one cavalry regiment, one
-  battery, morale, standing behaviour, brigade group moves. Acceptance: a 20-minute brigade
-  fight is fun at 2× speed.
+  battery, morale, standing behaviour, multi-selection moves. Acceptance: a 20-minute fight of
+  about 6 battalions per side is fun at 2× speed.
 - **S2 hardening:** worker, vision, smoke, group moves, cross-browser replays.
 - **S3 a real battle:** order of battle, scenarios, AI, saves.
 
@@ -137,7 +137,7 @@ performance, video tier, W6). The two tracks meet at the units placeholder.
 
 ## 5. Open questions
 
-1. What the player commands: battalions or brigades (`sim-design.md` §18).
+1. One figure = one soldier (proposal), or one figure = several men (`sim-design.md` §1).
 2. Default game speed within the 30–45 minute battle length (D5).
 3. Whether figures ever matter to the simulation (e.g. the general's figure), or everything stays
    per formation.

@@ -19,7 +19,7 @@ decisions in `engine-map.md` §2. Evidence and parameters: `research/rts-engine-
 
 | Simulated (deterministic) | Only drawn (renderer, cosmetic RNG) |
 |---|---|
-| **Formations**: battalions, cavalry regiments, batteries (D1) | The 100–200 figures of a formation, their animation, who falls |
+| **Formations**: battalions, cavalry regiments, batteries (D1) | The ~100 figures of a battalion, their animation, who falls |
 | **Commanders**: generals, one rider each, with position | Flags, drummers, officers inside a formation |
 | | Musket balls, flashes |
 | **Roundshot** in flight (rays bouncing on the heightfield) | Dust, debris, bodies |
@@ -27,7 +27,13 @@ decisions in `engine-map.md` §2. Evidence and parameters: `research/rts-engine-
 | Sim heightfield, cost grid, terrain layers (build-time data, §2) | Vegetation, water look, the far ring |
 
 Scale per battle: ≤ 128 formations, ≤ 64 commanders, ≤ 256 roundshot, ≤ 512 smoke
-puffs. The sim works on tens of entities, not thousands. A figure stands for about 3–8 men (R§3).
+puffs. The sim works on tens of entities, not thousands.
+
+**Scale (decided Oct 2026): the player commands battalions of about 100 figures**, 20–40 per battle
+(2k–4k figures). A middle size between Total War (magnificent, but players zoom out to dots) and
+Age of Empires (about 200 units per side). Proposal: **one figure is one soldier**: a game
+battalion is about 100 men (historically a large company), with real spacing per man so a line
+looks right. Ranges and speeds stay historical, to playtest.
 
 ## 2. Numbers, inputs, time, randomness
 
@@ -102,7 +108,7 @@ The only way into the sim. Players, AI and scripts issue the same commands.
 | `fire` | formation, hold or fire, optional target |
 | `charge` | formation, target |
 | `halt`, `retreat`, `rally` | formation |
-| `group-move` | a brigade: a line, a column of battalions, or a supporting second line, laid out by the sim |
+| `group-move` | *later:* a brigade laid out as a line, a column of battalions, or a second line |
 | `commander-move` | commander, waypoints |
 | `script`, `debug` | scenario events; spawn, kill, set morale, teleport (replayable) |
 
@@ -110,8 +116,10 @@ Orders to formations go through command and control (§6).
 
 ## 5. Formations and drill
 
-- **Geometry from data:** 0.56–0.7 m per file (R§3), ranks per nation and kind. A 600-man, 3-rank
-  French battalion in line is ≈ 111 m × 2.3 m; an attack column ≈ 40 files × 18 ranks (R§3).
+- **Geometry from data:** 0.56–0.7 m per file (R§3), ranks per nation and kind. A 100-man game
+  battalion in a 3-rank line is ≈ 34 files ≈ 20 m × 2.3 m (2 ranks: ≈ 30 m); an attack column
+  ≈ 10 files × 10 ranks. Forty battalions in line cover ≈ 0.8–1.2 km, which fits the 1–1.5 km
+  play area with room for second lines and manoeuvre.
   Frontage shrinks as men fall (ranks close), which moves contact, sight and canister edges.
 - **Formation changes are timed transitions** (R§3), with **partial credit**: a square at 70% gives
   70% of the square's protection.
@@ -141,8 +149,9 @@ Command still matters through the commanders on the field:
 - **Rally and morale:** formations within a commander's radius get a morale bonus and can be
   rallied when routing (§10). Riding a general forward helps a wavering line, at the risk of his
   life.
-- **Brigades as groups:** a brigade order lays out its battalions (a line, a column of battalions,
-  a supporting second line) through `group-move`; battalions can still be ordered one by one.
+- **The player orders battalions** (decided). Multi-selection moves several at once, keeping
+  their relative positions. Brigade group moves (a laid-out line or second line) come later if
+  playtests ask for them.
 - **Orders** are **replace** (default) or **append** (queued waypoints).
 - **Standing behaviour** (§12) still matters: troops react on their own to cavalry, fire and
   disorder between the player's orders.
@@ -180,7 +189,8 @@ friends:** a second line cannot fire through the first. Partial frontage overlap
 **Musketry, per formation, statistical** (D1). **Calibrated on time to break, not on hit rates.**
 The research's per-minute figure was wrong (§19): a 600-man line firing at 100 m with 1 hit in
 300–500 rounds gives ≈ 1.4–5 casualties a minute, so a battalion breaking at 10–15% losses would
-take 15–45 minutes and the battle would look static. Battlefield rates are averages over mostly
+take 15–45 minutes and the battle would look static. Game battalions are 100 men, so the rates are
+derived from the time-to-break target, not from historical rounds. Battlefield rates are averages over mostly
 long-range fire (Waterloo: 1 in 162, R§3), so short-range rates are higher anyway.
 
 - **Target:** two lines exchanging fire at ≈ 100 m: the weaker breaks in **≈ 6–10 minutes** of
@@ -323,7 +333,7 @@ The goal is to learn **"is it fun?"** as early as possible without building dete
 | Phase | Scope | Acceptance |
 |---|---|---|
 | **S0 short spine** (2–3 days) | restricted-float64 rules + lint, entity tables and pools, handles with kind tags, commands and stamping, RNG, hash, Node replay test, build step for the sim heightfield and cost grid | A scripted fight of moving blocks replays to the same hashes in Node |
-| **S1 fun slice** (main thread) | infantry line, column, square; one cavalry regiment; one battery with roundshot; musketry calibrated on time to break; morale and cohesion; standing behaviour; brigade group moves; an end condition; drawn by the prototype (units placeholder) | **A 20-minute brigade fight is fun at 2× speed**; cavalry catches a forming square; a square holds; artillery punishes columns |
+| **S1 fun slice** (main thread) | infantry line, column, square; one cavalry regiment; one battery with roundshot; musketry calibrated on time to break; morale and cohesion; standing behaviour; multi-selection moves; an end condition; drawn by the prototype (units placeholder) | **A 20-minute fight of about 6 battalions per side is fun at 2× speed**; cavalry catches a forming square; a square holds; artillery punishes columns |
 | **S2 hardening** | worker + snapshot + event ring; vision; smoke puffs; group moves; commanders and succession; Firefox/WebKit nightly replays | Same battle in the worker; replays match across browsers |
 | **S3 a real battle** | ammunition and fatigue; order of battle and scenarios; scripted enemy plan with brigade AI; saves; victory rules | One historical scenario playable start to end against the AI |
 
@@ -333,8 +343,8 @@ The goal is to learn **"is it fun?"** as early as possible without building dete
 controls: pause, 1×, 2×, 4–8× for approach marches; march speeds and casualty rates are tuned to
 fit).
 
-1. **What does the player command: battalions or brigades?** Proposal: brigades as the main level
-   (`group-move`), battalions orderable one by one. Drives the UI, group moves and the AI.
+1. ~~What does the player command?~~ **Battalions of about 100 figures** (decided, §1). Open:
+   one figure = one soldier (proposal) vs. one figure = several men.
 2. **Fog of war for the player:** full visibility until S2 playtests.
 3. **Casualty display:** proposal: figures fall in proportion and ranks close, bodies stay on the
    ground, plus a strength bar.
