@@ -15,7 +15,7 @@ command language. Everything else sits around that core:
             commands (player, AI, scripts, replay, debug)
                               │
                               ▼
-   ┌──────────── SIMULATION (worker, 20 Hz, deterministic float64)  ────────────┐
+   ┌──────────── SIMULATION (worker, 20 Hz, deterministic float64) ─────────────────┐
    │ formations · orders & couriers · movement · fire · melee · morale · vision ... │
    └───────────────────────────────┬────────────────────────────────────────────────┘
                                    │ snapshots (per tick)
