@@ -43,9 +43,9 @@ docs cite: D1 → 0007, D2 → 0006, D3 → 0008, D4 → 0013, D5 → 0009, D6 �
 | # | Decision | Status |
 |---|---|---|
 | D1 | **The battalion is the simulation's unit and the player's unit.** About 100 figures each, 20–40 per battle (2k–4k figures). One entity per battalion (line shape, strength, share loaded, morale, cohesion); the figures are placed and animated by the renderer from that state. Musketry is resolved per battalion; roundshot is a real ray bouncing on the heightfield | agreed (Oct 2026) |
-| D2 | **Deterministic numbers in the simulation.** Revised after the sim-design review: **restricted float64** (IEEE `+ − × /` and `sqrt` only; `Math.sin`, `pow` and the like banned by lint; own trig; build-time input data; seeded integer RNG; index-ordered iteration) instead of Q16.16 fixed-point, which overflowed and was mis-specified (`docs/proposals/sim-design.md` §2, §19) | revised, proposed |
+| D2 | **Deterministic numbers in the simulation.** Revised after the sim-design review: **restricted float64** (IEEE `+ − × /` and `sqrt` only; `Math.sin`, `pow` and the like banned by lint; own trig; build-time input data; seeded integer RNG; index-ordered iteration) instead of Q16.16 fixed-point, which overflowed and was mis-specified (`docs/proposals/sim-design.md` §2, §19) | accepted (Oct 2026) |
 | D3 | **No couriers: orders apply immediately.** Couriers would need trajectories, blocking and interception; too costly to do well. Generals still matter on the field (rally, morale) | agreed (Oct 2026) |
-| D4 | **Single-player first, multiplayer-capable**: determinism, hashing and command logs are built as if lockstep were coming, so it stays a transport problem | proposed |
+| D4 | **Single-player first, multiplayer-capable**: determinism, hashing and command logs are built as if lockstep were coming, so it stays a transport problem | accepted (Oct 2026) |
 | D5 | **A battle takes 30–45 minutes of real time** (real battles lasted hours): a battle clock with speed controls (pause, 1×, 2×, 4–8×). Time of day is chosen per scenario and baked; the sun does not move during a battle | agreed (Oct 2026) |
 | D6 | **The camera is locked down** (short 3D zoom); the far zoom is the staff map | agreed (`docs/proposals/engine-design.md`, `docs/proposals/staff-map/`) |
 

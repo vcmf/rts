@@ -61,5 +61,6 @@ commits or PRs.
 - **Pack colours are never used**: materials map to roles and our palette paints them.
 - **Static light is baked once per map**; only moving things get runtime lighting.
 - **The simulation never imports the renderer** and changes only through commands (decision 0005,
-  `docs/architecture.md`); its determinism rules are proposed (decisions 0006, 0013).
+  `docs/architecture.md`), and it is deterministic: restricted float64, replays match across
+  browsers (decisions 0006, 0013).
 - **Measure, don't assume**: performance claims need a measurement or are labelled estimates.
