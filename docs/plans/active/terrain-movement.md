@@ -132,3 +132,43 @@ fire and morale.
 | 8 | light | The accordion acts after the solve, so it can push a lag past Lmean or Lmax for a tick | Not fixed: within 0.01 m in every check; folding it into the solve waits for a measured need |
 | 9 | light | The core named 'march' and 'open' | Trail shapes are ruleset data (`trail`); empty bins need no q; turning half-width from the layout |
 | 10 | light | Route step chosen by the head alone | Route step only while every company is on a road |
+
+## Review round 3
+
+10 findings, 2 severe. Third round with severe findings: stop and redesign (the review count restarts).
+
+| # | Sev. | Finding |
+|---|---|---|
+| 1 | severe | Turning in place inside a move order is never checked: a line at the bank turning north puts 49 slots in deep water, and dressBack (backing along the heading) cannot get them out |
+| 2 | severe | A shape order during a change skips the refusal; the path of a change (wheeling about a flank) is never checked |
+| 3 | moderate | The accordion uses the straight layout; in a march column's bend companies come within 0.02 m |
+| 4 | moderate | The halt waits for a held bin to reach Lmax; impassable ground narrower than Lmax lets the slots cross and the men follow |
+| 5 | moderate | No checks for the ford, turning near water, orders during a change, the bend, wheel progress, a dry square accepted |
+| 6 | light | Accordion overlap test on a floating-point boundary for diagonal pairs |
+| 7 | light | Halted files close without q; idle battalions resample for nothing |
+| 8 | light | Readout mean lag counts empty bins; binN is a flag, not a count |
+| 9 | light | Core still names 'normal', 'march', 'line' (default style, bridge and ford orders, rebalance, closeRanks) |
+| 10 | light | Road pace from one point per company flickers at road edges |
+
+## Redesign (proposed after round 3)
+
+Every severe finding since round 1 is the same rule (no man on impassable ground) enforced separately,
+after the fact, in each kind of motion: advance, turn, wheel, change, halt. The redesign enforces it
+once, before the fact:
+
+- **One footprint gate.** Every change of pose (anchor step, turn, wheel step, change step) and every
+  lag change goes through one function that checks the men's places (slot − lag) of the next pose.
+  A step that would put a place on impassable ground is clipped (a fixed number of halvings,
+  deterministic) and the order halts. Nothing can enter, so `dressBack` and the 0.5 m look-ahead go.
+- **Per-bin gating in the lag model.** A bin whose places would enter is held exactly at the edge (its
+  lag grows); on halt the anchor moves back by the held lag, so slots return to where the men stand
+  and nothing crosses narrow ground.
+- **Changes checked along their path** (sampled poses of the transition), at the start and at every
+  interrupt.
+- **Lag along the trail** for trail shapes: a company lagging l stands on the trail at its gap + l, so
+  the accordion holds in bends (the straight-layout pairs stay for the other shapes, with a metre
+  tolerance).
+- **Era names out of the core:** default preset and scenario orders (bridge, ford) from the ruleset
+  or the map; rebalance and closeRanks keyed on the formation kind.
+- **Checks** for each finding of round 3, each with a negative run.
+
