@@ -1,126 +1,78 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Formation feel</title>
-<style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #c9c2a8; font: 13px/1.35 ui-monospace, Menlo, monospace; }
-  canvas { width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
-  #panel { position: absolute; top: 12px; left: 12px; width: 250px; padding: 12px; background: rgba(250, 247, 238, 0.93);
-           border: 1px solid #b9b19a; border-radius: 6px; color: #2c2a24; }
-  #panel h1 { font-size: 13px; margin: 0 0 8px; letter-spacing: 0.08em; }
-  #panel .row { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
-  #panel button { font: inherit; padding: 3px 7px; border: 1px solid #8d8570; background: #fff; border-radius: 4px; cursor: pointer; }
-  #panel button.on { background: #2c2a24; color: #fff; }
-  #panel label { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin: 4px 0; }
-  #panel input[type=range] { width: 110px; }
-  #stats { margin-top: 8px; white-space: pre; font-size: 12px; color: #4a463c; }
-  #hint { position: absolute; bottom: 10px; left: 12px; color: #4a463c; }
-</style>
-<script src="https://cdn.jsdelivr.net/npm/babylonjs@9.29.0/babylon.js"></script>
-</head>
-<body>
-<canvas id="c"></canvas>
-<div id="panel">
-  <h1>FORMATION FEEL · F0</h1>
-  <div class="row">
-    <button data-form="line">Line</button><button data-form="column">Column</button>
-    <button data-form="square">Square</button><button data-form="march">March col.</button>
-  </div>
-  <div class="row">
-    <button data-cmd="wheelL">Wheel ⟲</button><button data-cmd="wheelR">Wheel ⟳</button>
-    <button data-cmd="wood">Through wood</button><button data-cmd="ford">Cross ford</button>
-  </div>
-  <div class="row">
-    <button data-cmd="kill">Casualties ×10</button><button data-cmd="reset">Reset</button>
-  </div>
-  <label>Drill factor <input id="drill" type="range" min="0.5" max="3" step="0.1" value="1"><span id="drillv">1.0</span></label>
-  <div class="row">
-    <button data-speed="1" class="on">1×</button><button data-speed="4">4×</button><button data-speed="10">10×</button>
-    <button data-cmd="many">40 battalions</button><button data-cmd="debug">Debug</button><button data-cmd="crowns">Crowns</button>
-  </div>
-  <div id="stats"></div>
-</div>
-<div id="hint">click the ground to move · drag to orbit · right-drag to pan · scroll to zoom</div>
-<script>
-/* =========================================================================
-   FORMATION FEEL PROTOTYPE (docs/plans/active/formation-feel.md)
-   Two layers, as recommended in docs/research/formation-movement-and-doc-systems.md §4:
-   - FORMATION layer at 20 Hz: anchor (path, speed, turn limits), 4 companies, a slot table with
-     stable identity (company, file, rank), shapes as company placements, timed drill transitions.
-   - SOLDIER layer every frame: each soldier steers to his slot extrapolated a little ahead, with
-     drift, separation, tree avoidance, terrain speed and height. Cosmetic: it never feeds back.
-   A feel test only: no combat or morale, no deterministic number rules (docs/proposals/sim-design.md §2).
-   ========================================================================= */
-const B = BABYLON, V3 = B.Vector3, C3 = B.Color3;
-
-/* ---------- seeded RNG (cosmetic here, but repeatable screenshots) ---------- */
+// Formation core (docs/plans/active/formation-feel.md): terrain data, the 20 Hz formation layer and the
+// per-frame soldier layer, with no rendering. Loaded by prototypes/formation-map.html (a plain script,
+// so it runs from file://). Exposes the global FC.
+// The layers follow docs/research/formation-movement-and-doc-systems.md §4. A feel and benchmark test:
+// not yet the deterministic simulation (docs/proposals/sim-design.md §2 rules do not apply here).
+(() => {
+/* ---------- seeded RNG (repeatable maps and screenshots) ---------- */
 function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-/* ---------- terrain: gentle ground, a stream with one ford, a wood ---------- */
+/* =========================================================================
+   TERRAIN: hills (contours on the map), a stream with one ford, a road, a wood, rocks.
+   Heights are sampled once into a grid (the one authority for height, decision 0012); slope and the
+   map's contours both read it.
+   ========================================================================= */
+const FIELD = 360, HALF = FIELD / 2;
 const STREAM_X = z => 70 + 6 * Math.sin(z * 0.03);
 const FORD = { z0: -9, z1: 9 };
 const WOOD = { x: -45, z: 55, r: 30 };
-function baseH(x, z) { return 1.2 * Math.sin(x * 0.021) * Math.cos(z * 0.017) + 0.6 * Math.sin(x * 0.047 + z * 0.031); }
+const HILLS = [   // summits for spot heights; r is the spread
+  { x: 0, z: 95, h: 22, r: 46, name: 'Hill A' }, { x: -105, z: -55, h: 15, r: 36, name: 'Hill B' },
+  { x: 130, z: -95, h: 17, r: 40, name: 'Hill C' }, { x: -20, z: -125, h: 8, r: 30, name: 'Knoll' },
+];
+const ROAD = [[-180, -14], [-110, -8], [-50, -4], [STREAM_X(0) - 14, 0], [STREAM_X(0) + 14, 0], [125, 18], [180, 40]];
 const WATER_HALF = 5;
+function baseH(x, z) {
+  let h = 6 + 1.6 * Math.sin(x * 0.031 + 1) * Math.cos(z * 0.027) + 0.8 * Math.sin(x * 0.07 - z * 0.05);
+  for (const p of HILLS) h += p.h * Math.exp(-((x - p.x) ** 2 + (z - p.z) ** 2) / (p.r * p.r));
+  h -= 4 * Math.exp(-(((x - STREAM_X(z)) / 28) ** 2));   // the stream's valley
+  return h;
+}
 function streamDepth(x, z) {   // depth below the banks: 0 outside the channel
   const d = Math.abs(x - STREAM_X(z)); if (d > WATER_HALF + 2) return 0;
   const bed = z > FORD.z0 && z < FORD.z1 ? 0.45 : 1.1;
   const k = Math.min(1, Math.max(0, (WATER_HALF + 2 - d) / 2.5));
   return bed * k * k * (3 - 2 * k);
 }
-const H = (x, z) => baseH(x, z) - streamDepth(x, z);
+const formulaH = (x, z) => baseH(x, z) - streamDepth(x, z);
+// the height grid: 1 m cells, bilinear reads
+const HG = 1, HN = FIELD / HG + 1, heights = new Float32Array(HN * HN);
+for (let j = 0; j < HN; j++) for (let i = 0; i < HN; i++) heights[j * HN + i] = formulaH(i * HG - HALF, j * HG - HALF);
+function H(x, z) {
+  const u = Math.min(HN - 1.001, Math.max(0, (x + HALF) / HG)), v = Math.min(HN - 1.001, Math.max(0, (z + HALF) / HG));
+  const i = u | 0, j = v | 0, fu = u - i, fv = v - j, k = j * HN + i;
+  return (heights[k] * (1 - fu) + heights[k + 1] * fu) * (1 - fv) + (heights[k + HN] * (1 - fu) + heights[k + HN + 1] * fu) * fv;
+}
 const waterLevel = z => baseH(STREAM_X(z), z) - 0.25;
-const inWater = (x, z) => Math.abs(x - STREAM_X(z)) < WATER_HALF && H(x, z) < waterLevel(z);
+const inWater = (x, z) => Math.abs(x - STREAM_X(z)) < WATER_HALF && streamDepth(x, z) > 0.25;
 const inWood = (x, z) => (x - WOOD.x) ** 2 + (z - WOOD.z) ** 2 < WOOD.r * WOOD.r;
-// ground speed factor for soldiers and for the formation anchor
-const groundSpeed = (x, z) => (inWater(x, z) ? 0.45 : 1) * (inWood(x, z) ? 0.75 : 1);
-
-const canvas = document.getElementById('c');
-const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
-const scene = new B.Scene(engine);
-scene.clearColor = new B.Color4(0.79, 0.76, 0.66, 1);
-const camera = new B.ArcRotateCamera('cam', -Math.PI / 2 - 0.3, 0.72, 70, new V3(0, 0, 0), scene);
-camera.attachControl(canvas, true); camera.lowerRadiusLimit = 15; camera.upperRadiusLimit = 260;
-camera.lowerBetaLimit = 0.2; camera.upperBetaLimit = 1.1; camera.wheelDeltaPercentage = 0.01; camera.panningSensibility = 40;
-camera.mapPanning = true; camera.minZ = 0.5; camera.maxZ = 2000;
-const sun = new B.DirectionalLight('sun', new V3(-0.6, -1, 0.45), scene); sun.intensity = 1.05; sun.diffuse = new C3(1, 0.95, 0.85);
-const sky = new B.HemisphericLight('hemi', new V3(0, 1, 0), scene); sky.intensity = 0.55; sky.groundColor = new C3(0.45, 0.42, 0.36);
-
-const ground = B.MeshBuilder.CreateGround('ground', { width: 360, height: 360, subdivisions: 220, updatable: true }, scene);
-{ const p = ground.getVerticesData(B.VertexBuffer.PositionKind), col = [];
-  for (let i = 0; i < p.length; i += 3) { const x = p[i], z = p[i + 2], h = H(x, z); p[i + 1] = h;
-    const wet = streamDepth(x, z) > 0.05, wood = inWood(x, z), n = 0.5 + 0.5 * Math.sin(x * 0.13 + z * 0.07) * Math.sin(z * 0.11 - x * 0.05);
-    const c = wet ? [0.42, 0.40, 0.30] : wood ? [0.36 + 0.05 * n, 0.43 + 0.05 * n, 0.24] : [0.55 + 0.08 * n, 0.58 + 0.06 * n, 0.33 + 0.04 * n];
-    col.push(c[0], c[1], c[2], 1); }
-  ground.updateVerticesData(B.VertexBuffer.PositionKind, p); ground.setVerticesData(B.VertexBuffer.ColorKind, col);
-  const n = []; B.VertexData.ComputeNormals(p, ground.getIndices(), n); ground.updateVerticesData(B.VertexBuffer.NormalKind, n); }
-const groundMat = new B.StandardMaterial('gm', scene); groundMat.specularColor = new C3(0, 0, 0); ground.material = groundMat;
-
-// water: a ribbon along the stream at its level
-{ const paths = [];
-  for (const side of [-1, 1]) { const path = []; for (let z = -180; z <= 180; z += 3) path.push(new V3(STREAM_X(z) + side * (WATER_HALF + 0.6), waterLevel(z), z)); paths.push(path); }
-  const water = B.MeshBuilder.CreateRibbon('water', { pathArray: paths, sideOrientation: B.Mesh.DOUBLESIDE }, scene);
-  const wm = new B.StandardMaterial('wm', scene); wm.diffuseColor = new C3(0.36, 0.52, 0.56); wm.specularColor = new C3(0.25, 0.25, 0.25); wm.alpha = 0.92; water.material = wm; }
-
-// wood: trunks are the obstacles soldiers avoid; crowns can be hidden to watch the men under them
-const TREES = [];
+function roadDist(x, z) {
+  let m = Infinity;
+  for (let k = 0; k + 1 < ROAD.length; k++) { const [ax, az] = ROAD[k], [bx, bz] = ROAD[k + 1], ex = bx - ax, ez = bz - az;
+    const t = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez))); m = Math.min(m, Math.hypot(x - ax - ex * t, z - az - ez * t)); }
+  return m;
+}
+// ground speed factor: water and woods slow, slopes slow (steeper = slower), roads help a little
+function groundSpeed(x, z) {
+  const gx = (H(x + 1, z) - H(x - 1, z)) / 2, gz = (H(x, z + 1) - H(x, z - 1)) / 2, slope = Math.sqrt(gx * gx + gz * gz);
+  return (inWater(x, z) ? 0.45 : 1) * (inWood(x, z) ? 0.75 : 1) / (1 + 2.5 * slope) * (roadDist(x, z) < 3 ? 1.1 : 1);
+}
+// obstacles soldiers walk around: tree trunks in the wood, rocks on the hills and by the stream
+const TREES = [], ROCKS = [];
 { const r = rng(11);
   for (let i = 0; i < 600 && TREES.length < 120; i++) { const a = r() * Math.PI * 2, d = Math.sqrt(r()) * WOOD.r, x = WOOD.x + Math.cos(a) * d, z = WOOD.z + Math.sin(a) * d;
-    if (TREES.every(t => (t.x - x) ** 2 + (t.z - z) ** 2 > 16)) TREES.push({ x, z, r: 0.3 + r() * 0.15 }); } }
-const trunk = B.MeshBuilder.CreateCylinder('trunk', { height: 4, diameterTop: 0.5, diameterBottom: 0.8, tessellation: 7 }, scene);
-const crown = B.MeshBuilder.CreateSphere('crown', { diameter: 3.6, segments: 6 }, scene);
-{ const tm = new B.StandardMaterial('tm', scene); tm.diffuseColor = new C3(0.33, 0.25, 0.17); tm.specularColor = new C3(0, 0, 0); trunk.material = tm;
-  const cm = new B.StandardMaterial('cm', scene); cm.diffuseColor = new C3(0.30, 0.42, 0.20); cm.specularColor = new C3(0, 0, 0); crown.material = cm;
-  const mt = new Float32Array(TREES.length * 16), mc = new Float32Array(TREES.length * 16);
-  TREES.forEach((t, i) => { B.Matrix.Translation(t.x, H(t.x, t.z) + 2, t.z).copyToArray(mt, i * 16); B.Matrix.Translation(t.x, H(t.x, t.z) + 4.6, t.z).copyToArray(mc, i * 16); });
-  trunk.thinInstanceSetBuffer('matrix', mt, 16, true); crown.thinInstanceSetBuffer('matrix', mc, 16, true); }
-// numeric grids over the whole field (no string keys in the per-soldier loop)
-const FIELD = 360, HALF = FIELD / 2;
+    if (TREES.every(t => (t.x - x) ** 2 + (t.z - z) ** 2 > 16)) TREES.push({ x, z, r: 0.3 + r() * 0.15 }); }
+  const spots = [[0, 95, 22, 26], [130, -95, 16, 14], [-105, -55, 14, 8], [STREAM_X(60) + 9, 60, 10, 6], [STREAM_X(-70) - 9, -70, 10, 6]];
+  for (const [cx, cz, rad, n] of spots) for (let k = 0, tries = 0; k < n && tries < 400; tries++) {
+    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * rad, x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d, R = 0.6 + r() * 0.9;
+    if (inWater(x, z) || roadDist(x, z) < 4 || ROCKS.some(o => Math.hypot(o.x - x, o.z - z) < o.r + R + 2)) continue;
+    const pts = []; const m = 5 + (r() * 3 | 0); for (let q = 0; q < m; q++) { const ang = q / m * Math.PI * 2 + r() * 0.5; pts.push([Math.cos(ang) * R * (0.7 + r() * 0.4), Math.sin(ang) * R * (0.7 + r() * 0.4)]); }
+    ROCKS.push({ x, z, r: R, pts }); k++; }
+}
 const TREE_CELL = 4, TREE_N = FIELD / TREE_CELL, treeCells = Array.from({ length: TREE_N * TREE_N }, () => []);
 const treeCell = (x, z) => { const i = Math.floor((x + HALF) / TREE_CELL), j = Math.floor((z + HALF) / TREE_CELL); return i < 0 || j < 0 || i >= TREE_N || j >= TREE_N ? -1 : i * TREE_N + j; };
 for (const t of TREES) treeCells[treeCell(t.x, t.z)].push(t);
+for (const o of ROCKS) treeCells[treeCell(o.x, o.z)].push(o);   // same grid: an obstacle is a circle
 
 /* =========================================================================
    FORMATION LAYER (20 Hz)
@@ -388,8 +340,8 @@ function soldierStep(dt, alpha) {
           const ex = s.x - o.x, ez = s.z - o.z, d2 = ex * ex + ez * ez;
           if (d2 < SEP * SEP && d2 > 1e-8) { const d = Math.sqrt(d2), push = (SEP - d) / SEP * 1.8; wx += ex / d * push; wz += ez / d * push; } }
       }
-      // trees: steer around trunks ahead, never stand inside one
-      const tc = treeCell(s.x, s.z);   // every soldier: edge trunks stand outside the wood circle
+      // obstacles (trunks, rocks): steer around them, never stand inside one
+      const tc = treeCell(s.x, s.z);   // every soldier: edge trunks and rocks stand anywhere
       if (tc >= 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const cell = treeCells[tc + i * TREE_N + j]; if (!cell) continue;
         for (const tr of cell) { const ex = s.x - tr.x, ez = s.z - tr.z, d = Math.sqrt(ex * ex + ez * ez), R = tr.r + 0.35;
           if (d < R + 1.2 && d > 1e-6) { const push = (R + 1.2 - d) / 1.2 * 1.6; wx += ex / d * push; wz += ez / d * push; } } }
@@ -404,71 +356,6 @@ function soldierStep(dt, alpha) {
       s.gait += spd * dt * 5.5;
     }
   }
-}
-
-/* ---------- figures: one instanced mesh for every soldier (body, belts, head, shako, musket) ---------- */
-function figureMesh(name, coat) {
-  const parts = [];
-  const add = (m, col) => { const n = m.getTotalVertices(), c = []; for (let i = 0; i < n; i++) c.push(col[0], col[1], col[2], 1); m.setVerticesData(B.VertexBuffer.ColorKind, c); parts.push(m); };
-  const legs = B.MeshBuilder.CreateBox('l', { width: 0.36, height: 0.8, depth: 0.24 }, scene); legs.position.y = 0.4; add(legs, [0.86, 0.84, 0.78]);
-  const body = B.MeshBuilder.CreateBox('b', { width: 0.46, height: 0.62, depth: 0.28 }, scene); body.position.y = 1.1; add(body, coat);
-  const belt = B.MeshBuilder.CreateBox('x', { width: 0.48, height: 0.08, depth: 0.3 }, scene); belt.position.y = 1.18; belt.rotation.z = 0.6; add(belt, [0.93, 0.92, 0.88]);
-  const head = B.MeshBuilder.CreateSphere('h', { diameter: 0.24, segments: 4 }, scene); head.position.y = 1.55; add(head, [0.86, 0.68, 0.55]);
-  const shako = B.MeshBuilder.CreateCylinder('s', { height: 0.26, diameterTop: 0.27, diameterBottom: 0.23, tessellation: 6 }, scene); shako.position.y = 1.74; add(shako, [0.12, 0.11, 0.12]);
-  const musket = B.MeshBuilder.CreateBox('m', { width: 0.05, height: 1.5, depth: 0.05 }, scene); musket.position.set(0.2, 1.25, 0.05); musket.rotation.x = -0.12; add(musket, [0.32, 0.22, 0.14]);
-  const m = B.Mesh.MergeMeshes(parts, true, true); m.name = name;
-  const mat = new B.StandardMaterial(name + 'm', scene); mat.specularColor = new C3(0, 0, 0); m.material = mat;
-  return m;
-}
-const MAXN = 41 * COMPANIES * PER;
-const fig = figureMesh('fig', [0.17, 0.27, 0.55]);
-const figM = new Float32Array(MAXN * 16); fig.thinInstanceSetBuffer('matrix', figM, 16, false); fig.thinInstanceCount = 0;
-fig.alwaysSelectAsActiveMesh = true;   // thin instances are culled all-or-nothing; the battle area is always in view
-const flag = (() => { const pole = B.MeshBuilder.CreateCylinder('pole', { height: 3.2, diameter: 0.06 }, scene); pole.position.y = 1.6;
-  const cloth = B.MeshBuilder.CreatePlane('cloth', { width: 1.1, height: 0.8, sideOrientation: B.Mesh.DOUBLESIDE }, scene); cloth.position.set(0.58, 2.7, 0);
-  const pm = new B.StandardMaterial('pm', scene); pm.diffuseColor = new C3(0.3, 0.25, 0.2); pole.material = pm;
-  const fm = new B.StandardMaterial('fm', scene); fm.diffuseColor = new C3(0.85, 0.82, 0.78); fm.emissiveColor = new C3(0.25, 0.2, 0.2); cloth.material = fm;
-  const root = new B.TransformNode('flag', scene); pole.parent = root; cloth.parent = root; return root; })();
-
-const tmpM = new B.Matrix(), tmpQ = new B.Quaternion(), tmpS = new V3(1, 1, 1), tmpT = new V3();
-function writeFigures() {
-  let n = 0;
-  for (const b of battalions) for (const s of b.soldiers) {
-    const y = H(s.x, s.z), o = n * 16;
-    if (s.alive) {
-      const bob = Math.abs(Math.sin(s.gait)) * 0.05, c = Math.cos(s.yaw), sn = Math.sin(s.yaw);
-      figM[o] = c; figM[o + 1] = 0; figM[o + 2] = -sn; figM[o + 3] = 0; figM[o + 4] = 0; figM[o + 5] = 1; figM[o + 6] = 0; figM[o + 7] = 0;
-      figM[o + 8] = sn; figM[o + 9] = 0; figM[o + 10] = c; figM[o + 11] = 0; figM[o + 12] = s.x; figM[o + 13] = y + bob; figM[o + 14] = s.z; figM[o + 15] = 1;
-    } else {   // fallen: lying on the ground where he fell
-      const k = Math.min(1, (simTime - s.deadAt) / 0.8);
-      B.Quaternion.FromEulerAnglesToRef(-k * Math.PI / 2, s.yaw, 0, tmpQ); tmpT.set(s.x, y + 0.12 * k, s.z);
-      B.Matrix.ComposeToRef(tmpS, tmpQ, tmpT, tmpM); tmpM.copyToArray(figM, o);
-    }
-    n++;
-  }
-  fig.thinInstanceCount = n; fig.thinInstanceBufferUpdated('matrix');
-  const b = battalions[0], fr = companyFrames(b, 0, acc / TICK), p = frameSlot(fr[1], FILES - 1, 0); p[2] = fr[1].face;   // colours between companies 1 and 2
-  flag.position.set(p[0] + 0.3, H(p[0], p[1]), p[1]); flag.rotation.y = p[2];
-}
-
-/* ---------- debug: anchor, company guides, slots ---------- */
-const dbg = { on: false };
-const slotDot = B.MeshBuilder.CreateDisc('slot', { radius: 0.12, tessellation: 6 }, scene); slotDot.rotation.x = Math.PI / 2; slotDot.bakeCurrentTransformIntoVertices();
-{ const m = new B.StandardMaterial('sm', scene); m.emissiveColor = new C3(0.9, 0.2, 0.2); m.disableLighting = true; slotDot.material = m; }
-const slotM = new Float32Array(MAXN * 16); slotDot.thinInstanceSetBuffer('matrix', slotM, 16, false); slotDot.thinInstanceCount = 0; slotDot.alwaysSelectAsActiveMesh = true;
-const guideDot = B.MeshBuilder.CreateCylinder('guide', { height: 2.4, diameter: 0.25 }, scene);
-{ const m = new B.StandardMaterial('gdm', scene); m.emissiveColor = new C3(0.95, 0.75, 0.1); m.disableLighting = true; guideDot.material = m; }
-const guideM = new Float32Array(41 * 4 * 16); guideDot.thinInstanceSetBuffer('matrix', guideM, 16, false); guideDot.thinInstanceCount = 0; guideDot.alwaysSelectAsActiveMesh = true;
-function writeDebug(alpha) {
-  slotDot.isVisible = guideDot.isVisible = dbg.on;
-  if (!dbg.on) return;
-  let n = 0, g = 0;
-  for (const b of battalions) {
-    const fr = companyFrames(b, 0, alpha);   // once per battalion, not per soldier
-    for (const s of b.soldiers) if (s.alive) { const p = frameSlot(fr[s.c], s.f, s.r); B.Matrix.Translation(p[0], H(p[0], p[1]) + 0.05, p[1]).copyToArray(slotM, n++ * 16); }
-    for (let c = 0; c < COMPANIES; c++) { const p = frameSlot(fr[c], c % 2 ? 0 : FILES - 1, 0); B.Matrix.Translation(p[0], H(p[0], p[1]) + 1.2, p[1]).copyToArray(guideM, g++ * 16); }
-  }
-  slotDot.thinInstanceCount = n; slotDot.thinInstanceBufferUpdated('matrix'); guideDot.thinInstanceCount = g; guideDot.thinInstanceBufferUpdated('matrix');
 }
 
 /* ---------- commands ---------- */
@@ -502,63 +389,20 @@ function setMany(on) {
 }
 
 /* ---------- loop: formation at 20 Hz, soldiers every frame ---------- */
-let acc = 0, speed = 1, lastSoldierMs = 0, frameSoldierMs = 0;
-const soldierMs = [];
+let acc = 0, speed = 1, follow = true;
+const steerMs = [];
 function advance(dt) {
   const step = Math.min(dt * speed, 0.25); acc += step;
   while (acc >= TICK) { for (const b of battalions) formationTick(b); simTime += TICK; acc -= TICK; }
-  const t0 = performance.now(); soldierStep(step, acc / TICK); lastSoldierMs = performance.now() - t0;
-  soldierMs.push(lastSoldierMs); if (soldierMs.length > 60) soldierMs.shift();
+  const t0 = performance.now(); soldierStep(step, acc / TICK);
+  steerMs.push(performance.now() - t0); if (steerMs.length > 60) steerMs.shift();
 }
-function frame() {
-  const t0 = performance.now();
-  advance(engine.getDeltaTime() / 1000); writeFigures();
-  frameSoldierMs = performance.now() - t0;   // steering + figure matrices (+ the few formation ticks)
-  writeDebug(acc / TICK);
-  if (follow) { const b = main; camera.target.x += (b.x - camera.target.x) * 0.05; camera.target.z += (b.z - camera.target.z) * 0.05; camera.target.y = H(b.x, b.z); }
-  updateStats();
-}
-let follow = true;
-
-/* ---------- UI ---------- */
-const statsEl = document.getElementById('stats');
 function stats() {
-  const b = main, alive = b.soldiers.filter(s => s.alive).length, avg = soldierMs.reduce((a, x) => a + x, 0) / Math.max(1, soldierMs.length);
+  const b = main, alive = b.soldiers.filter(s => s.alive).length, avg = steerMs.reduce((a, x) => a + x, 0) / Math.max(1, steerMs.length);
   return { shape: b.trans ? b.trans.fromLabel + ' → ' + b.trans.shape : b.shape, alive, moved: b.moved, closed: b.closed || 0, simTime: +simTime.toFixed(1),
     changes: b.log.map(l => ({ change: l.change, planned: +l.planned.toFixed(1), took: l.took != null ? +l.took.toFixed(1) : null, interrupted: l.interrupted })),
-    soldiers: battalions.reduce((a, x) => a + x.soldiers.length, 0), steerMs: +avg.toFixed(2), frameSoldierMs: +frameSoldierMs.toFixed(2), fps: +engine.getFps().toFixed(0) };
+    soldiers: battalions.reduce((a, x) => a + x.soldiers.length, 0), steerMs: +avg.toFixed(2) };
 }
-function updateStats() {
-  const s = stats(), last = s.changes[s.changes.length - 1];
-  statsEl.textContent = `shape    ${s.shape}\nalive    ${s.alive} / 100   stepped up ${s.moved}  closed ${s.closed}\n` +
-    (last ? `change   ${last.change}  ${last.took ?? '…'} / ${last.planned} s\n` : '') +
-    `soldiers ${s.soldiers}   soldier layer ${s.frameSoldierMs} ms\nfps      ${s.fps}   time ${s.simTime} s`;
-}
-document.querySelectorAll('[data-form]').forEach(el => el.onclick = () => order(el.dataset.form));
-document.querySelectorAll('[data-cmd]').forEach(el => el.onclick = () => {
-  const c = el.dataset.cmd;
-  if (c === 'reset') { reset(); setMany(false); document.querySelector('[data-cmd=many]').classList.remove('on'); }
-  else if (c === 'many') { setMany(!manyOn); el.classList.toggle('on', manyOn); }
-  else if (c === 'debug') { dbg.on = !dbg.on; el.classList.toggle('on', dbg.on); }
-  else if (c === 'crowns') { crown.setEnabled(!crown.isEnabled()); el.classList.toggle('on', !crown.isEnabled()); }
-  else order(c);
-});
-document.querySelectorAll('[data-speed]').forEach(el => el.onclick = () => { speed = +el.dataset.speed; document.querySelectorAll('[data-speed]').forEach(e => e.classList.toggle('on', e === el)); });
-const drillEl = document.getElementById('drill'); drillEl.oninput = () => { drill = +drillEl.value; document.getElementById('drillv').textContent = drill.toFixed(1); };
-let down = null;
-scene.onPointerObservable.add(pi => {
-  if (pi.type === B.PointerEventTypes.POINTERDOWN && pi.event.button === 0) down = [pi.event.clientX, pi.event.clientY];
-  if (pi.type === B.PointerEventTypes.POINTERUP && down && Math.hypot(pi.event.clientX - down[0], pi.event.clientY - down[1]) < 5) {
-    const hit = scene.pick(scene.pointerX, scene.pointerY, m => m === ground); if (hit.hit) order('move', { x: hit.pickedPoint.x, z: hit.pickedPoint.z });
-    down = null;
-  }
-});
-
-reset();
-engine.runRenderLoop(() => { frame(); scene.render(); });
-window.addEventListener('resize', () => engine.resize());
-
-// headless hooks (tools/shot.mjs): issue orders and advance battle time without real time passing
 // how far soldiers are from their slots (a measurement, not a pass/fail check): max and mean, metres
 function slotError() {
   let max = 0, sum = 0, n = 0;
@@ -566,17 +410,17 @@ function slotError() {
     for (const s of b.soldiers) if (s.alive) { const p = frameSlot(fr[s.c], s.f, s.r), d = Math.hypot(s.x - p[0], s.z - p[1]); max = Math.max(max, d); sum += d; n++; } }
   return { max: +max.toFixed(2), mean: +(sum / Math.max(1, n)).toFixed(2) };
 }
-// per-soldier CPU per frame: steering plus writing the figure matrices, over `frames` frames of 1/60 s
+// simulation CPU per frame (formation ticks + steering) over `frames` frames of 1/60 s
 function measure(frames = 60) {
-  let t = 0; for (let k = 0; k < frames; k++) { const t0 = performance.now(); advance(1 / 60); writeFigures(); t += performance.now() - t0; }
+  let t = 0; for (let k = 0; k < frames; k++) { const t0 = performance.now(); advance(1 / 60); t += performance.now() - t0; }
   return +(t / frames).toFixed(2);
 }
-window.F = { slotError, measure,
-  order, kill: n => kill(main, n), setDrill: d => { drill = d; }, setMany, stats, battalions, get main() { return main; },
-  debug: on => { dbg.on = on; }, crowns: on => crown.setEnabled(on), follow: on => { follow = on; },
-  advance: sec => { const s = speed; speed = 1; for (let t = 0; t < sec; t += 1 / 30) advance(1 / 30); speed = s; writeFigures(); writeDebug(1); return stats(); },
-  view: (alpha, beta, radius) => { camera.alpha = alpha; camera.beta = beta; camera.radius = radius; const b = main; camera.target.set(b.x, H(b.x, b.z), b.z); },
+reset();
+window.FC = {
+  FIELD, HALF, H, heights, HN, HG, STREAM_X, FORD, WOOD, WATER_HALF, HILLS, ROAD, TREES, ROCKS, waterLevel, inWater, inWood,
+  FILES, RANKS, COMPANIES, battalions, get main() { return main; }, get simTime() { return simTime; }, get alpha() { return acc / TICK; },
+  get speed() { return speed; }, set speed(v) { speed = v; }, get drill() { return drill; }, set drill(v) { drill = v; },
+  order, reset, setMany, kill: n => kill(main, n), advance, stats, slotError, measure, companyFrames, frameSlot,
+  get manyOn() { return manyOn; },
 };
-</script>
-</body>
-</html>
+})();

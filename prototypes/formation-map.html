@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Formation map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+<style>
+  :root { --paper: #f3efe6; --ink: #211f1c; --ink-2: #5f5a52; --ink-3: #a19a8f; --rule: rgba(40, 30, 20, .14); --fr: #2c4fa8;
+          --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace; --display: 'Instrument Sans', system-ui, sans-serif; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #e8e1d3; color: var(--ink); font: 400 12px/1.45 var(--mono); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #units { cursor: crosshair; }
+  #panel { position: fixed; top: 16px; right: 16px; width: 252px; padding: 14px 14px 12px; background: rgba(246, 243, 236, .95);
+           border: 1px solid var(--rule); border-radius: 4px; }
+  #panel .t { font: 700 26px/1 var(--display); font-stretch: 75%; letter-spacing: -.01em; margin-bottom: 2px; }
+  #panel .m { font-size: 10px; color: var(--ink-3); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; }
+  .cap { font: 500 9.5px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 12px 0 6px; }
+  .row { display: flex; flex-wrap: wrap; gap: 4px; }
+  button { font: 400 10.5px/1 var(--mono); color: var(--ink-2); background: none; border: 1px solid rgba(40, 30, 20, .26); border-radius: 999px;
+           padding: 5px 9px; cursor: pointer; }
+  button:hover { color: var(--ink); border-color: var(--ink-2); }
+  button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 10.5px; color: var(--ink-2); margin-top: 8px; }
+  input[type=range] { width: 120px; accent-color: var(--ink); }
+  #stats { white-space: pre; font-size: 10.5px; color: var(--ink-2); line-height: 1.55; }
+  #scale { position: fixed; left: 22px; bottom: 22px; font: 400 9.5px/1 var(--mono); color: var(--ink-2); pointer-events: none; }
+  #north { position: fixed; left: 26px; top: 24px; font: 500 10px/1 var(--mono); color: var(--ink-2); text-align: center; pointer-events: none; }
+  #hint { position: fixed; left: 110px; bottom: 20px; font-size: 10px; color: var(--ink-3); pointer-events: none; }
+</style>
+<script src="formation-core.js"></script>
+</head>
+<body>
+<canvas id="map"></canvas>
+<canvas id="units"></canvas>
+<div id="north"><svg width="12" height="18" viewBox="0 0 12 18"><path d="M6 1 L10 16 L6 12.5 L2 16 Z" fill="none" stroke="#211f1c" stroke-width="1"/></svg><div>N</div></div>
+<div id="scale"><svg id="scalebar" width="140" height="22"></svg></div>
+<div id="hint">click to march · drag to pan · scroll to zoom</div>
+<div id="panel">
+  <div class="t">Formation map</div>
+  <div class="m">F0 · one battalion · 100 men</div>
+  <div class="cap">Formation</div>
+  <div class="row"><button data-form="line">Line</button><button data-form="column">Column</button><button data-form="square">Square</button><button data-form="march">March col.</button></div>
+  <div class="cap">Orders</div>
+  <div class="row"><button data-cmd="wheelL">Wheel ⟲</button><button data-cmd="wheelR">Wheel ⟳</button><button data-cmd="wood">Through wood</button><button data-cmd="ford">Cross ford</button><button data-cmd="kill">Casualties ×10</button><button data-cmd="reset">Reset</button></div>
+  <label>Drill factor <input id="drill" type="range" min="0.5" max="3" step="0.1" value="1"><span id="drillv">1.0</span></label>
+  <div class="cap">Time · view</div>
+  <div class="row"><button data-speed="1" class="on">1×</button><button data-speed="4">4×</button><button data-speed="10">10×</button><button data-cmd="follow" class="on">Follow</button><button data-cmd="debug">Slots</button><button data-cmd="many">40 battalions</button></div>
+  <div class="cap">Readout</div>
+  <div id="stats"></div>
+</div>
+<script>
+/* =========================================================================
+   FORMATION MAP (docs/plans/active/formation-feel.md): the formation core drawn as a staff-style map.
+   Every soldier is a small outlined circle, so formation logic is easy to read and to benchmark.
+   Two canvases: the map (contours, wood, rocks, stream, road) redrawn only when the view changes,
+   and the units, redrawn every frame.
+   ========================================================================= */
+const mapC = document.getElementById('map'), unitC = document.getElementById('units');
+const mg = mapC.getContext('2d'), ug = unitC.getContext('2d');
+const DPR = Math.min(2, window.devicePixelRatio || 1);
+const view = { cx: FC.main.x, cz: FC.main.z, k: 14 };   // k: screen pixels per metre
+let W = 0, Hh = 0, mapDirty = true, follow = true, showSlots = false;
+const toS = (x, z) => [W / 2 + (x - view.cx) * view.k, Hh / 2 - (z - view.cz) * view.k];   // north up
+const toW = (sx, sy) => [view.cx + (sx - W / 2) / view.k, view.cz - (sy - Hh / 2) / view.k];
+function resize() {
+  W = innerWidth; Hh = innerHeight;
+  for (const c of [mapC, unitC]) { c.width = W * DPR; c.height = Hh * DPR; c.getContext('2d').setTransform(DPR, 0, 0, DPR, 0, 0); }
+  mapDirty = true;
+}
+addEventListener('resize', resize); resize();
+
+/* ---------- contours: marching squares on the core's height grid, once ---------- */
+const MINOR = 2, INDEX = 10;   // metres between contours; every fifth one is an index contour
+const contours = new Map();     // level → Float32Array of segments x0 z0 x1 z1
+{ const { heights, HN, HG, HALF } = FC; let lo = Infinity, hi = -Infinity; for (const h of heights) { lo = Math.min(lo, h); hi = Math.max(hi, h); }
+  const S = 2, N = Math.floor((HN - 1) / S);   // sample every 2 m: smooth enough, few segments
+  const at = (i, j) => heights[(j * S) * HN + i * S];
+  for (let L = Math.ceil(lo / MINOR) * MINOR; L <= hi; L += MINOR) {
+    const seg = [];
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const a = at(i, j), b = at(i + 1, j), c = at(i + 1, j + 1), d = at(i, j + 1);
+      const code = (a > L) | ((b > L) << 1) | ((c > L) << 2) | ((d > L) << 3); if (code === 0 || code === 15) continue;
+      const x0 = i * S * HG - HALF, z0 = j * S * HG - HALF, s = S * HG, t = (p, q) => (L - p) / (q - p);
+      const e = [[x0 + s * t(a, b), z0], [x0 + s, z0 + s * t(b, c)], [x0 + s * t(d, c), z0 + s], [x0, z0 + s * t(a, d)]];   // bottom, right, top, left
+      const pairs = { 1: [[3, 0]], 2: [[0, 1]], 3: [[3, 1]], 4: [[1, 2]], 5: [[3, 2], [0, 1]], 6: [[0, 2]], 7: [[3, 2]], 8: [[2, 3]], 9: [[0, 2]], 10: [[3, 0], [1, 2]], 11: [[1, 2]], 12: [[1, 3]], 13: [[0, 1]], 14: [[0, 3]] }[code];
+      for (const [p, q] of pairs) seg.push(e[p][0], e[p][1], e[q][0], e[q][1]);
+    }
+    contours.set(L, new Float32Array(seg));
+  }
+}
+
+/* ---------- the map layer ---------- */
+const C = { paper: '#f3efe6', ink: '#211f1c', ink2: '#5f5a52', ink3: '#a19a8f', contour: '#a0714a', contourIx: '#7d5534', water: '#cfe0e2', waterInk: '#3f6f86',
+            wood: '#e2e6d2', woodInk: '#55703f', rock: '#6d655b', road: '#8a6a46', grid: 'rgba(40,30,20,.08)' };
+function drawMap() {
+  const g = mg; g.fillStyle = C.paper; g.fillRect(0, 0, W, Hh);
+  const k = view.k, [wx0, wz1] = toW(0, 0), [wx1, wz0] = toW(W, Hh);
+  // grid every 100 m, labelled at the edges like a field map
+  g.strokeStyle = C.grid; g.lineWidth = 1; g.font = '400 9px ' + getComputedStyle(document.body).getPropertyValue('--mono'); g.fillStyle = C.ink3;
+  for (let x = Math.ceil(wx0 / 100) * 100; x <= wx1; x += 100) { const [sx] = toS(x, 0); g.beginPath(); g.moveTo(sx, 0); g.lineTo(sx, Hh); g.stroke(); g.fillText(String(x), sx + 3, Hh - 6); }
+  for (let z = Math.ceil(wz0 / 100) * 100; z <= wz1; z += 100) { const [, sy] = toS(0, z); g.beginPath(); g.moveTo(0, sy); g.lineTo(W, sy); g.stroke(); g.fillText(String(z), 4, sy - 3); }
+  // wood: a light wash inside a dashed edge
+  { const [sx, sy] = toS(FC.WOOD.x, FC.WOOD.z), R = FC.WOOD.r * k; g.fillStyle = C.wood; g.beginPath(); g.arc(sx, sy, R + 2 * k, 0, 7); g.fill();
+    g.setLineDash([4, 3]); g.strokeStyle = C.woodInk; g.lineWidth = 0.8; g.stroke(); g.setLineDash([]); }
+  // contours: thin minor lines, thicker index lines with heights written along them
+  for (const [L, seg] of contours) {
+    const ix = L % INDEX === 0; if (!ix && k < 1.2) continue;   // at far zoom only index contours
+    g.strokeStyle = ix ? C.contourIx : C.contour; g.lineWidth = ix ? 1.15 : 0.55; g.globalAlpha = ix ? 0.95 : 0.75; g.beginPath();
+    for (let q = 0; q < seg.length; q += 4) { const [a, b] = toS(seg[q], seg[q + 1]), [c, d] = toS(seg[q + 2], seg[q + 3]); g.moveTo(a, b); g.lineTo(c, d); }
+    g.stroke(); g.globalAlpha = 1;
+  }
+  // index contour labels: a few per line, upright-ish, paper knocked out behind the number
+  g.font = '400 9px ' + getComputedStyle(document.body).getPropertyValue('--mono'); g.textAlign = 'center'; g.textBaseline = 'middle';
+  const placed = [];
+  for (const [L, seg] of contours) { if (L % INDEX) continue;
+    for (let q = 0; q < seg.length; q += 4 * 23) { const mx = (seg[q] + seg[q + 2]) / 2, mz = (seg[q + 1] + seg[q + 3]) / 2;
+      if (placed.some(([px, pz]) => Math.hypot(px - mx, pz - mz) < 70)) continue; placed.push([mx, mz]);
+      const [sx, sy] = toS(mx, mz); if (sx < 0 || sy < 0 || sx > W || sy > Hh) continue;
+      let ang = Math.atan2(-(seg[q + 3] - seg[q + 1]), seg[q + 2] - seg[q]); if (ang > Math.PI / 2) ang -= Math.PI; if (ang < -Math.PI / 2) ang += Math.PI;
+      g.save(); g.translate(sx, sy); g.rotate(ang); g.fillStyle = C.paper; g.fillRect(-9, -5, 18, 10); g.fillStyle = C.contourIx; g.fillText(String(L), 0, 0); g.restore(); } }
+  // road: a cased double line, drawn under the stream so it stops at the water (a ford, not a bridge)
+  { g.lineCap = g.lineJoin = 'round'; for (const [w, col] of [[Math.max(3, 5 * k), C.road], [Math.max(1.6, 3.6 * k), C.paper]]) {
+      g.strokeStyle = col; g.lineWidth = w; g.beginPath(); FC.ROAD.forEach(([x, z], i) => { const [sx, sy] = toS(x, z); i ? g.lineTo(sx, sy) : g.moveTo(sx, sy); }); g.stroke(); }}
+  // stream: water between the banks, ink banks, the ford as a dotted crossing
+  { const left = [], right = []; for (let z = -FC.HALF; z <= FC.HALF; z += 3) { left.push(toS(FC.STREAM_X(z) - FC.WATER_HALF, z)); right.push(toS(FC.STREAM_X(z) + FC.WATER_HALF, z)); }
+    g.fillStyle = C.water; g.beginPath(); left.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); for (let i = right.length - 1; i >= 0; i--) g.lineTo(...right[i]); g.fill();
+    g.strokeStyle = C.waterInk; g.lineWidth = 1; for (const side of [left, right]) { g.beginPath(); side.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); }
+    g.setLineDash([2, 3]); g.lineWidth = 1.2; for (const z of [FC.FORD.z0, FC.FORD.z1]) { g.beginPath(); g.moveTo(...toS(FC.STREAM_X(z) - FC.WATER_HALF, z)); g.lineTo(...toS(FC.STREAM_X(z) + FC.WATER_HALF, z)); g.stroke(); }
+    g.setLineDash([]); const [fx, fy] = toS(FC.STREAM_X(FC.FORD.z1) + FC.WATER_HALF + 3, FC.FORD.z1 + 2); g.fillStyle = C.waterInk; g.textAlign = 'left'; g.font = 'italic 400 10px ' + getComputedStyle(document.body).getPropertyValue('--display'); g.fillText('ford', fx, fy); }
+  // trees: small open crowns with a centre dot; rocks: small dark shapes
+  g.strokeStyle = C.woodInk; g.lineWidth = 0.9;
+  for (const t of FC.TREES) { const [sx, sy] = toS(t.x, t.z), R = Math.max(1.6, 1.7 * k); g.fillStyle = 'rgba(243,239,230,.85)'; g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = C.woodInk; g.beginPath(); g.arc(sx, sy, Math.max(0.6, t.r * k * 0.8), 0, 7); g.fill(); }
+  g.fillStyle = C.rock;
+  for (const o of FC.ROCKS) { g.beginPath(); o.pts.forEach(([px, pz], i) => { const [sx, sy] = toS(o.x + px, o.z + pz); i ? g.lineTo(sx, sy) : g.moveTo(sx, sy); }); g.closePath(); g.fill(); }
+  // spot heights on the summits
+  g.textAlign = 'left'; g.font = '500 10px ' + getComputedStyle(document.body).getPropertyValue('--mono');
+  for (const p of FC.HILLS) { const [sx, sy] = toS(p.x, p.z), h = FC.H(p.x, p.z).toFixed(0); g.fillStyle = C.ink; g.beginPath(); g.moveTo(sx, sy - 4); g.lineTo(sx + 4, sy + 3); g.lineTo(sx - 4, sy + 3); g.closePath(); g.fill();
+    g.fillText(h, sx + 7, sy + 1); g.fillStyle = C.ink2; g.font = 'italic 400 11px ' + getComputedStyle(document.body).getPropertyValue('--display'); g.fillText(p.name, sx + 7, sy + 14); g.font = '500 10px ' + getComputedStyle(document.body).getPropertyValue('--mono'); }
+  drawScale();
+}
+function drawScale() {
+  const steps = [5, 10, 20, 25, 50, 100, 200], len = steps.find(s => s * view.k >= 60) || 200, px = len * view.k;
+  document.getElementById('scalebar').innerHTML = `<rect x="1" y="12" width="${px / 2}" height="4" fill="#211f1c"/><rect x="${1 + px / 2}" y="12" width="${px / 2}" height="4" fill="none" stroke="#211f1c" stroke-width="1"/>` +
+    `<text x="1" y="8" font-size="9" font-family="monospace" fill="#5f5a52">0</text><text x="${px}" y="8" font-size="9" font-family="monospace" fill="#5f5a52" text-anchor="end">${len} m</text>`;
+}
+
+/* ---------- the unit layer: a circle per soldier ---------- */
+const UNIT = { fr: '#2c4fa8', dead: 'rgba(95,90,82,.55)', slot: '#c0392b', guide: '#d68910' };
+let drawMs = 0;
+function drawUnits() {
+  const t0 = performance.now(), g = ug, k = view.k; g.clearRect(0, 0, W, Hh);
+  const R = Math.max(1.3, 0.28 * k);
+  for (const b of FC.battalions) {
+    // the fallen: small crosses
+    g.strokeStyle = UNIT.dead; g.lineWidth = 1; g.beginPath();
+    for (const s of b.soldiers) if (!s.alive) { const [sx, sy] = toS(s.x, s.z); if (sx < -5 || sy < -5 || sx > W + 5 || sy > Hh + 5) continue; const d = R * 0.8; g.moveTo(sx - d, sy - d); g.lineTo(sx + d, sy + d); g.moveTo(sx + d, sy - d); g.lineTo(sx - d, sy + d); }
+    g.stroke();
+    // the living: open circles, one path per battalion
+    g.strokeStyle = UNIT.fr; g.lineWidth = k > 4 ? 1.1 : 0.9; g.beginPath();
+    for (const s of b.soldiers) if (s.alive) { const [sx, sy] = toS(s.x, s.z); if (sx < -5 || sy < -5 || sx > W + 5 || sy > Hh + 5) continue; g.moveTo(sx + R, sy); g.arc(sx, sy, R, 0, Math.PI * 2); }
+    g.stroke();
+    // the colours: a small filled flag between companies 1 and 2, pointing the way the battalion faces
+    const fr = FC.companyFrames(b, 0, FC.alpha), p = FC.frameSlot(fr[1], FC.FILES - 1, 0), [sx, sy] = toS(p[0] + 0.3 * fr[1].cos, p[1] + 0.3 * fr[1].sin);
+    g.fillStyle = UNIT.fr; g.save(); g.translate(sx, sy); g.rotate(fr[1].face); g.beginPath(); g.moveTo(0, -R * 3.2); g.lineTo(R * 2.4, -R * 2.4); g.lineTo(0, -R * 1.6); g.closePath(); g.fill();
+    g.lineWidth = 1; g.strokeStyle = UNIT.fr; g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -R * 3.2); g.stroke(); g.restore();
+    if (showSlots) {
+      g.fillStyle = UNIT.slot; for (const s of b.soldiers) if (s.alive) { const q = FC.frameSlot(fr[s.c], s.f, s.r), [qx, qy] = toS(q[0], q[1]); g.fillRect(qx - 1, qy - 1, 2, 2); }
+      g.fillStyle = UNIT.guide; for (let c = 0; c < FC.COMPANIES; c++) { const q = FC.frameSlot(fr[c], c % 2 ? 0 : FC.FILES - 1, 0), [qx, qy] = toS(q[0], q[1]); g.fillRect(qx - 2.5, qy - 2.5, 5, 5); }
+      if (b === FC.main && b.orders[0] && b.orders[0].type === 'move') { const [ax, ay] = toS(b.x, b.z), [tx, ty] = toS(b.orders[0].x, b.orders[0].z); g.setLineDash([3, 3]); g.strokeStyle = UNIT.slot; g.beginPath(); g.moveTo(ax, ay); g.lineTo(tx, ty); g.stroke(); g.setLineDash([]); }
+    }
+  }
+  drawMs = drawMs * 0.9 + (performance.now() - t0) * 0.1;
+}
+
+/* ---------- loop ---------- */
+let last = performance.now(), simMsAvg = 0, frames = 0, fps = 0, fpsT = last;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const t0 = performance.now(); FC.advance(dt); simMsAvg = simMsAvg * 0.9 + (performance.now() - t0) * 0.1;
+  if (follow) { const b = FC.main, nx = view.cx + (b.x - view.cx) * 0.06, nz = view.cz + (b.z - view.cz) * 0.06; if (Math.hypot(nx - view.cx, nz - view.cz) * view.k > 0.5) { view.cx = nx; view.cz = nz; mapDirty = true; } }
+  if (mapDirty) { drawMap(); mapDirty = false; }
+  drawUnits();
+  frames++; if (now - fpsT > 500) { fps = frames * 1000 / (now - fpsT); frames = 0; fpsT = now; }
+  updateStats();
+  requestAnimationFrame(frame);
+}
+const statsEl = document.getElementById('stats');
+function updateStats() {
+  const s = FC.stats(), lastC = s.changes[s.changes.length - 1];
+  statsEl.textContent = `shape     ${s.shape}\nalive     ${s.alive}/100  up ${s.moved}  closed ${s.closed}\n` + (lastC ? `change    ${lastC.change} ${lastC.took ?? '…'}/${lastC.planned}s\n` : '') +
+    `soldiers  ${s.soldiers}\nsim       ${simMsAvg.toFixed(2)} ms\ndraw      ${drawMs.toFixed(2)} ms\nfps       ${fps.toFixed(0)}   t ${s.simTime}s`;
+}
+
+/* ---------- input ---------- */
+document.querySelectorAll('[data-form]').forEach(el => el.onclick = () => FC.order(el.dataset.form));
+document.querySelectorAll('[data-cmd]').forEach(el => el.onclick = () => {
+  const c = el.dataset.cmd;
+  if (c === 'reset') { FC.reset(); document.querySelector('[data-cmd=many]').classList.remove('on'); }
+  else if (c === 'many') { FC.setMany(!FC.manyOn); el.classList.toggle('on', FC.manyOn); if (FC.manyOn) { follow = false; document.querySelector('[data-cmd=follow]').classList.remove('on'); view.cx = -10; view.cz = -40; view.k = Math.min(W, Hh) / 330; mapDirty = true; } }
+  else if (c === 'follow') { follow = !follow; el.classList.toggle('on', follow); }
+  else if (c === 'debug') { showSlots = !showSlots; el.classList.toggle('on', showSlots); }
+  else FC.order(c);
+});
+document.querySelectorAll('[data-speed]').forEach(el => el.onclick = () => { FC.speed = +el.dataset.speed; document.querySelectorAll('[data-speed]').forEach(e => e.classList.toggle('on', e === el)); });
+const drillEl = document.getElementById('drill'); drillEl.oninput = () => { FC.drill = +drillEl.value; document.getElementById('drillv').textContent = FC.drill.toFixed(1); };
+let drag = null;
+unitC.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, cx: view.cx, cz: view.cz, moved: false }; unitC.setPointerCapture(e.pointerId); });
+unitC.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 4) drag.moved = true;
+  if (drag.moved) { view.cx = drag.cx - dx / view.k; view.cz = drag.cz + dy / view.k; mapDirty = true; if (follow) { follow = false; document.querySelector('[data-cmd=follow]').classList.remove('on'); } } });
+unitC.addEventListener('pointerup', e => { if (drag && !drag.moved) { const [x, z] = toW(e.clientX, e.clientY); FC.order('move', { x, z }); } drag = null; });
+unitC.addEventListener('wheel', e => { e.preventDefault(); const [x, z] = toW(e.clientX, e.clientY), f = Math.exp(-e.deltaY * 0.0015);
+  view.k = Math.min(40, Math.max(0.8, view.k * f)); const [x2, z2] = toW(e.clientX, e.clientY); view.cx += x - x2; view.cz += z - z2; mapDirty = true; }, { passive: false });
+
+// headless hooks (tools/shot.mjs): orders, time and view without real time passing
+window.F = {
+  order: FC.order, kill: FC.kill, setMany: FC.setMany, stats: FC.stats, slotError: FC.slotError, measure: FC.measure,
+  setDrill: d => { FC.drill = d; }, slots: on => { showSlots = on; }, follow: on => { follow = on; },
+  view: (cx, cz, k) => { view.cx = cx; view.cz = cz; if (k) view.k = k; mapDirty = true; drawMap(); mapDirty = false; drawUnits(); },
+  advance: sec => { const sp = FC.speed; FC.speed = 1; for (let t = 0; t < sec; t += 1 / 30) FC.advance(1 / 30); FC.speed = sp; if (follow) { view.cx = FC.main.x; view.cz = FC.main.z; mapDirty = true; } if (mapDirty) { drawMap(); mapDirty = false; } drawUnits(); return FC.stats(); },
+  drawMs: () => { const t0 = performance.now(); for (let i = 0; i < 20; i++) drawUnits(); return +((performance.now() - t0) / 20).toFixed(2); },
+  get main() { return FC.main; },
+};
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
