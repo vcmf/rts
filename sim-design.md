@@ -31,7 +31,7 @@ puffs. The sim works on tens of entities, not thousands.
 
 **Scale (decided Oct 2026): the player commands battalions of about 100 figures**, 20–40 per battle
 (2k–4k figures). A middle size between Total War (magnificent, but players zoom out to dots) and
-Age of Empires (about 200 units per side). Proposal: **one figure is one soldier**: a game
+Age of Empires (about 200 units per side). **One figure is one soldier** (decided): a game
 battalion is about 100 men (historically a large company), with real spacing per man so a line
 looks right. Ranges and speeds stay historical, to playtest.
 
@@ -343,8 +343,8 @@ The goal is to learn **"is it fun?"** as early as possible without building dete
 controls: pause, 1×, 2×, 4–8× for approach marches; march speeds and casualty rates are tuned to
 fit).
 
-1. ~~What does the player command?~~ **Battalions of about 100 figures** (decided, §1). Open:
-   one figure = one soldier (proposal) vs. one figure = several men.
+1. ~~What does the player command?~~ **Battalions of about 100 figures, one figure per soldier**
+   (decided, §1).
 2. **Fog of war for the player:** full visibility until S2 playtests.
 3. **Casualty display:** proposal: figures fall in proportion and ranks close, bodies stay on the
    ground, plus a strength bar.

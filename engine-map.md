@@ -137,7 +137,6 @@ performance, video tier, W6). The two tracks meet at the units placeholder.
 
 ## 5. Open questions
 
-1. One figure = one soldier (proposal), or one figure = several men (`sim-design.md` §1).
-2. Default game speed within the 30–45 minute battle length (D5).
-3. Whether figures ever matter to the simulation (e.g. the general's figure), or everything stays
+1. Default game speed within the 30–45 minute battle length (D5).
+2. Whether figures ever matter to the simulation (e.g. the general's figure), or everything stays
    per formation.
