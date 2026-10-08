@@ -65,21 +65,24 @@ in whole frames and fails on the limits below). Worst distance from slot is samp
 
 | Scenario | Worst distance from slot | Worst mean |
 |---|---|---|
-| Halted in the open | 0 m (the ranks come to rest) | 0 m |
-| Line → square (100 s) | 0.85 m | 0.21 m |
+| Halted in the open | 0 m (settled men hold within 0.25 m of their place) | 0 m |
+| Line → square (100 s) | 1.4 m | 0.20 m |
 | March column turning (slope on the way) | 1.8 m | 0.46 m |
 | Line through the wood | 3.4 m | 0.54 m |
-| **Halted inside the wood** | 0.4 m (slots inside trunks moved to their edge); mean speed **0 m/s** | 0.08 m |
-| Cross the ford (march column, crossing, deploying) | 4.7 m | 1.28 m |
+| **Halted inside the wood**, 6 halt points | largest move of any soldier over 10 s: **0 m** at every point | |
+| Cross the ford (march column, crossing, deploying) | 4.6 m | 1.27 m |
 
-- **Limits checked by the script:** soldiers halted in the wood come to rest (mean speed ≤ 0.05 m/s;
-  the owner saw them fidget forever before); the slot table stays consistent after heavy casualties;
-  a square formed after them has four equal faces. Negative run with the old code: the first two fail.
+- **Limits checked by the script:** halted in the wood, no soldier moves more than 0.05 m in 10 s, at
+  six halt points (three of them found by a 64-point search where the previous version still
+  fidgeted, up to 0.22 m per 10 s; the owner saw this); the slot table stays consistent after heavy
+  casualties; a square formed after casualties, before or during the change, has equal faces.
+  Negative runs: the version before the settled state fails the wood points and the
+  during-the-change faces (20/19/14/17); the version before that fails the table and the faces too.
 - **Casualties:** 80 killed in line (5 × 10, then 30), then square: 20 men in four faces of 5, slot
-  table consistent.
+  table consistent. 30 killed 20 s into line → square: faces 18/18/17/17.
 - **Drill timings** are set by the table (line → square 100 s, column → square 60 s, line ↔ column
   30 / 40 s, march column 20 / 60 s); companies start one after another.
-- **Cost, 40 battalions (4,000 soldiers):** simulation **1.1 ms** per frame (ground speed baked into a
+- **Cost, 40 battalions (4,000 soldiers):** simulation **1.3 ms** per frame (ground speed baked into a
   grid at load), drawing all circles in view **0.85 ms** (Canvas 2D, one path per battalion).
 
 **Known limitations (later):** no countermarch (a march column ordered to turn back walks through its
@@ -130,3 +133,19 @@ company order on reversal.
 | 5 | moderate | Closing toward the colours drained the outer companies (a square lost a face) | Companies are evened out when the battalion leaves line |
 | 6 | moderate | Ground speed recomputed per soldier per frame; slope charged even along contours | Baked grid; slope charged along the direction of travel |
 | 7–10 | light | Input guards, contour labels per level, culling margin, scale bar, dead 3D state | Fixed; follow still redraws the map while it moves (about 1 ms) |
+
+## Review round 2 on the 2D rework — stop (no severe findings)
+
+3 moderate, 7 light. Fixed:
+- **Some soldiers in the wood still never settled** (a slot moved out of a trunk could land within
+  separation range of a neighbour's slot: two men pushing each other for ever). Replaced the patches
+  by a **settled state**: once the battalion is halted and a man is within 0.25 m of his place, he
+  holds still until his place moves. A 64-point search of halt positions: 5 fidgeting before, 0 after.
+- The rest check used the mean speed at one halt point: now the largest move of any soldier over 10 s
+  at six points, three of them known to fail before.
+- Casualties during a change gave unequal faces: companies are evened out when a non-line shape
+  starts and when it ends; tested.
+- Obstacle loops share one helper; the page shows when a script paused it (`F.resume()`); the plan's
+  negative-test wording corrected.
+Kept: rebalance re-deals ranks for every non-line shape (more men move than strictly needed; it
+happens during a change, while they are moving anyway).
