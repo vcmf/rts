@@ -4,10 +4,20 @@
 // values are reasoned estimates there, to be tuned on the map. Loaded before formation-core.js.
 window.RULESET = {
   name: 'Napoleonic (infantry)',
-  // m/s at the ordinary pace; march column moves at the route step
+  // paces in m/s
   pace: { ordinary: 0.9, routeStep: 1.125 },
-  // quick-step factor: how much faster a lagging file may hurry, by ground class (French 100/76)
-  q: { open: 1.3, light: 1.1, hard: 1.0 },
+  // quick-step factor: how much faster a lagging file may hurry, by pace and ground class (French
+  // 100/76 at the ordinary pace; less when already at a quicker pace)
+  q: { ordinary: { open: 1.3, light: 1.1, hard: 1.0 }, routeStep: { open: 1.15, light: 1.0, hard: 1.0 } },
+  // formations: terrain column used, pace off and on roads, and for depth-ordered formations which
+  // company marches ahead of which and how much room there is between them (metres) before the
+  // following company is held up (the accordion)
+  formations: {
+    line:   { kind: 'line',   pace: 'ordinary' },
+    square: { kind: 'column', pace: 'ordinary' },
+    column: { kind: 'column', pace: 'ordinary', ahead: [-1, -1, 0, 1], room: 3.5 },
+    march:  { kind: 'column', pace: 'ordinary', roadPace: 'routeStep', ahead: [-1, 0, 1, 2], room: 0.5 },
+  },
   // slope: g = min(1, k · exp(-3.5 (|s + 0.05| - 0.05))), s = rise over run along the travel direction
   slopeK: 1.3,
   // terrain classes: g per formation (relative to the pace on firm level open ground) and the ground
@@ -37,6 +47,4 @@ window.RULESET = {
   // disorder (0..1): grows with lag beyond the dressed tolerance and with the line's bow, recovers
   // when dressed (faster when halted)
   disorder: { Lok: 1.25, kLag: 0.02, kBow: 0.03, kRec: 0.01, scale: { line: 1.0, column: 0.4, skirmish: 0.1 } },
-  // formations: which terrain column each shape uses
-  formationKind: { line: 'line', column: 'column', square: 'column', march: 'column' },
 };
