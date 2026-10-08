@@ -61,7 +61,7 @@ try {
     if (m.method === 'Runtime.exceptionThrown') { pageErrors++; console.log('EXC', JSON.stringify(m.params.exceptionDetails).slice(0, 600)) }
     if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') { pageErrors++; console.log('ERR', JSON.stringify(m.params.args.map(a => a.value)).slice(0, 400)) }
   }
-  const TIMEOUT = 60000
+  const TIMEOUT = +(process.env.SHOT_TIMEOUT_S || 60) * 1000   // per DevTools call; long evals (formation-measure.js) raise it
   const send = (method, params = {}) => new Promise((res, rej) => {
     const i = ++id
     const t = setTimeout(() => { delete pend[i]; rej(new Error(`${method}: no reply in ${TIMEOUT / 1000}s`)) }, TIMEOUT)

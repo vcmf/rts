@@ -30,6 +30,7 @@
   #north { position: fixed; left: 26px; top: 24px; font: 500 10px/1 var(--mono); color: var(--ink-2); text-align: center; pointer-events: none; }
   #hint { position: fixed; left: 22px; bottom: 6px; font-size: 10px; color: var(--ink-3); pointer-events: none; }
 </style>
+<script src="ruleset-napoleonic.js"></script>
 <script src="formation-core.js"></script>
 </head>
 <body>
@@ -44,16 +45,18 @@
   <div class="cap">Formation</div>
   <div class="row"><button data-form="line">Line</button><button data-form="column">Column</button><button data-form="square">Square</button><button data-form="march">March col.</button></div>
   <div class="cap">Orders</div>
-  <div class="row"><button data-cmd="wheelL">Wheel ⟲</button><button data-cmd="wheelR">Wheel ⟳</button><button data-cmd="wood">Through wood</button><button data-cmd="ford">Cross ford</button><button data-cmd="kill">Casualties ×10</button><button data-cmd="reset">Reset</button></div>
+  <div class="row"><button data-cmd="wheelL">Wheel ⟲</button><button data-cmd="wheelR">Wheel ⟳</button><button data-cmd="face">Face about</button><button data-cmd="retire">Retire 30 m</button><button data-cmd="wood">Through wood</button><button data-cmd="ford">Cross ford</button><button data-cmd="bridge">Cross bridge</button><button data-cmd="kill">Casualties ×10</button><button data-cmd="reset">Reset</button></div>
+  <div class="cap">Order style</div>
+  <div class="row"><button data-style="keep">Keep order</button><button data-style="normal" class="on">Normal</button><button data-style="push">Push on</button></div>
   <label>Drill factor <input id="drill" type="range" min="0.5" max="3" step="0.1" value="1"><span id="drillv">1.0</span></label>
   <div class="cap">Time · view</div>
-  <div class="row"><button data-speed="1" class="on">1×</button><button data-speed="4">4×</button><button data-speed="10">10×</button><button data-cmd="follow" class="on">Follow</button><button data-cmd="debug">Slots</button><button data-cmd="many">40 battalions</button></div>
+  <div class="row"><button data-speed="1" class="on">1×</button><button data-speed="4">4×</button><button data-speed="10">10×</button><button data-cmd="follow" class="on">Follow</button><button data-cmd="debug">Slots</button><button data-cmd="speedmap">Speed</button><button data-cmd="many">40 battalions</button></div>
   <div class="cap">Readout</div>
   <div id="stats"></div>
 </div>
 <script>
 /* =========================================================================
-   FORMATION MAP (docs/plans/active/formation-feel.md): the formation core drawn as a staff-style map.
+   FORMATION MAP (docs/plans/done/formation-feel.md): the formation core drawn as a staff-style map.
    Every soldier is a small outlined circle, so formation logic is easy to read and to benchmark.
    Two canvases: the map (contours, wood, rocks, stream, road) redrawn only when the view changes,
    and the units, redrawn every frame.
@@ -106,6 +109,7 @@ function drawMap() {
   // wood: a light wash inside a dashed edge
   { const [sx, sy] = toS(FC.WOOD.x, FC.WOOD.z), R = FC.WOOD.r * k; g.fillStyle = C.wood; g.beginPath(); g.arc(sx, sy, R + 2 * k, 0, 7); g.fill();
     g.setLineDash([4, 3]); g.strokeStyle = C.woodInk; g.lineWidth = 0.8; g.stroke(); g.setLineDash([]); }
+  drawTerrain(g, k);
   // contours: thin minor lines, thicker index lines with heights written along them
   for (const [L, seg] of contours) {
     const ix = L % INDEX === 0; if (!ix && k < 1.2) continue;   // at far zoom only index contours
@@ -133,6 +137,9 @@ function drawMap() {
     g.strokeStyle = C.waterInk; g.lineWidth = 1; for (const side of [left, right]) { g.beginPath(); side.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); }
     g.setLineDash([2, 3]); g.lineWidth = 1.2; for (const z of [FC.FORD.z0, FC.FORD.z1]) { g.beginPath(); g.moveTo(...toS(FC.STREAM_X(z) - FC.WATER_HALF, z)); g.lineTo(...toS(FC.STREAM_X(z) + FC.WATER_HALF, z)); g.stroke(); }
     g.setLineDash([]); const [fx, fy] = toS(FC.STREAM_X(FC.FORD.z1) + FC.WATER_HALF + 3, FC.FORD.z1 + 2); g.fillStyle = C.waterInk; g.textAlign = 'left'; g.font = 'italic 400 10px ' + DISPLAY; g.fillText('ford', fx, fy); }
+  drawBridge(g, k);
+  // speed overlay on top of the ground (deep water shows as impassable), under trees and rocks
+  if (showSpeed) { const [ax, ay] = toS(-FC.HALF, FC.HALF), [bx, by] = toS(FC.HALF, -FC.HALF); g.imageSmoothingEnabled = false; g.globalAlpha = 0.85; g.drawImage(speedImg, ax, ay, bx - ax, by - ay); g.globalAlpha = 1; g.imageSmoothingEnabled = true; }
   // trees: small open crowns with a centre dot; rocks: small dark shapes
   g.strokeStyle = C.woodInk; g.lineWidth = 0.9;
   for (const t of FC.TREES) { const [sx, sy] = toS(t.x, t.z), R = Math.max(1.6, 1.7 * k); g.fillStyle = 'rgba(243,239,230,.85)'; g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill(); g.stroke();
@@ -145,6 +152,40 @@ function drawMap() {
     g.fillText(h, sx + 7, sy + 1); g.fillStyle = C.ink2; g.font = 'italic 400 11px ' + DISPLAY; g.fillText(p.name, sx + 7, sy + 14); g.font = '500 10px ' + MONO; }
   drawScale();
 }
+// terrain classes in the staff style: fills first, then symbols scaled with the zoom
+function rectPath(g, [x0, z0, x1, z1]) { const [a, b] = toS(x0, z1), [c, d] = toS(x1, z0); g.beginPath(); g.rect(a, b, c - a, d - b); }
+function drawTerrain(g, k) {
+  // crops: a pale ochre field with a fine stipple
+  for (const r of FC.CROPS) { rectPath(g, r); g.fillStyle = '#efe5c4'; g.fill(); g.strokeStyle = 'rgba(138,106,70,.45)'; g.lineWidth = 0.7; g.stroke();
+    if (k > 1.5) { g.fillStyle = 'rgba(138,106,70,.45)'; const st = 3; for (let x = r[0] + 1.5; x < r[2]; x += st) for (let z = r[1] + 1.5; z < r[3]; z += st) { const [sx, sy] = toS(x, z); g.fillRect(sx, sy, 1, 1); } } }
+  // ploughed: furrow lines across the field
+  for (const r of FC.PLOUGHED) { rectPath(g, r); g.fillStyle = '#ece0c9'; g.fill(); g.strokeStyle = 'rgba(138,106,70,.5)'; g.lineWidth = 0.7; g.stroke();
+    g.beginPath(); for (let z = r[1] + 2; z < r[3]; z += k > 2 ? 2 : 5) { const [a, b] = toS(r[0], z), [c] = toS(r[2], z); g.moveTo(a, b); g.lineTo(c, b); } g.strokeStyle = 'rgba(138,106,70,.35)'; g.lineWidth = 0.6; g.stroke(); }
+  // marsh: a pale wash with reed tufts
+  { const M = FC.MARSH, [sx, sy] = toS(M.x, M.z); g.fillStyle = '#dfe7de'; g.beginPath(); g.ellipse(sx, sy, M.rx * k, M.rz * k, 0, 0, 7); g.fill();
+    g.strokeStyle = '#4f7a86'; g.lineWidth = 0.8; g.beginPath(); const st = k > 3 ? 4 : 8;
+    for (let x = M.x - M.rx; x < M.x + M.rx; x += st) for (let z = M.z - M.rz; z < M.z + M.rz; z += st) { if (((x - M.x) / M.rx) ** 2 + ((z - M.z) / M.rz) ** 2 > 0.8) continue;
+      const [a, b] = toS(x + (z % 3), z), t = Math.max(2.5, 0.9 * k); g.moveTo(a - t, b); g.lineTo(a + t, b); g.moveTo(a, b); g.lineTo(a, b - t); g.moveTo(a - t * 0.6, b); g.lineTo(a - t, b - t * 0.8); g.moveTo(a + t * 0.6, b); g.lineTo(a + t, b - t * 0.8); }
+    g.stroke(); }
+  // dense wood: a darker wash in the heart of the wood
+  { const D = FC.DENSE, [sx, sy] = toS(D.x, D.z); g.fillStyle = 'rgba(85,112,63,.22)'; g.beginPath(); g.arc(sx, sy, D.r * k, 0, 7); g.fill(); }
+  // hedges: a dark green line beaded with small bushes
+  for (const [[ax, az], [bx, bz]] of FC.HEDGES) { const [a, b] = toS(ax, az), [c, d] = toS(bx, bz); g.strokeStyle = '#55703f'; g.lineWidth = Math.max(1.2, 0.8 * k); g.beginPath(); g.moveTo(a, b); g.lineTo(c, d); g.stroke();
+    const L = Math.hypot(bx - ax, bz - az); g.fillStyle = '#55703f'; for (let t = 0; t <= L; t += 3) { const [x, y] = toS(ax + (bx - ax) * t / L, az + (bz - az) * t / L); g.beginPath(); g.arc(x, y, Math.max(1.2, 0.7 * k), 0, 7); g.fill(); } }
+}
+function drawBridge(g, k) {   // over the water: the deck, its two parapets, a label
+  const B = FC.BRIDGE, [a, b] = toS(B.x0, B.z + B.half), [c, d] = toS(B.x1, B.z - B.half);
+  g.fillStyle = C.paper; g.fillRect(a, b, c - a, d - b); g.strokeStyle = C.ink; g.lineWidth = 1.2; g.beginPath(); g.moveTo(a, b); g.lineTo(c, b); g.moveTo(a, d); g.lineTo(c, d); g.stroke();
+  g.fillStyle = C.ink2; g.font = 'italic 400 10px ' + DISPLAY; g.textAlign = 'left'; g.fillText('bridge', c + 4, b - 4);
+}
+// speed overlay: the ground factor for a line on level ground, 1 px per metre, baked once
+const speedImg = document.createElement('canvas'); let showSpeed = false;
+function buildSpeedImg() { const N = FC.HN, cv = speedImg; cv.width = cv.height = N; const cx = cv.getContext('2d'), im = cx.createImageData(N, N);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const x = i - FC.HALF, z = FC.HALF - j, g = FC.groundG(x, z, 'line', 0, 0), o = (j * N + i) * 4;
+    if (g <= 0) { im.data[o] = 120; im.data[o + 1] = 30; im.data[o + 2] = 40; im.data[o + 3] = 150; }
+    else if (g < 0.999) { const t = 1 - g; im.data[o] = 200; im.data[o + 1] = 70 + 120 * (1 - t); im.data[o + 2] = 40; im.data[o + 3] = 40 + 160 * t; } }
+  cx.putImageData(im, 0, 0); }
+buildSpeedImg();
 function drawScale() {
   const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200], len = steps.find(s => s * view.k >= 50) || 200, px = len * view.k;
   const svg = document.getElementById('scalebar'); svg.setAttribute('width', Math.ceil(px + 12));
@@ -172,7 +213,7 @@ function drawUnits() {
     g.fillStyle = UNIT.fr; g.save(); g.translate(sx, sy); g.rotate(fr[1].face); g.beginPath(); g.moveTo(0, -R * 3.2); g.lineTo(R * 2.4, -R * 2.4); g.lineTo(0, -R * 1.6); g.closePath(); g.fill();
     g.lineWidth = 1; g.strokeStyle = UNIT.fr; g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -R * 3.2); g.stroke(); g.restore();
     if (showSlots) {
-      g.fillStyle = UNIT.slot; for (const s of b.soldiers) if (s.alive) { const q = FC.frameSlot(fr[s.c], s.f, s.r), [qx, qy] = toS(q[0], q[1]); g.fillRect(qx - 1, qy - 1, 2, 2); }
+      g.fillStyle = UNIT.slot; for (const s of b.soldiers) if (s.alive) { const q = FC.soldierPlace(b, fr[s.c], s), [qx, qy] = toS(q[0], q[1]); g.fillRect(qx - 1, qy - 1, 2, 2); }
       g.fillStyle = UNIT.guide; for (let c = 0; c < FC.COMPANIES; c++) { const q = FC.frameSlot(fr[c], c % 2 ? 0 : FC.FILES - 1, 0), [qx, qy] = toS(q[0], q[1]); g.fillRect(qx - 2.5, qy - 2.5, 5, 5); }
       if (b === FC.main && b.orders[0] && b.orders[0].type === 'move') { const [ax, ay] = toS(b.x, b.z), [tx, ty] = toS(b.orders[0].x, b.orders[0].z); g.setLineDash([3, 3]); g.strokeStyle = UNIT.slot; g.beginPath(); g.moveTo(ax, ay); g.lineTo(tx, ty); g.stroke(); g.setLineDash([]); }
     }
@@ -195,7 +236,8 @@ function frame(now) {
 const statsEl = document.getElementById('stats');
 function updateStats() {
   const s = FC.stats(), lastC = s.changes[s.changes.length - 1];
-  statsEl.textContent = `shape     ${s.shape}\nalive     ${s.alive}/100  up ${s.moved}  closed ${s.closed}\n` + (lastC ? `change    ${lastC.change} ${lastC.took ?? '…'}/${lastC.planned}s\n` : '') +
+  statsEl.textContent = `shape     ${s.shape}\nalive     ${s.alive}/100  up ${s.moved}  closed ${s.closed}\n` +
+    `style     ${s.style}  lag ${s.lagMax}/${s.lagMean} m\ndisorder  ${s.disorder}${s.status ? '  · ' + s.status : ''}\n` + (lastC ? `change    ${lastC.change} ${lastC.took ?? '…'}/${lastC.planned}s\n` : '') +
     `soldiers  ${s.soldiers}\nsim       ${simMsAvg.toFixed(2)} ms\ndraw      ${drawMs.toFixed(2)} ms\nfps       ${fps.toFixed(0)}   t ${s.simTime}s` + (paused ? '\nPAUSED by a script · F.resume()' : '');
 }
 
@@ -207,8 +249,10 @@ document.querySelectorAll('[data-cmd]').forEach(el => el.onclick = () => {
   else if (c === 'many') { FC.setMany(!FC.manyOn); el.classList.toggle('on', FC.manyOn); if (FC.manyOn) { follow = false; document.querySelector('[data-cmd=follow]').classList.remove('on'); view.cx = -10; view.cz = -40; view.k = Math.min(W, Hh) / 330; mapDirty = true; } }
   else if (c === 'follow') { follow = !follow; el.classList.toggle('on', follow); }
   else if (c === 'debug') { showSlots = !showSlots; el.classList.toggle('on', showSlots); }
+  else if (c === 'speedmap') { showSpeed = !showSpeed; el.classList.toggle('on', showSpeed); mapDirty = true; }
   else FC.order(c);
 });
+document.querySelectorAll('[data-style]').forEach(el => el.onclick = () => { FC.order('style', el.dataset.style); document.querySelectorAll('[data-style]').forEach(e => e.classList.toggle('on', e === el)); });
 document.querySelectorAll('[data-speed]').forEach(el => el.onclick = () => { FC.speed = +el.dataset.speed; document.querySelectorAll('[data-speed]').forEach(e => e.classList.toggle('on', e === el)); });
 const drillEl = document.getElementById('drill'); drillEl.oninput = () => { FC.drill = +drillEl.value; document.getElementById('drillv').textContent = FC.drill.toFixed(1); };
 let drag = null;
@@ -225,8 +269,12 @@ unitC.addEventListener('wheel', e => { e.preventDefault(); const [x, z] = toW(e.
 
 // headless hooks (tools/shot.mjs): orders, time and view without real time passing
 window.F = {
-  order: FC.order, kill: FC.kill, setMany: FC.setMany, stats: FC.stats, slotError: FC.slotError, measure: FC.measure,
-  setDrill: d => { FC.drill = d; }, slots: on => { showSlots = on; document.querySelector('[data-cmd=debug]').classList.toggle('on', on); },
+  order: (name, a) => { FC.order(name, a); if (name === 'style') document.querySelectorAll('[data-style]').forEach(e => e.classList.toggle('on', e.dataset.style === a)); },
+  kill: FC.kill, place: FC.place,
+  // test patches show in the speed overlay
+  paint: (x0, z0, x1, z1, cls) => { FC.paintTerrain(x0, z0, x1, z1, cls); buildSpeedImg(); mapDirty = true; },
+  setMany: FC.setMany, stats: FC.stats, slotError: FC.slotError, measure: FC.measure,
+  setDrill: d => { FC.drill = d; }, speedMap: on => { showSpeed = on; mapDirty = true; document.querySelector('[data-cmd=speedmap]').classList.toggle('on', on); }, slots: on => { showSlots = on; document.querySelector('[data-cmd=debug]').classList.toggle('on', on); },
   follow: on => { follow = on; document.querySelector('[data-cmd=follow]').classList.toggle('on', on); }, pause: on => { paused = on; }, resume: () => { paused = false; },
   view: (cx, cz, k) => { view.cx = cx; view.cz = cz; if (k) view.k = k; mapDirty = true; drawMap(); mapDirty = false; drawUnits(); },
   // a script driving time pauses the page loop, so nothing advances between evals; whole 1/30 s frames
