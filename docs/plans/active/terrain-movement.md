@@ -93,8 +93,12 @@ Run with `SHOT_TIMEOUT_S=1200` (the run takes several minutes; `tools/shot.mjs` 
   - thinned lines (41, 50, 59 losses) at the bank ordered into column over a grid of positions and
     headings: 15 accepted, 27 refused, 0 places in the water (empty slots are checked too); a line
     whose two emptied files stand over the stream is refused column (the men would spread into them);
-  - units halted at the water can leave: a line retires its half-width and turns, a march column
-    countermarches (the rear leads; every man keeps his place); both reach a target 58 m back;
+  - a unit halted at the water and ordered on at 60°, 90°, 120° or 180° (line and march column):
+    every order ends within 60 s (halted or arrived), no heading flip, 0 places in the water;
+  - Face about, then a move: line and column both reach a target 58 m back; Retire 30 m: the line
+    steps back 29.6 m in order and faces the front again;
+  - Face about keeps every man's place except the few who step up to close a file (18 of 90 after 10
+    losses), leaves no rank hole, and none carries into line;
   - ground a line cannot enter (a test ruleset with hedges g = 0 for a line): halted, 0 places on it;
     a column standing across that hedge is refused line;
   - places are checked both now and as the soldiers aim for them (0.6 s ahead);
@@ -134,6 +138,9 @@ Run with `SHOT_TIMEOUT_S=1200` (the run takes several minutes; `tools/shot.mjs` 
   exempt, no turning-circle arrival, wheels allowed in column): the line and the column stay stuck at
   the bank (58.4 and 56.9 m from the target), the column circles its target, a wheeled column folds to
   0.46 m, the thinned line forms column with 3 places in the water.
+- **Negative run of redesign 2** (no turning-circle halt, no file closing after Face about, anchor not
+  moved on Face about): the column's order never ends; 15 rank holes after Face about and in line;
+  the line cannot leave the bank (58.4 m short) and Retire is refused.
 - **Cost, 40 battalions** (all four formations, 9 march columns moving): simulation 2.2 ms per frame
   (1.7–1.8 ms before the gate; budget 4 ms, checked), drawing 0.9 ms.
 
@@ -209,11 +216,11 @@ once, before the fact:
   behind the head (his place in the straight layout plus his lag), across it by his rank's offset;
   the ranks are centred on the trail. The head turns only as it advances, on a radius that keeps men
   one file apart at least 0.52 m apart on the inside of the bend (4.25 m for this column). The
-  accordion's straight-layout pairs then hold in bends. With its target well behind, a column
-  countermarches (the rear leads back along the trail; company, file and rank are mirrored, so every
-  man keeps his place); a target inside its turning circle ends the order; it does not wheel.
-- **Leaving impassable ground:** a straight shape whose turn cannot move at all retires straight back
-  by its half-width and a metre (up to three half-widths in one order), then turns.
+  accordion's straight-layout pairs then hold in bends. A target inside its turning circle halts it
+  ("halted: target inside the turning circle"); a target behind it is reached by looping on its
+  radius; it does not wheel.
+- **No automatic manoeuvres (redesign 2):** a move that cannot proceed halts with a status. The player
+  has two drill orders, checked by the gate: *Face about* and *Retire N m* (below).
 - **Soldiers** (the cosmetic layer) never step onto impassable ground either.
 - **Era names out of the core:** start shape and order preset, the passage shapes (narrow, deploy) and
   `closeAcross` (which shape closes across company boundaries) are ruleset data. The shape geometry
@@ -279,7 +286,7 @@ the casualty system (S-phase).
 | 9 | light | Retire always goes straight back, even when the ground behind blocks the turn |
 | 10 | light | A refused countermarch is retried every tick at full cost |
 
-## Redesign 2 (proposed after round 3 of the redesign)
+## Redesign 2 (after round 3 of the redesign; the review count restarts)
 
 The gate holds: since the redesign, no review found a man's place on impassable ground through
 ordinary motion. The severe findings of the last two rounds are all about getting a blocked unit
@@ -289,11 +296,16 @@ planning, the pathfinding phase's job, done piecemeal inside this PR.
 
 - **This PR stops at the rule:** a move that cannot proceed halts with a clear status; it never
   oscillates and never leaves anyone on impassable ground. No automatic retire or countermarch.
-- **Two explicit, gated drill orders** for the player instead: *Retire* (step back N metres: along the
-  heading for a straight shape, back along the trail for a column; at the ground's speed through the
-  lag model) and *Face about* (a column countermarches with a rank-preserving relabel: files and
-  companies mirrored, each file's men repacked front to back; a line faces about by turning 180° on
-  its centre). Each is checked through the gate once, as a whole, before it starts.
+- **Two explicit, gated drill orders** for the player instead (panel buttons "Face about" and
+  "Retire 30 m"):
+  - *Face about* (`faceAbout`): every man keeps his place. Company, file and rank are relabelled by
+    the shape's half-turn symmetry: a slot maps to the slot at its point reflection through the
+    layout's centre. A straight shape's anchor moves to match and its heading turns by π; a column's
+    trail is rebuilt from its old tail (a countermarch). Then each file closes toward its new front
+    rank. The whole result goes through the gate once; refused if anyone would stand on impassable
+    ground. The battalion then stands 3 s.
+  - *Retire N m*: face about, march N m (an ordinary move, so terrain speed and the lag model apply),
+    face about again.
 - **Change check simplified:** no exemptions. A change is refused if any slot, filled or empty, would
   be on impassable ground at any sampled pose, before or after `rebalance`. A unit already standing on
   such ground (only possible through scenario setup) must first move off it.
