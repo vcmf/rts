@@ -15,7 +15,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`vision.md`](vision.md): pitch, pillars, scale, non-goals. *(draft)*
 - [`art-bible.md`](art-bible.md): the look: fixed constraints, palette, light, seasons, water, assets. *(current)*
 - [`architecture.md`](architecture.md): sim/render split, data model, commands, tick, Babylon setup. *(current; parts superseded by `docs/proposals/sim-design.md`)*
-- [`engine-map.md`](engine-map.md): every engine part with its owner doc, phase and status. *(current)*
+- [`engine-map.md`](engine-map.md): every engine part with its owner doc, phase and status. *(draft)*
 - [`conventions.md`](conventions.md): commits, units and numbers, prototypes, docs. *(current)*
 - [`glossary.md`](glossary.md): drill and engine terms. *(current)*
 - [`asset-sources.md`](asset-sources.md): where assets come from, licences. *(current)*
@@ -31,10 +31,10 @@ designs written before building (frozen once built, their lasting content moves 
 
 ## Proposals (designs before building)
 
-- [`proposals/engine-design.md`](proposals/engine-design.md): world spec, heightfield, camera, bakes, scale, known issues, order of engine work.
-- [`proposals/sim-design.md`](proposals/sim-design.md): the battle simulation (battalions, drill, fire, morale, determinism, phases).
-- [`proposals/staff-map/design.md`](proposals/staff-map/design.md): the far-zoom staff map, art direction.
-- [`proposals/staff-map/implementation.md`](proposals/staff-map/implementation.md): how the staff map is built.
+- [`proposals/engine-design.md`](proposals/engine-design.md): world spec, heightfield, camera, bakes, scale, known issues, order of engine work. *(accepted)*
+- [`proposals/sim-design.md`](proposals/sim-design.md): the battle simulation (battalions, drill, fire, morale, determinism, phases). *(draft)*
+- [`proposals/staff-map/design.md`](proposals/staff-map/design.md): the far-zoom staff map, art direction. *(draft)*
+- [`proposals/staff-map/implementation.md`](proposals/staff-map/implementation.md): how the staff map is built. *(draft)*
 
 ## Plans
 

@@ -189,7 +189,7 @@ docs/
     formations.md  formation-render.md  drill.md  terrain.md  pathfinding.md
     musketry.md  melee-charge.md  morale.md  command-delay.md  camera.md  ui.md ...
   decisions/                 # MADR-lite, append-only, NNNN-kebab-title.md
-  proposals/                 # pre-build design docs/RFCs; frozen once implemented
+  proposals/                 # pre-build design docs or RFCs; frozen once implemented
   plans/active/  plans/done/ # per-milestone execution plans with checklists and verification
   research/                  # non-authoritative; reports and notes (e.g. this report); may go stale
 src/sim/formation/AGENTS.md  # optional nested pointer: invariants for this module + link to systems/formations.md

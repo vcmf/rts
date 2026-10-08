@@ -16,7 +16,7 @@ only by a mild bend narrowing (−20%) and small fast noise.
 
 ## Change (scope: width only)
 
-- **Width rule** (`painted-cinematic.html`, river attributes):
+- **Width rule** (`prototypes/painted-cinematic.html`, river attributes):
   - each stretch of 2–3 bends gets its own width scale (slow noise, ±25%);
   - bends narrow by up to 40%;
   - straight riffle stretches widen by up to 35% (riffles are wide and shallow);

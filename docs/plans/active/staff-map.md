@@ -13,7 +13,7 @@ Every PR follows `AGENTS.md` → Workflow (plan → implement → `/code-review 
 Status: built. Open `prototypes/staff-map.html`. Measured numbers: `docs/proposals/staff-map/implementation.md` §7.
 
 **Goal:** judge the *feel* of the map, the blocks, the orders and the zoom before committing to
-any of it. Not the final rendering: the 3D side is a stand-in for `painted-cinematic.html`.
+any of it. Not the final rendering: the 3D side is a stand-in for `prototypes/painted-cinematic.html`.
 
 **Scope:** `prototypes/staff-map.html`, single file, Babylon 9 from the CDN, runs from `file://`.
 - An Austerlitz-inspired field (approximate geography): a central plateau, a meandering stream
@@ -41,7 +41,7 @@ any of it. Not the final rendering: the 3D side is a stand-in for `painted-cinem
 - [ ] 60 fps at the far zoom on an M1-class Mac (measured in the page, labelled).
 
 **Out of scope:** fog of war (see `docs/proposals/staff-map/design.md` §10), real terrain import, the painterly 3D
-shading of `painted-cinematic.html`, the real sim.
+shading of `prototypes/painted-cinematic.html`, the real sim.
 
 ## SM0b: readability pass (art director feedback, Oct 2026)
 
@@ -60,7 +60,7 @@ footprints fade out over ~40 game minutes; in the painted world block = footprin
 
 | Phase | Scope |
 |---|---|
-| SM1 | Port the zoom transition into `painted-cinematic.html`: its terrain, light and river under the map texture |
+| SM1 | Port the zoom transition into `prototypes/painted-cinematic.html`: its terrain, light and river under the map texture |
 | SM2 | Map bake in a worker; real heightmap and OSM features (shares the W6 importer in `docs/plans/active/prototype-plan.md`) |
 | SM3 | Unit symbols driven by the real `sim/` once it exists; overlap and layering rules |
 | SM4 | Video export: directed map camera, trails as replay |

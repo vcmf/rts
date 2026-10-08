@@ -28,23 +28,25 @@ One meandering channel generated once at load into dense per-sample arrays. Ever
   `D`, bank asymmetry `A` (for W2), riffle 0..1, water level `zw`, speed.
 - **Width rule:** each stretch of 2–3 bends has its own scale (slow noise), bends narrow, straight
   riffles widen; soft limits 4 and 11 m; smoothed over about two widths so banks never notch.
-- **Pools and riffles:** riffle phase about 6 local widths apart; depth and speed derived from the
-  smoothed riffle value.
+- **Pools and riffles:** riffles spaced in local widths; depth and speed derived from the smoothed
+  riffle value.
 - **Query:** `riverQuery(x, z, wantLevel)` returns the nearest segment (index, parameter, signed
-  distance, `s`) through a 16 m bucket grid; the blended water level only when asked for (the
+  distance, `s`) through a bucket grid; the blended water level only when asked for (the
   trough needs it where two passes of a bend meet).
-- **Terrain:** valley trough and floodplain (84 m), then a symmetric channel carve, on the 800 m
-  detail tile (1.79 m grid). The far ring (14.3 m grid) has the trough only and shows the river as a
-  painted line from a mask texture; an apron stitches the two grids vertex for vertex.
-- **Water mesh:** a flat ribbon at `zw`, 1.35 half-widths wide (outer columns dive under the bank),
+- **Terrain:** valley trough and floodplain, then a symmetric channel carve, on the detail tile.
+  The coarse far ring has the trough only and shows the river as a painted line from a mask
+  texture; an apron stitches the two grids vertex for vertex (sizes: `docs/proposals/engine-design.md` §4).
+- **Water mesh:** a flat ribbon at `zw` reaching 1.35 half-widths each side of the centre line
+  (1.35 widths in all, wider than the channel: the outer columns dive under the bank),
   clamped onto the tile edge where the painted line takes over.
 - **Placement:** `placeable` keeps every instance's footprint out of the water and the formation
   zones; stones may sit on riffles; willows line the banks; wheat stays off the floodplain.
 
 ## Tunables
 
-`RIVER.P` and the width rule in `prototypes/painted-cinematic.html` (RIVER section); valley axis
-`axisX`.
+All values live in `prototypes/painted-cinematic.html` (RIVER section): `RIVER.P` (base width,
+depth, floodplain and belt widths, valley shape, sinuosity, seed), the width rule, the riffle
+spacing, the query grid and the valley axis `axisX`. This doc names them; it does not copy them.
 
 ## Verification
 

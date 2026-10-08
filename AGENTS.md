@@ -18,7 +18,7 @@ The ones to read before touching a given area:
 | simulation, units, combat | `docs/proposals/sim-design.md`, `docs/architecture.md` |
 | the far-zoom map | `docs/proposals/staff-map/design.md` |
 | a built system | its doc in `docs/systems/` |
-| anything | the decisions in `docs/decisions/` (they are binding until superseded) |
+| anything | `docs/decisions/` (accepted records are binding; proposed ones are open) |
 
 Prototype-specific rules live in `prototypes/AGENTS.md`. Conventions (commits, units, docs) are in
 `docs/conventions.md`; terms in `docs/glossary.md`.
@@ -58,6 +58,7 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Conventions (commits, u
 - **No optical blur during gameplay.** Depth of field only in presentation modes and video export.
 - **The painterly look lives in assets and materials**, not in a heavy full-screen filter.
 - **Readable first**: armies are the most saturated objects on screen; never hide a formation.
+- **Pack colours are never used**: materials map to roles and our palette paints them.
 - **Static light is baked once per map**; only moving things get runtime lighting.
 - **The simulation is deterministic and never imports the renderer** (`docs/decisions/`).
 - **Measure, don't assume**: performance claims need a measurement or are labelled estimates.

@@ -12,12 +12,12 @@ Prototyping the look. Open `prototypes/painted-cinematic.html` in Chrome; no bui
 
 | Prototype | What it shows |
 |---|---|
-| `painted-cinematic.html` | **Current.** Baked light map, painted water, valley mist, light shafts, golden backlight, cinematic grade, seasons, optional depth of field |
-| `staff-map.html` | **Feel prototype** of the far-zoom staff map and the zoom into the world |
-| `painted-hybrid.html` | Real sun shadows + SSAO under painterly shading (superseded) |
-| `painted-foliage.html` | Leaf-card trees from a stylized `.blend` pack (superseded) |
-| `painted-nature.html` | First painterly pass on the Quaternius pack (superseded) |
-| `painted-diorama.html` | The retired tin-soldier diorama direction |
+| `prototypes/painted-cinematic.html` | **Current.** Baked light map, painted water, valley mist, light shafts, golden backlight, cinematic grade, seasons, optional depth of field |
+| `prototypes/staff-map.html` | **Feel prototype** of the far-zoom staff map and the zoom into the world |
+| `prototypes/painted-hybrid.html` | Real sun shadows + SSAO under painterly shading (superseded) |
+| `prototypes/painted-foliage.html` | Leaf-card trees from a stylized `.blend` pack (superseded) |
+| `prototypes/painted-nature.html` | First painterly pass on the Quaternius pack (superseded) |
+| `prototypes/painted-diorama.html` | The retired tin-soldier diorama direction |
 
 ## Docs
 

@@ -244,7 +244,7 @@ Load time (5 paired runs): main median 2.86 s, W1 3.03 s (+170 ms).
 | 6 | moderate | `apronUnstitched` and `waterOutsideTile` could not fail | Replaced: `farInBand`, `apronForeignVerts`, `apronUnusedEdgeVerts`, `apronArea` (matches the band exactly) |
 | 7 | light | Render-check reachability ignored the pan clamp | Fails on `|t| > PLAY` too; probes now run up to the tile edge |
 | 8 | light | Stale `touchesZone` comment | Removed |
-| 9 | light | Async wrapper with nothing to await | Sync IIFE; `shot.mjs` change reverted |
+| 9 | light | Async wrapper with nothing to await | Sync IIFE; `tools/shot.mjs` change reverted |
 
 Load time (5 paired runs): main median 2.80 s, W1 2.88 s (+85 ms; the far ring lost 6.7k triangles).
 

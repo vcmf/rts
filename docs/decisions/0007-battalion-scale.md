@@ -15,7 +15,7 @@ We will make the battalion the player's unit and the simulation's unit: about 10
 
 ## Consequences
 
-Fire is resolved per battalion; individual soldiers are cosmetic, except who fell (kept in the simulation's slot table). Brigade group moves are deferred.
+Fire is resolved per battalion; individual soldiers are cosmetic. Brigade group moves are deferred. (Whether the simulation also keeps a per-soldier slot table, for identical casualties in replays, is open: `docs/research/formation-movement-and-doc-systems.md` §4.)
 
 ## Alternatives considered
 

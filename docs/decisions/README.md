@@ -7,7 +7,8 @@ last_reviewed: 2026-10-08
 
 Numbered decision records (MADR-lite, template: `docs/templates/decision.md`). A record is never
 edited after acceptance: to change a decision, write a new record and mark the old one
-`superseded by NNNN`. Numbers are never reused. Decisions taken earlier in October 2026 were
+`superseded by NNNN`. Numbers are never reused. **Accepted** records are binding; **proposed**
+records are open until the owner accepts or rejects them (then their status changes once). Decisions taken earlier in October 2026 were
 recorded here on 2026-10-08.
 
 | # | Decision | Status |
@@ -17,7 +18,7 @@ recorded here on 2026-10-08.
 | [0003](0003-no-blur-in-gameplay.md) | No optical blur during gameplay | accepted |
 | [0004](0004-lowland-meander-river.md) | The first river type is the lowland meander | accepted |
 | [0005](0005-sim-render-split.md) | The simulation is separate from rendering and driven by commands | accepted |
-| [0006](0006-restricted-float64.md) | Deterministic simulation numbers with restricted float64 | accepted |
+| [0006](0006-restricted-float64.md) | Deterministic simulation numbers with restricted float64 | proposed |
 | [0007](0007-battalion-scale.md) | The player commands battalions of about 100 soldiers, one figure each | accepted |
 | [0008](0008-no-couriers.md) | No couriers: orders apply immediately | accepted |
 | [0009](0009-battle-length.md) | A battle takes 30–45 minutes of real time | accepted |

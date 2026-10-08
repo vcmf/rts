@@ -12,4 +12,6 @@ Single-file Babylon.js 9 prototypes. `painted-cinematic.html` is the current wor
 - **Verify with the tools**: `tools/shot.mjs` for screenshots, `tools/river-check.js` and
   `tools/render-check.js` for the river and render invariants. Every new check gets a negative test
   (break the thing, see the check fail).
+- **Pack colours are never used**: materials map to roles and our palette paints them
+  (`docs/art-bible.md` §4b).
 - **Load time**: compare against main with paired runs of the same marker (`window.__buildMs`).

@@ -7,7 +7,7 @@ last_reviewed: 2026-10-08
 
 How the staff map (`docs/proposals/staff-map/design.md`) is built in Babylon.js, and how it fits the sim/render split in
 `docs/architecture.md`. Status: **approach, validated only by the feel prototype**
-(`../prototypes/staff-map.html`).
+(`prototypes/staff-map.html`).
 
 ---
 
@@ -165,7 +165,7 @@ not GPU timer queries, so they bound the cost rather than isolate it.
 
 - The prototype's 3D side lights terrain and props at runtime (`dot(n, sun)`). That is a
   stand-in: the art bible bakes static light once per map, and SM1 must use the baked light map
-  of `painted-cinematic.html` under the map texture.
+  of `prototypes/painted-cinematic.html` under the map texture.
 
 ## 9. Video export
 

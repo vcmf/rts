@@ -27,7 +27,7 @@ battlefield that runs at 60 fps in a browser (game tier) and renders at film qua
 
 | Area | State | Notes |
 |---|---|---|
-| Painterly shading (ramp, grain, edges, rim, backlight) | ✅ done | `painted-cinematic.html` |
+| Painterly shading (ramp, grain, edges, rim, backlight) | ✅ done | `prototypes/painted-cinematic.html` |
 | Light: baked light map, sun shadows, occlusion | ✅ done | review round 1 fixed (10 findings) |
 | Cinematic layer (grade, bloom, mist, shafts, DOF option) | ✅ first pass | tuning pending |
 | Seasons and tree colour variety | ✅ done | `docs/art-bible.md` §4b |

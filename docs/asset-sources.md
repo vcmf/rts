@@ -91,7 +91,7 @@ A browser game ships its files to every player, who can extract them.
 - [ ] **Use outside the original engine** allowed (Unity / Unreal stores)?
 - [ ] Any **"must protect from extraction"** clause? A web build can't fully
       comply, so prefer licences without one.
-- [ ] **Attribution** required? If so, record it in a `CREDITS.md`.
+- [ ] **Attribution** required? If so, record it in a CREDITS.md file at the repo root (not created yet).
 - [ ] **Regional restrictions** (e.g. Hunyuan3D)?
 - [ ] Keep the original licence file next to the asset in `assets/<pack>/`.
 
