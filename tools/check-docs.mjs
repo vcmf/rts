@@ -20,16 +20,22 @@ function walk(dir, out = []) {
   return out
 }
 
-// Which tokens are references:
-// - in code (html/js/mjs/py): repo-root paths (docs/, prototypes/, tools/, design/) and any *.md name
-// - in docs: the same, plus every backticked file name with a doc or code extension, plus Markdown links
+// Which tokens are references (outside ~~struck-through~~ text, which marks old names on purpose):
+// - everywhere: repo-root paths (docs/, prototypes/, tools/, design/) and ../-relative file paths
+// - in docs: every *.md name, every backticked file name and old top-level folder name, Markdown links (inline, <angle>,
+//   reference definitions)
+// - in code: every *.md and *.html name, and hyphenated *.js/*.mjs/*.py names (river-check.js),
+//   so prose like "Babylon.js" is not mistaken for a file
 // A token resolves against the file's own folder, then the repo root, with exact letter case (macOS
-// file systems ignore case; GitHub and Linux do not). Placeholders (<x>, *, |, NNNN) are skipped.
+// file systems ignore case; GitHub and Linux do not). Placeholders (<x>, *, |, NNNN, YYYY) are skipped.
 const ROOT_PATH = /(?<![\w./@-])((?:docs|prototypes|tools|design)\/[\w./-]*[\w/])(?![\w])/g
 const MD_NAME = /(?<![\w./-])([\w-]+(?:\/[\w.-]+)*\.md)(?![\w])/g
-const TICKED = /`@?([\w./-]+\.(?:md|html|js|mjs|py))`/g
+const CODE_NAME = /(?<![\w./<-])([\w]+(?:-[\w]+)+(?:\/[\w.-]+)*\.(?:js|mjs|py)|[\w-]+(?:\/[\w.-]+)*\.html)(?![\w])/g
+const REL_PATH = /(?<![\w./-])((?:\.\.\/)+[\w./-]*\.(?:md|html|js|mjs|py))(?![\w])/g
+const TICKED = /`@?([\w./-]+\.(?:md|html|js|mjs|py)|(?:staff-map|plans|research)\/)`/g   // folders: only the old top-level ones (future code folders like sim/ do not exist yet)
+const REF_DEF = /^\s*\[[^\]]+\]:\s*<?([^\s>]+)>?/gm
 const AT_IMPORT = /^@([\w./-]+)$/gm
-const MD_LINK = /\]\(([^)\s#]+)(#[^)\s]*)?(?:\s+"[^"]*")?\)/g
+const MD_LINK = /\]\(<?([^)\s#>]+)>?(#[^)\s]*)?(?:\s+"[^"]*")?\)/g
 
 // exact-case existence, segment by segment
 function existsExact(p) {
@@ -45,9 +51,10 @@ function existsExact(p) {
 }
 const resolves = (file, token) => existsExact(path.resolve(path.dirname(file), token)) || existsExact(path.join(root, token))
 const placeholder = t => /[<*|]|NNNN|YYYY/.test(t)
+const unstruck = t => t.replace(/~~[^~\n]*~~/g, '')
 
 for (const file of walk(root)) {
-  const text = fs.readFileSync(file, 'utf8'), r = rel(file)
+  const text = unstruck(fs.readFileSync(file, 'utf8')), r = rel(file)
   if (r.startsWith('docs/templates/') || r === 'tools/check-docs.mjs') continue
   const isDoc = file.endsWith('.md')
   // research reports quote other projects' files (0 A.D., OpenRA): there only our own docs/ paths are checked
@@ -55,14 +62,17 @@ for (const file of walk(root)) {
   const tokens = new Set()
   for (const m of text.matchAll(ROOT_PATH)) if (!research || m[1].startsWith('docs/')) tokens.add(m[1])
   if (!research) {
-    if (!isDoc) for (const m of text.matchAll(MD_NAME)) tokens.add(m[1])
-    else for (const m of text.replace(/```[\s\S]*?```/g, '').matchAll(TICKED)) tokens.add(m[1])
+    for (const m of text.matchAll(REL_PATH)) tokens.add(m[1])
+    if (!isDoc) for (const m of text.matchAll(CODE_NAME)) tokens.add(m[1])
+    for (const m of text.matchAll(MD_NAME)) tokens.add(m[1])
+    if (isDoc) for (const m of text.replace(/```[\s\S]*?```/g, '').matchAll(TICKED)) tokens.add(m[1])
   }
   for (const t of tokens) if (!placeholder(t) && !resolves(file, t)) problems.push(`${r}: missing path ${t}`)
   // @imports (CLAUDE.md bridges) must resolve from their own folder
   if (path.basename(file) === 'CLAUDE.md') for (const m of text.matchAll(AT_IMPORT))
     if (!existsExact(path.resolve(path.dirname(file), m[1]))) problems.push(`${r}: missing import ${m[1]}`)
-  if (isDoc) for (const m of text.replace(/```[\s\S]*?```/g, '').matchAll(MD_LINK)) {   // links inside code blocks are code
+  const prose = text.replace(/```[\s\S]*?```/g, '')   // links inside code blocks are code
+  if (isDoc) for (const m of [...prose.matchAll(MD_LINK), ...prose.matchAll(REF_DEF)]) {
     const target = m[1]
     if (/^[a-z]+:/i.test(target) || placeholder(target)) continue   // URLs, placeholders
     if (!existsExact(path.resolve(path.dirname(file), target))) problems.push(`${r}: broken link ${target}`)
@@ -78,6 +88,8 @@ for (const file of walk(path.join(root, 'docs')).filter(f => f.endsWith('.md')))
   if (!m) { problems.push(`${r}: no front matter`); continue }
   if (!/^status: \S/m.test(m[1])) problems.push(`${r}: front matter without status`)
   const date = r.startsWith('docs/decisions/0') ? /^date: \d{4}-\d{2}-\d{2}$/m : /^last_reviewed: \d{4}-\d{2}-\d{2}$/m
+  const dm = m[1].match(/^(?:date|last_reviewed): (\d{4})-(\d{2})-(\d{2})$/m)
+  if (dm && (+dm[2] < 1 || +dm[2] > 12 || +dm[3] < 1 || +dm[3] > 31)) problems.push(`${r}: impossible date ${dm[0]}`)
   if (!date.test(m[1])) problems.push(`${r}: front matter without ${r.startsWith('docs/decisions/0') ? 'date' : 'last_reviewed'} (YYYY-MM-DD)`)
 }
 
@@ -87,7 +99,20 @@ const decs = fs.readdirSync(decDir).filter(f => /^\d{4}-.+\.md$/.test(f))
 const seen = new Map()
 for (const f of decs) { const n = f.slice(0, 4); if (seen.has(n)) problems.push(`decision number ${n} used twice: ${seen.get(n)}, ${f}`); seen.set(n, f) }
 const index = fs.readFileSync(path.join(decDir, 'README.md'), 'utf8')
-for (const f of decs) if (!index.includes(`(${f})`)) problems.push(`docs/decisions/README.md: ${f} not listed`)
+for (const f of decs) {
+  const row = index.split('\n').find(l => l.includes(`(${f})`))
+  if (!row) { problems.push(`docs/decisions/README.md: ${f} not listed`); continue }
+  const st = (fs.readFileSync(path.join(decDir, f), 'utf8').match(/^status: (.+)$/m) || [])[1]?.trim()
+  if (st && !row.trim().endsWith(`| ${st} |`)) problems.push(`docs/decisions/README.md: ${f} is "${st}" in its file but not in the table`)
+}
+
+// every doc is reachable from an index (INDEX.md, the systems README or the decisions README)
+const indexes = ['docs/INDEX.md', 'docs/systems/README.md', 'docs/decisions/README.md'].map(p => fs.readFileSync(path.join(root, p), 'utf8')).join('\n')
+for (const file of walk(path.join(root, 'docs')).filter(f => f.endsWith('.md'))) {
+  const r = rel(file), inDocs = r.slice('docs/'.length)
+  if (r.startsWith('docs/templates/') || ['docs/INDEX.md', 'docs/systems/README.md', 'docs/decisions/README.md'].includes(r)) continue
+  if (![r, inDocs, `(${inDocs})`, path.basename(r)].some(k => indexes.includes(k))) problems.push(`${r}: not listed in any index`)
+}
 
 if (problems.length) { console.error(problems.join('\n')); console.error(`check-docs: ${problems.length} problem(s)`); process.exit(1) }
 console.log(`check-docs: ok (${decs.length} decisions)`)
