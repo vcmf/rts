@@ -9,14 +9,13 @@ window.RULESET = {
   // quick-step factor: how much faster a lagging file may hurry, by pace and ground class (French
   // 100/76 at the ordinary pace; less when already at a quicker pace)
   q: { ordinary: { open: 1.3, light: 1.1, hard: 1.0 }, routeStep: { open: 1.15, light: 1.0, hard: 1.0 } },
-  // formations: terrain column used, pace off and on roads, and for depth-ordered formations which
-  // company marches ahead of which and how much room there is between them (metres) before the
-  // following company is held up (the accordion)
+  // formations: terrain column used, pace off and on roads (a road pace only while every company is on
+  // a road), and whether the companies follow the head's trail (a column of route)
   formations: {
     line:   { kind: 'line',   pace: 'ordinary' },
     square: { kind: 'column', pace: 'ordinary' },
-    column: { kind: 'column', pace: 'ordinary', ahead: [-1, -1, 0, 1], room: 3.5 },
-    march:  { kind: 'column', pace: 'ordinary', roadPace: 'routeStep', ahead: [-1, 0, 1, 2], room: 0.5 },
+    column: { kind: 'column', pace: 'ordinary' },
+    march:  { kind: 'column', pace: 'ordinary', roadPace: 'routeStep', trail: true },
   },
   // slope: g = min(1, k · exp(-3.5 (|s + 0.05| - 0.05))), s = rise over run along the travel direction
   slopeK: 1.3,
