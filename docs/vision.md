@@ -9,7 +9,8 @@ last_reviewed: 2026-10-08
 
 ## Pitch
 
-Command a Napoleonic battle as it looked in the paintings: battalions of real soldiers wheeling,
+An engine for pre-modern battles, from antiquity to Napoleon (decision 0015), starting with the
+Napoleonic era. Command a Napoleonic battle as it looked in the paintings: battalions of real soldiers wheeling,
 forming square and breaking under fire, on a living storybook landscape. Zoom out and the battle
 becomes a staff map drawn in ink; zoom in and the paper rises into the painted world. The same
 renderer produces cinematic history videos.
@@ -31,6 +32,7 @@ renderer produces cinematic history videos.
 
 ## Non-goals
 
+- No modern warfare (rifled and industrial weapons and later); eras come as rulesets on one engine.
 - No sky, no ground-level camera, no strategic 3D zoom (the far zoom is the staff map).
 - No economy, base building or production: battles only.
 - No couriers or order delay.

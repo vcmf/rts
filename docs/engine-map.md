@@ -38,7 +38,7 @@ without the renderer.
 ## 2. Decisions this map rests on
 
 The decision records in `docs/decisions/` are authoritative; this table keeps the D-labels other
-docs cite: D1 → 0007, D2 → 0006, D3 → 0008, D4 → 0013, D5 → 0009, D6 → 0010.
+docs cite: D1 → 0007, D2 → 0006, D3 → 0008, D4 → 0013, D5 → 0009, D6 → 0010, D7 → 0015.
 
 | # | Decision | Status |
 |---|---|---|
@@ -48,6 +48,7 @@ docs cite: D1 → 0007, D2 → 0006, D3 → 0008, D4 → 0013, D5 → 0009, D6 �
 | D4 | **Single-player first, multiplayer-capable**: determinism, hashing and command logs are built as if lockstep were coming, so it stays a transport problem | accepted (Oct 2026) |
 | D5 | **A battle takes 30–45 minutes of real time** (real battles lasted hours): a battle clock with speed controls (pause, 1×, 2×, 4–8×). Time of day is chosen per scenario and baked; the sun does not move during a battle | agreed (Oct 2026) |
 | D6 | **The camera is locked down** (short 3D zoom); the far zoom is the staff map | agreed (`docs/proposals/engine-design.md`, `docs/proposals/staff-map/`) |
+| D7 | **Era-generic engine, antiquity to Napoleon** (decision 0015): era-specific units, formations, weapons, movement and morale parameters are **era rulesets** (data); the Napoleonic ruleset is first; modern warfare is out of scope | agreed (Oct 2026) |
 
 ## 3. The map
 
@@ -106,7 +107,7 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 
 | Part | What it does | Owner doc | Phase | Status |
 |---|---|---|---|---|
-| Unit data | Formations, weapons, nations as data with inheritance and validation | `docs/proposals/sim-design.md` | P | ⬜ |
+| Era rulesets | Per era (Napoleonic first): unit types, formations and drill, weapons, movement factors, morale, as data with inheritance and validation (D7) | `docs/proposals/sim-design.md` | P | ⬜ |
 | **Order of battle** | Army → corps → division → brigade → battalion; commanders; starting positions. The core of a historical scenario | `docs/proposals/sim-design.md` | P (one battle), A | ⬜ |
 | Map build | Heightfield, rivers, roads, villages, AI hints from real data (W6) | `docs/proposals/engine-design.md` §10 | P | ⬜ |
 | Assets | Models and textures in, compressed (KTX2, meshopt) out | `docs/asset-sources.md` | A | 🟡 |
