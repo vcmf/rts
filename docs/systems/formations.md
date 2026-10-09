@@ -16,7 +16,7 @@ The battalion as the sim moves it:
 
 It is ported from `prototypes/formation-core.js` (the feel prototype, still the visual reference until
 S1b draws the sim). The behaviour and its history are in `docs/plans/done/terrain-movement.md`; the port
-is in `docs/plans/active/s1a-formations-on-spine.md`.
+is in `docs/plans/done/s1a-formations-on-spine.md`.
 
 ## Goals / non-goals
 

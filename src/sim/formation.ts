@@ -1,6 +1,6 @@
 // The formation layer (20 Hz), ported from prototypes/formation-core.js onto the spine: shapes and timed
 // changes, the march trail, the terrain lag model, the footprint gate, Face about, wheels, halts.
-// Design and history: docs/plans/done/terrain-movement.md, docs/plans/active/s1a-formations-on-spine.md.
+// Design and history: docs/plans/done/terrain-movement.md, docs/plans/done/s1a-formations-on-spine.md.
 //
 // A battalion is a few company blocks (files × ranks) placed in the battalion frame by its shape. The sim
 // keeps the men per company; which slots are filled follows from that by one rule (`occupied`), so no

@@ -1,5 +1,5 @@
 // The spine with formations: golden hashes, replays, saves, hash coverage, commands, data and ruleset
-// versions, era genericity (docs/plans/active/s1a-formations-on-spine.md, acceptance 2–4).
+// versions, era genericity (docs/plans/done/s1a-formations-on-spine.md, acceptance 2–4).
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
