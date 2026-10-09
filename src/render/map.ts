@@ -3,7 +3,7 @@
 // contours by marching squares, spot heights at the summits, cosmetic symbols (scene.ts), every soldier a
 // small outlined circle. Two layers: the map (redrawn when the view changes) and the units (every frame).
 import type { World } from '../sim/index.ts'
-import { cellK, O_MOVE, M_TICK, MS_STEADY, MORALE_STATES, DT, formationSlot, layoutOf } from '../sim/index.ts'
+import { cellK, O_MOVE, M_TICK, MS_STEADY, MS_ROUTING, MORALE_STATES, DT, formationSlot, layoutOf } from '../sim/index.ts'
 import type { Scene } from './scene.ts'
 import type { SoldierLayer } from './soldiers.ts'
 import { CLASS_STYLE, INK, SIDE_INK, FIRE_INK, MORALE_INK } from './style.ts'
@@ -155,7 +155,7 @@ export class StaffMap {
       // morale: a bar behind the battalion, past its rear rank (its shape's depth, or the routers' spread),
       // its length the morale, its colour the state; the state named under it unless steady
       const st = f.mstate[u.i], bw = Math.max(14, R * 7), mc = MORALE_INK[st] ?? INK.ink2
-      const back = layoutOf(w, u.i).depth + w.cr.geo.ranks * w.cr.geo.rankSpacing + (st === MORALE_STATES.length - 1 ? 6 : 0) + 14 / k
+      const back = layoutOf(w, u.i).depth + w.cr.geo.ranks * w.cr.geo.rankSpacing + (st === MS_ROUTING ? 6 : 0) + 14 / k
       const [bx, by] = toS(v, fx - Math.sin(fh) * back, fz - Math.cos(fh) * back)
       g.fillStyle = 'rgba(243,239,230,.85)'; g.fillRect(bx - bw / 2 - 1, by - 3, bw + 2, 5)
       g.fillStyle = mc; g.fillRect(bx - bw / 2, by - 2, bw * Math.max(0, Math.min(1, f.morale[u.i])), 3)

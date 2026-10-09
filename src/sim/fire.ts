@@ -100,18 +100,30 @@ function distToSegment(px: number, pz: number, x0: number, z0: number, x1: numbe
   const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, u = l2 > 0 ? Math.max(0, Math.min(1, ((px - x0) * dx + (pz - z0) * dz) / l2)) : 0
   const ex = x0 + dx * u - px, ez = z0 + dz * u - pz; return sqrt(ex * ex + ez * ez)
 }
+// company k sees company m: the sight line, walked at most once a tick per pair (cached in the world's
+// scratch, stamped with the tick)
+function sees(w: World, G: FireGeo, k: number, m: number): boolean {
+  const n = MAX_FORMATIONS * w.cr.geo.companies, s = w.scratch, tick = w.meta[M_TICK] + 1
+  const cache = s.fireSight ?? (s.fireSight = new Int32Array(n * n)), key = k * n + m, v = cache[key]
+  if (v >> 1 === tick) return (v & 1) === 1
+  const clear = clearSight(w, G.cx[k], G.cz[k], G.cx[m], G.cz[m]); cache[key] = (tick << 1) | (clear ? 1 : 0)
+  return clear
+}
+const sqDist = (G: FireGeo, k: number, m: number): number => (G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k])
+
 // battalion j's nearest company in company k's arc and range with a clear sight line, or −1: the companies
-// in arc are tried nearest first, so one hidden in a wood does not hide the rest
+// in arc are tried nearest first, so one hidden in a wood does not hide the rest (a battalion has at most
+// MAX_BINS / BINS companies, ruleset.ts)
 const aimD = new Float64Array(64), aimM = new Int32Array(64)
 function aimAt(w: World, G: FireGeo, k: number, j: number): number {
   const C = w.cr.geo.companies; let n = 0
   for (let q = 0; q < C; q++) {
     const m = j * C + q; if (w.f.men[m] <= 0 || !inArc(w, G, k, G.cx[m], G.cz[m])) continue
-    const d = (G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k])
+    const d = sqDist(G, k, m)
     let p = n++; while (p > 0 && (aimD[p - 1] > d || (aimD[p - 1] === d && aimM[p - 1] > m))) { aimD[p] = aimD[p - 1]; aimM[p] = aimM[p - 1]; p-- }
     aimD[p] = d; aimM[p] = m
   }
-  for (let p = 0; p < n; p++) if (clearSight(w, G.cx[k], G.cz[k], G.cx[aimM[p]], G.cz[aimM[p]])) return aimM[p]
+  for (let p = 0; p < n; p++) if (sees(w, G, k, aimM[p])) return aimM[p]
   return -1
 }
 
@@ -171,7 +183,8 @@ function chooseTarget(w: World, G: FireGeo, i: number, c: number): Handle {
   const f = w.f, C = w.cr.geo.companies, k = i * C + c
   chosenAim = -1
   for (const h of [f.prefer[i], f.target[k]]) { const j = slotOf(w, h); if (j >= 0 && f.side[j] !== f.side[i]) { const m = aimAt(w, G, k, j); if (m >= 0) { chosenAim = m; return h } } }
-  // candidates by distance to their nearest company in arc and range, then the sight line, nearest first
+  // the nearest battalion by its nearest visible company. Candidates are taken in order of their nearest
+  // company in arc (a bound: a visible one is no nearer), and the search stops once the bound passes the best.
   const cand: [number, number][] = []
   for (let j = 0; j < MAX_FORMATIONS; j++) {
     if (!f.alive[j] || f.side[j] === f.side[i]) continue
@@ -180,23 +193,29 @@ function chooseTarget(w: World, G: FireGeo, i: number, c: number): Handle {
     if (bd < Infinity) cand.push([bd, handleOf(w, j)])
   }
   cand.sort((a, b) => a[0] - b[0] || a[1] - b[1])
-  for (const [, h] of cand) { const m = aimAt(w, G, k, slotOf(w, h)); if (m >= 0) { chosenAim = m; return h } }
-  return 0
+  let best: Handle = 0, bd = Infinity
+  for (const [bound, h] of cand) {
+    if (bound >= bd) break
+    const m = aimAt(w, G, k, slotOf(w, h)); if (m < 0) continue
+    const d = sqDist(G, k, m); if (d < bd) { bd = d; best = h; chosenAim = m }
+  }
+  return best
 }
 
 // one company's volley at battalion j: expected hits, drawn as an integer, each given to a company of j in
-// the shooter's arc and range, weighted by its men (as they stood at the start of the step)
+// the shooter's arc and range that it can see, weighted by its men (as they stood at the start of the step)
 function volley(w: World, G: FireGeo, i: number, c: number, j: number, d: number, share: number, rs: Uint32Array): void {
   const f = w.f, C = w.cr.geo.companies, F = w.cr.rs.fire, k = i * C + c
   const rounds = firingMen(w, i, c) * share * (1 - F.misfire)
   const lambda = rounds * pAt(w, d) * w.cr.stateFactor[Math.min(2, f.mstate[i])] * (1 - F.cohesion * f.disorder[i]) * w.cr.depthByKind[layoutOf(w, j).kind]
   let hits = Math.floor(lambda); if (nextUnit(rs) < lambda - hits) hits++
   if (!hits) return
-  let tot = 0; for (let q = 0; q < C; q++) { const m = j * C + q; if (f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m])) tot += f.men[m] }
+  const hit = (m: number) => f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m]) && sees(w, G, k, m)
+  let tot = 0; for (let q = 0; q < C; q++) if (hit(j * C + q)) tot += f.men[j * C + q]
   if (!tot) return
   for (let n = 0; n < hits; n++) {
     let r = Math.floor(nextUnit(rs) * tot), q = 0
-    for (; q < C; q++) { const m = j * C + q; if (f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m])) { if (r < f.men[m]) break; r -= f.men[m] } }
+    for (; q < C; q++) { const m = j * C + q; if (hit(m)) { if (r < f.men[m]) break; r -= f.men[m] } }
     f.owed[j * C + Math.min(q, C - 1)]++
   }
 }
@@ -214,12 +233,18 @@ export function casualtiesStep(w: World, i: number): number {
 }
 
 // company c of battalion i as it would aim now: its target's slot (−1 none), the clear share of its rays
-// and the range (the page's readout and the tests; reads the positions as they are)
+// and the range. For tests and debugging: it rebuilds the fire geometry for every battalion, not a per-frame call.
 export function aimOf(w: World, i: number, c: number): { target: number; share: number; range: number } {
   const G = geometry(w), C = w.cr.geo.companies, k = i * C + c, j = slotOf(w, w.f.target[k])
   const m = j >= 0 ? aimAt(w, G, k, j) : -1
   if (m < 0) return { target: j, share: 0, range: Infinity }
   return { target: j, share: clearShare(w, G, i, c, G.cx[m], G.cz[m]), range: sqrt((G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k])) }
+}
+
+// company c of battalion i sees company q of battalion j, with the positions as they are (tests, debugging)
+export function companySees(w: World, i: number, c: number, j: number, q: number): boolean {
+  const G = geometry(w), C = w.cr.geo.companies
+  return clearSight(w, G.cx[i * C + c], G.cz[i * C + c], G.cx[j * C + q], G.cz[j * C + q])
 }
 
 // a new battalion: companies loaded at a keyed share of a reload, so a line does not open with one volley

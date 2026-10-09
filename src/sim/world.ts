@@ -49,6 +49,7 @@ export interface Formations {
   fireMode: Uint8Array; prefer: Int32Array
   // morale: quality, morale, the state (MS_*), the strength at spawn and the recent losses (decaying)
   quality: Float64Array; morale: Float64Array; mstate: Uint8Array; startMen: Int32Array; recent: Float64Array
+  runs: Uint8Array                                                 // a router's runs tried (the fan of directions, morale.ts)
 }
 // per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it)
 export interface Sides { rearX: Float64Array; rearZ: Float64Array }
@@ -73,7 +74,7 @@ export interface World {
   pending: Stamped[]
   data: SimData; cr: Compiled; terrain: Terrain
   debug: boolean
-  scratch: { places?: Places; arc?: Arc; fireGeo?: FireGeo; reverseFire?: boolean }   // reverseFire: a test visits battalions in reverse   // per-world working buffers, not state
+  scratch: { places?: Places; arc?: Arc; fireGeo?: FireGeo; fireSight?: Int32Array; reverseFire?: boolean }   // per-world working buffers, not state (reverseFire: a test switch, fire.ts)
 }
 
 export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {
@@ -89,7 +90,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     ordHead: i32(N).fill(-1), ordTail: i32(N).fill(-1),
     reload: f64(N * C), volleyTick: i32(N * C), target: i32(N * C), owed: i32(N * C),
     fireMode: u8(N), prefer: i32(N),
-    quality: f64(N), morale: f64(N), mstate: u8(N), startMen: i32(N), recent: f64(N),
+    quality: f64(N), morale: f64(N), mstate: u8(N), startMen: i32(N), recent: f64(N), runs: u8(N),
   }
   const M = MAX_ORDERS
   const ord: Orders = { type: i32(M), shape: i32(M), finish: u8(M), left: new Int8Array(M), resolved: u8(M),

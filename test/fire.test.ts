@@ -5,7 +5,7 @@ import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { data, cr, root } from './fx.ts'
 import { makeWorld, issue, advanceTick, compileRuleset, buildTerrain, makeHandle, KIND_FORMATION, M_FREE, M_TICK, MS_ROUTING, MS_STEADY, MS_SHAKEN, MS_WAVERING,
-  menOf, aimOf, hashWorld, wetBins, STATUS, O_MOVE, hex, serialize, deserialize, record, play, type World, type Command, type Ruleset, type Dropped } from '../src/sim/index.ts'
+  menOf, aimOf, companySees, hashWorld, wetBins, STATUS, cellK, placeWorld, O_MOVE, hex, serialize, deserialize, record, play, type World, type Command, type Ruleset, type Dropped, type Terrain } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { levelled, runFirefight, s1cFirefight, FIGHT_X, FIGHT_Z } from '../src/scenarios/s1c-firefight.ts'
 
@@ -13,9 +13,9 @@ const E = Math.PI / 2, Z = FIGHT_Z, lev = levelled(data), levTerrain = buildTerr
 // a world on levelled (or real) ground, with a log of dropped commands
 class W {
   w: World; dropped: Dropped[] = []
-  constructor(opts: { real?: boolean; rs?: Ruleset; seed?: number } = {}) {
+  constructor(opts: { real?: boolean; rs?: Ruleset; seed?: number; terrain?: Terrain } = {}) {
     const c = opts.rs ? compileRuleset(opts.rs) : cr
-    this.w = makeWorld(opts.real ? data : lev, c, opts.seed ?? 1, true, opts.rs ? undefined : opts.real ? undefined : levTerrain)
+    this.w = makeWorld(opts.real ? data : lev, c, opts.seed ?? 1, true, opts.terrain ?? (opts.rs ? undefined : opts.real ? undefined : levTerrain))
   }
   spawn(side: number, x: number, z: number, heading: number, extra: Partial<Extract<Command, { type: 'debug-spawn' }>> = {}): number {
     const slot = this.w.free[this.w.meta[M_FREE] - 1]
@@ -36,6 +36,8 @@ function pair(d: number, opts: ConstructorParameters<typeof W>[0] = {}, qb?: num
   return [s, a, b]
 }
 const fireRs = (fire: Partial<Ruleset['fire']>): Ruleset => ({ ...napoleonic, fire: { ...napoleonic.fire, ...fire } })
+// the z of company c's centre (its front-rank origin is close enough here)
+const companyZ = (s: W, h: number, c: number): number => placeWorld(s.w, s.i(h), c, s.w.f.x[s.i(h)], s.w.f.z[s.i(h)], s.w.f.heading[s.i(h)], 0, 0, { x: 0, z: 0, a: 0, face: 0 }).z
 
 describe('who may fire at whom', () => {
   it('only within the maximum range', () => {
@@ -91,6 +93,29 @@ describe('casualties', () => {
   })
 })
 
+describe('a target partly hidden', () => {
+  it('a company in a wood does not hide the rest of its battalion, and takes no hits it cannot be seen for', () => {
+    // B faces west; a dense wood (15 m sight limit) is painted around its southern company, deep enough that
+    // every line to that company crosses more of it than the limit (hit chance raised so the test sees hits)
+    const t = buildTerrain(lev, cr), dense = Object.keys(napoleonic.terrain).indexOf('denseWood')
+    const s = new W({ terrain: t, rs: undefined }), a = s.spawn(0, FIGHT_X - 50, Z, E), b = s.spawn(1, FIGHT_X + 50, Z, -E)
+    const C = 4, south = [0, 1, 2, 3].reduce((m, c) => (companyZ(s, b, c) < companyZ(s, b, m) ? c : m), 0), zs = companyZ(s, b, south)   // its southern company
+    for (let z = Math.floor(zs - 8); z <= Math.ceil(zs + 8); z++) for (let x = FIGHT_X + 10; x <= FIGHT_X + 56; x++) t.cls[cellK(t, x, z)] = dense
+    const rs = fireRs({ pRange: [[0, 0.2], [250, 0.2], [251, 0]] }), w2 = new W({ terrain: t, rs })
+    // B steady and in place for the whole test (a rout would Face about, and that remaps its companies)
+    const a2 = w2.spawn(0, FIGHT_X - 50, Z, E), b2 = w2.spawn(1, FIGHT_X + 50, Z, -E, { quality: 1 }); void a
+    // the companies of B that no company of A can see (they stand still: both battalions are halted)
+    const hidden = [0, 1, 2, 3].filter(q => [0, 1, 2, 3].every(c => !companySees(w2.w, w2.i(a2), c, w2.i(b2), q)))
+    const before = [0, 1, 2, 3].map(c => w2.w.f.men[w2.i(b2) * C + c]); w2.run(40)
+    expect(w2.state(b2)).not.toBe(MS_ROUTING)
+    const lost = [0, 1, 2, 3].map(c => before[c] - w2.w.f.men[w2.i(b2) * C + c])
+    console.log('hidden companies', hidden, 'losses by company', lost)
+    expect(hidden).toContain(south); expect(hidden.length).toBeLessThan(4)
+    for (const c of hidden) expect(lost[c]).toBe(0)
+    expect(lost.reduce((x, y) => x + y, 0)).toBeGreaterThan(10)
+  })
+})
+
 describe('morale', () => {
   it('no hits, no break: at p = 0 two lines at 50 m, one of them just above the rout, stand for 20 minutes', () => {
     const [s, a, b] = pair(50, { rs: fireRs({ pRange: [[0, 0], [250, 0]] }) }, 0.42)
@@ -114,7 +139,9 @@ describe('morale', () => {
     expect(s.w.f.z[s.i(h)]).toBeLessThan(-170)   // the southern edge is at −180, the order kept 2 m inside
   })
   it('a router whose Face about fails (water behind it) keeps its run: the failed turn does not drop it', () => {
-    // the S1a case (test/formations.test.ts): a 93-man line facing west by the stream cannot face about
+    // the S1a case (test/formations.test.ts): a 93-man line facing west by the stream cannot face about. This
+    // spot is a pinch even for a battalion that is not routing (a plain march west halts within a metre), so
+    // the test checks the order, not the movement; the fan test below checks a router that can move
     let found = false
     for (let x = 40; x < 75 && !found; x += 0.25) {
       const s = new W({ real: true }), h = s.spawn(0, x, -30, -Math.PI / 2, { men: 93 })
@@ -130,6 +157,20 @@ describe('morale', () => {
       const n = s.w.f.ordHead[s.i(h)]; expect(n >= 0 && s.w.ord.type[n] === O_MOVE).toBe(true)   // the run is still its order
     }
     expect(found).toBe(true)
+  })
+  it('a router halted at the stream runs another way: the fan of directions about its rear', () => {
+    // B faces west at x = 40; its rear is east, across the stream (x ≈ 60–80): its first run halts at the bank
+    const s = new W(), h = s.spawn(1, 40, -100, -E)
+    s.do({ type: 'side', side: 1, x: 1, z: 0 }); s.do({ type: 'debug-morale', id: h, quality: 0.1 })
+    let halt: [number, number] | null = null
+    for (let n = 0; n < 20 * 240; n++) {
+      s.tick()
+      if (!halt && s.state(h) === MS_ROUTING && s.w.f.ordHead[s.i(h)] < 0) halt = [s.w.f.x[s.i(h)], s.w.f.z[s.i(h)]]
+    }
+    expect(halt).not.toBeNull()
+    console.log('router halted at', halt, 'runs', s.w.f.runs[s.i(h)], 'now at', s.w.f.x[s.i(h)].toFixed(1), s.w.f.z[s.i(h)].toFixed(1))
+    expect(s.w.f.runs[s.i(h)]).toBeGreaterThan(1)
+    expect(Math.hypot(s.w.f.x[s.i(h)] - halt![0], s.w.f.z[s.i(h)] - halt![1])).toBeGreaterThan(20)
   })
   it('the opening volleys at 50 m do not break a fresh line in its first minute', () => {
     for (let seed = 1; seed <= 5; seed++) { const [s, a, b] = pair(50, { seed }); s.run(60); expect([s.state(a) !== MS_ROUTING, s.state(b) !== MS_ROUTING]).toEqual([true, true]) }

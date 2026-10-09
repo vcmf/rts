@@ -93,9 +93,9 @@ export interface Compiled {
   relax: number              // morale: the share of the gap to its target closed per tick
 }
 
-// each company is split in this many lateral bins (the lag model's sample points)
 // the morale states that fire, in MS_* order (world.ts)
 export const FIRING_STATES = ['steady', 'shaken', 'wavering']
+// each company is split in this many lateral bins (the lag model's sample points)
 export const BINS = 3
 export const MAX_BINS = 32   // bins per formation: bit masks are 32-bit
 
@@ -114,6 +114,7 @@ function rulesetHash(rs: Ruleset): number {
 export function compileRuleset(rs: Ruleset): Compiled {
   const g = rs.geometry, C = g.companies, R = g.ranks, F = g.files, NB = C * BINS
   if (NB > MAX_BINS) throw new Error(`ruleset ${rs.name}: ${C} companies make ${NB} bins, more than ${MAX_BINS}`)
+  if (Object.keys(rs.terrain).length > 64) throw new Error(`ruleset ${rs.name}: more than 64 terrain classes (fire's sight buffer)`)
   const kinds = Object.keys(Object.values(rs.terrain)[0].g)
   const paces = Object.keys(rs.pace), paceSpeed = new Float64Array(paces.map(p => rs.pace[p]))
   const names = Object.keys(rs.formations)

@@ -55,8 +55,9 @@ rotation.
   target).
 
 **Target:**
-- the preferred battalion, else the current one, else the nearest enemy with a company in the arc
-  (`fire.arc`) and range (`fire.maxRange`, centre to centre) and a clear sight line;
+- the preferred battalion, else the current one, else the enemy whose nearest *visible* company in the arc
+  (`fire.arc`) and range (`fire.maxRange`, centre to centre) is nearest. Candidates are taken by their
+  nearest company in arc, a bound that stops the search once it passes the best found;
 - the sight line: the heightfield stays below it (eyes at `fire.eye`, sampled every 2 m), and it crosses
   no more of a class than `fire.sight` allows (woods 40 m, dense wood 15 m);
 - re-chosen every 0.5 s, staggered by slot (all at once cost 2.3 ms on one tick), stored as a handle.
@@ -69,7 +70,8 @@ The companies are tried nearest first, so one hidden in a wood does not hide the
 - **Expected hits** = rounds × p(range) × the state factor × (1 − `cohesion` × disorder) × the target
   kind's depth factor.
 - The integer part of the expected hits is certain, and one keyed draw settles the fraction.
-- Each hit goes to a target company in the shooter's arc and range, weighted by its men.
+- Each hit goes to a target company in the shooter's arc and range **that it can see**, weighted by its
+  men. Sight results are cached per company pair for the tick.
 - **Reload:** about 25 s, ±20% keyed. At spawn each company is part-loaded, so a line opens with a
   ripple, not one crash. A loaded company that cannot see its target or is fully covered tries again
   in 0.5 s.
@@ -95,8 +97,10 @@ recentLosses = recentLosses · exp(−DT / recentTime) + lost this tick
 
 **Routing:**
 - the battalion drops its orders, refuses every command except the debug ones, and does not fire;
-- it Faces about if its shape allows and its rear is behind it. If the turn fails (water behind it), it
+- it Faces about if its shape allows and its run is behind it. If the turn fails (water behind it), it
   runs as it stands: the failed turn does not drop the run;
+- when a run halts (impassable ground), it tries the next direction of a fan every 5 s: the rear, then
+  turned 60° each way, then 120° each way. After the fifth it stays: pinned;
 - it runs at `routPace` times its pace toward its side's rear (the `side` command; straight back if
   none);
 - the run is kept 2 m inside the map; it stops at impassable ground (no pathfinding).
@@ -128,7 +132,9 @@ scripted tests.
     - the hysteresis sequence;
     - a router refuses orders, does not fire and runs to the map edge;
     - no break in the first minute at 50 m.
-    - **A router whose Face about fails keeps its run order.**
+    - **Routers:** a router whose Face about fails keeps its run order; a router halted at the stream
+    runs another way (the fan).
+  - **Partial sight:** companies of a target hidden in a wood take no hits; the rest are fired on.
   - **Determinism:**
     - the fire step in reversed visiting order gives the same hash (a per-world test switch);
     - the firefight golden, with its replay and save round trip;
@@ -144,5 +150,6 @@ scripted tests.
   for total losses. It is kept for bursts (artillery, charges, S1d); if those do not use it, cut it.
 - **Every weaker line breaks at the same share of losses (20%),** because the target is linear in losses
   and nothing else moves morale. Variety will come from S1c-2's shocks and support.
-- **A router stops at the first impassable ground** (the stream behind the field's east side).
-  Pathfinding is later.
+- **A router can be pinned.** Where every direction of the fan halts, or where the formation layer cannot
+  march out (by the stream at x ≈ 57, z = −30 even an ordinary battalion halts within a metre), it
+  stays. Pathfinding, and routers as a loose crowd rather than a formation, are later.

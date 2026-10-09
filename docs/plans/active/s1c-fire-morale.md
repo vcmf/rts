@@ -272,4 +272,20 @@ Built as planned, described in `docs/systems/fire-morale.md`. Measured on the de
 - **The firefight golden is recorded inside its test.**
 - **The morale bar sits past the shape's depth.**
 
+**Review round 2.** One severe finding and nine others, all fixed:
+- **Round 1's router fix did not hold.** The run survived the failed Face about, but the halt path
+  dropped it a second later: the turn toward the rear swept the line into the water. A router now tries
+  a fan of directions when its run halts.
+  - The spot the old test used turned out to be a pinch for any battalion (a plain march west halts
+    within a metre), so it now checks the order only.
+  - A new test has a router halted at the stream run 240 m the other way.
+- **Ranking:** targets are ranked by their nearest *visible* company.
+- **Hits:** they go only to companies the shooter can see. A test with a painted wood shows hidden
+  companies take none, and it fails without the check.
+- **Sight lines:** cached per company pair per tick.
+- **The order pool:** the run is allocated before the Face about, so a nearly full pool cannot leave a
+  router turned round with no run.
+- **Smaller:** buffer bounds noted, `MS_ROUTING` in the renderer, `aimOf` documented as a test hook,
+  comments fixed.
+
 **Left for S1c-2 and S1c-3:** as in the split above.
