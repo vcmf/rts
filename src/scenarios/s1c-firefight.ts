@@ -13,7 +13,7 @@ const E = 1.5707963267948966
 
 export function firefight(range: number, qa = STRONG, qb = WEAK): Scenario {
   return {
-    name: `s1c-firefight-${range}`,
+    name: range === 100 && qa === STRONG && qb === WEAK ? 's1c-firefight' : `s1c-firefight-${range}`,
     setup(w: World) {
       issue(w, { type: 'side', side: 0, x: -1, z: 0 }); issue(w, { type: 'side', side: 1, x: 1, z: 0 })
       issue(w, { type: 'debug-spawn', side: 0, x: FIGHT_X - range / 2, z: FIGHT_Z, heading: E, shape: 'line', men: 100, quality: qa })

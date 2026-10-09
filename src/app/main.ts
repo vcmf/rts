@@ -2,10 +2,11 @@
 // staff map with every soldier as a circle; the mouse selects and orders battalions. Every input becomes
 // a command through `issue`, and the external log is kept, so a session can be replayed.
 import dataUrl from '../../data/formation-field.simdata?url'
-import { loadSimData, compileRuleset, makeWorld, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ,
+import { loadSimData, compileRuleset, makeWorld, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ, MORALE_STATES, FIRE_MODES,
   type Command, type Stamped, type World, type HashPoint, type Replay, type Dropped } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
-import { S1B_SCENARIOS, FIELD_DATA_VERSION } from '../scenarios/s1b-field.ts'
+import { FIELD_DATA_VERSION } from '../scenarios/s1b-field.ts'
+import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS } from '../scenarios/page.ts'
 import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
@@ -18,7 +19,7 @@ async function main(): Promise<void> {
   const data = loadSimData(new Uint8Array(await (await fetch(dataUrl)).arrayBuffer()), FIELD_DATA_VERSION)
   const cr = compileRuleset(napoleonic)
   const w: World = makeWorld(data, cr, SEED, false)
-  const asked = new URLSearchParams(location.search).get('scenario') ?? '', scenario = S1B_SCENARIOS[Object.hasOwn(S1B_SCENARIOS, asked) ? asked : 's1b-field']
+  const asked = new URLSearchParams(location.search).get('scenario') ?? '', scenario = PAGE_SCENARIOS[Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO]
   scenario.setup(w)
   const log: Stamped[] = [], hashes: HashPoint[] = [], dropped: Dropped[] = []
   const scene = buildScene(w), layer = new SoldierLayer(w, scene), map = new StaffMap(w, scene)
@@ -28,7 +29,7 @@ async function main(): Promise<void> {
 
   const mapC = document.getElementById('map') as HTMLCanvasElement, unitC = document.getElementById('units') as HTMLCanvasElement
   const mg = mapC.getContext('2d')!, ug = unitC.getContext('2d')!, DPR = Math.min(2, window.devicePixelRatio || 1)
-  const view: View = { cx: -50, cz: 0, k: 4, W: 0, H: 0 }
+  const [vx, vz, vk] = PAGE_VIEWS[scenario.name] ?? [-50, 0, 4], view: View = { cx: vx, cz: vz, k: vk, W: 0, H: 0 }
   let mapDirty = true, speed = 1, acc = 0, showSlots = false, paused = false, simMs = 0, drawMs = 0, fps = 0
   const selected = new Set<number>()
   const resize = () => { view.W = innerWidth; view.H = innerHeight
@@ -72,6 +73,7 @@ async function main(): Promise<void> {
   setSpeed(1)
   const orders: Record<string, (id: number) => Command> = {
     face: id => ({ type: 'face', id }), retire: id => ({ type: 'retire', id, metres: 30 }), halt: id => ({ type: 'halt', id }),
+    fireAtWill: id => ({ type: 'fire', id, mode: 'at will' }), holdFire: id => ({ type: 'fire', id, mode: 'hold' }),
     wheelL: id => ({ type: 'wheel', id, angle: -Math.PI / 4 }), wheelR: id => ({ type: 'wheel', id, angle: Math.PI / 4 }),   // headings are compass bearings: + turns right
   }
   document.querySelectorAll<HTMLElement>('[data-cmd]').forEach(el => { el.onclick = () => forSelection(orders[el.dataset.cmd!]) })
@@ -150,7 +152,8 @@ async function main(): Promise<void> {
     const lines: string[] = []
     if (selected.size > 6) lines.push(`${selected.size} battalions selected`)
     else for (const i of selected) { const s = w.cr.shapes[w.f.shape[i]].name + (w.f.trans[i] ? ' → ' + w.cr.shapes[w.f.tShape[i]].name : '')
-      lines.push(`#${i} ${s} · ${menOf(w, i)} men · ${w.cr.presets[w.f.style[i]]}${STATUS[w.f.status[i]] ? ' · ' + STATUS[w.f.status[i]] : ''}`) }
+      lines.push(`#${i} ${s} · ${menOf(w, i)} men · ${w.cr.presets[w.f.style[i]]}${STATUS[w.f.status[i]] ? ' · ' + STATUS[w.f.status[i]] : ''}`)
+      lines.push(`   ${MORALE_STATES[w.f.mstate[i]]} · morale ${w.f.morale[i].toFixed(2)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}`) }
     const d = dropped.at(-1)
     if (note && performance.now() - noteT < 3000) lines.push(note)
     if (d && w.meta[M_TICK] - d.tick < 3 * TICK_HZ) lines.push(`order not carried out: ${d.reason}`)   // shown for 3 s

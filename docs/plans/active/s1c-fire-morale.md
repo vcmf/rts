@@ -203,3 +203,57 @@ change shows as a diff, not a pass that drifted.
 ## Also in this PR
 
 - The S1b plan moves to `docs/plans/done/`.
+
+## Results (2026-10-09)
+
+Built as planned, described in `docs/systems/fire-morale.md`. Measured on the dev Mac.
+
+1. **Calibration** (`node tools/calibrate-fire.ts`, 100 seeds per range, levelled ground, 93 s on 9
+   workers):
+
+   | Range | Weaker broke | Stronger first | No break in 20 min | Time to break, min (p10 / median / p90) | Weaker's losses at break |
+   |---|---|---|---|---|---|
+   | 50 m | 99 | 1 | 0 | 3.1 / 3.9 / 5.0 | 20–21% |
+   | 100 m | 98 | 2 | 0 | 6.1 / 8.3 / 11.9 | 20–21% |
+   | 200 m | 0 | 0 | 100 | none | none |
+
+   Every target holds. One tuning step was needed: p(100) went from 0.017 to 0.019 to centre the median
+   (9.5 → 8.3 min). At 200 m the lines trade 8–17 men in 20 minutes, below the weaker line's 20%.
+
+   **The terms at the break:** total losses 0.25, recent losses 0.02–0.04. The recent term hardly matters
+   in a firefight (open question in the system doc).
+2. **Rules:** 14 tests in `test/fire.test.ts`, all passing.
+3. **Determinism:**
+   - the fire step visited in reverse slot order gives the same hash;
+   - the firefight golden (12 000 ticks) reproduces through its replay and a save round trip;
+   - the five-seed calibration golden holds;
+   - `SIM_VERSION` is `s1c.1`, `SAVE_FORMAT` 4.
+4. **Cost**, 40 battalions firing (20 a side in four ranks, front ranks 100 m apart):
+   - sim plus soldier layer 1.69–1.78 ms per frame at 1× (budget 4);
+   - the fire step 0.27 ms per tick on average, its worst tick 0.74 ms (§16: 2 ms).
+5. **The page:** `npm run check:app` plays the firefight on the real field. The weaker line routs at
+   9.5 minutes with 21 men lost (the stronger lost 18), and the session's 568 hashes reproduce in Node.
+6. **Negative runs**, each caught:
+
+   | Mutation | Failing tests |
+   |---|---|
+   | volleys drawing from the world stream | reversed order, the goldens, the arc test |
+   | an under-fire pressure term in morale | p = 0, the first minute at 50 m, the goldens |
+   | no friend rays | friends' cover |
+
+**Changes found while building:**
+- **Disorder left the morale target.** The S1a drill showed a battalion marching through a wood going
+  shaken with no enemy near; cohesion acts on fire only.
+- **The S1a drill holds its fire.** Its two battalions are on opposite sides; the drill tests
+  formations.
+- **The calibration runs on levelled ground.** The strip rolls: a rise hides the lines from each other
+  beyond about 140 m, which made "no break at 200 m" pass with nobody firing. The ground's effect is
+  tested separately (the crest test).
+- **Retargeting is staggered by slot.** All battalions on one tick cost 2.33 ms, over §16's 2 ms.
+- **A blocked company waits 0.5 s before trying again.** Rear companies behind friends were re-checking
+  every tick: 0.46 → 0.27 ms per tick.
+- **Reversed visiting order replaces the mirrored scenario** as the slot-order test. Handles carry the
+  slot, so a respawn in reverse order changes the keys; reversing the loop tests the claim directly.
+- **The calibration takes about 1.5 minutes on 9 workers,** not "about a minute".
+
+**Left for S1c-2 and S1c-3:** as in the split above.
