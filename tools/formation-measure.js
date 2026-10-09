@@ -44,7 +44,7 @@
   reload(); F.order('square'); F.advance(20); F.kill(30); F.advance(100); { const z = [0, 0, 0, 0]; for (const s of FCm.main.soldiers) if (s.alive) z[s.c]++
     out.killDuringChange = { squareCompanies: z, tableErrors: tableOk(FCm.main) }
     if (Math.max(...z) - Math.min(...z) > 1 || out.killDuringChange.tableErrors) fail.push(`kills during the change: faces ${z}, table errors ${out.killDuringChange.tableErrors}`) }
-  // MOVEMENT OVER TERRAIN (docs/plans/active/terrain-movement.md)
+  // MOVEMENT OVER TERRAIN (docs/plans/done/terrain-movement.md)
   const R = FCm.RULESET, until = (sec, step = 0.1) => { let t = 0; while ((FCm.main.orders.length || FCm.main.trans) && t < sec) { F.advance(step); t += step } return +t.toFixed(1) }
   const live = b => [...b.lags].filter((l, j) => b.binN[j])
   // every live man's place this frame (slot set back by his file's lag), with his company
