@@ -23,7 +23,7 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
   // 7 vision · 8 fire · 9 roundshot · 10 melee · 11 casualties · 12 morale · 13 smoke: S1c+, S2
   step('14 reap', () => { for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i] && menOf(w, i) === 0) reapFormation(w, i) })
   w.meta[M_TICK] = t
-  if (w.debug) for (const a of columnsOf(w.f)) if (a instanceof Float64Array) assertFinite('formation column', a)
+  if (w.debug) for (const a of columnsOf(w.f)) if (a instanceof Float64Array) assertFinite('formation state', a)
   let hash: number | null = null
   step('15 hash', () => { if (t % HASH_EVERY === 0) hash = hashWorld(w) })
   return { tick: t, hash, dropped }

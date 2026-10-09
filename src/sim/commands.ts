@@ -28,7 +28,8 @@ export const COMMAND_TYPES = ['move', 'form', 'wheel', 'face', 'retire', 'halt',
 
 // stamps a command for the next tick; `log` receives it when the command is external
 export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
-  const s: Stamped = { tick: w.meta[M_TICK] + 1, seq: w.meta[M_SEQ]++, cmd: quantiseCommand(cmd) }
+  const q = quantiseCommand(cmd)
+  const s: Stamped = { tick: w.meta[M_TICK] + 1, seq: w.meta[M_SEQ]++, cmd: q }
   w.pending.push(s)
   if (log) log.push(s)
   return s
@@ -38,7 +39,7 @@ export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
 function quantiseCommand(c: Command): Command {
   const qa = (a: number) => Math.round(a * 10000) / 10000
   switch (c.type) {
-    case 'move': return { type: 'move', id: c.id | 0, points: c.points.length > MAX_POINTS ? c.points : c.points.map(([x, z]) => [quantise(x), quantise(z)]), append: !!c.append }
+    case 'move': return { type: 'move', id: c.id | 0, points: !wellFormed(c.points) || c.points.length > MAX_POINTS ? c.points : c.points.map(([x, z]) => [quantise(x), quantise(z)]), append: !!c.append }
     case 'form': return { type: 'form', id: c.id | 0, shape: String(c.shape) }
     case 'wheel': return { type: 'wheel', id: c.id | 0, angle: qa(c.angle) }
     case 'face': return { type: 'face', id: c.id | 0 }
@@ -49,6 +50,11 @@ function quantiseCommand(c: Command): Command {
     case 'debug-kill': return { type: 'debug-kill', id: c.id | 0, men: c.men | 0 }
     default: return c
   }
+}
+
+// waypoints as given: an array of [x, z] number pairs
+function wellFormed(p: unknown): p is [number, number][] {
+  return Array.isArray(p) && p.every(q => Array.isArray(q) && q.length === 2 && typeof q[0] === 'number' && typeof q[1] === 'number')
 }
 
 // the slot of a live formation handle, or −1
@@ -107,6 +113,7 @@ function apply(w: World, c: Command): string {
   const i = formationSlot(w, c.id); if (i < 0) return 'no such formation'
   switch (c.type) {
     case 'move': {
+      if (!wellFormed(c.points)) return 'malformed waypoints'
       if (c.points.length === 0) return 'no waypoints'
       if (c.points.length > MAX_POINTS) return 'too many waypoints'
       for (const [x, z] of c.points) if (!finite(x) || !finite(z) || !inside(w, x, z)) return 'waypoint outside the map'
@@ -144,8 +151,9 @@ function apply(w: World, c: Command): string {
 // frees an empty formation's slot: its orders, every column of its row zeroed, the generation moved on
 export function reapFormation(w: World, i: number): void {
   clearOrders(w, i)
-  const gen = w.f.gen[i], N = w.f.alive.length
+  const gen = w.f.gen[i], ver = w.f.trailVer[i], N = w.f.alive.length
   for (const a of columnsOf(w.f)) { const k = a.length / N; a.fill(0, i * k, i * k + k) }
-  w.f.gen[i] = (gen + 1) & ((1 << 19) - 1); w.f.ordHead[i] = -1; w.f.ordTail[i] = -1
+  // the generation moves on (old handles go stale); the trail version keeps counting (it keys the arc cache)
+  w.f.gen[i] = (gen + 1) & ((1 << 19) - 1); w.f.trailVer[i] = ver + 1; w.f.ordHead[i] = -1; w.f.ordTail[i] = -1
   w.free[w.meta[M_FREE]++] = i
 }

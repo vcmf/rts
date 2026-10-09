@@ -6,14 +6,15 @@
 // keeps the men per company; which slots are filled follows from that by one rule (`occupied`), so no
 // soldier is simulated (decision 0007): who stands where and who falls is the renderer's.
 import { type World, M_TICK, TRAIL, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MAX_FORMATIONS } from './world.ts'
-import { type ShapeLayout, type Placement, rot2, blockLocal, slotIndex } from './ruleset.ts'
+import type { ShapeLayout, Placement } from './ruleset.ts'
+import { rot2, blockLocal, slotIndex, BINS, MAX_BINS } from './ruleset.ts'
 import { cellK, groundG, groundQ, onRoad } from './terrain.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
 
-export const STATUS = ['', 'halted: impassable ground', 'cannot form: impassable ground', 'arrived: as near as the column can turn',
-  'cannot wheel: a column of route turns as it marches', 'cannot face about: impassable ground', 'cannot face about: the shape has no half-turn symmetry',
-  'cannot face about: changing shape', 'cannot face about: the column is not centred on its trail']
+export const STATUS = ['', 'halted: impassable ground', 'cannot form: impassable ground', 'arrived: as near as the shape can turn',
+  'cannot wheel: a trail shape turns as it marches', 'cannot face about: impassable ground', 'cannot face about: the shape has no half-turn symmetry',
+  'cannot face about: changing shape', 'cannot face about: the shape is not centred on its trail']
 const ST_HALTED = 1, ST_CANNOT_FORM = 2, ST_ARRIVED_NEAR = 3, ST_CANNOT_WHEEL = 4, ST_FACE_WET = 5, ST_FACE_ASYM = 6, ST_FACE_CHANGING = 7, ST_FACE_OFFCENTRE = 8
 
 const GATE_HALVINGS = 6, CHANGE_SAMPLES = 128
@@ -43,8 +44,11 @@ export function occupied(w: World, i: number, c: number, r: number, f: number): 
     const fi = (c - h * (C / 2)) * F + f, pos = h === 0 ? H - 1 - fi : fi   // distance from the colours, in files
     return pos < cr
   }
-  const m = men[i * C + c], nf = Math.min(F, Math.ceil(m / R)), start = Math.floor((F - nf) / 2), cr = Math.max(0, Math.min(nf, m - r * nf))
-  const off = Math.floor((nf - cr) / 2), fi = f - start - off
+  // when the files or the last rank cannot centre exactly, they lean one way; Face about flips the lean, so
+  // the fill mirrors with the turn and every man of a complete file keeps his place
+  const lean = w.f.lean[i] === 1, half = (n: number) => lean ? Math.ceil(n / 2) : Math.floor(n / 2)
+  const m = men[i * C + c], nf = Math.min(F, Math.ceil(m / R)), start = half(F - nf), cr = Math.max(0, Math.min(nf, m - r * nf))
+  const off = half(nf - cr), fi = f - start - off
   return fi >= 0 && fi < cr
 }
 export function rebalance(w: World, i: number): void {
@@ -58,15 +62,12 @@ export function menOf(w: World, i: number): number { const C = w.cr.geo.companie
 const tIdx = (w: World, i: number, k: number) => i * TRAIL + ((w.f.trailStart[i] + k) % TRAIL)
 function trailPush(w: World, i: number, x: number, z: number): void {
   const f = w.f
-  if (f.trailCount[i] === TRAIL) { f.trailStart[i] = (f.trailStart[i] + 1) % TRAIL; f.trailCount[i]-- }
+  if (f.trailCount[i] === TRAIL) {   // full: drop the oldest point and its segment
+    const a = tIdx(w, i, 0), b = tIdx(w, i, 1); f.trailLen[i] -= hyp(f.trailX[b] - f.trailX[a], f.trailZ[b] - f.trailZ[a])
+    f.trailStart[i] = (f.trailStart[i] + 1) % TRAIL; f.trailCount[i]-- }
   const k = tIdx(w, i, f.trailCount[i]); f.trailX[k] = x; f.trailZ[k] = z; f.trailCount[i]++; f.trailVer[i]++
 }
 function trailDropOldest(w: World, i: number): void { w.f.trailStart[i] = (w.f.trailStart[i] + 1) % TRAIL; w.f.trailCount[i]--; w.f.trailVer[i]++ }
-function trailLimit(w: World, i: number): number {
-  const L = layoutOf(w, i); let back = 0
-  for (const p of L.place) back = Math.max(back, -p.z)
-  return back + 2 * BW(w) + 12
-}
 export function resetTrail(w: World, i: number): void {
   const f = w.f, n = 8
   f.trailStart[i] = 0; f.trailCount[i] = 0
@@ -77,7 +78,7 @@ function pushTrail(w: World, i: number): void {
   const f = w.f, last = tIdx(w, i, f.trailCount[i] - 1), d = hyp(f.x[i] - f.trailX[last], f.z[i] - f.trailZ[last])
   if (d < 0.25) return
   trailPush(w, i, f.x[i], f.z[i]); f.trailLen[i] += d
-  const lim = trailLimit(w, i)
+  const lim = layoutOf(w, i).trailLimit
   for (;;) {
     if (f.trailCount[i] <= 2) break
     const a = tIdx(w, i, 0), b = tIdx(w, i, 1), s = hyp(f.trailX[b] - f.trailX[a], f.trailZ[b] - f.trailZ[a])
@@ -93,7 +94,7 @@ function setTrail(w: World, i: number, xs: number[], zs: number[]): void {
 }
 
 // arc length from a head (hx, hz) back along the trail
-interface Arc { i: number; hx: number; hz: number; h: number; ver: number; P: Float64Array; S: Float64Array; n: number }
+export interface Arc { i: number; hx: number; hz: number; h: number; ver: number; P: Float64Array; S: Float64Array; n: number }
 const mkArc = (): Arc => ({ i: -1, hx: 0, hz: 0, h: 0, ver: -1, P: new Float64Array(2 * (TRAIL + 2)), S: new Float64Array(TRAIL + 2), n: 0 })
 function arcOf(w: World, i: number, hx: number, hz: number, h: number, a: Arc): Arc {
   if (a.i === i && a.hx === hx && a.hz === hz && a.h === h && a.ver === w.f.trailVer[i]) return a
@@ -118,14 +119,15 @@ function trailPoint(a: Arc, D: number, out: number[]): number[] {
   const u = (D - S[lo]) / (S[hi] - S[lo])
   out[0] = P[2 * lo] + (P[2 * hi] - P[2 * lo]) * u; out[1] = P[2 * lo + 1] + (P[2 * hi + 1] - P[2 * lo + 1]) * u; return out
 }
-const pwArc = mkArc(), tA = [0, 0], tB = [0, 0], tC = [0, 0]
+const tA = [0, 0], tB = [0, 0], tC = [0, 0]
+const arcOfWorld = (w: World): Arc => w.scratch.arc ?? (w.scratch.arc = mkArc())
 
 interface Pose { x: number; z: number; a: number; face: number }
 const plTmp: Placement = { x: 0, z: 0, rot: 0, face: 0 }
 // a company's pose in world space: origin, block rotation a (counter-clockwise) and facing (a heading)
 export function placeWorld(w: World, i: number, c: number, hx: number, hz: number, h: number, t: number, extra: number, out: Pose): Pose {
   if (snakes(w, i)) {
-    const L = layoutOf(w, i), back = -L.place[c].z + extra, arc = arcOf(w, i, hx, hz, h, pwArc)
+    const L = layoutOf(w, i), back = -L.place[c].z + extra, arc = arcOf(w, i, hx, hz, h, arcOfWorld(w))
     trailPoint(arc, back, tA); trailPoint(arc, back + 2, tB); trailPoint(arc, back - 2, tC)
     const ch = atan2(tC[0] - tB[0], tC[1] - tB[1])
     out.x = tA[0]; out.z = tA[1]; out.a = L.place[c].rot - ch; out.face = ch - L.place[c].face; return out
@@ -166,15 +168,17 @@ const pcPose: Pose = { x: 0, z: 0, a: 0, face: 0 }
 export function placesCtx(ctx: Places, i: number, hx: number, hz: number, h: number, t: number, dt: number): Places {
   const w = ctx.w; ctx.i = i; ctx.snake = snakes(w, i); ctx.dt = dt; ctx.t = t
   if (ctx.snake) { ctx.arc.ver = -1; arcOf(w, i, hx, hz, h, ctx.arc); return ctx }
-  for (let j = 0; j < w.cr.NB; j++) {
-    const c = Math.floor(j / 3), lag = lagAt(w, i, j, dt), p = placeWorld(w, i, c, hx, hz, h, t, 0, pcPose)
-    ctx.fx[j] = p.x - sin(h) * lag; ctx.fz[j] = p.z - cos(h) * lag; ctx.fc[j] = cos(p.a); ctx.fs[j] = sin(p.a); ctx.ft[j] = h
+  const sh = sin(h), ch = cos(h)
+  for (let c = 0; c < w.cr.geo.companies; c++) {
+    const p = placeWorld(w, i, c, hx, hz, h, t, 0, pcPose), ca = cos(p.a), sa = sin(p.a)
+    for (let k = 0; k < BINS; k++) { const j = c * BINS + k, lag = lagAt(w, i, j, dt)
+      ctx.fx[j] = p.x - sh * lag; ctx.fz[j] = p.z - ch * lag; ctx.fc[j] = ca; ctx.fs[j] = sa; ctx.ft[j] = h }
   }
   return ctx
 }
 // a man's place [x, z, direction of travel]
 export function placeAt(ctx: Places, c: number, r: number, f: number, out: number[]): number[] {
-  const w = ctx.w, g = w.cr.geo, L = layoutOf(w, ctx.i), s = slotIndex(g, c, r, f), j = c * 3 + L.of[s]
+  const w = ctx.w, g = w.cr.geo, L = layoutOf(w, ctx.i), s = slotIndex(g, c, r, f), j = c * BINS + L.of[s]
   if (!ctx.snake) {
     const [lx, lz] = blockLocal(g, f, r)
     out[0] = ctx.fx[j] + lx * ctx.fc[j] - lz * ctx.fs[j]; out[1] = ctx.fz[j] + lx * ctx.fs[j] + lz * ctx.fc[j]; out[2] = ctx.ft[j]; return out
@@ -184,11 +188,8 @@ export function placeAt(ctx: Places, c: number, r: number, f: number, out: numbe
   const t = atan2(tA[0] - tB[0], tA[1] - tB[1]); trailPoint(ctx.arc, D, tA)
   out[0] = tA[0] + cos(t) * lx; out[1] = tA[1] - sin(t) * lx; out[2] = t; return out
 }
-let tickCtx: Places | null = null
-const ctxNow = (w: World, i: number): Places => {
-  if (!tickCtx || tickCtx.w !== w) tickCtx = mkPlaces(w)
-  return placesCtx(tickCtx, i, w.f.x[i], w.f.z[i], w.f.heading[i], now(w), 0)
-}
+const ctxNow = (w: World, i: number): Places =>
+  placesCtx(w.scratch.places ?? (w.scratch.places = mkPlaces(w)), i, w.f.x[i], w.f.z[i], w.f.heading[i], now(w), 0)
 // the pace (m/s) and its index: a road pace while every man stood on a road at the last sampling
 function paceOf(w: World, i: number): [number, number] {
   const L = layoutOf(w, i), p = L.roadPace >= 0 && !w.f.trans[i] && w.f.onRoad[i] ? L.roadPace : L.pace
@@ -210,14 +211,14 @@ export function wetBins(w: World, i: number): number {
     for (let c = 0; c < C; c++) {
       const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, wbPose), ca = cos(p.a), sa = sin(p.a)
       for (let r = 0; r < R; r++) for (let q = 0; q < F; q++) { if (!occupied(w, i, c, r, q)) continue
-        const [lx, lz] = blockLocal(g, q, r); if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) mask |= 1 << (c * 3) }
+        const [lx, lz] = blockLocal(g, q, r); if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) mask |= 1 << (c * BINS) }
     }
     return mask
   }
   const ctx = ctxNow(w, i), L = layoutOf(w, i)
   for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) for (let q = 0; q < F; q++) {
     if (!occupied(w, i, c, r, q)) continue
-    const j = c * 3 + L.of[slotIndex(g, c, r, q)]; if (mask & (1 << j)) continue
+    const j = c * BINS + L.of[slotIndex(g, c, r, q)]; if (mask & (1 << j)) continue
     placeAt(ctx, c, r, q, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) mask |= 1 << j
   }
   return mask
@@ -230,7 +231,7 @@ function gate(w: World, i: number, before: number, apply: (u: number) => void): 
 }
 
 /* ---------------- the lag model ---------------- */
-const MAXNB = 64
+const MAXNB = MAX_BINS
 const gTmp = new Float64Array(MAXNB), nTmp = new Int32Array(MAXNB), qTmp = new Float64Array(MAXNB), blkTmp = new Int32Array(MAXNB)
 // each man's ground where he stands, along his direction of travel: a bin's g is the harmonic mean over
 // its men, q its worst ground class; a bin is held (g = 0) when a man has impassable ground underfoot or one
@@ -240,7 +241,7 @@ function sampleBins(w: World, i: number, pace: number, V0: number): void {
   gTmp.fill(0); nTmp.fill(0); qTmp.fill(Infinity); blkTmp.fill(0); let road = true
   for (let c = 0; c < g.companies; c++) for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) {
     if (!occupied(w, i, c, r, q)) continue
-    const j = c * 3 + L.of[slotIndex(g, c, r, q)]
+    const j = c * BINS + L.of[slotIndex(g, c, r, q)]
     placeAt(ctx, c, r, q, pt); const px = pt[0], pz = pt[1], dx = sin(pt[2]), dz = cos(pt[2])
     const gg = groundG(w.terrain, px, pz, kind, dx, dz)
     if (gg <= 0 || imp[cellK(w.terrain, px + dx * look, pz + dz * look)]) blkTmp[j]++; else { gTmp[j] += 1 / gg; nTmp[j]++ }
@@ -434,7 +435,9 @@ function faceAbout(w: World, i: number): number {
   // the companies change labels with the slots; the fill rule then closes each file toward its new front
   const RF = g.ranks * g.files
   for (let c = 0; c < C; c++) f.men[i * C + Math.floor(T.m[c * RF] / RF)] = keep.men[c]
+  if (T.flipsFiles) f.lean[i] ^= 1   // the files reverse: the fill's lean reverses with them
   if (wetBins(w, i) & ~before) {
+    if (T.flipsFiles) f.lean[i] ^= 1
     f.x[i] = keep.x; f.z[i] = keep.z; f.heading[i] = keep.h; f.lags.set(keep.lags, b); f.men.set(keep.men, i * C)
     if (snake) setTrail(w, i, keep.tx, keep.tz)
     return ST_FACE_WET
@@ -510,7 +513,10 @@ function formationStep(w: World, i: number): void {
   if (type === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
   const [V0, pace] = paceOf(w, i), halfW = halfWidth(w, i)
   if (type === O_MOVE) {
-    if (!o.resolved[n]) { o.x[n] = f.x[i] + sin(f.heading[i]) * o.a[n]; o.z[n] = f.z[i] + cos(f.heading[i]) * o.a[n]; o.resolved[n] = 1 }
+    if (!o.resolved[n]) {   // a distance ahead (Retire): the point, kept on the map
+      const t2 = w.terrain, lo = 2, hiX = (t2.n - 1) * t2.cell - 2
+      o.x[n] = Math.min(t2.x0 + hiX, Math.max(t2.x0 + lo, f.x[i] + sin(f.heading[i]) * o.a[n]))
+      o.z[n] = Math.min(t2.z0 + hiX, Math.max(t2.z0 + lo, f.z[i] + cos(f.heading[i]) * o.a[n])); o.resolved[n] = 1 }
     const dx = o.x[n] - f.x[i], dz = o.z[n] - f.z[i], dist = hyp(dx, dz)
     if (dist < ARRIVE) { shiftOrder(w, i); f.vx[i] = 0; f.vz[i] = 0; return }
     const dh = wrapAngle(atan2(dx, dz) - f.heading[i])

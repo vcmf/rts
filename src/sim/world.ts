@@ -7,7 +7,9 @@ import type { SimData } from './data.ts'
 import { type RngState, seedRng } from './rng.ts'
 import type { Stamped } from './commands.ts'
 import type { Compiled } from './ruleset.ts'
-import { type Terrain, buildTerrain } from './terrain.ts'
+import type { Terrain } from './terrain.ts'
+import { buildTerrain } from './terrain.ts'
+import type { Places, Arc } from './formation.ts'
 
 export const MAX_FORMATIONS = 128
 export const TRAIL = 256          // trail points per formation (a ring)
@@ -20,6 +22,7 @@ export const M_TICK = 0, M_FREE = 1, M_DATA = 2, M_SEQ = 3, M_RULES = 4, M_LEN =
 export interface Formations {
   alive: Uint8Array; gen: Int32Array; side: Uint8Array
   shape: Int32Array; style: Int32Array; status: Int32Array; onRoad: Uint8Array; drill: Float64Array
+  lean: Uint8Array                                                 // which way a company's files centre when it cannot be exact (Face about flips it)
   x: Float64Array; z: Float64Array; heading: Float64Array          // the anchor: front centre; heading 0 = +z, clockwise toward +x
   px: Float64Array; pz: Float64Array; ph: Float64Array             // last tick's anchor (for the renderer's interpolation)
   vx: Float64Array; vz: Float64Array; omega: Float64Array
@@ -54,13 +57,14 @@ export interface World {
   pending: Stamped[]
   data: SimData; cr: Compiled; terrain: Terrain
   debug: boolean
+  scratch: { places?: Places; arc?: Arc }   // per-world working buffers, not state
 }
 
 export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {
   const N = MAX_FORMATIONS, C = cr.geo.companies, NB = cr.NB
   const f64 = (n: number) => new Float64Array(n), i32 = (n: number) => new Int32Array(n), u8 = (n: number) => new Uint8Array(n)
   const f: Formations = {
-    alive: u8(N), gen: i32(N), side: u8(N), shape: i32(N), style: i32(N), status: i32(N), onRoad: u8(N), drill: f64(N),
+    alive: u8(N), gen: i32(N), side: u8(N), shape: i32(N), style: i32(N), status: i32(N), onRoad: u8(N), drill: f64(N), lean: u8(N),
     x: f64(N), z: f64(N), heading: f64(N), px: f64(N), pz: f64(N), ph: f64(N), vx: f64(N), vz: f64(N), omega: f64(N),
     disorder: f64(N), blockedFor: f64(N), men: i32(N * C),
     trans: u8(N), tShape: i32(N), tStart: f64(N), tDur: f64(N), tDelay: f64(N * C), tFrom: f64(N * C * 4), tTo: f64(N * C * 4),
@@ -74,7 +78,11 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
   for (let k = 0; k < M; k++) ord.next[k] = k + 1 < M ? k + 1 : -1
   const free = new Int32Array(N)
   for (let i = 0; i < N; i++) free[i] = N - 1 - i   // slot 0 is handed out first
-  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), debug }
+  // a trail shape's trail, and the one Face about rebuilds, must fit the ring (0.25 m points)
+  let lmax = 0; for (const p of Object.values(cr.rs.orders)) lmax = Math.max(lmax, p.Lmax)
+  for (const s of cr.shapes) if (s.def.trail && Math.max(s.trailLimit, 15 + (s.turn ? -2 * s.turn.cz : s.depth) + lmax) / 0.25 + 16 > TRAIL)
+    throw new Error(`shape ${s.name}: its trail does not fit ${TRAIL} points`)
+  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), debug, scratch: {} }
   w.meta[M_FREE] = N
   w.meta[M_DATA] = data.version | 0
   w.meta[M_RULES] = cr.hash | 0

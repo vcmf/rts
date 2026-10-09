@@ -44,8 +44,10 @@ export interface ShapeLayout {
   posX: Float64Array; posZ: Float64Array   // [c][r][f] → place in the straight layout (heading 0)
   pairs: number[][]     // accordion: [bin ahead, bin behind, room]
   half: number          // half-width across travel
-  turn: { cx: number; cz: number; m: Int32Array; bin: Int32Array } | null   // half-turn: slot map (c·R·F + r·F + f), bin map
+  turn: { cx: number; cz: number; m: Int32Array; bin: Int32Array; flipsFiles: boolean } | null   // half-turn: slot map (c·R·F + r·F + f), bin map, whether files reverse
   pace: number; roadPace: number   // indices into paces, −1 none
+  trailLimit: number   // a trail shape's trail length: its depth, two company frontages and 12 m
+  depth: number        // how far the layout reaches behind the anchor
 }
 export interface Compiled {
   rs: Ruleset; hash: number; geo: Geometry
@@ -57,6 +59,10 @@ export interface Compiled {
   qMax: number
   slope: Float64Array        // 401 entries over rise/run −1..1
 }
+
+// each company is split in this many lateral bins (the lag model's sample points)
+export const BINS = 3
+export const MAX_BINS = 32   // bins per formation: bit masks are 32-bit
 
 export const rot2 = (x: number, z: number, a: number): [number, number] => [x * cos(a) - z * sin(a), x * sin(a) + z * cos(a)]
 export const blockLocal = (g: Geometry, f: number, r: number): [number, number] => [(f - (g.files - 1) / 2) * g.fileSpacing, -r * g.rankSpacing]
@@ -71,7 +77,8 @@ function rulesetHash(rs: Ruleset): number {
 }
 
 export function compileRuleset(rs: Ruleset): Compiled {
-  const g = rs.geometry, C = g.companies, R = g.ranks, F = g.files, NB = C * 3
+  const g = rs.geometry, C = g.companies, R = g.ranks, F = g.files, NB = C * BINS
+  if (NB > MAX_BINS) throw new Error(`ruleset ${rs.name}: ${C} companies make ${NB} bins, more than ${MAX_BINS}`)
   const kinds = Object.keys(Object.values(rs.terrain)[0].g)
   const paces = Object.keys(rs.pace), paceSpeed = new Float64Array(paces.map(p => rs.pace[p]))
   const names = Object.keys(rs.formations)
@@ -101,16 +108,16 @@ function layout(rs: Ruleset, name: string, kinds: string[], paces: string[]): Sh
     let lo = Infinity, hi = -Infinity
     for (let r = 0; r < R; r++) for (let f = 0; f < F; f++) { const [lx, lz] = blockLocal(g, f, r), s = slotIndex(g, c, r, f)
       posX[s] = place[c].x + lx * ca - lz * sa; posZ[s] = place[c].z + lx * sa + lz * ca; lo = Math.min(lo, posX[s]); hi = Math.max(hi, posX[s]) }
-    for (let k = 0; k < 3; k++) box.push({ j: c * 3 + k, x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity })
+    for (let k = 0; k < BINS; k++) box.push({ j: c * BINS + k, x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity })
     for (let r = 0; r < R; r++) for (let f = 0; f < F; f++) {
-      const s = slotIndex(g, c, r, f), k = Math.min(2, Math.floor((posX[s] - lo) / Math.max(1e-6, hi - lo) * 3)), bx = box[c * 3 + k]
+      const s = slotIndex(g, c, r, f), k = Math.min(BINS - 1, Math.floor((posX[s] - lo) / Math.max(1e-6, hi - lo) * BINS)), bx = box[c * BINS + k]
       of[s] = k; bx.x0 = Math.min(bx.x0, posX[s]); bx.x1 = Math.max(bx.x1, posX[s]); bx.z0 = Math.min(bx.z0, posZ[s]); bx.z1 = Math.max(bx.z1, posZ[s])
     }
   }
   // accordion: a bin wholly behind another, with men less than the gap apart across travel; rear-most last
   const pairs: number[][] = []
   for (const rb of [...box].sort((p, q) => q.z1 - p.z1 || p.j - q.j)) for (const ab of box)
-    if (Math.floor(ab.j / 3) !== Math.floor(rb.j / 3) && ab.z0 > rb.z1 && ab.x0 < rb.x1 + g.accordionGap && rb.x0 < ab.x1 + g.accordionGap)
+    if (Math.floor(ab.j / BINS) !== Math.floor(rb.j / BINS) && ab.z0 > rb.z1 && ab.x0 < rb.x1 + g.accordionGap && rb.x0 < ab.x1 + g.accordionGap)
       pairs.push([ab.j, rb.j, ab.z0 - rb.z1 - g.accordionGap])
   let half = 0; for (let s = 0; s < n; s++) half = Math.max(half, Math.abs(posX[s]))
   // half-turn symmetry: the slot at the point reflection through the layout's centre
@@ -121,13 +128,15 @@ function layout(rs: Ruleset, name: string, kinds: string[], paces: string[]): Sh
     if (Math.abs(posX[q] - (2 * cx - posX[s])) < 1e-6 && Math.abs(posZ[q] - (2 * cz - posZ[s])) < 1e-6) { m[s] = q; break }
   let turn: ShapeLayout['turn'] = null
   if (m.every(q => q >= 0)) {
-    const bin = new Int32Array(C * 3)
-    for (let s = 0; s < n; s++) { const c = Math.floor(s / (R * F)), c2 = Math.floor(m[s] / (R * F)); bin[c * 3 + of[s]] = c2 * 3 + of[m[s]] }
-    turn = { cx, cz, m, bin }
+    const bin = new Int32Array(C * BINS)
+    for (let s = 0; s < n; s++) { const c = Math.floor(s / (R * F)), c2 = Math.floor(m[s] / (R * F)); bin[c * BINS + of[s]] = c2 * BINS + of[m[s]] }
+    turn = { cx, cz, m, bin, flipsFiles: F > 1 && m[0] % F === F - 1 }
   }
   const kind = kinds.indexOf(def.kind)
   if (kind < 0) throw new Error(`shape ${name}: kind ${def.kind} not in the terrain table`)
-  return { name, def, kind, place, of, posX, posZ, pairs, half, turn, pace: paces.indexOf(def.pace), roadPace: def.roadPace ? paces.indexOf(def.roadPace) : -1 }
+  let depth = 0; for (const p of place) depth = Math.max(depth, -p.z)
+  const trailLimit = depth + 2 * g.files * g.fileSpacing + 12
+  return { name, def, kind, place, of, posX, posZ, pairs, half, turn, pace: paces.indexOf(def.pace), roadPace: def.roadPace ? paces.indexOf(def.roadPace) : -1, trailLimit, depth }
 }
 
 export const HALF_PI = PI / 2
