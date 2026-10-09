@@ -118,7 +118,7 @@ frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`.
   - each session's replay played back in Node.
 
   It fails on any console error or hash mismatch.
-- Negative runs (results in `docs/plans/active/s1b-sim-page.md`): the relabelling, the signature, the
+- Negative runs (results in `docs/plans/done/s1b-sim-page.md`): the relabelling, the signature, the
   slot reassignment and the settled state each break a test when removed.
 
 ## Open questions

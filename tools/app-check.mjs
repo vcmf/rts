@@ -1,4 +1,4 @@
-// Headless check of the built page (docs/plans/active/s1b-sim-page.md): serve dist/ with `vite preview`,
+// Headless check of the built page (docs/plans/done/s1b-sim-page.md): serve dist/ with `vite preview`,
 // drive it through window.APP with tools/shot.mjs, fail on any console error, then play each session's
 // exported replay back in Node: it must reproduce every hash the page took. Two runs: the drill scenario
 // (orders, every panel button, screenshots) and the 40-battalion bench (cost). Run `npm run build` first.

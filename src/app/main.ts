@@ -1,4 +1,4 @@
-// The S1b page (docs/plans/active/s1b-sim-page.md): the sim on the main thread at 20 Hz, drawn as a
+// The S1b page (docs/plans/done/s1b-sim-page.md): the sim on the main thread at 20 Hz, drawn as a
 // staff map with every soldier as a circle; the mouse selects and orders battalions. Every input becomes
 // a command through `issue`, and the external log is kept, so a session can be replayed.
 import dataUrl from '../../data/formation-field.simdata?url'

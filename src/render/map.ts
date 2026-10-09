@@ -1,4 +1,4 @@
-// The staff map (docs/plans/active/s1b-sim-page.md), drawn only from the sim's build-time data and the
+// The staff map (docs/plans/done/s1b-sim-page.md), drawn only from the sim's build-time data and the
 // ruleset, in the style of the formation prototype: class fills from a smoothed class image, edges and
 // contours by marching squares, spot heights at the summits, cosmetic symbols (scene.ts), every soldier a
 // small outlined circle. Two layers: the map (redrawn when the view changes) and the units (every frame).
