@@ -17,5 +17,6 @@ PR that changes it; the design that led to it stays in `docs/proposals/` and the
 | Painterly shading, vegetation, seasons | not yet: see `docs/art-bible.md` | prototype |
 | Staff map | not yet: see `docs/proposals/staff-map/design.md` | feel prototype |
 | Simulation spine (S0) | `docs/systems/sim-spine.md` | built (S0) |
-| Formations (the 20 Hz layer) | `docs/systems/formations.md` | built (S1a); drawn by the prototype until S1b |
+| Formations (the 20 Hz layer) | `docs/systems/formations.md` | built (S1a) |
+| The sim page: soldier layer, staff map drawing, input | `docs/systems/sim-page.md` | built (S1b) |
 | Fire, morale, combat | not yet: see `docs/proposals/sim-design.md` | not built |

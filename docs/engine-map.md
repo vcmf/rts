@@ -92,16 +92,16 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 
 | Part | What it does | Owner doc | Phase | Status |
 |---|---|---|---|---|
-| Sim → render bridge | Reads snapshots (once per frame) and an event ring, interpolates | `docs/proposals/sim-design.md` §16 | S1 (direct), S2 (worker) | ⬜ |
+| Sim → render bridge | Reads snapshots (once per frame) and an event ring, interpolates | `docs/proposals/sim-design.md` §16 | S1 (direct), S2 (worker) | 🟡 (S1b: direct reads, interpolated; no event ring) |
 | World rendering | Terrain, river, vegetation, painterly shading, bakes | `docs/proposals/engine-design.md`, `docs/art-bible.md` | E0 | ✅ prototype |
 | Figures | Instanced figures placed from formation state; LOD; stepped animation (vertex animation textures); casualties | `docs/proposals/engine-design.md` §7 | P | ⬜ |
 | Effects | Musket smoke, muzzle flashes, roundshot dust, painted | `docs/art-bible.md` §9 | P | ⬜ |
 | Camera | Locked RTS camera; presentation cameras | `docs/proposals/engine-design.md` §5 | E0 | 🟡 |
-| Staff map | Far zoom as a drawn map; `mapness` transition | `docs/proposals/staff-map/` | P | 🟡 feel prototype (#4) |
-| Selection and orders UI | Click, drag-box, groups; drawing orders (also on the staff map) | `docs/proposals/sim-design.md`, `docs/proposals/staff-map/` | P | ⬜ |
+| Staff map | Far zoom as a drawn map; `mapness` transition | `docs/proposals/staff-map/`, `docs/systems/sim-page.md` | P | 🟡 (feel prototype #4; S1b draws it from the sim data) |
+| Selection and orders UI | Click, drag-box, groups; drawing orders (also on the staff map) | `docs/proposals/sim-design.md`, `docs/proposals/staff-map/`, `docs/systems/sim-page.md` | P | 🟡 (S1b: click, shift, box, group moves, panel; no groups, no drawn orders) |
 | HUD | Formation cards (strength, morale, ammunition), notifications, battle clock | to write | A | ⬜ |
 | Audio | Volleys, cannon, drums; a voice budget per battle | to write | A | ⬜ |
-| Debug overlays | Formation slots, paths, ranges, vision, smoke, morale, tick time | `docs/proposals/sim-design.md` | S0 → P | ⬜ |
+| Debug overlays | Formation slots, paths, ranges, vision, smoke, morale, tick time | `docs/proposals/sim-design.md` | S0 → P | 🟡 (S1b: slots, waypoints, frame times) |
 
 ### Content and tools
 
@@ -120,7 +120,7 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 | Part | What it does | Owner doc | Phase | Status |
 |---|---|---|---|---|
 | Sim worker | The simulation in a Web Worker; snapshots as transferables (no special headers) | `docs/proposals/sim-design.md` §16 | S2 | ⬜ |
-| Build | Vite + TypeScript, Babylon deep or `/pure` imports | `docs/architecture.md` §5 | prototype exit | ⬜ |
+| Build | Vite + TypeScript, Babylon deep or `/pure` imports | `docs/architecture.md` §5 | prototype exit | 🟡 (S1b: Vite builds the sim page; no Babylon yet) |
 | Saves | Seed + scenario + command log + snapshots; exportable files (Safari clears storage after 7 days unused) | `docs/proposals/sim-design.md` | A | ⬜ |
 | Input | Bindings by `KeyboardEvent.code`; right-click and edge-pan handling | to write | P | 🟡 |
 | Context loss | Rebuild the scene from the untouched sim state | `docs/proposals/engine-design.md` | A | ⬜ |
