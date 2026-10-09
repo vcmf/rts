@@ -1,6 +1,6 @@
 ---
-status: active
-last_reviewed: 2026-10-08
+status: done
+last_reviewed: 2026-10-09
 ---
 
 # Plan: Movement over terrain (F1)

@@ -36,13 +36,13 @@ designs written before building (frozen once built, their lasting content moves 
 - [`proposals/sim-design.md`](proposals/sim-design.md): the battle simulation (battalions, drill, fire, morale, determinism, phases). *(draft)*
 - [`proposals/staff-map/design.md`](proposals/staff-map/design.md): the far-zoom staff map, art direction. *(accepted)*
 - [`proposals/staff-map/implementation.md`](proposals/staff-map/implementation.md): how the staff map is built. *(draft)*
+- [`proposals/prepainted-terrain.md`](proposals/prepainted-terrain.md): a painted macro colour bake for the ground; strokes stay at runtime. *(draft)*
 
 ## Plans
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
-  [`plans/active/staff-map.md`](plans/active/staff-map.md),
-  [`plans/active/terrain-movement.md`](plans/active/terrain-movement.md) (F1).
-- Done: [`plans/done/w1-river-shape.md`](plans/done/w1-river-shape.md), [`plans/done/w1b-river-width.md`](plans/done/w1b-river-width.md), [`plans/done/docs-restructure.md`](plans/done/docs-restructure.md), [`plans/done/formation-feel.md`](plans/done/formation-feel.md).
+  [`plans/active/staff-map.md`](plans/active/staff-map.md).
+- Done: [`plans/done/w1-river-shape.md`](plans/done/w1-river-shape.md), [`plans/done/w1b-river-width.md`](plans/done/w1b-river-width.md), [`plans/done/docs-restructure.md`](plans/done/docs-restructure.md), [`plans/done/formation-feel.md`](plans/done/formation-feel.md), [`plans/done/terrain-movement.md`](plans/done/terrain-movement.md) (F1, #9).
 
 ## Research (background)
 
@@ -51,6 +51,8 @@ designs written before building (frozen once built, their lasting content moves 
 - [`research/terrain-movement-speed-models.md`](research/terrain-movement-speed-models.md): movement over terrain, the lag model, era rulesets.
 - [`research/stylized-water.md`](research/stylized-water.md): painted water and river shape.
 - [`research/cheap-painterly-postfx.md`](research/cheap-painterly-postfx.md): cheap painterly post-processing.
+- [`research/painterly-style-in-real-time.md`](research/painterly-style-in-real-time.md): how doable the painted look is; techniques, costs, stack per surface, prototype plan.
+- [`research/prepainted-terrain-review.md`](research/prepainted-terrain-review.md): adversarial review of the pre-painted terrain proposal.
 
 ## Templates
 
