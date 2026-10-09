@@ -4,13 +4,15 @@
 import { fnv1a } from './hash.ts'
 
 export const DATA_MAGIC = 0x44535452   // 'RTSD' little-endian
-export const DATA_FORMAT = 1
+export const DATA_FORMAT = 2
 
 export interface Grid { cell: number; nx: number; nz: number; x0: number; z0: number }
 export interface SimData {
   version: number          // fnv1a of the file bytes
   height: Grid & { h: Float64Array }   // metres, nodes at x0 + i·cell
   cost: Grid & { g: Uint8Array }       // speed factor ×255 per cell (0: impassable), cells from x0 + i·cell
+  fine: Grid & { cls: Uint8Array; depth: Uint16Array }   // per 1 m node: terrain class index, water depth (mm)
+  classes: string[]                    // terrain class names, in index order
 }
 
 export class DataVersionMismatch extends Error {}
@@ -29,8 +31,14 @@ export function loadSimData(bytes: Uint8Array, expectedVersion?: number): SimDat
   const cg = { cell: f64(), nx: u32(), nz: u32(), x0: f64(), z0: f64() }
   const g = bytes.slice(o, o + cg.nx * cg.nz); o += g.length
   if (g.length !== cg.nx * cg.nz) throw new Error('sim data file is truncated')
+  const nClasses = u32(), classes: string[] = []
+  for (let k = 0; k < nClasses; k++) { const n = u32(); let s = ''; for (let q = 0; q < n; q++) s += String.fromCharCode(v.getUint8(o++)); classes.push(s) }
+  const fg = { cell: f64(), nx: u32(), nz: u32(), x0: f64(), z0: f64() }
+  const cls = bytes.slice(o, o + fg.nx * fg.nz); o += cls.length
+  if (cls.length !== fg.nx * fg.nz) throw new Error('sim data file is truncated')
+  const depth = new Uint16Array(fg.nx * fg.nz); for (let k = 0; k < depth.length; k++) { depth[k] = v.getUint16(o, true); o += 2 }
   if (o !== bytes.length) throw new Error('sim data file has trailing bytes')
-  return { version, height: { ...hg, h }, cost: { ...cg, g } }
+  return { version, height: { ...hg, h }, cost: { ...cg, g }, fine: { ...fg, cls, depth }, classes }
 }
 
 // the cost grid's speed factor (0..1) at a point; outside the grid: impassable

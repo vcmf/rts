@@ -1,39 +1,60 @@
 // Commands (docs/proposals/sim-design.md §4): the only way into the simulation. The sim stamps each
-// command with the next tick and a sequence number, quantises its positions to 1 cm, and applies it at
-// the start of that tick after validating it; an invalid command is dropped with a reason, never thrown.
-// Only external commands (player, scripts) go into the replay log.
+// command with the next tick and a sequence number, quantises its positions to 1 cm, and applies it at the
+// start of that tick after validating it; an invalid command is dropped with a reason and changes nothing.
+// Only external commands (player, scripts) go into the replay log. Shapes and order presets are named by
+// the ruleset (decision 0015).
 import { type Handle, KIND_FORMATION, handleKind, handleIndex, handleGen, makeHandle } from './handle.ts'
-import { quantise } from './num.ts'
-import { allocNode, freeList } from './pool.ts'
-import { type World, M_TICK, M_SEQ, M_FREE, SIDES } from './world.ts'
+import { quantise, PI } from './num.ts'
+import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS } from './world.ts'
+import { allocOrder, appendOrder, clearOrders, ordersFree, rebalance, resetTrail } from './formation.ts'
+import { nextInt } from './rng.ts'
+import { columnsOf } from './columns.ts'
 
 export type Command =
   | { type: 'move'; id: Handle; points: [number, number][]; append: boolean }
+  | { type: 'form'; id: Handle; shape: string }
+  | { type: 'wheel'; id: Handle; angle: number }
+  | { type: 'face'; id: Handle }
+  | { type: 'retire'; id: Handle; metres: number }
   | { type: 'halt'; id: Handle }
-  | { type: 'debug-spawn'; side: number; men: number; x: number; z: number; facing: number }
+  | { type: 'style'; id: Handle; preset: string }
+  | { type: 'debug-spawn'; side: number; x: number; z: number; heading: number; shape: string; men: number }
   | { type: 'debug-kill'; id: Handle; men: number }
 export interface Stamped { tick: number; seq: number; cmd: Command }
 export interface Dropped { tick: number; seq: number; reason: string }
 
 export const MAX_POINTS = 64
-const TYPES = ['move', 'halt', 'debug-spawn', 'debug-kill']
+export const COMMAND_TYPES = ['move', 'form', 'wheel', 'face', 'retire', 'halt', 'style', 'debug-spawn', 'debug-kill'] as const
 
 // stamps a command for the next tick; `log` receives it when the command is external
 export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
-  const s: Stamped = { tick: w.meta[M_TICK] + 1, seq: w.meta[M_SEQ]++, cmd: quantiseCommand(cmd) }
+  const q = quantiseCommand(cmd)
+  const s: Stamped = { tick: w.meta[M_TICK] + 1, seq: w.meta[M_SEQ]++, cmd: q }
   w.pending.push(s)
   if (log) log.push(s)
   return s
 }
-// a command of an unknown type, or a move with too many points, is kept as it is and dropped when applied
+// positions to 1 cm, angles to 0.1 mrad; an unknown type or a move with too many points is kept as it is
+// and dropped when applied
 function quantiseCommand(c: Command): Command {
-  if (!TYPES.includes(c.type)) return c
+  const qa = (a: number) => Math.round(a * 10000) / 10000
   switch (c.type) {
-    case 'move': return { type: 'move', id: c.id | 0, points: c.points.length > MAX_POINTS ? c.points : c.points.map(([x, z]) => [quantise(x), quantise(z)]), append: !!c.append }
+    case 'move': return { type: 'move', id: c.id | 0, points: !wellFormed(c.points) || c.points.length > MAX_POINTS ? c.points : c.points.map(([x, z]) => [quantise(x), quantise(z)]), append: !!c.append }
+    case 'form': return { type: 'form', id: c.id | 0, shape: String(c.shape) }
+    case 'wheel': return { type: 'wheel', id: c.id | 0, angle: qa(c.angle) }
+    case 'face': return { type: 'face', id: c.id | 0 }
+    case 'retire': return { type: 'retire', id: c.id | 0, metres: quantise(c.metres) }
     case 'halt': return { type: 'halt', id: c.id | 0 }
-    case 'debug-spawn': return { type: 'debug-spawn', side: c.side | 0, men: c.men | 0, x: quantise(c.x), z: quantise(c.z), facing: quantise(c.facing) }
+    case 'style': return { type: 'style', id: c.id | 0, preset: String(c.preset) }
+    case 'debug-spawn': return { type: 'debug-spawn', side: c.side | 0, x: quantise(c.x), z: quantise(c.z), heading: qa(c.heading), shape: String(c.shape), men: c.men | 0 }
     case 'debug-kill': return { type: 'debug-kill', id: c.id | 0, men: c.men | 0 }
+    default: return c
   }
+}
+
+// waypoints as given: an array of [x, z] number pairs
+function wellFormed(p: unknown): p is [number, number][] {
+  return Array.isArray(p) && p.every(q => Array.isArray(q) && q.length === 2 && typeof q[0] === 'number' && typeof q[1] === 'number')
 }
 
 // the slot of a live formation handle, or −1
@@ -45,8 +66,8 @@ export function formationSlot(w: World, h: Handle): number {
 export const formationHandle = (w: World, i: number): Handle => makeHandle(KIND_FORMATION, i, w.f.gen[i])
 
 const inside = (w: World, x: number, z: number): boolean => {
-  const c = w.data.cost
-  return x >= c.x0 && z >= c.z0 && x <= c.x0 + c.nx * c.cell && z <= c.z0 + c.nz * c.cell
+  const t = w.terrain, e = (t.n - 1) * t.cell
+  return x >= t.x0 && z >= t.z0 && x <= t.x0 + e && z <= t.z0 + e
 }
 const finite = (v: number): boolean => v === v && v !== Infinity && v !== -Infinity
 
@@ -55,53 +76,84 @@ export function applyCommands(w: World, t: number): Dropped[] {
   const dropped: Dropped[] = [], keep: Stamped[] = []
   for (const s of w.pending) {
     if (s.tick > t) { keep.push(s); continue }
-    const why = s.tick < t ? 'stale tick' : !TYPES.includes(s.cmd.type) ? 'unknown command' : apply(w, s.cmd)
+    const why = s.tick < t ? 'stale tick' : !(COMMAND_TYPES as readonly string[]).includes(s.cmd.type) ? 'unknown command' : apply(w, s.cmd)
     if (why) dropped.push({ tick: t, seq: s.seq, reason: why })
   }
   w.pending = keep
   return dropped
 }
 
+// replaces (or appends to) a formation's orders with new ones of the given types; '' or why not
+function giveOrders(w: World, i: number, types: number[], append: boolean, fill: (n: number, k: number) => void): string {
+  let room = ordersFree(w)
+  if (!append) for (let n = w.f.ordHead[i]; n >= 0; n = w.ord.next[n]) room++
+  if (types.length > room) return 'order pool full'
+  if (!append) clearOrders(w, i)
+  types.forEach((t, k) => { const n = allocOrder(w, t); fill(n, k); appendOrder(w, i, n) })
+  w.f.status[i] = 0; w.f.blockedFor[i] = 0
+  return ''
+}
+
 function apply(w: World, c: Command): string {
-  const f = w.f
+  const f = w.f, o = w.ord, cr = w.cr
+  if (c.type === 'debug-spawn') {
+    if (c.side < 0 || c.side >= SIDES) return 'no such side'
+    const shape = cr.shapeIndex(c.shape); if (shape < 0) return 'no such shape'
+    if (c.men <= 0 || c.men > cr.slots) return 'no room for those men'
+    if (!finite(c.x) || !finite(c.z) || !finite(c.heading) || !inside(w, c.x, c.z)) return 'outside the map'
+    if (Math.abs(c.heading) > 4 * PI) return 'heading out of range'
+    if (w.meta[M_FREE] === 0) return 'no free formation slot'
+    const i = w.free[--w.meta[M_FREE]], C = cr.geo.companies
+    f.alive[i] = 1; f.side[i] = c.side; f.shape[i] = shape; f.style[i] = cr.presetIndex(cr.rs.start.orders); f.drill[i] = 1
+    f.x[i] = c.x; f.z[i] = c.z; f.heading[i] = c.heading; f.px[i] = c.x; f.pz[i] = c.z; f.ph[i] = c.heading
+    f.men[i * C] = c.men; rebalance(w, i)
+    resetTrail(w, i)
+    return ''
+  }
+  const i = formationSlot(w, c.id); if (i < 0) return 'no such formation'
   switch (c.type) {
-    case 'debug-spawn': {
-      if (c.side < 0 || c.side >= SIDES) return 'no such side'
-      if (c.men <= 0) return 'no men'
-      if (!finite(c.x) || !finite(c.z) || !finite(c.facing) || !inside(w, c.x, c.z)) return 'outside the map'
-      if (w.meta[M_FREE] === 0) return 'no free formation slot'
-      const i = w.free[--w.meta[M_FREE]]
-      f.alive[i] = 1; f.side[i] = c.side; f.men[i] = c.men; f.x[i] = c.x; f.z[i] = c.z; f.facing[i] = c.facing; f.speed[i] = 0
-      f.wpHead[i] = -1; f.wpTail[i] = -1
-      return ''
-    }
     case 'move': {
-      const i = formationSlot(w, c.id); if (i < 0) return 'no such formation'
+      if (!wellFormed(c.points)) return 'malformed waypoints'
       if (c.points.length === 0) return 'no waypoints'
       if (c.points.length > MAX_POINTS) return 'too many waypoints'
       for (const [x, z] of c.points) if (!finite(x) || !finite(z) || !inside(w, x, z)) return 'waypoint outside the map'
-      // room first, so a dropped move changes nothing (a replacing move frees its old route)
-      let room = w.wp.x.length - w.wp.meta[1]
-      if (!c.append) for (let n = f.wpHead[i]; n >= 0; n = w.wp.next[n]) room++
-      if (c.points.length > room) return 'waypoint pool full'
-      if (!c.append) { freeList(w.wp, f.wpHead[i]); f.wpHead[i] = -1; f.wpTail[i] = -1 }
-      for (const [x, z] of c.points) {
-        const n = allocNode(w.wp, x, z)
-        if (f.wpTail[i] < 0) f.wpHead[i] = n; else w.wp.next[f.wpTail[i]] = n
-        f.wpTail[i] = n
+      return giveOrders(w, i, c.points.map(() => O_MOVE), c.append, (n, k) => { o.x[n] = c.points[k][0]; o.z[n] = c.points[k][1]; o.resolved[n] = 1 })
+    }
+    case 'form': {
+      const s = cr.shapeIndex(c.shape); if (s < 0) return 'no such shape'
+      return giveOrders(w, i, [O_FORM], false, n => { o.shape[n] = s })
+    }
+    case 'wheel':
+      if (!finite(c.angle) || c.angle === 0 || Math.abs(c.angle) > 2 * PI) return 'no such wheel'
+      return giveOrders(w, i, [O_WHEEL], false, n => { o.a[n] = c.angle })
+    case 'face': return giveOrders(w, i, [O_FACE], false, () => {})
+    case 'retire':   // face about, march, halt and dress, face the front again; the last two survive a halt
+      if (!finite(c.metres) || c.metres <= 0 || c.metres > 1000) return 'no such retreat'
+      return giveOrders(w, i, [O_FACE, O_MOVE, O_DRESS, O_FACE], false, (n, k) => { if (k === 1) o.a[n] = c.metres; if (k >= 2) o.finish[n] = 1 })
+    case 'halt': clearOrders(w, i); f.status[i] = 0; f.blockedFor[i] = 0; return ''
+    case 'style': { const p = cr.presetIndex(c.preset); if (p < 0) return 'no such order preset'; f.style[i] = p; return '' }
+    case 'debug-kill': {
+      if (c.men <= 0) return 'no men'
+      const C = cr.geo.companies
+      for (let k = 0; k < c.men; k++) {   // each man from a company drawn by the sim RNG, weighted by its men
+        let tot = 0; for (let q = 0; q < C; q++) tot += f.men[i * C + q]
+        if (!tot) break
+        let r = nextInt(w.rng, tot), q = 0
+        while (r >= f.men[i * C + q]) { r -= f.men[i * C + q]; q++ }
+        f.men[i * C + q]--
       }
       return ''
     }
-    case 'halt': {
-      const i = formationSlot(w, c.id); if (i < 0) return 'no such formation'
-      freeList(w.wp, f.wpHead[i]); f.wpHead[i] = -1; f.wpTail[i] = -1
-      return ''
-    }
-    case 'debug-kill': {
-      const i = formationSlot(w, c.id); if (i < 0) return 'no such formation'
-      if (c.men <= 0) return 'no men'
-      f.men[i] = Math.max(0, f.men[i] - c.men)
-      return ''
-    }
   }
+  return 'unknown command'
+}
+
+// frees an empty formation's slot: its orders, every column of its row zeroed, the generation moved on
+export function reapFormation(w: World, i: number): void {
+  clearOrders(w, i)
+  const gen = w.f.gen[i], ver = w.f.trailVer[i], N = w.f.alive.length
+  for (const a of columnsOf(w.f)) { const k = a.length / N; a.fill(0, i * k, i * k + k) }
+  // the generation moves on (old handles go stale); the trail version keeps counting (it keys the arc cache)
+  w.f.gen[i] = (gen + 1) & ((1 << 19) - 1); w.f.trailVer[i] = ver + 1; w.f.ordHead[i] = -1; w.f.ordTail[i] = -1
+  w.free[w.meta[M_FREE]++] = i
 }

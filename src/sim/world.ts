@@ -1,54 +1,91 @@
 // The world: all simulation state, in typed arrays (structure of arrays, docs/architecture.md §3), so
-// the hash and saves cover every byte. S0 holds one table, formations (moving blocks), and one pool,
-// waypoints. Only the commands stamped for the next tick live outside typed arrays; the serializer
-// writes them too.
-import { makePool, type Pool } from './pool.ts'
-import { type SimData } from './data.ts'
+// the hash and saves cover every byte. One table, formations, with their trails (a ring per formation)
+// and an order pool. Only the commands stamped for the next tick live outside typed arrays; the
+// serializer writes them too. The build-time data, the compiled ruleset and the terrain derived from them
+// are attached but are not state: their versions are (meta).
+import type { SimData } from './data.ts'
 import { type RngState, seedRng } from './rng.ts'
-import { type Stamped } from './commands.ts'
+import type { Stamped } from './commands.ts'
+import type { Compiled } from './ruleset.ts'
+import type { Terrain } from './terrain.ts'
+import { buildTerrain } from './terrain.ts'
+import type { Places, Arc } from './formation.ts'
 
 export const MAX_FORMATIONS = 128
-export const MAX_WAYPOINTS = 1024
+export const TRAIL = 256          // trail points per formation (a ring)
+export const MAX_ORDERS = 2048
 export const SIDES = 2
 
 // meta words
-export const M_TICK = 0, M_FREE = 1, M_DATA = 2, M_SEQ = 3, M_LEN = 4
+export const M_TICK = 0, M_FREE = 1, M_DATA = 2, M_SEQ = 3, M_RULES = 4, M_LEN = 5
 
 export interface Formations {
-  alive: Uint8Array
-  gen: Int32Array
-  side: Uint8Array
-  men: Int32Array
-  x: Float64Array
-  z: Float64Array
-  facing: Float64Array    // heading, radians, 0 = +z, clockwise toward +x
-  speed: Float64Array     // m/s this tick
-  wpHead: Int32Array      // first waypoint node, −1 none
-  wpTail: Int32Array
+  alive: Uint8Array; gen: Int32Array; side: Uint8Array
+  shape: Int32Array; style: Int32Array; status: Int32Array; onRoad: Uint8Array; drill: Float64Array
+  lean: Uint8Array                                                 // which way a company's files centre when it cannot be exact (Face about flips it)
+  x: Float64Array; z: Float64Array; heading: Float64Array          // the anchor: front centre; heading 0 = +z, clockwise toward +x
+  px: Float64Array; pz: Float64Array; ph: Float64Array             // last tick's anchor (for the renderer's interpolation)
+  vx: Float64Array; vz: Float64Array; omega: Float64Array
+  disorder: Float64Array; blockedFor: Float64Array
+  men: Int32Array                                                  // [i·C + c]
+  // a shape change in progress
+  trans: Uint8Array; tShape: Int32Array; tStart: Float64Array; tDur: Float64Array
+  tDelay: Float64Array                                             // [i·C + c]
+  tFrom: Float64Array; tTo: Float64Array                           // [(i·C + c)·4 + x|z|rot|face]
+  // the lag model, per bin
+  lags: Float64Array; lagRate: Float64Array; binG: Float64Array; binQ: Float64Array; binN: Int32Array   // [i·NB + j]
+  // the march trail: a ring of points, oldest first
+  trailX: Float64Array; trailZ: Float64Array                       // [i·TRAIL + k]
+  trailStart: Int32Array; trailCount: Int32Array; trailVer: Int32Array; trailLen: Float64Array
+  // orders: a list in the order pool
+  ordHead: Int32Array; ordTail: Int32Array
 }
+export interface Orders {
+  type: Int32Array; shape: Int32Array; finish: Uint8Array; left: Int8Array; resolved: Uint8Array
+  x: Float64Array; z: Float64Array; a: Float64Array; t0: Float64Array; px: Float64Array; pz: Float64Array; done: Float64Array
+  next: Int32Array
+  meta: Int32Array   // [free head, in use]
+}
+export const O_MOVE = 1, O_FORM = 2, O_WHEEL = 3, O_FACE = 4, O_DRESS = 5
+
 export interface World {
-  meta: Int32Array        // tick, free slots, data version, command sequence
+  meta: Int32Array
   rng: RngState
   f: Formations
-  free: Int32Array        // stack of free formation slots (top at meta[M_FREE] − 1)
-  wp: Pool
-  pending: Stamped[]      // commands stamped for the next tick, in arrival order
-  data: SimData           // build-time data (not state: its version is)
-  debug: boolean          // assert finite state every tick
+  free: Int32Array      // stack of free formation slots (top at meta[M_FREE] − 1)
+  ord: Orders
+  pending: Stamped[]
+  data: SimData; cr: Compiled; terrain: Terrain
+  debug: boolean
+  scratch: { places?: Places; arc?: Arc }   // per-world working buffers, not state
 }
 
-export function makeWorld(data: SimData, seed: number, debug = true): World {
-  const N = MAX_FORMATIONS
+export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {
+  const N = MAX_FORMATIONS, C = cr.geo.companies, NB = cr.NB
+  const f64 = (n: number) => new Float64Array(n), i32 = (n: number) => new Int32Array(n), u8 = (n: number) => new Uint8Array(n)
   const f: Formations = {
-    alive: new Uint8Array(N), gen: new Int32Array(N), side: new Uint8Array(N), men: new Int32Array(N),
-    x: new Float64Array(N), z: new Float64Array(N), facing: new Float64Array(N), speed: new Float64Array(N),
-    wpHead: new Int32Array(N).fill(-1), wpTail: new Int32Array(N).fill(-1),
+    alive: u8(N), gen: i32(N), side: u8(N), shape: i32(N), style: i32(N), status: i32(N), onRoad: u8(N), drill: f64(N), lean: u8(N),
+    x: f64(N), z: f64(N), heading: f64(N), px: f64(N), pz: f64(N), ph: f64(N), vx: f64(N), vz: f64(N), omega: f64(N),
+    disorder: f64(N), blockedFor: f64(N), men: i32(N * C),
+    trans: u8(N), tShape: i32(N), tStart: f64(N), tDur: f64(N), tDelay: f64(N * C), tFrom: f64(N * C * 4), tTo: f64(N * C * 4),
+    lags: f64(N * NB), lagRate: f64(N * NB), binG: f64(N * NB), binQ: f64(N * NB), binN: i32(N * NB),
+    trailX: f64(N * TRAIL), trailZ: f64(N * TRAIL), trailStart: i32(N), trailCount: i32(N), trailVer: i32(N), trailLen: f64(N),
+    ordHead: i32(N).fill(-1), ordTail: i32(N).fill(-1),
   }
+  const M = MAX_ORDERS
+  const ord: Orders = { type: i32(M), shape: i32(M), finish: u8(M), left: new Int8Array(M), resolved: u8(M),
+    x: f64(M), z: f64(M), a: f64(M), t0: f64(M), px: f64(M), pz: f64(M), done: f64(M), next: i32(M), meta: i32(2) }
+  for (let k = 0; k < M; k++) ord.next[k] = k + 1 < M ? k + 1 : -1
   const free = new Int32Array(N)
   for (let i = 0; i < N; i++) free[i] = N - 1 - i   // slot 0 is handed out first
-  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, free, wp: makePool(MAX_WAYPOINTS), pending: [], data, debug }
+  // a trail shape's trail, and the one Face about rebuilds, must fit the ring (0.25 m points)
+  let lmax = 0; for (const p of Object.values(cr.rs.orders)) lmax = Math.max(lmax, p.Lmax)
+  for (const s of cr.shapes) if (s.def.trail && Math.max(s.trailLimit, 15 + (s.turn ? -2 * s.turn.cz : s.depth) + lmax) / 0.25 + 16 > TRAIL)
+    throw new Error(`shape ${s.name}: its trail does not fit ${TRAIL} points`)
+  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), debug, scratch: {} }
   w.meta[M_FREE] = N
   w.meta[M_DATA] = data.version | 0
+  w.meta[M_RULES] = cr.hash | 0
   seedRng(w.rng, seed)
   return w
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sin, cos, atan2, wrapAngle, quantise, PI, TRIG_DOMAIN } from '../src/sim/num.ts'
+import { sin, cos, atan2, wrapAngle, quantise, PI, TRIG_DOMAIN, exp } from '../src/sim/num.ts'
 
 // the test may use Math.*: it checks the sim's own functions against them
 describe('num: exact-ops trigonometry', () => {
@@ -17,6 +17,12 @@ describe('num: exact-ops trigonometry', () => {
     expect(worst).toBeLessThan(1e-12)
     expect(atan2(0, 0)).toBe(0)
     expect(atan2(-0, -1)).toBe(PI)   // documented: (−π, π], unlike Math
+  })
+  it('exp within 1e-14 (relative) of Math over the range the sim uses, and refuses beyond ±700', () => {
+    let worst = 0
+    for (let k = 0; k <= 20000; k++) { const x = -40 + 60 * k / 20000; worst = Math.max(worst, Math.abs(exp(x) - Math.exp(x)) / Math.exp(x)) }
+    expect(worst).toBeLessThan(1e-14)
+    expect(exp(0)).toBe(1); expect(() => exp(800)).toThrow(RangeError)
   })
   it('refuses arguments outside its exact domain', () => {
     expect(() => sin(TRIG_DOMAIN * 2)).toThrow(RangeError); expect(() => wrapAngle(-1e12)).toThrow(RangeError)

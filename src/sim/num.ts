@@ -64,6 +64,20 @@ export function wrapAngle(a: number): number {
   const r = a - k * TWO_PI
   return r <= -PI ? r + TWO_PI : r > PI ? r - TWO_PI : r
 }
+// e^x for x in [−700, 700] (more than any decay or slope factor needs): x = k·ln2 + r with |r| ≤ ln2/2,
+// e^r by Taylor to r^16 (error < 1e-17 there), then k exact doublings or halvings
+const LN2_HI = 0.6931471803691238, LN2_LO = 1.9082149292705877e-10, LN2 = 0.6931471805599453
+export function exp(x: number): number {
+  if (x !== x) return x
+  if (x > 700 || x < -700) throw new RangeError(`exp argument ${x} outside ±700`)
+  const k = Math.round(x / LN2), r = (x - k * LN2_HI) - k * LN2_LO
+  let s = 1, term = 1
+  for (let n = 1; n <= 16; n++) { term = term * r / n; s += term }
+  if (k > 0) for (let i = 0; i < k; i++) s *= 2
+  else for (let i = 0; i < -k; i++) s /= 2
+  return s
+}
+
 // command positions are quantised to 1 cm when the sim stamps them
 export const quantise = (v: number): number => Math.round(v * 100) / 100
 

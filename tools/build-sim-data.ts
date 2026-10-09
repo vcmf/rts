@@ -1,6 +1,7 @@
 // Builds the simulation's input data (docs/proposals/sim-design.md §2, decision 0012) from a map
 // definition, once, in Node: the sim heightfield (1.79 m nodes) and the cost grid (7.16 m cells), as one
-// little-endian file in data/. Its FNV-1a hash is the data version the sim asserts on load.
+// little-endian file in data/, with the 1 m terrain class and water depth grids (format 2). Its FNV-1a
+// hash is the data version the sim asserts on load.
 //   node tools/build-sim-data.ts           writes data/<map>.simdata and prints its version
 //   node tools/build-sim-data.ts --check   rebuilds in memory and fails if it differs from data/
 // The output depends on this Node's Math functions; the committed file is the authority (§2), so a
@@ -36,13 +37,19 @@ export function buildSimData(map: MapDef): Uint8Array {
     const g = pass * 2 >= SUB * SUB ? (pass / inv) * map.slopeFactor(rise) : 0
     cost[cj * cn + ci] = Math.max(0, Math.min(255, Math.round(g * 255)))
   }
-  const size = 8 + (8 + 8 + 16) + heights.length * 8 + (8 + 8 + 16) + cost.length
+  const fn = map.fine.n, classBytes = map.classes.reduce((a, c) => a + 4 + c.length, 4)
+  const size = 8 + (8 + 8 + 16) + heights.length * 8 + (8 + 8 + 16) + cost.length + classBytes + (8 + 8 + 16) + fn * fn * 3
   const buf = new Uint8Array(size), v = new DataView(buf.buffer)
   let o = 0
   const u32 = (n: number) => { v.setUint32(o, n, true); o += 4 }, f64 = (n: number) => { v.setFloat64(o, n, true); o += 8 }
   u32(DATA_MAGIC); u32(DATA_FORMAT)
   f64(HEIGHT_CELL); u32(hn); u32(hn); f64(x0); f64(z0); for (let k = 0; k < heights.length; k++) f64(heights[k])
   f64(COST_CELL); u32(cn); u32(cn); f64(x0); f64(z0); buf.set(cost, o); o += cost.length
+  // the 1 m grid: class index per node, water depth in mm
+  u32(map.classes.length); for (const c of map.classes) { u32(c.length); for (let q = 0; q < c.length; q++) v.setUint8(o++, c.charCodeAt(q)) }
+  f64(map.fine.cell); u32(fn); u32(fn); f64(x0); f64(z0)
+  for (let j = 0; j < fn; j++) for (let i = 0; i < fn; i++) v.setUint8(o++, map.fine.classAt(i, j))
+  for (let j = 0; j < fn; j++) for (let i = 0; i < fn; i++) { v.setUint16(o, Math.min(65535, Math.round(map.fine.depthAt(i, j) * 1000)), true); o += 2 }
   if (o !== size) throw new Error('size mismatch')
   return buf
 }
