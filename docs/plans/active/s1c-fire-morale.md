@@ -6,172 +6,195 @@ last_reviewed: 2026-10-09
 # Plan: S1c, fire, cohesion and morale
 
 The third part of S1 (`docs/plans/done/s1a-formations-on-spine.md`, breakdown). Battalions fire on the
-enemy, take casualties, lose order and heart, and break. The design is `docs/proposals/sim-design.md`
-§8 (fire), §10 (morale and cohesion) and §12 (standing behaviour); this plan is the slice of it that S1c
-builds. S1c ends when **two lines exchange fire at 100 m and the weaker breaks in 6–10 minutes of battle
-time.**
+enemy, take casualties and break. The design is `docs/proposals/sim-design.md` §8 (fire), §10 (morale and
+cohesion) and §12 (standing behaviour). S1c ends when **two lines exchange fire at 100 m and the weaker
+breaks in 6–10 minutes of battle time.**
 
-## Scope
+The first draft was challenged in `docs/research/s1c-plan-review.md`. This plan follows that review:
+- morale is driven by losses;
+- random draws are keyed, not taken from the stream in slot order;
+- the re-packing gate and the fuller morale machine move to their own PRs.
+
+## The split
+
+| Part | Scope |
+|---|---|
+| **S1c-1** (this plan) | Fire, casualties, a loss-driven morale with rout, the calibration, the page. Meets S1c's goal |
+| S1c-2 | Rally, shattered, rout contagion, flank support, the wavering fall-back |
+| S1c-3 | The casualty re-packing gate (`docs/known-issues.md`): the other half of a line takes the loss first, no extra draws |
+
+## S1c-1 scope
+
+Every number named below is ruleset data (`fire` and `morale` in `src/rulesets/napoleonic.ts`); the
+engine names no musket (decision 0015).
+
+### Keyed draws
+
+Fire and casualties draw from a **keyed** generator. A short xoshiro stream is seeded from a hash of:
+- the world seed (a new meta word);
+- the tick;
+- the shooter's handle and company;
+- a purpose tag.
+
+A result then depends on who fires and when, not on slot order or on how many draws others made.
+The world stream is untouched by fire.
 
 ### Fire (tick step 8), per company
 
-A company is the firing unit: its facing comes from the shape (a square's four faces fire four ways).
-Every number below is ruleset data (`fire` in `src/rulesets/napoleonic.ts`); the engine has no musket in
-it (decision 0015).
+A company is the firing unit; its facing comes from the shape.
 
-- **Who may fire:**
-  - the battalion is not moving under an order, not changing shape, and not routing;
-  - its fire mode is *at will*. The mode is a new command, `fire`, with `at will` and `hold`, and an
-    optional target the battalion prefers while it is valid.
-- **Target:**
-  - the nearest enemy company whose centre is within range and inside the company's fire arc (data: a
-    half-angle about its facing);
-  - with a clear line: the heightfield does not rise above the sight line (sampled every 7 m, eyes at
-    1.6 m), it does not cross more than the ruleset's metres of woods, and no friendly battalion stands
-    across it (each battalion's start-of-step rectangle: anchor, heading, half-width, depth);
-  - kept while valid, re-chosen every 0.5 s (staggered by slot), ties broken by slot index.
-- **Volleys:** each company reloads on its own (data: about 25 s, drawn ±20% from the sim RNG so the
-  companies ripple). A loaded company with a target fires:
-  - rounds = men in its firing ranks (data: the front two of three) × (1 − misfire);
-  - expected hits = rounds × p(range) × modifiers;
-  - p(range) is a piecewise linear table, calibrated (below);
-  - the modifiers are the shooter's morale state and cohesion and the target's depth (a column is easier
-    to hit than a line). Each is one plain function of its terms in a fixed order (sim-design §13).
-  - Casualties are `sampleCount` around the expected value, given to the target's companies in arc and
-    range, weighted by their men.
-- **Order:** every volley in a tick is computed from positions after movement (steps 5–6). Casualties
-  collect in a per-company array and are applied together at step 11, so no shooter's result depends on
-  another's slot.
-- **For the renderer:** each company keeps its last volley's tick and target (state, hashed). The page
-  draws a flash and a fading line from them, without an event ring (that is S2).
+- **Who fires:**
+  - the battalion is halted (no order at its head that moves, wheels, faces or changes shape) and not
+    routing;
+  - its fire mode is *at will* (the default). A new command `fire` sets *at will* or *hold*, with an
+    optional preferred target handle.
+- **Target:** an enemy battalion with any company:
+  - inside the company's fire arc (data: half-angle);
+  - within the maximum range (data: 250 m), measured company centre to company centre;
+  - with a clear line.
 
-### Casualties (step 11), and the re-packing gate
+  The preferred target wins if valid, else the current target if still valid, else the nearest. Ties
+  go to the lower handle. Targets are re-chosen every 0.5 s, all battalions on the same tick, and stored
+  as a handle.
+- **Clear line**, judged on positions after movement:
+  - the heightfield stays below the sight line (eyes 1.6 m, sampled every 2 m);
+  - it crosses at most the ruleset's metres of sight-blocking classes (woods 40, dense wood 15);
+  - **partial cover by friends:** three rays per company (both flanks and centre); a ray is blocked by
+    any friendly company's block (its placed rectangle, so columns, squares and changes are exact). The
+    rounds scale by the share of clear rays.
+- **Volleys:**
+  - **Loading:** each company reloads on its own (data: 25 s, ±20% keyed), so the companies ripple. At
+    spawn, a company is loaded after a keyed share of a reload, so a line does not open with one
+    four-company volley.
+  - **Rounds:** men in the firing ranks (data: 2 of 3) × clear share × (1 − misfire).
+  - **Expected hits:** rounds × p(range) × the shooter's state factor × cohesion factor × the target's
+    depth factor. p(range) is a piecewise linear table; the depth factor is by kind (a column is easier
+    to hit).
+  - **Casualties:** each volley's expected hits accumulate per target. Each tick, step 11 takes the
+    integer part plus one keyed Bernoulli on the fraction, and gives each man to a company in the
+    shooter's arc and range, weighted by its men, by a keyed draw. This replaces `sampleCount` (no jump
+    at λ = 1; a volley's λ is 0.2–0.4).
+- **State kept:**
+  - per company: reload left, last volley tick, the target handle (the renderer draws flashes from
+    these);
+  - per battalion: hits owed;
+  - per side: the rear direction (below).
 
-The losses are removed man by man from the target's companies. Closing files after a loss is the fill
-rule `occupied`, which S1a left ungated (`docs/known-issues.md`).
+### Morale (step 12): loss-driven
 
-S1c gates it. A loss whose new fill would put a bin newly on impassable ground (`wetBins`, as for any pose
-change):
-- goes to another company in arc;
-- failing that, the lean flips;
-- failing both, the loss stands and the battalion records `pressed against impassable ground`.
+Each battalion has a stored **quality** (0..1, `debug-spawn`'s optional `quality`, default data) and a
+**morale** that **relaxes toward a target** each tick, in exact exponential steps:
 
-A test at the bank is the check. The known issue is closed only if that test passes; if not, the residual
-stays recorded.
+```
+target = quality − a · (losses / start) − b · (recent losses / start) − c · disorder
+```
 
-### Cohesion
+- **Recent losses:** a 10 s decaying sum. Its per-tick factor is computed once when the ruleset
+  compiles (`exp` from `num.ts`).
+- **Steady fire on a battalion does not move morale; only men lost do.** So an exchange at a range
+  where nobody falls breaks nobody, and p = 0 means no break.
+- **States, with hysteresis:**
+  - steady;
+  - shaken: below a threshold; fires worse;
+  - wavering: lower still; fires worse again;
+  - routing: below the break threshold.
 
-**Cohesion is `1 − disorder`.** S1a's `disorder` (order in the ranks lost to lagging files and a bowed
-line, recovered by halting) gains two sources:
-- casualties, a share per man lost;
-- routers passing through (deferred: no contact between formations yet).
+  Thresholds are data, with each way back set higher than the way in.
+- **Routing:**
+  - the battalion drops its orders, refuses commands (dropped as `routing`) and does not fire;
+  - it runs at the rout pace toward its **side's rear**, a per-side direction the scenario sets with a
+    `side` command;
+  - it Faces about first if the shape allows, else wheels;
+  - it stops at impassable ground or the map edge.
 
-It acts through fire effectiveness and morale pressure.
-
-### Morale (step 12)
-
-Each battalion has a `morale` from 0 to 1 and a **state**: steady, shaken, wavering, routing, rallying,
-or shattered. It starts at the battalion's quality, an optional `morale` on `debug-spawn` (default
-ruleset data).
-
-**Per tick**, all computed from start-of-step state and applied together:
-- **pressure:**
-  - recent losses: a decaying sum, about 10 s, of men lost, as a share of the starting strength;
-  - total losses as a share;
-  - under fire;
-  - low cohesion;
-  - enemy fire from the flank or rear arc;
-- **support:** a steady friendly battalion within a ruleset distance on a flank. Commanders come in S2.
-- **recovery:** when not under fire, faster when halted.
-
-**Shocks:**
-- losses of a ruleset share inside about 10 s;
-- a friendly battalion beginning to rout within a radius, larger to its front.
-
-**States** follow thresholds with hysteresis (data), in two layers.
-- **Fire:** shaken and wavering fire worse.
-- **Movement:**
-  - a wavering battalion under fire falls back, a Retire issued by standing behaviour, once per
-    wavering;
-  - a routing battalion drops its orders and does not fire. It runs at the ruleset's rout pace straight
-    away from the nearest enemy, Face about first where the shape allows. It stops at impassable ground
-    (no pathfinding yet);
-  - out of fire for a time, a router rallies, and then becomes steady again;
-  - a battalion below a strength share, or routing for too long, is **shattered** and never rallies. S1e
-    decides what happens to the shattered (the end condition).
+  It does not rally in S1c-1.
+- **Calibration aim for the losses at the break:** 12–25% of starting strength for the weaker line.
+- **Cohesion is `1 − disorder`:** S1a's disorder, from terrain and the lag model. It enters the fire
+  factor and morale target only. A casualty term is left out: halted recovery (about 1.8 per minute)
+  would cancel it at these loss rates.
 
 ### Standing behaviour (step 4)
 
-Return fire is the fire rule above: a halted battalion in *at will* fires on its own. Standing behaviour
-adds the wavering fall-back and the rout. Squares against cavalry come with cavalry (S1d).
+Return fire is the fire rule: a halted battalion *at will* fires on its own. Routing is the only other
+behaviour in S1c-1.
 
 ### The page
 
-- Flashes and fire lines from the volley state.
+- Volley flashes and fading fire lines.
 - A morale bar and the state by each battalion's colours.
-- Routing men loosen around their slots.
-- Fire mode buttons (at will, hold).
+- Routers' men loosen around their slots.
+- Fire mode buttons.
 - The readout: morale, state, losses.
-- A scenario `s1c-firefight`: two lines 100 m apart, the second of lower quality, plus a few battalions
-  to drill.
+- Scenario `s1c-firefight`: two lines 100 m apart, the second of lower quality, and the side rears set.
 
 ## Calibration
 
-`tools/calibrate-fire.ts` runs the firefight headless over seeds and ranges, and prints the time to
-break and the losses at the break. p(range) and the morale weights are tuned until:
-- **at 100 m:** the median time for the weaker line to break is 6–10 minutes over 20 seeds, and the
-  stronger line breaks first in at most 3 of them;
-- **at 200 m:** neither line breaks within 20 minutes;
-- **at 50 m:** the break comes in under 5 minutes.
+`tools/calibrate-fire.ts` runs two lines at 50, 100 and 200 m for 100 seeds each. The quality gap is
+fixed in the scenario (0.8 against 0.65). It reports:
+- the time to break and the losses at the break (median and spread);
+- how often the stronger line breaks first.
 
-The tuned values are data, with the sweep's table in the results. Vitest runs a smaller sweep (5 seeds)
-as the regression check.
+**Targets:**
+- **at 100 m:**
+  - the weaker line's median time to break is 6–10 minutes;
+  - its losses at the break are 12–25%;
+  - the stronger line breaks first in at most 15% of seeds;
+- **at 200 m:** no break within 20 minutes in at least 95%;
+- **at 50 m:** a median under 5 minutes.
+
+Tuning stays in the data. Vitest pins a **golden table** of five seeds at 100 m (times and losses), so a
+change shows as a diff, not a pass that drifted.
 
 ## Acceptance
 
-1. The calibration targets above hold, with the sweep table in the results.
+1. The calibration targets hold, with the 100-seed table in the results.
 2. **Rules, in Vitest:**
-   - fire needs arc, range and a clear line: none over a crest, none through a friend, none past the
-     woods limit;
-   - hold fire holds;
-   - a moving or changing battalion does not fire;
-   - casualties go only to companies in arc and range;
-   - the order of slots does not change results (a mirrored scenario gives the mirrored outcome);
-   - every state transition, rout and rally included, happens in a scripted case;
-   - a router runs away from the enemy and stops at impassable ground;
-   - the re-packing gate at a bank.
+   - **Line of fire:**
+     - fire needs arc, range and a clear line: none past 250 m, none over a crest, none past the woods
+       limit;
+     - a friend across a third of the front cuts the rounds by about a third.
+   - **When fire happens:**
+     - hold fire holds;
+     - a battalion moving, wheeling, facing or changing shape does not fire;
+     - a router does not fire and refuses commands.
+   - **Casualties:** they go only to companies in the shooter's arc and range.
+   - **Slot order:** the same scenario spawned in reverse slot order gives the same per-battalion
+     history (keyed draws).
+   - **Morale:**
+     - p = 0 gives no break;
+     - each state is reached in a scripted case, with its hysteresis.
+   - **Routing:**
+     - a router runs toward its side's rear and stops at the map edge;
+     - the opening volleys at 50 m do not break a fresh line in its first minute.
 3. **Determinism:** a golden of the firefight; its replay and save round trip reproduce the hashes.
    `SIM_VERSION` and `SAVE_FORMAT` move on.
-4. **Cost:** 40 battalions, half facing half at 100 m and all firing, sim plus soldier layer per frame
-   at 1× within the 4 ms budget. Fire and morale's share of the tick is reported.
+4. **Cost:** 40 battalions, half facing half at 100 m, all firing.
+   - Sim plus soldier layer per frame at 1× within 4 ms.
+   - Fire and morale's share of the tick reported against sim-design §16's 2 ms per tick.
 5. **The page:** `npm run check:app` runs the firefight to a break headless, with no console error, and
    plays the session back in Node.
 6. **Negative runs:**
-   - p(range) at zero gives no break;
-   - removing the start-of-step snapshot makes the mirrored test fail;
-   - the gate disabled fails the bank test.
+   - taking fire draws from the world stream in slot order makes the reversed-order test fail;
+   - an "under fire" pressure term makes the p = 0 test fail;
+   - dropping the friend rays makes the partial-cover test fail.
 
 ## Non-goals
 
+- Everything in S1c-2 and S1c-3.
 - Smoke, vision and fog of war (S2).
-- Commanders and their radius (S2).
+- Commanders (S2).
 - Ammunition and fatigue (S3).
-- Melee, charges and contact between formations (S1d).
-- Artillery and cavalry (S1d).
+- Melee, charges, artillery, cavalry (S1d).
 - Skirmishers.
 - Pathfinding for routers.
-- Firing on the move.
+- Fire on the move.
 
 ## Risks
 
-- **Calibration on one scenario.** Equal lines at fixed ranges can tune a model that feels wrong in a
-  messy fight. S1e's playtests are the real check; this plan only guarantees the numbers are in one place
-  and the sweep reruns in a minute.
-- **Morale with many weights.** Too many terms to tune by hand. The sweep reports each term's share of
-  the pressure at the break, so a term that never matters can be cut.
-- **Cost of sight lines.** About 30 samples per candidate pair, at 2 Hz per battalion. If the cost test
-  shows it near the budget, candidates are culled by range first, and only the chosen target is
-  re-checked between choices.
+- **Calibration on one scenario.** S1e's playtests are the real check. The sweep reruns in about a minute,
+  and its table shows each morale term's share at the break, so a term that never matters can be cut.
+- **Sight-line cost.** Three rays per company at 2 Hz per battalion. Candidates are culled by range
+  before any ray is cast; the cost test decides whether more is needed.
 
 ## Also in this PR
 

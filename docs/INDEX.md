@@ -57,6 +57,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`research/cheap-painterly-postfx.md`](research/cheap-painterly-postfx.md): cheap painterly post-processing.
 - [`research/painterly-style-in-real-time.md`](research/painterly-style-in-real-time.md): how doable the painted look is; techniques, costs, stack per surface, prototype plan.
 - [`research/prepainted-terrain-review.md`](research/prepainted-terrain-review.md): adversarial review of the pre-painted terrain proposal.
+- [`research/s1c-plan-review.md`](research/s1c-plan-review.md): adversarial review of the S1c plan (fire, morale); the plan was revised after it.
 
 ## Templates
 
