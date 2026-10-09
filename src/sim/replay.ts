@@ -1,0 +1,55 @@
+// Replays (docs/proposals/sim-design.md §15): sim version + data version + scenario + seed + the external
+// command log. Playback re-issues each logged command at its tick and must reproduce every state hash;
+// a mismatch reports the first differing tick and the first differing section (table).
+import { type World, makeWorld, M_TICK } from './world.ts'
+import { issue, type Stamped } from './commands.ts'
+import { advanceTick } from './tick.ts'
+import { sectionHashes } from './serialize.ts'
+import { type SimData, DataVersionMismatch, hex } from './data.ts'
+
+export const SIM_VERSION = 's0.1'
+
+export interface HashPoint { tick: number; hash: number; sections: [string, number][] }
+export interface Replay { simVersion: string; dataVersion: number; scenario: string; seed: number; ticks: number; log: Stamped[] }
+export type Scenario = (w: World) => void   // issues the scenario's own commands (not logged)
+
+// runs a scenario for `ticks`, issuing `script(w, tick)` commands as external (logged) ones
+export function record(data: SimData, scenarioName: string, scenario: Scenario, seed: number, ticks: number,
+  script: (w: World, issueExternal: (c: Parameters<typeof issue>[1]) => void) => void): { replay: Replay; hashes: HashPoint[] } {
+  const w = makeWorld(data, seed), log: Stamped[] = [], hashes: HashPoint[] = []
+  scenario(w)
+  while (w.meta[M_TICK] < ticks) {
+    script(w, c => { issue(w, c, log) })
+    const r = advanceTick(w)
+    if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: sectionHashes(w) })
+  }
+  return { replay: { simVersion: SIM_VERSION, dataVersion: data.version, scenario: scenarioName, seed, ticks, log }, hashes }
+}
+
+export interface Mismatch { tick: number; expected: string; got: string; section: string }
+
+// plays a replay back; returns the first mismatch against `expected`, or null
+export function play(r: Replay, data: SimData, scenario: Scenario, expected: HashPoint[]): Mismatch | null {
+  if (r.simVersion !== SIM_VERSION) throw new Error(`replay from sim ${r.simVersion}, this is ${SIM_VERSION}`)
+  if ((r.dataVersion >>> 0) !== (data.version >>> 0)) throw new DataVersionMismatch(`replay made with data ${hex(r.dataVersion)}, loaded ${hex(data.version)}`)
+  const w = makeWorld(data, r.seed)
+  scenario(w)
+  let k = 0, e = 0
+  while (w.meta[M_TICK] < r.ticks) {
+    // re-issue the commands logged at this tick (stamped for the next one), checking their sequence
+    while (k < r.log.length && r.log[k].tick === w.meta[M_TICK] + 1) {
+      const s = issue(w, r.log[k].cmd)
+      if (s.seq !== r.log[k].seq) return { tick: s.tick, expected: `command seq ${r.log[k].seq}`, got: `seq ${s.seq}`, section: 'command log' }
+      k++
+    }
+    const res = advanceTick(w)
+    if (res.hash === null) continue
+    const want = expected[e++]
+    if (!want || want.tick !== res.tick) return { tick: res.tick, expected: want ? `hash at tick ${want.tick}` : 'no more hashes', got: hex(res.hash), section: '' }
+    if (want.hash !== res.hash) {
+      const got = sectionHashes(w), bad = got.find(([n, h], i) => want.sections[i]?.[0] !== n || want.sections[i][1] !== h)
+      return { tick: res.tick, expected: hex(want.hash), got: hex(res.hash), section: bad ? bad[0] : '' }
+    }
+  }
+  return e === expected.length ? null : { tick: w.meta[M_TICK], expected: `${expected.length} hashes`, got: `${e}`, section: '' }
+}
