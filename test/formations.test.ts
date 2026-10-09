@@ -176,6 +176,11 @@ describe('impassable ground: deep water', () => {
     expect(Math.abs(Math.atan2(Math.sin(s.heading(h) - h0), Math.cos(s.heading(h) - h0)))).toBeLessThan(1e-9)
     expect(s.status(h)).toBe('')
   })
+  it('a Retire toward the map edge stops on the map', () => {
+    const s = new Sim(), h = s.spawn(-150, 100, Math.PI / 2)   // facing east: the retreat goes west, toward the edge
+    s.order({ type: 'retire', id: h, metres: 1000 }); s.until(() => s.busy(h), 400)
+    expect(s.x(h)).toBeGreaterThanOrEqual(-180); expect(s.status(h)).toBe('')
+  })
   it('a Retire cut short by the water still ends facing the front', () => {
     let x = 40
     for (; x < 150; x += 0.25) { const t = new Sim(), h = t.spawn(x, -30, -Math.PI / 2); if (t.wet(h)) break }
@@ -224,9 +229,9 @@ describe('impassable ground: deep water', () => {
 })
 
 describe('Face about', () => {
-  it('keeps the place of every man in a complete file, in every shape', () => {
-    for (const shape of ['line', 'column', 'square', 'march']) {
-      const s = new Sim(), h = s.spawn(-20, -100, 0)
+  it('keeps the place of every man in a complete file, in every shape and at uneven strengths', () => {
+    for (const men of [100, 97, 96, 88]) for (const shape of ['line', 'column', 'square', 'march']) {
+      const s = new Sim(), h = s.spawn(-20, -100, 0, 'line', men)
       if (shape !== 'line') { s.order({ type: 'form', id: h, shape }); s.advance(110) }
       const L = s.layout(h), T = L.turn!, g = cr.geo, before = s.places(h)
       const full = (p: [number, number, number, number]) => { const c = Math.floor(p[3] / (g.ranks * g.files)), f = p[3] % g.files; return before.filter(q => q[2] === c && q[3] % g.files === f).length === g.ranks }
@@ -234,7 +239,7 @@ describe('Face about', () => {
       const after = new Map(s.places(h).map(p => [p[3], p]))
       let worst = 0
       for (const p of before) if (full(p)) { const q = after.get(T.m[p[3]]); worst = Math.max(worst, q ? Math.hypot(q[0] - p[0], q[1] - p[1]) : Infinity) }
-      expect({ shape, worst: worst < 1e-6 }).toEqual({ shape, worst: true })
+      expect({ men, shape, worst: worst < 1e-6 }).toEqual({ men, shape, worst: true })
     }
   })
   it('keeps the places of a line with a file held back at the water (its lag is kept)', () => {
@@ -269,9 +274,32 @@ describe('trail shapes', () => {
     s.order({ type: 'move', id: h, points: [[s.x(h) + 3, s.z(h) - 10]], append: false })
     expect(s.until(() => s.busy(h), 120)).toBeLessThan(120)
     s.order({ type: 'move', id: h, points: [[s.x(h) + 3, s.z(h)]], append: false }); s.advance(5)
-    expect(s.status(h)).toBe('arrived: as near as the column can turn'); expect(s.orders(h)).toBe(0)
+    expect(s.status(h)).toBe('arrived: as near as the shape can turn'); expect(s.orders(h)).toBe(0)
     s.order({ type: 'wheel', id: h, angle: Math.PI / 4 }); s.advance(1)
-    expect(s.status(h)).toBe('cannot wheel: a column of route turns as it marches')
+    expect(s.status(h)).toBe('cannot wheel: a trail shape turns as it marches')
+  })
+})
+
+describe('the trail ring', () => {
+  // the world refuses a ruleset whose trail could fill the ring, so the ring's full branch is defensive
+  it('keeps its tracked length equal to the real one as it trims old points', () => {
+    const s = new Sim(), h = s.spawn(-150, -150, 0.3)
+    s.order({ type: 'form', id: h, shape: 'march' }); s.advance(25)
+    s.order({ type: 'move', id: h, points: [[-150 + 120 * Math.sin(0.3), -150 + 120 * Math.cos(0.3)]], append: false }); s.advance(130)
+    const f = s.w.f, i = s.slot(h), T = f.trailX.length / f.alive.length
+    let real = 0
+    for (let k = 1; k < f.trailCount[i]; k++) { const a = i * T + (f.trailStart[i] + k - 1) % T, b = i * T + (f.trailStart[i] + k) % T; real += Math.hypot(f.trailX[b] - f.trailX[a], f.trailZ[b] - f.trailZ[a]) }
+    expect(Math.abs(real - f.trailLen[i])).toBeLessThan(1e-6)
+    expect(real).toBeGreaterThan(s.layout(h).trailLimit - 1)
+  })
+  it('a ruleset whose trail would not fit the ring is refused, as is one with too many bins', () => {
+    const geometry = { ...napoleonic.geometry, companies: 8 }
+    const march8 = { ...napoleonic.formations.march, place: (g: typeof geometry) => Array.from({ length: g.companies }, (_, c) => ({ x: (g.ranks - 1) * g.rankSpacing / 2, z: -c * (g.files * g.fileSpacing + 1), rot: -Math.PI / 2, face: 0 })) }
+    const wide = (g: typeof geometry) => Array.from({ length: g.companies }, (_, c) => ({ x: (c - (g.companies - 1) / 2) * 7, z: 0, rot: 0, face: 0 }))
+    const rs8: Ruleset = { ...napoleonic, geometry, formations: { line: { ...napoleonic.formations.line, place: wide }, march: march8 } }
+    expect(() => new Sim(1, rs8)).toThrow(/trail does not fit/)
+    const rs11: Ruleset = { ...napoleonic, geometry: { ...napoleonic.geometry, companies: 11 }, formations: { line: { ...napoleonic.formations.line, place: wide } } }
+    expect(() => new Sim(1, rs11)).toThrow(/bins/)
   })
 })
 

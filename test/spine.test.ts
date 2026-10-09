@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { makeWorld, issue, advanceTick, makeHandle, KIND_FORMATION, formationSlot, makePool, allocNode, freeNode, freeList,
+import { makeWorld, issue, advanceTick, makeHandle, KIND_FORMATION, formationSlot,
   serialize, deserialize, hashWorld, play, record, loadSimData, compileRuleset, DataVersionMismatch, NonFiniteState, M_TICK, hex, MAX_POINTS,
   type Ruleset, type Command } from '../src/sim/index.ts'
 import { s1aDrill, s1aOrders } from '../src/scenarios/s1a-drill.ts'
@@ -63,7 +63,7 @@ describe('S1a acceptance: golden hashes, replays, saves', () => {
     issue(w, { type: 'halt', id: makeHandle(KIND_FORMATION, 0, 0) })
     const base = hashWorld(w), missed: string[] = []
     const arrays = (o: object, p: string): string[] => Object.entries(o).flatMap(([k, v]) =>
-      ArrayBuffer.isView(v) ? [p + k] : v && typeof v === 'object' && !Array.isArray(v) && !['data', 'cr', 'terrain'].includes(k) ? arrays(v, p + k + '.') : [])
+      ArrayBuffer.isView(v) ? [p + k] : v && typeof v === 'object' && !Array.isArray(v) && !['data', 'cr', 'terrain', 'scratch'].includes(k) ? arrays(v, p + k + '.') : [])
     const names = arrays(w, '')
     for (const name of names) {
       const c = deserialize(serialize(w), data, cr), arr = name.split('.').reduce((o: Record<string, unknown>, k) => o[k] as Record<string, unknown>, c as unknown as Record<string, unknown>) as unknown as Int32Array
@@ -130,11 +130,13 @@ describe('commands and handles', () => {
     s.w.f.x[s.slot(h)] = NaN
     expect(() => s.tick()).toThrow(NonFiniteState)
   })
-  it('the pool free list round-trips', () => {
-    const p = makePool(4), a = [0, 1, 2, 3].map(k => allocNode(p, k, k))
-    expect(a).toEqual([0, 1, 2, 3]); expect(allocNode(p, 0, 0)).toBe(-1)
-    freeNode(p, 1); expect(allocNode(p, 9, 9)).toBe(1)
-    p.next[0] = 1; p.next[1] = 2; p.next[2] = -1; freeList(p, 0); expect(p.meta[1]).toBe(1)
+  it('a malformed move is dropped, not thrown, and the sequence stays in step', () => {
+    const w = makeWorld(data, cr, 13); issue(w, { type: 'debug-spawn', side: 0, x: 0, z: 0, heading: 0, shape: 'line', men: 10 }); advanceTick(w)
+    const h = makeHandle(KIND_FORMATION, 0, 0)
+    const a = issue(w, { type: 'move', id: h, points: null, append: false } as unknown as Command)
+    const b = issue(w, { type: 'move', id: h, points: [[1, 'x']], append: false } as unknown as Command)
+    expect(b.seq).toBe(a.seq + 1)
+    expect(advanceTick(w).dropped.map(d => d.reason)).toEqual(['malformed waypoints', 'malformed waypoints'])
   })
 })
 
@@ -157,7 +159,8 @@ describe('era genericity (decision 0015)', () => {
     const hits: string[] = []
     for (const f of fs.readdirSync(dir)) {
       const text = fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')
-      for (const m of text.matchAll(/'([A-Za-z]+)'/g)) if (words.has(m[1])) hits.push(`${f}: '${m[1]}'`)
+      // every word inside every string literal ('…', "…", `…`), so an era name inside a message counts too
+      for (const m of text.matchAll(/(['"`])((?:\\.|(?!\1).)*)\1/g)) for (const word of m[2].split(/[^A-Za-z]+/)) if (words.has(word)) hits.push(`${f}: '${word}' in ${m[0].slice(0, 60)}`)
     }
     expect(hits).toEqual([])
   })
