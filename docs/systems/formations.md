@@ -33,7 +33,10 @@ is in `docs/plans/active/s1a-formations-on-spine.md`.
 - **Decision 0007:** the battalion is the unit. The sim keeps the **men per company**, never a soldier.
   Which slots are filled follows from the counts by one rule (`occupied`):
   - files from the centre outward, ranks front first;
-  - a shape that closes across companies (`closeAcross`, the line) fills each half toward the colours.
+  - a shape that closes across companies (`closeAcross`, the line) fills each half toward the colours;
+  - where files or the last rank cannot centre exactly they lean one way (`lean`), and Face about
+    reverses the lean when the shape's half-turn reverses the files, so complete files keep their places
+    at any strength.
 
   Who stands where, and who falls, is the renderer's (S1b).
 - **The spine's rules** (`docs/systems/sim-spine.md`): exact-ops maths, slot order, typed-array state.
@@ -61,6 +64,10 @@ The ruleset's hash is recorded in the world, the replays and the saves.
 - per kind, the impassable cells and each cell's distance to the nearest one.
 
 `groundG` is class × water × slope along the direction of travel.
+
+**Limits.** Checked when a world is made:
+- at most 32 bins per formation (`BINS = 3` per company), because the gate's masks are 32-bit;
+- a trail shape's trail, and the one Face about rebuilds, must fit the 256-point ring.
 
 **Places.** A man's place is his slot set back by his bin's lag:
 - **straight shapes:** along the heading;
@@ -92,7 +99,7 @@ How each behaves:
 - **Face about** relabels the companies by the shape's half-turn symmetry and keeps the lags (the anchor
   steps back by the largest lag), so every man in a complete file keeps his place; the fill rule closes
   the short files toward the new front. It is gated as a whole.
-- **Retire** is face, march, dress, face; the last two survive a halt.
+- **Retire** is face, march, dress, face; the last two survive a halt. Its march target is kept on the map.
 - **Trail shapes** turn only as they advance, on a radius that keeps the inside men apart; a target
   inside the turning circle ends that move; they do not wheel.
 
@@ -129,14 +136,16 @@ The ruleset (`src/rulesets/napoleonic.ts`). In `formation.ts`:
   - Face about and Retire, also cut short, and turns at the bank;
   - a strip narrower than Lmax;
   - ground impassable for one kind only (a test ruleset).
-- **Face about:** complete files keep their places in every shape and with a held file; refused when
-  closing a file would wet a man.
+- **Face about:** complete files keep their places in every shape, at 100, 97, 96 and 88 men, and with a
+  held file; refused when closing a file would wet a man.
 - **Trail shapes:** looping round to a target behind, the turning circle, no wheel.
 - **The accordion:** a held column, a 90° bend (within-company spacing too), a square in the wood.
 - **Passages:** the level bridge deck and the crossing, the ford, an empty bin in woods.
 - **Cost:** 40 battalions, under 2 ms per tick.
 
 Negative runs, each failing its tests:
+- the lean not flipping (uneven strengths);
+- the Retire target not kept on the map;
 - the gate off;
 - the change-path check off;
 - Face about dropping lags;

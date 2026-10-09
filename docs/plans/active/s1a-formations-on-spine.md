@@ -98,7 +98,7 @@ These fill the S0 tick slots:
 - 6 movement: the lag model, the accordion, the gate and halts;
 - 11 casualties: company counts and the fill rule.
 
-S0's stand-in fight stays, in a test scenario only.
+S0's stand-in fight is removed: the S1a drill scenario replaces the S0 one as the spine's golden run.
 
 ## Acceptance
 
@@ -127,7 +127,7 @@ S0's stand-in fight stays, in a test scenario only.
 
 ## Results
 
-- `npm test`: lint, typecheck, 50 Vitest tests pass (dev Mac, Node 22.22). Golden: the S1a drill's 300
+- `npm test`: lint, typecheck, 53 Vitest tests pass (dev Mac, Node 22.22). Golden: the S1a drill's 300
   hashes, data `0x6ae782ed` (format 2).
 - **Ported checks** (`test/formations.test.ts`): every formation-level check of the prototype passes
   against the sim's places. The thicket table matches the prototype's but one cell (keep 3/12: 7.4 s,
@@ -150,4 +150,28 @@ S0's stand-in fight stays, in a test scenario only.
   `formation.ts` reading `TRAIL` before `world.ts` set it (zero-length trail buffers, NaN places). Lint now
   requires `import type` for type-only imports.
 - **Known and recorded:** casualty re-packing is not gated (`docs/known-issues.md`; S1c).
+
+## Review round 1
+
+10 findings, none severe → stop (fix what is worth fixing).
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | moderate | The fill rule's centring was not mirror-symmetric: Face about shifted whole files at 97, 96, 88 men | A per-formation `lean`, reversed by Face about when the half-turn reverses the files; tested at four strengths |
+| 2 | moderate | Retire's target was not checked against the map | The resolved target is kept on the map; test from near the edge |
+| 3 | moderate | A full trail ring kept the dropped segment in its length; capacity unchecked | The segment is subtracted; worlds refuse rulesets whose trails cannot fit (so the full branch is defensive); length test |
+| 4 | moderate | Bin masks are 32-bit and scratch arrays fixed; the 3 bins per company was a literal | `BINS` and `MAX_BINS` named; compile refuses more than 32 bins; tested |
+| 5 | moderate | The arc cache was shared by every world, keyed without the world | Per-world scratch buffers; the trail version keeps counting across reaping |
+| 6 | light | Status texts named a formation; the era test only saw whole one-word strings | Era-neutral texts; the test reads every word of every string literal |
+| 7 | light | A malformed move threw from `issue` | Dropped with "malformed waypoints"; the sequence stays in step |
+| 8 | light | `pool.ts` duplicated the order pool and was unused | Removed |
+| 9 | light | The plan promised the S0 stand-in scenario | The plan now says it is replaced by the drill |
+| 10 | light | A module-level context kept the last world alive; places recomputed per bin | Per-world scratch; company poses once per company |
+
+**Negative runs after round 1** (each fails its test):
+- the lean not flipping;
+- Retire not clamped;
+- malformed waypoints not caught.
+
+The full-ring segment is not reachable while worlds refuse oversize trails.
 

@@ -60,12 +60,15 @@ advanceTick: 1 commands · 5–6 formations · 14 reap · tick++ · 15 hash (eve
   their versions are.
 - **Handles** (`handle.ts`): `kind:3 | index:9 | gen:19`, non-negative. Reaping a formation moves its
   generation on, so old handles go stale (`formationSlot` returns −1).
-- **Pools**: typed arrays with a free list in index order. The order pool (`world.ts`, `formation.ts`) holds
-  every formation's order list; `pool.ts` is the generic one.
+- **Pools**: typed arrays with a free list in index order: the order pool (`world.ts`, `formation.ts`)
+  holds every formation's order list.
+- **Scratch** (`world.scratch`): per-world working buffers (places, the trail arc cache), never state and
+  never shared between worlds.
 - **Commands** (`commands.ts`):
   - `move` (waypoints, replace or append), `form` (a shape by name), `wheel` (an angle), `face`, `retire`
     (metres), `halt`, `style` (an order preset by name);
-  - `debug-spawn`, `debug-kill` (men drawn by company with the sim RNG).
+  - `debug-spawn`, `debug-kill` (men drawn by company with the sim RNG). Malformed waypoints are dropped,
+    not thrown.
 
   `issue` stamps `tick + 1` and a sequence number, and quantises positions to 1 cm and angles to 0.1 mrad.
   `applyCommands` validates at the start of that tick and drops an invalid command with a reason
