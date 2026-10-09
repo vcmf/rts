@@ -8,8 +8,11 @@ const banned = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'sinh', 'c
 export default tseslint.config(
   { ignores: ['node_modules/', 'data/', 'prototypes/', 'tools/*.js', 'tools/*.mjs', 'tools/*.py', 'eslint.config.js'] },
   ...tseslint.configs.recommended,
+  // a type-only import written `import { type X }` still loads its module and can create an import cycle
+  // (it once left formation.ts reading TRAIL before world.ts had set it): type-only imports are `import type`
+  { files: ['**/*.ts'], rules: { '@typescript-eslint/no-import-type-side-effects': 'error', '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'separate-type-imports' }] } },
   {
-    files: ['src/sim/**/*.ts'],
+    files: ['src/sim/**/*.ts', 'src/rulesets/**/*.ts'],
     rules: {
       'no-restricted-properties': ['error',
         ...banned.map(property => ({ object: 'Math', property, message: 'Not exact across JS engines: use src/sim/num.ts (decision 0006).' })),
@@ -42,4 +45,7 @@ export default tseslint.config(
         { regex: '^(?!\\./)', message: 'src/sim/ imports only from src/sim/ (decision 0005).' }] }],
     },
   },
+  // a ruleset is data for the sim: the same rules, and it may import the sim's types and maths
+  { files: ['src/rulesets/**/*.ts'], rules: { 'no-restricted-imports': ['error', { patterns: [
+    { regex: '^(?!\\.\\./sim/[\\w-]+\\.ts$|\\./)', message: 'A ruleset imports only from src/sim/ and src/rulesets/.' }] }] } },
 )
