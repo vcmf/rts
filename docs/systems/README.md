@@ -16,4 +16,5 @@ PR that changes it; the design that led to it stays in `docs/proposals/` and the
 | Terrain, bakes, camera | not yet: see `docs/proposals/engine-design.md` | prototype, to be documented at E0-lite |
 | Painterly shading, vegetation, seasons | not yet: see `docs/art-bible.md` | prototype |
 | Staff map | not yet: see `docs/proposals/staff-map/design.md` | feel prototype |
-| Simulation, formations, combat | not yet: see `docs/proposals/sim-design.md` | not built |
+| Simulation spine (S0) | `docs/systems/sim-spine.md` | built (S0) |
+| Formations, combat | not yet: see `docs/proposals/sim-design.md` | prototype (`prototypes/formation-core.js`) |

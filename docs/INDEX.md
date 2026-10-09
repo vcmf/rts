@@ -28,6 +28,7 @@ designs written before building (frozen once built, their lasting content moves 
 ## Systems (built, current behaviour)
 
 - [`systems/river.md`](systems/river.md): the lowland meander river (W1, W1b).
+- [`systems/sim-spine.md`](systems/sim-spine.md): the simulation spine: tick, commands, state, hashing, saves, replays (S0).
 - More appear as systems are built; see [`systems/README.md`](systems/README.md).
 
 ## Proposals (designs before building)
@@ -41,7 +42,8 @@ designs written before building (frozen once built, their lasting content moves 
 ## Plans
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
-  [`plans/active/staff-map.md`](plans/active/staff-map.md).
+  [`plans/active/staff-map.md`](plans/active/staff-map.md),
+  [`plans/active/s0-sim-spine.md`](plans/active/s0-sim-spine.md) (S0).
 - Done: [`plans/done/w1-river-shape.md`](plans/done/w1-river-shape.md), [`plans/done/w1b-river-width.md`](plans/done/w1b-river-width.md), [`plans/done/docs-restructure.md`](plans/done/docs-restructure.md), [`plans/done/formation-feel.md`](plans/done/formation-feel.md), [`plans/done/terrain-movement.md`](plans/done/terrain-movement.md) (F1, #9).
 
 ## Research (background)

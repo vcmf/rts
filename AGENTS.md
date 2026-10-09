@@ -4,7 +4,8 @@ A browser real-time strategy game about Napoleonic battles, rendered as a painte
 look of *Puss in Boots: The Last Wish*, seen from a top-down RTS camera). The same rendering also
 serves cinematic history videos.
 
-Status: **prototyping**. No game code yet; prototypes are single HTML files in `prototypes/`.
+Status: **prototyping, engine starting**. Prototypes are single HTML files in `prototypes/`; game code
+is TypeScript in `src/` (so far the simulation spine, `src/sim/`, `docs/systems/sim-spine.md`).
 
 ## Where things are
 
@@ -26,6 +27,8 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
 
 ## Commands
 
+- Game code: `npm install`, then `npm test` (lint, typecheck, Vitest; Node ≥ 22.18). Sim data:
+  `node tools/build-sim-data.ts` (`--check` compares with the committed file).
 - Open a prototype: `prototypes/painted-cinematic.html` in Chrome (works from `file://`).
 - Headless screenshots and checks: `node tools/shot.mjs <page> <outDir> [w] [h] '<steps JSON>'`;
   river and render checks: see the headers of `tools/river-check.js` and `tools/render-check.js`.

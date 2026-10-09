@@ -60,14 +60,14 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 
 | Part | What it does | Owner doc | Phase | Status |
 |---|---|---|---|---|
-| Tick loop and command pipeline | Fixed 20 Hz tick; every change enters as a tick-stamped command | `docs/architecture.md` §4 | S0 | ⬜ |
-| Deterministic maths | Restricted float64, own trig, lint against banned functions, build-time input data | `docs/proposals/sim-design.md` §2 | S0 | ⬜ |
-| Split RNG | Seeded sim RNG; separate cosmetic RNG for the renderer | `docs/architecture.md` | S0 | ⬜ |
-| Entity storage | Typed arrays, generational handles | `docs/architecture.md` §3 | S0 | ⬜ |
-| Serialization and state hash | One serializer for saves, hashes and debug dumps | new: `docs/proposals/sim-design.md` | S0 | ⬜ |
-| Replay | A command log replayed through the same pipeline | `docs/proposals/sim-design.md` | S0 | ⬜ |
-| Headless runner | The sim in Node and in a worker, no renderer, for tests and AI soak runs | `docs/proposals/sim-design.md` | S0 | ⬜ |
-| Metering | Always-on per-system tick time against the 50 ms budget | `docs/proposals/sim-design.md` | S0 | ⬜ |
+| Tick loop and command pipeline | Fixed 20 Hz tick; every change enters as a tick-stamped command | `docs/systems/sim-spine.md` | S0 | ✅ (S0) |
+| Deterministic maths | Restricted float64, own trig, lint against banned functions, build-time input data | `docs/systems/sim-spine.md` | S0 | ✅ (S0) |
+| Split RNG | Seeded sim RNG; separate cosmetic RNG for the renderer | `docs/architecture.md` | S0 | 🟡 (sim RNG) |
+| Entity storage | Typed arrays, generational handles | `docs/systems/sim-spine.md` | S0 | ✅ (S0) |
+| Serialization and state hash | One serializer for saves, hashes and debug dumps | `docs/systems/sim-spine.md` | S0 | ✅ (S0) |
+| Replay | A command log replayed through the same pipeline | `docs/systems/sim-spine.md` | S0 | ✅ (Node; browsers S2) |
+| Headless runner | The sim in Node and in a worker, no renderer, for tests and AI soak runs | `docs/systems/sim-spine.md` | S0 | 🟡 (Node; worker S2) |
+| Metering | Always-on per-system tick time against the 50 ms budget | `docs/systems/sim-spine.md` | S0 | 🟡 (per-step hook; no display) |
 
 ### Simulation
 
