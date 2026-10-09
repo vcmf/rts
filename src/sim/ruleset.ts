@@ -87,11 +87,15 @@ export interface Compiled {
   slope: Float64Array        // 401 entries over rise/run −1..1
   depthByKind: Float64Array  // fire: the target's depth factor, by kind
   sightByClass: Float64Array // fire: metres of each terrain class a sight line may cross (Infinity: any)
+  cosArc: number             // fire: cos of the arc's half-angle
+  stateFactor: Float64Array  // fire: by morale state (steady, shaken, wavering; a router does not fire)
   recentDecay: number        // morale: recent losses' factor per tick
   relax: number              // morale: the share of the gap to its target closed per tick
 }
 
 // each company is split in this many lateral bins (the lag model's sample points)
+// the morale states that fire, in MS_* order (world.ts)
+export const FIRING_STATES = ['steady', 'shaken', 'wavering']
 export const BINS = 3
 export const MAX_BINS = 32   // bins per formation: bit masks are 32-bit
 
@@ -123,11 +127,11 @@ export function compileRuleset(rs: Ruleset): Compiled {
   for (let i = 0; i <= 400; i++) { const sl = i / 200 - 1, a = sl + 0.05 < 0 ? -(sl + 0.05) : sl + 0.05; slope[i] = Math.min(1, rs.slopeK * expNeg(3.5 * (a - 0.05))) }
   const depthByKind = new Float64Array(kinds.map(k => rs.fire.depth[k] ?? 1))
   const sightByClass = new Float64Array(Object.keys(rs.terrain).map(c => rs.fire.sight[c] ?? Infinity))
-  for (const s of ['steady', 'shaken', 'wavering']) if (!(s in rs.fire.state)) throw new Error(`ruleset ${rs.name}: fire.state has no ${s}`)
+  for (const s of FIRING_STATES) if (!(s in rs.fire.state)) throw new Error(`ruleset ${rs.name}: fire.state has no ${s}`)
   if (rs.fire.pRange.some((p, k) => k > 0 && p[0] <= rs.fire.pRange[k - 1][0])) throw new Error(`ruleset ${rs.name}: fire.pRange ranges must increase`)
   return {
     rs, hash: rulesetHash(rs), geo: g, NB, slots: C * R * F, shapes, kinds, paces, paceSpeed, presets, changeTime, qMax, slope,
-    depthByKind, sightByClass, recentDecay: exp(-DT / rs.morale.recentTime), relax: 1 - exp(-DT / rs.morale.relaxTime),
+    depthByKind, sightByClass, cosArc: cos(rs.fire.arc), stateFactor: new Float64Array(FIRING_STATES.map(s => rs.fire.state[s])), recentDecay: exp(-DT / rs.morale.recentTime), relax: 1 - exp(-DT / rs.morale.relaxTime),
     shapeIndex: n => names.indexOf(n), presetIndex: n => presets.indexOf(n),
   }
 }

@@ -256,4 +256,20 @@ Built as planned, described in `docs/systems/fire-morale.md`. Measured on the de
   slot, so a respawn in reverse order changes the keys; reversing the loop tests the claim directly.
 - **The calibration takes about 1.5 minutes on 9 workers,** not "about a minute".
 
+**Review round 1 (#15).** Three severe findings and seven others, all fixed:
+- **A `node_modules` symlink was committed.** `.gitignore` now matches files as well as folders.
+- **A router whose Face about failed lost its run order and stood forever.** It now keeps the run; a
+  test checks it, and fails on the old code.
+- **The S1b drill and bench fought** (14 bench battalions routing by minute 5). `debug-spawn` takes a
+  fire mode; the S1a drill and both S1b scenarios spawn holding fire.
+- **`aimAt` tries each company in arc, nearest first,** not only the nearest.
+- **Less work per tick:**
+  - the geometry is built only when some battalion may fire;
+  - the target found while retargeting is reused for the volley;
+  - the arc cosine and state factors are compiled.
+- **One handle check** (`formationSlot`, now in `world.ts`).
+- **The reverse-order switch is per world,** not a module flag.
+- **The firefight golden is recorded inside its test.**
+- **The morale bar sits past the shape's depth.**
+
 **Left for S1c-2 and S1c-3:** as in the split above.

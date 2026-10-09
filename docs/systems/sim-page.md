@@ -89,7 +89,8 @@ data is a darker margin.
 - The panel is built from the ruleset (shapes, order presets).
 
 **Scenarios** (`src/scenarios/page.ts`): `s1c-firefight` (the default, `docs/systems/fire-morale.md`),
-`s1b-field` (three battalions a side) and `s1b-bench` (40 battalions), chosen by `?scenario=`. Fire shows
+`s1b-field` (three battalions a side, holding fire until ordered) and `s1b-bench` (40 battalions, holding
+fire), chosen by `?scenario=`. Fire shows
 as a flash at a company's front with a fading line to its target; morale as a bar behind each battalion,
 named unless steady. Fire at will and Hold fire are panel orders. The page loads the data only at `FIELD_DATA_VERSION`.
 

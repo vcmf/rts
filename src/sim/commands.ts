@@ -3,9 +3,9 @@
 // start of that tick after validating it; an invalid command is dropped with a reason and changes nothing.
 // Only external commands (player, scripts) go into the replay log. Shapes and order presets are named by
 // the ruleset (decision 0015).
-import { type Handle, KIND_FORMATION, handleKind, handleIndex, handleGen, makeHandle } from './handle.ts'
+import type { Handle } from './handle.ts'
 import { quantise, PI } from './num.ts'
-import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MS_ROUTING } from './world.ts'
+import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MS_ROUTING, FIRE_AT_WILL, formationSlot } from './world.ts'
 import { spawnFire } from './fire.ts'
 import { spawnMorale } from './morale.ts'
 import { allocOrder, appendOrder, clearOrders, ordersFree, rebalance, resetTrail } from './formation.ts'
@@ -20,7 +20,7 @@ export type Command =
   | { type: 'retire'; id: Handle; metres: number }
   | { type: 'halt'; id: Handle }
   | { type: 'style'; id: Handle; preset: string }
-  | { type: 'debug-spawn'; side: number; x: number; z: number; heading: number; shape: string; men: number; quality?: number }
+  | { type: 'debug-spawn'; side: number; x: number; z: number; heading: number; shape: string; men: number; quality?: number; fire?: string }
   | { type: 'fire'; id: Handle; mode: string; target?: Handle }
   | { type: 'side'; side: number; x: number; z: number }
   | { type: 'debug-kill'; id: Handle; men: number }
@@ -52,7 +52,7 @@ function quantiseCommand(c: Command): Command {
     case 'retire': return { type: 'retire', id: c.id | 0, metres: quantise(c.metres) }
     case 'halt': return { type: 'halt', id: c.id | 0 }
     case 'style': return { type: 'style', id: c.id | 0, preset: String(c.preset) }
-    case 'debug-spawn': return { type: 'debug-spawn', side: c.side | 0, x: quantise(c.x), z: quantise(c.z), heading: qa(c.heading), shape: String(c.shape), men: c.men | 0, quality: c.quality === undefined ? -1 : qa(c.quality) }
+    case 'debug-spawn': return { type: 'debug-spawn', side: c.side | 0, x: quantise(c.x), z: quantise(c.z), heading: qa(c.heading), shape: String(c.shape), men: c.men | 0, quality: c.quality === undefined ? -1 : qa(c.quality), fire: c.fire === undefined ? FIRE_MODES[FIRE_AT_WILL] : String(c.fire) }
     case 'fire': return { type: 'fire', id: c.id | 0, mode: String(c.mode), target: (c.target ?? 0) | 0 }
     case 'side': return { type: 'side', side: c.side | 0, x: qa(c.x), z: qa(c.z) }
     case 'debug-kill': return { type: 'debug-kill', id: c.id | 0, men: c.men | 0 }
@@ -66,13 +66,6 @@ function wellFormed(p: unknown): p is [number, number][] {
   return Array.isArray(p) && p.every(q => Array.isArray(q) && q.length === 2 && typeof q[0] === 'number' && typeof q[1] === 'number')
 }
 
-// the slot of a live formation handle, or −1
-export function formationSlot(w: World, h: Handle): number {
-  if (h < 0 || handleKind(h) !== KIND_FORMATION) return -1
-  const i = handleIndex(h)
-  return i < w.f.alive.length && w.f.alive[i] && w.f.gen[i] === handleGen(h) ? i : -1
-}
-export const formationHandle = (w: World, i: number): Handle => makeHandle(KIND_FORMATION, i, w.f.gen[i])
 
 const inside = (w: World, x: number, z: number): boolean => {
   const t = w.terrain, e = (t.n - 1) * t.cell
@@ -113,13 +106,14 @@ function apply(w: World, c: Command): string {
     if (Math.abs(c.heading) > 4 * PI) return 'heading out of range'
     const q = c.quality === undefined || c.quality < 0 ? cr.rs.morale.quality : c.quality
     if (!finite(q) || q > 1) return 'no such quality'
+    const mode = FIRE_MODES.indexOf(c.fire ?? FIRE_MODES[FIRE_AT_WILL]); if (mode < 0) return 'no such fire mode'
     if (w.meta[M_FREE] === 0) return 'no free formation slot'
     const i = w.free[--w.meta[M_FREE]], C = cr.geo.companies
     f.alive[i] = 1; f.side[i] = c.side; f.shape[i] = shape; f.style[i] = cr.presetIndex(cr.rs.start.orders); f.drill[i] = 1
     f.x[i] = c.x; f.z[i] = c.z; f.heading[i] = c.heading; f.px[i] = c.x; f.pz[i] = c.z; f.ph[i] = c.heading
     f.men[i * C] = c.men; rebalance(w, i)
     resetTrail(w, i)
-    spawnFire(w, i); spawnMorale(w, i, q)
+    spawnFire(w, i); spawnMorale(w, i, q); f.fireMode[i] = mode
     return ''
   }
   if (c.type === 'side') {   // the direction of a side's rear, where its routers run

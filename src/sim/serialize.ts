@@ -64,7 +64,7 @@ const readArr = (r: Reader, a: Arr) => {
 // counts as int32, strings with their length, points with their count
 const FIELDS: Record<string, string[]> = {
   move: ['id:i', 'append:b', 'points:p'], form: ['id:i', 'shape:s'], wheel: ['id:i', 'angle:f'], face: ['id:i'], retire: ['id:i', 'metres:f'],
-  halt: ['id:i'], style: ['id:i', 'preset:s'], 'debug-spawn': ['side:i', 'x:f', 'z:f', 'heading:f', 'shape:s', 'men:i', 'quality:f'], 'debug-kill': ['id:i', 'men:i'], 'debug-morale': ['id:i', 'quality:f'],
+  halt: ['id:i'], style: ['id:i', 'preset:s'], 'debug-spawn': ['side:i', 'x:f', 'z:f', 'heading:f', 'shape:s', 'men:i', 'quality:f', 'fire:s'], 'debug-kill': ['id:i', 'men:i'], 'debug-morale': ['id:i', 'quality:f'],
   fire: ['id:i', 'mode:s', 'target:i'], side: ['side:i', 'x:f', 'z:f'],
 }
 function writeCommand(w: Writer, s: Stamped) {

@@ -5,7 +5,7 @@ import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { data, cr, root } from './fx.ts'
 import { makeWorld, issue, advanceTick, compileRuleset, buildTerrain, makeHandle, KIND_FORMATION, M_FREE, M_TICK, MS_ROUTING, MS_STEADY, MS_SHAKEN, MS_WAVERING,
-  menOf, aimOf, reverseFireOrder, hashWorld, hex, serialize, deserialize, record, play, type World, type Command, type Ruleset, type Dropped } from '../src/sim/index.ts'
+  menOf, aimOf, hashWorld, wetBins, STATUS, O_MOVE, hex, serialize, deserialize, record, play, type World, type Command, type Ruleset, type Dropped } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { levelled, runFirefight, s1cFirefight, FIGHT_X, FIGHT_Z } from '../src/scenarios/s1c-firefight.ts'
 
@@ -113,6 +113,24 @@ describe('morale', () => {
     expect(Math.max(...[0, 1, 2, 3].map(c => s.w.f.volleyTick[s.i(h) * 4 + c]))).toBeLessThanOrEqual(t0)
     expect(s.w.f.z[s.i(h)]).toBeLessThan(-170)   // the southern edge is at −180, the order kept 2 m inside
   })
+  it('a router whose Face about fails (water behind it) keeps its run: the failed turn does not drop it', () => {
+    // the S1a case (test/formations.test.ts): a 93-man line facing west by the stream cannot face about
+    let found = false
+    for (let x = 40; x < 75 && !found; x += 0.25) {
+      const s = new W({ real: true }), h = s.spawn(0, x, -30, -Math.PI / 2, { men: 93 })
+      if (wetBins(s.w, s.i(h))) continue
+      s.do({ type: 'face', id: h })
+      if (STATUS[s.w.f.status[s.i(h)]] !== 'cannot face about: impassable ground') continue
+      found = true
+      s.do({ type: 'side', side: 0, x: 1, z: 1 }); s.do({ type: 'debug-morale', id: h, quality: 0.1 })
+      for (let n = 0; n < 1200 && s.state(h) !== MS_ROUTING; n++) s.tick()   // morale relaxes to the rout (about 15 s)
+      s.run(2)   // the Face about is tried and fails
+      expect(s.state(h)).toBe(MS_ROUTING)
+      expect(STATUS[s.w.f.status[s.i(h)]]).toBe('cannot face about: impassable ground')
+      const n = s.w.f.ordHead[s.i(h)]; expect(n >= 0 && s.w.ord.type[n] === O_MOVE).toBe(true)   // the run is still its order
+    }
+    expect(found).toBe(true)
+  })
   it('the opening volleys at 50 m do not break a fresh line in its first minute', () => {
     for (let seed = 1; seed <= 5; seed++) { const [s, a, b] = pair(50, { seed }); s.run(60); expect([s.state(a) !== MS_ROUTING, s.state(b) !== MS_ROUTING]).toEqual([true, true]) }
   })
@@ -120,12 +138,12 @@ describe('morale', () => {
 
 describe('determinism', () => {
   it('the order the fire step visits battalions in does not change the result (keyed draws)', () => {
-    const go = (rev: boolean) => { reverseFireOrder(rev); try { const [s] = pair(80, { seed: 3 }); s.spawn(0, FIGHT_X - 60, Z + 40, E); s.spawn(1, FIGHT_X + 40, Z + 40, -E); s.run(300); return hex(hashWorld(s.w)) } finally { reverseFireOrder(false) } }
+    const go = (rev: boolean) => { const [s] = pair(80, { seed: 3 }); s.w.scratch.reverseFire = rev; s.spawn(0, FIGHT_X - 60, Z + 40, E); s.spawn(1, FIGHT_X + 40, Z + 40, -E); s.run(300); return hex(hashWorld(s.w)) }
     expect(go(true)).toBe(go(false))
   })
   const goldenFile = path.join(root, 'test', 'golden', 's1c-firefight.json'), TICKS = 12000
-  const run = record(data, cr, s1cFirefight, 5, TICKS, () => {})
   it('the firefight gives the committed golden hashes; its replay and a save round trip reproduce them', () => {
+    const run = record(data, cr, s1cFirefight, 5, TICKS, () => {})
     const hashes = run.hashes.map(h => [h.tick, hex(h.hash)])
     if (process.env.UPDATE_GOLDEN) fs.writeFileSync(goldenFile, JSON.stringify({ dataVersion: hex(data.version), ruleset: hex(cr.hash), ticks: TICKS, hashes }) + '\n')
     const golden = JSON.parse(fs.readFileSync(goldenFile, 'utf8'))

@@ -61,7 +61,8 @@ rotation.
   no more of a class than `fire.sight` allows (woods 40 m, dense wood 15 m);
 - re-chosen every 0.5 s, staggered by slot (all at once cost 2.3 ms on one tick), stored as a handle.
 
-**Volley:** a loaded company fires at the target's nearest company in its arc.
+**Volley:** a loaded company fires at the target's nearest company in its arc with a clear sight line.
+The companies are tried nearest first, so one hidden in a wood does not hide the rest.
 - **Rounds** = men in the firing ranks × the share of its three rays (both front ends and the centre)
   that no friendly block crosses × (1 − misfire). Its own battalion's other companies count as friends,
   so a column's rear companies do not fire.
@@ -94,14 +95,16 @@ recentLosses = recentLosses · exp(−DT / recentTime) + lost this tick
 
 **Routing:**
 - the battalion drops its orders, refuses every command except the debug ones, and does not fire;
-- it Faces about if its shape allows and its rear is behind it;
+- it Faces about if its shape allows and its rear is behind it. If the turn fails (water behind it), it
+  runs as it stands: the failed turn does not drop the run;
 - it runs at `routPace` times its pace toward its side's rear (the `side` command; straight back if
   none);
 - the run is kept 2 m inside the map; it stops at impassable ground (no pathfinding).
 
 A router does not rally yet.
 
-**Quality** comes from `debug-spawn`'s `quality` or the ruleset default. `debug-morale` sets it, for
+**Quality** comes from `debug-spawn`'s `quality` or the ruleset default; the spawn's `fire` sets the
+starting fire mode (the S1a drill and the S1b scenarios spawn holding fire). `debug-morale` sets it, for
 scripted tests.
 
 ## Tunables
@@ -125,8 +128,9 @@ scripted tests.
     - the hysteresis sequence;
     - a router refuses orders, does not fire and runs to the map edge;
     - no break in the first minute at 50 m.
+    - **A router whose Face about fails keeps its run order.**
   - **Determinism:**
-    - the fire step in reversed visiting order gives the same hash;
+    - the fire step in reversed visiting order gives the same hash (a per-world test switch);
     - the firefight golden, with its replay and save round trip;
     - a five-seed calibration golden.
 - **`test/soldiers.test.ts`:** 40 battalions firing, per-frame cost and per-tick fire cost.

@@ -9,6 +9,7 @@ import type { Stamped } from './commands.ts'
 import type { Compiled } from './ruleset.ts'
 import type { Terrain } from './terrain.ts'
 import { buildTerrain } from './terrain.ts'
+import { type Handle, KIND_FORMATION, handleKind, handleIndex, handleGen, makeHandle } from './handle.ts'
 import type { Places, Arc } from './formation.ts'
 import type { FireGeo } from './fire.ts'
 
@@ -72,7 +73,7 @@ export interface World {
   pending: Stamped[]
   data: SimData; cr: Compiled; terrain: Terrain
   debug: boolean
-  scratch: { places?: Places; arc?: Arc; fireGeo?: FireGeo }   // per-world working buffers, not state
+  scratch: { places?: Places; arc?: Arc; fireGeo?: FireGeo; reverseFire?: boolean }   // reverseFire: a test visits battalions in reverse   // per-world working buffers, not state
 }
 
 export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {
@@ -110,3 +111,11 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
 }
 
 export const tickOf = (w: World): number => w.meta[M_TICK]
+
+// the slot of a live formation handle, or −1 (0 and negative values are never handles: the kind tag is 1)
+export function formationSlot(w: World, h: Handle): number {
+  if (h <= 0 || handleKind(h) !== KIND_FORMATION) return -1
+  const i = handleIndex(h)
+  return i < w.f.alive.length && w.f.alive[i] && w.f.gen[i] === handleGen(h) ? i : -1
+}
+export const formationHandle = (w: World, i: number): Handle => makeHandle(KIND_FORMATION, i, w.f.gen[i])

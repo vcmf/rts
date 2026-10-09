@@ -555,7 +555,8 @@ function formationStep(w: World, i: number): void {
     if (lmax < 0.05 || t - o.t0[n] > w.cr.rs.dressTime) shiftOrder(w, i)
   } else if (type === O_FACE) {
     f.vx[i] = 0; f.vz[i] = 0
-    if (o.t0[n] < 0) { const why = faceAbout(w, i); if (why) { clearOrders(w, i); f.status[i] = why; return } o.t0[n] = t; f.blockedFor[i] = 0 }
+    // a router that cannot face about runs as it stands (its run must not be dropped with the failed turn)
+    if (o.t0[n] < 0) { const why = faceAbout(w, i); if (why) { if (f.mstate[i] === MS_ROUTING) shiftOrder(w, i); else clearOrders(w, i); f.status[i] = why; return } o.t0[n] = t; f.blockedFor[i] = 0 }
     if (t - o.t0[n] >= w.cr.rs.faceTime * f.drill[i]) shiftOrder(w, i)
   } else if (type === O_WHEEL) {
     if (snakes(w, i)) { shiftOrder(w, i); f.status[i] = ST_CANNOT_WHEEL; return }

@@ -3,8 +3,8 @@
 // loaded company of a halted battalion fires on it. A volley's hits are drawn from keyed streams and owed
 // to the target's companies in the shooter's arc and range; step 11 removes them. All of it reads the
 // positions after movement and the men at the start of the step, so no result depends on slot order.
-import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_DRESS, FIRE_AT_WILL, MS_ROUTING } from './world.ts'
-import { KIND_FORMATION, makeHandle, handleKind, handleIndex, handleGen, type Handle } from './handle.ts'
+import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_DRESS, FIRE_AT_WILL, MS_ROUTING, formationSlot as slotOf, formationHandle as handleOf } from './world.ts'
+import type { Handle } from './handle.ts'
 import { placeWorld, layoutOf, occupied } from './formation.ts'
 import { heightAt, cellK } from './terrain.ts'
 import { keyedStream, nextUnit } from './rng.ts'
@@ -22,11 +22,6 @@ export interface FireGeo { cx: Float64Array; cz: Float64Array; fx: Float64Array;
 const pose = { x: 0, z: 0, a: 0, face: 0 }
 const ks = new Uint32Array(4)
 
-const handleOf = (w: World, i: number): Handle => makeHandle(KIND_FORMATION, i, w.f.gen[i])
-const slotOf = (w: World, h: Handle): number => {
-  if (h <= 0 || handleKind(h) !== KIND_FORMATION) return -1
-  const i = handleIndex(h); return i < MAX_FORMATIONS && w.f.alive[i] && w.f.gen[i] === handleGen(h) ? i : -1
-}
 
 function geometry(w: World): FireGeo {
   const C = w.cr.geo.companies, n = MAX_FORMATIONS * C, s = w.scratch
@@ -53,8 +48,8 @@ export function pAt(w: World, d: number): number {
 }
 // company k sees point (x, z) inside its arc and range
 function inArc(w: World, G: FireGeo, k: number, x: number, z: number): boolean {
-  const dx = x - G.cx[k], dz = z - G.cz[k], d = sqrt(dx * dx + dz * dz), F = w.cr.rs.fire
-  return d <= F.maxRange && dx * G.fx[k] + dz * G.fz[k] >= d * cos(F.arc)
+  const dx = x - G.cx[k], dz = z - G.cz[k], d = sqrt(dx * dx + dz * dz)
+  return d <= w.cr.rs.fire.maxRange && dx * G.fx[k] + dz * G.fz[k] >= d * w.cr.cosArc
 }
 // the ground, and the woods, leave the sight line between two company centres clear
 const crossed = new Float64Array(64)
@@ -105,15 +100,19 @@ function distToSegment(px: number, pz: number, x0: number, z0: number, x1: numbe
   const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, u = l2 > 0 ? Math.max(0, Math.min(1, ((px - x0) * dx + (pz - z0) * dz) / l2)) : 0
   const ex = x0 + dx * u - px, ez = z0 + dz * u - pz; return sqrt(ex * ex + ez * ez)
 }
-// battalion j's nearest company in company k's arc and range with a clear sight line, or −1
+// battalion j's nearest company in company k's arc and range with a clear sight line, or −1: the companies
+// in arc are tried nearest first, so one hidden in a wood does not hide the rest
+const aimD = new Float64Array(64), aimM = new Int32Array(64)
 function aimAt(w: World, G: FireGeo, k: number, j: number): number {
-  const C = w.cr.geo.companies; let best = -1, bd = Infinity
+  const C = w.cr.geo.companies; let n = 0
   for (let q = 0; q < C; q++) {
     const m = j * C + q; if (w.f.men[m] <= 0 || !inArc(w, G, k, G.cx[m], G.cz[m])) continue
     const d = (G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k])
-    if (d < bd) { bd = d; best = m }
+    let p = n++; while (p > 0 && (aimD[p - 1] > d || (aimD[p - 1] === d && aimM[p - 1] > m))) { aimD[p] = aimD[p - 1]; aimM[p] = aimM[p - 1]; p-- }
+    aimD[p] = d; aimM[p] = m
   }
-  return best >= 0 && clearSight(w, G.cx[k], G.cz[k], G.cx[best], G.cz[best]) ? best : -1
+  for (let p = 0; p < n; p++) if (clearSight(w, G.cx[k], G.cz[k], G.cx[aimM[p]], G.cz[aimM[p]])) return aimM[p]
+  return -1
 }
 
 // a battalion may fire: halted (no order at its head but a dress), not changing shape, not routing, at will
@@ -129,27 +128,33 @@ function firingMen(w: World, i: number, c: number): number {
   return n
 }
 
-// the order the fire step visits battalions in: a test reverses it to show results do not depend on it
-let reversed = false
-export const reverseFireOrder = (on: boolean): void => { reversed = on }
-
 // step 8: targets every RETARGET_TICKS, then volleys; hits are owed, not yet removed
 export function fireStep(w: World): void {
   const f = w.f, C = w.cr.geo.companies, F = w.cr.rs.fire, tick = w.meta[M_TICK] + 1, seed = w.meta[M_SEED]
-  const G = geometry(w)
-  for (let n = 0; n < MAX_FORMATIONS; n++) {
-    const i = reversed ? MAX_FORMATIONS - 1 - n : n
+  // reloads run down whether or not anyone may fire; the geometry is built only when someone may
+  let any = false
+  for (let i = 0; i < MAX_FORMATIONS; i++) {
     if (!f.alive[i]) continue
-    const may = mayFire(w, i), h = handleOf(w, i)
+    for (let c = 0; c < C; c++) if (f.reload[i * C + c] > 0) f.reload[i * C + c] = Math.max(0, f.reload[i * C + c] - DT)
+    if (mayFire(w, i)) any = true; else for (let c = 0; c < C; c++) f.target[i * C + c] = 0
+  }
+  if (!any) return
+  const G = geometry(w), rev = w.scratch.reverseFire === true   // a test visits battalions in reverse: results must not change
+  for (let n = 0; n < MAX_FORMATIONS; n++) {
+    const i = rev ? MAX_FORMATIONS - 1 - n : n
+    if (!f.alive[i]) continue
+    if (!mayFire(w, i)) continue
+    const h = handleOf(w, i)
     for (let c = 0; c < C; c++) {
       const k = i * C + c
-      if (f.reload[k] > 0) f.reload[k] = Math.max(0, f.reload[k] - DT)
-      if (f.men[k] <= 0 || !may) { if (!may) f.target[k] = 0; continue }
-      if ((tick + i) % RETARGET_TICKS === 0) f.target[k] = chooseTarget(w, G, i, c)
+      if (f.men[k] <= 0) continue
+      let m = -2   // the company aimed at: −2 not yet looked for
+      if ((tick + i) % RETARGET_TICKS === 0) { f.target[k] = chooseTarget(w, G, i, c); m = chosenAim }
       const j = slotOf(w, f.target[k]); if (j < 0) { f.target[k] = 0; continue }
       if (f.reload[k] > 0) continue
       // a loaded company that cannot see its target, or has friends across every ray, tries again in 0.5 s
-      const m = aimAt(w, G, k, j); if (m < 0) { f.reload[k] = RETARGET_TICKS * DT; continue }
+      if (m === -2) m = aimAt(w, G, k, j)
+      if (m < 0) { f.reload[k] = RETARGET_TICKS * DT; continue }
       const share = clearShare(w, G, i, c, G.cx[m], G.cz[m]); if (share <= 0) { f.reload[k] = RETARGET_TICKS * DT; continue }
       const d = sqrt((G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k]))
       volley(w, G, i, c, j, d, share, keyedStream(ks, seed, tick, h, c, K_HITS))
@@ -159,10 +164,13 @@ export function fireStep(w: World): void {
   }
 }
 
-// the preferred target if it can be aimed at, else the current one, else the nearest; ties to the lower handle
+// the preferred target if it can be aimed at, else the current one, else the nearest; ties to the lower
+// handle. The company aimed at is left in chosenAim (−1 none) for the volley this tick.
+let chosenAim = -1
 function chooseTarget(w: World, G: FireGeo, i: number, c: number): Handle {
   const f = w.f, C = w.cr.geo.companies, k = i * C + c
-  for (const h of [f.prefer[i], f.target[k]]) { const j = slotOf(w, h); if (j >= 0 && f.side[j] !== f.side[i] && aimAt(w, G, k, j) >= 0) return h }
+  chosenAim = -1
+  for (const h of [f.prefer[i], f.target[k]]) { const j = slotOf(w, h); if (j >= 0 && f.side[j] !== f.side[i]) { const m = aimAt(w, G, k, j); if (m >= 0) { chosenAim = m; return h } } }
   // candidates by distance to their nearest company in arc and range, then the sight line, nearest first
   const cand: [number, number][] = []
   for (let j = 0; j < MAX_FORMATIONS; j++) {
@@ -172,7 +180,7 @@ function chooseTarget(w: World, G: FireGeo, i: number, c: number): Handle {
     if (bd < Infinity) cand.push([bd, handleOf(w, j)])
   }
   cand.sort((a, b) => a[0] - b[0] || a[1] - b[1])
-  for (const [, h] of cand) if (aimAt(w, G, k, slotOf(w, h)) >= 0) return h
+  for (const [, h] of cand) { const m = aimAt(w, G, k, slotOf(w, h)); if (m >= 0) { chosenAim = m; return h } }
   return 0
 }
 
@@ -181,8 +189,7 @@ function chooseTarget(w: World, G: FireGeo, i: number, c: number): Handle {
 function volley(w: World, G: FireGeo, i: number, c: number, j: number, d: number, share: number, rs: Uint32Array): void {
   const f = w.f, C = w.cr.geo.companies, F = w.cr.rs.fire, k = i * C + c
   const rounds = firingMen(w, i, c) * share * (1 - F.misfire)
-  const state = F.state[['steady', 'shaken', 'wavering'][Math.min(2, f.mstate[i])]]
-  const lambda = rounds * pAt(w, d) * state * (1 - F.cohesion * f.disorder[i]) * w.cr.depthByKind[layoutOf(w, j).kind]
+  const lambda = rounds * pAt(w, d) * w.cr.stateFactor[Math.min(2, f.mstate[i])] * (1 - F.cohesion * f.disorder[i]) * w.cr.depthByKind[layoutOf(w, j).kind]
   let hits = Math.floor(lambda); if (nextUnit(rs) < lambda - hits) hits++
   if (!hits) return
   let tot = 0; for (let q = 0; q < C; q++) { const m = j * C + q; if (f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m])) tot += f.men[m] }
