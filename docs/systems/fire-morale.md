@@ -71,7 +71,8 @@ The companies are tried nearest first, so one hidden in a wood does not hide the
   kind's depth factor.
 - The integer part of the expected hits is certain, and one keyed draw settles the fraction.
 - Each hit goes to a target company in the shooter's arc and range **that it can see**, weighted by its
-  men. Sight results are cached per company pair for the tick.
+  men. A sight line is walked once per company pair for each build of the geometry (the cache is stamped
+  with the build, and keyed low to high since a sight line is the same both ways).
 - **Reload:** about 25 s, ±20% keyed. At spawn each company is part-loaded, so a line opens with a
   ripple, not one crash. A loaded company that cannot see its target or is fully covered tries again
   in 0.5 s.
@@ -79,7 +80,8 @@ The companies are tried nearest first, so one hidden in a wood does not hide the
 The renderer reads each company's last volley tick and target (hashed state); there is no event ring
 yet (S2).
 
-**Casualties** (step 11). The owed men fall. A company owed more than it has passes the rest on.
+**Casualties** (step 11). The owed men fall. Hits owed beyond a company's men are lost: passing them on
+could strike a company the shooters cannot see.
 
 **Morale** (`morale.ts`), per battalion. It is loss-driven: being fired at moves nothing, and disorder
 moves nothing (a march through a wood pins disorder at 1 with no enemy in sight). Men falling move it.
@@ -95,15 +97,21 @@ recentLosses = recentLosses · exp(−DT / recentTime) + lost this tick
 - shaken and wavering, which fire worse;
 - routing, below `rout`.
 
-**Routing:**
-- the battalion drops its orders, refuses every command except the debug ones, and does not fire;
-- it Faces about if its shape allows and its run is behind it. If the turn fails (water behind it), it
-  runs as it stands: the failed turn does not drop the run;
-- when a run halts (impassable ground), it tries the next direction of a fan every 5 s: the rear, then
-  turned 60° each way, then 120° each way. After the fifth it stays: pinned;
-- it runs at `routPace` times its pace toward its side's rear (the `side` command; straight back if
-  none);
-- the run is kept 2 m inside the map; it stops at impassable ground (no pathfinding).
+**Routing.** The battalion drops its orders, refuses every command except the debug ones, and does not
+fire. Its rout is a small stored state, fixed at the break and never re-derived from the battalion as it
+is later:
+- **The direction** (`routX`, `routZ`): its side's rear (the `side` command), else straight back from its
+  heading at the break.
+- **The phase** (`routPhase`): running, halted or fled.
+  - Each run is a move at `routPace` times its pace, kept 2 m inside the map. It has a Face about first
+    when the shape allows and the way is behind it; if that turn fails (water behind it), the run goes
+    on as it stands.
+  - When its orders end, a router whose status says it halted at impassable ground is *halted*.
+    Otherwise it got where it was going, or as near as it could, and has *fled*: it stays.
+  - Only a halted router tries again: every 5 s, the next direction of a fan about the stored one (the
+    direction itself, then turned 60° each way, then 120°). After the fifth it stays, pinned.
+- **The run counter** advances only when the run's order was made, so a full order pool delays a run but
+  uses up no direction.
 
 A router does not rally yet.
 
@@ -132,8 +140,12 @@ scripted tests.
     - the hysteresis sequence;
     - a router refuses orders, does not fire and runs to the map edge;
     - no break in the first minute at 50 m.
-    - **Routers:** a router whose Face about fails keeps its run order; a router halted at the stream
-    runs another way (the fan).
+    - **Routers:**
+    - a router whose Face about fails keeps its run order;
+    - a router halted at the stream runs another way;
+    - one that arrives stays, fled;
+    - with no rear set, the fan turns about the stored direction;
+    - a full order pool uses up no direction.
   - **Partial sight:** companies of a target hidden in a wood take no hits; the rest are fired on.
   - **Determinism:**
     - the fire step in reversed visiting order gives the same hash (a per-world test switch);

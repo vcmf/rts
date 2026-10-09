@@ -288,4 +288,43 @@ Built as planned, described in `docs/systems/fire-morale.md`. Measured on the de
 - **Smaller:** buffer bounds noted, `MS_ROUTING` in the renderer, `aimOf` documented as a test hook,
   comments fixed.
 
+**Review round 3, and the redesign of the rout (2026-10-09).** Round 3 found two more severe defects, both
+in rout movement again:
+- a router that had arrived kept starting new runs;
+- with no rear set, later runs headed back toward the enemy.
+
+Every severe finding of the three rounds came from the same place: the run was re-derived each time from
+the battalion's current state (heading, order list, status). Under the workflow, a fourth round needs a
+redesign first. The user chose a stored rout state over cutting rout movement:
+- **Fixed at the break:** the run's direction, the side's rear or else straight back from the heading at
+  that moment (`routX`, `routZ`). Never recomputed.
+- **A phase** (`routPhase`): running, halted, fled.
+  - Running ends when the router has no orders. If its status says the run halted at impassable ground,
+    it is halted; otherwise (arrived, or as near as it can get) it has fled and stays.
+  - Only a halted router tries the next direction of the fan, every 5 s, measured from the stored
+    direction.
+- **The fan counter** advances only when an order was actually made, so a full order pool delays a run
+  but never uses up a direction.
+- **Tests:** a router that arrives stays put; with no rear set, every run points away from the front it
+  broke on; a router halted at the stream turns away; a full order pool uses up no direction.
+
+Built as designed. The tests, with a negative run for each of round 3's bugs:
+- **Arrival:** a router that arrives stays fled. Counting arrival as a halt fails it.
+- **No rear set:** a router halted at the stream fans out about its stored direction. Re-deriving the
+  direction from the current heading fails it.
+- **A full order pool:** it delays the first run without using up its direction. Counting the direction
+  before the order is made fails it.
+
+**The other round 3 findings, fixed:**
+- Excess hits on a company are dropped, not passed on to companies that may be hidden.
+- The sight cache is stamped with the geometry build, so a debug call between ticks cannot leave stale
+  answers.
+- Ties go to the lower handle.
+- A sight line is cached once per pair.
+- The distance helper is used everywhere.
+- The sight buffer is sized from the ruleset, and the 64-class limit is gone.
+- The hidden-company test is tidied.
+
+The review rounds restart with this design.
+
 **Left for S1c-2 and S1c-3:** as in the split above.

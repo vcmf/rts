@@ -114,7 +114,6 @@ function rulesetHash(rs: Ruleset): number {
 export function compileRuleset(rs: Ruleset): Compiled {
   const g = rs.geometry, C = g.companies, R = g.ranks, F = g.files, NB = C * BINS
   if (NB > MAX_BINS) throw new Error(`ruleset ${rs.name}: ${C} companies make ${NB} bins, more than ${MAX_BINS}`)
-  if (Object.keys(rs.terrain).length > 64) throw new Error(`ruleset ${rs.name}: more than 64 terrain classes (fire's sight buffer)`)
   const kinds = Object.keys(Object.values(rs.terrain)[0].g)
   const paces = Object.keys(rs.pace), paceSpeed = new Float64Array(paces.map(p => rs.pace[p]))
   const names = Object.keys(rs.formations)

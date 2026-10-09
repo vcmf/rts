@@ -5,7 +5,7 @@ import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { data, cr, root } from './fx.ts'
 import { makeWorld, issue, advanceTick, compileRuleset, buildTerrain, makeHandle, KIND_FORMATION, M_FREE, M_TICK, MS_ROUTING, MS_STEADY, MS_SHAKEN, MS_WAVERING,
-  menOf, aimOf, companySees, hashWorld, wetBins, STATUS, cellK, placeWorld, O_MOVE, hex, serialize, deserialize, record, play, type World, type Command, type Ruleset, type Dropped, type Terrain } from '../src/sim/index.ts'
+  menOf, aimOf, companySees, hashWorld, wetBins, STATUS, cellK, placeWorld, O_MOVE, RP_FLED, allocOrder, appendOrder, clearOrders, hex, serialize, deserialize, record, play, type World, type Command, type Ruleset, type Dropped, type Terrain } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { levelled, runFirefight, s1cFirefight, FIGHT_X, FIGHT_Z } from '../src/scenarios/s1c-firefight.ts'
 
@@ -98,12 +98,12 @@ describe('a target partly hidden', () => {
     // B faces west; a dense wood (15 m sight limit) is painted around its southern company, deep enough that
     // every line to that company crosses more of it than the limit (hit chance raised so the test sees hits)
     const t = buildTerrain(lev, cr), dense = Object.keys(napoleonic.terrain).indexOf('denseWood')
-    const s = new W({ terrain: t, rs: undefined }), a = s.spawn(0, FIGHT_X - 50, Z, E), b = s.spawn(1, FIGHT_X + 50, Z, -E)
-    const C = 4, south = [0, 1, 2, 3].reduce((m, c) => (companyZ(s, b, c) < companyZ(s, b, m) ? c : m), 0), zs = companyZ(s, b, south)   // its southern company
-    for (let z = Math.floor(zs - 8); z <= Math.ceil(zs + 8); z++) for (let x = FIGHT_X + 10; x <= FIGHT_X + 56; x++) t.cls[cellK(t, x, z)] = dense
-    const rs = fireRs({ pRange: [[0, 0.2], [250, 0.2], [251, 0]] }), w2 = new W({ terrain: t, rs })
     // B steady and in place for the whole test (a rout would Face about, and that remaps its companies)
-    const a2 = w2.spawn(0, FIGHT_X - 50, Z, E), b2 = w2.spawn(1, FIGHT_X + 50, Z, -E, { quality: 1 }); void a
+    const w2 = new W({ terrain: t, rs: fireRs({ pRange: [[0, 0.2], [250, 0.2], [251, 0]] }) })
+    const a2 = w2.spawn(0, FIGHT_X - 50, Z, E, { fire: 'hold' }), b2 = w2.spawn(1, FIGHT_X + 50, Z, -E, { quality: 1, fire: 'hold' })
+    const C = 4, south = [0, 1, 2, 3].reduce((m, c) => (companyZ(w2, b2, c) < companyZ(w2, b2, m) ? c : m), 0), zs = companyZ(w2, b2, south)   // B's southern company
+    for (let z = Math.floor(zs - 8); z <= Math.ceil(zs + 8); z++) for (let x = FIGHT_X + 10; x <= FIGHT_X + 56; x++) t.cls[cellK(t, x, z)] = dense
+    w2.do({ type: 'fire', id: a2, mode: 'at will' })
     // the companies of B that no company of A can see (they stand still: both battalions are halted)
     const hidden = [0, 1, 2, 3].filter(q => [0, 1, 2, 3].every(c => !companySees(w2.w, w2.i(a2), c, w2.i(b2), q)))
     const before = [0, 1, 2, 3].map(c => w2.w.f.men[w2.i(b2) * C + c]); w2.run(40)
@@ -171,6 +171,53 @@ describe('morale', () => {
     console.log('router halted at', halt, 'runs', s.w.f.runs[s.i(h)], 'now at', s.w.f.x[s.i(h)].toFixed(1), s.w.f.z[s.i(h)].toFixed(1))
     expect(s.w.f.runs[s.i(h)]).toBeGreaterThan(1)
     expect(Math.hypot(s.w.f.x[s.i(h)] - halt![0], s.w.f.z[s.i(h)] - halt![1])).toBeGreaterThan(20)
+  })
+  it('a router that gets where it was running stays there: fled, no more runs', () => {
+    const s = new W(), h = s.spawn(0, -100, -65, E)
+    s.do({ type: 'side', side: 0, x: -1, z: 0 }); s.do({ type: 'debug-morale', id: h, quality: 0.1 })
+    for (let n = 0; n < 20 * 120 && s.w.f.routPhase[s.i(h)] !== RP_FLED; n++) s.tick()
+    expect(s.w.f.routPhase[s.i(h)]).toBe(RP_FLED)
+    const at = [s.w.f.x[s.i(h)], s.w.f.z[s.i(h)]]; s.run(240)
+    expect(s.w.f.runs[s.i(h)]).toBe(1); expect(s.w.f.ordHead[s.i(h)]).toBe(-1)
+    expect(Math.hypot(s.w.f.x[s.i(h)] - at[0], s.w.f.z[s.i(h)] - at[1])).toBeLessThan(0.5)
+    expect(at[0]).toBeLessThan(-170)   // it ran west to the map edge
+  })
+  it('with no rear set, every run points away from the front it broke on', () => {
+    // facing east at x = −20 (z = −65 is open); no `side` command: its run is straight back, west
+    const s = new W(), h = s.spawn(0, -20, -65, E); s.do({ type: 'debug-morale', id: h, quality: 0.1 })
+    let broke = Infinity, maxX = -Infinity
+    for (let n = 0; n < 20 * 400; n++) { s.tick(); if (s.state(h) === MS_ROUTING) { if (broke === Infinity) broke = s.w.f.x[s.i(h)]; maxX = Math.max(maxX, s.w.f.x[s.i(h)]) } }
+    expect(s.w.f.routX[s.i(h)]).toBeLessThan(-0.99)   // stored at the break: west
+    expect(maxX).toBeLessThan(broke + 3)               // never back toward the front (a Face about shifts it a little)
+  })
+  it('with no rear set, a router halted at the stream fans out about its stored direction, not its new heading', () => {
+    // faces west at x = 40 with no rear set: straight back is east, to the stream, where it halts and turns
+    // its fan. After its Face about its heading is east; the first three runs (the stored direction, ±60°)
+    // must still point east, away from the front it broke on
+    const s = new W(), h = s.spawn(1, 40, -100, -E); s.do({ type: 'debug-morale', id: h, quality: 0.1 })
+    const dirs: number[] = []; let runs = 0
+    for (let n = 0; n < 20 * 300; n++) {
+      s.tick(); const i = s.i(h)
+      if (s.w.f.runs[i] !== runs) { runs = s.w.f.runs[i]; let o = s.w.f.ordHead[i]; while (o >= 0 && s.w.ord.type[o] !== O_MOVE) o = s.w.ord.next[o]; dirs.push(s.w.ord.x[o] - s.w.f.x[i]) }
+    }
+    console.log('runs east of the router by', dirs.map(d => d.toFixed(0)))
+    expect(dirs.length).toBeGreaterThanOrEqual(3)
+    for (const d of dirs.slice(0, 3)) expect(d).toBeGreaterThan(0)
+  })
+  it('a full order pool delays a run but uses up no direction of the fan', () => {
+    const s = new W(), h = s.spawn(1, 40, -100, -E), filler = s.spawn(1, -150, 100, 0, { fire: 'hold' })
+    s.do({ type: 'side', side: 1, x: 1, z: 0 })
+    // every free order to the filler, all a 70 m march north (open ground): it holds them for a minute
+    let k: number; while ((k = allocOrder(s.w, O_MOVE)) >= 0) { s.w.ord.x[k] = -150; s.w.ord.z[k] = 170; s.w.ord.resolved[k] = 1; appendOrder(s.w, s.i(filler), k) }
+    // the router breaks on the next tick, with the pool full
+    s.w.f.quality[s.i(h)] = 0.1; s.w.f.morale[s.i(h)] = 0.1; s.tick()
+    expect(s.state(h)).toBe(MS_ROUTING)
+    s.run(10)
+    expect([s.state(h), s.w.f.runs[s.i(h)], s.w.f.ordHead[s.i(h)]]).toEqual([MS_ROUTING, 0, -1])
+    clearOrders(s.w, s.i(filler)); s.run(6)   // the next retry (every 5 s) finds room
+    expect(s.w.f.runs[s.i(h)]).toBe(1)
+    let n = s.w.f.ordHead[s.i(h)]; while (n >= 0 && s.w.ord.type[n] !== O_MOVE) n = s.w.ord.next[n]
+    expect(n >= 0 && s.w.ord.x[n] > s.w.f.x[s.i(h)] + 100).toBe(true)   // the first run is still the rear (east), not the fan's next
   })
   it('the opening volleys at 50 m do not break a fresh line in its first minute', () => {
     for (let seed = 1; seed <= 5; seed++) { const [s, a, b] = pair(50, { seed }); s.run(60); expect([s.state(a) !== MS_ROUTING, s.state(b) !== MS_ROUTING]).toEqual([true, true]) }

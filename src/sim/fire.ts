@@ -23,8 +23,10 @@ const pose = { x: 0, z: 0, a: 0, face: 0 }
 const ks = new Uint32Array(4)
 
 
+// (each build starts a new epoch: the sight cache below holds only answers for these positions)
 function geometry(w: World): FireGeo {
   const C = w.cr.geo.companies, n = MAX_FORMATIONS * C, s = w.scratch
+  s.fireEpoch = ((s.fireEpoch ?? 0) + 1) & 0x3fffffff
   const G = s.fireGeo ?? (s.fireGeo = { cx: new Float64Array(n), cz: new Float64Array(n), fx: new Float64Array(n), fz: new Float64Array(n), ox: new Float64Array(n), oz: new Float64Array(n), ca: new Float64Array(n), sa: new Float64Array(n), n })
   const f = w.f, g = w.cr.geo, back = -(g.ranks - 1) * g.rankSpacing / 2, t = w.meta[M_TICK] * DT
   for (let i = 0; i < MAX_FORMATIONS; i++) {
@@ -52,11 +54,10 @@ function inArc(w: World, G: FireGeo, k: number, x: number, z: number): boolean {
   return d <= w.cr.rs.fire.maxRange && dx * G.fx[k] + dz * G.fz[k] >= d * w.cr.cosArc
 }
 // the ground, and the woods, leave the sight line between two company centres clear
-const crossed = new Float64Array(64)
 function clearSight(w: World, x0: number, z0: number, x1: number, z1: number): boolean {
   const t = w.terrain, d = w.data, eye = w.cr.rs.fire.eye, lim = w.cr.sightByClass
   const h0 = heightAt(d, x0, z0) + eye, h1 = heightAt(d, x1, z1) + eye, L = sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0))
-  const n = Math.floor(L / SIGHT_STEP); crossed.fill(0, 0, lim.length)
+  const crossed = w.scratch.fireCrossed ?? (w.scratch.fireCrossed = new Float64Array(lim.length)), n = Math.floor(L / SIGHT_STEP); crossed.fill(0)
   for (let s = 1; s < n; s++) {
     const u = s / n, x = x0 + (x1 - x0) * u, z = z0 + (z1 - z0) * u
     if (heightAt(d, x, z) > h0 + (h1 - h0) * u) return false
@@ -100,13 +101,14 @@ function distToSegment(px: number, pz: number, x0: number, z0: number, x1: numbe
   const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, u = l2 > 0 ? Math.max(0, Math.min(1, ((px - x0) * dx + (pz - z0) * dz) / l2)) : 0
   const ex = x0 + dx * u - px, ez = z0 + dz * u - pz; return sqrt(ex * ex + ez * ez)
 }
-// company k sees company m: the sight line, walked at most once a tick per pair (cached in the world's
-// scratch, stamped with the tick)
+// company k sees company m: the sight line, walked at most once per pair for one geometry (a sight line is
+// the same both ways, so the pair is keyed low to high; cached in the world's scratch, stamped with the
+// geometry's epoch, so an answer for older positions is never read)
 function sees(w: World, G: FireGeo, k: number, m: number): boolean {
-  const n = MAX_FORMATIONS * w.cr.geo.companies, s = w.scratch, tick = w.meta[M_TICK] + 1
-  const cache = s.fireSight ?? (s.fireSight = new Int32Array(n * n)), key = k * n + m, v = cache[key]
-  if (v >> 1 === tick) return (v & 1) === 1
-  const clear = clearSight(w, G.cx[k], G.cz[k], G.cx[m], G.cz[m]); cache[key] = (tick << 1) | (clear ? 1 : 0)
+  const n = MAX_FORMATIONS * w.cr.geo.companies, s = w.scratch, epoch = s.fireEpoch ?? 0
+  const cache = s.fireSight ?? (s.fireSight = new Int32Array(n * n)), key = k < m ? k * n + m : m * n + k, v = cache[key]
+  if (v >> 1 === epoch) return (v & 1) === 1
+  const clear = clearSight(w, G.cx[k], G.cz[k], G.cx[m], G.cz[m]); cache[key] = (epoch << 1) | (clear ? 1 : 0)
   return clear
 }
 const sqDist = (G: FireGeo, k: number, m: number): number => (G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k])
@@ -168,7 +170,7 @@ export function fireStep(w: World): void {
       if (m === -2) m = aimAt(w, G, k, j)
       if (m < 0) { f.reload[k] = RETARGET_TICKS * DT; continue }
       const share = clearShare(w, G, i, c, G.cx[m], G.cz[m]); if (share <= 0) { f.reload[k] = RETARGET_TICKS * DT; continue }
-      const d = sqrt((G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k]))
+      const d = sqrt(sqDist(G, k, m))
       volley(w, G, i, c, j, d, share, keyedStream(ks, seed, tick, h, c, K_HITS))
       f.reload[k] = F.reload * (1 + F.reloadJitter * (2 * nextUnit(keyedStream(ks, seed, tick, h, c, K_RELOAD)) - 1))
       f.volleyTick[k] = tick
@@ -189,19 +191,20 @@ function chooseTarget(w: World, G: FireGeo, i: number, c: number): Handle {
   for (let j = 0; j < MAX_FORMATIONS; j++) {
     if (!f.alive[j] || f.side[j] === f.side[i]) continue
     let bd = Infinity
-    for (let q = 0; q < C; q++) { const m = j * C + q; if (f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m])) bd = Math.min(bd, (G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k])) }
+    for (let q = 0; q < C; q++) { const m = j * C + q; if (f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m])) bd = Math.min(bd, sqDist(G, k, m)) }
     if (bd < Infinity) cand.push([bd, handleOf(w, j)])
   }
   cand.sort((a, b) => a[0] - b[0] || a[1] - b[1])
   let best: Handle = 0, bd = Infinity
   for (const [bound, h] of cand) {
-    if (bound >= bd) break
+    if (bound > bd) break   // equal bounds still run: a tie goes to the lower handle
     const m = aimAt(w, G, k, slotOf(w, h)); if (m < 0) continue
-    const d = sqDist(G, k, m); if (d < bd) { bd = d; best = h; chosenAim = m }
+    const d = sqDist(G, k, m); if (d < bd || (d === bd && h < best)) { bd = d; best = h; chosenAim = m }
   }
   return best
 }
 
+const open = new Uint8Array(64)   // the target companies a volley can hit (a battalion has at most MAX_BINS / BINS)
 // one company's volley at battalion j: expected hits, drawn as an integer, each given to a company of j in
 // the shooter's arc and range that it can see, weighted by its men (as they stood at the start of the step)
 function volley(w: World, G: FireGeo, i: number, c: number, j: number, d: number, share: number, rs: Uint32Array): void {
@@ -210,25 +213,23 @@ function volley(w: World, G: FireGeo, i: number, c: number, j: number, d: number
   const lambda = rounds * pAt(w, d) * w.cr.stateFactor[Math.min(2, f.mstate[i])] * (1 - F.cohesion * f.disorder[i]) * w.cr.depthByKind[layoutOf(w, j).kind]
   let hits = Math.floor(lambda); if (nextUnit(rs) < lambda - hits) hits++
   if (!hits) return
-  const hit = (m: number) => f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m]) && sees(w, G, k, m)
-  let tot = 0; for (let q = 0; q < C; q++) if (hit(j * C + q)) tot += f.men[j * C + q]
+  let tot = 0
+  for (let q = 0; q < C; q++) { const m = j * C + q; open[q] = f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m]) && sees(w, G, k, m) ? 1 : 0; if (open[q]) tot += f.men[m] }
   if (!tot) return
   for (let n = 0; n < hits; n++) {
     let r = Math.floor(nextUnit(rs) * tot), q = 0
-    for (; q < C; q++) { const m = j * C + q; if (hit(m)) { if (r < f.men[m]) break; r -= f.men[m] } }
+    for (; q < C; q++) { const m = j * C + q; if (open[q]) { if (r < f.men[m]) break; r -= f.men[m] } }
     f.owed[j * C + Math.min(q, C - 1)]++
   }
 }
 
-// step 11: the men owed fall; a company owed more than it has passes the rest to the next company with men.
+// step 11: the men owed fall. Hits owed to a company beyond the men it has are lost: they were aimed at
+// men who are already down, and passing them on could strike a company the shooters cannot see.
 // Returns the men battalion i lost.
 export function casualtiesStep(w: World, i: number): number {
   const f = w.f, C = w.cr.geo.companies
-  let spill = 0, lost = 0
-  for (let pass = 0; pass < 2; pass++) for (let c = 0; c < C; c++) {
-    const k = i * C + c, want = f.owed[k] + spill, take = Math.min(want, f.men[k])
-    f.men[k] -= take; lost += take; spill = want - take; f.owed[k] = 0
-  }
+  let lost = 0
+  for (let c = 0; c < C; c++) { const k = i * C + c, take = Math.min(f.owed[k], f.men[k]); f.men[k] -= take; lost += take; f.owed[k] = 0 }
   return lost
 }
 
@@ -238,7 +239,7 @@ export function aimOf(w: World, i: number, c: number): { target: number; share: 
   const G = geometry(w), C = w.cr.geo.companies, k = i * C + c, j = slotOf(w, w.f.target[k])
   const m = j >= 0 ? aimAt(w, G, k, j) : -1
   if (m < 0) return { target: j, share: 0, range: Infinity }
-  return { target: j, share: clearShare(w, G, i, c, G.cx[m], G.cz[m]), range: sqrt((G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k])) }
+  return { target: j, share: clearShare(w, G, i, c, G.cx[m], G.cz[m]), range: sqrt(sqDist(G, k, m)) }
 }
 
 // company c of battalion i sees company q of battalion j, with the positions as they are (tests, debugging)

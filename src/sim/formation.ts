@@ -15,7 +15,8 @@ import { DT } from './time.ts'
 export const STATUS = ['', 'halted: impassable ground', 'cannot form: impassable ground', 'arrived: as near as the shape can turn',
   'cannot wheel: a trail shape turns as it marches', 'cannot face about: impassable ground', 'cannot face about: the shape has no half-turn symmetry',
   'cannot face about: changing shape', 'cannot face about: the shape is not centred on its trail']
-const ST_HALTED = 1, ST_CANNOT_FORM = 2, ST_ARRIVED_NEAR = 3, ST_CANNOT_WHEEL = 4, ST_FACE_WET = 5, ST_FACE_ASYM = 6, ST_FACE_CHANGING = 7, ST_FACE_OFFCENTRE = 8
+export const ST_HALTED = 1
+const ST_CANNOT_FORM = 2, ST_ARRIVED_NEAR = 3, ST_CANNOT_WHEEL = 4, ST_FACE_WET = 5, ST_FACE_ASYM = 6, ST_FACE_CHANGING = 7, ST_FACE_OFFCENTRE = 8
 
 const GATE_HALVINGS = 6, CHANGE_SAMPLES = 128
 const STALL = 0.04      // m/s: an anchor slower than this, with a held bin, is stopped by impassable ground

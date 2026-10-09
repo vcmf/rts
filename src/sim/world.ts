@@ -49,13 +49,15 @@ export interface Formations {
   fireMode: Uint8Array; prefer: Int32Array
   // morale: quality, morale, the state (MS_*), the strength at spawn and the recent losses (decaying)
   quality: Float64Array; morale: Float64Array; mstate: Uint8Array; startMen: Int32Array; recent: Float64Array
-  runs: Uint8Array                                                 // a router's runs tried (the fan of directions, morale.ts)
+  // the rout (morale.ts): its direction, fixed at the break; its phase (RP_*); the runs made so far
+  routX: Float64Array; routZ: Float64Array; routPhase: Uint8Array; runs: Uint8Array
 }
 // per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it)
 export interface Sides { rearX: Float64Array; rearZ: Float64Array }
 export const FIRE_AT_WILL = 0, FIRE_HOLD = 1
 export const MS_STEADY = 0, MS_SHAKEN = 1, MS_WAVERING = 2, MS_ROUTING = 3
 export const MORALE_STATES = ['steady', 'shaken', 'wavering', 'routing']
+export const RP_NONE = 0, RP_RUNNING = 1, RP_HALTED = 2, RP_FLED = 3
 export interface Orders {
   type: Int32Array; shape: Int32Array; finish: Uint8Array; left: Int8Array; resolved: Uint8Array
   x: Float64Array; z: Float64Array; a: Float64Array; t0: Float64Array; px: Float64Array; pz: Float64Array; done: Float64Array
@@ -74,7 +76,7 @@ export interface World {
   pending: Stamped[]
   data: SimData; cr: Compiled; terrain: Terrain
   debug: boolean
-  scratch: { places?: Places; arc?: Arc; fireGeo?: FireGeo; fireSight?: Int32Array; reverseFire?: boolean }   // per-world working buffers, not state (reverseFire: a test switch, fire.ts)
+  scratch: { places?: Places; arc?: Arc; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverseFire?: boolean }   // per-world working buffers, not state (reverseFire: a test switch, fire.ts)
 }
 
 export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {
@@ -90,7 +92,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     ordHead: i32(N).fill(-1), ordTail: i32(N).fill(-1),
     reload: f64(N * C), volleyTick: i32(N * C), target: i32(N * C), owed: i32(N * C),
     fireMode: u8(N), prefer: i32(N),
-    quality: f64(N), morale: f64(N), mstate: u8(N), startMen: i32(N), recent: f64(N), runs: u8(N),
+    quality: f64(N), morale: f64(N), mstate: u8(N), startMen: i32(N), recent: f64(N), routX: f64(N), routZ: f64(N), routPhase: u8(N), runs: u8(N),
   }
   const M = MAX_ORDERS
   const ord: Orders = { type: i32(M), shape: i32(M), finish: u8(M), left: new Int8Array(M), resolved: u8(M),
