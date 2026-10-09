@@ -5,12 +5,11 @@
 // whose slots moved walk to the nearest free filled slot; Face about relabels the men through the shape's
 // half-turn. No DOM: tested in Node (test/soldiers.test.ts).
 import type { World, Places } from '../sim/index.ts'
-import { mkPlaces, placesCtx, placeAt, occupied, menOf, slotIndex, groundG, cellK, TICK_HZ, M_TICK } from '../sim/index.ts'
+import { mkPlaces, placesCtx, placeAt, occupied, menOf, slotIndex, groundG, cellK, DT, M_TICK } from '../sim/index.ts'
 import type { Scene } from './scene.ts'
 import { eachObstacle, cosmeticRng } from './scene.ts'
 import { CLASS_STYLE } from './style.ts'
 
-const DT_TICK = 1 / TICK_HZ
 export const AHEAD = 0.6, WALK = 1.35, RUN = 3.2, SEP = 0.52
 const SC = 0.6   // neighbour grid cell (≥ SEP: the 3×3 search sees every neighbour)
 
@@ -30,17 +29,17 @@ export class SoldierLayer {
   }
 
   // the anchor this frame: interpolated between ticks (alpha), extrapolated `ahead` seconds
-  private anchor(i: number, alpha: number, ahead: number): [number, number, number] {
+  anchor(i: number, alpha: number, ahead: number): [number, number, number] {
     const f = this.w.f
     let dh = f.heading[i] - f.ph[i]; dh = Math.atan2(Math.sin(dh), Math.cos(dh))
     return [f.px[i] + (f.x[i] - f.px[i]) * alpha + f.vx[i] * ahead, f.pz[i] + (f.z[i] - f.pz[i]) * alpha + f.vz[i] * ahead, f.ph[i] + dh * alpha + f.omega[i] * ahead]
   }
-  // places for formation i at this frame: ahead (where the men aim) and now
-  private frame(i: number, alpha: number): void {
-    const t = (this.w.meta[M_TICK] - 1 + alpha) * DT_TICK
+  // places for formation i at this frame: ahead (where the men aim) and now; `place` reads the last framed
+  frame(i: number, alpha: number): void {
+    const t = (this.w.meta[M_TICK] - 1 + alpha) * DT
     const [hx, hz, h] = this.anchor(i, alpha, AHEAD), [x0, z0, h0] = this.anchor(i, alpha, 0)
-    placesCtx(this.ctxA, i, hx, hz, h, t + AHEAD, AHEAD - (1 - alpha) * DT_TICK)
-    placesCtx(this.ctx0, i, x0, z0, h0, t, -(1 - alpha) * DT_TICK)
+    placesCtx(this.ctxA, i, hx, hz, h, t + AHEAD, AHEAD - (1 - alpha) * DT)
+    placesCtx(this.ctx0, i, x0, z0, h0, t, -(1 - alpha) * DT)
   }
   private kindOf(i: number): number { const f = this.w.f; return this.w.cr.shapes[f.trans[i] ? f.tShape[i] : f.shape[i]].kind }
   private slotRC(s: number): [number, number, number] { const g = this.w.cr.geo, RF = g.ranks * g.files; return [Math.floor(s / RF), Math.floor((s % RF) / g.files), s % g.files] }
@@ -104,17 +103,17 @@ export class SoldierLayer {
   step(dt: number, alpha: number): void {
     this.alphaNow = alpha
     this.sync(alpha)
-    const w = this.w, f = w.f, t = w.terrain, x0 = t.x0, SN = this.SN, p = [0, 0, 0]
+    const w = this.w, f = w.f, t = w.terrain, x0 = t.x0, z0 = t.z0, SN = this.SN, p = [0, 0, 0]
     // neighbour grid: cells and linked lists in typed arrays, rebuilt every frame
     for (const c of this.touched) this.cellHead[c] = -1
     this.flat.length = 0; this.touched.length = 0
     for (const u of this.units.values()) for (const m of u.men) if (m.alive) {
-      const ci = Math.floor((m.x - x0) / SC), cj = Math.floor((m.z - x0) / SC), cell = ci >= 0 && cj >= 0 && ci < SN && cj < SN ? ci * SN + cj : -1
+      const ci = Math.floor((m.x - x0) / SC), cj = Math.floor((m.z - z0) / SC), cell = ci >= 0 && cj >= 0 && ci < SN && cj < SN ? ci * SN + cj : -1
       const k = this.flat.length; this.flat.push(m)
       if (k >= this.cellNext.length) { const n = new Int32Array(this.cellNext.length * 2); n.set(this.cellNext); this.cellNext = n }
       if (cell >= 0) { if (this.cellHead[cell] < 0) this.touched.push(cell); this.cellNext[k] = this.cellHead[cell]; this.cellHead[cell] = k } else this.cellNext[k] = -1
     }
-    const tt = w.meta[M_TICK] * DT_TICK * 0.35
+    const tt = w.meta[M_TICK] * DT * 0.35
     for (const u of this.units.values()) {
       const i = u.i; this.frame(i, alpha)
       const busy = !!(f.trans[i] || f.ordHead[i] >= 0)
@@ -137,7 +136,7 @@ export class SoldierLayer {
         const gs = Math.max(0.15, dist > 1e-6 ? groundG(t, m.x, m.z, kind, dx / dist, dz / dist) : groundG(t, m.x, m.z, kind, 0, 0))   // never frozen mid-step
         const top = (dist > 2.5 ? RUN : WALK) * gs, want = dist < 0.08 ? 0 : Math.min(top, dist / 0.7)
         let wx = dist > 1e-6 ? dx / dist * want : 0, wz = dist > 1e-6 ? dz / dist * want : 0
-        const ci = Math.floor((m.x - x0) / SC), cj = Math.floor((m.z - x0) / SC)
+        const ci = Math.floor((m.x - x0) / SC), cj = Math.floor((m.z - z0) / SC)
         for (let a = ci - 1; a <= ci + 1; a++) for (let b = cj - 1; b <= cj + 1; b++) {
           if (a < 0 || b < 0 || a >= SN || b >= SN) continue
           for (let k = this.cellHead[a * SN + b]; k >= 0; k = this.cellNext[k]) { const o = this.flat[k]; if (o === m) continue

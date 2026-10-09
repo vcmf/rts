@@ -2,7 +2,7 @@
 // staff map with every soldier as a circle; the mouse selects and orders battalions. Every input becomes
 // a command through `issue`, and the external log is kept, so a session can be replayed.
 import dataUrl from '../../data/formation-field.simdata?url'
-import { loadSimData, compileRuleset, makeWorld, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, sectionHashes, SIM_VERSION, M_TICK,
+import { loadSimData, compileRuleset, makeWorld, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ,
   type Command, type Stamped, type World, type HashPoint, type Replay, type Dropped } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { S1B_SCENARIOS, FIELD_DATA_VERSION } from '../scenarios/s1b-field.ts'
@@ -10,7 +10,7 @@ import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
 
-const SEED = 20261009, TICK = 0.05, SPEEDS = [0, 1, 2, 4, 8]
+const SEED = 20261009, SPEEDS = [0, 1, 2, 4, 8], MEN_STEPS = 4   // at most MEN_STEPS soldier steps per frame, whatever the speed
 
 async function main(): Promise<void> {
   const data = loadSimData(new Uint8Array(await (await fetch(dataUrl)).arrayBuffer()), FIELD_DATA_VERSION)
@@ -37,15 +37,17 @@ async function main(): Promise<void> {
   // commands from the player: stamped, logged, applied at the next tick
   const external = (c: Command) => issue(w, c, log)
   const forSelection = (make: (h: number) => Command) => { for (const i of selected) external(make(formationHandle(w, i))) }
-  const tick = () => { const r = advanceTick(w); dropped.push(...r.dropped); if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: sectionHashes(w) }); for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i) }
+  // hash points without section hashes: those would cost a second serialization each time
+  const tick = () => { const r = advanceTick(w); dropped.push(...r.dropped); if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: [] }); for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i) }
 
   // the frame: ticks owed at the game speed, then the men (in game time), then the drawing
   const advance = (dt: number) => {
     const g = dt * speed; acc += g
     const a = performance.now(); let n = 0
-    while (acc >= TICK && n < 20) { tick(); acc -= TICK; n++ }
+    while (acc >= DT && n < 20) { tick(); acc -= DT; n++ }
     if (n === 20) acc = 0
-    for (let left = g; left > 1e-9; left -= 0.05) layer.step(Math.min(0.05, left), acc / TICK)
+    // the men in steps of at most one tick, but no more than MEN_STEPS a frame: at 8× their steps grow
+    const steps = Math.min(MEN_STEPS, Math.ceil(g / DT - 1e-9)); for (let s = 0; s < steps; s++) layer.step(g / steps, acc / DT)
     simMs = simMs * 0.9 + (performance.now() - a) * 0.1
   }
   const draw = () => {
@@ -110,12 +112,14 @@ async function main(): Promise<void> {
     if (hit >= 0) { if (d.shift) { if (selected.has(hit)) selected.delete(hit); else selected.add(hit) } else { selected.clear(); selected.add(hit) } return }
     const [x, z] = toW(view, e.clientX, e.clientY); march(x, z, d.shift)
   })
+  // the wheel zooms about the cursor; line (Firefox) and page deltas are scaled to pixels
   unitC.addEventListener('wheel', e => { e.preventDefault(); const [x, z] = toW(view, e.clientX, e.clientY)
-    view.k = Math.min(40, Math.max(0.8, view.k * Math.exp(-e.deltaY * 0.0015))); const [x2, z2] = toW(view, e.clientX, e.clientY); view.cx += x - x2; view.cz += z - z2; mapDirty = true }, { passive: false })
+    view.k = Math.min(40, Math.max(0.8, view.k * Math.exp(-e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? view.H : 1) * 0.0015))); const [x2, z2] = toW(view, e.clientX, e.clientY); view.cx += x - x2; view.cz += z - z2; mapDirty = true }, { passive: false })
   addEventListener('keyup', e => { if (e.code === 'Space') space = false })
   addEventListener('blur', () => { space = false })
   addEventListener('keydown', e => {
-    if (e.code === 'Space') { space = true; e.preventDefault() }
+    // space pans; a focused panel button must not take it as a click (it would repeat the order)
+    if (e.code === 'Space') { space = true; e.preventDefault(); if (document.activeElement instanceof HTMLButtonElement) document.activeElement.blur() }
     else if (e.key === 'p' || e.key === 'P') { paused = !paused }
     else if (e.key === 'Escape') selected.clear()
     else if ('1248'.includes(e.key)) setSpeed(+e.key)
@@ -134,9 +138,9 @@ async function main(): Promise<void> {
     else for (const i of selected) { const s = w.cr.shapes[w.f.shape[i]].name + (w.f.trans[i] ? ' → ' + w.cr.shapes[w.f.tShape[i]].name : '')
       lines.push(`#${i} ${s} · ${menOf(w, i)} men · ${w.cr.presets[w.f.style[i]]}${STATUS[w.f.status[i]] ? ' · ' + STATUS[w.f.status[i]] : ''}`) }
     const d = dropped.at(-1)
-    if (d && w.meta[M_TICK] - d.tick < 60) lines.push(`order not carried out: ${d.reason}`)   // shown for 3 s
+    if (d && w.meta[M_TICK] - d.tick < 3 * TICK_HZ) lines.push(`order not carried out: ${d.reason}`)   // shown for 3 s
     statsEl.textContent = (lines.length ? lines.join('\n') : 'nothing selected') +
-      `\n\nt ${(w.meta[M_TICK] * TICK).toFixed(1)} s · ${speed ? speed + '×' : 'paused'}${paused ? ' (P)' : ''}\nsim + men ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms\nfps ${fps.toFixed(0)} · map built in ${buildMs.toFixed(0)} ms`
+      `\n\nt ${(w.meta[M_TICK] * DT).toFixed(1)} s · ${speed ? speed + '×' : 'paused'}${paused ? ' (P)' : ''}\nsim + men ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms\nfps ${fps.toFixed(0)} · map built in ${buildMs.toFixed(0)} ms`
   }
   // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce
   const replay = (): { replay: Replay; hashes: HashPoint[] } => ({ replay: { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name, seed: SEED, ticks: w.meta[M_TICK], log }, hashes })

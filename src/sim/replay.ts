@@ -53,6 +53,8 @@ export function play(r: Replay, data: SimData, cr: Compiled, scenario: Scenario,
     const want = expected[e++]
     if (!want || want.tick !== res.tick) return { tick: res.tick, expected: want ? `hash at tick ${want.tick}` : 'no more hashes', got: hex(res.hash), section: '' }
     if (want.hash !== res.hash) {
+      // a recording without section hashes (the page, to spare a serialization) cannot name the table
+      if (!want.sections.length) return { tick: res.tick, expected: hex(want.hash), got: hex(res.hash), section: 'not recorded' }
       const got = sectionHashes(w), bad = got.find(([n, h], i) => want.sections[i]?.[0] !== n || want.sections[i][1] !== h)
       return { tick: res.tick, expected: hex(want.hash), got: hex(res.hash), section: bad ? bad[0] : '' }
     }

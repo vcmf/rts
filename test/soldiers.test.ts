@@ -7,10 +7,11 @@ import { SoldierLayer } from '../src/render/soldiers.ts'
 import { occupied } from '../src/sim/index.ts'
 
 // the sim at 20 Hz, frames at 30 Hz, as the page runs them
+// (`dt`: the soldier layer's step; the page's 8× takes 0.2 s steps, MEN_STEPS in src/app/main.ts)
 class Play {
-  sim: Sim; layer: SoldierLayer; acc = 0
-  constructor(sim = new Sim()) { this.sim = sim; this.layer = new SoldierLayer(sim.w, buildScene(sim.w)) }
-  frames(sec: number): void { for (let n = Math.round(sec * 30); n > 0; n--) { this.acc += 1 / 30; while (this.acc >= 0.05) { this.sim.tick(); this.acc -= 0.05 } this.layer.step(1 / 30, this.acc / 0.05) } }
+  sim: Sim; layer: SoldierLayer; acc = 0; dt: number
+  constructor(sim = new Sim(), dt = 1 / 30) { this.sim = sim; this.dt = dt; this.layer = new SoldierLayer(sim.w, buildScene(sim.w)) }
+  frames(sec: number): void { for (let n = Math.round(sec / this.dt); n > 0; n--) { this.acc += this.dt; while (this.acc >= 0.05 - 1e-9) { this.sim.tick(); this.acc -= 0.05 } this.layer.step(this.dt, this.acc / 0.05) } }
   // worst slot error sampled every 0.5 s while `sec` pass
   worst(sec: number): { max: number; mean: number } { let max = 0, mean = 0; for (let n = 0; n < sec * 2; n++) { this.frames(0.5); const e = this.layer.slotError(); max = Math.max(max, e.max); mean = Math.max(mean, e.mean) } return { max, mean } }
   men(h: number) { return this.layer.units.get(this.sim.slot(h))!.men }
@@ -80,6 +81,22 @@ describe('who stands where', () => {
     p.sim.order({ type: 'move', id: h, points: [[110, -30]], append: false })
     let worst = 0; for (let n = 0; n < 180; n++) { p.frames(0.5); worst = Math.max(worst, p.men(h).filter(m => m.alive && p.sim.deep(m.x, m.z)).length) }
     expect(worst).toBe(0); expect(STREAM_X(-30)).toBeGreaterThan(p.sim.x(h))
+  })
+})
+
+describe('at 8× (0.2 s soldier steps)', () => {
+  it('the men keep up through a march column\'s turn and the wood, and never enter deep water', () => {
+    const b = new Play(new Sim(), 0.2), hb = b.sim.spawn(-20, -40, 0)
+    b.sim.order({ type: 'form', id: hb, shape: 'march' }); b.frames(22)
+    b.sim.order({ type: 'move', id: hb, points: [[b.sim.x(hb) + 60, b.sim.z(hb) + 30]], append: false }); const mt = b.worst(60)
+    const c = new Play(new Sim(), 0.2), hc = c.sim.spawn(-45, 55 - 30 - 12, 0)
+    c.sim.order({ type: 'move', id: hc, points: [[-45, 55 - 30 - 12], [-45, 55 + 30 + 14]], append: false }); const wd = c.worst(200)
+    const r = new Play(new Sim(), 0.2), hr = r.sim.spawn(40, -30, Math.PI / 2)
+    r.sim.order({ type: 'move', id: hr, points: [[110, -30]], append: false })
+    let wet = 0; for (let n = 0; n < 180; n++) { r.frames(0.5); wet = Math.max(wet, r.men(hr).filter(m => m.alive && r.sim.deep(m.x, m.z)).length) }
+    console.log('8×', { marchTurn: mt, wood: wd })
+    // measured 2.0 m (0.6 m at 1×): at eight times speed the files trail a turn by a pace or two
+    expect(mt.max).toBeLessThan(2.5); expect(wd.max).toBeLessThan(6); expect(wd.mean).toBeLessThan(1.2); expect(wet).toBe(0)
   })
 })
 

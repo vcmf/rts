@@ -35,12 +35,15 @@ exports as a replay that plays back in Node to the same hashes.
 ## Design
 
 **Loop** (`src/app/main.ts`). Each animation frame adds `dt × speed` to an accumulator and runs the
-ticks owed (at most 20 per frame; the rest is dropped). The soldier layer then steps in sub-steps of at
-most 0.05 s of game time, with `alpha = acc / tick` for interpolation. The map is redrawn only when the
+ticks owed (at most 20 per frame; the rest is dropped). The soldier layer then steps in sub-steps of
+one tick or less, but at most four per frame (`MEN_STEPS`), so at 8× its steps grow to 0.2 s instead of
+its cost growing with the speed. `alpha = acc / tick` interpolates. The map is redrawn only when the
 view changes; the units every frame, on a second canvas.
 
 **Commands.** Every input goes through `issue` with the external log. The page keeps the hash points the
-sim takes (with their section hashes), and orders the sim drops show in the readout for 3 s. `Copy
+sim takes, without section hashes (a second serialization each time); a mismatch in playback then names
+the tick, not the table. Orders the sim drops show in the readout for 3 s. The colours and the order
+line are drawn at the interpolated anchor, as the men are. `Copy
 replay` puts `{ replay, hashes }` on the clipboard; `play` in `src/sim/replay.ts` checks it.
 
 **Who stands where** (`SoldierLayer.sync`). The sim keeps men per company (decision 0007); the layer
@@ -100,6 +103,7 @@ frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`.
   - slot error through line → square, a march column's turn and the wood;
   - halted in the wood at six points;
   - casualties, one man per filled slot;
+  - at 8× (0.2 s steps): a march column's turn, the wood, the river bank;
   - Face about for a line and a square at 100 and 97 men;
   - a battalion that is gone;
   - men never in deep water;

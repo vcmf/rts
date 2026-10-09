@@ -9,7 +9,7 @@ export interface Obstacle { x: number; z: number; r: number }
 export interface Scene {
   trees: Obstacle[]
   reeds: [number, number][]
-  obstacleCell: number; obstacleN: number; x0: number
+  obstacleCell: number; obstacleN: number; x0: number; z0: number
   obstacleGrid: Obstacle[][]
   isClass(x: number, z: number, names: string[]): boolean
 }
@@ -38,12 +38,12 @@ export function buildScene(w: World, seed = 11): Scene {
     const o = { x: tx, z: tz, r: 0.3 + rnd() * 0.15 }; trees.push(o); grid[k].push(o)
   }
   for (let z = t.z0; z < t.z0 + span; z += 5) for (let x = t.x0; x < t.x0 + span; x += 5) if (CLASS_STYLE[classAt(x, z)]?.symbol === 'reeds' && rnd() < 0.7) reeds.push([x + rnd() * 3, z + rnd() * 3])
-  return { trees, reeds, obstacleCell: G, obstacleN: gn, x0: t.x0, obstacleGrid: grid, isClass }
+  return { trees, reeds, obstacleCell: G, obstacleN: gn, x0: t.x0, z0: t.z0, obstacleGrid: grid, isClass }
 }
 
 // every obstacle in the 3×3 cells around (x, z)
 export function eachObstacle(s: Scene, x: number, z: number, fn: (o: Obstacle) => void): void {
-  const G = s.obstacleCell, n = s.obstacleN, i = Math.floor((x - s.x0) / G), j = Math.floor((z - s.x0) / G)
+  const G = s.obstacleCell, n = s.obstacleN, i = Math.floor((x - s.x0) / G), j = Math.floor((z - s.z0) / G)
   for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
     const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= n || b >= n) continue
     for (const o of s.obstacleGrid[b * n + a]) fn(o)

@@ -108,6 +108,17 @@ Changes beyond the plan:
 - the sim's `faces` column changes the state hashes: the S1a golden was regenerated and `SIM_VERSION` is
   now `s1b.1`;
 - a loss now frees the slot only of a man who held one (`sync`);
+- `SAVE_FORMAT` is 3 (the new column), so an S1a save is refused instead of misread;
+- review round 1 (#14):
+  - the soldier layer takes at most four steps a frame, so 8× costs as much as 1×; at 8× the march turn's
+    slot error is 2.0 m (0.6 m at 1×);
+  - the slots overlay frames each battalion;
+  - the colours are interpolated;
+  - grid lookups use `z0`, contours use `nz`;
+  - Space no longer clicks a focused button;
+  - line-mode wheel deltas are scaled;
+  - the tick length and order types come from the sim;
+  - the page's hash points carry no section hashes;
 - orders the sim refuses show in the readout.
 
 Not done: the speed overlay (the slots overlay is in).

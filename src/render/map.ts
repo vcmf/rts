@@ -3,7 +3,7 @@
 // contours by marching squares, spot heights at the summits, cosmetic symbols (scene.ts), every soldier a
 // small outlined circle. Two layers: the map (redrawn when the view changes) and the units (every frame).
 import type { World } from '../sim/index.ts'
-import { cellK } from '../sim/index.ts'
+import { cellK, O_MOVE } from '../sim/index.ts'
 import type { Scene } from './scene.ts'
 import type { SoldierLayer } from './soldiers.ts'
 import { CLASS_STYLE, INK, SIDE_INK } from './style.ts'
@@ -13,9 +13,9 @@ export const toS = (v: View, x: number, z: number): [number, number] => [v.W / 2
 export const toW = (v: View, sx: number, sy: number): [number, number] => [v.cx + (sx - v.W / 2) / v.k, v.cz - (sy - v.H / 2) / v.k]
 
 // marching squares over a scalar grid: segments where it crosses `level`, in world coordinates
-function march(get: (i: number, j: number) => number, n: number, cell: number, x0: number, z0: number, level: number, out: number[]): void {
+function march(get: (i: number, j: number) => number, nx: number, nz: number, cell: number, x0: number, z0: number, level: number, out: number[]): void {
   const pairs: Record<number, number[][]> = { 1: [[3, 0]], 2: [[0, 1]], 3: [[3, 1]], 4: [[1, 2]], 5: [[3, 2], [0, 1]], 6: [[0, 2]], 7: [[3, 2]], 8: [[2, 3]], 9: [[0, 2]], 10: [[3, 0], [1, 2]], 11: [[1, 2]], 12: [[1, 3]], 13: [[0, 1]], 14: [[0, 3]] }
-  for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) {
+  for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
     const a = get(i, j), b = get(i + 1, j), c = get(i + 1, j + 1), d = get(i, j + 1)
     const code = (a > level ? 1 : 0) | (b > level ? 2 : 0) | (c > level ? 4 : 0) | (d > level ? 8 : 0)
     if (code === 0 || code === 15) continue
@@ -38,11 +38,11 @@ export class StaffMap {
     const t = w.terrain, d = w.data, h = d.height
     // contours every 2 m on the heightfield
     let lo = Infinity, hi = -Infinity; for (const v of h.h) { lo = Math.min(lo, v); hi = Math.max(hi, v) }
-    for (let L = Math.ceil(lo / 2) * 2; L <= hi; L += 2) { const seg: number[] = []; march((i, j) => h.h[j * h.nx + i], h.nx, h.cell, h.x0, h.z0, L, seg); this.contours.set(L, new Float64Array(seg)) }
+    for (let L = Math.ceil(lo / 2) * 2; L <= hi; L += 2) { const seg: number[] = []; march((i, j) => h.h[j * h.nx + i], h.nx, h.nz, h.cell, h.x0, h.z0, L, seg); this.contours.set(L, new Float64Array(seg)) }
     // class edges, from each styled class's mask on the 1 m grid
     const cls = (i: number, j: number) => t.cls[j * t.n + i]
     this.names.forEach((name, c) => { const st = CLASS_STYLE[name]; if (!st?.edge) return
-      const seg: number[] = []; march((i, j) => (cls(i, j) === c ? 1 : 0), t.n, t.cell, t.x0, t.z0, 0.5, seg)
+      const seg: number[] = []; march((i, j) => (cls(i, j) === c ? 1 : 0), t.n, t.n, t.cell, t.x0, t.z0, 0.5, seg)
       this.edges.push({ style: st.edge, width: st.edgeWidth ?? 0.8, seg: new Float64Array(seg) }) })
     // spot heights: summits higher than everything within 30 m and at least 4 m above its rim
     const R = Math.round(30 / h.cell)
@@ -144,14 +144,15 @@ export class StaffMap {
       for (const m of u.men) if (m.alive) { const [sx, sy] = toS(v, m.x, m.z); if (!vis(sx, sy)) continue; g.moveTo(sx + R, sy); g.arc(sx, sy, R, 0, Math.PI * 2) }
       g.stroke()
       // the colours: a small flag at the anchor, pointing the way the battalion faces
-      const [ax, ay] = toS(v, f.x[u.i], f.z[u.i]); g.save(); g.translate(ax, ay); g.rotate(f.heading[u.i]); g.fillStyle = ink
+      const [fx, fz, fh] = layer.anchor(u.i, layer.alphaNow, 0)   // interpolated, as the men are
+      const [ax, ay] = toS(v, fx, fz); g.save(); g.translate(ax, ay); g.rotate(fh); g.fillStyle = ink
       g.beginPath(); g.moveTo(0, -R * 4.2); g.lineTo(R * 2.4, -R * 3.4); g.lineTo(0, -R * 2.6); g.closePath(); g.fill(); g.lineWidth = 1; g.strokeStyle = ink; g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -R * 4.2); g.stroke(); g.restore()
       if (sel) {   // the order: a dashed line through the waypoints
         g.setLineDash([4, 4]); g.strokeStyle = ink; g.lineWidth = 1; g.beginPath(); g.moveTo(ax, ay)
-        for (let n = f.ordHead[u.i]; n >= 0; n = w.ord.next[n]) if (w.ord.type[n] === 1 && w.ord.resolved[n]) { const [tx, ty] = toS(v, w.ord.x[n], w.ord.z[n]); g.lineTo(tx, ty) }
+        for (let n = f.ordHead[u.i]; n >= 0; n = w.ord.next[n]) if (w.ord.type[n] === O_MOVE && w.ord.resolved[n]) { const [tx, ty] = toS(v, w.ord.x[n], w.ord.z[n]); g.lineTo(tx, ty) }
         g.stroke(); g.setLineDash([])
       }
-      if (showSlots) { g.fillStyle = '#c0392b'; for (const m of u.men) if (m.alive) { layer.place(u.i, m.s, false, p); const [qx, qy] = toS(v, p[0], p[1]); g.fillRect(qx - 1, qy - 1, 2, 2) } }
+      if (showSlots) { layer.frame(u.i, layer.alphaNow); g.fillStyle = '#c0392b'; for (const m of u.men) if (m.alive) { layer.place(u.i, m.s, false, p); const [qx, qy] = toS(v, p[0], p[1]); g.fillRect(qx - 1, qy - 1, 2, 2) } }
     }
   }
 }

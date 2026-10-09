@@ -21,6 +21,7 @@ const drill = [
   ['eval', 'APP.select([0, 1, 2]); APP.march(-40, 10, false); APP.advance(20); `t ${APP.w.meta[0]} hash ${APP.hash()}`'],
   ['shot', 'drill-1-advance'],
   ['eval', 'APP.select([0]); APP.form("square"); APP.select([3]); APP.order("face"); APP.advance(60); APP.select([0]); APP.view(-60, -10, 9); "square and face about"'],
+  ['eval', 'document.querySelector("[data-view=slots]").click(); APP.view(-60, -10, 9); "slots on (each battalion its own)"'],
   ['shot', 'drill-2-square'],
   // every panel order reaches the sim as a command: each button logs one; the sim may refuse some (reported)
   ['eval', 'APP.select([1]); const n = APP.log.length, bs = [...document.querySelectorAll("#shapes button, #styles button, [data-cmd]")]; for (const b of bs) b.click(); APP.advance(1); `PANEL ${bs.length} ${APP.log.length - n} refused: ${APP.dropped.map(d => d.reason).join("; ")}`'],
