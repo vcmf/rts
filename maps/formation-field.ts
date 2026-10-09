@@ -11,10 +11,13 @@ export interface MapDef {
   heightAt(x: number, z: number): number         // metres
   groundAt(x: number, z: number): number         // speed factor 0..1 of the ground for a column (0: impassable)
   slopeFactor(rise: number): number              // speed factor for a slope (rise over run, uphill)
+  classes: string[]                              // terrain class names (the ruleset's terrain table keys)
+  fine: { cell: number; n: number; classAt(i: number, j: number): number; depthAt(i: number, j: number): number }   // 1 m grid from −half
 }
 
 interface FormationCore {
-  HALF: number; H(x: number, z: number): number
+  HALF: number; H(x: number, z: number): number; HN: number; HG: number
+  CLASSES: string[]; TERR: Uint8Array; WDEPTH: Float32Array
   groundG(x: number, z: number, kind: string, dx: number, dz: number): number
   RULESET: { slopeK: number }
 }
@@ -39,5 +42,7 @@ export async function formationField(): Promise<MapDef> {
     heightAt: (x, z) => fc.H(x, z),
     groundAt: (x, z) => fc.groundG(x, z, 'column', 0, 0),   // class × water depth; slope comes from the heightfield
     slopeFactor: rise => Math.min(1, fc.RULESET.slopeK * Math.exp(-3.5 * rise)),
+    classes: fc.CLASSES,
+    fine: { cell: fc.HG, n: fc.HN, classAt: (i, j) => fc.TERR[j * fc.HN + i], depthAt: (i, j) => fc.WDEPTH[j * fc.HN + i] },
   }
 }
