@@ -1,4 +1,4 @@
-// The S1a acceptance scenario (docs/plans/active/s1a-formations-on-spine.md): two battalions drill on the
+// The S1a acceptance scenario (docs/plans/done/s1a-formations-on-spine.md): two battalions drill on the
 // formation field. Through the wood, every shape change, Face about, Retire, a wheel, casualties, a move
 // into the stream that halts. The scenario's own commands are part of it, not of the log; `orders` are
 // the external (logged) commands of the recorded run.
