@@ -23,9 +23,22 @@ export function banned(x: number): number[] {
   const m = new Map<number, number>(); out.push(m.size) // BANNED
   const s = new Set<number>(); out.push(s.size) // BANNED
   const { sin } = Math; out.push(sin(x)) // BANNED
+  out.push(globalThis.Math.sin(x)) // BANNED
+  const M = Math; out.push(M.abs(x)) // BANNED
+  out.push(Reflect.get(Math, 'exp')(x)) // BANNED
+  const k = 'sin'; out.push((Math[k] as (v: number) => number)(x)) // BANNED
+  out.push(crypto.getRandomValues(new Uint8Array(1))[0]) // BANNED
+  out.push(Number(process.hrtime.bigint())) // BANNED
+  const h = new Float16Array(1); out.push(h[0]) // BANNED
+  new DataView(new ArrayBuffer(8)).setFloat32(0, x) // BANNED
+  out.push(new WeakRef({}) ? 1 : 0) // BANNED
   return out
 }
-// an import from outside src/sim/
+export const later = () => import('node:fs') // BANNED
+// imports from outside src/sim/: a relative path out, a bare package, a Node builtin
 export { buildSimData } from '../../tools/build-sim-data.ts' // BANNED
+import fs from 'fs' // BANNED
+import { join } from 'node:path' // BANNED
+export const touch = () => [fs, join]
 // allowed: exact operations
 export const ok = (x: number): number => Math.sqrt(x * x + 1) / 2 + Math.floor(x) + Math.abs(x) + Math.min(x, 1)

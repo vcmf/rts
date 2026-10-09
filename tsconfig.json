@@ -11,5 +11,6 @@
     "types": ["node"],
     "skipLibCheck": true
   },
-  "include": ["src", "maps", "test", "tools/*.ts"]
+  "include": ["src", "maps", "test", "tools/*.ts"],
+  "exclude": ["test/fixtures"]
 }
