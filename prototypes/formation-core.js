@@ -3,6 +3,8 @@
 // so it runs from file://). Exposes the global FC.
 // The layers follow docs/research/formation-movement-and-doc-systems.md §4. A feel and benchmark test:
 // not yet the deterministic simulation (docs/proposals/sim-design.md §2 rules do not apply here).
+// Since S1a the simulation's own port is authoritative (src/sim/formation.ts, docs/systems/formations.md);
+// this file stays the visual reference and the formation map's data source until S1b draws the sim.
 (() => {
 /* ---------- seeded RNG (repeatable maps and screenshots) ---------- */
 function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }

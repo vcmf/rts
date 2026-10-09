@@ -5,7 +5,8 @@ look of *Puss in Boots: The Last Wish*, seen from a top-down RTS camera). The sa
 serves cinematic history videos.
 
 Status: **prototyping, engine starting**. Prototypes are single HTML files in `prototypes/`; game code
-is TypeScript in `src/` (so far the simulation spine, `src/sim/`, `docs/systems/sim-spine.md`).
+is TypeScript in `src/`: the simulation (`src/sim/`, `docs/systems/sim-spine.md`, `docs/systems/formations.md`),
+era rulesets as data (`src/rulesets/`), scenarios (`src/scenarios/`).
 
 ## Where things are
 

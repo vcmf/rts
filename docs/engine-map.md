@@ -75,9 +75,9 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 |---|---|---|---|---|
 | Heightfield and terrain layers | Height, slope, cover, roads, water depth and fords as sim data | `docs/proposals/engine-design.md` §4 | E0 | 🟡 (`H()`, river data) |
 | Spatial index | Who is near whom, per formation (figures are not simulated, D1) | `docs/proposals/sim-design.md` | P | ⬜ |
-| Formations and drill | Line, column, square, skirmish; frontage per file; **timed formation changes** (square ≈ 60–100 s) with a penalty while changing | `docs/proposals/sim-design.md` | P | ⬜ |
+| Formations and drill | Line, column, square, skirmish; frontage per file; **timed formation changes** (square ≈ 60–100 s) with a penalty while changing | `docs/systems/formations.md` | P | 🟡 (S1a: shapes, changes, Face about, Retire, wheels; no skirmish, no change penalty yet) |
 | Orders and commanders | The player orders battalions (immediate, multi-selection); generals rally and steady nearby troops | `docs/proposals/sim-design.md` §6 | P | ⬜ |
-| Movement | Formation paths over the heightfield; wheeling, line deformation over terrain; local separation | `docs/proposals/sim-design.md`, `docs/architecture.md` §7 | P | ⬜ |
+| Movement | Formation paths over the heightfield; wheeling, line deformation over terrain; local separation | `docs/systems/formations.md`, `docs/architecture.md` §7 | P | 🟡 (S1a: the terrain lag model and the footprint gate; no paths, no contact) |
 | Fire | Musketry per formation (share loaded, volleys, 1 hit per 300–800 rounds in battle); artillery rays with ricochet, canister cones | `docs/proposals/sim-design.md` | P | ⬜ |
 | Melee and charges | Impact, square vs cavalry, breach chance on a morale failure | `docs/proposals/sim-design.md` | P | ⬜ |
 | Morale | Scalar with shocks (flank, rear, casualties, artillery), contagion from routing neighbours, general's rally radius; steady → shaken → wavering → routing → rallied / shattered | `docs/proposals/sim-design.md` | P | ⬜ |

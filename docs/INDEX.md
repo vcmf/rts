@@ -29,6 +29,7 @@ designs written before building (frozen once built, their lasting content moves 
 
 - [`systems/river.md`](systems/river.md): the lowland meander river (W1, W1b).
 - [`systems/sim-spine.md`](systems/sim-spine.md): the simulation spine: tick, commands, state, hashing, saves, replays (S0).
+- [`systems/formations.md`](systems/formations.md): the formation layer in the sim: shapes, changes, the lag model, the footprint gate (S1a).
 - More appear as systems are built; see [`systems/README.md`](systems/README.md).
 
 ## Proposals (designs before building)
@@ -43,7 +44,8 @@ designs written before building (frozen once built, their lasting content moves 
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
-  [`plans/active/s0-sim-spine.md`](plans/active/s0-sim-spine.md) (S0).
+  [`plans/active/s0-sim-spine.md`](plans/active/s0-sim-spine.md) (S0),
+  [`plans/active/s1a-formations-on-spine.md`](plans/active/s1a-formations-on-spine.md) (S1a).
 - Done: [`plans/done/w1-river-shape.md`](plans/done/w1-river-shape.md), [`plans/done/w1b-river-width.md`](plans/done/w1b-river-width.md), [`plans/done/docs-restructure.md`](plans/done/docs-restructure.md), [`plans/done/formation-feel.md`](plans/done/formation-feel.md), [`plans/done/terrain-movement.md`](plans/done/terrain-movement.md) (F1, #9).
 
 ## Research (background)
