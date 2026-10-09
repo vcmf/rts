@@ -28,3 +28,4 @@ recorded here on 2026-10-08.
 | [0013](0013-single-player-first.md) | Single-player first, multiplayer-capable | accepted |
 | [0014](0014-review-workflow.md) | Plan, implement, review in rounds, redesign after three | accepted |
 | [0015](0015-era-generic-engine.md) | The engine is era-generic, from antiquity to the Napoleonic era | accepted |
+| [0016](0016-typescript-toolchain.md) | Game code in strict TypeScript, tested with Vitest, linted with ESLint, versions pinned | proposed |
