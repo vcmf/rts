@@ -26,7 +26,8 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
   // 7 vision: S2
   step('8 fire', () => { fireStep(w) })
   // 9 roundshot · 10 melee: S1d
-  // each battalion's casualties and morale read only its own state: any order gives the same result
+  // each battalion's casualties and morale read only its own state, except a rout's orders, taken from the
+  // shared order pool: when it runs short, the lower slot is served first (slot order, deterministic)
   step('11–12 casualties and morale', () => { for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i]) moraleStep(w, i, casualtiesStep(w, i)) })
   // 13 smoke: S2
   step('14 reap', () => { for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i] && menOf(w, i) === 0) reapFormation(w, i) })

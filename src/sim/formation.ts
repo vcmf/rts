@@ -321,13 +321,13 @@ function stepBack(w: World, i: number, d: number): void {
 export function allocOrder(w: World, type: number): number {
   const o = w.ord, n = o.meta[0]; if (n < 0) return -1
   o.meta[0] = o.next[n]; o.meta[1]++
-  o.type[n] = type; o.shape[n] = 0; o.finish[n] = 0; o.left[n] = -1; o.resolved[n] = 0
+  o.type[n] = type; o.shape[n] = 0; o.finish[n] = 0; o.left[n] = -1; o.resolved[n] = 0; o.optional[n] = 0
   o.x[n] = 0; o.z[n] = 0; o.a[n] = 0; o.t0[n] = -1; o.px[n] = 0; o.pz[n] = 0; o.done[n] = 0; o.next[n] = -1
   return n
 }
 function freeOrder(w: World, n: number): void {
   const o = w.ord
-  o.type[n] = 0; o.shape[n] = 0; o.finish[n] = 0; o.left[n] = 0; o.resolved[n] = 0
+  o.type[n] = 0; o.shape[n] = 0; o.finish[n] = 0; o.left[n] = 0; o.resolved[n] = 0; o.optional[n] = 0
   o.x[n] = 0; o.z[n] = 0; o.a[n] = 0; o.t0[n] = 0; o.px[n] = 0; o.pz[n] = 0; o.done[n] = 0
   o.next[n] = o.meta[0]; o.meta[0] = n; o.meta[1]--
 }
@@ -339,6 +339,11 @@ export function shiftOrder(w: World, i: number): void {
   const f = w.f, n = f.ordHead[i]; if (n < 0) return
   f.ordHead[i] = w.ord.next[n]; if (f.ordHead[i] < 0) f.ordTail[i] = -1
   freeOrder(w, n)
+}
+// an order's point, kept 2 m inside the map on each axis (Retire, a router's run)
+export function setOnMap(w: World, n: number, x: number, z: number): void {
+  const t = w.terrain, lo = 2, hi = (t.n - 1) * t.cell - 2
+  w.ord.x[n] = Math.min(t.x0 + hi, Math.max(t.x0 + lo, x)); w.ord.z[n] = Math.min(t.z0 + hi, Math.max(t.z0 + lo, z))
 }
 export function clearOrders(w: World, i: number): void { while (w.f.ordHead[i] >= 0) shiftOrder(w, i) }
 export const ordersFree = (w: World): number => w.ord.type.length - w.ord.meta[1]
@@ -514,10 +519,7 @@ function formationStep(w: World, i: number): void {
   if (type === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
   const [V0, pace] = paceOf(w, i), halfW = halfWidth(w, i)
   if (type === O_MOVE) {
-    if (!o.resolved[n]) {   // a distance ahead (Retire): the point, kept on the map
-      const t2 = w.terrain, lo = 2, hiX = (t2.n - 1) * t2.cell - 2
-      o.x[n] = Math.min(t2.x0 + hiX, Math.max(t2.x0 + lo, f.x[i] + sin(f.heading[i]) * o.a[n]))
-      o.z[n] = Math.min(t2.z0 + hiX, Math.max(t2.z0 + lo, f.z[i] + cos(f.heading[i]) * o.a[n])); o.resolved[n] = 1 }
+    if (!o.resolved[n]) { setOnMap(w, n, f.x[i] + sin(f.heading[i]) * o.a[n], f.z[i] + cos(f.heading[i]) * o.a[n]); o.resolved[n] = 1 }   // a distance ahead (Retire)
     const dx = o.x[n] - f.x[i], dz = o.z[n] - f.z[i], dist = hyp(dx, dz)
     if (dist < ARRIVE) { shiftOrder(w, i); f.vx[i] = 0; f.vz[i] = 0; return }
     const dh = wrapAngle(atan2(dx, dz) - f.heading[i])
@@ -556,8 +558,8 @@ function formationStep(w: World, i: number): void {
     if (lmax < 0.05 || t - o.t0[n] > w.cr.rs.dressTime) shiftOrder(w, i)
   } else if (type === O_FACE) {
     f.vx[i] = 0; f.vz[i] = 0
-    // a router that cannot face about runs as it stands (its run must not be dropped with the failed turn)
-    if (o.t0[n] < 0) { const why = faceAbout(w, i); if (why) { if (f.mstate[i] === MS_ROUTING) shiftOrder(w, i); else clearOrders(w, i); f.status[i] = why; return } o.t0[n] = t; f.blockedFor[i] = 0 }
+    // a failed Face about drops the orders after it, unless it was optional (a router's: it runs as it stands)
+    if (o.t0[n] < 0) { const why = faceAbout(w, i); if (why) { if (o.optional[n]) shiftOrder(w, i); else clearOrders(w, i); f.status[i] = why; return } o.t0[n] = t; f.blockedFor[i] = 0 }
     if (t - o.t0[n] >= w.cr.rs.faceTime * f.drill[i]) shiftOrder(w, i)
   } else if (type === O_WHEEL) {
     if (snakes(w, i)) { shiftOrder(w, i); f.status[i] = ST_CANNOT_WHEEL; return }

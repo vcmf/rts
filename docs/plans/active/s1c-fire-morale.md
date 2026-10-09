@@ -327,4 +327,19 @@ Built as designed. The tests, with a negative run for each of round 3's bugs:
 
 The review rounds restart with this design.
 
+**Redesigned PR, review round 1.** One severe finding and seven others, all fixed:
+- **No rear set and a battalion that breaks mid-Retire:** "straight back from the heading" pointed at the
+  enemy, because the Retire's Face about had already turned it. With no rear set, the direction is now
+  away from the nearest enemy at the break (straight back only when there is none). A test breaks a
+  retiring battalion; the old rule fails it.
+- **Sight lines** are walked from the lower company to the higher, whichever asks, so the cached answer
+  cannot depend on order.
+- **Friendly cover** is culled by each battalion's real extent, not a fixed 40 m.
+- **A failed optional Face about:** an order flag (`optional`) skips it, replacing the morale check in
+  the formation layer.
+- **No allocations** in the fire step's hot path.
+- **One map clamp** (`setOnMap`).
+- **Quality:** a spawn's negative quality is refused, except the −1 default marker.
+- **The tick comment** names the shared order pool.
+
 **Left for S1c-2 and S1c-3:** as in the split above.

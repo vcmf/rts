@@ -15,10 +15,10 @@ const sqrt = Math.sqrt
 export const RETARGET_TICKS = 10                       // targets are chosen every 0.5 s, staggered by slot (one tick in ten each)
 const K_HITS = 1, K_RELOAD = 2, K_SPAWN = 3           // keyed draws: purpose tags
 const SIGHT_STEP = 2                                   // metres between samples along a sight line
-const BLOCK_CULL = 40                                  // a battalion this far from a sight line cannot stand across it
 
 // per-company geometry for this step (scratch, not state): centre, facing and the block's origin and rotation
-export interface FireGeo { cx: Float64Array; cz: Float64Array; fx: Float64Array; fz: Float64Array; ox: Float64Array; oz: Float64Array; ca: Float64Array; sa: Float64Array; n: number }
+// per battalion, reach: how far its blocks extend from its anchor (a sight line farther off cannot cross them)
+export interface FireGeo { cx: Float64Array; cz: Float64Array; fx: Float64Array; fz: Float64Array; ox: Float64Array; oz: Float64Array; ca: Float64Array; sa: Float64Array; reach: Float64Array; n: number }
 const pose = { x: 0, z: 0, a: 0, face: 0 }
 const ks = new Uint32Array(4)
 
@@ -27,15 +27,18 @@ const ks = new Uint32Array(4)
 function geometry(w: World): FireGeo {
   const C = w.cr.geo.companies, n = MAX_FORMATIONS * C, s = w.scratch
   s.fireEpoch = ((s.fireEpoch ?? 0) + 1) & 0x3fffffff
-  const G = s.fireGeo ?? (s.fireGeo = { cx: new Float64Array(n), cz: new Float64Array(n), fx: new Float64Array(n), fz: new Float64Array(n), ox: new Float64Array(n), oz: new Float64Array(n), ca: new Float64Array(n), sa: new Float64Array(n), n })
+  const G = s.fireGeo ?? (s.fireGeo = { cx: new Float64Array(n), cz: new Float64Array(n), fx: new Float64Array(n), fz: new Float64Array(n), ox: new Float64Array(n), oz: new Float64Array(n), ca: new Float64Array(n), sa: new Float64Array(n), reach: new Float64Array(MAX_FORMATIONS), n })
   const f = w.f, g = w.cr.geo, back = -(g.ranks - 1) * g.rankSpacing / 2, t = w.meta[M_TICK] * DT
+  const half = sqrt((g.files * g.fileSpacing / 2) * (g.files * g.fileSpacing / 2) + (g.ranks * g.rankSpacing / 2) * (g.ranks * g.rankSpacing / 2))   // a block's half-diagonal
   for (let i = 0; i < MAX_FORMATIONS; i++) {
     if (!f.alive[i]) continue
+    G.reach[i] = 0
     for (let c = 0; c < C; c++) {
       const k = i * C + c, p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, pose), ca = cos(p.a), sa = sin(p.a)
       G.ox[k] = p.x; G.oz[k] = p.z; G.ca[k] = ca; G.sa[k] = sa
       G.cx[k] = p.x - back * sa; G.cz[k] = p.z + back * ca   // the block's centre: (0, back) in the block frame
       G.fx[k] = sin(p.face); G.fz[k] = cos(p.face)
+      G.reach[i] = Math.max(G.reach[i], sqrt((G.cx[k] - f.x[i]) * (G.cx[k] - f.x[i]) + (G.cz[k] - f.z[i]) * (G.cz[k] - f.z[i])) + half)
     }
   }
   return G
@@ -85,12 +88,12 @@ function throughBlock(w: World, G: FireGeo, k: number, x0: number, z0: number, x
 function clearShare(w: World, G: FireGeo, i: number, c: number, x: number, z: number): number {
   const f = w.f, C = w.cr.geo.companies, k = i * C + c, g = w.cr.geo, half = (g.files - 1) * g.fileSpacing / 2
   let clear = 0
-  for (const s of [-half, 0, half]) {
-    const x0 = G.ox[k] + s * G.ca[k], z0 = G.oz[k] + s * G.sa[k]
+  for (let r = -1; r <= 1; r++) {
+    const s = r * half, x0 = G.ox[k] + s * G.ca[k], z0 = G.oz[k] + s * G.sa[k]
     let blocked = false
     for (let j = 0; j < MAX_FORMATIONS && !blocked; j++) {
       if (!f.alive[j] || f.side[j] !== f.side[i]) continue
-      if (distToSegment(f.x[j], f.z[j], x0, z0, x, z) > BLOCK_CULL) continue
+      if (distToSegment(f.x[j], f.z[j], x0, z0, x, z) > G.reach[j]) continue
       for (let q = 0; q < C && !blocked; q++) if ((j !== i || q !== c) && f.men[j * C + q] > 0 && throughBlock(w, G, j * C + q, x0, z0, x, z)) blocked = true
     }
     if (!blocked) clear++
@@ -108,7 +111,8 @@ function sees(w: World, G: FireGeo, k: number, m: number): boolean {
   const n = MAX_FORMATIONS * w.cr.geo.companies, s = w.scratch, epoch = s.fireEpoch ?? 0
   const cache = s.fireSight ?? (s.fireSight = new Int32Array(n * n)), key = k < m ? k * n + m : m * n + k, v = cache[key]
   if (v >> 1 === epoch) return (v & 1) === 1
-  const clear = clearSight(w, G.cx[k], G.cz[k], G.cx[m], G.cz[m]); cache[key] = (epoch << 1) | (clear ? 1 : 0)
+  // walked from the lower company to the higher, whichever asks: the two directions round differently
+  const a = k < m ? k : m, b = k < m ? m : k, clear = clearSight(w, G.cx[a], G.cz[a], G.cx[b], G.cz[b]); cache[key] = (epoch << 1) | (clear ? 1 : 0)
   return clear
 }
 const sqDist = (G: FireGeo, k: number, m: number): number => (G.cx[m] - G.cx[k]) * (G.cx[m] - G.cx[k]) + (G.cz[m] - G.cz[k]) * (G.cz[m] - G.cz[k])
@@ -181,22 +185,26 @@ export function fireStep(w: World): void {
 // the preferred target if it can be aimed at, else the current one, else the nearest; ties to the lower
 // handle. The company aimed at is left in chosenAim (−1 none) for the volley this tick.
 let chosenAim = -1
+const candD = new Float64Array(MAX_FORMATIONS), candH = new Int32Array(MAX_FORMATIONS)
 function chooseTarget(w: World, G: FireGeo, i: number, c: number): Handle {
   const f = w.f, C = w.cr.geo.companies, k = i * C + c
   chosenAim = -1
-  for (const h of [f.prefer[i], f.target[k]]) { const j = slotOf(w, h); if (j >= 0 && f.side[j] !== f.side[i]) { const m = aimAt(w, G, k, j); if (m >= 0) { chosenAim = m; return h } } }
+  for (let p = 0; p < 2; p++) { const h = p === 0 ? f.prefer[i] : f.target[k], j = slotOf(w, h); if (j >= 0 && f.side[j] !== f.side[i]) { const m = aimAt(w, G, k, j); if (m >= 0) { chosenAim = m; return h } } }
   // the nearest battalion by its nearest visible company. Candidates are taken in order of their nearest
   // company in arc (a bound: a visible one is no nearer), and the search stops once the bound passes the best.
-  const cand: [number, number][] = []
+  let nc = 0
   for (let j = 0; j < MAX_FORMATIONS; j++) {
     if (!f.alive[j] || f.side[j] === f.side[i]) continue
-    let bd = Infinity
-    for (let q = 0; q < C; q++) { const m = j * C + q; if (f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m])) bd = Math.min(bd, sqDist(G, k, m)) }
-    if (bd < Infinity) cand.push([bd, handleOf(w, j)])
+    let b = Infinity
+    for (let q = 0; q < C; q++) { const m = j * C + q; if (f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m])) b = Math.min(b, sqDist(G, k, m)) }
+    if (b === Infinity) continue
+    const h = handleOf(w, j); let p = nc++   // insertion by (bound, handle)
+    while (p > 0 && (candD[p - 1] > b || (candD[p - 1] === b && candH[p - 1] > h))) { candD[p] = candD[p - 1]; candH[p] = candH[p - 1]; p-- }
+    candD[p] = b; candH[p] = h
   }
-  cand.sort((a, b) => a[0] - b[0] || a[1] - b[1])
   let best: Handle = 0, bd = Infinity
-  for (const [bound, h] of cand) {
+  for (let p = 0; p < nc; p++) {
+    const bound = candD[p], h = candH[p]
     if (bound > bd) break   // equal bounds still run: a tie goes to the lower handle
     const m = aimAt(w, G, k, slotOf(w, h)); if (m < 0) continue
     const d = sqDist(G, k, m); if (d < bd || (d === bd && h < best)) { bd = d; best = h; chosenAim = m }

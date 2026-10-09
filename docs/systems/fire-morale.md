@@ -100,12 +100,14 @@ recentLosses = recentLosses · exp(−DT / recentTime) + lost this tick
 **Routing.** The battalion drops its orders, refuses every command except the debug ones, and does not
 fire. Its rout is a small stored state, fixed at the break and never re-derived from the battalion as it
 is later:
-- **The direction** (`routX`, `routZ`): its side's rear (the `side` command), else straight back from its
-  heading at the break.
+- **The direction** (`routX`, `routZ`):
+  - its side's rear (the `side` command);
+  - else away from the nearest enemy at the break (its heading may already be turned away, by a Retire);
+  - else straight back.
 - **The phase** (`routPhase`): running, halted or fled.
   - Each run is a move at `routPace` times its pace, kept 2 m inside the map. It has a Face about first
-    when the shape allows and the way is behind it; if that turn fails (water behind it), the run goes
-    on as it stands.
+    when the shape allows and the way is behind it. That Face about is an *optional* order: if it fails
+    (water behind it), the run goes on as it stands.
   - When its orders end, a router whose status says it halted at impassable ground is *halted*.
     Otherwise it got where it was going, or as near as it could, and has *fled*: it stays.
   - Only a halted router tries again: every 5 s, the next direction of a fan about the stored one (the
@@ -145,6 +147,7 @@ scripted tests.
     - a router halted at the stream runs another way;
     - one that arrives stays, fled;
     - with no rear set, the fan turns about the stored direction;
+    - a battalion that breaks mid-Retire runs away from the enemy;
     - a full order pool uses up no direction.
   - **Partial sight:** companies of a target hidden in a wood take no hits; the rest are fired on.
   - **Determinism:**

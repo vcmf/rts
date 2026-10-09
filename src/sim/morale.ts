@@ -6,8 +6,8 @@
 // is fixed at the break (its side's rear, else straight back), and its phase is kept: running, halted at
 // impassable ground, or fled. Only a halted router tries again, the next direction of a fan about the
 // stored one. It does not rally (S1c-2).
-import { type World, MS_STEADY, MS_SHAKEN, MS_WAVERING, MS_ROUTING, O_FACE, O_MOVE, M_TICK, RP_RUNNING, RP_HALTED, RP_FLED } from './world.ts'
-import { allocOrder, appendOrder, clearOrders, layoutOf, menOf, ordersFree, ST_HALTED } from './formation.ts'
+import { type World, MAX_FORMATIONS, MS_STEADY, MS_SHAKEN, MS_WAVERING, MS_ROUTING, O_FACE, O_MOVE, M_TICK, RP_RUNNING, RP_HALTED, RP_FLED } from './world.ts'
+import { allocOrder, appendOrder, clearOrders, layoutOf, menOf, ordersFree, setOnMap, ST_HALTED } from './formation.ts'
 import { sin, cos, PI } from './num.ts'
 
 const RUN = 800   // how far a router is sent, metres (kept on the map)
@@ -33,11 +33,21 @@ export function moraleStep(w: World, i: number, lost: number): void {
   f.mstate[i] = next
 }
 
-// the battalion breaks: its run's direction is fixed now, its orders dropped, and the first run made
+// the battalion breaks: its run's direction is fixed now (its side's rear; else away from the nearest enemy,
+// since its heading may be turned away already, by a Retire; else straight back), its orders dropped, and
+// the first run made
 function rout(w: World, i: number): void {
   const f = w.f, side = f.side[i]
   let rx = w.sides.rearX[side], rz = w.sides.rearZ[side]
-  if (rx === 0 && rz === 0) { rx = -sin(f.heading[i]); rz = -cos(f.heading[i]) }
+  if (rx === 0 && rz === 0) {
+    let bd = Infinity
+    for (let j = 0; j < MAX_FORMATIONS; j++) {
+      if (!f.alive[j] || f.side[j] === side) continue
+      const dx = f.x[i] - f.x[j], dz = f.z[i] - f.z[j], d = Math.sqrt(dx * dx + dz * dz)
+      if (d > 1e-6 && d < bd) { bd = d; rx = dx / d; rz = dz / d }   // the lower slot wins a tie
+    }
+    if (bd === Infinity) { rx = -sin(f.heading[i]); rz = -cos(f.heading[i]) }
+  }
   f.mstate[i] = MS_ROUTING; f.routX[i] = rx; f.routZ[i] = rz; f.runs[i] = 0; f.routPhase[i] = RP_HALTED
   clearOrders(w, i)
   run(w, i)
@@ -55,11 +65,13 @@ function routStep(w: World, i: number): void {
 function run(w: World, i: number): void {
   const f = w.f, a = FAN[f.runs[i]], ca = cos(a), sa = sin(a)
   const dx = f.routX[i] * ca + f.routZ[i] * sa, dz = -f.routX[i] * sa + f.routZ[i] * ca
-  const t = w.terrain, lo = 2, hi = (t.n - 1) * t.cell - 2, n = allocOrder(w, O_MOVE)
+  const n = allocOrder(w, O_MOVE)
   if (n < 0) return
   f.runs[i]++; f.routPhase[i] = RP_RUNNING; f.status[i] = 0; f.blockedFor[i] = 0
-  w.ord.x[n] = Math.min(t.x0 + hi, Math.max(t.x0 + lo, f.x[i] + dx * RUN)); w.ord.z[n] = Math.min(t.z0 + hi, Math.max(t.z0 + lo, f.z[i] + dz * RUN)); w.ord.resolved[n] = 1
-  if (ordersFree(w) > 0 && layoutOf(w, i).turn && !f.trans[i] && dx * sin(f.heading[i]) + dz * cos(f.heading[i]) < 0) appendOrder(w, i, allocOrder(w, O_FACE))
+  setOnMap(w, n, f.x[i] + dx * RUN, f.z[i] + dz * RUN); w.ord.resolved[n] = 1
+  if (ordersFree(w) > 0 && layoutOf(w, i).turn && !f.trans[i] && dx * sin(f.heading[i]) + dz * cos(f.heading[i]) < 0) {
+    const k = allocOrder(w, O_FACE); w.ord.optional[k] = 1; appendOrder(w, i, k)   // optional: if it fails, the run goes on
+  }
   appendOrder(w, i, n)
 }
 

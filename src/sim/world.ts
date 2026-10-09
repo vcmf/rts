@@ -60,6 +60,7 @@ export const MORALE_STATES = ['steady', 'shaken', 'wavering', 'routing']
 export const RP_NONE = 0, RP_RUNNING = 1, RP_HALTED = 2, RP_FLED = 3
 export interface Orders {
   type: Int32Array; shape: Int32Array; finish: Uint8Array; left: Int8Array; resolved: Uint8Array
+  optional: Uint8Array   // an order that, failing, is skipped rather than dropping the rest (a router's Face about)
   x: Float64Array; z: Float64Array; a: Float64Array; t0: Float64Array; px: Float64Array; pz: Float64Array; done: Float64Array
   next: Int32Array
   meta: Int32Array   // [free head, in use]
@@ -95,7 +96,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     quality: f64(N), morale: f64(N), mstate: u8(N), startMen: i32(N), recent: f64(N), routX: f64(N), routZ: f64(N), routPhase: u8(N), runs: u8(N),
   }
   const M = MAX_ORDERS
-  const ord: Orders = { type: i32(M), shape: i32(M), finish: u8(M), left: new Int8Array(M), resolved: u8(M),
+  const ord: Orders = { type: i32(M), shape: i32(M), finish: u8(M), left: new Int8Array(M), resolved: u8(M), optional: u8(M),
     x: f64(M), z: f64(M), a: f64(M), t0: f64(M), px: f64(M), pz: f64(M), done: f64(M), next: i32(M), meta: i32(2) }
   for (let k = 0; k < M; k++) ord.next[k] = k + 1 < M ? k + 1 : -1
   const free = new Int32Array(N)

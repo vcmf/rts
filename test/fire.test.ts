@@ -204,6 +204,19 @@ describe('morale', () => {
     expect(dirs.length).toBeGreaterThanOrEqual(3)
     for (const d of dirs.slice(0, 3)) expect(d).toBeGreaterThan(0)
   })
+  it('with no rear set, a battalion that breaks while retiring (faced about) runs away from the enemy, not toward it', () => {
+    const s = new W(), h = s.spawn(0, -100, -65, E, { fire: 'hold' }); s.spawn(1, -20, -65, -E, { fire: 'hold' })
+    s.do({ type: 'retire', id: h, metres: 30 }); s.run(4)                       // faced about: heading west, its back to the enemy
+    expect(Math.cos(s.w.f.heading[s.i(h)] - -E)).toBeGreaterThan(0.99)
+    s.w.f.quality[s.i(h)] = 0.1; s.w.f.morale[s.i(h)] = 0.1; s.tick()           // breaks now, mid-Retire
+    expect(s.state(h)).toBe(MS_ROUTING)
+    expect(s.w.f.routX[s.i(h)]).toBeLessThan(-0.99)                              // away from the enemy (west)
+    const x0 = s.w.f.x[s.i(h)]; s.run(60); expect(s.w.f.x[s.i(h)]).toBeLessThan(x0 - 20)
+  })
+  it('a spawn with a negative quality is refused (only the −1 marker means the ruleset\'s)', () => {
+    const s = new W(); s.do({ type: 'debug-spawn', side: 0, x: 0, z: 0, heading: 0, shape: 'line', men: 10, quality: -0.2 })
+    expect(s.dropped.at(-1)?.reason).toBe('no such quality')
+  })
   it('a full order pool delays a run but uses up no direction of the fan', () => {
     const s = new W(), h = s.spawn(1, 40, -100, -E), filler = s.spawn(1, -150, 100, 0, { fire: 'hold' })
     s.do({ type: 'side', side: 1, x: 1, z: 0 })

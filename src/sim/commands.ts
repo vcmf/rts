@@ -104,8 +104,8 @@ function apply(w: World, c: Command): string {
     if (c.men <= 0 || c.men > cr.slots) return 'no room for those men'
     if (!finite(c.x) || !finite(c.z) || !finite(c.heading) || !inside(w, c.x, c.z)) return 'outside the map'
     if (Math.abs(c.heading) > 4 * PI) return 'heading out of range'
-    const q = c.quality === undefined || c.quality < 0 ? cr.rs.morale.quality : c.quality
-    if (!finite(q) || q > 1) return 'no such quality'
+    const q = c.quality === undefined || c.quality === -1 ? cr.rs.morale.quality : c.quality   // −1: the ruleset's
+    if (!finite(q) || q < 0 || q > 1) return 'no such quality'
     const mode = FIRE_MODES.indexOf(c.fire ?? FIRE_MODES[FIRE_AT_WILL]); if (mode < 0) return 'no such fire mode'
     if (w.meta[M_FREE] === 0) return 'no free formation slot'
     const i = w.free[--w.meta[M_FREE]], C = cr.geo.companies
