@@ -4,11 +4,15 @@
   "type": "module",
   "engines": { "node": ">=22.18" },
   "scripts": {
+    "dev": "vite --open /app/",
+    "build": "vite build",
+    "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "build:data": "node tools/build-sim-data.ts",
     "check:data": "node tools/build-sim-data.ts --check",
-    "test": "npm run lint && npm run typecheck && vitest run"
+    "test": "npm run lint && npm run typecheck && vitest run",
+    "check:app": "npm run build && node tools/app-check.mjs"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

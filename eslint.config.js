@@ -6,7 +6,7 @@ const banned = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'sinh', 'c
   'exp', 'expm1', 'log', 'log1p', 'log2', 'log10', 'pow', 'hypot', 'cbrt', 'fround', 'random']
 
 export default tseslint.config(
-  { ignores: ['node_modules/', 'data/', 'prototypes/', 'tools/*.js', 'tools/*.mjs', 'tools/*.py', 'eslint.config.js'] },
+  { ignores: ['node_modules/', 'dist/', 'scratch/', 'data/', 'prototypes/', 'tools/*.js', 'tools/*.mjs', 'tools/*.py', 'eslint.config.js'] },
   ...tseslint.configs.recommended,
   // a type-only import written `import { type X }` still loads its module and can create an import cycle
   // (it once left formation.ts reading TRAIL before world.ts had set it): type-only imports are `import type`
