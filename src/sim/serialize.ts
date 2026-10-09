@@ -54,7 +54,7 @@ function writeCommand(w: Writer, s: Stamped) {
   switch (c.type) {
     case 'move': w.i32(c.id); w.u8(c.append ? 1 : 0); w.u32(c.points.length); for (const [x, z] of c.points) { w.f64(x); w.f64(z) } break
     case 'halt': w.i32(c.id); break
-    case 'debug-spawn': w.u8(c.side); w.i32(c.men); w.f64(c.x); w.f64(c.z); w.f64(c.facing); break
+    case 'debug-spawn': w.i32(c.side); w.i32(c.men); w.f64(c.x); w.f64(c.z); w.f64(c.facing); break
     case 'debug-kill': w.i32(c.id); w.i32(c.men); break
   }
 }
@@ -63,11 +63,15 @@ function readCommand(r: Reader): Stamped {
   let cmd: Command
   if (t === 1) { const id = r.i32(), append = r.u8() === 1, n = r.u32(), points: [number, number][] = []; for (let k = 0; k < n; k++) points.push([r.f64(), r.f64()]); cmd = { type: 'move', id, points, append } }
   else if (t === 2) cmd = { type: 'halt', id: r.i32() }
-  else if (t === 3) cmd = { type: 'debug-spawn', side: r.u8(), men: r.i32(), x: r.f64(), z: r.f64(), facing: r.f64() }
+  else if (t === 3) cmd = { type: 'debug-spawn', side: r.i32(), men: r.i32(), x: r.f64(), z: r.f64(), facing: r.f64() }
   else if (t === 4) cmd = { type: 'debug-kill', id: r.i32(), men: r.i32() }
   else throw new Error(`unknown command type ${t} in save`)
   return { tick, seq, cmd }
 }
+
+// every column of a table, in name order: a column added to the table is saved and hashed with no list
+// to update
+export const columns = (t: object): Arr[] => Object.keys(t).sort().map(k => (t as Record<string, Arr>)[k])
 
 // the world's sections, in the fixed order; each is self-describing (lengths included)
 export function sections(w: World): [string, Uint8Array][] {
@@ -76,7 +80,7 @@ export function sections(w: World): [string, Uint8Array][] {
   sec('meta', wr => writeArr(wr, w.meta))
   sec('rng', wr => writeArr(wr, w.rng))
   const f = w.f
-  sec('formations', wr => { for (const a of [f.alive, f.gen, f.side, f.men, f.x, f.z, f.facing, f.speed, f.wpHead, f.wpTail]) writeArr(wr, a) })
+  sec('formations', wr => { for (const a of columns(f)) writeArr(wr, a) })
   sec('formation free list', wr => writeArr(wr, w.free))
   sec('waypoint pool', wr => { writeArr(wr, w.wp.x); writeArr(wr, w.wp.z); writeArr(wr, w.wp.next); writeArr(wr, w.wp.meta) })
   sec('pending commands', wr => { wr.u32(w.pending.length); for (const s of w.pending) writeCommand(wr, s) })
@@ -103,7 +107,7 @@ export function deserialize(bytes: Uint8Array, data: SimData, debug = true): Wor
   if ((w.meta[2] >>> 0) !== (data.version >>> 0)) throw new DataVersionMismatch(`save made with data ${hex(w.meta[2])}, loaded with ${hex(data.version)}`)
   readArr(r, w.rng)
   const f = w.f
-  for (const a of [f.alive, f.gen, f.side, f.men, f.x, f.z, f.facing, f.speed, f.wpHead, f.wpTail]) readArr(r, a)
+  for (const a of columns(f)) readArr(r, a)
   readArr(r, w.free)
   readArr(r, w.wp.x); readArr(r, w.wp.z); readArr(r, w.wp.next); readArr(r, w.wp.meta)
   const n = r.u32(); for (let k = 0; k < n; k++) w.pending.push(readCommand(r))

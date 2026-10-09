@@ -15,7 +15,8 @@ export type Command =
 export interface Stamped { tick: number; seq: number; cmd: Command }
 export interface Dropped { tick: number; seq: number; reason: string }
 
-const MAX_POINTS = 64
+export const MAX_POINTS = 64
+const TYPES = ['move', 'halt', 'debug-spawn', 'debug-kill']
 
 // stamps a command for the next tick; `log` receives it when the command is external
 export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
@@ -24,9 +25,11 @@ export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
   if (log) log.push(s)
   return s
 }
+// a command of an unknown type, or a move with too many points, is kept as it is and dropped when applied
 function quantiseCommand(c: Command): Command {
+  if (!TYPES.includes(c.type)) return c
   switch (c.type) {
-    case 'move': return { type: 'move', id: c.id | 0, points: c.points.slice(0, MAX_POINTS).map(([x, z]) => [quantise(x), quantise(z)]), append: !!c.append }
+    case 'move': return { type: 'move', id: c.id | 0, points: c.points.length > MAX_POINTS ? c.points : c.points.map(([x, z]) => [quantise(x), quantise(z)]), append: !!c.append }
     case 'halt': return { type: 'halt', id: c.id | 0 }
     case 'debug-spawn': return { type: 'debug-spawn', side: c.side | 0, men: c.men | 0, x: quantise(c.x), z: quantise(c.z), facing: quantise(c.facing) }
     case 'debug-kill': return { type: 'debug-kill', id: c.id | 0, men: c.men | 0 }
@@ -51,8 +54,8 @@ const finite = (v: number): boolean => v === v && v !== Infinity && v !== -Infin
 export function applyCommands(w: World, t: number): Dropped[] {
   const dropped: Dropped[] = [], keep: Stamped[] = []
   for (const s of w.pending) {
-    if (s.tick !== t) { keep.push(s); continue }
-    const why = apply(w, s.cmd)
+    if (s.tick > t) { keep.push(s); continue }
+    const why = s.tick < t ? 'stale tick' : !TYPES.includes(s.cmd.type) ? 'unknown command' : apply(w, s.cmd)
     if (why) dropped.push({ tick: t, seq: s.seq, reason: why })
   }
   w.pending = keep
@@ -75,10 +78,15 @@ function apply(w: World, c: Command): string {
     case 'move': {
       const i = formationSlot(w, c.id); if (i < 0) return 'no such formation'
       if (c.points.length === 0) return 'no waypoints'
+      if (c.points.length > MAX_POINTS) return 'too many waypoints'
       for (const [x, z] of c.points) if (!finite(x) || !finite(z) || !inside(w, x, z)) return 'waypoint outside the map'
+      // room first, so a dropped move changes nothing (a replacing move frees its old route)
+      let room = w.wp.x.length - w.wp.meta[1]
+      if (!c.append) for (let n = f.wpHead[i]; n >= 0; n = w.wp.next[n]) room++
+      if (c.points.length > room) return 'waypoint pool full'
       if (!c.append) { freeList(w.wp, f.wpHead[i]); f.wpHead[i] = -1; f.wpTail[i] = -1 }
       for (const [x, z] of c.points) {
-        const n = allocNode(w.wp, x, z); if (n < 0) return 'waypoint pool full'
+        const n = allocNode(w.wp, x, z)
         if (f.wpTail[i] < 0) f.wpHead[i] = n; else w.wp.next[f.wpTail[i]] = n
         f.wpTail[i] = n
       }

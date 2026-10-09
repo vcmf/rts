@@ -18,8 +18,11 @@ function cosCore(x: number): number {
   return 1 + x2 * (-1 / 2 + x2 * (1 / 24 + x2 * (-1 / 720 + x2 * (1 / 40320 + x2 * (-1 / 3628800
     + x2 * (1 / 479001600 + x2 * (-1 / 87178291200 + x2 * (1 / 20922789888000))))))))
 }
-// x = k·π/2 + r with |r| ≤ π/4
+// x = k·π/2 + r with |r| ≤ π/4. Exact while k·π/2 (hi part) is exact: |x| up to about 1e5, far beyond any
+// angle the sim forms (headings are kept in (−π, π]); larger inputs are a bug and throw
+export const TRIG_DOMAIN = 1e5
 function reduce(x: number): [number, number] {
+  if (!(x <= TRIG_DOMAIN && x >= -TRIG_DOMAIN) && x === x) throw new RangeError(`trig argument ${x} outside ±${TRIG_DOMAIN}`)
   const k = Math.round(x / HALF_PI)
   return [k, (x - k * HALF_PI_HI) - k * HALF_PI_LO]
 }
@@ -45,7 +48,8 @@ function atanPos(t: number): number {
   if (t > TAN_PI_12) return PI / 6 + atanCore((t * SQRT3 - 1) / (t + SQRT3))
   return atanCore(t)
 }
-// the angle of (x, y) from the +x axis, like Math.atan2(y, x)
+// the angle of (x, y) from the +x axis, like Math.atan2(y, x), in (−π, π]: unlike Math, a negative zero y
+// on the negative x axis gives +π, and zero results are +0 (the sim has no use for signed zeros)
 export function atan2(y: number, x: number): number {
   if (x === 0 && y === 0) return 0
   const ax = x < 0 ? -x : x, ay = y < 0 ? -y : y
@@ -55,6 +59,7 @@ export function atan2(y: number, x: number): number {
 }
 // an angle in (−π, π]
 export function wrapAngle(a: number): number {
+  if (!(a <= TRIG_DOMAIN && a >= -TRIG_DOMAIN) && a === a) throw new RangeError(`angle ${a} outside ±${TRIG_DOMAIN}`)
   const k = Math.round(a / TWO_PI)
   const r = a - k * TWO_PI
   return r <= -PI ? r + TWO_PI : r > PI ? r - TWO_PI : r

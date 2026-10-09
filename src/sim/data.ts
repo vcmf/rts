@@ -28,6 +28,7 @@ export function loadSimData(bytes: Uint8Array, expectedVersion?: number): SimDat
   const h = new Float64Array(hg.nx * hg.nz); for (let i = 0; i < h.length; i++) h[i] = f64()
   const cg = { cell: f64(), nx: u32(), nz: u32(), x0: f64(), z0: f64() }
   const g = bytes.slice(o, o + cg.nx * cg.nz); o += g.length
+  if (g.length !== cg.nx * cg.nz) throw new Error('sim data file is truncated')
   if (o !== bytes.length) throw new Error('sim data file has trailing bytes')
   return { version, height: { ...hg, h }, cost: { ...cg, g } }
 }

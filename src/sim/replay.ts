@@ -11,29 +11,33 @@ export const SIM_VERSION = 's0.1'
 
 export interface HashPoint { tick: number; hash: number; sections: [string, number][] }
 export interface Replay { simVersion: string; dataVersion: number; scenario: string; seed: number; ticks: number; log: Stamped[] }
-export type Scenario = (w: World) => void   // issues the scenario's own commands (not logged)
+export interface Scenario { name: string; setup(w: World): void }   // setup issues the scenario's own commands (not logged)
 
 // runs a scenario for `ticks`, issuing `script(w, tick)` commands as external (logged) ones
-export function record(data: SimData, scenarioName: string, scenario: Scenario, seed: number, ticks: number,
+export function record(data: SimData, scenario: Scenario, seed: number, ticks: number,
   script: (w: World, issueExternal: (c: Parameters<typeof issue>[1]) => void) => void): { replay: Replay; hashes: HashPoint[] } {
   const w = makeWorld(data, seed), log: Stamped[] = [], hashes: HashPoint[] = []
-  scenario(w)
+  scenario.setup(w)
   while (w.meta[M_TICK] < ticks) {
     script(w, c => { issue(w, c, log) })
     const r = advanceTick(w)
     if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: sectionHashes(w) })
   }
-  return { replay: { simVersion: SIM_VERSION, dataVersion: data.version, scenario: scenarioName, seed, ticks, log }, hashes }
+  return { replay: { simVersion: SIM_VERSION, dataVersion: data.version, scenario: scenario.name, seed, ticks, log }, hashes }
 }
 
 export interface Mismatch { tick: number; expected: string; got: string; section: string }
 
-// plays a replay back; returns the first mismatch against `expected`, or null
+// plays a replay back; returns the first mismatch against `expected`, or null. Hashes are taken every
+// HASH_EVERY ticks, so a divergence is reported at the first hash point after it (within 20 ticks).
 export function play(r: Replay, data: SimData, scenario: Scenario, expected: HashPoint[]): Mismatch | null {
   if (r.simVersion !== SIM_VERSION) throw new Error(`replay from sim ${r.simVersion}, this is ${SIM_VERSION}`)
   if ((r.dataVersion >>> 0) !== (data.version >>> 0)) throw new DataVersionMismatch(`replay made with data ${hex(r.dataVersion)}, loaded ${hex(data.version)}`)
+  if (r.scenario !== scenario.name) throw new Error(`replay of scenario ${r.scenario}, given ${scenario.name}`)
+  for (let i = 0; i < r.log.length; i++)
+    if (r.log[i].tick < 1 || r.log[i].tick > r.ticks || (i && r.log[i].tick < r.log[i - 1].tick)) return { tick: r.log[i].tick, expected: 'log ticks in order, within the replay', got: `entry ${i} at tick ${r.log[i].tick}`, section: 'command log' }
   const w = makeWorld(data, r.seed)
-  scenario(w)
+  scenario.setup(w)
   let k = 0, e = 0
   while (w.meta[M_TICK] < r.ticks) {
     // re-issue the commands logged at this tick (stamped for the next one), checking their sequence
