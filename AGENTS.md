@@ -6,7 +6,8 @@ serves cinematic history videos.
 
 Status: **prototyping, engine starting**. Prototypes are single HTML files in `prototypes/`; game code
 is TypeScript in `src/`: the simulation (`src/sim/`, `docs/systems/sim-spine.md`, `docs/systems/formations.md`),
-era rulesets as data (`src/rulesets/`), scenarios (`src/scenarios/`).
+era rulesets as data (`src/rulesets/`), scenarios (`src/scenarios/`), and the page that draws and drives
+the sim (`app/`, `src/app/`, `src/render/`, `docs/systems/sim-page.md`; `npm run dev`).
 
 ## Where things are
 

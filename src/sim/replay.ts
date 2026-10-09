@@ -8,7 +8,7 @@ import { sectionHashes } from './serialize.ts'
 import { type SimData, DataVersionMismatch, hex } from './data.ts'
 import type { Compiled } from './ruleset.ts'
 
-export const SIM_VERSION = 's1a.1'
+export const SIM_VERSION = 's1b.1'   // bumped when the state or a rule changes: older replays no longer reproduce
 
 export interface HashPoint { tick: number; hash: number; sections: [string, number][] }
 export interface Replay { simVersion: string; dataVersion: number; ruleset: number; scenario: string; seed: number; ticks: number; log: Stamped[] }
@@ -53,6 +53,8 @@ export function play(r: Replay, data: SimData, cr: Compiled, scenario: Scenario,
     const want = expected[e++]
     if (!want || want.tick !== res.tick) return { tick: res.tick, expected: want ? `hash at tick ${want.tick}` : 'no more hashes', got: hex(res.hash), section: '' }
     if (want.hash !== res.hash) {
+      // a recording without section hashes (the page, to spare a serialization) cannot name the table
+      if (!want.sections.length) return { tick: res.tick, expected: hex(want.hash), got: hex(res.hash), section: 'not recorded' }
       const got = sectionHashes(w), bad = got.find(([n, h], i) => want.sections[i]?.[0] !== n || want.sections[i][1] !== h)
       return { tick: res.tick, expected: hex(want.hash), got: hex(res.hash), section: bad ? bad[0] : '' }
     }

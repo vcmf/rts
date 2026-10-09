@@ -14,8 +14,8 @@ The battalion as the sim moves it:
 - the footprint gate that keeps every man off impassable ground;
 - Face about, Retire and wheels.
 
-It is ported from `prototypes/formation-core.js` (the feel prototype, still the visual reference until
-S1b draws the sim). The behaviour and its history are in `docs/plans/done/terrain-movement.md`; the port
+It is ported from `prototypes/formation-core.js` (the feel prototype, still the reference for the feel;
+the sim is drawn by the S1b page, `docs/systems/sim-page.md`). The behaviour and its history are in `docs/plans/done/terrain-movement.md`; the port
 is in `docs/plans/done/s1a-formations-on-spine.md`.
 
 ## Goals / non-goals
@@ -24,7 +24,7 @@ is in `docs/plans/done/s1a-formations-on-spine.md`.
   - the prototype's drill and terrain behaviour, deterministic, driven only by commands;
   - every era-specific number and name in a ruleset (decision 0015).
 - **Non-goals:**
-  - drawing the men (S1b);
+  - drawing the men (the S1b page, `docs/systems/sim-page.md`);
   - fire, morale and contact between formations (S1c);
   - pathfinding, and automatic manoeuvres around obstacles (later).
 
@@ -36,9 +36,9 @@ is in `docs/plans/done/s1a-formations-on-spine.md`.
   - a shape that closes across companies (`closeAcross`, the line) fills each half toward the colours;
   - where files or the last rank cannot centre exactly they lean one way (`lean`), and Face about
     reverses the lean when the shape's half-turn reverses the files, so complete files keep their places
-    at any strength.
+    at any strength; each Face about also counts up `faces`, so the renderer knows to relabel its men (S1b).
 
-  Who stands where, and who falls, is the renderer's (S1b).
+  Who stands where, and who falls, is the renderer's (`docs/systems/sim-page.md`).
 - **The spine's rules** (`docs/systems/sim-spine.md`): exact-ops maths, slot order, typed-array state.
 - **Budget:** about 1.2 ms per tick for 40 battalions (`test/formations.test.ts`).
 
@@ -157,4 +157,4 @@ Negative runs, each failing its tests:
 - Casualty re-packing (the fill rule after losses) moves men sideways without the gate: at a bank
   parallel to the line, a closing file could stand on impassable ground. Recorded in
   `docs/known-issues.md`; to fold into the gate with the casualty system (S1c).
-- The soldier layer's checks (settling in the wood, slot error) move to S1b with the renderer.
+- The soldier layer's checks (settling in the wood, slot error) are in `test/soldiers.test.ts` (S1b).

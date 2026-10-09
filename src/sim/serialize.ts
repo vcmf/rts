@@ -10,7 +10,7 @@ import { DataVersionMismatch, type SimData, hex } from './data.ts'
 import { fnv1a } from './hash.ts'
 
 const SAVE_MAGIC = 0x57535452   // 'RTSW'
-const SAVE_FORMAT = 2
+const SAVE_FORMAT = 3   // 3: the formations' faces column (S1b)
 
 class Writer {
   buf = new Uint8Array(1024); view = new DataView(this.buf.buffer); o = 0

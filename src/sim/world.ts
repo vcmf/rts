@@ -23,6 +23,7 @@ export interface Formations {
   alive: Uint8Array; gen: Int32Array; side: Uint8Array
   shape: Int32Array; style: Int32Array; status: Int32Array; onRoad: Uint8Array; drill: Float64Array
   lean: Uint8Array                                                 // which way a company's files centre when it cannot be exact (Face about flips it)
+  faces: Int32Array                                                // Face abouts done (the renderer relabels its men through the half-turn)
   x: Float64Array; z: Float64Array; heading: Float64Array          // the anchor: front centre; heading 0 = +z, clockwise toward +x
   px: Float64Array; pz: Float64Array; ph: Float64Array             // last tick's anchor (for the renderer's interpolation)
   vx: Float64Array; vz: Float64Array; omega: Float64Array
@@ -64,7 +65,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
   const N = MAX_FORMATIONS, C = cr.geo.companies, NB = cr.NB
   const f64 = (n: number) => new Float64Array(n), i32 = (n: number) => new Int32Array(n), u8 = (n: number) => new Uint8Array(n)
   const f: Formations = {
-    alive: u8(N), gen: i32(N), side: u8(N), shape: i32(N), style: i32(N), status: i32(N), onRoad: u8(N), drill: f64(N), lean: u8(N),
+    alive: u8(N), gen: i32(N), side: u8(N), shape: i32(N), style: i32(N), status: i32(N), onRoad: u8(N), drill: f64(N), lean: u8(N), faces: i32(N),
     x: f64(N), z: f64(N), heading: f64(N), px: f64(N), pz: f64(N), ph: f64(N), vx: f64(N), vz: f64(N), omega: f64(N),
     disorder: f64(N), blockedFor: f64(N), men: i32(N * C),
     trans: u8(N), tShape: i32(N), tStart: f64(N), tDur: f64(N), tDelay: f64(N * C), tFrom: f64(N * C * 4), tTo: f64(N * C * 4),
