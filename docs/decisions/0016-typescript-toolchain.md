@@ -21,9 +21,12 @@ and the tests.
 
 ## Consequences
 
-The repo gets its first `package.json`, `node_modules/` (ignored) and a `.npmrc` with
-`legacy-peer-deps=true` (npm 10.9 fails resolving Vitest's optional peer dependencies otherwise). The
-prototypes stay plain scripts that open from `file://`.
+The repo gets its first `package.json`, a committed `package-lock.json` and `node_modules/`
+(ignored). Install with `npm ci`. With the lockfile, peer checks stay on. Resolving from scratch
+(no lockfile) fails on npm 10.9.8 with "Cannot read properties of null (reading 'edgesOut')" while
+resolving Vitest's optional peers; regenerate the lockfile once with `--legacy-peer-deps`, then
+reinstall without it. `.nvmrc` pins the Node used to build the committed sim data (its terrain
+formulas use Node's `Math`). The prototypes stay plain scripts that open from `file://`.
 
 ## Alternatives considered
 

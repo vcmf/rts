@@ -29,11 +29,19 @@ advanceTick: 1 commands · 6 movement · 8 fight · 11 casualties · 14 reap · 
 
 ## Constraints
 
-- **Determinism (0006):** in `src/sim/` only `+ − × /`, `Math.sqrt` and rounding helpers. ESLint bans
-  `Math.sin`-like functions, `Math.random`, `**`, `Date`, `performance`, `Float32Array`, `Map`, `Set`,
-  and imports from outside `src/sim/` (0005). `sin`, `cos`, `atan2` are polynomials of exact
-  operations (`num.ts`, within 1e-12 of `Math`). Decision 0006 names tables; `docs/proposals/sim-design.md` §2 allows
-  tables or polynomials, and polynomials need no data file.
+- **Determinism (0006):** in `src/sim/` only `+ − × /`, `Math.sqrt` and rounding helpers. ESLint bans:
+  - `Math.sin`-like functions and `Math.random`, directly, destructured, computed (`Math[k]`), aliased
+    (`const M = Math`), through `globalThis` or `Reflect`;
+  - `**` and `**=`;
+  - `Date`, `performance`, `process`, `crypto`;
+  - `Float32Array`, `Float16Array`, `DataView` float32 access;
+  - `Map`, `Set`, `WeakRef`, `FinalizationRegistry`;
+  - every import that does not start with `./`, and dynamic `import()` (0005).
+
+  `sin`, `cos` and `atan2` are polynomials of exact operations (`num.ts`), within 1e-12 of `Math`.
+  `sin` and `cos` are exact for |x| ≤ 1e5 and throw beyond that (a bug: headings stay in (−π, π]).
+  `atan2` returns values in (−π, π] with no −0. Decision 0006 names tables; `docs/proposals/sim-design.md`
+  §2 allows tables or polynomials, and polynomials need no data file.
 - **Order:** every loop runs in slot order; the fight reads start-of-step strengths, so a formation's
   slot never decides a result.
 - **Budget:** `docs/proposals/sim-design.md` §16 targets ≤ 2 ms per tick. Measured in `test/spine.test.ts` on the
@@ -49,18 +57,26 @@ advanceTick: 1 commands · 6 movement · 8 fight · 11 casualties · 14 reap · 
   generation on, so old handles go stale (`formationSlot` returns −1).
 - **Pools** (`pool.ts`): typed arrays with a free list in index order; a list is freed node by node.
 - **Commands** (`commands.ts`): `move` (waypoints, replace or append), `halt`, `debug-spawn`,
-  `debug-kill`. `issue` stamps `tick + 1` and a sequence number and quantises positions to 1 cm;
-  `applyCommands` validates at the start of that tick (alive handle, side, men, inside the map, pool room)
-  and drops invalid ones with a reason (returned by `advanceTick`), never throwing.
+  `debug-kill`. `issue` stamps `tick + 1` and a sequence number and quantises positions to 1 cm.
+  `applyCommands` validates at the start of that tick and drops an invalid command with a reason
+  (returned by `advanceTick`), never throwing and changing nothing. It checks: an unknown type, a stale
+  tick, an alive handle, the side, the men, inside the map, at most 64 waypoints, and pool room
+  (checked before a replacing move frees the old route).
 - **RNG** (`rng.ts`): `xoshiro128**` with `Math.imul`, seeded by splitmix32; `sampleCount` draws an
   integer around an expected value from 12 uniforms (no `log` or `cos`).
 - **Serializer** (`serialize.ts`): named sections (meta, RNG, formations, free list, waypoint pool,
-  pending commands), little-endian. `hashWorld` is FNV-1a over all of it; `sectionHashes` per section.
+  pending commands), little-endian. A table's columns are written in name order (`columns`), so a new
+  column is saved and hashed with no list to update. `hashWorld` is FNV-1a over all of it; `sectionHashes` per section.
   `deserialize` refuses a save made with other data.
-- **Replays** (`replay.ts`): `record` runs a scenario with external commands and keeps the log and the
-  hashes; `play` re-issues the log at its ticks (checking sequence numbers) and returns the first
-  mismatch: tick, expected and actual hash, and the first differing section.
-- **Metering**: `advanceTick(world, meter)` times each step through an injected clock; the sim reads none.
+- **Replays** (`replay.ts`):
+  - `record` runs a scenario (`{ name, setup }`) with external commands and keeps the log and the
+    hashes.
+  - `play` checks the scenario name and that the log is in tick order within the replay, re-issues it
+    at its ticks (checking sequence numbers), and returns the first mismatch: the hash point (every 20
+    ticks, so within 20 ticks of the divergence), the expected and actual hash, and the first differing
+    section.
+- **Metering**: `advanceTick(world, meter)` times each step through an injected clock (`Meter` in
+  `tick.ts`); the sim reads none.
 - **Data** (`data.ts`, `tools/build-sim-data.ts`): the heightfield on 1.79 m nodes and the cost grid on
   7.16 m cells, built in Node from a map definition and committed as `data/formation-field.simdata`; its
   FNV-1a is the data version. The map definition loads `prototypes/formation-core.js` in Node, so the sim
@@ -76,14 +92,18 @@ advanceTick: 1 commands · 6 movement · 8 fight · 11 casualties · 14 reap · 
 ## Verification
 
 `npm test`: lint, typecheck, then Vitest (`test/`):
-- the S0 fight's 180 hashes against `test/golden/s0-fight.json` (regenerate with
-  `UPDATE_GOLDEN=1 npx vitest run` and say why in the commit);
-- replay from the log, and a changed command caught at its tick in `formations`;
-- save at tick 1800, load, continue: the same hashes;
-- the hash covers the RNG, the pools and free lists, the pending commands;
+- the S0 fight's 180 hashes against `test/golden/s0-fight.json`, with the data version the tests pin
+  (regenerate with `UPDATE_GOLDEN=1 npx vitest run` and say why in the commit);
+- replay from the log (one logged order is dropped: its target was destroyed), a changed command caught
+  at the next hash point in `formations`, a log out of order or past its end, another scenario;
+- save at tick 1800 with a logged command pending, load, continue: the same hashes;
+- the hash covers every typed array in the world (found by walking it) and the pending commands;
+- bad commands are dropped with a reason and change nothing; a pending command crosses a save unchanged;
 - lint: `src/sim/` clean, and every construct in `test/fixtures/banned-in-sim.ts` reported on its line;
 - data version: another map gives another version, refused by saves, replays and `loadSimData`;
-- units: RNG reference outputs, trig accuracy, stale handles, pool, stamping, the finite-state assert.
+- data: truncated files are refused;
+- units: RNG reference outputs, trig accuracy and domain, stale handles, pool, stamping, the
+  finite-state assert.
 
 `node tools/build-sim-data.ts --check` rebuilds the data and compares it with the committed file.
 

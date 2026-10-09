@@ -62,7 +62,8 @@ The prototypes stay as they are (plain scripts from `file://`).
 - `serialize.ts`: one serializer for saves, hashes and debug dumps: world → bytes → world.
 - `replay.ts`: a replay is the sim version, data version, scenario, seed and external command log;
   playback reproduces every hash, and a mismatch reports the first differing tick and table.
-- `metering.ts`: time per tick step, injected from outside the sim so `sim/` never reads a clock.
+- metering: time per tick step, injected from outside the sim so `sim/` never reads a clock (built
+  as the `Meter` interface in `tick.ts`).
 
 **Build-time data** (`tools/build-sim-data.ts`, Node, outside `sim/`):
 - reads a map definition (`maps/formation-field.ts`: the formation test map's heights, stream,
@@ -140,3 +141,34 @@ formations and drill, fire, morale (S1), the renderer.
   - the `**` lint rule removed;
   - saves accepting other data;
   - the fight reading strengths mid-step (only the golden hashes catch this one).
+
+As built, the formation table has no `type` or order fields (S0 needs neither; S1 adds them). After
+review round 1: 24 tests, and the golden hashes regenerated (save column order by name; the scenario
+log gained a dropped order and an order pending across the save).
+
+## Review round 1
+
+10 findings, none severe → stop (fix what is worth fixing).
+
+| # | Sev. | Finding | Fix |
+|---|---|---|---|
+| 1 | moderate | Lint holes: bare and dynamic imports, `globalThis.Math`, aliased or computed `Math`, `Reflect`, `crypto`, `process`, `Float16Array`, float32 `DataView`, `WeakRef` | All banned; each in the fixture |
+| 2 | moderate | A pending spawn's side saved as one byte: a save could make an invalid command valid | Saved as int32; test with side 256 across a save |
+| 3 | moderate | A move dropped for a full pool had already replaced the route | Room checked before anything changes; test |
+| 4 | moderate | Formation columns listed by hand twice; coverage test checked one field | Columns derived in name order; the test walks every typed array in the world |
+| 5 | moderate | `play` did not check log order, log end or scenario; claimed the exact tick | Checked; the doc says "within 20 ticks" (hash points) |
+| 6 | light | Tests weaker than claimed: no command across the save, no dropped logged order | Both in the scenario and the tests |
+| 7 | light | Unknown types threw; long routes cut silently; stale commands stayed pending | Dropped with reasons |
+| 8 | light | Truncated cost grid loaded; tests did not pin the data version; Node not pinned | Refused; tests pin the version; `.nvmrc` |
+| 9 | light | Trig inexact for huge arguments; signed zeros differ from `Math` | Domain ±1e5 (throws beyond); (−π, π] and no −0, documented and tested |
+| 10 | light | `legacy-peer-deps` repo-wide although the lockfile installs without it | `.npmrc` removed; the exact npm failure recorded in 0016 |
+
+**Negative runs after round 1** (each makes its test fail):
+- the side saved as one byte;
+- no room check;
+- a column left out;
+- log order unchecked;
+- the old import rule;
+- truncated data accepted;
+- stale commands kept.
+
