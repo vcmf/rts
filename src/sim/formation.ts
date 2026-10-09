@@ -5,7 +5,7 @@
 // A battalion is a few company blocks (files × ranks) placed in the battalion frame by its shape. The sim
 // keeps the men per company; which slots are filled follows from that by one rule (`occupied`), so no
 // soldier is simulated (decision 0007): who stands where and who falls is the renderer's.
-import { type World, M_TICK, TRAIL, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MAX_FORMATIONS } from './world.ts'
+import { type World, M_TICK, TRAIL, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MAX_FORMATIONS, MS_ROUTING } from './world.ts'
 import type { ShapeLayout, Placement } from './ruleset.ts'
 import { rot2, blockLocal, slotIndex, BINS, MAX_BINS } from './ruleset.ts'
 import { cellK, groundG, groundQ, onRoad } from './terrain.ts'
@@ -193,7 +193,7 @@ const ctxNow = (w: World, i: number): Places =>
 // the pace (m/s) and its index: a road pace while every man stood on a road at the last sampling
 function paceOf(w: World, i: number): [number, number] {
   const L = layoutOf(w, i), p = L.roadPace >= 0 && !w.f.trans[i] && w.f.onRoad[i] ? L.roadPace : L.pace
-  return [w.cr.paceSpeed[p], p]
+  return [w.cr.paceSpeed[p] * (w.f.mstate[i] === MS_ROUTING ? w.cr.rs.morale.routPace : 1), p]
 }
 
 /* ---------------- the footprint gate ---------------- */

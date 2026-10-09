@@ -54,8 +54,9 @@ A company is the firing unit; its facing comes from the shape.
   - with a clear line.
 
   The preferred target wins if valid, else the current target if still valid, else the nearest. Ties
-  go to the lower handle. Targets are re-chosen every 0.5 s, all battalions on the same tick, and stored
-  as a handle.
+  go to the lower handle. Targets are re-chosen every 0.5 s and stored as a handle. The re-choice is
+  staggered by slot, a tenth of the battalions each tick: all on one tick cost 2.3 ms with 40
+  battalions, over §16's 2 ms.
 - **Clear line**, judged on positions after movement:
   - the heightfield stays below the sight line (eyes 1.6 m, sampled every 2 m);
   - it crosses at most the ruleset's metres of sight-blocking classes (woods 40, dense wood 15);
@@ -86,7 +87,7 @@ Each battalion has a stored **quality** (0..1, `debug-spawn`'s optional `quality
 **morale** that **relaxes toward a target** each tick, in exact exponential steps:
 
 ```
-target = quality − a · (losses / start) − b · (recent losses / start) − c · disorder
+target = quality − a · (losses / start) − b · (recent losses / start)
 ```
 
 - **Recent losses:** a 10 s decaying sum. Its per-tick factor is computed once when the ruleset
@@ -110,8 +111,11 @@ target = quality − a · (losses / start) − b · (recent losses / start) − 
   It does not rally in S1c-1.
 - **Calibration aim for the losses at the break:** 12–25% of starting strength for the weaker line.
 - **Cohesion is `1 − disorder`:** S1a's disorder, from terrain and the lag model. It enters the fire
-  factor and morale target only. A casualty term is left out: halted recovery (about 1.8 per minute)
-  would cancel it at these loss rates.
+  factor only.
+  - It is not in the morale target: a march through a wood pins disorder at 1 and would shake a
+    battalion no enemy can see. That showed in the S1a drill.
+  - A casualty term is left out: halted recovery (about 1.8 per minute) would cancel it at these loss
+    rates.
 
 ### Standing behaviour (step 4)
 

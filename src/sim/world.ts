@@ -10,6 +10,7 @@ import type { Compiled } from './ruleset.ts'
 import type { Terrain } from './terrain.ts'
 import { buildTerrain } from './terrain.ts'
 import type { Places, Arc } from './formation.ts'
+import type { FireGeo } from './fire.ts'
 
 export const MAX_FORMATIONS = 128
 export const TRAIL = 256          // trail points per formation (a ring)
@@ -17,7 +18,7 @@ export const MAX_ORDERS = 2048
 export const SIDES = 2
 
 // meta words
-export const M_TICK = 0, M_FREE = 1, M_DATA = 2, M_SEQ = 3, M_RULES = 4, M_LEN = 5
+export const M_TICK = 0, M_FREE = 1, M_DATA = 2, M_SEQ = 3, M_RULES = 4, M_SEED = 5, M_LEN = 6   // M_SEED: keys the keyed draws (rng.ts)
 
 export interface Formations {
   alive: Uint8Array; gen: Int32Array; side: Uint8Array
@@ -40,7 +41,19 @@ export interface Formations {
   trailStart: Int32Array; trailCount: Int32Array; trailVer: Int32Array; trailLen: Float64Array
   // orders: a list in the order pool
   ordHead: Int32Array; ordTail: Int32Array
+  // fire, per company [i·C + c]: seconds to loaded, the tick of the last volley, the target (a handle, 0 none),
+  // and the men hit and not yet removed (step 11)
+  reload: Float64Array; volleyTick: Int32Array; target: Int32Array; owed: Int32Array
+  // fire, per battalion: mode (FIRE_AT_WILL, FIRE_HOLD) and the preferred target (a handle, 0 none)
+  fireMode: Uint8Array; prefer: Int32Array
+  // morale: quality, morale, the state (MS_*), the strength at spawn and the recent losses (decaying)
+  quality: Float64Array; morale: Float64Array; mstate: Uint8Array; startMen: Int32Array; recent: Float64Array
 }
+// per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it)
+export interface Sides { rearX: Float64Array; rearZ: Float64Array }
+export const FIRE_AT_WILL = 0, FIRE_HOLD = 1
+export const MS_STEADY = 0, MS_SHAKEN = 1, MS_WAVERING = 2, MS_ROUTING = 3
+export const MORALE_STATES = ['steady', 'shaken', 'wavering', 'routing']
 export interface Orders {
   type: Int32Array; shape: Int32Array; finish: Uint8Array; left: Int8Array; resolved: Uint8Array
   x: Float64Array; z: Float64Array; a: Float64Array; t0: Float64Array; px: Float64Array; pz: Float64Array; done: Float64Array
@@ -53,12 +66,13 @@ export interface World {
   meta: Int32Array
   rng: RngState
   f: Formations
+  sides: Sides
   free: Int32Array      // stack of free formation slots (top at meta[M_FREE] − 1)
   ord: Orders
   pending: Stamped[]
   data: SimData; cr: Compiled; terrain: Terrain
   debug: boolean
-  scratch: { places?: Places; arc?: Arc }   // per-world working buffers, not state
+  scratch: { places?: Places; arc?: Arc; fireGeo?: FireGeo }   // per-world working buffers, not state
 }
 
 export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {
@@ -72,6 +86,9 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     lags: f64(N * NB), lagRate: f64(N * NB), binG: f64(N * NB), binQ: f64(N * NB), binN: i32(N * NB),
     trailX: f64(N * TRAIL), trailZ: f64(N * TRAIL), trailStart: i32(N), trailCount: i32(N), trailVer: i32(N), trailLen: f64(N),
     ordHead: i32(N).fill(-1), ordTail: i32(N).fill(-1),
+    reload: f64(N * C), volleyTick: i32(N * C), target: i32(N * C), owed: i32(N * C),
+    fireMode: u8(N), prefer: i32(N),
+    quality: f64(N), morale: f64(N), mstate: u8(N), startMen: i32(N), recent: f64(N),
   }
   const M = MAX_ORDERS
   const ord: Orders = { type: i32(M), shape: i32(M), finish: u8(M), left: new Int8Array(M), resolved: u8(M),
@@ -83,10 +100,11 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
   let lmax = 0; for (const p of Object.values(cr.rs.orders)) lmax = Math.max(lmax, p.Lmax)
   for (const s of cr.shapes) if (s.def.trail && Math.max(s.trailLimit, 15 + (s.turn ? -2 * s.turn.cz : s.depth) + lmax) / 0.25 + 16 > TRAIL)
     throw new Error(`shape ${s.name}: its trail does not fit ${TRAIL} points`)
-  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), debug, scratch: {} }
+  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, sides: { rearX: f64(SIDES), rearZ: f64(SIDES) }, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), debug, scratch: {} }
   w.meta[M_FREE] = N
   w.meta[M_DATA] = data.version | 0
   w.meta[M_RULES] = cr.hash | 0
+  w.meta[M_SEED] = seed | 0
   seedRng(w.rng, seed)
   return w
 }

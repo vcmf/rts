@@ -8,7 +8,7 @@ import { loadSimData, compileRuleset, buildTerrain, rebuildImpassable, makeWorld
   type Ruleset, type Terrain, type SimData, type Dropped, TICK_HZ, M_TICK } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 
-const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
+export const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const dataBytes = (): Uint8Array => new Uint8Array(fs.readFileSync(path.join(root, 'data', 'formation-field.simdata')))
 export const GOLDEN_DATA_VERSION = 0x6ae782ed
 export const data: SimData = loadSimData(dataBytes(), GOLDEN_DATA_VERSION)

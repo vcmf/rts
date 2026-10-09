@@ -5,7 +5,9 @@
 // the ruleset (decision 0015).
 import { type Handle, KIND_FORMATION, handleKind, handleIndex, handleGen, makeHandle } from './handle.ts'
 import { quantise, PI } from './num.ts'
-import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS } from './world.ts'
+import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MS_ROUTING } from './world.ts'
+import { spawnFire } from './fire.ts'
+import { spawnMorale } from './morale.ts'
 import { allocOrder, appendOrder, clearOrders, ordersFree, rebalance, resetTrail } from './formation.ts'
 import { nextInt } from './rng.ts'
 import { columnsOf } from './columns.ts'
@@ -18,13 +20,17 @@ export type Command =
   | { type: 'retire'; id: Handle; metres: number }
   | { type: 'halt'; id: Handle }
   | { type: 'style'; id: Handle; preset: string }
-  | { type: 'debug-spawn'; side: number; x: number; z: number; heading: number; shape: string; men: number }
+  | { type: 'debug-spawn'; side: number; x: number; z: number; heading: number; shape: string; men: number; quality?: number }
+  | { type: 'fire'; id: Handle; mode: string; target?: Handle }
+  | { type: 'side'; side: number; x: number; z: number }
   | { type: 'debug-kill'; id: Handle; men: number }
+  | { type: 'debug-morale'; id: Handle; quality: number }
 export interface Stamped { tick: number; seq: number; cmd: Command }
 export interface Dropped { tick: number; seq: number; reason: string }
 
 export const MAX_POINTS = 64
-export const COMMAND_TYPES = ['move', 'form', 'wheel', 'face', 'retire', 'halt', 'style', 'debug-spawn', 'debug-kill'] as const
+export const COMMAND_TYPES = ['move', 'form', 'wheel', 'face', 'retire', 'halt', 'style', 'fire', 'side', 'debug-spawn', 'debug-kill', 'debug-morale'] as const
+export const FIRE_MODES = ['at will', 'hold']   // index = FIRE_AT_WILL, FIRE_HOLD
 
 // stamps a command for the next tick; `log` receives it when the command is external
 export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
@@ -46,8 +52,11 @@ function quantiseCommand(c: Command): Command {
     case 'retire': return { type: 'retire', id: c.id | 0, metres: quantise(c.metres) }
     case 'halt': return { type: 'halt', id: c.id | 0 }
     case 'style': return { type: 'style', id: c.id | 0, preset: String(c.preset) }
-    case 'debug-spawn': return { type: 'debug-spawn', side: c.side | 0, x: quantise(c.x), z: quantise(c.z), heading: qa(c.heading), shape: String(c.shape), men: c.men | 0 }
+    case 'debug-spawn': return { type: 'debug-spawn', side: c.side | 0, x: quantise(c.x), z: quantise(c.z), heading: qa(c.heading), shape: String(c.shape), men: c.men | 0, quality: c.quality === undefined ? -1 : qa(c.quality) }
+    case 'fire': return { type: 'fire', id: c.id | 0, mode: String(c.mode), target: (c.target ?? 0) | 0 }
+    case 'side': return { type: 'side', side: c.side | 0, x: qa(c.x), z: qa(c.z) }
     case 'debug-kill': return { type: 'debug-kill', id: c.id | 0, men: c.men | 0 }
+    case 'debug-morale': return { type: 'debug-morale', id: c.id | 0, quality: qa(c.quality) }
     default: return c
   }
 }
@@ -102,15 +111,25 @@ function apply(w: World, c: Command): string {
     if (c.men <= 0 || c.men > cr.slots) return 'no room for those men'
     if (!finite(c.x) || !finite(c.z) || !finite(c.heading) || !inside(w, c.x, c.z)) return 'outside the map'
     if (Math.abs(c.heading) > 4 * PI) return 'heading out of range'
+    const q = c.quality === undefined || c.quality < 0 ? cr.rs.morale.quality : c.quality
+    if (!finite(q) || q > 1) return 'no such quality'
     if (w.meta[M_FREE] === 0) return 'no free formation slot'
     const i = w.free[--w.meta[M_FREE]], C = cr.geo.companies
     f.alive[i] = 1; f.side[i] = c.side; f.shape[i] = shape; f.style[i] = cr.presetIndex(cr.rs.start.orders); f.drill[i] = 1
     f.x[i] = c.x; f.z[i] = c.z; f.heading[i] = c.heading; f.px[i] = c.x; f.pz[i] = c.z; f.ph[i] = c.heading
     f.men[i * C] = c.men; rebalance(w, i)
     resetTrail(w, i)
+    spawnFire(w, i); spawnMorale(w, i, q)
+    return ''
+  }
+  if (c.type === 'side') {   // the direction of a side's rear, where its routers run
+    if (c.side < 0 || c.side >= SIDES) return 'no such side'
+    const l = Math.sqrt(c.x * c.x + c.z * c.z); if (!finite(l) || l < 1e-6) return 'no such direction'
+    w.sides.rearX[c.side] = c.x / l; w.sides.rearZ[c.side] = c.z / l
     return ''
   }
   const i = formationSlot(w, c.id); if (i < 0) return 'no such formation'
+  if (f.mstate[i] === MS_ROUTING && c.type !== 'debug-kill' && c.type !== 'debug-morale') return 'routing'
   switch (c.type) {
     case 'move': {
       if (!wellFormed(c.points)) return 'malformed waypoints'
@@ -132,6 +151,15 @@ function apply(w: World, c: Command): string {
       return giveOrders(w, i, [O_FACE, O_MOVE, O_DRESS, O_FACE], false, (n, k) => { if (k === 1) o.a[n] = c.metres; if (k >= 2) o.finish[n] = 1 })
     case 'halt': clearOrders(w, i); f.status[i] = 0; f.blockedFor[i] = 0; return ''
     case 'style': { const p = cr.presetIndex(c.preset); if (p < 0) return 'no such order preset'; f.style[i] = p; return '' }
+    case 'debug-morale':   // the quality its morale relaxes toward (scripted morale tests)
+      if (!finite(c.quality) || c.quality < 0 || c.quality > 1) return 'no such quality'
+      f.quality[i] = c.quality; return ''
+    case 'fire': {
+      const m = FIRE_MODES.indexOf(c.mode); if (m < 0) return 'no such fire mode'
+      const t = c.target ?? 0, j = t ? formationSlot(w, t) : -1
+      if (t && (j < 0 || f.side[j] === f.side[i])) return 'no such target'
+      f.fireMode[i] = m; f.prefer[i] = t; return ''
+    }
     case 'debug-kill': {
       if (c.men <= 0) return 'no men'
       const C = cr.geo.companies
