@@ -14,17 +14,18 @@ export const AHEAD = 0.6, WALK = 1.35, RUN = 3.2, SEP = 0.52
 const SC = 0.6   // neighbour grid cell (≥ SEP: the 3×3 search sees every neighbour)
 
 export interface Man { s: number; x: number; z: number; vx: number; vz: number; alive: boolean; dx: number; dz: number; settled: boolean; hx: number; hz: number }
-export interface Unit { i: number; gen: number; side: number; men: Man[]; faces: number; sway: number; sig: string }
+export interface Unit { i: number; gen: number; side: number; men: Man[]; faces: number; sway: number; sig: Int32Array }
 
 export class SoldierLayer {
   w: World; scene: Scene
   units = new Map<number, Unit>()
   fallen: Man[] = []                       // men of battalions that are gone
-  private ctxA: Places; private ctx0: Places; private rnd = cosmeticRng(7); private names: string[]
+  private ctxA: Places; private ctx0: Places; private rnd = cosmeticRng(7); private treesByClass: Uint8Array
   alphaNow = 1
   private cellHead: Int32Array; private cellNext = new Int32Array(1024); private flat: Man[] = []; private touched: number[] = []; private SN: number
   constructor(w: World, scene: Scene) {
-    this.w = w; this.scene = scene; this.ctxA = mkPlaces(w); this.ctx0 = mkPlaces(w); this.names = Object.keys(w.cr.rs.terrain)
+    this.w = w; this.scene = scene; this.ctxA = mkPlaces(w); this.ctx0 = mkPlaces(w)
+    this.treesByClass = Uint8Array.from(Object.keys(w.cr.rs.terrain), name => ((CLASS_STYLE[name]?.trees ?? 0) > 0 ? 1 : 0))
     const span = (w.terrain.n - 1) * w.terrain.cell; this.SN = Math.ceil(span / SC) + 1; this.cellHead = new Int32Array(this.SN * this.SN).fill(-1)
   }
 
@@ -52,7 +53,20 @@ export class SoldierLayer {
     return out
   }
 
-  // matches the men to the sim: new battalions, battalions gone, Face about, losses, slots that moved
+  // what decides which slots are filled: men per company, shape, the shape it changes to, the lean, faces
+  private sign(sig: Int32Array, i: number): void {
+    const f = this.w.f, C = this.w.cr.geo.companies
+    for (let c = 0; c < C; c++) sig[c] = f.men[i * C + c]
+    sig[C] = f.shape[i]; sig[C + 1] = f.trans[i]; sig[C + 2] = f.tShape[i]; sig[C + 3] = f.lean[i]; sig[C + 4] = f.faces[i]
+  }
+  private same(sig: Int32Array, i: number): boolean {
+    const f = this.w.f, C = this.w.cr.geo.companies
+    for (let c = 0; c < C; c++) if (sig[c] !== f.men[i * C + c]) return false
+    return sig[C] === f.shape[i] && sig[C + 1] === f.trans[i] && sig[C + 2] === f.tShape[i] && sig[C + 3] === f.lean[i] && sig[C + 4] === f.faces[i]
+  }
+  // matches the men to the sim: new battalions, battalions gone, Face about, losses, slots that moved.
+  // Call it after every tick (and `step` calls it each frame): a Face about is relabelled through the
+  // shape it turned in, which a later change of shape within the same frame would otherwise replace.
   sync(alpha: number): void {
     const w = this.w, f = w.f, g = w.cr.geo, N = f.alive.length, p = [0, 0, 0]
     for (const [i, u] of this.units) if (!f.alive[i] || f.gen[i] !== u.gen) { for (const m of u.men) { if (m.alive) m.alive = false; this.fallen.push(m) } this.units.delete(i) }
@@ -61,11 +75,10 @@ export class SoldierLayer {
       let u = this.units.get(i)
       // which slots are filled changes only with the men, the shape (or the one it changes to), the lean
       // and Face about: nothing to match otherwise
-      const C = g.companies, sig = `${[...f.men.slice(i * C, i * C + C)]}|${f.shape[i]}|${f.trans[i]}|${f.tShape[i]}|${f.lean[i]}|${f.faces[i]}`
-      if (u && u.sig === sig) continue
+      if (u && this.same(u.sig, i)) continue
       this.frame(i, alpha)
-      if (!u) { u = { i, gen: f.gen[i], side: f.side[i], men: [], faces: f.faces[i], sway: 0, sig }; this.units.set(i, u) }
-      u.sig = sig
+      if (!u) { u = { i, gen: f.gen[i], side: f.side[i], men: [], faces: f.faces[i], sway: 0, sig: new Int32Array(g.companies + 5) }; this.units.set(i, u) }
+      this.sign(u.sig, i)
       if (u.faces !== f.faces[i]) {   // Face about: each man's slot is now the half-turn of his old one
         const T = w.cr.shapes[f.shape[i]].turn
         for (let k = u.faces; k < f.faces[i]; k++) if (T) for (const m of u.men) if (m.alive) m.s = T.m[m.s]
@@ -122,7 +135,7 @@ export class SoldierLayer {
       for (const m of u.men) {
         if (!m.alive) continue
         this.place(i, m.s, true, p)
-        const inTrees = (CLASS_STYLE[this.names[t.cls[cellK(t, m.x, m.z)]]]?.trees ?? 0) > 0
+        const inTrees = this.treesByClass[t.cls[cellK(t, m.x, m.z)]] === 1
         const amp = (inTrees ? 0.3 : 0.1) * u.sway   // personal drift: the ranks loosen among trees
         let tx = p[0] + amp * Math.sin(tt + m.dx), tz = p[1] + amp * Math.sin(tt * 0.8 + m.dz)
         // a place inside a trunk moves to its edge: a stable place to stand, not a tug of war
@@ -163,5 +176,4 @@ export class SoldierLayer {
       for (const m of u.men) if (m.alive) { this.place(u.i, m.s, false, p); const d = Math.hypot(m.x - p[0], m.z - p[1]); max = Math.max(max, d); sum += d; n++ } }
     return { max, mean: n ? sum / n : 0 }
   }
-  aliveIn(i: number): number { const u = this.units.get(i); return u ? u.men.filter(m => m.alive).length : 0 }
 }

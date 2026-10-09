@@ -35,9 +35,10 @@ exports as a replay that plays back in Node to the same hashes.
 ## Design
 
 **Loop** (`src/app/main.ts`). Each animation frame adds `dt × speed` to an accumulator and runs the
-ticks owed (at most 20 per frame; the rest is dropped). The soldier layer then steps in sub-steps of
-one tick or less, but at most four per frame (`MEN_STEPS`), so at 8× its steps grow to 0.2 s instead of
-its cost growing with the speed. `alpha = acc / tick` interpolates. The map is redrawn only when the
+ticks owed (at most 20 per frame; the rest is dropped), syncing the soldier layer after each. The layer
+then steps once per frame, for up to 0.2 s of game time (`MEN_DT`, the step the 8× test uses); a longer
+frame takes more steps, at most four (`MEN_STEPS`). At 60 fps that is one step at every speed: 8× costs
+more than 1× only by its extra ticks. `alpha = acc / tick` interpolates. The map is redrawn only when the
 view changes; the units every frame, on a second canvas.
 
 **Commands.** Every input goes through `issue` with the external log. The page keeps the hash points the
@@ -51,7 +52,9 @@ places them. A battalion is matched again only when its signature changes: men p
 the shape it changes to, the lean bit and the `faces` counter.
 - A man keeps his slot while it stays filled.
 - Face about: each man's slot becomes its half-turn (`shape.turn.m`), once per step of the sim's
-  `faces` counter (incremented in `faceAbout`).
+  `faces` counter (incremented in `faceAbout`). The page syncs after every tick, so the half-turn is
+  the shape's the battalion turned in, even when a change of shape follows within the same frame.
+- The match runs only when a battalion's signature changes (a few integers compared per battalion).
 - Losses: men whose slot emptied fall first, then men drawn at random. The fallen stay as crosses.
 - Men whose slot emptied walk to the nearest free filled slot; new men appear at their places.
 
@@ -120,6 +123,8 @@ frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`.
 
 ## Open questions
 
-- The cost test runs about 0.5 ms under its 4 ms budget on the dev Mac; a slower machine fails it.
+- The cost test runs about 0.6 ms under its 4 ms budget on the dev Mac; a slower machine fails it.
+- 8× costs 6.2 ms per frame for 40 battalions (the sim's ticks): within a 60 fps frame, over the 1×
+  budget. The worker (S2) takes the ticks off the main thread.
 - The page selects and orders both sides (a drill sandbox); sides belong to S1e.
 - No speed overlay yet (the plan listed one); the slots overlay exists.

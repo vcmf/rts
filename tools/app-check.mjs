@@ -25,12 +25,15 @@ const drill = [
   ['shot', 'drill-2-square'],
   // every panel order reaches the sim as a command: each button logs one; the sim may refuse some (reported)
   ['eval', 'APP.select([1]); const n = APP.log.length, bs = [...document.querySelectorAll("#shapes button, #styles button, [data-cmd]")]; for (const b of bs) b.click(); APP.advance(1); `PANEL ${bs.length} ${APP.log.length - n} refused: ${APP.dropped.map(d => d.reason).join("; ")}`'],
+  // an order given while paused waits for its tick: the replay exported now must still play back
+  ['eval', 'APP.order("halt"); "paused order"'],
   REPLAY,
 ]
 const bench = [
   ['wait', 1500], READY,
   ['eval', 'APP.select([...Array(40).keys()]); APP.march(-35, 40, false); APP.advance(10); APP.view(-30, -40, 2.4); "40 marching"'],
-  ['wait', 4000],   // the page runs on its own clock for a while: its frame timings settle
+  ['eval', 'APP.run(); "running at 1x"'],
+  ['wait', 4000],   // the page runs on its own clock (headless rAF is throttled: few frames, real per-frame costs)
   ['shot', 'bench'],
   ['eval', 'const s = APP.stats(); `BENCH sim + men ${s.simMs.toFixed(2)} ms · units draw ${APP.drawMs().toFixed(2)} ms · map redraw ${APP.mapMs().toFixed(1)} ms · fps ${s.fps.toFixed(0)} (SwiftShader)`'],
   REPLAY,

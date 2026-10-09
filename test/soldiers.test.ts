@@ -11,7 +11,8 @@ import { occupied } from '../src/sim/index.ts'
 class Play {
   sim: Sim; layer: SoldierLayer; acc = 0; dt: number
   constructor(sim = new Sim(), dt = 1 / 30) { this.sim = sim; this.dt = dt; this.layer = new SoldierLayer(sim.w, buildScene(sim.w)) }
-  frames(sec: number): void { for (let n = Math.round(sec / this.dt); n > 0; n--) { this.acc += this.dt; while (this.acc >= 0.05 - 1e-9) { this.sim.tick(); this.acc -= 0.05 } this.layer.step(this.dt, this.acc / 0.05) } }
+  // `sec` exactly, in frames of `dt` (the last one shorter); the layer syncs after every tick, as the page does
+  frames(sec: number): void { for (let left = sec; left > 1e-9; left -= this.dt) { const d = Math.min(this.dt, left); this.acc += d; while (this.acc >= 0.05 - 1e-9) { this.sim.tick(); this.layer.sync(0); this.acc -= 0.05 } this.layer.step(d, this.acc / 0.05) } }
   // worst slot error sampled every 0.5 s while `sec` pass
   worst(sec: number): { max: number; mean: number } { let max = 0, mean = 0; for (let n = 0; n < sec * 2; n++) { this.frames(0.5); const e = this.layer.slotError(); max = Math.max(max, e.max); mean = Math.max(mean, e.mean) } return { max, mean } }
   men(h: number) { return this.layer.units.get(this.sim.slot(h))!.men }
@@ -95,8 +96,7 @@ describe('at 8× (0.2 s soldier steps)', () => {
     r.sim.order({ type: 'move', id: hr, points: [[110, -30]], append: false })
     let wet = 0; for (let n = 0; n < 180; n++) { r.frames(0.5); wet = Math.max(wet, r.men(hr).filter(m => m.alive && r.sim.deep(m.x, m.z)).length) }
     console.log('8×', { marchTurn: mt, wood: wd })
-    // measured 2.0 m (0.6 m at 1×): at eight times speed the files trail a turn by a pace or two
-    expect(mt.max).toBeLessThan(2.5); expect(wd.max).toBeLessThan(6); expect(wd.mean).toBeLessThan(1.2); expect(wet).toBe(0)
+    expect(mt.max).toBeLessThan(1.5); expect(wd.max).toBeLessThan(6); expect(wd.mean).toBeLessThan(1.2); expect(wet).toBe(0)
   })
 })
 
@@ -109,11 +109,15 @@ describe('cost', () => {
     // three windows of 120 frames, judged on the best: a busy machine slows a window, never speeds one up
     const windows: number[] = []
     for (let k = 0; k < 3; k++) {
-      const t0 = process.hrtime.bigint(); for (let n = 0; n < 120; n++) { p.acc += 1 / 60; while (p.acc >= 0.05) { p.sim.tick(); p.acc -= 0.05 } p.layer.step(1 / 60, p.acc / 0.05) }
+      const t0 = process.hrtime.bigint(); for (let n = 0; n < 120; n++) { p.acc += 1 / 60; while (p.acc >= 0.05) { p.sim.tick(); p.layer.sync(0); p.acc -= 0.05 } p.layer.step(1 / 60, p.acc / 0.05) }
       windows.push(Number(process.hrtime.bigint() - t0) / 1e6 / 120)
     }
     const ms = Math.min(...windows)
     console.log(`40 battalions, 4000 men: ${windows.map(x => x.toFixed(2)).join(' / ')} ms per frame (sim + soldiers)`)
+    // 8× at 60 fps: 8/60 s of game time a frame, about 2.7 ticks and one soldier step (reported, not judged:
+    // the 4 ms budget is for 1×)
+    const t8 = process.hrtime.bigint(); for (let n = 0; n < 120; n++) { p.acc += 8 / 60; while (p.acc >= 0.05) { p.sim.tick(); p.layer.sync(0); p.acc -= 0.05 } p.layer.step(8 / 60, p.acc / 0.05) }
+    console.log(`at 8×: ${(Number(process.hrtime.bigint() - t8) / 1e6 / 120).toFixed(2)} ms per frame`)
     expect(ms).toBeLessThan(4)
   })
 })

@@ -10,13 +10,15 @@ import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
 
-const SEED = 20261009, SPEEDS = [0, 1, 2, 4, 8], MEN_STEPS = 4   // at most MEN_STEPS soldier steps per frame, whatever the speed
+// the soldier layer steps once a frame, up to MEN_DT of game time (tested at that step); a longer frame
+// takes more steps, at most MEN_STEPS (then the men fall behind the sim and catch up)
+const SEED = 20261009, SPEEDS = [0, 1, 2, 4, 8], MEN_DT = 0.2, MEN_STEPS = 4
 
 async function main(): Promise<void> {
   const data = loadSimData(new Uint8Array(await (await fetch(dataUrl)).arrayBuffer()), FIELD_DATA_VERSION)
   const cr = compileRuleset(napoleonic)
   const w: World = makeWorld(data, cr, SEED, false)
-  const scenario = S1B_SCENARIOS[new URLSearchParams(location.search).get('scenario') ?? ''] ?? S1B_SCENARIOS['s1b-field']
+  const asked = new URLSearchParams(location.search).get('scenario') ?? '', scenario = S1B_SCENARIOS[Object.hasOwn(S1B_SCENARIOS, asked) ? asked : 's1b-field']
   scenario.setup(w)
   const log: Stamped[] = [], hashes: HashPoint[] = [], dropped: Dropped[] = []
   const scene = buildScene(w), layer = new SoldierLayer(w, scene), map = new StaffMap(w, scene)
@@ -38,7 +40,7 @@ async function main(): Promise<void> {
   const external = (c: Command) => issue(w, c, log)
   const forSelection = (make: (h: number) => Command) => { for (const i of selected) external(make(formationHandle(w, i))) }
   // hash points without section hashes: those would cost a second serialization each time
-  const tick = () => { const r = advanceTick(w); dropped.push(...r.dropped); if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: [] }); for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i) }
+  const tick = () => { const r = advanceTick(w); layer.sync(0); dropped.push(...r.dropped); if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: [] }); for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i) }
 
   // the frame: ticks owed at the game speed, then the men (in game time), then the drawing
   const advance = (dt: number) => {
@@ -46,8 +48,7 @@ async function main(): Promise<void> {
     const a = performance.now(); let n = 0
     while (acc >= DT && n < 20) { tick(); acc -= DT; n++ }
     if (n === 20) acc = 0
-    // the men in steps of at most one tick, but no more than MEN_STEPS a frame: at 8× their steps grow
-    const steps = Math.min(MEN_STEPS, Math.ceil(g / DT - 1e-9)); for (let s = 0; s < steps; s++) layer.step(g / steps, acc / DT)
+    const steps = Math.min(MEN_STEPS, Math.ceil(g / MEN_DT - 1e-9)); for (let s = 0; s < steps; s++) layer.step(Math.min(MEN_DT, g / steps), acc / DT)
     simMs = simMs * 0.9 + (performance.now() - a) * 0.1
   }
   const draw = () => {
@@ -76,7 +77,17 @@ async function main(): Promise<void> {
   document.querySelectorAll<HTMLElement>('[data-cmd]').forEach(el => { el.onclick = () => forSelection(orders[el.dataset.cmd!]) })
   document.querySelectorAll<HTMLElement>('[data-view]').forEach(el => { el.onclick = () => {
     if (el.dataset.view === 'slots') { showSlots = !showSlots; el.classList.toggle('on', showSlots) }
-    if (el.dataset.view === 'replay') navigator.clipboard?.writeText(JSON.stringify(replay())) } })
+    if (el.dataset.view === 'replay') copyReplay() } })
+  // to the clipboard, or (no clipboard: plain http, permission refused) as a downloaded file
+  let note = '', noteT = 0
+  const copyReplay = async () => {
+    const text = JSON.stringify(replay())
+    try { await navigator.clipboard.writeText(text); note = 'replay copied' } catch {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = `${scenario.name}-replay.json`; a.click(); URL.revokeObjectURL(a.href)
+      note = 'replay saved as a file'
+    }
+    noteT = performance.now()
+  }
 
   // the mouse: click a battalion to select (shift adds), drag a box, click the ground to march; right-drag
   // (or a drag with space held) pans
@@ -100,6 +111,9 @@ async function main(): Promise<void> {
     if (!drag.moved) return
     if (drag.button === 2 || drag.button === 1) { view.cx = drag.cx - dx / view.k; view.cz = drag.cz + dy / view.k; mapDirty = true; return }
     Object.assign(boxEl.style, { display: 'block', left: Math.min(drag.x, e.clientX) + 'px', top: Math.min(drag.y, e.clientY) + 'px', width: Math.abs(dx) + 'px', height: Math.abs(dy) + 'px' }) })
+  // a gesture the browser cancels (touch, lost capture) ends with no order
+  const cancel = () => { drag = null; boxEl.style.display = 'none' }
+  unitC.addEventListener('pointercancel', cancel); unitC.addEventListener('lostpointercapture', e => { if (e.buttons === 0 && drag) cancel() })
   unitC.addEventListener('pointerup', e => {
     const d = drag; drag = null; boxEl.style.display = 'none'; if (!d || d.button !== 0) return
     if (d.moved) {   // box select
@@ -138,18 +152,21 @@ async function main(): Promise<void> {
     else for (const i of selected) { const s = w.cr.shapes[w.f.shape[i]].name + (w.f.trans[i] ? ' → ' + w.cr.shapes[w.f.tShape[i]].name : '')
       lines.push(`#${i} ${s} · ${menOf(w, i)} men · ${w.cr.presets[w.f.style[i]]}${STATUS[w.f.status[i]] ? ' · ' + STATUS[w.f.status[i]] : ''}`) }
     const d = dropped.at(-1)
+    if (note && performance.now() - noteT < 3000) lines.push(note)
     if (d && w.meta[M_TICK] - d.tick < 3 * TICK_HZ) lines.push(`order not carried out: ${d.reason}`)   // shown for 3 s
     statsEl.textContent = (lines.length ? lines.join('\n') : 'nothing selected') +
       `\n\nt ${(w.meta[M_TICK] * DT).toFixed(1)} s · ${speed ? speed + '×' : 'paused'}${paused ? ' (P)' : ''}\nsim + men ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms\nfps ${fps.toFixed(0)} · map built in ${buildMs.toFixed(0)} ms`
   }
-  // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce
-  const replay = (): { replay: Replay; hashes: HashPoint[] } => ({ replay: { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name, seed: SEED, ticks: w.meta[M_TICK], log }, hashes })
+  // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce, as far as it has run:
+  // commands issued while paused wait for their tick and are left out
+  const replay = (): { replay: Replay; hashes: HashPoint[] } => ({ replay: { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name, seed: SEED, ticks: w.meta[M_TICK], log: log.filter(s => s.tick <= w.meta[M_TICK]) }, hashes })
 
   // headless hooks (tools/app-check.mjs): orders and time without real time passing
   Object.assign(window, { APP: {
     w, layer, map, selected, log, hashes, dropped,
     select: (ids: number[]) => { selected.clear(); for (const i of ids) selected.add(i) },
     march, order: (name: string) => forSelection(orders[name]), form: (shape: string) => forSelection(id => ({ type: 'form', id, shape })),
+    run: () => { paused = false; setSpeed(1) },
     advance: (sec: number) => { paused = true; const sp = speed; speed = 1; for (let n = Math.round(sec * 30); n > 0; n--) advance(1 / 30); speed = sp; draw() },
     view: (cx: number, cz: number, k: number) => { view.cx = cx; view.cz = cz; view.k = k; mapDirty = true; draw() },
     drawMs: () => { const a = performance.now(); for (let n = 0; n < 20; n++) map.drawUnits(ug, view, layer, selected, false); return (performance.now() - a) / 20 },

@@ -11,7 +11,6 @@ export interface Scene {
   reeds: [number, number][]
   obstacleCell: number; obstacleN: number; x0: number; z0: number
   obstacleGrid: Obstacle[][]
-  isClass(x: number, z: number, names: string[]): boolean
 }
 
 // a small seeded RNG for cosmetic placement
@@ -23,7 +22,6 @@ export function cosmeticRng(seed: number): () => number {
 export function buildScene(w: World, seed = 11): Scene {
   const t = w.terrain, names = Object.keys(w.cr.rs.terrain), rnd = cosmeticRng(seed)
   const classAt = (x: number, z: number) => names[t.cls[cellK(t, x, z)]]
-  const isClass = (x: number, z: number, which: string[]) => which.includes(classAt(x, z))
   const span = (t.n - 1) * t.cell, trees: Obstacle[] = [], reeds: [number, number][] = []
   // trees: one try per 4 m² of woods (denser in dense woods), at least 4 m apart
   const G = 4, gn = Math.ceil(span / G), grid: Obstacle[][] = Array.from({ length: gn * gn }, () => [])
@@ -38,7 +36,7 @@ export function buildScene(w: World, seed = 11): Scene {
     const o = { x: tx, z: tz, r: 0.3 + rnd() * 0.15 }; trees.push(o); grid[k].push(o)
   }
   for (let z = t.z0; z < t.z0 + span; z += 5) for (let x = t.x0; x < t.x0 + span; x += 5) if (CLASS_STYLE[classAt(x, z)]?.symbol === 'reeds' && rnd() < 0.7) reeds.push([x + rnd() * 3, z + rnd() * 3])
-  return { trees, reeds, obstacleCell: G, obstacleN: gn, x0: t.x0, z0: t.z0, obstacleGrid: grid, isClass }
+  return { trees, reeds, obstacleCell: G, obstacleN: gn, x0: t.x0, z0: t.z0, obstacleGrid: grid }
 }
 
 // every obstacle in the 3×3 cells around (x, z)

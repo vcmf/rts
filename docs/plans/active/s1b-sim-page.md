@@ -86,12 +86,14 @@ Built as planned, described in `docs/systems/sim-page.md`. Measured on the dev M
    - a multi-selection move keeps the battalions' offsets (screenshot: parallel waypoint lines);
    - all 12 panel buttons each log one command, none refused;
    - each session's exported replay plays back in Node to the same hashes (drill 17 commands and 81
-     hashes; bench 40 commands and 10 hashes).
+     hashes, exported with a paused order left out; bench 40 commands and 11 hashes).
 4. **Cost**, 40 battalions:
-   - sim plus soldiers 3.55 to 3.58 ms per frame in Node (best of three windows; a single window under
-     load once read 4.02 ms);
-   - 2.76 ms in headless Chrome;
-   - the units draw in 0.78 ms (SwiftShader).
+   - sim plus soldiers 3.31 to 3.37 ms per frame in Node at 1× (best of three windows; before the
+     round 2 fixes a single window under load once read 4.02 ms);
+   - 6.2 ms at 8× (60 fps: about 2.7 ticks and one soldier step per frame), reported, not judged;
+   - 3.46 ms in headless Chrome on the page's own clock (throttled to about 3 fps, so 0.1 s frames with
+     two ticks each);
+   - the units draw in 0.76 ms (SwiftShader).
 5. **Negative runs**, each breaking a test:
 
    | Removed | Failing test |
@@ -110,8 +112,7 @@ Changes beyond the plan:
 - a loss now frees the slot only of a man who held one (`sync`);
 - `SAVE_FORMAT` is 3 (the new column), so an S1a save is refused instead of misread;
 - review round 1 (#14):
-  - the soldier layer takes at most four steps a frame, so 8× costs as much as 1×; at 8× the march turn's
-    slot error is 2.0 m (0.6 m at 1×);
+  - the soldier layer's steps per frame are bounded (round 2 made it one step at 60 fps);
   - the slots overlay frames each battalion;
   - the colours are interpolated;
   - grid lookups use `z0`, contours use `nz`;
@@ -119,6 +120,18 @@ Changes beyond the plan:
   - line-mode wheel deltas are scaled;
   - the tick length and order types come from the sim;
   - the page's hash points carry no section hashes;
+- review round 2 (no severe findings; the last round):
+  - a replay exported while paused leaves out the commands still waiting for their tick;
+  - the layer syncs after every tick (Face about through the right shape);
+  - a cancelled pointer gesture ends the drag;
+  - the bench runs on the page's clock;
+  - the scenario lookup ignores inherited keys;
+  - Copy replay reports what it did, falling back to a file;
+  - 8× measured (above) instead of claimed;
+  - the test frames run the exact time asked: at 8× the march turn's slot error is 0.53 m, not the
+    2.0 m round 1 reported from mis-sized windows;
+  - numeric signatures and a per-class trees table in the soldier layer's hot paths;
+  - dead code removed;
 - orders the sim refuses show in the readout.
 
 Not done: the speed overlay (the slots overlay is in).
