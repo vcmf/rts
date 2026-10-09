@@ -35,6 +35,7 @@ function pair(d: number, opts: ConstructorParameters<typeof W>[0] = {}, qb?: num
   const s = new W(opts), a = s.spawn(0, FIGHT_X - d / 2, Z, E), b = s.spawn(1, FIGHT_X + d / 2, Z, -E, qb === undefined ? {} : { quality: qb })
   return [s, a, b]
 }
+const pairB = (s: W): number => makeHandle(KIND_FORMATION, 1, s.w.f.gen[1])
 const fireRs = (fire: Partial<Ruleset['fire']>): Ruleset => ({ ...napoleonic, fire: { ...napoleonic.fire, ...fire } })
 // the z of company c's centre (its front-rank origin is close enough here)
 const companyZ = (s: W, h: number, c: number): number => placeWorld(s.w, s.i(h), c, s.w.f.x[s.i(h)], s.w.f.z[s.i(h)], s.w.f.heading[s.i(h)], 0, 0, { x: 0, z: 0, a: 0, face: 0 }).z
@@ -77,6 +78,20 @@ describe('who may fire at whom', () => {
     s.do({ type: 'halt', id: a }); s.do({ type: 'form', id: a, shape: 'column' })
     const t1 = s.w.meta[M_TICK]; s.run(25)
     expect(Math.max(...[0, 1, 2, 3].map(c => s.w.f.volleyTick[s.i(a) * 4 + c]))).toBeLessThanOrEqual(t1)
+  })
+})
+
+describe('Face about', () => {
+  it('carries each company\'s fire state with its men (reload, last volley, target)', () => {
+    const [s, a] = pair(100, {}, undefined); s.do({ type: 'fire', id: pairB(s), mode: 'hold' }); s.run(40)   // A's companies have fired, reloads differ
+    const i = s.i(a), C = 4
+    for (let c = 0; c < C; c++) s.w.f.men[i * C + c] = 20 + c   // distinct strengths, so each company's men can be told apart
+    const pairs = (dt: number) => [0, 1, 2, 3].map(c => `${s.w.f.men[i * C + c]}:${Math.max(0, s.w.f.reload[i * C + c] - dt).toFixed(4)}:${s.w.f.volleyTick[i * C + c]}`).sort()
+    const before = pairs(0.05), faces = s.w.f.faces[i]
+    s.do({ type: 'face', id: a })   // applied and done in this tick (the fire step then takes one tick off every reload)
+    expect(s.w.f.faces[i]).toBe(faces + 1)
+    expect([0, 1, 2, 3].map(c => s.w.f.reload[i * C + c]).some(r => r !== 0)).toBe(true)
+    expect(pairs(0)).toEqual(before)
   })
 })
 

@@ -448,6 +448,11 @@ function faceAbout(w: World, i: number): number {
     if (snake) setTrail(w, i, keep.tx, keep.tz)
     return ST_FACE_WET
   }
+  // the companies' fire state goes with their men: reload, last volley, target, hits owed
+  for (const a of [f.reload, f.volleyTick, f.target, f.owed]) {
+    const was = a.slice(i * C, i * C + C)
+    for (let c = 0; c < C; c++) a[i * C + Math.floor(T.m[c * RF] / RF)] = was[c]
+  }
   f.px[i] = f.x[i]; f.pz[i] = f.z[i]; f.ph[i] = f.heading[i]; rateOff[i] = 1; f.onRoad[i] = 0; f.faces[i]++
   return 0
 }

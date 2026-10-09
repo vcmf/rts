@@ -42,13 +42,13 @@ const bench = [
 
 // the firefight played to a rout (in 3-minute steps: each eval stays inside shot.mjs's timeout), then the
 // moment after it, close up
-const STEP3 = ['eval', 'if (!APP.w.f.mstate.some(s => s === 3)) APP.advance(180); `t ${(APP.w.meta[0] / 1200).toFixed(1)} min, states ${[0, 1].map(i => APP.w.f.mstate[i]).join(" ")}`']
+const STEP3 = ['eval', 'if (!APP.w.f.mstate.some(s => s === 3)) APP.advance(180); `t ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states ${[0, 1].map(i => APP.w.f.mstate[i]).join(" ")}`']
 const fight = [
   ['wait', 1500], READY,
   ['eval', 'APP.view(-50, -165, 4); APP.advance(20); "opening volleys"'],
   ['shot', 'fight-0-volleys'],
   STEP3, STEP3, STEP3, STEP3, STEP3,
-  ['eval', 'const r = [0, 1].filter(i => APP.w.f.mstate[i] === 3); APP.advance(8); APP.view(-30, -165, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 1200).toFixed(1)} min, men ${[0, 1].map(i => APP.w.f.startMen[i] - APP.w.f.men.slice(i * 4, i * 4 + 4).reduce((a, b) => a + b, 0)).join(" / ")} lost`'],
+  ['eval', 'const r = [0, 1].filter(i => APP.w.f.mstate[i] === 3); APP.advance(8); APP.view(-30, -165, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, men ${[0, 1].map(i => { const C = APP.w.cr.geo.companies; return APP.w.f.startMen[i] - APP.w.f.men.slice(i * C, i * C + C).reduce((a, b) => a + b, 0) }).join(" / ")} lost`'],
   ['shot', 'fight-1-rout'],
   REPLAY,
 ]

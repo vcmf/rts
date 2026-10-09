@@ -40,6 +40,7 @@ export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
   if (log) log.push(s)
   return s
 }
+// a spawn's quality: −1 marks none given (the ruleset's), any negative given becomes −2 (refused);
 // positions to 1 cm, angles to 0.1 mrad; an unknown type or a move with too many points is kept as it is
 // and dropped when applied
 function quantiseCommand(c: Command): Command {
@@ -52,7 +53,7 @@ function quantiseCommand(c: Command): Command {
     case 'retire': return { type: 'retire', id: c.id | 0, metres: quantise(c.metres) }
     case 'halt': return { type: 'halt', id: c.id | 0 }
     case 'style': return { type: 'style', id: c.id | 0, preset: String(c.preset) }
-    case 'debug-spawn': return { type: 'debug-spawn', side: c.side | 0, x: quantise(c.x), z: quantise(c.z), heading: qa(c.heading), shape: String(c.shape), men: c.men | 0, quality: c.quality === undefined ? -1 : qa(c.quality), fire: c.fire === undefined ? FIRE_MODES[FIRE_AT_WILL] : String(c.fire) }
+    case 'debug-spawn': return { type: 'debug-spawn', side: c.side | 0, x: quantise(c.x), z: quantise(c.z), heading: qa(c.heading), shape: String(c.shape), men: c.men | 0, quality: c.quality === undefined ? -1 : c.quality < 0 ? -2 : qa(c.quality), fire: c.fire === undefined ? FIRE_MODES[FIRE_AT_WILL] : String(c.fire) }
     case 'fire': return { type: 'fire', id: c.id | 0, mode: String(c.mode), target: (c.target ?? 0) | 0 }
     case 'side': return { type: 'side', side: c.side | 0, x: qa(c.x), z: qa(c.z) }
     case 'debug-kill': return { type: 'debug-kill', id: c.id | 0, men: c.men | 0 }

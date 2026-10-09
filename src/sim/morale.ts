@@ -3,7 +3,8 @@
 // and of men lost recently. Being fired at does not move it, nor does disorder (a march through a wood would
 // shake a battalion no enemy can see); men falling do. The state
 // follows the morale with hysteresis. A battalion that routs drops its orders and runs; the run's direction
-// is fixed at the break (its side's rear, else straight back), and its phase is kept: running, halted at
+// is fixed at the break (its side's rear, else away from the nearest enemy, else straight back), and its
+// phase is kept: running, halted at
 // impassable ground, or fled. Only a halted router tries again, the next direction of a fan about the
 // stored one. It does not rally (S1c-2).
 import { type World, MAX_FORMATIONS, MS_STEADY, MS_SHAKEN, MS_WAVERING, MS_ROUTING, O_FACE, O_MOVE, M_TICK, RP_RUNNING, RP_HALTED, RP_FLED } from './world.ts'
@@ -42,7 +43,8 @@ function rout(w: World, i: number): void {
   if (rx === 0 && rz === 0) {
     let bd = Infinity
     for (let j = 0; j < MAX_FORMATIONS; j++) {
-      if (!f.alive[j] || f.side[j] === side) continue
+      // a threat: men left (after this tick's casualties), not running (as it stood before this step's morale)
+      if (!f.alive[j] || f.side[j] === side || menOf(w, j) === 0 || (w.scratch.mstateBefore ?? f.mstate)[j] === MS_ROUTING) continue
       const dx = f.x[i] - f.x[j], dz = f.z[i] - f.z[j], d = Math.sqrt(dx * dx + dz * dz)
       if (d > 1e-6 && d < bd) { bd = d; rx = dx / d; rz = dz / d }   // the lower slot wins a tie
     }

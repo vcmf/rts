@@ -26,9 +26,15 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
   // 7 vision: S2
   step('8 fire', () => { fireStep(w) })
   // 9 roundshot · 10 melee: S1d
-  // each battalion's casualties and morale read only its own state, except a rout's orders, taken from the
-  // shared order pool: when it runs short, the lower slot is served first (slot order, deterministic)
-  step('11–12 casualties and morale', () => { for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i]) moraleStep(w, i, casualtiesStep(w, i)) })
+  // all casualties first, then all morale: a rout reads other battalions (the nearest enemy's position and
+  // men, final for the tick; its morale state from a copy taken before any changes), so visiting order does
+  // not matter, except for orders from the shared pool (the lower slot served first when it runs short)
+  step('11–12 casualties and morale', () => {
+    const lost = w.scratch.lost ?? (w.scratch.lost = new Int32Array(MAX_FORMATIONS))
+    for (let i = 0; i < MAX_FORMATIONS; i++) lost[i] = w.f.alive[i] ? casualtiesStep(w, i) : 0
+    const before = w.scratch.mstateBefore ?? (w.scratch.mstateBefore = new Uint8Array(MAX_FORMATIONS)); before.set(w.f.mstate)
+    for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i]) moraleStep(w, i, lost[i])
+  })
   // 13 smoke: S2
   step('14 reap', () => { for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i] && menOf(w, i) === 0) reapFormation(w, i) })
   w.meta[M_TICK] = t

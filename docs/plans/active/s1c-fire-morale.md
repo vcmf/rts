@@ -342,4 +342,22 @@ The review rounds restart with this design.
 - **Quality:** a spawn's negative quality is refused, except the −1 default marker.
 - **The tick comment** names the shared order pool.
 
+**Redesigned PR, review round 2.** No severe findings, so this is the last round; the worthwhile ones are
+fixed:
+- **Face about now carries each company's fire state** (reload, last volley, target, hits owed) with its
+  men. A test checks it, and fails without.
+- **Casualties and morale are separate passes.** All casualties, then all morale, with a rout reading
+  enemy states from a copy taken before the step. The nearest-enemy search counts only enemies with men
+  left that are not routing, and no longer depends on visiting order.
+- **The −1 quality marker** means only "none given"; any negative given is refused.
+- **`companySees`** answers as the fire step does (low to high).
+- **The sight cache** is triangular.
+- **app-check** reads the company count.
+
+**Not done:**
+- tests for the extent cull and the low-to-high walk (open question in the system doc);
+- the per-battalion cull optimisation.
+
+One `check:app` run failed for a reason not captured; the two runs after passed.
+
 **Left for S1c-2 and S1c-3:** as in the split above.

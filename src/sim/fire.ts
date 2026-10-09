@@ -109,7 +109,8 @@ function distToSegment(px: number, pz: number, x0: number, z0: number, x1: numbe
 // geometry's epoch, so an answer for older positions is never read)
 function sees(w: World, G: FireGeo, k: number, m: number): boolean {
   const n = MAX_FORMATIONS * w.cr.geo.companies, s = w.scratch, epoch = s.fireEpoch ?? 0
-  const cache = s.fireSight ?? (s.fireSight = new Int32Array(n * n)), key = k < m ? k * n + m : m * n + k, v = cache[key]
+  const a0 = k < m ? k : m, b0 = k < m ? m : k, key = a0 * (2 * n - a0 - 1) / 2 + (b0 - a0 - 1)   // the upper triangle (k ≠ m)
+  const cache = s.fireSight ?? (s.fireSight = new Int32Array(n * (n - 1) / 2)), v = cache[key]
   if (v >> 1 === epoch) return (v & 1) === 1
   // walked from the lower company to the higher, whichever asks: the two directions round differently
   const a = k < m ? k : m, b = k < m ? m : k, clear = clearSight(w, G.cx[a], G.cz[a], G.cx[b], G.cz[b]); cache[key] = (epoch << 1) | (clear ? 1 : 0)
@@ -253,7 +254,7 @@ export function aimOf(w: World, i: number, c: number): { target: number; share: 
 // company c of battalion i sees company q of battalion j, with the positions as they are (tests, debugging)
 export function companySees(w: World, i: number, c: number, j: number, q: number): boolean {
   const G = geometry(w), C = w.cr.geo.companies
-  return clearSight(w, G.cx[i * C + c], G.cz[i * C + c], G.cx[j * C + q], G.cz[j * C + q])
+  return sees(w, G, i * C + c, j * C + q)   // as the fire step judges it (walked low to high)
 }
 
 // a new battalion: companies loaded at a keyed share of a reload, so a line does not open with one volley

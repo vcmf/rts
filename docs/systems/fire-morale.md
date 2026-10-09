@@ -15,8 +15,9 @@ rates.
 ```
 step 8 fire        geometry after movement → targets (every 0.5 s, a tenth of the battalions per tick)
                    → loaded, halted companies volley → hits owed to the target's companies (keyed draws)
-step 11 casualties the owed men fall
-step 12 morale     morale relaxes toward quality − losses; states with hysteresis; a break starts the rout
+step 11 casualties the owed men fall (all battalions first)
+step 12 morale     then morale for all: relaxes toward quality − losses; states with hysteresis; a break
+                   starts the rout (reading other battalions' states as they were before this step)
 ```
 
 ## Goals / non-goals
@@ -102,7 +103,8 @@ fire. Its rout is a small stored state, fixed at the break and never re-derived 
 is later:
 - **The direction** (`routX`, `routZ`):
   - its side's rear (the `side` command);
-  - else away from the nearest enemy at the break (its heading may already be turned away, by a Retire);
+  - else away from the nearest enemy at the break, counting only enemies with men left that were not
+    routing at the start of the step (its heading may already be turned away, by a Retire);
   - else straight back.
 - **The phase** (`routPhase`): running, halted or fled.
   - Each run is a move at `routPace` times its pace, kept 2 m inside the map. It has a Face about first
@@ -165,6 +167,10 @@ scripted tests.
   for total losses. It is kept for bursts (artillery, charges, S1d); if those do not use it, cut it.
 - **Every weaker line breaks at the same share of losses (20%),** because the target is linear in losses
   and nothing else moves morale. Variety will come from S1c-2's shocks and support.
+- **Two cover and sight fixes have no failing test.** Culling friendly cover by each battalion's extent
+  (not a fixed 40 m), and walking sight lines low to high, are not exercised. This ruleset cannot build a
+  battalion that reaches 40 m from its anchor, and the floating-point asymmetry cannot be set up on
+  purpose.
 - **A router can be pinned.** Where every direction of the fan halts, or where the formation layer cannot
   march out (by the stream at x ≈ 57, z = −30 even an ordinary battalion halts within a metre), it
   stays. Pathfinding, and routers as a loose crowd rather than a formation, are later.

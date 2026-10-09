@@ -77,7 +77,7 @@ export interface World {
   pending: Stamped[]
   data: SimData; cr: Compiled; terrain: Terrain
   debug: boolean
-  scratch: { places?: Places; arc?: Arc; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverseFire?: boolean }   // per-world working buffers, not state (reverseFire: a test switch, fire.ts)
+  scratch: { places?: Places; arc?: Arc; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverseFire?: boolean; lost?: Int32Array; mstateBefore?: Uint8Array }   // per-world working buffers, not state (reverseFire: a test switch, fire.ts)
 }
 
 export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {
