@@ -442,7 +442,7 @@ function faceAbout(w: World, i: number): number {
     if (snake) setTrail(w, i, keep.tx, keep.tz)
     return ST_FACE_WET
   }
-  f.px[i] = f.x[i]; f.pz[i] = f.z[i]; f.ph[i] = f.heading[i]; rateOff[i] = 1; f.onRoad[i] = 0
+  f.px[i] = f.x[i]; f.pz[i] = f.z[i]; f.ph[i] = f.heading[i]; rateOff[i] = 1; f.onRoad[i] = 0; f.faces[i]++
   return 0
 }
 // stopped by impassable ground: the orders end (bar those finishing a drill) and the slots come back to
