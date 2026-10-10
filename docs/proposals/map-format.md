@@ -72,8 +72,8 @@ waiting for a format:
 ```
  sources                         the map file                  compilers (Node, offline)       outputs (committed data)
  ───────                         ────────────                  ─────────────────────────       ────────────────────────
- DEM tiles + OpenStreetMap ──► importer ──┐                ┌──► sim compiler ──────────►  <map>.simdata (classes, depth,
- a traced period map ──► tracing tool ────┼──► <map>.map ──┤                                 cost; per ruleset, season)
+ DEM tiles + OpenStreetMap ──► importer ──┐                ┌──► sim compiler ──────────►  <map>.….simdata (classes, depth,
+ a traced period map ──► tracing tool ────┼──► <map>.map.json┤                                 cost; per ruleset, season)
  a person, by hand ───────────────────────┤   (validated)  ├──► world compiler ────────►  <map>.lookdata (heightfield, far
  a generator (later) ─────────────────────┘                │                                 ring, river samples, masks, scatter,
                                                            │                                 buildings)
@@ -85,16 +85,18 @@ waiting for a format:
   bridge names a road and a stream that cross), geometry (closed rings, no self-intersection, inside
   the extent). A file that fails is rejected with the feature's id and the reason.
 - **One heightfield** (decision 0012): relief and every height edit (carved channels, levelled
-  village ground) are compiled once, into one heightfield on the SPEC's 1.79 m grid. The simulation's
-  and the renderer's files both carry heights sampled from it, not from two evaluations of the map.
-  Today they are two maps with two height builds; the migration (§7) merges them.
+  village ground) are compiled once, into one heightfield on the world SPEC's tile grid
+  (`src/look/spec.ts`). The simulation's and the renderer's files both carry heights taken from it,
+  not from two evaluations of the map. Today they are two maps with two height builds on different
+  grids; the migration (§7, step 6) merges them.
 - **Compilers are pure functions** of their inputs (above). Any randomness (a meander's wiggle, tree
   placement) is seeded from the map's seed and the feature's id, so editing one wood never moves the
   trees in another. A feature may set its own `seed`, which wins (needed to reproduce today's river).
 - **Per ruleset and per season:** the simulation's output depends on the ruleset (ground kinds to
   classes, speed factors, the slope curve) and on the season (a frozen pond is passable), so it is
-  built per map, ruleset and season, and its data version identifies all three. The renderer's
-  output is per map and season where the season changes geometry or masks (ice).
+  built per map, ruleset and season, named `<map>.<ruleset>.<season>.simdata`; its manifest records
+  which (the data version, a hash of the bytes, cannot). The renderer's output is per map, and per
+  season where the season changes geometry or masks (ice).
 - **Outputs are committed and checked** (`--check` rebuilds and compares, as `npm run check:data`
   does today). The simulation asserts its data version on load (`src/sim/data.ts`).
 
@@ -128,7 +130,7 @@ A recommendation, to be settled by the first PR (§9, open question 1): **JSON**
   "format": 1,
   "id": "austerlitz-1805",
   "name": "Austerlitz",
-  "era": "napoleonic",                 // a ruleset id: the ruleset maps ground kinds to movement and sight
+  "eras": ["napoleonic"],              // metadata: the eras the map suits; the ruleset is chosen by the scenario and the build
   "date": "1805-12-02",
   "season": "winter",                  // the default season; features may override per season
   "seed": 1805,
@@ -152,8 +154,9 @@ A recommendation, to be settled by the first PR (§9, open question 1): **JSON**
   `circle` and `ellipse` (the shapes the test field uses), or a named `generator` with parameters
   (a meander along a valley axis, a scatter of rocks) whose shape the compiler computes.
 - `priority`: where areas overlap, the higher wins; each kind has a default (bridge over water over
-  road over hedge over wood over marsh over rough over field over open, as the test field resolves
-  them today), so most features never set one.
+  road over hedge over wood over marsh over rough over field over open, the order the test field
+  resolves them in today), so most features never set one. At equal priority the feature later in
+  the file wins (a dense core inside a wood is listed after the wood).
 - `source`: one of the map's `sources` ids (or `"invented"`).
 - `seasons`: per-season overrides of the feature's properties (a pond `frozen` in winter, a field
   `ploughed` in autumn).
@@ -191,7 +194,7 @@ house count; the river's exact centre line instead of a guide). Pinned detail al
 | Relief | the heightfield (decision 0012), slope in the cost grid | the same heightfield, the far ring | hachures from the heightfield |
 | Water | the class `water` and depth per 1 m node, from the water features' depths; a `ford` feature sets the depth where it lies | river samples, carve, water ribbon, bank paint | double ink line and a wash; names |
 | Cover | the ruleset's class per node (wheat → `crops`, wood → `woods`, …), sight blocking | albedo masks, scatter (grass, crops, trees) | wood edges and stipple; fields not drawn |
-| Lines | the ruleset's class for each (a road speeds and levels; a hedge slows: `src/rulesets/napoleonic.ts`) | road paint and edges, hedge and wall meshes | double or dashed hairlines |
+| Lines | the ruleset's class for each (a road gives the road pace, a hedge slows, a bridge takes no slope: `src/rulesets/napoleonic.ts`) | road paint and edges, hedge and wall meshes | double or dashed hairlines |
 | Settlements | building footprints impassable, villages as cover | buildings from assets by role (Track E LA) | ink blocks, church crosses |
 | Works | footprints, cover | earthwork meshes | ink outlines |
 | Labels | nothing | nothing | serif labels |
@@ -214,26 +217,32 @@ touching any map.
 ## 7. Migration (first steps for the workstream)
 
 1. **The schema and the validator** (`src/map/`), with negative tests: one bad file per rule.
-2. **Today's look world as a map file,** through named generators that call today's code: relief as
-   `generator: painted-world-v1` (`baseH` and the far ring's heights), the river as `generator:
-   meander-v1` with today's parameters, its valley axis (`axisX`) and its own `seed: 7`. The extent
-   covers the far ring (2600 m: the river runs to ±1350 m), the detailed area is the 800 m tile. The
-   world compiler rebuilds `data/painted-world.lookdata` **byte for byte** (`node
-   tools/build-look-data.ts --check` passes unchanged); its manifest is a new file beside it.
-3. **Today's sim test field as a map file,** in native features where they fit: its woods and marsh
-   as circles and an ellipse, its hills as a `gaussian-hills` relief generator, its stream as a
-   generator for `70 + 6 sin(0.03 z)`, its rocks as a `rocks` area seeded 11, and the kinds' default
-   priorities in the order `prototypes/formation-core.js` resolves them. The aim is `data/formation-field.simdata`
-   byte for byte; where rasterising a shape differs at its edge, the PR shows the difference (nodes
-   changed, the data version) and the owner accepts a new data version or a `legacy` generator for that
-   shape.
+2. **Both test maps as map files, through `legacy` generators.** A `legacy` generator is a named
+   compiler entry that calls today's code with today's parameters: `painted-world-v1`
+   (`src/look/world/author.ts`) and `formation-field-v1` (`maps/formation-field.ts`, which loads
+   `prototypes/formation-core.js`). Each map file holds little more than that generator, its extent
+   (large enough for everything the generator draws: the look world's river runs past the far ring)
+   and its sources. The compilers rebuild `data/painted-world.lookdata` and
+   `data/formation-field.simdata` **byte for byte** (`npm run check:data` passes unchanged); the
+   manifests are new files beside them. This proves the pipeline, the validator, the manifests and
+   the compilers' plumbing without touching any data.
+3. **Native features, one map at a time.** The test maps are rewritten in the format's own kinds
+   (relief, water, cover, lines). The data changes: the PR shows how (nodes changed, a golden diff,
+   the new data version) and the owner accepts it. Some of today's construction does not carry over
+   as it is, and should not: the test field's rocks share one random stream with its trees (so moving
+   the wood would move the rocks, against the locality rule in §3), and its relief carves a channel
+   whose depth depends on the ford. These become a `rocks` feature with its own seed and a
+   `water`-driven carve.
 4. **The staff map** reads its features from the map file (`docs/plans/active/staff-map.md`, SM2).
 5. **W6, Austerlitz,** through the importer: the first real map.
-6. **One heightfield per map** (decision 0012): the two test maps, or one merged world, compile their
-   heights once and both outputs sample them.
+6. **One heightfield per map** (decision 0012): today the sim builder and the world builder sample
+   their own grids (`tools/build-sim-data.ts`, `tools/build-look-data.ts`), with different origins,
+   and the far ring is a second height evaluation. One compiled heightfield on the world SPEC's tile
+   grid (`src/look/spec.ts`), read by both outputs, changes both files' data versions; it lands with
+   step 3 or after it.
 
-Steps 2 and 3 are the proof that the format carries what exists: today's data stays the authority
-until a step's check says it is reproduced.
+Step 2 is the proof that the format carries what exists; step 3 is where the data starts to change,
+on purpose and reviewed.
 
 ## 8. Verification
 
@@ -241,8 +250,8 @@ until a step's check says it is reproduced.
   feature outside the extent).
 - Determinism: compiling twice gives the same bytes; the outputs' hashes are checked in `npm run
   check:data`.
-- Equivalence: the migrated test maps compile to today's committed data, byte for byte (or with
-  the differences shown and accepted, step 3).
+- Equivalence: the test maps through their `legacy` generators compile to today's committed data,
+  byte for byte (step 2); after step 3, to the data the owner accepted.
 - Staleness: a manifest's input hashes (map, referenced files, ruleset, compiler) match the inputs on
   disk; editing the ruleset makes the simulation's output stale.
 - Locality: editing one feature changes only the outputs near it (a wood moved does not move another
@@ -265,11 +274,12 @@ until a step's check says it is reproduced.
    (`src/look/spec.ts`). How a map larger than the play area is cut into battles.
 6. **Where gameplay hints live:** terrain-intrinsic hints (a defensible ridge) in the map, everything
    about a particular battle in its scenario.
-7. **Output size and shape:** today's formats are square (one span, one `n`) and the simulation's is
-   dense: a 1.79 m float64 heightfield plus a 1 m class and depth grid. For the 6 × 4 km example that
-   is about 200 MB per file, over GitHub's 100 MB limit. Real maps need non-square, chunked or
-   compressed outputs, built in CI or kept out of git. That is a change to the data formats (a
-   non-goal here) which real maps will force.
+7. **Output size:** the simulation's file is dense (a float64 heightfield plus a 1 m class and depth
+   grid, `src/sim/data.ts`). Over a 2 × 2 km detailed area that is about 22 MB per ruleset and
+   season; over a whole 6 × 4 km extent it would be about 200 MB, past GitHub's 100 MB limit. So the
+   simulation covers the detailed area only, and the question is whether several seasons and
+   rulesets per map still belong in git, or are built in CI. The builders take one square span today
+   (`MapDef.half`); the file format itself stores each grid's width and depth.
 8. **Seasons:** which seasons a map compiles by default (all four, or those its scenarios use).
 
 ## 10. Related
