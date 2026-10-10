@@ -85,3 +85,11 @@ chunked 1.8 km world (engine-design §10 item 8), our own camera controller (pro
   material's register-then-remove; `RiverQuery.s` is required. Kept: the post-process vertex import
   (Babylon's lazy load never completed in the built page; the doc now says so). Deferred: the nature
   data moves out of `prototypes/` before L9; one shared declaration file for Vite's query imports.
+- **L0a round 1:** severe findings, all fixed. The shadow texel target held only in light space (along the
+  sun one texel covered 0.73 m of ground; now sized for the ground). The grid invariant missed the apron's
+  need for an even cell ratio. Loaded data was not checked against the spec (now `checkLookData`). The
+  floating-instance check used the placing function as its oracle (now the drawn meshes, and no instance
+  in the apron band). The margin invariant ignored the camera: computed now, it moved the play area to
+  ±235 m and the checked frame to 16:9, enforced at run time. Also: a negative test per invariant, the
+  hill check on grid nodes, the blur limited to the crowns' box, zero-copy data views, the far grid as a
+  `Grid` (data format 2).

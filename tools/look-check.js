@@ -3,7 +3,8 @@
 //    with Babylon's own reading of the drawn meshes (GroundMesh.getHeightAtCoordinates), an independent oracle,
 //    at sampled points on the tile and on the far ring;
 // 2. the camera cannot leave yaw ±SPEC.camera.yawRange (decision 0010), whatever is asked of it;
-// 3. every placed instance stands on the drawn ground (its pivot height minus its own offset).
+// 3. every placed instance stands on the drawn ground: Babylon's reading of the tile or far mesh under its pivot
+//    (instances may sink, never float), and none stands in the apron band, which the heightfield does not describe.
 // Run (after npm run build and npx vite preview): node tools/shot.mjs <look page URL> renders/tmp 800 600 \
 //        "$(python3 -c 'import json;print(json.dumps([["eval",open("tools/look-check.js").read()]]))')"
 // Prints the measurements; every failed limit is a console.error, so shot.mjs exits non-zero.
@@ -26,14 +27,20 @@
   for (const ask of [c.yaw0 + Math.PI / 2, c.yaw0 - Math.PI / 2, c.yaw0 + Math.PI]) { cam.alpha = ask; scene.render(); yaws.push(+cam.alpha.toFixed(4)); if (Math.abs(cam.alpha - c.yaw0) > c.yawRange + tol) fail.push(`yaw: asked ${ask.toFixed(2)}, the camera stayed at ${cam.alpha.toFixed(2)} (outside ±${c.yawRange.toFixed(3)})`) }
   cam.alpha = a0; scene.render()
   out.yaw = yaws
-  // 3. every instance's pivot on the drawn ground (pivot y = H + its own sink, which is ≤ 0)
-  let floating = 0, worstFloat = 0, tested = 0
+  // 3. every instance's pivot on the drawn ground
+  let floating = 0, worstFloat = 0, tested = 0, inBand = 0
   for (const m of scene.meshes) {
     if (!m.thinInstanceCount) continue
-    for (const W of m.thinInstanceGetWorldMatrices()) { const o = W.getTranslation(), g = H(o.x, o.z); tested++; if (o.y > g + 1e-3) { floating++; worstFloat = Math.max(worstFloat, o.y - g) } }
+    for (const W of m.thinInstanceGetWorldMatrices()) {
+      const o = W.getTranslation(), e = Math.max(Math.abs(o.x), Math.abs(o.z)); tested++
+      if (e > S.tile / 2 && e < BAND) { inBand++; continue }
+      const g = (e <= S.tile / 2 ? tileGround : farGround).getHeightAtCoordinates(o.x, o.z)
+      if (o.y > g + 1e-3) { floating++; worstFloat = Math.max(worstFloat, o.y - g) }
+    }
   }
-  out.instances = { tested, floating, worstFloat: +worstFloat.toFixed(3) }
+  out.instances = { tested, floating, worstFloat: +worstFloat.toFixed(3), inBand }
   if (tested < 1000) fail.push(`instances: only ${tested} tested`)
+  if (inBand) fail.push(`instancesInBand: ${inBand} instances stand in the apron band`)
   if (floating) fail.push(`instancesFloating: ${floating} of ${tested} instances float, worst ${worstFloat.toFixed(3)} m`)
   // the drawn ground stays inside the spec's ground range (the camera footprint assumes it)
   const t = tileGround.getVerticesData(B.VertexBuffer.PositionKind); let lo = Infinity, hi = -Infinity

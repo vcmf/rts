@@ -17,9 +17,9 @@ import { Post, buildCamera } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { HF, groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, lerpA, riverQuery, setRiver } from './river.ts'
-import { D } from './spec.ts'
+import { D, checkGround } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
-import { decodeLook } from './world/data.ts'
+import { checkLookData, decodeLook } from './world/data.ts'
 import { buildTerrain } from './terrain.ts'
 import { buildWater } from './water.ts'
 
@@ -28,11 +28,9 @@ const T0 = window.__T0 ?? performance.now()   // load-time measurement (window._
 if (!window.NATURE) { document.body.innerHTML = '<p style="padding:30px">nature-pack.data.js missing: run <code>node tools/obj-to-js.mjs</code></p>'; throw new Error('no nature data') }
 // the world's data, built offline (tools/build-look-data.ts, decision 0012): the heightfield, the far ring, the river
 const look = decodeLook(await (await fetch(LOOK_URL)).arrayBuffer())
-setRiver(look.river); setHeightfield(look.hf, { ...look.far, z0: look.far.x0 }, D.spec.tile / 2)
-{ // the camera footprint assumes the ground stays in the spec's range, on the tile and on the far ring
-  const g = D.spec.ground; let lo = HF.min, hi = HF.max; for (const v of look.far.h) { if (v < lo) lo = v; if (v > hi) hi = v }
-  if (lo < g.lo || hi > g.hi) throw new Error(`world spec: ground ${lo.toFixed(1)}..${hi.toFixed(1)} m outside the spec's ${g.lo}..${g.hi} m`)
-}
+checkLookData(D, look)
+setRiver(look.river); setHeightfield(look.hf, look.far, D.spec.tile / 2)
+{ let lo = HF.min, hi = HF.max; for (const v of look.far.h) { if (v < lo) lo = v; if (v > hi) hi = v } checkGround(D.spec, lo, hi) }
 const canvas = document.getElementById('c') as HTMLCanvasElement
 const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false }, false)
 engine.setHardwareScalingLevel(1)
@@ -106,7 +104,7 @@ Object.assign(window, {
   __proto: { S, scene, camera, buildPost: () => post.build(), play: D.spec.play },
   B: { Vector3, Matrix, DynamicTexture, VertexBuffer },
   // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring formulas the river check compares with
-  scene, engine, camera, RIVER: { ...RIVER, axisX }, H: groundAt, baseH, riverQuery, lerpA, BAND: D.band, PLAY: D.spec.play, SMW: D.spec.tile, TSUB: D.spec.tileSub, MASKN: D.spec.sizes.riverMask, SM_FADE_M: D.spec.shadowFade, SPEC: D.spec,
+  scene, engine, camera, apron: terrain.apron, RIVER: { ...RIVER, axisX }, H: groundAt, baseH, riverQuery, lerpA, BAND: D.band, PLAY: D.spec.play, SMW: D.spec.tile, TSUB: D.spec.tileSub, MASKN: D.spec.sizes.riverMask, SM_FADE_M: D.spec.shadowFade, SPEC: D.spec,
   tileGround: terrain.tileGround, farGround: terrain.farGround, farTerrainMat: terrain.farTerrainMat, riverMask: terrain.riverMask, riverMaskCanvas: terrain.riverMaskCanvas,
   groups: nature.groups, FAR: nature.far, KEEP_CLEAR: nature.KEEP_CLEAR, touchesZone: nature.touchesZone, placeable: nature.placeable, footprint: nature.footprint,
   lightCam: bakes.lightCam, shadowRT: bakes.shadowRT,

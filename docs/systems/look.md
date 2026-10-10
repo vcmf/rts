@@ -47,13 +47,22 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/water.ts` | The water ribbon and the tree-reflection mask |
 | `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule |
 | `src/look/bakes.ts` | Sun shadow depth (once), occlusion and valley mask (CPU, once), the top-down light map (once) |
-| `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010), and the passes: depth of field (presentation only, decision 0003), the fused grade |
+| `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), and the passes: depth of field (presentation only, decision 0003), the fused grade |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop, and the debug globals the checks read |
 
 Shaders are files in `src/look/shaders/`, imported as text (`?raw`). The page exposes
 `window.__proto = { S, scene, camera, buildPost, play }` and accepts `?frozen` (the clock stays at 0),
 the contract of `tools/golden.mjs`; it also puts the prototype's global names on `window`
 (`RIVER`, `H`, `groups`, `SMW`, …) so `tools/render-check.js` and `tools/river-check.js` run unchanged.
+
+## Changes from the prototype (L0a)
+
+- The world SPEC moved the play area in from ±250 m to ±235 m: at the widest zoom the frame's lower half
+  reaches 160 m from the focus, and the tile ends 400 m out (the old 150 m margin came from screenshots).
+- The shadow map is sized from its fitted box at 0.33 m on the ground (3647 × 4906 instead of 3072²).
+- The far ring sits at its authored height (the prototype lowered it 0.9 m, so the apron sloped and far bushes floated).
+- Instances stand on the drawn triangles, not on the formula; no far bush stands in the 14 m apron band.
+- The reflection mask is blurred in JS instead of by a canvas filter.
 
 ## Tunables
 

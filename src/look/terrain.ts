@@ -16,7 +16,7 @@ import type { Materials } from './materials.ts'
 import { HF } from './heightfield.ts'
 import { RIVER, bandOf, riverQuery } from './river.ts'
 import { D } from './spec.ts'
-import type { FarHeights } from './world/data.ts'
+import type { Grid } from './heightfield.ts'
 import TER_VS from './shaders/terrain.vert?raw'
 import TER_FS from './shaders/terrain.frag?raw'
 
@@ -29,7 +29,7 @@ export interface Terrain {
 const TILE_W = D.spec.tile, TILE_SUB = D.spec.tileSub, FAR_W = D.spec.far, FAR_SUB = D.spec.farSub, FAR_CELL = D.farCell, BAND = D.band, MASK_N = D.spec.sizes.riverMask
 
 // heights come from the look data: the tile from the heightfield (decision 0012), the far ring from its own nodes
-export function buildTerrain(scene: Scene, mats: Materials, far: FarHeights): Terrain {
+export function buildTerrain(scene: Scene, mats: Materials, far: Grid): Terrain {
   const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'] })
   // far ring: the river painted from a mask (the samples stroked at their widths), since 15 m vertices can't hold it
   const riverMaskCanvas = document.createElement('canvas'); riverMaskCanvas.width = riverMaskCanvas.height = MASK_N

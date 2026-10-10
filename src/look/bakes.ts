@@ -40,7 +40,7 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
     for (const x of [-h, h]) for (const z of [-h, h]) for (const y of [lo, hi + 60]) { const v = Vector3.TransformCoordinates(new Vector3(x, y, z), V); ex = Math.max(ex, Math.abs(v.x)); ey = Math.max(ey, Math.abs(v.y)); z0 = Math.min(z0, v.z); z1 = Math.max(z1, v.z) }
     if (z0 < LZ0 + 5 || z1 > LZ1 - 5) throw Error(`shadow depth range ${LZ0}..${LZ1} misses the tile (${z0.toFixed(0)}..${z1.toFixed(0)})`)   // SBIAS is derived from LZ0/LZ1
     ex += SM_FADE_M + 8; ey += SM_FADE_M + 8   // the fade band (shadowAt) lies outside the tile
-    sm = shadowMapSize(D, 2 * ex, 2 * ey)      // each side at the spec's texel target (docs/proposals/engine-design.md §6)
+    sm = shadowMapSize(D, 2 * ex, 2 * ey, SUN.y)   // the spec's texel target, on the ground (docs/proposals/engine-design.md §6)
     smTexel = new Vector2(1 / sm.w, 1 / sm.h)
     smFade = new Vector2(SM_FADE_M / (2 * ex), SM_FADE_M / (2 * ey))
     Object.assign(lightCam, { mode: Camera.ORTHOGRAPHIC_CAMERA, orthoLeft: -ex, orthoRight: ex, orthoTop: ey, orthoBottom: -ey, minZ: LZ0, maxZ: LZ1 })
@@ -69,7 +69,7 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
     const ring = (x: number, z: number, r: number) => { let s = 0; for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283; s += heightAt(x + Math.cos(a) * r, z + Math.sin(a) * r) } return s / 6 }
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
       const x = (i + 0.5) / N * TILE_W - TILE_W / 2, z = (j + 0.5) / N * TILE_W - TILE_W / 2, h = heightAt(x, z)
-      const near = ring(x, z, 7), far = ring(x, z, 40)
+      const near = ring(x, z, 7), far = ring(x, z, D.spec.aoRing)
       const ao = 1 - Math.min(0.35, Math.max(0, (near - h) * 0.10))   // hollows and stream banks
       const valley = Math.min(1, Math.max(0, (far - h) / 3.2))         // low ground relative to 40 m around
       const k = (j * N + i) * 4; d[k] = 255; d[k + 1] = ao * 255; d[k + 2] = valley * valley * (3 - 2 * valley) * 255; d[k + 3] = 255

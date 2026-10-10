@@ -29,7 +29,7 @@ export function buildLookData(): Uint8Array {
   for (let j = 0; j < fn; j++) for (let i = 0; i < fn; i++) fh[j * fn + i] = w.farH(fx(i), fx(j))
   const data: LookData = {
     hf: { n, cell: s.tile / s.tileSub, x0: (-m * s.tile) / s.tileSub - s.tile / 2, z0: (-m * s.tile) / s.tileSub - s.tile / 2, h, min, max },
-    far: { n: fn, cell: s.far / s.farSub, x0: -s.far / 2, h: fh },
+    far: { n: fn, cell: s.far / s.farSub, x0: -s.far / 2, z0: -s.far / 2, h: fh },
     river: w.samples,
   }
   return encodeLook(data)

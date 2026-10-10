@@ -3,9 +3,9 @@
 // look data is what the authoring step builds now.
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { SPEC, derive, shadowMapSize, type Spec } from '../src/look/spec.ts'
+import { SPEC, checkGround, derive, shadowMapSize, type Spec } from '../src/look/spec.ts'
 import { heightAt, setHeightfield, type Heightfield } from '../src/look/heightfield.ts'
-import { decodeLook, encodeLook } from '../src/look/world/data.ts'
+import { checkLookData, decodeLook, encodeLook } from '../src/look/world/data.ts'
 import { LOOK_FILE, buildLookData } from '../tools/build-look-data.ts'
 
 const with_ = (f: (s: Spec) => void): Spec => { const s = structuredClone(SPEC); f(s); return s }
@@ -21,20 +21,30 @@ describe('world spec', () => {
     ['tile edge off the far grid', s => { s.far = 2600 + 2600 / 182; s.farSub = 183 }, /tile edge does not lie/],
     ['tile too small for play + margin', s => { s.play = 300 }, /coverage: tile\/2/],
     ['a frame corner near the horizon', s => { s.camera.betaMax = 1.3 }, /horizon/],
-    ['a view past the far ring', s => { s.far = 1400; s.farSub = 98 }, /a view sees past the world/],
+    ['a view past the far ring', s => { s.far = 1200; s.farSub = 84 }, /a view sees past the world/],
     ['yaw beyond ±45°', s => { s.camera.yawRange = Math.PI / 3 }, /decision 0010/],
     ['camera limits out of order', s => { s.camera.rMin = 300 }, /limits out of order/],
     ['light map too coarse', s => { s.sizes.lightMap = 1024 }, /light map texel/],
-    ['occlusion cell too coarse', s => { s.sizes.aoCell = 5 }, /occlusion cell/],
+    ['occlusion cell over its texel target', s => { s.texel.ao = 2 }, /occlusion cell 3 m > 2 m/],
+    ['occlusion cell as wide as the narrowest channel', s => { s.texel.ao = 10; s.sizes.aoCell = 4 }, /narrowest channel/],
+    ['a far cell spanning an odd number of tile cells', s => { s.tileSub = 392 }, /odd number of tile cells/],
+    ['the frame below the focus past the margin', s => { s.camera.rMax = 320 }, /beside the play edge/],
+    ['the occlusion ring past the heightfield margin', s => { s.aoRing = 60 }, /occlusion ring/],
     ['a bake over the min-spec texture size', s => { s.sizes.reflMask = 16384 }, /min-spec/],
     ['sun depth range out of order', s => { s.depth.near = 2000 }, /depth range/],
   ]
   for (const [name, f, msg] of cases) it(`throws: ${name}`, () => { expect(() => derive(with_(f))).toThrow(msg) })
-  it('sizes the shadow map at the texel target, and refuses one over min-spec', () => {
-    const d = derive(SPEC), sm = shadowMapSize(d, 1203.3, 730.1)
+  it('sizes the shadow map at the texel target on the ground, and refuses one over min-spec', () => {
+    const d = derive(SPEC), sin = 0.45, sm = shadowMapSize(d, 1203.3, 730.1, sin)
     expect(1203.3 / sm.w).toBeLessThanOrEqual(SPEC.texel.shadow)
-    expect(730.1 / sm.h).toBeLessThanOrEqual(SPEC.texel.shadow)
-    expect(() => shadowMapSize(d, 4000, 700)).toThrow(/shadow map .*min-spec/)
+    expect(730.1 / sm.h / sin).toBeLessThanOrEqual(SPEC.texel.shadow)   // light-space y, stretched on the ground by 1/sin(elevation)
+    expect(() => shadowMapSize(d, 4000, 700, sin)).toThrow(/shadow map .*min-spec/)
+    expect(() => shadowMapSize(derive(with_(s => { s.minSpec.bakeMB = 100 })), 1203.3, 730.1, sin)).toThrow(/MB of bakes/)
+  })
+  it('refuses ground outside its range', () => {
+    expect(() => checkGround(SPEC, 0.4, 27.5)).not.toThrow()
+    expect(() => checkGround(SPEC, -3, 27.5)).toThrow(/outside the spec/)
+    expect(() => checkGround(SPEC, 0.4, 50)).toThrow(/outside the spec/)
   })
 })
 
@@ -56,6 +66,12 @@ describe('look data', () => {
     const bytes = buildLookData(), d = decodeLook(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
     expect(Buffer.compare(Buffer.from(encodeLook(d)), Buffer.from(bytes))).toBe(0)
     expect(d.hf.n).toBe(SPEC.tileSub + 1 + 2 * derive(SPEC).hfMargin)
+  })
+  it('refuses data built for another spec', () => {
+    const bytes = buildLookData(), d = decodeLook(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
+    expect(() => checkLookData(derive(SPEC), d)).not.toThrow()
+    expect(() => checkLookData(derive(with_(s => { s.aoMargin = 60; s.aoRing = 60 })), d)).toThrow(/heightfield .* nodes/)
+    expect(() => checkLookData(derive(with_(s => { s.far = 2600 + 2 * 2600 / 182; s.farSub = 184 })), d)).toThrow(/far ring/)
   })
   it('the committed file is what the authoring step builds (else run node tools/build-look-data.ts)', () => {
     expect(Buffer.compare(fs.readFileSync(LOOK_FILE), Buffer.from(buildLookData()))).toBe(0)

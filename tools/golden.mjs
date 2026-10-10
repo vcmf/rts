@@ -34,7 +34,7 @@ export const CAMS = [
   ['close', A0 + 0.15, 0.60, 80, [-95, 8, -60], 0],
   ['river', A0, 0.80, 125, [-70, 8, 0], 0],
   ['wide', A0 + 0.35, 0.70, 260, [-100, 8, 150], 0],
-  ['far-edge', A0, 0.98, 260, [-110, 8, 240], 0],   // the far ring and its seam with the tile at the top of the frame
+  ['far-edge', A0, 0.98, 260, [-110, 8, 230], 0],   // the far ring and its seam with the tile at the top of the frame
   ['winter', A0, 0.80, 125, [-10, 8, 2], 3],
 ]
 // Regions: a GRID×GRID split of the frame. A pixel differs when a channel moves more than PX; a region fails
