@@ -8,7 +8,8 @@
 //   node tools/golden.mjs --selftest [page]
 //     the negative test: the page against itself passes, and against a copy with one shader line changed fails
 //
-// The page contract: window.__proto = { scene, camera (ArcRotateCamera), S (state with .t, the clock, and .season) },
+// The page contract: window.__proto = { scene, camera (ArcRotateCamera), S (state with .t, the clock, and .season),
+// play (the half-size of the square the camera focus is clamped to) },
 // and ?frozen keeps S.t at 0 (checked: a page that ignores it fails). The cameras are this tool's own, not
 // render-check.js's (those aim at the river); each must lie inside the page's camera limits (checked).
 // Writes <cam>.base.png, <cam>.cand.png, <cam>.diff.png to outDir and prints a table; exits 1 when any region
@@ -41,24 +42,27 @@ export const CAMS = [
 // on one machine are identical, so the limits only absorb rounding (e.g. a bundler reordering constants).
 const GRID = 4, PX = 6, FRAC = 0.002, MEAN = 0.5
 
-// a page spec to a URL; a <ref>:<path> spec checks the ref out to a temporary worktree outside the repo, which
-// `cleanups` removes (outside, so no test runner or linter ever finds a second copy of the code)
+// a page spec to a URL; a <ref>:<path> spec checks the ref out to a worktree outside the repo (so no test runner
+// or linter finds a second copy of the code), one per commit: an interrupted run leaves at most that one, which
+// the next run reuses, and a finished run removes it
 const cleanups = []
+const git = args => execFileSync('git', args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim()
 function resolvePage(spec) {
   if (/^https?:\/\//.test(spec)) return spec
   const m = /^([^:]+):(.+)$/.exec(spec)
-  let file = spec
-  if (m && !fs.existsSync(spec)) {
-    const git = args => execFileSync('git', args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim()
-    const sha = git(['rev-parse', '--short', m[1]]), dir = fs.mkdtempSync(path.join(os.tmpdir(), `golden-base-${sha}-`))
-    git(['worktree', 'prune']); git(['worktree', 'add', '--detach', dir, sha])
-    cleanups.push(() => { try { git(['worktree', 'remove', '--force', dir]) } catch { fs.rmSync(dir, { recursive: true, force: true }); git(['worktree', 'prune']) } })
+  let file = path.resolve(ROOT, spec)
+  if (m && !fs.existsSync(file)) {
+    const sha = git(['rev-parse', '--short', m[1]]), dir = path.join(os.tmpdir(), `rts-golden-base-${sha}`)
+    git(['worktree', 'prune'])
+    if (!fs.existsSync(path.join(dir, '.git'))) { fs.rmSync(dir, { recursive: true, force: true }); git(['worktree', 'add', '--detach', dir, sha]) }
+    cleanups.push(dir)
     file = path.join(dir, m[2])
   }
   if (!fs.existsSync(file)) throw new Error(`no page at ${file}`)
-  return pathToFileURL(path.resolve(file)).href
+  return pathToFileURL(file).href
 }
-const cleanup = () => { while (cleanups.length) cleanups.pop()() }
+// never let a failed clean-up hide the error that ended the run
+const cleanup = () => { for (const dir of cleanups.splice(0)) try { git(['worktree', 'remove', '--force', dir]) } catch (e) { console.warn(`golden.mjs: could not remove the worktree ${dir}: ${e.message}`) } }
 
 function render(url, dir, tag) {
   const steps = [['wait', 3000],
@@ -69,12 +73,15 @@ function render(url, dir, tag) {
   for (const [name, a, b, r, t, season] of CAMS) {
     // every view must be one the player can reach: a clamped view would be rendered somewhere else, silently
     steps.push(['eval', `(async () => { const c = __proto.camera, lim = (v, lo, hi) => (lo == null || v >= lo - 1e-9) && (hi == null || v <= hi + 1e-9)
-      if (!lim(${a}, c.lowerAlphaLimit, c.upperAlphaLimit) || !lim(${b}, c.lowerBetaLimit, c.upperBetaLimit) || !lim(${r}, c.lowerRadiusLimit, c.upperRadiusLimit))
-        throw new Error("camera ${name} is outside the page's camera limits")
-      c.alpha = ${a}; c.beta = ${b}; c.radius = ${r}; c.target.set(${t}); __proto.S.season = ${season}
-      await __proto.scene.whenReadyAsync()   // every material compiled, so no mesh is skipped in one render and drawn in the other
+      const t = [${t}], P = __proto.play
+      if (!lim(${a}, c.lowerAlphaLimit, c.upperAlphaLimit) || !lim(${b}, c.lowerBetaLimit, c.upperBetaLimit) || !lim(${r}, c.lowerRadiusLimit, c.upperRadiusLimit)
+        || typeof P !== "number" || Math.abs(t[0]) > P || Math.abs(t[2]) > P)
+        throw new Error("camera ${name} is outside the page's camera limits or play area")
+      c.alpha = ${a}; c.beta = ${b}; c.radius = ${r}; c.target.set(...t); __proto.S.season = ${season}
+      // every material and render target compiled, so nothing is skipped in one render and drawn in the other
+      await Promise.race([__proto.scene.whenReadyAsync(true), new Promise((_, no) => setTimeout(() => no(new Error("scene never ready at camera ${name} (120 s)")), 120000))])
       for (let i = 0; i < 3; i++) __proto.scene.render()
-      return "${name}" })()`], ['wait', 300], ['shot', `${name}.${tag}`])
+      return "${name}" })()`], ['shot', `${name}.${tag}`])
   }
   const u = new URL(url); u.searchParams.set('frozen', '')
   const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), u.href, dir, String(W), String(H), JSON.stringify(steps)],
@@ -127,13 +134,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     if (args[0] === '--selftest') {
       // one shader line, changed by a visible amount: the grain's weight in the value (the shared paint function)
-      const page = path.resolve(args[1] || 'prototypes/painted-cinematic.html'), FIND = 'c*=1.0+gr*0.38;', REPLACE = 'c*=1.0+gr*0.58;'
+      const page = path.resolve(ROOT, args[1] || 'prototypes/painted-cinematic.html'), FIND = 'c*=1.0+gr*0.38;', REPLACE = 'c*=1.0+gr*0.58;'
       const src = fs.readFileSync(page, 'utf8')
       if (!src.includes(FIND)) throw new Error(`selftest: "${FIND}" not found in ${page}`)
       const broken = path.join(path.dirname(page), `.golden-selftest-${process.pid}.html`)   // beside the page, so its relative scripts load
       fs.writeFileSync(broken, src.replace(FIND, REPLACE))
-      const gone = () => fs.rmSync(broken, { force: true })
-      for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { gone(); process.exit(130) })
+      const gone = () => fs.rmSync(broken, { force: true })   // an interrupted run can leave the copy: it is git-ignored
       const out = path.join(ROOT, 'scratch/golden-selftest')
       let same, changed
       try {

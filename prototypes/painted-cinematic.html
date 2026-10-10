@@ -886,7 +886,7 @@ addEventListener('resize',()=>engine.resize());
 if(new URLSearchParams(location.search).get('river')==='debug'){   // centre line: light = riffle, dark blue = pool
   const pts=[],cols=[],C=RIVER;for(let i=0;i<C.n;i+=2){pts.push(new V3(C.px[i],C.zw[i]+0.4,C.pz[i]));const r=C.riffle[i];cols.push(new C4(0.15+0.85*r,0.25+0.75*r,0.6+0.4*r,1));}
   B.MeshBuilder.CreateLines('riverDebug',{points:pts,colors:cols},scene);}
-window.__proto={S,scene,camera,buildPost};
+window.__proto={S,scene,camera,buildPost,play:PLAY};
 window.__buildMs=performance.now()-T0;
 </script>
 </body>

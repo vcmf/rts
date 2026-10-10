@@ -8,7 +8,8 @@ import path from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const page = path.resolve(process.argv[2] || 'prototypes/painted-cinematic.html')
+const page = path.resolve(ROOT, process.argv[2] || 'prototypes/painted-cinematic.html')
+if (!fs.existsSync(page)) { console.error(`check-negatives: no page at ${page}`); process.exit(2) }
 const src = f => fs.readFileSync(path.join(ROOT, 'tools', f), 'utf8')
 const CHECKS = { render: src('render-check.js'), river: src('river-check.js') }
 
@@ -42,6 +43,7 @@ for (const [check, name, sabotage, expect] of CASES) {
   const line = out.split('\n').find(l => l.startsWith('EVAL "{\\"failed\\"'))
   const rep = line ? JSON.parse(JSON.parse(line.slice(5))) : null
   const failLine = rep?.failed.find(l => l.startsWith(`${check}-check FAILED: `)) || ''
+  if (rep && /^(EXC|EVAL-EXC) /m.test(out)) rep.other.push('an uncaught page exception')   // thrown errors are not console.error calls
   let ok, why
   if (!applied || !ran || !rep) { ok = false; why = !applied ? 'the sabotage did not apply' : !ran ? 'the check did not run' : 'no report' }
   else if (sabotage) { ok = failLine.includes(expect) && !rep.other.length; why = failLine ? (failLine.includes(expect) ? `fails on ${expect}` : `fails, but not on ${expect}`) : 'PASSES (the check missed it)'; if (rep.other.length) why += '; other page errors' }

@@ -71,4 +71,10 @@ chunked 1.8 km world (engine-design §10 item 8), our own camera controller (pro
   captured whole. Also fixed: the base-ref worktree lives outside the repo and is removed after the run;
   each camera waits for every material to compile; a page that ignores `?frozen` fails clearly; cameras
   sit inside ±40° yaw and are checked against the page's limits; full output and exit code on a bad
-  case; the selftest copy is git-ignored and removed on interrupt; the page contract names `scene`.
+  case; the selftest copy is git-ignored; the page contract names `scene`.
+- **L0b round 2:** nothing severe. Fixed: one base worktree per commit, reused after an interrupt and
+  removed after a run; the readiness wait covers render targets and times out with the camera's name;
+  uncaught page exceptions fail a negative case; the focus is checked against the play area; a failed
+  clean-up cannot hide the run's error; default pages resolve from the repo root. Not done: running
+  base and candidate in parallel, and printing full error lines from `tools/shot.mjs` (the negative
+  tests capture them in the page instead).
