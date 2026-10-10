@@ -363,7 +363,8 @@ describe('passages and casualties', () => {
   })
 })
 
-describe('cost', () => {
+// timing budgets: skipped on CI, whose shared runners are too noisy for millisecond budgets
+describe.skipIf(process.env.CI)('cost', () => {
   it('40 battalions of every shape, moving: time per tick (budget 2 ms, sim-design §16)', () => {
     const s = new Sim(), shapes = Object.keys(cr.rs.formations), hs: number[] = []
     for (let k = 0; k < 40; k++) { const x = -150 + (k % 8) * 38, z = -150 + Math.floor(k / 8) * 55; hs.push(s.spawn(x, z, 0)) }

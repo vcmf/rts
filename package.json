@@ -11,12 +11,15 @@
     "typecheck": "tsc --noEmit",
     "build:data": "node tools/build-sim-data.ts",
     "check:data": "node tools/build-sim-data.ts --check",
+    "check:docs": "node tools/check-docs.mjs",
     "test": "npm run lint && npm run typecheck && vitest run",
+    "coverage": "vitest run --coverage",
     "check:app": "npm run build && node tools/app-check.mjs",
     "calibrate:fire": "node tools/calibrate-fire.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "5.0.1",
     "eslint": "10.11.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.70.1",

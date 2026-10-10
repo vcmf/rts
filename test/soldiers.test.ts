@@ -100,7 +100,8 @@ describe('at 8× (0.2 s soldier steps)', () => {
   })
 })
 
-describe('cost', () => {
+// timing budgets: skipped on CI, whose shared runners are too noisy for millisecond budgets
+describe.skipIf(process.env.CI)('cost', () => {
   it('40 battalions firing (20 a side, front ranks 100 m apart): sim and soldier layer per frame within 4 ms; the fire step per tick reported', () => {
     const p = new Play(), E = Math.PI / 2
     for (const z of [-160, -130, -100, -70, -40]) for (let r = 0; r < 4; r++) { p.sim.spawn(-115 - r * 15, z, E, 'line', 100, 0); p.sim.spawn(-15 + r * 15, z, -E, 'line', 100, 1) }
