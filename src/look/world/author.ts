@@ -3,7 +3,7 @@
 // data; the page reads that data and never evaluates these formulas, except for checks. Ported from
 // prototypes/painted-cinematic.html.
 import { fbm, mulberry, sstep, vn } from '../noise.ts'
-import { RIVER, SECTION_REACH, lerpA, riverQuery, section, setRiver, type RiverParams, type RiverQuery, type RiverSamples } from '../river.ts'
+import { RIVER, bankReachAt, lerpA, riverQuery, section, setRiver, type RiverParams, type RiverQuery, type RiverSamples } from '../river.ts'
 
 // terrain before the river is carved
 export function baseH(x: number, z: number): number {
@@ -108,12 +108,22 @@ export function generateRiver(): { samples: RiverSamples; trough: Trough } {
 }
 
 
-// valley + floodplain + the channel (W2's asymmetric section). q = riverQuery(x,z), passed in so callers query once
+// valley + floodplain + the channel (W2's asymmetric section). Past this side's bank the section hands over to the
+// trough over half a half-width (a hard cut would step where the trough's floodplain sits above the section's).
+// q = riverQuery(x,z), passed in so callers query once
 export function carve(trough: Trough, x: number, z: number, q: RiverQuery | null): number {
   const h = trough(x, z, baseH(x, z), q); if (!q) return h                 // valley trough only lowers, never raises hills
-  const hw = lerpA(RIVER.W, q) / 2
-  if (q.dist > SECTION_REACH * hw) return h
-  return Math.min(h, lerpA(RIVER.zw, q) + section(q.n, hw, lerpA(RIVER.A, q), lerpA(RIVER.D, q), RIVER.P.bankH))
+  const hw = lerpA(RIVER.W, q) / 2, reach = bankReachAt(q), blend = 0.5 * hw
+  if (q.dist > reach + blend) return h
+  const c = lerpA(RIVER.zw, q) + section(q.n, hw, lerpA(RIVER.A, q), lerpA(RIVER.D, q), RIVER.P.bankH)
+  return Math.min(h, c + (h - c) * Math.max(0, sstep(reach, reach + blend, q.dist)))
+}
+
+// the authored surface's normal by central differences over ±e (the bank normals' rule: tools/build-look-data.ts,
+// and the bank check's reference: tools/detail-check.mjs)
+export function authoredNormal(H: (x: number, z: number) => number, x: number, z: number, e: number): [number, number, number] {
+  const gx = (H(x + e, z) - H(x - e, z)) / (2 * e), gz = (H(x, z + e) - H(x, z - e)) / (2 * e), l = Math.hypot(gx, 1, gz)
+  return [-gx / l, 1 / l, -gz / l]
 }
 
 // the authored world: generates the river, installs it for riverQuery, and returns the two height functions

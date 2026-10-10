@@ -84,10 +84,6 @@ export function section(n: number, hw: number, A: number, D: number, bankH: numb
   if (t <= wet) return -D * (1 - Math.pow(t / wet, 2 - 0.6 * a))
   return bankH * Math.pow(sstep(0, 1, (t - wet) * e / innerBank), barExp)
 }
-// how far from the centre line the section reaches, in half-widths, at most (the inner bar on the sharpest bends:
-// 1.74); the carve stops there
-export const SECTION_REACH = 1.8
-
 const bySide = (A: number, outer: number, inner: number): [number, number] => A >= 0 ? [outer, inner] : [inner, outer]
 // the water's edge on each side, in metres from the centre line: [the +n side, the −n side] (where section() is 0)
 export function wetEdges(hw: number, A: number): [number, number] {
@@ -100,9 +96,13 @@ export function bankReach(hw: number, A: number): [number, number] {
   return bySide(A, hw + outerBank, wet * e + innerBank - tw)
 }
 
-// distance from the water's edge on this side, in half-widths (≤0 = in the water), for terrain colouring
-export const bandOf = (q: RiverQuery | null): number => {
+// the water's edge and the bank's end on the side of the river a query point is on, in metres from the centre line.
+// k scales the asymmetry (1: the section; 0: symmetric, as the far ring's painted river)
+export const wetEdgeAt = (q: RiverQuery, k = 1): number => wetEdges(lerpA(RIVER.W, q) / 2, lerpA(RIVER.A, q) * k)[q.n >= 0 ? 0 : 1]
+export const bankReachAt = (q: RiverQuery): number => bankReach(lerpA(RIVER.W, q) / 2, lerpA(RIVER.A, q))[q.n >= 0 ? 0 : 1]
+
+// distance from the water's edge on this side, in half-widths (≤0 = in the water), for terrain colouring; k as above
+export const bandOf = (q: RiverQuery | null, k = 1): number => {
   if (!q) return 8
-  const hw = lerpA(RIVER.W, q) / 2, [pos, neg] = wetEdges(hw, lerpA(RIVER.A, q))
-  return Math.min(8, (q.dist - (q.n >= 0 ? pos : neg)) / hw)
+  return Math.min(8, (q.dist - wetEdgeAt(q, k)) / (lerpA(RIVER.W, q) / 2))
 }

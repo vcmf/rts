@@ -112,13 +112,18 @@ From the prototype plan (W2: "Cut banks steep, point bars shallow; no terrain st
   at 1,210 points on both banks of the sharpest bend: median 0.7° / 1.1°, 95th percentile 8.3° / 13.9°
   (closest / middle zoom). Without the bank normals (the sabotage): 9.0° / 10.6° and 32.8° / 34.1°.
   Limits: median 3°, 95th percentile 20°. The tail is on the scarps, which turn faster than 0.5 m texels.
-- **The detail checks** pass unchanged; the seam check leaves out the river's banks (the bank normals'
-  corridor: a cut bank is a real crease the grain follows, sub-pixel at the wide zooms).
+- **The detail checks** pass unchanged; the seam check leaves out the river's banks (where the bank
+  normals turn the shading: a cut bank is a real crease the grain follows, sub-pixel at the wide zooms).
 - **Review round 1** found the section discontinuous where a bend reverses (the bar's profile differed
   from the cut bank's at A = 0), the bank normals ending at the tile's edge with weight 1 (a seam against
   the apron), the water ribbon lying flat over the newly dry bars, and the bank colours on the symmetric
   edge. Fixed: one shape for both sides at A = 0, a fade toward the tile's edge (`SPEC.bank.edge`), the
   ribbon diving past each side's water's edge, the colours from it.
+- **Review round 2** (nothing severe; fixed and stopped): the test hill shades without the ground's bank
+  normals; the carve hands over to the trough past each side's bank instead of cutting off; trees keep
+  off the wider bars and stones off the water by each side's edge; the bank colours turn symmetric at the
+  tile's edge to meet the far ring's painted river; the seam check leaves out only pixels where the bank
+  normals turn the shading (over about 2.5°), and the wet channel's inset shrinks on narrow channels.
 - **Goldens:** the differences lie along the river's corridor (cameras without the river match).
 - **Readability guard:** no block that passes on the base fails.
 - **Bench** (Metal, a proxy): the terrain pass +0.01 to +0.09 ms against the base.

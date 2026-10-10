@@ -9,7 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { D } from '../src/look/spec.ts'
-import { authorWorld } from '../src/look/world/author.ts'
+import { authorWorld, authoredNormal } from '../src/look/world/author.ts'
 import { encodeLook, type BankNormals, type LookData } from '../src/look/world/data.ts'
 import { sstep } from '../src/look/noise.ts'
 import { riverQuery } from '../src/look/river.ts'
@@ -31,9 +31,9 @@ function bankNormals(H: (x: number, z: number) => number): BankNormals {
       if (inside && open < 0) open = i
       if (!inside && open >= 0) { spans.push(j, open, i - open); open = -1 }
       if (!inside) continue
-      const gx = (H(x + e, z) - H(x - e, z)) / cell, gz = (H(x, z + e) - H(x, z - e)) / cell, l = Math.hypot(gx, 1, gz)
+      const [nx, , nz] = authoredNormal(H, x, z, e)
       const edge = 1 - sstep(D.spec.tile / 2 - b.edge, D.spec.tile / 2, Math.max(Math.abs(x), Math.abs(z)))
-      tex.push(enc(-gx / l), enc(-gz / l), Math.round(255 * (1 - sstep(b.reach - b.fade, b.reach, q!.dist)) * edge))
+      tex.push(enc(nx), enc(nz), Math.round(255 * (1 - sstep(b.reach - b.fade, b.reach, q!.dist)) * edge))
     }
   }
   return { n, cell, x0, z0, spans: Float32Array.from(spans), tex: Uint8Array.from(tex) }

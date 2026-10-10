@@ -9,7 +9,7 @@ import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
 import { H } from './heightfield.ts'
-import { RIVER, lerpA, riverQuery, wetEdges } from './river.ts'
+import { RIVER, lerpA, riverQuery, wetEdgeAt, wetEdges } from './river.ts'
 import { D } from './spec.ts'
 import WAT_VS from './shaders/water.vert?raw'
 import WAT_FS from './shaders/water.frag?raw'
@@ -53,15 +53,14 @@ export function buildWater(scene: Scene, mats: Materials): Water {
   const pos: number[] = [], uv: number[] = [], dep: number[] = [], idx: number[] = [], C = RIVER, COLS = 12, E2 = TILE_W / 2 - 0.01, lim = TILE_W / 2 + 1.35 * RIVER.WMAX / 2 + 0.5; let k = 0
   for (let i = 0, join = false; i < C.n; i++) {
     if (Math.abs(C.px[i]) > lim || Math.abs(C.pz[i]) > lim) { join = false; continue }   // the water lives in the detailed tile only; a re-entry starts a new strip
-    const hw = C.W[i] / 2, nx = -C.tz[i], nz = C.tx[i], y = C.zw[i]                         // left normal of the flow; water is flat at zw
+    const hw = C.W[i] / 2, nx = -C.tz[i], nz = C.tx[i], y = C.zw[i], [ep, en] = wetEdges(hw, C.A[i])   // left normal of the flow; water is flat at zw
     for (let c = 0; c <= COLS; c++) {
       const a = (c / COLS * 2 - 1) * hw * 1.35; let x = C.px[i] + nx * a, zz = C.pz[i] + nz * a
       const cx = Math.max(-E2, Math.min(E2, x)), cz = Math.max(-E2, Math.min(E2, zz)), moved = cx !== x || cz !== zz; x = cx; zz = cz   // the ribbon ends exactly on the tile edge, where the painted line starts
       // columns past this side's water's edge dive under the bank (W2: the inner bar is dry sooner); a column the clamp
       // moved decides from where it landed (it may now be mid-channel)
-      const [ep, en] = wetEdges(hw, C.A[i])
       let dive = a >= 0 ? a > ep : -a > en
-      if (moved) { const q = riverQuery(x, zz); if (!q) dive = true; else { const [qp, qn] = wetEdges(lerpA(C.W, q) / 2, lerpA(C.A, q)); dive = q.dist > (q.n >= 0 ? qp : qn) } }
+      if (moved) { const q = riverQuery(x, zz); dive = !q || q.dist > wetEdgeAt(q) }
       const h = H(x, zz), yy = dive ? Math.min(y, h - 0.35) : y
       pos.push(x, yy, zz); uv.push(a, C.s[i]); dep.push(y - h)
     }

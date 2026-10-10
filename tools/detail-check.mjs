@@ -35,7 +35,7 @@ import * as png from './png.mjs'
 import { CAMS } from './golden.mjs'
 import { prepSteps, shoot, viewStep } from './look-page.mjs'
 import { SPEC } from '../src/look/spec.ts'
-import { authorWorld } from '../src/look/world/author.ts'
+import { authorWorld, authoredNormal } from '../src/look/world/author.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const W = 1280, H = 720, H_PX = H
@@ -108,9 +108,9 @@ const seamLimit = maxStep => maxStep * (SPEC.sizes.grain / (TILE_PX / 2)) / Math
 const EDGE_ON = 0.17   // the incidence's cosine below which a face is edge-on (about 10° from it)
 const KEEPS = 0.8    // and at twice the resolution (four quarter frames) a step there is still this fraction of it (a step is a step at any resolution; a transition under a pixel wide shrinks, if not to half)
 const ISOLATED = 3   // and a seam step is this many times larger than both steps beside it (a smooth slope's are alike)
-// The river's banks (the bank normals' corridor, from the incidence view) are left out: a cut bank turns the shading
-// normal by tens of degrees within a pixel at the wider zooms, a real crease the grain follows; the banks have their
-// own check (banks)
+// The river's banks (where the bank normals turn the shading normal by over about 2.5°, from the incidence view) are
+// left out: a cut bank turns it by tens of degrees within a pixel at the wider zooms, a real crease the grain follows;
+// the banks have their own check (banks)
 function seams(url, dir, defs) {
   const [hx, , hz] = FOCUS
   const steps = [...prepSteps(), detail(defs, true), ['eval', '"MAXSTEP " + __look.grain("smooth")']]
@@ -254,8 +254,7 @@ function banks(url, dir, defs) {
     const hw = C.W[i] / 2
     for (const side of [-1, 1]) for (const f of [0.9, 1.1, 1.3, 1.5, 1.7]) {
       const x = C.px[i] - C.tz[i] * side * f * hw, z = C.pz[i] + C.tx[i] * side * f * hw
-      const gx = (H(x + e, z) - H(x - e, z)) / (2 * e), gz = (H(x, z + e) - H(x, z - e)) / (2 * e), l = Math.hypot(gx, 1, gz)
-      pts.push([x, z, -gx / l, 1 / l, -gz / l])
+      pts.push([x, z, ...authoredNormal(H, x, z, e)])
     }
   }
   const zooms = [CAM.rMin, 90]

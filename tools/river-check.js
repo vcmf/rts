@@ -89,11 +89,11 @@
   //    (a dived column there would show the dry bed through the water)
   //    The wet part of the channel is asymmetric (W2: the inner bar is dry sooner): wetEdges gives each side's edge;
   //    the prototype (no wetEdges) keeps W1's symmetric channel. The rise is read 0.3 m inside the edge; the bed one
-  //    grid cell inside it: within a cell of a shallow edge the drawn ground (the heightfield, interpolated) can sit
-  //    above the water where the authored bed is just below it (the shoreline, W4)
+  //    grid cell inside it, or half the wet width where that is narrower: within a cell of a shallow edge the drawn
+  //    ground (the heightfield, interpolated) can sit above the water where the authored bed is just below it (W4)
   let rises = 0, prev = null, underBed = 0
   const W2 = typeof wetEdges === 'function'
-  const wetIn = (q, inset) => { if (!q) return false; const hw = lerpA(C.W, q) / 2; if (!W2) return q.dist < hw - 0.3; const [pos, neg] = wetEdges(hw, lerpA(C.A, q)); return q.dist < (q.n >= 0 ? pos : neg) - inset }
+  const wetIn = (q, inset) => { if (!q) return false; const hw = lerpA(C.W, q) / 2; if (!W2) return q.dist < hw - 0.3; const edge = wetEdgeAt(q); return q.dist < edge - Math.min(inset, edge / 2) }
   for (let k = 0; k < wp.length; k += 3) { const col = (k / 3) % 13
     const q = riverQuery(wp[k], wp[k + 2])
     if (col === 6 && wetIn(q, 0.3)) { if (prev !== null && wp[k + 1] > prev + 0.001) rises++; prev = wp[k + 1] }   // clamped rows at the tile edge can put the centre on the bank (dived: not surface)
@@ -133,7 +133,7 @@
   for (let i = 0; i < C.n; i += 3) { if (!detailed(C.px[i], C.pz[i])) continue
     for (let a = -30; a <= 30; a += 1) { const x = C.px[i] - C.tz[i] * a, z = C.pz[i] + C.tx[i] * a, q = riverQuery(x, z)
       if (!detailed(x, z)) continue
-      const hw = q && lerpA(C.W, q) / 2, reach = q && (W2 ? bankReach(hw, lerpA(C.A, q))[q.n >= 0 ? 0 : 1] + SMW / TSUB : hw * 1.05)
+      const reach = q && (W2 ? bankReachAt(q) + lerpA(C.W, q) / 4 + SMW / TSUB : lerpA(C.W, q) / 2 * 1.05)   // the bank, the carve's hand-over to the trough, a cell
       const bank = q && q.dist < reach
       for (const [dx, dz] of [[1, 0], [0, 1]]) { const g = Math.abs(H(x + dx, z + dz) - H(x, z))
         if (bank) { steepestBank = Math.max(steepestBank, g); if (g > 3) scarps++ } else { steepest = Math.max(steepest, g); if (g > 1.2) cliffs++ } } } }
