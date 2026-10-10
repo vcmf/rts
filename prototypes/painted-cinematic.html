@@ -869,12 +869,13 @@ addEventListener('drop',e=>{e.preventDefault();dropEl.style.display='none';const
 
 /* ---------- loop ---------- */
 const fpsEl=document.getElementById('fps');
+const FROZEN=new URLSearchParams(location.search).has('frozen');   // golden screenshots (tools/golden.mjs): the clock stays at 0
 // sun colour follows the season: warm gold in summer/autumn → pale gold in winter (keeps snow white, not yellow)
 const SUNCOL=PAL.sun.clone(),WINTER_SUN=new C3(0.98,0.95,0.88);
 scene.onBeforeRenderObservable.add(()=>{const w=Math.max(0,Math.min(1,S.season-2));
   SUNCOL.copyFrom(B.Color3.Lerp(PAL.sun,WINTER_SUN,w));});
 scene.onBeforeRenderObservable.add(()=>{
-  S.t+=Math.min(engine.getDeltaTime()/1000,0.05);
+  if(!FROZEN)S.t+=Math.min(engine.getDeltaTime()/1000,0.05);
   for(const m of mats){m.setVector3('uCamPos',camera.position);m.setVector3('uFocus',camera.target);m.setFloat('uTime',S.t);
     m.setFloat('uGrainAmt',S.grain?S.gamt:0);m.setFloat('uShadowsOn',S.shadows);m.setFloat('uSeason',S.season);m.setColor3('uSunCol',SUNCOL);m.setFloat('uEdges',S.edges);m.setFloat('uClouds',S.clouds);
     m.setFloat('uAO',S.ao);m.setFloat('uMist',S.mist);m.setFloat('uShafts',S.shafts);m.setFloat('uBack',S.back);}

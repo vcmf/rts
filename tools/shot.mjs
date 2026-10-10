@@ -71,8 +71,9 @@ try {
   await send('Runtime.enable'); await send('Page.enable')
   await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +h, deviceScaleFactor: 1, mobile: false })
   await send('Page.navigate', { url })
-  for (let i = 0; i < 240 && !loaded; i++) await sleep(250)   // the page's own script (scene build) runs before the load event
-  if (!loaded) throw new Error('page did not finish loading in 60s')
+  const LOAD = +(process.env.SHOT_LOAD_S || 60)                // seconds; a busy machine or a slow page raises it
+  for (let i = 0; i < LOAD * 4 && !loaded; i++) await sleep(250)   // the page's own script (scene build) runs before the load event
+  if (!loaded) throw new Error(`page did not finish loading in ${LOAD}s`)
   for (const [op, a, b] of steps) {
     if (op === 'wait') await sleep(a)
     else if (op === 'eval') {
