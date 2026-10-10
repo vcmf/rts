@@ -64,11 +64,11 @@ export function makeSmoothGrainCanvas(): { canvas: HTMLCanvasElement; maxStep: n
   g.putImageData(img, 0, 0); return { canvas, maxStep }
 }
 
-// the mean of the grain's R channel, 0..1
-export function grainMean(canvas: HTMLCanvasElement): number {
+// the means of the grain's R (fine grain) and G (blotches) channels, 0..1
+export function grainMean(canvas: HTMLCanvasElement): [number, number] {
   const d = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data
-  let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i]
-  return s / (d.length / 4) / 255
+  let r = 0, g = 0; for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1] }
+  return [r / (d.length / 4) / 255, g / (d.length / 4) / 255]
 }
 
 export function grainTexture(scene: Scene, canvas: HTMLCanvasElement): DynamicTexture {

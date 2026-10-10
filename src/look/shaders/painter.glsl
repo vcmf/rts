@@ -83,7 +83,7 @@ vec3 shadowOf(vec3 a){float l=dot(a,vec3(0.3,0.59,0.11));return clamp(mix(vec3(l
 #if defined(DETAIL)&&!defined(DETAIL_L0)
 #define DETAIL_ON
 #endif
-uniform float uGrainMean;   // the mean of the grain's R channel: the renormalisation's centre
+uniform vec2 uGrainMean;    // the means of the grain's R and G channels: the renormalisations' centres
 uniform float uPixA;        // the angle of one pixel of a 1080-line frame, from the camera's vertical field of view
 float pDetail;              // the detail grain of the last paint(), for DETAIL_DEBUG
 #ifdef DETAIL_ON
@@ -125,7 +125,7 @@ float detailGrain(vec3 wp,vec3 N){
   float idx=textureGrad(uGrain,wp.xz/DETAIL_INDEX,dPx.xz/DETAIL_INDEX,dPy.xz/DETAIL_INDEX).g*8.0;
   vec2 A=detailOctave(Sa,idx),B=detailOctave(Sa*2.0,idx);
   float q=((1.0-o)*(1.0-o)*A.y+o*o*B.y)*dot(pW,pW);              // sum of the squared weights of every read
-  return uGrainMean+(mix(A.x,B.x,o)-uGrainMean)/sqrt(q)*DETAIL_AMP*pFade;}
+  return uGrainMean.x+(mix(A.x,B.x,o)-uGrainMean.x)/sqrt(q)*DETAIL_AMP*pFade;}
 #endif
 // THE paint function. jitter: how loose the brushwork is (1 = landscape, 0.3 = crisp units).
 // sh: extra shadow from the painted shadow map (0..1).
@@ -133,7 +133,7 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   float snow=snowAt(N,wp);alb=mix(alb,vec3(0.80,0.81,0.84),snow);                           // snow: lit warm white, shadowed cool blue by the ramp
   #ifdef DETAIL_ON
   dPx=dFdx(wp);dPy=dFdy(wp);detailPlanes(wp,N);
-  float gd=detailGrain(wp,N),blot=0.5+(detailRead(21.0,vec2(0.0)).g-0.5)/sqrt(dot(pW,pW))*pFade;   // the 21 m blotches stay fixed in the world (renormalised like the grain)
+  float gd=detailGrain(wp,N),blot=uGrainMean.y+(detailRead(21.0,vec2(0.0)).g-uGrainMean.y)/sqrt(dot(pW,pW))*pFade;   // the 21 m blotches stay fixed in the world (renormalised like the grain)
   #else
   float gd=grainW(wp,N,5.5).r,blot=grainW(wp,N,21.0).g;
   #endif

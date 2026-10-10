@@ -76,7 +76,8 @@ grain at a constant size on screen (`docs/plans/active/l2-detail.md`).
   `SPEC.detail.index` (400 m), handed over by the index alone, so a variant with no weight is not read.
 - **Strength:** the blend's lost contrast is given back (variance renormalised), then scaled to `SPEC.detail.amp`
   (0.4) of the texture's own.
-- **Band edges:** never narrower than two pixels' change of the light value (`fwidth`).
+- **Band edges:** never narrower than two pixels' change of the light value (`fwidth`), baked and cloud
+  shadows included: where they step within a pixel the edge comes out about two pixels soft.
 - The pixel's angle is a uniform (`uPixA`) from the camera's actual vertical field of view, so on frames wider
   than 16:9 (which keep the horizontal one) the grain still spans the same share of the frame's height.
 - The 21 m blotch term reads the same planes at its fixed world size, renormalised the same way. Snow, cloud shadows and flowers are

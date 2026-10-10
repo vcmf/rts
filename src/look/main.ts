@@ -144,17 +144,23 @@ const project = (k: number, tx: number, ty: number) => {
   if (k !== 1 || tx || ty) camera.freezeProjectionMatrix(camera.getProjectionMatrix(true).multiply(Matrix.FromValues(k, 0, 0, 0, 0, k, 0, 0, 0, 0, 1, 0, tx, ty, 0, 1)))
 }
 const paintGrain = mats.grain, paintMean = mats.grainMean
-let smooth: { tex: DynamicTexture; mean: number; maxStep: number } | null = null
+let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | null = null
 const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   lab, mats, passes, post, setDetail,
   hill: (x: number, z: number) => lab.addHill(x, z, terrain.terrainMat),
   // the grain the terrain reads: the paint grain, or the seam check's smooth one (returns its steepest texel step)
   grain: (kind: 'paint' | 'smooth') => {
-    if (kind === 'paint') { mats.setGrain(paintGrain, paintMean); return null }
-    if (!smooth) { const s = makeSmoothGrainCanvas(); smooth = { tex: grainTexture(scene, s.canvas), mean: grainMean(s.canvas), maxStep: s.maxStep }; keptGrains.add(smooth.tex) }
-    mats.setGrain(smooth.tex, smooth.mean); return smooth.maxStep
+    const old = mats.grain
+    if (kind === 'paint') mats.setGrain(paintGrain, paintMean)
+    else {
+      if (!smooth) { const s = makeSmoothGrainCanvas(); smooth = { tex: grainTexture(scene, s.canvas), mean: grainMean(s.canvas), maxStep: s.maxStep }; keptGrains.add(smooth.tex) }
+      mats.setGrain(smooth.tex, smooth.mean)
+    }
+    if (old !== mats.grain && !keptGrains.has(old)) old.dispose()   // a dropped grain
+    return kind === 'smooth' ? smooth!.maxStep : null
   },
+
   // the terrain alone (and the lab's hill), or everything; the finishing passes on or off (off: the frame is the
   // terrain's own output, as the debug view needs)
   terrainOnly: (on: boolean) => {

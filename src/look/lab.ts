@@ -17,7 +17,7 @@ import BLOCK_VS from './shaders/block.vert?raw'
 import BLOCK_FS from './shaders/block.frag?raw'
 
 export const BLOCK = { w: 20, d: 3, h: 1.8 }
-export const HILL = { seg: 4, top: 6, sink: 2, round: 3 }   // m: each face's length along the profile, the flat top's radius, the foot's depth below the ground, the length a corner turns over
+export const HILL = { seg: 4, top: 6, sink: 2, round: 3 }   // m: each face's length along the profile, the flat top's radius, the foot's depth below the lowest ground under it, the length a corner turns over
 
 export interface BlockSpec { name: string; x: number; z: number; yaw: number; color: string }   // color: '#rrggbb'
 // the screen box of a block, in render pixels (y down), for the camera at the time of the call
@@ -50,8 +50,8 @@ export class Lab {
   // pixels exactly, behind whatever hides it
   setMask(v: number): void { this.mask = v; for (const m of this.blockMats.values()) m.setFloat('uMask', v) }
 
-  // a test hill at (x, z), its foot HILL.sink below the ground under its centre, drawn with mat (a terrain material:
-  // it reads aRiver, set to 8, no bank). Returns its height, m
+  // a test hill at (x, z), drawn with mat (a terrain material: it reads aRiver, set to 8, no bank). Returns its
+  // top's height above the ground at (x, z), m
   addHill(x: number, z: number, mat: ShaderMaterial): number {
     // walk the profile from the top's centre outward and down, the slope turning from face to face over HILL.round
     // metres (a crease would turn the normal within a pixel: terrain normals are smooth)
@@ -69,10 +69,13 @@ export class Lab {
     })
     pts.reverse()   // from the foot up: the faces point outward
     const hill = CreateLathe('hill', { shape: pts, tessellation: 144 }, this.scene)
-    hill.position.set(x, groundAt(x, z) - HILL.sink - h, z)
+    // the foot HILL.sink below the lowest ground under it, so no side floats on a slope
+    let lo = groundAt(x, z)
+    for (let k = 0; k < 32; k++) { const a = k / 32 * 2 * Math.PI; lo = Math.min(lo, groundAt(x + r * Math.cos(a), z + r * Math.sin(a))) }
+    hill.position.set(x, lo - HILL.sink - h, z)
     hill.setVerticesData('aRiver', new Float32Array(hill.getTotalVertices()).fill(8), false, 1)
     hill.material = mat; this.hills.push(hill)
-    return -h
+    return hill.position.y - groundAt(x, z)
   }
 
   clearHills(): void { for (const h of this.hills) h.dispose(); this.hills = [] }

@@ -134,8 +134,10 @@ In `paint()`, for the terrain only (other surfaces keep today's grain until L7):
   test hill. The grain fades to its mean as the weights' sum falls under 0.25, which keeps it continuous.
   The fade starts at about 47° of slope (facing a diagonal); the tile's steepest cell is 42°, and 74 of the far
   ring's 33,124 cells pass 35° (the steepest 51°).
-- **Band edges:** never narrower than two pixels' change of the light value (one pixel left 0.24% of the
-  pixels shimmering, two leave 0.18%).
+- **Band edges:** never narrower than two pixels' change of the light value (under a horizontal shift, one
+  pixel left 0.24% of the pixels shimmering, two leave 0.18%). The widening takes the whole light value,
+  baked shadows and cloud shadows included: where they step within a pixel the ramp opens to a soft edge
+  about two pixels wide, which is the anti-aliasing they lacked.
 - **The pixel's angle follows the camera** (a uniform, not a define from the SPEC's field of view): frames
   wider than 16:9 keep the horizontal field of view and see less vertically.
 - **The blotch term is renormalised** like the grain, so two blended planes do not weaken it on slopes.
@@ -164,7 +166,9 @@ Frames are 1280×720: a 1920×1080 screenshot crashes headless Chrome here, and 
   zooms. A smooth texture gives a smooth image except at silhouettes (found from the depth), so a jump
   between neighbouring pixels is a seam or a mip line. **Pass:** no pixel over the threshold away from
   silhouettes. The threshold is set from the smooth texture's own steepest gradient, recorded in the
-  tool. As built, the hill's corners are rounded over 3 m (terrain normals turn over a cell or two; a
+  tool. As built, the hill's foot sits 2 m below the lowest ground under it; a pixel belongs to the hill
+  when the hill drawn alone shows the same depth, and pixels where the hill and the ground both match (the
+  line where they meet) are left out; the hill's corners are rounded over 3 m (terrain normals turn over a cell or two; a
   crease turns them within a pixel), faces seen within about 10° of edge-on are skipped (a second debug
   view, `DETAIL_DEBUG_INC`, gives the incidence), and a step must also keep at least 0.8 of its size when
   the frame is rendered at twice the resolution (four quarter frames through the projection): a seam is a
@@ -177,11 +181,12 @@ Frames are 1280×720: a 1920×1080 screenshot crashes headless Chrome here, and 
   without a note here.
   **Note (L2b): the measure and the limit changed.** The 3×3 range test cannot see an aliased edge (an edge
   that crawls stays inside its neighbours' range): hard band edges scored 0.038%, under the page's 0.05%.
-  The check now shifts the image a quarter pixel a frame through the projection (the sampling grid moves
-  under a still world) and counts pixels whose luma differs by over 8/255 from the previous frame resampled
-  a quarter pixel along: a filtered image is predicted that way, hard edges and specks are not. Measured:
-  the page 0.18%, the L0 grain 1.48%, hard band edges 2.0%. What is left on the page is on the baked
-  shadows' edges (`docs/known-issues.md`), so the limit is **0.5%**, to tighten when L5 smooths them.
+  The check now shifts the image a quarter pixel a frame, right and down, through the projection (the
+  sampling grid moves under a still world) and counts pixels whose luma differs by over 8/255 from the
+  previous frame resampled a quarter pixel along: a filtered image is predicted that way, hard edges and
+  specks are not. Measured: the page 0.48%, the L0 grain 3.1%, hard band edges 3.4%. What is left on the
+  page is on the baked shadows' edges (`docs/known-issues.md`), so the limit is **1%**, to tighten when L5
+  smooths them.
 - **Tiling:** the image set for the 3-reviewer test (the widest zoom, three yaws, summer and winter,
   randomised names, an answer sheet). As built: the terrain alone, both arms (L2b and the L0 grain), 12
   images and `answers.json` in the tool's output folder; the tally goes in `docs/plans/active/track-e-results/`. The tool also reports,

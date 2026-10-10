@@ -4,7 +4,7 @@
 import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
-import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
+import { Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import PAINTER from './shaders/painter.glsl?raw'
 import { D } from './spec.ts'
@@ -32,22 +32,22 @@ export class Materials {
   private readonly every: ShaderMaterial[] = []   // all, and the ones kept out of it (the bake's)
   private readonly scene: Scene
   private readonly binders: ((m: ShaderMaterial) => void)[] = []
-  grain: BaseTexture; grainMean: number
-  constructor(scene: Scene, grain: BaseTexture, grainMean: number) { this.scene = scene; this.grain = grain; this.grainMean = grainMean }
+  grain: BaseTexture; grainMean: [number, number]   // the means of its R and G channels
+  constructor(scene: Scene, grain: BaseTexture, grainMean: [number, number]) { this.scene = scene; this.grain = grain; this.grainMean = grainMean }
   make(name: string, vs: string, fs: string, { attributes = ['position', 'normal'], uniforms = [], samplers = [], alpha = false, defines = [], perFrame = true }: MatOptions = {}): ShaderMaterial {
     const m = new ShaderMaterial(name, this.scene, { vertexSource: vs, fragmentSource: withPainter(fs) },
       { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM')], needAlphaBlending: alpha, defines: [...D.defines, ...defines] })
     m.setVector3('uSunDir', SUN); m.setColor3('uSunCol', PAL.sun); m.setColor3('uShadowCol', PAL.shadow)
-    m.setColor3('uHazeCool', PAL.hazeCool); m.setColor3('uHazeWarm', PAL.hazeWarm); m.setTexture('uGrain', this.grain); m.setFloat('uGrainMean', this.grainMean)
+    m.setColor3('uHazeCool', PAL.hazeCool); m.setColor3('uHazeWarm', PAL.hazeWarm); m.setTexture('uGrain', this.grain); m.setVector2('uGrainMean', new Vector2(...this.grainMean))
     this.every.push(m)
     if (perFrame) { this.all.push(m); for (const b of this.binders) b(m) }
     return m
   }
-  // a new grain texture for every painted material, the bake's too; mean: its R channel's (the detail layer
-  // renormalises about it)
-  setGrain(grain: BaseTexture, mean: number): void {
+  // a new grain texture for every painted material, the bake's too; mean: its R and G channels' (the detail layer
+  // renormalises about them)
+  setGrain(grain: BaseTexture, mean: [number, number]): void {
     this.grain = grain; this.grainMean = mean
-    for (const m of this.every) { m.setTexture('uGrain', grain); m.setFloat('uGrainMean', mean) }
+    for (const m of this.every) { m.setTexture('uGrain', grain); m.setVector2('uGrainMean', new Vector2(...mean)) }
   }
   // bindings for every painted material, now and made later (the bakes' textures and matrices)
   bindAll(b: (m: ShaderMaterial) => void): void { this.binders.push(b); for (const m of this.all) b(m) }

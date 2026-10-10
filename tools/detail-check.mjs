@@ -17,13 +17,13 @@
 //   image, so a step between neighbouring pixels larger than the smooth texture can make, much larger than the steps
 //   beside it, and as large again at twice the resolution (a smooth but fast transition, such as the biplanar blend
 //   on a rounded crest, halves when magnified; a seam keeps its step) is a seam or a mip line. None allowed.
-// - shimmer: the final image, terrain alone, at the default view, the image shifted a quarter pixel a frame (the
-//   projection's offset: the sampling grid moves under a still world, as in a slow pan). A pixel shimmers when its
-//   luma differs by over 8/255 from the previous frame resampled a quarter pixel along: a filtered image is
-//   predicted that way, hard edges and sub-pixel specks are not. Under 0.5% of pixels per frame pair.
+// - shimmer: the final image, terrain alone, at the default view, the image shifted a quarter pixel a frame right and
+//   down (the projection's offset: the sampling grid moves under a still world, as in a slow pan). A pixel shimmers
+//   when its luma differs by over 8/255 from the previous frame resampled a quarter pixel along: a filtered image
+//   is predicted that way, hard edges and sub-pixel specks are not. Under 1% of pixels per frame pair.
 // - tiling: the widest zoom at three yaws, summer and winter, the terrain alone, the detail layer and the L0 grain:
 //   12 images under random names and an answer sheet, for the 3-reviewer test. Also reported, not gated: the
-//   debug view's autocorrelation at the lags of the texture's repeat.
+//   debug view's autocorrelation at the shorter lags one tile can repeat at (the frame holds no longer ones).
 // Frames are 1280×720 (a 1920×1080 screenshot crashes headless Chrome here); the grain's size is set in 1080-line
 // pixels and does not depend on the frame's, so the checks scale their pixel numbers by H / 1080.
 // Exit 1 on a failure.
@@ -100,9 +100,9 @@ function scale(url, dir, defs) {
 const SEAM_ZOOMS = [CAM.rMin, R0, CAM.rMax]
 // The largest step between neighbouring pixels a smooth texture can draw, in the debug view's red units (0–255):
 // its steepest texel step × the most texels a pixel can span (octave A spans at least half a tile; the incidence
-// stretches it by up to 1/√minCos, the shader's floor) × the largest renormalisation (√8: two planes, two octaves,
+// stretches it by up to 1/√cos, the cos no less than EDGE_ON: edge-on faces are skipped) × the largest renormalisation (√8: two planes, two octaves,
 // two variants) × the strength × the debug view's ½ × 255; plus 2 for rounding both pixels.
-const seamLimit = maxStep => maxStep * (SPEC.sizes.grain / (TILE_PX / 2)) / Math.sqrt(DET.minCos) * Math.sqrt(8) * DET.amp * 0.5 * 255 + 2
+const seamLimit = maxStep => maxStep * (SPEC.sizes.grain / (TILE_PX / 2)) / Math.sqrt(Math.max(DET.minCos, EDGE_ON)) * Math.sqrt(8) * DET.amp * 0.5 * 255 + 2
 const EDGE_ON = 0.17   // the incidence's cosine below which a face is edge-on (about 10° from it)
 const KEEPS = 0.8    // and at twice the resolution (four quarter frames) a step there is still this fraction of it (a step is a step at any resolution; a transition under a pixel wide shrinks, if not to half)
 const ISOLATED = 3   // and a seam step is this many times larger than both steps beside it (a smooth slope's are alike)
@@ -112,6 +112,8 @@ function seams(url, dir, defs) {
   for (const r of SEAM_ZOOMS) {
     steps.push(view(`r${r}`, A0, BETA0, r), ['shot', `seams.r${r}.ground`])
     steps.push(['eval', `__look.hill(${hx}, ${hz}); "hill"`], render(`hill r${r}`), ['shot', `seams.r${r}.hill`])
+    // the hill alone (the ground hidden): its pixels are the ones where it is drawn at the depth the frame shows
+    steps.push(['eval', '__look.passes.terrain.forEach(m => m.setEnabled(false)); "ground hidden"'], render(`hill alone r${r}`), ['shot', `seams.r${r}.hillonly`], ['eval', '__look.passes.terrain.forEach(m => m.setEnabled(true)); "ground shown"'])
     for (const [i, j] of [[0, 0], [1, 0], [0, 1], [1, 1]]) steps.push(['eval', `__look.quarter(${i}, ${j}); "quarter"`], render(`quarter ${i} ${j}`), ['shot', `seams.r${r}.hill.q${i}${j}`])
     steps.push(['eval', '__look.quarter(null); "whole"'])
     steps.push(detail([...defs, 'DETAIL_DEBUG_INC'], true), render(`incidence r${r}`), ['shot', `seams.r${r}.inc`], detail(defs, true), ['eval', '__look.lab.clearHills(); "cleared"'])
@@ -122,9 +124,14 @@ function seams(url, dir, defs) {
   const lines = [`seams: steps over ${limit.toFixed(1)}/255 (the smooth texture's steepest texel step ${maxStep.toFixed(4)}), ${ISOLATED}× the steps beside them and still ${KEEPS}× as large at twice the resolution, away from silhouettes and edge-on faces`]
   for (const r of SEAM_ZOOMS) {
     const g = load(dir, `seams.r${r}.ground`), h = load(dir, `seams.r${r}.hill`), w = h.w
-    const dg = depth(g), dh = depth(h), v = red(h), onHill = new Uint8Array(w * h.h), sil = new Uint8Array(w * h.h)
+    const dg = depth(g), dh = depth(h), da = depth(load(dir, `seams.r${r}.hillonly`)), v = red(h), onHill = new Uint8Array(w * h.h), sil = new Uint8Array(w * h.h)
     let hillPx = 0
-    for (let i = 0; i < onHill.length; i++) if (dg[i] - dh[i] > 0.3) { onHill[i] = 1; hillPx++ }
+    // 1: the hill (drawn alone at the depth the frame shows, to the depth's 1.5 cm step), 0: the ground (likewise),
+    // 2: both match (along the line where the hill meets the ground): a pair touching it is not compared
+    for (let i = 0; i < onHill.length; i++) {
+      const hill = Math.abs(da[i] - dh[i]) < 0.05, ground = Math.abs(dg[i] - dh[i]) < 0.05
+      onHill[i] = hill && ground ? 2 : hill ? 1 : 0; if (onHill[i] === 1) hillPx++
+    }
     // silhouettes: a depth step much larger than the ones beside it (a slope's steps are alike), dilated by a pixel;
     // and faces seen nearly edge-on (incidence under EDGE_ON, from the incidence view), where a smooth turn of the
     // normal fits in a pixel
@@ -140,7 +147,7 @@ function seams(url, dir, defs) {
     for (let y = 2; y < h.h - 3; y++) for (let x = 2; x < w - 3; x++) {
       const i = y * w + x
       for (const s of [1, w]) {
-        if (sil[i] || sil[i + s] || onHill[i] !== onHill[i + s]) continue
+        if (sil[i] || sil[i + s] || onHill[i] !== onHill[i + s] || onHill[i] === 2) continue
         const d = Math.abs(v[i + s] - v[i]), side = Math.max(Math.abs(v[i] - v[i - s]), Math.abs(v[i + 2 * s] - v[i + s]))
         if (!(d > limit && d > ISOLATED * side)) continue
         // magnified, a smooth transition spreads over twice the pixels and its steps halve; a seam keeps its step
@@ -160,26 +167,27 @@ function seams(url, dir, defs) {
 }
 
 // ---------- shimmer ----------
-// The image shifted by a quarter pixel a frame (the projection's offset: the sampling grid moves under a still
-// world, as in a slow pan). A filtered image is predicted by resampling the previous frame a quarter pixel along
-// (linear); an under-filtered one (hard edges, specks under a pixel) is not.
-// SHIMMER_MAX: set from the measured values (docs/plans/active/l2-detail.md): the page 0.18%, the L0 grain 1.48%,
-// hard band edges (the sabotage) 2.0%; what is left on the page is on the baked shadows' edges (docs/known-issues.md)
-const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.005
+// The image shifted by a quarter pixel a frame, right and down (the projection's offset: the sampling grid moves
+// under a still world, as in a slow diagonal pan, so edges of every direction cross pixels). A filtered image is
+// predicted by resampling the previous frame a quarter pixel along (bilinear); an under-filtered one (hard edges,
+// specks under a pixel) is not.
+// SHIMMER_MAX: set from the measured values (docs/plans/active/l2-detail.md): the page 0.48%, the L0 grain 3.1%,
+// hard band edges (the sabotage) 3.4%; what is left on the page is on the baked shadows' edges (docs/known-issues.md)
+const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01
 function shimmer(url, dir, defs) {
   const steps = [...prepSteps(), detail(defs, false), view('default', A0, BETA0, R0)]
-  for (let k = 0; k < SHIFTS; k++) steps.push(['eval', `__look.shift(${k * STEP}, 0); "shift ${k}"`], render(`shifted ${k}`), ['shot', `shimmer.${k}`])
+  for (let k = 0; k < SHIFTS; k++) steps.push(['eval', `__look.shift(${k * STEP}, ${k * STEP}); "shift ${k}"`], render(`shifted ${k}`), ['shot', `shimmer.${k}`])
   steps.push(['eval', '__look.shift(0, 0); "unshifted"'])
   shoot(url, dir, steps, W, H)
   let ok = true, worst = 0
-  const lines = [`shimmer: pixels whose luma differs by over ${ERR}/255 from the previous frame resampled ${STEP} px along, per frame pair (pass under ${SHIMMER_MAX * 100}%)`]
+  const lines = [`shimmer: pixels whose luma differs by over ${ERR}/255 from the previous frame resampled ${STEP} px right and down, per frame pair (pass under ${SHIMMER_MAX * 100}%)`]
   let prev = luma(load(dir, 'shimmer.0'))
   const fr = []
   for (let k = 1; k < SHIFTS; k++) {
     const img = load(dir, `shimmer.${k}`), cur = luma(img), w = img.w
     let n = 0, all = 0
     for (let y = 2; y < img.h - 2; y++) for (let x = 2; x < w - 2; x++) {
-      const i = y * w + x, pred = (1 - STEP) * prev[i] + STEP * prev[i - 1]; all++
+      const i = y * w + x, S = STEP, pred = (1 - S) * (1 - S) * prev[i] + S * (1 - S) * (prev[i - 1] + prev[i - w]) + S * S * prev[i - w - 1]; all++
       if (Math.abs(cur[i] - pred) > ERR) n++
     }
     fr.push(n / all); worst = Math.max(worst, n / all); prev = cur
@@ -218,7 +226,7 @@ function tiling(url, dir) {
     for (let y = 0; y < img.h; y += 2) for (let x = 0; x < w - k; x += 2) { s += (v[y * w + x] - m) * (v[y * w + x + k] - m); n++ }
     if (s / n / c0 > best) { best = s / n / c0; at = k }
   }
-  return { ok: true, lines: [`tiling: ${views.length} images and answers.json in ${tdir}`, `  debug view, widest zoom: the largest autocorrelation along x at lags ${Math.round(TILE_PX / 2)}–${Math.min(Math.round(TILE_PX * 2), w - 256)} px is ${best.toFixed(3)} (at ${at} px); reported, not gated`] }
+  return { ok: true, lines: [`tiling: ${views.length} images and answers.json in ${tdir}`, `  debug view, widest zoom: the largest autocorrelation along x at lags ${Math.round(TILE_PX / 2)}–${Math.min(Math.round(TILE_PX * 2), w - 256)} px (the shorter repeats of the smaller octave; the frame is too narrow for the rest) is ${best.toFixed(3)} (at ${at} px); reported, not gated`] }
 }
 
 const CHECKS = { scale, seams, shimmer, tiling }
