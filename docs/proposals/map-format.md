@@ -82,20 +82,23 @@ waiting for a format:
 ```
 
 - **Validation** runs before any compiler: schema, units, ranges, references between features (a
-  bridge names a road and a stream that cross), geometry (closed rings, no self-intersection, inside
+  bridge names the water it crosses, and the line it carries if it carries one), geometry (closed rings, no self-intersection, inside
   the extent). A file that fails is rejected with the feature's id and the reason.
 - **One heightfield** (decision 0012): relief and every height edit (carved channels, levelled
-  village ground) are compiled once, into one heightfield on the world SPEC's tile grid
-  (`src/look/spec.ts`). The simulation's and the renderer's files both carry heights taken from it,
+  village ground) are compiled once, into one heightfield over the detailed area, at the world
+  SPEC's cell (`src/look/spec.ts`). The simulation's and the renderer's files both carry heights taken from it,
   not from two evaluations of the map. Today they are two maps with two height builds on different
   grids; the migration (§7, step 6) merges them.
 - **Compilers are pure functions** of their inputs (above). Any randomness (a meander's wiggle, tree
   placement) is seeded from the map's seed and the feature's id, so editing one wood never moves the
   trees in another. A feature may set its own `seed`, which wins (needed to reproduce today's river).
-- **Per ruleset and per season:** the simulation's output depends on the ruleset (ground kinds to
-  classes, speed factors, the slope curve) and on the season (a frozen pond is passable), so it is
-  built per map, ruleset and season, named `<map>.<ruleset>.<season>.simdata`; its manifest records
-  which (the data version, a hash of the bytes, cannot). The renderer's output is per map, and per
+- **Per ruleset and per season:** the simulation's output depends on the ruleset (its cost grid bakes
+  ground kinds to speed factors and the slope curve; the rest is applied at run time,
+  `src/sim/terrain.ts`) and on the season (a frozen pond is passable), so from §7 step 3 it is built
+  per map, ruleset and season, named `<map>.<ruleset>.<season>.simdata`; its manifest records which
+  (the data version, a hash of the bytes, cannot). Legacy maps (§7 step 2) keep today's names. The
+  manifest hashes the ruleset the build actually reads: today that is `prototypes/ruleset-napoleonic.js`,
+  through `maps/formation-field.ts`, not `src/rulesets/`. The renderer's output is per map, and per
   season where the season changes geometry or masks (ice).
 - **Outputs are committed and checked** (`--check` rebuilds and compares, as `npm run check:data`
   does today). The simulation asserts its data version on load (`src/sim/data.ts`).
@@ -116,12 +119,14 @@ A recommendation, to be settled by the first PR (§9, open question 1): **JSON**
 ### Coordinates and units
 
 - A local frame in **metres**: x and z on the ground, y up, origin at the map's centre (both test maps
-  span [−half, half] today). Which way north lies is a field of the map (`north`, degrees from +z;
-  no convention exists yet, so the first PR fixes one).
+  span [−half, half] today). Which way north lies is a field of the map (`north`: the angle from +z
+  turning toward +x, in radians); no convention exists yet, so the first PR confirms this one
+  against the renderer's (left-handed) frame and the staff map.
 - Heights in metres above a datum the map states.
 - An optional **georeference** (the origin's latitude and longitude, the projection), used by importers
   and to overlay period maps; the compilers never need it.
-- Angles in degrees, clockwise from north. Dates in ISO 8601.
+- Angles in radians (`docs/conventions.md`: radians in all authored data), measured like `north`.
+  Latitude and longitude, in the georeference only, are geographic degrees. Dates in ISO 8601.
 
 ### Top level
 
@@ -135,7 +140,7 @@ A recommendation, to be settled by the first PR (§9, open question 1): **JSON**
   "season": "winter",                  // the default season; features may override per season
   "seed": 1805,
   "extent": { "w": 6000, "h": 4000 },  // everything the map describes, backdrop included, metres
-  "detail": { "w": 2000, "h": 2000 },  // the battle's detailed area inside it; the play area and margins come from the world SPEC
+  "detail": { "w": 1500, "h": 1500 },  // the battle's detailed area inside it (today's SPEC tile is 800 m; engine-design §10 grows it to 1–1.5 km)
   "georef": { "lat": 49.128, "lon": 16.762, "projection": "local-tangent" },
   "sources": [ { "id": "dem", "kind": "dem", "ref": "terrarium z14", "note": "…" } ],
   "relief": { … },
@@ -153,7 +158,7 @@ A recommendation, to be settled by the first PR (§9, open question 1): **JSON**
 - `geometry`: `point` `[x, z]`, `line` `[[x, z], …]`, `area` (an outer ring and optional holes),
   `circle` and `ellipse` (the shapes the test field uses), or a named `generator` with parameters
   (a meander along a valley axis, a scatter of rocks) whose shape the compiler computes.
-- `priority`: where areas overlap, the higher wins; each kind has a default (bridge over water over
+- `priority`: where features overlap (a line counts over its width), the higher wins; each kind has a default (bridge over water over
   road over hedge over wood over marsh over rough over field over open, the order the test field
   resolves them in today), so most features never set one. At equal priority the feature later in
   the file wins (a dense core inside a wood is listed after the wood).
@@ -194,7 +199,7 @@ house count; the river's exact centre line instead of a guide). Pinned detail al
 | Relief | the heightfield (decision 0012), slope in the cost grid | the same heightfield, the far ring | hachures from the heightfield |
 | Water | the class `water` and depth per 1 m node, from the water features' depths; a `ford` feature sets the depth where it lies | river samples, carve, water ribbon, bank paint | double ink line and a wash; names |
 | Cover | the ruleset's class per node (wheat → `crops`, wood → `woods`, …), sight blocking | albedo masks, scatter (grass, crops, trees) | wood edges and stipple; fields not drawn |
-| Lines | the ruleset's class for each (a road gives the road pace, a hedge slows, a bridge takes no slope: `src/rulesets/napoleonic.ts`) | road paint and edges, hedge and wall meshes | double or dashed hairlines |
+| Lines | the ruleset's class for each (a road gives the road pace, a hedge slows: `src/rulesets/napoleonic.ts`); a bridge (in `settlements`) takes no slope | road paint and edges, hedge and wall meshes | double or dashed hairlines |
 | Settlements | building footprints impassable, villages as cover | buildings from assets by role (Track E LA) | ink blocks, church crosses |
 | Works | footprints, cover | earthwork meshes | ink outlines |
 | Labels | nothing | nothing | serif labels |
@@ -246,7 +251,7 @@ on purpose and reviewed.
 
 ## 8. Verification
 
-- Validation: one negative test per rule (a typo'd kind, an open ring, a bridge naming no road, a
+- Validation: one negative test per rule (a typo'd kind, an open ring, a bridge naming no water, a
   feature outside the extent).
 - Determinism: compiling twice gives the same bytes; the outputs' hashes are checked in `npm run
   check:data`.
@@ -276,7 +281,7 @@ on purpose and reviewed.
    about a particular battle in its scenario.
 7. **Output size:** the simulation's file is dense (a float64 heightfield plus a 1 m class and depth
    grid, `src/sim/data.ts`). Over a 2 × 2 km detailed area that is about 22 MB per ruleset and
-   season; over a whole 6 × 4 km extent it would be about 200 MB, past GitHub's 100 MB limit. So the
+   season; over a whole 6 × 4 km extent it would be about 130 MB, past GitHub's 100 MB limit. So the
    simulation covers the detailed area only, and the question is whether several seasons and
    rulesets per map still belong in git, or are built in CI. The builders take one square span today
    (`MapDef.half`); the file format itself stores each grid's width and depth.

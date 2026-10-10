@@ -85,8 +85,8 @@ Decided Oct 2026. Implementation: `docs/proposals/staff-map/implementation.md`. 
 
 The hachures are what make the map feel drawn. They replace hillshade completely.
 
-Every feature above comes from the battlefield's map file (`docs/proposals/map-format.md`), the same one
-the 3D battlefield and the simulation compile from.
+Proposed (`docs/proposals/map-format.md`, draft): every feature above comes from the battlefield's map
+file, the same one the 3D battlefield and the simulation compile from.
 
 ---
 
