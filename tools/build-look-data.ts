@@ -1,5 +1,5 @@
 // Builds the look world's data (decision 0012, docs/plans/done/l0-spine.md L0a): the heightfield over the tile
-// plus its margin, the far ring's heights and the river's samples, from the authoring formulas in
+// plus its margin, the far ring's heights, the river's samples and the fine bank normals, from the authoring formulas in
 // src/look/world/author.ts, once, in Node. The page reads the file and never evaluates the formulas.
 //   node tools/build-look-data.ts           writes data/painted-world.lookdata
 //   node tools/build-look-data.ts --check   rebuilds in memory and fails if it differs from the committed file
@@ -10,10 +10,32 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { D } from '../src/look/spec.ts'
 import { authorWorld } from '../src/look/world/author.ts'
-import { encodeLook, type LookData } from '../src/look/world/data.ts'
+import { encodeLook, type BankNormals, type LookData } from '../src/look/world/data.ts'
+import { sstep } from '../src/look/noise.ts'
+import { riverQuery } from '../src/look/river.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const LOOK_FILE = path.join(ROOT, 'data/painted-world.lookdata')
+
+// The fine bank normals (docs/plans/active/w2-river-banks.md): the authored surface's normal by central differences
+// at each texel's centre, over the river's corridor only (out to bank.reach m from its centre line, the weight fading
+// to 0 over the last bank.fade m), stored as row spans
+function bankNormals(H: (x: number, z: number) => number): BankNormals {
+  const b = D.spec.bank, n = D.bankN, cell = b.texel, x0 = -D.spec.tile / 2, z0 = x0, e = cell / 2
+  const spans: number[] = [], tex: number[] = [], enc = (v: number) => Math.round((Math.max(-1, Math.min(1, v)) * 0.5 + 0.5) * 255)
+  for (let j = 0; j < n; j++) {
+    let open = -1
+    for (let i = 0; i <= n; i++) {
+      const x = x0 + (i + 0.5) * cell, z = z0 + (j + 0.5) * cell, q = i < n ? riverQuery(x, z) : null, inside = !!q && q.dist < b.reach
+      if (inside && open < 0) open = i
+      if (!inside && open >= 0) { spans.push(j, open, i - open); open = -1 }
+      if (!inside) continue
+      const gx = (H(x + e, z) - H(x - e, z)) / cell, gz = (H(x, z + e) - H(x, z - e)) / cell, l = Math.hypot(gx, 1, gz)
+      tex.push(enc(-gx / l), enc(-gz / l), Math.round(255 * (1 - sstep(b.reach - b.fade, b.reach, q!.dist))))
+    }
+  }
+  return { n, cell, x0, z0, spans: Float32Array.from(spans), tex: Uint8Array.from(tex) }
+}
 
 export function buildLookData(): Uint8Array {
   const s = D.spec, w = authorWorld()
@@ -31,6 +53,7 @@ export function buildLookData(): Uint8Array {
     hf: { n, cell: s.tile / s.tileSub, x0: (-m * s.tile) / s.tileSub - s.tile / 2, z0: (-m * s.tile) / s.tileSub - s.tile / 2, h, min, max },
     far: { n: fn, cell: s.far / s.farSub, x0: -s.far / 2, z0: -s.far / 2, h: fh },
     river: w.samples,
+    bank: bankNormals(w.H),
   }
   return encodeLook(data)
 }

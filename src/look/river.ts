@@ -62,5 +62,31 @@ export function riverQuery(x: number, z: number, wantLevel = false): RiverQuery 
   return q
 }
 
+// The channel's cross-section (W2, docs/research/stylized-water.md §2.4): the ground's height relative to the local
+// water surface at signed offset n (+ = left of the flow), half-width hw, asymmetry A (+ = the outer bank on the +n
+// side), depth D. The deepest line shifts toward the outer bank; the outer side rises steeply to the water's edge at
+// hw, then a scarp to the floodplain that narrows to near vertical on the sharpest bends (the cut bank); on the inner
+// side the water's edge comes in and a long, low bar rises to the floodplain (the point bar). A = 0: symmetric.
+export function section(n: number, hw: number, A: number, D: number, bankH: number): number {
+  const a = Math.min(1, Math.abs(A)), m = A >= 0 ? n : -n, tw = 0.35 * a * hw   // m > 0: toward the outer bank
+  if (m >= tw) {                                                                 // outer half: the cut bank
+    const t = (m - tw) / (hw - tw)
+    if (t <= 1) return -D * (1 - Math.pow(t, 2 + 4 * a))
+    return bankH * sstep(0, 1, (m - hw) / (hw * (0.35 - 0.29 * a)))
+  }
+  const e = hw + tw, t = (tw - m) / e, wet = 1 - 0.45 * a                       // inner half: the point bar
+  if (t <= wet) return -D * (1 - Math.pow(t / wet, 2 - 0.6 * a))
+  return bankH * Math.pow(sstep(0, 1, (t - wet) * e / (hw * (0.35 + a))), 1.6)
+}
+// how far from the centre line the section reaches the floodplain, in half-widths (the inner bar on the sharpest
+// bends: 1.74)
+export const SECTION_REACH = 1.8
+
+// the water's edge on each side, in metres from the centre line: [the +n side, the −n side] (where section() is 0)
+export function wetEdges(hw: number, A: number): [number, number] {
+  const a = Math.min(1, Math.abs(A)), tw = 0.35 * a * hw, inner = (1 - 0.45 * a) * (hw + tw) - tw
+  return A >= 0 ? [hw, inner] : [inner, hw]
+}
+
 // bank distance in half-widths (≤0 = inside the channel), for terrain colouring
 export const bandOf = (q: RiverQuery | null): number => { if (!q) return 8; const hw = lerpA(RIVER.W, q) / 2; return Math.min(8, (q.dist - hw) / hw) }

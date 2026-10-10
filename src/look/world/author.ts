@@ -3,7 +3,7 @@
 // data; the page reads that data and never evaluates these formulas, except for checks. Ported from
 // prototypes/painted-cinematic.html.
 import { fbm, mulberry, sstep, vn } from '../noise.ts'
-import { RIVER, lerpA, riverQuery, setRiver, type RiverParams, type RiverQuery, type RiverSamples } from '../river.ts'
+import { RIVER, SECTION_REACH, lerpA, riverQuery, section, setRiver, type RiverParams, type RiverQuery, type RiverSamples } from '../river.ts'
 
 // terrain before the river is carved
 export function baseH(x: number, z: number): number {
@@ -70,7 +70,7 @@ export function generateRiver(): { samples: RiverSamples; trough: Trough } {
     const W = softClamp(P.W0 * Math.sqrt(Q) * reach * (1.2 - 0.45 * bendness) * (1 + 0.35 * straight * (1 - bendness)), WMIN, WMAX)
     const riffle = Math.max(1 - Math.min(1, bendness * 1.6), (1 - bendness) * straight)
     C.W[i] = W; C.riffle[i] = riffle
-    C.A[i] = Math.max(-1, Math.min(1, -k * W * 1.6))                        // + : outer (cut) bank on the +n side; used in W2
+    C.A[i] = Math.max(-1, Math.min(1, -k * W * 1.6))                        // + : outer (cut) bank on the +n side (section())
   }
   // width changes over ~2 W, never per sample (a jump notches both banks)
   boxSmooth(Float32Array.from(C.W), C.W, 8); for (let i = 0; i < n; i++) C.W[i] = Math.max(WMIN, Math.min(WMAX, C.W[i]))
@@ -108,14 +108,12 @@ export function generateRiver(): { samples: RiverSamples; trough: Trough } {
 }
 
 
-// valley + floodplain + symmetric channel carve (W1); the asymmetric cut bank / point bar is W2.
-// q = riverQuery(x,z), passed in so callers query once
+// valley + floodplain + the channel (W2's asymmetric section). q = riverQuery(x,z), passed in so callers query once
 export function carve(trough: Trough, x: number, z: number, q: RiverQuery | null): number {
   const h = trough(x, z, baseH(x, z), q); if (!q) return h                 // valley trough only lowers, never raises hills
-  const hw = lerpA(RIVER.W, q) / 2, bw = 0.7 * hw, m = q.dist, zw = lerpA(RIVER.zw, q)
-  if (m > hw + bw) return h
-  const g = m < hw ? -lerpA(RIVER.D, q) * (1 - (m / hw) ** 2) : RIVER.P.bankH * sstep(0, 1, (m - hw) / bw)
-  return Math.min(h, zw + g)
+  const hw = lerpA(RIVER.W, q) / 2
+  if (q.dist > SECTION_REACH * hw) return h
+  return Math.min(h, lerpA(RIVER.zw, q) + section(q.n, hw, lerpA(RIVER.A, q), lerpA(RIVER.D, q), RIVER.P.bankH))
 }
 
 // the authored world: generates the river, installs it for riverQuery, and returns the two height functions

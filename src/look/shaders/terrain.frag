@@ -4,6 +4,9 @@ precision highp float;varying vec3 vW,vN;varying float vRiver;
 #ifdef FARRING
 uniform sampler2D uRiverMask;
 #endif
+#if defined(BANKN)&&!defined(BANKN_OFF)
+uniform sampler2D uBankN;   // the fine bank normals (docs/plans/active/w2-river-banks.md): x, z, weight
+#endif
 vec3 albedo(vec3 wp,vec3 n){
   float n1=G(wp.xz/150.0).g,n2=G(wp.xz/53.0+0.31).g,n3=G(wp.xz/19.0+0.7).g;
   vec3 c=mix(vec3(0.33,0.45,0.20),vec3(0.55,0.58,0.27),smoothstep(0.35,0.66,n1));      // meadow → yellow-green
@@ -33,6 +36,13 @@ vec3 albedo(vec3 wp,vec3 n){
   return c;
 }
 void main(){vec3 N=normalize(vN);vec4 lm=LM(vW);
+  #if defined(BANKN)&&!defined(BANKN_OFF)
+  vec4 bk=texture2D(uBankN,(vW.xz+TILE_HALF)/TILE_W);vec2 bxz=bk.xy*2.0-1.0;   // BANKN_OFF: the bank check's sabotage
+  N=normalize(mix(N,vec3(bxz.x,sqrt(max(0.0,1.0-dot(bxz,bxz))),bxz.y),bk.z));
+  #endif
+  #ifdef DETAIL_DEBUG_N
+  gl_FragColor=vec4(N*0.5+0.5,1.0);return;   // the bank check's view: the shading normal
+  #endif
   float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,lm.g,uAO);
   vec3 alb=albedo(vW,N);
   #ifdef FARRING
