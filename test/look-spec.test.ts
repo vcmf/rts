@@ -1,4 +1,4 @@
-// The look world's spec, heightfield and data (docs/plans/active/l0-spine.md, L0a): every invariant throws on a
+// The look world's spec, heightfield and data (docs/plans/done/l0-spine.md, L0a): every invariant throws on a
 // spec that breaks it (each with a negative case), heightAt follows the mesh's triangle split, and the committed
 // look data is what the authoring step builds now.
 import fs from 'node:fs'

@@ -1,5 +1,5 @@
 // The look page (app/look.html): the painted world in the game's toolchain, ported from
-// prototypes/painted-cinematic.html with no change to the look (docs/plans/active/l0-spine.md, L0c). Built in the
+// prototypes/painted-cinematic.html with no change to the look (docs/plans/done/l0-spine.md, L0c). Built in the
 // prototype's order: mesh and material creation order decides draw order, and the goldens compare pixels.
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Engine } from '@babylonjs/core/Engines/engine.js'

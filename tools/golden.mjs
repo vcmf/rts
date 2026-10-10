@@ -1,4 +1,4 @@
-// Golden screenshots (docs/plans/active/l0-spine.md): render a base and a candidate page at the same fixed
+// Golden screenshots (docs/plans/done/l0-spine.md): render a base and a candidate page at the same fixed
 // cameras with the clock frozen, on this machine, in this run, and compare them region by region.
 // Nothing is committed: the baseline is rendered fresh, from a page or from a git ref.
 //

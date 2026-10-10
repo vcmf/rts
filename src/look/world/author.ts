@@ -1,4 +1,4 @@
-// The authoring step for the look world (decision 0012, docs/plans/active/l0-spine.md L0a): the terrain formula,
+// The authoring step for the look world (decision 0012, docs/plans/done/l0-spine.md L0a): the terrain formula,
 // the meander's generation and the carve. It runs in Node (tools/build-look-data.ts), which ships the result as
 // data; the page reads that data and never evaluates these formulas, except for checks. Ported from
 // prototypes/painted-cinematic.html.

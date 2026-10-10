@@ -1,4 +1,4 @@
-// The world spec (docs/proposals/engine-design.md §2–§6, docs/plans/active/l0-spine.md L0a): sizes are declared
+// The world spec (docs/proposals/engine-design.md §2–§6, docs/plans/done/l0-spine.md L0a): sizes are declared
 // once, everything else is derived from them, and the invariants are checked when the spec is derived: a bad
 // spec throws at load instead of drawing something subtly wrong. No DOM here, so tools and tests import it.
 

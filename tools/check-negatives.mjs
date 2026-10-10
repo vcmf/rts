@@ -1,4 +1,4 @@
-// Negative tests for the page checks (docs/plans/active/l0-spine.md, L0b): each check must pass on the real scene
+// Negative tests for the page checks (docs/plans/done/l0-spine.md, L0b): each check must pass on the real scene
 // and fail, naming the right limit, on a scene broken on purpose. A check that cannot fail checks nothing.
 //   node tools/check-negatives.mjs [page|url]  (default prototypes/painted-cinematic.html)
 // Runs tools/shot.mjs once per case: the real scene, then one sabotage per limit. Exit 1 if any case misbehaves.

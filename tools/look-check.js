@@ -1,4 +1,4 @@
-// Look page checks (docs/plans/active/l0-spine.md, L0a), evaluated inside the page:
+// Look page checks (docs/plans/done/l0-spine.md, L0a), evaluated inside the page:
 // 1. the ground used is the ground drawn: H(x, z) (the heightfield, and the far ring's nodes beyond the tile) agrees
 //    with Babylon's own reading of the drawn meshes (GroundMesh.getHeightAtCoordinates), an independent oracle,
 //    at sampled points on the tile and on the far ring;

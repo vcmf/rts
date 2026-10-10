@@ -1,4 +1,4 @@
-// Builds the look world's data (decision 0012, docs/plans/active/l0-spine.md L0a): the heightfield over the tile
+// Builds the look world's data (decision 0012, docs/plans/done/l0-spine.md L0a): the heightfield over the tile
 // plus its margin, the far ring's heights and the river's samples, from the authoring formulas in
 // src/look/world/author.ts, once, in Node. The page reads the file and never evaluates the formulas.
 //   node tools/build-look-data.ts           writes data/painted-world.lookdata
