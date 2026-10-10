@@ -1,6 +1,6 @@
 // The tick (docs/proposals/sim-design.md §16, the determinism contract). Every loop runs in slot order.
 // S1a fills steps 1, 5–6 (orders → formation state and movement, one call per formation) and 14; S1c fills
-// 8 (fire), 11 (casualties) and 12 (morale; the rout is its standing behaviour). The others are named and
+// 8 (fire), 11 (casualties) and 12 (morale; the rout and the wavering fall-back are its standing behaviours). The others are named and
 // empty until later parts of S1.
 import { type World, M_TICK, MAX_FORMATIONS } from './world.ts'
 import { applyCommands, reapFormation, type Dropped } from './commands.ts'
@@ -33,7 +33,9 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     const lost = w.scratch.lost ?? (w.scratch.lost = new Int32Array(MAX_FORMATIONS))
     for (let i = 0; i < MAX_FORMATIONS; i++) lost[i] = w.f.alive[i] ? casualtiesStep(w, i) : 0
     const before = w.scratch.mstateBefore ?? (w.scratch.mstateBefore = new Uint8Array(MAX_FORMATIONS)); before.set(w.f.mstate)
-    for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i]) moraleStep(w, i, lost[i])
+    // a test switch visits them in reverse: contagion and support read only state fixed before the step
+    const rev = w.scratch.reverse === true
+    for (let k = 0; k < MAX_FORMATIONS; k++) { const i = rev ? MAX_FORMATIONS - 1 - k : k; if (w.f.alive[i]) moraleStep(w, i, lost[i]) }
   })
   // 13 smoke: S2
   step('14 reap', () => { for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i] && menOf(w, i) === 0) reapFormation(w, i) })

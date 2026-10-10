@@ -51,13 +51,21 @@ export interface Formations {
   quality: Float64Array; morale: Float64Array; mstate: Uint8Array; startMen: Int32Array; recent: Float64Array
   // the rout (morale.ts): its direction, fixed at the break; its phase (RP_*); the runs made so far
   routX: Float64Array; routZ: Float64Array; routPhase: Uint8Array; runs: Uint8Array
+  // the rest of the machine (S1c-2): the men the losses term counts from (the spawn strength until a rally),
+  // the ticks it last broke, last lost a man and started rallying, the ticks in a row its morale has fallen,
+  // whether it has fallen back in this wavering spell, and how many times it has broken
+  baseMen: Int32Array; brokeTick: Int32Array; lastLoss: Int32Array; since: Int32Array; falling: Int32Array; fellBack: Uint8Array; routs: Uint8Array
   pressed: Int32Array                                              // losses that could only fall onto impassable ground (the re-packing gate)
 }
 // per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it)
 export interface Sides { rearX: Float64Array; rearZ: Float64Array }
 export const FIRE_AT_WILL = 0, FIRE_HOLD = 1
-export const MS_STEADY = 0, MS_SHAKEN = 1, MS_WAVERING = 2, MS_ROUTING = 3
-export const MORALE_STATES = ['steady', 'shaken', 'wavering', 'routing']
+export const MS_STEADY = 0, MS_SHAKEN = 1, MS_WAVERING = 2, MS_ROUTING = 3, MS_RALLYING = 4, MS_SHATTERED = 5
+export const MORALE_STATES = ['steady', 'shaken', 'wavering', 'routing', 'rallying', 'shattered']
+// out of the fight (routing or later): does not fire, threatens no one, supports no one
+export const outOfFight = (s: number): boolean => s >= MS_ROUTING
+// running from the field: routing or shattered (the rout pace, the run and its fan)
+export const fleeing = (s: number): boolean => s === MS_ROUTING || s === MS_SHATTERED
 export const RP_NONE = 0, RP_RUNNING = 1, RP_HALTED = 2, RP_FLED = 3
 export interface Orders {
   type: Int32Array; shape: Int32Array; finish: Uint8Array; left: Int8Array; resolved: Uint8Array
@@ -78,7 +86,7 @@ export interface World {
   pending: Stamped[]
   data: SimData; cr: Compiled; terrain: Terrain
   debug: boolean
-  scratch: { places?: Places; arc?: Arc; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverseFire?: boolean; lost?: Int32Array; mstateBefore?: Uint8Array }   // per-world working buffers, not state (reverseFire: a test switch, fire.ts)
+  scratch: { places?: Places; arc?: Arc; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverse?: boolean; lost?: Int32Array; mstateBefore?: Uint8Array }   // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
 }
 
 export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {
@@ -95,6 +103,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     reload: f64(N * C), volleyTick: i32(N * C), target: i32(N * C), owed: i32(N * C),
     fireMode: u8(N), prefer: i32(N),
     quality: f64(N), morale: f64(N), mstate: u8(N), startMen: i32(N), recent: f64(N), routX: f64(N), routZ: f64(N), routPhase: u8(N), runs: u8(N), pressed: i32(N),
+    baseMen: i32(N), brokeTick: i32(N), lastLoss: i32(N), since: i32(N), falling: i32(N), fellBack: u8(N), routs: u8(N),
   }
   const M = MAX_ORDERS
   const ord: Orders = { type: i32(M), shape: i32(M), finish: u8(M), left: new Int8Array(M), resolved: u8(M), optional: u8(M),

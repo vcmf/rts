@@ -1,14 +1,15 @@
 ---
 status: current
-last_reviewed: 2026-10-09
-code: [src/sim/fire.ts, src/sim/morale.ts, src/sim/rng.ts, src/sim/tick.ts, src/rulesets/napoleonic.ts, src/scenarios/s1c-firefight.ts, tools/calibrate-fire.ts, test/fire.test.ts]
+last_reviewed: 2026-10-10
+code: [src/sim/fire.ts, src/sim/morale.ts, src/sim/rng.ts, src/sim/tick.ts, src/rulesets/napoleonic.ts, src/scenarios/s1c-firefight.ts, tools/calibrate-fire.ts, test/fire.test.ts, test/morale.test.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0007-battalion-scale, 0015-era-generic-engine]
 ---
 
-# Fire and morale (S1c-1)
+# Fire and morale (S1c)
 
 Battalions fire by company on enemies in arc and range with a clear line, lose men, and break when the
-losses take their morale below the rout threshold. Every number is ruleset data (`fire`, `morale`);
+losses take their morale below the rout threshold. A break shocks nearby friends; friends on the flanks
+steady a line; a wavering line falls back; a router out of danger rallies, brittle, or shatters. Every number is ruleset data (`fire`, `morale`);
 the hit chances are calibrated on the time a firefight takes to break a line, not on historical hit
 rates.
 
@@ -16,8 +17,9 @@ rates.
 step 8 fire        geometry after movement → targets (every 0.5 s, a tenth of the battalions per tick)
                    → loaded, halted companies volley → hits owed to the target's companies (keyed draws)
 step 11 casualties the owed men fall (all battalions first)
-step 12 morale     then morale for all: relaxes toward quality − losses; states with hysteresis; a break
-                   starts the rout (reading other battalions' states as they were before this step)
+step 12 morale     then morale for all: relaxes toward quality − losses + flank support, less contagion
+                   shocks; states with hysteresis; a break starts the rout, a wavering line falls back, a
+                   router rallies or shatters (reading other battalions' states as they were before this step)
 ```
 
 ## Goals / non-goals
@@ -27,8 +29,9 @@ step 12 morale     then morale for all: relaxes toward quality − losses; state
   - results do not depend on slot order;
   - the numbers live in the ruleset and are tuned by a sweep.
 - **Non-goals (later parts):**
-  - rally, shattered, contagion, flank support, the wavering fall-back (S1c-2);
-  - smoke, vision and commanders (S2);
+  - smoke, vision and commanders, with their rally radius (S2);
+  - flank and rear threats (S1d);
+  - removing shattered battalions at the map edge (S1e);
   - melee, cavalry and artillery (S1d).
 
 ## Constraints
@@ -119,7 +122,33 @@ is later:
 - **The run counter** advances only when the run's order was made, so a full order pool delays a run but
   uses up no direction.
 
-A router does not rally yet.
+**Flank support and contagion** (S1c-2). Both read the other battalions' states from before the step:
+- **Support:** a friend in the fight within `support.reach` (100 m) and 45° of a battalion's left or right
+  axis secures that flank. Each secured flank adds `support.bonus` (0.04) to the target. Left and right
+  swap under a Face about, so both are still counted.
+- **Contagion:** a battalion that breaks records the tick (`brokeTick`). In the next tick each friend loses
+  `shock × (1 − d/R)` of its morale, after relaxing: `shock` 0.15, R 200 m for a break ahead of the side's
+  front (away from its rear, else the friend's heading) and 100 m otherwise. A chain of breaks travels one
+  link per tick. The ruleset is refused if one shock could rout a steady battalion of default quality
+  (more than 0.6 of the gap from it to the rout).
+
+**The wavering fall-back.** A wavering battalion with no orders, not changing shape, whose morale has fallen
+for 3 s in a row, with an enemy in the fight within musket range, Retires `fallback.metres` (15 m) once, by
+the Retire command's own orders. The flag clears when it recovers to shaken. A player's order replaces it.
+
+**Rally.** A router rallies when its run has ended, no enemy in the fight is within `rally.safe` (250 m), it
+has lost no man for `rally.calm` (20 s, `debug-kill` counts), and its quality less `rally.cost` (0.1) is
+still at least wavering. Rallying:
+- writes off the losses before the rout (the losses term counts from `baseMen`, its men now) and costs it
+  `rally.cost` of quality, so it comes back brittle. Without the write-off no router could ever rally: the
+  target at a break is the rout threshold itself;
+- stands for `rally.time` (30 s), refusing orders and not firing, then takes the state its morale gives.
+
+**Shattered.** A break beyond `rally.max` (2) rallies, or a router below `shatter` (half) of its spawn
+strength, shatters: it runs as a router, never rallies, and refuses orders.
+
+**Out of the fight** (routing, rallying, shattered: `mstate ≥ MS_ROUTING`): no fire, no threat to an enemy,
+no support to a friend. Every order but the debug ones is dropped, with the state as the reason.
 
 **Quality** comes from `debug-spawn`'s `quality` or the ruleset default; the spawn's `fire` sets the
 starting fire mode (the S1a drill and the S1b scenarios spawn holding fire). `debug-morale` sets it, for
@@ -154,21 +183,35 @@ scripted tests.
     - a battalion that breaks mid-Retire runs away from the enemy;
     - a full order pool uses up no direction.
   - **Partial sight:** companies of a target hidden in a wood take no hits; the rest are fired on.
+- **`test/morale.test.ts`** (S1c-2):
+  - **Rally:** when a router rallies and what it writes off; it refuses orders while rallying and holds
+    after; no rally near an enemy, while losing men, or below the quality floor.
+  - **Shattered:** below half strength, and beyond the rally allowance.
+  - **Contagion:** the shock's size, one tick late; a wavering neighbour breaks and a steady one does not;
+    front and back radii; a chain, one link per tick, the same in reverse visiting order.
+  - **Support:** two flanks against none; no support from a friend ahead, behind or routing.
+  - **Fall-back:** once, 15 m, then fires again; not with orders, not with no enemy in range, not on a dip.
+  - **Determinism:** the brigade's replay, and a save taken mid-rout and mid-fall-back.
   - **Determinism:**
     - the fire step in reversed visiting order gives the same hash (a per-world test switch);
     - the firefight golden, with its replay and save round trip;
     - a five-seed calibration golden.
 - **`test/soldiers.test.ts`:** 40 battalions firing, per-frame cost and per-tick fire cost.
 - **`tools/calibrate-fire.ts`:** 100 seeds at 50, 100 and 200 m on levelled ground, checked against the
-  plan's targets.
-- **`npm run check:app`:** plays the firefight on the page to a rout and replays it in Node.
+  plan's targets; the 100 m row again without the fall-back; a 3v3 brigade's contagion (reported).
+- **`npm run check:app`:** plays the firefight on the page to a rout, and the brigade until a break
+  spreads, and replays both in Node.
 
 ## Open questions
 
 - **The recent-losses term barely matters in a firefight.** It is 0.02–0.04 at the break, against 0.25
   for total losses. It is kept for bursts (artillery, charges, S1d); if those do not use it, cut it.
-- **Every weaker line breaks at the same share of losses (20%),** because the target is linear in losses
-  and nothing else moves morale. Variety will come from S1c-2's shocks and support.
+- **Every lone weaker line still breaks at the same share of losses (20%).** In a brigade, support and
+  contagion vary it: the inner line holds longer, and a break takes worn neighbours with it. In the 3v3
+  calibration the whole weaker brigade went within 0.1 s of its first break in 82 seeds of 100. A brigade
+  worn evenly collapses together; whether that is too total is for S1e's playtests.
+- **Routers on the formation field never rally in the brigade.** They are pinned at the stream about 180 m
+  from the enemy, inside `rally.safe`. The field is 360 m across; battle maps are 1–1.5 km.
 - **Two cover and sight fixes have no failing test.** Culling friendly cover by each battalion's extent
   (not a fixed 40 m), and walking sight lines low to high, are not exercised. This ruleset cannot build a
   battalion that reaches 40 m from its anchor, and the floating-point asymmetry cannot be set up on

@@ -5,7 +5,7 @@
 // the ruleset (decision 0015).
 import type { Handle } from './handle.ts'
 import { quantise, PI } from './num.ts'
-import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MS_ROUTING, FIRE_AT_WILL, formationSlot } from './world.ts'
+import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MORALE_STATES, outOfFight, FIRE_AT_WILL, formationSlot } from './world.ts'
 import { spawnFire } from './fire.ts'
 import { spawnMorale } from './morale.ts'
 import { allocOrder, appendOrder, clearOrders, ordersFree, rebalance, resetTrail, removeMan } from './formation.ts'
@@ -124,7 +124,8 @@ function apply(w: World, c: Command): string {
     return ''
   }
   const i = formationSlot(w, c.id); if (i < 0) return 'no such formation'
-  if (f.mstate[i] === MS_ROUTING && c.type !== 'debug-kill' && c.type !== 'debug-morale') return 'routing'
+  // out of the fight (routing, rallying, shattered): only the debug commands reach it
+  if (outOfFight(f.mstate[i]) && c.type !== 'debug-kill' && c.type !== 'debug-morale') return MORALE_STATES[f.mstate[i]]
   switch (c.type) {
     case 'move': {
       if (!wellFormed(c.points)) return 'malformed waypoints'
@@ -165,6 +166,7 @@ function apply(w: World, c: Command): string {
         while (r >= f.men[i * C + q]) { r -= f.men[i * C + q]; q++ }
         removeMan(w, i, q)   // through the re-packing gate
       }
+      f.lastLoss[i] = w.meta[M_TICK] + 1   // a loss like any other: a router losing men does not rally
       return ''
     }
   }

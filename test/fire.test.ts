@@ -254,7 +254,7 @@ describe('morale', () => {
 
 describe('determinism', () => {
   it('the order the fire step visits battalions in does not change the result (keyed draws)', () => {
-    const go = (rev: boolean) => { const [s] = pair(80, { seed: 3 }); s.w.scratch.reverseFire = rev; s.spawn(0, FIGHT_X - 60, Z + 40, E); s.spawn(1, FIGHT_X + 40, Z + 40, -E); s.run(300); return hex(hashWorld(s.w)) }
+    const go = (rev: boolean) => { const [s] = pair(80, { seed: 3 }); s.w.scratch.reverse = rev; s.spawn(0, FIGHT_X - 60, Z + 40, E); s.spawn(1, FIGHT_X + 40, Z + 40, -E); s.run(300); return hex(hashWorld(s.w)) }
     expect(go(true)).toBe(go(false))
   })
   const goldenFile = path.join(root, 'test', 'golden', 's1c-firefight.json'), TICKS = 12000

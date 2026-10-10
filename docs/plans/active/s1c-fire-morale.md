@@ -20,7 +20,7 @@ The first draft was challenged in `docs/research/s1c-plan-review.md`. This plan 
 | Part | Scope |
 |---|---|
 | **S1c-1** (this plan) | Fire, casualties, a loss-driven morale with rout, the calibration, the page. Meets S1c's goal |
-| S1c-2 | Rally, shattered, rout contagion, flank support, the wavering fall-back |
+| S1c-2 | Rally, shattered, rout contagion, flank support, the wavering fall-back (`docs/plans/active/s1c2-morale-machine.md`) |
 | S1c-3 | The casualty re-packing gate (`docs/known-issues.md`): the other half of a line takes the loss first, no extra draws |
 
 ## S1c-1 scope
