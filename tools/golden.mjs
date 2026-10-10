@@ -65,7 +65,8 @@ function resolvePage(spec) {
 const cleanup = () => { for (const dir of cleanups.splice(0)) try { git(['worktree', 'remove', '--force', dir]) } catch (e) { console.warn(`golden.mjs: could not remove the worktree ${dir}: ${e.message}`) } }
 
 function render(url, dir, tag) {
-  const steps = [['wait', 3000],
+  // a page may build after an await (the look page fetches its data): wait for its contract object first
+  const steps = [['wait', 1000], ['eval', '(async () => { for (let i = 0; i < 1200 && !window.__proto; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__proto) throw new Error("the page never set window.__proto (120 s)"); return "page built" })()'], ['wait', 2000],
     // the page's own loop stops: each camera renders exactly the frames asked for, and a slow frame cannot race the capture
     ['eval', 'for (const id of ["panel", "fps", "drop"]) { const e = document.getElementById(id); if (e) e.style.display = "none" } __proto.scene.getEngine().stopRenderLoop(); "ui hidden, loop stopped"'],
     // the clock must be frozen, or clouds and water move between the two renders

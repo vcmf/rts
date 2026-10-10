@@ -13,8 +13,10 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
-import { RIVER, bandOf, carve, baseH, riverQuery } from './river.ts'
-import { BAND, FAR_CELL, FAR_SUB, FAR_W, MASK_N, TILE_SUB, TILE_W } from './spec.ts'
+import { HF } from './heightfield.ts'
+import { RIVER, bandOf, riverQuery } from './river.ts'
+import { D } from './spec.ts'
+import type { FarHeights } from './world/data.ts'
 import TER_VS from './shaders/terrain.vert?raw'
 import TER_FS from './shaders/terrain.frag?raw'
 
@@ -24,7 +26,10 @@ export interface Terrain {
   tileGround: GroundMesh; farGround: GroundMesh; apron: Mesh
 }
 
-export function buildTerrain(scene: Scene, mats: Materials): Terrain {
+const TILE_W = D.spec.tile, TILE_SUB = D.spec.tileSub, FAR_W = D.spec.far, FAR_SUB = D.spec.farSub, FAR_CELL = D.farCell, BAND = D.band, MASK_N = D.spec.sizes.riverMask
+
+// heights come from the look data: the tile from the heightfield (decision 0012), the far ring from its own nodes
+export function buildTerrain(scene: Scene, mats: Materials, far: FarHeights): Terrain {
   const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'] })
   // far ring: the river painted from a mask (the samples stroked at their widths), since 15 m vertices can't hold it
   const riverMaskCanvas = document.createElement('canvas'); riverMaskCanvas.width = riverMaskCanvas.height = MASK_N
@@ -37,13 +42,17 @@ export function buildTerrain(scene: Scene, mats: Materials): Terrain {
   const riverMask = new DynamicTexture('riverMask', riverMaskCanvas, scene, true, Texture.BILINEAR_SAMPLINGMODE); riverMask.wrapU = riverMask.wrapV = Texture.CLAMP_ADDRESSMODE; riverMask.update(false)
   const farTerrainMat = mats.make('farTerrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], samplers: ['uRiverMask'], defines: ['#define FARRING'] }); farTerrainMat.setTexture('uRiverMask', riverMask)
 
-  function ground(size: number, sub: number, yOff: number): GroundMesh {
+  function ground(size: number, sub: number): GroundMesh {
     const g = CreateGround('t', { width: size, height: size, subdivisions: sub, updatable: true }, scene)
     const p = g.getVerticesData(VertexBuffer.PositionKind)!, coarse = size > TILE_W
     const rv = new Float32Array(p.length / 3)
     // far ring: valley trough only, no channel and no water; the river is a painted line there (FARRING). rv=8 (no bank
-    // colours): on a 14 m grid they would bead along the line
-    for (let i = 0; i < p.length; i += 3) { const x = p[i], z = p[i + 2], q = riverQuery(x, z, true); p[i + 1] = (coarse ? RIVER.trough(x, z, baseH(x, z), q) : carve(x, z, q)) + yOff; rv[i / 3] = coarse ? 8 : bandOf(q) }
+    // colours): on a 14 m grid they would bead along the line. Vertex (row, col) is node (col, sub − row) of its grid.
+    const m = D.hfMargin
+    for (let row = 0, k = 0; row <= sub; row++) for (let col = 0; col <= sub; col++, k++) {
+      if (coarse) { p[k * 3 + 1] = far.h[(sub - row) * far.n + col]; rv[k] = 8 }
+      else { p[k * 3 + 1] = HF.h[(sub - row + m) * HF.n + col + m]; rv[k] = bandOf(riverQuery(p[k * 3], p[k * 3 + 2])) }
+    }
     g.updateVerticesData(VertexBuffer.PositionKind, p); g.updateCoordinateHeights()
     if (coarse) {
       const ix = g.getIndices()!, keep: number[] = []
@@ -57,7 +66,7 @@ export function buildTerrain(scene: Scene, mats: Materials): Terrain {
     g.setVerticesData('aRiver', rv, false, 1)
     g.material = coarse ? farTerrainMat : terrainMat; return g
   }
-  const tileGround = ground(TILE_W, TILE_SUB, 0), farGround = ground(FAR_W, FAR_SUB, -0.9)
+  const tileGround = ground(TILE_W, TILE_SUB), farGround = ground(FAR_W, FAR_SUB)
 
   // vertex index of grid point (x,z) in a CreateGround mesh (rows run from +z to -z)
   const gridV = (size: number, sub: number, x: number, z: number) => { const c = size / sub, col = Math.round((x + size / 2) / c), row = sub - Math.round((z + size / 2) / c); return row * (sub + 1) + col }

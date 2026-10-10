@@ -23,11 +23,12 @@
     { name: 'mid', alpha: -Math.PI / 2 - 0.35, beta: 0.8, radius: 125, t: [-70, 8, 0] },
     { name: 'close', alpha: -Math.PI / 2 - 0.2, beta: 0.6, radius: 80, t: [-95, 8, -60] },
     { name: 'wide', alpha: -Math.PI / 2, beta: 0.7, radius: 260, t: [-100, 8, 150] },
-    { name: 'far', alpha: Math.PI / 2 - 0.3, beta: 0.98, radius: 260, t: [-110, 8, -250] },   // looks out past the tile edge (-z); at the camera limits
+    { name: 'far', alpha: -Math.PI / 2 - 0.35, beta: 0.98, radius: 260, t: [-110, 8, 240] },   // looks out past the tile edge (+z) at the default yaw; at the camera limits
   ]
   const half = SMW / 2, saved = { alpha: cam.alpha, beta: cam.beta, radius: cam.radius, target: cam.target.clone() }
   // views must be ones the player can reach: the camera clamps beta/radius on render, which would silently move the view
-  for (const v of views) if (v.beta > cam.upperBetaLimit || v.radius > cam.upperRadiusLimit || v.radius < cam.lowerRadiusLimit || Math.abs(v.t[0]) > PLAY || Math.abs(v.t[2]) > PLAY) fail.push(`${v.name}: outside the camera limits`)
+  const yawOk = a => (cam.lowerAlphaLimit == null || a >= cam.lowerAlphaLimit) && (cam.upperAlphaLimit == null || a <= cam.upperAlphaLimit)
+  for (const v of views) if (!yawOk(v.alpha) || v.beta > cam.upperBetaLimit || v.radius > cam.upperRadiusLimit || v.radius < cam.lowerRadiusLimit || Math.abs(v.t[0]) > PLAY || Math.abs(v.t[2]) > PLAY) fail.push(`${v.name}: outside the camera limits`)
   try {
     for (const v of views) {
       cam.alpha = v.alpha; cam.beta = v.beta; cam.radius = v.radius; cam.target.set(...v.t)
