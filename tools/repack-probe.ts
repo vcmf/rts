@@ -4,7 +4,7 @@
 // directly) and with it (removeMan), and how often the gate had to fall back to `pressed`.
 // Usage: node tools/repack-probe.ts [--events]   (--events prints each ungated case as JSON)
 import fs from 'node:fs'
-import { loadSimData, compileRuleset, buildTerrain, makeWorld, issue, advanceTick, wetBins, removeMan, M_FREE } from '../src/sim/index.ts'
+import { loadSimData, compileRuleset, buildTerrain, makeWorld, issue, advanceTick, anyWet, removeMan, M_FREE } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 
 const data = loadSimData(new Uint8Array(fs.readFileSync(new URL('../data/formation-field.simdata', import.meta.url)))), cr = compileRuleset(napoleonic)
@@ -15,13 +15,13 @@ const run = (gated: boolean) => {
   for (const shape of Object.keys(napoleonic.formations)) for (const heading of HEADINGS) for (let z = -160; z <= 160; z += 40) for (let x = 30; x <= 75; x += 0.25) {
     const w = makeWorld(data, cr, 1, false, terrain), i = w.free[w.meta[M_FREE] - 1]
     issue(w, { type: 'debug-spawn', side: 0, x, z, heading, shape, men: 100, fire: 'hold' }); advanceTick(w)
-    if (!w.f.alive[i] || wetBins(w, i)) continue
+    if (!w.f.alive[i] || anyWet(w, i)) continue
     positions++
     for (let n = 0; n < 60; n++) {
       const c = n % C; if (w.f.men[i * C + c] <= 0) continue
       losses++
       if (gated) removeMan(w, i, c); else w.f.men[i * C + c]--
-      if (wetBins(w, i)) { wet++; if (print && !gated) console.log(JSON.stringify({ shape, heading: +heading.toFixed(4), x, z, n })); break }
+      if (anyWet(w, i)) { wet++; if (print && !gated) console.log(JSON.stringify({ shape, heading: +heading.toFixed(4), x, z, n })); break }
     }
     if (w.f.pressed[i] > 0) pressed++
   }

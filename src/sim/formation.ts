@@ -5,9 +5,10 @@
 // A battalion is a few company blocks (files × ranks) placed in the battalion frame by its shape. The sim
 // keeps the men per company; which slots are filled follows from that by one rule (`occupied`), so no
 // soldier is simulated (decision 0007): who stands where and who falls is the renderer's.
-import { type World, M_TICK, TRAIL, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MAX_FORMATIONS, fleeing } from './world.ts'
+import { type World, M_TICK, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MAX_FORMATIONS, fleeing } from './world.ts'
 import type { ShapeLayout, Placement } from './ruleset.ts'
-import { rot2, blockLocal, slotIndex, BINS, MAX_BINS } from './ruleset.ts'
+import { rot2, blockLocal, slotIndex } from './ruleset.ts'
+import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
 import { cellK, groundG, groundQ, onRoad } from './terrain.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
@@ -52,35 +53,42 @@ export function occupied(w: World, i: number, c: number, r: number, f: number): 
   const off = half(nf - cr), fi = f - start - off
   return fi >= 0 && fi < cr
 }
-// bitmask of company c's filled slots (r · files + f, at most 32: ruleset.ts) on impassable ground, as the
-// battalion stands now (bit 31 makes it negative; only & and nonzero tests read it). `ctx`: the places now
-// (ctxNow), built once by the caller: a change of men moves no place
-function wetSlots(w: World, i: number, c: number, ctx: Places): number {
+// per-world bit sets, sized from the ruleset once (a tick allocates none): a battalion's bins (the footprint
+// gate) and a company's slots per company (the re-packing gate)
+export interface GateBits { before: Bits; now: Bits; held: Bits; tmp: Bits; slotNow: Bits; slotWas: Bits[] }
+function bitsOf(w: World): GateBits {
+  let b = w.scratch.gateBits
+  if (!b) { const NB = w.cr.NB, RF = w.cr.geo.ranks * w.cr.geo.files
+    b = w.scratch.gateBits = { before: mkBits(NB), now: mkBits(NB), held: mkBits(NB), tmp: mkBits(NB), slotNow: mkBits(RF), slotWas: Array.from({ length: w.cr.geo.companies }, () => mkBits(RF)) } }
+  return b
+}
+// company c's filled slots (r · files + f) on impassable ground, as the battalion stands now, into out.
+// `ctx`: the places now (ctxNow), built once by the caller: a change of men moves no place
+function wetSlots(w: World, i: number, c: number, ctx: Places, out: Bits): Bits {
   const f = w.f, g = w.cr.geo, imp = w.terrain.imp[kindOf(w, i)]
-  let mask = 0
+  out.fill(0)
   if (f.trans[i]) {
     const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], now(w), 0, wbPose), ca = cos(p.a), sa = sin(p.a)
     for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) { if (!occupied(w, i, c, r, q)) continue
-      const [lx, lz] = blockLocal(g, q, r); if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) mask |= 1 << (r * g.files + q) }
-    return mask
+      const [lx, lz] = blockLocal(g, q, r); if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) setBit(out, r * g.files + q) }
+    return out
   }
   for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) {
     if (!occupied(w, i, c, r, q)) continue
-    placeAt(ctx, c, r, q, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) mask |= 1 << (r * g.files + q)
+    placeAt(ctx, c, r, q, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) setBit(out, r * g.files + q)
   }
-  return mask
+  return out
 }
-const wetWas = new Int32Array(MAX_BINS)   // per company (a battalion has at most MAX_BINS / BINS)
 // takes one man from company q unless the re-pack puts a man newly on impassable ground; the companies the
 // re-pack can touch are q's own, or for a shape that closes across companies, q's half
 function takeIfDry(w: World, i: number, q: number, ctx: Places | null): boolean {
   const f = w.f, C = w.cr.geo.companies, k = i * C
   if (f.men[k + q] <= 0) return false
   if (!ctx) { f.men[k + q]--; return true }
-  const [lo, hi] = repackSpan(w, i, q)
-  for (let c = lo; c < hi; c++) wetWas[c] = wetSlots(w, i, c, ctx)
+  const [lo, hi] = repackSpan(w, i, q), B = bitsOf(w)
+  for (let c = lo; c < hi; c++) wetSlots(w, i, c, ctx, B.slotWas[c])
   f.men[k + q]--
-  for (let c = lo; c < hi; c++) if (wetSlots(w, i, c, ctx) & ~wetWas[c]) { f.men[k + q]++; return false }
+  for (let c = lo; c < hi; c++) if (anyNew(wetSlots(w, i, c, ctx, B.slotNow), B.slotWas[c])) { f.men[k + q]++; return false }
   return true
 }
 // the companies a loss in company q re-packs: its own, or for a shape that closes across companies, q's half
@@ -105,7 +113,7 @@ function takeMan(w: World, i: number, c: number, first?: ArrayLike<number>, near
   const f = w.f, C = w.cr.geo.companies, k = i * C
   const ctx = (near ?? !clearOfImpassable(w, i)) ? ctxNow(w, i) : null, [clo, chi] = repackSpan(w, i, c)
   if (takeIfDry(w, i, c, ctx)) return c
-  let tried = 1 << c   // whole re-pack spans tried: a span's companies are alike
+  let tried = 1 << c   // whole re-pack spans tried: a span's companies are alike (at most MAX_COMPANIES, 32)
   for (let s = clo; s < chi; s++) tried |= 1 << s
   for (let pass = 0; pass < 2; pass++) for (let d = 1; d < C; d++) for (let s = -1; s <= 1; s += 2) {
     const q = c + s * d
@@ -130,15 +138,15 @@ export function rebalance(w: World, i: number): void {
 export function menOf(w: World, i: number): number { const C = w.cr.geo.companies; let m = 0; for (let c = 0; c < C; c++) m += w.f.men[i * C + c]; return m }
 
 /* ---------------- the march trail: a ring of points, oldest first ---------------- */
-const tIdx = (w: World, i: number, k: number) => i * TRAIL + ((w.f.trailStart[i] + k) % TRAIL)
+const tIdx = (w: World, i: number, k: number) => i * w.cr.trail + ((w.f.trailStart[i] + k) % w.cr.trail)
 function trailPush(w: World, i: number, x: number, z: number): void {
   const f = w.f
-  if (f.trailCount[i] === TRAIL) {   // full: drop the oldest point and its segment
+  if (f.trailCount[i] === w.cr.trail) {   // full: drop the oldest point and its segment
     const a = tIdx(w, i, 0), b = tIdx(w, i, 1); f.trailLen[i] -= hyp(f.trailX[b] - f.trailX[a], f.trailZ[b] - f.trailZ[a])
-    f.trailStart[i] = (f.trailStart[i] + 1) % TRAIL; f.trailCount[i]-- }
+    f.trailStart[i] = (f.trailStart[i] + 1) % w.cr.trail; f.trailCount[i]-- }
   const k = tIdx(w, i, f.trailCount[i]); f.trailX[k] = x; f.trailZ[k] = z; f.trailCount[i]++; f.trailVer[i]++
 }
-function trailDropOldest(w: World, i: number): void { w.f.trailStart[i] = (w.f.trailStart[i] + 1) % TRAIL; w.f.trailCount[i]--; w.f.trailVer[i]++ }
+function trailDropOldest(w: World, i: number): void { w.f.trailStart[i] = (w.f.trailStart[i] + 1) % w.cr.trail; w.f.trailCount[i]--; w.f.trailVer[i]++ }
 export function resetTrail(w: World, i: number): void {
   const f = w.f, n = 8
   f.trailStart[i] = 0; f.trailCount[i] = 0
@@ -159,14 +167,14 @@ function pushTrail(w: World, i: number): void {
 }
 function setTrail(w: World, i: number, xs: number[], zs: number[]): void {
   const f = w.f; f.trailStart[i] = 0; f.trailCount[i] = 0
-  for (let k = Math.max(0, xs.length - TRAIL); k < xs.length; k++) trailPush(w, i, xs[k], zs[k])
+  for (let k = Math.max(0, xs.length - w.cr.trail); k < xs.length; k++) trailPush(w, i, xs[k], zs[k])
   f.trailLen[i] = 0
   for (let k = 1; k < f.trailCount[i]; k++) { const a = tIdx(w, i, k - 1), b = tIdx(w, i, k); f.trailLen[i] += hyp(f.trailX[b] - f.trailX[a], f.trailZ[b] - f.trailZ[a]) }
 }
 
 // arc length from a head (hx, hz) back along the trail
 export interface Arc { i: number; hx: number; hz: number; h: number; ver: number; P: Float64Array; S: Float64Array; n: number }
-const mkArc = (): Arc => ({ i: -1, hx: 0, hz: 0, h: 0, ver: -1, P: new Float64Array(2 * (TRAIL + 2)), S: new Float64Array(TRAIL + 2), n: 0 })
+const mkArc = (w: World): Arc => ({ i: -1, hx: 0, hz: 0, h: 0, ver: -1, P: new Float64Array(2 * (w.cr.trail + 2)), S: new Float64Array(w.cr.trail + 2), n: 0 })
 function arcOf(w: World, i: number, hx: number, hz: number, h: number, a: Arc): Arc {
   if (a.i === i && a.hx === hx && a.hz === hz && a.h === h && a.ver === w.f.trailVer[i]) return a
   a.i = i; a.hx = hx; a.hz = hz; a.h = h; a.ver = w.f.trailVer[i]
@@ -191,7 +199,7 @@ function trailPoint(a: Arc, D: number, out: number[]): number[] {
   out[0] = P[2 * lo] + (P[2 * hi] - P[2 * lo]) * u; out[1] = P[2 * lo + 1] + (P[2 * hi + 1] - P[2 * lo + 1]) * u; return out
 }
 const tA = [0, 0], tB = [0, 0], tC = [0, 0]
-const arcOfWorld = (w: World): Arc => w.scratch.arc ?? (w.scratch.arc = mkArc())
+const arcOfWorld = (w: World): Arc => w.scratch.arc ?? (w.scratch.arc = mkArc(w))
 
 interface Pose { x: number; z: number; a: number; face: number }
 const plTmp: Placement = { x: 0, z: 0, rot: 0, face: 0 }
@@ -234,22 +242,22 @@ export const lagAt = (w: World, i: number, j: number, dt: number): number => w.f
 // shape: per-bin frames, the lag along the heading. A trail shape: every man on the trail at his own
 // distance behind the head (his place in the straight layout plus his lag), across it by his offset.
 export interface Places { w: World; i: number; snake: boolean; dt: number; t: number; arc: Arc; fx: Float64Array; fz: Float64Array; fc: Float64Array; fs: Float64Array; ft: Float64Array }
-export const mkPlaces = (w: World): Places => { const n = w.cr.NB; return { w, i: -1, snake: false, dt: 0, t: 0, arc: mkArc(), fx: new Float64Array(n), fz: new Float64Array(n), fc: new Float64Array(n), fs: new Float64Array(n), ft: new Float64Array(n) } }
+export const mkPlaces = (w: World): Places => { const n = w.cr.NB; return { w, i: -1, snake: false, dt: 0, t: 0, arc: mkArc(w), fx: new Float64Array(n), fz: new Float64Array(n), fc: new Float64Array(n), fs: new Float64Array(n), ft: new Float64Array(n) } }
 const pcPose: Pose = { x: 0, z: 0, a: 0, face: 0 }
 export function placesCtx(ctx: Places, i: number, hx: number, hz: number, h: number, t: number, dt: number): Places {
   const w = ctx.w; ctx.i = i; ctx.snake = snakes(w, i); ctx.dt = dt; ctx.t = t
   if (ctx.snake) { ctx.arc.ver = -1; arcOf(w, i, hx, hz, h, ctx.arc); return ctx }
-  const sh = sin(h), ch = cos(h)
+  const sh = sin(h), ch = cos(h), B = w.cr.geo.bins
   for (let c = 0; c < w.cr.geo.companies; c++) {
     const p = placeWorld(w, i, c, hx, hz, h, t, 0, pcPose), ca = cos(p.a), sa = sin(p.a)
-    for (let k = 0; k < BINS; k++) { const j = c * BINS + k, lag = lagAt(w, i, j, dt)
+    for (let k = 0; k < B; k++) { const j = c * B + k, lag = lagAt(w, i, j, dt)
       ctx.fx[j] = p.x - sh * lag; ctx.fz[j] = p.z - ch * lag; ctx.fc[j] = ca; ctx.fs[j] = sa; ctx.ft[j] = h }
   }
   return ctx
 }
 // a man's place [x, z, direction of travel]
 export function placeAt(ctx: Places, c: number, r: number, f: number, out: number[]): number[] {
-  const w = ctx.w, g = w.cr.geo, L = layoutOf(w, ctx.i), s = slotIndex(g, c, r, f), j = c * BINS + L.of[s]
+  const w = ctx.w, g = w.cr.geo, L = layoutOf(w, ctx.i), s = slotIndex(g, c, r, f), j = c * g.bins + L.of[s]
   if (!ctx.snake) {
     const [lx, lz] = blockLocal(g, f, r)
     out[0] = ctx.fx[j] + lx * ctx.fc[j] - lz * ctx.fs[j]; out[1] = ctx.fz[j] + lx * ctx.fs[j] + lz * ctx.fc[j]; out[2] = ctx.ft[j]; return out
@@ -269,7 +277,6 @@ function paceOf(w: World, i: number): [number, number] {
 
 /* ---------------- the footprint gate ---------------- */
 const wbPose: Pose = { x: 0, z: 0, a: 0, face: 0 }, pt = [0, 0, 0]
-// bitmask of bins with a man's place on impassable ground, for the pose as it is now
 // no place of battalion i can be on impassable ground: the ground's distance field says the nearest is
 // farther than the battalion reaches
 export const nearImpassable = (w: World, i: number): boolean => !clearOfImpassable(w, i)
@@ -281,46 +288,54 @@ function clearOfImpassable(w: World, i: number): boolean {
   const kind = kindOf(w, i)
   return w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(w) + lmax + 2
 }
-export function wetBins(w: World, i: number): number {
-  const f = w.f, g = w.cr.geo, C = g.companies, R = g.ranks, F = g.files, t = now(w)
-  if (clearOfImpassable(w, i)) return 0
+// the bins with a man's place on impassable ground, for the pose as it is now, into out (a set of NB bits)
+export function wetBins(w: World, i: number, out: Bits): Bits {
+  const f = w.f, g = w.cr.geo, C = g.companies, R = g.ranks, F = g.files, B = g.bins, t = now(w)
+  out.fill(0)
+  if (clearOfImpassable(w, i)) return out
   const imp = w.terrain.imp[kindOf(w, i)]
-  let mask = 0
   if (f.trans[i]) {
     for (let c = 0; c < C; c++) {
       const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, wbPose), ca = cos(p.a), sa = sin(p.a)
       for (let r = 0; r < R; r++) for (let q = 0; q < F; q++) { if (!occupied(w, i, c, r, q)) continue
-        const [lx, lz] = blockLocal(g, q, r); if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) mask |= 1 << (c * BINS) }
+        const [lx, lz] = blockLocal(g, q, r); if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) setBit(out, c * B) }
     }
-    return mask
+    return out
   }
   const ctx = ctxNow(w, i), L = layoutOf(w, i)
   for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) for (let q = 0; q < F; q++) {
     if (!occupied(w, i, c, r, q)) continue
-    const j = c * BINS + L.of[slotIndex(g, c, r, q)]; if (mask & (1 << j)) continue
-    placeAt(ctx, c, r, q, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) mask |= 1 << j
+    const j = c * B + L.of[slotIndex(g, c, r, q)]; if (hasBit(out, j)) continue
+    placeAt(ctx, c, r, q, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) setBit(out, j)
   }
-  return mask
+  return out
 }
+// whether any man of battalion i stands on impassable ground (tests, tools)
+export const anyWet = (w: World, i: number): boolean => anyBit(wetBins(w, i, bitsOf(w).tmp))
 // apply(u) sets the pose for the fraction u of a step; keeps the largest of 1, ½, … that puts no bin newly
 // on impassable ground (`before`: the bins already there), else 0
-function gate(w: World, i: number, before: number, apply: (u: number) => void): number {
-  for (let k = 0, u = 1; k <= GATE_HALVINGS; k++, u /= 2) { apply(u); if (!(wetBins(w, i) & ~before)) return u }
+function gate(w: World, i: number, before: Bits, apply: (u: number) => void): number {
+  const cur = bitsOf(w).now
+  for (let k = 0, u = 1; k <= GATE_HALVINGS; k++, u /= 2) { apply(u); if (!anyNew(wetBins(w, i, cur), before)) return u }
   apply(0); return 0
 }
 
 /* ---------------- the lag model ---------------- */
-const MAXNB = MAX_BINS
-const gTmp = new Float64Array(MAXNB), nTmp = new Int32Array(MAXNB), qTmp = new Float64Array(MAXNB), blkTmp = new Int32Array(MAXNB)
+// per-bin scratch, grown to the largest NB seen
+let gTmp = new Float64Array(0), nTmp = new Int32Array(0), qTmp = new Float64Array(0), blkTmp = new Int32Array(0), capTmp = new Float64Array(0), lagTmp = new Float64Array(0), tickLag0 = new Float64Array(0)
+function binScratch(NB: number): void {
+  if (gTmp.length >= NB) return
+  gTmp = new Float64Array(NB); nTmp = new Int32Array(NB); qTmp = new Float64Array(NB); blkTmp = new Int32Array(NB); capTmp = new Float64Array(NB); lagTmp = new Float64Array(NB); tickLag0 = new Float64Array(NB)
+}
 // each man's ground where he stands, along his direction of travel: a bin's g is the harmonic mean over
 // its men, q its worst ground class; a bin is held (g = 0) when a man has impassable ground underfoot or one
 // step ahead; binN counts its men (0: empty, left out of the solve)
 function sampleBins(w: World, i: number, pace: number, V0: number): void {
   const f = w.f, g = w.cr.geo, NB = w.cr.NB, L = layoutOf(w, i), kind = L.kind, imp = w.terrain.imp[kind], look = V0 * w.cr.qMax * DT, ctx = ctxNow(w, i)
-  gTmp.fill(0); nTmp.fill(0); qTmp.fill(Infinity); blkTmp.fill(0); let road = true
+  gTmp.fill(0, 0, NB); nTmp.fill(0, 0, NB); qTmp.fill(Infinity, 0, NB); blkTmp.fill(0, 0, NB); let road = true
   for (let c = 0; c < g.companies; c++) for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) {
     if (!occupied(w, i, c, r, q)) continue
-    const j = c * BINS + L.of[slotIndex(g, c, r, q)]
+    const j = c * g.bins + L.of[slotIndex(g, c, r, q)]
     placeAt(ctx, c, r, q, pt); const px = pt[0], pz = pt[1], dx = sin(pt[2]), dz = cos(pt[2])
     const gg = groundG(w.terrain, px, pz, kind, dx, dz)
     if (gg <= 0 || imp[cellK(w.terrain, px + dx * look, pz + dz * look)]) blkTmp[j]++; else { gTmp[j] += 1 / gg; nTmp[j]++ }
@@ -337,7 +352,7 @@ function accordion(w: World, i: number): void {
   const NB = w.cr.NB, b = i * NB, f = w.f
   for (const [a, j, room] of layoutOf(w, i).pairs) if (f.binN[b + a] && f.binN[b + j]) f.lags[b + j] = Math.max(f.lags[b + j], f.lags[b + a] - room)
 }
-const capTmp = new Float64Array(MAXNB), ordTmp: number[] = []
+const ordTmp: number[] = []
 // the battalion's speed this tick toward `want`, given its pace V0; advances the lags and the disorder.
 // Returns the speed and how far the leading file fell back (the anchor stays with it).
 function lagStep(w: World, i: number, V0: number, want: number): [number, number] {
@@ -508,13 +523,13 @@ function faceAbout(w: World, i: number): number {
   const keep = { x: f.x[i], z: f.z[i], h: f.heading[i], lags: f.lags.slice(b, b + NB), men: f.men.slice(i * C, i * C + C),
     tx: [] as number[], tz: [] as number[] }
   for (let k = 0; k < f.trailCount[i]; k++) { const q = tIdx(w, i, k); keep.tx.push(f.trailX[q]); keep.tz.push(f.trailZ[q]) }
-  const before0 = wetBins(w, i)
+  const B = bitsOf(w), before0 = wetBins(w, i, B.tmp)
   // a file l behind its place stands L − l ahead of its mirrored place once the anchor steps back by L
   let Lm = 0; for (let j = 0; j < NB; j++) if (f.binN[b + j]) Lm = Math.max(Lm, f.lags[b + j])
   const lag1 = new Float64Array(NB); for (let j = 0; j < NB; j++) lag1[T.bin[j]] = f.binN[b + j] ? Lm - f.lags[b + j] : 0
-  let before = 0; for (let j = 0; j < NB; j++) if (before0 & (1 << j)) before |= 1 << T.bin[j]
+  const before = B.before.fill(0); for (let j = 0; j < NB; j++) if (hasBit(before0, j)) setBit(before, T.bin[j])
   if (snake) {
-    const Dt = -2 * T.cz + Lm, arc = arcOf(w, i, f.x[i], f.z[i], f.heading[i], mkArc()), p = trailPoint(arc, Dt, [0, 0]), pa = trailPoint(arc, Dt - 1, [0, 0]), pb = trailPoint(arc, Dt + 1, [0, 0])
+    const Dt = -2 * T.cz + Lm, arc = arcOf(w, i, f.x[i], f.z[i], f.heading[i], mkArc(w)), p = trailPoint(arc, Dt, [0, 0]), pa = trailPoint(arc, Dt - 1, [0, 0]), pb = trailPoint(arc, Dt + 1, [0, 0])
     const xs: number[] = [], zs: number[] = []
     for (let D = -15; D < Dt; D += 0.25) { const q = trailPoint(arc, D, [0, 0]); xs.push(q[0]); zs.push(q[1]) }
     f.x[i] = p[0]; f.z[i] = p[1]; f.heading[i] = atan2(pb[0] - pa[0], pb[1] - pa[1]); setTrail(w, i, xs, zs)
@@ -527,7 +542,7 @@ function faceAbout(w: World, i: number): number {
   const RF = g.ranks * g.files
   for (let c = 0; c < C; c++) f.men[i * C + Math.floor(T.m[c * RF] / RF)] = keep.men[c]
   if (T.flipsFiles) f.lean[i] ^= 1   // the files reverse: the fill's lean reverses with them
-  if (wetBins(w, i) & ~before) {
+  if (anyNew(wetBins(w, i, B.now), before)) {
     if (T.flipsFiles) f.lean[i] ^= 1
     f.x[i] = keep.x; f.z[i] = keep.z; f.heading[i] = keep.h; f.lags.set(keep.lags, b); f.men.set(keep.men, i * C)
     if (snake) setTrail(w, i, keep.tx, keep.tz)
@@ -543,32 +558,33 @@ function faceAbout(w: World, i: number): number {
 }
 // stopped by impassable ground: the orders end (bar those finishing a drill) and the slots come back to
 // where the held men stand
-function haltAtEdge(w: World, i: number, held: number): void {
+// (`held`: the held bins, or null for none)
+function haltAtEdge(w: World, i: number, held: Bits | null): void {
   const f = w.f, NB = w.cr.NB, b = i * NB
   haltOrders(w, i); f.vx[i] = 0; f.vz[i] = 0; f.omega[i] = 0; f.status[i] = ST_HALTED; f.blockedFor[i] = 0; rateOff[i] = 1
-  let d = 0; for (let j = 0; j < NB; j++) if (held & (1 << j)) d = Math.max(d, f.lags[b + j])
+  let d = 0; if (held) for (let j = 0; j < NB; j++) if (hasBit(held, j)) d = Math.max(d, f.lags[b + j])
   if (d > 0) {
-    const before = wetBins(w, i), keep = { x: f.x[i], z: f.z[i], h: f.heading[i], lags: f.lags.slice(b, b + NB), tx: [] as number[], tz: [] as number[] }
+    const B = bitsOf(w), before = wetBins(w, i, B.before), keep = { x: f.x[i], z: f.z[i], h: f.heading[i], lags: f.lags.slice(b, b + NB), tx: [] as number[], tz: [] as number[] }
     for (let k = 0; k < f.trailCount[i]; k++) { const q = tIdx(w, i, k); keep.tx.push(f.trailX[q]); keep.tz.push(f.trailZ[q]) }
     const snake = snakes(w, i)
     stepBack(w, i, d); for (let j = 0; j < NB; j++) f.lags[b + j] = Math.max(0, f.lags[b + j] - d)
-    if (wetBins(w, i) & ~before) { f.x[i] = keep.x; f.z[i] = keep.z; f.heading[i] = keep.h; f.lags.set(keep.lags, b); if (snake) setTrail(w, i, keep.tx, keep.tz) }
+    if (anyNew(wetBins(w, i, B.now), before)) { f.x[i] = keep.x; f.z[i] = keep.z; f.heading[i] = keep.h; f.lags.set(keep.lags, b); if (snake) setTrail(w, i, keep.tx, keep.tz) }
   }
   f.px[i] = f.x[i]; f.pz[i] = f.z[i]; f.ph[i] = f.heading[i]
 }
 // not marching forward: lagging files walk up to their places at their ground's quick step; a file whose
 // place would reach impassable ground stays where it is
-const lagTmp = new Float64Array(MAXNB)
 function lagSettle(w: World, i: number): void {
   const f = w.f, NB = w.cr.NB, b = i * NB
   if (f.trans[i]) return
   let any = false; for (let j = 0; j < NB; j++) if (f.lags[b + j] > 0) any = true
   if (!any) { if (f.disorder[i] > 0) updateDisorder(w, i, 0, w.cr.paceSpeed[layoutOf(w, i).pace]); return }
   const [V0, pace] = paceOf(w, i); sampleBins(w, i, pace, V0)
-  const before = wetBins(w, i); for (let j = 0; j < NB; j++) lagTmp[j] = f.lags[b + j]
+  binScratch(NB)
+  const B = bitsOf(w), before = wetBins(w, i, B.before); for (let j = 0; j < NB; j++) lagTmp[j] = f.lags[b + j]
   for (let j = 0; j < NB; j++) if (f.binG[b + j] > 0) f.lags[b + j] = Math.max(0, f.lags[b + j] - V0 * f.binG[b + j] * f.binQ[b + j] * DT)
   accordion(w, i)
-  const wet = wetBins(w, i) & ~before; for (let j = 0; j < NB; j++) if (wet & (1 << j)) f.lags[b + j] = lagTmp[j]
+  const wet = minus(wetBins(w, i, B.now), before, B.now); for (let j = 0; j < NB; j++) if (hasBit(wet, j)) f.lags[b + j] = lagTmp[j]
   updateDisorder(w, i, 0, V0)
 }
 // a trail shape's turning radius: men one file apart stay at least the minimum spacing apart inside the bend
@@ -581,9 +597,9 @@ function halfWidth(w: World, i: number): number {
 }
 
 /* ---------------- the tick ---------------- */
-const tickLag0 = new Float64Array(MAXNB)
 export function formationTick(w: World, i: number): void {
   const f = w.f, NB = w.cr.NB, b = i * NB
+  binScratch(NB)
   for (let j = 0; j < NB; j++) tickLag0[j] = f.lags[b + j]
   rateOff[i] = 0
   formationStep(w, i)
@@ -619,7 +635,7 @@ function formationStep(w: World, i: number): void {
       const R0 = turnRadius(w, i), sd = dh > 0 ? 1 : -1, cx = f.x[i] + cos(f.heading[i]) * R0 * sd, cz = f.z[i] - sin(f.heading[i]) * R0 * sd
       if (hyp(o.x[n] - cx, o.z[n] - cz) < R0) { shiftOrder(w, i); f.vx[i] = 0; f.vz[i] = 0; f.status[i] = ST_ARRIVED_NEAR; return }
     }
-    const before = wetBins(w, i); let turnHeld = false
+    const B = bitsOf(w), before = wetBins(w, i, B.before); let turnHeld = false
     const turnBy = (lim: number) => { const h1 = f.heading[i], turn = Math.max(-lim, Math.min(lim, dh)), ut = gate(w, i, before, u => { f.heading[i] = h1 + turn * u }); turnHeld = Math.abs(turn) > 1e-4 && ut < 1 }
     if (!snake) turnBy(wmax)
     // the advance: the lag model, then the gate holds any bin whose places would reach impassable ground
@@ -631,16 +647,17 @@ function formationStep(w: World, i: number): void {
     const lag1 = f.lags.slice(i * NB, i * NB + NB), sx = sin(f.heading[i]) * step, sz = cos(f.heading[i]) * step
     const set = (u: number) => { f.x[i] = x0 + sx * u; f.z[i] = z0 + sz * u; for (let j = 0; j < NB; j++) f.lags[i * NB + j] = lag0[j] + (lag1[j] - lag0[j]) * u }
     set(1)
-    let held = 0
-    if (step > 0) { const wet = wetBins(w, i) & ~before
-      if (wet) { for (let j = 0; j < NB; j++) if (wet & (1 << j)) { lag1[j] = lag0[j] + step; held |= 1 << j } set(1); accordion(w, i); lag1.set(f.lags.slice(i * NB, i * NB + NB)) } }
+    const held = B.held.fill(0)
+    if (step > 0) { const wet = minus(wetBins(w, i, B.now), before, B.now)
+      if (anyBit(wet)) { for (let j = 0; j < NB; j++) if (hasBit(wet, j)) { lag1[j] = lag0[j] + step; setBit(held, j) } set(1); accordion(w, i); lag1.set(f.lags.slice(i * NB, i * NB + NB)) } }
     const ua = gate(w, i, before, set)
     pushTrail(w, i)
     const moved = step * ua
     if (snake) turnBy(Math.min(wmax, Math.max(0, moved) / turnRadius(w, i)))
     f.vx[i] = (f.x[i] - x0) / DT; f.vz[i] = (f.z[i] - z0) / DT
-    for (let j = 0; j < NB; j++) if (f.binN[i * NB + j] && f.binG[i * NB + j] <= 0) held |= 1 << j
-    if ((held || turnHeld) && (moved < STALL * DT || turnHeld) && (want0 > 0 || turnHeld)) { f.blockedFor[i] += DT; if (f.blockedFor[i] > HALT_AFTER) haltAtEdge(w, i, held) }
+    for (let j = 0; j < NB; j++) if (f.binN[i * NB + j] && f.binG[i * NB + j] <= 0) setBit(held, j)
+    const anyHeld = anyBit(held)
+    if ((anyHeld || turnHeld) && (moved < STALL * DT || turnHeld) && (want0 > 0 || turnHeld)) { f.blockedFor[i] += DT; if (f.blockedFor[i] > HALT_AFTER) haltAtEdge(w, i, held) }
     else { f.blockedFor[i] = 0; if (moved > 0.001) f.status[i] = 0 }
   } else if (type === O_DRESS) {
     f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); if (o.t0[n] < 0) o.t0[n] = t
@@ -656,10 +673,10 @@ function formationStep(w: World, i: number): void {
     lagSettle(w, i)
     if (o.left[n] < 0) { o.left[n] = o.a[n] > 0 ? 1 : 0; const piv = rot2(o.left[n] ? -halfW : halfW, 0, -f.heading[i]); o.px[n] = f.x[i] + piv[0]; o.pz[n] = f.z[i] + piv[1]; o.done[n] = 0 }
     const wq = Math.min(Math.abs(o.a[n]) - o.done[n], 1.0 * V0 / (2 * halfW) * DT)   // the outer flank at marching pace
-    const sgn = o.a[n] > 0 ? -1 : 1, x0 = f.x[i], z0 = f.z[i], before = wetBins(w, i)
+    const sgn = o.a[n] > 0 ? -1 : 1, x0 = f.x[i], z0 = f.z[i], before = wetBins(w, i, bitsOf(w).before)
     const uw = gate(w, i, before, u => { const r = rot2(x0 - o.px[n], z0 - o.pz[n], -sgn * wq * u); f.x[i] = o.px[n] + r[0]; f.z[i] = o.pz[n] + r[1]; f.heading[i] = h0 + sgn * wq * u })
     f.vx[i] = (f.x[i] - x0) / DT; f.vz[i] = (f.z[i] - z0) / DT; o.done[n] += wq * uw; pushTrail(w, i)
-    if (uw === 0) haltAtEdge(w, i, 0)
+    if (uw === 0) haltAtEdge(w, i, null)
     else if (o.done[n] >= Math.abs(o.a[n]) - 1e-6) { shiftOrder(w, i); f.vx[i] = 0; f.vz[i] = 0 }
   }
   f.heading[i] = wrapAngle(f.heading[i])

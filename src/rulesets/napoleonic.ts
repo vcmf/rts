@@ -5,7 +5,7 @@
 import { type Ruleset, type Geometry, rot2 } from '../sim/ruleset.ts'
 import { PI } from '../sim/num.ts'
 
-const geometry: Geometry = { companies: 4, files: 9, ranks: 3, fileSpacing: 0.65, rankSpacing: 0.85, minSpacing: 0.52, accordionGap: 0.6 }
+const geometry: Geometry = { companies: 4, files: 9, ranks: 3, fileSpacing: 0.65, rankSpacing: 0.85, minSpacing: 0.52, accordionGap: 0.6, bins: 3 }
 const BW = (g: Geometry) => g.files * g.fileSpacing   // company frontage
 
 export const napoleonic: Ruleset = {

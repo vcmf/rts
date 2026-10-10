@@ -5,7 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { it } from 'vitest'
 import { loadSimData, compileRuleset, buildTerrain, rebuildImpassable, makeWorld, issue, advanceTick, makeHandle, KIND_FORMATION, formationSlot,
-  placesCtx, placeAt, mkPlaces, occupied, placeWorld, wetBins, layoutOf, STATUS, menOf, cellK, slotIndex, type Command, type World, type Compiled,
+  placesCtx, placeAt, mkPlaces, occupied, placeWorld, anyWet, layoutOf, STATUS, menOf, cellK, slotIndex, type Command, type World, type Compiled,
   type Ruleset, type Terrain, type SimData, type Dropped, TICK_HZ, M_TICK } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 
@@ -71,7 +71,7 @@ export class Sim {
   }
   deep(x: number, z: number): boolean { return this.w.terrain.depth[cellK(this.w.terrain, x, z)] > this.w.cr.rs.water.limit }
   placesInDeep(h: number): number { return this.places(h).filter(p => this.deep(p[0], p[1])).length }
-  wet(h: number): boolean { return wetBins(this.w, this.slot(h)) !== 0 }
+  wet(h: number): boolean { return anyWet(this.w, this.slot(h)) }
   men(h: number): number { return menOf(this.w, this.slot(h)) }
   companyFrames(h: number): { x: number; z: number; face: number }[] {
     const w = this.w, i = this.slot(h), out = []

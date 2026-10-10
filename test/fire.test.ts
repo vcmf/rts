@@ -5,7 +5,7 @@ import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { data, cr, root, longIt } from './fx.ts'
 import { makeWorld, issue, advanceTick, compileRuleset, buildTerrain, makeHandle, KIND_FORMATION, M_FREE, M_TICK, MS_ROUTING, MS_STEADY, MS_SHAKEN, MS_WAVERING,
-  menOf, aimOf, companySees, hashWorld, wetBins, STATUS, cellK, placeWorld, O_MOVE, RP_FLED, allocOrder, appendOrder, clearOrders, hex, serialize, deserialize, record, play, type World, type Command, type Ruleset, type Dropped, type Terrain } from '../src/sim/index.ts'
+  menOf, aimOf, companySees, hashWorld, anyWet, STATUS, cellK, placeWorld, O_MOVE, RP_FLED, allocOrder, appendOrder, clearOrders, hex, serialize, deserialize, record, play, type World, type Command, type Ruleset, type Dropped, type Terrain } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { levelled, runFirefight, s1cFirefight, FIGHT_X, FIGHT_Z } from '../src/scenarios/s1c-firefight.ts'
 
@@ -160,7 +160,7 @@ describe('morale', () => {
     let found = false
     for (let x = 40; x < 75 && !found; x += 0.25) {
       const s = new W({ real: true }), h = s.spawn(0, x, -30, -Math.PI / 2, { men: 93 })
-      if (wetBins(s.w, s.i(h))) continue
+      if (anyWet(s.w, s.i(h))) continue
       s.do({ type: 'face', id: h })
       if (STATUS[s.w.f.status[s.i(h)]] !== 'cannot face about: impassable ground') continue
       found = true

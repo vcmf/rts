@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import { Sim, cr, STREAM_X, DEG, closest, paint, baseTerrain, longIt } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { groundG, type Ruleset } from '../src/sim/index.ts'
+import { groundG, TRAIL_MIN, type Ruleset, type Geometry } from '../src/sim/index.ts'
 
 describe('timed changes', () => {
   it('line → square takes the ruleset time (100 s), and the companies are evened out', () => {
@@ -292,14 +292,14 @@ describe('the trail ring', () => {
     expect(Math.abs(real - f.trailLen[i])).toBeLessThan(1e-6)
     expect(real).toBeGreaterThan(s.layout(h).trailLimit - 1)
   })
-  it('a ruleset whose trail would not fit the ring is refused, as is one with too many bins', () => {
-    const geometry = { ...napoleonic.geometry, companies: 8 }
-    const march8 = { ...napoleonic.formations.march, place: (g: typeof geometry) => Array.from({ length: g.companies }, (_, c) => ({ x: (g.ranks - 1) * g.rankSpacing / 2, z: -c * (g.files * g.fileSpacing + 1), rot: -Math.PI / 2, face: 0 })) }
-    const wide = (g: typeof geometry) => Array.from({ length: g.companies }, (_, c) => ({ x: (c - (g.companies - 1) / 2) * 7, z: 0, rot: 0, face: 0 }))
-    const rs8: Ruleset = { ...napoleonic, geometry, formations: { line: { ...napoleonic.formations.line, place: wide }, march: march8 } }
-    expect(() => new Sim(1, rs8)).toThrow(/trail does not fit/)
-    const rs11: Ruleset = { ...napoleonic, geometry: { ...napoleonic.geometry, companies: 11 }, formations: { line: { ...napoleonic.formations.line, place: wide } } }
-    expect(() => new Sim(1, rs11)).toThrow(/bins/)
+  it('the trail ring grows with a deep trail shape; a ruleset past its limits is refused', () => {
+    const march = (g: Geometry) => Array.from({ length: g.companies }, (_, c) => ({ x: (g.ranks - 1) * g.rankSpacing / 2, z: -c * (g.files * g.fileSpacing + 1), rot: -Math.PI / 2, face: 0 }))
+    const wide = (g: Geometry) => Array.from({ length: g.companies }, (_, c) => ({ x: (c - (g.companies - 1) / 2) * 7, z: 0, rot: 0, face: 0 }))
+    const with_ = (geometry: Geometry): Ruleset => ({ ...napoleonic, geometry, formations: { line: { ...napoleonic.formations.line, place: wide }, march: { ...napoleonic.formations.march, place: march } } })
+    expect(new Sim(1, with_({ ...napoleonic.geometry, companies: 8 })).w.cr.trail).toBeGreaterThan(TRAIL_MIN)
+    expect(() => new Sim(1, with_({ ...napoleonic.geometry, companies: 32, files: 60 }))).toThrow(/trail of/)
+    expect(() => new Sim(1, with_({ ...napoleonic.geometry, companies: 33 }))).toThrow(/companies/)
+    expect(() => new Sim(1, with_({ ...napoleonic.geometry, bins: 0 }))).toThrow(/bins/)
   })
 })
 

@@ -10,11 +10,10 @@ import type { Compiled } from './ruleset.ts'
 import type { Terrain } from './terrain.ts'
 import { buildTerrain } from './terrain.ts'
 import { type Handle, KIND_FORMATION, handleKind, handleIndex, handleGen, makeHandle } from './handle.ts'
-import type { Places, Arc } from './formation.ts'
+import type { Places, Arc, GateBits } from './formation.ts'
 import type { FireGeo } from './fire.ts'
 
 export const MAX_FORMATIONS = 128
-export const TRAIL = 256          // trail points per formation (a ring)
 export const MAX_ORDERS = 2048
 export const SIDES = 2
 
@@ -38,7 +37,7 @@ export interface Formations {
   // the lag model, per bin
   lags: Float64Array; lagRate: Float64Array; binG: Float64Array; binQ: Float64Array; binN: Int32Array   // [i·NB + j]
   // the march trail: a ring of points, oldest first
-  trailX: Float64Array; trailZ: Float64Array                       // [i·TRAIL + k]
+  trailX: Float64Array; trailZ: Float64Array                       // [i·T + k], T = cr.trail
   trailStart: Int32Array; trailCount: Int32Array; trailVer: Int32Array; trailLen: Float64Array
   // orders: a list in the order pool
   ordHead: Int32Array; ordTail: Int32Array
@@ -86,7 +85,7 @@ export interface World {
   pending: Stamped[]
   data: SimData; cr: Compiled; terrain: Terrain
   debug: boolean
-  scratch: { places?: Places; arc?: Arc; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverse?: boolean; lost?: Int32Array; mstateBefore?: Uint8Array; menNow?: Int32Array }   // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
+  scratch: { places?: Places; arc?: Arc; gateBits?: GateBits; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverse?: boolean; lost?: Int32Array; mstateBefore?: Uint8Array; menNow?: Int32Array }   // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
 }
 
 export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {
@@ -98,7 +97,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     disorder: f64(N), blockedFor: f64(N), men: i32(N * C),
     trans: u8(N), tShape: i32(N), tStart: f64(N), tDur: f64(N), tDelay: f64(N * C), tFrom: f64(N * C * 4), tTo: f64(N * C * 4),
     lags: f64(N * NB), lagRate: f64(N * NB), binG: f64(N * NB), binQ: f64(N * NB), binN: i32(N * NB),
-    trailX: f64(N * TRAIL), trailZ: f64(N * TRAIL), trailStart: i32(N), trailCount: i32(N), trailVer: i32(N), trailLen: f64(N),
+    trailX: f64(N * cr.trail), trailZ: f64(N * cr.trail), trailStart: i32(N), trailCount: i32(N), trailVer: i32(N), trailLen: f64(N),
     ordHead: i32(N).fill(-1), ordTail: i32(N).fill(-1),
     reload: f64(N * C), volleyTick: i32(N * C), target: i32(N * C), owed: i32(N * C),
     fireMode: u8(N), prefer: i32(N),
@@ -111,10 +110,6 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
   for (let k = 0; k < M; k++) ord.next[k] = k + 1 < M ? k + 1 : -1
   const free = new Int32Array(N)
   for (let i = 0; i < N; i++) free[i] = N - 1 - i   // slot 0 is handed out first
-  // a trail shape's trail, and the one Face about rebuilds, must fit the ring (0.25 m points)
-  let lmax = 0; for (const p of Object.values(cr.rs.orders)) lmax = Math.max(lmax, p.Lmax)
-  for (const s of cr.shapes) if (s.def.trail && Math.max(s.trailLimit, 15 + (s.turn ? -2 * s.turn.cz : s.depth) + lmax) / 0.25 + 16 > TRAIL)
-    throw new Error(`shape ${s.name}: its trail does not fit ${TRAIL} points`)
   const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, sides: { rearX: f64(SIDES), rearZ: f64(SIDES) }, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), debug, scratch: {} }
   w.meta[M_FREE] = N
   w.meta[M_DATA] = data.version | 0

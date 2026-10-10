@@ -167,7 +167,7 @@ describe('era genericity (decision 0015)', () => {
   it('another era: a two-company phalanx ruleset with its own shapes, paces and presets drills on the same engine', () => {
     const rs: Ruleset = {
       ...napoleonic, name: 'test: antiquity',
-      geometry: { companies: 2, files: 8, ranks: 4, fileSpacing: 0.9, rankSpacing: 1.0, minSpacing: 0.6, accordionGap: 0.7 },
+      geometry: { companies: 2, files: 8, ranks: 4, fileSpacing: 0.9, rankSpacing: 1.0, minSpacing: 0.6, accordionGap: 0.7, bins: 3 },
       pace: { slow: 0.8 }, q: { slow: { open: 1.2, light: 1.1, hard: 1.0 } },
       formations: {
         phalanx: { kind: 'line', pace: 'slow', closeAcross: true, place: g => [0, 1].map(c => ({ x: (c - 0.5) * g.files * g.fileSpacing, z: 0, rot: 0, face: 0 })) },
