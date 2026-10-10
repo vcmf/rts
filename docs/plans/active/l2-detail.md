@@ -117,6 +117,27 @@ In `paint()`, for the terrain only (other surfaces keep today's grain until L7):
   the same whether it sits in octave A or B, and the octave hand-over stays continuous.
 - **Band edges `fwidth`-aware:** the ramp's transitions keep their design width but never become
   narrower than the light value's change across one pixel, so they cannot alias.
+
+**As built** (what L2b changed against the above, and why):
+- `P` is 2048 (`SPEC.detail.px`): at 1024 the grain read as pixel noise. One texel spans about 2.7 px of
+  a 1080-line frame; the grain's correlation length is about 5 px.
+- **A strength, `SPEC.detail.amp` = 0.4:** at the texture's full contrast (the renormalised blend) the grain
+  broke every band edge into static. L0's grain was weak only because the mips averaged it away. 0.4 was
+  set by eye against L0 at its closest zoom.
+- **The index at 400 m** (`SPEC.detail.index`), not 160 m: at 160 m the index field changes within a few
+  pixels at the far edge of the widest view, and the hand-over between variants became a visible contour
+  (the seam check found it).
+- **The variant hand-over depends on the index alone** (Quílez's `- 0.1·(a − b)` term dropped), so a variant
+  with no weight is not read.
+- **The cube's diagonals:** biplanar weights all reach zero where the normal points along a cube diagonal (a
+  55° slope facing between two axes), and the pair of planes read flips there: a discontinuity, found on the
+  test hill. The grain fades to its mean as the weights' sum falls under 0.25, which keeps it continuous.
+  The fade starts at about 47° of slope (facing a diagonal); the tile's steepest cell is 42°, and 74 of the far
+  ring's 33,124 cells pass 35° (the steepest 51°).
+- **Band edges:** never narrower than two pixels' change of the light value (one pixel left 0.24% of the
+  pixels shimmering, two leave 0.18%).
+- **Cost:** reading each plane's coordinates once and skipping zero-weight variants did not move the
+  Mac's numbers; the reads are kept simple and the laptop decides.
 - **The L0 grain stays behind a define** (`DETAIL_L0`) as the bench's and the checks' baseline arm,
   until the prototype exit (L9).
 
@@ -127,31 +148,48 @@ second plane adds up to 5 more. Cost is measured (bench, both arms), not assumed
 
 All render the look page headless with the clock frozen. A debug define (`DETAIL_DEBUG`) makes the
 terrain write its grain value to red and its view depth to green and blue (16 bits).
+Frames are 1280×720: a 1920×1080 screenshot crashes headless Chrome here, and the grain's size is set in
+1080-line pixels, independent of the frame's.
 - **Scale stability:** the debug view over a zoom sweep (radius from the closest to the widest, 8
   steps, at the default pitch and the steepest), with every other mesh hidden. In windows at the
   near edge, the centre and the far edge of the frame, the grain's correlation length is the lag
   where its autocorrelation falls to one half, along x and along y; the wavelength is their
-  geometric mean. **Pass:** every window of every frame within ±25% of the median.
+  geometric mean. **Pass:** every window of every frame within ±25% of the median. As built: 192 px
+  windows (at 128 px the estimate's own noise was about ±10%).
 - **Seams:** a test hill (a turned profile with faces at 0–90° in 15° steps, all around) on the
   ground, the grain texture swapped for a smooth one (only broad features), the debug view at three
   zooms. A smooth texture gives a smooth image except at silhouettes (found from the depth), so a jump
   between neighbouring pixels is a seam or a mip line. **Pass:** no pixel over the threshold away from
   silhouettes. The threshold is set from the smooth texture's own steepest gradient, recorded in the
-  tool.
+  tool. As built, the hill's corners are rounded over 3 m (terrain normals turn over a cell or two; a
+  crease turns them within a pixel), faces seen within about 10° of edge-on are skipped (a second debug
+  view, `DETAIL_DEBUG_INC`, gives the incidence), and a step must also keep at least 0.8 of its size when
+  the frame is rendered at twice the resolution (four quarter frames through the projection): a seam is a
+  step at any resolution, a fast but smooth transition shrinks.
 - **Shimmer:** the final image, terrain only (scatter and water hidden), at the default zoom, over a
   slow pan of about a quarter of a pixel a frame. A frame's pixel flickers when its value leaves the
   range of its 3×3 neighbourhood in the previous frame by more than 4/255 (a sub-pixel move cannot do
   that to a filtered image). **Pass:** fewer than 0.1% of pixels per frame pair. The limit is checked
   against the sabotages below and may be tightened once the real values are known, never loosened
   without a note here.
+  **Note (L2b): the measure and the limit changed.** The 3×3 range test cannot see an aliased edge (an edge
+  that crawls stays inside its neighbours' range): hard band edges scored 0.038%, under the page's 0.05%.
+  The check now shifts the image a quarter pixel a frame through the projection (the sampling grid moves
+  under a still world) and counts pixels whose luma differs by over 8/255 from the previous frame resampled
+  a quarter pixel along: a filtered image is predicted that way, hard edges and specks are not. Measured:
+  the page 0.18%, the L0 grain 1.48%, hard band edges 2.0%. What is left on the page is on the baked
+  shadows' edges (`docs/known-issues.md`), so the limit is **0.5%**, to tighten when L5 smooths them.
 - **Tiling:** the image set for the 3-reviewer test (the widest zoom, three yaws, summer and winter,
-  randomised names, an answer sheet in `docs/plans/active/track-e-results/`). The tool also reports,
+  randomised names, an answer sheet). As built: the terrain alone, both arms (L2b and the L0 grain), 12
+  images and `answers.json` in the tool's output folder; the tally goes in `docs/plans/active/track-e-results/`. The tool also reports,
   not gates, the autocorrelation of the debug view at the texture's repeat distance.
 - **Negative tests** (`--selftest`): each check passes on the page and fails on its sabotage:
   - scale: the L0 grain (`DETAIL_L0`);
   - seams: the L0 grain's hard axis switch, and implicit derivatives (`texture` in place of
     `textureGrad`, which draws mip lines at octave hand-overs);
   - shimmer: hard band edges (a step in place of the `fwidth`-aware ramp).
+
+The results of L2b's run are in `docs/plans/active/track-e-results/l2b-detail.md`.
 
 ## Acceptance
 
