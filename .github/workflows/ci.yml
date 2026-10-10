@@ -1,4 +1,6 @@
-# Every PR and every push to main: lint, types, generated data, docs, tests with coverage, build.
+# check: every PR and every push to main. Lint, types, generated data, docs, tests, build.
+# coverage: pushes to main (and by hand) only. Coverage instrumentation makes the sim's long scenarios about six
+# times slower (50 s → 5 min locally), too slow and too many uploads for every PR. It reports to Codecov.
 # The cost tests skip themselves when CI is set (shared runners are too noisy for millisecond budgets).
 # tools/app-check.mjs (headless browser) is not run here yet.
 name: ci
@@ -6,6 +8,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -24,10 +27,21 @@ jobs:
       - run: npm run typecheck
       - run: npm run check:data
       - run: npm run check:docs
-      - run: npm run coverage
+      - run: npx vitest run
       - run: npm run build
+  coverage:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run coverage
       - uses: codecov/codecov-action@v5
-        if: ${{ !cancelled() }}
         with:
           files: coverage/lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
