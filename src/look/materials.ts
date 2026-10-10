@@ -30,6 +30,7 @@ export interface MatOptions { attributes?: string[]; uniforms?: string[]; sample
 export class Materials {
   readonly all: ShaderMaterial[] = []
   private readonly scene: Scene
+  private readonly binders: ((m: ShaderMaterial) => void)[] = []
   grain: BaseTexture
   constructor(scene: Scene, grain: BaseTexture) { this.scene = scene; this.grain = grain }
   make(name: string, vs: string, fs: string, { attributes = ['position', 'normal'], uniforms = [], samplers = [], alpha = false, defines = [], perFrame = true }: MatOptions = {}): ShaderMaterial {
@@ -37,7 +38,9 @@ export class Materials {
       { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM')], needAlphaBlending: alpha, defines: [...D.defines, ...defines] })
     m.setVector3('uSunDir', SUN); m.setColor3('uSunCol', PAL.sun); m.setColor3('uShadowCol', PAL.shadow)
     m.setColor3('uHazeCool', PAL.hazeCool); m.setColor3('uHazeWarm', PAL.hazeWarm); m.setTexture('uGrain', this.grain)
-    if (perFrame) this.all.push(m)
+    if (perFrame) { this.all.push(m); for (const b of this.binders) b(m) }
     return m
   }
+  // bindings for every painted material, now and made later (the bakes' textures and matrices)
+  bindAll(b: (m: ShaderMaterial) => void): void { this.binders.push(b); for (const m of this.all) b(m) }
 }
