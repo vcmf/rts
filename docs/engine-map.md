@@ -109,7 +109,7 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 |---|---|---|---|---|
 | Era rulesets | Per era (Napoleonic first): unit types, formations and drill, weapons, movement factors, morale, as data with inheritance and validation (D7) | `docs/proposals/sim-design.md` | P | ⬜ |
 | **Order of battle** | Army → corps → division → brigade → battalion; commanders; starting positions. The core of a historical scenario | `docs/proposals/sim-design.md` | P (one battle), A | ⬜ |
-| Map build | Heightfield, rivers, roads, villages, AI hints from real data (W6) | `docs/proposals/engine-design.md` §10 | P | ⬜ |
+| Map build | Heightfield, rivers, roads, villages, AI hints from real data (W6), through one map format | `docs/proposals/map-format.md` | P | ⬜ |
 | Assets | Models and textures in, compressed (KTX2, meshopt) out | `docs/asset-sources.md` | A | 🟡 |
 | Scenario editor | Place troops, objectives, triggers on a map | to write | A | ⬜ |
 | Checks | Spec, geometry, pixel, determinism and replay checks | `docs/proposals/engine-design.md` §8 | ongoing | 🟡 |
