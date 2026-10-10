@@ -13,8 +13,10 @@
 // for good. A wavering battalion left without orders, its morale still falling and the enemy in front of it,
 // falls back once.
 //
-// Everything one battalion reads of another (its state, whether it broke) was fixed before this step
-// began, so the order battalions are visited in does not matter.
+// Everything one battalion reads of another (its state, whether it broke, its men) was fixed before this
+// step began, so no outcome depends on the order battalions are visited in. One thing does: routs and
+// fall-backs take orders from the shared pool in visiting order, so two in the same tick get different
+// pool entries (and the lower slot is served first when the pool runs short), as tick.ts says.
 import { type World, MAX_FORMATIONS, MS_STEADY, MS_SHAKEN, MS_WAVERING, MS_ROUTING, MS_RALLYING, MS_SHATTERED, O_FACE, O_MOVE, M_TICK, RP_NONE, RP_RUNNING, RP_HALTED, RP_FLED, outOfFight } from './world.ts'
 import { allocOrder, appendOrder, clearOrders, layoutOf, menOf, ordersFree, setOnMap, ST_HALTED, RETIRE, fillRetire } from './formation.ts'
 import { sin, cos, PI } from './num.ts'
@@ -33,23 +35,29 @@ const near = { shock: 0, left: 0, right: 0, enemy: Infinity, ax: 0, az: 0 }
 export function moraleStep(w: World, i: number, lost: number): void {
   const f = w.f, M = w.cr.rs.morale, now = w.meta[M_TICK] + 1, base = Math.max(1, f.baseMen[i]), start = Math.max(1, f.startMen[i])
   f.recent[i] = f.recent[i] * w.cr.recentDecay + lost
-  const s = f.mstate[i]
-  if (s === MS_SHATTERED) { routStep(w, i); return }   // it only runs: nothing it reads of others matters
+  const s = f.mstate[i], men = w.scratch.menNow ? w.scratch.menNow[i] : menOf(w, i)
+  // shattered, or routing mid-run: it only runs, and nothing it would read of the others is used
+  if (s === MS_SHATTERED || (s === MS_ROUTING && f.routPhase[i] === RP_RUNNING)) {
+    if (s === MS_ROUTING && men < M.shatter * f.startMen[i]) f.mstate[i] = MS_SHATTERED
+    routStep(w, i); return
+  }
   survey(w, i, now)
   // the losses term counts from baseMen (written off at a rally); recent losses are a share of the spawn strength
-  const target = f.quality[i] - M.losses * (base - menOf(w, i)) / base - M.recent * f.recent[i] / start + M.support.bonus * (near.left + near.right)
+  const target = f.quality[i] - M.losses * (base - men) / base - M.recent * f.recent[i] / start + M.support.bonus * (near.left + near.right)
   const was = f.morale[i]
   f.morale[i] += (target - f.morale[i]) * w.cr.relax
-  if (s === MS_STEADY || s === MS_SHAKEN || s === MS_WAVERING || s === MS_RALLYING) f.morale[i] -= near.shock
+  if (s !== MS_ROUTING) f.morale[i] -= near.shock   // routing and shattered (returned above) are not shocked
   // falling: down by more than fallback.rate a second (the relax's slow crawl toward a fixed target is not)
   f.falling[i] = was - f.morale[i] > M.fallback.rate * DT ? f.falling[i] + 1 : 0
   const m = f.morale[i]
   if (s === MS_ROUTING) {
-    if (menOf(w, i) < M.shatter * f.startMen[i]) f.mstate[i] = MS_SHATTERED
-    else if (f.routPhase[i] !== RP_RUNNING && f.quality[i] - M.rally.cost >= M.wavering[0] && now - f.lastLoss[i] >= M.rally.calm * TICK_HZ && near.enemy > M.rally.safe) { rally(w, i, now); return }
+    if (men < M.shatter * f.startMen[i]) f.mstate[i] = MS_SHATTERED
+    // its run has ended (a run was made, and it is not running: a full order pool can leave a router
+    // unmoved where it broke, which is not the end of a run)
+    else if (f.runs[i] > 0 && f.routPhase[i] !== RP_RUNNING && f.quality[i] - M.rally.cost >= M.wavering[0] && now - f.lastLoss[i] >= M.rally.calm * TICK_HZ && near.enemy > M.rally.safe) { rally(w, i, now, men); return }
     routStep(w, i); return
   }
-  if (m < M.rout) { rout(w, i, now); return }
+  if (m < M.rout) { rout(w, i, now, men); return }
   if (s === MS_RALLYING) {
     if (now - f.since[i] >= M.rally.time * TICK_HZ) f.mstate[i] = m < M.wavering[0] ? MS_WAVERING : m < M.shaken[0] ? MS_SHAKEN : MS_STEADY
     return
@@ -100,7 +108,7 @@ function survey(w: World, i: number, now: number): void {
 // the battalion breaks: its run's direction is fixed now (its side's rear; else away from the nearest enemy,
 // since its heading may be turned away already, by a Retire; else straight back), its orders dropped, and
 // the first run made. Breaking more often than it may rally, or below half strength, it shatters
-function rout(w: World, i: number, now: number): void {
+function rout(w: World, i: number, now: number, men: number): void {
   const f = w.f, side = f.side[i], M = w.cr.rs.morale
   let rx = w.sides.rearX[side], rz = w.sides.rearZ[side]
   if (rx === 0 && rz === 0) {
@@ -108,7 +116,7 @@ function rout(w: World, i: number, now: number): void {
     if (near.enemy < Infinity) { rx = near.ax; rz = near.az } else { rx = -sin(f.heading[i]); rz = -cos(f.heading[i]) }
   }
   f.routs[i] = Math.min(255, f.routs[i] + 1); f.brokeTick[i] = now; f.fellBack[i] = 0
-  f.mstate[i] = f.routs[i] > M.rally.max || menOf(w, i) < M.shatter * f.startMen[i] ? MS_SHATTERED : MS_ROUTING
+  f.mstate[i] = f.routs[i] > M.rally.max || men < M.shatter * f.startMen[i] ? MS_SHATTERED : MS_ROUTING
   f.routX[i] = rx; f.routZ[i] = rz; f.runs[i] = 0; f.routPhase[i] = RP_HALTED
   clearOrders(w, i)
   run(w, i)
@@ -139,11 +147,11 @@ function run(w: World, i: number): void {
 // it has now) and its quality drops, so it comes back brittle; it re-forms for rally.time before it takes
 // orders again. Only a battalion whose quality, less the cost, is still wavering or better may rally: one
 // below would break again at once
-function rally(w: World, i: number, now: number): void {
+function rally(w: World, i: number, now: number, men: number): void {
   const f = w.f, M = w.cr.rs.morale
   clearOrders(w, i)
   f.status[i] = 0; f.blockedFor[i] = 0; f.routPhase[i] = RP_NONE; f.fellBack[i] = 0
-  f.quality[i] = Math.max(0, f.quality[i] - M.rally.cost); f.baseMen[i] = menOf(w, i); f.recent[i] = 0; f.morale[i] = f.quality[i]
+  f.quality[i] = Math.max(0, f.quality[i] - M.rally.cost); f.baseMen[i] = men; f.recent[i] = 0; f.morale[i] = f.quality[i]
   f.mstate[i] = MS_RALLYING; f.since[i] = now
 }
 // the wavering fall-back: the Retire drill (formation.ts), made only when the pool has room for all of it.

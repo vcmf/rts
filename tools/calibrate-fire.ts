@@ -44,7 +44,7 @@ if (!isMainThread) {
   // time from the first break to the last within those 3 minutes
   const bw = brig.filter(b => b.first === 1), bt = bw.map(b => b.tick), spread = bw.map(b => (b.last - b.tick) / 20)
   const outs = [0, 1, 2, 3].map(k => bw.filter(b => b.outB === k).length)
-  console.log(`\nbrigade 3v3 at 100 m: weaker side broke first ${bw.length}, stronger first ${brig.filter(b => b.first === 0).length}, none ${brig.filter(b => b.first < 0).length}; first break ${min(q(bt, 0.1))} / ${min(q(bt, 0.5))} / ${min(q(bt, 0.9))} min; weaker lines out 3 min later (1 / 2 / 3): ${outs.slice(1).join(' / ')}; first to last break ${q(spread, 0.1)} / ${q(spread, 0.5)} / ${q(spread, 0.9)} s; stronger lines out: ${brig.reduce((a, b) => a + b.outA, 0)}`)
+  console.log(`\nbrigade 3v3 at 100 m: weaker side broke first ${bw.length}, stronger first ${brig.filter(b => b.first === 0).length}, both at once ${brig.filter(b => b.first === 2).length}, none ${brig.filter(b => b.first < 0).length}; first break ${min(q(bt, 0.1))} / ${min(q(bt, 0.5))} / ${min(q(bt, 0.9))} min; weaker lines out 3 min later (1 / 2 / 3): ${outs.slice(1).join(' / ')}; first to last break ${q(spread, 0.1)} / ${q(spread, 0.5)} / ${q(spread, 0.9)} s; stronger lines out: ${brig.reduce((a, b) => a + b.outA, 0)}`)
   const at = (range: number) => out.filter(o => o.range === range && o.kind === 'fight').map(o => o.r)
   const r100 = at(100), w100 = r100.filter(r => r.first === 1), med = q(w100.map(r => r.tick), 0.5) / 1200, lmed = q(w100.map(r => r.lossB), 0.5)
   const checks: [string, boolean][] = [

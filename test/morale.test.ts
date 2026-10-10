@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { data, cr } from './fx.ts'
 import { makeWorld, issue, advanceTick, buildTerrain, makeHandle, KIND_FORMATION, M_FREE, M_TICK, MS_STEADY, MS_SHAKEN, MS_WAVERING, MS_ROUTING, MS_RALLYING, MS_SHATTERED,
-  RP_RUNNING, RP_FLED, menOf, hashWorld, hex, serialize, deserialize, record, play, outOfFight, mayFire, type World, type Command, type Dropped } from '../src/sim/index.ts'
+  RP_RUNNING, RP_FLED, O_MOVE, allocOrder, menOf, hashWorld, hex, serialize, deserialize, record, play, outOfFight, mayFire, type World, type Command, type Dropped } from '../src/sim/index.ts'
 import { levelled, brigade } from '../src/scenarios/s1c-firefight.ts'
 
 const E = Math.PI / 2, lev = levelled(data), levTerrain = buildTerrain(lev, cr), M = cr.rs.morale
@@ -78,6 +78,14 @@ describe('rally', () => {
     const [hit, b] = routed(170, 10)
     for (let k = 0; k < 24; k++) { hit.run(10); hit.do({ type: 'debug-kill', id: b, men: 1 }) }
     expect(hit.state(b)).toBe(MS_ROUTING)
+  })
+  it('a router whose first run could not be made (the order pool full) does not rally where it broke', () => {
+    const s = new W(); SIDES_SET(s)
+    const h = s.spawn(0, -100, -35); s.spawn(1, 170, -35)   // 270 m: safe where it stands
+    const held: number[] = []; for (let n = allocOrder(s.w, O_MOVE); n >= 0; n = allocOrder(s.w, O_MOVE)) held.push(n)
+    s.breakNow(h); s.run(60)
+    expect(s.state(h)).toBe(MS_ROUTING); expect(s.w.f.runs[s.i(h)]).toBe(0); expect(s.w.f.x[s.i(h)]).toBe(-100)
+    void held
   })
   it('a battalion whose quality, less the cost, would be below wavering does not rally', () => {
     const s = new W(); SIDES_SET(s)

@@ -122,37 +122,43 @@ is later:
 - **The run counter** advances only when the run's order was made, so a full order pool delays a run but
   uses up no direction.
 
-**Flank support and contagion** (S1c-2). Both read the other battalions' states from before the step:
-- **Support:** a friend in the fight within `support.reach` (100 m) and 45° of a battalion's left or right
-  axis secures that flank. Each secured flank adds `support.bonus` (0.04) to the target. Left and right
-  swap under a Face about, so both are still counted.
+**Flank support and contagion** (S1c-2). Both read the other battalions' states from before the step. The
+numbers are `morale.support` and `morale.contagion` in `src/rulesets/napoleonic.ts`.
+- **Support:** a friend in the fight within `support.reach` and within `support.arc` of a battalion's left or
+  right axis secures that flank. Each secured flank adds `support.bonus` to the target. Left and right swap
+  under a Face about, so both are still counted.
 - **Contagion:** a battalion that breaks records the tick (`brokeTick`). In the next tick each friend loses
-  `shock × (1 − d/R)` of its morale, after relaxing: `shock` 0.15, R 200 m for a break ahead of the side's
-  front (away from its rear, else the friend's heading) and 100 m otherwise. A chain of breaks travels one
-  link per tick. The ruleset is refused if one shock could rout a steady battalion of default quality
+  `shock × (1 − d/R)` of its morale, after relaxing. R is `contagion.front` for a break ahead of the side's
+  front (away from its rear, else the friend's heading), else `contagion.back`. A chain of breaks travels
+  one link per tick. The ruleset is refused if one shock could rout a steady battalion of default quality
   (more than 0.6 of the gap from it to the rout).
 
-**The wavering fall-back.** A wavering battalion Retires `fallback.metres` (15 m) once, by the Retire drill
+**The wavering fall-back.** A wavering battalion Retires `fallback.metres` once, by the Retire drill
 (`RETIRE` in `formation.ts`), when all of these hold:
 - it has no orders and is not changing shape;
-- its morale has fallen by more than `fallback.rate` (0.0005 a second) on every tick of the last 3 s, so the
-  relax's slow crawl onto a fixed target does not count;
+- its morale has fallen by more than `fallback.rate` a second on every tick of the last `fallback.after`
+  seconds, so the relax's slow crawl onto a fixed target does not count;
 - the nearest enemy in the fight is within fire range and in front of it (within 90° of its heading). A
   Retire goes back from its own facing; with the enemy behind it, it would march toward the enemy.
 
 The flag clears when it recovers to shaken. A player's order replaces the Retire.
 
-**Rally.** A router rallies when its run has ended, no enemy in the fight is within `rally.safe` (250 m), it
-has lost no man for `rally.calm` (20 s; every loss through `removeMan` counts), and its quality less `rally.cost` (0.1) is
-still at least wavering. Rallying:
-- writes off the losses before the rout (the losses term counts from `baseMen`, its men now; recent losses
-  stay a share of the spawn strength) and costs it
-  `rally.cost` of quality, so it comes back brittle. Without the write-off no router could ever rally: the
-  target at a break is the rout threshold itself;
-- stands for `rally.time` (30 s), refusing orders and not firing, then takes the state its morale gives.
+**Rally** (`morale.rally`). A router rallies when all of these hold:
+- its run has ended: a run was made and it is no longer running (a full order pool can leave a router
+  unmoved where it broke, which does not count);
+- no enemy in the fight is within `rally.safe`;
+- it has lost no man for `rally.calm` seconds (every loss through `removeMan` counts);
+- its quality less `rally.cost` is still at least the wavering threshold.
 
-**Shattered.** A break beyond `rally.max` (2) rallies, or a router below `shatter` (half) of its spawn
-strength, shatters: it runs as a router, never rallies, and refuses orders.
+Rallying:
+- writes off the losses before the rout (the losses term counts from `baseMen`, its men now; recent losses
+  stay a share of the spawn strength) and costs it `rally.cost` of quality, so it comes back brittle.
+  Without the write-off no router could ever rally: the target at a break is the rout threshold itself;
+- stands for `rally.time` seconds, refusing orders and not firing, then takes the state its morale gives.
+
+**Shattered.** A break beyond `rally.max` rallies, or a router below `morale.shatter` of its spawn strength,
+shatters: it runs as a router, never rallies, and refuses orders. A router mid-run, like a shattered one,
+skips the survey of the others and its morale step: nothing it would read is used.
 
 **Out of the fight** (routing, rallying, shattered: `mstate ≥ MS_ROUTING`): no fire, no threat to an enemy,
 no support to a friend. Every order but the debug ones is dropped, with the state as the reason.
@@ -217,10 +223,14 @@ scripted tests.
   for total losses. It is kept for bursts (artillery, charges, S1d); if those do not use it, cut it.
 - **Every lone weaker line still breaks at the same share of losses (20%).** In a brigade, support and
   contagion vary it: the inner line holds longer, and a break takes worn neighbours with it. In the 3v3
-  calibration the whole weaker brigade went within 0.1 s of its first break in 82 seeds of 100. A brigade
-  worn evenly collapses together; whether that is too total is for S1e's playtests.
+  calibration (`docs/plans/active/s1c2-morale-machine.md`, Results) the median time from the weaker side's
+  first break to its last is 0.1 s, and in most seeds all three of its lines are out of the fight 3 minutes
+  later. A brigade worn evenly collapses together; whether that is too total is for S1e's playtests.
 - **Routers on the formation field never rally in the brigade.** They are pinned at the stream about 180 m
   from the enemy, inside `rally.safe`. The field is 360 m across; battle maps are 1–1.5 km.
+- **The order pool is served in visiting order.** Routs and fall-backs in the same tick take pool entries
+  in slot order, so the reverse-visiting switch gives the same behaviour but different entries (and a
+  different hash) when two happen in one tick. The chain test breaks one link per tick.
 - **Two cover and sight fixes have no failing test.** Culling friendly cover by each battalion's extent
   (not a fixed 40 m), and walking sight lines low to high, are not exercised. This ruleset cannot build a
   battalion that reaches 40 m from its anchor, and the floating-point asymmetry cannot be set up on

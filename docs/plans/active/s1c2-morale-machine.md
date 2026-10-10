@@ -292,11 +292,12 @@ Built as planned, with three changes found while building (below). Described in
    - in most seeds the whole side went within 0.1 s (two ticks): the lines wear evenly, so all three are
      wavering when the first breaks;
    - no line of the stronger side broke.
-2. **Rules:** 17 tests in `test/morale.test.ts`, all passing. The S1c-1 tests pass unchanged, except that the
+2. **Rules:** 21 tests in `test/morale.test.ts` (17 in the first build, 4 added in review), all passing. The S1c-1 tests pass unchanged, except that the
    reverse-order switch is renamed `reverse` and covers the morale pass too.
 3. **Determinism:**
    - the goldens are regenerated (drill, firefight, the five-seed calibration table);
-   - the brigade's replay reproduces, and so does a save taken with one battalion routing and one mid-fall-back;
+   - the brigade's replay reproduces, and so does a save taken with one battalion rallying, one routing and one
+     mid-fall-back (round 1);
    - `SIM_VERSION` is `s1c.3`, `SAVE_FORMAT` 6.
 4. **Cost**, 40 battalions firing: casualties and morale take 0.09–0.11 ms per tick, against 0.01 on main
    (§16: 2 ms). The survey of every other battalion is most of it.
@@ -311,6 +312,9 @@ Built as planned, with three changes found while building (below). Described in
    | the fall-back with no enemy check | no enemy within musket range |
    | a rally without the losses write-off | the rally, and "holds after" |
    | support from a routing friend | the routing friend |
+   | the fall-back whatever side the enemy is on (round 1) | the enemy behind |
+   | falling on any decrease (round 1) | the relax's crawl |
+   | a rally with no run made (round 2) | the full order pool |
 
 **Changes found while building:**
 - **A rally needs a quality floor.** A battalion whose quality less the cost is below wavering would rally
@@ -351,3 +355,23 @@ Built as planned, with three changes found while building (below). Described in
 The calibration is unchanged (100 m median 9.1 min) and every target holds. Under a load average of about
 30 the frame-cost test failed on main and on this branch alike (3.8–6.6 ms against its 4 ms budget, back to
 back); the morale step's own cost is the number above.
+
+**Review round 2.** No severe findings, so this is the last round. The worthwhile ones are fixed:
+- **A router with no run made could rally where it broke.** A full order pool leaves its phase "halted", which
+  the rally read as "its run has ended". A rally now needs a run to have been made. A test fills the pool,
+  and fails without the check.
+- **The visiting-order claim is honest.** Routs and fall-backs in the same tick take pool entries in slot
+  order: the same behaviour, different entries. `morale.ts` and the system doc now say so; the chain test
+  breaks one link per tick.
+- **The brigade runner counts every break** (from `brokeTick`, a break after a rally too), and a first tick
+  with breaks on both sides is reported as "both".
+- **Less work:** a router mid-run skips the survey and the morale step, as a shattered one does; the men
+  counted once per step are used throughout.
+- **The ruleset is checked** for `rally.max` (a byte) and `support.arc` (at most 90°, or a friend ahead
+  counts as a flank).
+- **Scenario names** carry non-default qualities, so a replay cannot be played against another variant; the
+  two S1c scenarios share their side setup.
+- **The system doc names the ruleset keys** instead of copying the numbers, and its brigade figure is
+  corrected (the median from first to last break is 0.1 s; most seeds have all three lines out 3 minutes later).
+
+The calibration is unchanged and every target holds. `check:app` passes.

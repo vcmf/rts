@@ -11,11 +11,20 @@ export const FIGHT_Z = -165, FIGHT_X = -50
 export const STRONG = 0.8, WEAK = 0.65
 const E = 1.5707963267948966
 
+// a scenario's name carries every parameter that is not the default, so a replay cannot be played against a
+// variant it was not recorded on (replay.ts checks the name)
+function scenarioName(base: string, range: number, qa: number, qb: number): string {
+  const q = qa === STRONG && qb === WEAK ? '' : `-q${qa}-${qb}`
+  return range === 100 && !q ? base : `${base}-${range}${q}`
+}
+// each side's rear: side 0 runs west, side 1 east
+function setSides(w: World): void { issue(w, { type: 'side', side: 0, x: -1, z: 0 }); issue(w, { type: 'side', side: 1, x: 1, z: 0 }) }
+
 export function firefight(range: number, qa = STRONG, qb = WEAK): Scenario {
   return {
-    name: range === 100 && qa === STRONG && qb === WEAK ? 's1c-firefight' : `s1c-firefight-${range}`,
+    name: scenarioName('s1c-firefight', range, qa, qb),
     setup(w: World) {
-      issue(w, { type: 'side', side: 0, x: -1, z: 0 }); issue(w, { type: 'side', side: 1, x: 1, z: 0 })
+      setSides(w)
       issue(w, { type: 'debug-spawn', side: 0, x: FIGHT_X - range / 2, z: FIGHT_Z, heading: E, shape: 'line', men: 100, quality: qa })
       issue(w, { type: 'debug-spawn', side: 1, x: FIGHT_X + range / 2, z: FIGHT_Z, heading: -E, shape: 'line', men: 100, quality: qb })
     },
@@ -48,9 +57,9 @@ export function runFirefight(data: SimData, cr: Compiled, seed: number, range: n
 export const BRIGADE_X = -60, BRIGADE_Z = -35, BRIGADE_GAP = 40
 export function brigade(range: number, qa = STRONG, qb = WEAK): Scenario {
   return {
-    name: range === 100 && qa === STRONG && qb === WEAK ? 's1c-brigade' : `s1c-brigade-${range}`,
+    name: scenarioName('s1c-brigade', range, qa, qb),
     setup(w: World) {
-      issue(w, { type: 'side', side: 0, x: -1, z: 0 }); issue(w, { type: 'side', side: 1, x: 1, z: 0 })
+      setSides(w)
       for (const [side, x, h, q] of [[0, BRIGADE_X - range / 2, E, qa], [1, BRIGADE_X + range / 2, -E, qb]])
         for (let k = -1; k <= 1; k++) issue(w, { type: 'debug-spawn', side, x, z: BRIGADE_Z + k * BRIGADE_GAP, heading: h, shape: 'line', men: 100, quality: q })
     },
@@ -58,18 +67,22 @@ export function brigade(range: number, qa = STRONG, qb = WEAK): Scenario {
 }
 export const s1cBrigade = brigade(100)
 
-// first: the side of the first battalion out of the fight (−1: none); tick: when; then, `window` ticks after
-// it, how many of each side are out of the fight and the tick of the last to go
+// first: the side whose battalion broke first (−1: none; 2: both in the same tick); tick: when; then,
+// `window` ticks after it, how many of each side are out of the fight and the tick of the last break. Every
+// break counts, a second one after a rally too (brokeTick is stamped at each)
 export interface BrigadeResult { first: number; tick: number; outA: number; outB: number; last: number }
 export function runBrigade(data: SimData, cr: Compiled, seed: number, range: number, maxTicks: number, window: number, qa = STRONG, qb = WEAK): BrigadeResult {
   const w = makeWorld(data, cr, seed, false); brigade(range, qa, qb).setup(w)
-  let first = -1, tick = maxTicks, last = 0, outs = 0
+  let first = -1, tick = maxTicks, last = 0
   // out of the fight, or gone (reaped): the spawn order fills slots 0–5, side 0 first
   const count = (side: number) => { let n = 0; for (let i = side * 3; i < side * 3 + 3; i++) if (!w.f.alive[i] || w.f.side[i] !== side || outOfFight(w.f.mstate[i])) n++; return n }
   for (let t = 1; t <= maxTicks && (first < 0 || t <= tick + window); t++) {
     advanceTick(w)
-    const a = count(0), b = count(1)
-    if (a + b > outs) { outs = a + b; last = t; if (first < 0) { first = a ? 0 : 1; tick = t } }
+    let broke = 0   // bit per side that had a break this tick
+    for (let i = 0; i < 6; i++) if (w.f.alive[i] && w.f.brokeTick[i] === t) broke |= 1 << w.f.side[i]
+    if (!broke) continue
+    last = t
+    if (first < 0) { first = broke === 3 ? 2 : broke === 1 ? 0 : 1; tick = t }
   }
   return { first, tick, outA: count(0), outB: count(1), last }
 }
