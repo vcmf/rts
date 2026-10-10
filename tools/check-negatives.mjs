@@ -28,6 +28,9 @@ const CASES = [
 ]
 // the look page's own checks (tools/look-check.js): only where the page has them (the prototype has no SPEC)
 const LOOK_CASES = [
+  // the river's W2 banks, on the look page only: every bend's cut bank on the wrong side, so the check measures the
+  // bar as the cut bank
+  ['river', 'cut banks on the inner side', 'for (let i = 0; i < RIVER.n; i++) RIVER.A[i] = -RIVER.A[i]', 'cutBankVsBar'],
   ['look', 'real scene', null, null],
   ['look', 'tile drawn 0.5 m high', 'tileGround.position.y = 0.5; tileGround.computeWorldMatrix(true)', 'tileHeights'],
   ['look', 'far ring at the old -0.9 m', 'farGround.position.y = -0.9; farGround.computeWorldMatrix(true)', 'farHeights'],

@@ -2,7 +2,7 @@
 // image set for the tiling review. Each renders the look page headless (SwiftShader, the clock frozen) through the
 // page's hooks (window.__look in src/look/main.ts).
 //
-//   node tools/detail-check.mjs <look page URL> [outDir] [--only scale,seams,shimmer,tiling]
+//   node tools/detail-check.mjs <look page URL> [outDir] [--only scale,seams,shimmer,tiling,banks]
 //   node tools/detail-check.mjs <look page URL> [outDir] --defines DETAIL_L0     the checks on a variant (e.g. the L0 arm)
 //   node tools/detail-check.mjs <look page URL> --selftest [outDir]
 //     each check passes on the page and fails on its sabotage (a variant of the terrain's shader, by define)
@@ -24,6 +24,7 @@
 // - tiling: the widest zoom at three yaws, summer and winter, the terrain alone, the detail layer and the L0 grain:
 //   12 images under random names and an answer sheet, for the 3-reviewer test. Also reported, not gated: the
 //   debug view's autocorrelation at the shorter lags one tile can repeat at (the frame holds no longer ones).
+// - banks (W2): the terrain's shading normal at the river's banks against the authored surface's (below).
 // Frames are 1280×720 (a 1920×1080 screenshot crashes headless Chrome here); the grain's size is set in 1080-line
 // pixels and does not depend on the frame's, so the checks scale their pixel numbers by H / 1080.
 // Exit 1 on a failure.
@@ -34,9 +35,10 @@ import * as png from './png.mjs'
 import { CAMS } from './golden.mjs'
 import { prepSteps, shoot, viewStep } from './look-page.mjs'
 import { SPEC } from '../src/look/spec.ts'
+import { authorWorld } from '../src/look/world/author.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const W = 1280, H = 720
+const W = 1280, H = 720, H_PX = H
 const CAM = SPEC.camera, DET = SPEC.detail
 const [, A0, BETA0, R0, FOCUS] = CAMS.find(c => c[0] === 'start')   // the default view
 const TILE_PX = DET.px * H / DET.lines                              // one texture tile at octave weight 0, in frame pixels
@@ -106,8 +108,10 @@ const seamLimit = maxStep => maxStep * (SPEC.sizes.grain / (TILE_PX / 2)) / Math
 const EDGE_ON = 0.17   // the incidence's cosine below which a face is edge-on (about 10° from it)
 const KEEPS = 0.8    // and at twice the resolution (four quarter frames) a step there is still this fraction of it (a step is a step at any resolution; a transition under a pixel wide shrinks, if not to half)
 const ISOLATED = 3   // and a seam step is this many times larger than both steps beside it (a smooth slope's are alike)
-function seams(url, dir, defs) {
-  const [hx, , hz] = FOCUS
+// the bank normals off (BANKN_OFF): a cut bank turns the shading normal by tens of degrees within a pixel at the wider
+// zooms, a real crease the grain follows; they have their own check (banks)
+function seams(url, dir, defs0) {
+  const defs = [...defs0, 'BANKN_OFF'], [hx, , hz] = FOCUS
   const steps = [...prepSteps(), detail(defs, true), ['eval', '"MAXSTEP " + __look.grain("smooth")']]
   for (const r of SEAM_ZOOMS) {
     steps.push(view(`r${r}`, A0, BETA0, r), ['shot', `seams.r${r}.ground`])
@@ -229,16 +233,67 @@ function tiling(url, dir) {
   return { ok: true, lines: [`tiling: ${views.length} images and answers.json in ${tdir}`, `  debug view, widest zoom: the largest autocorrelation along x at lags ${Math.round(TILE_PX / 2)}–${Math.min(Math.round(TILE_PX * 2), w - 256)} px (the shorter repeats of the smaller octave; the frame is too narrow for the rest) is ${best.toFixed(3)} (at ${at} px); reported, not gated`] }
 }
 
-const CHECKS = { scale, seams, shimmer, tiling }
+// ---------- banks (W2, docs/plans/active/w2-river-banks.md) ----------
+// The shading normal the terrain draws at the river's banks (the debug view DETAIL_DEBUG_N, the terrain alone), at
+// points along both banks of the play area's sharpest bend, against the authored surface's normal (central
+// differences on the authoring step's height, the bank map's own rule). Pass, at the closest and a middle zoom: the
+// angle's median under BANK_MED and its 95th percentile under BANK_P95 degrees. Set from the measurements (W2):
+// the page 0.9–1.1° and 9–14° (the tail is on the scarps, which turn faster than the map's 0.5 m texels and the
+// 1.79 m geometry can follow); vertex normals only (the sabotage) 9–11° and 33–34°.
+const BANK_MED = 3, BANK_P95 = 20
+let world = null
+function banks(url, dir, defs) {
+  world ??= authorWorld()
+  const C = world.samples, H = world.H, inPlay = i => Math.abs(C.px[i]) < SPEC.play - 30 && Math.abs(C.pz[i]) < SPEC.play - 30
+  let bi = -1; for (let i = 0; i < C.n; i++) if (inPlay(i) && (bi < 0 || Math.abs(C.A[i]) > Math.abs(C.A[bi]))) bi = i
+  const target = [C.px[bi], CAM.focusY, C.pz[bi]], e = SPEC.bank.texel / 2, pts = []
+  // both banks of 60 m of river around the bend, from the water's edge out to the floodplain (0.9–1.7 half-widths)
+  for (let i = bi - 120; i <= bi + 120; i += 2) {
+    if (i < 0 || i >= C.n) continue
+    const hw = C.W[i] / 2
+    for (const side of [-1, 1]) for (const f of [0.9, 1.1, 1.3, 1.5, 1.7]) {
+      const x = C.px[i] - C.tz[i] * side * f * hw, z = C.pz[i] + C.tx[i] * side * f * hw
+      const gx = (H(x + e, z) - H(x - e, z)) / (2 * e), gz = (H(x, z + e) - H(x, z - e)) / (2 * e), l = Math.hypot(gx, 1, gz)
+      pts.push([x, z, -gx / l, 1 / l, -gz / l])
+    }
+  }
+  const zooms = [CAM.rMin, 90]
+  const steps = [...prepSteps(), detail([...defs, 'DETAIL_DEBUG_N'], true)]
+  for (const r of zooms) {
+    steps.push(viewStep([`bank-r${r}`, A0, BETA0, r, `${target}`, 0]), ['shot', `banks.r${r}`])
+    steps.push(['eval', `(() => { const B = window.B, e = __proto.scene.getEngine(), vp = new B.Vector3(0, 0, 0), T = __proto.scene.getTransformMatrix(), w = e.getRenderWidth(), h = e.getRenderHeight()
+      const out = ${JSON.stringify(pts.map(p => [p[0], p[1]]))}.map(([x, z]) => { const s = B.Vector3.Project(new B.Vector3(x, H(x, z), z), B.Matrix.IdentityReadOnly, T, { x: 0, y: 0, width: w, height: h }); return [+s.x.toFixed(2), +s.y.toFixed(2)] })
+      return "PROJ r${r} " + JSON.stringify(out) })()`])
+  }
+  const out = shoot(url, dir, steps, W, H_PX)
+  const lines = [`banks: the drawn shading normal against the authored surface's, at ${pts.length} points on both banks of the sharpest bend (|A| ${Math.abs(C.A[bi]).toFixed(2)} at ${C.px[bi].toFixed(0)}, ${C.pz[bi].toFixed(0)}); pass: median under ${BANK_MED}°, 95th percentile under ${BANK_P95}°`]
+  let ok = true
+  for (const r of zooms) {
+    const m = new RegExp(`^EVAL "PROJ r${r} (.*)"$`, 'm').exec(out), proj = JSON.parse(JSON.parse(`"${m[1]}"`)), img = load(dir, `banks.r${r}`)
+    const ang = []
+    proj.forEach(([sx, sy], k) => {
+      const px = Math.floor(sx), py = Math.floor(sy); if (px < 1 || py < 1 || px >= img.w - 1 || py >= img.h - 1) return
+      const o = (py * img.w + px) * 4, n = [0, 1, 2].map(c => img.data[o + c] / 255 * 2 - 1), l = Math.hypot(...n), p = pts[k]
+      ang.push(Math.acos(Math.min(1, (n[0] * p[2] + n[1] * p[3] + n[2] * p[4]) / l)) * 180 / Math.PI)
+    })
+    ang.sort((a, b) => a - b)
+    const p95 = ang[Math.floor(ang.length * 0.95)], med = ang[Math.floor(ang.length / 2)]
+    const pass = ang.length >= 200 && med < BANK_MED && p95 < BANK_P95; if (!pass) ok = false
+    lines.push(`  r ${r}: ${ang.length} points on screen, angle median ${med?.toFixed(1)}°, 95th percentile ${p95?.toFixed(1)}°${ang.length < 200 ? '  TOO FEW' : pass ? '' : '  FAIL'}`)
+  }
+  return { ok, lines }
+}
+
+const CHECKS = { scale, seams, shimmer, tiling, banks }
 // each check's sabotages: the variant must fail it
-const SABOTAGE = { scale: [['DETAIL_L0']], seams: [['DETAIL_L0'], ['DETAIL_SAB_IMPLICIT']], shimmer: [['DETAIL_SAB_STEP']] }
+const SABOTAGE = { scale: [['DETAIL_L0']], seams: [['DETAIL_L0'], ['DETAIL_SAB_IMPLICIT']], shimmer: [['DETAIL_SAB_STEP']], banks: [['BANKN_OFF']] }
 
 function main() {
   const args = process.argv.slice(2), self = args.includes('--selftest'), oi = args.indexOf('--only')
   const only = oi >= 0 ? args.splice(oi, 2)[1].split(',') : Object.keys(CHECKS)
   const di = args.indexOf('--defines'), defs = di >= 0 ? args.splice(di, 2)[1].split(',') : []
   const [url, out = path.join(ROOT, 'scratch/detail-check')] = args.filter(a => a !== '--selftest')
-  if (!url || only.some(k => !CHECKS[k])) { console.error('usage: node tools/detail-check.mjs <look page URL> [outDir] [--only scale,seams,shimmer,tiling] [--defines A,B] [--selftest]'); process.exit(2) }
+  if (!url || only.some(k => !CHECKS[k])) { console.error('usage: node tools/detail-check.mjs <look page URL> [outDir] [--only scale,seams,shimmer,tiling,banks] [--defines A,B] [--selftest]'); process.exit(2) }
   fs.mkdirSync(out, { recursive: true })
   let ok = true
   for (const k of only) {
