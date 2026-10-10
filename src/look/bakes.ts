@@ -87,7 +87,7 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   const aoTex = new DynamicTexture('ao', aoCanvas, scene, true, Texture.BILINEAR_SAMPLINGMODE); aoTex.wrapU = aoTex.wrapV = Texture.CLAMP_ADDRESSMODE; aoTex.update(false)
 
   /* ---------- light-map bake: a top-down ortho render of the terrain, once ---------- */
-  const bakeMat = mats.make('bake', TER_VS, BAKE_FS, { attributes: ['position', 'normal', 'aRiver'], samplers: ['uAOTex'] }); mats.all.splice(mats.all.indexOf(bakeMat), 1)   // never bind uLM (its own target) or update it per frame
+  const bakeMat = mats.make('bake', TER_VS, BAKE_FS, { attributes: ['position', 'normal', 'aRiver'], samplers: ['uAOTex'], perFrame: false })   // never bind uLM (its own target) or update it per frame
   bakeMat.setTexture('uAOTex', aoTex); bakeMat.setTexture('uShadowMap', shadowRT); bakeMat.setMatrix('uLightVP', lightVP); bakeMat.setVector2('uSMTexel', smTexel)
   const lmCam = new FreeCamera('lmCam', new Vector3(0, 500, 0), scene); lmCam.setTarget(new Vector3(0, 0, 0.01))
   lmCam.mode = Camera.ORTHOGRAPHIC_CAMERA; Object.assign(lmCam, { orthoLeft: -TILE_W / 2, orthoRight: TILE_W / 2, orthoTop: TILE_W / 2, orthoBottom: -TILE_W / 2, minZ: 1, maxZ: 1000 })

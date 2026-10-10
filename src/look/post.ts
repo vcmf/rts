@@ -9,7 +9,9 @@ import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { PostProcess } from '@babylonjs/core/PostProcesses/postProcess.js'
-import '@babylonjs/core/Shaders/postprocess.vertex.js'   // the passes' vertex shader: the CDN build registers it, the modules only when imported
+// the passes' vertex shader, loaded up front: PostProcess imports it lazily, but in the built page that load never
+// completed and the grade pass stayed not-ready (observed in L0c; the CDN build has it registered from the start)
+import '@babylonjs/core/Shaders/postprocess.vertex.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { LookState } from './materials.ts'
 import { PLAY } from './spec.ts'

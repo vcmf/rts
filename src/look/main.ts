@@ -19,7 +19,9 @@ import { BAND, MASK_N, PLAY, SM_FADE_M, TILE_W } from './spec.ts'
 import { buildTerrain } from './terrain.ts'
 import { buildWater } from './water.ts'
 
-const T0 = performance.now()   // load-time measurement (window.__buildMs)
+declare global { interface Window { __T0?: number } }
+const T0 = window.__T0 ?? performance.now()   // load-time measurement (window.__buildMs), started by look.html
+if (!window.NATURE) { document.body.innerHTML = '<p style="padding:30px">nature-pack.data.js missing: run <code>node tools/obj-to-js.mjs</code></p>'; throw new Error('no nature data') }
 const canvas = document.getElementById('c') as HTMLCanvasElement
 const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false }, false)
 engine.setHardwareScalingLevel(1)
@@ -36,17 +38,21 @@ const camera = buildCamera(scene, canvas)
 const post = new Post(camera, engine, S, () => mats.grain); post.build()
 
 /* ---------- UI ---------- */
-const el = (id: string) => document.getElementById(id) as HTMLInputElement
-el('dofamt').oninput = e => { S.dofAmt = +(e.target as HTMLInputElement).value }
-el('res').onchange = e => { S.res = +(e.target as HTMLSelectElement).value; engine.setHardwareScalingLevel(1 / S.res) }
-type Toggle = 'grain' | 'edges' | 'clouds' | 'shadows' | 'ao' | 'mist' | 'shafts' | 'back' | 'grade' | 'bloom' | 'dof'
+const byId = <T extends HTMLElement>(id: string): T => { const e = document.getElementById(id); if (!e) throw new Error(`look.html has no #${id}`); return e as T }
+const input = (id: string) => byId<HTMLInputElement>(id)
+input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
+byId<HTMLSelectElement>('res').onchange = () => { S.res = +byId<HTMLSelectElement>('res').value; engine.setHardwareScalingLevel(1 / S.res) }
+const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
+type Toggle = typeof TOGGLES[number]
+const isToggle = (k: string | undefined): k is Toggle => (TOGGLES as readonly (string | undefined)[]).includes(k)
 document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => b.onclick = () => {
-  const k = b.dataset.k as Toggle; S[k] = S[k] ? 0 : 1; b.classList.toggle('on', !!S[k]); b.textContent = S[k] ? 'On' : 'Off'; if (k === 'dof') post.build()
+  const k = b.dataset.k; if (!isToggle(k)) throw new Error(`panel button with an unknown data-k: ${k}`)
+  S[k] = S[k] ? 0 : 1; b.classList.toggle('on', !!S[k]); b.textContent = S[k] ? 'On' : 'Off'; if (k === 'dof') post.build()
 })
-el('gamt').oninput = e => { S.gamt = +(e.target as HTMLInputElement).value }
+input('gamt').oninput = () => { S.gamt = +input('gamt').value }
 const SEASONS = ['Summer', 'Early autumn', 'Late autumn', 'Winter']
-el('season').oninput = e => { S.season = +(e.target as HTMLInputElement).value; el('slabel').textContent = SEASONS[Math.min(3, Math.round(S.season))] }
-const dropEl = el('drop')
+input('season').oninput = () => { S.season = +input('season').value; byId('slabel').textContent = SEASONS[Math.min(3, Math.round(S.season))] }
+const dropEl = byId('drop')
 addEventListener('dragover', e => { e.preventDefault(); dropEl.style.display = 'flex' })
 addEventListener('dragleave', () => dropEl.style.display = 'none')
 addEventListener('drop', e => {
@@ -61,7 +67,7 @@ addEventListener('drop', e => {
 })
 
 /* ---------- loop ---------- */
-const fpsEl = el('fps')
+const fpsEl = byId('fps')
 const FROZEN = new URLSearchParams(location.search).has('frozen')   // golden screenshots (tools/golden.mjs): the clock stays at 0
 // sun colour follows the season: warm gold in summer and autumn, pale gold in winter (keeps snow white, not yellow)
 const SUNCOL = PAL.sun.clone(), WINTER_SUN = new Color3(0.98, 0.95, 0.88)

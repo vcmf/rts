@@ -16,7 +16,7 @@ export function baseH(x: number, z: number): number {
 // Bessel J0: sinuosity = 1/J0(theta0)
 const J0 = (x: number): number => { let s = 0; for (let i = 0; i < 64; i++) { const t = (i + 0.5) / 64 * Math.PI; s += Math.cos(x * Math.sin(t)) } return s / 64 }
 
-export interface RiverQuery { i: number; t: number; dist: number; n: number; s?: number; level?: number }
+export interface RiverQuery { i: number; t: number; dist: number; n: number; s: number; level?: number }
 
 export interface River {
   P: { id: string; W0: number; D0: number; bankH: number; floodplainW: number; beltW: number; valleySlope: number; valleyFade: number
@@ -126,7 +126,7 @@ export const RIVER: River = (() => {
   return { ...C, WMAX, trough, grid, CELL, REACH, key, axisX }
 })()
 
-export const lerpA = (arr: Float32Array, q: RiverQuery): number => arr[q.i] + (arr[q.i + 1] - arr[q.i]) * q.t
+export const lerpA = (arr: Float32Array, q: { i: number; t: number }): number => arr[q.i] + (arr[q.i + 1] - arr[q.i]) * q.t
 
 // nearest river segment within REACH: {i,t,n (signed, + = left of flow),dist,s} or null.
 // wantLevel: also blend the water level of every pass in reach (trough only)
@@ -142,9 +142,8 @@ export function riverQuery(x: number, z: number, wantLevel = false): RiverQuery 
     if (wantLevel && d < R2) { const dd = Math.sqrt(d), w = Math.exp(-dd / 3) * (1 - sstep(0.5 * C.REACH, C.REACH, dd)); ws += w; wl += w * (C.zw[i] + (C.zw[i + 1] - C.zw[i]) * t) }
   }
   const dist = Math.sqrt(bd); if (bi < 0 || dist > C.REACH) return null
-  const q: RiverQuery = { i: bi, t: bt, dist, n: bsg * dist }
+  const q: RiverQuery = { i: bi, t: bt, dist, n: bsg * dist, s: lerpA(C.s, { i: bi, t: bt }) }
   if (wantLevel) q.level = ws > 1e-9 ? wl / ws : lerpA(C.zw, q)
-  q.s = lerpA(C.s, q)
   return q
 }
 

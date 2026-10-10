@@ -17,11 +17,14 @@ export const SUN = new Vector3(-0.70, 0.45, 0.55).normalize()   // low side-back
 export const PAL = { sun: new Color3(1.00, 0.84, 0.60), shadow: new Color3(0.45, 0.57, 0.76), hazeCool: new Color3(0.60, 0.69, 0.78), hazeWarm: new Color3(0.95, 0.80, 0.58) }
 export const CLEAR = new Color4(PAL.hazeCool.r, PAL.hazeCool.g, PAL.hazeCool.b, 1)
 
-export const withPainter = (src: string): string => src.replace('#include<painter>', PAINTER)
+const MARK = '#include<painter>'
+// every painted fragment shader includes the painter; a replacer function keeps `$` in the GLSL literal
+export const withPainter = (src: string): string => { if (!src.includes(MARK)) throw new Error(`a painted shader without ${MARK}`); return src.replace(MARK, () => PAINTER) }
 
 const COMMON = ['uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uSunCol', 'uShadowCol', 'uHazeCool', 'uHazeWarm', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds']
 
-export interface MatOptions { attributes?: string[]; uniforms?: string[]; samplers?: string[]; alpha?: boolean; defines?: string[] }
+// perFrame: false keeps a material out of `all` (no per-frame uniforms, no light map: the light-map bake draws into it)
+export interface MatOptions { attributes?: string[]; uniforms?: string[]; samplers?: string[]; alpha?: boolean; defines?: string[]; perFrame?: boolean }
 
 // every painted material, so per-frame uniforms and a new grain reach all of them
 export class Materials {
@@ -29,11 +32,12 @@ export class Materials {
   private readonly scene: Scene
   grain: BaseTexture
   constructor(scene: Scene, grain: BaseTexture) { this.scene = scene; this.grain = grain }
-  make(name: string, vs: string, fs: string, { attributes = ['position', 'normal'], uniforms = [], samplers = [], alpha = false, defines = [] }: MatOptions = {}): ShaderMaterial {
+  make(name: string, vs: string, fs: string, { attributes = ['position', 'normal'], uniforms = [], samplers = [], alpha = false, defines = [], perFrame = true }: MatOptions = {}): ShaderMaterial {
     const m = new ShaderMaterial(name, this.scene, { vertexSource: vs, fragmentSource: withPainter(fs) },
       { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM')], needAlphaBlending: alpha, defines: [...SHADER_DEFINES, ...defines] })
     m.setVector3('uSunDir', SUN); m.setColor3('uSunCol', PAL.sun); m.setColor3('uShadowCol', PAL.shadow)
     m.setColor3('uHazeCool', PAL.hazeCool); m.setColor3('uHazeWarm', PAL.hazeWarm); m.setTexture('uGrain', this.grain)
-    this.all.push(m); return m
+    if (perFrame) this.all.push(m)
+    return m
   }
 }

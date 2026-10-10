@@ -26,8 +26,9 @@ reference until L9 (`docs/plans/active/track-e-look.md`).
   camera and passes. Reordering changes pixels and shows in the goldens.
 - **Deep imports register only what they import.** The CDN build registers every shader include and
   post-process shader; the modules do not. A missing one leaves a material or pass forever "not ready"
-  with no error. The ones in use: the instancing includes (`src/look/nature.ts`) and the post-process
-  vertex shader (`src/look/post.ts`).
+  with no error. The instancing includes (`src/look/nature.ts`) must be imported. The post-process vertex
+  shader is imported up front too (`src/look/post.ts`): Babylon loads it lazily, but in the built page that
+  load never completed (observed in L0c).
 
 ## Design
 
@@ -63,5 +64,7 @@ river's parameters in `src/look/river.ts`, the scatter in `src/look/nature.ts`.
 
 ## Open questions
 
+- The nature pack's data comes from `prototypes/` as a script that sets `window.NATURE`; it moves to a
+  real module before the prototype is retired (L9).
 - The bundle is one 1.7 MB chunk (Babylon plus the nature pack data); splitting it waits until load
   time matters.
