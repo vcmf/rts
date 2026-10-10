@@ -109,7 +109,7 @@ From the prototype plan (W2: "Cut banks steep, point bars shallow; no terrain st
   shallow bar's edge the drawn ground can sit above the water (the shoreline, W4). The sabotage (every
   bend's cut bank on the wrong side) fails `cutBankVsBar`.
 - **Bank shading** (`tools/detail-check.mjs`, `banks`): the drawn normal against the authored surface's
-  at 1,210 points on both banks of the sharpest bend: median 0.7° / 1.1°, 95th percentile 8.3° / 13.9°
+  at 1,210 points on both banks of the sharpest bend: median 0.6° / 0.9°, 95th percentile 7.8° / 13.9°
   (closest / middle zoom). Without the bank normals (the sabotage): 9.0° / 10.6° and 32.8° / 34.1°.
   Limits: median 3°, 95th percentile 20°. The tail is on the scarps, which turn faster than 0.5 m texels.
 - **The detail checks** pass unchanged; the seam check leaves out the river's banks (where the bank
