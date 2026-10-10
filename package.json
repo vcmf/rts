@@ -13,7 +13,7 @@
     "check:data": "node tools/build-sim-data.ts --check",
     "check:docs": "node tools/check-docs.mjs",
     "test": "npm run lint && npm run typecheck && vitest run",
-    "coverage": "vitest run --coverage",
+    "coverage": "COVERAGE=1 vitest run --coverage",
     "check:app": "npm run build && node tools/app-check.mjs",
     "calibrate:fire": "node tools/calibrate-fire.ts"
   },

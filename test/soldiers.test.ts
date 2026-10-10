@@ -1,7 +1,7 @@
 // The soldier layer (src/render/soldiers.ts) against the real sim: the prototype's soldier-level checks
 // (tools/formation-measure.js), the slot assignment, Face about, cost.
 import { describe, it, expect } from 'vitest'
-import { Sim, STREAM_X } from './fx.ts'
+import { Sim, STREAM_X, longIt } from './fx.ts'
 import { buildScene } from '../src/render/scene.ts'
 import { SoldierLayer } from '../src/render/soldiers.ts'
 import { occupied, advanceTick, type Meter } from '../src/sim/index.ts'
@@ -35,7 +35,7 @@ describe('the soldier layer follows the sim', () => {
     console.log('slot error', { lineToSquare: sq, marchTurn: mt, wood: wd })
     expect(sq.max).toBeLessThan(2); expect(mt.max).toBeLessThan(1.5); expect(wd.max).toBeLessThan(5); expect(wd.mean).toBeLessThan(1)
   })
-  it('halted in the wood, no man moves more than 0.05 m in 10 s (six halt points)', () => {
+  longIt('halted in the wood, no man moves more than 0.05 m in 10 s (six halt points)', () => {
     for (const [ox, oz] of [[0, 0], [-10, 14], [-6, 6], [-14, -10], [8, 6], [12, -8]]) {
       const p = new Play(), h = p.sim.spawn(-45, 55 - 30 - 12, 0)
       p.sim.order({ type: 'move', id: h, points: [[-45 + ox, 55 + oz]], append: false }); p.frames(240)

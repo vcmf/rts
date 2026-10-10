@@ -1,7 +1,7 @@
 // The formation layer on the spine: the formation-level checks of tools/formation-measure.js (the
 // prototype's spec, docs/plans/done/terrain-movement.md), re-expressed against the sim's places.
 import { describe, it, expect } from 'vitest'
-import { Sim, cr, STREAM_X, DEG, closest, paint, baseTerrain } from './fx.ts'
+import { Sim, cr, STREAM_X, DEG, closest, paint, baseTerrain, longIt } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { groundG, type Ruleset } from '../src/sim/index.ts'
 
@@ -44,7 +44,7 @@ describe('partial bad ground: the thicket', () => {
   }
   const research: OrdersPresetTmp = { Lmax: 10, Lmean: 2, tau: 3 }
   type OrdersPresetTmp = { Lmax: number; Lmean: number; tau: number }
-  it('scales with the share held up; the full front costs the strip; tolerances hold every tick', () => {
+  longIt('scales with the share held up; the full front costs the strip; tolerances hold every tick', () => {
     // the research's tolerances as a fourth preset, compiled into the test's ruleset
     ;(cr.rs.orders as Record<string, OrdersPresetTmp>).research = research
     cr.presets.push('research')
@@ -145,7 +145,7 @@ describe('impassable ground: deep water', () => {
     let worst = 0; for (let n = 0; n < 240; n++) { s.advance(0.25); worst = Math.max(worst, s.placesInDeep(h)) }
     expect(worst).toBe(0)
   })
-  it('a unit halted at the bank, ordered on at any angle: ends without oscillating, nobody in the water', () => {
+  longIt('a unit halted at the bank, ordered on at any angle: ends without oscillating, nobody in the water', () => {
     for (const shape of ['line', 'march']) for (const deg of [30, 60, 90, 120, 180, -90]) {
       const s = new Sim(), h = s.spawn(30, -30, Math.PI / 2)
       if (shape !== 'line') { s.order({ type: 'form', id: h, shape }); s.advance(25) }
@@ -229,7 +229,7 @@ describe('impassable ground: deep water', () => {
 })
 
 describe('Face about', () => {
-  it('keeps the place of every man in a complete file, in every shape and at uneven strengths', () => {
+  longIt('keeps the place of every man in a complete file, in every shape and at uneven strengths', () => {
     for (const men of [100, 97, 96, 88]) for (const shape of ['line', 'column', 'square', 'march']) {
       const s = new Sim(), h = s.spawn(-20, -100, 0, 'line', men)
       if (shape !== 'line') { s.order({ type: 'form', id: h, shape }); s.advance(110) }
