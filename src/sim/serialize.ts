@@ -10,7 +10,7 @@ import { DataVersionMismatch, type SimData, hex } from './data.ts'
 import { fnv1a } from './hash.ts'
 
 const SAVE_MAGIC = 0x57535452   // 'RTSW'
-const SAVE_FORMAT = 3   // 3: the formations' faces column (S1b)
+const SAVE_FORMAT = 4   // 3: the formations' faces column (S1b); 4: fire, morale, sides, the seed (S1c)
 
 class Writer {
   buf = new Uint8Array(1024); view = new DataView(this.buf.buffer); o = 0
@@ -64,7 +64,8 @@ const readArr = (r: Reader, a: Arr) => {
 // counts as int32, strings with their length, points with their count
 const FIELDS: Record<string, string[]> = {
   move: ['id:i', 'append:b', 'points:p'], form: ['id:i', 'shape:s'], wheel: ['id:i', 'angle:f'], face: ['id:i'], retire: ['id:i', 'metres:f'],
-  halt: ['id:i'], style: ['id:i', 'preset:s'], 'debug-spawn': ['side:i', 'x:f', 'z:f', 'heading:f', 'shape:s', 'men:i'], 'debug-kill': ['id:i', 'men:i'],
+  halt: ['id:i'], style: ['id:i', 'preset:s'], 'debug-spawn': ['side:i', 'x:f', 'z:f', 'heading:f', 'shape:s', 'men:i', 'quality:f', 'fire:s'], 'debug-kill': ['id:i', 'men:i'], 'debug-morale': ['id:i', 'quality:f'],
+  fire: ['id:i', 'mode:s', 'target:i'], side: ['side:i', 'x:f', 'z:f'],
 }
 function writeCommand(w: Writer, s: Stamped) {
   w.i32(s.tick); w.i32(s.seq); const c = s.cmd as unknown as Record<string, unknown>
@@ -96,6 +97,7 @@ export function sections(w: World): [string, Uint8Array][] {
   sec('rng', wr => writeArr(wr, w.rng))
   const f = w.f
   sec('formations', wr => { for (const a of columns(f)) writeArr(wr, a) })
+  sec('sides', wr => { for (const a of columns(w.sides)) writeArr(wr, a) })
   sec('formation free list', wr => writeArr(wr, w.free))
   sec('order pool', wr => { for (const a of columns(w.ord)) writeArr(wr, a) })
   sec('pending commands', wr => { wr.u32(w.pending.length); for (const s of w.pending) writeCommand(wr, s) })
@@ -124,6 +126,7 @@ export function deserialize(bytes: Uint8Array, data: SimData, cr: Compiled, debu
   readArr(r, w.rng)
   const f = w.f
   for (const a of columns(f)) readArr(r, a)
+  for (const a of columns(w.sides)) readArr(r, a)
   readArr(r, w.free)
   for (const a of columns(w.ord)) readArr(r, a)
   const n = r.u32(); for (let k = 0; k < n; k++) w.pending.push(readCommand(r))

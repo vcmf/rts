@@ -11,7 +11,7 @@ assets/**/*.blend
 assets/**/*.blend1
 
 # Build / tooling output (for later game code)
-node_modules/
+node_modules
 dist/
 coverage/
 *.log

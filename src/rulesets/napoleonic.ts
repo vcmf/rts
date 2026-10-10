@@ -66,4 +66,19 @@ export const napoleonic: Ruleset = {
   },
   disorder: { Lok: 1.25, kLag: 0.02, kBow: 0.03, kRec: 0.01, scale: { line: 1.0, column: 0.4, skirmish: 0.1 } },
   faceTime: 3, dressTime: 30,
+  // fire: the hit chances are not historical rates: they are calibrated so two 100-man lines at 100 m
+  // break the weaker in 6–10 minutes (docs/proposals/sim-design.md §8; tools/calibrate-fire.ts)
+  fire: {
+    arc: 0.75, maxRange: 250,
+    pRange: [[0, 0.06], [50, 0.04], [100, 0.019], [150, 0.008], [200, 0.004], [250, 0]],
+    reload: 25, reloadJitter: 0.2, firingRanks: 2, misfire: 0.15,
+    depth: { line: 1.0, column: 1.6, skirmish: 0.5 },
+    state: { steady: 1.0, shaken: 0.85, wavering: 0.6 },
+    cohesion: 0.5, eye: 1.6,
+    sight: { woods: 40, denseWood: 15 },
+  },
+  morale: {
+    quality: 0.75, losses: 1.25, recent: 3, recentTime: 10, relaxTime: 20,
+    shaken: [0.6, 0.65], wavering: [0.5, 0.55], rout: 0.4, routPace: 2,
+  },
 }

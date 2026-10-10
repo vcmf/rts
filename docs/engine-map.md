@@ -78,9 +78,9 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 | Formations and drill | Line, column, square, skirmish; frontage per file; **timed formation changes** (square ≈ 60–100 s) with a penalty while changing | `docs/systems/formations.md` | P | 🟡 (S1a: shapes, changes, Face about, Retire, wheels; no skirmish, no change penalty yet) |
 | Orders and commanders | The player orders battalions (immediate, multi-selection); generals rally and steady nearby troops | `docs/proposals/sim-design.md` §6 | P | ⬜ |
 | Movement | Formation paths over the heightfield; wheeling, line deformation over terrain; local separation | `docs/systems/formations.md`, `docs/architecture.md` §7 | P | 🟡 (S1a: the terrain lag model and the footprint gate; no paths, no contact) |
-| Fire | Musketry per formation (share loaded, volleys, 1 hit per 300–800 rounds in battle); artillery rays with ricochet, canister cones | `docs/proposals/sim-design.md` | P | ⬜ |
+| Fire | Musketry per formation (share loaded, volleys, 1 hit per 300–800 rounds in battle); artillery rays with ricochet, canister cones | `docs/proposals/sim-design.md`, `docs/systems/fire-morale.md` | P | 🟡 (S1c-1: musketry by company, calibrated on time to break; no artillery) |
 | Melee and charges | Impact, square vs cavalry, breach chance on a morale failure | `docs/proposals/sim-design.md` | P | ⬜ |
-| Morale | Scalar with shocks (flank, rear, casualties, artillery), contagion from routing neighbours, general's rally radius; steady → shaken → wavering → routing → rallied / shattered | `docs/proposals/sim-design.md` | P | ⬜ |
+| Morale | Scalar with shocks (flank, rear, casualties, artillery), contagion from routing neighbours, general's rally radius; steady → shaken → wavering → routing → rallied / shattered | `docs/proposals/sim-design.md`, `docs/systems/fire-morale.md` | P | 🟡 (S1c-1: loss-driven, to routing; no rally, shocks or contagion) |
 | Modifier stack | One place for every bonus and penalty (terrain, formation, fatigue, elevation, commander) | `docs/proposals/sim-design.md` | P | ⬜ |
 | Condition | Fatigue, ammunition, fouling as separate values | `docs/proposals/sim-design.md` | A | ⬜ |
 | Vision and smoke | Line of sight over the heightfield; **smoke as a field** that cuts sight (to ~45 m) and accuracy | `docs/proposals/sim-design.md` | P (LOS), A (smoke) | ⬜ |

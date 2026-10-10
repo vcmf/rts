@@ -5,7 +5,7 @@
 // whose slots moved walk to the nearest free filled slot; Face about relabels the men through the shape's
 // half-turn. No DOM: tested in Node (test/soldiers.test.ts).
 import type { World, Places } from '../sim/index.ts'
-import { mkPlaces, placesCtx, placeAt, occupied, menOf, slotIndex, groundG, cellK, DT, M_TICK } from '../sim/index.ts'
+import { mkPlaces, placesCtx, placeAt, occupied, menOf, slotIndex, groundG, cellK, DT, M_TICK, MS_ROUTING } from '../sim/index.ts'
 import type { Scene } from './scene.ts'
 import { eachObstacle, cosmeticRng } from './scene.ts'
 import { CLASS_STYLE } from './style.ts'
@@ -136,7 +136,8 @@ export class SoldierLayer {
         if (!m.alive) continue
         this.place(i, m.s, true, p)
         const inTrees = this.treesByClass[t.cls[cellK(t, m.x, m.z)]] === 1
-        const amp = (inTrees ? 0.3 : 0.1) * u.sway   // personal drift: the ranks loosen among trees
+        // personal drift: the ranks loosen among trees, and break up when the battalion routs
+        const amp = (f.mstate[i] === MS_ROUTING ? 1.5 : inTrees ? 0.3 : 0.1) * u.sway
         let tx = p[0] + amp * Math.sin(tt + m.dx), tz = p[1] + amp * Math.sin(tt * 0.8 + m.dz)
         // a place inside a trunk moves to its edge: a stable place to stand, not a tug of war
         eachObstacle(this.scene, tx, tz, o => { const ex = tx - o.x, ez = tz - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.4

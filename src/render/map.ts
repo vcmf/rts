@@ -1,12 +1,12 @@
-// The staff map (docs/plans/active/s1b-sim-page.md), drawn only from the sim's build-time data and the
+// The staff map (docs/plans/done/s1b-sim-page.md), drawn only from the sim's build-time data and the
 // ruleset, in the style of the formation prototype: class fills from a smoothed class image, edges and
 // contours by marching squares, spot heights at the summits, cosmetic symbols (scene.ts), every soldier a
 // small outlined circle. Two layers: the map (redrawn when the view changes) and the units (every frame).
 import type { World } from '../sim/index.ts'
-import { cellK, O_MOVE } from '../sim/index.ts'
+import { cellK, O_MOVE, M_TICK, MS_STEADY, MS_ROUTING, MORALE_STATES, DT, formationSlot, layoutOf } from '../sim/index.ts'
 import type { Scene } from './scene.ts'
 import type { SoldierLayer } from './soldiers.ts'
-import { CLASS_STYLE, INK, SIDE_INK } from './style.ts'
+import { CLASS_STYLE, INK, SIDE_INK, FIRE_INK, MORALE_INK } from './style.ts'
 
 export interface View { cx: number; cz: number; k: number; W: number; H: number }   // k: pixels per metre; north up
 export const toS = (v: View, x: number, z: number): [number, number] => [v.W / 2 + (x - v.cx) * v.k, v.H / 2 - (z - v.cz) * v.k]
@@ -152,7 +152,34 @@ export class StaffMap {
         for (let n = f.ordHead[u.i]; n >= 0; n = w.ord.next[n]) if (w.ord.type[n] === O_MOVE && w.ord.resolved[n]) { const [tx, ty] = toS(v, w.ord.x[n], w.ord.z[n]); g.lineTo(tx, ty) }
         g.stroke(); g.setLineDash([])
       }
+      // morale: a bar behind the battalion, past its rear rank (its shape's depth, or the routers' spread),
+      // its length the morale, its colour the state; the state named under it unless steady
+      const st = f.mstate[u.i], bw = Math.max(14, R * 7), mc = MORALE_INK[st] ?? INK.ink2
+      const back = layoutOf(w, u.i).depth + w.cr.geo.ranks * w.cr.geo.rankSpacing + (st === MS_ROUTING ? 6 : 0) + 14 / k
+      const [bx, by] = toS(v, fx - Math.sin(fh) * back, fz - Math.cos(fh) * back)
+      g.fillStyle = 'rgba(243,239,230,.85)'; g.fillRect(bx - bw / 2 - 1, by - 3, bw + 2, 5)
+      g.fillStyle = mc; g.fillRect(bx - bw / 2, by - 2, bw * Math.max(0, Math.min(1, f.morale[u.i])), 3)
+      if (st !== MS_STEADY) { g.font = '9px ui-monospace, monospace'; g.textAlign = 'center'; g.textBaseline = 'top'; g.fillText(MORALE_STATES[st], bx, by + 4) }
+      this.drawVolleys(g, v, layer, u.i, u.men, R)
       if (showSlots) { layer.frame(u.i, layer.alphaNow); g.fillStyle = '#c0392b'; for (const m of u.men) if (m.alive) { layer.place(u.i, m.s, false, p); const [qx, qy] = toS(v, p[0], p[1]); g.fillRect(qx - 1, qy - 1, 2, 2) } }
+    }
+  }
+  // each company that fired in the last 0.6 s: a flash at its front and a fading line toward its target
+  private drawVolleys(g: CanvasRenderingContext2D, v: View, layer: SoldierLayer, i: number, men: { s: number; x: number; z: number; alive: boolean }[], R: number): void {
+    const w = this.w, f = w.f, g0 = w.cr.geo, C = g0.companies, RF = g0.ranks * g0.files, now = w.meta[M_TICK] + layer.alphaNow
+    for (let c = 0; c < C; c++) {
+      const k = i * C + c, age = (now - f.volleyTick[k]) * DT; if (!f.volleyTick[k] || age > 0.6 || age < 0) continue
+      let x = 0, z = 0, n = 0
+      for (const m of men) if (m.alive && Math.floor(m.s / RF) === c && Math.floor((m.s % RF) / g0.files) === 0) { x += m.x; z += m.z; n++ }   // the front rank
+      if (!n) continue
+      const [sx, sy] = toS(v, x / n, z / n), a = 1 - age / 0.6, h = f.target[k]
+      g.globalAlpha = a; g.fillStyle = FIRE_INK; g.beginPath(); g.arc(sx, sy, R * 1.8, 0, Math.PI * 2); g.fill()
+      const j = formationSlot(w, h)
+      if (j >= 0) {
+        const [tx, tz] = layer.anchor(j, layer.alphaNow, 0), [ex, ey] = toS(v, tx, tz)
+        g.strokeStyle = FIRE_INK; g.lineWidth = 1; g.globalAlpha = a * 0.5; g.setLineDash([2, 3]); g.beginPath(); g.moveTo(sx, sy); g.lineTo(ex, ey); g.stroke(); g.setLineDash([])
+      }
+      g.globalAlpha = 1
     }
   }
 }

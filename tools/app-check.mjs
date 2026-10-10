@@ -1,13 +1,14 @@
-// Headless check of the built page (docs/plans/active/s1b-sim-page.md): serve dist/ with `vite preview`,
+// Headless check of the built page (docs/plans/done/s1b-sim-page.md): serve dist/ with `vite preview`,
 // drive it through window.APP with tools/shot.mjs, fail on any console error, then play each session's
-// exported replay back in Node: it must reproduce every hash the page took. Two runs: the drill scenario
-// (orders, every panel button, screenshots) and the 40-battalion bench (cost). Run `npm run build` first.
+// exported replay back in Node: it must reproduce every hash the page took. Three runs: the drill scenario
+// (orders, every panel button, screenshots), the 40-battalion bench (cost) and the firefight to a rout.
+// Run `npm run build` first.
 // Usage: node tools/app-check.mjs [outDir]
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import { loadSimData, compileRuleset, play } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { S1B_SCENARIOS } from '../src/scenarios/s1b-field.ts'
+import { PAGE_SCENARIOS } from '../src/scenarios/page.ts'
 
 const out = process.argv[2] || 'scratch/app-check', PORT = 4178
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -39,6 +40,19 @@ const bench = [
   REPLAY,
 ]
 
+// the firefight played to a rout (in 3-minute steps: each eval stays inside shot.mjs's timeout), then the
+// moment after it, close up
+const STEP3 = ['eval', 'if (!APP.w.f.mstate.some(s => s === 3)) APP.advance(180); `t ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states ${[0, 1].map(i => APP.w.f.mstate[i]).join(" ")}`']
+const fight = [
+  ['wait', 1500], READY,
+  ['eval', 'APP.view(-50, -165, 4); APP.advance(20); "opening volleys"'],
+  ['shot', 'fight-0-volleys'],
+  STEP3, STEP3, STEP3, STEP3, STEP3,
+  ['eval', 'const r = [0, 1].filter(i => APP.w.f.mstate[i] === 3); APP.advance(8); APP.view(-30, -165, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, men ${[0, 1].map(i => { const C = APP.w.cr.geo.companies; return APP.w.f.startMen[i] - APP.w.f.men.slice(i * C, i * C + C).reduce((a, b) => a + b, 0) }).join(" / ")} lost`'],
+  ['shot', 'fight-1-rout'],
+  REPLAY,
+]
+
 async function run(scenario, steps) {
   let text = ''
   const shot = spawn('node', ['tools/shot.mjs', `http://localhost:${PORT}/app/?scenario=${scenario}`, out, '1600', '900', JSON.stringify(steps)], { stdio: ['ignore', 'pipe', 'inherit'] })
@@ -48,10 +62,11 @@ async function run(scenario, steps) {
   const line = text.split('\n').find(l => l.startsWith('EVAL "REPLAY '))
   if (!line) { console.log('no replay exported'); return false }
   const { replay, hashes } = JSON.parse(JSON.parse(line.slice(5)).slice(7))
-  const bad = play(replay, data, cr, S1B_SCENARIOS[scenario], hashes)
+  const bad = play(replay, data, cr, PAGE_SCENARIOS[scenario], hashes)
   console.log(bad ? `replay MISMATCH ${JSON.stringify(bad)}` : `replay: ${replay.log.length} commands, ${hashes.length} hashes reproduced in Node`)
   if (bad) return false
   const panel = text.match(/PANEL (\d+) (\d+)/)
+  if (scenario === 's1c-firefight' && !/ROUT [12] /.test(text)) { console.log('the firefight did not end in a rout'); return false }
   if (scenario === 's1b-field' && (!panel || panel[1] !== panel[2] || panel[1] === '0')) { console.log('panel buttons did not each log one command'); return false }
   return true
 }
@@ -61,7 +76,7 @@ const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--stri
 let ok = false
 try {
   await sleep(2500)
-  ok = await run('s1b-field', drill) && await run('s1b-bench', bench)
+  ok = await run('s1b-field', drill) && await run('s1b-bench', bench) && await run('s1c-firefight', fight)
 } finally { preview.kill() }
 console.log(ok ? 'app check: ok' : 'app check: FAILED')
 process.exit(ok ? 0 : 1)

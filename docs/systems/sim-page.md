@@ -88,8 +88,11 @@ data is a darker margin.
 - P pauses, 1/2/4/8 set the speed, Escape clears the selection.
 - The panel is built from the ruleset (shapes, order presets).
 
-**Scenarios** (`src/scenarios/s1b-field.ts`): `s1b-field` (three battalions a side) and `s1b-bench`
-(40 battalions), chosen by `?scenario=`. The page loads the data only at `FIELD_DATA_VERSION`.
+**Scenarios** (`src/scenarios/page.ts`): `s1c-firefight` (the default, `docs/systems/fire-morale.md`),
+`s1b-field` (three battalions a side, holding fire until ordered) and `s1b-bench` (40 battalions, holding
+fire), chosen by `?scenario=`. Fire shows
+as a flash at a company's front with a fading line to its target; morale as a bar behind each battalion,
+named unless steady. Fire at will and Hold fire are panel orders. The page loads the data only at `FIELD_DATA_VERSION`.
 
 **Hooks** (`window.APP`): select, march, form, order, `advance(seconds)` (pauses the clock and steps
 frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`.
@@ -118,7 +121,7 @@ frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`.
   - each session's replay played back in Node.
 
   It fails on any console error or hash mismatch.
-- Negative runs (results in `docs/plans/active/s1b-sim-page.md`): the relabelling, the signature, the
+- Negative runs (results in `docs/plans/done/s1b-sim-page.md`): the relabelling, the signature, the
   slot reassignment and the settled state each break a test when removed.
 
 ## Open questions

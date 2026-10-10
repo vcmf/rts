@@ -97,7 +97,7 @@ describe('commands and handles', () => {
     const w = makeWorld(data, cr, 4)
     const s = issue(w, { type: 'debug-spawn', side: 0, x: 1.23456, z: -2.0049, heading: 0.123456, shape: 'line', men: 10 })
     expect([s.tick, s.seq]).toEqual([1, 0])
-    expect(s.cmd).toEqual({ type: 'debug-spawn', side: 0, x: 1.23, z: -2, heading: 0.1235, shape: 'line', men: 10 })
+    expect(s.cmd).toEqual({ type: 'debug-spawn', side: 0, x: 1.23, z: -2, heading: 0.1235, shape: 'line', men: 10, quality: -1, fire: 'at will' })   // -1: the ruleset's quality
     const h = makeHandle(KIND_FORMATION, 0, 0)
     const bad: Command[] = [
       { type: 'debug-spawn', side: 2, x: 0, z: 0, heading: 0, shape: 'line', men: 10 },

@@ -4,6 +4,7 @@
 // layout, bins, accordion pairs and half-turn symmetry.
 import { cos, sin, PI, exp } from './num.ts'
 import { fnv1a } from './hash.ts'
+import { DT } from './time.ts'
 
 export interface Placement { x: number; z: number; rot: number; face: number }   // a company in the battalion frame
 export interface Geometry {
@@ -21,6 +22,30 @@ export interface FormationDef {
 }
 export interface TerrainDef { g: Record<string, number>; q: string; road?: boolean; level?: boolean }
 export interface OrdersPreset { Lmax: number; Lmean: number; tau: number }
+// fire by company (docs/plans/active/s1c-fire-morale.md): who can hit whom, how often and how hard
+export interface FireDef {
+  arc: number                  // half-angle about a company's facing, radians
+  maxRange: number             // metres, company centre to company centre
+  pRange: [number, number][]   // hit chance per round by range (metres), linear between points, 0 past the last
+  reload: number; reloadJitter: number   // seconds per volley, and its spread (a share, drawn per volley)
+  firingRanks: number          // the front ranks that fire
+  misfire: number              // share of rounds that do not go off
+  depth: Record<string, number>          // how easy a target is to hit, by its kind
+  state: Record<string, number>          // how well a battalion fires, by morale state (steady, shaken, wavering)
+  cohesion: number             // fire falls by this share at full disorder
+  eye: number                  // eye height above the ground, metres
+  sight: Record<string, number>          // metres of a terrain class a sight line may cross (classes not named: any)
+}
+// loss-driven morale: morale relaxes toward quality less losses; the states follow it with hysteresis
+export interface MoraleDef {
+  quality: number              // a battalion's quality when the scenario gives none (0..1)
+  losses: number; recent: number   // weights of the share of men lost, and of men lost recently
+  recentTime: number           // seconds over which recent losses decay (e-folding)
+  relaxTime: number            // seconds for morale to close 63% of the gap to its target
+  shaken: [number, number]; wavering: [number, number]   // [enter below, leave at or above]
+  rout: number                 // routs below this
+  routPace: number             // a router's pace, times its shape's
+}
 export interface Ruleset {
   name: string
   geometry: Geometry
@@ -35,6 +60,8 @@ export interface Ruleset {
   orders: Record<string, OrdersPreset>
   disorder: { Lok: number; kLag: number; kBow: number; kRec: number; scale: Record<string, number> }
   faceTime: number; dressTime: number
+  fire: FireDef
+  morale: MoraleDef
 }
 
 export interface ShapeLayout {
@@ -58,8 +85,16 @@ export interface Compiled {
   changeTime: Float64Array   // [from·S + to]
   qMax: number
   slope: Float64Array        // 401 entries over rise/run −1..1
+  depthByKind: Float64Array  // fire: the target's depth factor, by kind
+  sightByClass: Float64Array // fire: metres of each terrain class a sight line may cross (Infinity: any)
+  cosArc: number             // fire: cos of the arc's half-angle
+  stateFactor: Float64Array  // fire: by morale state (steady, shaken, wavering; a router does not fire)
+  recentDecay: number        // morale: recent losses' factor per tick
+  relax: number              // morale: the share of the gap to its target closed per tick
 }
 
+// the morale states that fire, in MS_* order (world.ts)
+export const FIRING_STATES = ['steady', 'shaken', 'wavering']
 // each company is split in this many lateral bins (the lag model's sample points)
 export const BINS = 3
 export const MAX_BINS = 32   // bins per formation: bit masks are 32-bit
@@ -72,7 +107,7 @@ export const slotIndex = (g: Geometry, c: number, r: number, f: number): number 
 function rulesetHash(rs: Ruleset): number {
   const geo = rs.geometry
   const shapes = Object.keys(rs.formations).sort().map(n => { const d = rs.formations[n]; return [n, d.kind, d.pace, d.roadPace ?? '', !!d.trail, !!d.closeAcross, d.place(geo)] })
-  const text = JSON.stringify([rs.name, geo, rs.pace, rs.q, shapes, rs.changeTime, rs.defaultChangeTime, rs.start, rs.slopeK, rs.terrain, rs.water, rs.orders, rs.disorder, rs.faceTime, rs.dressTime])
+  const text = JSON.stringify([rs.name, geo, rs.pace, rs.q, shapes, rs.changeTime, rs.defaultChangeTime, rs.start, rs.slopeK, rs.terrain, rs.water, rs.orders, rs.disorder, rs.faceTime, rs.dressTime, rs.fire, rs.morale])
   return fnv1a(new TextEncoder().encode(text))
 }
 
@@ -90,8 +125,13 @@ export function compileRuleset(rs: Ruleset): Compiled {
   // Tobler's hiking curve capped at the drill pace, over rise/run −1..1 in 400 steps, from exact operations
   const slope = new Float64Array(401)
   for (let i = 0; i <= 400; i++) { const sl = i / 200 - 1, a = sl + 0.05 < 0 ? -(sl + 0.05) : sl + 0.05; slope[i] = Math.min(1, rs.slopeK * expNeg(3.5 * (a - 0.05))) }
+  const depthByKind = new Float64Array(kinds.map(k => rs.fire.depth[k] ?? 1))
+  const sightByClass = new Float64Array(Object.keys(rs.terrain).map(c => rs.fire.sight[c] ?? Infinity))
+  for (const s of FIRING_STATES) if (!(s in rs.fire.state)) throw new Error(`ruleset ${rs.name}: fire.state has no ${s}`)
+  if (rs.fire.pRange.some((p, k) => k > 0 && p[0] <= rs.fire.pRange[k - 1][0])) throw new Error(`ruleset ${rs.name}: fire.pRange ranges must increase`)
   return {
     rs, hash: rulesetHash(rs), geo: g, NB, slots: C * R * F, shapes, kinds, paces, paceSpeed, presets, changeTime, qMax, slope,
+    depthByKind, sightByClass, cosArc: cos(rs.fire.arc), stateFactor: new Float64Array(FIRING_STATES.map(s => rs.fire.state[s])), recentDecay: exp(-DT / rs.morale.recentTime), relax: 1 - exp(-DT / rs.morale.relaxTime),
     shapeIndex: n => names.indexOf(n), presetIndex: n => presets.indexOf(n),
   }
 }

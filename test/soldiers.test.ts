@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import { Sim, STREAM_X } from './fx.ts'
 import { buildScene } from '../src/render/scene.ts'
 import { SoldierLayer } from '../src/render/soldiers.ts'
-import { occupied } from '../src/sim/index.ts'
+import { occupied, advanceTick, type Meter } from '../src/sim/index.ts'
 
 // the sim at 20 Hz, frames at 30 Hz, as the page runs them
 // (`dt`: the soldier layer's step; the page's 8× takes 0.2 s steps, MEN_STEPS in src/app/main.ts)
@@ -101,6 +101,23 @@ describe('at 8× (0.2 s soldier steps)', () => {
 })
 
 describe('cost', () => {
+  it('40 battalions firing (20 a side, front ranks 100 m apart): sim and soldier layer per frame within 4 ms; the fire step per tick reported', () => {
+    const p = new Play(), E = Math.PI / 2
+    for (const z of [-160, -130, -100, -70, -40]) for (let r = 0; r < 4; r++) { p.sim.spawn(-115 - r * 15, z, E, 'line', 100, 0); p.sim.spawn(-15 + r * 15, z, -E, 'line', 100, 1) }
+    p.frames(20)
+    const windows: number[] = []
+    for (let k = 0; k < 3; k++) {
+      const t0 = process.hrtime.bigint(); for (let n = 0; n < 120; n++) { p.acc += 1 / 60; while (p.acc >= 0.05) { p.sim.tick(); p.layer.sync(0); p.acc -= 0.05 } p.layer.step(1 / 60, p.acc / 0.05) }
+      windows.push(Number(process.hrtime.bigint() - t0) / 1e6 / 120)
+    }
+    // the tick's steps, metered over 200 ticks
+    const per: Record<string, number> = {}, worst: Record<string, number> = {}, meter: Meter = { now: () => Number(process.hrtime.bigint()) / 1e6, add: (s, ms) => { per[s] = (per[s] ?? 0) + ms; worst[s] = Math.max(worst[s] ?? 0, ms) } }
+    for (let n = 0; n < 200; n++) advanceTick(p.sim.w, meter)
+    const fired = [...p.sim.w.f.volleyTick].filter(t => t > 0).length
+    console.log(`40 battalions firing: ${windows.map(x => x.toFixed(2)).join(' / ')} ms per frame; per tick: ${Object.entries(per).map(([s, ms]) => `${s} ${(ms / 200).toFixed(3)}`).join(', ')} ms; the fire step's worst tick (a retargeting one) ${worst['8 fire'].toFixed(2)} ms; ${fired} companies have fired`)
+    expect(fired).toBeGreaterThan(20)
+    expect(Math.min(...windows)).toBeLessThan(4)
+  })
   it('40 battalions: sim and soldier layer per 1/60 s frame (budget 4 ms)', () => {
     const p = new Play(), shapes = Object.keys(p.sim.w.cr.rs.formations)
     for (let k = 0; k < 40; k++) { const h = p.sim.spawn(-150 + (k % 8) * 38, -150 + Math.floor(k / 8) * 55, 0)

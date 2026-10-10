@@ -5,7 +5,7 @@
 // A battalion is a few company blocks (files × ranks) placed in the battalion frame by its shape. The sim
 // keeps the men per company; which slots are filled follows from that by one rule (`occupied`), so no
 // soldier is simulated (decision 0007): who stands where and who falls is the renderer's.
-import { type World, M_TICK, TRAIL, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MAX_FORMATIONS } from './world.ts'
+import { type World, M_TICK, TRAIL, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MAX_FORMATIONS, MS_ROUTING } from './world.ts'
 import type { ShapeLayout, Placement } from './ruleset.ts'
 import { rot2, blockLocal, slotIndex, BINS, MAX_BINS } from './ruleset.ts'
 import { cellK, groundG, groundQ, onRoad } from './terrain.ts'
@@ -15,7 +15,8 @@ import { DT } from './time.ts'
 export const STATUS = ['', 'halted: impassable ground', 'cannot form: impassable ground', 'arrived: as near as the shape can turn',
   'cannot wheel: a trail shape turns as it marches', 'cannot face about: impassable ground', 'cannot face about: the shape has no half-turn symmetry',
   'cannot face about: changing shape', 'cannot face about: the shape is not centred on its trail']
-const ST_HALTED = 1, ST_CANNOT_FORM = 2, ST_ARRIVED_NEAR = 3, ST_CANNOT_WHEEL = 4, ST_FACE_WET = 5, ST_FACE_ASYM = 6, ST_FACE_CHANGING = 7, ST_FACE_OFFCENTRE = 8
+export const ST_HALTED = 1
+const ST_CANNOT_FORM = 2, ST_ARRIVED_NEAR = 3, ST_CANNOT_WHEEL = 4, ST_FACE_WET = 5, ST_FACE_ASYM = 6, ST_FACE_CHANGING = 7, ST_FACE_OFFCENTRE = 8
 
 const GATE_HALVINGS = 6, CHANGE_SAMPLES = 128
 const STALL = 0.04      // m/s: an anchor slower than this, with a held bin, is stopped by impassable ground
@@ -193,7 +194,7 @@ const ctxNow = (w: World, i: number): Places =>
 // the pace (m/s) and its index: a road pace while every man stood on a road at the last sampling
 function paceOf(w: World, i: number): [number, number] {
   const L = layoutOf(w, i), p = L.roadPace >= 0 && !w.f.trans[i] && w.f.onRoad[i] ? L.roadPace : L.pace
-  return [w.cr.paceSpeed[p], p]
+  return [w.cr.paceSpeed[p] * (w.f.mstate[i] === MS_ROUTING ? w.cr.rs.morale.routPace : 1), p]
 }
 
 /* ---------------- the footprint gate ---------------- */
@@ -320,13 +321,13 @@ function stepBack(w: World, i: number, d: number): void {
 export function allocOrder(w: World, type: number): number {
   const o = w.ord, n = o.meta[0]; if (n < 0) return -1
   o.meta[0] = o.next[n]; o.meta[1]++
-  o.type[n] = type; o.shape[n] = 0; o.finish[n] = 0; o.left[n] = -1; o.resolved[n] = 0
+  o.type[n] = type; o.shape[n] = 0; o.finish[n] = 0; o.left[n] = -1; o.resolved[n] = 0; o.optional[n] = 0
   o.x[n] = 0; o.z[n] = 0; o.a[n] = 0; o.t0[n] = -1; o.px[n] = 0; o.pz[n] = 0; o.done[n] = 0; o.next[n] = -1
   return n
 }
 function freeOrder(w: World, n: number): void {
   const o = w.ord
-  o.type[n] = 0; o.shape[n] = 0; o.finish[n] = 0; o.left[n] = 0; o.resolved[n] = 0
+  o.type[n] = 0; o.shape[n] = 0; o.finish[n] = 0; o.left[n] = 0; o.resolved[n] = 0; o.optional[n] = 0
   o.x[n] = 0; o.z[n] = 0; o.a[n] = 0; o.t0[n] = 0; o.px[n] = 0; o.pz[n] = 0; o.done[n] = 0
   o.next[n] = o.meta[0]; o.meta[0] = n; o.meta[1]--
 }
@@ -338,6 +339,11 @@ export function shiftOrder(w: World, i: number): void {
   const f = w.f, n = f.ordHead[i]; if (n < 0) return
   f.ordHead[i] = w.ord.next[n]; if (f.ordHead[i] < 0) f.ordTail[i] = -1
   freeOrder(w, n)
+}
+// an order's point, kept 2 m inside the map on each axis (Retire, a router's run)
+export function setOnMap(w: World, n: number, x: number, z: number): void {
+  const t = w.terrain, lo = 2, hi = (t.n - 1) * t.cell - 2
+  w.ord.x[n] = Math.min(t.x0 + hi, Math.max(t.x0 + lo, x)); w.ord.z[n] = Math.min(t.z0 + hi, Math.max(t.z0 + lo, z))
 }
 export function clearOrders(w: World, i: number): void { while (w.f.ordHead[i] >= 0) shiftOrder(w, i) }
 export const ordersFree = (w: World): number => w.ord.type.length - w.ord.meta[1]
@@ -442,6 +448,11 @@ function faceAbout(w: World, i: number): number {
     if (snake) setTrail(w, i, keep.tx, keep.tz)
     return ST_FACE_WET
   }
+  // the companies' fire state goes with their men: reload, last volley, target, hits owed
+  for (const a of [f.reload, f.volleyTick, f.target, f.owed]) {
+    const was = a.slice(i * C, i * C + C)
+    for (let c = 0; c < C; c++) a[i * C + Math.floor(T.m[c * RF] / RF)] = was[c]
+  }
   f.px[i] = f.x[i]; f.pz[i] = f.z[i]; f.ph[i] = f.heading[i]; rateOff[i] = 1; f.onRoad[i] = 0; f.faces[i]++
   return 0
 }
@@ -513,10 +524,7 @@ function formationStep(w: World, i: number): void {
   if (type === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
   const [V0, pace] = paceOf(w, i), halfW = halfWidth(w, i)
   if (type === O_MOVE) {
-    if (!o.resolved[n]) {   // a distance ahead (Retire): the point, kept on the map
-      const t2 = w.terrain, lo = 2, hiX = (t2.n - 1) * t2.cell - 2
-      o.x[n] = Math.min(t2.x0 + hiX, Math.max(t2.x0 + lo, f.x[i] + sin(f.heading[i]) * o.a[n]))
-      o.z[n] = Math.min(t2.z0 + hiX, Math.max(t2.z0 + lo, f.z[i] + cos(f.heading[i]) * o.a[n])); o.resolved[n] = 1 }
+    if (!o.resolved[n]) { setOnMap(w, n, f.x[i] + sin(f.heading[i]) * o.a[n], f.z[i] + cos(f.heading[i]) * o.a[n]); o.resolved[n] = 1 }   // a distance ahead (Retire)
     const dx = o.x[n] - f.x[i], dz = o.z[n] - f.z[i], dist = hyp(dx, dz)
     if (dist < ARRIVE) { shiftOrder(w, i); f.vx[i] = 0; f.vz[i] = 0; return }
     const dh = wrapAngle(atan2(dx, dz) - f.heading[i])
@@ -555,7 +563,8 @@ function formationStep(w: World, i: number): void {
     if (lmax < 0.05 || t - o.t0[n] > w.cr.rs.dressTime) shiftOrder(w, i)
   } else if (type === O_FACE) {
     f.vx[i] = 0; f.vz[i] = 0
-    if (o.t0[n] < 0) { const why = faceAbout(w, i); if (why) { clearOrders(w, i); f.status[i] = why; return } o.t0[n] = t; f.blockedFor[i] = 0 }
+    // a failed Face about drops the orders after it, unless it was optional (a router's: it runs as it stands)
+    if (o.t0[n] < 0) { const why = faceAbout(w, i); if (why) { if (o.optional[n]) shiftOrder(w, i); else clearOrders(w, i); f.status[i] = why; return } o.t0[n] = t; f.blockedFor[i] = 0 }
     if (t - o.t0[n] >= w.cr.rs.faceTime * f.drill[i]) shiftOrder(w, i)
   } else if (type === O_WHEEL) {
     if (snakes(w, i)) { shiftOrder(w, i); f.status[i] = ST_CANNOT_WHEEL; return }

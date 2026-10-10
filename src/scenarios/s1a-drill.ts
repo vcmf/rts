@@ -9,8 +9,9 @@ export const S1A_DRILL = 's1a-drill'
 const A = makeHandle(KIND_FORMATION, 0, 0), B = makeHandle(KIND_FORMATION, 1, 0)
 
 function setup(w: World): void {
-  issue(w, { type: 'debug-spawn', side: 0, x: -45, z: 10, heading: 0, shape: 'line', men: 100 })
-  issue(w, { type: 'debug-spawn', side: 1, x: 20, z: -40, heading: 1.5707963267948966, shape: 'line', men: 96 })
+  // a drill, not a fight: both hold their fire (S1c), so the drill tests the formations alone
+  issue(w, { type: 'debug-spawn', side: 0, x: -45, z: 10, heading: 0, shape: 'line', men: 100, fire: 'hold' })
+  issue(w, { type: 'debug-spawn', side: 1, x: 20, z: -40, heading: 1.5707963267948966, shape: 'line', men: 96, fire: 'hold' })
   issue(w, { type: 'move', id: A, points: [[-45, 100]], append: false })        // through the wood
   issue(w, { type: 'move', id: B, points: [[90, -40]], append: false })         // into the stream: halts
 }

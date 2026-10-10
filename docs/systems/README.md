@@ -19,4 +19,5 @@ PR that changes it; the design that led to it stays in `docs/proposals/` and the
 | Simulation spine (S0) | `docs/systems/sim-spine.md` | built (S0) |
 | Formations (the 20 Hz layer) | `docs/systems/formations.md` | built (S1a) |
 | The sim page: soldier layer, staff map drawing, input | `docs/systems/sim-page.md` | built (S1b) |
-| Fire, morale, combat | not yet: see `docs/proposals/sim-design.md` | not built |
+| Fire and morale | `docs/systems/fire-morale.md` | built (S1c-1): fire by company, loss-driven morale, rout |
+| Melee, cavalry, artillery | not yet: see `docs/proposals/sim-design.md` | not built |
