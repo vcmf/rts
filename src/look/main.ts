@@ -7,9 +7,11 @@ import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTextur
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js'
+import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
 import { buildBakes } from './bakes.ts'
+import { runBench, showBench } from './bench.ts'
 import { grainTexture, lumOf, makeGrainCanvas } from './grain.ts'
 import { CLEAR, Materials, PAL, S } from './materials.ts'
 import { buildNature } from './nature.ts'
@@ -22,6 +24,7 @@ import { axisX, baseH } from './world/author.ts'
 import { checkLookData, decodeLook } from './world/data.ts'
 import { buildTerrain } from './terrain.ts'
 import { buildWater } from './water.ts'
+import { Lab } from './lab.ts'
 
 declare global { interface Window { __T0?: number } }
 const T0 = window.__T0 ?? performance.now()   // load-time measurement (window.__buildMs), started by look.html
@@ -117,3 +120,18 @@ Object.assign(window, {
   lightCam: bakes.lightCam, shadowRT: bakes.shadowRT,
   __buildMs: performance.now() - T0,
 })
+// the look checks' hooks (tools/guard.mjs and the L2 checks): test objects, the materials and the meshes by pass
+const lab = new Lab(scene, mats)
+const passes = { terrain: [terrain.tileGround, terrain.farGround, terrain.apron], scatter: scene.meshes.filter((m): m is Mesh => m instanceof Mesh && m.thinInstanceCount > 0), water: [water.mesh], post: () => post.passes }
+Object.assign(window, { __look: { lab, mats, passes, post } })
+
+// ?bench (docs/plans/active/l2-detail.md): fixed cameras, the result shown with a link to save it, and in
+// window.__bench for tools/bench-look.mjs
+const params = new URLSearchParams(location.search)
+if (params.has('bench')) {
+  camera.detachControl()
+  const hold = Number(params.get('hold') ?? 3)
+  if (!(hold > 0)) throw new Error(`?hold must be a positive number of seconds, not ${params.get('hold')}`)
+  void runBench(scene, camera, passes, [{ name: 'page', apply: () => {} }], hold).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
+    (e: unknown) => { Object.assign(window, { __bench: { error: String(e) } }); console.error('bench failed:', e) })
+}

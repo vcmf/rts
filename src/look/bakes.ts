@@ -58,7 +58,7 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   scene.customRenderTargets.push(shadowRT)
   lightCam.computeWorldMatrix()
   const lightVP = lightCam.getViewMatrix(true).multiply(lightCam.getProjectionMatrix(true))
-  for (const m of mats.all) { m.setTexture('uShadowMap', shadowRT); m.setMatrix('uLightVP', lightVP); m.setVector2('uSMTexel', smTexel); m.setVector2('uSMFade', smFade) }
+  mats.bindAll(m => { m.setTexture('uShadowMap', shadowRT); m.setMatrix('uLightVP', lightVP); m.setVector2('uSMTexel', smTexel); m.setVector2('uSMFade', smFade) })
 
   /* ---------- occlusion + valley-mist mask (CPU, once) ---------- */
   const aoCanvas = document.createElement('canvas'); aoCanvas.width = aoCanvas.height = AO_N; const aog = aoCanvas.getContext('2d')!
@@ -96,6 +96,6 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   shadowRT.onAfterRenderObservable.add(() => lightMap.resetRefreshCounter())
   lmCam.computeWorldMatrix()
   const lmVP = lmCam.getViewMatrix(true).multiply(lmCam.getProjectionMatrix(true))
-  for (const m of mats.all) { m.setTexture('uLM', lightMap); m.setMatrix('uLMVP', lmVP) }
+  mats.bindAll(m => { m.setTexture('uLM', lightMap); m.setMatrix('uLMVP', lmVP) })
   return { lightCam, shadowRT, lightMap, bakeMat, lightVP, smTexel }
 }

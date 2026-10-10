@@ -7,7 +7,12 @@ vec3 G(vec2 uv){return texture2D(uGrain,uv).rgb;}
 vec3 grainW(vec3 wp,vec3 n,float sc){vec2 p=abs(n.y)>0.6?wp.xz:(abs(n.x)>abs(n.z)?wp.zy:wp.xy);return G(p/sc);}
 // SEASON (docs/art-bible.md §4b): 0 summer · 1 early autumn · 2 late autumn · 3 winter.
 // Snow settles on whatever faces up, broken by the grain, so it reads as painted.
-float snowAt(vec3 N,vec3 wp){float s=clamp(uSeason-2.0,0.0,1.0);if(s<=0.0)return 0.0;
+// NOSNOW: surfaces snow never settles on (the guard's army blocks, as units)
+float snowAt(vec3 N,vec3 wp){
+  #ifdef NOSNOW
+  return 0.0;
+  #endif
+  float s=clamp(uSeason-2.0,0.0,1.0);if(s<=0.0)return 0.0;
   return smoothstep(0.55,0.72,N.y*1.15*s+(grainW(wp,N,4.0).r-0.5)*0.4+(s-1.0)*0.35);}
 // Per-tree foliage colour. t = per-instance random; kind: 0 deciduous, 1 evergreen, 2 grass.
 vec3 foliage(vec3 a,vec3 b,float t,float kind){

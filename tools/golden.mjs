@@ -14,12 +14,13 @@
 // render-check.js's (those aim at the river); each must lie inside the page's camera limits (checked).
 // Writes <cam>.base.png, <cam>.cand.png, <cam>.diff.png to outDir and prints a table; exits 1 when any region
 // is over its tolerance. Software GL (SwiftShader) via tools/shot.mjs: deterministic on one machine.
-import { spawnSync, execFileSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import * as png from './png.mjs'
+import { prepSteps, shoot, viewStep } from './look-page.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const W = 1280, H = 720
@@ -65,29 +66,9 @@ function resolvePage(spec) {
 const cleanup = () => { for (const dir of cleanups.splice(0)) try { git(['worktree', 'remove', '--force', dir]) } catch (e) { console.warn(`golden.mjs: could not remove the worktree ${dir}: ${e.message}`) } }
 
 function render(url, dir, tag) {
-  // a page may build after an await (the look page fetches its data): wait for its contract object first
-  const steps = [['wait', 1000], ['eval', '(async () => { for (let i = 0; i < 1200 && !window.__proto; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__proto) throw new Error("the page never set window.__proto (120 s)"); return "page built" })()'], ['wait', 2000],
-    // the page's own loop stops: each camera renders exactly the frames asked for, and a slow frame cannot race the capture
-    ['eval', 'for (const id of ["panel", "fps", "drop"]) { const e = document.getElementById(id); if (e) e.style.display = "none" } __proto.scene.getEngine().stopRenderLoop(); "ui hidden, loop stopped"'],
-    // the clock must be frozen, or clouds and water move between the two renders
-    ['eval', '__proto.scene.render(); __proto.scene.render(); if (__proto.S.t !== 0) throw new Error("the page ignores ?frozen (S.t = " + __proto.S.t + ")"); "frozen"']]
-  for (const [name, a, b, r, t, season] of CAMS) {
-    // every view must be one the player can reach: a clamped view would be rendered somewhere else, silently
-    steps.push(['eval', `(async () => { const c = __proto.camera, lim = (v, lo, hi) => (lo == null || v >= lo - 1e-9) && (hi == null || v <= hi + 1e-9)
-      const t = [${t}], P = __proto.play
-      if (!lim(${a}, c.lowerAlphaLimit, c.upperAlphaLimit) || !lim(${b}, c.lowerBetaLimit, c.upperBetaLimit) || !lim(${r}, c.lowerRadiusLimit, c.upperRadiusLimit)
-        || typeof P !== "number" || Math.abs(t[0]) > P || Math.abs(t[2]) > P)
-        throw new Error("camera ${name} is outside the page's camera limits or play area")
-      c.alpha = ${a}; c.beta = ${b}; c.radius = ${r}; c.target.set(...t); __proto.S.season = ${season}
-      // every material and render target compiled, so nothing is skipped in one render and drawn in the other
-      await Promise.race([__proto.scene.whenReadyAsync(true), new Promise((_, no) => setTimeout(() => no(new Error("scene never ready at camera ${name} (120 s)")), 120000))])
-      for (let i = 0; i < 3; i++) __proto.scene.render()
-      return "${name}" })()`], ['shot', `${name}.${tag}`])
-  }
-  const u = new URL(url); u.searchParams.set('frozen', '')
-  const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), u.href, dir, String(W), String(H), JSON.stringify(steps)],
-    { encoding: 'utf8', env: { SHOT_TIMEOUT_S: '300', SHOT_LOAD_S: '300', ...process.env } })
-  if (r.status !== 0) throw new Error(`rendering ${url} failed (shot.mjs exit ${r.status}), full output:\n${r.stdout}${r.stderr}`)
+  const steps = prepSteps()
+  for (const cam of CAMS) steps.push(viewStep(cam), ['shot', `${cam[0]}.${tag}`])
+  shoot(url, dir, steps, W, H)
 }
 
 function compare(a, b) {

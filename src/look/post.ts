@@ -19,10 +19,13 @@ import { D } from './spec.ts'
 import DOF_FS from './shaders/dof.frag?raw'
 import UBER_FS from './shaders/uber.frag?raw'
 
+// the view the page opens on (the bench measures it as its default zoom)
+export const START = { beta: 0.80, radius: 125, x: -10, z: 2 }
+
 // the top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit
 export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateCamera {
   const c = D.spec.camera, PLAY = D.spec.play
-  const camera = new ArcRotateCamera('cam', c.yaw0, 0.80, 125, new Vector3(-10, c.focusY, 2), scene)
+  const camera = new ArcRotateCamera('cam', c.yaw0, START.beta, START.radius, new Vector3(START.x, c.focusY, START.z), scene)
   scene.activeCamera = camera; camera.attachControl(canvas, true)
   // locked down (decision 0010): yaw ± the spec's range around the default, pitch and zoom inside the checked limits
   camera.lowerAlphaLimit = c.yaw0 - c.yawRange; camera.upperAlphaLimit = c.yaw0 + c.yawRange
@@ -50,6 +53,7 @@ export class Post {
   private posts: PostProcess[] = []
   private readonly camera: ArcRotateCamera; private readonly engine: AbstractEngine; private readonly S: LookState; private readonly grain: () => BaseTexture
   constructor(camera: ArcRotateCamera, engine: AbstractEngine, S: LookState, grain: () => BaseTexture) { this.camera = camera; this.engine = engine; this.S = S; this.grain = grain }
+  get passes(): PostProcess[] { return this.posts }
   build(): void {
     const { camera, engine, S } = this
     this.posts.forEach(p => p.dispose(camera)); this.posts = []
