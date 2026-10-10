@@ -35,7 +35,7 @@ or a decision, the rule wins, and the image's row says what to ignore.
 | `design/refs/north-star-painted-v1.png` | **Summer master.** Composition (one hill, few formations, negative space), battalions of about 100 (decision 0007), dry-brush ground, smoke puffs, the warm and cool split, figures without bases. Ignore its cypresses and its scrub, which fill the negative space; its terrain is louder than the armies should allow. |
 | `design/refs/austerlitz-pratzen-v2.png` | **Winter master.** Grey frosted ground with the armies as the most saturated objects, ploughed stripes, mist and smoke that hide no formation. Ignore the brief's 300 men a battalion. |
 | `design/refs/austerlitz-goldbach-v1.png` | **Close zoom: river and village** (§6c): meander, gravel bars, stones, reeds, bare willows, bridge, red roofs. Ignore its saturated gold ground, which is late autumn, not December. |
-| `design/refs/wagram-grand-battery-v1.png` | **Pulled-back summer plain:** tan and olive fields, sculpted cannon smoke, Austrian white read on tan. Ignore the oversized foreground staff and smoke over the Austrian line. |
+| `design/refs/wagram-grand-battery-v1.png` | **Pulled-back summer plain:** tan and olive fields, sculpted cannon smoke, Austrian white read on tan. Ignore the brief's 300 men a battalion, the oversized foreground staff and smoke over the Austrian line. |
 
 ### Supporting references
 
@@ -52,7 +52,7 @@ or a decision, the rule wins, and the image's row says what to ignore.
 | `design/refs/eylau-cavalry-v1.png` | Deep snow with blue shadows (§4b), frozen stream, cavalry masses as shapes | Squalls and smoke blurring the cavalry; white trousers lost in snow |
 | `design/refs/eylau-cemetery-v1.png` | Snow on roofs and buildings, walled enclosures, hedges and fences as structure | Dense fallen; brown and grey roofs with no accent |
 | `design/refs/wagram-russbach-v1.png` | Escarpments and banks, bridges as crossings, wheat patches | Poplars that read as cypresses; a canal-straight stream (§6c) |
-| `design/refs/french-infantry-v1.png`, `-v1-rear` | Tripo input: silhouette, kit proportions, slender adult build, colour regions | Fine face, button and brass detail (§8); slight baked shading (§5) |
+| `design/refs/french-infantry-v1.png`, `-v1-rear` | Tripo input: silhouette, kit proportions, slender adult build, colour regions | Fine face, button and brass detail (§8); slight baked shading (§5); the shako is 1806 and later, so Austerlitz needs a bicorne variant |
 | `design/refs/french-barracks-u-v2-front.png`, `-u-v2-rear` (v1 pair superseded) | Tripo input: a U footprint that reads from above, clear wall, roof and window regions | Baked directional light (§5); stone texture too fine; check the dormer and chimney counts match between views |
 
 ### What the set gets wrong (fix in the next generation, and never copy)
