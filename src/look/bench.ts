@@ -10,11 +10,11 @@ import type { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import type { AbstractEngine } from '@babylonjs/core/Engines/abstractEngine.js'
 import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation.js'
-import { Mesh as MeshClass } from '@babylonjs/core/Meshes/mesh.js'
-import type { Mesh } from '@babylonjs/core/Meshes/mesh.js'
+import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import type { PostProcess } from '@babylonjs/core/PostProcesses/postProcess.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { GpuTimer } from './gputimer.ts'
+import { START } from './post.ts'
 import { D } from './spec.ts'
 
 declare const __BUILD__: string
@@ -36,7 +36,7 @@ const stat = (a: number[]): Stat => ({ p50: +q(a, 0.5).toFixed(3), p95: +q(a, 0.
 // yaw limits and the default yaw (decision 0010)
 function cameras(): Cam[] {
   const c = D.spec.camera, out: Cam[] = []
-  for (const [z, beta, radius] of [['close', 0.8, c.rMin], ['default', 0.8, 125], ['wide', c.betaMax, c.rMax]] as const)
+  for (const [z, beta, radius] of [['close', START.beta, c.rMin], ['default', START.beta, START.radius], ['wide', c.betaMax, c.rMax]] as const)
     for (const [y, da] of [['yaw-45', -c.yawRange], ['yaw0', 0], ['yaw+45', c.yawRange]] as const) out.push({ name: `${z}.${y}`, alpha: c.yaw0 + da, beta, radius })
   return out
 }
@@ -65,8 +65,10 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   const frameMs: number[] = [], draws: number[] = [], tris: number[] = [], timed = new Map<string, number>()
   // a pass is timed as segments of consecutive draws (one query per run of draws of the same pass, not one per mesh:
   // a query per draw costs more than the draw on some backends), in the camera's own pass only, never in a bake.
-  // Every mesh is hooked, so a draw outside the named passes ends the segment before it ('other')
+  // Every mesh is hooked, so a draw outside the named passes ends the segment before it ('other'). A segment stays
+  // open until the next draw of another pass: GPU work between draws (a clear, a target switch) is charged to it
   let open: string | null = null
+  const undo: (() => void)[] = []   // every observer the bench adds, removed when it ends
   const seg = (label: string | null) => {
     if (open === label) return
     if (open) timer.end(open)
@@ -77,50 +79,58 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   for (const m of passes.terrain) named.set(m, 'terrain')
   for (const m of passes.scatter) named.set(m, 'scatter')
   for (const m of passes.water) named.set(m, 'water')
-  const hook = (m: Mesh) => m.onBeforeRenderObservable.add(() => { if (timing && passFrame && engine.currentRenderPassId === camera.renderPassId) seg(named.get(m) ?? 'other') })
-  for (const m of scene.meshes) if (m instanceof MeshClass) hook(m)
-  scene.onNewMeshAddedObservable.add(m => { if (m instanceof MeshClass) hook(m) })
+  const hook = (m: Mesh) => { const o = m.onBeforeRenderObservable.add(() => { if (timing && passFrame && engine.currentRenderPassId === camera.renderPassId) seg(named.get(m) ?? 'other') }); undo.push(() => m.onBeforeRenderObservable.remove(o)) }
+  for (const m of scene.meshes) if (m instanceof Mesh) hook(m)
+  const added = scene.onNewMeshAddedObservable.add(m => { if (m instanceof Mesh) hook(m) }); undo.push(() => scene.onNewMeshAddedObservable.remove(added))
   for (const p of passes.post()) {
-    p.onApplyObservable.add(() => { if (timing && passFrame) seg('post') })
-    p.onAfterRenderObservable.add(() => { if (timing && passFrame) seg(null) })
+    const a = p.onApplyObservable.add(() => { if (timing && passFrame) seg('post') }), b = p.onAfterRenderObservable.add(() => { if (timing && passFrame) seg(null) })
+    undo.push(() => { p.onApplyObservable.remove(a); p.onAfterRenderObservable.remove(b) })
   }
-  // alternate frames: the passes on one, the whole frame on the next (queries cannot nest)
-  engine.onBeginFrameObservable.add(() => {
-    const t = performance.now(); if (timing && lastT) frameMs.push(t - lastT); lastT = t
+  // alternate frames: the passes on one, the whole frame on the next (queries cannot nest). Frame times come from the
+  // whole-frame frames only: the pass frames carry more queries, which cost time on some backends
+  const begin = engine.onBeginFrameObservable.add(() => {
+    const t = performance.now(); if (timing && lastT && !passFrame) frameMs.push(t - lastT); lastT = t   // passFrame: the frame that just ended
     timer.poll(); timer.newFrame(); frameNo++; passFrame = frameNo % 2 === 0
     if (timing && !passFrame) timer.begin('frame')
   })
-  engine.onEndFrameObservable.add(() => {
+  const end = engine.onEndFrameObservable.add(() => {
     seg(null)
     if (timing && !passFrame) timer.end('frame')
     if (timing) { draws.push(inst.drawCallsCounter.current); tris.push(scene.getActiveIndices() / 3) }
   })
+  undo.push(() => { engine.onBeginFrameObservable.remove(begin); engine.onEndFrameObservable.remove(end) })
+  // a hidden tab stops rendering: a run across it would hold a frame of several seconds, so the bench stops instead
+  let hidden = document.hidden
+  const onVis = () => { if (document.hidden) hidden = true }
+  document.addEventListener('visibilitychange', onVis); undo.push(() => document.removeEventListener('visibilitychange', onVis))
   const frames = (n: number) => new Promise<void>(r => { let k = 0; const o = engine.onEndFrameObservable.add(() => { if (++k >= n) { engine.onEndFrameObservable.remove(o); r() } }) })
   const seconds = (s: number) => new Promise<void>(r => setTimeout(r, s * 1000))
 
   const runs: RunStats[] = [], cams = cameras()
-  await seconds(2)   // shaders compiled, first frames out of the way
-  for (const cam of cams) {
-    camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; camera.target.set(-10, D.spec.camera.focusY, 2)
-    for (const arm of [...arms, ...[...arms].reverse()]) {
-      arm.apply(); await scene.whenReadyAsync(); await frames(10)
-      timer.reset(); frameMs.length = draws.length = tris.length = 0; timed.clear(); lastT = 0
-      // the hold, and at least MIN_FRAMES frames (a software renderer takes seconds a frame)
-      const t0 = performance.now(); timing = true
-      while (performance.now() - t0 < holdS * 1000 || frameMs.length < MIN_FRAMES) await frames(1)
-      timing = false
-      await frames(6)   // late query results
-      const gpuMs: Record<string, Stat | null> = {}
-      for (const k of ['frame', 'terrain', 'scatter', 'water', 'other', 'post']) { const a = timer.results.get(k); gpuMs[k] = timer.available && a?.length ? stat(a) : null }
-      const nPass = Math.max(1, Math.floor(frameMs.length / 2)), segments: Record<string, number> = {}
-      for (const [k, v] of timed) segments[k] = +(v / nPass).toFixed(1)
-      // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
-      const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
-      const passesFit = gpuMs.frame ? +(sum / gpuMs.frame.p50).toFixed(2) : null
-      runs.push({ cam: cam.name, arm: arm.name, frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
+  try {
+    await seconds(2)   // shaders compiled, first frames out of the way
+    for (const cam of cams) {
+      camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; camera.target.set(START.x, D.spec.camera.focusY, START.z)
+      for (const arm of [...arms, ...[...arms].reverse()]) {
+        arm.apply(); await scene.whenReadyAsync(); await frames(10)
+        timer.reset(); frameMs.length = draws.length = tris.length = 0; timed.clear(); lastT = 0
+        // the hold, and at least MIN_FRAMES frames (a software renderer takes seconds a frame)
+        const t0 = performance.now(); timing = true
+        while (performance.now() - t0 < holdS * 1000 || frameMs.length < MIN_FRAMES) await frames(1)
+        timing = false
+        if (hidden) throw new Error('the page was hidden during the bench (another tab or a minimised window): run it again with the tab in front')
+        await frames(6)   // late query results
+        const gpuMs: Record<string, Stat | null> = {}
+        for (const k of ['frame', 'terrain', 'scatter', 'water', 'other', 'post']) { const a = timer.results.get(k); gpuMs[k] = timer.available && a?.length ? stat(a) : null }
+        const nPass = Math.max(1, frameMs.length), segments: Record<string, number> = {}
+        for (const [k, v] of timed) segments[k] = +(v / nPass).toFixed(1)
+        // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
+        const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
+        const passesFit = gpuMs.frame ? +(sum / gpuMs.frame.p50).toFixed(2) : null
+        runs.push({ cam: cam.name, arm: arm.name, frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
+      }
     }
-  }
-  inst.dispose()
+  } finally { timing = false; seg(null); for (const u of undo) u(); inst.dispose() }
   const r = engine.getRenderingCanvas()
   return {
     tool: 'look-bench', version: 1, build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),

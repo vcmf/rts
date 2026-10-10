@@ -64,5 +64,6 @@ export class GpuTimer {
     this.pending = still
   }
 
-  reset(): void { this.results.clear(); this.refused = 0; this.disjoint = 0 }
+  // a new measurement: the results start again; refused and disjoint stay totals for the whole session
+  reset(): void { this.results.clear() }
 }

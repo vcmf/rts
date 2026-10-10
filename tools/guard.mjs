@@ -5,24 +5,27 @@
 //   node tools/guard.mjs <look page URL> --base <URL> [outDir]     no block that separates on the base may fail
 //
 // For each season (summer, winter) at the default view: the ground alone, then the ground with the coat blocks. A
-// block's pixels are those where it changes the frame (inside its projected box); its luma (Rec. 709, on the 0–1
-// values of the frame) is compared with the ground's luma at the same pixels, in the frame without blocks. A block
-// separates when they differ by at least SEP.
-// The negative, in summer: the same blocks painted by the terrain's own material must not separate (else the check
-// cannot tell a block from the ground). Not in winter: there a ground-coloured block still shows by its shadowed
-// sides against the snow, which is real separation.
+// block's pixels come from two mask renders (the blocks flat white, then flat black: all of the block that shows,
+// nothing hidden behind a tree); its luma (Rec. 709, on the 0–1 values of the frame) is compared with the ground's
+// luma at the same pixels, in the frame without blocks. A block separates when they differ by at least SEP.
+// The negative, in summer: the same blocks painted by the terrain's own material and nearly flush with the ground must
+// not separate (else the check cannot tell a block from the ground). Full height they would: their shaded sides
+// separate them, most of all against snow, which is real separation.
 // Also reported, not gated: whether a block is more saturated than the 99th percentile of the ground's saturation.
 // Exit 1 on a failure. The page: the look page, built (`npm run build`, `npx vite preview`).
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as png from './png.mjs'
+import { CAMS } from './golden.mjs'
 import { prepSteps, shoot, viewStep } from './look-page.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const W = 1280, H = 720, SEP = 0.10, CHANGED = 10   // a pixel belongs to a block when a channel moves by more than CHANGED/255
-const A0 = -Math.PI / 2 - 0.35
-const VIEW = [A0, 0.80, 125, [-10, 8, 2]]   // the default view: alpha, beta, radius, target
+const W = 1280, H = 720, SEP = 0.10, MASKED = 96   // a block's pixel: its white and black mask renders differ by more than MASKED/255
+const VIEW = CAMS.find(c => c[0] === 'start').slice(1, 5)   // the default view (the goldens' start): alpha, beta, radius, target
+// the negative: blocks painted by the terrain's own material, nearly flush with the ground (a full-height block
+// shows by its shaded sides, which is real separation), measured on the coat blocks' pixels
+const NEG_H = 0.3
 const SEASONS = [['summer', 0, true], ['winter', 3, false]]   // name, season value, run the negative
 const ARMY_HEX = { France: '#2C4FA8', Russia: '#2F6B3C', Austria: '#E9E3D3', Britain: '#B3302A' }   // docs/art-bible.md §4
 const COATS = Object.keys(ARMY_HEX)
@@ -43,10 +46,13 @@ function render(url, dir) {
   for (const [season, sv, negative] of SEASONS) {
     steps.push(viewStep([season, ...VIEW, sv]), ['shot', `${season}.ground`])
     for (const [tag, color] of [['coats', null], ...(negative ? [['negative', 'ground']] : [])]) {
-      const specs = blocks(color).map(b => ({ ...b, color: b.color in ARMY_HEX ? ARMY_HEX[b.color] : b.color }))
+      const specs = blocks(color).map(b => ({ ...b, color: b.color in ARMY_HEX ? ARMY_HEX[b.color] : b.color, ...(color ? { h: NEG_H } : {}) }))
       steps.push(['eval', `(async () => { const L = __look.lab; L.clearBlocks(); L.addBlocks(${JSON.stringify(specs)})
         await __proto.scene.whenReadyAsync(true); for (let i = 0; i < 3; i++) __proto.scene.render()
         return "BOXES ${season}.${tag} " + JSON.stringify({ w: __proto.scene.getEngine().getRenderWidth(), h: __proto.scene.getEngine().getRenderHeight(), boxes: L.blockBoxes() }) })()`], ['shot', `${season}.${tag}`])
+      // the coat blocks' own pixels: drawn flat white, then flat black; the ground and whatever hides a block are the same in both
+      if (!color) for (const v of [1, 0]) steps.push(['eval', `__look.lab.setMask(${v}); for (let i = 0; i < 3; i++) __proto.scene.render(); "mask ${v}"`], ['shot', `${season}.mask${v}`])
+      if (!color) steps.push(['eval', '__look.lab.setMask(-1); "painted"'])
     }
     steps.push(['eval', '__look.lab.clearBlocks(); "cleared"'])
   }
@@ -61,15 +67,17 @@ function render(url, dir) {
 const luma = (d, k) => (0.2126 * d[k] + 0.7152 * d[k + 1] + 0.0722 * d[k + 2]) / 255
 const sat = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b); return mx > 0 ? (mx - mn) / mx : 0 }
 
-// each block's pixels: inside its box, changed by it, and nearer its centre than any other block whose box holds them
-function blockPixels(ground, withBlocks, info) {
-  const sx = ground.w / info.w, sy = ground.h / info.h, px = new Map(info.boxes.map(b => [b.name, []]))
-  for (let y = 0; y < ground.h; y++) for (let x = 0; x < ground.w; x++) {
-    const k = (y * ground.w + x) * 4, d = Math.max(Math.abs(ground.data[k] - withBlocks.data[k]), Math.abs(ground.data[k + 1] - withBlocks.data[k + 1]), Math.abs(ground.data[k + 2] - withBlocks.data[k + 2]))
-    if (d <= CHANGED) continue
+// each block's pixels: where its white and black mask renders differ, inside its box, and nearer its centre than any
+// other block whose box holds them. All of the block, not just the part that differs from the ground (which would
+// leave out exactly the pixels that make a block hard to read)
+function blockPixels(white, black, info) {
+  const sx = white.w / info.w, sy = white.h / info.h, px = new Map(info.boxes.map(b => [b.name, []]))
+  for (let y = 0; y < white.h; y++) for (let x = 0; x < white.w; x++) {
+    const k = (y * white.w + x) * 4
+    if (Math.max(white.data[k] - black.data[k], white.data[k + 1] - black.data[k + 1], white.data[k + 2] - black.data[k + 2]) <= MASKED) continue
     let best = null, bd = Infinity
     for (const b of info.boxes) {
-      if (x < b.x0 * sx || x > b.x1 * sx || y < b.y0 * sy || y > b.y1 * sy) continue
+      if (x < b.x0 * sx - 1 || x > b.x1 * sx + 1 || y < b.y0 * sy - 1 || y > b.y1 * sy + 1) continue
       const e = (x - b.cx * sx) ** 2 + (y - b.cy * sy) ** 2; if (e < bd) { bd = e; best = b.name }
     }
     if (best) px.get(best).push(k)
@@ -86,7 +94,7 @@ export function measure(url, outDir) {
     const info = boxes[`${season}.coats`]; if (!info) throw new Error(`no block boxes for ${season}`)
     const gs = []; for (let k = 0; k < ground.data.length; k += 16) gs.push(sat(ground.data[k], ground.data[k + 1], ground.data[k + 2]))
     gs.sort((a, b) => a - b); const satP99 = gs[Math.floor(0.99 * gs.length)]
-    for (const [name, ks] of blockPixels(ground, coats, info)) {
+    for (const [name, ks] of blockPixels(img(`${season}.mask1`), img(`${season}.mask0`), info)) {
       const n = ks.length, key = `${name}.${season}`
       if (n < 50) { res.set(key, { season, name, n, hidden: true }); continue }
       let yb = 0, yg = 0, yn = 0, r = 0, g = 0, b = 0

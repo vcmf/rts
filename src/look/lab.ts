@@ -16,31 +16,36 @@ import BLOCK_FS from './shaders/block.frag?raw'
 
 export const BLOCK = { w: 20, d: 3, h: 1.8 }
 
-export interface BlockSpec { name: string; x: number; z: number; yaw: number; color: string }   // color: '#rrggbb' or 'ground'
+export interface BlockSpec { name: string; x: number; z: number; yaw: number; color: string; h?: number }   // color: '#rrggbb' or 'ground'; h: height (default BLOCK.h)
 // the screen box of a block, in render pixels (y down), for the camera at the time of the call
 export interface BlockBox { name: string; x0: number; y0: number; x1: number; y1: number; cx: number; cy: number }
 
 export class Lab {
   private readonly scene: Scene; private readonly mats: Materials; private readonly groundMat: ShaderMaterial
   private blocks: Mesh[] = []
+  private mask = -1
   private readonly blockMats = new Map<string, ShaderMaterial>()
   constructor(scene: Scene, mats: Materials, groundMat: ShaderMaterial) { this.scene = scene; this.mats = mats; this.groundMat = groundMat }
 
   addBlocks(specs: BlockSpec[]): number {
     for (const s of specs) {
       let m = s.color === 'ground' ? this.groundMat : this.blockMats.get(s.color)
-      if (!m) { m = this.mats.make(`block${s.color}`, BLOCK_VS, BLOCK_FS, { uniforms: ['uAlb'], defines: ['#define NOSNOW'] }); m.setColor3('uAlb', Color3.FromHexString(s.color)); this.blockMats.set(s.color, m) }
-      const b = CreateBox(s.name, { width: BLOCK.w, height: BLOCK.h, depth: BLOCK.d }, this.scene)
+      if (!m) { m = this.mats.make(`block${s.color}`, BLOCK_VS, BLOCK_FS, { uniforms: ['uAlb', 'uMask'], defines: ['#define NOSNOW'] }); m.setColor3('uAlb', Color3.FromHexString(s.color)); m.setFloat('uMask', this.mask); this.blockMats.set(s.color, m) }
+      const h = s.h ?? BLOCK.h, b = CreateBox(s.name, { width: BLOCK.w, height: h, depth: BLOCK.d }, this.scene)
       // on its lowest corner, so it never floats; on a slope the high side sinks into the ground
       const c = Math.cos(s.yaw), n = Math.sin(s.yaw), hw = BLOCK.w / 2, hd = BLOCK.d / 2
       let lo = Infinity
       for (const [u, v] of [[-hw, -hd], [hw, -hd], [-hw, hd], [hw, hd]]) lo = Math.min(lo, groundAt(s.x + u * c + v * n, s.z - u * n + v * c))
-      b.position.set(s.x, lo + BLOCK.h / 2, s.z); b.rotation.y = s.yaw; b.material = m
+      b.position.set(s.x, lo + h / 2, s.z); b.rotation.y = s.yaw; b.material = m
       if (m === this.groundMat) b.setVerticesData('aRiver', new Float32Array(b.getTotalVertices()).fill(8), false, 1)   // no bank colours (terrain.ts)
       this.blocks.push(b)
     }
     return this.blocks.length
   }
+
+  // every coat block drawn flat white (1), flat black (0) or painted (-1): two renders, white and black, find a block's
+  // pixels exactly, behind whatever hides it
+  setMask(v: number): void { this.mask = v; for (const m of this.blockMats.values()) m.setFloat('uMask', v) }
 
   clearBlocks(): void { for (const b of this.blocks) b.dispose(); this.blocks = [] }
 

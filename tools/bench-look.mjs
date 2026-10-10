@@ -20,7 +20,7 @@ const u = new URL(url); u.searchParams.set('bench', ''); u.searchParams.set('hol
 const steps = [['wait', 1000],
   ['eval', '(async () => { for (let i = 0; i < 18000 && !window.__bench; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__bench) throw new Error("no bench result after 30 min"); return "BENCH " + JSON.stringify(window.__bench) })()']]
 const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), u.href, path.join(ROOT, 'scratch'), '1920', '1080', JSON.stringify(steps)],
-  { encoding: 'utf8', env: { SHOT_TIMEOUT_S: '1900', SHOT_LOAD_S: '300', ...(gpu ? { SHOT_ANGLE: gpu } : {}), ...process.env } })
+  { encoding: 'utf8', env: { SHOT_LOAD_S: '300', ...process.env, SHOT_TIMEOUT_S: '1900', SHOT_ANGLE: gpu ?? 'swiftshader' } })   // the options win over the environment
 const line = r.stdout.split('\n').find(l => l.startsWith('EVAL "BENCH '))
 if (r.status !== 0 || !line) { console.error(`bench-look: the run failed (shot.mjs exit ${r.status}), full output:\n${r.stdout}${r.stderr}`); process.exit(1) }
 const res = JSON.parse(JSON.parse(line.slice(5)).slice(6))
