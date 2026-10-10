@@ -118,6 +118,8 @@ water. W5 and W6 can be reordered after a look review.
 
 ## 5. After water (backlog)
 
+Scheduled with the rest of the look in `docs/plans/active/track-e-look.md` (water W2–W5 after its L2).
+
 1. Performance pass: spatial tiling of instances, LOD and fade, measured GPU frame time.
 2. Brush library v1 from Procreate (grain, grass, foliage fills).
 3. First Tripo assets (one tree, one building) under the shaders.
