@@ -3,6 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { it } from 'vitest'
 import { loadSimData, compileRuleset, buildTerrain, rebuildImpassable, makeWorld, issue, advanceTick, makeHandle, KIND_FORMATION, formationSlot,
   placesCtx, placeAt, mkPlaces, occupied, placeWorld, wetBins, layoutOf, STATUS, menOf, cellK, slotIndex, type Command, type World, type Compiled,
   type Ruleset, type Terrain, type SimData, type Dropped, TICK_HZ, M_TICK } from '../src/sim/index.ts'
@@ -18,6 +19,10 @@ const baseTerrain: Terrain = buildTerrain(data, cr)
 // the formation field's stream (prototypes/formation-core.js), for placing tests
 export const STREAM_X = (z: number): number => 70 + 6 * Math.sin(z * 0.03)
 export const DEG = Math.PI / 180
+// a long test (5 s or more locally): skipped in the coverage run (`npm run coverage` sets COVERAGE), where V8's
+// block counters make the sim's hot loops about six times slower. It repeats paths shorter tests cover, and it
+// still runs in `npm test` and in CI's check job.
+export const longIt = it.skipIf(!!process.env.COVERAGE)
 
 export class Sim {
   w: World

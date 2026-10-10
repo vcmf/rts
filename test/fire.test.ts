@@ -3,7 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { data, cr, root } from './fx.ts'
+import { data, cr, root, longIt } from './fx.ts'
 import { makeWorld, issue, advanceTick, compileRuleset, buildTerrain, makeHandle, KIND_FORMATION, M_FREE, M_TICK, MS_ROUTING, MS_STEADY, MS_SHAKEN, MS_WAVERING,
   menOf, aimOf, companySees, hashWorld, wetBins, STATUS, cellK, placeWorld, O_MOVE, RP_FLED, allocOrder, appendOrder, clearOrders, hex, serialize, deserialize, record, play, type World, type Command, type Ruleset, type Dropped, type Terrain } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
@@ -132,11 +132,11 @@ describe('a target partly hidden', () => {
 })
 
 describe('morale', () => {
-  it('no hits, no break: at p = 0 two lines at 50 m, one of them just above the rout, stand for 20 minutes', () => {
+  longIt('no hits, no break: at p = 0 two lines at 50 m, one of them just above the rout, stand for 20 minutes', () => {
     const [s, a, b] = pair(50, { rs: fireRs({ pRange: [[0, 0], [250, 0]] }) }, 0.42)
     s.run(1200); expect([s.state(a), s.state(b), s.men(a), s.men(b)]).toEqual([MS_STEADY, MS_WAVERING, 100, 100])   // 0.42: wavering by quality
   })
-  it('the states follow the morale with hysteresis (steady → shaken → wavering → shaken → steady)', () => {
+  longIt('the states follow the morale with hysteresis (steady → shaken → wavering → shaken → steady)', () => {
     const s = new W(), h = s.spawn(0, FIGHT_X, Z, E), seen: number[] = []
     const settle = (q: number) => { s.do({ type: 'debug-morale', id: h, quality: q }); s.run(120); seen.push(s.state(h)) }
     for (const q of [0.62, 0.58, 0.62, 0.52, 0.48, 0.52, 0.56, 0.64, 0.66]) settle(q)
@@ -258,7 +258,7 @@ describe('determinism', () => {
     expect(go(true)).toBe(go(false))
   })
   const goldenFile = path.join(root, 'test', 'golden', 's1c-firefight.json'), TICKS = 12000
-  it('the firefight gives the committed golden hashes; its replay and a save round trip reproduce them', () => {
+  longIt('the firefight gives the committed golden hashes; its replay and a save round trip reproduce them', () => {
     const run = record(data, cr, s1cFirefight, 5, TICKS, () => {})
     const hashes = run.hashes.map(h => [h.tick, hex(h.hash)])
     if (process.env.UPDATE_GOLDEN) fs.writeFileSync(goldenFile, JSON.stringify({ dataVersion: hex(data.version), ruleset: hex(cr.hash), ticks: TICKS, hashes }) + '\n')
@@ -270,7 +270,7 @@ describe('determinism', () => {
     const w2 = deserialize(serialize(w), data, cr); while (w.meta[M_TICK] < 6000) { advanceTick(w); advanceTick(w2) }
     expect(hex(hashWorld(w2))).toBe(hex(hashWorld(w)))
   })
-  it('the calibration at 100 m, five seeds: times to break and losses match the golden table', () => {
+  longIt('the calibration at 100 m, five seeds: times to break and losses match the golden table', () => {
     const file = path.join(root, 'test', 'golden', 's1c-calibration.json')
     const table = [1, 2, 3, 4, 5].map(seed => { const r = runFirefight(lev, cr, seed, 100, 24000); return [seed, r.first, r.tick, r.lossA, r.lossB] })
     if (process.env.UPDATE_GOLDEN) fs.writeFileSync(file, JSON.stringify({ ruleset: hex(cr.hash), table }) + '\n')

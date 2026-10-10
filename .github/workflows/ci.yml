@@ -1,0 +1,52 @@
+# check: every PR into main or an epic/** branch, and every push to them. Lint, types, generated data, docs,
+# tests, build.
+# coverage: PRs into an epic/** branch, pushes to main or an epic/** branch, and by hand; not PRs into main.
+# Coverage instrumentation makes the sim's long scenarios about six times slower, so the coverage run skips the
+# tests marked longIt (test/fx.ts; they run in check): 144 s locally instead of 317 s, for 0.6 points of
+# statement coverage. It reports to Codecov.
+# The cost tests skip themselves when CI is set (shared runners are too noisy for millisecond budgets).
+# tools/app-check.mjs (headless browser) is not run here yet.
+name: ci
+on:
+  pull_request:
+    branches: [main, 'epic/**']
+  push:
+    branches: [main, 'epic/**']
+  workflow_dispatch:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run check:data
+      - run: npm run check:docs
+      - run: npx vitest run
+      - run: npm run build
+  coverage:
+    if: github.event_name != 'pull_request' || startsWith(github.base_ref, 'epic/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run coverage
+      - uses: codecov/codecov-action@v5
+        with:
+          files: coverage/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
