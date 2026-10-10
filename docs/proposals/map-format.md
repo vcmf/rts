@@ -39,8 +39,14 @@ waiting for a format:
 
 **Goals:**
 - One file per battlefield is the only source of a map. Every consumer's data is compiled from it.
-- **Deterministic:** the same file, referenced data and compiler version always give the same bytes
-  (decisions 0006, 0012). Compiled outputs carry the hash of their inputs.
+- **Deterministic:** the same inputs always give the same bytes (decisions 0006, 0012). The inputs
+  are the map file, the files it references (pinned snapshots, never a live download), the ruleset
+  (for the simulation's outputs) and the compiler's version. Each output has a manifest beside it
+  that records their hashes, so a stale output is found; the output files themselves keep their
+  formats. Today's compilers use `Math.sin` and friends, whose results can differ between Node
+  versions; as `tools/build-sim-data.ts` already says, the committed output is the authority, and a
+  machine that builds other bytes is reported. New generators should use the restricted maths of
+  decision 0006, so that this stops happening.
 - **Semantic and resolution-independent:** features in metres (a stream's centre line and width, a
   wood's outline and density), not pixels or triangles. Grids, meshes and masks are the compilers'
   business, so the cell size or a bake's resolution can change without touching any map.
@@ -57,14 +63,17 @@ waiting for a format:
 - A visual map editor (later; it would read and write this format).
 - A random map generator (later; it would write this format).
 - Runtime streaming of map data: maps compile offline, as today.
+- Changing how the simulation or the renderer store their data. The compilers write today's formats
+  (`src/sim/data.ts`, `src/look/world/data.ts`); changing those is separate work, with its own data
+  version.
 
 ## 3. The pipeline
 
 ```
  sources                         the map file                  compilers (Node, offline)       outputs (committed data)
  ───────                         ────────────                  ─────────────────────────       ────────────────────────
- DEM tiles + OpenStreetMap ──► importer ──┐                ┌──► sim compiler ──────────►  <map>.simdata (heights, classes,
- a traced period map ──► tracing tool ────┼──► <map>.map ──┤                                 depth, cost)
+ DEM tiles + OpenStreetMap ──► importer ──┐                ┌──► sim compiler ──────────►  <map>.simdata (classes, depth,
+ a traced period map ──► tracing tool ────┼──► <map>.map ──┤                                 cost; per ruleset, season)
  a person, by hand ───────────────────────┤   (validated)  ├──► world compiler ────────►  <map>.lookdata (heightfield, far
  a generator (later) ─────────────────────┘                │                                 ring, river samples, masks, scatter,
                                                            │                                 buildings)
@@ -75,9 +84,17 @@ waiting for a format:
 - **Validation** runs before any compiler: schema, units, ranges, references between features (a
   bridge names a road and a stream that cross), geometry (closed rings, no self-intersection, inside
   the extent). A file that fails is rejected with the feature's id and the reason.
-- **Compilers are pure functions** of the map file, the files it references (a DEM tile) and their
-  own version. Any randomness (a meander's wiggle, tree placement) is seeded from the map's seed and
-  the feature's id, so editing one wood never moves the trees in another.
+- **One heightfield** (decision 0012): relief and every height edit (carved channels, levelled
+  village ground) are compiled once, into one heightfield on the SPEC's 1.79 m grid. The simulation's
+  and the renderer's files both carry heights sampled from it, not from two evaluations of the map.
+  Today they are two maps with two height builds; the migration (§7) merges them.
+- **Compilers are pure functions** of their inputs (above). Any randomness (a meander's wiggle, tree
+  placement) is seeded from the map's seed and the feature's id, so editing one wood never moves the
+  trees in another. A feature may set its own `seed`, which wins (needed to reproduce today's river).
+- **Per ruleset and per season:** the simulation's output depends on the ruleset (ground kinds to
+  classes, speed factors, the slope curve) and on the season (a frozen pond is passable), so it is
+  built per map, ruleset and season, and its data version identifies all three. The renderer's
+  output is per map and season where the season changes geometry or masks (ice).
 - **Outputs are committed and checked** (`--check` rebuilds and compares, as `npm run check:data`
   does today). The simulation asserts its data version on load (`src/sim/data.ts`).
 
@@ -91,7 +108,8 @@ A recommendation, to be settled by the first PR (§9, open question 1): **JSON**
 - the schema defined once in TypeScript (`src/map/schema.ts`), with a hand-written validator in the
   repo's style (no runtime dependency), and a generated JSON Schema so editors check files as they
   are typed;
-- no expressions, no code: anything computed is a named generator with parameters (below).
+- no expressions, no code: anything computed is a named generator with parameters (below), whose
+  code lives in the compilers and is versioned with them.
 
 ### Coordinates and units
 
@@ -114,7 +132,8 @@ A recommendation, to be settled by the first PR (§9, open question 1): **JSON**
   "date": "1805-12-02",
   "season": "winter",                  // the default season; features may override per season
   "seed": 1805,
-  "extent": { "w": 6000, "h": 4000 },  // the detailed area, metres; the play area and margins come from the world SPEC
+  "extent": { "w": 6000, "h": 4000 },  // everything the map describes, backdrop included, metres
+  "detail": { "w": 2000, "h": 2000 },  // the battle's detailed area inside it; the play area and margins come from the world SPEC
   "georef": { "lat": 49.128, "lon": 16.762, "projection": "local-tangent" },
   "sources": [ { "id": "dem", "kind": "dem", "ref": "terrarium z14", "note": "…" } ],
   "relief": { … },
@@ -129,7 +148,12 @@ A recommendation, to be settled by the first PR (§9, open question 1): **JSON**
 ```
 - `id`: stable, unique in the map; references and seeds use it.
 - `kind`: from the format's closed list for that collection (a typo is an error).
-- `geometry`: `point` `[x, z]`, `line` `[[x, z], …]` or `area` (an outer ring and optional holes).
+- `geometry`: `point` `[x, z]`, `line` `[[x, z], …]`, `area` (an outer ring and optional holes),
+  `circle` and `ellipse` (the shapes the test field uses), or a named `generator` with parameters
+  (a meander along a valley axis, a scatter of rocks) whose shape the compiler computes.
+- `priority`: where areas overlap, the higher wins; each kind has a default (bridge over water over
+  road over hedge over wood over marsh over rough over field over open, as the test field resolves
+  them today), so most features never set one.
 - `source`: one of the map's `sources` ids (or `"invented"`).
 - `seasons`: per-season overrides of the feature's properties (a pond `frozen` in winter, a field
   `ploughed` in autumn).
@@ -140,7 +164,7 @@ A recommendation, to be settled by the first PR (§9, open question 1): **JSON**
 |---|---|---|
 | `relief` | `dem` (a heightfield file and its transform), `points` (spot heights and ridge or valley lines, interpolated), `generator` (a named generator with parameters: today's `baseH` becomes one) | plus `edits`: areas raised, lowered or levelled to a height, with a soft edge |
 | `water` | `stream`, `river` (a centre line), `pond`, `lake` (an area), `marsh`, `ford`, `weir`, `dam` | width (constant or per vertex), depth, flow direction (the line's order), bank style per side (cut, bar, reed), `meander` parameters when the line is a guide and the compiler should generate the bends (today's author step) |
-| `cover` | `open`, `meadow`, `pasture`, `field` (`crop`: wheat, rye, …; `state`: standing, stubble, ploughed), `orchard`, `vineyard`, `wood` (`density`, `leaf`: broad, conifer, mixed), `copse`, `heath`, `rough` | an area; later features win where areas overlap |
+| `cover` | `open`, `meadow`, `pasture`, `field` (`crop`: wheat, rye, …; `state`: standing, stubble, ploughed), `orchard`, `vineyard`, `wood` (`density`, `leaf`: broad, conifer, mixed), `copse`, `heath`, `rough`, `rocks` (scattered stones; a radius of rough ground around each) | an area; `priority` where areas overlap |
 | `lines` | `road` (`grade`: highway, road, track, path; width; surface), `sunken-road`, `hedge`, `wall`, `fence`, `causeway` | a line, width |
 | `settlements` | `village`, `town`, `farm`, `building` (`role`: house, church, mill, barn, manor, barracks), `bridge` | a village by outline or along a road with a house count and a layout style; a building by footprint, orientation and role; a bridge names the line and the water it joins |
 | `works` | `redoubt`, `fleche`, `entrenchment`, `abatis`, `battery` | footprint, facing |
@@ -165,9 +189,9 @@ house count; the river's exact centre line instead of a guide). Pinned detail al
 | Feature | Simulation (`.simdata`) | 3D battlefield (`.lookdata`, bakes) | Staff map |
 |---|---|---|---|
 | Relief | the heightfield (decision 0012), slope in the cost grid | the same heightfield, the far ring | hachures from the heightfield |
-| Water | the class `water` and depth per 1 m node; fords where shallow | river samples, carve, water ribbon, bank paint | double ink line and a wash; names |
+| Water | the class `water` and depth per 1 m node, from the water features' depths; a `ford` feature sets the depth where it lies | river samples, carve, water ribbon, bank paint | double ink line and a wash; names |
 | Cover | the ruleset's class per node (wheat → `crops`, wood → `woods`, …), sight blocking | albedo masks, scatter (grass, crops, trees) | wood edges and stipple; fields not drawn |
-| Lines | `road` class, level and speed; hedges and walls block | road paint and edges, hedge and wall meshes | double or dashed hairlines |
+| Lines | the ruleset's class for each (a road speeds and levels; a hedge slows: `src/rulesets/napoleonic.ts`) | road paint and edges, hedge and wall meshes | double or dashed hairlines |
 | Settlements | building footprints impassable, villages as cover | buildings from assets by role (Track E LA) | ink blocks, church crosses |
 | Works | footprints, cover | earthwork meshes | ink outlines |
 | Labels | nothing | nothing | serif labels |
@@ -190,17 +214,26 @@ touching any map.
 ## 7. Migration (first steps for the workstream)
 
 1. **The schema and the validator** (`src/map/`), with negative tests: one bad file per rule.
-2. **Today's look world as a map file:** relief as `generator: painted-world-v1` (today's `baseH`),
-   one stream with today's meander parameters. The world compiler rebuilds `data/painted-world.lookdata`
-   **byte for byte** (`node tools/build-look-data.ts --check` passes unchanged).
-3. **Today's sim test field as a map file:** the same for `data/formation-field.simdata`, byte for
-   byte, through the sim compiler.
+2. **Today's look world as a map file,** through named generators that call today's code: relief as
+   `generator: painted-world-v1` (`baseH` and the far ring's heights), the river as `generator:
+   meander-v1` with today's parameters, its valley axis (`axisX`) and its own `seed: 7`. The extent
+   covers the far ring (2600 m: the river runs to ±1350 m), the detailed area is the 800 m tile. The
+   world compiler rebuilds `data/painted-world.lookdata` **byte for byte** (`node
+   tools/build-look-data.ts --check` passes unchanged); its manifest is a new file beside it.
+3. **Today's sim test field as a map file,** in native features where they fit: its woods and marsh
+   as circles and an ellipse, its hills as a `gaussian-hills` relief generator, its stream as a
+   generator for `70 + 6 sin(0.03 z)`, its rocks as a `rocks` area seeded 11, and the kinds' default
+   priorities in the order `prototypes/formation-core.js` resolves them. The aim is `data/formation-field.simdata`
+   byte for byte; where rasterising a shape differs at its edge, the PR shows the difference (nodes
+   changed, the data version) and the owner accepts a new data version or a `legacy` generator for that
+   shape.
 4. **The staff map** reads its features from the map file (`docs/plans/active/staff-map.md`, SM2).
 5. **W6, Austerlitz,** through the importer: the first real map.
-6. Then the two test maps can be merged into one world, if the owner wants the sim and the look on
-   the same ground before the real maps arrive.
+6. **One heightfield per map** (decision 0012): the two test maps, or one merged world, compile their
+   heights once and both outputs sample them.
 
-Steps 2 and 3 are the proof that the format can carry what exists without changing a byte.
+Steps 2 and 3 are the proof that the format carries what exists: today's data stays the authority
+until a step's check says it is reproduced.
 
 ## 8. Verification
 
@@ -208,10 +241,14 @@ Steps 2 and 3 are the proof that the format can carry what exists without changi
   feature outside the extent).
 - Determinism: compiling twice gives the same bytes; the outputs' hashes are checked in `npm run
   check:data`.
-- Equivalence: the migrated test maps compile to today's committed data, byte for byte.
+- Equivalence: the migrated test maps compile to today's committed data, byte for byte (or with
+  the differences shown and accepted, step 3).
+- Staleness: a manifest's input hashes (map, referenced files, ruleset, compiler) match the inputs on
+  disk; editing the ruleset makes the simulation's output stale.
 - Locality: editing one feature changes only the outputs near it (a wood moved does not move another
   wood's trees), checked on a pair of files.
-- Round trip: the importer's output validates, and re-importing the same box gives the same file.
+- Round trip: the importer's output validates, and re-importing the same box from the same pinned
+  source snapshot gives the same file.
 
 ## 9. Open questions
 
@@ -222,11 +259,18 @@ Steps 2 and 3 are the proof that the format can carry what exists without changi
    period sources apart (large DEM-derived feature lists are long).
 3. **Time:** do maps describe one moment, or carry dated variants (a pond drained in 1806, a village
    burnt during the battle)?
-4. **Overlap rules:** later features win, or explicit priorities per kind?
+4. **Overlap rules:** are per-kind default priorities (§4, `priority`) enough, or do some overlaps need
+   blending (a wood thinning into a meadow)?
 5. **Scale:** the format is metric and unbounded; the world SPEC limits what a battle can use
    (`src/look/spec.ts`). How a map larger than the play area is cut into battles.
 6. **Where gameplay hints live:** terrain-intrinsic hints (a defensible ridge) in the map, everything
    about a particular battle in its scenario.
+7. **Output size and shape:** today's formats are square (one span, one `n`) and the simulation's is
+   dense: a 1.79 m float64 heightfield plus a 1 m class and depth grid. For the 6 × 4 km example that
+   is about 200 MB per file, over GitHub's 100 MB limit. Real maps need non-square, chunked or
+   compressed outputs, built in CI or kept out of git. That is a change to the data formats (a
+   non-goal here) which real maps will force.
+8. **Seasons:** which seasons a map compiles by default (all four, or those its scenarios use).
 
 ## 10. Related
 
