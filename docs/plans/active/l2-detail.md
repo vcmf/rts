@@ -119,7 +119,7 @@ In `paint()`, for the terrain only (other surfaces keep today's grain until L7):
 Fetches on gentle ground: index 1, octave A 2, octave B 2, blotch 1: 6 (today 2). On steep ground the
 second plane adds up to 5 more. Cost is measured (bench, both arms), not assumed.
 
-### L2b: the checks (`tools/detail-check.mjs`)
+### L2b: the checks (a new tool in tools/, detail-check)
 
 All render the look page headless with the clock frozen. A debug define (`DETAIL_DEBUG`) makes the
 terrain write its grain value to red and its view depth to green and blue (16 bits).
