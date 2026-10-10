@@ -201,7 +201,7 @@ Moved to `docs/known-issues.md` (a living list; this proposal is frozen once bui
 9. **Performance pass** with per-pass budgets (§8), full unit count (4k figures).
 10. **Video-tier frame** from a presentation camera.
 11. **W6** Austerlitz from real data; defines the map file format (heightfield, river samples,
-    zones, gameplay layers).
+    zones, gameplay layers): proposed in `docs/proposals/map-format.md`.
 
 ### At prototype exit / later
 | Item | Trigger |

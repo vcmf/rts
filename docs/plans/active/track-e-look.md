@@ -59,7 +59,7 @@ the prototype). This plan's phases are **L0–L9** (L for look):
 | L9 Look match and prototype exit | P7 | 9, 10 |
 
 Water W2–W5 and the Austerlitz import W6 continue under `docs/plans/active/prototype-plan.md` §4. They slot in after L2
-(below).
+(below). Maps are described in one format (`docs/proposals/map-format.md`), a separate workstream.
 
 ## Current focus: the world first (owner, 2026-10-10)
 
