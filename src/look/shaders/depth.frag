@@ -1,0 +1,1 @@
+precision highp float;varying float vD;void main(){gl_FragColor=vec4(vD,vD,vD,1.0);}

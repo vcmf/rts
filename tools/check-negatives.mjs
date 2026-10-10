@@ -1,6 +1,6 @@
 // Negative tests for the page checks (docs/plans/active/l0-spine.md, L0b): each check must pass on the real scene
 // and fail, naming the right limit, on a scene broken on purpose. A check that cannot fail checks nothing.
-//   node tools/check-negatives.mjs [page]      (default prototypes/painted-cinematic.html)
+//   node tools/check-negatives.mjs [page|url]  (default prototypes/painted-cinematic.html)
 // Runs tools/shot.mjs once per case: the real scene, then one sabotage per limit. Exit 1 if any case misbehaves.
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -8,8 +8,9 @@ import path from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const page = path.resolve(ROOT, process.argv[2] || 'prototypes/painted-cinematic.html')
-if (!fs.existsSync(page)) { console.error(`check-negatives: no page at ${page}`); process.exit(2) }
+const arg = process.argv[2] || 'prototypes/painted-cinematic.html', isUrl = /^https?:\/\//.test(arg)
+const page = isUrl ? arg : path.resolve(ROOT, arg)
+if (!isUrl && !fs.existsSync(page)) { console.error(`check-negatives: no page at ${page}`); process.exit(2) }
 const src = f => fs.readFileSync(path.join(ROOT, 'tools', f), 'utf8')
 const CHECKS = { render: src('render-check.js'), river: src('river-check.js') }
 
@@ -36,7 +37,7 @@ for (const [check, name, sabotage, expect] of CASES) {
   const steps = [['wait', 2000], ['eval', CAPTURE],
     ...(sabotage ? [['eval', sabotage + '; "SABOTAGED"']] : []),
     ['eval', CHECKS[check] + '; "CHECK RAN"'], ['eval', REPORT]]
-  const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), pathToFileURL(page).href, path.join(ROOT, 'scratch/check-negatives'), '1280', '720', JSON.stringify(steps)],
+  const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), isUrl ? page : pathToFileURL(page).href, path.join(ROOT, 'scratch/check-negatives'), '1280', '720', JSON.stringify(steps)],
     { encoding: 'utf8', env: { SHOT_TIMEOUT_S: '300', SHOT_LOAD_S: '300', ...process.env } })
   const out = r.stdout + r.stderr
   const applied = !sabotage || out.includes('EVAL "SABOTAGED"'), ran = out.includes('EVAL "CHECK RAN"')
