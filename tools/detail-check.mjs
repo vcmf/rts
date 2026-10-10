@@ -108,10 +108,11 @@ const seamLimit = maxStep => maxStep * (SPEC.sizes.grain / (TILE_PX / 2)) / Math
 const EDGE_ON = 0.17   // the incidence's cosine below which a face is edge-on (about 10° from it)
 const KEEPS = 0.8    // and at twice the resolution (four quarter frames) a step there is still this fraction of it (a step is a step at any resolution; a transition under a pixel wide shrinks, if not to half)
 const ISOLATED = 3   // and a seam step is this many times larger than both steps beside it (a smooth slope's are alike)
-// the bank normals off (BANKN_OFF): a cut bank turns the shading normal by tens of degrees within a pixel at the wider
-// zooms, a real crease the grain follows; they have their own check (banks)
-function seams(url, dir, defs0) {
-  const defs = [...defs0, 'BANKN_OFF'], [hx, , hz] = FOCUS
+// The river's banks (the bank normals' corridor, from the incidence view) are left out: a cut bank turns the shading
+// normal by tens of degrees within a pixel at the wider zooms, a real crease the grain follows; the banks have their
+// own check (banks)
+function seams(url, dir, defs) {
+  const [hx, , hz] = FOCUS
   const steps = [...prepSteps(), detail(defs, true), ['eval', '"MAXSTEP " + __look.grain("smooth")']]
   for (const r of SEAM_ZOOMS) {
     steps.push(view(`r${r}`, A0, BETA0, r), ['shot', `seams.r${r}.ground`])
@@ -125,7 +126,7 @@ function seams(url, dir, defs0) {
   const out = shoot(url, dir, steps, W, H)
   const maxStep = +/MAXSTEP ([\d.e-]+)/.exec(out)[1], limit = seamLimit(maxStep)
   let ok = true, total = 0
-  const lines = [`seams: steps over ${limit.toFixed(1)}/255 (the smooth texture's steepest texel step ${maxStep.toFixed(4)}), ${ISOLATED}× the steps beside them and still ${KEEPS}× as large at twice the resolution, away from silhouettes and edge-on faces`]
+  const lines = [`seams: steps over ${limit.toFixed(1)}/255 (the smooth texture's steepest texel step ${maxStep.toFixed(4)}), ${ISOLATED}× the steps beside them and still ${KEEPS}× as large at twice the resolution, away from silhouettes, edge-on faces and the river's banks`]
   for (const r of SEAM_ZOOMS) {
     const g = load(dir, `seams.r${r}.ground`), h = load(dir, `seams.r${r}.hill`), w = h.w
     const dg = depth(g), dh = depth(h), da = depth(load(dir, `seams.r${r}.hillonly`)), v = red(h), onHill = new Uint8Array(w * h.h), sil = new Uint8Array(w * h.h)
@@ -139,10 +140,10 @@ function seams(url, dir, defs0) {
     // silhouettes: a depth step much larger than the ones beside it (a slope's steps are alike), dilated by a pixel;
     // and faces seen nearly edge-on (incidence under EDGE_ON, from the incidence view), where a smooth turn of the
     // normal fits in a pixel
-    const dstep = (i, s) => Math.abs(dh[i + s] - dh[i]), inc = red(load(dir, `seams.r${r}.inc`))
+    const incImg = load(dir, `seams.r${r}.inc`), dstep = (i, s) => Math.abs(dh[i + s] - dh[i]), inc = red(incImg)
     for (let y = 2; y < h.h - 2; y++) for (let x = 2; x < w - 2; x++) {
       const i = y * w + x
-      if (inc[i] < EDGE_ON * 255) sil[i] = 1
+      if (inc[i] < EDGE_ON * 255 || incImg.data[i * 4 + 2] > 0) sil[i] = 1   // edge-on, or on the river's banks
       for (const s of [1, w]) if (dstep(i, s) > 0.05 + 0.002 * dh[i] && dstep(i, s) > 2 * Math.max(dstep(i - s, s), dstep(i + s, s))) for (const j of [i - s, i, i + s, i + 2 * s]) sil[j] = 1
     }
     const q = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([i, j]) => [i, j, red(load(dir, `seams.r${r}.hill.q${i}${j}`))]), w2 = 2 * w, v2 = new Float32Array(w2 * 2 * h.h)

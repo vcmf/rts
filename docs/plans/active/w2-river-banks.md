@@ -109,11 +109,16 @@ From the prototype plan (W2: "Cut banks steep, point bars shallow; no terrain st
   shallow bar's edge the drawn ground can sit above the water (the shoreline, W4). The sabotage (every
   bend's cut bank on the wrong side) fails `cutBankVsBar`.
 - **Bank shading** (`tools/detail-check.mjs`, `banks`): the drawn normal against the authored surface's
-  at 1,210 points on both banks of the sharpest bend: median 0.9° / 1.1°, 95th percentile 9.2° / 13.9°
+  at 1,210 points on both banks of the sharpest bend: median 0.7° / 1.1°, 95th percentile 8.3° / 13.9°
   (closest / middle zoom). Without the bank normals (the sabotage): 9.0° / 10.6° and 32.8° / 34.1°.
   Limits: median 3°, 95th percentile 20°. The tail is on the scarps, which turn faster than 0.5 m texels.
-- **The detail checks** pass unchanged; the seam check runs with the bank normals off (a cut bank is a
-  real crease the grain follows, sub-pixel at the wide zooms).
+- **The detail checks** pass unchanged; the seam check leaves out the river's banks (the bank normals'
+  corridor: a cut bank is a real crease the grain follows, sub-pixel at the wide zooms).
+- **Review round 1** found the section discontinuous where a bend reverses (the bar's profile differed
+  from the cut bank's at A = 0), the bank normals ending at the tile's edge with weight 1 (a seam against
+  the apron), the water ribbon lying flat over the newly dry bars, and the bank colours on the symmetric
+  edge. Fixed: one shape for both sides at A = 0, a fade toward the tile's edge (`SPEC.bank.edge`), the
+  ribbon diving past each side's water's edge, the colours from it.
 - **Goldens:** the differences lie along the river's corridor (cameras without the river match).
 - **Readability guard:** no block that passes on the base fails.
 - **Bench** (Metal, a proxy): the terrain pass +0.01 to +0.09 ms against the base.

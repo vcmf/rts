@@ -35,10 +35,10 @@ vec3 albedo(vec3 wp,vec3 n){
   c=uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);                          // steep: stony
   return c;
 }
-void main(){vec3 N=normalize(vN);vec4 lm=LM(vW);
+void main(){vec3 N=normalize(vN);vec4 lm=LM(vW);float bankW=0.0;
   #if defined(BANKN)&&!defined(BANKN_OFF)
-  vec4 bk=texture2D(uBankN,(vW.xz+TILE_HALF)/TILE_W);vec2 bxz=bk.xy*2.0-1.0;   // BANKN_OFF: the bank check's sabotage
-  N=normalize(mix(N,vec3(bxz.x,sqrt(max(0.0,1.0-dot(bxz,bxz))),bxz.y),bk.z));
+  vec4 bk=texture2D(uBankN,(vW.xz+TILE_HALF)/TILE_W);vec2 bxz=bk.xy*2.0-1.0;bankW=bk.z;   // BANKN_OFF: the bank check's sabotage
+  N=normalize(mix(N,vec3(bxz.x,sqrt(max(0.0,1.0-dot(bxz,bxz))),bxz.y),bankW));
   #endif
   #ifdef DETAIL_DEBUG_N
   gl_FragColor=vec4(N*0.5+0.5,1.0);return;   // the bank check's view: the shading normal
@@ -52,11 +52,11 @@ void main(){vec3 N=normalize(vN);vec4 lm=LM(vW);
   #endif
   vec3 c=paint(alb,N,vW,occ,0.12,1.0,sh);
   #ifdef DETAIL_DEBUG_INC
-  // the checks' incidence view: |cos| in red; the biplanar major plane's weight in green, its axis in blue (0, ½, 1)
+  // the checks' incidence view: |cos| in red; the biplanar major plane's weight in green; the bank normals' weight in blue
   #ifdef DETAIL_ON
-  gl_FragColor=vec4(abs(dot(N,normalize(uCamPos-vW))),pW.x,float(pMa)*0.5,1.0);return;
+  gl_FragColor=vec4(abs(dot(N,normalize(uCamPos-vW))),pW.x,bankW,1.0);return;
   #else
-  gl_FragColor=vec4(abs(dot(N,normalize(uCamPos-vW))),0.0,0.0,1.0);return;
+  gl_FragColor=vec4(abs(dot(N,normalize(uCamPos-vW))),0.0,bankW,1.0);return;
   #endif
   #endif
   #ifdef DETAIL_DEBUG

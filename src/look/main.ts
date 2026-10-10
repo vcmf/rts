@@ -19,7 +19,7 @@ import { buildNature } from './nature.ts'
 import { Post, buildCamera } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
-import { RIVER, SECTION_REACH, lerpA, riverQuery, setRiver, wetEdges } from './river.ts'
+import { RIVER, bankReach, lerpA, riverQuery, setRiver, wetEdges } from './river.ts'
 import { D, checkGround } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
 import { checkLookData, decodeLook } from './world/data.ts'
@@ -121,7 +121,7 @@ Object.assign(window, {
   __proto: { S, scene, camera, buildPost: () => post.build(), play: D.spec.play },
   B: { Vector3, Matrix, DynamicTexture, VertexBuffer },
   // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring formulas the river check compares with
-  scene, engine, camera, apron: terrain.apron, RIVER: { ...RIVER, axisX }, H: groundAt, baseH, riverQuery, lerpA, wetEdges, SECTION_REACH, BAND: D.band, PLAY: D.spec.play, SMW: D.spec.tile, TSUB: D.spec.tileSub, MASKN: D.spec.sizes.riverMask, SM_FADE_M: D.spec.shadowFade, SPEC: D.spec,
+  scene, engine, camera, apron: terrain.apron, RIVER: { ...RIVER, axisX }, H: groundAt, baseH, riverQuery, lerpA, wetEdges, bankReach, BAND: D.band, PLAY: D.spec.play, SMW: D.spec.tile, TSUB: D.spec.tileSub, MASKN: D.spec.sizes.riverMask, SM_FADE_M: D.spec.shadowFade, SPEC: D.spec,
   tileGround: terrain.tileGround, farGround: terrain.farGround, farTerrainMat: terrain.farTerrainMat, riverMask: terrain.riverMask, riverMaskCanvas: terrain.riverMaskCanvas,
   groups: nature.groups, FAR: nature.far, KEEP_CLEAR: nature.KEEP_CLEAR, touchesZone: nature.touchesZone, placeable: nature.placeable, footprint: nature.footprint,
   lightCam: bakes.lightCam, shadowRT: bakes.shadowRT,

@@ -36,12 +36,16 @@ page in L0 (generated offline, `src/look/world/author.ts`), with cut banks and p
   distance, `s`) through a bucket grid; the blended water level only when asked for (the
   trough needs it where two passes of a bend meet).
 - **Terrain:** valley trough and floodplain, then the channel carve, on the detail tile. On the look
-  page (W2) the carve is an asymmetric section (`section()` in `src/look/river.ts`): the deepest line shifts
+  page (W2) the carve is an asymmetric section (`section()` in `src/look/river.ts`, continuous where a bend
+  reverses): the deepest line shifts
   toward the outer bank, which rises steeply to a scarp (the cut bank, near vertical on the sharpest
   bends); on the inner side the water's edge comes in and a long, low bar rises to the floodplain (the
-  point bar). `wetEdges()` gives each side's water's edge. The prototype keeps W1's symmetric carve.
+  point bar). `wetEdges()` and `bankReach()` give each side's water's edge and the bank's end; the water
+  ribbon dives past the water's edge on each side, and the bank colours start from it. The prototype keeps
+  W1's symmetric carve.
 - **Bank normals (W2):** the heightfield's 1.79 m cells cannot hold a scarp, so the look data also
-  carries the authored surface's normal at 0.5 m over the river's corridor (`SPEC.bank`), and the tile's
+  carries the authored surface's normal over the river's corridor (`SPEC.bank`: the texel, the corridor, its
+  fades, one toward the tile's edge so the apron meets it without a seam), and the tile's
   terrain shades with it there (`BANKN` in `src/look/shaders/terrain.frag`). Heights stay the
   heightfield's (decision 0012); only the shading is finer.
   The coarse far ring has the trough only and shows the river as a painted line from a mask
@@ -60,10 +64,9 @@ spacing, the query grid and the valley axis `axisX`. This doc names them; it doe
 
 ## Verification
 
-- On the look page (W2), `tools/river-check.js` also checks the cut banks against the bars (on bends
-  with |A| > 0.5 the outer bank climbs to the floodplain in under half the inner bank's distance, median),
-  measures the wet channel from `wetEdges()`, and keeps the cliff limit for the floodplain beyond the
-  section (the banks get their own); `tools/detail-check.mjs` (`banks`) compares the drawn shading
+- On the look page (W2), `tools/river-check.js` also checks the cut banks against the bars on the
+  sharper bends (`cutBankVsBar`, its limits there), measures the wet channel from `wetEdges()`, and keeps
+  the cliff limit for the floodplain beyond each bank (`bankReach()`; the banks get their own); `tools/detail-check.mjs` (`banks`) compares the drawn shading
   normal at the banks with the authored surface's. Both have sabotages (`tools/check-negatives.mjs`,
   `--selftest`).
 - `tools/river-check.js`: shape (backtracking bends, width range and per-stretch contrast, width

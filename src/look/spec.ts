@@ -31,8 +31,9 @@ export interface Spec {
   // deviation is `amp` times the texture's own; the footprint's incidence never counts below `minCos`
   detail: { px: number; lines: number; index: number; amp: number; minCos: number }
   // the fine bank normals (docs/plans/active/w2-river-banks.md): texels of `texel` m over the tile, covering the
-  // river's corridor out to `reach` m from its centre line, faded out over the last `fade` m
-  bank: { texel: number; reach: number; fade: number }
+  // river's corridor out to `reach` m from its centre line, faded out over the last `fade` m, and over the last
+  // `edge` m before the tile's edge (where the apron and the far ring shade with their vertex normals)
+  bank: { texel: number; reach: number; fade: number; edge: number }
 }
 
 export const SPEC: Spec = {
@@ -45,7 +46,7 @@ export const SPEC: Spec = {
   depth: { near: 100, far: 1600 },
   shadowFade: 32,
   detail: { px: 2048, lines: 1080, index: 400, amp: 0.4, minCos: 0.05 },
-  bank: { texel: 0.5, reach: 14, fade: 3 },
+  bank: { texel: 0.5, reach: 14, fade: 3, edge: 10 },
 }
 
 export interface Derived {
@@ -115,7 +116,7 @@ export function derive(s: Spec = SPEC): Derived {
   if (s.depth.near >= s.depth.far) bad.push('bake: sun depth range out of order')
   if (!isInt(s.tile / s.bank.texel)) bad.push(`bank: the tile (${s.tile} m) is not a whole number of ${s.bank.texel} m texels`)
   else if (s.tile / s.bank.texel > s.minSpec.maxTexture) bad.push(`bake: bank normals ${s.tile / s.bank.texel}² > ${s.minSpec.maxTexture}² (min-spec)`)
-  if (!(s.bank.fade > 0 && s.bank.fade < s.bank.reach)) bad.push('bank: the fade must be positive and inside the reach')
+  if (!(s.bank.fade > 0 && s.bank.fade < s.bank.reach && s.bank.edge > 0 && s.bank.edge < s.tile / 2)) bad.push('bank: the fades must be positive, the corridor\'s inside the reach and the edge\'s inside the tile')
   if (!(s.detail.px > 0 && s.detail.lines > 0 && s.detail.index > 0 && s.detail.amp > 0 && s.detail.minCos > 0)) bad.push('detail: sizes must be positive')
   if (bad.length) throw new Error('world spec: ' + bad.join('; '))
   const sbias = (0.96 / (s.depth.far - s.depth.near)).toFixed(6)

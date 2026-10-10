@@ -87,17 +87,17 @@
   check('waterNonFinite', bad === 0, bad)
   // 7. the water never rises downstream (centre column), and inside the channel no water vertex sits below the bed
   //    (a dived column there would show the dry bed through the water)
-  //    The wet part of the channel is asymmetric (W2: the inner bar is dry sooner): wetEdges gives each side's edge.
-  //    Measured from one grid cell inside it: within a cell of a shallow edge the drawn ground (the heightfield,
-  //    interpolated) can sit above the water where the authored bed is just below it (the shoreline: W4)
+  //    The wet part of the channel is asymmetric (W2: the inner bar is dry sooner): wetEdges gives each side's edge;
+  //    the prototype (no wetEdges) keeps W1's symmetric channel. The rise is read 0.3 m inside the edge; the bed one
+  //    grid cell inside it: within a cell of a shallow edge the drawn ground (the heightfield, interpolated) can sit
+  //    above the water where the authored bed is just below it (the shoreline, W4)
   let rises = 0, prev = null, underBed = 0
-  //    The prototype (no wetEdges) keeps W1's symmetric channel and rule
   const W2 = typeof wetEdges === 'function'
-  const wetHere = q => { if (!q) return false; if (!W2) return q.dist < lerpA(C.W, q) / 2 - 0.3; const [pos, neg] = wetEdges(lerpA(C.W, q) / 2, lerpA(C.A, q)); return q.dist < (q.n >= 0 ? pos : neg) - SMW / TSUB }
+  const wetIn = (q, inset) => { if (!q) return false; const hw = lerpA(C.W, q) / 2; if (!W2) return q.dist < hw - 0.3; const [pos, neg] = wetEdges(hw, lerpA(C.A, q)); return q.dist < (q.n >= 0 ? pos : neg) - inset }
   for (let k = 0; k < wp.length; k += 3) { const col = (k / 3) % 13
-    const q = riverQuery(wp[k], wp[k + 2]), inChannel = wetHere(q)
-    if (col === 6 && inChannel) { if (prev !== null && wp[k + 1] > prev + 0.001) rises++; prev = wp[k + 1] }   // clamped rows at the tile edge can put the centre on the bank (dived: not surface)
-    if (inChannel && wp[k + 1] < H(wp[k], wp[k + 2]) - 0.01) underBed++ }
+    const q = riverQuery(wp[k], wp[k + 2])
+    if (col === 6 && wetIn(q, 0.3)) { if (prev !== null && wp[k + 1] > prev + 0.001) rises++; prev = wp[k + 1] }   // clamped rows at the tile edge can put the centre on the bank (dived: not surface)
+    if (wetIn(q, W2 ? SMW / TSUB : 0.3) && wp[k + 1] < H(wp[k], wp[k + 2]) - 0.01) underBed++ }
   check('uphillSteps', rises === 0, rises)
   check('waterUnderBed', underBed === 0, underBed)
 
@@ -126,14 +126,15 @@
   const bandArea = (2 * BAND) ** 2 - SMW ** 2
   check('apronArea', Math.abs(area - bandArea) < 1, [Math.round(area), Math.round(bandArea)])
 
-  // 7c. no cliffs on the floodplain: beyond the channel's section (W2: its cut banks are steep on purpose), the
-  //     detailed terrain rises < 1.2 m per metre; inside the section, < 3 m per metre (the grid's own bound for a
-  //     bank's whole height across one cell: a larger step is a broken carve)
+  // 7c. no cliffs on the floodplain: beyond each side's bank (bankReach, plus a grid cell the drawn surface needs to
+  //     settle; W2: the cut banks are steep on purpose), the detailed terrain rises < 1.2 m per metre; on the banks,
+  //     < 3 m per metre (the grid's own bound for a bank's whole height across one cell: more is a broken carve)
   let cliffs = 0, steepest = 0, scarps = 0, steepestBank = 0
   for (let i = 0; i < C.n; i += 3) { if (!detailed(C.px[i], C.pz[i])) continue
     for (let a = -30; a <= 30; a += 1) { const x = C.px[i] - C.tz[i] * a, z = C.pz[i] + C.tx[i] * a, q = riverQuery(x, z)
       if (!detailed(x, z)) continue
-      const bank = q && q.dist < lerpA(C.W, q) / 2 * (W2 ? SECTION_REACH : 1.05)
+      const hw = q && lerpA(C.W, q) / 2, reach = q && (W2 ? bankReach(hw, lerpA(C.A, q))[q.n >= 0 ? 0 : 1] + SMW / TSUB : hw * 1.05)
+      const bank = q && q.dist < reach
       for (const [dx, dz] of [[1, 0], [0, 1]]) { const g = Math.abs(H(x + dx, z + dz) - H(x, z))
         if (bank) { steepestBank = Math.max(steepestBank, g); if (g > 3) scarps++ } else { steepest = Math.max(steepest, g); if (g > 1.2) cliffs++ } } } }
   check('cliffs', cliffs === 0, cliffs)

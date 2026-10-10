@@ -2,6 +2,7 @@
 // docs/systems/river.md): the per-sample arrays, built offline (src/look/world/author.ts) and shipped in the look
 // data, plus a bucket grid for nearest-segment queries. Every consumer (terrain colours, water mesh, scatter,
 // reflections) asks riverQuery(); nothing re-derives the river from a formula. No DOM: the build tool uses it too.
+import { sstep } from './noise.ts'
 
 export interface RiverParams { id: string; W0: number; D0: number; bankH: number; floodplainW: number; beltW: number; valleySlope: number; valleyFade: number
   theta0: number; Js: number; Jf: number; v0: number; seed: number; z0: number; z1: number }
@@ -41,7 +42,6 @@ export function setRiver(samples: RiverSamples): River {
 
 export const lerpA = (arr: Float32Array, q: { i: number; t: number }): number => arr[q.i] + (arr[q.i + 1] - arr[q.i]) * q.t
 
-const sstep = (a: number, b: number, x: number): number => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
 
 // nearest river segment within REACH: {i,t,n (signed, + = left of flow),dist,s} or null.
 // wantLevel: also blend the water level of every pass in reach (trough only)
@@ -66,27 +66,43 @@ export function riverQuery(x: number, z: number, wantLevel = false): RiverQuery 
 // water surface at signed offset n (+ = left of the flow), half-width hw, asymmetry A (+ = the outer bank on the +n
 // side), depth D. The deepest line shifts toward the outer bank; the outer side rises steeply to the water's edge at
 // hw, then a scarp to the floodplain that narrows to near vertical on the sharpest bends (the cut bank); on the inner
-// side the water's edge comes in and a long, low bar rises to the floodplain (the point bar). A = 0: symmetric.
+// side the water's edge comes in and a long, low bar rises to the floodplain (the point bar). At A = 0 both sides are
+// the same profile, so the section is continuous where a bend reverses (A changes sign).
+// The shape's parameters, in one place for section(), wetEdges() and bankReach()
+function shape(hw: number, A: number) {
+  const a = Math.min(1, Math.abs(A)), tw = 0.35 * a * hw                         // the deepest line's shift toward the outer bank
+  return { a, tw, e: hw + tw, wet: 1 - 0.45 * a, outerBank: hw * (0.35 - 0.29 * a), innerBank: hw * (0.35 + a), barExp: 1 + 0.6 * a }
+}
 export function section(n: number, hw: number, A: number, D: number, bankH: number): number {
-  const a = Math.min(1, Math.abs(A)), m = A >= 0 ? n : -n, tw = 0.35 * a * hw   // m > 0: toward the outer bank
+  const { a, tw, e, wet, outerBank, innerBank, barExp } = shape(hw, A), m = A >= 0 ? n : -n   // m > 0: toward the outer bank
   if (m >= tw) {                                                                 // outer half: the cut bank
     const t = (m - tw) / (hw - tw)
     if (t <= 1) return -D * (1 - Math.pow(t, 2 + 4 * a))
-    return bankH * sstep(0, 1, (m - hw) / (hw * (0.35 - 0.29 * a)))
+    return bankH * sstep(0, 1, (m - hw) / outerBank)
   }
-  const e = hw + tw, t = (tw - m) / e, wet = 1 - 0.45 * a                       // inner half: the point bar
+  const t = (tw - m) / e                                                         // inner half: the point bar
   if (t <= wet) return -D * (1 - Math.pow(t / wet, 2 - 0.6 * a))
-  return bankH * Math.pow(sstep(0, 1, (t - wet) * e / (hw * (0.35 + a))), 1.6)
+  return bankH * Math.pow(sstep(0, 1, (t - wet) * e / innerBank), barExp)
 }
-// how far from the centre line the section reaches the floodplain, in half-widths (the inner bar on the sharpest
-// bends: 1.74)
+// how far from the centre line the section reaches, in half-widths, at most (the inner bar on the sharpest bends:
+// 1.74); the carve stops there
 export const SECTION_REACH = 1.8
 
+const bySide = (A: number, outer: number, inner: number): [number, number] => A >= 0 ? [outer, inner] : [inner, outer]
 // the water's edge on each side, in metres from the centre line: [the +n side, the −n side] (where section() is 0)
 export function wetEdges(hw: number, A: number): [number, number] {
-  const a = Math.min(1, Math.abs(A)), tw = 0.35 * a * hw, inner = (1 - 0.45 * a) * (hw + tw) - tw
-  return A >= 0 ? [hw, inner] : [inner, hw]
+  const { tw, e, wet } = shape(hw, A)
+  return bySide(A, hw, wet * e - tw)
+}
+// where each side's bank reaches the floodplain, in metres from the centre line: [the +n side, the −n side]
+export function bankReach(hw: number, A: number): [number, number] {
+  const { tw, e, wet, outerBank, innerBank } = shape(hw, A)
+  return bySide(A, hw + outerBank, wet * e + innerBank - tw)
 }
 
-// bank distance in half-widths (≤0 = inside the channel), for terrain colouring
-export const bandOf = (q: RiverQuery | null): number => { if (!q) return 8; const hw = lerpA(RIVER.W, q) / 2; return Math.min(8, (q.dist - hw) / hw) }
+// distance from the water's edge on this side, in half-widths (≤0 = in the water), for terrain colouring
+export const bandOf = (q: RiverQuery | null): number => {
+  if (!q) return 8
+  const hw = lerpA(RIVER.W, q) / 2, [pos, neg] = wetEdges(hw, lerpA(RIVER.A, q))
+  return Math.min(8, (q.dist - (q.n >= 0 ? pos : neg)) / hw)
+}

@@ -68,7 +68,13 @@ export function decodeLook(buf: ArrayBuffer): LookData {
   const river = { P: meta.river.P, n: meta.river.n } as RiverSamples
   for (const k of SAMPLE_KEYS) { if (!arr[k] || arr[k].length !== meta.river.n) throw new Error(`look data: river array ${k} missing or short`); river[k] = arr[k] }
   if (!arr.bankSpans || !u8.bankTex || arr.bankSpans.length % 3) throw new Error('look data: no bank normals')
-  let covered = 0; for (let i = 2; i < arr.bankSpans.length; i += 3) covered += arr.bankSpans[i]
+  const bn = meta.bank.n
+  let covered = 0
+  for (let i = 0; i < arr.bankSpans.length; i += 3) {
+    const j = arr.bankSpans[i], i0 = arr.bankSpans[i + 1], len = arr.bankSpans[i + 2]
+    if (!Number.isInteger(j) || !Number.isInteger(i0) || !Number.isInteger(len) || j < 0 || j >= bn || i0 < 0 || len < 1 || i0 + len > bn) throw new Error(`look data: bank span ${i / 3} (row ${j}, from ${i0}, ${len} texels) is outside the ${bn}² grid`)
+    covered += len
+  }
   if (u8.bankTex.length !== covered * 3) throw new Error(`look data: bank normals hold ${u8.bankTex.length / 3} texels, the spans cover ${covered}`)
   return { hf: { ...meta.hf, h: arr.hf }, far: { ...meta.far, h: arr.far }, river, bank: { ...meta.bank, spans: arr.bankSpans, tex: u8.bankTex } }
 }
@@ -82,5 +88,7 @@ export function checkLookData(d: Derived, look: LookData): void {
   if (look.hf.h.length !== n * n) bad.push(`heightfield has ${look.hf.h.length} heights, not ${n * n}`)
   if (look.far.n !== fn || !near(look.far.cell, d.farCell) || !near(look.far.x0, -s.far / 2) || !near(look.far.z0, -s.far / 2)) bad.push(`far ring ${look.far.n} nodes of ${look.far.cell} m, the spec wants ${fn} of ${d.farCell} m`)
   if (look.far.h.length !== fn * fn) bad.push(`far ring has ${look.far.h.length} heights, not ${fn * fn}`)
+  const b = look.bank
+  if (b.n !== d.bankN || !near(b.cell, s.bank.texel) || !near(b.x0, -s.tile / 2) || !near(b.z0, -s.tile / 2)) bad.push(`bank normals ${b.n}² of ${b.cell} m from ${b.x0}, the spec wants ${d.bankN}² of ${s.bank.texel} m from ${-s.tile / 2}`)
   if (bad.length) throw new Error('look data does not match the world spec (run node tools/build-look-data.ts): ' + bad.join('; '))
 }

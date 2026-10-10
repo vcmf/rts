@@ -9,7 +9,7 @@ import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
 import { H } from './heightfield.ts'
-import { RIVER, lerpA, riverQuery } from './river.ts'
+import { RIVER, lerpA, riverQuery, wetEdges } from './river.ts'
 import { D } from './spec.ts'
 import WAT_VS from './shaders/water.vert?raw'
 import WAT_FS from './shaders/water.frag?raw'
@@ -57,8 +57,11 @@ export function buildWater(scene: Scene, mats: Materials): Water {
     for (let c = 0; c <= COLS; c++) {
       const a = (c / COLS * 2 - 1) * hw * 1.35; let x = C.px[i] + nx * a, zz = C.pz[i] + nz * a
       const cx = Math.max(-E2, Math.min(E2, x)), cz = Math.max(-E2, Math.min(E2, zz)), moved = cx !== x || cz !== zz; x = cx; zz = cz   // the ribbon ends exactly on the tile edge, where the painted line starts
-      // outer columns dive under the carved bank; a column the clamp moved decides from where it landed (it may now be mid-channel)
-      let dive = Math.abs(a) > hw; if (moved) { const q = riverQuery(x, zz); dive = !(q && q.dist < lerpA(C.W, q) / 2) }
+      // columns past this side's water's edge dive under the bank (W2: the inner bar is dry sooner); a column the clamp
+      // moved decides from where it landed (it may now be mid-channel)
+      const [ep, en] = wetEdges(hw, C.A[i])
+      let dive = a >= 0 ? a > ep : -a > en
+      if (moved) { const q = riverQuery(x, zz); if (!q) dive = true; else { const [qp, qn] = wetEdges(lerpA(C.W, q) / 2, lerpA(C.A, q)); dive = q.dist > (q.n >= 0 ? qp : qn) } }
       const h = H(x, zz), yy = dive ? Math.min(y, h - 0.35) : y
       pos.push(x, yy, zz); uv.push(a, C.s[i]); dep.push(y - h)
     }

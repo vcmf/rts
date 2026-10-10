@@ -19,7 +19,8 @@ export const LOOK_FILE = path.join(ROOT, 'data/painted-world.lookdata')
 
 // The fine bank normals (docs/plans/active/w2-river-banks.md): the authored surface's normal by central differences
 // at each texel's centre, over the river's corridor only (out to bank.reach m from its centre line, the weight fading
-// to 0 over the last bank.fade m), stored as row spans
+// to 0 over the last bank.fade m, and over the last bank.edge m before the tile's edge, so the tile's banks meet the
+// apron's vertex normals without a seam), stored as row spans
 function bankNormals(H: (x: number, z: number) => number): BankNormals {
   const b = D.spec.bank, n = D.bankN, cell = b.texel, x0 = -D.spec.tile / 2, z0 = x0, e = cell / 2
   const spans: number[] = [], tex: number[] = [], enc = (v: number) => Math.round((Math.max(-1, Math.min(1, v)) * 0.5 + 0.5) * 255)
@@ -31,7 +32,8 @@ function bankNormals(H: (x: number, z: number) => number): BankNormals {
       if (!inside && open >= 0) { spans.push(j, open, i - open); open = -1 }
       if (!inside) continue
       const gx = (H(x + e, z) - H(x - e, z)) / cell, gz = (H(x, z + e) - H(x, z - e)) / cell, l = Math.hypot(gx, 1, gz)
-      tex.push(enc(-gx / l), enc(-gz / l), Math.round(255 * (1 - sstep(b.reach - b.fade, b.reach, q!.dist))))
+      const edge = 1 - sstep(D.spec.tile / 2 - b.edge, D.spec.tile / 2, Math.max(Math.abs(x), Math.abs(z)))
+      tex.push(enc(-gx / l), enc(-gz / l), Math.round(255 * (1 - sstep(b.reach - b.fade, b.reach, q!.dist)) * edge))
     }
   }
   return { n, cell, x0, z0, spans: Float32Array.from(spans), tex: Uint8Array.from(tex) }
