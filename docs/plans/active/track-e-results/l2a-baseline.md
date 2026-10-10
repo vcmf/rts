@@ -28,10 +28,9 @@ have to move (art bible §4: "keep terrain under the battle area mid-value and l
 (0.72: the gold patches and the flowers); only Britain's red reaches it. In winter France, Britain and some
 Russian blocks are the most saturated objects. The art bible says armies are always the most saturated.
 
-**The negative** (summer, the same blocks painted with the terrain's material, 0.3 m tall): 0 of 24
-separate, the largest at 0.009. At full height they would come close (0.097 measured): a ground-coloured
-block 1.8 m tall almost separates by its shaded sides alone. The 0.10 limit is a floor; the readability
-gate (L4, stage 2) sets the real bar with people.
+**The negative** (summer, the same blocks painted grey, each at the grey that matches the ground's value
+under it): 0 of 24 separate, the largest at 0.014. The 0.10 limit is a floor; the readability gate (L4,
+stage 2) sets the real bar with people.
 
 ## Bench (this machine: a proxy, no gate)
 

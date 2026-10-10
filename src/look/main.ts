@@ -121,7 +121,7 @@ Object.assign(window, {
   __buildMs: performance.now() - T0,
 })
 // the look checks' hooks (tools/guard.mjs and the L2 checks): test objects, the materials and the meshes by pass
-const lab = new Lab(scene, mats, terrain.terrainMat)
+const lab = new Lab(scene, mats)
 const passes = { terrain: [terrain.tileGround, terrain.farGround, terrain.apron], scatter: scene.meshes.filter((m): m is Mesh => m instanceof Mesh && m.thinInstanceCount > 0), water: [water.mesh], post: () => post.passes }
 Object.assign(window, { __look: { lab, mats, passes, post } })
 

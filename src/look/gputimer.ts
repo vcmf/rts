@@ -3,6 +3,8 @@
 // begin while one is open is refused (and counted), and whole-frame time is measured on frames that time no pass.
 // Results arrive a few frames later; a frame counts only when every query it opened resolved without a disjoint
 // event (the GPU's clock was interrupted: the numbers would be wrong).
+// Babylon's own time queries (engine.startTimeQuery) keep one TIME_ELAPSED token at a time and hand it back to a second
+// caller, which cannot label segments; hence this small class.
 
 interface TimerExt { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number }
 interface Open { frame: number; label: string; q: WebGLQuery }
@@ -44,17 +46,17 @@ export class GpuTimer {
     this.pending.push(this.open); this.open = null
   }
 
-  // collect what has resolved; call once a frame, outside any query
+  // collect what has resolved; call once a frame, outside any query. The order is the extension's: which queries are
+  // available first, then the disjoint flag (which covers them), then their results
   poll(): void {
     if (!this.ext) return
-    const gl = this.gl, dis = !!gl.getParameter(this.ext.GPU_DISJOINT_EXT)
+    const gl = this.gl, ready: Open[] = [], still: Open[] = []
+    for (const p of this.pending) (gl.getQueryParameter(p.q, gl.QUERY_RESULT_AVAILABLE) ? ready : still).push(p)
     // a disjoint event spoils every query in flight, resolved or not (reading the flag clears it)
-    if (dis) { this.disjoint++; for (const f of this.frames.values()) f.bad = true }
-    const still: Open[] = []
-    for (const p of this.pending) {
-      if (!gl.getQueryParameter(p.q, gl.QUERY_RESULT_AVAILABLE)) { still.push(p); continue }
+    if (gl.getParameter(this.ext.GPU_DISJOINT_EXT)) { this.disjoint++; for (const f of this.frames.values()) f.bad = true }
+    for (const p of ready) {
       const ns = gl.getQueryParameter(p.q, gl.QUERY_RESULT) as number; gl.deleteQuery(p.q)
-      const f = this.frames.get(p.frame); if (!f) continue
+      const f = this.frames.get(p.frame); if (!f) continue   // a frame from before the last reset
       f.sums.set(p.label, (f.sums.get(p.label) ?? 0) + ns / 1e6); f.left--
       if (f.left === 0) {
         this.frames.delete(p.frame)
@@ -64,6 +66,7 @@ export class GpuTimer {
     this.pending = still
   }
 
-  // a new measurement: the results start again; refused and disjoint stay totals for the whole session
-  reset(): void { this.results.clear() }
+  // a new measurement: the results start again, and queries still in flight from before are dropped when they
+  // resolve; refused and disjoint stay totals for the whole session
+  reset(): void { this.results.clear(); this.frames.clear() }
 }

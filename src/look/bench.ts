@@ -82,15 +82,23 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   const hook = (m: Mesh) => { const o = m.onBeforeRenderObservable.add(() => { if (timing && passFrame && engine.currentRenderPassId === camera.renderPassId) seg(named.get(m) ?? 'other') }); undo.push(() => m.onBeforeRenderObservable.remove(o)) }
   for (const m of scene.meshes) if (m instanceof Mesh) hook(m)
   const added = scene.onNewMeshAddedObservable.add(m => { if (m instanceof Mesh) hook(m) }); undo.push(() => scene.onNewMeshAddedObservable.remove(added))
-  for (const p of passes.post()) {
-    const a = p.onApplyObservable.add(() => { if (timing && passFrame) seg('post') }), b = p.onAfterRenderObservable.add(() => { if (timing && passFrame) seg(null) })
-    undo.push(() => { p.onApplyObservable.remove(a); p.onAfterRenderObservable.remove(b) })
+  // the finishing passes are rebuilt by Post.build (an arm may toggle depth of field): hooked again whenever they change
+  const hookedPosts = new Set<PostProcess>()
+  const hookPosts = () => {
+    for (const p of passes.post()) {
+      if (hookedPosts.has(p)) continue
+      hookedPosts.add(p)
+      const a = p.onApplyObservable.add(() => { if (timing && passFrame) seg('post') }), b = p.onAfterRenderObservable.add(() => { if (timing && passFrame) seg(null) })
+      undo.push(() => { p.onApplyObservable.remove(a); p.onAfterRenderObservable.remove(b) })
+    }
   }
+  hookPosts()
   // alternate frames: the passes on one, the whole frame on the next (queries cannot nest). Frame times come from the
   // whole-frame frames only: the pass frames carry more queries, which cost time on some backends
   const begin = engine.onBeginFrameObservable.add(() => {
     const t = performance.now(); if (timing && lastT && !passFrame) frameMs.push(t - lastT); lastT = t   // passFrame: the frame that just ended
-    timer.poll(); timer.newFrame(); frameNo++; passFrame = frameNo % 2 === 0
+    timer.poll(); timer.newFrame(); frameNo++; hookPosts()
+    passFrame = timer.available && frameNo % 2 === 0   // without a timer every frame is a whole frame
     if (timing && !passFrame) timer.begin('frame')
   })
   const end = engine.onEndFrameObservable.add(() => {

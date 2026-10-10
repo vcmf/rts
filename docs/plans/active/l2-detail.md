@@ -60,7 +60,7 @@ set time each. It records:
 - **The build:** the git hash baked in at build time, the user agent, the GPU renderer string
   (`WEBGL_debug_renderer_info` where available), the canvas size and device pixel ratio.
 
-**Arms.** A bench run can compare variants of the page in one session, interleaved (A B A B per
+**Arms.** A bench run can compare variants of the page in one session, interleaved (A B B A per
 camera) so heat and clocks drift equally on both. L2a ships the harness with a single arm; L2b adds
 the L0 grain as the second arm, which gives the "+1 ms over L0's terrain" figure.
 
@@ -85,7 +85,7 @@ the same JSON; its numbers are labelled by renderer and pass no gate (track plan
 - **Seasons:** summer and winter.
 - **Use:** every stage-1 screenshot set runs it. A block that fails on main is reported to the owner
   (a palette question); a change may not make a passing block fail.
-- **Its negative test:** a block painted in the ground's own colour must fail.
+- **Its negative test:** a block painted at the grey that matches the ground's value under it must fail.
 
 ### L2b: the detail layer
 

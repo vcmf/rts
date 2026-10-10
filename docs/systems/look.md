@@ -83,9 +83,9 @@ camera.
 size, on the default view, summer and winter. Each block's luma against the ground's at the same pixels (from a
 render without blocks) must differ by 0.10; with `--base`, a block fails only if it separated on the base. The
 blocks are painted by the shared painter at unit crispness, without snow (`NOSNOW`), as units will be. Its
-negative, in summer: the same blocks painted with the terrain's own material and nearly flush with the ground (0.3 m)
-must not separate. A block's pixels come from two mask renders (flat white, flat black), so hidden parts and
-ground-coloured parts are both counted right.
+negative, in summer: the same blocks painted grey, each at the grey that matches the ground's value under it
+(interpolated from renders at two greys), must not separate. A block's pixels come from two mask renders (flat
+white, flat black), so hidden parts and ground-coloured parts are both counted right.
 
 ## Changes from the prototype (L0a)
 
