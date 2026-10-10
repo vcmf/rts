@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-10
 ---
 
 # Art Direction: "The Painted Campaign"
@@ -15,14 +15,59 @@ Rendering reference: *Puss in Boots: The Last Wish* (DreamWorks, 2022): 3D
 assets, surfaces, lighting and effects authored to look painted, explicitly
 "not a Photoshop filter applied on top".
 
-| Reference | File | Use it for |
-|---|---|---|
-| Painterly style | `design/refs/style-painterly.png` | Rendering, colour, brushwork |
-| North star | `design/refs/north-star.png` | **Composition only:** one hill, few readable formations, negative space. Ignore its toy bases and tilt-shift. |
-| Mood (wide) | `design/refs/mood-wide.png` | Warm light and atmosphere only. Its busy composition is what to avoid. |
+The reference images and what each is for are in §0.
 
 > Revision, Oct 2026: replaces the earlier "tin-soldier diorama" direction
 > (tilt-shift blur, figure bases, sky and horizon shots), which is retired.
+
+---
+
+## 0. Reference images
+
+All in `design/refs/`. Most are generated concepts (their prompts sit beside them as
+`<name>.prompt.txt`). **They are targets for look, not specs:** where an image breaks a rule below
+or a decision, the rule wins, and the image's row says what to ignore.
+
+### Primary targets (the look is signed off against these)
+
+| Target | For |
+|---|---|
+| `design/refs/north-star-painted-v1.png` | **Summer master.** Composition (one hill, few formations, negative space), battalions of about 100 (decision 0007), dry-brush ground, smoke puffs, the warm and cool split, figures without bases. Ignore its cypresses and its scrub, which fill the negative space; its terrain is louder than the armies should allow. |
+| `design/refs/austerlitz-pratzen-v2.png` | **Winter master.** Grey frosted ground with the armies as the most saturated objects, ploughed stripes, mist and smoke that hide no formation. Ignore the brief's 300 men a battalion. |
+| `design/refs/austerlitz-goldbach-v1.png` | **Close zoom: river and village** (§6c): meander, gravel bars, stones, reeds, bare willows, bridge, red roofs. Ignore its saturated gold ground, which is late autumn, not December. |
+| `design/refs/wagram-grand-battery-v1.png` | **Pulled-back summer plain:** tan and olive fields, sculpted cannon smoke, Austrian white read on tan. Ignore the brief's 300 men a battalion, the oversized foreground staff and smoke over the Austrian line. |
+
+### Supporting references
+
+| Image | Take | Ignore |
+|---|---|---|
+| `design/refs/style-painterly.png` | **Brushwork and colour:** tapered grass flicks, flower dabs, broken edges, teal hue-shifted shadows, cloud-shadow patches | Its sky, horizon and ground-level camera |
+| `design/refs/north-star.png` | Composition only (superseded by the painted version) | Toy bases, tilt-shift, sky glow, glossy figurine finish |
+| `design/refs/mood-wide.png` | Warm light temperature, gold-lit valley mist | Everything else: sky, mountains, cypresses, crowding, toy figures |
+| `design/refs/austerlitz-cavalry-v2.png` (v1 superseded) | Grey winter palette, hollow squares, a cavalry mass read as one shape, dust | Even texture density everywhere (noise) |
+| `design/refs/austerlitz-goldbach-v2.png` (v1 kept for close zoom) | Mid zoom: partly frozen meander, field-strip patchwork, tree lines along the stream | Crowding, little negative space |
+| `design/refs/austerlitz-pratzen-v1.png` (superseded) | Mist in the hollow, long shadows across a slope | Saturated gold ground, Mediterranean rocks |
+| `design/refs/borodino-fleches-v1.png` | Earthworks (arrowhead parapets), birch clusters, timber hamlet, casualties as small painted shapes | Clutter; near-realistic black smoke from the fire |
+| `design/refs/borodino-great-redoubt-v1.png` | Redoubt massing (rampart, ditch, embrasures), an assault in clear lanes | Smoke banks over columns; dusty Total War realism |
+| `design/refs/eylau-cavalry-v1.png` | Deep snow with blue shadows (§4b), frozen stream, cavalry masses as shapes | Squalls and smoke blurring the cavalry; white trousers lost in snow |
+| `design/refs/eylau-cemetery-v1.png` | Snow on roofs and buildings, walled enclosures, hedges and fences as structure | Dense fallen; brown and grey roofs with no accent |
+| `design/refs/wagram-russbach-v1.png` | Escarpments and banks, bridges as crossings, wheat patches | Poplars that read as cypresses; a canal-straight stream (§6c) |
+| `design/refs/french-infantry-v1.png`, `-v1-rear` | Tripo input: silhouette, kit proportions, slender adult build, colour regions | Fine face, button and brass detail (§8); slight baked shading (§5); the shako is 1806 and later, so Austerlitz needs a bicorne variant |
+| `design/refs/french-barracks-u-v2-front.png`, `-u-v2-rear` (v1 pair superseded) | Tripo input: a U footprint that reads from above, clear wall, roof and window regions | Baked directional light (§5); stone texture too fine; check the dormer and chimney counts match between views |
+
+### What the set gets wrong (fix in the next generation, and never copy)
+
+- **Battalion size.** The v2, Borodino, Eylau and Wagram prompts ask for 200–400 men a battalion;
+  decision 0007 says about 100. Prompts say about 100 from now on (§12).
+- **Russian green reads near-black** in every scene, never `#2F6B3C`, which fails "side readable in
+  under a second". In game the palette sets it; check its value against the ground in L4's greyscale
+  test (`docs/plans/active/track-e-look.md`). White trousers also vanish on snow.
+- **December painted as late autumn.** The v1 Austerlitz images use saturated gold-orange ground
+  (§4b value 2). Winter is the v2 grey with pale gold light only on ridges and roofs.
+- **Busyness.** Many wide shots carry the same fine texture everywhere and fill the frame with units,
+  against §11 and "terrain never matches army saturation".
+- **Concept images have baked light** (warm side, cool side), so the Tripo output needs the clean-up
+  pass in §10.
 
 ---
 
@@ -310,6 +355,8 @@ scanned. The prototype accepts a dropped PNG to test a grain live.
   painted ground ring when needed.
 - **Graphic rim** and a crisper version of the paint (less brush jitter than
   the landscape).
+- **Paint follows size on screen** (decision 0017, proposed): a brush mask on
+  the figure's UVs that fades to flat colour regions at gameplay zoom.
 - **12 fps stepped animation** for marching and fighting.
 - **No gore:** casualties fall and remain as painted shapes.
 - At the far zoom a unit is a flat block whose shape is its formation's
@@ -360,6 +407,12 @@ concept image (OpenAI)  →  Tripo (image or multiview → 3D)  →  clean-up  �
 ---
 
 ## 12. Prompt library (OpenAI image generation)
+
+**Rules for every battle-scene prompt** (from the review of the reference set, §0): battalions of
+about 100 men (decision 0007); armies more saturated than the ground; winter as grey ground with pale
+gold light, not gold-orange; Russian green named as a mid-value green, not dark; generous negative
+space; no cypresses or poplars in Central Europe. The full prompts used so far sit beside their
+images in `design/refs/`.
 
 **Asset prompt: tree (Tripo input)**
 ```
