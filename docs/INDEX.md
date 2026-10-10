@@ -46,7 +46,8 @@ designs written before building (frozen once built, their lasting content moves 
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
-  [`plans/active/s1c-fire-morale.md`](plans/active/s1c-fire-morale.md) (S1c).
+  [`plans/active/s1c-fire-morale.md`](plans/active/s1c-fire-morale.md) (S1c),
+  [`plans/active/track-e-look.md`](plans/active/track-e-look.md) (Track E: the painterly look, L0–L9; results in [`plans/active/track-e-results/README.md`](plans/active/track-e-results/README.md)).
 - Done: [`plans/done/w1-river-shape.md`](plans/done/w1-river-shape.md), [`plans/done/w1b-river-width.md`](plans/done/w1b-river-width.md), [`plans/done/docs-restructure.md`](plans/done/docs-restructure.md), [`plans/done/formation-feel.md`](plans/done/formation-feel.md), [`plans/done/terrain-movement.md`](plans/done/terrain-movement.md) (F1, #9), [`plans/done/s0-sim-spine.md`](plans/done/s0-sim-spine.md) (S0, #11), [`plans/done/s1a-formations-on-spine.md`](plans/done/s1a-formations-on-spine.md) (S1a, #13), [`plans/done/s1b-sim-page.md`](plans/done/s1b-sim-page.md) (S1b, #14).
 
 ## Research (background)

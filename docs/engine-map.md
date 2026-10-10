@@ -141,8 +141,10 @@ Phases as revised in `docs/proposals/sim-design.md` §17:
 - **S2 hardening:** worker, vision, smoke, group moves, cross-browser replays.
 - **S3 a real battle:** order of battle, scenarios, AI, saves.
 
-**Track E (engine spine and the look):** unchanged (E0-lite, then water W2–W5, scale-up,
-performance, video tier, W6). The two tracks meet at the units placeholder.
+**Track E (engine spine and the look):** scheduled in `docs/plans/active/track-e-look.md` (phases
+L0–L9: E0-lite, the units placeholder and benchmark, the terrain detail layer, the soldier look, the
+readability gate, the macro bake, smoke, foliage, anti-aliasing, the look match; water W2–W6 after L2).
+The two tracks meet at the renderer's read of the sim (`SoldierLayer`, the volley state).
 
 ## 5. Open questions
 
