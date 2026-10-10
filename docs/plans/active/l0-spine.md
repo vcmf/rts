@@ -78,3 +78,10 @@ chunked 1.8 km world (engine-design §10 item 8), our own camera controller (pro
   clean-up cannot hide the run's error; default pages resolve from the repo root. Not done: running
   base and candidate in parallel, and printing full error lines from `tools/shot.mjs` (the negative
   tests capture them in the page instead).
+- **L0c round 1:** nothing severe; the port matched the prototype pixel for pixel before and after.
+  Fixed: the load-time marker starts before any module runs (as in the prototype); a readable page
+  message when the nature data is missing; real DOM types and validated panel toggles; the painter is
+  inlined with a replacer function and a missing marker throws; a `perFrame` option replaces the bake
+  material's register-then-remove; `RiverQuery.s` is required. Kept: the post-process vertex import
+  (Babylon's lazy load never completed in the built page; the doc now says so). Deferred: the nature
+  data moves out of `prototypes/` before L9; one shared declaration file for Vite's query imports.

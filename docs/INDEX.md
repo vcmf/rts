@@ -31,6 +31,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`systems/sim-spine.md`](systems/sim-spine.md): the simulation spine: tick, commands, state, hashing, saves, replays (S0).
 - [`systems/formations.md`](systems/formations.md): the formation layer in the sim: shapes, changes, the lag model, the footprint gate (S1a).
 - [`systems/sim-page.md`](systems/sim-page.md): the page that draws and drives the sim: soldier layer, staff map, input, replays (S1b).
+- [`systems/look.md`](systems/look.md): the look page: the painted world in TypeScript (Track E L0c).
 - [`systems/fire-morale.md`](systems/fire-morale.md): fire by company, keyed casualties, loss-driven morale and rout (S1c-1).
 - More appear as systems are built; see [`systems/README.md`](systems/README.md).
 

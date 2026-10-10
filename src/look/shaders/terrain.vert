@@ -1,0 +1,2 @@
+precision highp float;attribute vec3 position;attribute vec3 normal;attribute float aRiver;uniform mat4 world,viewProjection;
+varying vec3 vW,vN;varying float vRiver;void main(){vec4 w=world*vec4(position,1.0);vW=w.xyz;vN=normalize(mat3(world)*normal);vRiver=aRiver;gl_Position=viewProjection*w;}

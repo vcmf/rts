@@ -13,6 +13,7 @@ PR that changes it; the design that led to it stays in `docs/proposals/` and the
 | System | Doc | State |
 |---|---|---|
 | River (lowland meander) | `docs/systems/river.md` | built in the prototype (W1, W1b) |
+| The look page: terrain, river, nature, bakes, passes | `docs/systems/look.md` | built (Track E L0c): the prototype ported to TypeScript |
 | Terrain, bakes, camera | not yet: see `docs/proposals/engine-design.md` | prototype, to be documented at E0-lite |
 | Painterly shading, vegetation, seasons | not yet: see `docs/art-bible.md` | prototype |
 | Staff map | not yet: see `docs/proposals/staff-map/design.md` | feel prototype |
