@@ -7,8 +7,9 @@ import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTextur
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { mulberry } from './noise.ts'
+import { D } from './spec.ts'
 
-export const GRAIN_N = 512
+export const GRAIN_N = D.spec.sizes.grain
 
 function pnoise(N: number, cx: number, cy: number, seed: number): Float32Array {
   const r = mulberry(seed), L = new Float32Array(cx * cy); for (let i = 0; i < L.length; i++) L[i] = r()
@@ -52,11 +53,14 @@ export function makeSmoothGrainCanvas(): { canvas: HTMLCanvasElement; maxStep: n
   const N = GRAIN_N, canvas = makeGrainCanvas(null), g = canvas.getContext('2d')!, img = g.getImageData(0, 0, N, N), d = img.data
   const a = pnoise(N, 4, 4, 11), b = pnoise(N, 8, 8, 12), r = new Float32Array(N * N)
   for (let i = 0; i < N * N; i++) r[i] = cl((0.65 * a[i] + 0.35 * b[i] - 0.5) * 2.2 + 0.5)
+  for (let i = 0; i < N * N; i++) d[i * 4] = Math.round(r[i] * 255)
+  // on the stored bytes: the texture holds those, not the floats
   let maxStep = 0
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-    const v = r[y * N + x]; d[(y * N + x) * 4] = Math.round(v * 255)
-    maxStep = Math.max(maxStep, Math.abs(v - r[y * N + (x + 1) % N]), Math.abs(v - r[((y + 1) % N) * N + x]))
+    const v = d[(y * N + x) * 4]
+    maxStep = Math.max(maxStep, Math.abs(v - d[(y * N + (x + 1) % N) * 4]), Math.abs(v - d[(((y + 1) % N) * N + x) * 4]))
   }
+  maxStep /= 255
   g.putImageData(img, 0, 0); return { canvas, maxStep }
 }
 

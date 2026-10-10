@@ -77,7 +77,9 @@ grain at a constant size on screen (`docs/plans/active/l2-detail.md`).
 - **Strength:** the blend's lost contrast is given back (variance renormalised), then scaled to `SPEC.detail.amp`
   (0.4) of the texture's own.
 - **Band edges:** never narrower than two pixels' change of the light value (`fwidth`).
-- The 21 m blotch term reads the same planes at its fixed world size. Snow, cloud shadows and flowers are
+- The pixel's angle is a uniform (`uPixA`) from the camera's actual vertical field of view, so on frames wider
+  than 16:9 (which keep the horizontal one) the grain still spans the same share of the frame's height.
+- The 21 m blotch term reads the same planes at its fixed world size, renormalised the same way. Snow, cloud shadows and flowers are
   unchanged. Every read is a `textureGrad` from the world position's derivatives, taken once.
 - `DETAIL_L0` puts back the L0 grain (the bench's second arm, the checks' baseline); `DETAIL_DEBUG` and
   `DETAIL_DEBUG_INC` are the checks' views; `DETAIL_SAB_IMPLICIT` and `DETAIL_SAB_STEP` are sabotages.

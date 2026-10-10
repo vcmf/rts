@@ -44,7 +44,7 @@ void main(){vec3 N=normalize(vN);vec4 lm=LM(vW);
   #ifdef DETAIL_DEBUG_INC
   // the checks' incidence view: |cos| in red; the biplanar major plane's weight in green, its axis in blue (0, ½, 1)
   #ifdef DETAIL_ON
-  gl_FragColor=vec4(abs(dot(N,normalize(uCamPos-vW))),pW.x,float(pMa.x)*0.5,1.0);return;
+  gl_FragColor=vec4(abs(dot(N,normalize(uCamPos-vW))),pW.x,float(pMa)*0.5,1.0);return;
   #else
   gl_FragColor=vec4(abs(dot(N,normalize(uCamPos-vW))),0.0,0.0,1.0);return;
   #endif

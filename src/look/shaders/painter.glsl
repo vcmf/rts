@@ -84,9 +84,10 @@ vec3 shadowOf(vec3 a){float l=dot(a,vec3(0.3,0.59,0.11));return clamp(mix(vec3(l
 #define DETAIL_ON
 #endif
 uniform float uGrainMean;   // the mean of the grain's R channel: the renormalisation's centre
+uniform float uPixA;        // the angle of one pixel of a 1080-line frame, from the camera's vertical field of view
 float pDetail;              // the detail grain of the last paint(), for DETAIL_DEBUG
 #ifdef DETAIL_ON
-vec3 dPx,dPy;ivec3 pMa,pMe;vec2 pW;float pFade;
+vec3 dPx,dPy;int pMa,pMe;vec2 pW;float pFade;
 vec2 pUA,pUB,pXA,pXB,pYA,pYB;   // the two planes' coordinates and their screen derivatives, picked once
 // a plane's coordinates, by the axis it faces (as Quilez's: x → yz, y → zx, z → xy)
 vec2 onPlane(vec3 v,int ax){return ax==0?v.yz:ax==1?v.zx:v.xy;}
@@ -94,13 +95,12 @@ vec2 onPlane(vec3 v,int ax){return ax==0?v.yz:ax==1?v.zx:v.xy;}
 // smooth). Near the cube's diagonals (a 55° slope facing between two axes) every weight goes to zero and which two
 // planes are read flips: there the grain fades to its mean (pFade), so the result stays continuous
 void detailPlanes(vec3 wp,vec3 n){n=abs(n);
-  pMa=(n.x>n.y&&n.x>n.z)?ivec3(0,1,2):(n.y>n.z)?ivec3(1,2,0):ivec3(2,0,1);
-  ivec3 mi=(n.x<n.y&&n.x<n.z)?ivec3(0,1,2):(n.y<n.z)?ivec3(1,2,0):ivec3(2,0,1);
-  pMe=ivec3(3)-mi-pMa;
-  vec2 w=clamp((vec2(n[pMa.x],n[pMe.x])-0.5773)/(1.0-0.5773),0.0,1.0);float sw=w.x+w.y;
+  pMa=(n.x>=n.y&&n.x>=n.z)?0:(n.y>=n.z)?1:2;                 // ties go to the first axis, so the two always differ
+  int o1=pMa==0?1:0,o2=pMa==2?1:2;pMe=n[o1]>=n[o2]?o1:o2;
+  vec2 w=clamp((vec2(n[pMa],n[pMe])-0.5773)/(1.0-0.5773),0.0,1.0);float sw=w.x+w.y;
   pW=sw>0.0?w/sw:vec2(1.0,0.0);pFade=clamp(sw/0.25,0.0,1.0);
-  pUA=onPlane(wp,pMa.x);pXA=onPlane(dPx,pMa.x);pYA=onPlane(dPy,pMa.x);
-  pUB=onPlane(wp,pMe.x);pXB=onPlane(dPx,pMe.x);pYB=onPlane(dPy,pMe.x);}
+  pUA=onPlane(wp,pMa);pXA=onPlane(dPx,pMa);pYA=onPlane(dPy,pMa);
+  pUB=onPlane(wp,pMe);pXB=onPlane(dPx,pMe);pYB=onPlane(dPy,pMe);}
 #ifdef DETAIL_SAB_IMPLICIT
 #define TEXG(uv,gx,gy) texture(uGrain,uv)                 // sabotage: implicit derivatives (mip lines at hand-overs)
 #else
@@ -119,8 +119,8 @@ vec2 detailOctave(float S,float idx){
   if(s>0.0)b=detailRead(S,sin(vec2(3.0,7.0)*(i+1.0))).r;
   return vec2(mix(a,b,s),(1.0-s)*(1.0-s)+s*s);}
 float detailGrain(vec3 wp,vec3 N){
-  vec3 v=uCamPos-wp;float dist=length(v),ci=max(abs(dot(N,v/dist)),0.05);
-  float T=dist*DETAIL_PIXA/sqrt(ci)*DETAIL_PX;                  // the world size of a tile spanning DETAIL_PX pixels
+  vec3 v=uCamPos-wp;float dist=length(v),ci=max(abs(dot(N,v/dist)),DETAIL_MINCOS);
+  float T=dist*uPixA/sqrt(ci)*DETAIL_PX;                  // the world size of a tile spanning DETAIL_PX pixels
   float L=log2(T),La=floor(L),Sa=exp2(La),o=L-La;
   float idx=textureGrad(uGrain,wp.xz/DETAIL_INDEX,dPx.xz/DETAIL_INDEX,dPy.xz/DETAIL_INDEX).g*8.0;
   vec2 A=detailOctave(Sa,idx),B=detailOctave(Sa*2.0,idx);
@@ -133,7 +133,7 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   float snow=snowAt(N,wp);alb=mix(alb,vec3(0.80,0.81,0.84),snow);                           // snow: lit warm white, shadowed cool blue by the ramp
   #ifdef DETAIL_ON
   dPx=dFdx(wp);dPy=dFdy(wp);detailPlanes(wp,N);
-  float gd=detailGrain(wp,N),blot=0.5+(detailRead(21.0,vec2(0.0)).g-0.5)*pFade;   // the 21 m blotches stay fixed in the world
+  float gd=detailGrain(wp,N),blot=0.5+(detailRead(21.0,vec2(0.0)).g-0.5)/sqrt(dot(pW,pW))*pFade;   // the 21 m blotches stay fixed in the world (renormalised like the grain)
   #else
   float gd=grainW(wp,N,5.5).r,blot=grainW(wp,N,21.0).g;
   #endif

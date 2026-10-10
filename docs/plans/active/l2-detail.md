@@ -136,6 +136,9 @@ In `paint()`, for the terrain only (other surfaces keep today's grain until L7):
   ring's 33,124 cells pass 35° (the steepest 51°).
 - **Band edges:** never narrower than two pixels' change of the light value (one pixel left 0.24% of the
   pixels shimmering, two leave 0.18%).
+- **The pixel's angle follows the camera** (a uniform, not a define from the SPEC's field of view): frames
+  wider than 16:9 keep the horizontal field of view and see less vertically.
+- **The blotch term is renormalised** like the grain, so two blended planes do not weaken it on slopes.
 - **Cost:** reading each plane's coordinates once and skipping zero-weight variants did not move the
   Mac's numbers; the reads are kept simple and the laptop decides.
 - **The L0 grain stays behind a define** (`DETAIL_L0`) as the bench's and the checks' baseline arm,

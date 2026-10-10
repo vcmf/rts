@@ -22,14 +22,14 @@ export interface Spec {
   }
   ground: { lo: number; hi: number }          // lo: the lowest ground anywhere; hi: the highest on the tile, m (checked against the data)
   texel: { shadow: number; light: number; ao: number }   // the largest texel each bake may have, m
-  sizes: { lightMap: number; aoCell: number; riverMask: number; reflMask: number; aoTex: number }   // texels per side; aoCell in m
+  sizes: { lightMap: number; aoCell: number; riverMask: number; reflMask: number; aoTex: number; grain: number }   // texels per side; aoCell in m
   minSpec: { maxTexture: number; bakeMB: number }         // decision 0011: RTX 3060 laptop
   depth: { near: number; far: number }        // the sun camera's depth range, m
   shadowFade: number                          // shadows fade out over the shadow box's outer metres
   // the terrain's detail layer (docs/plans/active/l2-detail.md, L2b): one texture tile spans `px` pixels of a frame
   // `lines` pixels tall at every zoom; the anti-tiling index varies over `index` metres of the world; the grain's
-  // deviation is `amp` times the texture's own
-  detail: { px: number; lines: number; index: number; amp: number }
+  // deviation is `amp` times the texture's own; the footprint's incidence never counts below `minCos`
+  detail: { px: number; lines: number; index: number; amp: number; minCos: number }
 }
 
 export const SPEC: Spec = {
@@ -37,11 +37,11 @@ export const SPEC: Spec = {
   camera: { yaw0: -Math.PI / 2 - 0.35, yawRange: Math.PI / 4, betaMin: 0.3, betaMax: 0.98, rMin: 45, rMax: 260, fov: 0.62, aspectMax: 16 / 9, horizonMargin: 0.1, focusY: 8 },
   ground: { lo: 0, hi: 25 },   // the tile spans 0.4..20.3 m, the far ring 2.2..27.5 m; checked at load
   texel: { shadow: 0.33, light: 0.5, ao: 4 },
-  sizes: { lightMap: 3072, aoCell: 3, riverMask: 2048, reflMask: 1536, aoTex: 768 },
+  sizes: { lightMap: 3072, aoCell: 3, riverMask: 2048, reflMask: 1536, aoTex: 768, grain: 512 },
   minSpec: { maxTexture: 8192, bakeMB: 600 },
   depth: { near: 100, far: 1600 },
   shadowFade: 32,
-  detail: { px: 2048, lines: 1080, index: 400, amp: 0.4 },
+  detail: { px: 2048, lines: 1080, index: 400, amp: 0.4, minCos: 0.05 },
 }
 
 export interface Derived {
@@ -108,15 +108,15 @@ export function derive(s: Spec = SPEC): Derived {
   if (s.sizes.aoCell >= 4) bad.push('bake: occlusion cells must be finer than the narrowest channel (4 m)')
   for (const [k, n] of Object.entries(s.sizes)) if (k !== 'aoCell' && n > s.minSpec.maxTexture) bad.push(`bake: ${k} ${n}² > ${s.minSpec.maxTexture}² (min-spec)`)
   if (s.depth.near >= s.depth.far) bad.push('bake: sun depth range out of order')
-  if (!(s.detail.px > 0 && s.detail.lines > 0 && s.detail.index > 0 && s.detail.amp > 0)) bad.push('detail: sizes must be positive')
+  if (!(s.detail.px > 0 && s.detail.lines > 0 && s.detail.index > 0 && s.detail.amp > 0 && s.detail.minCos > 0)) bad.push('detail: sizes must be positive')
   if (bad.length) throw new Error('world spec: ' + bad.join('; '))
   const sbias = (0.96 / (s.depth.far - s.depth.near)).toFixed(6)
   return {
     spec: s, cell, farCell, band: s.tile / 2 + farCell, hfMargin: Math.ceil(s.aoMargin / cell), footprint, sbias,
     defines: [`#define SBIAS ${sbias}`, `#define FAR_W ${s.far.toFixed(1)}`, `#define TILE_HALF ${(s.tile / 2).toFixed(1)}`, `#define TILE_W ${s.tile.toFixed(1)}`,
-      // the world size of one pixel, per metre of view distance, at the centre of a `lines`-tall frame; amp: the grain's
-      // deviation, as a fraction of the texture's own
-      `#define DETAIL_PIXA ${(2 * Math.tan(c.fov / 2) / s.detail.lines).toExponential(6)}`, `#define DETAIL_PX ${s.detail.px.toFixed(1)}`, `#define DETAIL_INDEX ${s.detail.index.toFixed(1)}`, `#define DETAIL_AMP ${s.detail.amp.toFixed(3)}`],
+      // amp: the grain's deviation, as a fraction of the texture's own; minCos: the incidence's floor (the pixel angle
+      // is the uniform uPixA: it follows the camera's field of view)
+      `#define DETAIL_MINCOS ${s.detail.minCos.toFixed(3)}`, `#define DETAIL_PX ${s.detail.px.toFixed(1)}`, `#define DETAIL_INDEX ${s.detail.index.toFixed(1)}`, `#define DETAIL_AMP ${s.detail.amp.toFixed(3)}`],
   }
 }
 

@@ -2,6 +2,7 @@
 // prototypes/painted-cinematic.html with no change to the look (docs/plans/done/l0-spine.md, L0c). Built in the
 // prototype's order: mesh and material creation order decides draw order, and the goldens compare pixels.
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
+import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Engine } from '@babylonjs/core/Engines/engine.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
@@ -48,6 +49,7 @@ const scene = new Scene(engine); scene.skipPointerMovePicking = true
 scene.clearColor = CLEAR
 
 const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0))
+const keptGrains = new Set([mats.grain])   // grains the look tools switch back to (window.__look.grain): never disposed
 const terrain = buildTerrain(scene, mats, look.far)
 const water = buildWater(scene, mats)
 const nature = buildNature(scene, mats, water.reflAdd)
@@ -79,7 +81,7 @@ addEventListener('drop', e => {
   const img = new Image()
   img.onload = () => {
     const old = mats.grain, cv = makeGrainCanvas(lumOf(img)); mats.setGrain(grainTexture(scene, cv), grainMean(cv))
-    bakes.bakeMat.setTexture('uGrain', mats.grain); bakes.lightMap.resetRefreshCounter(); old.dispose()
+    bakes.lightMap.resetRefreshCounter(); if (!keptGrains.has(old)) old.dispose()
   }
   img.src = URL.createObjectURL(f)
 })
@@ -90,11 +92,17 @@ const FROZEN = new URLSearchParams(location.search).has('frozen')   // golden sc
 // sun colour follows the season: warm gold in summer and autumn, pale gold in winter (keeps snow white, not yellow)
 const SUNCOL = PAL.sun.clone(), WINTER_SUN = new Color3(0.98, 0.95, 0.88)
 scene.onBeforeRenderObservable.add(() => { const w = Math.max(0, Math.min(1, S.season - 2)); SUNCOL.copyFrom(Color3.Lerp(PAL.sun, WINTER_SUN, w)) })
+// the detail layer's pixel angle (src/look/shaders/painter.glsl): the angle one pixel of a SPEC.detail.lines-tall
+// frame spans, from the camera's actual vertical field of view (narrower than the SPEC's on frames wider than 16:9)
+let pixA = 0
 scene.onBeforeRenderObservable.add(() => {
+  const tv = camera.fovMode === Camera.FOVMODE_VERTICAL_FIXED ? Math.tan(camera.fov / 2) : Math.tan(camera.fov / 2) / engine.getAspectRatio(camera)
+  pixA = 2 * tv / D.spec.detail.lines
   if (!FROZEN) S.t += Math.min(engine.getDeltaTime() / 1000, 0.05)
   for (const m of mats.all) {
     m.setVector3('uCamPos', camera.position); m.setVector3('uFocus', camera.target); m.setFloat('uTime', S.t)
     m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
+    m.setFloat('uPixA', pixA)
     m.setFloat('uAO', S.ao); m.setFloat('uMist', S.mist); m.setFloat('uShafts', S.shafts); m.setFloat('uBack', S.back)
   }
   fpsEl.textContent = engine.getFps().toFixed(0) + ' fps'
@@ -144,7 +152,7 @@ Object.assign(window, { __look: {
   // the grain the terrain reads: the paint grain, or the seam check's smooth one (returns its steepest texel step)
   grain: (kind: 'paint' | 'smooth') => {
     if (kind === 'paint') { mats.setGrain(paintGrain, paintMean); return null }
-    if (!smooth) { const s = makeSmoothGrainCanvas(); smooth = { tex: grainTexture(scene, s.canvas), mean: grainMean(s.canvas), maxStep: s.maxStep } }
+    if (!smooth) { const s = makeSmoothGrainCanvas(); smooth = { tex: grainTexture(scene, s.canvas), mean: grainMean(s.canvas), maxStep: s.maxStep }; keptGrains.add(smooth.tex) }
     mats.setGrain(smooth.tex, smooth.mean); return smooth.maxStep
   },
   // the terrain alone (and the lab's hill), or everything; the finishing passes on or off (off: the frame is the

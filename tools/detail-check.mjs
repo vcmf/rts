@@ -100,9 +100,9 @@ function scale(url, dir, defs) {
 const SEAM_ZOOMS = [CAM.rMin, R0, CAM.rMax]
 // The largest step between neighbouring pixels a smooth texture can draw, in the debug view's red units (0–255):
 // its steepest texel step × the most texels a pixel can span (octave A spans at least half a tile; the incidence
-// stretches it by up to 1/√0.05, the shader's floor) × the largest renormalisation (√8: two planes, two octaves, two
-// variants) × the strength × the debug view's ½ × 255; plus 2 for rounding both pixels.
-const seamLimit = maxStep => maxStep * (512 / (TILE_PX / 2)) / Math.sqrt(0.05) * Math.sqrt(8) * DET.amp * 0.5 * 255 + 2
+// stretches it by up to 1/√minCos, the shader's floor) × the largest renormalisation (√8: two planes, two octaves,
+// two variants) × the strength × the debug view's ½ × 255; plus 2 for rounding both pixels.
+const seamLimit = maxStep => maxStep * (SPEC.sizes.grain / (TILE_PX / 2)) / Math.sqrt(DET.minCos) * Math.sqrt(8) * DET.amp * 0.5 * 255 + 2
 const EDGE_ON = 0.17   // the incidence's cosine below which a face is edge-on (about 10° from it)
 const KEEPS = 0.8    // and at twice the resolution (four quarter frames) a step there is still this fraction of it (a step is a step at any resolution; a transition under a pixel wide shrinks, if not to half)
 const ISOLATED = 3   // and a seam step is this many times larger than both steps beside it (a smooth slope's are alike)
@@ -195,10 +195,15 @@ function tiling(url, dir) {
   const views = []
   for (const [arm, defs] of [['l2', []], ['l0', ['DETAIL_L0']]]) for (const [season, sv] of [['summer', 0], ['winter', 3]]) for (const dy of [-CAM.yawRange, 0, CAM.yawRange])
     views.push({ arm, defs, season, sv, yaw: Math.round(dy * 180 / Math.PI) })
-  // random names: shuffled numbers
-  const ids = views.map((_, i) => i + 1).sort(() => Math.random() - 0.5)
+  // random names: shuffled numbers (Fisher–Yates)
+  const ids = views.map((_, i) => i + 1)
+  for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]] }
   const steps = prepSteps()
-  views.forEach((v, i) => { v.name = `ground-${String(ids[i]).padStart(2, '0')}`; steps.push(detail(v.defs, false), view(v.name, A0 + v.yaw * Math.PI / 180, CAM.betaMax, CAM.rMax, v.sv), ['shot', path.join('tiling', v.name)]) })
+  views.forEach((v, i) => {
+    v.name = `ground-${String(ids[i]).padStart(2, '0')}`
+    if (i === 0 || views[i - 1].arm !== v.arm) steps.push(detail(v.defs, false))   // views are grouped by arm
+    steps.push(view(v.name, A0 + v.yaw * Math.PI / 180, CAM.betaMax, CAM.rMax, v.sv), ['shot', path.join('tiling', v.name)])
+  })
   steps.push(detail([], true), view('tiling-debug', A0, CAM.betaMax, CAM.rMax), ['shot', 'tiling.debug'])
   shoot(url, dir, steps, W, H)
   const answers = Object.fromEntries(views.map(v => [v.name, { arm: v.arm, season: v.season, yawDeg: v.yaw }]))
