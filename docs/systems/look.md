@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-10
-code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs]
+code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs]
 decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0003-no-blur-in-gameplay, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain]
 ---
 
@@ -49,11 +49,39 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/bakes.ts` | Sun shadow depth (once), occlusion and valley mask (CPU, once), the top-down light map (once) |
 | `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), and the passes: depth of field (presentation only, decision 0003), the fused grade |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop, and the debug globals the checks read |
+| `src/look/bench.ts`, `src/look/gputimer.ts` | `?bench`: fixed cameras, frame times, GPU time per pass, draw calls, triangles, texture memory and the build hash, as JSON (below) |
+| `src/look/lab.ts` | Test objects the tools add: the readability guard's army blocks |
 
-Shaders are files in `src/look/shaders/`, imported as text (`?raw`). The page exposes
+Shaders are files in `src/look/shaders/`, imported as text (`?raw`). Materials made after the bakes (the
+guard's blocks) get the bakes' textures through `Materials.bindAll`. The page exposes
 `window.__proto = { S, scene, camera, buildPost, play }` and accepts `?frozen` (the clock stays at 0),
 the contract of `tools/golden.mjs`; it also puts the prototype's global names on `window`
-(`RIVER`, `H`, `groups`, `SMW`, …) so `tools/render-check.js` and `tools/river-check.js` run unchanged.
+(`RIVER`, `H`, `groups`, `SMW`, …) so `tools/render-check.js` and `tools/river-check.js` run unchanged, and
+`window.__look = { lab, mats, passes, post }` for the look tools.
+
+### The bench (`?bench`, L2a)
+
+The page runs 9 cameras (closest, default and widest zoom, each at yaw −45°, 0°, +45°) and records, per camera
+and arm, frame times (p50, p95, max), GPU time per pass, draw calls and triangles, plus the estimated texture
+memory, the renderer and the build hash (`__BUILD__`, set by `vite.config.ts`). It shows the JSON with a link to
+save it, and puts it in `window.__bench`. Arms are variants of the page measured in the same session, A B B A per
+camera.
+- **GPU time** comes from our own `EXT_disjoint_timer_query_webgl2` queries (`src/look/gputimer.ts`). Queries
+  cannot nest: whole-frame time is taken on alternate frames, the passes (terrain, scatter, water, other,
+  post) on the others, each as segments of consecutive draws, only in the camera's own render pass. Frames with
+  a disjoint event are dropped. Without the extension the GPU fields are `null`.
+- **`passesOverFrame`** is the passes' medians over the frame's. ANGLE on Metal inflates every query (about 2×
+  here); there only the frame column stands. Cost comparisons between arms use frame time.
+- `node tools/bench-look.mjs <url> [out.json] [--hold s] [--gpu metal]` runs it headless (SwiftShader by
+  default, which has no GPU timer). The laptop run is the owner's (`docs/plans/active/track-e-look.md`, "Measuring").
+
+### The readability guard (L2a)
+
+`node tools/guard.mjs <url> [--base <url>]`: six clusters of the four army coats (art bible §4) at battalion
+size, on the default view, summer and winter. Each block's luma against the ground's at the same pixels (from a
+render without blocks) must differ by 0.10; with `--base`, a block fails only if it separated on the base. The
+blocks are painted by the shared painter at unit crispness, without snow (`NOSNOW`), as units will be. Its
+negative, in summer: the same blocks painted with the terrain's own material must not separate.
 
 ## Changes from the prototype (L0a)
 
@@ -80,6 +108,8 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
   with a sabotage per limit.
 - `test/look-spec.test.ts`: one negative case per SPEC invariant, the triangle split, the data file's round
   trip and that the committed file is what the authoring step builds.
+- `node tools/guard.mjs` and `node tools/bench-look.mjs` (above). Their baselines are in
+  `docs/plans/active/track-e-results/l2a-baseline.md`.
 - `npm test` (lint and typecheck cover `src/look/`).
 
 ## Open questions
@@ -88,5 +118,7 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
   real module before the prototype is retired (L9).
 - `groundAt` reads the far grid inside the 14 m apron band, where the drawn surface is the apron's fan; nothing
   is placed there (`src/look/nature.ts`), and the look check fails if anything is.
+- **The guard fails on main** for some coats (red in summer, white on snow): a palette question for the owner,
+  recorded in `docs/plans/active/track-e-results/l2a-baseline.md`.
 - The bundle is one 1.7 MB chunk (Babylon plus the nature pack data); splitting it waits until load
   time matters.
