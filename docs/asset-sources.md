@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-10
 ---
 
 # Asset Sources
@@ -53,7 +53,7 @@ model contract" and §10 "asset generation pipeline").
 | Tool | Use | Notes |
 |---|---|---|
 | **OpenAI image generation → Tripo** | Concept image, then 3D model | Prompts in `docs/art-bible.md` §12. The image must be **evenly lit with no cast shadows**, or the shading gets baked into the texture. |
-| **Tripo API** | Multiview to 3D, low-poly P-series, `convert_model` (GLB/OBJ/FBX, `face_limit`), auto-rigging | Paid per credit. Rigging: biped and quadruped, Mixamo-compatible bones. |
+| **Tripo API** | Multiview to 3D, low-poly P-series, `convert_model` (GLB/OBJ/FBX, `face_limit`), auto-rigging | Paid per credit. Rigging: biped and quadruped, Mixamo-compatible bones. **Our models come from the owner's Tripo Pro account, which carries a full commercial licence.** |
 | **TRELLIS.2** (Microsoft) | Image to 3D, open source | **MIT licence.** Needs a large NVIDIA GPU: use the Hugging Face Space or a rented GPU. Single image only, for now. |
 | **Hunyuan3D 2.1** (Tencent) | Image to 3D, open weights | ⚠️ Licence excludes the **EU, UK and South Korea**. Avoid for published work there. |
 | **Mixamo / AccuRIG / UniRig** | Rigging and animation for humanoids (UniRig handles any shape, MIT) | Mixamo is free but unmaintained and sometimes broken; AccuRIG is a desktop app. |

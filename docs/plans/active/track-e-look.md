@@ -280,7 +280,7 @@ so, WebGPU moves up (research open question).
 ## LA. Asset pipeline (beside L0–L3)
 
 **Goal:** generated models become engine assets that the shared painted material paints, within
-budget, with their licence on record. No phase before this one owns that path (art bible §10), and the
+budget. No phase before this one owns that path (art bible §10), and the
 first real assets exist: a rigged French infantryman with 14 authored clips, and concept images for
 the infantryman and the barracks in `design/refs/`.
 
@@ -297,14 +297,11 @@ README is the source for every number; this plan copies none.
    history and stay out), and a clip graph that covers
    **every** clip, each with its role (the trial's `clips.json` covers only the drill and melee clips;
    LA0 adds the rest from the GLB and the trial's READMEs). Out of git: renders, videos, `.blend` scenes and the GLB, which
-   are all rebuilt. **The licence comes first:** record in `docs/asset-sources.md` the source, the Tripo
-   plan and the licence (a free-tier model cannot ship), and research §d risk 12's other duties
-   (disclose AI-generated assets on Steam; flags, insignia and text are hand-made). Only then is the
-   source FBX committed: it has no public download, so git is its one safe home. If the licence
-   fails, the model is regenerated on a paid plan before LA0 lands.
+   are all rebuilt. The source FBX is committed: it has no public download, so git is
+   its one safe home.
 
    Acceptance: on a fresh checkout, the chain rebuilds the GLB from the committed FBX and the build's
-   own checks pass; the clip graph lists every clip in the GLB (a check); the licence is recorded.
+   own checks pass; the clip graph lists every clip in the GLB (a check).
 2. **LA1, the figure for crowds.** The Tripo mesh is the shape source, not the shipped mesh (research
    §d, risk 12: retopology onto a canonical soldier mesh). So:
    - a canonical soldier mesh at the L1 LOD budgets, retopologised over the Tripo shape and skinned to
@@ -333,17 +330,21 @@ README is the source for every number; this plan copies none.
    building and L9 a landmark; the building material (object-local grain, oriented strokes, edge
    skirts) is L7's, and so is the test that its marks stay attached.
 
-   Acceptance: the licence is recorded in `docs/asset-sources.md` before the model is committed (a
-   free-tier model cannot ship; LA0's rule); within 2–8k triangles; colour regions separate, with no
+   Acceptance: within 2–8k triangles; colour regions separate, with no
    colour taken from the Tripo texture; a side-by-side with the concept image at gameplay zoom for
    the owner.
+
+**Licences** are not a prototype concern (owner, 2026-10-10). Models come from the owner's Tripo Pro
+account, which carries a commercial licence; `docs/asset-sources.md` records that once. The release
+duties in research §d risk 12 (disclosing AI-generated assets on Steam; hand-made flags, insignia
+and text) are checked before release, not per phase.
 
 **Out of scope:** cavalry and artillery models (L4's placeholders are enough until then), other
 nations' uniforms (a palette change on the same mesh, art bible §4b's rule), and any clip the sim
 cannot yet drive.
 
 **Depends on:** nothing for LA0; LA0 for LA1 (L0 for its in-engine check); L0 for LA2. LA2 is in
-stage 1 and records its own licence the way LA0 does; LA0 and LA1 are stage 2. **Estimate:**
+stage 1; LA0 and LA1 are stage 2. **Estimate:**
 6–9 days over 3 PRs (the retopology is the largest part).
 
 ## L2. Terrain detail layer (research P1; the proposal's runtime layer 4)
@@ -618,24 +619,24 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
    or fixed?
 5. **Soldier grain:** any at gameplay zoom, or only at the closest zoom (research open question)?
    The size rule under Sources makes this a threshold; L3's A/B proposes it, the owner accepts it.
-6. **Licences** (LA0, LA2): which Tripo plan made the soldier and the barracks? LA0 commits the
-   soldier's FBX and build chain only once that is recorded.
-7. **Battle scale in the targets:** the v2 Austerlitz images show 200–400 men a battalion. Decision
+6. **Battle scale in the targets:** the v2 Austerlitz images show 200–400 men a battalion. Decision
    0007 keeps about 100, so those images are judged for mood, season and smoke, not for unit count.
    Is that right, or is the scale itself up for review (a new decision, not this track)?
-8. **Headgear for the first battle:** the infantry concept and the trial wear the shako (from 1806);
+7. **Headgear for the first battle:** the infantry concept and the trial wear the shako (from 1806);
    Austerlitz (1805) needs the bicorne. LA1 makes headgear a variant of the canonical mesh; which one
    comes first?
 
 ## Changes to this plan
 
+- **2026-10-10, licences.** No licence gates while prototyping: models come from the owner's Tripo Pro
+  account (commercial licence); release duties are checked before release.
 - **2026-10-10, focus.** The owner put units on hold: stage 1 paints the landscape and buildings
   (L0, L2, water, L5, LA2, L7, L9w), with a readability guard standing in for L4; the unit phases
   move to stage 2 unchanged.
 - **2026-10-10, amendment** (the size rule is proposed as decision 0017). Added LA (asset pipeline) with the soldier animation trial as the source
   of L1's figure; the size rule for paint on units; the reference images curated in `docs/art-bible.md` §0;
   the note `docs/research/painterly-2d-on-3d.md` as a source; the volley lead-in ask; the style
-  track's own worktree; buildings in L7; owner questions 6 to 8.
+  track's own worktree; buildings in L7; owner questions on battle scale and headgear.
   Reviewed in two rounds (`/code-review high`): round 1 had severe findings (clip timing, sources,
   dependencies), all fixed; round 2 had none, and its findings were fixed.
 
