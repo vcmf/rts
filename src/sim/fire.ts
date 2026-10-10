@@ -5,7 +5,7 @@
 // positions after movement and the men at the start of the step, so no result depends on slot order.
 import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_DRESS, FIRE_AT_WILL, MS_ROUTING, formationSlot as slotOf, formationHandle as handleOf } from './world.ts'
 import type { Handle } from './handle.ts'
-import { placeWorld, layoutOf, occupied } from './formation.ts'
+import { placeWorld, layoutOf, occupied, removeMan } from './formation.ts'
 import { heightAt, cellK } from './terrain.ts'
 import { keyedStream, nextUnit } from './rng.ts'
 import { sin, cos } from './num.ts'
@@ -232,13 +232,16 @@ function volley(w: World, G: FireGeo, i: number, c: number, j: number, d: number
   }
 }
 
-// step 11: the men owed fall. Hits owed to a company beyond the men it has are lost: they were aimed at
-// men who are already down, and passing them on could strike a company the shooters cannot see.
-// Returns the men battalion i lost.
+// step 11: the men owed fall, one at a time through the re-packing gate (removeMan: a loss whose re-pack
+// would put a man on impassable ground falls on another company, those owed hits first). Hits owed to a
+// company beyond the men it has are lost: they were aimed at men who are already down, and passing them on
+// could strike a company the shooters cannot see. Returns the men battalion i lost.
+const owedNow = new Int32Array(64)   // a battalion has at most MAX_BINS / BINS companies
 export function casualtiesStep(w: World, i: number): number {
   const f = w.f, C = w.cr.geo.companies
   let lost = 0
-  for (let c = 0; c < C; c++) { const k = i * C + c, take = Math.min(f.owed[k], f.men[k]); f.men[k] -= take; lost += take; f.owed[k] = 0 }
+  for (let c = 0; c < C; c++) { owedNow[c] = f.owed[i * C + c]; f.owed[i * C + c] = 0 }
+  for (let c = 0; c < C; c++) for (let n = Math.min(owedNow[c], f.men[i * C + c]); n > 0 && f.men[i * C + c] > 0; n--) { removeMan(w, i, c, owedNow); lost++ }
   return lost
 }
 

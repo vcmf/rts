@@ -14,9 +14,10 @@ import { DT } from './time.ts'
 
 export const STATUS = ['', 'halted: impassable ground', 'cannot form: impassable ground', 'arrived: as near as the shape can turn',
   'cannot wheel: a trail shape turns as it marches', 'cannot face about: impassable ground', 'cannot face about: the shape has no half-turn symmetry',
-  'cannot face about: changing shape', 'cannot face about: the shape is not centred on its trail']
+  'cannot face about: changing shape', 'cannot face about: the shape is not centred on its trail', 'pressed against impassable ground']
 export const ST_HALTED = 1
 const ST_CANNOT_FORM = 2, ST_ARRIVED_NEAR = 3, ST_CANNOT_WHEEL = 4, ST_FACE_WET = 5, ST_FACE_ASYM = 6, ST_FACE_CHANGING = 7, ST_FACE_OFFCENTRE = 8
+export const ST_PRESSED = 9
 
 const GATE_HALVINGS = 6, CHANGE_SAMPLES = 128
 const STALL = 0.04      // m/s: an anchor slower than this, with a held bin, is stopped by impassable ground
@@ -51,6 +52,23 @@ export function occupied(w: World, i: number, c: number, r: number, f: number): 
   const m = men[i * C + c], nf = Math.min(F, Math.ceil(m / R)), start = half(F - nf), cr = Math.max(0, Math.min(nf, m - r * nf))
   const off = half(nf - cr), fi = f - start - off
   return fi >= 0 && fi < cr
+}
+// One man of company c falls (docs/plans/active/s1c3-repack-gate.md). The fill rule re-packs the company;
+// if that would put a man newly on impassable ground (a bin wet that was dry), another company takes the
+// loss: those in `first` (a per-company count for battalion i, e.g. hits owed this tick) before the rest,
+// each nearest by index first. If none can, the loss stands and the battalion is pressed against the
+// ground. No random draws. Returns the company that lost the man.
+export function removeMan(w: World, i: number, c: number, first?: ArrayLike<number>): number {
+  const f = w.f, C = w.cr.geo.companies, k = i * C, before = wetBins(w, i)
+  const fits = (q: number): boolean => { f.men[k + q]--; if (!(wetBins(w, i) & ~before)) return true; f.men[k + q]++; return false }
+  if (fits(c)) return c
+  for (let pass = 0; pass < 2; pass++) for (let d = 1; d < C; d++) for (const q of [c - d, c + d]) {
+    if (q < 0 || q >= C || f.men[k + q] <= 0) continue
+    const owed = first ? first[q] > 0 : false
+    if ((pass === 0) === owed && fits(q)) return q
+  }
+  f.men[k + c]--; f.status[i] = ST_PRESSED
+  return c
 }
 export function rebalance(w: World, i: number): void {
   const C = w.cr.geo.companies; let tot = 0
