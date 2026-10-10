@@ -3,7 +3,7 @@ status: active
 last_reviewed: 2026-10-10
 ---
 
-# L2a baselines (main as of L0, build 5d67a2b)
+# L2a baselines (main as of L0, build be40f57)
 
 The measurements L2b and later stage-1 phases are compared with (`docs/plans/active/l2-detail.md`).
 
@@ -35,17 +35,18 @@ stage 2) sets the real bar with people.
 ## Bench (this machine: a proxy, no gate)
 
 `node tools/bench-look.mjs <URL> --gpu metal`, 1920×1080, Apple M1 Pro through ANGLE Metal, headless
-Chrome: `l2a-2026-10-10-5d67a2b-mac-proxy.json`.
+Chrome without vsync: `l2a-2026-10-10-be40f57-mac-proxy.json`.
 
-| Zoom | Whole-frame GPU p50 (3 yaws, 2 runs each) |
-|---|---|
-| Closest (r 45) | 5.2–5.9 ms |
-| Default (r 125) | 6.1–6.8 ms |
-| Widest (r 260, steepest pitch) | 7.2–7.8 ms |
+| Zoom | GPU frame p50 (3 yaws, 2 runs each) | Frame interval p50 |
+|---|---|---|
+| Closest (r 45) | 4.0–4.7 ms | 3.0–3.1 ms |
+| Default (r 125) | 6.3–6.5 ms | 4.1–4.3 ms |
+| Widest (r 260, steepest pitch) | 9.2–9.7 ms | 5.5–5.6 ms |
 
-- Frame time is vsync-bound (p50 16.7 ms).
 - 38 draw calls, 2.07 M triangles (the scatter's thin instances dominate).
 - About 205 MB of textures, an estimate: render-target depth buffers are not counted.
-- **Per-pass times are not usable on Metal:** the passes add up to 1.6–2.7× the frame (ANGLE's Metal
-  backend inflates each query). The laptop's run (Windows, D3D11) is the one to read them from.
+- **Metal's timer queries are not trustworthy in absolute terms.** The GPU frame time is longer than
+  the interval between frames: ANGLE's Metal backend appears to count time across frames. The passes
+  add up to about 1.3–1.5× the GPU frame. Comparisons between arms in one session are still usable;
+  absolute and per-pass numbers come from the laptop's run (Windows, D3D11).
 - Run to run, the same camera varies by up to about 10%. This is why arms run A B B A.
