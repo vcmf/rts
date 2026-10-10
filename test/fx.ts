@@ -1,5 +1,11 @@
-// Test harness for the formation layer: a world on the formation field with the Napoleonic ruleset,
-// driven only through commands, with helpers to read where the men stand. Tests may use Math.*.
+// Test harness for the formation layer: a world on the formation field, driven only through commands, with
+// helpers to read where the men stand. Tests may use Math.*.
+//
+// The default ruleset is `small`: the Napoleonic ruleset with the S1a–S1c block (4 companies of 9 files × 3
+// ranks, 100 men). The terrain-mechanics tests were placed for battalions that size at spots along the
+// stream; the engine code they test does not depend on the block. The shipped block (6 × 23 × 3, 400 men,
+// decision 0018) and the ceiling (6 × 45 × 3) are tested in test/scale.test.ts, and the scenarios, goldens,
+// calibration and cost benches use the shipped ruleset.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,7 +19,14 @@ export const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..'
 export const dataBytes = (): Uint8Array => new Uint8Array(fs.readFileSync(path.join(root, 'data', 'formation-field.simdata')))
 export const GOLDEN_DATA_VERSION = 0x6ae782ed
 export const data: SimData = loadSimData(dataBytes(), GOLDEN_DATA_VERSION)
-export const cr: Compiled = compileRuleset(napoleonic)
+// (its morale reaches are S1c-2's: they scale with the frontage, napoleonic.ts)
+export const small: Ruleset = { ...napoleonic, name: `${napoleonic.name}, the S1a block`,
+  geometry: { ...napoleonic.geometry, companies: 4, files: 9, bins: 3 },
+  morale: { ...napoleonic.morale, contagion: { ...napoleonic.morale.contagion, front: 200, back: 100 }, support: { ...napoleonic.morale.support, reach: 100 } } }
+// the ceiling (decision 0018): the shipped ruleset with companies of 45 files, 810 places
+export const ceiling: Ruleset = { ...napoleonic, name: `${napoleonic.name}, the ceiling`, geometry: { ...napoleonic.geometry, files: 45, bins: 15 } }
+export const cr: Compiled = compileRuleset(small)
+export const shipped: Compiled = compileRuleset(napoleonic)   // the scenarios' ruleset
 const baseTerrain: Terrain = buildTerrain(data, cr)
 
 // the formation field's stream (prototypes/formation-core.js), for placing tests

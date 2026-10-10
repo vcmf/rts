@@ -40,7 +40,7 @@ advanceTick: 1 commands · 5–6 formations · 14 reap · tick++ · 15 hash (eve
 
   `src/rulesets/` follows the same rules and may import only from `src/sim/`. Everywhere, type-only
   imports are written `import type`: `import { type X }` still loads its module, and once made an import
-  cycle that left `formation.ts` reading `TRAIL` before `world.ts` had set it.
+  cycle that left `formation.ts` reading a constant of `world.ts` before it was set.
 
   `sin`, `cos` and `atan2` are polynomials of exact operations (`num.ts`), within 1e-12 of `Math`.
   `sin` and `cos` are exact for |x| ≤ 1e5 and throw beyond that (a bug: headings stay in (−π, π]).
@@ -48,7 +48,8 @@ advanceTick: 1 commands · 5–6 formations · 14 reap · tick++ · 15 hash (eve
   §2 allows tables or polynomials, and polynomials need no data file.
 - **Order:** every loop runs in slot order.
 - **Budget:** `docs/proposals/sim-design.md` §16 targets ≤ 2 ms per tick. Measured in `test/formations.test.ts`:
-  40 battalions of every shape, moving, about 1.2 ms per tick on a dev Mac.
+  40 battalions of 400 of every shape, moving, about 5 ms per tick on a dev Mac (1.2 ms at 100 men; over
+  the target since S1c-4, `docs/known-issues.md`).
 
 ## Design
 
@@ -101,7 +102,8 @@ advanceTick: 1 commands · 5–6 formations · 14 reap · tick++ · 15 hash (eve
 
 ## Tunables
 
-The ruleset (`src/rulesets/napoleonic.ts`); `MAX_FORMATIONS`, `TRAIL` and `MAX_ORDERS` in `world.ts`;
+The ruleset (`src/rulesets/napoleonic.ts`); `MAX_FORMATIONS` and `MAX_ORDERS` in `world.ts`; `MAX_COMPANIES`
+and the trail ring's bounds in `ruleset.ts`;
 the cell sizes in `tools/build-sim-data.ts`.
 
 ## Verification

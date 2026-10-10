@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-09
 code: [app/index.html, src/app/main.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, test/soldiers.test.ts, tools/app-check.mjs]
-decisions: [0005-sim-render-split, 0006-restricted-float64, 0007-battalion-scale, 0016-typescript-toolchain]
+decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0016-typescript-toolchain]
 ---
 
 # The sim page (S1b)
@@ -21,7 +21,7 @@ exports as a replay that plays back in Node to the same hashes.
 
 ## Goals / non-goals
 
-- Goals: see the S1a sim with the eyes; drill with the mouse; measure the cost of 4000 men; keep the
+- Goals: see the S1a sim with the eyes; drill with the mouse; measure the cost of 40 battalions; keep the
   render side out of the sim (decision 0005).
 - Non-goals: the 3D world, figures, fire and morale (S1c), the worker (S2), the staff map's final art
   (`docs/proposals/staff-map/`). The formation prototype stays the reference for the feel.
@@ -30,7 +30,8 @@ exports as a replay that plays back in Node to the same hashes.
 
 - The soldier layer is cosmetic: it reads the sim and never writes to it; it uses its own RNG
   (`cosmeticRng`), so its choices never change a hash.
-- Sim plus soldier layer within 4 ms per frame for 40 battalions on the dev Mac.
+- Sim plus soldier layer within 4 ms per frame for 40 battalions on the dev Mac. Not met at 400 men a
+  battalion (decision 0018): `docs/known-issues.md`, S1c-5.
 
 ## Design
 
@@ -47,7 +48,7 @@ the tick, not the table. Orders the sim drops show in the readout for 3 s. The c
 line are drawn at the interpolated anchor, as the men are. `Copy
 replay` puts `{ replay, hashes }` on the clipboard; `play` in `src/sim/replay.ts` checks it.
 
-**Who stands where** (`SoldierLayer.sync`). The sim keeps men per company (decision 0007); the layer
+**Who stands where** (`SoldierLayer.sync`). The sim keeps men per company (decisions 0007, 0018); the layer
 places them. A battalion is matched again only when its signature changes: men per company, shape,
 the shape it changes to, the lean bit and the `faces` counter.
 - A man keeps his slot while it stays filled.
@@ -89,8 +90,8 @@ data is a darker margin.
 - The panel is built from the ruleset (shapes, order presets).
 
 **Scenarios** (`src/scenarios/page.ts`): `s1c-firefight` (the default, `docs/systems/fire-morale.md`),
-`s1b-field` (three battalions a side, holding fire until ordered) and `s1b-bench` (40 battalions, holding
-fire), chosen by `?scenario=`. Fire shows
+`s1c-brigade`, `s1b-field` (three battalions a side, holding fire until ordered) and `s1b-bench` (40
+battalions of 400 in column, holding fire), chosen by `?scenario=`. Every scenario spawns battalions of 400. Fire shows
 as a flash at a company's front with a fading line to its target; morale as a bar behind each battalion,
 named unless steady. Fire at will and Hold fire are panel orders. The page loads the data only at `FIELD_DATA_VERSION`.
 
@@ -113,7 +114,7 @@ frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`.
   - Face about for a line and a square at 100 and 97 men;
   - a battalion that is gone;
   - men never in deep water;
-  - cost for 40 battalions.
+  - cost for 40 battalions of 400 (and 800, reported).
 - `npm run check:app` builds and serves the page and drives it headless:
   - the drill scenario, with screenshots, a multi-selection move, square and Face about;
   - every panel button logs one command;
@@ -126,8 +127,9 @@ frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`.
 
 ## Open questions
 
-- The cost test runs about 0.6 ms under its 4 ms budget on the dev Mac; a slower machine fails it.
-- 8× costs 6.2 ms per frame for 40 battalions (the sim's ticks): within a 60 fps frame, over the 1×
-  budget. The worker (S2) takes the ticks off the main thread.
+- At 40 battalions of 400 (16,000 men) sim and soldier layer cost about 14 ms a frame marching and 6 ms
+  firing on the dev Mac, against the 4 ms budget; 40 × 800 costs about 27 ms. The cost tests hold
+  temporary budgets until S1c-5 (`docs/known-issues.md`). The worker (S2) takes the ticks off the main
+  thread.
 - The page selects and orders both sides (a drill sandbox); sides belong to S1e.
 - No speed overlay yet (the plan listed one); the slots overlay exists.

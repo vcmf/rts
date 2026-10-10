@@ -134,3 +134,48 @@ The benchmark put the layer at 10.6 ms per frame for 16,000 marching men. Planne
 merges: skip settled men before any placement work, make the displaced-man search local (today it scans
 every slot per displaced man), and measure what moving the layer into the S2 worker or onto the GPU
 would save. Its budget: 4 ms for sim and layer together at 40 × 400, and a report at 40 × 800.
+
+## Results (2026-10-10)
+
+**What changed from the design:**
+- **The trail ring** was a fixed 256 points (64 m); a column of route of 400 needs about 120 m. The ring
+  is now sized from the ruleset (`cr.trail`: 512 for 400 men, 1024 for the ceiling).
+- **The reaches:** contagion and support are centre to centre, so they were scaled by 2.8 (front 560 m,
+  back 280 m, support 280 m), not only support raised to 150 m. Unscaled, the brigade's neighbours (113 m
+  apart) fell outside contagion's 100 m and a break spread over 35–135 s instead of one tick.
+- **The firefight** moved to x −120, z 120: at z −110 the ground between the lines hid part of each and
+  a break took more than 20 minutes on the real field. In the north-west it takes 9.4 minutes, as on
+  levelled ground. The fire tests keep the old strip for their 100-man lines.
+- **The tests:** the terrain-mechanics tests run on `small`, the S1a–S1c block, with S1c-2's reaches
+  (`test/fx.ts`); the scenarios, goldens, calibration and cost benches use the shipped ruleset;
+  `test/scale.test.ts` covers 400 and 810.
+- **A bug the scale tests caught:** the first square gave the extra companies to the front and right
+  faces, so a 6-company square had no half-turn and refused Face about.
+
+**Refactor check:** with `bins` left out of the ruleset hash, the bit sets reproduced every golden and
+replay hash of the old block.
+
+**Calibration** (100 seeds, levelled, lines of 400):
+
+| Range | Weaker breaks | Time to break, min (p10 / median / p90) | Losses at the break |
+|---|---|---|---|
+| 50 m | 100 | 4.0 / 4.3 / 4.7 | 20% |
+| 100 m | 100 | 8.4 / 9.3 / 10.7 | 20% |
+| 200 m | none in 20 min | – | – |
+| 100 m, no fall-back | 100 | 7.9 / 8.5 / 9.8 | 20% |
+
+S1c-2 at 100 men: 9.1 minutes at 100 m, 4.2 at 50 m. The hit chances are per round, so they carry over
+unchanged. Brigade 3v3: the weaker side breaks first in every seed, after a median 10.4 minutes, and all
+three of its lines are out within 0.1 s.
+
+**Cost** (dev Mac, M1 Pro; `docs/known-issues.md`):
+
+| Bench | 40 × 400 | 40 × 800 |
+|---|---|---|
+| Formation step, per tick, every shape marching | 5.3 ms (target 2) | 8.9 ms |
+| Sim and soldier layer, per frame, marching | 13.8 ms (budget 4) | 27 ms |
+| Sim and soldier layer, per frame, firing at the halt | 6.2 ms | – |
+| Hash, every 20 ticks | about 5 ms | about 8 ms |
+
+`check:app`: the firefight breaks the weaker line at 9.5 minutes, the brigade's break spreads to its three
+lines at 12.4 minutes, and every replay reproduces in Node.

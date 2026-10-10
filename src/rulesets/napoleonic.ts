@@ -2,11 +2,28 @@
 // data). The engine's copy of `prototypes/ruleset-napoleonic.js`, plus the block geometry, the shapes
 // and the change times that the prototype kept in its core. Values and sources:
 // docs/research/terrain-movement-speed-models.md §6; change times: docs/proposals/sim-design.md §5.
-import { type Ruleset, type Geometry, rot2 } from '../sim/ruleset.ts'
+import { type Ruleset, type Geometry, type Placement, rot2 } from '../sim/ruleset.ts'
 import { PI } from '../sim/num.ts'
 
-const geometry: Geometry = { companies: 4, files: 9, ranks: 3, fileSpacing: 0.65, rankSpacing: 0.85, minSpacing: 0.52, accordionGap: 0.6, bins: 3 }
+// the French battalion after 1808: six companies (four fusilier, grenadiers, voltigeurs) of 23 files × 3 ranks,
+// 414 places for a battalion of about 400 (decision 0018); a bin is about 3 files
+const geometry: Geometry = { companies: 6, files: 23, ranks: 3, fileSpacing: 0.65, rankSpacing: 0.85, minSpacing: 0.52, accordionGap: 0.6, bins: 8 }
 const BW = (g: Geometry) => g.files * g.fileSpacing   // company frontage
+const each = <T>(g: Geometry, f: (c: number) => T): T[] => Array.from({ length: g.companies }, (_, c) => f(c))
+// the square: the companies over four faces, front and rear first (6: 2, 1, 2, 1), each face a row of
+// blocks facing out at its distance from the centre; a pinwheel, so each face's end meets the next face's
+// rear rank. Faces in order: front, right, rear, left
+function square(g: Geometry): Placement[] {
+  const C = g.companies, base = Math.floor(C / 4), extra = C % 4
+  const counts = [0, 1, 2, 3].map(face => base + ([0, 2, 1, 3].indexOf(face) < extra ? 1 : 0))   // the extras go front, rear, right, left
+  const s = (g.ranks - 1) * g.rankSpacing / 2 + 0.3, len = (k: number) => k * BW(g) + (k - 1) * g.fileSpacing
+  const out: Placement[] = []
+  ;[0, -PI / 2, PI, PI / 2].forEach((rot, face) => {
+    const k = counts[face], D = (face % 2 ? len(counts[0]) : len(counts[1])) / 2 + s
+    for (let j = 0; j < k; j++) { const [x, z] = rot2((j - (k - 1) / 2) * (BW(g) + g.fileSpacing) - s, D, rot); out.push({ x, z, rot, face: rot }) }
+  })
+  return out
+}
 
 export const napoleonic: Ruleset = {
   name: 'Napoleonic (infantry)',
@@ -15,21 +32,20 @@ export const napoleonic: Ruleset = {
   pace: { ordinary: 0.9, routeStep: 1.125 },
   // quick-step factor: how much faster a lagging file may hurry, by pace and ground class
   q: { ordinary: { open: 1.3, light: 1.1, hard: 1.0 }, routeStep: { open: 1.15, light: 1.0, hard: 1.0 } },
-  // shapes: four company blocks placed in the battalion frame (x across, z ahead)
+  // shapes: the company blocks placed in the battalion frame (x across, z ahead)
   formations: {
     // companies side by side, one file between them; casualties close toward the colours
     line: { kind: 'line', pace: 'ordinary', closeAcross: true,
-      place: g => [0, 1, 2, 3].map(c => ({ x: (c - 1.5) * (BW(g) + g.fileSpacing), z: 0, rot: 0, face: 0 })) },
-    // each company one face, facing out; pinwheel, so each face's end meets the next face's rear rank
-    square: { kind: 'column', pace: 'ordinary',
-      place: g => { const s = (g.ranks - 1) * g.rankSpacing / 2 + 0.3, D = BW(g) / 2 + s
-        return [0, -PI / 2, PI, PI / 2].map(rot => { const [x, z] = rot2(-s, D, rot); return { x, z, rot, face: rot } }) } },
-    // column of divisions: two companies wide, two deep
+      place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * (BW(g) + g.fileSpacing), z: 0, rot: 0, face: 0 })) },
+    // the companies over four faces, facing out (square, above)
+    square: { kind: 'column', pace: 'ordinary', place: square },
+    // column of divisions: two companies wide, one division behind another (an odd last company centred;
+    // 0 − keeps the first division at +0)
     column: { kind: 'column', pace: 'ordinary',
-      place: g => [0, 1, 2, 3].map(c => ({ x: ((c % 2) - 0.5) * (BW(g) + g.fileSpacing), z: c < 2 ? 0 : -(g.ranks * g.rankSpacing + 3.2), rot: 0, face: 0 })) },
+      place: g => each(g, c => ({ x: c === g.companies - 1 && g.companies % 2 ? 0 : ((c % 2) - 0.5) * (BW(g) + g.fileSpacing), z: 0 - Math.floor(c / 2) * (g.ranks * g.rankSpacing + 3.2), rot: 0, face: 0 })) },
     // column of route by files, ranks centred on the line of march; follows its head's trail
     march: { kind: 'column', pace: 'ordinary', roadPace: 'routeStep', trail: true,
-      place: g => [0, 1, 2, 3].map(c => ({ x: (g.ranks - 1) * g.rankSpacing / 2, z: -c * (BW(g) + 1.0), rot: -PI / 2, face: 0 })) },
+      place: g => each(g, c => ({ x: (g.ranks - 1) * g.rankSpacing / 2, z: -c * (BW(g) + 1.0), rot: -PI / 2, face: 0 })) },
   },
   // regulation-like times in seconds at drill factor 1
   changeTime: {
@@ -81,8 +97,10 @@ export const napoleonic: Ruleset = {
     quality: 0.75, losses: 1.25, recent: 3, recentTime: 10, relaxTime: 20,
     shaken: [0.6, 0.65], wavering: [0.5, 0.55], rout: 0.4, routPace: 2,
     // the rest of the machine (docs/plans/active/s1c2-morale-machine.md)
-    contagion: { shock: 0.15, front: 200, back: 100 },
-    support: { bonus: 0.04, reach: 100, arc: 0.7853981633974483 },
+    // the reaches scale with the frontage (S1c-4): 2.8 times S1c-2's, set for 100-man lines 40 m apart in a
+    // brigade, so a 400-man line 113 m from its neighbour feels the same shock and support
+    contagion: { shock: 0.15, front: 560, back: 280 },
+    support: { bonus: 0.04, reach: 280, arc: 0.7853981633974483 },
     fallback: { metres: 15, after: 3, rate: 0.0005 },
     rally: { safe: 250, calm: 20, time: 30, cost: 0.1, max: 2 },
     shatter: 0.5,

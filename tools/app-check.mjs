@@ -22,8 +22,8 @@ const drill = [
   // a multi-selection order: the three keep their places relative to each other
   ['eval', 'APP.select([0, 1, 2]); APP.march(-40, 10, false); APP.advance(20); `t ${APP.w.meta[0]} hash ${APP.hash()}`'],
   ['shot', 'drill-1-advance'],
-  ['eval', 'APP.select([0]); APP.form("square"); APP.select([3]); APP.order("face"); APP.advance(60); APP.select([0]); APP.view(-60, -10, 9); "square and face about"'],
-  ['eval', 'document.querySelector("[data-view=slots]").click(); APP.view(-60, -10, 9); "slots on (each battalion its own)"'],
+  ['eval', 'APP.select([0]); APP.form("square"); APP.select([3]); APP.order("face"); APP.advance(60); APP.select([0]); APP.view(-130, -55, 4); "square and face about"'],
+  ['eval', 'document.querySelector("[data-view=slots]").click(); APP.view(-130, -55, 4); "slots on (each battalion its own)"'],
   ['shot', 'drill-2-square'],
   // every panel order reaches the sim as a command: each button logs one; the sim may refuse some (reported)
   ['eval', 'APP.select([1]); const n = APP.log.length, bs = [...document.querySelectorAll("#shapes button, #styles button, [data-cmd]")]; for (const b of bs) b.click(); APP.advance(1); `PANEL ${bs.length} ${APP.log.length - n} refused: ${APP.dropped.map(d => d.reason).join("; ")}`'],
@@ -33,7 +33,7 @@ const drill = [
 ]
 const bench = [
   ['wait', 1500], READY,
-  ['eval', 'APP.select([...Array(40).keys()]); APP.march(-35, 40, false); APP.advance(10); APP.view(-30, -40, 2.4); "40 marching"'],
+  ['eval', 'APP.select([...Array(40).keys()]); APP.march(-35, 40, false); APP.advance(10); APP.view(-66, -10, 1.4); "40 marching"'],
   ['eval', 'APP.run(); "running at 1x"'],
   ['wait', 4000],   // the page runs on its own clock (headless rAF is throttled: few frames, real per-frame costs)
   ['shot', 'bench'],
@@ -47,10 +47,10 @@ const bench = [
 const STEP3 = ['eval', 'if (!APP.w.f.mstate.some(s => s >= 3)) APP.advance(180); `t ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states ${[0, 1].map(i => APP.w.f.mstate[i]).join(" ")}`']
 const fight = [
   ['wait', 1500], READY,
-  ['eval', 'APP.view(-50, -165, 4); APP.advance(20); "opening volleys"'],
+  ['eval', 'APP.view(-120, 120, 3); APP.advance(20); "opening volleys"'],
   ['shot', 'fight-0-volleys'],
   STEP3, STEP3, STEP3, STEP3, STEP3,
-  ['eval', 'const r = [0, 1].filter(i => APP.w.f.mstate[i] >= 3); APP.advance(8); APP.view(-30, -165, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, men ${[0, 1].map(i => { const C = APP.w.cr.geo.companies; return APP.w.f.startMen[i] - APP.w.f.men.slice(i * C, i * C + C).reduce((a, b) => a + b, 0) }).join(" / ")} lost`'],
+  ['eval', 'const r = [0, 1].filter(i => APP.w.f.mstate[i] >= 3); APP.advance(8); APP.view(-100, 120, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, men ${[0, 1].map(i => { const C = APP.w.cr.geo.companies; return APP.w.f.startMen[i] - APP.w.f.men.slice(i * C, i * C + C).reduce((a, b) => a + b, 0) }).join(" / ")} lost`'],
   ['shot', 'fight-1-rout'],
   REPLAY,
 ]
@@ -61,10 +61,10 @@ const OUT = 'APP.w.f.mstate.slice(3, 6).filter(s => s >= 3).length'
 const STEP3B = ['eval', `if (${OUT} < 2) APP.advance(180); \`t \${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states \${[...APP.w.f.mstate.slice(0, 6)].join(" ")}\``]
 const brigadeFight = [
   ['wait', 1500], READY,
-  ['eval', 'APP.view(-60, -35, 2.5); APP.advance(20); "opening volleys"'],
+  ['eval', 'APP.view(-125, -10, 2); APP.advance(20); "opening volleys"'],
   ['shot', 'brigade-0-volleys'],
   STEP3B, STEP3B, STEP3B, STEP3B, STEP3B, STEP3B,
-  ['eval', `APP.advance(4); APP.view(-30, -35, 2.5); \`CONTAGION \${${OUT}} out at \${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states \${[...APP.w.f.mstate.slice(0, 6)].join(" ")}\``],
+  ['eval', `APP.advance(4); APP.view(-100, -10, 2); \`CONTAGION \${${OUT}} out at \${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states \${[...APP.w.f.mstate.slice(0, 6)].join(" ")}\``],
   ['shot', 'brigade-1-contagion'],
   REPLAY,
 ]

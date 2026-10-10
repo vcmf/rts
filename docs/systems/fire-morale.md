@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-10
 code: [src/sim/fire.ts, src/sim/morale.ts, src/sim/rng.ts, src/sim/tick.ts, src/rulesets/napoleonic.ts, src/scenarios/s1c-firefight.ts, tools/calibrate-fire.ts, test/fire.test.ts, test/morale.test.ts]
-decisions: [0005-sim-render-split, 0006-restricted-float64, 0007-battalion-scale, 0015-era-generic-engine]
+decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0018-battalion-of-400]
 ---
 
 # Fire and morale (S1c)
@@ -41,8 +41,8 @@ step 12 morale     then morale for all: relaxes toward quality − losses + flan
 - **Every draw is keyed.** The seed comes from the world seed, the tick, the shooter's handle and
   company, and a purpose tag (`keyedStream`). A draw depends on who draws and when, never on the order
   battalions are visited in or how many draws came before. The world stream is not used.
-- **The tick budget (sim-design §16, 2 ms).** With 40 battalions firing, the fire step averages 0.27 ms a
-  tick and peaks at 0.74 ms.
+- **The tick budget (sim-design §16, 2 ms).** With 40 battalions of 400 firing (in column, so they fit the
+  field), the fire step averages 0.6 ms a tick and peaks at 1.5 ms; morale and casualties 0.09 ms.
 
 ## Design
 
@@ -123,7 +123,10 @@ is later:
   uses up no direction.
 
 **Flank support and contagion** (S1c-2). Both read the other battalions' states from before the step. The
-numbers are `morale.support` and `morale.contagion` in `src/rulesets/napoleonic.ts`.
+numbers are `morale.support` and `morale.contagion` in `src/rulesets/napoleonic.ts`. Distances are centre
+to centre, so the reaches scale with the frontage: S1c-4 multiplied S1c-2's by 2.8, the ratio of a
+brigade's spacing at 400 men (113 m) to that at 100 (40 m). Unscaled, a 400-man brigade's neighbours fell
+outside contagion's reach and its breaks spread over 35–135 s instead of one tick.
 - **Support:** a friend in the fight within `support.reach` and within `support.arc` of a battalion's left or
   right axis secures that flank. Each secured flank adds `support.bonus` to the target. Left and right swap
   under a Face about, so both are still counted.
@@ -211,9 +214,12 @@ scripted tests.
     - the fire step in reversed visiting order gives the same hash (a per-world test switch);
     - the firefight golden, with its replay and save round trip;
     - a five-seed calibration golden.
-- **`test/soldiers.test.ts`:** 40 battalions firing, per-frame cost and per-tick fire cost.
+- **`test/soldiers.test.ts`:** 40 battalions of 400 firing, per-frame cost and per-tick fire cost.
+- **`test/scale.test.ts`:** friendly cover by each battalion's extent, with a 400-man friend whose outer
+  company stands more than 40 m from its anchor.
 - **`tools/calibrate-fire.ts`:** 100 seeds at 50, 100 and 200 m on levelled ground, checked against the
-  plan's targets; the 100 m row again without the fall-back; a 3v3 brigade's contagion (reported).
+  plan's targets; the 100 m row again without the fall-back; a 3v3 brigade's contagion (reported). Lines
+  of 400 (S1c-4): the 100 m median is 9.3 min, at 20% losses.
 - **`npm run check:app`:** plays the firefight on the page to a rout, and the brigade until a break
   spreads, and replays both in Node.
 
@@ -226,15 +232,14 @@ scripted tests.
   calibration (`docs/plans/active/s1c2-morale-machine.md`, Results) the median time from the weaker side's
   first break to its last is 0.1 s, and in most seeds all three of its lines are out of the fight 3 minutes
   later. A brigade worn evenly collapses together; whether that is too total is for S1e's playtests.
-- **Routers on the formation field never rally in the brigade.** They are pinned at the stream about 180 m
+- **Routers on the formation field never rally in the brigade.** They are pinned at the stream about 240 m
   from the enemy, inside `rally.safe`. The field is 360 m across; battle maps are 1–1.5 km.
 - **The order pool is served in visiting order.** Routs and fall-backs in the same tick take pool entries
   in slot order, so the reverse-visiting switch gives the same behaviour but different entries (and a
   different hash) when two happen in one tick. The chain test breaks one link per tick.
-- **Two cover and sight fixes have no failing test.** Culling friendly cover by each battalion's extent
-  (not a fixed 40 m), and walking sight lines low to high, are not exercised. This ruleset cannot build a
-  battalion that reaches 40 m from its anchor, and the floating-point asymmetry cannot be set up on
-  purpose.
+- **One sight fix has no failing test.** Walking sight lines low to high is not exercised: the
+  floating-point asymmetry cannot be set up on purpose. (Culling friendly cover by each battalion's extent
+  is tested since S1c-4: a 400-man line reaches 46 m.)
 - **A router can be pinned.** Where every direction of the fan halts, or where the formation layer cannot
   march out (by the stream at x ≈ 57, z = −30 even an ordinary battalion halts within a metre), it
   stays. Pathfinding, and routers as a loose crowd rather than a formation, are later.

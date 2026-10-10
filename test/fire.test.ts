@@ -3,13 +3,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { data, cr, root, longIt } from './fx.ts'
+import { data, cr, root, longIt, small, shipped } from './fx.ts'
 import { makeWorld, issue, advanceTick, compileRuleset, buildTerrain, makeHandle, KIND_FORMATION, M_FREE, M_TICK, MS_ROUTING, MS_STEADY, MS_SHAKEN, MS_WAVERING,
   menOf, aimOf, companySees, hashWorld, anyWet, STATUS, cellK, placeWorld, O_MOVE, RP_FLED, allocOrder, appendOrder, clearOrders, hex, serialize, deserialize, record, play, type World, type Command, type Ruleset, type Dropped, type Terrain } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { levelled, runFirefight, s1cFirefight, FIGHT_X, FIGHT_Z } from '../src/scenarios/s1c-firefight.ts'
+import { levelled, runFirefight, s1cFirefight } from '../src/scenarios/s1c-firefight.ts'
 
-const E = Math.PI / 2, Z = FIGHT_Z, lev = levelled(data), levTerrain = buildTerrain(lev, cr)
+// X, Z: the S1a–S1c firefight strip, where these tests place 100-man lines (the scenario's own holds 400-man lines)
+const FIGHT_X = -50, E = Math.PI / 2, Z = -165, lev = levelled(data), levTerrain = buildTerrain(lev, cr)
 // a world on levelled (or real) ground, with a log of dropped commands
 class W {
   w: World; dropped: Dropped[] = []
@@ -36,7 +37,7 @@ function pair(d: number, opts: ConstructorParameters<typeof W>[0] = {}, qb?: num
   return [s, a, b]
 }
 const pairB = (s: W): number => makeHandle(KIND_FORMATION, 1, s.w.f.gen[1])
-const fireRs = (fire: Partial<Ruleset['fire']>): Ruleset => ({ ...napoleonic, fire: { ...napoleonic.fire, ...fire } })
+const fireRs = (fire: Partial<Ruleset['fire']>): Ruleset => ({ ...small, fire: { ...small.fire, ...fire } })
 // the z of company c's centre (its front-rank origin is close enough here)
 const companyZ = (s: W, h: number, c: number): number => placeWorld(s.w, s.i(h), c, s.w.f.x[s.i(h)], s.w.f.z[s.i(h)], s.w.f.heading[s.i(h)], 0, 0, { x: 0, z: 0, a: 0, face: 0 }).z
 
@@ -259,7 +260,7 @@ describe('determinism', () => {
   })
   const goldenFile = path.join(root, 'test', 'golden', 's1c-firefight.json'), TICKS = 12000
   longIt('the firefight gives the committed golden hashes; its replay and a save round trip reproduce them', () => {
-    const run = record(data, cr, s1cFirefight, 5, TICKS, () => {})
+    const cr = shipped, run = record(data, cr, s1cFirefight, 5, TICKS, () => {})
     const hashes = run.hashes.map(h => [h.tick, hex(h.hash)])
     if (process.env.UPDATE_GOLDEN) fs.writeFileSync(goldenFile, JSON.stringify({ dataVersion: hex(data.version), ruleset: hex(cr.hash), ticks: TICKS, hashes }) + '\n')
     const golden = JSON.parse(fs.readFileSync(goldenFile, 'utf8'))
@@ -272,7 +273,7 @@ describe('determinism', () => {
   })
   longIt('the calibration at 100 m, five seeds: times to break and losses match the golden table', () => {
     const file = path.join(root, 'test', 'golden', 's1c-calibration.json')
-    const table = [1, 2, 3, 4, 5].map(seed => { const r = runFirefight(lev, cr, seed, 100, 24000); return [seed, r.first, r.tick, r.lossA, r.lossB] })
+    const cr = shipped, table = [1, 2, 3, 4, 5].map(seed => { const r = runFirefight(lev, cr, seed, 100, 24000); return [seed, r.first, r.tick, r.lossA, r.lossB] })
     if (process.env.UPDATE_GOLDEN) fs.writeFileSync(file, JSON.stringify({ ruleset: hex(cr.hash), table }) + '\n')
     const golden = JSON.parse(fs.readFileSync(file, 'utf8'))
     expect(golden.ruleset).toBe(hex(cr.hash)); expect(table).toEqual(golden.table)

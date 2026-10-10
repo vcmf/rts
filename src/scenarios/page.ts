@@ -7,4 +7,4 @@ import { s1cFirefight, s1cBrigade } from './s1c-firefight.ts'
 export const PAGE_SCENARIOS: Record<string, Scenario> = { 's1c-firefight': s1cFirefight, 's1c-brigade': s1cBrigade, ...S1B_SCENARIOS }
 export const DEFAULT_SCENARIO = 's1c-firefight'
 // where the page opens on each: centre x, z and pixels per metre
-export const PAGE_VIEWS: Record<string, [number, number, number]> = { 's1c-firefight': [-50, -150, 4], 's1c-brigade': [-60, -35, 2.5] }
+export const PAGE_VIEWS: Record<string, [number, number, number]> = { 's1c-firefight': [-100, 120, 3], 's1c-brigade': [-125, -10, 2] }

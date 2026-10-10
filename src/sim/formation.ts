@@ -4,7 +4,7 @@
 //
 // A battalion is a few company blocks (files × ranks) placed in the battalion frame by its shape. The sim
 // keeps the men per company; which slots are filled follows from that by one rule (`occupied`), so no
-// soldier is simulated (decision 0007): who stands where and who falls is the renderer's.
+// soldier is simulated (decisions 0007, 0018): who stands where and who falls is the renderer's.
 import { type World, M_TICK, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MAX_FORMATIONS, fleeing } from './world.ts'
 import type { ShapeLayout, Placement } from './ruleset.ts'
 import { rot2, blockLocal, slotIndex } from './ruleset.ts'

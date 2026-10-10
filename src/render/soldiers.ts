@@ -1,6 +1,6 @@
 // The soldier layer (cosmetic, every frame): one figure per man walking to his place in his battalion.
 // Ported from the prototype's soldier layer (prototypes/formation-core.js). The sim keeps men per company
-// and which slots are filled (decision 0007); this layer decides who stands where and who falls:
+// and which slots are filled (decisions 0007, 0018); this layer decides who stands where and who falls:
 // a man keeps his slot while it stays filled; when men fall, those whose slots emptied fall first; men
 // whose slots moved walk to the nearest free filled slot; Face about relabels the men through the shape's
 // half-turn. No DOM: tested in Node (test/soldiers.test.ts).
