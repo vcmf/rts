@@ -83,7 +83,7 @@ export const napoleonic: Ruleset = {
     // the rest of the machine (docs/plans/active/s1c2-morale-machine.md)
     contagion: { shock: 0.15, front: 200, back: 100 },
     support: { bonus: 0.04, reach: 100, arc: 0.7853981633974483 },
-    fallback: { metres: 15, after: 3 },
+    fallback: { metres: 15, after: 3, rate: 0.0005 },
     rally: { safe: 250, calm: 20, time: 30, cost: 0.1, max: 2 },
     shatter: 0.5,
   },

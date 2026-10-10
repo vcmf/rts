@@ -132,14 +132,21 @@ is later:
   link per tick. The ruleset is refused if one shock could rout a steady battalion of default quality
   (more than 0.6 of the gap from it to the rout).
 
-**The wavering fall-back.** A wavering battalion with no orders, not changing shape, whose morale has fallen
-for 3 s in a row, with an enemy in the fight within musket range, Retires `fallback.metres` (15 m) once, by
-the Retire command's own orders. The flag clears when it recovers to shaken. A player's order replaces it.
+**The wavering fall-back.** A wavering battalion Retires `fallback.metres` (15 m) once, by the Retire drill
+(`RETIRE` in `formation.ts`), when all of these hold:
+- it has no orders and is not changing shape;
+- its morale has fallen by more than `fallback.rate` (0.0005 a second) on every tick of the last 3 s, so the
+  relax's slow crawl onto a fixed target does not count;
+- the nearest enemy in the fight is within fire range and in front of it (within 90° of its heading). A
+  Retire goes back from its own facing; with the enemy behind it, it would march toward the enemy.
+
+The flag clears when it recovers to shaken. A player's order replaces the Retire.
 
 **Rally.** A router rallies when its run has ended, no enemy in the fight is within `rally.safe` (250 m), it
-has lost no man for `rally.calm` (20 s, `debug-kill` counts), and its quality less `rally.cost` (0.1) is
+has lost no man for `rally.calm` (20 s; every loss through `removeMan` counts), and its quality less `rally.cost` (0.1) is
 still at least wavering. Rallying:
-- writes off the losses before the rout (the losses term counts from `baseMen`, its men now) and costs it
+- writes off the losses before the rout (the losses term counts from `baseMen`, its men now; recent losses
+  stay a share of the spawn strength) and costs it
   `rally.cost` of quality, so it comes back brittle. Without the write-off no router could ever rally: the
   target at a break is the rout threshold itself;
 - stands for `rally.time` (30 s), refusing orders and not firing, then takes the state its morale gives.
@@ -190,8 +197,10 @@ scripted tests.
   - **Contagion:** the shock's size, one tick late; a wavering neighbour breaks and a steady one does not;
     front and back radii; a chain, one link per tick, the same in reverse visiting order.
   - **Support:** two flanks against none; no support from a friend ahead, behind or routing.
-  - **Fall-back:** once, 15 m, then fires again; not with orders, not with no enemy in range, not on a dip.
-  - **Determinism:** the brigade's replay, and a save taken mid-rout and mid-fall-back.
+  - **Fall-back:** once, 15 m, then fires again; not with orders, with no enemy in range, with the enemy
+    behind it, on the relax's crawl, or on a dip.
+  - **Determinism:** the brigade's replay, and a save taken with one battalion rallying, one routing and
+    one mid-fall-back.
   - **Determinism:**
     - the fire step in reversed visiting order gives the same hash (a per-world test switch);
     - the firefight golden, with its replay and save round trip;

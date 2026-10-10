@@ -48,7 +48,7 @@ export interface MoraleDef {
   // S1c-2 (docs/plans/active/s1c2-morale-machine.md)
   contagion: { shock: number; front: number; back: number }   // a friend's break: the morale lost at 0 m, falling to 0 at front (ahead of the side's front) or back metres
   support: { bonus: number; reach: number; arc: number }      // per secured flank: target bonus; a friend within reach metres and arc radians of the left or right axis
-  fallback: { metres: number; after: number }                 // a wavering battalion without orders Retires this far once its morale has fallen for `after` seconds
+  fallback: { metres: number; after: number; rate: number }   // a wavering battalion without orders Retires `metres` once its morale has fallen by more than `rate` a second for `after` seconds
   rally: { safe: number; calm: number; time: number; cost: number; max: number }   // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; quality lost; rallies allowed
   shatter: number              // a router below this share of its spawn strength shatters
 }

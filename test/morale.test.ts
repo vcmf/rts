@@ -210,6 +210,18 @@ describe('the wavering fall-back', () => {
     let fell = false; s.run(60, () => { fell ||= s.w.f.fellBack[s.i(h)] === 1 })
     expect(s.state(h)).toBe(MS_WAVERING); expect(fell).toBe(false)
   })
+  it('not with the enemy behind it: a Retire, back from its facing, would march toward the enemy', () => {
+    // faced east, its back to the enemy 100 m west (a rallied battalion faces the way it ran)
+    const s = new W(); SIDES_SET(s); s.spawn(0, -110, -35); const h = s.spawn(1, -10, -35, { heading: E }); s.w.f.quality[s.i(h)] = 0.45
+    let fell = false; s.run(60, () => { fell ||= s.w.f.fellBack[s.i(h)] === 1 })
+    expect(s.state(h)).toBe(MS_WAVERING); expect(fell).toBe(false); expect(s.w.f.x[s.i(h)]).toBe(-10)
+  })
+  it('not on the slow crawl of a morale settling onto a fixed target', () => {
+    const [s, h] = setup(), i = s.i(h)
+    s.set(h, 0.45 + 1e-4)   // wavering, a hair above its target: it creeps down by about 2.5e-7 a tick
+    let fell = false; s.run(30, () => { fell ||= s.w.f.fellBack[i] === 1 })
+    expect(fell).toBe(false)
+  })
   it('not on a dip into wavering that recovers (its morale rising)', () => {
     const [s, h] = setup(), i = s.i(h)
     s.w.f.quality[i] = M.quality; s.set(h, 0.48)
@@ -219,13 +231,25 @@ describe('the wavering fall-back', () => {
 })
 
 describe('determinism', () => {
-  it('the brigade: its replay reproduces, and a save mid-rout and mid-fall-back reproduces', () => {
+  it('the brigade: its replay reproduces', () => {
     const sc = brigade(100), run = record(lev, cr, sc, 2, 14000, () => {})
     expect(play(run.replay, lev, cr, sc, run.hashes)).toBeNull()
-    const w = makeWorld(lev, cr, 2); sc.setup(w)
-    while (!(w.f.mstate.some(st => st === MS_ROUTING) && w.f.fellBack.some(Boolean))) advanceTick(w)
-    const w2 = deserialize(serialize(w), lev, cr)
-    for (let n = 0; n < 2000; n++) { advanceTick(w); advanceTick(w2) }
-    expect(hex(hashWorld(w2))).toBe(hex(hashWorld(w)))
+  })
+  it('a save taken with one battalion rallying, one routing and one mid-fall-back reproduces', () => {
+    // side 0: a router that runs to the west edge and rallies, a second routing, and east of the stream a
+    // wavering line falling back from side 1's line 60 m in front of it (side 1 stays east: the edge is safe)
+    const s = new W(); SIDES_SET(s)
+    const r1 = s.spawn(0, -60, -35), r2 = s.spawn(0, -60, 25); s.spawn(1, 170, -95)
+    const fb = s.spawn(0, 110, -95, { fire: 'at will' })
+    const until = (ok: () => boolean) => { for (let n = 0; n < 20 * 600 && !ok(); n++) s.tick(); expect(ok()).toBe(true) }
+    s.breakNow(r1)
+    until(() => s.state(r1) === MS_RALLYING)
+    // just above wavering, its quality lowered: it falls back within about 6 s, inside the 30 s rally
+    s.w.f.quality[s.i(fb)] = 0.45; s.set(fb, 0.51); s.breakNow(r2)
+    until(() => s.w.f.fellBack[s.i(fb)] === 1 && s.w.f.ordHead[s.i(fb)] >= 0)
+    expect([s.state(r1), s.state(r2), s.state(fb)]).toEqual([MS_RALLYING, MS_ROUTING, MS_WAVERING])   // the rally lasts 30 s: the fall-back must come first
+    const w2 = deserialize(serialize(s.w), lev, cr, true, levTerrain)
+    for (let n = 0; n < 1200; n++) { advanceTick(s.w); advanceTick(w2) }
+    expect(hex(hashWorld(w2))).toBe(hex(hashWorld(s.w)))
   })
 })

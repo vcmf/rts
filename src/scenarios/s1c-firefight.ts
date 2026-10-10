@@ -5,7 +5,7 @@
 // `levelled` data: the strip rolls (a rise at x ≈ −13 hides the lines from each other beyond about 140 m),
 // and the fire model's numbers are tuned apart from what the ground does to them.
 import type { World, Scenario, SimData, Compiled } from '../sim/index.ts'
-import { issue, makeWorld, advanceTick, menOf, MS_ROUTING, outOfFight } from '../sim/index.ts'
+import { issue, makeWorld, advanceTick, menOf, outOfFight } from '../sim/index.ts'
 
 export const FIGHT_Z = -165, FIGHT_X = -50
 export const STRONG = 0.8, WEAK = 0.65
@@ -34,7 +34,7 @@ export function runFirefight(data: SimData, cr: Compiled, seed: number, range: n
   const w = makeWorld(data, cr, seed, false); firefight(range, qa, qb).setup(w)
   for (let t = 0; t < maxTicks; t++) {
     advanceTick(w)
-    const a = w.f.mstate[0] === MS_ROUTING, b = w.f.mstate[1] === MS_ROUTING
+    const a = outOfFight(w.f.mstate[0]), b = outOfFight(w.f.mstate[1])   // a break: routing, or shattered at once
     if (a || b) { const i = a ? 0 : 1, M = cr.rs.morale, start = w.f.startMen[i]
       return { first: i, tick: w.meta[0], lossA: 100 - menOf(w, 0), lossB: 100 - menOf(w, 1), termLosses: M.losses * (start - menOf(w, i)) / start, termRecent: M.recent * w.f.recent[i] / start } }
   }

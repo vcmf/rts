@@ -134,7 +134,12 @@ A standing behaviour, taken in the morale step like the rout:
 - **when:**
   - the battalion is wavering;
   - it has no orders and is not changing shape;
-  - its morale has fallen on each of the last `fallback.after` seconds (3);
+  - its morale has fallen by more than `fallback.rate` (0.0005 a second) on every tick of the last
+    `fallback.after` seconds (3). Under steady fire it falls about 0.001 a second; the relax's slow crawl
+    onto a fixed target, which goes on for minutes, does not count;
+  - the nearest enemy in the fight is in front of it (within 90° of its heading). A Retire goes back from the
+    battalion's own facing, so with the enemy behind it, a rallied battalion facing the way it ran, it
+    would march toward the enemy;
   - it has not fallen back yet in this wavering spell;
   - an enemy in the fight is within musket range (`fire.maxRange`). It falls back *from* someone; with no
     enemy, a break mid-Retire would run "straight back" from its turned heading, toward where it faced.
@@ -293,8 +298,8 @@ Built as planned, with three changes found while building (below). Described in
    - the goldens are regenerated (drill, firefight, the five-seed calibration table);
    - the brigade's replay reproduces, and so does a save taken with one battalion routing and one mid-fall-back;
    - `SIM_VERSION` is `s1c.3`, `SAVE_FORMAT` 6.
-4. **Cost**, 40 battalions firing: casualties and morale take 0.10 ms per tick (§16: 2 ms). The O(n²) scans
-   do not show at this count.
+4. **Cost**, 40 battalions firing: casualties and morale take 0.09–0.11 ms per tick, against 0.01 on main
+   (§16: 2 ms). The survey of every other battalion is most of it.
 5. **The page:** `npm run check:app` plays the brigade until a break spreads (all three weaker lines out at
    12.4 min) and its 744 hashes reproduce in Node. The firefight still routs at 9.5 min.
 6. **Negative runs**, each caught:
@@ -320,3 +325,29 @@ Built as planned, with three changes found while building (below). Described in
 - **`debug-kill` counts as a loss for the rally's calm**, so a scripted router losing men does not rally.
 - **The brigade stands on an open band at x ≈ −60,** not the firefight's strip: the strip is on the map's
   southern edge, and lines at z = −125 cannot see each other.
+
+**Review round 1 (#24).** One severe finding and nine others, all fixed:
+- **The fall-back could march toward the enemy.** It uses the Retire drill, which goes back from the
+  battalion's own facing. A rallied battalion faces the way it ran, so with an enemy behind it, its
+  fall-back went 15 m toward that enemy. It now falls back only from an enemy in front of it. A test puts
+  the enemy behind and fails without the check.
+- **"Falling" counted the relax's crawl.** Morale settling onto a fixed target drops by tiny amounts for
+  minutes, so a battalion that went wavering after its losses stopped could still fall back. Falling now
+  means more than `fallback.rate` (0.0005 a second). A test fails on any decrease.
+- **The save test** now saves with one battalion rallying, one routing and one mid-fall-back, as acceptance 3
+  asks. Its waits are bounded.
+- **A first break that shatters at once** counts as a break in the firefight runner and the page check.
+- **Recent losses** are a share of the spawn strength, as the design says; only the losses term counts
+  from the rally.
+- **One Retire drill:** the command and the fall-back share `RETIRE` and `fillRetire` (`formation.ts`).
+- **Less repeated work:**
+  - the rout takes the nearest enemy the survey found;
+  - a shattered battalion skips the survey;
+  - the men per battalion are counted once per step.
+- **Every loss stamps `lastLoss`** in `removeMan`, the one way men are removed, instead of a special case in
+  `debug-kill`.
+- **No era words in engine code:** "musket range" is "fire range" in `src/sim`.
+
+The calibration is unchanged (100 m median 9.1 min) and every target holds. Under a load average of about
+30 the frame-cost test failed on main and on this branch alike (3.8–6.6 ms against its 4 ms budget, back to
+back); the morale step's own cost is the number above.

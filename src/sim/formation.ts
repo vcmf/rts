@@ -97,6 +97,11 @@ function repackSpan(w: World, i: number, q: number): [number, number] {
 // per half is tried. `near` (optional): whether the battalion is within reach of impassable ground, when
 // the caller already knows. Returns the company that lost the man, or −1 if the battalion has none left.
 export function removeMan(w: World, i: number, c: number, first?: ArrayLike<number>, near?: boolean): number {
+  const q = takeMan(w, i, c, first, near)
+  if (q >= 0) w.f.lastLoss[i] = w.meta[M_TICK] + 1   // every loss, whatever removed the man (a router losing men does not rally)
+  return q
+}
+function takeMan(w: World, i: number, c: number, first?: ArrayLike<number>, near?: boolean): number {
   const f = w.f, C = w.cr.geo.companies, k = i * C
   const ctx = (near ?? !clearOfImpassable(w, i)) ? ctxNow(w, i) : null, [clo, chi] = repackSpan(w, i, c)
   if (takeIfDry(w, i, c, ctx)) return c
@@ -412,6 +417,13 @@ export function shiftOrder(w: World, i: number): void {
   const f = w.f, n = f.ordHead[i]; if (n < 0) return
   f.ordHead[i] = w.ord.next[n]; if (f.ordHead[i] < 0) f.ordTail[i] = -1
   freeOrder(w, n)
+}
+// the Retire drill: face about, march `metres`, halt and dress, face the front again; the last two survive a
+// halt. Used by the `retire` command and the wavering fall-back: fills order k of RETIRE
+export const RETIRE = [O_FACE, O_MOVE, O_DRESS, O_FACE]
+export function fillRetire(w: World, n: number, k: number, metres: number): void {
+  if (k === 1) w.ord.a[n] = metres
+  if (k >= 2) w.ord.finish[n] = 1
 }
 // an order's point, kept 2 m inside the map on each axis (Retire, a router's run)
 export function setOnMap(w: World, n: number, x: number, z: number): void {

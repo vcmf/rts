@@ -33,6 +33,8 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     const lost = w.scratch.lost ?? (w.scratch.lost = new Int32Array(MAX_FORMATIONS))
     for (let i = 0; i < MAX_FORMATIONS; i++) lost[i] = w.f.alive[i] ? casualtiesStep(w, i) : 0
     const before = w.scratch.mstateBefore ?? (w.scratch.mstateBefore = new Uint8Array(MAX_FORMATIONS)); before.set(w.f.mstate)
+    const men = w.scratch.menNow ?? (w.scratch.menNow = new Int32Array(MAX_FORMATIONS))
+    for (let i = 0; i < MAX_FORMATIONS; i++) men[i] = w.f.alive[i] ? menOf(w, i) : 0   // final for the tick: the morale pass reads them
     // a test switch visits them in reverse: contagion and support read only state fixed before the step
     const rev = w.scratch.reverse === true
     for (let k = 0; k < MAX_FORMATIONS; k++) { const i = rev ? MAX_FORMATIONS - 1 - k : k; if (w.f.alive[i]) moraleStep(w, i, lost[i]) }
