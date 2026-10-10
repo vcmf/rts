@@ -53,8 +53,9 @@ export function occupied(w: World, i: number, c: number, r: number, f: number): 
   return fi >= 0 && fi < cr
 }
 // bitmask of company c's filled slots (r · files + f, at most 32: ruleset.ts) on impassable ground, as the
-// battalion stands now (bit 31 makes it negative; only & and nonzero tests read it)
-export function wetSlots(w: World, i: number, c: number): number {
+// battalion stands now (bit 31 makes it negative; only & and nonzero tests read it). `ctx`: the places now
+// (ctxNow), built once by the caller: a change of men moves no place
+function wetSlots(w: World, i: number, c: number, ctx: Places): number {
   const f = w.f, g = w.cr.geo, imp = w.terrain.imp[kindOf(w, i)]
   let mask = 0
   if (f.trans[i]) {
@@ -63,7 +64,6 @@ export function wetSlots(w: World, i: number, c: number): number {
       const [lx, lz] = blockLocal(g, q, r); if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) mask |= 1 << (r * g.files + q) }
     return mask
   }
-  const ctx = ctxNow(w, i)
   for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) {
     if (!occupied(w, i, c, r, q)) continue
     placeAt(ctx, c, r, q, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) mask |= 1 << (r * g.files + q)
@@ -73,28 +73,40 @@ export function wetSlots(w: World, i: number, c: number): number {
 const wetWas = new Int32Array(MAX_BINS)   // per company (a battalion has at most MAX_BINS / BINS)
 // takes one man from company q unless the re-pack puts a man newly on impassable ground; the companies the
 // re-pack can touch are q's own, or for a shape that closes across companies, q's half
-function takeIfDry(w: World, i: number, q: number, near: boolean): boolean {
+function takeIfDry(w: World, i: number, q: number, ctx: Places | null): boolean {
   const f = w.f, C = w.cr.geo.companies, k = i * C
   if (f.men[k + q] <= 0) return false
-  if (!near) { f.men[k + q]--; return true }
-  const across = targetLayout(w, i).def.closeAcross && C % 2 === 0, lo = across ? (q < C / 2 ? 0 : C / 2) : q, hi = across ? lo + C / 2 : q + 1
-  for (let c = lo; c < hi; c++) wetWas[c] = wetSlots(w, i, c)
+  if (!ctx) { f.men[k + q]--; return true }
+  const [lo, hi] = repackSpan(w, i, q)
+  for (let c = lo; c < hi; c++) wetWas[c] = wetSlots(w, i, c, ctx)
   f.men[k + q]--
-  for (let c = lo; c < hi; c++) if (wetSlots(w, i, c) & ~wetWas[c]) { f.men[k + q]++; return false }
+  for (let c = lo; c < hi; c++) if (wetSlots(w, i, c, ctx) & ~wetWas[c]) { f.men[k + q]++; return false }
   return true
+}
+// the companies a loss in company q re-packs: its own, or for a shape that closes across companies, q's half
+function repackSpan(w: World, i: number, q: number): [number, number] {
+  const C = w.cr.geo.companies
+  if (!(targetLayout(w, i).def.closeAcross && C % 2 === 0)) return [q, q + 1]
+  const lo = q < C / 2 ? 0 : C / 2; return [lo, lo + C / 2]
 }
 // One man of company c falls (docs/plans/active/s1c3-repack-gate.md). The fill rule re-packs the company; if
 // that would put a man newly on impassable ground, another company takes the loss: those with hits still
 // owed in `first` (per company of battalion i) before the rest, each nearest by index first. If none can,
 // the loss falls on c (or, if c is empty, the nearest company with men) and is counted in `pressed`. No
-// random draws. Returns the company that lost the man, or −1 if the battalion has none left.
-export function removeMan(w: World, i: number, c: number, first?: ArrayLike<number>): number {
-  const f = w.f, C = w.cr.geo.companies, k = i * C, near = !clearOfImpassable(w, i)
-  if (takeIfDry(w, i, c, near)) return c
+// random draws. For a shape that closes across companies any company of a half gives the same fill, so one
+// per half is tried. `near` (optional): whether the battalion is within reach of impassable ground, when
+// the caller already knows. Returns the company that lost the man, or −1 if the battalion has none left.
+export function removeMan(w: World, i: number, c: number, first?: ArrayLike<number>, near?: boolean): number {
+  const f = w.f, C = w.cr.geo.companies, k = i * C
+  const ctx = (near ?? !clearOfImpassable(w, i)) ? ctxNow(w, i) : null, [clo, chi] = repackSpan(w, i, c)
+  if (takeIfDry(w, i, c, ctx)) return c
+  let tried = 1 << c   // whole re-pack spans tried: a span's companies are alike
+  for (let s = clo; s < chi; s++) tried |= 1 << s
   for (let pass = 0; pass < 2; pass++) for (let d = 1; d < C; d++) for (let s = -1; s <= 1; s += 2) {
     const q = c + s * d
-    if (q < 0 || q >= C || ((first ? first[q] > 0 : false) !== (pass === 0))) continue
-    if (takeIfDry(w, i, q, near)) return q
+    if (q < 0 || q >= C || (tried & (1 << q)) || f.men[k + q] <= 0 || ((first ? first[q] > 0 : false) !== (pass === 0))) continue
+    if (takeIfDry(w, i, q, ctx)) return q
+    const [lo, hi] = repackSpan(w, i, q); for (let r = lo; r < hi; r++) tried |= 1 << r   // its span fails alike
   }
   let q = f.men[k + c] > 0 ? c : -1
   for (let d = 1; q < 0 && d < C; d++) for (let s = -1; s <= 1 && q < 0; s += 2) { const r = c + s * d; if (r >= 0 && r < C && f.men[k + r] > 0) q = r }
@@ -102,6 +114,9 @@ export function removeMan(w: World, i: number, c: number, first?: ArrayLike<numb
   f.men[k + q]--; f.pressed[i]++
   return q
 }
+// evens the men across companies. After a shape change it needs no re-packing gate: changeWet refused the
+// change unless every slot along it, filled or empty, was on passable ground, and the battalion does not move
+// while it changes (so whatever slots the even counts fill were checked)
 export function rebalance(w: World, i: number): void {
   const C = w.cr.geo.companies; let tot = 0
   for (let c = 0; c < C; c++) tot += w.f.men[i * C + c]
@@ -252,6 +267,7 @@ const wbPose: Pose = { x: 0, z: 0, a: 0, face: 0 }, pt = [0, 0, 0]
 // bitmask of bins with a man's place on impassable ground, for the pose as it is now
 // no place of battalion i can be on impassable ground: the ground's distance field says the nearest is
 // farther than the battalion reaches
+export const nearImpassable = (w: World, i: number): boolean => !clearOfImpassable(w, i)
 function clearOfImpassable(w: World, i: number): boolean {
   const f = w.f, C = w.cr.geo.companies, t = now(w)
   let reach = 0

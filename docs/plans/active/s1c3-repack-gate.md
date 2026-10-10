@@ -63,11 +63,11 @@ field). Near the stream it costs one footprint check per loss. Losses are a few 
 
 1. **The probe, as a test:**
    - the 41 positions found (fixtures from the probe) now show no man on impassable ground at any step;
-   - a reduced sweep over the diagonal headings shows none either, and no `pressed` status on this field.
+   - a reduced sweep over the diagonal headings shows none either, and no `pressed` count on this field.
 2. **The rule:** for every shape, every lean and every men count 5..27 per company, the slots filled
    after one loss lie inside the block filled before. A test of `occupied` alone, no terrain.
 3. **The fallback** (`pressed`) is reached in a constructed case: a battalion every one of whose
-   alternatives would wet a bin. It is built by painting impassable cells into a copy of the terrain.
+   alternatives would wet a slot. It is built by painting impassable cells into a copy of the terrain.
 4. **Determinism:**
    - the goldens move (the gate is a new rule) and replays and save round trips still reproduce;
    - the fire step's reversed-order test still passes.
@@ -90,7 +90,7 @@ field). Near the stream it costs one footprint check per loss. Losses are a few 
 Built as planned:
 - `removeMan` is in `src/sim/formation.ts`. The casualty step and `debug-kill` go through it.
 - `tools/repack-probe.ts` runs in about 2 minutes.
-- `test/repack.test.ts` has 3 tests.
+- `test/repack.test.ts` has 5 tests.
 
 **The probe:** all four shapes, ten headings, the stream bank from x 30 to 75 m every 0.25 m, z −160..160
 every 40 m. That is 42,228 dry positions and 2,531,292 losses.
@@ -107,8 +107,10 @@ every 40 m. That is 42,228 dry positions and 2,531,292 losses.
 - **The fallback:** `pressed` is reached on painted terrain with no alternative company.
 - **The negative run:** with the gate removed, the fixture and fallback tests fail.
 
-**Determinism:** no golden moved. None of the golden scenarios reaches the gate, so normal play is
-unchanged. `SIM_VERSION` is `s1c.2`, because the rule can change a replay near a bank.
+**Determinism:** in the first build no golden moved: none of the golden scenarios reaches the gate, so
+normal play is unchanged. Round 1 added the `pressed` column, which is hashed state, so both goldens were
+regenerated then. `SIM_VERSION` is `s1c.2`, because the rule can change a replay near a bank.
+`SAVE_FORMAT` is 5 (the new column).
 
 **The known issue is closed:** removed from `docs/known-issues.md`.
 
@@ -128,6 +130,21 @@ unchanged. `SIM_VERSION` is `s1c.2`, because the rule can change a replay near a
   frequency figures agree.
 
 The probe gives the same result with the redesigned gate: 41 cases without it, 0 with it, 0 pressed.
+
+**Review round 2.** No severe findings, so this is the last round. The worthwhile ones are fixed:
+- **The alternatives** rank by the hits the volleys put on each company this tick, not the hits left after
+  processing.
+- **Less repeated work:** the places context and the "near impassable ground" check are built once per
+  battalion per step. For a line, one company per half is tried, since any company of a half gives the
+  same fill.
+- **`SAVE_FORMAT`** goes to 5.
+- **The known issue** is struck through with #18, not deleted.
+- **The sweep test** asserts that it holds cases needing the gate.
+
+One finding was checked and found not to hold: "the rebalance after a formation change re-packs without the
+gate". `changeWet` refuses a change unless every slot along it, filled or empty, is passable, and the
+battalion does not move while changing. So the rebalanced counts can only fill slots already proven dry.
+A comment says so. Not done: sharing one footprint walk between `wetSlots` and `wetBins` (light).
 
 The cost tests failed in this round's full runs with the machine at a load average of about 100. Run back
 to back, `main` failed the same test under the same load (6.4–8.3 ms per tick against 7.5–8.4 on the

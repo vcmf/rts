@@ -32,16 +32,22 @@ describe('the re-packing gate', () => {
   })
 
   it('a reduced sweep along the bank at diagonal headings: no loss leaves a man newly on impassable ground', () => {
-    const t = buildTerrain(data, cr); let positions = 0
+    const t = buildTerrain(data, cr); let positions = 0, ungatedWet = 0
     for (const shape of ['column', 'march']) for (const heading of [-3 * Math.PI / 4, -Math.PI / 4, 3 * Math.PI / 4]) for (const z of [-160, -80, 0, 80]) for (let x = 45; x <= 66; x += 0.5) {
-      const w = makeWorld(data, cr, 1, false, t), i = w.free[w.meta[M_FREE] - 1]
-      issue(w, { type: 'debug-spawn', side: 0, x, z, heading, shape, men: 100, fire: 'hold' }); advanceTick(w)
-      if (!w.f.alive[i] || wetBins(w, i)) continue
-      positions++
-      for (let n = 0; n < 12; n++) { removeMan(w, i, n % C); expect({ shape, heading, x, z, n, wet: wetBins(w, i) }).toEqual({ shape, heading, x, z, n, wet: 0 }) }
-      expect(w.f.pressed[i]).toBe(0)
+      for (const gated of [false, true]) {
+        const w = makeWorld(data, cr, 1, false, t), i = w.free[w.meta[M_FREE] - 1]
+        issue(w, { type: 'debug-spawn', side: 0, x, z, heading, shape, men: 100, fire: 'hold' }); advanceTick(w)
+        if (!w.f.alive[i] || wetBins(w, i)) continue
+        if (gated) positions++
+        for (let n = 0; n < 12; n++) {
+          if (gated) { removeMan(w, i, n % C); expect({ shape, heading, x, z, n, wet: wetBins(w, i) }).toEqual({ shape, heading, x, z, n, wet: 0 }) }
+          else { w.f.men[i * C + n % C]--; if (wetBins(w, i)) { ungatedWet++; break } }
+        }
+        if (gated) expect(w.f.pressed[i]).toBe(0)
+      }
     }
     expect(positions).toBeGreaterThan(200)
+    expect(ungatedWet).toBeGreaterThan(0)   // the sweep holds cases that need the gate (4 of 610 when written)
   })
   // below ranks + 2 men the last men gather into one full-depth file, so the block can deepen by a rank: real
   // companies (25) never get there, and the gate covers them anyway
