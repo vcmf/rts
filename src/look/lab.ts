@@ -1,11 +1,14 @@
 // Test objects for the look checks (docs/plans/active/l2-detail.md), added to the page by the tools, never by the
 // page itself. The readability guard's army blocks: one coat colour each (docs/art-bible.md §4), battalion size (a
-// line of about 100 men in three ranks: 20 m × 3 m, 1.8 m tall, decision 0007), painted at unit crispness.
+// line of about 100 men in three ranks: 20 m × 3 m, 1.8 m tall, decision 0007), painted at unit crispness. The
+// detail check's test hill: a turned profile with faces at 15° to 90° in 15° steps and a flat top, all around, so the
+// ground's projection meets every slope and facing.
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import { Color3 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { Viewport } from '@babylonjs/core/Maths/math.viewport.js'
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js'
+import { CreateLathe } from '@babylonjs/core/Meshes/Builders/latheBuilder.js'
 import type { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
@@ -14,6 +17,7 @@ import BLOCK_VS from './shaders/block.vert?raw'
 import BLOCK_FS from './shaders/block.frag?raw'
 
 export const BLOCK = { w: 20, d: 3, h: 1.8 }
+export const HILL = { seg: 4, top: 6, sink: 2, round: 3 }   // m: each face's length along the profile, the flat top's radius, the foot's depth below the ground, the length a corner turns over
 
 export interface BlockSpec { name: string; x: number; z: number; yaw: number; color: string }   // color: '#rrggbb'
 // the screen box of a block, in render pixels (y down), for the camera at the time of the call
@@ -22,6 +26,7 @@ export interface BlockBox { name: string; x0: number; y0: number; x1: number; y1
 export class Lab {
   private readonly scene: Scene; private readonly mats: Materials
   private blocks: Mesh[] = []
+  private hills: Mesh[] = []
   private mask = -1
   private readonly blockMats = new Map<string, ShaderMaterial>()
   constructor(scene: Scene, mats: Materials) { this.scene = scene; this.mats = mats }
@@ -44,6 +49,33 @@ export class Lab {
   // every coat block drawn flat white (1), flat black (0) or painted (-1): two renders, white and black, find a block's
   // pixels exactly, behind whatever hides it
   setMask(v: number): void { this.mask = v; for (const m of this.blockMats.values()) m.setFloat('uMask', v) }
+
+  // a test hill at (x, z), its foot HILL.sink below the ground under its centre, drawn with mat (a terrain material:
+  // it reads aRiver, set to 8, no bank). Returns its height, m
+  addHill(x: number, z: number, mat: ShaderMaterial): number {
+    // walk the profile from the top's centre outward and down, the slope turning from face to face over HILL.round
+    // metres (a crease would turn the normal within a pixel: terrain normals are smooth)
+    const faces = [[0, HILL.top], ...[90, 75, 60, 45, 30, 15].map(d => [d, HILL.seg])], ds = 0.25, pts = [new Vector3(0, 0, 0)]
+    let r = 0, h = 0
+    faces.forEach(([deg, len], k) => {
+      for (let s = ds; s <= len + 1e-9; s += ds) {
+        const prev = faces[k - 1]?.[0], next = faces[k + 1]?.[0], half = HILL.round / 2
+        let d = deg
+        if (prev != null && s < half) d = prev + (deg - prev) * (0.5 + s / HILL.round)
+        if (next != null && s > len - half) d = deg + (next - deg) * (s - (len - half)) / HILL.round
+        const a = d * Math.PI / 180
+        r += ds * Math.cos(a); h -= ds * Math.sin(a); pts.push(new Vector3(r, h, 0))
+      }
+    })
+    pts.reverse()   // from the foot up: the faces point outward
+    const hill = CreateLathe('hill', { shape: pts, tessellation: 144 }, this.scene)
+    hill.position.set(x, groundAt(x, z) - HILL.sink - h, z)
+    hill.setVerticesData('aRiver', new Float32Array(hill.getTotalVertices()).fill(8), false, 1)
+    hill.material = mat; this.hills.push(hill)
+    return -h
+  }
+
+  clearHills(): void { for (const h of this.hills) h.dispose(); this.hills = [] }
 
   clearBlocks(): void { for (const b of this.blocks) b.dispose(); this.blocks = [] }
 

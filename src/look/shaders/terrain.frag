@@ -41,4 +41,18 @@ void main(){vec3 N=normalize(vN);vec4 lm=LM(vW);
   alb=mix(alb,vec3(0.40,0.55,0.58),smoothstep(0.3,0.6,rm));   // the water mid tone after its sky tint, so the line matches the river at the tile edge
   #endif
   vec3 c=paint(alb,N,vW,occ,0.12,1.0,sh);
+  #ifdef DETAIL_DEBUG_INC
+  // the checks' incidence view: |cos| in red; the biplanar major plane's weight in green, its axis in blue (0, ½, 1)
+  #ifdef DETAIL_ON
+  gl_FragColor=vec4(abs(dot(N,normalize(uCamPos-vW))),pW.x,float(pMa.x)*0.5,1.0);return;
+  #else
+  gl_FragColor=vec4(abs(dot(N,normalize(uCamPos-vW))),0.0,0.0,1.0);return;
+  #endif
+  #endif
+  #ifdef DETAIL_DEBUG
+  // the checks' view (tools/detail-check.mjs): the detail grain in red (0.5 ± half its deviation), the view distance
+  // in green and blue (16 bits over 0–1000 m)
+  float dd=floor(clamp(length(vW-uCamPos)/1000.0,0.0,1.0)*65535.0);
+  gl_FragColor=vec4(clamp(0.5+(pDetail-0.5)*0.5,0.0,1.0),floor(dd/256.0)/255.0,mod(dd,256.0)/255.0,1.0);return;
+  #endif
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}

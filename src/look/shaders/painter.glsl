@@ -72,16 +72,87 @@ float cloud(vec3 wp){
 }
 // Cool, more saturated shadow version of a colour (hue shift, never plain darkening).
 vec3 shadowOf(vec3 a){float l=dot(a,vec3(0.3,0.59,0.11));return clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80+vec3(0.02,0.04,0.07);}
+// THE TERRAIN'S DETAIL LAYER (docs/plans/active/l2-detail.md, L2b): the paint grain at a constant size on screen.
+// DETAIL: the terrain's materials; DETAIL_L0 puts back the L0 grain (the bench's and the checks' baseline).
+// Biplanar projection (the two planes most facing the normal; the third has no weight, and on gentle ground nor has
+// the second, so it is not read). Two power-of-two octaves of the texture, cross-faded by the pixel's footprint on
+// the ground, so one texture tile spans DETAIL_PX pixels of a 1080-line frame at every zoom. Each octave reads two
+// variants (Quilez's index variation, the index fixed in the world) against tiling; the blend's lost contrast is
+// given back (variance renormalised). Every read is a textureGrad from the world position's derivatives, taken
+// once: no change of plane, octave or variant reaches the mip selection.
+#if defined(DETAIL)&&!defined(DETAIL_L0)
+#define DETAIL_ON
+#endif
+uniform float uGrainMean;   // the mean of the grain's R channel: the renormalisation's centre
+float pDetail;              // the detail grain of the last paint(), for DETAIL_DEBUG
+#ifdef DETAIL_ON
+vec3 dPx,dPy;ivec3 pMa,pMe;vec2 pW;float pFade;
+vec2 pUA,pUB,pXA,pXB,pYA,pYB;   // the two planes' coordinates and their screen derivatives, picked once
+// a plane's coordinates, by the axis it faces (as Quilez's: x → yz, y → zx, z → xy)
+vec2 onPlane(vec3 v,int ax){return ax==0?v.yz:ax==1?v.zx:v.xy;}
+// the two planes and their weights, from the normal (zero weight at and below 1/sqrt(3), so a plane change is
+// smooth). Near the cube's diagonals (a 55° slope facing between two axes) every weight goes to zero and which two
+// planes are read flips: there the grain fades to its mean (pFade), so the result stays continuous
+void detailPlanes(vec3 wp,vec3 n){n=abs(n);
+  pMa=(n.x>n.y&&n.x>n.z)?ivec3(0,1,2):(n.y>n.z)?ivec3(1,2,0):ivec3(2,0,1);
+  ivec3 mi=(n.x<n.y&&n.x<n.z)?ivec3(0,1,2):(n.y<n.z)?ivec3(1,2,0):ivec3(2,0,1);
+  pMe=ivec3(3)-mi-pMa;
+  vec2 w=clamp((vec2(n[pMa.x],n[pMe.x])-0.5773)/(1.0-0.5773),0.0,1.0);float sw=w.x+w.y;
+  pW=sw>0.0?w/sw:vec2(1.0,0.0);pFade=clamp(sw/0.25,0.0,1.0);
+  pUA=onPlane(wp,pMa.x);pXA=onPlane(dPx,pMa.x);pYA=onPlane(dPy,pMa.x);
+  pUB=onPlane(wp,pMe.x);pXB=onPlane(dPx,pMe.x);pYB=onPlane(dPy,pMe.x);}
+#ifdef DETAIL_SAB_IMPLICIT
+#define TEXG(uv,gx,gy) texture(uGrain,uv)                 // sabotage: implicit derivatives (mip lines at hand-overs)
+#else
+#define TEXG(uv,gx,gy) textureGrad(uGrain,uv,gx,gy)
+#endif
+// one read on the two planes at world size S, shifted by off (in tiles)
+vec4 detailRead(float S,vec2 off){
+  vec4 a=TEXG(pUA/S+off,pXA/S,pYA/S);
+  if(pW.y<=0.0)return a;
+  return a*pW.x+TEXG(pUB/S+off,pXB/S,pYB/S)*pW.y;}
+// one octave: two variants by the index (the hand-over between them depends on the index alone, so where one
+// variant has no weight it is not read); returns the value and its weights' sum of squares
+vec2 detailOctave(float S,float idx){
+  float i=floor(idx),s=smoothstep(0.2,0.8,idx-i),a=0.0,b=0.0;
+  if(s<1.0)a=detailRead(S,sin(vec2(3.0,7.0)*i)).r;
+  if(s>0.0)b=detailRead(S,sin(vec2(3.0,7.0)*(i+1.0))).r;
+  return vec2(mix(a,b,s),(1.0-s)*(1.0-s)+s*s);}
+float detailGrain(vec3 wp,vec3 N){
+  vec3 v=uCamPos-wp;float dist=length(v),ci=max(abs(dot(N,v/dist)),0.05);
+  float T=dist*DETAIL_PIXA/sqrt(ci)*DETAIL_PX;                  // the world size of a tile spanning DETAIL_PX pixels
+  float L=log2(T),La=floor(L),Sa=exp2(La),o=L-La;
+  float idx=textureGrad(uGrain,wp.xz/DETAIL_INDEX,dPx.xz/DETAIL_INDEX,dPy.xz/DETAIL_INDEX).g*8.0;
+  vec2 A=detailOctave(Sa,idx),B=detailOctave(Sa*2.0,idx);
+  float q=((1.0-o)*(1.0-o)*A.y+o*o*B.y)*dot(pW,pW);              // sum of the squared weights of every read
+  return uGrainMean+(mix(A.x,B.x,o)-uGrainMean)/sqrt(q)*DETAIL_AMP*pFade;}
+#endif
 // THE paint function. jitter: how loose the brushwork is (1 = landscape, 0.3 = crisp units).
 // sh: extra shadow from the painted shadow map (0..1).
 vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh){
   float snow=snowAt(N,wp);alb=mix(alb,vec3(0.80,0.81,0.84),snow);                           // snow: lit warm white, shadowed cool blue by the ramp
-  vec3 g=grainW(wp,N,5.5),g2=grainW(wp,N,21.0);
-  float gr=(g.r-0.5)*uGrainAmt;
+  #ifdef DETAIL_ON
+  dPx=dFdx(wp);dPy=dFdy(wp);detailPlanes(wp,N);
+  float gd=detailGrain(wp,N),blot=0.5+(detailRead(21.0,vec2(0.0)).g-0.5)*pFade;   // the 21 m blotches stay fixed in the world
+  #else
+  float gd=grainW(wp,N,5.5).r,blot=grainW(wp,N,21.0).g;
+  #endif
+  pDetail=gd;
+  float gr=(gd-0.5)*uGrainAmt;
   float ndl=dot(N,uSunDir);
-  float l=ndl+gr*0.55*jitter+(g2.g-0.5)*0.3*jitter;
+  float l=ndl+gr*0.55*jitter+(blot-0.5)*0.3*jitter;
   l-=cloud(wp)*0.40+sh*1.25+(1.0-occ)*0.55;
+  #ifdef DETAIL_ON
+  // the band edges keep their width but never get narrower than the light's change across two pixels (no aliasing)
+  #ifdef DETAIL_SAB_STEP
+  float t=step(-0.06,l)*0.55+step(0.34,l)*0.45;                          // sabotage: hard band edges
+  #else
+  float bw=max(0.08,2.0*fwidth(l));
+  float t=smoothstep(-0.06-bw*0.5,-0.06+bw*0.5,l)*0.55+smoothstep(0.34-bw*0.5,0.34+bw*0.5,l)*0.45;
+  #endif
+  #else
   float t=smoothstep(-0.10,-0.02,l)*0.55+smoothstep(0.30,0.38,l)*0.45;   // shadow | mid | light, grain-broken edges
+  #endif
   vec3 shc=shadowOf(alb);
   vec3 mid=alb*mix(vec3(0.86,0.92,0.98),uSunCol,0.30);
   vec3 lt=alb*uSunCol*mix(1.16,1.02,snow)+vec3(0.03,0.025,0.0)*(1.0-snow);
@@ -89,7 +160,7 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   c*=1.0+gr*0.38;                                                           // gouache grain in the value
   vec3 V=normalize(uCamPos-wp);
   float fres=1.0-max(dot(N,V),0.0);
-  float rim=smoothstep(0.58,0.64,fres+(g.r-0.5)*0.2)*smoothstep(-0.35,0.2,ndl);
+  float rim=smoothstep(0.58,0.64,fres+(gd-0.5)*0.2)*smoothstep(-0.35,0.2,ndl);
   c+=uSunCol*vec3(1.0,0.86,0.6)*rim*rimAmt*0.55*(1.0-cloud(wp)*0.7)*(1.0-sh);       // graphic warm rim
   return c;
 }

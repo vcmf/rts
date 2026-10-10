@@ -30,7 +30,8 @@ const TILE_W = D.spec.tile, TILE_SUB = D.spec.tileSub, FAR_W = D.spec.far, FAR_S
 
 // heights come from the look data: the tile from the heightfield (decision 0012), the far ring from its own nodes
 export function buildTerrain(scene: Scene, mats: Materials, far: Grid): Terrain {
-  const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'] })
+  // DETAIL: the detail layer (src/look/shaders/painter.glsl), on the terrain only
+  const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], defines: ['#define DETAIL'] })
   // far ring: the river painted from a mask (the samples stroked at their widths), since 15 m vertices can't hold it
   const riverMaskCanvas = document.createElement('canvas'); riverMaskCanvas.width = riverMaskCanvas.height = MASK_N
   // one path per run of equal (half-pixel) width: a canvas filter or a stroke per sample loses the GL context in SwiftShader
@@ -40,7 +41,7 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid): Terrain 
     for (let i = 0; i < C.n - 1;) { const lw = w(i); g.lineWidth = lw; g.beginPath(); g.moveTo(X(i), Z(i)); let j = i + 1; for (; j < C.n - 1 && w(j) === lw; j++) g.lineTo(X(j), Z(j)); g.lineTo(X(j), Z(j)); g.stroke(); i = j }
   }
   const riverMask = new DynamicTexture('riverMask', riverMaskCanvas, scene, true, Texture.BILINEAR_SAMPLINGMODE); riverMask.wrapU = riverMask.wrapV = Texture.CLAMP_ADDRESSMODE; riverMask.update(false)
-  const farTerrainMat = mats.make('farTerrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], samplers: ['uRiverMask'], defines: ['#define FARRING'] }); farTerrainMat.setTexture('uRiverMask', riverMask)
+  const farTerrainMat = mats.make('farTerrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], samplers: ['uRiverMask'], defines: ['#define FARRING', '#define DETAIL'] }); farTerrainMat.setTexture('uRiverMask', riverMask)
 
   function ground(size: number, sub: number): GroundMesh {
     const g = CreateGround('t', { width: size, height: size, subdivisions: sub, updatable: true }, scene)

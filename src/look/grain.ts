@@ -45,6 +45,28 @@ export function makeGrainCanvas(userLum: Float32Array | null): HTMLCanvasElement
   g.putImageData(img, 0, 0); return c
 }
 
+// the seam check's grain (tools/detail-check.mjs): R holds only broad, smooth features (a few cells per tile), so a
+// render of it is smooth everywhere but at silhouettes and seams; G and B as the paint grain's. Also returns R's
+// steepest change between neighbouring texels
+export function makeSmoothGrainCanvas(): { canvas: HTMLCanvasElement; maxStep: number } {
+  const N = GRAIN_N, canvas = makeGrainCanvas(null), g = canvas.getContext('2d')!, img = g.getImageData(0, 0, N, N), d = img.data
+  const a = pnoise(N, 4, 4, 11), b = pnoise(N, 8, 8, 12), r = new Float32Array(N * N)
+  for (let i = 0; i < N * N; i++) r[i] = cl((0.65 * a[i] + 0.35 * b[i] - 0.5) * 2.2 + 0.5)
+  let maxStep = 0
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const v = r[y * N + x]; d[(y * N + x) * 4] = Math.round(v * 255)
+    maxStep = Math.max(maxStep, Math.abs(v - r[y * N + (x + 1) % N]), Math.abs(v - r[((y + 1) % N) * N + x]))
+  }
+  g.putImageData(img, 0, 0); return { canvas, maxStep }
+}
+
+// the mean of the grain's R channel, 0..1
+export function grainMean(canvas: HTMLCanvasElement): number {
+  const d = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data
+  let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i]
+  return s / (d.length / 4) / 255
+}
+
 export function grainTexture(scene: Scene, canvas: HTMLCanvasElement): DynamicTexture {
   const t = new DynamicTexture('grain', canvas, scene, true, Texture.TRILINEAR_SAMPLINGMODE)
   t.wrapU = t.wrapV = Texture.WRAP_ADDRESSMODE; t.anisotropicFilteringLevel = 4; t.update(false); return t

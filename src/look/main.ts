@@ -12,7 +12,7 @@ import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
 import { buildBakes } from './bakes.ts'
 import { runBench, showBench } from './bench.ts'
-import { grainTexture, lumOf, makeGrainCanvas } from './grain.ts'
+import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { CLEAR, Materials, PAL, S } from './materials.ts'
 import { buildNature } from './nature.ts'
 import { Post, buildCamera } from './post.ts'
@@ -47,7 +47,7 @@ engine.setHardwareScalingLevel(1)
 const scene = new Scene(engine); scene.skipPointerMovePicking = true
 scene.clearColor = CLEAR
 
-const mats = new Materials(scene, grainTexture(scene, makeGrainCanvas(null)))
+const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0))
 const terrain = buildTerrain(scene, mats, look.far)
 const water = buildWater(scene, mats)
 const nature = buildNature(scene, mats, water.reflAdd)
@@ -78,8 +78,7 @@ addEventListener('drop', e => {
   e.preventDefault(); dropEl.style.display = 'none'; const f = e.dataTransfer?.files[0]; if (!f || !/image/.test(f.type)) return
   const img = new Image()
   img.onload = () => {
-    const old = mats.grain; mats.grain = grainTexture(scene, makeGrainCanvas(lumOf(img)))
-    for (const m of mats.all) m.setTexture('uGrain', mats.grain)
+    const old = mats.grain, cv = makeGrainCanvas(lumOf(img)); mats.setGrain(grainTexture(scene, cv), grainMean(cv))
     bakes.bakeMat.setTexture('uGrain', mats.grain); bakes.lightMap.resetRefreshCounter(); old.dispose()
   }
   img.src = URL.createObjectURL(f)
@@ -120,18 +119,59 @@ Object.assign(window, {
   lightCam: bakes.lightCam, shadowRT: bakes.shadowRT,
   __buildMs: performance.now() - T0,
 })
-// the look checks' hooks (tools/guard.mjs and the L2 checks): test objects, the materials and the meshes by pass
+// the look checks' hooks (tools/guard.mjs, tools/detail-check.mjs): test objects, the materials, the meshes by pass,
+// and the detail layer's switches
 const lab = new Lab(scene, mats)
 const passes = { terrain: [terrain.tileGround, terrain.farGround, terrain.apron], scatter: scene.meshes.filter((m): m is Mesh => m instanceof Mesh && m.thinInstanceCount > 0), water: [water.mesh], post: () => post.passes }
-Object.assign(window, { __look: { lab, mats, passes, post } })
+const terrainMats = [terrain.terrainMat, terrain.farTerrainMat]
+// the terrain's variants (src/look/shaders/painter.glsl): the L0 grain, the debug view, the checks' sabotages
+const DETAIL_DEFINES = ['DETAIL_L0', 'DETAIL_DEBUG', 'DETAIL_DEBUG_INC', 'DETAIL_SAB_IMPLICIT', 'DETAIL_SAB_STEP']
+const setDetail = (on: string[]) => {
+  for (const d of on) if (!DETAIL_DEFINES.includes(d)) throw new Error(`unknown detail define ${d}`)
+  for (const m of terrainMats) for (const d of DETAIL_DEFINES) m.setDefine(`#define ${d}`, on.includes(d))
+}
+// the camera's projection, then in clip space x' = k·x + tx·w, y' = k·y + ty·w (k 1, no offset: the camera's own)
+const project = (k: number, tx: number, ty: number) => {
+  camera.unfreezeProjectionMatrix()
+  if (k !== 1 || tx || ty) camera.freezeProjectionMatrix(camera.getProjectionMatrix(true).multiply(Matrix.FromValues(k, 0, 0, 0, 0, k, 0, 0, 0, 0, 1, 0, tx, ty, 0, 1)))
+}
+const paintGrain = mats.grain, paintMean = mats.grainMean
+let smooth: { tex: DynamicTexture; mean: number; maxStep: number } | null = null
+const hidden: Mesh[] = []
+Object.assign(window, { __look: {
+  lab, mats, passes, post, setDetail,
+  hill: (x: number, z: number) => lab.addHill(x, z, terrain.terrainMat),
+  // the grain the terrain reads: the paint grain, or the seam check's smooth one (returns its steepest texel step)
+  grain: (kind: 'paint' | 'smooth') => {
+    if (kind === 'paint') { mats.setGrain(paintGrain, paintMean); return null }
+    if (!smooth) { const s = makeSmoothGrainCanvas(); smooth = { tex: grainTexture(scene, s.canvas), mean: grainMean(s.canvas), maxStep: s.maxStep } }
+    mats.setGrain(smooth.tex, smooth.mean); return smooth.maxStep
+  },
+  // the terrain alone (and the lab's hill), or everything; the finishing passes on or off (off: the frame is the
+  // terrain's own output, as the debug view needs)
+  terrainOnly: (on: boolean) => {
+    if (on) for (const m of scene.meshes) { if (m instanceof Mesh && m.isEnabled() && !terrainMats.includes(m.material as never)) { m.setEnabled(false); hidden.push(m) } }
+    else { for (const m of hidden) m.setEnabled(true); hidden.length = 0 }
+  },
+  finishing: (on: boolean) => on ? post.build() : post.clear(),
+  // one quarter of the frame (column i, row j from the top) drawn over the whole frame: four of them make a frame at
+  // twice the resolution (the seam check's magnification); null puts the camera's own projection back
+  quarter: (i: number | null, j = 0) => i === null ? project(1, 0, 0) : project(2, i === 0 ? 1 : -1, j === 0 ? -1 : 1),
+  // the image moved by (dx, dy) pixels (right, down) with nothing else changed: the shimmer check's sub-pixel shift
+  shift: (dx: number, dy: number) => project(1, 2 * dx / engine.getRenderWidth(), -2 * dy / engine.getRenderHeight()),
+} })
 
+const params = new URLSearchParams(location.search)
+// ?detail=l0: the terrain with the L0 grain (compare by eye; the goldens of main against it match)
+if (params.get('detail') === 'l0') setDetail(['DETAIL_L0'])
+else if (params.has('detail')) throw new Error(`?detail must be l0, not ${params.get('detail')}`)
 // ?bench (docs/plans/active/l2-detail.md): fixed cameras, the result shown with a link to save it, and in
 // window.__bench for tools/bench-look.mjs
-const params = new URLSearchParams(location.search)
 if (params.has('bench')) {
   camera.detachControl()
   const hold = Number(params.get('hold') ?? 3)
   if (!(hold > 0)) throw new Error(`?hold must be a positive number of seconds, not ${params.get('hold')}`)
-  void runBench(scene, camera, passes, [{ name: 'page', apply: () => {} }], hold).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
+  // the arms: the detail layer, and the L0 grain it replaces (the cost gate: at most +1 ms GPU for the terrain)
+  void runBench(scene, camera, passes, [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }], hold).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
     (e: unknown) => { Object.assign(window, { __bench: { error: String(e) } }); console.error('bench failed:', e) })
 }
