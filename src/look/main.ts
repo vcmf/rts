@@ -15,7 +15,7 @@ import { CLEAR, Materials, PAL, S } from './materials.ts'
 import { buildNature } from './nature.ts'
 import { Post, buildCamera } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
-import { HF, groundAt, setHeightfield } from './heightfield.ts'
+import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, lerpA, riverQuery, setRiver } from './river.ts'
 import { D, checkGround } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
@@ -27,10 +27,17 @@ declare global { interface Window { __T0?: number } }
 const T0 = window.__T0 ?? performance.now()   // load-time measurement (window.__buildMs), started by look.html
 if (!window.NATURE) { document.body.innerHTML = '<p style="padding:30px">nature-pack.data.js missing: run <code>node tools/obj-to-js.mjs</code></p>'; throw new Error('no nature data') }
 // the world's data, built offline (tools/build-look-data.ts, decision 0012): the heightfield, the far ring, the river
-const look = decodeLook(await (await fetch(LOOK_URL)).arrayBuffer())
+const res = await fetch(LOOK_URL)
+if (!res.ok) throw new Error(`look data: ${res.status} ${res.statusText} for ${LOOK_URL}`)
+const look = decodeLook(await res.arrayBuffer())
 checkLookData(D, look)
 setRiver(look.river); setHeightfield(look.hf, look.far, D.spec.tile / 2)
-{ let lo = HF.min, hi = HF.max; for (const v of look.far.h) { if (v < lo) lo = v; if (v > hi) hi = v } checkGround(D.spec, lo, hi) }
+{ // the heights themselves, not the header
+  let lo = Infinity, hi = -Infinity, farLo = Infinity
+  for (const v of look.hf.h) { if (v < lo) lo = v; if (v > hi) hi = v }
+  for (const v of look.far.h) if (v < farLo) farLo = v
+  checkGround(D.spec, lo, hi, farLo)
+}
 const canvas = document.getElementById('c') as HTMLCanvasElement
 const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false }, false)
 engine.setHardwareScalingLevel(1)

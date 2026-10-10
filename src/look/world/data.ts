@@ -51,6 +51,7 @@ export function decodeLook(buf: ArrayBuffer): LookData {
     o += n * 4
   }
   if (o !== buf.byteLength) throw new Error(`look data: ${buf.byteLength - o} bytes left over`)
+  for (const k of ['hf', 'far']) if (!arr[k]) throw new Error(`look data: no ${k} array`)
   const river = { P: meta.river.P, n: meta.river.n } as RiverSamples
   for (const k of SAMPLE_KEYS) { if (!arr[k] || arr[k].length !== meta.river.n) throw new Error(`look data: river array ${k} missing or short`); river[k] = arr[k] }
   return { hf: { ...meta.hf, h: arr.hf }, far: { ...meta.far, h: arr.far }, river }

@@ -32,7 +32,9 @@ export function blurMask(g: CanvasRenderingContext2D, N: number, sigma: number, 
   const [bx0, by0, bx1, by1] = box, X0 = Math.max(0, Math.floor(bx0) - R), Y0 = Math.max(0, Math.floor(by0) - R), X1 = Math.min(N, Math.ceil(bx1) + R + 1), Y1 = Math.min(N, Math.ceil(by1) + R + 1)
   if (X1 <= X0 || Y1 <= Y0) return
   const W = X1 - X0, Hh = Y1 - Y0, img = g.getImageData(X0, Y0, W, Hh), d = img.data, a = new Float32Array(W * Hh), b = new Float32Array(W * Hh)
-  const at = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))   // clamped at the mask's edges, as before
+  // edge pixels repeat at the mask's border; the canvas filter it replaces read transparent there and blurred each crown
+  // before compositing, so reflections near the tile edge and where crowns overlap differ slightly (an intended change)
+  const at = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
   for (let i = 0; i < W * Hh; i++) a[i] = d[i * 4]
   for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) { let s = 0; for (let k = -R; k <= R; k++) { const xx = at(X0 + x + k, 0, N - 1) - X0; s += w[k + R] * (xx >= 0 && xx < W ? a[y * W + xx] : 0) } b[y * W + x] = s }
   for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) { let s = 0; for (let k = -R; k <= R; k++) { const yy = at(Y0 + y + k, 0, N - 1) - Y0; s += w[k + R] * (yy >= 0 && yy < Hh ? b[yy * W + x] : 0) } a[y * W + x] = s }

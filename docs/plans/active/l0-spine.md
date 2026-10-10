@@ -93,3 +93,9 @@ chunked 1.8 km world (engine-design §10 item 8), our own camera controller (pro
   ±235 m and the checked frame to 16:9, enforced at run time. Also: a negative test per invariant, the
   hill check on grid nodes, the blur limited to the crowns' box, zero-copy data views, the far grid as a
   `Grid` (data format 2).
+- **L0a round 2:** nothing severe; fixed and stopped. The near-reach bound now also casts onto the tile's
+  highest ground (`ground.hi` is the tile's bound; the far ring needs only `lo`), and a camera inside that
+  ground fails; the bake budget counts the two depth buffers; the ground check reads the heights, not the
+  header; a failed data fetch says so; the negative tests detect a SPEC from the page; the aspect is set on
+  resize, not every frame. Left as documented: `groundAt` reads the far grid in the apron band, where
+  nothing is placed and the look check fails if anything is.

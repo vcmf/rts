@@ -59,7 +59,7 @@ the contract of `tools/golden.mjs`; it also puts the prototype's global names on
 
 - The world SPEC moved the play area in from ±250 m to ±235 m: at the widest zoom the frame's lower half
   reaches 160 m from the focus, and the tile ends 400 m out (the old 150 m margin came from screenshots).
-- The shadow map is sized from its fitted box at 0.33 m on the ground (3647 × 4906 instead of 3072²).
+- The shadow map is sized from its fitted box at 0.33 m on the ground (about 3647 × 4906 instead of 3072²).
 - The far ring sits at its authored height (the prototype lowered it 0.9 m, so the apron sloped and far bushes floated).
 - Instances stand on the drawn triangles, not on the formula; no far bush stands in the 14 m apron band.
 - The reflection mask is blurred in JS instead of by a canvas filter.
@@ -71,8 +71,9 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
 
 ## Verification
 
-- `node tools/golden.mjs prototypes/painted-cinematic.html http://localhost:<port>/app/look.html` after
-  `npm run build` and `npx vite preview`: the port matches the prototype at every camera.
+- `node tools/golden.mjs <base> <cand>` after `npm run build` and `npx vite preview`: a change to the look
+  page against its `origin/main` build (or another page). Against the prototype it differs since L0a, by the
+  changes listed above; L0c matched it pixel for pixel.
 - The render and river checks run on the look page through `tools/shot.mjs` (their headers), and so does
   `tools/look-check.js`: `H` against Babylon's own reading of both drawn meshes, the yaw lock, every instance
   on the ground, the ground inside the SPEC's range. `node tools/check-negatives.mjs <url>` runs all three
@@ -85,5 +86,7 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
 
 - The nature pack's data comes from `prototypes/` as a script that sets `window.NATURE`; it moves to a
   real module before the prototype is retired (L9).
+- `groundAt` reads the far grid inside the 14 m apron band, where the drawn surface is the apron's fan; nothing
+  is placed there (`src/look/nature.ts`), and the look check fails if anything is.
 - The bundle is one 1.7 MB chunk (Babylon plus the nature pack data); splitting it waits until load
   time matters.

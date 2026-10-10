@@ -29,6 +29,7 @@ describe('world spec', () => {
     ['occlusion cell as wide as the narrowest channel', s => { s.texel.ao = 10; s.sizes.aoCell = 4 }, /narrowest channel/],
     ['a far cell spanning an odd number of tile cells', s => { s.tileSub = 392 }, /odd number of tile cells/],
     ['the frame below the focus past the margin', s => { s.camera.rMax = 320 }, /beside the play edge/],
+    ['the closest camera below the highest ground', s => { s.ground.hi = 40 }, /horizon|inside/],
     ['the occlusion ring past the heightfield margin', s => { s.aoRing = 60 }, /occlusion ring/],
     ['a bake over the min-spec texture size', s => { s.sizes.reflMask = 16384 }, /min-spec/],
     ['sun depth range out of order', s => { s.depth.near = 2000 }, /depth range/],
@@ -42,9 +43,10 @@ describe('world spec', () => {
     expect(() => shadowMapSize(derive(with_(s => { s.minSpec.bakeMB = 100 })), 1203.3, 730.1, sin)).toThrow(/MB of bakes/)
   })
   it('refuses ground outside its range', () => {
-    expect(() => checkGround(SPEC, 0.4, 27.5)).not.toThrow()
-    expect(() => checkGround(SPEC, -3, 27.5)).toThrow(/outside the spec/)
-    expect(() => checkGround(SPEC, 0.4, 50)).toThrow(/outside the spec/)
+    expect(() => checkGround(SPEC, 0.4, 20.3, 2.2)).not.toThrow()
+    expect(() => checkGround(SPEC, -3, 20.3, 2.2)).toThrow(/outside the spec/)
+    expect(() => checkGround(SPEC, 0.4, 30, 2.2)).toThrow(/outside the spec/)
+    expect(() => checkGround(SPEC, 0.4, 20.3, -1)).toThrow(/outside the spec/)
   })
 })
 

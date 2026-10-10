@@ -34,11 +34,12 @@ export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateC
   camera.panningSensibility = 30; camera.minZ = 0.5; camera.maxZ = 5000; camera.fov = c.fov; camera.inertia = 0.88
   // the SPEC checked frames up to aspectMax: a wider screen keeps that frame's horizontal field of view and sees
   // less vertically, never more of the world than was checked
-  scene.onBeforeRenderObservable.add(() => {
+  const fit = () => {
     const wide = scene.getEngine().getAspectRatio(camera) > c.aspectMax
     camera.fovMode = wide ? Camera.FOVMODE_HORIZONTAL_FIXED : Camera.FOVMODE_VERTICAL_FIXED
     camera.fov = wide ? 2 * Math.atan(Math.tan(c.fov / 2) * c.aspectMax) : c.fov
-  })
+  }
+  fit(); scene.getEngine().onResizeObservable.add(fit)
   return camera
 }
 

@@ -25,7 +25,7 @@ import DEPTH_VS from './shaders/depth.vert?raw'
 import DEPTH_FS from './shaders/depth.frag?raw'
 import BAKE_FS from './shaders/bake.frag?raw'
 
-export interface Bakes { lightCam: FreeCamera; shadowRT: RenderTargetTexture; lightMap: RenderTargetTexture; bakeMat: ShaderMaterial; lightVP: Matrix; smTexel: Vector2; smSize: { w: number; h: number } }
+export interface Bakes { lightCam: FreeCamera; shadowRT: RenderTargetTexture; lightMap: RenderTargetTexture; bakeMat: ShaderMaterial; lightVP: Matrix; smTexel: Vector2 }
 
 const TILE_W = D.spec.tile, AO_N = D.spec.sizes.aoTex, LM_N = D.spec.sizes.lightMap, LZ0 = D.spec.depth.near, LZ1 = D.spec.depth.far, SM_FADE_M = D.spec.shadowFade
 
@@ -97,5 +97,5 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   lmCam.computeWorldMatrix()
   const lmVP = lmCam.getViewMatrix(true).multiply(lmCam.getProjectionMatrix(true))
   for (const m of mats.all) { m.setTexture('uLM', lightMap); m.setMatrix('uLMVP', lmVP) }
-  return { lightCam, shadowRT, lightMap, bakeMat, lightVP, smTexel, smSize: sm }
+  return { lightCam, shadowRT, lightMap, bakeMat, lightVP, smTexel }
 }

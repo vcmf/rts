@@ -38,11 +38,12 @@ const LOOK_CASES = [
 // The page records every console.error, so the check's own "<check>-check FAILED: …" line is read back whole
 // (shot.mjs cuts console output at 400 characters). A case is judged only on that line, never on other output.
 const CAPTURE = 'window.__errs = []; { const ce = console.error.bind(console); console.error = (...a) => { __errs.push(a.join(" ")); ce(...a) } } "capturing"'
-const REPORT = 'JSON.stringify({ failed: __errs.filter(l => /^\\w+-check FAILED: /.test(l)), other: __errs.filter(l => !/^\\w+-check FAILED: /.test(l)) })'
+const REPORT = 'JSON.stringify({ failed: __errs.filter(l => /^\\w+-check FAILED: /.test(l)), other: __errs.filter(l => !/^\\w+-check FAILED: /.test(l)), hasSpec: typeof SPEC !== "undefined" })'
 
-let bad = 0
-const hasSpec = !/painted-cinematic\.html$/.test(page)
-for (const [check, name, sabotage, expect] of hasSpec ? [...CASES, ...LOOK_CASES] : CASES) {
+let bad = 0, hasSpec = false   // the look cases run when the page has a SPEC (read from the first case's report)
+const queue = [...CASES]
+for (let q = 0; q < queue.length; q++) {
+  const [check, name, sabotage, expect] = queue[q]
   const steps = [['wait', 1000], ['eval', '(async () => { for (let i = 0; i < 1200 && !window.__proto; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__proto) throw new Error("the page never set window.__proto (120 s)"); return "page built" })()'], ['wait', 1000], ['eval', CAPTURE],
     ...(sabotage ? [['eval', sabotage + '; "SABOTAGED"']] : []),
     ['eval', CHECKS[check] + '; "CHECK RAN"'], ['eval', REPORT]]
@@ -52,6 +53,7 @@ for (const [check, name, sabotage, expect] of hasSpec ? [...CASES, ...LOOK_CASES
   const applied = !sabotage || out.includes('EVAL "SABOTAGED"'), ran = out.includes('EVAL "CHECK RAN"')
   const line = out.split('\n').find(l => l.startsWith('EVAL "{\\"failed\\"'))
   const rep = line ? JSON.parse(JSON.parse(line.slice(5))) : null
+  if (q === 0 && rep?.hasSpec) { hasSpec = true; queue.push(...LOOK_CASES) }
   const failLine = rep?.failed.find(l => l.startsWith(`${check}-check FAILED: `)) || ''
   if (rep && /^(EXC|EVAL-EXC) /m.test(out)) rep.other.push('an uncaught page exception')   // thrown errors are not console.error calls
   let ok, why
