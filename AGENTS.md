@@ -35,10 +35,10 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
 - Headless screenshots and checks: `node tools/shot.mjs <page> <outDir> [w] [h] '<steps JSON>'`;
   river and render checks: see the headers of `tools/river-check.js` and `tools/render-check.js`.
 - Docs check: `node tools/check-docs.mjs` (every doc path resolves, front matter, decision numbers).
-- CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint, typecheck, `check:data`, `check:docs`,
-  Vitest, build. On those pushes only, Vitest with coverage, uploaded to Codecov (informational only;
-  coverage makes the suite about six times slower). The cost tests skip when `CI` is set: run them locally.
-  `npm run coverage` gives the same report locally (`coverage/`).
+- CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint,
+  typecheck, `check:data`, `check:docs`, Vitest, build. On those pushes only, Vitest with coverage, uploaded to
+  Codecov (informational only; coverage makes the suite about six times slower). The cost tests skip when `CI`
+  is set: run them locally. `npm run coverage` gives the same report locally (`coverage/`).
 - Regenerate model data: `node tools/obj-to-js.mjs`; `tools/blend-to-js.py` with Blender (see its header).
 
 ## Workflow (every PR)

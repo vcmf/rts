@@ -1,6 +1,8 @@
-# check: every PR into main or an epic/** branch, and every push to them. Lint, types, generated data, docs, tests, build.
-# coverage: pushes to main or an epic/** branch (and by hand) only. Coverage instrumentation makes the sim's long scenarios about six
-# times slower (50 s → 5 min locally), too slow and too many uploads for every PR. It reports to Codecov.
+# check: every PR into main or an epic/** branch, and every push to them. Lint, types, generated data, docs,
+# tests, build.
+# coverage: pushes to main or an epic/** branch (and by hand) only. Coverage instrumentation makes the sim's long
+# scenarios about six times slower (50 s → 5 min locally), too slow and too many uploads for every PR. It reports
+# to Codecov.
 # The cost tests skip themselves when CI is set (shared runners are too noisy for millisecond budgets).
 # tools/app-check.mjs (headless browser) is not run here yet.
 name: ci
