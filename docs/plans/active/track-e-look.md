@@ -79,6 +79,10 @@ What changes while units wait:
   stand-in for L4, not a replacement.
 - **Budgets** are measured per pass for terrain, foliage, buildings and water; the units' share of
   the frame (engine-design §8) stays reserved and unmeasured, so the world must fit its own split.
+  The bench harness (described under Measuring, first planned in L1) is built in L2's first PR with
+  world scenes only, and L1 later adds its unit scenes to it. The laptop is needed in stage 1 too.
+- **Stage 2 re-checks stage 1.** L4 re-runs L5's chosen arm and L7's heat-ripple check with real
+  units and smoke. A failure there sends L2, L5 or L7 back, like any L4 failure.
 - **L9w** signs the world off against the primary targets (`docs/art-bible.md` §0), with their
   armies ignored: palette, light, haze and brushwork on ground, water, trees and buildings, in one
   summer and one winter target.
@@ -173,7 +177,7 @@ Some acceptance tests need people, not scripts. The owner arranges them:
 - **The readability test (L4):** at least 5 people, blind, 2 s exposures.
 - **The terrain ablation (L5):** at least 3 judges, blind, a fixed checklist.
 - **Anti-aliasing (L8):** a majority of reviewers.
-- **The look sign-off (L9):** the owner, against the target images.
+- **The look sign-offs (L9w in stage 1, L9 in stage 2):** the owner, against the target images.
 
 The style agent prepares the material (image sets, randomised order, answer sheets in
 `docs/plans/active/track-e-results/`) and tallies the answers.
@@ -221,7 +225,7 @@ The golden screenshots are the guard; port, then change, never both in one PR.
 
 **Goal:** thousands of figures on the painted terrain, driven by the sim, measured on the min-spec
 laptop before any further art. **This is the riskiest unknown in the track** (research §d, risk 1). Its
-answer can change art decisions, so it comes first.
+answer can change art decisions, so it comes first in stage 2.
 
 **Build:**
 - **The soldier:** the French infantryman from LA1 (retopologised LODs, about 300–400 triangles at LOD0
@@ -329,8 +333,10 @@ README is the source for every number; this plan copies none.
    building and L9 a landmark; the building material (object-local grain, oriented strokes, edge
    skirts) is L7's, and so is the test that its marks stay attached.
 
-   Acceptance: within 2–8k triangles; colour regions separate, with no colour taken from the Tripo
-   texture; a side-by-side with the concept image at gameplay zoom for the owner.
+   Acceptance: the licence is recorded in `docs/asset-sources.md` before the model is committed (a
+   free-tier model cannot ship; LA0's rule); within 2–8k triangles; colour regions separate, with no
+   colour taken from the Tripo texture; a side-by-side with the concept image at gameplay zoom for
+   the owner.
 
 **Out of scope:** cavalry and artillery models (L4's placeholders are enough until then), other
 nations' uniforms (a palette change on the same mesh, art bible §4b's rule), and any clip the sim
@@ -364,9 +370,9 @@ or tiling. Every terrain option needs this layer (the terrain proposal: "runtime
 - **No shimmer:** a slow pan at mid zoom, with no band-edge flicker above a set pixel-difference
   threshold in static regions; a headless tool.
 - **No tiling:** 3 of 3 reviewers cannot point to a repeat at maximum zoom-out.
-- **Cost:** ≤ +1 ms GPU over L1's terrain (laptop).
+- **Cost:** ≤ +1 ms GPU over L0's terrain (laptop, with the harness this phase builds).
 
-**Depends on:** L0 (L1 can run in parallel). **Estimate:** 4–6 days, 2 PRs.
+**Depends on:** L0. **Estimate:** 4–6 days, 2 PRs.
 
 **Then water:** W2–W5 (`docs/plans/active/prototype-plan.md` §4) go after L2, because their banks and bed painting use
 the same projection and grain.
@@ -402,7 +408,8 @@ the readability features the research asks for.
 ## L4. Readability gate (research P3)
 
 **Goal:** proof that the painting does not cost the player the battle. **The track's main art-direction
-risk** (research §d, risk 2). A failure here sends L2 and L3 back before more look is added.
+risk** (research §d, risk 2). A failure here sends L2 and L3 back before more look is added; it also re-checks stage 1
+(Current focus).
 
 **Build:** formations in line, column and square for three armies, on the painted terrain, at gameplay
 zoom, with flat-shaded baseline renders of the same scenes. A placeholder smoke (L6 is not built yet)
@@ -448,7 +455,7 @@ checked again with two battalions and smoke.
 - **The judges:** at least 3, blind, using the checklist:
   - does it read as painted?
   - are the classes readable?
-  - do the units look pasted on?
+  - do the units look pasted on? (in stage 1: do the army-colour blocks stand out from the ground?)
   - does it shimmer or tile?
 
   An arm is kept only if the judges prefer it to the arm before it. The stroke painter is dropped
@@ -503,12 +510,13 @@ winter trees the target images depend on, and the building material.
 - far woods switched to painted terrain colour;
 - **a first attempt at bare winter trees:** thin branches clamped to at least 1 px with alpha-to-coverage,
   painted-opacity skirts for the twig mass. The research has no evidence here (§c foliage 6), so this is
-  a design spike with screenshots for the owner, not a gate.
+  a design spike with screenshots for the owner. In stage 1 it is a gate: bare trees good enough for
+  L9w's winter target, judged by the owner.
 
 **Acceptance** (research P5):
 - average foliage overdraw ≤ 2–3× at the worst zoom;
 - crown coverage within ±10% from the nearest to the farthest zoom;
-- no heat ripple behind units;
+- no heat ripple behind units (in stage 1, behind the army-colour blocks; L4 re-checks with units);
 - foliage ≤ 3 ms GPU.
 
 **Depends on:** L2, LA2 (the first building); in stage 1 it measures its own budget rather than
@@ -559,10 +567,12 @@ Babylon VAT writes no velocity, and the 12 fps steps reset its history.
 
 **Depends on:** all. **Estimate:** 4–8 days, with iteration on the owner's feedback.
 
-**L9w, the world-only match (stage 1):** the build items above that touch the world (terrain
-terminator and rim, shadow-tint volume, depth wash, snow and ground brushwork, periphery
+**L9w, the world-only match (stage 1):** the build items above that touch the world (the warm
+terminator on ground and buildings, the rim on foliage tops only, shadow-tint volume, depth wash, snow and ground brushwork, periphery
 simplification), signed off as described under Current focus. The units' items, the video-tier
-frame and the full prototype exit wait for stage 2. **Depends on:** L2, water W2–W5, L5, L7.
+frame and the full prototype exit wait for stage 2. **Acceptance:** the owner's sign-off, and every
+stage-1 budget (terrain, foliage, buildings, water, post) still holding on the laptop with L9w's
+passes on. **Depends on:** L2, water W2–W5, L5, L7.
 
 ---
 
@@ -582,7 +592,8 @@ Stage 2, units (deferred):
 ```
 LA0 ──► LA1 ──┬──► L1 closes
 L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
-                          L3, L7 ──► L8 ──► L9 (full sign-off)
+                          L3, L7 ──► L8 ──┐
+                          L6 ─────────────┴──► L9 (full sign-off)
 ```
 
 - **Stage 1's critical path is L0, L2, L7, L9w.** L2 is the base every ground, water and building
@@ -590,7 +601,7 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
 - **The order was risk-first** (L0, L1, L3, L4: performance and readability before most of the look).
   Deferring units moves those two risks later; the readability guard and the reserved unit budget
   keep them from being designed out by stage 1.
-- **L2 runs beside L1.** Water follows L2.
+- **Water follows L2.** In stage 2, L1 needs only L0.
 - **LA:** LA2 runs in stage 1 after L0. In stage 2, LA0 needs nothing; L1 starts without LA1 but
   closes only on its figure; L3 needs it.
 - **Upstream assets:** Tripo or TRELLIS models (art bible §10) and the owner's brushes (§7) replace
@@ -598,7 +609,7 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
 
 ## Open questions for the owner
 
-1. **The laptop:** is a min-spec RTX 3060 laptop available for the L1 measurements? If not, which
+1. **The laptop:** is a min-spec RTX 3060 laptop available for the stage-1 budgets and, later, the L1 measurements? If not, which
    machine stands in, and do its numbers gate?
 2. **The judges** for L4 and L5: who, and how many? The research's bars assume at least 5 and at least 3.
 3. **Tilt-shift:** A/B it in L9, or rule it out now (decision 0003 forbids blur in gameplay; tilt-shift
@@ -608,7 +619,8 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
 5. **Soldier grain:** any at gameplay zoom, or only at the closest zoom (research open question)?
    The size rule under Sources makes this a threshold; L3's A/B proposes it, the owner accepts it.
 6. **Where the soldier's sources live** (LA0): the trial's scripts under `tools/` and the GLB in git,
-   the FBX and `.blend` scenes in `assets/`? And which Tripo plan made the model (licence)?
+   the FBX and `.blend` scenes in `assets/`? And which Tripo plan made the soldier and the barracks
+   (licence)?
 7. **Battle scale in the targets:** the v2 Austerlitz images show 200–400 men a battalion. Decision
    0007 keeps about 100, so those images are judged for mood, season and smoke, not for unit count.
    Is that right, or is the scale itself up for review (a new decision, not this track)?
