@@ -114,6 +114,7 @@ function rulesetHash(rs: Ruleset): number {
 export function compileRuleset(rs: Ruleset): Compiled {
   const g = rs.geometry, C = g.companies, R = g.ranks, F = g.files, NB = C * BINS
   if (NB > MAX_BINS) throw new Error(`ruleset ${rs.name}: ${C} companies make ${NB} bins, more than ${MAX_BINS}`)
+  if (R * F > 32) throw new Error(`ruleset ${rs.name}: a company of ${R * F} slots, more than a 32-bit mask holds (the re-packing gate)`)
   const kinds = Object.keys(Object.values(rs.terrain)[0].g)
   const paces = Object.keys(rs.pace), paceSpeed = new Float64Array(paces.map(p => rs.pace[p]))
   const names = Object.keys(rs.formations)

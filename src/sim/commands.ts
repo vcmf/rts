@@ -8,7 +8,7 @@ import { quantise, PI } from './num.ts'
 import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MS_ROUTING, FIRE_AT_WILL, formationSlot } from './world.ts'
 import { spawnFire } from './fire.ts'
 import { spawnMorale } from './morale.ts'
-import { allocOrder, appendOrder, clearOrders, ordersFree, rebalance, resetTrail } from './formation.ts'
+import { allocOrder, appendOrder, clearOrders, ordersFree, rebalance, resetTrail, removeMan } from './formation.ts'
 import { nextInt } from './rng.ts'
 import { columnsOf } from './columns.ts'
 
@@ -163,7 +163,7 @@ function apply(w: World, c: Command): string {
         if (!tot) break
         let r = nextInt(w.rng, tot), q = 0
         while (r >= f.men[i * C + q]) { r -= f.men[i * C + q]; q++ }
-        f.men[i * C + q]--
+        removeMan(w, i, q)   // through the re-packing gate
       }
       return ''
     }

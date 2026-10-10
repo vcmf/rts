@@ -28,7 +28,6 @@ step 12 morale     then morale for all: relaxes toward quality − losses; state
   - the numbers live in the ruleset and are tuned by a sweep.
 - **Non-goals (later parts):**
   - rally, shattered, contagion, flank support, the wavering fall-back (S1c-2);
-  - the casualty re-packing gate (S1c-3);
   - smoke, vision and commanders (S2);
   - melee, cavalry and artillery (S1d).
 
@@ -81,8 +80,11 @@ The companies are tried nearest first, so one hidden in a wood does not hide the
 The renderer reads each company's last volley tick and target (hashed state); there is no event ring
 yet (S2).
 
-**Casualties** (step 11). The owed men fall. Hits owed beyond a company's men are lost: passing them on
-could strike a company the shooters cannot see.
+**Casualties** (step 11). The owed men fall, one at a time through the re-packing gate
+(`docs/systems/formations.md`). In the rare case where a loss's re-pack would put a man on impassable
+ground, it falls on another company, those owed hits first: about one loss in 62,000 in the probe along the bank, and the
+"hits only on companies the shooter can see" rule bends there. Hits owed beyond a company's men are
+lost: passing them on could strike a company the shooters cannot see.
 
 **Morale** (`morale.ts`), per battalion. It is loss-driven: being fired at moves nothing, and disorder
 moves nothing (a march through a wood pins disorder at 1 with no enemy in sight). Men falling move it.
