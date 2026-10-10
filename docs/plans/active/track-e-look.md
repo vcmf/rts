@@ -618,9 +618,8 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
    or fixed?
 5. **Soldier grain:** any at gameplay zoom, or only at the closest zoom (research open question)?
    The size rule under Sources makes this a threshold; L3's A/B proposes it, the owner accepts it.
-6. **Where the soldier's sources live** (LA0): the trial's scripts under `tools/` and the GLB in git,
-   the FBX and `.blend` scenes in `assets/`? And which Tripo plan made the soldier and the barracks
-   (licence)?
+6. **Licences** (LA0, LA2): which Tripo plan made the soldier and the barracks? LA0 commits the
+   soldier's FBX and build chain only once that is recorded.
 7. **Battle scale in the targets:** the v2 Austerlitz images show 200–400 men a battalion. Decision
    0007 keeps about 100, so those images are judged for mood, season and smoke, not for unit count.
    Is that right, or is the scale itself up for review (a new decision, not this track)?
