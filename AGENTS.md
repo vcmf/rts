@@ -37,6 +37,8 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
   river and render checks: see the headers of `tools/river-check.js` and `tools/render-check.js`.
 - Golden screenshots: `node tools/golden.mjs <base> <cand>` (a page, a URL or `<ref>:<page>`; `--selftest`);
   negative tests of the page checks: `node tools/check-negatives.mjs`.
+- Look page bench and readability guard (built page, `npx vite preview`): `node tools/bench-look.mjs <url>`
+  (`?bench` in a browser), `node tools/guard.mjs <url> [--base <url>]`; see their headers.
 - Docs check: `node tools/check-docs.mjs` (every doc path resolves, front matter, decision numbers).
 - CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint,
   typecheck, `check:data`, `check:docs`, Vitest, build. On PRs into `epic/**` and on all those pushes, Vitest
