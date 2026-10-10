@@ -1,0 +1,1935 @@
+{
+ "tool": "look-bench",
+ "version": 2,
+ "build": "0c91f76",
+ "date": "2026-10-10T21:01:36.001Z",
+ "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+ "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+ "canvas": {
+  "w": 1920,
+  "h": 1080,
+  "cssW": 1920,
+  "cssH": 1080,
+  "dpr": 1
+ },
+ "gpuTimer": true,
+ "holdS": 3,
+ "arms": [
+  "l2",
+  "l0"
+ ],
+ "textureMB": 205.2,
+ "queriesRefused": 0,
+ "disjoint": 0,
+ "note": "GPU times from EXT_disjoint_timer_query_webgl2",
+ "runs": [
+  {
+   "cam": "close.yaw-45",
+   "arm": "l2",
+   "frames": 427,
+   "frameMs": {
+    "p50": 3,
+    "p95": 5.8,
+    "max": 8.5,
+    "n": 427
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 4.779,
+     "p95": 5.322,
+     "max": 6.036,
+     "n": 353
+    },
+    "terrain": {
+     "p50": 1.626,
+     "p95": 1.738,
+     "max": 2.529,
+     "n": 354
+    },
+    "scatter": {
+     "p50": 1.895,
+     "p95": 2.205,
+     "max": 2.805,
+     "n": 354
+    },
+    "water": {
+     "p50": 1.203,
+     "p95": 1.404,
+     "max": 2.145,
+     "n": 354
+    },
+    "other": null,
+    "post": {
+     "p50": 1.894,
+     "p95": 2.184,
+     "max": 2.997,
+     "n": 354
+    }
+   },
+   "passesOverFrame": 1.38,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "close.yaw-45",
+   "arm": "l0",
+   "frames": 503,
+   "frameMs": {
+    "p50": 2.8,
+    "p95": 4.3,
+    "max": 6.7,
+    "n": 503
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 3.218,
+     "p95": 4.308,
+     "max": 5.216,
+     "n": 429
+    },
+    "terrain": {
+     "p50": 1.303,
+     "p95": 1.385,
+     "max": 2.122,
+     "n": 429
+    },
+    "scatter": {
+     "p50": 1.537,
+     "p95": 1.813,
+     "max": 2.663,
+     "n": 429
+    },
+    "water": {
+     "p50": 0.87,
+     "p95": 1.038,
+     "max": 1.91,
+     "n": 429
+    },
+    "other": null,
+    "post": {
+     "p50": 1.537,
+     "p95": 1.798,
+     "max": 2.517,
+     "n": 429
+    }
+   },
+   "passesOverFrame": 1.63,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "close.yaw-45",
+   "arm": "l0",
+   "frames": 533,
+   "frameMs": {
+    "p50": 2.8,
+    "p95": 3.3,
+    "max": 5.2,
+    "n": 533
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 3.188,
+     "p95": 4.167,
+     "max": 4.924,
+     "n": 459
+    },
+    "terrain": {
+     "p50": 1.305,
+     "p95": 1.4,
+     "max": 3.11,
+     "n": 460
+    },
+    "scatter": {
+     "p50": 1.539,
+     "p95": 1.767,
+     "max": 3.778,
+     "n": 460
+    },
+    "water": {
+     "p50": 0.872,
+     "p95": 1.044,
+     "max": 2.984,
+     "n": 460
+    },
+    "other": null,
+    "post": {
+     "p50": 1.54,
+     "p95": 1.88,
+     "max": 2.566,
+     "n": 460
+    }
+   },
+   "passesOverFrame": 1.65,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "close.yaw-45",
+   "arm": "l2",
+   "frames": 485,
+   "frameMs": {
+    "p50": 2.8,
+    "p95": 4.2,
+    "max": 6.2,
+    "n": 485
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 4.8,
+     "p95": 5.433,
+     "max": 5.95,
+     "n": 411
+    },
+    "terrain": {
+     "p50": 1.62,
+     "p95": 1.709,
+     "max": 2.472,
+     "n": 411
+    },
+    "scatter": {
+     "p50": 1.882,
+     "p95": 2.168,
+     "max": 2.742,
+     "n": 411
+    },
+    "water": {
+     "p50": 1.204,
+     "p95": 1.392,
+     "max": 2.043,
+     "n": 411
+    },
+    "other": null,
+    "post": {
+     "p50": 1.883,
+     "p95": 2.308,
+     "max": 2.739,
+     "n": 411
+    }
+   },
+   "passesOverFrame": 1.37,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "close.yaw0",
+   "arm": "l2",
+   "frames": 477,
+   "frameMs": {
+    "p50": 2.8,
+    "p95": 4.2,
+    "max": 6.8,
+    "n": 477
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 4.773,
+     "p95": 5.242,
+     "max": 5.83,
+     "n": 403
+    },
+    "terrain": {
+     "p50": 1.617,
+     "p95": 1.701,
+     "max": 2.451,
+     "n": 403
+    },
+    "scatter": {
+     "p50": 1.897,
+     "p95": 2.29,
+     "max": 2.786,
+     "n": 403
+    },
+    "water": {
+     "p50": 1.199,
+     "p95": 1.429,
+     "max": 2.04,
+     "n": 403
+    },
+    "other": null,
+    "post": {
+     "p50": 1.889,
+     "p95": 2.201,
+     "max": 2.723,
+     "n": 403
+    }
+   },
+   "passesOverFrame": 1.38,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "close.yaw0",
+   "arm": "l0",
+   "frames": 529,
+   "frameMs": {
+    "p50": 2.7,
+    "p95": 3.8,
+    "max": 4.9,
+    "n": 529
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 2.919,
+     "p95": 4.239,
+     "max": 5.043,
+     "n": 455
+    },
+    "terrain": {
+     "p50": 1.279,
+     "p95": 1.375,
+     "max": 3.152,
+     "n": 455
+    },
+    "scatter": {
+     "p50": 1.527,
+     "p95": 1.762,
+     "max": 3.81,
+     "n": 455
+    },
+    "water": {
+     "p50": 0.85,
+     "p95": 1.032,
+     "max": 2.998,
+     "n": 455
+    },
+    "other": null,
+    "post": {
+     "p50": 1.53,
+     "p95": 1.7,
+     "max": 2.974,
+     "n": 455
+    }
+   },
+   "passesOverFrame": 1.78,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "close.yaw0",
+   "arm": "l0",
+   "frames": 538,
+   "frameMs": {
+    "p50": 2.7,
+    "p95": 3.9,
+    "max": 5.1,
+    "n": 538
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 3.411,
+     "p95": 4.33,
+     "max": 5.227,
+     "n": 464
+    },
+    "terrain": {
+     "p50": 1.27,
+     "p95": 1.344,
+     "max": 2.235,
+     "n": 463
+    },
+    "scatter": {
+     "p50": 1.532,
+     "p95": 1.711,
+     "max": 2.856,
+     "n": 463
+    },
+    "water": {
+     "p50": 0.846,
+     "p95": 0.964,
+     "max": 2.067,
+     "n": 463
+    },
+    "other": null,
+    "post": {
+     "p50": 1.536,
+     "p95": 1.768,
+     "max": 2.641,
+     "n": 463
+    }
+   },
+   "passesOverFrame": 1.52,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "close.yaw0",
+   "arm": "l2",
+   "frames": 483,
+   "frameMs": {
+    "p50": 2.8,
+    "p95": 4.2,
+    "max": 6,
+    "n": 483
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 4.78,
+     "p95": 5.463,
+     "max": 6.065,
+     "n": 409
+    },
+    "terrain": {
+     "p50": 1.621,
+     "p95": 1.721,
+     "max": 2.539,
+     "n": 409
+    },
+    "scatter": {
+     "p50": 1.906,
+     "p95": 2.203,
+     "max": 3.026,
+     "n": 409
+    },
+    "water": {
+     "p50": 1.198,
+     "p95": 1.376,
+     "max": 2.105,
+     "n": 409
+    },
+    "other": null,
+    "post": {
+     "p50": 1.895,
+     "p95": 2.187,
+     "max": 2.951,
+     "n": 409
+    }
+   },
+   "passesOverFrame": 1.38,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "close.yaw+45",
+   "arm": "l2",
+   "frames": 464,
+   "frameMs": {
+    "p50": 2.9,
+    "p95": 4.4,
+    "max": 6.7,
+    "n": 464
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 4.829,
+     "p95": 5.76,
+     "max": 6.189,
+     "n": 390
+    },
+    "terrain": {
+     "p50": 1.658,
+     "p95": 2.344,
+     "max": 2.616,
+     "n": 390
+    },
+    "scatter": {
+     "p50": 1.916,
+     "p95": 2.766,
+     "max": 3.176,
+     "n": 390
+    },
+    "water": {
+     "p50": 1.208,
+     "p95": 1.909,
+     "max": 2.244,
+     "n": 390
+    },
+    "other": null,
+    "post": {
+     "p50": 1.916,
+     "p95": 2.758,
+     "max": 3,
+     "n": 390
+    }
+   },
+   "passesOverFrame": 1.39,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "close.yaw+45",
+   "arm": "l0",
+   "frames": 509,
+   "frameMs": {
+    "p50": 2.8,
+    "p95": 4,
+    "max": 5,
+    "n": 509
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 3.307,
+     "p95": 4.551,
+     "max": 5.288,
+     "n": 435
+    },
+    "terrain": {
+     "p50": 1.329,
+     "p95": 1.514,
+     "max": 3.801,
+     "n": 435
+    },
+    "scatter": {
+     "p50": 1.554,
+     "p95": 2.316,
+     "max": 4.481,
+     "n": 435
+    },
+    "water": {
+     "p50": 0.872,
+     "p95": 1.248,
+     "max": 3.604,
+     "n": 435
+    },
+    "other": null,
+    "post": {
+     "p50": 1.555,
+     "p95": 2.386,
+     "max": 3.45,
+     "n": 435
+    }
+   },
+   "passesOverFrame": 1.61,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "close.yaw+45",
+   "arm": "l0",
+   "frames": 519,
+   "frameMs": {
+    "p50": 2.8,
+    "p95": 3.6,
+    "max": 19.2,
+    "n": 519
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 3.336,
+     "p95": 4.346,
+     "max": 5.066,
+     "n": 445
+    },
+    "terrain": {
+     "p50": 1.31,
+     "p95": 1.44,
+     "max": 3.157,
+     "n": 446
+    },
+    "scatter": {
+     "p50": 1.543,
+     "p95": 1.919,
+     "max": 3.809,
+     "n": 446
+    },
+    "water": {
+     "p50": 0.868,
+     "p95": 1.138,
+     "max": 3.003,
+     "n": 446
+    },
+    "other": null,
+    "post": {
+     "p50": 1.542,
+     "p95": 1.828,
+     "max": 2.683,
+     "n": 446
+    }
+   },
+   "passesOverFrame": 1.58,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "close.yaw+45",
+   "arm": "l2",
+   "frames": 478,
+   "frameMs": {
+    "p50": 2.9,
+    "p95": 4.2,
+    "max": 6.2,
+    "n": 478
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 4.743,
+     "p95": 5.571,
+     "max": 6.288,
+     "n": 404
+    },
+    "terrain": {
+     "p50": 1.642,
+     "p95": 2.242,
+     "max": 3.774,
+     "n": 405
+    },
+    "scatter": {
+     "p50": 1.909,
+     "p95": 2.57,
+     "max": 4.45,
+     "n": 405
+    },
+    "water": {
+     "p50": 1.205,
+     "p95": 1.621,
+     "max": 3.59,
+     "n": 405
+    },
+    "other": null,
+    "post": {
+     "p50": 1.896,
+     "p95": 2.552,
+     "max": 2.886,
+     "n": 405
+    }
+   },
+   "passesOverFrame": 1.4,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "default.yaw-45",
+   "arm": "l2",
+   "frames": 380,
+   "frameMs": {
+    "p50": 3.9,
+    "p95": 5.2,
+    "max": 8.2,
+    "n": 380
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 6.508,
+     "p95": 7.53,
+     "max": 8.169,
+     "n": 306
+    },
+    "terrain": {
+     "p50": 2.142,
+     "p95": 2.699,
+     "max": 3.396,
+     "n": 306
+    },
+    "scatter": {
+     "p50": 2.773,
+     "p95": 3.588,
+     "max": 4.073,
+     "n": 306
+    },
+    "water": {
+     "p50": 1.69,
+     "p95": 2.307,
+     "max": 3.005,
+     "n": 306
+    },
+    "other": null,
+    "post": {
+     "p50": 2.683,
+     "p95": 3.406,
+     "max": 4.056,
+     "n": 306
+    }
+   },
+   "passesOverFrame": 1.43,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "default.yaw-45",
+   "arm": "l0",
+   "frames": 387,
+   "frameMs": {
+    "p50": 3.9,
+    "p95": 5.2,
+    "max": 7.5,
+    "n": 387
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 5.834,
+     "p95": 6.729,
+     "max": 7.486,
+     "n": 313
+    },
+    "terrain": {
+     "p50": 1.672,
+     "p95": 2.042,
+     "max": 2.732,
+     "n": 313
+    },
+    "scatter": {
+     "p50": 2.376,
+     "p95": 2.965,
+     "max": 3.528,
+     "n": 313
+    },
+    "water": {
+     "p50": 1.263,
+     "p95": 1.609,
+     "max": 2.363,
+     "n": 313
+    },
+    "other": null,
+    "post": {
+     "p50": 2.387,
+     "p95": 2.923,
+     "max": 3.249,
+     "n": 313
+    }
+   },
+   "passesOverFrame": 1.32,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "default.yaw-45",
+   "arm": "l0",
+   "frames": 396,
+   "frameMs": {
+    "p50": 4,
+    "p95": 5.2,
+    "max": 7.5,
+    "n": 396
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 5.805,
+     "p95": 6.787,
+     "max": 7.67,
+     "n": 322
+    },
+    "terrain": {
+     "p50": 1.677,
+     "p95": 2.016,
+     "max": 2.645,
+     "n": 323
+    },
+    "scatter": {
+     "p50": 2.392,
+     "p95": 3.143,
+     "max": 3.765,
+     "n": 323
+    },
+    "water": {
+     "p50": 1.254,
+     "p95": 1.594,
+     "max": 2.347,
+     "n": 323
+    },
+    "other": null,
+    "post": {
+     "p50": 2.386,
+     "p95": 3.133,
+     "max": 3.568,
+     "n": 323
+    }
+   },
+   "passesOverFrame": 1.33,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "default.yaw-45",
+   "arm": "l2",
+   "frames": 368,
+   "frameMs": {
+    "p50": 4,
+    "p95": 5.3,
+    "max": 6.7,
+    "n": 368
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 6.674,
+     "p95": 7.378,
+     "max": 7.898,
+     "n": 294
+    },
+    "terrain": {
+     "p50": 2.455,
+     "p95": 2.617,
+     "max": 2.758,
+     "n": 294
+    },
+    "scatter": {
+     "p50": 3.121,
+     "p95": 3.294,
+     "max": 3.651,
+     "n": 294
+    },
+    "water": {
+     "p50": 2.018,
+     "p95": 2.194,
+     "max": 2.351,
+     "n": 294
+    },
+    "other": null,
+    "post": {
+     "p50": 2.958,
+     "p95": 3.204,
+     "max": 3.673,
+     "n": 294
+    }
+   },
+   "passesOverFrame": 1.58,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "default.yaw0",
+   "arm": "l2",
+   "frames": 374,
+   "frameMs": {
+    "p50": 3.9,
+    "p95": 5.2,
+    "max": 6.9,
+    "n": 374
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 6.528,
+     "p95": 7.195,
+     "max": 7.81,
+     "n": 300
+    },
+    "terrain": {
+     "p50": 2.128,
+     "p95": 2.476,
+     "max": 2.977,
+     "n": 300
+    },
+    "scatter": {
+     "p50": 2.822,
+     "p95": 3.392,
+     "max": 3.689,
+     "n": 300
+    },
+    "water": {
+     "p50": 1.727,
+     "p95": 2.057,
+     "max": 2.608,
+     "n": 300
+    },
+    "other": null,
+    "post": {
+     "p50": 2.732,
+     "p95": 3.305,
+     "max": 3.581,
+     "n": 300
+    }
+   },
+   "passesOverFrame": 1.44,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "default.yaw0",
+   "arm": "l0",
+   "frames": 415,
+   "frameMs": {
+    "p50": 3.8,
+    "p95": 4.4,
+    "max": 7,
+    "n": 415
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 5.525,
+     "p95": 6.138,
+     "max": 6.566,
+     "n": 341
+    },
+    "terrain": {
+     "p50": 1.618,
+     "p95": 1.722,
+     "max": 2.491,
+     "n": 342
+    },
+    "scatter": {
+     "p50": 2.31,
+     "p95": 2.802,
+     "max": 3.184,
+     "n": 342
+    },
+    "water": {
+     "p50": 1.22,
+     "p95": 1.338,
+     "max": 2.125,
+     "n": 342
+    },
+    "other": null,
+    "post": {
+     "p50": 2.224,
+     "p95": 2.767,
+     "max": 3.048,
+     "n": 342
+    }
+   },
+   "passesOverFrame": 1.33,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "default.yaw0",
+   "arm": "l0",
+   "frames": 424,
+   "frameMs": {
+    "p50": 3.8,
+    "p95": 4.4,
+    "max": 6.9,
+    "n": 424
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 5.536,
+     "p95": 6.203,
+     "max": 6.676,
+     "n": 350
+    },
+    "terrain": {
+     "p50": 1.619,
+     "p95": 1.726,
+     "max": 2.537,
+     "n": 351
+    },
+    "scatter": {
+     "p50": 2.317,
+     "p95": 2.838,
+     "max": 3.298,
+     "n": 351
+    },
+    "water": {
+     "p50": 1.219,
+     "p95": 1.362,
+     "max": 2.158,
+     "n": 351
+    },
+    "other": null,
+    "post": {
+     "p50": 2.233,
+     "p95": 2.779,
+     "max": 3.233,
+     "n": 351
+    }
+   },
+   "passesOverFrame": 1.33,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "default.yaw0",
+   "arm": "l2",
+   "frames": 381,
+   "frameMs": {
+    "p50": 3.9,
+    "p95": 5.2,
+    "max": 7.3,
+    "n": 381
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 6.521,
+     "p95": 7.216,
+     "max": 7.732,
+     "n": 307
+    },
+    "terrain": {
+     "p50": 2.123,
+     "p95": 2.245,
+     "max": 3.088,
+     "n": 307
+    },
+    "scatter": {
+     "p50": 2.824,
+     "p95": 3.402,
+     "max": 3.785,
+     "n": 307
+    },
+    "water": {
+     "p50": 1.727,
+     "p95": 2.021,
+     "max": 2.618,
+     "n": 307
+    },
+    "other": null,
+    "post": {
+     "p50": 2.732,
+     "p95": 3.298,
+     "max": 3.608,
+     "n": 307
+    }
+   },
+   "passesOverFrame": 1.44,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "default.yaw+45",
+   "arm": "l2",
+   "frames": 369,
+   "frameMs": {
+    "p50": 3.9,
+    "p95": 5.2,
+    "max": 8.1,
+    "n": 369
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 6.583,
+     "p95": 7.319,
+     "max": 8.048,
+     "n": 295
+    },
+    "terrain": {
+     "p50": 2.111,
+     "p95": 2.446,
+     "max": 2.962,
+     "n": 295
+    },
+    "scatter": {
+     "p50": 2.856,
+     "p95": 3.376,
+     "max": 3.852,
+     "n": 295
+    },
+    "water": {
+     "p50": 1.738,
+     "p95": 2.098,
+     "max": 2.544,
+     "n": 295
+    },
+    "other": null,
+    "post": {
+     "p50": 2.779,
+     "p95": 3.307,
+     "max": 3.741,
+     "n": 295
+    }
+   },
+   "passesOverFrame": 1.44,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "default.yaw+45",
+   "arm": "l0",
+   "frames": 406,
+   "frameMs": {
+    "p50": 3.8,
+    "p95": 4.5,
+    "max": 7.3,
+    "n": 406
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 5.624,
+     "p95": 6.366,
+     "max": 7.117,
+     "n": 332
+    },
+    "terrain": {
+     "p50": 1.596,
+     "p95": 1.869,
+     "max": 2.446,
+     "n": 332
+    },
+    "scatter": {
+     "p50": 2.35,
+     "p95": 2.838,
+     "max": 3.275,
+     "n": 332
+    },
+    "water": {
+     "p50": 1.226,
+     "p95": 1.535,
+     "max": 2.182,
+     "n": 332
+    },
+    "other": null,
+    "post": {
+     "p50": 2.277,
+     "p95": 2.76,
+     "max": 3.242,
+     "n": 332
+    }
+   },
+   "passesOverFrame": 1.32,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "default.yaw+45",
+   "arm": "l0",
+   "frames": 419,
+   "frameMs": {
+    "p50": 3.8,
+    "p95": 4.3,
+    "max": 6.7,
+    "n": 419
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 5.603,
+     "p95": 6.286,
+     "max": 6.672,
+     "n": 345
+    },
+    "terrain": {
+     "p50": 1.597,
+     "p95": 1.777,
+     "max": 2.27,
+     "n": 345
+    },
+    "scatter": {
+     "p50": 2.349,
+     "p95": 2.879,
+     "max": 3.142,
+     "n": 345
+    },
+    "water": {
+     "p50": 1.224,
+     "p95": 1.458,
+     "max": 1.91,
+     "n": 345
+    },
+    "other": null,
+    "post": {
+     "p50": 2.282,
+     "p95": 2.85,
+     "max": 3.063,
+     "n": 345
+    }
+   },
+   "passesOverFrame": 1.33,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "default.yaw+45",
+   "arm": "l2",
+   "frames": 371,
+   "frameMs": {
+    "p50": 3.9,
+    "p95": 5.2,
+    "max": 8.1,
+    "n": 371
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 6.676,
+     "p95": 7.522,
+     "max": 8.128,
+     "n": 297
+    },
+    "terrain": {
+     "p50": 2.112,
+     "p95": 2.595,
+     "max": 3.313,
+     "n": 297
+    },
+    "scatter": {
+     "p50": 2.874,
+     "p95": 3.46,
+     "max": 4.227,
+     "n": 297
+    },
+    "water": {
+     "p50": 1.741,
+     "p95": 2.279,
+     "max": 2.943,
+     "n": 297
+    },
+    "other": null,
+    "post": {
+     "p50": 2.803,
+     "p95": 3.405,
+     "max": 3.989,
+     "n": 297
+    }
+   },
+   "passesOverFrame": 1.43,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "wide.yaw-45",
+   "arm": "l2",
+   "frames": 297,
+   "frameMs": {
+    "p50": 5.1,
+    "p95": 6.3,
+    "max": 10.5,
+    "n": 297
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 9.004,
+     "p95": 9.976,
+     "max": 11.673,
+     "n": 223
+    },
+    "terrain": {
+     "p50": 3.328,
+     "p95": 3.808,
+     "max": 4.108,
+     "n": 222
+    },
+    "scatter": {
+     "p50": 4.061,
+     "p95": 4.614,
+     "max": 5.496,
+     "n": 222
+    },
+    "water": {
+     "p50": 2.955,
+     "p95": 3.466,
+     "max": 3.751,
+     "n": 222
+    },
+    "other": null,
+    "post": {
+     "p50": 3.877,
+     "p95": 4.473,
+     "max": 5.138,
+     "n": 222
+    }
+   },
+   "passesOverFrame": 1.58,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "wide.yaw-45",
+   "arm": "l0",
+   "frames": 315,
+   "frameMs": {
+    "p50": 5,
+    "p95": 6,
+    "max": 9.2,
+    "n": 315
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 7.521,
+     "p95": 8.27,
+     "max": 8.839,
+     "n": 241
+    },
+    "terrain": {
+     "p50": 2.606,
+     "p95": 3.158,
+     "max": 3.286,
+     "n": 241
+    },
+    "scatter": {
+     "p50": 3.314,
+     "p95": 3.887,
+     "max": 4.241,
+     "n": 241
+    },
+    "water": {
+     "p50": 2.248,
+     "p95": 2.818,
+     "max": 2.971,
+     "n": 241
+    },
+    "other": null,
+    "post": {
+     "p50": 3.066,
+     "p95": 3.623,
+     "max": 4.032,
+     "n": 241
+    }
+   },
+   "passesOverFrame": 1.49,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "wide.yaw-45",
+   "arm": "l0",
+   "frames": 325,
+   "frameMs": {
+    "p50": 4.9,
+    "p95": 5.3,
+    "max": 8.6,
+    "n": 325
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 7.503,
+     "p95": 8.244,
+     "max": 8.61,
+     "n": 251
+    },
+    "terrain": {
+     "p50": 2.608,
+     "p95": 2.82,
+     "max": 3.519,
+     "n": 252
+    },
+    "scatter": {
+     "p50": 3.313,
+     "p95": 3.909,
+     "max": 4.221,
+     "n": 252
+    },
+    "water": {
+     "p50": 2.251,
+     "p95": 2.504,
+     "max": 3.16,
+     "n": 252
+    },
+    "other": null,
+    "post": {
+     "p50": 3.062,
+     "p95": 3.706,
+     "max": 4.015,
+     "n": 252
+    }
+   },
+   "passesOverFrame": 1.5,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "wide.yaw-45",
+   "arm": "l2",
+   "frames": 292,
+   "frameMs": {
+    "p50": 5.1,
+    "p95": 6.3,
+    "max": 9.7,
+    "n": 292
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 8.89,
+     "p95": 9.722,
+     "max": 10.298,
+     "n": 218
+    },
+    "terrain": {
+     "p50": 3.302,
+     "p95": 3.871,
+     "max": 4.242,
+     "n": 219
+    },
+    "scatter": {
+     "p50": 4.017,
+     "p95": 4.641,
+     "max": 4.946,
+     "n": 219
+    },
+    "water": {
+     "p50": 2.947,
+     "p95": 3.555,
+     "max": 3.96,
+     "n": 219
+    },
+    "other": null,
+    "post": {
+     "p50": 3.827,
+     "p95": 4.456,
+     "max": 4.853,
+     "n": 219
+    }
+   },
+   "passesOverFrame": 1.59,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "wide.yaw0",
+   "arm": "l2",
+   "frames": 277,
+   "frameMs": {
+    "p50": 5.2,
+    "p95": 6.4,
+    "max": 10.5,
+    "n": 277
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 9.135,
+     "p95": 10.119,
+     "max": 10.735,
+     "n": 203
+    },
+    "terrain": {
+     "p50": 3.367,
+     "p95": 3.877,
+     "max": 4.185,
+     "n": 203
+    },
+    "scatter": {
+     "p50": 4.149,
+     "p95": 4.704,
+     "max": 5.208,
+     "n": 203
+    },
+    "water": {
+     "p50": 3.036,
+     "p95": 3.59,
+     "max": 3.856,
+     "n": 203
+    },
+    "other": null,
+    "post": {
+     "p50": 3.958,
+     "p95": 4.538,
+     "max": 5.167,
+     "n": 203
+    }
+   },
+   "passesOverFrame": 1.59,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "wide.yaw0",
+   "arm": "l0",
+   "frames": 306,
+   "frameMs": {
+    "p50": 5,
+    "p95": 6.3,
+    "max": 9.4,
+    "n": 306
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 7.708,
+     "p95": 8.444,
+     "max": 8.812,
+     "n": 232
+    },
+    "terrain": {
+     "p50": 2.67,
+     "p95": 3.236,
+     "max": 3.502,
+     "n": 231
+    },
+    "scatter": {
+     "p50": 3.429,
+     "p95": 4.023,
+     "max": 4.242,
+     "n": 231
+    },
+    "water": {
+     "p50": 2.341,
+     "p95": 2.933,
+     "max": 3.182,
+     "n": 231
+    },
+    "other": null,
+    "post": {
+     "p50": 3.144,
+     "p95": 3.721,
+     "max": 4.13,
+     "n": 231
+    }
+   },
+   "passesOverFrame": 1.5,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "wide.yaw0",
+   "arm": "l0",
+   "frames": 318,
+   "frameMs": {
+    "p50": 5,
+    "p95": 5.5,
+    "max": 9.5,
+    "n": 318
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 7.667,
+     "p95": 8.558,
+     "max": 9.173,
+     "n": 244
+    },
+    "terrain": {
+     "p50": 2.667,
+     "p95": 3.206,
+     "max": 3.695,
+     "n": 244
+    },
+    "scatter": {
+     "p50": 3.42,
+     "p95": 4.009,
+     "max": 4.523,
+     "n": 244
+    },
+    "water": {
+     "p50": 2.337,
+     "p95": 2.93,
+     "max": 3.361,
+     "n": 244
+    },
+    "other": null,
+    "post": {
+     "p50": 3.137,
+     "p95": 3.739,
+     "max": 4.292,
+     "n": 244
+    }
+   },
+   "passesOverFrame": 1.51,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "wide.yaw0",
+   "arm": "l2",
+   "frames": 275,
+   "frameMs": {
+    "p50": 5.3,
+    "p95": 6.6,
+    "max": 10.6,
+    "n": 275
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 9.401,
+     "p95": 10.396,
+     "max": 11.647,
+     "n": 201
+    },
+    "terrain": {
+     "p50": 3.44,
+     "p95": 4.219,
+     "max": 4.828,
+     "n": 202
+    },
+    "scatter": {
+     "p50": 4.228,
+     "p95": 4.966,
+     "max": 6.057,
+     "n": 202
+    },
+    "water": {
+     "p50": 3.122,
+     "p95": 3.923,
+     "max": 4.631,
+     "n": 202
+    },
+    "other": null,
+    "post": {
+     "p50": 4.047,
+     "p95": 4.791,
+     "max": 5.446,
+     "n": 202
+    }
+   },
+   "passesOverFrame": 1.58,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "wide.yaw+45",
+   "arm": "l2",
+   "frames": 281,
+   "frameMs": {
+    "p50": 5.1,
+    "p95": 6.4,
+    "max": 9.4,
+    "n": 281
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 8.695,
+     "p95": 9.712,
+     "max": 10.547,
+     "n": 207
+    },
+    "terrain": {
+     "p50": 3.187,
+     "p95": 3.9,
+     "max": 4.284,
+     "n": 208
+    },
+    "scatter": {
+     "p50": 3.887,
+     "p95": 4.666,
+     "max": 5.05,
+     "n": 208
+    },
+    "water": {
+     "p50": 2.827,
+     "p95": 3.491,
+     "max": 4.057,
+     "n": 208
+    },
+    "other": null,
+    "post": {
+     "p50": 3.717,
+     "p95": 4.42,
+     "max": 4.94,
+     "n": 208
+    }
+   },
+   "passesOverFrame": 1.57,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "wide.yaw+45",
+   "arm": "l0",
+   "frames": 318,
+   "frameMs": {
+    "p50": 5,
+    "p95": 5.5,
+    "max": 8.4,
+    "n": 318
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 7.298,
+     "p95": 8.299,
+     "max": 9.005,
+     "n": 244
+    },
+    "terrain": {
+     "p50": 2.526,
+     "p95": 3.293,
+     "max": 3.687,
+     "n": 245
+    },
+    "scatter": {
+     "p50": 3.219,
+     "p95": 4.06,
+     "max": 4.707,
+     "n": 245
+    },
+    "water": {
+     "p50": 2.166,
+     "p95": 2.965,
+     "max": 3.617,
+     "n": 245
+    },
+    "other": null,
+    "post": {
+     "p50": 2.935,
+     "p95": 3.809,
+     "max": 4.316,
+     "n": 245
+    }
+   },
+   "passesOverFrame": 1.49,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "wide.yaw+45",
+   "arm": "l0",
+   "frames": 328,
+   "frameMs": {
+    "p50": 4.3,
+    "p95": 5.5,
+    "max": 8.2,
+    "n": 328
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 7.342,
+     "p95": 8.483,
+     "max": 9.385,
+     "n": 254
+    },
+    "terrain": {
+     "p50": 2.547,
+     "p95": 2.979,
+     "max": 3.615,
+     "n": 254
+    },
+    "scatter": {
+     "p50": 3.236,
+     "p95": 4.026,
+     "max": 4.602,
+     "n": 254
+    },
+    "water": {
+     "p50": 2.172,
+     "p95": 2.737,
+     "max": 3.414,
+     "n": 254
+    },
+    "other": null,
+    "post": {
+     "p50": 2.954,
+     "p95": 3.755,
+     "max": 4.226,
+     "n": 254
+    }
+   },
+   "passesOverFrame": 1.49,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  },
+  {
+   "cam": "wide.yaw+45",
+   "arm": "l2",
+   "frames": 277,
+   "frameMs": {
+    "p50": 5.2,
+    "p95": 6.6,
+    "max": 9.6,
+    "n": 277
+   },
+   "gpuMs": {
+    "frame": {
+     "p50": 9.817,
+     "p95": 11.401,
+     "max": 12.661,
+     "n": 203
+    },
+    "terrain": {
+     "p50": 3.473,
+     "p95": 4.207,
+     "max": 4.999,
+     "n": 202
+    },
+    "scatter": {
+     "p50": 4.362,
+     "p95": 5.707,
+     "max": 6.443,
+     "n": 202
+    },
+    "water": {
+     "p50": 3.147,
+     "p95": 3.951,
+     "max": 4.794,
+     "n": 202
+    },
+    "other": null,
+    "post": {
+     "p50": 4.166,
+     "p95": 5.284,
+     "max": 6.092,
+     "n": 202
+    }
+   },
+   "passesOverFrame": 1.54,
+   "drawCalls": 38,
+   "triangles": 2071826,
+   "segments": {
+    "terrain": 1,
+    "water": 1,
+    "scatter": 1,
+    "post": 1
+   }
+  }
+ ]
+}
