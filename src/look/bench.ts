@@ -1,0 +1,138 @@
+// The bench (docs/plans/active/l2-detail.md, L2a; the track plan's "Measuring on the min-spec laptop"): the look page
+// with ?bench runs fixed cameras, records frame times, GPU time per pass, draw calls, triangles and texture memory,
+// and offers the result as JSON. The owner runs it on the laptop; tools/bench-look.mjs runs it headless here.
+//   ?bench            the default run; ?hold=<s> seconds measured per camera and arm (default 3)
+// GPU time per pass is only as good as the browser's timer queries: passesOverFrame (the passes' medians over the
+// frame's) far above 1 means the backend inflates them (ANGLE on Metal does), and only the frame time stands.
+// Arms are variants of the page measured in the same session, interleaved A B B A per camera so that heat and clock
+// changes fall on both equally.
+import type { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
+import { Constants } from '@babylonjs/core/Engines/constants.js'
+import type { AbstractEngine } from '@babylonjs/core/Engines/abstractEngine.js'
+import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation.js'
+import { Mesh as MeshClass } from '@babylonjs/core/Meshes/mesh.js'
+import type { Mesh } from '@babylonjs/core/Meshes/mesh.js'
+import type { PostProcess } from '@babylonjs/core/PostProcesses/postProcess.js'
+import type { Scene } from '@babylonjs/core/scene.js'
+import { GpuTimer } from './gputimer.ts'
+import { D } from './spec.ts'
+
+declare const __BUILD__: string
+
+export interface Arm { name: string; apply: () => void }
+export interface BenchPasses { terrain: Mesh[]; scatter: Mesh[]; water: Mesh[]; post: () => PostProcess[] }
+interface Cam { name: string; alpha: number; beta: number; radius: number }
+export interface RunStats {
+  cam: string; arm: string; frames: number
+  frameMs: Stat; gpuMs: Record<string, Stat | null>; passesOverFrame: number | null; drawCalls: number; triangles: number; segments: Record<string, number>
+}
+interface Stat { p50: number; p95: number; max: number; n: number }
+
+const q = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : NaN }
+const stat = (a: number[]): Stat => ({ p50: +q(a, 0.5).toFixed(3), p95: +q(a, 0.95).toFixed(3), max: +Math.max(...a).toFixed(3), n: a.length })
+
+// the closest, default and widest zoom (the widest at the steepest pitch, which shows the most world), each at the
+// yaw limits and the default yaw (decision 0010)
+function cameras(): Cam[] {
+  const c = D.spec.camera, out: Cam[] = []
+  for (const [z, beta, radius] of [['close', 0.8, c.rMin], ['default', 0.8, 125], ['wide', c.betaMax, c.rMax]] as const)
+    for (const [y, da] of [['yaw-45', -c.yawRange], ['yaw0', 0], ['yaw+45', c.yawRange]] as const) out.push({ name: `${z}.${y}`, alpha: c.yaw0 + da, beta, radius })
+  return out
+}
+
+// estimated GPU texture memory: every texture the engine holds, size × bytes per texel × mips × samples; render
+// target depth buffers are not in the cache, so this is a floor
+function textureMB(engine: AbstractEngine): number {
+  const ch = (f: number) => f === Constants.TEXTUREFORMAT_R ? 1 : f === Constants.TEXTUREFORMAT_RG ? 2 : f === Constants.TEXTUREFORMAT_RGB ? 3 : 4
+  const by = (t: number) => t === Constants.TEXTURETYPE_FLOAT ? 4 : t === Constants.TEXTURETYPE_HALF_FLOAT ? 2 : 1
+  let b = 0
+  for (const t of engine.getLoadedTexturesCache()) b += t.width * t.height * Math.max(1, t.depth) * (t.isCube ? 6 : 1) * ch(t.format) * by(t.type) * (t.generateMipMaps ? 4 / 3 : 1) * Math.max(1, t.samples)
+  return +(b / 2 ** 20).toFixed(1)
+}
+
+function rendererName(engine: AbstractEngine): string {
+  const gl = (engine as unknown as { _gl?: WebGL2RenderingContext })._gl
+  if (!gl) return 'unknown'
+  const ext = gl.getExtension('WEBGL_debug_renderer_info')
+  return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER))
+}
+
+export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: BenchPasses, arms: Arm[], holdS: number): Promise<object> {
+  const engine = scene.getEngine(), gl = (engine as unknown as { _gl: WebGL2RenderingContext })._gl
+  const timer = new GpuTimer(gl), inst = new SceneInstrumentation(scene)
+  let timing = false, passFrame = false, frameNo = 0, lastT = 0
+  const frameMs: number[] = [], draws: number[] = [], tris: number[] = [], timed = new Map<string, number>()
+  // a pass is timed as segments of consecutive draws (one query per run of draws of the same pass, not one per mesh:
+  // a query per draw costs more than the draw on some backends), in the camera's own pass only, never in a bake.
+  // Every mesh is hooked, so a draw outside the named passes ends the segment before it ('other')
+  let open: string | null = null
+  const seg = (label: string | null) => {
+    if (open === label) return
+    if (open) timer.end(open)
+    open = label
+    if (label) { timer.begin(label); timed.set(label, (timed.get(label) ?? 0) + 1) }
+  }
+  const named = new Map<Mesh, string>()
+  for (const m of passes.terrain) named.set(m, 'terrain')
+  for (const m of passes.scatter) named.set(m, 'scatter')
+  for (const m of passes.water) named.set(m, 'water')
+  const hook = (m: Mesh) => m.onBeforeRenderObservable.add(() => { if (timing && passFrame && engine.currentRenderPassId === camera.renderPassId) seg(named.get(m) ?? 'other') })
+  for (const m of scene.meshes) if (m instanceof MeshClass) hook(m)
+  scene.onNewMeshAddedObservable.add(m => { if (m instanceof MeshClass) hook(m) })
+  for (const p of passes.post()) {
+    p.onApplyObservable.add(() => { if (timing && passFrame) seg('post') })
+    p.onAfterRenderObservable.add(() => { if (timing && passFrame) seg(null) })
+  }
+  // alternate frames: the passes on one, the whole frame on the next (queries cannot nest)
+  engine.onBeginFrameObservable.add(() => {
+    const t = performance.now(); if (timing && lastT) frameMs.push(t - lastT); lastT = t
+    timer.poll(); timer.newFrame(); frameNo++; passFrame = frameNo % 2 === 0
+    if (timing && !passFrame) timer.begin('frame')
+  })
+  engine.onEndFrameObservable.add(() => {
+    seg(null)
+    if (timing && !passFrame) timer.end('frame')
+    if (timing) { draws.push(inst.drawCallsCounter.current); tris.push(scene.getActiveIndices() / 3) }
+  })
+  const frames = (n: number) => new Promise<void>(r => { let k = 0; const o = engine.onEndFrameObservable.add(() => { if (++k >= n) { engine.onEndFrameObservable.remove(o); r() } }) })
+  const seconds = (s: number) => new Promise<void>(r => setTimeout(r, s * 1000))
+
+  const runs: RunStats[] = [], cams = cameras()
+  await seconds(2)   // shaders compiled, first frames out of the way
+  for (const cam of cams) {
+    camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; camera.target.set(-10, D.spec.camera.focusY, 2)
+    for (const arm of [...arms, ...[...arms].reverse()]) {
+      arm.apply(); await scene.whenReadyAsync(); await frames(10)
+      timer.reset(); frameMs.length = draws.length = tris.length = 0; timed.clear(); lastT = 0
+      timing = true; await seconds(holdS); timing = false
+      await frames(6)   // late query results
+      const gpuMs: Record<string, Stat | null> = {}
+      for (const k of ['frame', 'terrain', 'scatter', 'water', 'other', 'post']) { const a = timer.results.get(k); gpuMs[k] = timer.available && a?.length ? stat(a) : null }
+      const nPass = Math.max(1, Math.floor(frameMs.length / 2)), segments: Record<string, number> = {}
+      for (const [k, v] of timed) segments[k] = +(v / nPass).toFixed(1)
+      // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
+      const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
+      const passesFit = gpuMs.frame ? +(sum / gpuMs.frame.p50).toFixed(2) : null
+      runs.push({ cam: cam.name, arm: arm.name, frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
+    }
+  }
+  inst.dispose()
+  const r = engine.getRenderingCanvas()
+  return {
+    tool: 'look-bench', version: 1, build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
+    canvas: { w: engine.getRenderWidth(), h: engine.getRenderHeight(), cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
+    gpuTimer: timer.available, holdS, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
+    note: timer.available ? 'GPU times from EXT_disjoint_timer_query_webgl2' : 'no GPU timer on this browser: GPU fields are null', runs,
+  }
+}
+
+// the result on the page, with a link to save it
+export function showBench(result: object): void {
+  const json = JSON.stringify(result, null, 1), el = document.createElement('div')
+  el.style.cssText = 'position:fixed;inset:24px;overflow:auto;background:rgba(12,13,15,.92);color:#eceae4;font:11px ui-monospace,Menlo,monospace;padding:16px;border-radius:10px;z-index:9'
+  const a = document.createElement('a'), r = result as { build: string; date: string }
+  a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); a.download = `l2-${r.date.slice(0, 10)}-${r.build}.json`
+  a.textContent = `Save ${a.download}`; a.style.cssText = 'color:#d9a35b;font-size:13px'
+  const pre = document.createElement('pre'); pre.textContent = json
+  el.append(a, pre); document.body.append(el)
+}
