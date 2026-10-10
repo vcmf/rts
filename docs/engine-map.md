@@ -38,11 +38,11 @@ without the renderer.
 ## 2. Decisions this map rests on
 
 The decision records in `docs/decisions/` are authoritative; this table keeps the D-labels other
-docs cite: D1 → 0007, D2 → 0006, D3 → 0008, D4 → 0013, D5 → 0009, D6 → 0010, D7 → 0015.
+docs cite: D1 → 0018, D2 → 0006, D3 → 0008, D4 → 0013, D5 → 0009, D6 → 0010, D7 → 0015.
 
 | # | Decision | Status |
 |---|---|---|
-| D1 | **The battalion is the simulation's unit and the player's unit.** About 100 figures each, 20–40 per battle (2k–4k figures). One entity per battalion (line shape, strength, share loaded, morale, cohesion); the figures are placed and animated by the renderer from that state. Musketry is resolved per battalion; roundshot is a real ray bouncing on the heightfield | agreed (Oct 2026) |
+| D1 | **The battalion is the simulation's unit and the player's unit.** About 400 figures each (decision 0018, superseding 0007; the engine reaches 800), 20 a side (about 16k figures). One entity per battalion (line shape, strength, share loaded, morale, cohesion); the figures are placed and animated by the renderer from that state. Musketry is resolved per battalion; roundshot is a real ray bouncing on the heightfield | agreed (Oct 2026) |
 | D2 | **Deterministic numbers in the simulation.** Revised after the sim-design review: **restricted float64** (IEEE `+ − × /` and `sqrt` only; `Math.sin`, `pow` and the like banned by lint; own trig; build-time input data; seeded integer RNG; index-ordered iteration) instead of Q16.16 fixed-point, which overflowed and was mis-specified (`docs/proposals/sim-design.md` §2, §19) | accepted (Oct 2026) |
 | D3 | **No couriers: orders apply immediately.** Couriers would need trajectories, blocking and interception; too costly to do well. Generals still matter on the field (rally, morale) | agreed (Oct 2026) |
 | D4 | **Single-player first, multiplayer-capable**: determinism, hashing and command logs are built as if lockstep were coming, so it stays a transport problem | accepted (Oct 2026) |
