@@ -20,3 +20,6 @@ coverage/
 renders/
 scratch/
 *.mp4
+
+# golden selftest copies (tools/golden.mjs), removed after each run
+prototypes/.golden-selftest-*

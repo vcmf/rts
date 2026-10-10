@@ -12,8 +12,9 @@ are earlier steps kept for comparison.
 - **Comments**: one short comment on non-obvious code, the why, not the how. Reference docs by
   repo path (`docs/art-bible.md` §6c), so `tools/check-docs.mjs` can verify them.
 - **Verify with the tools**: `tools/shot.mjs` for screenshots, `tools/river-check.js` and
-  `tools/render-check.js` for the river and render invariants. Every new check gets a negative test
-  (break the thing, see the check fail).
+  `tools/render-check.js` for the river and render invariants, `tools/golden.mjs` for a pixel diff against
+  a baseline (the page must keep `window.__proto` and `?frozen`). Every new check gets a negative test
+  in `tools/check-negatives.mjs` (break the thing, see the check fail).
 - **Pack colours are never used**: materials map to roles and our palette paints them
   (`docs/art-bible.md` §4b).
 - **Load time**: compare against main with paired runs of the same marker (`window.__buildMs`).
