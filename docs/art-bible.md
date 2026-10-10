@@ -355,6 +355,8 @@ scanned. The prototype accepts a dropped PNG to test a grain live.
   painted ground ring when needed.
 - **Graphic rim** and a crisper version of the paint (less brush jitter than
   the landscape).
+- **Paint follows size on screen** (decision 0017, proposed): a brush mask on
+  the figure's UVs that fades to flat colour regions at gameplay zoom.
 - **12 fps stepped animation** for marching and fighting.
 - **No gore:** casualties fall and remain as painted shapes.
 - At the far zoom a unit is a flat block whose shape is its formation's
