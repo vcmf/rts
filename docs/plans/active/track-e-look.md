@@ -21,12 +21,21 @@ The style is designed in these documents; this plan schedules them and does not 
 | `docs/research/prepainted-terrain-review.md` | Why baked strokes and lit bakes were rejected |
 | `docs/proposals/engine-design.md` | Scale and min-spec (§2), camera (§5), bakes and their memory limits (§6), units on the render side (§7), verification and frame budgets (§8), the order of work this plan extends (§10) |
 | `docs/plans/active/prototype-plan.md` | Prototype exit criteria (§1); the water workstream W2–W6 (§4) |
-| Decisions | 0001 (look in assets and materials, not filters), 0002 (top-down, no sky), 0003 (no blur in gameplay), 0010 (locked camera and staff map), 0011 (scale and min-spec), 0012 (heightfield authority) |
-| `design/refs/north-star.png` and the Austerlitz images in `design/refs/` | The targets the look is judged against |
+| `docs/research/painterly-2d-on-3d.md` | Brush masks inside the ramp (not over it); which coordinates keep paint attached per surface (world for terrain, object-local for rigid props, authored UVs for skinned soldiers); the one-hill, one-tree, one-soldier validation scene |
+| Decisions | 0001 (look in assets and materials, not filters), 0002 (top-down, no sky), 0003 (no blur in gameplay), 0007 (battalions of about 100, one figure each), 0010 (locked camera and staff map), 0011 (scale and min-spec), 0012 (heightfield authority) |
+| `docs/art-bible.md` §0 (reference images) | The targets the look is judged against, each with what to take from it and what to ignore |
+| The soldier animation trial (below, LA) | The first real figure: a Tripo French line infantryman, rigged, with authored clips |
 
 **The rule from all of them: paint the world, keep the units clean.** Soldiers are 10–30 px tall at
 gameplay zoom. The painting lives in ground, trees, buildings, smoke and light; units carry value,
 silhouette and colour, and almost no brushwork.
+
+**Paint on units depends on size on screen.** This settles the research note
+(`docs/research/painterly-2d-on-3d.md`, authored-UV cloth marks) against the rule above. A figure's paint lives in its
+albedo on authored UVs, so it moves with the cloth; no world-space or screen-space grain ever touches a
+unit. The shader fades that paint toward flat colour regions as the figure's pixel height drops, so at
+gameplay zoom a unit reads as value, silhouette and colour, and the marks show only at the closest
+zoom. The threshold is set by L3's A/B, not here.
 
 ## Naming
 
@@ -36,7 +45,8 @@ the prototype). This plan's phases are **L0–L9** (L for look):
 | Phase | Research step | Engine-design §10 item |
 |---|---|---|
 | L0 Spine | none | E0-lite (2–5) |
-| L1 Units placeholder and benchmark | P0 | 6 |
+| L1 Units and benchmark | P0 | 6 |
+| LA Asset pipeline (beside L1–L3) | none (research §d risk 12) | none |
 | L2 Terrain detail layer | P1 | none |
 | L3 Soldier look | P2 | none |
 | L4 Readability gate | P3 | none |
@@ -59,7 +69,8 @@ Water W2–W5 and the Austerlitz import W6 continue under `docs/plans/active/pro
 | `src/render/soldiers.ts`, `src/render/map.ts`, `src/app/` (the staff-map page) | logic | The 3D renderer reuses `SoldierLayer` (below); a change it needs goes in a small PR the logic track reviews |
 | `prototypes/` | style | Single-file look prototypes, until L0 moves them |
 | New: the look code (`src/look`), its page (look.html in `app/`), the bench tools and look tests | style | The 3D renderer, its shaders, bakes and checks |
-| `docs/art-bible.md`, `docs/research/` (look), this plan | style | |
+| `docs/art-bible.md`, `docs/research/` (look), `design/refs/`, `docs/asset-sources.md`, this plan | style | |
+| Asset sources and their build scripts (LA): models, clips, the tools that bake them | style | Raw packs and generated sources stay out of git (`.gitignore`); what the game loads is committed |
 | `package.json`, `eslint.config.js`, `vite.config.ts`, `docs/INDEX.md`, `docs/engine-map.md` | shared | Small, separate commits; rebase before merging; never reformat someone else's lines |
 
 ### The interface between them
@@ -79,12 +90,22 @@ The renderer reads the sim. It never writes to it (decision 0005).
 If the style track needs more from the sim (a per-figure animation state, a facing per company), it
 asks the logic track for a read-only accessor rather than reading internals.
 
+**Known ask, from L1 and LA:** the figure's clips have lead-in time. The Fire clip's shot falls 0.75 s
+after it starts, so a figure that starts Fire when `volleyTick` changes fires visibly late. The
+renderer needs to know a volley is coming: a company's next planned volley tick, or a "making ready"
+state. Until the logic track adds one, the renderer starts Fire at the volley and accepts the lag;
+it never predicts the sim's decisions on its own.
+
 ### Rules
 
 - **The workflow** (AGENTS.md):
   - plan, implement, `/code-review high`;
   - another round only after a severe finding; a redesign after 3 rounds;
   - no AI attribution in commits or PRs; squash merges.
+- **A separate checkout.** The style track works in its own git worktree,
+  `/Users/haquangle/workspace/rts-track-e` (`git worktree add ../rts-track-e`), on branches named
+  `look/<phase>-<topic>` cut from `origin/main`. It never edits files in the logic track's checkout, and
+  it rebases on `origin/main` before each PR.
 - **One PR per phase step,** with before and after screenshots at fixed cameras.
 - **Timing:** headless Chrome uses SwiftShader. It checks correctness, never timing. Timing comes from
   the min-spec laptop (below).
@@ -168,22 +189,27 @@ change to the look.
 **Depends on:** nothing. **Estimate:** 4–6 days over 3 PRs. **Risk:** the port drifts from the prototype.
 The golden screenshots are the guard; port, then change, never both in one PR.
 
-## L1. Units placeholder and benchmark (research P0)
+## L1. Units and benchmark (research P0)
 
 **Goal:** thousands of figures on the painted terrain, driven by the sim, measured on the min-spec
 laptop before any further art. **This is the riskiest unknown in the track** (research §d, risk 1). Its
 answer can change art decisions, so it comes first.
 
 **Build:**
-- **A placeholder soldier:** about 300 triangles (LOD0) and about 120 (LOD1), separate colour regions
-  for coat, facings, trousers and headgear (art bible §5 contract). A shako silhouette exaggerated
-  1.2–1.5× (research §c, soldiers 1).
+- **The soldier:** the French infantryman from LA1 (decimated LODs, about 300–400 triangles at LOD0
+  and 120–150 at LOD1, separate colour regions for coat, facings, trousers and headgear: art bible §5).
+  If LA1 has not landed when L1 starts, a procedural placeholder of the same budget stands in, and
+  the benchmark is run again on the real figure before L1 closes. A shako silhouette exaggerated
+  1.2–1.5× (research §c, soldiers 1), in the LOD meshes rather than in the source.
 - **Stepped animation** at 12 fps from a vertex animation texture (Babylon's
-  `BakedVertexAnimationManager`). Two clips, stand and march, baked by a small tool in `tools/` from a
-  procedural rig: the placeholder needs no artist rig.
+  `BakedVertexAnimationManager`), baked from LA1's clips (sampled every second frame of the 24 fps
+  source). For the benchmark: stand, march, and the firing loop (make ready, fire, reload).
   - The phase is **fractional** per battalion, so not all figures change pose on the same frame (§c,
     soldiers 4).
-  - Clips cut on step boundaries.
+  - Clips cut on step boundaries, and only where the clip graph has an exact join (LA1's `clips.json`);
+    VAT has no blending.
+  - Which clip a figure plays is derived from the sim state: moving, halted, firing (`volleyTick`),
+    routing (`mstate`). The firing lead-in is the known ask above.
 - **Thin instances:** one host per battalion per LOD; matrices written in place each frame from
   `SoldierLayer`; bounds padded by one figure height (thin-instance bounds do not follow VAT).
 - **Shadows:**
@@ -213,6 +239,55 @@ answer can change art decisions, so it comes first.
 **Depends on:** L0. **Estimate:** 5–8 days over 2–3 PRs (figure and VAT; instancing and shadows; the
 harness and scenes). **Decision after L1:** whether WebGL2 is CPU-bound on submission at this scale. If
 so, WebGPU moves up (research open question).
+
+## LA. Asset pipeline (beside L1–L3)
+
+**Goal:** generated models become engine assets that the shared painted material paints, within
+budget, with their licence on record. No phase before this one owns that path (art bible §10), and the
+first real assets exist: a rigged French infantryman with 14 authored clips, and concept images for
+the infantryman and the barracks in `design/refs/`.
+
+**Where the soldier stands now.** The soldier animation trial (in the owner's checkout under
+`output/soldier-animation/`, not in git) took a Tripo French infantry FBX (5,055 vertices,
+65 Mixamo bones) and authored clips in Blender: walking, standing and kneeling fire, the full 1791
+firing drill (make ready, fire, an 11.3 s reload with a working ramrod), bayonet guard, thrust and butt
+stroke. Its v8 GLB holds all 14 clips; a `clips.json` gives the clip graph, exact joins and event
+times (the shot, the hit). Checks cover grips, joins, rigid weapons, ground contact, wrists and neck.
+
+1. **LA0, land the sources.** Into git: the trial's build and validation scripts (under `tools/`), the
+   GLB and `clips.json`. Out of git: renders, videos and `.blend` scenes, which the scripts rebuild
+   from the source FBX in the git-ignored `assets/` folder (restore steps in `README.md`). Record the
+   model's source, Tripo plan and licence in `docs/asset-sources.md`; a free-tier model cannot ship
+   (research §d, risk 12).
+
+   Acceptance: the scripts rebuild the GLB from the restored FBX and the trial's checks pass; the
+   licence is recorded.
+2. **LA1, the figure for crowds.** A tool in `tools/` that, from the GLB:
+   - decimates the mesh to the L1 LOD budgets, keeping the colour regions as 4 mask channels (coat,
+     facings, trousers, headgear) and 1–2 bone influences per vertex;
+   - bakes each clip into one vertex animation texture at 12 fps, with the clip table (start frame,
+     length, loop, joins, events) generated from `clips.json`, never copied by hand;
+   - checks the albedo for baked light (art bible §5): a lit-from-one-side texture shows as a
+     value gradient across symmetric regions; the tool reports it, and a failing region is repainted
+     or flattened;
+   - writes committed, generated output the way `tools/obj-to-js.mjs` does.
+
+   Acceptance: each LOD within budget; the VAT figure matches the GLB's skinned pose at sampled frames
+   (vertex error under 1 cm at LOD0); event frames survive the 12 fps step (the shot falls on a
+   kept frame); a screenshot at gameplay and closest zoom.
+3. **LA2, one building.** The U-shaped barracks (`design/refs/french-barracks-u-v2-front.png`) through
+   Tripo and clean-up, painted by the shared material (research §c buildings: biplanar or
+   object-local grain, oriented strokes, edge skirts with units masked out). The same budget and baked-
+   light checks as LA1. It tests that the pipeline works for rigid props and gives L9 a landmark.
+
+   Acceptance: within 2–8k triangles; marks stay attached while the camera orbits; a side-by-side with
+   the concept image at gameplay zoom for the owner.
+
+**Out of scope:** cavalry and artillery models (L4's placeholders are enough until then), other
+nations' uniforms (a palette change on the same mesh, art bible §4b's rule), and any clip the sim
+cannot yet drive.
+
+**Depends on:** nothing for LA0; L0 for LA1's in-engine check. **Estimate:** 4–7 days over 3 PRs.
 
 ## L2. Terrain detail layer (research P1; the proposal's runtime layer 4)
 
@@ -253,8 +328,10 @@ the readability features the research asks for.
 **Build:**
 - **The 3-band ramp on units:** a narrow warm terminator and a warm rim masked to the upper or back edge
   with a hard step. No per-figure outlines.
-- **Grain** sampled from the bind-pose position plus a per-instance seed: one coarse octave sized to the
-  figure, clamped by derivatives, fading to flat below a pixel-size threshold.
+- **Paint on the figure** (the size rule under Sources): the albedo's painted marks on authored UVs,
+  plus at most one coarse grain octave sampled from the bind-pose position and a per-instance seed,
+  clamped by derivatives. Both fade to flat colour regions below a pixel-height threshold, which this
+  phase sets by A/B (owner question 5).
 - **Team identity** in the value and hue of the coat mass, with ±5–10% per-figure value jitter; 4
   per-instance mask channels.
 - **Phases:** fractional per battalion; random with ±10% speed for routers (`mstate` routing) and, later,
@@ -266,9 +343,11 @@ the readability features the research asks for.
   its own frame (pixel difference zero apart from translation).
 - **No global strobe:** at most 30% of figures change pose on any one frame, across 4,000 and 8,000.
 - **No grain aliasing** at 10 px figure height: reviewers A/B it against grain off.
+- **The threshold** where paint fades to flat, chosen by that A/B and written into
+  `docs/art-bible.md` §8.
 - **Units cost** still within L1's budget.
 
-**Depends on:** L1. **Estimate:** 3–5 days, 2 PRs.
+**Depends on:** L1, LA1. **Estimate:** 3–5 days, 2 PRs.
 
 ## L4. Readability gate (research P3)
 
@@ -414,8 +493,8 @@ Babylon VAT writes no velocity, and the 12 fps steps reset its history.
   presentation camera.
 
 **Acceptance:**
-- the owner signs off side by side with `design/refs/north-star.png` and the Austerlitz images on
-  palette, light and haze;
+- the owner signs off side by side with the primary targets in `docs/art-bible.md` §0, on palette,
+  light, haze and brushwork, one season per target (a summer and a winter target at least);
 - every budget from L1–L8 still holds on the laptop;
 - the prototype exit checklist (`docs/plans/active/prototype-plan.md` §1) is ticked;
 - L1's and L9's measurements (the cost of runtime grain, the bake's memory and resolution) are written
@@ -428,17 +507,20 @@ Babylon VAT writes no velocity, and the 12 fps steps reset its history.
 ## Order and parallelism
 
 ```
-L0 ──► L1 ──► L3 ──┐
-  └──► L2 ──┬──────┴──► L4 ──► L5
-            │                  L6 (after L4)
-            └──► water W2–W5   L7 (after L1, L2) ──► L8 ──► L9
+LA0 ──► LA1 ──┐
+L0 ──► L1 ────┴──► L3 ──┐
+  ├──► L2 ──┬───────────┴──► L4 ──► L5
+  │         │                       L6 (after L4)
+  │         └──► water W2–W5        L7 (after L1, L2) ──► L8 ──► L9
+  └──► LA2 (after L0; a landmark for L9)
 ```
 
 - **The critical path is L0, L1, L3, L4.** It answers the two biggest risks, performance and readability,
   before most of the look is built.
 - **L2 runs beside L1.** Water follows L2.
+- **LA runs beside L0–L1.** LA0 needs nothing; LA1 feeds L1's benchmark and L3; LA2 can wait for L0.
 - **Upstream assets:** Tripo or TRELLIS models (art bible §10) and the owner's brushes (§7) replace
-  placeholders whenever they land. None of the phases waits for them.
+  placeholders whenever they land. Only L3 waits for an asset (LA1's figure); the others do not.
 
 ## Open questions for the owner
 
@@ -450,6 +532,19 @@ L0 ──► L1 ──► L3 ──┐
 4. **Stepped animation comfort:** ship 12 fps steps as a setting that can be turned off (Insomniac did),
    or fixed?
 5. **Soldier grain:** any at gameplay zoom, or only at the closest zoom (research open question)?
+   The size rule under Sources makes this a threshold; L3's A/B proposes it, the owner accepts it.
+6. **Where the soldier's sources live** (LA0): the trial's scripts under `tools/` and the GLB in git,
+   the FBX and `.blend` scenes in `assets/`? And which Tripo plan made the model (licence)?
+7. **Battle scale in the targets:** the v2 Austerlitz images show 200–400 men a battalion. Decision
+   0007 keeps about 100, so those images are judged for mood, season and smoke, not for unit count.
+   Is that right, or is the scale itself up for review (a new decision, not this track)?
+
+## Changes to this plan
+
+- **2026-10-10, amendment.** Added LA (asset pipeline) with the soldier animation trial as L1's
+  figure; the size rule for paint on units; the reference images curated in `docs/art-bible.md` §0;
+  the note `docs/research/painterly-2d-on-3d.md` as a source; the volley lead-in ask; the style
+  track's own worktree; owner questions 6 and 7.
 
 ## Results
 
