@@ -18,6 +18,6 @@ export const CLASS_STYLE: Record<string, ClassStyle> = {
 export const INK = { paper: '#f3efe6', offMap: '#ddd5c5', ink: '#211f1c', ink2: '#5f5a52', ink3: '#a19a8f', contour: '#a0714a', contourIx: '#7d5534', grid: 'rgba(40,30,20,.08)',
   waterInk: '#3f6f86', woodInk: '#55703f', shallow: '#e3edee' }
 export const SIDE_INK = ['#2c4fa8', '#a8322c']
-// fire, and morale by state (steady, shaken, wavering, routing)
+// fire, and morale by state (steady, shaken, wavering, routing, rallying, shattered)
 export const FIRE_INK = '#c8641e'
-export const MORALE_INK = ['#5f5a52', '#b08a2e', '#c8641e', '#a8322c']
+export const MORALE_INK = ['#5f5a52', '#b08a2e', '#c8641e', '#a8322c', '#4f7a8a', '#5a2a2a']

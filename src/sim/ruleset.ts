@@ -45,6 +45,12 @@ export interface MoraleDef {
   shaken: [number, number]; wavering: [number, number]   // [enter below, leave at or above]
   rout: number                 // routs below this
   routPace: number             // a router's pace, times its shape's
+  // S1c-2 (docs/plans/active/s1c2-morale-machine.md)
+  contagion: { shock: number; front: number; back: number }   // a friend's break: the morale lost at 0 m, falling to 0 at front (ahead of the side's front) or back metres
+  support: { bonus: number; reach: number; arc: number }      // per secured flank: target bonus; a friend within reach metres and arc radians of the left or right axis
+  fallback: { metres: number; after: number; rate: number }   // a wavering battalion without orders Retires `metres` once its morale has fallen by more than `rate` a second for `after` seconds
+  rally: { safe: number; calm: number; time: number; cost: number; max: number }   // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; quality lost; rallies allowed
+  shatter: number              // a router below this share of its spawn strength shatters
 }
 export interface Ruleset {
   name: string
@@ -91,6 +97,7 @@ export interface Compiled {
   stateFactor: Float64Array  // fire: by morale state (steady, shaken, wavering; a router does not fire)
   recentDecay: number        // morale: recent losses' factor per tick
   relax: number              // morale: the share of the gap to its target closed per tick
+  supportCos: number         // morale: cos of the support arc
 }
 
 // the morale states that fire, in MS_* order (world.ts)
@@ -130,9 +137,14 @@ export function compileRuleset(rs: Ruleset): Compiled {
   const sightByClass = new Float64Array(Object.keys(rs.terrain).map(c => rs.fire.sight[c] ?? Infinity))
   for (const s of FIRING_STATES) if (!(s in rs.fire.state)) throw new Error(`ruleset ${rs.name}: fire.state has no ${s}`)
   if (rs.fire.pRange.some((p, k) => k > 0 && p[0] <= rs.fire.pRange[k - 1][0])) throw new Error(`ruleset ${rs.name}: fire.pRange ranges must increase`)
+  // one friend's break must not rout a steady battalion of default quality on its own (s1c-plan-review L2)
+  const M = rs.morale
+  if (M.contagion.shock > 0.6 * (M.quality - M.rout)) throw new Error(`ruleset ${rs.name}: morale.contagion.shock over 0.6 of the gap from the default quality to the rout`)
+  if (!(M.rally.max >= 0 && M.rally.max < 255)) throw new Error(`ruleset ${rs.name}: morale.rally.max must be 0..254 (the break count is a byte)`)
+  if (!(M.support.arc > 0 && M.support.arc <= PI / 2)) throw new Error(`ruleset ${rs.name}: morale.support.arc must be in (0, π/2]: wider, a friend ahead would count as a flank`)
   return {
     rs, hash: rulesetHash(rs), geo: g, NB, slots: C * R * F, shapes, kinds, paces, paceSpeed, presets, changeTime, qMax, slope,
-    depthByKind, sightByClass, cosArc: cos(rs.fire.arc), stateFactor: new Float64Array(FIRING_STATES.map(s => rs.fire.state[s])), recentDecay: exp(-DT / rs.morale.recentTime), relax: 1 - exp(-DT / rs.morale.relaxTime),
+    depthByKind, sightByClass, cosArc: cos(rs.fire.arc), stateFactor: new Float64Array(FIRING_STATES.map(s => rs.fire.state[s])), recentDecay: exp(-DT / rs.morale.recentTime), relax: 1 - exp(-DT / rs.morale.relaxTime), supportCos: cos(rs.morale.support.arc),
     shapeIndex: n => names.indexOf(n), presetIndex: n => presets.indexOf(n),
   }
 }

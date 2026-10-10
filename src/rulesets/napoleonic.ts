@@ -80,5 +80,11 @@ export const napoleonic: Ruleset = {
   morale: {
     quality: 0.75, losses: 1.25, recent: 3, recentTime: 10, relaxTime: 20,
     shaken: [0.6, 0.65], wavering: [0.5, 0.55], rout: 0.4, routPace: 2,
+    // the rest of the machine (docs/plans/active/s1c2-morale-machine.md)
+    contagion: { shock: 0.15, front: 200, back: 100 },
+    support: { bonus: 0.04, reach: 100, arc: 0.7853981633974483 },
+    fallback: { metres: 15, after: 3, rate: 0.0005 },
+    rally: { safe: 250, calm: 20, time: 30, cost: 0.1, max: 2 },
+    shatter: 0.5,
   },
 }

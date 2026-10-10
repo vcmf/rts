@@ -5,10 +5,10 @@
 // the ruleset (decision 0015).
 import type { Handle } from './handle.ts'
 import { quantise, PI } from './num.ts'
-import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MS_ROUTING, FIRE_AT_WILL, formationSlot } from './world.ts'
+import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, MORALE_STATES, outOfFight, FIRE_AT_WILL, formationSlot } from './world.ts'
 import { spawnFire } from './fire.ts'
 import { spawnMorale } from './morale.ts'
-import { allocOrder, appendOrder, clearOrders, ordersFree, rebalance, resetTrail, removeMan } from './formation.ts'
+import { allocOrder, appendOrder, clearOrders, ordersFree, rebalance, resetTrail, removeMan, RETIRE, fillRetire } from './formation.ts'
 import { nextInt } from './rng.ts'
 import { columnsOf } from './columns.ts'
 
@@ -124,7 +124,8 @@ function apply(w: World, c: Command): string {
     return ''
   }
   const i = formationSlot(w, c.id); if (i < 0) return 'no such formation'
-  if (f.mstate[i] === MS_ROUTING && c.type !== 'debug-kill' && c.type !== 'debug-morale') return 'routing'
+  // out of the fight (routing, rallying, shattered): only the debug commands reach it
+  if (outOfFight(f.mstate[i]) && c.type !== 'debug-kill' && c.type !== 'debug-morale') return MORALE_STATES[f.mstate[i]]
   switch (c.type) {
     case 'move': {
       if (!wellFormed(c.points)) return 'malformed waypoints'
@@ -141,9 +142,9 @@ function apply(w: World, c: Command): string {
       if (!finite(c.angle) || c.angle === 0 || Math.abs(c.angle) > 2 * PI) return 'no such wheel'
       return giveOrders(w, i, [O_WHEEL], false, n => { o.a[n] = c.angle })
     case 'face': return giveOrders(w, i, [O_FACE], false, () => {})
-    case 'retire':   // face about, march, halt and dress, face the front again; the last two survive a halt
+    case 'retire':   // the Retire drill (formation.ts)
       if (!finite(c.metres) || c.metres <= 0 || c.metres > 1000) return 'no such retreat'
-      return giveOrders(w, i, [O_FACE, O_MOVE, O_DRESS, O_FACE], false, (n, k) => { if (k === 1) o.a[n] = c.metres; if (k >= 2) o.finish[n] = 1 })
+      return giveOrders(w, i, RETIRE, false, (n, k) => fillRetire(w, n, k, c.metres))
     case 'halt': clearOrders(w, i); f.status[i] = 0; f.blockedFor[i] = 0; return ''
     case 'style': { const p = cr.presetIndex(c.preset); if (p < 0) return 'no such order preset'; f.style[i] = p; return '' }
     case 'debug-morale':   // the quality its morale relaxes toward (scripted morale tests)

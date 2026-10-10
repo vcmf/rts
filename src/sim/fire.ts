@@ -3,7 +3,7 @@
 // loaded company of a halted battalion fires on it. A volley's hits are drawn from keyed streams and owed
 // to the target's companies in the shooter's arc and range; step 11 removes them. All of it reads the
 // positions after movement and the men at the start of the step, so no result depends on slot order.
-import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_DRESS, FIRE_AT_WILL, MS_ROUTING, formationSlot as slotOf, formationHandle as handleOf } from './world.ts'
+import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_DRESS, FIRE_AT_WILL, outOfFight, formationSlot as slotOf, formationHandle as handleOf } from './world.ts'
 import type { Handle } from './handle.ts'
 import { placeWorld, layoutOf, occupied, removeMan, nearImpassable } from './formation.ts'
 import { heightAt, cellK } from './terrain.ts'
@@ -135,10 +135,10 @@ function aimAt(w: World, G: FireGeo, k: number, j: number): number {
   return -1
 }
 
-// a battalion may fire: halted (no order at its head but a dress), not changing shape, not routing, at will
+// a battalion may fire: halted (no order at its head but a dress), not changing shape, in the fight, at will
 export function mayFire(w: World, i: number): boolean {
   const f = w.f, n = f.ordHead[i]
-  return f.fireMode[i] === FIRE_AT_WILL && f.mstate[i] !== MS_ROUTING && !f.trans[i] && (n < 0 || w.ord.type[n] === O_DRESS)
+  return f.fireMode[i] === FIRE_AT_WILL && !outOfFight(f.mstate[i]) && !f.trans[i] && (n < 0 || w.ord.type[n] === O_DRESS)
 }
 
 // men in company c's firing ranks
@@ -159,7 +159,7 @@ export function fireStep(w: World): void {
     if (mayFire(w, i)) any = true; else for (let c = 0; c < C; c++) f.target[i * C + c] = 0
   }
   if (!any) return
-  const G = geometry(w), rev = w.scratch.reverseFire === true   // a test visits battalions in reverse: results must not change
+  const G = geometry(w), rev = w.scratch.reverse === true   // a test visits battalions in reverse: results must not change
   for (let n = 0; n < MAX_FORMATIONS; n++) {
     const i = rev ? MAX_FORMATIONS - 1 - n : n
     if (!f.alive[i]) continue
