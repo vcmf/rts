@@ -29,6 +29,7 @@ export interface RunStats {
 interface Stat { p50: number; p95: number; max: number; n: number }
 
 const q = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : NaN }
+const MIN_FRAMES = 20
 const stat = (a: number[]): Stat => ({ p50: +q(a, 0.5).toFixed(3), p95: +q(a, 0.95).toFixed(3), max: +Math.max(...a).toFixed(3), n: a.length })
 
 // the closest, default and widest zoom (the widest at the steepest pitch, which shows the most world), each at the
@@ -104,7 +105,10 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
     for (const arm of [...arms, ...[...arms].reverse()]) {
       arm.apply(); await scene.whenReadyAsync(); await frames(10)
       timer.reset(); frameMs.length = draws.length = tris.length = 0; timed.clear(); lastT = 0
-      timing = true; await seconds(holdS); timing = false
+      // the hold, and at least MIN_FRAMES frames (a software renderer takes seconds a frame)
+      const t0 = performance.now(); timing = true
+      while (performance.now() - t0 < holdS * 1000 || frameMs.length < MIN_FRAMES) await frames(1)
+      timing = false
       await frames(6)   // late query results
       const gpuMs: Record<string, Stat | null> = {}
       for (const k of ['frame', 'terrain', 'scatter', 'water', 'other', 'post']) { const a = timer.results.get(k); gpuMs[k] = timer.available && a?.length ? stat(a) : null }
