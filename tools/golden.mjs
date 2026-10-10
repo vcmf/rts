@@ -8,11 +8,14 @@
 //   node tools/golden.mjs --selftest [page]
 //     the negative test: the page against itself passes, and against a copy with one shader line changed fails
 //
-// The page must expose window.__proto = { camera (ArcRotateCamera), S (state with .season) } and accept ?frozen.
+// The page contract: window.__proto = { scene, camera (ArcRotateCamera), S (state with .t, the clock, and .season) },
+// and ?frozen keeps S.t at 0 (checked: a page that ignores it fails). The cameras are this tool's own, not
+// render-check.js's (those aim at the river); each must lie inside the page's camera limits (checked).
 // Writes <cam>.base.png, <cam>.cand.png, <cam>.diff.png to outDir and prints a table; exits 1 when any region
 // is over its tolerance. Software GL (SwiftShader) via tools/shot.mjs: deterministic on one machine.
 import { spawnSync, execFileSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import * as png from './png.mjs'
@@ -20,15 +23,17 @@ import * as png from './png.mjs'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const W = 1280, H = 720
 const A0 = -Math.PI / 2 - 0.35   // the prototype's start yaw
-// [name, alpha, beta, radius, target, season]; every view inside the prototype's camera limits
+// [name, alpha, beta, radius, target, season]: yaws within ±40° of the start (decision 0010 allows ±45°, so a
+// view never sits on the clamp), zooms and focus inside the camera limits and the play area
+const Y40 = 40 * Math.PI / 180
 export const CAMS = [
   ['start', A0, 0.80, 125, [-10, 8, 2], 0],
-  ['start-yaw-45', A0 - Math.PI / 4, 0.80, 125, [-10, 8, 2], 0],
-  ['start-yaw+45', A0 + Math.PI / 4, 0.80, 125, [-10, 8, 2], 0],
-  ['close', -Math.PI / 2 - 0.2, 0.60, 80, [-95, 8, -60], 0],
-  ['mid', A0, 0.80, 125, [-70, 8, 0], 0],
-  ['wide', -Math.PI / 2, 0.70, 260, [-100, 8, 150], 0],
-  ['far', Math.PI / 2 - 0.3, 0.98, 260, [-110, 8, -250], 0],
+  ['start-yaw-40', A0 - Y40, 0.80, 125, [-10, 8, 2], 0],
+  ['start-yaw+40', A0 + Y40, 0.80, 125, [-10, 8, 2], 0],
+  ['close', A0 + 0.15, 0.60, 80, [-95, 8, -60], 0],
+  ['river', A0, 0.80, 125, [-70, 8, 0], 0],
+  ['wide', A0 + 0.35, 0.70, 260, [-100, 8, 150], 0],
+  ['far-edge', A0, 0.98, 260, [-110, 8, 240], 0],   // the far ring and its seam with the tile at the top of the frame
   ['winter', A0, 0.80, 125, [-10, 8, 2], 3],
 ]
 // Regions: a GRID×GRID split of the frame. A pixel differs when a channel moves more than PX; a region fails
@@ -36,32 +41,45 @@ export const CAMS = [
 // on one machine are identical, so the limits only absorb rounding (e.g. a bundler reordering constants).
 const GRID = 4, PX = 6, FRAC = 0.002, MEAN = 0.5
 
-function resolvePage(spec, scratch) {
+// a page spec to a URL; a <ref>:<path> spec checks the ref out to a temporary worktree outside the repo, which
+// `cleanups` removes (outside, so no test runner or linter ever finds a second copy of the code)
+const cleanups = []
+function resolvePage(spec) {
   if (/^https?:\/\//.test(spec)) return spec
   const m = /^([^:]+):(.+)$/.exec(spec)
   let file = spec
   if (m && !fs.existsSync(spec)) {
-    const sha = execFileSync('git', ['rev-parse', '--short', m[1]], { cwd: ROOT }).toString().trim()
-    const dir = path.join(scratch, `golden-base-${sha}`)
-    if (!fs.existsSync(dir)) execFileSync('git', ['worktree', 'add', '--detach', dir, sha], { cwd: ROOT, stdio: 'ignore' })
+    const git = args => execFileSync('git', args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim()
+    const sha = git(['rev-parse', '--short', m[1]]), dir = fs.mkdtempSync(path.join(os.tmpdir(), `golden-base-${sha}-`))
+    git(['worktree', 'prune']); git(['worktree', 'add', '--detach', dir, sha])
+    cleanups.push(() => { try { git(['worktree', 'remove', '--force', dir]) } catch { fs.rmSync(dir, { recursive: true, force: true }); git(['worktree', 'prune']) } })
     file = path.join(dir, m[2])
   }
   if (!fs.existsSync(file)) throw new Error(`no page at ${file}`)
   return pathToFileURL(path.resolve(file)).href
 }
+const cleanup = () => { while (cleanups.length) cleanups.pop()() }
 
 function render(url, dir, tag) {
   const steps = [['wait', 3000],
     // the page's own loop stops: each camera renders exactly the frames asked for, and a slow frame cannot race the capture
-    ['eval', 'for (const id of ["panel", "fps", "drop"]) { const e = document.getElementById(id); if (e) e.style.display = "none" } __proto.scene.getEngine().stopRenderLoop(); "ui hidden, loop stopped"']]
+    ['eval', 'for (const id of ["panel", "fps", "drop"]) { const e = document.getElementById(id); if (e) e.style.display = "none" } __proto.scene.getEngine().stopRenderLoop(); "ui hidden, loop stopped"'],
+    // the clock must be frozen, or clouds and water move between the two renders
+    ['eval', '__proto.scene.render(); __proto.scene.render(); if (__proto.S.t !== 0) throw new Error("the page ignores ?frozen (S.t = " + __proto.S.t + ")"); "frozen"']]
   for (const [name, a, b, r, t, season] of CAMS) {
-    steps.push(['eval', `{ const c = __proto.camera; c.alpha = ${a}; c.beta = ${b}; c.radius = ${r}; c.target.set(${t}); __proto.S.season = ${season};
-      for (let i = 0; i < 3; i++) __proto.scene.render(); "${name}" }`], ['wait', 300], ['shot', `${name}.${tag}`])
+    // every view must be one the player can reach: a clamped view would be rendered somewhere else, silently
+    steps.push(['eval', `(async () => { const c = __proto.camera, lim = (v, lo, hi) => (lo == null || v >= lo - 1e-9) && (hi == null || v <= hi + 1e-9)
+      if (!lim(${a}, c.lowerAlphaLimit, c.upperAlphaLimit) || !lim(${b}, c.lowerBetaLimit, c.upperBetaLimit) || !lim(${r}, c.lowerRadiusLimit, c.upperRadiusLimit))
+        throw new Error("camera ${name} is outside the page's camera limits")
+      c.alpha = ${a}; c.beta = ${b}; c.radius = ${r}; c.target.set(${t}); __proto.S.season = ${season}
+      await __proto.scene.whenReadyAsync()   // every material compiled, so no mesh is skipped in one render and drawn in the other
+      for (let i = 0; i < 3; i++) __proto.scene.render()
+      return "${name}" })()`], ['wait', 300], ['shot', `${name}.${tag}`])
   }
-  const sep = url.includes('?') ? '&' : '?'
-  const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), url + sep + 'frozen', dir, String(W), String(H), JSON.stringify(steps)],
+  const u = new URL(url); u.searchParams.set('frozen', '')
+  const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), u.href, dir, String(W), String(H), JSON.stringify(steps)],
     { encoding: 'utf8', env: { SHOT_TIMEOUT_S: '300', SHOT_LOAD_S: '300', ...process.env } })
-  if (r.status !== 0) throw new Error(`rendering ${url} failed (exit ${r.status}):\n${r.stdout}${r.stderr}`)
+  if (r.status !== 0) throw new Error(`rendering ${url} failed (shot.mjs exit ${r.status}), full output:\n${r.stdout}${r.stderr}`)
 }
 
 function compare(a, b) {
@@ -86,9 +104,10 @@ function compare(a, b) {
 // returns true when every camera matches
 export function golden(base, cand, outDir, { quiet = false } = {}) {
   fs.mkdirSync(outDir, { recursive: true })
-  const scratch = path.join(ROOT, 'scratch'); fs.mkdirSync(scratch, { recursive: true })
-  render(resolvePage(base, scratch), outDir, 'base')
-  render(resolvePage(cand, scratch), outDir, 'cand')
+  try {
+    render(resolvePage(base), outDir, 'base')
+    render(resolvePage(cand), outDir, 'cand')
+  } finally { cleanup() }
   let ok = true
   if (!quiet) console.log(`camera          regions failed   worst region (differing px, mean diff)   limits: px>${PX} on ≤${FRAC * 100}%, mean ≤${MEAN}`)
   for (const [name] of CAMS) {
@@ -113,12 +132,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       if (!src.includes(FIND)) throw new Error(`selftest: "${FIND}" not found in ${page}`)
       const broken = path.join(path.dirname(page), `.golden-selftest-${process.pid}.html`)   // beside the page, so its relative scripts load
       fs.writeFileSync(broken, src.replace(FIND, REPLACE))
+      const gone = () => fs.rmSync(broken, { force: true })
+      for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { gone(); process.exit(130) })
       const out = path.join(ROOT, 'scratch/golden-selftest')
       let same, changed
       try {
         console.log('1. the page against itself (must pass)'); same = golden(page, page, path.join(out, 'same'))
         console.log(`2. against "${REPLACE}" (must fail)`); changed = golden(page, broken, path.join(out, 'changed'))
-      } finally { fs.rmSync(broken, { force: true }) }
+      } finally { gone() }
       console.log(`selftest: same ${same ? 'passes' : 'FAILS'}, changed ${changed ? 'PASSES' : 'fails'}`)
       process.exit(same && !changed ? 0 : 1)
     }

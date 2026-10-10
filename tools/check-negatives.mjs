@@ -25,17 +25,30 @@ const CASES = [
   ['river', 'wheat on the floodplain', '{ const z = 40; groups.Wheat.push([RIVER.axisX(z) + 30, z, 1.5, 0, 0.5]) }', 'wheatOnFloodplain'],
 ]
 
+// The page records every console.error, so the check's own "<check>-check FAILED: …" line is read back whole
+// (shot.mjs cuts console output at 400 characters). A case is judged only on that line, never on other output.
+const CAPTURE = 'window.__errs = []; { const ce = console.error.bind(console); console.error = (...a) => { __errs.push(a.join(" ")); ce(...a) } } "capturing"'
+const REPORT = 'JSON.stringify({ failed: __errs.filter(l => /^\\w+-check FAILED: /.test(l)), other: __errs.filter(l => !/^\\w+-check FAILED: /.test(l)) })'
+
 let bad = 0
 for (const [check, name, sabotage, expect] of CASES) {
-  const steps = [['wait', 2000], ...(sabotage ? [['eval', sabotage + '; "sabotaged"']] : []), ['eval', CHECKS[check]]]
+  const steps = [['wait', 2000], ['eval', CAPTURE],
+    ...(sabotage ? [['eval', sabotage + '; "SABOTAGED"']] : []),
+    ['eval', CHECKS[check] + '; "CHECK RAN"'], ['eval', REPORT]]
   const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), pathToFileURL(page).href, path.join(ROOT, 'scratch/check-negatives'), '1280', '720', JSON.stringify(steps)],
     { encoding: 'utf8', env: { SHOT_TIMEOUT_S: '300', SHOT_LOAD_S: '300', ...process.env } })
-  const out = r.stdout + r.stderr, failed = r.status !== 0
-  const ok = sabotage ? failed && out.includes(expect) : !failed
+  const out = r.stdout + r.stderr
+  const applied = !sabotage || out.includes('EVAL "SABOTAGED"'), ran = out.includes('EVAL "CHECK RAN"')
+  const line = out.split('\n').find(l => l.startsWith('EVAL "{\\"failed\\"'))
+  const rep = line ? JSON.parse(JSON.parse(line.slice(5))) : null
+  const failLine = rep?.failed.find(l => l.startsWith(`${check}-check FAILED: `)) || ''
+  let ok, why
+  if (!applied || !ran || !rep) { ok = false; why = !applied ? 'the sabotage did not apply' : !ran ? 'the check did not run' : 'no report' }
+  else if (sabotage) { ok = failLine.includes(expect) && !rep.other.length; why = failLine ? (failLine.includes(expect) ? `fails on ${expect}` : `fails, but not on ${expect}`) : 'PASSES (the check missed it)'; if (rep.other.length) why += '; other page errors' }
+  else { ok = !failLine && !rep.other.length && r.status === 0; why = ok ? 'passes' : 'FAILS' }
   if (!ok) bad++
-  const why = sabotage ? (failed ? (out.includes(expect) ? `fails on ${expect}` : `fails, but not on ${expect}`) : 'PASSES (the check missed it)') : (failed ? 'FAILS' : 'passes')
   console.log(`${ok ? 'ok  ' : 'BAD '} ${check.padEnd(7)}${name.padEnd(30)}${why}`)
-  if (!ok) console.log(out.split('\n').filter(l => /FAILED|EXC|ERR|shot\.mjs/.test(l)).join('\n').slice(0, 1200))
+  if (!ok) console.log(`--- shot.mjs exit ${r.status}, full output:\n${out}\n---`)
 }
 console.log(bad ? `check-negatives: ${bad} case(s) misbehaved` : 'check-negatives: every check passes the scene and catches its sabotage')
 process.exit(bad ? 1 : 0)

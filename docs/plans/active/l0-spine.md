@@ -65,4 +65,10 @@ chunked 1.8 km world (engine-design §10 item 8), our own camera controller (pro
 
 ## Review rounds
 
-(appended during review)
+- **L0b round 1:** one severe finding: the negative tests matched expected names anywhere in the output,
+  which the check's own success report contains, so a sabotage that never applied counted as caught.
+  Now the sabotage must report that it applied and the case is judged on the check's own failure line,
+  captured whole. Also fixed: the base-ref worktree lives outside the repo and is removed after the run;
+  each camera waits for every material to compile; a page that ignores `?frozen` fails clearly; cameras
+  sit inside ±40° yaw and are checked against the page's limits; full output and exit code on a bad
+  case; the selftest copy is git-ignored and removed on interrupt; the page contract names `scene`.
