@@ -7,7 +7,7 @@ import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import PAINTER from './shaders/painter.glsl?raw'
-import { SHADER_DEFINES } from './spec.ts'
+import { D } from './spec.ts'
 
 // the panel's state; t is the clock (cloud drift, water flow)
 export const S = { grain: 1, gamt: 0.9, edges: 1, clouds: 1, shadows: 1, ao: 1, mist: 1, shafts: 1, back: 1, grade: 1, bloom: 1, dof: 0, dofAmt: 1, res: 1, season: 0, t: 0 }
@@ -34,7 +34,7 @@ export class Materials {
   constructor(scene: Scene, grain: BaseTexture) { this.scene = scene; this.grain = grain }
   make(name: string, vs: string, fs: string, { attributes = ['position', 'normal'], uniforms = [], samplers = [], alpha = false, defines = [], perFrame = true }: MatOptions = {}): ShaderMaterial {
     const m = new ShaderMaterial(name, this.scene, { vertexSource: vs, fragmentSource: withPainter(fs) },
-      { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM')], needAlphaBlending: alpha, defines: [...SHADER_DEFINES, ...defines] })
+      { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM')], needAlphaBlending: alpha, defines: [...D.defines, ...defines] })
     m.setVector3('uSunDir', SUN); m.setColor3('uSunCol', PAL.sun); m.setColor3('uShadowCol', PAL.shadow)
     m.setColor3('uHazeCool', PAL.hazeCool); m.setColor3('uHazeWarm', PAL.hazeWarm); m.setTexture('uGrain', this.grain)
     if (perFrame) this.all.push(m)

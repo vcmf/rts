@@ -1,4 +1,4 @@
-// Golden screenshots (docs/plans/active/l0-spine.md): render a base and a candidate page at the same fixed
+// Golden screenshots (docs/plans/done/l0-spine.md): render a base and a candidate page at the same fixed
 // cameras with the clock frozen, on this machine, in this run, and compare them region by region.
 // Nothing is committed: the baseline is rendered fresh, from a page or from a git ref.
 //
@@ -34,7 +34,7 @@ export const CAMS = [
   ['close', A0 + 0.15, 0.60, 80, [-95, 8, -60], 0],
   ['river', A0, 0.80, 125, [-70, 8, 0], 0],
   ['wide', A0 + 0.35, 0.70, 260, [-100, 8, 150], 0],
-  ['far-edge', A0, 0.98, 260, [-110, 8, 240], 0],   // the far ring and its seam with the tile at the top of the frame
+  ['far-edge', A0, 0.98, 260, [-110, 8, 230], 0],   // the far ring and its seam with the tile at the top of the frame
   ['winter', A0, 0.80, 125, [-10, 8, 2], 3],
 ]
 // Regions: a GRID×GRID split of the frame. A pixel differs when a channel moves more than PX; a region fails
@@ -65,7 +65,8 @@ function resolvePage(spec) {
 const cleanup = () => { for (const dir of cleanups.splice(0)) try { git(['worktree', 'remove', '--force', dir]) } catch (e) { console.warn(`golden.mjs: could not remove the worktree ${dir}: ${e.message}`) } }
 
 function render(url, dir, tag) {
-  const steps = [['wait', 3000],
+  // a page may build after an await (the look page fetches its data): wait for its contract object first
+  const steps = [['wait', 1000], ['eval', '(async () => { for (let i = 0; i < 1200 && !window.__proto; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__proto) throw new Error("the page never set window.__proto (120 s)"); return "page built" })()'], ['wait', 2000],
     // the page's own loop stops: each camera renders exactly the frames asked for, and a slow frame cannot race the capture
     ['eval', 'for (const id of ["panel", "fps", "drop"]) { const e = document.getElementById(id); if (e) e.style.display = "none" } __proto.scene.getEngine().stopRenderLoop(); "ui hidden, loop stopped"'],
     // the clock must be frozen, or clouds and water move between the two renders

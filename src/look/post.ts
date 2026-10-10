@@ -2,6 +2,7 @@
 // [depth of field H, V, presentation and video only per decision 0003] → one fused pass (grade, bloom, vignette,
 // paper, dither). Materials write view distance into alpha, so depth of field needs no second scene render.
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
+import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import type { AbstractEngine } from '@babylonjs/core/Engines/abstractEngine.js'
 import { Effect } from '@babylonjs/core/Materials/effect.js'
@@ -14,19 +15,31 @@ import { PostProcess } from '@babylonjs/core/PostProcesses/postProcess.js'
 import '@babylonjs/core/Shaders/postprocess.vertex.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { LookState } from './materials.ts'
-import { PLAY } from './spec.ts'
+import { D } from './spec.ts'
 import DOF_FS from './shaders/dof.frag?raw'
 import UBER_FS from './shaders/uber.frag?raw'
 
 // the top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit
 export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateCamera {
-  const camera = new ArcRotateCamera('cam', -Math.PI / 2 - 0.35, 0.80, 125, new Vector3(-10, 8, 2), scene)
-  scene.activeCamera = camera; camera.attachControl(canvas, true); camera.lowerRadiusLimit = 45
+  const c = D.spec.camera, PLAY = D.spec.play
+  const camera = new ArcRotateCamera('cam', c.yaw0, 0.80, 125, new Vector3(-10, c.focusY, 2), scene)
+  scene.activeCamera = camera; camera.attachControl(canvas, true)
+  // locked down (decision 0010): yaw ± the spec's range around the default, pitch and zoom inside the checked limits
+  camera.lowerAlphaLimit = c.yaw0 - c.yawRange; camera.upperAlphaLimit = c.yaw0 + c.yawRange
+  camera.lowerRadiusLimit = c.rMin
   // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the play area
   camera.mapPanning = true; scene.onBeforeRenderObservable.add(() => { const t = camera.target; t.x = Math.max(-PLAY, Math.min(PLAY, t.x)); t.z = Math.max(-PLAY, Math.min(PLAY, t.z)) })
-  camera.upperRadiusLimit = 260; camera.lowerBetaLimit = 0.3; camera.upperBetaLimit = 0.98
+  camera.upperRadiusLimit = c.rMax; camera.lowerBetaLimit = c.betaMin; camera.upperBetaLimit = c.betaMax
   camera.wheelDeltaPercentage = 0.01
-  camera.panningSensibility = 30; camera.minZ = 0.5; camera.maxZ = 5000; camera.fov = 0.62; camera.inertia = 0.88
+  camera.panningSensibility = 30; camera.minZ = 0.5; camera.maxZ = 5000; camera.fov = c.fov; camera.inertia = 0.88
+  // the SPEC checked frames up to aspectMax: a wider screen keeps that frame's horizontal field of view and sees
+  // less vertically, never more of the world than was checked
+  const fit = () => {
+    const wide = scene.getEngine().getAspectRatio(camera) > c.aspectMax
+    camera.fovMode = wide ? Camera.FOVMODE_HORIZONTAL_FIXED : Camera.FOVMODE_VERTICAL_FIXED
+    camera.fov = wide ? 2 * Math.atan(Math.tan(c.fov / 2) * c.aspectMax) : c.fov
+  }
+  fit(); scene.getEngine().onResizeObservable.add(fit)
   return camera
 }
 

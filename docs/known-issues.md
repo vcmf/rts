@@ -11,7 +11,7 @@ an unrelated PR (`AGENTS.md`, workflow). Fixed issues stay listed, struck throug
 | Issue | Where | Planned fix |
 |---|---|---|
 | ~~Camera pans in view space; the target can climb without limit~~ | main, camera setup | **Fixed in W1** (#1): ground-plane pan + focus clamp, checked by render-check |
-| Reflection canvas uses a canvas blur filter (the context-loss pattern) | main, reflection bake | E0-lite bake rules (`docs/proposals/engine-design.md` §10 step 3) |
+| ~~Reflection canvas uses a canvas blur filter (the context-loss pattern)~~ | main, reflection bake | **Fixed in L0a** on the look page: a JS Gaussian (`src/look/water.ts`); the prototype keeps the filter as the reference |
 | Up/down pans move the map cos(pitch) as fast as left/right (0.56× at the steepest pitch) | main, Babylon panning | Own camera controller: drag keeps the grabbed ground point under the cursor (`docs/proposals/engine-design.md` §5) |
 | The formation prototype's 20 Hz layer uses `Math.sin`, `cos`, `atan2`, `hypot` and `exp` (decision 0006 bans transcendental functions in the simulation); replays match within one browser only | main and PR #9, `prototypes/formation-core.js` | S0 sim spine: table-based or fixed-point trigonometry per decision 0006; the prototype stays the reference for behaviour, not for determinism |
 | ~~Casualty re-packing in the sim (the fill rule after losses) moves men sideways without the footprint gate~~ | `src/sim/formation.ts` (`occupied`), since S1a | **Fixed in S1c-3** (#18): every loss goes through `removeMan`, which moves it to another company when the re-pack would put a man newly on impassable ground (`docs/plans/active/s1c3-repack-gate.md`) |

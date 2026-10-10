@@ -30,7 +30,8 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
 ## Commands
 
 - Game code: `npm install`, then `npm test` (lint, typecheck, Vitest; Node ≥ 22.18). Sim data:
-  `node tools/build-sim-data.ts` (`--check` compares with the committed file).
+  `node tools/build-sim-data.ts` (`--check` compares with the committed file). Look data:
+  `node tools/build-look-data.ts` (same `--check`); `npm run build:data` and `npm run check:data` run both.
 - Open a prototype: `prototypes/painted-cinematic.html` in Chrome (works from `file://`).
 - Headless screenshots and checks: `node tools/shot.mjs <page> <outDir> [w] [h] '<steps JSON>'`;
   river and render checks: see the headers of `tools/river-check.js` and `tools/render-check.js`.

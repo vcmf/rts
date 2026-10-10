@@ -8,11 +8,15 @@
   const C = RIVER, r = {}, fail = []
   const check = (name, ok, value) => { r[name] = value; if (!ok) fail.push(`${name}=${JSON.stringify(value)}`) }
 
-  // 1. formation zones and the central hill are untouched by the valley and channel
+  // 1. formation zones and the central hill are untouched by the valley and channel. Sampled at the tile's grid
+  //    nodes (TSUB cells over SMW, at the positions the mesh stores): there H is the authored height exactly, while
+  //    between nodes the look page's H interpolates the heightfield and would count the hill's curvature as lowering
   let lowered = 0
-  for (let x = -50; x <= 50; x += 1) for (let z = -60; z <= 40; z += 1) if (KEEP_CLEAR(x, z) && baseH(x, z) - H(x, z) > 0.01) lowered++   // covers all three zones
+  const node = k => Math.fround((k * SMW) / TSUB - SMW / 2), k0 = Math.floor((SMW / 2 - 60) * TSUB / SMW), k1 = Math.ceil((SMW / 2 + 50) * TSUB / SMW)
+  for (let i = k0; i <= k1; i++) for (let j = k0; j <= k1; j++) { const x = node(i), z = node(j); if (KEEP_CLEAR(x, z) && baseH(x, z) - H(x, z) > 0.01) lowered++ }   // covers all three zones
   check('keepClearLowered', lowered === 0, lowered)
-  const hillDrop = Math.max(baseH(0, 6) - H(0, 6), baseH(-15, 6) - H(-15, 6))
+  const snap = v => node(Math.round((v + SMW / 2) * TSUB / SMW)), hill = [[snap(0), snap(6)], [snap(-15), snap(6)]]   // grid nodes nearest the hill top
+  const hillDrop = Math.max(...hill.map(([x, z]) => baseH(x, z) - H(x, z)))
   check('hillDrop', hillDrop < 0.05, +hillDrop.toFixed(2))
 
   // 2. nothing in the water except stones: every instance's footprint (exact reach from its pivot) clears the

@@ -14,8 +14,10 @@ import '@babylonjs/core/Shaders/ShadersInclude/instancesDeclaration.js'
 import '@babylonjs/core/Shaders/ShadersInclude/instancesVertex.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
+import { D } from './spec.ts'
 import { fbm, hash, mulberry } from './noise.ts'
-import { H, RIVER, lerpA, riverQuery } from './river.ts'
+import { H } from './heightfield.ts'
+import { RIVER, lerpA, riverQuery } from './river.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 
@@ -130,8 +132,8 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
   // a wheat field on the valley side between the floodplain and the formation zones (docs/art-bible.md §6c: fields above the floodplain)
   for (let u = 0; u < 30; u += 1.25) for (let v = 0; v < 22; v += 1.3) { const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5, z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5; if (rr() < 0.08) continue; addPlaced('Wheat', [x, z, 1.5 + rr() * 0.4, rr() * 6.28, rr()]) }
-  // far woods and hedgerows from cheap bush crowns
-  const far: Item[] = []
+  // far woods and hedgerows from cheap bush crowns, never in the apron band, whose ground only the apron mesh knows
+  const far: Item[] = [], inBand = (x: number, z: number) => { const m = Math.max(Math.abs(x), Math.abs(z)); return m > D.spec.tile / 2 && m < D.band }
   for (let k = -8; k <= 8; k++) for (let t = -560; t <= 560; t += 6) {
     const qx = k * 70 + (hash(k, t) - 0.5) * 2, qy = t, x = 0.8 * qx - 0.6 * qy, z = 0.6 * qx + 0.8 * qy, r = Math.hypot(x, z)
     const fs = 3.6 + hash(k, t * 3) * 2.0; if (r < 190 || r > 640 || hash(k * 7, Math.floor(t / 60)) < 0.35 || !placeable(x, z, footprint('Bush_1', fs))) continue; far.push([x, z, fs, hash(t, k) * 6.28, hash(k, t)])
@@ -143,6 +145,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   for (const [k, items] of Object.entries(groups)) {
     const material = /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : /Birch/.test(k) ? birchMat : /Pine/.test(k) ? pineMat : treeMat; place(k, material, items)
   }
-  place('Bush_1', farMat, far.filter((_, i) => i % 4 === 0)); place('Bush_2', farMat, far.filter((_, i) => i % 4 === 2))
+  // the band is left out after the every-fourth choice, so every other bush stays the one the prototype drew
+  place('Bush_1', farMat, far.filter(([x, z], i) => i % 4 === 0 && !inBand(x, z))); place('Bush_2', farMat, far.filter(([x, z], i) => i % 4 === 2 && !inBand(x, z)))
   return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint }
 }

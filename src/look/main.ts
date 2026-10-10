@@ -1,5 +1,5 @@
 // The look page (app/look.html): the painted world in the game's toolchain, ported from
-// prototypes/painted-cinematic.html with no change to the look (docs/plans/active/l0-spine.md, L0c). Built in the
+// prototypes/painted-cinematic.html with no change to the look (docs/plans/done/l0-spine.md, L0c). Built in the
 // prototype's order: mesh and material creation order decides draw order, and the goldens compare pixels.
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Engine } from '@babylonjs/core/Engines/engine.js'
@@ -14,14 +14,30 @@ import { grainTexture, lumOf, makeGrainCanvas } from './grain.ts'
 import { CLEAR, Materials, PAL, S } from './materials.ts'
 import { buildNature } from './nature.ts'
 import { Post, buildCamera } from './post.ts'
-import { H, RIVER, baseH, carve, lerpA, riverQuery } from './river.ts'
-import { BAND, MASK_N, PLAY, SM_FADE_M, TILE_W } from './spec.ts'
+import LOOK_URL from '../../data/painted-world.lookdata?url'
+import { groundAt, setHeightfield } from './heightfield.ts'
+import { RIVER, lerpA, riverQuery, setRiver } from './river.ts'
+import { D, checkGround } from './spec.ts'
+import { axisX, baseH } from './world/author.ts'
+import { checkLookData, decodeLook } from './world/data.ts'
 import { buildTerrain } from './terrain.ts'
 import { buildWater } from './water.ts'
 
 declare global { interface Window { __T0?: number } }
 const T0 = window.__T0 ?? performance.now()   // load-time measurement (window.__buildMs), started by look.html
 if (!window.NATURE) { document.body.innerHTML = '<p style="padding:30px">nature-pack.data.js missing: run <code>node tools/obj-to-js.mjs</code></p>'; throw new Error('no nature data') }
+// the world's data, built offline (tools/build-look-data.ts, decision 0012): the heightfield, the far ring, the river
+const res = await fetch(LOOK_URL)
+if (!res.ok) throw new Error(`look data: ${res.status} ${res.statusText} for ${LOOK_URL}`)
+const look = decodeLook(await res.arrayBuffer())
+checkLookData(D, look)
+setRiver(look.river); setHeightfield(look.hf, look.far, D.spec.tile / 2)
+{ // the heights themselves, not the header
+  let lo = Infinity, hi = -Infinity, farLo = Infinity
+  for (const v of look.hf.h) { if (v < lo) lo = v; if (v > hi) hi = v }
+  for (const v of look.far.h) if (v < farLo) farLo = v
+  checkGround(D.spec, lo, hi, farLo)
+}
 const canvas = document.getElementById('c') as HTMLCanvasElement
 const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false }, false)
 engine.setHardwareScalingLevel(1)
@@ -29,7 +45,7 @@ const scene = new Scene(engine); scene.skipPointerMovePicking = true
 scene.clearColor = CLEAR
 
 const mats = new Materials(scene, grainTexture(scene, makeGrainCanvas(null)))
-const terrain = buildTerrain(scene, mats)
+const terrain = buildTerrain(scene, mats, look.far)
 const water = buildWater(scene, mats)
 const nature = buildNature(scene, mats, water.reflAdd)
 water.finish(scene)
@@ -92,9 +108,10 @@ if (new URLSearchParams(location.search).get('river') === 'debug') {   // centre
 // the page contract of tools/golden.mjs, and the names tools/render-check.js and tools/river-check.js read (they were
 // written against the prototype's globals; SMW and MASKN are the prototype's names for TILE_W and MASK_N)
 Object.assign(window, {
-  __proto: { S, scene, camera, buildPost: () => post.build(), play: PLAY },
+  __proto: { S, scene, camera, buildPost: () => post.build(), play: D.spec.play },
   B: { Vector3, Matrix, DynamicTexture, VertexBuffer },
-  scene, engine, camera, RIVER, H, baseH, carve, riverQuery, lerpA, BAND, PLAY, SMW: TILE_W, MASKN: MASK_N, SM_FADE_M,
+  // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring formulas the river check compares with
+  scene, engine, camera, apron: terrain.apron, RIVER: { ...RIVER, axisX }, H: groundAt, baseH, riverQuery, lerpA, BAND: D.band, PLAY: D.spec.play, SMW: D.spec.tile, TSUB: D.spec.tileSub, MASKN: D.spec.sizes.riverMask, SM_FADE_M: D.spec.shadowFade, SPEC: D.spec,
   tileGround: terrain.tileGround, farGround: terrain.farGround, farTerrainMat: terrain.farTerrainMat, riverMask: terrain.riverMask, riverMaskCanvas: terrain.riverMaskCanvas,
   groups: nature.groups, FAR: nature.far, KEEP_CLEAR: nature.KEEP_CLEAR, touchesZone: nature.touchesZone, placeable: nature.placeable, footprint: nature.footprint,
   lightCam: bakes.lightCam, shadowRT: bakes.shadowRT,
