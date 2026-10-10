@@ -14,4 +14,4 @@ Proxy runs from the dev Mac are kept too, with `mac-proxy` in the name; they pas
 ## Contents
 
 - [`l2a-baseline.md`](l2a-baseline.md): the readability guard and the bench on main before L2b.
-- `l2a-2026-10-10-17ae831-mac-proxy.json`: the bench on the dev Mac (Apple M1 Pro, ANGLE Metal), a proxy.
+- `l2a-2026-10-10-5d67a2b-mac-proxy.json`: the bench on the dev Mac (Apple M1 Pro, ANGLE Metal), a proxy.
