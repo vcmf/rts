@@ -70,6 +70,8 @@ camera.
   cannot nest: whole-frame time is taken on alternate frames, the passes (terrain, scatter, water, other,
   post) on the others, each as segments of consecutive draws, only in the camera's own render pass. Frames with
   a disjoint event are dropped. Without the extension the GPU fields are `null`.
+- **Frame times** come from the whole-frame frames only (the pass frames carry more queries). A hidden tab stops
+  the run with an error. The bench removes its observers when it ends.
 - **`passesOverFrame`** is the passes' medians over the frame's. ANGLE on Metal inflates every query (about 2×
   here); there only the frame column stands. Cost comparisons between arms use frame time.
 - `node tools/bench-look.mjs <url> [out.json] [--hold s] [--gpu metal]` runs it headless (SwiftShader by
@@ -81,7 +83,9 @@ camera.
 size, on the default view, summer and winter. Each block's luma against the ground's at the same pixels (from a
 render without blocks) must differ by 0.10; with `--base`, a block fails only if it separated on the base. The
 blocks are painted by the shared painter at unit crispness, without snow (`NOSNOW`), as units will be. Its
-negative, in summer: the same blocks painted with the terrain's own material must not separate.
+negative, in summer: the same blocks painted with the terrain's own material and nearly flush with the ground (0.3 m)
+must not separate. A block's pixels come from two mask renders (flat white, flat black), so hidden parts and
+ground-coloured parts are both counted right.
 
 ## Changes from the prototype (L0a)
 
