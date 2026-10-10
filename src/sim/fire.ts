@@ -8,6 +8,7 @@ import type { Handle } from './handle.ts'
 import { placeWorld, layoutOf, occupied, removeMan } from './formation.ts'
 import { heightAt, cellK } from './terrain.ts'
 import { keyedStream, nextUnit } from './rng.ts'
+import { MAX_BINS } from './ruleset.ts'
 import { sin, cos } from './num.ts'
 import { DT } from './time.ts'
 
@@ -236,12 +237,14 @@ function volley(w: World, G: FireGeo, i: number, c: number, j: number, d: number
 // would put a man on impassable ground falls on another company, those owed hits first). Hits owed to a
 // company beyond the men it has are lost: they were aimed at men who are already down, and passing them on
 // could strike a company the shooters cannot see. Returns the men battalion i lost.
-const owedNow = new Int32Array(64)   // a battalion has at most MAX_BINS / BINS companies
+const owedNow = new Int32Array(MAX_BINS), takeNow = new Int32Array(MAX_BINS)   // per company (at most MAX_BINS / BINS)
 export function casualtiesStep(w: World, i: number): number {
   const f = w.f, C = w.cr.geo.companies
   let lost = 0
-  for (let c = 0; c < C; c++) { owedNow[c] = f.owed[i * C + c]; f.owed[i * C + c] = 0 }
-  for (let c = 0; c < C; c++) for (let n = Math.min(owedNow[c], f.men[i * C + c]); n > 0 && f.men[i * C + c] > 0; n--) { removeMan(w, i, c, owedNow); lost++ }
+  // each company's losses are fixed first (its hits, at most its men); the gate may move a loss to another
+  // company, preferring those with hits still owed
+  for (let c = 0; c < C; c++) { owedNow[c] = f.owed[i * C + c]; takeNow[c] = Math.min(owedNow[c], f.men[i * C + c]); f.owed[i * C + c] = 0 }
+  for (let c = 0; c < C; c++) for (let n = takeNow[c]; n > 0; n--) { owedNow[c]--; if (removeMan(w, i, c, owedNow) >= 0) lost++ }
   return lost
 }
 

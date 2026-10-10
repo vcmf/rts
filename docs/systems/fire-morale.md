@@ -82,7 +82,7 @@ yet (S2).
 
 **Casualties** (step 11). The owed men fall, one at a time through the re-packing gate
 (`docs/systems/formations.md`). In the rare case where a loss's re-pack would put a man on impassable
-ground, it falls on another company, those owed hits first: about one loss in 60,000 near a bank, and the
+ground, it falls on another company, those owed hits first: about one loss in 62,000 in the probe along the bank, and the
 "hits only on companies the shooter can see" rule bends there. Hits owed beyond a company's men are
 lost: passing them on could strike a company the shooters cannot see.
 

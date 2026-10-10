@@ -37,20 +37,22 @@ diagonal block.
 
 **One way to remove a man,** used by the casualty step and `debug-kill`: `removeMan(w, i, c)` in
 `formation.ts`, beside `occupied` and `wetBins`.
-1. Remove the man from company c. If no bin of the battalion is newly on impassable ground (`wetBins`
-   against the bins already there), done.
-2. Otherwise put him back and try the battalion's other companies with men. Companies with hits owed
-   this tick come first, then the rest, each set nearest by index first. The first whose loss leaves no
-   bin newly wet takes it.
-3. If none does, the loss stands in company c. The battalion's status reads `pressed against impassable
-   ground`, and the residual is counted in the probe's results.
+1. Remove the man from company c. If no filled slot of the companies the re-pack can touch is newly on
+   impassable ground (`wetSlots`: c's own, or c's half for a line), done. Far from impassable ground the
+   check is skipped.
+2. Otherwise put him back and try the battalion's other companies with men. Companies with hits still
+   owed this tick come first, then the rest, each set nearest by index first. The first whose loss leaves
+   no slot newly wet takes it.
+3. If none does, the loss stands in company c (or the nearest company with men, if c has none), and the
+   battalion's `pressed` count goes up. The count is not a status, so it never hides another (a router's
+   `halted`).
 
 **No random draws on a retry:** `debug-kill` still draws its company from the world stream, once per
 man, then the gate decides. Casualties keep their keyed draws.
 
 **What changes for the player:**
-- the man who falls may belong to the next company, not the one the hit was aimed at, in about one loss
-  in 36,000 near a bank;
+- the man who falls may belong to the next company, not the one the hit was aimed at. In the probe
+  that was one loss in 62,000 over all headings (1 in 36,000 at diagonal headings only);
 - the volley's company-level rule ("hits only on companies the shooter can see") can bend in that
   case. The plan accepts it; the alternative leaves a man standing in the water.
 
@@ -109,3 +111,24 @@ every 40 m. That is 42,228 dry positions and 2,531,292 losses.
 unchanged. `SIM_VERSION` is `s1c.2`, because the rule can change a replay near a bank.
 
 **The known issue is closed:** removed from `docs/known-issues.md`.
+
+**Review round 1 (#18).** One severe finding and eight others, all fixed:
+- **The fallback no longer touches the status.** A `pressed` loss used to overwrite `halted`, so a router
+  halted at the bank and hit in the same tick was taken for fled and stopped trying other directions. The
+  fallback is now a per-battalion count. A test keeps `halted` through a pressed loss.
+- **The gate judges men, not bins.** A man moving onto water inside a bin that already had a wet man used to
+  pass. `wetSlots` compares slots of the companies the re-pack can touch. A test stands a company in water
+  everywhere and still catches the newly wet men; judging by bin fails it.
+- **The casualty step:** losses are fixed per company first, the remaining owed hits rank the
+  alternatives, and a diverted loss can no longer vanish.
+- **`removeMan`** refuses an empty company (it used to drive the count negative), returns −1 when the
+  battalion has no men, and allocates nothing.
+- **Tests:** the fixture test checks that a man fell. A reduced sweep along the bank is a test.
+- **Small:** buffers sized from `MAX_BINS`, a ruleset check that a company fits a 32-bit slot mask, and the
+  frequency figures agree.
+
+The probe gives the same result with the redesigned gate: 41 cases without it, 0 with it, 0 pressed.
+
+The cost tests failed in this round's full runs with the machine at a load average of about 100. Run back
+to back, `main` failed the same test under the same load (6.4–8.3 ms per tick against 7.5–8.4 on the
+branch). The cost is load, not the gate.

@@ -4,7 +4,7 @@
 // directly) and with it (removeMan), and how often the gate had to fall back to `pressed`.
 // Usage: node tools/repack-probe.ts [--events]   (--events prints each ungated case as JSON)
 import fs from 'node:fs'
-import { loadSimData, compileRuleset, buildTerrain, makeWorld, issue, advanceTick, wetBins, removeMan, M_FREE, ST_PRESSED } from '../src/sim/index.ts'
+import { loadSimData, compileRuleset, buildTerrain, makeWorld, issue, advanceTick, wetBins, removeMan, M_FREE } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 
 const data = loadSimData(new Uint8Array(fs.readFileSync(new URL('../data/formation-field.simdata', import.meta.url)))), cr = compileRuleset(napoleonic)
@@ -23,7 +23,7 @@ const run = (gated: boolean) => {
       if (gated) removeMan(w, i, c); else w.f.men[i * C + c]--
       if (wetBins(w, i)) { wet++; if (print && !gated) console.log(JSON.stringify({ shape, heading: +heading.toFixed(4), x, z, n })); break }
     }
-    if (w.f.status[i] === ST_PRESSED) pressed++
+    if (w.f.pressed[i] > 0) pressed++
   }
   return { positions, losses, wet, pressed }
 }

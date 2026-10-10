@@ -14,10 +14,9 @@ import { DT } from './time.ts'
 
 export const STATUS = ['', 'halted: impassable ground', 'cannot form: impassable ground', 'arrived: as near as the shape can turn',
   'cannot wheel: a trail shape turns as it marches', 'cannot face about: impassable ground', 'cannot face about: the shape has no half-turn symmetry',
-  'cannot face about: changing shape', 'cannot face about: the shape is not centred on its trail', 'pressed against impassable ground']
+  'cannot face about: changing shape', 'cannot face about: the shape is not centred on its trail']
 export const ST_HALTED = 1
 const ST_CANNOT_FORM = 2, ST_ARRIVED_NEAR = 3, ST_CANNOT_WHEEL = 4, ST_FACE_WET = 5, ST_FACE_ASYM = 6, ST_FACE_CHANGING = 7, ST_FACE_OFFCENTRE = 8
-export const ST_PRESSED = 9
 
 const GATE_HALVINGS = 6, CHANGE_SAMPLES = 128
 const STALL = 0.04      // m/s: an anchor slower than this, with a held bin, is stopped by impassable ground
@@ -53,22 +52,55 @@ export function occupied(w: World, i: number, c: number, r: number, f: number): 
   const off = half(nf - cr), fi = f - start - off
   return fi >= 0 && fi < cr
 }
-// One man of company c falls (docs/plans/active/s1c3-repack-gate.md). The fill rule re-packs the company;
-// if that would put a man newly on impassable ground (a bin wet that was dry), another company takes the
-// loss: those in `first` (a per-company count for battalion i, e.g. hits owed this tick) before the rest,
-// each nearest by index first. If none can, the loss stands and the battalion is pressed against the
-// ground. No random draws. Returns the company that lost the man.
-export function removeMan(w: World, i: number, c: number, first?: ArrayLike<number>): number {
-  const f = w.f, C = w.cr.geo.companies, k = i * C, before = wetBins(w, i)
-  const fits = (q: number): boolean => { f.men[k + q]--; if (!(wetBins(w, i) & ~before)) return true; f.men[k + q]++; return false }
-  if (fits(c)) return c
-  for (let pass = 0; pass < 2; pass++) for (let d = 1; d < C; d++) for (const q of [c - d, c + d]) {
-    if (q < 0 || q >= C || f.men[k + q] <= 0) continue
-    const owed = first ? first[q] > 0 : false
-    if ((pass === 0) === owed && fits(q)) return q
+// bitmask of company c's filled slots (r · files + f, at most 32: ruleset.ts) on impassable ground, as the
+// battalion stands now (bit 31 makes it negative; only & and nonzero tests read it)
+export function wetSlots(w: World, i: number, c: number): number {
+  const f = w.f, g = w.cr.geo, imp = w.terrain.imp[kindOf(w, i)]
+  let mask = 0
+  if (f.trans[i]) {
+    const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], now(w), 0, wbPose), ca = cos(p.a), sa = sin(p.a)
+    for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) { if (!occupied(w, i, c, r, q)) continue
+      const [lx, lz] = blockLocal(g, q, r); if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) mask |= 1 << (r * g.files + q) }
+    return mask
   }
-  f.men[k + c]--; f.status[i] = ST_PRESSED
-  return c
+  const ctx = ctxNow(w, i)
+  for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) {
+    if (!occupied(w, i, c, r, q)) continue
+    placeAt(ctx, c, r, q, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) mask |= 1 << (r * g.files + q)
+  }
+  return mask
+}
+const wetWas = new Int32Array(MAX_BINS)   // per company (a battalion has at most MAX_BINS / BINS)
+// takes one man from company q unless the re-pack puts a man newly on impassable ground; the companies the
+// re-pack can touch are q's own, or for a shape that closes across companies, q's half
+function takeIfDry(w: World, i: number, q: number, near: boolean): boolean {
+  const f = w.f, C = w.cr.geo.companies, k = i * C
+  if (f.men[k + q] <= 0) return false
+  if (!near) { f.men[k + q]--; return true }
+  const across = targetLayout(w, i).def.closeAcross && C % 2 === 0, lo = across ? (q < C / 2 ? 0 : C / 2) : q, hi = across ? lo + C / 2 : q + 1
+  for (let c = lo; c < hi; c++) wetWas[c] = wetSlots(w, i, c)
+  f.men[k + q]--
+  for (let c = lo; c < hi; c++) if (wetSlots(w, i, c) & ~wetWas[c]) { f.men[k + q]++; return false }
+  return true
+}
+// One man of company c falls (docs/plans/active/s1c3-repack-gate.md). The fill rule re-packs the company; if
+// that would put a man newly on impassable ground, another company takes the loss: those with hits still
+// owed in `first` (per company of battalion i) before the rest, each nearest by index first. If none can,
+// the loss falls on c (or, if c is empty, the nearest company with men) and is counted in `pressed`. No
+// random draws. Returns the company that lost the man, or −1 if the battalion has none left.
+export function removeMan(w: World, i: number, c: number, first?: ArrayLike<number>): number {
+  const f = w.f, C = w.cr.geo.companies, k = i * C, near = !clearOfImpassable(w, i)
+  if (takeIfDry(w, i, c, near)) return c
+  for (let pass = 0; pass < 2; pass++) for (let d = 1; d < C; d++) for (let s = -1; s <= 1; s += 2) {
+    const q = c + s * d
+    if (q < 0 || q >= C || ((first ? first[q] > 0 : false) !== (pass === 0))) continue
+    if (takeIfDry(w, i, q, near)) return q
+  }
+  let q = f.men[k + c] > 0 ? c : -1
+  for (let d = 1; q < 0 && d < C; d++) for (let s = -1; s <= 1 && q < 0; s += 2) { const r = c + s * d; if (r >= 0 && r < C && f.men[k + r] > 0) q = r }
+  if (q < 0) return -1
+  f.men[k + q]--; f.pressed[i]++
+  return q
 }
 export function rebalance(w: World, i: number): void {
   const C = w.cr.geo.companies; let tot = 0
@@ -218,13 +250,20 @@ function paceOf(w: World, i: number): [number, number] {
 /* ---------------- the footprint gate ---------------- */
 const wbPose: Pose = { x: 0, z: 0, a: 0, face: 0 }, pt = [0, 0, 0]
 // bitmask of bins with a man's place on impassable ground, for the pose as it is now
-export function wetBins(w: World, i: number): number {
-  const f = w.f, g = w.cr.geo, C = g.companies, R = g.ranks, F = g.files, t = now(w)
+// no place of battalion i can be on impassable ground: the ground's distance field says the nearest is
+// farther than the battalion reaches
+function clearOfImpassable(w: World, i: number): boolean {
+  const f = w.f, C = w.cr.geo.companies, t = now(w)
   let reach = 0
   for (let c = 0; c < C; c++) { const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, wbPose); reach = Math.max(reach, hyp(p.x - f.x[i], p.z - f.z[i])) }
   let lmax = 0; for (let j = 0; j < w.cr.NB; j++) lmax = Math.max(lmax, f.lags[i * w.cr.NB + j])
-  const kind = kindOf(w, i), imp = w.terrain.imp[kind]
-  if (w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(w) + lmax + 2) return 0
+  const kind = kindOf(w, i)
+  return w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(w) + lmax + 2
+}
+export function wetBins(w: World, i: number): number {
+  const f = w.f, g = w.cr.geo, C = g.companies, R = g.ranks, F = g.files, t = now(w)
+  if (clearOfImpassable(w, i)) return 0
+  const imp = w.terrain.imp[kindOf(w, i)]
   let mask = 0
   if (f.trans[i]) {
     for (let c = 0; c < C; c++) {

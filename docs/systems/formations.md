@@ -42,8 +42,9 @@ is in `docs/plans/done/s1a-formations-on-spine.md`.
     inside the block already filled (from five men up); but at an angle to a bank such a slot can be
     water (41 of 42,228 positions in `tools/repack-probe.ts`). A loss whose re-pack would put a man newly on
     impassable ground falls on another company instead, those owed hits first and then the rest, nearest
-    first, with no random draws. If none can take it, the loss stands and the status reads `pressed against
-    impassable ground`.
+    first, with no random draws. The test is by slot (`wetSlots`), for the companies the re-pack can touch.
+    If none can take it, the loss stands and the battalion's `pressed` count goes up (a count, not a
+    status).
 
   Who stands where, and who falls, is the renderer's (`docs/systems/sim-page.md`).
 - **The spine's rules** (`docs/systems/sim-spine.md`): exact-ops maths, slot order, typed-array state.

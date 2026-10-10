@@ -51,6 +51,7 @@ export interface Formations {
   quality: Float64Array; morale: Float64Array; mstate: Uint8Array; startMen: Int32Array; recent: Float64Array
   // the rout (morale.ts): its direction, fixed at the break; its phase (RP_*); the runs made so far
   routX: Float64Array; routZ: Float64Array; routPhase: Uint8Array; runs: Uint8Array
+  pressed: Int32Array                                              // losses that could only fall onto impassable ground (the re-packing gate)
 }
 // per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it)
 export interface Sides { rearX: Float64Array; rearZ: Float64Array }
@@ -93,7 +94,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     ordHead: i32(N).fill(-1), ordTail: i32(N).fill(-1),
     reload: f64(N * C), volleyTick: i32(N * C), target: i32(N * C), owed: i32(N * C),
     fireMode: u8(N), prefer: i32(N),
-    quality: f64(N), morale: f64(N), mstate: u8(N), startMen: i32(N), recent: f64(N), routX: f64(N), routZ: f64(N), routPhase: u8(N), runs: u8(N),
+    quality: f64(N), morale: f64(N), mstate: u8(N), startMen: i32(N), recent: f64(N), routX: f64(N), routZ: f64(N), routPhase: u8(N), runs: u8(N), pressed: i32(N),
   }
   const M = MAX_ORDERS
   const ord: Orders = { type: i32(M), shape: i32(M), finish: u8(M), left: new Int8Array(M), resolved: u8(M), optional: u8(M),

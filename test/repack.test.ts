@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { Sim, data, cr, root } from './fx.ts'
-import { buildTerrain, rebuildImpassable, cellK, wetBins, removeMan, occupied, ST_PRESSED, STATUS } from '../src/sim/index.ts'
+import { buildTerrain, rebuildImpassable, cellK, wetBins, removeMan, occupied, makeWorld, ST_HALTED, issue, advanceTick, M_FREE } from '../src/sim/index.ts'
 
 interface Case { shape: string; heading: number; x: number; z: number; n: number }
 const cases: Case[] = JSON.parse(fs.readFileSync(path.join(root, 'test', 'fixtures', 'repack-events.json'), 'utf8'))
@@ -20,15 +20,29 @@ describe('the re-packing gate', () => {
         expect(wetBins(s.w, i)).toBe(0)
         for (let n = 0; n <= e.n; n++) {
           const c = n % C
+          const men = s.men(h)
           if (gated) removeMan(s.w, i, c); else s.w.f.men[i * C + c]--
+          expect(s.men(h)).toBe(men - 1)   // a man fell, whichever company he was in
           if (!gated && wetBins(s.w, i)) { ungatedWet++; break }
-          if (gated) { expect({ ...e, step: n, wet: wetBins(s.w, i) }).toEqual({ ...e, step: n, wet: 0 }); expect(s.w.f.status[i]).not.toBe(ST_PRESSED) }
+          if (gated) { expect({ ...e, step: n, wet: wetBins(s.w, i) }).toEqual({ ...e, step: n, wet: 0 }); expect(s.w.f.pressed[i]).toBe(0) }
         }
       }
     }
     expect(ungatedWet).toBe(cases.length)   // the fixtures are real cases: without the gate each one wets a bin
   })
 
+  it('a reduced sweep along the bank at diagonal headings: no loss leaves a man newly on impassable ground', () => {
+    const t = buildTerrain(data, cr); let positions = 0
+    for (const shape of ['column', 'march']) for (const heading of [-3 * Math.PI / 4, -Math.PI / 4, 3 * Math.PI / 4]) for (const z of [-160, -80, 0, 80]) for (let x = 45; x <= 66; x += 0.5) {
+      const w = makeWorld(data, cr, 1, false, t), i = w.free[w.meta[M_FREE] - 1]
+      issue(w, { type: 'debug-spawn', side: 0, x, z, heading, shape, men: 100, fire: 'hold' }); advanceTick(w)
+      if (!w.f.alive[i] || wetBins(w, i)) continue
+      positions++
+      for (let n = 0; n < 12; n++) { removeMan(w, i, n % C); expect({ shape, heading, x, z, n, wet: wetBins(w, i) }).toEqual({ shape, heading, x, z, n, wet: 0 }) }
+      expect(w.f.pressed[i]).toBe(0)
+    }
+    expect(positions).toBeGreaterThan(200)
+  })
   // below ranks + 2 men the last men gather into one full-depth file, so the block can deepen by a rank: real
   // companies (25) never get there, and the gate covers them anyway
   it('from 5 men up, a loss never widens a company: every slot filled after it lies in the block filled before', () => {
@@ -48,7 +62,7 @@ describe('the re-packing gate', () => {
     expect(bad).toEqual([])
   })
 
-  it('when no company can take a loss without wetting a bin, it stands and the battalion is pressed against the ground', () => {
+  it('when no company can take a loss without wetting a slot, it stands and is counted as pressed', () => {
     // one company with men (no alternative), on open ground; deep water painted under the slots its next loss
     // newly fills (25 → 24: the fill re-centres), where no man stands now
     const t = buildTerrain(data, cr), s = new Sim(1, undefined, t), h = s.spawn(-100, -100, 0, 'column', 100), i = s.slot(h)
@@ -59,8 +73,25 @@ describe('the re-packing gate', () => {
     for (const p of fresh) t.depth[cellK(t, p[0], p[1])] = 5
     rebuildImpassable(t)
     expect(wetBins(s.w, i)).toBe(0)
+    s.w.f.status[i] = ST_HALTED   // a router halted at the bank this tick: the fallback must not overwrite it
     removeMan(s.w, i, 0)
     expect(s.w.f.men[i * C]).toBe(24)
-    expect(STATUS[s.w.f.status[i]]).toBe('pressed against impassable ground')
+    expect(s.w.f.pressed[i]).toBe(1)
+    expect(s.w.f.status[i]).toBe(ST_HALTED)   // a count, not a status: 'halted' still tells the rout it halted
+  })
+  it('the gate judges men, not bins: a man moving onto water in a bin already wet is still caught', () => {
+    // the same company, now standing in water everywhere it stands (every bin already wet), plus the slots its
+    // next loss newly fills: a check by bin would see nothing new; by slot it sees the newly wet men
+    const t = buildTerrain(data, cr), s = new Sim(1, undefined, t), h = s.spawn(-100, -100, 0, 'column', 100), i = s.slot(h)
+    s.w.f.men.fill(0, i * C, i * C + C); s.w.f.men[i * C] = 25
+    const before = new Set(s.places(h).map(p => p[3])), standing = s.places(h).map(p => cellK(t, p[0], p[1]))
+    s.w.f.men[i * C]--; const fresh = s.places(h).filter(p => !before.has(p[3]) && !standing.includes(cellK(t, p[0], p[1]))); s.w.f.men[i * C]++
+    expect(fresh.length).toBeGreaterThan(0)
+    for (const k of standing) t.depth[k] = 5
+    for (const p of fresh) t.depth[cellK(t, p[0], p[1])] = 5
+    rebuildImpassable(t)
+    expect(wetBins(s.w, i)).not.toBe(0)
+    removeMan(s.w, i, 0)
+    expect(s.w.f.pressed[i]).toBe(1)
   })
 })
