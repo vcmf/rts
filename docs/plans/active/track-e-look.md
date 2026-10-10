@@ -61,6 +61,28 @@ the prototype). This plan's phases are **L0–L9** (L for look):
 Water W2–W5 and the Austerlitz import W6 continue under `docs/plans/active/prototype-plan.md` §4. They slot in after L2
 (below).
 
+## Current focus: the world first (owner, 2026-10-10)
+
+**For now the track paints the landscape and the buildings; units stay as they are.** The phases run
+in two stages:
+
+| Stage | Phases | Notes |
+|---|---|---|
+| **1. The painted world (now)** | L0, L2, water W2–W5, L5, LA2, L7, L9w | L9w is L9's look match for ground, water, trees and buildings only (below) |
+| **2. Units (deferred)** | LA0, LA1, L1, L3, L4, L6, L8, the rest of L9 | Kept as written, so the plan is ready when units come back |
+
+What changes while units wait:
+- **Readability guard.** The painted ground must still leave room for the armies (art bible pillar 1;
+  research §c terrain 9: the ground under the battle stays mid-value and low-chroma). Each stage-1
+  screenshot set adds flat blocks in the army colours (art bible §4) at battalion size on the ground,
+  and a greyscale capture must separate every block from the ground under it. This is a cheap
+  stand-in for L4, not a replacement.
+- **Budgets** are measured per pass for terrain, foliage, buildings and water; the units' share of
+  the frame (engine-design §8) stays reserved and unmeasured, so the world must fit its own split.
+- **L9w** signs the world off against the primary targets (`docs/art-bible.md` §0), with their
+  armies ignored: palette, light, haze and brushwork on ground, water, trees and buildings, in one
+  summer and one winter target.
+
 ## Working beside the logic track
 
 ### Who owns what
@@ -314,7 +336,8 @@ README is the source for every number; this plan copies none.
 nations' uniforms (a palette change on the same mesh, art bible §4b's rule), and any clip the sim
 cannot yet drive.
 
-**Depends on:** nothing for LA0; LA0 for LA1 (L0 for its in-engine check); L0 for LA2. **Estimate:**
+**Depends on:** nothing for LA0; LA0 for LA1 (L0 for its in-engine check); L0 for LA2. LA2 is in
+stage 1 and records its own licence the way LA0 does; LA0 and LA1 are stage 2. **Estimate:**
 6–9 days over 3 PRs (the retopology is the largest part).
 
 ## L2. Terrain detail layer (research P1; the proposal's runtime layer 4)
@@ -417,8 +440,9 @@ horse-and-rider mass, and a gun with crew.
 4. plus baked strokes (experiment);
 5. plus Kuwahara on the bake (experiment).
 
-Run each at three zooms and three yaws, on the Pratzen framing, with two battalions, one tree type and
-smoke.
+Run each at three zooms and three yaws, on the Pratzen framing, with one tree type and the
+readability guard's army-colour blocks (no smoke in stage 1). When units return, the chosen arm is
+checked again with two battalions and smoke.
 
 **Acceptance:**
 - **The judges:** at least 3, blind, using the checklist:
@@ -432,7 +456,8 @@ smoke.
 - **One full-size bake** is measured: bake time, peak memory (≤ 600 MB in total for bakes), and
   behaviour under SwiftShader (no lost context).
 
-**Depends on:** L2 (and L4 passed). **Estimate:** 4–6 days, 2 PRs (the bake; the ablation set).
+**Depends on:** L2 (in stage 1, the readability guard stands in for L4). **Estimate:** 4–6 days, 2 PRs
+(the bake; the ablation set).
 
 ## L6. Smoke (research P4; art bible §9)
 
@@ -486,7 +511,8 @@ winter trees the target images depend on, and the building material.
 - no heat ripple behind units;
 - foliage ≤ 3 ms GPU.
 
-**Depends on:** L1 (budget), L2, LA2 (the first building). **Estimate:** 4–6 days, 2–3 PRs.
+**Depends on:** L2, LA2 (the first building); in stage 1 it measures its own budget rather than
+L1's. **Estimate:** 4–6 days, 2–3 PRs.
 
 ## L8. Anti-aliasing (research P6)
 
@@ -533,24 +559,40 @@ Babylon VAT writes no velocity, and the 12 fps steps reset its history.
 
 **Depends on:** all. **Estimate:** 4–8 days, with iteration on the owner's feedback.
 
+**L9w, the world-only match (stage 1):** the build items above that touch the world (terrain
+terminator and rim, shadow-tint volume, depth wash, snow and ground brushwork, periphery
+simplification), signed off as described under Current focus. The units' items, the video-tier
+frame and the full prototype exit wait for stage 2. **Depends on:** L2, water W2–W5, L5, L7.
+
 ---
 
 ## Order and parallelism
 
+Stage 1, the painted world (now):
+
 ```
-LA0 ──► LA1 ──┬──► L1 closes
-L0 ──► L1 ────┴──► L3 ──┐
-  ├──► L2 ──┬───────────┴──► L4 ──► L5
-  │         │                       L6 (after L4)
-  │         └──► water W2–W5        L7 (after L1, L2) ──► L8 ──► L9
-  └──► LA2 (after L0; a landmark for L9)
+L0 ──► L2 ──┬──► water W2–W5 ─────────┐
+  │         ├──► L5 ──────────────────┤
+  │         └──► L7 (after LA2) ──────┴──► L9w
+  └──► LA2 ──────┘
 ```
 
-- **The critical path is L0, L1, L3, L4.** It answers the two biggest risks, performance and readability,
-  before most of the look is built.
+Stage 2, units (deferred):
+
+```
+LA0 ──► LA1 ──┬──► L1 closes
+L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
+                          L3, L7 ──► L8 ──► L9 (full sign-off)
+```
+
+- **Stage 1's critical path is L0, L2, L7, L9w.** L2 is the base every ground, water and building
+  surface reuses.
+- **The order was risk-first** (L0, L1, L3, L4: performance and readability before most of the look).
+  Deferring units moves those two risks later; the readability guard and the reserved unit budget
+  keep them from being designed out by stage 1.
 - **L2 runs beside L1.** Water follows L2.
-- **LA runs beside L0–L3.** LA0 needs nothing; L1 starts without LA1 but closes only on its figure;
-  L3 needs it; LA2 waits for L0.
+- **LA:** LA2 runs in stage 1 after L0. In stage 2, LA0 needs nothing; L1 starts without LA1 but
+  closes only on its figure; L3 needs it.
 - **Upstream assets:** Tripo or TRELLIS models (art bible §10) and the owner's brushes (§7) replace
   placeholders whenever they land. Only L1's close and L3 wait for an asset (LA1's figure).
 
@@ -576,6 +618,9 @@ L0 ──► L1 ────┴──► L3 ──┐
 
 ## Changes to this plan
 
+- **2026-10-10, focus.** The owner put units on hold: stage 1 paints the landscape and buildings
+  (L0, L2, water, L5, LA2, L7, L9w), with a readability guard standing in for L4; the unit phases
+  move to stage 2 unchanged.
 - **2026-10-10, amendment** (the size rule is proposed as decision 0017). Added LA (asset pipeline) with the soldier animation trial as the source
   of L1's figure; the size rule for paint on units; the reference images curated in `docs/art-bible.md` §0;
   the note `docs/research/painterly-2d-on-3d.md` as a source; the volley lead-in ask; the style
