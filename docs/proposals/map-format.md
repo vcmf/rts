@@ -140,7 +140,7 @@ A recommendation, to be settled by the first PR (§9, open question 1): **JSON**
   "season": "winter",                  // the default season; features may override per season
   "seed": 1805,
   "extent": { "w": 6000, "h": 4000 },  // everything the map describes, backdrop included, metres
-  "detail": { "w": 1500, "h": 1500 },  // the battle's detailed area inside it (today's SPEC tile is 800 m; engine-design §10 grows it to 1–1.5 km)
+  "detail": { "w": 1500, "h": 1500 },  // the battle's detailed area inside it (today the SPEC's tile; engine-design §10, "Scale up", grows it)
   "georef": { "lat": 49.128, "lon": 16.762, "projection": "local-tangent" },
   "sources": [ { "id": "dem", "kind": "dem", "ref": "terrarium z14", "note": "…" } ],
   "relief": { … },
@@ -242,8 +242,8 @@ touching any map.
 5. **W6, Austerlitz,** through the importer: the first real map.
 6. **One heightfield per map** (decision 0012): today the sim builder and the world builder sample
    their own grids (`tools/build-sim-data.ts`, `tools/build-look-data.ts`), with different origins,
-   and the far ring is a second height evaluation. One compiled heightfield on the world SPEC's tile
-   grid (`src/look/spec.ts`), read by both outputs, changes both files' data versions; it lands with
+   and the far ring is a second height evaluation. One compiled heightfield over the detailed area at the
+   world SPEC's cell (`src/look/spec.ts`), read by both outputs, changes both files' data versions; it lands with
    step 3 or after it.
 
 Step 2 is the proof that the format carries what exists; step 3 is where the data starts to change,
