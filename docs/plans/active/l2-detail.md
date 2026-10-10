@@ -48,12 +48,15 @@ Three PRs, the first two now:
 **The page mode.** `look.html?bench` builds the world as usual, then runs a fixed list of cameras: the
 closest, the default and the widest zoom, each at yaw −45°, 0° and +45° (decision 0010), held for a
 set time each. It records:
-- **Frame time** per frame (requestAnimationFrame deltas): p50, p95, max.
+- **Frame time** (the interval between frames, on the frames that time the whole frame): p50, p95, max.
+  In a browser it is held at the display's refresh; arms are compared by GPU frame time.
 - **GPU time per pass**, from `EXT_disjoint_timer_query_webgl2`, with our own `TIME_ELAPSED` queries:
   the terrain (tile, far ring, apron), the scatter (every thin-instance mesh), the water, and the
   finishing pass. Queries cannot nest, so whole-frame GPU time is measured on alternate frames. A
   mesh's draws are timed only in the camera's own render pass (`engine.currentRenderPassId`), never
-  in a bake. Without the extension (SwiftShader, Safari) the GPU fields are `null`, not zero.
+  in a bake. Without the extension (Safari) the GPU fields are `null`, not zero; SwiftShader has it,
+  and times software rendering. A pass is timed as segments of consecutive draws (a query per mesh
+  inflated the totals 11–30× on ANGLE Metal).
 - **Draw calls and triangles** per frame (Babylon's scene instrumentation).
 - **Texture memory:** the sum over the scene's textures of size × bytes per texel × the mip factor,
   labelled an estimate (WebGL cannot report it).
@@ -79,7 +82,8 @@ the same JSON; its numbers are labelled by renderer and pass no gate (track plan
 - **Places:** spots on the default view chosen to cover the sunlit slope, the shadow side, the flat,
   the bank and a field, so the coats meet the ground's light, mid and shadow bands.
 - **The check:** in a greyscale capture (Rec. 709 luma of the final frame), each block's mean luma
-  against the mean of a ring of ground around it. A block separates when they differ by at least
+  against the ground's at the same pixels, in a render without blocks. A block's pixels come from two
+  mask renders (the blocks flat white, then flat black). A block separates when they differ by at least
   **0.10** (on 0–1). Also reported, not gated: whether the block is more saturated than the 99th
   percentile of the ground's saturation in the frame ("armies are the most saturated objects").
 - **Seasons:** summer and winter.
@@ -152,8 +156,8 @@ terrain write its grain value to red and its view depth to green and blue (16 bi
 ## Acceptance
 
 From the track plan (research P1), on this machine unless marked:
-- **L2a:** the bench runs headless here and writes its JSON; the per-pass GPU fields are `null` on
-  SwiftShader and filled where the extension exists. The guard runs in summer and winter, its
+- **L2a:** the bench runs headless here and writes its JSON; the GPU fields are filled where the
+  extension exists and `null` where it does not. The guard runs in summer and winter, its
   negative block fails, and the baseline (main) is recorded. Goldens: 0 regions over tolerance against
   main.
 - **L2b:**

@@ -70,12 +70,13 @@ camera.
   cannot nest: whole-frame time is taken on alternate frames, the passes (terrain, scatter, water, other,
   post) on the others, each as segments of consecutive draws, only in the camera's own render pass. Frames with
   a disjoint event are dropped. Without the extension the GPU fields are `null`.
-- **Frame times** come from the whole-frame frames only (the pass frames carry more queries). A hidden tab stops
-  the run with an error. The bench removes its observers when it ends.
+- **Frame times** come from the whole-frame frames only (the pass frames carry more queries). A run during which
+  the tab was hidden is measured again. The bench removes its observers when it ends.
 - **`passesOverFrame`** is the passes' medians over the frame's. ANGLE on Metal inflates every query (about 2×
-  here); there only the frame column stands. Cost comparisons between arms use frame time.
+  here); there only the GPU frame column stands. **Cost comparisons between arms use GPU frame time:** in a
+  browser the frame time is held at the display's refresh (16.7 ms at 60 Hz) whenever the frame is cheaper.
 - `node tools/bench-look.mjs <url> [out.json] [--hold s] [--gpu metal]` runs it headless (SwiftShader by
-  default, which has no GPU timer). The laptop run is the owner's (`docs/plans/active/track-e-look.md`, "Measuring").
+  default: slow, and its timer times software rendering), with vsync and the frame-rate limit off. The laptop run is the owner's (`docs/plans/active/track-e-look.md`, "Measuring").
 
 ### The readability guard (L2a)
 

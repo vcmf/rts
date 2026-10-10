@@ -3,7 +3,7 @@
 // Steps: ["wait",ms] · ["eval","js"] (prints the result; a promise is awaited) · ["shot","name"] · ["tap","KeyD",holdMs]
 // Exits non-zero on page exceptions/console errors or tool failure, and always cleans up Chrome.
 // Software GL (SwiftShader) by default: good for correctness, NOT for timing GPU frame cost. SHOT_ANGLE=metal (or
-// another ANGLE backend) uses the machine's GPU instead.
+// another ANGLE backend) uses the machine's GPU instead. SHOT_CHROME_ARGS: more Chrome flags, space-separated.
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -40,7 +40,7 @@ try {
   // SHOT_ANGLE: the GL backend, swiftshader (software, deterministic: the default) or the machine's own (e.g. metal)
   const angle = process.env.SHOT_ANGLE || 'swiftshader'
   chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--use-angle=${angle}`, ...(angle === 'swiftshader' ? ['--enable-unsafe-swiftshader'] : []),
-    '--ignore-gpu-blocklist', `--window-size=${w},${h}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' })
+    '--ignore-gpu-blocklist', ...(process.env.SHOT_CHROME_ARGS || '').split(' ').filter(Boolean), `--window-size=${w},${h}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' })
   const portFile = path.join(profile, 'DevToolsActivePort')
   let port
   for (let i = 0; i < 60 && !port; i++) { await sleep(250); if (fs.existsSync(portFile)) port = fs.readFileSync(portFile, 'utf8').split('\n')[0] }

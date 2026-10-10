@@ -61,10 +61,11 @@ function rendererName(engine: AbstractEngine): string {
 export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: BenchPasses, arms: Arm[], holdS: number): Promise<object> {
   const engine = scene.getEngine(), gl = (engine as unknown as { _gl: WebGL2RenderingContext })._gl
   const timer = new GpuTimer(gl), inst = new SceneInstrumentation(scene)
-  let timing = false, passFrame = false, frameNo = 0, lastT = 0
+  let timing = false, passFrame = false, frameNo = 0, lastT = 0, passFrames = 0
   const frameMs: number[] = [], draws: number[] = [], tris: number[] = [], timed = new Map<string, number>()
   // a pass is timed as segments of consecutive draws (one query per run of draws of the same pass, not one per mesh:
-  // a query per draw costs more than the draw on some backends), in the camera's own pass only, never in a bake.
+  // per-mesh queries summed to 11–30× the frame on ANGLE Metal, measured in L2a), in the camera's own pass only,
+  // never in a bake.
   // Every mesh is hooked, so a draw outside the named passes ends the segment before it ('other'). A segment stays
   // open until the next draw of another pass: GPU work between draws (a clear, a target switch) is charged to it
   let open: string | null = null
@@ -100,6 +101,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
     timer.poll(); timer.newFrame(); frameNo++; hookPosts()
     passFrame = timer.available && frameNo % 2 === 0   // without a timer every frame is a whole frame
     if (timing && !passFrame) timer.begin('frame')
+    if (timing && passFrame) passFrames++
   })
   const end = engine.onEndFrameObservable.add(() => {
     seg(null)
@@ -107,8 +109,8 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
     if (timing) { draws.push(inst.drawCallsCounter.current); tris.push(scene.getActiveIndices() / 3) }
   })
   undo.push(() => { engine.onBeginFrameObservable.remove(begin); engine.onEndFrameObservable.remove(end) })
-  // a hidden tab stops rendering: a run across it would hold a frame of several seconds, so the bench stops instead
-  let hidden = document.hidden
+  // a hidden tab stops rendering: a run across it would hold a frame of several seconds, so that run is measured again
+  let hidden = false
   const onVis = () => { if (document.hidden) hidden = true }
   document.addEventListener('visibilitychange', onVis); undo.push(() => document.removeEventListener('visibilitychange', onVis))
   const frames = (n: number) => new Promise<void>(r => { let k = 0; const o = engine.onEndFrameObservable.add(() => { if (++k >= n) { engine.onEndFrameObservable.remove(o); r() } }) })
@@ -120,17 +122,21 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
     for (const cam of cams) {
       camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; camera.target.set(START.x, D.spec.camera.focusY, START.z)
       for (const arm of [...arms, ...[...arms].reverse()]) {
-        arm.apply(); await scene.whenReadyAsync(); await frames(10)
-        timer.reset(); frameMs.length = draws.length = tris.length = 0; timed.clear(); lastT = 0
-        // the hold, and at least MIN_FRAMES frames (a software renderer takes seconds a frame)
-        const t0 = performance.now(); timing = true
-        while (performance.now() - t0 < holdS * 1000 || frameMs.length < MIN_FRAMES) await frames(1)
-        timing = false
-        if (hidden) throw new Error('the page was hidden during the bench (another tab or a minimised window): run it again with the tab in front')
+        arm.apply(); await scene.whenReadyAsync()
+        for (let tries = 0; ; tries++) {
+          await frames(10)
+          timer.reset(); frameMs.length = draws.length = tris.length = 0; timed.clear(); lastT = 0; passFrames = 0; hidden = document.hidden
+          // the hold, and at least MIN_FRAMES frames (a software renderer takes seconds a frame)
+          const t0 = performance.now(); timing = true
+          while (performance.now() - t0 < holdS * 1000 || frameMs.length < MIN_FRAMES) await frames(1)
+          timing = false
+          if (!hidden) break
+          if (tries >= 3) throw new Error('the page was hidden in 4 tries of one run (another tab or a minimised window): keep the tab in front')
+        }
         await frames(6)   // late query results
         const gpuMs: Record<string, Stat | null> = {}
         for (const k of ['frame', 'terrain', 'scatter', 'water', 'other', 'post']) { const a = timer.results.get(k); gpuMs[k] = timer.available && a?.length ? stat(a) : null }
-        const nPass = Math.max(1, frameMs.length), segments: Record<string, number> = {}
+        const nPass = Math.max(1, passFrames), segments: Record<string, number> = {}
         for (const [k, v] of timed) segments[k] = +(v / nPass).toFixed(1)
         // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
         const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
@@ -141,7 +147,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   } finally { timing = false; seg(null); for (const u of undo) u(); inst.dispose() }
   const r = engine.getRenderingCanvas()
   return {
-    tool: 'look-bench', version: 1, build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
+    tool: 'look-bench', version: 2, build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
     canvas: { w: engine.getRenderWidth(), h: engine.getRenderHeight(), cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
     gpuTimer: timer.available, holdS, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
     note: timer.available ? 'GPU times from EXT_disjoint_timer_query_webgl2' : 'no GPU timer on this browser: GPU fields are null', runs,

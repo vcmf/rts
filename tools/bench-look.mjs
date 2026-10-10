@@ -3,8 +3,9 @@
 //
 //   node tools/bench-look.mjs <look page URL> [out.json] [--hold <s>] [--gpu <angle backend>] [--timeout <min>]
 //     --hold     seconds measured per camera and arm (default 3; each run also takes at least 20 frames)
-//     --gpu      use the machine's GPU through that ANGLE backend (e.g. metal); default SwiftShader (slow, and its
-//                timer queries measure software rendering)
+//     --gpu      use the machine's GPU through that ANGLE backend (e.g. metal); default $SHOT_ANGLE, else SwiftShader
+//                (slow; it has the timer extension, but it times software rendering)
+// Chrome runs without vsync or a frame-rate limit, so frame times are the page's own, not the display's.
 //     --timeout  minutes the whole run may take (default 60)
 // Prints a table per camera and arm; exit 1 when the bench fails or reports an error.
 import fs from 'node:fs'
@@ -22,7 +23,7 @@ const u = new URL(url); u.searchParams.set('bench', ''); u.searchParams.set('hol
 const steps = [['wait', 1000],
   ['eval', `(async () => { const end = Date.now() + ${timeout * 60000}; while (!window.__bench && Date.now() < end) await new Promise(r => setTimeout(r, 100)); if (!window.__bench) throw new Error("no bench result after ${timeout} min (--timeout)"); return "BENCH " + JSON.stringify(window.__bench) })()`]]
 let stdout
-try { stdout = shoot(u.href, path.join(ROOT, 'scratch'), steps, 1920, 1080, { frozen: false, env: { SHOT_TIMEOUT_S: String(timeout * 60 + 120), SHOT_ANGLE: gpu ?? 'swiftshader' } }) }
+try { stdout = shoot(u.href, path.join(ROOT, 'scratch'), steps, 1920, 1080, { frozen: false, env: { SHOT_TIMEOUT_S: String(timeout * 60 + 120), SHOT_ANGLE: gpu ?? process.env.SHOT_ANGLE ?? 'swiftshader', SHOT_CHROME_ARGS: '--disable-gpu-vsync --disable-frame-rate-limit' } }) }
 catch (e) { console.error('bench-look:', e.message); process.exit(1) }
 const line = stdout.split('\n').find(l => l.startsWith('EVAL "BENCH '))
 if (!line) { console.error(`bench-look: no result in the output:\n${stdout}`); process.exit(1) }
@@ -38,5 +39,5 @@ for (const x of res.runs) {
   console.log(`${x.cam.padEnd(18)}${x.arm.padEnd(9)}${String(x.frames).padStart(5)}  ${f(x.frameMs.p50)} ${f(x.frameMs.p95)} ${f(x.frameMs.max)} | ${f(g('frame'))} ${f(g('terrain'))} ${f(g('scatter'))} ${f(g('water'))} ${f(g('other'))} ${f(g('post'))} ${x.passesOverFrame == null ? '  – ' : x.passesOverFrame.toFixed(2)} | ${String(x.drawCalls).padStart(5)} ${String(x.triangles).padStart(7)}`)
 }
 const unfit = res.runs.filter(x => x.passesOverFrame != null && x.passesOverFrame > 1.3).length
-if (unfit) console.log(`fit: in ${unfit} of ${res.runs.length} runs the passes add up to more than 1.3× the frame: this backend's per-pass queries are inflated; compare the GPU frame column (frame time is held at vsync)`)
+if (unfit) console.log(`fit: in ${unfit} of ${res.runs.length} runs the passes add up to more than 1.3× the frame: this backend's per-pass queries are inflated; compare the GPU frame column`)
 console.log(`wrote ${path.relative(ROOT, out)}`)

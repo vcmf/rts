@@ -10,7 +10,8 @@
 // luma at the same pixels, in the frame without blocks. A block separates when they differ by at least SEP.
 // The negative, in summer: the same blocks painted grey, each at the grey that matches the ground's value under it
 // (interpolated from two greys), must not separate: else the check cannot tell a block that does not read from one
-// that does. It takes a second page load.
+// that does. It takes a second page load. What it proves is limited: the grey is fitted on the same pixels it is
+// then measured on, so it checks the masks, the renders and the measure end to end, not a different comparison.
 // Also reported, not gated: whether a block is more saturated than the 99th percentile of the ground's saturation.
 // Exit 1 on a failure. The page: the look page, built (`npm run build`, `npx vite preview`).
 import fs from 'node:fs'
@@ -107,7 +108,8 @@ export function measure(url, outDir) {
       const yb = meanLuma(coats, ks), yg = meanLuma(ground, ks), sep = Math.abs(yb - yg)
       // the grey whose block would have the ground's value here (the block's luma is close to linear in its grey)
       let match = null
-      if (greys) { const [l0, l1] = greys.map(im => meanLuma(im, ks)); match = GREYS[0] + (yg - l0) / (l1 - l0) * (GREYS[1] - GREYS[0]) }
+      // (null where no grey in 0–1 can match: that block's negative is not measured, and is reported)
+      if (greys) { const [l0, l1] = greys.map(im => meanLuma(im, ks)), m = GREYS[0] + (yg - l0) / (l1 - l0) * (GREYS[1] - GREYS[0]); match = Number.isFinite(m) && m >= 0 && m <= 1 ? m : null }
       res.set(key, { season, name, n, yb, yg, sep, pass: sep >= SEP, sat: sat(r / n, g / n, b / n), satP99, match, negSep: null })
     }
   }
@@ -139,7 +141,9 @@ export function guard(url, outDir, baseUrl = null) {
     const verdict = c.pass ? 'ok    ' : fails ? 'FAILS ' : 'fails*'
     console.log(`${head}  ${c.yb.toFixed(3)}  ${c.yg.toFixed(3)}   ${c.sep.toFixed(3)}  ${verdict}${base ? `  ${b.hidden ? 'hidden' : b.sep.toFixed(3)}  ` : ''}  ${c.sat.toFixed(2)} / ${c.satP99.toFixed(2)}${c.sat > c.satP99 ? '' : ' (not the most saturated)'}${c.negSep != null ? `  neg ${c.negSep.toFixed(3)}` : ''}${negBad ? `  NEGATIVE SEPARATES (${c.negSep.toFixed(3)}): the check cannot tell ground from a block` : ''}`)
   }
-  const negs = [...cand.values()].filter(c => c.negSep != null)
+  const negs = [...cand.values()].filter(c => c.negSep != null), unmatched = [...cand.values()].filter(c => c.season === 'summer' && !c.hidden && c.negSep == null)
+  if (unmatched.length) console.log(`negative: no grey matches the ground at ${unmatched.map(c => c.name).join(', ')} (not measured there)`)
+  if (negs.length < 12) { ok = false; console.log(`negative: only ${negs.length} blocks measured (at least 12)`) }
   if (!negs.length) { ok = false; console.log('negative: NONE measured') }
   else console.log(`negative (summer, blocks at the grey that matches the ground's value): ${negs.filter(c => c.negSep >= SEP).length} of ${negs.length} separate (must be 0); largest ${Math.max(...negs.map(c => c.negSep)).toFixed(3)}`)
   if (base) console.log('fails*: does not separate here, nor on the base (a palette question for the owner, not a regression)')
