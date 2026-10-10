@@ -130,10 +130,18 @@ A 40 × 800 run is reported, never failed.
 
 ## Next: S1c-5, the soldier layer at 16,000 men
 
-The benchmark put the layer at 10.6 ms per frame for 16,000 marching men. Planned separately, after this
-merges: skip settled men before any placement work, make the displaced-man search local (today it scans
-every slot per displaced man), and measure what moving the layer into the S2 worker or onto the GPU
-would save. Its budget: 4 ms for sim and layer together at 40 × 400, and a report at 40 × 800.
+The benchmark put the layer at 10.6 ms per frame for 16,000 marching men, and the formation step at
+5 ms a tick. Planned separately, after this merges:
+- the soldier layer: skip settled men before any placement work, make the displaced-man search local
+  (today it scans every slot per displaced man), and measure what moving the layer into the S2 worker or
+  onto the GPU would save;
+- the formation step: the footprint gate walks every man's place up to 9 times a tick (before, up to 7
+  halvings, after); a company-level bounds test before the per-man scan, or places cached between
+  halvings (review round 1);
+- the hash and saves: the trail ring is allocated for all 128 slots at the deepest shape's size (512
+  points at 400), so every hash writes 1 MB of trails, mostly zeros (review round 1).
+
+Its budget: 4 ms for sim and layer together at 40 × 400, 2 ms a tick, and a report at 40 × 800.
 
 ## Results (2026-10-10)
 
@@ -179,3 +187,18 @@ three of its lines are out within 0.1 s.
 
 `check:app`: the firefight breaks the weaker line at 9.5 minutes, the brigade's break spreads to its three
 lines at 12.4 minutes, and every replay reproduces in Node.
+
+## Review
+
+**Round 1** (`/code-review high`, 9 findings, none severe; no second round):
+- **Fixed:**
+  - the square was open for an odd number of companies and overlapped for fewer than 4: it now
+    refuses those counts, and the scale test checks the refusal;
+  - the re-packing probe compiled the shipped block while its fixture is replayed on the S1a block: it
+    runs on the S1a block again;
+  - the lag model's per-bin scratch was module-level and sized on demand, so it depended on call order;
+    it moved into the per-world scratch with the bit sets, beside the Face about arc that was allocated per
+    turn;
+  - the scale test decoded bits by hand: it uses `hasBit`.
+- **Deferred to S1c-5** (above): the raised cost budgets, the gate's repeated per-man scans, and the trail
+  ring's size in every hash.

@@ -12,10 +12,13 @@ const BW = (g: Geometry) => g.files * g.fileSpacing   // company frontage
 const each = <T>(g: Geometry, f: (c: number) => T): T[] => Array.from({ length: g.companies }, (_, c) => f(c))
 // the square: the companies over four faces, front and rear first (6: 2, 1, 2, 1), each face a row of
 // blocks facing out at its distance from the centre; a pinwheel, so each face's end meets the next face's
-// rear rank. Faces in order: front, right, rear, left
+// rear rank. Faces in order: front, right, rear, left. Opposite faces must match to close the square, so it
+// needs an even number of companies, at least 4
 function square(g: Geometry): Placement[] {
-  const C = g.companies, base = Math.floor(C / 4), extra = C % 4
-  const counts = [0, 1, 2, 3].map(face => base + ([0, 2, 1, 3].indexOf(face) < extra ? 1 : 0))   // the extras go front, rear, right, left
+  const C = g.companies
+  if (C < 4 || C % 2) throw new Error(`square: ${C} companies; it needs an even number, at least 4`)
+  const base = Math.floor(C / 4), extra = C % 4
+  const counts = [0, 1, 2, 3].map(face => base + ([0, 2, 1, 3].indexOf(face) < extra ? 1 : 0))   // the extras go front and rear
   const s = (g.ranks - 1) * g.rankSpacing / 2 + 0.3, len = (k: number) => k * BW(g) + (k - 1) * g.fileSpacing
   const out: Placement[] = []
   ;[0, -PI / 2, PI, PI / 2].forEach((rot, face) => {

@@ -1,5 +1,7 @@
 // The re-packing probe (docs/plans/active/s1c3-repack-gate.md): battalions of every shape, spawned dry along
-// the stream at many headings, lose men one at a time from each company in turn (100 down to 40). Counts the
+// the stream at many headings, lose men one at a time from each company in turn (100 down to 40). It runs on
+// the S1a block (4 companies of 9 files, 100 men), the ruleset test/repack.test.ts replays its events on
+// (`small`, test/fx.ts); the shipped block is covered by test/scale.test.ts. Counts the
 // losses after which a man stands newly on impassable ground, without the gate (the company's count cut
 // directly) and with it (removeMan), and how often the gate had to fall back to `pressed`.
 // Usage: node tools/repack-probe.ts [--events]   (--events prints each ungated case as JSON)
@@ -7,7 +9,10 @@ import fs from 'node:fs'
 import { loadSimData, compileRuleset, buildTerrain, makeWorld, issue, advanceTick, anyWet, removeMan, M_FREE } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 
-const data = loadSimData(new Uint8Array(fs.readFileSync(new URL('../data/formation-field.simdata', import.meta.url)))), cr = compileRuleset(napoleonic)
+// the S1a block (test/fx.ts, small)
+const small = { ...napoleonic, name: `${napoleonic.name}, the S1a block`, geometry: { ...napoleonic.geometry, companies: 4, files: 9, bins: 3 } }
+
+const data = loadSimData(new Uint8Array(fs.readFileSync(new URL('../data/formation-field.simdata', import.meta.url)))), cr = compileRuleset(small)
 const terrain = buildTerrain(data, cr), C = cr.geo.companies, print = process.argv.includes('--events')
 const HEADINGS = [0, Math.PI / 2, -Math.PI / 2, Math.PI, Math.PI / 4, -Math.PI / 4, 3 * Math.PI / 4, -3 * Math.PI / 4, 0.3, -1.2]
 const run = (gated: boolean) => {
