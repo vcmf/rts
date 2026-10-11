@@ -183,6 +183,7 @@ export const napoleonic: Ruleset = {
     fallback: { metres: 15, after: 3, rate: 0.0005 },
     rally: { safe: 250, calm: 20, time: 30, cost: 0.1, max: 2 },
     shatter: 0.5,
+    leave: 12,   // S1e-1: shattered formations that reach the map's edge leave the field
   },
   // charges and melee (docs/plans/active/s1d2-charges.md): first guesses, tuned by tools/calibrate-charge.ts.
   // A charge's threat shakes the target at the test, its impact costs men and morale by its momentum and the

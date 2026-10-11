@@ -3,7 +3,7 @@
 // 8 (fire), 11 (casualties) and 12 (morale; the rout and the wavering fall-back are its standing behaviours);
 // S1d-2 fills 4 (the square against cavalry) and 10 (charges and melee); S1d-3 fills 9 (artillery). The others are named and empty until
 // later parts of S1.
-import { type World, M_TICK, MAX_FORMATIONS } from './world.ts'
+import { type World, M_TICK, MAX_FORMATIONS, MS_SHATTERED } from './world.ts'
 import { applyCommands, reapFormation, type Dropped } from './commands.ts'
 import { HASH_EVERY } from './time.ts'
 import { assertFinite } from './num.ts'
@@ -14,6 +14,11 @@ import { moraleStep } from './morale.ts'
 import { meleeStep, standingStep } from './melee.ts'
 import { artilleryStep } from './artillery.ts'
 
+// the formation's anchor is within morale.leave of the map's edge
+function atEdge(w: World, i: number): boolean {
+  const t = w.terrain, e = (t.n - 1) * t.cell, L = w.cr.rs.morale.leave, x = w.f.x[i] - t.x0, z = w.f.z[i] - t.z0
+  return Math.min(x, z, e - x, e - z) <= L
+}
 // metering is injected: the sim never reads a clock itself
 export interface Meter { now(): number; add(step: string, ms: number): void }
 export interface TickResult { tick: number; hash: number | null; dropped: Dropped[] }
@@ -44,7 +49,14 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     for (let k = 0; k < MAX_FORMATIONS; k++) { const i = rev ? MAX_FORMATIONS - 1 - k : k; if (w.f.alive[i]) moraleStep(w, i, lost[i]) }
   })
   // 13 smoke: S2
-  step('14 reap', () => { for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i] && menOf(w, i) === 0) reapFormation(w, i) })
+  // 14: formations with no men are reaped, and shattered formations at the map's edge leave the field: reaped,
+  // their men counted to their side (S1e-1). A router there stays: it may still rally
+  step('14 reap', () => { for (let i = 0; i < MAX_FORMATIONS; i++) {
+    if (!w.f.alive[i]) continue
+    const men = menOf(w, i)
+    if (men === 0) reapFormation(w, i)
+    else if (w.f.mstate[i] === MS_SHATTERED && atEdge(w, i)) { w.sides.left[w.f.side[i]] += men; reapFormation(w, i) }
+  } })
   w.meta[M_TICK] = t
   // (the trail rings, 1 MB at 400 men, are skipped: their points come from checked positions or from the ring
   // itself, and a non-finite point would make trailLen, which is checked, non-finite too)

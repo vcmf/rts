@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-11
-code: [src/sim, tools/build-sim-data.ts, maps/formation-field.ts, src/scenarios/s1a-drill.ts, test]
+code: [src/sim, tools/build-sim-data.ts, maps/formation-field.ts, maps/battlefield.ts, src/scenarios/maps.ts, src/scenarios/s1a-drill.ts, test]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0012-heightfield-authority, 0013-single-player-first, 0015-era-generic-engine, 0016-typescript-toolchain]
 ---
 
@@ -99,9 +99,14 @@ advanceTick: 1 commands · 4 standing behaviour · 5–6 formations · 8 fire ·
   `tick.ts`); the sim reads none.
 - **Data** (`data.ts`, `tools/build-sim-data.ts`, format 2): the heightfield on 1.79 m nodes, the cost
   grid on 7.16 m cells, and the terrain class and water depth on the 1 m grid, with the class names,
-  built in Node from a map definition and committed as `data/formation-field.simdata`; its
-  FNV-1a is the data version. The map definition loads `prototypes/formation-core.js` in Node, so the sim
-  and the prototype read the same terrain. A cost cell is the harmonic mean of its passable ground
+  built in Node from a map definition and committed as `data/<map>.simdata`; its FNV-1a is the data version.
+  There are two maps:
+  - `formation-field` (360 m, 1 m grid): its definition loads `prototypes/formation-core.js` in Node, so the
+    sim and the prototype read the same terrain;
+  - `battlefield` (1.2 km, 2 m grid, S1e-1): `maps/battlefield.ts`, build-time formulas.
+
+  A scenario names its map (`Scenario.map`), and `src/scenarios/maps.ts` holds the version each was placed
+  for. A cost cell is the harmonic mean of its passable ground
   samples (at least half passable, else 0) times the slope factor of its steepest rise; a stand-in until
   pathfinding brings clearance and explicit bridges (`docs/proposals/sim-design.md` §7).
 
@@ -129,7 +134,7 @@ the cell sizes in `tools/build-sim-data.ts`.
 - units: RNG reference outputs, trig accuracy and domain, stale handles, pool, stamping, the
   finite-state assert.
 
-`node tools/build-sim-data.ts --check` rebuilds the data and compares it with the committed file.
+`node tools/build-sim-data.ts --check` rebuilds every map's data and compares it with the committed files.
 
 Negative runs from S0 (each guard broken on purpose fails its check; S1a's are in `docs/systems/formations.md`):
 - the RNG left out of saves;

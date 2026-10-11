@@ -24,7 +24,7 @@ if (mode === 'fire') {
   for (let row = 0; row < 5; row++) for (let r = 0; r < 4; r++) { const z = -150 + row * 60; spawn(-115 - r * 20, z, E, 0); spawn(-15 + r * 20, z, -E, 1) }
 } else {
   const shapes = Object.keys(rs.types.infantry.formations)
-  for (let k = 0; k < 40; k++) spawn(-165 + (k % 7) * 33, -150 + Math.floor(k / 7) * 55, 0)
+  for (let k = 0; k < 40; k++) spawn(-120 + (k % 7) * 25, -80 + Math.floor(k / 7) * 40, 0)
   slots.forEach((i, k) => { const id = makeHandle(KIND_FORMATION, i, w.f.gen[i])
     cmd({ type: 'form', id, shape: shapes[k % shapes.length] }); cmd({ type: 'move', id, points: [[w.f.x[i], w.f.z[i] + 40]], append: true }) })
 }

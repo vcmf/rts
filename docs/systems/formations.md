@@ -91,7 +91,12 @@ per-company and per-bin rows of the world are strided by the most of any type (`
 **Terrain** (`terrain.ts`), from the build-time data:
 - the class and water depth on the 1 m grid;
 - the slope from the 1.79 m heightfield (level where the ruleset says so: a bridge deck);
-- per kind, the impassable cells and each cell's distance to the nearest one.
+- per kind, the impassable cells and each cell's distance to the nearest one or to the map's edge.
+
+**The map's edge** (S1e-1, #37): ground beyond it is impassable to every kind. Every test of a place's ground (the
+footprint gate, the wet bins, the look-ahead, a change's path) asks `impAt`, which answers so off the map, and the
+distance field counts the edge, so the quick rejects see it. A line marching into a corner halts with its flank
+on the map; a change that would put places off it is refused.
 
 `groundG` is class × water × slope along the direction of travel.
 

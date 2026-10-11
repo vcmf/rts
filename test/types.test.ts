@@ -3,16 +3,18 @@
 // and formations of different types (6, 4 and 8 companies) share the world's rows without touching each
 // other's. Most cases stand on an open, level field painted for the test.
 import { describe, it, expect } from 'vitest'
-import { Sim, data, small } from './fx.ts'
+import { Sim, data, small, battleData } from './fx.ts'
 import { levelled } from '../src/scenarios/s1c-firefight.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { buildTerrain, rebuildImpassable, compileRuleset, cellK, typeOf, menOf, filledSlots, occupied, slotIndex, MS_ROUTING, type Terrain, type Ruleset } from '../src/sim/index.ts'
 
 const N = Math.PI / 2
-// the shipped ruleset on a field of open, level, dry ground; `paint` sets a class or a depth on a box
+// the shipped ruleset on a field of open, level, dry ground (the 1.2 km battlefield, levelled: room for a column of
+// route of horses); `paint` sets a class or a depth on a box
+const OPEN = levelled(battleData)
 const crN = compileRuleset(napoleonic)
 function field(paint: (t: Terrain, cls: (name: string) => number) => void = () => {}): Terrain {
-  const t = buildTerrain(levelled(data), crN), names = Object.keys(napoleonic.terrain), open = names.indexOf('open')
+  const t = buildTerrain(OPEN, crN), names = Object.keys(napoleonic.terrain), open = names.indexOf('open')
   t.cls.fill(open); t.depth.fill(0)
   paint(t, name => names.indexOf(name)); rebuildImpassable(t)
   return t
@@ -20,7 +22,7 @@ function field(paint: (t: Terrain, cls: (name: string) => number) => void = () =
 function box(t: Terrain, x0: number, x1: number, z0: number, z1: number, set: (k: number) => void): void {
   for (let z = Math.ceil(z0); z <= z1; z++) for (let x = Math.ceil(x0); x <= x1; x++) set(cellK(t, x, z))
 }
-const sim = (t = field(), rs: Ruleset = napoleonic) => new Sim(1, rs, t)
+const sim = (t = field(), rs: Ruleset = napoleonic) => new Sim(1, rs, t, OPEN)
 const UNITS = [['infantry', 400], ['cavalry', 250], ['battery', 96]] as const
 
 describe('the types compile', () => {

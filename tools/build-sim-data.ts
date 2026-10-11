@@ -2,14 +2,15 @@
 // definition, once, in Node: the sim heightfield (1.79 m nodes) and the cost grid (7.16 m cells), as one
 // little-endian file in data/, with the 1 m terrain class and water depth grids (format 2). Its FNV-1a
 // hash is the data version the sim asserts on load.
-//   node tools/build-sim-data.ts           writes data/<map>.simdata and prints its version
-//   node tools/build-sim-data.ts --check   rebuilds in memory and fails if it differs from data/
+//   node tools/build-sim-data.ts           writes data/<map>.simdata for every map and prints their versions
+//   node tools/build-sim-data.ts --check   rebuilds them in memory and fails if one differs from data/
 // The output depends on this Node's Math functions; the committed file is the authority (§2), so a
 // different Node that builds different bytes is reported, not silently used.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { formationField, type MapDef } from '../maps/formation-field.ts'
+import { battlefield } from '../maps/battlefield.ts'
 import { fnv1a } from '../src/sim/hash.ts'
 import { DATA_MAGIC, DATA_FORMAT, hex } from '../src/sim/data.ts'
 
@@ -57,12 +58,16 @@ export function buildSimData(map: MapDef): Uint8Array {
 export const dataFile = (name: string): string => path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', name + '.simdata')
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const map = await formationField(), bytes = buildSimData(map), file = dataFile(map.name)
-  if (process.argv.includes('--check')) {
-    const old = fs.readFileSync(file), same = Buffer.compare(Buffer.from(bytes), old) === 0
-    console.log(`${map.name}: built ${hex(fnv1a(bytes))}, committed ${hex(fnv1a(new Uint8Array(old)))}${same ? ' (same)' : ' (DIFFERENT)'}`)
-    process.exit(same ? 0 : 1)
+  let ok = true
+  for (const map of [await formationField(), battlefield()]) {
+    const bytes = buildSimData(map), file = dataFile(map.name)
+    if (process.argv.includes('--check')) {
+      const old = fs.existsSync(file) ? fs.readFileSync(file) : Buffer.alloc(0), same = Buffer.compare(Buffer.from(bytes), old) === 0
+      console.log(`${map.name}: built ${hex(fnv1a(bytes))}, committed ${hex(fnv1a(new Uint8Array(old)))}${same ? ' (same)' : ' (DIFFERENT)'}`)
+      ok &&= same; continue
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes)
+    console.log(`${map.name}: ${bytes.length} bytes, data version ${hex(fnv1a(bytes))} → ${path.relative(process.cwd(), file)}`)
   }
-  fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes)
-  console.log(`${map.name}: ${bytes.length} bytes, data version ${hex(fnv1a(bytes))} → ${path.relative(process.cwd(), file)}`)
+  process.exit(ok ? 0 : 1)
 }

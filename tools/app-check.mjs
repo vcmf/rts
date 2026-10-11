@@ -91,6 +91,20 @@ const guns = [
   REPLAY,
 ]
 
+// the battle (S1e-1) on the 1.2 km battlefield: every formation deploys on the map; side 0's left-hand column forms
+// column of route and marches over the western ford; every man stands on the map throughout
+const ONMAP = '[...APP.layer.units.values()].every(u => u.men.every(m => !m.alive || (Math.abs(m.x) <= 600 && Math.abs(m.z) <= 600)))'
+const battle = [
+  ['wait', 1500], READY,
+  ['eval', `APP.view(0, 0, 0.6); APP.advance(5); \`DEPLOYED \${[...APP.w.f.alive].filter(a => a).length} on map \${${ONMAP}}\``],
+  ['shot', 'battle-0-deployed'],
+  ['eval', 'APP.select([3]); APP.form("march"); APP.advance(25); APP.march(-260, -40, false); APP.march(-260, 60, true); APP.select([]); APP.advance(180); "marching"'],
+  ['eval', 'APP.advance(180); "marching"'],
+  ['eval', `APP.advance(180); APP.view(-260, 0, 1.5); \`FORD column at z \${APP.w.f.z[3].toFixed(0)} on map \${${ONMAP}}\``],   // about 480 s from the ridge at the ordinary pace
+  ['shot', 'battle-1-ford'],
+  REPLAY,
+]
+
 // the brigade (S1c-2) played until a break has spread: two or more of the weaker side's lines (slots 3–5) out
 // of the fight (routing, rallying or shattered: state ≥ 3), in 3-minute steps
 const OUT = 'APP.w.f.mstate.slice(3, 6).filter(s => s >= 3).length'
@@ -114,7 +128,7 @@ async function run(scenario, steps) {
   const line = text.split('\n').find(l => l.startsWith('EVAL "REPLAY '))
   if (!line) { console.log('no replay exported'); return false }
   const { replay, hashes } = JSON.parse(JSON.parse(line.slice(5)).slice(7))
-  const bad = play(replay, data, cr, PAGE_SCENARIOS[scenario], hashes)
+  const bad = play(replay, dataOf(PAGE_SCENARIOS[scenario].map ?? 'formation-field'), cr, PAGE_SCENARIOS[scenario], hashes)
   console.log(bad ? `replay MISMATCH ${JSON.stringify(bad)}` : `replay: ${replay.log.length} commands, ${hashes.length} hashes reproduced in Node`)
   if (bad) return false
   const panel = text.match(/PANEL (\d+) (\d+)/)
@@ -123,16 +137,17 @@ async function run(scenario, steps) {
   if (scenario === 's1d-arms' && !(/TROT march unlimbered column unlimbered at z 80/.test(text) && /ARMS column unlimbered column unlimbered/.test(text))) { console.log('the arms did not change shape'); return false }
   if (scenario === 's1d-charge' && !(/CHARGE line state [35]/.test(text) && /SQUARE state [012], regiment phase 0 melee 0/.test(text))) { console.log('the charges did not break the line and fail on the square'); return false }
   if (scenario === 's1d-guns' && !/GUNS column lost [1-9]\d*, shots [1-9]/.test(text)) { console.log('the battery did not fire on the column'); return false }
+  if (scenario === 's1e-battle' && !(/DEPLOYED 16 on map true/.test(text) && /FORD column at z (\d+) on map true/.test(text) && +text.match(/FORD column at z (\d+)/)[1] > 20)) { console.log('the battle did not deploy on the map, or the column did not cross the ford'); return false }
   if (scenario === 's1b-field' && (!panel || panel[1] !== panel[2] || panel[1] === '0')) { console.log('panel buttons did not each log one command'); return false }
   return true
 }
 
-const data = loadSimData(new Uint8Array(fs.readFileSync('data/formation-field.simdata'))), cr = compileRuleset(napoleonic)
+const dataOf = name => loadSimData(new Uint8Array(fs.readFileSync(`data/${name}.simdata`))), cr = compileRuleset(napoleonic)
 const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' })
 let ok = false
 try {
   await sleep(2500)
-  ok = await run('s1b-field', drill) && await run('s1b-bench', bench) && await run('s1c-firefight', fight) && await run('s1c-brigade', brigadeFight) && await run('s1d-arms', arms) && await run('s1d-charge', charge) && await run('s1d-guns', guns)
+  ok = await run('s1b-field', drill) && await run('s1b-bench', bench) && await run('s1c-firefight', fight) && await run('s1c-brigade', brigadeFight) && await run('s1d-arms', arms) && await run('s1d-charge', charge) && await run('s1d-guns', guns) && await run('s1e-battle', battle)
 } finally { preview.kill() }
 console.log(ok ? 'app check: ok' : 'app check: FAILED')
 process.exit(ok ? 0 : 1)

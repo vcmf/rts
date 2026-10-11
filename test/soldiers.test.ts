@@ -1,10 +1,11 @@
 // The soldier layer (src/render/soldiers.ts) against the real sim: the prototype's soldier-level checks
 // (tools/formation-measure.js), the slot assignment, Face about, cost.
 import { describe, it, expect } from 'vitest'
-import { Sim, STREAM_X, longIt, ceiling } from './fx.ts'
+import { Sim, STREAM_X, longIt, ceiling, battleData, small } from './fx.ts'
 import { buildScene } from '../src/render/scene.ts'
 import { SoldierLayer } from '../src/render/soldiers.ts'
-import { occupied, advanceTick, type Meter } from '../src/sim/index.ts'
+import { occupied, advanceTick, buildTerrain, rebuildImpassable, compileRuleset, type Meter } from '../src/sim/index.ts'
+import { levelled } from '../src/scenarios/s1c-firefight.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 
 // the sim at 20 Hz, frames at 30 Hz, as the page runs them
@@ -40,7 +41,9 @@ describe('the soldier layer follows the sim', () => {
   // follow, as a battalion's do: these march straight, so the change's own error shows)
   it('troopers keep up at the walk and the trot and through their changes; gunners fall in once the battery has deployed', () => {
     const run = (unit: string, shape: string, men: number, to: string, sec: number) => {
-      const p = new Play(new Sim(1, napoleonic)), h = p.sim.spawn(-120, -150, 0, shape, men, 0, unit); p.frames(2)
+      // on the battlefield, levelled and open: a regiment's line is 157 m and its column of route 190 m
+      const d = levelled(battleData), t = buildTerrain(d, compileRuleset(napoleonic)); t.cls.fill(Object.keys(napoleonic.terrain).indexOf('open')); t.depth.fill(0); rebuildImpassable(t)
+      const p = new Play(new Sim(1, napoleonic, t, d)), h = p.sim.spawn(-120, -150, 0, shape, men, 0, unit); p.frames(2)
       p.sim.order({ type: 'move', id: h, points: [[-120, -40]], append: false }); const move = p.worst(40)
       p.sim.order({ type: 'form', id: h, shape: to }); const change = p.worst(sec); p.frames(20); const after = p.layer.slotError()
       expect(p.sim.busy(h)).toBe(false); expect(p.men(h).filter(m => m.alive).length).toBe(men); expect(p.layer.units.get(p.sim.slot(h))!.type).toBe(unit); expect(p.layer.units.get(p.sim.slot(h))!.figure).toBe(unit === 'cavalry' ? 'mounted' : 'crewed')
@@ -68,7 +71,8 @@ describe('the soldier layer follows the sim', () => {
 
 describe('who stands where', () => {
   it('after casualties the living equal the sim\'s men, one per filled slot', () => {
-    const p = new Play(), h = p.sim.spawn(-20, -40, 0); p.frames(1)
+    // it must not break: losses do not move its morale (shattered at 20 of 100, it would run off the field, S1e-1)
+    const p = new Play(new Sim(1, { ...small, morale: { ...small.morale, losses: 0, recent: 0 } })), h = p.sim.spawn(-20, -40, 0); p.frames(1)
     for (let n = 0; n < 5; n++) { p.sim.order({ type: 'debug-kill', id: h, men: 10 }); p.frames(3) }
     p.sim.order({ type: 'debug-kill', id: h, men: 30 }); p.frames(5)
     p.sim.order({ type: 'form', id: h, shape: 'square' }); p.frames(110)
@@ -148,7 +152,7 @@ describe.skipIf(process.env.CI)('cost', () => {
   it('40 battalions of 400 changing shape and marching: sim and soldier layer per 1/60 s frame; 40 × 800 reported', () => {
     const run = (sim: Sim, men: number) => {
       const p = new Play(sim), shapes = Object.keys(p.sim.w.cr.rs.types.infantry.formations)
-      for (let k = 0; k < 40; k++) { const h = p.sim.spawn(-165 + (k % 7) * 33, -150 + Math.floor(k / 7) * 55, 0, 'column', men)
+      for (let k = 0; k < 40; k++) { const h = p.sim.spawn(-120 + (k % 7) * 25, -80 + Math.floor(k / 7) * 40, 0, 'column', men)
         p.sim.cmd({ type: 'form', id: h, shape: shapes[k % shapes.length] }); p.sim.cmd({ type: 'move', id: h, points: [[p.sim.x(h), p.sim.z(h) + 40]], append: true }) }
       p.frames(30)
       // three windows of 120 frames, judged on the best: a busy machine slows a window, never speeds one up

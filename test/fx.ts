@@ -19,6 +19,9 @@ export const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..'
 export const dataBytes = (): Uint8Array => new Uint8Array(fs.readFileSync(path.join(root, 'data', 'formation-field.simdata')))
 export const GOLDEN_DATA_VERSION = 0x6ae782ed
 export const data: SimData = loadSimData(dataBytes(), GOLDEN_DATA_VERSION)
+// the S1e battlefield (1.2 km): tests that need room paint it open (levelled) instead of the 360 m field
+export const BATTLE_DATA_VERSION = 0xad83ce9c
+export const battleData: SimData = loadSimData(new Uint8Array(fs.readFileSync(path.join(root, 'data', 'battlefield.simdata'))), BATTLE_DATA_VERSION)
 // (its morale reaches are S1c-2's: they scale with the frontage, napoleonic.ts)
 export const small: Ruleset = { ...withBlock(napoleonic, 'infantry', { companies: 4, files: 9, bins: 3 }), name: `${napoleonic.name}, the S1a block`,
   morale: { ...napoleonic.morale, contagion: { ...napoleonic.morale.contagion, front: 200, back: 100 }, support: { ...napoleonic.morale.support, reach: 100 } } }
@@ -39,9 +42,9 @@ export class Sim {
   w: World
   dropped: Dropped[] = []
   private ctx
-  constructor(seed = 1, ruleset?: Ruleset, terrain?: Terrain) {
+  constructor(seed = 1, ruleset?: Ruleset, terrain?: Terrain, d: SimData = data) {   // d: the map's data (its heights), the field's unless given
     const c = ruleset ? compileRuleset(ruleset) : cr
-    this.w = makeWorld(data, c, seed, true, terrain ?? (ruleset ? undefined : baseTerrain))
+    this.w = makeWorld(d, c, seed, true, terrain ?? (ruleset ? undefined : baseTerrain))
     this.ctx = mkPlaces(this.w)
   }
   get t(): number { return this.w.meta[M_TICK] / TICK_HZ }

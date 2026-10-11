@@ -372,7 +372,7 @@ const TICK_BUDGET = 3
 describe.skipIf(process.env.CI)('cost', () => {
   it('40 battalions of 400 of every shape, moving: time per tick (target 2 ms, sim-design §16)', () => {
     const s = new Sim(1, napoleonic), shapes = Object.keys(napoleonic.types.infantry.formations), hs: number[] = []
-    for (let k = 0; k < 40; k++) hs.push(s.spawn(-165 + (k % 7) * 33, -150 + Math.floor(k / 7) * 55, 0, 'column', 400))
+    for (let k = 0; k < 40; k++) hs.push(s.spawn(-120 + (k % 7) * 25, -80 + Math.floor(k / 7) * 40, 0, 'column', 400))
     hs.forEach((h, k) => { s.cmd({ type: 'form', id: h, shape: shapes[k % shapes.length] }); s.cmd({ type: 'move', id: h, points: [[s.x(h) + ((k * 7) % 30) - 15, s.z(h) + 40]], append: true }) })
     s.advance(30)
     const t0 = process.hrtime.bigint(); s.advance(10); const ms = Number(process.hrtime.bigint() - t0) / 1e6 / 200

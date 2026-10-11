@@ -9,7 +9,7 @@ import { type World, M_TICK, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, O_CHARGE,
 import type { ShapeLayout, Placement, TypeTable } from './ruleset.ts'
 import { rot2, slotIndex, MAX_COMPANIES } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
-import { cellK, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
+import { cellK, impAt, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
 
@@ -101,8 +101,8 @@ function wetSlots(w: World, i: number, c: number, ctx: Places, out: Bits): Bits 
   for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) {
     if (!occupied(w, i, c, r, q)) continue
     const s = base + r * g.files + q
-    if (p) { const lx = U.slotLX[s] * p.kx, lz = U.slotLZ[s] * p.kz; if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) setBit(out, s - base) }
-    else { placeAtSlot(ctx, s, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) setBit(out, s - base) }
+    if (p) { const lx = U.slotLX[s] * p.kx, lz = U.slotLZ[s] * p.kz; if (impAt(w.terrain, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) setBit(out, s - base) }
+    else { placeAtSlot(ctx, s, pt); if (impAt(w.terrain, imp, pt[0], pt[1])) setBit(out, s - base) }
   }
   return out
 }
@@ -360,7 +360,7 @@ export function wetBins(w: World, i: number, out: Bits): Bits {
       const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, wbPose), ca = cos(p.a), sa = sin(p.a)
       if (clearWithin(T, impd, p.x, p.z, U.slotReach * Math.max(1, p.kx, p.kz))) continue
       for (let k = Fl.at[a + c], e = Fl.at[a + c + 1]; k < e; k++) { const s = Fl.s[k], lx = U.slotLX[s] * p.kx, lz = U.slotLZ[s] * p.kz
-        if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) { setBit(out, c * B); break } }
+        if (impAt(w.terrain, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) { setBit(out, c * B); break } }
     }
     return out
   }
@@ -369,7 +369,7 @@ export function wetBins(w: World, i: number, out: Bits): Bits {
     if (companyClear(ctx, c, impd)) continue
     for (let k = Fl.at[a + c], e = Fl.at[a + c + 1]; k < e; k++) {
       const s = Fl.s[k], j = c * B + L.of[s]; if (hasBit(out, j)) continue
-      placeAtSlot(ctx, s, pt); if (imp[cellK(T, pt[0], pt[1])]) setBit(out, j)
+      placeAtSlot(ctx, s, pt); if (impAt(T, imp, pt[0], pt[1])) setBit(out, j)
     }
   }
   return out
@@ -425,7 +425,7 @@ function sampleBins(w: World, i: number, pace: number, V0: number): void {
     placeAtSlot(ctx, s, pt); const px = pt[0], pz = pt[1]
     if (pt[2] !== dir) { dir = pt[2]; dx = sin(dir); dz = cos(dir) }
     const T = w.terrain, cell = cellK(T, px, pz), gg = groundGAt(T, cell, kind, dx, dz)   // groundG, onRoad, groundQ from one cell lookup
-    if (gg <= 0 || imp[cellK(T, px + dx * look, pz + dz * look)]) blkTmp[j]++; else { gTmp[j] += 1 / gg; nTmp[j]++ }
+    if (gg <= 0 || impAt(T, imp, px + dx * look, pz + dz * look)) blkTmp[j]++; else { gTmp[j] += 1 / gg; nTmp[j]++ }
     if (road && !onRoadAt(T, cell)) road = false
     qTmp[j] = Math.min(qTmp[j], groundQAt(T, cell, pace))
   }
@@ -568,7 +568,7 @@ function changeWet(w: World, i: number): boolean {
     for (let c = 0; c < C; c++) {
       const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, ccPose), ca = cos(p.a), sa = sin(p.a)
       for (let s = c * g.ranks * g.files, e = s + g.ranks * g.files; s < e; s++) { const lx = U.slotLX[s] * p.kx, lz = U.slotLZ[s] * p.kz
-        if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) return true }
+        if (impAt(w.terrain, imp, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)) return true }
     }
   }
   return false

@@ -3,13 +3,17 @@
 // re-pack like the small block the terrain tests use, past the old 32-bit masks (48 and 90 bins, 69 and 135
 // slots a company).
 import { describe, it, expect } from 'vitest'
-import { Sim, ceiling, STREAM_X } from './fx.ts'
+import { Sim, ceiling, STREAM_X, battleData } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { removeMan, anyWet, wetBins, aimOf, type Ruleset, withBlock } from '../src/sim/index.ts'
+import { removeMan, anyWet, wetBins, aimOf, buildTerrain, rebuildImpassable, compileRuleset, type Ruleset, withBlock } from '../src/sim/index.ts'
+import { levelled } from '../src/scenarios/s1c-firefight.ts'
 import { mkBits, hasBit } from '../src/sim/bits.ts'
 
 const SHIPPED = { rs: napoleonic, men: 400 }, CEILING = { rs: ceiling, men: 810 }
 const both = [['400', SHIPPED], ['810', CEILING]] as const
+// the battlefield, levelled and open: room for every shape of a battalion of 810 (the 360 m field's edge holds them)
+const OPEN = levelled(battleData)
+const roomy = (rs: Ruleset): Sim => { const t = buildTerrain(OPEN, compileRuleset(rs)); t.cls.fill(Object.keys(rs.terrain).indexOf('open')); t.depth.fill(0); rebuildImpassable(t); return new Sim(1, rs, t, OPEN) }
 const companies = (n: number): Ruleset => withBlock({ ...napoleonic, name: `${n} companies` }, 'infantry', { companies: n })
 
 describe('the blocks', () => {
@@ -37,7 +41,7 @@ describe('the blocks', () => {
 
 describe.each(both)('battalions of %s', (_, { rs, men }) => {
   it('change through every shape, march and Face about, keeping their men and their feet dry', () => {
-    const s = new Sim(1, rs), h = s.spawn(-60, -150, 0, 'line', men)
+    const s = roomy(rs), h = s.spawn(-60, -150, 0, 'line', men)
     for (const shape of ['column', 'square', 'line', 'march', 'column', 'line']) {
       s.order({ type: 'form', id: h, shape }); s.until(() => s.busy(h), 240)
       expect(s.shape(h)).toBe(shape)
@@ -49,7 +53,7 @@ describe.each(both)('battalions of %s', (_, { rs, men }) => {
     }
   })
   it('a march column follows its trail through a 90° turn (the ring holds its depth)', () => {
-    const s = new Sim(1, rs), h = s.spawn(-120, -150, 0, 'march', men)
+    const s = roomy(rs), h = s.spawn(-120, -150, 0, 'march', men)
     s.order({ type: 'move', id: h, points: [[-120, -40], [-20, -40]], append: false }); s.until(() => s.busy(h), 600)
     expect(s.busy(h)).toBe(false); expect(Math.hypot(s.x(h) + 20, s.z(h) + 40)).toBeLessThan(1)
     expect(s.men(h)).toBe(men); expect(s.placesInDeep(h)).toBe(0)

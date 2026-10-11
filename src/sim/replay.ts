@@ -12,7 +12,7 @@ export const SIM_VERSION = 's1d.3'   // bumped when the state or a rule changes:
 
 export interface HashPoint { tick: number; hash: number; sections: [string, number][] }
 export interface Replay { simVersion: string; dataVersion: number; ruleset: number; scenario: string; seed: number; ticks: number; log: Stamped[] }
-export interface Scenario { name: string; setup(w: World): void }   // setup issues the scenario's own commands (not logged)
+export interface Scenario { name: string; setup(w: World): void; map?: string }   // setup issues the scenario's own commands (not logged); map: the data it is placed on (the formation field when left out)
 
 // runs a scenario for `ticks`, issuing `script(w, tick)` commands as external (logged) ones
 export function record(data: SimData, cr: Compiled, scenario: Scenario, seed: number, ticks: number,
