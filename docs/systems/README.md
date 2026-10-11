@@ -23,3 +23,4 @@ PR that changes it; the design that led to it stays in `docs/proposals/` and the
 | Fire and morale | `docs/systems/fire-morale.md` | built (S1c-1): fire by company, loss-driven morale, rout |
 | Charges, melee and the square | `docs/systems/melee.md` | built (S1d-2) |
 | Artillery: roundshot and canister | `docs/systems/artillery.md` | built (S1d-3) |
+| Sides, the scenario's plan and the end | `docs/systems/sides.md` | built (S1e-2) |

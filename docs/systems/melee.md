@@ -173,9 +173,6 @@ The step is skipped when no charging type is in the fight and no battalion is on
 
 ## Open questions
 
-- **A battalion that breaks while changing shape** finishes the change before it runs (S1c's rule). With the
-  square, it is common now: a line caught forming square breaks and stands for up to a minute while the
-  pursuit rides it down ([#39](https://github.com/vcmf/rts/issues/39)).
 - **A caught column rarely breaks:** column to square takes 60 s, so a column is half braced when the horses
   arrive, and the regiment turns away or recoils once the square closes. Whether that is too safe is for S1e's
   playtests.

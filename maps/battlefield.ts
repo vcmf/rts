@@ -2,8 +2,8 @@
 // (tools/build-sim-data.ts): an invented 1.2 km square of lowland, written as build-time formulas (Math.* is fine
 // here: the output is data, and the committed file is the authority), with the sim's exact-operation trigonometry
 // so the bytes are the same on every machine. Two low ridges face each other across a
-// valley about 560 m apart; a stream meanders along the valley, too deep to wade but at two fords, with a bridge
-// where the road crosses and a marsh in one bend; a wood on each side's flank, fields with hedges, rough ground
+// valley about 560 m apart; a stream meanders along the valley, wadeable by men and horses but in its pools, by guns
+// only at two fords, with a bridge where the road crosses and a marsh in one bend; a wood on each side's flank, fields with hedges, rough ground
 // on the steeper slopes. x is east, z north; side 0 holds the southern ridge, side 1 the northern.
 // The class names are the Napoleonic ruleset's terrain classes; the map names no rule. When the map format
 // (docs/proposals/map-format.md) lands, this map becomes its first file.
@@ -62,11 +62,13 @@ function classAt(x: number, z: number): number {
   if (Math.sqrt(gx * gx + gz * gz) > 0.14) return C('rough')
   return C('open')
 }
-// water depth in metres: 1.4 in the channel (no kind wades it), 0.5 at the fords, shallower to the banks
+// water depth in metres, shallower to the banks: 0.8 in most of the channel (men and horses wade it, slowly; guns
+// cannot), 1.4 in its pools (no kind wades them), 0.5 at the fords (every kind)
+export const pool = (x: number): boolean => Math.abs(x) > 420 && sin(x / 30) > 0   // out on the flanks, clear of the lines' advance
 function depthAt(x: number, z: number): number {
   const ds = Math.abs(z - streamZ(x)); if (ds > STREAM_HALF || Math.abs(x - roadX(z)) <= ROAD_HALF) return 0
-  const deep = FORDS.some(f => Math.abs(x - f) <= FORD_HALF) ? 0.5 : 1.4
-  return deep * (1 - (ds / STREAM_HALF) ** 2 * 0.5)
+  const deep = FORDS.some(f => Math.abs(x - f) <= FORD_HALF) ? 0.5 : pool(x) ? 1.4 : 0.8
+  return deep * (1 - sq(ds / STREAM_HALF) * 0.5)
 }
 
 export function battlefield(): MapDef {

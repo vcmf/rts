@@ -1,0 +1,55 @@
+// A scenario's plan (docs/systems/sides.md; docs/plans/active/s1e2-sides.md; sim-design §12: "the enemy's plan is
+// scripted per scenario"): timed commands for the formations of the side it scripts, step 3 of the tick. A plan is
+// attached to a world like its terrain (`attachScenario`): the steps are the scenario's, and which have run follows
+// from the tick, so saves and replays need nothing more. Its commands pass the same validation as a player's, are
+// applied directly and are not logged: a replay re-derives them (sim-design §4).
+//
+// A step names its formation by the order the scenario spawned it in (`unit`): a fresh world hands out slots in
+// order at generation 0, so the handle is fixed. A target (a charge's, a preferred fire target) names an enemy
+// unit the same way.
+import { type World, M_TICK, M_END, M_WINNER, END_NONE, END_SIDE0, END_SIDE1, END_DRAW, outOfFight } from './world.ts'
+import { menOf } from './formation.ts'
+import { makeHandle, KIND_FORMATION } from './handle.ts'
+import { applyNow, type Command, type Dropped } from './commands.ts'
+import { TICK_HZ } from './time.ts'
+
+// a step's command: any command for one formation, its `id` (and any `target`) given as unit numbers
+export type PlanCommand = Command extends infer C ? C extends { id: number } ? Omit<C, 'id'> : never : never
+export interface PlanStep { at: number; unit: number; cmd: PlanCommand }   // at: seconds from the start
+// what a world needs of its scenario beyond its setup: the plan and the time limit
+export interface ScenarioRules { plan?: PlanStep[]; minutes?: number }
+
+export const unitHandle = (unit: number): number => makeHandle(KIND_FORMATION, unit, 0)
+export function attachScenario(w: World, s: ScenarioRules): void {
+  w.plan = s.plan ?? []; w.limit = s.minutes ? Math.round(s.minutes * 60 * TICK_HZ) : 0
+}
+
+// step 3: the steps due this tick, in plan order; a dropped one is reported with sequence −1
+export function planStep(w: World, dropped: Dropped[]): void {
+  const t = w.meta[M_TICK] + 1
+  for (const s of w.plan) {
+    if (Math.round(s.at * TICK_HZ) !== t) continue
+    const c = { ...s.cmd, id: unitHandle(s.unit) } as Command & { target?: number }
+    if ((c.type === 'charge' || c.type === 'fire') && c.target !== undefined && c.target >= 0) c.target = unitHandle(c.target)
+    const why = applyNow(w, c)
+    if (why) dropped.push({ tick: t, seq: -1, reason: `plan: ${why}` })
+  }
+}
+
+// step 13, the end (S1e-2): a side is broken when the men it has in the fight fall to end.broken of the men it
+// spawned (out of the fight: gone, routing, rallying, shattered, left the field); its enemy wins, and two broken
+// on one tick is a draw. At the scenario's time limit the side with the larger share in the fight wins, a draw
+// within end.margin. Decided once; the battle runs on after it
+export function endStep(w: World): void {
+  if (w.meta[M_END]) return
+  const f = w.f, E = w.cr.rs.end, t = w.meta[M_TICK] + 1, inFight = [0, 0]
+  for (let i = 0; i < f.alive.length; i++) if (f.alive[i] && !outOfFight(f.mstate[i])) inFight[f.side[i]] += menOf(w, i)
+  const share = [0, 1].map(s => w.sides.spawned[s] ? inFight[s] / w.sides.spawned[s] : 1)
+  const broken = share.map((v, s) => w.sides.spawned[s] > 0 && v <= E.broken)
+  let r = END_NONE
+  if (broken[0] && broken[1]) r = END_DRAW
+  else if (broken[0]) r = END_SIDE1
+  else if (broken[1]) r = END_SIDE0
+  else if (w.limit && t >= w.limit) r = Math.abs(share[0] - share[1]) <= E.margin ? END_DRAW : share[0] > share[1] ? END_SIDE0 : END_SIDE1
+  if (r !== END_NONE) { w.meta[M_END] = t; w.meta[M_WINNER] = r }
+}

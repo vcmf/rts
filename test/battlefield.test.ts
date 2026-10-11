@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import { Sim, battleData, BATTLE_DATA_VERSION } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { s1eBattle } from '../src/scenarios/s1e-battle.ts'
-import { streamZ, roadX, FORDS } from '../maps/battlefield.ts'
+import { streamZ, roadX, FORDS, pool } from '../maps/battlefield.ts'
 import { MAP_VERSIONS } from '../src/scenarios/maps.ts'
 import { buildTerrain, compileRuleset, advanceTick, issue, cellK, heightAt, impAt, formationSlot, formationHandle, typeOf, MS_ROUTING, MS_SHATTERED } from '../src/sim/index.ts'
 
@@ -19,9 +19,11 @@ describe('the map', () => {
     expect(MAP_VERSIONS.battlefield).toBe(BATTLE_DATA_VERSION)
     expect(battleData.classes).toEqual(names)
   })
-  it('the stream is impassable to every kind but at the fords and the bridge; horses wade the fords, so do men', () => {
-    for (const x of [-450, -100, 200, 500]) for (const k of ['line', 'column', 'horse', 'guns']) expect(impAt(T, T.imp[kind(k)], x, streamZ(x))).toBe(1)
-    for (const x of FORDS) for (const k of ['line', 'column', 'horse']) expect(impAt(T, T.imp[kind(k)], x, streamZ(x))).toBe(0)
+  it('men and horses wade the stream but in its pools; guns cross it only at the fords and the bridge', () => {
+    const at = (x: number, k: string) => impAt(T, T.imp[kind(k)], x, streamZ(x))
+    for (const x of [-100, 0, 200]) { expect(pool(x)).toBe(false); expect(['line', 'column', 'horse', 'guns'].map(k => at(x, k))).toEqual([0, 0, 0, 1]) }
+    const deep = [-600, -500, -450, 450, 500, 590].find(x => pool(x))!; expect(['line', 'column', 'horse', 'guns'].map(k => at(deep, k))).toEqual([1, 1, 1, 1])
+    for (const x of FORDS) for (const k of ['line', 'column', 'horse', 'guns']) expect(at(x, k)).toBe(0)
     const bx = roadX(streamZ(60)); expect(cls(bx, streamZ(bx))).toBe('bridge')
   })
   it('two ridges face each other across the valley', () => {

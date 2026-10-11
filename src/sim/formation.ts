@@ -256,6 +256,15 @@ function changeEase(w: World, i: number, c: number, t: number): number {
   const f = w.f, u0 = (t - f.tStart[i] - f.tDelay[i * w.cr.maxC + c]) / f.tDur[i], u = Math.min(1, Math.max(0, u0))
   return u * u * (3 - 2 * u)
 }
+// a change cut short where it stands (a battalion that breaks, #39): it takes whichever of its two shapes the change
+// is nearer to, at once (its places jump by up to half the change; the soldier layer's men walk the difference)
+export function cutChange(w: World, i: number): void {
+  const f = w.f; if (!f.trans[i]) return
+  if (changeProgress(w, i, now(w)) >= 0.5) f.shape[i] = f.tShape[i]
+  f.trans[i] = 0
+  if (layoutOf(w, i).def.trail) resetTrail(w, i)
+  if (!layoutOf(w, i).def.closeAcross) rebalance(w, i)
+}
 // how far a formation changing shape is through the change at time t: its companies' eased progress, on
 // average (0..1; 1 when not changing)
 export function changeProgress(w: World, i: number, t: number): number {
@@ -719,7 +728,7 @@ export function formationTick(w: World, i: number): void {
 function formationStep(w: World, i: number): void {
   const f = w.f, o = w.ord, NB = typeOf(w, i).NB, NS = w.cr.maxNB, C = typeOf(w, i).C, CS = w.cr.maxC, t = now(w)
   f.px[i] = f.x[i]; f.pz[i] = f.z[i]; f.ph[i] = f.heading[i]; f.omega[i] = 0
-  if (f.trans[i]) {   // no marching while the companies change places; a new shape order interrupts the change (a router too: issue #39)
+  if (f.trans[i]) {   // no marching while the companies change places; a new shape order interrupts the change (a battalion that breaks cuts it short: cutChange)
     f.vx[i] = 0; f.vz[i] = 0
     const n = f.ordHead[i]
     if (n >= 0 && o.type[n] === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }

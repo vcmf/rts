@@ -15,8 +15,8 @@ layer (`docs/systems/formations.md`) with an era ruleset passed in at creation (
 ```
 issue(cmd) ──► stamped for tick+1 (seq, 1 cm) ──► pending ──┐   external commands also go to the log
                                                            ▼
-advanceTick: 1 commands · 4 standing behaviour · 5–6 formations · 8 fire · 9 artillery · 10 charges and melee ·
-             11–12 casualties and morale · 14 reap · tick++ · 15 hash (every 20)
+advanceTick: 1 commands · 3 the plan · 4 standing behaviour · 5–6 formations · 8 fire · 9 artillery · 10 charges and melee ·
+             11–12 casualties and morale · 13 the end · 14 reap · tick++ · 15 hash (every 20)
                                                            │
             serialize(world) ── saves, the state hash, per-section hashes for replay diagnostics
 ```

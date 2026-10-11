@@ -13,13 +13,16 @@ import { type Handle, KIND_FORMATION, handleKind, handleIndex, handleGen, makeHa
 import type { Places, Arc, GateBits, Filled } from './formation.ts'
 import type { FireGeo } from './fire.ts'
 import type { Melee } from './melee.ts'
+import type { PlanStep } from './plan.ts'
 
 export const MAX_FORMATIONS = 128
 export const MAX_ORDERS = 2048
 export const SIDES = 2
 
 // meta words
-export const M_TICK = 0, M_FREE = 1, M_DATA = 2, M_SEQ = 3, M_RULES = 4, M_SEED = 5, M_LEN = 6   // M_SEED: keys the keyed draws (rng.ts)
+export const M_TICK = 0, M_FREE = 1, M_DATA = 2, M_SEQ = 3, M_RULES = 4, M_SEED = 5, M_END = 6, M_WINNER = 7, M_LEN = 8   // M_SEED: keys the keyed draws (rng.ts); M_END: the tick the battle ended (0: not yet), M_WINNER: END_* (S1e-2)
+export const END_NONE = 0, END_SIDE0 = 1, END_SIDE1 = 2, END_DRAW = 3
+export const END_RESULTS = ['', 'side 0 wins', 'side 1 wins', 'a draw']
 
 export interface Formations {
   alive: Uint8Array; gen: Int32Array; side: Uint8Array
@@ -70,9 +73,9 @@ export interface Formations {
   // none), the shape it formed square from (+1, 0 none), and an order given in this spell (it stands down)
   alertAt: Int32Array; alertSince: Int32Array; autoFrom: Int32Array; refugeOff: Uint8Array
 }
-// per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it), and the men of its shattered
-// formations that left the field at the map's edge (S1e-1)
-export interface Sides { rearX: Float64Array; rearZ: Float64Array; left: Int32Array }
+// per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it), the men of its shattered
+// formations that left the field at the map's edge (S1e-1), and the men it spawned (S1e-2: the end condition)
+export interface Sides { rearX: Float64Array; rearZ: Float64Array; left: Int32Array; spawned: Int32Array }
 export const FIRE_AT_WILL = 0, FIRE_HOLD = 1
 export const SHOT_NONE = 0, SHOT_RAY = 1, SHOT_CONE = 2
 export const MS_STEADY = 0, MS_SHAKEN = 1, MS_WAVERING = 2, MS_ROUTING = 3, MS_RALLYING = 4, MS_SHATTERED = 5
@@ -103,6 +106,9 @@ export interface World {
   ord: Orders
   pending: Stamped[]
   data: SimData; cr: Compiled; terrain: Terrain
+  // a scenario's plan for the side it scripts and its time limit (S1e-2, plan.ts): attached like the terrain, not
+  // state (the steps are the scenario's, and which have run follows from the tick)
+  plan: PlanStep[]; limit: number   // limit: the tick the battle ends at, 0 none
   debug: boolean
   scratch: { places?: Places; arc?: Arc; gateBits?: GateBits; filled?: Filled; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverse?: boolean; lost?: Int32Array; mstateBefore?: Uint8Array; menNow?: Int32Array; melee?: Melee; fireGeoTick?: number }   // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
 }
@@ -131,7 +137,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
   for (let k = 0; k < M; k++) ord.next[k] = k + 1 < M ? k + 1 : -1
   const free = new Int32Array(N)
   for (let i = 0; i < N; i++) free[i] = N - 1 - i   // slot 0 is handed out first
-  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, sides: { rearX: f64(SIDES), rearZ: f64(SIDES), left: i32(SIDES) }, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), debug, scratch: {} }
+  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, sides: { rearX: f64(SIDES), rearZ: f64(SIDES), left: i32(SIDES), spawned: i32(SIDES) }, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), plan: [], limit: 0, debug, scratch: {} }
   w.meta[M_FREE] = N
   w.meta[M_DATA] = data.version | 0
   w.meta[M_RULES] = cr.hash | 0

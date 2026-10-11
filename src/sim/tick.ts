@@ -17,6 +17,7 @@ import { fireStep, casualtiesStep } from './fire.ts'
 import { moraleStep } from './morale.ts'
 import { meleeStep, standingStep } from './melee.ts'
 import { artilleryStep } from './artillery.ts'
+import { planStep, endStep } from './plan.ts'
 
 // a company of formation i with men stands within morale.leave of the map's edge: any corner of its block (a line
 // meeting the edge at an angle, a square backing into it, or a column of route's tail reaches it before the anchor)
@@ -46,7 +47,8 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
   let dropped: Dropped[] = []
   const departed: TickResult['departed'] = []
   step('1 commands', () => { dropped = applyCommands(w, t) })
-  // 2 commanders · 3 enemy AI: S2
+  // 2 commanders: S2
+  step('3 the scenario\'s plan', () => { planStep(w, dropped) })
   step('4 standing behaviour: refuge against a charge', () => { standingStep(w) })
   step('5–6 formations: orders, changes, movement', () => { for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i]) formationTick(w, i) })
   // 7 vision: S2
@@ -66,7 +68,8 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     const rev = w.scratch.reverse === true
     for (let k = 0; k < MAX_FORMATIONS; k++) { const i = rev ? MAX_FORMATIONS - 1 - k : k; if (w.f.alive[i]) moraleStep(w, i, lost[i]) }
   })
-  // 13 smoke: S2
+  // 13: the end (S1e-2); smoke: S2
+  step('13 the end', () => { endStep(w) })
   // 14: formations with no men are reaped, and shattered formations at the map's edge leave the field: reaped,
   // their men counted to their side (S1e-1). A router there stays: it may still rally
   step('14 reap', () => { for (let i = 0; i < MAX_FORMATIONS; i++) {

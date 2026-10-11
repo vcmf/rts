@@ -124,6 +124,7 @@ export interface Ruleset {
   fire: FireDef
   morale: MoraleDef
   melee: MeleeDef
+  end: { broken: number; margin: number }   // S1e-2: a side is broken at this share of its spawned men in the fight; at a time limit, shares within margin draw
 }
 
 export interface ShapeLayout {
@@ -195,7 +196,7 @@ export const slotIndex = (g: Geometry, c: number, r: number, f: number): number 
 function rulesetHash(rs: Ruleset): number {
   const types = Object.keys(rs.types).map(t => { const u = rs.types[t], geo = u.geometry
     return [t, geo, Object.keys(u.formations).sort().map(n => { const d = u.formations[n]; return [n, d.kind, d.pace, d.roadPace ?? '', !!d.trail, !!d.closeAcross, d.step ?? null, !!d.braced, d.place(geo)] }), u.changeTime, u.defaultChangeTime, u.start, u.fires, u.figure, u.charge ?? null, u.refuge ?? '', u.artillery ?? null] })
-  const text = JSON.stringify([rs.name, types, rs.pace, rs.q, rs.start, rs.slopeK, rs.terrain, rs.water, rs.orders, rs.disorder, rs.faceTime, rs.dressTime, rs.fire, rs.morale, rs.melee])
+  const text = JSON.stringify([rs.name, types, rs.pace, rs.q, rs.start, rs.slopeK, rs.terrain, rs.water, rs.orders, rs.disorder, rs.faceTime, rs.dressTime, rs.fire, rs.morale, rs.melee, rs.end])
   return fnv1a(new TextEncoder().encode(text))
 }
 

@@ -45,7 +45,7 @@ export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
 // a spawn's quality: −1 marks none given (the ruleset's), any negative given becomes −2 (refused);
 // positions to 1 cm, angles to 0.1 mrad; an unknown type or a move with too many points is kept as it is
 // and dropped when applied
-function quantiseCommand(c: Command): Command {
+export function quantiseCommand(c: Command): Command {
   const qa = (a: number) => Math.round(a * 10000) / 10000
   switch (c.type) {
     case 'move': return { type: 'move', id: c.id | 0, points: !wellFormed(c.points) || c.points.length > MAX_POINTS ? c.points : c.points.map(([x, z]) => [quantise(x), quantise(z)]), append: !!c.append }
@@ -107,6 +107,8 @@ function playerOrdered(w: World, i: number): void {
   f.autoFrom[i] = 0; if (f.alertAt[i]) f.refugeOff[i] = 1
 }
 
+// applies a command now, as the tick applies a stamped one (plan.ts: a scenario's plan); '' or why it was dropped
+export const applyNow = (w: World, c: Command): string => apply(w, quantiseCommand(c))
 function apply(w: World, c: Command): string {
   const f = w.f, o = w.ord, cr = w.cr
   if (c.type === 'debug-spawn') {
@@ -123,7 +125,7 @@ function apply(w: World, c: Command): string {
     const i = w.free[--w.meta[M_FREE]]
     f.alive[i] = 1; f.side[i] = c.side; f.type[i] = type; f.shape[i] = shape; f.style[i] = cr.presetIndex(cr.rs.start.orders); f.drill[i] = 1
     f.x[i] = c.x; f.z[i] = c.z; f.heading[i] = c.heading; f.px[i] = c.x; f.pz[i] = c.z; f.ph[i] = c.heading
-    f.men[i * cr.maxC] = c.men; rebalance(w, i)
+    f.men[i * cr.maxC] = c.men; rebalance(w, i); w.sides.spawned[c.side] += c.men
     resetTrail(w, i)
     spawnFire(w, i); spawnMorale(w, i, q); f.fireMode[i] = mode
     return ''
