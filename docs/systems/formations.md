@@ -213,4 +213,6 @@ Negative runs, each failing its tests:
 
 ## Open questions
 
+- **One slope curve for every kind** (S1d-1): horses and guns climb on the infantry's curve. A curve per kind
+  (and the draught test for guns on slopes) waits for horse artillery.
 - The soldier layer's checks (settling in the wood, slot error) are in `test/soldiers.test.ts` (S1b).

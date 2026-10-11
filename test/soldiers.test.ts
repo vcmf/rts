@@ -122,7 +122,7 @@ describe('at 8× (0.2 s soldier steps)', () => {
 // timing budgets: skipped on CI, whose shared runners are too noisy for millisecond budgets. The benches use
 // the shipped ruleset: 40 battalions of 400 (decision 0018), in columns so they fit the 360 m field. Firing at
 // the halt meets the 4 ms budget for sim and soldier layer together (S1c-5: 0.7 ms). With all 16,000 men
-// marching it does not (docs/known-issues.md): that test holds the measured cost with a margin,
+// marching it does not (issue #36): that test holds the measured cost with a margin,
 // MARCH_BUDGET, so it cannot grow unnoticed. vitest runs this code about 40% slower than plain Node (the
 // page's numbers: tools/bench-cost.ts)
 const FRAME_BUDGET = 4, MARCH_BUDGET = 10

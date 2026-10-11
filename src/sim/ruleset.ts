@@ -239,7 +239,8 @@ export function compileRuleset(rs: Ruleset): Compiled {
 }
 const expNeg = (x: number): number => exp(-x)
 // a trail shape's trail, and the one Face about rebuilds, must fit the ring (0.25 m points): the ring is
-// the smallest multiple of 64 points that holds the deepest, at least TRAIL_MIN
+// the smallest multiple of 64 points that holds the deepest, at least TRAIL_MIN; one size for every slot, so the
+// hash and saves carry the deepest type's ring for all (issue #38)
 function trailRing(rs: Ruleset, types: TypeTable[]): number {
   let lmax = 0; for (const p of Object.values(rs.orders)) lmax = Math.max(lmax, p.Lmax)
   let need = 0

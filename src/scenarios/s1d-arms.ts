@@ -3,7 +3,7 @@
 // the mouse. Side 0 in the south facing north: the battalion in line, the regiment in column of route east of
 // the wood, the battery limbered; side 1 in the north facing south: the battalion and the regiment in line, the
 // battery unlimbered. Everything stays on the map when deployed (the field is 360 m; a regiment's line is 157 m
-// and its column of route 190 m: docs/known-issues.md, the map's edge). Fighting between the types comes with
+// and its column of route 190 m: issue #37, the map's edge). Fighting between the types comes with
 // S1d-2 (charges) and S1d-3 (the battery's fire).
 import type { World, Scenario } from '../sim/index.ts'
 import { issue, PI as S } from '../sim/index.ts'

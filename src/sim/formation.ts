@@ -719,7 +719,7 @@ export function formationTick(w: World, i: number): void {
 function formationStep(w: World, i: number): void {
   const f = w.f, o = w.ord, NB = typeOf(w, i).NB, NS = w.cr.maxNB, C = typeOf(w, i).C, CS = w.cr.maxC, t = now(w)
   f.px[i] = f.x[i]; f.pz[i] = f.z[i]; f.ph[i] = f.heading[i]; f.omega[i] = 0
-  if (f.trans[i]) {   // no marching while the companies change places; a new shape order interrupts the change
+  if (f.trans[i]) {   // no marching while the companies change places; a new shape order interrupts the change (a router too: issue #39)
     f.vx[i] = 0; f.vz[i] = 0
     const n = f.ordHead[i]
     if (n >= 0 && o.type[n] === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }

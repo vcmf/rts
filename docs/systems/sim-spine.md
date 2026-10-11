@@ -50,7 +50,7 @@ advanceTick: 1 commands · 4 standing behaviour · 5–6 formations · 8 fire ·
 - **Order:** every loop runs in slot order.
 - **Budget:** `docs/proposals/sim-design.md` §16 targets ≤ 2 ms per tick. Measured in `test/formations.test.ts`:
   40 battalions of 400 of every shape, moving, about 5 ms per tick on a dev Mac (1.2 ms at 100 men; over
-  the target since S1c-4, `docs/known-issues.md`).
+  the target since S1c-4, [#36](https://github.com/vcmf/rts/issues/36)).
 
 ## Design
 

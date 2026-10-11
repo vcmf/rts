@@ -255,7 +255,7 @@ regenerated.
 - **Order dependence:** two chargers can hit one target in a tick. The receiver sums contributions over its
   attackers in slot order, the draws are keyed by pair and purpose, and the reverse switch tests it.
 - **Charges through friends:** formations do not collide. A regiment can gallop through its own infantry to
-  reach the enemy. This is accepted for now and noted as a known issue if it shows in play.
+  reach the enemy. This is accepted for now and filed as an issue if it shows in play.
 - **Calibration:** the case table is the test. If no first guess meets it, the numbers move, not the
   targets. If the targets turn out unreachable without a new mechanism, the plan says which.
 
@@ -300,7 +300,7 @@ fire costs the regiment about 9 men. A line has 35 s of its 100 s change when th
   a tick marching, 0.59 against 0.60 firing, within this session's noise).
 
 **Not done, logged:** a battalion that breaks while changing shape still finishes the change before it runs
-(`docs/known-issues.md`).
+([#39](https://github.com/vcmf/rts/issues/39)).
 
 ## Review
 

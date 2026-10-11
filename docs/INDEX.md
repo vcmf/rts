@@ -19,7 +19,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`conventions.md`](conventions.md): commits, units and numbers, prototypes, docs. *(current)*
 - [`glossary.md`](glossary.md): drill and engine terms. *(current)*
 - [`asset-sources.md`](asset-sources.md): where assets come from, licences. *(current)*
-- [`known-issues.md`](known-issues.md): grave pre-existing issues with their planned fixes. *(current)*
+- [`known-issues.md`](known-issues.md): where known issues live now (GitHub issues labelled `known-issue`), and the ones fixed before the move. *(current)*
 
 ## Decisions
 

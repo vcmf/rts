@@ -33,7 +33,7 @@ exports as a replay that plays back in Node to the same hashes.
   (`cosmeticRng`), so its choices never change a hash.
 - Sim plus soldier layer within 4 ms per frame for 40 battalions on the dev Mac. At 400 men a battalion
   (decision 0018) it holds at the halt and firing (0.7 ms) but not with all 16,000 men marching (4.4–6 ms):
-  `docs/known-issues.md`. `node tools/bench-cost.ts` measures it by part on the page's release world.
+  [#36](https://github.com/vcmf/rts/issues/36). `node tools/bench-cost.ts` measures it by part on the page's release world.
 
 ## Design
 
@@ -147,7 +147,7 @@ speeds, faster where its pace (or its routers') would leave them behind (trooper
 
 - At 40 battalions of 400 (16,000 men) sim and soldier layer cost about 14 ms a frame marching and 6 ms
   firing on the dev Mac, against the 4 ms budget; 40 × 800 costs about 27 ms. The cost tests hold
-  temporary budgets until S1c-5 (`docs/known-issues.md`). The worker (S2) takes the ticks off the main
+  temporary budgets until S1c-5 ([#36](https://github.com/vcmf/rts/issues/36)). The worker (S2) takes the ticks off the main
   thread.
 - The page selects and orders both sides (a drill sandbox); sides belong to S1e.
 - No speed overlay yet (the plan listed one); the slots overlay exists.
