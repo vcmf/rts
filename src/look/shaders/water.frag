@@ -1,5 +1,5 @@
 #extension GL_OES_standard_derivatives : enable
-precision highp float;varying vec3 vW;varying vec2 vUv;varying float vTau,vRiffle;uniform sampler2D uRefl;
+precision highp float;varying vec3 vW;varying float vAcross,vTau,vRiffle;uniform sampler2D uRefl;
 #include<painter>
 #include<waterdata>
 #include<shore>
@@ -7,8 +7,8 @@ precision highp float;varying vec3 vW;varying vec2 vUv;varying float vTau,vRiffl
 // The painted water (docs/plans/active/w4-water-surface.md, research §2.8): opaque. Its lower layers (the bed, the
 // absorption, the shadows, the shore foam) are the shore band's (src/look/shaders/shore.glsl), the same function the
 // terrain paints near the water; the upper layers (rough water, sky tint, reflections, strokes, glitter, riffle foam)
-// fade in past the band, where the water is always the surface drawn. vUv: across (m, + left of the flow), along (m);
-// vTau: the time of travel (s); vRiffle: 0 pool .. 1 riffle.
+// fade in past the band, where the water is always the surface drawn. vAcross: m from the centre line (+ left of the
+// flow); vTau: the time of travel (s); vRiffle: 0 pool .. 1 riffle.
 const float STROKE_V=0.6;            // m/s: the strokes' scale along the flow (about the river's mean speed)
 const float STROKE_P=20.0/STROKE_V;  // s: a whole period of every stroke pattern (its rates along are multiples of 0.05)
 float reflAt(vec2 xz){vec2 uv=(xz+TILE_HALF)/TILE_W;if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0)return 0.0;return texture2D(uRefl,uv).r;}
@@ -31,7 +31,7 @@ void main(){
   float up=smoothstep(UP0,UP0+0.5,s)*(1.0-0.9*iceAmt());
   if(s>UP0-1.5*fws){   // past where the layers below have weight, by the derivatives' margin (src/look/shaders/shore.glsl)
     vec3 V=normalize(uCamPos-vW),R=reflect(-V,vec3(0.0,1.0,0.0));
-    float across=vUv.x,cs=max(cloud(vW)*0.6,sh);
+    float across=vAcross,cs=max(cloud(vW)*0.6,sh);
     // the marks under 0.3 m (strokes, glitter, riffle foam) fade as a pixel's footprint grows past them (shore.glsl)
     float near=1.0-smoothstep(0.25,0.5,pxGround(vW));
     #ifdef WATER_SAB_FLAT

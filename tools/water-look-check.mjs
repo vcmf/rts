@@ -138,7 +138,7 @@ function seam(url, dir, sab) {
       const s = (raw.data[i * 4 + 1] / 255 * 2 - 1) * SDF; if (Math.abs(s) >= BAND - 0.125) continue   // the raw view's step: 0.125 m
       let e = 0; for (let k = 0; k < 3; k++) e = Math.max(e, Math.abs(ter.data[i * 4 + k] - wat.data[i * 4 + k])); d.push(e)
     }
-    const p95 = pct(d, 0.95), mx = d.length ? Math.max(...d) : NaN, over = d.filter(e => e > SEAM_MAX).length, good = d.length >= SEAM_MIN_PX && p95 <= SEAM_P95 && over <= SEAM_OVER * d.length
+    const p95 = pct(d, 0.95), mx = d.reduce((a, b) => Math.max(a, b), 0), over = d.filter(e => e > SEAM_MAX).length, good = d.length >= SEAM_MIN_PX && p95 <= SEAM_P95 && over <= SEAM_OVER * d.length
     if (!good) ok = false
     lines.push(`  ${n}: ${d.length} pixels, 95th percentile ${p95}, ${over} over ${SEAM_MAX} (largest ${mx})${good ? '' : '  FAIL'}`)
   }
@@ -199,8 +199,9 @@ function shimmer(url, dir, sab) {
   const lines = [`shimmer: the water and its shore, luma off by over ${ERR}/255 from the previous frame resampled ${STEP} px along (per pair under ${(SHIMMER_MAX * 100).toFixed(1)}% at the closest zoom, ${(SHIMMER_WIDE * 100).toFixed(1)}% at the widest)`]
   for (const [n, , , , , , lim] of shimmerViews()) {
     // the water's pixels, dilated 6 px (the shore band on the terrain's side, the shore foam)
-    const surf = load(dir, `${n}.surface`), mask = new Uint8Array(W * H), R = 6
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (white(surf, y * W + x)) for (let yy = Math.max(0, y - R); yy <= Math.min(H - 1, y + R); yy++) for (let xx = Math.max(0, x - R); xx <= Math.min(W - 1, x + R); xx++) mask[yy * W + xx] = 1
+    const surf = load(dir, `${n}.surface`), rows = new Uint8Array(W * H), mask = new Uint8Array(W * H), R = 6
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (white(surf, y * W + x)) for (let xx = Math.max(0, x - R); xx <= Math.min(W - 1, x + R); xx++) rows[y * W + xx] = 1   // dilated along rows, then columns
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (rows[y * W + x]) for (let yy = Math.max(0, y - R); yy <= Math.min(H - 1, y + R); yy++) mask[yy * W + x] = 1
     let prev = lum(load(dir, `${n}.0`)), worst = 0, all = 0
     const fr = []
     for (let k = 1; k < SHIFTS; k++) {

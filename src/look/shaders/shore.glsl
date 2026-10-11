@@ -65,7 +65,10 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh){
   // 1. the bed seen through the water, painted at the surface's point: no refraction offset (an offset by the depth,
   // a bilinear field, makes the point's screen derivatives jump at every texel's edge, and with them the grain's
   // level of detail)
+  // no snow settles under the water: it fades out over the first 5 cm of depth (the shore keeps the land's)
+  pSnowK=1.0-smoothstep(0.0,0.05,dd);
   vec3 bed=paint(bedAlbedo(wp.xz,dd,sp),bankNormal(vec3(0.0,1.0,0.0),wp.xz),wp,occ,0.12,1.0,sh);
+  pSnowK=1.0;
   // 2. absorption, red first; the painted ramp (shallow green-ochre, turquoise, deep teal) in bands broken by the grain
   float dn=dd*(1.0+0.35*(G(wp.xz/5.0).g-0.5)*uGrainAmt);
   vec3 T=exp(-vec3(3.0,1.5,1.1)*dn);

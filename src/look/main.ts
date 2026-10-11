@@ -55,8 +55,10 @@ const keptGrains = new Set([mats.grain])   // grains the look tools switch back 
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
 const waterT0 = performance.now(), waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData'), waterTexMs = performance.now() - waterT0
 const terrain = buildTerrain(scene, mats, look.far, look.bank, waterData)
+// the page's options (?watersab, ?detail, ?water, ?bench: below)
+const params = new URLSearchParams(location.search)
 // ?watersab=nodive: the band check's sabotage (tools/water-look-check.mjs), the ribbon's columns never dive under the banks
-const waterSabParam = new URLSearchParams(location.search).get('watersab')
+const waterSabParam = params.get('watersab')
 if (waterSabParam !== null && waterSabParam !== 'nodive') throw new Error(`?watersab must be nodive, not ${waterSabParam}`)
 const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }, waterSabParam !== 'nodive')
 const nature = buildNature(scene, mats, water.reflAdd)
@@ -143,10 +145,9 @@ const terrainMats = [terrain.terrainMat, terrain.farTerrainMat, terrain.hillMat]
 const DETAIL_DEFINES = ['DETAIL_L0', 'DETAIL_DEBUG', 'DETAIL_DEBUG_INC', 'DETAIL_DEBUG_N', 'DETAIL_SAB_IMPLICIT', 'DETAIL_SAB_STEP', 'BANKN_OFF']
 // the water's materials take the two that change the shore band (it paints with the terrain's paint() and normals).
 // On WebGL1 the L0 grain stays on whatever is asked (the detail layer needs GLSL ES 3.00: src/look/materials.ts)
-const webgl1 = engine.version < 2
 const setDetail = (on: string[]) => {
   for (const d of on) if (!DETAIL_DEFINES.includes(d)) throw new Error(`unknown detail define ${d}`)
-  const set = (d: string) => on.includes(d) || (d === 'DETAIL_L0' && webgl1)
+  const set = (d: string) => on.includes(d) || (d === 'DETAIL_L0' && mats.webgl1)
   for (const m of terrainMats) for (const d of DETAIL_DEFINES) m.setDefine(`#define ${d}`, set(d))
   for (const m of waterMats) for (const d of ['DETAIL_L0', 'BANKN_OFF']) m.setDefine(`#define ${d}`, set(d))
 }
@@ -200,7 +201,7 @@ Object.assign(window, { __look: {
   // the terrain alone (and the lab's hill), or everything; the finishing passes on or off (off: the frame is the
   // terrain's own output, as the debug view needs)
   terrainOnly: (on: boolean) => {
-    if (on) for (const m of scene.meshes) { if (m instanceof Mesh && m.isEnabled() && !terrainMats.includes(m.material as never)) { m.setEnabled(false); hidden.push(m) } }
+    if (on) for (const m of scene.meshes) { if (m instanceof Mesh && m.isEnabled() && !terrainMats.includes(m.material as never) && m !== terrain.tileGround) { m.setEnabled(false); hidden.push(m) } }
     else { for (const m of hidden) m.setEnabled(true); hidden.length = 0 }
   },
   finishing: (on: boolean) => on ? post.build() : post.clear(),
@@ -212,7 +213,6 @@ Object.assign(window, { __look: {
   waterView, waterSab, groundAs, waterAt,
 } })
 
-const params = new URLSearchParams(location.search)
 // ?detail=l0: the terrain with the L0 grain (compare by eye; the goldens of main against it match)
 if (params.get('detail') === 'l0') setDetail(['DETAIL_L0'])
 else if (params.has('detail')) throw new Error(`?detail must be l0, not ${params.get('detail')}`)

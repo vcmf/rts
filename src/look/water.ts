@@ -47,7 +47,7 @@ export function blurMask(g: CanvasRenderingContext2D, N: number, sigma: number, 
 
 // the water's shader with the ground's attributes: no ribbon coordinates (the upper layers' strokes stand still; the
 // seam check compares the band only, where they have no weight)
-const GROUND_VS = 'precision highp float;attribute vec3 position;uniform mat4 world,viewProjection;varying vec3 vW;varying vec2 vUv;varying float vTau,vRiffle;void main(){vec4 w=world*vec4(position,1.0);vW=w.xyz;vUv=vec2(0.0);vTau=0.0;vRiffle=0.0;gl_Position=viewProjection*w;}'
+const GROUND_VS = 'precision highp float;attribute vec3 position;uniform mat4 world,viewProjection;varying vec3 vW;varying float vAcross,vTau,vRiffle;void main(){vec4 w=world*vec4(position,1.0);vW=w.xyz;vAcross=0.0;vTau=0.0;vRiffle=0.0;gl_Position=viewProjection*w;}'
 
 // tex: the water data (docs/plans/done/w3-water-data.md) and the bank normals (the shore band lights the edge with them);
 // dive: false keeps every column at the water's level, the band check's sabotage (the ribbon then shows over dry ground)
@@ -59,7 +59,7 @@ export function buildWater(scene: Scene, mats: Materials, tex: { water: RawTextu
   const reflAdd = (x: number, z: number, r: number) => { const q = riverQuery(x, z); if (q && q.dist < lerpA(RIVER.W, q) / 2 + 20) reflTrees.push([x, z, r]) }   // crowns within 20 m of the water
 
   // samples whose ribbon (1.35 half-widths) reaches the tile; vertices clamped onto it
-  const pos: number[] = [], uv: number[] = [], tau: number[] = [], rif: number[] = [], idx: number[] = [], C = RIVER, COLS = 12, E2 = TILE_W / 2 - 0.01, lim = TILE_W / 2 + 1.35 * RIVER.WMAX / 2 + 0.5; let k = 0
+  const pos: number[] = [], across: number[] = [], tau: number[] = [], rif: number[] = [], idx: number[] = [], C = RIVER, COLS = 12, E2 = TILE_W / 2 - 0.01, lim = TILE_W / 2 + 1.35 * RIVER.WMAX / 2 + 0.5; let k = 0
   for (let i = 0, join = false; i < C.n; i++) {
     if (Math.abs(C.px[i]) > lim || Math.abs(C.pz[i]) > lim) { join = false; continue }   // the water lives in the detailed tile only; a re-entry starts a new strip
     const hw = C.W[i] / 2, nx = -C.tz[i], nz = C.tx[i], y = C.zw[i], [ep, en] = wetEdges(hw, C.A[i])   // left normal of the flow; water is flat at zw
@@ -72,18 +72,18 @@ export function buildWater(scene: Scene, mats: Materials, tex: { water: RawTextu
       let under = a >= 0 ? a > ep : -a > en
       if (moved) { const q = riverQuery(x, zz); under = !q || q.dist > wetEdgeAt(q) }
       const h = H(x, zz), yy = under && dive ? Math.min(y, h - 0.35) : y
-      pos.push(x, yy, zz); uv.push(a, C.s[i]); tau.push(C.tau[i]); rif.push(C.riffle[i])
+      pos.push(x, yy, zz); across.push(a); tau.push(C.tau[i]); rif.push(C.riffle[i])
     }
     if (join) for (let c = 0; c < COLS; c++) { const a = (k - 1) * (COLS + 1) + c, b = k * (COLS + 1) + c; idx.push(a, b, a + 1, a + 1, b, b + 1) }
     k++; join = true
   }
-  const mesh = new Mesh('water', scene), vd = new VertexData(); vd.positions = pos; vd.uvs = uv; vd.indices = idx
+  const mesh = new Mesh('water', scene), vd = new VertexData(); vd.positions = pos; vd.indices = idx
   const n: number[] = []; VertexData.ComputeNormals(pos, idx, n); vd.normals = n; vd.applyToMesh(mesh)
-  mesh.setVerticesData('aTau', new Float32Array(tau), false, 1); mesh.setVerticesData('aRiffle', new Float32Array(rif), false, 1)
+  mesh.setVerticesData('aAcross', new Float32Array(across), false, 1); mesh.setVerticesData('aTau', new Float32Array(tau), false, 1); mesh.setVerticesData('aRiffle', new Float32Array(rif), false, 1)
   // DETAIL: the same paint() (and grain) as the terrain's, so the shore band is one function on both; WATER_SURFACE:
   // the debug views' surface view shows the water white
   const opts = { uniforms: ['uWaterView'], samplers: ['uRefl', 'uWater', 'uBankN'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define WATER_SURFACE'] }
-  const waterMat = mats.make('water', WAT_VS, WAT_FS, { ...opts, attributes: ['position', 'uv', 'aTau', 'aRiffle'] }); mesh.material = waterMat; waterMat.backFaceCulling = false
+  const waterMat = mats.make('water', WAT_VS, WAT_FS, { ...opts, attributes: ['position', 'aAcross', 'aTau', 'aRiffle'] }); mesh.material = waterMat; waterMat.backFaceCulling = false
   const groundMat = mats.make('waterOnGround', GROUND_VS, WAT_FS, { ...opts, attributes: ['position'] })
   for (const m of [waterMat, groundMat]) { m.setTexture('uWater', tex.water); m.setTexture('uBankN', tex.bankN) }
 

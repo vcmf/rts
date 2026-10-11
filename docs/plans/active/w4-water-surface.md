@@ -172,3 +172,39 @@ From the prototype plan (W4: "No shoreline seam or flicker; pools read dark and 
   edge, at least 165 m past the play area (seen from the wide zooms only). Left as it is.
 - **Spiral risk** (prototype plan §4.4): if the review needs more than 3 rounds, stop and revisit the opaque
   bed-painting design.
+
+## Results (dev Mac, against main as the base)
+
+- **Band** (`node tools/water-look-check.mjs <url> --selftest`): the ribbon shows over dry ground at 857 of 187,237
+  points (0.25 m), the farthest 0.69 m from the shore; the drawn ground stands above the water at 4,973, the farthest
+  0.63 m into the water and 0.60 m above it; every wet texel lies under the ribbon; past the band no ground comes
+  within 2 cm of the water. All under the band (0.75 m), with little margin: a world whose grid strays farther
+  fails here. The sabotage (no diving columns): water over dry ground 0.94 m out, fails.
+- **Seam:** the tile's ground with each material, at 75,222 / 30,771 / 22,981 band pixels (the sharpest bend
+  closest, the bend and a reach at the default zoom): 95th percentile 0/255, 2–4 pixels over 6/255 (largest 11, on
+  the shoreline itself). The sabotages: 95th percentile 31–82, fail.
+- **Pools and riffles** (three reaches, default zoom): median luma pools 0.536, riffles 0.568; bright pixels pools
+  0.1%, riffles 3.9%. The riffle ignored: no bright pixels on riffles, fails.
+- **Shimmer:** at the closest zoom 0.42% per frame pair (the terrain's own, L2b: 0.49%); at the widest 3.0%, where
+  main measures 6.3% on the same pixels. Aliased edges (the sabotage): 3.1% at the closest, fails.
+- **The tile's edge:** the river's colour just inside the tile (the ribbon) against just outside (the far ring's
+  line), at the far-edge camera: main steps by up to 16/255 (blue), this branch by up to 11/255 (red, green). The
+  line was left as it is.
+- **Existing checks:** `tools/check-negatives.mjs` (render, river, look: every check passes the scene and fails
+  its sabotages), `tools/water-check.mjs --selftest`, `tools/detail-check.mjs --selftest` (scale, seams, shimmer,
+  banks), `npm test`, `npm run check:data`, the docs check.
+- **Readability guard:** no block that separates on the base fails (Austria on wheat and open low ground in winter
+  fails on both).
+- **Goldens:** the cameras without the river match (the start view at −40°); the others differ along the river and
+  its banks.
+- **Textures:** the water data is made at load and kept (10 MB); it and the bank normals lose their mips (10 MB
+  each, were 13.7).
+- **Owner's eye:** screenshots in the PR (three zooms; sun and cloud shadow; summer, late autumn, winter).
+- **Review:** round 1 (two severe: the ice no longer covered the upper layers; the data's mips differed between
+  the surfaces) fixed the ice, dropped the mips, anti-aliased the shoreline's select, made the seam sabotage reach
+  the band and dropped the fold guard. Round 2 (severe: fwidth without the derivatives extension on WebGL1) also
+  painted the bed at the surface's point, made the band follow the seasons, and added the widest view to the
+  shimmer check (thin marks now widen or fade with a pixel's footprint). Round 3 (nothing severe; fixed and
+  stopped): no snow on the bed under the water, the seam check's maximum without a spread, `terrainOnly` keeps the
+  tile's ground, the WebGL1 rule in one place, the ribbon's unused along coordinate dropped, the URL options in one
+  parser.

@@ -39,10 +39,11 @@ export class Materials {
   private readonly scene: Scene
   private readonly binders: ((m: ShaderMaterial) => void)[] = []
   grain: BaseTexture; grainMean: [number, number]   // the means of its R and G channels
-  constructor(scene: Scene, grain: BaseTexture, grainMean: [number, number]) { this.scene = scene; this.grain = grain; this.grainMean = grainMean }
+  readonly webgl1: boolean   // the detail layer's materials keep the L0 grain (DETAIL_L0) whatever is asked
+  constructor(scene: Scene, grain: BaseTexture, grainMean: [number, number]) { this.scene = scene; this.grain = grain; this.grainMean = grainMean; this.webgl1 = scene.getEngine().version < 2 }
   make(name: string, vs: string, fs: string, { attributes = ['position', 'normal'], uniforms = [], samplers = [], alpha = false, defines = [], perFrame = true }: MatOptions = {}): ShaderMaterial {
     // the detail layer needs GLSL ES 3.00 (textureGrad): on WebGL1 its materials keep the L0 grain
-    if (defines.includes('#define DETAIL') && this.scene.getEngine().version < 2) defines = [...defines, '#define DETAIL_L0']
+    if (defines.includes('#define DETAIL') && this.webgl1) defines = [...defines, '#define DETAIL_L0']
     const m = new ShaderMaterial(name, this.scene, { vertexSource: vs, fragmentSource: withPainter(fs) },
       { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM')], needAlphaBlending: alpha, defines: [...D.defines, ...defines] })
     m.setVector3('uSunDir', SUN); m.setColor3('uSunCol', PAL.sun); m.setColor3('uShadowCol', PAL.shadow)
