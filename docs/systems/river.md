@@ -13,16 +13,16 @@ One meandering channel generated once at load into dense per-sample arrays. Ever
 (`docs/plans/done/w1-river-shape.md`, `docs/plans/done/w1b-river-width.md`) in the prototype, ported to the look
 page in L0 (generated offline, `src/look/world/author.ts`), with cut banks and point bars since W2
 (`docs/plans/done/w2-river-banks.md`, the look page only), the water data baked for the water's shaders since
-W3 (`docs/plans/done/w3-water-data.md`), and the painted water, its shoreline from that data, since W4
-(`docs/plans/done/w4-water-surface.md`).
+W3 (`docs/plans/done/w3-water-data.md`), the painted water, its shoreline from that data, since W4
+(`docs/plans/done/w4-water-surface.md`), and the banks, stones and reeds since W5a (`docs/plans/active/w5-banks.md`).
 
 ## Goals / non-goals
 
 - **Goals:** bends that turn back on themselves; visibly varying width (4–11 m, stretches differ);
   pools at bends and riffles between them; a flat floodplain in a valley; water level that never
   rises downstream; nothing in the water except stones (`docs/art-bible.md` §6c).
-- **Non-goals (later):** the banks beyond the shore band (wet band, bare cut banks, gravel bars, reeds), rocks,
-  weirs, fords and the seasons (W5); river networks, ponds and dams (W6, from the map format).
+- **Non-goals (later):** the river's seasons (pools freezing first, autumn leaves: W5b); weirs and fords as authored
+  crossings, river networks, ponds and dams (W6, from the map format).
 
 ## Design
 
@@ -77,8 +77,20 @@ W3 (`docs/plans/done/w3-water-data.md`), and the painted water, its shoreline fr
   tree reflections, strokes on the time of travel (they stretch in fast water and never shear), glitter and riffle
   foam. Hard edges threshold the grain's soft blotches and are anti-aliased over a pixel (no shimmer). Winter
   ice stays as it was (the seasons are W5's).
+- **The banks (W5a):** painted from the water data and the bank normals (`bankPaint()` in
+  `src/look/shaders/shore.glsl`): damp grass near the water, bare earth where the bank is steep near it (cut banks),
+  pale grey gravel on low gentle ground near it (point bars), and a wet line at the water, wider on gentle ground.
+  The shore band's land side and the tile's terrain both paint it (the seam stays closed); within `SPEC.bank.edge`
+  of the tile's edge the terrain hands back to the `aRiver` bands the apron and the far ring continue. Its edges widen
+  with a pixel's footprint (no shimmer at the wide zooms).
+- **Stones and their foam (W5a):** a seeded pass places stones in riffles and at the foot of the sharper cut banks,
+  sized to stand 0.35–0.7 m out of the water; at most `SPEC.water.stones` of them go to the shaders (`uStones`),
+  which paint a pillow upstream and a broken wake downstream of each, in the band function (so both surfaces agree).
+- **Reeds (W5a):** clumps of the pack's grass blade, narrowed and set tall (the `Reed` model), on the land within
+  about a metre of the water on slow inner bends, in their own role colour on the grass's sway.
 - **Placement:** `placeable` keeps every instance's footprint out of the water and the formation
-  zones; stones may sit on riffles; willows line the banks; wheat stays off the floodplain.
+  zones; stones may sit on riffles or at a cut bank's foot; reeds at the water's edge, on land; willows line the
+  banks; wheat stays off the floodplain.
 
 ## Tunables
 
@@ -99,7 +111,8 @@ spacing, the query grid and the valley axis `axisX`. This doc names them; it doe
   shoreline).
 - `tools/water-look-check.mjs` (W4): the band (the drawn surfaces disagree on the shore only within it; no
   z-fighting past it), the seam (the tile's ground drawn with each material: the same colour in the band), pools
-  darker and calmer than riffles, and shimmer on the water; each with a sabotage under `--selftest`.
+  darker and calmer than riffles, and shimmer on the water (W4); the banks (wet line, cut bank, bar against the
+  meadow) and the stones' foam (W5a); each with a sabotage under `--selftest`.
 - `tools/river-check.js`: shape (backtracking bends, width range and per-stretch contrast, width
   steps, riffle steps), terrain (no floating banks, no cliffs, water above the bed, exact stitch),
   placement (nothing in the water or zones, population).
