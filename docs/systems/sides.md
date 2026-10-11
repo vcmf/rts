@@ -52,7 +52,7 @@ A scenario with no player is a sandbox for both sides.
   command, but not as the player's). A refusal goes into the tick's dropped list with sequence −1 and the reason
   prefixed `plan:`. The page shows only your own refusals.
 - **Under a cavalry threat** a battalion forms square ahead of the orders it has (the plan's), holds in it, and
-  forms back and goes on with them when the threat has passed: all orders in its list (`docs/systems/melee.md`). A player's order stands
+  forms back and goes on with them when the threat has passed (sheltering, `docs/systems/melee.md`). A player's order stands
   the square down instead.
 
 **The end** (`endStep`, step 13; `rs.end`):

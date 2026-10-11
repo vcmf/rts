@@ -100,11 +100,11 @@ function giveOrders(w: World, i: number, types: number[], append: boolean, fill:
   if (player) playerOrdered(w, i)   // a scenario's plan is not the player: the standing behaviour carries on
   return ''
 }
-// the player's order is obeyed: the square against cavalry stands down for this spell of threat (its orders, in the
-// list, went with the ones the player's replaced; a charge replaced by another order ends at the melee step)
+// the player's order is obeyed: the square against cavalry stands down for this spell of threat and forgets the
+// shape it would form back into (a charge replaced by another order ends at the melee step)
 function playerOrdered(w: World, i: number): void {
   const f = w.f
-  if (f.alertAt[i]) f.refugeOff[i] = 1   // (its orders replace the square's, which are in the list)
+  f.autoFrom[i] = 0; if (f.alertAt[i]) f.refugeOff[i] = 1
 }
 
 // applies a command now, as the tick applies a stamped one (plan.ts: a scenario's plan); '' or why it was dropped

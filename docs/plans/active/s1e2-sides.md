@@ -207,3 +207,34 @@ Also from round 3:
 - whether the plan should give way to the fall-back is for S1e-3's playtests.
 
 The review starts again at round 1.
+
+**Redesign round 1** (`/code-review high`, 8 findings; four severe): putting the square's hold in the order list
+broke other things:
+- a battalion holding in square had an order at its head, so it did not fire;
+- a square that could not be formed added orders every tick and drained the pool;
+- a plan order arriving after the square formed replaced the hold and the form-back, so the battalion stayed in
+  square for good;
+- a melee's contact cleared the form-back.
+
+The fix is the design's own rule taken one step further: no bookkeeping that can go stale. **Sheltering is derived
+from state each tick** (`sheltering`, `formation.ts`): in the refuge or changing into it, formed by itself
+(`autoFrom`, back in the state), in a spell no player's order stood down, in the fight and not in melee.
+- **A sheltering battalion** stands and keeps its orders, and counts as halted for fire.
+- **The standing behaviour** starts the square and the form-back itself, as changes (`startChange`, optional:
+  a failure clears nothing). It retries every 5 s where one cannot be made; nothing is queued, so nothing
+  piles up.
+- **What ends it:** a rout clears `autoFrom`; a melee, a player's order (`refugeOff`) and the spell's end end
+  sheltering by the state they change.
+
+Tests:
+- a plan order that comes after the square formed is kept, with no growth in the pool, and resumed after;
+- a sheltering square fires;
+- a battalion that breaks in its square runs.
+
+The charge golden came back to the value it had before the order-list design.
+
+**Kept:**
+- **A form-back that cannot be made** (the square stands where its old line would be wet) is retried every 5 s.
+  Meanwhile, with the spell over, its orders run in square.
+- **A battalion that breaks during a change that was itself interrupted** snaps to the shape it held before the
+  first change, which can be farther than half a change. It is rare, and S1e-3's playtests will say if it shows.

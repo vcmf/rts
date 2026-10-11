@@ -5,7 +5,7 @@
 // A battalion is a few company blocks (files × ranks) placed in the battalion frame by its shape. The sim
 // keeps the men per company; which slots are filled follows from that by one rule (`occupied`), so no
 // soldier is simulated (decisions 0007, 0018): who stands where and who falls is the renderer's.
-import { type World, M_TICK, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, O_CHARGE, O_HOLD, CH_PURSUIT, MAX_FORMATIONS, fleeing, typeOf, formationSlot } from './world.ts'
+import { type World, M_TICK, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, O_CHARGE, CH_PURSUIT, outOfFight, MAX_FORMATIONS, fleeing, typeOf, formationSlot } from './world.ts'
 import type { ShapeLayout, Placement, TypeTable } from './ruleset.ts'
 import { rot2, slotIndex, MAX_COMPANIES } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
@@ -255,6 +255,15 @@ export function placeWorld(w: World, i: number, c: number, hx: number, hz: numbe
 function changeEase(w: World, i: number, c: number, t: number): number {
   const f = w.f, u0 = (t - f.tStart[i] - f.tDelay[i * w.cr.maxC + c]) / f.tDur[i], u = Math.min(1, Math.max(0, u0))
   return u * u * (3 - 2 * u)
+}
+// sheltering in the square against cavalry (melee.ts, the standing behaviour): in its refuge, or changing into it,
+// formed by itself (it has a shape to form back into), in a spell of threat no player's order stood down, and in the
+// fight and not in melee. It stands, keeping its orders, and fires as a halted battalion does. Derived from state,
+// so a rout, a melee, a player's order or the spell's end ends it with nothing to undo
+export function sheltering(w: World, i: number): boolean {
+  const f = w.f, U = typeOf(w, i)
+  return U.refuge >= 0 && f.autoFrom[i] !== 0 && f.alertAt[i] !== 0 && !f.refugeOff[i] && !outOfFight(f.mstate[i]) && !f.foe[i] &&
+    (f.trans[i] ? f.tShape[i] : f.shape[i]) === U.refuge
 }
 // a change cut short where it stands (a battalion that breaks, #39): it takes whichever of its two shapes the change
 // is nearer to, at once (its places jump by up to half the change; the soldier layer's men walk the difference)
@@ -530,10 +539,6 @@ export function appendOrder(w: World, i: number, n: number): void {
   const f = w.f; if (f.ordTail[i] < 0) f.ordHead[i] = n; else w.ord.next[f.ordTail[i]] = n
   f.ordTail[i] = n
 }
-// puts an order at the head of a formation's list (the square against cavalry, before what it was doing)
-export function prependOrder(w: World, i: number, n: number): void {
-  const f = w.f; w.ord.next[n] = f.ordHead[i]; f.ordHead[i] = n; if (f.ordTail[i] < 0) f.ordTail[i] = n
-}
 export function shiftOrder(w: World, i: number): void {
   const f = w.f, n = f.ordHead[i]; if (n < 0) return
   f.ordHead[i] = w.ord.next[n]; if (f.ordHead[i] < 0) f.ordTail[i] = -1
@@ -739,21 +744,22 @@ export function formationTick(w: World, i: number): void {
 function formationStep(w: World, i: number): void {
   const f = w.f, o = w.ord, NB = typeOf(w, i).NB, NS = w.cr.maxNB, C = typeOf(w, i).C, CS = w.cr.maxC, t = now(w)
   f.px[i] = f.x[i]; f.pz[i] = f.z[i]; f.ph[i] = f.heading[i]; f.omega[i] = 0
+  const shelter = sheltering(w, i)
   if (f.trans[i]) {   // no marching while the companies change places; a new shape order interrupts the change (a battalion that breaks cuts it short: cutChange)
     f.vx[i] = 0; f.vz[i] = 0
     const n = f.ordHead[i]
-    if (n >= 0 && o.type[n] === O_FORM) { const s = o.shape[n], opt = o.optional[n] === 1; shiftOrder(w, i); startChange(w, i, s, opt); return }
+    if (n >= 0 && o.type[n] === O_FORM && !shelter) { const s = o.shape[n], opt = o.optional[n] === 1; shiftOrder(w, i); startChange(w, i, s, opt); return }
     if (t >= f.tStart[i] + f.tDelay[i * CS + C - 1] + f.tDur[i]) {
       finishChange(w, i, f.tShape[i])
     }
     return
   }
   const n = f.ordHead[i]
-  if (n < 0) { f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); return }
+  // no orders, or sheltering in the square against cavalry: it stands (a sheltering battalion keeps its orders for
+  // after the threat)
+  if (n < 0 || shelter) { f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); return }
   const h0 = f.heading[i], type = o.type[n]
   if (type === O_FORM) { const s = o.shape[n], opt = o.optional[n] === 1; shiftOrder(w, i); startChange(w, i, s, opt); return }
-  // the square against cavalry's hold (melee.ts): it stands until the spell of threat is over
-  if (type === O_HOLD) { f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); if (!f.alertAt[i]) shiftOrder(w, i); return }
   const [V0, pace] = paceOf(w, i), halfW = halfWidth(w, i)
   if (type === O_MOVE || type === O_CHARGE) {
     if (type === O_CHARGE) { if (!chargeAim(w, i, n)) { shiftOrder(w, i); f.vx[i] = 0; f.vz[i] = 0; return } }   // its target is gone (the melee step ends the charge)

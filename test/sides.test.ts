@@ -7,7 +7,7 @@ import { Sim, root, longIt, openBattlefield, OPEN_DATA, battleData } from './fx.
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { s1eBattle } from '../src/scenarios/s1e-battle.ts'
 import { attachScenario, compileRuleset, makeWorld, advanceTick, record, play, serialize, deserialize, hashWorld, hex, unitHandle, formationSlot,
-  M_TICK, M_END, M_WINNER, END_SIDE0, END_DRAW, O_HOLD, bracedOf, fightShares, issue, type World, MS_ROUTING, type PlanStep, type ScenarioRules } from '../src/sim/index.ts'
+  M_TICK, M_END, M_WINNER, END_SIDE0, END_DRAW, sheltering, ordersFree, bracedOf, fightShares, issue, type World, MS_ROUTING, type PlanStep, type ScenarioRules } from '../src/sim/index.ts'
 
 const PI = Math.PI
 // a world on the open battlefield with a scenario's plan and limit, and units spawned in order (unit k is slot k)
@@ -51,9 +51,29 @@ describe('the plan', () => {
     s.cmd({ type: 'debug-spawn', side: 0, unit: 'cavalry', x: 0, z: -40, heading: 0, shape: 'line', men: 256, fire: 'hold' })
     s.cmd({ type: 'debug-spawn', side: 1, x: 0, z: 100, heading: 0, shape: 'line', men: 400, fire: 'hold' }); s.tick()
     s.order({ type: 'side', side: 1, x: 0, z: 1 })
-    const line = unitHandle(1); s.until(() => s.shape(line) !== 'square', 150); expect(s.w.ord.type[s.w.f.ordHead[1]]).toBe(O_HOLD)
+    const line = unitHandle(1); s.until(() => s.shape(line) !== 'square', 150); expect(sheltering(s.w, 1)).toBe(true)
     const z0 = s.z(line); s.w.f.morale[1] = 0.1; s.tick(); expect(s.w.f.mstate[1]).toBe(MS_ROUTING)
     s.advance(30); expect(s.z(line)).toBeGreaterThan(z0 + 20)   // it ran north, to its rear
+  })
+  it('a plan order that comes after the square has formed is kept too, and the order pool does not grow', () => {
+    const plan: PlanStep[] = [{ at: 60, unit: 1, cmd: { type: 'move', points: [[0, 300]], append: false } }]
+    const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA); attachScenario(s.w, { plan })
+    s.cmd({ type: 'debug-spawn', side: 0, unit: 'cavalry', x: 0, z: -40, heading: 0, shape: 'line', men: 256, fire: 'hold' })
+    s.cmd({ type: 'debug-spawn', side: 1, x: 0, z: 100, heading: 0, shape: 'line', men: 400, fire: 'hold' }); s.tick()
+    const line = unitHandle(1); s.until(() => s.shape(line) !== 'square', 150); const free = ordersFree(s.w)
+    s.advance(60); expect([s.shape(line), s.orders(line), sheltering(s.w, 1)]).toEqual(['square', 1, true])
+    expect(ordersFree(s.w)).toBeGreaterThanOrEqual(free - 1)   // at most the plan's one order: nothing piling up
+    s.order({ type: 'move', id: unitHandle(0), points: [[0, -500]], append: false }); s.until(() => s.z(unitHandle(0)) > -400, 400)
+    s.advance(napoleonic.melee.refuge.hold + 120); expect(s.shape(line)).toBe('line'); expect(s.z(line)).toBeGreaterThan(130)
+  })
+  it('a battalion sheltering in its square still fires at an enemy in range', () => {
+    const plan: PlanStep[] = [{ at: 1, unit: 1, cmd: { type: 'move', points: [[0, 300]], append: false } }]
+    const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA); attachScenario(s.w, { plan })
+    s.cmd({ type: 'debug-spawn', side: 0, unit: 'cavalry', x: 0, z: -40, heading: 0, shape: 'line', men: 256, fire: 'hold' })
+    s.cmd({ type: 'debug-spawn', side: 1, x: 0, z: 100, heading: 0, shape: 'line', men: 400, fire: 'at will' })
+    s.cmd({ type: 'debug-spawn', side: 0, x: 0, z: 200, heading: PI, shape: 'line', men: 400, fire: 'hold' }); s.tick()   // infantry 100 m off its rear face
+    s.until(() => s.shape(unitHandle(1)) !== 'square', 150); const v0 = Math.max(...s.w.f.volleyTick.slice(8, 16)); s.advance(40)
+    expect(sheltering(s.w, 1)).toBe(true); expect(Math.max(...s.w.f.volleyTick.slice(8, 16))).toBeGreaterThan(v0)
   })
   it('a player\'s order in the same spell stands the square down', () => {
     const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA)

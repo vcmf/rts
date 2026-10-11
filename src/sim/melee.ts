@@ -16,8 +16,8 @@
 // numbers, so the order of the adding does not matter) and the shock it sends, which each receiver sums over
 // its attackers in slot order. The draws are keyed by tick, formation and purpose. Orders come from the shared
 // pool in visiting order, as routs' do (tick.ts).
-import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_CHARGE, O_FORM, O_FACE, O_MOVE, O_HOLD, CH_NONE, CH_CLOSING, CH_TESTED, CH_PURSUIT, MS_WAVERING, outOfFight, formationSlot as slotOf, formationHandle as handleOf, typeOf } from './world.ts'
-import { allocOrder, appendOrder, prependOrder, clearOrders, ordersFree, setOnMap, layoutOf, changeProgress } from './formation.ts'
+import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_CHARGE, O_FACE, O_MOVE, CH_NONE, CH_CLOSING, CH_TESTED, CH_PURSUIT, MS_WAVERING, outOfFight, formationSlot as slotOf, formationHandle as handleOf, typeOf } from './world.ts'
+import { allocOrder, appendOrder, clearOrders, ordersFree, setOnMap, layoutOf, changeProgress, startChange } from './formation.ts'
 import { blockGeometry, oweByMen, type FireGeo } from './fire.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
@@ -262,12 +262,17 @@ function nearby(w: World, i: number, n: number): boolean {
     const dx = f.x[i] - f.x[j], dz = f.z[i] - f.z[j]; if (dx * dx + dz * dz <= A * A) return true }
   return false
 }
+// the square against cavalry: a threatened battalion forms its refuge after refuge.react seconds, and shelters in it
+// (formation.ts, sheltering) while the spell lasts; when the spell is over it forms back into the shape it formed
+// square from. The changes are started here, not ordered, and tried every SQUARE_RETRY ticks while they cannot be
+// made (a wood, the water), so nothing piles up in the order pool
+const SQUARE_RETRY = 100
 export function standingStep(w: World): void {
   const f = w.f, Q = w.cr.rs.melee.refuge, tick = w.meta[M_TICK] + 1, react = Math.round(Q.react * TICK_HZ), hold = Math.round(Q.hold * TICK_HZ)
-  // the charging types in the fight, once; nothing to do with none and no battalion on the alert
-  let n = 0, alert = false
-  for (let j = 0; j < MAX_FORMATIONS; j++) { if (!f.alive[j]) continue; if (f.alertAt[j]) alert = true; if (typeOf(w, j).charge && !outOfFight(f.mstate[j])) chargers[n++] = j }
-  if (!n && !alert) return
+  // the charging types in the fight, once; nothing to do with none, no battalion on the alert and none to form back
+  let n = 0, busy = false
+  for (let j = 0; j < MAX_FORMATIONS; j++) { if (!f.alive[j]) continue; if (f.alertAt[j] || f.autoFrom[j]) busy = true; if (typeOf(w, j).charge && !outOfFight(f.mstate[j])) chargers[n++] = j }
+  if (!n && !busy) return
   for (let i = 0; i < MAX_FORMATIONS; i++) {
     if (!f.alive[i]) continue
     const U = typeOf(w, i); if (U.refuge < 0 || outOfFight(f.mstate[i]) || f.foe[i]) continue
@@ -276,18 +281,19 @@ export function standingStep(w: World): void {
       if (!f.alertAt[i] || tick - f.alertAt[i] > hold) f.refugeOff[i] = 0        // a new spell of threat
       f.alertAt[i] = tick
     } else if (f.alertAt[i] && tick - f.alertAt[i] > hold && !nearby(w, i, n)) {
-      // the spell is over: a hold in its list ends (formation.ts), and it forms back and goes on
-      f.alertAt[i] = 0; f.alertSince[i] = 0; f.refugeOff[i] = 0
-      continue
+      f.alertAt[i] = 0; f.alertSince[i] = 0; f.refugeOff[i] = 0                   // the spell is over
     }
-    if (!f.alertAt[i] || f.alertAt[i] !== tick || f.refugeOff[i] || tick - f.alertSince[i] < react) continue
     const into = f.trans[i] ? f.tShape[i] : f.shape[i]
-    if (into === U.refuge || ordersFree(w) < 3) continue
-    // ahead of its orders (a plan's, kept for after): form square, hold until the spell is over, form back into the
-    // shape it was in or going to. The forms are optional: where one cannot be formed it is skipped, and the rest
-    // go on. A rout or a player's order clears them with the rest
-    const steps: [number, number][] = [[O_FORM, into], [O_HOLD, 0], [O_FORM, U.refuge]]   // prepended, so last first
-    for (const [type, shape] of steps) { const o = allocOrder(w, type); w.ord.shape[o] = shape; w.ord.optional[o] = 1; prependOrder(w, i, o) }
-    f.status[i] = 0; f.blockedFor[i] = 0
+    if (f.alertAt[i]) {
+      // in a spell: form square once the threat has run react seconds unbroken, unless a player's order stood it down
+      if (f.alertAt[i] !== tick || f.refugeOff[i] || into === U.refuge || tick - f.alertSince[i] < react || (tick - f.alertSince[i] - react) % SQUARE_RETRY) continue   // threatened now, unbroken for react
+      if (startChange(w, i, U.refuge, true)) { if (!f.autoFrom[i]) f.autoFrom[i] = into + 1; f.status[i] = 0; f.blockedFor[i] = 0 }
+    } else if (f.autoFrom[i]) {
+      // the spell is over: back into the shape it formed square from, once the square is formed (tried again while
+      // that cannot be made there); a shape changed meanwhile by an order is kept
+      if (into !== U.refuge) { f.autoFrom[i] = 0; continue }
+      if (f.trans[i] || (tick + i) % SQUARE_RETRY) continue
+      if (startChange(w, i, f.autoFrom[i] - 1, true)) f.autoFrom[i] = 0
+    }
   }
 }
