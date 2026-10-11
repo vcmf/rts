@@ -260,8 +260,13 @@ function changeEase(w: World, i: number, c: number, t: number): number {
 // is nearer to, at once (its places jump by up to half the change; the soldier layer's men walk the difference)
 export function cutChange(w: World, i: number): void {
   const f = w.f; if (!f.trans[i]) return
-  if (changeProgress(w, i, now(w)) >= 0.5) f.shape[i] = f.tShape[i]
-  f.trans[i] = 0
+  finishChange(w, i, changeProgress(w, i, now(w)) >= 0.5 ? f.tShape[i] : f.shape[i])
+}
+// a change ends in `shape`: its trail begins anew for a trail shape, and its men are rebalanced unless they close
+// across companies
+function finishChange(w: World, i: number, shape: number): void {
+  const f = w.f
+  f.shape[i] = shape; f.trans[i] = 0
   if (layoutOf(w, i).def.trail) resetTrail(w, i)
   if (!layoutOf(w, i).def.closeAcross) rebalance(w, i)
 }
@@ -733,9 +738,7 @@ function formationStep(w: World, i: number): void {
     const n = f.ordHead[i]
     if (n >= 0 && o.type[n] === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
     if (t >= f.tStart[i] + f.tDelay[i * CS + C - 1] + f.tDur[i]) {
-      f.shape[i] = f.tShape[i]; f.trans[i] = 0
-      if (layoutOf(w, i).def.trail) resetTrail(w, i)
-      if (!layoutOf(w, i).def.closeAcross) rebalance(w, i)
+      finishChange(w, i, f.tShape[i])
     }
     return
   }

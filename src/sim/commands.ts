@@ -103,12 +103,15 @@ function giveOrders(w: World, i: number, types: number[], append: boolean, fill:
 // the player's order is obeyed: the square against cavalry stands down for this spell of threat and forgets the
 // shape it would form back into (a charge replaced by another order ends at the melee step)
 function playerOrdered(w: World, i: number): void {
+  if (!fromPlayer) return   // a scenario's plan is not the player: the standing behaviour carries on
   const f = w.f
   f.autoFrom[i] = 0; if (f.alertAt[i]) f.refugeOff[i] = 1
 }
+let fromPlayer = true
 
 // applies a command now, as the tick applies a stamped one (plan.ts: a scenario's plan); '' or why it was dropped
-export const applyNow = (w: World, c: Command): string => apply(w, quantiseCommand(c))
+// (not as the player's: it does not stand the square against cavalry down)
+export function applyNow(w: World, c: Command): string { fromPlayer = false; try { return apply(w, quantiseCommand(c)) } finally { fromPlayer = true } }
 function apply(w: World, c: Command): string {
   const f = w.f, o = w.ord, cr = w.cr
   if (c.type === 'debug-spawn') {

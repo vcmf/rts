@@ -130,3 +130,25 @@ regenerated (`SIM_VERSION` `s1e.2`, `SAVE_FORMAT` 11), and `s1e-battle` has one 
   side 1 wins on the larger share in the fight.
 - **Your regiment pins side 1's infantry:** a battalion within 200 m of standing cavalry forms square (S1d-2's
   threat rule) and holds it. On this map that happens often. S1e-3's playtests will say if it is too much.
+
+## Review
+
+**Round 1** (`/code-review high`, 10 findings; two severe, so a second round):
+- **Fixed, severe:**
+  - the plan's commands went through the player's path, so a scripted order stood side 1's square against cavalry
+    down for the spell, as a player's order does. Plan commands are not the player's now; a test checks the
+    square forms;
+  - a save forgot its plan and time limit: a loaded world ran on without them, and nothing said so. The limit and
+    the plan's hash are state (`M_LIMIT`, `M_PLAN`). A loaded world refuses to tick until its plan is attached
+    again, and `attachScenario` refuses another plan.
+- **Fixed:**
+  - the page lost its "nothing selected" hint;
+  - a plan step's negative target was read as one: none is no target;
+  - the page counted the men in the fight its own way: it uses `fightShares`, as the end does;
+  - the change's finish is one function (`finishChange`) for a change done and one cut short;
+  - a test of "not logged" could not fail: a recorded game's log holds only the player's commands, and its replay
+    reproduces the planned moves;
+  - a rally bringing men back into the count is tested;
+  - comments named docs by bare file name.
+- **Kept:** a step names its formation by spawn order, and nothing checks that the scenario's spawns were all
+  accepted. The scenario test checks `s1e-battle` deploys all 16, and a scenario's spawns are its own data.

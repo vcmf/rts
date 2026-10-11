@@ -20,7 +20,7 @@ export const MAX_ORDERS = 2048
 export const SIDES = 2
 
 // meta words
-export const M_TICK = 0, M_FREE = 1, M_DATA = 2, M_SEQ = 3, M_RULES = 4, M_SEED = 5, M_END = 6, M_WINNER = 7, M_LEN = 8   // M_SEED: keys the keyed draws (rng.ts); M_END: the tick the battle ended (0: not yet), M_WINNER: END_* (S1e-2)
+export const M_TICK = 0, M_FREE = 1, M_DATA = 2, M_SEQ = 3, M_RULES = 4, M_SEED = 5, M_END = 6, M_WINNER = 7, M_LIMIT = 8, M_PLAN = 9, M_LEN = 10   // M_SEED: keys the keyed draws (rng.ts); S1e-2: M_END the tick the battle ended (0: not yet), M_WINNER END_*, M_LIMIT the tick it ends at (0: none), M_PLAN the hash of the plan attached (plan.ts)
 export const END_NONE = 0, END_SIDE0 = 1, END_SIDE1 = 2, END_DRAW = 3
 export const END_RESULTS = ['', 'side 0 wins', 'side 1 wins', 'a draw']
 
@@ -106,9 +106,10 @@ export interface World {
   ord: Orders
   pending: Stamped[]
   data: SimData; cr: Compiled; terrain: Terrain
-  // a scenario's plan for the side it scripts and its time limit (S1e-2, plan.ts): attached like the terrain, not
-  // state (the steps are the scenario's, and which have run follows from the tick)
-  plan: PlanStep[]; limit: number   // limit: the tick the battle ends at, 0 none
+  // a scenario's plan for the side it scripts (S1e-2, plan.ts): attached like the terrain, not state (the steps are
+  // the scenario's, and which have run follows from the tick); its hash is state (M_PLAN), so a save loaded without
+  // the plan it was made with fails at once
+  plan: PlanStep[]; planHash: number
   debug: boolean
   scratch: { places?: Places; arc?: Arc; gateBits?: GateBits; filled?: Filled; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverse?: boolean; lost?: Int32Array; mstateBefore?: Uint8Array; menNow?: Int32Array; melee?: Melee; fireGeoTick?: number }   // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
 }
@@ -137,7 +138,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
   for (let k = 0; k < M; k++) ord.next[k] = k + 1 < M ? k + 1 : -1
   const free = new Int32Array(N)
   for (let i = 0; i < N; i++) free[i] = N - 1 - i   // slot 0 is handed out first
-  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, sides: { rearX: f64(SIDES), rearZ: f64(SIDES), left: i32(SIDES), spawned: i32(SIDES) }, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), plan: [], limit: 0, debug, scratch: {} }
+  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, sides: { rearX: f64(SIDES), rearZ: f64(SIDES), left: i32(SIDES), spawned: i32(SIDES) }, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), plan: [], planHash: 0, debug, scratch: {} }
   w.meta[M_FREE] = N
   w.meta[M_DATA] = data.version | 0
   w.meta[M_RULES] = cr.hash | 0

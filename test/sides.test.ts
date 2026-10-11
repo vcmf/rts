@@ -7,7 +7,7 @@ import { Sim, root, longIt, openBattlefield, OPEN_DATA, battleData } from './fx.
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { s1eBattle } from '../src/scenarios/s1e-battle.ts'
 import { attachScenario, compileRuleset, makeWorld, advanceTick, record, play, serialize, deserialize, hashWorld, hex, unitHandle, formationSlot,
-  M_TICK, M_END, M_WINNER, END_SIDE0, END_DRAW, bracedOf, MS_ROUTING, type PlanStep, type ScenarioRules } from '../src/sim/index.ts'
+  M_TICK, M_END, M_WINNER, END_SIDE0, END_DRAW, MS_STEADY, bracedOf, fightShares, issue, type World, MS_ROUTING, type PlanStep, type ScenarioRules } from '../src/sim/index.ts'
 
 const PI = Math.PI
 // a world on the open battlefield with a scenario's plan and limit, and units spawned in order (unit k is slot k)
@@ -19,12 +19,38 @@ function battle(rules: ScenarioRules, units: [side: number, x: number, z: number
 }
 
 describe('the plan', () => {
-  it('a step\'s command reaches its formation at its tick, and is not in the log', () => {
+  it('a step\'s command reaches its formation at its tick', () => {
     const plan: PlanStep[] = [{ at: 10, unit: 1, cmd: { type: 'move', points: [[200, 100]], append: false } }]
     const s = battle({ plan }, [[0, 0, -200, 0], [1, 200, 200, PI]])
     s.advance(9.9); expect(s.orders(unitHandle(1))).toBe(0)
     s.advance(0.1); expect(s.orders(unitHandle(1))).toBe(1)
-    expect(s.w.pending).toEqual([])
+  })
+  it('a recorded game logs only the player\'s commands, not the plan\'s; its replay reproduces the planned moves', () => {
+    const plan: PlanStep[] = [{ at: 5, unit: 1, cmd: { type: 'move', points: [[200, 100]], append: false } }]
+    const scenario = { name: 'plan-log', map: 'battlefield', plan, setup: (w: World) => { issue(w, { type: 'debug-spawn', side: 0, x: 0, z: -200, heading: 0, shape: 'line', men: 400, fire: 'hold' }); issue(w, { type: 'debug-spawn', side: 1, x: 200, z: 200, heading: PI, shape: 'line', men: 400, fire: 'hold' }) } }
+    const cr = compileRuleset(napoleonic)
+    const run = record(battleData, cr, scenario, 1, 400, (w, ext) => { if (w.meta[M_TICK] === 20) ext({ type: 'halt', id: unitHandle(0) }) })
+    expect(run.replay.log.map(e => e.cmd.type)).toEqual(['halt'])
+    expect(play(run.replay, battleData, cr, scenario, run.hashes)).toBeNull()
+  })
+  it('a plan command does not stand the square against cavalry down, as a player\'s does', () => {
+    const go = (byPlan: boolean) => {
+      const plan: PlanStep[] = byPlan ? [{ at: 3, unit: 1, cmd: { type: 'halt' } }] : []
+      const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA); attachScenario(s.w, { plan })
+      s.cmd({ type: 'debug-spawn', side: 0, unit: 'cavalry', x: 0, z: -40, heading: 0, shape: 'line', men: 256, fire: 'hold' })
+      s.cmd({ type: 'debug-spawn', side: 1, x: 0, z: 100, heading: PI, shape: 'line', men: 400, fire: 'hold' }); s.tick()   // in reach of the regiment: on the alert
+      s.advance(1); if (!byPlan) s.order({ type: 'halt', id: unitHandle(1) })
+      s.advance(4); return [s.w.f.refugeOff[1], s.shape(unitHandle(1))]
+    }
+    expect(go(true)).toEqual([0, 'line → square']); expect(go(false)[0]).toBe(1)
+  })
+  it('a save made with a plan refuses to run until that plan is attached again, and refuses another', () => {
+    const plan: PlanStep[] = [{ at: 50, unit: 0, cmd: { type: 'halt' } }]
+    const s = battle({ plan, minutes: 10 }, [[0, 0, -200, 0], [1, 200, 200, PI]]), cr = s.w.cr
+    const w2 = deserialize(serialize(s.w), OPEN_DATA, cr, true, openBattlefield())
+    expect(() => advanceTick(w2)).toThrow(/plan is not attached/)
+    expect(() => attachScenario(w2, { plan: [], minutes: 10 })).toThrow(/another plan/)
+    attachScenario(w2, { plan, minutes: 10 }); advanceTick(w2); s.tick(); expect(hex(hashWorld(w2))).toBe(hex(hashWorld(s.w)))
   })
   it('one for a formation gone, or out of the fight, is dropped with a reason', () => {
     const plan: PlanStep[] = [{ at: 5, unit: 3, cmd: { type: 'halt' } }, { at: 5, unit: 1, cmd: { type: 'halt' } }]
@@ -57,6 +83,11 @@ describe('the end', () => {
   it('at the time limit the larger share in the fight wins; within the margin, a draw', () => {
     const go = (kill: number) => { const s = battle({ minutes: 0.1 }, [[0, -100, -200, 0], [1, -100, 200, PI]]); s.order({ type: 'debug-kill', id: unitHandle(1), men: kill }); s.advance(6); return [s.w.meta[M_END], s.w.meta[M_WINNER]] }
     expect(go(10)).toEqual([120, END_DRAW]); expect(go(40)).toEqual([120, END_SIDE0])
+  })
+  it('a rally brings a battalion\'s men back into the count', () => {
+    const s = battle({}, [[0, -100, -200, 0], [1, -150, 200, PI], [1, 150, 200, PI]])
+    s.w.f.morale[1] = 0.1; s.tick(); expect(fightShares(s.w)[1]).toBeCloseTo(0.5, 9)
+    s.w.f.mstate[1] = MS_STEADY; expect(fightShares(s.w)[1]).toBe(1)   // (as the rally's end leaves it)
   })
   it('a side is not broken while more than half its men are in the fight', () => {
     const s = battle({}, [[0, -100, -200, 0], [1, -150, 200, PI], [1, 0, 200, PI], [1, 150, 200, PI]])

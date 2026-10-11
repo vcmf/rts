@@ -1,4 +1,4 @@
-// The S1e scenario (docs/plans/active/s1e1-battlefield.md, s1e2-sides.md) on the battlefield (maps/battlefield.ts): on
+// The S1e scenario (docs/plans/active/s1e1-battlefield.md, docs/plans/active/s1e2-sides.md) on the battlefield (maps/battlefield.ts): on
 // each side six battalions in two lines of three on its ridge, a cavalry regiment on one flank and a battery on the
 // other, firing at will. Side 0 holds the southern ridge facing north and is yours; side 1 the northern, facing
 // south, and follows its plan. The stream runs between them: men and horses wade it but in its pools out on the

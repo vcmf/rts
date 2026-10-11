@@ -3,7 +3,7 @@
 // a command through `issue`, and the external log is kept, so a session can be replayed.
 import fieldUrl from '../../data/formation-field.simdata?url'
 import battleUrl from '../../data/battlefield.simdata?url'
-import { loadSimData, compileRuleset, makeWorld, typeOf, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ, MORALE_STATES, FIRE_MODES, CHARGE_PHASES, M_END, M_WINNER, END_RESULTS, attachScenario,
+import { loadSimData, compileRuleset, makeWorld, typeOf, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ, MORALE_STATES, FIRE_MODES, CHARGE_PHASES, M_END, M_WINNER, END_RESULTS, END_DRAW, attachScenario, fightShares,
   type Command, type Stamped, type World, type HashPoint, type Replay, type Dropped } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
@@ -174,12 +174,12 @@ async function main(): Promise<void> {
     const d = dropped.filter(x => x.seq >= 0).at(-1)   // yours: the scenario's plan's own refusals are not shown
     if (note && performance.now() - noteT < 3000) lines.push(note)
     // the battle (S1e-2): each side's men in the fight, as a share of those it spawned, and the result once decided
-    const inFight = [0, 0]; for (let i = 0; i < w.f.alive.length; i++) if (w.f.alive[i] && w.f.mstate[i] < 3) inFight[w.f.side[i]] += menOf(w, i)
-    lines.unshift(`in the fight: ${[0, 1].map(s => `${s === scenario.player ? 'yours' : 'side ' + s} ${w.sides.spawned[s] ? Math.round(100 * inFight[s] / w.sides.spawned[s]) : 0}%`).join(' · ')}`)
-    if (w.meta[M_END]) { const r = w.meta[M_WINNER], you = scenario.player === undefined ? END_RESULTS[r] : r === 3 ? 'a draw' : r - 1 === scenario.player ? 'you win' : 'you lose'
-      lines.unshift(`BATTLE OVER at ${(w.meta[M_END] * DT / 60).toFixed(1)} min: ${you}`) }
+    const shares = fightShares(w), head: string[] = []
+    if (w.meta[M_END]) { const r = w.meta[M_WINNER], you = scenario.player === undefined ? END_RESULTS[r] : r === END_DRAW ? 'a draw' : r - 1 === scenario.player ? 'you win' : 'you lose'
+      head.push(`BATTLE OVER at ${(w.meta[M_END] * DT / 60).toFixed(1)} min: ${you}`) }
+    head.push(`in the fight: ${[0, 1].map(s => `${s === scenario.player ? 'yours' : 'side ' + s} ${Math.round(100 * shares[s])}%`).join(' · ')}`)
     if (d && w.meta[M_TICK] - d.tick < 3 * TICK_HZ) lines.push(`order not carried out: ${d.reason}`)   // shown for 3 s
-    statsEl.textContent = (lines.length ? lines.join('\n') : 'nothing selected') +
+    statsEl.textContent = head.join('\n') + '\n' + (lines.length ? lines.join('\n') : 'nothing selected') +
       `\n\nt ${(w.meta[M_TICK] * DT).toFixed(1)} s · ${speed ? speed + '×' : 'paused'}${paused ? ' (P)' : ''}\nsim + men ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms\nfps ${fps.toFixed(0)} · map built in ${buildMs.toFixed(0)} ms`
   }
   // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce, as far as it has run:
