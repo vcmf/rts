@@ -138,7 +138,7 @@ export function derive(s: Spec = SPEC): Derived {
       // is the uniform uPixA: it follows the camera's field of view)
       `#define DETAIL_MINCOS ${s.detail.minCos.toFixed(3)}`, `#define DETAIL_PX ${s.detail.px.toFixed(1)}`, `#define DETAIL_INDEX ${s.detail.index.toFixed(1)}`, `#define DETAIL_AMP ${s.detail.amp.toFixed(3)}`,
       // the water data's encoding (src/look/shaders/waterdata.glsl)
-      `#define WATER_D0 ${s.water.depth[0].toFixed(3)}`, `#define WATER_D1 ${s.water.depth[1].toFixed(3)}`, `#define WATER_SDF ${s.water.sdf.toFixed(3)}`, `#define WATER_BAND ${s.water.band.toFixed(3)}`],
+      `#define WATER_D0 ${s.water.depth[0].toFixed(3)}`, `#define WATER_D1 ${s.water.depth[1].toFixed(3)}`, `#define WATER_SDF ${s.water.sdf.toFixed(3)}`, `#define WATER_BAND ${s.water.band.toFixed(3)}`, `#define BANK_EDGE ${s.bank.edge.toFixed(1)}`],
   }
 }
 

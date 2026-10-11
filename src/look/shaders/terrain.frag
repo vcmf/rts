@@ -19,11 +19,19 @@ vec3 albedo(vec3 wp,vec3 n){
   float fpat=smoothstep(0.60,0.68,G(wp.xz/70.0+vec2(0.71,0.13)).g);
   float fl=step(0.86,G(wp.xz/1.6).r)*fpat;c=mix(c,vec3(0.99,0.56,0.14),fl);
   c=mix(c,vec3(0.96,0.93,0.84),step(0.93,G(wp.xz/1.3+0.5).r)*fpat*0.8);
-  // stream banks
+  // stream banks: on the tile from the water data (W5, bankPaint in src/look/shaders/shore.glsl); within BANK_EDGE of
+  // the tile's edge, and on the apron and the far ring, from aRiver, which the far ring's painted line continues
   float rb=vRiver+(G(wp.xz/3.0).r-0.5)*0.35;                                   // distance to the bank in half-widths
-  c=mix(c*vec3(0.72,0.78,0.70),c,smoothstep(0.1,0.9,rb));                       // damp ground near the water
-  c=mix(vec3(0.20,0.36,0.22),c,smoothstep(-0.05,0.4,rb));
-  c=mix(vec3(0.42,0.34,0.22),c,smoothstep(-0.35,-0.05,rb));
+  vec3 cr=mix(c*vec3(0.72,0.78,0.70),c,smoothstep(0.1,0.9,rb));                // damp ground near the water
+  cr=mix(vec3(0.20,0.36,0.22),cr,smoothstep(-0.05,0.4,rb));
+  cr=mix(vec3(0.42,0.34,0.22),cr,smoothstep(-0.35,-0.05,rb));
+  #ifdef SHORE
+  vec4 wt=waterTexel(wp.xz);
+  vec3 cb=bankPaint(c,wp.xz,max(-waterSdf(wt),0.0),-waterDepth(wt),bankNormal(vec3(0.0,1.0,0.0),wp.xz).y);
+  c=mix(cr,cb,1.0-smoothstep(TILE_HALF-BANK_EDGE,TILE_HALF,max(abs(wp.x),abs(wp.z))));
+  #else
+  c=cr;
+  #endif
   // strip fields in the distance
   float r=length(wp.xz);vec2 f=mat2(0.8,-0.6,0.6,0.8)*wp.xz;
   float id=fract(sin(dot(floor(vec2(f.x/70.0,f.y/22.0)),vec2(12.9898,78.233)))*43758.5453);

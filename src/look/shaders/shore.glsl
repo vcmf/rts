@@ -41,10 +41,30 @@ float aastep(float t,float v){
 }
 #if defined(WATERDATA)&&defined(BANKN)
 #define SHORE
-// damp earth at the water's edge
-vec3 landAlbedo(vec2 xz){
+// THE BANKS (W5, docs/plans/active/w5-banks.md; docs/art-bible.md §6c, research §2.9): painted over a ground colour
+// c at a point land m from the water (≥ 0), h m above it, where the authored surface's normal has y = ny. Damp grass
+// near the water; bare earth on steep ground near it (cut banks); pale gravel on low, gentle ground near it (point
+// bars); last, the wet line at the water, wider on gentle ground (a dark edge to the pale bar). WATER_SAB_BANKS (the banks check's sabotage): none
+vec3 bankPaint(vec3 c,vec2 xz,float land,float h,float ny){
+  #ifdef WATER_SAB_BANKS
+  return c;
+  #else
+  float gr=G(xz/3.0).g-0.5;
+  c=mix(c*vec3(0.80,0.86,0.80),c,smoothstep(1.0,6.0,land+gr*1.5));                                   // damp grass
+  float earth=smoothstep(0.82,0.62,ny)*smoothstep(4.0,1.0,land+gr);
+  c=mix(c,vec3(0.47,0.36,0.23)*(0.9+0.2*G(xz/2.0).g),earth);                                          // bare earth
+  float bar=smoothstep(0.8,0.2,h)*smoothstep(4.5,1.0,land+gr)*smoothstep(0.86,0.95,ny);
+  vec3 gv=vec3(0.66,0.65,0.60)*(0.88+0.24*G(xz/1.1).g);gv=mix(gv,vec3(0.50,0.49,0.45),smoothstep(0.58,0.68,G(xz/2.9+0.3).g)*0.5);
+  c=mix(c,gv,bar*0.9);                                                                                  // gravel: pale grey, darker pebbles
+  float wetW=mix(0.35,0.8,smoothstep(0.75,0.97,ny));
+  return mix(c*vec3(0.58,0.64,0.62),c,smoothstep(0.0,wetW,land+gr*0.4));                               // the wet line
+  #endif
+}
+// the shore band's ground: damp earth with the banks painted over it, through the seasons
+vec3 landAlbedo(vec2 xz,float land,float h){
   float g=G(xz/2.6).r,g2=G(xz/9.0+0.4).g;
-  return groundSeason(mix(vec3(0.34,0.29,0.19),vec3(0.43,0.36,0.23),g2)*(0.92+0.16*g));}
+  vec3 c=mix(vec3(0.34,0.29,0.19),vec3(0.43,0.36,0.23),g2)*(0.92+0.16*g);
+  return groundSeason(bankPaint(c,xz,land,h,bankNormal(vec3(0.0,1.0,0.0),xz).y));}
 // the bed: silt in pools, pale gravel where the current runs, weed in slow deeper water; the damp edge at depth 0
 vec3 bedAlbedo(vec2 xz,float depth,float speed){
   float g=G(xz/1.7).r,g2=G(xz/6.0+0.2).g;
@@ -52,12 +72,12 @@ vec3 bedAlbedo(vec2 xz,float depth,float speed){
   vec3 gravel=mix(vec3(0.56,0.50,0.37),vec3(0.70,0.64,0.50),g);
   vec3 b=mix(mud,gravel,smoothstep(0.45,0.85,speed+(g2-0.5)*0.3));
   b=mix(b,vec3(0.21,0.29,0.15),smoothstep(0.60,0.78,G(xz/4.3+0.6).g)*smoothstep(0.4,0.8,depth)*(1.0-speed));
-  return mix(landAlbedo(xz),b,smoothstep(0.0,0.3,depth));}
+  return mix(landAlbedo(xz,0.0,0.0),b,smoothstep(0.0,0.3,depth));}   // at depth 0, the ground at the water's edge
 const vec3 FOAM=vec3(0.93,0.92,0.84);
 // winter ice (the seasons are W5's): how much of the water it covers, 0..1; it covers every layer of the water
 float iceAmt(){return clamp(uSeason-2.3,0.0,0.7)/0.7;}
-// the ground at the water's edge, lit with the authored surface's normal
-vec3 shoreLand(vec3 wp,float occ,float sh){return paint(landAlbedo(wp.xz),bankNormal(vec3(0.0,1.0,0.0),wp.xz),wp,occ,0.12,1.0,sh);}
+// the ground at the water's edge, lit with the authored surface's normal: t its water texel
+vec3 shoreLand(vec3 wp,vec4 t,float occ,float sh){return paint(landAlbedo(wp.xz,max(-waterSdf(t),0.0),-waterDepth(t)),bankNormal(vec3(0.0,1.0,0.0),wp.xz),wp,occ,0.12,1.0,sh);}
 // the water's lower layers (research §2.8, layers 1, 2, 7, the shore foam, the ice): d the depth, s the shore distance,
 // sp the speed (0..1)
 vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh){
@@ -97,7 +117,7 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh){
 // the shoreline is a hard painted edge, anti-aliased
 vec3 shore(vec3 wp,vec4 t,float occ,float sh,float fw){
   float s=waterSdf(t),m=1.5*fw+1e-3;vec3 land=vec3(0.0),water=vec3(0.0);
-  if(s<m)land=shoreLand(wp,occ,sh);
+  if(s<m)land=shoreLand(wp,t,occ,sh);
   if(s>-m)water=shoreWater(wp,waterDepth(t),s,length(waterFlow(t)),occ,sh);
   return mix(land,water,aastep(0.0,s))*(1.0+(G(wp.xz/4.0).r-0.5)*uGrainAmt*0.14);}   // the gouache grain, on both sides (continuous at the shore)
 #endif

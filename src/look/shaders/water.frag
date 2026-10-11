@@ -22,7 +22,7 @@ void main(){
   // the seam check's sabotage: the water painting itself in the band (every layer wherever it is wet, the dry side lit
   // with the water's flat normal instead of the bank normals)
   const float UP0=0.0;
-  vec3 c=s<=0.0?paint(landAlbedo(vW.xz),vec3(0.0,1.0,0.0),vW,occ,0.12,1.0,sh)*(1.0+(G(vW.xz/4.0).r-0.5)*uGrainAmt*0.14):shore(vW,t,occ,sh,fws);
+  vec3 c=s<=0.0?paint(landAlbedo(vW.xz,max(-s,0.0),-waterDepth(t)),vec3(0.0,1.0,0.0),vW,occ,0.12,1.0,sh)*(1.0+(G(vW.xz/4.0).r-0.5)*uGrainAmt*0.14):shore(vW,t,occ,sh,fws);
   #else
   const float UP0=WATER_BAND;   // the upper layers: none within the band
   vec3 c=shore(vW,t,occ,sh,fws);
