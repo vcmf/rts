@@ -238,3 +238,22 @@ The charge golden came back to the value it had before the order-list design.
   Meanwhile, with the spell over, its orders run in square.
 - **A battalion that breaks during a change that was itself interrupted** snaps to the shape it held before the
   first change, which can be farther than half a change. It is rare, and S1e-3's playtests will say if it shows.
+
+**Redesign round 2** (`/code-review high`, 10 findings; three severe, each stranding a battalion in square or
+losing the plan's orders):
+- **Fixed, severe:**
+  - a rout cleared `autoFrom`, so a battalion that broke in its square and rallied never formed back. Sheltering
+    already ends at a rout, so the clear is gone;
+  - the form-back waited for its retry slot, so a battalion with a kept march marched in square for up to 5 s:
+    it forms back on the tick the spell ends;
+  - a battalion struck in melee had its orders cleared (the plan's kept march with them). In melee it now
+    stands, keeping its orders, and goes on with them after; a charge of its own ends. A test runs a march
+    through a melee.
+- **Fixed:**
+  - a wheel kept through a change takes its pivot again from the new shape, and its progress counts on;
+  - the shape to form back into is the one it is in, or going to, when the square starts;
+  - the standing behaviour's own refused change shows no "cannot form";
+  - the optional flag's order-side plumbing (a leftover of the order-list design) is gone;
+  - the retry is 5 s in seconds, under a generic name (`REFUGE_RETRY`);
+  - one `targetShape` replaces three copies;
+  - a test read companies by a hard-coded stride.

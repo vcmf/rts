@@ -117,7 +117,7 @@ function rout(w: World, i: number, now: number, men: number): void {
     // away from the nearest enemy in the fight, as this step's survey found it
     if (near.enemy < Infinity) { rx = near.ax; rz = near.az } else { rx = -sin(f.heading[i]); rz = -cos(f.heading[i]) }
   }
-  f.routs[i] = Math.min(255, f.routs[i] + 1); f.brokeTick[i] = now; f.fellBack[i] = 0; f.autoFrom[i] = 0
+  f.routs[i] = Math.min(255, f.routs[i] + 1); f.brokeTick[i] = now; f.fellBack[i] = 0
   f.mstate[i] = f.routs[i] > M.rally.max || men < M.shatter * f.startMen[i] ? MS_SHATTERED : MS_ROUTING
   f.routX[i] = rx; f.routZ[i] = rz; f.runs[i] = 0; f.routPhase[i] = RP_HALTED
   clearOrders(w, i)

@@ -17,7 +17,7 @@
 // its attackers in slot order. The draws are keyed by tick, formation and purpose. Orders come from the shared
 // pool in visiting order, as routs' do (tick.ts).
 import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_CHARGE, O_FACE, O_MOVE, CH_NONE, CH_CLOSING, CH_TESTED, CH_PURSUIT, MS_WAVERING, outOfFight, formationSlot as slotOf, formationHandle as handleOf, typeOf } from './world.ts'
-import { allocOrder, appendOrder, clearOrders, ordersFree, setOnMap, layoutOf, changeProgress, startChange } from './formation.ts'
+import { allocOrder, appendOrder, clearOrders, shiftOrder, ordersFree, setOnMap, layoutOf, changeProgress, startChange, targetShape } from './formation.ts'
 import { blockGeometry, oweByMen, type FireGeo } from './fire.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
@@ -145,9 +145,11 @@ function leave(w: World, i: number, j: number): void {
   if (j >= 0 && f.foe[j] === handleOf(w, i)) f.foe[j] = 0
 }
 // battalion j is in melee with i: its orders and any charge of its own end
+// (its other orders are kept for after the melee: in melee it stands, formation.ts)
 function engage(w: World, j: number, i: number): void {
   const f = w.f
-  clearOrders(w, j); f.foe[j] = handleOf(w, i); f.vx[j] = 0; f.vz[j] = 0; f.status[j] = 0; f.blockedFor[j] = 0
+  if (f.ordHead[j] >= 0 && w.ord.type[f.ordHead[j]] === O_CHARGE) shiftOrder(w, j)
+  f.foe[j] = handleOf(w, i); f.vx[j] = 0; f.vz[j] = 0; f.status[j] = 0; f.blockedFor[j] = 0
   if (f.chPhase[j]) { f.chPhase[j] = CH_NONE; f.chTarget[j] = 0; f.chRun[j] = 0 }
 }
 // a charge ends: blown for charge.rest if it galloped or met its target
@@ -264,9 +266,9 @@ function nearby(w: World, i: number, n: number): boolean {
 }
 // the square against cavalry: a threatened battalion forms its refuge after refuge.react seconds, and shelters in it
 // (formation.ts, sheltering) while the spell lasts; when the spell is over it forms back into the shape it formed
-// square from. The changes are started here, not ordered, and tried every SQUARE_RETRY ticks while they cannot be
+// square from. The changes are started here, not ordered, and tried every REFUGE_RETRY ticks while they cannot be
 // made (a wood, the water), so nothing piles up in the order pool
-const SQUARE_RETRY = 100
+const REFUGE_RETRY = Math.round(5 * TICK_HZ)   // ticks between tries of a change that cannot be made there
 export function standingStep(w: World): void {
   const f = w.f, Q = w.cr.rs.melee.refuge, tick = w.meta[M_TICK] + 1, react = Math.round(Q.react * TICK_HZ), hold = Math.round(Q.hold * TICK_HZ)
   // the charging types in the fight, once; nothing to do with none, no battalion on the alert and none to form back
@@ -281,18 +283,20 @@ export function standingStep(w: World): void {
       if (!f.alertAt[i] || tick - f.alertAt[i] > hold) f.refugeOff[i] = 0        // a new spell of threat
       f.alertAt[i] = tick
     } else if (f.alertAt[i] && tick - f.alertAt[i] > hold && !nearby(w, i, n)) {
-      f.alertAt[i] = 0; f.alertSince[i] = 0; f.refugeOff[i] = 0                   // the spell is over
+      f.alertAt[i] = 0; f.alertSince[i] = 0; f.refugeOff[i] = 0                   // the spell is over: form back now
+      if (f.autoFrom[i] && targetShape(w, i) === U.refuge && !f.trans[i] && startChange(w, i, f.autoFrom[i] - 1, true)) f.autoFrom[i] = 0
+      continue
     }
-    const into = f.trans[i] ? f.tShape[i] : f.shape[i]
+    const into = targetShape(w, i)
     if (f.alertAt[i]) {
       // in a spell: form square once the threat has run react seconds unbroken, unless a player's order stood it down
-      if (f.alertAt[i] !== tick || f.refugeOff[i] || into === U.refuge || tick - f.alertSince[i] < react || (tick - f.alertSince[i] - react) % SQUARE_RETRY) continue   // threatened now, unbroken for react
-      if (startChange(w, i, U.refuge, true)) { if (!f.autoFrom[i]) f.autoFrom[i] = into + 1; f.status[i] = 0; f.blockedFor[i] = 0 }
+      if (f.alertAt[i] !== tick || f.refugeOff[i] || into === U.refuge || tick - f.alertSince[i] < react || (tick - f.alertSince[i] - react) % REFUGE_RETRY) continue   // threatened now, unbroken for react
+      if (startChange(w, i, U.refuge, true)) { f.autoFrom[i] = into + 1; f.status[i] = 0; f.blockedFor[i] = 0 }   // the shape it is in, or going to, now
     } else if (f.autoFrom[i]) {
       // the spell is over: back into the shape it formed square from, once the square is formed (tried again while
       // that cannot be made there); a shape changed meanwhile by an order is kept
       if (into !== U.refuge) { f.autoFrom[i] = 0; continue }
-      if (f.trans[i] || (tick + i) % SQUARE_RETRY) continue
+      if (f.trans[i] || (tick + i) % REFUGE_RETRY) continue
       if (startChange(w, i, f.autoFrom[i] - 1, true)) f.autoFrom[i] = 0
     }
   }

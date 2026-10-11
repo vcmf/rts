@@ -72,8 +72,19 @@ describe('the plan', () => {
     s.cmd({ type: 'debug-spawn', side: 0, unit: 'cavalry', x: 0, z: -40, heading: 0, shape: 'line', men: 256, fire: 'hold' })
     s.cmd({ type: 'debug-spawn', side: 1, x: 0, z: 100, heading: 0, shape: 'line', men: 400, fire: 'at will' })
     s.cmd({ type: 'debug-spawn', side: 0, x: 0, z: 200, heading: PI, shape: 'line', men: 400, fire: 'hold' }); s.tick()   // infantry 100 m off its rear face
-    s.until(() => s.shape(unitHandle(1)) !== 'square', 150); const v0 = Math.max(...s.w.f.volleyTick.slice(8, 16)); s.advance(40)
-    expect(sheltering(s.w, 1)).toBe(true); expect(Math.max(...s.w.f.volleyTick.slice(8, 16))).toBeGreaterThan(v0)
+    s.until(() => s.shape(unitHandle(1)) !== 'square', 150); const C = s.w.cr.maxC, v0 = Math.max(...s.w.f.volleyTick.slice(C, 2 * C)); s.advance(40)
+    expect(sheltering(s.w, 1)).toBe(true); expect(Math.max(...s.w.f.volleyTick.slice(C, 2 * C))).toBeGreaterThan(v0)
+  })
+  it('a battalion struck in melee stands, keeping its plan march, and goes on with it once the melee is over', () => {
+    const plan: PlanStep[] = [{ at: 1, unit: 1, cmd: { type: 'move', points: [[300, 100]], append: false } }]
+    const rs = { ...napoleonic, melee: { ...napoleonic.melee, refuge: { ...napoleonic.melee.refuge, alert: 0 } } }   // no square: the melee alone
+    const s = new Sim(1, rs, openBattlefield(rs), OPEN_DATA); attachScenario(s.w, { plan })
+    s.cmd({ type: 'debug-spawn', side: 0, unit: 'cavalry', x: 100, z: -60, heading: 0, shape: 'line', men: 256, fire: 'hold', quality: 0.45 })
+    s.cmd({ type: 'debug-spawn', side: 1, x: 100, z: 100, heading: PI / 2, shape: 'line', men: 400, fire: 'hold', quality: 1 }); s.tick()
+    s.advance(2); s.order({ type: 'charge', id: unitHandle(0), target: unitHandle(1) })
+    s.until(() => !s.w.f.foe[1], 120); expect(s.w.f.foe[1]).not.toBe(0)
+    const x = s.x(unitHandle(1)); s.advance(2); expect([s.orders(unitHandle(1)), s.x(unitHandle(1))]).toEqual([1, x])   // stands, its march kept
+    s.until(() => s.w.f.foe[1] !== 0, 300); s.advance(20); expect(s.x(unitHandle(1))).toBeGreaterThan(x + 5)   // the regiment broke: on it goes
   })
   it('a player\'s order in the same spell stands the square down', () => {
     const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA)

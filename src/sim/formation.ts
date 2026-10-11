@@ -31,7 +31,9 @@ const now = (w: World) => w.meta[M_TICK] * DT
 /* ---------------- shapes, places ---------------- */
 // (a formation's shapes are its type's: f.shape and f.tShape index typeOf(w, i).shapes)
 export const layoutOf = (w: World, i: number): ShapeLayout => typeOf(w, i).shapes[w.f.shape[i]]
-const targetLayout = (w: World, i: number): ShapeLayout => typeOf(w, i).shapes[w.f.trans[i] ? w.f.tShape[i] : w.f.shape[i]]
+// the shape a formation is in, or changing into
+export const targetShape = (w: World, i: number): number => w.f.trans[i] ? w.f.tShape[i] : w.f.shape[i]
+const targetLayout = (w: World, i: number): ShapeLayout => typeOf(w, i).shapes[targetShape(w, i)]
 export const snakes = (w: World, i: number): boolean => !w.f.trans[i] && !!layoutOf(w, i).def.trail
 const kindOf = (w: World, i: number) => targetLayout(w, i).kind
 const BW = (U: TypeTable) => U.geo.files * U.geo.fileSpacing   // a company's frontage
@@ -65,7 +67,7 @@ export function filledSlots(w: World, i: number): Filled {
   const U = typeOf(w, i), g = U.geo, C = U.C, CS = w.cr.maxC, SL = w.cr.maxSlots, f = w.f
   let F = w.scratch.filled
   if (!F) F = w.scratch.filled = { s: new Int32Array(MAX_FORMATIONS * SL), at: new Int32Array(MAX_FORMATIONS * (CS + 1)), sig: new Int32Array(MAX_FORMATIONS * (CS + 3)).fill(-1) }
-  const sg = i * (CS + 3), shape = f.trans[i] ? f.tShape[i] : f.shape[i]
+  const sg = i * (CS + 3), shape = targetShape(w, i)
   let same = F.sig[sg] === shape && F.sig[sg + 1] === f.lean[i] && F.sig[sg + 2] === f.type[i]
   for (let c = 0; same && c < C; c++) same = F.sig[sg + 3 + c] === f.men[i * CS + c]
   if (same) return F
@@ -263,7 +265,7 @@ function changeEase(w: World, i: number, c: number, t: number): number {
 export function sheltering(w: World, i: number): boolean {
   const f = w.f, U = typeOf(w, i)
   return U.refuge >= 0 && f.autoFrom[i] !== 0 && f.alertAt[i] !== 0 && !f.refugeOff[i] && !outOfFight(f.mstate[i]) && !f.foe[i] &&
-    (f.trans[i] ? f.tShape[i] : f.shape[i]) === U.refuge
+    targetShape(w, i) === U.refuge
 }
 // a change cut short where it stands (a battalion that breaks, #39): it takes whichever of its two shapes the change
 // is nearer to, at once (its places jump by up to half the change; the soldier layer's men walk the difference)
@@ -598,7 +600,8 @@ function changeWet(w: World, i: number): boolean {
 }
 const csPlace: Placement = { x: 0, z: 0, rot: 0, face: 0 }
 // starts a change to `shape`; refused (and the orders dropped) if its path crosses impassable ground
-// (`optional`: a change that cannot be made is skipped, and the orders after it go on; else they are dropped)
+// (`optional`: the standing behaviour's own change, which may fail quietly: no orders dropped, no status; an order's
+// that cannot be made drops the orders after it)
 export function startChange(w: World, i: number, shape: number, optional = false): boolean {
   const f = w.f, U = typeOf(w, i), C = U.C, CS = w.cr.maxC, S = U.shapes.length, t = now(w)
   if (shape === f.shape[i] && !f.trans[i]) return false
@@ -619,11 +622,13 @@ export function startChange(w: World, i: number, shape: number, optional = false
   if (changeWet(w, i)) {
     f.trans[i] = keep.trans; f.tShape[i] = keep.tShape; f.tStart[i] = keep.tStart; f.tDur[i] = keep.tDur
     f.tDelay.set(keep.delay, i * CS); f.tFrom.set(keep.from, i * CS * 4); f.tTo.set(keep.to, i * CS * 4); f.tK.set(keep.k, i * CS * 2)
-    if (!optional) clearOrders(w, i)
-    f.status[i] = ST_CANNOT_FORM; return false
+    if (!optional) { clearOrders(w, i); f.status[i] = ST_CANNOT_FORM }   // (an optional one, the standing behaviour's own, says nothing)
+    return false
   }
   f.vx[i] = 0; f.vz[i] = 0; f.omega[i] = 0; f.onRoad[i] = 0
   for (let j = 0; j < U.NB; j++) f.lags[i * w.cr.maxNB + j] = 0
+  // a wheel kept through the change (a square against cavalry) takes its pivot again from the new shape
+  for (let n = f.ordHead[i]; n >= 0; n = w.ord.next[n]) if (w.ord.type[n] === O_WHEEL) w.ord.left[n] = -1
   if (!U.shapes[shape].def.closeAcross) rebalance(w, i)
   return true
 }
@@ -748,18 +753,17 @@ function formationStep(w: World, i: number): void {
   if (f.trans[i]) {   // no marching while the companies change places; a new shape order interrupts the change (a battalion that breaks cuts it short: cutChange)
     f.vx[i] = 0; f.vz[i] = 0
     const n = f.ordHead[i]
-    if (n >= 0 && o.type[n] === O_FORM && !shelter) { const s = o.shape[n], opt = o.optional[n] === 1; shiftOrder(w, i); startChange(w, i, s, opt); return }
+    if (n >= 0 && o.type[n] === O_FORM && !shelter) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
     if (t >= f.tStart[i] + f.tDelay[i * CS + C - 1] + f.tDur[i]) {
       finishChange(w, i, f.tShape[i])
     }
     return
   }
   const n = f.ordHead[i]
-  // no orders, or sheltering in the square against cavalry: it stands (a sheltering battalion keeps its orders for
-  // after the threat)
-  if (n < 0 || shelter) { f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); return }
+  // no orders, sheltering in the square against cavalry, or in melee: it stands (keeping its orders for after)
+  if (n < 0 || shelter || f.foe[i]) { f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); return }
   const h0 = f.heading[i], type = o.type[n]
-  if (type === O_FORM) { const s = o.shape[n], opt = o.optional[n] === 1; shiftOrder(w, i); startChange(w, i, s, opt); return }
+  if (type === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
   const [V0, pace] = paceOf(w, i), halfW = halfWidth(w, i)
   if (type === O_MOVE || type === O_CHARGE) {
     if (type === O_CHARGE) { if (!chargeAim(w, i, n)) { shiftOrder(w, i); f.vx[i] = 0; f.vz[i] = 0; return } }   // its target is gone (the melee step ends the charge)
@@ -809,7 +813,7 @@ function formationStep(w: World, i: number): void {
   } else if (type === O_WHEEL) {
     if (snakes(w, i)) { shiftOrder(w, i); f.status[i] = ST_CANNOT_WHEEL; return }
     lagSettle(w, i)
-    if (o.left[n] < 0) { o.left[n] = o.a[n] > 0 ? 1 : 0; const piv = rot2(o.left[n] ? -halfW : halfW, 0, -f.heading[i]); o.px[n] = f.x[i] + piv[0]; o.pz[n] = f.z[i] + piv[1]; o.done[n] = 0 }
+    if (o.left[n] < 0) { o.left[n] = o.a[n] > 0 ? 1 : 0; const piv = rot2(o.left[n] ? -halfW : halfW, 0, -f.heading[i]); o.px[n] = f.x[i] + piv[0]; o.pz[n] = f.z[i] + piv[1] }   // (its pivot: set again after a change of shape; done counts on)
     const wq = Math.min(Math.abs(o.a[n]) - o.done[n], 1.0 * V0 / (2 * halfW) * DT)   // the outer flank at marching pace
     const sgn = o.a[n] > 0 ? -1 : 1, x0 = f.x[i], z0 = f.z[i], before = wetBins(w, i, bitsOf(w).before)
     const uw = gate(w, i, before, u => { const r = rot2(x0 - o.px[n], z0 - o.pz[n], -sgn * wq * u); f.x[i] = o.px[n] + r[0]; f.z[i] = o.pz[n] + r[1]; f.heading[i] = h0 + sgn * wq * u })
