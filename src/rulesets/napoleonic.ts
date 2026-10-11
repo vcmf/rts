@@ -109,8 +109,16 @@ const battery: UnitType = {
   changeTime: { 'limbered>unlimbered': 90, 'unlimbered>limbered': 120 },
   defaultChangeTime: 90,
   start: 'limbered',
-  fires: false,   // its fire is S1d-3
+  fires: false,   // no musketry: its pieces fire shot
   figure: 'crewed',
+  // roundshot and canister (docs/systems/artillery.md): a 6-pounder's ball at about 430 m/s, effective to about
+  // 800 m with its grazes; canister inside 300 m (the research: 200–350 m). First guesses, tuned by
+  // tools/calibrate-artillery.ts
+  artillery: {
+    shapes: ['unlimbered'], arc: 0.35, reload: 25, reloadJitter: 0.2, crew: 12,
+    ray: { range: 800, muzzle: 1.0, speed: 430, energy: 900, graze: 60, restitution: 0.3, bury: 0.25, height: 1.9, width: 0.6, perMan: 25, kill: 0.09, spread: 0.012, short: 0.1 },
+    cone: { range: 300, half: 0.09, hits: [[0, 8], [100, 5], [200, 2], [300, 0.5]] },
+  },
 }
 
 export const napoleonic: Ruleset = {

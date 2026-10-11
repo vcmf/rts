@@ -66,10 +66,14 @@ export function pAt(w: World, d: number): number {
   for (let k = 1; k < T.length; k++) if (d < T[k][0]) { const u = (d - T[k - 1][0]) / (T[k][0] - T[k - 1][0]); return T[k - 1][1] + (T[k][1] - T[k - 1][1]) * u }
   return 0
 }
+// the arc and range the targeting below uses: musketry's (fire.arc, fire.maxRange), or a battery's own
+// (artillery.ts sets them for its pieces with `useReach`)
+const reach = { range: 0, cos: 1 }
+export function useReach(range: number, cosArc: number): void { reach.range = range; reach.cos = cosArc }
 // company k sees point (x, z) inside its arc and range
-function inArc(w: World, G: FireGeo, k: number, x: number, z: number): boolean {
+function inArc(G: FireGeo, k: number, x: number, z: number): boolean {
   const dx = x - G.cx[k], dz = z - G.cz[k], d = sqrt(dx * dx + dz * dz)
-  return d <= w.cr.rs.fire.maxRange && dx * G.fx[k] + dz * G.fz[k] >= d * w.cr.cosArc
+  return d <= reach.range && dx * G.fx[k] + dz * G.fz[k] >= d * reach.cos
 }
 // the ground, and the woods, leave the sight line between two company centres clear
 function clearSight(w: World, x0: number, z0: number, x1: number, z1: number): boolean {
@@ -100,7 +104,7 @@ function throughBlock(G: FireGeo, j: number, k: number, x0: number, z0: number, 
 }
 // the share of company k's three rays (both ends of its front and its centre) to (x, z) that no friendly
 // block, its own battalion's other companies included, stands across
-function clearShare(w: World, G: FireGeo, i: number, c: number, x: number, z: number): number {
+export function clearShare(w: World, G: FireGeo, i: number, c: number, x: number, z: number): number {
   const f = w.f, CS = w.cr.maxC, k = i * CS + c, g = typeOf(w, i).geo, half = (g.files - 1) * g.fileSpacing / 2
   let clear = 0
   for (let r = -1; r <= 1; r++) {
@@ -115,14 +119,14 @@ function clearShare(w: World, G: FireGeo, i: number, c: number, x: number, z: nu
   }
   return clear / 3
 }
-function distToSegment(px: number, pz: number, x0: number, z0: number, x1: number, z1: number): number {
+export function distToSegment(px: number, pz: number, x0: number, z0: number, x1: number, z1: number): number {
   const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, u = l2 > 0 ? Math.max(0, Math.min(1, ((px - x0) * dx + (pz - z0) * dz) / l2)) : 0
   const ex = x0 + dx * u - px, ez = z0 + dz * u - pz; return sqrt(ex * ex + ez * ez)
 }
 // company k sees company m: the sight line, walked at most once per pair for one geometry (a sight line is
 // the same both ways, so the pair is keyed low to high; cached in the world's scratch, stamped with the
 // geometry's epoch, so an answer for older positions is never read)
-function sees(w: World, G: FireGeo, k: number, m: number): boolean {
+export function sees(w: World, G: FireGeo, k: number, m: number): boolean {
   const n = MAX_FORMATIONS * w.cr.maxC, s = w.scratch, epoch = s.fireEpoch ?? 0
   const a0 = k < m ? k : m, b0 = k < m ? m : k, key = a0 * (2 * n - a0 - 1) / 2 + (b0 - a0 - 1)   // the upper triangle (k ≠ m)
   const cache = s.fireSight ?? (s.fireSight = new Int32Array(n * (n - 1) / 2)), v = cache[key]
@@ -137,10 +141,10 @@ const sqDist = (G: FireGeo, k: number, m: number): number => (G.cx[m] - G.cx[k])
 // in arc are tried nearest first, so one hidden in a wood does not hide the rest (a battalion has at most
 // MAX_COMPANIES, ruleset.ts)
 const aimD = new Float64Array(MAX_COMPANIES), aimM = new Int32Array(MAX_COMPANIES)
-function aimAt(w: World, G: FireGeo, k: number, j: number): number {
+export function aimAt(w: World, G: FireGeo, k: number, j: number): number {
   const C = typeOf(w, j).C, CS = w.cr.maxC; let n = 0
   for (let q = 0; q < C; q++) {
-    const m = j * CS + q; if (w.f.men[m] <= 0 || !inArc(w, G, k, G.cx[m], G.cz[m])) continue
+    const m = j * CS + q; if (w.f.men[m] <= 0 || !inArc(G, k, G.cx[m], G.cz[m])) continue
     const d = sqDist(G, k, m)
     let p = n++; while (p > 0 && (aimD[p - 1] > d || (aimD[p - 1] === d && aimM[p - 1] > m))) { aimD[p] = aimD[p - 1]; aimM[p] = aimM[p - 1]; p-- }
     aimD[p] = d; aimM[p] = m
@@ -172,10 +176,11 @@ export function fireStep(w: World): void {
     if (!f.alive[i]) continue
     const C = typeOf(w, i).C
     for (let c = 0; c < C; c++) if (f.reload[i * CS + c] > 0) f.reload[i * CS + c] = Math.max(0, f.reload[i * CS + c] - DT)
-    if (mayFire(w, i)) any = true; else for (let c = 0; c < C; c++) f.target[i * CS + c] = 0
+    if (mayFire(w, i)) any = true; else if (!typeOf(w, i).artillery) for (let c = 0; c < C; c++) f.target[i * CS + c] = 0   // a battery's pieces: artillery.ts
   }
   if (!any) return
   const G = blockGeometry(w), rev = w.scratch.reverse === true   // a test visits battalions in reverse: results must not change
+  useReach(F.maxRange, w.cr.cosArc)
   w.scratch.fireGeoTick = tick   // built for this tick's positions after movement: the melee step reuses it
   for (let n = 0; n < MAX_FORMATIONS; n++) {
     const i = rev ? MAX_FORMATIONS - 1 - n : n
@@ -204,8 +209,9 @@ export function fireStep(w: World): void {
 // the preferred target if it can be aimed at, else the current one, else the nearest; ties to the lower
 // handle. The company aimed at is left in chosenAim (−1 none) for the volley this tick.
 let chosenAim = -1
+export const chosen = (): number => chosenAim
 const candD = new Float64Array(MAX_FORMATIONS), candH = new Int32Array(MAX_FORMATIONS)
-function chooseTarget(w: World, G: FireGeo, i: number, c: number): Handle {
+export function chooseTarget(w: World, G: FireGeo, i: number, c: number): Handle {
   const f = w.f, CS = w.cr.maxC, k = i * CS + c
   chosenAim = -1
   for (let p = 0; p < 2; p++) { const h = p === 0 ? f.prefer[i] : f.target[k], j = slotOf(w, h); if (j >= 0 && f.side[j] !== f.side[i]) { const m = aimAt(w, G, k, j); if (m >= 0) { chosenAim = m; return h } } }
@@ -215,7 +221,7 @@ function chooseTarget(w: World, G: FireGeo, i: number, c: number): Handle {
   for (let j = 0; j < MAX_FORMATIONS; j++) {
     if (!f.alive[j] || f.side[j] === f.side[i]) continue
     let b = Infinity
-    for (let q = 0, C = typeOf(w, j).C; q < C; q++) { const m = j * CS + q; if (f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m])) b = Math.min(b, sqDist(G, k, m)) }
+    for (let q = 0, C = typeOf(w, j).C; q < C; q++) { const m = j * CS + q; if (f.men[m] > 0 && inArc(G, k, G.cx[m], G.cz[m])) b = Math.min(b, sqDist(G, k, m)) }
     if (b === Infinity) continue
     const h = handleOf(w, j); let p = nc++   // insertion by (bound, handle)
     while (p > 0 && (candD[p - 1] > b || (candD[p - 1] === b && candH[p - 1] > h))) { candD[p] = candD[p - 1]; candH[p] = candH[p - 1]; p-- }
@@ -240,7 +246,7 @@ function volley(w: World, G: FireGeo, i: number, c: number, j: number, d: number
   const lambda = rounds * pAt(w, d) * w.cr.stateFactor[Math.min(2, f.mstate[i])] * (1 - F.cohesion * f.disorder[i]) * w.cr.depthByKind[layoutOf(w, j).kind]
   let hits = Math.floor(lambda); if (nextUnit(rs) < lambda - hits) hits++
   if (!hits) return
-  for (let q = 0; q < C; q++) { const m = j * CS + q; open[q] = f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m]) && sees(w, G, k, m) ? 1 : 0 }
+  for (let q = 0; q < C; q++) { const m = j * CS + q; open[q] = f.men[m] > 0 && inArc(G, k, G.cx[m], G.cz[m]) && sees(w, G, k, m) ? 1 : 0 }
   oweByMen(w, j, open, hits, rs)
 }
 // n men owed to battalion j's companies marked in `mask`, each drawn from rs to a marked company weighted by its
@@ -276,7 +282,7 @@ export function casualtiesStep(w: World, i: number): number {
 // company c of battalion i as it would aim now: its target's slot (−1 none), the clear share of its rays
 // and the range. For tests and debugging: it rebuilds the fire geometry for every battalion, not a per-frame call.
 export function aimOf(w: World, i: number, c: number): { target: number; share: number; range: number } {
-  const G = blockGeometry(w), k = i * w.cr.maxC + c, j = slotOf(w, w.f.target[k])
+  const G = blockGeometry(w), k = i * w.cr.maxC + c, j = slotOf(w, w.f.target[k]); useReach(w.cr.rs.fire.maxRange, w.cr.cosArc)
   const m = j >= 0 ? aimAt(w, G, k, j) : -1
   if (m < 0) return { target: j, share: 0, range: Infinity }
   return { target: j, share: clearShare(w, G, i, c, G.cx[m], G.cz[m]), range: sqrt(sqDist(G, k, m)) }

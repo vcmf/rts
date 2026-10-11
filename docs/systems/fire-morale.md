@@ -32,7 +32,7 @@ step 12 morale     then morale for all: relaxes toward quality − losses + flan
   - smoke, vision and commanders, with their rally radius (S2);
   - flank and rear threats from musketry (charges strike flanks and rears since S1d-2, `docs/systems/melee.md`);
   - removing shattered battalions at the map edge (S1e);
-  - artillery (S1d-3).
+  - artillery (`docs/systems/artillery.md`, S1d-3: its pieces use this targeting with their own arc and range).
 
 ## Constraints
 

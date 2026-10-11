@@ -152,7 +152,7 @@ describe('under fire', () => {
     const t = buildTerrain(levelled(data), compileRuleset(rs)), s = new Sim(1, rs, t)
     s.cmd({ type: 'side', side: 0, x: -1, z: 0 }); s.cmd({ type: 'side', side: 1, x: 1, z: 0 })
     const inf = s.spawn(-90, -165, N, 'line', 100, 0), them = s.spawn(-10, -165, -N, shape, men, 1, unit), j = s.slot(them)
-    void inf
+    void inf; s.order({ type: 'fire', id: them, mode: 'hold' })   // the battery holds its shot (S1d-3): this is about taking fire
     let fired = false, t0 = -1
     for (let k = 0; k < 20 * 180 && t0 < 0; k++) {
       s.tick(); const C = typeOf(s.w, j).C

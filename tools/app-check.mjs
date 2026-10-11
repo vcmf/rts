@@ -3,7 +3,7 @@
 // exported replay back in Node: it must reproduce every hash the page took. The runs: the drill scenario
 // (orders, every panel button, screenshots), the 40-battalion bench (cost), the firefight to a rout, the
 // brigade to a break that spreads, the arms (the unit types changing shape), and the charge (a line caught
-// forming square breaks; a square holds).
+// forming square breaks; a square holds), and the guns (a battery fires roundshot on a column).
 // Run `npm run build` first.
 // Usage: node tools/app-check.mjs [outDir]
 import { spawn } from 'node:child_process'
@@ -83,6 +83,14 @@ const charge = [
   REPLAY,
 ]
 
+// the guns (S1d-3): the battery on the hill fires on the column across the stream for a minute and a half
+const guns = [
+  ['wait', 1500], READY,
+  ['eval', 'APP.view(25, 50, 1.6); APP.select([0]); APP.order("fireAtWill"); APP.select([]); APP.advance(90); `GUNS column lost ${APP.w.f.startMen[1] - APP.w.f.men.slice(APP.w.cr.maxC, 2 * APP.w.cr.maxC).reduce((a, b) => a + b, 0)}, shots ${[...APP.w.f.shotKind.slice(0, 8)].filter(k => k === 1).length}`'],
+  ['shot', 'guns-0-fire'],
+  REPLAY,
+]
+
 // the brigade (S1c-2) played until a break has spread: two or more of the weaker side's lines (slots 3–5) out
 // of the fight (routing, rallying or shattered: state ≥ 3), in 3-minute steps
 const OUT = 'APP.w.f.mstate.slice(3, 6).filter(s => s >= 3).length'
@@ -114,6 +122,7 @@ async function run(scenario, steps) {
   if (scenario === 's1c-brigade' && !/CONTAGION [23] /.test(text)) { console.log('the brigade fight did not spread a break'); return false }
   if (scenario === 's1d-arms' && !(/TROT march unlimbered column unlimbered at z 80/.test(text) && /ARMS column unlimbered column unlimbered/.test(text))) { console.log('the arms did not change shape'); return false }
   if (scenario === 's1d-charge' && !(/CHARGE line state [35]/.test(text) && /SQUARE state [012], regiment phase 0 melee 0/.test(text))) { console.log('the charges did not break the line and fail on the square'); return false }
+  if (scenario === 's1d-guns' && !/GUNS column lost [1-9]\d*, shots [1-9]/.test(text)) { console.log('the battery did not fire on the column'); return false }
   if (scenario === 's1b-field' && (!panel || panel[1] !== panel[2] || panel[1] === '0')) { console.log('panel buttons did not each log one command'); return false }
   return true
 }
@@ -123,7 +132,7 @@ const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--stri
 let ok = false
 try {
   await sleep(2500)
-  ok = await run('s1b-field', drill) && await run('s1b-bench', bench) && await run('s1c-firefight', fight) && await run('s1c-brigade', brigadeFight) && await run('s1d-arms', arms) && await run('s1d-charge', charge)
+  ok = await run('s1b-field', drill) && await run('s1b-bench', bench) && await run('s1c-firefight', fight) && await run('s1c-brigade', brigadeFight) && await run('s1d-arms', arms) && await run('s1d-charge', charge) && await run('s1d-guns', guns)
 } finally { preview.kill() }
 console.log(ok ? 'app check: ok' : 'app check: FAILED')
 process.exit(ok ? 0 : 1)

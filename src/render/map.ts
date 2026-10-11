@@ -3,7 +3,7 @@
 // contours by marching squares, spot heights at the summits, cosmetic symbols (scene.ts), every soldier a
 // small outlined circle. Two layers: the map (redrawn when the view changes) and the units (every frame).
 import type { World } from '../sim/index.ts'
-import { cellK, O_MOVE, M_TICK, MS_STEADY, MORALE_STATES, fleeing, DT, formationSlot, layoutOf, typeOf, placeWorld } from '../sim/index.ts'
+import { cellK, O_MOVE, M_TICK, MS_STEADY, MORALE_STATES, fleeing, DT, formationSlot, layoutOf, typeOf, placeWorld, SHOT_RAY, SHOT_CONE } from '../sim/index.ts'
 import type { Scene } from './scene.ts'
 import type { SoldierLayer } from './soldiers.ts'
 import { CLASS_STYLE, INK, SIDE_INK, FIRE_INK, MORALE_INK } from './style.ts'
@@ -187,18 +187,27 @@ export class StaffMap {
     }
     g.stroke()
   }
-  // each company that fired in the last 0.6 s: a flash at its front and a fading line toward its target
+  // each company that fired in the last 0.6 s: a flash at its front and a fading line toward its target. A
+  // battery's piece (S1d-3) shows for a second: a roundshot as a line to where the ball stopped, canister as a fan
   private drawVolleys(g: CanvasRenderingContext2D, v: View, layer: SoldierLayer, i: number, men: { s: number; x: number; z: number; alive: boolean }[], R: number): void {
     const w = this.w, f = w.f, U = typeOf(w, i), g0 = U.geo, C = U.C, RF = g0.ranks * g0.files, now = w.meta[M_TICK] + layer.alphaNow
     for (let c = 0; c < C; c++) {
-      const k = i * w.cr.maxC + c, age = (now - f.volleyTick[k]) * DT; if (!f.volleyTick[k] || age > 0.6 || age < 0) continue
+      const k = i * w.cr.maxC + c, shot = f.shotKind[k], life = shot ? 1 : 0.6, age = (now - f.volleyTick[k]) * DT; if (!f.volleyTick[k] || age > life || age < 0) continue
       let x = 0, z = 0, n = 0
       for (const m of men) if (m.alive && Math.floor(m.s / RF) === c && Math.floor((m.s % RF) / g0.files) === 0) { x += m.x; z += m.z; n++ }   // the front rank
       if (!n) continue
-      const [sx, sy] = toS(v, x / n, z / n), a = 1 - age / 0.6, h = f.target[k]
+      const [sx, sy] = toS(v, x / n, z / n), a = 1 - age / life, h = f.target[k]
       g.globalAlpha = a; g.fillStyle = FIRE_INK; g.beginPath(); g.arc(sx, sy, R * 1.8, 0, Math.PI * 2); g.fill()
       const j = formationSlot(w, h)
-      if (j >= 0) {
+      if (shot === SHOT_RAY) {   // the ball's line, to where it stopped
+        const [ex, ey] = toS(v, f.shotX[k], f.shotZ[k])
+        g.strokeStyle = FIRE_INK; g.lineWidth = 1; g.globalAlpha = a * 0.7; g.beginPath(); g.moveTo(sx, sy); g.lineTo(ex, ey); g.stroke()
+      } else if (shot === SHOT_CONE) {   // the fan, out to the aim point
+        const half = U.def.artillery?.cone.half ?? 0.1, dx = f.shotX[k] - x / n, dz = f.shotZ[k] - z / n
+        g.fillStyle = FIRE_INK; g.globalAlpha = a * 0.25; g.beginPath(); g.moveTo(sx, sy)
+        for (const t of [-half, half]) { const ct = Math.cos(t), st = Math.sin(t), [px, py] = toS(v, x / n + dx * ct - dz * st, z / n + dx * st + dz * ct); g.lineTo(px, py) }
+        g.closePath(); g.fill()
+      } else if (j >= 0) {
         const [tx, tz] = layer.anchor(j, layer.alphaNow, 0), [ex, ey] = toS(v, tx, tz)
         g.strokeStyle = FIRE_INK; g.lineWidth = 1; g.globalAlpha = a * 0.5; g.setLineDash([2, 3]); g.beginPath(); g.moveTo(sx, sy); g.lineTo(ex, ey); g.stroke(); g.setLineDash([])
       }

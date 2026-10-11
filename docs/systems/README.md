@@ -22,4 +22,4 @@ PR that changes it; the design that led to it stays in `docs/proposals/` and the
 | The sim page: soldier layer, staff map drawing, input | `docs/systems/sim-page.md` | built (S1b) |
 | Fire and morale | `docs/systems/fire-morale.md` | built (S1c-1): fire by company, loss-driven morale, rout |
 | Charges, melee and the square | `docs/systems/melee.md` | built (S1d-2) |
-| Artillery fire | not yet: see `docs/proposals/sim-design.md` | not built (S1d-3) |
+| Artillery: roundshot and canister | `docs/systems/artillery.md` | built (S1d-3) |

@@ -1,7 +1,7 @@
 // The tick (docs/proposals/sim-design.md §16, the determinism contract). Every loop runs in slot order.
 // S1a fills steps 1, 5–6 (orders → formation state and movement, one call per formation) and 14; S1c fills
 // 8 (fire), 11 (casualties) and 12 (morale; the rout and the wavering fall-back are its standing behaviours);
-// S1d-2 fills 4 (the square against cavalry) and 10 (charges and melee). The others are named and empty until
+// S1d-2 fills 4 (the square against cavalry) and 10 (charges and melee); S1d-3 fills 9 (artillery). The others are named and empty until
 // later parts of S1.
 import { type World, M_TICK, MAX_FORMATIONS } from './world.ts'
 import { applyCommands, reapFormation, type Dropped } from './commands.ts'
@@ -12,6 +12,7 @@ import { hashWorld } from './serialize.ts'
 import { fireStep, casualtiesStep } from './fire.ts'
 import { moraleStep } from './morale.ts'
 import { meleeStep, standingStep } from './melee.ts'
+import { artilleryStep } from './artillery.ts'
 
 // metering is injected: the sim never reads a clock itself
 export interface Meter { now(): number; add(step: string, ms: number): void }
@@ -27,7 +28,7 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
   step('5–6 formations: orders, changes, movement', () => { for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i]) formationTick(w, i) })
   // 7 vision: S2
   step('8 fire', () => { fireStep(w) })
-  // 9 roundshot: S1d-3
+  step('9 artillery', () => { artilleryStep(w) })
   step('10 charges and melee', () => { meleeStep(w) })
   // all casualties first, then all morale: a rout reads other battalions (the nearest enemy's position and
   // men, final for the tick; its morale state from a copy taken before any changes), so visiting order does
