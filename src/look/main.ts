@@ -142,7 +142,7 @@ const terrainMats = [terrain.terrainMat, terrain.farTerrainMat, terrain.hillMat]
 // the terrain's variants (src/look/shaders/painter.glsl): the L0 grain, the debug view, the checks' sabotages
 const DETAIL_DEFINES = ['DETAIL_L0', 'DETAIL_DEBUG', 'DETAIL_DEBUG_INC', 'DETAIL_DEBUG_N', 'DETAIL_SAB_IMPLICIT', 'DETAIL_SAB_STEP', 'BANKN_OFF']
 // the water's materials take the two that change the shore band (it paints with the terrain's paint() and normals).
-// On WebGL1 the L0 grain stays on whatever is asked (the detail layer needs GLSL ES 3.00: src/look/terrain.ts)
+// On WebGL1 the L0 grain stays on whatever is asked (the detail layer needs GLSL ES 3.00: src/look/materials.ts)
 const webgl1 = engine.version < 2
 const setDetail = (on: string[]) => {
   for (const d of on) if (!DETAIL_DEFINES.includes(d)) throw new Error(`unknown detail define ${d}`)
@@ -175,7 +175,7 @@ const groundAs = (kind: 'terrain' | 'water') => { terrain.tileGround.material = 
 // the water data at a point, read bilinearly as the GPU reads it (the band check measures the drawn surfaces against it)
 let waterBytes: Uint8Array | null = null
 const waterAt = (x: number, z: number) => {
-  waterBytes ??= new Uint8Array(unpackSpans(look.water, WATER_FILL).buffer)
+  waterBytes ??= unpackSpans(look.water, WATER_FILL)
   const g = look.water
   return decodeWater(...sampleRGBA(waterBytes, g.n, g.cell, g.x0, g.z0, x, z))
 }

@@ -43,7 +43,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/river.ts` | The meander at run time (`docs/systems/river.md`): the shipped samples, a bucket grid, `riverQuery`, `bandOf` |
 | `src/look/grain.ts` | The procedural paint grain (R fine, G blotches, B streaks), a dropped PNG's luminance, the seam check's smooth grain, the R channel's mean |
 | `src/look/materials.ts` | Panel state `S`, sun and palette, and the material factory that inlines `shaders/painter.glsl` at `#include<painter>`, the water data's reads (`#include<waterdata>`) and the shore band with the bank normals (`#include<shore>`, W4) |
-| `src/look/terrain.ts` | Tile (1.79 m), far ring (14.3 m) and the apron that stitches them; the far ring's painted river mask; the bank normals' texture (W2, `docs/systems/river.md`; both it and the water data's, W3, from `src/look/span-texture.ts`). Their materials define `DETAIL` (the detail layer, below); the tile's also `BANKN` |
+| `src/look/terrain.ts` | Tile (1.79 m), far ring (14.3 m) and the apron that stitches them; the far ring's painted river mask; the bank normals' texture (W2, `docs/systems/river.md`; both it and the water data's, W3, from `src/look/span-texture.ts`). Their materials define `DETAIL` (the detail layer, below; on WebGL1 the material factory adds `DETAIL_L0`); the tile's also `BANKN` and `WATERDATA` (the shore band, W4), as do the water's |
 | `src/look/water.ts` | The water ribbon, its materials (the painted water, W4, `docs/systems/river.md`; and the same shader on the tile's ground, for the seam check) and the tree-reflection mask |
 | `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule |
 | `src/look/bakes.ts` | Sun shadow depth (once), occlusion and valley mask (CPU, once), the top-down light map (once) |
@@ -64,7 +64,7 @@ with the L0 grain on the terrain.
 
 ### The detail layer (L2b)
 
-In `paint()` (`src/look/shaders/painter.glsl`), for materials that define `DETAIL` (the terrain's): the paint
+In `paint()` (`src/look/shaders/painter.glsl`), for materials that define `DETAIL` (the terrain's, and the water's since W4: the shore band paints with it): the paint
 grain at a constant size on screen (`docs/plans/active/l2-detail.md`).
 - **Projection:** biplanar (the two planes most facing the normal; on gentle ground only the ground plane is
   read). Near the cube's diagonals (55° slopes facing between two axes) every plane's weight goes to zero and the
@@ -149,8 +149,8 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
   trip and that the committed file is what the authoring step builds.
 - `node tools/guard.mjs` and `node tools/bench-look.mjs` (above). Their baselines are in
   `docs/plans/active/track-e-results/l2a-baseline.md`.
-- `node tools/detail-check.mjs <url> --selftest` (above). The goldens of main against `?detail=l0` match: the
-  detail layer changes the terrain only.
+- `node tools/detail-check.mjs <url> --selftest` (above). The goldens of main against `?detail=l0` matched in
+  L2b (the detail layer then changed the terrain only); since W4 `?detail=l0` also changes the water's shore band.
 - `node tools/water-look-check.mjs <url> --selftest` (W4, `docs/systems/river.md`): the shore band, the seam,
   pools against riffles, shimmer on the water. The page's hooks: `__look.waterSab` (the sabotages),
   `__look.groundAs` (the tile's ground drawn with the water's shader), `__look.waterAt` (the data at a point),

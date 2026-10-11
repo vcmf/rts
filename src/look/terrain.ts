@@ -82,8 +82,6 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
     g.setVerticesData('aRiver', rv, false, 1)
     g.material = coarse ? farTerrainMat : terrainMat; return g
   }
-  // the detail layer needs GLSL ES 3.00 (textureGrad): on WebGL1 the terrain keeps the L0 grain
-  if (scene.getEngine().version < 2) for (const m of [terrainMat, farTerrainMat]) m.setDefine('#define DETAIL_L0', true)
   const tileGround = ground(TILE_W, TILE_SUB), farGround = ground(FAR_W, FAR_SUB)
 
   // vertex index of grid point (x,z) in a CreateGround mesh (rows run from +z to -z)

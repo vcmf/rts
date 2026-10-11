@@ -9,6 +9,8 @@
 // value's screen derivative (fw: fwidth of the shore distance, taken outside any branch): a quad with one pixel that
 // needs the branch takes it whole (the shore distance changes across a quad by at most its fwidth).
 // Hard edges threshold the grain's soft blotches (G), never its per-texel noise (R): that speckles under a pixel.
+// fwidth on WebGL1 needs GL_OES_standard_derivatives: the including shaders enable it (Babylon drops the line on
+// WebGL2).
 #ifdef BANKN
 #ifndef BANKN_OFF
 uniform sampler2D uBankN;   // x, z of the authored surface's normal, the weight
@@ -22,6 +24,13 @@ vec3 bankNormal(vec3 N,vec2 xz){
   #endif
 }
 #endif
+// a pixel's footprint on the ground, m: thin painted marks widen or fade with it (a mark under a pixel shimmers)
+float pxGround(vec3 wp){vec2 f=fwidth(wp.xz);return max(f.x,f.y);}
+// the ground's colour through the seasons (summer, early and late autumn, winter: uSeason 0..3), for the terrain and
+// the shore band alike
+vec3 groundSeason(vec3 c){
+  vec3 au=mix(c,vec3(0.70,0.60,0.34),0.45),la=mix(c,vec3(0.52,0.42,0.27),0.6),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
+  return uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
 // a hard painted edge, anti-aliased over about two pixels (no shimmer when the view moves): 0 below t, 1 above
 float aastep(float t,float v){
   #ifdef WATER_SAB_STEP
@@ -35,7 +44,7 @@ float aastep(float t,float v){
 // damp earth at the water's edge
 vec3 landAlbedo(vec2 xz){
   float g=G(xz/2.6).r,g2=G(xz/9.0+0.4).g;
-  return mix(vec3(0.34,0.29,0.19),vec3(0.43,0.36,0.23),g2)*(0.92+0.16*g);}
+  return groundSeason(mix(vec3(0.34,0.29,0.19),vec3(0.43,0.36,0.23),g2)*(0.92+0.16*g));}
 // the bed: silt in pools, pale gravel where the current runs, weed in slow deeper water; the damp edge at depth 0
 vec3 bedAlbedo(vec2 xz,float depth,float speed){
   float g=G(xz/1.7).r,g2=G(xz/6.0+0.2).g;
@@ -53,10 +62,10 @@ vec3 shoreLand(vec3 wp,float occ,float sh){return paint(landAlbedo(wp.xz),bankNo
 // sp the speed (0..1)
 vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh){
   float dd=max(d,0.0);
-  // 1. the bed seen through the water: read along the view ray, at 3/4 of the depth (the painted refraction)
-  vec3 V=normalize(uCamPos-wp);vec2 off=-V.xz/max(V.y,0.35)*dd*0.75;
-  vec3 bp=vec3(wp.x+off.x,wp.y-dd,wp.z+off.y);
-  vec3 bed=paint(bedAlbedo(bp.xz,dd,sp),bankNormal(vec3(0.0,1.0,0.0),bp.xz),bp,occ,0.12,1.0,sh);
+  // 1. the bed seen through the water, painted at the surface's point: no refraction offset (an offset by the depth,
+  // a bilinear field, makes the point's screen derivatives jump at every texel's edge, and with them the grain's
+  // level of detail)
+  vec3 bed=paint(bedAlbedo(wp.xz,dd,sp),bankNormal(vec3(0.0,1.0,0.0),wp.xz),wp,occ,0.12,1.0,sh);
   // 2. absorption, red first; the painted ramp (shallow green-ochre, turquoise, deep teal) in bands broken by the grain
   float dn=dd*(1.0+0.35*(G(wp.xz/5.0).g-0.5)*uGrainAmt);
   vec3 T=exp(-vec3(3.0,1.5,1.1)*dn);
@@ -66,9 +75,12 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh){
   // 7. tree and cloud shadows cool the water, deep water more (the bed is already shadowed)
   float cs=max(cloud(wp)*0.6,sh);c=mix(c,c*vec3(0.58,0.70,0.88),cs*smoothstep(0.1,0.8,dd));
   // the shore foam: a broken line about 0.2 m in and a fainter one farther out, hard-edged (thresholded grain)
+  // Far out (a pixel over about 0.12 m) the line widens to at least 1.5 pixels with its ink spread over the width,
+  // its breaks (0.3 m blotches) close up and the faint second line goes: under a pixel they would shimmer
   float gr=G(wp.xz/9.0+0.5).g,gb=G(wp.xz/23.0+0.2).g,j=(G(wp.xz/3.1+0.7).g-0.5)*0.25;
-  float foam=(1.0-aastep(0.14,abs(s-0.22-j)))*aastep(0.5,gr)*aastep(0.42,gb);
-  foam=max(foam,(1.0-aastep(0.05,abs(s-0.60-j*1.5)))*aastep(0.62,gr)*aastep(0.5,gb)*0.6);
+  float px=pxGround(wp),far=smoothstep(0.12,0.35,px),hw=max(0.14,0.75*px);
+  float foam=(1.0-aastep(hw,abs(s-0.22-j)))*mix(aastep(0.5,gr)*aastep(0.42,gb),1.0,far)*0.14/hw;
+  foam=max(foam,(1.0-aastep(0.05,abs(s-0.60-j*1.5)))*aastep(0.62,gr)*aastep(0.5,gb)*0.6*(1.0-far));
   c=mix(c,FOAM*mix(1.0,0.78,cs),foam*0.85);
   // winter ice (the seasons are W5's): pale and cracked, darker over deep water
   float ice=iceAmt();

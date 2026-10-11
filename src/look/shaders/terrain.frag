@@ -1,3 +1,4 @@
+#extension GL_OES_standard_derivatives : enable
 precision highp float;varying vec3 vW,vN;varying float vRiver;
 #include<painter>
 #include<waterdata>
@@ -30,9 +31,7 @@ vec3 albedo(vec3 wp,vec3 n){
   float fm=smoothstep(170.0,250.0,r);
   c=mix(c,fc*(0.96+0.06*G(vec2(f.x/40.0,f.y/3.0)).b),fm*0.85);   // faint furrows on distant fields only
   c=mix(c,vec3(0.55,0.52,0.46),smoothstep(0.80,0.62,n.y)*0.5);
-  vec3 au=mix(c,vec3(0.70,0.60,0.34),0.45),la=mix(c,vec3(0.52,0.42,0.27),0.6),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
-  c=uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);                          // steep: stony
-  return c;
+  return groundSeason(c);
 }
 void main(){
   #ifdef WATER_DEBUG

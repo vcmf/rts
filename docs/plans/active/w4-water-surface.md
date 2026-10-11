@@ -83,8 +83,9 @@ E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/styl
 ### The water's layers (research §2.8, painted values from the art bible's palette)
 
 1. **Bed** (shared): a bed albedo by depth and current (mud in pools, gravel where it runs fast and shallow, the
-   damp earth at the edge), read at the point offset along the view by 3/4 of the depth (the painted refraction),
-   lit flat.
+   damp earth at the edge), lit with the bank normals. As built, without research §2.8's refraction offset (the bed
+   read along the view by 3/4 of the depth): an offset by a bilinear depth makes the point's screen derivatives
+   jump at every texel's edge, and the grain's level of detail with them (review round 2).
 2. **Absorption** (shared): `T = exp(−k·depth)` per channel (red first); the painted three-band ramp (shallow
    green-ochre, turquoise, deep teal), its band edges broken by the grain; `c = bed·T + ramp·(1 − T)`. The deepest
    colour's value stays above the darkest tree shadow (research §4.2: pools must not read as holes).
@@ -117,7 +118,9 @@ E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/styl
   two materials paint the same colour in the band. The tile's ground is drawn twice, once with the terrain's
   material and once with the water's (a variant with the ground's attributes): same geometry, so the same pixels,
   world points and derivatives. At the pixels within the band (from the raw data view), the two frames' colour
-  difference: 95th percentile within 2/255, largest within 6/255. Where the two surfaces meet on screen they
+  difference: 95th percentile within 2/255, and at most 0.1% of the pixels over 6/255 (as built: isolated pixels on
+  the shoreline itself, where the land and water sides blend over a pixel, differ by up to 12/255 in the two
+  shaders' arithmetic; the sabotages move the 95th percentile to 30–80). Where the two surfaces meet on screen they
   intersect, so they share the world point there: with the band check (each surface shows only within the band of
   the other), equal colours in the band leave no seam. Comparing a frame with the water hidden would not do: the
   two surfaces stand up to 0.5 m apart, and the parallax shifts the grain.
@@ -128,8 +131,13 @@ E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/styl
   margin; riffles' share of foam-bright pixels at least twice the pools'. As built, riffles are classed at 0.5 and
   above (the river's riffle reaches 0.81, and no stretch in the play area holds above 0.7). Sabotage: the riffle ignored
   (`WATER_SAB_FLAT`) fails.
-- **No flicker:** the band check's z-fighting count, and the L2b shimmer check run on the water at the closest zoom
-  (a sub-pixel shift of the image moves the shore by its shift, not more).
+- **No flicker:** the band check's z-fighting count, and the L2b shimmer check run on the water and its shore (a
+  sub-pixel shift of the image moves the shore by its shift, not more): at the closest zoom under 1% per frame pair,
+  as the terrain's; at the widest (added in review round 2, the data's textures having lost their mips) under 3.5%:
+  there the river's outline (the painted shoreline, the banks hiding the water) is a large share of the pixels, and
+  main measures 6.3% on the same pixels and view. Thin marks widen (the shore line, to 1.5 pixels at least, its ink
+  spread) or fade (strokes, glitter, riffle foam) as a pixel's footprint grows past them. Sabotage: aliased hard
+  edges (`WATER_SAB_STEP`).
 - **Existing checks hold:** `tools/render-check.js` (the water is what the camera sees; nothing spills on the
   banks; the far line), `tools/river-check.js`, `tools/water-check.mjs`, `tools/detail-check.mjs`.
 - **Readability guard:** no block that passes on the base fails (water is less saturated than the coats).
@@ -160,5 +168,7 @@ From the prototype plan (W4: "No shoreline seam or flicker; pools read dark and 
   The data's textures have no mips for this reason (a mip level would change the values).
 - **The terrain's cost:** one more fetch per terrain pixel (the water data) and the band's work near the water;
   measured by the bench.
+- **The band at the tile's edge:** the apron and the far ring have no water data, so the band stops at the tile's
+  edge, at least 165 m past the play area (seen from the wide zooms only). Left as it is.
 - **Spiral risk** (prototype plan §4.4): if the review needs more than 3 rounds, stop and revisit the opaque
   bed-painting design.

@@ -1,3 +1,4 @@
+#extension GL_OES_standard_derivatives : enable
 precision highp float;varying vec3 vW;varying vec2 vUv;varying float vTau,vRiffle;uniform sampler2D uRefl;
 #include<painter>
 #include<waterdata>
@@ -31,6 +32,8 @@ void main(){
   if(s>UP0-1.5*fws){   // past where the layers below have weight, by the derivatives' margin (src/look/shaders/shore.glsl)
     vec3 V=normalize(uCamPos-vW),R=reflect(-V,vec3(0.0,1.0,0.0));
     float across=vUv.x,cs=max(cloud(vW)*0.6,sh);
+    // the marks under 0.3 m (strokes, glitter, riffle foam) fade as a pixel's footprint grows past them (shore.glsl)
+    float near=1.0-smoothstep(0.25,0.5,pxGround(vW));
     #ifdef WATER_SAB_FLAT
     float riffle=0.0;   // the pool and riffle check's sabotage: the riffle ignored
     #else
@@ -52,16 +55,16 @@ void main(){
     // 6. strokes along the current: light marks (more on riffles), a few dark ones in pools, none where it is slow
     float st=G(vec2(along*0.05,across*0.12)).b,st2=G(vec2(along*0.10+0.37,across*0.35+0.2)).g;
     float slow=smoothstep(0.08,0.25,sp),marks=smoothstep(0.62,0.80,st*0.6+st2*0.4)*smoothstep(0.15,0.6,d)*slow;
-    c=mix(c,c*1.12+vec3(0.03,0.05,0.05),marks*(0.35+0.4*rough)*up);
-    c=mix(c,c*0.82,smoothstep(0.70,0.85,st2)*0.25*(1.0-rough)*smoothstep(0.3,0.8,d)*slow*up);
+    c=mix(c,c*1.12+vec3(0.03,0.05,0.05),marks*(0.35+0.4*rough)*up*near);
+    c=mix(c,c*0.82,smoothstep(0.70,0.85,st2)*0.25*(1.0-rough)*smoothstep(0.3,0.8,d)*slow*up*near);
     // 8. glitter: painted sun dabs, mostly on riffles
     float spec=pow(max(dot(R,uSunDir),0.0),5.0);
     float dab=aastep(mix(0.80,0.73,rough),G(vec2(along*0.10,across*0.25)).g)*aastep(0.5,G(vW.xz/9.0+mod(uTime,200.0/3.0)*0.015).g);
-    c+=uSunCol*vec3(1.0,0.86,0.58)*dab*(0.2+spec*1.6)*(1.0-cs)*smoothstep(0.15,0.5,d)*up;
+    c+=uSunCol*vec3(1.0,0.86,0.58)*dab*(0.2+spec*1.6)*(1.0-cs)*smoothstep(0.15,0.5,d)*up*near;
     // 9. riffle foam: broken streaks along the current (the grain's dry-brush channel, long along x), bent into
     // chevrons pointing upstream, hard-edged
     float chev=G(vec2(along*0.05+abs(across)*0.02,across*0.03)).b;
     float riff=smoothstep(0.35,0.65,riffle)*aastep(0.66,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);
-    c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.85*up);
+    c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.85*up*near);
   }
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}

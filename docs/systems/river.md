@@ -71,8 +71,8 @@ W3 (`docs/plans/done/w3-water-data.md`), and the painted water, its shoreline fr
   light map, the grain). Where the two surfaces meet on screen they intersect, so they share the point, and the
   colours match. On land it is damp earth at the water's edge; in the water, the water's lower layers.
 - **The painted water (W4):** opaque, layer by layer (`docs/research/stylized-water.md` §2.8): the bed seen through
-  the water (silt in pools, gravel where it runs, weed in slow deep water; read along the view at 3/4 of the
-  depth), a painted absorption ramp from the data's depth, shadows and the shore foam (these in the band); then,
+  the water (silt in pools, gravel where it runs, weed in slow deep water; lit with the bank normals, no refraction
+  offset), a painted absorption ramp from the data's depth, shadows and the shore foam (these in the band); then,
   faded in past the band, calm against rough water (the riffle, fast shallow water), the painted sky tint, the
   tree reflections, strokes on the time of travel (they stretch in fast water and never shear), glitter and riffle
   foam. Hard edges threshold the grain's soft blotches and are anti-aliased over a pixel (no shimmer). Winter

@@ -86,8 +86,6 @@ export function buildWater(scene: Scene, mats: Materials, tex: { water: RawTextu
   const waterMat = mats.make('water', WAT_VS, WAT_FS, { ...opts, attributes: ['position', 'uv', 'aTau', 'aRiffle'] }); mesh.material = waterMat; waterMat.backFaceCulling = false
   const groundMat = mats.make('waterOnGround', GROUND_VS, WAT_FS, { ...opts, attributes: ['position'] })
   for (const m of [waterMat, groundMat]) { m.setTexture('uWater', tex.water); m.setTexture('uBankN', tex.bankN) }
-  // the detail layer needs GLSL ES 3.00 (textureGrad): on WebGL1 the water keeps the L0 grain, as the terrain does
-  if (scene.getEngine().version < 2) for (const m of [waterMat, groundMat]) m.setDefine('#define DETAIL_L0', true)
 
   const finish = (sc: Scene) => {
     const box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity]
