@@ -121,6 +121,16 @@ describe('paces and ground', () => {
     const s = sim(t), h = s.spawn(-100, 150, 0, 'march', 250, 0, 'cavalry')
     expect(s.placesInDeep(h)).toBeGreaterThan(0); expect(s.wet(h)).toBe(true)
   })
+  it('a change into the column of route interrupted halfway goes on from the spacing it had: no place jumps', () => {
+    for (const [from, via, to] of [['line', 'march', 'column'], ['march', 'line', 'march']] as const) {
+      const s = sim(), h = s.spawn(-100, 150, 0, from, 250, 0, 'cavalry')
+      s.order({ type: 'form', id: h, shape: via }); s.advance(60)
+      const before = s.places(h); s.order({ type: 'form', id: h, shape: to }); const after = s.places(h)
+      const jump = Math.max(...before.map((p, k) => Math.hypot(p[0] - after[k][0], p[1] - after[k][1])))
+      expect({ change: `${from}>${via}>${to}`, small: jump < 0.5 }).toEqual({ change: `${from}>${via}>${to}`, small: true })
+      s.until(() => s.busy(h), 200); expect(s.shape(h)).toBe(to)
+    }
+  })
   it('a change into the column of route by fours is refused when its places, longer than the change, would reach water', () => {
     // the column's last horses stand 192 m behind the anchor; the change, in the block's 1 m spacing, reaches
     // about 161 m: water 180–185 m back stops only the column's places

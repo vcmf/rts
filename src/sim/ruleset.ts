@@ -63,6 +63,7 @@ export interface UnitType {
   changeTime: Record<string, number>; defaultChangeTime: number   // seconds, keyed 'from>to'
   start: string                // the shape a spawn takes when it names none
   fires: boolean               // fires by company (S1c's musketry)
+  figure: 'foot' | 'mounted' | 'crewed'   // how its men are drawn: on foot, on horseback, or serving pieces (the renderer's; no rule reads it)
 }
 export interface Ruleset {
   name: string
@@ -144,7 +145,7 @@ export const slotIndex = (g: Geometry, c: number, r: number, f: number): number 
 // a stable hash of the ruleset's numbers and names (its functions by their output), recorded by a world
 function rulesetHash(rs: Ruleset): number {
   const types = Object.keys(rs.types).map(t => { const u = rs.types[t], geo = u.geometry
-    return [t, geo, Object.keys(u.formations).sort().map(n => { const d = u.formations[n]; return [n, d.kind, d.pace, d.roadPace ?? '', !!d.trail, !!d.closeAcross, d.step ?? null, d.place(geo)] }), u.changeTime, u.defaultChangeTime, u.start, u.fires] })
+    return [t, geo, Object.keys(u.formations).sort().map(n => { const d = u.formations[n]; return [n, d.kind, d.pace, d.roadPace ?? '', !!d.trail, !!d.closeAcross, d.step ?? null, d.place(geo)] }), u.changeTime, u.defaultChangeTime, u.start, u.fires, u.figure] })
   const text = JSON.stringify([rs.name, types, rs.pace, rs.q, rs.start, rs.slopeK, rs.terrain, rs.water, rs.orders, rs.disorder, rs.faceTime, rs.dressTime, rs.fire, rs.morale])
   return fnv1a(new TextEncoder().encode(text))
 }
@@ -164,7 +165,8 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
   for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) for (let f = 0; f < F; f++) { const s = slotIndex(g, c, r, f), [lx, lz] = blockLocal(g, f, r)
     slotC[s] = c; slotLX[s] = lx; slotLZ[s] = lz }
   let slotReach = 0; for (let s = 0; s < slots; s++) slotReach = Math.max(slotReach, Math.sqrt(slotLX[s] * slotLX[s] + slotLZ[s] * slotLZ[s]))
-  let qMax = 0; for (const L of shapes) for (const p of [L.pace, L.roadPace]) if (p >= 0) for (const v of Object.values(rs.q[paces[p]] ?? {})) qMax = Math.max(qMax, v)
+  // at least 1: a pace with no q table hurries at 1 (groundQAt)
+  let qMax = 1; for (const L of shapes) for (const p of [L.pace, L.roadPace]) if (p >= 0) for (const v of Object.values(rs.q[paces[p]] ?? {})) qMax = Math.max(qMax, v)
   return { name, def: u, geo: g, C, NB, slots, qMax, slotC, slotLX, slotLZ, slotReach, shapes, shapeIndex: n => names.indexOf(n), changeTime, start }
 }
 

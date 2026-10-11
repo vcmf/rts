@@ -181,6 +181,29 @@ The tick's 0.08 ms is the type lookups in the per-formation paths (the per-man p
 from its places context). The hash is the trail ring (960 points for every slot, the regiment's column of
 route): `docs/known-issues.md`.
 
+## Review
+
+**Round 1** (`/code-review high`, 10 findings, none severe; no second round):
+- **Fixed:**
+  - a change interrupted halfway into or out of the column of route snapped its spacing back to its first
+    shape's (a regiment's places shrinking to a third in one tick): each company's spacing as the change
+    began is now state (`tK`), and the change eases on from it; a test checks that no place jumps;
+  - the fire step sized a block by the block's spacing, so a friendly column of route by fours blocked
+    fire along a third of its length: the block's rectangle and reach take the pose's spacing;
+  - a type whose paces had no hurry table got a look-ahead of 0: the hurry factor is at least 1;
+  - the map named the Napoleonic kinds (`horse`, `guns`), against decision 0015: a unit type now says how its
+    men are drawn (`figure`: foot, mounted, crewed), and `Unit` carries it for the 3D renderer;
+  - the map looked a type's shapes and the anchor up twice a formation a frame; a halted trooper's stroke
+    pointed along the head's heading, across a bent column: it follows his place's direction of travel;
+  - the places context is read for its type and shape throughout (`companyClear`, `placeAt`);
+  - the scenario's own π.
+- **Kept:**
+  - one trail ring size for every slot (the hash 2.7 → 4.1 ms even with no cavalry): a ring per type
+    needs per-formation offsets into the rings, a change of the save format left for S2 with the save of live
+    points only (`docs/known-issues.md`);
+  - the fire step's per-company buffers and sight cache strided by the battery's 8 companies (2.1 MB against
+    1.2 MB): the cost is memory, not time (the firing frame is unchanged).
+
 ## Next
 
 - **S1d-2:** charges and melee (the split, above).

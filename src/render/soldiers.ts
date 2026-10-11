@@ -18,8 +18,9 @@ const wave = (a: number): number => { const u = a / (2 * Math.PI) * WAVE_N, k = 
 
 export interface Man { s: number; x: number; z: number; vx: number; vz: number; alive: boolean; dx: number; dz: number; settled: boolean; hx: number; hz: number }
 // pose: what the places were last framed from (still: unchanged, so settled men need no new place); type: the
-// unit type's name (cr.types: infantry, cavalry, battery in the Napoleonic ruleset)
-export interface Unit { i: number; gen: number; side: number; type: string; men: Man[]; faces: number; sway: number; sig: Int32Array; pose: Float64Array }
+// unit type's name (cr.types: infantry, cavalry, battery in the Napoleonic ruleset); figure: how its men are drawn
+// (UnitType.figure: foot, mounted, crewed)
+export interface Unit { i: number; gen: number; side: number; type: string; figure: string; men: Man[]; faces: number; sway: number; sig: Int32Array; pose: Float64Array }
 
 export class SoldierLayer {
   w: World; scene: Scene
@@ -113,7 +114,7 @@ export class SoldierLayer {
       if (u && this.same(u.sig, i)) continue
       this.frame(i, alpha)
       const U = typeOf(w, i), C = U.C
-      if (!u) { u = { i, gen: f.gen[i], side: f.side[i], type: U.name, men: [], faces: f.faces[i], sway: 0, sig: new Int32Array(C + 5), pose: new Float64Array(8 + 2 * w.cr.maxNB).fill(NaN) }; this.units.set(i, u) }
+      if (!u) { u = { i, gen: f.gen[i], side: f.side[i], type: U.name, figure: U.def.figure, men: [], faces: f.faces[i], sway: 0, sig: new Int32Array(C + 5), pose: new Float64Array(8 + 2 * w.cr.maxNB).fill(NaN) }; this.units.set(i, u) }
       this.sign(u.sig, i)
       if (u.faces !== f.faces[i]) {   // Face about: each man's slot is now the half-turn of his old one
         const T = U.shapes[f.shape[i]].turn

@@ -173,7 +173,7 @@ describe('era genericity (decision 0015)', () => {
           phalanx: { kind: 'line', pace: 'slow', closeAcross: true, place: g => [0, 1].map(c => ({ x: (c - 0.5) * g.files * g.fileSpacing, z: 0, rot: 0, face: 0 })) },
           files: { kind: 'column', pace: 'slow', trail: true, place: g => [0, 1].map(c => ({ x: (g.ranks - 1) * g.rankSpacing / 2, z: -c * (g.files * g.fileSpacing + 1), rot: -Math.PI / 2, face: 0 })) },
         },
-        changeTime: { 'phalanx>files': 25, 'files>phalanx': 45 }, defaultChangeTime: 40, start: 'phalanx', fires: false,
+        changeTime: { 'phalanx>files': 25, 'files>phalanx': 45 }, defaultChangeTime: 40, start: 'phalanx', fires: false, figure: 'foot',
       } },
       pace: { slow: 0.8 }, q: { slow: { open: 1.2, light: 1.1, hard: 1.0 } },
       start: { orders: 'steady' },

@@ -142,13 +142,16 @@ export class StaffMap {
       // the living: open circles, one path per formation; a trooper also a stroke the length of his horse, along
       // the way he rides (or his formation faces, at rest); selected formations drawn bolder
       g.strokeStyle = ink; g.lineWidth = sel ? 1.8 : k > 4 ? 1.1 : 0.9; g.beginPath()
-      const horse = typeOf(w, u.i).shapes.some(L => w.cr.kinds[L.kind] === 'horse'), uh = layer.anchor(u.i, layer.alphaNow, 0)[2]
+      const mounted = u.figure === 'mounted', [fx, fz, fh] = layer.anchor(u.i, layer.alphaNow, 0)   // interpolated, as the men are
+      if (mounted) layer.frame(u.i, layer.alphaNow)
       for (const m of u.men) if (m.alive) { const [sx, sy] = toS(v, m.x, m.z); if (!vis(sx, sy)) continue; g.moveTo(sx + R, sy); g.arc(sx, sy, R, 0, Math.PI * 2)
-        if (horse) { const sp = Math.hypot(m.vx, m.vz), dx = sp > 0.3 ? m.vx / sp : Math.sin(uh), dz = sp > 0.3 ? m.vz / sp : Math.cos(uh), [bx, by] = toS(v, m.x - dx * 2.4, m.z - dz * 2.4); g.moveTo(sx, sy); g.lineTo(bx, by) } }
+        if (mounted) {   // at rest, along his place's direction of travel (a column of route's bends)
+          const sp = Math.hypot(m.vx, m.vz); let dx = m.vx / sp, dz = m.vz / sp
+          if (!(sp > 0.3)) { layer.place(u.i, m.s, false, p); dx = Math.sin(p[2]); dz = Math.cos(p[2]) }
+          const [bx, by] = toS(v, m.x - dx * 2.4, m.z - dz * 2.4); g.moveTo(sx, sy); g.lineTo(bx, by) } }
       g.stroke()
-      if (typeOf(w, u.i).shapes.some(L => w.cr.kinds[L.kind] === 'guns')) this.drawPieces(g, v, layer, u.i, u.men, R, ink)
+      if (u.figure === 'crewed') this.drawPieces(g, v, layer, u.i, u.men, R, ink)
       // the colours: a small flag at the anchor, pointing the way the battalion faces
-      const [fx, fz, fh] = layer.anchor(u.i, layer.alphaNow, 0)   // interpolated, as the men are
       const [ax, ay] = toS(v, fx, fz); g.save(); g.translate(ax, ay); g.rotate(fh); g.fillStyle = ink
       g.beginPath(); g.moveTo(0, -R * 4.2); g.lineTo(R * 2.4, -R * 3.4); g.lineTo(0, -R * 2.6); g.closePath(); g.fill(); g.lineWidth = 1; g.strokeStyle = ink; g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -R * 4.2); g.stroke(); g.restore()
       if (sel) {   // the order: a dashed line through the waypoints

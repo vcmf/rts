@@ -36,15 +36,22 @@ function geometry(w: World): FireGeo {
   const f = w.f, t = w.meta[M_TICK] * DT
   for (let i = 0; i < MAX_FORMATIONS; i++) {
     if (!f.alive[i]) continue
-    const U = typeOf(w, i), g = U.geo, back = -(g.ranks - 1) * g.rankSpacing / 2
-    const half = sqrt((g.files * g.fileSpacing / 2) * (g.files * g.fileSpacing / 2) + (g.ranks * g.rankSpacing / 2) * (g.ranks * g.rankSpacing / 2))   // a block's half-diagonal
-    G.bx[i] = g.files * g.fileSpacing / 2; G.bz0[i] = -(g.ranks - 1) * g.rankSpacing - g.rankSpacing / 2; G.bz1[i] = g.rankSpacing / 2
+    const U = typeOf(w, i), g = U.geo
+    // the block's rectangle as its places stand: the block's spacing times the pose's (a step's column of route
+    // is three times as long), the largest of its companies'
+    let kx = 1, kz = 1
+    for (let c = 0; c < U.C; c++) {
+      const k = i * CS + c, p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, pose)
+      G.ox[k] = p.x; G.oz[k] = p.z; G.ca[k] = cos(p.a); G.sa[k] = sin(p.a); G.fx[k] = sin(p.face); G.fz[k] = cos(p.face)
+      kx = Math.max(kx, p.kx); kz = Math.max(kz, p.kz)
+    }
+    const fs = g.fileSpacing * kx, rs = g.rankSpacing * kz, back = -(g.ranks - 1) * rs / 2
+    const half = sqrt((g.files * fs / 2) * (g.files * fs / 2) + (g.ranks * rs / 2) * (g.ranks * rs / 2))   // a block's half-diagonal
+    G.bx[i] = g.files * fs / 2; G.bz0[i] = -(g.ranks - 1) * rs - rs / 2; G.bz1[i] = rs / 2
     G.reach[i] = 0
     for (let c = 0; c < U.C; c++) {
-      const k = i * CS + c, p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, pose), ca = cos(p.a), sa = sin(p.a)
-      G.ox[k] = p.x; G.oz[k] = p.z; G.ca[k] = ca; G.sa[k] = sa
-      G.cx[k] = p.x - back * sa; G.cz[k] = p.z + back * ca   // the block's centre: (0, back) in the block frame
-      G.fx[k] = sin(p.face); G.fz[k] = cos(p.face)
+      const k = i * CS + c
+      G.cx[k] = G.ox[k] - back * G.sa[k]; G.cz[k] = G.oz[k] + back * G.ca[k]   // the block's centre: (0, back) in the block frame
       G.reach[i] = Math.max(G.reach[i], sqrt((G.cx[k] - f.x[i]) * (G.cx[k] - f.x[i]) + (G.cz[k] - f.z[i]) * (G.cz[k] - f.z[i])) + half)
     }
   }

@@ -246,9 +246,10 @@ export function placeWorld(w: World, i: number, c: number, hx: number, hz: numbe
   out.x = hx + o[0]; out.z = hz + o[1]; out.a = pl.rot - h; out.face = h - pl.face
   const f = w.f
   if (!f.trans[i]) { const L = layoutOf(w, i); out.kx = L.kx; out.kz = L.kz; return out }
-  const S = typeOf(w, i).shapes, A = S[f.shape[i]], B = S[f.tShape[i]]
-  if (A.kx === B.kx && A.kz === B.kz) { out.kx = A.kx; out.kz = A.kz; return out }
-  const e = changeEase(w, i, c, t); out.kx = A.kx + (B.kx - A.kx) * e; out.kz = A.kz + (B.kz - A.kz) * e; return out
+  // eased from the spacing as the change began (an interrupted change goes on from where it stood)
+  const B = typeOf(w, i).shapes[f.tShape[i]], k = (i * w.cr.maxC + c) * 2, kx0 = f.tK[k], kz0 = f.tK[k + 1]
+  if (kx0 === B.kx && kz0 === B.kz) { out.kx = B.kx; out.kz = B.kz; return out }
+  const e = changeEase(w, i, c, t); out.kx = kx0 + (B.kx - kx0) * e; out.kz = kz0 + (B.kz - kz0) * e; return out
 }
 // how far company c of a formation changing shape is through its part of the change at time t (eased, 0..1)
 function changeEase(w: World, i: number, c: number, t: number): number {
@@ -289,9 +290,9 @@ export const mkPlaces = (w: World): Places => { const n = w.cr.maxNB; return { w
   dD: NaN, dX: 0, dZ: 0, dT: 0, dC: 0, dS: 0 } }
 const pcPose: Pose = { x: 0, z: 0, a: 0, face: 0, kx: 1, kz: 1 }
 export function placesCtx(ctx: Places, i: number, hx: number, hz: number, h: number, t: number, dt: number): Places {
-  const w = ctx.w; ctx.i = i; ctx.U = typeOf(w, i); ctx.L = layoutOf(w, i); ctx.snake = snakes(w, i); ctx.dt = dt; ctx.t = t; ctx.dD = NaN
+  const w = ctx.w, U = typeOf(w, i); ctx.i = i; ctx.U = U; ctx.L = U.shapes[w.f.shape[i]]; ctx.snake = snakes(w, i); ctx.dt = dt; ctx.t = t; ctx.dD = NaN
   if (ctx.snake) { ctx.arc.ver = -1; arcOf(w, i, hx, hz, h, ctx.arc); return ctx }
-  const U = typeOf(w, i), sh = sin(h), ch = cos(h), B = U.geo.bins
+  const sh = sin(h), ch = cos(h), B = U.geo.bins
   for (let c = 0; c < U.C; c++) {
     const p = placeWorld(w, i, c, hx, hz, h, t, 0, pcPose), ca = cos(p.a), sa = sin(p.a)
     for (let k = 0; k < B; k++) { const j = c * B + k, lag = lagAt(w, i, j, dt)
@@ -301,7 +302,7 @@ export function placesCtx(ctx: Places, i: number, hx: number, hz: number, h: num
 }
 // a man's place [x, z, direction of travel] (the type and shape as the context was built: build it again after
 // a change of shape)
-export const placeAt = (ctx: Places, c: number, r: number, f: number, out: number[]): number[] => placeAtSlot(ctx, slotIndex(typeOf(ctx.w, ctx.i).geo, c, r, f), out)
+export const placeAt = (ctx: Places, c: number, r: number, f: number, out: number[]): number[] => placeAtSlot(ctx, slotIndex(ctx.U.geo, c, r, f), out)
 // the same, by slot index
 export function placeAtSlot(ctx: Places, s: number, out: number[]): number[] {
   const w = ctx.w, U = ctx.U, L = ctx.L, j = U.slotC[s] * U.geo.bins + L.of[s]
@@ -376,13 +377,13 @@ const tK = [0, 0]
 // within (D1 − D0)/2 of the point at the middle distance (the trail is followed at unit speed), across it by
 // the company's widest offset
 function companyClear(ctx: Places, c: number, impd: Float64Array): boolean {
-  const w = ctx.w, T = w.terrain, U = typeOf(w, ctx.i), B = U.geo.bins
+  const w = ctx.w, T = w.terrain, U = ctx.U, B = U.geo.bins
   if (!ctx.snake) {
     const x0 = ctx.fx[c * B], z0 = ctx.fz[c * B]
     let r = 0; for (let k = 1; k < B; k++) r = Math.max(r, hyp(ctx.fx[c * B + k] - x0, ctx.fz[c * B + k] - z0))
     return clearWithin(T, impd, x0, z0, r + U.slotReach * Math.max(1, ctx.kx[c * B], ctx.kz[c * B]))
   }
-  const E = layoutOf(w, ctx.i).extent
+  const E = ctx.L.extent
   let lo = Infinity, hi = -Infinity
   for (let k = 0; k < B; k++) { const l = lagAt(w, ctx.i, c * B + k, ctx.dt); lo = Math.min(lo, l); hi = Math.max(hi, l) }
   const D0 = E[c * 3] + lo, D1 = E[c * 3 + 1] + hi
@@ -568,21 +569,22 @@ export function startChange(w: World, i: number, shape: number): boolean {
   const f = w.f, U = typeOf(w, i), C = U.C, CS = w.cr.maxC, S = U.shapes.length, t = now(w)
   if (shape === f.shape[i] && !f.trans[i]) return false
   if (f.trans[i] && shape === f.tShape[i]) return false
-  const from: number[] = []
-  for (let c = 0; c < C; c++) { const p = companyPlace(w, i, c, t, csPlace); from.push(p.x, p.z, p.rot, p.face) }
+  const from: number[] = [], k0: number[] = []
+  for (let c = 0; c < C; c++) { const p = companyPlace(w, i, c, t, csPlace); from.push(p.x, p.z, p.rot, p.face)
+    const q = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, ccPose); k0.push(q.kx, q.kz) }
   const to = placeFlat(U.shapes[shape].place)
   // an interrupted change is timed by the distance still to cover against a full change of the same kind
   const base = shape === f.shape[i] && f.trans[i] ? f.tShape[i] : f.shape[i]
   let T = U.changeTime[base * S + shape] * f.drill[i]
   if (f.trans[i]) { const full = layoutDistance(placeFlat(U.shapes[base].place), to, C, BW(U)); T = Math.max(3, T * Math.min(1, layoutDistance(from, to, C, BW(U)) / Math.max(1e-6, full))) }
   // try it: the change's fields set, checked along its path, kept or restored
-  const keep = { trans: f.trans[i], tShape: f.tShape[i], tStart: f.tStart[i], tDur: f.tDur[i], delay: f.tDelay.slice(i * CS, i * CS + C), from: f.tFrom.slice(i * CS * 4, i * CS * 4 + C * 4), to: f.tTo.slice(i * CS * 4, i * CS * 4 + C * 4) }
+  const keep = { trans: f.trans[i], tShape: f.tShape[i], tStart: f.tStart[i], tDur: f.tDur[i], delay: f.tDelay.slice(i * CS, i * CS + C), from: f.tFrom.slice(i * CS * 4, i * CS * 4 + C * 4), to: f.tTo.slice(i * CS * 4, i * CS * 4 + C * 4), k: f.tK.slice(i * CS * 2, i * CS * 2 + C * 2) }
   f.trans[i] = 1; f.tShape[i] = shape; f.tStart[i] = t; f.tDur[i] = T * 0.55
   for (let c = 0; c < C; c++) f.tDelay[i * CS + c] = C > 1 ? c * T * 0.45 / (C - 1) : 0
-  f.tFrom.set(from, i * CS * 4); f.tTo.set(to, i * CS * 4)
+  f.tFrom.set(from, i * CS * 4); f.tTo.set(to, i * CS * 4); f.tK.set(k0, i * CS * 2)
   if (changeWet(w, i)) {
     f.trans[i] = keep.trans; f.tShape[i] = keep.tShape; f.tStart[i] = keep.tStart; f.tDur[i] = keep.tDur
-    f.tDelay.set(keep.delay, i * CS); f.tFrom.set(keep.from, i * CS * 4); f.tTo.set(keep.to, i * CS * 4)
+    f.tDelay.set(keep.delay, i * CS); f.tFrom.set(keep.from, i * CS * 4); f.tTo.set(keep.to, i * CS * 4); f.tK.set(keep.k, i * CS * 2)
     clearOrders(w, i); f.status[i] = ST_CANNOT_FORM; return false
   }
   f.vx[i] = 0; f.vz[i] = 0; f.omega[i] = 0; f.onRoad[i] = 0

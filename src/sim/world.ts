@@ -35,6 +35,7 @@ export interface Formations {
   trans: Uint8Array; tShape: Int32Array; tStart: Float64Array; tDur: Float64Array
   tDelay: Float64Array                                             // [i·C + c]
   tFrom: Float64Array; tTo: Float64Array                           // [(i·C + c)·4 + x|z|rot|face]
+  tK: Float64Array                                                 // [(i·C + c)·2 + kx|kz]: the spacing of its places as the change began
   // the lag model, per bin
   lags: Float64Array; lagRate: Float64Array; binG: Float64Array; binQ: Float64Array; binN: Int32Array   // [i·NB + j], NB = cr.maxNB
   // the march trail: a ring of points, oldest first
@@ -96,7 +97,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     alive: u8(N), gen: i32(N), side: u8(N), type: u8(N), shape: i32(N), style: i32(N), status: i32(N), onRoad: u8(N), drill: f64(N), lean: u8(N), faces: i32(N),
     x: f64(N), z: f64(N), heading: f64(N), px: f64(N), pz: f64(N), ph: f64(N), vx: f64(N), vz: f64(N), omega: f64(N),
     disorder: f64(N), blockedFor: f64(N), men: i32(N * C),
-    trans: u8(N), tShape: i32(N), tStart: f64(N), tDur: f64(N), tDelay: f64(N * C), tFrom: f64(N * C * 4), tTo: f64(N * C * 4),
+    trans: u8(N), tShape: i32(N), tStart: f64(N), tDur: f64(N), tDelay: f64(N * C), tFrom: f64(N * C * 4), tTo: f64(N * C * 4), tK: f64(N * C * 2),
     lags: f64(N * NB), lagRate: f64(N * NB), binG: f64(N * NB), binQ: f64(N * NB), binN: i32(N * NB),
     trailX: f64(N * cr.trail), trailZ: f64(N * cr.trail), trailStart: i32(N), trailCount: i32(N), trailVer: i32(N), trailLen: f64(N),
     ordHead: i32(N).fill(-1), ordTail: i32(N).fill(-1),

@@ -55,6 +55,7 @@ const infantry: UnitType = {
   defaultChangeTime: 30,
   start: 'line',
   fires: true,
+  figure: 'foot',
 }
 
 // a cavalry regiment of four squadrons, each 32 files × 2 ranks (256 places, about 250 troopers): a trooper's
@@ -82,6 +83,7 @@ const cavalry: UnitType = {
   defaultChangeTime: 60,
   start: 'line',
   fires: false,
+  figure: 'mounted',
 }
 
 // a foot battery of 8 pieces (6 guns, 2 howitzers), each a detachment of 4 files × 3 ranks (12 men; 96 in all)
@@ -104,6 +106,7 @@ const battery: UnitType = {
   defaultChangeTime: 90,
   start: 'limbered',
   fires: false,   // its fire is S1d-3
+  figure: 'crewed',
 }
 
 export const napoleonic: Ruleset = {

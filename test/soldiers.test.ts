@@ -43,7 +43,7 @@ describe('the soldier layer follows the sim', () => {
       const p = new Play(new Sim(1, napoleonic)), h = p.sim.spawn(-120, -150, 0, shape, men, 0, unit); p.frames(2)
       p.sim.order({ type: 'move', id: h, points: [[-120, -40]], append: false }); const move = p.worst(40)
       p.sim.order({ type: 'form', id: h, shape: to }); const change = p.worst(sec); p.frames(20); const after = p.layer.slotError()
-      expect(p.sim.busy(h)).toBe(false); expect(p.men(h).filter(m => m.alive).length).toBe(men); expect(p.layer.units.get(p.sim.slot(h))!.type).toBe(unit)
+      expect(p.sim.busy(h)).toBe(false); expect(p.men(h).filter(m => m.alive).length).toBe(men); expect(p.layer.units.get(p.sim.slot(h))!.type).toBe(unit); expect(p.layer.units.get(p.sim.slot(h))!.figure).toBe(unit === 'cavalry' ? 'mounted' : 'crewed')
       return { move, change, after }
     }
     const walk = run('cavalry', 'line', 250, 'column', 46), trot = run('cavalry', 'march', 250, 'line', 101), guns = run('battery', 'limbered', 96, 'unlimbered', 91)
