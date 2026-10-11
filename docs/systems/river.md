@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-11
-code: [prototypes/painted-cinematic.html, src/look/river.ts, src/look/world/author.ts, tools/build-look-data.ts, src/look/terrain.ts, tools/river-check.js, tools/render-check.js, tools/detail-check.mjs]
+code: [prototypes/painted-cinematic.html, src/look/river.ts, src/look/world/author.ts, tools/build-look-data.ts, src/look/terrain.ts, tools/river-check.js, tools/render-check.js, tools/detail-check.mjs, src/look/world/water-data.ts, src/look/shaders/waterdata.glsl, tools/water-check.mjs]
 decisions: [0004-lowland-meander-river, 0012-heightfield-authority]
 ---
 
@@ -12,15 +12,16 @@ One meandering channel generated once at load into dense per-sample arrays. Ever
 `riverQuery()`; nothing re-derives the river from a formula. Built in W1 and W1b
 (`docs/plans/done/w1-river-shape.md`, `docs/plans/done/w1b-river-width.md`) in the prototype, ported to the look
 page in L0 (generated offline, `src/look/world/author.ts`), with cut banks and point bars since W2
-(`docs/plans/active/w2-river-banks.md`, the look page only).
+(`docs/plans/active/w2-river-banks.md`, the look page only), and the water data baked for the water's shaders since
+W3 (`docs/plans/active/w3-water-data.md`).
 
 ## Goals / non-goals
 
 - **Goals:** bends that turn back on themselves; visibly varying width (4–11 m, stretches differ);
   pools at bends and riffles between them; a flat floodplain in a valley; water level that never
   rises downstream; nothing in the water except stones (`docs/art-bible.md` §6c).
-- **Non-goals (later):** the shoreline where the water meets the bank (W4); the water-data bake and the
-  painted water shader (W3–W4); river networks, ponds and dams (W6).
+- **Non-goals (later):** the shoreline where the water meets the bank and the painted water shader (W4);
+  river networks, ponds and dams (W6).
 
 ## Design
 
@@ -50,6 +51,14 @@ page in L0 (generated offline, `src/look/world/author.ts`), with cut banks and p
   heightfield's (decision 0012); only the shading is finer.
   The coarse far ring has the trough only and shows the river as a painted line from a mask
   texture; an apron stitches the two grids vertex for vertex (sizes: `docs/proposals/engine-design.md` §4).
+- **Water data (W3):** baked offline with the look data over the tile at `SPEC.water.texel`
+  (`src/look/world/water-data.ts`): the signed depth (the nearest sample's water level, as the carve uses it, minus
+  the authored height; its dry side is the height above the water), the signed distance to the shoreline (exact: the
+  distance to the shoreline's segments, each crossing found by bisection on the authored surface, since a point bar
+  meets the water nearly flat) and the flow (the river's direction × speed, easing to 0 over the last 1.5 m to the
+  shore). An RGBA8 texture bound to the tile's terrain and the water as `uWater`; in W3 only the debug views
+  (`?water=depth|sdf|flow`, `WATER_DEBUG` in `src/look/shaders/waterdata.glsl`) read it, so the drawn frame is
+  unchanged. Encoding ranges: `SPEC.water`.
 - **Water mesh:** a flat ribbon at `zw` reaching 1.35 half-widths each side of the centre line
   (1.35 widths in all, wider than the channel: the outer columns dive under the bank),
   clamped onto the tile edge where the painted line takes over.
@@ -69,6 +78,10 @@ spacing, the query grid and the valley axis `axisX`. This doc names them; it doe
   the cliff limit for the floodplain beyond each bank (`bankReach()`; the banks get their own); `tools/detail-check.mjs` (`banks`) compares the drawn shading
   normal at the banks with the authored surface's. Both have sabotages (`tools/check-negatives.mjs`,
   `--selftest`).
+- `tools/water-check.mjs` (W3): the bake against the authoring step (depth exact to half an encoding step, the
+  shore distance against a brute-force reference, the flow's direction) and the page's texture against the bake;
+  sabotages under `--selftest`. It also reports where the drawn heightfield stands above the data's water (W4's
+  shoreline).
 - `tools/river-check.js`: shape (backtracking bends, width range and per-stretch contrast, width
   steps, riffle steps), terrain (no floating banks, no cliffs, water above the bed, exact stitch),
   placement (nothing in the water or zones, population).

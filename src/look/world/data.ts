@@ -1,37 +1,44 @@
 // The look data file (data/painted-world.lookdata), written by tools/build-look-data.ts and read by the look page:
-// the heightfield (tile plus margin), the far ring's heights, the river's per-sample arrays and the fine bank normals.
+// the heightfield (tile plus margin), the far ring's heights, the river's per-sample arrays, the fine bank normals and
+// the water data.
 // Layout, little-endian: "LOOK", u32 version, u32 meta length, the meta as UTF-8 JSON padded to 4 bytes, then the
 // arrays in the order the meta lists them (float32, or bytes padded to 4).
 import type { Grid, Heightfield } from '../heightfield.ts'
 import type { Derived } from '../spec.ts'
 import { SAMPLE_KEYS, type RiverParams, type RiverSamples } from '../river.ts'
 
-export const LOOK_VERSION = 3
+export const LOOK_VERSION = 4
 
-// The fine bank normals (docs/plans/active/w2-river-banks.md): a grid of n² texels of `cell` metres from (x0, z0),
-// stored only where covered: spans are (row, first column, count) triples, tex holds 3 bytes per covered texel in
-// span order (the normal's x and z as (v·0.5 + 0.5)·255, and the weight ·255)
-export interface BankNormals { n: number; cell: number; x0: number; z0: number; spans: Float32Array; tex: Uint8Array }
-export interface LookData { hf: Heightfield; far: Grid; river: RiverSamples; bank: BankNormals }   // far: the far ring's nodes
+// A grid of n² texels of `cell` metres from (x0, z0) with ch bytes a texel, stored only where covered: spans are (row,
+// first column, count) triples, tex holds ch bytes per covered texel in span order. The rest take the user's fill.
+// The bank normals (docs/plans/active/w2-river-banks.md): 3 bytes, the normal's x and z as (v·0.5 + 0.5)·255 and the
+// weight ·255. The water data (docs/plans/active/w3-water-data.md): 4 bytes, src/look/world/water-data.ts.
+export interface SpanGrid { n: number; cell: number; x0: number; z0: number; ch: number; spans: Float32Array; tex: Uint8Array }
+export interface LookData { hf: Heightfield; far: Grid; river: RiverSamples; bank: SpanGrid; water: SpanGrid }   // far: the far ring's nodes
+
+const SPAN_GRIDS = ['bank', 'water'] as const
+type GridMeta = { n: number; cell: number; x0: number; z0: number; ch: number }
 
 interface Meta {
   hf: { n: number; cell: number; x0: number; z0: number; min: number; max: number }
   far: { n: number; cell: number; x0: number; z0: number }
   river: { P: RiverParams; n: number }
-  bank: { n: number; cell: number; x0: number; z0: number }
+  bank: GridMeta; water: GridMeta
   arrays: [string, number, 'f32' | 'u8'][]
 }
 
 const bytesOf = (n: number, t: 'f32' | 'u8') => t === 'f32' ? n * 4 : Math.ceil(n / 4) * 4
 
+const gridMeta = (g: SpanGrid): GridMeta => ({ n: g.n, cell: g.cell, x0: g.x0, z0: g.z0, ch: g.ch })
+
 export function encodeLook(d: LookData): Uint8Array {
-  const arrays: [string, Float32Array | Uint8Array][] = [['hf', d.hf.h], ['far', d.far.h], ...SAMPLE_KEYS.map(k => [k, d.river[k]] as [string, Float32Array]), ['bankSpans', d.bank.spans], ['bankTex', d.bank.tex]]
+  const arrays: [string, Float32Array | Uint8Array][] = [['hf', d.hf.h], ['far', d.far.h], ...SAMPLE_KEYS.map(k => [k, d.river[k]] as [string, Float32Array]), ...SPAN_GRIDS.flatMap(g => [[g + 'Spans', d[g].spans], [g + 'Tex', d[g].tex]] as [string, Float32Array | Uint8Array][])]
   const type = (a: Float32Array | Uint8Array): 'f32' | 'u8' => a instanceof Float32Array ? 'f32' : 'u8'
   const meta: Meta = {
     hf: { n: d.hf.n, cell: d.hf.cell, x0: d.hf.x0, z0: d.hf.z0, min: d.hf.min, max: d.hf.max },
     far: { n: d.far.n, cell: d.far.cell, x0: d.far.x0, z0: d.far.z0 },
     river: { P: d.river.P, n: d.river.n },
-    bank: { n: d.bank.n, cell: d.bank.cell, x0: d.bank.x0, z0: d.bank.z0 },
+    bank: gridMeta(d.bank), water: gridMeta(d.water),
     arrays: arrays.map(([k, a]) => [k, a.length, type(a)]),
   }
   const json = new TextEncoder().encode(JSON.stringify(meta)), pad = (4 - json.length % 4) % 4
@@ -67,16 +74,31 @@ export function decodeLook(buf: ArrayBuffer): LookData {
   for (const k of ['hf', 'far']) if (!arr[k]) throw new Error(`look data: no ${k} array`)
   const river = { P: meta.river.P, n: meta.river.n } as RiverSamples
   for (const k of SAMPLE_KEYS) { if (!arr[k] || arr[k].length !== meta.river.n) throw new Error(`look data: river array ${k} missing or short`); river[k] = arr[k] }
-  if (!arr.bankSpans || !u8.bankTex || arr.bankSpans.length % 3) throw new Error('look data: no bank normals')
-  const bn = meta.bank.n
-  let covered = 0
-  for (let i = 0; i < arr.bankSpans.length; i += 3) {
-    const j = arr.bankSpans[i], i0 = arr.bankSpans[i + 1], len = arr.bankSpans[i + 2]
-    if (!Number.isInteger(j) || !Number.isInteger(i0) || !Number.isInteger(len) || j < 0 || j >= bn || i0 < 0 || len < 1 || i0 + len > bn) throw new Error(`look data: bank span ${i / 3} (row ${j}, from ${i0}, ${len} texels) is outside the ${bn}² grid`)
-    covered += len
+  const grid = (g: typeof SPAN_GRIDS[number]): SpanGrid => {
+    const m = meta[g], spans = arr[g + 'Spans'], tex = u8[g + 'Tex']
+    if (!m || !spans || !tex || spans.length % 3) throw new Error(`look data: no ${g} grid`)
+    let covered = 0
+    for (let i = 0; i < spans.length; i += 3) {
+      const j = spans[i], i0 = spans[i + 1], len = spans[i + 2]
+      if (!Number.isInteger(j) || !Number.isInteger(i0) || !Number.isInteger(len) || j < 0 || j >= m.n || i0 < 0 || len < 1 || i0 + len > m.n) throw new Error(`look data: ${g} span ${i / 3} (row ${j}, from ${i0}, ${len} texels) is outside the ${m.n}² grid`)
+      covered += len
+    }
+    if (tex.length !== covered * m.ch) throw new Error(`look data: the ${g} grid holds ${tex.length / m.ch} texels, its spans cover ${covered}`)
+    return { ...m, spans, tex }
   }
-  if (u8.bankTex.length !== covered * 3) throw new Error(`look data: bank normals hold ${u8.bankTex.length / 3} texels, the spans cover ${covered}`)
-  return { hf: { ...meta.hf, h: arr.hf }, far: { ...meta.far, h: arr.far }, river, bank: { ...meta.bank, spans: arr.bankSpans, tex: u8.bankTex } }
+  return { hf: { ...meta.hf, h: arr.hf }, far: { ...meta.far, h: arr.far }, river, bank: grid('bank'), water: grid('water') }
+}
+
+// a span grid unpacked into n² texels of 4 bytes (RGBA, for a texture), the uncovered ones `fill` (RGBA)
+export function unpackSpans(g: SpanGrid, fill: [number, number, number, number]): Uint8Array {
+  const n = g.n, ch = g.ch, data = new Uint8Array(n * n * 4)
+  new Uint32Array(data.buffer).fill((fill[0] | fill[1] << 8 | fill[2] << 16 | fill[3] << 24) >>> 0)   // bytes in little-endian order: every browser
+  let t = 0
+  for (let s = 0; s < g.spans.length; s += 3) {
+    const j = g.spans[s], i0 = g.spans[s + 1], len = g.spans[s + 2]
+    for (let i = i0; i < i0 + len; i++, t++) { const o = (j * n + i) * 4; for (let k = 0; k < ch; k++) data[o + k] = g.tex[t * ch + k] }
+  }
+  return data
 }
 
 // The data must be the one this spec describes: a stale file (an old build, a cached download) would otherwise be
@@ -88,7 +110,7 @@ export function checkLookData(d: Derived, look: LookData): void {
   if (look.hf.h.length !== n * n) bad.push(`heightfield has ${look.hf.h.length} heights, not ${n * n}`)
   if (look.far.n !== fn || !near(look.far.cell, d.farCell) || !near(look.far.x0, -s.far / 2) || !near(look.far.z0, -s.far / 2)) bad.push(`far ring ${look.far.n} nodes of ${look.far.cell} m, the spec wants ${fn} of ${d.farCell} m`)
   if (look.far.h.length !== fn * fn) bad.push(`far ring has ${look.far.h.length} heights, not ${fn * fn}`)
-  const b = look.bank
-  if (b.n !== d.bankN || !near(b.cell, s.bank.texel) || !near(b.x0, -s.tile / 2) || !near(b.z0, -s.tile / 2)) bad.push(`bank normals ${b.n}² of ${b.cell} m from ${b.x0}, the spec wants ${d.bankN}² of ${s.bank.texel} m from ${-s.tile / 2}`)
+  for (const [name, g, gn, texel, ch] of [['bank normals', look.bank, d.bankN, s.bank.texel, 3], ['water data', look.water, d.waterN, s.water.texel, 4]] as const)
+    if (g.n !== gn || g.ch !== ch || !near(g.cell, texel) || !near(g.x0, -s.tile / 2) || !near(g.z0, -s.tile / 2)) bad.push(`${name} ${g.n}² of ${g.cell} m (${g.ch} bytes) from ${g.x0}, the spec wants ${gn}² of ${texel} m (${ch} bytes) from ${-s.tile / 2}`)
   if (bad.length) throw new Error('look data does not match the world spec (run node tools/build-look-data.ts): ' + bad.join('; '))
 }

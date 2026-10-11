@@ -1,5 +1,6 @@
 precision highp float;varying vec3 vW,vN;varying float vRiver;
 #include<painter>
+#include<waterdata>
 
 #ifdef FARRING
 uniform sampler2D uRiverMask;
@@ -35,7 +36,11 @@ vec3 albedo(vec3 wp,vec3 n){
   c=uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);                          // steep: stony
   return c;
 }
-void main(){vec3 N=normalize(vN);vec4 lm=LM(vW);float bankTurn=0.0;
+void main(){
+  #ifdef WATER_DEBUG
+  if(uWaterView>0.5){gl_FragColor=vec4(waterView(vW.xz),1.0);return;}   // the water data's debug views
+  #endif
+  vec3 N=normalize(vN);vec4 lm=LM(vW);float bankTurn=0.0;
   #if defined(BANKN)&&!defined(BANKN_OFF)
   vec4 bk=texture2D(uBankN,(vW.xz+TILE_HALF)/TILE_W);vec2 bxz=bk.xy*2.0-1.0;   // BANKN_OFF: the bank check's sabotage
   vec3 bN=normalize(mix(N,vec3(bxz.x,sqrt(max(0.0,1.0-dot(bxz,bxz))),bxz.y),bk.z));

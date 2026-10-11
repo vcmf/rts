@@ -2,6 +2,7 @@
 // wide enough that the TERRAIN cuts the real shoreline; per-vertex depth drives shallow turquoise to deep teal, foam
 // at the shore, flow strokes, baked tree reflections, sun glitter, tree and cloud shadows.
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
+import type { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
@@ -42,7 +43,8 @@ export function blurMask(g: CanvasRenderingContext2D, N: number, sigma: number, 
   g.putImageData(img, X0, Y0)
 }
 
-export function buildWater(scene: Scene, mats: Materials): Water {
+// waterData: the water data (docs/plans/active/w3-water-data.md), bound for its debug views (WATER_DEBUG)
+export function buildWater(scene: Scene, mats: Materials, waterData: RawTexture): Water {
   // reflection mask: crown discs of trees near the stream
   const reflCanvas = document.createElement('canvas'); reflCanvas.width = reflCanvas.height = REFL_N
   const reflG = reflCanvas.getContext('2d', { willReadFrequently: true })!; reflG.fillStyle = '#000'; reflG.fillRect(0, 0, REFL_N, REFL_N)
@@ -70,7 +72,7 @@ export function buildWater(scene: Scene, mats: Materials): Water {
   const mesh = new Mesh('water', scene), vd = new VertexData(); vd.positions = pos; vd.uvs = uv; vd.indices = idx
   const n: number[] = []; VertexData.ComputeNormals(pos, idx, n); vd.normals = n; vd.applyToMesh(mesh)
   mesh.setVerticesData('aDepth', new Float32Array(dep), false, 1)
-  const waterMat = mats.make('water', WAT_VS, WAT_FS, { attributes: ['position', 'uv', 'aDepth'], samplers: ['uRefl'] }); mesh.material = waterMat; waterMat.backFaceCulling = false
+  const waterMat = mats.make('water', WAT_VS, WAT_FS, { attributes: ['position', 'uv', 'aDepth'], uniforms: ['uWaterView'], samplers: ['uRefl', 'uWater'] }); mesh.material = waterMat; waterMat.setTexture('uWater', waterData); waterMat.backFaceCulling = false
 
   const finish = (sc: Scene) => {
     const box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity]

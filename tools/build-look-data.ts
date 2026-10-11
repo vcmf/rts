@@ -1,6 +1,6 @@
 // Builds the look world's data (decision 0012, docs/plans/done/l0-spine.md L0a): the heightfield over the tile
-// plus its margin, the far ring's heights, the river's samples and the fine bank normals, from the authoring formulas in
-// src/look/world/author.ts, once, in Node. The page reads the file and never evaluates the formulas.
+// plus its margin, the far ring's heights, the river's samples, the fine bank normals and the water data, from the
+// authoring formulas in src/look/world/author.ts, once, in Node. The page reads the file and never evaluates the formulas.
 //   node tools/build-look-data.ts           writes data/painted-world.lookdata
 //   node tools/build-look-data.ts --check   rebuilds in memory and fails if it differs from the committed file
 // Each node's x and z use the same expression as Babylon's CreateGround vertices, so the authored heights land on
@@ -10,7 +10,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { D } from '../src/look/spec.ts'
 import { authorWorld, authoredNormal } from '../src/look/world/author.ts'
-import { encodeLook, type BankNormals, type LookData } from '../src/look/world/data.ts'
+import { encodeLook, type LookData, type SpanGrid } from '../src/look/world/data.ts'
+import { bakeWater, packWater } from '../src/look/world/water-data.ts'
 import { sstep } from '../src/look/noise.ts'
 import { riverQuery } from '../src/look/river.ts'
 
@@ -21,7 +22,7 @@ export const LOOK_FILE = path.join(ROOT, 'data/painted-world.lookdata')
 // at each texel's centre, over the river's corridor only (out to bank.reach m from its centre line, the weight fading
 // to 0 over the last bank.fade m, and over the last bank.edge m before the tile's edge, so the tile's banks meet the
 // apron's vertex normals without a seam), stored as row spans
-function bankNormals(H: (x: number, z: number) => number): BankNormals {
+function bankNormals(H: (x: number, z: number) => number): SpanGrid {
   const b = D.spec.bank, n = D.bankN, cell = b.texel, x0 = -D.spec.tile / 2, z0 = x0, e = cell / 2
   const spans: number[] = [], tex: number[] = [], enc = (v: number) => Math.round((Math.max(-1, Math.min(1, v)) * 0.5 + 0.5) * 255)
   for (let j = 0; j < n; j++) {
@@ -36,7 +37,7 @@ function bankNormals(H: (x: number, z: number) => number): BankNormals {
       tex.push(enc(nx), enc(nz), Math.round(255 * (1 - sstep(b.reach - b.fade, b.reach, q!.dist)) * edge))
     }
   }
-  return { n, cell, x0, z0, spans: Float32Array.from(spans), tex: Uint8Array.from(tex) }
+  return { n, cell, x0, z0, ch: 3, spans: Float32Array.from(spans), tex: Uint8Array.from(tex) }
 }
 
 export function buildLookData(): Uint8Array {
@@ -56,6 +57,7 @@ export function buildLookData(): Uint8Array {
     far: { n: fn, cell: s.far / s.farSub, x0: -s.far / 2, z0: -s.far / 2, h: fh },
     river: w.samples,
     bank: bankNormals(w.H),
+    water: packWater(bakeWater(w.H)),
   }
   return encodeLook(data)
 }

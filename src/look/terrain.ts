@@ -4,9 +4,8 @@
 // triangle inside the band one far cell beyond the tile; the apron fills that band, joining the tile's edge
 // vertices to the far ring's vertices one for one.
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
-import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
-import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
+import type { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import type { GroundMesh } from '@babylonjs/core/Meshes/groundMesh.js'
@@ -20,7 +19,8 @@ import { RIVER, bandOf, riverQuery } from './river.ts'
 import { sstep } from './noise.ts'
 import { D } from './spec.ts'
 import type { Grid } from './heightfield.ts'
-import type { BankNormals } from './world/data.ts'
+import type { SpanGrid } from './world/data.ts'
+import { spanTexture } from './span-texture.ts'
 import TER_VS from './shaders/terrain.vert?raw'
 import TER_FS from './shaders/terrain.frag?raw'
 
@@ -33,11 +33,14 @@ export interface Terrain {
 const TILE_W = D.spec.tile, TILE_SUB = D.spec.tileSub, FAR_W = D.spec.far, FAR_SUB = D.spec.farSub, FAR_CELL = D.farCell, BAND = D.band, MASK_N = D.spec.sizes.riverMask
 
 // heights come from the look data: the tile from the heightfield (decision 0012), the far ring from its own nodes
-export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: BankNormals): Terrain {
+export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: SpanGrid, waterData: RawTexture): Terrain {
   // DETAIL: the detail layer (src/look/shaders/painter.glsl), on the terrain only. BANKN: the tile shades the river's
-  // banks with the fine bank normals (docs/plans/active/w2-river-banks.md)
-  const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], samplers: ['uBankN'], defines: ['#define DETAIL', '#define BANKN'] })
-  const bankN = bankTexture(scene, bank); terrainMat.setTexture('uBankN', bankN)
+  // banks with the fine bank normals (docs/plans/active/w2-river-banks.md). The water data (W3) is bound for its debug
+  // views (WATER_DEBUG)
+  const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView'], samplers: ['uBankN', 'uWater'], defines: ['#define DETAIL', '#define BANKN'] })
+  // the bank normals: x, z of the normal, the weight; the uncovered texels a level normal of no weight (the vertex
+  // normals hold there)
+  const bankN = spanTexture(scene, bank, [128, 128, 0, 0], 'bankN'); terrainMat.setTexture('uBankN', bankN); terrainMat.setTexture('uWater', waterData)
   // the bank colours turn symmetric over the bank normals' edge fade, to meet the far ring's painted river (stroked
   // at the river's width) at the tile's edge
   const edgeK = (x: number, z: number) => 1 - sstep(TILE_W / 2 - D.spec.bank.edge, TILE_W / 2, Math.max(Math.abs(x), Math.abs(z)))
@@ -113,17 +116,3 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Ban
   return { terrainMat, farTerrainMat, hillMat, bankN, riverMask, riverMaskCanvas, tileGround, farGround, apron }
 }
 
-// the bank normals as an RGBA8 texture over the tile (x, z of the normal; the weight; unused): uncovered texels have
-// no weight, so the vertex normals hold there
-function bankTexture(scene: Scene, b: BankNormals): RawTexture {
-  const n = b.n, data = new Uint8Array(n * n * 4)
-  new Uint32Array(data.buffer).fill(0x8080)   // x, z 128 (a level normal), no weight (bytes in little-endian order: every browser)
-  let t = 0
-  for (let s = 0; s < b.spans.length; s += 3) {
-    const j = b.spans[s], i0 = b.spans[s + 1], len = b.spans[s + 2]
-    for (let i = i0; i < i0 + len; i++, t++) { const o = (j * n + i) * 4; data[o] = b.tex[t * 3]; data[o + 1] = b.tex[t * 3 + 1]; data[o + 2] = b.tex[t * 3 + 2] }
-  }
-  const tex = RawTexture.CreateRGBATexture(data, n, n, scene, true, false, Texture.TRILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_UNSIGNED_BYTE)
-  tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE; tex.name = 'bankN'
-  return tex
-}

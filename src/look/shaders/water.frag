@@ -1,8 +1,12 @@
 precision highp float;varying vec3 vW;varying vec2 vUv;varying float vDepth;uniform sampler2D uRefl;
 #include<painter>
+#include<waterdata>
 
 float reflAt(vec2 xz){vec2 uv=(xz+TILE_HALF)/TILE_W;if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0)return 0.0;return texture2D(uRefl,uv).r;}
 void main(){
+  #ifdef WATER_DEBUG
+  if(uWaterView>0.5){gl_FragColor=vec4(waterView(vW.xz),1.0);return;}   // the water data's debug views
+  #endif
   vec3 V=normalize(uCamPos-vW);
   float depth=max(vDepth,0.0);
   float across=vUv.x,along=vUv.y;                                           // stream-space coordinates (metres)
