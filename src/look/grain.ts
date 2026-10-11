@@ -7,8 +7,9 @@ import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTextur
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { mulberry } from './noise.ts'
+import { D } from './spec.ts'
 
-export const GRAIN_N = 512
+export const GRAIN_N = D.spec.sizes.grain
 
 function pnoise(N: number, cx: number, cy: number, seed: number): Float32Array {
   const r = mulberry(seed), L = new Float32Array(cx * cy); for (let i = 0; i < L.length; i++) L[i] = r()
@@ -43,6 +44,31 @@ export function makeGrainCanvas(userLum: Float32Array | null): HTMLCanvasElement
     d[i * 4] = f * 255; d[i * 4 + 1] = bl * 255; d[i * 4 + 2] = st * 255; d[i * 4 + 3] = 255
   }
   g.putImageData(img, 0, 0); return c
+}
+
+// the seam check's grain (tools/detail-check.mjs): R holds only broad, smooth features (a few cells per tile), so a
+// render of it is smooth everywhere but at silhouettes and seams; G and B as the paint grain's. Also returns R's
+// steepest change between neighbouring texels
+export function makeSmoothGrainCanvas(): { canvas: HTMLCanvasElement; maxStep: number } {
+  const N = GRAIN_N, canvas = makeGrainCanvas(null), g = canvas.getContext('2d')!, img = g.getImageData(0, 0, N, N), d = img.data
+  const a = pnoise(N, 4, 4, 11), b = pnoise(N, 8, 8, 12), r = new Float32Array(N * N)
+  for (let i = 0; i < N * N; i++) r[i] = cl((0.65 * a[i] + 0.35 * b[i] - 0.5) * 2.2 + 0.5)
+  for (let i = 0; i < N * N; i++) d[i * 4] = Math.round(r[i] * 255)
+  // on the stored bytes: the texture holds those, not the floats
+  let maxStep = 0
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const v = d[(y * N + x) * 4]
+    maxStep = Math.max(maxStep, Math.abs(v - d[(y * N + (x + 1) % N) * 4]), Math.abs(v - d[(((y + 1) % N) * N + x) * 4]))
+  }
+  maxStep /= 255
+  g.putImageData(img, 0, 0); return { canvas, maxStep }
+}
+
+// the means of the grain's R (fine grain) and G (blotches) channels, 0..1
+export function grainMean(canvas: HTMLCanvasElement): [number, number] {
+  const d = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data
+  let r = 0, g = 0; for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1] }
+  return [r / (d.length / 4) / 255, g / (d.length / 4) / 255]
 }
 
 export function grainTexture(scene: Scene, canvas: HTMLCanvasElement): DynamicTexture {

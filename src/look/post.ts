@@ -54,6 +54,8 @@ export class Post {
   private readonly camera: ArcRotateCamera; private readonly engine: AbstractEngine; private readonly S: LookState; private readonly grain: () => BaseTexture
   constructor(camera: ArcRotateCamera, engine: AbstractEngine, S: LookState, grain: () => BaseTexture) { this.camera = camera; this.engine = engine; this.S = S; this.grain = grain }
   get passes(): PostProcess[] { return this.posts }
+  // no finishing passes: the scene draws straight to the canvas (the detail check's debug view)
+  clear(): void { this.posts.forEach(p => p.dispose(this.camera)); this.posts = [] }
   build(): void {
     const { camera, engine, S } = this
     this.posts.forEach(p => p.dispose(camera)); this.posts = []
