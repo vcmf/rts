@@ -5,16 +5,20 @@
 // whose slots moved walk to the nearest free filled slot; Face about relabels the men through the shape's
 // half-turn. No DOM: tested in Node (test/soldiers.test.ts).
 import type { World, Places } from '../sim/index.ts'
-import { mkPlaces, placesCtx, placeAt, occupied, menOf, slotIndex, groundG, cellK, DT, M_TICK, MS_RALLYING, fleeing } from '../sim/index.ts'
-import type { Scene } from './scene.ts'
-import { eachObstacle, cosmeticRng } from './scene.ts'
+import { mkPlaces, placesCtx, placeAtSlot, filledSlots, menOf, groundGAt, cellK, DT, M_TICK, MS_RALLYING, fleeing } from '../sim/index.ts'
+import type { Scene, Obstacle } from './scene.ts'
+import { cosmeticRng } from './scene.ts'
 import { CLASS_STYLE } from './style.ts'
 
 export const AHEAD = 0.6, WALK = 1.35, RUN = 3.2, SEP = 0.52
-const SC = 0.6   // neighbour grid cell (≥ SEP: the 3×3 search sees every neighbour)
+const SC = 1.05   // neighbour grid cell (≥ 2·SEP: the 2×2 cells nearest a man hold every neighbour within SEP)
+// the sway's sine, from a table (32,000 sines a frame at 16,000 men)
+const WAVE_N = 1024, WAVE = Float64Array.from({ length: WAVE_N + 1 }, (_, k) => Math.sin(k / WAVE_N * 2 * Math.PI))
+const wave = (a: number): number => { const u = a / (2 * Math.PI) * WAVE_N, k = Math.floor(u), q = k & (WAVE_N - 1); return WAVE[q] + (WAVE[q + 1] - WAVE[q]) * (u - k) }
 
 export interface Man { s: number; x: number; z: number; vx: number; vz: number; alive: boolean; dx: number; dz: number; settled: boolean; hx: number; hz: number }
-export interface Unit { i: number; gen: number; side: number; men: Man[]; faces: number; sway: number; sig: Int32Array }
+// pose: what the places were last framed from (still: unchanged, so settled men need no new place)
+export interface Unit { i: number; gen: number; side: number; men: Man[]; faces: number; sway: number; sig: Int32Array; pose: Float64Array }
 
 export class SoldierLayer {
   w: World; scene: Scene
@@ -22,11 +26,27 @@ export class SoldierLayer {
   fallen: Man[] = []                       // men of battalions that are gone
   private ctxA: Places; private ctx0: Places; private rnd = cosmeticRng(7); private treesByClass: Uint8Array
   alphaNow = 1
-  private cellHead: Int32Array; private cellNext = new Int32Array(1024); private flat: Man[] = []; private touched: number[] = []; private SN: number
+  // the neighbour grid: per cell the first man, per man the next, and the men's positions as the frame began
+  private cellHead: Int32Array; private cellNext = new Int32Array(1024); private flatX = new Float64Array(1024); private flatZ = new Float64Array(1024); private nFlat = 0
+  private touched: number[] = []; private SN: number
+  // per obstacle cell, the trunks in it and the 8 around it (the cells scene.ts eachObstacle visits), flattened:
+  // cell k's are [treeAt[k], treeAt[k + 1]) of treeX, treeZ, treeR; most cells have none
+  private treeAt: Int32Array; private treeX: Float64Array; private treeZ: Float64Array; private treeR: Float64Array
   constructor(w: World, scene: Scene) {
-    this.w = w; this.scene = scene; this.ctxA = mkPlaces(w); this.ctx0 = mkPlaces(w)
+    this.w = w; this.scene = scene; this.ctxA = mkPlaces(w); this.ctx0 = mkPlaces(w); this.poseNow = new Float64Array(8 + 2 * w.cr.NB)
     this.treesByClass = Uint8Array.from(Object.keys(w.cr.rs.terrain), name => ((CLASS_STYLE[name]?.trees ?? 0) > 0 ? 1 : 0))
     const span = (w.terrain.n - 1) * w.terrain.cell; this.SN = Math.ceil(span / SC) + 1; this.cellHead = new Int32Array(this.SN * this.SN).fill(-1)
+    const n = scene.obstacleN, near: Obstacle[] = []
+    this.treeAt = new Int32Array(n * n + 1)
+    for (let b = 0; b < n; b++) for (let a = 0; a < n; a++) { this.treeAt[b * n + a] = near.length
+      for (let db = -1; db <= 1; db++) for (let da = -1; da <= 1; da++) { const p = a + da, q = b + db; if (p >= 0 && q >= 0 && p < n && q < n) near.push(...scene.obstacleGrid[q * n + p]) } }
+    this.treeAt[n * n] = near.length
+    this.treeX = Float64Array.from(near, o => o.x); this.treeZ = Float64Array.from(near, o => o.z); this.treeR = Float64Array.from(near, o => o.r)
+  }
+  // the obstacle cell at (x, z), −1 off the grid (no trees there)
+  private treeCell(x: number, z: number): number {
+    const s = this.scene, n = s.obstacleN, i = Math.floor((x - s.x0) / s.obstacleCell), j = Math.floor((z - s.z0) / s.obstacleCell)
+    return i < 0 || j < 0 || i >= n || j >= n ? -1 : j * n + i
   }
 
   // the anchor this frame: interpolated between ticks (alpha), extrapolated `ahead` seconds
@@ -43,13 +63,18 @@ export class SoldierLayer {
     placesCtx(this.ctx0, i, x0, z0, h0, t, -(1 - alpha) * DT)
   }
   private kindOf(i: number): number { const f = this.w.f; return this.w.cr.shapes[f.trans[i] ? f.tShape[i] : f.shape[i]].kind }
-  private slotRC(s: number): [number, number, number] { const g = this.w.cr.geo, RF = g.ranks * g.files; return [Math.floor(s / RF), Math.floor((s % RF) / g.files), s % g.files] }
   // a man's place (`ahead`: where he aims; a place on impassable ground falls back to the place now)
-  place(i: number, s: number, ahead: boolean, out: number[]): number[] {
-    const [c, r, f] = this.slotRC(s)
-    if (!ahead) return placeAt(this.ctx0, c, r, f, out)
-    placeAt(this.ctxA, c, r, f, out)
-    if (this.w.terrain.imp[this.kindOf(i)][cellK(this.w.terrain, out[0], out[1])]) placeAt(this.ctx0, c, r, f, out)
+  place(i: number, s: number, ahead: boolean, out: number[], imp: Uint8Array = this.w.terrain.imp[this.kindOf(i)]): number[] {
+    if (!ahead) return placeAtSlot(this.ctx0, s, out)
+    placeAtSlot(this.ctxA, s, out)
+    if (imp[cellK(this.w.terrain, out[0], out[1])]) placeAtSlot(this.ctx0, s, out)
+    return out
+  }
+  // what the places of formation i were framed from: the anchors, the trail, the lags and their rates
+  private poseOf(i: number, alpha: number, out: Float64Array): Float64Array {
+    const f = this.w.f, NB = this.w.cr.NB, [hx, hz, h] = this.anchor(i, alpha, AHEAD), [x0, z0, h0] = this.anchor(i, alpha, 0)
+    out[0] = hx; out[1] = hz; out[2] = h; out[3] = x0; out[4] = z0; out[5] = h0; out[6] = f.trailVer[i]; out[7] = f.trans[i]
+    for (let j = 0; j < NB; j++) { out[8 + 2 * j] = f.lags[i * NB + j]; out[9 + 2 * j] = f.lagRate[i * NB + j] }
     return out
   }
 
@@ -77,15 +102,15 @@ export class SoldierLayer {
       // and Face about: nothing to match otherwise
       if (u && this.same(u.sig, i)) continue
       this.frame(i, alpha)
-      if (!u) { u = { i, gen: f.gen[i], side: f.side[i], men: [], faces: f.faces[i], sway: 0, sig: new Int32Array(g.companies + 5) }; this.units.set(i, u) }
+      if (!u) { u = { i, gen: f.gen[i], side: f.side[i], men: [], faces: f.faces[i], sway: 0, sig: new Int32Array(g.companies + 5), pose: new Float64Array(8 + 2 * w.cr.NB).fill(NaN) }; this.units.set(i, u) }
       this.sign(u.sig, i)
       if (u.faces !== f.faces[i]) {   // Face about: each man's slot is now the half-turn of his old one
         const T = w.cr.shapes[f.shape[i]].turn
         for (let k = u.faces; k < f.faces[i]; k++) if (T) for (const m of u.men) if (m.alive) m.s = T.m[m.s]
         u.faces = f.faces[i]
       }
-      const slots = w.cr.slots, occ = new Uint8Array(slots), claimed = new Uint8Array(slots)
-      for (let c = 0; c < g.companies; c++) for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) if (occupied(w, i, c, r, q)) occ[slotIndex(g, c, r, q)] = 1
+      const slots = w.cr.slots, occ = new Uint8Array(slots), claimed = new Uint8Array(slots), F = filledSlots(w, i), a = i * (g.companies + 1)
+      for (let k = F.at[a], e = F.at[a + g.companies]; k < e; k++) occ[F.s[k]] = 1
       const displaced: Man[] = []
       let alive = 0
       for (const m of u.men) if (m.alive) { alive++; if (occ[m.s] && !claimed[m.s]) claimed[m.s] = 1; else displaced.push(m) }
@@ -116,60 +141,78 @@ export class SoldierLayer {
   step(dt: number, alpha: number): void {
     this.alphaNow = alpha
     this.sync(alpha)
-    const w = this.w, f = w.f, t = w.terrain, x0 = t.x0, z0 = t.z0, SN = this.SN, p = [0, 0, 0]
-    // neighbour grid: cells and linked lists in typed arrays, rebuilt every frame
+    const w = this.w, f = w.f, t = w.terrain, x0 = t.x0, z0 = t.z0, SN = this.SN, p = [0, 0, 0], TA = this.treeAt, TX = this.treeX, TZ = this.treeZ, TR = this.treeR
+    // neighbour grid: cells and linked lists in typed arrays, rebuilt every frame, with the positions as the
+    // frame began (each man is pushed by where the others stood, whatever order they move in)
     for (const c of this.touched) this.cellHead[c] = -1
-    this.flat.length = 0; this.touched.length = 0
+    this.touched.length = 0; this.nFlat = 0
     for (const u of this.units.values()) for (const m of u.men) if (m.alive) {
       const ci = Math.floor((m.x - x0) / SC), cj = Math.floor((m.z - z0) / SC), cell = ci >= 0 && cj >= 0 && ci < SN && cj < SN ? ci * SN + cj : -1
-      const k = this.flat.length; this.flat.push(m)
-      if (k >= this.cellNext.length) { const n = new Int32Array(this.cellNext.length * 2); n.set(this.cellNext); this.cellNext = n }
+      const k = this.nFlat++
+      if (k >= this.cellNext.length) this.grow()
+      this.flatX[k] = m.x; this.flatZ[k] = m.z
       if (cell >= 0) { if (this.cellHead[cell] < 0) this.touched.push(cell); this.cellNext[k] = this.cellHead[cell]; this.cellHead[cell] = k } else this.cellNext[k] = -1
     }
-    const tt = w.meta[M_TICK] * DT * 0.35
+    const tt = w.meta[M_TICK] * DT * 0.35, X = this.flatX, Z = this.flatZ, head = this.cellHead, next = this.cellNext
     for (const u of this.units.values()) {
       const i = u.i; this.frame(i, alpha)
       const busy = !!(f.trans[i] || f.ordHead[i] >= 0)
       u.sway += ((busy ? 1 : 0) - u.sway) * Math.min(1, dt * 0.8)   // sway eases out at the halt, so the ranks come to rest
+      // still: halted, and every place framed as last frame, so a settled man's place has not moved
+      const pose = this.poseOf(i, alpha, this.poseNow)
+      let still = !busy
+      for (let k = 0; still && k < pose.length; k++) still = pose[k] === u.pose[k]
+      u.pose.set(pose)
       const kind = this.kindOf(i), imp = t.imp[kind]
       for (const m of u.men) {
-        if (!m.alive) continue
-        this.place(i, m.s, true, p)
-        const inTrees = this.treesByClass[t.cls[cellK(t, m.x, m.z)]] === 1
+        if (!m.alive || (still && m.settled)) continue
+        this.place(i, m.s, true, p, imp)
+        const here = cellK(t, m.x, m.z), inTrees = this.treesByClass[t.cls[here]] === 1
         // personal drift: the ranks loosen among trees, break up when the battalion routs or shatters, and are
         // still loose while it rallies
         const amp = (fleeing(f.mstate[i]) ? 1.5 : f.mstate[i] === MS_RALLYING ? 0.6 : inTrees ? 0.3 : 0.1) * u.sway
-        let tx = p[0] + amp * Math.sin(tt + m.dx), tz = p[1] + amp * Math.sin(tt * 0.8 + m.dz)
+        let tx = p[0], tz = p[1]
+        if (amp > 1e-4) { tx += amp * wave(tt + m.dx); tz += amp * wave(tt * 0.8 + m.dz) }
         // a place inside a trunk moves to its edge: a stable place to stand, not a tug of war
-        eachObstacle(this.scene, tx, tz, o => { const ex = tx - o.x, ez = tz - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.4
-          if (d < R) { if (d > 1e-6) { tx = o.x + ex / d * R; tz = o.z + ez / d * R } else tx = o.x + R } })
+        let tc = this.treeCell(tx, tz)
+        if (tc >= 0) for (let k = TA[tc], e = TA[tc + 1]; k < e; k++) { const ox = TX[k], oz = TZ[k], ex = tx - ox, ez = tz - oz, d = Math.sqrt(ex * ex + ez * ez), R = TR[k] + 0.4
+          if (d < R) { if (d > 1e-6) { tx = ox + ex / d * R; tz = oz + ez / d * R } else tx = ox + R } }
         // settled: a man at his place while his battalion is halted holds still until his place moves
         if (m.settled && (busy || Math.hypot(tx - m.hx, tz - m.hz) > 0.3)) m.settled = false
         if (m.settled) { m.vx = 0; m.vz = 0; continue }
         const dx = tx - m.x, dz = tz - m.z, dist = Math.sqrt(dx * dx + dz * dz)
         if (!busy && u.sway < 0.05 && dist < 0.25) { m.settled = true; m.hx = tx; m.hz = tz; m.vx = 0; m.vz = 0; continue }
-        const gs = Math.max(0.15, dist > 1e-6 ? groundG(t, m.x, m.z, kind, dx / dist, dz / dist) : groundG(t, m.x, m.z, kind, 0, 0))   // never frozen mid-step
+        const gs = Math.max(0.15, dist > 1e-6 ? groundGAt(t, here, kind, dx / dist, dz / dist) : groundGAt(t, here, kind, 0, 0))   // never frozen mid-step
         const top = (dist > 2.5 ? RUN : WALK) * gs, want = dist < 0.08 ? 0 : Math.min(top, dist / 0.7)
         let wx = dist > 1e-6 ? dx / dist * want : 0, wz = dist > 1e-6 ? dz / dist * want : 0
-        const ci = Math.floor((m.x - x0) / SC), cj = Math.floor((m.z - z0) / SC)
-        for (let a = ci - 1; a <= ci + 1; a++) for (let b = cj - 1; b <= cj + 1; b++) {
+        // his cell and the neighbouring cells on the sides of it he is nearer to
+        const mx = m.x, mz = m.z, u0 = (mx - x0) / SC, v0 = (mz - z0) / SC, ci = Math.floor(u0), cj = Math.floor(v0)
+        const a0 = u0 - ci < 0.5 ? ci - 1 : ci, b0 = v0 - cj < 0.5 ? cj - 1 : cj
+        for (let a = a0; a <= a0 + 1; a++) for (let b = b0; b <= b0 + 1; b++) {
           if (a < 0 || b < 0 || a >= SN || b >= SN) continue
-          for (let k = this.cellHead[a * SN + b]; k >= 0; k = this.cellNext[k]) { const o = this.flat[k]; if (o === m) continue
-            const ex = m.x - o.x, ez = m.z - o.z, d2 = ex * ex + ez * ez
+          for (let k = head[a * SN + b]; k >= 0; k = next[k]) {   // himself: at distance 0, skipped
+            const ex = mx - X[k], ez = mz - Z[k], d2 = ex * ex + ez * ez
             if (d2 < SEP * SEP && d2 > 1e-8) { const d = Math.sqrt(d2), push = (SEP - d) / SEP * 1.8; wx += ex / d * push; wz += ez / d * push } }
         }
         const walking = Math.min(1, Math.sqrt(m.vx * m.vx + m.vz * m.vz) / 0.5)   // while walking, steer round the trunks just ahead
-        if (walking > 0) eachObstacle(this.scene, m.x, m.z, o => { const ex = m.x - o.x, ez = m.z - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.35
-          if (d < R + 0.8 && d > 1e-6) { const push = (R + 0.8 - d) / 0.8 * 1.4 * walking; wx += ex / d * push; wz += ez / d * push } })
+        tc = this.treeCell(m.x, m.z)
+        if (walking > 0 && tc >= 0) for (let k = TA[tc], e = TA[tc + 1]; k < e; k++) { const ex = m.x - TX[k], ez = m.z - TZ[k], d = Math.sqrt(ex * ex + ez * ez), R = TR[k] + 0.35
+          if (d < R + 0.8 && d > 1e-6) { const push = (R + 0.8 - d) / 0.8 * 1.4 * walking; wx += ex / d * push; wz += ez / d * push } }
         const kk = Math.min(1, dt * 5); m.vx += (wx - m.vx) * kk; m.vz += (wz - m.vz) * kk
         if (dist < 0.08) { const damp = Math.max(0, 1 - dt * 8); m.vx *= damp; m.vz *= damp }   // arrived: come to rest
         const sp2 = m.vx * m.vx + m.vz * m.vz, cap = RUN * gs; if (sp2 > cap * cap) { const r = cap / Math.sqrt(sp2); m.vx *= r; m.vz *= r }
         const nx = m.x + m.vx * dt, nz = m.z + m.vz * dt
-        if (imp[cellK(t, nx, nz)] && !imp[cellK(t, m.x, m.z)]) { m.vx = 0; m.vz = 0 } else { m.x = nx; m.z = nz }   // never onto impassable ground
-        eachObstacle(this.scene, m.x, m.z, o => { const ex = m.x - o.x, ez = m.z - o.z, d = Math.sqrt(ex * ex + ez * ez), R = o.r + 0.3   // never inside a trunk
-          if (d < R && d > 1e-6) { m.x = o.x + ex / d * R; m.z = o.z + ez / d * R } })
+        if (imp[cellK(t, nx, nz)] && !imp[here]) { m.vx = 0; m.vz = 0 } else { m.x = nx; m.z = nz }   // never onto impassable ground
+        tc = this.treeCell(m.x, m.z)
+        if (tc >= 0) for (let k = TA[tc], e = TA[tc + 1]; k < e; k++) { const ex = m.x - TX[k], ez = m.z - TZ[k], d = Math.sqrt(ex * ex + ez * ez), R = TR[k] + 0.3   // never inside a trunk
+          if (d < R && d > 1e-6) { m.x = TX[k] + ex / d * R; m.z = TZ[k] + ez / d * R } }
       }
     }
+  }
+  private poseNow: Float64Array
+  private grow(): void {
+    const n = this.cellNext.length * 2, a = new Int32Array(n), x = new Float64Array(n), z = new Float64Array(n)
+    a.set(this.cellNext); x.set(this.flatX); z.set(this.flatZ); this.cellNext = a; this.flatX = x; this.flatZ = z
   }
   // how far men stand from their places (a measurement): max and mean, metres
   slotError(): { max: number; mean: number } {

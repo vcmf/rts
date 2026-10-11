@@ -10,7 +10,7 @@ import type { Compiled } from './ruleset.ts'
 import type { Terrain } from './terrain.ts'
 import { buildTerrain } from './terrain.ts'
 import { type Handle, KIND_FORMATION, handleKind, handleIndex, handleGen, makeHandle } from './handle.ts'
-import type { Places, Arc, GateBits } from './formation.ts'
+import type { Places, Arc, GateBits, Filled } from './formation.ts'
 import type { FireGeo } from './fire.ts'
 
 export const MAX_FORMATIONS = 128
@@ -85,7 +85,7 @@ export interface World {
   pending: Stamped[]
   data: SimData; cr: Compiled; terrain: Terrain
   debug: boolean
-  scratch: { places?: Places; arc?: Arc; gateBits?: GateBits; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverse?: boolean; lost?: Int32Array; mstateBefore?: Uint8Array; menNow?: Int32Array }   // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
+  scratch: { places?: Places; arc?: Arc; gateBits?: GateBits; filled?: Filled; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverse?: boolean; lost?: Int32Array; mstateBefore?: Uint8Array; menNow?: Int32Array }   // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
 }
 
 export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {

@@ -82,6 +82,9 @@ advanceTick: 1 commands · 5–6 formations · 14 reap · tick++ · 15 hash (eve
 - **Serializer** (`serialize.ts`): named sections (meta, RNG, formations, free list, order pool, pending
   commands), little-endian; commands are written field by field from a table per type. A table's columns are written in name order (`columns`), so a new
   column is saved and hashed with no list to update. `hashWorld` is FNV-1a over all of it; `sectionHashes` per section.
+  A typed array is copied as its own bytes on a little-endian machine (every target), the same bytes as
+  number by number (S1c-5: 0.5 ms for the 1.5 MB world of 40 battalions of 400; the hash itself, 2 ms, is
+  FNV-1a's byte loop, kept so the hashes stay).
   `deserialize` refuses a save made with other data or another ruleset.
 - **Replays** (`replay.ts`):
   - `record` runs a scenario (`{ name, setup }`) with external commands and keeps the log and the

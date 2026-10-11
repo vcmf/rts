@@ -80,8 +80,9 @@ export function slopeG(t: Terrain, sl: number): number {
   return t.slope[i] + (t.slope[i + 1] - t.slope[i]) * f
 }
 // speed factor of the ground at (x, z) for a formation kind, moving along (dx, dz)
-export function groundG(t: Terrain, x: number, z: number, kind: number, dx: number, dz: number): number {
-  const k = cellK(t, x, z)
+export const groundG = (t: Terrain, x: number, z: number, kind: number, dx: number, dz: number): number => groundGAt(t, cellK(t, x, z), kind, dx, dz)
+// the same, for cell k
+export function groundGAt(t: Terrain, k: number, kind: number, dx: number, dz: number): number {
   return t.classG[t.cls[k] * t.K + kind] * waterG(t, t.depth[k]) * slopeG(t, t.gx[k] * dx + t.gz[k] * dz)
 }
 export const groundQ = (t: Terrain, x: number, z: number, pace: number): number => t.classQ[t.cls[cellK(t, x, z)] * t.P + pace]

@@ -10,7 +10,6 @@ import { formationTick, menOf } from './formation.ts'
 import { hashWorld } from './serialize.ts'
 import { fireStep, casualtiesStep } from './fire.ts'
 import { moraleStep } from './morale.ts'
-import { columnsOf } from './columns.ts'
 
 // metering is injected: the sim never reads a clock itself
 export interface Meter { now(): number; add(step: string, ms: number): void }
@@ -42,7 +41,9 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
   // 13 smoke: S2
   step('14 reap', () => { for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i] && menOf(w, i) === 0) reapFormation(w, i) })
   w.meta[M_TICK] = t
-  if (w.debug) for (const a of columnsOf(w.f)) if (a instanceof Float64Array) assertFinite('formation state', a)
+  // (the trail rings, 1 MB at 400 men, are skipped: their points come from checked positions or from the ring
+  // itself, and a non-finite point would make trailLen, which is checked, non-finite too)
+  if (w.debug) for (const [name, a] of Object.entries(w.f)) if (a instanceof Float64Array && name !== 'trailX' && name !== 'trailZ') assertFinite(`formation state ${name}`, a)
   let hash: number | null = null
   step('15 hash', () => { if (t % HASH_EVERY === 0) hash = hashWorld(w) })
   return { tick: t, hash, dropped }

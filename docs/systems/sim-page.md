@@ -30,8 +30,9 @@ exports as a replay that plays back in Node to the same hashes.
 
 - The soldier layer is cosmetic: it reads the sim and never writes to it; it uses its own RNG
   (`cosmeticRng`), so its choices never change a hash.
-- Sim plus soldier layer within 4 ms per frame for 40 battalions on the dev Mac. Not met at 400 men a
-  battalion (decision 0018): `docs/known-issues.md`, S1c-5.
+- Sim plus soldier layer within 4 ms per frame for 40 battalions on the dev Mac. At 400 men a battalion
+  (decision 0018) it holds at the halt and firing (0.7 ms) but not with all 16,000 men marching (4.4–6 ms):
+  `docs/known-issues.md`. `node tools/bench-cost.ts` measures it by part on the page's release world.
 
 ## Design
 
@@ -63,13 +64,18 @@ the shape it changes to, the lean bit and the `faces` counter.
 - the place is the slot extrapolated 0.6 s ahead along the battalion's motion, falling back to the
   current place when that one is impassable;
 - personal sway while the battalion moves, wider among trees;
-- separation from neighbours through a 0.6 m grid;
-- going round the cosmetic tree trunks;
+- separation from neighbours through a 0.6 m grid, from where they stood as the frame began (so the order
+  men move in does not matter);
+- going round the cosmetic tree trunks: the trunks near each 4 m cell are listed once, so a man away from
+  the woods looks at none;
 - speed from the ground (`groundG`).
 
 A man never steps from passable onto impassable ground. **Settled**: at the halt, a man within 0.25 m of
 his place stops and holds still until the place moves 0.3 m or the battalion moves again. Without it men
 jitter in the wood and the 40-battalion frame costs 0.5 to 0.8 ms more (both shown by the negative runs).
+**Still**: while a halted battalion's places are framed exactly as the frame before (its anchors, trail,
+lags and their rates), its settled men are not visited at all: a firing line of 400 costs nothing per
+frame until a loss moves someone (S1c-5).
 
 **The map** (`src/render/map.ts`), built once from the data:
 - a class image at 4 px per metre with smoothed edges;

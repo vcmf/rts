@@ -102,10 +102,12 @@ describe('at 8× (0.2 s soldier steps)', () => {
 })
 
 // timing budgets: skipped on CI, whose shared runners are too noisy for millisecond budgets. The benches use
-// the shipped ruleset: 40 battalions of 400 (decision 0018), in columns so they fit the 360 m field. The
-// 4 ms budget for sim and soldier layer together is not met at 16,000 men (docs/known-issues.md); until
-// S1c-5 the test holds the measured cost, LAYER_BUDGET, so it cannot grow unnoticed
-const LAYER_BUDGET = 20
+// the shipped ruleset: 40 battalions of 400 (decision 0018), in columns so they fit the 360 m field. Firing at
+// the halt meets the 4 ms budget for sim and soldier layer together (S1c-5: 0.7 ms). With all 16,000 men
+// marching it does not (docs/known-issues.md): that test holds the measured cost with a margin,
+// MARCH_BUDGET, so it cannot grow unnoticed. vitest runs this code about 40% slower than plain Node (the
+// page's numbers: tools/bench-cost.ts)
+const FRAME_BUDGET = 4, MARCH_BUDGET = 10
 describe.skipIf(process.env.CI)('cost', () => {
   const shipped = () => new Sim(1, napoleonic)
   it('40 battalions of 400 firing (20 a side in column, fronts 100 m apart): sim and soldier layer per frame; the fire step per tick reported', () => {
@@ -123,7 +125,7 @@ describe.skipIf(process.env.CI)('cost', () => {
     const fired = [...p.sim.w.f.volleyTick].filter(t => t > 0).length
     console.log(`40 × 400 firing: ${windows.map(x => x.toFixed(2)).join(' / ')} ms per frame; per tick: ${Object.entries(per).map(([s, ms]) => `${s} ${(ms / 200).toFixed(3)}`).join(', ')} ms; the fire step's worst tick ${worst['8 fire'].toFixed(2)} ms; ${fired} companies have fired`)
     expect(fired).toBeGreaterThan(20)
-    expect(Math.min(...windows)).toBeLessThan(LAYER_BUDGET)
+    expect(Math.min(...windows)).toBeLessThan(FRAME_BUDGET)
   })
   it('40 battalions of 400 changing shape and marching: sim and soldier layer per 1/60 s frame; 40 × 800 reported', () => {
     const run = (sim: Sim, men: number) => {
@@ -142,6 +144,6 @@ describe.skipIf(process.env.CI)('cost', () => {
     }
     const ms = run(shipped(), 400)
     run(new Sim(1, ceiling), 800)
-    expect(ms).toBeLessThan(LAYER_BUDGET)
+    expect(ms).toBeLessThan(MARCH_BUDGET)
   })
 })
