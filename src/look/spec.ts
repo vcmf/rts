@@ -127,6 +127,7 @@ export function derive(s: Spec = SPEC): Derived {
   if (!isInt(s.tile / s.water.texel)) bad.push(`water: the tile (${s.tile} m) is not a whole number of ${s.water.texel} m texels`)
   else if (s.tile / s.water.texel > s.minSpec.maxTexture) bad.push(`bake: water data ${s.tile / s.water.texel}² > ${s.minSpec.maxTexture}² (min-spec)`)
   if (!(s.water.depth[0] < 0 && s.water.depth[1] > 0 && s.water.sdf > 0)) bad.push('water: the depth range must hold 0 (the shore) and the shore distance be positive')
+  if (!(s.bank.paint > 1 && s.bank.paint <= s.bank.reach - s.bank.fade)) bad.push('bank: the banks\' colours must reach past a metre and stay where the bank normals are whole (reach − fade)')
   if (!(Number.isInteger(s.water.stones) && s.water.stones > 0 && s.water.stones <= 64)) bad.push('water: the stones the water paints foam for must be a whole number, 1–64 (a fixed loop in the shader)')
   if (!(s.water.band > 0 && s.water.band < s.water.sdf / 2)) bad.push('water: the shore band must be positive and well inside the shore distance\'s range')
   if (!(s.detail.px > 0 && s.detail.lines > 0 && s.detail.index > 0 && s.detail.amp > 0 && s.detail.minCos > 0)) bad.push('detail: sizes must be positive')
@@ -139,7 +140,7 @@ export function derive(s: Spec = SPEC): Derived {
       // is the uniform uPixA: it follows the camera's field of view)
       `#define DETAIL_MINCOS ${s.detail.minCos.toFixed(3)}`, `#define DETAIL_PX ${s.detail.px.toFixed(1)}`, `#define DETAIL_INDEX ${s.detail.index.toFixed(1)}`, `#define DETAIL_AMP ${s.detail.amp.toFixed(3)}`,
       // the water data's encoding (src/look/shaders/waterdata.glsl)
-      `#define WATER_D0 ${s.water.depth[0].toFixed(3)}`, `#define WATER_D1 ${s.water.depth[1].toFixed(3)}`, `#define WATER_SDF ${s.water.sdf.toFixed(3)}`, `#define WATER_BAND ${s.water.band.toFixed(3)}`, `#define BANK_EDGE ${s.bank.edge.toFixed(1)}`, `#define STONES ${s.water.stones}`, `#define BANK_REACH ${s.bank.paint.toFixed(1)}`],
+      `#define WATER_D0 ${s.water.depth[0].toFixed(3)}`, `#define WATER_D1 ${s.water.depth[1].toFixed(3)}`, `#define WATER_SDF ${s.water.sdf.toFixed(3)}`, `#define WATER_BAND ${s.water.band.toFixed(3)}`, `#define BANK_EDGE ${s.bank.edge.toFixed(3)}`, `#define STONES ${s.water.stones}`, `#define BANK_REACH ${s.bank.paint.toFixed(3)}`],
   }
 }
 

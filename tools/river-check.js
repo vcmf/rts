@@ -27,14 +27,13 @@
   // edge: true measures to the water's edge on each side (W2), for reeds, which stand at it; everything else keeps
   // clear of the half-width
   const overlapsWater = (x, z, r, edge = false) => { const q = riverQuery(x, z); return q && q.dist < (edge ? wetEdgeAt(q) : lerpA(C.W, q) / 2) + r }
-  // the W5a stones at a cut bank's foot: the outer side of a bend sharper than |A| 0.5, the centre within 0.6 m of the
-  // water's edge (src/look/nature.ts holds the same rule)
-  const atCutBank = q => typeof wetEdgeAt === 'function' && Math.abs(lerpA(C.A, q)) > 0.5 && Math.sign(q.n) === Math.sign(lerpA(C.A, q)) && q.dist >= wetEdgeAt(q) - 0.6
+  // the W5a stones at a cut bank's foot: the page's own rule (src/look/river.ts), reaching at most 1.2 m
+  const cutStone = (q, fp) => typeof atCutBank === 'function' && atCutBank(q) && fp <= 1.2
   let reedsAway = 0   // reeds (W5a) farther than 1.2 m (plus their reach) from the water's edge
   for (const [model, items] of Object.entries(groups)) for (const [x, z, sc] of items) {
     const fp = footprint(model, sc)
     if (touchesZone(x, z, fp)) inZone++
-    if (/^Rock/.test(model)) { const q = riverQuery(x, z); if (q && q.dist < lerpA(C.W, q) / 2 + fp && lerpA(C.riffle, q) <= 0.6 && !atCutBank(q)) stonesInPools++; continue }
+    if (/^Rock/.test(model)) { const q = riverQuery(x, z); if (q && q.dist < lerpA(C.W, q) / 2 + fp && lerpA(C.riffle, q) <= 0.6 && !cutStone(q, fp)) stonesInPools++; continue }
     if (model === 'Reed') { const q = riverQuery(x, z); if (!q || q.dist > wetEdgeAt(q) + 1.2 + fp) reedsAway++ }
     if (overlapsWater(x, z, fp, model === 'Reed')) wet++
     if (model === 'Wheat' && Math.abs(x - C.axisX(z)) < C.P.floodplainW / 2) wheatOnFloodplain++

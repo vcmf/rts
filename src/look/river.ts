@@ -99,6 +99,9 @@ export function bankReach(hw: number, A: number): [number, number] {
 // the water's edge and the bank's end on the side of the river a query point is on, in metres from the centre line.
 // k scales the asymmetry (1: the section; 0: symmetric, as the far ring's painted river)
 export const wetEdgeAt = (q: RiverQuery, k = 1): number => wetEdges(lerpA(RIVER.W, q) / 2, lerpA(RIVER.A, q) * k)[q.n >= 0 ? 0 : 1]
+// the foot of a cut bank (W5a stones): the outer side (A's sign) of a bend sharper than |A| 0.5, within 0.6 m of its
+// water's edge (inside or out)
+export const atCutBank = (q: RiverQuery): boolean => { const A = lerpA(RIVER.A, q); return Math.abs(A) > 0.5 && Math.sign(q.n) === Math.sign(A) && q.dist >= wetEdgeAt(q) - 0.6 }
 export const bankReachAt = (q: RiverQuery): number => bankReach(lerpA(RIVER.W, q) / 2, lerpA(RIVER.A, q))[q.n >= 0 ? 0 : 1]
 
 // distance from the water's edge on this side, in half-widths (≤0 = in the water), for terrain colouring; k as above

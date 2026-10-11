@@ -12,9 +12,9 @@
 //   surface (z-fighting). Sabotage: the ribbon's columns kept at the water's level (?watersab=nodive).
 // - seam: the tile's ground drawn with the terrain's material, then with the water's (src/look/water.ts,
 //   groundMat): same geometry, so the same pixels and world points. At the ground's pixels within the band (from the
-//   raw data view), the two frames' largest channel difference: 95th percentile within SEAM_P95, and at most
-//   SEAM_OVER of the pixels over SEAM_MAX (out of 255; isolated pixels on the shoreline itself, where the land and
-//   water sides blend over a pixel, differ by up to 12 in the two shaders' arithmetic; a seam moves the percentile). With the band check, equal colours in the band leave no seam where the two surfaces meet
+//   raw data view), the two frames' largest channel difference: 95th percentile within SEAM_P95, largest within
+//   SEAM_MAX (out of 255). (W4 allowed 0.1% over: isolated shoreline pixels then differed by up to 12, which W5a found
+//   to be undefined derivatives, the shoreline's branches reaching too little past its blend; now exact.) With the band check, equal colours in the band leave no seam where the two surfaces meet
 //   (they intersect there, so they share the world point). What follows each surface's own screen derivatives (the
 //   detail grain's blur, the edges' anti-aliasing) one geometry cannot show; comparing neighbours across the real
 //   boundary cannot tell it from the painted shoreline there (tried: the sabotage and the page measured alike).
@@ -46,7 +46,7 @@ import { LOOK_FILE } from './build-look-data.ts'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const W = 1280, H = 720, CAM = SPEC.camera, BAND = SPEC.water.band, SDF = SPEC.water.sdf
 const [, A0, BETA0, R0] = CAMS.find(c => c[0] === 'start')
-const SEAM_P95 = 2, SEAM_MAX = 6, SEAM_OVER = 0.001, SEAM_MIN_PX = 500
+const SEAM_P95 = 2, SEAM_MAX = 6, SEAM_MIN_PX = 500
 const POOL = 0.2, RIFFLE = 0.5, LUMA_GAP = 0.03, BRIGHT = 0.2, FOAM_RATIO = 2, FOAM_MIN = 0.02
 const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.035
 
@@ -130,7 +130,7 @@ function seam(url, dir, sab) {
   }
   shoot(url, dir, steps, W, H)
   let ok = true
-  const lines = [`seam: the ground's pixels within ${BAND} m of the shore, terrain's material against the water's, largest channel difference /255 (95th percentile ≤ ${SEAM_P95}, ≤ ${SEAM_OVER * 100}% over ${SEAM_MAX})`]
+  const lines = [`seam: the ground's pixels within ${BAND} m of the shore, terrain's material against the water's, largest channel difference /255 (95th percentile ≤ ${SEAM_P95}, largest ≤ ${SEAM_MAX})`]
   for (const [n] of seamViews()) {
     const surf = load(dir, `${n}.surface`), raw = load(dir, `${n}.raw`), ter = load(dir, `${n}.terrain`), wat = load(dir, `${n}.water`), d = []
     for (let i = 0; i < W * H; i++) {
@@ -138,9 +138,9 @@ function seam(url, dir, sab) {
       const s = (raw.data[i * 4 + 1] / 255 * 2 - 1) * SDF; if (Math.abs(s) >= BAND - 0.125) continue   // the raw view's step: 0.125 m
       let e = 0; for (let k = 0; k < 3; k++) e = Math.max(e, Math.abs(ter.data[i * 4 + k] - wat.data[i * 4 + k])); d.push(e)
     }
-    const p95 = pct(d, 0.95), mx = d.reduce((a, b) => Math.max(a, b), 0), over = d.filter(e => e > SEAM_MAX).length, good = d.length >= SEAM_MIN_PX && p95 <= SEAM_P95 && over <= SEAM_OVER * d.length
+    const p95 = pct(d, 0.95), mx = d.reduce((a, b) => Math.max(a, b), 0), good = d.length >= SEAM_MIN_PX && p95 <= SEAM_P95 && mx <= SEAM_MAX
     if (!good) ok = false
-    lines.push(`  ${n}: ${d.length} pixels, 95th percentile ${p95}, ${over} over ${SEAM_MAX} (largest ${mx})${good ? '' : '  FAIL'}`)
+    lines.push(`  ${n}: ${d.length} pixels, 95th percentile ${p95}, largest ${mx}${good ? '' : '  FAIL'}`)
   }
   return { ok, lines }
 }

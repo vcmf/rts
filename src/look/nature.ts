@@ -17,7 +17,7 @@ import type { Materials } from './materials.ts'
 import { D } from './spec.ts'
 import { fbm, hash, mulberry } from './noise.ts'
 import { H } from './heightfield.ts'
-import { RIVER, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges } from './river.ts'
+import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges } from './river.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 
@@ -87,15 +87,12 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // exact: does the disc (x,z,r) overlap any formation zone? (the two boxes and the circle of KEEP_CLEAR)
   const boxD = (x: number, z: number, x0: number, x1: number, z0: number, z1: number) => Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(z0 - z, 0, z - z1))
   const touchesZone = (x: number, z: number, r: number) => KEEP_CLEAR(x, z) || boxD(x, z, -25, 15, -44, -2) < r || boxD(x, z, -14, 26, 7, 19) < r || Math.hypot(x - 34, z + 24) < Math.sqrt(160) + r
-  // the foot of a cut bank: the outer side (A's sign) of a bend sharper than |A| 0.5, the centre within 0.6 m of its
-  // water's edge (tools/river-check.js holds the same rule)
-  const atCutBank = (q: NonNullable<ReturnType<typeof riverQuery>>) => { const A = lerpA(RIVER.A, q); return Math.abs(A) > 0.5 && Math.sign(q.n) === Math.sign(A) && q.dist >= wetEdgeAt(q) - 0.6 }
   function placeable(x: number, z: number, r = 0, kind = ''): boolean {
     if (touchesZone(x, z, r)) return false
     const q = riverQuery(x, z)
     // stones: wholly on dry land, or on riffles; the W5a pass's stones at the foot of a cut bank (docs/art-bible.md §6c)
     if (kind === 'stone') return !q || q.dist >= wetEdgeAt(q) + r || lerpA(RIVER.riffle, q) > 0.6
-    if (kind === 'cutstone') return !!q && atCutBank(q)
+    if (kind === 'cutstone') return !!q && atCutBank(q) && r <= 1.2   // at a cut bank's foot, reaching at most 1.2 m
     if (kind === 'reed') return !q || q.dist >= wetEdgeAt(q) + r   // reeds: at the water's edge, wholly on land
     return !q || q.dist >= Math.max(lerpA(RIVER.W, q) / 2 * 1.7, bankReachAt(q)) + r                 // off the banks (W2: a point bar reaches farther)
   }
@@ -154,6 +151,8 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // stones on purpose (W5a, docs/plans/active/w5-banks.md; docs/art-bible.md §6c): in riffles, and at the foot of the
   // sharper cut banks, sized to stand 0.35–0.7 m out of the water there, so the water makes foam around them. Their own
   // seeded stream, so the rest of the scatter keeps its places
+  // a stone's radius for its foam: the mean of its plan's half-extents (the pillow hugs it on average)
+  const meanRadius = (mdl: string, s: number) => { const M = NATURE![mdl]; return (M.max[0] - M.min[0] + M.max[2] - M.min[2]) / 4 * s }
   const stones: Nature['stones'] = [], RS = mulberry(91), rs = () => RS()
   for (let i = 0, step = 0, C = RIVER; i < C.n && stones.length < D.spec.water.stones; i += step) {
     step = Math.max(1, Math.round((8 + rs() * 14) / (RIVER.P.W0 / 4)))
@@ -166,7 +165,12 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const x = C.px[i] - C.tz[i] * n, z = C.pz[i] + C.tx[i] * n, mdl = rs() < 0.5 ? 'Rock_' + (1 + Math.floor(rs() * 2)) : 'Rock_Moss_' + (3 + Math.floor(rs() * 2))
     const top = C.zw[i] - H(x, z) + 0.35 + rs() * 0.35, s = Math.max(1, top / (NATURE![mdl].max[1] * 0.95))
     if (s > 3) continue   // too deep there for the pack's rocks to stand out of the water
-    if (addPlaced(mdl, [x, z, s, rs() * 6.28, rs(), -0.05 * s], kind)) { stones.push([x, z, footprint(mdl, s) * 0.8, Math.atan2(C.tz[i], C.tx[i])]); smBlob(x, z, s * 0.3) }
+    if (addPlaced(mdl, [x, z, s, rs() * 6.28, rs(), -0.05 * s], kind)) { stones.push([x, z, meanRadius(mdl, s), Math.atan2(C.tz[i], C.tx[i])]); smBlob(x, z, s * 0.3) }
+  }
+  // the scatter's own stones that stand in the water (on riffles) have foam too
+  for (const [mdl, items] of Object.entries(groups)) if (/^Rock/.test(mdl)) for (const [x, z, s] of items) {
+    const q = riverQuery(x, z)
+    if (q && q.dist < wetEdgeAt(q) && stones.length < D.spec.water.stones && !stones.some(st => st[0] === x && st[1] === z)) stones.push([x, z, meanRadius(mdl, s), Math.atan2(RIVER.tz[q.i], RIVER.tx[q.i])])
   }
   // reeds at the water's edge on slow inner bends (W5a; docs/art-bible.md §6c): clumps of the pack's grass blade,
   // narrowed and set tall (the Reed model), on the bar's side of bends sharper than |A| 0.4, out of the riffles

@@ -33,7 +33,7 @@ vec3 groundSeason(vec3 c){
   return uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
 // THE GROUND before the banks and the seasons (the terrain's and the shore band's alike): the meadow (yellow-green,
 // dry gold, teal-green hollows), its flower patches, the strip fields in the distance
-vec3 groundBase(vec2 xz){
+vec3 groundMeadow(vec2 xz){
   float n1=G(xz/150.0).g,n2=G(xz/53.0+0.31).g;
   vec3 c=mix(vec3(0.33,0.45,0.20),vec3(0.55,0.58,0.27),smoothstep(0.35,0.66,n1));      // meadow → yellow-green
   c=mix(c,vec3(0.70,0.64,0.40),smoothstep(0.62,0.76,n2)*0.45);                         // dry gold
@@ -41,13 +41,15 @@ vec3 groundBase(vec2 xz){
   // flower patches: orange and white flecks (complementary accents)
   float fpat=smoothstep(0.60,0.68,G(xz/70.0+vec2(0.71,0.13)).g);
   float fl=step(0.86,G(xz/1.6).r)*fpat;c=mix(c,vec3(0.99,0.56,0.14),fl);
-  c=mix(c,vec3(0.96,0.93,0.84),step(0.93,G(xz/1.3+0.5).r)*fpat*0.8);
-  // strip fields in the distance
+  return mix(c,vec3(0.96,0.93,0.84),step(0.93,G(xz/1.3+0.5).r)*fpat*0.8);}
+// the strip fields in the distance, over a ground colour
+vec3 groundFields(vec3 c,vec2 xz){
   float r=length(xz);vec2 f=mat2(0.8,-0.6,0.6,0.8)*xz;
   float id=fract(sin(dot(floor(vec2(f.x/70.0,f.y/22.0)),vec2(12.9898,78.233)))*43758.5453);
   vec3 fc=id<0.25?vec3(0.78,0.64,0.30):id<0.5?vec3(0.42,0.56,0.20):id<0.75?vec3(0.58,0.42,0.28):vec3(0.30,0.48,0.24);
   float fm=smoothstep(170.0,250.0,r);
   return mix(c,fc*(0.96+0.06*G(vec2(f.x/40.0,f.y/3.0)).b),fm*0.85);}   // faint furrows on distant fields only
+vec3 groundBase(vec2 xz){return groundFields(groundMeadow(xz),xz);}
 // steep ground goes stony (ny: the normal's y)
 vec3 groundSteep(vec3 c,float ny){return mix(c,vec3(0.55,0.52,0.46),smoothstep(0.80,0.62,ny)*0.5);}
 // a hard painted edge, anti-aliased over about two pixels (no shimmer when the view moves): 0 below t, 1 above
@@ -108,6 +110,7 @@ uniform vec4 uStones[STONES];
 float stoneFoam(vec2 xz,float s){
   float f=0.0,tw=mod(uTime,40.0);   // 40 s: a whole number of the breaks' periods
   #ifndef WATER_SAB_NOFOAM
+  if(s<-1.5*fwidth(s))return 0.0;   // on land (the foam is the water's), past the derivatives' margin
   vec2 fw=fwidth(xz);float px=max(fw.x,fw.y),far=smoothstep(0.12,0.35,px);
   for(int k=0;k<STONES;k++){
     vec4 st=uStones[k];if(st.z<=0.0)break;
@@ -169,7 +172,9 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh){
 // (the depth and the shore distance are separate channels; on a cut bank the water at the shore is already tinted), so
 // the shoreline is a hard painted edge, anti-aliased
 vec3 shore(vec3 wp,vec4 t,float occ,float sh,float fw){
-  float s=waterSdf(t),m=1.5*fw+1e-3;vec3 land=vec3(0.0),water=vec3(0.0);
+  // m: the blend below reaches 1.2 fw past the shore (aastep), and a quad spans up to fw more, so each side's branch
+  // reaches 2.5 fw past it (derivatives, above)
+  float s=waterSdf(t),m=2.5*fw+1e-3;vec3 land=vec3(0.0),water=vec3(0.0);
   if(s<m)land=shoreLand(wp,t,occ,sh);
   if(s>-m)water=shoreWater(wp,waterDepth(t),s,length(waterFlow(t)),occ,sh);
   return mix(land,water,aastep(0.0,s))*(1.0+(G(wp.xz/4.0).r-0.5)*uGrainAmt*0.14);}   // the gouache grain, on both sides (continuous at the shore)
