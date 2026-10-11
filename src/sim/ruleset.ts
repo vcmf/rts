@@ -19,6 +19,9 @@ export interface FormationDef {
   pace: string; roadPace?: string
   trail?: boolean          // companies follow the head's trail (a column of route)
   closeAcross?: boolean    // casualties close toward the colours across company boundaries
+  // a trail shape's spacing of files and ranks when it is not the block's (a column of route of horses, nose
+  // to tail): its places only; a change into or out of it passes through the block's spacing
+  step?: { file: number; rank: number }
   place(g: Geometry): Placement[]
 }
 export interface TerrainDef { g: Record<string, number>; q: string; road?: boolean; level?: boolean }
@@ -53,17 +56,23 @@ export interface MoraleDef {
   rally: { safe: number; calm: number; time: number; cost: number; max: number }   // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; quality lost; rallies allowed
   shatter: number              // a router below this share of its spawn strength shatters
 }
-export interface Ruleset {
-  name: string
+// a unit type (S1d-1): its block, its shapes and their change times. A formation is of one type for life
+export interface UnitType {
   geometry: Geometry
-  pace: Record<string, number>
-  q: Record<string, Record<string, number>>
   formations: Record<string, FormationDef>
   changeTime: Record<string, number>; defaultChangeTime: number   // seconds, keyed 'from>to'
-  start: { shape: string; orders: string }
+  start: string                // the shape a spawn takes when it names none
+  fires: boolean               // fires by company (S1c's musketry)
+}
+export interface Ruleset {
+  name: string
+  types: Record<string, UnitType>   // the first is the default
+  pace: Record<string, number>
+  q: Record<string, Record<string, number>>
+  start: { orders: string }
   slopeK: number
   terrain: Record<string, TerrainDef>
-  water: { curve: [number, number][]; limit: number }
+  water: { curve: [number, number][]; limit: number; limitByKind?: Record<string, number> }   // limit: metres, deeper is impassable (per kind where named)
   orders: Record<string, OrdersPreset>
   disorder: { Lok: number; kLag: number; kBow: number; kRec: number; scale: Record<string, number> }
   faceTime: number; dressTime: number
@@ -80,22 +89,34 @@ export interface ShapeLayout {
   half: number          // half-width across travel
   turn: { cx: number; cz: number; m: Int32Array; bin: Int32Array; flipsFiles: boolean } | null   // half-turn: slot map (c·R·F + r·F + f), bin map, whether files reverse
   pace: number; roadPace: number   // indices into paces, −1 none
-  trailLimit: number   // a trail shape's trail length: its depth, two company frontages and 12 m
+  fileStep: number     // metres between files in its places (the block's, or a trail shape's step)
+  kx: number; kz: number   // its places' spacing of files and of ranks over the block's (1 but for a step)
+  spread: number       // the larger of kx, kz and 1: how much farther than the block a company's places reach
+  trailLimit: number   // a trail shape's trail length: its depth, two company frontages and 12 m, and at least 24 m past its farthest place
   depth: number        // how far the layout reaches behind the anchor
   extent: Float64Array // [c·3 + 0..2]: company c's nearest and farthest place behind the anchor (−posZ), its widest |posX|
 }
-export interface Compiled {
-  rs: Ruleset; hash: number; geo: Geometry
-  NB: number; slots: number   // bins per formation, slots per formation
-  trail: number               // points in a formation's trail ring (trailRing)
+// a unit type compiled: what one block needs (its slots, bins and shapes)
+export interface TypeTable {
+  name: string; def: UnitType; geo: Geometry
+  C: number; NB: number; slots: number   // companies, bins and slots of a formation of this type
+  qMax: number               // the largest hurry factor of its shapes' paces (how far a man may step in a tick)
   slotC: Int32Array                                         // each slot's company
   slotLX: Float64Array; slotLZ: Float64Array                // each slot's place in its company block (blockLocal)
   slotReach: number                                         // the farthest place in a company block from its origin
   shapes: ShapeLayout[]; shapeIndex(name: string): number
+  changeTime: Float64Array   // [from·S + to]
+  start: number              // the spawn's shape
+}
+export interface Compiled {
+  rs: Ruleset; hash: number
+  types: TypeTable[]; typeIndex(name: string): number
+  // the strides of the world's per-formation buffers: the most companies, bins and slots of any type (a
+  // formation of a smaller type leaves the rest of its row unused)
+  maxC: number; maxNB: number; maxSlots: number
+  trail: number               // points in a formation's trail ring (trailRing)
   kinds: string[]; paces: string[]; paceSpeed: Float64Array
   presets: string[]; presetIndex(name: string): number
-  changeTime: Float64Array   // [from·S + to]
-  qMax: number
   slope: Float64Array        // 401 entries over rise/run −1..1
   depthByKind: Float64Array  // fire: the target's depth factor, by kind
   sightByClass: Float64Array // fire: metres of each terrain class a sight line may cross (Infinity: any)
@@ -113,30 +134,47 @@ export const MAX_COMPANIES = 32
 // a formation's trail ring: at least TRAIL_MIN points, more for a deep trail shape, never past TRAIL_MAX
 export const TRAIL_MIN = 256, TRAIL_MAX = 4096
 
+// the ruleset with one type's block changed (tests and tools: the S1a block, the ceiling)
+export const withBlock = (rs: Ruleset, type: string, g: Partial<Geometry>): Ruleset =>
+  ({ ...rs, types: { ...rs.types, [type]: { ...rs.types[type], geometry: { ...rs.types[type].geometry, ...g } } } })
 export const rot2 = (x: number, z: number, a: number): [number, number] => [x * cos(a) - z * sin(a), x * sin(a) + z * cos(a)]
 export const blockLocal = (g: Geometry, f: number, r: number): [number, number] => [(f - (g.files - 1) / 2) * g.fileSpacing, -r * g.rankSpacing]
 export const slotIndex = (g: Geometry, c: number, r: number, f: number): number => (c * g.ranks + r) * g.files + f
 
 // a stable hash of the ruleset's numbers and names (its functions by their output), recorded by a world
 function rulesetHash(rs: Ruleset): number {
-  const geo = rs.geometry
-  const shapes = Object.keys(rs.formations).sort().map(n => { const d = rs.formations[n]; return [n, d.kind, d.pace, d.roadPace ?? '', !!d.trail, !!d.closeAcross, d.place(geo)] })
-  const text = JSON.stringify([rs.name, geo, rs.pace, rs.q, shapes, rs.changeTime, rs.defaultChangeTime, rs.start, rs.slopeK, rs.terrain, rs.water, rs.orders, rs.disorder, rs.faceTime, rs.dressTime, rs.fire, rs.morale])
+  const types = Object.keys(rs.types).map(t => { const u = rs.types[t], geo = u.geometry
+    return [t, geo, Object.keys(u.formations).sort().map(n => { const d = u.formations[n]; return [n, d.kind, d.pace, d.roadPace ?? '', !!d.trail, !!d.closeAcross, d.step ?? null, d.place(geo)] }), u.changeTime, u.defaultChangeTime, u.start, u.fires] })
+  const text = JSON.stringify([rs.name, types, rs.pace, rs.q, rs.start, rs.slopeK, rs.terrain, rs.water, rs.orders, rs.disorder, rs.faceTime, rs.dressTime, rs.fire, rs.morale])
   return fnv1a(new TextEncoder().encode(text))
 }
 
+// a unit type's tables
+function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]): TypeTable {
+  const u = rs.types[name], g = u.geometry, C = g.companies, R = g.ranks, F = g.files, NB = C * g.bins, at = `ruleset ${rs.name}, type ${name}`
+  if (!(C >= 1 && C <= MAX_COMPANIES)) throw new Error(`${at}: ${C} companies, outside 1..${MAX_COMPANIES}`)
+  if (!(Number.isInteger(g.bins) && g.bins >= 1 && g.bins <= F)) throw new Error(`${at}: geometry.bins must be a whole number in 1..files`)
+  const names = Object.keys(u.formations)
+  const shapes: ShapeLayout[] = names.map(n => layout(g, u.formations, n, kinds, paces))
+  const S = names.length, changeTime = new Float64Array(S * S)
+  for (let a = 0; a < S; a++) for (let b = 0; b < S; b++) changeTime[a * S + b] = u.changeTime[names[a] + '>' + names[b]] ?? u.defaultChangeTime
+  const start = names.indexOf(u.start)
+  if (start < 0) throw new Error(`${at}: start shape ${u.start} is not one of its shapes`)
+  const slots = C * R * F, slotC = new Int32Array(slots), slotLX = new Float64Array(slots), slotLZ = new Float64Array(slots)
+  for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) for (let f = 0; f < F; f++) { const s = slotIndex(g, c, r, f), [lx, lz] = blockLocal(g, f, r)
+    slotC[s] = c; slotLX[s] = lx; slotLZ[s] = lz }
+  let slotReach = 0; for (let s = 0; s < slots; s++) slotReach = Math.max(slotReach, Math.sqrt(slotLX[s] * slotLX[s] + slotLZ[s] * slotLZ[s]))
+  let qMax = 0; for (const L of shapes) for (const p of [L.pace, L.roadPace]) if (p >= 0) for (const v of Object.values(rs.q[paces[p]] ?? {})) qMax = Math.max(qMax, v)
+  return { name, def: u, geo: g, C, NB, slots, qMax, slotC, slotLX, slotLZ, slotReach, shapes, shapeIndex: n => names.indexOf(n), changeTime, start }
+}
+
 export function compileRuleset(rs: Ruleset): Compiled {
-  const g = rs.geometry, C = g.companies, R = g.ranks, F = g.files, NB = C * g.bins
-  if (!(C >= 1 && C <= MAX_COMPANIES)) throw new Error(`ruleset ${rs.name}: ${C} companies, outside 1..${MAX_COMPANIES}`)
-  if (!(Number.isInteger(g.bins) && g.bins >= 1 && g.bins <= F)) throw new Error(`ruleset ${rs.name}: geometry.bins must be a whole number in 1..files`)
   const kinds = Object.keys(Object.values(rs.terrain)[0].g)
   const paces = Object.keys(rs.pace), paceSpeed = new Float64Array(paces.map(p => rs.pace[p]))
-  const names = Object.keys(rs.formations)
-  const shapes: ShapeLayout[] = names.map(name => layout(rs, name, kinds, paces))
-  const S = names.length, changeTime = new Float64Array(S * S)
-  for (let a = 0; a < S; a++) for (let b = 0; b < S; b++) changeTime[a * S + b] = rs.changeTime[names[a] + '>' + names[b]] ?? rs.defaultChangeTime
+  const typeNames = Object.keys(rs.types)
+  if (!typeNames.length) throw new Error(`ruleset ${rs.name}: no unit types`)
+  const types = typeNames.map(t => compileType(rs, t, kinds, paces))
   const presets = Object.keys(rs.orders)
-  let qMax = 0; for (const t of Object.values(rs.q)) for (const v of Object.values(t)) qMax = Math.max(qMax, v)
   // Tobler's hiking curve capped at the drill pace, over rise/run −1..1 in 400 steps, from exact operations
   const slope = new Float64Array(401)
   for (let i = 0; i <= 400; i++) { const sl = i / 200 - 1, a = sl + 0.05 < 0 ? -(sl + 0.05) : sl + 0.05; slope[i] = Math.min(1, rs.slopeK * expNeg(3.5 * (a - 0.05))) }
@@ -144,43 +182,44 @@ export function compileRuleset(rs: Ruleset): Compiled {
   const sightByClass = new Float64Array(Object.keys(rs.terrain).map(c => rs.fire.sight[c] ?? Infinity))
   for (const s of FIRING_STATES) if (!(s in rs.fire.state)) throw new Error(`ruleset ${rs.name}: fire.state has no ${s}`)
   if (rs.fire.pRange.some((p, k) => k > 0 && p[0] <= rs.fire.pRange[k - 1][0])) throw new Error(`ruleset ${rs.name}: fire.pRange ranges must increase`)
+  for (const k of Object.keys(rs.water.limitByKind ?? {})) if (!kinds.includes(k)) throw new Error(`ruleset ${rs.name}: a wading limit names ${k}, not a kind of the terrain table`)
   // one friend's break must not rout a steady battalion of default quality on its own (s1c-plan-review L2)
   const M = rs.morale
   if (M.contagion.shock > 0.6 * (M.quality - M.rout)) throw new Error(`ruleset ${rs.name}: morale.contagion.shock over 0.6 of the gap from the default quality to the rout`)
   if (!(M.rally.max >= 0 && M.rally.max < 255)) throw new Error(`ruleset ${rs.name}: morale.rally.max must be 0..254 (the break count is a byte)`)
   if (!(M.support.arc > 0 && M.support.arc <= PI / 2)) throw new Error(`ruleset ${rs.name}: morale.support.arc must be in (0, π/2]: wider, a friend ahead would count as a flank`)
-  const slots = C * R * F, slotC = new Int32Array(slots), slotLX = new Float64Array(slots), slotLZ = new Float64Array(slots)
-  for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) for (let f = 0; f < F; f++) { const s = slotIndex(g, c, r, f), [lx, lz] = blockLocal(g, f, r)
-    slotC[s] = c; slotLX[s] = lx; slotLZ[s] = lz }
-  let slotReach = 0; for (let s = 0; s < slots; s++) slotReach = Math.max(slotReach, Math.sqrt(slotLX[s] * slotLX[s] + slotLZ[s] * slotLZ[s]))
+  let maxC = 0, maxNB = 0, maxSlots = 0
+  for (const t of types) { maxC = Math.max(maxC, t.C); maxNB = Math.max(maxNB, t.NB); maxSlots = Math.max(maxSlots, t.slots) }
   return {
-    rs, hash: rulesetHash(rs), geo: g, NB, slots, trail: trailRing(rs, shapes), slotC, slotLX, slotLZ, slotReach, shapes, kinds, paces, paceSpeed, presets, changeTime, qMax, slope,
+    rs, hash: rulesetHash(rs), types, typeIndex: n => typeNames.indexOf(n), maxC, maxNB, maxSlots, trail: trailRing(rs, types), kinds, paces, paceSpeed, presets, slope,
     depthByKind, sightByClass, cosArc: cos(rs.fire.arc), stateFactor: new Float64Array(FIRING_STATES.map(s => rs.fire.state[s])), recentDecay: exp(-DT / rs.morale.recentTime), relax: 1 - exp(-DT / rs.morale.relaxTime), supportCos: cos(rs.morale.support.arc),
-    shapeIndex: n => names.indexOf(n), presetIndex: n => presets.indexOf(n),
+    presetIndex: n => presets.indexOf(n),
   }
 }
 const expNeg = (x: number): number => exp(-x)
 // a trail shape's trail, and the one Face about rebuilds, must fit the ring (0.25 m points): the ring is
 // the smallest multiple of 64 points that holds the deepest, at least TRAIL_MIN
-function trailRing(rs: Ruleset, shapes: ShapeLayout[]): number {
+function trailRing(rs: Ruleset, types: TypeTable[]): number {
   let lmax = 0; for (const p of Object.values(rs.orders)) lmax = Math.max(lmax, p.Lmax)
   let need = 0
-  for (const s of shapes) if (s.def.trail) need = Math.max(need, Math.max(s.trailLimit, 15 + (s.turn ? -2 * s.turn.cz : s.depth) + lmax) / 0.25 + 16)
+  for (const t of types) for (const s of t.shapes) if (s.def.trail) need = Math.max(need, Math.max(s.trailLimit, 15 + (s.turn ? -2 * s.turn.cz : s.depth) + lmax) / 0.25 + 16)
   const n = Math.max(TRAIL_MIN, Math.ceil(need / 64) * 64)
   if (n > TRAIL_MAX) throw new Error(`ruleset ${rs.name}: a trail of ${n} points does not fit ${TRAIL_MAX}`)
   return n
 }
 
-function layout(rs: Ruleset, name: string, kinds: string[], paces: string[]): ShapeLayout {
-  const g = rs.geometry, C = g.companies, R = g.ranks, F = g.files, B = g.bins, def = rs.formations[name]
+function layout(g: Geometry, formations: Record<string, FormationDef>, name: string, kinds: string[], paces: string[]): ShapeLayout {
+  const C = g.companies, R = g.ranks, F = g.files, B = g.bins, def = formations[name]
   const place = def.place(g)
+  if (def.step && !def.trail) throw new Error(`shape ${name}: a step needs a trail shape (a straight shape's places are the block's)`)
+  const gs: Geometry = def.step ? { ...g, fileSpacing: def.step.file, rankSpacing: def.step.rank } : g   // the spacing of its places
   if (place.length !== C) throw new Error(`shape ${name}: ${place.length} placements for ${C} companies`)
   const n = C * R * F, of = new Int32Array(n), posX = new Float64Array(n), posZ = new Float64Array(n)
   const box: { j: number; x0: number; x1: number; z0: number; z1: number }[] = []
   for (let c = 0; c < C; c++) {
     const ca = cos(place[c].rot), sa = sin(place[c].rot)
     let lo = Infinity, hi = -Infinity
-    for (let r = 0; r < R; r++) for (let f = 0; f < F; f++) { const [lx, lz] = blockLocal(g, f, r), s = slotIndex(g, c, r, f)
+    for (let r = 0; r < R; r++) for (let f = 0; f < F; f++) { const [lx, lz] = blockLocal(gs, f, r), s = slotIndex(g, c, r, f)
       posX[s] = place[c].x + lx * ca - lz * sa; posZ[s] = place[c].z + lx * sa + lz * ca; lo = Math.min(lo, posX[s]); hi = Math.max(hi, posX[s]) }
     for (let k = 0; k < B; k++) box.push({ j: c * B + k, x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity })
     for (let r = 0; r < R; r++) for (let f = 0; f < F; f++) {
@@ -212,8 +251,10 @@ function layout(rs: Ruleset, name: string, kinds: string[], paces: string[]): Sh
   const extent = new Float64Array(C * 3)
   for (let c = 0; c < C; c++) { extent[c * 3] = Infinity; extent[c * 3 + 1] = -Infinity
     for (let s = c * R * F; s < (c + 1) * R * F; s++) { extent[c * 3] = Math.min(extent[c * 3], -posZ[s]); extent[c * 3 + 1] = Math.max(extent[c * 3 + 1], -posZ[s]); extent[c * 3 + 2] = Math.max(extent[c * 3 + 2], Math.abs(posX[s])) } }
-  const trailLimit = depth + 2 * g.files * g.fileSpacing + 12
-  return { name, def, kind, place, of, posX, posZ, pairs, half, turn, pace: paces.indexOf(def.pace), roadPace: def.roadPace ? paces.indexOf(def.roadPace) : -1, trailLimit, depth, extent }
+  let far = 0; for (let c = 0; c < C; c++) far = Math.max(far, extent[c * 3 + 1])
+  const trailLimit = Math.max(depth + 2 * g.files * g.fileSpacing + 12, far + 24)
+  return { name, def, kind, place, of, posX, posZ, pairs, half, turn, pace: paces.indexOf(def.pace), roadPace: def.roadPace ? paces.indexOf(def.roadPace) : -1, fileStep: gs.fileSpacing, kx: gs.fileSpacing / g.fileSpacing, kz: gs.rankSpacing / g.rankSpacing,
+    spread: Math.max(1, gs.fileSpacing / g.fileSpacing, gs.rankSpacing / g.rankSpacing), trailLimit, depth, extent }
 }
 
 export const HALF_PI = PI / 2

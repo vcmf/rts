@@ -52,6 +52,7 @@ designs written before building (frozen once built, their lasting content moves 
   [`plans/active/s1c3-repack-gate.md`](plans/active/s1c3-repack-gate.md) (S1c-3),
   [`plans/active/s1c4-battalion-scale.md`](plans/active/s1c4-battalion-scale.md) (S1c-4: the 400-man battalion),
   [`plans/active/s1c5-cost.md`](plans/active/s1c5-cost.md) (S1c-5: the cost of 16,000 men),
+  [`plans/active/s1d1-unit-types.md`](plans/active/s1d1-unit-types.md) (S1d-1: unit types, the cavalry regiment and the foot battery; the S1d split),
   [`plans/active/l2-detail.md`](plans/active/l2-detail.md) (Track E L2: the bench, the readability guard, the terrain detail layer),
   [`plans/active/w2-river-banks.md`](plans/active/w2-river-banks.md) (water W2: cut banks, point bars and the fine bank normals),
   [`plans/active/track-e-look.md`](plans/active/track-e-look.md) (Track E: the painterly look, L0–L9 and LA assets; results in [`plans/active/track-e-results/README.md`](plans/active/track-e-results/README.md), the L2a baselines in [`plans/active/track-e-results/l2a-baseline.md`](plans/active/track-e-results/l2a-baseline.md), the L2b results in [`plans/active/track-e-results/l2b-detail.md`](plans/active/track-e-results/l2b-detail.md)).

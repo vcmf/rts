@@ -5,25 +5,25 @@
 import { describe, it, expect } from 'vitest'
 import { Sim, ceiling, STREAM_X } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { removeMan, anyWet, wetBins, aimOf, type Ruleset } from '../src/sim/index.ts'
+import { removeMan, anyWet, wetBins, aimOf, type Ruleset, withBlock } from '../src/sim/index.ts'
 import { mkBits, hasBit } from '../src/sim/bits.ts'
 
 const SHIPPED = { rs: napoleonic, men: 400 }, CEILING = { rs: ceiling, men: 810 }
 const both = [['400', SHIPPED], ['810', CEILING]] as const
-const companies = (n: number): Ruleset => ({ ...napoleonic, name: `${n} companies`, geometry: { ...napoleonic.geometry, companies: n } })
+const companies = (n: number): Ruleset => withBlock({ ...napoleonic, name: `${n} companies` }, 'infantry', { companies: n })
 
 describe('the blocks', () => {
   it('every shape, for 4, 6 and 8 companies and the ceiling: no two places closer than the minimum spacing; the square turns about', () => {
     const worst: Record<string, number> = {}
     for (const n of [2, 3, 5, 7]) expect(() => new Sim(1, companies(n))).toThrow(/square/)   // an open or overlapping square
-    for (const rs of [companies(4), napoleonic, companies(8), ceiling]) for (const shape of Object.keys(rs.formations)) {
-      const s = new Sim(1, rs), h = s.spawn(-60, -60, 0, shape, s.w.cr.slots), p = s.places(h)
-      expect(p.length).toBe(s.w.cr.slots)
+    for (const rs of [companies(4), napoleonic, companies(8), ceiling]) for (const shape of Object.keys(rs.types.infantry.formations)) {
+      const s = new Sim(1, rs), U = s.w.cr.types[0], g = U.geo, h = s.spawn(-60, -60, 0, shape, U.slots), p = s.places(h)
+      expect(p.length).toBe(U.slots)
       let m = Infinity
       for (let a = 0; a < p.length; a++) for (let b = a + 1; b < p.length; b++) m = Math.min(m, Math.hypot(p[a][0] - p[b][0], p[a][1] - p[b][1]))
-      worst[`${rs.geometry.companies}×${rs.geometry.files} ${shape}`] = +m.toFixed(3)
-      expect(m).toBeGreaterThanOrEqual(rs.geometry.minSpacing - 1e-9)
-      if (shape === 'square') expect(s.w.cr.shapes[s.w.cr.shapeIndex('square')].turn).not.toBeNull()
+      worst[`${g.companies}×${g.files} ${shape}`] = +m.toFixed(3)
+      expect(m).toBeGreaterThanOrEqual(g.minSpacing - 1e-9)
+      if (shape === 'square') expect(U.shapes[U.shapeIndex('square')].turn).not.toBeNull()
     }
     console.log('closest places', worst)
   })
@@ -62,7 +62,7 @@ describe.each(both)('battalions of %s', (_, { rs, men }) => {
   it('a diagonal column losing half its men along the bank never puts a man on impassable ground', () => {
     let positions = 0
     for (const heading of [-Math.PI / 4, 3 * Math.PI / 4]) for (const z of [-100, 60]) for (let x = 20; x <= 60; x += 2) {
-      const s = new Sim(1, rs), h = s.spawn(x, z, heading, 'column', men), i = s.slot(h), C = s.w.cr.geo.companies
+      const s = new Sim(1, rs), h = s.spawn(x, z, heading, 'column', men), i = s.slot(h), C = s.w.cr.types[0].C
       if (anyWet(s.w, i)) continue
       positions++
       for (let n = 0; n < men / 2; n++) { removeMan(s.w, i, n % C); if (anyWet(s.w, i)) throw new Error(`wet at x ${x}, z ${z}, heading ${heading}, loss ${n}`) }
@@ -74,11 +74,11 @@ describe.each(both)('battalions of %s', (_, { rs, men }) => {
 
 describe('bins past 32', () => {
   it('a line with only its eastern company over the stream reports that company\'s bins, all past bit 32', () => {
-    const s = new Sim(1, napoleonic), z = 40, h = s.spawn(STREAM_X(z) - 52, z, 0, 'line', 400), i = s.slot(h), B = s.w.cr.geo.bins
+    const s = new Sim(1, napoleonic), z = 40, h = s.spawn(STREAM_X(z) - 52, z, 0, 'line', 400), i = s.slot(h), B = s.w.cr.types[0].geo.bins
     expect(anyWet(s.w, i)).toBe(false)
     s.w.f.x[i] += 10   // the eastern company's files over the water (a probe: no tick runs)
-    const wet = wetBins(s.w, i, mkBits(s.w.cr.NB)), set: number[] = []
-    for (let j = 0; j < s.w.cr.NB; j++) if (hasBit(wet, j)) set.push(j)
+    const wet = wetBins(s.w, i, mkBits(s.w.cr.maxNB)), set: number[] = []
+    for (let j = 0; j < s.w.cr.maxNB; j++) if (hasBit(wet, j)) set.push(j)
     expect(set.length).toBeGreaterThan(0)
     expect(Math.min(...set)).toBeGreaterThanOrEqual(4 * B)   // companies 4 and 5: bins 32..47
   })

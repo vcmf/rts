@@ -1,8 +1,8 @@
 // Headless check of the built page (docs/plans/done/s1b-sim-page.md): serve dist/ with `vite preview`,
 // drive it through window.APP with tools/shot.mjs, fail on any console error, then play each session's
-// exported replay back in Node: it must reproduce every hash the page took. Three runs: the drill scenario
-// (orders, every panel button, screenshots), the 40-battalion bench (cost), the firefight to a rout and the
-// brigade to a break that spreads.
+// exported replay back in Node: it must reproduce every hash the page took. The runs: the drill scenario
+// (orders, every panel button, screenshots), the 40-battalion bench (cost), the firefight to a rout, the
+// brigade to a break that spreads, and the arms (the unit types changing shape).
 // Run `npm run build` first.
 // Usage: node tools/app-check.mjs [outDir]
 import { spawn } from 'node:child_process'
@@ -50,8 +50,22 @@ const fight = [
   ['eval', 'APP.view(-120, 120, 3); APP.advance(20); "opening volleys"'],
   ['shot', 'fight-0-volleys'],
   STEP3, STEP3, STEP3, STEP3, STEP3,
-  ['eval', 'const r = [0, 1].filter(i => APP.w.f.mstate[i] >= 3); APP.advance(8); APP.view(-100, 120, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, men ${[0, 1].map(i => { const C = APP.w.cr.geo.companies; return APP.w.f.startMen[i] - APP.w.f.men.slice(i * C, i * C + C).reduce((a, b) => a + b, 0) }).join(" / ")} lost`'],
+  ['eval', 'const r = [0, 1].filter(i => APP.w.f.mstate[i] >= 3); APP.advance(8); APP.view(-100, 120, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, men ${[0, 1].map(i => { const C = APP.w.cr.maxC; return APP.w.f.startMen[i] - APP.w.f.men.slice(i * C, i * C + C).reduce((a, b) => a + b, 0) }).join(" / ")} lost`'],
   ['shot', 'fight-1-rout'],
+  REPLAY,
+]
+
+// the arms (S1d-1): side 0's battery unlimbers and its regiment trots north in column of route, then forms
+// column of squadrons; side 1's regiment forms column; the page draws them
+const SHAPES = '[1, 2, 4, 5].map(i => APP.w.cr.types[APP.w.f.type[i]].shapes[APP.w.f.shape[i]].name).join(" ")'
+const arms = [
+  ['wait', 1500], READY,
+  ['eval', 'APP.view(-60, 10, 1.9); "the three types"'],
+  ['shot', 'arms-0-start'],
+  ['eval', 'APP.select([2]); APP.form("unlimbered"); APP.select([4]); APP.form("column"); APP.select([1]); APP.march(10, 80, false); APP.advance(95); APP.select([]); APP.view(-40, 60, 2.2); `TROT ${' + SHAPES + '} at z ${APP.w.f.z[1].toFixed(0)}`'],
+  ['shot', 'arms-1-trot'],
+  ['eval', 'APP.select([1]); APP.form("column"); APP.advance(80); APP.select([]); `ARMS ${' + SHAPES + '}`'],
+  ['shot', 'arms-2-deployed'],
   REPLAY,
 ]
 
@@ -84,6 +98,7 @@ async function run(scenario, steps) {
   const panel = text.match(/PANEL (\d+) (\d+)/)
   if (scenario === 's1c-firefight' && !/ROUT [12] /.test(text)) { console.log('the firefight did not end in a rout'); return false }
   if (scenario === 's1c-brigade' && !/CONTAGION [23] /.test(text)) { console.log('the brigade fight did not spread a break'); return false }
+  if (scenario === 's1d-arms' && !(/TROT march unlimbered column unlimbered at z 80/.test(text) && /ARMS column unlimbered column unlimbered/.test(text))) { console.log('the arms did not change shape'); return false }
   if (scenario === 's1b-field' && (!panel || panel[1] !== panel[2] || panel[1] === '0')) { console.log('panel buttons did not each log one command'); return false }
   return true
 }
@@ -93,7 +108,7 @@ const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--stri
 let ok = false
 try {
   await sleep(2500)
-  ok = await run('s1b-field', drill) && await run('s1b-bench', bench) && await run('s1c-firefight', fight) && await run('s1c-brigade', brigadeFight)
+  ok = await run('s1b-field', drill) && await run('s1b-bench', bench) && await run('s1c-firefight', fight) && await run('s1c-brigade', brigadeFight) && await run('s1d-arms', arms)
 } finally { preview.kill() }
 console.log(ok ? 'app check: ok' : 'app check: FAILED')
 process.exit(ok ? 0 : 1)

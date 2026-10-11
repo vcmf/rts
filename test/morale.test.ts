@@ -205,7 +205,7 @@ describe('the wavering fall-back', () => {
     expect(s.w.f.x[i]).toBeCloseTo(-10 + M.fallback.metres, 0)
     expect(s.w.f.heading[i]).toBeCloseTo(-E, 4)   // the spawn's heading, to 0.1 mrad
     expect(s.w.f.ordHead[i]).toBe(-1)                                // once: no second Retire while still wavering
-    const last = Math.max(...s.w.f.volleyTick.slice(i * 4, i * 4 + 4))
+    const last = Math.max(...s.w.f.volleyTick.slice(i * s.w.cr.maxC, i * s.w.cr.maxC + 4))
     expect(last).toBeGreaterThan(fell + 20 * 10)                       // it fired after the Retire
   })
   it('not with orders', () => {

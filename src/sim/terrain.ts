@@ -13,7 +13,7 @@ export interface Terrain {
   classQ: Float64Array                          // [class·P + pace]
   road: Uint8Array
   imp: Uint8Array[]; impd: Float64Array[]       // per kind
-  waterCurve: [number, number][]; waterLimit: number
+  waterCurve: [number, number][]; waterLimit: Float64Array   // per kind: deeper is impassable
   slope: Float64Array
   K: number; P: number
 }
@@ -42,7 +42,7 @@ export function buildTerrain(d: SimData, cr: Compiled): Terrain {
     cr.kinds.forEach((kind, q) => { classG[c * K + q] = t.g[kind] })
     cr.paces.forEach((pace, p) => { classQ[c * P + p] = rs.q[pace]?.[t.q] ?? 1 })
     road[c] = t.road ? 1 : 0 })
-  const t: Terrain = { n, cell, x0: f.x0, z0: f.z0, cls, depth, gx, gz, classG, classQ, road, imp: [], impd: [], waterCurve: rs.water.curve, waterLimit: rs.water.limit, slope: cr.slope, K, P }
+  const t: Terrain = { n, cell, x0: f.x0, z0: f.z0, cls, depth, gx, gz, classG, classQ, road, imp: [], impd: [], waterCurve: rs.water.curve, waterLimit: new Float64Array(cr.kinds.map(k => rs.water.limitByKind?.[k] ?? rs.water.limit)), slope: cr.slope, K, P }
   rebuildImpassable(t)
   return t
 }
@@ -56,7 +56,7 @@ export function rebuildImpassable(t: Terrain): void {
 // nearest one (two-pass chamfer)
 function impassable(t: Terrain, kind: number): [Uint8Array, Float64Array] {
   const n = t.n, h = t.cell, D2 = Math.SQRT2 * h, imp = new Uint8Array(n * n), d = new Float64Array(n * n)
-  for (let k = 0; k < n * n; k++) { imp[k] = t.depth[k] > t.waterLimit || t.classG[t.cls[k] * t.K + kind] <= 0 ? 1 : 0; d[k] = imp[k] ? 0 : 1e9 }
+  for (let k = 0; k < n * n; k++) { imp[k] = t.depth[k] > t.waterLimit[kind] || t.classG[t.cls[k] * t.K + kind] <= 0 ? 1 : 0; d[k] = imp[k] ? 0 : 1e9 }
   const rel = (k: number, j: number, s: number) => { if (d[j] + s < d[k]) d[k] = d[j] + s }
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const k = j * n + i
     if (i > 0) rel(k, k - 1, h); if (j > 0) { rel(k, k - n, h); if (i > 0) rel(k, k - n - 1, D2); if (i < n - 1) rel(k, k - n + 1, D2) } }
@@ -68,10 +68,10 @@ function impassable(t: Terrain, kind: number): [Uint8Array, Float64Array] {
 export const cellK = (t: Terrain, x: number, z: number): number =>
   Math.min(t.n - 1, Math.max(0, Math.round((z - t.z0) / t.cell))) * t.n + Math.min(t.n - 1, Math.max(0, Math.round((x - t.x0) / t.cell)))
 
-export function waterG(t: Terrain, d: number): number {
+export function waterG(t: Terrain, d: number, kind: number): number {
   const c = t.waterCurve
   if (d <= 0) return 1
-  if (d > t.waterLimit) return 0
+  if (d > t.waterLimit[kind]) return 0
   for (let k = 1; k < c.length; k++) if (d <= c[k][0]) return c[k - 1][1] + (c[k][1] - c[k - 1][1]) * (d - c[k - 1][0]) / (c[k][0] - c[k - 1][0])
   return c[c.length - 1][1]
 }
@@ -83,7 +83,7 @@ export function slopeG(t: Terrain, sl: number): number {
 export const groundG = (t: Terrain, x: number, z: number, kind: number, dx: number, dz: number): number => groundGAt(t, cellK(t, x, z), kind, dx, dz)
 // the same, for cell k
 export function groundGAt(t: Terrain, k: number, kind: number, dx: number, dz: number): number {
-  return t.classG[t.cls[k] * t.K + kind] * waterG(t, t.depth[k]) * slopeG(t, t.gx[k] * dx + t.gz[k] * dz)
+  return t.classG[t.cls[k] * t.K + kind] * waterG(t, t.depth[k], kind) * slopeG(t, t.gx[k] * dx + t.gz[k] * dz)
 }
 export const groundQ = (t: Terrain, x: number, z: number, pace: number): number => groundQAt(t, cellK(t, x, z), pace)
 export const groundQAt = (t: Terrain, k: number, pace: number): number => t.classQ[t.cls[k] * t.P + pace]

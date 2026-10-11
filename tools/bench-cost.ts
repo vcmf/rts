@@ -10,7 +10,7 @@ import { SoldierLayer } from '../src/render/soldiers.ts'
 
 const mode = process.argv[2] ?? 'march', men = Number(process.argv[3] ?? 400), frames = Number(process.argv[4] ?? 360), warm = Number(process.argv[5] ?? 1)
 const data = loadSimData(new Uint8Array(fs.readFileSync(new URL('../data/formation-field.simdata', import.meta.url))))
-const shippedCr = compileRuleset(napoleonic), rs = men > shippedCr.slots ? ceiling : napoleonic
+const shippedCr = compileRuleset(napoleonic), rs = men > shippedCr.types[0].slots ? ceiling : napoleonic
 const w: World = makeWorld(data, rs === napoleonic ? shippedCr : compileRuleset(rs), 1, process.env.DEBUG === "1")   // a release world, as the page runs (DEBUG=1: the tests' debug world)
 const cmd = (c: Command) => issue(w, c)
 const slots: number[] = []
@@ -23,7 +23,7 @@ if (mode === 'fire') {
   const E = Math.PI / 2
   for (let row = 0; row < 5; row++) for (let r = 0; r < 4; r++) { const z = -150 + row * 60; spawn(-115 - r * 20, z, E, 0); spawn(-15 + r * 20, z, -E, 1) }
 } else {
-  const shapes = Object.keys(rs.formations)
+  const shapes = Object.keys(rs.types.infantry.formations)
   for (let k = 0; k < 40; k++) spawn(-165 + (k % 7) * 33, -150 + Math.floor(k / 7) * 55, 0)
   slots.forEach((i, k) => { const id = makeHandle(KIND_FORMATION, i, w.f.gen[i])
     cmd({ type: 'form', id, shape: shapes[k % shapes.length] }); cmd({ type: 'move', id, points: [[w.f.x[i], w.f.z[i] + 40]], append: true }) })
