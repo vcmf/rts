@@ -22,12 +22,12 @@ vec3 bankNormal(vec3 N,vec2 xz){
   #endif
 }
 #endif
-// a hard painted edge, anti-aliased over about a pixel (no shimmer when the view moves): 0 below t, 1 above
+// a hard painted edge, anti-aliased over about two pixels (no shimmer when the view moves): 0 below t, 1 above
 float aastep(float t,float v){
   #ifdef WATER_SAB_STEP
   return step(t,v);   // the shimmer check's sabotage: aliased edges
   #else
-  float w=max(fwidth(v)*0.7,1e-5);return smoothstep(t-w,t+w,v);
+  float w=max(fwidth(v)*1.2,1e-5);return smoothstep(t-w,t+w,v);
   #endif
 }
 #if defined(WATERDATA)&&defined(BANKN)
