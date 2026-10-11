@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { Sim, data, cr, root } from './fx.ts'
-import { buildTerrain, rebuildImpassable, cellK, wetBins, removeMan, occupied, makeWorld, ST_HALTED, issue, advanceTick, M_FREE } from '../src/sim/index.ts'
+import { buildTerrain, rebuildImpassable, cellK, anyWet, removeMan, occupied, makeWorld, ST_HALTED, issue, advanceTick, M_FREE } from '../src/sim/index.ts'
 
 interface Case { shape: string; heading: number; x: number; z: number; n: number }
 const cases: Case[] = JSON.parse(fs.readFileSync(path.join(root, 'test', 'fixtures', 'repack-events.json'), 'utf8'))
@@ -17,14 +17,14 @@ describe('the re-packing gate', () => {
     for (const e of cases) {
       for (const gated of [false, true]) {
         const s = new Sim(), h = s.spawn(e.x, e.z, e.heading, e.shape, 100), i = s.slot(h)
-        expect(wetBins(s.w, i)).toBe(0)
+        expect(anyWet(s.w, i)).toBe(false)
         for (let n = 0; n <= e.n; n++) {
           const c = n % C
           const men = s.men(h)
           if (gated) removeMan(s.w, i, c); else s.w.f.men[i * C + c]--
           expect(s.men(h)).toBe(men - 1)   // a man fell, whichever company he was in
-          if (!gated && wetBins(s.w, i)) { ungatedWet++; break }
-          if (gated) { expect({ ...e, step: n, wet: wetBins(s.w, i) }).toEqual({ ...e, step: n, wet: 0 }); expect(s.w.f.pressed[i]).toBe(0) }
+          if (!gated && anyWet(s.w, i)) { ungatedWet++; break }
+          if (gated) { expect({ ...e, step: n, wet: anyWet(s.w, i) }).toEqual({ ...e, step: n, wet: false }); expect(s.w.f.pressed[i]).toBe(0) }
         }
       }
     }
@@ -37,11 +37,11 @@ describe('the re-packing gate', () => {
       for (const gated of [false, true]) {
         const w = makeWorld(data, cr, 1, false, t), i = w.free[w.meta[M_FREE] - 1]
         issue(w, { type: 'debug-spawn', side: 0, x, z, heading, shape, men: 100, fire: 'hold' }); advanceTick(w)
-        if (!w.f.alive[i] || wetBins(w, i)) continue
+        if (!w.f.alive[i] || anyWet(w, i)) continue
         if (gated) positions++
         for (let n = 0; n < 12; n++) {
-          if (gated) { removeMan(w, i, n % C); expect({ shape, heading, x, z, n, wet: wetBins(w, i) }).toEqual({ shape, heading, x, z, n, wet: 0 }) }
-          else { w.f.men[i * C + n % C]--; if (wetBins(w, i)) { ungatedWet++; break } }
+          if (gated) { removeMan(w, i, n % C); expect({ shape, heading, x, z, n, wet: anyWet(w, i) }).toEqual({ shape, heading, x, z, n, wet: false }) }
+          else { w.f.men[i * C + n % C]--; if (anyWet(w, i)) { ungatedWet++; break } }
         }
         if (gated) expect(w.f.pressed[i]).toBe(0)
       }
@@ -78,7 +78,7 @@ describe('the re-packing gate', () => {
     expect(fresh.length).toBeGreaterThan(0)
     for (const p of fresh) t.depth[cellK(t, p[0], p[1])] = 5
     rebuildImpassable(t)
-    expect(wetBins(s.w, i)).toBe(0)
+    expect(anyWet(s.w, i)).toBe(false)
     s.w.f.status[i] = ST_HALTED   // a router halted at the bank this tick: the fallback must not overwrite it
     removeMan(s.w, i, 0)
     expect(s.w.f.men[i * C]).toBe(24)
@@ -96,7 +96,7 @@ describe('the re-packing gate', () => {
     for (const k of standing) t.depth[k] = 5
     for (const p of fresh) t.depth[cellK(t, p[0], p[1])] = 5
     rebuildImpassable(t)
-    expect(wetBins(s.w, i)).not.toBe(0)
+    expect(anyWet(s.w, i)).toBe(true)
     removeMan(s.w, i, 0)
     expect(s.w.f.pressed[i]).toBe(1)
   })

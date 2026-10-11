@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-09
 code: [src/sim/formation.ts, src/sim/ruleset.ts, src/sim/terrain.ts, src/rulesets/napoleonic.ts, test/formations.test.ts]
-decisions: [0005-sim-render-split, 0006-restricted-float64, 0007-battalion-scale, 0012-heightfield-authority, 0015-era-generic-engine]
+decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0012-heightfield-authority, 0015-era-generic-engine]
 ---
 
 # Formations (the 20 Hz formation layer)
@@ -30,7 +30,7 @@ is in `docs/plans/done/s1a-formations-on-spine.md`.
 
 ## Constraints
 
-- **Decision 0007:** the battalion is the unit. The sim keeps the **men per company**, never a soldier.
+- **Decisions 0007 and 0018:** the battalion is the unit (about 400 men since 0018). The sim keeps the **men per company**, never a soldier.
   Which slots are filled follows from the counts by one rule (`occupied`):
   - files from the centre outward, ranks front first;
   - a shape that closes across companies (`closeAcross`, the line) fills each half toward the colours;
@@ -48,19 +48,24 @@ is in `docs/plans/done/s1a-formations-on-spine.md`.
 
   Who stands where, and who falls, is the renderer's (`docs/systems/sim-page.md`).
 - **The spine's rules** (`docs/systems/sim-spine.md`): exact-ops maths, slot order, typed-array state.
-- **Budget:** about 1.2 ms per tick for 40 battalions (`test/formations.test.ts`).
+- **Budget:** 2 ms per tick (sim-design §16). Not met at 400 men: 40 battalions of 400 changing shape and
+  marching cost about 5 ms per tick (`test/formations.test.ts`; `docs/known-issues.md`, S1c-5).
 
 ## Design
 
 **Ruleset** (`ruleset.ts`, `src/rulesets/napoleonic.ts`). The ruleset holds:
-- the block geometry: companies, files, ranks, spacings, the minimum spacing, the accordion gap;
-- the shapes as company placements, with kind, pace, road pace, `trail` and `closeAcross`;
+- the block geometry: companies, files, ranks, spacings, the minimum spacing, the accordion gap, bins per
+  company. Napoleonic (decision 0018): 6 companies of 23 files × 3 ranks, 414 places for a battalion of
+  about 400, 8 bins a company (about 3 files each); a line is about 93 m;
+- the shapes as company placements, with kind, pace, road pace, `trail` and `closeAcross`. The Napoleonic
+  shapes place any number of companies: a line side by side; a column of divisions two wide; a column of
+  route one behind another; a square over four faces, front and rear first (6: 2, 1, 2, 1);
 - change times, paces, q, the terrain table (with `road` and `level` flags), the water curve, slope `k`;
 - the order presets, disorder, and the face and dress times.
 
 `compileRuleset` indexes it and precomputes, per shape:
 - the straight layout;
-- the bins: lateral thirds of each company;
+- the bins: `bins` lateral strips of each company;
 - the accordion pairs;
 - the half-turn symmetry for Face about.
 
@@ -73,9 +78,11 @@ The ruleset's hash is recorded in the world, the replays and the saves.
 
 `groundG` is class × water × slope along the direction of travel.
 
-**Limits.** Checked when a world is made:
-- at most 32 bins per formation (`BINS = 3` per company), because the gate's masks are 32-bit;
-- a trail shape's trail, and the one Face about rebuilds, must fit the 256-point ring.
+**Limits.** Checked when a ruleset is compiled:
+- at most 32 companies (`MAX_COMPANIES`: per-company scratch, and the company mask of the re-packing
+  gate); bins and slots have no limit: the gates keep them in bit sets (`bits.ts`);
+- the trail ring is sized from the deepest trail shape, at least 256 points of 0.25 m and at most 4096
+  (`cr.trail`): 512 for a column of route of 400.
 
 **Places.** A man's place is his slot set back by his bin's lag:
 - **straight shapes:** along the heading;
@@ -86,7 +93,7 @@ During a change, each company wheels about the flank it turns to, with smoothste
 interrupted by another is timed by the distance still to cover.
 
 **The lag model** (per tick, moving):
-- 12 bins sample their men's ground: the harmonic mean of g, the worst q;
+- the bins sample their men's ground: the harmonic mean of g, the worst q;
 - a bin is held when a man has impassable ground underfoot or one step ahead;
 - the speed is the largest that keeps every file within Lmax and the mean within Lmean (solved
   exactly);
@@ -149,7 +156,15 @@ The ruleset (`src/rulesets/napoleonic.ts`). In `formation.ts`:
 - **Trail shapes:** looping round to a target behind, the turning circle, no wheel.
 - **The accordion:** a held column, a 90° bend (within-company spacing too), a square in the wood.
 - **Passages:** the level bridge deck and the crossing, the ford, an empty bin in woods.
-- **Cost:** 40 battalions, under 2 ms per tick.
+- **Cost:** 40 battalions of 400, under a temporary 8 ms per tick (target 2 ms, S1c-5).
+- **Scale** (`test/scale.test.ts`): the shipped block and the ceiling (45 files, 810 men) change through
+  every shape, Face about, march a 90° turn, halt dry at the stream, and lose half their men at the bank
+  without a man on impassable ground; no two places of any shape closer than the minimum spacing, for 4 to
+  8 companies; a battalion's bins past bit 32 reported by the gate.
+
+Most terrain tests run on `small` (`test/fx.ts`): the S1a–S1c block of 4 companies of 9 files (100 men).
+They were placed for battalions that size at spots along the stream; the code they test does not depend
+on the block.
 
 Negative runs, each failing its tests:
 - the lean not flipping (uneven strengths);

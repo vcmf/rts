@@ -7,13 +7,13 @@ last_reviewed: 2026-10-08
 
 ## Drill and battle
 
-- **Battalion:** the unit the player commands; about 100 soldiers in the game (historically a
-  battalion was 500–800 men; ours has a company's footprint).
-- **Company:** a sub-unit of a battalion. Whether game battalions have companies (for drill-like
-  formation changes) is open (`docs/research/formation-movement-and-doc-systems.md` §4).
+- **Battalion:** the unit the player commands; about 400 soldiers in the game (decision 0018;
+  historically 400–800 on campaign).
+- **Company:** a sub-unit of a battalion, a block of files × ranks; a Napoleonic battalion has 6 (four
+  fusilier companies, grenadiers, voltigeurs).
 - **Brigade, division, corps, army:** the command levels above the battalion.
 - **File:** a column of men one behind the other, front rank to rear rank. **Rank:** a row of men
-  side by side. A 3-rank line of 100 men has about 33–34 files.
+  side by side. A 3-rank line of 400 men has about 134 files.
 - **Frontage:** the width of a formation (about 0.56–0.7 m per file).
 - **Line, column, square, skirmish (open order), march column:** the formations.
 - **Wheel:** turning a line or company around a pivot flank. **Change front:** turning the facing in

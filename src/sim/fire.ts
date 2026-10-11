@@ -8,7 +8,7 @@ import type { Handle } from './handle.ts'
 import { placeWorld, layoutOf, occupied, removeMan, nearImpassable } from './formation.ts'
 import { heightAt, cellK } from './terrain.ts'
 import { keyedStream, nextUnit } from './rng.ts'
-import { MAX_BINS } from './ruleset.ts'
+import { MAX_COMPANIES } from './ruleset.ts'
 import { sin, cos } from './num.ts'
 import { DT } from './time.ts'
 
@@ -121,8 +121,8 @@ const sqDist = (G: FireGeo, k: number, m: number): number => (G.cx[m] - G.cx[k])
 
 // battalion j's nearest company in company k's arc and range with a clear sight line, or −1: the companies
 // in arc are tried nearest first, so one hidden in a wood does not hide the rest (a battalion has at most
-// MAX_BINS / BINS companies, ruleset.ts)
-const aimD = new Float64Array(64), aimM = new Int32Array(64)
+// MAX_COMPANIES, ruleset.ts)
+const aimD = new Float64Array(MAX_COMPANIES), aimM = new Int32Array(MAX_COMPANIES)
 function aimAt(w: World, G: FireGeo, k: number, j: number): number {
   const C = w.cr.geo.companies; let n = 0
   for (let q = 0; q < C; q++) {
@@ -214,7 +214,7 @@ function chooseTarget(w: World, G: FireGeo, i: number, c: number): Handle {
   return best
 }
 
-const open = new Uint8Array(64)   // the target companies a volley can hit (a battalion has at most MAX_BINS / BINS)
+const open = new Uint8Array(MAX_COMPANIES)   // the target companies a volley can hit
 // one company's volley at battalion j: expected hits, drawn as an integer, each given to a company of j in
 // the shooter's arc and range that it can see, weighted by its men (as they stood at the start of the step)
 function volley(w: World, G: FireGeo, i: number, c: number, j: number, d: number, share: number, rs: Uint32Array): void {
@@ -237,7 +237,7 @@ function volley(w: World, G: FireGeo, i: number, c: number, j: number, d: number
 // would put a man on impassable ground falls on another company, those owed hits first). Hits owed to a
 // company beyond the men it has are lost: they were aimed at men who are already down, and passing them on
 // could strike a company the shooters cannot see. Returns the men battalion i lost.
-const owedAtStart = new Int32Array(MAX_BINS), takeNow = new Int32Array(MAX_BINS)   // per company (at most MAX_BINS / BINS)
+const owedAtStart = new Int32Array(MAX_COMPANIES), takeNow = new Int32Array(MAX_COMPANIES)   // per company
 export function casualtiesStep(w: World, i: number): number {
   const f = w.f, C = w.cr.geo.companies
   let lost = 0, any = false

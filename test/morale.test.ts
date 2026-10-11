@@ -2,7 +2,7 @@
 // flank support, the wavering fall-back. The cases are scripted: morale and states are set between ticks, on
 // levelled ground, in the open band west of the stream (x ≈ −60, z −105..30) or at the map's west edge.
 import { describe, it, expect } from 'vitest'
-import { data, cr } from './fx.ts'
+import { data, cr, shipped } from './fx.ts'
 import { makeWorld, issue, advanceTick, buildTerrain, makeHandle, KIND_FORMATION, M_FREE, M_TICK, MS_STEADY, MS_SHAKEN, MS_WAVERING, MS_ROUTING, MS_RALLYING, MS_SHATTERED,
   RP_RUNNING, RP_FLED, O_MOVE, allocOrder, menOf, hashWorld, hex, serialize, deserialize, record, play, outOfFight, mayFire, type World, type Command, type Dropped } from '../src/sim/index.ts'
 import { levelled, brigade } from '../src/scenarios/s1c-firefight.ts'
@@ -240,7 +240,7 @@ describe('the wavering fall-back', () => {
 
 describe('determinism', () => {
   it('the brigade: its replay reproduces', () => {
-    const sc = brigade(100), run = record(lev, cr, sc, 2, 14000, () => {})
+    const cr = shipped, sc = brigade(100), run = record(lev, cr, sc, 2, 14000, () => {})
     expect(play(run.replay, lev, cr, sc, run.hashes)).toBeNull()
   })
   it('a save taken with one battalion rallying, one routing and one mid-fall-back reproduces', () => {

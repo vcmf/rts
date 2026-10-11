@@ -1,11 +1,17 @@
-// Test harness for the formation layer: a world on the formation field with the Napoleonic ruleset,
-// driven only through commands, with helpers to read where the men stand. Tests may use Math.*.
+// Test harness for the formation layer: a world on the formation field, driven only through commands, with
+// helpers to read where the men stand. Tests may use Math.*.
+//
+// The default ruleset is `small`: the Napoleonic ruleset with the S1a–S1c block (4 companies of 9 files × 3
+// ranks, 100 men). The terrain-mechanics tests were placed for battalions that size at spots along the
+// stream; the engine code they test does not depend on the block. The shipped block (6 × 23 × 3, 400 men,
+// decision 0018) and the ceiling (6 × 45 × 3) are tested in test/scale.test.ts, and the scenarios, goldens,
+// calibration and cost benches use the shipped ruleset.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { it } from 'vitest'
 import { loadSimData, compileRuleset, buildTerrain, rebuildImpassable, makeWorld, issue, advanceTick, makeHandle, KIND_FORMATION, formationSlot,
-  placesCtx, placeAt, mkPlaces, occupied, placeWorld, wetBins, layoutOf, STATUS, menOf, cellK, slotIndex, type Command, type World, type Compiled,
+  placesCtx, placeAt, mkPlaces, occupied, placeWorld, anyWet, layoutOf, STATUS, menOf, cellK, slotIndex, type Command, type World, type Compiled,
   type Ruleset, type Terrain, type SimData, type Dropped, TICK_HZ, M_TICK } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 
@@ -13,7 +19,14 @@ export const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..'
 export const dataBytes = (): Uint8Array => new Uint8Array(fs.readFileSync(path.join(root, 'data', 'formation-field.simdata')))
 export const GOLDEN_DATA_VERSION = 0x6ae782ed
 export const data: SimData = loadSimData(dataBytes(), GOLDEN_DATA_VERSION)
-export const cr: Compiled = compileRuleset(napoleonic)
+// (its morale reaches are S1c-2's: they scale with the frontage, napoleonic.ts)
+export const small: Ruleset = { ...napoleonic, name: `${napoleonic.name}, the S1a block`,
+  geometry: { ...napoleonic.geometry, companies: 4, files: 9, bins: 3 },
+  morale: { ...napoleonic.morale, contagion: { ...napoleonic.morale.contagion, front: 200, back: 100 }, support: { ...napoleonic.morale.support, reach: 100 } } }
+// the ceiling (decision 0018): the shipped ruleset with companies of 45 files, 810 places
+export const ceiling: Ruleset = { ...napoleonic, name: `${napoleonic.name}, the ceiling`, geometry: { ...napoleonic.geometry, files: 45, bins: 15 } }
+export const cr: Compiled = compileRuleset(small)
+export const shipped: Compiled = compileRuleset(napoleonic)   // the scenarios' ruleset
 const baseTerrain: Terrain = buildTerrain(data, cr)
 
 // the formation field's stream (prototypes/formation-core.js), for placing tests
@@ -71,7 +84,7 @@ export class Sim {
   }
   deep(x: number, z: number): boolean { return this.w.terrain.depth[cellK(this.w.terrain, x, z)] > this.w.cr.rs.water.limit }
   placesInDeep(h: number): number { return this.places(h).filter(p => this.deep(p[0], p[1])).length }
-  wet(h: number): boolean { return wetBins(this.w, this.slot(h)) !== 0 }
+  wet(h: number): boolean { return anyWet(this.w, this.slot(h)) }
   men(h: number): number { return menOf(this.w, this.slot(h)) }
   companyFrames(h: number): { x: number; z: number; face: number }[] {
     const w = this.w, i = this.slot(h), out = []

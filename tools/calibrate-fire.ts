@@ -1,4 +1,4 @@
-// The fire and morale calibration (docs/plans/active/s1c-fire-morale.md): two 100-man lines on levelled
+// The fire and morale calibration (docs/plans/active/s1c-fire-morale.md): two 400-man lines on levelled
 // ground at 50, 100 and 200 m, the first of quality 0.8 and the second 0.65, run to the first rout or
 // 20 minutes over many seeds, in worker threads. Prints each range's times to break, losses at the break,
 // how often the stronger line broke first, and each morale term's share at the break, against the targets.
@@ -10,7 +10,7 @@ import os from 'node:os'
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads'
 import { loadSimData, compileRuleset } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { runFirefight, runBrigade, levelled, type FightResult, type BrigadeResult } from '../src/scenarios/s1c-firefight.ts'
+import { runFirefight, runBrigade, levelled, MEN, type FightResult, type BrigadeResult } from '../src/scenarios/s1c-firefight.ts'
 
 // the 1v1 at three ranges; the 100 m row again without the wavering fall-back (S1c-2: its share of the
 // result); and a 3v3 brigade at 100 m (reported, no target), watched for 3 minutes after its first break
@@ -36,7 +36,7 @@ if (!isMainThread) {
   console.log('range | weaker broke | stronger first | none in 20 min | time to break, min (p10 / median / p90) | weaker losses at break (p10 / median / p90) | at the break: losses term / recent term')
   for (const [label, kind, range] of [...RANGES.map(r => [`${r} m`, 'fight', r] as const), ['100 m, no fall-back', 'nofallback', 100] as const]) {
     const rs = out.filter(o => o.range === range && o.kind === kind).map(o => o.r), weak = rs.filter(r => r.first === 1), strong = rs.filter(r => r.first === 0), none = rs.filter(r => r.first < 0)
-    const broke = rs.filter(r => r.first >= 0), t = weak.map(r => r.tick), l = weak.map(r => r.lossB)
+    const broke = rs.filter(r => r.first >= 0), t = weak.map(r => r.tick), l = weak.map(r => r.lossB * 100 / MEN)   // percent of the line
     const avg = (a: number[]) => a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(2) : '-'
     console.log(`${label} | ${weak.length} | ${strong.length} | ${none.length} | ${min(q(t, 0.1))} / ${min(q(t, 0.5))} / ${min(q(t, 0.9))} | ${q(l, 0.1)} / ${q(l, 0.5)} / ${q(l, 0.9)}% | ${avg(broke.map(r => r.termLosses))} / ${avg(broke.map(r => r.termRecent))}`)
   }
@@ -46,7 +46,7 @@ if (!isMainThread) {
   const outs = [0, 1, 2, 3].map(k => bw.filter(b => b.outB === k).length)
   console.log(`\nbrigade 3v3 at 100 m: weaker side broke first ${bw.length}, stronger first ${brig.filter(b => b.first === 0).length}, both at once ${brig.filter(b => b.first === 2).length}, none ${brig.filter(b => b.first < 0).length}; first break ${min(q(bt, 0.1))} / ${min(q(bt, 0.5))} / ${min(q(bt, 0.9))} min; weaker lines out 3 min later (1 / 2 / 3): ${outs.slice(1).join(' / ')}; first to last break ${q(spread, 0.1)} / ${q(spread, 0.5)} / ${q(spread, 0.9)} s; stronger lines out: ${brig.reduce((a, b) => a + b.outA, 0)}`)
   const at = (range: number) => out.filter(o => o.range === range && o.kind === 'fight').map(o => o.r)
-  const r100 = at(100), w100 = r100.filter(r => r.first === 1), med = q(w100.map(r => r.tick), 0.5) / 1200, lmed = q(w100.map(r => r.lossB), 0.5)
+  const r100 = at(100), w100 = r100.filter(r => r.first === 1), med = q(w100.map(r => r.tick), 0.5) / 1200, lmed = q(w100.map(r => r.lossB * 100 / MEN), 0.5)
   const checks: [string, boolean][] = [
     ['100 m: median time to break 6–10 min', med >= 6 && med <= 10],
     ['100 m: weaker losses at break 12–25% (median)', lmed >= 12 && lmed <= 25],

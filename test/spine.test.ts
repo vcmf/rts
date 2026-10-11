@@ -5,11 +5,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { makeWorld, issue, advanceTick, makeHandle, KIND_FORMATION, formationSlot,
-  serialize, deserialize, hashWorld, play, record, loadSimData, compileRuleset, DataVersionMismatch, NonFiniteState, M_TICK, hex, MAX_POINTS,
+  serialize, deserialize, hashWorld, play, record, loadSimData, compileRuleset, DataVersionMismatch, NonFiniteState, M_TICK, hex, MAX_POINTS, menOf,
   type Ruleset, type Command } from '../src/sim/index.ts'
 import { s1aDrill, s1aOrders } from '../src/scenarios/s1a-drill.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { data, cr, dataBytes, Sim } from './fx.ts'
+import { data, shipped as cr, dataBytes, Sim } from './fx.ts'
 import { buildSimData } from '../tools/build-sim-data.ts'
 import { formationField } from '../maps/formation-field.ts'
 
@@ -37,7 +37,7 @@ describe('S1a acceptance: golden hashes, replays, saves', () => {
     expect(dropped).toEqual(['no such formation'])
     expect(statuses.has(1)).toBe(true)              // B halted at the stream
     expect(shapes.size).toBeGreaterThanOrEqual(4)   // A: line, column, square, march
-    expect(w.f.men[0] + w.f.men[1] + w.f.men[2] + w.f.men[3]).toBe(87)
+    expect(menOf(w, 0)).toBe(387)
   })
   it('a replay from the log reproduces every hash; a changed command is caught at the next hash point', () => {
     expect(play(run.replay, data, cr, s1aDrill, run.hashes)).toBeNull()
@@ -167,7 +167,7 @@ describe('era genericity (decision 0015)', () => {
   it('another era: a two-company phalanx ruleset with its own shapes, paces and presets drills on the same engine', () => {
     const rs: Ruleset = {
       ...napoleonic, name: 'test: antiquity',
-      geometry: { companies: 2, files: 8, ranks: 4, fileSpacing: 0.9, rankSpacing: 1.0, minSpacing: 0.6, accordionGap: 0.7 },
+      geometry: { companies: 2, files: 8, ranks: 4, fileSpacing: 0.9, rankSpacing: 1.0, minSpacing: 0.6, accordionGap: 0.7, bins: 3 },
       pace: { slow: 0.8 }, q: { slow: { open: 1.2, light: 1.1, hard: 1.0 } },
       formations: {
         phalanx: { kind: 'line', pace: 'slow', closeAcross: true, place: g => [0, 1].map(c => ({ x: (c - 0.5) * g.files * g.fileSpacing, z: 0, rot: 0, face: 0 })) },

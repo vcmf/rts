@@ -1,13 +1,14 @@
-// The S1c scenarios (docs/plans/active/s1c-fire-morale.md): two lines exchange fire across open ground on
-// the formation field (the strip at z = −165, west of the stream), the second of lower quality. Each side's
+// The S1c scenarios (docs/plans/active/s1c-fire-morale.md): two lines of 400 exchange fire across open ground
+// on the formation field (centred at x −120, z 120, in the north-west, west of the wood; S1c-4 moved them
+// there from the southern strip, too narrow for a 93 m line), the second of lower quality. Each side's
 // rear is set, so a router runs away from the fight. `firefight` makes one at any range; `runFirefight` runs
 // it to the first rout (the calibration, tools/calibrate-fire.ts, and the tests). The calibration runs on
-// `levelled` data: the strip rolls (a rise at x ≈ −13 hides the lines from each other beyond about 140 m),
-// and the fire model's numbers are tuned apart from what the ground does to them.
+// `levelled` data: the field rolls (the ground can hide the lines from each other at long range), and the
+// fire model's numbers are tuned apart from what the ground does to them.
 import type { World, Scenario, SimData, Compiled } from '../sim/index.ts'
 import { issue, makeWorld, advanceTick, menOf, outOfFight } from '../sim/index.ts'
 
-export const FIGHT_Z = -165, FIGHT_X = -50
+export const FIGHT_Z = 120, FIGHT_X = -120, MEN = 400
 export const STRONG = 0.8, WEAK = 0.65
 const E = 1.5707963267948966
 
@@ -25,8 +26,8 @@ export function firefight(range: number, qa = STRONG, qb = WEAK): Scenario {
     name: scenarioName('s1c-firefight', range, qa, qb),
     setup(w: World) {
       setSides(w)
-      issue(w, { type: 'debug-spawn', side: 0, x: FIGHT_X - range / 2, z: FIGHT_Z, heading: E, shape: 'line', men: 100, quality: qa })
-      issue(w, { type: 'debug-spawn', side: 1, x: FIGHT_X + range / 2, z: FIGHT_Z, heading: -E, shape: 'line', men: 100, quality: qb })
+      issue(w, { type: 'debug-spawn', side: 0, x: FIGHT_X - range / 2, z: FIGHT_Z, heading: E, shape: 'line', men: MEN, quality: qa })
+      issue(w, { type: 'debug-spawn', side: 1, x: FIGHT_X + range / 2, z: FIGHT_Z, heading: -E, shape: 'line', men: MEN, quality: qb })
     },
   }
 }
@@ -45,23 +46,23 @@ export function runFirefight(data: SimData, cr: Compiled, seed: number, range: n
     advanceTick(w)
     const a = outOfFight(w.f.mstate[0]), b = outOfFight(w.f.mstate[1])   // a break: routing, or shattered at once
     if (a || b) { const i = a ? 0 : 1, M = cr.rs.morale, start = w.f.startMen[i]
-      return { first: i, tick: w.meta[0], lossA: 100 - menOf(w, 0), lossB: 100 - menOf(w, 1), termLosses: M.losses * (start - menOf(w, i)) / start, termRecent: M.recent * w.f.recent[i] / start } }
+      return { first: i, tick: w.meta[0], lossA: w.f.startMen[0] - menOf(w, 0), lossB: w.f.startMen[1] - menOf(w, 1), termLosses: M.losses * (start - menOf(w, i)) / start, termRecent: M.recent * w.f.recent[i] / start } }
   }
-  return { first: -1, tick: maxTicks, lossA: 100 - menOf(w, 0), lossB: 100 - menOf(w, 1), termLosses: 0, termRecent: 0 }
+  return { first: -1, tick: maxTicks, lossA: w.f.startMen[0] - menOf(w, 0), lossB: w.f.startMen[1] - menOf(w, 1), termLosses: 0, termRecent: 0 }
 }
 
-// three lines a side, BRIGADE_GAP apart (docs/plans/active/s1c2-morale-machine.md): the inner lines have both
-// flanks secured, the outer ones one; a break shocks its neighbours. The firefight's strip is on the map's
-// southern edge, too narrow for three; this band (x ≈ −60, z −105..30) is open, and the lines see each other
-// across it
-export const BRIGADE_X = -60, BRIGADE_Z = -35, BRIGADE_GAP = 40
+// three lines a side, BRIGADE_GAP apart centre to centre (a 93 m line and a 20 m interval;
+// docs/plans/active/s1c2-morale-machine.md): the inner lines have both flanks secured, the outer ones one; a
+// break shocks its neighbours. Three lines need 319 m: the field's western band (x −175..−75, z −170..150)
+// holds them, west of the wood, and the lines see each other across it
+export const BRIGADE_X = -125, BRIGADE_Z = -10, BRIGADE_GAP = 113
 export function brigade(range: number, qa = STRONG, qb = WEAK): Scenario {
   return {
     name: scenarioName('s1c-brigade', range, qa, qb),
     setup(w: World) {
       setSides(w)
       for (const [side, x, h, q] of [[0, BRIGADE_X - range / 2, E, qa], [1, BRIGADE_X + range / 2, -E, qb]])
-        for (let k = -1; k <= 1; k++) issue(w, { type: 'debug-spawn', side, x, z: BRIGADE_Z + k * BRIGADE_GAP, heading: h, shape: 'line', men: 100, quality: q })
+        for (let k = -1; k <= 1; k++) issue(w, { type: 'debug-spawn', side, x, z: BRIGADE_Z + k * BRIGADE_GAP, heading: h, shape: 'line', men: MEN, quality: q })
     },
   }
 }
