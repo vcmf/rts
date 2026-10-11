@@ -80,6 +80,7 @@ export interface MeleeDef {
 // a short-range cone. The shapes it fires from, a piece's arc, its reload and the crew that keeps it
 export interface RayDef {
   range: number                 // the farthest a piece aims, metres
+  step: number                  // metres the ball moves per step of its walk
   muzzle: number                // the muzzle's height above the ground, metres
   speed: number                 // m/s (sets the drop per metre of the flat trajectory)
   energy: number                // metres of travel the ball has, spent by flight, grazes and men struck
@@ -92,7 +93,9 @@ export interface RayDef {
   spread: number; short: number // keyed dispersion: across (radians, ±) and in range (a share, ±)
 }
 export interface ConeDef { range: number; half: number; hits: [number, number][] }   // inside range; half-angle; men struck per shot by range
-export interface ArtilleryDef { shapes: string[]; arc: number; reload: number; reloadJitter: number; crew: number; ray: RayDef; cone: ConeDef }
+// shapes it fires from; a piece's arc (half-angle, radians); reload seconds and spread; full crew per piece, and
+// the most a short crew may slow the reload (a factor); how far ahead of its detachment's front rank the piece stands
+export interface ArtilleryDef { shapes: string[]; arc: number; reload: number; reloadJitter: number; crew: number; crewSlow: number; ahead: number; ray: RayDef; cone: ConeDef }
 // a unit type (S1d-1): its block, its shapes and their change times. A formation is of one type for life
 export interface UnitType {
   geometry: Geometry
@@ -225,7 +228,10 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
   if (u.artillery) {
     const A = u.artillery, from = new Uint8Array(S)
     for (const n of A.shapes) { const k = names.indexOf(n); if (k < 0) throw new Error(`${at}: it fires from ${n}, not one of its shapes`); from[k] = 1 }
-    if (!(A.cone.range < A.ray.range && A.ray.speed > 0 && A.crew > 0 && A.cone.hits.every((p, k) => k === 0 || p[0] > A.cone.hits[k - 1][0]))) throw new Error(`${at}: artillery needs cone.range < ray.range, speed and crew > 0, and cone.hits ranges increasing`)
+    if (u.fires) throw new Error(`${at}: a type fires musketry or artillery, not both (they share a company's reload and target)`)
+    const R = A.ray, ok = A.cone.range < R.range && R.speed > 0 && A.crew > 0 && A.crewSlow >= 1 && A.arc > 0 && A.arc <= PI && R.step > 0 && R.energy > 0 && R.height > 0 && R.width > 0 &&
+      A.cone.hits.length > 0 && A.cone.hits.every((p, k) => k === 0 || p[0] > A.cone.hits[k - 1][0])
+    if (!ok) throw new Error(`${at}: artillery needs cone.range < ray.range; speed, crew, step, energy, height and width > 0; crewSlow ≥ 1; arc in (0, π]; and cone.hits not empty, its ranges increasing`)
     artillery = { from, cosArc: cos(A.arc), drop: 9.81 / (A.ray.speed * A.ray.speed) }
   }
   const own = [...shapes.flatMap(L => [L.pace, L.roadPace]), ...(charge ? [charge.approach, charge.pace] : [])]

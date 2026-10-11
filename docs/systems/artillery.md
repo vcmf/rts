@@ -53,14 +53,17 @@ step 11 casualties   the owed men fall
 - it is in the fight, not in melee, and its fire mode is at will.
 
 **Per piece** (a company with men):
-- **The target:** musketry's targeting (`chooseTarget`, `aimAt` in `fire.ts`), run with the battery's own arc
-  and range (`useReach`): every 0.5 s, staggered, the preferred target, else the current one, else the nearest
+- **The target:** musketry's targeting (`chooseTarget`, `aimAt` in `fire.ts`), passed the battery's own arc and
+  range (`reachOf`): every 0.5 s, staggered, the preferred target, else the current one, else the nearest
   enemy company in arc and range with a clear sight line. The fire step keeps a battery's targets: they are
   this step's.
 - **Friends:** it holds when a friendly block stands across any of its three rays to the company aimed at
   (`clearShare` < 1), and tries again in 0.5 s.
-- **Reload:** `reload × (1 ± reloadJitter)`, × `crew / men` when its detachment is short (at most 3×).
-- **The muzzle** stands 2 m ahead of the detachment's front rank.
+- **Reload:** `reload × (1 ± reloadJitter)`, × `crew / men` when its detachment is short (at most `crewSlow`).
+  Its first load at spawn is a keyed share of its own reload.
+- **The muzzle** stands `ahead` metres ahead of the detachment's front rank.
+- **One type, one fire:** a type has musketry (`fires`) or artillery, not both; they share a company's reload and
+  target, and the ruleset is refused otherwise.
 - **The shot:** inside `cone.range` of the company aimed at, the cone; beyond it, the ray.
 
 **The cone:**
@@ -70,27 +73,28 @@ step 11 casualties   the owed men fall
   the piece sees. Each man goes first to a formation weighted by its men there, then to a company of it
   (`oweByMen`).
 
-**The ray** (`ray`), in 2 m steps from the muzzle:
+**The ray** (`ray`), in `step` metre steps from the muzzle:
 - **The aim:** at the company's centre, turned across by up to `spread` and lengthened or shortened by up to
   `short` (keyed). The flat trajectory from `muzzle` metres up meets the ground at the aim point: its first
   graze.
 - **Each step:**
-  - **flight:** the height follows the trajectory; the step costs 2 m of energy;
+  - **flight:** the height follows the trajectory; the step costs its length in energy;
   - **a graze** (the ball meets the ground): where the ground ahead rises steeper than `bury`, the ball
     stops. Else it bounces, its slope becoming the ground's plus `restitution` of the difference, and loses
     `graze` metres of energy;
   - **striking men,** while the ball is no higher than `height` over the ground: each company block it cuts
     on the step loses `λ = chord × width × men/area × kill × min(1, 2 · energy / energy₀)`, drawn as an
     integer. `chord` is the step's length inside the block, grown by half the lane (`width`) so a ball
-    skimming the edge strikes the edge file. Each man struck costs `perMan` metres of energy.
+    skimming the edge strikes the edge file. Each man struck costs `perMan` metres of energy. The ball's line
+    on the ground is straight, so where it enters and leaves each block is found once per shot.
 - **It stops** when its energy is spent, it buries, or it leaves the map. It strikes every formation's blocks
   on its line but its own battery's: friendly fire beyond the target is real.
-- Only formations whose reach comes near the ball's line are tested (`G.reach`, as the fire step culls its
-  friendly-cover test).
+- Only formations whose reach (and half the lane) comes near the ball's line are tested (`G.reach`, as the fire
+  step culls its friendly-cover test).
 
 **Records** (per piece, hashed state):
 - `volleyTick` and `target`, as musketry's;
-- `shotKind` (none, ray, cone);
+- `shotKind` (none, ray, cone);   (they move with their pieces at a Face about, as the reload does)
 - `shotX`, `shotZ`: where the ball stopped, or the cone's aim point.
 
 The staff map draws a roundshot as a line from the piece to where it stopped and canister as a fan, each for a

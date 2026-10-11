@@ -38,14 +38,18 @@ if (!isMainThread) {
   console.log('case | minutes | men lost (p10 / median / p90) | a minute, until the break (median) | broke')
   for (const [kind, minutes] of RUNS) { const rs = of(kind, minutes); if (!rs.length) continue
     const l = rs.map(r => r.lost); console.log(`${kind} | ${minutes} | ${q(l, 0.1)} / ${q(l, 0.5)} / ${q(l, 0.9)} of ${INF} | ${rate(kind, minutes).toFixed(1)} | ${Math.round(100 * broke(kind, minutes))}%`) }
-  const all: [string, boolean][] = [
-    ['column: loses men at least 2× as fast as the line (5 minutes)', rate('column', 5) >= 2 * rate('line', 5)],
-    ['line: loses 4–15% in 10 minutes', med('line', 10) >= 0.04 * INF && med('line', 10) <= 0.15 * INF],
-    ['line: breaks in at most 20% in 10 minutes', broke('line', 10) <= 0.2],
-    ['column: breaks in at least 30% in 10 minutes', broke('column', 10) >= 0.3],
-    ['canister: loses at least 15% in 3 minutes', med('canister', 3) >= 0.15 * INF],
-    ['crest: a battalion hidden behind a crest loses under a quarter of the line in the open (10 minutes)', med('crest', 10) < 0.25 * Math.max(1, med('line', 10))],
-  ], checks = all.filter(c => !only || c[0].startsWith(only))
+  // each check names the cases it reads: with a case filter, only checks whose cases all ran are made
+  const all: [string, GunCase[], () => boolean][] = [
+    ['column: loses men at least 2× as fast as the line (5 minutes)', ['column', 'line'], () => rate('column', 5) >= 2 * rate('line', 5)],
+    ['line: loses 4–15% in 10 minutes', ['line'], () => med('line', 10) >= 0.04 * INF && med('line', 10) <= 0.15 * INF],
+    ['line: breaks in at most 20% in 10 minutes', ['line'], () => broke('line', 10) <= 0.2],
+    ['column: breaks in at least 30% in 10 minutes', ['column'], () => broke('column', 10) >= 0.3],
+    ['canister: loses at least 15% in 3 minutes', ['canister'], () => med('canister', 3) >= 0.15 * INF],
+    // concealment: the battery cannot see over the crest and does not fire (a ball carried over a crest onto men
+    // in the hollow is test/artillery.test.ts's)
+    ['crest: a battalion hidden behind a crest loses under a quarter of the line in the open (10 minutes)', ['crest', 'line'], () => med('crest', 10) < 0.25 * Math.max(1, med('line', 10))],
+  ]
+  const checks = all.filter(c => !only || c[1].every(k => k === only)).map(([name, , ok]) => [name, ok()] as [string, boolean])
   console.log('')
   for (const [name, ok] of checks) console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`)
   process.exit(checks.every(c => c[1]) ? 0 : 1)

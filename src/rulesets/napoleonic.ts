@@ -115,8 +115,8 @@ const battery: UnitType = {
   // 800 m with its grazes; canister inside 300 m (the research: 200–350 m). First guesses, tuned by
   // tools/calibrate-artillery.ts
   artillery: {
-    shapes: ['unlimbered'], arc: 0.35, reload: 25, reloadJitter: 0.2, crew: 12,
-    ray: { range: 800, muzzle: 1.0, speed: 430, energy: 900, graze: 60, restitution: 0.3, bury: 0.25, height: 1.9, width: 0.6, perMan: 25, kill: 0.09, spread: 0.012, short: 0.1 },
+    shapes: ['unlimbered'], arc: 0.35, reload: 25, reloadJitter: 0.2, crew: 12, crewSlow: 3, ahead: 2,
+    ray: { range: 800, step: 2, muzzle: 1.0, speed: 430, energy: 900, graze: 60, restitution: 0.3, bury: 0.25, height: 1.9, width: 0.6, perMan: 25, kill: 0.09, spread: 0.012, short: 0.1 },
     cone: { range: 300, half: 0.09, hits: [[0, 8], [100, 5], [200, 2], [300, 0.5]] },
   },
 }

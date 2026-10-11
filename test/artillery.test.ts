@@ -51,6 +51,14 @@ const diag = (s: number): [number, number] => [s / Math.SQRT2, s / Math.SQRT2]  
 // the centre of company c's block (a piece aims at a company's centre)
 const centre = (s: W, h: number, c = 0): [number, number] => { const G = blockGeometry(s.w), k = s.i(h) * s.w.cr.maxC + c; return [G.cx[k], G.cz[k]] }
 
+describe('the ruleset', () => {
+  it('refuses a type with both musketry and artillery, and canister with no table', () => {
+    const B = napoleonic.types.battery
+    expect(() => compileRuleset({ ...napoleonic, types: { ...napoleonic.types, battery: { ...B, fires: true } } })).toThrow(/not both/)
+    expect(() => compileRuleset(withGuns({}, { cone: { ...B.artillery!.cone, hits: [] } }))).toThrow(/cone.hits not empty/)
+  })
+})
+
 describe('who fires', () => {
   const pair = (shape: string) => { const s = new W(); const b = s.spawn(0, -100, -100, NE, shape, 'battery', 'at will'), t = s.spawn(1, 60, 60, SW, 'line'); return { s, b, t } }
   it('an unlimbered battery fires on an enemy in range; limbered, changing shape or holding fire it does not', () => {

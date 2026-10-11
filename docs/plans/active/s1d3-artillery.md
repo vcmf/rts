@@ -202,3 +202,28 @@ tick marching, 0.63 against 0.64 firing (no battery in the benches: the step onl
 slower in this session than when S1c-5 set the budgets; `test/soldiers.test.ts`'s marching frame, held at 10 ms
 under vitest, measured 10.2–11.7 ms in some runs here (run only on this branch; the release-world bench above
 shows no difference from main; issue #36).
+
+## Review
+
+**Round 1** (`/code-review high`, 10 findings, none severe; no second round):
+- **Fixed:**
+  - a type could have musketry and artillery both, which share a company's reload and target: the ruleset is
+    refused;
+  - the targeting's arc and range were a module global set by the last step to run: they are a parameter
+    (`reachOf`), so an aim asked from outside the steps gets the right one;
+  - a battery's first load at spawn was a share of musketry's reload: its own;
+  - a Face about moved the reload, the last volley and the target with their pieces, but not the shot records;
+  - the ball's cull ignored the half-lane its blocks are grown by;
+  - the ruleset check let an empty canister table through (a throw mid-tick), and did not check the arc, the
+    step, energy, height or width;
+  - the ball tested every company of every nearby formation at every step: where it enters and leaves each block
+    is found once per shot (the calibration is unchanged);
+  - the muzzle's offset, the step and the crew's slowest reload were engine constants: ruleset data (`ahead`,
+    `ray.step`, `crewSlow`);
+  - `tools/calibrate-artillery.ts` with a case named failed every check that read another case: each check names
+    the cases it reads.
+- **Kept:** the calibration's crest case measures concealment (the battery cannot see the battalion and does not
+  fire); a ball carried over a crest onto men in the hollow is the unit test's. The check's name says so.
+
+The refactor's results were checked against the firefight calibration's golden table, which is the same; every hash
+moved with the ruleset's new fields, and the goldens were regenerated.

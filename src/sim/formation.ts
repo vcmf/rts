@@ -640,7 +640,7 @@ function faceAbout(w: World, i: number): number {
     return ST_FACE_WET
   }
   // the companies' fire state goes with their men: reload, last volley, target, hits owed
-  for (const a of [f.reload, f.volleyTick, f.target, f.owed]) {
+  for (const a of [f.reload, f.volleyTick, f.target, f.owed, f.shotKind, f.shotX, f.shotZ]) {
     const was = a.slice(i * CS, i * CS + C)
     for (let c = 0; c < C; c++) a[i * CS + Math.floor(T.m[c * RF] / RF)] = was[c]
   }
