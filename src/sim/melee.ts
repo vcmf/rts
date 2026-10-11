@@ -121,8 +121,9 @@ export function meleeStep(w: World): void {
   for (let i = 0; i < N && !any; i++) if (f.alive[i] && (f.chPhase[i] || f.foe[i])) any = true
   if (!any) return
   const tick = w.meta[M_TICK] + 1, rev = w.scratch.reverse === true
-  // the fire step's geometry when it built one this tick (positions do not change between steps 8 and 10)
-  const S = scratchOf(w), G = w.scratch.fireGeoTick === tick && w.scratch.fireGeo ? w.scratch.fireGeo : blockGeometry(w)
+  // the fire step's geometry when it built one this tick (positions do not change between steps 8 and 10; a step
+  // between them that moves formations must rebuild it and stamp fireGeoTick again)
+  const S = scratchOf(w), G = w.scratch.fireGeoTick === tick ? w.scratch.fireGeo! : blockGeometry(w)
   S.shockTo.fill(-1); S.shockBy.fill(0)
   for (let n = 0; n < N; n++) { const i = rev ? N - 1 - n : n; if (f.alive[i] && f.chPhase[i]) chargeStep(w, G, S, i, tick) }
   S.foe0.set(f.foe)
@@ -253,6 +254,14 @@ function threatened(w: World, i: number, n: number): boolean {
   }
   return false
 }
+// any enemy charging type in the fight within refuge.alert of battalion i, whatever it is doing: a battalion does
+// not form back while cavalry is still near (a recoiling regiment rides 80 m, longer than refuge.hold, and halts)
+function nearby(w: World, i: number, n: number): boolean {
+  const f = w.f, A = w.cr.rs.melee.refuge.alert
+  for (let k = 0; k < n; k++) { const j = chargers[k]; if (f.side[j] === f.side[i]) continue
+    const dx = f.x[i] - f.x[j], dz = f.z[i] - f.z[j]; if (dx * dx + dz * dz <= A * A) return true }
+  return false
+}
 export function standingStep(w: World): void {
   const f = w.f, Q = w.cr.rs.melee.refuge, tick = w.meta[M_TICK] + 1, react = Math.round(Q.react * TICK_HZ), hold = Math.round(Q.hold * TICK_HZ)
   // the charging types in the fight, once; nothing to do with none and no battalion on the alert
@@ -264,19 +273,19 @@ export function standingStep(w: World): void {
     const U = typeOf(w, i); if (U.refuge < 0 || outOfFight(f.mstate[i]) || f.foe[i]) continue
     if (threatened(w, i, n)) {
       if (!f.alertAt[i] || tick - f.alertAt[i] > 1) f.alertSince[i] = tick   // the threat's unbroken run began now
-      if (!f.alertAt[i] || tick - f.alertAt[i] > hold) f.sqOff[i] = 0        // a new spell of threat
+      if (!f.alertAt[i] || tick - f.alertAt[i] > hold) f.refugeOff[i] = 0        // a new spell of threat
       f.alertAt[i] = tick
-    } else if (f.alertAt[i] && tick - f.alertAt[i] > hold) {
+    } else if (f.alertAt[i] && tick - f.alertAt[i] > hold && !nearby(w, i, n)) {
       // the spell is over: back into the shape it formed square from (from the square, or out of the change into
       // it), if it still has no orders
       const inRefuge = f.trans[i] ? f.tShape[i] === U.refuge : f.shape[i] === U.refuge
       if (f.autoFrom[i] && inRefuge && f.ordHead[i] < 0 && ordersFree(w) > 0) {
         const o = allocOrder(w, O_FORM); w.ord.shape[o] = f.autoFrom[i] - 1; appendOrder(w, i, o)
       }
-      f.alertAt[i] = 0; f.alertSince[i] = 0; f.autoFrom[i] = 0; f.sqOff[i] = 0
+      f.alertAt[i] = 0; f.alertSince[i] = 0; f.autoFrom[i] = 0; f.refugeOff[i] = 0
       continue
     }
-    if (!f.alertAt[i] || f.alertAt[i] !== tick || f.sqOff[i] || tick - f.alertSince[i] < react) continue
+    if (!f.alertAt[i] || f.alertAt[i] !== tick || f.refugeOff[i] || tick - f.alertSince[i] < react) continue
     const into = f.trans[i] ? f.tShape[i] : f.shape[i]
     if (into === U.refuge || ordersFree(w) < 1) continue
     clearOrders(w, i)

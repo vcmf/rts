@@ -104,7 +104,7 @@ function giveOrders(w: World, i: number, types: number[], append: boolean, fill:
 // shape it would form back into (a charge replaced by another order ends at the melee step)
 function playerOrdered(w: World, i: number): void {
   const f = w.f
-  f.autoFrom[i] = 0; if (f.alertAt[i]) f.sqOff[i] = 1
+  f.autoFrom[i] = 0; if (f.alertAt[i]) f.refugeOff[i] = 1
 }
 
 function apply(w: World, c: Command): string {

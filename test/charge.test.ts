@@ -209,14 +209,17 @@ describe('the square against cavalry (standing behaviour)', () => {
     expect(near(s => { const c = s.cav(0, -170, 0); s.order({ type: 'side', side: 0, x: 0, z: 1 }); s.order({ type: 'debug-morale', id: c, quality: 0 }); s.until(() => !s.out(c), 60); s.advance(40) })).toBe('line')
     expect(near(s => { const c = s.inf(0, -100, 0, 0); s.order({ type: 'move', id: c, points: [[0, 20]], append: false }) })).toBe('line')
   })
-  it('holds the square while a regiment stands near, then forms back into its shape once it has ridden off for hold', () => {
-    const s = new S(), ln = s.inf(0, 60, PI), cav = s.cav(0, -110, 0)
+  it('holds the square while a regiment is near, then forms back into its shape once it has ridden out of reach', () => {
+    const s = new S(), ln = s.inf(0, 60, PI), cav = s.cav(0, -110, 0), A = napoleonic.melee.refuge.alert
     s.order({ type: 'move', id: cav, points: [[0, 0]], append: false }); s.until(() => s.shape(ln) !== 'square', 150)
     s.advance(20); expect(s.shape(ln)).toBe('square')   // the regiment stands 60 m off
     s.order({ type: 'move', id: cav, points: [[0, -170]], append: false })
     s.until(() => s.f(cav, 'vz') > -napoleonic.melee.refuge.closing, 300); const away = s.t   // riding away
+    const dist = () => Math.hypot(s.x(ln) - s.x(cav), s.z(ln) - s.z(cav))
+    s.until(() => dist() <= A, 300); const out = s.t
+    expect(s.shape(ln)).toBe('square')   // riding away, but still near
     s.until(() => s.shape(ln) === 'square', 120)
-    expect(s.shape(ln)).toBe('square → line'); expect(Math.abs(s.t - away - napoleonic.melee.refuge.hold)).toBeLessThan(1.5)
+    expect(s.shape(ln)).toBe('square → line'); expect(Math.abs(s.t - Math.max(out, away + napoleonic.melee.refuge.hold))).toBeLessThan(1.5)
     s.until(() => s.busy(ln), 120); expect(s.shape(ln)).toBe('line')
   })
   it('a player\'s order stands it down for the rest of the threat', () => {

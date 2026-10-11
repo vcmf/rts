@@ -162,7 +162,7 @@ New columns:
 - the charge: `chTarget`, `chPhase`, `chRun`, `chGap`, `chUntil`, `blownUntil`;
 - melee: `foe`;
 - shocks: `shockIn`;
-- the square: `alertAt`, `alertSince`, `autoFrom`, `sqOff`.
+- the square: `alertAt`, `alertSince`, `autoFrom`, `refugeOff`.
 
 `SAVE_FORMAT` 8, `SIM_VERSION` `s1d.2`.
 
@@ -318,3 +318,18 @@ fire costs the regiment about 9 men. A line has 35 s of its 100 s change when th
   - the melee's and the volley's weighted loss allocation were two copies: one helper (`oweByMen`);
   - the standing step scanned every formation for every battalion: it collects the charging formations once;
   - the engine's `melee.square` named an era's formation (decision 0015): it is `melee.refuge`.
+
+**Round 2** (`/code-review high`, 7 findings, none severe; no third round):
+- **Fixed:**
+  - after a recoil the square formed back while the regiment was still riding off within reach (80 m at the
+    walk outlasts `refuge.hold`), then squared again when it halted: a battalion forms back only when no
+    enemy charging type is within `refuge.alert`;
+  - a panel order left a pending charge armed;
+  - the state column `sqOff` named the square (decision 0015): `refugeOff`;
+  - the melee doc had the stand-down flag and the forgotten shape the wrong way round.
+- **Kept:**
+  - a regiment that recoils while another enemy strikes it is held in that melee (it is being struck);
+  - the geometry's reuse stamp stays explicit in the fire step (a stamp inside `blockGeometry` would let a
+    test helper's build between ticks pass for the next tick's); the melee step says a step between 8 and 10
+    that moves formations must rebuild and stamp it;
+  - the striker's contact mask is computed with its men count (one helper for both).

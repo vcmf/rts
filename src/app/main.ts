@@ -39,7 +39,8 @@ async function main(): Promise<void> {
 
   // commands from the player: stamped, logged, applied at the next tick
   const external = (c: Command) => issue(w, c, log)
-  const forSelection = (make: (h: number) => Command) => { for (const i of selected) external(make(formationHandle(w, i))) }
+  // a panel order also disarms a pending charge (C)
+  const forSelection = (make: (h: number) => Command) => { charging = false; for (const i of selected) external(make(formationHandle(w, i))) }
   // hash points without section hashes: those would cost a second serialization each time
   const tick = () => { const r = advanceTick(w); layer.sync(0); dropped.push(...r.dropped); if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: [] }); for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i) }
 

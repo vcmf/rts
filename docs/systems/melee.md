@@ -130,10 +130,11 @@ with contagion, after relaxing (`morale.ts`).
   charge in seconds.
 - **Forming:** after `refuge.react` seconds of unbroken threat, a battalion not in its refuge and not changing
   into it drops its orders and forms it. The shape it came from is kept (`autoFrom`).
-- **Forming back:** when `refuge.hold` seconds pass with no threat, it forms back into that shape (from the
-  square, or out of the change into it), if it has no orders.
+- **Forming back:** when `refuge.hold` seconds pass with no threat and no enemy charging type is within
+  `refuge.alert` at all, it forms back into that shape (from the square, or out of the change into it), if it
+  has no orders.
 - **The player's order wins:** any order given during a spell of threat stands the behaviour down until the
-  spell ends, and forgets the shape (`sqOff`).
+  spell ends (`refugeOff`), and forgets the shape it would form back into (`autoFrom`).
 
 The step is skipped when no charging type is in the fight and no battalion is on the alert.
 
