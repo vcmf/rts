@@ -1,11 +1,11 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-11
 ---
 
 # Plan: W3, the water-data bake (depth, shore distance, flow)
 
-Water phase W3 (`docs/plans/active/prototype-plan.md` §4.3), after W2 (`docs/plans/active/w2-river-banks.md`) in
+Water phase W3 (`docs/plans/active/prototype-plan.md` §4.3), after W2 (`docs/plans/done/w2-river-banks.md`) in
 Track E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/stylized-water.md` §2.6, §4.3.
 
 ## Problem

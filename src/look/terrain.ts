@@ -35,7 +35,7 @@ const TILE_W = D.spec.tile, TILE_SUB = D.spec.tileSub, FAR_W = D.spec.far, FAR_S
 // heights come from the look data: the tile from the heightfield (decision 0012), the far ring from its own nodes
 export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: SpanGrid): Terrain {
   // DETAIL: the detail layer (src/look/shaders/painter.glsl), on the terrain only. BANKN: the tile shades the river's
-  // banks with the fine bank normals (docs/plans/active/w2-river-banks.md). The water data (W3, uWater) is bound by its
+  // banks with the fine bank normals (docs/plans/done/w2-river-banks.md). The water data (W3, uWater) is bound by its
   // debug views (WATER_DEBUG, src/look/main.ts)
   const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView'], samplers: ['uBankN', 'uWater'], defines: ['#define DETAIL', '#define BANKN'] })
   // the bank normals: x, z of the normal, the weight; the uncovered texels a level normal of no weight (the vertex

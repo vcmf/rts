@@ -1,4 +1,4 @@
-// The water data's checks (docs/plans/active/w3-water-data.md, W3): the bake in the committed look data against the
+// The water data's checks (docs/plans/done/w3-water-data.md, W3): the bake in the committed look data against the
 // authoring step, and the page's texture against the bake.
 //
 //   node tools/water-check.mjs                          the bake (Node only)

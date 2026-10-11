@@ -42,7 +42,7 @@ export function blurMask(g: CanvasRenderingContext2D, N: number, sigma: number, 
   g.putImageData(img, X0, Y0)
 }
 
-// the water data (docs/plans/active/w3-water-data.md, uWater) is bound by its debug views (WATER_DEBUG, src/look/main.ts)
+// the water data (docs/plans/done/w3-water-data.md, uWater) is bound by its debug views (WATER_DEBUG, src/look/main.ts)
 export function buildWater(scene: Scene, mats: Materials): Water {
   // reflection mask: crown discs of trees near the stream
   const reflCanvas = document.createElement('canvas'); reflCanvas.width = reflCanvas.height = REFL_N

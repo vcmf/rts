@@ -30,11 +30,11 @@ export interface Spec {
   // `lines` pixels tall at every zoom; the anti-tiling index varies over `index` metres of the world; the grain's
   // deviation is `amp` times the texture's own; the footprint's incidence never counts below `minCos`
   detail: { px: number; lines: number; index: number; amp: number; minCos: number }
-  // the fine bank normals (docs/plans/active/w2-river-banks.md): texels of `texel` m over the tile, covering the
+  // the fine bank normals (docs/plans/done/w2-river-banks.md): texels of `texel` m over the tile, covering the
   // river's corridor out to `reach` m from its centre line, faded out over the last `fade` m, and over the last
   // `edge` m before the tile's edge (where the apron and the far ring shade with their vertex normals)
   bank: { texel: number; reach: number; fade: number; edge: number }
-  // the water data (docs/plans/active/w3-water-data.md): texels of `texel` m over the tile; the depth (the water level
+  // the water data (docs/plans/done/w3-water-data.md): texels of `texel` m over the tile; the depth (the water level
   // minus the ground, signed) stored over depth[0]..depth[1] m, the shore distance over ±sdf m
   water: { texel: number; depth: [number, number]; sdf: number }
 }

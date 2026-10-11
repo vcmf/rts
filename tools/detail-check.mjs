@@ -234,7 +234,7 @@ function tiling(url, dir) {
   return { ok: true, lines: [`tiling: ${views.length} images and answers.json in ${tdir}`, `  debug view, widest zoom: the largest autocorrelation along x at lags ${Math.round(TILE_PX / 2)}–${Math.min(Math.round(TILE_PX * 2), w - 256)} px (the shorter repeats of the smaller octave; the frame is too narrow for the rest) is ${best.toFixed(3)} (at ${at} px); reported, not gated`] }
 }
 
-// ---------- banks (W2, docs/plans/active/w2-river-banks.md) ----------
+// ---------- banks (W2, docs/plans/done/w2-river-banks.md) ----------
 // The shading normal the terrain draws at the river's banks (the debug view DETAIL_DEBUG_N, the terrain alone), at
 // points along both banks of the play area's sharpest bend, against the authored surface's normal (central
 // differences on the authoring step's height, the bank map's own rule). Pass, at the closest and a middle zoom: the

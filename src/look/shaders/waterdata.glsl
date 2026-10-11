@@ -1,4 +1,4 @@
-// The water data (docs/plans/active/w3-water-data.md, src/look/world/water-data.ts): depth, shore distance and flow
+// The water data (docs/plans/done/w3-water-data.md, src/look/world/water-data.ts): depth, shore distance and flow
 // over the tile. W3 reads it in the debug views only (WATER_DEBUG); without that define nothing here is compiled
 #ifdef WATER_DEBUG
 uniform sampler2D uWater;uniform float uWaterView;

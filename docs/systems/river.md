@@ -12,8 +12,8 @@ One meandering channel generated once at load into dense per-sample arrays. Ever
 `riverQuery()`; nothing re-derives the river from a formula. Built in W1 and W1b
 (`docs/plans/done/w1-river-shape.md`, `docs/plans/done/w1b-river-width.md`) in the prototype, ported to the look
 page in L0 (generated offline, `src/look/world/author.ts`), with cut banks and point bars since W2
-(`docs/plans/active/w2-river-banks.md`, the look page only), and the water data baked for the water's shaders since
-W3 (`docs/plans/active/w3-water-data.md`).
+(`docs/plans/done/w2-river-banks.md`, the look page only), and the water data baked for the water's shaders since
+W3 (`docs/plans/done/w3-water-data.md`).
 
 ## Goals / non-goals
 

@@ -149,7 +149,7 @@ const project = (k: number, tx: number, ty: number) => {
 // the water data's debug views on the tile's terrain and the water (src/look/shaders/waterdata.glsl): 0 off, 1 depth,
 // 2 shore distance, 3 flow, 4 and 5 the raw texels; sab: the page check's sabotage (the texture read upside down)
 const WATER_VIEWS = ['off', 'depth', 'sdf', 'flow', 'raw', 'alpha']
-// The water data's texture (docs/plans/active/w3-water-data.md) is made on the first view: until W4 nothing else reads it
+// The water data's texture (docs/plans/done/w3-water-data.md) is made on the first view: until W4 nothing else reads it
 let waterData: RawTexture | null = null
 const waterView = (v: number, sab = false) => {
   if (!WATER_VIEWS[v]) throw new Error(`unknown water view ${v}`)

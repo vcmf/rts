@@ -6,7 +6,7 @@ precision highp float;varying vec3 vW,vN;varying float vRiver;
 uniform sampler2D uRiverMask;
 #endif
 #if defined(BANKN)&&!defined(BANKN_OFF)
-uniform sampler2D uBankN;   // the fine bank normals (docs/plans/active/w2-river-banks.md): x, z, weight
+uniform sampler2D uBankN;   // the fine bank normals (docs/plans/done/w2-river-banks.md): x, z, weight
 #endif
 vec3 albedo(vec3 wp,vec3 n){
   float n1=G(wp.xz/150.0).g,n2=G(wp.xz/53.0+0.31).g,n3=G(wp.xz/19.0+0.7).g;

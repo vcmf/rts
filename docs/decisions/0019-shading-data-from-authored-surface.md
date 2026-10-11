@@ -9,7 +9,7 @@ date: 2026-10-11
 
 Decision 0012 makes one heightfield (1.79 m cells on the tile) the authority for height: the meshes, the
 simulation, placement and checks read it. The river's banks and shoreline need detail the 1.79 m grid cannot hold:
-W2's bank normals (a scarp narrower than a cell) and W3's water data (the shoreline, `docs/plans/active/w3-water-data.md`).
+W2's bank normals (a scarp narrower than a cell) and W3's water data (the shoreline, `docs/plans/done/w3-water-data.md`).
 Both are baked at 0.5 m. Baked from the heightfield, they could only repeat its rounding; baked from the authoring
 surface `H()`, they disagree with the drawn mesh within a cell: 2.4% of the water data's wet texels have the drawn
 ground above the water, at most 0.56 m from the shore.
@@ -32,4 +32,4 @@ surface finer than the heightfield, or these bakes fall back to the heightfield'
 Baking from the heightfield (no detail beyond its cells: the scarps and the shoreline stay stair-stepped); a finer
 heightfield on the tile (4× the data and the triangles for a detail only the river needs).
 
-See: decision 0012, `docs/plans/active/w2-river-banks.md`, `docs/plans/active/w3-water-data.md`.
+See: decision 0012, `docs/plans/done/w2-river-banks.md`, `docs/plans/done/w3-water-data.md`.
