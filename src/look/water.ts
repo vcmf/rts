@@ -42,6 +42,7 @@ export function blurMask(g: CanvasRenderingContext2D, N: number, sigma: number, 
   g.putImageData(img, X0, Y0)
 }
 
+// the water data (docs/plans/active/w3-water-data.md, uWater) is bound by its debug views (WATER_DEBUG, src/look/main.ts)
 export function buildWater(scene: Scene, mats: Materials): Water {
   // reflection mask: crown discs of trees near the stream
   const reflCanvas = document.createElement('canvas'); reflCanvas.width = reflCanvas.height = REFL_N
@@ -70,7 +71,7 @@ export function buildWater(scene: Scene, mats: Materials): Water {
   const mesh = new Mesh('water', scene), vd = new VertexData(); vd.positions = pos; vd.uvs = uv; vd.indices = idx
   const n: number[] = []; VertexData.ComputeNormals(pos, idx, n); vd.normals = n; vd.applyToMesh(mesh)
   mesh.setVerticesData('aDepth', new Float32Array(dep), false, 1)
-  const waterMat = mats.make('water', WAT_VS, WAT_FS, { attributes: ['position', 'uv', 'aDepth'], samplers: ['uRefl'] }); mesh.material = waterMat; waterMat.backFaceCulling = false
+  const waterMat = mats.make('water', WAT_VS, WAT_FS, { attributes: ['position', 'uv', 'aDepth'], uniforms: ['uWaterView'], samplers: ['uRefl', 'uWater'] }); mesh.material = waterMat; waterMat.backFaceCulling = false
 
   const finish = (sc: Scene) => {
     const box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity]

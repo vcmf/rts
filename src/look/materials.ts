@@ -7,6 +7,7 @@ import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import PAINTER from './shaders/painter.glsl?raw'
+import WATERDATA from './shaders/waterdata.glsl?raw'
 import { D } from './spec.ts'
 
 // the panel's state; t is the clock (cloud drift, water flow)
@@ -18,8 +19,12 @@ export const PAL = { sun: new Color3(1.00, 0.84, 0.60), shadow: new Color3(0.45,
 export const CLEAR = new Color4(PAL.hazeCool.r, PAL.hazeCool.g, PAL.hazeCool.b, 1)
 
 const MARK = '#include<painter>'
-// every painted fragment shader includes the painter; a replacer function keeps `$` in the GLSL literal
-export const withPainter = (src: string): string => { if (!src.includes(MARK)) throw new Error(`a painted shader without ${MARK}`); return src.replace(MARK, () => PAINTER) }
+// every painted fragment shader includes the painter, and may include the water data's reads (#include<waterdata>);
+// a replacer function keeps `$` in the GLSL literal
+export const withPainter = (src: string): string => {
+  if (!src.includes(MARK)) throw new Error(`a painted shader without ${MARK}`)
+  return src.replace(MARK, () => PAINTER).replace('#include<waterdata>', () => WATERDATA)
+}
 
 const COMMON = ['uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uSunCol', 'uShadowCol', 'uHazeCool', 'uHazeWarm', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA']
 

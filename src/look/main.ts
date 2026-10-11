@@ -5,6 +5,7 @@ import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Engine } from '@babylonjs/core/Engines/engine.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
+import type { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js'
@@ -25,6 +26,8 @@ import { axisX, baseH } from './world/author.ts'
 import { checkLookData, decodeLook } from './world/data.ts'
 import { buildTerrain } from './terrain.ts'
 import { buildWater } from './water.ts'
+import { spanTexture } from './span-texture.ts'
+import { WATER_FILL } from './world/water-data.ts'
 import { Lab } from './lab.ts'
 
 declare global { interface Window { __T0?: number } }
@@ -143,6 +146,20 @@ const project = (k: number, tx: number, ty: number) => {
   camera.unfreezeProjectionMatrix()
   if (k !== 1 || tx || ty) camera.freezeProjectionMatrix(camera.getProjectionMatrix(true).multiply(Matrix.FromValues(k, 0, 0, 0, 0, k, 0, 0, 0, 0, 1, 0, tx, ty, 0, 1)))
 }
+// the water data's debug views on the tile's terrain and the water (src/look/shaders/waterdata.glsl): 0 off, 1 depth,
+// 2 shore distance, 3 flow, 4 and 5 the raw texels; sab: the page check's sabotage (the texture read upside down)
+const WATER_VIEWS = ['off', 'depth', 'sdf', 'flow', 'raw', 'alpha']
+// The water data's texture (docs/plans/active/w3-water-data.md) is made on the first view: until W4 nothing else reads it
+let waterData: RawTexture | null = null
+const waterView = (v: number, sab = false) => {
+  if (!WATER_VIEWS[v]) throw new Error(`unknown water view ${v}`)
+  if (v > 0 && !waterData) {
+    const t0 = performance.now(); waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData')
+    for (const m of [terrain.terrainMat, water.waterMat]) m.setTexture('uWater', waterData)
+    Object.assign(window, { __waterTexMs: performance.now() - t0 })
+  }
+  for (const m of [terrain.terrainMat, water.waterMat]) { m.setDefine('#define WATER_DEBUG', v > 0); m.setDefine('#define WATER_SAB_FLIP', sab); m.setFloat('uWaterView', v) }
+}
 const paintGrain = mats.grain, paintMean = mats.grainMean
 let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | null = null
 const hidden: Mesh[] = []
@@ -173,12 +190,18 @@ Object.assign(window, { __look: {
   quarter: (i: number | null, j = 0) => i === null ? project(1, 0, 0) : project(2, i === 0 ? 1 : -1, j === 0 ? -1 : 1),
   // the image moved by (dx, dy) pixels (right, down) with nothing else changed: the shimmer check's sub-pixel shift
   shift: (dx: number, dy: number) => project(1, 2 * dx / engine.getRenderWidth(), -2 * dy / engine.getRenderHeight()),
+  waterView,
 } })
 
 const params = new URLSearchParams(location.search)
 // ?detail=l0: the terrain with the L0 grain (compare by eye; the goldens of main against it match)
 if (params.get('detail') === 'l0') setDetail(['DETAIL_L0'])
 else if (params.has('detail')) throw new Error(`?detail must be l0, not ${params.get('detail')}`)
+// ?water=depth|sdf|flow: the water data's debug views
+if (params.has('water')) {
+  const v = WATER_VIEWS.indexOf(params.get('water') ?? ''); if (v < 1 || v > 3) throw new Error(`?water must be depth, sdf or flow, not ${params.get('water')}`)
+  waterView(v)
+}
 // ?bench (docs/plans/active/l2-detail.md): fixed cameras, the result shown with a link to save it, and in
 // window.__bench for tools/bench-look.mjs
 if (params.has('bench')) {

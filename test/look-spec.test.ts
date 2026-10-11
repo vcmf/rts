@@ -33,6 +33,8 @@ describe('world spec', () => {
     ['the occlusion ring past the heightfield margin', s => { s.aoRing = 60 }, /occlusion ring/],
     ['a bake over the min-spec texture size', s => { s.sizes.reflMask = 16384 }, /min-spec/],
     ['sun depth range out of order', s => { s.depth.near = 2000 }, /depth range/],
+    ['water texels not dividing the tile', s => { s.water.texel = 0.3 }, /water: the tile/],
+    ['a water depth range without the shore', s => { s.water.depth = [0.5, 2.5] }, /water: the depth range/],
   ]
   for (const [name, f, msg] of cases) it(`throws: ${name}`, () => { expect(() => derive(with_(f))).toThrow(msg) })
   it('sizes the shadow map at the texel target on the ground, and refuses one over min-spec', () => {
@@ -74,6 +76,7 @@ describe('look data', () => {
     expect(() => checkLookData(derive(SPEC), d)).not.toThrow()
     expect(() => checkLookData(derive(with_(s => { s.aoMargin = 60; s.aoRing = 60 })), d)).toThrow(/heightfield .* nodes/)
     expect(() => checkLookData(derive(with_(s => { s.far = 2600 + 2 * 2600 / 182; s.farSub = 184 })), d)).toThrow(/far ring/)
+    expect(() => checkLookData(derive(with_(s => { s.water.texel = 1 })), d)).toThrow(/water data/)
   })
   it('the committed file is what the authoring step builds (else run node tools/build-look-data.ts)', () => {
     expect(Buffer.compare(fs.readFileSync(LOOK_FILE), Buffer.from(buildLookData()))).toBe(0)
