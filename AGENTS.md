@@ -39,8 +39,8 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
   negative tests of the page checks: `node tools/check-negatives.mjs`.
 - Look page bench and readability guard (built page, `npx vite preview`): `node tools/bench-look.mjs <url>`
   (`?bench` in a browser), `node tools/guard.mjs <url> [--base <url>]`, the terrain detail checks
-  `node tools/detail-check.mjs <url> --selftest`, the water data's `node tools/water-check.mjs [<url>] --selftest`;
-  see their headers.
+  `node tools/detail-check.mjs <url> --selftest`, the water data's `node tools/water-check.mjs [<url>] --selftest`,
+  the painted water's `node tools/water-look-check.mjs <url> --selftest`; see their headers.
 - Docs check: `node tools/check-docs.mjs` (every doc path resolves, front matter, decision numbers).
 - CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint,
   typecheck, `check:data`, `check:docs`, Vitest, build. On PRs into `epic/**` and on all those pushes, Vitest

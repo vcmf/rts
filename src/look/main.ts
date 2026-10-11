@@ -5,7 +5,6 @@ import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Engine } from '@babylonjs/core/Engines/engine.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
-import type { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js'
@@ -23,11 +22,11 @@ import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
 import { D, checkGround } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
-import { checkLookData, decodeLook } from './world/data.ts'
+import { checkLookData, decodeLook, unpackSpans } from './world/data.ts'
 import { buildTerrain } from './terrain.ts'
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
-import { WATER_FILL } from './world/water-data.ts'
+import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
 
 declare global { interface Window { __T0?: number } }
@@ -53,8 +52,15 @@ scene.clearColor = CLEAR
 
 const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0))
 const keptGrains = new Set([mats.grain])   // grains the look tools switch back to (window.__look.grain): never disposed
-const terrain = buildTerrain(scene, mats, look.far, look.bank)
-const water = buildWater(scene, mats)
+// the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
+const waterT0 = performance.now(), waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData'), waterTexMs = performance.now() - waterT0
+const terrain = buildTerrain(scene, mats, look.far, look.bank, waterData)
+// the page's options (?watersab, ?detail, ?water, ?bench: below)
+const params = new URLSearchParams(location.search)
+// ?watersab=nodive: the band check's sabotage (tools/water-look-check.mjs), the ribbon's columns never dive under the banks
+const waterSabParam = params.get('watersab')
+if (waterSabParam !== null && waterSabParam !== 'nodive') throw new Error(`?watersab must be nodive, not ${waterSabParam}`)
+const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }, waterSabParam !== 'nodive')
 const nature = buildNature(scene, mats, water.reflAdd)
 water.finish(scene)
 const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy)
@@ -124,7 +130,7 @@ Object.assign(window, {
   __proto: { S, scene, camera, buildPost: () => post.build(), play: D.spec.play },
   B: { Vector3, Matrix, DynamicTexture, VertexBuffer },
   // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring formulas the river check compares with
-  scene, engine, camera, apron: terrain.apron, RIVER: { ...RIVER, axisX }, H: groundAt, baseH, riverQuery, lerpA, wetEdges, wetEdgeAt, bankReachAt, BAND: D.band, PLAY: D.spec.play, SMW: D.spec.tile, TSUB: D.spec.tileSub, MASKN: D.spec.sizes.riverMask, SM_FADE_M: D.spec.shadowFade, SPEC: D.spec,
+  scene, engine, camera, apron: terrain.apron, __waterTexMs: waterTexMs, RIVER: { ...RIVER, axisX }, H: groundAt, baseH, riverQuery, lerpA, wetEdges, wetEdgeAt, bankReachAt, BAND: D.band, PLAY: D.spec.play, SMW: D.spec.tile, TSUB: D.spec.tileSub, MASKN: D.spec.sizes.riverMask, SM_FADE_M: D.spec.shadowFade, SPEC: D.spec,
   tileGround: terrain.tileGround, farGround: terrain.farGround, farTerrainMat: terrain.farTerrainMat, riverMask: terrain.riverMask, riverMaskCanvas: terrain.riverMaskCanvas,
   groups: nature.groups, FAR: nature.far, KEEP_CLEAR: nature.KEEP_CLEAR, touchesZone: nature.touchesZone, placeable: nature.placeable, footprint: nature.footprint,
   lightCam: bakes.lightCam, shadowRT: bakes.shadowRT,
@@ -134,12 +140,16 @@ Object.assign(window, {
 // and the detail layer's switches
 const lab = new Lab(scene, mats)
 const passes = { terrain: [terrain.tileGround, terrain.farGround, terrain.apron], scatter: scene.meshes.filter((m): m is Mesh => m instanceof Mesh && m.thinInstanceCount > 0), water: [water.mesh], post: () => post.passes }
-const terrainMats = [terrain.terrainMat, terrain.farTerrainMat, terrain.hillMat]
+const terrainMats = [terrain.terrainMat, terrain.farTerrainMat, terrain.hillMat], waterMats = [water.waterMat, water.groundMat]
 // the terrain's variants (src/look/shaders/painter.glsl): the L0 grain, the debug view, the checks' sabotages
 const DETAIL_DEFINES = ['DETAIL_L0', 'DETAIL_DEBUG', 'DETAIL_DEBUG_INC', 'DETAIL_DEBUG_N', 'DETAIL_SAB_IMPLICIT', 'DETAIL_SAB_STEP', 'BANKN_OFF']
+// the water's materials take the two that change the shore band (it paints with the terrain's paint() and normals).
+// On WebGL1 the L0 grain stays on whatever is asked (the detail layer needs GLSL ES 3.00: src/look/materials.ts)
 const setDetail = (on: string[]) => {
   for (const d of on) if (!DETAIL_DEFINES.includes(d)) throw new Error(`unknown detail define ${d}`)
-  for (const m of terrainMats) for (const d of DETAIL_DEFINES) m.setDefine(`#define ${d}`, on.includes(d))
+  const set = (d: string) => on.includes(d) || (d === 'DETAIL_L0' && mats.webgl1)
+  for (const m of terrainMats) for (const d of DETAIL_DEFINES) m.setDefine(`#define ${d}`, set(d))
+  for (const m of waterMats) for (const d of ['DETAIL_L0', 'BANKN_OFF']) m.setDefine(`#define ${d}`, set(d))
 }
 // the camera's projection, then in clip space x' = k·x + tx·w, y' = k·y + ty·w (k 1, no offset: the camera's own)
 const project = (k: number, tx: number, ty: number) => {
@@ -147,18 +157,28 @@ const project = (k: number, tx: number, ty: number) => {
   if (k !== 1 || tx || ty) camera.freezeProjectionMatrix(camera.getProjectionMatrix(true).multiply(Matrix.FromValues(k, 0, 0, 0, 0, k, 0, 0, 0, 0, 1, 0, tx, ty, 0, 1)))
 }
 // the water data's debug views on the tile's terrain and the water (src/look/shaders/waterdata.glsl): 0 off, 1 depth,
-// 2 shore distance, 3 flow, 4 and 5 the raw texels; sab: the page check's sabotage (the texture read upside down)
-const WATER_VIEWS = ['off', 'depth', 'sdf', 'flow', 'raw', 'alpha']
-// The water data's texture (docs/plans/active/w3-water-data.md) is made on the first view: until W4 nothing else reads it
-let waterData: RawTexture | null = null
+// 2 shore distance, 3 flow, 4 and 5 the raw texels, 6 the surface (the water white); sab: the page check's sabotage
+// (the texture read upside down)
+const WATER_VIEWS = ['off', 'depth', 'sdf', 'flow', 'raw', 'alpha', 'surface']
+const dataMats = [terrain.terrainMat, ...waterMats]
 const waterView = (v: number, sab = false) => {
   if (!WATER_VIEWS[v]) throw new Error(`unknown water view ${v}`)
-  if (v > 0 && !waterData) {
-    const t0 = performance.now(); waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData')
-    for (const m of [terrain.terrainMat, water.waterMat]) m.setTexture('uWater', waterData)
-    Object.assign(window, { __waterTexMs: performance.now() - t0 })
-  }
-  for (const m of [terrain.terrainMat, water.waterMat]) { m.setDefine('#define WATER_DEBUG', v > 0); m.setDefine('#define WATER_SAB_FLIP', sab); m.setFloat('uWaterView', v) }
+  for (const m of dataMats) { m.setDefine('#define WATER_DEBUG', v > 0); m.setDefine('#define WATER_SAB_FLIP', sab); m.setFloat('uWaterView', v) }
+}
+// the water surface's checks (tools/water-look-check.mjs): their sabotages (src/look/shaders/water.frag, terrain.frag),
+// and the tile's ground drawn with the water's shader (the seam check)
+const WATER_SABS = ['WATER_SAB_OWN', 'WATER_SAB_TERRAIN', 'WATER_SAB_FLAT', 'WATER_SAB_STEP']
+const waterSab = (on: string[]) => {
+  for (const d of on) if (!WATER_SABS.includes(d)) throw new Error(`unknown water sabotage ${d}`)
+  for (const m of dataMats) for (const d of WATER_SABS) m.setDefine(`#define ${d}`, on.includes(d))
+}
+const groundAs = (kind: 'terrain' | 'water') => { terrain.tileGround.material = kind === 'water' ? water.groundMat : terrain.terrainMat }
+// the water data at a point, read bilinearly as the GPU reads it (the band check measures the drawn surfaces against it)
+let waterBytes: Uint8Array | null = null
+const waterAt = (x: number, z: number) => {
+  waterBytes ??= unpackSpans(look.water, WATER_FILL)
+  const g = look.water
+  return decodeWater(...sampleRGBA(waterBytes, g.n, g.cell, g.x0, g.z0, x, z))
 }
 const paintGrain = mats.grain, paintMean = mats.grainMean
 let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | null = null
@@ -181,7 +201,7 @@ Object.assign(window, { __look: {
   // the terrain alone (and the lab's hill), or everything; the finishing passes on or off (off: the frame is the
   // terrain's own output, as the debug view needs)
   terrainOnly: (on: boolean) => {
-    if (on) for (const m of scene.meshes) { if (m instanceof Mesh && m.isEnabled() && !terrainMats.includes(m.material as never)) { m.setEnabled(false); hidden.push(m) } }
+    if (on) for (const m of scene.meshes) { if (m instanceof Mesh && m.isEnabled() && !terrainMats.includes(m.material as never) && m !== terrain.tileGround) { m.setEnabled(false); hidden.push(m) } }
     else { for (const m of hidden) m.setEnabled(true); hidden.length = 0 }
   },
   finishing: (on: boolean) => on ? post.build() : post.clear(),
@@ -190,10 +210,9 @@ Object.assign(window, { __look: {
   quarter: (i: number | null, j = 0) => i === null ? project(1, 0, 0) : project(2, i === 0 ? 1 : -1, j === 0 ? -1 : 1),
   // the image moved by (dx, dy) pixels (right, down) with nothing else changed: the shimmer check's sub-pixel shift
   shift: (dx: number, dy: number) => project(1, 2 * dx / engine.getRenderWidth(), -2 * dy / engine.getRenderHeight()),
-  waterView,
+  waterView, waterSab, groundAs, waterAt,
 } })
 
-const params = new URLSearchParams(location.search)
 // ?detail=l0: the terrain with the L0 grain (compare by eye; the goldens of main against it match)
 if (params.get('detail') === 'l0') setDetail(['DETAIL_L0'])
 else if (params.has('detail')) throw new Error(`?detail must be l0, not ${params.get('detail')}`)

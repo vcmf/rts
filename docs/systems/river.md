@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-11
-code: [prototypes/painted-cinematic.html, src/look/river.ts, src/look/world/author.ts, tools/build-look-data.ts, src/look/terrain.ts, tools/river-check.js, tools/render-check.js, tools/detail-check.mjs, src/look/world/water-data.ts, src/look/shaders/waterdata.glsl, tools/water-check.mjs]
+code: [prototypes/painted-cinematic.html, src/look/river.ts, src/look/world/author.ts, tools/build-look-data.ts, src/look/terrain.ts, tools/river-check.js, tools/render-check.js, tools/detail-check.mjs, src/look/world/water-data.ts, src/look/shaders/waterdata.glsl, tools/water-check.mjs, src/look/water.ts, src/look/shaders/water.frag, src/look/shaders/shore.glsl, tools/water-look-check.mjs]
 decisions: [0004-lowland-meander-river, 0012-heightfield-authority, 0019-shading-data-from-authored-surface]
 ---
 
@@ -12,16 +12,17 @@ One meandering channel generated once at load into dense per-sample arrays. Ever
 `riverQuery()`; nothing re-derives the river from a formula. Built in W1 and W1b
 (`docs/plans/done/w1-river-shape.md`, `docs/plans/done/w1b-river-width.md`) in the prototype, ported to the look
 page in L0 (generated offline, `src/look/world/author.ts`), with cut banks and point bars since W2
-(`docs/plans/active/w2-river-banks.md`, the look page only), and the water data baked for the water's shaders since
-W3 (`docs/plans/active/w3-water-data.md`).
+(`docs/plans/done/w2-river-banks.md`, the look page only), the water data baked for the water's shaders since
+W3 (`docs/plans/done/w3-water-data.md`), and the painted water, its shoreline from that data, since W4
+(`docs/plans/active/w4-water-surface.md`).
 
 ## Goals / non-goals
 
 - **Goals:** bends that turn back on themselves; visibly varying width (4–11 m, stretches differ);
   pools at bends and riffles between them; a flat floodplain in a valley; water level that never
   rises downstream; nothing in the water except stones (`docs/art-bible.md` §6c).
-- **Non-goals (later):** the shoreline where the water meets the bank and the painted water shader (W4);
-  river networks, ponds and dams (W6).
+- **Non-goals (later):** the banks beyond the shore band (wet band, bare cut banks, gravel bars, reeds), rocks,
+  weirs, fords and the seasons (W5); river networks, ponds and dams (W6, from the map format).
 
 ## Design
 
@@ -56,13 +57,26 @@ W3 (`docs/plans/active/w3-water-data.md`).
   the authored height; its dry side is the height above the water), the signed distance to the shoreline (exact: the
   distance to the shoreline's segments, each crossing found by bisection on the authored surface, since a point bar
   meets the water nearly flat) and the flow (the river's direction × speed, easing to 0 over the last 1.5 m to the
-  shore). An RGBA8 texture for the tile's terrain and the water (`uWater`); in W3 only the debug views
-  (`?water=depth|sdf|flow`, `WATER_DEBUG` in `src/look/shaders/waterdata.glsl`) read it, and the first of them makes
-  it, so the drawn frame is unchanged. Encoding ranges: `SPEC.water`. Baked from the authored surface, not the
-  heightfield (proposed decision 0019).
+  shore). An RGBA8 texture for the tile's terrain and the water (`uWater`, `WATERDATA`), made at load; the debug
+  views (`?water=depth|sdf|flow`, `WATER_DEBUG` in `src/look/shaders/waterdata.glsl`) show it. Encoding ranges:
+  `SPEC.water`. Baked from the authored surface, not the heightfield (proposed decision 0019).
 - **Water mesh:** a flat ribbon at `zw` reaching 1.35 half-widths each side of the centre line
   (1.35 widths in all, wider than the channel: the outer columns dive under the bank),
-  clamped onto the tile edge where the painted line takes over.
+  clamped onto the tile edge where the painted line takes over. Per vertex: across and along (m), the time of
+  travel `tau` and the riffle (W4).
+- **The shore band (W4):** the drawn shoreline (where the ribbon's plane cuts the 1.79 m heightfield) strays from
+  the data's by up to 0.7 m, so the visible shore is painted, not geometric: within `SPEC.water.band` of the
+  data's shoreline, on both sides, the terrain and the water paint one function (`shore()` in
+  `src/look/shaders/shore.glsl`) from inputs both have at a world point (the water data, the bank normals, the
+  light map, the grain). Where the two surfaces meet on screen they intersect, so they share the point, and the
+  colours match. On land it is damp earth at the water's edge; in the water, the water's lower layers.
+- **The painted water (W4):** opaque, layer by layer (`docs/research/stylized-water.md` §2.8): the bed seen through
+  the water (silt in pools, gravel where it runs, weed in slow deep water; lit with the bank normals, no refraction
+  offset), a painted absorption ramp from the data's depth, shadows and the shore foam (these in the band); then,
+  faded in past the band, calm against rough water (the riffle, fast shallow water), the painted sky tint, the
+  tree reflections, strokes on the time of travel (they stretch in fast water and never shear), glitter and riffle
+  foam. Hard edges threshold the grain's soft blotches and are anti-aliased over a pixel (no shimmer). Winter
+  ice stays as it was (the seasons are W5's).
 - **Placement:** `placeable` keeps every instance's footprint out of the water and the formation
   zones; stones may sit on riffles; willows line the banks; wheat stays off the floodplain.
 
@@ -83,6 +97,9 @@ spacing, the query grid and the valley axis `axisX`. This doc names them; it doe
   shore distance against a brute-force reference, the flow's direction) and the page's texture against the bake;
   sabotages under `--selftest`. It also reports where the drawn heightfield stands above the data's water (W4's
   shoreline).
+- `tools/water-look-check.mjs` (W4): the band (the drawn surfaces disagree on the shore only within it; no
+  z-fighting past it), the seam (the tile's ground drawn with each material: the same colour in the band), pools
+  darker and calmer than riffles, and shimmer on the water; each with a sabotage under `--selftest`.
 - `tools/river-check.js`: shape (backtracking bends, width range and per-stretch contrast, width
   steps, riffle steps), terrain (no floating banks, no cliffs, water above the bed, exact stitch),
   placement (nothing in the water or zones, population).

@@ -8,6 +8,7 @@ import { Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import PAINTER from './shaders/painter.glsl?raw'
 import WATERDATA from './shaders/waterdata.glsl?raw'
+import SHORE from './shaders/shore.glsl?raw'
 import { D } from './spec.ts'
 
 // the panel's state; t is the clock (cloud drift, water flow)
@@ -19,11 +20,11 @@ export const PAL = { sun: new Color3(1.00, 0.84, 0.60), shadow: new Color3(0.45,
 export const CLEAR = new Color4(PAL.hazeCool.r, PAL.hazeCool.g, PAL.hazeCool.b, 1)
 
 const MARK = '#include<painter>'
-// every painted fragment shader includes the painter, and may include the water data's reads (#include<waterdata>);
-// a replacer function keeps `$` in the GLSL literal
+// every painted fragment shader includes the painter, and may include the water data's reads (#include<waterdata>)
+// and the shore band with the bank normals (#include<shore>, after both); a replacer function keeps `$` in the GLSL
 export const withPainter = (src: string): string => {
   if (!src.includes(MARK)) throw new Error(`a painted shader without ${MARK}`)
-  return src.replace(MARK, () => PAINTER).replace('#include<waterdata>', () => WATERDATA)
+  return src.replace(MARK, () => PAINTER).replace('#include<waterdata>', () => WATERDATA).replace('#include<shore>', () => SHORE)
 }
 
 const COMMON = ['uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uSunCol', 'uShadowCol', 'uHazeCool', 'uHazeWarm', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA']
@@ -38,8 +39,11 @@ export class Materials {
   private readonly scene: Scene
   private readonly binders: ((m: ShaderMaterial) => void)[] = []
   grain: BaseTexture; grainMean: [number, number]   // the means of its R and G channels
-  constructor(scene: Scene, grain: BaseTexture, grainMean: [number, number]) { this.scene = scene; this.grain = grain; this.grainMean = grainMean }
+  readonly webgl1: boolean   // the detail layer's materials keep the L0 grain (DETAIL_L0) whatever is asked
+  constructor(scene: Scene, grain: BaseTexture, grainMean: [number, number]) { this.scene = scene; this.grain = grain; this.grainMean = grainMean; this.webgl1 = scene.getEngine().version < 2 }
   make(name: string, vs: string, fs: string, { attributes = ['position', 'normal'], uniforms = [], samplers = [], alpha = false, defines = [], perFrame = true }: MatOptions = {}): ShaderMaterial {
+    // the detail layer needs GLSL ES 3.00 (textureGrad): on WebGL1 its materials keep the L0 grain
+    if (defines.includes('#define DETAIL') && this.webgl1) defines = [...defines, '#define DETAIL_L0']
     const m = new ShaderMaterial(name, this.scene, { vertexSource: vs, fragmentSource: withPainter(fs) },
       { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM')], needAlphaBlending: alpha, defines: [...D.defines, ...defines] })
     m.setVector3('uSunDir', SUN); m.setColor3('uSunCol', PAL.sun); m.setColor3('uShadowCol', PAL.shadow)

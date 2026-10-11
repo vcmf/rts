@@ -18,7 +18,7 @@ import { riverQuery } from '../src/look/river.ts'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const LOOK_FILE = path.join(ROOT, 'data/painted-world.lookdata')
 
-// The fine bank normals (docs/plans/active/w2-river-banks.md): the authored surface's normal by central differences
+// The fine bank normals (docs/plans/done/w2-river-banks.md): the authored surface's normal by central differences
 // at each texel's centre, over the river's corridor only (out to bank.reach m from its centre line, the weight fading
 // to 0 over the last bank.fade m, and over the last bank.edge m before the tile's edge, so the tile's banks meet the
 // apron's vertex normals without a seam), stored as row spans

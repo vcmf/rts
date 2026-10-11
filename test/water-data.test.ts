@@ -1,4 +1,4 @@
-// The water data's pieces (docs/plans/active/w3-water-data.md, src/look/world/water-data.ts): the distance transform
+// The water data's pieces (docs/plans/done/w3-water-data.md, src/look/world/water-data.ts): the distance transform
 // against brute force, the encoding's round trip, a span grid's unpacking and the GPU-style bilinear read.
 import { describe, expect, it } from 'vitest'
 import { mulberry } from '../src/look/noise.ts'

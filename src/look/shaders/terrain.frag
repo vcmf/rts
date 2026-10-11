@@ -1,12 +1,11 @@
+#extension GL_OES_standard_derivatives : enable
 precision highp float;varying vec3 vW,vN;varying float vRiver;
 #include<painter>
 #include<waterdata>
+#include<shore>
 
 #ifdef FARRING
 uniform sampler2D uRiverMask;
-#endif
-#if defined(BANKN)&&!defined(BANKN_OFF)
-uniform sampler2D uBankN;   // the fine bank normals (docs/plans/active/w2-river-banks.md): x, z, weight
 #endif
 vec3 albedo(vec3 wp,vec3 n){
   float n1=G(wp.xz/150.0).g,n2=G(wp.xz/53.0+0.31).g,n3=G(wp.xz/19.0+0.7).g;
@@ -32,18 +31,15 @@ vec3 albedo(vec3 wp,vec3 n){
   float fm=smoothstep(170.0,250.0,r);
   c=mix(c,fc*(0.96+0.06*G(vec2(f.x/40.0,f.y/3.0)).b),fm*0.85);   // faint furrows on distant fields only
   c=mix(c,vec3(0.55,0.52,0.46),smoothstep(0.80,0.62,n.y)*0.5);
-  vec3 au=mix(c,vec3(0.70,0.60,0.34),0.45),la=mix(c,vec3(0.52,0.42,0.27),0.6),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
-  c=uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);                          // steep: stony
-  return c;
+  return groundSeason(c);
 }
 void main(){
   #ifdef WATER_DEBUG
   if(uWaterView>0.5){gl_FragColor=vec4(waterView(vW.xz),1.0);return;}   // the water data's debug views
   #endif
   vec3 N=normalize(vN);vec4 lm=LM(vW);float bankTurn=0.0;
-  #if defined(BANKN)&&!defined(BANKN_OFF)
-  vec4 bk=texture2D(uBankN,(vW.xz+TILE_HALF)/TILE_W);vec2 bxz=bk.xy*2.0-1.0;   // BANKN_OFF: the bank check's sabotage
-  vec3 bN=normalize(mix(N,vec3(bxz.x,sqrt(max(0.0,1.0-dot(bxz,bxz))),bxz.y),bk.z));
+  #ifdef BANKN
+  vec3 bN=bankNormal(N,vW.xz);   // the fine bank normals (src/look/shaders/shore.glsl)
   bankTurn=step(0.001,1.0-dot(bN,N));N=bN;   // where the bank normals turn the shading normal by over about 2.5°
   #endif
   #ifdef DETAIL_DEBUG_N
@@ -71,5 +67,13 @@ void main(){
   // in green and blue (16 bits over 0–1000 m)
   float dd=floor(clamp(length(vW-uCamPos)/1000.0,0.0,1.0)*65535.0);
   gl_FragColor=vec4(clamp(0.5+(pDetail-0.5)*0.5,0.0,1.0),floor(dd/256.0)/255.0,mod(dd,256.0)/255.0,1.0);return;
+  #endif
+  #if defined(SHORE)&&!defined(WATER_SAB_TERRAIN)
+  // the shore band (src/look/shaders/shore.glsl), and the next 0.4 m inland blending to the ground's own colour. Past
+  // the band in the water the ground keeps its own colour: the water always covers it there (the band check, tools/
+  // water-look-check.mjs), so the band is not painted under the water. WATER_SAB_TERRAIN: the seam check's sabotage,
+  // the terrain without the band
+  vec4 wt=waterTexel(vW.xz);float ws=waterSdf(wt),fws=fwidth(ws);   // fws: the branches' margin (shore.glsl)
+  if(ws>-WATER_BAND-0.4-1.5*fws&&ws<WATER_BAND+1.5*fws)c=mix(c,shore(vW,wt,occ,sh,fws),smoothstep(-WATER_BAND-0.4,-WATER_BAND,ws)*step(ws,WATER_BAND));
   #endif
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}

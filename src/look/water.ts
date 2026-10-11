@@ -1,7 +1,9 @@
-// Water (docs/art-bible.md §6c), ported from prototypes/painted-cinematic.html: painted, top-down. An opaque ribbon
-// wide enough that the TERRAIN cuts the real shoreline; per-vertex depth drives shallow turquoise to deep teal, foam
-// at the shore, flow strokes, baked tree reflections, sun glitter, tree and cloud shadows.
+// Water (docs/art-bible.md §6c, docs/plans/active/w4-water-surface.md): painted, top-down. An opaque ribbon wide
+// enough that it dives under the banks; what it paints comes from the water data (depth, shore distance, flow), and
+// near the shore it paints the shore band, as the terrain does there (src/look/shaders/shore.glsl), so the shoreline
+// is the data's, not the triangles'.
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
+import type { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
@@ -16,6 +18,7 @@ import WAT_FS from './shaders/water.frag?raw'
 
 export interface Water {
   mesh: Mesh; waterMat: ShaderMaterial
+  groundMat: ShaderMaterial   // the water's shader on the tile's ground (the seam check draws the ground with it)
   reflAdd(x: number, z: number, r: number): void   // a crown that may reflect: kept if within 20 m of the water
   finish(scene: Scene): DynamicTexture              // draws the kept crowns into the reflection mask, once the scatter is known
 }
@@ -42,8 +45,13 @@ export function blurMask(g: CanvasRenderingContext2D, N: number, sigma: number, 
   g.putImageData(img, X0, Y0)
 }
 
-// the water data (docs/plans/active/w3-water-data.md, uWater) is bound by its debug views (WATER_DEBUG, src/look/main.ts)
-export function buildWater(scene: Scene, mats: Materials): Water {
+// the water's shader with the ground's attributes: no ribbon coordinates (the upper layers' strokes stand still; the
+// seam check compares the band only, where they have no weight)
+const GROUND_VS = 'precision highp float;attribute vec3 position;uniform mat4 world,viewProjection;varying vec3 vW;varying float vAcross,vTau,vRiffle;void main(){vec4 w=world*vec4(position,1.0);vW=w.xyz;vAcross=0.0;vTau=0.0;vRiffle=0.0;gl_Position=viewProjection*w;}'
+
+// tex: the water data (docs/plans/done/w3-water-data.md) and the bank normals (the shore band lights the edge with them);
+// dive: false keeps every column at the water's level, the band check's sabotage (the ribbon then shows over dry ground)
+export function buildWater(scene: Scene, mats: Materials, tex: { water: RawTexture; bankN: RawTexture }, dive = true): Water {
   // reflection mask: crown discs of trees near the stream
   const reflCanvas = document.createElement('canvas'); reflCanvas.width = reflCanvas.height = REFL_N
   const reflG = reflCanvas.getContext('2d', { willReadFrequently: true })!; reflG.fillStyle = '#000'; reflG.fillRect(0, 0, REFL_N, REFL_N)
@@ -51,27 +59,33 @@ export function buildWater(scene: Scene, mats: Materials): Water {
   const reflAdd = (x: number, z: number, r: number) => { const q = riverQuery(x, z); if (q && q.dist < lerpA(RIVER.W, q) / 2 + 20) reflTrees.push([x, z, r]) }   // crowns within 20 m of the water
 
   // samples whose ribbon (1.35 half-widths) reaches the tile; vertices clamped onto it
-  const pos: number[] = [], uv: number[] = [], dep: number[] = [], idx: number[] = [], C = RIVER, COLS = 12, E2 = TILE_W / 2 - 0.01, lim = TILE_W / 2 + 1.35 * RIVER.WMAX / 2 + 0.5; let k = 0
+  const pos: number[] = [], across: number[] = [], tau: number[] = [], rif: number[] = [], idx: number[] = [], C = RIVER, COLS = 12, E2 = TILE_W / 2 - 0.01, lim = TILE_W / 2 + 1.35 * RIVER.WMAX / 2 + 0.5; let k = 0
   for (let i = 0, join = false; i < C.n; i++) {
     if (Math.abs(C.px[i]) > lim || Math.abs(C.pz[i]) > lim) { join = false; continue }   // the water lives in the detailed tile only; a re-entry starts a new strip
     const hw = C.W[i] / 2, nx = -C.tz[i], nz = C.tx[i], y = C.zw[i], [ep, en] = wetEdges(hw, C.A[i])   // left normal of the flow; water is flat at zw
     for (let c = 0; c <= COLS; c++) {
-      const a = (c / COLS * 2 - 1) * hw * 1.35; let x = C.px[i] + nx * a, zz = C.pz[i] + nz * a
+      const a = (c / COLS * 2 - 1) * hw * 1.35
+      let x = C.px[i] + nx * a, zz = C.pz[i] + nz * a
       const cx = Math.max(-E2, Math.min(E2, x)), cz = Math.max(-E2, Math.min(E2, zz)), moved = cx !== x || cz !== zz; x = cx; zz = cz   // the ribbon ends exactly on the tile edge, where the painted line starts
       // columns past this side's water's edge dive under the bank (W2: the inner bar is dry sooner); a column the clamp
       // moved decides from where it landed (it may now be mid-channel)
-      let dive = a >= 0 ? a > ep : -a > en
-      if (moved) { const q = riverQuery(x, zz); dive = !q || q.dist > wetEdgeAt(q) }
-      const h = H(x, zz), yy = dive ? Math.min(y, h - 0.35) : y
-      pos.push(x, yy, zz); uv.push(a, C.s[i]); dep.push(y - h)
+      let under = a >= 0 ? a > ep : -a > en
+      if (moved) { const q = riverQuery(x, zz); under = !q || q.dist > wetEdgeAt(q) }
+      const h = H(x, zz), yy = under && dive ? Math.min(y, h - 0.35) : y
+      pos.push(x, yy, zz); across.push(a); tau.push(C.tau[i]); rif.push(C.riffle[i])
     }
     if (join) for (let c = 0; c < COLS; c++) { const a = (k - 1) * (COLS + 1) + c, b = k * (COLS + 1) + c; idx.push(a, b, a + 1, a + 1, b, b + 1) }
     k++; join = true
   }
-  const mesh = new Mesh('water', scene), vd = new VertexData(); vd.positions = pos; vd.uvs = uv; vd.indices = idx
+  const mesh = new Mesh('water', scene), vd = new VertexData(); vd.positions = pos; vd.indices = idx
   const n: number[] = []; VertexData.ComputeNormals(pos, idx, n); vd.normals = n; vd.applyToMesh(mesh)
-  mesh.setVerticesData('aDepth', new Float32Array(dep), false, 1)
-  const waterMat = mats.make('water', WAT_VS, WAT_FS, { attributes: ['position', 'uv', 'aDepth'], uniforms: ['uWaterView'], samplers: ['uRefl', 'uWater'] }); mesh.material = waterMat; waterMat.backFaceCulling = false
+  mesh.setVerticesData('aAcross', new Float32Array(across), false, 1); mesh.setVerticesData('aTau', new Float32Array(tau), false, 1); mesh.setVerticesData('aRiffle', new Float32Array(rif), false, 1)
+  // DETAIL: the same paint() (and grain) as the terrain's, so the shore band is one function on both; WATER_SURFACE:
+  // the debug views' surface view shows the water white
+  const opts = { uniforms: ['uWaterView'], samplers: ['uRefl', 'uWater', 'uBankN'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define WATER_SURFACE'] }
+  const waterMat = mats.make('water', WAT_VS, WAT_FS, { ...opts, attributes: ['position', 'aAcross', 'aTau', 'aRiffle'] }); mesh.material = waterMat; waterMat.backFaceCulling = false
+  const groundMat = mats.make('waterOnGround', GROUND_VS, WAT_FS, { ...opts, attributes: ['position'] })
+  for (const m of [waterMat, groundMat]) { m.setTexture('uWater', tex.water); m.setTexture('uBankN', tex.bankN) }
 
   const finish = (sc: Scene) => {
     const box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity]
@@ -82,8 +96,8 @@ export function buildWater(scene: Scene, mats: Materials): Water {
     }
     blurMask(reflG, REFL_N, 3, box)
     const reflTex = new DynamicTexture('refl', reflCanvas, sc, true, Texture.BILINEAR_SAMPLINGMODE); reflTex.wrapU = reflTex.wrapV = Texture.CLAMP_ADDRESSMODE; reflTex.update(false)
-    waterMat.setTexture('uRefl', reflTex)
+    waterMat.setTexture('uRefl', reflTex); groundMat.setTexture('uRefl', reflTex)
     return reflTex
   }
-  return { mesh, waterMat, reflAdd, finish }
+  return { mesh, waterMat, groundMat, reflAdd, finish }
 }

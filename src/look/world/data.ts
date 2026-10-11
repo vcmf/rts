@@ -11,8 +11,8 @@ export const LOOK_VERSION = 4
 
 // A grid of n² texels of `cell` metres from (x0, z0) with ch bytes a texel, stored only where covered: spans are (row,
 // first column, count) triples, tex holds ch bytes per covered texel in span order. The rest take the user's fill.
-// The bank normals (docs/plans/active/w2-river-banks.md): 3 bytes, the normal's x and z as (v·0.5 + 0.5)·255 and the
-// weight ·255. The water data (docs/plans/active/w3-water-data.md): 4 bytes, src/look/world/water-data.ts.
+// The bank normals (docs/plans/done/w2-river-banks.md): 3 bytes, the normal's x and z as (v·0.5 + 0.5)·255 and the
+// weight ·255. The water data (docs/plans/done/w3-water-data.md): 4 bytes, src/look/world/water-data.ts.
 export interface SpanGrid { n: number; cell: number; x0: number; z0: number; ch: number; spans: Float32Array; tex: Uint8Array }
 export interface LookData { hf: Heightfield; far: Grid; river: RiverSamples; bank: SpanGrid; water: SpanGrid }   // far: the far ring's nodes
 

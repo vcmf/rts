@@ -1,4 +1,4 @@
-// The water data (docs/plans/active/w3-water-data.md, docs/research/stylized-water.md §2.6): depth, the distance to
+// The water data (docs/plans/done/w3-water-data.md, docs/research/stylized-water.md §2.6): depth, the distance to
 // the shoreline and the flow, on a grid over the tile, baked offline (tools/build-look-data.ts) from the authored
 // height and the river's samples. No DOM: the build tool and tools/water-check.mjs use it.
 //   R  the depth: the water level of the nearest river sample (the carve's) minus the ground, signed (+ under water),
