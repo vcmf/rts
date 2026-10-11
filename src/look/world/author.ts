@@ -3,7 +3,7 @@
 // data; the page reads that data and never evaluates these formulas, except for checks. Ported from
 // prototypes/painted-cinematic.html.
 import { fbm, mulberry, sstep, vn } from '../noise.ts'
-import { RIVER, lerpA, riverQuery, setRiver, type RiverParams, type RiverQuery, type RiverSamples } from '../river.ts'
+import { RIVER, bankReachAt, lerpA, riverQuery, section, setRiver, type RiverParams, type RiverQuery, type RiverSamples } from '../river.ts'
 
 // terrain before the river is carved
 export function baseH(x: number, z: number): number {
@@ -70,7 +70,7 @@ export function generateRiver(): { samples: RiverSamples; trough: Trough } {
     const W = softClamp(P.W0 * Math.sqrt(Q) * reach * (1.2 - 0.45 * bendness) * (1 + 0.35 * straight * (1 - bendness)), WMIN, WMAX)
     const riffle = Math.max(1 - Math.min(1, bendness * 1.6), (1 - bendness) * straight)
     C.W[i] = W; C.riffle[i] = riffle
-    C.A[i] = Math.max(-1, Math.min(1, -k * W * 1.6))                        // + : outer (cut) bank on the +n side; used in W2
+    C.A[i] = Math.max(-1, Math.min(1, -k * W * 1.6))                        // + : outer (cut) bank on the +n side (section())
   }
   // width changes over ~2 W, never per sample (a jump notches both banks)
   boxSmooth(Float32Array.from(C.W), C.W, 8); for (let i = 0; i < n; i++) C.W[i] = Math.max(WMIN, Math.min(WMAX, C.W[i]))
@@ -108,14 +108,22 @@ export function generateRiver(): { samples: RiverSamples; trough: Trough } {
 }
 
 
-// valley + floodplain + symmetric channel carve (W1); the asymmetric cut bank / point bar is W2.
+// valley + floodplain + the channel (W2's asymmetric section). Past this side's bank the section hands over to the
+// trough over half a half-width (a hard cut would step where the trough's floodplain sits above the section's).
 // q = riverQuery(x,z), passed in so callers query once
 export function carve(trough: Trough, x: number, z: number, q: RiverQuery | null): number {
   const h = trough(x, z, baseH(x, z), q); if (!q) return h                 // valley trough only lowers, never raises hills
-  const hw = lerpA(RIVER.W, q) / 2, bw = 0.7 * hw, m = q.dist, zw = lerpA(RIVER.zw, q)
-  if (m > hw + bw) return h
-  const g = m < hw ? -lerpA(RIVER.D, q) * (1 - (m / hw) ** 2) : RIVER.P.bankH * sstep(0, 1, (m - hw) / bw)
-  return Math.min(h, zw + g)
+  const hw = lerpA(RIVER.W, q) / 2, reach = bankReachAt(q), blend = 0.5 * hw
+  if (q.dist > reach + blend) return h
+  const c = lerpA(RIVER.zw, q) + section(q.n, hw, lerpA(RIVER.A, q), lerpA(RIVER.D, q), RIVER.P.bankH)
+  return Math.min(h, c + (h - c) * Math.max(0, sstep(reach, reach + blend, q.dist)))
+}
+
+// the authored surface's normal by central differences over ±e (the bank normals' rule: tools/build-look-data.ts,
+// and the bank check's reference: tools/detail-check.mjs)
+export function authoredNormal(H: (x: number, z: number) => number, x: number, z: number, e: number): [number, number, number] {
+  const gx = (H(x + e, z) - H(x - e, z)) / (2 * e), gz = (H(x, z + e) - H(x, z - e)) / (2 * e), l = Math.hypot(gx, 1, gz)
+  return [-gx / l, 1 / l, -gz / l]
 }
 
 // the authored world: generates the river, installs it for riverQuery, and returns the two height functions

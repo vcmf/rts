@@ -17,7 +17,7 @@ import type { Materials } from './materials.ts'
 import { D } from './spec.ts'
 import { fbm, hash, mulberry } from './noise.ts'
 import { H } from './heightfield.ts'
-import { RIVER, lerpA, riverQuery } from './river.ts'
+import { RIVER, bankReachAt, lerpA, riverQuery, wetEdgeAt } from './river.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 
@@ -87,8 +87,8 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   function placeable(x: number, z: number, r = 0, kind = ''): boolean {
     if (touchesZone(x, z, r)) return false
     const q = riverQuery(x, z)
-    if (kind === 'stone') return !q || q.dist >= lerpA(RIVER.W, q) / 2 + r || lerpA(RIVER.riffle, q) > 0.6   // stones: wholly on dry land, or on riffles (docs/art-bible.md §6c)
-    return !q || q.dist >= lerpA(RIVER.W, q) / 2 * 1.7 + r
+    if (kind === 'stone') return !q || q.dist >= wetEdgeAt(q) + r || lerpA(RIVER.riffle, q) > 0.6   // stones: wholly on dry land, or on riffles (docs/art-bible.md §6c)
+    return !q || q.dist >= Math.max(lerpA(RIVER.W, q) / 2 * 1.7, bankReachAt(q)) + r                 // off the banks (W2: a point bar reaches farther)
   }
   const groups: Record<string, Item[]> = {}; const add = (model: string, item: Item) => (groups[model] = groups[model] || []).push(item)
   // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
