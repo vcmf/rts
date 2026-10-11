@@ -33,7 +33,7 @@ export interface Spec {
   // the fine bank normals (docs/plans/done/w2-river-banks.md): texels of `texel` m over the tile, covering the
   // river's corridor out to `reach` m from its centre line, faded out over the last `fade` m, and over the last
   // `edge` m before the tile's edge (where the apron and the far ring shade with their vertex normals)
-  bank: { texel: number; reach: number; fade: number; edge: number }
+  bank: { texel: number; reach: number; fade: number; edge: number; paint: number }   // paint: the banks' colours reach this far from the water, m (W5a)
   // the water data (docs/plans/done/w3-water-data.md): texels of `texel` m over the tile; the depth (the water level
   // minus the ground, signed) stored over depth[0]..depth[1] m, the shore distance over ±sdf m. The shore band
   // (docs/plans/done/w4-water-surface.md): within `band` m of the shoreline, on either side, the terrain and the
@@ -51,7 +51,7 @@ export const SPEC: Spec = {
   depth: { near: 100, far: 1600 },
   shadowFade: 32,
   detail: { px: 2048, lines: 1080, index: 400, amp: 0.4, minCos: 0.05 },
-  bank: { texel: 0.5, reach: 14, fade: 3, edge: 10 },
+  bank: { texel: 0.5, reach: 14, fade: 3, edge: 10, paint: 7.5 },
   water: { texel: 0.5, depth: [-1, 2], sdf: 16, band: 0.75, stones: 24 },
 }
 
@@ -139,7 +139,7 @@ export function derive(s: Spec = SPEC): Derived {
       // is the uniform uPixA: it follows the camera's field of view)
       `#define DETAIL_MINCOS ${s.detail.minCos.toFixed(3)}`, `#define DETAIL_PX ${s.detail.px.toFixed(1)}`, `#define DETAIL_INDEX ${s.detail.index.toFixed(1)}`, `#define DETAIL_AMP ${s.detail.amp.toFixed(3)}`,
       // the water data's encoding (src/look/shaders/waterdata.glsl)
-      `#define WATER_D0 ${s.water.depth[0].toFixed(3)}`, `#define WATER_D1 ${s.water.depth[1].toFixed(3)}`, `#define WATER_SDF ${s.water.sdf.toFixed(3)}`, `#define WATER_BAND ${s.water.band.toFixed(3)}`, `#define BANK_EDGE ${s.bank.edge.toFixed(1)}`, `#define STONES ${s.water.stones}`],
+      `#define WATER_D0 ${s.water.depth[0].toFixed(3)}`, `#define WATER_D1 ${s.water.depth[1].toFixed(3)}`, `#define WATER_SDF ${s.water.sdf.toFixed(3)}`, `#define WATER_BAND ${s.water.band.toFixed(3)}`, `#define BANK_EDGE ${s.bank.edge.toFixed(1)}`, `#define STONES ${s.water.stones}`, `#define BANK_REACH ${s.bank.paint.toFixed(1)}`],
   }
 }
 

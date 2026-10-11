@@ -7,18 +7,10 @@ precision highp float;varying vec3 vW,vN;varying float vRiver;
 #ifdef FARRING
 uniform sampler2D uRiverMask;
 #endif
+// the ground's colour: the meadow and its fields (shore.glsl, shared with the shore band), stony where steep, the
+// banks, the seasons
 vec3 albedo(vec3 wp,vec3 n){
-  float n1=G(wp.xz/150.0).g,n2=G(wp.xz/53.0+0.31).g,n3=G(wp.xz/19.0+0.7).g;
-  vec3 c=mix(vec3(0.33,0.45,0.20),vec3(0.55,0.58,0.27),smoothstep(0.35,0.66,n1));      // meadow → yellow-green
-  c=mix(c,vec3(0.70,0.64,0.40),smoothstep(0.62,0.76,n2)*0.45);                         // dry gold
-  c=mix(c,vec3(0.24,0.40,0.33),smoothstep(0.64,0.80,1.0-n1)*0.6);                      // teal-green hollows
-  // dry-brush grass marks: directional streaks, two angles
-  vec2 q=mat2(0.82,-0.57,0.57,0.82)*wp.xz;float st=G(q/9.0).b;
-  // (directional dry-brush streaks removed: the paint grain carries the grass texture)
-  // flower patches: orange and white flecks (complementary accents)
-  float fpat=smoothstep(0.60,0.68,G(wp.xz/70.0+vec2(0.71,0.13)).g);
-  float fl=step(0.86,G(wp.xz/1.6).r)*fpat;c=mix(c,vec3(0.99,0.56,0.14),fl);
-  c=mix(c,vec3(0.96,0.93,0.84),step(0.93,G(wp.xz/1.3+0.5).r)*fpat*0.8);
+  vec3 c=groundSteep(groundBase(wp.xz),n.y);
   // stream banks: on the tile from the water data (W5, bankPaint in src/look/shaders/shore.glsl); within BANK_EDGE of
   // the tile's edge, and on the apron and the far ring, from aRiver, which the far ring's painted line continues
   float rb=vRiver+(G(wp.xz/3.0).r-0.5)*0.35;                                   // distance to the bank in half-widths
@@ -26,19 +18,15 @@ vec3 albedo(vec3 wp,vec3 n){
   cr=mix(vec3(0.20,0.36,0.22),cr,smoothstep(-0.05,0.4,rb));
   cr=mix(vec3(0.42,0.34,0.22),cr,smoothstep(-0.35,-0.05,rb));
   #ifdef SHORE
-  vec4 wt=waterTexel(wp.xz);
-  vec3 cb=bankPaint(c,wp.xz,max(-waterSdf(wt),0.0),-waterDepth(wt),bankNormal(vec3(0.0,1.0,0.0),wp.xz).y);
+  // the banks are painted on land within BANK_REACH of the water; past it, and under the water (where the band, or the
+  // water itself, is what shows), the ground is left as it is (the branch reaches past both edges by the derivatives'
+  // margin, shore.glsl)
+  vec4 wt=waterTexel(wp.xz);float sd=waterSdf(wt),fsd=1.5*fwidth(sd),land=max(-sd,0.0);vec3 cb=c;
+  if(sd<fsd&&-sd<BANK_REACH+fsd)cb=bankPaint(c,wp.xz,land,-waterDepth(wt),bankNormal(vec3(0.0,1.0,0.0),wp.xz).y);
   c=mix(cr,cb,1.0-smoothstep(TILE_HALF-BANK_EDGE,TILE_HALF,max(abs(wp.x),abs(wp.z))));
   #else
   c=cr;
   #endif
-  // strip fields in the distance
-  float r=length(wp.xz);vec2 f=mat2(0.8,-0.6,0.6,0.8)*wp.xz;
-  float id=fract(sin(dot(floor(vec2(f.x/70.0,f.y/22.0)),vec2(12.9898,78.233)))*43758.5453);
-  vec3 fc=id<0.25?vec3(0.78,0.64,0.30):id<0.5?vec3(0.42,0.56,0.20):id<0.75?vec3(0.58,0.42,0.28):vec3(0.30,0.48,0.24);
-  float fm=smoothstep(170.0,250.0,r);
-  c=mix(c,fc*(0.96+0.06*G(vec2(f.x/40.0,f.y/3.0)).b),fm*0.85);   // faint furrows on distant fields only
-  c=mix(c,vec3(0.55,0.52,0.46),smoothstep(0.80,0.62,n.y)*0.5);
   return groundSeason(c);
 }
 void main(){
@@ -82,6 +70,6 @@ void main(){
   // water-look-check.mjs), so the band is not painted under the water. WATER_SAB_TERRAIN: the seam check's sabotage,
   // the terrain without the band
   vec4 wt=waterTexel(vW.xz);float ws=waterSdf(wt),fws=fwidth(ws);   // fws: the branches' margin (shore.glsl)
-  if(ws>-WATER_BAND-0.4-1.5*fws&&ws<WATER_BAND+1.5*fws)c=mix(c,shore(vW,wt,occ,sh,fws),smoothstep(-WATER_BAND-0.4,-WATER_BAND,ws)*step(ws,WATER_BAND));
+  if(ws>-WATER_BAND-0.4-1.5*fws&&ws<WATER_BAND+1.5*fws)c=mix(c,withStones(shore(vW,wt,occ,sh,fws),vW,ws,sh),smoothstep(-WATER_BAND-0.4,-WATER_BAND,ws)*step(ws,WATER_BAND));
   #endif
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}

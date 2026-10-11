@@ -64,7 +64,8 @@ void main(){
     // 9. riffle foam: broken streaks along the current (the grain's dry-brush channel, long along x), bent into
     // chevrons pointing upstream, hard-edged
     float chev=G(vec2(along*0.05+abs(across)*0.02,across*0.03)).b;
-    float riff=smoothstep(0.35,0.65,riffle)*aastep(0.70,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);
+    float riff=smoothstep(0.35,0.65,riffle)*aastep(0.66,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);
     c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.85*up*near);
   }
+  c=withStones(c,vW,s,sh);   // the stones' foam, over every layer (shore.glsl)
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}

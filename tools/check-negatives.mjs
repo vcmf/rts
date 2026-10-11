@@ -31,6 +31,8 @@ const LOOK_CASES = [
   // the river's W2 banks, on the look page only: every bend's cut bank on the wrong side, so the check measures the
   // bar as the cut bank
   ['river', 'cut banks on the inner side', 'for (let i = 0; i < RIVER.n; i++) RIVER.A[i] = -RIVER.A[i]', 'cutBankVsBar'],
+  // W5a: a reed out on the meadow, far from the water
+  ['river', 'a reed far from the water', '(groups.Reed ||= []).push([RIVER.px[RIVER.n >> 1] + 30, RIVER.pz[RIVER.n >> 1], 1.6, 0, 0.5])', 'reedsAwayFromWater'],
   ['look', 'real scene', null, null],
   ['look', 'tile drawn 0.5 m high', 'tileGround.position.y = 0.5; tileGround.computeWorldMatrix(true)', 'tileHeights'],
   ['look', 'far ring at the old -0.9 m', 'farGround.position.y = -0.9; farGround.computeWorldMatrix(true)', 'farHeights'],

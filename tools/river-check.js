@@ -24,19 +24,26 @@
   //    at the foot of a cut bank (W5a: the outer side of a bend sharper than |A| 0.5, against its edge); fields off the
   //    floodplain
   let wet = 0, inZone = 0, stonesInPools = 0, wheatOnFloodplain = 0
-  const overlapsWater = (x, z, r) => { const q = riverQuery(x, z); return q && q.dist < (typeof wetEdgeAt === 'function' ? wetEdgeAt(q) : lerpA(C.W, q) / 2) + r }
-  const atCutBank = (q, r) => typeof wetEdgeAt === 'function' && Math.abs(lerpA(C.A, q)) > 0.5 && Math.sign(q.n) === Math.sign(lerpA(C.A, q)) && q.dist >= wetEdgeAt(q) - r
+  // edge: true measures to the water's edge on each side (W2), for reeds, which stand at it; everything else keeps
+  // clear of the half-width
+  const overlapsWater = (x, z, r, edge = false) => { const q = riverQuery(x, z); return q && q.dist < (edge ? wetEdgeAt(q) : lerpA(C.W, q) / 2) + r }
+  // the W5a stones at a cut bank's foot: the outer side of a bend sharper than |A| 0.5, the centre within 0.6 m of the
+  // water's edge (src/look/nature.ts holds the same rule)
+  const atCutBank = q => typeof wetEdgeAt === 'function' && Math.abs(lerpA(C.A, q)) > 0.5 && Math.sign(q.n) === Math.sign(lerpA(C.A, q)) && q.dist >= wetEdgeAt(q) - 0.6
+  let reedsAway = 0   // reeds (W5a) farther than 1.2 m (plus their reach) from the water's edge
   for (const [model, items] of Object.entries(groups)) for (const [x, z, sc] of items) {
     const fp = footprint(model, sc)
     if (touchesZone(x, z, fp)) inZone++
-    if (/^Rock/.test(model)) { const q = riverQuery(x, z); if (q && q.dist < lerpA(C.W, q) / 2 + fp && lerpA(C.riffle, q) <= 0.6 && !atCutBank(q, fp)) stonesInPools++; continue }
-    if (overlapsWater(x, z, fp)) wet++
+    if (/^Rock/.test(model)) { const q = riverQuery(x, z); if (q && q.dist < lerpA(C.W, q) / 2 + fp && lerpA(C.riffle, q) <= 0.6 && !atCutBank(q)) stonesInPools++; continue }
+    if (model === 'Reed') { const q = riverQuery(x, z); if (!q || q.dist > wetEdgeAt(q) + 1.2 + fp) reedsAway++ }
+    if (overlapsWater(x, z, fp, model === 'Reed')) wet++
     if (model === 'Wheat' && Math.abs(x - C.axisX(z)) < C.P.floodplainW / 2) wheatOnFloodplain++
   }
   for (const [x, z, sc] of FAR) if (overlapsWater(x, z, footprint('Bush_1', sc))) wet++
   check('instancesOverWater', wet === 0, wet)
   check('instancesInZones', inZone === 0, inZone)
   check('stonesInPools', stonesInPools === 0, stonesInPools)
+  check('reedsAwayFromWater', reedsAway === 0, reedsAway)
   check('wheatOnFloodplain', wheatOnFloodplain === 0, wheatOnFloodplain)
   // bank trees exist: docs/art-bible.md §6c asks for a broken line of willows along the banks near the scene
   const willows = Object.entries(groups).filter(([m]) => /^Willow/.test(m)).reduce((a, [, v]) => a + v.length, 0)

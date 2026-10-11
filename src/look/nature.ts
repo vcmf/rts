@@ -87,14 +87,15 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // exact: does the disc (x,z,r) overlap any formation zone? (the two boxes and the circle of KEEP_CLEAR)
   const boxD = (x: number, z: number, x0: number, x1: number, z0: number, z1: number) => Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(z0 - z, 0, z - z1))
   const touchesZone = (x: number, z: number, r: number) => KEEP_CLEAR(x, z) || boxD(x, z, -25, 15, -44, -2) < r || boxD(x, z, -14, 26, 7, 19) < r || Math.hypot(x - 34, z + 24) < Math.sqrt(160) + r
-  // the foot of a cut bank: the outer side (A's sign) of a bend sharper than |A| 0.5, within r of its water's edge
-  const atCutBank = (q: NonNullable<ReturnType<typeof riverQuery>>, r: number) => { const A = lerpA(RIVER.A, q); return Math.abs(A) > 0.5 && Math.sign(q.n) === Math.sign(A) && q.dist >= wetEdgeAt(q) - r }
+  // the foot of a cut bank: the outer side (A's sign) of a bend sharper than |A| 0.5, the centre within 0.6 m of its
+  // water's edge (tools/river-check.js holds the same rule)
+  const atCutBank = (q: NonNullable<ReturnType<typeof riverQuery>>) => { const A = lerpA(RIVER.A, q); return Math.abs(A) > 0.5 && Math.sign(q.n) === Math.sign(A) && q.dist >= wetEdgeAt(q) - 0.6 }
   function placeable(x: number, z: number, r = 0, kind = ''): boolean {
     if (touchesZone(x, z, r)) return false
     const q = riverQuery(x, z)
-    // stones: wholly on dry land, on riffles, or at the foot of a cut bank (the outer side of a sharp bend, against
-    // its water's edge) (docs/art-bible.md §6c)
-    if (kind === 'stone') return !q || q.dist >= wetEdgeAt(q) + r || lerpA(RIVER.riffle, q) > 0.6 || atCutBank(q, r)
+    // stones: wholly on dry land, or on riffles; the W5a pass's stones at the foot of a cut bank (docs/art-bible.md §6c)
+    if (kind === 'stone') return !q || q.dist >= wetEdgeAt(q) + r || lerpA(RIVER.riffle, q) > 0.6
+    if (kind === 'cutstone') return !!q && atCutBank(q)
     if (kind === 'reed') return !q || q.dist >= wetEdgeAt(q) + r   // reeds: at the water's edge, wholly on land
     return !q || q.dist >= Math.max(lerpA(RIVER.W, q) / 2 * 1.7, bankReachAt(q)) + r                 // off the banks (W2: a point bar reaches farther)
   }
@@ -158,13 +159,14 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     step = Math.max(1, Math.round((8 + rs() * 14) / (RIVER.P.W0 / 4)))
     if (Math.abs(C.px[i]) > 200 || Math.abs(C.pz[i]) > 200) continue
     const hw = C.W[i] / 2, A = C.A[i], [ep, en] = wetEdges(hw, A)
-    let n: number
-    if (C.riffle[i] > 0.62) n = (rs() - 0.5) * 0.9 * hw                                   // mid-channel in a riffle
-    else if (Math.abs(A) > 0.55) n = A >= 0 ? ep - 0.25 : -(en - 0.25)                      // against the cut bank
+    let n: number, kind: string
+    if (C.riffle[i] > 0.62) { n = (rs() - 0.5) * 0.9 * hw; kind = 'stone' }                          // mid-channel in a riffle
+    else if (Math.abs(A) > 0.55) { n = A >= 0 ? ep - 0.25 : -(en - 0.25); kind = 'cutstone' }      // against the cut bank
     else continue
     const x = C.px[i] - C.tz[i] * n, z = C.pz[i] + C.tx[i] * n, mdl = rs() < 0.5 ? 'Rock_' + (1 + Math.floor(rs() * 2)) : 'Rock_Moss_' + (3 + Math.floor(rs() * 2))
-    const top = C.zw[i] - H(x, z) + 0.35 + rs() * 0.35, s = Math.min(3, Math.max(1, top / (NATURE![mdl].max[1] * 0.95)))
-    if (addPlaced(mdl, [x, z, s, rs() * 6.28, rs(), -0.05 * s], 'stone')) { stones.push([x, z, footprint(mdl, s) * 0.8, Math.atan2(C.tz[i], C.tx[i])]); smBlob(x, z, s * 0.3) }
+    const top = C.zw[i] - H(x, z) + 0.35 + rs() * 0.35, s = Math.max(1, top / (NATURE![mdl].max[1] * 0.95))
+    if (s > 3) continue   // too deep there for the pack's rocks to stand out of the water
+    if (addPlaced(mdl, [x, z, s, rs() * 6.28, rs(), -0.05 * s], kind)) { stones.push([x, z, footprint(mdl, s) * 0.8, Math.atan2(C.tz[i], C.tx[i])]); smBlob(x, z, s * 0.3) }
   }
   // reeds at the water's edge on slow inner bends (W5a; docs/art-bible.md §6c): clumps of the pack's grass blade,
   // narrowed and set tall (the Reed model), on the bar's side of bends sharper than |A| 0.4, out of the riffles
