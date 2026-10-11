@@ -61,7 +61,8 @@ step 12 morale              the shocks owed (shockIn) are taken with contagion
 - it charged within `charge.rest` seconds: "blown";
 - the target is not a live enemy: "no such target".
 
-A formation in melee refuses every command but the debug ones ("in melee").
+A formation in melee refuses every player command but the debug ones ("in melee"); a scenario's plan's orders are
+queued for after the melee (a charge is refused). It stands while it fights.
 
 **The charge** (`O_CHARGE`, `formation.ts`): an order alone in the formation's list, run by the move order's
 code (turn limits, the lag model, the footprint gate).
@@ -100,7 +101,8 @@ A target changing shape has no front, and is struck as in the flank.
   inflicts nothing.
 - **Shock:** the target loses `impact.shock[side] × momentum × (1 − braced)` of its morale.
 - **Then:** the charger recoils with chance `braced`, else both are in melee (`foe`). A target struck while
-  not in melee takes on its lowest-slot attacker, and its orders and any charge of its own end.
+  not in melee takes on its lowest-slot attacker, and any charge of its own ends; its other orders are kept for
+  after the melee (in melee it stands).
 
 **The recoil:** the charger rides `charge.recoil` metres straight away from the target, with a Face about first
 when the way is behind it, and is blown for `charge.rest`.

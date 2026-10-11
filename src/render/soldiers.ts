@@ -5,7 +5,7 @@
 // whose slots moved walk to the nearest free filled slot; Face about relabels the men through the shape's
 // half-turn. No DOM: tested in Node (test/soldiers.test.ts).
 import type { World, Places } from '../sim/index.ts'
-import { mkPlaces, placesCtx, placeAtSlot, filledSlots, menOf, groundGAt, cellK, impAt, typeOf, makeHandle, KIND_FORMATION, DT, M_TICK, MS_RALLYING, fleeing } from '../sim/index.ts'
+import { mkPlaces, placesCtx, placeAtSlot, filledSlots, menOf, groundGAt, cellK, impAt, typeOf, targetShape, makeHandle, KIND_FORMATION, DT, M_TICK, MS_RALLYING, fleeing } from '../sim/index.ts'
 import type { Scene, Obstacle } from './scene.ts'
 import { cosmeticRng } from './scene.ts'
 import { CLASS_STYLE } from './style.ts'
@@ -73,7 +73,7 @@ export class SoldierLayer {
     placesCtx(this.ctx0, i, x0, z0, h0, t, -(1 - alpha) * DT)
   }
   private framed = new Float64Array(6)   // the anchors the last frame() used: ahead, then now
-  private kindOf(i: number): number { const f = this.w.f; return typeOf(this.w, i).shapes[f.trans[i] ? f.tShape[i] : f.shape[i]].kind }
+  private kindOf(i: number): number { return typeOf(this.w, i).shapes[targetShape(this.w, i)].kind }
   // a man's place (`ahead`: where he aims; a place on impassable ground falls back to the place now)
   place(i: number, s: number, ahead: boolean, out: number[], imp?: Uint8Array): number[] {
     if (!ahead) return placeAtSlot(this.ctx0, s, out)

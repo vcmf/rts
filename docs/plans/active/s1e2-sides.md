@@ -257,3 +257,14 @@ losing the plan's orders):
   - the retry is 5 s in seconds, under a generic name (`REFUGE_RETRY`);
   - one `targetShape` replaces three copies;
   - a test read companies by a hard-coded stride.
+
+**Redesign round 3** (`/code-review high`, 8 findings, none severe; the review stops here):
+- **Fixed:**
+  - **The form-back has one path.** It is tried the first tick the square stands formed after the spell, even when
+    the spell ended mid-change, and every 5 s after a try that could not be made. `autoFrom` is let go only when a
+    change into another shape has finished, so a battalion that breaks halfway back and rallies forms back again;
+  - **a plan step due during a melee** is queued for after it, not dropped. The battalion stands while it
+    fights; a plan's charge is still refused;
+  - **no new shape in contact:** a queued form does not start while in melee;
+  - **a router** does not stand for the tick before its melee ends;
+  - the docs and comments on a struck battalion's orders; the soldier layer reads `targetShape`.

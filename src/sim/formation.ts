@@ -753,7 +753,7 @@ function formationStep(w: World, i: number): void {
   if (f.trans[i]) {   // no marching while the companies change places; a new shape order interrupts the change (a battalion that breaks cuts it short: cutChange)
     f.vx[i] = 0; f.vz[i] = 0
     const n = f.ordHead[i]
-    if (n >= 0 && o.type[n] === O_FORM && !shelter) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
+    if (n >= 0 && o.type[n] === O_FORM && !shelter && !f.foe[i]) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }   // (no new shape in contact)
     if (t >= f.tStart[i] + f.tDelay[i * CS + C - 1] + f.tDur[i]) {
       finishChange(w, i, f.tShape[i])
     }
@@ -761,7 +761,8 @@ function formationStep(w: World, i: number): void {
   }
   const n = f.ordHead[i]
   // no orders, sheltering in the square against cavalry, or in melee: it stands (keeping its orders for after)
-  if (n < 0 || shelter || f.foe[i]) { f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); return }
+  // (a router does not stand: its foe goes only at the melee step)
+  if (n < 0 || shelter || (f.foe[i] && !outOfFight(f.mstate[i]))) { f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); return }
   const h0 = f.heading[i], type = o.type[n]
   if (type === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
   const [V0, pace] = paceOf(w, i), halfW = halfWidth(w, i)

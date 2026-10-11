@@ -141,7 +141,8 @@ function apply(w: World, c: Command, player = true): string {
   // out of the fight (routing, rallying, shattered): only the debug commands reach it
   if (outOfFight(f.mstate[i]) && c.type !== 'debug-kill' && c.type !== 'debug-morale') return MORALE_STATES[f.mstate[i]]
   // in melee: only the debug commands (it ends by a rout, docs/systems/melee.md)
-  if (f.foe[i] && c.type !== 'debug-kill' && c.type !== 'debug-morale') return 'in melee'
+  // (a scenario's plan's order is queued, for after the melee: it stands while it fights; but it does not charge)
+  if (f.foe[i] && c.type !== 'debug-kill' && c.type !== 'debug-morale' && (player || c.type === 'charge')) return 'in melee'
   switch (c.type) {
     case 'move': {
       if (!wellFormed(c.points)) return 'malformed waypoints'

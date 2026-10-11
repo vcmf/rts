@@ -128,7 +128,7 @@ export function meleeStep(w: World): void {
   for (let n = 0; n < N; n++) { const i = rev ? N - 1 - n : n; if (f.alive[i] && f.chPhase[i]) chargeStep(w, G, S, i, tick) }
   S.foe0.set(f.foe)
   for (let n = 0; n < N; n++) { const i = rev ? N - 1 - n : n; if (f.alive[i] && S.foe0[i]) meleePair(w, G, S, i, tick) }
-  // a battalion struck while not in melee takes on its lowest-slot attacker; it stops what it was doing
+  // a battalion struck while not in melee takes on its lowest-slot attacker; it stands while it fights
   for (let i = 0; i < N; i++) {
     if (!f.alive[i] || !f.foe[i]) continue
     const j = slotOf(w, f.foe[i]); if (j >= 0 && !f.foe[j] && !outOfFight(f.mstate[j])) engage(w, j, i)
@@ -144,8 +144,8 @@ function leave(w: World, i: number, j: number): void {
   f.foe[i] = 0
   if (j >= 0 && f.foe[j] === handleOf(w, i)) f.foe[j] = 0
 }
-// battalion j is in melee with i: its orders and any charge of its own end
-// (its other orders are kept for after the melee: in melee it stands, formation.ts)
+// battalion j is in melee with i: any charge of its own ends; its other orders are kept for after the melee (in melee
+// it stands, formation.ts)
 function engage(w: World, j: number, i: number): void {
   const f = w.f
   if (f.ordHead[j] >= 0 && w.ord.type[f.ordHead[j]] === O_CHARGE) shiftOrder(w, j)
@@ -283,9 +283,7 @@ export function standingStep(w: World): void {
       if (!f.alertAt[i] || tick - f.alertAt[i] > hold) f.refugeOff[i] = 0        // a new spell of threat
       f.alertAt[i] = tick
     } else if (f.alertAt[i] && tick - f.alertAt[i] > hold && !nearby(w, i, n)) {
-      f.alertAt[i] = 0; f.alertSince[i] = 0; f.refugeOff[i] = 0                   // the spell is over: form back now
-      if (f.autoFrom[i] && targetShape(w, i) === U.refuge && !f.trans[i] && startChange(w, i, f.autoFrom[i] - 1, true)) f.autoFrom[i] = 0
-      continue
+      f.alertAt[i] = 0; f.alertSince[i] = 0; f.refugeOff[i] = 0                   // the spell is over (alertSince: the form-back's next try, now)
     }
     const into = targetShape(w, i)
     if (f.alertAt[i]) {
@@ -293,11 +291,12 @@ export function standingStep(w: World): void {
       if (f.alertAt[i] !== tick || f.refugeOff[i] || into === U.refuge || tick - f.alertSince[i] < react || (tick - f.alertSince[i] - react) % REFUGE_RETRY) continue   // threatened now, unbroken for react
       if (startChange(w, i, U.refuge, true)) { f.autoFrom[i] = into + 1; f.status[i] = 0; f.blockedFor[i] = 0 }   // the shape it is in, or going to, now
     } else if (f.autoFrom[i]) {
-      // the spell is over: back into the shape it formed square from, once the square is formed (tried again while
-      // that cannot be made there); a shape changed meanwhile by an order is kept
-      if (into !== U.refuge) { f.autoFrom[i] = 0; continue }
-      if (f.trans[i] || (tick + i) % REFUGE_RETRY) continue
-      if (startChange(w, i, f.autoFrom[i] - 1, true)) f.autoFrom[i] = 0
+      // the spell is over: back into the shape it formed square from, as soon as the square stands formed (out of a
+      // spell, alertSince holds the tick of the next try: 0 at once, REFUGE_RETRY after one that could not be made).
+      // autoFrom is let go once a change into another shape has finished: the form-back's, or one an order made
+      if (into !== U.refuge) { if (!f.trans[i]) f.autoFrom[i] = 0; continue }
+      if (f.trans[i] || tick < f.alertSince[i]) continue
+      if (!startChange(w, i, f.autoFrom[i] - 1, true)) f.alertSince[i] = tick + REFUGE_RETRY
     }
   }
 }
