@@ -61,7 +61,7 @@ footprints fade out over ~40 game minutes; in the painted world block = footprin
 | Phase | Scope |
 |---|---|
 | SM1 | Port the zoom transition into `prototypes/painted-cinematic.html`: its terrain, light and river under the map texture |
-| SM2 | Map bake in a worker; real heightmap and OSM features (shares the W6 importer in `docs/plans/active/prototype-plan.md`) |
+| SM2 | Map bake in a worker; real heightmap and OSM features (shares the W6 importer in `docs/plans/active/prototype-plan.md`), read from the map format (`docs/proposals/map-format.md`) |
 | SM3 | Unit symbols driven by the real `sim/` once it exists; overlap and layering rules |
 | SM4 | Video export: directed map camera, trails as replay |
 
