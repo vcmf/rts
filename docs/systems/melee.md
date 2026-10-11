@@ -125,12 +125,12 @@ with contagion, after relaxing (`morale.ts`).
 
 **The square against cavalry** (step 4, `standingStep`), for each battalion whose type names a refuge
 (`UnitType.refuge`), in the fight and not in melee:
-- **A threat:** an enemy in the fight of a type that charges, within `square.alert` (200 m, centre to centre),
-  either charging it or anything but riding away faster than `square.closing`. A regiment at the halt can
+- **A threat:** an enemy in the fight of a type that charges, within `refuge.alert` (200 m, centre to centre),
+  either charging it or anything but riding away faster than `refuge.closing`. A regiment at the halt can
   charge in seconds.
-- **Forming:** after `square.react` seconds of unbroken threat, a battalion not in its refuge and not changing
+- **Forming:** after `refuge.react` seconds of unbroken threat, a battalion not in its refuge and not changing
   into it drops its orders and forms it. The shape it came from is kept (`autoFrom`).
-- **Forming back:** when `square.hold` seconds pass with no threat, it forms back into that shape (from the
+- **Forming back:** when `refuge.hold` seconds pass with no threat, it forms back into that shape (from the
   square, or out of the change into it), if it has no orders.
 - **The player's order wins:** any order given during a spell of threat stands the behaviour down until the
   spell ends, and forgets the shape (`sqOff`).

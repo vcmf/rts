@@ -694,7 +694,7 @@ const caPose: Pose = { x: 0, z: 0, a: 0, face: 0, kx: 1, kz: 1 }, caX = new Floa
 function chargeAim(w: World, i: number, n: number): boolean {
   const f = w.f, j = formationSlot(w, f.chTarget[i]); if (j < 0) return false
   const Ui = typeOf(w, i), Uj = typeOf(w, j), CS = w.cr.maxC, t = now(w), E = layoutOf(w, i).extent; let bd = Infinity, front = Infinity
-  for (let c = 0; c < Ui.C; c++) { front = Math.min(front, E[c * 3]); const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, caPose); caX[c] = p.x; caZ[c] = p.z }
+  for (let c = 0; c < Ui.C; c++) { if (f.men[i * CS + c] > 0) front = Math.min(front, E[c * 3]); const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, caPose); caX[c] = p.x; caZ[c] = p.z }
   for (let q = 0; q < Uj.C; q++) {
     if (f.men[j * CS + q] <= 0) continue
     const p = placeWorld(w, j, q, f.x[j], f.z[j], f.heading[j], t, 0, caPose)

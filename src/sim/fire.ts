@@ -176,6 +176,7 @@ export function fireStep(w: World): void {
   }
   if (!any) return
   const G = blockGeometry(w), rev = w.scratch.reverse === true   // a test visits battalions in reverse: results must not change
+  w.scratch.fireGeoTick = tick   // built for this tick's positions after movement: the melee step reuses it
   for (let n = 0; n < MAX_FORMATIONS; n++) {
     const i = rev ? MAX_FORMATIONS - 1 - n : n
     if (!f.alive[i]) continue
@@ -239,12 +240,18 @@ function volley(w: World, G: FireGeo, i: number, c: number, j: number, d: number
   const lambda = rounds * pAt(w, d) * w.cr.stateFactor[Math.min(2, f.mstate[i])] * (1 - F.cohesion * f.disorder[i]) * w.cr.depthByKind[layoutOf(w, j).kind]
   let hits = Math.floor(lambda); if (nextUnit(rs) < lambda - hits) hits++
   if (!hits) return
-  let tot = 0
-  for (let q = 0; q < C; q++) { const m = j * CS + q; open[q] = f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m]) && sees(w, G, k, m) ? 1 : 0; if (open[q]) tot += f.men[m] }
+  for (let q = 0; q < C; q++) { const m = j * CS + q; open[q] = f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m]) && sees(w, G, k, m) ? 1 : 0 }
+  oweByMen(w, j, open, hits, rs)
+}
+// n men owed to battalion j's companies marked in `mask`, each drawn from rs to a marked company weighted by its
+// men (as they stood at the start of the step): a volley's hits, a charge's and a melee's losses (melee.ts)
+export function oweByMen(w: World, j: number, mask: ArrayLike<number>, n: number, rs: Uint32Array): void {
+  const f = w.f, CS = w.cr.maxC, C = typeOf(w, j).C
+  let tot = 0; for (let q = 0; q < C; q++) if (mask[q]) tot += f.men[j * CS + q]
   if (!tot) return
-  for (let n = 0; n < hits; n++) {
+  for (let k = 0; k < n; k++) {
     let r = Math.floor(nextUnit(rs) * tot), q = 0
-    for (; q < C; q++) { const m = j * CS + q; if (open[q]) { if (r < f.men[m]) break; r -= f.men[m] } }
+    for (; q < C; q++) if (mask[q]) { if (r < f.men[j * CS + q]) break; r -= f.men[j * CS + q] }
     f.owed[j * CS + Math.min(q, C - 1)]++
   }
 }

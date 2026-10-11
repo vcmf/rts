@@ -147,7 +147,7 @@ describe('paces and ground', () => {
 describe('under fire', () => {
   // an infantry line fires (hit chance raised) on a regiment or a battery 80 m off, which do not fire back (and does
   // not form square against the regiment: S1d-2's standing behaviour, off)
-  const rs: Ruleset = { ...small, fire: { ...small.fire, pRange: [[0, 0.3], [250, 0.3], [251, 0]] }, melee: { ...small.melee, square: { ...small.melee.square, alert: 0 } } }
+  const rs: Ruleset = { ...small, fire: { ...small.fire, pRange: [[0, 0.3], [250, 0.3], [251, 0]] }, melee: { ...small.melee, refuge: { ...small.melee.refuge, alert: 0 } } }
   for (const [unit, shape, men] of [['cavalry', 'line', 250], ['battery', 'unlimbered', 96]] as const) it(`a ${unit} loses men, never fires, breaks and routs`, () => {
     const t = buildTerrain(levelled(data), compileRuleset(rs)), s = new Sim(1, rs, t)
     s.cmd({ type: 'side', side: 0, x: -1, z: 0 }); s.cmd({ type: 'side', side: 1, x: 1, z: 0 })

@@ -111,14 +111,14 @@ attackers in slot order. The reverse-visiting test switch must give the same has
 
 Step 4 of the tick, for every battalion whose type names a refuge (`UnitType.refuge`: the infantry's
 `square`) and that is in the fight and not in melee:
-- **A threat** is an enemy in the fight whose type charges, within `square.alert` (200 m, centre to centre),
-  and either charging this battalion or closing on it faster than `square.closing` (1 m/s).
-- **Forming:** after `square.react` seconds of threat, a battalion not in its refuge and not changing into
+- **A threat** is an enemy in the fight whose type charges, within `refuge.alert` (200 m, centre to centre),
+  and either charging this battalion or closing on it faster than `refuge.closing` (1 m/s).
+- **Forming:** after `refuge.react` seconds of threat, a battalion not in its refuge and not changing into
   it drops its orders and forms square. Its shape before is stored.
-- **Holding:** it stays in square until `square.hold` (30 s) passes with no threat. It then forms back into
+- **Holding:** it stays in square until `refuge.hold` (30 s) passes with no threat. It then forms back into
   the stored shape, if it still has no orders.
 - **The player's word wins:** an order given to a battalion during a threat cancels the behaviour until the
-  threat has been gone for `square.hold`. The stored shape is forgotten.
+  threat has been gone for `refuge.hold`. The stored shape is forgotten.
 
 ## Data (`src/rulesets/napoleonic.ts`)
 
@@ -136,7 +136,7 @@ melee: {
   impact: { kill: number; shock: { front: number; flank: number; rear: number } }
   rate: number; strength: Record<string, number>; cohesion: number
   refuse: number; breach: number
-  square: { alert: number; closing: number; react: number; hold: number }
+  refuge: { alert: number; closing: number; react: number; hold: number }   // the square against cavalry
 }
 ```
 
@@ -271,7 +271,7 @@ reproduced. The goldens were then regenerated (`SIM_VERSION` `s1d.2`, `SAVE_FORM
 |---|---|---|---|---|---|---|
 | Formed square | 0% | 0% | 100% | 0% | 100% | – |
 | Line (forms square on the alert) | 90% | 0% | 10% | 78% | 10% | 56 (at the impact) |
-| Column (forms square on the alert) | 12% | 16% | 72% | 28% | 72% | 110 |
+| Column (forms square on the alert) | 12% | 4% | 84% | 28% | 72% | 110 |
 | Line in the flank | 96% | 0% | 4% | 76% | 4% | 22 (most at the test) |
 | Two regiments | 40% / 60% (who broke first) | | 0% | 100% | – | 43 |
 
@@ -301,3 +301,20 @@ fire costs the regiment about 9 men. A line has 35 s of its 100 s change when th
 
 **Not done, logged:** a battalion that breaks while changing shape still finishes the change before it runs
 (`docs/known-issues.md`).
+
+## Review
+
+**Round 1** (`/code-review high`, 9 findings, one severe):
+- **Fixed:**
+  - **severe:** a regiment never turned away from a square that finished forming in melee. Its leaving was
+    one-sided: the square's `foe` still pointed at it, and the end of the step pulled it back into the melee
+    and cleared its recoil. Leaving a melee now ends the pairing both ways. A test catches it, and fails without
+    the fix. In the column case the regiment now breaks in 4% of seeds, not 16%;
+  - the charge's aim took its leading rank over empty companies too: a column that lost its head squadron had
+    its charge dropped with no reason given;
+  - a charge armed with C stayed armed through a box select;
+  - the melee step rebuilt the fire step's block geometry, built for the same positions this tick: it reuses it;
+  - the shocks and the engage pass were N × N loops: one pass each, the same order;
+  - the melee's and the volley's weighted loss allocation were two copies: one helper (`oweByMen`);
+  - the standing step scanned every formation for every battalion: it collects the charging formations once;
+  - the engine's `melee.square` named an era's formation (decision 0015): it is `melee.refuge`.

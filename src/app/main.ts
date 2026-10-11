@@ -123,7 +123,8 @@ async function main(): Promise<void> {
   unitC.addEventListener('pointercancel', cancel); unitC.addEventListener('lostpointercapture', e => { if (e.buttons === 0 && drag) cancel() })
   unitC.addEventListener('pointerup', e => {
     const d = drag; drag = null; boxEl.style.display = 'none'; if (!d || d.button !== 0) return
-    if (d.moved) {   // box select
+    if (d.moved) {   // box select (it also disarms a charge)
+      charging = false
       const [x0, z1] = toW(view, Math.min(d.x, e.clientX), Math.min(d.y, e.clientY)), [x1, z0] = toW(view, Math.max(d.x, e.clientX), Math.max(d.y, e.clientY))
       if (!d.shift) selected.clear()
       for (const u of layer.units.values()) if (u.men.some(m => m.alive && m.x > x0 && m.x < x1 && m.z > z0 && m.z < z1)) selected.add(u.i)

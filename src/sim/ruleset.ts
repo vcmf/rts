@@ -66,14 +66,15 @@ export interface Quarters { front: number; flank: number; rear: number }
 // melee and the charge's effects (S1d-2): contact and its hold (metres between blocks); the threat's morale
 // shock at the test and the impact's, by the side the charge comes from; the impact's losses (a share of the
 // other's men in contact at full momentum); the melee's losses per second per man in contact, by kind; the
-// chance a charger turns from a braced target and breaks into a wavering one; the square against cavalry
+// chance a charger turns from a braced target and breaks into a wavering one; the refuge (a square) against a
+// charging enemy
 export interface MeleeDef {
   contact: number; hold: number
   threat: Quarters
   impact: { kill: number; shock: Quarters }
   rate: number; strength: Record<string, number>; cohesion: number
   refuse: number; breach: number
-  square: { alert: number; closing: number; react: number; hold: number }   // metres, m/s, seconds, seconds
+  refuge: { alert: number; closing: number; react: number; hold: number }   // forming the refuge shape against a charging enemy: metres, m/s, seconds, seconds
 }
 // a unit type (S1d-1): its block, its shapes and their change times. A formation is of one type for life
 export interface UnitType {

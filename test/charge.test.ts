@@ -22,7 +22,7 @@ const open = (): Terrain => {
 const FIELD = open()
 // the shipped ruleset with the melee numbers changed (noSquare: no battalion forms square by itself)
 const withMelee = (m: Partial<Ruleset['melee']>): Ruleset => ({ ...napoleonic, melee: { ...napoleonic.melee, ...m } })
-const noSquare = withMelee({ square: { ...napoleonic.melee.square, alert: 0 } })
+const noSquare = withMelee({ refuge: { ...napoleonic.melee.refuge, alert: 0 } })
 
 class S extends Sim {
   constructor(seed = 1, rs: Ruleset = napoleonic) { super(seed, rs, FIELD) }
@@ -174,6 +174,17 @@ describe('melee', () => {
     expect(s.men(foe)).toBeLessThan(m)
     expect(s.f(cav, 'blownUntil')).toBeGreaterThan(s.w.meta[M_TICK]); expect(s.orders(cav)).toBe(0)
   })
+  it('a regiment turns away when its foe finishes forming square and holds it; the square is out of melee too', () => {
+    const quiet = { front: 0, flank: 0, rear: 0 }
+    const rs = withMelee({ threat: quiet, impact: { kill: 0, shock: quiet }, rate: 0.001 })
+    for (const seed of [1, 3]) {
+      const s = new S(seed, rs), foe = s.inf(0, 60, PI, 1, 'line', 1), cav = s.cav(0, -40, 0)
+      s.charge(cav, foe); s.until(() => !s.f(cav, 'foe'), 60)
+      expect(s.w.f.trans[s.slot(foe)]).toBe(1)   // caught mid-change
+      s.until(() => s.f(cav, 'foe') !== 0, 200)
+      expect([s.shape(foe), s.out(foe), s.f(foe, 'foe'), s.orders(cav) > 0, s.f(cav, 'blownUntil') > s.w.meta[M_TICK]]).toEqual(['square', false, 0, true, true])
+    }
+  })
   it('ends at a rout: infantry that sees the regiment break holds where it stands', () => {
     const { s, foe, cav } = fight(1, 0.45)
     s.until(() => !s.out(foe) && !s.out(cav), 180)
@@ -188,7 +199,7 @@ describe('the square against cavalry (standing behaviour)', () => {
     const s = new S(), ln = s.inf(0, 100, PI), cav = s.cav(0, -170, 0)
     s.charge(cav, ln); s.until(() => !s.f(ln, 'alertAt'), 60)
     const t0 = s.t; s.until(() => !s.w.f.trans[s.slot(ln)], 10)
-    expect(s.t - t0).toBeCloseTo(napoleonic.melee.square.react, 1); expect(s.shape(ln)).toBe('line → square')
+    expect(s.t - t0).toBeCloseTo(napoleonic.melee.refuge.react, 1); expect(s.shape(ln)).toBe('line → square')
   })
   it('forms square against a regiment closing at the walk; not against one riding away, a routing one, or infantry', () => {
     const near = (place: (s: S, ln: number) => void) => { const s = new S(), ln = s.inf(0, 60, PI); place(s, ln); s.advance(20); return s.shape(ln) }
@@ -203,9 +214,9 @@ describe('the square against cavalry (standing behaviour)', () => {
     s.order({ type: 'move', id: cav, points: [[0, 0]], append: false }); s.until(() => s.shape(ln) !== 'square', 150)
     s.advance(20); expect(s.shape(ln)).toBe('square')   // the regiment stands 60 m off
     s.order({ type: 'move', id: cav, points: [[0, -170]], append: false })
-    s.until(() => s.f(cav, 'vz') > -napoleonic.melee.square.closing, 300); const away = s.t   // riding away
+    s.until(() => s.f(cav, 'vz') > -napoleonic.melee.refuge.closing, 300); const away = s.t   // riding away
     s.until(() => s.shape(ln) === 'square', 120)
-    expect(s.shape(ln)).toBe('square → line'); expect(Math.abs(s.t - away - napoleonic.melee.square.hold)).toBeLessThan(1.5)
+    expect(s.shape(ln)).toBe('square → line'); expect(Math.abs(s.t - away - napoleonic.melee.refuge.hold)).toBeLessThan(1.5)
     s.until(() => s.busy(ln), 120); expect(s.shape(ln)).toBe('line')
   })
   it('a player\'s order stands it down for the rest of the threat', () => {

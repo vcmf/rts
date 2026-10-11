@@ -185,7 +185,7 @@ export const napoleonic: Ruleset = {
     impact: { kill: 0.12, shock: { front: 0.2, flank: 0.35, rear: 0.4 } },
     rate: 0.01, strength: { line: 1.0, column: 1.0, skirmish: 0.5, horse: 1.6, guns: 0.3 }, cohesion: 0.5,
     refuse: 0.9, breach: 0.3,
-    square: { alert: 200, closing: 1, react: 2, hold: 30 },
+    refuge: { alert: 200, closing: 1, react: 2, hold: 30 },   // the square against cavalry
   },
 }
 // the ceiling (decision 0018): the same ruleset with companies of 45 files, 810 places (tests, cost benches)
