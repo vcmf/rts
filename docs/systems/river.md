@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-11
 code: [prototypes/painted-cinematic.html, src/look/river.ts, src/look/world/author.ts, tools/build-look-data.ts, src/look/terrain.ts, tools/river-check.js, tools/render-check.js, tools/detail-check.mjs, src/look/world/water-data.ts, src/look/shaders/waterdata.glsl, tools/water-check.mjs]
-decisions: [0004-lowland-meander-river, 0012-heightfield-authority]
+decisions: [0004-lowland-meander-river, 0012-heightfield-authority, 0019-shading-data-from-authored-surface]
 ---
 
 # River (lowland meander)
@@ -56,9 +56,10 @@ W3 (`docs/plans/active/w3-water-data.md`).
   the authored height; its dry side is the height above the water), the signed distance to the shoreline (exact: the
   distance to the shoreline's segments, each crossing found by bisection on the authored surface, since a point bar
   meets the water nearly flat) and the flow (the river's direction × speed, easing to 0 over the last 1.5 m to the
-  shore). An RGBA8 texture bound to the tile's terrain and the water as `uWater`; in W3 only the debug views
-  (`?water=depth|sdf|flow`, `WATER_DEBUG` in `src/look/shaders/waterdata.glsl`) read it, so the drawn frame is
-  unchanged. Encoding ranges: `SPEC.water`.
+  shore). An RGBA8 texture for the tile's terrain and the water (`uWater`); in W3 only the debug views
+  (`?water=depth|sdf|flow`, `WATER_DEBUG` in `src/look/shaders/waterdata.glsl`) read it, and the first of them makes
+  it, so the drawn frame is unchanged. Encoding ranges: `SPEC.water`. Baked from the authored surface, not the
+  heightfield (proposed decision 0019).
 - **Water mesh:** a flat ribbon at `zw` reaching 1.35 half-widths each side of the centre line
   (1.35 widths in all, wider than the channel: the outer columns dive under the bank),
   clamped onto the tile edge where the painted line takes over.

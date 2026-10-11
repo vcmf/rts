@@ -116,18 +116,29 @@ From the prototype plan (W3: "Debug view shows correct depth, SDF and flow arrow
 - **The depth range is [−1, 2] m** (planned [−1.5, 2.5]): the floodplain stands about 1.1 m above the water, so its
   dry side clamps evenly instead of showing the river query's reach as a step. The deepest water is 1.49 m; the build
   fails on water deeper than the range.
-- **The bake** (`node tools/water-check.mjs --selftest`), 12,000 points in five 48 m regions:
+- **The bake** (`node tools/water-check.mjs --selftest`), 28,800 points in twelve 48 m regions (after review round 1):
   - depth: within 0.56 cm of the exact depth read the same way (half a step: 0.59 cm); against the depth at the
     point itself, 95th percentile 4.3 cm (the 0.5 m grid's, on the scarps);
-  - shore distance: 2,420 points within 1.5 m of the shore, median 2.0 cm, 95th percentile 4.9 cm, largest 8.9 cm
-    (limit 12). The sabotage: largest 21.4 cm, fails;
-  - flow: direction 95th percentile 0.35° (limit 5°);
+  - shore distance: 5,632 points within 1.5 m of the shore, median 1.9 cm, 95th percentile 4.9 cm, largest 8.9 cm
+    (limit 12). The section's-edge sabotage: largest 32.8 cm, 3 points over, fails; its error is local (where the carve
+    meets the trough), so the gate is the largest error by design; the half-texel offset fails it on 4,448 points;
+  - flow: direction 95th percentile 0.33° (limit 5°); reversed, the sabotage, 180°;
+  - depth's sabotage (texel centres half a texel off): 81 cm off, fails;
   - **for W4:** 778 of 32,003 wet texels (2.4%) have the drawn heightfield above the water, at most 0.56 m into it
     (the shallow bars' edges, where the 1.79 m grid rounds the bar up).
 - **The page:** 579 points on the sharpest bend at the closest zoom, 2 off by over 3/255 (largest 4.3/255); the
   texture read upside down: 578 off, fails.
 - **Goldens:** the base (W2) against this page: 0 of 16 regions at all 8 cameras, pixel for pixel. The default
   shaders do not declare the texture, so the frame's cost is unchanged (no bench needed).
-- **Load:** the look data 2.63 MB (was 1.75; the water data 0.88 MB: 1,822 spans, 215 k texels); the page's unpack
-  and texture creation 6 ms; the page's build 3.2–3.5 s on both, within its noise. GPU memory: 13.7 MB with mips.
+- **Load:** the look data 2.63 MB (was 1.75; the water data 0.88 MB: 1,822 spans, 215 k texels). The texture is made
+  on the first debug view (6 ms, 13.7 MB GPU with mips), so a normal load does not pay for it until W4 reads it; the
+  page's build 3.2–3.5 s on both, within its noise.
 - **Debug views:** `?water=depth|sdf|flow` (screenshots in the PR).
+- **Review round 1** (nothing severe; fixed and stopped): the depth and the shore distance disagreed on 33 texels
+  beyond the carve (ground below the water level but outside it: now one step below 0); the depth and the flow had
+  no sabotage (now a half-texel offset and the flow reversed, each failing its own part); zero flow decoded as
+  +0.004 (now 128 ± 127, exact); the tool used the file without `checkLookData`, and the format did not bound a grid's
+  bytes a texel; a saddle cell's centre ignored the carve's extent (now the wet rule); the texture was made on every
+  load (now on the first view); the check repeated the module's wet rule and bisection (now shared); the flow view's
+  arrow read picked a coarse mip at every cell's edge (now biased to the finest). Baking from the authored surface
+  rather than the heightfield is recorded as proposed decision 0019.

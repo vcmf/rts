@@ -5,6 +5,7 @@ import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Engine } from '@babylonjs/core/Engines/engine.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
+import type { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js'
@@ -52,10 +53,8 @@ scene.clearColor = CLEAR
 
 const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0))
 const keptGrains = new Set([mats.grain])   // grains the look tools switch back to (window.__look.grain): never disposed
-// the water data (docs/plans/active/w3-water-data.md): read by the debug views only, until W4
-const tw0 = performance.now(), waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData'), waterTexMs = performance.now() - tw0
-const terrain = buildTerrain(scene, mats, look.far, look.bank, waterData)
-const water = buildWater(scene, mats, waterData)
+const terrain = buildTerrain(scene, mats, look.far, look.bank)
+const water = buildWater(scene, mats)
 const nature = buildNature(scene, mats, water.reflAdd)
 water.finish(scene)
 const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy)
@@ -129,7 +128,7 @@ Object.assign(window, {
   tileGround: terrain.tileGround, farGround: terrain.farGround, farTerrainMat: terrain.farTerrainMat, riverMask: terrain.riverMask, riverMaskCanvas: terrain.riverMaskCanvas,
   groups: nature.groups, FAR: nature.far, KEEP_CLEAR: nature.KEEP_CLEAR, touchesZone: nature.touchesZone, placeable: nature.placeable, footprint: nature.footprint,
   lightCam: bakes.lightCam, shadowRT: bakes.shadowRT,
-  __buildMs: performance.now() - T0, __waterTexMs: waterTexMs,
+  __buildMs: performance.now() - T0,
 })
 // the look checks' hooks (tools/guard.mjs, tools/detail-check.mjs): test objects, the materials, the meshes by pass,
 // and the detail layer's switches
@@ -150,8 +149,15 @@ const project = (k: number, tx: number, ty: number) => {
 // the water data's debug views on the tile's terrain and the water (src/look/shaders/waterdata.glsl): 0 off, 1 depth,
 // 2 shore distance, 3 flow, 4 and 5 the raw texels; sab: the page check's sabotage (the texture read upside down)
 const WATER_VIEWS = ['off', 'depth', 'sdf', 'flow', 'raw', 'alpha']
+// The water data's texture (docs/plans/active/w3-water-data.md) is made on the first view: until W4 nothing else reads it
+let waterData: RawTexture | null = null
 const waterView = (v: number, sab = false) => {
   if (!WATER_VIEWS[v]) throw new Error(`unknown water view ${v}`)
+  if (v > 0 && !waterData) {
+    const t0 = performance.now(); waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData')
+    for (const m of [terrain.terrainMat, water.waterMat]) m.setTexture('uWater', waterData)
+    Object.assign(window, { __waterTexMs: performance.now() - t0 })
+  }
   for (const m of [terrain.terrainMat, water.waterMat]) { m.setDefine('#define WATER_DEBUG', v > 0); m.setDefine('#define WATER_SAB_FLIP', sab); m.setFloat('uWaterView', v) }
 }
 const paintGrain = mats.grain, paintMean = mats.grainMean

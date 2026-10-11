@@ -5,7 +5,7 @@
 //   node tools/water-check.mjs <look page URL> [outDir] the bake, the page, and the debug views' screenshots
 //   ... --selftest                                      each check passes, and fails on its sabotage
 //
-// - bake: in five 48 m regions along the river (the play area's sharpest bend and four others, seeded), at random
+// - bake: in twelve 48 m regions along the river (the play area's sharpest bend and eleven others, seeded), at random
 //   points read bilinearly from the decoded data as the GPU reads it:
 //   - depth: against the exact depth at the four texel centres, read the same way: within half an encoding step
 //     (placement and encoding exact); the error against the depth at the point itself is reported (the 0.5 m grid's);
@@ -33,20 +33,21 @@ import { mulberry } from '../src/look/noise.ts'
 import { lerpA, riverQuery } from '../src/look/river.ts'
 import { heightAt, setHeightfield } from '../src/look/heightfield.ts'
 import { authorWorld } from '../src/look/world/author.ts'
-import { decodeLook, unpackSpans } from '../src/look/world/data.ts'
-import { WATER_FILL, bakeWater, decodeWater, packWater, sampleRGBA, waterAt } from '../src/look/world/water-data.ts'
+import { checkLookData, decodeLook, unpackSpans } from '../src/look/world/data.ts'
+import { DEPTH_STEP, WATER_FILL, bakeWater, decodeWater, packWater, sampleRGBA, shoreCrossing, waterAt, wetAt } from '../src/look/world/water-data.ts'
 import { LOOK_FILE } from './build-look-data.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const W = 1280, H = 720, CAM = SPEC.camera, WS = SPEC.water
 const [, A0, BETA0, R0] = CAMS.find(c => c[0] === 'start')
-const SDF_MAX = 0.12, FLOW_P95 = 5, PAGE_BAD = 0.01, REGION = 48, FINE = 0.125, SHORE = 1.5
+const SDF_MAX = 0.12, FLOW_P95 = 5, PAGE_BAD = 0.01, REGIONS = 12, REGION = 48, FINE = 0.125, SHORE = 1.5
 
 let world = null, look = null
 const setup = () => {
   world ??= authorWorld()
   if (!look) {
     const b = fs.readFileSync(LOOK_FILE); look = decodeLook(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength))
+    checkLookData(D, look)   // a file built for another spec fails here, not as odd errors below
     setHeightfield(look.hf, look.far, SPEC.tile / 2)
   }
 }
@@ -58,7 +59,7 @@ const sharpest = () => { let bi = -1; for (let i = 0; i < C().n; i++) if (inPlay
 // ---------- bake ----------
 function regions() {
   const r = mulberry(3), out = [sharpest()], lim = SPEC.tile / 2 - REGION
-  while (out.length < 5) { const i = Math.floor(r() * C().n); if (Math.abs(C().px[i]) < lim && Math.abs(C().pz[i]) < lim) out.push(i) }
+  while (out.length < REGIONS) { const i = Math.floor(r() * C().n); if (Math.abs(C().px[i]) < lim && Math.abs(C().pz[i]) < lim) out.push(i) }
   return out.map(i => [C().px[i], C().pz[i]])
 }
 // the reference water on a fine grid over a region: the depth and the wet flag at each node, and the zero contour's
@@ -72,12 +73,9 @@ function fineRegion(cx, cz) {
     const w = waterAt(world.H, x, z, q); dep[j * m + i] = w.depth; wet[j * m + i] = w.wet ? 1 : 0
   }
   const pts = []
-  const wetAt = (x, z) => { const q = riverQuery(x, z); return !!q && waterAt(world.H, x, z, q).wet }
   const edge = (a, b, xa, za, xb, zb) => {
     if (wet[a] === wet[b]) return
-    let lo = 0, hi = 1
-    for (let it = 0; it < 10; it++) { const m = (lo + hi) / 2; if (wetAt(xa + (xb - xa) * m, za + (zb - za) * m) === !!wet[a]) lo = m; else hi = m }
-    const t = (lo + hi) / 2
+    const t = shoreCrossing(world.H, xa, za, xb, zb, !!wet[a], 10)
     pts.push([xa + (xb - xa) * t, za + (zb - za) * t])
   }
   for (let j = 0; j < m; j++) for (let i = 0; i < m; i++) {
@@ -90,9 +88,10 @@ function fineRegion(cx, cz) {
 
 function bakeCheck(data, label) {
   setup()
-  const n = D.waterN, cell = WS.texel, x0 = -SPEC.tile / 2, step = (WS.depth[1] - WS.depth[0]) / 255, r = mulberry(5)
+  const n = D.waterN, cell = WS.texel, x0 = -SPEC.tile / 2, step = DEPTH_STEP, r = mulberry(5)
   const read = (x, z) => decodeWater(...sampleRGBA(data, n, cell, x0, x0, x, z))
-  const exactAt = (x, z) => { const q = riverQuery(x, z); return q ? Math.max(WS.depth[0], Math.min(WS.depth[1], waterAt(world.H, x, z, q).depth)) : WS.depth[0] }
+  // the data's depth rule, independently: the depth where it is water, else at most a step below 0, in the range
+  const exactAt = (x, z) => { const q = riverQuery(x, z); if (!q) return WS.depth[0]; const w = waterAt(world.H, x, z, q); return Math.max(WS.depth[0], Math.min(WS.depth[1], w.wet ? w.depth : Math.min(w.depth, -step))) }
   // the exact depth read bilinearly from the four texel centres around (x, z)
   const exactBilinear = (x, z) => {
     const u = (x - x0) / cell - 0.5, v = (z - x0) / cell - 0.5, i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j
@@ -108,7 +107,7 @@ function bakeCheck(data, label) {
       if (q) { const d = waterAt(world.H, x, z, q).depth; if (d > WS.depth[0] && d < WS.depth[1]) depthTrue.push(Math.abs(got.depth - d)) }
       // the reference shore distance: the nearest contour point, signed by the water at the point
       let best = Infinity; for (const [px, pz] of pts) best = Math.min(best, (px - x) ** 2 + (pz - z) ** 2)
-      const wet = !!q && waterAt(world.H, x, z, q).wet, ref = (wet ? 1 : -1) * Math.sqrt(best)
+      const wet = wetAt(world.H, x, z), ref = (wet ? 1 : -1) * Math.sqrt(best)
       if (Math.abs(ref) < SHORE) sdfErr.push(Math.abs(got.sdf - ref))
       if (q && ref > 1 && Math.hypot(got.fx, got.fz) > 0.05) {
         const tx = lerpA(C().tx, q), tz = lerpA(C().tz, q)
@@ -118,11 +117,11 @@ function bakeCheck(data, label) {
   }
   const dMax = Math.max(...depthErr), sMax = Math.max(...sdfErr), fP95 = pct(flowErr, 0.95)
   const okD = dMax <= step / 2 + 1e-3, okS = sdfErr.length >= 1000 && sMax <= SDF_MAX, okF = flowErr.length >= 300 && fP95 < FLOW_P95
-  const lines = [`bake (${label}): ${depthErr.length} points in 5 regions of ${REGION} m`,
+  const lines = [`bake (${label}): ${depthErr.length} points in ${REGIONS} regions of ${REGION} m`,
     `  depth: largest error against the exact depth read the same way ${(dMax * 100).toFixed(2)} cm (limit half a step, ${(step * 50).toFixed(2)} cm)${okD ? '' : '  FAIL'}; against the depth at the point, 95th percentile ${(pct(depthTrue, 0.95) * 100).toFixed(1)} cm, largest ${(Math.max(...depthTrue) * 100).toFixed(1)} cm (the 0.5 m grid's, reported)`,
-    `  shore distance: ${sdfErr.length} points within ${SHORE} m of the shore, error median ${(pct(sdfErr, 0.5) * 100).toFixed(1)} cm, 95th percentile ${(pct(sdfErr, 0.95) * 100).toFixed(1)} cm, largest ${(sMax * 100).toFixed(1)} cm (limit ${SDF_MAX * 100} cm)${okS ? '' : '  FAIL'}`,
+    `  shore distance: ${sdfErr.length} points within ${SHORE} m of the shore, error median ${(pct(sdfErr, 0.5) * 100).toFixed(1)} cm, 95th percentile ${(pct(sdfErr, 0.95) * 100).toFixed(1)} cm, 99th percentile ${(pct(sdfErr, 0.99) * 100).toFixed(1)} cm, largest ${(sMax * 100).toFixed(1)} cm (limit ${SDF_MAX * 100} cm; ${sdfErr.filter(e => e > SDF_MAX).length} over it)${okS ? '' : '  FAIL'}`,
     `  flow: ${flowErr.length} points over 1 m into the water, direction error median ${pct(flowErr, 0.5).toFixed(2)}°, 95th percentile ${fP95.toFixed(2)}° (limit ${FLOW_P95}°)${okF ? '' : '  FAIL'}`]
-  return { ok: okD && okS && okF, lines }
+  return { ok: okD && okS && okF, okD, okS, okF, lines }
 }
 
 // the drawn ground against the data's water (reported for W4)
@@ -190,7 +189,11 @@ function main() {
   }
   report(bakeCheck(data, 'the committed data'))
   for (const l of drawnReport(data)) console.log(l)
-  if (self) report(bakeCheck(unpackSpans(packWater(bakeWater(world.H, 'centre')), WATER_FILL), 'shore distance from the centre line'), true)
+  // each sabotage must fail its own part of the check
+  if (self) for (const [sab, label, part] of [['centre', 'the shore distance from the section\'s water\'s edge', 'okS'], ['offset', 'texel centres half a texel off', 'okD'], ['upstream', 'the flow reversed', 'okF']]) {
+    const r = bakeCheck(unpackSpans(packWater(bakeWater(world.H, sab)), WATER_FILL), label)
+    report({ ok: r[part], lines: r.lines }, true)
+  }
   if (url) {
     report(pageCheck(url, out, false, data))
     if (self) report(pageCheck(url, path.join(out, 'sabotage'), true, data), true)

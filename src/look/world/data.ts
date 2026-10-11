@@ -77,6 +77,7 @@ export function decodeLook(buf: ArrayBuffer): LookData {
   const grid = (g: typeof SPAN_GRIDS[number]): SpanGrid => {
     const m = meta[g], spans = arr[g + 'Spans'], tex = u8[g + 'Tex']
     if (!m || !spans || !tex || spans.length % 3) throw new Error(`look data: no ${g} grid`)
+    if (!Number.isInteger(m.ch) || m.ch < 1 || m.ch > 4) throw new Error(`look data: the ${g} grid has ${m.ch} bytes a texel (1 to 4)`)
     let covered = 0
     for (let i = 0; i < spans.length; i += 3) {
       const j = spans[i], i0 = spans[i + 1], len = spans[i + 2]

@@ -32,10 +32,12 @@ describe('water encoding', () => {
       const b = encodeWater(d, s, fx, fz), w = decodeWater(...(b.map(v => v / 255) as [number, number, number, number]))
       expect(Math.abs(w.depth - d)).toBeLessThanOrEqual(step / 2 + 1e-9)
       expect(Math.abs(w.sdf - s)).toBeLessThanOrEqual(W.sdf / 255 + 1e-9)
-      expect(Math.abs(w.fx - fx)).toBeLessThanOrEqual(1 / 255 + 1e-9)
-      expect(Math.abs(w.fz - fz)).toBeLessThanOrEqual(1 / 255 + 1e-9)
+      expect(Math.abs(w.fx - fx)).toBeLessThanOrEqual(0.5 / 127 + 1e-9)
+      expect(Math.abs(w.fz - fz)).toBeLessThanOrEqual(0.5 / 127 + 1e-9)
     }
-    expect(encodeWater(9, 99, 3, -3)).toEqual([255, 255, 255, 0])
+    expect(encodeWater(9, 99, 3, -3)).toEqual([255, 255, 255, 1])
+    const still = decodeWater(...(encodeWater(0, 0, 0, 0).map(v => v / 255) as [number, number, number, number]))
+    expect([still.fx, still.fz]).toEqual([0, 0])   // no flow is exactly none
   })
 })
 

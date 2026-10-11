@@ -33,14 +33,14 @@ export interface Terrain {
 const TILE_W = D.spec.tile, TILE_SUB = D.spec.tileSub, FAR_W = D.spec.far, FAR_SUB = D.spec.farSub, FAR_CELL = D.farCell, BAND = D.band, MASK_N = D.spec.sizes.riverMask
 
 // heights come from the look data: the tile from the heightfield (decision 0012), the far ring from its own nodes
-export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: SpanGrid, waterData: RawTexture): Terrain {
+export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: SpanGrid): Terrain {
   // DETAIL: the detail layer (src/look/shaders/painter.glsl), on the terrain only. BANKN: the tile shades the river's
-  // banks with the fine bank normals (docs/plans/active/w2-river-banks.md). The water data (W3) is bound for its debug
-  // views (WATER_DEBUG)
+  // banks with the fine bank normals (docs/plans/active/w2-river-banks.md). The water data (W3, uWater) is bound by its
+  // debug views (WATER_DEBUG, src/look/main.ts)
   const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView'], samplers: ['uBankN', 'uWater'], defines: ['#define DETAIL', '#define BANKN'] })
   // the bank normals: x, z of the normal, the weight; the uncovered texels a level normal of no weight (the vertex
   // normals hold there)
-  const bankN = spanTexture(scene, bank, [128, 128, 0, 0], 'bankN'); terrainMat.setTexture('uBankN', bankN); terrainMat.setTexture('uWater', waterData)
+  const bankN = spanTexture(scene, bank, [128, 128, 0, 0], 'bankN'); terrainMat.setTexture('uBankN', bankN)
   // the bank colours turn symmetric over the bank normals' edge fade, to meet the far ring's painted river (stroked
   // at the river's width) at the tile's edge
   const edgeK = (x: number, z: number) => 1 - sstep(TILE_W / 2 - D.spec.bank.edge, TILE_W / 2, Math.max(Math.abs(x), Math.abs(z)))
