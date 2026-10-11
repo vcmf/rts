@@ -4,7 +4,7 @@ precision highp float;varying vec3 vW;varying float vAcross,vTau,vRiffle;uniform
 #include<waterdata>
 #include<shore>
 
-// The painted water (docs/plans/active/w4-water-surface.md, research §2.8): opaque. Its lower layers (the bed, the
+// The painted water (docs/plans/done/w4-water-surface.md, research §2.8): opaque. Its lower layers (the bed, the
 // absorption, the shadows, the shore foam) are the shore band's (src/look/shaders/shore.glsl), the same function the
 // terrain paints near the water; the upper layers (rough water, sky tint, reflections, strokes, glitter, riffle foam)
 // fade in past the band, where the water is always the surface drawn. vAcross: m from the centre line (+ left of the

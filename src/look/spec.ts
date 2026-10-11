@@ -36,7 +36,7 @@ export interface Spec {
   bank: { texel: number; reach: number; fade: number; edge: number }
   // the water data (docs/plans/done/w3-water-data.md): texels of `texel` m over the tile; the depth (the water level
   // minus the ground, signed) stored over depth[0]..depth[1] m, the shore distance over ±sdf m. The shore band
-  // (docs/plans/active/w4-water-surface.md): within `band` m of the shoreline, on either side, the terrain and the
+  // (docs/plans/done/w4-water-surface.md): within `band` m of the shoreline, on either side, the terrain and the
   // water paint the same colour (the drawn surfaces disagree on the shore by less: tools/water-look-check.mjs)
   water: { texel: number; depth: [number, number]; sdf: number; band: number }
 }

@@ -1,4 +1,4 @@
-// The shore band (docs/plans/active/w4-water-surface.md): within WATER_BAND m of the shoreline the tile's terrain and
+// The shore band (docs/plans/done/w4-water-surface.md): within WATER_BAND m of the shoreline the tile's terrain and
 // the water paint the same colour, from inputs both have at a world point (the water data, the bank normals, the
 // light map, the paint grain), so the shore is painted from the data whichever surface the depth test keeps. Where
 // the two surfaces meet on screen they intersect, so they share the point there and the colours match.

@@ -1,4 +1,4 @@
-// The painted water's checks (docs/plans/active/w4-water-surface.md, W4): the shore band, the seam, pools against
+// The painted water's checks (docs/plans/done/w4-water-surface.md, W4): the shore band, the seam, pools against
 // riffles, and shimmer. Each renders the look page headless (SwiftShader, the clock frozen) through its hooks
 // (window.__look in src/look/main.ts).
 //

@@ -14,7 +14,7 @@ One meandering channel generated once at load into dense per-sample arrays. Ever
 page in L0 (generated offline, `src/look/world/author.ts`), with cut banks and point bars since W2
 (`docs/plans/done/w2-river-banks.md`, the look page only), the water data baked for the water's shaders since
 W3 (`docs/plans/done/w3-water-data.md`), and the painted water, its shoreline from that data, since W4
-(`docs/plans/active/w4-water-surface.md`).
+(`docs/plans/done/w4-water-surface.md`).
 
 ## Goals / non-goals
 

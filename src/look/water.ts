@@ -1,4 +1,4 @@
-// Water (docs/art-bible.md §6c, docs/plans/active/w4-water-surface.md): painted, top-down. An opaque ribbon wide
+// Water (docs/art-bible.md §6c, docs/plans/done/w4-water-surface.md): painted, top-down. An opaque ribbon wide
 // enough that it dives under the banks; what it paints comes from the water data (depth, shore distance, flow), and
 // near the shore it paints the shore band, as the terrain does there (src/look/shaders/shore.glsl), so the shoreline
 // is the data's, not the triangles'.
