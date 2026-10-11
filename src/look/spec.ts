@@ -153,7 +153,7 @@ export function shadowMapSize(d: Derived, boxW: number, boxH: number, sunSinElev
   if (w > s.minSpec.maxTexture || h > s.minSpec.maxTexture) throw new Error(`world spec: bake: shadow map ${w}×${h} > ${s.minSpec.maxTexture}² (min-spec)`)
   // the two render targets also hold a depth buffer each (4 bytes a texel)
   const mb = 2 * bakeMB(w, h) + 2 * bakeMB(s.sizes.lightMap, s.sizes.lightMap) + bakeMB(s.sizes.aoTex, s.sizes.aoTex) + bakeMB(s.sizes.riverMask, s.sizes.riverMask) + bakeMB(s.sizes.reflMask, s.sizes.reflMask)
-    + (bakeMB(d.bankN, d.bankN) + bakeMB(d.waterN, d.waterN)) * 4 / 3   // the bank normals and the water data, with mips
+    + bakeMB(d.bankN, d.bankN) + bakeMB(d.waterN, d.waterN)   // the bank normals and the water data (no mips: src/look/span-texture.ts)
   if (mb > s.minSpec.bakeMB) throw new Error(`world spec: bake: ${mb.toFixed(0)} MB of bakes > ${s.minSpec.bakeMB} MB (min-spec)`)
   return { w, h }
 }

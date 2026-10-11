@@ -29,17 +29,20 @@ E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/styl
 
 ## Scope
 
-- **The ribbon:** the same mesh, with the time of travel (`aTau`) and the riffle (`aRiffle`) per vertex, the inner
-  columns clamped to 0.85 of the bend's radius (research §2.7: folding; a guard for W6's imported rivers: on this
-  river the tightest radius is 11.5 m and no column reaches it, measured); the depth comes from the water data, not
-  the vertices.
+- **The ribbon:** the same mesh, with the time of travel (`aTau`) and the riffle (`aRiffle`) per vertex; the depth
+  comes from the water data, not the vertices. No fold guard (research §2.7's clamp of the inner columns to 0.85 of
+  the bend's radius): on this river the tightest radius is 11.5 m and no row of the ribbon runs backwards (measured),
+  and the clamp as written leaves the inner bar without water where the radius is under its wet edge; W6's
+  imported rivers bring the tight bends, and the guard with them.
 - **The shared shore band:** one GLSL function both the terrain and the water draw with near the shoreline, so the
   shore is painted from the data, whichever surface the depth test keeps.
 - **The water shader, layer by layer** (research §2.8): the bed seen through the water, the painted absorption ramp,
   calm and rough water, the painted sky tint, the tree reflections, strokes on the time of travel, shadows, glitter,
   and hard-edged foam (shore and riffles). The winter ice stays as it is (W5's seasons).
 - **The water data on the page from the start:** bound to the terrain's and the water's materials outside the debug
-  views (its texture: 13.7 MB, 6 ms, measured in W3).
+  views (its texture: 6 ms to make, measured in W3). It and the bank normals lose their mips (10 MB each): the band
+  must read the same value at a world point from both surfaces, and a mip level follows each surface's own screen
+  derivatives.
 - **The far ring's painted line** where it meets the ribbon at the tile's edge (re-matched if the new water shows a
   step there).
 
@@ -122,7 +125,8 @@ E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/styl
     upper layers not faded in) and the terrain without the band (`WATER_SAB_TERRAIN`) each fail it.
 - **Pools dark and calm, riffles light and foamy** (page, the default zoom at three reaches): water pixels near the
   centre line, classed by the river's riffle there (above 0.7, below 0.2): pools' median luma under riffles' by a
-  margin; riffles' share of foam-bright pixels at least twice the pools'. Sabotage: the riffle ignored
+  margin; riffles' share of foam-bright pixels at least twice the pools'. As built, riffles are classed at 0.5 and
+  above (the river's riffle reaches 0.81, and no stretch in the play area holds above 0.7). Sabotage: the riffle ignored
   (`WATER_SAB_FLAT`) fails.
 - **No flicker:** the band check's z-fighting count, and the L2b shimmer check run on the water at the closest zoom
   (a sub-pixel shift of the image moves the shore by its shift, not more).
@@ -149,8 +153,11 @@ From the prototype plan (W4: "No shoreline seam or flicker; pools read dark and 
 - **The band shows as a halo:** a 0.75 m strip without strokes or glitter along every shore. The research wants
   quieter water at the edge anyway (slack water, research §4.3); judged on the screenshots. If it reads as a halo,
   the next step is a finer drawn shoreline (a bank strip mesh, research §2.5), which narrows the band.
-- **Parallax in the band:** the refraction offset reads the bed at a point that depends on the view vector, which
-  differs slightly between the water's plane and the drawn ground; the seam check measures it.
+- **What follows each surface's derivatives:** where the ribbon meets a sloped bank, the two surfaces share the
+  world point but not its screen derivatives, so the detail grain's blur and the edges' anti-aliasing differ slightly
+  across the line (the values do not). The seam check cannot see it (one geometry); a check across the real
+  boundary could not tell it from the painted shoreline there (tried in review round 1). Judged on screenshots.
+  The data's textures have no mips for this reason (a mip level would change the values).
 - **The terrain's cost:** one more fetch per terrain pixel (the water data) and the band's work near the water;
   measured by the bench.
 - **Spiral risk** (prototype plan §4.4): if the review needs more than 3 rounds, stop and revisit the opaque

@@ -14,9 +14,11 @@
 //   groundMat): same geometry, so the same pixels and world points. At the ground's pixels within the band (from the
 //   raw data view), the two frames' largest channel difference: 95th percentile within SEAM_P95, largest within
 //   SEAM_MAX (out of 255). With the band check, equal colours in the band leave no seam where the two surfaces meet
-//   (they intersect there, so they share the world point). Terrain alone, no finishing passes; the sharpest bend at
-//   the closest zoom, and two default views. Sabotages: the water painting itself in the band (WATER_SAB_OWN), the
-//   terrain without the band (WATER_SAB_TERRAIN).
+//   (they intersect there, so they share the world point). What follows each surface's own screen derivatives (the
+//   detail grain's blur, the edges' anti-aliasing) one geometry cannot show; comparing neighbours across the real
+//   boundary cannot tell it from the painted shoreline there (tried: the sabotage and the page measured alike).
+//   Terrain alone, no finishing passes; the sharpest bend at the closest zoom, and two default views. Sabotages: the
+//   water painting itself in the band (WATER_SAB_OWN), the terrain without the band (WATER_SAB_TERRAIN).
 // - pools: the default view at three reaches. At the river's samples on screen (the centre line and 0.3 half-widths
 //   either side, where the water is what the camera sees), the frame's luma (Rec. 709, 0..1) in 5×5 pixels,
 //   classed by the riffle there (pool ≤ POOL, riffle ≥ RIFFLE). Pools' median under riffles' by LUMA_GAP; riffles'

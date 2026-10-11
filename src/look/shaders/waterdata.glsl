@@ -3,12 +3,11 @@
 // WATER_DEBUG adds its debug views. Without WATERDATA nothing here is compiled
 #ifdef WATERDATA
 uniform sampler2D uWater;
-vec4 waterTexel(vec2 xz,float bias){vec2 uv=(xz+TILE_HALF)/TILE_W;
+vec4 waterTexel(vec2 xz){vec2 uv=(xz+TILE_HALF)/TILE_W;
   #ifdef WATER_SAB_FLIP
   uv.y=1.0-uv.y;   // the page check's sabotage: the texture read upside down
   #endif
-  return texture2D(uWater,uv,bias);}
-vec4 waterTexel(vec2 xz){return waterTexel(xz,0.0);}
+  return texture2D(uWater,uv);}
 float waterDepth(vec4 t){return WATER_D0+t.r*(WATER_D1-WATER_D0);}
 float waterSdf(vec4 t){return (t.g*2.0-1.0)*WATER_SDF;}
 vec2 waterFlow(vec4 t){return (t.ba*255.0-128.0)/127.0;}   // 128 ± 127: 0 exactly at 128
@@ -33,8 +32,8 @@ vec3 waterView(vec2 xz){
   if(uWaterView<2.5){float s=waterSdf(t),w=max(fwidth(s),1e-4);
     vec3 c=(s>0.0?vec3(0.20,0.40,0.90):vec3(0.85,0.35,0.20))*(0.55+0.45*fract(s));
     return mix(vec3(1.0),c,smoothstep(w,2.5*w,abs(s)));}
-  // the cell's centre, read at the finest level (its derivatives jump at every cell's edge: a bias, not a seam)
-  vec2 cc=(floor(xz/2.0)+0.5)*2.0,f=waterFlow(waterTexel(cc,-16.0)),p=xz-cc;float sp=length(f);
+  // the cell's centre (the texture has no mips: src/look/span-texture.ts)
+  vec2 cc=(floor(xz/2.0)+0.5)*2.0,f=waterFlow(waterTexel(cc)),p=xz-cc;float sp=length(f);
   vec3 c=depthView(waterDepth(t))*0.7;
   if(sp<0.02)return c;
   vec2 d=f/sp,e=vec2(-d.y,d.x);float a=dot(p,d),b=abs(dot(p,e)),L=0.15+0.8*sp,

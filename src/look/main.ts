@@ -141,11 +141,14 @@ const passes = { terrain: [terrain.tileGround, terrain.farGround, terrain.apron]
 const terrainMats = [terrain.terrainMat, terrain.farTerrainMat, terrain.hillMat], waterMats = [water.waterMat, water.groundMat]
 // the terrain's variants (src/look/shaders/painter.glsl): the L0 grain, the debug view, the checks' sabotages
 const DETAIL_DEFINES = ['DETAIL_L0', 'DETAIL_DEBUG', 'DETAIL_DEBUG_INC', 'DETAIL_DEBUG_N', 'DETAIL_SAB_IMPLICIT', 'DETAIL_SAB_STEP', 'BANKN_OFF']
-// the water's materials take the two that change the shore band (it paints with the terrain's paint() and normals)
+// the water's materials take the two that change the shore band (it paints with the terrain's paint() and normals).
+// On WebGL1 the L0 grain stays on whatever is asked (the detail layer needs GLSL ES 3.00: src/look/terrain.ts)
+const webgl1 = engine.version < 2
 const setDetail = (on: string[]) => {
   for (const d of on) if (!DETAIL_DEFINES.includes(d)) throw new Error(`unknown detail define ${d}`)
-  for (const m of terrainMats) for (const d of DETAIL_DEFINES) m.setDefine(`#define ${d}`, on.includes(d))
-  for (const m of waterMats) for (const d of ['DETAIL_L0', 'BANKN_OFF']) m.setDefine(`#define ${d}`, on.includes(d))
+  const set = (d: string) => on.includes(d) || (d === 'DETAIL_L0' && webgl1)
+  for (const m of terrainMats) for (const d of DETAIL_DEFINES) m.setDefine(`#define ${d}`, set(d))
+  for (const m of waterMats) for (const d of ['DETAIL_L0', 'BANKN_OFF']) m.setDefine(`#define ${d}`, set(d))
 }
 // the camera's projection, then in clip space x' = k·x + tx·w, y' = k·y + ty·w (k 1, no offset: the camera's own)
 const project = (k: number, tx: number, ty: number) => {

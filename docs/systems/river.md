@@ -63,8 +63,7 @@ W3 (`docs/plans/done/w3-water-data.md`), and the painted water, its shoreline fr
 - **Water mesh:** a flat ribbon at `zw` reaching 1.35 half-widths each side of the centre line
   (1.35 widths in all, wider than the channel: the outer columns dive under the bank),
   clamped onto the tile edge where the painted line takes over. Per vertex: across and along (m), the time of
-  travel `tau` and the riffle (W4). The inner side of a bend stops at 0.85 of its radius (a guard against
-  folding; no column reaches it on this river).
+  travel `tau` and the riffle (W4).
 - **The shore band (W4):** the drawn shoreline (where the ribbon's plane cuts the 1.79 m heightfield) strays from
   the data's by up to 0.7 m, so the visible shore is painted, not geometric: within `SPEC.water.band` of the
   data's shoreline, on both sides, the terrain and the water paint one function (`shore()` in

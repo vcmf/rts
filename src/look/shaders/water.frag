@@ -17,15 +17,18 @@ void main(){
   #endif
   vec4 lm=LM(vW);float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,lm.g,uAO);
   vec4 t=waterTexel(vW.xz);float d=max(waterDepth(t),0.0),s=waterSdf(t),sp=length(waterFlow(t)),fws=fwidth(s);   // fws: the branches' margin (shore.glsl)
-  float up=smoothstep(WATER_BAND,WATER_BAND+0.5,s);   // the upper layers: none within the band
   #ifdef WATER_SAB_OWN
   // the seam check's sabotage: the water painting itself in the band (every layer wherever it is wet, the dry side lit
   // with the water's flat normal instead of the bank normals)
-  vec3 c=s<=0.0?paint(landAlbedo(vW.xz),vec3(0.0,1.0,0.0),vW,occ,0.12,1.0,sh)*(1.0+(G(vW.xz/4.0).r-0.5)*uGrainAmt*0.14):shore(vW,t,occ,sh,fws);up=step(0.0,s);
+  const float UP0=0.0;
+  vec3 c=s<=0.0?paint(landAlbedo(vW.xz),vec3(0.0,1.0,0.0),vW,occ,0.12,1.0,sh)*(1.0+(G(vW.xz/4.0).r-0.5)*uGrainAmt*0.14):shore(vW,t,occ,sh,fws);
   #else
+  const float UP0=WATER_BAND;   // the upper layers: none within the band
   vec3 c=shore(vW,t,occ,sh,fws);
   #endif
-  if(s>WATER_BAND-1.5*fws){   // past where the layers below have weight, by the derivatives' margin (src/look/shaders/shore.glsl)
+  // the upper layers' weight: faded in past the band, and under the winter ice (it covers every layer, shore.glsl)
+  float up=smoothstep(UP0,UP0+0.5,s)*(1.0-0.9*iceAmt());
+  if(s>UP0-1.5*fws){   // past where the layers below have weight, by the derivatives' margin (src/look/shaders/shore.glsl)
     vec3 V=normalize(uCamPos-vW),R=reflect(-V,vec3(0.0,1.0,0.0));
     float across=vUv.x,cs=max(cloud(vW)*0.6,sh);
     #ifdef WATER_SAB_FLAT
@@ -54,11 +57,11 @@ void main(){
     // 8. glitter: painted sun dabs, mostly on riffles
     float spec=pow(max(dot(R,uSunDir),0.0),5.0);
     float dab=aastep(mix(0.80,0.73,rough),G(vec2(along*0.10,across*0.25)).g)*aastep(0.5,G(vW.xz/9.0+mod(uTime,200.0/3.0)*0.015).g);
-    c+=uSunCol*vec3(1.0,0.86,0.58)*dab*(0.2+spec*1.6)*(1.0-cs)*smoothstep(0.15,0.5,d)*up*(1.0-clamp(uSeason-2.3,0.0,0.7)/0.7);
+    c+=uSunCol*vec3(1.0,0.86,0.58)*dab*(0.2+spec*1.6)*(1.0-cs)*smoothstep(0.15,0.5,d)*up;
     // 9. riffle foam: broken streaks along the current (the grain's dry-brush channel, long along x), bent into
     // chevrons pointing upstream, hard-edged
     float chev=G(vec2(along*0.05+abs(across)*0.02,across*0.03)).b;
     float riff=smoothstep(0.35,0.65,riffle)*aastep(0.66,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);
-    c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.85*up*(1.0-clamp(uSeason-2.3,0.0,0.7)/0.7));
+    c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.85*up);
   }
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}

@@ -63,11 +63,8 @@ export function buildWater(scene: Scene, mats: Materials, tex: { water: RawTextu
   for (let i = 0, join = false; i < C.n; i++) {
     if (Math.abs(C.px[i]) > lim || Math.abs(C.pz[i]) > lim) { join = false; continue }   // the water lives in the detailed tile only; a re-entry starts a new strip
     const hw = C.W[i] / 2, nx = -C.tz[i], nz = C.tx[i], y = C.zw[i], [ep, en] = wetEdges(hw, C.A[i])   // left normal of the flow; water is flat at zw
-    // the inner side of a bend (the side of the curvature's sign: the outer bank, A, is on the other) stays short of the
-    // centre of curvature: a guard against folding (research §2.7; no column reaches it on this river)
-    const inner = Math.sign(C.kappa[i]), R = 0.85 / Math.max(1e-4, Math.abs(C.kappa[i]))
     for (let c = 0; c <= COLS; c++) {
-      let a = (c / COLS * 2 - 1) * hw * 1.35; if (Math.sign(a) === inner) a = inner * Math.min(Math.abs(a), R)
+      const a = (c / COLS * 2 - 1) * hw * 1.35
       let x = C.px[i] + nx * a, zz = C.pz[i] + nz * a
       const cx = Math.max(-E2, Math.min(E2, x)), cz = Math.max(-E2, Math.min(E2, zz)), moved = cx !== x || cz !== zz; x = cx; zz = cz   // the ribbon ends exactly on the tile edge, where the painted line starts
       // columns past this side's water's edge dive under the bank (W2: the inner bar is dry sooner); a column the clamp

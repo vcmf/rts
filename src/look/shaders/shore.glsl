@@ -45,6 +45,8 @@ vec3 bedAlbedo(vec2 xz,float depth,float speed){
   b=mix(b,vec3(0.21,0.29,0.15),smoothstep(0.60,0.78,G(xz/4.3+0.6).g)*smoothstep(0.4,0.8,depth)*(1.0-speed));
   return mix(landAlbedo(xz),b,smoothstep(0.0,0.3,depth));}
 const vec3 FOAM=vec3(0.93,0.92,0.84);
+// winter ice (the seasons are W5's): how much of the water it covers, 0..1; it covers every layer of the water
+float iceAmt(){return clamp(uSeason-2.3,0.0,0.7)/0.7;}
 // the ground at the water's edge, lit with the authored surface's normal
 vec3 shoreLand(vec3 wp,float occ,float sh){return paint(landAlbedo(wp.xz),bankNormal(vec3(0.0,1.0,0.0),wp.xz),wp,occ,0.12,1.0,sh);}
 // the water's lower layers (research §2.8, layers 1, 2, 7, the shore foam, the ice): d the depth, s the shore distance,
@@ -69,16 +71,18 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh){
   foam=max(foam,(1.0-aastep(0.05,abs(s-0.60-j*1.5)))*aastep(0.62,gr)*aastep(0.5,gb)*0.6);
   c=mix(c,FOAM*mix(1.0,0.78,cs),foam*0.85);
   // winter ice (the seasons are W5's): pale and cracked, darker over deep water
-  float ice=clamp(uSeason-2.3,0.0,0.7)/0.7;
+  float ice=iceAmt();
   if(ice>0.0){vec3 ic=mix(vec3(0.66,0.76,0.82),vec3(0.84,0.88,0.90),smoothstep(0.5,0.0,dd));
     float crack=smoothstep(0.03,0.0,abs(G(wp.xz/9.0).g-0.5))*0.5;ic*=1.0-crack;ic=mix(ic,ic*vec3(0.62,0.72,0.88),cs);
     c=mix(c,ic,ice*0.9);}
   return c;}
 // the band's colour at a drawn point: t its water texel, occ its occlusion, sh its sun shadow, fw the shore distance's
-// fwidth. Near the shore both sides are painted (the choice between them is a select, not a branch)
+// fwidth. Near the shore both sides are painted and blended over about a pixel: the water's side has its depth there
+// (the depth and the shore distance are separate channels; on a cut bank the water at the shore is already tinted), so
+// the shoreline is a hard painted edge, anti-aliased
 vec3 shore(vec3 wp,vec4 t,float occ,float sh,float fw){
   float s=waterSdf(t),m=1.5*fw+1e-3;vec3 land=vec3(0.0),water=vec3(0.0);
   if(s<m)land=shoreLand(wp,occ,sh);
   if(s>-m)water=shoreWater(wp,waterDepth(t),s,length(waterFlow(t)),occ,sh);
-  return (s<=0.0?land:water)*(1.0+(G(wp.xz/4.0).r-0.5)*uGrainAmt*0.14);}   // the gouache grain, on both sides (continuous at the shore)
+  return mix(land,water,aastep(0.0,s))*(1.0+(G(wp.xz/4.0).r-0.5)*uGrainAmt*0.14);}   // the gouache grain, on both sides (continuous at the shore)
 #endif
