@@ -36,6 +36,24 @@ describe('the soldier layer follows the sim', () => {
     console.log('slot error', { lineToSquare: sq, marchTurn: mt, wood: wd })
     expect(sq.max).toBeLessThan(2); expect(mt.max).toBeLessThan(1.5); expect(wd.max).toBeLessThan(5); expect(wd.mean).toBeLessThan(1)
   })
+  // (a column on a curved trail straightens into blocks as a change begins, and its men take a few seconds to
+  // follow, as a battalion's do: these march straight, so the change's own error shows)
+  it('troopers keep up at the walk and the trot and through their changes; gunners fall in once the battery has deployed', () => {
+    const run = (unit: string, shape: string, men: number, to: string, sec: number) => {
+      const p = new Play(new Sim(1, napoleonic)), h = p.sim.spawn(-120, -150, 0, shape, men, 0, unit); p.frames(2)
+      p.sim.order({ type: 'move', id: h, points: [[-120, -40]], append: false }); const move = p.worst(40)
+      p.sim.order({ type: 'form', id: h, shape: to }); const change = p.worst(sec); p.frames(20); const after = p.layer.slotError()
+      expect(p.sim.busy(h)).toBe(false); expect(p.men(h).filter(m => m.alive).length).toBe(men); expect(p.layer.units.get(p.sim.slot(h))!.type).toBe(unit); expect(p.layer.units.get(p.sim.slot(h))!.figure).toBe(unit === 'cavalry' ? 'mounted' : 'crewed')
+      return { move, change, after }
+    }
+    const walk = run('cavalry', 'line', 250, 'column', 46), trot = run('cavalry', 'march', 250, 'line', 101), guns = run('battery', 'limbered', 96, 'unlimbered', 91)
+    console.log('slot error', { walk, trot, guns })
+    for (const e of [walk.move, trot.move, guns.move]) expect(e.mean).toBeLessThan(1)
+    expect(walk.move.max).toBeLessThan(1); expect(trot.move.max).toBeLessThan(3); expect(guns.move.max).toBeLessThan(1)
+    // the rear squadrons' frames peak near 5 m/s in the middle of march → line, over ground slower than the open
+    expect(walk.change.max).toBeLessThan(4); expect(trot.change.max).toBeLessThan(12); expect(walk.change.mean + trot.change.mean).toBeLessThan(3)
+    for (const e of [walk.after, trot.after, guns.after]) expect(e.max).toBeLessThan(1)   // the battery's gunners, behind their pieces in the change (known-issues), have fallen in
+  })
   longIt('halted in the wood, no man moves more than 0.05 m in 10 s (six halt points)', () => {
     for (const [ox, oz] of [[0, 0], [-10, 14], [-6, 6], [-14, -10], [8, 6], [12, -8]]) {
       const p = new Play(), h = p.sim.spawn(-45, 55 - 30 - 12, 0)
@@ -54,7 +72,7 @@ describe('who stands where', () => {
     for (let n = 0; n < 5; n++) { p.sim.order({ type: 'debug-kill', id: h, men: 10 }); p.frames(3) }
     p.sim.order({ type: 'debug-kill', id: h, men: 30 }); p.frames(5)
     p.sim.order({ type: 'form', id: h, shape: 'square' }); p.frames(110)
-    const i = p.sim.slot(h), g = p.sim.w.cr.geo, live = p.men(h).filter(m => m.alive)
+    const i = p.sim.slot(h), g = p.sim.w.cr.types[0].geo, live = p.men(h).filter(m => m.alive)
     expect(live.length).toBe(p.sim.men(h))
     const slots = new Set(live.map(m => m.s)); expect(slots.size).toBe(live.length)
     for (const m of live) { const c = Math.floor(m.s / (g.ranks * g.files)), r = Math.floor((m.s % (g.ranks * g.files)) / g.files), f = m.s % g.files; expect(occupied(p.sim.w, i, c, r, f)).toBe(true) }
@@ -64,7 +82,7 @@ describe('who stands where', () => {
   it('Face about relabels the men: those in complete files keep their places', () => {
     for (const [shape, men] of [['line', 100], ['line', 97], ['square', 100], ['square', 97]] as const) {
       const p = new Play(), h = p.sim.spawn(-20, -40, 0, shape, men); p.frames(5)
-      const g = p.sim.w.cr.geo, i = p.sim.slot(h), RF = g.ranks * g.files, pt = [0, 0, 0]
+      const g = p.sim.w.cr.types[0].geo, i = p.sim.slot(h), RF = g.ranks * g.files, pt = [0, 0, 0]
       const full = (s: number) => { const c = Math.floor(s / RF), f = s % g.files; let n = 0; for (let r = 0; r < g.ranks; r++) if (occupied(p.sim.w, i, c, r, f)) n++; return n === g.ranks }
       const before = new Map(p.men(h).filter(m => m.alive).map(m => [m, full(m.s) ? [...p.layer.place(i, m.s, false, pt)] : null]))
       p.sim.order({ type: 'face', id: h }); p.frames(0.1)
@@ -129,7 +147,7 @@ describe.skipIf(process.env.CI)('cost', () => {
   })
   it('40 battalions of 400 changing shape and marching: sim and soldier layer per 1/60 s frame; 40 × 800 reported', () => {
     const run = (sim: Sim, men: number) => {
-      const p = new Play(sim), shapes = Object.keys(p.sim.w.cr.rs.formations)
+      const p = new Play(sim), shapes = Object.keys(p.sim.w.cr.rs.types.infantry.formations)
       for (let k = 0; k < 40; k++) { const h = p.sim.spawn(-165 + (k % 7) * 33, -150 + Math.floor(k / 7) * 55, 0, 'column', men)
         p.sim.cmd({ type: 'form', id: h, shape: shapes[k % shapes.length] }); p.sim.cmd({ type: 'move', id: h, points: [[p.sim.x(h), p.sim.z(h) + 40]], append: true }) }
       p.frames(30)

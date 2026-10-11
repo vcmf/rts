@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { it } from 'vitest'
 import { loadSimData, compileRuleset, buildTerrain, rebuildImpassable, makeWorld, issue, advanceTick, makeHandle, KIND_FORMATION, formationSlot,
   placesCtx, placeAt, mkPlaces, occupied, placeWorld, anyWet, layoutOf, STATUS, menOf, cellK, slotIndex, type Command, type World, type Compiled,
-  type Ruleset, type Terrain, type SimData, type Dropped, TICK_HZ, M_TICK } from '../src/sim/index.ts'
+  type Ruleset, type Terrain, type SimData, type Dropped, TICK_HZ, M_TICK, typeOf, withBlock } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 
 export const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -20,8 +20,7 @@ export const dataBytes = (): Uint8Array => new Uint8Array(fs.readFileSync(path.j
 export const GOLDEN_DATA_VERSION = 0x6ae782ed
 export const data: SimData = loadSimData(dataBytes(), GOLDEN_DATA_VERSION)
 // (its morale reaches are S1c-2's: they scale with the frontage, napoleonic.ts)
-export const small: Ruleset = { ...napoleonic, name: `${napoleonic.name}, the S1a block`,
-  geometry: { ...napoleonic.geometry, companies: 4, files: 9, bins: 3 },
+export const small: Ruleset = { ...withBlock(napoleonic, 'infantry', { companies: 4, files: 9, bins: 3 }), name: `${napoleonic.name}, the S1a block`,
   morale: { ...napoleonic.morale, contagion: { ...napoleonic.morale.contagion, front: 200, back: 100 }, support: { ...napoleonic.morale.support, reach: 100 } } }
 export { ceiling } from '../src/rulesets/napoleonic.ts'   // the ceiling (decision 0018): companies of 45 files, 810 places
 export const cr: Compiled = compileRuleset(small)
@@ -49,10 +48,10 @@ export class Sim {
   cmd(c: Command): void { issue(this.w, c) }
   // issues a command and runs the tick that applies it
   order(c: Command): void { issue(this.w, c); this.tick() }
-  // spawns a battalion and returns its handle (applied on the next tick)
-  spawn(x: number, z: number, heading: number, shape = 'line', men = 100, side = 0): number {
+  // spawns a battalion (or a formation of another unit type) and returns its handle (applied on the next tick)
+  spawn(x: number, z: number, heading: number, shape = 'line', men = 100, side = 0, unit?: string): number {
     const slot = this.w.free[this.w.meta[1] - 1]
-    this.cmd({ type: 'debug-spawn', side, x, z, heading, shape, men }); this.tick()
+    this.cmd({ type: 'debug-spawn', side, x, z, heading, shape, men, unit }); this.tick()
     return makeHandle(KIND_FORMATION, slot, this.w.f.gen[slot])
   }
   tick(): void { const r = advanceTick(this.w); this.dropped.push(...r.dropped) }
@@ -63,19 +62,19 @@ export class Sim {
   status(h: number): string { const i = this.slot(h); return i < 0 ? 'gone' : STATUS[this.w.f.status[i]] }
   orders(h: number): number { const i = this.slot(h); let n = 0; for (let o = this.w.f.ordHead[i]; o >= 0; o = this.w.ord.next[o]) n++; return n }
   busy(h: number): boolean { const i = this.slot(h); return this.orders(h) > 0 || this.w.f.trans[i] === 1 }
-  shape(h: number): string { const i = this.slot(h), f = this.w.f; return f.trans[i] ? `${this.w.cr.shapes[f.shape[i]].name} → ${this.w.cr.shapes[f.tShape[i]].name}` : this.w.cr.shapes[f.shape[i]].name }
+  shape(h: number): string { const i = this.slot(h), f = this.w.f, S = typeOf(this.w, i).shapes; return f.trans[i] ? `${S[f.shape[i]].name} → ${S[f.tShape[i]].name}` : S[f.shape[i]].name }
   x(h: number): number { return this.w.f.x[this.slot(h)] }
   z(h: number): number { return this.w.f.z[this.slot(h)] }
   heading(h: number): number { return this.w.f.heading[this.slot(h)] }
-  lags(h: number): number[] { const i = this.slot(h), NB = this.w.cr.NB; return [...this.w.f.lags.slice(i * NB, i * NB + NB)].filter((_, j) => this.w.f.binN[i * NB + j]) }
+  lags(h: number): number[] { const i = this.slot(h), NB = typeOf(this.w, i).NB, NS = this.w.cr.maxNB; return [...this.w.f.lags.slice(i * NS, i * NS + NB)].filter((_, j) => this.w.f.binN[i * NS + j]) }
   // every filled slot's place: [x, z, company, slot index]
   places(h: number): [number, number, number, number][] {
-    const w = this.w, i = this.slot(h), g = w.cr.geo, out: [number, number, number, number][] = [], p = [0, 0, 0]
+    const w = this.w, i = this.slot(h), g = typeOf(w, i).geo, out: [number, number, number, number][] = [], p = [0, 0, 0]
     placesCtx(this.ctx, i, w.f.x[i], w.f.z[i], w.f.heading[i], w.meta[M_TICK] / TICK_HZ, 0)
     for (let c = 0; c < g.companies; c++) for (let r = 0; r < g.ranks; r++) for (let f = 0; f < g.files; f++) {
       if (!occupied(w, i, c, r, f)) continue
       if (w.f.trans[i]) {   // during a change: company frames
-        const q = placeWorld(w, i, c, w.f.x[i], w.f.z[i], w.f.heading[i], this.t, 0, { x: 0, z: 0, a: 0, face: 0 }), lx = (f - (g.files - 1) / 2) * g.fileSpacing, lz = -r * g.rankSpacing
+        const q = placeWorld(w, i, c, w.f.x[i], w.f.z[i], w.f.heading[i], this.t, 0, { x: 0, z: 0, a: 0, face: 0, kx: 1, kz: 1 }), lx = (f - (g.files - 1) / 2) * g.fileSpacing * q.kx, lz = -r * g.rankSpacing * q.kz
         out.push([q.x + lx * Math.cos(q.a) - lz * Math.sin(q.a), q.z + lx * Math.sin(q.a) + lz * Math.cos(q.a), c, slotIndex(g, c, r, f)])
       } else { placeAt(this.ctx, c, r, f, p); out.push([p[0], p[1], c, slotIndex(g, c, r, f)]) }
     }
@@ -87,7 +86,7 @@ export class Sim {
   men(h: number): number { return menOf(this.w, this.slot(h)) }
   companyFrames(h: number): { x: number; z: number; face: number }[] {
     const w = this.w, i = this.slot(h), out = []
-    for (let c = 0; c < w.cr.geo.companies; c++) { const p = placeWorld(w, i, c, w.f.x[i], w.f.z[i], w.f.heading[i], this.t, 0, { x: 0, z: 0, a: 0, face: 0 }); out.push({ x: p.x, z: p.z, face: p.face }) }
+    for (let c = 0; c < typeOf(w, i).C; c++) { const p = placeWorld(w, i, c, w.f.x[i], w.f.z[i], w.f.heading[i], this.t, 0, { x: 0, z: 0, a: 0, face: 0, kx: 1, kz: 1 }); out.push({ x: p.x, z: p.z, face: p.face }) }
     return out
   }
   layout(h: number) { return layoutOf(this.w, this.slot(h)) }

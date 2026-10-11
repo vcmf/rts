@@ -3,7 +3,7 @@
 // contours by marching squares, spot heights at the summits, cosmetic symbols (scene.ts), every soldier a
 // small outlined circle. Two layers: the map (redrawn when the view changes) and the units (every frame).
 import type { World } from '../sim/index.ts'
-import { cellK, O_MOVE, M_TICK, MS_STEADY, MORALE_STATES, fleeing, DT, formationSlot, layoutOf } from '../sim/index.ts'
+import { cellK, O_MOVE, M_TICK, MS_STEADY, MORALE_STATES, fleeing, DT, formationSlot, layoutOf, typeOf, placeWorld } from '../sim/index.ts'
 import type { Scene } from './scene.ts'
 import type { SoldierLayer } from './soldiers.ts'
 import { CLASS_STYLE, INK, SIDE_INK, FIRE_INK, MORALE_INK } from './style.ts'
@@ -139,12 +139,19 @@ export class StaffMap {
     const p = [0, 0, 0]
     for (const u of layer.units.values()) {
       const sel = selected.has(u.i), ink = SIDE_INK[u.side] ?? INK.ink
-      // the living: open circles, one path per battalion; selected battalions drawn bolder
+      // the living: open circles, one path per formation; a trooper also a stroke the length of his horse, along
+      // the way he rides (or his formation faces, at rest); selected formations drawn bolder
       g.strokeStyle = ink; g.lineWidth = sel ? 1.8 : k > 4 ? 1.1 : 0.9; g.beginPath()
-      for (const m of u.men) if (m.alive) { const [sx, sy] = toS(v, m.x, m.z); if (!vis(sx, sy)) continue; g.moveTo(sx + R, sy); g.arc(sx, sy, R, 0, Math.PI * 2) }
+      const mounted = u.figure === 'mounted', [fx, fz, fh] = layer.anchor(u.i, layer.alphaNow, 0)   // interpolated, as the men are
+      if (mounted) layer.frame(u.i, layer.alphaNow)
+      for (const m of u.men) if (m.alive) { const [sx, sy] = toS(v, m.x, m.z); if (!vis(sx, sy)) continue; g.moveTo(sx + R, sy); g.arc(sx, sy, R, 0, Math.PI * 2)
+        if (mounted) {   // at rest, along his place's direction of travel (a column of route's bends)
+          const sp = Math.hypot(m.vx, m.vz); let dx = m.vx / sp, dz = m.vz / sp
+          if (!(sp > 0.3)) { layer.place(u.i, m.s, false, p); dx = Math.sin(p[2]); dz = Math.cos(p[2]) }
+          const [bx, by] = toS(v, m.x - dx * 2.4, m.z - dz * 2.4); g.moveTo(sx, sy); g.lineTo(bx, by) } }
       g.stroke()
+      if (u.figure === 'crewed') this.drawPieces(g, v, layer, u.i, u.men, R, ink)
       // the colours: a small flag at the anchor, pointing the way the battalion faces
-      const [fx, fz, fh] = layer.anchor(u.i, layer.alphaNow, 0)   // interpolated, as the men are
       const [ax, ay] = toS(v, fx, fz); g.save(); g.translate(ax, ay); g.rotate(fh); g.fillStyle = ink
       g.beginPath(); g.moveTo(0, -R * 4.2); g.lineTo(R * 2.4, -R * 3.4); g.lineTo(0, -R * 2.6); g.closePath(); g.fill(); g.lineWidth = 1; g.strokeStyle = ink; g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -R * 4.2); g.stroke(); g.restore()
       if (sel) {   // the order: a dashed line through the waypoints
@@ -155,7 +162,7 @@ export class StaffMap {
       // morale: a bar behind the battalion, past its rear rank (its shape's depth, or the routers' spread),
       // its length the morale, its colour the state; the state named under it unless steady
       const st = f.mstate[u.i], bw = Math.max(14, R * 7), mc = MORALE_INK[st] ?? INK.ink2
-      const back = layoutOf(w, u.i).depth + w.cr.geo.ranks * w.cr.geo.rankSpacing + (fleeing(st) ? 6 : 0) + 14 / k
+      const g0 = typeOf(w, u.i).geo, back = layoutOf(w, u.i).depth + g0.ranks * g0.rankSpacing + (fleeing(st) ? 6 : 0) + 14 / k
       const [bx, by] = toS(v, fx - Math.sin(fh) * back, fz - Math.cos(fh) * back)
       g.fillStyle = 'rgba(243,239,230,.85)'; g.fillRect(bx - bw / 2 - 1, by - 3, bw + 2, 5)
       g.fillStyle = mc; g.fillRect(bx - bw / 2, by - 2, bw * Math.max(0, Math.min(1, f.morale[u.i])), 3)
@@ -164,11 +171,27 @@ export class StaffMap {
       if (showSlots) { layer.frame(u.i, layer.alphaNow); g.fillStyle = '#c0392b'; for (const m of u.men) if (m.alive) { layer.place(u.i, m.s, false, p); const [qx, qy] = toS(v, p[0], p[1]); g.fillRect(qx - 1, qy - 1, 2, 2) } }
     }
   }
+  // a battery's pieces: for each detachment with men, a barrel ahead of its front rank along its facing and the
+  // axle across it
+  private drawPieces(g: CanvasRenderingContext2D, v: View, layer: SoldierLayer, i: number, men: { s: number; x: number; z: number; alive: boolean }[], R: number, ink: string): void {
+    const w = this.w, U = typeOf(w, i), g0 = U.geo, RF = g0.ranks * g0.files, [ax, az, ah] = layer.anchor(i, layer.alphaNow, 0), t = (w.meta[M_TICK] - 1 + layer.alphaNow) * DT
+    const pose = { x: 0, z: 0, a: 0, face: 0, kx: 1, kz: 1 }
+    g.strokeStyle = ink; g.lineWidth = Math.max(1.5, R * 0.9); g.beginPath()
+    for (let c = 0; c < U.C; c++) {
+      let x = 0, z = 0, n = 0
+      for (const m of men) if (m.alive && Math.floor(m.s / RF) === c && Math.floor((m.s % RF) / g0.files) === 0) { x += m.x; z += m.z; n++ }   // the front rank
+      if (!n) continue
+      const p = placeWorld(w, i, c, ax, az, ah, t, 0, pose), fx = Math.sin(p.face), fz = Math.cos(p.face), cx = x / n + fx * 1.5, cz = z / n + fz * 1.5
+      const [a0, a1] = toS(v, cx, cz), [b0, b1] = toS(v, cx + fx * 2.5, cz + fz * 2.5), [l0, l1] = toS(v, cx - fz * 0.9, cz + fx * 0.9), [r0, r1] = toS(v, cx + fz * 0.9, cz - fx * 0.9)
+      g.moveTo(a0, a1); g.lineTo(b0, b1); g.moveTo(l0, l1); g.lineTo(r0, r1)
+    }
+    g.stroke()
+  }
   // each company that fired in the last 0.6 s: a flash at its front and a fading line toward its target
   private drawVolleys(g: CanvasRenderingContext2D, v: View, layer: SoldierLayer, i: number, men: { s: number; x: number; z: number; alive: boolean }[], R: number): void {
-    const w = this.w, f = w.f, g0 = w.cr.geo, C = g0.companies, RF = g0.ranks * g0.files, now = w.meta[M_TICK] + layer.alphaNow
+    const w = this.w, f = w.f, U = typeOf(w, i), g0 = U.geo, C = U.C, RF = g0.ranks * g0.files, now = w.meta[M_TICK] + layer.alphaNow
     for (let c = 0; c < C; c++) {
-      const k = i * C + c, age = (now - f.volleyTick[k]) * DT; if (!f.volleyTick[k] || age > 0.6 || age < 0) continue
+      const k = i * w.cr.maxC + c, age = (now - f.volleyTick[k]) * DT; if (!f.volleyTick[k] || age > 0.6 || age < 0) continue
       let x = 0, z = 0, n = 0
       for (const m of men) if (m.alive && Math.floor(m.s / RF) === c && Math.floor((m.s % RF) / g0.files) === 0) { x += m.x; z += m.z; n++ }   // the front rank
       if (!n) continue

@@ -5,7 +5,7 @@
 // whose slots moved walk to the nearest free filled slot; Face about relabels the men through the shape's
 // half-turn. No DOM: tested in Node (test/soldiers.test.ts).
 import type { World, Places } from '../sim/index.ts'
-import { mkPlaces, placesCtx, placeAtSlot, filledSlots, menOf, groundGAt, cellK, DT, M_TICK, MS_RALLYING, fleeing } from '../sim/index.ts'
+import { mkPlaces, placesCtx, placeAtSlot, filledSlots, menOf, groundGAt, cellK, typeOf, DT, M_TICK, MS_RALLYING, fleeing } from '../sim/index.ts'
 import type { Scene, Obstacle } from './scene.ts'
 import { cosmeticRng } from './scene.ts'
 import { CLASS_STYLE } from './style.ts'
@@ -17,14 +17,19 @@ const WAVE_N = 1024, WAVE = Float64Array.from({ length: WAVE_N + 1 }, (_, k) => 
 const wave = (a: number): number => { const u = a / (2 * Math.PI) * WAVE_N, k = Math.floor(u), q = k & (WAVE_N - 1); return WAVE[q] + (WAVE[q + 1] - WAVE[q]) * (u - k) }
 
 export interface Man { s: number; x: number; z: number; vx: number; vz: number; alive: boolean; dx: number; dz: number; settled: boolean; hx: number; hz: number }
-// pose: what the places were last framed from (still: unchanged, so settled men need no new place)
-export interface Unit { i: number; gen: number; side: number; men: Man[]; faces: number; sway: number; sig: Int32Array; pose: Float64Array }
+// pose: what the places were last framed from (still: unchanged, so settled men need no new place); type: the
+// unit type's name (cr.types: infantry, cavalry, battery in the Napoleonic ruleset); figure: how its men are drawn
+// (UnitType.figure: foot, mounted, crewed)
+export interface Unit { i: number; gen: number; side: number; type: string; figure: string; men: Man[]; faces: number; sway: number; sig: Int32Array; pose: Float64Array }
 
 export class SoldierLayer {
   w: World; scene: Scene
   units = new Map<number, Unit>()
   fallen: Man[] = []                       // men of battalions that are gone
   private ctxA: Places; private ctx0: Places; private rnd = cosmeticRng(7); private treesByClass: Uint8Array
+  // per unit type, how fast its men walk and run to their places: at least the infantry's, faster for a type
+  // whose pace (or its routers') would leave them behind (troopers at the trot)
+  private walkOf: Float64Array; private runOf: Float64Array
   alphaNow = 1
   // the neighbour grid: per cell the first man, per man the next, and the men's positions as the frame began
   private cellHead: Int32Array; private cellNext = new Int32Array(1024); private flatX = new Float64Array(1024); private flatZ = new Float64Array(1024); private nFlat = 0
@@ -34,7 +39,9 @@ export class SoldierLayer {
   // of cells outside the scene's, so a man just off its edge still sees the trunks inside
   private treeAt: Int32Array; private treeX: Float64Array; private treeZ: Float64Array; private treeR: Float64Array
   constructor(w: World, scene: Scene) {
-    this.w = w; this.scene = scene; this.ctxA = mkPlaces(w); this.ctx0 = mkPlaces(w); this.poseNow = new Float64Array(8 + 2 * w.cr.NB)
+    this.w = w; this.scene = scene; this.ctxA = mkPlaces(w); this.ctx0 = mkPlaces(w); this.poseNow = new Float64Array(8 + 2 * w.cr.maxNB)
+    const top = w.cr.types.map(U => Math.max(...U.shapes.flatMap(L => [L.pace, L.roadPace].filter(p => p >= 0).map(p => w.cr.paceSpeed[p]))))
+    this.walkOf = Float64Array.from(top, v => Math.max(WALK, 1.2 * v)); this.runOf = Float64Array.from(top, v => Math.max(RUN, 1.2 * w.cr.rs.morale.routPace * v))
     this.treesByClass = Uint8Array.from(Object.keys(w.cr.rs.terrain), name => ((CLASS_STYLE[name]?.trees ?? 0) > 0 ? 1 : 0))
     const span = (w.terrain.n - 1) * w.terrain.cell; this.SN = Math.ceil(span / SC) + 1; this.cellHead = new Int32Array(this.SN * this.SN).fill(-1)
     const n = scene.obstacleN, N = n + 2, near: Obstacle[] = []
@@ -65,7 +72,7 @@ export class SoldierLayer {
     placesCtx(this.ctx0, i, x0, z0, h0, t, -(1 - alpha) * DT)
   }
   private framed = new Float64Array(6)   // the anchors the last frame() used: ahead, then now
-  private kindOf(i: number): number { const f = this.w.f; return this.w.cr.shapes[f.trans[i] ? f.tShape[i] : f.shape[i]].kind }
+  private kindOf(i: number): number { const f = this.w.f; return typeOf(this.w, i).shapes[f.trans[i] ? f.tShape[i] : f.shape[i]].kind }
   // a man's place (`ahead`: where he aims; a place on impassable ground falls back to the place now)
   place(i: number, s: number, ahead: boolean, out: number[], imp?: Uint8Array): number[] {
     if (!ahead) return placeAtSlot(this.ctx0, s, out)
@@ -74,30 +81,30 @@ export class SoldierLayer {
     return out
   }
   // what the places of formation i were framed from (call after frame(i)): the anchors, the trail, the lags
-  // and their rates
-  private poseOf(i: number, out: Float64Array): Float64Array {
-    const f = this.w.f, NB = this.w.cr.NB
+  // and their rates; returns how many entries of out it wrote
+  private poseOf(i: number, out: Float64Array): number {
+    const f = this.w.f, NB = typeOf(this.w, i).NB, NS = this.w.cr.maxNB
     out.set(this.framed); out[6] = f.trailVer[i]; out[7] = f.trans[i]
-    for (let j = 0; j < NB; j++) { out[8 + 2 * j] = f.lags[i * NB + j]; out[9 + 2 * j] = f.lagRate[i * NB + j] }
-    return out
+    for (let j = 0; j < NB; j++) { out[8 + 2 * j] = f.lags[i * NS + j]; out[9 + 2 * j] = f.lagRate[i * NS + j] }
+    return 8 + 2 * NB
   }
 
   // what decides which slots are filled: men per company, shape, the shape it changes to, the lean, faces
   private sign(sig: Int32Array, i: number): void {
-    const f = this.w.f, C = this.w.cr.geo.companies
-    for (let c = 0; c < C; c++) sig[c] = f.men[i * C + c]
+    const f = this.w.f, C = typeOf(this.w, i).C, CS = this.w.cr.maxC
+    for (let c = 0; c < C; c++) sig[c] = f.men[i * CS + c]
     sig[C] = f.shape[i]; sig[C + 1] = f.trans[i]; sig[C + 2] = f.tShape[i]; sig[C + 3] = f.lean[i]; sig[C + 4] = f.faces[i]
   }
   private same(sig: Int32Array, i: number): boolean {
-    const f = this.w.f, C = this.w.cr.geo.companies
-    for (let c = 0; c < C; c++) if (sig[c] !== f.men[i * C + c]) return false
+    const f = this.w.f, C = typeOf(this.w, i).C, CS = this.w.cr.maxC
+    for (let c = 0; c < C; c++) if (sig[c] !== f.men[i * CS + c]) return false
     return sig[C] === f.shape[i] && sig[C + 1] === f.trans[i] && sig[C + 2] === f.tShape[i] && sig[C + 3] === f.lean[i] && sig[C + 4] === f.faces[i]
   }
   // matches the men to the sim: new battalions, battalions gone, Face about, losses, slots that moved.
   // Call it after every tick (and `step` calls it each frame): a Face about is relabelled through the
   // shape it turned in, which a later change of shape within the same frame would otherwise replace.
   sync(alpha: number): void {
-    const w = this.w, f = w.f, g = w.cr.geo, N = f.alive.length, p = [0, 0, 0]
+    const w = this.w, f = w.f, N = f.alive.length, p = [0, 0, 0]
     for (const [i, u] of this.units) if (!f.alive[i] || f.gen[i] !== u.gen) { for (const m of u.men) { if (m.alive) m.alive = false; this.fallen.push(m) } this.units.delete(i) }
     for (let i = 0; i < N; i++) {
       if (!f.alive[i]) continue
@@ -106,15 +113,16 @@ export class SoldierLayer {
       // and Face about: nothing to match otherwise
       if (u && this.same(u.sig, i)) continue
       this.frame(i, alpha)
-      if (!u) { u = { i, gen: f.gen[i], side: f.side[i], men: [], faces: f.faces[i], sway: 0, sig: new Int32Array(g.companies + 5), pose: new Float64Array(8 + 2 * w.cr.NB).fill(NaN) }; this.units.set(i, u) }
+      const U = typeOf(w, i), C = U.C
+      if (!u) { u = { i, gen: f.gen[i], side: f.side[i], type: U.name, figure: U.def.figure, men: [], faces: f.faces[i], sway: 0, sig: new Int32Array(C + 5), pose: new Float64Array(8 + 2 * w.cr.maxNB).fill(NaN) }; this.units.set(i, u) }
       this.sign(u.sig, i)
       if (u.faces !== f.faces[i]) {   // Face about: each man's slot is now the half-turn of his old one
-        const T = w.cr.shapes[f.shape[i]].turn
+        const T = U.shapes[f.shape[i]].turn
         for (let k = u.faces; k < f.faces[i]; k++) if (T) for (const m of u.men) if (m.alive) m.s = T.m[m.s]
         u.faces = f.faces[i]
       }
-      const slots = w.cr.slots, occ = new Uint8Array(slots), claimed = new Uint8Array(slots), F = filledSlots(w, i), a = i * (g.companies + 1)
-      for (let k = F.at[a], e = F.at[a + g.companies]; k < e; k++) occ[F.s[k]] = 1
+      const slots = U.slots, occ = new Uint8Array(slots), claimed = new Uint8Array(slots), F = filledSlots(w, i), a = i * (w.cr.maxC + 1)
+      for (let k = F.at[a], e = F.at[a + C]; k < e; k++) occ[F.s[k]] = 1
       const displaced: Man[] = []
       let alive = 0
       for (const m of u.men) if (m.alive) { alive++; if (occ[m.s] && !claimed[m.s]) claimed[m.s] = 1; else displaced.push(m) }
@@ -163,11 +171,11 @@ export class SoldierLayer {
       const busy = !!(f.trans[i] || f.ordHead[i] >= 0)
       u.sway += ((busy ? 1 : 0) - u.sway) * Math.min(1, dt * 0.8)   // sway eases out at the halt, so the ranks come to rest
       // still: halted, and every place framed as last frame, so a settled man's place has not moved
-      const pose = this.poseOf(i, this.poseNow)
+      const pose = this.poseNow, np = this.poseOf(i, pose)
       let still = !busy
-      for (let k = 0; still && k < pose.length; k++) still = pose[k] === u.pose[k]
-      u.pose.set(pose)
-      const kind = this.kindOf(i), imp = t.imp[kind]
+      for (let k = 0; still && k < np; k++) still = pose[k] === u.pose[k]
+      u.pose.set(pose.subarray(0, np))
+      const kind = this.kindOf(i), imp = t.imp[kind], ty = f.type[i], WALKu = this.walkOf[ty], RUNu = this.runOf[ty]
       for (const m of u.men) {
         if (!m.alive || (still && m.settled)) continue
         this.place(i, m.s, true, p, imp)
@@ -187,7 +195,7 @@ export class SoldierLayer {
         const dx = tx - m.x, dz = tz - m.z, dist = Math.sqrt(dx * dx + dz * dz)
         if (!busy && u.sway < 0.05 && dist < 0.25) { m.settled = true; m.hx = tx; m.hz = tz; m.vx = 0; m.vz = 0; continue }
         const gs = Math.max(0.15, dist > 1e-6 ? groundGAt(t, here, kind, dx / dist, dz / dist) : groundGAt(t, here, kind, 0, 0))   // never frozen mid-step
-        const top = (dist > 2.5 ? RUN : WALK) * gs, want = dist < 0.08 ? 0 : Math.min(top, dist / 0.7)
+        const top = (dist > 2.5 ? RUNu : WALKu) * gs, want = dist < 0.08 ? 0 : Math.min(top, dist / 0.7)
         let wx = dist > 1e-6 ? dx / dist * want : 0, wz = dist > 1e-6 ? dz / dist * want : 0
         // his cell and the neighbouring cells on the sides of it he is nearer to
         const mx = m.x, mz = m.z, u0 = (mx - x0) / SC, v0 = (mz - z0) / SC, ci = Math.floor(u0), cj = Math.floor(v0)
@@ -204,7 +212,7 @@ export class SoldierLayer {
           if (d < R + 0.8 && d > 1e-6) { const push = (R + 0.8 - d) / 0.8 * 1.4 * walking; wx += ex / d * push; wz += ez / d * push } }
         const kk = Math.min(1, dt * 5); m.vx += (wx - m.vx) * kk; m.vz += (wz - m.vz) * kk
         if (dist < 0.08) { const damp = Math.max(0, 1 - dt * 8); m.vx *= damp; m.vz *= damp }   // arrived: come to rest
-        const sp2 = m.vx * m.vx + m.vz * m.vz, cap = RUN * gs; if (sp2 > cap * cap) { const r = cap / Math.sqrt(sp2); m.vx *= r; m.vz *= r }
+        const sp2 = m.vx * m.vx + m.vz * m.vz, cap = RUNu * gs; if (sp2 > cap * cap) { const r = cap / Math.sqrt(sp2); m.vx *= r; m.vz *= r }
         const nx = m.x + m.vx * dt, nz = m.z + m.vz * dt
         if (imp[cellK(t, nx, nz)] && !imp[here]) { m.vx = 0; m.vz = 0 } else { m.x = nx; m.z = nz }   // never onto impassable ground
         tc = this.treeCell(m.x, m.z)

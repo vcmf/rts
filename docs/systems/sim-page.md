@@ -1,14 +1,15 @@
 ---
 status: current
-last_reviewed: 2026-10-09
-code: [app/index.html, src/app/main.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, test/soldiers.test.ts, tools/app-check.mjs]
+last_reviewed: 2026-10-11
+code: [app/index.html, src/app/main.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, test/soldiers.test.ts, tools/app-check.mjs]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0016-typescript-toolchain]
 ---
 
 # The sim page (S1b)
 
 A Vite page that runs the sim on the main thread and draws it as a staff map, with every soldier as a
-small circle. The mouse selects battalions and orders them; every order is a command, so a session
+small circle (a trooper with a stroke the length of his horse, a battery's pieces as barrels ahead of their
+detachments). The mouse selects battalions and orders them; every order is a command, so a session
 exports as a replay that plays back in Node to the same hashes.
 
 ```
@@ -93,11 +94,13 @@ data is a darker margin.
   shift appends a waypoint.
 - Right-drag or space-drag pans; the wheel zooms about the cursor.
 - P pauses, 1/2/4/8 set the speed, Escape clears the selection.
-- The panel is built from the ruleset (shapes, order presets).
+- The panel is built from the ruleset (every type's shapes, order presets); a shape the selected formation's
+  type lacks is refused, and the readout names each selected formation's type.
 
 **Scenarios** (`src/scenarios/page.ts`): `s1c-firefight` (the default, `docs/systems/fire-morale.md`),
-`s1c-brigade`, `s1b-field` (three battalions a side, holding fire until ordered) and `s1b-bench` (40
-battalions of 400 in column, holding fire), chosen by `?scenario=`. Every scenario spawns battalions of 400. Fire shows
+`s1c-brigade`, `s1d-arms` (a battalion, a cavalry regiment and a battery a side, holding fire: the unit types,
+`docs/plans/active/s1d1-unit-types.md`), `s1b-field` (three battalions a side, holding fire until ordered) and
+`s1b-bench` (40 battalions of 400 in column, holding fire), chosen by `?scenario=`. Battalions are of 400. Fire shows
 as a flash at a company's front with a fading line to its target; morale as a bar behind each battalion,
 named unless steady. Fire at will and Hold fire are panel orders. The page loads the data only at `FIELD_DATA_VERSION`.
 
@@ -107,7 +110,8 @@ frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`.
 ## Tunables
 
 `AHEAD`, `WALK`, `RUN`, `SEP` and the steering gains in `src/render/soldiers.ts`; class looks in
-`src/render/style.ts`; the scenarios in `src/scenarios/s1b-field.ts`.
+`src/render/style.ts`; the scenarios in `src/scenarios/`. A type's men walk and run at least the infantry's
+speeds, faster where its pace (or its routers') would leave them behind (troopers at the trot).
 
 ## Verification
 
@@ -120,11 +124,14 @@ frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`.
   - Face about for a line and a square at 100 and 97 men;
   - a battalion that is gone;
   - men never in deep water;
+  - troopers at the walk and the trot and through their changes; a battery's gunners falling in after it
+    deploys;
   - cost for 40 battalions of 400 (and 800, reported).
 - `npm run check:app` builds and serves the page and drives it headless:
   - the drill scenario, with screenshots, a multi-selection move, square and Face about;
   - every panel button logs one command;
   - the 40-battalion bench;
+  - the arms: a battery unlimbering, a regiment at the trot and changing shape;
   - each session's replay played back in Node.
 
   It fails on any console error or hash mismatch.

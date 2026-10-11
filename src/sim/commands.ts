@@ -5,7 +5,7 @@
 // the ruleset (decision 0015).
 import type { Handle } from './handle.ts'
 import { quantise, PI } from './num.ts'
-import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, MORALE_STATES, outOfFight, FIRE_AT_WILL, formationSlot } from './world.ts'
+import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, MORALE_STATES, outOfFight, FIRE_AT_WILL, formationSlot, typeOf } from './world.ts'
 import { spawnFire } from './fire.ts'
 import { spawnMorale } from './morale.ts'
 import { allocOrder, appendOrder, clearOrders, ordersFree, rebalance, resetTrail, removeMan, RETIRE, fillRetire } from './formation.ts'
@@ -20,7 +20,7 @@ export type Command =
   | { type: 'retire'; id: Handle; metres: number }
   | { type: 'halt'; id: Handle }
   | { type: 'style'; id: Handle; preset: string }
-  | { type: 'debug-spawn'; side: number; x: number; z: number; heading: number; shape: string; men: number; quality?: number; fire?: string }
+  | { type: 'debug-spawn'; side: number; x: number; z: number; heading: number; shape?: string; men: number; quality?: number; fire?: string; unit?: string }   // unit: the unit type (the ruleset's first when left out); shape: the type's start when left out
   | { type: 'fire'; id: Handle; mode: string; target?: Handle }
   | { type: 'side'; side: number; x: number; z: number }
   | { type: 'debug-kill'; id: Handle; men: number }
@@ -53,7 +53,7 @@ function quantiseCommand(c: Command): Command {
     case 'retire': return { type: 'retire', id: c.id | 0, metres: quantise(c.metres) }
     case 'halt': return { type: 'halt', id: c.id | 0 }
     case 'style': return { type: 'style', id: c.id | 0, preset: String(c.preset) }
-    case 'debug-spawn': return { type: 'debug-spawn', side: c.side | 0, x: quantise(c.x), z: quantise(c.z), heading: qa(c.heading), shape: String(c.shape), men: c.men | 0, quality: c.quality === undefined ? -1 : c.quality < 0 ? -2 : qa(c.quality), fire: c.fire === undefined ? FIRE_MODES[FIRE_AT_WILL] : String(c.fire) }
+    case 'debug-spawn': return { type: 'debug-spawn', side: c.side | 0, x: quantise(c.x), z: quantise(c.z), heading: qa(c.heading), shape: c.shape === undefined ? '' : String(c.shape), men: c.men | 0, quality: c.quality === undefined ? -1 : c.quality < 0 ? -2 : qa(c.quality), fire: c.fire === undefined ? FIRE_MODES[FIRE_AT_WILL] : String(c.fire), unit: c.unit === undefined ? '' : String(c.unit) }
     case 'fire': return { type: 'fire', id: c.id | 0, mode: String(c.mode), target: (c.target ?? 0) | 0 }
     case 'side': return { type: 'side', side: c.side | 0, x: qa(c.x), z: qa(c.z) }
     case 'debug-kill': return { type: 'debug-kill', id: c.id | 0, men: c.men | 0 }
@@ -101,18 +101,19 @@ function apply(w: World, c: Command): string {
   const f = w.f, o = w.ord, cr = w.cr
   if (c.type === 'debug-spawn') {
     if (c.side < 0 || c.side >= SIDES) return 'no such side'
-    const shape = cr.shapeIndex(c.shape); if (shape < 0) return 'no such shape'
-    if (c.men <= 0 || c.men > cr.slots) return 'no room for those men'
+    const type = c.unit ? cr.typeIndex(c.unit) : 0; if (type < 0) return 'no such unit type'
+    const U = cr.types[type], shape = c.shape ? U.shapeIndex(c.shape) : U.start; if (shape < 0) return 'no such shape'
+    if (c.men <= 0 || c.men > U.slots) return 'no room for those men'
     if (!finite(c.x) || !finite(c.z) || !finite(c.heading) || !inside(w, c.x, c.z)) return 'outside the map'
     if (Math.abs(c.heading) > 4 * PI) return 'heading out of range'
     const q = c.quality === undefined || c.quality === -1 ? cr.rs.morale.quality : c.quality   // −1: the ruleset's
     if (!finite(q) || q < 0 || q > 1) return 'no such quality'
     const mode = FIRE_MODES.indexOf(c.fire ?? FIRE_MODES[FIRE_AT_WILL]); if (mode < 0) return 'no such fire mode'
     if (w.meta[M_FREE] === 0) return 'no free formation slot'
-    const i = w.free[--w.meta[M_FREE]], C = cr.geo.companies
-    f.alive[i] = 1; f.side[i] = c.side; f.shape[i] = shape; f.style[i] = cr.presetIndex(cr.rs.start.orders); f.drill[i] = 1
+    const i = w.free[--w.meta[M_FREE]]
+    f.alive[i] = 1; f.side[i] = c.side; f.type[i] = type; f.shape[i] = shape; f.style[i] = cr.presetIndex(cr.rs.start.orders); f.drill[i] = 1
     f.x[i] = c.x; f.z[i] = c.z; f.heading[i] = c.heading; f.px[i] = c.x; f.pz[i] = c.z; f.ph[i] = c.heading
-    f.men[i * C] = c.men; rebalance(w, i)
+    f.men[i * cr.maxC] = c.men; rebalance(w, i)
     resetTrail(w, i)
     spawnFire(w, i); spawnMorale(w, i, q); f.fireMode[i] = mode
     return ''
@@ -135,7 +136,7 @@ function apply(w: World, c: Command): string {
       return giveOrders(w, i, c.points.map(() => O_MOVE), c.append, (n, k) => { o.x[n] = c.points[k][0]; o.z[n] = c.points[k][1]; o.resolved[n] = 1 })
     }
     case 'form': {
-      const s = cr.shapeIndex(c.shape); if (s < 0) return 'no such shape'
+      const s = typeOf(w, i).shapeIndex(c.shape); if (s < 0) return 'no such shape'
       return giveOrders(w, i, [O_FORM], false, n => { o.shape[n] = s })
     }
     case 'wheel':
@@ -158,12 +159,12 @@ function apply(w: World, c: Command): string {
     }
     case 'debug-kill': {
       if (c.men <= 0) return 'no men'
-      const C = cr.geo.companies
+      const C = typeOf(w, i).C, CS = cr.maxC
       for (let k = 0; k < c.men; k++) {   // each man from a company drawn by the sim RNG, weighted by its men
-        let tot = 0; for (let q = 0; q < C; q++) tot += f.men[i * C + q]
+        let tot = 0; for (let q = 0; q < C; q++) tot += f.men[i * CS + q]
         if (!tot) break
         let r = nextInt(w.rng, tot), q = 0
-        while (r >= f.men[i * C + q]) { r -= f.men[i * C + q]; q++ }
+        while (r >= f.men[i * CS + q]) { r -= f.men[i * CS + q]; q++ }
         removeMan(w, i, q)   // through the re-packing gate
       }
       return ''

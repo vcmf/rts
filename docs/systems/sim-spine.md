@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-09
+last_reviewed: 2026-10-11
 code: [src/sim, tools/build-sim-data.ts, maps/formation-field.ts, src/scenarios/s1a-drill.ts, test]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0012-heightfield-authority, 0013-single-player-first, 0015-era-generic-engine, 0016-typescript-toolchain]
 ---
@@ -55,8 +55,8 @@ advanceTick: 1 commands · 5–6 formations · 14 reap · tick++ · 15 hash (eve
 
 - **Time** (`time.ts`): `TICK_HZ = 20`, one hash every 20 ticks; data in seconds.
 - **World** (`world.ts`): `meta` (tick, free slots, data version, command sequence, ruleset hash), the
-  RNG state, the formation table (structure of arrays, 128 slots; per company and per bin columns are
-  flattened), its free-slot stack, the order pool, and the commands stamped for the next tick. The
+  RNG state, the formation table (structure of arrays, 128 slots; each formation's unit type; per company
+  and per bin columns are flattened, strided by the most companies and bins of any type), its free-slot stack, the order pool, and the commands stamped for the next tick. The
   build-time data, the compiled ruleset and the terrain derived from them are attached but are not state:
   their versions are.
 - **Handles** (`handle.ts`): `kind:3 | index:9 | gen:19`, non-negative. Reaping a formation moves its
@@ -68,7 +68,8 @@ advanceTick: 1 commands · 5–6 formations · 14 reap · tick++ · 15 hash (eve
 - **Commands** (`commands.ts`):
   - `move` (waypoints, replace or append), `form` (a shape by name), `wheel` (an angle), `face`, `retire`
     (metres), `halt`, `style` (an order preset by name);
-  - `debug-spawn`, `debug-kill` (men drawn by company with the sim RNG). Malformed waypoints are dropped,
+  - `debug-spawn` (a unit type, `unit`, the ruleset's first when left out; a shape, the type's start when
+    left out), `debug-kill` (men drawn by company with the sim RNG). Malformed waypoints are dropped,
     not thrown.
 
   `issue` stamps `tick + 1` and a sequence number, and quantises positions to 1 cm and angles to 0.1 mrad.

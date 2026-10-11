@@ -1,13 +1,13 @@
 ---
 status: current
-last_reviewed: 2026-10-09
-code: [src/sim/formation.ts, src/sim/ruleset.ts, src/sim/terrain.ts, src/rulesets/napoleonic.ts, test/formations.test.ts]
+last_reviewed: 2026-10-11
+code: [src/sim/formation.ts, src/sim/ruleset.ts, src/sim/terrain.ts, src/rulesets/napoleonic.ts, test/formations.test.ts, test/types.test.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0012-heightfield-authority, 0015-era-generic-engine]
 ---
 
 # Formations (the 20 Hz formation layer)
 
-The battalion as the sim moves it:
+A formation (a battalion, a cavalry regiment, a battery: its unit type, S1d-1) as the sim moves it:
 - its shape and timed changes between shapes;
 - the march column's trail;
 - movement over terrain with the lag model;
@@ -49,28 +49,44 @@ is in `docs/plans/done/s1a-formations-on-spine.md`.
 
   Who stands where, and who falls, is the renderer's (`docs/systems/sim-page.md`).
 - **The spine's rules** (`docs/systems/sim-spine.md`): exact-ops maths, slot order, typed-array state.
-- **Budget:** 2 ms per tick (sim-design §16). Not met at 400 men: 40 battalions of 400 changing shape and
-  marching cost about 5 ms per tick (`test/formations.test.ts`; `docs/known-issues.md`, S1c-5).
+- **Budget:** 2 ms per tick (sim-design §16). 40 battalions of 400 changing shape and marching: 0.7 ms a
+  tick on the dev Mac's release world (`tools/bench-cost.ts`, S1c-5 and S1d-1).
 
 ## Design
 
-**Ruleset** (`ruleset.ts`, `src/rulesets/napoleonic.ts`). The ruleset holds:
-- the block geometry: companies, files, ranks, spacings, the minimum spacing, the accordion gap, bins per
-  company. Napoleonic (decision 0018): 6 companies of 23 files × 3 ranks, 414 places for a battalion of
-  about 400, 8 bins a company (about 3 files each); a line is about 93 m;
-- the shapes as company placements, with kind, pace, road pace, `trail` and `closeAcross`. The Napoleonic
-  shapes place any number of companies: a line side by side; a column of divisions two wide; a column of
-  route one behind another; a square over four faces, front and rear first (6: 2, 1, 2, 1);
-- change times, paces, q, the terrain table (with `road` and `level` flags), the water curve, slope `k`;
-- the order presets, disorder, and the face and dress times.
+**Ruleset** (`ruleset.ts`, `src/rulesets/napoleonic.ts`). The ruleset holds its **unit types** (`types`; the
+first is the default), each with:
+- its block geometry: companies, files, ranks, spacings, the minimum spacing, the accordion gap, bins per
+  company;
+- its shapes as company placements, with kind, pace, road pace, `trail`, `closeAcross` and, for a trail
+  shape, an optional `step`: the spacing of its places' files and ranks when it is not the block's (a column
+  of route of horses, nose to tail);
+- its change times, the shape a spawn takes, and whether it fires by company (S1c's musketry).
 
-`compileRuleset` indexes it and precomputes, per shape:
+The rest is shared: paces and q (a type's shapes name their paces), the terrain table (a column per kind,
+with `road` and `level` flags), the water curve and the wading limit (per kind where named), slope `k`, the
+order presets, disorder, and the face and dress times.
+
+The Napoleonic types (`docs/plans/active/s1d1-unit-types.md`):
+
+| Type | Block | Shapes | Paces |
+|---|---|---|---|
+| Infantry (decision 0018) | 6 companies of 23 files × 3 ranks, 414 places; 8 bins a company; a line about 93 m | line, square (four faces, front and rear first: 2, 1, 2, 1), column of divisions, column of route | ordinary, route step |
+| Cavalry regiment | 4 squadrons of 32 files × 2 ranks, 256 places; 1 m a file, 3 m a rank; a line about 157 m | line, column of squadrons at half distance, column of route by fours (each squadron a column of twos, horses 3 m apart: a `step`) | walk; the march at the trot |
+| Foot battery | 8 pieces, each a detachment of 4 files × 3 ranks (96 men); one bin a piece | unlimbered (16 m apart), limbered (18 m apart on the trail) | by hand; the walk |
+
+`compileRuleset` indexes it and precomputes, per type, its slot tables, and per shape:
 - the straight layout;
 - the bins: `bins` lateral strips of each company;
 - the accordion pairs;
 - the half-turn symmetry for Face about.
 
 The ruleset's hash is recorded in the world, the replays and the saves.
+
+**Types in the world.** A formation stores its type (`f.type`), and `f.shape` indexes its type's shapes. The
+per-company and per-bin rows of the world are strided by the most of any type (`cr.maxC`, `cr.maxNB`,
+`cr.maxSlots`), so a smaller type leaves the rest of its row empty; loops run over its own counts
+(`typeOf(w, i)`).
 
 **Terrain** (`terrain.ts`), from the build-time data:
 - the class and water depth on the 1 m grid;
@@ -82,16 +98,19 @@ The ruleset's hash is recorded in the world, the replays and the saves.
 **Limits.** Checked when a ruleset is compiled:
 - at most 32 companies (`MAX_COMPANIES`: per-company scratch, and the company mask of the re-packing
   gate); bins and slots have no limit: the gates keep them in bit sets (`bits.ts`);
-- the trail ring is sized from the deepest trail shape, at least 256 points of 0.25 m and at most 4096
-  (`cr.trail`): 512 for a column of route of 400.
+- the trail ring is sized from the deepest trail shape of any type, at least 256 points of 0.25 m and at
+  most 4096 (`cr.trail`): 960 for the regiment's column of route (512 for the battalion's alone). A trail
+  shape keeps its depth, two company frontages and 12 m of trail, and at least 24 m past its farthest place.
 
 **Places.** A man's place is his slot set back by his bin's lag:
 - **straight shapes:** along the heading;
 - **trail shapes:** along the trail, man by man, so a column follows its head's bends. The trail is a
   ring of points per formation.
 
-During a change, each company wheels about the flank it turns to, with smoothstep timing. A change
-interrupted by another is timed by the distance still to cover.
+During a change, each company wheels about the flank it turns to, with smoothstep timing; a step's spacing
+is eased with the company's frame, so a change into or out of the column of route by fours passes from the
+block's spacing to the step's. A change interrupted by another is timed by the distance still to cover (and
+eases the spacing from its first shape's again).
 
 **The lag model** (per tick, moving):
 - the bins sample their men's ground: the harmonic mean of g, the worst q;
@@ -108,6 +127,8 @@ interrupted by another is timed by the distance still to cover.
   middle of its stretch of trail, half that stretch and its widest offset) is skipped when the distance
   field there exceeds the reach, with margins for the chamfer and the cells (S1c-5; checked against a scan
   of every man in `test/shortcuts.test.ts`);
+- the quick reject (no place of the formation within reach of impassable ground) allows a company's places
+  a frontage of its origin, times its spacing (a step reaches three times farther);
 - changes are checked along their whole path (128 poses), for every slot, filled or empty;
 - a stalled move halts after 1 s ("halted: impassable ground"), stepping back to where the held men
   stand.
@@ -162,11 +183,19 @@ The ruleset (`src/rulesets/napoleonic.ts`). In `formation.ts`:
 - **Trail shapes:** looping round to a target behind, the turning circle, no wheel.
 - **The accordion:** a held column, a 90° bend (within-company spacing too), a square in the wood.
 - **Passages:** the level bridge deck and the crossing, the ford, an empty bin in woods.
-- **Cost:** 40 battalions of 400, under a temporary 8 ms per tick (target 2 ms, S1c-5).
+- **Cost:** 40 battalions of 400, under 3 ms per tick in vitest (the target, 2 ms, met on the release world: S1c-5).
 - **Scale** (`test/scale.test.ts`): the shipped block and the ceiling (45 files, 810 men) change through
   every shape, Face about, march a 90° turn, halt dry at the stream, and lose half their men at the bank
   without a man on impassable ground; no two places of any shape closer than the minimum spacing, for 4 to
   8 companies; a battalion's bins past bit 32 reported by the gate.
+
+- **Unit types** (`test/types.test.ts`): each type through every change in its time, Face about and a wheel;
+  its pace on open ground and its terrain factors (a regiment in woods, a battery held at a wood's edge and
+  at a hedge, horses wading 1 m where infantry and guns cannot, guns refused at 0.8 m); a column of route by
+  fours wet only at its tail, and a change into it refused for its places alone; a regiment and a battery
+  under fire, which never fire back and rout; a battalion, a regiment and a battery side by side, whose rows
+  no other touches. The gate's shortcuts are checked for the regiment and the battery too
+  (`test/shortcuts.test.ts`).
 
 Most terrain tests run on `small` (`test/fx.ts`): the S1a–S1c block of 4 companies of 9 files (100 men).
 They were placed for battalions that size at spots along the stream; the code they test does not depend

@@ -97,7 +97,7 @@ describe('commands and handles', () => {
     const w = makeWorld(data, cr, 4)
     const s = issue(w, { type: 'debug-spawn', side: 0, x: 1.23456, z: -2.0049, heading: 0.123456, shape: 'line', men: 10 })
     expect([s.tick, s.seq]).toEqual([1, 0])
-    expect(s.cmd).toEqual({ type: 'debug-spawn', side: 0, x: 1.23, z: -2, heading: 0.1235, shape: 'line', men: 10, quality: -1, fire: 'at will' })   // -1: the ruleset's quality
+    expect(s.cmd).toEqual({ type: 'debug-spawn', side: 0, x: 1.23, z: -2, heading: 0.1235, shape: 'line', men: 10, quality: -1, fire: 'at will', unit: '' })   // -1: the ruleset's quality; '': the first unit type
     const h = makeHandle(KIND_FORMATION, 0, 0)
     const bad: Command[] = [
       { type: 'debug-spawn', side: 2, x: 0, z: 0, heading: 0, shape: 'line', men: 10 },
@@ -154,8 +154,8 @@ describe('data and ruleset versions', () => {
 })
 
 describe('era genericity (decision 0015)', () => {
-  it('src/sim/ names no shape, pace, preset or terrain class of the Napoleonic ruleset', () => {
-    const dir = path.join(root, 'src', 'sim'), words = new Set([...Object.keys(napoleonic.formations), ...Object.keys(napoleonic.pace), ...Object.keys(napoleonic.orders), ...Object.keys(napoleonic.terrain), ...Object.keys(napoleonic.q.ordinary)])
+  it('src/sim/ names no unit type, shape, pace, preset or terrain class of the Napoleonic ruleset', () => {
+    const dir = path.join(root, 'src', 'sim'), words = new Set([...Object.keys(napoleonic.types), ...Object.values(napoleonic.types).flatMap(u => Object.keys(u.formations)), ...Object.keys(napoleonic.pace), ...Object.keys(napoleonic.orders), ...Object.keys(napoleonic.terrain), ...Object.keys(napoleonic.q.ordinary)])
     const hits: string[] = []
     for (const f of fs.readdirSync(dir)) {
       const text = fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')
@@ -167,14 +167,16 @@ describe('era genericity (decision 0015)', () => {
   it('another era: a two-company phalanx ruleset with its own shapes, paces and presets drills on the same engine', () => {
     const rs: Ruleset = {
       ...napoleonic, name: 'test: antiquity',
-      geometry: { companies: 2, files: 8, ranks: 4, fileSpacing: 0.9, rankSpacing: 1.0, minSpacing: 0.6, accordionGap: 0.7, bins: 3 },
+      types: { hoplites: {
+        geometry: { companies: 2, files: 8, ranks: 4, fileSpacing: 0.9, rankSpacing: 1.0, minSpacing: 0.6, accordionGap: 0.7, bins: 3 },
+        formations: {
+          phalanx: { kind: 'line', pace: 'slow', closeAcross: true, place: g => [0, 1].map(c => ({ x: (c - 0.5) * g.files * g.fileSpacing, z: 0, rot: 0, face: 0 })) },
+          files: { kind: 'column', pace: 'slow', trail: true, place: g => [0, 1].map(c => ({ x: (g.ranks - 1) * g.rankSpacing / 2, z: -c * (g.files * g.fileSpacing + 1), rot: -Math.PI / 2, face: 0 })) },
+        },
+        changeTime: { 'phalanx>files': 25, 'files>phalanx': 45 }, defaultChangeTime: 40, start: 'phalanx', fires: false, figure: 'foot',
+      } },
       pace: { slow: 0.8 }, q: { slow: { open: 1.2, light: 1.1, hard: 1.0 } },
-      formations: {
-        phalanx: { kind: 'line', pace: 'slow', closeAcross: true, place: g => [0, 1].map(c => ({ x: (c - 0.5) * g.files * g.fileSpacing, z: 0, rot: 0, face: 0 })) },
-        files: { kind: 'column', pace: 'slow', trail: true, place: g => [0, 1].map(c => ({ x: (g.ranks - 1) * g.rankSpacing / 2, z: -c * (g.files * g.fileSpacing + 1), rot: -Math.PI / 2, face: 0 })) },
-      },
-      changeTime: { 'phalanx>files': 25, 'files>phalanx': 45 }, defaultChangeTime: 40,
-      start: { shape: 'phalanx', orders: 'steady' },
+      start: { orders: 'steady' },
       orders: { steady: { Lmax: 2, Lmean: 0.7, tau: 4 } },
     }
     const s = new Sim(7, rs), h = s.spawn(-100, -60, 0, 'phalanx', 60)

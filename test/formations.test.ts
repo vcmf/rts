@@ -11,7 +11,7 @@ describe('timed changes', () => {
     s.order({ type: 'form', id: h, shape: 'square' })
     const t = s.until(() => s.busy(h), 200)
     expect(t).toBeCloseTo(100 - 0.05, 1)
-    const C = cr.geo.companies, i = s.slot(h), men = [...s.w.f.men.slice(i * C, i * C + C)]
+    const C = cr.types[0].C, CS = cr.maxC, i = s.slot(h), men = [...s.w.f.men.slice(i * CS, i * CS + C)]
     expect(Math.max(...men) - Math.min(...men)).toBeLessThanOrEqual(1)
   })
 })
@@ -25,8 +25,8 @@ describe('partial bad ground: the thicket', () => {
     if (n > 0) {
       const probe = new Sim(); const h0 = probe.spawn(x, z, 0)
       // the front-rank places of the first n bins (left to right), and the strip over exactly their files
-      const L = probe.layout(h0), RF = cr.geo.ranks * cr.geo.files
-      const front = probe.places(h0).filter(p => Math.floor((p[3] % RF) / cr.geo.files) === 0 && Math.floor(p[3] / RF) * 3 + L.of[p[3]] < n).map(p => p[0])
+      const L = probe.layout(h0), RF = cr.types[0].geo.ranks * cr.types[0].geo.files
+      const front = probe.places(h0).filter(p => Math.floor((p[3] % RF) / cr.types[0].geo.files) === 0 && Math.floor(p[3] / RF) * 3 + L.of[p[3]] < n).map(p => p[0])
       terrain = paint(baseTerrain, [{ x0: Math.min(...front) - 0.3, z0: z + 15, x1: Math.max(...front) + 0.3, z1: z + 24, cls: 'woods' }])
     }
     const s = new Sim(1, undefined, terrain), h = s.spawn(x, z, 0)
@@ -81,7 +81,7 @@ describe('impassable ground: deep water', () => {
     s.order({ type: 'form', id: h, shape: 'march' }); s.advance(25)
     s.order({ type: 'move', id: h, points: [[100, -30]], append: false })
     let worst = 0; for (let n = 0; n < 180; n++) { s.advance(0.5); worst = Math.max(worst, s.placesInDeep(h)) }
-    const fr = s.companyFrames(h), gap = cr.geo.files * cr.geo.fileSpacing + 1
+    const fr = s.companyFrames(h), gap = cr.types[0].geo.files * cr.types[0].geo.fileSpacing + 1
     expect(s.status(h)).toBe('halted: impassable ground'); expect(worst).toBe(0)
     for (let c = 1; c < 4; c++) expect(Math.abs(Math.hypot(fr[c].x - fr[c - 1].x, fr[c].z - fr[c - 1].z) - gap)).toBeLessThan(0.3)
     for (const f of fr) expect(Math.abs(f.face - Math.PI / 2)).toBeLessThan(0.05)
@@ -135,7 +135,7 @@ describe('impassable ground: deep water', () => {
       const t = new Sim(), h = t.spawn(x, -30, 0, 'line', 94)
       if (t.wet(h)) break
       // company 3's files 7 and 8 (heading 0: files along +x, ranks behind along −z)
-      const g = cr.geo, base = t.companyFrames(h)[3], empty: [number, number][] = []
+      const g = cr.types[0].geo, base = t.companyFrames(h)[3], empty: [number, number][] = []
       for (let r = 0; r < g.ranks; r++) for (const f of [7, 8]) empty.push([base.x + (f - (g.files - 1) / 2) * g.fileSpacing, base.z - r * g.rankSpacing])
       if (empty.every(([ex, ez]) => t.deep(ex, ez))) { found = x; break }
     }
@@ -233,7 +233,7 @@ describe('Face about', () => {
     for (const men of [100, 97, 96, 88]) for (const shape of ['line', 'column', 'square', 'march']) {
       const s = new Sim(), h = s.spawn(-20, -100, 0, 'line', men)
       if (shape !== 'line') { s.order({ type: 'form', id: h, shape }); s.advance(110) }
-      const L = s.layout(h), T = L.turn!, g = cr.geo, before = s.places(h)
+      const L = s.layout(h), T = L.turn!, g = cr.types[0].geo, before = s.places(h)
       const full = (p: [number, number, number, number]) => { const c = Math.floor(p[3] / (g.ranks * g.files)), f = p[3] % g.files; return before.filter(q => q[2] === c && q[3] % g.files === f).length === g.ranks }
       s.order({ type: 'face', id: h })
       const after = new Map(s.places(h).map(p => [p[3], p]))
@@ -247,7 +247,7 @@ describe('Face about', () => {
     s.order({ type: 'move', id: h, points: [[100, -30 + 70 * Math.tan(-0.5)]], append: false })
     let lag = 0; for (let n = 0; n < 400 && lag < 1; n++) { s.advance(0.25); lag = Math.max(...s.lags(h)) }
     expect(lag).toBeGreaterThanOrEqual(1)
-    const T = s.layout(h).turn!, g = cr.geo, before = s.places(h)
+    const T = s.layout(h).turn!, g = cr.types[0].geo, before = s.places(h)
     const full = (p: [number, number, number, number]) => { const c = Math.floor(p[3] / (g.ranks * g.files)), f = p[3] % g.files; return before.filter(q => q[2] === c && q[3] % g.files === f).length === g.ranks }
     s.order({ type: 'face', id: h })
     const after = new Map(s.places(h).map(p => [p[3], p]))
@@ -295,11 +295,12 @@ describe('the trail ring', () => {
   it('the trail ring grows with a deep trail shape; a ruleset past its limits is refused', () => {
     const march = (g: Geometry) => Array.from({ length: g.companies }, (_, c) => ({ x: (g.ranks - 1) * g.rankSpacing / 2, z: -c * (g.files * g.fileSpacing + 1), rot: -Math.PI / 2, face: 0 }))
     const wide = (g: Geometry) => Array.from({ length: g.companies }, (_, c) => ({ x: (c - (g.companies - 1) / 2) * 7, z: 0, rot: 0, face: 0 }))
-    const with_ = (geometry: Geometry): Ruleset => ({ ...napoleonic, geometry, formations: { line: { ...napoleonic.formations.line, place: wide }, march: { ...napoleonic.formations.march, place: march } } })
-    expect(new Sim(1, with_({ ...napoleonic.geometry, companies: 8 })).w.cr.trail).toBeGreaterThan(TRAIL_MIN)
-    expect(() => new Sim(1, with_({ ...napoleonic.geometry, companies: 32, files: 60 }))).toThrow(/trail of/)
-    expect(() => new Sim(1, with_({ ...napoleonic.geometry, companies: 33 }))).toThrow(/companies/)
-    expect(() => new Sim(1, with_({ ...napoleonic.geometry, bins: 0 }))).toThrow(/bins/)
+    const inf = napoleonic.types.infantry
+    const with_ = (g: Partial<Geometry>): Ruleset => ({ ...napoleonic, types: { infantry: { ...inf, geometry: { ...inf.geometry, ...g }, formations: { line: { ...inf.formations.line, place: wide }, march: { ...inf.formations.march, place: march } } } } })
+    expect(new Sim(1, with_({ companies: 8 })).w.cr.trail).toBeGreaterThan(TRAIL_MIN)
+    expect(() => new Sim(1, with_({ companies: 32, files: 60 }))).toThrow(/trail of/)
+    expect(() => new Sim(1, with_({ companies: 33 }))).toThrow(/companies/)
+    expect(() => new Sim(1, with_({ bins: 0 }))).toThrow(/bins/)
   })
 })
 
@@ -357,7 +358,7 @@ describe('passages and casualties', () => {
     const terrain = paint(baseTerrain, [{ x0: -80, z0: -100, x1: 0, z1: -20, cls: 'woods' }])
     const s = new Sim(1, undefined, terrain), h = s.spawn(-40, -90, 0, 'line', 90)
     s.order({ type: 'move', id: h, points: [[-40, -30]], append: false }); s.advance(30)
-    const i = s.slot(h), NB = cr.NB, empty = [...s.w.f.binN.slice(i * NB, i * NB + NB)].filter(n => !n).length
+    const i = s.slot(h), NB = cr.types[0].NB, NS = cr.maxNB, empty = [...s.w.f.binN.slice(i * NS, i * NS + NB)].filter(n => !n).length
     expect(empty).toBeGreaterThanOrEqual(1)
     expect(Math.max(...s.lags(h))).toBeLessThanOrEqual(0.1); expect(s.w.f.disorder[i]).toBeLessThanOrEqual(0.05)
   })
@@ -370,7 +371,7 @@ describe('passages and casualties', () => {
 const TICK_BUDGET = 3
 describe.skipIf(process.env.CI)('cost', () => {
   it('40 battalions of 400 of every shape, moving: time per tick (target 2 ms, sim-design §16)', () => {
-    const s = new Sim(1, napoleonic), shapes = Object.keys(napoleonic.formations), hs: number[] = []
+    const s = new Sim(1, napoleonic), shapes = Object.keys(napoleonic.types.infantry.formations), hs: number[] = []
     for (let k = 0; k < 40; k++) hs.push(s.spawn(-165 + (k % 7) * 33, -150 + Math.floor(k / 7) * 55, 0, 'column', 400))
     hs.forEach((h, k) => { s.cmd({ type: 'form', id: h, shape: shapes[k % shapes.length] }); s.cmd({ type: 'move', id: h, points: [[s.x(h) + ((k * 7) % 30) - 15, s.z(h) + 40]], append: true }) })
     s.advance(30)

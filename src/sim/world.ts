@@ -6,7 +6,7 @@
 import type { SimData } from './data.ts'
 import { type RngState, seedRng } from './rng.ts'
 import type { Stamped } from './commands.ts'
-import type { Compiled } from './ruleset.ts'
+import type { Compiled, TypeTable } from './ruleset.ts'
 import type { Terrain } from './terrain.ts'
 import { buildTerrain } from './terrain.ts'
 import { type Handle, KIND_FORMATION, handleKind, handleIndex, handleGen, makeHandle } from './handle.ts'
@@ -22,6 +22,7 @@ export const M_TICK = 0, M_FREE = 1, M_DATA = 2, M_SEQ = 3, M_RULES = 4, M_SEED 
 
 export interface Formations {
   alive: Uint8Array; gen: Int32Array; side: Uint8Array
+  type: Uint8Array                                                 // the unit type (cr.types); the per-company and per-bin rows below are strided by the most of any type
   shape: Int32Array; style: Int32Array; status: Int32Array; onRoad: Uint8Array; drill: Float64Array
   lean: Uint8Array                                                 // which way a company's files centre when it cannot be exact (Face about flips it)
   faces: Int32Array                                                // Face abouts done (the renderer relabels its men through the half-turn)
@@ -29,13 +30,14 @@ export interface Formations {
   px: Float64Array; pz: Float64Array; ph: Float64Array             // last tick's anchor (for the renderer's interpolation)
   vx: Float64Array; vz: Float64Array; omega: Float64Array
   disorder: Float64Array; blockedFor: Float64Array
-  men: Int32Array                                                  // [i·C + c]
+  men: Int32Array                                                  // [i·C + c], C = cr.maxC
   // a shape change in progress
   trans: Uint8Array; tShape: Int32Array; tStart: Float64Array; tDur: Float64Array
   tDelay: Float64Array                                             // [i·C + c]
   tFrom: Float64Array; tTo: Float64Array                           // [(i·C + c)·4 + x|z|rot|face]
+  tK: Float64Array                                                 // [(i·C + c)·2 + kx|kz]: the spacing of its places as the change began
   // the lag model, per bin
-  lags: Float64Array; lagRate: Float64Array; binG: Float64Array; binQ: Float64Array; binN: Int32Array   // [i·NB + j]
+  lags: Float64Array; lagRate: Float64Array; binG: Float64Array; binQ: Float64Array; binN: Int32Array   // [i·NB + j], NB = cr.maxNB
   // the march trail: a ring of points, oldest first
   trailX: Float64Array; trailZ: Float64Array                       // [i·T + k], T = cr.trail
   trailStart: Int32Array; trailCount: Int32Array; trailVer: Int32Array; trailLen: Float64Array
@@ -89,13 +91,13 @@ export interface World {
 }
 
 export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {
-  const N = MAX_FORMATIONS, C = cr.geo.companies, NB = cr.NB
+  const N = MAX_FORMATIONS, C = cr.maxC, NB = cr.maxNB
   const f64 = (n: number) => new Float64Array(n), i32 = (n: number) => new Int32Array(n), u8 = (n: number) => new Uint8Array(n)
   const f: Formations = {
-    alive: u8(N), gen: i32(N), side: u8(N), shape: i32(N), style: i32(N), status: i32(N), onRoad: u8(N), drill: f64(N), lean: u8(N), faces: i32(N),
+    alive: u8(N), gen: i32(N), side: u8(N), type: u8(N), shape: i32(N), style: i32(N), status: i32(N), onRoad: u8(N), drill: f64(N), lean: u8(N), faces: i32(N),
     x: f64(N), z: f64(N), heading: f64(N), px: f64(N), pz: f64(N), ph: f64(N), vx: f64(N), vz: f64(N), omega: f64(N),
     disorder: f64(N), blockedFor: f64(N), men: i32(N * C),
-    trans: u8(N), tShape: i32(N), tStart: f64(N), tDur: f64(N), tDelay: f64(N * C), tFrom: f64(N * C * 4), tTo: f64(N * C * 4),
+    trans: u8(N), tShape: i32(N), tStart: f64(N), tDur: f64(N), tDelay: f64(N * C), tFrom: f64(N * C * 4), tTo: f64(N * C * 4), tK: f64(N * C * 2),
     lags: f64(N * NB), lagRate: f64(N * NB), binG: f64(N * NB), binQ: f64(N * NB), binN: i32(N * NB),
     trailX: f64(N * cr.trail), trailZ: f64(N * cr.trail), trailStart: i32(N), trailCount: i32(N), trailVer: i32(N), trailLen: f64(N),
     ordHead: i32(N).fill(-1), ordTail: i32(N).fill(-1),
@@ -127,4 +129,6 @@ export function formationSlot(w: World, h: Handle): number {
   const i = handleIndex(h)
   return i < w.f.alive.length && w.f.alive[i] && w.f.gen[i] === handleGen(h) ? i : -1
 }
+// formation i's unit type
+export const typeOf = (w: World, i: number): TypeTable => w.cr.types[w.f.type[i]]
 export const formationHandle = (w: World, i: number): Handle => makeHandle(KIND_FORMATION, i, w.f.gen[i])

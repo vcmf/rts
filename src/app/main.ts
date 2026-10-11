@@ -2,7 +2,7 @@
 // staff map with every soldier as a circle; the mouse selects and orders battalions. Every input becomes
 // a command through `issue`, and the external log is kept, so a session can be replayed.
 import dataUrl from '../../data/formation-field.simdata?url'
-import { loadSimData, compileRuleset, makeWorld, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ, MORALE_STATES, FIRE_MODES,
+import { loadSimData, compileRuleset, makeWorld, typeOf, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ, MORALE_STATES, FIRE_MODES,
   type Command, type Stamped, type World, type HashPoint, type Replay, type Dropped } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { FIELD_DATA_VERSION } from '../scenarios/s1b-field.ts'
@@ -64,9 +64,9 @@ async function main(): Promise<void> {
     readout(); requestAnimationFrame(frame)
   }
 
-  // panel: shapes and order presets come from the ruleset
+  // panel: shapes (every type's: a shape the selected type lacks is refused) and order presets come from the ruleset
   const shapesEl = document.getElementById('shapes')!, stylesEl = document.getElementById('styles')!, speedsEl = document.getElementById('speeds')!
-  for (const s of Object.keys(cr.rs.formations)) { const b = document.createElement('button'); b.textContent = s; b.onclick = () => forSelection(id => ({ type: 'form', id, shape: s })); shapesEl.append(b) }
+  for (const s of new Set(cr.types.flatMap(t => t.shapes.map(l => l.name)))) { const b = document.createElement('button'); b.textContent = s; b.onclick = () => forSelection(id => ({ type: 'form', id, shape: s })); shapesEl.append(b) }
   for (const s of Object.keys(cr.rs.orders)) { const b = document.createElement('button'); b.textContent = s; b.dataset.style = s; b.onclick = () => forSelection(id => ({ type: 'style', id, preset: s })); stylesEl.append(b) }
   for (const s of SPEEDS) { const b = document.createElement('button'); b.textContent = s ? `${s}×` : 'pause'; b.dataset.speed = String(s); b.onclick = () => setSpeed(s); speedsEl.append(b) }
   const setSpeed = (s: number) => { speed = s; document.querySelectorAll<HTMLElement>('[data-speed]').forEach(e => e.classList.toggle('on', +e.dataset.speed! === s)) }
@@ -151,8 +151,8 @@ async function main(): Promise<void> {
   function readout(): void {
     const lines: string[] = []
     if (selected.size > 6) lines.push(`${selected.size} battalions selected`)
-    else for (const i of selected) { const s = w.cr.shapes[w.f.shape[i]].name + (w.f.trans[i] ? ' → ' + w.cr.shapes[w.f.tShape[i]].name : '')
-      lines.push(`#${i} ${s} · ${menOf(w, i)} men · ${w.cr.presets[w.f.style[i]]}${STATUS[w.f.status[i]] ? ' · ' + STATUS[w.f.status[i]] : ''}`)
+    else for (const i of selected) { const U = typeOf(w, i), s = U.shapes[w.f.shape[i]].name + (w.f.trans[i] ? ' → ' + U.shapes[w.f.tShape[i]].name : '')
+      lines.push(`#${i} ${U.name} · ${s} · ${menOf(w, i)} men · ${w.cr.presets[w.f.style[i]]}${STATUS[w.f.status[i]] ? ' · ' + STATUS[w.f.status[i]] : ''}`)
       lines.push(`   ${MORALE_STATES[w.f.mstate[i]]} · morale ${w.f.morale[i].toFixed(2)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}`) }
     const d = dropped.at(-1)
     if (note && performance.now() - noteT < 3000) lines.push(note)

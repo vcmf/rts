@@ -28,7 +28,7 @@ class W {
   run(sec: number): void { for (let n = Math.round(sec * 20); n > 0; n--) this.tick() }
   i(h: number): number { return (h >>> 19) & 511 }
   men(h: number): number { return menOf(this.w, this.i(h)) }
-  volleys(h: number): number { let n = 0; for (let c = 0; c < 4; c++) if (this.w.f.volleyTick[this.i(h) * 4 + c] > 0) n++; return n }
+  volleys(h: number): number { let n = 0; for (let c = 0; c < 4; c++) if (this.w.f.volleyTick[this.i(h) * this.w.cr.maxC + c] > 0) n++; return n }
   state(h: number): number { return this.w.f.mstate[this.i(h)] }
 }
 // two lines facing each other `d` apart on the strip
@@ -39,7 +39,7 @@ function pair(d: number, opts: ConstructorParameters<typeof W>[0] = {}, qb?: num
 const pairB = (s: W): number => makeHandle(KIND_FORMATION, 1, s.w.f.gen[1])
 const fireRs = (fire: Partial<Ruleset['fire']>): Ruleset => ({ ...small, fire: { ...small.fire, ...fire } })
 // the z of company c's centre (its front-rank origin is close enough here)
-const companyZ = (s: W, h: number, c: number): number => placeWorld(s.w, s.i(h), c, s.w.f.x[s.i(h)], s.w.f.z[s.i(h)], s.w.f.heading[s.i(h)], 0, 0, { x: 0, z: 0, a: 0, face: 0 }).z
+const companyZ = (s: W, h: number, c: number): number => placeWorld(s.w, s.i(h), c, s.w.f.x[s.i(h)], s.w.f.z[s.i(h)], s.w.f.heading[s.i(h)], 0, 0, { x: 0, z: 0, a: 0, face: 0, kx: 1, kz: 1 }).z
 
 describe('who may fire at whom', () => {
   it('only within the maximum range', () => {
@@ -62,7 +62,7 @@ describe('who may fire at whom', () => {
     s.spawn(0, -80, Z + 15, E, { men: 100 })
     s.run(40)
     const shares = [0, 1, 2, 3].map(c => aimOf(s.w, s.i(a), c).share)
-    const fired = [0, 1, 2, 3].map(c => s.w.f.volleyTick[s.i(a) * 4 + c] > 0)
+    const fired = [0, 1, 2, 3].map(c => s.w.f.volleyTick[s.i(a) * s.w.cr.maxC + c] > 0)
     console.log('shares behind a friend', shares, fired)
     expect(shares.some(x => x === 0)).toBe(true); expect(shares.some(x => x === 1)).toBe(true)
     for (let c = 0; c < 4; c++) if (shares[c] === 0) expect(fired[c]).toBe(false)
@@ -75,18 +75,18 @@ describe('who may fire at whom', () => {
     const [s, a] = pair(100)
     s.do({ type: 'move', id: a, points: [[FIGHT_X - 50, Z + 60]], append: false })
     const t0 = s.w.meta[M_TICK]; s.run(30)
-    expect(Math.max(...[0, 1, 2, 3].map(c => s.w.f.volleyTick[s.i(a) * 4 + c]))).toBeLessThanOrEqual(t0)
+    expect(Math.max(...[0, 1, 2, 3].map(c => s.w.f.volleyTick[s.i(a) * s.w.cr.maxC + c]))).toBeLessThanOrEqual(t0)
     s.do({ type: 'halt', id: a }); s.do({ type: 'form', id: a, shape: 'column' })
     const t1 = s.w.meta[M_TICK]; s.run(25)
-    expect(Math.max(...[0, 1, 2, 3].map(c => s.w.f.volleyTick[s.i(a) * 4 + c]))).toBeLessThanOrEqual(t1)
+    expect(Math.max(...[0, 1, 2, 3].map(c => s.w.f.volleyTick[s.i(a) * s.w.cr.maxC + c]))).toBeLessThanOrEqual(t1)
   })
 })
 
 describe('Face about', () => {
   it('carries each company\'s fire state with its men (reload, last volley, target)', () => {
     const [s, a] = pair(100, {}, undefined); s.do({ type: 'fire', id: pairB(s), mode: 'hold' }); s.run(40)   // A's companies have fired, reloads differ
-    const i = s.i(a), C = 4
-    for (let c = 0; c < C; c++) s.w.f.men[i * C + c] = 20 + c   // distinct strengths, so each company's men can be told apart
+    const i = s.i(a), C = s.w.cr.maxC   // the stride of the per-company rows (the S1a block has 4 companies)
+    for (let c = 0; c < 4; c++) s.w.f.men[i * C + c] = 20 + c   // distinct strengths, so each company's men can be told apart
     const pairs = (dt: number) => [0, 1, 2, 3].map(c => `${s.w.f.men[i * C + c]}:${Math.max(0, s.w.f.reload[i * C + c] - dt).toFixed(4)}:${s.w.f.volleyTick[i * C + c]}`).sort()
     const before = pairs(0.05), faces = s.w.f.faces[i]
     s.do({ type: 'face', id: a })   // applied and done in this tick (the fire step then takes one tick off every reload)
@@ -102,8 +102,8 @@ describe('casualties', () => {
     // only B's western company (company 0) is within 100 m (hit chance raised so the test sees hits)
     const s = new W({ rs: fireRs({ maxRange: 100, pRange: [[0, 0.2], [100, 0.2], [101, 0]] }) })
     s.spawn(0, -150, Z, E); const b = s.spawn(1, -45.25, Z, 0)
-    const before = [0, 1, 2, 3].map(c => s.w.f.men[s.i(b) * 4 + c]); s.run(120)
-    const lost = [0, 1, 2, 3].map(c => before[c] - s.w.f.men[s.i(b) * 4 + c])
+    const before = [0, 1, 2, 3].map(c => s.w.f.men[s.i(b) * s.w.cr.maxC + c]); s.run(120)
+    const lost = [0, 1, 2, 3].map(c => before[c] - s.w.f.men[s.i(b) * s.w.cr.maxC + c])
     console.log('losses by company', lost)
     expect(lost[0]).toBeGreaterThan(0); expect(lost.slice(1)).toEqual([0, 0, 0])
   })
@@ -117,7 +117,7 @@ describe('a target partly hidden', () => {
     // B steady and in place for the whole test (a rout would Face about, and that remaps its companies)
     const w2 = new W({ terrain: t, rs: fireRs({ pRange: [[0, 0.2], [250, 0.2], [251, 0]] }) })
     const a2 = w2.spawn(0, FIGHT_X - 50, Z, E, { fire: 'hold' }), b2 = w2.spawn(1, FIGHT_X + 50, Z, -E, { quality: 1, fire: 'hold' })
-    const C = 4, south = [0, 1, 2, 3].reduce((m, c) => (companyZ(w2, b2, c) < companyZ(w2, b2, m) ? c : m), 0), zs = companyZ(w2, b2, south)   // B's southern company
+    const C = w2.w.cr.maxC, south = [0, 1, 2, 3].reduce((m, c) => (companyZ(w2, b2, c) < companyZ(w2, b2, m) ? c : m), 0), zs = companyZ(w2, b2, south)   // B's southern company
     for (let z = Math.floor(zs - 8); z <= Math.ceil(zs + 8); z++) for (let x = FIGHT_X + 10; x <= FIGHT_X + 56; x++) t.cls[cellK(t, x, z)] = dense
     w2.do({ type: 'fire', id: a2, mode: 'at will' })
     // the companies of B that no company of A can see (they stand still: both battalions are halted)
@@ -151,7 +151,7 @@ describe('morale', () => {
     const t0 = s.w.meta[M_TICK]; s.do({ type: 'move', id: h, points: [[0, 0]], append: false })
     expect(s.dropped.at(-1)?.reason).toBe('routing')
     s.run(120)
-    expect(Math.max(...[0, 1, 2, 3].map(c => s.w.f.volleyTick[s.i(h) * 4 + c]))).toBeLessThanOrEqual(t0)
+    expect(Math.max(...[0, 1, 2, 3].map(c => s.w.f.volleyTick[s.i(h) * s.w.cr.maxC + c]))).toBeLessThanOrEqual(t0)
     expect(s.w.f.z[s.i(h)]).toBeLessThan(-170)   // the southern edge is at −180, the order kept 2 m inside
   })
   it('a router whose Face about fails (water behind it) keeps its run: the failed turn does not drop it', () => {

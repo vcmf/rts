@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-11
 code: [src/sim/fire.ts, src/sim/morale.ts, src/sim/rng.ts, src/sim/tick.ts, src/rulesets/napoleonic.ts, src/scenarios/s1c-firefight.ts, tools/calibrate-fire.ts, test/fire.test.ts, test/morale.test.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine, 0018-battalion-of-400]
 ---
@@ -52,6 +52,8 @@ Each step starts from the companies' poses after movement: centre, facing, and t
 rotation.
 
 **May fire:**
+- its unit type fires by company (`fires`: the Napoleonic infantry; a cavalry regiment and a battery do not,
+  until S1d-2 and S1d-3, but are fired on, lose men and have morale like a battalion);
 - the battalion is halted: no order at its head, or a dress;
 - it is not changing shape and not routing;
 - its fire mode is at will (the `fire` command sets *at will* or *hold*, with an optional preferred

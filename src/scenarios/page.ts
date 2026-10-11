@@ -1,10 +1,11 @@
 // The scenarios the page offers (?scenario=), all on the formation field (FIELD_DATA_VERSION): the S1b drill
-// and bench, the S1c firefight (the default) and the S1c-2 brigade fight.
+// and bench, the S1c firefight (the default), the S1c-2 brigade fight and the S1d-1 arms (the unit types).
 import type { Scenario } from '../sim/index.ts'
 import { S1B_SCENARIOS } from './s1b-field.ts'
 import { s1cFirefight, s1cBrigade } from './s1c-firefight.ts'
+import { s1dArms } from './s1d-arms.ts'
 
-export const PAGE_SCENARIOS: Record<string, Scenario> = { 's1c-firefight': s1cFirefight, 's1c-brigade': s1cBrigade, ...S1B_SCENARIOS }
+export const PAGE_SCENARIOS: Record<string, Scenario> = { 's1c-firefight': s1cFirefight, 's1c-brigade': s1cBrigade, 's1d-arms': s1dArms, ...S1B_SCENARIOS }
 export const DEFAULT_SCENARIO = 's1c-firefight'
 // where the page opens on each: centre x, z and pixels per metre
-export const PAGE_VIEWS: Record<string, [number, number, number]> = { 's1c-firefight': [-100, 120, 3], 's1c-brigade': [-125, -10, 2] }
+export const PAGE_VIEWS: Record<string, [number, number, number]> = { 's1c-firefight': [-100, 120, 3], 's1c-brigade': [-125, -10, 2], 's1d-arms': [-60, 10, 1.9] }
