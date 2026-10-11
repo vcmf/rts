@@ -3,7 +3,10 @@
 // 8 (fire), 11 (casualties) and 12 (morale; the rout and the wavering fall-back are its standing behaviours);
 // S1d-2 fills 4 (the square against cavalry) and 10 (charges and melee); S1d-3 fills 9 (artillery). The others are named and empty until
 // later parts of S1.
-import { type World, M_TICK, MAX_FORMATIONS, MS_SHATTERED } from './world.ts'
+import { type World, M_TICK, MAX_FORMATIONS, MS_SHATTERED, typeOf, formationHandle } from './world.ts'
+import { placeWorld, type Pose } from './formation.ts'
+import { DT } from './time.ts'
+import { sin, cos } from './num.ts'
 import { applyCommands, reapFormation, type Dropped } from './commands.ts'
 import { HASH_EVERY } from './time.ts'
 import { assertFinite } from './num.ts'
@@ -14,10 +17,22 @@ import { moraleStep } from './morale.ts'
 import { meleeStep, standingStep } from './melee.ts'
 import { artilleryStep } from './artillery.ts'
 
-// the formation's anchor is within morale.leave of the map's edge
+// a company of formation i with men stands within morale.leave of the map's edge: any corner of its block (a line
+// meeting the edge at an angle, a square backing into it, or a column of route's tail reaches it before the anchor)
+const aePose: Pose = { x: 0, z: 0, a: 0, face: 0, kx: 1, kz: 1 }
 function atEdge(w: World, i: number): boolean {
-  const t = w.terrain, e = (t.n - 1) * t.cell, L = w.cr.rs.morale.leave, x = w.f.x[i] - t.x0, z = w.f.z[i] - t.z0
-  return Math.min(x, z, e - x, e - z) <= L
+  const t = w.terrain, e = (t.n - 1) * t.cell, L = w.cr.rs.morale.leave, f = w.f, U = typeOf(w, i), g = U.geo, now = w.meta[M_TICK] * DT
+  for (let c = 0; c < U.C; c++) {
+    if (f.men[i * w.cr.maxC + c] <= 0) continue
+    const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], now, 0, aePose), ca = cos(p.a), sa = sin(p.a)
+    const hx = (g.files - 1) / 2 * g.fileSpacing * p.kx, lz = -(g.ranks - 1) * g.rankSpacing * p.kz
+    for (let k = 0; k < 4; k++) {
+      const lx = k & 1 ? hx : -hx, z0 = k & 2 ? lz : 0
+      const x = p.x + lx * ca - z0 * sa - t.x0, z = p.z + lx * sa + z0 * ca - t.z0
+      if (Math.min(x, z, e - x, e - z) <= L) return true
+    }
+  }
+  return false
 }
 // metering is injected: the sim never reads a clock itself
 export interface Meter { now(): number; add(step: string, ms: number): void }
@@ -55,7 +70,11 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     if (!w.f.alive[i]) continue
     const men = menOf(w, i)
     if (men === 0) reapFormation(w, i)
-    else if (w.f.mstate[i] === MS_SHATTERED && atEdge(w, i)) { w.sides.left[w.f.side[i]] += men; reapFormation(w, i) }
+    else if (w.f.mstate[i] === MS_SHATTERED && atEdge(w, i)) {
+      w.sides.left[w.f.side[i]] += men
+      ;(w.scratch.departed ??= []).push(formationHandle(w, i))   // for the renderer: these men left, they did not fall
+      reapFormation(w, i)
+    }
   } })
   w.meta[M_TICK] = t
   // (the trail rings, 1 MB at 400 men, are skipped: their points come from checked positions or from the ring

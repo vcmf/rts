@@ -3,17 +3,15 @@
 // re-pack like the small block the terrain tests use, past the old 32-bit masks (48 and 90 bins, 69 and 135
 // slots a company).
 import { describe, it, expect } from 'vitest'
-import { Sim, ceiling, STREAM_X, battleData } from './fx.ts'
+import { Sim, ceiling, STREAM_X, openBattlefield, OPEN_DATA } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { removeMan, anyWet, wetBins, aimOf, buildTerrain, rebuildImpassable, compileRuleset, type Ruleset, withBlock } from '../src/sim/index.ts'
-import { levelled } from '../src/scenarios/s1c-firefight.ts'
+import { removeMan, anyWet, wetBins, aimOf, type Ruleset, withBlock } from '../src/sim/index.ts'
 import { mkBits, hasBit } from '../src/sim/bits.ts'
 
 const SHIPPED = { rs: napoleonic, men: 400 }, CEILING = { rs: ceiling, men: 810 }
 const both = [['400', SHIPPED], ['810', CEILING]] as const
 // the battlefield, levelled and open: room for every shape of a battalion of 810 (the 360 m field's edge holds them)
-const OPEN = levelled(battleData)
-const roomy = (rs: Ruleset): Sim => { const t = buildTerrain(OPEN, compileRuleset(rs)); t.cls.fill(Object.keys(rs.terrain).indexOf('open')); t.depth.fill(0); rebuildImpassable(t); return new Sim(1, rs, t, OPEN) }
+const roomy = (rs: Ruleset): Sim => new Sim(1, rs, openBattlefield(rs), OPEN_DATA)
 const companies = (n: number): Ruleset => withBlock({ ...napoleonic, name: `${n} companies` }, 'infantry', { companies: n })
 
 describe('the blocks', () => {

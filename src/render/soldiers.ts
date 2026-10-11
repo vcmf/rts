@@ -5,7 +5,7 @@
 // whose slots moved walk to the nearest free filled slot; Face about relabels the men through the shape's
 // half-turn. No DOM: tested in Node (test/soldiers.test.ts).
 import type { World, Places } from '../sim/index.ts'
-import { mkPlaces, placesCtx, placeAtSlot, filledSlots, menOf, groundGAt, cellK, typeOf, DT, M_TICK, MS_RALLYING, fleeing } from '../sim/index.ts'
+import { mkPlaces, placesCtx, placeAtSlot, filledSlots, menOf, groundGAt, cellK, impAt, typeOf, makeHandle, KIND_FORMATION, DT, M_TICK, MS_RALLYING, fleeing } from '../sim/index.ts'
 import type { Scene, Obstacle } from './scene.ts'
 import { cosmeticRng } from './scene.ts'
 import { CLASS_STYLE } from './style.ts'
@@ -77,7 +77,7 @@ export class SoldierLayer {
   place(i: number, s: number, ahead: boolean, out: number[], imp?: Uint8Array): number[] {
     if (!ahead) return placeAtSlot(this.ctx0, s, out)
     placeAtSlot(this.ctxA, s, out)
-    if ((imp ?? this.w.terrain.imp[this.kindOf(i)])[cellK(this.w.terrain, out[0], out[1])]) placeAtSlot(this.ctx0, s, out)
+    if (impAt(this.w.terrain, imp ?? this.w.terrain.imp[this.kindOf(i)], out[0], out[1])) placeAtSlot(this.ctx0, s, out)
     return out
   }
   // what the places of formation i were framed from (call after frame(i)): the anchors, the trail, the lags
@@ -105,7 +105,13 @@ export class SoldierLayer {
   // shape it turned in, which a later change of shape within the same frame would otherwise replace.
   sync(alpha: number): void {
     const w = this.w, f = w.f, N = f.alive.length, p = [0, 0, 0]
-    for (const [i, u] of this.units) if (!f.alive[i] || f.gen[i] !== u.gen) { for (const m of u.men) { if (m.alive) m.alive = false; this.fallen.push(m) } this.units.delete(i) }
+    // a formation gone: its men fell, unless it left the field (S1e-1), when they go with it
+    const departed = new Set(w.scratch.departed ?? []); w.scratch.departed = []
+    for (const [i, u] of this.units) if (!f.alive[i] || f.gen[i] !== u.gen) {
+      const left = departed.has(makeHandle(KIND_FORMATION, i, u.gen))
+      if (!left) for (const m of u.men) { if (m.alive) m.alive = false; this.fallen.push(m) }
+      this.units.delete(i)
+    }
     for (let i = 0; i < N; i++) {
       if (!f.alive[i]) continue
       let u = this.units.get(i)
@@ -214,7 +220,7 @@ export class SoldierLayer {
         if (dist < 0.08) { const damp = Math.max(0, 1 - dt * 8); m.vx *= damp; m.vz *= damp }   // arrived: come to rest
         const sp2 = m.vx * m.vx + m.vz * m.vz, cap = RUNu * gs; if (sp2 > cap * cap) { const r = cap / Math.sqrt(sp2); m.vx *= r; m.vz *= r }
         const nx = m.x + m.vx * dt, nz = m.z + m.vz * dt
-        if (imp[cellK(t, nx, nz)] && !imp[here]) { m.vx = 0; m.vz = 0 } else { m.x = nx; m.z = nz }   // never onto impassable ground
+        if (impAt(t, imp, nx, nz) && !imp[here]) { m.vx = 0; m.vz = 0 } else { m.x = nx; m.z = nz }   // never onto impassable ground, nor off the map
         tc = this.treeCell(m.x, m.z)
         if (tc >= 0) for (let k = TA[tc], e = TA[tc + 1]; k < e; k++) { const ex = m.x - TX[k], ez = m.z - TZ[k], d = Math.sqrt(ex * ex + ez * ez), R = TR[k] + 0.3   // never inside a trunk
           if (d < R && d > 1e-6) { m.x = TX[k] + ex / d * R; m.z = TZ[k] + ez / d * R } }

@@ -6,7 +6,7 @@ import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { s1eBattle } from '../src/scenarios/s1e-battle.ts'
 import { streamZ, roadX, FORDS } from '../maps/battlefield.ts'
 import { MAP_VERSIONS } from '../src/scenarios/maps.ts'
-import { buildTerrain, compileRuleset, makeWorld, advanceTick, cellK, heightAt, impAt, formationSlot, typeOf, MS_ROUTING } from '../src/sim/index.ts'
+import { buildTerrain, compileRuleset, advanceTick, issue, cellK, heightAt, impAt, formationSlot, formationHandle, typeOf, MS_ROUTING, MS_SHATTERED } from '../src/sim/index.ts'
 
 const cr = compileRuleset(napoleonic), T = buildTerrain(battleData, cr), names = Object.keys(napoleonic.terrain)
 const cls = (x: number, z: number) => names[T.cls[cellK(T, x, z)]]
@@ -60,11 +60,34 @@ describe('leaving the field', () => {
 })
 
 describe('the S1e scenario', () => {
-  it('every formation deploys, and every shape it is drilled into stays on the map', () => {
-    const w = makeWorld(battleData, cr, 1, true, T); s1eBattle.setup(w); const r = advanceTick(w)
-    expect(r.dropped).toEqual([])
+  it('every formation deploys; formed into each of its shapes together, every place stays on the map', () => {
+    const s = new Sim(1, napoleonic, T, battleData), w = s.w; s1eBattle.setup(w); s.tick()
+    expect(s.dropped).toEqual([])
     const live = [...w.f.alive].map((a, i) => a ? i : -1).filter(i => i >= 0)
     expect(live.length).toBe(16)
     expect(live.map(i => typeOf(w, i).name).filter(n => n === 'infantry').length).toBe(12)
+    const onMap = () => live.every(i => s.places(formationHandle(w, i)).every(([x, z]) => Math.abs(x) <= 600 && Math.abs(z) <= 600))
+    // each round: every formation forms the next of its type's shapes, all at once, until none is changing
+    for (let round = 0; round < 4; round++) {
+      for (const i of live) { const S = typeOf(w, i).shapes; issue(w, { type: 'form', id: formationHandle(w, i), shape: S[(w.f.shape[i] + 1) % S.length].name }) }
+      for (let n = 0; n < 20 * 150 && live.some(i => w.f.trans[i]); n++) advanceTick(w)
+      expect(live.filter(i => w.f.trans[i])).toEqual([]); expect(onMap()).toBe(true)
+    }
+  })
+})
+
+describe('along the edge', () => {
+  it('a column of route turning along the edge into a corner keeps every place on the map', () => {
+    const s = sim(), h = s.spawn(560, 300, 0, 'march', 400); let off = 0
+    s.order({ type: 'move', id: h, points: [[560, 560], [300, 560]], append: false })
+    for (let n = 0; n < 900 && s.busy(h); n++) { s.advance(1); off += s.places(h).filter(([x, z]) => Math.abs(x) > 600 || Math.abs(z) > 600).length }
+    expect(off).toBe(0); expect(s.x(h)).toBeLessThan(560)   // it got round the corner
+  })
+  it('a shattered formation leaves when any company reaches the edge, not only its anchor', () => {
+    // a column of route facing north with its tail at the southern edge: its anchor stands about 90 m in
+    const s = sim(), h = s.spawn(0, -505, 0, 'march', 400), i = s.slot(h)
+    expect(Math.min(...s.places(h).map(([, z]) => z))).toBeLessThan(-590)
+    s.w.f.mstate[i] = MS_SHATTERED; s.tick()
+    expect(formationSlot(s.w, h)).toBe(-1); expect(s.w.sides.left[0]).toBe(400)
   })
 })

@@ -20,6 +20,7 @@ async function main(): Promise<void> {
   const asked = new URLSearchParams(location.search).get('scenario') ?? '', scenario = PAGE_SCENARIOS[Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO]
   // the scenario's map, at the version it was placed for
   const mapName = scenario.map ?? DEFAULT_MAP, urls: Record<string, string> = { 'formation-field': fieldUrl, battlefield: battleUrl }
+  if (!urls[mapName] || MAP_VERSIONS[mapName] === undefined) throw new Error(`scenario ${scenario.name}: no map ${mapName} (src/scenarios/maps.ts and the page's data imports)`)
   const data = loadSimData(new Uint8Array(await (await fetch(urls[mapName])).arrayBuffer()), MAP_VERSIONS[mapName])
   const cr = compileRuleset(napoleonic)
   const w: World = makeWorld(data, cr, SEED, false)

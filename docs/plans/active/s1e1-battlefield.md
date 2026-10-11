@@ -143,3 +143,24 @@ ends at the edge on any map, so removing routers would end every rally).
   `morale.leave`, the drill, firefight, calibration and guns goldens reproduced. The charge golden changed for an
   edge reason: its routed line runs north to the field's edge, where the edge now holds its square's rear face.
   All were regenerated.
+
+## Review
+
+**Round 1** (`/code-review high`, 8 findings; two severe, so a second round):
+- **Fixed, severe:**
+  - a shattered battalion leaving the field was drawn as a heap of dead at the edge: the soldier layer took every
+    man of a removed formation as fallen. The sim now names the formations that left (`scratch.departed`, not
+    state), and their men go with them. A test checks no man is left as fallen;
+  - only the anchor was tested against the edge, so a line meeting it at an angle, or a column of route whose
+    tail reached it, stopped with its anchor more than 12 m in and never left. Every corner of every company's
+    block is tested now; a test with the tail at the edge fails on the anchor rule.
+- **Fixed:**
+  - `check:app` counted a line out of the fight by its state, which a removed slot loses: a removed slot counts
+    as broken; the charge golden checks the square is still there;
+  - the soldier layer tested ground with the raw grid, so a man could step past the edge: it asks `impAt`;
+  - `SIM_VERSION` (`s1e.1`) and `SAVE_FORMAT` (10) were not bumped for the new state and rule;
+  - the scenario test said it drilled every shape and did not: it forms all 16 formations through their shapes
+    together and checks every place; a column of route turning along the edge into a corner is tested;
+  - the open battlefield's recipe was copied into four test files and rebuilt per test: one cached helper
+    (`openBattlefield`, `OPEN_DATA` in `test/fx.ts`);
+  - a scenario naming a map the page cannot load now fails with a message; `check:app` uses `DEFAULT_MAP`.

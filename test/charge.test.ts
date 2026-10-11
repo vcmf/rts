@@ -5,22 +5,17 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { Sim, data, battleData, root, longIt } from './fx.ts'
-import { levelled } from '../src/scenarios/s1c-firefight.ts'
+import { Sim, data, root, longIt, openBattlefield, OPEN_DATA } from './fx.ts'
 import { s1dCharge, chargeFight } from '../src/scenarios/s1d-charge.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { buildTerrain, rebuildImpassable, compileRuleset, makeWorld, advanceTick, record, play, serialize, deserialize, hashWorld, hex, issue,
+import { compileRuleset, makeWorld, advanceTick, record, play, serialize, deserialize, hashWorld, hex, issue,
   bracedOf, gapBetween, sideStruck, Q_FRONT, Q_FLANK, Q_REAR, CH_CLOSING, CH_TESTED, CH_PURSUIT, MS_ROUTING, M_TICK, MORALE_STATES, outOfFight, makeHandle, KIND_FORMATION,
-  type Terrain, type Ruleset } from '../src/sim/index.ts'
+  type Ruleset } from '../src/sim/index.ts'
 
 const PI = Math.PI
 const crN = compileRuleset(napoleonic)
-const OPEN = levelled(battleData)   // the 1.2 km battlefield, levelled and painted open: room for every shape
-const open = (): Terrain => {
-  const t = buildTerrain(OPEN, crN); t.cls.fill(Object.keys(napoleonic.terrain).indexOf('open')); t.depth.fill(0); rebuildImpassable(t)
-  return t
-}
-const FIELD = open()
+const OPEN = OPEN_DATA   // the 1.2 km battlefield, levelled and painted open: room for every shape
+const FIELD = openBattlefield()
 // the shipped ruleset with the melee numbers changed (noSquare: no battalion forms square by itself)
 const withMelee = (m: Partial<Ruleset['melee']>): Ruleset => ({ ...napoleonic, melee: { ...napoleonic.melee, ...m } })
 const noSquare = withMelee({ refuge: { ...napoleonic.melee.refuge, alert: 0 } })
@@ -270,6 +265,6 @@ describe('determinism', () => {
     const w = makeWorld(data, crN, 7); s1dCharge.setup(w); let broke = false
     while (w.meta[M_TICK] < TICKS) { if (w.meta[M_TICK] === 1) issue(w, { type: 'charge', id: h(0), target: h(1) }); if (w.meta[M_TICK] === 3600) issue(w, { type: 'charge', id: h(0), target: h(2) }); advanceTick(w)
       if (w.f.alive[1] && w.f.mstate[1] >= MS_ROUTING) broke = true }
-    expect([broke, outOfFight(w.f.mstate[2])]).toEqual([true, false])
+    expect([broke, w.f.alive[2] === 1 && !outOfFight(w.f.mstate[2])]).toEqual([true, true])   // the square is there, in the fight
   })
 })

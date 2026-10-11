@@ -14,6 +14,7 @@ import { loadSimData, compileRuleset, buildTerrain, rebuildImpassable, makeWorld
   placesCtx, placeAt, mkPlaces, occupied, placeWorld, anyWet, layoutOf, STATUS, menOf, cellK, slotIndex, type Command, type World, type Compiled,
   type Ruleset, type Terrain, type SimData, type Dropped, TICK_HZ, M_TICK, typeOf, withBlock } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import { levelled } from '../src/scenarios/s1c-firefight.ts'
 
 export const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const dataBytes = (): Uint8Array => new Uint8Array(fs.readFileSync(path.join(root, 'data', 'formation-field.simdata')))
@@ -22,6 +23,15 @@ export const data: SimData = loadSimData(dataBytes(), GOLDEN_DATA_VERSION)
 // the S1e battlefield (1.2 km): tests that need room paint it open (levelled) instead of the 360 m field
 export const BATTLE_DATA_VERSION = 0xad83ce9c
 export const battleData: SimData = loadSimData(new Uint8Array(fs.readFileSync(path.join(root, 'data', 'battlefield.simdata'))), BATTLE_DATA_VERSION)
+// the battlefield levelled and painted open, dry ground (room for every shape): its data and a terrain per ruleset,
+// built once each. A test that paints on it takes a copy (`paint`)
+export const OPEN_DATA: SimData = levelled(battleData)
+const openTerrains = new Map<Ruleset, Terrain>()
+export function openBattlefield(rs: Ruleset = napoleonic): Terrain {
+  let t = openTerrains.get(rs)
+  if (!t) { t = buildTerrain(OPEN_DATA, compileRuleset(rs)); t.cls.fill(Object.keys(rs.terrain).indexOf('open')); t.depth.fill(0); rebuildImpassable(t); openTerrains.set(rs, t) }
+  return t
+}
 // (its morale reaches are S1c-2's: they scale with the frontage, napoleonic.ts)
 export const small: Ruleset = { ...withBlock(napoleonic, 'infantry', { companies: 4, files: 9, bins: 3 }), name: `${napoleonic.name}, the S1a block`,
   morale: { ...napoleonic.morale, contagion: { ...napoleonic.morale.contagion, front: 200, back: 100 }, support: { ...napoleonic.morale.support, reach: 100 } } }

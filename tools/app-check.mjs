@@ -11,6 +11,7 @@ import fs from 'node:fs'
 import { loadSimData, compileRuleset, play } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { PAGE_SCENARIOS } from '../src/scenarios/page.ts'
+import { DEFAULT_MAP } from '../src/scenarios/maps.ts'
 
 const out = process.argv[2] || 'scratch/app-check', PORT = 4178
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -44,14 +45,15 @@ const bench = [
 
 // the firefight played to a rout (in 3-minute steps: each eval stays inside shot.mjs's timeout), then the
 // moment after it, close up
-// a break: routing or later (rallying, shattered: state ≥ 3)
-const STEP3 = ['eval', 'if (!APP.w.f.mstate.some(s => s >= 3)) APP.advance(180); `t ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states ${[0, 1].map(i => APP.w.f.mstate[i]).join(" ")}`']
+// a break: routing or later (rallying, shattered: state ≥ 3), or gone (a shattered line leaves the field at the edge)
+const BROKE = 'i => !APP.w.f.alive[i] || APP.w.f.mstate[i] >= 3'
+const STEP3 = ['eval', 'if (![0, 1].some(' + BROKE + ')) APP.advance(180); `t ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states ${[0, 1].map(i => APP.w.f.mstate[i]).join(" ")}`']
 const fight = [
   ['wait', 1500], READY,
   ['eval', 'APP.view(-120, 120, 3); APP.advance(20); "opening volleys"'],
   ['shot', 'fight-0-volleys'],
   STEP3, STEP3, STEP3, STEP3, STEP3,
-  ['eval', 'const r = [0, 1].filter(i => APP.w.f.mstate[i] >= 3); APP.advance(8); APP.view(-100, 120, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, men ${[0, 1].map(i => { const C = APP.w.cr.maxC; return APP.w.f.startMen[i] - APP.w.f.men.slice(i * C, i * C + C).reduce((a, b) => a + b, 0) }).join(" / ")} lost`'],
+  ['eval', 'const r = [0, 1].filter(' + BROKE + '); APP.advance(8); APP.view(-100, 120, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, men ${[0, 1].map(i => { const C = APP.w.cr.maxC; return APP.w.f.startMen[i] - APP.w.f.men.slice(i * C, i * C + C).reduce((a, b) => a + b, 0) }).join(" / ")} lost`'],
   ['shot', 'fight-1-rout'],
   REPLAY,
 ]
@@ -76,7 +78,7 @@ const charge = [
   ['wait', 1500], READY,
   ['eval', 'APP.view(-110, 60, 1.9); "the regiment, the line and the square"'],
   ['shot', 'charge-0-start'],
-  ['eval', 'APP.select([0]); APP.charge(1); APP.advance(30); APP.select([]); APP.view(-125, 100, 2.5); `CHARGE line state ${APP.w.f.mstate[1]}, ${APP.w.f.startMen[1] - APP.w.f.men.slice(APP.w.cr.maxC, 2 * APP.w.cr.maxC).reduce((a, b) => a + b, 0)} lost`'],
+  ['eval', 'APP.select([0]); APP.charge(1); APP.advance(30); APP.select([]); APP.view(-125, 100, 2.5); `CHARGE line state ${APP.w.f.alive[1] ? APP.w.f.mstate[1] : 5}, ${APP.w.f.startMen[1] - APP.w.f.men.slice(APP.w.cr.maxC, 2 * APP.w.cr.maxC).reduce((a, b) => a + b, 0)} lost`'],
   ['shot', 'charge-1-line'],
   ['eval', 'APP.advance(150); APP.select([0]); APP.charge(2); APP.advance(40); APP.select([]); APP.view(-90, 130, 2.2); `SQUARE state ${APP.w.f.mstate[2]}, regiment phase ${APP.w.f.chPhase[0]} melee ${APP.w.f.foe[0] ? 1 : 0}`'],
   ['shot', 'charge-2-square'],
@@ -107,7 +109,7 @@ const battle = [
 
 // the brigade (S1c-2) played until a break has spread: two or more of the weaker side's lines (slots 3–5) out
 // of the fight (routing, rallying or shattered: state ≥ 3), in 3-minute steps
-const OUT = 'APP.w.f.mstate.slice(3, 6).filter(s => s >= 3).length'
+const OUT = '[3, 4, 5].filter(' + BROKE + ').length'
 const STEP3B = ['eval', `if (${OUT} < 2) APP.advance(180); \`t \${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, states \${[...APP.w.f.mstate.slice(0, 6)].join(" ")}\``]
 const brigadeFight = [
   ['wait', 1500], READY,
@@ -128,7 +130,7 @@ async function run(scenario, steps) {
   const line = text.split('\n').find(l => l.startsWith('EVAL "REPLAY '))
   if (!line) { console.log('no replay exported'); return false }
   const { replay, hashes } = JSON.parse(JSON.parse(line.slice(5)).slice(7))
-  const bad = play(replay, dataOf(PAGE_SCENARIOS[scenario].map ?? 'formation-field'), cr, PAGE_SCENARIOS[scenario], hashes)
+  const bad = play(replay, dataOf(PAGE_SCENARIOS[scenario].map ?? DEFAULT_MAP), cr, PAGE_SCENARIOS[scenario], hashes)
   console.log(bad ? `replay MISMATCH ${JSON.stringify(bad)}` : `replay: ${replay.log.length} commands, ${hashes.length} hashes reproduced in Node`)
   if (bad) return false
   const panel = text.match(/PANEL (\d+) (\d+)/)
