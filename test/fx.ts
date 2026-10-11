@@ -21,7 +21,7 @@ export const dataBytes = (): Uint8Array => new Uint8Array(fs.readFileSync(path.j
 export const GOLDEN_DATA_VERSION = 0x6ae782ed
 export const data: SimData = loadSimData(dataBytes(), GOLDEN_DATA_VERSION)
 // the S1e battlefield (1.2 km): tests that need room paint it open (levelled) instead of the 360 m field
-export const BATTLE_DATA_VERSION = 0xad83ce9c
+export const BATTLE_DATA_VERSION = 0xfeb0d496
 export const battleData: SimData = loadSimData(new Uint8Array(fs.readFileSync(path.join(root, 'data', 'battlefield.simdata'))), BATTLE_DATA_VERSION)
 // the battlefield levelled and painted open, dry ground (room for every shape): its data and a terrain per ruleset,
 // built once each. A test that paints on it takes a copy (`paint`)
