@@ -82,7 +82,7 @@ export function buildWater(scene: Scene, mats: Materials, tex: { water: RawTextu
   mesh.setVerticesData('aAcross', new Float32Array(across), false, 1); mesh.setVerticesData('aTau', new Float32Array(tau), false, 1); mesh.setVerticesData('aRiffle', new Float32Array(rif), false, 1)
   // DETAIL: the same paint() (and grain) as the terrain's, so the shore band is one function on both; WATER_SURFACE:
   // the debug views' surface view shows the water white
-  const opts = { uniforms: ['uWaterView'], samplers: ['uRefl', 'uWater', 'uBankN'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define WATER_SURFACE'] }
+  const opts = { uniforms: ['uWaterView', 'uStones'], samplers: ['uRefl', 'uWater', 'uBankN'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define WATER_SURFACE'] }
   const waterMat = mats.make('water', WAT_VS, WAT_FS, { ...opts, attributes: ['position', 'aAcross', 'aTau', 'aRiffle'] }); mesh.material = waterMat; waterMat.backFaceCulling = false
   const groundMat = mats.make('waterOnGround', GROUND_VS, WAT_FS, { ...opts, attributes: ['position'] })
   for (const m of [waterMat, groundMat]) { m.setTexture('uWater', tex.water); m.setTexture('uBankN', tex.bankN) }

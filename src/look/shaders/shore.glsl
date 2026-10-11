@@ -74,6 +74,26 @@ vec3 bedAlbedo(vec2 xz,float depth,float speed){
   b=mix(b,vec3(0.21,0.29,0.15),smoothstep(0.60,0.78,G(xz/4.3+0.6).g)*smoothstep(0.4,0.8,depth)*(1.0-speed));
   return mix(landAlbedo(xz,0.0,0.0),b,smoothstep(0.0,0.3,depth));}   // at depth 0, the ground at the water's edge
 const vec3 FOAM=vec3(0.93,0.92,0.84);
+// THE STONES' FOAM (W5a, research §4.4): the stones in the water (src/look/nature.ts), at most STONES: x, z, radius,
+// the flow's direction (rad); a radius of 0 ends the list. Per stone, in the flow's frame: a thin pillow arc upstream,
+// and a wake of two broken streaks downstream, 6 radii long, widening, drifting with the current. In the band
+// function, so a stone against a cut bank has its foam on both surfaces. WATER_SAB_NOFOAM: none (the check's sabotage)
+uniform vec4 uStones[STONES];
+float stoneFoam(vec2 xz){
+  float f=0.0,tw=mod(uTime,40.0);   // 40 s: a whole number of the breaks' periods
+  #ifndef WATER_SAB_NOFOAM
+  for(int k=0;k<STONES;k++){
+    vec4 st=uStones[k];if(st.z<=0.0)break;
+    vec2 d=xz-st.xy;float r=st.z;if(dot(d,d)>64.0*r*r)continue;   // past its wake, where it has no weight
+    vec2 fl=vec2(cos(st.w),sin(st.w));float a=dot(d,fl),b=dot(d,vec2(-fl.y,fl.x));
+    float pillow=(1.0-aastep(0.06+0.1*r,abs(length(d)-1.2*r)))*smoothstep(0.3*r,-0.5*r,a);
+    float L=6.0*r,t=clamp(a/L,0.0,1.0),hf=r*(0.9+0.9*t),w=0.06+0.12*r*(1.0-0.5*t);
+    float brk=aastep(0.42,G(vec2((a-tw*0.5)*0.35,b*0.7)+st.xy*0.13).g);
+    float wake=(1.0-aastep(w,abs(abs(b)-hf)))*smoothstep(-0.2*r,0.3*r,a)*(1.0-t)*brk;
+    f=max(f,max(pillow,wake*0.85));
+  }
+  #endif
+  return f;}
 // winter ice (the seasons are W5's): how much of the water it covers, 0..1; it covers every layer of the water
 float iceAmt(){return clamp(uSeason-2.3,0.0,0.7)/0.7;}
 // the ground at the water's edge, lit with the authored surface's normal: t its water texel
@@ -105,6 +125,7 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh){
   float foam=(1.0-aastep(hw,abs(s-0.22-j)))*mix(aastep(0.5,gr)*aastep(0.42,gb),1.0,far)*0.14/hw;
   foam=max(foam,(1.0-aastep(0.05,abs(s-0.60-j*1.5)))*aastep(0.62,gr)*aastep(0.5,gb)*0.6*(1.0-far));
   c=mix(c,FOAM*mix(1.0,0.78,cs),foam*0.85);
+  c=mix(c,FOAM*mix(1.0,0.78,cs),stoneFoam(wp.xz)*0.85*(1.0-0.5*far));
   // winter ice (the seasons are W5's): pale and cracked, darker over deep water
   float ice=iceAmt();
   if(ice>0.0){vec3 ic=mix(vec3(0.66,0.76,0.82),vec3(0.84,0.88,0.90),smoothstep(0.5,0.0,dd));

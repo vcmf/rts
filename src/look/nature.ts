@@ -17,7 +17,7 @@ import type { Materials } from './materials.ts'
 import { D } from './spec.ts'
 import { fbm, hash, mulberry } from './noise.ts'
 import { H } from './heightfield.ts'
-import { RIVER, bankReachAt, lerpA, riverQuery, wetEdgeAt } from './river.ts'
+import { RIVER, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges } from './river.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 
@@ -33,6 +33,7 @@ export interface Nature {
   touchesZone(x: number, z: number, r: number): boolean
   placeable(x: number, z: number, r?: number, kind?: string): boolean
   footprint(model: string, s: number): number
+  stones: [number, number, number, number][]   // the stones in the water (W5a): x, z, radius, the flow's direction (rad), for their foam
 }
 
 export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void): Nature {
@@ -84,10 +85,14 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // exact: does the disc (x,z,r) overlap any formation zone? (the two boxes and the circle of KEEP_CLEAR)
   const boxD = (x: number, z: number, x0: number, x1: number, z0: number, z1: number) => Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(z0 - z, 0, z - z1))
   const touchesZone = (x: number, z: number, r: number) => KEEP_CLEAR(x, z) || boxD(x, z, -25, 15, -44, -2) < r || boxD(x, z, -14, 26, 7, 19) < r || Math.hypot(x - 34, z + 24) < Math.sqrt(160) + r
+  // the foot of a cut bank: the outer side (A's sign) of a bend sharper than |A| 0.5, within r of its water's edge
+  const atCutBank = (q: NonNullable<ReturnType<typeof riverQuery>>, r: number) => { const A = lerpA(RIVER.A, q); return Math.abs(A) > 0.5 && Math.sign(q.n) === Math.sign(A) && q.dist >= wetEdgeAt(q) - r }
   function placeable(x: number, z: number, r = 0, kind = ''): boolean {
     if (touchesZone(x, z, r)) return false
     const q = riverQuery(x, z)
-    if (kind === 'stone') return !q || q.dist >= wetEdgeAt(q) + r || lerpA(RIVER.riffle, q) > 0.6   // stones: wholly on dry land, or on riffles (docs/art-bible.md §6c)
+    // stones: wholly on dry land, on riffles, or at the foot of a cut bank (the outer side of a sharp bend, against
+    // its water's edge) (docs/art-bible.md §6c)
+    if (kind === 'stone') return !q || q.dist >= wetEdgeAt(q) + r || lerpA(RIVER.riffle, q) > 0.6 || atCutBank(q, r)
     return !q || q.dist >= Math.max(lerpA(RIVER.W, q) / 2 * 1.7, bankReachAt(q)) + r                 // off the banks (W2: a point bar reaches farther)
   }
   const groups: Record<string, Item[]> = {}; const add = (model: string, item: Item) => (groups[model] = groups[model] || []).push(item)
@@ -142,10 +147,26 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const a = hash(w, 51) * 6.283, r = 230 + hash(w, 52) * 320, cx = Math.cos(a) * r, cz = Math.sin(a) * r
     for (let i = 0; i < 34; i++) { const x = cx + (hash(w, i) - 0.5) * 80, z = cz + (hash(i, w) - 0.5) * 55, fs = 5 + hash(i + w, 9) * 3; if (!placeable(x, z, footprint('Bush_1', fs))) continue; far.push([x, z, fs, hash(i, w * 3) * 6.28, hash(w, i * 2)]) }
   }
+  // stones on purpose (W5a, docs/plans/active/w5-banks.md; docs/art-bible.md §6c): in riffles, and at the foot of the
+  // sharper cut banks, sized to stand 0.35–0.7 m out of the water there, so the water makes foam around them. Their own
+  // seeded stream, so the rest of the scatter keeps its places
+  const stones: Nature['stones'] = [], RS = mulberry(91), rs = () => RS()
+  for (let i = 0, step = 0, C = RIVER; i < C.n && stones.length < D.spec.water.stones; i += step) {
+    step = Math.max(1, Math.round((8 + rs() * 14) / (RIVER.P.W0 / 4)))
+    if (Math.abs(C.px[i]) > 200 || Math.abs(C.pz[i]) > 200) continue
+    const hw = C.W[i] / 2, A = C.A[i], [ep, en] = wetEdges(hw, A)
+    let n: number
+    if (C.riffle[i] > 0.62) n = (rs() - 0.5) * 0.9 * hw                                   // mid-channel in a riffle
+    else if (Math.abs(A) > 0.55) n = A >= 0 ? ep - 0.25 : -(en - 0.25)                      // against the cut bank
+    else continue
+    const x = C.px[i] - C.tz[i] * n, z = C.pz[i] + C.tx[i] * n, mdl = rs() < 0.5 ? 'Rock_' + (1 + Math.floor(rs() * 2)) : 'Rock_Moss_' + (3 + Math.floor(rs() * 2))
+    const top = C.zw[i] - H(x, z) + 0.35 + rs() * 0.35, s = Math.min(3, Math.max(1, top / (NATURE![mdl].max[1] * 0.95)))
+    if (addPlaced(mdl, [x, z, s, rs() * 6.28, rs(), -0.05 * s], 'stone')) { stones.push([x, z, footprint(mdl, s) * 0.8, Math.atan2(C.tz[i], C.tx[i])]); smBlob(x, z, s * 0.3) }
+  }
   for (const [k, items] of Object.entries(groups)) {
     const material = /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : /Birch/.test(k) ? birchMat : /Pine/.test(k) ? pineMat : treeMat; place(k, material, items)
   }
   // the band is left out after the every-fourth choice, so every other bush stays the one the prototype drew
   place('Bush_1', farMat, far.filter(([x, z], i) => i % 4 === 0 && !inBand(x, z))); place('Bush_2', farMat, far.filter(([x, z], i) => i % 4 === 2 && !inBand(x, z)))
-  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint }
+  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones }
 }
