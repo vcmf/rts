@@ -14,11 +14,24 @@ import { loadSimData, compileRuleset, buildTerrain, rebuildImpassable, makeWorld
   placesCtx, placeAt, mkPlaces, occupied, placeWorld, anyWet, layoutOf, STATUS, menOf, cellK, slotIndex, type Command, type World, type Compiled,
   type Ruleset, type Terrain, type SimData, type Dropped, TICK_HZ, M_TICK, typeOf, withBlock } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import { levelled } from '../src/scenarios/s1c-firefight.ts'
 
 export const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const dataBytes = (): Uint8Array => new Uint8Array(fs.readFileSync(path.join(root, 'data', 'formation-field.simdata')))
 export const GOLDEN_DATA_VERSION = 0x6ae782ed
 export const data: SimData = loadSimData(dataBytes(), GOLDEN_DATA_VERSION)
+// the S1e battlefield (1.2 km): tests that need room paint it open (levelled) instead of the 360 m field
+export const BATTLE_DATA_VERSION = 0xfeb0d496
+export const battleData: SimData = loadSimData(new Uint8Array(fs.readFileSync(path.join(root, 'data', 'battlefield.simdata'))), BATTLE_DATA_VERSION)
+// the battlefield levelled and painted open, dry ground (room for every shape): its data and a terrain per ruleset,
+// built once each. A test that paints on it takes a copy (`paint`)
+export const OPEN_DATA: SimData = levelled(battleData)
+const openTerrains = new Map<Ruleset, Terrain>()
+export function openBattlefield(rs: Ruleset = napoleonic): Terrain {
+  let t = openTerrains.get(rs)
+  if (!t) { t = buildTerrain(OPEN_DATA, compileRuleset(rs)); t.cls.fill(Object.keys(rs.terrain).indexOf('open')); t.depth.fill(0); rebuildImpassable(t); openTerrains.set(rs, t) }
+  return t
+}
 // (its morale reaches are S1c-2's: they scale with the frontage, napoleonic.ts)
 export const small: Ruleset = { ...withBlock(napoleonic, 'infantry', { companies: 4, files: 9, bins: 3 }), name: `${napoleonic.name}, the S1a block`,
   morale: { ...napoleonic.morale, contagion: { ...napoleonic.morale.contagion, front: 200, back: 100 }, support: { ...napoleonic.morale.support, reach: 100 } } }
@@ -39,9 +52,9 @@ export class Sim {
   w: World
   dropped: Dropped[] = []
   private ctx
-  constructor(seed = 1, ruleset?: Ruleset, terrain?: Terrain) {
+  constructor(seed = 1, ruleset?: Ruleset, terrain?: Terrain, d: SimData = data) {   // d: the map's data (its heights), the field's unless given
     const c = ruleset ? compileRuleset(ruleset) : cr
-    this.w = makeWorld(data, c, seed, true, terrain ?? (ruleset ? undefined : baseTerrain))
+    this.w = makeWorld(d, c, seed, true, terrain ?? (ruleset ? undefined : baseTerrain))
     this.ctx = mkPlaces(this.w)
   }
   get t(): number { return this.w.meta[M_TICK] / TICK_HZ }
@@ -54,7 +67,9 @@ export class Sim {
     this.cmd({ type: 'debug-spawn', side, x, z, heading, shape, men, unit }); this.tick()
     return makeHandle(KIND_FORMATION, slot, this.w.f.gen[slot])
   }
-  tick(): void { const r = advanceTick(this.w); this.dropped.push(...r.dropped) }
+  departed: { id: number; men: number }[] = []   // formations that left the field, until a soldier layer takes them
+  tick(): void { const r = advanceTick(this.w); this.dropped.push(...r.dropped); this.departed.push(...r.departed) }
+  takeDeparted(): { id: number; men: number }[] { const d = this.departed; this.departed = []; return d }
   advance(sec: number): void { for (let n = Math.round(sec * TICK_HZ); n > 0; n--) this.tick() }
   // advances while `pred` holds, up to `sec`; returns the seconds spent
   until(pred: () => boolean, sec: number): number { let n = 0; while (pred() && n < sec * TICK_HZ) { this.tick(); n++ } return n / TICK_HZ }

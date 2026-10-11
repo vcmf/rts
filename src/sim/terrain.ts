@@ -53,10 +53,11 @@ export function rebuildImpassable(t: Terrain): void {
 }
 
 // impassable cells for a kind (too deep to wade, or a class with g = 0) and the distance in metres to the
-// nearest one (two-pass chamfer)
+// nearest one or to the map's edge, whichever is nearer (two-pass chamfer; ground beyond the edge is impassable)
 function impassable(t: Terrain, kind: number): [Uint8Array, Float64Array] {
   const n = t.n, h = t.cell, D2 = Math.SQRT2 * h, imp = new Uint8Array(n * n), d = new Float64Array(n * n)
-  for (let k = 0; k < n * n; k++) { imp[k] = t.depth[k] > t.waterLimit[kind] || t.classG[t.cls[k] * t.K + kind] <= 0 ? 1 : 0; d[k] = imp[k] ? 0 : 1e9 }
+  for (let k = 0; k < n * n; k++) { imp[k] = t.depth[k] > t.waterLimit[kind] || t.classG[t.cls[k] * t.K + kind] <= 0 ? 1 : 0
+    const i = k % n, j = (k - i) / n; d[k] = imp[k] ? 0 : Math.min(i, n - 1 - i, j, n - 1 - j) * h }
   const rel = (k: number, j: number, s: number) => { if (d[j] + s < d[k]) d[k] = d[j] + s }
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const k = j * n + i
     if (i > 0) rel(k, k - 1, h); if (j > 0) { rel(k, k - n, h); if (i > 0) rel(k, k - n - 1, D2); if (i < n - 1) rel(k, k - n + 1, D2) } }
@@ -65,10 +66,13 @@ function impassable(t: Terrain, kind: number): [Uint8Array, Float64Array] {
   return [imp, d]
 }
 
-// a point off the map reads the edge cell, so the footprint gate passes ground beyond the edge (issue #37)
+// a point off the map reads the edge cell: ground there is asked through impAt, which counts it impassable
 export const cellK = (t: Terrain, x: number, z: number): number =>
   Math.min(t.n - 1, Math.max(0, Math.round((z - t.z0) / t.cell))) * t.n + Math.min(t.n - 1, Math.max(0, Math.round((x - t.x0) / t.cell)))
 
+// ground at (x, z) is impassable for a kind (its `imp`): ground beyond the map's edge is (issue #37)
+export const impAt = (t: Terrain, imp: Uint8Array, x: number, z: number): number =>
+  x < t.x0 || z < t.z0 || x > t.x0 + (t.n - 1) * t.cell || z > t.z0 + (t.n - 1) * t.cell ? 1 : imp[cellK(t, x, z)]
 export function waterG(t: Terrain, d: number, kind: number): number {
   const c = t.waterCurve
   if (d <= 0) return 1

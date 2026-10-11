@@ -31,7 +31,7 @@ step 12 morale     then morale for all: relaxes toward quality − losses + flan
 - **Non-goals (later parts):**
   - smoke, vision and commanders, with their rally radius (S2);
   - flank and rear threats from musketry (charges strike flanks and rears since S1d-2, `docs/systems/melee.md`);
-  - removing shattered battalions at the map edge (S1e);
+  - the end condition (S1e-2);
   - artillery (`docs/systems/artillery.md`, S1d-3: its pieces use this targeting with their own arc and range).
 
 ## Constraints
@@ -161,6 +161,13 @@ Rallying:
   stay a share of the spawn strength) and costs it `rally.cost` of quality, so it comes back brittle.
   Without the write-off no router could ever rally: the target at a break is the rout threshold itself;
 - stands for `rally.time` seconds, refusing orders and not firing, then takes the state its morale gives.
+
+**Leaving the field** (S1e-1). A shattered formation with any corner of a company block within `morale.leave`
+(12 m) of the map's edge leaves the field: a line meeting the edge at an angle, or a column of route's tail, gets
+there before its anchor. It is removed at step 14 (reap), and its men are added to its side's count
+(`sides.left`, hashed); the tick's result names it with its men (`departed`), so the soldier layer lets them go
+rather than fall. A run's order is kept 2 m inside the map, so a run to the side's rear ends there. A router there stays:
+it may still rally (above).
 
 **Shattered.** A break beyond `rally.max` rallies, or a router below `morale.shatter` of its spawn strength,
 shatters: it runs as a router, never rallies, and refuses orders. A router mid-run, like a shattered one,

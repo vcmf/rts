@@ -1,11 +1,12 @@
 // The S1b page (docs/plans/done/s1b-sim-page.md): the sim on the main thread at 20 Hz, drawn as a
 // staff map with every soldier as a circle; the mouse selects and orders battalions. Every input becomes
 // a command through `issue`, and the external log is kept, so a session can be replayed.
-import dataUrl from '../../data/formation-field.simdata?url'
+import fieldUrl from '../../data/formation-field.simdata?url'
+import battleUrl from '../../data/battlefield.simdata?url'
 import { loadSimData, compileRuleset, makeWorld, typeOf, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ, MORALE_STATES, FIRE_MODES, CHARGE_PHASES,
   type Command, type Stamped, type World, type HashPoint, type Replay, type Dropped } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
-import { FIELD_DATA_VERSION } from '../scenarios/s1b-field.ts'
+import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
 import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS } from '../scenarios/page.ts'
 import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
@@ -16,10 +17,13 @@ import { StaffMap, toW, toS, type View } from '../render/map.ts'
 const SEED = 20261009, SPEEDS = [0, 1, 2, 4, 8], MEN_DT = 0.2, MEN_STEPS = 4
 
 async function main(): Promise<void> {
-  const data = loadSimData(new Uint8Array(await (await fetch(dataUrl)).arrayBuffer()), FIELD_DATA_VERSION)
+  const asked = new URLSearchParams(location.search).get('scenario') ?? '', scenario = PAGE_SCENARIOS[Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO]
+  // the scenario's map, at the version it was placed for
+  const mapName = scenario.map ?? DEFAULT_MAP, urls: Record<string, string> = { 'formation-field': fieldUrl, battlefield: battleUrl }
+  if (!urls[mapName] || MAP_VERSIONS[mapName] === undefined) throw new Error(`scenario ${scenario.name}: no map ${mapName} (src/scenarios/maps.ts and the page's data imports)`)
+  const data = loadSimData(new Uint8Array(await (await fetch(urls[mapName])).arrayBuffer()), MAP_VERSIONS[mapName])
   const cr = compileRuleset(napoleonic)
   const w: World = makeWorld(data, cr, SEED, false)
-  const asked = new URLSearchParams(location.search).get('scenario') ?? '', scenario = PAGE_SCENARIOS[Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO]
   scenario.setup(w)
   const log: Stamped[] = [], hashes: HashPoint[] = [], dropped: Dropped[] = []
   const scene = buildScene(w), layer = new SoldierLayer(w, scene), map = new StaffMap(w, scene)
@@ -42,7 +46,7 @@ async function main(): Promise<void> {
   // a panel order also disarms a pending charge (C)
   const forSelection = (make: (h: number) => Command) => { charging = false; for (const i of selected) external(make(formationHandle(w, i))) }
   // hash points without section hashes: those would cost a second serialization each time
-  const tick = () => { const r = advanceTick(w); layer.sync(0); dropped.push(...r.dropped); if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: [] }); for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i) }
+  const tick = () => { const r = advanceTick(w); layer.sync(0, r.departed); dropped.push(...r.dropped); if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: [] }); for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i) }
 
   // the frame: ticks owed at the game speed, then the men (in game time), then the drawing
   const advance = (dt: number) => {
@@ -138,7 +142,7 @@ async function main(): Promise<void> {
   })
   // the wheel zooms about the cursor; line (Firefox) and page deltas are scaled to pixels
   unitC.addEventListener('wheel', e => { e.preventDefault(); const [x, z] = toW(view, e.clientX, e.clientY)
-    view.k = Math.min(40, Math.max(0.8, view.k * Math.exp(-e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? view.H : 1) * 0.0015))); const [x2, z2] = toW(view, e.clientX, e.clientY); view.cx += x - x2; view.cz += z - z2; mapDirty = true }, { passive: false })
+    view.k = Math.min(40, Math.max(0.4, view.k * Math.exp(-e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? view.H : 1) * 0.0015))); const [x2, z2] = toW(view, e.clientX, e.clientY); view.cx += x - x2; view.cz += z - z2; mapDirty = true }, { passive: false })
   addEventListener('keyup', e => { if (e.code === 'Space') space = false })
   addEventListener('blur', () => { space = false })
   addEventListener('keydown', e => {

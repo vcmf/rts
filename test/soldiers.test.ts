@@ -1,10 +1,10 @@
 // The soldier layer (src/render/soldiers.ts) against the real sim: the prototype's soldier-level checks
 // (tools/formation-measure.js), the slot assignment, Face about, cost.
 import { describe, it, expect } from 'vitest'
-import { Sim, STREAM_X, longIt, ceiling } from './fx.ts'
+import { Sim, STREAM_X, longIt, ceiling, small, openBattlefield, OPEN_DATA } from './fx.ts'
 import { buildScene } from '../src/render/scene.ts'
 import { SoldierLayer } from '../src/render/soldiers.ts'
-import { occupied, advanceTick, type Meter } from '../src/sim/index.ts'
+import { occupied, advanceTick, MS_SHATTERED, type Meter } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 
 // the sim at 20 Hz, frames at 30 Hz, as the page runs them
@@ -13,7 +13,7 @@ class Play {
   sim: Sim; layer: SoldierLayer; acc = 0; dt: number
   constructor(sim = new Sim(), dt = 1 / 30) { this.sim = sim; this.dt = dt; this.layer = new SoldierLayer(sim.w, buildScene(sim.w)) }
   // `sec` exactly, in frames of `dt` (the last one shorter); the layer syncs after every tick, as the page does
-  frames(sec: number): void { for (let left = sec; left > 1e-9; left -= this.dt) { const d = Math.min(this.dt, left); this.acc += d; while (this.acc >= 0.05 - 1e-9) { this.sim.tick(); this.layer.sync(0); this.acc -= 0.05 } this.layer.step(d, this.acc / 0.05) } }
+  frames(sec: number): void { for (let left = sec; left > 1e-9; left -= this.dt) { const d = Math.min(this.dt, left); this.acc += d; while (this.acc >= 0.05 - 1e-9) { this.sim.tick(); this.layer.sync(0, this.sim.takeDeparted()); this.acc -= 0.05 } this.layer.step(d, this.acc / 0.05) } }
   // worst slot error sampled every 0.5 s while `sec` pass
   worst(sec: number): { max: number; mean: number } { let max = 0, mean = 0; for (let n = 0; n < sec * 2; n++) { this.frames(0.5); const e = this.layer.slotError(); max = Math.max(max, e.max); mean = Math.max(mean, e.mean) } return { max, mean } }
   men(h: number) { return this.layer.units.get(this.sim.slot(h))!.men }
@@ -40,7 +40,8 @@ describe('the soldier layer follows the sim', () => {
   // follow, as a battalion's do: these march straight, so the change's own error shows)
   it('troopers keep up at the walk and the trot and through their changes; gunners fall in once the battery has deployed', () => {
     const run = (unit: string, shape: string, men: number, to: string, sec: number) => {
-      const p = new Play(new Sim(1, napoleonic)), h = p.sim.spawn(-120, -150, 0, shape, men, 0, unit); p.frames(2)
+      // on the battlefield, levelled and open: a regiment's line is 157 m and its column of route 190 m
+      const p = new Play(new Sim(1, napoleonic, openBattlefield(), OPEN_DATA)), h = p.sim.spawn(-120, -150, 0, shape, men, 0, unit); p.frames(2)
       p.sim.order({ type: 'move', id: h, points: [[-120, -40]], append: false }); const move = p.worst(40)
       p.sim.order({ type: 'form', id: h, shape: to }); const change = p.worst(sec); p.frames(20); const after = p.layer.slotError()
       expect(p.sim.busy(h)).toBe(false); expect(p.men(h).filter(m => m.alive).length).toBe(men); expect(p.layer.units.get(p.sim.slot(h))!.type).toBe(unit); expect(p.layer.units.get(p.sim.slot(h))!.figure).toBe(unit === 'cavalry' ? 'mounted' : 'crewed')
@@ -67,8 +68,16 @@ describe('the soldier layer follows the sim', () => {
 })
 
 describe('who stands where', () => {
+  it('a battalion that leaves the field takes its men with it: none is left as fallen', () => {
+    // a column of route with its tail at the battlefield's southern edge, shattered: it leaves at the next tick
+    const p = new Play(new Sim(1, napoleonic, openBattlefield(), OPEN_DATA)), h = p.sim.spawn(0, -505, 0, 'march', 400); p.frames(1)
+    const before = p.layer.fallen.length
+    p.sim.w.f.mstate[p.sim.slot(h)] = MS_SHATTERED; p.frames(0.2)
+    expect(p.sim.slot(h)).toBe(-1); expect(p.layer.units.size).toBe(0); expect(p.layer.fallen.length).toBe(before)
+  })
   it('after casualties the living equal the sim\'s men, one per filled slot', () => {
-    const p = new Play(), h = p.sim.spawn(-20, -40, 0); p.frames(1)
+    // it must not break: losses do not move its morale (shattered at 20 of 100, it would run off the field, S1e-1)
+    const p = new Play(new Sim(1, { ...small, morale: { ...small.morale, losses: 0, recent: 0 } })), h = p.sim.spawn(-20, -40, 0); p.frames(1)
     for (let n = 0; n < 5; n++) { p.sim.order({ type: 'debug-kill', id: h, men: 10 }); p.frames(3) }
     p.sim.order({ type: 'debug-kill', id: h, men: 30 }); p.frames(5)
     p.sim.order({ type: 'form', id: h, shape: 'square' }); p.frames(110)
@@ -125,7 +134,7 @@ describe('at 8× (0.2 s soldier steps)', () => {
 // marching it does not (issue #36): that test holds the measured cost with a margin,
 // MARCH_BUDGET, so it cannot grow unnoticed. vitest runs this code about 40% slower than plain Node (the
 // page's numbers: tools/bench-cost.ts)
-const FRAME_BUDGET = 4, MARCH_BUDGET = 10
+const FRAME_BUDGET = 4, MARCH_BUDGET = 12   // 12: S1e-1's tighter grid (every shape on the field) measures 9.2–9.9 ms on main; the old grid's 10 kept the same margin over about 8
 describe.skipIf(process.env.CI)('cost', () => {
   const shipped = () => new Sim(1, napoleonic)
   it('40 battalions of 400 firing (20 a side in column, fronts 100 m apart): sim and soldier layer per frame; the fire step per tick reported', () => {
@@ -148,7 +157,7 @@ describe.skipIf(process.env.CI)('cost', () => {
   it('40 battalions of 400 changing shape and marching: sim and soldier layer per 1/60 s frame; 40 × 800 reported', () => {
     const run = (sim: Sim, men: number) => {
       const p = new Play(sim), shapes = Object.keys(p.sim.w.cr.rs.types.infantry.formations)
-      for (let k = 0; k < 40; k++) { const h = p.sim.spawn(-165 + (k % 7) * 33, -150 + Math.floor(k / 7) * 55, 0, 'column', men)
+      for (let k = 0; k < 40; k++) { const h = p.sim.spawn(-120 + (k % 7) * 25, -80 + Math.floor(k / 7) * 40, 0, 'column', men)
         p.sim.cmd({ type: 'form', id: h, shape: shapes[k % shapes.length] }); p.sim.cmd({ type: 'move', id: h, points: [[p.sim.x(h), p.sim.z(h) + 40]], append: true }) }
       p.frames(30)
       // three windows of 120 frames, judged on the best: a busy machine slows a window, never speeds one up

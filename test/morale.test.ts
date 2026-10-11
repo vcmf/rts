@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { data, cr, shipped } from './fx.ts'
 import { makeWorld, issue, advanceTick, buildTerrain, makeHandle, KIND_FORMATION, M_FREE, M_TICK, MS_STEADY, MS_SHAKEN, MS_WAVERING, MS_ROUTING, MS_RALLYING, MS_SHATTERED,
-  RP_RUNNING, RP_FLED, O_MOVE, allocOrder, menOf, hashWorld, hex, serialize, deserialize, record, play, outOfFight, mayFire, type World, type Command, type Dropped } from '../src/sim/index.ts'
+  RP_RUNNING, RP_FLED, O_MOVE, allocOrder, menOf, hashWorld, hex, serialize, deserialize, record, play, outOfFight, mayFire, formationSlot, type World, type Command, type Dropped } from '../src/sim/index.ts'
 import { levelled, brigade } from '../src/scenarios/s1c-firefight.ts'
 
 const E = Math.PI / 2, lev = levelled(data), levTerrain = buildTerrain(lev, cr), M = cr.rs.morale
@@ -96,13 +96,16 @@ describe('rally', () => {
 })
 
 describe('shattered', () => {
-  it('a router below half its spawn strength shatters, never rallies, and refuses orders', () => {
+  it('a router below half its spawn strength shatters, never rallies, refuses orders, and leaves the field at the edge', () => {
     const s = new W(); SIDES_SET(s)
     const h = s.spawn(0, -60, -35); s.spawn(1, 170, -35)
     s.breakNow(h); s.do({ type: 'debug-kill', id: h, men: 51 })
     expect(s.state(h)).toBe(MS_SHATTERED)
-    s.run(240); expect(s.state(h)).toBe(MS_SHATTERED)
     s.dropped = []; s.do({ type: 'halt', id: h }); expect(s.reasons()).toEqual(['shattered'])
+    const states = new Set<number>(), on = () => formationSlot(s.w, h) >= 0
+    for (let n = 0; n < 20 * 240 && on(); n++) { states.add(s.state(h)); s.tick() }
+    expect([...states]).toEqual([MS_SHATTERED])   // never rallies
+    expect(on()).toBe(false); expect(s.w.sides.left[0]).toBe(49)   // it ran west to the edge and left the field (S1e-1)
   })
   it('a break beyond the rally allowance shatters at once', () => {
     const s = new W(); SIDES_SET(s)

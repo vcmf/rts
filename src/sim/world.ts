@@ -70,8 +70,9 @@ export interface Formations {
   // none), the shape it formed square from (+1, 0 none), and an order given in this spell (it stands down)
   alertAt: Int32Array; alertSince: Int32Array; autoFrom: Int32Array; refugeOff: Uint8Array
 }
-// per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it)
-export interface Sides { rearX: Float64Array; rearZ: Float64Array }
+// per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it), and the men of its shattered
+// formations that left the field at the map's edge (S1e-1)
+export interface Sides { rearX: Float64Array; rearZ: Float64Array; left: Int32Array }
 export const FIRE_AT_WILL = 0, FIRE_HOLD = 1
 export const SHOT_NONE = 0, SHOT_RAY = 1, SHOT_CONE = 2
 export const MS_STEADY = 0, MS_SHAKEN = 1, MS_WAVERING = 2, MS_ROUTING = 3, MS_RALLYING = 4, MS_SHATTERED = 5
@@ -130,7 +131,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
   for (let k = 0; k < M; k++) ord.next[k] = k + 1 < M ? k + 1 : -1
   const free = new Int32Array(N)
   for (let i = 0; i < N; i++) free[i] = N - 1 - i   // slot 0 is handed out first
-  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, sides: { rearX: f64(SIDES), rearZ: f64(SIDES) }, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), debug, scratch: {} }
+  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, sides: { rearX: f64(SIDES), rearZ: f64(SIDES), left: i32(SIDES) }, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), debug, scratch: {} }
   w.meta[M_FREE] = N
   w.meta[M_DATA] = data.version | 0
   w.meta[M_RULES] = cr.hash | 0

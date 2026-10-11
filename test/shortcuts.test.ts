@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import { Sim, ceiling, STREAM_X, DEG } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { typeOf, filledSlots, occupied, slotIndex, wetBins, placesCtx, placeAt, placeWorld, mkPlaces, layoutOf, cellK, blockLocal, sin, cos, DT, M_TICK, type World } from '../src/sim/index.ts'
+import { typeOf, filledSlots, occupied, slotIndex, wetBins, placesCtx, placeAt, placeWorld, mkPlaces, layoutOf, impAt, blockLocal, sin, cos, DT, M_TICK, type World } from '../src/sim/index.ts'
 import { mkBits, hasBit } from '../src/sim/bits.ts'
 
 // battalion i's filled slots by asking `occupied` of every slot
@@ -22,8 +22,8 @@ function wetBrute(w: World, i: number): number[] {
     const P = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, { x: 0, z: 0, a: 0, face: 0, kx: 1, kz: 1 }), ca = cos(P.a), sa = sin(P.a)
     for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) {
       if (!occupied(w, i, c, r, q)) continue
-      if (f.trans[i]) { const [bx, bz] = blockLocal(g, q, r), lx = bx * P.kx, lz = bz * P.kz; if (imp[cellK(w.terrain, P.x + lx * ca - lz * sa, P.z + lx * sa + lz * ca)]) out.add(c * B) }
-      else { placeAt(ctx, c, r, q, p); if (imp[cellK(w.terrain, p[0], p[1])]) out.add(c * B + L.of[slotIndex(g, c, r, q)]) }
+      if (f.trans[i]) { const [bx, bz] = blockLocal(g, q, r), lx = bx * P.kx, lz = bz * P.kz; if (impAt(w.terrain, imp, P.x + lx * ca - lz * sa, P.z + lx * sa + lz * ca)) out.add(c * B) }
+      else { placeAt(ctx, c, r, q, p); if (impAt(w.terrain, imp, p[0], p[1])) out.add(c * B + L.of[slotIndex(g, c, r, q)]) }
     }
   }
   return [...out].sort((a, b) => a - b)
