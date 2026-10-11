@@ -30,8 +30,9 @@ E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/styl
 ## Scope
 
 - **The ribbon:** the same mesh, with the time of travel (`aTau`) and the riffle (`aRiffle`) per vertex, the inner
-  columns clamped to 0.85 of the bend's radius (research §2.7: folding); the depth comes from the water data, not the
-  vertices.
+  columns clamped to 0.85 of the bend's radius (research §2.7: folding; a guard for W6's imported rivers: on this
+  river the tightest radius is 11.5 m and no column reaches it, measured); the depth comes from the water data, not
+  the vertices.
 - **The shared shore band:** one GLSL function both the terrain and the water draw with near the shoreline, so the
   shore is painted from the data, whichever surface the depth test keeps.
 - **The water shader, layer by layer** (research §2.8): the bed seen through the water, the painted absorption ramp,
@@ -64,7 +65,7 @@ E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/styl
     as well as the bars' shallows.
   - At the shore itself both sides give the bed's colour at depth 0 (research §2.8: at depth 0, the water equals the
     bed), so the band is continuous across the shoreline.
-- **Its width:** B = 0.75 m on each side (the measured 0.57 m and 0.69 m, plus a margin). The check gates the
+- **Its width:** B = 0.75 m on each side (`SPEC.water.band`) (the measured 0.57 m and 0.69 m, plus a margin). The check gates the
   measured widths against B (below), so a world whose grid strays farther fails, rather than showing a seam.
 - **The terrain** paints `shore()` where the shore distance is above −B, and blends to its own colour over the next
   0.4 m inland (one shader, so no seam). Under the water, past the band, it paints `shore()` too (it is hidden there,
@@ -108,15 +109,15 @@ E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/styl
   farthest wet texel with the drawn ground above the water, and the farthest dry texel the ribbon shows over, each
   under B; and no texel past B into the water has the drawn ground within 2 cm of the water (z-fighting).
 - **No shoreline seam** (page, the closest and the default zoom over the sharpest bend and a straight reach): the
-  shore must not depend on which surface is drawn.
-  - **Water side:** the frame as is, against the frame with the water mesh hidden. At pixels within 0.5 m of the
-    shore (from the raw data view), where the water was drawn (the two frames' surfaces differ), the colour
-    difference: 95th percentile under a limit set from the grain's own variation between neighbouring pixels.
-  - **Terrain side:** the frame as is, against the frame with the ribbon raised by the measured poke height plus
-    2 cm (it then covers the ground that pokes through): the same measure where the terrain was drawn.
-  - **Sabotages:** the water with its own colour in the band (`WATER_SAB_OWN`: the upper layers not faded, the
-    lower ones from the vertex depth) fails the first; the terrain without the band (`WATER_SAB_TERRAIN`) fails the
-    second.
+  two materials paint the same colour in the band. The tile's ground is drawn twice, once with the terrain's
+  material and once with the water's (a variant with the ground's attributes): same geometry, so the same pixels,
+  world points and derivatives. At the pixels within the band (from the raw data view), the two frames' colour
+  difference: 95th percentile within 2/255, largest within 6/255. Where the two surfaces meet on screen they
+  intersect, so they share the world point there: with the band check (each surface shows only within the band of
+  the other), equal colours in the band leave no seam. Comparing a frame with the water hidden would not do: the
+  two surfaces stand up to 0.5 m apart, and the parallax shifts the grain.
+  - **Sabotages:** the water painting itself everywhere it is drawn (`WATER_SAB_OWN`: water on the dry side, the
+    upper layers not faded in) and the terrain without the band (`WATER_SAB_TERRAIN`) each fail it.
 - **Pools dark and calm, riffles light and foamy** (page, the default zoom at three reaches): water pixels near the
   centre line, classed by the river's riffle there (above 0.7, below 0.2): pools' median luma under riffles' by a
   margin; riffles' share of foam-bright pixels at least twice the pools'. Sabotage: the riffle ignored
