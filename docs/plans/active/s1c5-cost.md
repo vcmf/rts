@@ -130,6 +130,23 @@ firing 6.2 → 0.7 ms, 40 × 800 27 → 15 ms). The tests now hold: the 4 ms fra
   4.4–6 ms; the layer's step is 5 ms of it, about 1.5 ms each for placing, for the neighbours and for the
   rest. Whether a stride shows is a question for the 3D look, so it waits for the S2 worker and the look.
 
+## Review
+
+**Round 1** (`/code-review high`, 10 findings, none severe; no second round):
+- **Fixed:**
+  - the trunk lookup lost the trunks for a man just outside the obstacle grid: the grid has a ring of
+    cells outside the scene's;
+  - the re-packing gate's per-company scan went through the battalion's cached list, rebuilt on every
+    trial loss: it asks `occupied` of the company again;
+  - the layer computed each battalion's anchors twice a frame, and the impassable grid for places it did
+    not test;
+  - `sampleBins` inlined `onRoad` and `groundQ`: they have cell-index forms beside `groundGAt`;
+  - unused `slotR`/`slotF`; the bench's own copy of the ceiling ruleset (now in
+    `src/rulesets/napoleonic.ts`), its `meta[1]` and unchecked spawns;
+  - `docs/systems/sim-page.md` copied the grid size; the tick budget is 3 ms (half again over vitest's
+    2.0).
+- **Kept:** `eachObstacle` in `src/render/scene.ts`, which the layer no longer calls, for the 3D renderer.
+
 ## Next
 
 - **S2:** the sim and its hash in a worker (2–3 ms of the frame when marching, the hash spike every second).

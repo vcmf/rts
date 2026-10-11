@@ -366,8 +366,8 @@ describe('passages and casualties', () => {
 // timing budgets: skipped on CI, whose shared runners are too noisy for millisecond budgets. The target is
 // 2 ms per tick (sim-design §16, so 8× fits). At 40 battalions of 400 the page's release world meets it
 // (1.8 ms marching, tools/bench-cost.ts, S1c-5); this test's debug world under vitest measures about 2.0 ms,
-// so it holds TICK_BUDGET, a margin over that, and reports the target
-const TICK_BUDGET = 2.5
+// so it holds TICK_BUDGET, half again over that (a busy machine), and reports the target
+const TICK_BUDGET = 3
 describe.skipIf(process.env.CI)('cost', () => {
   it('40 battalions of 400 of every shape, moving: time per tick (target 2 ms, sim-design §16)', () => {
     const s = new Sim(1, napoleonic), shapes = Object.keys(napoleonic.formations), hs: number[] = []

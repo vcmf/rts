@@ -64,10 +64,10 @@ the shape it changes to, the lean bit and the `faces` counter.
 - the place is the slot extrapolated 0.6 s ahead along the battalion's motion, falling back to the
   current place when that one is impassable;
 - personal sway while the battalion moves, wider among trees;
-- separation from neighbours through a 0.6 m grid, from where they stood as the frame began (so the order
-  men move in does not matter);
-- going round the cosmetic tree trunks: the trunks near each 4 m cell are listed once, so a man away from
-  the woods looks at none;
+- separation from neighbours found through a grid (`SC` in `src/render/soldiers.ts`), from where they
+  stood as the frame began (so the order men move in does not matter);
+- going round the cosmetic tree trunks: the trunks near each cell of the scene's obstacle grid are listed
+  once, so a man away from the woods looks at none;
 - speed from the ground (`groundG`).
 
 A man never steps from passable onto impassable ground. **Settled**: at the halt, a man within 0.25 m of

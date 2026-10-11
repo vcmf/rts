@@ -85,5 +85,7 @@ export const groundG = (t: Terrain, x: number, z: number, kind: number, dx: numb
 export function groundGAt(t: Terrain, k: number, kind: number, dx: number, dz: number): number {
   return t.classG[t.cls[k] * t.K + kind] * waterG(t, t.depth[k]) * slopeG(t, t.gx[k] * dx + t.gz[k] * dz)
 }
-export const groundQ = (t: Terrain, x: number, z: number, pace: number): number => t.classQ[t.cls[cellK(t, x, z)] * t.P + pace]
-export const onRoad = (t: Terrain, x: number, z: number): boolean => t.road[t.cls[cellK(t, x, z)]] === 1
+export const groundQ = (t: Terrain, x: number, z: number, pace: number): number => groundQAt(t, cellK(t, x, z), pace)
+export const groundQAt = (t: Terrain, k: number, pace: number): number => t.classQ[t.cls[k] * t.P + pace]
+export const onRoad = (t: Terrain, x: number, z: number): boolean => onRoadAt(t, cellK(t, x, z))
+export const onRoadAt = (t: Terrain, k: number): boolean => t.road[t.cls[k]] === 1

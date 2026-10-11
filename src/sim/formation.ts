@@ -9,7 +9,7 @@ import { type World, M_TICK, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MAX_FORMA
 import type { ShapeLayout, Placement } from './ruleset.ts'
 import { rot2, slotIndex } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
-import { cellK, groundGAt } from './terrain.ts'
+import { cellK, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
 
@@ -90,17 +90,18 @@ function bitsOf(w: World): GateBits {
 }
 // company c's filled slots (r · files + f) on impassable ground, as the battalion stands now, into out.
 // `ctx`: the places now (ctxNow), built once by the caller: a change of men moves no place
+// (asks `occupied` of this company's slots, not the battalion's cached list: the re-packing gate changes the
+// company's men between calls, which would rebuild the whole list each time)
 function wetSlots(w: World, i: number, c: number, ctx: Places, out: Bits): Bits {
-  const f = w.f, g = w.cr.geo, imp = w.terrain.imp[kindOf(w, i)], F = filledSlots(w, i), a = i * (g.companies + 1), base = c * g.ranks * g.files
+  const f = w.f, g = w.cr.geo, imp = w.terrain.imp[kindOf(w, i)], base = c * g.ranks * g.files
   out.fill(0)
-  if (f.trans[i]) {
-    const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], now(w), 0, wbPose), ca = cos(p.a), sa = sin(p.a)
-    for (let k = F.at[a + c], e = F.at[a + c + 1]; k < e; k++) { const s = F.s[k], lx = w.cr.slotLX[s], lz = w.cr.slotLZ[s]
-      if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) setBit(out, s - base) }
-    return out
+  const p = f.trans[i] ? placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], now(w), 0, wbPose) : null, ca = p ? cos(p.a) : 0, sa = p ? sin(p.a) : 0
+  for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) {
+    if (!occupied(w, i, c, r, q)) continue
+    const s = base + r * g.files + q
+    if (p) { const lx = w.cr.slotLX[s], lz = w.cr.slotLZ[s]; if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) setBit(out, s - base) }
+    else { placeAtSlot(ctx, s, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) setBit(out, s - base) }
   }
-  for (let k = F.at[a + c], e = F.at[a + c + 1]; k < e; k++) { const s = F.s[k]
-    placeAtSlot(ctx, s, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) setBit(out, s - base) }
   return out
 }
 // takes one man from company q unless the re-pack puts a man newly on impassable ground; the companies the
@@ -397,10 +398,10 @@ function sampleBins(w: World, i: number, pace: number, V0: number): void {
     const s = Fl.s[k], j = w.cr.slotC[s] * g.bins + L.of[s]
     placeAtSlot(ctx, s, pt); const px = pt[0], pz = pt[1]
     if (pt[2] !== dir) { dir = pt[2]; dx = sin(dir); dz = cos(dir) }
-    const T = w.terrain, cell = cellK(T, px, pz), cls = T.cls[cell], gg = groundGAt(T, cell, kind, dx, dz)   // groundG, onRoad, groundQ in one lookup
+    const T = w.terrain, cell = cellK(T, px, pz), gg = groundGAt(T, cell, kind, dx, dz)   // groundG, onRoad, groundQ from one cell lookup
     if (gg <= 0 || imp[cellK(T, px + dx * look, pz + dz * look)]) blkTmp[j]++; else { gTmp[j] += 1 / gg; nTmp[j]++ }
-    if (road && T.road[cls] !== 1) road = false
-    qTmp[j] = Math.min(qTmp[j], T.classQ[cls * T.P + pace])
+    if (road && !onRoadAt(T, cell)) road = false
+    qTmp[j] = Math.min(qTmp[j], groundQAt(T, cell, pace))
   }
   f.onRoad[i] = road ? 1 : 0
   for (let j = 0; j < NB; j++) { const b = i * NB + j

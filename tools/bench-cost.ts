@@ -3,18 +3,22 @@
 // sim, ms per frame for the soldier layer's step and its syncs, and the hash. Run with --cpu-prof to profile.
 // Usage: node tools/bench-cost.ts [march|fire] [400|800] [frames=360] [warm-up seconds=1]
 import fs from 'node:fs'
-import { loadSimData, compileRuleset, makeWorld, issue, advanceTick, hashWorld, makeHandle, KIND_FORMATION, type Command, type World } from '../src/sim/index.ts'
-import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import { loadSimData, compileRuleset, makeWorld, issue, advanceTick, hashWorld, makeHandle, KIND_FORMATION, M_FREE, type Command, type World } from '../src/sim/index.ts'
+import { napoleonic, ceiling } from '../src/rulesets/napoleonic.ts'
 import { buildScene } from '../src/render/scene.ts'
 import { SoldierLayer } from '../src/render/soldiers.ts'
 
 const mode = process.argv[2] ?? 'march', men = Number(process.argv[3] ?? 400), frames = Number(process.argv[4] ?? 360), warm = Number(process.argv[5] ?? 1)
 const data = loadSimData(new Uint8Array(fs.readFileSync(new URL('../data/formation-field.simdata', import.meta.url))))
-const rs = men > 414 ? { ...napoleonic, name: `${napoleonic.name}, the ceiling`, geometry: { ...napoleonic.geometry, files: 45, bins: 15 } } : napoleonic
-const w: World = makeWorld(data, compileRuleset(rs), 1, process.env.DEBUG === "1")   // a release world, as the page runs (DEBUG=1: the tests' debug world)
+const shippedCr = compileRuleset(napoleonic), rs = men > shippedCr.slots ? ceiling : napoleonic
+const w: World = makeWorld(data, rs === napoleonic ? shippedCr : compileRuleset(rs), 1, process.env.DEBUG === "1")   // a release world, as the page runs (DEBUG=1: the tests' debug world)
 const cmd = (c: Command) => issue(w, c)
 const slots: number[] = []
-const spawn = (x: number, z: number, heading: number, side = 0) => { slots.push(w.free[w.meta[1] - 1]); cmd({ type: 'debug-spawn', side, x, z, heading, shape: 'column', men }); advanceTick(w) }
+const spawn = (x: number, z: number, heading: number, side = 0) => {
+  const i = w.free[w.meta[M_FREE] - 1]; cmd({ type: 'debug-spawn', side, x, z, heading, shape: 'column', men })
+  const r = advanceTick(w); if (r.dropped.length || !w.f.alive[i]) throw new Error(`spawn at (${x}, ${z}) refused: ${r.dropped.map(d => d.reason).join(', ')}`)
+  slots.push(i)
+}
 if (mode === 'fire') {
   const E = Math.PI / 2
   for (let row = 0; row < 5; row++) for (let r = 0; r < 4; r++) { const z = -150 + row * 60; spawn(-115 - r * 20, z, E, 0); spawn(-15 + r * 20, z, -E, 1) }

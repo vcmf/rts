@@ -30,23 +30,24 @@ export class SoldierLayer {
   private cellHead: Int32Array; private cellNext = new Int32Array(1024); private flatX = new Float64Array(1024); private flatZ = new Float64Array(1024); private nFlat = 0
   private touched: number[] = []; private SN: number
   // per obstacle cell, the trunks in it and the 8 around it (the cells scene.ts eachObstacle visits), flattened:
-  // cell k's are [treeAt[k], treeAt[k + 1]) of treeX, treeZ, treeR; most cells have none
+  // cell k's are [treeAt[k], treeAt[k + 1]) of treeX, treeZ, treeR; most cells have none. The grid has a ring
+  // of cells outside the scene's, so a man just off its edge still sees the trunks inside
   private treeAt: Int32Array; private treeX: Float64Array; private treeZ: Float64Array; private treeR: Float64Array
   constructor(w: World, scene: Scene) {
     this.w = w; this.scene = scene; this.ctxA = mkPlaces(w); this.ctx0 = mkPlaces(w); this.poseNow = new Float64Array(8 + 2 * w.cr.NB)
     this.treesByClass = Uint8Array.from(Object.keys(w.cr.rs.terrain), name => ((CLASS_STYLE[name]?.trees ?? 0) > 0 ? 1 : 0))
     const span = (w.terrain.n - 1) * w.terrain.cell; this.SN = Math.ceil(span / SC) + 1; this.cellHead = new Int32Array(this.SN * this.SN).fill(-1)
-    const n = scene.obstacleN, near: Obstacle[] = []
-    this.treeAt = new Int32Array(n * n + 1)
-    for (let b = 0; b < n; b++) for (let a = 0; a < n; a++) { this.treeAt[b * n + a] = near.length
+    const n = scene.obstacleN, N = n + 2, near: Obstacle[] = []
+    this.treeAt = new Int32Array(N * N + 1)
+    for (let b = -1; b <= n; b++) for (let a = -1; a <= n; a++) { this.treeAt[(b + 1) * N + a + 1] = near.length
       for (let db = -1; db <= 1; db++) for (let da = -1; da <= 1; da++) { const p = a + da, q = b + db; if (p >= 0 && q >= 0 && p < n && q < n) near.push(...scene.obstacleGrid[q * n + p]) } }
-    this.treeAt[n * n] = near.length
+    this.treeAt[N * N] = near.length
     this.treeX = Float64Array.from(near, o => o.x); this.treeZ = Float64Array.from(near, o => o.z); this.treeR = Float64Array.from(near, o => o.r)
   }
-  // the obstacle cell at (x, z), −1 off the grid (no trees there)
+  // the obstacle cell at (x, z) in the ringed grid, −1 farther out (no trunk within reach)
   private treeCell(x: number, z: number): number {
-    const s = this.scene, n = s.obstacleN, i = Math.floor((x - s.x0) / s.obstacleCell), j = Math.floor((z - s.z0) / s.obstacleCell)
-    return i < 0 || j < 0 || i >= n || j >= n ? -1 : j * n + i
+    const s = this.scene, N = s.obstacleN + 2, i = Math.floor((x - s.x0) / s.obstacleCell) + 1, j = Math.floor((z - s.z0) / s.obstacleCell) + 1
+    return i < 0 || j < 0 || i >= N || j >= N ? -1 : j * N + i
   }
 
   // the anchor this frame: interpolated between ticks (alpha), extrapolated `ahead` seconds
@@ -57,23 +58,26 @@ export class SoldierLayer {
   }
   // places for formation i at this frame: ahead (where the men aim) and now; `place` reads the last framed
   frame(i: number, alpha: number): void {
-    const t = (this.w.meta[M_TICK] - 1 + alpha) * DT
+    const t = (this.w.meta[M_TICK] - 1 + alpha) * DT, A = this.framed
     const [hx, hz, h] = this.anchor(i, alpha, AHEAD), [x0, z0, h0] = this.anchor(i, alpha, 0)
+    A[0] = hx; A[1] = hz; A[2] = h; A[3] = x0; A[4] = z0; A[5] = h0
     placesCtx(this.ctxA, i, hx, hz, h, t + AHEAD, AHEAD - (1 - alpha) * DT)
     placesCtx(this.ctx0, i, x0, z0, h0, t, -(1 - alpha) * DT)
   }
+  private framed = new Float64Array(6)   // the anchors the last frame() used: ahead, then now
   private kindOf(i: number): number { const f = this.w.f; return this.w.cr.shapes[f.trans[i] ? f.tShape[i] : f.shape[i]].kind }
   // a man's place (`ahead`: where he aims; a place on impassable ground falls back to the place now)
-  place(i: number, s: number, ahead: boolean, out: number[], imp: Uint8Array = this.w.terrain.imp[this.kindOf(i)]): number[] {
+  place(i: number, s: number, ahead: boolean, out: number[], imp?: Uint8Array): number[] {
     if (!ahead) return placeAtSlot(this.ctx0, s, out)
     placeAtSlot(this.ctxA, s, out)
-    if (imp[cellK(this.w.terrain, out[0], out[1])]) placeAtSlot(this.ctx0, s, out)
+    if ((imp ?? this.w.terrain.imp[this.kindOf(i)])[cellK(this.w.terrain, out[0], out[1])]) placeAtSlot(this.ctx0, s, out)
     return out
   }
-  // what the places of formation i were framed from: the anchors, the trail, the lags and their rates
-  private poseOf(i: number, alpha: number, out: Float64Array): Float64Array {
-    const f = this.w.f, NB = this.w.cr.NB, [hx, hz, h] = this.anchor(i, alpha, AHEAD), [x0, z0, h0] = this.anchor(i, alpha, 0)
-    out[0] = hx; out[1] = hz; out[2] = h; out[3] = x0; out[4] = z0; out[5] = h0; out[6] = f.trailVer[i]; out[7] = f.trans[i]
+  // what the places of formation i were framed from (call after frame(i)): the anchors, the trail, the lags
+  // and their rates
+  private poseOf(i: number, out: Float64Array): Float64Array {
+    const f = this.w.f, NB = this.w.cr.NB
+    out.set(this.framed); out[6] = f.trailVer[i]; out[7] = f.trans[i]
     for (let j = 0; j < NB; j++) { out[8 + 2 * j] = f.lags[i * NB + j]; out[9 + 2 * j] = f.lagRate[i * NB + j] }
     return out
   }
@@ -159,7 +163,7 @@ export class SoldierLayer {
       const busy = !!(f.trans[i] || f.ordHead[i] >= 0)
       u.sway += ((busy ? 1 : 0) - u.sway) * Math.min(1, dt * 0.8)   // sway eases out at the halt, so the ranks come to rest
       // still: halted, and every place framed as last frame, so a settled man's place has not moved
-      const pose = this.poseOf(i, alpha, this.poseNow)
+      const pose = this.poseOf(i, this.poseNow)
       let still = !busy
       for (let k = 0; still && k < pose.length; k++) still = pose[k] === u.pose[k]
       u.pose.set(pose)

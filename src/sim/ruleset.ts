@@ -88,7 +88,7 @@ export interface Compiled {
   rs: Ruleset; hash: number; geo: Geometry
   NB: number; slots: number   // bins per formation, slots per formation
   trail: number               // points in a formation's trail ring (trailRing)
-  slotC: Int32Array; slotR: Int32Array; slotF: Int32Array   // each slot's company, rank and file
+  slotC: Int32Array                                         // each slot's company
   slotLX: Float64Array; slotLZ: Float64Array                // each slot's place in its company block (blockLocal)
   slotReach: number                                         // the farthest place in a company block from its origin
   shapes: ShapeLayout[]; shapeIndex(name: string): number
@@ -149,12 +149,12 @@ export function compileRuleset(rs: Ruleset): Compiled {
   if (M.contagion.shock > 0.6 * (M.quality - M.rout)) throw new Error(`ruleset ${rs.name}: morale.contagion.shock over 0.6 of the gap from the default quality to the rout`)
   if (!(M.rally.max >= 0 && M.rally.max < 255)) throw new Error(`ruleset ${rs.name}: morale.rally.max must be 0..254 (the break count is a byte)`)
   if (!(M.support.arc > 0 && M.support.arc <= PI / 2)) throw new Error(`ruleset ${rs.name}: morale.support.arc must be in (0, π/2]: wider, a friend ahead would count as a flank`)
-  const slots = C * R * F, slotC = new Int32Array(slots), slotR = new Int32Array(slots), slotF = new Int32Array(slots), slotLX = new Float64Array(slots), slotLZ = new Float64Array(slots)
+  const slots = C * R * F, slotC = new Int32Array(slots), slotLX = new Float64Array(slots), slotLZ = new Float64Array(slots)
   for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) for (let f = 0; f < F; f++) { const s = slotIndex(g, c, r, f), [lx, lz] = blockLocal(g, f, r)
-    slotC[s] = c; slotR[s] = r; slotF[s] = f; slotLX[s] = lx; slotLZ[s] = lz }
+    slotC[s] = c; slotLX[s] = lx; slotLZ[s] = lz }
   let slotReach = 0; for (let s = 0; s < slots; s++) slotReach = Math.max(slotReach, Math.sqrt(slotLX[s] * slotLX[s] + slotLZ[s] * slotLZ[s]))
   return {
-    rs, hash: rulesetHash(rs), geo: g, NB, slots, trail: trailRing(rs, shapes), slotC, slotR, slotF, slotLX, slotLZ, slotReach, shapes, kinds, paces, paceSpeed, presets, changeTime, qMax, slope,
+    rs, hash: rulesetHash(rs), geo: g, NB, slots, trail: trailRing(rs, shapes), slotC, slotLX, slotLZ, slotReach, shapes, kinds, paces, paceSpeed, presets, changeTime, qMax, slope,
     depthByKind, sightByClass, cosArc: cos(rs.fire.arc), stateFactor: new Float64Array(FIRING_STATES.map(s => rs.fire.state[s])), recentDecay: exp(-DT / rs.morale.recentTime), relax: 1 - exp(-DT / rs.morale.relaxTime), supportCos: cos(rs.morale.support.arc),
     shapeIndex: n => names.indexOf(n), presetIndex: n => presets.indexOf(n),
   }
