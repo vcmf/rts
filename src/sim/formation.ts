@@ -7,9 +7,9 @@
 // soldier is simulated (decisions 0007, 0018): who stands where and who falls is the renderer's.
 import { type World, M_TICK, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MAX_FORMATIONS, fleeing } from './world.ts'
 import type { ShapeLayout, Placement } from './ruleset.ts'
-import { rot2, blockLocal, slotIndex } from './ruleset.ts'
+import { rot2, slotIndex } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
-import { cellK, groundG, groundQ, onRoad } from './terrain.ts'
+import { cellK, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
 import { DT } from './time.ts'
 
@@ -53,6 +53,27 @@ export function occupied(w: World, i: number, c: number, r: number, f: number): 
   const off = half(nf - cr), fi = f - start - off
   return fi >= 0 && fi < cr
 }
+// every battalion's filled slots, in company, rank, file order (the order of the loops over `occupied`), kept
+// per world and rebuilt for a battalion only when what decides them changed: the men per company, the shape
+// it fills (the target during a change) and the lean (S1c-5: the per-man passes walk 400 filled slots, not
+// ask `occupied` 414 times). Battalion i's entries in `s` are [at[i·(C+1)], at[i·(C+1) + C]); company c's
+// start at at[i·(C+1) + c]
+export interface Filled { s: Int32Array; at: Int32Array; sig: Int32Array }
+export function filledSlots(w: World, i: number): Filled {
+  const g = w.cr.geo, C = g.companies, SL = w.cr.slots, f = w.f
+  let F = w.scratch.filled
+  if (!F) F = w.scratch.filled = { s: new Int32Array(MAX_FORMATIONS * SL), at: new Int32Array(MAX_FORMATIONS * (C + 1)), sig: new Int32Array(MAX_FORMATIONS * (C + 2)).fill(-1) }
+  const sg = i * (C + 2), shape = f.trans[i] ? f.tShape[i] : f.shape[i]
+  let same = F.sig[sg] === shape && F.sig[sg + 1] === f.lean[i]
+  for (let c = 0; same && c < C; c++) same = F.sig[sg + 2 + c] === f.men[i * C + c]
+  if (same) return F
+  F.sig[sg] = shape; F.sig[sg + 1] = f.lean[i]; for (let c = 0; c < C; c++) F.sig[sg + 2 + c] = f.men[i * C + c]
+  let n = i * SL
+  for (let c = 0; c < C; c++) { F.at[i * (C + 1) + c] = n
+    for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) if (occupied(w, i, c, r, q)) F.s[n++] = slotIndex(g, c, r, q) }
+  F.at[i * (C + 1) + C] = n
+  return F
+}
 // per-world working buffers, sized from the ruleset once (a tick allocates none): bit sets of a battalion's
 // bins (the footprint gate) and of each company's slots (the re-packing gate), per-bin numbers for the lag
 // model, and the arc Face about rebuilds a trail from
@@ -69,18 +90,17 @@ function bitsOf(w: World): GateBits {
 }
 // company c's filled slots (r · files + f) on impassable ground, as the battalion stands now, into out.
 // `ctx`: the places now (ctxNow), built once by the caller: a change of men moves no place
+// (asks `occupied` of this company's slots, not the battalion's cached list: the re-packing gate changes the
+// company's men between calls, which would rebuild the whole list each time)
 function wetSlots(w: World, i: number, c: number, ctx: Places, out: Bits): Bits {
-  const f = w.f, g = w.cr.geo, imp = w.terrain.imp[kindOf(w, i)]
+  const f = w.f, g = w.cr.geo, imp = w.terrain.imp[kindOf(w, i)], base = c * g.ranks * g.files
   out.fill(0)
-  if (f.trans[i]) {
-    const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], now(w), 0, wbPose), ca = cos(p.a), sa = sin(p.a)
-    for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) { if (!occupied(w, i, c, r, q)) continue
-      const [lx, lz] = blockLocal(g, q, r); if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) setBit(out, r * g.files + q) }
-    return out
-  }
+  const p = f.trans[i] ? placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], now(w), 0, wbPose) : null, ca = p ? cos(p.a) : 0, sa = p ? sin(p.a) : 0
   for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) {
     if (!occupied(w, i, c, r, q)) continue
-    placeAt(ctx, c, r, q, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) setBit(out, r * g.files + q)
+    const s = base + r * g.files + q
+    if (p) { const lx = w.cr.slotLX[s], lz = w.cr.slotLZ[s]; if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) setBit(out, s - base) }
+    else { placeAtSlot(ctx, s, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) setBit(out, s - base) }
   }
   return out
 }
@@ -247,11 +267,15 @@ export const lagAt = (w: World, i: number, j: number, dt: number): number => w.f
 // where each man stands, for a pose (hx, hz, h) and a time: his slot set back by his bin's lag. A straight
 // shape: per-bin frames, the lag along the heading. A trail shape: every man on the trail at his own
 // distance behind the head (his place in the straight layout plus his lag), across it by his offset.
-export interface Places { w: World; i: number; snake: boolean; dt: number; t: number; arc: Arc; fx: Float64Array; fz: Float64Array; fc: Float64Array; fs: Float64Array; ft: Float64Array }
-export const mkPlaces = (w: World): Places => { const n = w.cr.NB; return { w, i: -1, snake: false, dt: 0, t: 0, arc: mkArc(w), fx: new Float64Array(n), fz: new Float64Array(n), fc: new Float64Array(n), fs: new Float64Array(n), ft: new Float64Array(n) } }
+// A trail shape's men of one rank and bin stand at the same distance back: the last distance's trail point
+// and direction are kept (`dD`…), so the next man at that distance reuses them.
+export interface Places { w: World; i: number; snake: boolean; dt: number; t: number; arc: Arc; fx: Float64Array; fz: Float64Array; fc: Float64Array; fs: Float64Array; ft: Float64Array
+  dD: number; dX: number; dZ: number; dT: number; dC: number; dS: number }
+export const mkPlaces = (w: World): Places => { const n = w.cr.NB; return { w, i: -1, snake: false, dt: 0, t: 0, arc: mkArc(w), fx: new Float64Array(n), fz: new Float64Array(n), fc: new Float64Array(n), fs: new Float64Array(n), ft: new Float64Array(n),
+  dD: NaN, dX: 0, dZ: 0, dT: 0, dC: 0, dS: 0 } }
 const pcPose: Pose = { x: 0, z: 0, a: 0, face: 0 }
 export function placesCtx(ctx: Places, i: number, hx: number, hz: number, h: number, t: number, dt: number): Places {
-  const w = ctx.w; ctx.i = i; ctx.snake = snakes(w, i); ctx.dt = dt; ctx.t = t
+  const w = ctx.w; ctx.i = i; ctx.snake = snakes(w, i); ctx.dt = dt; ctx.t = t; ctx.dD = NaN
   if (ctx.snake) { ctx.arc.ver = -1; arcOf(w, i, hx, hz, h, ctx.arc); return ctx }
   const sh = sin(h), ch = cos(h), B = w.cr.geo.bins
   for (let c = 0; c < w.cr.geo.companies; c++) {
@@ -262,16 +286,21 @@ export function placesCtx(ctx: Places, i: number, hx: number, hz: number, h: num
   return ctx
 }
 // a man's place [x, z, direction of travel]
-export function placeAt(ctx: Places, c: number, r: number, f: number, out: number[]): number[] {
-  const w = ctx.w, g = w.cr.geo, L = layoutOf(w, ctx.i), s = slotIndex(g, c, r, f), j = c * g.bins + L.of[s]
+export const placeAt = (ctx: Places, c: number, r: number, f: number, out: number[]): number[] => placeAtSlot(ctx, slotIndex(ctx.w.cr.geo, c, r, f), out)
+// the same, by slot index
+export function placeAtSlot(ctx: Places, s: number, out: number[]): number[] {
+  const w = ctx.w, cr = w.cr, L = layoutOf(w, ctx.i), j = cr.slotC[s] * cr.geo.bins + L.of[s]
   if (!ctx.snake) {
-    const [lx, lz] = blockLocal(g, f, r)
+    const lx = cr.slotLX[s], lz = cr.slotLZ[s]
     out[0] = ctx.fx[j] + lx * ctx.fc[j] - lz * ctx.fs[j]; out[1] = ctx.fz[j] + lx * ctx.fs[j] + lz * ctx.fc[j]; out[2] = ctx.ft[j]; return out
   }
   const lx = L.posX[s], D = -L.posZ[s] + lagAt(w, ctx.i, j, ctx.dt)
-  trailPoint(ctx.arc, D - 1, tA); trailPoint(ctx.arc, D + 1, tB)
-  const t = atan2(tA[0] - tB[0], tA[1] - tB[1]); trailPoint(ctx.arc, D, tA)
-  out[0] = tA[0] + cos(t) * lx; out[1] = tA[1] - sin(t) * lx; out[2] = t; return out
+  if (D !== ctx.dD) {
+    trailPoint(ctx.arc, D - 1, tA); trailPoint(ctx.arc, D + 1, tB)
+    const t = atan2(tA[0] - tB[0], tA[1] - tB[1]); trailPoint(ctx.arc, D, tA)
+    ctx.dD = D; ctx.dX = tA[0]; ctx.dZ = tA[1]; ctx.dT = t; ctx.dC = cos(t); ctx.dS = sin(t)
+  }
+  out[0] = ctx.dX + ctx.dC * lx; out[1] = ctx.dZ - ctx.dS * lx; out[2] = ctx.dT; return out
 }
 const ctxNow = (w: World, i: number): Places =>
   placesCtx(w.scratch.places ?? (w.scratch.places = mkPlaces(w)), i, w.f.x[i], w.f.z[i], w.f.heading[i], now(w), 0)
@@ -296,25 +325,54 @@ function clearOfImpassable(w: World, i: number): boolean {
 }
 // the bins with a man's place on impassable ground, for the pose as it is now, into out (a set of NB bits)
 export function wetBins(w: World, i: number, out: Bits): Bits {
-  const f = w.f, g = w.cr.geo, C = g.companies, R = g.ranks, F = g.files, B = g.bins, t = now(w)
+  const f = w.f, C = w.cr.geo.companies, B = w.cr.geo.bins, t = now(w)
   out.fill(0)
   if (clearOfImpassable(w, i)) return out
-  const imp = w.terrain.imp[kindOf(w, i)]
+  const T = w.terrain, kind = kindOf(w, i), imp = T.imp[kind], impd = T.impd[kind], Fl = filledSlots(w, i), a = i * (C + 1)
   if (f.trans[i]) {
     for (let c = 0; c < C; c++) {
       const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, wbPose), ca = cos(p.a), sa = sin(p.a)
-      for (let r = 0; r < R; r++) for (let q = 0; q < F; q++) { if (!occupied(w, i, c, r, q)) continue
-        const [lx, lz] = blockLocal(g, q, r); if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) setBit(out, c * B) }
+      if (clearWithin(T, impd, p.x, p.z, w.cr.slotReach)) continue
+      for (let k = Fl.at[a + c], e = Fl.at[a + c + 1]; k < e; k++) { const s = Fl.s[k], lx = w.cr.slotLX[s], lz = w.cr.slotLZ[s]
+        if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) { setBit(out, c * B); break } }
     }
     return out
   }
   const ctx = ctxNow(w, i), L = layoutOf(w, i)
-  for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) for (let q = 0; q < F; q++) {
-    if (!occupied(w, i, c, r, q)) continue
-    const j = c * B + L.of[slotIndex(g, c, r, q)]; if (hasBit(out, j)) continue
-    placeAt(ctx, c, r, q, pt); if (imp[cellK(w.terrain, pt[0], pt[1])]) setBit(out, j)
+  for (let c = 0; c < C; c++) {
+    if (companyClear(ctx, c, impd)) continue
+    for (let k = Fl.at[a + c], e = Fl.at[a + c + 1]; k < e; k++) {
+      const s = Fl.s[k], j = c * B + L.of[s]; if (hasBit(out, j)) continue
+      placeAtSlot(ctx, s, pt); if (imp[cellK(T, pt[0], pt[1])]) setBit(out, j)
+    }
   }
   return out
+}
+// whether every point within `reach` of (x, z) is on a cell the distance field `impd` says is passable (S1c-5:
+// the gate skips a company far from the water). The field is a chamfer distance between cell centres, at
+// most 1/cos 22.5° (1.0824) of the true distance, and a point and the centre of its cell are up to
+// √2/2 cells apart, at either end
+const CHAMFER = 1.09
+const clearWithin = (T: World['terrain'], impd: Float64Array, x: number, z: number, reach: number): boolean =>
+  impd[cellK(T, x, z)] > CHAMFER * (reach + 1.5 * T.cell)
+const tK = [0, 0]
+// company c's places in ctx, all clear of impassable ground: a straight shape's lie within the slot reach of
+// their bins' frames; a trail shape's at trail distances D0..D1 (the company's extent plus its bins' lags),
+// within (D1 − D0)/2 of the point at the middle distance (the trail is followed at unit speed), across it by
+// the company's widest offset
+function companyClear(ctx: Places, c: number, impd: Float64Array): boolean {
+  const w = ctx.w, T = w.terrain, B = w.cr.geo.bins
+  if (!ctx.snake) {
+    const x0 = ctx.fx[c * B], z0 = ctx.fz[c * B]
+    let r = 0; for (let k = 1; k < B; k++) r = Math.max(r, hyp(ctx.fx[c * B + k] - x0, ctx.fz[c * B + k] - z0))
+    return clearWithin(T, impd, x0, z0, r + w.cr.slotReach)
+  }
+  const E = layoutOf(w, ctx.i).extent
+  let lo = Infinity, hi = -Infinity
+  for (let k = 0; k < B; k++) { const l = lagAt(w, ctx.i, c * B + k, ctx.dt); lo = Math.min(lo, l); hi = Math.max(hi, l) }
+  const D0 = E[c * 3] + lo, D1 = E[c * 3 + 1] + hi
+  trailPoint(ctx.arc, (D0 + D1) / 2, tK)
+  return clearWithin(T, impd, tK[0], tK[1], (D1 - D0) / 2 + E[c * 3 + 2])
 }
 // whether any man of battalion i stands on impassable ground (tests, tools)
 export const anyWet = (w: World, i: number): boolean => anyBit(wetBins(w, i, bitsOf(w).tmp))
@@ -334,14 +392,16 @@ function sampleBins(w: World, i: number, pace: number, V0: number): void {
   const f = w.f, g = w.cr.geo, NB = w.cr.NB, L = layoutOf(w, i), kind = L.kind, imp = w.terrain.imp[kind], look = V0 * w.cr.qMax * DT, ctx = ctxNow(w, i)
   const { g: gTmp, n: nTmp, q: qTmp, blk: blkTmp } = bitsOf(w)
   gTmp.fill(0); nTmp.fill(0); qTmp.fill(Infinity); blkTmp.fill(0); let road = true
-  for (let c = 0; c < g.companies; c++) for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) {
-    if (!occupied(w, i, c, r, q)) continue
-    const j = c * g.bins + L.of[slotIndex(g, c, r, q)]
-    placeAt(ctx, c, r, q, pt); const px = pt[0], pz = pt[1], dx = sin(pt[2]), dz = cos(pt[2])
-    const gg = groundG(w.terrain, px, pz, kind, dx, dz)
-    if (gg <= 0 || imp[cellK(w.terrain, px + dx * look, pz + dz * look)]) blkTmp[j]++; else { gTmp[j] += 1 / gg; nTmp[j]++ }
-    if (road && !onRoad(w.terrain, px, pz)) road = false
-    qTmp[j] = Math.min(qTmp[j], groundQ(w.terrain, px, pz, pace))
+  const Fl = filledSlots(w, i), a = i * (g.companies + 1)
+  let dir = NaN, dx = 0, dz = 0   // a straight shape's men share their direction of travel: sin and cos once
+  for (let k = Fl.at[a], e = Fl.at[a + g.companies]; k < e; k++) {
+    const s = Fl.s[k], j = w.cr.slotC[s] * g.bins + L.of[s]
+    placeAtSlot(ctx, s, pt); const px = pt[0], pz = pt[1]
+    if (pt[2] !== dir) { dir = pt[2]; dx = sin(dir); dz = cos(dir) }
+    const T = w.terrain, cell = cellK(T, px, pz), gg = groundGAt(T, cell, kind, dx, dz)   // groundG, onRoad, groundQ from one cell lookup
+    if (gg <= 0 || imp[cellK(T, px + dx * look, pz + dz * look)]) blkTmp[j]++; else { gTmp[j] += 1 / gg; nTmp[j]++ }
+    if (road && !onRoadAt(T, cell)) road = false
+    qTmp[j] = Math.min(qTmp[j], groundQAt(T, cell, pace))
   }
   f.onRoad[i] = road ? 1 : 0
   for (let j = 0; j < NB; j++) { const b = i * NB + j
@@ -479,7 +539,7 @@ function changeWet(w: World, i: number): boolean {
     const t = f.tStart[i] + span * k / CHANGE_SAMPLES
     for (let c = 0; c < C; c++) {
       const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, ccPose), ca = cos(p.a), sa = sin(p.a)
-      for (let r = 0; r < g.ranks; r++) for (let q = 0; q < g.files; q++) { const [lx, lz] = blockLocal(g, q, r)
+      for (let s = c * g.ranks * g.files, e = s + g.ranks * g.files; s < e; s++) { const lx = w.cr.slotLX[s], lz = w.cr.slotLZ[s]
         if (imp[cellK(w.terrain, p.x + lx * ca - lz * sa, p.z + lx * sa + lz * ca)]) return true }
     }
   }

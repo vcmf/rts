@@ -31,7 +31,8 @@ is in `docs/plans/done/s1a-formations-on-spine.md`.
 ## Constraints
 
 - **Decisions 0007 and 0018:** the battalion is the unit (about 400 men since 0018). The sim keeps the **men per company**, never a soldier.
-  Which slots are filled follows from the counts by one rule (`occupied`):
+  Which slots are filled follows from the counts by one rule (`occupied`); `filledSlots` keeps each
+  battalion's list, rebuilt only when the men per company, the shape it fills or the lean change (S1c-5):
   - files from the centre outward, ranks front first;
   - a shape that closes across companies (`closeAcross`, the line) fills each half toward the colours;
   - where files or the last rank cannot centre exactly they lean one way (`lean`), and Face about
@@ -102,6 +103,11 @@ interrupted by another is timed by the distance still to cover.
 **The footprint gate:**
 - every pose change (the turn and advance of a move, a wheel step) goes through `gate`, which halves the
   step until no new bin's places are on impassable ground;
+- `wetBins` places only the men of companies near impassable ground: a company whose places all lie
+  within a reach of one point (a straight shape: its bins' frames plus the block; a trail shape: the
+  middle of its stretch of trail, half that stretch and its widest offset) is skipped when the distance
+  field there exceeds the reach, with margins for the chamfer and the cells (S1c-5; checked against a scan
+  of every man in `test/shortcuts.test.ts`);
 - changes are checked along their whole path (128 poses), for every slot, filled or empty;
 - a stalled move halts after 1 s ("halted: impassable ground"), stepping back to where the held men
   stand.

@@ -82,11 +82,15 @@ export interface ShapeLayout {
   pace: number; roadPace: number   // indices into paces, −1 none
   trailLimit: number   // a trail shape's trail length: its depth, two company frontages and 12 m
   depth: number        // how far the layout reaches behind the anchor
+  extent: Float64Array // [c·3 + 0..2]: company c's nearest and farthest place behind the anchor (−posZ), its widest |posX|
 }
 export interface Compiled {
   rs: Ruleset; hash: number; geo: Geometry
   NB: number; slots: number   // bins per formation, slots per formation
   trail: number               // points in a formation's trail ring (trailRing)
+  slotC: Int32Array                                         // each slot's company
+  slotLX: Float64Array; slotLZ: Float64Array                // each slot's place in its company block (blockLocal)
+  slotReach: number                                         // the farthest place in a company block from its origin
   shapes: ShapeLayout[]; shapeIndex(name: string): number
   kinds: string[]; paces: string[]; paceSpeed: Float64Array
   presets: string[]; presetIndex(name: string): number
@@ -145,8 +149,12 @@ export function compileRuleset(rs: Ruleset): Compiled {
   if (M.contagion.shock > 0.6 * (M.quality - M.rout)) throw new Error(`ruleset ${rs.name}: morale.contagion.shock over 0.6 of the gap from the default quality to the rout`)
   if (!(M.rally.max >= 0 && M.rally.max < 255)) throw new Error(`ruleset ${rs.name}: morale.rally.max must be 0..254 (the break count is a byte)`)
   if (!(M.support.arc > 0 && M.support.arc <= PI / 2)) throw new Error(`ruleset ${rs.name}: morale.support.arc must be in (0, π/2]: wider, a friend ahead would count as a flank`)
+  const slots = C * R * F, slotC = new Int32Array(slots), slotLX = new Float64Array(slots), slotLZ = new Float64Array(slots)
+  for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) for (let f = 0; f < F; f++) { const s = slotIndex(g, c, r, f), [lx, lz] = blockLocal(g, f, r)
+    slotC[s] = c; slotLX[s] = lx; slotLZ[s] = lz }
+  let slotReach = 0; for (let s = 0; s < slots; s++) slotReach = Math.max(slotReach, Math.sqrt(slotLX[s] * slotLX[s] + slotLZ[s] * slotLZ[s]))
   return {
-    rs, hash: rulesetHash(rs), geo: g, NB, slots: C * R * F, trail: trailRing(rs, shapes), shapes, kinds, paces, paceSpeed, presets, changeTime, qMax, slope,
+    rs, hash: rulesetHash(rs), geo: g, NB, slots, trail: trailRing(rs, shapes), slotC, slotLX, slotLZ, slotReach, shapes, kinds, paces, paceSpeed, presets, changeTime, qMax, slope,
     depthByKind, sightByClass, cosArc: cos(rs.fire.arc), stateFactor: new Float64Array(FIRING_STATES.map(s => rs.fire.state[s])), recentDecay: exp(-DT / rs.morale.recentTime), relax: 1 - exp(-DT / rs.morale.relaxTime), supportCos: cos(rs.morale.support.arc),
     shapeIndex: n => names.indexOf(n), presetIndex: n => presets.indexOf(n),
   }
@@ -201,8 +209,11 @@ function layout(rs: Ruleset, name: string, kinds: string[], paces: string[]): Sh
   const kind = kinds.indexOf(def.kind)
   if (kind < 0) throw new Error(`shape ${name}: kind ${def.kind} not in the terrain table`)
   let depth = 0; for (const p of place) depth = Math.max(depth, -p.z)
+  const extent = new Float64Array(C * 3)
+  for (let c = 0; c < C; c++) { extent[c * 3] = Infinity; extent[c * 3 + 1] = -Infinity
+    for (let s = c * R * F; s < (c + 1) * R * F; s++) { extent[c * 3] = Math.min(extent[c * 3], -posZ[s]); extent[c * 3 + 1] = Math.max(extent[c * 3 + 1], -posZ[s]); extent[c * 3 + 2] = Math.max(extent[c * 3 + 2], Math.abs(posX[s])) } }
   const trailLimit = depth + 2 * g.files * g.fileSpacing + 12
-  return { name, def, kind, place, of, posX, posZ, pairs, half, turn, pace: paces.indexOf(def.pace), roadPace: def.roadPace ? paces.indexOf(def.roadPace) : -1, trailLimit, depth }
+  return { name, def, kind, place, of, posX, posZ, pairs, half, turn, pace: paces.indexOf(def.pace), roadPace: def.roadPace ? paces.indexOf(def.roadPace) : -1, trailLimit, depth, extent }
 }
 
 export const HALF_PI = PI / 2

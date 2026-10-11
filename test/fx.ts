@@ -23,8 +23,7 @@ export const data: SimData = loadSimData(dataBytes(), GOLDEN_DATA_VERSION)
 export const small: Ruleset = { ...napoleonic, name: `${napoleonic.name}, the S1a block`,
   geometry: { ...napoleonic.geometry, companies: 4, files: 9, bins: 3 },
   morale: { ...napoleonic.morale, contagion: { ...napoleonic.morale.contagion, front: 200, back: 100 }, support: { ...napoleonic.morale.support, reach: 100 } } }
-// the ceiling (decision 0018): the shipped ruleset with companies of 45 files, 810 places
-export const ceiling: Ruleset = { ...napoleonic, name: `${napoleonic.name}, the ceiling`, geometry: { ...napoleonic.geometry, files: 45, bins: 15 } }
+export { ceiling } from '../src/rulesets/napoleonic.ts'   // the ceiling (decision 0018): companies of 45 files, 810 places
 export const cr: Compiled = compileRuleset(small)
 export const shipped: Compiled = compileRuleset(napoleonic)   // the scenarios' ruleset
 const baseTerrain: Terrain = buildTerrain(data, cr)

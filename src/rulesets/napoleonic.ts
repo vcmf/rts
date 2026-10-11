@@ -109,3 +109,5 @@ export const napoleonic: Ruleset = {
     shatter: 0.5,
   },
 }
+// the ceiling (decision 0018): the same ruleset with companies of 45 files, 810 places (tests, cost benches)
+export const ceiling: Ruleset = { ...napoleonic, name: `${napoleonic.name}, the ceiling`, geometry: { ...napoleonic.geometry, files: 45, bins: 15 } }

@@ -26,6 +26,7 @@ class Writer {
   i32(v: number) { this.room(4); this.view.setInt32(this.o, v, true); this.o += 4 }
   u32(v: number) { this.room(4); this.view.setUint32(this.o, v, true); this.o += 4 }
   f64(v: number) { this.room(8); this.view.setFloat64(this.o, v, true); this.o += 8 }
+  raw(b: Uint8Array) { this.room(b.length); this.buf.set(b, this.o); this.o += b.length }
   bytes(): Uint8Array { return this.buf.slice(0, this.o) }
 }
 class Reader {
@@ -38,12 +39,19 @@ class Reader {
   i32() { const v = this.view.getInt32(this.o, true); this.o += 4; return v }
   u32() { const v = this.view.getUint32(this.o, true); this.o += 4; return v }
   f64() { const v = this.view.getFloat64(this.o, true); this.o += 8; return v }
+  raw(out: Uint8Array) { if (this.o + out.length > this.b.length) throw new RangeError('save is truncated'); out.set(this.b.subarray(this.o, this.o + out.length)); this.o += out.length }
 }
 
 type Arr = Column
+// a typed array's own bytes are its little-endian encoding on a little-endian machine (every browser and Node
+// target): copied whole, the same bytes as number by number, far faster (S1c-5). A big-endian machine
+// writes number by number.
+const LITTLE = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1
+const bytesOf = (a: Arr): Uint8Array => new Uint8Array(a.buffer, a.byteOffset, a.byteLength)
 const writeArr = (w: Writer, a: Arr) => {
   w.u32(a.length)
-  if (a instanceof Float64Array) for (let i = 0; i < a.length; i++) w.f64(a[i])
+  if (LITTLE) w.raw(bytesOf(a))
+  else if (a instanceof Float64Array) for (let i = 0; i < a.length; i++) w.f64(a[i])
   else if (a instanceof Uint8Array) for (let i = 0; i < a.length; i++) w.u8(a[i])
   else if (a instanceof Int8Array) for (let i = 0; i < a.length; i++) w.i8(a[i])
   else if (a instanceof Uint16Array) for (let i = 0; i < a.length; i++) w.u16(a[i])
@@ -52,7 +60,8 @@ const writeArr = (w: Writer, a: Arr) => {
 }
 const readArr = (r: Reader, a: Arr) => {
   if (r.u32() !== a.length) throw new Error('save does not match this sim version (array length)')
-  if (a instanceof Float64Array) for (let i = 0; i < a.length; i++) a[i] = r.f64()
+  if (LITTLE) r.raw(bytesOf(a))
+  else if (a instanceof Float64Array) for (let i = 0; i < a.length; i++) a[i] = r.f64()
   else if (a instanceof Uint8Array) for (let i = 0; i < a.length; i++) a[i] = r.u8()
   else if (a instanceof Int8Array) for (let i = 0; i < a.length; i++) a[i] = r.i8()
   else if (a instanceof Uint16Array) for (let i = 0; i < a.length; i++) a[i] = r.u16()
