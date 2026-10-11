@@ -530,6 +530,10 @@ export function appendOrder(w: World, i: number, n: number): void {
   const f = w.f; if (f.ordTail[i] < 0) f.ordHead[i] = n; else w.ord.next[f.ordTail[i]] = n
   f.ordTail[i] = n
 }
+// puts an order at the head of a formation's list (the square against cavalry, before what it was doing)
+export function prependOrder(w: World, i: number, n: number): void {
+  const f = w.f; w.ord.next[n] = f.ordHead[i]; f.ordHead[i] = n; if (f.ordTail[i] < 0) f.ordTail[i] = n
+}
 export function shiftOrder(w: World, i: number): void {
   const f = w.f, n = f.ordHead[i]; if (n < 0) return
   f.ordHead[i] = w.ord.next[n]; if (f.ordHead[i] < 0) f.ordTail[i] = -1
@@ -744,6 +748,8 @@ function formationStep(w: World, i: number): void {
   }
   const n = f.ordHead[i]
   if (n < 0) { f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); return }
+  // in the square it formed against cavalry by itself (melee.ts): it holds there, keeping its orders for after
+  if (f.autoFrom[i] && f.shape[i] === typeOf(w, i).refuge && o.type[n] !== O_FORM) { f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); return }
   const h0 = f.heading[i], type = o.type[n]
   if (type === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
   const [V0, pace] = paceOf(w, i), halfW = halfWidth(w, i)

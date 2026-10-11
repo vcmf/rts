@@ -129,10 +129,11 @@ with contagion, after relaxing (`morale.ts`).
   either charging it or anything but riding away faster than `refuge.closing`. A regiment at the halt can
   charge in seconds.
 - **Forming:** after `refuge.react` seconds of unbroken threat, a battalion not in its refuge and not changing
-  into it drops its orders and forms it. The shape it came from is kept (`autoFrom`).
+  into it forms it ahead of its orders. The shape it came from is kept (`autoFrom`). In that square it holds,
+  keeping its orders (a scenario's plan's) for after.
 - **Forming back:** when `refuge.hold` seconds pass with no threat and no enemy charging type is within
-  `refuge.alert` at all, it forms back into that shape (from the square, or out of the change into it), if it
-  has no orders.
+  `refuge.alert` at all, it forms back into that shape (from the square, or out of the change into it), ahead of
+  the orders it kept, and goes on with them.
 - **The player's order wins:** any order given during a spell of threat stands the behaviour down until the
   spell ends (`refugeOff`), and forgets the shape it would form back into (`autoFrom`).
 

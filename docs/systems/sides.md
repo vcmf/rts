@@ -18,7 +18,8 @@ step 13 the end    each side's men in the fight against those it spawned: broken
 
 ## Goals / non-goals
 
-- **Goals:** a battle you play against a side that moves; a result; nothing the sim decides depends on who plays.
+- **Goals:** a battle you play against a side that moves; a result; the sim knows no player, only who sent an order
+  (a player's order stands the square against cavalry down; a plan's does not).
 - **Non-goals (later):**
   - a brigade AI that reacts (S3), with plan steps on conditions;
   - fog of war;
@@ -28,9 +29,10 @@ step 13 the end    each side's men in the fight against those it spawned: broken
 ## Constraints
 
 - **Determinism.** A plan is data attached to a world, like its terrain: which steps have run follows from the
-  tick, so saves and replays carry nothing for it. Its commands are applied directly and not logged; a replay
-  re-derives them (sim-design §4).
-- **Ownership is the page's.** The sim validates every command as it always has, whoever sends it.
+  tick. A save carries the time limit and a hash of the plan and limit (`M_LIMIT`, `M_PLAN`), so a loaded world
+  refuses to tick until the same plan is attached again (`attachScenario`). Its commands are applied directly
+  and not logged; a replay re-derives them (`docs/proposals/sim-design.md` §4).
+- **Ownership is the page's.** The sim validates every command the same way, whoever sends it.
 
 ## Design
 
@@ -47,8 +49,11 @@ A scenario with no player is a sandbox for both sides.
   generation 0, so the handle is `unitHandle(unit)`. A charge's or a preferred fire's `target` names an enemy
   unit the same way.
 - **Step 3:** at a step's tick its command is applied (`applyNow`: quantised, then validated as a stamped
-  command). A refusal goes into the tick's dropped list with sequence −1 and the reason prefixed `plan:`. The
-  page shows only your own refusals.
+  command, but not as the player's). A refusal goes into the tick's dropped list with sequence −1 and the reason
+  prefixed `plan:`. The page shows only your own refusals.
+- **Under a cavalry threat** a battalion forms square ahead of the orders it has (the plan's), holds in it, and
+  forms back and goes on with them when the threat has passed (`docs/systems/melee.md`). A player's order stands
+  the square down instead.
 
 **The end** (`endStep`, step 13; `rs.end`):
 - **In the fight:** a formation alive and not routing, rallying or shattered.

@@ -171,7 +171,7 @@ async function main(): Promise<void> {
       lines.push(`#${i} ${U.name} · ${s} · ${menOf(w, i)} men · ${w.cr.presets[w.f.style[i]]}${STATUS[w.f.status[i]] ? ' · ' + STATUS[w.f.status[i]] : ''}`)
       const fight = w.f.foe[i] ? ' · in melee' : w.f.chPhase[i] ? ' · ' + CHARGE_PHASES[w.f.chPhase[i]] : w.f.blownUntil[i] > w.meta[M_TICK] ? ' · blown' : ''
       lines.push(`   ${MORALE_STATES[w.f.mstate[i]]} · morale ${w.f.morale[i].toFixed(2)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}${fight}`) }
-    const d = dropped.filter(x => x.seq >= 0).at(-1)   // yours: the scenario's plan's own refusals are not shown
+    let d: Dropped | undefined; for (let k = dropped.length - 1; k >= 0 && !d; k--) if (dropped[k].seq >= 0) d = dropped[k]   // yours: the plan's refusals are not shown
     if (note && performance.now() - noteT < 3000) lines.push(note)
     // the battle (S1e-2): each side's men in the fight, as a share of those it spawned, and the result once decided
     const shares = fightShares(w), head: string[] = []

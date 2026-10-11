@@ -17,7 +17,7 @@ import { fireStep, casualtiesStep } from './fire.ts'
 import { moraleStep } from './morale.ts'
 import { meleeStep, standingStep } from './melee.ts'
 import { artilleryStep } from './artillery.ts'
-import { planStep, endStep } from './plan.ts'
+import { planStep, endStep, checkPlan } from './plan.ts'
 
 // a company of formation i with men stands within morale.leave of the map's edge: any corner of its block (a line
 // meeting the edge at an angle, a square backing into it, or a column of route's tail reaches it before the anchor)
@@ -42,6 +42,7 @@ export interface Meter { now(): number; add(step: string, ms: number): void }
 export interface TickResult { tick: number; hash: number | null; dropped: Dropped[]; departed: { id: Handle; men: number }[] }
 
 export function advanceTick(w: World, meter?: Meter): TickResult {
+  checkPlan(w)   // a world made with a plan has it (before anything changes)
   const t = w.meta[M_TICK] + 1
   const step = (name: string, fn: () => void) => { if (!meter) return fn(); const t0 = meter.now(); fn(); meter.add(name, meter.now() - t0) }
   let dropped: Dropped[] = []

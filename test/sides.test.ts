@@ -7,7 +7,7 @@ import { Sim, root, longIt, openBattlefield, OPEN_DATA, battleData } from './fx.
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { s1eBattle } from '../src/scenarios/s1e-battle.ts'
 import { attachScenario, compileRuleset, makeWorld, advanceTick, record, play, serialize, deserialize, hashWorld, hex, unitHandle, formationSlot,
-  M_TICK, M_END, M_WINNER, END_SIDE0, END_DRAW, MS_STEADY, bracedOf, fightShares, issue, type World, MS_ROUTING, type PlanStep, type ScenarioRules } from '../src/sim/index.ts'
+  M_TICK, M_END, M_WINNER, END_SIDE0, END_DRAW, bracedOf, fightShares, issue, type World, MS_ROUTING, type PlanStep, type ScenarioRules } from '../src/sim/index.ts'
 
 const PI = Math.PI
 // a world on the open battlefield with a scenario's plan and limit, and units spawned in order (unit k is slot k)
@@ -33,16 +33,25 @@ describe('the plan', () => {
     expect(run.replay.log.map(e => e.cmd.type)).toEqual(['halt'])
     expect(play(run.replay, battleData, cr, scenario, run.hashes)).toBeNull()
   })
-  it('a plan command does not stand the square against cavalry down, as a player\'s does', () => {
-    const go = (byPlan: boolean) => {
-      const plan: PlanStep[] = byPlan ? [{ at: 3, unit: 1, cmd: { type: 'halt' } }] : []
-      const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA); attachScenario(s.w, { plan })
-      s.cmd({ type: 'debug-spawn', side: 0, unit: 'cavalry', x: 0, z: -40, heading: 0, shape: 'line', men: 256, fire: 'hold' })
-      s.cmd({ type: 'debug-spawn', side: 1, x: 0, z: 100, heading: PI, shape: 'line', men: 400, fire: 'hold' }); s.tick()   // in reach of the regiment: on the alert
-      s.advance(1); if (!byPlan) s.order({ type: 'halt', id: unitHandle(1) })
-      s.advance(4); return [s.w.f.refugeOff[1], s.shape(unitHandle(1))]
-    }
-    expect(go(true)).toEqual([0, 'line → square']); expect(go(false)[0]).toBe(1)
+  it('a plan\'s march under a cavalry threat is kept: the battalion forms square, holds, then forms back and marches on', () => {
+    // a regiment of the other side stands 140 m off: the line is on the alert when the plan's order comes
+    const plan: PlanStep[] = [{ at: 0.5, unit: 1, cmd: { type: 'move', points: [[0, 300]], append: false } }]
+    const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA); attachScenario(s.w, { plan })
+    s.cmd({ type: 'debug-spawn', side: 0, unit: 'cavalry', x: 0, z: -40, heading: 0, shape: 'line', men: 256, fire: 'hold' })
+    s.cmd({ type: 'debug-spawn', side: 1, x: 0, z: 100, heading: 0, shape: 'line', men: 400, fire: 'hold' }); s.tick()
+    const line = unitHandle(1), z0 = s.z(line)
+    s.until(() => s.shape(line) !== 'square', 150); const zq = s.z(line); s.advance(60)
+    expect([s.shape(line), s.orders(line) > 0, s.z(line)]).toEqual(['square', true, zq])   // in square, holding, its march kept
+    s.order({ type: 'move', id: unitHandle(0), points: [[0, -500]], append: false })   // the regiment rides away
+    s.until(() => s.z(unitHandle(0)) > -400, 400); s.advance(napoleonic.melee.refuge.hold + 120)
+    expect(s.shape(line)).toBe('line'); expect(s.z(line)).toBeGreaterThan(z0 + 20)   // formed back, and on its way
+  })
+  it('a player\'s order in the same spell stands the square down', () => {
+    const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA)
+    s.cmd({ type: 'debug-spawn', side: 0, unit: 'cavalry', x: 0, z: -40, heading: 0, shape: 'line', men: 256, fire: 'hold' })
+    s.cmd({ type: 'debug-spawn', side: 1, x: 0, z: 100, heading: 0, shape: 'line', men: 400, fire: 'hold' }); s.tick()
+    s.advance(0.5); s.order({ type: 'move', id: unitHandle(1), points: [[0, 300]], append: false }); s.advance(10)
+    expect(s.shape(unitHandle(1))).toBe('line'); expect(s.z(unitHandle(1))).toBeGreaterThan(105)
   })
   it('a save made with a plan refuses to run until that plan is attached again, and refuses another', () => {
     const plan: PlanStep[] = [{ at: 50, unit: 0, cmd: { type: 'halt' } }]
@@ -85,9 +94,12 @@ describe('the end', () => {
     expect(go(10)).toEqual([120, END_DRAW]); expect(go(40)).toEqual([120, END_SIDE0])
   })
   it('a rally brings a battalion\'s men back into the count', () => {
-    const s = battle({}, [[0, -100, -200, 0], [1, -150, 200, PI], [1, 150, 200, PI]])
-    s.w.f.morale[1] = 0.1; s.tick(); expect(fightShares(s.w)[1]).toBeCloseTo(0.5, 9)
-    s.w.f.mstate[1] = MS_STEADY; expect(fightShares(s.w)[1]).toBe(1)   // (as the rally's end leaves it)
+    // side 1's battalion breaks far from any enemy and runs to its rear at the northern edge, where it rallies
+    const s = battle({}, [[0, -500, -500, 0], [1, 0, 300, PI], [1, 300, 300, PI], [1, -300, 300, PI]])
+    s.order({ type: 'side', side: 1, x: 0, z: 1 }); s.w.f.morale[1] = 0.1; s.tick()
+    expect(s.w.f.mstate[1]).toBe(MS_ROUTING); expect(fightShares(s.w)[1]).toBeCloseTo(2 / 3, 9)
+    s.until(() => s.w.f.mstate[1] >= MS_ROUTING, 300)
+    expect(s.w.f.mstate[1]).toBeLessThan(MS_ROUTING); expect(fightShares(s.w)[1]).toBe(1)   // rallied: all its men back
   })
   it('a side is not broken while more than half its men are in the fight', () => {
     const s = battle({}, [[0, -100, -200, 0], [1, -150, 200, PI], [1, 0, 200, PI], [1, 150, 200, PI]])

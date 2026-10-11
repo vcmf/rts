@@ -17,7 +17,7 @@
 // its attackers in slot order. The draws are keyed by tick, formation and purpose. Orders come from the shared
 // pool in visiting order, as routs' do (tick.ts).
 import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_CHARGE, O_FORM, O_FACE, O_MOVE, CH_NONE, CH_CLOSING, CH_TESTED, CH_PURSUIT, MS_WAVERING, outOfFight, formationSlot as slotOf, formationHandle as handleOf, typeOf } from './world.ts'
-import { allocOrder, appendOrder, clearOrders, ordersFree, setOnMap, layoutOf, changeProgress } from './formation.ts'
+import { allocOrder, appendOrder, prependOrder, clearOrders, ordersFree, setOnMap, layoutOf, changeProgress } from './formation.ts'
 import { blockGeometry, oweByMen, type FireGeo } from './fire.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
 import { keyedStream, nextUnit } from './rng.ts'
@@ -277,10 +277,10 @@ export function standingStep(w: World): void {
       f.alertAt[i] = tick
     } else if (f.alertAt[i] && tick - f.alertAt[i] > hold && !nearby(w, i, n)) {
       // the spell is over: back into the shape it formed square from (from the square, or out of the change into
-      // it), if it still has no orders
+      // it), ahead of the orders it kept (a player's order would have cleared autoFrom: these are the plan's)
       const inRefuge = f.trans[i] ? f.tShape[i] === U.refuge : f.shape[i] === U.refuge
-      if (f.autoFrom[i] && inRefuge && f.ordHead[i] < 0 && ordersFree(w) > 0) {
-        const o = allocOrder(w, O_FORM); w.ord.shape[o] = f.autoFrom[i] - 1; appendOrder(w, i, o)
+      if (f.autoFrom[i] && inRefuge && ordersFree(w) > 0) {
+        const o = allocOrder(w, O_FORM); w.ord.shape[o] = f.autoFrom[i] - 1; prependOrder(w, i, o)
       }
       f.alertAt[i] = 0; f.alertSince[i] = 0; f.autoFrom[i] = 0; f.refugeOff[i] = 0
       continue
@@ -288,8 +288,8 @@ export function standingStep(w: World): void {
     if (!f.alertAt[i] || f.alertAt[i] !== tick || f.refugeOff[i] || tick - f.alertSince[i] < react) continue
     const into = f.trans[i] ? f.tShape[i] : f.shape[i]
     if (into === U.refuge || ordersFree(w) < 1) continue
-    clearOrders(w, i)
-    const o = allocOrder(w, O_FORM); w.ord.shape[o] = U.refuge; appendOrder(w, i, o)
+    // square ahead of its orders: it holds there (formation.ts) and goes on with them when it forms back
+    const o = allocOrder(w, O_FORM); w.ord.shape[o] = U.refuge; prependOrder(w, i, o)
     if (!f.autoFrom[i]) f.autoFrom[i] = into + 1
     f.status[i] = 0; f.blockedFor[i] = 0
   }

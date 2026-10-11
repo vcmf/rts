@@ -152,3 +152,22 @@ regenerated (`SIM_VERSION` `s1e.2`, `SAVE_FORMAT` 11), and `s1e-battle` has one 
   - comments named docs by bare file name.
 - **Kept:** a step names its formation by spawn order, and nothing checks that the scenario's spawns were all
   accepted. The scenario test checks `s1e-battle` deploys all 16, and a scenario's spawns are its own data.
+
+**Round 2** (`/code-review high`, 10 findings; two severe, so a third round):
+- **Fixed, severe:**
+  - with plan commands no longer standing the square down, a plan order that came in the 2 s before a battalion
+    formed square was wiped when the square cleared its orders, and the plan never sends it again. The square
+    is now formed ahead of a battalion's orders, held, and formed back ahead of them;
+  - a battalion in a square it formed by itself marched on in square when the plan moved it, and if the threat
+    passed mid-march it never formed back. It holds in that square, keeping the march for after.
+
+  A test runs a plan march through a threat: square, held, formed back, marching on.
+- **Fixed:**
+  - who sent a command was a module flag: it is an argument (`apply`, `giveOrders`);
+  - the missing-plan check ran after step 1 had applied the pending commands: it is the tick's first act;
+  - a world attached with no plan could take one later: attaching records a plan's hash (never 0), and attaching
+    nothing to a world made with a plan fails;
+  - the docs described saves as carrying nothing for the plan;
+  - the page copied the session's dropped list every frame;
+  - the end step's comment sat over another function;
+  - the rally test set the state by hand: a battalion now breaks, runs to its rear and rallies.
