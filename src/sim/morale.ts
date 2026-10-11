@@ -3,7 +3,8 @@
 // quality less the weighted share of men lost and of men lost recently, plus a bonus for each secured flank.
 // Being fired at does not move it, nor does disorder (a march through a wood would shake a battalion no
 // enemy can see); men falling do, and so does a friend breaking nearby (contagion, a shock in the next
-// tick). The state follows the morale with hysteresis.
+// tick), and so do a charge's threat and impact (the melee step's shocks, docs/systems/melee.md). The state
+// follows the morale with hysteresis.
 //
 // A battalion that routs drops its orders and runs; the run's direction is fixed at the break (its side's
 // rear, else away from the nearest enemy, else straight back), and its phase is kept: running, halted at
@@ -11,7 +12,7 @@
 // stored one. A router whose run has ended, safe and calm, rallies: its losses so far are written off and
 // its quality drops. A battalion that breaks too often, or routs below half strength, shatters and runs
 // for good. A wavering battalion left without orders, its morale still falling and the enemy in front of it,
-// falls back once.
+// falls back once (not in melee: it ends by a rout, docs/systems/melee.md).
 //
 // Everything one battalion reads of another (its state, whether it broke, its men) was fixed before this
 // step began, so no outcome depends on the order battalions are visited in. One thing does: routs and
@@ -35,6 +36,7 @@ const near = { shock: 0, left: 0, right: 0, enemy: Infinity, ax: 0, az: 0 }
 export function moraleStep(w: World, i: number, lost: number): void {
   const f = w.f, M = w.cr.rs.morale, now = w.meta[M_TICK] + 1, base = Math.max(1, f.baseMen[i]), start = Math.max(1, f.startMen[i])
   f.recent[i] = f.recent[i] * w.cr.recentDecay + lost
+  const owedShock = f.shockIn[i]; f.shockIn[i] = 0   // the melee step's shocks (a charge's threat and impact): taken with contagion
   const s = f.mstate[i], men = w.scratch.menNow ? w.scratch.menNow[i] : menOf(w, i)
   // shattered, or routing mid-run: it only runs, and nothing it would read of the others is used
   if (s === MS_SHATTERED || (s === MS_ROUTING && f.routPhase[i] === RP_RUNNING)) {
@@ -46,7 +48,7 @@ export function moraleStep(w: World, i: number, lost: number): void {
   const target = f.quality[i] - M.losses * (base - men) / base - M.recent * f.recent[i] / start + M.support.bonus * (near.left + near.right)
   const was = f.morale[i]
   f.morale[i] += (target - f.morale[i]) * w.cr.relax
-  if (s !== MS_ROUTING) f.morale[i] -= near.shock   // routing and shattered (returned above) are not shocked
+  if (s !== MS_ROUTING) f.morale[i] -= near.shock + owedShock   // routing and shattered (returned above) are not shocked
   // falling: down by more than fallback.rate a second (the relax's slow crawl toward a fixed target is not)
   f.falling[i] = was - f.morale[i] > M.fallback.rate * DT ? f.falling[i] + 1 : 0
   const m = f.morale[i]
@@ -70,7 +72,7 @@ export function moraleStep(w: World, i: number, lost: number): void {
   if (next === s && s === MS_SHAKEN && m >= M.shaken[1]) next = MS_STEADY
   f.mstate[i] = next
   if (next !== MS_WAVERING) f.fellBack[i] = 0
-  else if (!f.fellBack[i] && f.ordHead[i] < 0 && !f.trans[i] && f.falling[i] >= M.fallback.after * TICK_HZ && enemyAhead(w, i)) fallBack(w, i)
+  else if (!f.fellBack[i] && f.ordHead[i] < 0 && !f.trans[i] && !f.foe[i] && f.falling[i] >= M.fallback.after * TICK_HZ && enemyAhead(w, i)) fallBack(w, i)
 }
 // the nearest enemy in the fight is within fire range and in front of the battalion (within 90° of its
 // heading): a Retire, back from its own facing, then takes it away from that enemy, not toward it

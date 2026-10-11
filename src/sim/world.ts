@@ -12,6 +12,7 @@ import { buildTerrain } from './terrain.ts'
 import { type Handle, KIND_FORMATION, handleKind, handleIndex, handleGen, makeHandle } from './handle.ts'
 import type { Places, Arc, GateBits, Filled } from './formation.ts'
 import type { FireGeo } from './fire.ts'
+import type { Melee } from './melee.ts'
 
 export const MAX_FORMATIONS = 128
 export const MAX_ORDERS = 2048
@@ -57,6 +58,14 @@ export interface Formations {
   // whether it has fallen back in this wavering spell, and how many times it has broken
   baseMen: Int32Array; brokeTick: Int32Array; lastLoss: Int32Array; since: Int32Array; falling: Int32Array; fellBack: Uint8Array; routs: Uint8Array
   pressed: Int32Array                                              // losses that could only fall onto impassable ground (the re-packing gate)
+  // the charge (S1d-2, melee.ts): its target (a handle), its phase (CH_*), the metres galloped, the gap to the
+  // target at the last melee step, the tick its pursuit ends, and the tick until which it is blown
+  chTarget: Int32Array; chPhase: Uint8Array; chRun: Float64Array; chGap: Float64Array; chUntil: Int32Array; blownUntil: Int32Array
+  foe: Int32Array                                                  // melee: the formation it fights (a handle, 0 none)
+  shockIn: Float64Array                                            // morale shocks owed to it this tick (the melee step's; morale takes them)
+  // the square against cavalry (melee.ts): the tick a threat was last seen and the tick its unbroken run began (0
+  // none), the shape it formed square from (+1, 0 none), and an order given in this spell (it stands down)
+  alertAt: Int32Array; alertSince: Int32Array; autoFrom: Int32Array; sqOff: Uint8Array
 }
 // per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it)
 export interface Sides { rearX: Float64Array; rearZ: Float64Array }
@@ -68,6 +77,9 @@ export const outOfFight = (s: number): boolean => s >= MS_ROUTING
 // running from the field: routing or shattered (the rout pace, the run and its fan)
 export const fleeing = (s: number): boolean => s === MS_ROUTING || s === MS_SHATTERED
 export const RP_NONE = 0, RP_RUNNING = 1, RP_HALTED = 2, RP_FLED = 3
+// the charge's phases: none; closing before the test; closing after it; pursuing a broken foe
+export const CH_NONE = 0, CH_CLOSING = 1, CH_TESTED = 2, CH_PURSUIT = 3
+export const CHARGE_PHASES = ['', 'charging', 'charging', 'pursuing']
 export interface Orders {
   type: Int32Array; shape: Int32Array; finish: Uint8Array; left: Int8Array; resolved: Uint8Array
   optional: Uint8Array   // an order that, failing, is skipped rather than dropping the rest (a router's Face about)
@@ -75,7 +87,7 @@ export interface Orders {
   next: Int32Array
   meta: Int32Array   // [free head, in use]
 }
-export const O_MOVE = 1, O_FORM = 2, O_WHEEL = 3, O_FACE = 4, O_DRESS = 5
+export const O_MOVE = 1, O_FORM = 2, O_WHEEL = 3, O_FACE = 4, O_DRESS = 5, O_CHARGE = 6
 
 export interface World {
   meta: Int32Array
@@ -87,7 +99,7 @@ export interface World {
   pending: Stamped[]
   data: SimData; cr: Compiled; terrain: Terrain
   debug: boolean
-  scratch: { places?: Places; arc?: Arc; gateBits?: GateBits; filled?: Filled; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverse?: boolean; lost?: Int32Array; mstateBefore?: Uint8Array; menNow?: Int32Array }   // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
+  scratch: { places?: Places; arc?: Arc; gateBits?: GateBits; filled?: Filled; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverse?: boolean; lost?: Int32Array; mstateBefore?: Uint8Array; menNow?: Int32Array; melee?: Melee }   // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
 }
 
 export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {
@@ -105,6 +117,8 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     fireMode: u8(N), prefer: i32(N),
     quality: f64(N), morale: f64(N), mstate: u8(N), startMen: i32(N), recent: f64(N), routX: f64(N), routZ: f64(N), routPhase: u8(N), runs: u8(N), pressed: i32(N),
     baseMen: i32(N), brokeTick: i32(N), lastLoss: i32(N), since: i32(N), falling: i32(N), fellBack: u8(N), routs: u8(N),
+    chTarget: i32(N), chPhase: u8(N), chRun: f64(N), chGap: f64(N), chUntil: i32(N), blownUntil: i32(N), foe: i32(N), shockIn: f64(N),
+    alertAt: i32(N), alertSince: i32(N), autoFrom: i32(N), sqOff: u8(N),
   }
   const M = MAX_ORDERS
   const ord: Orders = { type: i32(M), shape: i32(M), finish: u8(M), left: new Int8Array(M), resolved: u8(M), optional: u8(M),

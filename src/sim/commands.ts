@@ -5,9 +5,10 @@
 // the ruleset (decision 0015).
 import type { Handle } from './handle.ts'
 import { quantise, PI } from './num.ts'
-import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, MORALE_STATES, outOfFight, FIRE_AT_WILL, formationSlot, typeOf } from './world.ts'
+import { type World, M_TICK, M_SEQ, M_FREE, SIDES, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_CHARGE, CH_CLOSING, MORALE_STATES, outOfFight, FIRE_AT_WILL, formationSlot, typeOf } from './world.ts'
 import { spawnFire } from './fire.ts'
 import { spawnMorale } from './morale.ts'
+import { GAP_UNKNOWN } from './melee.ts'
 import { allocOrder, appendOrder, clearOrders, ordersFree, rebalance, resetTrail, removeMan, RETIRE, fillRetire } from './formation.ts'
 import { nextInt } from './rng.ts'
 import { columnsOf } from './columns.ts'
@@ -25,11 +26,12 @@ export type Command =
   | { type: 'side'; side: number; x: number; z: number }
   | { type: 'debug-kill'; id: Handle; men: number }
   | { type: 'debug-morale'; id: Handle; quality: number }
+  | { type: 'charge'; id: Handle; target: Handle }
 export interface Stamped { tick: number; seq: number; cmd: Command }
 export interface Dropped { tick: number; seq: number; reason: string }
 
 export const MAX_POINTS = 64
-export const COMMAND_TYPES = ['move', 'form', 'wheel', 'face', 'retire', 'halt', 'style', 'fire', 'side', 'debug-spawn', 'debug-kill', 'debug-morale'] as const
+export const COMMAND_TYPES = ['move', 'form', 'wheel', 'face', 'retire', 'halt', 'style', 'fire', 'side', 'debug-spawn', 'debug-kill', 'debug-morale', 'charge'] as const
 export const FIRE_MODES = ['at will', 'hold']   // index = FIRE_AT_WILL, FIRE_HOLD
 
 // stamps a command for the next tick; `log` receives it when the command is external
@@ -58,6 +60,7 @@ function quantiseCommand(c: Command): Command {
     case 'side': return { type: 'side', side: c.side | 0, x: qa(c.x), z: qa(c.z) }
     case 'debug-kill': return { type: 'debug-kill', id: c.id | 0, men: c.men | 0 }
     case 'debug-morale': return { type: 'debug-morale', id: c.id | 0, quality: qa(c.quality) }
+    case 'charge': return { type: 'charge', id: c.id | 0, target: c.target | 0 }
     default: return c
   }
 }
@@ -94,7 +97,14 @@ function giveOrders(w: World, i: number, types: number[], append: boolean, fill:
   if (!append) clearOrders(w, i)
   types.forEach((t, k) => { const n = allocOrder(w, t); fill(n, k); appendOrder(w, i, n) })
   w.f.status[i] = 0; w.f.blockedFor[i] = 0
+  playerOrdered(w, i)
   return ''
+}
+// the player's order is obeyed: the square against cavalry stands down for this spell of threat and forgets the
+// shape it would form back into (a charge replaced by another order ends at the melee step)
+function playerOrdered(w: World, i: number): void {
+  const f = w.f
+  f.autoFrom[i] = 0; if (f.alertAt[i]) f.sqOff[i] = 1
 }
 
 function apply(w: World, c: Command): string {
@@ -127,6 +137,8 @@ function apply(w: World, c: Command): string {
   const i = formationSlot(w, c.id); if (i < 0) return 'no such formation'
   // out of the fight (routing, rallying, shattered): only the debug commands reach it
   if (outOfFight(f.mstate[i]) && c.type !== 'debug-kill' && c.type !== 'debug-morale') return MORALE_STATES[f.mstate[i]]
+  // in melee: only the debug commands (it ends by a rout, docs/systems/melee.md)
+  if (f.foe[i] && c.type !== 'debug-kill' && c.type !== 'debug-morale') return 'in melee'
   switch (c.type) {
     case 'move': {
       if (!wellFormed(c.points)) return 'malformed waypoints'
@@ -146,7 +158,18 @@ function apply(w: World, c: Command): string {
     case 'retire':   // the Retire drill (formation.ts)
       if (!finite(c.metres) || c.metres <= 0 || c.metres > 1000) return 'no such retreat'
       return giveOrders(w, i, RETIRE, false, (n, k) => fillRetire(w, n, k, c.metres))
-    case 'halt': clearOrders(w, i); f.status[i] = 0; f.blockedFor[i] = 0; return ''
+    case 'halt': clearOrders(w, i); f.status[i] = 0; f.blockedFor[i] = 0; playerOrdered(w, i); return ''
+    case 'charge': {   // docs/systems/melee.md
+      const U = typeOf(w, i), ch = U.charge; if (!ch) return 'cannot charge'
+      if (f.trans[i]) return 'changing shape'
+      if (!ch.from[f.shape[i]]) return 'cannot charge from this shape'
+      if (f.blownUntil[i] > w.meta[M_TICK] + 1) return 'blown'
+      const j = formationSlot(w, c.target)
+      if (j < 0 || f.side[j] === f.side[i]) return 'no such target'
+      const why = giveOrders(w, i, [O_CHARGE], false, () => {}); if (why) return why
+      f.chTarget[i] = c.target; f.chPhase[i] = CH_CLOSING; f.chRun[i] = 0; f.chGap[i] = GAP_UNKNOWN; f.chUntil[i] = 0
+      return ''
+    }
     case 'style': { const p = cr.presetIndex(c.preset); if (p < 0) return 'no such order preset'; f.style[i] = p; return '' }
     case 'debug-morale':   // the quality its morale relaxes toward (scripted morale tests)
       if (!finite(c.quality) || c.quality < 0 || c.quality > 1) return 'no such quality'

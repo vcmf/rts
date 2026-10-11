@@ -296,7 +296,7 @@ describe('the trail ring', () => {
     const march = (g: Geometry) => Array.from({ length: g.companies }, (_, c) => ({ x: (g.ranks - 1) * g.rankSpacing / 2, z: -c * (g.files * g.fileSpacing + 1), rot: -Math.PI / 2, face: 0 }))
     const wide = (g: Geometry) => Array.from({ length: g.companies }, (_, c) => ({ x: (c - (g.companies - 1) / 2) * 7, z: 0, rot: 0, face: 0 }))
     const inf = napoleonic.types.infantry
-    const with_ = (g: Partial<Geometry>): Ruleset => ({ ...napoleonic, types: { infantry: { ...inf, geometry: { ...inf.geometry, ...g }, formations: { line: { ...inf.formations.line, place: wide }, march: { ...inf.formations.march, place: march } } } } })
+    const with_ = (g: Partial<Geometry>): Ruleset => ({ ...napoleonic, types: { infantry: { ...inf, refuge: undefined, geometry: { ...inf.geometry, ...g }, formations: { line: { ...inf.formations.line, place: wide }, march: { ...inf.formations.march, place: march } } } } })
     expect(new Sim(1, with_({ companies: 8 })).w.cr.trail).toBeGreaterThan(TRAIL_MIN)
     expect(() => new Sim(1, with_({ companies: 32, files: 60 }))).toThrow(/trail of/)
     expect(() => new Sim(1, with_({ companies: 33 }))).toThrow(/companies/)

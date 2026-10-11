@@ -22,6 +22,7 @@ export interface FormationDef {
   // a trail shape's spacing of files and ranks when it is not the block's (a column of route of horses, nose
   // to tail): its places only; a change into or out of it passes through the block's spacing
   step?: { file: number; rank: number }
+  braced?: boolean         // proof against a charge from any side (the square; S1d-2)
   place(g: Geometry): Placement[]
 }
 export interface TerrainDef { g: Record<string, number>; q: string; road?: boolean; level?: boolean }
@@ -56,6 +57,24 @@ export interface MoraleDef {
   rally: { safe: number; calm: number; time: number; cost: number; max: number }   // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; quality lost; rallies allowed
   shatter: number              // a router below this share of its spawn strength shatters
 }
+// a type that charges (S1d-2, docs/systems/melee.md): the shapes it charges from, its paces (the approach
+// until gallopAt metres from the target, then the gallop), the metres of gallop for full momentum, the gap at
+// which the test before contact is taken, the recoil's metres, and the seconds it is blown after a charge and
+// pursues a broken foe
+export interface ChargeDef { shapes: string[]; approach: string; pace: string; gallopAt: number; build: number; test: number; recoil: number; rest: number; pursue: number }
+export interface Quarters { front: number; flank: number; rear: number }
+// melee and the charge's effects (S1d-2): contact and its hold (metres between blocks); the threat's morale
+// shock at the test and the impact's, by the side the charge comes from; the impact's losses (a share of the
+// other's men in contact at full momentum); the melee's losses per second per man in contact, by kind; the
+// chance a charger turns from a braced target and breaks into a wavering one; the square against cavalry
+export interface MeleeDef {
+  contact: number; hold: number
+  threat: Quarters
+  impact: { kill: number; shock: Quarters }
+  rate: number; strength: Record<string, number>; cohesion: number
+  refuse: number; breach: number
+  square: { alert: number; closing: number; react: number; hold: number }   // metres, m/s, seconds, seconds
+}
 // a unit type (S1d-1): its block, its shapes and their change times. A formation is of one type for life
 export interface UnitType {
   geometry: Geometry
@@ -64,6 +83,8 @@ export interface UnitType {
   start: string                // the shape a spawn takes when it names none
   fires: boolean               // fires by company (S1c's musketry)
   figure: 'foot' | 'mounted' | 'crewed'   // how its men are drawn: on foot, on horseback, or serving pieces (the renderer's; no rule reads it)
+  charge?: ChargeDef           // it charges (S1d-2)
+  refuge?: string              // the shape it forms against a charging enemy (S1d-2, the standing behaviour)
 }
 export interface Ruleset {
   name: string
@@ -79,6 +100,7 @@ export interface Ruleset {
   faceTime: number; dressTime: number
   fire: FireDef
   morale: MoraleDef
+  melee: MeleeDef
 }
 
 export interface ShapeLayout {
@@ -108,6 +130,8 @@ export interface TypeTable {
   shapes: ShapeLayout[]; shapeIndex(name: string): number
   changeTime: Float64Array   // [from·S + to]
   start: number              // the spawn's shape
+  charge: { from: Uint8Array; approach: number; pace: number } | null   // the shapes it charges from (1 by shape) and its paces' indices; null: it does not charge
+  refuge: number             // the shape it forms against cavalry, −1 none
 }
 export interface Compiled {
   rs: Ruleset; hash: number
@@ -126,6 +150,7 @@ export interface Compiled {
   recentDecay: number        // morale: recent losses' factor per tick
   relax: number              // morale: the share of the gap to its target closed per tick
   supportCos: number         // morale: cos of the support arc
+  strengthByKind: Float64Array   // melee: strength by kind
 }
 
 // the morale states that fire, in MS_* order (world.ts)
@@ -145,8 +170,8 @@ export const slotIndex = (g: Geometry, c: number, r: number, f: number): number 
 // a stable hash of the ruleset's numbers and names (its functions by their output), recorded by a world
 function rulesetHash(rs: Ruleset): number {
   const types = Object.keys(rs.types).map(t => { const u = rs.types[t], geo = u.geometry
-    return [t, geo, Object.keys(u.formations).sort().map(n => { const d = u.formations[n]; return [n, d.kind, d.pace, d.roadPace ?? '', !!d.trail, !!d.closeAcross, d.step ?? null, d.place(geo)] }), u.changeTime, u.defaultChangeTime, u.start, u.fires, u.figure] })
-  const text = JSON.stringify([rs.name, types, rs.pace, rs.q, rs.start, rs.slopeK, rs.terrain, rs.water, rs.orders, rs.disorder, rs.faceTime, rs.dressTime, rs.fire, rs.morale])
+    return [t, geo, Object.keys(u.formations).sort().map(n => { const d = u.formations[n]; return [n, d.kind, d.pace, d.roadPace ?? '', !!d.trail, !!d.closeAcross, d.step ?? null, !!d.braced, d.place(geo)] }), u.changeTime, u.defaultChangeTime, u.start, u.fires, u.figure, u.charge ?? null, u.refuge ?? ''] })
+  const text = JSON.stringify([rs.name, types, rs.pace, rs.q, rs.start, rs.slopeK, rs.terrain, rs.water, rs.orders, rs.disorder, rs.faceTime, rs.dressTime, rs.fire, rs.morale, rs.melee])
   return fnv1a(new TextEncoder().encode(text))
 }
 
@@ -166,8 +191,19 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     slotC[s] = c; slotLX[s] = lx; slotLZ[s] = lz }
   let slotReach = 0; for (let s = 0; s < slots; s++) slotReach = Math.max(slotReach, Math.sqrt(slotLX[s] * slotLX[s] + slotLZ[s] * slotLZ[s]))
   // at least 1: a pace with no q table hurries at 1 (groundQAt)
-  let qMax = 1; for (const L of shapes) for (const p of [L.pace, L.roadPace]) if (p >= 0) for (const v of Object.values(rs.q[paces[p]] ?? {})) qMax = Math.max(qMax, v)
-  return { name, def: u, geo: g, C, NB, slots, qMax, slotC, slotLX, slotLZ, slotReach, shapes, shapeIndex: n => names.indexOf(n), changeTime, start }
+  let charge: TypeTable['charge'] = null
+  if (u.charge) {
+    const ch = u.charge, from = new Uint8Array(S), approach = paces.indexOf(ch.approach), pace = paces.indexOf(ch.pace)
+    for (const n of ch.shapes) { const k = names.indexOf(n); if (k < 0) throw new Error(`${at}: it charges from ${n}, not one of its shapes`); if (u.formations[n].trail) throw new Error(`${at}: it charges from ${n}, a trail shape`); from[k] = 1 }
+    if (approach < 0 || pace < 0) throw new Error(`${at}: a charge pace is not one of the paces`)
+    if (!(ch.gallopAt >= ch.test && ch.test > rs.melee.contact && ch.build > 0)) throw new Error(`${at}: the charge needs gallopAt ≥ test > melee.contact and build > 0`)
+    charge = { from, approach, pace }
+  }
+  const refuge = u.refuge === undefined ? -1 : names.indexOf(u.refuge)
+  if (u.refuge !== undefined && (refuge < 0 || !u.formations[u.refuge].braced)) throw new Error(`${at}: its refuge ${u.refuge} is not one of its braced shapes`)
+  const own = [...shapes.flatMap(L => [L.pace, L.roadPace]), ...(charge ? [charge.approach, charge.pace] : [])]
+  let qMax = 1; for (const p of own) if (p >= 0) for (const v of Object.values(rs.q[paces[p]] ?? {})) qMax = Math.max(qMax, v)
+  return { name, def: u, geo: g, C, NB, slots, qMax, slotC, slotLX, slotLZ, slotReach, shapes, shapeIndex: n => names.indexOf(n), changeTime, start, charge, refuge }
 }
 
 export function compileRuleset(rs: Ruleset): Compiled {
@@ -190,11 +226,13 @@ export function compileRuleset(rs: Ruleset): Compiled {
   if (M.contagion.shock > 0.6 * (M.quality - M.rout)) throw new Error(`ruleset ${rs.name}: morale.contagion.shock over 0.6 of the gap from the default quality to the rout`)
   if (!(M.rally.max >= 0 && M.rally.max < 255)) throw new Error(`ruleset ${rs.name}: morale.rally.max must be 0..254 (the break count is a byte)`)
   if (!(M.support.arc > 0 && M.support.arc <= PI / 2)) throw new Error(`ruleset ${rs.name}: morale.support.arc must be in (0, π/2]: wider, a friend ahead would count as a flank`)
+  for (const k of Object.keys(rs.melee.strength)) if (!kinds.includes(k)) throw new Error(`ruleset ${rs.name}: melee.strength names ${k}, not a kind of the terrain table`)
   let maxC = 0, maxNB = 0, maxSlots = 0
   for (const t of types) { maxC = Math.max(maxC, t.C); maxNB = Math.max(maxNB, t.NB); maxSlots = Math.max(maxSlots, t.slots) }
   return {
     rs, hash: rulesetHash(rs), types, typeIndex: n => typeNames.indexOf(n), maxC, maxNB, maxSlots, trail: trailRing(rs, types), kinds, paces, paceSpeed, presets, slope,
     depthByKind, sightByClass, cosArc: cos(rs.fire.arc), stateFactor: new Float64Array(FIRING_STATES.map(s => rs.fire.state[s])), recentDecay: exp(-DT / rs.morale.recentTime), relax: 1 - exp(-DT / rs.morale.relaxTime), supportCos: cos(rs.morale.support.arc),
+    strengthByKind: new Float64Array(kinds.map(k => rs.melee.strength[k] ?? 1)),
     presetIndex: n => presets.indexOf(n),
   }
 }

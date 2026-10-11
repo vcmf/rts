@@ -30,9 +30,9 @@ step 12 morale     then morale for all: relaxes toward quality − losses + flan
   - the numbers live in the ruleset and are tuned by a sweep.
 - **Non-goals (later parts):**
   - smoke, vision and commanders, with their rally radius (S2);
-  - flank and rear threats (S1d);
+  - flank and rear threats from musketry (charges strike flanks and rears since S1d-2, `docs/systems/melee.md`);
   - removing shattered battalions at the map edge (S1e);
-  - melee, cavalry and artillery (S1d).
+  - artillery (S1d-3).
 
 ## Constraints
 
@@ -55,6 +55,7 @@ rotation.
 - its unit type fires by company (`fires`: the Napoleonic infantry; a cavalry regiment and a battery do not,
   until S1d-2 and S1d-3, but are fired on, lose men and have morale like a battalion);
 - the battalion is halted: no order at its head, or a dress;
+- it is not in melee (`docs/systems/melee.md`);
 - it is not changing shape and not routing;
 - its fire mode is at will (the `fire` command sets *at will* or *hold*, with an optional preferred
   target).
@@ -140,7 +141,7 @@ outside contagion's reach and its breaks spread over 35–135 s instead of one t
 
 **The wavering fall-back.** A wavering battalion Retires `fallback.metres` once, by the Retire drill
 (`RETIRE` in `formation.ts`), when all of these hold:
-- it has no orders and is not changing shape;
+- it has no orders, is not changing shape and is not in melee;
 - its morale has fallen by more than `fallback.rate` a second on every tick of the last `fallback.after`
   seconds, so the relax's slow crawl onto a fixed target does not count;
 - the nearest enemy in the fight is within fire range and in front of it (within 90° of its heading). A
@@ -164,6 +165,9 @@ Rallying:
 **Shattered.** A break beyond `rally.max` rallies, or a router below `morale.shatter` of its spawn strength,
 shatters: it runs as a router, never rallies, and refuses orders. A router mid-run, like a shattered one,
 skips the survey of the others and its morale step: nothing it would read is used.
+
+**Charges' shocks** (S1d-2): the melee step owes a target the shock of a charge's threat and impact
+(`shockIn`); morale takes it with contagion, after relaxing, and a router takes none (`docs/systems/melee.md`).
 
 **Out of the fight** (routing, rallying, shattered: `mstate ≥ MS_ROUTING`): no fire, no threat to an enemy,
 no support to a friend. Every order but the debug ones is dropped, with the state as the reason.

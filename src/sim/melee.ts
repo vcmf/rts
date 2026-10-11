@@ -1,0 +1,284 @@
+// Charges, melee and the square against cavalry (docs/systems/melee.md; docs/plans/active/s1d2-charges.md;
+// docs/proposals/sim-design.md §9, §12). A charge is an order (O_CHARGE) that steers at its target in the
+// move code, at the approach pace and then the gallop; this step reads the positions after movement:
+// - the gap to the target (the least separating-axis distance between their company blocks);
+// - at `charge.test` metres, once, the target's morale shock and, against a braced target (a square, or one
+//   forming), the charger's chance to turn away;
+// - at contact, the impact: losses and a shock by momentum and the side the charge comes from, both cut by
+//   how far the target is braced; then a recoil (straight away from the target) or melee;
+// - melee: losses each tick between companies in contact, until one side is out of the fight or out of
+//   contact; cavalry then pursues the broken foe for a while, and is blown.
+// The standing behaviour (step 4): a battalion with a refuge shape forms it against charging cavalry, holds
+// it while the threat lasts, and forms back.
+//
+// Everything a formation reads of another was fixed before the step: positions after movement, men, morale
+// states, shapes, and the melee pairs as the step began. A formation writes only its own state, owed men (whole
+// numbers, so the order of the adding does not matter) and the shock it sends, which each receiver sums over
+// its attackers in slot order. The draws are keyed by tick, formation and purpose. Orders come from the shared
+// pool in visiting order, as routs' do (tick.ts).
+import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_CHARGE, O_FORM, O_FACE, O_MOVE, CH_NONE, CH_CLOSING, CH_TESTED, CH_PURSUIT, MS_WAVERING, outOfFight, formationSlot as slotOf, formationHandle as handleOf, typeOf } from './world.ts'
+import { allocOrder, appendOrder, clearOrders, ordersFree, setOnMap, layoutOf, changeProgress } from './formation.ts'
+import { blockGeometry, type FireGeo } from './fire.ts'
+import { MAX_COMPANIES } from './ruleset.ts'
+import { keyedStream, nextUnit } from './rng.ts'
+import { sin, cos } from './num.ts'
+import { TICK_HZ, DT } from './time.ts'
+
+const sqrt = Math.sqrt
+const K_TEST = 11, K_REFUSE = 12, K_BREACH = 13, K_IMPACT = 14, K_RECOIL = 15, K_MELEE = 16   // keyed draws: purpose tags
+export const Q_FRONT = 0, Q_FLANK = 1, Q_REAR = 2   // the side a charge comes from, in the target's frame
+const COS45 = Math.SQRT1_2
+// a charge whose gap has not been measured yet (the melee step measures it after the first movement)
+export const GAP_UNKNOWN = 1e9
+
+// per-world scratch: the shock each attacker sends this step and to whom, the melee pairs as the step began,
+// and per-company masks of the companies in contact
+export interface Melee { shockTo: Int32Array; shockBy: Float64Array; foe0: Int32Array; mi: Uint8Array; mj: Uint8Array }
+const ks = new Uint32Array(4)
+const scratchOf = (w: World): Melee => w.scratch.melee ?? (w.scratch.melee = { shockTo: new Int32Array(MAX_FORMATIONS), shockBy: new Float64Array(MAX_FORMATIONS), foe0: new Int32Array(MAX_FORMATIONS),
+  mi: new Uint8Array(MAX_COMPANIES), mj: new Uint8Array(MAX_COMPANIES) })
+
+/* ---------------- geometry ---------------- */
+// the separating-axis distance between company k of battalion i and company m of battalion j (their blocks'
+// rectangles): exact face to face, short of the true distance corner to corner, 0 when they overlap
+function sep(G: FireGeo, i: number, k: number, j: number, m: number): number {
+  const ai = G.bx[i], bi = (G.bz1[i] - G.bz0[i]) / 2, aj = G.bx[j], bj = (G.bz1[j] - G.bz0[j]) / 2
+  const dx = G.cx[m] - G.cx[k], dz = G.cz[m] - G.cz[k]
+  let s = 0
+  // the four axes: each block's across (ca, sa) and along (−sa, ca)
+  for (let n = 0; n < 4; n++) {
+    const q = n < 2 ? k : m, nx = n % 2 ? -G.sa[q] : G.ca[q], nz = n % 2 ? G.ca[q] : G.sa[q]
+    const ri = ai * Math.abs(G.ca[k] * nx + G.sa[k] * nz) + bi * Math.abs(-G.sa[k] * nx + G.ca[k] * nz)
+    const rj = aj * Math.abs(G.ca[m] * nx + G.sa[m] * nz) + bj * Math.abs(-G.sa[m] * nx + G.ca[m] * nz)
+    const d = Math.abs(dx * nx + dz * nz) - ri - rj
+    if (d > s) s = d
+  }
+  return s
+}
+// the gap between battalions i and j: the least separation of any company of one from any of the other (with men)
+function gapOf(w: World, G: FireGeo, i: number, j: number): number {
+  const f = w.f, CS = w.cr.maxC, Ci = typeOf(w, i).C, Cj = typeOf(w, j).C
+  let g = Infinity
+  for (let c = 0; c < Ci; c++) { const k = i * CS + c; if (f.men[k] <= 0) continue
+    for (let q = 0; q < Cj; q++) { const m = j * CS + q; if (f.men[m] > 0) g = Math.min(g, sep(G, i, k, j, m)) } }
+  return g
+}
+// the men of battalion i's companies within `lim` of any company of j, each such company marked in `mask`
+function inContact(w: World, G: FireGeo, i: number, j: number, lim: number, mask: Uint8Array): number {
+  const f = w.f, CS = w.cr.maxC, Ci = typeOf(w, i).C, Cj = typeOf(w, j).C
+  let men = 0
+  for (let c = 0; c < Ci; c++) {
+    const k = i * CS + c; mask[c] = 0; if (f.men[k] <= 0) continue
+    for (let q = 0; q < Cj; q++) { const m = j * CS + q; if (f.men[m] > 0 && sep(G, i, k, j, m) <= lim) { mask[c] = 1; men += f.men[k]; break } }
+  }
+  return men
+}
+// the side of battalion j that a charge from battalion i strikes: from j's centre (its companies' with men) to
+// i's, within 45° of j's facing is its front, beyond 135° its rear, else a flank. A battalion changing shape has
+// no front: its companies are on the move, and it is struck as in the flank
+function quarter(w: World, G: FireGeo, i: number, j: number): number {
+  const f = w.f, CS = w.cr.maxC, C = typeOf(w, j).C
+  let x = 0, z = 0, n = 0
+  for (let q = 0; q < C; q++) { const m = j * CS + q; if (f.men[m] > 0) { x += G.cx[m]; z += G.cz[m]; n++ } }
+  if (!n) return Q_FRONT
+  const dx = f.x[i] - x / n, dz = f.z[i] - z / n, d = sqrt(dx * dx + dz * dz)
+  const along = dx * sin(f.heading[j]) + dz * cos(f.heading[j])
+  return along >= d * COS45 ? (f.trans[j] ? Q_FLANK : Q_FRONT) : along <= -d * COS45 ? Q_REAR : Q_FLANK
+}
+const bySide = (q: { front: number; flank: number; rear: number }, s: number): number => s === Q_FRONT ? q.front : s === Q_FLANK ? q.flank : q.rear
+
+// how far battalion i stands in a shape proof against a charge from any side (0..1): during a change into one,
+// the change's progress; out of one, 1 less it
+export function bracedOf(w: World, i: number): number {
+  const f = w.f, U = typeOf(w, i), from = U.shapes[f.shape[i]].def.braced ? 1 : 0
+  if (!f.trans[i]) return from
+  const to = U.shapes[f.tShape[i]].def.braced ? 1 : 0
+  return from + (to - from) * changeProgress(w, i, w.meta[M_TICK] * DT)
+}
+// battalion i's strength in melee: its kind's, less its disorder's share (all of it while changing shape), by its
+// morale state
+function strengthOf(w: World, i: number): number {
+  const f = w.f
+  return w.cr.strengthByKind[layoutOf(w, i).kind] * (1 - w.cr.rs.melee.cohesion * (f.trans[i] ? 1 : f.disorder[i])) * w.cr.stateFactor[Math.min(2, f.mstate[i])]
+}
+// λ men owed to battalion j's companies marked in `mask`: the whole part certain, a draw for the fraction, each
+// man to a marked company weighted by its men
+function owe(w: World, j: number, mask: Uint8Array, lambda: number, rs: Uint32Array): void {
+  if (!(lambda > 0)) return
+  const f = w.f, CS = w.cr.maxC, C = typeOf(w, j).C
+  let n = Math.floor(lambda); if (nextUnit(rs) < lambda - n) n++
+  let tot = 0; for (let q = 0; q < C; q++) if (mask[q]) tot += f.men[j * CS + q]
+  if (!tot) return
+  for (let k = 0; k < n; k++) {
+    let r = Math.floor(nextUnit(rs) * tot), q = 0
+    for (; q < C; q++) if (mask[q]) { if (r < f.men[j * CS + q]) break; r -= f.men[j * CS + q] }
+    f.owed[j * CS + Math.min(q, C - 1)]++
+  }
+}
+
+// the gap between battalions i and j, and the side of j that a charge from i would strike, as they stand (tests,
+// debugging: each rebuilds the block geometry)
+export const gapBetween = (w: World, i: number, j: number): number => gapOf(w, blockGeometry(w), i, j)
+export const sideStruck = (w: World, i: number, j: number): number => quarter(w, blockGeometry(w), i, j)
+
+/* ---------------- step 10: charges and melee ---------------- */
+export function meleeStep(w: World): void {
+  const f = w.f, N = MAX_FORMATIONS
+  let any = false
+  for (let i = 0; i < N && !any; i++) if (f.alive[i] && (f.chPhase[i] || f.foe[i])) any = true
+  if (!any) return
+  const S = scratchOf(w), G = blockGeometry(w), tick = w.meta[M_TICK] + 1, rev = w.scratch.reverse === true
+  S.shockTo.fill(-1); S.shockBy.fill(0)
+  for (let n = 0; n < N; n++) { const i = rev ? N - 1 - n : n; if (f.alive[i] && f.chPhase[i]) chargeStep(w, G, S, i, tick) }
+  S.foe0.set(f.foe)
+  for (let n = 0; n < N; n++) { const i = rev ? N - 1 - n : n; if (f.alive[i] && S.foe0[i]) meleePair(w, G, S, i, tick) }
+  // a battalion struck while not in melee takes on its lowest-slot attacker; it stops what it was doing
+  for (let j = 0; j < N; j++) {
+    if (!f.alive[j] || f.foe[j] || outOfFight(f.mstate[j])) continue
+    const h = handleOf(w, j)
+    for (let i = 0; i < N; i++) if (f.alive[i] && f.foe[i] === h) { engage(w, j, i); break }
+  }
+  // the shocks, summed by each receiver over its attackers in slot order
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) if (S.shockTo[i] === j) f.shockIn[j] += S.shockBy[i]
+}
+
+// battalion j is in melee with i: its orders and any charge of its own end
+function engage(w: World, j: number, i: number): void {
+  const f = w.f
+  clearOrders(w, j); f.foe[j] = handleOf(w, i); f.vx[j] = 0; f.vz[j] = 0; f.status[j] = 0; f.blockedFor[j] = 0
+  if (f.chPhase[j]) { f.chPhase[j] = CH_NONE; f.chTarget[j] = 0; f.chRun[j] = 0 }
+}
+// a charge ends: blown for charge.rest if it galloped or met its target
+function endCharge(w: World, i: number, tick: number, blown: boolean): void {
+  const f = w.f
+  f.chPhase[i] = CH_NONE; f.chTarget[i] = 0; f.chRun[i] = 0; f.chGap[i] = 0; f.chUntil[i] = 0
+  if (blown) f.blownUntil[i] = tick + Math.round(typeOf(w, i).def.charge!.rest * TICK_HZ)
+}
+// the charger turns away from battalion j: it rides charge.recoil metres straight away from it (kept on the map),
+// with a Face about first when the shape allows and the way is behind it (optional: if it fails, it rides as it
+// stands), when the pool has room; and it is blown
+function recoil(w: World, i: number, j: number, tick: number): void {
+  const f = w.f, metres = typeOf(w, i).def.charge!.recoil
+  clearOrders(w, i); endCharge(w, i, tick, true)
+  let dx = f.x[i] - f.x[j], dz = f.z[i] - f.z[j]; const d = sqrt(dx * dx + dz * dz)
+  if (d > 1e-6) { dx /= d; dz /= d } else { dx = -sin(f.heading[i]); dz = -cos(f.heading[i]) }
+  const back = dx * sin(f.heading[i]) + dz * cos(f.heading[i]) < 0
+  if (ordersFree(w) < (back ? 2 : 1)) return
+  if (back && layoutOf(w, i).turn) { const k = allocOrder(w, O_FACE); w.ord.optional[k] = 1; appendOrder(w, i, k) }
+  const n = allocOrder(w, O_MOVE); setOnMap(w, n, f.x[i] + dx * metres, f.z[i] + dz * metres); w.ord.resolved[n] = 1; appendOrder(w, i, n)
+  f.status[i] = 0; f.blockedFor[i] = 0
+}
+// pursuing a broken foe at the gallop for charge.pursue seconds (when the pool has room; else blown at once)
+function pursue(w: World, i: number, j: number, tick: number): void {
+  const f = w.f
+  clearOrders(w, i); f.foe[i] = 0
+  if (ordersFree(w) < 1) { endCharge(w, i, tick, true); return }
+  appendOrder(w, i, allocOrder(w, O_CHARGE))
+  f.chTarget[i] = handleOf(w, j); f.chPhase[i] = CH_PURSUIT; f.chUntil[i] = tick + Math.round(typeOf(w, i).def.charge!.pursue * TICK_HZ)
+  f.status[i] = 0; f.blockedFor[i] = 0
+}
+
+function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): void {
+  const f = w.f, M = w.cr.rs.melee, ch = typeOf(w, i).def.charge!, head = f.ordHead[i], seed = w.meta[M_SEED], h = handleOf(w, i)
+  const j = slotOf(w, f.chTarget[i])
+  // called off (another order replaced it), or its target is gone
+  if (head < 0 || w.ord.type[head] !== O_CHARGE || j < 0) { if (head >= 0 && w.ord.type[head] === O_CHARGE) clearOrders(w, i); endCharge(w, i, tick, f.chRun[i] > 0 || f.chPhase[i] === CH_PURSUIT); return }
+  if (f.chPhase[i] === CH_PURSUIT || f.chGap[i] <= ch.gallopAt) f.chRun[i] += sqrt(f.vx[i] * f.vx[i] + f.vz[i] * f.vz[i]) * DT   // the gallop's metres
+  const gap = gapOf(w, G, i, j); f.chGap[i] = gap
+  if (f.chPhase[i] === CH_PURSUIT) {
+    if (tick >= f.chUntil[i]) { clearOrders(w, i); endCharge(w, i, tick, true); return }
+    // riding down the router: it does not fight back
+    if (gap <= M.contact + M.hold) {
+      const men = inContact(w, G, i, j, M.contact + M.hold, S.mi); inContact(w, G, j, i, M.contact + M.hold, S.mj)
+      owe(w, j, S.mj, M.rate * DT * men * strengthOf(w, i), keyedStream(ks, seed, tick, h, j, K_MELEE))
+    }
+    return
+  }
+  // the target broke before contact: ride it down
+  if (outOfFight(f.mstate[j])) { f.chPhase[i] = CH_PURSUIT; f.chUntil[i] = tick + Math.round(ch.pursue * TICK_HZ); return }
+  const b = bracedOf(w, j), side = quarter(w, G, i, j)
+  // the test before contact, once (a charge launched inside the test's distance takes it at once)
+  if (f.chPhase[i] === CH_CLOSING && gap <= ch.test) {
+    f.chPhase[i] = CH_TESTED
+    S.shockTo[i] = j; S.shockBy[i] += bySide(M.threat, side) * (1 - b) * (0.5 + nextUnit(keyedStream(ks, seed, tick, h, j, K_TEST)))
+    if (b > 0 && nextUnit(keyedStream(ks, seed, tick, h, j, K_REFUSE)) < M.refuse * b * (f.mstate[j] >= MS_WAVERING ? 0.5 : 1)) { recoil(w, i, j, tick); return }
+  }
+  if (gap > M.contact) return
+  // the impact: a wavering braced target may be broken into
+  const bb = b > 0 && f.mstate[j] >= MS_WAVERING && nextUnit(keyedStream(ks, seed, tick, h, j, K_BREACH)) < M.breach ? 0 : b
+  const mom = Math.min(1, f.chRun[i] / ch.build)
+  const men = inContact(w, G, i, j, M.contact, S.mi); inContact(w, G, j, i, M.contact, S.mj)
+  owe(w, j, S.mj, M.impact.kill * mom * men * (1 - bb), keyedStream(ks, seed, tick, h, j, K_IMPACT))
+  S.shockTo[i] = j; S.shockBy[i] += bySide(M.impact.shock, side) * mom * (1 - bb)
+  if (nextUnit(keyedStream(ks, seed, tick, h, j, K_RECOIL)) < bb) { recoil(w, i, j, tick); return }
+  clearOrders(w, i); endCharge(w, i, tick, true)
+  f.foe[i] = handleOf(w, j); f.vx[i] = 0; f.vz[i] = 0; f.status[i] = 0; f.blockedFor[i] = 0
+}
+
+// one side of a melee: battalion i strikes its foe and every enemy whose foe it is (as the step began), with the
+// men of its companies in contact with each; it leaves the melee when either side is out of the fight or gone,
+// or they are out of contact. A charging type that saw its foe break pursues it; one whose foe has finished
+// forming square and holds it recoils
+function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): void {
+  const f = w.f, M = w.cr.rs.melee, seed = w.meta[M_SEED], h = handleOf(w, i), lim = M.contact + M.hold
+  const j = slotOf(w, S.foe0[i])
+  if (outOfFight(f.mstate[i])) { f.foe[i] = 0; return }
+  if (j < 0 || outOfFight(f.mstate[j])) { f.foe[i] = 0; if (j >= 0 && typeOf(w, i).charge) pursue(w, i, j, tick); return }
+  if (gapOf(w, G, i, j) > lim) { f.foe[i] = 0; return }
+  // a charging type does not press a foe that has formed its refuge (a square) and holds it: it turns away. One
+  // wavering or worse is pressed (it was broken into, or will be)
+  if (typeOf(w, i).charge && bracedOf(w, j) >= 1 && f.mstate[j] < MS_WAVERING) { f.foe[i] = 0; recoil(w, i, j, tick); return }
+  const strike = (e: number) => {
+    const men = inContact(w, G, i, e, lim, S.mi); inContact(w, G, e, i, lim, S.mj)
+    owe(w, e, S.mj, M.rate * DT * men * strengthOf(w, i), keyedStream(ks, seed, tick, h, e, K_MELEE))
+  }
+  strike(j)
+  for (let e = 0; e < MAX_FORMATIONS; e++) if (e !== j && f.alive[e] && S.foe0[e] === h && !outOfFight(f.mstate[e])) strike(e)
+}
+
+/* ---------------- step 4: the square against cavalry ---------------- */
+// an enemy in the fight of a type that charges, within square.alert of battalion i, charging it, or standing or
+// closing: anything but riding away faster than square.closing (a regiment at the halt can charge in seconds)
+function threatened(w: World, i: number): boolean {
+  const f = w.f, Q = w.cr.rs.melee.square, h = handleOf(w, i)
+  for (let j = 0; j < MAX_FORMATIONS; j++) {
+    if (!f.alive[j] || f.side[j] === f.side[i] || outOfFight(f.mstate[j]) || !typeOf(w, j).charge) continue
+    const dx = f.x[i] - f.x[j], dz = f.z[i] - f.z[j], d = sqrt(dx * dx + dz * dz)
+    if (d > Q.alert) continue
+    if (f.chTarget[j] === h && (f.chPhase[j] === CH_CLOSING || f.chPhase[j] === CH_TESTED)) return true
+    if (d > 1e-6 && f.vx[j] * dx + f.vz[j] * dz > -Q.closing * d) return true
+  }
+  return false
+}
+export function standingStep(w: World): void {
+  const f = w.f, Q = w.cr.rs.melee.square, tick = w.meta[M_TICK] + 1, react = Math.round(Q.react * TICK_HZ), hold = Math.round(Q.hold * TICK_HZ)
+  // nothing to do with no charging type in the fight and no battalion on the alert (the common case: one scan)
+  let any = false
+  for (let j = 0; j < MAX_FORMATIONS && !any; j++) if (f.alive[j] && (f.alertAt[j] || (typeOf(w, j).charge && !outOfFight(f.mstate[j])))) any = true
+  if (!any) return
+  for (let i = 0; i < MAX_FORMATIONS; i++) {
+    if (!f.alive[i]) continue
+    const U = typeOf(w, i); if (U.refuge < 0 || outOfFight(f.mstate[i]) || f.foe[i]) continue
+    if (threatened(w, i)) {
+      if (!f.alertAt[i] || tick - f.alertAt[i] > 1) f.alertSince[i] = tick   // the threat's unbroken run began now
+      if (!f.alertAt[i] || tick - f.alertAt[i] > hold) f.sqOff[i] = 0        // a new spell of threat
+      f.alertAt[i] = tick
+    } else if (f.alertAt[i] && tick - f.alertAt[i] > hold) {
+      // the spell is over: back into the shape it formed square from (from the square, or out of the change into
+      // it), if it still has no orders
+      const inRefuge = f.trans[i] ? f.tShape[i] === U.refuge : f.shape[i] === U.refuge
+      if (f.autoFrom[i] && inRefuge && f.ordHead[i] < 0 && ordersFree(w) > 0) {
+        const n = allocOrder(w, O_FORM); w.ord.shape[n] = f.autoFrom[i] - 1; appendOrder(w, i, n)
+      }
+      f.alertAt[i] = 0; f.alertSince[i] = 0; f.autoFrom[i] = 0; f.sqOff[i] = 0
+      continue
+    }
+    if (!f.alertAt[i] || f.alertAt[i] !== tick || f.sqOff[i] || tick - f.alertSince[i] < react) continue
+    const into = f.trans[i] ? f.tShape[i] : f.shape[i]
+    if (into === U.refuge || ordersFree(w) < 1) continue
+    clearOrders(w, i)
+    const n = allocOrder(w, O_FORM); w.ord.shape[n] = U.refuge; appendOrder(w, i, n)
+    if (!f.autoFrom[i]) f.autoFrom[i] = into + 1
+    f.status[i] = 0; f.blockedFor[i] = 0
+  }
+}

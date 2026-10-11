@@ -2,7 +2,7 @@
 // staff map with every soldier as a circle; the mouse selects and orders battalions. Every input becomes
 // a command through `issue`, and the external log is kept, so a session can be replayed.
 import dataUrl from '../../data/formation-field.simdata?url'
-import { loadSimData, compileRuleset, makeWorld, typeOf, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ, MORALE_STATES, FIRE_MODES,
+import { loadSimData, compileRuleset, makeWorld, typeOf, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ, MORALE_STATES, FIRE_MODES, CHARGE_PHASES,
   type Command, type Stamped, type World, type HashPoint, type Replay, type Dropped } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { FIELD_DATA_VERSION } from '../scenarios/s1b-field.ts'
@@ -100,6 +100,11 @@ async function main(): Promise<void> {
     for (const u of layer.units.values()) for (const m of u.men) if (m.alive) { const d = (m.x - x) ** 2 + (m.z - z) ** 2; if (d < r2 && d < bd) { bd = d; best = u.i } }
     return best
   }
+  // the selection charges battalion j (those of a type that cannot charge are refused, and said so)
+  let charging = false
+  const charge = (j: number) => { for (const i of selected) external({ type: 'charge', id: formationHandle(w, i), target: formationHandle(w, j) }) }
+  const armCharge = () => { if (!selected.size) return; charging = true; note = 'click the enemy to charge'; noteT = performance.now() }
+  document.getElementById('charge')!.onclick = armCharge
   const march = (x: number, z: number, append: boolean) => {
     if (!selected.size) return
     let cx = 0, cz = 0; for (const i of selected) { cx += w.f.x[i]; cz += w.f.z[i] } cx /= selected.size; cz /= selected.size
@@ -125,6 +130,7 @@ async function main(): Promise<void> {
       return
     }
     const hit = pick(e.clientX, e.clientY)
+    if (charging) { charging = false; if (hit >= 0) charge(hit); return }   // C, then a click on the enemy
     if (hit >= 0) { if (d.shift) { if (selected.has(hit)) selected.delete(hit); else selected.add(hit) } else { selected.clear(); selected.add(hit) } return }
     const [x, z] = toW(view, e.clientX, e.clientY); march(x, z, d.shift)
   })
@@ -137,7 +143,8 @@ async function main(): Promise<void> {
     // space pans; a focused panel button must not take it as a click (it would repeat the order)
     if (e.code === 'Space') { space = true; e.preventDefault(); if (document.activeElement instanceof HTMLButtonElement) document.activeElement.blur() }
     else if (e.key === 'p' || e.key === 'P') { paused = !paused }
-    else if (e.key === 'Escape') selected.clear()
+    else if (e.key === 'Escape') { selected.clear(); charging = false }
+    else if (e.key === 'c' || e.key === 'C') armCharge()
     else if ('1248'.includes(e.key)) setSpeed(+e.key)
   })
 
@@ -153,7 +160,8 @@ async function main(): Promise<void> {
     if (selected.size > 6) lines.push(`${selected.size} battalions selected`)
     else for (const i of selected) { const U = typeOf(w, i), s = U.shapes[w.f.shape[i]].name + (w.f.trans[i] ? ' → ' + U.shapes[w.f.tShape[i]].name : '')
       lines.push(`#${i} ${U.name} · ${s} · ${menOf(w, i)} men · ${w.cr.presets[w.f.style[i]]}${STATUS[w.f.status[i]] ? ' · ' + STATUS[w.f.status[i]] : ''}`)
-      lines.push(`   ${MORALE_STATES[w.f.mstate[i]]} · morale ${w.f.morale[i].toFixed(2)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}`) }
+      const fight = w.f.foe[i] ? ' · in melee' : w.f.chPhase[i] ? ' · ' + CHARGE_PHASES[w.f.chPhase[i]] : w.f.blownUntil[i] > w.meta[M_TICK] ? ' · blown' : ''
+      lines.push(`   ${MORALE_STATES[w.f.mstate[i]]} · morale ${w.f.morale[i].toFixed(2)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}${fight}`) }
     const d = dropped.at(-1)
     if (note && performance.now() - noteT < 3000) lines.push(note)
     if (d && w.meta[M_TICK] - d.tick < 3 * TICK_HZ) lines.push(`order not carried out: ${d.reason}`)   // shown for 3 s
@@ -168,7 +176,7 @@ async function main(): Promise<void> {
   Object.assign(window, { APP: {
     w, layer, map, selected, log, hashes, dropped,
     select: (ids: number[]) => { selected.clear(); for (const i of ids) selected.add(i) },
-    march, order: (name: string) => forSelection(orders[name]), form: (shape: string) => forSelection(id => ({ type: 'form', id, shape })),
+    march, charge, order: (name: string) => forSelection(orders[name]), form: (shape: string) => forSelection(id => ({ type: 'form', id, shape })),
     run: () => { paused = false; setSpeed(1) },
     advance: (sec: number) => { paused = true; const sp = speed; speed = 1; for (let n = Math.round(sec * 30); n > 0; n--) advance(1 / 30); speed = sp; draw() },
     view: (cx: number, cz: number, k: number) => { view.cx = cx; view.cz = cz; view.k = k; mapDirty = true; draw() },
