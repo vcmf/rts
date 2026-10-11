@@ -16,7 +16,7 @@
 // numbers, so the order of the adding does not matter) and the shock it sends, which each receiver sums over
 // its attackers in slot order. The draws are keyed by tick, formation and purpose. Orders come from the shared
 // pool in visiting order, as routs' do (tick.ts).
-import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_CHARGE, O_FORM, O_FACE, O_MOVE, CH_NONE, CH_CLOSING, CH_TESTED, CH_PURSUIT, MS_WAVERING, outOfFight, formationSlot as slotOf, formationHandle as handleOf, typeOf } from './world.ts'
+import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_CHARGE, O_FORM, O_FACE, O_MOVE, O_HOLD, CH_NONE, CH_CLOSING, CH_TESTED, CH_PURSUIT, MS_WAVERING, outOfFight, formationSlot as slotOf, formationHandle as handleOf, typeOf } from './world.ts'
 import { allocOrder, appendOrder, prependOrder, clearOrders, ordersFree, setOnMap, layoutOf, changeProgress } from './formation.ts'
 import { blockGeometry, oweByMen, type FireGeo } from './fire.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
@@ -276,21 +276,18 @@ export function standingStep(w: World): void {
       if (!f.alertAt[i] || tick - f.alertAt[i] > hold) f.refugeOff[i] = 0        // a new spell of threat
       f.alertAt[i] = tick
     } else if (f.alertAt[i] && tick - f.alertAt[i] > hold && !nearby(w, i, n)) {
-      // the spell is over: back into the shape it formed square from (from the square, or out of the change into
-      // it), ahead of the orders it kept (a player's order would have cleared autoFrom: these are the plan's)
-      const inRefuge = f.trans[i] ? f.tShape[i] === U.refuge : f.shape[i] === U.refuge
-      if (f.autoFrom[i] && inRefuge && ordersFree(w) > 0) {
-        const o = allocOrder(w, O_FORM); w.ord.shape[o] = f.autoFrom[i] - 1; prependOrder(w, i, o)
-      }
-      f.alertAt[i] = 0; f.alertSince[i] = 0; f.autoFrom[i] = 0; f.refugeOff[i] = 0
+      // the spell is over: a hold in its list ends (formation.ts), and it forms back and goes on
+      f.alertAt[i] = 0; f.alertSince[i] = 0; f.refugeOff[i] = 0
       continue
     }
     if (!f.alertAt[i] || f.alertAt[i] !== tick || f.refugeOff[i] || tick - f.alertSince[i] < react) continue
     const into = f.trans[i] ? f.tShape[i] : f.shape[i]
-    if (into === U.refuge || ordersFree(w) < 1) continue
-    // square ahead of its orders: it holds there (formation.ts) and goes on with them when it forms back
-    const o = allocOrder(w, O_FORM); w.ord.shape[o] = U.refuge; prependOrder(w, i, o)
-    if (!f.autoFrom[i]) f.autoFrom[i] = into + 1
+    if (into === U.refuge || ordersFree(w) < 3) continue
+    // ahead of its orders (a plan's, kept for after): form square, hold until the spell is over, form back into the
+    // shape it was in or going to. The forms are optional: where one cannot be formed it is skipped, and the rest
+    // go on. A rout or a player's order clears them with the rest
+    const steps: [number, number][] = [[O_FORM, into], [O_HOLD, 0], [O_FORM, U.refuge]]   // prepended, so last first
+    for (const [type, shape] of steps) { const o = allocOrder(w, type); w.ord.shape[o] = shape; w.ord.optional[o] = 1; prependOrder(w, i, o) }
     f.status[i] = 0; f.blockedFor[i] = 0
   }
 }

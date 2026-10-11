@@ -5,7 +5,7 @@
 // A battalion is a few company blocks (files × ranks) placed in the battalion frame by its shape. The sim
 // keeps the men per company; which slots are filled follows from that by one rule (`occupied`), so no
 // soldier is simulated (decisions 0007, 0018): who stands where and who falls is the renderer's.
-import { type World, M_TICK, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, O_CHARGE, CH_PURSUIT, MAX_FORMATIONS, fleeing, typeOf, formationSlot } from './world.ts'
+import { type World, M_TICK, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, O_CHARGE, O_HOLD, CH_PURSUIT, MAX_FORMATIONS, fleeing, typeOf, formationSlot } from './world.ts'
 import type { ShapeLayout, Placement, TypeTable } from './ruleset.ts'
 import { rot2, slotIndex, MAX_COMPANIES } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
@@ -593,7 +593,8 @@ function changeWet(w: World, i: number): boolean {
 }
 const csPlace: Placement = { x: 0, z: 0, rot: 0, face: 0 }
 // starts a change to `shape`; refused (and the orders dropped) if its path crosses impassable ground
-export function startChange(w: World, i: number, shape: number): boolean {
+// (`optional`: a change that cannot be made is skipped, and the orders after it go on; else they are dropped)
+export function startChange(w: World, i: number, shape: number, optional = false): boolean {
   const f = w.f, U = typeOf(w, i), C = U.C, CS = w.cr.maxC, S = U.shapes.length, t = now(w)
   if (shape === f.shape[i] && !f.trans[i]) return false
   if (f.trans[i] && shape === f.tShape[i]) return false
@@ -613,7 +614,8 @@ export function startChange(w: World, i: number, shape: number): boolean {
   if (changeWet(w, i)) {
     f.trans[i] = keep.trans; f.tShape[i] = keep.tShape; f.tStart[i] = keep.tStart; f.tDur[i] = keep.tDur
     f.tDelay.set(keep.delay, i * CS); f.tFrom.set(keep.from, i * CS * 4); f.tTo.set(keep.to, i * CS * 4); f.tK.set(keep.k, i * CS * 2)
-    clearOrders(w, i); f.status[i] = ST_CANNOT_FORM; return false
+    if (!optional) clearOrders(w, i)
+    f.status[i] = ST_CANNOT_FORM; return false
   }
   f.vx[i] = 0; f.vz[i] = 0; f.omega[i] = 0; f.onRoad[i] = 0
   for (let j = 0; j < U.NB; j++) f.lags[i * w.cr.maxNB + j] = 0
@@ -740,7 +742,7 @@ function formationStep(w: World, i: number): void {
   if (f.trans[i]) {   // no marching while the companies change places; a new shape order interrupts the change (a battalion that breaks cuts it short: cutChange)
     f.vx[i] = 0; f.vz[i] = 0
     const n = f.ordHead[i]
-    if (n >= 0 && o.type[n] === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
+    if (n >= 0 && o.type[n] === O_FORM) { const s = o.shape[n], opt = o.optional[n] === 1; shiftOrder(w, i); startChange(w, i, s, opt); return }
     if (t >= f.tStart[i] + f.tDelay[i * CS + C - 1] + f.tDur[i]) {
       finishChange(w, i, f.tShape[i])
     }
@@ -748,10 +750,10 @@ function formationStep(w: World, i: number): void {
   }
   const n = f.ordHead[i]
   if (n < 0) { f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); return }
-  // in the square it formed against cavalry by itself (melee.ts): it holds there, keeping its orders for after
-  if (f.autoFrom[i] && f.shape[i] === typeOf(w, i).refuge && o.type[n] !== O_FORM) { f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); return }
   const h0 = f.heading[i], type = o.type[n]
-  if (type === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
+  if (type === O_FORM) { const s = o.shape[n], opt = o.optional[n] === 1; shiftOrder(w, i); startChange(w, i, s, opt); return }
+  // the square against cavalry's hold (melee.ts): it stands until the spell of threat is over
+  if (type === O_HOLD) { f.vx[i] = 0; f.vz[i] = 0; lagSettle(w, i); if (!f.alertAt[i]) shiftOrder(w, i); return }
   const [V0, pace] = paceOf(w, i), halfW = halfWidth(w, i)
   if (type === O_MOVE || type === O_CHARGE) {
     if (type === O_CHARGE) { if (!chargeAim(w, i, n)) { shiftOrder(w, i); f.vx[i] = 0; f.vz[i] = 0; return } }   // its target is gone (the melee step ends the charge)

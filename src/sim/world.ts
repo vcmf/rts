@@ -70,8 +70,8 @@ export interface Formations {
   foe: Int32Array                                                  // melee: the formation it fights (a handle, 0 none)
   shockIn: Float64Array                                            // morale shocks owed to it this tick (the melee step's; morale takes them)
   // the square against cavalry (melee.ts): the tick a threat was last seen and the tick its unbroken run began (0
-  // none), the shape it formed square from (+1, 0 none), and an order given in this spell (it stands down)
-  alertAt: Int32Array; alertSince: Int32Array; autoFrom: Int32Array; refugeOff: Uint8Array
+  // none), and a player's order given in this spell (it stands down). The square itself is orders in its list
+  alertAt: Int32Array; alertSince: Int32Array; refugeOff: Uint8Array
 }
 // per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it), the men of its shattered
 // formations that left the field at the map's edge (S1e-1), and the men it spawned (S1e-2: the end condition)
@@ -95,7 +95,7 @@ export interface Orders {
   next: Int32Array
   meta: Int32Array   // [free head, in use]
 }
-export const O_MOVE = 1, O_FORM = 2, O_WHEEL = 3, O_FACE = 4, O_DRESS = 5, O_CHARGE = 6
+export const O_MOVE = 1, O_FORM = 2, O_WHEEL = 3, O_FACE = 4, O_DRESS = 5, O_CHARGE = 6, O_HOLD = 7   // O_HOLD: stand until the spell of cavalry threat is over (melee.ts)
 
 export interface World {
   meta: Int32Array
@@ -109,7 +109,7 @@ export interface World {
   // a scenario's plan for the side it scripts (S1e-2, plan.ts): attached like the terrain, not state (the steps are
   // the scenario's, and which have run follows from the tick); its hash is state (M_PLAN), so a save loaded without
   // the plan it was made with fails at once
-  plan: PlanStep[]; planHash: number
+  plan: PlanStep[]; planHash: number; planDue: number[]   // plan: its steps sorted by the tick they fall due on (planDue)
   debug: boolean
   scratch: { places?: Places; arc?: Arc; gateBits?: GateBits; filled?: Filled; fireGeo?: FireGeo; fireSight?: Int32Array; fireEpoch?: number; fireCrossed?: Float64Array; reverse?: boolean; lost?: Int32Array; mstateBefore?: Uint8Array; menNow?: Int32Array; melee?: Melee; fireGeoTick?: number }   // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
 }
@@ -130,7 +130,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     quality: f64(N), morale: f64(N), mstate: u8(N), startMen: i32(N), recent: f64(N), routX: f64(N), routZ: f64(N), routPhase: u8(N), runs: u8(N), pressed: i32(N),
     baseMen: i32(N), brokeTick: i32(N), lastLoss: i32(N), since: i32(N), falling: i32(N), fellBack: u8(N), routs: u8(N),
     chTarget: i32(N), chPhase: u8(N), chRun: f64(N), chGap: f64(N), chUntil: i32(N), blownUntil: i32(N), foe: i32(N), shockIn: f64(N),
-    alertAt: i32(N), alertSince: i32(N), autoFrom: i32(N), refugeOff: u8(N),
+    alertAt: i32(N), alertSince: i32(N), refugeOff: u8(N),
   }
   const M = MAX_ORDERS
   const ord: Orders = { type: i32(M), shape: i32(M), finish: u8(M), left: new Int8Array(M), resolved: u8(M), optional: u8(M),
@@ -138,7 +138,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
   for (let k = 0; k < M; k++) ord.next[k] = k + 1 < M ? k + 1 : -1
   const free = new Int32Array(N)
   for (let i = 0; i < N; i++) free[i] = N - 1 - i   // slot 0 is handed out first
-  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, sides: { rearX: f64(SIDES), rearZ: f64(SIDES), left: i32(SIDES), spawned: i32(SIDES) }, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), plan: [], planHash: 0, debug, scratch: {} }
+  const w: World = { meta: new Int32Array(M_LEN), rng: new Uint32Array(4), f, sides: { rearX: f64(SIDES), rearZ: f64(SIDES), left: i32(SIDES), spawned: i32(SIDES) }, free, ord, pending: [], data, cr, terrain: terrain ?? buildTerrain(data, cr), plan: [], planHash: 0, planDue: [], debug, scratch: {} }
   w.meta[M_FREE] = N
   w.meta[M_DATA] = data.version | 0
   w.meta[M_RULES] = cr.hash | 0

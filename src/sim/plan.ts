@@ -27,11 +27,14 @@ export function attachScenario(w: World, s: ScenarioRules): void {
   const plan = s.plan ?? [], limit = s.minutes ? Math.round(s.minutes * 60 * TICK_HZ) : 0
   // no plan and no limit: nothing to record (a world without them hashes as one never attached), but one made with
   // a plan cannot be given none
-  if (!plan.length && !limit) { if (w.meta[M_PLAN]) throw new Error('this world was made with another plan or time limit'); w.plan = []; w.planHash = 0; return }
+  if (!plan.length && !limit) { if (w.meta[M_PLAN]) throw new Error('this world was made with another plan or time limit'); w.plan = []; w.planHash = 0; w.planDue = []; return }
   const h = (fnv1a(new TextEncoder().encode(JSON.stringify([plan, limit]))) | 0) || 1
   if (!w.meta[M_PLAN]) { if (w.meta[M_TICK] !== 0) throw new Error('a plan is attached before the first tick'); w.meta[M_PLAN] = h; w.meta[M_LIMIT] = limit }
   else if (w.meta[M_PLAN] !== h) throw new Error('this world was made with another plan or time limit')
-  w.plan = plan; w.planHash = h
+  for (const p of plan) if (!(Math.round(p.at * TICK_HZ) >= 1)) throw new Error(`a plan step at ${p.at} s comes before the first tick`)
+  // the steps sorted by the tick they fall due on (in plan order within a tick), and those ticks
+  w.plan = plan.map((p, k) => [Math.round(p.at * TICK_HZ), k, p] as const).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(e => e[2])
+  w.planDue = w.plan.map(p => Math.round(p.at * TICK_HZ)); w.planHash = h
 }
 // a world made with a plan has it attached (advanceTick asks before anything changes)
 export function checkPlan(w: World): void {
@@ -40,9 +43,10 @@ export function checkPlan(w: World): void {
 
 // step 3: the steps due this tick, in plan order; a dropped one is reported with sequence −1
 export function planStep(w: World, dropped: Dropped[]): void {
-  const t = w.meta[M_TICK] + 1
-  for (const s of w.plan) {
-    if (Math.round(s.at * TICK_HZ) !== t) continue
+  const t = w.meta[M_TICK] + 1, D = w.planDue
+  let lo = 0, hi = D.length; while (lo < hi) { const m = (lo + hi) >> 1; if (D[m] < t) lo = m + 1; else hi = m }   // the first due at t or later
+  for (let k = lo; k < D.length && D[k] === t; k++) {
+    const s = w.plan[k]
     const c = { ...s.cmd, id: unitHandle(s.unit) } as Command & { target?: number }
     // a target names a unit; none (or a negative one) is no target
     if (c.type === 'charge' || c.type === 'fire') { if (c.target !== undefined && c.target >= 0) c.target = unitHandle(c.target); else delete c.target }

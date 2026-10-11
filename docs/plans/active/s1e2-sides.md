@@ -171,3 +171,39 @@ regenerated (`SIM_VERSION` `s1e.2`, `SAVE_FORMAT` 11), and `s1e-battle` has one 
   - the page copied the session's dropped list every frame;
   - the end step's comment sat over another function;
   - the rally test set the state by hand: a battalion now breaks, runs to its rear and rallies.
+
+**Round 3** (`/code-review high`, 9 findings; one severe): a battalion that broke in the square it had formed by
+itself never ran. Its hold was a flag (`autoFrom`) checked in the movement step, which a rout did not clear, so
+the hold froze the router's run. Three rounds with a severe finding each, all from the square's hold and the
+plan's orders meeting, is the workflow's signal to stop patching and redesign (`AGENTS.md`).
+
+## Redesign: the square's hold is orders, not a flag
+
+The square against cavalry put a flag on the battalion, and the movement step obeyed it. Every other source of
+orders (a rout's run, the fall-back, a failed change, a pool run dry) had to know about the flag, and each round
+found one that did not. Now the whole manoeuvre is orders, put ahead of the battalion's own:
+1. form its refuge;
+2. hold (`O_HOLD`), standing until the spell of threat is over;
+3. form back into the shape it was in, or going to.
+
+Then its own orders (a scenario's plan's) follow. Nothing outside the order list remains, so:
+- **a rout or a player's order** clears the square's orders with the rest, as any order is cleared;
+- **a form that cannot be made there** (water, a wood: round 3's second finding) is optional: it is skipped and
+  the rest go on, the plan's march included;
+- **with fewer than three free orders in the pool** it does not form square at all, so it never marches on in a
+  square it cannot form back from (round 3's third);
+- **a plan step that reshapes it during a spell** replaces the square's orders; if the threat goes on, the square
+  is put ahead of the new shape, and it forms back into that shape after (round 3's fourth);
+- **`autoFrom` is gone** from the state.
+
+Also from round 3:
+- a plan step due before the first tick is refused at attach, where it never ran before;
+- the plan's steps are sorted by due tick once, at attach, and a tick finds its own by binary search;
+- `docs/systems/sides.md` links the end's numbers and the scenario's plan rather than copying them.
+
+**Kept:**
+- a wavering battalion with orders still does not fall back (S1c-2's rule: it falls back only without orders),
+  and a plan's march is an order;
+- whether the plan should give way to the fall-back is for S1e-3's playtests.
+
+The review starts again at round 1.

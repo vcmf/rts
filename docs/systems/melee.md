@@ -129,13 +129,19 @@ with contagion, after relaxing (`morale.ts`).
   either charging it or anything but riding away faster than `refuge.closing`. A regiment at the halt can
   charge in seconds.
 - **Forming:** after `refuge.react` seconds of unbroken threat, a battalion not in its refuge and not changing
-  into it forms it ahead of its orders. The shape it came from is kept (`autoFrom`). In that square it holds,
-  keeping its orders (a scenario's plan's) for after.
-- **Forming back:** when `refuge.hold` seconds pass with no threat and no enemy charging type is within
-  `refuge.alert` at all, it forms back into that shape (from the square, or out of the change into it), ahead of
-  the orders it kept, and goes on with them.
-- **The player's order wins:** any order given during a spell of threat stands the behaviour down until the
-  spell ends (`refugeOff`), and forgets the shape it would form back into (`autoFrom`).
+  into it puts three orders ahead of its own (a scenario's plan's, kept for after):
+  1. form its refuge;
+  2. hold (`O_HOLD`) until the spell of threat is over;
+  3. form back into the shape it was in, or going to.
+
+  The forms are optional: one that cannot be made there is skipped, and the rest go on. With fewer than three
+  free orders in the pool it does not form square. A rout, or a player's order, clears these orders with the
+  rest, as any order is cleared.
+- **The spell ends** when `refuge.hold` seconds pass with no threat and no enemy charging type is within
+  `refuge.alert` at all. The hold ends then, and the battalion forms back and goes on with its orders.
+- **The player's order wins:** any order given during a spell of threat replaces the square's orders with the
+  rest and stands the behaviour down until the spell ends (`refugeOff`). A scenario's plan's order does not stand
+  it down.
 
 The step is skipped when no charging type is in the fight and no battalion is on the alert.
 

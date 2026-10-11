@@ -222,7 +222,7 @@ describe('the square against cavalry (standing behaviour)', () => {
     const s = new S(), ln = s.inf(0, 60, PI), cav = s.cav(0, -110, 0)
     s.order({ type: 'move', id: cav, points: [[0, 0]], append: false }); s.until(() => !s.w.f.trans[s.slot(ln)], 20)
     s.order({ type: 'form', id: ln, shape: 'line' }); s.advance(40)
-    expect(s.shape(ln)).toBe('line'); expect(s.f(ln, 'autoFrom')).toBe(0)
+    expect(s.shape(ln)).toBe('line'); expect(s.orders(ln)).toBe(0)   // the square's orders went with the player's
   })
 })
 

@@ -52,28 +52,25 @@ A scenario with no player is a sandbox for both sides.
   command, but not as the player's). A refusal goes into the tick's dropped list with sequence −1 and the reason
   prefixed `plan:`. The page shows only your own refusals.
 - **Under a cavalry threat** a battalion forms square ahead of the orders it has (the plan's), holds in it, and
-  forms back and goes on with them when the threat has passed (`docs/systems/melee.md`). A player's order stands
+  forms back and goes on with them when the threat has passed: all orders in its list (`docs/systems/melee.md`). A player's order stands
   the square down instead.
 
 **The end** (`endStep`, step 13; `rs.end`):
 - **In the fight:** a formation alive and not routing, rallying or shattered.
 - **Spawned:** each side's men at spawn (`sides.spawned`).
-- **Broken:** a side whose men in the fight fall to `end.broken` (0.5) of its spawned men. Its enemy wins; both on
-  one tick is a draw.
-- **The time limit** (`Scenario.minutes`): the larger share in the fight wins, a draw within `end.margin` (0.05).
+- **Broken:** a side whose men in the fight fall to `end.broken` of its spawned men. Its enemy wins; both on one
+  tick is a draw.
+- **The time limit** (`Scenario.minutes`): the larger share in the fight wins, a draw within `end.margin`. Both
+  numbers are the ruleset's `end` (`src/rulesets/napoleonic.ts`).
 - **The result** (`meta`): `M_END` (the tick, 0 while undecided) and `M_WINNER` (`END_*`). It is decided once,
   and the battle runs on after it.
 
 **The page** shows each side's share in the fight and, once decided, the result ("you win", "you lose", "a
 draw").
 
-**`s1e-battle`:** you command side 0, on the southern ridge. Side 1's plan:
-- at 1 minute its first line comes down to the stream's north bank;
-- at 4 minutes it wades the stream and closes to about 120 m of your first line;
-- at 5 minutes its second line comes down to the bank, and at 10 minutes over;
-- at 8 minutes its regiment charges your eastern battalion.
-
-The limit is 40 minutes.
+**`s1e-battle`** (`src/scenarios/s1e-battle.ts`): you command side 0, on the southern ridge. Side 1's plan brings
+its first line down to the stream and over it to close with yours, its second line after it, and its regiment
+in a charge; the scenario sets its times and its limit.
 
 ## Verification
 
