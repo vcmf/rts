@@ -1,8 +1,8 @@
 // The painted water's checks (docs/plans/done/w4-water-surface.md, W4): the shore band, the seam, pools against
-// riffles, and shimmer. Each renders the look page headless (SwiftShader, the clock frozen) through its hooks
+// riffles, and shimmer; the banks and the stones' foam (docs/plans/active/w5-banks.md, W5a). Each renders the look page headless (SwiftShader, the clock frozen) through its hooks
 // (window.__look in src/look/main.ts).
 //
-//   node tools/water-look-check.mjs <look page URL> [outDir] [--only band,seam,pools,shimmer]
+//   node tools/water-look-check.mjs <look page URL> [outDir] [--only band,seam,pools,shimmer,banks,foam]
 //   node tools/water-look-check.mjs <look page URL> [outDir] --selftest     each check passes, and fails on its sabotage
 //
 // - band: the ribbon as built (its triangles, rasterised at 0.25 m) against the drawn ground (the tile mesh's own
@@ -221,15 +221,87 @@ function shimmer(url, dir, sab) {
   return { ok, lines }
 }
 
-const CHECKS = { band, seam, pools, shimmer }
+// ---------- banks (W5a) ----------
+// the default view at the three reaches and the sharpest bend at the closest zoom, the terrain alone (the ribbon and
+// the scatter hidden), finished as drawn. Pixels classed from the raw data view: the wet line (0.05–0.3 m from the
+// water), the cut bank's scarp (0.3–1.2 m from it, 0.3–1 m above it: a cut bank rises that fast), the bar (1–2.5 m, under 0.45 m above it), the meadow
+// (8–12 m). Against the meadow's medians: the wet line darker by BANK_WET; the cut bank warmer (red over green) by
+// BANK_EARTH and no lighter; the bar lighter by BANK_BAR and greyer (chroma) by BANK_GREY.
+const BANK_WET = 0.05, BANK_EARTH = 0.03, BANK_BAR = 0.04, BANK_GREY = 0.03, BANK_MIN = 300
+const bankViews = () => [...POOL_VIEWS, seamViews()[0]]
+function banks(url, dir, sab) {
+  const steps = [...prepSteps(), sabStep(sab), ['eval', '__look.groundAs("terrain"); __look.terrainOnly(true); "terrain alone"']]
+  for (const v of bankViews()) steps.push(viewStep(v), ['eval', '__look.finishing(false); __look.waterView(4); "raw"'], render('raw'), ['shot', `${v[0]}.raw`],
+    ['eval', '__look.waterView(0); __look.finishing(true); "frame"'], render('frame'), ['shot', `${v[0]}.frame`])
+  shoot(url, dir, steps, W, H)
+  const cls = { wet: [], cut: [], bar: [], meadow: [] }, [D0, D1] = SPEC.water.depth
+  for (const [n] of bankViews()) {
+    const raw = load(dir, `${n}.raw`), fr = load(dir, `${n}.frame`)
+    for (let i = 0; i < W * H; i++) {
+      const land = -(raw.data[i * 4 + 1] / 255 * 2 - 1) * SDF, h = -(D0 + raw.data[i * 4] / 255 * (D1 - D0))
+      const k = land >= 0.05 && land <= 0.3 ? 'wet' : land >= 0.3 && land <= 1.2 && h >= 0.3 && h <= 1 ? 'cut' : land >= 1 && land <= 2.5 && h < 0.45 ? 'bar' : land >= 8 && land <= 12 ? 'meadow' : null
+      if (k) cls[k].push([fr.data[i * 4] / 255, fr.data[i * 4 + 1] / 255, fr.data[i * 4 + 2] / 255])
+    }
+  }
+  const med = (a, f) => pct(a.map(f), 0.5), lum = c => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2], rg = c => c[0] - c[1], chroma = c => Math.max(...c) - Math.min(...c)
+  const m = k => ({ l: med(cls[k], lum), rg: med(cls[k], rg), ch: med(cls[k], chroma) }), M = m('meadow'), wet = m('wet'), cut = m('cut'), bar = m('bar'), f = v => v.toFixed(3)
+  const enough = Object.values(cls).every(a => a.length >= BANK_MIN)
+  const okWet = wet.l <= M.l - BANK_WET, okCut = cut.rg >= M.rg + BANK_EARTH && cut.l <= M.l, okBar = bar.l >= M.l + BANK_BAR && bar.ch <= M.ch - BANK_GREY
+  return { ok: enough && okWet && okCut && okBar, lines: [
+    `banks: pixels by the data at ${bankViews().length} views: wet line ${cls.wet.length}, cut bank ${cls.cut.length}, bar ${cls.bar.length}, meadow ${cls.meadow.length}${enough ? '' : '  FAIL: too few'}`,
+    `  meadow: luma ${f(M.l)}, red over green ${f(M.rg)}, chroma ${f(M.ch)}`,
+    `  wet line: luma ${f(wet.l)} (darker by ≥ ${BANK_WET})${okWet ? '' : '  FAIL'}`,
+    `  cut bank: red over green ${f(cut.rg)} (warmer by ≥ ${BANK_EARTH}), luma ${f(cut.l)} (no lighter)${okCut ? '' : '  FAIL'}`,
+    `  bar: luma ${f(bar.l)} (lighter by ≥ ${BANK_BAR}), chroma ${f(bar.ch)} (greyer by ≥ ${BANK_GREY})${okBar ? '' : '  FAIL'}`] }
+}
+
+// ---------- foam (W5a) ----------
+// up to FOAM_STONES stones in the water (the page's list), each at the closest zoom: the frame against the same frame
+// without the stones' foam (WATER_SAB_NOFOAM). At points of the pillow (upstream, against the stone) and of the wake
+// (1–5 radii downstream, within 2 radii across), projected at the water's level: pixels the foam brightens by over
+// FOAM_LIFT. A stone shows its foam with at least FOAM_PILLOW such pillow points and FOAM_WAKE wake points; at least
+// FOAM_SHARE of the stones must. Sabotage: no foam (the frame then equals the one without).
+const FOAM_STONES = 5, FOAM_LIFT = 0.12, FOAM_PILLOW = 3, FOAM_WAKE = 6, FOAM_SHARE = 0.75
+function foam(url, dir, sab) {
+  const list = evalTag(shoot(url, dir, [...prepSteps(), ['eval', '"STONES " + JSON.stringify(STONES)']], 320, 180), 'STONES').slice(0, FOAM_STONES)
+  const pts = st => { const [x, z, r, ang] = st, fx = Math.cos(ang), fz = Math.sin(ang), out = []
+    for (let a = -1.6; a <= 5; a += 0.2) for (let b = -2; b <= 2; b += 0.2) {
+      const kind = a <= -0.6 && Math.abs(b) <= 1.3 ? 'p' : a >= 1 && Math.abs(b) <= 2 ? 'w' : null; if (!kind) continue
+      out.push([x + (fx * a - fz * b) * r, z + (fz * a + fx * b) * r, kind]) }
+    return out }
+  const steps = [...prepSteps()]
+  list.forEach((st, k) => {
+    const P = pts(st)
+    steps.push(viewStep([`stone${k}`, A0, CAM.betaMin, CAM.rMin, `${st[0]},${CAM.focusY},${st[1]}`, 0]), sabStep(sab), render('frame'), ['shot', `stone${k}.frame`],
+      sabStep([...sab, 'WATER_SAB_NOFOAM']), render('nofoam'), ['shot', `stone${k}.nofoam`], sabStep(sab),
+      ['eval', `(() => { const B = window.B, e = __proto.scene.getEngine(), T = __proto.scene.getTransformMatrix(), out = []
+        for (const [x, z, kind] of ${JSON.stringify(P)}) { const q = riverQuery(x, z); if (!q) continue
+          const s = B.Vector3.Project(new B.Vector3(x, lerpA(RIVER.zw, q), z), B.Matrix.IdentityReadOnly, T, { x: 0, y: 0, width: e.getRenderWidth(), height: e.getRenderHeight() })
+          if (s.z > 0 && s.z < 1 && s.x >= 0 && s.y >= 0 && s.x < e.getRenderWidth() && s.y < e.getRenderHeight()) out.push([Math.floor(s.x), Math.floor(s.y), kind]) }
+        return "PTS${k} " + JSON.stringify(out) })()`])
+  })
+  const out = shoot(url, dir, steps, W, H)
+  let shown = 0
+  const lines = []
+  list.forEach((st, k) => {
+    const fr = load(dir, `stone${k}.frame`), nf = load(dir, `stone${k}.nofoam`), seen = new Set(), n = { p: 0, w: 0 }
+    for (const [x, y, kind] of evalTag(out, `PTS${k}`)) { const i = y * W + x; if (seen.has(i)) continue; seen.add(i); if (lumaAt(fr, i) - lumaAt(nf, i) > FOAM_LIFT) n[kind]++ }
+    const good = n.p >= FOAM_PILLOW && n.w >= FOAM_WAKE; if (good) shown++
+    lines.push(`  stone ${k} (${st[0].toFixed(0)}, ${st[1].toFixed(0)}, r ${st[2].toFixed(2)} m): pillow ${n.p}, wake ${n.w}${good ? '' : '  (no foam)'}`)
+  })
+  const ok = list.length >= 3 && shown >= FOAM_SHARE * list.length
+  return { ok, lines: [`foam: ${list.length} stones in the water at the closest zoom; points the foam brightens by over ${FOAM_LIFT} (pillow ≥ ${FOAM_PILLOW}, wake ≥ ${FOAM_WAKE}); ${shown} show it (≥ ${FOAM_SHARE * 100}%)${ok ? '' : '  FAIL'}`, ...lines] }
+}
+
+const CHECKS = { band, seam, pools, shimmer, banks, foam }
 // each check's sabotages (shader defines; the band's is the page's ?watersab=nodive)
-const SABOTAGE = { band: [['nodive']], seam: [['WATER_SAB_OWN'], ['WATER_SAB_TERRAIN']], pools: [['WATER_SAB_FLAT']], shimmer: [['WATER_SAB_STEP']] }
+const SABOTAGE = { band: [['nodive']], seam: [['WATER_SAB_OWN'], ['WATER_SAB_TERRAIN']], pools: [['WATER_SAB_FLAT']], shimmer: [['WATER_SAB_STEP']], banks: [['WATER_SAB_BANKS']], foam: [['WATER_SAB_NOFOAM']] }
 
 function main() {
   const args = process.argv.slice(2), self = args.includes('--selftest'), oi = args.indexOf('--only')
   const only = oi >= 0 ? args.splice(oi, 2)[1].split(',') : Object.keys(CHECKS)
   const [url, out = path.join(ROOT, 'scratch/water-look-check')] = args.filter(a => a !== '--selftest')
-  if (!url || only.some(k => !CHECKS[k])) { console.error('usage: node tools/water-look-check.mjs <look page URL> [outDir] [--only band,seam,pools,shimmer] [--selftest]'); process.exit(2) }
+  if (!url || only.some(k => !CHECKS[k])) { console.error('usage: node tools/water-look-check.mjs <look page URL> [outDir] [--only band,seam,pools,shimmer,banks,foam] [--selftest]'); process.exit(2) }
   let ok = true
   for (const k of only) {
     const dir = path.join(out, k); fs.mkdirSync(dir, { recursive: true })

@@ -49,15 +49,17 @@ vec3 bankPaint(vec3 c,vec2 xz,float land,float h,float ny){
   #ifdef WATER_SAB_BANKS
   return c;
   #else
+  // far out (a pixel over about 0.12 m) the edges widen with the pixel and the pebbles go: under a pixel they shimmer
+  vec2 fw=fwidth(xz);float px=max(fw.x,fw.y),far=smoothstep(0.12,0.35,px),e=0.1*far;
   float gr=G(xz/3.0).g-0.5;
   c=mix(c*vec3(0.80,0.86,0.80),c,smoothstep(1.0,6.0,land+gr*1.5));                                   // damp grass
-  float earth=smoothstep(0.82,0.62,ny)*smoothstep(4.0,1.0,land+gr);
-  c=mix(c,vec3(0.47,0.36,0.23)*(0.9+0.2*G(xz/2.0).g),earth);                                          // bare earth
-  float bar=smoothstep(0.8,0.2,h)*smoothstep(4.5,1.0,land+gr)*smoothstep(0.86,0.95,ny);
-  vec3 gv=vec3(0.66,0.65,0.60)*(0.88+0.24*G(xz/1.1).g);gv=mix(gv,vec3(0.50,0.49,0.45),smoothstep(0.58,0.68,G(xz/2.9+0.3).g)*0.5);
+  float earth=smoothstep(0.92+e,0.72-e,ny)*smoothstep(4.0,1.0,land+gr);
+  c=mix(c,vec3(0.50,0.36,0.21)*(0.9+0.2*G(xz/2.0).g),earth);                                          // bare earth
+  float bar=smoothstep(0.8,0.2,h)*smoothstep(4.5,1.0,land+gr)*smoothstep(0.86-e,0.95+e,ny);
+  vec3 gv=vec3(0.66,0.65,0.60)*(0.88+0.24*G(xz/1.1).g);gv=mix(gv,vec3(0.50,0.49,0.45),smoothstep(0.58,0.68,G(xz/2.9+0.3).g)*0.5*(1.0-far));
   c=mix(c,gv,bar*0.9);                                                                                  // gravel: pale grey, darker pebbles
-  float wetW=mix(0.35,0.8,smoothstep(0.75,0.97,ny));
-  return mix(c*vec3(0.58,0.64,0.62),c,smoothstep(0.0,wetW,land+gr*0.4));                               // the wet line
+  float wetW=mix(0.35,0.8,smoothstep(0.75,0.97,ny)),ww=max(wetW,2.0*px);   // the line at least 2 pixels wide, its ink spread
+  return mix(c,c*vec3(0.58,0.64,0.62),(1.0-smoothstep(0.0,ww,land+gr*0.4))*wetW/ww);                    // the wet line
   #endif
 }
 // the shore band's ground: damp earth with the banks painted over it, through the seasons
