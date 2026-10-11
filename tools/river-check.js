@@ -20,13 +20,16 @@
   check('hillDrop', hillDrop < 0.05, +hillDrop.toFixed(2))
 
   // 2. nothing in the water except stones: every instance's footprint (exact reach from its pivot) clears the
-  //    water and stays out of the formation zones; stones only on dry land or riffles; fields off the floodplain
+  //    water (its edge on each side, W2) and stays out of the formation zones; stones only on dry land, in riffles or
+  //    at the foot of a cut bank (W5a: the outer side of a bend sharper than |A| 0.5, against its edge); fields off the
+  //    floodplain
   let wet = 0, inZone = 0, stonesInPools = 0, wheatOnFloodplain = 0
-  const overlapsWater = (x, z, r) => { const q = riverQuery(x, z); return q && q.dist < lerpA(C.W, q) / 2 + r }
+  const overlapsWater = (x, z, r) => { const q = riverQuery(x, z); return q && q.dist < (typeof wetEdgeAt === 'function' ? wetEdgeAt(q) : lerpA(C.W, q) / 2) + r }
+  const atCutBank = (q, r) => typeof wetEdgeAt === 'function' && Math.abs(lerpA(C.A, q)) > 0.5 && Math.sign(q.n) === Math.sign(lerpA(C.A, q)) && q.dist >= wetEdgeAt(q) - r
   for (const [model, items] of Object.entries(groups)) for (const [x, z, sc] of items) {
     const fp = footprint(model, sc)
     if (touchesZone(x, z, fp)) inZone++
-    if (/^Rock/.test(model)) { const q = riverQuery(x, z); if (q && q.dist < lerpA(C.W, q) / 2 + fp && lerpA(C.riffle, q) <= 0.6) stonesInPools++; continue }
+    if (/^Rock/.test(model)) { const q = riverQuery(x, z); if (q && q.dist < lerpA(C.W, q) / 2 + fp && lerpA(C.riffle, q) <= 0.6 && !atCutBank(q, fp)) stonesInPools++; continue }
     if (overlapsWater(x, z, fp)) wet++
     if (model === 'Wheat' && Math.abs(x - C.axisX(z)) < C.P.floodplainW / 2) wheatOnFloodplain++
   }

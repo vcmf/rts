@@ -49,6 +49,8 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const pineMat = natMat('pines', '#2f5a36', '#4f7a3e', { rim: 0.8, kind: 1 })
   const farMat = natMat('far', '#3c6640', '#6b8648', { rim: 0.4 })
   const grassMat = natMat('grass', '#5a7a30', '#a3a346', { rim: 0.5, grassy: true })
+  // reeds (W5a): green-brown, straw in autumn (the grass's seasons), on the grass's sway
+  const reedMat = natMat('reeds', '#3f4f25', '#7d7a3c', { rim: 0.5, grassy: true })
 
   const FLIP = true   // OBJ winding is opposite to Babylon's default
   function buildModel(name: string): Mesh {
@@ -93,6 +95,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     // stones: wholly on dry land, on riffles, or at the foot of a cut bank (the outer side of a sharp bend, against
     // its water's edge) (docs/art-bible.md §6c)
     if (kind === 'stone') return !q || q.dist >= wetEdgeAt(q) + r || lerpA(RIVER.riffle, q) > 0.6 || atCutBank(q, r)
+    if (kind === 'reed') return !q || q.dist >= wetEdgeAt(q) + r   // reeds: at the water's edge, wholly on land
     return !q || q.dist >= Math.max(lerpA(RIVER.W, q) / 2 * 1.7, bankReachAt(q)) + r                 // off the banks (W2: a point bar reaches farther)
   }
   const groups: Record<string, Item[]> = {}; const add = (model: string, item: Item) => (groups[model] = groups[model] || []).push(item)
@@ -163,8 +166,21 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const top = C.zw[i] - H(x, z) + 0.35 + rs() * 0.35, s = Math.min(3, Math.max(1, top / (NATURE![mdl].max[1] * 0.95)))
     if (addPlaced(mdl, [x, z, s, rs() * 6.28, rs(), -0.05 * s], 'stone')) { stones.push([x, z, footprint(mdl, s) * 0.8, Math.atan2(C.tz[i], C.tx[i])]); smBlob(x, z, s * 0.3) }
   }
+  // reeds at the water's edge on slow inner bends (W5a; docs/art-bible.md §6c): clumps of the pack's grass blade,
+  // narrowed and set tall (the Reed model), on the bar's side of bends sharper than |A| 0.4, out of the riffles
+  if (!NATURE!.Reed) { const g = NATURE!.Grass; NATURE!.Reed = { ...g, pos: g.pos.map((v, i) => i % 3 === 1 ? v : v * 0.8), min: [g.min[0] * 0.8, g.min[1], g.min[2] * 0.8], max: [g.max[0] * 0.8, g.max[1], g.max[2] * 0.8] } }
+  const RR = mulberry(92), rq = () => RR()
+  for (let i = 0, step = 0, C = RIVER; i < C.n; i += step) {
+    step = Math.max(1, Math.round((5 + rq() * 12) / (RIVER.P.W0 / 4)))
+    if (Math.abs(C.px[i]) > 200 || Math.abs(C.pz[i]) > 200 || Math.abs(C.A[i]) < 0.4 || C.riffle[i] > 0.4 || rq() < 0.35) continue
+    const hw = C.W[i] / 2, A = C.A[i], side = A >= 0 ? -1 : 1, edge = wetEdges(hw, A)[A >= 0 ? 1 : 0]
+    for (let b = 0, nb = 8 + Math.floor(rq() * 7); b < nb; b++) {
+      const n = side * (edge + 0.15 + rq() * 0.7), along = (rq() - 0.5) * 1.4, x = C.px[i] - C.tz[i] * n + C.tx[i] * along, z = C.pz[i] + C.tx[i] * n + C.tz[i] * along
+      addPlaced('Reed', [x, z, 1.5 + rq() * 0.8, rq() * 6.28, rq()], 'reed')
+    }
+  }
   for (const [k, items] of Object.entries(groups)) {
-    const material = /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : /Birch/.test(k) ? birchMat : /Pine/.test(k) ? pineMat : treeMat; place(k, material, items)
+    const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : /Birch/.test(k) ? birchMat : /Pine/.test(k) ? pineMat : treeMat; place(k, material, items)
   }
   // the band is left out after the every-fourth choice, so every other bush stays the one the prototype drew
   place('Bush_1', farMat, far.filter(([x, z], i) => i % 4 === 0 && !inBand(x, z))); place('Bush_2', farMat, far.filter(([x, z], i) => i % 4 === 2 && !inBand(x, z)))
