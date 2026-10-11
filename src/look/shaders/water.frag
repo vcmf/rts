@@ -1,47 +1,64 @@
-precision highp float;varying vec3 vW;varying vec2 vUv;varying float vDepth;uniform sampler2D uRefl;
+precision highp float;varying vec3 vW;varying vec2 vUv;varying float vTau,vRiffle;uniform sampler2D uRefl;
 #include<painter>
 #include<waterdata>
+#include<shore>
 
+// The painted water (docs/plans/active/w4-water-surface.md, research §2.8): opaque. Its lower layers (the bed, the
+// absorption, the shadows, the shore foam) are the shore band's (src/look/shaders/shore.glsl), the same function the
+// terrain paints near the water; the upper layers (rough water, sky tint, reflections, strokes, glitter, riffle foam)
+// fade in past the band, where the water is always the surface drawn. vUv: across (m, + left of the flow), along (m);
+// vTau: the time of travel (s); vRiffle: 0 pool .. 1 riffle.
+const float STROKE_V=0.6;            // m/s: the strokes' scale along the flow (about the river's mean speed)
+const float STROKE_P=20.0/STROKE_V;  // s: a whole period of every stroke pattern (its rates along are multiples of 0.05)
 float reflAt(vec2 xz){vec2 uv=(xz+TILE_HALF)/TILE_W;if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0)return 0.0;return texture2D(uRefl,uv).r;}
 void main(){
   #ifdef WATER_DEBUG
   if(uWaterView>0.5){gl_FragColor=vec4(waterView(vW.xz),1.0);return;}   // the water data's debug views
   #endif
-  vec3 V=normalize(uCamPos-vW);
-  float depth=max(vDepth,0.0);
-  float across=vUv.x,along=vUv.y;                                           // stream-space coordinates (metres)
-  // 1. depth colour: wet shore → turquoise shallows → deep teal
-  vec3 deep=vec3(0.07,0.24,0.31),mid=vec3(0.20,0.46,0.50),shal=vec3(0.48,0.66,0.58),wet=vec3(0.34,0.33,0.22);
-  float dn=depth+(G(vW.xz/6.0).g-0.5)*0.35;
-  vec3 c=dn<0.25?mix(wet,shal,smoothstep(0.0,0.25,dn)):dn<0.9?mix(shal,mid,smoothstep(0.25,0.9,dn)):mix(mid,deep,smoothstep(0.9,1.9,dn));
-  // 2. sky reflection at grazing view (painted sky colour, no real sky)
-  float fr=pow(1.0-max(V.y,0.0),2.5);c=mix(c,vec3(0.62,0.74,0.86),fr*0.45*smoothstep(0.2,0.6,dn));
-  // 3. tree reflections: trace the mirrored view ray up to crown height, read the baked canopy mask
-  vec3 R=reflect(-V,vec3(0.0,1.0,0.0));
-  float wob=(G(vec2(across*0.6,along*0.25-uTime*0.25)).r-0.5)*0.9;
-  vec2 o=R.xz/max(R.y,0.2);
-  float rf=max(reflAt(vW.xz+o*4.0+vec2(wob,0.0)),reflAt(vW.xz+o*7.5+vec2(wob*1.5,0.0)));
-  c=mix(c,vec3(0.08,0.17,0.13),smoothstep(0.25,0.6,rf)*0.62*smoothstep(0.15,0.5,dn));
-  // 4. flow strokes along the current (scrolling with the water, stretched along the stream)
-  float flow=G(vec2(along*0.035-uTime*0.02,across*0.12)).b;
-  float flow2=G(vec2(along*0.06-uTime*0.03+0.3,across*0.2+0.2)).g;
-  float fl=smoothstep(0.62,0.82,flow*0.55+flow2*0.45)*smoothstep(0.3,0.8,dn);
-  c=mix(c,c*1.15+vec3(0.03,0.05,0.05),fl*0.45);
-  // shadows (trees + clouds) cool the water
-  vec4 lm=LM(vW);float cs=max(cloud(vW)*0.6,(1.0-lm.r)*uShadowsOn);c=mix(c,c*vec3(0.55,0.70,0.88),cs);
-  // 5. sun glitter: painted dabs only where the sun reflects toward the camera
-  float spec=pow(max(dot(R,uSunDir),0.0),5.0);
-  float dab=step(0.80,G(vec2(along*0.45-uTime*0.12,across*0.9)).r)*step(0.55,G(vW.xz/2.3+uTime*0.015).g);
-  c+=uSunCol*vec3(1.0,0.86,0.58)*dab*(0.25+spec*1.6)*(1.0-cs)*smoothstep(0.3,0.8,dn);
-  // 6. foam: broken painted line at the shore, plus a faint second line
-  float g=G(vW.xz/1.4).r,gf=G(vec2(along*0.5-uTime*0.05,across)).g;
-  float foam=smoothstep(0.08,0.02,abs(dn-0.12-(gf-0.5)*0.1))*step(0.42,g);
-  foam=max(foam,smoothstep(0.05,0.0,abs(dn-0.42-(gf-0.5)*0.15))*step(0.62,g)*0.6);
-  c=mix(c,vec3(0.92,0.92,0.84)*mix(1.0,0.8,cs),foam*0.85);
-  // season: winter ice (pale, cracked), snow at the edges
-  float ice=clamp(uSeason-2.3,0.0,0.7)/0.7;
-  if(ice>0.0){vec3 ic=mix(vec3(0.66,0.76,0.82),vec3(0.84,0.88,0.90),smoothstep(0.5,0.0,dn));
-    float crack=smoothstep(0.03,0.0,abs(G(vW.xz/9.0).g-0.5))*0.5;ic*=1.0-crack;ic=mix(ic,ic*vec3(0.62,0.72,0.88),cs);
-    c=mix(c,ic,ice*0.9);}
-  c*=1.0+(G(vW.xz/4.0).r-0.5)*uGrainAmt*0.14;
+  vec4 lm=LM(vW);float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,lm.g,uAO);
+  vec4 t=waterTexel(vW.xz);float d=max(waterDepth(t),0.0),s=waterSdf(t),sp=length(waterFlow(t)),fws=fwidth(s);   // fws: the branches' margin (shore.glsl)
+  float up=smoothstep(WATER_BAND,WATER_BAND+0.5,s);   // the upper layers: none within the band
+  #ifdef WATER_SAB_OWN
+  // the seam check's sabotage: the water painting itself in the band (every layer wherever it is wet, the dry side lit
+  // with the water's flat normal instead of the bank normals)
+  vec3 c=s<=0.0?paint(landAlbedo(vW.xz),vec3(0.0,1.0,0.0),vW,occ,0.12,1.0,sh)*(1.0+(G(vW.xz/4.0).r-0.5)*uGrainAmt*0.14):shore(vW,t,occ,sh,fws);up=step(0.0,s);
+  #else
+  vec3 c=shore(vW,t,occ,sh,fws);
+  #endif
+  if(s>WATER_BAND-1.5*fws){   // past where the layers below have weight, by the derivatives' margin (src/look/shaders/shore.glsl)
+    vec3 V=normalize(uCamPos-vW),R=reflect(-V,vec3(0.0,1.0,0.0));
+    float across=vUv.x,cs=max(cloud(vW)*0.6,sh);
+    #ifdef WATER_SAB_FLAT
+    float riffle=0.0;   // the pool and riffle check's sabotage: the riffle ignored
+    #else
+    float riffle=vRiffle;
+    #endif
+    // 3. calm and rough: riffles, and fast shallow water, break the surface
+    float rough=max(smoothstep(0.3,0.65,riffle),smoothstep(0.6,0.9,sp)*smoothstep(1.2,0.5,d));
+    // the strokes' coordinate along the flow: the time of travel against the clock, wrapped to a whole period
+    // (research §4.3: features stretch where the water is fast and never shear)
+    float along=(vTau-mod(uTime,STROKE_P))*STROKE_V;
+    // 4. the painted sky tint at grazing view (no sky is drawn), less on rough water
+    float fr=pow(1.0-max(V.y,0.0),2.5);
+    c=mix(c,vec3(0.62,0.74,0.86),(0.12+fr*0.40)*smoothstep(0.2,1.0,d)*(1.0-0.6*rough)*up);
+    // 5. tree reflections: the mirrored view ray traced up to crown height in the baked canopy mask, broken on riffles
+    float wob=(G(vec2(across*0.6,along*0.25)).r-0.5)*(0.9+1.6*rough);
+    vec2 o=R.xz/max(R.y,0.2);
+    float rf=max(reflAt(vW.xz+o*4.0+vec2(wob,0.0)),reflAt(vW.xz+o*7.5+vec2(wob*1.5,0.0)));
+    c=mix(c,vec3(0.08,0.17,0.13),smoothstep(0.25,0.6,rf)*0.62*smoothstep(0.15,0.5,d)*(1.0-0.7*rough)*up);
+    // 6. strokes along the current: light marks (more on riffles), a few dark ones in pools, none where it is slow
+    float st=G(vec2(along*0.05,across*0.12)).b,st2=G(vec2(along*0.10+0.37,across*0.35+0.2)).g;
+    float slow=smoothstep(0.08,0.25,sp),marks=smoothstep(0.62,0.80,st*0.6+st2*0.4)*smoothstep(0.15,0.6,d)*slow;
+    c=mix(c,c*1.12+vec3(0.03,0.05,0.05),marks*(0.35+0.4*rough)*up);
+    c=mix(c,c*0.82,smoothstep(0.70,0.85,st2)*0.25*(1.0-rough)*smoothstep(0.3,0.8,d)*slow*up);
+    // 8. glitter: painted sun dabs, mostly on riffles
+    float spec=pow(max(dot(R,uSunDir),0.0),5.0);
+    float dab=aastep(mix(0.80,0.73,rough),G(vec2(along*0.10,across*0.25)).g)*aastep(0.5,G(vW.xz/9.0+mod(uTime,200.0/3.0)*0.015).g);
+    c+=uSunCol*vec3(1.0,0.86,0.58)*dab*(0.2+spec*1.6)*(1.0-cs)*smoothstep(0.15,0.5,d)*up*(1.0-clamp(uSeason-2.3,0.0,0.7)/0.7);
+    // 9. riffle foam: broken streaks along the current (the grain's dry-brush channel, long along x), bent into
+    // chevrons pointing upstream, hard-edged
+    float chev=G(vec2(along*0.05+abs(across)*0.02,across*0.06)).b;
+    float riff=smoothstep(0.35,0.65,riffle)*aastep(0.66,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);
+    c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.85*up*(1.0-clamp(uSeason-2.3,0.0,0.7)/0.7));
+  }
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}

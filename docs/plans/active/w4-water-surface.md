@@ -40,7 +40,8 @@ E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/styl
   and hard-edged foam (shore and riffles). The winter ice stays as it is (W5's seasons).
 - **The water data on the page from the start:** bound to the terrain's and the water's materials outside the debug
   views (its texture: 13.7 MB, 6 ms, measured in W3).
-- **The far ring's painted line** re-matched to the new water at the tile's edge.
+- **The far ring's painted line** where it meets the ribbon at the tile's edge (re-matched if the new water shows a
+  step there).
 
 **Not in W4:**
 - **Ponds** (pond polygons, the dam, research §2.7): there is no pond in the world. The map format
@@ -67,9 +68,9 @@ E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/styl
     bed), so the band is continuous across the shoreline.
 - **Its width:** B = 0.75 m on each side (`SPEC.water.band`) (the measured 0.57 m and 0.69 m, plus a margin). The check gates the
   measured widths against B (below), so a world whose grid strays farther fails, rather than showing a seam.
-- **The terrain** paints `shore()` where the shore distance is above −B, and blends to its own colour over the next
-  0.4 m inland (one shader, so no seam). Under the water, past the band, it paints `shore()` too (it is hidden there,
-  except where the drawn ground pokes through).
+- **The terrain** paints `shore()` where the shore distance is within ±B, and blends to its own colour over the next
+  0.4 m inland (one shader, so no seam). Past the band in the water it keeps its own colour: the band check shows the
+  water always covers it there, so the hidden bed is not painted twice.
 - **The water** paints `shore()` on dry ground (where the ribbon covers it), and adds its upper layers (sky tint,
   reflections, strokes, glitter, riffle foam) faded in from B to B + 0.5 m into the water: where either surface may
   be the one drawn, only the shared layers show.
@@ -100,8 +101,9 @@ E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/styl
 
 - The water data's texture is made at load and bound to the terrain's and the water's materials; the debug views
   (W3) stay on top of it. Its cost moves from the first debug view to the load (measured, reported).
-- The far ring's line colour: the water's mean colour at the tile's edge (measured on the page), so the line meets
-  the ribbon there.
+- The far ring's line meets the ribbon at the tile's edge, at least 165 m past the play area (`SPEC.margin`): seen
+  only from the wide zooms, under the haze. If the new water shows a step there (the far-edge screenshots, base
+  and branch), the line's colour is re-matched.
 
 ## Checks (`tools/water-look-check.mjs`, new; Node and the page)
 

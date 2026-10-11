@@ -1,7 +1,8 @@
 // The water data (docs/plans/done/w3-water-data.md, src/look/world/water-data.ts): depth, shore distance and flow
-// over the tile. W3 reads it in the debug views only (WATER_DEBUG); without that define nothing here is compiled
-#ifdef WATER_DEBUG
-uniform sampler2D uWater;uniform float uWaterView;
+// over the tile. WATERDATA: the tile's terrain and the water read it (the shore band, src/look/shaders/shore.glsl);
+// WATER_DEBUG adds its debug views. Without WATERDATA nothing here is compiled
+#ifdef WATERDATA
+uniform sampler2D uWater;
 vec4 waterTexel(vec2 xz,float bias){vec2 uv=(xz+TILE_HALF)/TILE_W;
   #ifdef WATER_SAB_FLIP
   uv.y=1.0-uv.y;   // the page check's sabotage: the texture read upside down
@@ -11,11 +12,20 @@ vec4 waterTexel(vec2 xz){return waterTexel(xz,0.0);}
 float waterDepth(vec4 t){return WATER_D0+t.r*(WATER_D1-WATER_D0);}
 float waterSdf(vec4 t){return (t.g*2.0-1.0)*WATER_SDF;}
 vec2 waterFlow(vec4 t){return (t.ba*255.0-128.0)/127.0;}   // 128 ± 127: 0 exactly at 128
+#endif
+#ifdef WATER_DEBUG
+uniform float uWaterView;
 vec3 depthView(float d){return d>0.0?mix(vec3(0.62,0.88,0.96),vec3(0.03,0.12,0.40),clamp(d/1.5,0.0,1.0)):mix(vec3(0.42,0.33,0.20),vec3(0.93,0.91,0.86),clamp(d/WATER_D0,0.0,1.0));}
 // uWaterView: 1 depth (blues by depth; dry ground brown to pale by its height above the water, to the range's end), 2 shore distance
 // (1 m bands, blue in the water, red on land, the shore white), 3 flow (an arrow per 2 m cell over the depth, its
-// length by speed), 4 the raw texel's RGB, 5 its alpha (grey)
+// length by speed), 4 the raw texel's RGB, 5 its alpha (grey), 6 the surface (the water white, the terrain black:
+// WATER_SURFACE)
 vec3 waterView(vec2 xz){
+  #ifdef WATER_SURFACE
+  if(uWaterView>5.5)return vec3(1.0);
+  #else
+  if(uWaterView>5.5)return vec3(0.0);
+  #endif
   vec4 t=waterTexel(xz);
   if(uWaterView>4.5)return vec3(t.a);
   if(uWaterView>3.5)return t.rgb;

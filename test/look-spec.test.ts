@@ -35,6 +35,7 @@ describe('world spec', () => {
     ['sun depth range out of order', s => { s.depth.near = 2000 }, /depth range/],
     ['water texels not dividing the tile', s => { s.water.texel = 0.3 }, /water: the tile/],
     ['a water depth range without the shore', s => { s.water.depth = [0.5, 2.5] }, /water: the depth range/],
+    ['no shore band', s => { s.water.band = 0 }, /water: the shore band/],
   ]
   for (const [name, f, msg] of cases) it(`throws: ${name}`, () => { expect(() => derive(with_(f))).toThrow(msg) })
   it('sizes the shadow map at the texel target on the ground, and refuses one over min-spec', () => {
