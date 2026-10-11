@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-11
-code: [app/index.html, src/app/main.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, test/soldiers.test.ts, tools/app-check.mjs]
+code: [app/index.html, src/app/main.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, test/soldiers.test.ts, tools/app-check.mjs]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0016-typescript-toolchain]
 ---
 
@@ -103,9 +103,11 @@ data is a darker margin.
 **Scenarios** (`src/scenarios/page.ts`): `s1c-firefight` (the default, `docs/systems/fire-morale.md`),
 `s1c-brigade`, `s1d-arms` (a battalion, a cavalry regiment and a battery a side, holding fire: the unit types,
 `docs/plans/active/s1d1-unit-types.md`), `s1d-charge` (a regiment against a battalion in line and one in
-square, `docs/systems/melee.md`), `s1b-field` (three battalions a side, holding fire until ordered) and
+square, `docs/systems/melee.md`), `s1d-guns` (a battery on the hill against a column across the stream,
+`docs/systems/artillery.md`), `s1b-field` (three battalions a side, holding fire until ordered) and
 `s1b-bench` (40 battalions of 400 in column, holding fire), chosen by `?scenario=`. Battalions are of 400. Fire shows
-as a flash at a company's front with a fading line to its target; morale as a bar behind each battalion,
+as a flash at a company's front with a fading line to its target (a battery's roundshot: a line to where the
+ball stopped; canister: a fan); morale as a bar behind each battalion,
 named unless steady. Fire at will and Hold fire are panel orders. The page loads the data only at `FIELD_DATA_VERSION`.
 
 **Hooks** (`window.APP`): select, march, charge, form, order, `advance(seconds)` (pauses the clock and steps
@@ -137,6 +139,7 @@ speeds, faster where its pace (or its routers') would leave them behind (trooper
   - the 40-battalion bench;
   - the arms: a battery unlimbering, a regiment at the trot and changing shape;
   - the charge: a regiment charges a line, which breaks, then a square, which holds;
+  - the guns: a battery fires roundshot on a column, which loses men;
   - each session's replay played back in Node.
 
   It fails on any console error or hash mismatch.

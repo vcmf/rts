@@ -76,6 +76,26 @@ export interface MeleeDef {
   refuse: number; breach: number
   refuge: { alert: number; closing: number; react: number; hold: number }   // forming the refuge shape against a charging enemy: metres, m/s, seconds, seconds
 }
+// a type that fires shot (S1d-3, docs/systems/artillery.md): a ball walked over the heightfield (the ray) and
+// a short-range cone. The shapes it fires from, a piece's arc, its reload and the crew that keeps it
+export interface RayDef {
+  range: number                 // the farthest a piece aims, metres
+  step: number                  // metres the ball moves per step of its walk
+  muzzle: number                // the muzzle's height above the ground, metres
+  speed: number                 // m/s (sets the drop per metre of the flat trajectory)
+  energy: number                // metres of travel the ball has, spent by flight, grazes and men struck
+  graze: number; restitution: number   // energy lost at a graze; the share of its drop it keeps as rise
+  bury: number                  // a graze into ground rising steeper than this (rise over run) stops it
+  height: number                // the ball strikes men while this low over the ground, metres
+  width: number                 // the lane it cuts through a block, metres
+  perMan: number                // metres of energy a man struck absorbs
+  kill: number                  // share of the men in its lane who fall
+  spread: number; short: number // keyed dispersion: across (radians, ±) and in range (a share, ±)
+}
+export interface ConeDef { range: number; half: number; hits: [number, number][] }   // inside range; half-angle; men struck per shot by range
+// shapes it fires from; a piece's arc (half-angle, radians); reload seconds and spread; full crew per piece, and
+// the most a short crew may slow the reload (a factor); how far ahead of its detachment's front rank the piece stands
+export interface ArtilleryDef { shapes: string[]; arc: number; reload: number; reloadJitter: number; crew: number; crewSlow: number; ahead: number; ray: RayDef; cone: ConeDef }
 // a unit type (S1d-1): its block, its shapes and their change times. A formation is of one type for life
 export interface UnitType {
   geometry: Geometry
@@ -86,6 +106,7 @@ export interface UnitType {
   figure: 'foot' | 'mounted' | 'crewed'   // how its men are drawn: on foot, on horseback, or serving pieces (the renderer's; no rule reads it)
   charge?: ChargeDef           // it charges (S1d-2)
   refuge?: string              // the shape it forms against a charging enemy (S1d-2, the standing behaviour)
+  artillery?: ArtilleryDef     // it fires shot (S1d-3)
 }
 export interface Ruleset {
   name: string
@@ -133,6 +154,7 @@ export interface TypeTable {
   start: number              // the spawn's shape
   charge: { from: Uint8Array; approach: number; pace: number } | null   // the shapes it charges from (1 by shape) and its paces' indices; null: it does not charge
   refuge: number             // the shape it forms against cavalry, −1 none
+  artillery: { from: Uint8Array; cosArc: number; drop: number } | null   // the shapes it fires from (1 by shape), cos of its arc, the ray's drop per metre per metre
 }
 export interface Compiled {
   rs: Ruleset; hash: number
@@ -171,7 +193,7 @@ export const slotIndex = (g: Geometry, c: number, r: number, f: number): number 
 // a stable hash of the ruleset's numbers and names (its functions by their output), recorded by a world
 function rulesetHash(rs: Ruleset): number {
   const types = Object.keys(rs.types).map(t => { const u = rs.types[t], geo = u.geometry
-    return [t, geo, Object.keys(u.formations).sort().map(n => { const d = u.formations[n]; return [n, d.kind, d.pace, d.roadPace ?? '', !!d.trail, !!d.closeAcross, d.step ?? null, !!d.braced, d.place(geo)] }), u.changeTime, u.defaultChangeTime, u.start, u.fires, u.figure, u.charge ?? null, u.refuge ?? ''] })
+    return [t, geo, Object.keys(u.formations).sort().map(n => { const d = u.formations[n]; return [n, d.kind, d.pace, d.roadPace ?? '', !!d.trail, !!d.closeAcross, d.step ?? null, !!d.braced, d.place(geo)] }), u.changeTime, u.defaultChangeTime, u.start, u.fires, u.figure, u.charge ?? null, u.refuge ?? '', u.artillery ?? null] })
   const text = JSON.stringify([rs.name, types, rs.pace, rs.q, rs.start, rs.slopeK, rs.terrain, rs.water, rs.orders, rs.disorder, rs.faceTime, rs.dressTime, rs.fire, rs.morale, rs.melee])
   return fnv1a(new TextEncoder().encode(text))
 }
@@ -202,9 +224,19 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
   }
   const refuge = u.refuge === undefined ? -1 : names.indexOf(u.refuge)
   if (u.refuge !== undefined && (refuge < 0 || !u.formations[u.refuge].braced)) throw new Error(`${at}: its refuge ${u.refuge} is not one of its braced shapes`)
+  let artillery: TypeTable['artillery'] = null
+  if (u.artillery) {
+    const A = u.artillery, from = new Uint8Array(S)
+    for (const n of A.shapes) { const k = names.indexOf(n); if (k < 0) throw new Error(`${at}: it fires from ${n}, not one of its shapes`); from[k] = 1 }
+    if (u.fires) throw new Error(`${at}: a type fires musketry or artillery, not both (they share a company's reload and target)`)
+    const R = A.ray, ok = A.cone.range < R.range && R.speed > 0 && A.crew > 0 && A.crewSlow >= 1 && A.arc > 0 && A.arc <= PI && R.step > 0 && R.energy > 0 && R.height > 0 && R.width > 0 &&
+      A.cone.hits.length > 0 && A.cone.hits.every((p, k) => k === 0 || p[0] > A.cone.hits[k - 1][0])
+    if (!ok) throw new Error(`${at}: artillery needs cone.range < ray.range; speed, crew, step, energy, height and width > 0; crewSlow ≥ 1; arc in (0, π]; and cone.hits not empty, its ranges increasing`)
+    artillery = { from, cosArc: cos(A.arc), drop: 9.81 / (A.ray.speed * A.ray.speed) }
+  }
   const own = [...shapes.flatMap(L => [L.pace, L.roadPace]), ...(charge ? [charge.approach, charge.pace] : [])]
   let qMax = 1; for (const p of own) if (p >= 0) for (const v of Object.values(rs.q[paces[p]] ?? {})) qMax = Math.max(qMax, v)
-  return { name, def: u, geo: g, C, NB, slots, qMax, slotC, slotLX, slotLZ, slotReach, shapes, shapeIndex: n => names.indexOf(n), changeTime, start, charge, refuge }
+  return { name, def: u, geo: g, C, NB, slots, qMax, slotC, slotLX, slotLZ, slotReach, shapes, shapeIndex: n => names.indexOf(n), changeTime, start, charge, refuge, artillery }
 }
 
 export function compileRuleset(rs: Ruleset): Compiled {

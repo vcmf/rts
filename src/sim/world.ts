@@ -49,6 +49,9 @@ export interface Formations {
   reload: Float64Array; volleyTick: Int32Array; target: Int32Array; owed: Int32Array
   // fire, per battalion: mode (FIRE_AT_WILL, FIRE_HOLD) and the preferred target (a handle, 0 none)
   fireMode: Uint8Array; prefer: Int32Array
+  // a battery's pieces (S1d-3, artillery.ts), per company: the last shot's kind (SHOT_*), and where its ball
+  // stopped (a ray) or its aim point (a cone), for the renderer
+  shotKind: Uint8Array; shotX: Float64Array; shotZ: Float64Array
   // morale: quality, morale, the state (MS_*), the strength at spawn and the recent losses (decaying)
   quality: Float64Array; morale: Float64Array; mstate: Uint8Array; startMen: Int32Array; recent: Float64Array
   // the rout (morale.ts): its direction, fixed at the break; its phase (RP_*); the runs made so far
@@ -70,6 +73,7 @@ export interface Formations {
 // per side: the direction of its rear (a unit vector; 0, 0 until a scenario sets it)
 export interface Sides { rearX: Float64Array; rearZ: Float64Array }
 export const FIRE_AT_WILL = 0, FIRE_HOLD = 1
+export const SHOT_NONE = 0, SHOT_RAY = 1, SHOT_CONE = 2
 export const MS_STEADY = 0, MS_SHAKEN = 1, MS_WAVERING = 2, MS_ROUTING = 3, MS_RALLYING = 4, MS_SHATTERED = 5
 export const MORALE_STATES = ['steady', 'shaken', 'wavering', 'routing', 'rallying', 'shattered']
 // out of the fight (routing or later): does not fire, threatens no one, supports no one
@@ -114,7 +118,7 @@ export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = tru
     trailX: f64(N * cr.trail), trailZ: f64(N * cr.trail), trailStart: i32(N), trailCount: i32(N), trailVer: i32(N), trailLen: f64(N),
     ordHead: i32(N).fill(-1), ordTail: i32(N).fill(-1),
     reload: f64(N * C), volleyTick: i32(N * C), target: i32(N * C), owed: i32(N * C),
-    fireMode: u8(N), prefer: i32(N),
+    fireMode: u8(N), prefer: i32(N), shotKind: u8(N * C), shotX: f64(N * C), shotZ: f64(N * C),
     quality: f64(N), morale: f64(N), mstate: u8(N), startMen: i32(N), recent: f64(N), routX: f64(N), routZ: f64(N), routPhase: u8(N), runs: u8(N), pressed: i32(N),
     baseMen: i32(N), brokeTick: i32(N), lastLoss: i32(N), since: i32(N), falling: i32(N), fellBack: u8(N), routs: u8(N),
     chTarget: i32(N), chPhase: u8(N), chRun: f64(N), chGap: f64(N), chUntil: i32(N), blownUntil: i32(N), foe: i32(N), shockIn: f64(N),
