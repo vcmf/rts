@@ -65,6 +65,7 @@ function impassable(t: Terrain, kind: number): [Uint8Array, Float64Array] {
   return [imp, d]
 }
 
+// a point off the map reads the edge cell, so the footprint gate passes ground beyond the edge (issue #37)
 export const cellK = (t: Terrain, x: number, z: number): number =>
   Math.min(t.n - 1, Math.max(0, Math.round((z - t.z0) / t.cell))) * t.n + Math.min(t.n - 1, Math.max(0, Math.round((x - t.x0) / t.cell)))
 

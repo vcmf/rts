@@ -1,7 +1,8 @@
 // The tick (docs/proposals/sim-design.md §16, the determinism contract). Every loop runs in slot order.
 // S1a fills steps 1, 5–6 (orders → formation state and movement, one call per formation) and 14; S1c fills
-// 8 (fire), 11 (casualties) and 12 (morale; the rout and the wavering fall-back are its standing behaviours). The others are named and
-// empty until later parts of S1.
+// 8 (fire), 11 (casualties) and 12 (morale; the rout and the wavering fall-back are its standing behaviours);
+// S1d-2 fills 4 (the square against cavalry) and 10 (charges and melee). The others are named and empty until
+// later parts of S1.
 import { type World, M_TICK, MAX_FORMATIONS } from './world.ts'
 import { applyCommands, reapFormation, type Dropped } from './commands.ts'
 import { HASH_EVERY } from './time.ts'
@@ -10,6 +11,7 @@ import { formationTick, menOf } from './formation.ts'
 import { hashWorld } from './serialize.ts'
 import { fireStep, casualtiesStep } from './fire.ts'
 import { moraleStep } from './morale.ts'
+import { meleeStep, standingStep } from './melee.ts'
 
 // metering is injected: the sim never reads a clock itself
 export interface Meter { now(): number; add(step: string, ms: number): void }
@@ -20,11 +22,13 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
   const step = (name: string, fn: () => void) => { if (!meter) return fn(); const t0 = meter.now(); fn(); meter.add(name, meter.now() - t0) }
   let dropped: Dropped[] = []
   step('1 commands', () => { dropped = applyCommands(w, t) })
-  // 2 commanders · 3 enemy AI · 4 standing behaviour: S1c+
+  // 2 commanders · 3 enemy AI: S2
+  step('4 standing behaviour: refuge against a charge', () => { standingStep(w) })
   step('5–6 formations: orders, changes, movement', () => { for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i]) formationTick(w, i) })
   // 7 vision: S2
   step('8 fire', () => { fireStep(w) })
-  // 9 roundshot · 10 melee: S1d
+  // 9 roundshot: S1d-3
+  step('10 charges and melee', () => { meleeStep(w) })
   // all casualties first, then all morale: a rout reads other battalions (the nearest enemy's position and
   // men, final for the tick; its morale state from a copy taken before any changes), so visiting order does
   // not matter, except for orders from the shared pool (the lower slot served first when it runs short)

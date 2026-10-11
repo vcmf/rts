@@ -124,7 +124,7 @@ way to see the types; fighting between them comes with S1d-2 and S1d-3.
 
 - Charges, melee, auto-square (S1d-2); the battery firing (S1d-3).
 - Horse artillery, the draught test for guns on slopes, a slope curve per kind: the slope stays the
-  infantry curve for every type (noted in `docs/known-issues.md`).
+  infantry curve for every type (an open question in `docs/systems/formations.md`).
 - A lag-model catch-up time per type (cavalry 2 s): the presets stay shared.
 - The 3D look of horses and guns (Track E reads `Unit.type`).
 
@@ -166,7 +166,7 @@ ruleset's hash alone moved).
   near 5 m/s); a battery's gunners trail their pieces by up to 29 m while it deploys and fall in after.
 - **The scenario** spawns the types in place (above), and keeps every shape the page drills them into on the
   map: the field is 360 m, and the gate does not treat the ground beyond its edge as impassable
-  (`docs/known-issues.md`, for S1e).
+  ([#37](https://github.com/vcmf/rts/issues/37), for S1e).
 
 **Cost** (dev Mac, M1 Pro, `node tools/bench-cost.ts`, the page's release world, main against this branch):
 
@@ -179,7 +179,7 @@ ruleset's hash alone moved).
 
 The tick's 0.08 ms is the type lookups in the per-formation paths (the per-man path reads the type and shape
 from its places context). The hash is the trail ring (960 points for every slot, the regiment's column of
-route): `docs/known-issues.md`.
+route): [#38](https://github.com/vcmf/rts/issues/38).
 
 ## Review
 
@@ -200,7 +200,7 @@ route): `docs/known-issues.md`.
 - **Kept:**
   - one trail ring size for every slot (the hash 2.7 → 4.1 ms even with no cavalry): a ring per type
     needs per-formation offsets into the rings, a change of the save format left for S2 with the save of live
-    points only (`docs/known-issues.md`);
+    points only ([#38](https://github.com/vcmf/rts/issues/38));
   - the fire step's per-company buffers and sight cache strided by the battery's 8 companies (2.1 MB against
     1.2 MB): the cost is memory, not time (the firing frame is unchanged).
 

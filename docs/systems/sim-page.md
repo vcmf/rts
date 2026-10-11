@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-11
-code: [app/index.html, src/app/main.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, test/soldiers.test.ts, tools/app-check.mjs]
+code: [app/index.html, src/app/main.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, test/soldiers.test.ts, tools/app-check.mjs]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0016-typescript-toolchain]
 ---
 
@@ -33,7 +33,7 @@ exports as a replay that plays back in Node to the same hashes.
   (`cosmeticRng`), so its choices never change a hash.
 - Sim plus soldier layer within 4 ms per frame for 40 battalions on the dev Mac. At 400 men a battalion
   (decision 0018) it holds at the halt and firing (0.7 ms) but not with all 16,000 men marching (4.4–6 ms):
-  `docs/known-issues.md`. `node tools/bench-cost.ts` measures it by part on the page's release world.
+  [#36](https://github.com/vcmf/rts/issues/36). `node tools/bench-cost.ts` measures it by part on the page's release world.
 
 ## Design
 
@@ -94,24 +94,28 @@ data is a darker margin.
   shift appends a waypoint.
 - Right-drag or space-drag pans; the wheel zooms about the cursor.
 - P pauses, 1/2/4/8 set the speed, Escape clears the selection.
+- C (or the panel's Charge) and then a click on an enemy: the selection charges it (S1d-2; a type that cannot
+  charge is refused, and the readout says so). The readout names a charge, a pursuit, a melee and a blown
+  regiment.
 - The panel is built from the ruleset (every type's shapes, order presets); a shape the selected formation's
   type lacks is refused, and the readout names each selected formation's type.
 
 **Scenarios** (`src/scenarios/page.ts`): `s1c-firefight` (the default, `docs/systems/fire-morale.md`),
 `s1c-brigade`, `s1d-arms` (a battalion, a cavalry regiment and a battery a side, holding fire: the unit types,
-`docs/plans/active/s1d1-unit-types.md`), `s1b-field` (three battalions a side, holding fire until ordered) and
+`docs/plans/active/s1d1-unit-types.md`), `s1d-charge` (a regiment against a battalion in line and one in
+square, `docs/systems/melee.md`), `s1b-field` (three battalions a side, holding fire until ordered) and
 `s1b-bench` (40 battalions of 400 in column, holding fire), chosen by `?scenario=`. Battalions are of 400. Fire shows
 as a flash at a company's front with a fading line to its target; morale as a bar behind each battalion,
 named unless steady. Fire at will and Hold fire are panel orders. The page loads the data only at `FIELD_DATA_VERSION`.
 
-**Hooks** (`window.APP`): select, march, form, order, `advance(seconds)` (pauses the clock and steps
+**Hooks** (`window.APP`): select, march, charge, form, order, `advance(seconds)` (pauses the clock and steps
 frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`.
 
 ## Tunables
 
 `AHEAD`, `WALK`, `RUN`, `SEP` and the steering gains in `src/render/soldiers.ts`; class looks in
 `src/render/style.ts`; the scenarios in `src/scenarios/`. A type's men walk and run at least the infantry's
-speeds, faster where its pace (or its routers') would leave them behind (troopers at the trot).
+speeds, faster where its pace (or its routers') would leave them behind (troopers at the trot and the gallop).
 
 ## Verification
 
@@ -132,6 +136,7 @@ speeds, faster where its pace (or its routers') would leave them behind (trooper
   - every panel button logs one command;
   - the 40-battalion bench;
   - the arms: a battery unlimbering, a regiment at the trot and changing shape;
+  - the charge: a regiment charges a line, which breaks, then a square, which holds;
   - each session's replay played back in Node.
 
   It fails on any console error or hash mismatch.
@@ -142,7 +147,7 @@ speeds, faster where its pace (or its routers') would leave them behind (trooper
 
 - At 40 battalions of 400 (16,000 men) sim and soldier layer cost about 14 ms a frame marching and 6 ms
   firing on the dev Mac, against the 4 ms budget; 40 × 800 costs about 27 ms. The cost tests hold
-  temporary budgets until S1c-5 (`docs/known-issues.md`). The worker (S2) takes the ticks off the main
+  temporary budgets until S1c-5 ([#36](https://github.com/vcmf/rts/issues/36)). The worker (S2) takes the ticks off the main
   thread.
 - The page selects and orders both sides (a drill sandbox); sides belong to S1e.
 - No speed overlay yet (the plan listed one); the slots overlay exists.

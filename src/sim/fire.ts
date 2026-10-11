@@ -27,8 +27,9 @@ const pose = { x: 0, z: 0, a: 0, face: 0, kx: 1, kz: 1 }
 const ks = new Uint32Array(4)
 
 
-// (each build starts a new epoch: the sight cache below holds only answers for these positions)
-function geometry(w: World): FireGeo {
+// (each build starts a new epoch: the sight cache below holds only answers for these positions; the melee step
+// builds it too, for the positions after movement)
+export function blockGeometry(w: World): FireGeo {
   const CS = w.cr.maxC, n = MAX_FORMATIONS * CS, s = w.scratch, N = MAX_FORMATIONS
   s.fireEpoch = ((s.fireEpoch ?? 0) + 1) & 0x3fffffff
   const G = s.fireGeo ?? (s.fireGeo = { cx: new Float64Array(n), cz: new Float64Array(n), fx: new Float64Array(n), fz: new Float64Array(n), ox: new Float64Array(n), oz: new Float64Array(n), ca: new Float64Array(n), sa: new Float64Array(n), reach: new Float64Array(N),
@@ -149,10 +150,10 @@ function aimAt(w: World, G: FireGeo, k: number, j: number): number {
 }
 
 // a battalion may fire: of a type that fires, halted (no order at its head but a dress), not changing shape, in
-// the fight, at will
+// the fight and not in melee, at will
 export function mayFire(w: World, i: number): boolean {
   const f = w.f, n = f.ordHead[i]
-  return typeOf(w, i).def.fires && f.fireMode[i] === FIRE_AT_WILL && !outOfFight(f.mstate[i]) && !f.trans[i] && (n < 0 || w.ord.type[n] === O_DRESS)
+  return typeOf(w, i).def.fires && f.fireMode[i] === FIRE_AT_WILL && !outOfFight(f.mstate[i]) && !f.foe[i] && !f.trans[i] && (n < 0 || w.ord.type[n] === O_DRESS)
 }
 
 // men in company c's firing ranks
@@ -174,7 +175,8 @@ export function fireStep(w: World): void {
     if (mayFire(w, i)) any = true; else for (let c = 0; c < C; c++) f.target[i * CS + c] = 0
   }
   if (!any) return
-  const G = geometry(w), rev = w.scratch.reverse === true   // a test visits battalions in reverse: results must not change
+  const G = blockGeometry(w), rev = w.scratch.reverse === true   // a test visits battalions in reverse: results must not change
+  w.scratch.fireGeoTick = tick   // built for this tick's positions after movement: the melee step reuses it
   for (let n = 0; n < MAX_FORMATIONS; n++) {
     const i = rev ? MAX_FORMATIONS - 1 - n : n
     if (!f.alive[i]) continue
@@ -238,12 +240,18 @@ function volley(w: World, G: FireGeo, i: number, c: number, j: number, d: number
   const lambda = rounds * pAt(w, d) * w.cr.stateFactor[Math.min(2, f.mstate[i])] * (1 - F.cohesion * f.disorder[i]) * w.cr.depthByKind[layoutOf(w, j).kind]
   let hits = Math.floor(lambda); if (nextUnit(rs) < lambda - hits) hits++
   if (!hits) return
-  let tot = 0
-  for (let q = 0; q < C; q++) { const m = j * CS + q; open[q] = f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m]) && sees(w, G, k, m) ? 1 : 0; if (open[q]) tot += f.men[m] }
+  for (let q = 0; q < C; q++) { const m = j * CS + q; open[q] = f.men[m] > 0 && inArc(w, G, k, G.cx[m], G.cz[m]) && sees(w, G, k, m) ? 1 : 0 }
+  oweByMen(w, j, open, hits, rs)
+}
+// n men owed to battalion j's companies marked in `mask`, each drawn from rs to a marked company weighted by its
+// men (as they stood at the start of the step): a volley's hits, a charge's and a melee's losses (melee.ts)
+export function oweByMen(w: World, j: number, mask: ArrayLike<number>, n: number, rs: Uint32Array): void {
+  const f = w.f, CS = w.cr.maxC, C = typeOf(w, j).C
+  let tot = 0; for (let q = 0; q < C; q++) if (mask[q]) tot += f.men[j * CS + q]
   if (!tot) return
-  for (let n = 0; n < hits; n++) {
+  for (let k = 0; k < n; k++) {
     let r = Math.floor(nextUnit(rs) * tot), q = 0
-    for (; q < C; q++) { const m = j * CS + q; if (open[q]) { if (r < f.men[m]) break; r -= f.men[m] } }
+    for (; q < C; q++) if (mask[q]) { if (r < f.men[j * CS + q]) break; r -= f.men[j * CS + q] }
     f.owed[j * CS + Math.min(q, C - 1)]++
   }
 }
@@ -268,7 +276,7 @@ export function casualtiesStep(w: World, i: number): number {
 // company c of battalion i as it would aim now: its target's slot (−1 none), the clear share of its rays
 // and the range. For tests and debugging: it rebuilds the fire geometry for every battalion, not a per-frame call.
 export function aimOf(w: World, i: number, c: number): { target: number; share: number; range: number } {
-  const G = geometry(w), k = i * w.cr.maxC + c, j = slotOf(w, w.f.target[k])
+  const G = blockGeometry(w), k = i * w.cr.maxC + c, j = slotOf(w, w.f.target[k])
   const m = j >= 0 ? aimAt(w, G, k, j) : -1
   if (m < 0) return { target: j, share: 0, range: Infinity }
   return { target: j, share: clearShare(w, G, i, c, G.cx[m], G.cz[m]), range: sqrt(sqDist(G, k, m)) }
@@ -276,7 +284,7 @@ export function aimOf(w: World, i: number, c: number): { target: number; share: 
 
 // company c of battalion i sees company q of battalion j, with the positions as they are (tests, debugging)
 export function companySees(w: World, i: number, c: number, j: number, q: number): boolean {
-  const G = geometry(w), CS = w.cr.maxC
+  const G = blockGeometry(w), CS = w.cr.maxC
   return sees(w, G, i * CS + c, j * CS + q)   // as the fire step judges it (walked low to high)
 }
 

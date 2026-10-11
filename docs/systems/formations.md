@@ -135,7 +135,8 @@ eases the spacing from its first shape's again).
 
 **Orders** (a list per formation in the order pool):
 - move, with waypoints or a distance ahead (Retire);
-- form, wheel, face, dress.
+- form, wheel, face, dress;
+- charge (S1d-2): a move that steers at its target each tick, at the charge's paces (`docs/systems/melee.md`).
 
 How each behaves:
 - **Face about** relabels the companies by the shape's half-turn symmetry and keeps the lags (the anchor
@@ -212,4 +213,6 @@ Negative runs, each failing its tests:
 
 ## Open questions
 
+- **One slope curve for every kind** (S1d-1): horses and guns climb on the infantry's curve. A curve per kind
+  (and the draught test for guns on slopes) waits for horse artillery.
 - The soldier layer's checks (settling in the wood, slot error) are in `test/soldiers.test.ts` (S1b).

@@ -40,7 +40,7 @@ export class SoldierLayer {
   private treeAt: Int32Array; private treeX: Float64Array; private treeZ: Float64Array; private treeR: Float64Array
   constructor(w: World, scene: Scene) {
     this.w = w; this.scene = scene; this.ctxA = mkPlaces(w); this.ctx0 = mkPlaces(w); this.poseNow = new Float64Array(8 + 2 * w.cr.maxNB)
-    const top = w.cr.types.map(U => Math.max(...U.shapes.flatMap(L => [L.pace, L.roadPace].filter(p => p >= 0).map(p => w.cr.paceSpeed[p]))))
+    const top = w.cr.types.map(U => Math.max(...[...U.shapes.flatMap(L => [L.pace, L.roadPace]), ...(U.charge ? [U.charge.pace] : [])].filter(p => p >= 0).map(p => w.cr.paceSpeed[p])))   // a charging type's gallop too
     this.walkOf = Float64Array.from(top, v => Math.max(WALK, 1.2 * v)); this.runOf = Float64Array.from(top, v => Math.max(RUN, 1.2 * w.cr.rs.morale.routPace * v))
     this.treesByClass = Uint8Array.from(Object.keys(w.cr.rs.terrain), name => ((CLASS_STYLE[name]?.trees ?? 0) > 0 ? 1 : 0))
     const span = (w.terrain.n - 1) * w.terrain.cell; this.SN = Math.ceil(span / SC) + 1; this.cellHead = new Int32Array(this.SN * this.SN).fill(-1)

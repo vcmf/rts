@@ -2,7 +2,8 @@
 // drive it through window.APP with tools/shot.mjs, fail on any console error, then play each session's
 // exported replay back in Node: it must reproduce every hash the page took. The runs: the drill scenario
 // (orders, every panel button, screenshots), the 40-battalion bench (cost), the firefight to a rout, the
-// brigade to a break that spreads, and the arms (the unit types changing shape).
+// brigade to a break that spreads, the arms (the unit types changing shape), and the charge (a line caught
+// forming square breaks; a square holds).
 // Run `npm run build` first.
 // Usage: node tools/app-check.mjs [outDir]
 import { spawn } from 'node:child_process'
@@ -69,6 +70,19 @@ const arms = [
   REPLAY,
 ]
 
+// the charge (S1d-2): the regiment charges the line, which starts forming square and is caught: it breaks; once
+// the regiment is no longer blown, it charges the square, which holds while the regiment turns away
+const charge = [
+  ['wait', 1500], READY,
+  ['eval', 'APP.view(-110, 60, 1.9); "the regiment, the line and the square"'],
+  ['shot', 'charge-0-start'],
+  ['eval', 'APP.select([0]); APP.charge(1); APP.advance(30); APP.select([]); APP.view(-125, 100, 2.5); `CHARGE line state ${APP.w.f.mstate[1]}, ${APP.w.f.startMen[1] - APP.w.f.men.slice(APP.w.cr.maxC, 2 * APP.w.cr.maxC).reduce((a, b) => a + b, 0)} lost`'],
+  ['shot', 'charge-1-line'],
+  ['eval', 'APP.advance(150); APP.select([0]); APP.charge(2); APP.advance(40); APP.select([]); APP.view(-90, 130, 2.2); `SQUARE state ${APP.w.f.mstate[2]}, regiment phase ${APP.w.f.chPhase[0]} melee ${APP.w.f.foe[0] ? 1 : 0}`'],
+  ['shot', 'charge-2-square'],
+  REPLAY,
+]
+
 // the brigade (S1c-2) played until a break has spread: two or more of the weaker side's lines (slots 3–5) out
 // of the fight (routing, rallying or shattered: state ≥ 3), in 3-minute steps
 const OUT = 'APP.w.f.mstate.slice(3, 6).filter(s => s >= 3).length'
@@ -99,6 +113,7 @@ async function run(scenario, steps) {
   if (scenario === 's1c-firefight' && !/ROUT [12] /.test(text)) { console.log('the firefight did not end in a rout'); return false }
   if (scenario === 's1c-brigade' && !/CONTAGION [23] /.test(text)) { console.log('the brigade fight did not spread a break'); return false }
   if (scenario === 's1d-arms' && !(/TROT march unlimbered column unlimbered at z 80/.test(text) && /ARMS column unlimbered column unlimbered/.test(text))) { console.log('the arms did not change shape'); return false }
+  if (scenario === 's1d-charge' && !(/CHARGE line state [35]/.test(text) && /SQUARE state [012], regiment phase 0 melee 0/.test(text))) { console.log('the charges did not break the line and fail on the square'); return false }
   if (scenario === 's1b-field' && (!panel || panel[1] !== panel[2] || panel[1] === '0')) { console.log('panel buttons did not each log one command'); return false }
   return true
 }
@@ -108,7 +123,7 @@ const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--stri
 let ok = false
 try {
   await sleep(2500)
-  ok = await run('s1b-field', drill) && await run('s1b-bench', bench) && await run('s1c-firefight', fight) && await run('s1c-brigade', brigadeFight) && await run('s1d-arms', arms)
+  ok = await run('s1b-field', drill) && await run('s1b-bench', bench) && await run('s1c-firefight', fight) && await run('s1c-brigade', brigadeFight) && await run('s1d-arms', arms) && await run('s1d-charge', charge)
 } finally { preview.kill() }
 console.log(ok ? 'app check: ok' : 'app check: FAILED')
 process.exit(ok ? 0 : 1)

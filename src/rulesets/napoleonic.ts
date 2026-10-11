@@ -38,7 +38,7 @@ const infantry: UnitType = {
     line: { kind: 'line', pace: 'ordinary', closeAcross: true,
       place: g => each(g, c => ({ x: (c - (g.companies - 1) / 2) * (BW(g) + g.fileSpacing), z: 0, rot: 0, face: 0 })) },
     // the companies over four faces, facing out (square, above)
-    square: { kind: 'column', pace: 'ordinary', place: square },
+    square: { kind: 'column', pace: 'ordinary', braced: true, place: square },
     // column of divisions: two companies wide, one division behind another (an odd last company centred;
     // 0 − keeps the first division at +0)
     column: { kind: 'column', pace: 'ordinary',
@@ -56,6 +56,7 @@ const infantry: UnitType = {
   start: 'line',
   fires: true,
   figure: 'foot',
+  refuge: 'square',   // formed against cavalry (the standing behaviour, docs/systems/melee.md)
 }
 
 // a cavalry regiment of four squadrons, each 32 files × 2 ranks (256 places, about 250 troopers): a trooper's
@@ -84,6 +85,9 @@ const cavalry: UnitType = {
   start: 'line',
   fires: false,
   figure: 'mounted',
+  // the charge (docs/systems/melee.md): at the trot, the gallop over the last 150 m (the research: 50–200
+  // paces), full weight after 50 m of it; blown for two minutes after, recoiling 80 m from a square
+  charge: { shapes: ['line', 'column'], approach: 'trot', pace: 'gallop', gallopAt: 150, build: 50, test: 60, recoil: 80, rest: 120, pursue: 20 },
 }
 
 // a foot battery of 8 pieces (6 guns, 2 howitzers), each a detachment of 4 files × 3 ranks (12 men; 96 in all)
@@ -112,12 +116,12 @@ const battery: UnitType = {
 export const napoleonic: Ruleset = {
   name: 'Napoleonic',
   types: { infantry, cavalry, battery },
-  // paces in m/s: infantry ordinary and route step; cavalry walk and trot (the gallop is the charge's, S1d-2);
+  // paces in m/s: infantry ordinary and route step; cavalry walk, trot and the charge's gallop;
   // a battery at the walk limbered, by hand unlimbered
-  pace: { ordinary: 0.9, routeStep: 1.125, walk: 1.7, trot: 3.3, gunWalk: 0.85, manhandle: 0.3 },
+  pace: { ordinary: 0.9, routeStep: 1.125, walk: 1.7, trot: 3.3, gallop: 6.5, gunWalk: 0.85, manhandle: 0.3 },
   // quick-step factor: how much faster a lagging file may hurry, by pace and ground class
   q: { ordinary: { open: 1.3, light: 1.1, hard: 1.0 }, routeStep: { open: 1.15, light: 1.0, hard: 1.0 },
-    walk: { open: 1.5, light: 1.2, hard: 1.0 }, trot: { open: 1.15, light: 1.0, hard: 1.0 }, gunWalk: { open: 1.0, light: 1.0, hard: 1.0 }, manhandle: { open: 1.0, light: 1.0, hard: 1.0 } },
+    walk: { open: 1.5, light: 1.2, hard: 1.0 }, trot: { open: 1.15, light: 1.0, hard: 1.0 }, gallop: { open: 1.05, light: 1.0, hard: 1.0 }, gunWalk: { open: 1.0, light: 1.0, hard: 1.0 }, manhandle: { open: 1.0, light: 1.0, hard: 1.0 } },
   start: { orders: 'normal' },
   // slope: g = min(1, k · exp(-3.5 (|s + 0.05| - 0.05))), s = rise over run along the travel direction
   slopeK: 1.3,
@@ -171,6 +175,17 @@ export const napoleonic: Ruleset = {
     fallback: { metres: 15, after: 3, rate: 0.0005 },
     rally: { safe: 250, calm: 20, time: 30, cost: 0.1, max: 2 },
     shatter: 0.5,
+  },
+  // charges and melee (docs/plans/active/s1d2-charges.md): first guesses, tuned by tools/calibrate-charge.ts.
+  // A charge's threat shakes the target at the test, its impact costs men and morale by its momentum and the
+  // side it comes from, both cut by how far the target is braced (a square); melee kills per man in contact
+  melee: {
+    contact: 2, hold: 3,
+    threat: { front: 0.12, flank: 0.25, rear: 0.3 },
+    impact: { kill: 0.12, shock: { front: 0.2, flank: 0.35, rear: 0.4 } },
+    rate: 0.01, strength: { line: 1.0, column: 1.0, skirmish: 0.5, horse: 1.6, guns: 0.3 }, cohesion: 0.5,
+    refuse: 0.9, breach: 0.3,
+    refuge: { alert: 200, closing: 1, react: 2, hold: 30 },   // the square against cavalry
   },
 }
 // the ceiling (decision 0018): the same ruleset with companies of 45 files, 810 places (tests, cost benches)

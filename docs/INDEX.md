@@ -19,7 +19,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`conventions.md`](conventions.md): commits, units and numbers, prototypes, docs. *(current)*
 - [`glossary.md`](glossary.md): drill and engine terms. *(current)*
 - [`asset-sources.md`](asset-sources.md): where assets come from, licences. *(current)*
-- [`known-issues.md`](known-issues.md): grave pre-existing issues with their planned fixes. *(current)*
+- [`known-issues.md`](known-issues.md): where known issues live now (GitHub issues labelled `known-issue`), and the ones fixed before the move. *(current)*
 
 ## Decisions
 
@@ -33,6 +33,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`systems/sim-page.md`](systems/sim-page.md): the page that draws and drives the sim: soldier layer, staff map, input, replays (S1b).
 - [`systems/look.md`](systems/look.md): the look page: the painted world in TypeScript (Track E L0c).
 - [`systems/fire-morale.md`](systems/fire-morale.md): fire by company, keyed casualties, loss-driven morale and rout (S1c-1).
+- [`systems/melee.md`](systems/melee.md): cavalry charges, melee, and the square against cavalry (S1d-2).
 - More appear as systems are built; see [`systems/README.md`](systems/README.md).
 
 ## Proposals (designs before building)
@@ -54,6 +55,7 @@ designs written before building (frozen once built, their lasting content moves 
   [`plans/active/s1c4-battalion-scale.md`](plans/active/s1c4-battalion-scale.md) (S1c-4: the 400-man battalion),
   [`plans/active/s1c5-cost.md`](plans/active/s1c5-cost.md) (S1c-5: the cost of 16,000 men),
   [`plans/active/s1d1-unit-types.md`](plans/active/s1d1-unit-types.md) (S1d-1: unit types, the cavalry regiment and the foot battery; the S1d split),
+  [`plans/active/s1d2-charges.md`](plans/active/s1d2-charges.md) (S1d-2: charges, melee and the square against cavalry),
   [`plans/active/l2-detail.md`](plans/active/l2-detail.md) (Track E L2: the bench, the readability guard, the terrain detail layer),
   [`plans/active/w2-river-banks.md`](plans/active/w2-river-banks.md) (water W2: cut banks, point bars and the fine bank normals),
   [`plans/active/w3-water-data.md`](plans/active/w3-water-data.md) (water W3: the water-data bake, depth, shore distance and flow),

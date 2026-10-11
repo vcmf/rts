@@ -5,9 +5,9 @@
 // A battalion is a few company blocks (files × ranks) placed in the battalion frame by its shape. The sim
 // keeps the men per company; which slots are filled follows from that by one rule (`occupied`), so no
 // soldier is simulated (decisions 0007, 0018): who stands where and who falls is the renderer's.
-import { type World, M_TICK, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, MAX_FORMATIONS, fleeing, typeOf } from './world.ts'
+import { type World, M_TICK, O_MOVE, O_FORM, O_WHEEL, O_FACE, O_DRESS, O_CHARGE, CH_PURSUIT, MAX_FORMATIONS, fleeing, typeOf, formationSlot } from './world.ts'
 import type { ShapeLayout, Placement, TypeTable } from './ruleset.ts'
-import { rot2, slotIndex } from './ruleset.ts'
+import { rot2, slotIndex, MAX_COMPANIES } from './ruleset.ts'
 import { type Bits, mkBits, setBit, hasBit, anyBit, anyNew, minus } from './bits.ts'
 import { cellK, groundGAt, groundQAt, onRoadAt } from './terrain.ts'
 import { sin, cos, atan2, wrapAngle, PI } from './num.ts'
@@ -256,6 +256,13 @@ function changeEase(w: World, i: number, c: number, t: number): number {
   const f = w.f, u0 = (t - f.tStart[i] - f.tDelay[i * w.cr.maxC + c]) / f.tDur[i], u = Math.min(1, Math.max(0, u0))
   return u * u * (3 - 2 * u)
 }
+// how far a formation changing shape is through the change at time t: its companies' eased progress, on
+// average (0..1; 1 when not changing)
+export function changeProgress(w: World, i: number, t: number): number {
+  if (!w.f.trans[i]) return 1
+  const C = typeOf(w, i).C; let e = 0; for (let c = 0; c < C; c++) e += changeEase(w, i, c, t)
+  return e / C
+}
 const cpPose: Pose = { x: 0, z: 0, a: 0, face: 0, kx: 1, kz: 1 }
 // a company's placement in the battalion frame (interpolated during a change: wheeling around the flank it
 // turns to)
@@ -320,8 +327,11 @@ export function placeAtSlot(ctx: Places, s: number, out: number[]): number[] {
 }
 const ctxNow = (w: World, i: number): Places =>
   placesCtx(w.scratch.places ?? (w.scratch.places = mkPlaces(w)), i, w.f.x[i], w.f.z[i], w.f.heading[i], now(w), 0)
-// the pace (m/s) and its index: a road pace while every man stood on a road at the last sampling
+// the pace (m/s) and its index: a road pace while every man stood on a road at the last sampling; a charge's
+// approach pace, and its gallop once within gallopAt of the target (at the last melee step) or pursuing
 function paceOf(w: World, i: number): [number, number] {
+  const f = w.f, n = f.ordHead[i], ch = typeOf(w, i).charge
+  if (ch && n >= 0 && w.ord.type[n] === O_CHARGE) { const p = f.chPhase[i] === CH_PURSUIT || f.chGap[i] <= typeOf(w, i).def.charge!.gallopAt ? ch.pace : ch.approach; return [w.cr.paceSpeed[p], p] }
   const L = layoutOf(w, i), p = L.roadPace >= 0 && !w.f.trans[i] && w.f.onRoad[i] ? L.roadPace : L.pace
   return [w.cr.paceSpeed[p] * (fleeing(w.f.mstate[i]) ? w.cr.rs.morale.routPace : 1), p]
 }
@@ -676,6 +686,27 @@ function halfWidth(w: World, i: number): number {
   return m + BW(U) / 2
 }
 
+// a charge steers so that its leading company nearest the target meets the target's company nearest it, front
+// centre to front centre (aimed by its anchor, the front centre of the whole: a regiment's is the interval
+// between its middle squadrons, which a narrow target would slip into). Leading: in its shape's front rank of
+// companies (a column's rear squadrons would steer its head past the target). False when the target is gone
+const caPose: Pose = { x: 0, z: 0, a: 0, face: 0, kx: 1, kz: 1 }, caX = new Float64Array(MAX_COMPANIES), caZ = new Float64Array(MAX_COMPANIES)
+function chargeAim(w: World, i: number, n: number): boolean {
+  const f = w.f, j = formationSlot(w, f.chTarget[i]); if (j < 0) return false
+  const Ui = typeOf(w, i), Uj = typeOf(w, j), CS = w.cr.maxC, t = now(w), E = layoutOf(w, i).extent; let bd = Infinity, front = Infinity
+  for (let c = 0; c < Ui.C; c++) { if (f.men[i * CS + c] > 0) front = Math.min(front, E[c * 3]); const p = placeWorld(w, i, c, f.x[i], f.z[i], f.heading[i], t, 0, caPose); caX[c] = p.x; caZ[c] = p.z }
+  for (let q = 0; q < Uj.C; q++) {
+    if (f.men[j * CS + q] <= 0) continue
+    const p = placeWorld(w, j, q, f.x[j], f.z[j], f.heading[j], t, 0, caPose)
+    for (let c = 0; c < Ui.C; c++) {
+      if (f.men[i * CS + c] <= 0 || E[c * 3] > front + 1) continue
+      const d = hyp(p.x - caX[c], p.z - caZ[c])
+      if (d < bd) { bd = d; w.ord.x[n] = p.x - (caX[c] - f.x[i]); w.ord.z[n] = p.z - (caZ[c] - f.z[i]) }
+    }
+  }
+  return bd < Infinity
+}
+
 /* ---------------- the tick ---------------- */
 export function formationTick(w: World, i: number): void {
   const f = w.f, NB = typeOf(w, i).NB, b = i * w.cr.maxNB
@@ -688,7 +719,7 @@ export function formationTick(w: World, i: number): void {
 function formationStep(w: World, i: number): void {
   const f = w.f, o = w.ord, NB = typeOf(w, i).NB, NS = w.cr.maxNB, C = typeOf(w, i).C, CS = w.cr.maxC, t = now(w)
   f.px[i] = f.x[i]; f.pz[i] = f.z[i]; f.ph[i] = f.heading[i]; f.omega[i] = 0
-  if (f.trans[i]) {   // no marching while the companies change places; a new shape order interrupts the change
+  if (f.trans[i]) {   // no marching while the companies change places; a new shape order interrupts the change (a router too: issue #39)
     f.vx[i] = 0; f.vz[i] = 0
     const n = f.ordHead[i]
     if (n >= 0 && o.type[n] === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
@@ -704,10 +735,11 @@ function formationStep(w: World, i: number): void {
   const h0 = f.heading[i], type = o.type[n]
   if (type === O_FORM) { const s = o.shape[n]; shiftOrder(w, i); startChange(w, i, s); return }
   const [V0, pace] = paceOf(w, i), halfW = halfWidth(w, i)
-  if (type === O_MOVE) {
-    if (!o.resolved[n]) { setOnMap(w, n, f.x[i] + sin(f.heading[i]) * o.a[n], f.z[i] + cos(f.heading[i]) * o.a[n]); o.resolved[n] = 1 }   // a distance ahead (Retire)
+  if (type === O_MOVE || type === O_CHARGE) {
+    if (type === O_CHARGE) { if (!chargeAim(w, i, n)) { shiftOrder(w, i); f.vx[i] = 0; f.vz[i] = 0; return } }   // its target is gone (the melee step ends the charge)
+    else if (!o.resolved[n]) { setOnMap(w, n, f.x[i] + sin(f.heading[i]) * o.a[n], f.z[i] + cos(f.heading[i]) * o.a[n]); o.resolved[n] = 1 }   // a distance ahead (Retire)
     const dx = o.x[n] - f.x[i], dz = o.z[n] - f.z[i], dist = hyp(dx, dz)
-    if (dist < ARRIVE) { shiftOrder(w, i); f.vx[i] = 0; f.vz[i] = 0; return }
+    if (dist < ARRIVE) { if (type === O_MOVE) shiftOrder(w, i); f.vx[i] = 0; f.vz[i] = 0; return }   // a charge waits for the melee step
     const dh = wrapAngle(atan2(dx, dz) - f.heading[i])
     const wmax = 1.2 * V0 / halfW * DT   // the outer flank may not outrun the quick step
     const snake = snakes(w, i)
