@@ -46,7 +46,7 @@ async function main(): Promise<void> {
   // a panel order also disarms a pending charge (C)
   const forSelection = (make: (h: number) => Command) => { charging = false; for (const i of selected) external(make(formationHandle(w, i))) }
   // hash points without section hashes: those would cost a second serialization each time
-  const tick = () => { const r = advanceTick(w); layer.sync(0); dropped.push(...r.dropped); if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: [] }); for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i) }
+  const tick = () => { const r = advanceTick(w); layer.sync(0, r.departed); dropped.push(...r.dropped); if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: [] }); for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i) }
 
   // the frame: ticks owed at the game speed, then the men (in game time), then the drawing
   const advance = (dt: number) => {

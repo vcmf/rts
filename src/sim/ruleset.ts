@@ -56,7 +56,7 @@ export interface MoraleDef {
   fallback: { metres: number; after: number; rate: number }   // a wavering battalion without orders Retires `metres` once its morale has fallen by more than `rate` a second for `after` seconds
   rally: { safe: number; calm: number; time: number; cost: number; max: number }   // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; quality lost; rallies allowed
   shatter: number              // a router below this share of its spawn strength shatters
-  leave: number                // a shattered formation this near the map's edge (metres, its anchor) leaves the field
+  leave: number                // a shattered formation with any corner of a company block this near the map's edge (metres) leaves the field
 }
 // a type that charges (S1d-2, docs/systems/melee.md): the shapes it charges from, its paces (the approach
 // until gallopAt metres from the target, then the gallop), the metres of gallop for full momentum, the gap at

@@ -13,7 +13,7 @@ class Play {
   sim: Sim; layer: SoldierLayer; acc = 0; dt: number
   constructor(sim = new Sim(), dt = 1 / 30) { this.sim = sim; this.dt = dt; this.layer = new SoldierLayer(sim.w, buildScene(sim.w)) }
   // `sec` exactly, in frames of `dt` (the last one shorter); the layer syncs after every tick, as the page does
-  frames(sec: number): void { for (let left = sec; left > 1e-9; left -= this.dt) { const d = Math.min(this.dt, left); this.acc += d; while (this.acc >= 0.05 - 1e-9) { this.sim.tick(); this.layer.sync(0); this.acc -= 0.05 } this.layer.step(d, this.acc / 0.05) } }
+  frames(sec: number): void { for (let left = sec; left > 1e-9; left -= this.dt) { const d = Math.min(this.dt, left); this.acc += d; while (this.acc >= 0.05 - 1e-9) { this.sim.tick(); this.layer.sync(0, this.sim.takeDeparted()); this.acc -= 0.05 } this.layer.step(d, this.acc / 0.05) } }
   // worst slot error sampled every 0.5 s while `sec` pass
   worst(sec: number): { max: number; mean: number } { let max = 0, mean = 0; for (let n = 0; n < sec * 2; n++) { this.frames(0.5); const e = this.layer.slotError(); max = Math.max(max, e.max); mean = Math.max(mean, e.mean) } return { max, mean } }
   men(h: number) { return this.layer.units.get(this.sim.slot(h))!.men }
@@ -134,7 +134,7 @@ describe('at 8× (0.2 s soldier steps)', () => {
 // marching it does not (issue #36): that test holds the measured cost with a margin,
 // MARCH_BUDGET, so it cannot grow unnoticed. vitest runs this code about 40% slower than plain Node (the
 // page's numbers: tools/bench-cost.ts)
-const FRAME_BUDGET = 4, MARCH_BUDGET = 10
+const FRAME_BUDGET = 4, MARCH_BUDGET = 12   // 12: S1e-1's tighter grid (every shape on the field) measures 9.2–9.9 ms on main; the old grid's 10 kept the same margin over about 8
 describe.skipIf(process.env.CI)('cost', () => {
   const shipped = () => new Sim(1, napoleonic)
   it('40 battalions of 400 firing (20 a side in column, fronts 100 m apart): sim and soldier layer per frame; the fire step per tick reported', () => {

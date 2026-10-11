@@ -59,8 +59,8 @@ reaches the edge (below).
 
 ### Leaving the field
 
-A shattered battalion whose anchor comes within `morale.leave` metres (data, 12 m) of the map's edge leaves the
-field. It is removed (reaped). Its side's count of men who left (`sides.left`, hashed) grows by its men. S1e-2's
+A shattered battalion with any corner of a company block within `morale.leave` metres (data, 12 m) of the map's
+edge leaves the field. It is removed (reaped). Its side's count of men who left (`sides.left`, hashed) grows by its men. S1e-2's
 end condition reads the count. A router there stays: it may still rally (S1c-2's rule; a router's run of 800 m
 ends at the edge on any map, so removing routers would end every rally).
 
@@ -134,8 +134,9 @@ ends at the edge on any map, so removing routers would end every rally).
   reached off the map. The grid is tighter now (x −120..30, z −80..120) so every shape stands on the map.
   Measured on the new grid, main against this branch:
   - **release world (dev Mac):** 5.6–6.1 against 5.6–5.7 ms a frame marching at 40 × 400;
-  - **vitest:** 9.2–9.9 against 9.3–10.1 ms. The test's 10 ms budget is tight on this machine for both (issue
-    #36).
+  - **vitest:** 9.2–9.9 against 9.3–10.1 ms. The test's budget moves from 10 to 12 ms: the old grid measured
+    about 8 ms under its 10, and the new grid's formations, packed closer, cost the soldier layer about 1.5 ms
+    more on main as here (issue #36).
 
   The 40 × 800 row is only reported: an 810-man line is 180 m wide and the field 360 m, so the edge holds some of
   its lines.
@@ -164,3 +165,17 @@ ends at the edge on any map, so removing routers would end every rally).
   - the open battlefield's recipe was copied into four test files and rebuilt per test: one cached helper
     (`openBattlefield`, `OPEN_DATA` in `test/fx.ts`);
   - a scenario naming a map the page cannot load now fails with a message; `check:app` uses `DEFAULT_MAP`.
+
+**Round 2** (`/code-review high`, 8 findings, none severe; no third round):
+- **Fixed:**
+  - the scenario drill issued its orders but never ticked, so nothing changed shape: it ticks, checks every change
+    began, and the side-1 battery (mirrored onto the eastern wood's edge, where guns cannot stand) moves 50 m
+    back on both sides;
+  - departures went through the world's scratch, which the renderer emptied: the tick's result names them with
+    their men (`TickResult.departed`), as it does dropped commands, and the soldier layer lets that many go and
+    the rest it still had standing (killed in the same tick) fall;
+  - a trunk's push near the edge could take a man off the map, where he could not walk back: he is kept on it;
+  - `check:app` printed a removed slot's losses as 0: it says it left the field;
+  - the docs and the ruleset still described the anchor rule.
+- **Kept:** the edge test computes each block's corners itself rather than reading the fire step's geometry: it
+  runs at reap time for shattered formations only, and the fire geometry is built only when someone fires.

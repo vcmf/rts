@@ -53,7 +53,7 @@ const fight = [
   ['eval', 'APP.view(-120, 120, 3); APP.advance(20); "opening volleys"'],
   ['shot', 'fight-0-volleys'],
   STEP3, STEP3, STEP3, STEP3, STEP3,
-  ['eval', 'const r = [0, 1].filter(' + BROKE + '); APP.advance(8); APP.view(-100, 120, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, men ${[0, 1].map(i => { const C = APP.w.cr.maxC; return APP.w.f.startMen[i] - APP.w.f.men.slice(i * C, i * C + C).reduce((a, b) => a + b, 0) }).join(" / ")} lost`'],
+  ['eval', 'const r = [0, 1].filter(' + BROKE + '); APP.advance(8); APP.view(-100, 120, 3); `ROUT ${r.length} battalion ${r.join(" ")} at ${(APP.w.meta[0] / 20 / 60).toFixed(1)} min, men ${[0, 1].map(i => { const C = APP.w.cr.maxC; return APP.w.f.alive[i] ? APP.w.f.startMen[i] - APP.w.f.men.slice(i * C, i * C + C).reduce((a, b) => a + b, 0) : "left the field" }).join(" / ")} lost`'],
   ['shot', 'fight-1-rout'],
   REPLAY,
 ]
@@ -78,7 +78,7 @@ const charge = [
   ['wait', 1500], READY,
   ['eval', 'APP.view(-110, 60, 1.9); "the regiment, the line and the square"'],
   ['shot', 'charge-0-start'],
-  ['eval', 'APP.select([0]); APP.charge(1); APP.advance(30); APP.select([]); APP.view(-125, 100, 2.5); `CHARGE line state ${APP.w.f.alive[1] ? APP.w.f.mstate[1] : 5}, ${APP.w.f.startMen[1] - APP.w.f.men.slice(APP.w.cr.maxC, 2 * APP.w.cr.maxC).reduce((a, b) => a + b, 0)} lost`'],
+  ['eval', 'APP.select([0]); APP.charge(1); APP.advance(30); APP.select([]); APP.view(-125, 100, 2.5); `CHARGE line state ${APP.w.f.alive[1] ? APP.w.f.mstate[1] : 5}, ${APP.w.f.alive[1] ? APP.w.f.startMen[1] - APP.w.f.men.slice(APP.w.cr.maxC, 2 * APP.w.cr.maxC).reduce((a, b) => a + b, 0) : "left the field, all"} lost`'],
   ['shot', 'charge-1-line'],
   ['eval', 'APP.advance(150); APP.select([0]); APP.charge(2); APP.advance(40); APP.select([]); APP.view(-90, 130, 2.2); `SQUARE state ${APP.w.f.mstate[2]}, regiment phase ${APP.w.f.chPhase[0]} melee ${APP.w.f.foe[0] ? 1 : 0}`'],
   ['shot', 'charge-2-square'],

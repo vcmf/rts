@@ -9,6 +9,7 @@ import { DT } from './time.ts'
 import { sin, cos } from './num.ts'
 import { applyCommands, reapFormation, type Dropped } from './commands.ts'
 import { HASH_EVERY } from './time.ts'
+import type { Handle } from './handle.ts'
 import { assertFinite } from './num.ts'
 import { formationTick, menOf } from './formation.ts'
 import { hashWorld } from './serialize.ts'
@@ -36,12 +37,14 @@ function atEdge(w: World, i: number): boolean {
 }
 // metering is injected: the sim never reads a clock itself
 export interface Meter { now(): number; add(step: string, ms: number): void }
-export interface TickResult { tick: number; hash: number | null; dropped: Dropped[] }
+// departed: the formations that left the field this tick, with their men (the renderer lets them go, not fall)
+export interface TickResult { tick: number; hash: number | null; dropped: Dropped[]; departed: { id: Handle; men: number }[] }
 
 export function advanceTick(w: World, meter?: Meter): TickResult {
   const t = w.meta[M_TICK] + 1
   const step = (name: string, fn: () => void) => { if (!meter) return fn(); const t0 = meter.now(); fn(); meter.add(name, meter.now() - t0) }
   let dropped: Dropped[] = []
+  const departed: TickResult['departed'] = []
   step('1 commands', () => { dropped = applyCommands(w, t) })
   // 2 commanders · 3 enemy AI: S2
   step('4 standing behaviour: refuge against a charge', () => { standingStep(w) })
@@ -72,7 +75,7 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     if (men === 0) reapFormation(w, i)
     else if (w.f.mstate[i] === MS_SHATTERED && atEdge(w, i)) {
       w.sides.left[w.f.side[i]] += men
-      ;(w.scratch.departed ??= []).push(formationHandle(w, i))   // for the renderer: these men left, they did not fall
+      departed.push({ id: formationHandle(w, i), men })
       reapFormation(w, i)
     }
   } })
@@ -82,5 +85,5 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
   if (w.debug) for (const [name, a] of Object.entries(w.f)) if (a instanceof Float64Array && name !== 'trailX' && name !== 'trailZ') assertFinite(`formation state ${name}`, a)
   let hash: number | null = null
   step('15 hash', () => { if (t % HASH_EVERY === 0) hash = hashWorld(w) })
-  return { tick: t, hash, dropped }
+  return { tick: t, hash, dropped, departed }
 }

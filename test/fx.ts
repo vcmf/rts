@@ -67,7 +67,9 @@ export class Sim {
     this.cmd({ type: 'debug-spawn', side, x, z, heading, shape, men, unit }); this.tick()
     return makeHandle(KIND_FORMATION, slot, this.w.f.gen[slot])
   }
-  tick(): void { const r = advanceTick(this.w); this.dropped.push(...r.dropped) }
+  departed: { id: number; men: number }[] = []   // formations that left the field, until a soldier layer takes them
+  tick(): void { const r = advanceTick(this.w); this.dropped.push(...r.dropped); this.departed.push(...r.departed) }
+  takeDeparted(): { id: number; men: number }[] { const d = this.departed; this.departed = []; return d }
   advance(sec: number): void { for (let n = Math.round(sec * TICK_HZ); n > 0; n--) this.tick() }
   // advances while `pred` holds, up to `sec`; returns the seconds spent
   until(pred: () => boolean, sec: number): number { let n = 0; while (pred() && n < sec * TICK_HZ) { this.tick(); n++ } return n / TICK_HZ }

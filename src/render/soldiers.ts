@@ -26,6 +26,7 @@ export class SoldierLayer {
   w: World; scene: Scene
   units = new Map<number, Unit>()
   fallen: Man[] = []                       // men of battalions that are gone
+  private leaving = new Map<number, number>()   // formations that left the field (handle → the men they took), until their units go
   private ctxA: Places; private ctx0: Places; private rnd = cosmeticRng(7); private treesByClass: Uint8Array
   // per unit type, how fast its men walk and run to their places: at least the infantry's, faster for a type
   // whose pace (or its routers') would leave them behind (troopers at the trot)
@@ -103,13 +104,17 @@ export class SoldierLayer {
   // matches the men to the sim: new battalions, battalions gone, Face about, losses, slots that moved.
   // Call it after every tick (and `step` calls it each frame): a Face about is relabelled through the
   // shape it turned in, which a later change of shape within the same frame would otherwise replace.
-  sync(alpha: number): void {
+  // `departed`: the tick's formations that left the field (TickResult), with the men they took
+  sync(alpha: number, departed?: readonly { id: number; men: number }[]): void {
     const w = this.w, f = w.f, N = f.alive.length, p = [0, 0, 0]
-    // a formation gone: its men fell, unless it left the field (S1e-1), when they go with it
-    const departed = new Set(w.scratch.departed ?? []); w.scratch.departed = []
+    if (departed) for (const d of departed) this.leaving.set(d.id, d.men)
+    // a formation gone: its men fell, unless it left the field (S1e-1), when the men it took go with it and any
+    // more the layer still had standing (killed in that same tick) fall
     for (const [i, u] of this.units) if (!f.alive[i] || f.gen[i] !== u.gen) {
-      const left = departed.has(makeHandle(KIND_FORMATION, i, u.gen))
-      if (!left) for (const m of u.men) { if (m.alive) m.alive = false; this.fallen.push(m) }
+      const h = makeHandle(KIND_FORMATION, i, u.gen), took = this.leaving.get(h)
+      let fall = Infinity
+      if (took !== undefined) { this.leaving.delete(h); fall = u.men.filter(m => m.alive).length - took }
+      for (const m of u.men) { if (m.alive) { if (fall <= 0) continue; m.alive = false; fall-- } this.fallen.push(m) }
       this.units.delete(i)
     }
     for (let i = 0; i < N; i++) {
@@ -159,7 +164,7 @@ export class SoldierLayer {
   step(dt: number, alpha: number): void {
     this.alphaNow = alpha
     this.sync(alpha)
-    const w = this.w, f = w.f, t = w.terrain, x0 = t.x0, z0 = t.z0, SN = this.SN, p = [0, 0, 0], TA = this.treeAt, TX = this.treeX, TZ = this.treeZ, TR = this.treeR
+    const w = this.w, f = w.f, t = w.terrain, x0 = t.x0, z0 = t.z0, xMax = x0 + (t.n - 1) * t.cell, zMax = z0 + (t.n - 1) * t.cell, SN = this.SN, p = [0, 0, 0], TA = this.treeAt, TX = this.treeX, TZ = this.treeZ, TR = this.treeR
     // neighbour grid: cells and linked lists in typed arrays, rebuilt every frame, with the positions as the
     // frame began (each man is pushed by where the others stood, whatever order they move in)
     for (const c of this.touched) this.cellHead[c] = -1
@@ -224,6 +229,7 @@ export class SoldierLayer {
         tc = this.treeCell(m.x, m.z)
         if (tc >= 0) for (let k = TA[tc], e = TA[tc + 1]; k < e; k++) { const ex = m.x - TX[k], ez = m.z - TZ[k], d = Math.sqrt(ex * ex + ez * ez), R = TR[k] + 0.3   // never inside a trunk
           if (d < R && d > 1e-6) { m.x = TX[k] + ex / d * R; m.z = TZ[k] + ez / d * R } }
+        m.x = Math.min(xMax, Math.max(t.x0, m.x)); m.z = Math.min(zMax, Math.max(t.z0, m.z))   // a trunk's push never takes him off the map
       }
     }
   }

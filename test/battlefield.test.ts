@@ -70,6 +70,7 @@ describe('the S1e scenario', () => {
     // each round: every formation forms the next of its type's shapes, all at once, until none is changing
     for (let round = 0; round < 4; round++) {
       for (const i of live) { const S = typeOf(w, i).shapes; issue(w, { type: 'form', id: formationHandle(w, i), shape: S[(w.f.shape[i] + 1) % S.length].name }) }
+      s.tick(); expect(s.dropped).toEqual([]); expect(live.filter(i => !w.f.trans[i])).toEqual([])   // every change has begun
       for (let n = 0; n < 20 * 150 && live.some(i => w.f.trans[i]); n++) advanceTick(w)
       expect(live.filter(i => w.f.trans[i])).toEqual([]); expect(onMap()).toBe(true)
     }

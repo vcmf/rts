@@ -12,7 +12,7 @@ const SOUTH: [string, string, number, number, number][] = [
   ['infantry', 'line', 400, -200, -230], ['infantry', 'line', 400, -80, -230], ['infantry', 'line', 400, 40, -230],
   ['infantry', 'column', 400, -140, -330], ['infantry', 'column', 400, -20, -330], ['infantry', 'column', 400, 100, -330],
   ['cavalry', 'line', 256, 260, -310],        // the eastern flank, behind the ploughed field
-  ['battery', 'unlimbered', 96, -330, -300],  // the western flank, south of the wood
+  ['battery', 'unlimbered', 96, -330, -350],  // the western flank, south of the wood (and clear of the eastern one, mirrored)
 ]
 export const s1eBattle: Scenario = {
   name: 's1e-battle',

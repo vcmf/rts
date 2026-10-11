@@ -162,9 +162,11 @@ Rallying:
   Without the write-off no router could ever rally: the target at a break is the rout threshold itself;
 - stands for `rally.time` seconds, refusing orders and not firing, then takes the state its morale gives.
 
-**Leaving the field** (S1e-1). A shattered formation whose anchor comes within `morale.leave` (12 m) of the map's
-edge leaves the field: it is removed at step 14 (reap), and its men are added to its side's count (`sides.left`,
-hashed). A run's order is kept 2 m inside the map, so a run to the side's rear ends there. A router there stays:
+**Leaving the field** (S1e-1). A shattered formation with any corner of a company block within `morale.leave`
+(12 m) of the map's edge leaves the field: a line meeting the edge at an angle, or a column of route's tail, gets
+there before its anchor. It is removed at step 14 (reap), and its men are added to its side's count
+(`sides.left`, hashed); the tick's result names it with its men (`departed`), so the soldier layer lets them go
+rather than fall. A run's order is kept 2 m inside the map, so a run to the side's rear ends there. A router there stays:
 it may still rally (above).
 
 **Shattered.** A break beyond `rally.max` rallies, or a router below `morale.shatter` of its spawn strength,
