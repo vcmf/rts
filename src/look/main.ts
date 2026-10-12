@@ -216,6 +216,11 @@ Object.assign(window, { __look: {
   waterView, waterSab, groundAs, waterAt,
 } })
 
+// ?season=<0..3>: open in that season (0 summer, 1 early autumn, 2 late autumn, 3 winter; the bench runs in it too)
+if (params.has('season')) {
+  const v = Number(params.get('season')); if (!(v >= 0 && v <= 3)) throw new Error(`?season must be 0 to 3, not ${params.get('season')}`)
+  input('season').value = String(v); input('season').dispatchEvent(new Event('input'))
+}
 // ?detail=l0: the terrain with the L0 grain (compare by eye; the goldens of main against it match)
 if (params.get('detail') === 'l0') setDetail(['DETAIL_L0'])
 else if (params.has('detail')) throw new Error(`?detail must be l0, not ${params.get('detail')}`)
