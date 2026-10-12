@@ -32,3 +32,5 @@ recorded here on 2026-10-08.
 | [0017](0017-paint-on-units-by-screen-size.md) | Paint on units follows their size on screen | proposed |
 | [0018](0018-battalion-of-400.md) | Battalions of about 400 soldiers, one figure each; the engine reaches 800 | accepted |
 | [0019](0019-shading-data-from-authored-surface.md) | Shading data finer than the heightfield comes from the authored surface | proposed |
+| [0020](0020-track-m-on-an-epic-branch.md) | The map engine is Track M, built on an epic branch | accepted |
+| [0021](0021-two-metre-map-cell.md) | Every map grid is built on one 2 m cell | accepted |

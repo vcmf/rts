@@ -109,7 +109,7 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 |---|---|---|---|---|
 | Era rulesets | Per era (Napoleonic first): unit types, formations and drill, weapons, movement factors, morale, as data with inheritance and validation (D7) | `docs/proposals/sim-design.md` | P | ⬜ |
 | **Order of battle** | Army → corps → division → brigade → battalion; commanders; starting positions. The core of a historical scenario | `docs/proposals/sim-design.md` | P (one battle), A | ⬜ |
-| Map build | Heightfield, rivers, roads, villages, AI hints from real data (W6), through one map format | `docs/proposals/map-format.md` | P | ⬜ |
+| Map build | A JSON map language, its generator and compilers; draft and rendered views; real data (W6) later | `docs/proposals/map-engine.md` | M | ⬜ |
 | Assets | Models and textures in, compressed (KTX2, meshopt) out | `docs/asset-sources.md` | A | 🟡 |
 | Scenario editor | Place troops, objectives, triggers on a map | to write | A | ⬜ |
 | Checks | Spec, geometry, pixel, determinism and replay checks | `docs/proposals/engine-design.md` §8 | ongoing | 🟡 |
@@ -145,6 +145,10 @@ Phases as revised in `docs/proposals/sim-design.md` §17:
 L0–L9: E0-lite, the units placeholder and benchmark, the terrain detail layer, the soldier look, the
 readability gate, the macro bake, smoke, foliage, anti-aliasing, the look match; water W2–W6 after L2).
 The two tracks meet at the renderer's read of the sim (`SoldierLayer`, the volley state).
+
+**Track M (the map engine):** a closed JSON language for maps, its generator, the compilers that write the sim's
+and the look's data, and the draft and rendered views (`docs/proposals/map-engine.md`), built on the
+`epic/map-engine` branch (decision 0020).
 
 ## 5. Open questions
 
