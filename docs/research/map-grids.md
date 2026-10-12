@@ -3,6 +3,9 @@ status: research
 last_reviewed: 2026-10-12
 ---
 
+> Decision 0021 (2026-10-12) chose a 2 m cell for every map grid instead of keeping 1.79 m as recommended
+> below; the rest of this research stands.
+
 # Map grids for a battalion-scale RTS: grid or no grid, square or hex, what cell size
 
 Research note, 2026-10-12. Tags: **[primary]** source code, official docs or a developer's own talk or text;

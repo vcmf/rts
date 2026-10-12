@@ -48,7 +48,7 @@ writing the same JSON); scenarios (orders of battle, objectives); streaming map 
  ──────────────────────────          ─────────────────────────────────────────       ──────────────
  features: kind + shape +       ──►  the same features, generators run:         ──►  sim: heights, ground, depth,
  attributes, some with a "gen"       exact lines, polygons, buildings,               cost per kind
- (meander, clump, village, …)        level profiles; no "gen" left                   look: heightfield, cover, water
+ (meander, clump, village, …)        widths and depths; no "gen" left                look: heightfield, cover, water
                                      (golden-tested, diffable)                       draft: the same grids, drawn flat
 ```
 
@@ -69,11 +69,12 @@ few and orthogonal, while the kinds give the richness and stay data.
 
 **Water is a level, not a negative height.** Depth = water level − ground. A river's level falls downstream, a
 pond's level is set by its dam, and a flood or a drained pond changes the level, not the ground. Heights may still
-be negative relative to the map's datum: a ditch or a riverbed sits below the land around it.
+be negative relative to the map's datum: a riverbed or a ditch sits below the land around it.
 
 **Blocking is derived, never painted.** Steep relief blocks by slope, read over a few cells and limited per kind
-of unit in the ruleset. A sunken road or a parapet more than about 2 m wide is relief, judged by slope and step
-height. Barriers (hedges, walls, fences, ditches) **live on the grid's cells**, as walls do in Age of Empires and
+of unit in the ruleset. Anything made of earth is relief, judged by slope and step height: a ditch, a sunken
+road's cut, a parapet, a bank. Barriers built or grown on the ground (hedges, walls, fences) **live on the grid's
+cells**, as walls do in Age of Empires and
 StarCraft (§3.6): each is a run of cells with a height, a porosity (how see-through it is) and a crossing kind
 (open, jump, climb, push, none). The ruleset turns these into movement, sight and cover. Only a `nogo` area overrides by hand, for the rare case the derivation gets wrong
 (`docs/research/map-grids.md` §4).
@@ -94,15 +95,21 @@ StarCraft (§3.6): each is a run of cells with a height, a porosity (how see-thr
 }
 ```
 
-That is the whole grammar. Optional fields: `priority` (who wins an overlap; each kind has a default), `source`
-(where the data comes from), and `state` (a scenario's changes: burnt, flooded, breached; §3.5). A crop's growth is its `stage`, an attribute,
-never `state`.
+That is the whole grammar. The other fields a feature may carry:
+- `preset` (a map-level preset, §3.2), `priority` (who wins an overlap; each kind has a default), `source` (where
+  the data comes from), `state` (a scenario's changes: burnt, flooded, breached; §3.5);
+- the reference fields below (`on`, `carries`, `crosses`, `near`, `along`, `follow`), and `avoid`, `near` and
+  `min` on a `scatter` (§3.4);
+- in the expanded map only, `origin` (§3.4).
+
+A crop's growth is its `stage`, an attribute, never `state`.
 
 - **Shapes:** `point [x, z]`; `line [[x, z], …]`; `area` (an outer ring plus optional holes); `circle [[x, z], r]`;
   `ellipse [[x, z], rx, rz, angle]`. Metres in the map's frame: x east, z north, origin at the centre. Angles are
   in radians.
-- **References** are by id, and every one is checked. A bridge `carries` a road and `crosses` a stream; a ford
-  sits `on` a stream at `at` (metres along it); a village lies `along` part of a road (`{ "id": …, "from": m, "to": m }`, metres along it). An area's edge may `follow` part of
+- **References** are by id, and every one is checked. A bridge `carries` a road and `crosses` a stream (with a
+  `near` point when they cross more than once; the validator asks for it); a ford sits `on` a stream `near` a
+  point, snapped to the nearest point of the stream's expanded channel, so it stays put when the meander changes; a village lies `along` part of a road (`{ "id": …, "from": m, "to": m }`, metres along it). An area's edge may `follow` part of
   another feature's line, so a wood bounded by a stream shares the stream's bank instead of overlapping it
   (TopoJSON's shared edges, `docs/research/map-language.md` §2).
 - **Ramps** are the only structured value: a number that varies between stops over a closed input (`edge`:
@@ -115,9 +122,9 @@ never `state`.
 path is a preset of attributes, and the deeper step overrides the shallower one:
 
 ```
-veg.wood               stand: density 0.6, canopy 20, crownBase 6, undergrowth 0.4; ground: litter
-veg.wood.broad         leaf: broad; leafOn by season
-veg.wood.broad.beech   canopy 28, undergrowth 0.15        (bonus: species are look first, sight second)
+veg.wood               (the stand) density 0.6, height 20, crownBase 6, undergrowth 0.4; ground: litter
+veg.wood.broad         leaf: broad; leaves on by season
+veg.wood.broad.beech   height 28, undergrowth 0.15        (bonus: species are look first, sight second)
 veg.wood.conifer.pine  leaf: needle; crownBase 10, undergrowth 0.1
 ```
 
@@ -130,12 +137,12 @@ touches no ruleset.
 
 | Category | Kinds (essential) | Bonus, later |
 |---|---|---|
-| `relief` | `base` (seeded noise at a scale), `hill`, `ridge` (along a line), `valley`, `plateau`, `scarp`; edits `raise`, `lower`, `level`, `cut` | `dem` (an elevation file), `spot` heights, `basin`, `terrace` |
-| `ground` | `meadow`, `pasture`, `field` (`.wheat`, `.rye`, `.oats`; state standing, stubble, ploughed), `rough`, `marsh`, `yard` (village ground); moisture and snow as season states | `heath`, `sand`, `rock`, `bog`, `mud` as a weather state |
+| `relief` | `base` (seeded noise at a scale), `hill`, `ridge` (along a line), `valley`, `plateau`, `scarp`; edits `raise`, `lower`, `level`, `cut`, `ditch` (a cut along a line) | `dem` (an elevation file), `spot` heights, `basin`, `terrace` |
+| `ground` | `meadow`, `pasture`, `field` (`.wheat`, `.rye`, `.oats`: loam under a crop whose `stage` is standing, stubble or ploughed), `rough`, `marsh`, `yard` (village ground); moisture and snow as season attributes | `heath`, `sand`, `rock`, `bog`, `mud` as a weather state |
 | `veg` | `wood.broad`, `wood.conifer`, `wood.mixed`, `thicket`, `orchard` (rows), `reeds`, `scrub` | species presets, `vineyard`, `olive`, `wood.pasture`, `tallgrass`, `treeline` |
 | `water` | `stream`, `river` (lines with width, depth, flow, banks), `pond`, `lake` (areas with a level), `ford` (on a stream) | `canal`, `weir`, `dam`, `millrace`, `flood` (a level over a meadow), breakable ice |
 | `way` | `road.highway`, `road.lane`, `track`, `path`; `road.sunken` (a cut plus optional hedges) | `causeway`, `ferry` |
-| `barrier` | `hedge`, `wall`, `fence`, `ditch` (on the grid: height, thickness in cells, porosity, crossing, gaps) | `bank`, `palisade`, `stakes`, `abatis` |
+| `barrier` | `hedge`, `wall`, `fence` (on the grid: height, thickness in cells, porosity, crossing, gaps) | `palisade`, `stakes`, `abatis` |
 | `built` | `house`, `barn`, `church`, `farm` (buildings plus a walled yard), `village` (generated along roads), `bridge` | `mill`, `town`, `manor`, `cemetery`, `quarry`; capacity and loopholes |
 | `work` | `redoubt`, `fleche` (parapet, ditch, facing) | `entrenchment`, `battery`, `camp` |
 | `zone` | `nogo`, `go` (overrides), `label` (names for the staff map) | `deploy` (belongs to scenarios; listed to be ruled out) |
@@ -143,12 +150,15 @@ touches no ruleset.
 Attribute names per layer (closed lists; units in the schema):
 - **relief:** `height`, `width`, `profile` (round, flat, sharp), `steep` (the steeper side), `to`, `edge`;
 - **ground:** `material`, `moisture`, `stones`, `wear`, `snow`;
-- **veg:** `low` {`kind`, `height`, `density`, `stage`}, `stand` {`leaf`, `density`, `canopy`, `crownBase`,
-  `undergrowth`}, `rows` {`dir`, `spacing`};
+- **veg:** `height` (m: a crop's or the canopy's top), `density`, `stage` (crops), `leaf`, `crownBase`,
+  `undergrowth`, `rows` {`dir`, `spacing`}. Attributes are flat: each kind fills one vegetation layer, the low one
+  (crops, reeds, scrub) or the stand (woods, orchards), so `density` on a wood is the stand's and on a field the
+  crop's. What grows under a stand is its `undergrowth` and the ground kind beneath it;
 - **water:** `level` or `depth`, `width`, `flow`, `bed`, `banks`, `ice`;
 - **way:** `width`, `surface`, `cut`, `raise`, `hedges`;
 - **barrier:** `height`, `thickness` (whole cells), `porosity`, `crossing`, `gaps`;
-- **built and work:** `footprint`, `wall`, `roof`, `material`, `parapet`, `ditch`, `facing`.
+- **built and work:** `footprint`, `wall`, `roof`, `material`, `parapet`, `ditch`, `facing` (a work's parapet
+  and ditch are relief edits, step 2 of §4).
 
 The full taxonomy, with each preset's values and sources, is in `docs/research/terrain-taxonomy.md` §4.
 
@@ -180,11 +190,12 @@ is an error, unless the feature says `"min"`. 0 A.D.'s silent partial placement 
 
 `seasons` overrides attributes per season (`spring`, `summer`, `autumn`, `winter`): a crop's `stage` and
 height, leaves on or off, moisture, snow depth, ice thickness, a pond's level. The map's `season` field is the
-default season. A scenario may also apply `state` (burnt, flooded, breached), which swaps a feature's kind for its
-state variant (a burnt house becomes `built.house.ruin`) or sets attributes.
+default season. A scenario may also apply a `state` (burnt, flooded, breached): a named overlay in the catalogue
+for the feature's kind (`built.house@burnt`: roof none, walls 1.5 m, stones 0.7), applied over everything else.
+A state never changes the kind; it only sets attributes, so it always wins.
 
 Precedence, lowest first: the catalogue along the kind's path, the map preset, the feature's own fields, the
-season's overrides, the scenario's `state`.
+season's overrides, the state's overlay.
 
 ### 3.6 Barriers on the grid
 
@@ -193,17 +204,20 @@ StarCraft. This is a deliberate simplification for play and for the editor:
 - **Readable and fair:** a barrier is exactly where its cells are, the same for the sim, the draft view and the 3D
   world. If the game ever becomes competitive, nobody can argue about a wall's edge, and a good editor can place,
   join and cut barriers cell by cell.
-- **Thick:** a barrier is at least **2 cells (4 m)** thick by default (`thickness`, in whole cells, from the
-  catalogue: a hedge 2, a wall 2, a fence 2; a 3 m bocage bank later 4). The thickness is even and centred on
-  the line, half on each side, so a line on cell corners always fills whole cells. A one-cell barrier would leak
-  on diagonals and read as a line on screen; two layers of cells close it on every side. The 3D world draws the barrier filling its band (a broad
+- **Thick:** a barrier is at least **2 cells (4 m)** thick (`thickness`, in whole cells, from the catalogue: a
+  hedge 2, a wall 2, a fence 2). A one-cell barrier would leak on diagonals and read as a line on screen. The 3D world draws the barrier filling its band (a broad
   bocage hedge, a thick wall with its coping), so what you see is what blocks.
 - **Snapped:** a barrier's line has its points on cell corners, and its segments run along the grid's axes or its
   diagonals (8 directions). The validator rejects any other direction and says which point to move, and the
-  editor will snap as you draw. A diagonal is drawn as a staircase of whole cells that still closes on every side.
-- **Gaps** are whole cells too: a gate or a gap in a hedge is a run of open cells, set by
-  `"gaps": { "every": 12, "width": 2 }` (cells, counted along the line from its first point) or listed by the
-  feature.
+  editor will snap as you draw.
+- **One rule makes the cells:** a cell belongs to the barrier when its centre lies closer to the line than half
+  the thickness (`thickness × c / 2`), strictly. Cell centres and line points are on whole metres, so the test is
+  exact in integers (squared distances). Along an axis a 2-thick barrier is 2 cells, one on each side of the line;
+  along a diagonal it is a staircase 3 cells across, which closes on every side. The sim, the draft view and the
+  3D world all use this rule, from one function.
+- **Gaps** are whole cells too, counted in **steps** along the line (a step is one cell, straight or diagonal):
+  `"gaps": { "every": 12, "width": 2 }` opens the cells whose centre projects onto steps [12k, 12k + 2) from the
+  line's first point. A feature may also list its gaps by step.
 
 Ways (roads, tracks) and areas (woods, fields) keep their free shapes: they only change speed and look, and their
 edges can stay organic.
@@ -211,18 +225,21 @@ edges can stay organic.
 ## 4. The pipeline
 
 ```
-validate ──► expand (generators, in stages) ──► compile (per consumer) ──► view / ship
+validate ──► relief ──► expand (generators) ──► apply (layers, fixed order) ──► compile (per consumer) ──► view / ship
 ```
 
 - **Validate:** schema (closed objects, kinds from the catalogue, units and ranges), references, geometry (closed
   rings, no self-intersection, inside the extent). It reports every error with the feature's id.
-- **Expand** runs the generators and gives every feature its exact shape. Features run in dependency order
-  (references), with ties broken by id, never in the file's order (AoE II's and Civilization's lesson). A
-  generator may read the relief's base and landforms (step 1 below) and the expanded shapes of the features it
-  references, nothing else: a `meander` follows the valley, a `street-village` its road, a `scatter` avoids the
-  shapes of the kinds it names. Its output is the expanded map.
+- **Relief** comes first, always: the relief features (`relief.base` with its `noise`, the landforms) expand and
+  are summed into the relief before any other feature runs. They read nothing but their own parameters.
+- **Expand** runs every other generator and gives every feature its exact shape. Features run in dependency
+  order, with ties broken by id, never in the file's order (AoE II's and Civilization's lesson). A feature depends
+  on the ids it references, and a `scatter` also on every feature of the kinds it names in `avoid` or `near`. A
+  generator reads the relief and the expanded shapes of what it depends on, nothing else: a `meander` follows the
+  valley, a `street-village` its road, a `scatter` avoids the woods. A cycle is a validation error. Its output is
+  the expanded map.
 - **Apply** writes the expanded features into the five layers, in a fixed order owned by the engine:
-  1. **relief:** the base, then the landforms (summed);
+  1. **relief:** the base and the landforms (already built);
   2. **relief edits** from every feature, now that all shapes exist (a sunken road's cut, a parapet and its ditch,
      a village's levelled yards, `raise`, `lower`, `level`, `cut`), by priority;
   3. **water:** each stream's and river's level, set from the ground along its banks and falling downstream
@@ -262,11 +279,12 @@ look grid (1.786 m) do not even line up. At 2 m, everything aligns: cost cells a
 
 What the switch touches (each change lands with the phase that rebuilds that data anyway):
 - **sim (M2):** `HEIGHT_CELL` and `COST_CELL` in `tools/build-sim-data.ts`, and the fine class and depth grid:
-  already 2 m on the battlefield (`maps/battlefield.ts`), 1 m on the formation field (taken from
-  `prototypes/formation-core.js`). Both maps are rewritten as JSON maps on 2 m grids. Every `.simdata` file
-  changes, so the data versions in `src/scenarios/maps.ts`, `src/scenarios/s1b-field.ts` and `test/fx.ts`, the
-  golden replays and the calibration table in `test/golden/`, and possibly the calibrations (fire, charge,
-  artillery) where slope or cost moved;
+  already 2 m on the battlefield (`maps/battlefield.ts`), 1 m on the formation field. The battlefield is rewritten
+  as a JSON map on 2 m grids, so its data version (`src/scenarios/maps.ts`, `test/fx.ts`), the S1e golden replay
+  in `test/golden/`, and possibly the calibrations where slope or cost moved, change. The **formation field stays
+  on its legacy builder, with its cells**: its terrain is the prototype's (`prototypes/formation-core.js`, shared
+  with the formation prototype page), and it moves to the map engine only when that prototype retires (with #35).
+  Its data and the goldens that use it (S1a–S1d) do not change;
 - **look (M4, with Track E):** `tileSub` and `farSub` in `src/look/spec.ts` (the far ring's size becomes
   `tile + 2 × 16 m × k` to keep its grid lines on the tile's edge), the look data, the golden screenshots; the
   tile mesh has about a fifth fewer triangles;
@@ -323,7 +341,8 @@ draft view, writing the same JSON.
   outside the extent).
 - **Golden expansions:** small intent maps under `maps/tests/`, each with its committed expanded JSON; a change to
   a generator shows up as a reviewable diff.
-- **Locality:** moving one wood changes no other feature's expansion and only the grid cells near it.
+- **Locality:** moving one wood changes no other feature's expansion, except a `scatter` that avoids woods (it
+  depends on them by design; pin its children to freeze them), and only the grid cells near it.
 - **Determinism:** expanding and compiling twice, and in Node and in a browser, gives the same bytes.
 - **A map CLI** in the tools folder (to be built): `check`, `expand`, `build`, `draft <map>`. `draft` writes a PNG of the draft view for
   headless checks and PR images.
@@ -341,10 +360,10 @@ hedge and a village.
     { "id": "ground", "kind": "relief.base", "gen": { "noise": { "amplitude": 4, "scale": 400 } } },
     { "id": "south-ridge", "kind": "relief.ridge", "line": [[-650, -300], [0, -260], [650, -320]], "height": 18, "width": 230, "steep": "south" },
     { "id": "north-ridge", "kind": "relief.ridge", "line": [[-650, 300], [650, 260]], "height": 14, "width": 260 },
-    { "id": "meadows", "kind": "ground.meadow", "area": [[[-700, -700], [700, -700], [700, 700], [-700, 700]]], "priority": 0 },
+    { "id": "meadows", "kind": "ground.meadow", "area": [[[-1200, -1200], [1200, -1200], [1200, 1200], [-1200, 1200]]], "priority": 0 },
     { "id": "brook", "kind": "water.stream", "line": [[-700, 20], [0, -10], [700, 30]], "width": 6, "depth": 0.8,
       "gen": { "meander": { "amplitude": 30, "wavelength": 190 } } },
-    { "id": "ford-west", "kind": "water.ford", "on": "brook", "at": 420, "depth": 0.5 },
+    { "id": "ford-west", "kind": "water.ford", "on": "brook", "near": [-330, 10], "depth": 0.5 },
     { "id": "high-road", "kind": "way.road.lane", "line": [[60, -700], [70, 0], [40, 700]] },
     { "id": "bridge", "kind": "built.bridge", "carries": "high-road", "crosses": "brook" },
     { "id": "west-wood", "kind": "veg.wood.broad", "circle": [[-380, -190], 80], "gen": { "clump": { "coherence": 0.6 } },
@@ -365,7 +384,7 @@ Track M works on an epic branch (decision 0020). The phases follow the pipeline,
 |---|---|---|
 | **M0** | This proposal and its research; decisions 0020 (Track M on an epic branch) and 0021 (the 2 m cell) | The owner accepts the language, the layers and the grids |
 | **M1: the language and the draft view** | The TypeScript schema and validator; the catalogue of essential kinds in **every** category; features with exact shapes (no `gen` yet); compiling into the draft view page, which redraws on save; the map CLI | §9's example, written with exact shapes, validates and draws; a save redraws in under a second; one negative test per rule |
-| **M2: the sim compiler** | Grids at 2 m from the features (heights, ground, vegetation, depth, barriers, cost); a stream's level set from its banks, falling downstream (a compiler rule, not a generator); the ruleset maps attributes to classes; `maps/battlefield.ts` rewritten as JSON | The S1e battle plays on the compiled map; the data change is shown (golden diff) and accepted |
+| **M2: the sim compiler** | Grids at 2 m from the features (heights, ground, vegetation, depth, barriers, cost); a stream's level set from its banks, falling downstream (a compiler rule, not a generator); the ruleset maps attributes to classes; `maps/battlefield.ts` rewritten as JSON (the formation field stays legacy, §5) | The S1e battle plays on the compiled map; its data change is shown (golden diff) and accepted; S1a–S1d goldens unchanged |
 | **M3: the generators** | `noise`, `meander`, `clump`, `street-village`, `scatter`, on the exact maths; seasons and ice; golden expansions | §9's example as written (with `gen`) expands and plays; five seeds give five distinct, valid maps |
 | **M4: the rendered view** | The look compiler and the toggle between draft and 3D (with Track E: the look page loads any map's look data at 2 m) | The same map drafted and painted |
 
@@ -417,6 +436,7 @@ map reading map features (SM2).
 
 ## 14. Open questions
 
-1. **Who owns `src/look/world/cover.ts`:** L5a authors the cover there today; M4's look compiler takes it over.
+1. **Who owns the look's cover:** Track E's L5a authors it in `src/look/world/cover.ts` on its own branch (not
+   on main yet); M4's look compiler takes it over.
    Until then Track E keeps it, shaped like this language's ground and vegetation kinds.
 2. **Which kinds the first catalogue carries:** the essential column of §3.3, or fewer?
