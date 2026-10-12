@@ -17,6 +17,7 @@ export interface ParamSpec extends FieldSpec { required?: boolean }
 export interface GenContext {
   f: Feature; attrs: Record<string, AttrValue>; params: Record<string, unknown>; seed: number; mapSeed: number
   features: Map<string, Feature>; attrsOf(id: string): Record<string, AttrValue>; kindOf(id: string): string
+  isKind(sel: string): boolean    // a category or a kind of the catalogue (else a selector is a feature's id)
 }
 // its output: the feature's new shape (or null: the feature leaves the expanded map), and any children
 export interface GenOutput { self: Partial<Feature> | null; children?: Feature[] }
@@ -26,10 +27,18 @@ export interface GenSpec {
   output: ShapeName                // the shape it writes (for itself or its children), which the kind must take
   params: Record<string, ParamSpec>
   selects?: string[]               // the list parameters that name features (ids, categories or kind prefixes)
-  reads?: boolean                  // reads other features (after the ones that only reshape their own, in id order)
-  late?: boolean                   // runs after every other generator (it reads their output; scatters)
-  children?: boolean               // writes children (ids <feature>-<n>, reserved by the validator)
+  // what it reads of the other features, as selectors (ids, categories, kind prefixes): expansion runs it after
+  // every generator whose output these could match, and shows it only finished features (src/map/expand.ts)
+  reads?(f: Feature, params: Record<string, unknown>): string[]
+  childKind?(kind: string): string // the kind of the children it writes, when it writes any (ids <feature>-<n>)
+  removesSelf?: boolean            // its own feature leaves the expanded map (a scatter's region)
   run(ctx: GenContext): GenOutput
+}
+
+// a generated child's id is its parent's and -1, -2, …: the one place the form is decided
+export function childOf(id: string): { parent: string; n: number } | null {
+  const m = /^(.*)-([1-9]\d*)$/.exec(id)
+  return m ? { parent: m[1], n: Number(m[2]) } : null
 }
 
 const P = (p: Record<string, unknown>, k: string): number | undefined => (typeof p[k] === 'number' ? p[k] as number : undefined)
@@ -60,14 +69,16 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
     },
   },
   'street-village': {
-    kinds: ['built.village'], input: ['area', 'none'], output: 'area', reads: true, children: true,
+    kinds: ['built.village'], input: ['area', 'none'], output: 'area', childKind: () => 'built.house',
+    reads: f => [f.along!.id, 'water', 'built', 'way', 'barrier', 'zone.nogo'],
     params: { min: { type: 'int', unit: 'count', min: 0, max: 500 } },
     run: ({ f, attrs, params, seed, features, attrsOf, kindOf }) => {
       const along = f.along!, road = features.get(along.id)!.line!, want = num(attrs.houses, 12), min = P(params, 'min') ?? want
-      // what a house must keep clear of, as a whole polygon: water, other buildings (any shape; a bridge has none
-      // and is skipped), other ways and barriers, and its own road where the road bends back
+      // what a house must keep clear of, as a whole polygon (only finished features are visible here): water, other
+      // buildings (any shape; a bridge has none and is skipped), no-go zones, other ways and barriers, and its own road
+      // where the road bends back
       const water = [...features.values()].filter(g => kindOf(g.id).startsWith('water.'))
-      const built = [...features.values()].filter(g => kindOf(g.id).startsWith('built.') && g.id !== f.id && (g.area || g.circle || g.ellipse || g.point))
+      const built = [...features.values()].filter(g => (kindOf(g.id).startsWith('built.') || kindOf(g.id) === 'zone.nogo') && g.id !== f.id && (g.area || g.circle || g.ellipse || g.point))
       const roadF = features.get(along.id)!, roadA = attrsOf(along.id), rw = num(roadA.width, 5)
       const lines = [...features.values()].filter(g => g.id !== along.id && g.line && (kindOf(g.id).startsWith('way.') || kindOf(g.id).startsWith('barrier.')))
       // a barrier's band is its thickness in 2 m cells, centred on its line (proposal §3.6)
@@ -82,7 +93,8 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
     },
   },
   scatter: {
-    input: ['area'], output: 'area', late: true, children: true, selects: ['avoid', 'within'],
+    input: ['area'], output: 'area', childKind: kind => kind, removesSelf: true, selects: ['avoid', 'within'],
+    reads: (_f, p) => [...(Array.isArray(p.avoid) ? p.avoid as string[] : []), ...(Array.isArray(p.within) ? p.within as string[] : [])],
     params: {
       count: { type: 'int', unit: 'count', min: 1, max: 500, required: true },
       radiusMin: { type: 'number', unit: 'm', min: 2, max: 2000 },
@@ -92,7 +104,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
       min: { type: 'int', unit: 'count', min: 0, max: 500 },
       coherence: { type: 'number', unit: '0..1', min: 0, max: 1 }, raggedness: { type: 'number', unit: '0..1', min: 0, max: 1 },
     },
-    run: ({ f, params, seed, mapSeed, features, attrsOf, kindOf }) => {
+    run: ({ f, params, seed, mapSeed, features, attrsOf, kindOf, isKind }) => {
       const count = P(params, 'count')!, rMin = P(params, 'radiusMin') ?? 30, rMax = P(params, 'radiusMax') ?? Math.max(rMin, 60)
       if (rMax < rMin) throw new Error(`radiusMax (${rMax}) is below radiusMin (${rMin})`)
       const coherence = P(params, 'coherence') ?? CLUMP_DEFAULTS.coherence, ragged = P(params, 'raggedness') ?? CLUMP_DEFAULTS.raggedness
@@ -102,6 +114,11 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
       const of = (sels: string[]) => [...features.values()].filter(g => g.id !== f.id && sels.some(s => matches(s, g, kindOf(g.id))))
       const avoid = of(pick(params.avoid)), within = of(pick(params.within))
       if (pick(params.within).length && !within.length) throw new Error(`nothing matches within (${pick(params.within).join(', ')}): no child could be placed near it`)
+      // a selector that names a feature (an id, or a child's id) must find it: a kind may match nothing on a map, a
+      // name that does is a mistake (a child past its parent's count, a feature since removed)
+      for (const sel of [...pick(params.avoid), ...pick(params.within)]) {
+        if (!isKind(sel) && !features.has(sel) && ![...features.values()].some(g => g.origin?.parent === sel)) throw new Error(`"${sel}" names no finished feature`)
+      }
       const nearest = (gs: Feature[], x: number, z: number) => gs.reduce((d, g) => Math.min(d, distanceTo(g, attrsOf(g.id), x, z)), Infinity)
       const sites = scatterSites(f.area!, {
         count, radiusMin: rMin, radiusMax: rMax, clearance: P(params, 'clearance') ?? 20, reach: P(params, 'reach') ?? 100, spread,

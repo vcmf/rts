@@ -15,13 +15,16 @@ import { seedOf } from './seed.ts'
 import { validate } from './validate.ts'
 import { crossings } from './geometry.ts'
 import { kindMatches } from './reach.ts'
+import { childOf } from './generators.ts'
+import { kindChain } from './catalogue.ts'
 
 export const EXPAND_VERSION = 3   // recorded in a generated feature's `origin`; bump when any generator's output changes
 
 export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Issue[] } {
   const issues: Issue[] = [], at = new Map(map.features.map((f, i) => [f.id, i]))
-  // the features as they expand, by id; their resolved attributes and kinds, for the generators that read others
-  const current = new Map(map.features.map(f => [f.id, f])), resolved = new Map<string, ReturnType<typeof resolve>>()
+  // the finished features, by id: the author's without a generator, then each generator's output once it has run. A
+  // generator sees only these: one still to run is invisible, so its input (a guide, a region) never leaks
+  const current = new Map(map.features.filter(f => !f.gen).map(f => [f.id, f])), resolved = new Map<string, ReturnType<typeof resolve>>()
   const res = (f: Feature) => { let r = resolved.get(f.id); if (!r) { r = resolve(f, map, cat); resolved.set(f.id, r) } return r }
   const children: Feature[] = []
   const runOne = (f: Feature) => {
@@ -32,10 +35,10 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
       out = spec.run({
         f, attrs: res(f).attrs, params, seed: seedOf(map.seed, f.id, name), mapSeed: map.seed, features: current,
         attrsOf: id => res(current.get(id)!).attrs, kindOf: id => res(current.get(id)!).kind,
+        isKind: sel => Object.hasOwn(cat.categories, sel) || kindChain(cat, sel) !== null,
       })
     } catch (err) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen.${name}`, message: (err as Error).message }); return }
-    if (out.self === null) current.delete(f.id)
-    else {
+    if (out.self !== null) {
       // the feature without its generator, and without its old shape when the generator gives a new one (a village
       // with its own area keeps it)
       const isShape = (k: string) => (SHAPES as readonly string[]).includes(k), newShape = Object.keys(out.self).some(isShape)
@@ -47,28 +50,31 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
       children.push(child); current.set(child.id, child)
     }
   }
-  // the generators in three passes, none in the file's order (so reordering the file changes nothing):
-  //   1. those that only reshape their own feature (meander, clump), each reading nothing else;
-  //   2. those that read other features (street-village), in id order, after every reshaping;
-  //   3. the late ones (scatter): each after every scatter whose children any of its selectors would match (by the
-  //      scatter's id, a child's id, or the children's kind, which is the scatter's), so it sees those children
-  //      whatever the ids; a loop is an error naming its scatters; otherwise in id order
-  const gens = [...map.features.filter(f => f.gen)].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), spec = (f: Feature) => GENERATOR_SPECS[Object.keys(f.gen!)[0]]
-  for (const f of gens) if (!spec(f).reads && !spec(f).late) runOne(f)
-  for (const f of gens) if (spec(f).reads && !spec(f).late) runOne(f)
-  const late = gens.filter(f => spec(f).late), done = new Set<string>(), visiting = new Set<string>()
-  const named = (f: Feature) => (spec(f).selects ?? []).flatMap(k => { const v = (f.gen![Object.keys(f.gen!)[0]] as Record<string, unknown>)[k]; return Array.isArray(v) ? v as string[] : [] })
-  const childOfId = (sel: string, parent: string) => sel.startsWith(parent + '-') && /^[1-9]\d*$/.test(sel.slice(parent.length + 1))
-  const needs = (f: Feature, g: Feature) => named(f).some(sel => sel === g.id || childOfId(sel, g.id) || kindMatches(sel, res(g).kind))
-  const trail: string[] = []
-  const visit = (f: Feature) => {
-    if (done.has(f.id)) return
-    if (visiting.has(f.id)) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen`, message: `scatters wait on each other's children in a loop: ${[...trail.slice(trail.indexOf(f.id)), f.id].join(' → ')}` }); return }
-    visiting.add(f.id); trail.push(f.id)
-    for (const g of late) if (g !== f && needs(f, g)) visit(g)
-    trail.pop(); visiting.delete(f.id); done.add(f.id); runOne(f)
+  // the order: F waits for G when what F reads (its selectors) could match what G produces (G's id, its children's
+  // ids, the kinds of G and of its children). The strongly connected groups of that graph run in dependency order
+  // (Tarjan's algorithm emits a group after every group it depends on); inside a group, generators that read each
+  // other run in id order, each seeing the earlier ones' output. The file's order never matters.
+  const gens = [...map.features.filter(f => f.gen)].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  const specOf = (f: Feature) => GENERATOR_SPECS[Object.keys(f.gen!)[0]]
+  const readsOf = (f: Feature) => specOf(f).reads?.(f, f.gen![Object.keys(f.gen!)[0]] as Record<string, unknown>) ?? []
+  const produces = (g: Feature) => { const k = res(g).kind, c = specOf(g).childKind; return c ? [k, c(k)] : [k] }
+  const waitsFor = (f: Feature, g: Feature) => readsOf(f).some(sel => sel === g.id || childOf(sel)?.parent === g.id || produces(g).some(k => kindMatches(sel, k)))
+  const index = new Map<string, number>(), low = new Map<string, number>(), onStack = new Set<string>(), stack: Feature[] = []
+  let counter = 0
+  const strong = (f: Feature) => {
+    index.set(f.id, counter); low.set(f.id, counter); counter++; stack.push(f); onStack.add(f.id)
+    for (const g of gens) {
+      if (g === f || !waitsFor(f, g)) continue
+      if (!index.has(g.id)) { strong(g); low.set(f.id, Math.min(low.get(f.id)!, low.get(g.id)!)) }
+      else if (onStack.has(g.id)) low.set(f.id, Math.min(low.get(f.id)!, index.get(g.id)!))
+    }
+    if (low.get(f.id) !== index.get(f.id)) return
+    const group: Feature[] = []
+    let g: Feature
+    do { g = stack.pop()!; onStack.delete(g.id); group.push(g) } while (g !== f)
+    for (const h of group.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) runOne(h)
   }
-  for (const f of late) visit(f)
+  for (const f of gens) if (!index.has(f.id)) strong(f)
   if (issues.length) return { map, issues }
   // the expanded features: the author's, in their order (generated ones at their new shape, removed ones gone), then
   // the children; validated like any map, so the paths of the author's features name their file

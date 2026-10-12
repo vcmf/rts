@@ -1,7 +1,7 @@
 // street-village (docs/proposals/map-engine.md §3.4, docs/plans/active/m3-generators.md M3b): houses along a village's
 // road between `from` and `to` (metres along it), on both sides, set back from the road's edge and turned to face it,
-// with seeded lengths, depths and gaps. A house keeps clear of water, of other buildings and of the road itself
-// (which may bend back). Each side walks the stretch on its own; the side further behind takes the next house.
+// with seeded lengths, depths and gaps. A house keeps clear of what the generator's `clear` test says (water, other
+// buildings, no-go zones, other ways and barriers, and the road itself where it bends back: src/map/generators.ts). Each side walks the stretch on its own; the side further behind takes the next house.
 import type { Pt } from './schema.ts'
 import { pointAt, inRing, ringsTouch, lineLength } from './geometry.ts'
 import { random } from './seed.ts'

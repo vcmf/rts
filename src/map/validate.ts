@@ -4,7 +4,7 @@
 import type { Catalogue, Feature, MapFile, Pt } from './schema.ts'
 import { GENERATORS, ID, RESERVED, REFS, SEASONS, SHAPES } from './schema.ts'
 import type { GenSpec } from './generators.ts'
-import { GENERATOR_SPECS } from './generators.ts'
+import { GENERATOR_SPECS, childOf } from './generators.ts'
 import type { Issue } from './catalogue.ts'
 import { allowedIn, categoryOf, checkCatalogue, checkValue, kindChain, kindMeta, kindStates } from './catalogue.ts'
 import { barrierProblem, inRing, isPt, lineCrossing, lineFoldBack, lineLength, onCentimetres, ringArea2, ringCrossing, ringsTouch } from './geometry.ts'
@@ -68,13 +68,20 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
     else byId.set(f.id, f as Feature)
   })
 
-  // the ids generated children will take, <parent>-<n>: reserved, so an author's feature never collides with one
-  const parents = new Set(map.features.flatMap(f => (isObj(f) && typeof f.id === 'string' && isObj(f.gen) && Object.keys(f.gen).some(g => Object.hasOwn(GENERATOR_SPECS, g) && GENERATOR_SPECS[g].children) ? [f.id] : [])))
-  const childOf = (x: string): string | undefined => { const m = /^(.*)-([1-9]\d*)$/.exec(x); return m && parents.has(m[1]) ? m[1] : undefined }
+  // the ids generated children will take, <parent>-<n> (childOf, src/map/generators.ts): reserved while their parent
+  // generates, so an author's feature never collides with one. The parents, and how one is pinned
+  const parents = new Map<string, string>()
+  for (const f of map.features) if (isObj(f) && typeof f.id === 'string' && isObj(f.gen)) {
+    const g = Object.keys(f.gen)[0], spec = Object.hasOwn(GENERATOR_SPECS, g) ? GENERATOR_SPECS[g] : undefined
+    if (spec?.childKind) parents.set(f.id, spec.removesSelf ? `remove "${f.id}" itself (its region leaves the map) and keep its children` : `remove the generator of "${f.id}" and keep its children`)
+  }
+  const parentOf = (x: string): string | undefined => { const c = childOf(x); return c && parents.has(c.parent) ? c.parent : undefined }
+  // ids that pinned children name as their parent: a selector may still name the parent to mean them
+  const pinnedParents = new Set(map.features.flatMap(f => (isObj(f) && isObj(f.origin) && typeof f.origin.parent === 'string' ? [f.origin.parent] : [])))
   map.features.forEach((f, i) => {
     if (!isObj(f) || typeof f.id !== 'string') return
     const id = f.id, path = `features[${i}]`
-    if (childOf(id)) bad(id, `${path}.id`, `"${id}" is reserved for the children of "${childOf(id)}"; to pin one, remove the parent's generator and keep its children`)
+    if (parentOf(id)) bad(id, `${path}.id`, `"${id}" is reserved for the children of "${parentOf(id)}"; to pin them, ${parents.get(parentOf(id)!)}`)
     // the kind: its own, or its preset's
     let kind = f.kind
     if (f.preset !== undefined) {
@@ -115,8 +122,8 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
           const sel = (params as Record<string, unknown>)[k]
           if (Array.isArray(sel)) sel.forEach((x, n) => {
             if (typeof x !== 'string') return
-            if (x === id || childOf(x) === id) bad(id, `${gp}.${k}[${n}]`, 'a feature cannot name itself or its own children')
-            else if (!byId.has(x) && !childOf(x) && !Object.hasOwn(cat.categories, x) && !kindChain(cat, x)) bad(id, `${gp}.${k}[${n}]`, `"${x}" is no feature id, generated child, category or kind`)
+            if (x === id || parentOf(x) === id) bad(id, `${gp}.${k}[${n}]`, 'a feature cannot name itself or its own children')
+            else if (!byId.has(x) && !parentOf(x) && !pinnedParents.has(x) && !Object.hasOwn(cat.categories, x) && !kindChain(cat, x)) bad(id, `${gp}.${k}[${n}]`, `"${x}" is no feature id, generated child, category or kind`)
           })
         }
       }

@@ -58,15 +58,21 @@ maps/kinds.json ──► checkCatalogue ─┐
 - **Resolution** (`src/map/resolve.ts`): the catalogue along the path, the map preset, the feature's own fields,
   the season's overrides (the catalogue's, then the feature's), the state's overlay. This is the one place the order
   lives.
-- **Expansion** (`src/map/expand.ts`): three passes, none in the file's order, so reordering the file changes
-  nothing:
-  1. the generators that only reshape their own feature (meander, clump);
-  2. those that read others (street-village), in id order;
-  3. the scatters, each after every scatter whose children any of its selectors would match (by id, a child's id,
-     or the children's kind), otherwise in id order; a loop is an error naming its scatters.
-
-  An author's id of the form `<parent>-<n>`, where the parent writes children, is reserved while the parent
-  generates: pinning a generated child means taking the parent's generator away and keeping the children;
+- **Expansion** (`src/map/expand.ts`), by dependency, over finished features only (the M3b redesign,
+  `docs/plans/active/m3-generators.md`):
+  - a generator sees only finished features: the author's without a generator, and the generators that have
+    already run (their output and children). One still to run is invisible, so its input (a guide, a region)
+    never leaks;
+  - each generator declares what it `reads`, as selectors (`src/map/generators.ts`): a village its road, water,
+    buildings, ways, barriers and no-go zones; a scatter its `avoid` and `within`; meander and clump nothing;
+  - F waits for G when what F reads could match what G produces (G's id, its children's ids, the kinds of G and of
+    its children). The strongly connected groups of that graph run in dependency order (Tarjan); inside a group,
+    generators that read each other run in id order, each seeing the earlier ones. The file's order never
+    matters; a rename can change the order only inside such a group (and, as always, the renamed feature's seed);
+  - an author's id of the form `<parent>-<n>` (`childOf`), where the parent writes children, is reserved while
+    the parent generates. To pin a street-village's houses, remove the village's generator and keep its houses;
+    to pin a scatter's children, remove the scatter feature itself (its region would otherwise stay) and keep the
+    children. A selector naming the removed scatter still means its pinned children;
   - each generator runs with its seed, `hash(map.seed, id, generator)` (`src/map/seed.ts`), so no other feature's
     change reaches it;
   - its feature takes the output shape and records `origin` (the generator, its parameters, `EXPAND_VERSION`);
@@ -103,8 +109,8 @@ maps/kinds.json ──► checkCatalogue ─┐
     region, `clearance` m clear of what it `avoid`s and of its siblings, and within `reach` of what it stays
     `within`. A selector is an id (a generator's id names its children too), a category or a kind prefix; a
     feature cannot name itself, and a `within` that matches nothing is an error. The largest radius comes from
-    `clumpMaxRadius`, `clump`'s own bound. Scatters run after every other generator, in id
-    order; fewer than `count` is an error unless `min` allows it.
+    `clumpMaxRadius`, `clump`'s own bound. A selector that names a feature (an id, a child's id) must find it among
+    the finished features. Fewer than `count` is an error unless `min` allows it.
 - **The base ground** (`relief.base`): seeded value noise (`src/map/noise.ts`), `height` its amplitude and `width`
   its scale, three octaves, filled from per-octave lattice tables (`addFbmGrid`, equal to `fbm` to the bit).
 - **The layout** (`src/map/format.ts`): one feature per line, so diffs show which features changed.

@@ -52,7 +52,8 @@ cannot be both short and rich.
 
 **M3b:**
 - **Children:** a generator may write child features beside its own. A child's id is its parent's plus `-<n>`; it
-  carries an `origin` naming its parent, so it can be pinned like any generated feature.
+  carries an `origin` naming its parent. To pin children, the parent's generator goes (a village keeps its feature;
+  a scatter's region goes too: see round 3).
 - **`street-village`**, on a `built.village` with `along` its road:
   - houses (`built.house`) on both sides of the road between `from` and `to`, set back from its edge, turned to
     face it, with seeded sizes and gaps;
@@ -67,8 +68,8 @@ cannot be both short and rich.
   - each lies within `reach` metres of a feature it must stay `within`, when that list is given;
   - fewer than `count` placed is an error unless `min` allows it.
 
-  Scatters run after every other generator (they see the meandered streams), in id order, a later scatter seeing
-  an earlier one's children. The region feature itself leaves the expanded map; its children stay.
+  The order of expansion is by dependency (round 3's redesign): a scatter runs after whatever it could read. The
+  region feature itself leaves the expanded map; its children stay.
 - **Five seeds:** `maps/generated.map.json`, an intent map in the valley's layout:
   - ridges and a meandered brook with its fords and bridge;
   - noise ground;
@@ -208,4 +209,41 @@ M3a:
   - the seed override only touches a file that is a JSON object.
   - Not done: the far-away prefilter in `distanceToPolygon` (an efficiency note; the full expansion takes about
     0.25 s).
+
+**M3b, round 3** (10 findings, 1 severe): **stop and redesign** (decision 0014: more than three rounds means the design
+is wrong).
+
+The severe finding was a village seeing unexpanded scatter regions: a scatter of ponds over the map left every
+village with 0 houses. It is the third severe finding in a row about the order generators run in:
+- round 1: a village saw a stream's unmeandered guide;
+- round 2: a scatter saw another scatter's unexpanded region;
+- round 3: a village sees scatter regions.
+
+The cause is the same each time: fixed passes let a generator see other generators' *unexpanded inputs*, shapes
+that never reach the final map.
+
+### Redesign: expansion by dependency, over finished features only
+
+1. **A generator sees only finished features:** the author's features without generators, and the generators
+   that have already run (their output and their children). A generator still to run is invisible: its input
+   never leaks.
+2. **Each generator declares what it reads**, as selectors (ids, categories, kind prefixes):
+   - a village reads its road, water, buildings, ways, barriers and no-go zones;
+   - a scatter reads its `avoid` and `within`;
+   - meander and clump read nothing.
+3. **Order by dependency:** F waits for G when F's reads could match what G produces (G's id, its children's
+   ids, the kinds of G and of its children). Expansion runs the strongly connected groups of that graph in
+   dependency order.
+4. **Mutual readers:** inside a group of generators that read each other (two scatters of woods each avoiding
+   `veg`, two villages sharing a road), the generators run in id order, each seeing the earlier ones' output. A
+   rename inside such a group can change which goes first; one-at-a-time placement must pick an order, and the id is
+   the author's handle on it. Nothing outside the group depends on ids, and the file's order never matters.
+
+The round count restarts after this redesign. Round 3's other findings are taken with it:
+- pinning a scatter means removing the scatter feature itself (its region would otherwise stay);
+- a selector naming a pinned scatter's id still matches its children;
+- an id selector (or a child's id) that matches nothing is an error;
+- houses keep out of no-go zones;
+- the child-id rule lives in one place;
+- the stale docs are fixed.
 

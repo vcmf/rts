@@ -356,10 +356,12 @@ describe('M3b: review round 2', () => {
     expect(apart(kidsOf(map, 'aaa'), [w1])).toBe(true)
     expect(expand(mini([woods, aaa({ within: ['woods-1'], reach: 200 })]), cat).issues).toEqual([])
   })
-  it('scatters waiting on each other are a loop, named', () => {
-    const woods = { id: 'woods', kind: 'veg.wood', area: region, gen: { scatter: { count: 2, avoid: ['ground.field'] } } }
-    const fields = { id: 'fields', kind: 'ground.field', area: region, gen: { scatter: { count: 2, avoid: ['veg'] } } }
-    expect(expand(mini([woods, fields]), cat).issues[0]?.message).toMatch(/in a loop: .*(woods → fields → woods|fields → woods → fields)/)
+  it('scatters that read each other run in id order, each seeing the earlier ones (the redesign: no loop error)', () => {
+    const woods = { id: 'woods', kind: 'veg.wood', area: region, gen: { scatter: { count: 3, radiusMin: 30, radiusMax: 40, avoid: ['ground.field'] } } }
+    const fields = { id: 'fields', kind: 'ground.field', area: region, gen: { scatter: { count: 3, radiusMin: 20, radiusMax: 30, avoid: ['veg'] } } }
+    const { map, issues } = expand(mini([woods, fields]), cat)
+    expect(issues).toEqual([])
+    expect(apart(kidsOf(map, 'fields'), kidsOf(map, 'woods'))).toBe(true)
   })
   it("a child's id is the generator's while it generates; pinning means taking the generator away and keeping the children", () => {
     const woods = { id: 'woods', kind: 'veg.wood', area: region, gen: { scatter: { count: 3, radiusMin: 30, radiusMax: 40 } } }
@@ -383,6 +385,53 @@ describe('M3b: review round 2', () => {
     const lake = { id: 'lake', kind: 'water.lake', area: [[[-100, -100], [100, -100], [100, 100], [-100, 100]], [[-40, -40], [40, -40], [40, 40], [-40, 40]]] as Pt[][] }
     expect(distanceToPolygon(lake, {}, [[-5, -5], [5, -5], [5, 5], [-5, 5]])).toBeCloseTo(35, 9)
     expect(distanceToPolygon(lake, {}, [[60, -5], [70, -5], [70, 5], [60, 5]])).toBe(0)
+  })
+})
+
+describe('M3b: the redesign (round 3): expansion by dependency, over finished features only', () => {
+  const region = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
+  const kidsOf = (m: MapFile, parent: string) => m.features.filter(f => f.origin?.parent === parent)
+  const road = { id: 'road', kind: 'way.road.lane', line: [[-400, 0], [400, 0]] as Pt[] }
+  const village = { id: 'village', kind: 'built.village', along: { id: 'road', from: 300, to: 520 }, houses: 10, gen: { 'street-village': { min: 1 } } }
+  it("a village waits for a scatter of ponds and keeps clear of the ponds, never of the scatter's region", () => {
+    const ponds = { id: 'ponds', kind: 'water.pond', area: region, gen: { scatter: { count: 4, radiusMin: 15, radiusMax: 25, avoid: ['way'], clearance: 20 } } }
+    for (const fs of [[road, village, ponds], [ponds, road, village]]) {
+      const { map, issues } = expand(mini(fs as MapFile['features']), cat)
+      expect(issues).toEqual([])
+      const houses = kidsOf(map, 'village'), pondKids = kidsOf(map, 'ponds')
+      expect(houses).toHaveLength(10); expect(pondKids).toHaveLength(4)
+      for (const h of houses) for (const p of pondKids) expect(distanceToPolygon(p, {}, h.area![0])).toBeGreaterThan(2)
+    }
+  })
+  it('two scatters of one category, each avoiding the category, both expand, apart', () => {
+    const copses = { id: 'copses', kind: 'veg.wood', area: region, gen: { scatter: { count: 3, radiusMin: 25, radiusMax: 35, avoid: ['veg'], clearance: 10 } } }
+    const orchards = { id: 'orchards', kind: 'veg.orchard', area: region, gen: { scatter: { count: 3, radiusMin: 20, radiusMax: 30, avoid: ['veg'], clearance: 10 } } }
+    const { map, issues } = expand(mini([copses, orchards]), cat)
+    expect(issues).toEqual([])
+    const all = [...kidsOf(map, 'copses'), ...kidsOf(map, 'orchards')]
+    expect(all).toHaveLength(6)
+    for (const a of all) for (const b of all) if (a !== b) expect(a.area![0].some(p => inRing(b.area![0], p))).toBe(false)
+  })
+  it("a pinned scatter is still named by its id; an id that names nothing is an error; houses keep out of no-go zones", () => {
+    const woods = { id: 'woods', kind: 'veg.wood', area: region, gen: { scatter: { count: 2, radiusMin: 30, radiusMax: 40 } } }
+    const pinned = kidsOf(expand(mini([woods]), cat).map, 'woods')
+    const fields = (avoid: string[]) => ({ id: 'fields', kind: 'ground.field', area: region, gen: { scatter: { count: 2, radiusMin: 20, radiusMax: 30, avoid, clearance: 10 } } })
+    const m = mini([...pinned, fields(['woods'])])
+    expect(validate(m, cat)).toEqual([])
+    const out = expand(m, cat)
+    expect(out.issues).toEqual([])
+    for (const f of kidsOf(out.map, 'fields')) for (const w of pinned) expect(f.area![0].some(p => inRing(w.area![0], p))).toBe(false)
+    expect(validate(mini([woods, kidsOf(expand(mini([woods]), cat).map, 'woods')[0]]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/remove "woods" itself \(its region leaves the map\)/))
+    expect(expand(mini([woods, fields(['woods-9'])]), cat).issues[0]?.message).toMatch(/"woods-9" names no finished feature/)
+    const nogo = { id: 'keep-out', kind: 'zone.nogo', area: [[[-200, 2], [200, 2], [200, 40], [-200, 40]]] as Pt[][] }
+    const near = expand(mini([road, nogo, { ...village, along: { id: 'road', from: 300, to: 500 } }]), cat)
+    expect(near.issues).toEqual([])
+    for (const h of kidsOf(near.map, 'village')) expect(h.area![0].every(([x, z]) => !(Math.abs(x) <= 200 && z >= 2 && z <= 40))).toBe(true)
+  })
+  it("the file's order never matters, for any mix of generators", () => {
+    const raw = JSON.parse(fs.readFileSync(path.join(root, 'maps/generated.map.json'), 'utf8')) as MapFile
+    const reversed = { ...raw, features: [...raw.features].reverse() }
+    expect(expand(reversed, cat).map).toEqual(expand(raw, cat).map)
   })
 })
 
