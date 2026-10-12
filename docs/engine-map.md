@@ -84,7 +84,7 @@ engine spine (world, render), **P** = finish the prototype, **A** = alpha (conte
 | Modifier stack | One place for every bonus and penalty (terrain, formation, fatigue, elevation, commander) | `docs/proposals/sim-design.md` | P | ⬜ |
 | Condition | Fatigue, ammunition, fouling as separate values | `docs/proposals/sim-design.md` | A | ⬜ |
 | Vision and smoke | Line of sight over the heightfield; **smoke as a field** that cuts sight (to ~45 m) and accuracy | `docs/proposals/sim-design.md` | P (LOS), A (smoke) | ⬜ |
-| AI | Uses commands only; layers: army plan → brigade tactics → formation behaviour; time-sliced | `docs/proposals/sim-design.md` | A | ⬜ |
+| AI | Uses commands only; layers: army plan → brigade tactics → formation behaviour; time-sliced | `docs/proposals/ai.md` | A | ⬜ |
 | Scenario and triggers | Objectives, reinforcements, victory conditions, scripted events | `docs/proposals/sim-design.md` | A | ⬜ |
 | Battle clock | Time of day, compression, end of battle (D5) | `docs/proposals/sim-design.md` | A | ⬜ |
 
