@@ -22,7 +22,8 @@ We will build the map engine as **Track M**, in its own worktree, on a long-live
 - when the track's phases are done, the epic merges into main with a merge commit, so each phase stays one commit
   in main's history.
 
-CI already runs on PRs into and pushes to `epic/**` branches (`.github/workflows/ci.yml`).
+CI already runs on PRs into and pushes to `epic/**` branches (`.github/workflows/ci.yml`). This is the one exception to
+"PRs are squash-merged" in `docs/conventions.md`, which points here.
 
 ## Consequences
 
