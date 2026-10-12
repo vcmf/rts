@@ -5,7 +5,7 @@
 // positions after movement and the men at the start of the step, so no result depends on slot order.
 import { type World, M_TICK, M_SEED, MAX_FORMATIONS, O_DRESS, FIRE_AT_WILL, outOfFight, formationSlot as slotOf, formationHandle as handleOf, typeOf } from './world.ts'
 import type { Handle } from './handle.ts'
-import { placeWorld, layoutOf, occupied, removeMan, nearImpassable } from './formation.ts'
+import { placeWorld, layoutOf, occupied, removeMan, nearImpassable, sheltering } from './formation.ts'
 import { heightAt, cellK } from './terrain.ts'
 import { keyedStream, nextUnit } from './rng.ts'
 import { MAX_COMPANIES } from './ruleset.ts'
@@ -158,7 +158,7 @@ export function aimAt(w: World, G: FireGeo, k: number, j: number, R: Reach): num
 // the fight and not in melee, at will
 export function mayFire(w: World, i: number): boolean {
   const f = w.f, n = f.ordHead[i]
-  return typeOf(w, i).def.fires && f.fireMode[i] === FIRE_AT_WILL && !outOfFight(f.mstate[i]) && !f.foe[i] && !f.trans[i] && (n < 0 || w.ord.type[n] === O_DRESS)
+  return typeOf(w, i).def.fires && f.fireMode[i] === FIRE_AT_WILL && !outOfFight(f.mstate[i]) && !f.foe[i] && !f.trans[i] && (n < 0 || w.ord.type[n] === O_DRESS || sheltering(w, i))
 }
 
 // men in company c's firing ranks

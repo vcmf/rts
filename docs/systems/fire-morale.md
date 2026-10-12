@@ -162,6 +162,10 @@ Rallying:
   Without the write-off no router could ever rally: the target at a break is the rout threshold itself;
 - stands for `rally.time` seconds, refusing orders and not firing, then takes the state its morale gives.
 
+**Breaking ranks** (S1e-2, #39). A battalion that breaks while changing shape cuts the change short where it
+stands: it takes whichever of its two shapes the change is nearer to, by its progress, and runs at once. Its places
+jump by up to half the change; the soldier layer's men walk the difference.
+
 **Leaving the field** (S1e-1). A shattered formation with any corner of a company block within `morale.leave`
 (12 m) of the map's edge leaves the field: a line meeting the edge at an angle, or a column of route's tail, gets
 there before its anchor. It is removed at step 14 (reap), and its men are added to its side's count

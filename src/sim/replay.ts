@@ -1,6 +1,7 @@
 // Replays (docs/proposals/sim-design.md §15): sim version + data version + scenario + seed + the external
 // command log. Playback re-issues each logged command at its tick and must reproduce every state hash;
 // a mismatch reports the first differing tick and the first differing section (table).
+import { attachScenario, type ScenarioRules } from './plan.ts'
 import { type World, makeWorld, M_TICK } from './world.ts'
 import { issue, type Stamped } from './commands.ts'
 import { advanceTick } from './tick.ts'
@@ -8,17 +9,19 @@ import { sectionHashes } from './serialize.ts'
 import { type SimData, DataVersionMismatch, hex } from './data.ts'
 import type { Compiled } from './ruleset.ts'
 
-export const SIM_VERSION = 's1e.1'   // bumped when the state or a rule changes: older replays no longer reproduce
+export const SIM_VERSION = 's1e.2'   // bumped when the state or a rule changes: older replays no longer reproduce
 
 export interface HashPoint { tick: number; hash: number; sections: [string, number][] }
 export interface Replay { simVersion: string; dataVersion: number; ruleset: number; scenario: string; seed: number; ticks: number; log: Stamped[] }
-export interface Scenario { name: string; setup(w: World): void; map?: string }   // setup issues the scenario's own commands (not logged); map: the data it is placed on (the formation field when left out)
+// setup issues the scenario's own commands (not logged); map: the data it is placed on (the formation field when
+// left out); player: the side the page lets you command (none: both, a sandbox); plan and minutes: plan.ts
+export interface Scenario extends ScenarioRules { name: string; setup(w: World): void; map?: string; player?: number }
 
 // runs a scenario for `ticks`, issuing `script(w, tick)` commands as external (logged) ones
 export function record(data: SimData, cr: Compiled, scenario: Scenario, seed: number, ticks: number,
   script: (w: World, issueExternal: (c: Parameters<typeof issue>[1]) => void) => void): { replay: Replay; hashes: HashPoint[] } {
   const w = makeWorld(data, cr, seed), log: Stamped[] = [], hashes: HashPoint[] = []
-  scenario.setup(w)
+  attachScenario(w, scenario); scenario.setup(w)
   while (w.meta[M_TICK] < ticks) {
     script(w, c => { issue(w, c, log) })
     const r = advanceTick(w)
@@ -39,7 +42,7 @@ export function play(r: Replay, data: SimData, cr: Compiled, scenario: Scenario,
   for (let i = 0; i < r.log.length; i++)
     if (r.log[i].tick < 1 || r.log[i].tick > r.ticks || (i && r.log[i].tick < r.log[i - 1].tick)) return { tick: r.log[i].tick, expected: 'log ticks in order, within the replay', got: `entry ${i} at tick ${r.log[i].tick}`, section: 'command log' }
   const w = makeWorld(data, cr, r.seed)
-  scenario.setup(w)
+  attachScenario(w, scenario); scenario.setup(w)
   let k = 0, e = 0
   while (w.meta[M_TICK] < r.ticks) {
     // re-issue the commands logged at this tick (stamped for the next one), checking their sequence

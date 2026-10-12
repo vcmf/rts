@@ -45,7 +45,7 @@ export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
 // a spawn's quality: −1 marks none given (the ruleset's), any negative given becomes −2 (refused);
 // positions to 1 cm, angles to 0.1 mrad; an unknown type or a move with too many points is kept as it is
 // and dropped when applied
-function quantiseCommand(c: Command): Command {
+export function quantiseCommand(c: Command): Command {
   const qa = (a: number) => Math.round(a * 10000) / 10000
   switch (c.type) {
     case 'move': return { type: 'move', id: c.id | 0, points: !wellFormed(c.points) || c.points.length > MAX_POINTS ? c.points : c.points.map(([x, z]) => [quantise(x), quantise(z)]), append: !!c.append }
@@ -90,14 +90,14 @@ export function applyCommands(w: World, t: number): Dropped[] {
 }
 
 // replaces (or appends to) a formation's orders with new ones of the given types; '' or why not
-function giveOrders(w: World, i: number, types: number[], append: boolean, fill: (n: number, k: number) => void): string {
+function giveOrders(w: World, i: number, types: number[], append: boolean, fill: (n: number, k: number) => void, player: boolean): string {
   let room = ordersFree(w)
   if (!append) for (let n = w.f.ordHead[i]; n >= 0; n = w.ord.next[n]) room++
   if (types.length > room) return 'order pool full'
   if (!append) clearOrders(w, i)
   types.forEach((t, k) => { const n = allocOrder(w, t); fill(n, k); appendOrder(w, i, n) })
   w.f.status[i] = 0; w.f.blockedFor[i] = 0
-  playerOrdered(w, i)
+  if (player) playerOrdered(w, i)   // a scenario's plan is not the player: the standing behaviour carries on
   return ''
 }
 // the player's order is obeyed: the square against cavalry stands down for this spell of threat and forgets the
@@ -107,7 +107,10 @@ function playerOrdered(w: World, i: number): void {
   f.autoFrom[i] = 0; if (f.alertAt[i]) f.refugeOff[i] = 1
 }
 
-function apply(w: World, c: Command): string {
+// applies a command now, as the tick applies a stamped one (plan.ts: a scenario's plan); '' or why it was dropped
+// (not as the player's: it does not stand the square against cavalry down)
+export const applyNow = (w: World, c: Command): string => apply(w, quantiseCommand(c), false)
+function apply(w: World, c: Command, player = true): string {
   const f = w.f, o = w.ord, cr = w.cr
   if (c.type === 'debug-spawn') {
     if (c.side < 0 || c.side >= SIDES) return 'no such side'
@@ -123,7 +126,7 @@ function apply(w: World, c: Command): string {
     const i = w.free[--w.meta[M_FREE]]
     f.alive[i] = 1; f.side[i] = c.side; f.type[i] = type; f.shape[i] = shape; f.style[i] = cr.presetIndex(cr.rs.start.orders); f.drill[i] = 1
     f.x[i] = c.x; f.z[i] = c.z; f.heading[i] = c.heading; f.px[i] = c.x; f.pz[i] = c.z; f.ph[i] = c.heading
-    f.men[i * cr.maxC] = c.men; rebalance(w, i)
+    f.men[i * cr.maxC] = c.men; rebalance(w, i); w.sides.spawned[c.side] += c.men
     resetTrail(w, i)
     spawnFire(w, i); spawnMorale(w, i, q); f.fireMode[i] = mode
     return ''
@@ -138,27 +141,28 @@ function apply(w: World, c: Command): string {
   // out of the fight (routing, rallying, shattered): only the debug commands reach it
   if (outOfFight(f.mstate[i]) && c.type !== 'debug-kill' && c.type !== 'debug-morale') return MORALE_STATES[f.mstate[i]]
   // in melee: only the debug commands (it ends by a rout, docs/systems/melee.md)
-  if (f.foe[i] && c.type !== 'debug-kill' && c.type !== 'debug-morale') return 'in melee'
+  // (a scenario's plan's order is queued, for after the melee: it stands while it fights; but it does not charge)
+  if (f.foe[i] && c.type !== 'debug-kill' && c.type !== 'debug-morale' && (player || c.type === 'charge')) return 'in melee'
   switch (c.type) {
     case 'move': {
       if (!wellFormed(c.points)) return 'malformed waypoints'
       if (c.points.length === 0) return 'no waypoints'
       if (c.points.length > MAX_POINTS) return 'too many waypoints'
       for (const [x, z] of c.points) if (!finite(x) || !finite(z) || !inside(w, x, z)) return 'waypoint outside the map'
-      return giveOrders(w, i, c.points.map(() => O_MOVE), c.append, (n, k) => { o.x[n] = c.points[k][0]; o.z[n] = c.points[k][1]; o.resolved[n] = 1 })
+      return giveOrders(w, i, c.points.map(() => O_MOVE), c.append, (n, k) => { o.x[n] = c.points[k][0]; o.z[n] = c.points[k][1]; o.resolved[n] = 1 }, player)
     }
     case 'form': {
       const s = typeOf(w, i).shapeIndex(c.shape); if (s < 0) return 'no such shape'
-      return giveOrders(w, i, [O_FORM], false, n => { o.shape[n] = s })
+      return giveOrders(w, i, [O_FORM], false, n => { o.shape[n] = s }, player)
     }
     case 'wheel':
       if (!finite(c.angle) || c.angle === 0 || Math.abs(c.angle) > 2 * PI) return 'no such wheel'
-      return giveOrders(w, i, [O_WHEEL], false, n => { o.a[n] = c.angle })
-    case 'face': return giveOrders(w, i, [O_FACE], false, () => {})
+      return giveOrders(w, i, [O_WHEEL], false, n => { o.a[n] = c.angle }, player)
+    case 'face': return giveOrders(w, i, [O_FACE], false, () => {}, player)
     case 'retire':   // the Retire drill (formation.ts)
       if (!finite(c.metres) || c.metres <= 0 || c.metres > 1000) return 'no such retreat'
-      return giveOrders(w, i, RETIRE, false, (n, k) => fillRetire(w, n, k, c.metres))
-    case 'halt': clearOrders(w, i); f.status[i] = 0; f.blockedFor[i] = 0; playerOrdered(w, i); return ''
+      return giveOrders(w, i, RETIRE, false, (n, k) => fillRetire(w, n, k, c.metres), player)
+    case 'halt': clearOrders(w, i); f.status[i] = 0; f.blockedFor[i] = 0; if (player) playerOrdered(w, i); return ''
     case 'charge': {   // docs/systems/melee.md
       const U = typeOf(w, i), ch = U.charge; if (!ch) return 'cannot charge'
       if (f.trans[i]) return 'changing shape'
@@ -166,7 +170,7 @@ function apply(w: World, c: Command): string {
       if (f.blownUntil[i] > w.meta[M_TICK] + 1) return 'blown'
       const j = formationSlot(w, c.target)
       if (j < 0 || f.side[j] === f.side[i]) return 'no such target'
-      const why = giveOrders(w, i, [O_CHARGE], false, () => {}); if (why) return why
+      const why = giveOrders(w, i, [O_CHARGE], false, () => {}, player); if (why) return why
       f.chTarget[i] = c.target; f.chPhase[i] = CH_CLOSING; f.chRun[i] = 0; f.chGap[i] = GAP_UNKNOWN; f.chUntil[i] = 0
       return ''
     }

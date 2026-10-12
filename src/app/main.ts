@@ -3,7 +3,7 @@
 // a command through `issue`, and the external log is kept, so a session can be replayed.
 import fieldUrl from '../../data/formation-field.simdata?url'
 import battleUrl from '../../data/battlefield.simdata?url'
-import { loadSimData, compileRuleset, makeWorld, typeOf, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ, MORALE_STATES, FIRE_MODES, CHARGE_PHASES,
+import { loadSimData, compileRuleset, makeWorld, typeOf, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ, MORALE_STATES, FIRE_MODES, CHARGE_PHASES, M_END, M_WINNER, END_RESULTS, END_DRAW, attachScenario, fightShares,
   type Command, type Stamped, type World, type HashPoint, type Replay, type Dropped } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
@@ -24,7 +24,9 @@ async function main(): Promise<void> {
   const data = loadSimData(new Uint8Array(await (await fetch(urls[mapName])).arrayBuffer()), MAP_VERSIONS[mapName])
   const cr = compileRuleset(napoleonic)
   const w: World = makeWorld(data, cr, SEED, false)
-  scenario.setup(w)
+  attachScenario(w, scenario); scenario.setup(w)
+  // the side you command (S1e-2): a scenario that names one lets you select only its formations; none, both
+  const mine = (i: number): boolean => scenario.player === undefined || w.f.side[i] === scenario.player
   const log: Stamped[] = [], hashes: HashPoint[] = [], dropped: Dropped[] = []
   const scene = buildScene(w), layer = new SoldierLayer(w, scene), map = new StaffMap(w, scene)
   const t0 = performance.now()
@@ -132,11 +134,12 @@ async function main(): Promise<void> {
       charging = false
       const [x0, z1] = toW(view, Math.min(d.x, e.clientX), Math.min(d.y, e.clientY)), [x1, z0] = toW(view, Math.max(d.x, e.clientX), Math.max(d.y, e.clientY))
       if (!d.shift) selected.clear()
-      for (const u of layer.units.values()) if (u.men.some(m => m.alive && m.x > x0 && m.x < x1 && m.z > z0 && m.z < z1)) selected.add(u.i)
+      for (const u of layer.units.values()) if (mine(u.i) && u.men.some(m => m.alive && m.x > x0 && m.x < x1 && m.z > z0 && m.z < z1)) selected.add(u.i)
       return
     }
     const hit = pick(e.clientX, e.clientY)
     if (charging) { charging = false; if (hit >= 0) charge(hit); return }   // C, then a click on the enemy
+    if (hit >= 0 && !mine(hit)) return   // an enemy: nothing (C then a click charges it)
     if (hit >= 0) { if (d.shift) { if (selected.has(hit)) selected.delete(hit); else selected.add(hit) } else { selected.clear(); selected.add(hit) } return }
     const [x, z] = toW(view, e.clientX, e.clientY); march(x, z, d.shift)
   })
@@ -168,10 +171,15 @@ async function main(): Promise<void> {
       lines.push(`#${i} ${U.name} · ${s} · ${menOf(w, i)} men · ${w.cr.presets[w.f.style[i]]}${STATUS[w.f.status[i]] ? ' · ' + STATUS[w.f.status[i]] : ''}`)
       const fight = w.f.foe[i] ? ' · in melee' : w.f.chPhase[i] ? ' · ' + CHARGE_PHASES[w.f.chPhase[i]] : w.f.blownUntil[i] > w.meta[M_TICK] ? ' · blown' : ''
       lines.push(`   ${MORALE_STATES[w.f.mstate[i]]} · morale ${w.f.morale[i].toFixed(2)} · lost ${w.f.startMen[i] - menOf(w, i)} · ${FIRE_MODES[w.f.fireMode[i]]}${fight}`) }
-    const d = dropped.at(-1)
+    let d: Dropped | undefined; for (let k = dropped.length - 1; k >= 0 && !d; k--) if (dropped[k].seq >= 0) d = dropped[k]   // yours: the plan's refusals are not shown
     if (note && performance.now() - noteT < 3000) lines.push(note)
+    // the battle (S1e-2): each side's men in the fight, as a share of those it spawned, and the result once decided
+    const shares = fightShares(w), head: string[] = []
+    if (w.meta[M_END]) { const r = w.meta[M_WINNER], you = scenario.player === undefined ? END_RESULTS[r] : r === END_DRAW ? 'a draw' : r - 1 === scenario.player ? 'you win' : 'you lose'
+      head.push(`BATTLE OVER at ${(w.meta[M_END] * DT / 60).toFixed(1)} min: ${you}`) }
+    head.push(`in the fight: ${[0, 1].map(s => `${s === scenario.player ? 'yours' : 'side ' + s} ${Math.round(100 * shares[s])}%`).join(' · ')}`)
     if (d && w.meta[M_TICK] - d.tick < 3 * TICK_HZ) lines.push(`order not carried out: ${d.reason}`)   // shown for 3 s
-    statsEl.textContent = (lines.length ? lines.join('\n') : 'nothing selected') +
+    statsEl.textContent = head.join('\n') + '\n' + (lines.length ? lines.join('\n') : 'nothing selected') +
       `\n\nt ${(w.meta[M_TICK] * DT).toFixed(1)} s · ${speed ? speed + '×' : 'paused'}${paused ? ' (P)' : ''}\nsim + men ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms\nfps ${fps.toFixed(0)} · map built in ${buildMs.toFixed(0)} ms`
   }
   // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce, as far as it has run:
@@ -181,7 +189,8 @@ async function main(): Promise<void> {
   // headless hooks (tools/app-check.mjs): orders and time without real time passing
   Object.assign(window, { APP: {
     w, layer, map, selected, log, hashes, dropped,
-    select: (ids: number[]) => { selected.clear(); for (const i of ids) selected.add(i) },
+    select: (ids: number[]) => { selected.clear(); for (const i of ids) if (mine(i)) selected.add(i) },
+    mine, result: () => ({ tick: w.meta[M_END], winner: END_RESULTS[w.meta[M_WINNER]] }),
     march, charge, order: (name: string) => forSelection(orders[name]), form: (shape: string) => forSelection(id => ({ type: 'form', id, shape })),
     run: () => { paused = false; setSpeed(1) },
     advance: (sec: number) => { paused = true; const sp = speed; speed = 1; for (let n = Math.round(sec * 30); n > 0; n--) advance(1 / 30); speed = sp; draw() },

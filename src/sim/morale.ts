@@ -19,7 +19,7 @@
 // fall-backs take orders from the shared pool in visiting order, so two in the same tick get different
 // pool entries (and the lower slot is served first when the pool runs short), as tick.ts says.
 import { type World, MAX_FORMATIONS, MS_STEADY, MS_SHAKEN, MS_WAVERING, MS_ROUTING, MS_RALLYING, MS_SHATTERED, O_FACE, O_MOVE, M_TICK, RP_NONE, RP_RUNNING, RP_HALTED, RP_FLED, outOfFight } from './world.ts'
-import { allocOrder, appendOrder, clearOrders, layoutOf, menOf, ordersFree, setOnMap, ST_HALTED, RETIRE, fillRetire } from './formation.ts'
+import { allocOrder, appendOrder, clearOrders, layoutOf, menOf, ordersFree, setOnMap, ST_HALTED, RETIRE, fillRetire, cutChange } from './formation.ts'
 import { sin, cos, PI } from './num.ts'
 import { TICK_HZ, DT } from './time.ts'
 
@@ -121,6 +121,7 @@ function rout(w: World, i: number, now: number, men: number): void {
   f.mstate[i] = f.routs[i] > M.rally.max || men < M.shatter * f.startMen[i] ? MS_SHATTERED : MS_ROUTING
   f.routX[i] = rx; f.routZ[i] = rz; f.runs[i] = 0; f.routPhase[i] = RP_HALTED
   clearOrders(w, i)
+  if (f.trans[i]) cutChange(w, i)   // it breaks its ranks: no change finished under fire (#39)
   run(w, i)
 }
 // a router: a run ends when its orders do. Halted at impassable ground, it tries the fan's next direction

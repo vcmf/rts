@@ -110,7 +110,8 @@ as a flash at a company's front with a fading line to its target (a battery's ro
 ball stopped; canister: a fan); morale as a bar behind each battalion,
 named unless steady. Fire at will and Hold fire are panel orders. The page loads the scenario's map (`Scenario.map`, the formation field unless it names another) at the version
 in `src/scenarios/maps.ts`; `s1e-battle` (6 battalions, a regiment and a battery a side, holding fire) is on the
-1.2 km battlefield.
+1.2 km battlefield, where you command side 0 against side 1's plan. The readout shows each side's share of its men
+in the fight and, once decided, the result.
 
 **Hooks** (`window.APP`): select, march, charge, form, order, `advance(seconds)` (pauses the clock and steps
 frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`.
@@ -143,7 +144,7 @@ speeds, faster where its pace (or its routers') would leave them behind (trooper
   - the charge: a regiment charges a line, which breaks, then a square, which holds;
   - the guns: a battery fires roundshot on a column, which loses men;
   - the battle: 16 formations deploy on the battlefield, a column of route crosses a ford, and every man stays
-    on the map;
+    on the map; you can select only your side, side 1 advances on its own, and the battle runs to a result;
   - each session's replay played back in Node.
 
   It fails on any console error or hash mismatch.
@@ -156,5 +157,6 @@ speeds, faster where its pace (or its routers') would leave them behind (trooper
   firing on the dev Mac, against the 4 ms budget; 40 × 800 costs about 27 ms. The cost tests hold
   temporary budgets until S1c-5 ([#36](https://github.com/vcmf/rts/issues/36)). The worker (S2) takes the ticks off the main
   thread.
-- The page selects and orders both sides (a drill sandbox); sides belong to S1e.
+- The page selects and orders both sides only in scenarios with no player side (a sandbox); `s1e-battle` gives
+  you side 0 (`docs/systems/sides.md`).
 - No speed overlay yet (the plan listed one); the slots overlay exists.

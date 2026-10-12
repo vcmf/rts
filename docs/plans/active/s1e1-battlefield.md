@@ -112,7 +112,7 @@ ends at the edge on any map, so removing routers would end every rally).
 
 ## Results (2026-10-11)
 
-**The map** (`data/battlefield.simdata`, 4.7 MB, version `0xfeb0d496`):
+**The map** (`data/battlefield.simdata`, 4.7 MB, version `0xff0c79dc`):
 - the terrain builds in 87 ms (601² cells on a 2 m grid);
 - the staff map builds in 0.6–0.7 s on the page and redraws in 1.3 ms;
 - `s1e-battle` deploys its 16 formations with every man on the map;
@@ -182,4 +182,4 @@ ends at the edge on any map, so removing routers would end every rally).
 - **CI found the battlefield built to other bytes on Linux:** its formulas used `Math.sin`, `exp` and `atan2`, which
   may differ in the last bit between platforms, enough to move a cell across a class threshold (the slope that
   makes rough ground). The map uses the sim's exact-operation functions (`src/sim/num.ts`) now, and `check:data`
-  passes on both machines (version `0xfeb0d496`).
+  passes on both machines (version `0xff0c79dc`).

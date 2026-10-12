@@ -104,6 +104,12 @@ const battle = [
   ['eval', 'APP.advance(180); "marching"'],
   ['eval', `APP.advance(180); APP.view(-260, 0, 1.5); \`FORD column at z \${APP.w.f.z[3].toFixed(0)} on map \${${ONMAP}}\``],   // about 480 s from the ridge at the ordinary pace
   ['shot', 'battle-1-ford'],
+  // S1e-2: you command side 0 only; side 1 follows its plan (its first line has come down from its ridge at z 230)
+  ['eval', `APP.select([8, 0]); const sel = [...APP.selected].join(","); APP.select([]); \`SIDES selected \${sel}, enemy first line at z \${[8, 9, 10].map(i => APP.w.f.z[i].toFixed(0)).join(" ")}\``],
+  // on to the result (at most the scenario's 40 minutes), in 3-minute steps
+  ...Array.from({ length: 12 }, () => ['eval', 'if (!APP.result().tick) APP.advance(180); `t ${(APP.w.meta[0] / 1200).toFixed(1)} min`']),
+  ['eval', 'APP.view(0, -60, 0.8); const r = APP.result(); `RESULT ${r.winner} at ${(r.tick / 1200).toFixed(1)} min`'],
+  ['shot', 'battle-2-result'],
   REPLAY,
 ]
 
@@ -140,6 +146,7 @@ async function run(scenario, steps) {
   if (scenario === 's1d-charge' && !(/CHARGE line state [35]/.test(text) && /SQUARE state [012], regiment phase 0 melee 0/.test(text))) { console.log('the charges did not break the line and fail on the square'); return false }
   if (scenario === 's1d-guns' && !/GUNS column lost [1-9]\d*, shots [1-9]/.test(text)) { console.log('the battery did not fire on the column'); return false }
   if (scenario === 's1e-battle' && !(/DEPLOYED 16 on map true/.test(text) && /FORD column at z (\d+) on map true/.test(text) && +text.match(/FORD column at z (\d+)/)[1] > 20)) { console.log('the battle did not deploy on the map, or the column did not cross the ford'); return false }
+  if (scenario === 's1e-battle' && !(/SIDES selected 0, enemy first line at z (-?\d+) (-?\d+) (-?\d+)/.test(text) && text.match(/enemy first line at z (-?\d+) (-?\d+) (-?\d+)/).slice(1).every(z => +z < 200) && /RESULT (side \d wins|a draw) at/.test(text))) { console.log('the battle let you select an enemy, side 1 did not advance, or it reached no result'); return false }
   if (scenario === 's1b-field' && (!panel || panel[1] !== panel[2] || panel[1] === '0')) { console.log('panel buttons did not each log one command'); return false }
   return true
 }

@@ -61,7 +61,8 @@ step 12 morale              the shocks owed (shockIn) are taken with contagion
 - it charged within `charge.rest` seconds: "blown";
 - the target is not a live enemy: "no such target".
 
-A formation in melee refuses every command but the debug ones ("in melee").
+A formation in melee refuses every player command but the debug ones ("in melee"); a scenario's plan's orders are
+queued for after the melee (a charge is refused). It stands while it fights.
 
 **The charge** (`O_CHARGE`, `formation.ts`): an order alone in the formation's list, run by the move order's
 code (turn limits, the lag model, the footprint gate).
@@ -100,7 +101,8 @@ A target changing shape has no front, and is struck as in the flank.
   inflicts nothing.
 - **Shock:** the target loses `impact.shock[side] × momentum × (1 − braced)` of its morale.
 - **Then:** the charger recoils with chance `braced`, else both are in melee (`foe`). A target struck while
-  not in melee takes on its lowest-slot attacker, and its orders and any charge of its own end.
+  not in melee takes on its lowest-slot attacker, and any charge of its own ends; its other orders are kept for
+  after the melee (in melee it stands).
 
 **The recoil:** the charger rides `charge.recoil` metres straight away from the target, with a Face about first
 when the way is behind it, and is blown for `charge.rest`.
@@ -128,13 +130,20 @@ with contagion, after relaxing (`morale.ts`).
 - **A threat:** an enemy in the fight of a type that charges, within `refuge.alert` (200 m, centre to centre),
   either charging it or anything but riding away faster than `refuge.closing`. A regiment at the halt can
   charge in seconds.
-- **Forming:** after `refuge.react` seconds of unbroken threat, a battalion not in its refuge and not changing
-  into it drops its orders and forms it. The shape it came from is kept (`autoFrom`).
-- **Forming back:** when `refuge.hold` seconds pass with no threat and no enemy charging type is within
-  `refuge.alert` at all, it forms back into that shape (from the square, or out of the change into it), if it
-  has no orders.
+- **Forming:** after `refuge.react` seconds of unbroken threat, with the threat present, a battalion not in its
+  refuge and not changing into it starts the change itself (not an order). The shape it came from is kept
+  (`autoFrom`). A change that cannot be made there (a wood, the water) is tried again every 5 s; nothing is
+  queued.
+- **Sheltering** (`sheltering`, `formation.ts`), derived from state each tick: in its refuge or changing into
+  it, formed by itself, in a spell no player's order stood down, in the fight and not in melee. A sheltering
+  battalion stands, keeps its orders (a scenario's plan's) for after, and fires as a halted one does. A rout, a
+  melee, a player's order or the spell's end ends it, with nothing to undo.
+- **The spell ends** when `refuge.hold` seconds pass with no threat and no enemy charging type is within
+  `refuge.alert` at all. The battalion forms back into its old shape (tried every 5 s while that cannot be made
+  there; a shape changed meanwhile by an order is kept) and goes on with its orders.
 - **The player's order wins:** any order given during a spell of threat stands the behaviour down until the
-  spell ends (`refugeOff`), and forgets the shape it would form back into (`autoFrom`).
+  spell ends (`refugeOff`) and forgets the shape to form back into. A scenario's plan's order does not stand it
+  down.
 
 The step is skipped when no charging type is in the fight and no battalion is on the alert.
 
@@ -173,9 +182,6 @@ The step is skipped when no charging type is in the fight and no battalion is on
 
 ## Open questions
 
-- **A battalion that breaks while changing shape** finishes the change before it runs (S1c's rule). With the
-  square, it is common now: a line caught forming square breaks and stands for up to a minute while the
-  pursuit rides it down ([#39](https://github.com/vcmf/rts/issues/39)).
 - **A caught column rarely breaks:** column to square takes 60 s, so a column is half braced when the horses
   arrive, and the regiment turns away or recoils once the square closes. Whether that is too safe is for S1e's
   playtests.
