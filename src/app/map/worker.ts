@@ -1,4 +1,4 @@
-// The draft page's compile worker (docs/plans/active/m1-language.md M1b): validate, expand, apply, draw, off the
+// The draft page's compile worker (docs/plans/done/m1-language.md M1b): validate, expand, apply, draw, off the
 // page's thread, with the same code the map CLI runs in Node (src/map/).
 import type { Catalogue, MapFile } from '../../map/schema.ts'
 import { validate } from '../../map/validate.ts'
@@ -25,8 +25,8 @@ function compile(seq: number, map: unknown, cat: Catalogue): void {
   const layers = Object.fromEntries(LAYER_NAMES.map(n => [n, L[n].buffer as ArrayBuffer])) as Record<LayerName, ArrayBuffer>
   const reply: CompileReply = {
     seq, ok: true, map: ex.map, w: img.w, h: img.h, rgba: img.data.buffer as ArrayBuffer,
-    cell: L.cell, nx: L.nx, nz: L.nz, x0: L.x0, z0: L.z0, height: L.height.buffer as ArrayBuffer, layers, table: L.table,
+    cell: L.cell, nx: L.nx, nz: L.nz, x0: L.x0, z0: L.z0, height: L.height.buffer as ArrayBuffer, depth: L.depth.buffer as ArrayBuffer, layers, table: L.table,
     ms: { validate: t1 - t0, apply: t2 - t1, draw: t3 - t2 },
   }
-  ;(self as unknown as Worker).postMessage(reply, [reply.rgba, reply.height, ...Object.values(layers)])
+  ;(self as unknown as Worker).postMessage(reply, [reply.rgba, reply.height, reply.depth, ...Object.values(layers)])
 }

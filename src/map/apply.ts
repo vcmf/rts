@@ -1,4 +1,4 @@
-// Apply (docs/proposals/map-engine.md §4, docs/plans/active/m1-language.md M1b): the expanded map's features
+// Apply (docs/proposals/map-engine.md §4, docs/plans/done/m1-language.md M1b): the expanded map's features
 // laid into the five layers on the 2 m grid over the map's extent, in the engine's fixed order:
 //   1. relief: the landforms (hill, ridge, valley, plateau, scarp), summed (the base is flat until `noise`, M3);
 //   2. relief edits, now that every shape exists: raise, lower, level, cut, ditch, and a way's cut or raise;
@@ -18,6 +18,9 @@ import { cos, sin } from '../sim/num.ts'
 export const CELL = 2   // m (decision 0021)
 // widths where the catalogue gives none: a way's (every way kind sets one), and the bands of the line-shaped kinds
 // that take no width attribute (reeds along a bank, a flèche's earthwork), m
+// the water (§4 step 3): the level sits FREEBOARD m under the lower bank, read BANK_OUT m beyond each edge every
+// LEVEL_STEP m; a pond reaches its full depth SHORE_IN m in from its shore
+const FREEBOARD = 0.4, BANK_OUT = 3, LEVEL_STEP = 2, SHORE_IN = 10
 const WAY_WIDTH = 5, WATER_WIDTH = 6, EDIT_WIDTH = 4, LANDFORM_WIDTH = 100, VEG_LINE = 4, WORK_LINE = 6
 
 export interface Layers {
@@ -29,6 +32,8 @@ export interface Layers {
   edit: Uint16Array         // the last cut or ditch (a relief cut, a ditch, a sunken way) that covers the cell: the draft
                             // draws it, and it marks the cell for the ruleset's crossing rule; other edits leave no mark
   density: Uint8Array       // the vegetation's density × 255 (ramps evaluated per cell)
+  depth: Uint16Array        // the water's depth over the cell, mm (the water's level less the cell's mean ground; 0: dry)
+  streams: { id: string; step: number; levels: Float64Array }[]   // each stream's or river's level every `step` m from its first point
 }
 export const LAYER_NAMES = ['ground', 'veg', 'water', 'way', 'barrier', 'built', 'zone', 'edit'] as const
 
@@ -45,19 +50,36 @@ function profile(kind: AttrValue | undefined, t: number): number {
 // free end along its tangent (0 inside), and the distance along the line to the nearest point
 interface Near { d: number; side: number; over: number; along: number }
 function nearLine(line: Pt[], px: number, pz: number): Near {
-  let best: Near = { d: Infinity, side: 1, over: 0, along: 0 }, acc = 0
+  // scalars only (this runs for every node and cell near a line), and a segment whose box lies farther than the best
+  // distance so far is skipped without measuring it; ties keep the earlier segment, as a full scan would
+  let bd = Infinity, bd2 = Infinity, side = 1, over = 0, along = 0, acc = 0
   for (let k = 0; k + 1 < line.length; k++) {
-    const [ax, az] = line[k], [bx, bz] = line[k + 1], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz, L = Math.sqrt(L2)
+    const ax = line[k][0], az = line[k][1], bx = line[k + 1][0], bz = line[k + 1][1], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz, L = Math.sqrt(L2)
+    const ox = px < (ax < bx ? ax : bx) ? (ax < bx ? ax : bx) - px : px > (ax > bx ? ax : bx) ? px - (ax > bx ? ax : bx) : 0
+    const oz = pz < (az < bz ? az : bz) ? (az < bz ? az : bz) - pz : pz > (az > bz ? az : bz) ? pz - (az > bz ? az : bz) : 0
+    if (ox * ox + oz * oz > bd2) { acc += L; continue }
     const t = ((px - ax) * dx + (pz - az) * dz) / L2, tc = t < 0 ? 0 : t > 1 ? 1 : t
     const qx = ax + tc * dx, qz = az + tc * dz, d = Math.sqrt((px - qx) * (px - qx) + (pz - qz) * (pz - qz))
-    if (d < best.d) {
-      const over = k === 0 && t < 0 ? -t * L : k === line.length - 2 && t > 1 ? (t - 1) * L : 0
-      const cross = dx * (pz - az) - dz * (px - ax)
-      best = { d, side: cross >= 0 ? 1 : -1, over, along: acc + tc * L }
+    if (d < bd) {
+      bd = d; bd2 = d * d
+      over = k === 0 && t < 0 ? -t * L : k === line.length - 2 && t > 1 ? (t - 1) * L : 0
+      side = dx * (pz - az) - dz * (px - ax) >= 0 ? 1 : -1
+      along = acc + tc * L
     }
     acc += L
   }
-  return best
+  return { d: bd, side, over, along }
+}
+
+// the point at distance s along a polyline, and the unit tangent there: [x, z, tx, tz]
+function pointAt(line: Pt[], s: number): [number, number, number, number] {
+  let acc = 0
+  for (let k = 0; k + 1 < line.length; k++) {
+    const [ax, az] = line[k], [bx, bz] = line[k + 1], dx = bx - ax, dz = bz - az, L = Math.sqrt(dx * dx + dz * dz)
+    if (acc + L >= s || k + 2 === line.length) { const t = Math.min(1, Math.max(0, (s - acc) / L)); return [ax + t * dx, az + t * dz, dx / L, dz / L] }
+    acc += L
+  }
+  return [line[0][0], line[0][1], 1, 0]
 }
 
 // a feature's shape as a field: whether a point is inside (even-odd over all rings), and its distance in from
@@ -100,7 +122,7 @@ function ramp(v: AttrValue | undefined, input: { edge?: number; along?: number }
 export function apply(map: MapFile, cat: Catalogue): Layers {
   const c = CELL, nx = map.extent.w / c, nz = map.extent.h / c, x0 = -map.extent.w / 2, z0 = -map.extent.h / 2
   const n = nx * nz, U = () => new Uint16Array(n)
-  const L: Layers = { cell: c, nx, nz, x0, z0, height: new Float64Array((nx + 1) * (nz + 1)), table: [], ground: U(), veg: U(), water: U(), way: U(), barrier: U(), built: U(), zone: U(), edit: U(), density: new Uint8Array(n) }
+  const L: Layers = { cell: c, nx, nz, x0, z0, height: new Float64Array((nx + 1) * (nz + 1)), table: [], ground: U(), veg: U(), water: U(), way: U(), barrier: U(), built: U(), zone: U(), edit: U(), density: new Uint8Array(n), depth: U(), streams: [] }
   // features in painting order: priority, then id
   const order = map.features.map(f => ({ f, r: resolve(f, map, cat) })).sort((a, b) => a.r.priority - b.r.priority || (a.f.id < b.f.id ? -1 : a.f.id > b.f.id ? 1 : 0))
   order.forEach(({ r }) => L.table.push(r))
@@ -121,6 +143,11 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
   }
   const lineBox = (line: Pt[]): [number, number, number, number] => [Math.min(...line.map(p => p[0])), Math.min(...line.map(p => p[1])), Math.max(...line.map(p => p[0])), Math.max(...line.map(p => p[1]))]
   const H = L.height
+  // the ground at a point, bilinear between the nodes (clamped to the grid)
+  const hAt = (x: number, z: number): number => {
+    const u = Math.min(nx - 1e-9, Math.max(0, (x - x0) / c)), v = Math.min(nz - 1e-9, Math.max(0, (z - z0) / c)), i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, W = nx + 1
+    return (H[j * W + i] * (1 - fu) + H[j * W + i + 1] * fu) * (1 - fv) + (H[(j + 1) * W + i] * (1 - fu) + H[(j + 1) * W + i + 1] * fu) * fv
+  }
 
   // 1. landforms, summed
   for (const { f, r } of order) {
@@ -189,12 +216,55 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
     const half = Math.max(halfWidth, c / 2 + 0.01)
     cells(lineBox(line), half + c, (i, j, x, z) => { const q = nearLine(line, x, z); if (q.d < half && q.over === 0) { layer[j * nx + i] = k1; onCell?.(j * nx + i, q.along) } })
   }
+  // 3. water: levels, channels, fords, ponds; then each water cell's depth below its body's level
+  const level = new Float64Array(n).fill(NaN)
+  const streams = new Map<string, { line: Pt[]; hw: number; levelAt(along: number): number }>()
   for (const { f, r } of order) {
-    const cat0 = categoryOf(r.kind), k1 = index.get(f.id)!, a = r.attrs
-    if (cat0 === 'water') {
-      if (f.line) paintLine(f.line, num(a.width, WATER_WIDTH) / 2, L.water, k1)
-      else paintArea(f, L.water, k1)
+    if (categoryOf(r.kind) !== 'water') continue
+    const k1 = index.get(f.id)!, a = r.attrs
+    if (f.line) {
+      // the level: the lower bank (BANK_OUT beyond each edge) less the freeboard, never rising downstream (the
+      // line's order is the flow); carving only lowers the ground, so the banks stay above it
+      const hw = Math.max(num(a.width, WATER_WIDTH) / 2, c / 2), line = f.line, len = lineLength(line), ns = Math.floor(len / LEVEL_STEP) + 1
+      const levels = new Float64Array(ns)
+      for (let k = 0; k < ns; k++) {
+        const [px, pz, tx, tz] = pointAt(line, Math.min(k * LEVEL_STEP, len)), o = hw + BANK_OUT
+        const bank = Math.min(hAt(px - tz * o, pz + tx * o), hAt(px + tz * o, pz - tx * o)) - FREEBOARD
+        levels[k] = k ? Math.min(levels[k - 1], bank) : bank
+      }
+      const levelAt = (along: number) => levels[Math.min(ns - 1, Math.round(along / LEVEL_STEP))]
+      streams.set(f.id, { line, hw, levelAt }); L.streams.push({ id: f.id, step: LEVEL_STEP, levels })
+      // the channel: the depth (a ramp along the line gives pools), shallower toward the banks
+      nodes(lineBox(line), hw + c, (k, x, z) => {
+        const q = nearLine(line, x, z); if (q.over > 0 || q.d > hw) return
+        const t = q.d / hw, bed = levelAt(q.along) - ramp(a.depth, { along: q.along }, 0.8) * (1 - 0.5 * t * t)
+        if (bed < H[k]) H[k] = bed
+      })
+      paintLine(line, hw, L.water, k1, (cell, along) => { level[cell] = levelAt(along) })
+    } else if (f.on) {
+      // a ford: the bed raised to the ford's depth over its width, along the stream nearest its point
+      const st = streams.get(f.on); if (!st) continue
+      const at = nearLine(st.line, f.near![0], f.near![1]).along, half = num(a.width, 20) / 2, fd = num(a.depth, 0.5)
+      const [fx, fz] = pointAt(st.line, at), reach = half + st.hw + c
+      nodes([fx - reach, fz - reach, fx + reach, fz + reach], 0, (k, x, z) => {
+        const q = nearLine(st.line, x, z); if (q.over > 0 || q.d > st.hw || Math.abs(q.along - at) > half) return
+        const t = q.d / st.hw, bed = st.levelAt(q.along) - fd * (1 - 0.5 * t * t)
+        if (bed > H[k]) H[k] = bed
+      })
+    } else {
+      // a pond or a lake: its level, or the lowest point of its shore less the freeboard; deepest SHORE_IN m in
+      const field = areaField(f); if (!field) continue
+      let lv = typeof a.level === 'number' ? a.level : Infinity
+      if (lv === Infinity) cells(field.box, c, (i, j, x, z) => { if (!field.inside(x, z)) return; const e = field.edge(x, z); if (e < c) lv = Math.min(lv, hAt(x, z) - FREEBOARD) })
+      const D = num(a.depth, 1.5)
+      nodes(field.box, 0, (k, x, z) => { const e = field.edge(x, z); if (e <= 0) return; const bed = lv - D * smooth(e / SHORE_IN); if (bed < H[k]) H[k] = bed })
+      paintArea(f, L.water, k1, cell => { level[cell] = lv })
     }
+  }
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const cell = j * nx + i; if (Number.isNaN(level[cell])) continue
+    const W = nx + 1, g = (H[j * W + i] + H[j * W + i + 1] + H[(j + 1) * W + i] + H[(j + 1) * W + i + 1]) / 4
+    L.depth[cell] = Math.max(0, Math.min(65535, Math.round((level[cell] - g) * 1000)))
   }
   for (const { f, r } of order) {
     const cat0 = categoryOf(r.kind), k1 = index.get(f.id)!, a = r.attrs

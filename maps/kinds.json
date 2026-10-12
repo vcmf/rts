@@ -29,7 +29,7 @@
     "steep": { "layers": ["relief"], "type": "enum", "values": ["none", "left", "right"], "note": "the steeper side, looking along the line from its first point" },
     "to": { "layers": ["relief"], "type": "number", "unit": "m", "min": -100, "max": 400, "note": "a level edit's height above the datum" },
     "edge": { "layers": ["relief"], "type": "number", "unit": "m", "min": 0, "max": 500, "note": "an edit's or a plateau's soft edge; a scarp's back slope, where its high side returns to the ground" },
-    "depth": { "layers": ["relief", "water"], "type": "number", "unit": "m", "min": 0, "max": 30, "season": true, "note": "relief: a cut's or a ditch's depth; water: the depth of the channel or pond" },
+    "depth": { "layers": ["relief", "water"], "type": "number", "unit": "m", "min": 0, "max": 30, "season": true, "ramp": ["along"], "note": "relief: a cut's or a ditch's depth; water: the depth of the channel or pond below its level (a ramp along a stream gives pools)" },
     "material": { "layers": ["ground", "built"], "type": "enum", "values": ["loam", "clay", "sand", "gravel", "rock", "peat", "stone", "brick", "timber", "wattle", "earth"] },
     "moisture": { "layers": ["ground"], "type": "number", "unit": "0..1", "min": 0, "max": 1, "season": true },
     "stones": { "layers": ["ground"], "type": "number", "unit": "0..1", "min": 0, "max": 1 },

@@ -11,13 +11,16 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { formationField, type MapDef } from '../maps/formation-field.ts'
 import { battlefield } from '../maps/battlefield.ts'
+import { engineMap } from '../maps/engine.ts'
 import { fnv1a } from '../src/sim/hash.ts'
 import { DATA_MAGIC, DATA_FORMAT, hex } from '../src/sim/data.ts'
 
-export const HEIGHT_CELL = 1.79, COST_CELL = 4 * HEIGHT_CELL   // decision 0012; sim-design §7
+// the legacy maps' cells (decision 0012, sim-design §7); the map engine's maps carry their own (decision 0021: 2 m, 8 m)
+export const LEGACY_HEIGHT_CELL = 1.79, LEGACY_COST_CELL = 4 * LEGACY_HEIGHT_CELL
 const SUB = 8   // ground samples per cost cell side
 
 export function buildSimData(map: MapDef): Uint8Array {
+  const HEIGHT_CELL = map.cells?.height ?? LEGACY_HEIGHT_CELL, COST_CELL = map.cells?.cost ?? LEGACY_COST_CELL
   const span = 2 * map.half, x0 = -map.half, z0 = -map.half
   const hn = Math.floor(span / HEIGHT_CELL) + 1
   const heights = new Float64Array(hn * hn)
@@ -26,6 +29,7 @@ export function buildSimData(map: MapDef): Uint8Array {
   // (else impassable), times the slope factor of the steepest node-to-node rise in the cell
   const cn = Math.floor(span / COST_CELL), cost = new Uint8Array(cn * cn)
   const hAt = (i: number, j: number) => heights[Math.min(hn - 1, j) * hn + Math.min(hn - 1, i)]
+  const step = Math.round(COST_CELL / HEIGHT_CELL)   // height nodes per cost cell side (4)
   for (let cj = 0; cj < cn; cj++) for (let ci = 0; ci < cn; ci++) {
     let inv = 0, pass = 0
     for (let b = 0; b < SUB; b++) for (let a = 0; a < SUB; a++) {
@@ -33,7 +37,7 @@ export function buildSimData(map: MapDef): Uint8Array {
       if (g > 0) { inv += 1 / g; pass++ }
     }
     let rise = 0
-    for (let j = cj * 4; j < cj * 4 + 4; j++) for (let i = ci * 4; i < ci * 4 + 4; i++)
+    for (let j = cj * step; j < cj * step + step; j++) for (let i = ci * step; i < ci * step + step; i++)
       rise = Math.max(rise, Math.abs(hAt(i + 1, j) - hAt(i, j)) / HEIGHT_CELL, Math.abs(hAt(i, j + 1) - hAt(i, j)) / HEIGHT_CELL)
     const g = pass * 2 >= SUB * SUB ? (pass / inv) * map.slopeFactor(rise) : 0
     cost[cj * cn + ci] = Math.max(0, Math.min(255, Math.round(g * 255)))
@@ -59,7 +63,8 @@ export const dataFile = (name: string): string => path.join(path.dirname(fileURL
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let ok = true
-  for (const map of [await formationField(), battlefield()]) {
+  // the legacy maps (TypeScript definitions), then the map engine's (docs/plans/active/m2-sim.md)
+  for (const map of [await formationField(), battlefield(), engineMap('valley', 'maps/valley.map.json')]) {
     const bytes = buildSimData(map), file = dataFile(map.name)
     if (process.argv.includes('--check')) {
       const old = fs.existsSync(file) ? fs.readFileSync(file) : Buffer.alloc(0), same = Buffer.compare(Buffer.from(bytes), old) === 0

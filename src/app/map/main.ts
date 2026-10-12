@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-// The draft page (docs/proposals/map-engine.md §7, docs/plans/active/m1-language.md M1b): a map from maps/ compiled
+// The draft page (docs/proposals/map-engine.md §7, docs/plans/done/m1-language.md M1b): a map from maps/ compiled
 // in a worker and drawn flat, with pan and zoom, feature outlines and ids, a readout of the cell under the mouse,
 // and the validator's errors. Saving the map file (or maps/kinds.json) recompiles and redraws; the last good
 // drawing stays up while a file is broken. window.MAP exposes the state for headless checks.
@@ -29,7 +29,7 @@ picker.value = names.find(n => n.endsWith(`/${asked}.map.json`)) ?? names.find(n
 
 // the view: world point at the canvas centre, and pixels per metre; kept across reloads of the same map
 let view = { cx: 0, cz: 0, ppm: 0 }, current: Compiled | null = null, image: HTMLCanvasElement | null = null, issues: Issue[] = []
-let layers: Partial<Record<LayerName, Uint16Array>> = {}, height = new Float64Array(0)
+let layers: Partial<Record<LayerName, Uint16Array>> = {}, height = new Float64Array(0), depth = new Uint16Array(0)
 const log: { reason: string; savedAt?: number; drawnAt: number; ms: number }[] = []
 
 let seq = 0, pending: { reason: string; t0: number; savedAt?: number } | null = null
@@ -55,7 +55,7 @@ function onReply(e: MessageEvent<CompileReply>): void {
     const fresh = !current || current.map.id !== r.map.id
     current = r; issues = []
     layers = Object.fromEntries(Object.entries(r.layers).map(([k, b]) => [k, new Uint16Array(b)]))
-    height = new Float64Array(r.height)
+    height = new Float64Array(r.height); depth = new Uint16Array(r.depth)
     image = document.createElement('canvas'); image.width = r.w; image.height = r.h
     image.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(r.rgba), r.w, r.h), 0, 0)
     if (fresh || !view.ppm) fit()
@@ -140,6 +140,7 @@ function hover(sx: number, sy: number): void {
   if (i < 0 || j < 0 || i >= c.nx || j >= c.nz) { readout.textContent = ''; return }
   const W = c.nx + 1, h = (height[j * W + i] + height[j * W + i + 1] + height[(j + 1) * W + i] + height[(j + 1) * W + i + 1]) / 4
   const rows = [`x ${x.toFixed(1)}  z ${z.toFixed(1)}  cell ${i},${j}`, `height ${h.toFixed(2)} m`]
+  if (depth[j * c.nx + i]) rows.push(`water ${(depth[j * c.nx + i] / 1000).toFixed(2)} m deep`)
   for (const n of Object.keys(layers) as LayerName[]) { const k = layers[n]![j * c.nx + i]; if (k) { const t = c.table[k - 1]; rows.push(`${n.padEnd(8)}${t.id} (${t.kind})`) } }
   readout.textContent = rows.join('\n')
 }

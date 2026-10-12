@@ -260,8 +260,10 @@ validate ──► relief ──► expand (generators) ──► apply (layers,
   6. **built and works.**
 - **Compile:** pure functions of the expanded map, the catalogue, the ruleset (for the sim), the season and the
   compiler's version.
-  - The **sim compiler** writes `.simdata` in a new format 3 (`src/sim/data.ts` gains a loader in M2): the 2 m
-    grids of §5, which format 2 cannot hold (it has float64 heights and no vegetation or barrier layers).
+  - The **sim compiler** writes `.simdata` in today's format 2 (`src/sim/data.ts`), which stores each grid's
+    cell: heights at 2 m, cost at 8 m, and each 2 m cell's terrain class (the ruleset's reading of its layers)
+    and water depth, over the play area (M2). The sim reads classes, not layers, so format 2 holds everything it
+    uses; a compact format (16-bit heights, §5) waits for a measured need.
   - The **look compiler** writes `.lookdata` (`src/look/world/data.ts`: heightfield, far ring, river samples,
     cover grid).
   - The **draft compiler** writes nothing to disk: the draft view draws the grids directly.
@@ -287,11 +289,10 @@ look grid (1.786 m) do not even line up. At 2 m, everything aligns: cost cells a
 8 cells (16 m), and the 0.5 m water and bank texels 1/4 of a cell.
 
 What the switch touches (each change lands with the phase that rebuilds that data anyway):
-- **sim (M2):** the new sim compiler writes format 3 on 2 m grids; the legacy builder (`tools/build-sim-data.ts`)
-  keeps its 1.79 m and 7.16 m cells and format 2 for the formation field. The fine class and depth grid is
-  already 2 m on the battlefield (`maps/battlefield.ts`), 1 m on the formation field. The battlefield is rewritten
-  as a JSON map on 2 m grids, so its data version (`src/scenarios/maps.ts`, `test/fx.ts`), the S1e golden replay
-  in `test/golden/`, and possibly the calibrations where slope or cost moved, change. The **formation field stays
+- **sim (M2):** the map engine's maps compile on 2 m grids (format 2, with each grid's cell); the legacy builder
+  keeps the legacy maps' 1.79 m and 7.16 m cells (`tools/build-sim-data.ts`). The battlefield's layout is written
+  as a JSON map beside it (`maps/valley.map.json`, the owner's choice): S1e and its golden stay on
+  `maps/battlefield.ts` until S1e moves to the map, with Track S, which then changes its data version and golden. The **formation field stays
   on its legacy builder, with its cells**: its terrain is the prototype's (`prototypes/formation-core.js`, shared
   with the formation prototype page), and it moves to the map engine only when that prototype retires (with #35).
   Its data and the goldens that use it (S1a–S1d) do not change;
@@ -305,7 +306,7 @@ The grids at 2 m:
 
 | Layer | Cell | Stored as | 1.5 km square |
 |---|---|---|---|
-| heights (sim and renderer: decision 0012) | `c` | u16 in 1 cm steps above the file's lowest point, stored in its header (heights below the datum are fine; 655 m of range) | 1.1 MB |
+| heights (sim and renderer: decision 0012) | `c` | float64 in today's format 2 (M2); u16 in 1 cm steps above the file's lowest point when a compact format is needed (655 m of range) | 1.1 MB as u16 |
 | ground and veg, water depth | `c` | u16 index into the map's attribute table (one row per feature, resolved for the season and state), u8 density for ramps, u16 depth in mm | 1.1 + 0.56 + 1.1 MB |
 | slope | derived at load; read over 2 or more cells for the impassable test | n/a | n/a |
 | movement cost, per kind of unit | `4c` (8 m) | u8 speed factor | 35 KB per kind |
@@ -394,7 +395,7 @@ Track M works on an epic branch (decision 0020). The phases follow the pipeline,
 |---|---|---|
 | **M0** | This proposal and its research; decisions 0020 (Track M on an epic branch) and 0021 (the 2 m cell) | The owner accepts the language, the layers and the grids |
 | **M1: the language and the draft view** | The TypeScript schema and validator; the catalogue of essential kinds in **every** category; features with exact shapes (no `gen` yet); compiling into the draft view page, which redraws on save; the map CLI | §9's example, written with exact shapes, validates and draws; a save redraws in under a second; one negative test per rule |
-| **M2: the sim compiler** | Grids at 2 m from the features (heights, ground, vegetation, depth, barriers, cost); a stream's level set from its banks, falling downstream (a compiler rule, not a generator); the ruleset maps attributes to classes; `maps/battlefield.ts` rewritten as JSON (the formation field stays legacy, §5) | The S1e battle plays on the compiled map; its data change is shown (golden diff) and accepted; S1a–S1d goldens unchanged |
+| **M2: the sim compiler** | Water in apply: stream levels from the banks, falling downstream; channels carved, pools by a depth ramp, fords, ponds; a depth per cell. The ruleset's reading of a cell's attributes as its terrain classes; map-engine maps compiled to format 2 on 2 m grids; the S1e layout as `maps/valley.map.json`, with the S1e battle on it beside the original | The battle plays on the compiled valley; its golden is committed; every existing golden unchanged |
 | **M3: the generators** | `noise`, `meander`, `clump`, `street-village`, `scatter`, on the exact maths; seasons and ice; golden expansions | §9's example as written (with `gen`) expands and plays; five seeds give five distinct, valid maps |
 | **M4: the rendered view** | The look compiler and the toggle between draft and 3D (with Track E: the look page loads any map's look data at 2 m) | The same map drafted and painted |
 

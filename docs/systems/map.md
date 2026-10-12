@@ -1,17 +1,17 @@
 ---
 status: current
 last_reviewed: 2026-10-12
-code: [src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts]
+code: [maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts]
 decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell]
 ---
 
-# The map language and the draft view (Track M, M1)
+# The map engine: the language, the draft view and the sim compiler (Track M, M1–M2)
 
 A map is a strict JSON file (`maps/<id>.map.json`): a list of features, each with an id, a dotted kind from the
 kinds catalogue (`maps/kinds.json`), one shape and attribute overrides. This system checks such a file, resolves
-any feature's effective attributes, writes its expanded form, lays it into layers on the 2 m grid and draws them
-flat on the draft page. The design is `docs/proposals/map-engine.md`; the compilers to the sim's and the look's
-data (M2, M4) and the generators (M3) come next.
+any feature's effective attributes, writes its expanded form, lays it into layers on the 2 m grid, draws them
+flat on the draft page, and compiles them into the sim's data. The design is `docs/proposals/map-engine.md`; the
+generators (M3) and the look compiler (M4) come next.
 
 ```
 maps/kinds.json ──► checkCatalogue ─┐
@@ -71,7 +71,13 @@ maps/kinds.json ──► checkCatalogue ─┐
     widths round the same way for every line (on even metres a 6 m stream and a 5 m road take 4 m);
   - painting order is priority, then id: the higher priority wins a cell and, at equal priority, the later id;
   - barriers by `barrierCells`, the one implementation of the cell rule (proposal §3.6), exact in integers;
-  - a bridge, for now, decks the road's cells over the water; the real deck is M2's.
+  - water (step 3): a stream's level is the lower of its two banks (3 m beyond each edge) less a 0.4 m
+    freeboard, taken every 2 m and never rising downstream (the line's order is the flow; `Layers.streams` keeps
+    each profile). Its channel is carved from its depth (a ramp `along` gives pools), shallower toward the banks; a
+    ford raises the bed to its depth over its width, where the stream passes nearest its point; a pond sits at its
+    `level` or the lowest point of its shore less the freeboard, deepest 10 m in. Each water cell's depth is its
+    body's level less the cell's mean ground (`Layers.depth`, mm);
+  - a bridge decks the road's cells over the water (the sim classifies them `bridge`: level, dry).
 - **The draft** (`src/map/draft.ts`): one pixel per cell, north up, colours from categories and attributes (never
   kind names), hill shading from the north-west and contours every 2.5 m.
 - **The page** (`app/map.html`, `src/app/map/`):
@@ -80,6 +86,14 @@ maps/kinds.json ──► checkCatalogue ─┐
   - errors are listed while the last good drawing stays;
   - a saved map or catalogue reaches the page through a small Vite plugin (`map-changed`, `vite.config.ts`) and
     recompiles.
+- **The sim compiler** (`maps/engine.ts`, `tools/build-sim-data.ts`): a map's layers over its play area (square)
+  become format 2 data, heights at 2 m, cost at 8 m, classes and depth at 2 m. Each cell's attributes
+  (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes
+  (`classifyNapoleonic`, `src/rulesets/napoleonic-ground.ts`), a module apart from the ruleset's table so its hash
+  does not move. Interim readings: walls and fences as hedges, buildings as dense woods, a no-go zone as water
+  deeper than every limit. The fine grid's node (i, j) takes cell (i, j). `maps/valley.map.json` (the S1e layout)
+  compiles to `data/valley.simdata`, and the `m2-valley` scenario plays the S1e battle on it
+  (`src/scenarios/m2-valley.ts`).
 - **The CLI** (`tools/map.ts`): `check`, `expand` (`--check` compares with the committed file), `resolve`,
   `draft` (a PNG). `npm run check:data` runs `expand --check` on the example map.
 
@@ -101,6 +115,12 @@ The kinds' values and the attributes' ranges: `maps/kinds.json`. Its note says w
 `tools/map-page-check.mjs` (headless, against the dev server): the page compiles on load; a saved change redraws
 it in under a second (about 0.25 s measured on the dev Mac); a broken file shows its error and keeps the drawing;
 the restored file compiles clean; no console errors.
+
+`test/map-sim.test.ts`: the valley's stream never rises downstream, its depths are as designed (channel, fords,
+pools, banks); each ground reading in order, and the valley's cells read as the map says; the compiled data loads
+at its pinned version with its cells; ten minutes of the battle on it match a committed golden and replay. Every
+existing golden is unchanged (the ruleset's hash included). Ten minutes of the S1e battle end with nearly the
+same positions and strengths on the valley as on the original battlefield.
 
 `test/map-language.test.ts`:
 - the catalogue checks clean, and a broken one is reported;

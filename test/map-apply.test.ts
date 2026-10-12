@@ -1,4 +1,4 @@
-// Applying a map into its layers, and the draft raster (docs/plans/active/m1-language.md, M1b): the barrier cell
+// Applying a map into its layers, and the draft raster (docs/plans/done/m1-language.md, M1b): the barrier cell
 // rule of proposal §3.6, painting order, the relief, determinism against committed hashes, and locality.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
@@ -17,7 +17,7 @@ const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps/kinds.json'), 'utf8
 const example = JSON.parse(fs.readFileSync(path.join(root, 'maps/two-ridges.map.json'), 'utf8')) as MapFile
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
 const bytes = (a: ArrayBufferView) => new Uint8Array(a.buffer, a.byteOffset, a.byteLength)
-const hashLayers = (L: Layers) => hex(LAYER_NAMES.reduce((h, n) => fnv1a(bytes(L[n]), h), fnv1a(bytes(L.height), fnv1a(bytes(L.density)))))
+const hashLayers = (L: Layers) => hex(LAYER_NAMES.reduce((h, n) => fnv1a(bytes(L[n]), h), fnv1a(bytes(L.depth), fnv1a(bytes(L.height), fnv1a(bytes(L.density))))))
 
 // a barrier's cells on an open grid around the origin: a set of "i,j" with i, j counted from (x0, z0) = (−40, −40)
 const X0 = -40
@@ -194,13 +194,13 @@ describe('M1b: determinism and locality', () => {
     const a = apply(ex, cat), b = apply(ex, cat)
     expect(hashLayers(a)).toBe(hashLayers(b))
     const img = draft(a)
-    expect({ layers: hashLayers(a), draft: hex(fnv1a(bytes(img.data))) }).toEqual({ layers: '0x0acfa553', draft: '0xa37ced1d' })
+    expect({ layers: hashLayers(a), draft: hex(fnv1a(bytes(img.data))) }).toEqual({ layers: '0xf234bec6', draft: '0x230f6cc6' })
   })
   it('moving one wood changes only the cells it covered or covers, and no height', () => {
     const moved = clone(ex), wood = moved.features.find(f => f.id === 'west-wood')!
     wood.area = wood.area!.map(r => r.map(([x, z]) => [x + 40, z] as Pt))
     const A = apply(ex, cat), B = apply(moved, cat)
-    expect(hashLayers({ ...A, ground: B.ground, veg: B.veg, density: B.density } as Layers)).toBe(hashLayers(B))   // only veg and density moved
+    expect(hashLayers({ ...A, ground: B.ground, veg: B.veg, density: B.density } as Layers)).toBe(hashLayers(B))   // only veg and density moved (not the water's depth)
     expect(Buffer.compare(Buffer.from(bytes(A.height)), Buffer.from(bytes(B.height)))).toBe(0)
     const woodIx = (L: Layers) => L.table.findIndex(t => t.id === 'west-wood') + 1
     for (let c = 0; c < A.veg.length; c++) if (A.veg[c] !== B.veg[c] || A.density[c] !== B.density[c]) expect(A.veg[c] === woodIx(A) || B.veg[c] === woodIx(B)).toBe(true)

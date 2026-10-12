@@ -1,4 +1,4 @@
-// The draft raster (docs/proposals/map-engine.md §7, docs/plans/active/m1-language.md M1b): the layers as an
+// The draft raster (docs/proposals/map-engine.md §7, docs/plans/done/m1-language.md M1b): the layers as an
 // RGBA image, one pixel per 2 m cell, north up. A working drawing, not the look: flat colours by category and
 // attribute, hill shading and contours every 2.5 m from the heights. Pure, so Node (PNGs, tests) and the page
 // draw the same pixels. Colours read attributes and categories, never kind names (a new kind draws without code).
@@ -26,7 +26,10 @@ function groundColour(r: Resolved | undefined, veg: Resolved | undefined, densit
   return h < 0.2 ? [176, 196, 128] : [154, 184, 112]   // pasture, meadow
 }
 
-const WATER: RGB = [88, 136, 176], WAY: RGB = [198, 170, 126], SUNKEN: RGB = [150, 120, 84], EDIT: RGB = [120, 100, 80]
+// water by depth: shallow (a ford) pale, a pool dark
+const SHALLOW: RGB = [128, 178, 206], DEEP: RGB = [52, 96, 146]
+const water = (mm: number): RGB => { const t = Math.min(1, mm / 1500); return [SHALLOW[0] + (DEEP[0] - SHALLOW[0]) * t, SHALLOW[1] + (DEEP[1] - SHALLOW[1]) * t, SHALLOW[2] + (DEEP[2] - SHALLOW[2]) * t] }
+const WAY: RGB = [198, 170, 126], SUNKEN: RGB = [150, 120, 84], EDIT: RGB = [120, 100, 80]
 function barrierColour(r: Resolved): RGB {
   const p = typeof r.attrs.porosity === 'number' ? r.attrs.porosity : 0
   return p >= 0.6 ? [120, 92, 60] : p > 0 ? [46, 74, 40] : [92, 88, 84]   // fence, hedge, wall
@@ -65,7 +68,7 @@ export function draft(L: Layers): Draft {
     const shade = Math.max(0.55, Math.min(1.3, 1 + 2.2 * (lit - 0.7071)))
     let col: RGB = ground(L.ground[cellIx], L.veg[cellIx], L.density[cellIx])
     if (L.edit[cellIx] && cutCell[L.edit[cellIx]]) col = EDIT   // cuts and ditches show; raised, lowered or levelled ground keeps its colour
-    if (L.water[cellIx]) col = WATER
+    if (L.water[cellIx]) col = water(L.depth[cellIx])
     if (L.way[cellIx]) col = way[L.way[cellIx]]
     if (L.built[cellIx]) col = built[L.built[cellIx]]
     if (L.barrier[cellIx]) col = barrier[L.barrier[cellIx]]
@@ -73,8 +76,9 @@ export function draft(L: Layers): Draft {
     let r = col[0] * k, g = col[1] * k, b = col[2] * k
     if (L.zone[cellIx]) { r = r * 0.6 + 200 * 0.4; g = g * 0.6 + 40 * 0.4; b = b * 0.6 + 40 * 0.4 }
     // a contour where the cell's corners straddle a multiple of CONTOUR (every fourth darker)
-    const lo = Math.min(h00, h10, h01, h11), hi = Math.max(h00, h10, h01, h11), band = Math.floor(hi / CONTOUR)
-    if (band > Math.floor(lo / CONTOUR) && !L.water[cellIx]) { const k = band % 4 === 0 ? 0.62 : 0.8; r *= k; g *= k; b *= k }
+    // (strictly: ground that only touches a contour's height, like the rim of a hollow at 0 m, draws none)
+    const lo = Math.min(h00, h10, h01, h11), hi = Math.max(h00, h10, h01, h11), band = Math.ceil(hi / CONTOUR) - 1, v = band * CONTOUR
+    if (v > lo && v < hi && !L.water[cellIx]) { const k = band % 4 === 0 ? 0.62 : 0.8; r *= k; g *= k; b *= k }
     // north up: row 0 is the northern edge
     const o = ((nz - 1 - j) * nx + i) * 4
     data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255

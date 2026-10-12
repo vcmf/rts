@@ -1,4 +1,4 @@
-// Headless check of the map draft page (docs/plans/active/m1-language.md M1b, acceptance 5): starts Vite's dev
+// Headless check of the map draft page (docs/plans/done/m1-language.md M1b, acceptance 5): starts Vite's dev
 // server, opens app/map.html in headless Chrome (tools/shot.mjs), and edits a map file from here, as an author
 // saving it would:
 //   1. a real change (a ridge's height): the page must recompile and redraw; the time from the save to the redraw

@@ -1,4 +1,4 @@
-// The map language (docs/plans/active/m1-language.md, M1a): the catalogue checks itself, a valid map passes, every
+// The map language (docs/plans/done/m1-language.md, M1a): the catalogue checks itself, a valid map passes, every
 // validator rule has a negative test that names the feature and the path, resolution follows §3.5's order, and
 // expansion and the layout are stable.
 import { describe, it, expect } from 'vitest'
