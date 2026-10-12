@@ -87,17 +87,13 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
     }
     tg.putImageData(img, 0, 0); aog.imageSmoothingEnabled = true; aog.drawImage(tmp, 0, 0, AO_N, AO_N)
     aog.globalCompositeOperation = 'multiply'
-    for (const [x, z, r, a] of canopy) {
-      const px = (x + TILE_W / 2) / TILE_W * AO_N, pz = (z + TILE_W / 2) / TILE_W * AO_N, pr = Math.max(1.5, r / TILE_W * AO_N)
-      const gr = aog.createRadialGradient(px, pz, 0, px, pz, pr); gr.addColorStop(0, `rgb(255,${Math.round(255 * (1 - a))},255)`); gr.addColorStop(1, 'rgb(255,255,255)')
-      aog.fillStyle = gr; aog.beginPath(); aog.arc(px, pz, pr, 0, 7); aog.fill()
-    }
-    // contact (docs/plans/active/shadow-look.md): a dark core under each tree's crown, so the tree sits on its ground
-    for (const [x, z, r, a] of canopy) {
-      if (a < 0.4) continue   // trees only: bushes and stones keep their light footprint
-      const px = (x + TILE_W / 2) / TILE_W * AO_N, pz = (z + TILE_W / 2) / TILE_W * AO_N, pr = Math.max(1.5, r * 0.45 / TILE_W * AO_N)
-      const gr = aog.createRadialGradient(px, pz, 0, px, pz, pr); gr.addColorStop(0, 'rgb(255,166,255)'); gr.addColorStop(1, 'rgb(255,255,255)')
-      aog.fillStyle = gr; aog.beginPath(); aog.arc(px, pz, pr, 0, 7); aog.fill()
+    // contact (docs/plans/active/shadow-look.md): a dark core under each tree's crown, in R, which the light map
+    // carries to the ground alone (its alpha: the crowns read G, and the core would darken their tops)
+    for (const [x, z, r, a, tree] of canopy) {
+      const px = (x + TILE_W / 2) / TILE_W * AO_N, pz = (z + TILE_W / 2) / TILE_W * AO_N
+      const disc = (pr: number, inner: string) => { const gr = aog.createRadialGradient(px, pz, 0, px, pz, pr); gr.addColorStop(0, inner); gr.addColorStop(1, 'rgb(255,255,255)'); aog.fillStyle = gr; aog.beginPath(); aog.arc(px, pz, pr, 0, 7); aog.fill() }
+      disc(Math.max(1.5, r / TILE_W * AO_N), `rgb(255,${Math.round(255 * (1 - a))},255)`)
+      if (tree) disc(Math.max(1.5, r * 0.45 / TILE_W * AO_N), 'rgb(166,255,255)')
     }
   }
   const aoTex = new DynamicTexture('ao', aoCanvas, scene, true, Texture.BILINEAR_SAMPLINGMODE); aoTex.wrapU = aoTex.wrapV = Texture.CLAMP_ADDRESSMODE; aoTex.update(false)

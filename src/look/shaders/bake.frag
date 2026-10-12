@@ -8,4 +8,4 @@ void main(){vec3 N=normalize(vN);
   float vis=1.0-s/12.0;
   vis=smoothstep(0.35,0.65,vis+(G(vW.xz/3.0).r-0.5)*0.35);                  // painted edge, decided once
   vec4 a=texture2D(uAOTex,(vW.xz+TILE_HALF)/TILE_W);
-  gl_FragColor=vec4(vis,a.g,a.b,1.0);}
+  gl_FragColor=vec4(vis,a.g,a.b,a.r);}   // A: the contact under trees (src/look/bakes.ts)

@@ -53,7 +53,7 @@ shadows, the grade.
 
 ## Results (2026-10-12)
 
-Pairs (not committed): `../rts-canopy/scratch/l7a/shadows-{near,mid,far,winter}.png`, main beside this branch.
+Pairs (not committed; `scratch/` in this worktree): `scratch/shadow/{near,mid,far,winter}.png`, main beside this branch.
 
 | Cast shadow ÷ lit ground (luma) | main | this branch | the deeper variant (not kept) |
 |---|---|---|---|
@@ -70,3 +70,14 @@ Pairs (not committed): `../rts-canopy/scratch/l7a/shadows-{near,mid,far,winter}.
   and ruled out as the cause, one at a time: the mist's thinning and its air colour, the edge filter, the
   contact core, the clamp of saturated coats. The guard's rule (no block that separates on main may fail) is
   for the owner to waive or not: the loss is 0.002 on one block, against shadows that read in the valley.
+
+## Review (`/code-review high`)
+
+- **Round 1** (223dd55): severe: the contact core sat in the occlusion channel the crowns read too, so it
+  darkened the crowns' tops more than the ground (now in the light map's alpha, read by the terrain only); the
+  cool pull dulled army coats in shadow, against "armies are the most saturated" (the blocks keep the old band:
+  `KEEP_HUE`); the guard's regression (the owner's decision, above). Moderate: with shadows off the mist still
+  thinned in their shape (now gated by the switch); raised surfaces took the ground's shadow for the mist (now
+  fading with the height); the system doc. Light: the tree flag read from a strength value (now explicit), the
+  contact loop copied (folded into one), the cool colour normalised twice (simplified). Not observed: stair-steps
+  from the tighter filter (the winter edge at 2× stays grain-broken).
