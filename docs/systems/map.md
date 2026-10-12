@@ -1,11 +1,11 @@
 ---
 status: current
 last_reviewed: 2026-10-12
-code: [src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts]
+code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts]
 decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell]
 ---
 
-# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3a)
+# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3b)
 
 A map is a strict JSON file (`maps/<id>.map.json`): a list of features, each with an id, a dotted kind from the
 kinds catalogue (`maps/kinds.json`), one shape and attribute overrides. This system checks such a file, resolves
@@ -58,7 +58,8 @@ maps/kinds.json ──► checkCatalogue ─┐
 - **Resolution** (`src/map/resolve.ts`): the catalogue along the path, the map preset, the feature's own fields,
   the season's overrides (the catalogue's, then the feature's), the state's overlay. This is the one place the order
   lives.
-- **Expansion** (`src/map/expand.ts`):
+- **Expansion** (`src/map/expand.ts`): the ordinary generators in the file's order, then the late ones (scatter),
+  each seeing everything expanded before it;
   - each generator runs with its seed, `hash(map.seed, id, generator)` (`src/map/seed.ts`), so no other feature's
     change reaches it;
   - its feature takes the output shape and records `origin` (the generator, its parameters, `EXPAND_VERSION`);
@@ -83,7 +84,17 @@ maps/kinds.json ──► checkCatalogue ─┐
 
     It runs on streams and rivers only;
   - `clump` (`src/map/clump.ts`): a radial polygon, so always simple, swung by seeded harmonics;
-  - `street-village` and `scatter` are named but arrive in M3b.
+  - **children**: a generator may write features beside its own, each with the id `<parent>-<n>` and an `origin`
+    naming its `parent`; a generator may also remove its own feature (a scatter's region);
+  - `street-village` (`src/map/street-village.ts`), on a village `along` its road: houses on both sides between
+    `from` and `to`, set back 3 m and facing the road, with seeded sizes and gaps; clear of water, buildings and the
+    road where it bends back; the village's area, when it has none, the hull of its houses; fewer than `houses` is
+    an error unless `min` allows it;
+  - `scatter` (`src/map/scatter.ts`), on an area kind given as its region: `count` clumps of the feature's kind and
+    attributes, by seeded rejection sampling, each (at its largest radius, from clump's own harmonics) inside the
+    region, `clearance` m clear of what it `avoid`s (ids, categories or kind prefixes, `src/map/reach.ts`) and of
+    its siblings, and within `reach` of what it stays `within`. Scatters run after every other generator, in id
+    order; fewer than `count` is an error unless `min` allows it.
 - **The base ground** (`relief.base`): seeded value noise (`src/map/noise.ts`), `height` its amplitude and `width`
   its scale, three octaves, filled from per-octave lattice tables (`addFbmGrid`, equal to `fbm` to the bit).
 - **The layout** (`src/map/format.ts`): one feature per line, so diffs show which features changed.
@@ -157,6 +168,11 @@ the restored file compiles clean; no console errors.
 - the fast paths equal to the plain ones (the line index against the scan on 4000 points, the grid noise against
   `fbm`);
 - the validator's generator checks; expansion's origin and pinning; the bridge that crosses twice.
+
+`test/map-gen.test.ts` (M3b): street-village's houses (both sides, within the stretch, facing the road, clear of
+each other, the road and the water, inside the hull); scatter's children (inside the region, clear of what they avoid
+and of each other, within reach), its errors and `min`, its locality; five seeds of `maps/generated.map.json` that
+validate, expand, compile to sim data and run two minutes of the S1e battle with finite state, all different.
 
 `test/map-sim.test.ts`: the valley's stream never rises downstream, its depths are as designed (channel, fords,
 pools, banks); each ground reading in order, and the valley's cells read as the map says; the compiled data loads

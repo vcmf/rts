@@ -56,6 +56,7 @@ export function checkValue(spec: AttrSpec | FieldSpec, v: unknown, rampOk = fals
     }
     case 'enum': return typeof v === 'string' && spec.values!.includes(v) ? null : `must be one of ${spec.values!.join(', ')}`
     case 'string': return typeof v === 'string' ? null : 'must be a string'
+    case 'list': return Array.isArray(v) && v.length > 0 && v.every(x => typeof x === 'string') ? null : 'must be a list of names'
     case 'object': {
       if (typeof v !== 'object' || v === null || Array.isArray(v)) return 'must be an object'
       const fields = (spec as AttrSpec).fields ?? {}

@@ -26,12 +26,13 @@ export const COST_CELL = 4 * CELL   // decision 0021
 const NOGO_DEPTH = 10               // m: a no-go cell's depth, past every wading limit
 
 // the map's layers, or the validator's first problems as an error
-export function layersOf(file: string): { map: MapFile; layers: Layers } {
+export function layersOf(file: string, seed?: number): { map: MapFile; layers: Layers } {
   const cat = JSON.parse(fs.readFileSync(path.join(ROOT, 'maps/kinds.json'), 'utf8')) as Catalogue
-  const raw: unknown = JSON.parse(fs.readFileSync(path.resolve(ROOT, file), 'utf8'))
+  const raw = JSON.parse(fs.readFileSync(path.resolve(ROOT, file), 'utf8')) as Record<string, unknown>
+  if (seed !== undefined) raw.seed = seed   // another battlefield from the same intent (docs/plans/active/m3-generators.md)
   const issues = validate(raw, cat)
   if (issues.length) throw new Error(`${file}: ${issues.slice(0, 5).map(i => `${i.id ?? ''} ${i.path}: ${i.message}`).join('; ')}`)
-  const ex = expand(raw as MapFile, cat)
+  const ex = expand(raw as unknown as MapFile, cat)
   if (ex.issues.length) throw new Error(`${file}: ${ex.issues[0].message}`)
   return { map: ex.map, layers: apply(ex.map, cat) }
 }
@@ -53,8 +54,8 @@ export function groundCell(L: Layers, cell: number): GroundCell {
   }
 }
 
-export function engineMap(name: string, file: string, rs: Ruleset = napoleonic, classify: Classify = classifyNapoleonic): MapDef {
-  const { map, layers: L } = layersOf(file)
+export function engineMap(name: string, file: string, rs: Ruleset = napoleonic, classify: Classify = classifyNapoleonic, seed?: number): MapDef {
+  const { map, layers: L } = layersOf(file, seed)
   const { w, h } = map.play
   if (w !== h || !Number.isInteger(w / COST_CELL)) throw new Error(`${file}: the sim needs a square play area, a whole number of ${COST_CELL} m cost cells (got ${w} × ${h})`)
   // the play area's corner, in the layers' cells, per axis (the extent need not be square)

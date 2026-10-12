@@ -24,4 +24,4 @@ PR that changes it; the design that led to it stays in `docs/proposals/` and the
 | Charges, melee and the square | `docs/systems/melee.md` | built (S1d-2) |
 | Artillery: roundshot and canister | `docs/systems/artillery.md` | built (S1d-3) |
 | Sides, the scenario's plan and the end | `docs/systems/sides.md` | built (S1e-2) |
-| The map engine: language, generators, draft view, sim compiler | `docs/systems/map.md` | built (Track M, M1, M2, M3a) |
+| The map engine: language, generators, draft view, sim compiler | `docs/systems/map.md` | built (Track M, M1, M2, M3a, M3b) |

@@ -50,12 +50,37 @@ cannot be both short and rich.
 - **The example:** `maps/two-ridges.map.json` uses `meander` for its brook, `clump` for its wood and noise for its
   ground, as the proposal's §9 does; the hamlet stays exact until M3b.
 
-**M3b** (planned here, built after M3a):
-- `street-village`: houses and yards along its road between `from` and `to`, both sides, seeded;
-- `scatter`: N child features of a kind in a region, with `avoid` and `within` constraints on kinds or ids, and
-  `min`;
-- `follow` (shared edges);
-- five seeds of one intent map giving five valid, distinct battlefields that compile and play.
+**M3b:**
+- **Children:** a generator may write child features beside its own. A child's id is its parent's plus `-<n>`; it
+  carries an `origin` naming its parent, so it can be pinned like any generated feature.
+- **`street-village`**, on a `built.village` with `along` its road:
+  - houses (`built.house`) on both sides of the road between `from` and `to`, set back from its edge, turned to
+    face it, with seeded sizes and gaps;
+  - houses keep clear of water and of other buildings;
+  - the village's own area, when the author gives none, becomes the hull of its houses;
+  - fewer houses than asked is an error, unless the feature allows fewer with `min`.
+- **`scatter`**, on any area kind given as an area (the region):
+  - `count` children of the feature's kind and attributes, each a `clump` of radius between `radiusMin` and
+    `radiusMax`, with their centres inside the region;
+  - each keeps `clearance` metres from the features it must `avoid` (kinds, as category or dotted prefixes, or
+    ids) and from its siblings;
+  - each lies within `reach` metres of a feature it must stay `within`, when that list is given;
+  - fewer than `count` placed is an error unless `min` allows it.
+
+  Scatters run after every other generator (they see the meandered streams), in id order, a later scatter seeing
+  an earlier one's children. The region feature itself leaves the expanded map; its children stay.
+- **Five seeds:** `maps/generated.map.json`, an intent map in the valley's layout:
+  - ridges and a meandered brook with its fords and bridge;
+  - noise ground;
+  - scattered copses kept off the water, the road and the armies' ground;
+  - a street village along the road.
+
+  Five map seeds give five valid, distinct expansions that compile to sim data and run the S1e battle with finite
+  state.
+
+**M3c** (after M3b): `follow`, shared edges. An area's ring may take part of another feature's line, offset to
+one side, so a wood bounded by a stream shares its bank. It changes the shape grammar (a ring point may then be a
+reference), so it is its own PR.
 
 **Out of scope:**
 - relief generators beyond the base noise (erosion, rivers carving valleys);
@@ -74,6 +99,22 @@ cannot be both short and rich.
   tests move another feature and compare.
 
 ## Acceptance
+
+M3b:
+1. **Determinism and locality:** children are stable across runs and local (another feature's change leaves them
+   alone, unless it is a feature they avoid).
+2. **`street-village`:** the houses face their road, are on both sides within `from`–`to`, overlap neither each
+   other, nor the road, nor water. Fewer than asked is an error naming the feature.
+3. **`scatter`:**
+   - the children are inside the region, clear of what they avoid and of each other, and within reach when asked;
+   - an impossible scatter is an error, and `min` lowers the bar.
+4. **Five seeds of `generated.map.json`:**
+   - each validates, expands and compiles to sim data;
+   - each runs two minutes of the S1e battle with finite state;
+   - the five expansions all differ.
+5. **The page** draws `generated` and redraws on save in under a second.
+6. `npm test`, `npm run check:data`, `npm run check:docs` and `npm run build` pass, with full output and exit codes
+   in the PR.
 
 M3a:
 1. Determinism and locality:

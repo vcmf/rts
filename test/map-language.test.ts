@@ -100,7 +100,7 @@ const CASES: [string, (m: MapFile & Record<string, unknown>) => void, string | n
   ['a season override of a fixed attribute', m => { f(m, 'field').seasons = { autumn: { material: 'clay' } } }, 'field', 'features[9].seasons.autumn.material', /season/],
   ['an unknown state', m => { f(m, 'house').state = 'flooded' }, 'house', 'features[8].state'],
   ['an unknown generator', m => { f(m, 'wood').gen = { blob: {} } }, 'wood', 'features[6].gen'],
-  ['a shared edge before M3', m => { f(m, 'wood').follow = 'brook' }, 'wood', 'features[6].follow', /M3/],
+  ['a shared edge before M3', m => { f(m, 'wood').follow = 'brook' }, 'wood', 'features[6].follow', /M3c/],
   // round 1 of the M1a review
   ['an extent off the 4 m step', m => { m.extent = { w: 1002, h: 1000 } }, null, 'extent', /multiple of 4/],
   ['an attribute named like an object builtin', m => { Object.defineProperty(f(m, 'wood'), 'constructor', { value: 1, enumerable: true }) }, 'wood', 'features[6].constructor'],
@@ -191,9 +191,9 @@ describe('M1a: expansion and the layout', () => {
     expect(map.features.map(x => x.id)).toEqual(BASE.features.map(x => x.id).sort())
     expect(validate(map, cat)).toEqual([])
   })
-  it('a generator still to come (M3b) is reported, not run', () => {
-    const m = clone(BASE); f(m, 'wood').gen = { scatter: {} }
-    expect(expand(m, cat).issues[0]).toMatchObject({ id: 'wood', path: 'features[6].gen' })
+  it("a generator's required parameter is checked: a scatter needs its count", () => {
+    const m = clone(BASE); f(m, 'field').gen = { scatter: {} }
+    expect(validate(m, cat).map(i => i.path)).toContain('features[9].gen.scatter.count')
   })
   it('the layout round-trips and puts one feature per line', () => {
     const text = formatMap(BASE)

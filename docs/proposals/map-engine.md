@@ -172,8 +172,8 @@ validated parameters:
 |---|---|---|
 | `meander` | `water.stream`, `water.river` | the bends along a guide line (today's Kinoshita curve from `src/look/world/author.ts`), with width and depth per sample (narrower bends, pools and riffles); the water level is the compiler's (§4) |
 | `clump` | any area kind at a point | an organic outline of a given size, coherence and raggedness (0 A.D.'s ClumpPlacer) |
-| `street-village` | `built.village` | houses, yards and gardens along its road |
-| `scatter` | a region | N child features of a kind, with `avoid` and `within` constraints (a distance from other kinds or ids) (0 A.D.'s placer, painter and constraint triple, as data) |
+| `street-village` | `built.village` with `along` its road | houses (children) on both sides between `from` and `to`, set back and facing the road, clear of water and buildings; the village's area, when it has none, the hull of its houses; `min` |
+| `scatter` | any area kind given as its region | `count` children of the feature's kind and attributes, each a `clump` of radius `radiusMin`–`radiusMax`, `clearance` m clear of the kinds or ids it `avoid`s and of each other, within `reach` m of what it stays `within`; runs after the other generators; `min` |
 
 **The expanded map** is the same language with every `gen` run: exact lines, polygons and buildings. Each
 generated feature records where it came from (`origin`: the generator, its parameters and its version). To hand-tune

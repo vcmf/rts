@@ -12,7 +12,14 @@ import { clump } from '../src/map/clump.ts'
 import { expand } from '../src/map/expand.ts'
 import { validate } from '../src/map/validate.ts'
 import { apply, nearLine, nearScan } from '../src/map/apply.ts'
-import { crossings, lineCrossing, lineLength, ringCrossing } from '../src/map/geometry.ts'
+import { crossings, inRing, lineCrossing, lineLength, ringCrossing } from '../src/map/geometry.ts'
+import { engineMap } from '../maps/engine.ts'
+import { buildSimData } from '../tools/build-sim-data.ts'
+import { classifyNapoleonic } from '../src/rulesets/napoleonic-ground.ts'
+import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import { loadSimData, compileRuleset, makeWorld, attachScenario, advanceTick, M_TICK } from '../src/sim/index.ts'
+import { m2Valley } from '../src/scenarios/m2-valley.ts'
+import { longIt } from './fx.ts'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps/kinds.json'), 'utf8')) as Catalogue
@@ -185,7 +192,7 @@ describe('M3a: the validator and expansion', () => {
     expect(issues).toEqual([])
     const w = map.features.find(f => f.id === 'wood')!
     expect([w.gen, w.circle, Array.isArray(w.area)]).toEqual([undefined, undefined, true])
-    expect(w.origin).toEqual({ generator: 'clump', params: { coherence: 0.5 }, version: 2 })
+    expect(w.origin).toEqual({ generator: 'clump', params: { coherence: 0.5 }, version: 3 })
     expect(validate(map, cat)).toEqual([])
     // pinned: the expanded feature written back into a map is just a feature
     expect(issuesOf(mini([BROOK, w]))).toEqual([])
@@ -197,5 +204,100 @@ describe('M3a: the validator and expansion', () => {
     expect(issues.map(i => `${i.id} ${i.path}`)).toContain('bridge features[2].near')   // its index in the file the author wrote
     const near = clone(m); near.features[2].near = [-300, 0]
     expect(expand(near, cat).issues).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------- M3b: children, street-village, scatter, five seeds
+describe('M3b: street-village', () => {
+  const road = { id: 'road', kind: 'way.road.lane', line: [[0, -500], [0, 500]] as Pt[], width: 6 }
+  const brook = { id: 'brook', kind: 'water.stream', line: [[-560, 100], [560, 100]] as Pt[], width: 6 }
+  const village = (houses: number, from = 300, to = 520, gen: Record<string, unknown> = {}) => ({ id: 'village', kind: 'built.village', along: { id: 'road', from, to }, houses, gen: { 'street-village': gen } })
+  it('houses on both sides of the road, within the stretch, facing it, clear of each other, the road and the water', () => {
+    const { map, issues } = expand(mini([road, brook, village(10)]), cat)
+    expect(issues).toEqual([])
+    const houses = map.features.filter(f => f.origin?.parent === 'village')
+    expect(houses).toHaveLength(10)
+    expect(houses.map(h => h.id).sort()).toEqual([...Array(10).keys()].map(k => `village-${k + 1}`).sort())
+    const sides = new Set(houses.map(h => Math.sign(h.area![0][0][0])))
+    expect(sides).toEqual(new Set([-1, 1]))
+    for (const h of houses) {
+      const ring = h.area![0]
+      for (const [x, z] of ring) { expect(Math.abs(x)).toBeGreaterThanOrEqual(3 + 3 - 0.01); expect(z).toBeGreaterThanOrEqual(-500 + 300 - 1); expect(z).toBeLessThanOrEqual(-500 + 520 + 1) }
+      // facing the road: two of its edges run along it (constant x on this straight road)
+      expect(Math.abs(ring[0][0] - ring[1][0])).toBeLessThan(0.02)
+      for (const [, z] of ring) expect(Math.abs(z - 100)).toBeGreaterThan(3)   // clear of the brook
+      for (const o of houses) if (o !== h) expect(o.area![0].some(p => inRing(ring, p))).toBe(false)
+    }
+    // the village's ground is the hull of its houses
+    const v = map.features.find(f => f.id === 'village')!
+    for (const h of houses) for (const p of h.area![0]) expect(inRing(v.area![0], p)).toBe(true)
+  })
+  it('fewer houses than asked is an error naming the feature; min allows fewer', () => {
+    const tight = expand(mini([road, village(30, 300, 360)]), cat)
+    expect(tight.issues[0]).toMatchObject({ id: 'village', path: 'features[1].gen.street-village' })
+    expect(tight.issues[0].message).toMatch(/placed \d+ of 30 houses/)
+    expect(expand(mini([road, village(30, 300, 360, { min: 2 })]), cat).issues).toEqual([])
+  })
+})
+
+describe('M3b: scatter', () => {
+  const region = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
+  const road = { id: 'road', kind: 'way.road.lane', line: [[0, -560], [0, 560]] as Pt[], width: 6 }
+  const pond = { id: 'pond', kind: 'water.pond', circle: [[-250, 250], 60] as [Pt, number] }
+  const copses = (p: Record<string, unknown>) => ({ id: 'copses', kind: 'veg.wood.broad', density: 0.7, area: region, gen: { scatter: { count: 8, radiusMin: 20, radiusMax: 40, avoid: ['water', 'way'], clearance: 20, ...p } } })
+  it('children inside the region, clear of what they avoid and of each other; the region itself leaves the map', () => {
+    const { map, issues } = expand(mini([road, pond, copses({})]), cat)
+    expect(issues).toEqual([])
+    expect(map.features.some(f => f.id === 'copses')).toBe(false)
+    const kids = map.features.filter(f => f.origin?.parent === 'copses')
+    expect(kids).toHaveLength(8)
+    for (const k of kids) {
+      expect(k.kind).toBe('veg.wood.broad'); expect(k.density).toBe(0.7); expect(k.gen).toBeUndefined()
+      for (const [x, z] of k.area![0]) {
+        expect(Math.abs(x)).toBeLessThan(500); expect(Math.abs(z)).toBeLessThan(500)
+        expect(Math.abs(x) - 3).toBeGreaterThanOrEqual(20 - 0.02)                                            // the road's edge
+        expect(Math.hypot(x + 250, z - 250) - 60).toBeGreaterThanOrEqual(20 - 0.02)                           // the pond's
+      }
+      for (const o of kids) if (o !== k) expect(o.area![0].some(p => inRing(k.area![0], p))).toBe(false)
+    }
+  })
+  it('within keeps every child within reach of what it names', () => {
+    const { map } = expand(mini([road, pond, copses({ count: 4, within: ['pond'], reach: 150 })]), cat)
+    for (const k of map.features.filter(f => f.origin?.parent === 'copses')) {
+      const [cx, cz] = k.area![0].reduce(([a, b], [x, z]) => [a + x / k.area![0].length, b + z / k.area![0].length], [0, 0])
+      expect(Math.hypot(cx + 250, cz - 250) - 60).toBeLessThan(150 + 1)
+    }
+  })
+  it('an impossible scatter is an error naming the feature; min lowers the bar; a name that is nothing is refused', () => {
+    const impossible = expand(mini([road, pond, copses({ count: 200, radiusMin: 80, radiusMax: 90 })]), cat)
+    expect(impossible.issues[0]).toMatchObject({ id: 'copses', path: 'features[2].gen.scatter' })
+    expect(expand(mini([road, pond, copses({ count: 200, radiusMin: 80, radiusMax: 90, min: 1 })]), cat).issues).toEqual([])
+    expect(validate(mini([road, pond, copses({ avoid: ['lava'] })]), cat).map(i => i.path)).toContain('features[2].gen.scatter.avoid[0]')
+  })
+  it('children are local: moving a feature they do not avoid leaves them; moving one they avoid may not', () => {
+    const base = [road, pond, copses({}), { id: 'rough', kind: 'ground.rough', circle: [[300, -300], 50] as [Pt, number] }]
+    const kids = (fs: MapFile['features']) => expand(mini(fs), cat).map.features.filter(f => f.origin?.parent === 'copses')
+    const moved = clone(base); (moved[3] as { circle: [Pt, number] }).circle = [[-300, 300], 50]
+    expect(kids(moved)).toEqual(kids(base))
+  })
+})
+
+describe('M3b: five seeds of one intent, five battlefields', () => {
+  longIt('each validates, expands, compiles to sim data and runs two minutes of the S1e battle with finite state; all differ', () => {
+    const seen = new Set<string>()
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const raw = JSON.parse(fs.readFileSync(path.join(root, 'maps/generated.map.json'), 'utf8')) as MapFile
+      raw.seed = seed
+      expect(validate(raw, cat)).toEqual([])
+      const { map, issues } = expand(raw, cat)
+      expect(issues).toEqual([])
+      seen.add(JSON.stringify(map.features.filter(f => f.origin)))
+      const d = loadSimData(buildSimData(engineMap('generated', 'maps/generated.map.json', napoleonic, classifyNapoleonic, seed)))
+      const cr = compileRuleset(napoleonic), w = makeWorld(d, cr, 3)
+      attachScenario(w, m2Valley); m2Valley.setup(w)
+      while (w.meta[M_TICK] < 2400) advanceTick(w)
+      for (const a of [w.f.x, w.f.z, w.f.heading]) for (let i = 0; i < 16; i++) expect(Number.isFinite(a[i])).toBe(true)
+    }
+    expect(seen.size).toBe(5)
   })
 })

@@ -1,7 +1,7 @@
 // Headless check of the map draft page (docs/plans/done/m1-language.md M1b, acceptance 5): starts Vite's dev
 // server, opens app/map.html in headless Chrome (tools/shot.mjs), and edits a map file from here, as an author
 // saving it would:
-//   1. a real change (a ridge's height): the page must recompile and redraw; the time from the save to the redraw
+//   1. a real change (the first height in the file): the page must recompile and redraw; the time from the save to the redraw
 //      is measured and must stay under a second;
 //   2. a broken file (invalid JSON): the page must show the error and keep the last good drawing;
 //   3. the original back: the page must recompile clean.
@@ -66,8 +66,9 @@ try {
   check(seen.LOADED.issues === 0 && seen.LOADED.compiled !== null, `the page compiled ${mapName} on load (${seen.LOADED.log.ms.toFixed(0)} ms)`)
   // a screenshot blocks the page's thread in headless Chrome: save only once it is taken
   await until('shot:draft'); await sleep(300)
-  const edited = original.replace(/"height": 18/, '"height": 19')
-  if (edited === original) throw new Error('the edit found nothing to change (expected a "height": 18 in the map)')
+  // a real edit: the first height in the file, one metre higher
+  const edited = original.replace(/"height": ?(-?\d+(\.\d+)?)/, (_, v) => `"height": ${Number(v) + 1}`)
+  if (edited === original) throw new Error('the edit found nothing to change (expected a "height" in the map)')
   const savedAt = Date.now(); fs.writeFileSync(mapFile, edited)
   await until('SAVED')
   const latency = seen.SAVED.log.drawnAt - savedAt

@@ -1,0 +1,49 @@
+// street-village (docs/proposals/map-engine.md §3.4, docs/plans/active/m3-generators.md M3b): houses along a village's
+// road between `from` and `to` (metres along it), on both sides, set back from the road's edge and turned to face it,
+// with seeded lengths, depths and gaps. A house keeps clear of water, of other buildings and of the road itself
+// (which may bend back). Each side walks the stretch on its own; the side further behind takes the next house.
+import type { Pt } from './schema.ts'
+import { pointAt, inRing, segmentsMeet, lineLength } from './geometry.ts'
+import { random } from './seed.ts'
+import { cm } from './util.ts'
+
+export interface Obstacle { clear(corners: Pt[]): boolean }   // may a house of these corners stand here?
+export interface HouseRow { houses: Pt[][]; hull: Pt[] }
+
+const SETBACK = 3, LENGTH = [8, 13], DEPTH = [6, 9], GAP = [3, 9], YARD = 4   // m
+
+function overlaps(a: Pt[], b: Pt[]): boolean {
+  for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) if (segmentsMeet(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])) return true
+  return inRing(b, a[0]) || inRing(a, b[0])
+}
+
+// the convex hull of the points (monotone chain), counter-clockwise
+function hull(pts: Pt[]): Pt[] {
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]), cross = (o: Pt, a: Pt, b: Pt) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+  const lo: Pt[] = [], hi: Pt[] = []
+  for (const q of p) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q) }
+  for (const q of [...p].reverse()) { while (hi.length >= 2 && cross(hi[hi.length - 2], hi[hi.length - 1], q) <= 0) hi.pop(); hi.push(q) }
+  return [...lo.slice(0, -1), ...hi.slice(0, -1)]
+}
+
+export function streetVillage(road: Pt[], roadWidth: number, from: number, to: number, want: number, seed: number, obstacle: Obstacle): HouseRow {
+  const rnd = random(seed), range = (r: number[]) => r[0] + rnd() * (r[1] - r[0]), end = Math.min(to, lineLength(road))
+  const houses: Pt[][] = [], at = [from + range([0, 6]), from + range([0, 6])]   // each side's next position along the road
+  for (let guard = 0; houses.length < want && guard < 4 * want + 200; guard++) {
+    const side = at[0] <= at[1] ? 0 : 1, L = range(LENGTH), D = range(DEPTH), s = at[side]
+    if (s + L > end) { at[side] = Infinity; if (at[0] === Infinity && at[1] === Infinity) break; continue }
+    const [mx, mz, tx, tz] = pointAt(road, s + L / 2), sign = side ? -1 : 1, nx = -tz * sign, nz = tx * sign   // the side's outward normal
+    const near = roadWidth / 2 + SETBACK, far = near + D
+    const corners: Pt[] = [[-L / 2, near], [L / 2, near], [L / 2, far], [-L / 2, far]].map(([a, b]) => [cm(mx + tx * a + nx * b), cm(mz + tz * a + nz * b)] as Pt)
+    if (obstacle.clear(corners) && !houses.some(h => overlaps(h, corners))) { houses.push(corners); at[side] = s + L + range(GAP) }
+    else at[side] = s + range([2, 4])   // something in the way: step on a little and try again
+  }
+  // the village's ground: the hull of its houses, pushed out by a yard's depth (corner by corner, from each house's
+  // middle, so the hull stays convex and holds every house)
+  const pts: Pt[] = []
+  for (const h of houses) {
+    const cx = (h[0][0] + h[2][0]) / 2, cz = (h[0][1] + h[2][1]) / 2
+    for (const [x, z] of h) { const dx = x - cx, dz = z - cz, l = Math.sqrt(dx * dx + dz * dz) || 1; pts.push([cm(x + dx / l * YARD), cm(z + dz / l * YARD)]) }
+  }
+  return { houses, hull: houses.length ? hull(pts) : [] }
+}

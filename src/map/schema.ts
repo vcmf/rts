@@ -19,7 +19,7 @@ export type AttrValue = number | string | boolean | Ramp | Record<string, number
 export type Attrs = Record<string, AttrValue>
 
 export interface Along { id: string; from: number; to: number }   // metres along the referenced line
-export interface Origin { generator: string; params: Record<string, unknown>; version: number }
+export interface Origin { generator: string; params: Record<string, unknown>; version: number; parent?: string }   // parent: the feature a child was generated from
 
 // a feature's own fields; every other key is an attribute from the catalogue
 export const RESERVED = ['id', 'kind', 'preset', 'note', 'source', 'priority', 'state', 'seasons', 'gen', 'origin',
@@ -59,7 +59,7 @@ export interface MapFile {
 }
 
 // the kinds catalogue (maps/kinds.json)
-export type AttrType = 'number' | 'int' | 'enum' | 'string' | 'object'
+export type AttrType = 'number' | 'int' | 'enum' | 'string' | 'object' | 'list'   // list: of strings (generator parameters)
 export interface FieldSpec { type: AttrType; unit?: string; min?: number; max?: number; values?: string[]; even?: boolean }
 export interface AttrSpec extends FieldSpec {
   layers: string[]
