@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "id": "two-ridges",
+  "name": "Two Ridges",
+  "note": "The proposal's example (docs/proposals/map-engine.md §9) with exact shapes: the brook, the wood and the hamlet are pinned until their generators (meander, clump, street-village) arrive in M3.",
+  "seed": 41,
+  "season": "summer",
+  "extent": {"w":2400,"h":2400},
+  "play": {"w":1500,"h":1500},
+  "features": [
+    {"id":"bridge","kind":"built.bridge","carries":"high-road","crosses":"brook"},
+    {"id":"brook","kind":"water.stream","line":[[-1200,20],[-900,-15],[-620,34],[-330,10],[-60,-22],[200,18],[480,-16],[800,26],[1200,6]],"width":6,"depth":0.8,"note":"pinned until meander (M3)"},
+    {"id":"farm-wall","kind":"barrier.wall","line":[[-520,400],[-440,400],[-440,460],[-520,460]]},
+    {"id":"ford-west","kind":"water.ford","on":"brook","near":[-330,10]},
+    {"id":"hamlet","kind":"built.village","along":{"id":"high-road","from":1320,"to":1460},"area":[[[22,120],[112,120],[112,262],[22,262]]],"houses":12,"note":"its houses arrive with street-village (M3)"},
+    {"id":"hamlet-church","kind":"built.church","area":[[[84,180],[104,180],[104,192],[84,192]]]},
+    {"id":"high-road","kind":"way.road.lane","line":[[60,-1200],[70,0],[40,1200]]},
+    {"id":"meadows","kind":"ground.meadow","area":[[[-1200,-1200],[1200,-1200],[1200,1200],[-1200,1200]]],"priority":0},
+    {"id":"name-brook","kind":"zone.label","point":[-700,60],"text":"Goldbrook"},
+    {"id":"north-redoubt","kind":"work.redoubt","area":[[[180,330],[240,330],[240,380],[180,380]]],"facing":-1.57},
+    {"id":"north-ridge","kind":"relief.ridge","line":[[-650,300],[650,260]],"height":14,"width":260},
+    {"id":"south-ridge","kind":"relief.ridge","line":[[-650,-300],[0,-260],[650,-320]],"height":18,"width":230,"steep":"right"},
+    {"id":"west-wood","kind":"veg.wood.broad","area":[[[-460,-200],[-430,-255],[-370,-272],[-312,-246],[-296,-186],[-322,-128],[-384,-110],[-442,-136]]],"density":{"edge":[[0,0.3],[30,0.8]]},"note":"pinned until clump (M3)"},
+    {"id":"wheat","kind":"ground.field.wheat","area":[[[-160,-216],[-20,-216],[-20,-136],[-160,-136]]],"seasons":{"autumn":{"stage":"stubble"}}},
+    {"id":"wheat-hedge","kind":"barrier.hedge","line":[[-160,-136],[-20,-136]],"gaps":{"every":24,"width":2}}
+  ]
+}

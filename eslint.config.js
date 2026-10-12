@@ -45,6 +45,22 @@ export default tseslint.config(
         { regex: '^(?!\\./)', message: 'src/sim/ imports only from src/sim/ (decision 0005).' }] }],
     },
   },
+  // the map engine (docs/proposals/map-engine.md §4): its compilers run in Node and in browsers and must give the
+  // same bytes, so the sim's number rules apply; it imports only itself and the sim's exact maths
+  {
+    files: ['src/map/**/*.ts'],
+    rules: {
+      'no-restricted-properties': ['error',
+        ...banned.map(property => ({ object: 'Math', property, message: 'Not exact across JS engines: use src/sim/num.ts (decision 0006).' }))],
+      'no-restricted-syntax': ['error',
+        { selector: "BinaryExpression[operator='**']", message: 'Not exact across JS engines: multiply, or use src/sim/num.ts.' },
+        { selector: "AssignmentExpression[operator='**=']", message: 'Not exact across JS engines: multiply, or use src/sim/num.ts.' },
+        { selector: "MemberExpression[object.name='Math'][computed=true]", message: 'No computed access to Math in the map engine.' }],
+      'no-restricted-globals': ['error', { name: 'Float32Array', message: 'Map data is exact: float32 rounds silently on store.' }],
+      'no-restricted-imports': ['error', { patterns: [
+        { regex: '^(?!\\./|\\.\\./sim/num\\.ts$)', message: 'src/map/ imports only from src/map/ and src/sim/num.ts.' }] }],
+    },
+  },
   // a ruleset is data for the sim: the same rules, and it may import the sim's types and maths
   { files: ['src/rulesets/**/*.ts'], rules: { 'no-restricted-imports': ['error', { patterns: [
     { regex: '^(?!\\.\\./sim/[\\w-]+\\.ts$|\\./)', message: 'A ruleset imports only from src/sim/ and src/rulesets/.' }] }] } },

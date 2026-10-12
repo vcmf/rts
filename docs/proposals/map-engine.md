@@ -98,8 +98,8 @@ StarCraft (§3.6): each is a run of cells with a height, a porosity (how see-thr
 That is the whole grammar. The other fields a feature may carry:
 - `preset` (a map-level preset, §3.2), `priority` (who wins an overlap; each kind has a default), `source` (where
   the data comes from), `state` (a scenario's changes: burnt, flooded, breached; §3.5);
-- the reference fields below (`on`, `carries`, `crosses`, `near`, `along`, `follow`), and `avoid`, `within` and
-  `min` on a `scatter` (§3.4);
+- the reference fields below (`on`, `carries`, `crosses`, `near`, `along`, `follow`), and a `scatter`'s `avoid`, `within` and
+  `min` inside its `gen` parameters (§3.4);
 - in the expanded map only, `origin` (§3.4).
 
 A crop's growth is its `stage`, an attribute, never `state`.
@@ -119,7 +119,7 @@ A crop's growth is its `stage`, an attribute, never `state`.
 
 ### 3.2 Kinds: a catalogue of presets
 
-`kind` is a dotted path through an era-generic catalogue (`data/kinds.json`, schema-checked). Each step of the
+`kind` is a dotted path through an era-generic catalogue (`maps/kinds.json`, checked by the validator). Each step of the
 path is a preset of attributes, and the deeper step overrides the shallower one:
 
 ```
@@ -149,7 +149,7 @@ touches no ruleset.
 | `zone` | `nogo`, `go` (overrides), `label` (names for the staff map) | `deploy` (belongs to scenarios; listed to be ruled out) |
 
 Attribute names per layer (closed lists; units in the schema):
-- **relief:** `height`, `width`, `profile` (round, flat, sharp), `steep` (the steeper side), `to`, `edge`;
+- **relief:** `height`, `width`, `profile` (round, flat, sharp), `steep` (the steeper side: `left` or `right` looking along the line, or `none`), `to`, `edge`;
 - **ground:** `material`, `moisture`, `stones`, `wear`, `snow`;
 - **veg:** `height` (m: a crop's or the canopy's top), `density`, `stage` (crops), `leaf`, `crownBase`,
   `undergrowth`, `rows` {`dir`, `spacing`}. Attributes are flat: each kind fills one vegetation layer, the low one
@@ -366,7 +366,7 @@ hedge and a village.
   "extent": { "w": 2400, "h": 2400 }, "play": { "w": 1500, "h": 1500 },
   "features": [
     { "id": "ground", "kind": "relief.base", "gen": { "noise": { "amplitude": 4, "scale": 400 } } },
-    { "id": "south-ridge", "kind": "relief.ridge", "line": [[-650, -300], [0, -260], [650, -320]], "height": 18, "width": 230, "steep": "south" },
+    { "id": "south-ridge", "kind": "relief.ridge", "line": [[-650, -300], [0, -260], [650, -320]], "height": 18, "width": 230, "steep": "right" },
     { "id": "north-ridge", "kind": "relief.ridge", "line": [[-650, 300], [650, 260]], "height": 14, "width": 260 },
     { "id": "meadows", "kind": "ground.meadow", "area": [[[-1200, -1200], [1200, -1200], [1200, 1200], [-1200, 1200]]], "priority": 0 },
     { "id": "brook", "kind": "water.stream", "line": [[-700, 20], [0, -10], [700, 30]], "width": 6, "depth": 0.8,
