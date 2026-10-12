@@ -40,7 +40,7 @@ function load(file: string, cat: Catalogue): MapFile | null {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [cmd, file, ...rest] = process.argv.slice(2)
   const cat = loadCatalogue()
-  if (!file || !['check', 'expand', 'resolve', 'draft'].includes(cmd)) { console.log('usage: node tools/map.ts check|expand|resolve <map.json> …'); process.exit(2) }
+  if (!file || !['check', 'expand', 'resolve', 'draft'].includes(cmd)) { console.log('usage: node tools/map.ts check|expand|resolve|draft <map.json> …'); process.exit(2) }
   const map = load(file, cat)
   if (!map) process.exit(1)
   if (cmd === 'check') { console.log(`${file}: ok (${map.features.length} features)`); process.exit(0) }

@@ -130,6 +130,33 @@ describe('M1b: applying features into the layers', () => {
     expect(at(L, 'barrier', -71, 41)).toBe('hedge'); expect(at(L, 'barrier', -71, 39)).toBe('hedge'); expect(at(L, 'barrier', -71, 43)).toBeNull()
     expect(at(L, 'built', 65, 65)).toBe('house')
   })
+  it('a scarp is a step: its high side stays up past the face and returns over its back slope (review round 1)', () => {
+    const L = apply(mini([{ id: 'step', kind: 'relief.scarp', line: [[-150, 0], [150, 0]], height: 6, width: 20, steep: 'left', edge: 100 }]), cat)
+    expect(hAt(L, 0, -20)).toBeCloseTo(0, 9)              // the low side, past the face
+    expect(hAt(L, 0, 0)).toBeCloseTo(3, 9)                // mid-face
+    expect(hAt(L, 0, 10)).toBeCloseTo(6, 9)               // the top of the face
+    expect(hAt(L, 0, 40)).toBeGreaterThan(4)              // still high 30 m back, no cliff at a box edge
+    expect(hAt(L, 0, 110)).toBeCloseTo(0, 9)              // back to the ground after the back slope
+    for (let z = 10; z < 110; z += 2) expect(hAt(L, 0, z + 2)).toBeLessThanOrEqual(hAt(L, 0, z) + 1e-12)   // never rises again
+  })
+  it('lines narrower than a cell still take the cells beside them (review round 1)', () => {
+    const L = apply(mini([
+      { id: 'path', kind: 'way.path', line: [[-100, 50], [100, 50]] },
+      { id: 'rill', kind: 'water.stream', line: [[-100, -50], [100, -50]], width: 2 },
+    ]), cat)
+    expect(at(L, 'way', 1, 51)).toBe('path'); expect(at(L, 'way', 1, 49)).toBe('path'); expect(at(L, 'way', 1, 53)).toBeNull()
+    expect(at(L, 'water', 1, -49)).toBe('rill')
+  })
+  it('in the draft, cuts and ditches show; levelled ground keeps its colour (review round 1)', () => {
+    const L = apply(mini([
+      { id: 'meadow', kind: 'ground.meadow', area: [[[-200, -200], [200, -200], [200, 200], [-200, 200]]] },
+      { id: 'flat', kind: 'relief.level', circle: [[-100, 0], 30], to: 0 },
+      { id: 'ditch', kind: 'relief.ditch', line: [[60, 0], [140, 0]], depth: 1.5, width: 4 },
+    ]), cat), img = draft(L)
+    const px = (x: number, z: number) => { const i = Math.floor((x - L.x0) / 2), j = Math.floor((z - L.z0) / 2), o = ((L.nz - 1 - j) * L.nx + i) * 4; return [img.data[o], img.data[o + 1], img.data[o + 2]] }
+    expect(px(-100, 1)).toEqual(px(-160, 101))                     // levelled flat meadow = flat meadow elsewhere
+    expect(px(101, 1)).not.toEqual(px(-160, 101))                  // the ditch is drawn
+  })
   it('a density ramp thins a wood toward its edge', () => {
     const L = apply(mini([{ id: 'wood', kind: 'veg.wood', circle: [[0, 0], 80], density: { edge: [[0, 0.2], [40, 1]] } }]), cat)
     const d = (x: number) => L.density[Math.floor((0 - L.z0) / 2) * L.nx + Math.floor((x - L.x0) / 2)]

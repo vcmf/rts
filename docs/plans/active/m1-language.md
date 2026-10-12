@@ -146,3 +146,22 @@ M1b:
 - `along` metres keep the 1 cm rule;
 - barriers stay 8 m inside the extent;
 - small clean-ups in the loop check and the state lookup.
+
+**M1b, round 1** (10 findings, 2 severe):
+- **Severe:**
+  - a scarp raised a band with a cliff behind it. Its high side now stays up and returns over a back slope
+    (`edge`, 150 m by default);
+  - lines narrower than a cell painted no cells. A line's band is now at least a cell, so a footpath or a rill
+    takes the cells beside it.
+- **Moderate:**
+  - an older, slower file read could replace a newer compile on the page; each compile now takes its number
+    before reading;
+  - a throw in the worker left the page on "compiling…"; the worker catches it, and the page has an `onerror`;
+  - the page check's broken-file condition always passed;
+  - the draft painted every relief edit brown, where only cuts and ditches should show;
+  - the page check left the map half-written and processes running on Ctrl-C; it now restores the file on any
+    signal and stops Vite's process group and Chrome.
+- **Light:**
+  - the default widths are one set of named constants;
+  - the CLI's usage lists `draft`, and `*.draft.png` is ignored;
+  - one repeated edge computation is left (an efficiency note only).

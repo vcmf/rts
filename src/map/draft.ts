@@ -43,10 +43,11 @@ export function draft(L: Layers): Draft {
   const { nx, nz, cell } = L, data = new Uint8ClampedArray(nx * nz * 4), H = L.height, W = nx + 1
   const T = (k: number): Resolved | undefined => (k ? L.table[k - 1] : undefined)
   // colours per feature, worked out once; the ground's per (ground, veg) pair, and per density only under a stand
-  const n = L.table.length + 1, way: RGB[] = [], barrier: RGB[] = [], built: RGB[] = [], groundCache = new Map<number, RGB>()
+  const n = L.table.length + 1, cutCell: boolean[] = [], way: RGB[] = [], barrier: RGB[] = [], built: RGB[] = [], groundCache = new Map<number, RGB>()
   for (let k = 1; k < n; k++) {
     const r = L.table[k - 1], cut = r.attrs.cut
     way[k] = typeof cut === 'number' && cut > 0 ? SUNKEN : WAY; barrier[k] = barrierColour(r); built[k] = builtColour(r)
+    cutCell[k] = typeof r.attrs.depth === 'number' || (typeof cut === 'number' && cut > 0)
   }
   const ground = (g: number, v: number, d: number): RGB => {
     const stand = v && L.table[v - 1].attrs.growth === 'stand', key = (g * n + v) * 256 + (stand ? d : 0)
@@ -63,7 +64,7 @@ export function draft(L: Layers): Draft {
     const nlen = Math.sqrt(gx * gx + gz * gz + 1), lit = (gx * 0.5 - gz * 0.5 + 0.7071) / nlen
     const shade = Math.max(0.55, Math.min(1.3, 1 + 2.2 * (lit - 0.7071)))
     let col: RGB = ground(L.ground[cellIx], L.veg[cellIx], L.density[cellIx])
-    if (L.edit[cellIx]) col = EDIT
+    if (L.edit[cellIx] && cutCell[L.edit[cellIx]]) col = EDIT   // cuts and ditches show; raised, lowered or levelled ground keeps its colour
     if (L.water[cellIx]) col = WATER
     if (L.way[cellIx]) col = way[L.way[cellIx]]
     if (L.built[cellIx]) col = built[L.built[cellIx]]

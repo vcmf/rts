@@ -13,6 +13,10 @@ self.onmessage = (e: MessageEvent<CompileRequest>) => {
   let map: unknown, cat: Catalogue
   try { cat = JSON.parse(kindsText) as Catalogue } catch (err) { fail('maps/kinds.json', `not valid JSON: ${(err as Error).message}`); return }
   try { map = JSON.parse(mapText) } catch (err) { fail('', `not valid JSON: ${(err as Error).message}`); return }
+  try { compile(seq, map, cat) } catch (err) { fail('', `the compiler failed: ${(err as Error).message} (a bug, or a catalogue the validator does not check)`) }
+}
+
+function compile(seq: number, map: unknown, cat: Catalogue): void {
   const t0 = performance.now(), issues = validate(map, cat)
   if (issues.length) { (self as unknown as Worker).postMessage({ seq, ok: false, issues } satisfies CompileReply); return }
   const ex = expand(map as MapFile)

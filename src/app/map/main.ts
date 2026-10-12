@@ -30,6 +30,11 @@ const log: { reason: string; savedAt?: number; drawnAt: number; ms: number }[] =
 
 const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
 let seq = 0, pending: { reason: string; t0: number; savedAt?: number } | null = null
+worker.onerror = e => {
+  issues = [{ id: null, path: '', message: `the compile worker failed: ${e.message}` }]
+  if (pending) log.push({ reason: pending.reason, savedAt: pending.savedAt, drawnAt: Date.now(), ms: performance.now() - pending.t0 })
+  pending = null; draw(); panel()
+}
 worker.onmessage = (e: MessageEvent<CompileReply>) => {
   const r = e.data
   if (r.seq !== seq || !pending) return   // an older compile, overtaken
@@ -48,10 +53,13 @@ worker.onmessage = (e: MessageEvent<CompileReply>) => {
   draw(); panel()
 }
 
+// each compile takes its number before it reads the files, so a slower, older read can never replace a newer one
 async function compile(reason: string, savedAt?: number): Promise<void> {
-  const t0 = performance.now(), [mapText, kindsText] = await Promise.all([read(picker.value, MAPS), read('/maps/kinds.json', KINDS)])
+  const mine = ++seq, t0 = performance.now()
   pending = { reason, t0, savedAt }
-  worker.postMessage({ seq: ++seq, mapText, kindsText } satisfies CompileRequest)
+  const [mapText, kindsText] = await Promise.all([read(picker.value, MAPS), read('/maps/kinds.json', KINDS)])
+  if (mine !== seq) return
+  worker.postMessage({ seq: mine, mapText, kindsText } satisfies CompileRequest)
 }
 
 function fit(): void {

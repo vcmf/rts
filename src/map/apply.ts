@@ -16,6 +16,9 @@ import { inRing, lineLength } from './geometry.ts'
 import { cos, sin } from '../sim/num.ts'
 
 export const CELL = 2   // m (decision 0021)
+// widths where the catalogue gives none: a way's (every way kind sets one), and the bands of the line-shaped kinds
+// that take no width attribute (reeds along a bank, a flèche's earthwork), m
+const WAY_WIDTH = 5, VEG_LINE = 4, WORK_LINE = 6
 
 export interface Layers {
   cell: number; nx: number; nz: number; x0: number; z0: number   // cells; cell (i, j) spans x0 + i·cell … + cell
@@ -135,10 +138,13 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
         H[k] += h * taper * profile(a.profile, q.d / sideHalf)
       })
     } else if (kind === 'scarp') {
-      const high = a.steep === 'right' ? -1 : 1
-      nodes(lineBox(f.line!), w2 * 3, (k, x, z) => {
-        const q = nearLine(f.line!, x, z), s = q.side * high * Math.min(1, q.d / w2)
-        H[k] += h * smooth((s + 1) / 2) * smooth(1 - q.over / (2 * w2))
+      // a step in the land: the face rises over its width, centred on the line; the high side then stays up and
+      // returns to the ground around it over `edge` m (the back slope); past the line's ends it fades over a width
+      const high = a.steep === 'right' ? -1 : 1, back = num(a.edge, 150)
+      nodes(lineBox(f.line!), w2 + back, (k, x, z) => {
+        const q = nearLine(f.line!, x, z), s = q.side * high * q.d
+        const rise = s <= w2 ? smooth((s + w2) / (2 * w2)) : smooth(1 - (s - w2) / back)
+        H[k] += h * rise * smooth(1 - q.over / (2 * w2))
       })
     } else if (kind === 'plateau') {
       const field = areaField(f)!, edge = num(a.edge, 60)
@@ -175,13 +181,15 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
     const field = areaField(f); if (!field) return
     cells(field.box, 0, (i, j, x, z) => { if (field.inside(x, z)) { layer[j * nx + i] = k1; onCell?.(j * nx + i, needEdge ? field.edge(x, z) : 0) } })
   }
+  // a line's band is at least a cell wide: a 1.5 m path still takes the cells beside its line
   const paintLine = (line: Pt[], halfWidth: number, layer: Uint16Array, k1: number, onCell?: (cell: number, along: number) => void) => {
-    cells(lineBox(line), halfWidth + c, (i, j, x, z) => { const q = nearLine(line, x, z); if (q.d < halfWidth && q.over === 0) { layer[j * nx + i] = k1; onCell?.(j * nx + i, q.along) } })
+    const half = Math.max(halfWidth, c / 2)
+    cells(lineBox(line), half + c, (i, j, x, z) => { const q = nearLine(line, x, z); if (q.d <= half && q.over === 0) { layer[j * nx + i] = k1; onCell?.(j * nx + i, q.along) } })
   }
   for (const { f, r } of order) {
     const cat0 = categoryOf(r.kind), k1 = index.get(f.id)!, a = r.attrs
     if (cat0 === 'water') {
-      if (f.line) paintLine(f.line, Math.max(num(a.width, 6) / 2, c / 2), L.water, k1)
+      if (f.line) paintLine(f.line, num(a.width, 6) / 2, L.water, k1)
       else paintArea(f, L.water, k1)
     }
   }
@@ -189,7 +197,7 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
     const cat0 = categoryOf(r.kind), k1 = index.get(f.id)!, a = r.attrs
     if (cat0 !== 'ground' && cat0 !== 'veg') continue
     const dens = (cell: number, input: { edge?: number; along?: number }) => { L.density[cell] = Math.round(255 * Math.max(0, Math.min(1, ramp(a.density, input, 0)))) }
-    if (f.line) paintLine(f.line, c, L.veg, k1, (cell, along) => dens(cell, { along }))
+    if (f.line) paintLine(f.line, VEG_LINE / 2, L.veg, k1, (cell, along) => dens(cell, { along }))
     else {
       if (cat0 === 'ground') paintArea(f, L.ground, k1)
       paintArea(f, L.veg, k1, (cell, edge) => dens(cell, { edge }), typeof a.density === 'object')
@@ -197,17 +205,17 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
   }
   for (const { f, r } of order) {
     const cat0 = categoryOf(r.kind), k1 = index.get(f.id)!, a = r.attrs
-    if (cat0 === 'way' && f.line) paintLine(f.line, num(a.width, 4) / 2, L.way, k1)
+    if (cat0 === 'way' && f.line) paintLine(f.line, num(a.width, WAY_WIDTH) / 2, L.way, k1)
     if (cat0 === 'barrier' && f.line) barrierCells(f.line, num(a.thickness, 2), a.gaps as { every: number; width: number } | undefined, (i, j) => { if (i >= 0 && j >= 0 && i < nx && j < nz) L.barrier[j * nx + i] = k1 }, x0, z0)
   }
   for (const { f, r } of order) {
     const cat0 = categoryOf(r.kind), k1 = index.get(f.id)!
     if (cat0 === 'built' || cat0 === 'work') {
-      if (f.line) paintLine(f.line, 3, L.built, k1)
+      if (f.line) paintLine(f.line, WORK_LINE / 2, L.built, k1)
       else if (f.area || f.circle || f.ellipse) paintArea(f, L.built, k1)
       else if (f.carries && f.crosses) {
         // the bridge's deck, for the draft: the road's cells where it crosses the water (the deck itself: M2)
-        const road = byId.get(f.carries)!, water = byId.get(f.crosses)!, rw = num(L.table[index.get(road.id)! - 1].attrs.width, 5) / 2, ww = num(L.table[index.get(water.id)! - 1].attrs.width, 6) / 2
+        const road = byId.get(f.carries)!, water = byId.get(f.crosses)!, rw = num(L.table[index.get(road.id)! - 1].attrs.width, WAY_WIDTH) / 2, ww = num(L.table[index.get(water.id)! - 1].attrs.width, 6) / 2
         const hit = crossing(road.line!, water.line!, f.near)
         if (hit) cells([hit[0], hit[1], hit[0], hit[1]], ww + rw + 4, (i, j, x, z) => {
           if (nearLine(road.line!, x, z).d < rw + 1 && Math.sqrt((x - hit[0]) * (x - hit[0]) + (z - hit[1]) * (z - hit[1])) < ww + 4) L.built[j * nx + i] = k1

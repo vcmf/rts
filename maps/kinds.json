@@ -70,7 +70,7 @@
     "relief.ridge": { "shapes": ["line"], "set": { "height": 15, "width": 200, "profile": "round", "steep": "none" } },
     "relief.valley": { "shapes": ["line"], "set": { "height": -8, "width": 200, "profile": "round", "steep": "none" } },
     "relief.plateau": { "shapes": ["area", "circle", "ellipse"], "set": { "height": 10, "edge": 60, "profile": "flat" } },
-    "relief.scarp": { "shapes": ["line"], "set": { "height": 6, "width": 20, "steep": "left", "profile": "sharp" }, "note": "a step in the land along a line: higher on the steep side" },
+    "relief.scarp": { "shapes": ["line"], "set": { "height": 6, "width": 20, "steep": "left", "profile": "sharp", "edge": 150 }, "note": "a step in the land along a line: the face rises over `width` to the steep side, which stays high and returns to the ground over `edge` m" },
     "relief.raise": { "shapes": ["area", "circle", "ellipse"], "edit": true, "set": { "height": 1, "edge": 10 } },
     "relief.lower": { "shapes": ["area", "circle", "ellipse"], "edit": true, "set": { "height": 1, "edge": 10 } },
     "relief.level": { "shapes": ["area", "circle", "ellipse"], "edit": true, "set": { "to": 0, "edge": 15 }, "note": "flattens the ground to `to`, blending over `edge`" },

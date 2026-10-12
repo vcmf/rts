@@ -22,10 +22,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 let failed = 0
 const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) failed++ }
 
-const vite = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] })
-let shot
-const cleanup = () => { fs.writeFileSync(mapFile, original); shot?.kill(); vite.kill() }
+// Vite in its own process group, so stopping it stops npx's child too; shot.mjs closes its Chrome on SIGINT
+const vite = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+let shot, cleaned = false
+const cleanup = () => {
+  if (cleaned) return
+  cleaned = true
+  fs.writeFileSync(mapFile, original)
+  shot?.kill('SIGINT')
+  try { process.kill(-vite.pid, 'SIGTERM') } catch { /* already gone */ }
+}
 process.on('exit', cleanup)
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { cleanup(); process.exit(130) })
 try {
   await new Promise((res, rej) => { vite.stdout.on('data', d => { if (/Local:/.test(String(d))) res() }); vite.on('exit', () => rej(new Error('vite exited'))); setTimeout(() => rej(new Error('vite did not start')), 30000) })
   // the page: wait for each compile in turn (MAP.log grows by one per compile), printing what it saw
@@ -58,7 +66,7 @@ try {
   await sleep(300)
   fs.writeFileSync(mapFile, original.slice(0, original.length / 2))
   await until('BROKEN')
-  check(seen.BROKEN.issues > 0 && seen.BROKEN.compiled === mapName.replace(/\.map$/, '') || seen.BROKEN.compiled !== null, `a broken file shows ${seen.BROKEN.issues} error(s) and keeps the last good drawing (${seen.BROKEN.compiled})`)
+  check(seen.BROKEN.issues > 0 && seen.BROKEN.compiled === mapName, `a broken file shows ${seen.BROKEN.issues} error(s) and keeps the last good drawing (${seen.BROKEN.compiled})`)
   await sleep(300)
   fs.writeFileSync(mapFile, original)
   await until('RESTORED')
