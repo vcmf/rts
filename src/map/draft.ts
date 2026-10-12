@@ -1,0 +1,83 @@
+// The draft raster (docs/proposals/map-engine.md §7, docs/plans/active/m1-language.md M1b): the layers as an
+// RGBA image, one pixel per 2 m cell, north up. A working drawing, not the look: flat colours by category and
+// attribute, hill shading and contours every 2.5 m from the heights. Pure, so Node (PNGs, tests) and the page
+// draw the same pixels. Colours read attributes and categories, never kind names (a new kind draws without code).
+import type { Layers } from './apply.ts'
+import { categoryOf } from './catalogue.ts'
+import type { Resolved } from './resolve.ts'
+
+type RGB = [number, number, number]
+export const CONTOUR = 2.5   // m
+
+// the ground and its low growth: by growth, height and stage
+function groundColour(r: Resolved | undefined, veg: Resolved | undefined, density: number): RGB {
+  const v = veg?.attrs ?? r?.attrs ?? {}, g = r?.attrs ?? {}
+  if (g.material === 'peat' || (typeof g.moisture === 'number' && g.moisture >= 0.9)) return [128, 150, 120]   // marsh
+  if (veg && categoryOf(veg.kind) === 'veg' && v.growth === 'stand') {
+    const d = density / 255
+    return v.rows ? [120, 150, 80] : [Math.round(92 - 40 * d), Math.round(128 - 38 * d), Math.round(70 - 30 * d)]   // orchard; woods darken with density
+  }
+  if (v.growth === 'none' || g.wear !== undefined && (g.wear as number) >= 0.5) return [176, 160, 132]   // yards, worn ground
+  if (v.stage === 'ploughed') return [150, 118, 86]
+  if (v.stage === 'stubble') return [214, 196, 140]
+  if (v.stage === 'standing') return [222, 196, 110]
+  if (typeof g.stones === 'number' && g.stones >= 0.4) return [160, 160, 120]   // rough
+  const h = typeof v.height === 'number' ? v.height : 0.3
+  return h < 0.2 ? [176, 196, 128] : [154, 184, 112]   // pasture, meadow
+}
+
+const WATER: RGB = [88, 136, 176], WAY: RGB = [198, 170, 126], SUNKEN: RGB = [150, 120, 84], EDIT: RGB = [120, 100, 80]
+function barrierColour(r: Resolved): RGB {
+  const p = typeof r.attrs.porosity === 'number' ? r.attrs.porosity : 0
+  return p >= 0.6 ? [120, 92, 60] : p > 0 ? [46, 74, 40] : [92, 88, 84]   // fence, hedge, wall
+}
+function builtColour(r: Resolved): RGB {
+  if (categoryOf(r.kind) === 'work') return [130, 100, 70]
+  if (r.attrs.houses !== undefined) return [200, 176, 150]   // a village's ground
+  if (r.attrs.roof === undefined && r.attrs.wall === undefined) return [168, 150, 128]   // a bridge's deck, a farm's yard
+  return typeof r.attrs.height === 'number' && r.attrs.height >= 12 ? [96, 70, 64] : [168, 92, 72]   // church, house
+}
+
+export interface Draft { w: number; h: number; data: Uint8ClampedArray }
+export function draft(L: Layers): Draft {
+  const { nx, nz, cell } = L, data = new Uint8ClampedArray(nx * nz * 4), H = L.height, W = nx + 1
+  const T = (k: number): Resolved | undefined => (k ? L.table[k - 1] : undefined)
+  // colours per feature, worked out once; the ground's per (ground, veg) pair, and per density only under a stand
+  const n = L.table.length + 1, cutCell: boolean[] = [], way: RGB[] = [], barrier: RGB[] = [], built: RGB[] = [], groundCache = new Map<number, RGB>()
+  for (let k = 1; k < n; k++) {
+    const r = L.table[k - 1], cut = r.attrs.cut
+    way[k] = typeof cut === 'number' && cut > 0 ? SUNKEN : WAY; barrier[k] = barrierColour(r); built[k] = builtColour(r)
+    cutCell[k] = typeof r.attrs.depth === 'number' || (typeof cut === 'number' && cut > 0)
+  }
+  const ground = (g: number, v: number, d: number): RGB => {
+    const stand = v && L.table[v - 1].attrs.growth === 'stand', key = (g * n + v) * 256 + (stand ? d : 0)
+    let col = groundCache.get(key)
+    if (!col) { col = groundColour(T(g), T(v), d); groundCache.set(key, col) }
+    return col
+  }
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const cellIx = j * nx + i
+    // the cell's corner heights: slope for the shading (light from the north-west, above), and contours
+    const h00 = H[j * W + i], h10 = H[j * W + i + 1], h01 = H[(j + 1) * W + i], h11 = H[(j + 1) * W + i + 1]
+    const gx = (h10 + h11 - h00 - h01) / (2 * cell), gz = (h01 + h11 - h00 - h10) / (2 * cell)
+    // the light: from the north-west, 45° up; flat ground keeps its colour, slopes facing the light brighten
+    const nlen = Math.sqrt(gx * gx + gz * gz + 1), lit = (gx * 0.5 - gz * 0.5 + 0.7071) / nlen
+    const shade = Math.max(0.55, Math.min(1.3, 1 + 2.2 * (lit - 0.7071)))
+    let col: RGB = ground(L.ground[cellIx], L.veg[cellIx], L.density[cellIx])
+    if (L.edit[cellIx] && cutCell[L.edit[cellIx]]) col = EDIT   // cuts and ditches show; raised, lowered or levelled ground keeps its colour
+    if (L.water[cellIx]) col = WATER
+    if (L.way[cellIx]) col = way[L.way[cellIx]]
+    if (L.built[cellIx]) col = built[L.built[cellIx]]
+    if (L.barrier[cellIx]) col = barrier[L.barrier[cellIx]]
+    const k = L.water[cellIx] ? 1 : shade
+    let r = col[0] * k, g = col[1] * k, b = col[2] * k
+    if (L.zone[cellIx]) { r = r * 0.6 + 200 * 0.4; g = g * 0.6 + 40 * 0.4; b = b * 0.6 + 40 * 0.4 }
+    // a contour where the cell's corners straddle a multiple of CONTOUR (every fourth darker)
+    const lo = Math.min(h00, h10, h01, h11), hi = Math.max(h00, h10, h01, h11), band = Math.floor(hi / CONTOUR)
+    if (band > Math.floor(lo / CONTOUR) && !L.water[cellIx]) { const k = band % 4 === 0 ? 0.62 : 0.8; r *= k; g *= k; b *= k }
+    // north up: row 0 is the northern edge
+    const o = ((nz - 1 - j) * nx + i) * 4
+    data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255
+  }
+  return { w: nx, h: nz, data }
+}

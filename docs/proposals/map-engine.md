@@ -96,7 +96,7 @@ StarCraft (§3.6): each is a run of cells with a height, a porosity (how see-thr
 ```
 
 That is the whole grammar. The other fields a feature may carry:
-- `preset` (a map-level preset, §3.2), `priority` (who wins an overlap; each kind has a default), `source` (where
+- `preset` (a map-level preset, §3.2), `priority` (who wins an overlap; each kind has a default; at equal priority the later id wins), `source` (where
   the data comes from), `state` (a scenario's changes: burnt, flooded, breached; §3.5);
 - the reference fields below (`on`, `carries`, `crosses`, `near`, `along`, `follow`), and a `scatter`'s `avoid`, `within` and
   `min` inside its `gen` parameters (§3.4);
@@ -224,7 +224,7 @@ StarCraft. This is a deliberate simplification for play and for the editor:
   3D world all use this rule, from one function.
 - **Gaps** are whole cells too, counted in **steps** along the line (a step is one cell, straight or diagonal):
   `"gaps": { "every": 12, "width": 2 }` opens the cells whose centre projects onto steps [12k, 12k + 2) from the
-  line's first point. A feature may also list its gaps by step.
+  line's first point, for k = 1, 2, … (a gap at step 0 would only shorten the line). A feature may also list its gaps by step.
 
 Ways (roads, tracks) and areas (woods, fields) keep their free shapes: they only change speed and look, and their
 edges can stay organic.

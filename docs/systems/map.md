@@ -1,21 +1,24 @@
 ---
 status: current
 last_reviewed: 2026-10-12
-code: [src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, maps/kinds.json, tools/map.ts, test/map-language.test.ts]
+code: [src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts]
 decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell]
 ---
 
-# The map language (Track M, M1a)
+# The map language and the draft view (Track M, M1)
 
 A map is a strict JSON file (`maps/<id>.map.json`): a list of features, each with an id, a dotted kind from the
 kinds catalogue (`maps/kinds.json`), one shape and attribute overrides. This system checks such a file, resolves
-any feature's effective attributes, and writes its expanded form. The design is `docs/proposals/map-engine.md`;
-the drawing of maps (M1b) and the compilers (M2 on) come next.
+any feature's effective attributes, writes its expanded form, lays it into layers on the 2 m grid and draws them
+flat on the draft page. The design is `docs/proposals/map-engine.md`; the compilers to the sim's and the look's
+data (M2, M4) and the generators (M3) come next.
 
 ```
 maps/kinds.json ──► checkCatalogue ─┐
 <map>.map.json ──► validate ────────┼──► resolve (one feature, a season, a state) ──► attributes
-                                    └──► expand (M1: sort; generators in M3) ──► formatMap ──► <map>.expanded.json
+                                    └──► expand (M1: sort; generators in M3) ──┬──► formatMap ──► <map>.expanded.json
+                                                                               └──► apply ──► layers ──► draft ──► RGBA
+                                                                                     (the page's worker, or `tools/map.ts draft`)
 ```
 
 ## Goals / non-goals
@@ -23,8 +26,10 @@ maps/kinds.json ──► checkCatalogue ─┐
 - Every problem is reported with the feature's id and a JSON path, as a list, never as a thrown error.
 - The catalogue is the only place attributes, units, ranges and kinds are declared. Adding a kind or an attribute
   is a data change.
-- Not yet: generators (M3: a `gen` is validated but reported by `expand`), shared edges (`follow`, M3), drawing
-  (M1b), compiling to the sim's or the look's data (M2, M4).
+- The draft page shows exactly what the code computes: the page's worker and the CLI run the same functions.
+- Not yet: generators (M3: a `gen` is validated but reported by `expand`), shared edges (`follow`, M3), water
+  levels and carving, bridge decks and works' earthworks (M2), compiling to the sim's or the look's data (M2, M4),
+  editing on the page.
 
 ## Constraints
 
@@ -53,8 +58,30 @@ maps/kinds.json ──► checkCatalogue ─┐
   lives.
 - **Expansion** (`src/map/expand.ts`): in M1 it sorts the features by id and reports any `gen`.
 - **The layout** (`src/map/format.ts`): one feature per line, so diffs show which features changed.
-- **The CLI** (`tools/map.ts`): `check`, `expand` (`--check` compares with the committed file), `resolve`.
-  `npm run check:data` runs `expand --check` on the example map.
+- **Apply** (`src/map/apply.ts`): the expanded features into layers on the 2 m grid over the extent, in the
+  proposal's fixed order (§4):
+  - heights at the grid's nodes: the landforms summed, then the relief edits in painting order (`level`, `raise`,
+    `lower`, `cut`, `ditch`, a way's `cut` or `raise`). A ridge's crest tapers over its last half-width. A scarp
+    is a step: its face rises over `width` to the steep side, which stays up and returns to the ground over its
+    back slope (`edge`, never steeper than the face), and it fades past its ends over the same length;
+  - per cell, an index into the map's table of resolved features for each layer (ground, veg, water, way,
+    barrier, built, zone), plus the vegetation's density with ramps evaluated, and the last cut or ditch (`edit`:
+    drawn in the draft, and the mark the ruleset's crossing rule will read; other edits leave none);
+  - a line takes the cells whose centre lies strictly within its half-width, and at least the cells beside it, so
+    widths round the same way for every line (on even metres a 6 m stream and a 5 m road take 4 m);
+  - painting order is priority, then id: the higher priority wins a cell and, at equal priority, the later id;
+  - barriers by `barrierCells`, the one implementation of the cell rule (proposal §3.6), exact in integers;
+  - a bridge, for now, decks the road's cells over the water; the real deck is M2's.
+- **The draft** (`src/map/draft.ts`): one pixel per cell, north up, colours from categories and attributes (never
+  kind names), hill shading from the north-west and contours every 2.5 m.
+- **The page** (`app/map.html`, `src/app/map/`):
+  - a worker compiles; the page draws with pan and zoom, outlines with ids, the play area, and the cell under
+    the mouse with the feature in each layer;
+  - errors are listed while the last good drawing stays;
+  - a saved map or catalogue reaches the page through a small Vite plugin (`map-changed`, `vite.config.ts`) and
+    recompiles.
+- **The CLI** (`tools/map.ts`): `check`, `expand` (`--check` compares with the committed file), `resolve`,
+  `draft` (a PNG). `npm run check:data` runs `expand --check` on the example map.
 
 ## Tunables
 
@@ -62,6 +89,18 @@ The kinds' values and the attributes' ranges: `maps/kinds.json`. Its note says w
 (`docs/research/terrain-taxonomy.md` §4) and which are tuned.
 
 ## Verification
+
+`test/map-apply.test.ts`:
+- the barrier rule: 2 cells on an axis; a 3-cell staircase on a diagonal that no 8-direction walk crosses;
+  square-cut ends and a 2-cell gate; a sealed corner and a sealed closed yard; gaps by step;
+- painting order, the relief (a hill's peak, a ridge's steep side, a level edit, a ditch, a scarp's step, its
+  back slope and its ends), each layer, a bridge deck, a density ramp, line widths, a ditch under a later raise;
+- determinism: the example's layers and draft hash to committed values;
+- locality: moving one wood changes only its old and new cells and no height.
+
+`tools/map-page-check.mjs` (headless, against the dev server): the page compiles on load; a saved change redraws
+it in under a second (about 0.25 s measured on the dev Mac); a broken file shows its error and keeps the drawing;
+the restored file compiles clean; no console errors.
 
 `test/map-language.test.ts`:
 - the catalogue checks clean, and a broken one is reported;
