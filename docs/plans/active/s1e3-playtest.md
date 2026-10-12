@@ -115,20 +115,20 @@ throwaway probes: shots fired per formation, positions over time, results over e
 | Fault | Cause | Change |
 |---|---|---|
 | Side 1's eastern battalion faced nothing | side 1 was side 0 turned through the centre, so its lines attacked at x 200, 80, −40 against yours at −200, −80, 40 | side 1 is placed and planned on its own: four battalions up, two back, closing opposite and overlapping your line |
-| A battalion crawled 90 m in 8 minutes | its 93 m line straddled the hedge at x 110 and kept to the hedge's pace | every first-line battalion comes straight down clear of the hedge, then obliques on open ground |
+| A battalion crawled 90 m in 8 minutes | its 93 m line straddled the hedge at x 110 and kept to the hedge's pace | every first-line battalion comes straight down clear of the hedge to the north bank, then obliques across the stream (and, for the western two, the marsh) |
 | The lines arrived one at a time | different paths and the marsh | three legs: the north bank, a halt at about 130 m to dress, the final advance together |
 | The batteries never fired | each faced straight ahead (arc ±20°) from a flank where no enemy came | yours stands on your first line's eastern flank, turned 25° inwards: its arc sweeps the ground in front of the line, which no friend masks. Side 1's stands west of its first line, turned 25° inwards: it fires past its line while that comes down, and is masked by it once it closes |
 | One charge put a whole side in square for 4 minutes | the regiment charged into the middle of the line, then rested and stood within 200 m of every battalion | it charges your battery on the flank, then rides back: only the battalion beside the battery squares, for about 3 minutes (the rule is unchanged; a rule change was tried and withdrawn, see the review) |
 | The regiment loitered in your lines for 30 minutes | the plan ended with the charge | it charges your battery, then rides back over the stream (a timed step, 630 s: it moves once its rest is over; a charge ends by clearing its orders, so a move appended to it is lost) |
 | A standing defender won easily | a halted line fires from 250 m and a marching one cannot; the defender's battery swept the approach | side 1's infantry are veterans (quality 0.85) and overlap your line; its regiment goes for your guns |
-| Nothing happened for the last 20 minutes; the limit gave a draw | at `end.broken` 0.5 a side whose first line had routed fought on, and its rallied battalions (at the map's edge) counted as in the fight | `end.broken` 0.65: a side with 35% of its men out of the fight is broken |
-| Side 1's second line never fought | the plan halted it 100 m behind | in column behind the centre, it comes up to about 40 m behind the firing line at 15 minutes, to fill it as it breaks |
+| Nothing was decided in 40 minutes; the limit gave a draw | at `end.broken` 0.5 a side whose first line had routed fought on, and its rallied battalions (at the map's edge) counted as in the fight | `end.broken` 0.65: a side with 35% of its men out of the fight is broken, and the battle is decided at 17–20 minutes. The quiet after it remains: the rallied battalions come back into the count, and nothing more happens (the result stands; the open question is in `docs/systems/sides.md`) |
+| Side 1's second line never fought | the plan halted it 100 m behind | in column behind the centre, it halts on the north bank clear of the stream, and at 15 minutes comes up to about 25 m behind the centre's two, beyond the hedge they crossed, to fill the line as it breaks |
 
 **Results**, eight seeds each (seeds 1–7 and the page's); a defence scripted as a player might play it:
 
 | Your side | Result |
 |---|---|
-| No orders | side 1 wins at 17.3–19.5 min |
+| No orders | side 1 wins at 17.4–19.6 min |
 | The reserves extend both flanks | either: side 1 on four seeds (19.1–20.4 min), you on four (17.8–20.7 min) |
 | Your regiment counter-charges theirs, saving your battery | you win at 11.3–13.0 min |
 | Both | you win at 12.9–14.5 min |
@@ -180,5 +180,21 @@ rule to fix what was a scenario fault (the regiment charged into the middle of t
     `!`).
 - **Noted, not changed:** the regiment's timed ride back (above).
 
-The results above are measured again after round 2, on eight seeds.
+The results above are measured again after round 3, on eight seeds.
+
+**Round 3** (`/code-review high`, 9 findings, none severe; the review stops here). It confirmed the ruleset change: run
+at `end.broken` 0.5, every older golden reproduces, and each of their scenarios ends on the same tick with the same
+winner at 0.5 and 0.65. Fixed:
+- side 1's western second-line column halted with its rear in the stream and the marsh for six minutes: the second
+  line halts on the north bank at z 40;
+- the docs said the second wave came up 40 m behind the line (25 m, beyond a hedge), that the first line obliqued on
+  open ground (it crosses the stream and the marsh), "17–19 minutes" (17–20), `s1e-battle` "holding fire" in
+  `docs/systems/sim-page.md`, and `end.broken` 0.5 in the S1e-2 plan;
+- nothing pinned the threshold or the tuning: a test breaks a side at 60% in the fight (in the fight at 0.5, out at
+  0.65), and a long test plays the battle with no orders at the page's seed to side 1's win;
+- the report test's end table is exact again;
+- one helper numbers the units; side 0's rows carry no fight x.
+- **Noted:** the quiet after the result (above); `check:app` runs in CI only on PRs into `main`, so it was run
+  locally: every scenario passes, the battle ends in side 1's win at 19.2 minutes, its replay reproduces and the
+  report finds the mark and the end.
 
