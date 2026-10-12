@@ -94,14 +94,16 @@ vec4 macro(vec2 xz,float q,float px){
 // engine-design.md §6). One stroke a STROKE_CELL m cell, its centre jittered in the cell; along the field's furrows
 // on fields, along a slow flow elsewhere; 1.6-2.8 m long, 0.5-0.9 m wide; the macro colour at its centre, its value
 // jittered by up to 10% and its temperature a little (a painter's strokes vary: with the centre's colour alone they
-// changed the frame by about a level, too little to judge). A stroke reaches at most 1.85 m from its centre, so a texel reads its cell's 3x3 neighbours, in one fixed
-// order (the bake stays deterministic). The snow's lie stays the texel's own.
+// changed the frame by about a level, too little to judge). A stroke reaches at most 1.65 m from its centre (half its
+// length and its soft edge), so a texel reads its cell's 3x3 neighbours; they are laid over in the order of a hash
+// of their cell (a fixed order by position would let one direction win every overlap). The snow's lie stays the
+// texel's own.
 #define STROKE_CELL 2.0
 float strokeHash(vec2 p){vec3 q=fract(vec3(p.xyx)*0.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
 vec3 strokes(vec2 xz,vec3 c,float px){
-  vec2 cell=floor(xz/STROKE_CELL);
-  for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){
-    vec2 id=cell+vec2(float(i),float(j));
+  vec2 cell=floor(xz/STROKE_CELL);vec3 sc[9];float sm[9],sp[9];
+  for(int k=0;k<9;k++){
+    vec2 id=cell+vec2(float(k-(k/3)*3-1),float(k/3-1));
     vec2 o=(id+vec2(strokeHash(id),strokeHash(id+17.3)))*STROKE_CELL;
     vec4 cv=coverAt(coverWarp(o));
     float a=cv.y>0.5?cv.z:(texM(uGrain,o/60.0,60.0).g-0.5)*6.2831853;
@@ -109,9 +111,16 @@ vec3 strokes(vec2 xz,vec3 c,float px){
     float hl=0.8+0.6*strokeHash(id+41.9),hw=0.25+0.2*strokeHash(id+73.1);
     // a capsule: the distance past its edge, m, soft over about a texel
     float e=length(vec2(max(abs(dot(d,u))-(hl-hw),0.0),dot(d,vec2(-u.y,u.x))))-hw;
-    vec3 sc=macro(o,0.0,px).rgb*(0.9+0.2*strokeHash(id+97.7))*mix(vec3(0.96,1.0,1.05),vec3(1.04,1.0,0.95),strokeHash(id+5.3));
-    c=mix(c,sc,0.9*(1.0-smoothstep(-0.25,0.25,e)));
+    sm[k]=0.9*(1.0-smoothstep(-0.25,0.25,e));sp[k]=strokeHash(id+59.1);sc[k]=c;
+    #ifdef WEBGL2
+    // the colour read only where the stroke reaches (explicit derivatives make the branch's reads safe)
+    if(sm[k]>0.0)
+    #endif
+    sc[k]=macro(o,0.0,px).rgb*(0.9+0.2*strokeHash(id+97.7))*mix(vec3(0.96,1.0,1.05),vec3(1.04,1.0,0.95),strokeHash(id+5.3));
   }
+  for(int i=0;i<8;i++)for(int j=0;j<8;j++)if(j<8-i&&sp[j]>sp[j+1]){
+    vec3 tc=sc[j];sc[j]=sc[j+1];sc[j+1]=tc;float t=sm[j];sm[j]=sm[j+1];sm[j+1]=t;t=sp[j];sp[j]=sp[j+1];sp[j+1]=t;}
+  for(int k=0;k<9;k++)c=mix(c,sc[k],sm[k]);
   return c;}
 #endif
 // the bake's texel (src/look/macro.ts): the macro colour, with arm 4's strokes on the tile (on the far ring's 4 m

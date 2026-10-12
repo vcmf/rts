@@ -28,7 +28,7 @@ import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
-import { MACRO_ARMS, buildMacro, type MacroArm } from './macro.ts'
+import { MACRO_ARMS, SHADER_ARMS, buildMacro, type MacroArm } from './macro.ts'
 
 declare global { interface Window { __T0?: number } }
 const T0 = window.__T0 ?? performance.now()   // load-time measurement (window.__buildMs), started by look.html
@@ -253,8 +253,8 @@ if (params.has('bench')) {
   const hold = Number(params.get('hold') ?? 3)
   if (!(hold > 0)) throw new Error(`?hold must be a positive number of seconds, not ${params.get('hold')}`)
   // the arms: the detail layer, and the L0 grain it replaces (the cost gate: at most +1 ms GPU for the terrain)
-  // ?bench=macro: the macro colour's arms instead (with the detail layer)
-  const arms = params.get('bench') === 'macro' ? MACRO_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); return macro.setArm(a) } })) : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
+  // ?bench=macro: the macro colour's arms whose shaders differ instead (with the detail layer)
+  const arms = params.get('bench') === 'macro' ? SHADER_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); return macro.setArm(a) } })) : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
   void runBench(scene, camera, passes, arms, hold).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
     (e: unknown) => { Object.assign(window, { __bench: { error: String(e) } }); console.error('bench failed:', e) })
 }

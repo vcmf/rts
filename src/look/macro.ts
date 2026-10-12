@@ -22,6 +22,9 @@ export type MacroArm = typeof MACRO_ARMS[number]
 const MATERIAL_DEFINES = ['MACRO_FLAT', 'MACRO_SHADER', 'MACRO_BAKE'] as const
 const ARM_DEFINE: Record<MacroArm, typeof MATERIAL_DEFINES[number]> = { flat: 'MACRO_FLAT', shader: 'MACRO_SHADER', bake: 'MACRO_BAKE', strokes: 'MACRO_BAKE', kuwahara: 'MACRO_BAKE' }
 const isBaked = (a: MacroArm): boolean => ARM_DEFINE[a] === 'MACRO_BAKE'
+// the arms whose materials differ (the bench's): strokes and kuwahara draw with the bake's shader, and differ in their
+// bakes alone (their cost: the bake's, BakeStats)
+export const SHADER_ARMS: readonly MacroArm[] = ['flat', 'shader', 'bake']
 // the checks' variants (tools/macro-check.mjs): the class view, and the sabotages (every class the meadow's colour; the
 // stripes not faded with the footprint)
 export const MACRO_CHECK_DEFINES = ['MACRO_DEBUG', 'MACRO_SAB_ONECLASS', 'MACRO_SAB_STEP'] as const
@@ -113,11 +116,11 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
     engine.unBindFramebuffer(rt, false); renderer.restoreStates()   // makes the mips, on a mipmapped target
     return draws
   }
-  // one bake over the world square centred on 0 of side `world` m: the macro colour, then on arm 5 its filter
-  const draw = async (t: RenderTargetTexture, n: number, world: number): Promise<BakeStats> => {
-    await ready(wrapper); if (bakeArm === 'kuwahara') await ready(kuwahara)
+  // one bake over the world square centred on 0 of side `world` m: the macro colour, then on arm 5 (kuw) its filter
+  const draw = async (t: RenderTargetTexture, n: number, world: number, kuw: boolean): Promise<BakeStats> => {
+    await ready(wrapper); if (kuw) await ready(kuwahara)
     const lost0 = losses, t0 = performance.now(), x0 = -world / 2
-    const src = bakeArm === 'kuwahara' ? scratch(n) : t
+    const src = kuw ? scratch(n) : t
     try {
       let draws = pass(src, n, wrapper, (e, i, j, w, h) => {
         e.setFloat4('uRect', x0 + i / n * world, x0 + j / n * world, x0 + (i + w) / n * world, x0 + (j + h) / n * world)
@@ -131,28 +134,35 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
       return { ms: performance.now() - t0, texels: n * n, draws, mb: bakeMB(n, n) * (mips ? 4 / 3 : 1), lost: losses > lost0 }
     } finally { if (src !== t) src.dispose() }
   }
-  // the arm the page shows, and the one the bakes hold (bake, strokes or kuwahara: the last baked one)
-  let arm: MacroArm = 'bake', bakeArm: MacroArm = 'bake'
-  const bake = async () => {
-    const a = await draw(tile, D.macroN, D.spec.tile), b = await draw(far, D.macroFarN, D.spec.far)
+  // the arm the page shows, and the baked arm wanted (bake, strokes or kuwahara: the last one set)
+  let arm: MacroArm = 'bake', bakeArm: MacroArm = 'bake', checks: string[] = []
+  // The bakes run one at a time, in the order asked (a new grain, a restored context, an arm, a check, a rebake): each
+  // takes the arm and the checks wanted when it starts. The bake's shader's defines are the checks' (all but the class
+  // view, which the bake ignores) and arm 4's strokes; `baked` is what the targets hold, set once a bake finishes
+  let effectKey = 'bake', baked = ''
+  const NOTHING: BakeStats = { ms: 0, texels: 0, draws: 0, mb: 0, lost: false }
+  const wantedDefs = () => [...checks.filter(d => d !== 'MACRO_DEBUG'), ...(bakeArm === 'strokes' ? ['MACRO_STROKES'] : [])].sort()
+  const wantedKey = () => [bakeArm, ...wantedDefs()].join(' ')
+  // the bake's shader set to the wanted defines
+  const wanted = () => {
+    const defs = wantedDefs(), key = wantedKey()
+    if (key !== effectKey) { wrapper.updateEffect([...D.defines, ...defs.map(d => `#define ${d}`)].join('\n'), UNIFORMS, SAMPLERS); effectKey = key }
+    return { kuw: bakeArm === 'kuwahara', key }
+  }
+  const bakeNow = async (): Promise<BakeStats> => {
+    const w = wanted(); baked = ''
+    const a = await draw(tile, D.macroN, D.spec.tile, w.kuw), b = await draw(far, D.macroFarN, D.spec.far, w.kuw)
+    baked = w.key
     return { ms: a.ms + b.ms, texels: a.texels + b.texels, draws: a.draws + b.draws, mb: a.mb + b.mb, lost: a.lost || b.lost }
   }
-  // a rebake no one awaits (a new grain, a restored context): its failure is reported, and settled() waits for it
   let last: Promise<unknown> = Promise.resolve()
-  const rebake = () => { last = bake().catch((e: unknown) => { console.error('macro rebake failed:', e) }) }
+  const enqueue = <T>(job: () => Promise<T>): Promise<T> => { const p = last.then(job, job); last = p.catch(() => undefined); return p }
+  const bake = () => enqueue(bakeNow)
+  // a rebake no one awaits (a new grain, a restored context): its failure is reported, and settled() waits for it
+  const rebake = () => { bake().catch((e: unknown) => { console.error('macro rebake failed:', e) }) }
   mats.onGrain(rebake)
-  // the bake's shader's defines: the checks' (all but the class view, which the bake ignores) and arm 4's strokes. The
-  // bake is redone only when they, or the arm the bakes hold, change
-  let checks: string[] = [], bakeKey = 'bake'
-  const NOTHING: BakeStats = { ms: 0, texels: 0, draws: 0, mb: 0, lost: false }
-  const rebakeIfChanged = async (): Promise<BakeStats> => {
-    const defs = [...checks.filter(d => d !== 'MACRO_DEBUG'), ...(bakeArm === 'strokes' ? ['MACRO_STROKES'] : [])].sort()
-    const key = [bakeArm, ...defs].join(' ')
-    if (key === bakeKey) return NOTHING
-    bakeKey = key
-    wrapper.updateEffect([...D.defines, ...defs.map(d => `#define ${d}`)].join('\n'), UNIFORMS, SAMPLERS)
-    return bake()
-  }
+  // redone only when the arm or the checks wanted differ from what the targets hold
+  const rebakeIfChanged = () => enqueue(() => wantedKey() === baked ? Promise.resolve(NOTHING) : bakeNow())
   const setCheck = async (on: string[]) => {
     for (const d of on) if (!(MACRO_CHECK_DEFINES as readonly string[]).includes(d)) throw new Error(`unknown macro check define ${d}`)
     for (const m of mats.all) for (const d of MACRO_CHECK_DEFINES) m.setDefine(`#define ${d}`, on.includes(d))
@@ -170,7 +180,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
     async bakeBench(side) {
       if (!(Number.isInteger(side) && side >= 64 && side <= D.spec.minSpec.maxTexture)) throw new Error(`?macroBench must be a whole number of texels, 64–${D.spec.minSpec.maxTexture}`)
       const t = target('macroBench', side)
-      try { return await draw(t, side, side * s.texel) } finally { t.dispose() }
+      return enqueue(async () => { try { return await draw(t, side, side * s.texel, wanted().kuw) } finally { t.dispose() } })
     },
     async hash(which) {
       const t = which === 'tile' ? tile : far, data = await t.readPixels() as Uint8Array

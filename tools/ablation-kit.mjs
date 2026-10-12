@@ -3,15 +3,20 @@
 // and zoom (H.264), with the readability guard's army-colour blocks on the ground and one tree type (?trees=one).
 //
 //   node tools/ablation-kit.mjs <look page URL> <outDir> [--seed <text>] [--arms <a,b>]
-//     --seed   names the files and draws the screens' sides (default: the date): a new seed, new names
-//     --arms   shoot only these arms (the rest of the kit is still written from what <outDir>/shots holds)
+//     --seed   names the files and draws the screens' sides (default: the date): a new seed, new names, so give the
+//              same seed to a partial run
+//     --arms   shoot only these arms (the kit is still assembled from every arm's shots in <outDir>/private/shots)
 //
 // Writes, under <outDir>:
-//   media/<id>.jpg, media/<id>.mp4   the stills and pans, under opaque ids (nothing in a name tells an arm)
-//   screens.json                     what the judging page shows: per screen, side x and side y's ids (no arm names)
-//   key.json                         which arm each screen's x and y is, and each id: KEEP IT FROM THE JUDGES
-//   <outDir>/judge.html              the judging page (tools/ablation-judge.html): publish it with screens.json and
-//                                    media/ as a private artifact, its answers in its db (answers/<judge's id>)
+//   private/shots/                   the shots, named by arm, and private/key.json: which arm each screen's x and y
+//                                    is, the seed and each id. KEEP BOTH FROM THE JUDGES: never publish private/
+//   publish/                         what the judging artifact publishes, and nothing else: the judging page
+//                                    (tools/ablation-judge.html, as judge), publish/screens.json (per screen, side x and side
+//                                    y's ids, no arm names) and publish/media/<id>.jpg and .mp4 (opaque ids)
+// Publish the page in publish/ with root publish/ and its files, as a private artifact with the capabilities
+//   {db: {rules: [{path: 'answers', read: 'owner', write: 'owner'}, {path: 'answers/{self}', read: 'interact', write: 'interact'}]}, user: {}}
+// so each judge reads and writes their own answers (answers/<their id>) and the owner reads all of them; without the
+// rules every viewer would read and overwrite every judge's. Judges need Contributor access to save.
 // The page then shuffles the screens and swaps the sides per judge. Needs ffmpeg, and the machine's GPU
 // (SHOT_ANGLE, default metal): SwiftShader is too slow for the pans.
 import { createHash } from 'node:crypto'
@@ -39,12 +44,14 @@ const TARGET = [95, 8, -40], YAW0 = -Math.PI / 2 - 0.35, YAW_RANGE = Math.PI / 4
 const ZOOMS = { close: [0.80, 45], default: [0.80, 125], wide: [0.98, 260] }
 const YAWS = { 'yaw-45': -YAW_RANGE, yaw0: 0, 'yaw+45': YAW_RANGE }
 const SEASONS = { summer: 0, winter: 3 }
-// the pans: FRAMES at 24 fps, the target moving along the screen's right by PAN of the zoom's distance (at the default
+// the pans: FRAMES at 24 fps (3 s), the target moving along the screen's right by PAN of the zoom's distance (at the default
 // zoom about 1.7 px a frame)
 const FRAMES = 72, PAN = 0.1, W = 1280, H = 720
 
-const shots = path.join(outDir, 'shots'), media = path.join(outDir, 'media')
-fs.mkdirSync(shots, { recursive: true }); fs.mkdirSync(media, { recursive: true })
+const shots = path.join(outDir, 'private', 'shots'), pub = path.join(outDir, 'publish'), media = path.join(pub, 'media')
+fs.mkdirSync(shots, { recursive: true })
+// the published folder holds this run's files alone (an earlier run's, under another seed, would be published too)
+fs.rmSync(pub, { recursive: true, force: true }); fs.mkdirSync(media, { recursive: true })
 const run = (cmd, a) => { const r = spawnSync(cmd, a, { encoding: 'utf8' }); if (r.status !== 0) throw new Error(`${cmd} ${a.join(' ')} failed (exit ${r.status}):\n${r.stderr}`) }
 
 // one page load an arm: the blocks, then every still, then the pans' frames (each pan encoded, its frames removed)
@@ -74,8 +81,15 @@ for (const arm of only ?? ARMS) {
 // the opaque ids: a hash of the seed and the shot's name (the seed kept in key.json, never on the page)
 const id = name => createHash('sha256').update(`${seed}:${name}`).digest('hex').slice(0, 12)
 const missing = [], ids = {}
-const still = name => { const src = path.join(shots, `${name}.png`); if (!fs.existsSync(src)) { missing.push(name); return null } const i = id(name); ids[i] = name; run('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-q:v', '3', path.join(media, `${i}.jpg`)]); return i }
-const clip = name => { const src = path.join(shots, `${name}.mp4`); if (!fs.existsSync(src)) { missing.push(name); return null } const i = id(name); ids[i] = name; fs.copyFileSync(src, path.join(media, `${i}.mp4`)); return i }
+// a shot into the published media once (an arm's shots serve every screen it is on)
+const put = (name, ext, write) => {
+  const src = path.join(shots, `${name}.${ext === 'jpg' ? 'png' : 'mp4'}`), i = id(name)
+  if (ids[i]) return i
+  if (!fs.existsSync(src)) { missing.push(name); return null }
+  write(src, path.join(media, `${i}.${ext}`)); ids[i] = name; return i
+}
+const still = name => put(name, 'jpg', (src, dst) => run('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-q:v', '3', dst]))
+const clip = name => put(name, 'mp4', (src, dst) => fs.copyFileSync(src, dst))
 const side = arm => ({
   stills: Object.fromEntries(Object.keys(SEASONS).flatMap(s => Object.keys(YAWS).map(y => [`${s}.${y}`, null]))),
   clips: Object.fromEntries(Object.keys(SEASONS).map(s => [s, null])), arm,
@@ -94,8 +108,8 @@ PAIRS.forEach(([a, b], p) => Object.keys(ZOOMS).forEach(zoom => {
   key.screens[sid] = { pair: [a, b], zoom, x, y }
   screens.push({ id: sid, zoom, x: { stills: sides.x.stills, clips: sides.x.clips }, y: { stills: sides.y.stills, clips: sides.y.clips } })
 }))
-fs.writeFileSync(path.join(outDir, 'screens.json'), JSON.stringify({ screens }, null, 1))
-fs.writeFileSync(path.join(outDir, 'key.json'), JSON.stringify(key, null, 1))
-fs.copyFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'ablation-judge.html'), `${outDir}/judge.html`)
+fs.writeFileSync(path.join(pub, 'screens.json'), JSON.stringify({ screens }, null, 1))
+fs.writeFileSync(path.join(outDir, 'private', 'key.json'), JSON.stringify(key, null, 1))
+fs.copyFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'ablation-judge.html'), `${pub}/judge.html`)
 if (missing.length) { console.error(`ablation-kit: ${missing.length} shots missing (shoot their arms first), e.g. ${missing.slice(0, 3).join(', ')}`); process.exit(1) }
-console.log(`ablation-kit: ${screens.length} screens, ${Object.keys(ids).length} files in ${media}; the key in ${path.join(outDir, 'key.json')}`)
+console.log(`ablation-kit: ${screens.length} screens, ${Object.keys(ids).length} files in ${media}; the key in ${path.join(outDir, 'private', 'key.json')}`)

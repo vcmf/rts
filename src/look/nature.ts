@@ -112,15 +112,17 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     if (kind === 'reed') return !q || q.dist >= wetEdgeAt(q) + r   // reeds: at the water's edge, wholly on land
     return !q || q.dist >= Math.max(lerpA(RIVER.W, q) / 2 * 1.7, bankReachAt(q)) + r                 // off the banks (W2: a point bar reaches farther)
   }
-  const groups: Record<string, Item[]> = {}; const add = (model: string, item: Item) => { const m = oneTree && /^(CommonTree|BirchTree|Willow|PineTree)_/.test(model) ? 'CommonTree_1' : model; (groups[m] = groups[m] || []).push(item) }
+  const groups: Record<string, Item[]> = {}; const add = (model: string, item: Item) => (groups[model] = groups[model] || []).push(item)
   // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
   const addPlaced = (model: string, item: Item, kind = '') => { const [x, z, s] = item; if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false; add(model, item); return true }
 
   const TREE_MODELS = ['CommonTree_1', 'CommonTree_2', 'CommonTree_3', 'CommonTree_4', 'CommonTree_5']
+  // ?trees=one: the tree model, chosen before its footprint, its shadow and its reflection are (all from that model)
+  const tree = (model: string) => oneTree ? 'CommonTree_1' : model
   const clusters = [[-62, -22, 7], [-128, 4, 9], [-74, 58, 6], [42, 56, 8], [82, 32, 6], [-22, 72, 7], [112, -12, 5], [-150, 62, 8], [150, 72, 7], [-42, 122, 10], [62, 112, 8], [18, -80, 6], [-95, -70, 7], [120, -70, 6]]
   for (const [cx, cz, n] of clusters) for (let i = 0; i < n; i++) {
     const x = cx + (rr() - 0.5) * 42, z = cz + (rr() - 0.5) * 32
-    const birch = rr() < 0.22, mdl = birch ? 'BirchTree_' + (1 + Math.floor(rr() * 5)) : TREE_MODELS[Math.floor(rr() * 5)], s = 3.4 + rr() * 1.4
+    const birch = rr() < 0.22, mdl = tree(birch ? 'BirchTree_' + (1 + Math.floor(rr() * 5)) : TREE_MODELS[Math.floor(rr() * 5)]), s = 3.4 + rr() * 1.4
     if (!addPlaced(mdl, [x, z, s, rr() * 6.28, rr()])) continue
     const M = NATURE[mdl]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s)
     if (rr() < 0.5) { const fx = x + (rr() - 0.5) * 6, fz = z + (rr() - 0.5) * 6; addPlaced('Plant_1', [fx, fz, 1.6 + rr(), rr() * 6.28, rr()]) }
@@ -128,14 +130,14 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   for (let i = 0, step = 0; i < RIVER.n; i += step) {   // willows follow the river banks
     step = Math.round((7 + rr() * 9) / (RIVER.P.W0 / 4)); const C = RIVER
     if (Math.abs(C.px[i]) > 175 || Math.abs(C.pz[i]) > 175 || rr() < 0.45) continue
-    const mdl = 'Willow_' + (1 + Math.floor(rr() * 3)), s = 2.6 + rr() * 0.9, side = rr() < 0.5 ? -1 : 1, off = C.W[i] / 2 * 1.7 + footprint(mdl, s) + 0.3 + rr() * 3; let x = C.px[i] - C.tz[i] * side * off, z = C.pz[i] + C.tx[i] * side * off
+    const mdl = tree('Willow_' + (1 + Math.floor(rr() * 3))), s = 2.6 + rr() * 0.9, side = rr() < 0.5 ? -1 : 1, off = C.W[i] / 2 * 1.7 + footprint(mdl, s) + 0.3 + rr() * 3; let x = C.px[i] - C.tz[i] * side * off, z = C.pz[i] + C.tx[i] * side * off
     // inside a bend the nearest water is closer than this sample's normal suggests: step outward until the rule accepts
     const yaw = rr() * 6.28, tint = 0.2 + rr() * 0.5; let ok = false
     for (let t = 0; t < 6 && !ok; t++) { const o = off + t * 1.5; x = C.px[i] - C.tz[i] * side * o; z = C.pz[i] + C.tx[i] * side * o; ok = addPlaced(mdl, [x, z, s, yaw, tint]) }
     if (!ok) continue
     const M = NATURE[mdl]; smTree(x, z, M.max[1] * 0.6 * s, (M.max[0] - M.min[0]) * 0.45 * s)
   }
-  for (let i = 0; i < 5; i++) { const x = 150 + (rr() - 0.5) * 30, z = -40 + (rr() - 0.5) * 30; if (addPlaced('PineTree_' + (1 + Math.floor(rr() * 3)), [x, z, 3.6 + rr(), rr() * 6.28, rr()])) smTree(x, z, 6, 3.5) }
+  for (let i = 0; i < 5; i++) { const x = 150 + (rr() - 0.5) * 30, z = -40 + (rr() - 0.5) * 30; const mdl = tree('PineTree_' + (1 + Math.floor(rr() * 3))), s = 3.6 + rr(); if (addPlaced(mdl, [x, z, s, rr() * 6.28, rr()])) { if (oneTree) { const M = NATURE[mdl]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s) } else smTree(x, z, 6, 3.5) } }
   for (let i = 0; i < 90; i++) {   // bushes, a third of them with berries
     const a = rr() * 6.28, r = 14 + rr() * 120, x = Math.cos(a) * r + 8, z = Math.sin(a) * r, s = 1.8 + rr() * 1.4
     if (addPlaced(rr() < 0.33 ? 'BushBerries_' + (1 + Math.floor(rr() * 2)) : 'Bush_' + (1 + Math.floor(rr() * 2)), [x, z, s, rr() * 6.28, rr()])) smBlob(x, z, s * 0.6)

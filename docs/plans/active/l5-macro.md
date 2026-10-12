@@ -176,12 +176,15 @@ published before they can start.
 
 The bake with strokes painted into it. A gather in the bake's fragment shader: no per-stroke draws, which lost the
 context under SwiftShader (`docs/proposals/engine-design.md` §6).
-- **Stroke centres:** one per cell of a jittered grid of about 1.5 m.
+- **Stroke centres:** one per cell of a jittered grid of 2 m (a stroke then stays within its cell's neighbours).
 - **Orientation:** in a frame turned along the field's furrows on fields, and along a slow noise flow on grass.
 - **Shape:** each stroke a soft-ended capsule 1.6–3 m long and 0.5–0.9 m wide.
 - **Colour:** the macro colour at its centre (one tap) with a small value jitter.
+- **Colour:** the macro colour at its centre, its value jittered by up to 10% and its temperature a little (with
+  the centre's colour alone the strokes changed the frame by about a level, too little to judge).
 - **Gather:** each texel reads the strokes of its 3×3 neighbour cells and lays them over its own colour in a
-  fixed order (by a hash of the cell), so the bake stays deterministic.
+  fixed order (by a hash of the cell), so the bake stays deterministic. A stroke's colour is read only where it
+  reaches the texel.
 - **The snow's lie** stays the texel's own, so the stripes keep holding the snow.
 
 The materials read the bake as in arm 3; only the bake's own shader changes.
@@ -210,8 +213,8 @@ strokes unless they beat arm 3.
   one tree type (`?trees=one`, every tree from one broadleaf model) so the trees' variety does not vary the
   answer.
 - **Seasons:** summer and winter.
-- **Stills and motion:** per arm, one still per view and season, and a 4 s slow pan per zoom (yaw 0), encoded as
-  H.264 for the shimmer question.
+- **Stills and motion:** per arm, one still per view and season, and a 3 s slow pan per season and zoom (yaw 0),
+  encoded as H.264 for the shimmer question.
 - **Pairs:** arm 1 against 2, 2 against 3, 3 against 4, 3 against 5. One screen per pair and zoom (12 screens),
   each with the three yaws and both seasons as tabs and the two pans playing in sync.
 - **Blind:** each judge gets their own random screen order and random A/B sides; arm names are never shown.
@@ -221,8 +224,11 @@ strokes unless they beat arm 3.
   - In which do the coloured blocks stand out more from the ground?
   - Which shimmers or tiles less in motion?
   - Overall, which do you prefer?
-- **Answers:** stored in the judging page's shared store, one record per judge and screen, so a judge can stop
-  and resume. Claude reads them back for the tally (L5b-2).
+- **Answers:** stored in the judging page's store, one document per judge holding their answers by screen, so a
+  judge can stop and resume. Access rules let each judge read and write their own document alone and the owner
+  read all of them. Claude reads them back for the tally (L5b-2).
+- **The key:** which arm is which, written apart from the published files and kept from the judges until the
+  tally.
 
 ### The rule (L5b-2)
 
@@ -241,16 +247,17 @@ strokes unless they beat arm 3.
   - the bake is deterministic;
   - the guard passes (`--view cover` too);
   - the bake's time is measured on the Mac's GPU and under SwiftShader;
-  - the bench covers the new arms.
-- The kit: every screen has both arms' images and pans; no file name, path or metadata reveals an arm; A/B
-  sides are balanced across screens for each judge.
+  - the bench covers arms 1–3. Arms 4 and 5 draw with arm 3's shader, so their cost is their bake's (the macro
+    check).
+- The kit: every screen has both arms' images and pans; no published file name, path or metadata reveals an arm;
+  the later arm is side x on half the screens, and each judge's A/B sides are drawn at random per screen.
 
 ## Acceptance (L5b)
 
 - **L5b-1:**
   - arms 4 and 5 render and switch like arms 1–3, and pass the checks above;
   - the kit is published, and one test run of the judging page stores and reads back an answer;
-  - the bench measures arms 4 and 5 against arm 3.
+  - the bake's time of arms 4 and 5 is measured against arm 3's.
 - **L5b-2:** as the track plan's L5:
   - at least 3 judges, blind, using the checklist;
   - an arm is kept only if the judges prefer it to the arm before it, and the stroke painter is dropped unless
