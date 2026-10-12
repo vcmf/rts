@@ -148,7 +148,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const a = hash(w, 51) * 6.283, r = 230 + hash(w, 52) * 320, cx = Math.cos(a) * r, cz = Math.sin(a) * r
     for (let i = 0; i < 34; i++) { const x = cx + (hash(w, i) - 0.5) * 80, z = cz + (hash(i, w) - 0.5) * 55, fs = 5 + hash(i + w, 9) * 3; if (!placeable(x, z, footprint('Bush_1', fs))) continue; far.push([x, z, fs, hash(i, w * 3) * 6.28, hash(w, i * 2)]) }
   }
-  // stones on purpose (W5a, docs/plans/active/w5-banks.md; docs/art-bible.md §6c): in riffles, and at the foot of the
+  // stones on purpose (W5a, docs/plans/done/w5-banks.md; docs/art-bible.md §6c): in riffles, and at the foot of the
   // sharper cut banks, sized to stand 0.35–0.7 m out of the water there, so the water makes foam around them. Their own
   // seeded stream, so the rest of the scatter keeps its places
   // a stone's radius for its foam: the mean of its plan's half-extents (the pillow hugs it on average)

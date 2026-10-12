@@ -15,7 +15,7 @@ page in L0 (generated offline, `src/look/world/author.ts`), with cut banks and p
 (`docs/plans/done/w2-river-banks.md`, the look page only), the water data baked for the water's shaders since
 W3 (`docs/plans/done/w3-water-data.md`), the painted water, its shoreline from that data, since W4
 (`docs/plans/done/w4-water-surface.md`), the banks, stones and reeds since W5a and the river's seasons since W5b
-(`docs/plans/active/w5-banks.md`).
+(`docs/plans/done/w5-banks.md`).
 
 ## Goals / non-goals
 

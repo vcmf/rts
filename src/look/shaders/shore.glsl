@@ -62,7 +62,7 @@ float aastep(float t,float v){
 }
 #if defined(WATERDATA)&&defined(BANKN)
 #define SHORE
-// THE BANKS (W5, docs/plans/active/w5-banks.md; docs/art-bible.md §6c, research §2.9): painted over a ground colour
+// THE BANKS (W5, docs/plans/done/w5-banks.md; docs/art-bible.md §6c, research §2.9): painted over a ground colour
 // c at a point land m from the water (≥ 0), h m above it, where the authored surface's normal has y = ny. Damp grass
 // near the water; bare earth on steep ground near it (cut banks); pale gravel on low, gentle ground near it (point
 // bars); last, the wet line at the water, wider on gentle ground (a dark edge to the pale bar). WATER_SAB_BANKS (the banks check's sabotage): none
@@ -97,7 +97,7 @@ vec3 bedAlbedo(vec2 xz,float depth,float speed,vec3 la){
   b=mix(b,vec3(0.21,0.29,0.15),smoothstep(0.60,0.78,G(xz/4.3+0.6).g)*smoothstep(0.4,0.8,depth)*(1.0-speed));
   return mix(la,b,smoothstep(0.0,0.3,depth));}   // at depth 0, the ground at the water's edge
 const vec3 FOAM=vec3(0.93,0.92,0.84);
-// THE ICE (W5b, docs/plans/active/w5-banks.md): the frost, 0 until late autumn (season 2), 1 in winter (3)
+// THE ICE (W5b, docs/plans/done/w5-banks.md): the frost, 0 until late autumn (season 2), 1 in winter (3)
 float frost(){return clamp(uSeason-2.0,0.0,1.0);}
 // the ice at a point of the water, from the water data's speed sp there (0..1) and its depth d, so the terrain's band
 // and the water paint it alike: x the ice (0..1), y the rime along its edge (on the ice's side). Slow water freezes
