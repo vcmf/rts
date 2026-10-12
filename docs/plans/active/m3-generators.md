@@ -190,3 +190,22 @@ M3a:
   - selectors may name generated children, and a feature may not name itself;
   - `clump` exports its largest radius, and street-village reuses `ringsTouch`.
 
+**M3b, round 2** (9 findings, 1 severe):
+- **Severe:** scatters were ordered only by exact ids named, so a scatter avoiding a kind (`veg`) could run before
+  the wood scatter it meant to avoid and avoid its whole region. Renaming `copses` to `woods` broke the five-seeds
+  map. A scatter now runs after every scatter whose children any of its selectors would match: by id, a child's id,
+  or the children's kind. A loop is an error naming the scatters. Tested: the renamed map works for three seeds,
+  and two scatters avoiding each other's kinds are named as a loop.
+- **Moderate:**
+  - selectors naming a child wait for its parent;
+  - a pinned child while its parent still generates is a validation error; pinning means removing the parent's
+    generator (tested with hand-tuned notes surviving);
+  - houses keep clear of other ways and barriers (a crossroads, 30 seeds, all houses placed).
+- **Light:**
+  - a house inside an area's hole is outside it;
+  - reserved child ids are `-1`, `-2`, … only, and a scatter cannot name its own children;
+  - the stale comment is gone;
+  - the seed override only touches a file that is a JSON object.
+  - Not done: the far-away prefilter in `distanceToPolygon` (an efficiency note; the full expansion takes about
+    0.25 s).
+

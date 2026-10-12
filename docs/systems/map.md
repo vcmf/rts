@@ -62,9 +62,11 @@ maps/kinds.json ──► checkCatalogue ─┐
   nothing:
   1. the generators that only reshape their own feature (meander, clump);
   2. those that read others (street-village), in id order;
-  3. the scatters, each after any scatter it names, in id order (a loop is an error).
+  3. the scatters, each after every scatter whose children any of its selectors would match (by id, a child's id,
+     or the children's kind), otherwise in id order; a loop is an error naming its scatters.
 
-  An author's id of the form `<parent>-<n>`, where the parent writes children, is reserved;
+  An author's id of the form `<parent>-<n>`, where the parent writes children, is reserved while the parent
+  generates: pinning a generated child means taking the parent's generator away and keeping the children;
   - each generator runs with its seed, `hash(map.seed, id, generator)` (`src/map/seed.ts`), so no other feature's
     change reaches it;
   - its feature takes the output shape and records `origin` (the generator, its parameters, `EXPAND_VERSION`);
@@ -93,7 +95,7 @@ maps/kinds.json ──► checkCatalogue ─┐
     naming its `parent`; a generator may also remove its own feature (a scatter's region);
   - `street-village` (`src/map/street-village.ts`), on a village `along` its road: houses on both sides between
     `from` and `to`, set back 3 m and facing the road, with seeded sizes and gaps; clear of water, buildings and the
-    road where it bends back, each house tested as a whole polygon (`distanceToPolygon`, `src/map/reach.ts`: exact
+    road where it bends back, other ways and barriers (a barrier by its band), each house tested as a whole polygon (`distanceToPolygon`, `src/map/reach.ts`: exact
     for lines and areas); the village's area, when it has none, the hull of its houses; fewer than `houses` is an
     error unless `min` allows it (with none, the village has no area);
   - `scatter` (`src/map/scatter.ts`), on an area kind given as its region: `count` clumps of the feature's kind and

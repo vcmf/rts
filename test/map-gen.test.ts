@@ -14,6 +14,7 @@ import { validate } from '../src/map/validate.ts'
 import { apply, nearLine, nearScan } from '../src/map/apply.ts'
 import { crossings, inRing, lineCrossing, lineLength, ringCrossing } from '../src/map/geometry.ts'
 import { engineMap } from '../maps/engine.ts'
+import { distanceToPolygon } from '../src/map/reach.ts'
 import { buildSimData } from '../tools/build-sim-data.ts'
 import { classifyNapoleonic } from '../src/rulesets/napoleonic-ground.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
@@ -329,6 +330,59 @@ describe('M3b: review round 1', () => {
     expect(issues([{ id: 'c', kind: 'veg.wood', area: region, gen: { scatter: { count: 2, avoid: ['c'] } } }])).toContainEqual(expect.stringMatching(/avoid\[0\]: a feature cannot name itself/))
     expect(issues([road, village, { id: 'village-2', kind: 'built.house', circle: [[50, 0], 5] }])).toContainEqual(expect.stringMatching(/features\[2\]\.id: "village-2" is reserved/))
     expect(issues([road, village, { id: 'w', kind: 'veg.wood', area: region, gen: { scatter: { count: 2, avoid: ['village-3'] } } }])).toEqual([])
+  })
+})
+
+describe('M3b: review round 2', () => {
+  const region = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
+  const kidsOf = (m: MapFile, parent: string) => m.features.filter(f => f.origin?.parent === parent)
+  const apart = (as: MapFile['features'], bs: MapFile['features']) => as.every(a => bs.every(b => !a.area![0].some(p => inRing(b.area![0], p)) && !b.area![0].some(p => inRing(a.area![0], p))))
+  it('scatters order by what their children would be, not their ids: the five-seeds map with copses renamed woods still works', () => {
+    const raw = JSON.parse(fs.readFileSync(path.join(root, 'maps/generated.map.json'), 'utf8')) as MapFile
+    const renamed = JSON.parse(JSON.stringify(raw).replaceAll('"copses"', '"woods"')) as MapFile
+    for (const seed of [1, 2, 3]) {
+      const { map, issues } = expand({ ...renamed, seed }, cat)
+      expect(issues).toEqual([])
+      expect(kidsOf(map, 'woods').length).toBeGreaterThanOrEqual(4); expect(kidsOf(map, 'fields').length).toBeGreaterThanOrEqual(3)
+      expect(apart(kidsOf(map, 'fields'), kidsOf(map, 'woods'))).toBe(true)
+    }
+  })
+  it("a selector naming another scatter's child waits for it, whatever the ids", () => {
+    const woods = { id: 'woods', kind: 'veg.wood', area: region, gen: { scatter: { count: 4, radiusMin: 30, radiusMax: 40 } } }
+    const aaa = (p: Record<string, unknown>) => ({ id: 'aaa', kind: 'ground.field', area: region, gen: { scatter: { count: 4, radiusMin: 20, radiusMax: 25, ...p } } })
+    const { map, issues } = expand(mini([woods, aaa({ avoid: ['woods-1'], clearance: 30 })]), cat)
+    expect(issues).toEqual([])
+    const w1 = map.features.find(f => f.id === 'woods-1')!
+    expect(apart(kidsOf(map, 'aaa'), [w1])).toBe(true)
+    expect(expand(mini([woods, aaa({ within: ['woods-1'], reach: 200 })]), cat).issues).toEqual([])
+  })
+  it('scatters waiting on each other are a loop, named', () => {
+    const woods = { id: 'woods', kind: 'veg.wood', area: region, gen: { scatter: { count: 2, avoid: ['ground.field'] } } }
+    const fields = { id: 'fields', kind: 'ground.field', area: region, gen: { scatter: { count: 2, avoid: ['veg'] } } }
+    expect(expand(mini([woods, fields]), cat).issues[0]?.message).toMatch(/in a loop: .*(woods → fields → woods|fields → woods → fields)/)
+  })
+  it("a child's id is the generator's while it generates; pinning means taking the generator away and keeping the children", () => {
+    const woods = { id: 'woods', kind: 'veg.wood', area: region, gen: { scatter: { count: 3, radiusMin: 30, radiusMax: 40 } } }
+    const { map } = expand(mini([woods]), cat), kids = kidsOf(map, 'woods')
+    expect(validate(mini([woods, kids[0]]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/reserved for the children of "woods"/))
+    const pinned = mini(kids.map(k => ({ ...k, note: 'hand-tuned' })))
+    expect(validate(pinned, cat)).toEqual([])
+    expect(expand(pinned, cat).map.features.map(f => f.note)).toEqual(['hand-tuned', 'hand-tuned', 'hand-tuned'])
+  })
+  it('a village at a crossroads keeps its houses off the other road', () => {
+    const road = { id: 'road', kind: 'way.road.lane', line: [[-400, 0], [400, 0]] as Pt[] }
+    const lane = { id: 'lane', kind: 'way.track', line: [[0, -400], [0, 400]] as Pt[], width: 3 }
+    const village = { id: 'village', kind: 'built.village', along: { id: 'road', from: 300, to: 520 }, houses: 10, gen: { 'street-village': { min: 1 } } }
+    for (let seed = 1; seed <= 30; seed++) {
+      const { map, issues } = expand(mini([road, lane, village], seed), cat)
+      expect(issues).toEqual([])
+      for (const h of kidsOf(map, 'village')) expect(h.area![0].every(([x]) => Math.abs(x) > 1.5 + 1)).toBe(true)
+    }
+  })
+  it("a house inside an area's hole is outside the area", () => {
+    const lake = { id: 'lake', kind: 'water.lake', area: [[[-100, -100], [100, -100], [100, 100], [-100, 100]], [[-40, -40], [40, -40], [40, 40], [-40, 40]]] as Pt[][] }
+    expect(distanceToPolygon(lake, {}, [[-5, -5], [5, -5], [5, 5], [-5, 5]])).toBeCloseTo(35, 9)
+    expect(distanceToPolygon(lake, {}, [[60, -5], [70, -5], [70, 5], [60, 5]])).toBe(0)
   })
 })
 

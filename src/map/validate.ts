@@ -70,11 +70,11 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
 
   // the ids generated children will take, <parent>-<n>: reserved, so an author's feature never collides with one
   const parents = new Set(map.features.flatMap(f => (isObj(f) && typeof f.id === 'string' && isObj(f.gen) && Object.keys(f.gen).some(g => Object.hasOwn(GENERATOR_SPECS, g) && GENERATOR_SPECS[g].children) ? [f.id] : [])))
-  const childOf = (x: string): string | undefined => { const m = /^(.*)-\d+$/.exec(x); return m && parents.has(m[1]) ? m[1] : undefined }
+  const childOf = (x: string): string | undefined => { const m = /^(.*)-([1-9]\d*)$/.exec(x); return m && parents.has(m[1]) ? m[1] : undefined }
   map.features.forEach((f, i) => {
     if (!isObj(f) || typeof f.id !== 'string') return
     const id = f.id, path = `features[${i}]`
-    if (childOf(id) && !isObj(f.origin)) bad(id, `${path}.id`, `"${id}" is reserved for the children of "${childOf(id)}" (pin a generated child with its origin)`)
+    if (childOf(id)) bad(id, `${path}.id`, `"${id}" is reserved for the children of "${childOf(id)}"; to pin one, remove the parent's generator and keep its children`)
     // the kind: its own, or its preset's
     let kind = f.kind
     if (f.preset !== undefined) {
@@ -115,7 +115,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
           const sel = (params as Record<string, unknown>)[k]
           if (Array.isArray(sel)) sel.forEach((x, n) => {
             if (typeof x !== 'string') return
-            if (x === id) bad(id, `${gp}.${k}[${n}]`, 'a feature cannot name itself')
+            if (x === id || childOf(x) === id) bad(id, `${gp}.${k}[${n}]`, 'a feature cannot name itself or its own children')
             else if (!byId.has(x) && !childOf(x) && !Object.hasOwn(cat.categories, x) && !kindChain(cat, x)) bad(id, `${gp}.${k}[${n}]`, `"${x}" is no feature id, generated child, category or kind`)
           })
         }

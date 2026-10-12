@@ -64,14 +64,16 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
     params: { min: { type: 'int', unit: 'count', min: 0, max: 500 } },
     run: ({ f, attrs, params, seed, features, attrsOf, kindOf }) => {
       const along = f.along!, road = features.get(along.id)!.line!, want = num(attrs.houses, 12), min = P(params, 'min') ?? want
-      // what a house must keep clear of: water, other buildings, and the road itself where it bends back
       // what a house must keep clear of, as a whole polygon: water, other buildings (any shape; a bridge has none
-      // and is skipped), and its own road where the road bends back
+      // and is skipped), other ways and barriers, and its own road where the road bends back
       const water = [...features.values()].filter(g => kindOf(g.id).startsWith('water.'))
       const built = [...features.values()].filter(g => kindOf(g.id).startsWith('built.') && g.id !== f.id && (g.area || g.circle || g.ellipse || g.point))
       const roadF = features.get(along.id)!, roadA = attrsOf(along.id), rw = num(roadA.width, 5)
+      const lines = [...features.values()].filter(g => g.id !== along.id && g.line && (kindOf(g.id).startsWith('way.') || kindOf(g.id).startsWith('barrier.')))
+      // a barrier's band is its thickness in 2 m cells, centred on its line (proposal §3.6)
+      const lineGap = (g: Feature) => (kindOf(g.id).startsWith('barrier.') ? num(attrsOf(g.id).thickness, 2) : 0) + 1
       const clear = (house: Pt[]) => water.every(g => distanceToPolygon(g, attrsOf(g.id), house) > 2) && built.every(g => distanceToPolygon(g, attrsOf(g.id), house) > 1)
-        && distanceToPolygon(roadF, roadA, house) > 1
+        && lines.every(g => distanceToPolygon(g, attrsOf(g.id), house) > lineGap(g)) && distanceToPolygon(roadF, roadA, house) > 1
       const row = streetVillage(road, rw, along.from, along.to, want, seed, { clear })
       if (row.houses.length < min) throw new Error(`placed ${row.houses.length} of ${want} houses between ${along.from} and ${along.to} m along "${along.id}"; lengthen the stretch, ask fewer houses, or allow fewer with min`)
       const children: Feature[] = row.houses.map((h, k) => ({ id: `${f.id}-${k + 1}`, kind: 'built.house', area: [h] }))

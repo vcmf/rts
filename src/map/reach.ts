@@ -43,7 +43,12 @@ export function distanceToPolygon(f: Feature, attrs: Record<string, AttrValue>, 
     return Math.max(0, d - halfWidth)
   }
   if (f.line) return lineDist(f.line, num(attrs.width, 0) / 2)
-  if (f.area) { let d = Infinity; for (const r of f.area) d = Math.min(d, inRing(r, poly[0]) ? 0 : lineDist(closed(r), 0)); return d }
+  if (f.area) {
+    // inside the area (even-odd over its rings, so a hole is outside), or the nearest of its rings
+    let inside = false, d = Infinity
+    for (const r of f.area) { if (inRing(r, poly[0])) inside = !inside; d = Math.min(d, lineDist(closed(r), 0)) }
+    return inside ? 0 : d
+  }
   if (f.point || f.circle || f.ellipse) {
     const c = f.point ?? (f.circle ? f.circle[0] : f.ellipse![0])
     if (inRing(poly, c)) return 0
@@ -54,4 +59,6 @@ export function distanceToPolygon(f: Feature, attrs: Record<string, AttrValue>, 
 
 // does a feature match a selector: its id, the id of the feature it was generated from (a scatter's region names its
 // children), its category, or a dotted prefix of its kind?
-export const matches = (sel: string, f: Feature, kind: string): boolean => sel === f.id || sel === f.origin?.parent || kind === sel || kind.startsWith(sel + '.')
+export const matches = (sel: string, f: Feature, kind: string): boolean => sel === f.id || sel === f.origin?.parent || kindMatches(sel, kind)
+// is the kind the selector itself, or below it (a category or a dotted prefix)?
+export const kindMatches = (sel: string, kind: string): boolean => kind === sel || kind.startsWith(sel + '.')

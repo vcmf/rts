@@ -14,6 +14,7 @@ import { resolve } from './resolve.ts'
 import { seedOf } from './seed.ts'
 import { validate } from './validate.ts'
 import { crossings } from './geometry.ts'
+import { kindMatches } from './reach.ts'
 
 export const EXPAND_VERSION = 3   // recorded in a generated feature's `origin`; bump when any generator's output changes
 
@@ -49,19 +50,23 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
   // the generators in three passes, none in the file's order (so reordering the file changes nothing):
   //   1. those that only reshape their own feature (meander, clump), each reading nothing else;
   //   2. those that read other features (street-village), in id order, after every reshaping;
-  //   3. the late ones (scatter), each after any scatter it names in avoid or within (a cycle is an error), then in
-  //      id order: a later one sees an earlier one's children
+  //   3. the late ones (scatter): each after every scatter whose children any of its selectors would match (by the
+  //      scatter's id, a child's id, or the children's kind, which is the scatter's), so it sees those children
+  //      whatever the ids; a loop is an error naming its scatters; otherwise in id order
   const gens = [...map.features.filter(f => f.gen)].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), spec = (f: Feature) => GENERATOR_SPECS[Object.keys(f.gen!)[0]]
   for (const f of gens) if (!spec(f).reads && !spec(f).late) runOne(f)
   for (const f of gens) if (spec(f).reads && !spec(f).late) runOne(f)
   const late = gens.filter(f => spec(f).late), done = new Set<string>(), visiting = new Set<string>()
   const named = (f: Feature) => (spec(f).selects ?? []).flatMap(k => { const v = (f.gen![Object.keys(f.gen!)[0]] as Record<string, unknown>)[k]; return Array.isArray(v) ? v as string[] : [] })
+  const childOfId = (sel: string, parent: string) => sel.startsWith(parent + '-') && /^[1-9]\d*$/.test(sel.slice(parent.length + 1))
+  const needs = (f: Feature, g: Feature) => named(f).some(sel => sel === g.id || childOfId(sel, g.id) || kindMatches(sel, res(g).kind))
+  const trail: string[] = []
   const visit = (f: Feature) => {
     if (done.has(f.id)) return
-    if (visiting.has(f.id)) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen`, message: 'scatters name each other in a loop' }); return }
-    visiting.add(f.id)
-    for (const g of late) if (g !== f && named(f).includes(g.id)) visit(g)
-    visiting.delete(f.id); done.add(f.id); runOne(f)
+    if (visiting.has(f.id)) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen`, message: `scatters wait on each other's children in a loop: ${[...trail.slice(trail.indexOf(f.id)), f.id].join(' → ')}` }); return }
+    visiting.add(f.id); trail.push(f.id)
+    for (const g of late) if (g !== f && needs(f, g)) visit(g)
+    trail.pop(); visiting.delete(f.id); done.add(f.id); runOne(f)
   }
   for (const f of late) visit(f)
   if (issues.length) return { map, issues }

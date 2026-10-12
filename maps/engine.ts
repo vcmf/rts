@@ -29,7 +29,7 @@ const NOGO_DEPTH = 10               // m: a no-go cell's depth, past every wadin
 export function layersOf(file: string, seed?: number): { map: MapFile; layers: Layers } {
   const cat = JSON.parse(fs.readFileSync(path.join(ROOT, 'maps/kinds.json'), 'utf8')) as Catalogue
   const raw = JSON.parse(fs.readFileSync(path.resolve(ROOT, file), 'utf8')) as Record<string, unknown>
-  if (seed !== undefined) raw.seed = seed   // another battlefield from the same intent (docs/plans/active/m3-generators.md)
+  if (seed !== undefined && raw !== null && typeof raw === 'object' && !Array.isArray(raw)) raw.seed = seed   // another battlefield from the same intent (docs/plans/active/m3-generators.md); a file that is no map fails validation below
   const issues = validate(raw, cat)
   if (issues.length) throw new Error(`${file}: ${issues.slice(0, 5).map(i => `${i.id ?? ''} ${i.path}: ${i.message}`).join('; ')}`)
   const ex = expand(raw as unknown as MapFile, cat)
