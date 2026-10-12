@@ -98,8 +98,8 @@ StarCraft (§3.6): each is a run of cells with a height, a porosity (how see-thr
 That is the whole grammar. The other fields a feature may carry:
 - `preset` (a map-level preset, §3.2), `priority` (who wins an overlap; each kind has a default), `source` (where
   the data comes from), `state` (a scenario's changes: burnt, flooded, breached; §3.5);
-- the reference fields below (`on`, `carries`, `crosses`, `near`, `along`, `follow`), and `avoid`, `within` and
-  `min` on a `scatter` (§3.4);
+- the reference fields below (`on`, `carries`, `crosses`, `near`, `along`, `follow`), and a `scatter`'s `avoid`, `within` and
+  `min` inside its `gen` parameters (§3.4);
 - in the expanded map only, `origin` (§3.4).
 
 A crop's growth is its `stage`, an attribute, never `state`.
@@ -119,7 +119,7 @@ A crop's growth is its `stage`, an attribute, never `state`.
 
 ### 3.2 Kinds: a catalogue of presets
 
-`kind` is a dotted path through an era-generic catalogue (`data/kinds.json`, schema-checked). Each step of the
+`kind` is a dotted path through an era-generic catalogue (`maps/kinds.json`, checked by the validator). Each step of the
 path is a preset of attributes, and the deeper step overrides the shallower one:
 
 ```
@@ -149,7 +149,7 @@ touches no ruleset.
 | `zone` | `nogo`, `go` (overrides), `label` (names for the staff map) | `deploy` (belongs to scenarios; listed to be ruled out) |
 
 Attribute names per layer (closed lists; units in the schema):
-- **relief:** `height`, `width`, `profile` (round, flat, sharp), `steep` (the steeper side), `to`, `edge`;
+- **relief:** `height`, `width`, `profile` (round, flat, sharp), `steep` (the steeper side: `left` or `right` looking along the line, or `none`), `to`, `edge`;
 - **ground:** `material`, `moisture`, `stones`, `wear`, `snow`;
 - **veg:** `height` (m: a crop's or the canopy's top), `density`, `stage` (crops), `leaf`, `crownBase`,
   `undergrowth`, `rows` {`dir`, `spacing`}. Attributes are flat: each kind fills one vegetation layer, the low one
@@ -197,7 +197,8 @@ A state never changes the kind; it only sets attributes, so it always wins. A br
 state: the scenario adds a gap to that barrier (§3.6).
 
 Precedence, lowest first: the catalogue along the kind's path, the map preset, the feature's own fields, the
-season's overrides, the state's overlay.
+season's overrides (the catalogue's, then the feature's), the state's overlay. A season beats a fixed value: a
+field given its own crop height is still ploughed bare in winter, unless the feature overrides that season too.
 
 ### 3.6 Barriers on the grid
 
@@ -216,7 +217,8 @@ StarCraft. This is a deliberate simplification for play and for the editor:
 - **One rule makes the cells:** a cell belongs to the barrier when its centre lies closer to the line than half
   the thickness (`thickness × c / 2`), strictly, and its nearest point on the line is not one of the line's two
   free ends. Joints inside the line are round, so corners stay sealed; the ends are cut square, so a barrier stops
-  at its last point and two walls 4 m apart leave a 2-cell gate. Cell centres and line points are on whole metres, so the test is
+  at its last point and two walls 4 m apart leave a 2-cell gate. A barrier whose last point is its first is
+  closed (a walled yard): it has no free ends. Cell centres and line points are on whole metres, so the test is
   exact in integers (squared distances). Along an axis a 2-thick barrier is 2 cells, one on each side of the line;
   along a diagonal it is a staircase 3 cells across, which closes on every side. The sim, the draft view and the
   3D world all use this rule, from one function.
@@ -366,7 +368,7 @@ hedge and a village.
   "extent": { "w": 2400, "h": 2400 }, "play": { "w": 1500, "h": 1500 },
   "features": [
     { "id": "ground", "kind": "relief.base", "gen": { "noise": { "amplitude": 4, "scale": 400 } } },
-    { "id": "south-ridge", "kind": "relief.ridge", "line": [[-650, -300], [0, -260], [650, -320]], "height": 18, "width": 230, "steep": "south" },
+    { "id": "south-ridge", "kind": "relief.ridge", "line": [[-650, -300], [0, -260], [650, -320]], "height": 18, "width": 230, "steep": "right" },
     { "id": "north-ridge", "kind": "relief.ridge", "line": [[-650, 300], [650, 260]], "height": 14, "width": 260 },
     { "id": "meadows", "kind": "ground.meadow", "area": [[[-1200, -1200], [1200, -1200], [1200, 1200], [-1200, 1200]]], "priority": 0 },
     { "id": "brook", "kind": "water.stream", "line": [[-700, 20], [0, -10], [700, 30]], "width": 6, "depth": 0.8,

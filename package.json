@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "build:data": "node tools/build-sim-data.ts && node tools/build-look-data.ts",
-    "check:data": "node tools/build-sim-data.ts --check && node tools/build-look-data.ts --check",
+    "check:data": "node tools/build-sim-data.ts --check && node tools/build-look-data.ts --check && node tools/map.ts expand maps/two-ridges.map.json --check",
     "check:docs": "node tools/check-docs.mjs",
     "test": "npm run lint && npm run typecheck && vitest run",
     "coverage": "COVERAGE=1 vitest run --coverage",
