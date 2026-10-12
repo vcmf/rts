@@ -39,6 +39,9 @@ export interface Spec {
   // (docs/plans/done/w4-water-surface.md): within `band` m of the shoreline, on either side, the terrain and the
   // water paint the same colour (the drawn surfaces disagree on the shore by less: tools/water-look-check.mjs)
   water: { texel: number; depth: [number, number]; sdf: number; band: number; stones: number }   // stones: the most stones in the water whose foam the water paints (W5a)
+  // the ground's macro colour (docs/plans/active/l5-macro.md, L5a): baked at `texel` m over the tile and `far` m over
+  // the far ring, `bakeTile` texels square a draw; the cover grid (src/look/world/cover.ts) has `cover` m cells
+  macro: { texel: number; far: number; bakeTile: number; cover: number }
 }
 
 export const SPEC: Spec = {
@@ -53,6 +56,7 @@ export const SPEC: Spec = {
   detail: { px: 2048, lines: 1080, index: 400, amp: 0.4, minCos: 0.05 },
   bank: { texel: 0.5, reach: 14, fade: 3, edge: 10, paint: 7.5 },
   water: { texel: 0.5, depth: [-1, 2], sdf: 16, band: 0.75, stones: 24 },
+  macro: { texel: 0.5, far: 4, bakeTile: 512, cover: 2 },
 }
 
 export interface Derived {
@@ -62,6 +66,7 @@ export interface Derived {
   hfMargin: number      // heightfield nodes beyond the tile on each side
   footprint: number     // the largest ground distance from the focus to a frame corner over every allowed view, m
   bankN: number         // the bank normal map's texels per side
+  macroN: number; macroFarN: number   // the macro bakes' texels per side: the tile's, the far ring's
   waterN: number        // the water data's texels per side
   sbias: string         // the shadow bias, 0.96 m in the sun camera's depth, as shader text
   defines: string[]     // the numbers the shaders read as macros
@@ -130,11 +135,15 @@ export function derive(s: Spec = SPEC): Derived {
   if (!(s.bank.paint > 1 && s.bank.paint <= s.bank.reach - s.bank.fade)) bad.push('bank: the banks\' colours must reach past a metre and stay where the bank normals are whole (reach − fade)')
   if (!(Number.isInteger(s.water.stones) && s.water.stones > 0 && s.water.stones <= 64)) bad.push('water: the stones the water paints foam for must be a whole number, 1–64 (a fixed loop in the shader)')
   if (!(s.water.band > 0 && s.water.band < s.water.sdf / 2)) bad.push('water: the shore band must be positive and well inside the shore distance\'s range')
+  for (const [k, side, t] of [['tile', s.tile, s.macro.texel], ['far ring', s.far, s.macro.far], ['cover', s.far, s.macro.cover]] as const)
+    if (!isInt(side / t)) bad.push(`macro: the ${k} (${side} m) is not a whole number of ${t} m texels`)
+    else if (side / t > s.minSpec.maxTexture) bad.push(`bake: macro ${k} ${side / t}² > ${s.minSpec.maxTexture}² (min-spec)`)
+  if (!(s.macro.bakeTile >= 64 && s.macro.bakeTile <= 2048)) bad.push('macro: a bake draw must be 64–2048 texels square')
   if (!(s.detail.px > 0 && s.detail.lines > 0 && s.detail.index > 0 && s.detail.amp > 0 && s.detail.minCos > 0)) bad.push('detail: sizes must be positive')
   if (bad.length) throw new Error('world spec: ' + bad.join('; '))
   const sbias = (0.96 / (s.depth.far - s.depth.near)).toFixed(6)
   return {
-    spec: s, cell, farCell, band: s.tile / 2 + farCell, hfMargin: Math.ceil(s.aoMargin / cell), footprint, sbias, bankN: Math.round(s.tile / s.bank.texel), waterN: Math.round(s.tile / s.water.texel),
+    spec: s, cell, farCell, band: s.tile / 2 + farCell, hfMargin: Math.ceil(s.aoMargin / cell), footprint, sbias, bankN: Math.round(s.tile / s.bank.texel), macroN: Math.round(s.tile / s.macro.texel), macroFarN: Math.round(s.far / s.macro.far), waterN: Math.round(s.tile / s.water.texel),
     defines: [`#define SBIAS ${sbias}`, `#define FAR_W ${s.far.toFixed(1)}`, `#define TILE_HALF ${(s.tile / 2).toFixed(1)}`, `#define TILE_W ${s.tile.toFixed(1)}`,
       // amp: the grain's deviation, as a fraction of the texture's own; minCos: the incidence's floor (the pixel angle
       // is the uniform uPixA: it follows the camera's field of view)
@@ -156,6 +165,7 @@ export function shadowMapSize(d: Derived, boxW: number, boxH: number, sunSinElev
   // the two render targets also hold a depth buffer each (4 bytes a texel)
   const mb = 2 * bakeMB(w, h) + 2 * bakeMB(s.sizes.lightMap, s.sizes.lightMap) + bakeMB(s.sizes.aoTex, s.sizes.aoTex) + bakeMB(s.sizes.riverMask, s.sizes.riverMask) + bakeMB(s.sizes.reflMask, s.sizes.reflMask)
     + bakeMB(d.bankN, d.bankN) + bakeMB(d.waterN, d.waterN)   // the bank normals and the water data (no mips: src/look/span-texture.ts)
+    + (bakeMB(d.macroN, d.macroN) + bakeMB(d.macroFarN, d.macroFarN)) * 4 / 3 + bakeMB(s.far / s.macro.cover, s.far / s.macro.cover)   // the macro colour (mipmapped) and the cover grid
   if (mb > s.minSpec.bakeMB) throw new Error(`world spec: bake: ${mb.toFixed(0)} MB of bakes > ${s.minSpec.bakeMB} MB (min-spec)`)
   return { w, h }
 }

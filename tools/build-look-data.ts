@@ -1,5 +1,5 @@
 // Builds the look world's data (decision 0012, docs/plans/done/l0-spine.md L0a): the heightfield over the tile
-// plus its margin, the far ring's heights, the river's samples, the fine bank normals and the water data, from the
+// plus its margin, the far ring's heights, the river's samples, the fine bank normals, the water data and the cover, from the
 // authoring formulas in src/look/world/author.ts, once, in Node. The page reads the file and never evaluates the formulas.
 //   node tools/build-look-data.ts           writes data/painted-world.lookdata
 //   node tools/build-look-data.ts --check   rebuilds in memory and fails if it differs from the committed file
@@ -14,6 +14,7 @@ import { encodeLook, type LookData, type SpanGrid } from '../src/look/world/data
 import { bakeWater, packWater } from '../src/look/world/water-data.ts'
 import { sstep } from '../src/look/noise.ts'
 import { riverQuery } from '../src/look/river.ts'
+import { authorCover } from '../src/look/world/cover.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const LOOK_FILE = path.join(ROOT, 'data/painted-world.lookdata')
@@ -58,6 +59,7 @@ export function buildLookData(): Uint8Array {
     river: w.samples,
     bank: bankNormals(w.H),
     water: packWater(bakeWater(w.H)),
+    cover: authorCover(s.far, s.macro.cover),
   }
   return encodeLook(data)
 }

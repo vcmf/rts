@@ -38,6 +38,9 @@ describe('world spec', () => {
     ['no shore band', s => { s.water.band = 0 }, /water: the shore band/],
     ['bank colours past the bank normals', s => { s.bank.paint = 13 }, /bank: the banks' colours/],
     ['too many stones for the foam loop', s => { s.water.stones = 100 }, /water: the stones/],
+    ['macro texels not dividing the tile', s => { s.macro.texel = 0.3 }, /macro: the tile/],
+    ['a macro bake over the min-spec texture size', s => { s.macro.far = 0.25 }, /bake: macro far ring/],
+    ['a macro bake draw out of range', s => { s.macro.bakeTile = 16 }, /macro: a bake draw/],
   ]
   for (const [name, f, msg] of cases) it(`throws: ${name}`, () => { expect(() => derive(with_(f))).toThrow(msg) })
   it('sizes the shadow map at the texel target on the ground, and refuses one over min-spec', () => {
@@ -80,6 +83,7 @@ describe('look data', () => {
     expect(() => checkLookData(derive(with_(s => { s.aoMargin = 60; s.aoRing = 60 })), d)).toThrow(/heightfield .* nodes/)
     expect(() => checkLookData(derive(with_(s => { s.far = 2600 + 2 * 2600 / 182; s.farSub = 184 })), d)).toThrow(/far ring/)
     expect(() => checkLookData(derive(with_(s => { s.water.texel = 1 })), d)).toThrow(/water data/)
+    expect(() => checkLookData(derive(with_(s => { s.macro.cover = 4 })), d)).toThrow(/cover/)
   })
   it('the committed file is what the authoring step builds (else run node tools/build-look-data.ts)', () => {
     expect(Buffer.compare(fs.readFileSync(LOOK_FILE), Buffer.from(buildLookData()))).toBe(0)
