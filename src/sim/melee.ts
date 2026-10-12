@@ -243,13 +243,12 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
 /* ---------------- step 4: the square against cavalry ---------------- */
 // an enemy in the fight of a type that charges (from `chargers`, n of them), within refuge.alert of battalion i,
 // charging it, or standing or closing: anything but riding away faster than refuge.closing (a regiment at the
-// halt can charge in seconds). A blown regiment cannot charge: it threatens only once its rest ends within
-// refuge.hold, time for the battalion to form (S1e-3: a resting regiment no longer puts a side into square)
+// halt can charge in seconds)
 const chargers = new Int32Array(MAX_FORMATIONS)
 function threatened(w: World, i: number, n: number): boolean {
-  const f = w.f, Q = w.cr.rs.melee.refuge, h = handleOf(w, i), soon = w.meta[M_TICK] + 1 + Math.round(Q.hold * TICK_HZ)
+  const f = w.f, Q = w.cr.rs.melee.refuge, h = handleOf(w, i)
   for (let k = 0; k < n; k++) {
-    const j = chargers[k]; if (f.side[j] === f.side[i] || f.blownUntil[j] > soon) continue
+    const j = chargers[k]; if (f.side[j] === f.side[i]) continue
     const dx = f.x[i] - f.x[j], dz = f.z[i] - f.z[j], d = sqrt(dx * dx + dz * dz)
     if (d > Q.alert) continue
     if (f.chTarget[j] === h && (f.chPhase[j] === CH_CLOSING || f.chPhase[j] === CH_TESTED)) return true
@@ -257,9 +256,8 @@ function threatened(w: World, i: number, n: number): boolean {
   }
   return false
 }
-// any enemy charging type in the fight within refuge.alert of battalion i, whatever it is doing, blown or not: a
-// battalion does not form back while cavalry is still near (a recoiling regiment rides 80 m, longer than
-// refuge.hold, and halts; a blown one is ready again in charge.rest)
+// any enemy charging type in the fight within refuge.alert of battalion i, whatever it is doing: a battalion does
+// not form back while cavalry is still near (a recoiling regiment rides 80 m, longer than refuge.hold, and halts)
 function nearby(w: World, i: number, n: number): boolean {
   const f = w.f, A = w.cr.rs.melee.refuge.alert
   for (let k = 0; k < n; k++) { const j = chargers[k]; if (f.side[j] === f.side[i]) continue

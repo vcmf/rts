@@ -71,7 +71,7 @@ draw").
 **`s1e-battle`** (`src/scenarios/s1e-battle.ts`): you command side 0, on the southern ridge in two lines of three.
 Side 1, veterans four up and two back, follows its plan: its first line comes down to the stream, halts about
 130 m from yours to dress and closes to 70 m, overlapping your line at both ends; its regiment charges your
-battery and rides back; its second line comes up as a second wave. With no orders from you it wins in about 17
+battery and rides back; its second line comes up as a second wave. With no orders from you it wins in 17–19
 minutes; saving your guns wins it for you (`docs/plans/active/s1e3-playtest.md`).
 
 ## Verification

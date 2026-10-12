@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-11
 code: [src/sim/melee.ts, src/sim/formation.ts, src/sim/commands.ts, src/sim/morale.ts, src/rulesets/napoleonic.ts, src/scenarios/s1d-charge.ts, tools/calibrate-charge.ts, test/charge.test.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine]
 ---
@@ -127,11 +127,9 @@ with contagion, after relaxing (`morale.ts`).
 
 **The square against cavalry** (step 4, `standingStep`), for each battalion whose type names a refuge
 (`UnitType.refuge`), in the fight and not in melee:
-- **A threat:** an enemy in the fight of a type that charges and is not blown, within `refuge.alert` (200 m,
-  centre to centre), either charging it or anything but riding away faster than `refuge.closing`. A regiment at
-  the halt can charge in seconds; a blown one cannot charge, so it threatens only once its rest ends within
-  `refuge.hold`, time to form (S1e-3: a regiment resting after its melee put every battalion near it into square).
-  A square already formed still holds while it is near (below).
+- **A threat:** an enemy in the fight of a type that charges, within `refuge.alert` (200 m, centre to centre),
+  either charging it or anything but riding away faster than `refuge.closing`. A regiment at the halt can
+  charge in seconds.
 - **Forming:** after `refuge.react` seconds of unbroken threat, with the threat present, a battalion not in its
   refuge and not changing into it starts the change itself (not an order). The shape it came from is kept
   (`autoFrom`). A change that cannot be made there (a wood, the water) is tried again every 5 s; nothing is
@@ -140,8 +138,8 @@ with contagion, after relaxing (`morale.ts`).
   it, formed by itself, in a spell no player's order stood down, in the fight and not in melee. A sheltering
   battalion stands, keeps its orders (a scenario's plan's) for after, and fires as a halted one does. A rout, a
   melee, a player's order or the spell's end ends it, with nothing to undo.
-- **The spell ends** when `refuge.hold` seconds pass with no threat and no enemy charging type, blown or not, is
-  within `refuge.alert` at all. The battalion forms back into its old shape (tried every 5 s while that cannot be made
+- **The spell ends** when `refuge.hold` seconds pass with no threat and no enemy charging type is within
+  `refuge.alert` at all. The battalion forms back into its old shape (tried every 5 s while that cannot be made
   there; a shape changed meanwhile by an order is kept) and goes on with its orders.
 - **The player's order wins:** any order given during a spell of threat stands the behaviour down until the
   spell ends (`refugeOff`) and forgets the shape to form back into. A scenario's plan's order does not stand it
