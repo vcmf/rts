@@ -1,4 +1,4 @@
-// The map validator (docs/proposals/map-engine.md §4, docs/plans/active/m1-language.md): every problem in a map
+// The map validator (docs/proposals/map-engine.md §4, docs/plans/done/m1-language.md): every problem in a map
 // file, each with the feature's id and a JSON path, as values, never thrown. Generic over the kinds catalogue:
 // which attributes exist, their types, units and ranges, and which kinds may set them are the catalogue's data.
 import type { Catalogue, Feature, MapFile, Pt } from './schema.ts'

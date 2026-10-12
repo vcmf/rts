@@ -1,4 +1,4 @@
-// The map CLI (docs/proposals/map-engine.md §8, docs/plans/active/m1-language.md), against the kinds catalogue in
+// The map CLI (docs/proposals/map-engine.md §8, docs/plans/done/m1-language.md), against the kinds catalogue in
 // maps/kinds.json:
 //   node tools/map.ts check <map.json>        validate; print every problem with its feature id and path; exit 1 if any
 //   node tools/map.ts expand <map.json>       validate and write <map>.expanded.json beside it (generators arrive in M3)

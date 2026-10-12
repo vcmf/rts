@@ -6,7 +6,7 @@ import { defineConfig, type Plugin } from 'vite'
 // __BUILD__: the commit a page was built from (the look bench records it), "-dirty" with uncommitted changes to
 // tracked files or new files in src/, app/, tools/
 const build = (() => { try { return execSync('git rev-parse --short HEAD').toString().trim() + (execSync('git status --porcelain --untracked-files=no').toString().trim() || execSync('git status --porcelain -- src app tools').toString().trim() ? '-dirty' : '') } catch { return 'unknown' } })()
-// the map draft page (app/map.html, docs/plans/active/m1-language.md M1b): a saved map file or the kinds catalogue
+// the map draft page (app/map.html, docs/plans/done/m1-language.md M1b): a saved map file or the kinds catalogue
 // is sent to the page as `map-changed` (with the time the server saw it), instead of a full reload
 const mapsHot: Plugin = {
   name: 'maps-hot',

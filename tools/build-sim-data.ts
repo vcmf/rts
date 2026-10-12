@@ -1,6 +1,7 @@
 // Builds the simulation's input data (docs/proposals/sim-design.md §2, decision 0012) from a map
-// definition, once, in Node: the sim heightfield (1.79 m nodes) and the cost grid (7.16 m cells), as one
-// little-endian file in data/, with the 1 m terrain class and water depth grids (format 2). Its FNV-1a
+// definition, once, in Node: the sim heightfield and the cost grid (1.79 m nodes and 7.16 m cells for the legacy maps;
+// 2 m and 8 m for the map engine's, decision 0021), as one little-endian file in data/, with the terrain class and
+// water depth grids (1 m on the formation field, 2 m on the others) (format 2). Its FNV-1a
 // hash is the data version the sim asserts on load.
 //   node tools/build-sim-data.ts           writes data/<map>.simdata for every map and prints their versions
 //   node tools/build-sim-data.ts --check   rebuilds them in memory and fails if one differs from data/
@@ -11,13 +12,16 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { formationField, type MapDef } from '../maps/formation-field.ts'
 import { battlefield } from '../maps/battlefield.ts'
+import { engineMap } from '../maps/engine.ts'
 import { fnv1a } from '../src/sim/hash.ts'
 import { DATA_MAGIC, DATA_FORMAT, hex } from '../src/sim/data.ts'
 
-export const HEIGHT_CELL = 1.79, COST_CELL = 4 * HEIGHT_CELL   // decision 0012; sim-design §7
+// the legacy maps' cells (decision 0012, sim-design §7); the map engine's maps carry their own (decision 0021: 2 m, 8 m)
+export const LEGACY_HEIGHT_CELL = 1.79, LEGACY_COST_CELL = 4 * LEGACY_HEIGHT_CELL
 const SUB = 8   // ground samples per cost cell side
 
 export function buildSimData(map: MapDef): Uint8Array {
+  const HEIGHT_CELL = map.cells?.height ?? LEGACY_HEIGHT_CELL, COST_CELL = map.cells?.cost ?? LEGACY_COST_CELL
   const span = 2 * map.half, x0 = -map.half, z0 = -map.half
   const hn = Math.floor(span / HEIGHT_CELL) + 1
   const heights = new Float64Array(hn * hn)
@@ -26,6 +30,7 @@ export function buildSimData(map: MapDef): Uint8Array {
   // (else impassable), times the slope factor of the steepest node-to-node rise in the cell
   const cn = Math.floor(span / COST_CELL), cost = new Uint8Array(cn * cn)
   const hAt = (i: number, j: number) => heights[Math.min(hn - 1, j) * hn + Math.min(hn - 1, i)]
+  const step = Math.round(COST_CELL / HEIGHT_CELL)   // height nodes per cost cell side (4)
   for (let cj = 0; cj < cn; cj++) for (let ci = 0; ci < cn; ci++) {
     let inv = 0, pass = 0
     for (let b = 0; b < SUB; b++) for (let a = 0; a < SUB; a++) {
@@ -33,7 +38,7 @@ export function buildSimData(map: MapDef): Uint8Array {
       if (g > 0) { inv += 1 / g; pass++ }
     }
     let rise = 0
-    for (let j = cj * 4; j < cj * 4 + 4; j++) for (let i = ci * 4; i < ci * 4 + 4; i++)
+    for (let j = cj * step; j < cj * step + step; j++) for (let i = ci * step; i < ci * step + step; i++)
       rise = Math.max(rise, Math.abs(hAt(i + 1, j) - hAt(i, j)) / HEIGHT_CELL, Math.abs(hAt(i, j + 1) - hAt(i, j)) / HEIGHT_CELL)
     const g = pass * 2 >= SUB * SUB ? (pass / inv) * map.slopeFactor(rise) : 0
     cost[cj * cn + ci] = Math.max(0, Math.min(255, Math.round(g * 255)))
@@ -48,7 +53,7 @@ export function buildSimData(map: MapDef): Uint8Array {
   f64(COST_CELL); u32(cn); u32(cn); f64(x0); f64(z0); buf.set(cost, o); o += cost.length
   // the 1 m grid: class index per node, water depth in mm
   u32(map.classes.length); for (const c of map.classes) { u32(c.length); for (let q = 0; q < c.length; q++) v.setUint8(o++, c.charCodeAt(q)) }
-  f64(map.fine.cell); u32(fn); u32(fn); f64(x0); f64(z0)
+  f64(map.fine.cell); u32(fn); u32(fn); f64(x0 + (map.fine.origin ?? 0)); f64(z0 + (map.fine.origin ?? 0))
   for (let j = 0; j < fn; j++) for (let i = 0; i < fn; i++) v.setUint8(o++, map.fine.classAt(i, j))
   for (let j = 0; j < fn; j++) for (let i = 0; i < fn; i++) { v.setUint16(o, Math.min(65535, Math.round(map.fine.depthAt(i, j) * 1000)), true); o += 2 }
   if (o !== size) throw new Error('size mismatch')
@@ -59,7 +64,8 @@ export const dataFile = (name: string): string => path.join(path.dirname(fileURL
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let ok = true
-  for (const map of [await formationField(), battlefield()]) {
+  // the legacy maps (TypeScript definitions), then the map engine's (docs/plans/active/m2-sim.md)
+  for (const map of [await formationField(), battlefield(), engineMap('valley', 'maps/valley.map.json')]) {
     const bytes = buildSimData(map), file = dataFile(map.name)
     if (process.argv.includes('--check')) {
       const old = fs.existsSync(file) ? fs.readFileSync(file) : Buffer.alloc(0), same = Buffer.compare(Buffer.from(bytes), old) === 0
