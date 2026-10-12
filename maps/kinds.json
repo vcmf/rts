@@ -65,7 +65,7 @@
     "lang": { "layers": ["zone"], "type": "string" }
   },
   "kinds": {
-    "relief.base": { "shapes": ["none"], "refs": {}, "set": {}, "note": "the gentle ground between landforms; needs a generator (noise, M3) or is flat at the datum" },
+    "relief.base": { "shapes": ["none"], "refs": {}, "set": { "height": 0, "width": 400 }, "note": "the gentle ground between the landforms: seeded value noise over the whole extent, ± height at the scale of width (m); flat at the datum with no height" },
     "relief.hill": { "shapes": ["point", "circle", "ellipse"], "set": { "height": 10, "width": 120, "profile": "round" } },
     "relief.ridge": { "shapes": ["line"], "set": { "height": 15, "width": 200, "profile": "round", "steep": "none" } },
     "relief.valley": { "shapes": ["line"], "set": { "height": -8, "width": 200, "profile": "round", "steep": "none" } },

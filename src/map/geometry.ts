@@ -94,3 +94,30 @@ export function barrierProblem(line: Pt[]): [number, string] | null {
   }
   return null
 }
+
+// the point at distance s along a polyline, and the unit tangent there: [x, z, tx, tz]
+export function pointAt(line: Pt[], s: number): [number, number, number, number] {
+  let acc = 0
+  for (let k = 0; k + 1 < line.length; k++) {
+    const [ax, az] = line[k], [bx, bz] = line[k + 1], dx = bx - ax, dz = bz - az, L = Math.sqrt(dx * dx + dz * dz)
+    if (acc + L >= s || k + 2 === line.length) { const t = Math.min(1, Math.max(0, (s - acc) / L)); return [ax + t * dx, az + t * dz, dx / L, dz / L] }
+    acc += L
+  }
+  return [line[0][0], line[0][1], 1, 0]
+}
+
+// every point where two polylines cross, in order along the first
+export function crossings(a: Pt[], b: Pt[]): Pt[] {
+  const out: Pt[] = []
+  for (let i = 0; i + 1 < a.length; i++) for (let j = 0; j + 1 < b.length; j++) {
+    const p = a[i], q = a[i + 1], r = b[j], s = b[j + 1]
+    const d = (q[0] - p[0]) * (s[1] - r[1]) - (q[1] - p[1]) * (s[0] - r[0])
+    if (d === 0) continue
+    const t = ((r[0] - p[0]) * (s[1] - r[1]) - (r[1] - p[1]) * (s[0] - r[0])) / d, u = ((r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0])) / d
+    if (t < 0 || t > 1 || u < 0 || u > 1) continue
+    const hit: Pt = [p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])]
+    const last = out[out.length - 1]
+    if (!last || last[0] !== hit[0] || last[1] !== hit[1]) out.push(hit)   // a crossing at a shared vertex counts once
+  }
+  return out
+}

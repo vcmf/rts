@@ -64,7 +64,7 @@ export const dataFile = (name: string): string => path.join(path.dirname(fileURL
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let ok = true
-  // the legacy maps (TypeScript definitions), then the map engine's (docs/plans/active/m2-sim.md)
+  // the legacy maps (TypeScript definitions), then the map engine's (docs/plans/done/m2-sim.md)
   for (const map of [await formationField(), battlefield(), engineMap('valley', 'maps/valley.map.json')]) {
     const bytes = buildSimData(map), file = dataFile(map.name)
     if (process.argv.includes('--check')) {

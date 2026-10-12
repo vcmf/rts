@@ -186,14 +186,14 @@ describe('M1a: resolution follows the catalogue, the preset, the feature, the se
 
 describe('M1a: expansion and the layout', () => {
   it('a map without generators expands to itself, sorted by id', () => {
-    const { map, issues } = expand(BASE)
+    const { map, issues } = expand(BASE, cat)
     expect(issues).toEqual([])
     expect(map.features.map(x => x.id)).toEqual(BASE.features.map(x => x.id).sort())
     expect(validate(map, cat)).toEqual([])
   })
-  it('a generator is reported, not run, until M3', () => {
-    const m = clone(BASE); f(m, 'wood').gen = { clump: { coherence: 0.6 } }
-    expect(expand(m).issues[0]).toMatchObject({ id: 'wood', path: 'features[6].gen' })
+  it('a generator still to come (M3b) is reported, not run', () => {
+    const m = clone(BASE); f(m, 'wood').gen = { scatter: {} }
+    expect(expand(m, cat).issues[0]).toMatchObject({ id: 'wood', path: 'features[6].gen' })
   })
   it('the layout round-trips and puts one feature per line', () => {
     const text = formatMap(BASE)
@@ -202,7 +202,7 @@ describe('M1a: expansion and the layout', () => {
   })
   it("the example's committed expansion matches a fresh one", () => {
     const ex = JSON.parse(fs.readFileSync(path.join(root, 'maps/two-ridges.map.json'), 'utf8')) as MapFile
-    expect(fs.readFileSync(path.join(root, 'maps/two-ridges.expanded.json'), 'utf8')).toBe(formatMap(expand(ex).map))
+    expect(fs.readFileSync(path.join(root, 'maps/two-ridges.expanded.json'), 'utf8')).toBe(formatMap(expand(ex, cat).map))
   })
 })
 

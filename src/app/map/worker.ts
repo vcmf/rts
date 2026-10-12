@@ -19,7 +19,7 @@ self.onmessage = (e: MessageEvent<CompileRequest>) => {
 function compile(seq: number, map: unknown, cat: Catalogue): void {
   const t0 = performance.now(), issues = validate(map, cat)
   if (issues.length) { (self as unknown as Worker).postMessage({ seq, ok: false, issues } satisfies CompileReply); return }
-  const ex = expand(map as MapFile)
+  const ex = expand(map as MapFile, cat)
   if (ex.issues.length) { (self as unknown as Worker).postMessage({ seq, ok: false, issues: ex.issues } satisfies CompileReply); return }
   const t1 = performance.now(), L = apply(ex.map, cat), t2 = performance.now(), img = draft(L), t3 = performance.now()
   const layers = Object.fromEntries(LAYER_NAMES.map(n => [n, L[n].buffer as ArrayBuffer])) as Record<LayerName, ArrayBuffer>

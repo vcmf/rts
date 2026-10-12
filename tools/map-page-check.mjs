@@ -8,6 +8,7 @@
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
+import net from 'node:net'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -17,7 +18,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const outDir = process.argv[2] ?? fs.mkdtempSync(path.join(os.tmpdir(), 'map-page-'))
 const mapFile = path.resolve(ROOT, process.argv[3] ?? 'maps/two-ridges.map.json'), mapName = path.basename(mapFile, '.map.json')
 const mapId = JSON.parse(fs.readFileSync(mapFile, 'utf8')).id
-const PORT = 5191, LIMIT_MS = 1000
+const LIMIT_MS = 1000
+// a free port, so the check never collides with another server (another worktree's, another session's)
+const PORT = await new Promise((res, rej) => { const srv = net.createServer(); srv.on('error', rej); srv.listen(0, '127.0.0.1', () => { const { port } = srv.address(); srv.close(() => res(port)) }) })
 const original = fs.readFileSync(mapFile, 'utf8')
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 let failed = 0

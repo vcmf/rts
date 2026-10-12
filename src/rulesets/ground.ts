@@ -1,4 +1,4 @@
-// What lies on a cell of a map, as a ruleset reads it (docs/proposals/map-engine.md §6, docs/plans/active/m2-sim.md):
+// What lies on a cell of a map, as a ruleset reads it (docs/proposals/map-engine.md §6, docs/plans/done/m2-sim.md):
 // the attributes the map engine resolved for the cell's layers, as plain data, so a ruleset can classify ground
 // without importing the map engine. The map records what is there; the ruleset decides what it means for play
 // (decision 0015).
