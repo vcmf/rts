@@ -222,3 +222,44 @@ L5a 3–4 days; L5b 2 days of work plus the judges' time.
   linear-light luma had counted dark earth's flicker too little and snow's too much). The snow's edge on fields
   breaks on the grain's soft blotches over a wider fixed band (a width from `fwidth` stepped by 2×2 pixels, as in
   W5b).
+
+## Results, L5a (dev Mac, against main with W5b as the base)
+
+- **The arms:** flat, shader and bake render on the terrain, the far ring and the shore band alike, switched by
+  `?macro=` or `__look.macro.setArm()`.
+- **Classes** (`node tools/macro-check.mjs <url>`, `classes`): the median ΔE 2000 across the cover's class edges,
+  24 px apart, summer. Field against grass: bake 11.9, shader 14.4, flat 14.9. Road against grass: bake 8.6, shader
+  12.1, flat 14.3 (all ≥ 8; 10 at roads was planned, but a road that far from the meadow in value hid the Austrian
+  white, so it reads by hue: `Changes` above). The sabotage (one colour for every class) fails at 6.3 and 6.6.
+- **Shimmer** (`shimmer`, sRGB luma over 8/255, field pixels, SwiftShader). Worst pair, closest / widest, summer
+  then winter: main 0.65% / 1.01%, 1.24% / 1.74%; bake 0.40% / 0.59%, 1.21% / 1.75%; shader 0.48% / 1.09%,
+  1.21% / 1.81%; flat 0.56% / 0.89%, 1.24% / 1.74%. The sabotage (hard stripes, never faded) fails in winter
+  at the closest zoom (1.84%).
+- **Seam:** exact (largest 0/255) in every view, in each arm (`tools/water-look-check.mjs --only seam`).
+- **Determinism:** the bakes' hashes equal on load, on a rebake and on a second load.
+- **Bake:** at the page's sizes (1600² and 650²) 40–64 ms on the Mac's GPU on load and 7–13 ms a rebake, 0.35–0.9 s
+  under SwiftShader; 15.2 MB with mips. The full-size run (3600²) 1.0–3.2 s under SwiftShader, 65.9 MB, the context
+  held. Textures in all: 224.7 MB on main, 246.3 MB.
+- **Readability guard** (`tools/guard.mjs`, the start view and the new `--view cover`): no block that separates on
+  the base fails; the Austrian white in winter fails on main too.
+- **Existing checks:** `tools/check-negatives.mjs`, `tools/water-check.mjs --selftest`, `tools/water-look-check.mjs
+  --selftest`, `tools/detail-check.mjs --selftest`, `npm run check:data`, the docs check: pass. `npm test`: 254 of
+  255 with the checks' Chromes just finished (the sim's cost test, `test/soldiers.test.ts`, 12.6 ms against 12); it
+  passes alone (L5a touches no sim file).
+- **Cost** (Metal proxy, `?bench` on main against `?bench=macro`, two alternating runs per build and season,
+  1920×1080; GPU medians). Terrain pass, close / default / wide, summer: main 1.92 / 2.64 / 4.44 ms, bake 1.97 /
+  2.70 / 4.51, flat 1.75 / 2.37 / 3.92, shader 2.95 / 4.44 / 7.58; winter within 0.15 ms of these. The bake arm is
+  within 0.07 ms of main everywhere (acceptance: 0.2). The terrain line's 1.5 ms is the laptop's budget; main is over
+  it on this proxy already. The shader arm costs 1–3 ms more: if it wins L5b's judging, its cost (review round 2,
+  finding 9: every class's reads taken always) comes first. `tools/bench-look.mjs` kept dropping `?bench=macro`
+  (fixed here).
+- **Comparison page:** main against the three arms at nine views, summer and winter (a private artifact, linked
+  from the PR).
+- **Review:** round 1 (severe: WebGL1 could not mipmap the non-power-of-two bakes, so they read black; no rebake on a
+  restored context; derivatives taken in branches, so the bake differed run to run) fixed. Round 2 (nothing severe;
+  fixed and stopped): the shimmer's luma from sRGB, the water's snow lie, WebGL1 opening in the shader arm, one bounce
+  in every arm, whole-texel viewports, the meadow's reads with explicit derivatives, the far bushes' index, the
+  scatter's nine probes, a cheaper shader-arm snow lie. Not fixed: finding 9 (cost, above).
+- **Known limits:** the cover is authored here until the map format's compiler writes the grid; the staff map does not
+  read the macro colour; stubble and wheat still turn warm orange in the golden light; the bake's road contrast is
+  near its gate.
