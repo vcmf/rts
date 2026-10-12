@@ -8,6 +8,20 @@
 //   MACRO_BAKE    the bake, read: arm 3
 // the cover grid (nearest): class, field id, furrow direction, wear distance
 uniform sampler2D uCover;
+// The world position's screen derivatives, taken by each shader's main before any branch (macroDerivs): every read
+// below passes them explicitly, so a read in a branch the pixels of a 2×2 quad take differently (a class edge, the
+// shore band's sides) still picks its mip level right. Where no main sets them (a tree's root: one point) they are 0,
+// the finest level. Without them, on the Mac's GPU, the bake differed run to run. WebGL1 has no textureGrad: there
+// the reads take their implicit derivatives, as before L5.
+vec2 pMdx=vec2(0.0),pMdy=vec2(0.0);
+void macroDerivs(vec2 xz){pMdx=dFdx(xz);pMdy=dFdy(xz);}
+float pxMacro(){return max(abs(pMdx.x)+abs(pMdy.x),abs(pMdx.y)+abs(pMdy.y));}   // the pixel's footprint, m (pxGround's)
+// a texture over world space at s m a repeat, uv = xz/s (+ an offset)
+#ifdef WEBGL2
+vec4 texM(sampler2D t,vec2 uv,float s){return textureGrad(t,uv,pMdx/s,pMdy/s);}
+#else
+vec4 texM(sampler2D t,vec2 uv,float s){return texture2D(t,uv);}
+#endif
 // the snow's lie's zero, a byte (128/255), and under a byte from it the lie is 0: off the fields the bake's 8 bits
 // then read 0, so snowAt keeps its own edge there, as the water's shore band does (the seam)
 #define LIE0 0.50196078
@@ -22,8 +36,9 @@ vec4 coverAt(vec2 xz){vec4 t=texture2D(uCover,xz/FAR_W+0.5);return vec4(floor(t.
 vec3 classColour(float k,float v){
   return k<1.5?mix(vec3(0.27,0.43,0.21),vec3(0.38,0.50,0.25),v)      // pasture (0 is the meadow: groundMeadow)
         :k<2.5?mix(vec3(0.17,0.29,0.22),vec3(0.25,0.36,0.25),v)      // wood floor
-        :k<3.5?mix(vec3(0.63,0.60,0.53),vec3(0.70,0.67,0.59),v)      // road: pale dust, cooler than the meadow's golds
-        :k<4.5?mix(vec3(0.58,0.56,0.48),vec3(0.66,0.63,0.54),v)      // track
+        :k<3.5?mix(vec3(0.48,0.49,0.50),vec3(0.54,0.55,0.56),v)      // road: cool grey dust, a mid value (it reads against the
+                                                                       // meadow by hue: a pale road hid the Austrian white, the guard)
+        :k<4.5?mix(vec3(0.49,0.48,0.46),vec3(0.55,0.54,0.52),v)      // track
         :k<5.5?mix(vec3(0.50,0.46,0.38),vec3(0.58,0.53,0.43),v)      // village ground (trodden earth: cellColour mixes grass in)
         :k<6.5?mix(vec3(0.51,0.47,0.32),vec3(0.57,0.52,0.36),v)      // wheat: olive-gold straw (the warm sun turns it gold), between the dark coats and the white
         :k<7.5?mix(vec3(0.37,0.50,0.20),vec3(0.45,0.56,0.24),v)      // green crop
@@ -33,12 +48,11 @@ vec3 classColour(float k,float v){
 }
 // the grain's soft blotches at about scale s m without its repeat: G(xz/s) tiles every s m, so two reads at
 // unrelated scales are mixed wherever a repeat would show
-float blot(vec2 xz,float s){return G(xz/s).g*0.6+G(xz/(s*2.618)+0.37).g*0.4;}
-// The grain at a point, read once and outside any branch: a texture read in a branch the pixels of a 2×2 quad take
-// differently (a class edge) has undefined derivatives, and on some GPUs a different result each run (the bake was not
-// deterministic). Every function below is arithmetic on these.
+float blot(vec2 xz,float s){return texM(uGrain,xz/s,s).g*0.6+texM(uGrain,xz/(s*2.618)+0.37,s*2.618).g*0.4;}
+// The grain at a point, read once: every function below is arithmetic on these (the class's colours and the stripes
+// pick among them by class, after the reads)
 struct Grain{vec3 meadow;float v,village,stripe,wear,wearDab;};
-Grain grainAt(vec2 xz){return Grain(groundMeadow(xz),G(xz/90.0).g,blot(xz+0.7,13.0),blot(xz,17.0),blot(xz+0.3,6.0),blot(xz+0.6,2.7));}
+Grain grainAt(vec2 xz){return Grain(groundMeadow(xz),texM(uGrain,xz/90.0,90.0).g,blot(xz+0.7,13.0),blot(xz,17.0),blot(xz+0.3,6.0),blot(xz+0.6,2.7));}
 // the colour of one cover cell: the class with its variation; a field's own shade from its id
 vec3 cellColour(vec4 cv,Grain g){
   #ifdef MACRO_SAB_ONECLASS
@@ -87,17 +101,20 @@ vec4 macro(vec2 xz,float q,float px){
   }else c=cellColour(cv,g);
   float b=stripeBand(cv,xz,px,g);c*=1.0+stripeValue(cv.x)*b;c=wear(c,cv,g);
   return vec4(c,LIE0-(b*stripeSnow(cv.x)+trodden(cv.x))/1.2);}
-// the shader arm's macro at a point, once a pixel (the colour and the snow's lie both read it; every pixel of a quad
-// takes the first call's branch, so the grain's reads keep their derivatives)
+// the shader arm's macro, and the bake arm's read, at a point, once a pixel (the colour and the snow's lie both use
+// them)
 vec2 pMacroXZ=vec2(1e9);vec4 pMacro;
 vec4 macroOnce(vec2 xz,float px){if(xz!=pMacroXZ){pMacroXZ=xz;pMacro=macro(xz,0.0,px);}return pMacro;}
+#ifdef MACRO_BAKE
+// the tile's bake, handing over to the far ring's over the tile's last 60 m (both read always)
+vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
+  pMacro=mix(texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W),texM(uMacroFar,xz/FAR_W+0.5,FAR_W),smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y))));}
+  return pMacro;}
+#endif
 // THE GROUND'S COLOUR the terrain and the shore band start from, by arm; past them all, main's (groundBase)
 vec3 groundAt(vec2 xz,float px){
   #if defined(MACRO_BAKE)
-  // the tile's bake, handing over to the far ring's over the tile's last 60 m (both read always: a texture read in a
-  // branch some pixels of a quad skip has no derivatives)
-  vec3 a=texture2D(uMacro,(xz+TILE_HALF)/TILE_W).rgb,b=texture2D(uMacroFar,xz/FAR_W+0.5).rgb;
-  return mix(a,b,smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y))));
+  return bakeOnce(xz).rgb;
   #elif defined(MACRO_SHADER)
   return macroOnce(xz,px).rgb;
   #elif defined(MACRO_FLAT)
@@ -124,11 +141,20 @@ float classAt(vec2 xz){
 float snowLie(vec2 xz,float px){
   float k=1.0-smoothstep(0.35,1.2,px);
   #if defined(MACRO_BAKE)
-  float a=texture2D(uMacro,(xz+TILE_HALF)/TILE_W).a,b=texture2D(uMacroFar,xz/FAR_W+0.5).a;
-  return lieOf(mix(a,b,smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y)))))*k;
+  return lieOf(bakeOnce(xz).a)*k;
   #elif defined(MACRO_SHADER)
   return lieOf(macroOnce(xz,px).a)*k;
   #else
   return 0.0;
+  #endif
+}
+// the ground's colour under a tree or a tuft, for its bounce (nature.frag): the bake where there is one; else the
+// class's flat colour (one read: the full macro per fragment of every instance would cost the shader arm dearly, and
+// its result is the same over an instance)
+vec3 groundBounce(vec2 xz){
+  #if defined(MACRO_BAKE)
+  return bakeOnce(xz).rgb;
+  #else
+  float k=coverAt(xz).x;return k<0.5?vec3(0.43,0.51,0.24):classColour(k,0.5);
   #endif
 }

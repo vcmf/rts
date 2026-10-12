@@ -87,7 +87,7 @@ vec3 bankPaint(vec3 c,vec2 xz,float land,float h,float ny){
 // the shore band's ground: the terrain's (groundAt, stony where steep) with the banks painted over it, through the
 // seasons: the same colour the terrain paints there
 vec3 landAlbedo(vec2 xz,float land,float h){float ny=bankNormal(vec3(0.0,1.0,0.0),xz).y;
-  return groundSeason(bankPaint(groundSteep(groundAt(xz,max(fwidth(xz).x,fwidth(xz).y)),ny),xz,land,h,ny));}
+  return groundSeason(bankPaint(groundSteep(groundAt(xz,pxMacro()),ny),xz,land,h,ny));}
 // the bed: silt in pools, pale gravel where the current runs, weed in slow deeper water; the damp edge at depth 0
 // la: the ground at the water's edge (used to 0.3 m deep)
 vec3 bedAlbedo(vec2 xz,float depth,float speed,vec3 la){

@@ -10,6 +10,7 @@
 //   A the distance to the nearest road, track or village ground, in WEAR_STEP m (0 on them, 255 at or past the reach).
 import { hash, vn } from '../noise.ts'
 import { axisX } from './author.ts'
+import { RIVER } from '../river.ts'
 
 export const COVER = { meadow: 0, pasture: 1, wood: 2, road: 3, track: 4, village: 5, wheat: 6, green: 7, stubble: 8, ploughed: 9 } as const
 export type CoverClass = typeof COVER[keyof typeof COVER]
@@ -19,11 +20,11 @@ export const isField = (c: number): boolean => c >= COVER.wheat
 export interface CoverGrid { n: number; cell: number; x0: number; z0: number; tex: Uint8Array }   // tex: n² cells × 4 bytes, row j at z0 + (j + ½)·cell
 
 
-// the formation zones (the scatter's KEEP_CLEAR, src/look/nature.ts): no field or village there
+// the formation zones (the scatter's KEEP_CLEAR, src/look/nature.ts, reads this one): no field or village there
 export const inFormationZone = (x: number, z: number): boolean => (Math.abs(x + 5) < 20 && z > -44 && z < -2) || (z > 7 && z < 19 && x > -14 && x < 26) || ((x - 34) ** 2 + (z + 24) ** 2 < 160)
 // the floodplain (art bible §6c: fields and villages sit on the valley sides, above it): the valley axis ± half the
-// river's floodplain width (84 m, generateRiver in src/look/world/author.ts)
-const onFloodplain = (x: number, z: number): boolean => Math.abs(x - axisX(z)) < 42
+// river's floodplain width (generateRiver in src/look/world/author.ts; the river must be set)
+export const onFloodplain = (x: number, z: number): boolean => Math.abs(x - axisX(z)) < RIVER.P.floodplainW / 2
 
 type Pt = readonly [number, number]
 // the authored fields near the play area: a polygon, the class, the furrow direction (rad from +x toward +z)

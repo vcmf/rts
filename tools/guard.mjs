@@ -39,12 +39,15 @@ const START_SPOTS = [
   ['wheat', -45, -17, 0],
   ['open-low', 45, 15, 0],
 ]
-// --view cover (docs/plans/active/l5-macro.md): east of the hill, the coats on each class of the ground's cover (the
-// ploughed field, the track, the road, the village ground)
+// --view cover (docs/plans/active/l5-macro.md): east of the hill, the coats on each class of the ground's cover that
+// a 20 m line fits on, every block wholly on it: on the ploughed field (18 m across) lines along it, 4.5 m apart; on
+// the road a column of march, the lines end to end along it; on the village ground as on the default view. (The 3 m
+// track holds no line; the class check measures it.) Spots: name, x, z, the blocks' yaw (Babylon's: +yaw turns +x
+// toward −z), the column's direction (rad from +x toward +z; +z by default) and the spacing (7 m by default)
 const COVER = [START[0], 0.8, 150, [150, 8, -25]]
-const COVER_SPOTS = [['ploughed', 75, -38, 0], ['track', 150, -61, 0], ['road', 185, -10, 0], ['village', 228, -2, 0]]
+const COVER_SPOTS = [['ploughed', 78, -38, -0.18, 0.18 + Math.PI / 2, 4.5], ['road', 185, -5, -Math.PI / 2, Math.PI / 2, 22], ['village', 228, -2, 0]]
 let VIEW = START, SPOTS = START_SPOTS
-const blocks = (color = null) => SPOTS.flatMap(([s, x, z, yaw]) => COATS.map((c, i) => ({ name: `${s}.${c}`, x, z: z + (i - 1.5) * 7, yaw, color: color ?? c })))
+const blocks = (color = null) => SPOTS.flatMap(([s, x, z, yaw, dir = Math.PI / 2, gap = 7]) => COATS.map((c, i) => ({ name: `${s}.${c}`, x: x + Math.cos(dir) * (i - 1.5) * gap, z: z + Math.sin(dir) * (i - 1.5) * gap, yaw, color: color ?? c })))
 
 const hex = g => '#' + Math.round(Math.min(1, Math.max(0, g)) * 255).toString(16).padStart(2, '0').repeat(3)
 

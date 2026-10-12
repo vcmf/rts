@@ -39,7 +39,7 @@ void main(){
   #else
   float bw=0.15*(1.0-smoothstep(-0.1,0.4,dot(N,uSunDir)))*(1.0-smoothstep(0.0,6.0,vH));
   #endif
-  vec3 alb=mix(roleCol(vRole,vTint),groundSeason(groundAt(vRoot,1.0)),bw);
+  vec3 alb=mix(roleCol(vRole,vTint),groundSeason(groundBounce(vRoot)),bw);
   vec3 c=paint(alb,N,vW,vOcc*mix(1.0,lm.g,uAO*0.6),uRim,1.0,sh);
   #ifndef GRASSY
   if(vRole<1.5){                                                // golden backlight: crowns glow when the sun is behind them

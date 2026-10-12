@@ -29,7 +29,7 @@ const BAKE_FS = `#extension GL_OES_standard_derivatives : enable
 precision highp float;varying vec2 vUV;uniform vec4 uRect;uniform float uTexel;
 #include<painter>
 #include<shore>
-void main(){gl_FragColor=macro(mix(uRect.xy,uRect.zw,vUV),1.0,uTexel);}`
+void main(){vec2 xz=mix(uRect.xy,uRect.zw,vUV);macroDerivs(xz);gl_FragColor=macro(xz,1.0,uTexel);}`
 
 export interface BakeStats { ms: number; texels: number; draws: number; mb: number; lost: boolean }
 export interface Macro {
@@ -41,15 +41,20 @@ export interface Macro {
   // the full-size run (the track plan's measurement): a side² target over side · texel m, then freed
   bakeBench(side: number): Promise<BakeStats>
   hash(which: 'tile' | 'far'): Promise<string>
+  // the last bake started (by a new grain, a restored context, a check), settled
+  settled(): Promise<unknown>
 }
 
 export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Macro {
   const engine = scene.getEngine() as AbstractEngine, s = D.spec.macro
   const coverTex = RawTexture.CreateRGBATexture(cover.tex, cover.n, cover.n, scene, false, false, Texture.NEAREST_SAMPLINGMODE)
   coverTex.wrapU = coverTex.wrapV = Texture.CLAMP_ADDRESSMODE
+  // mipmapped on WebGL2; WebGL1 cannot mipmap a texture whose sides are not powers of two (1600², 650²), so there the
+  // bakes are read bilinear, without mips (an incomplete mipmapped texture would read black)
+  const mips = !mats.webgl1
   const target = (name: string, n: number) => {
-    const t = new RenderTargetTexture(name, n, scene, { generateMipMaps: true, generateDepthBuffer: false, generateStencilBuffer: false, type: Constants.TEXTURETYPE_UNSIGNED_BYTE, samplingMode: Texture.TRILINEAR_SAMPLINGMODE, format: Constants.TEXTUREFORMAT_RGBA })
-    t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE; t.anisotropicFilteringLevel = 4; return t
+    const t = new RenderTargetTexture(name, n, scene, { generateMipMaps: mips, generateDepthBuffer: false, generateStencilBuffer: false, type: Constants.TEXTURETYPE_UNSIGNED_BYTE, samplingMode: mips ? Texture.TRILINEAR_SAMPLINGMODE : Texture.BILINEAR_SAMPLINGMODE, format: Constants.TEXTUREFORMAT_RGBA })
+    t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE; t.anisotropicFilteringLevel = mips ? 4 : 1; return t
   }
   const tile = target('macroTile', D.macroN), far = target('macroFar', D.macroFarN)
   mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far) })
@@ -57,15 +62,17 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
   const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover']
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: D.defines })
   const renderer = new EffectRenderer(engine)
-  let lost = false
-  engine.onContextLostObservable.add(() => { lost = true })
+  // a lost context empties the targets: a bake that saw a loss reports it, and a restored context bakes again
+  let losses = 0
+  engine.onContextLostObservable.add(() => { losses++ })
+  engine.onContextRestoredObservable.add(() => { rebake() })
   const ready = () => new Promise<void>((res, rej) => { const t0 = performance.now(); const poll = () => wrapper.effect.isReady() ? res() : performance.now() - t0 > 30000 ? rej(new Error(`macro bake: the shader did not compile: ${wrapper.effect.getCompilationError()}`)) : setTimeout(poll, 16); poll() })
   // gl.readPixels of one texel waits for the GPU: the bake's time includes its work, not only its submission
   const gl = (engine as unknown as { _gl: WebGLRenderingContext })._gl
   // one target over the world square centred on 0 of side `world` m
   const draw = async (t: RenderTargetTexture, n: number, world: number): Promise<BakeStats> => {
     await ready()
-    const t0 = performance.now(), k = s.bakeTile, rt = t.renderTarget!
+    const lost0 = losses, t0 = performance.now(), k = s.bakeTile, rt = t.renderTarget!
     let draws = 0
     renderer.saveStates(); engine.bindFramebuffer(rt, undefined, undefined, undefined, true)
     for (let j = 0; j < n; j += k) for (let i = 0; i < n; i += k) {
@@ -78,7 +85,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
     }
     const px = new Uint8Array(4); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px)
     engine.unBindFramebuffer(rt, false); renderer.restoreStates()   // makes the mips
-    return { ms: performance.now() - t0, texels: n * n, draws, mb: bakeMB(n, n) * 4 / 3, lost }
+    return { ms: performance.now() - t0, texels: n * n, draws, mb: bakeMB(n, n) * (mips ? 4 / 3 : 1), lost: losses > lost0 }
   }
   let arm: MacroArm = 'bake'
   const setArm = (a: MacroArm) => {
@@ -89,15 +96,24 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
     const a = await draw(tile, D.macroN, D.spec.tile), b = await draw(far, D.macroFarN, D.spec.far)
     return { ms: a.ms + b.ms, texels: a.texels + b.texels, draws: a.draws + b.draws, mb: a.mb + b.mb, lost: a.lost || b.lost }
   }
-  mats.onGrain(() => void bake())
+  // a rebake no one awaits (a new grain, a restored context): its failure is reported, and settled() waits for it
+  let last: Promise<unknown> = Promise.resolve()
+  const rebake = () => { last = bake().catch((e: unknown) => { console.error('macro rebake failed:', e) }) }
+  mats.onGrain(rebake)
+  // the checks' variants: the materials' defines, and the bake's (all but the class view, which the bake ignores); the
+  // bake is redone only when its own defines change
+  let bakeDefs = ''
   const setCheck = async (on: string[]) => {
     for (const d of on) if (!(MACRO_CHECK_DEFINES as readonly string[]).includes(d)) throw new Error(`unknown macro check define ${d}`)
     for (const m of mats.all) for (const d of MACRO_CHECK_DEFINES) m.setDefine(`#define ${d}`, on.includes(d))
+    const defs = on.filter(d => d !== 'MACRO_DEBUG').sort().join(' ')
+    if (defs === bakeDefs) return { ms: 0, texels: 0, draws: 0, mb: 0, lost: false }
+    bakeDefs = defs
     wrapper.updateEffect([...D.defines, ...on.filter(d => d !== 'MACRO_DEBUG').map(d => `#define ${d}`)].join('\n'), UNIFORMS, SAMPLERS)
     return bake()
   }
   return {
-    cover: coverTex, tile, far, setArm, arm: () => arm, bake, setCheck,
+    cover: coverTex, tile, far, setArm, arm: () => arm, bake, setCheck, settled: () => last,
     async bakeBench(side) {
       if (!(Number.isInteger(side) && side >= 64 && side <= D.spec.minSpec.maxTexture)) throw new Error(`?macroBench must be a whole number of texels, 64–${D.spec.minSpec.maxTexture}`)
       const t = target('macroBench', side)

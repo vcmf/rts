@@ -222,8 +222,9 @@ Object.assign(window, { __look: {
   // the image moved by (dx, dy) pixels (right, down) with nothing else changed: the shimmer check's sub-pixel shift
   shift: (dx: number, dy: number) => project(1, 2 * dx / engine.getRenderWidth(), -2 * dy / engine.getRenderHeight()),
   waterView, waterSab, groundAs, waterAt,
-  // the macro colour (docs/plans/active/l5-macro.md): the arm, the checks' variants (rebaked), the bakes' hashes, a rebake
-  macro: { setArm: (a: MacroArm) => macro.setArm(a), setCheck: (on: string[]) => macro.setCheck(on), hash: (w: 'tile' | 'far') => macro.hash(w), bake: () => macro.bake() },
+  // the macro colour (docs/plans/active/l5-macro.md): the arm, the checks' variants (rebaked), the bakes' hashes, a rebake,
+  // and the last rebake no one awaited (a new grain's), settled
+  macro: { setArm: (a: MacroArm) => macro.setArm(a), setCheck: (on: string[]) => macro.setCheck(on), hash: (w: 'tile' | 'far') => macro.hash(w), bake: () => macro.bake(), settled: () => macro.settled() },
 } })
 
 // ?season=<0..3>: open in that season (0 summer, 1 early autumn, 2 late autumn, 3 winter; the bench runs in it too)

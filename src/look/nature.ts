@@ -18,7 +18,7 @@ import { D } from './spec.ts'
 import { fbm, hash, mulberry } from './noise.ts'
 import { H } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges } from './river.ts'
-import { COVER, coverAt, type CoverGrid } from './world/cover.ts'
+import { COVER, coverAt, inFormationZone, type CoverGrid } from './world/cover.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 
@@ -42,11 +42,12 @@ export interface Nature {
 // village; trees and the far hedgerows' bushes too. The roads and the village keep clear of the copses (a rejected
 // copse tree would shift the scatter's stream after it: the scatter's counts match main's)
 const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood], TRODDEN: readonly number[] = [COVER.road, COVER.track, COVER.village]
+// The point and four points EDGE m around it must all pass: the shader paints a class edge pushed up to 1.5 m by the
+// grain (coverWarp, src/look/shaders/macro.glsl), so an instance nearer an edge could stand on another painted class
+const EDGE = 1.5
 function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boolean {
-  const c = coverAt(cover, x, z)
-  if (model === 'Wheat') return c === COVER.wheat
-  if (/^(Grass|Flowers|Plant_1|Bush|TreeStump|WoodLog)/.test(model)) return GRASSY_COVER.includes(c)
-  return !TRODDEN.includes(c)
+  const ok = (c: number) => model === 'Wheat' ? c === COVER.wheat : /^(Grass|Flowers|Plant_1|Bush|TreeStump|WoodLog)/.test(model) ? GRASSY_COVER.includes(c) : !TRODDEN.includes(c)
+  return [[0, 0], [EDGE, 0], [-EDGE, 0], [0, EDGE], [0, -EDGE]].every(([dx, dz]) => ok(coverAt(cover, x + dx, z + dz)))
 }
 
 export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid): Nature {
@@ -92,7 +93,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
 
   /* ---------- scattering: composition follows the north star ---------- */
   const R = mulberry(77), rr = () => R()
-  const KEEP_CLEAR = (x: number, z: number) => (Math.abs(x + 5) < 20 && z > -44 && z < -2) || (z > 7 && z < 19 && x > -14 && x < 26) || ((x - 34) ** 2 + (z + 24) ** 2 < 160)   // formations
+  const KEEP_CLEAR = inFormationZone   // formations (src/look/world/cover.ts: the cover keeps them meadow)
   // THE placement rule (docs/art-bible.md §6c): nothing in the water or on the wet bank except stones,
   // nothing in the formation zones. r = the object's footprint/crown radius. Every scatter loop uses it.
   const REACH_OF: Record<string, number> = {}   // largest distance of any vertex from the model pivot in plan: the true footprint under any yaw

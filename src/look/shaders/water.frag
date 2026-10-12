@@ -14,6 +14,7 @@ const float STROKE_P=20.0/STROKE_V;  // s: a whole period of every stroke patter
 const float LEAF_P=200.0/STROKE_V;   // s: the leaves' period (layer 10)
 float reflAt(vec2 xz){vec2 uv=(xz+TILE_HALF)/TILE_W;if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0)return 0.0;return texture2D(uRefl,uv).r;}
 void main(){
+  macroDerivs(vW.xz);   // before any branch (macro.glsl)
   #ifdef WATER_DEBUG
   if(uWaterView>0.5){gl_FragColor=vec4(waterView(vW.xz),1.0);return;}   // the water data's debug views
   #endif

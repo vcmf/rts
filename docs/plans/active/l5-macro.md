@@ -200,11 +200,17 @@ L5a 3–4 days; L5b 2 days of work plus the judges' time.
   (`pSnowLie` in `snowAt()`).
 - **Stripes are lands, not furrows:** 4–7 m bands (ridge-and-furrow lands, drill bands), which a 0.5 m bake holds;
   1 m furrows would sit at its Nyquist limit and belong to the runtime detail.
-- **Colours set by the guard:** the ploughed earth, the wheat and the stubble are lighter or greyer than first
-  painted. Dark earth matched the French and Russian coats' value, and pale straw the Austrian white's once the warm
-  sun lit it (`tools/guard.mjs --view cover`, a second view with blocks on each class, is new).
-- **Every grain read outside a branch** (`grainAt`): reads in branches the pixels of a quad take differently (a
-  class edge) made the bake differ run to run on the Mac's GPU (0.85% of texels by up to 26 levels).
+- **Colours set by the guard:** the ploughed earth, the wheat, the stubble and the road are lighter, darker or
+  greyer than first painted. Dark earth matched the French and Russian coats' value; pale straw and a pale road the
+  Austrian white's once the warm sun lit them. The road now reads against the meadow by hue (a cool grey) more than
+  by value (`tools/guard.mjs --view cover`, a second view with lines wholly on each class, is new; the 3 m track
+  holds no 20 m line and is left to the class check).
+- **Explicit derivatives on every read** (`macroDerivs`, `textureGrad`): reads in branches the pixels of a quad take
+  differently (a class edge, the shore band's sides) made the bake differ run to run on the Mac's GPU (0.85% of
+  texels by up to 26 levels).
+- **The bounce reads one texel:** the bake's, or the class's flat colour in the other arms (the full macro per
+  fragment of every tree and tuft would have charged the shader arm for a value constant over an instance).
+- **The scatter keeps 1.5 m from class edges** (the painted edges wander that far).
 - **The class check samples 24 px apart,** not 8: at the closest views 8 px is under a metre, inside the bake's soft
   edge, and measured the edge's blend instead of the two classes.
 - **Winter shimmer gate:** snow against bare ground makes every edge pop; the closest zoom's winter limit is main's

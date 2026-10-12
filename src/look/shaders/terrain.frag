@@ -10,7 +10,7 @@ uniform sampler2D uRiverMask;
 // the ground's colour: its cover's (groundAt, the macro colour's arm: macro.glsl, shared with the shore band), stony
 // where steep, the banks, the seasons. wt: the water data here (WATERDATA)
 vec3 albedo(vec3 wp,vec3 n,vec4 wt){
-  vec3 m=groundAt(wp.xz,pxGround(wp)),c=groundSteep(m,n.y);
+  vec3 m=groundAt(wp.xz,pxMacro()),c=groundSteep(m,n.y);
   // stream banks: on the tile from the water data (W5, bankPaint in src/look/shaders/shore.glsl); within BANK_EDGE of
   // the tile's edge, and on the apron and the far ring, from aRiver, as before W5 (the bands over the ground, then the
   // stony steep ground over them), which the far ring's painted line continues
@@ -31,6 +31,7 @@ vec3 albedo(vec3 wp,vec3 n,vec4 wt){
   return groundSeason(c);
 }
 void main(){
+  macroDerivs(vW.xz);   // before any branch (macro.glsl)
   #ifdef WATER_DEBUG
   if(uWaterView>0.5){gl_FragColor=vec4(waterView(vW.xz),1.0);return;}   // the water data's debug views
   #endif
@@ -57,7 +58,7 @@ void main(){
   alb=mix(alb,alb*vec3(0.72,0.78,0.70),smoothstep(0.0,0.15,rm));
   alb=mix(alb,vec3(0.40,0.55,0.58),smoothstep(0.3,0.6,rm));   // the water mid tone after its sky tint, so the line matches the river at the tile edge
   #endif
-  pSnowLie=snowLie(vW.xz,pxGround(vW));   // the fields' furrows hold the snow (macro.glsl)
+  pSnowLie=snowLie(vW.xz,pxMacro());   // the fields' furrows hold the snow (macro.glsl)
   vec3 c=paint(alb,N,vW,occ,0.12,1.0,sh);
   #ifdef DETAIL_DEBUG_INC
   // the checks' incidence view: |cos| in red; the biplanar major plane's weight in green; in blue, where the bank

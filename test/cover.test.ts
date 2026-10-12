@@ -3,8 +3,7 @@
 // floodplain, nothing but meadow in the formation zones) and holds every class the macro colour paints.
 import { describe, expect, it } from 'vitest'
 import { SPEC } from '../src/look/spec.ts'
-import { axisX } from '../src/look/world/author.ts'
-import { COVER, authorCover, coverAt, inFormationZone, isField, packCover, unpackCover } from '../src/look/world/cover.ts'
+import { COVER, authorCover, coverAt, inFormationZone, isField, onFloodplain, packCover, unpackCover } from '../src/look/world/cover.ts'
 import { buildLookData } from '../tools/build-look-data.ts'
 import { decodeLook } from '../src/look/world/data.ts'
 
@@ -33,7 +32,7 @@ describe('the authored cover', () => {
       const x = g.x0 + (i + 0.5) * g.cell, z = g.z0 + (j + 0.5) * g.cell, c = g.tex[(j * g.n + i) * 4]
       if (!isField(c) && c !== COVER.village) continue
       fields++
-      expect(Math.abs(x - axisX(z)) >= 42 && !inFormationZone(x, z), `class ${c} at ${x},${z}`).toBe(true)
+      expect(!onFloodplain(x, z) && !inFormationZone(x, z), `class ${c} at ${x},${z}`).toBe(true)
     }
     expect(fields).toBeGreaterThan(1000)
   })

@@ -59,9 +59,10 @@ export class Materials {
   // a new grain texture for every painted material, the bake's too; mean: its R and G channels' (the detail layer
   // renormalises about them)
   setGrain(grain: BaseTexture, mean: [number, number]): void {
+    const changed = grain !== this.grain
     this.grain = grain; this.grainMean = mean
     for (const m of this.every) { m.setTexture('uGrain', grain); m.setVector2('uGrainMean', new Vector2(...mean)) }
-    for (const f of this.grainUsers) f()
+    if (changed) for (const f of this.grainUsers) f()
   }
   // what else reads the grain and must follow a new one (the macro colour's bake: src/look/macro.ts)
   private readonly grainUsers: (() => void)[] = []

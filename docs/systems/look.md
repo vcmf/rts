@@ -82,23 +82,27 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   meadow is the old `groundMeadow`), a low-frequency variation, each field's own shade, stripes along its furrows
   (ridge-and-furrow lands on ploughed ground, faint drill bands on crops, faded with the pixel's footprint), wear
   near the lines, and edges that wander (the class lookup's point pushed ±1.5 m by the grain's blotches). Colour
-  only: the light stays in `paint()`. Every grain read happens once, outside any branch (`grainAt`): a read in a
-  branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then
-  differed run to run.
+  only: the light stays in `paint()`. Every read passes the world position's screen derivatives explicitly
+  (`macroDerivs`, taken at the top of each shader's main; `textureGrad` on WebGL2): a read in a branch the pixels of
+  a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
 - **Three arms, one switch** (`?macro`): `flat`, each class's colour alone, unwarped (the ablation's arm 1);
   `shader`, `macro(xz, 0)` per pixel, one tap; `bake`, one read of the bake. `groundAt()` gives the arm's colour
   to the terrain, the far ring and the shore band alike (so the seam holds), and `snowLie()` the snow's lie.
 - **The bake** (`src/look/macro.ts`): `macro(xz, 1)` (9 taps of the grid a metre apart: soft edges and a darker
   headland where classes meet) drawn by an `EffectRenderer` into RGBA8 render targets, 512² texels a draw, then
-  mipmapped: the tile at 0.5 m (1600²) and the far ring at 4 m (650²), 15 MB with mips. RGB the colour, A the
+  mipmapped (on WebGL1, which cannot mipmap their sides, read bilinear without mips): the tile at 0.5 m (1600²) and
+  the far ring at 4 m (650²), 15 MB with mips. A restored context bakes again. RGB the colour, A the
   snow's lie. The tile's bake hands over to the far ring's over the tile's last 60 m. It reads the grain, so a new
   grain rebakes it (`Materials.onGrain`). `?macroBench=<side>` bakes a side² target (the full-size run).
 - **The fields in winter:** the furrows hold the snow and the ridges show the earth (the winter master's stripes):
   `pSnowLie` moves `snowAt()`'s threshold. There the snow's edge breaks on the grain's soft blotches, not its
   per-texel noise, over a wider band, and the lie fades out as a pixel spans 0.35 to 1.2 m.
 - **The scatter follows the cover:** grass, flowers, plants, bushes, stumps and logs on grass; wheat on wheat;
-  nothing on roads, tracks or village ground. **Ground bounce:** trees take 15% of the macro colour under their
-  root into the albedo of their side away from the sun, near the ground; grass 25% all over.
+  nothing on roads, tracks or village ground; the point and four points 1.5 m around it must all pass (the painted
+  edges wander that far). **Ground bounce:** trees take 15% of the ground's colour under their root into the albedo
+  of their side away from the sun, near the ground; grass 25% all over. The colour is the bake's in the bake arm,
+  else the class's flat colour (one read: the full macro per fragment of every instance would be the shader arm's
+  biggest cost, for a value constant over an instance).
 - `window.__look.macro`: `setArm`, `setCheck` (the check's view and sabotages, rebaked), `hash`, `bake`.
 
 ### The detail layer (L2b)
@@ -153,8 +157,8 @@ negative, in summer: the same blocks painted grey, each at the grey that matches
 (interpolated from renders at two greys), must not separate. A block's pixels come from two mask renders (flat
 white, flat black), so hidden parts and ground-coloured parts are both counted right.
 
-`--view cover` (L5a) puts four clusters east of the hill instead, one on each class of the cover (the ploughed
-field, the track, the road, the village ground).
+`--view cover` (L5a) puts the clusters east of the hill instead, every block wholly on a class of the cover: lines
+along the ploughed field, a column of march on the road, the village ground (the 3 m track holds no 20 m line).
 
 ### The macro checks (L5a)
 
