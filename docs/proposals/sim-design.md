@@ -271,7 +271,7 @@ steady ──► shaken ──► wavering ──► routing ──► rallying 
 - **Enemy AI:** the enemy's plan is **scripted per scenario** (objectives, timing, which brigades
   attack where). Brigade-level AI executes it through commands: lines, supports,
   attack and defend points, time-sliced (≈ 1 s). Army-level AI is later.
-- **Fair:** the AI knows only what its side sees.
+- **Fair:** the AI knows only what its side sees. The long form: `docs/proposals/ai.md`.
 
 ## 13. Stats and modifiers
 
