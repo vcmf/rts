@@ -1,6 +1,7 @@
 // Builds the simulation's input data (docs/proposals/sim-design.md §2, decision 0012) from a map
-// definition, once, in Node: the sim heightfield (1.79 m nodes) and the cost grid (7.16 m cells), as one
-// little-endian file in data/, with the 1 m terrain class and water depth grids (format 2). Its FNV-1a
+// definition, once, in Node: the sim heightfield and the cost grid (1.79 m nodes and 7.16 m cells for the legacy maps;
+// 2 m and 8 m for the map engine's, decision 0021), as one little-endian file in data/, with the terrain class and
+// water depth grids (1 m on the formation field, 2 m on the others) (format 2). Its FNV-1a
 // hash is the data version the sim asserts on load.
 //   node tools/build-sim-data.ts           writes data/<map>.simdata for every map and prints their versions
 //   node tools/build-sim-data.ts --check   rebuilds them in memory and fails if one differs from data/
@@ -52,7 +53,7 @@ export function buildSimData(map: MapDef): Uint8Array {
   f64(COST_CELL); u32(cn); u32(cn); f64(x0); f64(z0); buf.set(cost, o); o += cost.length
   // the 1 m grid: class index per node, water depth in mm
   u32(map.classes.length); for (const c of map.classes) { u32(c.length); for (let q = 0; q < c.length; q++) v.setUint8(o++, c.charCodeAt(q)) }
-  f64(map.fine.cell); u32(fn); u32(fn); f64(x0); f64(z0)
+  f64(map.fine.cell); u32(fn); u32(fn); f64(x0 + (map.fine.origin ?? 0)); f64(z0 + (map.fine.origin ?? 0))
   for (let j = 0; j < fn; j++) for (let i = 0; i < fn; i++) v.setUint8(o++, map.fine.classAt(i, j))
   for (let j = 0; j < fn; j++) for (let i = 0; i < fn; i++) { v.setUint16(o, Math.min(65535, Math.round(map.fine.depthAt(i, j) * 1000)), true); o += 2 }
   if (o !== size) throw new Error('size mismatch')

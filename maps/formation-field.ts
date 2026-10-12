@@ -12,7 +12,7 @@ export interface MapDef {
   groundAt(x: number, z: number): number         // speed factor 0..1 of the ground for a column (0: impassable)
   slopeFactor(rise: number): number              // speed factor for a slope (rise over run, uphill)
   classes: string[]                              // terrain class names (the ruleset's terrain table keys)
-  fine: { cell: number; n: number; classAt(i: number, j: number): number; depthAt(i: number, j: number): number }   // 1 m grid from −half
+  fine: { cell: number; n: number; classAt(i: number, j: number): number; depthAt(i: number, j: number): number; origin?: number }   // n × n nodes from −half + origin (0 when absent)
   cells?: { height: number; cost: number }       // the heightfield's and the cost grid's cells, m; the legacy maps' 1.79 and 7.16 when absent
 }
 

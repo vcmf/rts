@@ -9,7 +9,8 @@ export interface GroundCell {
   way?: { surface?: string; cut?: number }
   barrier?: { crossing?: string; height?: number; porosity?: number }
   built?: { bridge: boolean; building: boolean }
-  nogo: boolean
+  nogo: boolean                                   // the map's overrides (zone.nogo, zone.go): impassable, or passable
+  go: boolean                                     // whatever the ground would say
 }
 
 // a ruleset's reading of a cell: one of its terrain classes (the keys of its terrain table)

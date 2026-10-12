@@ -262,7 +262,7 @@ validate ──► relief ──► expand (generators) ──► apply (layers,
   compiler's version.
   - The **sim compiler** writes `.simdata` in today's format 2 (`src/sim/data.ts`), which stores each grid's
     cell: heights at 2 m, cost at 8 m, and each 2 m cell's terrain class (the ruleset's reading of its layers)
-    and water depth, over the play area (M2). The sim reads classes, not layers, so format 2 holds everything it
+    and water depth, over the play area (M2; the fine nodes at the cells' centres). The sim reads classes, not layers, so format 2 holds everything it
     uses; a compact format (16-bit heights, §5) waits for a measured need.
   - The **look compiler** writes `.lookdata` (`src/look/world/data.ts`: heightfield, far ring, river samples,
     cover grid).

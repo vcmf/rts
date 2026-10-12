@@ -71,13 +71,15 @@ maps/kinds.json ──► checkCatalogue ─┐
     widths round the same way for every line (on even metres a 6 m stream and a 5 m road take 4 m);
   - painting order is priority, then id: the higher priority wins a cell and, at equal priority, the later id;
   - barriers by `barrierCells`, the one implementation of the cell rule (proposal §3.6), exact in integers;
-  - water (step 3): a stream's level is the lower of its two banks (3 m beyond each edge) less a 0.4 m
-    freeboard, taken every 2 m and never rising downstream (the line's order is the flow; `Layers.streams` keeps
+  - water (step 3): a stream's level is the lower of its two banks (3 m beyond each edge, on the ground as the
+    landforms made it, before any edit or channel, so a cut or another water by a bank cannot pull it down) less a
+    0.4 m freeboard, taken every 2 m and never rising downstream (the line's order is the flow; `Layers.streams` keeps
     each profile). Its channel is carved from its depth (a ramp `along` gives pools), shallower toward the banks; a
     ford raises the bed to its depth over its width, where the stream passes nearest its point; a pond sits at its
     `level` or the lowest point of its shore less the freeboard, deepest 10 m in. Each water cell's depth is its
     body's level less the cell's mean ground (`Layers.depth`, mm);
-  - a bridge decks the road's cells over the water (the sim classifies them `bridge`: level, dry).
+  - a bridge decks the road's cells over the water at the height of the higher of the road's two ends, 4 m past
+    each bank (the sim classifies them `bridge`: level, dry).
 - **The draft** (`src/map/draft.ts`): one pixel per cell, north up, colours from categories and attributes (never
   kind names), hill shading from the north-west and contours every 2.5 m.
 - **The page** (`app/map.html`, `src/app/map/`):
@@ -91,7 +93,9 @@ maps/kinds.json ──► checkCatalogue ─┐
   (`groundCell`, typed by `src/rulesets/ground.ts`) are read by the ruleset into one of its terrain classes
   (`classifyNapoleonic`, `src/rulesets/napoleonic-ground.ts`), a module apart from the ruleset's table so its hash
   does not move. Interim readings: walls and fences as hedges, buildings as dense woods, a no-go zone as water
-  deeper than every limit. The fine grid's node (i, j) takes cell (i, j). `maps/valley.map.json` (the S1e layout)
+  deeper than every limit, a go zone as open, dry ground (the overrides come first). The fine grid has one node per
+  cell, at its centre (origin a half-cell in from the play area's corner), so the sim's rounding to the nearest
+  node finds the cell that holds the point; the map's edge is a half-cell inside the play area's. `maps/valley.map.json` (the S1e layout)
   compiles to `data/valley.simdata`, and the `m2-valley` scenario plays the S1e battle on it
   (`src/scenarios/m2-valley.ts`).
 - **The CLI** (`tools/map.ts`): `check`, `expand` (`--check` compares with the committed file), `resolve`,

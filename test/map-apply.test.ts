@@ -194,7 +194,7 @@ describe('M1b: determinism and locality', () => {
     const a = apply(ex, cat), b = apply(ex, cat)
     expect(hashLayers(a)).toBe(hashLayers(b))
     const img = draft(a)
-    expect({ layers: hashLayers(a), draft: hex(fnv1a(bytes(img.data))) }).toEqual({ layers: '0xf234bec6', draft: '0x230f6cc6' })
+    expect({ layers: hashLayers(a), draft: hex(fnv1a(bytes(img.data))) }).toEqual({ layers: '0x744b6f1e', draft: '0x65b89ca6' })
   })
   it('moving one wood changes only the cells it covered or covers, and no height', () => {
     const moved = clone(ex), wood = moved.features.find(f => f.id === 'west-wood')!

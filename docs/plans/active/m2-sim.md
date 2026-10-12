@@ -88,3 +88,24 @@ no water yet: a stream is a band of cells with no level, no depth and no channel
 ## Review rounds
 
 (appended during review)
+
+**Round 1** (10 findings, none severe: fix what is worth it and stop):
+- **Moderate:**
+  - the play area's corner was taken from the x axis for both axes; it is per axis now, so a non-square extent
+    compiles in the right place;
+  - a low spot by a bank (a sunken road's cut, a ditch, another water) pulled a stream's level down for the rest
+    of its course; levels and pond shores now read the ground as the landforms made it;
+  - the sim read classes about 1 m off, because it rounds a point to the nearest fine node while each node took
+    the cell north-east of it. The fine grid now has one node per cell, at its centre.
+- **Light:**
+  - the bridge is a deck level with its banks;
+  - `zone.go` is read (passable, dry), and the overrides come before the bridge;
+  - `engineMap` takes a ruleset with its ground reading;
+  - the compiler reuses `heightOf`;
+  - the vacuous depth check is now a real one (the centre line holds water everywhere; dry cells only at a
+    ford's margin);
+  - a test now checks the valley battle against the original battlefield, with finite state;
+  - stale comments are fixed.
+- **Not fixed here:** `clearOfImpassable` and `changeWet` in `src/sim/formation.ts` use a fixed 2 m margin that
+  ignores the cell size (light, on main, Track S's code). Noted in the PR for Track S.
+

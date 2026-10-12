@@ -20,7 +20,7 @@ export const CELL = 2   // m (decision 0021)
 // that take no width attribute (reeds along a bank, a flèche's earthwork), m
 // the water (§4 step 3): the level sits FREEBOARD m under the lower bank, read BANK_OUT m beyond each edge every
 // LEVEL_STEP m; a pond reaches its full depth SHORE_IN m in from its shore
-const FREEBOARD = 0.4, BANK_OUT = 3, LEVEL_STEP = 2, SHORE_IN = 10
+const FREEBOARD = 0.4, BANK_OUT = 3, LEVEL_STEP = 2, SHORE_IN = 10, BRIDGE_REACH = 4
 const WAY_WIDTH = 5, WATER_WIDTH = 6, EDIT_WIDTH = 4, LANDFORM_WIDTH = 100, VEG_LINE = 4, WORK_LINE = 6
 
 export interface Layers {
@@ -143,11 +143,6 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
   }
   const lineBox = (line: Pt[]): [number, number, number, number] => [Math.min(...line.map(p => p[0])), Math.min(...line.map(p => p[1])), Math.max(...line.map(p => p[0])), Math.max(...line.map(p => p[1]))]
   const H = L.height
-  // the ground at a point, bilinear between the nodes (clamped to the grid)
-  const hAt = (x: number, z: number): number => {
-    const u = Math.min(nx - 1e-9, Math.max(0, (x - x0) / c)), v = Math.min(nz - 1e-9, Math.max(0, (z - z0) / c)), i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, W = nx + 1
-    return (H[j * W + i] * (1 - fu) + H[j * W + i + 1] * fu) * (1 - fv) + (H[(j + 1) * W + i] * (1 - fu) + H[(j + 1) * W + i + 1] * fu) * fv
-  }
 
   // 1. landforms, summed
   for (const { f, r } of order) {
@@ -179,6 +174,10 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
       nodes(field.box, edge, (k, x, z) => { const e = field.edge(x, z); H[k] += h * (e >= 0 ? 1 : smooth(1 + e / edge)) })
     }
   }
+
+  // the landforms' ground, before any edit or channel: what water levels are read from, so a cut, a ditch or
+  // another body of water by a bank cannot pull a stream's level down, whatever the features' order
+  const H0 = Float64Array.from(H), hAt = (x: number, z: number) => heightOf(L, x, z, H0)
 
   // 2. relief edits, in painting order
   for (const { f, r } of order) {
@@ -255,7 +254,7 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
       // a pond or a lake: its level, or the lowest point of its shore less the freeboard; deepest SHORE_IN m in
       const field = areaField(f); if (!field) continue
       let lv = typeof a.level === 'number' ? a.level : Infinity
-      if (lv === Infinity) cells(field.box, c, (i, j, x, z) => { if (!field.inside(x, z)) return; const e = field.edge(x, z); if (e < c) lv = Math.min(lv, hAt(x, z) - FREEBOARD) })
+      if (lv === Infinity) cells(field.box, c, (i, j, x, z) => { if (!field.inside(x, z)) return; const e = field.edge(x, z); if (e < c) lv = Math.min(lv, hAt(x, z) - FREEBOARD) })   // the shore, as the landforms made it
       const D = num(a.depth, 1.5)
       nodes(field.box, 0, (k, x, z) => { const e = field.edge(x, z); if (e <= 0) return; const bed = lv - D * smooth(e / SHORE_IN); if (bed < H[k]) H[k] = bed })
       paintArea(f, L.water, k1, cell => { level[cell] = lv })
@@ -287,17 +286,29 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
       if (f.line) paintLine(f.line, WORK_LINE / 2, L.built, k1)
       else if (f.area || f.circle || f.ellipse) paintArea(f, L.built, k1)
       else if (f.carries && f.crosses) {
-        // the bridge's deck, for the draft: the road's cells where it crosses the water (the deck itself: M2)
+        // the deck: the road's cells where it crosses the water, level with the higher of the road's two ends
+        // (BRIDGE_REACH m past each bank), so a unit on it stands on the deck, not in the channel
         const road = byId.get(f.carries)!, water = byId.get(f.crosses)!, rw = num(L.table[index.get(road.id)! - 1].attrs.width, WAY_WIDTH) / 2, ww = num(L.table[index.get(water.id)! - 1].attrs.width, WATER_WIDTH) / 2
         const hit = crossing(road.line!, water.line!, f.near)
-        if (hit) cells([hit[0], hit[1], hit[0], hit[1]], ww + rw + 4, (i, j, x, z) => {
-          if (nearLine(road.line!, x, z).d < rw + 1 && Math.sqrt((x - hit[0]) * (x - hit[0]) + (z - hit[1]) * (z - hit[1])) < ww + 4) L.built[j * nx + i] = k1
-        })
+        if (hit) {
+          const span = ww + BRIDGE_REACH, at = nearLine(road.line!, hit[0], hit[1]).along, [ax, az] = pointAt(road.line!, at - span), [bx, bz] = pointAt(road.line!, at + span)
+          const deck = Math.max(heightOf(L, ax, az), heightOf(L, bx, bz)), on = (x: number, z: number) => nearLine(road.line!, x, z).d < rw + 1 && Math.sqrt((x - hit[0]) * (x - hit[0]) + (z - hit[1]) * (z - hit[1])) < span
+          cells([hit[0], hit[1], hit[0], hit[1]], span + rw + c, (i, j, x, z) => { if (on(x, z)) L.built[j * nx + i] = k1 })
+          nodes([hit[0], hit[1], hit[0], hit[1]], span + rw + c, (k, x, z) => { if (on(x, z)) H[k] = deck })
+        }
       }
     }
     if (cat0 === 'zone' && !f.point && !f.line) paintArea(f, L.zone, k1)
   }
   return L
+}
+
+// the ground at a point, bilinear between the layers' nodes, clamped to the grid (of `h`: the layers' heights unless
+// given another array on the same nodes)
+export function heightOf(L: Layers, x: number, z: number, h: Float64Array = L.height): number {
+  const u = Math.min(L.nx - 1e-9, Math.max(0, (x - L.x0) / L.cell)), v = Math.min(L.nz - 1e-9, Math.max(0, (z - L.z0) / L.cell))
+  const i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, W = L.nx + 1
+  return (h[j * W + i] * (1 - fu) + h[j * W + i + 1] * fu) * (1 - fv) + (h[(j + 1) * W + i] * (1 - fu) + h[(j + 1) * W + i + 1] * fu) * fv
 }
 
 // where two lines cross: the crossing nearest `near`, or the first along the first line
