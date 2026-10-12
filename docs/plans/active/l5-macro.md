@@ -9,9 +9,9 @@ Track E phase L5 (`docs/plans/active/track-e-look.md` §L5), after water W5 (`do
 stage 1. Design: `docs/proposals/prepainted-terrain.md` (the macro bake, light at runtime, the ablation). Art
 direction: `docs/art-bible.md` §4 (palette), §7 (brushes), §11 (composition), and the targets in §0.
 
-Two PRs: **L5a** the ground's cover and the macro colour, baked and in the shader, with the switch between the
-arms; **L5b** the two experimental arms (baked strokes, Kuwahara on the bake), the judging kit, the judges'
-tally and the decision.
+Three PRs: **L5a** the ground's cover and the macro colour, baked and in the shader, with the switch between the
+arms; **L5b-1** the two experimental arms (baked strokes, Kuwahara on the bake) and the judging kit; **L5b-2**
+the judges' tally and the decision.
 
 ## Problem
 
@@ -166,12 +166,96 @@ painted river line stay.
   the bake arm within 0.2 ms of main.
 - A comparison page: main against the three arms in summer and winter, at the three zooms.
 
+## Approach (L5b)
+
+L5b is two PRs: **L5b-1** the two experimental arms and the judging kit; **L5b-2**, once the judges have answered,
+the tally, the decision record and the losing arms removed. The judges need the arms on the page and the kit
+published before they can start.
+
+### Arm 4: baked strokes (`?macro=strokes`)
+
+The bake with strokes painted into it. A gather in the bake's fragment shader: no per-stroke draws, which lost the
+context under SwiftShader (`docs/proposals/engine-design.md` §6).
+- **Stroke centres:** one per cell of a jittered grid of about 1.5 m.
+- **Orientation:** in a frame turned along the field's furrows on fields, and along a slow noise flow on grass.
+- **Shape:** each stroke a soft-ended capsule 1.6–3 m long and 0.5–0.9 m wide.
+- **Colour:** the macro colour at its centre (one tap) with a small value jitter.
+- **Gather:** each texel reads the strokes of its 3×3 neighbour cells and lays them over its own colour in a
+  fixed order (by a hash of the cell), so the bake stays deterministic.
+- **The snow's lie** stays the texel's own, so the stripes keep holding the snow.
+
+The materials read the bake as in arm 3; only the bake's own shader changes.
+
+### Arm 5: Kuwahara on the bake (`?macro=kuwahara`)
+
+The arm-3 bake rendered into a scratch target, then a four-quadrant Kuwahara pass from it into the bake's target,
+done before the mips are made.
+- **Radius:** 4 texels (2 m) on the tile and 1 texel (4 m) on the far ring.
+- **What it filters:** RGB only. The alpha (the snow's lie) is the centre texel's, so the lie off fields stays
+  exactly 0 and the seam holds.
+- **Memory:** the scratch target exists only while the arm bakes.
+
+Arm 5 filters arm 3's bake, not arm 4's, and is judged against arm 3. Both arms are painterly abstractions of the
+same bake: stacking them would make a vote for arm 5 a vote for both, and the track plan already drops the
+strokes unless they beat arm 3.
+
+### The judging kit (a new tool in `tools/`, the ablation kit, and a private judging page)
+
+- **The framing:** the Pratzen framing has no place of its own in this world, so the kit uses a stand-in. Its
+  target is east of the hill, with the ploughed field, the track, the road and the village in frame (the winter
+  master's content: fields, a village, open slopes). It is shot at the bench's three zooms (`src/look/bench.ts`:
+  the closest, the default, the widest at the steepest pitch) and three yaws (the default and the yaw limits,
+  decision 0010).
+- **On the ground:** the readability guard's army-colour blocks, a column of the four coats at three spots, and
+  one tree type (`?trees=one`, every tree from one broadleaf model) so the trees' variety does not vary the
+  answer.
+- **Seasons:** summer and winter.
+- **Stills and motion:** per arm, one still per view and season, and a 4 s slow pan per zoom (yaw 0), encoded as
+  H.264 for the shimmer question.
+- **Pairs:** arm 1 against 2, 2 against 3, 3 against 4, 3 against 5. One screen per pair and zoom (12 screens),
+  each with the three yaws and both seasons as tabs and the two pans playing in sync.
+- **Blind:** each judge gets their own random screen order and random A/B sides; arm names are never shown.
+- **The questions per screen**, each answered A, B or the same:
+  - Which reads more as painted?
+  - In which are the ground's classes (fields, road, village, grass) easier to tell apart?
+  - In which do the coloured blocks stand out more from the ground?
+  - Which shimmers or tiles less in motion?
+  - Overall, which do you prefer?
+- **Answers:** stored in the judging page's shared store, one record per judge and screen, so a judge can stop
+  and resume. Claude reads them back for the tally (L5b-2).
+
+### The rule (L5b-2)
+
+- A judge prefers the later arm of a pair when they choose it overall on at least 2 of its 3 zoom screens.
+- An arm is kept when most judges prefer it to its predecessor. A tie keeps the simpler arm.
+- The checklist's answers are reported, and they break no tie.
+- The decision record names the arm the page keeps and removes the others: the arms' code, their checks and the
+  switch's dead values.
+
+### Checks (L5b-1)
+
+- Arms 4 and 5:
+  - the seam is 0;
+  - the shimmer gates hold;
+  - the class check passes;
+  - the bake is deterministic;
+  - the guard passes (`--view cover` too);
+  - the bake's time is measured on the Mac's GPU and under SwiftShader;
+  - the bench covers the new arms.
+- The kit: every screen has both arms' images and pans; no file name, path or metadata reveals an arm; A/B
+  sides are balanced across screens for each judge.
+
 ## Acceptance (L5b)
 
-As the track plan's L5: at least 3 judges, blind, the checklist (does it read as painted? are the classes
-readable? do the army-colour blocks stand out from the ground? does it shimmer or tile?). An arm is kept only if
-the judges prefer it to the arm before it; the stroke painter is dropped unless arm 4 beats arm 3. The owner
-names the judges (`track-e-look.md`, open question 2).
+- **L5b-1:**
+  - arms 4 and 5 render and switch like arms 1–3, and pass the checks above;
+  - the kit is published, and one test run of the judging page stores and reads back an answer;
+  - the bench measures arms 4 and 5 against arm 3.
+- **L5b-2:** as the track plan's L5:
+  - at least 3 judges, blind, using the checklist;
+  - an arm is kept only if the judges prefer it to the arm before it, and the stroke painter is dropped unless
+    arm 4 beats arm 3;
+  - the owner names the judges (`track-e-look.md`, open question 2).
 
 ## Risks
 
