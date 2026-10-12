@@ -169,8 +169,10 @@ Since W4 the ice is one amount over the whole water (`iceAmt()`, from 2.3 to 3) 
   grows from late autumn (2.0) to winter (3.0); water freezes where its speed, less a bonus in the shallows (under
   0.4 m deep) and jittered by the grain's blotches, is under a threshold that rises with F to 0.66 in full winter.
   So the ice starts as shelves along the banks and the bars in late autumn, closes over the pools in winter, and the
-  riffles stay open (deep water from about 0.75; shallow riffle edges can freeze). The ice's edge is hard (`aastep`, wider than a pixel far out).
-- **Frosty edges:** a thin rime of white along the ice's edge on the ice's side, broken by the grain; the open water
+  riffles stay open (deep water from about 0.75; shallow riffle edges can freeze). The ice's edge is hard
+  (`aastep`, wider than a pixel far out).
+- **Frosty edges:** a rime of white along the ice's edge on the ice's side, broken by the grain (as built: soft,
+  over the last 0.06 of speed: a hard line there shimmered); the open water
   in winter darker and colder (less sky tint, no glitter's warmth), its strokes and riffle foam kept: open riffles
   read as dark water with white foam between pale ice.
 - **The ice:** W4's colour (pale, cracked, darker over deep water) with drifts of snow on it, thicker near the
@@ -213,3 +215,39 @@ Since W4 the ice is one amount over the whole water (`iceAmt()`, from 2.3 to 3) 
 The winter, leaves, seam and shimmer checks pass and their sabotages fail; the existing checks hold; the
 screenshots show the pools frozen, the riffles open with frosty edges, snow on the banks' rims, and leaves in the
 pools in autumn (owner's eye).
+
+## Results, W5b (dev Mac, against main with W5a as the base)
+
+- **Winter** (`node tools/water-look-check.mjs <url> --selftest`, `winter`): at the three reaches, pools 96.2% ice,
+  riffles 86.1% open (luma 10th/50th/90th percentile: pools 0.60/0.71/0.81, riffles 0.37/0.47/0.60; the ice cut
+  at 0.56 between them). With W4's even ice (the sabotage) the riffles are 2.2% open.
+- **Leaves** (`leaves`): at the default zoom in autumn, a leaf changes 1.6% of the pools' pixels and none of the
+  riffles'; in summer and winter none (over 2/255). Both sabotages fail (no leaves; leaves at any speed: riffles
+  1.7%). As built the leaves are 0.5–0.75 m, larger than planned (Approach above).
+- **Seam:** exact (largest 0/255) in every view, the new winter view too.
+- **Shimmer:** summer as W5a (closest 0.57%, widest 2.9%); autumn closest 0.58%, widest 2.6%. Winter shimmers on
+  main already (W4's even ice: 3.3% and 10.9% over the mask, 3.1% and 11.3% on the water's own pixels), from bright
+  snow and ice making every painted edge and the grain's clusters cross the 8/255 threshold. W5b: 1.6% and 9.7%
+  over the mask, 1.3% and 8.3% on the water's own pixels; the gates are main's, rounded down. Found on the way: a
+  hard rime line (2.5% at the closest zoom alone; now soft) and the ice's cracks, unantialiased since W4 (now at
+  least 1.5 pixels wide, their ink spread).
+- **Existing checks:** `tools/check-negatives.mjs`, `tools/water-check.mjs --selftest`,
+  `tools/detail-check.mjs --selftest`, `npm run check:data`, the docs check: pass. `npm test`: 244 of 245 under
+  outside load (a sim cost test, `test/soldiers.test.ts`, 12.2 ms against 12 with Blender running; it passes alone;
+  W5b touches no sim, render or test file).
+- **Readability guard:** no block that separates on the base fails (the Austria winter blocks fail on main too).
+- **Bench** (Metal proxy, main against this branch, `?season=`; the machine under outside load, runs of one build
+  varying by up to 1.5 ms): summer and winter within noise of main (winter often faster: the ice replaces W4's
+  ice over every layer); autumn, the best of six runs per camera, water +0 to +0.3 ms at the default zoom, the same
+  at the closest and the widest (the leaves skip their loop where they have no weight). The laptop decides.
+- **Review:** round 1 (severe: the leaves cut at their cells' edges and no far fade; their layout repeating every
+  5 cells; their scale from the local speed instead of the section's) fixed: the 2×2 nearest cells, a 200-unit
+  period, the section's speed (`aV`), a far fade, none under the ice; also the ice computed once per pixel, the
+  winter sky tint and glitter cooled, the shimmer gate on the water's own pixels, a widest autumn view, the plan
+  and the river system doc. Round 2 (nothing severe; fixed and stopped): the cracks' derivative taken before
+  `abs()`, the leaf loop skipped where it has no weight, a tolerance on the "no leaves" frames, an empty
+  `SHIMMER_ONLY` fails, the riffles' open speed stated as built.
+- **Known limits:** the leaves' along scale is the centre line's (on a tight bend they stretch on the outer side
+  and squash on the inner); the far ring's painted river line keeps its summer colour in every season; the leaf
+  palette copies the trees' autumn colours (`painter.glsl`) rather than sharing them.
+- **Also in this PR:** `?season=<0..3>` opens the look page in a season (the bench runs in it).
