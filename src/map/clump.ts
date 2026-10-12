@@ -8,12 +8,17 @@ import { cm } from './util.ts'
 
 export interface ClumpParams { coherence?: number; raggedness?: number; points?: number }
 export const CLUMP_DEFAULTS = { coherence: 0.6, raggedness: 0.3, points: 48 }
+// the shape's and the wobble's weights, and the harmonics they swing (below); a clump's radius never exceeds
+// clumpMaxRadius × its own (each harmonic's weight at most its full share)
+const SHAPE = 0.35, WOBBLE = 0.15, SHAPE_H = [2, 3, 4], WOBBLE_H = [7, 8, 9, 10], SHAPE_DIV = 1.6, WOBBLE_DIV = 2.2
+export const clumpMaxRadius = (coherence: number, raggedness: number): number =>
+  1 + (1 - coherence) * SHAPE * SHAPE_H.length / SHAPE_DIV + (1 - coherence) * raggedness * WOBBLE * WOBBLE_H.length / WOBBLE_DIV
 
 export function clump(centre: Pt, ra: number, rb: number, angle: number, p: ClumpParams, seed: number): Pt[] {
   const coherence = p.coherence ?? CLUMP_DEFAULTS.coherence, ragged = p.raggedness ?? CLUMP_DEFAULTS.raggedness, N = p.points ?? CLUMP_DEFAULTS.points
-  const rnd = random(seed), shape = (1 - coherence) * 0.35, wobble = (1 - coherence) * ragged * 0.15
+  const rnd = random(seed), shape = (1 - coherence) * SHAPE, wobble = (1 - coherence) * ragged * WOBBLE
   // harmonics 2–4 for the shape, 7–10 for the wobble: a weight and a phase each
-  const H = [2, 3, 4, 7, 8, 9, 10].map(k => ({ k, a: (k < 7 ? shape : wobble) * (0.4 + 0.6 * rnd()) / (k < 7 ? 1.6 : 2.2), ph: rnd() * 2 * PI }))
+  const H = [...SHAPE_H.map(k => ({ k, a: shape * (0.4 + 0.6 * rnd()) / SHAPE_DIV, ph: rnd() * 2 * PI })), ...WOBBLE_H.map(k => ({ k, a: wobble * (0.4 + 0.6 * rnd()) / WOBBLE_DIV, ph: rnd() * 2 * PI }))]
   const ca = cos(angle), sa = sin(angle), ring: Pt[] = []
   for (let i = 0; i < N; i++) {
     const t = 2 * PI * i / N

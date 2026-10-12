@@ -170,3 +170,23 @@ M3a:
   duplicate import and the orphan comment are gone. Re-validating only the generated features after expansion is
   left: the whole map is validated, which keeps the guarantee simple and costs little with the box check.
 
+**M3b, round 1** (10 findings, 2 severe):
+- **Severe:**
+  - street-village tested only a house's corners, so a stream through its middle passed (32 houses over 50
+    seeds). Houses are now tested as polygons: exact for lines and areas, after checking for any crossing;
+  - a village listed before its meandered stream saw the unmeandered guide, so the file's order changed the
+    houses. Expansion now runs in three passes, none in the file's order: self-reshaping generators, then readers
+    in id order, then scatters ordered by the scatters they name. Tested: the two orders give the same map.
+- **Moderate:**
+  - a scatter naming another scatter's region matched nothing once it had run; a selector now matches a
+    generator's children by its id, scatters run after those they name, and a `within` matching nothing is an
+    error;
+  - houses avoided only buildings given as areas; now any shape;
+  - closed rings are made once (the line index is no longer rebuilt per query).
+- **Light:**
+  - generated children's ids are reserved against an author's ids;
+  - `min: 0` with no room gives an empty village;
+  - the street walk's budget comes from the stretch's length;
+  - selectors may name generated children, and a feature may not name itself;
+  - `clump` exports its largest radius, and street-village reuses `ringsTouch`.
+

@@ -58,8 +58,13 @@ maps/kinds.json ──► checkCatalogue ─┐
 - **Resolution** (`src/map/resolve.ts`): the catalogue along the path, the map preset, the feature's own fields,
   the season's overrides (the catalogue's, then the feature's), the state's overlay. This is the one place the order
   lives.
-- **Expansion** (`src/map/expand.ts`): the ordinary generators in the file's order, then the late ones (scatter),
-  each seeing everything expanded before it;
+- **Expansion** (`src/map/expand.ts`): three passes, none in the file's order, so reordering the file changes
+  nothing:
+  1. the generators that only reshape their own feature (meander, clump);
+  2. those that read others (street-village), in id order;
+  3. the scatters, each after any scatter it names, in id order (a loop is an error).
+
+  An author's id of the form `<parent>-<n>`, where the parent writes children, is reserved;
   - each generator runs with its seed, `hash(map.seed, id, generator)` (`src/map/seed.ts`), so no other feature's
     change reaches it;
   - its feature takes the output shape and records `origin` (the generator, its parameters, `EXPAND_VERSION`);
@@ -88,12 +93,15 @@ maps/kinds.json ──► checkCatalogue ─┐
     naming its `parent`; a generator may also remove its own feature (a scatter's region);
   - `street-village` (`src/map/street-village.ts`), on a village `along` its road: houses on both sides between
     `from` and `to`, set back 3 m and facing the road, with seeded sizes and gaps; clear of water, buildings and the
-    road where it bends back; the village's area, when it has none, the hull of its houses; fewer than `houses` is
-    an error unless `min` allows it;
+    road where it bends back, each house tested as a whole polygon (`distanceToPolygon`, `src/map/reach.ts`: exact
+    for lines and areas); the village's area, when it has none, the hull of its houses; fewer than `houses` is an
+    error unless `min` allows it (with none, the village has no area);
   - `scatter` (`src/map/scatter.ts`), on an area kind given as its region: `count` clumps of the feature's kind and
     attributes, by seeded rejection sampling, each (at its largest radius, from clump's own harmonics) inside the
-    region, `clearance` m clear of what it `avoid`s (ids, categories or kind prefixes, `src/map/reach.ts`) and of
-    its siblings, and within `reach` of what it stays `within`. Scatters run after every other generator, in id
+    region, `clearance` m clear of what it `avoid`s and of its siblings, and within `reach` of what it stays
+    `within`. A selector is an id (a generator's id names its children too), a category or a kind prefix; a
+    feature cannot name itself, and a `within` that matches nothing is an error. The largest radius comes from
+    `clumpMaxRadius`, `clump`'s own bound. Scatters run after every other generator, in id
     order; fewer than `count` is an error unless `min` allows it.
 - **The base ground** (`relief.base`): seeded value noise (`src/map/noise.ts`), `height` its amplitude and `width`
   its scale, three octaves, filled from per-octave lattice tables (`addFbmGrid`, equal to `fbm` to the bit).

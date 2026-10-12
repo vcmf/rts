@@ -3,19 +3,16 @@
 // with seeded lengths, depths and gaps. A house keeps clear of water, of other buildings and of the road itself
 // (which may bend back). Each side walks the stretch on its own; the side further behind takes the next house.
 import type { Pt } from './schema.ts'
-import { pointAt, inRing, segmentsMeet, lineLength } from './geometry.ts'
+import { pointAt, inRing, ringsTouch, lineLength } from './geometry.ts'
 import { random } from './seed.ts'
 import { cm } from './util.ts'
 
-export interface Obstacle { clear(corners: Pt[]): boolean }   // may a house of these corners stand here?
+export interface Obstacle { clear(house: Pt[]): boolean }   // may this house (its four corners, a convex polygon) stand here?
 export interface HouseRow { houses: Pt[][]; hull: Pt[] }
 
 const SETBACK = 3, LENGTH = [8, 13], DEPTH = [6, 9], GAP = [3, 9], YARD = 4   // m
 
-function overlaps(a: Pt[], b: Pt[]): boolean {
-  for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) if (segmentsMeet(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])) return true
-  return inRing(b, a[0]) || inRing(a, b[0])
-}
+const overlaps = (a: Pt[], b: Pt[]): boolean => ringsTouch(a, b) || inRing(b, a[0]) || inRing(a, b[0])
 
 // the convex hull of the points (monotone chain), counter-clockwise
 function hull(pts: Pt[]): Pt[] {
@@ -29,7 +26,9 @@ function hull(pts: Pt[]): Pt[] {
 export function streetVillage(road: Pt[], roadWidth: number, from: number, to: number, want: number, seed: number, obstacle: Obstacle): HouseRow {
   const rnd = random(seed), range = (r: number[]) => r[0] + rnd() * (r[1] - r[0]), end = Math.min(to, lineLength(road))
   const houses: Pt[][] = [], at = [from + range([0, 6]), from + range([0, 6])]   // each side's next position along the road
-  for (let guard = 0; houses.length < want && guard < 4 * want + 200; guard++) {
+  // enough tries to walk the whole stretch on both sides in the smallest steps (2 m), plus one per house
+  const tries = 2 * Math.ceil(Math.max(0, end - from) / 2) + 4 * want + 20
+  for (let guard = 0; houses.length < want && guard < tries; guard++) {
     const side = at[0] <= at[1] ? 0 : 1, L = range(LENGTH), D = range(DEPTH), s = at[side]
     if (s + L > end) { at[side] = Infinity; if (at[0] === Infinity && at[1] === Infinity) break; continue }
     const [mx, mz, tx, tz] = pointAt(road, s + L / 2), sign = side ? -1 : 1, nx = -tz * sign, nz = tx * sign   // the side's outward normal

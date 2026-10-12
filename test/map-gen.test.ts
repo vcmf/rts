@@ -282,6 +282,56 @@ describe('M3b: scatter', () => {
   })
 })
 
+describe('M3b: review round 1', () => {
+  const road = { id: 'road', kind: 'way.road.lane', line: [[0, -560], [0, 560]] as Pt[], width: 6 }
+  const village = { id: 'village', kind: 'built.village', along: { id: 'road', from: 400, to: 720 }, houses: 12, gen: { 'street-village': { min: 1 } } }
+  it('no house straddles a stream crossing its road (the house tested as a polygon, not by its corners)', () => {
+    const brook = { id: 'brook', kind: 'water.stream', line: [[-560, 0], [560, 0]] as Pt[], width: 6 }
+    for (let seed = 1; seed <= 20; seed++) {
+      const { map, issues } = expand(mini([road, brook, village], seed), cat)
+      expect(issues).toEqual([])
+      for (const h of map.features.filter(f => f.origin?.parent === 'village')) {
+        const zs = h.area![0].map(p => p[1])
+        expect(Math.min(...zs) > 5 || Math.max(...zs) < -5).toBe(true)   // wholly off the water (3 m) and its 2 m margin
+      }
+    }
+  })
+  it("the file's order changes nothing: a village before its meandered stream sees the meandered stream", () => {
+    const brook = { id: 'brook', kind: 'water.stream', line: [[-560, 0], [560, 0]] as Pt[], width: 6, gen: { meander: { amplitude: 40, wavelength: 150 } } }
+    for (const seed of [1, 2, 3]) expect(expand(mini([road, village, brook], seed), cat).map).toEqual(expand(mini([road, brook, village], seed), cat).map)
+  })
+  it('houses avoid a building of any shape; min 0 with no room gives an empty village', () => {
+    const hut = { id: 'hut', kind: 'built.house', circle: [[8, -100], 6] as [Pt, number] }
+    const { map } = expand(mini([road, hut, { ...village, along: { id: 'road', from: 420, to: 500 } }]), cat)
+    for (const h of map.features.filter(f => f.origin?.parent === 'village')) expect(h.area![0].every(([x, z]) => Math.hypot(x - 8, z + 100) > 6)).toBe(true)
+    const pond = { id: 'pond', kind: 'water.lake', area: [[[-200, -200], [200, -200], [200, 200], [-200, 200]]] as Pt[][] }
+    const empty = expand(mini([road, pond, { ...village, along: { id: 'road', from: 400, to: 700 }, gen: { 'street-village': { min: 0 } } }]), cat)
+    expect(empty.issues).toEqual([])
+    expect(empty.map.features.find(f => f.id === 'village')!.area).toBeUndefined()
+  })
+  it("a scatter naming another scatter avoids its children, whichever id comes first; within that matches nothing is an error", () => {
+    const region = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
+    const woods = (id: string) => ({ id, kind: 'veg.wood', area: region, gen: { scatter: { count: 5, radiusMin: 30, radiusMax: 50 } } })
+    const fields = (id: string, woodsId: string) => ({ id, kind: 'ground.field', area: region, gen: { scatter: { count: 5, radiusMin: 20, radiusMax: 30, avoid: [woodsId], clearance: 10 } } })
+    for (const [w, fi] of [['a-woods', 'b-fields'], ['b-woods', 'a-fields']]) {
+      const { map, issues } = expand(mini([woods(w), fields(fi, w)]), cat)
+      expect(issues).toEqual([])
+      const ws = map.features.filter(f => f.origin?.parent === w), fs = map.features.filter(f => f.origin?.parent === fi)
+      expect(ws).toHaveLength(5); expect(fs).toHaveLength(5)
+      for (const a of fs) for (const b of ws) expect(a.area![0].some(p => inRing(b.area![0], p)) || b.area![0].some(p => inRing(a.area![0], p))).toBe(false)
+    }
+    const lonely = expand(mini([{ ...woods('w'), gen: { scatter: { count: 2, within: ['water'], reach: 10 } } }]), cat)
+    expect(lonely.issues[0]?.message).toMatch(/nothing matches within/)
+  })
+  it("a feature cannot name itself; a generated child's id is reserved, and a child can be named", () => {
+    const region = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
+    const issues = (fs: MapFile['features']) => validate(mini(fs), cat).map(i => `${i.path}: ${i.message}`)
+    expect(issues([{ id: 'c', kind: 'veg.wood', area: region, gen: { scatter: { count: 2, avoid: ['c'] } } }])).toContainEqual(expect.stringMatching(/avoid\[0\]: a feature cannot name itself/))
+    expect(issues([road, village, { id: 'village-2', kind: 'built.house', circle: [[50, 0], 5] }])).toContainEqual(expect.stringMatching(/features\[2\]\.id: "village-2" is reserved/))
+    expect(issues([road, village, { id: 'w', kind: 'veg.wood', area: region, gen: { scatter: { count: 2, avoid: ['village-3'] } } }])).toEqual([])
+  })
+})
+
 describe('M3b: five seeds of one intent, five battlefields', () => {
   longIt('each validates, expands, compiles to sim data and runs two minutes of the S1e battle with finite state; all differ', () => {
     const seen = new Set<string>()

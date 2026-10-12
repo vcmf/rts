@@ -29,7 +29,7 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
     let out: GenOutput
     try {
       out = spec.run({
-        f, attrs: res(f).attrs, params, seed: seedOf(map.seed, f.id, name), mapSeed: map.seed, extent: map.extent, features: current,
+        f, attrs: res(f).attrs, params, seed: seedOf(map.seed, f.id, name), mapSeed: map.seed, features: current,
         attrsOf: id => res(current.get(id)!).attrs, kindOf: id => res(current.get(id)!).kind,
       })
     } catch (err) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen.${name}`, message: (err as Error).message }); return }
@@ -46,11 +46,24 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
       children.push(child); current.set(child.id, child)
     }
   }
-  // the generators in two passes: every ordinary one in the file's order, then the late ones (scatter: they read the
-  // others' output) in id order, a later one seeing an earlier one's children
-  const gens = map.features.filter(f => f.gen)
-  for (const f of gens) if (!GENERATOR_SPECS[Object.keys(f.gen!)[0]].late) runOne(f)
-  for (const f of gens.filter(g => GENERATOR_SPECS[Object.keys(g.gen!)[0]].late).sort((a, b) => (a.id < b.id ? -1 : 1))) runOne(f)
+  // the generators in three passes, none in the file's order (so reordering the file changes nothing):
+  //   1. those that only reshape their own feature (meander, clump), each reading nothing else;
+  //   2. those that read other features (street-village), in id order, after every reshaping;
+  //   3. the late ones (scatter), each after any scatter it names in avoid or within (a cycle is an error), then in
+  //      id order: a later one sees an earlier one's children
+  const gens = [...map.features.filter(f => f.gen)].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), spec = (f: Feature) => GENERATOR_SPECS[Object.keys(f.gen!)[0]]
+  for (const f of gens) if (!spec(f).reads && !spec(f).late) runOne(f)
+  for (const f of gens) if (spec(f).reads && !spec(f).late) runOne(f)
+  const late = gens.filter(f => spec(f).late), done = new Set<string>(), visiting = new Set<string>()
+  const named = (f: Feature) => (spec(f).selects ?? []).flatMap(k => { const v = (f.gen![Object.keys(f.gen!)[0]] as Record<string, unknown>)[k]; return Array.isArray(v) ? v as string[] : [] })
+  const visit = (f: Feature) => {
+    if (done.has(f.id)) return
+    if (visiting.has(f.id)) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen`, message: 'scatters name each other in a loop' }); return }
+    visiting.add(f.id)
+    for (const g of late) if (g !== f && named(f).includes(g.id)) visit(g)
+    visiting.delete(f.id); done.add(f.id); runOne(f)
+  }
+  for (const f of late) visit(f)
   if (issues.length) return { map, issues }
   // the expanded features: the author's, in their order (generated ones at their new shape, removed ones gone), then
   // the children; validated like any map, so the paths of the author's features name their file
