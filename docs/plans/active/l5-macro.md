@@ -353,3 +353,38 @@ L5a 3–4 days; L5b 2 days of work plus the judges' time.
 - **Known limits:** the cover is authored here until the map format's compiler writes the grid; the staff map does not
   read the macro colour; stubble and wheat still turn warm orange in the golden light; the bake's road contrast is
   near its gate.
+
+## Results, L5b-1 (dev Mac)
+
+- **The arms:** strokes and kuwahara render on the terrain, the far ring and the shore band, switched by `?macro=` or
+  `__look.macro.setArm()` like arms 1–3; bakes run one at a time, so a switch made during a bake lands on the arm
+  asked for last.
+- **Classes** (median ΔE 2000, summer): field against grass, strokes 12.5, kuwahara 12.1 (bake 11.9); road against
+  grass, strokes 9.3, kuwahara 8.8 (bake 8.6). All ≥ 8.
+- **Shimmer** (worst pair, closest / widest, summer then winter): strokes 0.40% / 0.60%, 1.21% / 1.75%; kuwahara
+  0.40% / 0.60%, 1.21% / 1.75%; within 0.01 points of the bake everywhere.
+- **Seam:** exact (0/255) in all five arms.
+- **Determinism:** the hashes equal on load, on a rebake and on a second load for both arms. The bake arm still
+  hashes 49cfc64f / 943d2329, L5a's, so reading the cover through `coverTex` changed nothing.
+- **Bake** (the page's sizes, as the page reports it on load; Metal, two runs; SwiftShader with another session
+  loading the machine): bake 12–15 ms Metal, 1.2 s SwiftShader; strokes 42–44 ms, 4.2 s; kuwahara 21–24 ms, 2.6 s.
+  Full size (3600²) under SwiftShader: bake 4.5 s, strokes 19.1 s, kuwahara 11.5 s, the context held in each.
+  Memory with mips: 15.2 MB for bake and strokes, 26.5 MB for kuwahara (its scratch target is kept for rebakes).
+  Arms 4 and 5 draw with arm 3's shader, so their frame cost is arm 3's; the bench measures arms 1–3.
+- **Readability guard** (start view and `--view cover`, against `?macro=bake`): both arms pass.
+- **Existing checks:** `tools/check-negatives.mjs`, `tools/water-check.mjs --selftest`, `tools/water-look-check.mjs
+  --selftest`, `tools/detail-check.mjs --selftest`, `tools/macro-check.mjs --selftest`, `npm run check:data`, the
+  docs check: pass. `npm test`: 255 of 256 with the checks' Chromes and another session loading the machine (the
+  sim's cost test, 13.2 ms against 12); `test/soldiers.test.ts` passes alone.
+- **The kit:** 12 screens (4 pairs × 3 zooms), each with 6 stills a side (3 yaws × summer and winter) and a 3 s pan:
+  120 media files, 69 MB. The later arm is side x on 6 screens. Published as a private judging page with a
+  database (answers per judge, readable by the owner alone); a probe answer was written and read back, and a judge's
+  view saw only their own document. The key (`scratch/l5b-kit/key.json`, git-ignored) is committed with the tally in
+  L5b-2.
+- **Review:** round 1 (severe: the database rules undocumented; the key beside the published files; two bakes able
+  to race) fixed. Round 2 (nothing severe; fixed and stopped): Finish waits for the save, a random seed, the scratch
+  counted in memory, missing shots stop the kit, reads in branches through `coverTex`, the effect keyed on its
+  defines, trees placed as their own model, the kit's cameras from `SPEC.camera`, a lazy Kuwahara pass.
+- **Known limits:** the stroke gather (nine cells, sorted) makes its bake about three times arm 3's; a judge who
+  opens the page's data or network panel can see which screens share files (the bake's in 3 pairs, the shader's in
+  2) though not which arm they are, so the blind rests on judges not inspecting.
