@@ -38,8 +38,9 @@ export interface Nature {
   footprint(model: string, s: number): number
   stones: [number, number, number, number][]   // the stones in the water (W5a): x, z, radius, the flow's direction (rad), for their foam
   showCards?: (on: boolean) => void            // under cards: the crowns as cards, or the pack's (the bench's arms)
-  // under cards: the card meshes, which cast the crowns' shadows (src/look/bakes.ts; the trunk meshes cast the trunks')
-  cardCasters?: { leaf: BaseTexture; cards: Mesh[] }
+  // under cards: the card meshes, which cast the crowns' shadows, and the pack models they replace, which cast nothing
+  // (src/look/bakes.ts; the trunk meshes cast the trunks')
+  cardCasters?: { leaf: BaseTexture; cards: Mesh[]; packs: Mesh[] }
 }
 
 // what may grow on each class of the cover (docs/plans/active/l5-macro.md): grass, flowers, plants, bushes, stumps
@@ -89,9 +90,9 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     return m
   }
   const _m = new Matrix(), _q = new Quaternion(), _s = new Vector3(), _t = new Vector3()
-  function place(model: string, material: ShaderMaterial, items: Item[], trunk = false): { mesh: Mesh; buf: Float32Array; tint: Float32Array } | null {
+  function place(model: string, material: ShaderMaterial, items: Item[]): { mesh: Mesh; buf: Float32Array; tint: Float32Array } | null {
     if (!items.length) return null
-    const m = buildModel(model, trunk); m.material = material; m.alwaysSelectAsActiveMesh = true
+    const m = buildModel(model); m.material = material; m.alwaysSelectAsActiveMesh = true
     const buf = new Float32Array(items.length * 16), tint = new Float32Array(items.length)
     items.forEach(([x, z, s, yaw, t, dy = 0], i) => { _t.set(x, H(x, z) + dy, z); Quaternion.RotationYawPitchRollToRef(yaw, 0, 0, _q); _s.set(s, s, s); Matrix.ComposeToRef(_s, _q, _t, _m); _m.copyToArray(buf, i * 16); tint[i] = t })
     m.thinInstanceSetBuffer('matrix', buf, 16, true); m.thinInstanceSetBuffer('aTint', tint, 1, true)
@@ -214,16 +215,18 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const carded = (k: string) => !!cards && /^(CommonTree|BirchTree|Willow)_/.test(k)
   const treeCards = cards && cardMaterial(mats, 'treeCards', '#4a7330', '#97a043', 0.45, cards.leaf), birchCards = cards && cardMaterial(mats, 'birchCards', '#7a9a3c', '#bcae55', 0.45, cards.leaf)
   let seed = 1
-  const swaps: ((on: boolean) => void)[] = [], cardMeshes: Mesh[] = []
+  const swaps: ((on: boolean) => void)[] = [], cardMeshes: Mesh[] = [], packs: Mesh[] = []
   for (const [k, items] of Object.entries(groups)) {
     const birch = /Birch/.test(k)
     const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : birch ? birchMat : /Pine/.test(k) ? pineMat : treeMat
     const placed = place(k, material, items)
     if (placed && cards && carded(k)) {
-      const trunks = place(k, material, items, true)!.mesh, cm = cardMesh(scene, 'cards_' + k, NATURE[k], cards.opts, seed++), pack = placed.mesh
+      const trunks = buildModel(k, true), cm = cardMesh(scene, 'cards_' + k, NATURE[k], cards.opts, seed++), pack = placed.mesh
+      trunks.material = material; trunks.alwaysSelectAsActiveMesh = true
+      trunks.thinInstanceSetBuffer('matrix', placed.buf, 16, true); trunks.thinInstanceSetBuffer('aTint', placed.tint, 1, true)
       placeCards(cm, (birch ? birchCards : treeCards) as ShaderMaterial, placed.buf, placed.tint)
       const show = (on: boolean) => { cm.setEnabled(on); trunks.setEnabled(on); pack.setEnabled(!on) }
-      show(true); swaps.push(show); cardMeshes.push(cm)
+      show(true); swaps.push(show); cardMeshes.push(cm); packs.push(pack)
     }
   }
   const showCards = cards ? (on: boolean) => { for (const f of swaps) f(on) } : undefined
@@ -231,5 +234,5 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // and none on the roads or the village ground (after the every-fourth choice, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
   place('Bush_1', farMat, far.filter((b, i) => i % 4 === 0 && drawn(b))); place('Bush_2', farMat, far.filter((b, i) => i % 4 === 2 && drawn(b)))
-  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes } : undefined }
+  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined }
 }

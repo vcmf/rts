@@ -71,6 +71,7 @@ const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }
 const treesParam = params.get('trees')
 if (treesParam !== null && treesParam !== 'cards') throw new Error(`?trees must be cards, not ${treesParam}`)
 const leavesParam = params.get('leaves') ?? 'oak'
+for (const k of ['leaves', 'cardsize', 'cardcover', 'cardsink']) if (params.has(k) && treesParam !== 'cards') throw new Error(`?${k} needs ?trees=cards`)
 if (leavesParam !== 'oak' && leavesParam !== 'procedural') throw new Error(`?leaves must be oak or procedural, not ${leavesParam}`)
 const cardOpt = (k: string, d: number) => { const v = Number(params.get(k) ?? d); if (!(v > 0)) throw new Error(`?${k} must be a positive number, not ${params.get(k)}`); return v }
 const cardOpts: CardOptions = { size: cardOpt('cardsize', CARD_DEFAULTS.size), cover: cardOpt('cardcover', CARD_DEFAULTS.cover), sink: cardOpt('cardsink', CARD_DEFAULTS.sink) }
@@ -123,8 +124,15 @@ addEventListener('drop', e => {
     if (!leafTex) { console.warn('dropping a leaf picture needs ?trees=cards'); return }
     const tex = leafTex
     // the crowns cast through the atlas too: the render-once shadow map, and the light map after it, are redone
-    img.onload = () => { const atlas = atlasFromPicture(img); tex.getContext().clearRect(0, 0, atlas.width, atlas.height); tex.getContext().drawImage(atlas, 0, 0); tex.update(false); bakes.shadowRT.resetRefreshCounter() }
-    img.src = URL.createObjectURL(f); return
+    const url = URL.createObjectURL(f)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      let atlas: HTMLCanvasElement
+      try { atlas = atlasFromPicture(img) } catch (err) { alert(String(err)); return }
+      tex.getContext().clearRect(0, 0, atlas.width, atlas.height); tex.getContext().drawImage(atlas, 0, 0); tex.update(false)
+      nature.showCards?.(true); bakes.shadowRT.resetRefreshCounter()   // the shadows are baked with the cards shown
+    }
+    img.src = url; return
   }
   img.onload = () => {
     const old = mats.grain, cv = makeGrainCanvas(lumOf(img)); mats.setGrain(grainTexture(scene, cv), grainMean(cv))

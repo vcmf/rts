@@ -58,7 +58,7 @@ export function atlasFromPicture(img: CanvasImageSource & { width: number; heigh
         v = (at(ix, iy) * (1 - fx) + at(ix + 1, iy) * fx) * (1 - fy) + (at(ix, iy + 1) * (1 - fx) + at(ix + 1, iy + 1) * fx) * fy
       }
       const a = Math.min(1, Math.max(0, (v - BLACK) / 24)), q = ((oy + y) * CELL * 2 + ox + x) * 4
-      const n = Math.min(1, Math.max(0, (v - v0) / (v1 - v0)))
+      const n = v1 - v0 < 1 ? 0.6 : Math.min(1, Math.max(0, (v - v0) / (v1 - v0)))   // a flat picture: one mid value
       od.data[q] = od.data[q + 1] = od.data[q + 2] = Math.round(n * 255); od.data[q + 3] = Math.round(a * 255)
     }
   })
@@ -76,13 +76,13 @@ export function atlasProcedural(seed = 7): HTMLCanvasElement {
     g.save(); g.translate(x, y); g.rotate(ang); g.beginPath()
     const wdt = len * 0.32
     g.moveTo(0, -len / 2)
-    for (const side of [1, -1]) {
-      for (let k = 0; k < 3; k++) {
-        const t0 = -0.5 + k / 3, t1 = t0 + 1 / 3, wv = wdt * (0.75 + 0.25 * Math.sin((k + 1) * 1.1))
-        g.quadraticCurveTo(side * wv * 1.25, (t0 + 1 / 6) * len, side * wv * 0.55, t1 * len)
-      }
-      if (side === 1) g.lineTo(0, len / 2)
+    const lobe = (k: number, side: number, down: boolean) => {
+      const t0 = -0.5 + k / 3, t1 = t0 + 1 / 3, wv = wdt * (0.75 + 0.25 * Math.sin((k + 1) * 1.1))
+      g.quadraticCurveTo(side * wv * 1.25, (t0 + 1 / 6) * len, side * wv * 0.55, (down ? t1 : t0) * len)
     }
+    for (let k = 0; k < 3; k++) lobe(k, 1, true)       // down the right side to the tip
+    g.lineTo(0, len / 2)
+    for (let k = 2; k >= 0; k--) lobe(k, -1, false)    // and back up the left
     g.closePath()
     const c = Math.round(255 * v); g.fillStyle = `rgb(${c},${c},${c})`; g.fill(); g.restore()
   }

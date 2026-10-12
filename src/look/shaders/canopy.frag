@@ -8,7 +8,8 @@ void main(){
   // the coverage grows with the mip level, so far crowns keep their mass instead of thinning out
   vec2 d=vUV*uLeafSize;float lod=max(0.0,0.5*log2(max(dot(dFdx(d),dFdx(d)),dot(dFdy(d),dFdy(d)))));
   if(tx.a*(1.0+lod*0.6)<0.5)discard;
-  float val=mix(tx.r,0.6,smoothstep(1.5,4.0,lod));                 // far crowns: less value noise between leaves
+  // the value over the coverage: the black around each clump, filtered in at its edge and in the mips, would darken it
+  float val=mix(clamp(tx.r/max(tx.a,1e-3),0.0,1.0),0.6,smoothstep(1.5,4.0,lod));                 // far crowns: less value noise between leaves
   vec3 N=normalize(vN);
   vec4 lm=LM(vW);
   float sh=shadowAt(vS,N);                                      // at its point on the crown surface: deeper in, the other cards would shade it

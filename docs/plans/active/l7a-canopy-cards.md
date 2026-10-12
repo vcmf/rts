@@ -89,3 +89,17 @@ the oak picture and with the procedural atlas.
   finding, not the shadow map's 0.33 m texel as first thought); with a plain cut two mips finer, the shadow's
   outline breaks into leaf lobes. Its inside stays solid where the crown is dense. The light-map bake filters
   edges over about 1.3 m for every shadow on the map; a tighter filter is the shadow-look plan's.
+
+## Review (`/code-review high`)
+
+- **Round 1** (d9235ea): one severe finding, the shadow pass's alpha cut using the screen's coverage boost
+  (no gaps in the shadows), and nine moderate or light ones (the inner-leaf tint missing on cards, trunks drawn
+  as whole models with every crown fragment discarded, a stale shadow map after a dropped atlas, the atlas
+  wrapping, contradictory comments, the system doc, duplicated card GLSL, a bench arm not labelled, a model with
+  no crown triangle). All fixed in 4ab21f5.
+- **Round 2**: no severe finding. Fixed: the procedural leaf path crossing itself, a flat picture giving NaN
+  values, the shadow casters chosen by enable state, the dropped picture's errors and object URL, the dark
+  fringe from the black around each clump (value over coverage in the shader), the trunks' duplicated instance
+  buffers, the card switches ignored without `?trees=cards`. Left as they are (light): the pack models are still
+  built under cards (the bench's other arm), and the crown centre and the backlight are computed twice, in the
+  pack and the card shaders. Review stops here (no severe finding).
