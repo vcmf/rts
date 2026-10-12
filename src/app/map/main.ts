@@ -10,8 +10,12 @@ import type { Compiled, CompileReply, CompileRequest, LayerName } from './protoc
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<string, () => Promise<string>>
 const KINDS = import.meta.glob('/maps/kinds.json', { query: '?raw', import: 'default' }) as Record<string, () => Promise<string>>
-const read = async (file: string, bundled: Record<string, () => Promise<string>>): Promise<string> =>
-  import.meta.env.DEV ? (await fetch(file, { cache: 'no-store' })).text() : bundled[file]()
+async function read(file: string, bundled: Record<string, () => Promise<string>>): Promise<string> {
+  if (!import.meta.env.DEV) return bundled[file]()
+  const res = await fetch(file, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`${file}: ${res.status} ${res.statusText}`)
+  return res.text()
+}
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 const canvas = $<HTMLCanvasElement>('map'), ctx = canvas.getContext('2d')!
@@ -28,14 +32,23 @@ let view = { cx: 0, cz: 0, ppm: 0 }, current: Compiled | null = null, image: HTM
 let layers: Partial<Record<LayerName, Uint16Array>> = {}, height = new Float64Array(0)
 const log: { reason: string; savedAt?: number; drawnAt: number; ms: number }[] = []
 
-const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
 let seq = 0, pending: { reason: string; t0: number; savedAt?: number } | null = null
-worker.onerror = e => {
-  issues = [{ id: null, path: '', message: `the compile worker failed: ${e.message}` }]
+// a compile that ends without a drawing (a read failed, the worker died): its error shows, the last drawing stays
+function failed(message: string): void {
+  issues = [{ id: null, path: '', message }]
   if (pending) log.push({ reason: pending.reason, savedAt: pending.savedAt, drawnAt: Date.now(), ms: performance.now() - pending.t0 })
   pending = null; draw(); panel()
 }
-worker.onmessage = (e: MessageEvent<CompileReply>) => {
+// the worker catches the compiler's errors itself; an error here means the worker is broken (it failed to load, or
+// threw outside a compile), so it is replaced and whatever it held is lost
+let worker = makeWorker()
+function makeWorker(): Worker {
+  const w = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
+  w.onmessage = onReply
+  w.onerror = e => { e.preventDefault(); w.terminate(); worker = makeWorker(); failed(`the compile worker failed: ${e.message || 'it did not load'}`) }
+  return w
+}
+function onReply(e: MessageEvent<CompileReply>): void {
   const r = e.data
   if (r.seq !== seq || !pending) return   // an older compile, overtaken
   if (r.ok) {
@@ -57,7 +70,11 @@ worker.onmessage = (e: MessageEvent<CompileReply>) => {
 async function compile(reason: string, savedAt?: number): Promise<void> {
   const mine = ++seq, t0 = performance.now()
   pending = { reason, t0, savedAt }
-  const [mapText, kindsText] = await Promise.all([read(picker.value, MAPS), read('/maps/kinds.json', KINDS)])
+  let mapText: string, kindsText: string
+  try { [mapText, kindsText] = await Promise.all([read(picker.value, MAPS), read('/maps/kinds.json', KINDS)]) } catch (err) {
+    if (mine === seq) failed(`cannot read the map: ${(err as Error).message}`)
+    return
+  }
   if (mine !== seq) return
   worker.postMessage({ seq: mine, mapText, kindsText } satisfies CompileRequest)
 }

@@ -60,10 +60,15 @@ maps/kinds.json ──► checkCatalogue ─┐
 - **The layout** (`src/map/format.ts`): one feature per line, so diffs show which features changed.
 - **Apply** (`src/map/apply.ts`): the expanded features into layers on the 2 m grid over the extent, in the
   proposal's fixed order (§4):
-  - heights at the grid's nodes: the landforms summed (a ridge's crest tapers over its last half-width), then the
-    relief edits in painting order (`level`, `raise`, `lower`, `cut`, `ditch`, a way's `cut` or `raise`);
+  - heights at the grid's nodes: the landforms summed, then the relief edits in painting order (`level`, `raise`,
+    `lower`, `cut`, `ditch`, a way's `cut` or `raise`). A ridge's crest tapers over its last half-width. A scarp
+    is a step: its face rises over `width` to the steep side, which stays up and returns to the ground over its
+    back slope (`edge`, never steeper than the face), and it fades past its ends over the same length;
   - per cell, an index into the map's table of resolved features for each layer (ground, veg, water, way,
-    barrier, built, zone, and the last edit), plus the vegetation's density with ramps evaluated;
+    barrier, built, zone), plus the vegetation's density with ramps evaluated, and the last cut or ditch (`edit`:
+    drawn in the draft, and the mark the ruleset's crossing rule will read; other edits leave none);
+  - a line takes the cells whose centre lies strictly within its half-width, and at least the cells beside it, so
+    widths round the same way for every line (on even metres a 6 m stream and a 5 m road take 4 m);
   - painting order is priority, then id: the higher priority wins a cell and, at equal priority, the later id;
   - barriers by `barrierCells`, the one implementation of the cell rule (proposal §3.6), exact in integers;
   - a bridge, for now, decks the road's cells over the water; the real deck is M2's.
@@ -88,8 +93,8 @@ The kinds' values and the attributes' ranges: `maps/kinds.json`. Its note says w
 `test/map-apply.test.ts`:
 - the barrier rule: 2 cells on an axis; a 3-cell staircase on a diagonal that no 8-direction walk crosses;
   square-cut ends and a 2-cell gate; a sealed corner and a sealed closed yard; gaps by step;
-- painting order, the relief (a hill's peak, a ridge's steep side, a level edit, a ditch), each layer, a bridge
-  deck, a density ramp;
+- painting order, the relief (a hill's peak, a ridge's steep side, a level edit, a ditch, a scarp's step, its
+  back slope and its ends), each layer, a bridge deck, a density ramp, line widths, a ditch under a later raise;
 - determinism: the example's layers and draft hash to committed values;
 - locality: moving one wood changes only its old and new cells and no height.
 

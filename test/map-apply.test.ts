@@ -147,6 +147,29 @@ describe('M1b: applying features into the layers', () => {
     expect(at(L, 'way', 1, 51)).toBe('path'); expect(at(L, 'way', 1, 49)).toBe('path'); expect(at(L, 'way', 1, 53)).toBeNull()
     expect(at(L, 'water', 1, -49)).toBe('rill')
   })
+  it('widths round the same way for every line: a 6 m stream and a 5 m road both take 4 m, a 10 m stream 8 m (review round 2)', () => {
+    const L = apply(mini([
+      { id: 'stream', kind: 'water.stream', line: [[-100, 0], [100, 0]], width: 6 },
+      { id: 'river', kind: 'water.river', line: [[-100, 100], [100, 100]], width: 10 },
+      { id: 'road', kind: 'way.road.lane', line: [[-100, -100], [100, -100]], width: 5 },
+    ]), cat)
+    const across = (layer: (typeof LAYER_NAMES)[number], z0: number) => [-5, -3, -1, 1, 3, 5].filter(dz => at(L, layer, 1, z0 + dz) !== null).length * 2
+    expect(across('water', 0)).toBe(4); expect(across('way', -100)).toBe(4); expect(across('water', 100)).toBe(8)
+  })
+  it('a raise over a ditch keeps the ditch marked (review round 2)', () => {
+    const L = apply(mini([
+      { id: 'a-ditch', kind: 'relief.ditch', line: [[-50, 0], [50, 0]], depth: 1.5, width: 4 },
+      { id: 'b-raise', kind: 'relief.raise', circle: [[0, 0], 20], height: 1 },
+    ]), cat)
+    expect(at(L, 'edit', 1, 1)).toBe('a-ditch')
+  })
+  it("a scarp's ends fade over its back slope, not as a wall; edge 0 is no cliff (review round 2)", () => {
+    const L = apply(mini([{ id: 'step', kind: 'relief.scarp', line: [[-100, 0], [100, 0]], height: 6, width: 20, steep: 'left', edge: 150 }]), cat)
+    for (let x = 100; x < 190; x += 2) expect(Math.abs(hAt(L, x + 2, 40) - hAt(L, x, 40))).toBeLessThan(0.35)   // gentler than the face's 6 m over 20 m
+    const Z = apply(mini([{ id: 'step', kind: 'relief.scarp', line: [[-100, 0], [100, 0]], height: 6, width: 20, steep: 'left', edge: 0 }]), cat)
+    // the face's steepest 2 m step is 1.5 × 6 m / 20 m × 2 m = 0.9 m; the back slope is never steeper
+    for (let z = 0; z < 60; z += 2) expect(Math.abs(hAt(Z, 0, z + 2) - hAt(Z, 0, z))).toBeLessThanOrEqual(0.9 + 1e-9)
+  })
   it('in the draft, cuts and ditches show; levelled ground keeps its colour (review round 1)', () => {
     const L = apply(mini([
       { id: 'meadow', kind: 'ground.meadow', area: [[[-200, -200], [200, -200], [200, 200], [-200, 200]]] },

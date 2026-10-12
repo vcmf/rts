@@ -18,7 +18,7 @@ import { cos, sin } from '../sim/num.ts'
 export const CELL = 2   // m (decision 0021)
 // widths where the catalogue gives none: a way's (every way kind sets one), and the bands of the line-shaped kinds
 // that take no width attribute (reeds along a bank, a flèche's earthwork), m
-const WAY_WIDTH = 5, VEG_LINE = 4, WORK_LINE = 6
+const WAY_WIDTH = 5, WATER_WIDTH = 6, EDIT_WIDTH = 4, LANDFORM_WIDTH = 100, VEG_LINE = 4, WORK_LINE = 6
 
 export interface Layers {
   cell: number; nx: number; nz: number; x0: number; z0: number   // cells; cell (i, j) spans x0 + i·cell … + cell
@@ -26,7 +26,8 @@ export interface Layers {
   table: Resolved[]         // the features, resolved for the map's season; a layer's value k ≥ 1 is table[k − 1]
   ground: Uint16Array; veg: Uint16Array; water: Uint16Array; way: Uint16Array
   barrier: Uint16Array; built: Uint16Array; zone: Uint16Array
-  edit: Uint16Array         // the last relief edit that covers the cell (cuts and ditches show in the draft)
+  edit: Uint16Array         // the last cut or ditch (a relief cut, a ditch, a sunken way) that covers the cell: the draft
+                            // draws it, and it marks the cell for the ruleset's crossing rule; other edits leave no mark
   density: Uint8Array       // the vegetation's density × 255 (ramps evaluated per cell)
 }
 export const LAYER_NAMES = ['ground', 'veg', 'water', 'way', 'barrier', 'built', 'zone', 'edit'] as const
@@ -124,7 +125,7 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
   // 1. landforms, summed
   for (const { f, r } of order) {
     if (categoryOf(r.kind) !== 'relief' || isEdit(r)) continue
-    const a = r.attrs, h = num(a.height), w2 = num(a.width, 100) / 2, kind = r.kind.split('.')[1]
+    const a = r.attrs, h = num(a.height), w2 = num(a.width, LANDFORM_WIDTH) / 2, kind = r.kind.split('.')[1]
     if (kind === 'hill') {
       const field = f.point ? areaField({ id: f.id, circle: [f.point, w2] })! : areaField(f)!
       const rad = f.point ? w2 : f.circle ? f.circle[1] : Math.min(f.ellipse![1], f.ellipse![2])
@@ -140,11 +141,11 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
     } else if (kind === 'scarp') {
       // a step in the land: the face rises over its width, centred on the line; the high side then stays up and
       // returns to the ground around it over `edge` m (the back slope); past the line's ends it fades over a width
-      const high = a.steep === 'right' ? -1 : 1, back = num(a.edge, 150)
+      const high = a.steep === 'right' ? -1 : 1, back = Math.max(num(a.edge, 150), 2 * w2)   // a back slope never steeper than the face
       nodes(lineBox(f.line!), w2 + back, (k, x, z) => {
         const q = nearLine(f.line!, x, z), s = q.side * high * q.d
         const rise = s <= w2 ? smooth((s + w2) / (2 * w2)) : smooth(1 - (s - w2) / back)
-        H[k] += h * rise * smooth(1 - q.over / (2 * w2))
+        H[k] += h * rise * smooth(1 - q.over / back)   // past the ends the step fades over the back slope's length, not as a wall
       })
     } else if (kind === 'plateau') {
       const field = areaField(f)!, edge = num(a.edge, 60)
@@ -159,10 +160,10 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
     const edge = categoryOf(kind) === 'way' ? 1 : num(a.edge, 5)
     const field = f.line ? null : areaField(f)
     const weight = (x: number, z: number): number => {
-      if (f.line) { const q = nearLine(f.line, x, z), w2 = num(a.width, 4) / 2; return q.d <= w2 ? 1 : edge > 0 ? smooth(1 - (q.d - w2) / edge) : 0 }
+      if (f.line) { const q = nearLine(f.line, x, z), w2 = num(a.width, EDIT_WIDTH) / 2; return q.d <= w2 ? 1 : edge > 0 ? smooth(1 - (q.d - w2) / edge) : 0 }
       const e = field!.edge(x, z); return e >= 0 ? 1 : edge > 0 ? smooth(1 + e / edge) : 0
     }
-    const box = f.line ? lineBox(f.line) : field!.box, pad = (f.line ? num(a.width, 4) / 2 : 0) + edge + c
+    const box = f.line ? lineBox(f.line) : field!.box, pad = (f.line ? num(a.width, EDIT_WIDTH) / 2 : 0) + edge + c
     const op = categoryOf(kind) === 'way' ? (num(a.cut) > 0 ? 'cut-way' : 'raise-way') : kind.split('.')[1]
     nodes(box, pad, (k, x, z) => {
       const w = weight(x, z); if (w <= 0) return
@@ -173,7 +174,7 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
       else if (op === 'cut-way') H[k] -= num(a.cut) * w
       else if (op === 'raise-way') H[k] += num(a.raise) * w
     })
-    cells(box, pad, (i, j, x, z) => { if (weight(x, z) >= 0.5) L.edit[j * nx + i] = k1 })
+    if (op === 'cut' || op === 'ditch' || op === 'cut-way') cells(box, pad, (i, j, x, z) => { if (weight(x, z) >= 0.5) L.edit[j * nx + i] = k1 })
   }
 
   // 3–6. the cell layers, in painting order within each
@@ -181,15 +182,17 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
     const field = areaField(f); if (!field) return
     cells(field.box, 0, (i, j, x, z) => { if (field.inside(x, z)) { layer[j * nx + i] = k1; onCell?.(j * nx + i, needEdge ? field.edge(x, z) : 0) } })
   }
-  // a line's band is at least a cell wide: a 1.5 m path still takes the cells beside its line
+  // a line takes the cells whose centre lies strictly within its half-width, and at least the cells beside it (a
+  // 1.5 m path, a 2 m rill): widths round the same way for every line (a 6 m stream and a 5 m road on even metres
+  // both take 4 m, a 10 m stream 8 m), as the barrier rule does
   const paintLine = (line: Pt[], halfWidth: number, layer: Uint16Array, k1: number, onCell?: (cell: number, along: number) => void) => {
-    const half = Math.max(halfWidth, c / 2)
-    cells(lineBox(line), half + c, (i, j, x, z) => { const q = nearLine(line, x, z); if (q.d <= half && q.over === 0) { layer[j * nx + i] = k1; onCell?.(j * nx + i, q.along) } })
+    const half = Math.max(halfWidth, c / 2 + 0.01)
+    cells(lineBox(line), half + c, (i, j, x, z) => { const q = nearLine(line, x, z); if (q.d < half && q.over === 0) { layer[j * nx + i] = k1; onCell?.(j * nx + i, q.along) } })
   }
   for (const { f, r } of order) {
     const cat0 = categoryOf(r.kind), k1 = index.get(f.id)!, a = r.attrs
     if (cat0 === 'water') {
-      if (f.line) paintLine(f.line, num(a.width, 6) / 2, L.water, k1)
+      if (f.line) paintLine(f.line, num(a.width, WATER_WIDTH) / 2, L.water, k1)
       else paintArea(f, L.water, k1)
     }
   }
@@ -215,7 +218,7 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
       else if (f.area || f.circle || f.ellipse) paintArea(f, L.built, k1)
       else if (f.carries && f.crosses) {
         // the bridge's deck, for the draft: the road's cells where it crosses the water (the deck itself: M2)
-        const road = byId.get(f.carries)!, water = byId.get(f.crosses)!, rw = num(L.table[index.get(road.id)! - 1].attrs.width, WAY_WIDTH) / 2, ww = num(L.table[index.get(water.id)! - 1].attrs.width, 6) / 2
+        const road = byId.get(f.carries)!, water = byId.get(f.crosses)!, rw = num(L.table[index.get(road.id)! - 1].attrs.width, WAY_WIDTH) / 2, ww = num(L.table[index.get(water.id)! - 1].attrs.width, WATER_WIDTH) / 2
         const hit = crossing(road.line!, water.line!, f.near)
         if (hit) cells([hit[0], hit[1], hit[0], hit[1]], ww + rw + 4, (i, j, x, z) => {
           if (nearLine(road.line!, x, z).d < rw + 1 && Math.sqrt((x - hit[0]) * (x - hit[0]) + (z - hit[1]) * (z - hit[1])) < ww + 4) L.built[j * nx + i] = k1

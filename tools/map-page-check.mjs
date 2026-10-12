@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const outDir = process.argv[2] ?? fs.mkdtempSync(path.join(os.tmpdir(), 'map-page-'))
 const mapFile = path.resolve(ROOT, process.argv[3] ?? 'maps/two-ridges.map.json'), mapName = path.basename(mapFile, '.map.json')
+const mapId = JSON.parse(fs.readFileSync(mapFile, 'utf8')).id
 const PORT = 5191, LIMIT_MS = 1000
 const original = fs.readFileSync(mapFile, 'utf8')
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -33,12 +34,18 @@ const cleanup = () => {
   try { process.kill(-vite.pid, 'SIGTERM') } catch { /* already gone */ }
 }
 process.on('exit', cleanup)
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { cleanup(); process.exit(130) })
+process.on('SIGINT', () => { cleanup(); process.exit(130) })
+process.on('SIGTERM', () => { cleanup(); process.exit(143) })
 try {
   await new Promise((res, rej) => { vite.stdout.on('data', d => { if (/Local:/.test(String(d))) res() }); vite.on('exit', () => rej(new Error('vite exited'))); setTimeout(() => rej(new Error('vite did not start')), 30000) })
-  // the page: wait for each compile in turn (MAP.log grows by one per compile), printing what it saw
-  const waitLog = (n, tag) => ['eval', `new Promise(r => { const t = setInterval(() => { if (MAP.log.length >= ${n}) { clearInterval(t); r('${tag} ' + JSON.stringify({ log: MAP.log[${n} - 1], issues: MAP.issues.length, compiled: MAP.compiled })) } }, 20) })`]
-  const steps = [waitLog(1, 'LOADED'), ['shot', 'draft'], waitLog(2, 'SAVED'), waitLog(3, 'BROKEN'), waitLog(4, 'RESTORED'), ['shot', 'draft-restored']]
+  // the page: wait for the state each step expects, not for a count of compiles (one write may raise two change
+  // events, and an overtaken compile is never logged), then report the latest compile
+  const waitFor = (cond, tag) => ['eval', `new Promise(r => { const t = setInterval(() => { const L = MAP.log, last = L[L.length - 1]; if (${cond}) { clearInterval(t); r('${tag} ' + JSON.stringify({ log: last, issues: MAP.issues.length, compiled: MAP.compiled })) } }, 20) })`]
+  const steps = [
+    waitFor('last && last.reason === "load"', 'LOADED'), ['shot', 'draft'],
+    waitFor('last && last.reason === "save" && MAP.issues.length === 0', 'SAVED'),
+    waitFor('MAP.issues.length > 0', 'BROKEN'),
+    waitFor('last && last.reason === "save" && MAP.issues.length === 0', 'RESTORED'), ['shot', 'draft-restored']]
   shot = spawn('node', [path.join(ROOT, 'tools/shot.mjs'), `http://localhost:${PORT}/app/map.html?map=${mapName}`, outDir, '1400', '900', JSON.stringify(steps)], { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, SHOT_TIMEOUT_S: '30' } })
   const seen = {}
   const done = new Promise(res => shot.on('exit', code => res(code)))
@@ -66,7 +73,7 @@ try {
   await sleep(300)
   fs.writeFileSync(mapFile, original.slice(0, original.length / 2))
   await until('BROKEN')
-  check(seen.BROKEN.issues > 0 && seen.BROKEN.compiled === mapName, `a broken file shows ${seen.BROKEN.issues} error(s) and keeps the last good drawing (${seen.BROKEN.compiled})`)
+  check(seen.BROKEN.issues > 0 && seen.BROKEN.compiled === mapId, `a broken file shows ${seen.BROKEN.issues} error(s) and keeps the last good drawing (${seen.BROKEN.compiled})`)
   await sleep(300)
   fs.writeFileSync(mapFile, original)
   await until('RESTORED')
