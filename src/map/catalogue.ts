@@ -22,6 +22,8 @@ export function kindChain(cat: Catalogue, kind: string): string[] | null {
 }
 
 export const categoryOf = (kind: string): string => kind.split('.')[0]
+// is a selector a category or a kind of the catalogue (rather than a feature's id)?
+export const isKindName = (cat: Catalogue, sel: string): boolean => Object.hasOwn(cat.categories, sel) || kindChain(cat, sel) !== null
 
 // what a kind inherits: each of these comes from the deepest preset along the chain that sets it
 export interface KindMeta { shapes: (ShapeName | 'none')[]; refs: Partial<Record<RefName, string>>; optional: RefName[]; priority: number; edit: boolean }

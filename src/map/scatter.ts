@@ -1,7 +1,8 @@
 // scatter (docs/proposals/map-engine.md §3.4, docs/plans/active/m3-generators.md M3b): `count` children inside a
 // region, each a clump of radius between radiusMin and radiusMax, by seeded rejection sampling: a centre is kept when
 // its clump (at its largest possible radius) lies inside the region, `clearance` m clear of everything it avoids and
-// of its siblings, and, when asked, within `reach` m of something it must stay near. 0 A.D.'s placer, painter and
+// of its siblings, and, when asked, within reach of something it must stay near. The siblings sit in a grid and the
+// avoided features are skipped by their boxes, so a scatter of hundreds stays quick. 0 A.D.'s placer, painter and
 // constraint triple, as data (docs/research/map-generation-in-games.md §3).
 import type { Pt } from './schema.ts'
 import { random } from './seed.ts'
@@ -10,9 +11,9 @@ import { nearLine } from './apply.ts'
 
 export interface ScatterSite { x: number; z: number; r: number }
 export interface ScatterRules {
-  count: number; radiusMin: number; radiusMax: number; clearance: number; reach: number; spread: number   // spread: a clump's largest radius / its radius
-  avoid(x: number, z: number): number      // the distance to the nearest feature to avoid (Infinity: none)
-  near?(x: number, z: number): number      // the distance to the nearest feature to stay within reach of
+  count: number; radiusMin: number; radiusMax: number; clearance: number; spread: number   // spread: a clump's largest radius / its radius
+  clear(x: number, z: number, need: number): boolean   // nothing to avoid lies closer than `need`
+  near?(x: number, z: number): boolean                 // within reach of something it must stay near (when asked)
 }
 
 export function scatterSites(region: Pt[][], rules: ScatterRules, seed: number): ScatterSite[] {
@@ -20,14 +21,22 @@ export function scatterSites(region: Pt[][], rules: ScatterRules, seed: number):
   const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs), rings = region.map(r => [...r, r[0]] as Pt[])
   const inside = (x: number, z: number) => { let k = false; for (const r of region) if (inRing(r, [x, z])) k = !k; return k }
   const edge = (x: number, z: number) => Math.min(...rings.map(r => nearLine(r, x, z).d))
+  // siblings in a grid of cells as wide as the farthest two may need to be apart, so each try checks its neighbours only
+  const cell = 2 * rules.radiusMax * rules.spread + rules.clearance, grid = new Map<string, ScatterSite[]>()
+  const key = (i: number, j: number) => `${i},${j}`
   const sites: ScatterSite[] = []
   for (let tries = 0; sites.length < rules.count && tries < rules.count * 400; tries++) {
     const x = x0 + rnd() * (x1 - x0), z = z0 + rnd() * (z1 - z0), r = rules.radiusMin + rnd() * (rules.radiusMax - rules.radiusMin), R = r * rules.spread
     if (!inside(x, z) || edge(x, z) < R) continue
-    if (rules.avoid(x, z) < R + rules.clearance) continue
-    if (rules.near && rules.near(x, z) > rules.reach) continue
-    if (sites.some(s => Math.sqrt((s.x - x) * (s.x - x) + (s.z - z) * (s.z - z)) < s.r * rules.spread + R + rules.clearance)) continue
-    sites.push({ x, z, r })
+    const gi = Math.floor((x - x0) / cell), gj = Math.floor((z - z0) / cell)
+    let crowded = false
+    for (let dj = -1; dj <= 1 && !crowded; dj++) for (let di = -1; di <= 1 && !crowded; di++)
+      for (const s of grid.get(key(gi + di, gj + dj)) ?? []) if (Math.sqrt((s.x - x) * (s.x - x) + (s.z - z) * (s.z - z)) < s.r * rules.spread + R + rules.clearance) { crowded = true; break }
+    if (crowded || !rules.clear(x, z, R + rules.clearance) || (rules.near && !rules.near(x, z))) continue
+    const site = { x, z, r }
+    sites.push(site)
+    const k = key(gi, gj), list = grid.get(k)
+    if (list) list.push(site); else grid.set(k, [site])
   }
   return sites
 }

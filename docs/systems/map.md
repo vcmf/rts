@@ -63,16 +63,21 @@ maps/kinds.json ──► checkCatalogue ─┐
   - a generator sees only finished features: the author's without a generator, and the generators that have
     already run (their output and children). One still to run is invisible, so its input (a guide, a region)
     never leaks;
-  - each generator declares what it `reads`, as selectors (`src/map/generators.ts`): a village its road, water,
-    buildings, ways, barriers and no-go zones; a scatter its `avoid` and `within`; meander and clump nothing;
+  - each generator declares what it `reads`, as selectors (`src/map/generators.ts`), hard or soft. Hard: it
+    cannot run without them (a village's road, a scatter's `within`). Soft: it keeps clear of them (a village's
+    water, buildings, no-go zones, ways and barriers; a scatter's `avoid`). Meander and clump read nothing;
   - F waits for G when what F reads could match what G produces (G's id, its children's ids, the kinds of G and of
-    its children). The strongly connected groups of that graph run in dependency order (Tarjan); inside a group,
-    generators that read each other run in id order, each seeing the earlier ones. The file's order never
-    matters; a rename can change the order only inside such a group (and, as always, the renamed feature's seed);
+    its children). The strongly connected groups of that graph run in dependency order (Tarjan). Inside a group of
+    generators that read each other, hard reads come first, then the ids, each seeing the finished features: a
+    soft read of one not yet run sees nothing of it, and a loop of hard reads is an error naming its members. The
+    file's order never matters; a rename can change the order only inside such a group (and, as always, the
+    renamed feature's seed). A generator whose reads include one that failed is skipped, so the first error is
+    the one reported;
   - an author's id of the form `<parent>-<n>` (`childOf`), where the parent writes children, is reserved while
-    the parent generates. To pin a street-village's houses, remove the village's generator and keep its houses;
-    to pin a scatter's children, remove the scatter feature itself (its region would otherwise stay) and keep the
-    children. A selector naming the removed scatter still means its pinned children;
+    the parent generates. To pin a street-village's houses, replace the village by its expanded form (it keeps the
+    area it was given) and keep its houses; to pin a scatter's children, remove the scatter feature itself (its
+    region would otherwise stay) and keep the children. A selector naming the removed scatter still means its pinned
+    children;
   - each generator runs with its seed, `hash(map.seed, id, generator)` (`src/map/seed.ts`), so no other feature's
     change reaches it;
   - its feature takes the output shape and records `origin` (the generator, its parameters, `EXPAND_VERSION`);
@@ -109,8 +114,11 @@ maps/kinds.json ──► checkCatalogue ─┐
     region, `clearance` m clear of what it `avoid`s and of its siblings, and within `reach` of what it stays
     `within`. A selector is an id (a generator's id names its children too), a category or a kind prefix; a
     feature cannot name itself, and a `within` that matches nothing is an error. The largest radius comes from
-    `clumpMaxRadius`, `clump`'s own bound. A selector that names a feature (an id, a child's id) must find it among
-    the finished features. Fewer than `count` is an error unless `min` allows it.
+    `clumpMaxRadius`, `clump`'s own bound. A selector that names a feature (an id, a child's id) must name one the
+    map holds; a generator that ran and placed nothing still counts. Avoided features are skipped by their boxes
+    and siblings sit in a grid: 200 children take about 15–25 ms. Circles and ellipses are measured as the 64-sided
+    polygons that just contain them (`ringsOf`, `src/map/reach.ts`), so no distance to them comes out longer than
+    the truth. Fewer than `count` is an error unless `min` allows it.
 - **The base ground** (`relief.base`): seeded value noise (`src/map/noise.ts`), `height` its amplitude and `width`
   its scale, three octaves, filled from per-octave lattice tables (`addFbmGrid`, equal to `fbm` to the bit).
 - **The layout** (`src/map/format.ts`): one feature per line, so diffs show which features changed.

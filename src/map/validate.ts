@@ -6,7 +6,7 @@ import { GENERATORS, ID, RESERVED, REFS, SEASONS, SHAPES } from './schema.ts'
 import type { GenSpec } from './generators.ts'
 import { GENERATOR_SPECS, childOf } from './generators.ts'
 import type { Issue } from './catalogue.ts'
-import { allowedIn, categoryOf, checkCatalogue, checkValue, kindChain, kindMeta, kindStates } from './catalogue.ts'
+import { allowedIn, categoryOf, checkCatalogue, checkValue, isKindName, kindChain, kindMeta, kindStates } from './catalogue.ts'
 import { barrierProblem, inRing, isPt, lineCrossing, lineFoldBack, lineLength, onCentimetres, ringArea2, ringCrossing, ringsTouch } from './geometry.ts'
 
 export type { Issue }
@@ -73,7 +73,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
   const parents = new Map<string, string>()
   for (const f of map.features) if (isObj(f) && typeof f.id === 'string' && isObj(f.gen)) {
     const g = Object.keys(f.gen)[0], spec = Object.hasOwn(GENERATOR_SPECS, g) ? GENERATOR_SPECS[g] : undefined
-    if (spec?.childKind) parents.set(f.id, spec.removesSelf ? `remove "${f.id}" itself (its region leaves the map) and keep its children` : `remove the generator of "${f.id}" and keep its children`)
+    if (spec?.childKind) parents.set(f.id, spec.removesSelf ? `remove "${f.id}" itself (its region leaves the map) and keep its expanded children` : `replace "${f.id}" by its expanded form (it keeps the area it was given) and keep its expanded children`)
   }
   const parentOf = (x: string): string | undefined => { const c = childOf(x); return c && parents.has(c.parent) ? c.parent : undefined }
   // ids that pinned children name as their parent: a selector may still name the parent to mean them
@@ -123,7 +123,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
           if (Array.isArray(sel)) sel.forEach((x, n) => {
             if (typeof x !== 'string') return
             if (x === id || parentOf(x) === id) bad(id, `${gp}.${k}[${n}]`, 'a feature cannot name itself or its own children')
-            else if (!byId.has(x) && !parentOf(x) && !pinnedParents.has(x) && !Object.hasOwn(cat.categories, x) && !kindChain(cat, x)) bad(id, `${gp}.${k}[${n}]`, `"${x}" is no feature id, generated child, category or kind`)
+            else if (!byId.has(x) && !parentOf(x) && !pinnedParents.has(x) && !isKindName(cat, x)) bad(id, `${gp}.${k}[${n}]`, `"${x}" is no feature id, generated child, category or kind`)
           })
         }
       }

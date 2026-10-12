@@ -247,3 +247,22 @@ The round count restarts after this redesign. Round 3's other findings are taken
 - the child-id rule lives in one place;
 - the stale docs are fixed.
 
+**After the redesign, round 1** (9 findings, 1 severe):
+- **Severe:** two generators naming each other by id could never both expand (the first failed on the other,
+  not yet run). The redesign gains **hard and soft reads**: hard reads (a village's road, a scatter's `within`)
+  always come first, and a loop of them is an error naming its members; soft reads (keeping clear) of a group
+  member not yet run see nothing of it. Tested: two scatters avoiding each other, and a village with ponds
+  `within` it, whatever the ids.
+- **Moderate:**
+  - a scatter that placed nothing is finished (naming it is fine);
+  - ellipses were measured by a radial guess that could overestimate; circles and ellipses are now the polygons
+    that just contain them;
+  - scatter is pruned (avoided features by box, siblings in a grid): 200 children went from about 970 ms to
+    14–26 ms (measured).
+- **Light:**
+  - a generator reading a failed one is skipped, so one error is reported;
+  - the proposal's table is updated;
+  - street-village builds its obstacles from its declared reads;
+  - reads are computed once, and a single id comparator and a single `isKindName` are shared;
+  - a village's pinning advice keeps its area.
+

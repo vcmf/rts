@@ -14,7 +14,7 @@ import { validate } from '../src/map/validate.ts'
 import { apply, nearLine, nearScan } from '../src/map/apply.ts'
 import { crossings, inRing, lineCrossing, lineLength, ringCrossing } from '../src/map/geometry.ts'
 import { engineMap } from '../maps/engine.ts'
-import { distanceToPolygon } from '../src/map/reach.ts'
+import { distanceTo, distanceToPolygon } from '../src/map/reach.ts'
 import { buildSimData } from '../tools/build-sim-data.ts'
 import { classifyNapoleonic } from '../src/rulesets/napoleonic-ground.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
@@ -422,7 +422,7 @@ describe('M3b: the redesign (round 3): expansion by dependency, over finished fe
     expect(out.issues).toEqual([])
     for (const f of kidsOf(out.map, 'fields')) for (const w of pinned) expect(f.area![0].some(p => inRing(w.area![0], p))).toBe(false)
     expect(validate(mini([woods, kidsOf(expand(mini([woods]), cat).map, 'woods')[0]]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/remove "woods" itself \(its region leaves the map\)/))
-    expect(expand(mini([woods, fields(['woods-9'])]), cat).issues[0]?.message).toMatch(/"woods-9" names no finished feature/)
+    expect(expand(mini([woods, fields(['woods-9'])]), cat).issues[0]?.message).toMatch(/"woods-9" names nothing on the map/)
     const nogo = { id: 'keep-out', kind: 'zone.nogo', area: [[[-200, 2], [200, 2], [200, 40], [-200, 40]]] as Pt[][] }
     const near = expand(mini([road, nogo, { ...village, along: { id: 'road', from: 300, to: 500 } }]), cat)
     expect(near.issues).toEqual([])
@@ -432,6 +432,53 @@ describe('M3b: the redesign (round 3): expansion by dependency, over finished fe
     const raw = JSON.parse(fs.readFileSync(path.join(root, 'maps/generated.map.json'), 'utf8')) as MapFile
     const reversed = { ...raw, features: [...raw.features].reverse() }
     expect(expand(reversed, cat).map).toEqual(expand(raw, cat).map)
+  })
+})
+
+describe('M3b: after the redesign, round 1: hard and soft reads', () => {
+  const region = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
+  const kidsOf = (m: MapFile, parent: string) => m.features.filter(f => f.origin?.parent === parent)
+  const sc = (id: string, kind: string, p: Record<string, unknown>) => ({ id, kind, area: region, gen: { scatter: { count: 3, radiusMin: 20, radiusMax: 30, ...p } } })
+  it('two scatters avoiding each other by id both expand (a soft read of one not yet run sees nothing of it)', () => {
+    const { map, issues } = expand(mini([sc('aa', 'veg.wood', { avoid: ['bb'] }), sc('bb', 'ground.field', { avoid: ['aa'] })]), cat)
+    expect(issues).toEqual([])
+    for (const a of kidsOf(map, 'aa')) for (const b of kidsOf(map, 'bb')) expect(a.area![0].some(p => inRing(b.area![0], p))).toBe(false)
+  })
+  it('a village and ponds within it read each other: the hard read runs first, whatever the ids', () => {
+    const road = { id: 'road', kind: 'way.road.lane', line: [[-400, 0], [400, 0]] as Pt[] }
+    for (const [v, p] of [['village', 'ponds'], ['zz-village', 'aa-ponds']]) {
+      const village = { id: v, kind: 'built.village', along: { id: 'road', from: 300, to: 500 }, houses: 6, gen: { 'street-village': { min: 1 } } }
+      const { map, issues } = expand(mini([road, village, sc(p, 'water.pond', { within: [v], reach: 120, avoid: ['way', 'built'], clearance: 10 })]), cat)
+      expect(issues).toEqual([])
+      expect(kidsOf(map, v).length).toBeGreaterThan(0); expect(kidsOf(map, p)).toHaveLength(3)
+    }
+  })
+  it('a loop of hard reads cannot run: one error naming each member; nothing else is reported', () => {
+    const { issues } = expand(mini([sc('aa', 'veg.wood', { within: ['bb'] }), sc('bb', 'ground.field', { within: ['aa'] })]), cat)
+    expect(issues.map(i => i.id).sort()).toEqual(['aa', 'bb'])
+    expect(issues[0].message).toMatch(/a loop no order can run/)
+  })
+  it('a scatter that placed nothing (min 0) is finished: naming it is no error', () => {
+    const zero = sc('zero', 'veg.wood', { count: 3, radiusMin: 400, radiusMax: 450, min: 0 })
+    const { issues } = expand(mini([zero, sc('cc', 'ground.field', { avoid: ['zero'] })]), cat)
+    expect(issues).toEqual([])
+  })
+  it('a failed generator skips those that read it: one error, the one to fix', () => {
+    const road = { id: 'road', kind: 'way.road.lane', line: [[-400, 0], [400, 0]] as Pt[] }
+    const village = { id: 'village', kind: 'built.village', along: { id: 'road', from: 300, to: 320 }, houses: 30, gen: { 'street-village': {} } }
+    const { issues } = expand(mini([road, village, sc('ponds', 'water.pond', { within: ['village'] })]), cat)
+    expect(issues.map(i => i.id)).toEqual(['village'])
+  })
+  it("a long thin ellipse is avoided by its true distance, not a radial guess", () => {
+    const thin = { id: 'thin', kind: 'zone.nogo', ellipse: [[0, 0], 200, 10, 0] as [Pt, number, number, number] }
+    expect(distanceTo(thin, {}, 190, 12)).toBeLessThan(10)
+    const { map } = expand(mini([thin, sc('w', 'veg.wood', { count: 6, avoid: ['thin'], clearance: 15 })]), cat)
+    for (const k of kidsOf(map, 'w')) for (const [x, z] of k.area![0]) expect((x / 200) * (x / 200) + (z / 10) * (z / 10)).toBeGreaterThan(1)
+  })
+  it('a scatter of 200 stays quick (box pruning, a sibling grid)', () => {
+    const t0 = performance.now(), { issues } = expand(mini([{ id: 'road', kind: 'way.road', line: [[-560, 0], [560, 0]] as Pt[] }, sc('many', 'veg.wood', { count: 200, radiusMin: 5, radiusMax: 8, avoid: ['way'], min: 150 })]), cat), ms = performance.now() - t0
+    expect(issues).toEqual([])
+    expect(ms).toBeLessThan(3000)   // measured 14–26 ms on the dev Mac (about 970 ms before the pruning); loose, as the machine is often loaded
   })
 })
 
