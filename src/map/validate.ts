@@ -4,9 +4,10 @@
 import type { Catalogue, Feature, MapFile, Pt } from './schema.ts'
 import { GENERATORS, ID, RESERVED, REFS, SEASONS, SHAPES } from './schema.ts'
 import type { GenSpec } from './generators.ts'
-import { GENERATOR_SPECS, childOf } from './generators.ts'
+import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import type { Issue } from './catalogue.ts'
 import { allowedIn, categoryOf, checkCatalogue, checkValue, isKindName, kindChain, kindMeta, kindStates } from './catalogue.ts'
+import { kindMatches } from './reach.ts'
 import { barrierProblem, inRing, isPt, lineCrossing, lineFoldBack, lineLength, onCentimetres, ringArea2, ringCrossing, ringsTouch } from './geometry.ts'
 
 export type { Issue }
@@ -65,6 +66,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
   map.features.forEach((f, i) => {
     if (!isObj(f) || typeof f.id !== 'string' || !ID.test(f.id)) { bad(null, `features[${i}].id`, 'every feature needs an id of lowercase letters, digits and dashes'); return }
     if (byId.has(f.id)) bad(f.id, `features[${i}].id`, `"${f.id}" is used twice`)
+    else if (Object.hasOwn(cat.categories, f.id)) bad(f.id, `features[${i}].id`, `"${f.id}" is a category's name: a selector naming it would mean both`)
     else byId.set(f.id, f as Feature)
   })
 
@@ -77,7 +79,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
   }
   const parentOf = (x: string): string | undefined => { const c = childOf(x); return c && parents.has(c.parent) ? c.parent : undefined }
   // ids that pinned children name as their parent: a selector may still name the parent to mean them
-  const pinnedParents = new Set(map.features.flatMap(f => (isObj(f) && isObj(f.origin) && typeof f.origin.parent === 'string' ? [f.origin.parent] : [])))
+  const pinnedParents = pinnedParentsOf(map.features.filter(f => isObj(f) && isObj(f.origin)) as Feature[])
   map.features.forEach((f, i) => {
     if (!isObj(f) || typeof f.id !== 'string') return
     const id = f.id, path = `features[${i}]`
@@ -138,7 +140,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
     else if (shapes.length === 1) {
       const s = shapes[0]
       // with a generator, the shape is its input, and its output must be a shape the kind takes
-      if (gen?.kinds && !gen.kinds.some(k => kind === k || kind.startsWith(k + '.'))) bad(id, `${path}.gen`, `the ${Object.keys(f.gen!)[0]} generator runs on ${gen.kinds.join(', ')}, not ${kind}`)
+      if (gen?.kinds && !gen.kinds.some(k => kindMatches(k, kind))) bad(id, `${path}.gen`, `the ${Object.keys(f.gen!)[0]} generator runs on ${gen.kinds.join(', ')}, not ${kind}`)
       else if (gen && !gen.input.includes(s as typeof gen.input[number])) bad(id, `${path}.${s}`, `the ${Object.keys(f.gen!)[0]} generator reads ${gen.input.join(', ')}, not ${s}`)
       else if (gen && !meta.shapes.includes(gen.output)) bad(id, `${path}.gen`, `the ${Object.keys(f.gen!)[0]} generator writes a ${gen.output}, which ${kind} does not take`)
       else if (!gen && !meta.shapes.includes(s)) bad(id, `${path}.${s}`, `${kind} takes ${meta.shapes.filter(x => x !== 'none').join(', ') || 'no shape'}, not ${s}`)

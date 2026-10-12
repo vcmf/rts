@@ -266,3 +266,19 @@ The round count restarts after this redesign. Round 3's other findings are taken
   - reads are computed once, and a single id comparator and a single `isKindName` are shared;
   - a village's pinning advice keeps its area.
 
+**After the redesign, round 2** (10 findings, 1 severe):
+- **Severe:** in a ring of three or more avoids, one pair was never separated. **Separation is now mutual:** inside
+  a group, a generator also keeps clear of the earlier members that wanted to keep clear of it. Tested: a ring of
+  three scatters over five seeds, and a village with ponds avoiding woods and woods avoiding buildings.
+- **Moderate:**
+  - a name for a child was accepted or refused by id order; names are now checked once everything has run;
+  - a `within` by kind made two pond scatters a loop; only reads by name are hard now.
+- **Light:**
+  - loop errors name only the loop's members;
+  - selectors match only features with a shape;
+  - ids may not be category names (`ground` in the example maps is now `terrain`, which reseeds their noise);
+  - houses prune by box;
+  - `pinnedParentsOf` is shared and validate uses `kindMatches`;
+  - one `pending` set;
+  - the ordering rules are a decision record (0022).
+

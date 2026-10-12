@@ -8,7 +8,7 @@
   "extent": {"w": 2400, "h": 2400},
   "play": {"w": 1500, "h": 1500},
   "features": [
-    {"id": "ground", "kind": "relief.base", "height": 3, "width": 350},
+    {"id": "terrain", "kind": "relief.base", "height": 3, "width": 350},
     {"id": "meadows", "kind": "ground.meadow", "area": [[[-1200, -1200], [1200, -1200], [1200, 1200], [-1200, 1200]]], "priority": 0},
     {"id": "south-ridge", "kind": "relief.ridge", "line": [[-650, -300], [0, -260], [650, -320]], "height": 18, "width": 230, "steep": "right"},
     {"id": "north-ridge", "kind": "relief.ridge", "line": [[-650, 300], [650, 260]], "height": 14, "width": 260},

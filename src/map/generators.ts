@@ -24,6 +24,9 @@ export interface GenContext {
   features: Map<string, Feature>; attrsOf(id: string): Record<string, AttrValue>; kindOf(id: string): string
   isKind(sel: string): boolean       // a category or a kind of the catalogue (else a selector names a feature)
   status(id: string): Status         // for a selector that names a feature
+  // the output of the generators that ran earlier in its group and wanted to keep clear of it (separation is mutual:
+  // if A keeps clear of B, they end up apart whichever runs first): it keeps clear of these too
+  keepClearOf: Feature[]
 }
 // its output: the feature's new shape (or null: the feature leaves the expanded map), and any children
 export interface GenOutput { self: Partial<Feature> | null; children?: Feature[] }
@@ -52,8 +55,12 @@ export function childOf(id: string): { parent: string; n: number } | null {
 
 const P = (p: Record<string, unknown>, k: string): number | undefined => (typeof p[k] === 'number' ? p[k] as number : undefined)
 const list = (v: unknown): string[] => (Array.isArray(v) ? v as string[] : [])
-// the finished features a set of selectors matches (never the generator's own feature)
-const select = (ctx: GenContext, sels: string[]) => [...ctx.features.values()].filter(g => g.id !== ctx.f.id && sels.some(s => matches(s, g, ctx.kindOf(g.id))))
+// the finished features with a shape that a set of selectors matches (never the generator's own feature)
+const hasShape = (g: Feature) => !!(g.line || g.area || g.circle || g.ellipse || g.point)
+const select = (ctx: GenContext, sels: string[]) => [...ctx.features.values()].filter(g => g.id !== ctx.f.id && hasShape(g) && sels.some(s => matches(s, g, ctx.kindOf(g.id))))
+
+// the parents that pinned children name (origin.parent): a selector may still name the parent to mean them
+export const pinnedParentsOf = (features: Feature[]): Set<string> => new Set(features.flatMap(f => (f.origin?.parent ? [f.origin.parent] : [])))
 // every selector that names a feature must name one the map holds (a kind may match nothing on a map; a name that does
 // is a mistake: a child past its parent's count, a feature since removed)
 function checkNames(ctx: GenContext, sels: string[]): void {
@@ -98,9 +105,12 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
       // what a house keeps clear of, as a whole polygon: what its soft reads match among the finished features (its
       // own road aside: a house keeps 1 m from it where it bends back), at 2 m from water, a barrier's band (its
       // thickness in 2 m cells, centred, proposal §3.6) plus 1 m, and 1 m from the rest (a bridge has no shape)
-      const near = select(ctx, VILLAGE_KEEPS_CLEAR).filter(g => g.id !== along.id && (g.line || g.area || g.circle || g.ellipse || g.point))
       const gap = (g: Feature) => matches('water', g, kindOf(g.id)) ? 2 : matches('barrier', g, kindOf(g.id)) ? num(attrsOf(g.id).thickness, 2) + 1 : 1
-      const clear = (house: Pt[]) => near.every(g => distanceToPolygon(g, attrsOf(g.id), house) > gap(g)) && distanceToPolygon(roadF, roadA, house) > 1
+      const near = [...select(ctx, VILLAGE_KEEPS_CLEAR).filter(g => g.id !== along.id), ...ctx.keepClearOf.filter(hasShape)]
+        .map(g => ({ g, box: boxOf(g, attrsOf(g.id)), gap: gap(g) }))
+      // a house is far from a feature whose box is farther than the gap from every corner: skipped without measuring
+      const clear = (house: Pt[]) => near.every(({ g, box, gap }) => house.every(([x, z]) => boxDistance(box, x, z) > gap + 30) || distanceToPolygon(g, attrsOf(g.id), house) > gap)
+        && distanceToPolygon(roadF, roadA, house) > 1
       const row = streetVillage(road, rw, along.from, along.to, want, seed, { clear })
       if (row.houses.length < min) throw new Error(`placed ${row.houses.length} of ${want} houses between ${along.from} and ${along.to} m along "${along.id}"; lengthen the stretch, ask fewer houses, or allow fewer with min`)
       const children: Feature[] = row.houses.map((h, k) => ({ id: `${f.id}-${k + 1}`, kind: 'built.house', area: [h] }))
@@ -126,7 +136,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
       if (rMax < rMin) throw new Error(`radiusMax (${rMax}) is below radiusMin (${rMin})`)
       const coherence = P(params, 'coherence') ?? CLUMP_DEFAULTS.coherence, ragged = P(params, 'raggedness') ?? CLUMP_DEFAULTS.raggedness
       checkNames(ctx, [...list(params.avoid), ...list(params.within)])
-      const avoid = select(ctx, list(params.avoid)).map(g => ({ g, box: boxOf(g, attrsOf(g.id)) }))
+      const avoid = [...select(ctx, list(params.avoid)), ...ctx.keepClearOf.filter(hasShape)].map(g => ({ g, box: boxOf(g, attrsOf(g.id)) }))
       const within = select(ctx, list(params.within)).map(g => ({ g, box: boxOf(g, attrsOf(g.id)) }))
       if (list(params.within).length && !within.length) throw new Error(`nothing matches within (${list(params.within).join(', ')}): no child could be placed near it`)
       const reach = P(params, 'reach') ?? 100

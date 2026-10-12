@@ -58,21 +58,24 @@ maps/kinds.json ──► checkCatalogue ─┐
 - **Resolution** (`src/map/resolve.ts`): the catalogue along the path, the map preset, the feature's own fields,
   the season's overrides (the catalogue's, then the feature's), the state's overlay. This is the one place the order
   lives.
-- **Expansion** (`src/map/expand.ts`), by dependency, over finished features only (the M3b redesign,
-  `docs/plans/active/m3-generators.md`):
+- **Expansion** (`src/map/expand.ts`), by dependency, over finished features only (decision 0022):
   - a generator sees only finished features: the author's without a generator, and the generators that have
     already run (their output and children). One still to run is invisible, so its input (a guide, a region)
     never leaks;
   - each generator declares what it `reads`, as selectors (`src/map/generators.ts`), hard or soft. Hard: it
-    cannot run without them (a village's road, a scatter's `within`). Soft: it keeps clear of them (a village's
-    water, buildings, no-go zones, ways and barriers; a scatter's `avoid`). Meander and clump read nothing;
+    cannot run without them, by name (a village's road, a scatter's `within` naming a feature). Soft: it keeps
+    clear of them (a village's water, buildings, no-go zones, ways and barriers; a scatter's `avoid`), and a
+    `within` by kind, which orders only softly. Meander and clump read nothing;
   - F waits for G when what F reads could match what G produces (G's id, its children's ids, the kinds of G and of
     its children). The strongly connected groups of that graph run in dependency order (Tarjan). Inside a group of
     generators that read each other, hard reads come first, then the ids, each seeing the finished features: a
-    soft read of one not yet run sees nothing of it, and a loop of hard reads is an error naming its members. The
+    soft read of one not yet run sees nothing of it, but separation is mutual: a generator also keeps clear of the
+    earlier members that wanted to keep clear of it (`keepClearOf`), so a ring of avoids ends up pairwise apart. A
+    loop of hard reads is an error naming its members (those only waiting on it are skipped). The
     file's order never matters; a rename can change the order only inside such a group (and, as always, the
     renamed feature's seed). A generator whose reads include one that failed is skipped, so the first error is
-    the one reported;
+    the one reported. Once everything has run, every selector that names a feature must name one of the expanded
+    map. A feature's id may not be a category's name (a selector would mean both);
   - an author's id of the form `<parent>-<n>` (`childOf`), where the parent writes children, is reserved while
     the parent generates. To pin a street-village's houses, replace the village by its expanded form (it keeps the
     area it was given) and keep its houses; to pin a scatter's children, remove the scatter feature itself (its
