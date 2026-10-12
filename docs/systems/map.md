@@ -1,11 +1,11 @@
 ---
 status: current
 last_reviewed: 2026-10-12
-code: [maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts]
+code: [src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts]
 decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell]
 ---
 
-# The map engine: the language, the draft view and the sim compiler (Track M, M1–M2)
+# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3a)
 
 A map is a strict JSON file (`maps/<id>.map.json`): a list of features, each with an id, a dotted kind from the
 kinds catalogue (`maps/kinds.json`), one shape and attribute overrides. This system checks such a file, resolves
@@ -33,6 +33,8 @@ maps/kinds.json ──► checkCatalogue ─┐
 
 ## Constraints
 
+- **Exact geometry:** the orientation test behind every crossing check runs on whole centimetres (the language's
+  precision), so nearly collinear points never read as crossing.
 - **Exact:** `src/map/` follows the sim's number rules (decision 0006, lint in `eslint.config.js`) and imports only
   itself and `src/sim/num.ts`, so the compilers built on it give the same bytes in Node and in browsers.
 - **Resolution-independent, except barriers:** coordinates are metres with at most 2 decimals. Barrier lines lie on
@@ -56,7 +58,34 @@ maps/kinds.json ──► checkCatalogue ─┐
 - **Resolution** (`src/map/resolve.ts`): the catalogue along the path, the map preset, the feature's own fields,
   the season's overrides (the catalogue's, then the feature's), the state's overlay. This is the one place the order
   lives.
-- **Expansion** (`src/map/expand.ts`): in M1 it sorts the features by id and reports any `gen`.
+- **Expansion** (`src/map/expand.ts`):
+  - each generator runs with its seed, `hash(map.seed, id, generator)` (`src/map/seed.ts`), so no other feature's
+    change reaches it;
+  - its feature takes the output shape and records `origin` (the generator, its parameters, `EXPAND_VERSION`);
+  - the expanded map is validated like any map, in the author's order (so the paths name their file), then sorted
+    by id; a generator's error is an issue on its feature;
+  - a bridge whose road crosses its water more than once must say `near`. `crossings` (`src/map/geometry.ts`) is
+    exact on whole centimetres: a point exactly on the other line is decided by simulation of simplicity (the first
+    line shifted infinitesimally in a fixed direction), so a pass through a vertex crosses once and a touch
+    nowhere; a line's own end on the other line takes its neighbour's side;
+  - a pinned feature (no `gen`, with an `origin`) is just a feature.
+- **The generators** (`src/map/generators.ts`: for each, the shape it reads, the shape it writes, its checked
+  parameters):
+  - `meander` (`src/map/meander.ts`): the look world's Kinoshita curve in the exact maths, along the author's guide
+    line. Each bend varies its amplitude and length by a seeded noise, a cubic term holds the belt (± amplitude),
+    and the bends ease out over half a wavelength at each end. The heading never strays more than 83° from the
+    guide's, so the channel always advances: on a straight guide it cannot cross itself, whatever the seed (no
+    goosenecks, the price of the guarantee). The guide's normal turns smoothly through each vertex. The generator
+    refuses, naming the feature, rather than fold by chance:
+    - a guide turning more than 90° at a vertex;
+    - segments around a turn too short to ease it for the belt (each at least 1.4 · belt · θ);
+    - a belt narrower than the stream.
+
+    It runs on streams and rivers only;
+  - `clump` (`src/map/clump.ts`): a radial polygon, so always simple, swung by seeded harmonics;
+  - `street-village` and `scatter` are named but arrive in M3b.
+- **The base ground** (`relief.base`): seeded value noise (`src/map/noise.ts`), `height` its amplitude and `width`
+  its scale, three octaves, filled from per-octave lattice tables (`addFbmGrid`, equal to `fbm` to the bit).
 - **The layout** (`src/map/format.ts`): one feature per line, so diffs show which features changed.
 - **Apply** (`src/map/apply.ts`): the expanded features into layers on the 2 m grid over the extent, in the
   proposal's fixed order (§4):
@@ -119,6 +148,15 @@ The kinds' values and the attributes' ranges: `maps/kinds.json`. Its note says w
 `tools/map-page-check.mjs` (headless, against the dev server): the page compiles on load; a saved change redraws
 it in under a second (about 0.25 s measured on the dev Mac); a broken file shows its error and keeps the drawing;
 the restored file compiles clean; no console errors.
+
+`test/map-gen.test.ts`:
+- seeds: stable, and local (another feature, the file's order, the map's seed);
+- meander: within 1.35 × its belt, on its guide at both ends, never crossing itself, longer than its guide;
+- clump: simple, within its bounds, a circle at coherence 1;
+- the base noise: within ± its height, flat without one;
+- the fast paths equal to the plain ones (the line index against the scan on 4000 points, the grid noise against
+  `fbm`);
+- the validator's generator checks; expansion's origin and pinning; the bridge that crosses twice.
 
 `test/map-sim.test.ts`: the valley's stream never rises downstream, its depths are as designed (channel, fords,
 pools, banks); each ground reading in order, and the valley's cells read as the map says; the compiled data loads

@@ -52,7 +52,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     try { console.log(JSON.stringify(resolve(f, map, cat, season, state), null, 2)) } catch (e) { console.log((e as Error).message); process.exit(1) }
     process.exit(0)
   }
-  const { map: out, issues } = expand(map)
+  const { map: out, issues } = expand(map, cat)
   show(file, issues)
   if (issues.length) process.exit(1)
   if (cmd === 'draft') {

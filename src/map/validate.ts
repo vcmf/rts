@@ -3,6 +3,8 @@
 // which attributes exist, their types, units and ranges, and which kinds may set them are the catalogue's data.
 import type { Catalogue, Feature, MapFile, Pt } from './schema.ts'
 import { GENERATORS, ID, RESERVED, REFS, SEASONS, SHAPES } from './schema.ts'
+import type { GenSpec } from './generators.ts'
+import { GENERATOR_SPECS } from './generators.ts'
 import type { Issue } from './catalogue.ts'
 import { allowedIn, categoryOf, checkCatalogue, checkValue, kindChain, kindMeta, kindStates } from './catalogue.ts'
 import { barrierProblem, inRing, isPt, lineCrossing, lineFoldBack, lineLength, onCentimetres, ringArea2, ringCrossing, ringsTouch } from './geometry.ts'
@@ -90,19 +92,35 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       if (!Object.hasOwn(states, f.state)) bad(id, `${path}.state`, `${kind} has no state "${f.state}" (it has: ${Object.keys(states).join(', ') || 'none'})`)
     }
     if (f.follow !== undefined) bad(id, `${path}.follow`, 'shared edges arrive with the generators (M3)')
+    // a generator: its name, its parameters, and (below) the shape it reads and the one it writes
+    let gen: GenSpec | undefined
     if (f.gen !== undefined) {
-      const names = isObj(f.gen) ? Object.keys(f.gen) : []
-      if (names.length !== 1 || !(GENERATORS as readonly string[]).includes(names[0]) || !isObj((f.gen as Record<string, unknown>)[names[0]])) bad(id, `${path}.gen`, `must be { "<generator>": { params } }, one of ${GENERATORS.join(', ')}`)
+      const names = isObj(f.gen) ? Object.keys(f.gen) : [], params = names.length === 1 ? (f.gen as Record<string, unknown>)[names[0]] : undefined
+      if (names.length !== 1 || !(GENERATORS as readonly string[]).includes(names[0]) || !isObj(params)) bad(id, `${path}.gen`, `must be { "<generator>": { params } }, one of ${GENERATORS.join(', ')}`)
+      else if (Object.hasOwn(GENERATOR_SPECS, names[0])) {
+        gen = GENERATOR_SPECS[names[0]]
+        const gp = `${path}.gen.${names[0]}`
+        for (const [k, v] of Object.entries(params)) {
+          if (!Object.hasOwn(gen.params, k)) { bad(id, `${gp}.${k}`, `unknown parameter (${Object.keys(gen.params).join(', ')})`); continue }
+          const e = checkValue(gen.params[k], v); if (e) bad(id, `${gp}.${k}`, e)
+        }
+        for (const [k, spec] of Object.entries(gen.params)) if (spec.required && !(k in params)) bad(id, `${gp}.${k}`, 'is required')
+      }
     }
     if (f.origin !== undefined && (!isObj(f.origin) || typeof f.origin.generator !== 'string' || !isObj(f.origin.params) || !Number.isInteger(f.origin.version))) bad(id, `${path}.origin`, 'must be { "generator", "params", "version" }')
 
     // the shape
     const shapes = SHAPES.filter(s => f[s] !== undefined)
     if (shapes.length > 1) bad(id, path, `has ${shapes.length} shapes (${shapes.join(', ')}); a feature has one`)
+    else if (shapes.length === 0 && gen) bad(id, path, `needs a shape for its ${Object.keys(f.gen!)[0]} generator: one of ${gen.input.join(', ')}`)
     else if (shapes.length === 0 && !meta.shapes.includes('none') && f.gen === undefined) bad(id, path, `needs a shape: one of ${meta.shapes.join(', ')}`)
     else if (shapes.length === 1) {
       const s = shapes[0]
-      if (!meta.shapes.includes(s)) bad(id, `${path}.${s}`, `${kind} takes ${meta.shapes.filter(x => x !== 'none').join(', ') || 'no shape'}, not ${s}`)
+      // with a generator, the shape is its input, and its output must be a shape the kind takes
+      if (gen?.kinds && !gen.kinds.some(k => kind === k || kind.startsWith(k + '.'))) bad(id, `${path}.gen`, `the ${Object.keys(f.gen!)[0]} generator runs on ${gen.kinds.join(', ')}, not ${kind}`)
+      else if (gen && !gen.input.includes(s)) bad(id, `${path}.${s}`, `the ${Object.keys(f.gen!)[0]} generator reads ${gen.input.join(', ')}, not ${s}`)
+      else if (gen && !meta.shapes.includes(gen.output)) bad(id, `${path}.gen`, `the ${Object.keys(f.gen!)[0]} generator writes a ${gen.output}, which ${kind} does not take`)
+      else if (!gen && !meta.shapes.includes(s)) bad(id, `${path}.${s}`, `${kind} takes ${meta.shapes.filter(x => x !== 'none').join(', ') || 'no shape'}, not ${s}`)
       else checkShape(s, f[s], `${path}.${s}`, extent, (p, m) => bad(id, p, m))
       if (category === 'barrier' && s === 'line' && Array.isArray(f.line) && f.line.every(isPt)) {
         const e = barrierProblem(f.line as Pt[]); if (e) bad(id, `${path}.line[${e[0]}]`, e[1])

@@ -2,7 +2,7 @@
   "format": 1,
   "id": "valley",
   "name": "The Valley",
-  "note": "The S1e battlefield (maps/battlefield.ts) as a JSON map (docs/plans/active/m2-sim.md): two ridges about 560 m apart, a stream along the valley with pools on the flanks, fords at x -260 and 330, a road over a bridge, a marsh in a bend, a wood on each side's flank, fields with hedges. Written by a one-off script from the battlefield's formulas; edit this file by hand from now on.",
+  "note": "The S1e battlefield (maps/battlefield.ts) as a JSON map (docs/plans/done/m2-sim.md): two ridges about 560 m apart, a stream along the valley with pools on the flanks, fords at x -260 and 330, a road over a bridge, a marsh in a bend, a wood on each side's flank, fields with hedges. Written by a one-off script from the battlefield's formulas; edit this file by hand from now on.",
   "seed": 1805,
   "season": "summer",
   "extent": {"w":2000,"h":2000},

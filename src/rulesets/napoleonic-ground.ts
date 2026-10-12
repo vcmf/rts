@@ -1,4 +1,4 @@
-// The Napoleonic ruleset's reading of a map's ground (docs/plans/active/m2-sim.md): a cell's attributes to one of
+// The Napoleonic ruleset's reading of a map's ground (docs/plans/done/m2-sim.md): a cell's attributes to one of
 // the terrain classes of src/rulesets/napoleonic.ts, decided in this order. Kept apart from the ruleset's table, so
 // the ruleset's hash (and every golden replay) does not move with it.
 // Interim, until the ruleset gains the classes (a ruleset change, with Track S): walls and fences read as hedges

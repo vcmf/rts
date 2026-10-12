@@ -138,7 +138,7 @@ touches no ruleset.
 
 | Category | Kinds (essential) | Bonus, later |
 |---|---|---|
-| `relief` | `base` (seeded noise at a scale), `hill`, `ridge` (along a line), `valley`, `plateau`, `scarp`; edits `raise`, `lower`, `level`, `cut`, `ditch` (a cut along a line, at least 2 cells wide, its cells also marked for the ruleset's crossing rule) | `dem` (an elevation file), `spot` heights, `basin`, `terrace` |
+| `relief` | `base` (seeded value noise: `height` the amplitude, `width` the scale; a landform, not a generator, since a field has no shape to pin), `hill`, `ridge` (along a line), `valley`, `plateau`, `scarp`; edits `raise`, `lower`, `level`, `cut`, `ditch` (a cut along a line, at least 2 cells wide, its cells also marked for the ruleset's crossing rule) | `dem` (an elevation file), `spot` heights, `basin`, `terrace` |
 | `ground` | `meadow`, `pasture`, `field` (`.wheat`, `.rye`, `.oats`: loam under a crop whose `stage` is standing, stubble or ploughed), `rough`, `marsh`, `yard` (village ground); moisture and snow as season attributes | `heath`, `sand`, `rock`, `bog`, `mud` as a weather state |
 | `veg` | `wood.broad`, `wood.conifer`, `wood.mixed`, `thicket`, `orchard` (rows), `reeds`, `scrub` | species presets, `vineyard`, `olive`, `wood.pasture`, `tallgrass`, `treeline` |
 | `water` | `stream`, `river` (lines with width, depth, flow, banks), `pond`, `lake` (areas with a level), `ford` (on a stream) | `canal`, `weir`, `dam`, `millrace`, `flood` (a level over a meadow), breakable ice |
@@ -170,7 +170,6 @@ validated parameters:
 
 | Generator | On | Makes |
 |---|---|---|
-| `noise` | `relief.base` | the gentle ground between landforms (seeded fbm at a scale and amplitude) |
 | `meander` | `water.stream`, `water.river` | the bends along a guide line (today's Kinoshita curve from `src/look/world/author.ts`), with width and depth per sample (narrower bends, pools and riffles); the water level is the compiler's (§4) |
 | `clump` | any area kind at a point | an organic outline of a given size, coherence and raggedness (0 A.D.'s ClumpPlacer) |
 | `street-village` | `built.village` | houses, yards and gardens along its road |
@@ -237,7 +236,7 @@ validate ──► relief ──► expand (generators) ──► apply (layers,
 
 - **Validate:** schema (closed objects, kinds from the catalogue, units and ranges), references, geometry (closed
   rings, no self-intersection, inside the extent). It reports every error with the feature's id.
-- **Relief** comes first, always: the relief features (`relief.base` with its `noise`, the landforms) expand and
+- **Relief** comes first, always: the relief features (`relief.base` with its noise, the landforms) expand and
   are summed into the relief before any other feature runs. They read nothing but their own parameters.
 - **Expand** runs every other generator and gives every feature its exact shape. Features run in dependency
   order, with ties broken by id, never in the file's order (AoE II's and Civilization's lesson). A feature depends
@@ -368,7 +367,7 @@ hedge and a village.
   "format": 1, "id": "two-ridges", "name": "Two Ridges", "seed": 41, "season": "summer",
   "extent": { "w": 2400, "h": 2400 }, "play": { "w": 1500, "h": 1500 },
   "features": [
-    { "id": "ground", "kind": "relief.base", "gen": { "noise": { "amplitude": 4, "scale": 400 } } },
+    { "id": "ground", "kind": "relief.base", "height": 4, "width": 400 },
     { "id": "south-ridge", "kind": "relief.ridge", "line": [[-650, -300], [0, -260], [650, -320]], "height": 18, "width": 230, "steep": "right" },
     { "id": "north-ridge", "kind": "relief.ridge", "line": [[-650, 300], [650, 260]], "height": 14, "width": 260 },
     { "id": "meadows", "kind": "ground.meadow", "area": [[[-1200, -1200], [1200, -1200], [1200, 1200], [-1200, 1200]]], "priority": 0 },
@@ -396,7 +395,7 @@ Track M works on an epic branch (decision 0020). The phases follow the pipeline,
 | **M0** | This proposal and its research; decisions 0020 (Track M on an epic branch) and 0021 (the 2 m cell) | The owner accepts the language, the layers and the grids |
 | **M1: the language and the draft view** | The TypeScript schema and validator; the catalogue of essential kinds in **every** category; features with exact shapes (no `gen` yet); compiling into the draft view page, which redraws on save; the map CLI | §9's example, written with exact shapes, validates and draws; a save redraws in under a second; one negative test per rule |
 | **M2: the sim compiler** | Water in apply: stream levels from the banks, falling downstream; channels carved, pools by a depth ramp, fords, ponds; a depth per cell. The ruleset's reading of a cell's attributes as its terrain classes; map-engine maps compiled to format 2 on 2 m grids; the S1e layout as `maps/valley.map.json`, with the S1e battle on it beside the original | The battle plays on the compiled valley; its golden is committed; every existing golden unchanged |
-| **M3: the generators** | `noise`, `meander`, `clump`, `street-village`, `scatter`, on the exact maths; seasons and ice; golden expansions | §9's example as written (with `gen`) expands and plays; five seeds give five distinct, valid maps |
+| **M3: the generators** | the base ground's noise, `meander`, `clump`, `street-village`, `scatter`, on the exact maths; seasons and ice; golden expansions | §9's example as written (with `gen`) expands and plays; five seeds give five distinct, valid maps |
 | **M4: the rendered view** | The look compiler and the toggle between draft and 3D (with Track E: the look page loads any map's look data at 2 m) | The same map drafted and painted |
 
 M1 and M2 are tested with hand-written exact maps, before any randomness exists.

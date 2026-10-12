@@ -188,13 +188,13 @@ describe('M1b: applying features into the layers', () => {
 })
 
 describe('M1b: determinism and locality', () => {
-  const ex = expand(example).map
+  const ex = expand(example, cat).map
   it('the example applies and draws to the same bytes every time, and to the committed hashes', () => {
     expect(validate(ex, cat)).toEqual([])
     const a = apply(ex, cat), b = apply(ex, cat)
     expect(hashLayers(a)).toBe(hashLayers(b))
     const img = draft(a)
-    expect({ layers: hashLayers(a), draft: hex(fnv1a(bytes(img.data))) }).toEqual({ layers: '0x744b6f1e', draft: '0x65b89ca6' })
+    expect({ layers: hashLayers(a), draft: hex(fnv1a(bytes(img.data))) }).toEqual({ layers: '0x755885ce', draft: '0x8f0ccdf2' })
   })
   it('moving one wood changes only the cells it covered or covers, and no height', () => {
     const moved = clone(ex), wood = moved.features.find(f => f.id === 'west-wood')!

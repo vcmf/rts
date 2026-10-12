@@ -1,6 +1,6 @@
 // Apply (docs/proposals/map-engine.md §4, docs/plans/done/m1-language.md M1b): the expanded map's features
 // laid into the five layers on the 2 m grid over the map's extent, in the engine's fixed order:
-//   1. relief: the landforms (hill, ridge, valley, plateau, scarp), summed (the base is flat until `noise`, M3);
+//   1. relief: the base ground (seeded noise) and the landforms (hill, ridge, valley, plateau, scarp), summed;
 //   2. relief edits, now that every shape exists: raise, lower, level, cut, ditch, and a way's cut or raise;
 //   3. water: the cells under streams, rivers and ponds (levels and carving: M2);
 //   4. areas: ground and vegetation;
@@ -12,8 +12,11 @@ import type { AttrValue, Catalogue, Feature, MapFile, Pt, Ramp } from './schema.
 import { categoryOf, kindChain, kindMeta } from './catalogue.ts'
 import type { Resolved } from './resolve.ts'
 import { resolve } from './resolve.ts'
-import { inRing, lineLength } from './geometry.ts'
+import { crossings, inRing, lineLength, pointAt } from './geometry.ts'
 import { cos, sin } from '../sim/num.ts'
+import { seedOf } from './seed.ts'
+import { num, smooth } from './util.ts'
+import { addFbmGrid } from './noise.ts'
 
 export const CELL = 2   // m (decision 0021)
 // widths where the catalogue gives none: a way's (every way kind sets one), and the bands of the line-shaped kinds
@@ -37,7 +40,6 @@ export interface Layers {
 }
 export const LAYER_NAMES = ['ground', 'veg', 'water', 'way', 'barrier', 'built', 'zone', 'edit'] as const
 
-const smooth = (s: number): number => { const t = s < 0 ? 0 : s > 1 ? 1 : s; return t * t * (3 - 2 * t) }
 // a landform's profile over t = distance / half-width (1 at the centre, 0 from t = 1 on)
 function profile(kind: AttrValue | undefined, t: number): number {
   if (t >= 1) return 0
@@ -49,9 +51,13 @@ function profile(kind: AttrValue | undefined, t: number): number {
 // the nearest point of a polyline: distance, which side (left of the direction of travel: +1), how far past a
 // free end along its tangent (0 inside), and the distance along the line to the nearest point
 interface Near { d: number; side: number; over: number; along: number }
-function nearLine(line: Pt[], px: number, pz: number): Near {
-  // scalars only (this runs for every node and cell near a line), and a segment whose box lies farther than the best
-  // distance so far is skipped without measuring it; ties keep the earlier segment, as a full scan would
+export function nearLine(line: Pt[], px: number, pz: number): Near {
+  return line.length > INDEX_FROM ? nearIndexed(lineIndex(line), line, px, pz) : nearScan(line, px, pz)
+}
+
+// the full scan: scalars only, a segment whose box lies farther than the best so far skipped; ties keep the
+// earlier segment
+export function nearScan(line: Pt[], px: number, pz: number): Near {
   let bd = Infinity, bd2 = Infinity, side = 1, over = 0, along = 0, acc = 0
   for (let k = 0; k + 1 < line.length; k++) {
     const ax = line[k][0], az = line[k][1], bx = line[k + 1][0], bz = line[k + 1][1], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz, L = Math.sqrt(L2)
@@ -71,16 +77,58 @@ function nearLine(line: Pt[], px: number, pz: number): Near {
   return { d: bd, side, over, along }
 }
 
-// the point at distance s along a polyline, and the unit tangent there: [x, z, tx, tz]
-function pointAt(line: Pt[], s: number): [number, number, number, number] {
-  let acc = 0
+// long lines (a meandered stream has hundreds of segments) get a bucket grid of their segments, searched in rings
+// out from the point until no nearer segment can remain; the same answer as the scan, ties to the earlier segment
+const INDEX_FROM = 24, BUCKET = 32
+interface LineIndex { x0: number; z0: number; nx: number; nz: number; buckets: number[][]; cum: Float64Array }
+const indexes = new WeakMap<Pt[], LineIndex>()
+function lineIndex(line: Pt[]): LineIndex {
+  let ix = indexes.get(line)
+  if (ix) return ix
+  const xs = line.map(p => p[0]), zs = line.map(p => p[1]), x0 = Math.min(...xs), z0 = Math.min(...zs)
+  const nx = Math.floor((Math.max(...xs) - x0) / BUCKET) + 1, nz = Math.floor((Math.max(...zs) - z0) / BUCKET) + 1
+  const buckets: number[][] = Array.from({ length: nx * nz }, () => []), cum = new Float64Array(line.length)
   for (let k = 0; k + 1 < line.length; k++) {
-    const [ax, az] = line[k], [bx, bz] = line[k + 1], dx = bx - ax, dz = bz - az, L = Math.sqrt(dx * dx + dz * dz)
-    if (acc + L >= s || k + 2 === line.length) { const t = Math.min(1, Math.max(0, (s - acc) / L)); return [ax + t * dx, az + t * dz, dx / L, dz / L] }
-    acc += L
+    const [ax, az] = line[k], [bx, bz] = line[k + 1]
+    cum[k + 1] = cum[k] + Math.sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az))
+    const i0 = Math.floor((Math.min(ax, bx) - x0) / BUCKET), i1 = Math.floor((Math.max(ax, bx) - x0) / BUCKET)
+    const j0 = Math.floor((Math.min(az, bz) - z0) / BUCKET), j1 = Math.floor((Math.max(az, bz) - z0) / BUCKET)
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) buckets[j * nx + i].push(k)
   }
-  return [line[0][0], line[0][1], 1, 0]
+  ix = { x0, z0, nx, nz, buckets, cum }
+  indexes.set(line, ix)
+  return ix
 }
+function nearIndexed(ix: LineIndex, line: Pt[], px: number, pz: number): Near {
+  let bd = Infinity, bk = -1, side = 1, over = 0, along = 0
+  const ci = Math.floor((px - ix.x0) / BUCKET), cj = Math.floor((pz - ix.z0) / BUCKET), last = line.length - 2
+  const visit = (k: number) => {
+    const ax = line[k][0], az = line[k][1], bx = line[k + 1][0], bz = line[k + 1][1], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz, L = Math.sqrt(L2)
+    const t = ((px - ax) * dx + (pz - az) * dz) / L2, tc = t < 0 ? 0 : t > 1 ? 1 : t
+    const qx = ax + tc * dx, qz = az + tc * dz, d = Math.sqrt((px - qx) * (px - qx) + (pz - qz) * (pz - qz))
+    if (d < bd || (d === bd && k < bk)) {
+      bd = d; bk = k
+      over = k === 0 && t < 0 ? -t * L : k === last && t > 1 ? (t - 1) * L : 0
+      side = dx * (pz - az) - dz * (px - ax) >= 0 ? 1 : -1
+      along = ix.cum[k] + tc * L
+    }
+  }
+  // rings of buckets around the point's (clamped into the grid, so a point outside still finds the nearest ring); a
+  // segment not yet visited lies in ring r or beyond, at least max(the point's distance to the grid, (r − 1)·BUCKET)
+  // away (a bucket off on the diagonal is nearer than their sum)
+  const gi = Math.min(ix.nx - 1, Math.max(0, ci)), gj = Math.min(ix.nz - 1, Math.max(0, cj))
+  const outside = Math.max(0, ix.x0 - px, px - (ix.x0 + ix.nx * BUCKET), ix.z0 - pz, pz - (ix.z0 + ix.nz * BUCKET))
+  const R = Math.max(ix.nx, ix.nz)
+  for (let r = 0; r <= R; r++) {
+    if (bk >= 0 && bd < Math.max(outside, (r - 1) * BUCKET)) break
+    // the ring's buckets only: its top and bottom rows, then its sides between them
+    const at = (i: number, j: number) => { if (i >= 0 && j >= 0 && i < ix.nx && j < ix.nz) for (const k of ix.buckets[j * ix.nx + i]) visit(k) }
+    for (let i = gi - r; i <= gi + r; i++) { at(i, gj - r); if (r) at(i, gj + r) }
+    for (let j = gj - r + 1; j <= gj + r - 1; j++) { at(gi - r, j); if (r) at(gi + r, j) }
+  }
+  return { d: bd, side, over, along }
+}
+
 
 // a feature's shape as a field: whether a point is inside (even-odd over all rings), and its distance in from
 // (positive) or out from (negative) the edge. The edge costs more, so callers ask for it only where it is used.
@@ -107,7 +155,6 @@ function areaField(f: Feature): Field | null {
   return null
 }
 
-const num = (v: AttrValue | undefined, dflt = 0): number => (typeof v === 'number' ? v : dflt)
 // a ramp's value at an input (edge distance or along-line distance), clamped to its first and last stops
 function ramp(v: AttrValue | undefined, input: { edge?: number; along?: number }, dflt: number): number {
   if (typeof v === 'number') return v
@@ -148,7 +195,11 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
   for (const { f, r } of order) {
     if (categoryOf(r.kind) !== 'relief' || isEdit(r)) continue
     const a = r.attrs, h = num(a.height), w2 = num(a.width, LANDFORM_WIDTH) / 2, kind = r.kind.split('.')[1]
-    if (kind === 'hill') {
+    if (kind === 'base') {
+      // the gentle ground between the landforms: value noise over the whole extent, ± height, at the scale of width
+      if (h === 0) continue
+      addFbmGrid(H, seedOf(map.seed, f.id, 'noise'), x0, z0, nx, nz, c, num(a.width, 400), h)
+    } else if (kind === 'hill') {
       const field = f.point ? areaField({ id: f.id, circle: [f.point, w2] })! : areaField(f)!
       const rad = f.point ? w2 : f.circle ? f.circle[1] : Math.min(f.ellipse![1], f.ellipse![2])
       nodes(field.box, 0, (k, x, z) => { H[k] += h * profile(a.profile, 1 - field.edge(x, z) / rad) })
@@ -313,19 +364,10 @@ export function heightOf(L: Layers, x: number, z: number, h: Float64Array = L.he
 
 // where two lines cross: the crossing nearest `near`, or the first along the first line
 export function crossing(a: Pt[], b: Pt[], near?: Pt): Pt | null {
-  let best: Pt | null = null, bestD = Infinity
-  for (let i = 0; i + 1 < a.length; i++) for (let j = 0; j + 1 < b.length; j++) {
-    const [p, q] = [a[i], a[i + 1]], [r, s] = [b[j], b[j + 1]]
-    const d = (q[0] - p[0]) * (s[1] - r[1]) - (q[1] - p[1]) * (s[0] - r[0])
-    if (d === 0) continue
-    const t = ((r[0] - p[0]) * (s[1] - r[1]) - (r[1] - p[1]) * (s[0] - r[0])) / d, u = ((r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0])) / d
-    if (t < 0 || t > 1 || u < 0 || u > 1) continue
-    const hit: Pt = [p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])]
-    if (!near) return hit
-    const dd = (hit[0] - near[0]) * (hit[0] - near[0]) + (hit[1] - near[1]) * (hit[1] - near[1])
-    if (dd < bestD) { bestD = dd; best = hit }
-  }
-  return best
+  const hits = crossings(a, b)
+  if (!near || hits.length < 2) return hits[0] ?? null
+  const d = (p: Pt) => (p[0] - near[0]) * (p[0] - near[0]) + (p[1] - near[1]) * (p[1] - near[1])
+  return hits.reduce((best, p) => (d(p) < d(best) ? p : best))
 }
 
 // The barrier cell rule (proposal §3.6), exact in integers: a cell belongs to the barrier when its centre lies

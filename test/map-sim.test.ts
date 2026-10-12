@@ -1,4 +1,4 @@
-// The sim compiler (docs/plans/active/m2-sim.md, M2): water levels and depths in the layers, the ruleset's ground
+// The sim compiler (docs/plans/done/m2-sim.md, M2): water levels and depths in the layers, the ruleset's ground
 // reading, the valley's compiled data, and the S1e battle played on it.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'

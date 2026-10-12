@@ -1,4 +1,4 @@
-// A map-engine map as a map definition for the sim data build (docs/plans/active/m2-sim.md, tools/build-sim-data.ts):
+// A map-engine map as a map definition for the sim data build (docs/plans/done/m2-sim.md, tools/build-sim-data.ts):
 // the JSON map validated, expanded and applied into its 2 m layers (src/map/), each cell classified by the
 // ruleset's ground reading (src/rulesets/napoleonic-ground.ts), over the map's play area (square). The sim's format
 // 2 carries it as it is: heights at 2 m (the layers' nodes), cost at 8 m, classes and depth at 2 m.
@@ -31,7 +31,7 @@ export function layersOf(file: string): { map: MapFile; layers: Layers } {
   const raw: unknown = JSON.parse(fs.readFileSync(path.resolve(ROOT, file), 'utf8'))
   const issues = validate(raw, cat)
   if (issues.length) throw new Error(`${file}: ${issues.slice(0, 5).map(i => `${i.id ?? ''} ${i.path}: ${i.message}`).join('; ')}`)
-  const ex = expand(raw as MapFile)
+  const ex = expand(raw as MapFile, cat)
   if (ex.issues.length) throw new Error(`${file}: ${ex.issues[0].message}`)
   return { map: ex.map, layers: apply(ex.map, cat) }
 }
