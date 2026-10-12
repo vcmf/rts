@@ -188,3 +188,25 @@ names the judges (`track-e-look.md`, open question 2).
 ## Estimate
 
 L5a 3–4 days; L5b 2 days of work plus the judges' time.
+
+## Changes from this plan (L5a, as built)
+
+- **No `wood` floor.** The copses' ellipses darkened open ground between their few trees, and the readability
+  guard's blocks there stopped reading against it; the light map's occlusion already darkens the ground under each
+  crown. The class stays in the format.
+- **The bake's A is the snow's lie, not an earth mask.** Nothing read the mask (the detail layer's per-class strokes
+  belong with the brush library, art bible §7). The winter master reads by its ploughed stripes: furrows hold the
+  snow, ridges show the earth, and roads, tracks and the village ground hold less, so they still read in winter
+  (`pSnowLie` in `snowAt()`).
+- **Stripes are lands, not furrows:** 4–7 m bands (ridge-and-furrow lands, drill bands), which a 0.5 m bake holds;
+  1 m furrows would sit at its Nyquist limit and belong to the runtime detail.
+- **Colours set by the guard:** the ploughed earth, the wheat and the stubble are lighter or greyer than first
+  painted. Dark earth matched the French and Russian coats' value, and pale straw the Austrian white's once the warm
+  sun lit it (`tools/guard.mjs --view cover`, a second view with blocks on each class, is new).
+- **Every grain read outside a branch** (`grainAt`): reads in branches the pixels of a quad take differently (a
+  class edge) made the bake differ run to run on the Mac's GPU (0.85% of texels by up to 26 levels).
+- **The class check samples 24 px apart,** not 8: at the closest views 8 px is under a metre, inside the bake's soft
+  edge, and measured the edge's blend instead of the two classes.
+- **Winter shimmer gate:** snow against bare ground makes every edge pop; the closest zoom's winter limit is main's
+  own number on the same pixels (1.9%) rounded up to 2.0% (the flat arm measures 1.94%), the widest's stays the water check's 3.5%. The snow's edge on fields breaks
+  on the grain's soft blotches over a wider fixed band (a width from `fwidth` stepped by 2×2 pixels, as in W5b).

@@ -1,7 +1,7 @@
 ---
 status: current
-last_reviewed: 2026-10-10
-code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs]
+last_reviewed: 2026-10-12
+code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts]
 decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0003-no-blur-in-gameplay, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain]
 ---
 
@@ -37,15 +37,17 @@ world spec and a heightfield built offline. The prototype stays as the reference
 |---|---|
 | `src/look/spec.ts` | The world SPEC: sizes declared once, the rest derived (cells, the apron band, the camera footprint, the shader macros), and the invariants checked on derive: grids meet exactly, the tile holds play ⊕ margin, the far ring holds every view, no frame corner near the horizon, yaw ≤ ±45°, bakes at their texel targets and within min-spec. The shadow map is sized from its fitted box at the texel target |
 | `src/look/world/author.ts` | The authoring formulas (`baseH`, the meander's generation, the trough and the carve). Run in Node by the build tool; the page uses them only for checks |
-| `tools/build-look-data.ts` | Builds `data/painted-world.lookdata`: the heightfield (tile plus `aoMargin`), the far ring's nodes, the river's samples, the bank normals (W2) and the water data (W3, `src/look/world/water-data.ts`) (`--check` compares) |
-| `src/look/world/data.ts` | The look data's binary format (version 4): arrays, and span grids (a grid's covered texels only) for the bank normals and the water data |
+| `tools/build-look-data.ts` | Builds `data/painted-world.lookdata`: the heightfield (tile plus `aoMargin`), the far ring's nodes, the river's samples, the bank normals (W2), the water data (W3, `src/look/world/water-data.ts`) and the cover (L5a, below) (`--check` compares) |
+| `src/look/world/data.ts` | The look data's binary format (version 5): arrays, span grids (a grid's covered texels only) for the bank normals and the water data, and the cover's runs |
+| `src/look/world/cover.ts` | The ground's cover (L5a, below): authored, rasterised to a grid, run-length coded |
+| `src/look/macro.ts` | The cover's texture, the macro colour's bake and its arms (L5a, below) |
 | `src/look/heightfield.ts` | `heightAt` on the heightfield with CreateGround's own triangle split; `groundAt` adds the far ring's nodes beyond the tile; `H` is `groundAt` |
 | `src/look/river.ts` | The meander at run time (`docs/systems/river.md`): the shipped samples, a bucket grid, `riverQuery`, `bandOf` |
 | `src/look/grain.ts` | The procedural paint grain (R fine, G blotches, B streaks), a dropped PNG's luminance, the seam check's smooth grain, the R channel's mean |
-| `src/look/materials.ts` | Panel state `S`, sun and palette, and the material factory that inlines `shaders/painter.glsl` at `#include<painter>`, the water data's reads (`#include<waterdata>`) and the shore band with the bank normals (`#include<shore>`, W4) |
+| `src/look/materials.ts` | Panel state `S`, sun and palette, and the material factory that inlines `shaders/painter.glsl` at `#include<painter>`, the water data's reads (`#include<waterdata>`) and the shore band with the bank normals (`#include<shore>`, W4), which includes the macro colour (`#include<macro>`, L5a) |
 | `src/look/terrain.ts` | Tile (1.79 m), far ring (14.3 m) and the apron that stitches them; the far ring's painted river mask; the bank normals' texture (W2, `docs/systems/river.md`; both it and the water data's, W3, from `src/look/span-texture.ts`). Their materials define `DETAIL` (the detail layer, below; on WebGL1 the material factory adds `DETAIL_L0`); the tile's also `BANKN` and `WATERDATA` (the shore band, W4), as do the water's |
 | `src/look/water.ts` | The water ribbon, its materials (the painted water, W4, `docs/systems/river.md`; and the same shader on the tile's ground, for the seam check) and the tree-reflection mask |
-| `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule |
+| `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule (and, since L5a, the cover's: what grows on which class) |
 | `src/look/bakes.ts` | Sun shadow depth (once), occlusion and valley mask (CPU, once), the top-down light map (once) |
 | `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), and the passes: depth of field (presentation only, decision 0003), the fused grade |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop, and the debug globals the checks read |
@@ -60,7 +62,44 @@ the contract of `tools/golden.mjs`; it also puts the prototype's global names on
 `window.__look` for the look tools: `lab`, `mats`, `passes`, and the detail layer's switches (`setDetail`, the
 terrain's variant defines; `grain`, the paint or the smooth grain; `terrainOnly`; `finishing`, the finishing
 passes on or off; `hill`; `quarter` and `shift`, the projection moved for the checks). `?season=<0..3>` opens the
-page in a season (the bench runs in it); `?detail=l0` opens it with the L0 grain on the terrain.
+page in a season (the bench runs in it); `?detail=l0` opens it with the L0 grain on the terrain; `?macro=flat|shader|bake`
+picks the macro colour's arm (L5a, below; `bake` by default) and `?bench=macro` benches the three.
+
+### The ground's cover and macro colour (L5a)
+
+The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainted-terrain.md`.
+
+- **The cover** (`src/look/world/cover.ts`, authored in Node until the map format's world compiler writes the
+  same grid, `docs/proposals/map-format.md`): strip fields on the valley sides and beyond the play area (wheat,
+  green crop, stubble, ploughed; each with an id and a furrow direction), meadow and pasture, a road along the
+  valley's east side, a track toward the hill, village ground beside the road. Nothing but meadow on the
+  floodplain (art bible §6c) or in the formation zones. Rasterised to a grid of `SPEC.macro.cover` m cells (2 m)
+  over the far ring, 4 bytes a cell: the class, the field's id, the furrow direction, the distance to the
+  nearest road, track or village (the wear's). The class `wood` is in the format but not authored: a floor over a
+  copse's whole spread darkened open ground between its few trees, and the light map's occlusion already darkens
+  the ground under each crown.
+- **The macro colour** (`src/look/shaders/macro.glsl`, `macro(xz, q, px)`): class colours from the palette (the
+  meadow is the old `groundMeadow`), a low-frequency variation, each field's own shade, stripes along its furrows
+  (ridge-and-furrow lands on ploughed ground, faint drill bands on crops, faded with the pixel's footprint), wear
+  near the lines, and edges that wander (the class lookup's point pushed ±1.5 m by the grain's blotches). Colour
+  only: the light stays in `paint()`. Every grain read happens once, outside any branch (`grainAt`): a read in a
+  branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then
+  differed run to run.
+- **Three arms, one switch** (`?macro`): `flat`, each class's colour alone, unwarped (the ablation's arm 1);
+  `shader`, `macro(xz, 0)` per pixel, one tap; `bake`, one read of the bake. `groundAt()` gives the arm's colour
+  to the terrain, the far ring and the shore band alike (so the seam holds), and `snowLie()` the snow's lie.
+- **The bake** (`src/look/macro.ts`): `macro(xz, 1)` (9 taps of the grid a metre apart: soft edges and a darker
+  headland where classes meet) drawn by an `EffectRenderer` into RGBA8 render targets, 512² texels a draw, then
+  mipmapped: the tile at 0.5 m (1600²) and the far ring at 4 m (650²), 15 MB with mips. RGB the colour, A the
+  snow's lie. The tile's bake hands over to the far ring's over the tile's last 60 m. It reads the grain, so a new
+  grain rebakes it (`Materials.onGrain`). `?macroBench=<side>` bakes a side² target (the full-size run).
+- **The fields in winter:** the furrows hold the snow and the ridges show the earth (the winter master's stripes):
+  `pSnowLie` moves `snowAt()`'s threshold. There the snow's edge breaks on the grain's soft blotches, not its
+  per-texel noise, over a wider band, and the lie fades out as a pixel spans 0.35 to 1.2 m.
+- **The scatter follows the cover:** grass, flowers, plants, bushes, stumps and logs on grass; wheat on wheat;
+  nothing on roads, tracks or village ground. **Ground bounce:** trees take 15% of the macro colour under their
+  root into the albedo of their side away from the sun, near the ground; grass 25% all over.
+- `window.__look.macro`: `setArm`, `setCheck` (the check's view and sabotages, rebaked), `hash`, `bake`.
 
 ### The detail layer (L2b)
 
@@ -114,6 +153,18 @@ negative, in summer: the same blocks painted grey, each at the grey that matches
 (interpolated from renders at two greys), must not separate. A block's pixels come from two mask renders (flat
 white, flat black), so hidden parts and ground-coloured parts are both counted right.
 
+`--view cover` (L5a) puts four clusters east of the hill instead, one on each class of the cover (the ploughed
+field, the track, the road, the village ground).
+
+### The macro checks (L5a)
+
+`node tools/macro-check.mjs <url> [outDir] [--only classes,shimmer,determinism,bake] [--selftest]`: the classes
+read apart (CIE ΔE 2000 across the class edges the class view finds, medians per kind of edge), shimmer on the
+fields' pixels under a quarter-pixel shift (summer and winter), the bakes' hashes after a load, a rebake and a
+second load, and the full-size bake (3600²) without a lost context. Run the self-test in the shader arm: the
+bake's texture filtering smooths even the stripes' sabotage, and the flat arm has no stripes. The header has the
+measures and limits; the results are in the plan.
+
 ### The detail checks (L2b)
 
 `node tools/detail-check.mjs <url> [outDir] [--only …] [--defines …] [--selftest]`: scale stability over a zoom
@@ -133,7 +184,7 @@ header has the measures and the limits; the results are in `docs/plans/active/tr
 
 ## Tunables
 
-In the code: sizes in `src/look/spec.ts` (with the detail layer's `detail.px`, `detail.amp` and `detail.index`), colours and light in `src/look/materials.ts` and the shaders, the
+In the code: sizes in `src/look/spec.ts` (with the detail layer's `detail.px`, `detail.amp` and `detail.index`, and the macro colour's `macro`), colours and light in `src/look/materials.ts` and the shaders (the cover's colours in `src/look/shaders/macro.glsl`; the cover itself in `src/look/world/cover.ts`, rebuild the look data after a change), the
 river's parameters in `src/look/world/author.ts` (rebuild the look data after a change), the scatter in `src/look/nature.ts`.
 
 ## Verification
@@ -146,7 +197,8 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
   on the ground, the ground inside the SPEC's range. `node tools/check-negatives.mjs <url>` runs all three
   with a sabotage per limit.
 - `test/look-spec.test.ts`: one negative case per SPEC invariant, the triangle split, the data file's round
-  trip and that the committed file is what the authoring step builds.
+  trip and that the committed file is what the authoring step builds. `test/cover.test.ts`: the cover's coding,
+  and its rules (nothing on the floodplain or in the formation zones).
 - `node tools/guard.mjs` and `node tools/bench-look.mjs` (above). Their baselines are in
   `docs/plans/active/track-e-results/l2a-baseline.md`.
 - `node tools/detail-check.mjs <url> --selftest` (above). The goldens of main against `?detail=l0` matched in
@@ -155,6 +207,7 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
   pools against riffles, shimmer on the water. The page's hooks: `__look.waterSab` (the sabotages),
   `__look.groundAs` (the tile's ground drawn with the water's shader), `__look.waterAt` (the data at a point),
   `?watersab=nodive`.
+- `node tools/macro-check.mjs <url?macro=shader> --selftest` and `node tools/guard.mjs <url> --view cover` (L5a, above).
 - `npm test` (lint and typecheck cover `src/look/`).
 
 ## Open questions
@@ -165,5 +218,8 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
   is placed there (`src/look/nature.ts`), and the look check fails if anything is.
 - **The guard fails on main** for some coats (red in summer, white on snow): a palette question for the owner,
   recorded in `docs/plans/active/track-e-results/l2a-baseline.md`.
+- **The staff map** will read the macro colour flattened (the proposal); it is not on the look page yet.
+- **The cover is this world's** until the map format's world compiler writes the grid; the grid's shape is what
+  it would write.
 - The bundle is one 1.7 MB chunk (Babylon plus the nature pack data); splitting it waits until load
   time matters.
