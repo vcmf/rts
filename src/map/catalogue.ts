@@ -1,7 +1,9 @@
 // The kinds catalogue (maps/kinds.json, docs/proposals/map-engine.md §3.2): a kind's chain of presets along its
 // dotted path, the metadata it inherits, and the check of the catalogue itself.
 import type { AttrSpec, AttrValue, Catalogue, FieldSpec, KindSpec, RefName, ShapeName, Season } from './schema.ts'
-import { SEASONS, SHAPES } from './schema.ts'
+import { REFS, SEASONS, SHAPES } from './schema.ts'
+
+const TYPES = ['number', 'int', 'enum', 'string', 'object']
 
 export interface Issue { id: string | null; path: string; message: string }
 
@@ -62,6 +64,8 @@ export function checkValue(spec: AttrSpec | FieldSpec, v: unknown, rampOk = fals
         const e = checkValue(fields[k], fv); if (e) return `${k} ${e}`
       }
       for (const k of Object.keys(fields)) if (!(k in v)) return `needs its field "${k}"`
+      const less = (spec as AttrSpec).less, o = v as Record<string, number>
+      if (less && !(o[less[0]] < o[less[1]])) return `${less[0]} must be less than ${less[1]}`
       return null
     }
   }
@@ -75,6 +79,7 @@ function checkRamp(spec: AttrSpec, v: Record<string, unknown>): string | null {
   let last = -Infinity
   for (const s of stops) {
     if (!Array.isArray(s) || s.length !== 2 || typeof s[0] !== 'number' || !Number.isFinite(s[0])) return 'each stop is [input, value]'
+    if (s[0] < 0) return 'a stop\'s input is a distance, at least 0'
     if (s[0] <= last) return 'stops must increase along their input'
     last = s[0]
     const e = checkValue({ ...spec, ramp: undefined }, s[1]); if (e) return `a stop's value ${e}`
@@ -86,9 +91,11 @@ function checkRamp(spec: AttrSpec, v: Record<string, unknown>): string | null {
 export function checkCatalogue(cat: Catalogue): Issue[] {
   const out: Issue[] = [], bad = (path: string, message: string) => out.push({ id: null, path, message })
   if (cat.format !== 1) bad('format', 'must be 1')
-  for (const [c, def] of Object.entries(cat.categories)) for (const l of def.layers) if (!(l in cat.layers)) bad(`categories.${c}`, `names an unknown layer "${l}"`)
+  for (const [c, def] of Object.entries(cat.categories)) for (const l of def.layers) if (!Object.hasOwn(cat.layers, l)) bad(`categories.${c}`, `names an unknown layer "${l}"`)
   for (const [a, s] of Object.entries(cat.attributes)) {
-    for (const l of s.layers) if (!(l in cat.layers)) bad(`attributes.${a}`, `names an unknown layer "${l}"`)
+    for (const l of s.layers) if (!Object.hasOwn(cat.layers, l)) bad(`attributes.${a}`, `names an unknown layer "${l}"`)
+    if (!TYPES.includes(s.type)) bad(`attributes.${a}`, `unknown type "${s.type}" (${TYPES.join(', ')})`)
+    for (const [fname, fs] of Object.entries(s.fields ?? {})) if (!TYPES.includes(fs.type) || fs.type === 'object') bad(`attributes.${a}.fields.${fname}`, `unknown or nested type "${fs.type}"`)
     if (s.type === 'enum' && !s.values?.length) bad(`attributes.${a}`, 'an enum needs values')
     if (s.type === 'object' && !s.fields) bad(`attributes.${a}`, 'an object needs fields')
   }
@@ -97,6 +104,12 @@ export function checkCatalogue(cat: Catalogue): Issue[] {
     if (!chain) { bad(p, 'its category or a shorter prefix of its path is not in the catalogue'); continue }
     if (chain.length === 1 && !k.shapes) bad(p, 'the first kind of a path must give its shapes')
     for (const s of k.shapes ?? []) if (s !== 'none' && !(SHAPES as readonly string[]).includes(s)) bad(p, `unknown shape "${s}"`)
+    for (const [r, target] of Object.entries(k.refs ?? {})) {
+      const [tc, ts] = String(target).split(':')
+      if (!(REFS as readonly string[]).includes(r)) bad(`${p}.refs.${r}`, 'unknown reference field')
+      else if (r === 'near' ? target !== 'point' : !Object.hasOwn(cat.categories, tc) || (ts !== undefined && !(SHAPES as readonly string[]).includes(ts))) bad(`${p}.refs.${r}`, `"${target}" must be a category, optionally ":<shape>" (or "point" for near)`)
+    }
+    for (const r of k.optional ?? []) if (!Object.hasOwn(k.refs ?? {}, r)) bad(`${p}.optional`, `"${r}" is not one of its references`)
     checkSet(cat, categoryOf(name), k.set, `${p}.set`, bad)
     for (const [season, attrs] of Object.entries(k.seasons ?? {})) {
       if (!(SEASONS as readonly string[]).includes(season)) bad(`${p}.seasons`, `unknown season "${season}"`)

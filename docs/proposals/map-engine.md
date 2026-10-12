@@ -217,7 +217,8 @@ StarCraft. This is a deliberate simplification for play and for the editor:
 - **One rule makes the cells:** a cell belongs to the barrier when its centre lies closer to the line than half
   the thickness (`thickness × c / 2`), strictly, and its nearest point on the line is not one of the line's two
   free ends. Joints inside the line are round, so corners stay sealed; the ends are cut square, so a barrier stops
-  at its last point and two walls 4 m apart leave a 2-cell gate. Cell centres and line points are on whole metres, so the test is
+  at its last point and two walls 4 m apart leave a 2-cell gate. A barrier whose last point is its first is
+  closed (a walled yard): it has no free ends. Cell centres and line points are on whole metres, so the test is
   exact in integers (squared distances). Along an axis a 2-thick barrier is 2 cells, one on each side of the line;
   along a diagonal it is a staircase 3 cells across, which closes on every side. The sim, the draft view and the
   3D world all use this rule, from one function.

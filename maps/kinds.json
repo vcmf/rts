@@ -54,7 +54,7 @@
     "thickness": { "layers": ["barrier"], "type": "int", "unit": "cells", "min": 2, "max": 8, "even": true },
     "porosity": { "layers": ["barrier"], "type": "number", "unit": "0..1", "min": 0, "max": 1, "season": true },
     "crossing": { "layers": ["barrier"], "type": "enum", "values": ["open", "jump", "climb", "push", "none"] },
-    "gaps": { "layers": ["barrier"], "type": "object", "fields": { "every": { "type": "int", "unit": "steps", "min": 2, "max": 1000 }, "width": { "type": "int", "unit": "steps", "min": 1, "max": 100 } } },
+    "gaps": { "layers": ["barrier"], "type": "object", "less": ["width", "every"], "fields": { "every": { "type": "int", "unit": "steps", "min": 2, "max": 1000 }, "width": { "type": "int", "unit": "steps", "min": 1, "max": 100 } } },
     "wall": { "layers": ["built"], "type": "number", "unit": "m", "min": 0, "max": 30, "note": "a building's wall height" },
     "roof": { "layers": ["built"], "type": "enum", "values": ["none", "thatch", "tile", "slate"] },
     "parapet": { "layers": ["built"], "type": "number", "unit": "m", "min": 0, "max": 6 },
@@ -100,7 +100,7 @@
     "water.river": { "shapes": ["line"], "priority": 60, "set": { "width": 20, "depth": 2, "flow": 0.8, "bed": "sand", "banks": { "left": "plain", "right": "plain" } } },
     "water.pond": { "shapes": ["area", "circle", "ellipse"], "priority": 60, "set": { "depth": 1.5, "flow": 0, "bed": "mud" } },
     "water.lake": { "shapes": ["area", "circle", "ellipse"], "priority": 60, "set": { "depth": 4, "flow": 0, "bed": "mud" } },
-    "water.ford": { "shapes": ["none"], "refs": { "on": "water", "near": "point" }, "priority": 65, "set": { "depth": 0.5, "width": 20, "bed": "gravel" } },
+    "water.ford": { "shapes": ["none"], "refs": { "on": "water:line", "near": "point" }, "priority": 65, "set": { "depth": 0.5, "width": 20, "bed": "gravel" } },
 
     "way.road": { "shapes": ["line"], "priority": 50, "set": { "width": 5, "surface": "earth", "hedges": "none" } },
     "way.road.highway": { "set": { "width": 9, "surface": "metalled" } },
@@ -118,8 +118,8 @@
     "built.barn": { "shapes": ["area"], "priority": 80, "set": { "height": 8, "wall": 4, "roof": "thatch", "material": "timber" }, "states": { "burnt": { "roof": "none", "height": 2, "wall": 1 } } },
     "built.church": { "shapes": ["area"], "priority": 80, "set": { "height": 14, "wall": 8, "roof": "slate", "material": "stone" } },
     "built.farm": { "shapes": ["area"], "priority": 75, "set": { "material": "stone", "wear": 0.6 }, "note": "a walled yard; its buildings and walls are their own features until street-village and farm generators (M3)" },
-    "built.village": { "shapes": ["area", "none"], "refs": { "along": "way" }, "priority": 24, "set": { "houses": 12, "wear": 0.5 } },
-    "built.bridge": { "shapes": ["none"], "refs": { "carries": "way", "crosses": "water", "near": "point" }, "optional": ["near"], "priority": 90, "set": { "material": "stone" } },
+    "built.village": { "shapes": ["area", "none"], "refs": { "along": "way:line" }, "priority": 24, "set": { "houses": 12, "wear": 0.5 } },
+    "built.bridge": { "shapes": ["none"], "refs": { "carries": "way:line", "crosses": "water:line", "near": "point" }, "optional": ["near"], "priority": 90, "set": { "material": "stone" } },
 
     "work.redoubt": { "shapes": ["area"], "priority": 85, "set": { "parapet": 1.8, "ditch": 1.5, "material": "earth" } },
     "work.fleche": { "shapes": ["line"], "priority": 85, "set": { "parapet": 1.4, "ditch": 1.2, "material": "earth" } },

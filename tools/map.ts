@@ -3,11 +3,12 @@
 //   node tools/map.ts check <map.json>        validate; print every problem with its feature id and path; exit 1 if any
 //   node tools/map.ts expand <map.json>       validate and write <map>.expanded.json beside it (generators arrive in M3)
 //   node tools/map.ts expand <map.json> --check   fail if the committed expanded file differs from a fresh expansion
-//   node tools/map.ts resolve <map.json> <id> [season] [state]   print one feature's effective attributes
+//   node tools/map.ts resolve <map.json> <id> [season] [state|none]   print one feature's effective attributes
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Catalogue, MapFile, Season } from '../src/map/schema.ts'
+import { SEASONS } from '../src/map/schema.ts'
 import type { Issue } from '../src/map/validate.ts'
 import { validate } from '../src/map/validate.ts'
 import { expand } from '../src/map/expand.ts'
@@ -24,7 +25,9 @@ const show = (file: string, issues: Issue[]) => { for (const i of issues) consol
 
 function load(file: string, cat: Catalogue): MapFile | null {
   let map: unknown
-  try { map = JSON.parse(fs.readFileSync(file, 'utf8')) } catch (e) { console.log(`${file}: not valid JSON: ${(e as Error).message}`); return null }
+  let text: string
+  try { text = fs.readFileSync(file, 'utf8') } catch (e) { console.log(`${file}: cannot read: ${(e as Error).message}`); return null }
+  try { map = JSON.parse(text) } catch (e) { console.log(`${file}: not valid JSON: ${(e as Error).message}`); return null }
   const issues = validate(map, cat)
   show(file, issues)
   return issues.length ? null : map as MapFile
@@ -40,7 +43,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (cmd === 'resolve') {
     const f = map.features.find(x => x.id === rest[0])
     if (!f) { console.log(`${file}: no feature "${rest[0]}"`); process.exit(1) }
-    console.log(JSON.stringify(resolve(f, map, cat, (rest[1] as Season) ?? map.season, rest[2] ?? f.state), null, 2)); process.exit(0)
+    const season = (rest[1] ?? map.season) as Season, state = rest[2] === 'none' ? undefined : rest[2] ?? f.state
+    if (!(SEASONS as readonly string[]).includes(season)) { console.log(`unknown season "${season}" (${SEASONS.join(', ')})`); process.exit(2) }
+    try { console.log(JSON.stringify(resolve(f, map, cat, season, state), null, 2)) } catch (e) { console.log((e as Error).message); process.exit(1) }
+    process.exit(0)
   }
   const { map: out, issues } = expand(map)
   show(file, issues)

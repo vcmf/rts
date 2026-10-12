@@ -114,7 +114,16 @@ const CASES: [string, (m: MapFile & Record<string, unknown>) => void, string | n
   ['a hole inside a hole', m => { f(m, 'field').area = [[[0, 0], [100, 0], [100, 100], [0, 100]], [[10, 10], [90, 10], [90, 90], [10, 90]], [[40, 40], [60, 40], [60, 60], [40, 60]]] }, 'field', 'features[9].area[2]', /hole 1/],
   ['a line that turns back on itself', m => { f(m, 'road').line = [[0, 0], [100, 0], [50, 0]] }, 'road', 'features[4].line[1]', /turns back/],
   ['an along past the end of its line', m => { f(m, 'house').kind = 'built.village'; f(m, 'house').along = { id: 'road', from: 900, to: 1100 }; delete f(m, 'house').state }, 'house', 'features[8].along.to', /past the end/],
-  ['gaps as wide as their spacing', m => { f(m, 'hedge').gaps = { every: 4, width: 4 } }, 'hedge', 'features[7].gaps.width'],
+  ['gaps as wide as their spacing', m => { f(m, 'hedge').gaps = { every: 4, width: 4 } }, 'hedge', 'features[7].gaps', /less than/],
+  // round 2 of the M1a review
+  ['all-gap barriers in a map preset', m => { m.presets!['old-hedge'].gaps = { every: 4, width: 4 } }, null, 'presets.old-hedge.gaps', /less than/],
+  ['a bridge crossing a ford (no line)', m => { f(m, 'bridge').crosses = 'ford' }, 'bridge', 'features[5].crosses', /no line/],
+  ['a ford on a pond', m => { m.features.push({ id: 'pond', kind: 'water.pond', circle: [[300, 300], 20] }); f(m, 'ford').on = 'pond' }, 'ford', 'features[3].on', /no line/],
+  ['an along ramp on an area', m => { f(m, 'wood').density = { along: [[0, 0.3], [30, 0.8]] } }, 'wood', 'features[6].density', /needs a line/],
+  ['a ramp with a negative distance', m => { f(m, 'wood').density = { edge: [[-50, 0.3], [-10, 0.8]] } }, 'wood', 'features[6].density', /at least 0/],
+  ['a repeated point in a line', m => { f(m, 'road').line = [[50, -500], [50, 0], [50, 0], [50, 500]] }, 'road', 'features[4].line[2]', /repeats a point/],
+  ['along metres finer than 1 cm', m => { f(m, 'house').kind = 'built.village'; f(m, 'house').along = { id: 'road', from: 10.123, to: 50 }; delete f(m, 'house').state }, 'house', 'features[8].along', /2 decimals/],
+  ['a barrier on the edge of the extent', m => { f(m, 'hedge').line = [[100, -500], [200, -500]] }, 'hedge', 'features[7].line[0]', /inside the extent/],
 ]
 
 describe('M1a: the validator names the feature and the path', () => {
@@ -125,6 +134,17 @@ describe('M1a: the validator names the feature and the path', () => {
     const hit = issues.find(i => i.path === p && i.id === id)
     expect(hit, `expected an issue at ${p} for ${id}; got ${JSON.stringify(issues)}`).toBeTruthy()
     if (msg) expect(hit!.message).toMatch(msg)
+  })
+  it('a closed barrier (a walled yard) is valid; one that crosses itself is not', () => {
+    const m = clone(BASE); f(m, 'hedge').line = [[100, -100], [200, -100], [200, -40], [100, -40], [100, -100]]
+    expect(validate(m, cat)).toEqual([])
+    f(m, 'hedge').line = [[100, -100], [200, -100], [100, -40], [200, -40], [100, -100]]
+    expect(validate(m, cat).map(i => i.message)).toContainEqual(expect.stringMatching(/8 directions|crosses itself/))
+  })
+  it('a catalogue with an unknown type or a bad reference target is reported', () => {
+    const c = clone(cat); c.attributes.stones.type = 'boolean' as never; c.kinds['water.ford'].refs = { on: 'watr', near: 'point' }
+    const paths = checkCatalogue(c).map(i => i.path)
+    expect(paths).toContain('attributes.stones'); expect(paths).toContain('kinds.water.ford.refs.on')
   })
   it('a reference loop is reported (with a catalogue whose streams may join a stream)', () => {
     const c = clone(cat); c.kinds['water.stream'].refs = { on: 'water' }; c.kinds['water.stream'].optional = ['on']
@@ -197,10 +217,21 @@ describe('M1a: the determinism rules hold in src/map/', () => {
     const lines = [...new Set(res.messages.filter(m => m.severity === 2 && m.ruleId?.startsWith('no-restricted')).map(m => m.line))].sort()
     expect(lines).toEqual([1, 2, 3])
   })
-  it("an import spelled ./../ and Reflect are reported too (review round 1)", async () => {
-    const text = "import { SPEC } from './../look/spec.ts'\nexport const c = SPEC\nexport const d = Reflect.get(Math, 'sin')\n"
+  it("imports that climb out, aliasing Math, wall-clock time, dynamic imports and float16 are reported (review rounds 1, 2)", async () => {
+    const text = [
+      "import { SPEC } from './../look/spec.ts'",          // 1: climbs out
+      "import { W } from './a/../../sim/world.ts'",        // 2: climbs out further down the path
+      "import { sin } from '../sim/num.ts'",               // 3: allowed
+      "import { isPt } from './geometry.ts'",              // 4: allowed
+      "const M = Math",                                    // 5: aliasing Math
+      "export const t = Date.now()",                       // 6: wall-clock time
+      "export const d = import('./format.ts')",            // 7: a dynamic import
+      "export const h = new Float16Array(2)",              // 8: float16
+      "export const r = Reflect.get(M, 'abs')",            // 9: Reflect
+      "export const all = [SPEC, W, sin, isPt]",
+    ].join('\n')
     const [res] = await new ESLint({ cwd: root }).lintText(text, { filePath: path.join(root, 'src', 'map', 'fixture.ts') })
     const lines = [...new Set(res.messages.filter(m => m.severity === 2 && m.ruleId?.startsWith('no-restricted')).map(m => m.line))].sort()
-    expect(lines).toEqual([1, 3])
+    expect(lines).toEqual([1, 2, 5, 6, 7, 8, 9])
   })
 })

@@ -115,4 +115,34 @@ M1b:
 
 ## Review rounds
 
-(appended during review)
+**M1a, round 1** (`/code-review high`, 10 findings, 1 severe):
+- **Severe:** resolution applied the catalogue's season overrides before the feature's own fields, so a field
+  given its own crop height kept it in winter. A season now beats a fixed value; the proposal (§3.5) and the
+  system doc say so.
+- **Moderate:**
+  - attributes, states and presets named like object builtins (`constructor`) crashed the validator or passed;
+    every lookup is now `Object.hasOwn`;
+  - string or infinite radii passed;
+  - holes were checked only by their corners;
+  - the extent was unchecked: it must be a multiple of 4 m, so the 2 m grid's corners are the barrier lattice.
+- **Light:**
+  - zero-area rings and lines that fold back passed;
+  - `expand` could overwrite a file not ending in `.json`;
+  - the `src/map/` import rule had a gap;
+  - `along` past its line's end, and all-gap barriers, passed.
+
+  The per-category test maps were replaced by the test map, which covers every category.
+
+**M1a, round 2** (10 findings, none severe: stop and fix what is worth it):
+- the `src/map/` lint block copied only part of the sim's rules; the exact-number rules are now shared constants
+  in `eslint.config.js`, and the import rule rejects any path that climbs out;
+- the CLI's `resolve` checks its season and takes `none` for no state;
+- the all-gap check moved into the catalogue's object check (`less`), so presets are covered;
+- references name a target shape (`water:line`), so a bridge cannot cross a ford, nor a ford sit on a pond;
+- ramp inputs must fit the shape and be distances of at least 0;
+- a barrier line that ends where it starts is closed (a walled yard, proposal §3.6), and repeated points get
+  their own message;
+- the catalogue check covers attribute types, reference targets and optional references;
+- `along` metres keep the 1 cm rule;
+- barriers stay 8 m inside the extent;
+- small clean-ups in the loop check and the state lookup.

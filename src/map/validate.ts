@@ -10,6 +10,7 @@ import { barrierProblem, inRing, isPt, lineCrossing, lineFoldBack, lineLength, o
 export type { Issue }
 const isRadius = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v) && v > 0 && onCentimetres(v)
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+const BARRIER_MARGIN = 8   // m: half the thickest barrier (8 cells of 2 m)
 const TOP = ['format', 'id', 'name', 'note', 'seed', 'season', 'datum', 'extent', 'play', 'sources', 'presets', 'features']
 
 export function validate(map: unknown, cat: Catalogue): Issue[] {
@@ -84,7 +85,10 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
     for (const k of ['note', 'source', 'state'] as const) if (f[k] !== undefined && typeof f[k] !== 'string') bad(id, `${path}.${k}`, 'must be a string')
     if (typeof f.source === 'string' && !sources.has(f.source)) bad(id, `${path}.source`, `"${f.source}" is not one of the map's sources (or "invented")`)
     if (f.priority !== undefined && (!Number.isInteger(f.priority) || (f.priority as number) < 0 || (f.priority as number) > 1000)) bad(id, `${path}.priority`, 'must be a whole number from 0 to 1000')
-    if (typeof f.state === 'string' && !Object.hasOwn(kindStates(cat, chain), f.state)) bad(id, `${path}.state`, `${kind} has no state "${f.state}" (it has: ${Object.keys(kindStates(cat, chain)).join(', ') || 'none'})`)
+    if (typeof f.state === 'string') {
+      const states = kindStates(cat, chain)
+      if (!Object.hasOwn(states, f.state)) bad(id, `${path}.state`, `${kind} has no state "${f.state}" (it has: ${Object.keys(states).join(', ') || 'none'})`)
+    }
     if (f.follow !== undefined) bad(id, `${path}.follow`, 'shared edges arrive with the generators (M3)')
     if (f.gen !== undefined) {
       const names = isObj(f.gen) ? Object.keys(f.gen) : []
@@ -102,6 +106,8 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       else checkShape(s, f[s], `${path}.${s}`, extent, (p, m) => bad(id, p, m))
       if (category === 'barrier' && s === 'line' && Array.isArray(f.line) && f.line.every(isPt)) {
         const e = barrierProblem(f.line as Pt[]); if (e) bad(id, `${path}.line[${e[0]}]`, e[1])
+        // the band (up to 8 cells, 16 m) must fit inside the grid
+        else if (extent) (f.line as Pt[]).forEach((q, k) => { if (Math.abs(q[0]) > extent.w / 2 - BARRIER_MARGIN || Math.abs(q[1]) > extent.h / 2 - BARRIER_MARGIN) bad(id, `${path}.line[${k}]`, `a barrier stays ${BARRIER_MARGIN} m inside the extent, so its band fits the grid`) })
       }
     }
 
@@ -115,11 +121,13 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       if (r === 'along' && (!isObj(f.along) || Object.keys(f.along).sort().join() !== 'from,id,to' || typeof f.along.from !== 'number' || typeof f.along.to !== 'number' || f.along.from < 0 || f.along.to <= f.along.from)) {
         bad(id, `${path}.along`, 'must be { "id", "from": m, "to": m } with 0 ≤ from < to'); continue
       }
+      if (r === 'along' && (!onCentimetres((f.along as { from: number }).from) || !onCentimetres((f.along as { to: number }).to))) bad(id, `${path}.along`, 'metres carry at most 2 decimals (1 cm)')
       const t = typeof target === 'string' ? byId.get(target) : undefined
       if (!t) { bad(id, `${path}.${r}`, `no feature "${String(target)}"`); continue }
       if (t.id === id) { bad(id, `${path}.${r}`, 'a feature cannot reference itself'); continue }
-      const tk = featureKind(t, presets)
-      if (!tk || categoryOf(tk) !== want) { bad(id, `${path}.${r}`, `"${t.id}" is a ${tk ?? 'feature without a kind'}; "${r}" needs a ${want}.* feature`); continue }
+      const tk = featureKind(t, presets), [wantCat, wantShape] = want.split(':')
+      if (!tk || categoryOf(tk) !== wantCat) { bad(id, `${path}.${r}`, `"${t.id}" is a ${tk ?? 'feature without a kind'}; "${r}" needs a ${wantCat}.* feature`); continue }
+      if (wantShape && t[wantShape] === undefined) { bad(id, `${path}.${r}`, `"${t.id}" has no ${wantShape}; "${r}" needs a ${wantCat}.* feature drawn as a ${wantShape}`); continue }
       if (r === 'along' && Array.isArray(t.line) && t.line.every(isPt)) {
         const len = lineLength(t.line as Pt[]), a = f.along as { from: number; to: number }
         if (a.to > len) bad(id, `${path}.along.to`, `${a.to} m runs past the end of "${t.id}" (${Math.floor(len)} m long)`)
@@ -128,8 +136,13 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
 
     // attributes, seasons
     checkAttrs(cat, id, f, path, category, bad, RESERVED as readonly string[])
-    const gaps = f.gaps as { every?: unknown; width?: unknown } | undefined
-    if (isObj(gaps) && typeof gaps.every === 'number' && typeof gaps.width === 'number' && gaps.width >= gaps.every) bad(id, `${path}.gaps.width`, 'must be less than gaps.every (a barrier that is all gap)')
+    // a ramp's input must fit the shape: `edge` on an area, `along` on a line
+    for (const [a, v] of Object.entries(f)) {
+      if (!isObj(v) || !Object.hasOwn(cat.attributes, a) || !cat.attributes[a].ramp) continue
+      const input = Object.keys(v)[0], shape = SHAPES.find(s => f[s] !== undefined)
+      if (input === 'edge' && shape && !['area', 'circle', 'ellipse'].includes(shape)) bad(id, `${path}.${a}`, `an "edge" ramp needs an area, circle or ellipse, not a ${shape}`)
+      if (input === 'along' && shape && shape !== 'line') bad(id, `${path}.${a}`, `an "along" ramp needs a line, not a ${shape}`)
+    }
     if (f.seasons !== undefined) {
       if (!isObj(f.seasons)) bad(id, `${path}.seasons`, 'must be an object of seasons')
       else for (const [season, attrs] of Object.entries(f.seasons)) {
@@ -143,16 +156,17 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
 
   // references must not loop (a feature is expanded after what it references, §4)
   const state = new Map<string, 1 | 2>()
-  const visit = (fid: string, trail: string[]): void => {
+  const trail: string[] = []
+  const visit = (fid: string): void => {
     if (state.get(fid) === 2) return
     if (state.get(fid) === 1) { bad(fid, 'features', `references loop: ${[...trail.slice(trail.indexOf(fid)), fid].join(' → ')}`); return }
-    state.set(fid, 1)
+    state.set(fid, 1); trail.push(fid)
     const f = byId.get(fid)!
-    for (const r of ['on', 'carries', 'crosses'] as const) if (typeof f[r] === 'string' && byId.has(f[r] as string)) visit(f[r] as string, [...trail, fid])
-    if (isObj(f.along) && typeof f.along.id === 'string' && byId.has(f.along.id)) visit(f.along.id, [...trail, fid])
-    state.set(fid, 2)
+    for (const r of ['on', 'carries', 'crosses'] as const) if (typeof f[r] === 'string' && byId.has(f[r] as string)) visit(f[r] as string)
+    if (isObj(f.along) && typeof f.along.id === 'string' && byId.has(f.along.id)) visit(f.along.id)
+    trail.pop(); state.set(fid, 2)
   }
-  for (const fid of [...byId.keys()].sort()) visit(fid, [])
+  for (const fid of [...byId.keys()].sort()) visit(fid)
   return out
 }
 
@@ -185,8 +199,12 @@ function checkShape(s: typeof SHAPES[number], v: unknown, path: string, extent: 
     case 'point': if (!isPt(v)) bad(path, 'must be a point [x, z]'); else checkInside(v, path, extent, bad); return
     case 'line': {
       const l = pts(v, 2, path); if (!l) return
-      const c = lineCrossing(l); if (c) { bad(path, `crosses itself (segments ${c[0]} and ${c[1]})`); return }
-      const b = lineFoldBack(l); if (b >= 0) bad(`${path}[${b}]`, 'the line turns back on itself here, or repeats a point')
+      const last = l[l.length - 1], closed = l.length > 3 && last[0] === l[0][0] && last[1] === l[0][1]
+      const open = closed ? l.slice(0, -1) : l
+      const b = lineFoldBack(open); if (b >= 0) { bad(`${path}[${b}]`, 'the line turns back on itself here, or repeats a point'); return }
+      // a line that ends where it starts is closed (a walled yard): checked as a ring, with no free ends (§3.6)
+      const c = closed ? ringCrossing(open) : lineCrossing(l)
+      if (c) bad(path, `crosses itself (segments ${c[0]} and ${c[1]})`)
       return
     }
     case 'area': {

@@ -66,11 +66,12 @@ export interface AttrSpec extends FieldSpec {
   season?: boolean               // may be overridden per season
   ramp?: ('edge' | 'along')[]    // may be a ramp over these inputs
   fields?: Record<string, FieldSpec>   // for type 'object'
+  less?: [string, string]        // for type 'object': the first field must be less than the second
   note?: string
 }
 export interface KindSpec {
   shapes?: (ShapeName | 'none')[]
-  refs?: Partial<Record<RefName, string>>   // reference field → the category it must point at, or 'point' for `near`
+  refs?: Partial<Record<RefName, string>>   // reference field → the category it points at, optionally ':<shape>' ("water:line"), or 'point' for `near`
   optional?: RefName[]
   priority?: number
   edit?: boolean                 // a relief edit (applied after every shape exists, §4)
