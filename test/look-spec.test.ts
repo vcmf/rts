@@ -36,6 +36,8 @@ describe('world spec', () => {
     ['water texels not dividing the tile', s => { s.water.texel = 0.3 }, /water: the tile/],
     ['a water depth range without the shore', s => { s.water.depth = [0.5, 2.5] }, /water: the depth range/],
     ['no shore band', s => { s.water.band = 0 }, /water: the shore band/],
+    ['bank colours past the bank normals', s => { s.bank.paint = 13 }, /bank: the banks' colours/],
+    ['too many stones for the foam loop', s => { s.water.stones = 100 }, /water: the stones/],
   ]
   for (const [name, f, msg] of cases) it(`throws: ${name}`, () => { expect(() => derive(with_(f))).toThrow(msg) })
   it('sizes the shadow map at the texel target on the ground, and refuses one over min-spec', () => {

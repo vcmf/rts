@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-11
 ---
 
@@ -120,7 +120,9 @@ E's stage 1 (`docs/plans/active/track-e-look.md`). Research: `docs/research/styl
   world points and derivatives. At the pixels within the band (from the raw data view), the two frames' colour
   difference: 95th percentile within 2/255, and at most 0.1% of the pixels over 6/255 (as built: isolated pixels on
   the shoreline itself, where the land and water sides blend over a pixel, differ by up to 12/255 in the two
-  shaders' arithmetic; the sabotages move the 95th percentile to 30–80). Where the two surfaces meet on screen they
+  shaders' arithmetic; the sabotages move the 95th percentile to 30–80). Corrected in W5a: those pixels were
+  undefined derivatives (the shoreline's branches reached too little past its blend); with the margin fixed the two
+  materials match exactly, and the gate is back to the largest within 6/255. Where the two surfaces meet on screen they
   intersect, so they share the world point there: with the band check (each surface shows only within the band of
   the other), equal colours in the band leave no seam. Comparing a frame with the water hidden would not do: the
   two surfaces stand up to 0.5 m apart, and the parallax shifts the grain.

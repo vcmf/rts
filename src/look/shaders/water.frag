@@ -4,7 +4,7 @@ precision highp float;varying vec3 vW;varying float vAcross,vTau,vRiffle;uniform
 #include<waterdata>
 #include<shore>
 
-// The painted water (docs/plans/active/w4-water-surface.md, research §2.8): opaque. Its lower layers (the bed, the
+// The painted water (docs/plans/done/w4-water-surface.md, research §2.8): opaque. Its lower layers (the bed, the
 // absorption, the shadows, the shore foam) are the shore band's (src/look/shaders/shore.glsl), the same function the
 // terrain paints near the water; the upper layers (rough water, sky tint, reflections, strokes, glitter, riffle foam)
 // fade in past the band, where the water is always the surface drawn. vAcross: m from the centre line (+ left of the
@@ -22,7 +22,7 @@ void main(){
   // the seam check's sabotage: the water painting itself in the band (every layer wherever it is wet, the dry side lit
   // with the water's flat normal instead of the bank normals)
   const float UP0=0.0;
-  vec3 c=s<=0.0?paint(landAlbedo(vW.xz),vec3(0.0,1.0,0.0),vW,occ,0.12,1.0,sh)*(1.0+(G(vW.xz/4.0).r-0.5)*uGrainAmt*0.14):shore(vW,t,occ,sh,fws);
+  vec3 c=s<=0.0?paint(landAlbedo(vW.xz,max(-s,0.0),-waterDepth(t)),vec3(0.0,1.0,0.0),vW,occ,0.12,1.0,sh)*(1.0+(G(vW.xz/4.0).r-0.5)*uGrainAmt*0.14):shore(vW,t,occ,sh,fws);
   #else
   const float UP0=WATER_BAND;   // the upper layers: none within the band
   vec3 c=shore(vW,t,occ,sh,fws);
@@ -67,4 +67,5 @@ void main(){
     float riff=smoothstep(0.35,0.65,riffle)*aastep(0.66,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);
     c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.85*up*near);
   }
+  c=withStones(c,vW,s,sh);   // the stones' foam, over every layer (shore.glsl)
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}

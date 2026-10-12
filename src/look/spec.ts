@@ -33,12 +33,12 @@ export interface Spec {
   // the fine bank normals (docs/plans/done/w2-river-banks.md): texels of `texel` m over the tile, covering the
   // river's corridor out to `reach` m from its centre line, faded out over the last `fade` m, and over the last
   // `edge` m before the tile's edge (where the apron and the far ring shade with their vertex normals)
-  bank: { texel: number; reach: number; fade: number; edge: number }
+  bank: { texel: number; reach: number; fade: number; edge: number; paint: number }   // paint: the banks' colours reach this far from the water, m (W5a)
   // the water data (docs/plans/done/w3-water-data.md): texels of `texel` m over the tile; the depth (the water level
   // minus the ground, signed) stored over depth[0]..depth[1] m, the shore distance over ±sdf m. The shore band
-  // (docs/plans/active/w4-water-surface.md): within `band` m of the shoreline, on either side, the terrain and the
+  // (docs/plans/done/w4-water-surface.md): within `band` m of the shoreline, on either side, the terrain and the
   // water paint the same colour (the drawn surfaces disagree on the shore by less: tools/water-look-check.mjs)
-  water: { texel: number; depth: [number, number]; sdf: number; band: number }
+  water: { texel: number; depth: [number, number]; sdf: number; band: number; stones: number }   // stones: the most stones in the water whose foam the water paints (W5a)
 }
 
 export const SPEC: Spec = {
@@ -51,8 +51,8 @@ export const SPEC: Spec = {
   depth: { near: 100, far: 1600 },
   shadowFade: 32,
   detail: { px: 2048, lines: 1080, index: 400, amp: 0.4, minCos: 0.05 },
-  bank: { texel: 0.5, reach: 14, fade: 3, edge: 10 },
-  water: { texel: 0.5, depth: [-1, 2], sdf: 16, band: 0.75 },
+  bank: { texel: 0.5, reach: 14, fade: 3, edge: 10, paint: 7.5 },
+  water: { texel: 0.5, depth: [-1, 2], sdf: 16, band: 0.75, stones: 24 },
 }
 
 export interface Derived {
@@ -127,6 +127,8 @@ export function derive(s: Spec = SPEC): Derived {
   if (!isInt(s.tile / s.water.texel)) bad.push(`water: the tile (${s.tile} m) is not a whole number of ${s.water.texel} m texels`)
   else if (s.tile / s.water.texel > s.minSpec.maxTexture) bad.push(`bake: water data ${s.tile / s.water.texel}² > ${s.minSpec.maxTexture}² (min-spec)`)
   if (!(s.water.depth[0] < 0 && s.water.depth[1] > 0 && s.water.sdf > 0)) bad.push('water: the depth range must hold 0 (the shore) and the shore distance be positive')
+  if (!(s.bank.paint > 1 && s.bank.paint <= s.bank.reach - s.bank.fade)) bad.push('bank: the banks\' colours must reach past a metre and stay where the bank normals are whole (reach − fade)')
+  if (!(Number.isInteger(s.water.stones) && s.water.stones > 0 && s.water.stones <= 64)) bad.push('water: the stones the water paints foam for must be a whole number, 1–64 (a fixed loop in the shader)')
   if (!(s.water.band > 0 && s.water.band < s.water.sdf / 2)) bad.push('water: the shore band must be positive and well inside the shore distance\'s range')
   if (!(s.detail.px > 0 && s.detail.lines > 0 && s.detail.index > 0 && s.detail.amp > 0 && s.detail.minCos > 0)) bad.push('detail: sizes must be positive')
   if (bad.length) throw new Error('world spec: ' + bad.join('; '))
@@ -138,7 +140,7 @@ export function derive(s: Spec = SPEC): Derived {
       // is the uniform uPixA: it follows the camera's field of view)
       `#define DETAIL_MINCOS ${s.detail.minCos.toFixed(3)}`, `#define DETAIL_PX ${s.detail.px.toFixed(1)}`, `#define DETAIL_INDEX ${s.detail.index.toFixed(1)}`, `#define DETAIL_AMP ${s.detail.amp.toFixed(3)}`,
       // the water data's encoding (src/look/shaders/waterdata.glsl)
-      `#define WATER_D0 ${s.water.depth[0].toFixed(3)}`, `#define WATER_D1 ${s.water.depth[1].toFixed(3)}`, `#define WATER_SDF ${s.water.sdf.toFixed(3)}`, `#define WATER_BAND ${s.water.band.toFixed(3)}`],
+      `#define WATER_D0 ${s.water.depth[0].toFixed(3)}`, `#define WATER_D1 ${s.water.depth[1].toFixed(3)}`, `#define WATER_SDF ${s.water.sdf.toFixed(3)}`, `#define WATER_BAND ${s.water.band.toFixed(3)}`, `#define BANK_EDGE ${s.bank.edge.toFixed(3)}`, `#define STONES ${s.water.stones}`, `#define BANK_REACH ${s.bank.paint.toFixed(3)}`],
   }
 }
 
