@@ -9,8 +9,9 @@ Water phase W5 (`docs/plans/active/prototype-plan.md` §4.3), after W4 (`docs/pl
 Track E's stage 1 (`docs/plans/active/track-e-look.md`). Art direction: `docs/art-bible.md` §6c. Research:
 `docs/research/stylized-water.md` §2.9, §4.4, §4.8, §4.10.
 
-Two PRs: **W5a** the banks, the stones and their foam, the reeds; **W5b** the seasons on the water (pools freeze
-first, riffles stay open, autumn leaves in pools). This plan covers both; W5b's section is refined when W5a merges.
+Two PRs: **W5a** the banks, the stones and their foam, the reeds (merged, #45); **W5b** the seasons on the water
+(pools freeze first, riffles stay open, autumn leaves in pools). This plan covers both; W5b's sections follow W5a's
+results.
 
 ## Problem
 
@@ -37,7 +38,7 @@ first, riffles stay open, autumn leaves in pools). This plan covers both; W5b's 
 
 **W5b**
 - Ice that forms on slow water first (pools, the shallows by the bars) and leaves the riffles open, with frosty edges
-  and snow on the banks' rims; autumn leaves drifting in pools along the flow.
+  and snow on the banks' rims; autumn leaves drifting in pools along the flow (below, Approach (W5b)).
 
 **Not in W5:** weirs and fords as authored crossings (they need features the map format describes, W6); ponds (W6);
 the far ring's banks (it keeps its painted line).
@@ -151,3 +152,59 @@ From the prototype plan (W5: "Banks read wet/bare/gravel; foam around rocks; win
   scatter's stones in the water get foam; the foam's radius from the stone's mean size; the foam skipped on land;
   one water read in the terrain; `atCutBank` shared by the page and the check; the SPEC checks the banks' reach;
   the shoreline's derivative margin (above).
+
+## Approach (W5b)
+
+The seasons run on `uSeason` (0 summer, 1 early autumn, 2 late autumn, 3 winter; `src/look/shaders/painter.glsl`).
+Since W4 the ice is one amount over the whole water (`iceAmt()`, from 2.3 to 3) and it fades every upper layer.
+
+### Ice where the water is slow
+
+- **Measured first** (the water data at the river's samples, centre and ±0.3, ±0.6 half-widths): the speed (the
+  flow's length, 0..1) is 0.40 in pools (riffle under 0.2), 0.62, 0.77, and 0.87 in riffles (0.6 and over); at
+  0.6 half-widths out, pools run 0.13–0.26. The speed is in the water data, so the terrain's band and the water read
+  the same value and the ice stays seamless; the ribbon's riffle is not (it is the ribbon's own attribute).
+- **One function,** `iceAt(xz, sp, d)` in `shore.glsl`, 0..1, called by `shoreWater` (both surfaces) and by the
+  water's upper layers and the stones' foam (they fade under the local ice instead of `iceAmt()`). The frost F
+  grows from late autumn (2.0) to winter (3.0); water freezes where its speed, less a bonus in the shallows (under
+  0.4 m deep) and jittered by the grain's blotches, is under a threshold that rises with F to 0.66 in full winter.
+  So the ice starts as shelves along the banks and the bars in late autumn, closes over the pools in winter, and the
+  riffles (0.7 and over) stay open. The ice's edge is hard (`aastep`, wider than a pixel far out).
+- **Frosty edges:** a thin rime of white along the ice's edge on the ice's side, broken by the grain; the open water
+  in winter darker and colder (less sky tint, no glitter's warmth), its strokes and riffle foam kept: open riffles
+  read as dark water with white foam between pale ice.
+- **The ice:** W4's colour (pale, cracked, darker over deep water) with drifts of snow on it, thicker near the
+  banks, broken by the grain, so the frozen river still reads as a river (not as the snowy meadow).
+- **Snow on the banks' rims:** the band's land side already paints the terrain's snow through the bank normals
+  (`paint()`, `snowAt`): the rims and the bars whiten, the cut banks' scarps stay bare earth. Kept and judged on the
+  screenshots; no new code unless they show otherwise.
+
+### Autumn leaves in the pools
+
+- **An upper layer** of the water (past the band: it needs the ribbon's time of travel), from early autumn (season
+  0.6, peaking 1.3–2.0) to the start of the ice (2.5), on slow water (speed under 0.55, faded above).
+- **Drifting with the current:** cells in the strokes' coordinates (along the flow, 1 m, wrapped to the strokes'
+  20 m period so the clock's wrap stays seamless; across, 0.8 m); a hashed share of cells holds one leaf at a hashed
+  place, angle and size (0.10–0.18 m long), drawn in metres (the along coordinate scaled by the local speed over the
+  strokes' speed). Colours from the trees' autumn palette (orange, yellow, red, brown), late autumn browner.
+  Hard-edged, anti-aliased with the pixel's footprint, faded far out as W4's marks (`near`).
+
+## Checks (W5b)
+
+- **Winter** (`tools/water-look-check.mjs` gains `winter`): the pools check's three reaches at season 3, pixels at
+  the river's samples classed by the riffle there (as `pools`); a pixel is ice when it is pale (luma over the
+  threshold set from the first run between the ice and the open water). Pools mostly ice (≥ WINTER_POOL), riffles
+  mostly open (≥ WINTER_OPEN). Sabotage: the ice even over the whole water as in W4 (`WATER_SAB_EVENICE`).
+- **Leaves** (`leaves`): the same reaches at season 1.5 against the same frames without the leaves
+  (`WATER_SAB_NOLEAVES`): pixels the leaves change, on pools at least LEAF_MIN, on riffles at most a third of the
+  pools'; in summer and winter, none. Sabotages: no leaves; leaves at any speed (`WATER_SAB_LEAFALL`).
+- **Seam** (W4's) holds in winter: it gains a winter view (the ice is in the band).
+- **Shimmer** holds at both zooms in winter (the ice's edge and rime are new hard edges) and in autumn (the leaves).
+- **Existing checks; readability guard; goldens** (the winter view changes along the river); **bench** (Metal
+  proxy).
+
+## Acceptance (W5b)
+
+The winter, leaves, seam and shimmer checks pass and their sabotages fail; the existing checks hold; the
+screenshots show the pools frozen, the riffles open with frosty edges, snow on the banks' rims, and leaves in the
+pools in autumn (owner's eye).
