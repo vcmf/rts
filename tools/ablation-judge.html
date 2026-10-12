@@ -1,0 +1,208 @@
+<title>Ground Judging</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* L5b's blind judging page (docs/plans/active/l5-macro.md; made by tools/ablation-kit.mjs, which publishes it beside
+   screens.json and media/). Layout: one screen at a time, two views side by side, the questions under them. */
+:root{
+  --bg:#f2f0e8; --panel:#e6e3d7; --fg:#22261f; --muted:#5d6255; --line:#cdc8b8;
+  --accent:#3f5f8a; --accent-fg:#f4f2ea; --ok:#4f6b2a; --warn:#9a5a12;
+  --display:"Fraunces",Georgia,serif; --body:"Source Sans 3",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#16191d;--panel:#20252b;--fg:#e5e7e2;--muted:#a2a8a0;--line:#343b42;--accent:#8fb1e0;--accent-fg:#16191d;--ok:#a9c46e;--warn:#e0a35a;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#16191d;--panel:#20252b;--fg:#e5e7e2;--muted:#a2a8a0;--line:#343b42;--accent:#8fb1e0;--accent-fg:#16191d;--ok:#a9c46e;--warn:#e0a35a;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:16px/1.55 var(--body)}
+.wrap{max-width:1400px;margin:0 auto;padding-inline:16px;padding-block:24px 56px;display:grid;gap:20px}
+h1{font:650 clamp(24px,3.4vw,34px)/1.15 var(--display);margin:0;text-wrap:balance}
+h2{font:500 20px/1.25 var(--display);margin:0;text-wrap:balance}
+p{margin:0;max-width:75ch}
+.muted{color:var(--muted)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.lab{font:600 12px/1 var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+button{font:600 14px/1 var(--body);padding:9px 13px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+button[aria-pressed="true"],button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input[type=text]{font:16px var(--body);padding:8px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--fg);min-width:0;width:16em;max-width:100%}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:14px}
+.side{display:grid;gap:8px;min-width:0}
+.side h3{font:650 22px/1 var(--display);margin:0}
+.frame{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;background:var(--panel);border-radius:6px;overflow:hidden}
+.frame img,.frame video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.q{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.q:last-child{border-bottom:0}
+.opts{display:flex;gap:6px}
+.opts button{min-width:64px}
+.status{font-size:14px}
+.status.ok{color:var(--ok)} .status.warn{color:var(--warn)}
+.progress{font:13px var(--mono);color:var(--muted)}
+.card{background:var(--panel);border-radius:8px;padding:16px;display:grid;gap:12px}
+table{border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:5px 12px 5px 0;border-bottom:1px solid var(--line)}
+@media (max-width:620px){.q{grid-template-columns:1fr}}
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:8px">
+    <h1>Which painted ground is better?</h1>
+    <p class="muted">You will see 12 screens. Each shows the same piece of a battlefield painted two ways, A and B. Look at both, switch the season and angle tabs, watch the slow pans, then answer the five questions. Your answers save as you go, so you can stop and come back. The coloured bars stand in for armies.</p>
+  </header>
+
+  <section id="who" class="card" hidden>
+    <label class="lab" for="judgeName">Your name or initials</label>
+    <div class="bar"><input id="judgeName" type="text" autocomplete="off" maxlength="40"><button id="start" class="primary" type="button">Start judging</button></div>
+    <p class="status" id="whoStatus"></p>
+  </section>
+
+  <section id="judge" hidden style="display:grid;gap:16px">
+    <div class="bar" style="justify-content:space-between">
+      <h2 id="screenTitle"></h2>
+      <span class="progress" id="progress"></span>
+    </div>
+    <div class="bar" role="group" aria-label="View"><span class="lab">View</span><span class="bar" id="tabs"></span></div>
+    <div class="pair">
+      <div class="side"><h3>A</h3><div class="frame"><img id="imgA" alt="View A"></div><div class="frame"><video id="vidA" muted loop playsinline preload="auto" aria-label="Slow pan, A"></video></div></div>
+      <div class="side"><h3>B</h3><div class="frame"><img id="imgB" alt="View B"></div><div class="frame"><video id="vidB" muted loop playsinline preload="auto" aria-label="Slow pan, B"></video></div></div>
+    </div>
+    <p class="muted" style="font-size:14px">The pans under each view move slowly across the ground; watch for flicker, crawling patterns or repeats.</p>
+    <div id="questions"></div>
+    <div class="bar" style="justify-content:space-between">
+      <button id="prev" type="button">Previous</button>
+      <span class="status" id="saveStatus" role="status"></span>
+      <button id="next" class="primary" type="button">Next</button>
+    </div>
+  </section>
+
+  <section id="done" class="card" hidden>
+    <h2>Thank you</h2>
+    <p>All 12 screens are answered and saved. You can go back and change any answer until the judging closes.</p>
+    <div><button id="review" type="button">Review my answers</button></div>
+  </section>
+
+  <section id="owner" class="card" hidden>
+    <h2>Judges so far</h2>
+    <p class="muted">Only you, the page's owner, see this. Answers stay blind here: the arms are named only in the kit's key.</p>
+    <div style="overflow-x:auto"><table><thead><tr><th>Judge</th><th>Screens answered</th><th>Last saved</th></tr></thead><tbody id="ownerRows"></tbody></table></div>
+  </section>
+
+  <section id="offline" class="card" hidden>
+    <h2>Answers cannot be saved here</h2>
+    <p>Open this page from its claude.ai link while signed in, with Contributor access or higher. Ask the page's owner for access if your answers do not save.</p>
+  </section>
+</div>
+
+<script>
+const QUESTIONS = [
+  ['painted', 'Which reads more as painted?'],
+  ['classes', 'In which are the ground\'s kinds (fields, road, village, grass) easier to tell apart?'],
+  ['blocks', 'In which do the coloured bars stand out more from the ground?'],
+  ['shimmer', 'Which shimmers or repeats less in the pans?'],
+  ['overall', 'Overall, which do you prefer?'],
+]
+const TABS = [['summer.yaw-45', 'Summer, left'], ['summer.yaw0', 'Summer'], ['summer.yaw+45', 'Summer, right'], ['winter.yaw-45', 'Winter, left'], ['winter.yaw0', 'Winter'], ['winter.yaw+45', 'Winter, right']]
+const ZOOM_NAME = { close: 'Close', default: 'Middle distance', wide: 'Far' }
+const $ = id => document.getElementById(id)
+
+// a judge's own order and sides: seeded from their id, so they stay the same on every visit
+function rng(text) { let h = 2166136261; for (const c of text) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) } return () => { h += 0x6D2B79F5; let t = h; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296 } }
+function plan(screens, uid) {
+  const r = rng(uid), order = screens.map(s => s.id)
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [order[i], order[j]] = [order[j], order[i]] }
+  const swap = {}; for (const s of screens) swap[s.id] = r() < 0.5
+  return { order, swap }
+}
+
+let screens = [], byId = {}, db = null, uid = null, mine = null, P = null, at = 0, tab = 'summer.yaw0', saving = Promise.resolve()
+
+async function boot() {
+  try { screens = (await (await fetch('screens.json')).json()).screens } catch (e) { $('offline').hidden = false; $('offline').querySelector('p').textContent = 'The screens did not load. Reload the page.'; return }
+  byId = Object.fromEntries(screens.map(s => [s.id, s]))
+  const [dbNs, user] = await Promise.all([window.claude?.use?.('db') ?? null, window.claude?.use?.('user') ?? null])
+  db = dbNs; uid = user ? await user.id() : null
+  if (!db || !uid) { $('offline').hidden = false; P = plan(screens, 'preview'); mine = { answers: {} }; showJudge(); return }
+  P = plan(screens, uid)
+  if (await user.isOwner()) watchOwner()
+  const snap = await db.doc('answers/' + uid).get().catch(() => null)
+  mine = snap?.exists ? structuredClone(snap.data()) : null
+  if (!mine?.name) { $('who').hidden = false; $('judgeName').focus(); return }
+  at = Math.max(0, P.order.findIndex(id => !complete(id))); if (at < 0 || allDone()) { showDone(); return }
+  showJudge()
+}
+
+function complete(id) { const a = mine?.answers?.[id]; return !!a && QUESTIONS.every(([k]) => a[k]) }
+function allDone() { return P.order.every(complete) }
+
+$('start').onclick = async () => {
+  const name = $('judgeName').value.trim()
+  if (!name) { $('whoStatus').textContent = 'Enter a name or initials so the owner can tell judges apart.'; $('whoStatus').className = 'status warn'; return }
+  mine = { name, answers: mine?.answers ?? {}, started: new Date().toISOString() }
+  try { await db.doc('answers/' + uid).set(mine) } catch (e) { $('whoStatus').textContent = 'Could not save: ' + (e?.code === 'invalid_argument' ? 'this account cannot write here. Ask the owner for Contributor access.' : 'try again in a moment.'); $('whoStatus').className = 'status warn'; return }
+  $('who').hidden = true; at = 0; showJudge()
+}
+
+function showJudge() { $('judge').hidden = false; $('done').hidden = true; render() }
+function showDone() { $('judge').hidden = true; $('done').hidden = false }
+$('review').onclick = () => { at = 0; showJudge() }
+
+// the screen's side shown as A, and as B (the judge's swap), and an answer's A/B mapped to the kit's x/y
+const sides = id => P.swap[id] ? ['y', 'x'] : ['x', 'y']
+function render() {
+  const id = P.order[at], s = byId[id], [a, b] = sides(id)
+  $('screenTitle').textContent = `Screen ${at + 1} of ${P.order.length}: ${ZOOM_NAME[s.zoom]}`
+  $('progress').textContent = `${P.order.filter(complete).length} of ${P.order.length} answered`
+  $('tabs').replaceChildren(...TABS.map(([k, label]) => { const t = document.createElement('button'); t.type = 'button'; t.textContent = label; t.setAttribute('aria-pressed', k === tab); t.onclick = () => { tab = k; render() }; return t }))
+  $('imgA').src = 'media/' + s[a].stills[tab] + '.jpg'; $('imgB').src = 'media/' + s[b].stills[tab] + '.jpg'
+  const season = tab.split('.')[0], va = $('vidA'), vb = $('vidB'), srcA = 'media/' + s[a].clips[season] + '.mp4', srcB = 'media/' + s[b].clips[season] + '.mp4'
+  if (va.dataset.src !== srcA || vb.dataset.src !== srcB) {
+    va.dataset.src = va.src = srcA; vb.dataset.src = vb.src = srcB
+    // the two pans in step: both start together once both can play
+    Promise.all([va, vb].map(v => new Promise(r => v.readyState >= 3 ? r() : v.addEventListener('canplay', r, { once: true })))).then(() => { va.currentTime = vb.currentTime = 0; va.play().catch(() => {}); vb.play().catch(() => {}) })
+  }
+  const ans = mine.answers[id] ?? {}
+  $('questions').replaceChildren(...QUESTIONS.map(([k, text]) => {
+    const row = document.createElement('div'); row.className = 'q'
+    const label = document.createElement('div'); label.textContent = text; label.id = 'q-' + k
+    const opts = document.createElement('div'); opts.className = 'opts'; opts.setAttribute('role', 'group'); opts.setAttribute('aria-labelledby', label.id)
+    for (const [shown, val] of [['A', a], ['Same', 'same'], ['B', b]]) {
+      const o = document.createElement('button'); o.type = 'button'; o.textContent = shown; o.setAttribute('aria-pressed', ans[k] === val)
+      o.onclick = () => answer(id, k, val); opts.append(o)
+    }
+    row.append(label, opts); return row
+  }))
+  $('prev').disabled = at === 0
+  $('next').textContent = at === P.order.length - 1 ? 'Finish' : 'Next'
+}
+
+function answer(id, k, val) {
+  mine.answers[id] = { ...(mine.answers[id] ?? {}), [k]: val }; mine.updated = new Date().toISOString(); render()
+  if (!db || !uid) { $('saveStatus').textContent = 'Preview only: not saved'; $('saveStatus').className = 'status warn'; return }
+  const body = structuredClone(mine)
+  $('saveStatus').textContent = 'Saving…'; $('saveStatus').className = 'status'
+  // one write at a time to the judge's document
+  saving = saving.then(() => db.doc('answers/' + uid).set(body)).then(
+    () => { $('saveStatus').textContent = 'Saved'; $('saveStatus').className = 'status ok' },
+    e => { $('saveStatus').textContent = e?.code === 'invalid_argument' ? 'Not saved: this account cannot write here' : 'Not saved: check your connection, then answer again'; $('saveStatus').className = 'status warn' })
+}
+
+$('prev').onclick = () => { if (at > 0) { at--; render(); scrollTo({ top: 0 }) } }
+$('next').onclick = () => {
+  const id = P.order[at]
+  if (!complete(id)) { $('saveStatus').textContent = 'Answer all five questions first'; $('saveStatus').className = 'status warn'; return }
+  if (at < P.order.length - 1) { at++; render(); scrollTo({ top: 0 }) } else if (allDone()) showDone()
+  else { at = P.order.findIndex(i => !complete(i)); render() }
+}
+
+// the owner's view: every judge's progress, live
+function watchOwner() {
+  $('owner').hidden = false
+  db.collection('answers').onSnapshot(q => {
+    $('ownerRows').replaceChildren(...q.docs.map(d => {
+      const v = d.data() ?? {}, n = Object.values(v.answers ?? {}).filter(a => QUESTIONS.every(([k]) => a?.[k])).length
+      const tr = document.createElement('tr')
+      for (const t of [String(v.name ?? '(no name)'), `${n} of ${screens.length}`, v.updated ? new Date(v.updated).toLocaleString() : '–']) { const td = document.createElement('td'); td.textContent = t; tr.append(td) }
+      return tr
+    }))
+  }, () => { $('owner').hidden = true })
+}
+
+boot()
+</script>
