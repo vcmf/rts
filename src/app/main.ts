@@ -3,6 +3,7 @@
 // a command through `issue`, and the external log is kept, so a session can be replayed.
 import fieldUrl from '../../data/formation-field.simdata?url'
 import battleUrl from '../../data/battlefield.simdata?url'
+import valleyUrl from '../../data/valley.simdata?url'
 import { loadSimData, compileRuleset, makeWorld, typeOf, issue, advanceTick, formationHandle, STATUS, menOf, hashWorld, hex, SIM_VERSION, M_TICK, DT, TICK_HZ, MORALE_STATES, FIRE_MODES, CHARGE_PHASES, M_END, M_WINNER, END_RESULTS, END_DRAW, attachScenario, fightShares,
   type Command, type Stamped, type World, type HashPoint, type Replay, type Dropped } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
@@ -19,7 +20,7 @@ const SEED = 20261009, SPEEDS = [0, 1, 2, 4, 8], MEN_DT = 0.2, MEN_STEPS = 4
 async function main(): Promise<void> {
   const asked = new URLSearchParams(location.search).get('scenario') ?? '', scenario = PAGE_SCENARIOS[Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO]
   // the scenario's map, at the version it was placed for
-  const mapName = scenario.map ?? DEFAULT_MAP, urls: Record<string, string> = { 'formation-field': fieldUrl, battlefield: battleUrl }
+  const mapName = scenario.map ?? DEFAULT_MAP, urls: Record<string, string> = { 'formation-field': fieldUrl, battlefield: battleUrl, valley: valleyUrl }
   if (!urls[mapName] || MAP_VERSIONS[mapName] === undefined) throw new Error(`scenario ${scenario.name}: no map ${mapName} (src/scenarios/maps.ts and the page's data imports)`)
   const data = loadSimData(new Uint8Array(await (await fetch(urls[mapName])).arrayBuffer()), MAP_VERSIONS[mapName])
   const cr = compileRuleset(napoleonic)

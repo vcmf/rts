@@ -36,6 +36,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`systems/melee.md`](systems/melee.md): cavalry charges, melee, and the square against cavalry (S1d-2).
 - [`systems/artillery.md`](systems/artillery.md): the battery's roundshot over the ground and canister (S1d-3).
 - [`systems/sides.md`](systems/sides.md): your side, the scenario's plan for the other, and the end of a battle (S1e-2).
+- [`systems/map.md`](systems/map.md): the map engine: the kinds catalogue, the validator, resolution, the 2 m layers and water, the draft page, the sim compiler, the map CLI (Track M, M1, M2).
 - More appear as systems are built; see [`systems/README.md`](systems/README.md).
 
 ## Proposals (designs before building)
@@ -46,6 +47,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`proposals/staff-map/implementation.md`](proposals/staff-map/implementation.md): how the staff map is built. *(draft)*
 - [`proposals/prepainted-terrain.md`](proposals/prepainted-terrain.md): a painted macro colour bake for the ground; strokes stay at runtime. *(draft)*
 - [`proposals/map-format.md`](proposals/map-format.md): the map format, one schema-checked description of a battlefield that the sim, the 3D battlefield and the staff map compile from. *(draft)*
+- [`proposals/map-engine.md`](proposals/map-engine.md): the map engine: a closed JSON language (one feature shape, dotted kinds from a catalogue of presets, five layers), its generator, compilers in Node and the browser, square grids, the draft and rendered views, Track M's phases. *(draft)*
 - [`proposals/ai.md`](proposals/ai.md): the enemy AI: layers, influence maps, utility scores, lookahead with the sim, honest difficulty; built after pathfinding. *(draft)*
 
 ## Plans
@@ -62,10 +64,11 @@ designs written before building (frozen once built, their lasting content moves 
   [`plans/active/s1d3-artillery.md`](plans/active/s1d3-artillery.md) (S1d-3: the battery fires roundshot and canister),
   [`plans/active/s1e1-battlefield.md`](plans/active/s1e1-battlefield.md) (S1e-1: the 1.2 km battlefield, the map's edge, leaving the field; the S1e split),
   [`plans/active/s1e2-sides.md`](plans/active/s1e2-sides.md) (S1e-2: your side, the enemy's plan, the end of a battle),
+  [`plans/active/m3-generators.md`](plans/active/m3-generators.md) (Track M M3: the generators),
   [`plans/active/l2-detail.md`](plans/active/l2-detail.md) (Track E L2: the bench, the readability guard, the terrain detail layer),
   [`plans/active/l5-macro.md`](plans/active/l5-macro.md) (Track E L5: the ground's cover and macro colour, baked and in the shader, and the ablation),
   [`plans/active/track-e-look.md`](plans/active/track-e-look.md) (Track E: the painterly look, L0–L9 and LA assets; results in [`plans/active/track-e-results/README.md`](plans/active/track-e-results/README.md), the L2a baselines in [`plans/active/track-e-results/l2a-baseline.md`](plans/active/track-e-results/l2a-baseline.md), the L2b results in [`plans/active/track-e-results/l2b-detail.md`](plans/active/track-e-results/l2b-detail.md)).
-- Done: [`plans/done/w1-river-shape.md`](plans/done/w1-river-shape.md), [`plans/done/w1b-river-width.md`](plans/done/w1b-river-width.md), [`plans/done/docs-restructure.md`](plans/done/docs-restructure.md), [`plans/done/formation-feel.md`](plans/done/formation-feel.md), [`plans/done/terrain-movement.md`](plans/done/terrain-movement.md) (F1, #9), [`plans/done/s0-sim-spine.md`](plans/done/s0-sim-spine.md) (S0, #11), [`plans/done/s1a-formations-on-spine.md`](plans/done/s1a-formations-on-spine.md) (S1a, #13), [`plans/done/s1b-sim-page.md`](plans/done/s1b-sim-page.md) (S1b, #14), [`plans/done/l0-spine.md`](plans/done/l0-spine.md) (Track E L0, #19 #20 #21), [`plans/done/w2-river-banks.md`](plans/done/w2-river-banks.md) (water W2, in #26), [`plans/done/w3-water-data.md`](plans/done/w3-water-data.md) (water W3, #30), [`plans/done/w4-water-surface.md`](plans/done/w4-water-surface.md) (water W4, #42), [`plans/done/w5-banks.md`](plans/done/w5-banks.md) (water W5, #45 #46).
+- Done: [`plans/done/w1-river-shape.md`](plans/done/w1-river-shape.md), [`plans/done/w1b-river-width.md`](plans/done/w1b-river-width.md), [`plans/done/docs-restructure.md`](plans/done/docs-restructure.md), [`plans/done/formation-feel.md`](plans/done/formation-feel.md), [`plans/done/terrain-movement.md`](plans/done/terrain-movement.md) (F1, #9), [`plans/done/s0-sim-spine.md`](plans/done/s0-sim-spine.md) (S0, #11), [`plans/done/s1a-formations-on-spine.md`](plans/done/s1a-formations-on-spine.md) (S1a, #13), [`plans/done/s1b-sim-page.md`](plans/done/s1b-sim-page.md) (S1b, #14), [`plans/done/l0-spine.md`](plans/done/l0-spine.md) (Track E L0, #19 #20 #21), [`plans/done/w2-river-banks.md`](plans/done/w2-river-banks.md) (water W2, in #26), [`plans/done/w3-water-data.md`](plans/done/w3-water-data.md) (water W3, #30), [`plans/done/w4-water-surface.md`](plans/done/w4-water-surface.md) (water W4, #42), [`plans/done/w5-banks.md`](plans/done/w5-banks.md) (water W5, #45 #46), [`plans/done/m1-language.md`](plans/done/m1-language.md) (Track M M1, #50 #52), [`plans/done/m2-sim.md`](plans/done/m2-sim.md) (Track M M2, #54).
 
 ## Research (background)
 
@@ -78,6 +81,10 @@ designs written before building (frozen once built, their lasting content moves 
 - [`research/painterly-style-in-real-time.md`](research/painterly-style-in-real-time.md): how doable the painted look is; techniques, costs, stack per surface, prototype plan.
 - [`research/prepainted-terrain-review.md`](research/prepainted-terrain-review.md): adversarial review of the pre-painted terrain proposal.
 - [`research/s1c-plan-review.md`](research/s1c-plan-review.md): adversarial review of the S1c plan (fire, morale); the plan was revised after it.
+- [`research/map-generation-in-games.md`](research/map-generation-in-games.md): how AoE, 0 A.D., StarCraft, Total War, Civilization, Recoil and terrain research describe and generate maps; lessons for a map language.
+- [`research/map-grids.md`](research/map-grids.md): grid or no grid, square or hex, cell sizes per layer, blocking from slope, water as depth.
+- [`research/terrain-taxonomy.md`](research/terrain-taxonomy.md): what terrain did in battle from antiquity to 1815, how games classify it, a five-layer model and an essential/bonus taxonomy.
+- [`research/map-language.md`](research/map-language.md): what makes a map language elegant: OpenStreetMap, Mapbox, CityEngine, LDtk, stable seeding, schema design.
 
 ## Templates
 

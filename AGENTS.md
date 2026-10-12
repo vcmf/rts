@@ -41,6 +41,8 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
   (`?bench` in a browser), `node tools/guard.mjs <url> [--base <url>]`, the terrain detail checks
   `node tools/detail-check.mjs <url> --selftest`, the water data's `node tools/water-check.mjs [<url>] --selftest`,
   the painted water's `node tools/water-look-check.mjs <url> --selftest`; see their headers.
+- Maps (Track M): `node tools/map.ts check|expand|resolve|draft <map.json>` against `maps/kinds.json`; the draft page
+  `app/map.html` (`npm run dev`), checked headless by `node tools/map-page-check.mjs` (`docs/systems/map.md`).
 - Docs check: `node tools/check-docs.mjs` (every doc path resolves, front matter, decision numbers).
 - CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint,
   typecheck, `check:data`, `check:docs`, Vitest, build. On PRs into `epic/**` and on all those pushes, Vitest
