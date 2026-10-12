@@ -1,7 +1,7 @@
 ---
 status: current
-last_reviewed: 2026-10-11
-code: [app/index.html, src/app/main.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, tools/app-check.mjs]
+last_reviewed: 2026-10-12
+code: [app/index.html, src/app/main.ts, src/render/soldiers.ts, src/render/map.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, tools/app-check.mjs, tools/battle-report.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0016-typescript-toolchain]
 ---
 
@@ -47,8 +47,10 @@ view changes; the units every frame, on a second canvas.
 **Commands.** Every input goes through `issue` with the external log. The page keeps the hash points the
 sim takes, without section hashes (a second serialization each time); a mismatch in playback then names
 the tick, not the table. Orders the sim drops show in the readout for 3 s. The colours and the order
-line are drawn at the interpolated anchor, as the men are. `Copy
-replay` puts `{ replay, hashes }` on the clipboard; `play` in `src/sim/replay.ts` checks it.
+line are drawn at the interpolated anchor, as the men are. `Save
+session` downloads `{ replay, hashes, marks }` as `<scenario>-<date>.json`; `play` in `src/sim/replay.ts` checks it,
+and `tools/battle-report.ts` plays it back and prints what happened, with where everyone stood at each mark
+(S1e-3, `docs/plans/active/s1e3-playtest.md`).
 
 **Who stands where** (`SoldierLayer.sync`). The sim keeps men per company (decisions 0007, 0018); the layer
 places them. A battalion is matched again only when its signature changes: men per company, shape,
@@ -94,6 +96,8 @@ data is a darker margin.
   shift appends a waypoint.
 - Right-drag or space-drag pans; the wheel zooms about the cursor.
 - P pauses, 1/2/4/8 set the speed, Escape clears the selection.
+- M marks a moment for the playtest: the battle pauses while you say what happened (optional). Marks go in the
+  session file, not the sim.
 - C (or the panel's Charge) and then a click on an enemy: the selection charges it (S1d-2; a type that cannot
   charge is refused, and the readout says so). The readout names a charge, a pursuit, a melee and a blown
   regiment.
@@ -114,7 +118,7 @@ in `src/scenarios/maps.ts`; `s1e-battle` (6 battalions, a regiment and a battery
 in the fight and, once decided, the result.
 
 **Hooks** (`window.APP`): select, march, charge, form, order, `advance(seconds)` (pauses the clock and steps
-frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`.
+frames at 30 Hz), view, `drawMs`, `mapMs`, `stats`, `hash`, `replay`, `session`, `mark(note)`.
 
 ## Tunables
 

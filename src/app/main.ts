@@ -86,16 +86,22 @@ async function main(): Promise<void> {
   document.querySelectorAll<HTMLElement>('[data-cmd]').forEach(el => { el.onclick = () => forSelection(orders[el.dataset.cmd!]) })
   document.querySelectorAll<HTMLElement>('[data-view]').forEach(el => { el.onclick = () => {
     if (el.dataset.view === 'slots') { showSlots = !showSlots; el.classList.toggle('on', showSlots) }
-    if (el.dataset.view === 'replay') copyReplay() } })
-  // to the clipboard, or (no clipboard: plain http, permission refused) as a downloaded file
+    if (el.dataset.view === 'replay') saveSession() } })
+  // the session (the replay, its hashes and the moments marked) as a downloaded file, for tools/battle-report.ts
   let note = '', noteT = 0
-  const copyReplay = async () => {
-    const text = JSON.stringify(replay())
-    try { await navigator.clipboard.writeText(text); note = 'replay copied' } catch {
-      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = `${scenario.name}-replay.json`; a.click(); URL.revokeObjectURL(a.href)
-      note = 'replay saved as a file'
-    }
-    noteT = performance.now()
+  const saveSession = () => {
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-')
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(session())], { type: 'application/json' })); a.download = `${scenario.name}-${stamp}.json`; a.click(); URL.revokeObjectURL(a.href)
+    note = 'session saved as a file'; noteT = performance.now()
+  }
+  // M marks a moment of the playtest (docs/plans/active/s1e3-playtest.md): the battle pauses while you say what
+  // happened; the report prints where everyone stood then
+  const marks: { tick: number; note: string }[] = []
+  const mark = (text?: string) => {
+    const was = paused; paused = true
+    const said = text ?? prompt('What happened here? (optional)') ?? ''
+    marks.push({ tick: w.meta[M_TICK], note: said.trim() }); paused = was
+    note = `moment ${marks.length} marked`; noteT = performance.now()
   }
 
   // the mouse: click a battalion to select (shift adds), drag a box, click the ground to march; right-drag
@@ -155,6 +161,7 @@ async function main(): Promise<void> {
     else if (e.key === 'Escape') { selected.clear(); charging = false }
     else if (e.key === 'c' || e.key === 'C') armCharge()
     else if ('1248'.includes(e.key)) setSpeed(+e.key)
+    else if (e.key === 'm' || e.key === 'M') mark()
   })
 
   function drawScale(): void {
@@ -185,6 +192,7 @@ async function main(): Promise<void> {
   // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce, as far as it has run:
   // commands issued while paused wait for their tick and are left out
   const replay = (): { replay: Replay; hashes: HashPoint[] } => ({ replay: { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name, seed: SEED, ticks: w.meta[M_TICK], log: log.filter(s => s.tick <= w.meta[M_TICK]) }, hashes })
+  const session = () => ({ ...replay(), marks: [...marks] })
 
   // headless hooks (tools/app-check.mjs): orders and time without real time passing
   Object.assign(window, { APP: {
@@ -197,7 +205,7 @@ async function main(): Promise<void> {
     view: (cx: number, cz: number, k: number) => { view.cx = cx; view.cz = cz; view.k = k; mapDirty = true; draw() },
     drawMs: () => { const a = performance.now(); for (let n = 0; n < 20; n++) map.drawUnits(ug, view, layer, selected, false); return (performance.now() - a) / 20 },
     mapMs: () => { const a = performance.now(); map.drawMap(mg, view); return performance.now() - a },
-    hash: () => hex(hashWorld(w)), replay, stats: () => ({ simMs, drawMs, fps }), toS: (x: number, z: number) => toS(view, x, z), buildMs,
+    hash: () => hex(hashWorld(w)), replay, session, mark, stats: () => ({ simMs, drawMs, fps }), toS: (x: number, z: number) => toS(view, x, z), buildMs,
   } })
   requestAnimationFrame(frame)
 }
