@@ -4,14 +4,14 @@ uniform mat4 viewProjection;uniform vec3 uCamPos;
 #ifdef INSTANCES
 attribute float aTint;
 #endif
-varying vec3 vW,vN;varying float vRole,vTint,vOcc,vH;
+varying vec3 vW,vN;varying float vRole,vTint,vOcc,vH;varying vec2 vRoot;
 void main(){
   #include<instancesVertex>
   vec3 pp=position;
   #ifdef GRASSY
   pp*=1.0-smoothstep(120.0,165.0,length(finalWorld[3].xyz-uCamPos));
   #endif
-  vec4 w=finalWorld*vec4(pp,1.0);vH=w.y-finalWorld[3].y;
+  vec4 w=finalWorld*vec4(pp,1.0);vH=w.y-finalWorld[3].y;vRoot=finalWorld[3].xz;
   vec3 n=normal;
   #ifdef GRASSY
   n=normalize(mix(n,vec3(0.0,1.0,0.0),0.7));                 // grass shades like the ground it grows from

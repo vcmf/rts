@@ -28,6 +28,7 @@ import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
+import { MACRO_ARMS, buildMacro, type MacroArm } from './macro.ts'
 
 declare global { interface Window { __T0?: number } }
 const T0 = window.__T0 ?? performance.now()   // load-time measurement (window.__buildMs), started by look.html
@@ -61,12 +62,19 @@ const params = new URLSearchParams(location.search)
 const waterSabParam = params.get('watersab')
 if (waterSabParam !== null && waterSabParam !== 'nodive') throw new Error(`?watersab must be nodive, not ${waterSabParam}`)
 const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }, waterSabParam !== 'nodive')
-const nature = buildNature(scene, mats, water.reflAdd)
+const nature = buildNature(scene, mats, water.reflAdd, look.cover)
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 { const a = new Array(D.spec.water.stones * 4).fill(0); nature.stones.forEach((st, k) => a.splice(k * 4, 4, ...st))
   for (const m of [terrain.terrainMat, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
 const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy)
+// the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake picks the arm (bake by default),
+// set once every material is made; the bake runs before the first frame
+const macro = buildMacro(scene, mats, look.cover)
+const macroArm = (params.get('macro') ?? 'bake') as MacroArm
+if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)
+macro.setArm(macroArm)
+const macroBake = await macro.bake()
 const camera = buildCamera(scene, canvas)
 const post = new Post(camera, engine, S, () => mats.grain); post.build()
 
@@ -136,7 +144,7 @@ Object.assign(window, {
   scene, engine, camera, apron: terrain.apron, __waterTexMs: waterTexMs, RIVER: { ...RIVER, axisX }, H: groundAt, baseH, riverQuery, lerpA, wetEdges, wetEdgeAt, bankReachAt, atCutBank, BAND: D.band, PLAY: D.spec.play, SMW: D.spec.tile, TSUB: D.spec.tileSub, MASKN: D.spec.sizes.riverMask, SM_FADE_M: D.spec.shadowFade, SPEC: D.spec,
   tileGround: terrain.tileGround, farGround: terrain.farGround, farTerrainMat: terrain.farTerrainMat, riverMask: terrain.riverMask, riverMaskCanvas: terrain.riverMaskCanvas,
   groups: nature.groups, FAR: nature.far, STONES: nature.stones, KEEP_CLEAR: nature.KEEP_CLEAR, touchesZone: nature.touchesZone, placeable: nature.placeable, footprint: nature.footprint,
-  lightCam: bakes.lightCam, shadowRT: bakes.shadowRT,
+  lightCam: bakes.lightCam, shadowRT: bakes.shadowRT, __macro: { bake: macroBake, macro },
   __buildMs: performance.now() - T0,
 })
 // the look checks' hooks (tools/guard.mjs, tools/detail-check.mjs): test objects, the materials, the meshes by pass,
@@ -214,6 +222,8 @@ Object.assign(window, { __look: {
   // the image moved by (dx, dy) pixels (right, down) with nothing else changed: the shimmer check's sub-pixel shift
   shift: (dx: number, dy: number) => project(1, 2 * dx / engine.getRenderWidth(), -2 * dy / engine.getRenderHeight()),
   waterView, waterSab, groundAs, waterAt,
+  // the macro colour (docs/plans/active/l5-macro.md): the arm, the checks' variants (rebaked), the bakes' hashes, a rebake
+  macro: { setArm: (a: MacroArm) => macro.setArm(a), setCheck: (on: string[]) => macro.setCheck(on), hash: (w: 'tile' | 'far') => macro.hash(w), bake: () => macro.bake() },
 } })
 
 // ?season=<0..3>: open in that season (0 summer, 1 early autumn, 2 late autumn, 3 winter; the bench runs in it too)
@@ -229,6 +239,9 @@ if (params.has('water')) {
   const v = WATER_VIEWS.indexOf(params.get('water') ?? ''); if (v < 1 || v > 3) throw new Error(`?water must be depth, sdf or flow, not ${params.get('water')}`)
   waterView(v)
 }
+// ?macroBench=<side>: the macro bake's full-size run (side² texels at SPEC.macro.texel), its time and memory in
+// window.__macroBench
+if (params.has('macroBench')) void macro.bakeBench(Number(params.get('macroBench'))).then(r => { Object.assign(window, { __macroBench: r }); console.log('macro bench', r) }, (e: unknown) => { Object.assign(window, { __macroBench: { error: String(e) } }); console.error('macro bench failed:', e) })
 // ?bench (docs/plans/active/l2-detail.md): fixed cameras, the result shown with a link to save it, and in
 // window.__bench for tools/bench-look.mjs
 if (params.has('bench')) {
@@ -236,6 +249,8 @@ if (params.has('bench')) {
   const hold = Number(params.get('hold') ?? 3)
   if (!(hold > 0)) throw new Error(`?hold must be a positive number of seconds, not ${params.get('hold')}`)
   // the arms: the detail layer, and the L0 grain it replaces (the cost gate: at most +1 ms GPU for the terrain)
-  void runBench(scene, camera, passes, [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }], hold).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
+  // ?bench=macro: the macro colour's arms instead (with the detail layer)
+  const arms = params.get('bench') === 'macro' ? MACRO_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); macro.setArm(a) } })) : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
+  void runBench(scene, camera, passes, arms, hold).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
     (e: unknown) => { Object.assign(window, { __bench: { error: String(e) } }); console.error('bench failed:', e) })
 }

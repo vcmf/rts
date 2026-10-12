@@ -52,6 +52,7 @@ vec3 groundFields(vec3 c,vec2 xz){
 vec3 groundBase(vec2 xz){return groundFields(groundMeadow(xz),xz);}
 // steep ground goes stony (ny: the normal's y)
 vec3 groundSteep(vec3 c,float ny){return mix(c,vec3(0.55,0.52,0.46),smoothstep(0.80,0.62,ny)*0.5);}
+#include<macro>
 // a hard painted edge, anti-aliased over about two pixels (no shimmer when the view moves): 0 below t, 1 above
 float aastep(float t,float v){
   #ifdef WATER_SAB_STEP
@@ -83,10 +84,10 @@ vec3 bankPaint(vec3 c,vec2 xz,float land,float h,float ny){
   return mix(c,c*vec3(0.58,0.64,0.62),(1.0-smoothstep(0.0,ww,land+gr*0.4))*wetW/ww);                    // the wet line
   #endif
 }
-// the shore band's ground: the terrain's (groundBase, stony where steep) with the banks painted over it, through the
+// the shore band's ground: the terrain's (groundAt, stony where steep) with the banks painted over it, through the
 // seasons: the same colour the terrain paints there
 vec3 landAlbedo(vec2 xz,float land,float h){float ny=bankNormal(vec3(0.0,1.0,0.0),xz).y;
-  return groundSeason(bankPaint(groundSteep(groundBase(xz),ny),xz,land,h,ny));}
+  return groundSeason(bankPaint(groundSteep(groundAt(xz,max(fwidth(xz).x,fwidth(xz).y)),ny),xz,land,h,ny));}
 // the bed: silt in pools, pale gravel where the current runs, weed in slow deeper water; the damp edge at depth 0
 // la: the ground at the water's edge (used to 0.3 m deep)
 vec3 bedAlbedo(vec2 xz,float depth,float speed,vec3 la){
