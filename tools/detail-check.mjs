@@ -113,7 +113,7 @@ const ISOLATED = 3   // and a seam step is this many times larger than both step
 // the banks have their own check (banks)
 function seams(url, dir, defs) {
   const [hx, , hz] = FOCUS
-  const steps = [...prepSteps(), detail(defs, true), ['eval', '"MAXSTEP " + __look.grain("smooth")']]
+  const steps = [...prepSteps(), detail(defs, true), ['eval', '(async () => { const m = __look.grain("smooth"); await __look.macro?.settled(); return "MAXSTEP " + m })()']]
   for (const r of SEAM_ZOOMS) {
     steps.push(view(`r${r}`, A0, BETA0, r), ['shot', `seams.r${r}.ground`])
     steps.push(['eval', `__look.hill(${hx}, ${hz}); "hill"`], render(`hill r${r}`), ['shot', `seams.r${r}.hill`])

@@ -1,5 +1,7 @@
-precision highp float;varying vec3 vW,vN;varying float vRole,vTint,vOcc,vH;uniform vec3 uFolA,uFolB;uniform float uRim,uKind;
+#extension GL_OES_standard_derivatives : enable
+precision highp float;varying vec3 vW,vN;varying float vRole,vTint,vOcc,vH;varying vec2 vRoot;uniform vec3 uFolA,uFolB;uniform float uRim,uKind;
 #include<painter>
+#include<shore>
 
 vec3 roleCol(float r,float t){
   vec3 fol=foliage(uFolA,uFolB,t,uKind);
@@ -29,7 +31,16 @@ void main(){
     if(fres>0.42&&g<(fres-0.42)*1.9)discard;
   }
   #endif
-  vec3 c=paint(roleCol(vRole,vTint),N,vW,vOcc*mix(1.0,lm.g,uAO*0.6),uRim,1.0,sh);
+  // the ground's bounce (docs/plans/active/l5-macro.md): the macro colour under the root tints the albedo on the side
+  // away from the sun, most near the ground (grass all over: it shades like its ground), so a copse on its dark floor
+  // and a tuft on stubble sit in their ground; the ramp then lights it like the rest
+  #ifdef GRASSY
+  float bw=0.25;
+  #else
+  float bw=0.15*(1.0-smoothstep(-0.1,0.4,dot(N,uSunDir)))*(1.0-smoothstep(0.0,6.0,vH));
+  #endif
+  vec3 alb=mix(roleCol(vRole,vTint),groundSeason(groundBounce(vRoot)),bw);
+  vec3 c=paint(alb,N,vW,vOcc*mix(1.0,lm.g,uAO*0.6),uRim,1.0,sh);
   #ifndef GRASSY
   if(vRole<1.5){                                                // golden backlight: crowns glow when the sun is behind them
     vec3 V=normalize(uCamPos-vW);

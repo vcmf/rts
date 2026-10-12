@@ -3,6 +3,7 @@
 //
 //   node tools/guard.mjs <look page URL> [outDir]                  every block must separate
 //   node tools/guard.mjs <look page URL> --base <URL> [outDir]     no block that separates on the base may fail
+//   node tools/guard.mjs <look page URL> --view cover ...           the cover's view (L5): blocks on each class
 //
 // For each season (summer, winter) at the default view: the ground alone, then the ground with the coat blocks. A
 // block's pixels come from two mask renders (the blocks flat white, then flat black: all of the block that shows,
@@ -23,14 +24,14 @@ import { prepSteps, shoot, viewStep } from './look-page.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const W = 1280, H = 720, SEP = 0.10, MASKED = 96   // a block's pixel: its white and black mask renders differ by more than MASKED/255
-const VIEW = CAMS.find(c => c[0] === 'start').slice(1, 5)   // the default view (the goldens' start): alpha, beta, radius, target
+const START = CAMS.find(c => c[0] === 'start').slice(1, 5)   // the default view (the goldens' start): alpha, beta, radius, target
 const GREYS = [0.3, 0.7]   // the negative's two greys, from which each block's matched grey is interpolated
 const SEASONS = [['summer', 0, true], ['winter', 3, false]]   // name, season value, run the negative
 const ARMY_HEX = { France: '#2C4FA8', Russia: '#2F6B3C', Austria: '#E9E3D3', Britain: '#B3302A' }   // docs/art-bible.md §4
 const COATS = Object.keys(ARMY_HEX)
 // cluster centres on the default view (world x, z, yaw), chosen to put the coats on each band of the ground: four
 // blocks in a column, 7 m apart
-const SPOTS = [
+const START_SPOTS = [
   ['sunlit-slope', -40, 20, 0],
   ['cloud-shadow', 12, -10, 0],
   ['flat', 30, 62, 0],
@@ -38,7 +39,15 @@ const SPOTS = [
   ['wheat', -45, -17, 0],
   ['open-low', 45, 15, 0],
 ]
-const blocks = (color = null) => SPOTS.flatMap(([s, x, z, yaw]) => COATS.map((c, i) => ({ name: `${s}.${c}`, x, z: z + (i - 1.5) * 7, yaw, color: color ?? c })))
+// --view cover (docs/plans/active/l5-macro.md): east of the hill, the coats on each class of the ground's cover that
+// a 20 m line fits on, every block wholly on it: on the ploughed field (18 m across) lines along it, 4.5 m apart; on
+// the road a column of march, the lines end to end along it; on the village ground as on the default view. (The 3 m
+// track holds no line; the class check measures it.) Spots: name, x, z, the blocks' yaw (Babylon's: +yaw turns +x
+// toward −z), the column's direction (rad from +x toward +z; +z by default) and the spacing (7 m by default)
+const COVER = [START[0], 0.8, 150, [150, 8, -25]]
+const COVER_SPOTS = [['ploughed', 78, -38, -0.18, 0.18 + Math.PI / 2, 4.5], ['road', 185, -5, -Math.PI / 2, Math.PI / 2, 22], ['village', 228, -2, 0]]
+let VIEW = START, SPOTS = START_SPOTS
+const blocks = (color = null) => SPOTS.flatMap(([s, x, z, yaw, dir = Math.PI / 2, gap = 7]) => COATS.map((c, i) => ({ name: `${s}.${c}`, x: x + Math.cos(dir) * (i - 1.5) * gap, z: z + Math.sin(dir) * (i - 1.5) * gap, yaw, color: color ?? c })))
 
 const hex = g => '#' + Math.round(Math.min(1, Math.max(0, g)) * 255).toString(16).padStart(2, '0').repeat(3)
 
@@ -152,7 +161,9 @@ export function guard(url, outDir, baseUrl = null) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2), bi = args.indexOf('--base'), baseUrl = bi >= 0 ? args.splice(bi, 2)[1] : null
+  const vi = args.indexOf('--view'), view = vi >= 0 ? args.splice(vi, 2)[1] : 'start'
+  if (view === 'cover') { VIEW = COVER; SPOTS = COVER_SPOTS } else if (view !== 'start') { console.error('--view must be start or cover'); process.exit(2) }
   const [url, out = path.join(ROOT, 'scratch/guard')] = args
-  if (!url || (bi >= 0 && !baseUrl)) { console.error('usage: node tools/guard.mjs <look page URL> [--base <URL>] [outDir]'); process.exit(2) }
+  if (!url || (bi >= 0 && !baseUrl)) { console.error('usage: node tools/guard.mjs <look page URL> [--base <URL>] [--view start|cover] [outDir]'); process.exit(2) }
   try { const ok = guard(url, out, baseUrl); console.log(ok ? 'guard: ok' : 'guard: FAILED'); process.exit(ok ? 0 : 1) } catch (e) { console.error('guard.mjs:', e.message); process.exit(1) }
 }

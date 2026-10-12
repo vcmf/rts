@@ -18,6 +18,7 @@ import { D } from './spec.ts'
 import { fbm, hash, mulberry } from './noise.ts'
 import { H } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges } from './river.ts'
+import { COVER, coverAt, inFormationZone, type CoverGrid } from './world/cover.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 
@@ -36,7 +37,21 @@ export interface Nature {
   stones: [number, number, number, number][]   // the stones in the water (W5a): x, z, radius, the flow's direction (rad), for their foam
 }
 
-export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void): Nature {
+// what may grow on each class of the cover (docs/plans/active/l5-macro.md): grass, flowers, plants, bushes, stumps
+// and logs on grass (meadow, pasture, a copse's floor); wheat on wheat; stones anywhere but roads, tracks and the
+// village; trees and the far hedgerows' bushes too. The roads and the village keep clear of the copses (a rejected
+// copse tree would shift the scatter's stream after it: the scatter's counts match main's)
+const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood], TRODDEN: readonly number[] = [COVER.road, COVER.track, COVER.village]
+// The point and eight points EDGE m around it must all pass: the shader paints a class edge pushed up to 1.5 m along
+// each axis by the grain (coverWarp, src/look/shaders/macro.glsl), and the bake blends it over ±1 m, so an instance
+// nearer an edge could stand on another painted class
+const EDGE = 2.5, AROUND = [[0, 0], ...Array.from({ length: 8 }, (_, k) => [Math.cos(k * Math.PI / 4), Math.sin(k * Math.PI / 4)])]
+function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boolean {
+  const ok = (c: number) => model === 'Wheat' ? c === COVER.wheat : /^(Grass|Flowers|Plant_1|Bush|TreeStump|WoodLog)/.test(model) ? GRASSY_COVER.includes(c) : !TRODDEN.includes(c)
+  return AROUND.every(([dx, dz]) => ok(coverAt(cover, x + dx * EDGE, z + dz * EDGE)))
+}
+
+export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
 
@@ -79,7 +94,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
 
   /* ---------- scattering: composition follows the north star ---------- */
   const R = mulberry(77), rr = () => R()
-  const KEEP_CLEAR = (x: number, z: number) => (Math.abs(x + 5) < 20 && z > -44 && z < -2) || (z > 7 && z < 19 && x > -14 && x < 26) || ((x - 34) ** 2 + (z + 24) ** 2 < 160)   // formations
+  const KEEP_CLEAR = inFormationZone   // formations (src/look/world/cover.ts: the cover keeps them meadow)
   // THE placement rule (docs/art-bible.md §6c): nothing in the water or on the wet bank except stones,
   // nothing in the formation zones. r = the object's footprint/crown radius. Every scatter loop uses it.
   const REACH_OF: Record<string, number> = {}   // largest distance of any vertex from the model pivot in plan: the true footprint under any yaw
@@ -98,7 +113,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
   const groups: Record<string, Item[]> = {}; const add = (model: string, item: Item) => (groups[model] = groups[model] || []).push(item)
   // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
-  const addPlaced = (model: string, item: Item, kind = '') => { const [x, z, s] = item; if (!placeable(x, z, footprint(model, s), kind)) return false; add(model, item); return true }
+  const addPlaced = (model: string, item: Item, kind = '') => { const [x, z, s] = item; if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false; add(model, item); return true }
 
   const TREE_MODELS = ['CommonTree_1', 'CommonTree_2', 'CommonTree_3', 'CommonTree_4', 'CommonTree_5']
   const clusters = [[-62, -22, 7], [-128, 4, 9], [-74, 58, 6], [42, 56, 8], [82, 32, 6], [-22, 72, 7], [112, -12, 5], [-150, 62, 8], [150, 72, 7], [-42, 122, 10], [62, 112, 8], [18, -80, 6], [-95, -70, 7], [120, -70, 6]]
@@ -148,7 +163,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const a = hash(w, 51) * 6.283, r = 230 + hash(w, 52) * 320, cx = Math.cos(a) * r, cz = Math.sin(a) * r
     for (let i = 0; i < 34; i++) { const x = cx + (hash(w, i) - 0.5) * 80, z = cz + (hash(i, w) - 0.5) * 55, fs = 5 + hash(i + w, 9) * 3; if (!placeable(x, z, footprint('Bush_1', fs))) continue; far.push([x, z, fs, hash(i, w * 3) * 6.28, hash(w, i * 2)]) }
   }
-  // stones on purpose (W5a, docs/plans/active/w5-banks.md; docs/art-bible.md §6c): in riffles, and at the foot of the
+  // stones on purpose (W5a, docs/plans/done/w5-banks.md; docs/art-bible.md §6c): in riffles, and at the foot of the
   // sharper cut banks, sized to stand 0.35–0.7 m out of the water there, so the water makes foam around them. Their own
   // seeded stream, so the rest of the scatter keeps its places
   // a stone's radius for its foam: the mean of its plan's half-extents (the pillow hugs it on average)
@@ -189,6 +204,8 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : /Birch/.test(k) ? birchMat : /Pine/.test(k) ? pineMat : treeMat; place(k, material, items)
   }
   // the band is left out after the every-fourth choice, so every other bush stays the one the prototype drew
-  place('Bush_1', farMat, far.filter(([x, z], i) => i % 4 === 0 && !inBand(x, z))); place('Bush_2', farMat, far.filter(([x, z], i) => i % 4 === 2 && !inBand(x, z)))
+  // and none on the roads or the village ground (after the every-fourth choice, so the others stay main's)
+  const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
+  place('Bush_1', farMat, far.filter((b, i) => i % 4 === 0 && drawn(b))); place('Bush_2', farMat, far.filter((b, i) => i % 4 === 2 && drawn(b)))
   return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones }
 }

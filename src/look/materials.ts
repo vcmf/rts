@@ -9,6 +9,7 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import PAINTER from './shaders/painter.glsl?raw'
 import WATERDATA from './shaders/waterdata.glsl?raw'
 import SHORE from './shaders/shore.glsl?raw'
+import MACRO from './shaders/macro.glsl?raw'
 import { D } from './spec.ts'
 
 // the panel's state; t is the clock (cloud drift, water flow)
@@ -21,12 +22,15 @@ export const CLEAR = new Color4(PAL.hazeCool.r, PAL.hazeCool.g, PAL.hazeCool.b, 
 
 const MARK = '#include<painter>'
 // every painted fragment shader includes the painter, and may include the water data's reads (#include<waterdata>)
-// and the shore band with the bank normals (#include<shore>, after both); a replacer function keeps `$` in the GLSL
+// and the shore band with the bank normals (#include<shore>, after both; it includes the ground's macro colour,
+// #include<macro>); a replacer function keeps `$` in the GLSL
 export const withPainter = (src: string): string => {
   if (!src.includes(MARK)) throw new Error(`a painted shader without ${MARK}`)
-  return src.replace(MARK, () => PAINTER).replace('#include<waterdata>', () => WATERDATA).replace('#include<shore>', () => SHORE)
+  return src.replace(MARK, () => PAINTER).replace('#include<waterdata>', () => WATERDATA).replace('#include<shore>', () => SHORE).replace('#include<macro>', () => MACRO)
 }
 
+// the ground's macro colour (src/look/shaders/macro.glsl): the cover grid and the bakes, on every painted material
+const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar']
 const COMMON = ['uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uSunCol', 'uShadowCol', 'uHazeCool', 'uHazeWarm', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA']
 
 // perFrame: false keeps a material out of `all` (no per-frame uniforms, no light map: the light-map bake draws into it)
@@ -45,7 +49,7 @@ export class Materials {
     // the detail layer needs GLSL ES 3.00 (textureGrad): on WebGL1 its materials keep the L0 grain
     if (defines.includes('#define DETAIL') && this.webgl1) defines = [...defines, '#define DETAIL_L0']
     const m = new ShaderMaterial(name, this.scene, { vertexSource: vs, fragmentSource: withPainter(fs) },
-      { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM')], needAlphaBlending: alpha, defines: [...D.defines, ...defines] })
+      { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...MACRO_SAMPLERS, ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM' && !MACRO_SAMPLERS.includes(x))], needAlphaBlending: alpha, defines: [...D.defines, ...defines] })
     m.setVector3('uSunDir', SUN); m.setColor3('uSunCol', PAL.sun); m.setColor3('uShadowCol', PAL.shadow)
     m.setColor3('uHazeCool', PAL.hazeCool); m.setColor3('uHazeWarm', PAL.hazeWarm); m.setTexture('uGrain', this.grain); m.setVector2('uGrainMean', new Vector2(...this.grainMean))
     this.every.push(m)
@@ -55,9 +59,14 @@ export class Materials {
   // a new grain texture for every painted material, the bake's too; mean: its R and G channels' (the detail layer
   // renormalises about them)
   setGrain(grain: BaseTexture, mean: [number, number]): void {
+    const changed = grain !== this.grain
     this.grain = grain; this.grainMean = mean
     for (const m of this.every) { m.setTexture('uGrain', grain); m.setVector2('uGrainMean', new Vector2(...mean)) }
+    if (changed) for (const f of this.grainUsers) f()
   }
+  // what else reads the grain and must follow a new one (the macro colour's bake: src/look/macro.ts)
+  private readonly grainUsers: (() => void)[] = []
+  onGrain(f: () => void): void { this.grainUsers.push(f) }
   // bindings for every painted material, now and made later (the bakes' textures and matrices)
   bindAll(b: (m: ShaderMaterial) => void): void { this.binders.push(b); for (const m of this.all) b(m) }
 }

@@ -1,5 +1,5 @@
 // The painted water's checks (docs/plans/done/w4-water-surface.md, W4): the shore band, the seam, pools against
-// riffles, and shimmer; the banks and the stones' foam (docs/plans/active/w5-banks.md, W5a); the ice and the autumn
+// riffles, and shimmer; the banks and the stones' foam (docs/plans/done/w5-banks.md, W5a); the ice and the autumn
 // leaves (W5b). Each renders the look page headless (SwiftShader, the clock frozen) through its hooks
 // (window.__look in src/look/main.ts).
 //

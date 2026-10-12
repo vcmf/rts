@@ -7,17 +7,17 @@ precision highp float;varying vec3 vW,vN;varying float vRiver;
 #ifdef FARRING
 uniform sampler2D uRiverMask;
 #endif
-// the ground's colour: the meadow and its fields (shore.glsl, shared with the shore band), stony where steep, the
-// banks, the seasons. wt: the water data here (WATERDATA)
+// the ground's colour: its cover's (groundAt, the macro colour's arm: macro.glsl, shared with the shore band), stony
+// where steep, the banks, the seasons. wt: the water data here (WATERDATA)
 vec3 albedo(vec3 wp,vec3 n,vec4 wt){
-  vec3 m=groundMeadow(wp.xz),c=groundSteep(groundFields(m,wp.xz),n.y);
+  vec3 m=groundAt(wp.xz,pxMacro()),c=groundSteep(m,n.y);
   // stream banks: on the tile from the water data (W5, bankPaint in src/look/shaders/shore.glsl); within BANK_EDGE of
-  // the tile's edge, and on the apron and the far ring, from aRiver, as before W5 (the bands, then the fields and the
+  // the tile's edge, and on the apron and the far ring, from aRiver, as before W5 (the bands over the ground, then the
   // stony steep ground over them), which the far ring's painted line continues
   float rb=vRiver+(G(wp.xz/3.0).r-0.5)*0.35;                                   // distance to the bank in half-widths
   vec3 cr=mix(m*vec3(0.72,0.78,0.70),m,smoothstep(0.1,0.9,rb));                // damp ground near the water
   cr=mix(vec3(0.20,0.36,0.22),cr,smoothstep(-0.05,0.4,rb));
-  cr=groundSteep(groundFields(mix(vec3(0.42,0.34,0.22),cr,smoothstep(-0.35,-0.05,rb)),wp.xz),n.y);
+  cr=groundSteep(mix(vec3(0.42,0.34,0.22),cr,smoothstep(-0.35,-0.05,rb)),n.y);
   #ifdef SHORE
   // the banks are painted on land within BANK_REACH of the water; past it, and under the water (where the band, or the
   // water itself, is what shows), the ground is left as it is (the branch reaches past both edges by the derivatives'
@@ -31,8 +31,12 @@ vec3 albedo(vec3 wp,vec3 n,vec4 wt){
   return groundSeason(c);
 }
 void main(){
+  macroDerivs(vW.xz);   // before any branch (shore.glsl)
   #ifdef WATER_DEBUG
   if(uWaterView>0.5){gl_FragColor=vec4(waterView(vW.xz),1.0);return;}   // the water data's debug views
+  #endif
+  #ifdef MACRO_DEBUG
+  gl_FragColor=vec4(classAt(vW.xz)*20.0/255.0,0.0,0.0,1.0);return;   // the class check's view (macro.glsl): the class ×20 in red
   #endif
   vec3 N=normalize(vN);vec4 lm=LM(vW);float bankTurn=0.0;
   #ifdef BANKN
@@ -54,6 +58,7 @@ void main(){
   alb=mix(alb,alb*vec3(0.72,0.78,0.70),smoothstep(0.0,0.15,rm));
   alb=mix(alb,vec3(0.40,0.55,0.58),smoothstep(0.3,0.6,rm));   // the water mid tone after its sky tint, so the line matches the river at the tile edge
   #endif
+  pSnowLie=snowLie(vW.xz,pxMacro());   // the fields' furrows hold the snow (macro.glsl)
   vec3 c=paint(alb,N,vW,occ,0.12,1.0,sh);
   #ifdef DETAIL_DEBUG_INC
   // the checks' incidence view: |cos| in red; the biplanar major plane's weight in green; in blue, where the bank

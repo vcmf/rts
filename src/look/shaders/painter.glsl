@@ -9,12 +9,22 @@ vec3 grainW(vec3 wp,vec3 n,float sc){vec2 p=abs(n.y)>0.6?wp.xz:(abs(n.x)>abs(n.z
 // Snow settles on whatever faces up, broken by the grain, so it reads as painted.
 // NOSNOW: surfaces snow never settles on (the guard's army blocks, as units)
 float pSnowK=1.0;   // a weight on the snow, for a surface it only partly settles on (the riverbed: src/look/shaders/shore.glsl)
+// added to the snow's threshold where the ground holds more or less of it (the fields' furrows and ridges: snowLie in
+// src/look/shaders/macro.glsl)
+float pSnowLie=0.0;
 float snowAt(vec3 N,vec3 wp){
   #ifdef NOSNOW
   return 0.0;
   #endif
   float s=clamp(uSeason-2.0,0.0,1.0);if(s<=0.0)return 0.0;
-  return smoothstep(0.55,0.72,N.y*1.15*s+(grainW(wp,N,4.0).r-0.5)*0.4+(s-1.0)*0.35)*pSnowK;}
+  // where the ground moves the threshold (pSnowLie: the fields' furrows) the snow's edge runs across open ground, and
+  // there it breaks on the grain's soft blotches (G), not its per-texel noise (R), which speckles under a pixel, over a
+  // wider band (snow against bare earth is the frame's strongest contrast; a width from fwidth would step by 2×2
+  // pixels, W5b's lesson)
+  // (blended in with the lie's size, so the edge changes nowhere abruptly, and with no lie it is exactly the old one)
+  vec3 gw=grainW(wp,N,4.0);float m=smoothstep(0.0,0.05,abs(pSnowLie));
+  float x=N.y*1.15*s+(mix(gw.r,gw.g,m)-0.5)*0.4+(s-1.0)*0.35+pSnowLie,w=mix(0.085,0.25,m);
+  return smoothstep(0.635-w,0.635+w,x)*pSnowK;}
 // Per-tree foliage colour. t = per-instance random; kind: 0 deciduous, 1 evergreen, 2 grass.
 vec3 foliage(vec3 a,vec3 b,float t,float kind){
   vec3 summer=mix(a,b,t);
