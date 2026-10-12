@@ -169,7 +169,7 @@ Since W4 the ice is one amount over the whole water (`iceAmt()`, from 2.3 to 3) 
   grows from late autumn (2.0) to winter (3.0); water freezes where its speed, less a bonus in the shallows (under
   0.4 m deep) and jittered by the grain's blotches, is under a threshold that rises with F to 0.66 in full winter.
   So the ice starts as shelves along the banks and the bars in late autumn, closes over the pools in winter, and the
-  riffles (0.7 and over) stay open. The ice's edge is hard (`aastep`, wider than a pixel far out).
+  riffles stay open (deep water from about 0.75; shallow riffle edges can freeze). The ice's edge is hard (`aastep`, wider than a pixel far out).
 - **Frosty edges:** a thin rime of white along the ice's edge on the ice's side, broken by the grain; the open water
   in winter darker and colder (less sky tint, no glitter's warmth), its strokes and riffle foam kept: open riffles
   read as dark water with white foam between pale ice.

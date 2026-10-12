@@ -196,6 +196,7 @@ function shimmerViews() {
     ['closest-winter', A0, CAM.betaMin, CAM.rMin, t, 3, SHIMMER_WINTER, SHIMMER_ICE], ['widest-winter', A0, CAM.betaMax, CAM.rMax, t, 3, SHIMMER_WINTER_WIDE, SHIMMER_ICE_WIDE]])
 }
 function shimmer(url, dir, sab) {
+  if (!shimmerViews().length) return { ok: false, lines: [`shimmer: no view matches SHIMMER_ONLY=${process.env.SHIMMER_ONLY}  FAIL`] }
   const steps = [...prepSteps(), sabStep(sab)]
   for (const v of shimmerViews()) {
     const n = v[0]
@@ -342,9 +343,10 @@ function winter(url, dir, sab) {
 }
 // leaves (season 1.5): each frame against the same without the leaves (WATER_SAB_NOLEAVES); a pixel shows a leaf
 // when a channel moves by over LEAF_DIFF/255. Pools' share at least LEAF_MIN; riffles' at most LEAF_RIFFLE of the
-// pools'. In summer (0) and winter (3), at the first reach, no pixel of the frame moves at all. Sabotages: no leaves;
+// pools'. In summer (0) and winter (3), at the first reach, no pixel of the frame moves by over LEAF_OFF/255 (the
+// two compilations may round differently). Sabotages: no leaves;
 // leaves at any speed (WATER_SAB_LEAFALL)
-const LEAF_DIFF = 20, LEAF_MIN = 0.01, LEAF_RIFFLE = 1 / 3
+const LEAF_DIFF = 20, LEAF_MIN = 0.01, LEAF_RIFFLE = 1 / 3, LEAF_OFF = 2
 const moved = (a, b, i) => Math.max(Math.abs(a.data[i * 4] - b.data[i * 4]), Math.abs(a.data[i * 4 + 1] - b.data[i * 4 + 1]), Math.abs(a.data[i * 4 + 2] - b.data[i * 4 + 2]))
 function leaves(url, dir, sab) {
   const without = n => [sabStep([...sab, 'WATER_SAB_NOLEAVES']), render('without'), ['shot', `${n}.without`], sabStep(sab)]
@@ -355,7 +357,7 @@ function leaves(url, dir, sab) {
   for (const season of [0, 3]) {
     const v = [...POOL_VIEWS[0].slice(0, 5), season], tag = `s${season}`
     shoot(url, dir, [...prepSteps(), sabStep(sab), viewStep(v), render('with'), ['shot', `${tag}.with`], ...without(tag)], W, H)
-    const a = load(dir, `${tag}.with`), b = load(dir, `${tag}.without`); let m = 0; for (let i = 0; i < W * H; i++) if (moved(a, b, i) > 0) m++
+    const a = load(dir, `${tag}.with`), b = load(dir, `${tag}.without`); let m = 0; for (let i = 0; i < W * H; i++) if (moved(a, b, i) > LEAF_OFF) m++
     off.push([season, m])
   }
   const sp = lf.pool / Math.max(1, n.pool), sr = lf.riffle / Math.max(1, n.riffle)

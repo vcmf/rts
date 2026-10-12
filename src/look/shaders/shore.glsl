@@ -103,7 +103,7 @@ float frost(){return clamp(uSeason-2.0,0.0,1.0);}
 // and the water paint it alike: x the ice (0..1), y the rime along its edge (on the ice's side). Slow water freezes
 // first: the speed, less a bonus in the shallows and jittered by the grain's blotches, under a threshold that rises
 // with the frost (none at 0, 0.66 in full winter): shelves along the banks and the bars in late autumn, the pools
-// closed over in winter, the riffles (0.7 and over) open. The ice's edge hard, as wide as a pixel at least (aastep);
+// closed over in winter, the riffles open (deep water from about 0.75; shallow riffle edges can freeze). The ice's edge hard, as wide as a pixel at least (aastep);
 // the rime soft (below). The ice covers every layer of the water. WATER_SAB_EVENICE (the winter check's sabotage):
 // W4's ice, even over the whole water
 vec2 iceAt(vec2 xz,float sp,float d){
@@ -188,8 +188,10 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh,vec2 ia){
     float F=frost();
     c=mix(c,vec3(0.05,0.12,0.20)*mix(1.0,0.75,cs),F*0.75*smoothstep(0.0,0.3,dd));
     vec3 ic=mix(vec3(0.48,0.60,0.70),vec3(0.66,0.75,0.82),smoothstep(0.6,0.0,dd));   // bluer and darker than the snow
-    // the cracks: thin lines where the grain crosses its middle, at least 1.5 pixels wide, their ink spread
-    float ca=abs(G(wp.xz/9.0).g-0.5),cw=max(0.03,1.5*fwidth(ca));ic*=1.0-(1.0-aastep(cw,ca))*0.5*0.03/cw;
+    // the cracks: thin lines where the grain crosses its middle, at least 1.5 pixels wide, their ink spread (the
+    // derivative taken before abs(): at the line's centre abs() folds it to 0)
+    float gc=G(wp.xz/9.0).g-0.5,fc=fwidth(gc),cw=max(0.03,1.5*fc);
+    ic*=1.0-(1.0-smoothstep(cw-1.2*fc,cw+1.2*fc,abs(gc)))*0.5*0.03/cw;
     ic=mix(ic,vec3(0.86,0.88,0.92),aastep(0.62,G(wp.xz/6.0+0.7).g+0.25*(1.0-smoothstep(0.3,2.0,s)))*0.85*F);
     ic=mix(ic,vec3(0.95,0.96,0.98),ia.y*0.9);
     c=mix(c,mix(ic,ic*vec3(0.62,0.72,0.88),cs),ia.x*0.9);}

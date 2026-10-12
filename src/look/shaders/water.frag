@@ -87,9 +87,10 @@ void main(){
       float still=1.0-smoothstep(0.45,0.62,sp);
       #endif
       float px=pxGround(vW),k=max(vV,0.2)/STROKE_V,aL=(vTau-mod(uTime,LEAF_P))*STROKE_V;
+      float lwt=still*(1.0-smoothstep(0.15,0.3,px))*smoothstep(UP0,UP0+0.5,s)*(1.0-ia.x);   // the leaves' weight here
       vec2 cs2=vec2(4.0,1.6),u=vec2(aL,across)/cs2,base=floor(u-0.5);   // the 2×2 cells nearest: from base to base+1
       float leaf=0.0;vec3 lc=vec3(0.0);
-      for(int m=0;m<4;m++){
+      if(lwt>0.0)for(int m=0;m<4;m++){   // skipped where they have no weight (no derivatives inside)
         vec2 cl=base+vec2(float(m-2*(m/2)),float(m/2)),cw=vec2(mod(cl.x,50.0),cl.y);
         vec4 h=fract(sin(vec4(dot(cw,vec2(12.9898,78.233)),dot(cw,vec2(39.346,11.135)),dot(cw,vec2(73.156,52.235)),dot(cw,vec2(26.651,94.673))))*43758.5453);
         if(fract(h.x*7.31+h.y*3.17)>0.9*lw)continue;
@@ -103,7 +104,7 @@ void main(){
       }
       // late autumn browner (the trees' palette, painter.glsl), all a little darker for being wet
       lc=mix(lc,mix(lc*vec3(0.80,0.62,0.50),vec3(0.46,0.30,0.18),0.45),clamp(uSeason-1.0,0.0,1.0))*0.9;
-      c=mix(c,lc*mix(1.0,0.62,cs),leaf*still*(1.0-smoothstep(0.15,0.3,px))*smoothstep(UP0,UP0+0.5,s)*(1.0-ia.x));
+      c=mix(c,lc*mix(1.0,0.62,cs),leaf*lwt);
     }
   }
   c=withStones(c,vW,s,sh,ia.x);   // the stones' foam, over every layer (shore.glsl)
