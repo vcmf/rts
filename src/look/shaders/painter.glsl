@@ -71,8 +71,8 @@ vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
       s+=LM(q-uSunDir*((q.y-wp.y)/uSunDir.y)).r;}
     air=s/3.0;}
   float n=G(wp.xz/55.0+uTime*vec2(0.004,0.0015)).g;
-  float t=clamp(m*(0.35+0.55*n),0.0,0.42);
-  return mix(c,mix(vec3(0.58,0.67,0.78),vec3(1.0,0.86,0.63),air),t);}
+  float t=clamp(m*(0.35+0.55*n),0.0,0.42)*mix(0.55,1.0,lm.r);                 // thinner over cast shadow, which keeps its shape
+  return mix(c,mix(vec3(0.42,0.53,0.68),vec3(1.0,0.86,0.63),air),t);}
 // view distance in alpha → depth of field without re-rendering the scene
 float depthA(vec3 wp){return clamp(length(wp-uCamPos)/1000.0,0.0,1.0);}
 // Big painted cloud shadows drifting over the land: the top-down camera's only "sky".
@@ -81,8 +81,12 @@ float cloud(vec3 wp){
   float c=0.62*G(p/330.0).g+0.38*G(p/131.0+vec2(0.37,0.11)).g;
   return smoothstep(0.60,0.635,c+(G(wp.xz/5.0).r-0.5)*0.06)*uClouds;
 }
-// Cool, more saturated shadow version of a colour (hue shift, never plain darkening).
-vec3 shadowOf(vec3 a){float l=dot(a,vec3(0.3,0.59,0.11));return clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80+vec3(0.02,0.04,0.07);}
+// the shadow band (docs/plans/active/shadow-look.md): more saturated than the base and turned toward a cool blue
+// violet at the same value: a darker band costs dark coats their separation from the ground (tools/guard.mjs)
+vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
+  float v=dot(clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80,Y);              // the band value main had: dark coats keep their separation
+  vec3 s=clamp(mix(vec3(l),a,1.3),0.0,1.0)*uShadowCol;s=mix(s,vec3(0.34,0.45,0.80)*dot(s,Y)/0.4555,0.25);
+  return s*v/max(dot(s,Y),1e-4)+vec3(0.02,0.04,0.07);}
 // THE TERRAIN'S DETAIL LAYER (docs/plans/active/l2-detail.md, L2b): the paint grain at a constant size on screen.
 // DETAIL: the terrain's materials; DETAIL_L0 puts back the L0 grain (the bench's and the checks' baseline).
 // Biplanar projection (the two planes most facing the normal; the third has no weight, and on gentle ground nor has

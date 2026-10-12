@@ -92,6 +92,13 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
       const gr = aog.createRadialGradient(px, pz, 0, px, pz, pr); gr.addColorStop(0, `rgb(255,${Math.round(255 * (1 - a))},255)`); gr.addColorStop(1, 'rgb(255,255,255)')
       aog.fillStyle = gr; aog.beginPath(); aog.arc(px, pz, pr, 0, 7); aog.fill()
     }
+    // contact (docs/plans/active/shadow-look.md): a dark core under each tree's crown, so the tree sits on its ground
+    for (const [x, z, r, a] of canopy) {
+      if (a < 0.4) continue   // trees only: bushes and stones keep their light footprint
+      const px = (x + TILE_W / 2) / TILE_W * AO_N, pz = (z + TILE_W / 2) / TILE_W * AO_N, pr = Math.max(1.5, r * 0.45 / TILE_W * AO_N)
+      const gr = aog.createRadialGradient(px, pz, 0, px, pz, pr); gr.addColorStop(0, 'rgb(255,166,255)'); gr.addColorStop(1, 'rgb(255,255,255)')
+      aog.fillStyle = gr; aog.beginPath(); aog.arc(px, pz, pr, 0, 7); aog.fill()
+    }
   }
   const aoTex = new DynamicTexture('ao', aoCanvas, scene, true, Texture.BILINEAR_SAMPLINGMODE); aoTex.wrapU = aoTex.wrapV = Texture.CLAMP_ADDRESSMODE; aoTex.update(false)
 
