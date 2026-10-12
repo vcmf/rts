@@ -2,19 +2,21 @@
 // the heightfield (tile plus margin), the far ring's heights, the river's per-sample arrays, the fine bank normals and
 // the water data.
 // Layout, little-endian: "LOOK", u32 version, u32 meta length, the meta as UTF-8 JSON padded to 4 bytes, then the
-// arrays in the order the meta lists them (float32, or bytes padded to 4).
+// arrays in the order the meta lists them (float32, or bytes padded to 4). The cover (docs/plans/active/l5-macro.md):
+// its grid's runs, src/look/world/cover.ts.
 import type { Grid, Heightfield } from '../heightfield.ts'
 import type { Derived } from '../spec.ts'
 import { SAMPLE_KEYS, type RiverParams, type RiverSamples } from '../river.ts'
+import { packCover, unpackCover, type CoverGrid } from './cover.ts'
 
-export const LOOK_VERSION = 4
+export const LOOK_VERSION = 5
 
 // A grid of n² texels of `cell` metres from (x0, z0) with ch bytes a texel, stored only where covered: spans are (row,
 // first column, count) triples, tex holds ch bytes per covered texel in span order. The rest take the user's fill.
 // The bank normals (docs/plans/done/w2-river-banks.md): 3 bytes, the normal's x and z as (v·0.5 + 0.5)·255 and the
 // weight ·255. The water data (docs/plans/done/w3-water-data.md): 4 bytes, src/look/world/water-data.ts.
 export interface SpanGrid { n: number; cell: number; x0: number; z0: number; ch: number; spans: Float32Array; tex: Uint8Array }
-export interface LookData { hf: Heightfield; far: Grid; river: RiverSamples; bank: SpanGrid; water: SpanGrid }   // far: the far ring's nodes
+export interface LookData { hf: Heightfield; far: Grid; river: RiverSamples; bank: SpanGrid; water: SpanGrid; cover: CoverGrid }   // far: the far ring's nodes
 
 const SPAN_GRIDS = ['bank', 'water'] as const
 type GridMeta = { n: number; cell: number; x0: number; z0: number; ch: number }
@@ -24,6 +26,7 @@ interface Meta {
   far: { n: number; cell: number; x0: number; z0: number }
   river: { P: RiverParams; n: number }
   bank: GridMeta; water: GridMeta
+  cover: { n: number; cell: number; x0: number; z0: number }
   arrays: [string, number, 'f32' | 'u8'][]
 }
 
@@ -32,13 +35,14 @@ const bytesOf = (n: number, t: 'f32' | 'u8') => t === 'f32' ? n * 4 : Math.ceil(
 const gridMeta = (g: SpanGrid): GridMeta => ({ n: g.n, cell: g.cell, x0: g.x0, z0: g.z0, ch: g.ch })
 
 export function encodeLook(d: LookData): Uint8Array {
-  const arrays: [string, Float32Array | Uint8Array][] = [['hf', d.hf.h], ['far', d.far.h], ...SAMPLE_KEYS.map(k => [k, d.river[k]] as [string, Float32Array]), ...SPAN_GRIDS.flatMap(g => [[g + 'Spans', d[g].spans], [g + 'Tex', d[g].tex]] as [string, Float32Array | Uint8Array][])]
+  const arrays: [string, Float32Array | Uint8Array][] = [['hf', d.hf.h], ['far', d.far.h], ...SAMPLE_KEYS.map(k => [k, d.river[k]] as [string, Float32Array]), ...SPAN_GRIDS.flatMap(g => [[g + 'Spans', d[g].spans], [g + 'Tex', d[g].tex]] as [string, Float32Array | Uint8Array][]), ['coverRuns', packCover(d.cover)]]
   const type = (a: Float32Array | Uint8Array): 'f32' | 'u8' => a instanceof Float32Array ? 'f32' : 'u8'
   const meta: Meta = {
     hf: { n: d.hf.n, cell: d.hf.cell, x0: d.hf.x0, z0: d.hf.z0, min: d.hf.min, max: d.hf.max },
     far: { n: d.far.n, cell: d.far.cell, x0: d.far.x0, z0: d.far.z0 },
     river: { P: d.river.P, n: d.river.n },
     bank: gridMeta(d.bank), water: gridMeta(d.water),
+    cover: { n: d.cover.n, cell: d.cover.cell, x0: d.cover.x0, z0: d.cover.z0 },
     arrays: arrays.map(([k, a]) => [k, a.length, type(a)]),
   }
   const json = new TextEncoder().encode(JSON.stringify(meta)), pad = (4 - json.length % 4) % 4
@@ -87,7 +91,9 @@ export function decodeLook(buf: ArrayBuffer): LookData {
     if (tex.length !== covered * m.ch) throw new Error(`look data: the ${g} grid holds ${tex.length / m.ch} texels, its spans cover ${covered}`)
     return { ...m, spans, tex }
   }
-  return { hf: { ...meta.hf, h: arr.hf }, far: { ...meta.far, h: arr.far }, river, bank: grid('bank'), water: grid('water') }
+  if (!meta.cover || !u8.coverRuns) throw new Error('look data: no cover grid')
+  const cover: CoverGrid = { ...meta.cover, tex: unpackCover(meta.cover.n, u8.coverRuns) }
+  return { hf: { ...meta.hf, h: arr.hf }, far: { ...meta.far, h: arr.far }, river, bank: grid('bank'), water: grid('water'), cover }
 }
 
 // a span grid unpacked into n² texels of 4 bytes (RGBA, for a texture), the uncovered ones `fill` (RGBA)
@@ -113,5 +119,6 @@ export function checkLookData(d: Derived, look: LookData): void {
   if (look.far.h.length !== fn * fn) bad.push(`far ring has ${look.far.h.length} heights, not ${fn * fn}`)
   for (const [name, g, gn, texel, ch] of [['bank normals', look.bank, d.bankN, s.bank.texel, 3], ['water data', look.water, d.waterN, s.water.texel, 4]] as const)
     if (g.n !== gn || g.ch !== ch || !near(g.cell, texel) || !near(g.x0, -s.tile / 2) || !near(g.z0, -s.tile / 2)) bad.push(`${name} ${g.n}² of ${g.cell} m (${g.ch} bytes) from ${g.x0}, the spec wants ${gn}² of ${texel} m (${ch} bytes) from ${-s.tile / 2}`)
+  if (!near(look.cover.cell, s.macro.cover) || !near(look.cover.n * look.cover.cell, s.far) || !near(look.cover.x0, -s.far / 2) || !near(look.cover.z0, -s.far / 2)) bad.push(`cover ${look.cover.n}² of ${look.cover.cell} m from ${look.cover.x0}, the spec wants ${s.macro.cover} m cells over the far ring (${s.far} m) from ${-s.far / 2}`)
   if (bad.length) throw new Error('look data does not match the world spec (run node tools/build-look-data.ts): ' + bad.join('; '))
 }
