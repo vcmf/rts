@@ -103,8 +103,8 @@ float frost(){return clamp(uSeason-2.0,0.0,1.0);}
 // and the water paint it alike: x the ice (0..1), y the rime along its edge (on the ice's side). Slow water freezes
 // first: the speed, less a bonus in the shallows and jittered by the grain's blotches, under a threshold that rises
 // with the frost (none at 0, 0.66 in full winter): shelves along the banks and the bars in late autumn, the pools
-// closed over in winter, the riffles (0.7 and over) open. Hard edges, as wide as a pixel at least (aastep); the rime
-// about 0.15 m wide, broken. The ice covers every layer of the water. WATER_SAB_EVENICE (the winter check's sabotage):
+// closed over in winter, the riffles (0.7 and over) open. The ice's edge hard, as wide as a pixel at least (aastep);
+// the rime soft (below). The ice covers every layer of the water. WATER_SAB_EVENICE (the winter check's sabotage):
 // W4's ice, even over the whole water
 vec2 iceAt(vec2 xz,float sp,float d){
   #ifdef WATER_SAB_EVENICE
@@ -112,9 +112,11 @@ vec2 iceAt(vec2 xz,float sp,float d){
   #else
   float F=frost();if(F<=0.0)return vec2(0.0);   // uniform: no derivatives lost
   float v=sp-0.22*(1.0-smoothstep(0.05,0.4,d))+(G(xz/2.3+0.4).g-0.5)*0.16,vt=mix(-0.32,0.66,F);
-  vec2 fx=fwidth(xz);float fv=fwidth(v),rw=max(0.15*fv/max(max(fx.x,fx.y),1e-4),2.0*fv);   // the rime's width in speed
+  // the rime: soft, brightening over the last 0.06 of speed to the ice's edge (about 0.3 m where the speed changes
+  // fastest), so it adds no hard edge of its own (a hard line there shimmered, and a width from the screen
+  // derivatives steps by 2×2 pixels); broken softly by the grain's blotches
   float ice=1.0-aastep(vt,v);
-  return vec2(ice,aastep(vt-rw,v)*ice*aastep(0.32,G(xz/1.3+0.2).g));
+  return vec2(ice,ice*smoothstep(vt-0.06,vt,v)*smoothstep(0.25,0.45,G(xz/1.3+0.2).g));
   #endif
 }
 // THE STONES' FOAM (W5a, research §4.4): the stones in the water (src/look/nature.ts), at most STONES: x, z, radius,
@@ -144,16 +146,16 @@ float stoneFoam(vec2 xz,float s){
   f*=(1.0-0.5*far)*aastep(0.0,s);
   #endif
   return f;}
-// the stones' foam over a colour at a point of the water (t: its water texel; sh: the sun's shadow there; the ice
-// covers it, so stones in the open riffles keep theirs in winter)
-vec3 withStones(vec3 c,vec3 wp,vec4 t,float sh){
-  float cs=max(cloud(wp)*0.6,sh),ice=iceAt(wp.xz,length(waterFlow(t)),max(waterDepth(t),0.0)).x;
-  return mix(c,FOAM*mix(1.0,0.78,cs),stoneFoam(wp.xz,waterSdf(t))*0.85*(1.0-0.9*ice));}
+// the stones' foam over a colour at a point of the water (s: the shore distance; sh: the sun's shadow there; ice: the
+// ice there, iceAt's x: it covers the foam, so stones in the open riffles keep theirs in winter)
+vec3 withStones(vec3 c,vec3 wp,float s,float sh,float ice){
+  float cs=max(cloud(wp)*0.6,sh);
+  return mix(c,FOAM*mix(1.0,0.78,cs),stoneFoam(wp.xz,s)*0.85*(1.0-0.9*ice));}
 // the ground at the water's edge, lit with the authored surface's normal: t its water texel
 vec3 shoreLand(vec3 wp,vec4 t,float occ,float sh){return paint(landAlbedo(wp.xz,max(-waterSdf(t),0.0),-waterDepth(t)),bankNormal(vec3(0.0,1.0,0.0),wp.xz),wp,occ,0.12,1.0,sh);}
 // the water's lower layers (research §2.8, layers 1, 2, 7, the shore foam, the ice): d the depth, s the shore distance,
-// sp the speed (0..1)
-vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh){
+// sp the speed (0..1), ia the ice there (iceAt, computed once by the caller)
+vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh,vec2 ia){
   float dd=max(d,0.0);
   // 1. the bed seen through the water, painted at the surface's point: no refraction offset (an offset by the depth,
   // a bilinear field, makes the point's screen derivatives jump at every texel's edge, and with them the grain's
@@ -183,7 +185,7 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh){
   // winter (W5b): the open water darker and colder; the ice (iceAt) pale and cracked, darker over deep water, with
   // drifts of snow on it, near the banks mostly; the rime white along its edge
   if(frost()>0.0){   // uniform: the grain's derivatives hold
-    float F=frost();vec2 ia=iceAt(wp.xz,sp,dd);
+    float F=frost();
     c=mix(c,vec3(0.05,0.12,0.20)*mix(1.0,0.75,cs),F*0.75*smoothstep(0.0,0.3,dd));
     vec3 ic=mix(vec3(0.48,0.60,0.70),vec3(0.66,0.75,0.82),smoothstep(0.6,0.0,dd));   // bluer and darker than the snow
     // the cracks: thin lines where the grain crosses its middle, at least 1.5 pixels wide, their ink spread
@@ -193,14 +195,14 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh){
     c=mix(c,mix(ic,ic*vec3(0.62,0.72,0.88),cs),ia.x*0.9);}
   return c;}
 // the band's colour at a drawn point: t its water texel, occ its occlusion, sh its sun shadow, fw the shore distance's
-// fwidth. Near the shore both sides are painted and blended over about a pixel: the water's side has its depth there
+// fwidth, ia the ice there (iceAt, computed once by the caller). Near the shore both sides are painted and blended over about a pixel: the water's side has its depth there
 // (the depth and the shore distance are separate channels; on a cut bank the water at the shore is already tinted), so
 // the shoreline is a hard painted edge, anti-aliased
-vec3 shore(vec3 wp,vec4 t,float occ,float sh,float fw){
+vec3 shore(vec3 wp,vec4 t,float occ,float sh,float fw,vec2 ia){
   // m: the blend below reaches 1.2 fw past the shore (aastep), and a quad spans up to fw more, so each side's branch
   // reaches 2.5 fw past it (derivatives, above)
   float s=waterSdf(t),m=2.5*fw+1e-3;vec3 land=vec3(0.0),water=vec3(0.0);
   if(s<m)land=shoreLand(wp,t,occ,sh);
-  if(s>-m)water=shoreWater(wp,waterDepth(t),s,length(waterFlow(t)),occ,sh);
+  if(s>-m)water=shoreWater(wp,waterDepth(t),s,length(waterFlow(t)),occ,sh,ia);
   return mix(land,water,aastep(0.0,s))*(1.0+(G(wp.xz/4.0).r-0.5)*uGrainAmt*0.14);}   // the gouache grain, on both sides (continuous at the shore)
 #endif

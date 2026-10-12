@@ -5,6 +5,7 @@
 //
 //   node tools/water-look-check.mjs <look page URL> [outDir] [--only band,seam,pools,shimmer,banks,foam,winter,leaves]
 //   node tools/water-look-check.mjs <look page URL> [outDir] --selftest     each check passes, and fails on its sabotage
+//   SHIMMER_ONLY=closest-winter,widest-winter node tools/water-look-check.mjs <url> --only shimmer     those views only
 //
 // - band: the ribbon as built (its triangles, rasterised at 0.25 m) against the drawn ground (the tile mesh's own
 //   triangles) and the water data (read as the GPU reads it). The water shows over dry ground only within the band
@@ -32,8 +33,11 @@
 //   differs by over 8/255 from the previous frame resampled a quarter pixel along. Under SHIMMER_MAX per pair at the
 //   closest zoom; at the widest, where the river's outline (the painted shoreline, the banks hiding the water) is a
 //   large share of the mask, under SHIMMER_WIDE (main measured 6.3% there, the same mask and view: W4's plan). In
-//   winter main measures 3.3% at the closest zoom and 10.9% at the widest (the same views: W5b's plan), so there the
-//   limits are main's, rounded up: W5b adds none.
+//   winter, bright snow and ice make every painted edge and the grain's clusters pop more (main measures 3.3% at the
+//   closest zoom and 10.9% at the widest, the same views and mask, with W4's even ice; and on the water's own pixels,
+//   the surface eroded 2 px, 3.1% and 11.3%: W5b's plan), so there the limits are main's, rounded down: the mask
+//   under SHIMMER_WINTER and SHIMMER_WINTER_WIDE, the water's own pixels (the ice, its edges and rime, the open
+//   riffles) under SHIMMER_ICE and SHIMMER_ICE_WIDE: W5b's water must shimmer less than main's.
 //   Sabotage: aliased hard edges (WATER_SAB_STEP).
 // Frames are 1280×720. Exit 1 on a failure.
 import fs from 'node:fs'
@@ -52,7 +56,7 @@ const W = 1280, H = 720, CAM = SPEC.camera, BAND = SPEC.water.band, SDF = SPEC.w
 const [, A0, BETA0, R0] = CAMS.find(c => c[0] === 'start')
 const SEAM_P95 = 2, SEAM_MAX = 6, SEAM_MIN_PX = 500
 const POOL = 0.2, RIFFLE = 0.5, LUMA_GAP = 0.03, BRIGHT = 0.2, FOAM_RATIO = 2, FOAM_MIN = 0.02
-const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.035, SHIMMER_WINTER = 0.035, SHIMMER_WINTER_WIDE = 0.115
+const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.035, SHIMMER_WINTER = 0.032, SHIMMER_WINTER_WIDE = 0.108, SHIMMER_ICE = 0.03, SHIMMER_ICE_WIDE = 0.11
 
 let C = null
 const river = () => {
@@ -187,8 +191,9 @@ function pools(url, dir, sab) {
 // the closest zoom, and the widest (the data's textures have no mips: their 0.5 m texels are minified there)
 function shimmerViews() {
   const c = river(), bi = sharpest(), t = `${[c.px[bi], CAM.focusY, c.pz[bi]]}`
-  return [['closest', A0, CAM.betaMin, CAM.rMin, t, 0, SHIMMER_MAX], ['widest', A0, CAM.betaMax, CAM.rMax, t, 0, SHIMMER_WIDE],
-    ['closest-autumn', A0, CAM.betaMin, CAM.rMin, t, 1.5, SHIMMER_MAX], ['closest-winter', A0, CAM.betaMin, CAM.rMin, t, 3, SHIMMER_WINTER], ['widest-winter', A0, CAM.betaMax, CAM.rMax, t, 3, SHIMMER_WINTER_WIDE]]
+  return (v => process.env.SHIMMER_ONLY ? v.filter(x => process.env.SHIMMER_ONLY.split(',').includes(x[0])) : v)([['closest', A0, CAM.betaMin, CAM.rMin, t, 0, SHIMMER_MAX], ['widest', A0, CAM.betaMax, CAM.rMax, t, 0, SHIMMER_WIDE],
+    ['closest-autumn', A0, CAM.betaMin, CAM.rMin, t, 1.5, SHIMMER_MAX], ['widest-autumn', A0, CAM.betaMax, CAM.rMax, t, 1.5, SHIMMER_WIDE],
+    ['closest-winter', A0, CAM.betaMin, CAM.rMin, t, 3, SHIMMER_WINTER, SHIMMER_ICE], ['widest-winter', A0, CAM.betaMax, CAM.rMax, t, 3, SHIMMER_WINTER_WIDE, SHIMMER_ICE_WIDE]])
 }
 function shimmer(url, dir, sab) {
   const steps = [...prepSteps(), sabStep(sab)]
@@ -202,26 +207,30 @@ function shimmer(url, dir, sab) {
   const lum = img => { const v = new Float32Array(W * H); for (let i = 0; i < v.length; i++) v[i] = lumaAt(img, i) * 255; return v }
   let ok = true
   const lines = [`shimmer: the water and its shore, luma off by over ${ERR}/255 from the previous frame resampled ${STEP} px along (per pair under ${(SHIMMER_MAX * 100).toFixed(1)}% at the closest zoom, ${(SHIMMER_WIDE * 100).toFixed(1)}% at the widest; in winter ${(SHIMMER_WINTER * 100).toFixed(1)}% and ${(SHIMMER_WINTER_WIDE * 100).toFixed(1)}%, main's)`]
-  for (const [n, , , , , , lim] of shimmerViews()) {
+  for (const [n, , , , , , lim, coreLim] of shimmerViews()) {
     // the water's pixels, dilated 6 px (the shore band on the terrain's side, the shore foam)
     const surf = load(dir, `${n}.surface`), rows = new Uint8Array(W * H), mask = new Uint8Array(W * H), R = 6
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (white(surf, y * W + x)) for (let xx = Math.max(0, x - R); xx <= Math.min(W - 1, x + R); xx++) rows[y * W + xx] = 1   // dilated along rows, then columns
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (rows[y * W + x]) for (let yy = Math.max(0, y - R); yy <= Math.min(H - 1, y + R); yy++) mask[yy * W + x] = 1
-    let prev = lum(load(dir, `${n}.0`)), worst = 0, all = 0
+    // the water's own pixels: the surface eroded 2 px
+    const core = new Uint8Array(W * H)
+    if (coreLim) for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) { let all = true; for (let yy = y - 2; yy <= y + 2 && all; yy++) for (let xx = x - 2; xx <= x + 2; xx++) if (!white(surf, yy * W + xx)) { all = false; break } if (all) core[y * W + x] = 1 }
+    let prev = lum(load(dir, `${n}.0`)), worst = 0, all = 0, worstC = 0, allC = 0
     const fr = []
     for (let k = 1; k < SHIFTS; k++) {
       const cur = lum(load(dir, `${n}.${k}`)), S = STEP
-      let bad = 0; all = 0
+      let bad = 0, badC = 0; all = 0; allC = 0
       for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
         const i = y * W + x; if (!mask[i]) continue
-        const pred = (1 - S) * (1 - S) * prev[i] + S * (1 - S) * (prev[i - 1] + prev[i - W]) + S * S * prev[i - W - 1]; all++
-        if (Math.abs(cur[i] - pred) > ERR) bad++
+        const pred = (1 - S) * (1 - S) * prev[i] + S * (1 - S) * (prev[i - 1] + prev[i - W]) + S * S * prev[i - W - 1], b = Math.abs(cur[i] - pred) > ERR; all++
+        if (b) bad++
+        if (core[i]) { allC++; if (b) badC++ }
       }
-      fr.push(bad / Math.max(1, all)); worst = Math.max(worst, bad / Math.max(1, all)); prev = cur
+      fr.push(bad / Math.max(1, all)); worst = Math.max(worst, bad / Math.max(1, all)); worstC = Math.max(worstC, badC / Math.max(1, allC)); prev = cur
     }
-    const good = all >= 5000 && worst < lim
+    const good = all >= 5000 && worst < lim && (!coreLim || (allC >= 5000 && worstC < coreLim))
     if (!good) ok = false
-    lines.push(`  ${n}: ${all} pixels; per pair ${fr.map(f => (f * 100).toFixed(3) + '%').join(' ')}; worst ${(worst * 100).toFixed(3)}%${good ? '' : '  FAIL'}`)
+    lines.push(`  ${n}: ${all} pixels; per pair ${fr.map(f => (f * 100).toFixed(3) + '%').join(' ')}; worst ${(worst * 100).toFixed(3)}%${coreLim ? `; the water's own ${allC} pixels: worst ${(worstC * 100).toFixed(3)}% (under ${(coreLim * 100).toFixed(1)}%)` : ''}${good ? '' : '  FAIL'}`)
   }
   return { ok, lines }
 }

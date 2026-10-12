@@ -21,7 +21,7 @@ W3 (`docs/plans/done/w3-water-data.md`), the painted water, its shoreline from t
 
 - **Goals:** bends that turn back on themselves; visibly varying width (4–11 m, stretches differ);
   pools at bends and riffles between them; a flat floodplain in a valley; water level that never
-  rises downstream; nothing in the water except stones (`docs/art-bible.md` §6c).
+  rises downstream; nothing in the water except stones, and floating leaves in autumn (`docs/art-bible.md` §6c).
 - **Non-goals (later):** weirs and fords as authored crossings, river networks, ponds and dams (W6, from the map
   format).
 
@@ -94,7 +94,7 @@ W3 (`docs/plans/done/w3-water-data.md`), the painted water, its shoreline from t
   with their foam (the stones' too); a broken white rime along the ice's edge and drifts of snow on it near the
   banks. The snow on the banks is the terrain's (the bank normals keep the cut banks' scarps bare). Autumn leaves
   drift on slow water past the band, from early autumn until the ice: an upper layer of the water in cells of the
-  strokes' coordinates, so they travel at the water's speed.
+  time of travel's coordinates, so they travel at the water's speed.
 - **Placement:** `placeable` keeps every instance's footprint out of the water and the formation
   zones; stones may sit on riffles or at a cut bank's foot; reeds at the water's edge, on land; willows line the
   banks; wheat stays off the floodplain.

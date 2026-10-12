@@ -182,12 +182,16 @@ Since W4 the ice is one amount over the whole water (`iceAmt()`, from 2.3 to 3) 
 ### Autumn leaves in the pools
 
 - **An upper layer** of the water (past the band: it needs the ribbon's time of travel), from early autumn (season
-  0.6, peaking 1.3–2.0) to the start of the ice (2.5), on slow water (speed under 0.55, faded above).
-- **Drifting with the current:** cells in the strokes' coordinates (along the flow, 1 m, wrapped to the strokes'
-  20 m period so the clock's wrap stays seamless; across, 0.8 m); a hashed share of cells holds one leaf at a hashed
-  place, angle and size (0.10–0.18 m long), drawn in metres (the along coordinate scaled by the local speed over the
-  strokes' speed). Colours from the trees' autumn palette (orange, yellow, red, brown), late autumn browner.
-  Hard-edged, anti-aliased with the pixel's footprint, faded far out as W4's marks (`near`).
+  0.6, full from 1.3) to 2.5, on slow water (speed under 0.45, gone from 0.62); none under the ice.
+- **Drifting with the current:** cells in the time of travel's coordinates, 4 along (the clock wrapped to a period of
+  200 along, the hash's period too, so the wrap is seamless and the layout repeats only past 200 m of travel) by
+  1.6 m across; most cells hold one leaf at a hashed place, angle and size, drawn in metres (along scaled by the
+  section's speed, a new ribbon attribute, over the strokes' speed). Each pixel reads the 2×2 cells nearest it, so
+  no leaf is cut at a cell's edge. Colours from the trees' autumn palette (orange, yellow, red, brown), late autumn
+  browner.
+- **Size, as built:** 0.5–0.75 m, larger than life (planned 0.10–0.18 m: at the closest zoom those were 2–3 pixels
+  and read as specks; at the default zoom, nothing). Hard-edged, anti-aliased over 1.2 pixels in metres, faded as a
+  pixel grows past 0.15–0.3 m (under a pixel they would shimmer).
 
 ## Checks (W5b)
 
@@ -199,7 +203,8 @@ Since W4 the ice is one amount over the whole water (`iceAmt()`, from 2.3 to 3) 
   (`WATER_SAB_NOLEAVES`): pixels the leaves change, on pools at least LEAF_MIN, on riffles at most a third of the
   pools'; in summer and winter, none. Sabotages: no leaves; leaves at any speed (`WATER_SAB_LEAFALL`).
 - **Seam** (W4's) holds in winter: it gains a winter view (the ice is in the band).
-- **Shimmer** holds at both zooms in winter (the ice's edge and rime are new hard edges) and in autumn (the leaves).
+- **Shimmer** holds at both zooms in autumn (the leaves) and in winter (the ice's edge, the rime and the cracks are
+  hard edges; the water's own pixels, without the land's snow, held to the summer limits).
 - **Existing checks; readability guard; goldens** (the winter view changes along the river); **bench** (Metal
   proxy).
 
