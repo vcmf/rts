@@ -31,7 +31,7 @@ vec3 albedo(vec3 wp,vec3 n,vec4 wt){
   return groundSeason(c);
 }
 void main(){
-  macroDerivs(vW.xz);   // before any branch (macro.glsl)
+  macroDerivs(vW.xz);   // before any branch (shore.glsl)
   #ifdef WATER_DEBUG
   if(uWaterView>0.5){gl_FragColor=vec4(waterView(vW.xz),1.0);return;}   // the water data's debug views
   #endif

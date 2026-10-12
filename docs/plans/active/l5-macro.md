@@ -205,14 +205,20 @@ L5a 3–4 days; L5b 2 days of work plus the judges' time.
   Austrian white's once the warm sun lit them. The road now reads against the meadow by hue (a cool grey) more than
   by value (`tools/guard.mjs --view cover`, a second view with lines wholly on each class, is new; the 3 m track
   holds no 20 m line and is left to the class check).
-- **Explicit derivatives on every read** (`macroDerivs`, `textureGrad`): reads in branches the pixels of a quad take
-  differently (a class edge, the shore band's sides) made the bake differ run to run on the Mac's GPU (0.85% of
-  texels by up to 26 levels).
-- **The bounce reads one texel:** the bake's, or the class's flat colour in the other arms (the full macro per
-  fragment of every tree and tuft would have charged the shader arm for a value constant over an instance).
-- **The scatter keeps 1.5 m from class edges** (the painted edges wander that far).
+- **Explicit derivatives on every read** (`macroDerivs`, `textureGrad`, the meadow's reads too): reads in branches the
+  pixels of a quad take differently (a class edge, the shore band's sides) made the bake differ run to run on the
+  Mac's GPU (0.85% of texels by up to 26 levels). The water's land side takes the snow's lie as the terrain does.
+- **The bounce reads one texel, the class's flat colour, in every arm:** the full macro per fragment of every tree and
+  tuft would have charged the shader arm for a value constant over an instance, and a bounce that differed by arm
+  would confound the ablation.
+- **The scatter keeps 2.5 m from class edges** (nine probes: the painted edges wander 1.5 m along each axis and the
+  bake blends ±1 m). The far hedgerows keep main's every-fourth choice; the road's bushes are dropped after it.
+- **WebGL1 opens in the shader arm:** it cannot mipmap the bakes, and unfiltered stripes would alias.
 - **The class check samples 24 px apart,** not 8: at the closest views 8 px is under a metre, inside the bake's soft
   edge, and measured the edge's blend instead of the two classes.
 - **Winter shimmer gate:** snow against bare ground makes every edge pop; the closest zoom's winter limit is main's
-  own number on the same pixels (1.9%) rounded up to 2.0% (the flat arm measures 1.94%), the widest's stays the water check's 3.5%. The snow's edge on fields breaks
-  on the grain's soft blotches over a wider fixed band (a width from `fwidth` stepped by 2×2 pixels, as in W5b).
+  own number on the same pixels (1.24%) rounded up to 1.3%, the widest's stays the water check's 3.5% (main 1.74%).
+  The check takes luma from the frame's sRGB values, as the checks whose limits it borrows do (review round 2: a
+  linear-light luma had counted dark earth's flicker too little and snow's too much). The snow's edge on fields
+  breaks on the grain's soft blotches over a wider fixed band (a width from `fwidth` stepped by 2×2 pixels, as in
+  W5b).

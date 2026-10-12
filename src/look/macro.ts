@@ -77,7 +77,8 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
     renderer.saveStates(); engine.bindFramebuffer(rt, undefined, undefined, undefined, true)
     for (let j = 0; j < n; j += k) for (let i = 0; i < n; i += k) {
       const w = Math.min(k, n - i), h = Math.min(k, n - j)
-      renderer.setViewport(new Viewport(i / n, j / n, w / n, h / n)); renderer.applyEffectWrapper(wrapper)
+      // in whole texels (a fraction of n multiplied back can land under a whole number, and gl.viewport truncates it)
+      engine.setViewport(new Viewport(i, j, w, h), 1, 1); renderer.applyEffectWrapper(wrapper)
       const e = wrapper.effect, x0 = -world / 2
       e.setFloat4('uRect', x0 + i / n * world, x0 + j / n * world, x0 + (i + w) / n * world, x0 + (j + h) / n * world)
       e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex)

@@ -21,9 +21,8 @@
 //   frame; on the fields' pixels (the class view), a pixel shimmers when its luma differs by over 8/255 from the
 //   previous frame resampled a quarter pixel along. Under SHIMMER_MAX per pair at the closest zoom and SHIMMER_WIDE
 //   at the widest (the water check's limits, tools/water-look-check.mjs). In winter snow against bare ground makes
-//   every edge pop (main's own ground, on the same pixels: 1.9% at the closest zoom, 2.7% at the widest; L5's plan):
-//   there the closest zoom's limit is main's, rounded up (SHIMMER_WINTER; the flat arm, main's snow on the new
-//   classes, measures 1.94%), and the widest's stays SHIMMER_WIDE. Sabotage: hard
+//   every edge pop (main's own ground, on the same pixels: 1.24% at the closest zoom, 1.74% at the widest; L5's
+//   plan): there the closest zoom's limit is main's, rounded up (SHIMMER_WINTER), and the widest's stays SHIMMER_WIDE. Sabotage: hard
 //   stripes never faded with the footprint (MACRO_SAB_STEP).
 // - determinism: the bakes' hashes after the load, after a rebake, and after a second load: all equal.
 // - bake: the bake's time at the page's sizes, and the full-size run (?macroBench=FULL: FULL² texels, the proposal's
@@ -39,7 +38,7 @@ import { SPEC } from '../src/look/spec.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const W = 1280, H = 720, CAM = SPEC.camera, BOUNDARY = 24, FIELD_DE = 8, ROAD_DE = 8, MIN_EDGES = 200
-const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.035, SHIMMER_WINTER = 0.02, FULL = 3600
+const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.035, SHIMMER_WINTER = 0.013, FULL = 3600
 const [, A0] = CAMS.find(c => c[0] === 'start')
 // the cover's classes (src/look/world/cover.ts): grass 0–1, wood 2, road 3, track 4, village 5, fields 6–9
 const GRASS = c => c <= 1, ROAD = c => c === 3 || c === 4, FIELD = c => c >= 6 && c <= 9
@@ -49,7 +48,9 @@ const SHIMMER_VIEWS = [['closest', A0, CAM.betaMin, CAM.rMin, [78, 8, -38], 0, S
 
 const load = (dir, n) => png.read(fs.readFileSync(path.join(dir, n + '.png')))
 const classOf = (img, i) => Math.round(img.data[i * 4] / 20)
-const lumaAt = (img, i) => { const d = img.data, l = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 }; return 0.2126 * l(d[i * 4]) + 0.7152 * l(d[i * 4 + 1]) + 0.0722 * l(d[i * 4 + 2]) }
+// Rec. 709 weights on the frame's stored (sRGB) values, 0–1: the measure tools/detail-check.mjs and
+// tools/water-look-check.mjs take, whose limits the shimmer check borrows
+const lumaAt = (img, i) => (0.2126 * img.data[i * 4] + 0.7152 * img.data[i * 4 + 1] + 0.0722 * img.data[i * 4 + 2]) / 255
 const render = what => ['eval', `(async () => { await __proto.scene.whenReadyAsync(true); for (let i = 0; i < 3; i++) __proto.scene.render(); return "${what}" })()`]
 const checkStep = defs => ['eval', `(async () => { const r = await __look.macro.setCheck(${JSON.stringify(defs)}); return "checks ${defs.join(' ') || 'none'}, rebaked in " + r.ms.toFixed(0) + " ms" })()`]
 

@@ -71,7 +71,8 @@ const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy)
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
 const macro = buildMacro(scene, mats, look.cover)
-const macroArm = (params.get('macro') ?? 'bake') as MacroArm
+// (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
+const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)
 macro.setArm(macroArm)
 const macroBake = await macro.bake()

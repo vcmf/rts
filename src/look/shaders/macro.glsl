@@ -8,20 +8,6 @@
 //   MACRO_BAKE    the bake, read: arm 3
 // the cover grid (nearest): class, field id, furrow direction, wear distance
 uniform sampler2D uCover;
-// The world position's screen derivatives, taken by each shader's main before any branch (macroDerivs): every read
-// below passes them explicitly, so a read in a branch the pixels of a 2×2 quad take differently (a class edge, the
-// shore band's sides) still picks its mip level right. Where no main sets them (a tree's root: one point) they are 0,
-// the finest level. Without them, on the Mac's GPU, the bake differed run to run. WebGL1 has no textureGrad: there
-// the reads take their implicit derivatives, as before L5.
-vec2 pMdx=vec2(0.0),pMdy=vec2(0.0);
-void macroDerivs(vec2 xz){pMdx=dFdx(xz);pMdy=dFdy(xz);}
-float pxMacro(){return max(abs(pMdx.x)+abs(pMdy.x),abs(pMdx.y)+abs(pMdy.y));}   // the pixel's footprint, m (pxGround's)
-// a texture over world space at s m a repeat, uv = xz/s (+ an offset)
-#ifdef WEBGL2
-vec4 texM(sampler2D t,vec2 uv,float s){return textureGrad(t,uv,pMdx/s,pMdy/s);}
-#else
-vec4 texM(sampler2D t,vec2 uv,float s){return texture2D(t,uv);}
-#endif
 // the snow's lie's zero, a byte (128/255), and under a byte from it the lie is 0: off the fields the bake's 8 bits
 // then read 0, so snowAt keeps its own edge there, as the water's shore band does (the seam)
 #define LIE0 0.50196078
@@ -111,7 +97,8 @@ vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
   pMacro=mix(texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W),texM(uMacroFar,xz/FAR_W+0.5,FAR_W),smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y))));}
   return pMacro;}
 #endif
-// THE GROUND'S COLOUR the terrain and the shore band start from, by arm; past them all, main's (groundBase)
+// THE GROUND'S COLOUR the terrain and the shore band start from, by arm (every painted material has one: setArm,
+// src/look/macro.ts; with none, the shader arm's)
 vec3 groundAt(vec2 xz,float px){
   #if defined(MACRO_BAKE)
   return bakeOnce(xz).rgb;
@@ -124,7 +111,7 @@ vec3 groundAt(vec2 xz,float px){
   #endif
   return k<0.5?vec3(0.43,0.51,0.24):classColour(k,0.5);
   #else
-  return groundBase(xz);
+  return macroOnce(xz,px).rgb;
   #endif
 }
 // the class the arm paints at a point (the class check's view, MACRO_DEBUG): the warped lookup's, or the flat arm's
@@ -143,18 +130,14 @@ float snowLie(vec2 xz,float px){
   #if defined(MACRO_BAKE)
   return lieOf(bakeOnce(xz).a)*k;
   #elif defined(MACRO_SHADER)
+  // grass 4 m or more from a field's or a line's cell holds no lie: no macro there (the water's land side asks too)
+  vec4 cv=coverAt(xz);if(cv.x<1.5&&cv.w>=4.0&&coverAt(xz+vec2(2.0,0.0)).y+coverAt(xz-vec2(2.0,0.0)).y+coverAt(xz+vec2(0.0,2.0)).y+coverAt(xz-vec2(0.0,2.0)).y<0.5)return 0.0;
   return lieOf(macroOnce(xz,px).a)*k;
   #else
   return 0.0;
   #endif
 }
-// the ground's colour under a tree or a tuft, for its bounce (nature.frag): the bake where there is one; else the
-// class's flat colour (one read: the full macro per fragment of every instance would cost the shader arm dearly, and
-// its result is the same over an instance)
-vec3 groundBounce(vec2 xz){
-  #if defined(MACRO_BAKE)
-  return bakeOnce(xz).rgb;
-  #else
-  float k=coverAt(xz).x;return k<0.5?vec3(0.43,0.51,0.24):classColour(k,0.5);
-  #endif
-}
+// the ground's colour under a tree or a tuft, for its bounce (nature.frag): the class's flat colour, one read, the same
+// in every arm (the arms differ in the ground alone, for the ablation; the full macro per fragment of every instance
+// would cost dearly for a value constant over an instance)
+vec3 groundBounce(vec2 xz){float k=coverAt(xz).x;return k<0.5?vec3(0.43,0.51,0.24):classColour(k,0.5);}

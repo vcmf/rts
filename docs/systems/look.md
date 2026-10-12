@@ -63,7 +63,7 @@ the contract of `tools/golden.mjs`; it also puts the prototype's global names on
 terrain's variant defines; `grain`, the paint or the smooth grain; `terrainOnly`; `finishing`, the finishing
 passes on or off; `hill`; `quarter` and `shift`, the projection moved for the checks). `?season=<0..3>` opens the
 page in a season (the bench runs in it); `?detail=l0` opens it with the L0 grain on the terrain; `?macro=flat|shader|bake`
-picks the macro colour's arm (L5a, below; `bake` by default) and `?bench=macro` benches the three.
+picks the macro colour's arm (L5a, below; `bake` by default, `shader` on WebGL1) and `?bench=macro` benches the three.
 
 ### The ground's cover and macro colour (L5a)
 
@@ -83,7 +83,8 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   (ridge-and-furrow lands on ploughed ground, faint drill bands on crops, faded with the pixel's footprint), wear
   near the lines, and edges that wander (the class lookup's point pushed ±1.5 m by the grain's blotches). Colour
   only: the light stays in `paint()`. Every read passes the world position's screen derivatives explicitly
-  (`macroDerivs`, taken at the top of each shader's main; `textureGrad` on WebGL2): a read in a branch the pixels of
+  (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's
+  reads too): a read in a branch the pixels of
   a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
 - **Three arms, one switch** (`?macro`): `flat`, each class's colour alone, unwarped (the ablation's arm 1);
   `shader`, `macro(xz, 0)` per pixel, one tap; `bake`, one read of the bake. `groundAt()` gives the arm's colour
@@ -98,11 +99,10 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   `pSnowLie` moves `snowAt()`'s threshold. There the snow's edge breaks on the grain's soft blotches, not its
   per-texel noise, over a wider band, and the lie fades out as a pixel spans 0.35 to 1.2 m.
 - **The scatter follows the cover:** grass, flowers, plants, bushes, stumps and logs on grass; wheat on wheat;
-  nothing on roads, tracks or village ground; the point and four points 1.5 m around it must all pass (the painted
+  nothing on roads, tracks or village ground; the point and eight points 2.5 m around it must all pass (the painted
   edges wander that far). **Ground bounce:** trees take 15% of the ground's colour under their root into the albedo
-  of their side away from the sun, near the ground; grass 25% all over. The colour is the bake's in the bake arm,
-  else the class's flat colour (one read: the full macro per fragment of every instance would be the shader arm's
-  biggest cost, for a value constant over an instance).
+  of their side away from the sun, near the ground; grass 25% all over. The colour is the class's flat colour in
+  every arm (one read; the arms differ in the ground alone).
 - `window.__look.macro`: `setArm`, `setCheck` (the check's view and sabotages, rebaked), `hash`, `bake`.
 
 ### The detail layer (L2b)

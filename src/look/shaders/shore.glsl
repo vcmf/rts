@@ -31,25 +31,31 @@ float pxGround(vec3 wp){vec2 f=fwidth(wp.xz);return max(f.x,f.y);}
 vec3 groundSeason(vec3 c){
   vec3 au=mix(c,vec3(0.70,0.60,0.34),0.45),la=mix(c,vec3(0.52,0.42,0.27),0.6),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
   return uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
+// The world position's screen derivatives, taken by each shader's main before any branch (macroDerivs): the ground's
+// reads (the meadow's here, the macro colour's, src/look/shaders/macro.glsl) pass them explicitly, so a read in a
+// branch the pixels of a 2×2 quad take differently (a class edge, the shore band's sides) still picks its mip level
+// right. Where no main sets them they are 0, the finest level. Without them, on the Mac's GPU, the macro bake differed
+// run to run. WebGL1 has no textureGrad: there the reads take their implicit derivatives.
+vec2 pMdx=vec2(0.0),pMdy=vec2(0.0);
+void macroDerivs(vec2 xz){pMdx=dFdx(xz);pMdy=dFdy(xz);}
+float pxMacro(){return max(abs(pMdx.x)+abs(pMdy.x),abs(pMdx.y)+abs(pMdy.y));}   // the pixel's footprint, m (pxGround's)
+// a texture over world space at s m a repeat, uv = xz/s (+ an offset)
+#ifdef WEBGL2
+vec4 texM(sampler2D t,vec2 uv,float s){return textureGrad(t,uv,pMdx/s,pMdy/s);}
+#else
+vec4 texM(sampler2D t,vec2 uv,float s){return texture2D(t,uv);}
+#endif
 // THE GROUND before the banks and the seasons (the terrain's and the shore band's alike): the meadow (yellow-green,
-// dry gold, teal-green hollows), its flower patches, the strip fields in the distance
+// dry gold, teal-green hollows), its flower patches; the cover over it (L5a) is the macro colour's (macro.glsl)
 vec3 groundMeadow(vec2 xz){
-  float n1=G(xz/150.0).g,n2=G(xz/53.0+0.31).g;
+  float n1=texM(uGrain,xz/150.0,150.0).g,n2=texM(uGrain,xz/53.0+0.31,53.0).g;
   vec3 c=mix(vec3(0.33,0.45,0.20),vec3(0.55,0.58,0.27),smoothstep(0.35,0.66,n1));      // meadow → yellow-green
   c=mix(c,vec3(0.70,0.64,0.40),smoothstep(0.62,0.76,n2)*0.45);                         // dry gold
   c=mix(c,vec3(0.24,0.40,0.33),smoothstep(0.64,0.80,1.0-n1)*0.6);                      // teal-green hollows
   // flower patches: orange and white flecks (complementary accents)
-  float fpat=smoothstep(0.60,0.68,G(xz/70.0+vec2(0.71,0.13)).g);
-  float fl=step(0.86,G(xz/1.6).r)*fpat;c=mix(c,vec3(0.99,0.56,0.14),fl);
-  return mix(c,vec3(0.96,0.93,0.84),step(0.93,G(xz/1.3+0.5).r)*fpat*0.8);}
-// the strip fields in the distance, over a ground colour
-vec3 groundFields(vec3 c,vec2 xz){
-  float r=length(xz);vec2 f=mat2(0.8,-0.6,0.6,0.8)*xz;
-  float id=fract(sin(dot(floor(vec2(f.x/70.0,f.y/22.0)),vec2(12.9898,78.233)))*43758.5453);
-  vec3 fc=id<0.25?vec3(0.78,0.64,0.30):id<0.5?vec3(0.42,0.56,0.20):id<0.75?vec3(0.58,0.42,0.28):vec3(0.30,0.48,0.24);
-  float fm=smoothstep(170.0,250.0,r);
-  return mix(c,fc*(0.96+0.06*G(vec2(f.x/40.0,f.y/3.0)).b),fm*0.85);}   // faint furrows on distant fields only
-vec3 groundBase(vec2 xz){return groundFields(groundMeadow(xz),xz);}
+  float fpat=smoothstep(0.60,0.68,texM(uGrain,xz/70.0+vec2(0.71,0.13),70.0).g);
+  float fl=step(0.86,texM(uGrain,xz/1.6,1.6).r)*fpat;c=mix(c,vec3(0.99,0.56,0.14),fl);
+  return mix(c,vec3(0.96,0.93,0.84),step(0.93,texM(uGrain,xz/1.3+0.5,1.3).r)*fpat*0.8);}
 // steep ground goes stony (ny: the normal's y)
 vec3 groundSteep(vec3 c,float ny){return mix(c,vec3(0.55,0.52,0.46),smoothstep(0.80,0.62,ny)*0.5);}
 #include<macro>
