@@ -6,10 +6,10 @@
 // guide's, so it always advances; the bends ease to nothing over half a wavelength at each end, so the stream starts
 // and ends on its guide.
 import type { Pt } from './schema.ts'
-import { lineLength, pointAt } from './geometry.ts'
+import { lineLength } from './geometry.ts'
 import { random } from './seed.ts'
 import { valueNoise } from './noise.ts'
-import { cos, sin, PI } from '../sim/num.ts'
+import { atan2, cos, sin, PI } from '../sim/num.ts'
 import { cm, smooth } from './util.ts'
 
 export interface MeanderParams { amplitude: number; wavelength?: number; bend?: number }
@@ -26,9 +26,13 @@ function J0(x: number): number { let s = 0; for (let i = 0; i < 64; i++) s += co
 // (blended over up to `blend` m each side, never more than half a neighbouring segment), so the offsets neither
 // gap nor fold where the guide bends
 function frame(guide: Pt[], cum: number[], u: number, blend: number): [number, number, number, number] {
-  const [gx, gz, tx, tz] = pointAt(guide, u)
-  let k = 1
-  while (k < guide.length - 1 && cum[k] < u) k++
+  // the segment holding u, by bisection on the cumulative lengths (u only grows, but bisection keeps this pure)
+  let lo = 0, hi = guide.length - 1
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (cum[mid] <= u) lo = mid; else hi = mid }
+  const L = cum[hi] - cum[lo], t = L > 0 ? Math.min(1, Math.max(0, (u - cum[lo]) / L)) : 0
+  const tx = (guide[hi][0] - guide[lo][0]) / (L || 1), tz = (guide[hi][1] - guide[lo][1]) / (L || 1)
+  const gx = guide[lo][0] + t * (guide[hi][0] - guide[lo][0]), gz = guide[lo][1] + t * (guide[hi][1] - guide[lo][1])
+  const k = hi
   // the vertex nearest u, if within its blend zone
   for (const v of [k - 1, k]) {
     if (v <= 0 || v >= guide.length - 1) continue
@@ -42,7 +46,6 @@ function frame(guide: Pt[], cum: number[], u: number, blend: number): [number, n
   return [gx, gz, tx, tz]
 }
 
-// a guide may turn up to 90° at a vertex; sharper, a belt folds on the inside of the turn, so the generator refuses it
 
 export function meander(guide: Pt[], width: number, p: MeanderParams, seed: number): Pt[] {
   const len = lineLength(guide), ds = width / 4, belt = p.amplitude
@@ -52,8 +55,14 @@ export function meander(guide: Pt[], width: number, p: MeanderParams, seed: numb
     cum.push(cum[k - 1] + Math.sqrt((guide[k][0] - guide[k - 1][0]) * (guide[k][0] - guide[k - 1][0]) + (guide[k][1] - guide[k - 1][1]) * (guide[k][1] - guide[k - 1][1])))
     if (k < guide.length - 1) {
       const ax = guide[k][0] - guide[k - 1][0], az = guide[k][1] - guide[k - 1][1], bx = guide[k + 1][0] - guide[k][0], bz = guide[k + 1][1] - guide[k][1]
-      // sharper than 90° exactly when the directions' dot product is negative (no cosine: cos(π/2) is not 0 in floats)
+      // a guide may turn up to 90° at a vertex (sharper exactly when the directions' dot product is negative; no
+      // cosine: cos(π/2) is not 0 in floats), and the turn must be eased over enough guide: the normal turns through
+      // the vertex over 2d, d = min(3·belt, half of each neighbouring segment), an arc of radius about 2d / θ, which
+      // must hold the belt (with the 35% the bends may overshoot it) on its inside, so d ≥ 0.7 · belt · θ
       if (ax * bx + az * bz < 0) throw new Error(`the guide turns more than 90° at point ${k}; meander needs gentler turns`)
+      const theta = Math.abs(atan2(ax * bz - az * bx, ax * bx + az * bz)), need = 0.7 * belt * theta
+      const d = Math.min(3 * belt, Math.sqrt(ax * ax + az * az) / 2, Math.sqrt(bx * bx + bz * bz) / 2)
+      if (d < need) throw new Error(`the guide's segments either side of point ${k} are too short for its turn and a ${belt} m belt: make each at least ${Math.ceil(2 * need)} m, or the turn gentler`)
     }
   }
   const valleyLam = p.wavelength ?? MEANDER_DEFAULTS.wavelengthWidths * width, base = p.bend ?? MEANDER_DEFAULTS.bend

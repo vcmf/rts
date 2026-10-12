@@ -71,6 +71,19 @@ describe('M3a: meander', () => {
     const { issues } = expand(mini([{ ...BROOK, width: 30, gen: { meander: { amplitude: 10 } } }]), cat)
     expect(issues[0]).toMatchObject({ id: 'brook', path: 'features[0].gen.meander' })
   })
+  it('a turn too tight for the belt is refused, whatever the seed; turns the guide may take never fold (review round 2)', () => {
+    expect(() => meander([[0, 0], [1000, 0], [1000, 20], [1000, 1000]], 20, { amplitude: 200 }, 1)).toThrow(/too short for its turn/)
+    const r = random(21)
+    for (let n = 0; n < 30; n++) {
+      // a random guide of four points, each turn at most 80°, its segments long enough for the belt
+      const amp = 20 + r() * 60, pts: Pt[] = [[-900, 0]]
+      let ang = 0
+      for (let k = 0; k < 3; k++) { ang += (r() - 0.5) * 2.8; const L = 300 + r() * 300; const [x, z] = pts[pts.length - 1]; pts.push([Math.round(x + L * Math.cos(ang)), Math.round(z + L * Math.sin(ang))]) }
+      let line: Pt[] | null = null
+      try { line = meander(pts, 6, { amplitude: amp }, n) } catch { continue }   // refused: the turn or the segments
+      expect(lineCrossing(line)).toBeNull()
+    }
+  })
   it('a smaller bend winds less', () => {
     const tight = lineLength(meander(GUIDE, 6, { amplitude: 30, bend: 1.6 }, 9)), gentle = lineLength(meander(GUIDE, 6, { amplitude: 30, bend: 0.5 }, 9))
     expect(gentle).toBeLessThan(tight)
@@ -123,7 +136,27 @@ describe('M3a: the line index answers as the scan', () => {
   })
 })
 
-describe('M3a: crossings (review round 1)', () => {
+describe('M3a: crossings (review rounds 1, 2)', () => {
+  it('a road vertex exactly on a river segment, in decimal centimetres: a touch is 0, a pass is 1 (2000 cases each)', () => {
+    const r = random(11), cmv = (v: number) => Math.round(v) / 100, gcd = (x: number, y: number): number => (y ? gcd(y, x % y) : Math.abs(x))
+    for (let n = 0; n < 2000; n++) {
+      // a river segment in whole centimetres, and a point exactly on it (a lattice step along it)
+      const rx = Math.floor(r() * 20000) - 10000, rz = Math.floor(r() * 20000) - 10000, dx = Math.floor(r() * 4000) + 1, dz = Math.floor(r() * 4000) - 2000
+      const g = gcd(dx, dz), sx = dx / g, sz = dz / g, k = 1 + Math.floor(r() * (g - 1 || 1))
+      const river: Pt[] = [[cmv(rx - 3 * dx), cmv(rz - 3 * dz)], [cmv(rx), cmv(rz)], [cmv(rx + dx), cmv(rz + dz)], [cmv(rx + 4 * dx), cmv(rz + 4 * dz)]]
+      const m: Pt = [cmv(rx + k * sx), cmv(rz + k * sz)], nx = -dz, nz = dx   // the river's left
+      const off = (sideSign: number, along: number): Pt => [cmv(rx + k * sx + sideSign * nx * 0.7 + along * dx * 0.3), cmv(rz + k * sz + sideSign * nz * 0.7 + along * dz * 0.3)]
+      expect(crossings([off(-1, -1), m, off(-1, 1)], river)).toHaveLength(0)    // in from the right, back to the right: a touch
+      expect(crossings([off(-1, -1), m, off(1, 1)], river)).toHaveLength(1)     // right to left through the point: a crossing
+    }
+  })
+  it("both lines through one vertex, the road passing from inside the river's bend to outside: one crossing", () => {
+    expect(crossings([[0.2, -2], [0, 0], [-1, -0.5]], [[-1, -1], [0, 0], [1, -1]])).toHaveLength(1)
+  })
+  it('a road that only ends on the bank does not cross it', () => {
+    expect(crossings([[0, -50], [0, 0]], [[-100, 0], [100, 0]])).toHaveLength(0)
+    expect(crossings([[0, 0], [0, -50]], [[-100, 0], [100, 0]])).toHaveLength(0)
+  })
   it('a crossing through a vertex counts once; a touch at a vertex is none; a plain crossing is one', () => {
     const water: Pt[] = [[-100, 0], [0, 0], [100, 0]]
     expect(crossings([[0, -50], [0, 50]], water)).toHaveLength(1)                  // through the water's vertex
@@ -142,6 +175,10 @@ describe('M3a: the validator and expansion', () => {
     expect(issuesOf(mini([{ ...WOOD, circle: undefined, line: [[0, 0], [10, 0]] }]))).toContainEqual(expect.stringMatching(/^wood features\[0\]\.line: the clump generator reads point, circle, ellipse/))
     expect(issuesOf(mini([{ id: 'road', kind: 'way.road', point: [0, 0], gen: { clump: {} } }]))).toContainEqual(expect.stringMatching(/^road features\[0\]\.gen: the clump generator writes a area, which way\.road does not take/))
     expect(issuesOf(mini([BROOK, WOOD]))).toEqual([])
+    // round 2: a generator on a kind that may take no shape still needs its input; meander runs on streams and rivers
+    expect(issuesOf(mini([{ id: 'g', kind: 'relief.base', gen: { clump: {} } }]))).toContainEqual(expect.stringMatching(/^g features\[0\]: needs a shape for its clump generator/))
+    expect(issuesOf(mini([{ id: 'h', kind: 'barrier.hedge', line: [[0, 0], [100, 0]], gen: { meander: { amplitude: 10 } } }]))).toContainEqual(expect.stringMatching(/^h features\[0\]\.gen: the meander generator runs on water\.stream, water\.river/))
+    expect(expand(mini([{ ...WOOD, gen: { clump: { radius: 200 } } }]), cat).issues[0]).toMatchObject({ id: 'wood', path: 'features[0].gen.clump' })
   })
   it('a generated feature takes its output shape, records its origin, and the expanded map validates', () => {
     const m = mini([BROOK, WOOD]), { map, issues } = expand(m, cat)

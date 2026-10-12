@@ -112,11 +112,13 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
     // the shape
     const shapes = SHAPES.filter(s => f[s] !== undefined)
     if (shapes.length > 1) bad(id, path, `has ${shapes.length} shapes (${shapes.join(', ')}); a feature has one`)
-    else if (shapes.length === 0 && !meta.shapes.includes('none') && (f.gen === undefined || gen)) bad(id, path, `needs a shape: one of ${(gen ? gen.input : meta.shapes).join(', ')}`)
+    else if (shapes.length === 0 && gen) bad(id, path, `needs a shape for its ${Object.keys(f.gen!)[0]} generator: one of ${gen.input.join(', ')}`)
+    else if (shapes.length === 0 && !meta.shapes.includes('none') && f.gen === undefined) bad(id, path, `needs a shape: one of ${meta.shapes.join(', ')}`)
     else if (shapes.length === 1) {
       const s = shapes[0]
       // with a generator, the shape is its input, and its output must be a shape the kind takes
-      if (gen && !gen.input.includes(s)) bad(id, `${path}.${s}`, `the ${Object.keys(f.gen!)[0]} generator reads ${gen.input.join(', ')}, not ${s}`)
+      if (gen?.kinds && !gen.kinds.some(k => kind === k || kind.startsWith(k + '.'))) bad(id, `${path}.gen`, `the ${Object.keys(f.gen!)[0]} generator runs on ${gen.kinds.join(', ')}, not ${kind}`)
+      else if (gen && !gen.input.includes(s)) bad(id, `${path}.${s}`, `the ${Object.keys(f.gen!)[0]} generator reads ${gen.input.join(', ')}, not ${s}`)
       else if (gen && !meta.shapes.includes(gen.output)) bad(id, `${path}.gen`, `the ${Object.keys(f.gen!)[0]} generator writes a ${gen.output}, which ${kind} does not take`)
       else if (!gen && !meta.shapes.includes(s)) bad(id, `${path}.${s}`, `${kind} takes ${meta.shapes.filter(x => x !== 'none').join(', ') || 'no shape'}, not ${s}`)
       else checkShape(s, f[s], `${path}.${s}`, extent, (p, m) => bad(id, p, m))

@@ -114,3 +114,18 @@ M3a:
 - **Found while fixing:** the orientation test behind every crossing check read nearly collinear points as
   crossing, from rounding in metres. It now runs on whole centimetres, exactly. Also, `cos(π/2)` is not 0 in
   floats, so the 90° test uses the dot product instead.
+
+**M3a, round 2** (9 findings, none severe: stop and fix what is worth it):
+- `crossings` still decided vertex hits in floating-point metres (snapped vertices misread both ways). It is now
+  exact on whole centimetres, with simulation of simplicity for points on the other line (a pass through a vertex
+  crosses once, a touch never) and ends taking their neighbour's side. It is fuzzed on 4000 snapped vertices in
+  decimal centimetres; the shared-vertex wedge and a road ending on a bank are tested;
+- short guide segments at a turn folded the meander on 21–31% of seeds. The generator now refuses a turn whose
+  neighbouring segments cannot ease it for the belt (a seed-independent error saying how long they must be).
+  Random accepted guides are tested clean;
+- a generator on a kind that may take no shape needed its input; `meander` runs on streams and rivers only; `clump`'s
+  `radius` on a circle is an error;
+- light: the segment box check speeds every crossing test; meander finds the guide's segment by bisection; the
+  duplicate import and the orphan comment are gone. Re-validating only the generated features after expansion is
+  left: the whole map is validated, which keeps the guarantee simple and costs little with the box check.
+

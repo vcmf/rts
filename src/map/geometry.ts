@@ -22,6 +22,7 @@ const within = (a: Pt, b: Pt, p: Pt): boolean => Math.min(a[0], b[0]) <= p[0] &&
 
 // do segments ab and cd share any point (touching counts)?
 export function segmentsMeet(a: Pt, b: Pt, c: Pt, d: Pt): boolean {
+  if (Math.max(a[0], b[0]) < Math.min(c[0], d[0]) || Math.max(c[0], d[0]) < Math.min(a[0], b[0]) || Math.max(a[1], b[1]) < Math.min(c[1], d[1]) || Math.max(c[1], d[1]) < Math.min(a[1], b[1])) return false   // boxes apart: cheap, and most pairs
   const o1 = orient(a, b, c), o2 = orient(a, b, d), o3 = orient(c, d, a), o4 = orient(c, d, b)
   if (o1 !== o2 && o3 !== o4) return true
   return (o1 === 0 && within(a, b, c)) || (o2 === 0 && within(a, b, d)) || (o3 === 0 && within(c, d, a)) || (o4 === 0 && within(c, d, b))
@@ -113,22 +114,42 @@ export function pointAt(line: Pt[], s: number): [number, number, number, number]
   return [line[0][0], line[0][1], 1, 0]
 }
 
-// every point where two polylines cross, in order along the first. Each segment owns its start but not its end (the
-// last owns both), so a crossing at a shared vertex counts once; a vertex that only touches the other line, without
-// passing to its other side, is no crossing; hits within a micrometre of each other merge.
+// every point where two polylines cross, in order along the first; exact, on whole centimetres (integers). A point
+// lying exactly on the other line is decided by "simulation of simplicity": the first line is taken as shifted by an
+// infinitesimal step along PERTURB, a direction no segment on a map is parallel to (its x is 1000003 times its z, and
+// no segment spans a million centimetres), so every decision is the same from either line's side. A line passing
+// through a vertex of the other then crosses exactly once; a touch crosses nowhere or twice at the same point, and such
+// a coincident pair is removed. A line's own first or last point on the other line takes its neighbour's side, so a
+// road that only ends on a bank does not cross it. Lines running along each other do not cross.
+const PERTURB = [1000003, 1]
 export function crossings(a: Pt[], b: Pt[]): Pt[] {
-  const out: Pt[] = [], side = (p: Pt, q: Pt, r: Pt) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
-  for (let i = 0; i + 1 < a.length; i++) for (let j = 0; j + 1 < b.length; j++) {
-    const p = a[i], q = a[i + 1], r = b[j], s = b[j + 1]
+  const A = a.map(p => [icm(p[0]), icm(p[1])]), B = b.map(p => [icm(p[0]), icm(p[1])])
+  const turn = (p: number[], q: number[], r: number[]) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+  const sgn = (v: number) => (v > 0 ? 1 : -1)
+  // the side of L[k] against segment p→q; `shift` is +1 when L is the shifted line, −1 when the segment's line is
+  const sideOf = (L: number[][], k: number, p: number[], q: number[], shift: number): number => {
+    const v = turn(p, q, L[k])
+    if (v !== 0) return sgn(v)
+    if (L.length > 1 && (k === 0 || k === L.length - 1)) { const w = turn(p, q, L[k === 0 ? 1 : k - 1]); if (w !== 0) return sgn(w) }
+    return sgn(shift * ((q[0] - p[0]) * PERTURB[1] - (q[1] - p[1]) * PERTURB[0]))
+  }
+  const hits: { at: number; p: Pt }[] = []
+  for (let i = 0; i + 1 < A.length; i++) for (let j = 0; j + 1 < B.length; j++) {
+    const p = A[i], q = A[i + 1], r = B[j], s = B[j + 1]
+    if (Math.max(p[0], q[0]) < Math.min(r[0], s[0]) || Math.max(r[0], s[0]) < Math.min(p[0], q[0]) || Math.max(p[1], q[1]) < Math.min(r[1], s[1]) || Math.max(r[1], s[1]) < Math.min(p[1], q[1])) continue
+    if (sideOf(A, i, r, s, 1) === sideOf(A, i + 1, r, s, 1) || sideOf(B, j, p, q, -1) === sideOf(B, j + 1, p, q, -1)) continue
+    // where, for the record (the decision above is exact; this point is only reported)
     const d = (q[0] - p[0]) * (s[1] - r[1]) - (q[1] - p[1]) * (s[0] - r[0])
-    if (d === 0) continue
-    const t = ((r[0] - p[0]) * (s[1] - r[1]) - (r[1] - p[1]) * (s[0] - r[0])) / d, u = ((r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0])) / d
-    if (t < 0 || u < 0 || t > 1 || u > 1 || (t === 1 && i + 2 < a.length) || (u === 1 && j + 2 < b.length)) continue
-    // at a vertex of either line, a touch (the neighbours on the same side of the other segment) is no crossing
-    if (t === 0 && i > 0 && side(r, s, a[i - 1]) * side(r, s, q) > 0) continue
-    if (u === 0 && j > 0 && side(p, q, b[j - 1]) * side(p, q, s) > 0) continue
-    const hit: Pt = [p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])]
-    if (!out.some(h => Math.abs(h[0] - hit[0]) < 1e-6 && Math.abs(h[1] - hit[1]) < 1e-6)) out.push(hit)
+    const t = d === 0 ? 0 : Math.min(1, Math.max(0, ((r[0] - p[0]) * (s[1] - r[1]) - (r[1] - p[1]) * (s[0] - r[0])) / d))
+    hits.push({ at: i + t, p: [a[i][0] + t * (a[i + 1][0] - a[i][0]), a[i][1] + t * (a[i + 1][1] - a[i][1])] })
+  }
+  hits.sort((x, y) => x.at - y.at)
+  // a touch: two crossings at the same point, one after the other along the line; they cancel
+  const out: Pt[] = []
+  for (let k = 0; k < hits.length; k++) {
+    const h = hits[k], n = hits[k + 1]
+    if (n && Math.abs(n.p[0] - h.p[0]) < 1e-6 && Math.abs(n.p[1] - h.p[1]) < 1e-6) { k++; continue }
+    out.push(h.p)
   }
   return out
 }

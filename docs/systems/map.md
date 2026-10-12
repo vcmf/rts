@@ -64,8 +64,10 @@ maps/kinds.json ──► checkCatalogue ─┐
   - its feature takes the output shape and records `origin` (the generator, its parameters, `EXPAND_VERSION`);
   - the expanded map is validated like any map, in the author's order (so the paths name their file), then sorted
     by id; a generator's error is an issue on its feature;
-  - a bridge whose road crosses its water more than once must say `near` (`crossings`, `src/map/geometry.ts`: a
-    vertex crossed counts once, a vertex that only touches is none);
+  - a bridge whose road crosses its water more than once must say `near`. `crossings` (`src/map/geometry.ts`) is
+    exact on whole centimetres: a point exactly on the other line is decided by simulation of simplicity (the first
+    line shifted infinitesimally in a fixed direction), so a pass through a vertex crosses once and a touch
+    nowhere; a line's own end on the other line takes its neighbour's side;
   - a pinned feature (no `gen`, with an `origin`) is just a feature.
 - **The generators** (`src/map/generators.ts`: for each, the shape it reads, the shape it writes, its checked
   parameters):
@@ -73,9 +75,13 @@ maps/kinds.json ──► checkCatalogue ─┐
     line. Each bend varies its amplitude and length by a seeded noise, a cubic term holds the belt (± amplitude),
     and the bends ease out over half a wavelength at each end. The heading never strays more than 83° from the
     guide's, so the channel always advances: on a straight guide it cannot cross itself, whatever the seed (no
-    goosenecks, the price of the guarantee). The guide's normal turns smoothly through each vertex, a guide may turn
-    at most 90° at one, and the belt must be at least the stream's width; otherwise the generator refuses, naming
-    the feature;
+    goosenecks, the price of the guarantee). The guide's normal turns smoothly through each vertex. The generator
+    refuses, naming the feature, rather than fold by chance:
+    - a guide turning more than 90° at a vertex;
+    - segments around a turn too short to ease it for the belt (each at least 1.4 · belt · θ);
+    - a belt narrower than the stream.
+
+    It runs on streams and rivers only;
   - `clump` (`src/map/clump.ts`): a radial polygon, so always simple, swung by seeded harmonics;
   - `street-village` and `scatter` are named but arrive in M3b.
 - **The base ground** (`relief.base`): seeded value noise (`src/map/noise.ts`), `height` its amplitude and `width`
