@@ -36,7 +36,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`systems/melee.md`](systems/melee.md): cavalry charges, melee, and the square against cavalry (S1d-2).
 - [`systems/artillery.md`](systems/artillery.md): the battery's roundshot over the ground and canister (S1d-3).
 - [`systems/sides.md`](systems/sides.md): your side, the scenario's plan for the other, and the end of a battle (S1e-2).
-- [`systems/map.md`](systems/map.md): the map language: the kinds catalogue, the validator, resolution, the map CLI (Track M, M1a).
+- [`systems/map.md`](systems/map.md): the map language and the draft view: the kinds catalogue, the validator, resolution, the 2 m layers, the draft page, the map CLI (Track M, M1).
 - More appear as systems are built; see [`systems/README.md`](systems/README.md).
 
 ## Proposals (designs before building)
