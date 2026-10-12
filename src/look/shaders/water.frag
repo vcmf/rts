@@ -28,7 +28,7 @@ void main(){
   vec3 c=shore(vW,t,occ,sh,fws);
   #endif
   // the upper layers' weight: faded in past the band, and under the winter ice (it covers every layer, shore.glsl)
-  float up=smoothstep(UP0,UP0+0.5,s)*(1.0-0.9*iceAmt());
+  float up=smoothstep(UP0,UP0+0.5,s)*(1.0-0.9*iceAt(vW.xz,sp,d).x);
   if(s>UP0-1.5*fws){   // past where the layers below have weight, by the derivatives' margin (src/look/shaders/shore.glsl)
     vec3 V=normalize(uCamPos-vW),R=reflect(-V,vec3(0.0,1.0,0.0));
     float across=vAcross,cs=max(cloud(vW)*0.6,sh);
@@ -60,12 +60,41 @@ void main(){
     // 8. glitter: painted sun dabs, mostly on riffles
     float spec=pow(max(dot(R,uSunDir),0.0),5.0);
     float dab=aastep(mix(0.80,0.73,rough),G(vec2(along*0.10,across*0.25)).g)*aastep(0.5,G(vW.xz/9.0+mod(uTime,200.0/3.0)*0.015).g);
-    c+=uSunCol*vec3(1.0,0.86,0.58)*dab*(0.2+spec*1.6)*(1.0-cs)*smoothstep(0.15,0.5,d)*up*near;
+    c+=uSunCol*vec3(1.0,0.86,0.58)*dab*(0.2+spec*1.6)*(1.0-cs)*smoothstep(0.15,0.5,d)*up*near*(1.0-0.7*frost());   // less in winter (W5b)
     // 9. riffle foam: broken streaks along the current (the grain's dry-brush channel, long along x), bent into
     // chevrons pointing upstream, hard-edged
     float chev=G(vec2(along*0.05+abs(across)*0.02,across*0.03)).b;
     float riff=smoothstep(0.35,0.65,riffle)*aastep(0.66,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);
     c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.85*up*near);
+    // 10. autumn leaves (W5b): from early autumn until the ice, drifting with the current on slow water (none from a
+    // speed of 0.62). Cells in the strokes' coordinates, 4 along (wrapped to the strokes' period, so the clock's wrap
+    // is seamless) by 1.6 m across; most hold one leaf at a hashed place, angle, size (0.55–0.8 m: painted
+    // larger than life, to read from the game's zooms) and colour, drawn in metres (along scaled by the speed over the
+    // strokes'). Its axes at least 0.75 pixel, their ink spread (shore.glsl)
+    float lw=smoothstep(0.6,1.3,uSeason)*(1.0-smoothstep(2.1,2.5,uSeason));
+    #ifdef WATER_SAB_NOLEAVES
+    lw=0.0;   // the leaves check's sabotage: none
+    #endif
+    if(lw>0.0){   // uniform
+      #ifdef WATER_SAB_LEAFALL
+      float still=1.0;   // the leaves check's sabotage: at any speed
+      #else
+      float still=1.0-smoothstep(0.45,0.62,sp);
+      #endif
+      vec2 cl=vec2(floor(along/4.0),floor(across/1.6)),cw=vec2(mod(cl.x,STROKE_P*STROKE_V/4.0),cl.y);
+      vec4 h=fract(sin(vec4(dot(cw,vec2(12.9898,78.233)),dot(cw,vec2(39.346,11.135)),dot(cw,vec2(73.156,52.235)),dot(cw,vec2(26.651,94.673))))*43758.5453);
+      float k=max(sp,0.2)/STROKE_V,L=min(0.55+0.25*h.z,1.8*k),ang=h.w*6.2832,px=pxGround(vW);
+      vec2 q=vec2((along-(cl.x+0.25+0.5*h.x)*4.0)*k,across-(cl.y+0.25+0.5*h.y)*1.6);
+      q=mat2(cos(ang),sin(ang),-sin(ang),cos(ang))*q;
+      vec2 ax=vec2(0.5,0.28)*L,axw=max(ax,vec2(0.75*px));
+      float e=length(q/axw),w=1.2*px/axw.y;
+      float leaf=(1.0-smoothstep(1.0-w,1.0+w,e))*ax.x*ax.y/(axw.x*axw.y)*step(fract(h.x*7.31+h.y*3.17),0.8*lw);
+      float pick=fract(h.z*5.71);
+      vec3 lc=pick<0.35?vec3(0.86,0.46,0.12):pick<0.6?vec3(0.92,0.74,0.22):pick<0.82?vec3(0.70,0.17,0.10):vec3(0.46,0.30,0.18);
+      // late autumn browner (the trees' palette, painter.glsl), all a little darker for being wet
+      lc=mix(lc,mix(lc*vec3(0.80,0.62,0.50),vec3(0.46,0.30,0.18),0.45),clamp(uSeason-1.0,0.0,1.0))*0.9;
+      c=mix(c,lc*mix(1.0,0.62,cs),leaf*still*up);
+    }
   }
-  c=withStones(c,vW,s,sh);   // the stones' foam, over every layer (shore.glsl)
+  c=withStones(c,vW,t,sh);   // the stones' foam, over every layer (shore.glsl)
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}

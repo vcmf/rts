@@ -170,7 +170,7 @@ const waterView = (v: number, sab = false) => {
 }
 // the water surface's checks (tools/water-look-check.mjs): their sabotages (src/look/shaders/water.frag, terrain.frag),
 // and the tile's ground drawn with the water's shader (the seam check)
-const WATER_SABS = ['WATER_SAB_OWN', 'WATER_SAB_TERRAIN', 'WATER_SAB_FLAT', 'WATER_SAB_STEP', 'WATER_SAB_BANKS', 'WATER_SAB_NOFOAM']
+const WATER_SABS = ['WATER_SAB_OWN', 'WATER_SAB_TERRAIN', 'WATER_SAB_FLAT', 'WATER_SAB_STEP', 'WATER_SAB_BANKS', 'WATER_SAB_NOFOAM', 'WATER_SAB_EVENICE', 'WATER_SAB_NOLEAVES', 'WATER_SAB_LEAFALL']
 const waterSab = (on: string[]) => {
   for (const d of on) if (!WATER_SABS.includes(d)) throw new Error(`unknown water sabotage ${d}`)
   for (const m of dataMats) for (const d of WATER_SABS) m.setDefine(`#define ${d}`, on.includes(d))

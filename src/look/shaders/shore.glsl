@@ -97,8 +97,26 @@ vec3 bedAlbedo(vec2 xz,float depth,float speed,vec3 la){
   b=mix(b,vec3(0.21,0.29,0.15),smoothstep(0.60,0.78,G(xz/4.3+0.6).g)*smoothstep(0.4,0.8,depth)*(1.0-speed));
   return mix(la,b,smoothstep(0.0,0.3,depth));}   // at depth 0, the ground at the water's edge
 const vec3 FOAM=vec3(0.93,0.92,0.84);
-// winter ice (the seasons are W5's): how much of the water it covers, 0..1; it covers every layer of the water
-float iceAmt(){return clamp(uSeason-2.3,0.0,0.7)/0.7;}
+// THE ICE (W5b, docs/plans/active/w5-banks.md): the frost, 0 until late autumn (season 2), 1 in winter (3)
+float frost(){return clamp(uSeason-2.0,0.0,1.0);}
+// the ice at a point of the water, from the water data's speed sp there (0..1) and its depth d, so the terrain's band
+// and the water paint it alike: x the ice (0..1), y the rime along its edge (on the ice's side). Slow water freezes
+// first: the speed, less a bonus in the shallows and jittered by the grain's blotches, under a threshold that rises
+// with the frost (none at 0, 0.66 in full winter): shelves along the banks and the bars in late autumn, the pools
+// closed over in winter, the riffles (0.7 and over) open. Hard edges, as wide as a pixel at least (aastep); the rime
+// about 0.15 m wide, broken. The ice covers every layer of the water. WATER_SAB_EVENICE (the winter check's sabotage):
+// W4's ice, even over the whole water
+vec2 iceAt(vec2 xz,float sp,float d){
+  #ifdef WATER_SAB_EVENICE
+  return vec2(clamp(uSeason-2.3,0.0,0.7)/0.7,0.0);
+  #else
+  float F=frost();if(F<=0.0)return vec2(0.0);   // uniform: no derivatives lost
+  float v=sp-0.22*(1.0-smoothstep(0.05,0.4,d))+(G(xz/2.3+0.4).g-0.5)*0.16,vt=mix(-0.32,0.66,F);
+  vec2 fx=fwidth(xz);float fv=fwidth(v),rw=max(0.15*fv/max(max(fx.x,fx.y),1e-4),2.0*fv);   // the rime's width in speed
+  float ice=1.0-aastep(vt,v);
+  return vec2(ice,aastep(vt-rw,v)*ice*aastep(0.32,G(xz/1.3+0.2).g));
+  #endif
+}
 // THE STONES' FOAM (W5a, research §4.4): the stones in the water (src/look/nature.ts), at most STONES: x, z, radius,
 // the flow's direction (rad); a radius of 0 ends the list. Per stone, in the flow's frame: a thin pillow arc upstream,
 // and a wake of two broken streaks downstream, 6 radii long, widening, drifting with the current; on the water only
@@ -126,10 +144,11 @@ float stoneFoam(vec2 xz,float s){
   f*=(1.0-0.5*far)*aastep(0.0,s);
   #endif
   return f;}
-// the stones' foam over a colour at a point of the water (sh: the sun's shadow there; the ice covers it)
-vec3 withStones(vec3 c,vec3 wp,float s,float sh){
-  float cs=max(cloud(wp)*0.6,sh);
-  return mix(c,FOAM*mix(1.0,0.78,cs),stoneFoam(wp.xz,s)*0.85*(1.0-0.9*iceAmt()));}
+// the stones' foam over a colour at a point of the water (t: its water texel; sh: the sun's shadow there; the ice
+// covers it, so stones in the open riffles keep theirs in winter)
+vec3 withStones(vec3 c,vec3 wp,vec4 t,float sh){
+  float cs=max(cloud(wp)*0.6,sh),ice=iceAt(wp.xz,length(waterFlow(t)),max(waterDepth(t),0.0)).x;
+  return mix(c,FOAM*mix(1.0,0.78,cs),stoneFoam(wp.xz,waterSdf(t))*0.85*(1.0-0.9*ice));}
 // the ground at the water's edge, lit with the authored surface's normal: t its water texel
 vec3 shoreLand(vec3 wp,vec4 t,float occ,float sh){return paint(landAlbedo(wp.xz,max(-waterSdf(t),0.0),-waterDepth(t)),bankNormal(vec3(0.0,1.0,0.0),wp.xz),wp,occ,0.12,1.0,sh);}
 // the water's lower layers (research §2.8, layers 1, 2, 7, the shore foam, the ice): d the depth, s the shore distance,
@@ -161,11 +180,17 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh){
   float foam=(1.0-aastep(hw,abs(s-0.22-j)))*mix(aastep(0.5,gr)*aastep(0.42,gb),1.0,far)*0.14/hw;
   foam=max(foam,(1.0-aastep(0.05,abs(s-0.60-j*1.5)))*aastep(0.62,gr)*aastep(0.5,gb)*0.6*(1.0-far));
   c=mix(c,FOAM*mix(1.0,0.78,cs),foam*0.85);
-  // winter ice (the seasons are W5's): pale and cracked, darker over deep water
-  float ice=iceAmt();
-  if(ice>0.0){vec3 ic=mix(vec3(0.66,0.76,0.82),vec3(0.84,0.88,0.90),smoothstep(0.5,0.0,dd));
-    float crack=smoothstep(0.03,0.0,abs(G(wp.xz/9.0).g-0.5))*0.5;ic*=1.0-crack;ic=mix(ic,ic*vec3(0.62,0.72,0.88),cs);
-    c=mix(c,ic,ice*0.9);}
+  // winter (W5b): the open water darker and colder; the ice (iceAt) pale and cracked, darker over deep water, with
+  // drifts of snow on it, near the banks mostly; the rime white along its edge
+  if(frost()>0.0){   // uniform: the grain's derivatives hold
+    float F=frost();vec2 ia=iceAt(wp.xz,sp,dd);
+    c=mix(c,vec3(0.05,0.12,0.20)*mix(1.0,0.75,cs),F*0.75*smoothstep(0.0,0.3,dd));
+    vec3 ic=mix(vec3(0.48,0.60,0.70),vec3(0.66,0.75,0.82),smoothstep(0.6,0.0,dd));   // bluer and darker than the snow
+    // the cracks: thin lines where the grain crosses its middle, at least 1.5 pixels wide, their ink spread
+    float ca=abs(G(wp.xz/9.0).g-0.5),cw=max(0.03,1.5*fwidth(ca));ic*=1.0-(1.0-aastep(cw,ca))*0.5*0.03/cw;
+    ic=mix(ic,vec3(0.86,0.88,0.92),aastep(0.62,G(wp.xz/6.0+0.7).g+0.25*(1.0-smoothstep(0.3,2.0,s)))*0.85*F);
+    ic=mix(ic,vec3(0.95,0.96,0.98),ia.y*0.9);
+    c=mix(c,mix(ic,ic*vec3(0.62,0.72,0.88),cs),ia.x*0.9);}
   return c;}
 // the band's colour at a drawn point: t its water texel, occ its occlusion, sh its sun shadow, fw the shore distance's
 // fwidth. Near the shore both sides are painted and blended over about a pixel: the water's side has its depth there

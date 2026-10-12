@@ -76,6 +76,6 @@ void main(){
   // water-look-check.mjs), so the band is not painted under the water. WATER_SAB_TERRAIN: the seam check's sabotage,
   // the terrain without the band
   float ws=waterSdf(wt),fws=fwidth(ws);   // fws: the branches' margin (shore.glsl)
-  if(ws>-WATER_BAND-0.4-1.5*fws&&ws<WATER_BAND+1.5*fws)c=mix(c,withStones(shore(vW,wt,occ,sh,fws),vW,ws,sh),smoothstep(-WATER_BAND-0.4,-WATER_BAND,ws)*step(ws,WATER_BAND));
+  if(ws>-WATER_BAND-0.4-1.5*fws&&ws<WATER_BAND+1.5*fws)c=mix(c,withStones(shore(vW,wt,occ,sh,fws),vW,wt,sh),smoothstep(-WATER_BAND-0.4,-WATER_BAND,ws)*step(ws,WATER_BAND));
   #endif
   gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}

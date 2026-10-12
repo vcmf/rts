@@ -1,8 +1,9 @@
 // The painted water's checks (docs/plans/done/w4-water-surface.md, W4): the shore band, the seam, pools against
-// riffles, and shimmer; the banks and the stones' foam (docs/plans/active/w5-banks.md, W5a). Each renders the look page headless (SwiftShader, the clock frozen) through its hooks
+// riffles, and shimmer; the banks and the stones' foam (docs/plans/active/w5-banks.md, W5a); the ice and the autumn
+// leaves (W5b). Each renders the look page headless (SwiftShader, the clock frozen) through its hooks
 // (window.__look in src/look/main.ts).
 //
-//   node tools/water-look-check.mjs <look page URL> [outDir] [--only band,seam,pools,shimmer,banks,foam]
+//   node tools/water-look-check.mjs <look page URL> [outDir] [--only band,seam,pools,shimmer,banks,foam,winter,leaves]
 //   node tools/water-look-check.mjs <look page URL> [outDir] --selftest     each check passes, and fails on its sabotage
 //
 // - band: the ribbon as built (its triangles, rasterised at 0.25 m) against the drawn ground (the tile mesh's own
@@ -18,7 +19,8 @@
 //   (they intersect there, so they share the world point). What follows each surface's own screen derivatives (the
 //   detail grain's blur, the edges' anti-aliasing) one geometry cannot show; comparing neighbours across the real
 //   boundary cannot tell it from the painted shoreline there (tried: the sabotage and the page measured alike).
-//   Terrain alone, no finishing passes; the sharpest bend at the closest zoom, and two default views. Sabotages: the
+//   Terrain alone, no finishing passes; the sharpest bend at the closest zoom, and two default views, one of them in
+//   winter too (the ice is in the band, W5b). Sabotages: the
 //   water painting itself in the band (WATER_SAB_OWN), the terrain without the band (WATER_SAB_TERRAIN).
 // - pools: the default view at three reaches. At the river's samples on screen (the centre line and 0.3 half-widths
 //   either side, where the water is what the camera sees), the frame's luma (Rec. 709, 0..1) in 5×5 pixels,
@@ -26,10 +28,12 @@
 //   share of bright pixels (over the water's median by BRIGHT) at least FOAM_RATIO times the pools' and FOAM_MIN.
 //   Sabotage: the riffle ignored (WATER_SAB_FLAT).
 // - shimmer (as tools/detail-check.mjs's, on the water): the sharpest bend at the closest and the widest zoom
-//   (the data's textures have no mips), everything drawn, the image shifted a quarter pixel a frame; within 6 px of the water's pixels, a pixel shimmers when its luma
+//   (the data's textures have no mips), in summer, and in autumn (the leaves) and winter (the ice's edges, W5b), everything drawn, the image shifted a quarter pixel a frame; within 6 px of the water's pixels, a pixel shimmers when its luma
 //   differs by over 8/255 from the previous frame resampled a quarter pixel along. Under SHIMMER_MAX per pair at the
 //   closest zoom; at the widest, where the river's outline (the painted shoreline, the banks hiding the water) is a
-//   large share of the mask, under SHIMMER_WIDE (main measured 6.3% there, the same mask and view: W4's plan).
+//   large share of the mask, under SHIMMER_WIDE (main measured 6.3% there, the same mask and view: W4's plan). In
+//   winter main measures 3.3% at the closest zoom and 10.9% at the widest (the same views: W5b's plan), so there the
+//   limits are main's, rounded up: W5b adds none.
 //   Sabotage: aliased hard edges (WATER_SAB_STEP).
 // Frames are 1280×720. Exit 1 on a failure.
 import fs from 'node:fs'
@@ -48,7 +52,7 @@ const W = 1280, H = 720, CAM = SPEC.camera, BAND = SPEC.water.band, SDF = SPEC.w
 const [, A0, BETA0, R0] = CAMS.find(c => c[0] === 'start')
 const SEAM_P95 = 2, SEAM_MAX = 6, SEAM_MIN_PX = 500
 const POOL = 0.2, RIFFLE = 0.5, LUMA_GAP = 0.03, BRIGHT = 0.2, FOAM_RATIO = 2, FOAM_MIN = 0.02
-const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.035
+const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.035, SHIMMER_WINTER = 0.035, SHIMMER_WINTER_WIDE = 0.115
 
 let C = null
 const river = () => {
@@ -115,7 +119,7 @@ function band(url, dir, sab) {
 // ---------- seam ----------
 function seamViews() {
   const c = river(), bi = sharpest(), bend = `${[c.px[bi], CAM.focusY, c.pz[bi]]}`
-  return [['bend-close', A0, CAM.betaMin, CAM.rMin, bend, 0], ['bend', A0, BETA0, R0, bend, 0], ['reach', A0, BETA0, R0, '-100,8,-70', 0]]
+  return [['bend-close', A0, CAM.betaMin, CAM.rMin, bend, 0], ['bend', A0, BETA0, R0, bend, 0], ['reach', A0, BETA0, R0, '-100,8,-70', 0], ['reach-winter', A0, BETA0, R0, '-100,8,-70', 3]]
 }
 function seam(url, dir, sab) {
   const steps = [...prepSteps(), ['eval', '__look.groundAs("terrain"); __look.terrainOnly(true); __look.finishing(false); "terrain alone"'], sabStep(sab)]
@@ -183,7 +187,8 @@ function pools(url, dir, sab) {
 // the closest zoom, and the widest (the data's textures have no mips: their 0.5 m texels are minified there)
 function shimmerViews() {
   const c = river(), bi = sharpest(), t = `${[c.px[bi], CAM.focusY, c.pz[bi]]}`
-  return [['closest', A0, CAM.betaMin, CAM.rMin, t, 0, SHIMMER_MAX], ['widest', A0, CAM.betaMax, CAM.rMax, t, 0, SHIMMER_WIDE]]
+  return [['closest', A0, CAM.betaMin, CAM.rMin, t, 0, SHIMMER_MAX], ['widest', A0, CAM.betaMax, CAM.rMax, t, 0, SHIMMER_WIDE],
+    ['closest-autumn', A0, CAM.betaMin, CAM.rMin, t, 1.5, SHIMMER_MAX], ['closest-winter', A0, CAM.betaMin, CAM.rMin, t, 3, SHIMMER_WINTER], ['widest-winter', A0, CAM.betaMax, CAM.rMax, t, 3, SHIMMER_WINTER_WIDE]]
 }
 function shimmer(url, dir, sab) {
   const steps = [...prepSteps(), sabStep(sab)]
@@ -196,7 +201,7 @@ function shimmer(url, dir, sab) {
   shoot(url, dir, steps, W, H)
   const lum = img => { const v = new Float32Array(W * H); for (let i = 0; i < v.length; i++) v[i] = lumaAt(img, i) * 255; return v }
   let ok = true
-  const lines = [`shimmer: the water and its shore, luma off by over ${ERR}/255 from the previous frame resampled ${STEP} px along (per pair under ${(SHIMMER_MAX * 100).toFixed(1)}% at the closest zoom, ${(SHIMMER_WIDE * 100).toFixed(1)}% at the widest)`]
+  const lines = [`shimmer: the water and its shore, luma off by over ${ERR}/255 from the previous frame resampled ${STEP} px along (per pair under ${(SHIMMER_MAX * 100).toFixed(1)}% at the closest zoom, ${(SHIMMER_WIDE * 100).toFixed(1)}% at the widest; in winter ${(SHIMMER_WINTER * 100).toFixed(1)}% and ${(SHIMMER_WINTER_WIDE * 100).toFixed(1)}%, main's)`]
   for (const [n, , , , , , lim] of shimmerViews()) {
     // the water's pixels, dilated 6 px (the shore band on the terrain's side, the shore foam)
     const surf = load(dir, `${n}.surface`), rows = new Uint8Array(W * H), mask = new Uint8Array(W * H), R = 6
@@ -293,15 +298,74 @@ function foam(url, dir, sab) {
   return { ok, lines: [`foam: ${list.length} stones in the water at the closest zoom; points the foam brightens by over ${FOAM_LIFT} (pillow ≥ ${FOAM_PILLOW}, wake ≥ ${FOAM_WAKE}); ${shown} show it (≥ ${FOAM_SHARE * 100}%)${ok ? '' : '  FAIL'}`, ...lines] }
 }
 
-const CHECKS = { band, seam, pools, shimmer, banks, foam }
+// ---------- the seasons (W5b) ----------
+// the pools check's reaches at a season: per reach the frame, the surface view and the river's samples on screen
+// (PROJ_JS); then, with extra page steps per reach (more frames), each sample's 5×5 pixels where the water is what
+// the camera sees, classed by the riffle there (pool ≤ POOL, riffle ≥ RIFFLE)
+function seasonFrames(url, dir, sab, season, extra = () => []) {
+  const views = POOL_VIEWS.map(v => [...v.slice(0, 5), season]), steps = [...prepSteps(), sabStep(sab)]
+  for (const v of views) steps.push(viewStep(v), ['eval', '__look.finishing(false); __look.waterView(6); "surface"'], render('surface'), ['shot', `${v[0]}.surface`], ['eval', PROJ_JS(`PROJ-${v[0]}`)],
+    ['eval', '__look.waterView(0); __look.finishing(true); "frame"'], render('frame'), ['shot', `${v[0]}.frame`], ...extra(v[0]))
+  const out = shoot(url, dir, steps, W, H), px = []
+  for (const [n] of views) {
+    const surf = load(dir, `${n}.surface`), seen = new Set()
+    for (const [sx, sy, rf] of evalTag(out, `PROJ-${n}`)) {
+      const k = rf <= POOL ? 'pool' : rf >= RIFFLE ? 'riffle' : null; if (!k) continue
+      for (let y = sy - 2; y <= sy + 2; y++) for (let x = sx - 2; x <= sx + 2; x++) { const i = y * W + x; if (!seen.has(i) && white(surf, i)) { seen.add(i); px.push([n, i, k]) } }
+    }
+  }
+  return px
+}
+// winter (season 3): a pixel is ice when its luma is over ICE_LUMA (the ice, pale blue-grey with snow on it, against
+// the open water, dark under the haze; set between the two from the first run: the pools' 10th percentile 0.60, the
+// riffles' median 0.48). Pools at least WINTER_POOL ice, riffles at least WINTER_OPEN open. Sabotage: the ice even
+// over the whole water, as in W4 (WATER_SAB_EVENICE)
+const ICE_LUMA = 0.56, WINTER_POOL = 0.8, WINTER_OPEN = 0.6
+function winter(url, dir, sab) {
+  const px = seasonFrames(url, dir, sab, 3), frames = {}, n = { pool: 0, riffle: 0 }, ice = { pool: 0, riffle: 0 }, L = { pool: [], riffle: [] }
+  for (const [v, i, k] of px) { const f = frames[v] ??= load(dir, `${v}.frame`), l = lumaAt(f, i); n[k]++; L[k].push(l); if (l > ICE_LUMA) ice[k]++ }
+  const sp = ice.pool / Math.max(1, n.pool), so = 1 - ice.riffle / Math.max(1, n.riffle), f = v => v.toFixed(3)
+  const enough = n.pool >= 500 && n.riffle >= 500, okPool = sp >= WINTER_POOL, okOpen = so >= WINTER_OPEN
+  return { ok: enough && okPool && okOpen, lines: [
+    `winter: ${n.pool} pool pixels, ${n.riffle} riffle pixels at ${POOL_VIEWS.length} reaches; ice when luma over ${ICE_LUMA}${enough ? '' : '  FAIL: too few'}`,
+    `  luma, 10th/50th/90th percentile: pools ${f(pct(L.pool, 0.1))}/${f(pct(L.pool, 0.5))}/${f(pct(L.pool, 0.9))}, riffles ${f(pct(L.riffle, 0.1))}/${f(pct(L.riffle, 0.5))}/${f(pct(L.riffle, 0.9))}`,
+    `  pools frozen ${(sp * 100).toFixed(1)}% (≥ ${WINTER_POOL * 100}%)${okPool ? '' : '  FAIL'}; riffles open ${(so * 100).toFixed(1)}% (≥ ${WINTER_OPEN * 100}%)${okOpen ? '' : '  FAIL'}`] }
+}
+// leaves (season 1.5): each frame against the same without the leaves (WATER_SAB_NOLEAVES); a pixel shows a leaf
+// when a channel moves by over LEAF_DIFF/255. Pools' share at least LEAF_MIN; riffles' at most LEAF_RIFFLE of the
+// pools'. In summer (0) and winter (3), at the first reach, no pixel of the frame moves at all. Sabotages: no leaves;
+// leaves at any speed (WATER_SAB_LEAFALL)
+const LEAF_DIFF = 20, LEAF_MIN = 0.01, LEAF_RIFFLE = 1 / 3
+const moved = (a, b, i) => Math.max(Math.abs(a.data[i * 4] - b.data[i * 4]), Math.abs(a.data[i * 4 + 1] - b.data[i * 4 + 1]), Math.abs(a.data[i * 4 + 2] - b.data[i * 4 + 2]))
+function leaves(url, dir, sab) {
+  const without = n => [sabStep([...sab, 'WATER_SAB_NOLEAVES']), render('without'), ['shot', `${n}.without`], sabStep(sab)]
+  const px = seasonFrames(url, dir, sab, 1.5, without), fr = {}, n = { pool: 0, riffle: 0 }, lf = { pool: 0, riffle: 0 }
+  for (const [v, i, k] of px) { fr[v] ??= [load(dir, `${v}.frame`), load(dir, `${v}.without`)]; n[k]++; if (moved(fr[v][0], fr[v][1], i) > LEAF_DIFF) lf[k]++ }
+  // summer and winter: the whole frame, with and without the leaves
+  const off = []
+  for (const season of [0, 3]) {
+    const v = [...POOL_VIEWS[0].slice(0, 5), season], tag = `s${season}`
+    shoot(url, dir, [...prepSteps(), sabStep(sab), viewStep(v), render('with'), ['shot', `${tag}.with`], ...without(tag)], W, H)
+    const a = load(dir, `${tag}.with`), b = load(dir, `${tag}.without`); let m = 0; for (let i = 0; i < W * H; i++) if (moved(a, b, i) > 0) m++
+    off.push([season, m])
+  }
+  const sp = lf.pool / Math.max(1, n.pool), sr = lf.riffle / Math.max(1, n.riffle)
+  const enough = n.pool >= 500 && n.riffle >= 500, okPool = sp >= LEAF_MIN, okRiffle = sr <= LEAF_RIFFLE * sp, okOff = off.every(([, m]) => m === 0)
+  return { ok: enough && okPool && okRiffle && okOff, lines: [
+    `leaves: ${n.pool} pool pixels, ${n.riffle} riffle pixels at ${POOL_VIEWS.length} reaches in autumn (1.5); a leaf moves a channel by over ${LEAF_DIFF}/255${enough ? '' : '  FAIL: too few'}`,
+    `  pools ${(sp * 100).toFixed(2)}% (≥ ${LEAF_MIN * 100}%)${okPool ? '' : '  FAIL'}; riffles ${(sr * 100).toFixed(2)}% (≤ ${(LEAF_RIFFLE * 100).toFixed(0)}% of the pools')${okRiffle ? '' : '  FAIL'}`,
+    `  pixels the leaves move in ${off.map(([s, m]) => `${s ? 'winter' : 'summer'} ${m}`).join(', ')} (none)${okOff ? '' : '  FAIL'}`] }
+}
+
+const CHECKS = { band, seam, pools, shimmer, banks, foam, winter, leaves }
 // each check's sabotages (shader defines; the band's is the page's ?watersab=nodive)
-const SABOTAGE = { band: [['nodive']], seam: [['WATER_SAB_OWN'], ['WATER_SAB_TERRAIN']], pools: [['WATER_SAB_FLAT']], shimmer: [['WATER_SAB_STEP']], banks: [['WATER_SAB_BANKS']], foam: [['WATER_SAB_NOFOAM']] }
+const SABOTAGE = { band: [['nodive']], seam: [['WATER_SAB_OWN'], ['WATER_SAB_TERRAIN']], pools: [['WATER_SAB_FLAT']], shimmer: [['WATER_SAB_STEP']], banks: [['WATER_SAB_BANKS']], foam: [['WATER_SAB_NOFOAM']], winter: [['WATER_SAB_EVENICE']], leaves: [['WATER_SAB_NOLEAVES'], ['WATER_SAB_LEAFALL']] }
 
 function main() {
   const args = process.argv.slice(2), self = args.includes('--selftest'), oi = args.indexOf('--only')
   const only = oi >= 0 ? args.splice(oi, 2)[1].split(',') : Object.keys(CHECKS)
   const [url, out = path.join(ROOT, 'scratch/water-look-check')] = args.filter(a => a !== '--selftest')
-  if (!url || only.some(k => !CHECKS[k])) { console.error('usage: node tools/water-look-check.mjs <look page URL> [outDir] [--only band,seam,pools,shimmer,banks,foam] [--selftest]'); process.exit(2) }
+  if (!url || only.some(k => !CHECKS[k])) { console.error('usage: node tools/water-look-check.mjs <look page URL> [outDir] [--only band,seam,pools,shimmer,banks,foam,winter,leaves] [--selftest]'); process.exit(2) }
   let ok = true
   for (const k of only) {
     const dir = path.join(out, k); fs.mkdirSync(dir, { recursive: true })
