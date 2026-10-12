@@ -7,14 +7,14 @@ import { loadSimData, compileRuleset, makeWorld, typeOf, issue, advanceTick, for
   type Command, type Stamped, type World, type HashPoint, type Replay, type Dropped } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
-import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS } from '../scenarios/page.ts'
+import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS, PAGE_SEED } from '../scenarios/page.ts'
 import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
 
 // the soldier layer steps once a frame, up to MEN_DT of game time (tested at that step); a longer frame
 // takes more steps, at most MEN_STEPS (then the men fall behind the sim and catch up)
-const SEED = 20261009, SPEEDS = [0, 1, 2, 4, 8], MEN_DT = 0.2, MEN_STEPS = 4
+const SPEEDS = [0, 1, 2, 4, 8], MEN_DT = 0.2, MEN_STEPS = 4
 
 async function main(): Promise<void> {
   const asked = new URLSearchParams(location.search).get('scenario') ?? '', scenario = PAGE_SCENARIOS[Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO]
@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   if (!urls[mapName] || MAP_VERSIONS[mapName] === undefined) throw new Error(`scenario ${scenario.name}: no map ${mapName} (src/scenarios/maps.ts and the page's data imports)`)
   const data = loadSimData(new Uint8Array(await (await fetch(urls[mapName])).arrayBuffer()), MAP_VERSIONS[mapName])
   const cr = compileRuleset(napoleonic)
-  const w: World = makeWorld(data, cr, SEED, false)
+  const w: World = makeWorld(data, cr, PAGE_SEED, false)
   attachScenario(w, scenario); scenario.setup(w)
   // the side you command (S1e-2): a scenario that names one lets you select only its formations; none, both
   const mine = (i: number): boolean => scenario.player === undefined || w.f.side[i] === scenario.player
@@ -91,16 +91,16 @@ async function main(): Promise<void> {
   let note = '', noteT = 0
   const saveSession = () => {
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-')
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(session())], { type: 'application/json' })); a.download = `${scenario.name}-${stamp}.json`; a.click(); URL.revokeObjectURL(a.href)
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(session())], { type: 'application/json' })); a.download = `${scenario.name}-${stamp}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10_000)   // revoked at once, some browsers cancel the download
     note = 'session saved as a file'; noteT = performance.now()
   }
-  // M marks a moment of the playtest (docs/plans/active/s1e3-playtest.md): the battle pauses while you say what
-  // happened; the report prints where everyone stood then
+  // M marks a moment of the playtest (docs/plans/active/s1e3-playtest.md): the prompt holds the page (and the
+  // battle) while you say what happened; Cancel marks nothing. The report prints where everyone stood then
   const marks: { tick: number; note: string }[] = []
   const mark = (text?: string) => {
-    const was = paused; paused = true
-    const said = text ?? prompt('What happened here? (optional)') ?? ''
-    marks.push({ tick: w.meta[M_TICK], note: said.trim() }); paused = was
+    const said = text ?? prompt('What happened here? (optional)')
+    if (said === null) return
+    marks.push({ tick: w.meta[M_TICK], note: said.trim() })
     note = `moment ${marks.length} marked`; noteT = performance.now()
   }
 
@@ -161,7 +161,7 @@ async function main(): Promise<void> {
     else if (e.key === 'Escape') { selected.clear(); charging = false }
     else if (e.key === 'c' || e.key === 'C') armCharge()
     else if ('1248'.includes(e.key)) setSpeed(+e.key)
-    else if (e.key === 'm' || e.key === 'M') mark()
+    else if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey) mark()   // not Cmd+M (minimise)
   })
 
   function drawScale(): void {
@@ -191,7 +191,7 @@ async function main(): Promise<void> {
   }
   // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce, as far as it has run:
   // commands issued while paused wait for their tick and are left out
-  const replay = (): { replay: Replay; hashes: HashPoint[] } => ({ replay: { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name, seed: SEED, ticks: w.meta[M_TICK], log: log.filter(s => s.tick <= w.meta[M_TICK]) }, hashes })
+  const replay = (): { replay: Replay; hashes: HashPoint[] } => ({ replay: { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name, seed: PAGE_SEED, ticks: w.meta[M_TICK], log: log.filter(s => s.tick <= w.meta[M_TICK]) }, hashes })
   const session = () => ({ ...replay(), marks: [...marks] })
 
   // headless hooks (tools/app-check.mjs): orders and time without real time passing

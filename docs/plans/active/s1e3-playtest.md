@@ -56,16 +56,17 @@ Worth watching:
 - the guns: do they matter;
 - the end: is half the men out of the fight the right point (`end.broken`).
 
-## A first read: the battle with no orders (seed 1)
+## A first read: the battle with no orders
 
-`node tools/battle-report.ts s1e-battle`, 40 minutes, your side standing where it deploys:
+`node tools/battle-report.ts s1e-battle`, 40 minutes at the page's seed (`PAGE_SEED`), your side standing where it
+deploys:
 - **A slow opening.** The first losses come at about 8 minutes, when side 1's regiment charges (its plan's 480 s);
   at 2× that is 4 minutes of watching.
 - **One charge pins a whole side.** The regiment's charge put all six of your battalions in square, the second line
   100 m behind too, for 3–4 minutes (10:26 to 14:19).
 - **An indecisive firefight.** Side 1's first line halts about 120 m from yours, at long musket range. In 40 minutes
-  three battalions route and all rally, none shatters. Side 1 wins at the limit with 87% in the fight against
-  80%.
+  three battalions and the regiment rout, and all rally; none shatters. The limit finds a draw: 90% of your side
+  in the fight against 88%.
 - **Side 1's first line arrives piecemeal.** Its middle battalion (unit 9, x 80) marches its eastern flank along
   a hedge that runs north–south at x ≈ 110 from z 120 to 200, and the line keeps to the hedge's pace (0.2): 90 m
   in 8 minutes, 4–5 minutes after its neighbours. The plan's line or the hedge moves in S1e-3b.
@@ -88,3 +89,20 @@ These are a standing side's battle, not yours. They are what the playtest tests 
 
 - Tuning: S1e-3b, from your sessions.
 - Recording what you saw (the camera, the selection): a session replays the battle, not the screen.
+
+## Review
+
+**Round 1** (`/code-review high`, 10 findings, none severe; no second round). All fixed:
+- the no-orders report ran at seed 1, not the page's: the seed is `PAGE_SEED` (`src/scenarios/page.ts`), shared by
+  the page and the report, and the first read above is redone at it (a draw, not side 1's win);
+- a session was played twice, once to check it and once for the report, the second loop a copy of `play`'s: `play`
+  takes an observer of each tick, and the report is built in the one checked pass;
+- the script's entry check failed silently through a symlink or a path needing escapes: it compares real paths;
+- the data file was read from the working directory, without its version: it is found from the tool's own place
+  and checked against `MAP_VERSIONS`; every error exits 1 with a message;
+- a pursuit was reported as a charge, and a target gone from the field as `#-1`;
+- the download's link was revoked in the same task as its click, which some browsers cancel: it is revoked later;
+- Cancel on the mark's prompt still marked: it marks nothing; the pause around the prompt did nothing (the prompt
+  holds the page) and is gone; Cmd+M (minimise) no longer marks;
+- `check:app` crashed on a missing session line, and left out the default map.
+

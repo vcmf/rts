@@ -33,8 +33,9 @@ export function record(data: SimData, cr: Compiled, scenario: Scenario, seed: nu
 export interface Mismatch { tick: number; expected: string; got: string; section: string }
 
 // plays a replay back; returns the first mismatch against `expected`, or null. Hashes are taken every
-// HASH_EVERY ticks, so a divergence is reported at the first hash point after it (within 20 ticks).
-export function play(r: Replay, data: SimData, cr: Compiled, scenario: Scenario, expected: HashPoint[]): Mismatch | null {
+// HASH_EVERY ticks, so a divergence is reported at the first hash point after it (within 20 ticks). `after`
+// sees the world after each tick (tools/battle-report.ts), before that tick's hash is checked.
+export function play(r: Replay, data: SimData, cr: Compiled, scenario: Scenario, expected: HashPoint[], after?: (w: World) => void): Mismatch | null {
   if (r.simVersion !== SIM_VERSION) throw new Error(`replay from sim ${r.simVersion}, this is ${SIM_VERSION}`)
   if ((r.dataVersion >>> 0) !== (data.version >>> 0)) throw new DataVersionMismatch(`replay made with data ${hex(r.dataVersion)}, loaded ${hex(data.version)}`)
   if ((r.ruleset >>> 0) !== (cr.hash >>> 0)) throw new DataVersionMismatch(`replay made with ruleset ${hex(r.ruleset)}, given ${hex(cr.hash)}`)
@@ -52,6 +53,7 @@ export function play(r: Replay, data: SimData, cr: Compiled, scenario: Scenario,
       k++
     }
     const res = advanceTick(w)
+    after?.(w)
     if (res.hash === null) continue
     const want = expected[e++]
     if (!want || want.tick !== res.tick) return { tick: res.tick, expected: want ? `hash at tick ${want.tick}` : 'no more hashes', got: hex(res.hash), section: '' }
