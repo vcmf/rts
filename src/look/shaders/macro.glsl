@@ -5,7 +5,8 @@
 // shader arm runs it with q = 0 per pixel. The arms (one define, the page's ?macro):
 //   MACRO_FLAT    each class's colour alone (no variation, stripes, wear or broken edges): the ablation's arm 1
 //   MACRO_SHADER  macro(xz, 0) per pixel: arm 2
-//   MACRO_BAKE    the bake, read: arm 3
+//   MACRO_BAKE    the bake, read: arm 3, and arms 4 and 5 (L5b), whose bakes differ (MACRO_STROKES below; the
+//                 Kuwahara pass in src/look/macro.ts)
 // the cover grid (nearest): class, field id, furrow direction, wear distance
 uniform sampler2D uCover;
 // the snow's lie's zero, a byte (128/255), and under a byte from it the lie is 0: off the fields the bake's 8 bits
@@ -87,6 +88,39 @@ vec4 macro(vec2 xz,float q,float px){
   }else c=cellColour(cv,g);
   float b=stripeBand(cv,xz,px,g);c*=1.0+stripeValue(cv.x)*b;c=wear(c,cv,g);
   return vec4(c,LIE0-(b*stripeSnow(cv.x)+trodden(cv.x))/1.2);}
+#ifdef MACRO_STROKES
+// ARM 4, BAKED STROKES (the bake's shader alone; L5b, an experiment: docs/proposals/prepainted-terrain.md): the bake's
+// colour laid over with strokes of its own colour, gathered per texel (no per-stroke draws, docs/proposals/
+// engine-design.md §6). One stroke a STROKE_CELL m cell, its centre jittered in the cell; along the field's furrows
+// on fields, along a slow flow elsewhere; 1.6-2.8 m long, 0.5-0.9 m wide; the macro colour at its centre, its value
+// jittered by up to 10% and its temperature a little (a painter's strokes vary: with the centre's colour alone they
+// changed the frame by about a level, too little to judge). A stroke reaches at most 1.85 m from its centre, so a texel reads its cell's 3x3 neighbours, in one fixed
+// order (the bake stays deterministic). The snow's lie stays the texel's own.
+#define STROKE_CELL 2.0
+float strokeHash(vec2 p){vec3 q=fract(vec3(p.xyx)*0.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
+vec3 strokes(vec2 xz,vec3 c,float px){
+  vec2 cell=floor(xz/STROKE_CELL);
+  for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){
+    vec2 id=cell+vec2(float(i),float(j));
+    vec2 o=(id+vec2(strokeHash(id),strokeHash(id+17.3)))*STROKE_CELL;
+    vec4 cv=coverAt(coverWarp(o));
+    float a=cv.y>0.5?cv.z:(texM(uGrain,o/60.0,60.0).g-0.5)*6.2831853;
+    vec2 u=vec2(cos(a),sin(a)),d=xz-o;
+    float hl=0.8+0.6*strokeHash(id+41.9),hw=0.25+0.2*strokeHash(id+73.1);
+    // a capsule: the distance past its edge, m, soft over about a texel
+    float e=length(vec2(max(abs(dot(d,u))-(hl-hw),0.0),dot(d,vec2(-u.y,u.x))))-hw;
+    vec3 sc=macro(o,0.0,px).rgb*(0.9+0.2*strokeHash(id+97.7))*mix(vec3(0.96,1.0,1.05),vec3(1.04,1.0,0.95),strokeHash(id+5.3));
+    c=mix(c,sc,0.9*(1.0-smoothstep(-0.25,0.25,e)));
+  }
+  return c;}
+#endif
+// the bake's texel (src/look/macro.ts): the macro colour, with arm 4's strokes on the tile (on the far ring's 4 m
+// texels a stroke is under a texel)
+vec4 bakeTexel(vec2 xz,float px){vec4 m=macro(xz,1.0,px);
+  #ifdef MACRO_STROKES
+  if(px<1.0)m.rgb=strokes(xz,m.rgb,px);
+  #endif
+  return m;}
 // the shader arm's macro, and the bake arm's read, at a point, once a pixel (the colour and the snow's lie both use
 // them)
 vec2 pMacroXZ=vec2(1e9);vec4 pMacro;
