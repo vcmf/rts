@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-12
 code: [prototypes/painted-cinematic.html, src/look/river.ts, src/look/world/author.ts, tools/build-look-data.ts, src/look/terrain.ts, tools/river-check.js, tools/render-check.js, tools/detail-check.mjs, src/look/world/water-data.ts, src/look/shaders/waterdata.glsl, tools/water-check.mjs, src/look/water.ts, src/look/shaders/water.frag, src/look/shaders/shore.glsl, tools/water-look-check.mjs]
 decisions: [0004-lowland-meander-river, 0012-heightfield-authority, 0019-shading-data-from-authored-surface]
 ---
@@ -14,15 +14,16 @@ One meandering channel generated once at load into dense per-sample arrays. Ever
 page in L0 (generated offline, `src/look/world/author.ts`), with cut banks and point bars since W2
 (`docs/plans/done/w2-river-banks.md`, the look page only), the water data baked for the water's shaders since
 W3 (`docs/plans/done/w3-water-data.md`), the painted water, its shoreline from that data, since W4
-(`docs/plans/done/w4-water-surface.md`), and the banks, stones and reeds since W5a (`docs/plans/active/w5-banks.md`).
+(`docs/plans/done/w4-water-surface.md`), the banks, stones and reeds since W5a and the river's seasons since W5b
+(`docs/plans/active/w5-banks.md`).
 
 ## Goals / non-goals
 
 - **Goals:** bends that turn back on themselves; visibly varying width (4–11 m, stretches differ);
   pools at bends and riffles between them; a flat floodplain in a valley; water level that never
-  rises downstream; nothing in the water except stones (`docs/art-bible.md` §6c).
-- **Non-goals (later):** the river's seasons (pools freezing first, autumn leaves: W5b); weirs and fords as authored
-  crossings, river networks, ponds and dams (W6, from the map format).
+  rises downstream; nothing in the water except stones, and floating leaves in autumn (`docs/art-bible.md` §6c).
+- **Non-goals (later):** weirs and fords as authored crossings, river networks, ponds and dams (W6, from the map
+  format).
 
 ## Design
 
@@ -75,8 +76,7 @@ W3 (`docs/plans/done/w3-water-data.md`), the painted water, its shoreline from t
   offset), a painted absorption ramp from the data's depth, shadows and the shore foam (these in the band); then,
   faded in past the band, calm against rough water (the riffle, fast shallow water), the painted sky tint, the
   tree reflections, strokes on the time of travel (they stretch in fast water and never shear), glitter and riffle
-  foam. Hard edges threshold the grain's soft blotches and are anti-aliased over a pixel (no shimmer). Winter
-  ice stays as it was (the seasons are W5's).
+  foam. Hard edges threshold the grain's soft blotches and are anti-aliased over a pixel (no shimmer).
 - **The banks (W5a):** painted from the water data and the bank normals (`bankPaint()` in
   `src/look/shaders/shore.glsl`): damp grass near the water, bare earth where the bank is steep near it (cut banks),
   pale grey gravel on low gentle ground near it (point bars), and a wet line at the water, wider on gentle ground.
@@ -88,6 +88,13 @@ W3 (`docs/plans/done/w3-water-data.md`), the painted water, its shoreline from t
   which paint a pillow upstream and a broken wake downstream of each, in the band function (so both surfaces agree).
 - **Reeds (W5a):** clumps of the pack's grass blade, narrowed and set tall (the `Reed` model), on the land within
   about a metre of the water on slow inner bends, in their own role colour on the grass's sway.
+- **The seasons on the water (W5b):** the ice forms where the water is slow (`iceAt()` in
+  `src/look/shaders/shore.glsl`, from the water data's speed and depth, so both surfaces paint it alike): shelves
+  along the banks and bars from late autumn, the pools closed over in winter, the riffles left open, dark and cold,
+  with their foam (the stones' too); a broken white rime along the ice's edge and drifts of snow on it near the
+  banks. The snow on the banks is the terrain's (the bank normals keep the cut banks' scarps bare). Autumn leaves
+  drift on slow water past the band, from early autumn until the ice: an upper layer of the water in cells of the
+  time of travel's coordinates, so they travel at the water's speed.
 - **Placement:** `placeable` keeps every instance's footprint out of the water and the formation
   zones; stones may sit on riffles or at a cut bank's foot; reeds at the water's edge, on land; willows line the
   banks; wheat stays off the floodplain.
@@ -112,7 +119,8 @@ spacing, the query grid and the valley axis `axisX`. This doc names them; it doe
 - `tools/water-look-check.mjs` (W4): the band (the drawn surfaces disagree on the shore only within it; no
   z-fighting past it), the seam (the tile's ground drawn with each material: the same colour in the band), pools
   darker and calmer than riffles, and shimmer on the water (W4); the banks (wet line, cut bank, bar against the
-  meadow) and the stones' foam (W5a); each with a sabotage under `--selftest`.
+  meadow) and the stones' foam (W5a); pools frozen and riffles open in winter, leaves in pools and not on riffles
+  in autumn, none in summer or winter (W5b); each with a sabotage under `--selftest`.
 - `tools/river-check.js`: shape (backtracking bends, width range and per-stretch contrast, width
   steps, riffle steps), terrain (no floating banks, no cliffs, water above the bed, exact stitch),
   placement (nothing in the water or zones, population).

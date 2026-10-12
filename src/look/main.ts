@@ -170,7 +170,7 @@ const waterView = (v: number, sab = false) => {
 }
 // the water surface's checks (tools/water-look-check.mjs): their sabotages (src/look/shaders/water.frag, terrain.frag),
 // and the tile's ground drawn with the water's shader (the seam check)
-const WATER_SABS = ['WATER_SAB_OWN', 'WATER_SAB_TERRAIN', 'WATER_SAB_FLAT', 'WATER_SAB_STEP', 'WATER_SAB_BANKS', 'WATER_SAB_NOFOAM']
+const WATER_SABS = ['WATER_SAB_OWN', 'WATER_SAB_TERRAIN', 'WATER_SAB_FLAT', 'WATER_SAB_STEP', 'WATER_SAB_BANKS', 'WATER_SAB_NOFOAM', 'WATER_SAB_EVENICE', 'WATER_SAB_NOLEAVES', 'WATER_SAB_LEAFALL']
 const waterSab = (on: string[]) => {
   for (const d of on) if (!WATER_SABS.includes(d)) throw new Error(`unknown water sabotage ${d}`)
   for (const m of dataMats) for (const d of WATER_SABS) m.setDefine(`#define ${d}`, on.includes(d))
@@ -216,6 +216,11 @@ Object.assign(window, { __look: {
   waterView, waterSab, groundAs, waterAt,
 } })
 
+// ?season=<0..3>: open in that season (0 summer, 1 early autumn, 2 late autumn, 3 winter; the bench runs in it too)
+if (params.has('season')) {
+  const v = Number(params.get('season')); if (!(v >= 0 && v <= 3)) throw new Error(`?season must be 0 to 3, not ${params.get('season')}`)
+  input('season').value = String(v); input('season').dispatchEvent(new Event('input'))
+}
 // ?detail=l0: the terrain with the L0 grain (compare by eye; the goldens of main against it match)
 if (params.get('detail') === 'l0') setDetail(['DETAIL_L0'])
 else if (params.has('detail')) throw new Error(`?detail must be l0, not ${params.get('detail')}`)

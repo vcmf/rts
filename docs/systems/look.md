@@ -59,8 +59,8 @@ the contract of `tools/golden.mjs`; it also puts the prototype's global names on
 (`RIVER`, `H`, `groups`, `SMW`, …) so `tools/render-check.js` and `tools/river-check.js` run unchanged, and
 `window.__look` for the look tools: `lab`, `mats`, `passes`, and the detail layer's switches (`setDetail`, the
 terrain's variant defines; `grain`, the paint or the smooth grain; `terrainOnly`; `finishing`, the finishing
-passes on or off; `hill`; `quarter` and `shift`, the projection moved for the checks). `?detail=l0` opens the page
-with the L0 grain on the terrain.
+passes on or off; `hill`; `quarter` and `shift`, the projection moved for the checks). `?season=<0..3>` opens the
+page in a season (the bench runs in it); `?detail=l0` opens it with the L0 grain on the terrain.
 
 ### The detail layer (L2b)
 
