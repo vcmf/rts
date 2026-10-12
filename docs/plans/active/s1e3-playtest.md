@@ -118,10 +118,10 @@ throwaway probes: shots fired per formation, positions over time, results over e
 | A battalion crawled 90 m in 8 minutes | its 93 m line straddled the hedge at x 110 and kept to the hedge's pace | every first-line battalion comes straight down clear of the hedge, then obliques on open ground |
 | The lines arrived one at a time | different paths and the marsh | three legs: the north bank, a halt at about 130 m to dress, the final advance together |
 | The batteries never fired | each faced straight ahead (arc ±20°) from a flank where no enemy came | each stands on its first line's inner flank, turned 25° inwards; its arc sweeps the ground in front of the line, which no friend masks |
-| One charge pinned a whole side in square for 4 minutes | the regiment, blown and resting after its melee, stood within 200 m, which counts as a threat | a blown regiment cannot charge, so it neither threatens nor holds a square (`docs/systems/melee.md`) |
-| The regiment loitered in your lines for 30 minutes | the plan ended with the charge | it charges your battery, then rides back over the stream |
+| One charge put a whole side in square for 4 minutes | the regiment, blown and resting after its melee, stood within 200 m, which counts as a threat | a blown regiment threatens only once its rest ends within `refuge.hold`; a square already formed still holds while it is near (`docs/systems/melee.md`) |
+| The regiment loitered in your lines for 30 minutes | the plan ended with the charge | it charges your battery, then rides back over the stream (a timed step, 630 s: it moves once its rest is over; a charge ends by clearing its orders, so a move appended to it is lost) |
 | A standing defender won easily | a halted line fires from 250 m and a marching one cannot; the defender's battery swept the approach | side 1's infantry are veterans (quality 0.85) and overlap your line; its regiment goes for your guns |
-| Nothing happened for the last 20 minutes; the limit gave a draw | at `end.broken` 0.5 a side whose first line had routed fought on, and its rallied battalions (at the map's edge) counted as in the fight | `end.broken` 0.65: a side with more than a third of its men out of the fight is broken |
+| Nothing happened for the last 20 minutes; the limit gave a draw | at `end.broken` 0.5 a side whose first line had routed fought on, and its rallied battalions (at the map's edge) counted as in the fight | `end.broken` 0.65: a side with 35% of its men out of the fight is broken |
 | Side 1's second line never fought | the plan halted it 100 m behind | it comes up to the firing line at 15 minutes as a second wave |
 
 **Results**, eight seeds each (seeds 1–7 and the page's); a defence scripted as a player might play it:
@@ -129,19 +129,43 @@ throwaway probes: shots fired per formation, positions over time, results over e
 | Your side | Result |
 |---|---|
 | No orders | side 1 wins at 17.0–18.1 min |
-| The reserves extend both flanks | side 1 wins at 19.7–20.8 min (four seeds) |
-| Your regiment counter-charges theirs, saving your battery | you win at 11.6–13.0 min (four seeds) |
-| Both | you win at 13.6–14.5 min (four seeds) |
+| The reserves extend both flanks | side 1 wins at 19.3–20.7 min |
+| Your regiment counter-charges theirs, saving your battery | you win at 11.6–13.0 min |
+| Both | you win at 13.3–14.5 min |
 
 Along the way: with ordinary quality (0.75) attackers and `end.broken` 0.65, a standing defender won every seed at
 17–19 minutes; at 0.5 almost every battle was a draw at 40 minutes.
 
 **What this leaves for your play:**
+- the centre's two battalions of side 1 cross a hedge (the northern edge of the field in front of your line, z −135)
+  on the final advance; they come on slowly and fight from about z −150, 10 m short of the others;
+- the regiment's ride back is timed: if you delay its charge, the step can cut it short;
 - the battle turns on one decision, the guns; whether that is a good puzzle or a trap is yours to say;
 - a defender who saves its guns wins in about 12 minutes, maybe too fast;
 - side 1's plan still does not react: a second wave goes in at 15 minutes whatever has happened.
 
 **The goldens:** every one changed its ruleset hash (`end`). Two changed behaviour: `s1e-battle` (the new scenario)
-and the page's charge, where the spawned square's alert spell now ends while the regiment is blown (ticks 1101
-and 4202); it stays in square either way, being spawned in it. `SIM_VERSION` is `s1e.3`.
+and the page's charge: against `main`, the spawned square's spell is no longer renewed while the regiment rests,
+only once its rest is within `refuge.hold` of ending (tick 2701); its shapes are the same tick for tick. `SIM_VERSION` is `s1e.3`.
+
+### Review (S1e-3b)
+
+**Round 1** (`/code-review high`, 9 findings, one severe; a second round follows):
+- **Fixed, severe:** a blown regiment was left out of both the threat and the hold. A square near it formed back
+  after `refuge.hold`, then formed again the moment its rest ended, while it still stood within 200 m (your #5:
+  three changes in three minutes). A player could have rested cavalry beside a square and charged as it
+  deployed. A blown regiment now holds a formed square while near, and threatens once its rest ends within
+  `refuge.hold`: #5 forms once and stands down after the regiment has ridden off. The results above are
+  unchanged.
+- **Fixed:**
+  - the docs and the `nearby` comment contradicted the rule;
+  - "more than a third" was 35%;
+  - three rows of the results were four seeds: all are eight now;
+  - the second line's spacing in the comment;
+  - the plan's unit numbers were hand-kept beside the rows: the rows carry their part and the x they fight at,
+    and the plan finds its units from them.
+- **Noted, not changed:**
+  - `end.broken` treats a symptom: rallied battalions at the map's edge count as in the fight (`fightShares`).
+    Counting them out is a rule of its own, open in `docs/systems/sides.md`, for your play to weigh;
+  - the regiment's timed ride back, and the hedge on the final advance (above).
 

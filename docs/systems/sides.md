@@ -92,6 +92,6 @@ minutes; saving your guns wins it for you (`docs/plans/active/s1e3-playtest.md`)
 
 - **The plan is a script.** It does not react: a line ordered over the stream goes even when your guns are
   waiting for it. Whether that is enough for the first playtests is S1e-3's question; a reacting brigade AI is S3.
-- **More than a third of the men out of the fight ends a battle** (`end.broken` 0.65, S1e-3). At half, a side
+- **35% of the men out of the fight ends a battle** (`end.broken` 0.65, S1e-3). At half, a side
   whose first line had routed fought on for 20 minutes with nothing happening: rallied battalions count as in the
   fight, though they stand at the map's edge. Whether a rallied battalion far from the fight should count is open.

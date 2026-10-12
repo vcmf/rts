@@ -241,15 +241,15 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
 }
 
 /* ---------------- step 4: the square against cavalry ---------------- */
-// an enemy in the fight of a type that charges and is not blown (from `chargers`, n of them: a blown regiment
-// cannot charge, so it neither threatens nor holds a square, S1e-3), within refuge.alert of battalion i,
+// an enemy in the fight of a type that charges (from `chargers`, n of them), within refuge.alert of battalion i,
 // charging it, or standing or closing: anything but riding away faster than refuge.closing (a regiment at the
-// halt can charge in seconds)
+// halt can charge in seconds). A blown regiment cannot charge: it threatens only once its rest ends within
+// refuge.hold, time for the battalion to form (S1e-3: a resting regiment no longer puts a side into square)
 const chargers = new Int32Array(MAX_FORMATIONS)
 function threatened(w: World, i: number, n: number): boolean {
-  const f = w.f, Q = w.cr.rs.melee.refuge, h = handleOf(w, i)
+  const f = w.f, Q = w.cr.rs.melee.refuge, h = handleOf(w, i), soon = w.meta[M_TICK] + 1 + Math.round(Q.hold * TICK_HZ)
   for (let k = 0; k < n; k++) {
-    const j = chargers[k]; if (f.side[j] === f.side[i]) continue
+    const j = chargers[k]; if (f.side[j] === f.side[i] || f.blownUntil[j] > soon) continue
     const dx = f.x[i] - f.x[j], dz = f.z[i] - f.z[j], d = sqrt(dx * dx + dz * dz)
     if (d > Q.alert) continue
     if (f.chTarget[j] === h && (f.chPhase[j] === CH_CLOSING || f.chPhase[j] === CH_TESTED)) return true
@@ -257,8 +257,9 @@ function threatened(w: World, i: number, n: number): boolean {
   }
   return false
 }
-// any enemy charging type in the fight within refuge.alert of battalion i, whatever it is doing: a battalion does
-// not form back while cavalry is still near (a recoiling regiment rides 80 m, longer than refuge.hold, and halts)
+// any enemy charging type in the fight within refuge.alert of battalion i, whatever it is doing, blown or not: a
+// battalion does not form back while cavalry is still near (a recoiling regiment rides 80 m, longer than
+// refuge.hold, and halts; a blown one is ready again in charge.rest)
 function nearby(w: World, i: number, n: number): boolean {
   const f = w.f, A = w.cr.rs.melee.refuge.alert
   for (let k = 0; k < n; k++) { const j = chargers[k]; if (f.side[j] === f.side[i]) continue
@@ -274,7 +275,7 @@ export function standingStep(w: World): void {
   const f = w.f, Q = w.cr.rs.melee.refuge, tick = w.meta[M_TICK] + 1, react = Math.round(Q.react * TICK_HZ), hold = Math.round(Q.hold * TICK_HZ)
   // the charging types in the fight, once; nothing to do with none, no battalion on the alert and none to form back
   let n = 0, busy = false
-  for (let j = 0; j < MAX_FORMATIONS; j++) { if (!f.alive[j]) continue; if (f.alertAt[j] || f.autoFrom[j]) busy = true; if (typeOf(w, j).charge && !outOfFight(f.mstate[j]) && f.blownUntil[j] <= tick) chargers[n++] = j }
+  for (let j = 0; j < MAX_FORMATIONS; j++) { if (!f.alive[j]) continue; if (f.alertAt[j] || f.autoFrom[j]) busy = true; if (typeOf(w, j).charge && !outOfFight(f.mstate[j])) chargers[n++] = j }
   if (!n && !busy) return
   for (let i = 0; i < MAX_FORMATIONS; i++) {
     if (!f.alive[i]) continue
