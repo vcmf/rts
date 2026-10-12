@@ -47,8 +47,8 @@ and the field at fault, a catalogue of kinds, and a fast way to see a map.
   - `check <map>`: validate, and print the errors;
   - `expand <map>`: write `<map>.expanded.json`;
   - `resolve <map> <id>`: print one feature fully resolved.
-- **The example maps:** `maps/two-ridges.map.json` is §9's example written with exact shapes (no `gen`); a few
-  small maps under `maps/tests/` exercise each category.
+- **The example maps:** `maps/two-ridges.map.json` is §9's example written with exact shapes (no `gen`); the
+  test map in `test/map-language.test.ts` exercises every category.
 - **The proposal updated** where M1a settles something: the catalogue's path (`maps/kinds.json`, not
   `data/kinds.json`, since `data/` holds built outputs), and anything the schema had to make precise.
 

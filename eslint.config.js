@@ -56,9 +56,11 @@ export default tseslint.config(
         { selector: "BinaryExpression[operator='**']", message: 'Not exact across JS engines: multiply, or use src/sim/num.ts.' },
         { selector: "AssignmentExpression[operator='**=']", message: 'Not exact across JS engines: multiply, or use src/sim/num.ts.' },
         { selector: "MemberExpression[object.name='Math'][computed=true]", message: 'No computed access to Math in the map engine.' }],
-      'no-restricted-globals': ['error', { name: 'Float32Array', message: 'Map data is exact: float32 rounds silently on store.' }],
+      'no-restricted-globals': ['error', { name: 'Float32Array', message: 'Map data is exact: float32 rounds silently on store.' },
+        { name: 'globalThis', message: 'The map engine reaches nothing global but its allowed builtins.' },
+        { name: 'Reflect', message: 'No indirect access to builtins in the map engine.' }],
       'no-restricted-imports': ['error', { patterns: [
-        { regex: '^(?!\\./|\\.\\./sim/num\\.ts$)', message: 'src/map/ imports only from src/map/ and src/sim/num.ts.' }] }],
+        { regex: '^(?!\\./(?!\\.)|\\.\\./sim/num\\.ts$)', message: 'src/map/ imports only from src/map/ and src/sim/num.ts.' }] }],
     },
   },
   // a ruleset is data for the sim: the same rules, and it may import the sim's types and maths

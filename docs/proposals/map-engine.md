@@ -197,7 +197,8 @@ A state never changes the kind; it only sets attributes, so it always wins. A br
 state: the scenario adds a gap to that barrier (§3.6).
 
 Precedence, lowest first: the catalogue along the kind's path, the map preset, the feature's own fields, the
-season's overrides, the state's overlay.
+season's overrides (the catalogue's, then the feature's), the state's overlay. A season beats a fixed value: a
+field given its own crop height is still ploughed bare in winter, unless the feature overrides that season too.
 
 ### 3.6 Barriers on the grid
 

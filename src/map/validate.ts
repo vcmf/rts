@@ -5,9 +5,10 @@ import type { Catalogue, Feature, MapFile, Pt } from './schema.ts'
 import { GENERATORS, ID, RESERVED, REFS, SEASONS, SHAPES } from './schema.ts'
 import type { Issue } from './catalogue.ts'
 import { allowedIn, categoryOf, checkCatalogue, checkValue, kindChain, kindMeta, kindStates } from './catalogue.ts'
-import { barrierProblem, inRing, isPt, lineCrossing, onCentimetres, ringCrossing } from './geometry.ts'
+import { barrierProblem, inRing, isPt, lineCrossing, lineFoldBack, lineLength, onCentimetres, ringArea2, ringCrossing, ringsTouch } from './geometry.ts'
 
 export type { Issue }
+const isRadius = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v) && v > 0 && onCentimetres(v)
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const TOP = ['format', 'id', 'name', 'note', 'seed', 'season', 'datum', 'extent', 'play', 'sources', 'presets', 'features']
 
@@ -27,7 +28,9 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
   if (map.datum !== undefined && (typeof map.datum !== 'number' || !Number.isFinite(map.datum))) bad(null, 'datum', 'must be a number (m)')
   const size = (k: 'extent' | 'play'): { w: number; h: number } | null => {
     const v = map[k]
-    if (!isObj(v) || Object.keys(v).sort().join() !== 'h,w' || ![v.w, v.h].every(n => typeof n === 'number' && n > 0)) { bad(null, k, 'must be { "w": m, "h": m }, both positive'); return null }
+    if (!isObj(v) || Object.keys(v).sort().join() !== 'h,w' || ![v.w, v.h].every(n => typeof n === 'number' && Number.isFinite(n) && n > 0)) { bad(null, k, 'must be { "w": m, "h": m }, both positive'); return null }
+    // whole multiples of 4 m: the 2 m grid then starts at an even coordinate, so its cell corners are the barrier lattice
+    if (![v.w, v.h].every(n => Number.isInteger((n as number) / 4))) { bad(null, k, 'must be a whole multiple of 4 m (the 2 m grid, centred, keeps its corners on even metres)'); return null }
     return v as { w: number; h: number }
   }
   const extent = size('extent'), play = size('play')
@@ -68,7 +71,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
     // the kind: its own, or its preset's
     let kind = f.kind
     if (f.preset !== undefined) {
-      const p = typeof f.preset === 'string' ? presets[f.preset] : undefined
+      const p = typeof f.preset === 'string' && Object.hasOwn(presets, f.preset) ? presets[f.preset] : undefined
       if (!p) { bad(id, `${path}.preset`, `no preset "${String(f.preset)}" in the map's presets`); return }
       if (kind !== undefined && kind !== p.kind) { bad(id, `${path}.kind`, `differs from its preset's kind "${String(p.kind)}"`); return }
       kind = p.kind
@@ -81,7 +84,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
     for (const k of ['note', 'source', 'state'] as const) if (f[k] !== undefined && typeof f[k] !== 'string') bad(id, `${path}.${k}`, 'must be a string')
     if (typeof f.source === 'string' && !sources.has(f.source)) bad(id, `${path}.source`, `"${f.source}" is not one of the map's sources (or "invented")`)
     if (f.priority !== undefined && (!Number.isInteger(f.priority) || (f.priority as number) < 0 || (f.priority as number) > 1000)) bad(id, `${path}.priority`, 'must be a whole number from 0 to 1000')
-    if (typeof f.state === 'string' && !(f.state in kindStates(cat, chain))) bad(id, `${path}.state`, `${kind} has no state "${f.state}" (it has: ${Object.keys(kindStates(cat, chain)).join(', ') || 'none'})`)
+    if (typeof f.state === 'string' && !Object.hasOwn(kindStates(cat, chain), f.state)) bad(id, `${path}.state`, `${kind} has no state "${f.state}" (it has: ${Object.keys(kindStates(cat, chain)).join(', ') || 'none'})`)
     if (f.follow !== undefined) bad(id, `${path}.follow`, 'shared edges arrive with the generators (M3)')
     if (f.gen !== undefined) {
       const names = isObj(f.gen) ? Object.keys(f.gen) : []
@@ -116,11 +119,17 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       if (!t) { bad(id, `${path}.${r}`, `no feature "${String(target)}"`); continue }
       if (t.id === id) { bad(id, `${path}.${r}`, 'a feature cannot reference itself'); continue }
       const tk = featureKind(t, presets)
-      if (!tk || categoryOf(tk) !== want) bad(id, `${path}.${r}`, `"${t.id}" is a ${tk ?? 'feature without a kind'}; "${r}" needs a ${want}.* feature`)
+      if (!tk || categoryOf(tk) !== want) { bad(id, `${path}.${r}`, `"${t.id}" is a ${tk ?? 'feature without a kind'}; "${r}" needs a ${want}.* feature`); continue }
+      if (r === 'along' && Array.isArray(t.line) && t.line.every(isPt)) {
+        const len = lineLength(t.line as Pt[]), a = f.along as { from: number; to: number }
+        if (a.to > len) bad(id, `${path}.along.to`, `${a.to} m runs past the end of "${t.id}" (${Math.floor(len)} m long)`)
+      }
     }
 
     // attributes, seasons
     checkAttrs(cat, id, f, path, category, bad, RESERVED as readonly string[])
+    const gaps = f.gaps as { every?: unknown; width?: unknown } | undefined
+    if (isObj(gaps) && typeof gaps.every === 'number' && typeof gaps.width === 'number' && gaps.width >= gaps.every) bad(id, `${path}.gaps.width`, 'must be less than gaps.every (a barrier that is all gap)')
     if (f.seasons !== undefined) {
       if (!isObj(f.seasons)) bad(id, `${path}.seasons`, 'must be an object of seasons')
       else for (const [season, attrs] of Object.entries(f.seasons)) {
@@ -148,12 +157,12 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
 }
 
 const featureKind = (f: Feature, presets: Record<string, Record<string, unknown>>): string | undefined =>
-  typeof f.kind === 'string' ? f.kind : typeof f.preset === 'string' && typeof presets[f.preset]?.kind === 'string' ? presets[f.preset].kind as string : undefined
+  typeof f.kind === 'string' ? f.kind : typeof f.preset === 'string' && Object.hasOwn(presets, f.preset) && typeof presets[f.preset].kind === 'string' ? presets[f.preset].kind as string : undefined
 
 function checkAttrs(cat: Catalogue, id: string | null, obj: Record<string, unknown>, path: string, category: string, bad: (id: string | null, p: string, m: string) => void, skip: readonly string[], seasonal = false): void {
   for (const [a, v] of Object.entries(obj)) {
     if (skip.includes(a)) continue
-    const spec = cat.attributes[a]
+    const spec = Object.hasOwn(cat.attributes, a) ? cat.attributes[a] : undefined
     if (!spec) { bad(id, `${path}.${a}`, 'unknown field or attribute'); continue }
     if (!allowedIn(cat, spec, category)) { bad(id, `${path}.${a}`, `is not an attribute of ${category}.* kinds (it belongs to ${spec.layers.join(', ')})`); continue }
     if (seasonal && !spec.season) { bad(id, `${path}.${a}`, 'cannot change with the season'); continue }
@@ -174,21 +183,43 @@ function checkShape(s: typeof SHAPES[number], v: unknown, path: string, extent: 
   }
   switch (s) {
     case 'point': if (!isPt(v)) bad(path, 'must be a point [x, z]'); else checkInside(v, path, extent, bad); return
-    case 'line': { const l = pts(v, 2, path); if (!l) return; const c = lineCrossing(l); if (c) bad(path, `crosses itself (segments ${c[0]} and ${c[1]})`); return }
+    case 'line': {
+      const l = pts(v, 2, path); if (!l) return
+      const c = lineCrossing(l); if (c) { bad(path, `crosses itself (segments ${c[0]} and ${c[1]})`); return }
+      const b = lineFoldBack(l); if (b >= 0) bad(`${path}[${b}]`, 'the line turns back on itself here, or repeats a point')
+      return
+    }
     case 'area': {
       if (!Array.isArray(v) || v.length < 1) { bad(path, 'must be a list of rings: the outer ring, then holes'); return }
       const rings = v.map((r, k) => pts(r, 3, `${path}[${k}]`))
-      rings.forEach((r, k) => { if (!r) return; const c = ringCrossing(r); if (c) bad(`${path}[${k}]`, `crosses itself (edges ${c[0]} and ${c[1]})`) })
+      rings.forEach((r, k) => {
+        if (!r) return
+        const last = r[r.length - 1]
+        if (last[0] === r[0][0] && last[1] === r[0][1]) { bad(`${path}[${k}]`, 'rings close by themselves: drop the repeated last point'); rings[k] = null; return }
+        const c = ringCrossing(r)
+        if (c) { bad(`${path}[${k}]`, `crosses itself (edges ${c[0]} and ${c[1]})`); rings[k] = null; return }
+        if (ringArea2(r) === 0) { bad(`${path}[${k}]`, 'has no area (its points are in a line)'); rings[k] = null }
+      })
       const outer = rings[0]
-      if (outer) rings.slice(1).forEach((h, k) => { if (h && !h.every(q => inRing(outer, q))) bad(`${path}[${k + 1}]`, 'a hole must lie inside the outer ring') })
+      if (!outer) return
+      rings.forEach((h, k) => {
+        if (!h || k === 0) return
+        const hp = `${path}[${k}]`
+        if (!h.every(q => inRing(outer, q))) { bad(hp, 'a hole must lie inside the outer ring'); return }
+        for (let j = 0; j < k; j++) {
+          const o = rings[j]
+          if (o && ringsTouch(h, o)) { bad(hp, j ? `touches or crosses hole ${j}` : 'touches or crosses the outer ring'); return }
+          if (o && j > 0 && (inRing(o, h[0]) || inRing(h, o[0]))) { bad(hp, `lies inside or around hole ${j}`); return }
+        }
+      })
       return
     }
     case 'circle': {
-      if (!Array.isArray(v) || v.length !== 2 || !isPt(v[0]) || typeof v[1] !== 'number' || !(v[1] > 0)) { bad(path, 'must be [[x, z], radius > 0]'); return }
+      if (!Array.isArray(v) || v.length !== 2 || !isPt(v[0]) || !isRadius(v[1])) { bad(path, 'must be [[x, z], radius > 0, at most 2 decimals]'); return }
       checkInside(v[0], path, extent, bad, v[1]); return
     }
     case 'ellipse': {
-      if (!Array.isArray(v) || v.length !== 4 || !isPt(v[0]) || !(v[1] > 0) || !(v[2] > 0) || typeof v[3] !== 'number' || !Number.isFinite(v[3])) { bad(path, 'must be [[x, z], radius along, radius across, angle]'); return }
+      if (!Array.isArray(v) || v.length !== 4 || !isPt(v[0]) || !isRadius(v[1]) || !isRadius(v[2]) || typeof v[3] !== 'number' || !Number.isFinite(v[3])) { bad(path, 'must be [[x, z], radius along, radius across, angle]: radii > 0 with at most 2 decimals'); return }
       checkInside(v[0], path, extent, bad, Math.max(v[1], v[2])); return
     }
   }

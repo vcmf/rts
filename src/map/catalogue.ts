@@ -109,7 +109,7 @@ export function checkCatalogue(cat: Catalogue): Issue[] {
 
 function checkSet(cat: Catalogue, category: string, attrs: Record<string, AttrValue>, path: string, bad: (p: string, m: string) => void, seasonal = false): void {
   for (const [a, v] of Object.entries(attrs)) {
-    const spec = cat.attributes[a]
+    const spec = Object.hasOwn(cat.attributes, a) ? cat.attributes[a] : undefined
     if (!spec) { bad(`${path}.${a}`, 'unknown attribute'); continue }
     if (!allowedIn(cat, spec, category)) bad(`${path}.${a}`, `is not an attribute of category ${category}`)
     if (seasonal && !spec.season) bad(`${path}.${a}`, 'cannot change with the season')

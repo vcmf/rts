@@ -48,8 +48,8 @@ maps/kinds.json ──► checkCatalogue ─┐
   - references and their target categories, attributes against the catalogue, seasons, states and generator
     names;
   - finally, loops in the references.
-- **Resolution** (`src/map/resolve.ts`): the catalogue along the path (with its season overrides), the map
-  preset, the feature's own fields, its season overrides, the state's overlay. This is the one place the order
+- **Resolution** (`src/map/resolve.ts`): the catalogue along the path, the map preset, the feature's own fields,
+  the season's overrides (the catalogue's, then the feature's), the state's overlay. This is the one place the order
   lives.
 - **Expansion** (`src/map/expand.ts`): in M1 it sorts the features by id and reports any `gen`.
 - **The layout** (`src/map/format.ts`): one feature per line, so diffs show which features changed.

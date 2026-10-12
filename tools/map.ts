@@ -16,7 +16,10 @@ import { formatMap } from '../src/map/format.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const loadCatalogue = (): Catalogue => JSON.parse(fs.readFileSync(path.join(ROOT, 'maps/kinds.json'), 'utf8')) as Catalogue
-export const expandedPath = (file: string): string => file.replace(/(\.map)?\.json$/, '.expanded.json')
+export function expandedPath(file: string): string {
+  if (!/\.json$/.test(file)) throw new Error(`${file}: a map file ends in .json`)
+  return file.replace(/(\.map)?\.json$/, '.expanded.json')
+}
 const show = (file: string, issues: Issue[]) => { for (const i of issues) console.log(`${file}: ${i.id ? `[${i.id}] ` : ''}${i.path || '(map)'}: ${i.message}`) }
 
 function load(file: string, cat: Catalogue): MapFile | null {

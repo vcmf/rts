@@ -37,6 +37,39 @@ export function lineCrossing(line: Pt[]): [number, number] | null {
   return null
 }
 
+// twice the ring's signed area (shoelace); 0 when its points are in a line
+export function ringArea2(ring: Pt[]): number {
+  let a = 0
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += (ring[j][0] - ring[i][0]) * (ring[j][1] + ring[i][1])
+  return a
+}
+
+// do two closed rings share any point on their edges?
+export function ringsTouch(a: Pt[], b: Pt[]): boolean {
+  for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++)
+    if (segmentsMeet(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])) return true
+  return false
+}
+
+// the first point where an open line turns straight back or repeats the point before it, or −1
+export function lineFoldBack(line: Pt[]): number {
+  for (let i = 1; i < line.length; i++) {
+    const [ax, az] = line[i - 1], [bx, bz] = line[i]
+    if (ax === bx && az === bz) return i
+    if (i + 1 < line.length) {
+      const [cx, cz] = line[i + 1], ux = bx - ax, uz = bz - az, vx = cx - bx, vz = cz - bz
+      if (ux * vz - uz * vx === 0 && ux * vx + uz * vz < 0) return i
+    }
+  }
+  return -1
+}
+
+export function lineLength(line: Pt[]): number {
+  let s = 0
+  for (let i = 1; i < line.length; i++) { const dx = line[i][0] - line[i - 1][0], dz = line[i][1] - line[i - 1][1]; s += Math.sqrt(dx * dx + dz * dz) }
+  return s
+}
+
 // is p inside the ring (even-odd; points on an edge count as inside)?
 export function inRing(ring: Pt[], p: Pt): boolean {
   let inside = false

@@ -101,6 +101,20 @@ const CASES: [string, (m: MapFile & Record<string, unknown>) => void, string | n
   ['an unknown state', m => { f(m, 'house').state = 'flooded' }, 'house', 'features[8].state'],
   ['an unknown generator', m => { f(m, 'wood').gen = { blob: {} } }, 'wood', 'features[6].gen'],
   ['a shared edge before M3', m => { f(m, 'wood').follow = 'brook' }, 'wood', 'features[6].follow', /M3/],
+  // round 1 of the M1a review
+  ['an extent off the 4 m step', m => { m.extent = { w: 1002, h: 1000 } }, null, 'extent', /multiple of 4/],
+  ['an attribute named like an object builtin', m => { Object.defineProperty(f(m, 'wood'), 'constructor', { value: 1, enumerable: true }) }, 'wood', 'features[6].constructor'],
+  ['a state named like an object builtin', m => { f(m, 'house').state = 'toString' }, 'house', 'features[8].state'],
+  ['a preset named like an object builtin', m => { f(m, 'hedge').preset = 'constructor' }, 'hedge', 'features[7].preset', /no preset/],
+  ['an ellipse with a string radius', m => { const w = f(m, 'wood'); delete w.circle; w.ellipse = [[0, 0], '50', 30, 0] as never }, 'wood', 'features[6].ellipse'],
+  ['a radius finer than 1 cm', m => { f(m, 'wood').circle = [[-250, -200], 60.001] }, 'wood', 'features[6].circle'],
+  ['a ring with no area', m => { f(m, 'field').area = [[[0, 0], [10, 0], [20, 0]]] }, 'field', 'features[9].area[0]', /no area/],
+  ['a ring closed by hand', m => { f(m, 'field').area = [[[0, 0], [10, 0], [10, 10], [0, 0]]] }, 'field', 'features[9].area[0]', /repeated last point/],
+  ['a hole crossing a concave ring', m => { f(m, 'field').area = [[[0, 0], [90, 0], [90, 90], [60, 90], [60, 30], [30, 30], [30, 90], [0, 90]], [[10, 50], [80, 50], [80, 60], [10, 60]]] }, 'field', 'features[9].area[1]'],
+  ['a hole inside a hole', m => { f(m, 'field').area = [[[0, 0], [100, 0], [100, 100], [0, 100]], [[10, 10], [90, 10], [90, 90], [10, 90]], [[40, 40], [60, 40], [60, 60], [40, 60]]] }, 'field', 'features[9].area[2]', /hole 1/],
+  ['a line that turns back on itself', m => { f(m, 'road').line = [[0, 0], [100, 0], [50, 0]] }, 'road', 'features[4].line[1]', /turns back/],
+  ['an along past the end of its line', m => { f(m, 'house').kind = 'built.village'; f(m, 'house').along = { id: 'road', from: 900, to: 1100 }; delete f(m, 'house').state }, 'house', 'features[8].along.to', /past the end/],
+  ['gaps as wide as their spacing', m => { f(m, 'hedge').gaps = { every: 4, width: 4 } }, 'hedge', 'features[7].gaps.width'],
 ]
 
 describe('M1a: the validator names the feature and the path', () => {
@@ -124,6 +138,13 @@ describe('M1a: resolution follows the catalogue, the preset, the feature, the se
     const r = resolve(f(BASE, 'field'), BASE, cat)
     expect(r.attrs).toMatchObject({ material: 'loam', stage: 'standing', height: 1.6, growth: 'low' })
     expect(r.priority).toBe(20)
+  })
+  it("a season beats the feature's own fixed value (review round 1): a tall field is still ploughed bare in winter", () => {
+    const m = clone(BASE); f(m, 'field').height = 1.9
+    expect(resolve(f(m, 'field'), m, cat, 'winter').attrs).toMatchObject({ stage: 'ploughed', height: 0 })
+    expect(resolve(f(m, 'field'), m, cat, 'summer').attrs.height).toBe(1.9)
+    f(m, 'field').seasons = { winter: { height: 0.2 } }
+    expect(resolve(f(m, 'field'), m, cat, 'winter').attrs.height).toBe(0.2)
   })
   it("the catalogue's season, then the feature's", () => {
     expect(resolve(f(BASE, 'field'), BASE, cat, 'winter').attrs).toMatchObject({ stage: 'ploughed', height: 0 })
@@ -175,5 +196,11 @@ describe('M1a: the determinism rules hold in src/map/', () => {
     const [res] = await new ESLint({ cwd: root }).lintText(text, { filePath: path.join(root, 'src', 'map', 'fixture.ts') })
     const lines = [...new Set(res.messages.filter(m => m.severity === 2 && m.ruleId?.startsWith('no-restricted')).map(m => m.line))].sort()
     expect(lines).toEqual([1, 2, 3])
+  })
+  it("an import spelled ./../ and Reflect are reported too (review round 1)", async () => {
+    const text = "import { SPEC } from './../look/spec.ts'\nexport const c = SPEC\nexport const d = Reflect.get(Math, 'sin')\n"
+    const [res] = await new ESLint({ cwd: root }).lintText(text, { filePath: path.join(root, 'src', 'map', 'fixture.ts') })
+    const lines = [...new Set(res.messages.filter(m => m.severity === 2 && m.ruleId?.startsWith('no-restricted')).map(m => m.line))].sort()
+    expect(lines).toEqual([1, 3])
   })
 })
