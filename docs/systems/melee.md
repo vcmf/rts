@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-12
 code: [src/sim/melee.ts, src/sim/formation.ts, src/sim/commands.ts, src/sim/morale.ts, src/rulesets/napoleonic.ts, src/scenarios/s1d-charge.ts, tools/calibrate-charge.ts, test/charge.test.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0015-era-generic-engine]
 ---
@@ -127,9 +127,10 @@ with contagion, after relaxing (`morale.ts`).
 
 **The square against cavalry** (step 4, `standingStep`), for each battalion whose type names a refuge
 (`UnitType.refuge`), in the fight and not in melee:
-- **A threat:** an enemy in the fight of a type that charges, within `refuge.alert` (200 m, centre to centre),
-  either charging it or anything but riding away faster than `refuge.closing`. A regiment at the halt can
-  charge in seconds.
+- **A threat:** an enemy in the fight of a type that charges and is not blown, within `refuge.alert` (200 m,
+  centre to centre), either charging it or anything but riding away faster than `refuge.closing`. A regiment at
+  the halt can charge in seconds; a blown one cannot charge, so it neither threatens nor holds a square (S1e-3:
+  a regiment resting after its melee had pinned a whole side in square for minutes).
 - **Forming:** after `refuge.react` seconds of unbroken threat, with the threat present, a battalion not in its
   refuge and not changing into it starts the change itself (not an order). The shape it came from is kept
   (`autoFrom`). A change that cannot be made there (a wood, the water) is tried again every 5 s; nothing is

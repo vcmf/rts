@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-12
 code: [src/sim/plan.ts, src/sim/tick.ts, src/sim/commands.ts, src/sim/replay.ts, src/scenarios/s1e-battle.ts, src/app/main.ts, test/sides.test.ts]
 decisions: [0005-sim-render-split, 0013-single-player-first, 0015-era-generic-engine]
 ---
@@ -68,17 +68,19 @@ A scenario with no player is a sandbox for both sides.
 **The page** shows each side's share in the fight and, once decided, the result ("you win", "you lose", "a
 draw").
 
-**`s1e-battle`** (`src/scenarios/s1e-battle.ts`): you command side 0, on the southern ridge. Side 1's plan brings
-its first line down to the stream and over it to close with yours, its second line after it, and its regiment
-in a charge; the scenario sets its times and its limit.
+**`s1e-battle`** (`src/scenarios/s1e-battle.ts`): you command side 0, on the southern ridge in two lines of three.
+Side 1, veterans four up and two back, follows its plan: its first line comes down to the stream, halts about
+130 m from yours to dress and closes to 70 m, overlapping your line at both ends; its regiment charges your
+battery and rides back; its second line comes up as a second wave. With no orders from you it wins in about 17
+minutes; saving your guns wins it for you (`docs/plans/active/s1e3-playtest.md`).
 
 ## Verification
 
 - **`test/sides.test.ts`:**
   - **the plan:** a step's command arrives at its tick and is not logged; one for a formation gone or out of the
     fight is dropped with a reason; a charge's target by unit;
-  - **the end:** a side broken at half; a draw on one tick; the limit and its margin; not broken while more than
-    half is in the fight;
+  - **the end:** a side broken at `end.broken`; a draw on one tick; the limit and its margin; not broken above
+    it;
   - **routers breaking ranks (#39);**
   - **determinism:** ten minutes of `s1e-battle`, a golden with its replay (an empty log) and a save round trip.
 - **`npm run check:app`:**
@@ -90,5 +92,6 @@ in a charge; the scenario sets its times and its limit.
 
 - **The plan is a script.** It does not react: a line ordered over the stream goes even when your guns are
   waiting for it. Whether that is enough for the first playtests is S1e-3's question; a reacting brigade AI is S3.
-- **Half the men out of the fight ends a battle.** That may be too soon or too late; S1e-3's playtests tune
-  `end.broken`.
+- **More than a third of the men out of the fight ends a battle** (`end.broken` 0.65, S1e-3). At half, a side
+  whose first line had routed fought on for 20 minutes with nothing happening: rallied battalions count as in the
+  fight, though they stand at the map's edge. Whether a rallied battalion far from the fight should count is open.

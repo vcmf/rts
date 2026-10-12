@@ -7,12 +7,13 @@ last_reviewed: 2026-10-12
 
 The last part of S1e (`docs/plans/active/s1e1-battlefield.md`, the split), and S1's acceptance
 (`docs/proposals/sim-design.md` §17): **a 20-minute fight of about 6 battalions per side is fun at 2× speed**. Only
-you can judge that, so S1e-3 is your play and the tuning that follows from it, in two PRs:
+you can judge that, so S1e-3 is your play and the tuning that follows from it, in three PRs:
 
 | Part | Scope | Ends with |
 |---|---|---|
 | **S1e-3a** (this PR) | The playtest kit: marking moments while you play, saving the session to a file, and a report that plays a session back and says what happened; a first read of the battle with no orders | You play, mark what feels wrong, and send the file |
-| S1e-3b | Tuning from your sessions: the scenario, the plan, the rules' numbers | S1's acceptance, or a list of what blocks it |
+| **S1e-3b** | Tuning before your play: the faults the first read found, fixed without human eyes, measured with the report and scripted defences | With no orders you lose; a defence that uses its arms wins |
+| S1e-3c | Tuning from your sessions: the scenario, the plan, the rules' numbers | S1's acceptance, or a list of what blocks it |
 
 ## The problem
 
@@ -105,4 +106,42 @@ These are a standing side's battle, not yours. They are what the playtest tests 
 - Cancel on the mark's prompt still marked: it marks nothing; the pause around the prompt did nothing (the prompt
   holds the page) and is gone; Cmd+M (minimise) no longer marks;
 - `check:app` crashed on a missing session line, and left out the default map.
+
+## S1e-3b: tuning before your play
+
+Each fault of the first read, its cause, and what changed (measured with `tools/battle-report.ts` and with
+throwaway probes: shots fired per formation, positions over time, results over eight seeds):
+
+| Fault | Cause | Change |
+|---|---|---|
+| Side 1's eastern battalion faced nothing | side 1 was side 0 turned through the centre, so its lines attacked at x 200, 80, −40 against yours at −200, −80, 40 | side 1 is placed and planned on its own: four battalions up, two back, closing opposite and overlapping your line |
+| A battalion crawled 90 m in 8 minutes | its 93 m line straddled the hedge at x 110 and kept to the hedge's pace | every first-line battalion comes straight down clear of the hedge, then obliques on open ground |
+| The lines arrived one at a time | different paths and the marsh | three legs: the north bank, a halt at about 130 m to dress, the final advance together |
+| The batteries never fired | each faced straight ahead (arc ±20°) from a flank where no enemy came | each stands on its first line's inner flank, turned 25° inwards; its arc sweeps the ground in front of the line, which no friend masks |
+| One charge pinned a whole side in square for 4 minutes | the regiment, blown and resting after its melee, stood within 200 m, which counts as a threat | a blown regiment cannot charge, so it neither threatens nor holds a square (`docs/systems/melee.md`) |
+| The regiment loitered in your lines for 30 minutes | the plan ended with the charge | it charges your battery, then rides back over the stream |
+| A standing defender won easily | a halted line fires from 250 m and a marching one cannot; the defender's battery swept the approach | side 1's infantry are veterans (quality 0.85) and overlap your line; its regiment goes for your guns |
+| Nothing happened for the last 20 minutes; the limit gave a draw | at `end.broken` 0.5 a side whose first line had routed fought on, and its rallied battalions (at the map's edge) counted as in the fight | `end.broken` 0.65: a side with more than a third of its men out of the fight is broken |
+| Side 1's second line never fought | the plan halted it 100 m behind | it comes up to the firing line at 15 minutes as a second wave |
+
+**Results**, eight seeds each (seeds 1–7 and the page's); a defence scripted as a player might play it:
+
+| Your side | Result |
+|---|---|
+| No orders | side 1 wins at 17.0–18.1 min |
+| The reserves extend both flanks | side 1 wins at 19.7–20.8 min (four seeds) |
+| Your regiment counter-charges theirs, saving your battery | you win at 11.6–13.0 min (four seeds) |
+| Both | you win at 13.6–14.5 min (four seeds) |
+
+Along the way: with ordinary quality (0.75) attackers and `end.broken` 0.65, a standing defender won every seed at
+17–19 minutes; at 0.5 almost every battle was a draw at 40 minutes.
+
+**What this leaves for your play:**
+- the battle turns on one decision, the guns; whether that is a good puzzle or a trap is yours to say;
+- a defender who saves its guns wins in about 12 minutes, maybe too fast;
+- side 1's plan still does not react: a second wave goes in at 15 minutes whatever has happened.
+
+**The goldens:** every one changed its ruleset hash (`end`). Two changed behaviour: `s1e-battle` (the new scenario)
+and the page's charge, where the spawned square's alert spell now ends while the regiment is blown (ticks 1101
+and 4202); it stays in square either way, being spawned in it. `SIM_VERSION` is `s1e.3`.
 

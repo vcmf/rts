@@ -241,7 +241,8 @@ function meleePair(w: World, G: FireGeo, S: Melee, i: number, tick: number): voi
 }
 
 /* ---------------- step 4: the square against cavalry ---------------- */
-// an enemy in the fight of a type that charges (from `chargers`, n of them), within refuge.alert of battalion i,
+// an enemy in the fight of a type that charges and is not blown (from `chargers`, n of them: a blown regiment
+// cannot charge, so it neither threatens nor holds a square, S1e-3), within refuge.alert of battalion i,
 // charging it, or standing or closing: anything but riding away faster than refuge.closing (a regiment at the
 // halt can charge in seconds)
 const chargers = new Int32Array(MAX_FORMATIONS)
@@ -273,7 +274,7 @@ export function standingStep(w: World): void {
   const f = w.f, Q = w.cr.rs.melee.refuge, tick = w.meta[M_TICK] + 1, react = Math.round(Q.react * TICK_HZ), hold = Math.round(Q.hold * TICK_HZ)
   // the charging types in the fight, once; nothing to do with none, no battalion on the alert and none to form back
   let n = 0, busy = false
-  for (let j = 0; j < MAX_FORMATIONS; j++) { if (!f.alive[j]) continue; if (f.alertAt[j] || f.autoFrom[j]) busy = true; if (typeOf(w, j).charge && !outOfFight(f.mstate[j])) chargers[n++] = j }
+  for (let j = 0; j < MAX_FORMATIONS; j++) { if (!f.alive[j]) continue; if (f.alertAt[j] || f.autoFrom[j]) busy = true; if (typeOf(w, j).charge && !outOfFight(f.mstate[j]) && f.blownUntil[j] <= tick) chargers[n++] = j }
   if (!n && !busy) return
   for (let i = 0; i < MAX_FORMATIONS; i++) {
     if (!f.alive[i]) continue

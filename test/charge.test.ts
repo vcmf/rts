@@ -218,6 +218,17 @@ describe('the square against cavalry (standing behaviour)', () => {
     expect(s.shape(ln)).toBe('square → line'); expect(Math.abs(s.t - Math.max(out, away + napoleonic.melee.refuge.hold))).toBeLessThan(1.5)
     s.until(() => s.busy(ln), 120); expect(s.shape(ln)).toBe('line')
   })
+  it('a blown regiment neither threatens nor holds a square: it cannot charge (S1e-3)', () => {
+    const blow = (s: S, c: number) => { s.w.f.blownUntil[s.slot(c)] = 1e9 }
+    // standing 60 m off, blown: no square
+    const s = new S(), ln = s.inf(0, 60, PI), cav = s.cav(0, 0, 0); blow(s, cav); s.advance(20)
+    expect(s.shape(ln)).toBe('line')
+    // a square sheltering from it forms back once it is blown, after refuge.hold, though it stands as near
+    const t = new S(), sq = t.inf(0, 60, PI), c = t.cav(0, -110, 0)
+    t.order({ type: 'move', id: c, points: [[0, 0]], append: false }); t.until(() => t.shape(sq) !== 'square', 150); t.advance(5)
+    blow(t, c); const at = t.t; t.until(() => t.shape(sq) === 'square', 120)
+    expect(t.shape(sq)).toBe('square → line'); expect(t.t - at).toBeCloseTo(napoleonic.melee.refuge.hold, 0)
+  })
   it('a player\'s order stands it down for the rest of the threat', () => {
     const s = new S(), ln = s.inf(0, 60, PI), cav = s.cav(0, -110, 0)
     s.order({ type: 'move', id: cav, points: [[0, 0]], append: false }); s.until(() => !s.w.f.trans[s.slot(ln)], 20)

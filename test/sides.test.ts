@@ -119,7 +119,7 @@ describe('the plan', () => {
 
 describe('the end', () => {
   const two = () => battle({}, [[0, -100, -200, 0], [0, 100, -200, 0], [1, -100, 200, PI], [1, 100, 200, PI]])
-  it('a side with half its men out of the fight is broken and its enemy wins', () => {
+  it('a side whose share in the fight falls to end.broken is broken and its enemy wins (one of two out)', () => {
     const s = two(); s.advance(1); expect(s.w.meta[M_END]).toBe(0)
     s.order({ type: 'debug-morale', id: unitHandle(2), quality: 0 }); s.until(() => !s.w.meta[M_END], 30)
     expect([s.w.f.mstate[2], s.w.meta[M_WINNER]]).toEqual([MS_ROUTING, END_SIDE0])
@@ -141,7 +141,8 @@ describe('the end', () => {
     s.until(() => s.w.f.mstate[1] >= MS_ROUTING, 300)
     expect(s.w.f.mstate[1]).toBeLessThan(MS_ROUTING); expect(fightShares(s.w)[1]).toBe(1)   // rallied: all its men back
   })
-  it('a side is not broken while more than half its men are in the fight', () => {
+  it('a side is not broken while its share in the fight is above end.broken (two of three in)', () => {
+    expect(napoleonic.end.broken).toBeGreaterThanOrEqual(1 / 2); expect(napoleonic.end.broken).toBeLessThan(2 / 3)   // what the setups below need
     const s = battle({}, [[0, -100, -200, 0], [1, -150, 200, PI], [1, 0, 200, PI], [1, 150, 200, PI]])
     s.w.f.morale[1] = 0.1; s.tick()   // one of side 1's three: two thirds still in the fight
     expect([s.w.f.mstate[1], s.w.meta[M_END]]).toEqual([MS_ROUTING, 0])
