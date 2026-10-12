@@ -1,6 +1,6 @@
-#extension GL_OES_standard_derivatives : enable
-precision highp float;varying float vD;varying vec2 vUV;uniform sampler2D uLeaf;uniform float uLeafSize;
+precision highp float;varying float vD;varying vec2 vUV;uniform sampler2D uLeaf;
 void main(){
-  vec2 d=vUV*uLeafSize;float lod=max(0.0,0.5*log2(max(dot(dFdx(d),dFdx(d)),dot(dFdy(d),dFdy(d)))));
-  if(texture2D(uLeaf,vUV).a*(1.0+lod*0.6)<0.5)discard;   // the same coverage as the cards drawn
+  // a plain cut, two mips finer than the sun view asks: the shadow keeps the gaps between the leaves (the cards
+  // drawn boost coverage with distance instead, for the screen)
+  if(texture2D(uLeaf,vUV,-2.0).a<0.5)discard;
   gl_FragColor=vec4(vD,vD,vD,1.0);}

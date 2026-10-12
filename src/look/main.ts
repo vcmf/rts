@@ -77,7 +77,8 @@ const cardOpts: CardOptions = { size: cardOpt('cardsize', CARD_DEFAULTS.size), c
 let leafTex: DynamicTexture | null = null
 if (treesParam === 'cards') {
   const atlas = leavesParam === 'procedural' ? atlasProcedural() : atlasFromPicture(await loadImage(LEAF_URL))
-  leafTex = new DynamicTexture('leaves', atlas, scene, true, Texture.TRILINEAR_SAMPLINGMODE); leafTex.hasAlpha = true; leafTex.update(false)
+  leafTex = new DynamicTexture('leaves', atlas, scene, true, Texture.TRILINEAR_SAMPLINGMODE); leafTex.hasAlpha = true
+  leafTex.wrapU = leafTex.wrapV = Texture.CLAMP_ADDRESSMODE; leafTex.update(false)
 }
 const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { leaf: leafTex, opts: cardOpts } : undefined)
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
@@ -121,7 +122,8 @@ addEventListener('drop', e => {
   if (e.shiftKey) {
     if (!leafTex) { console.warn('dropping a leaf picture needs ?trees=cards'); return }
     const tex = leafTex
-    img.onload = () => { const atlas = atlasFromPicture(img); tex.getContext().clearRect(0, 0, atlas.width, atlas.height); tex.getContext().drawImage(atlas, 0, 0); tex.update(false) }
+    // the crowns cast through the atlas too: the render-once shadow map, and the light map after it, are redone
+    img.onload = () => { const atlas = atlasFromPicture(img); tex.getContext().clearRect(0, 0, atlas.width, atlas.height); tex.getContext().drawImage(atlas, 0, 0); tex.update(false); bakes.shadowRT.resetRefreshCounter() }
     img.src = URL.createObjectURL(f); return
   }
   img.onload = () => {
@@ -276,7 +278,8 @@ if (params.has('bench')) {
   if (!(hold > 0)) throw new Error(`?hold must be a positive number of seconds, not ${params.get('hold')}`)
   // the arms: the detail layer, and the L0 grain it replaces (the cost gate: at most +1 ms GPU for the terrain)
   // ?bench=macro: the macro colour's arms instead (with the detail layer)
-  // ?trees=cards&bench=trees: the crowns' two arms, cards and the pack's (docs/plans/active/l7a-canopy-cards.md)
+  // ?trees=cards&bench=trees: the crowns' two arms, cards and the pack's (docs/plans/active/l7a-canopy-cards.md),
+  // for their GPU time only: the shadow map is baked once, with the cards, so the pack arm keeps the cards' shadows
   if (params.get('bench') === 'trees' && !nature.showCards) throw new Error('?bench=trees needs ?trees=cards')
   const show = nature.showCards
   const arms = params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? MACRO_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); macro.setArm(a) } })) : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]

@@ -23,8 +23,8 @@ whether that reads better than ours **at the RTS camera**, under our painter.
   pines, bushes and everything else unchanged.
 - The cards are generated from each pack model's crown triangles (area-weighted samples), so placement, scale
   and composition stay exactly the same as the default arm.
-- **Shadows stay the default arm's**: the pack crowns still cast into the baked shadow map and the light map,
-  and are hidden from the main view. Only the crown's own look differs between arms.
+- **Shadows** (first pass: the pack crowns cast and the cards did not; since the leafy shadows below): the
+  crowns cast through their cards, and the trunks through a trunk-only mesh.
 - The leaf atlas: four clumps, greyscale value plus alpha, read from a generated reference
   (`data/leaf-clumps-oak-v1.png`, the owner's generated reference oak-leaf-clumps-greyscale-v1, unchanged) or drawn procedurally
   (`?leaves=procedural`). A PNG dropped on the page while holding Shift replaces it (any layout of four clumps
@@ -40,11 +40,12 @@ whether that reads better than ours **at the RTS camera**, under our painter.
 2. `src/look/canopy.ts` + `shaders/canopy.vert|frag`: per model, a card mesh (four vertices per card, the card
    centre, a corner, a size, a rotation and an atlas cell). The vertex shader expands each card in view space
    around its centre (scaled with the instance). Normals are the crown's sphere normals, so the crown shades
-   as one mass. The fragment shader alpha-tests the atlas with a sharpened, mip-compensated alpha (so crowns
-   neither shimmer nor thin out at distance) and paints through the shared `paint()` with the same palette,
-   rim and backlight as the default crowns.
-3. `nature.ts`: under `cards`, the pack tree meshes keep only their trunks in the main view (`TRUNK_ONLY`) and
-   the card meshes go beside them; `bakes.ts` keeps card meshes out of the shadow pass.
+   as one mass. The fragment shader alpha-tests the atlas with a mip-compensated alpha (so crowns do not thin
+   out at distance) and paints through the shared `paint()` with the same palette (the inner, role-1 leaves
+   darker, as on the pack crowns), rim and backlight as the default crowns. The expansion and the atlas cell are
+   one include (`shaders/cards.glsl`) shared with the shadow pass.
+3. `nature.ts`: under `cards`, a carded model is drawn as a trunk-only mesh (its triangles off the crown) and its
+   card mesh; the whole pack model is disabled. `?bench=trees` switches between the two for GPU time.
 
 ## Leafy shadows (added 2026-10-12, owner: "the shadow work of our trees looks weak")
 
@@ -83,8 +84,8 @@ the oak picture and with the procedural atlas.
   proxy, machine under load, no gate): GPU frame p50 close 5.50–5.63 ms (cards) vs 5.53–5.65 (pack); widest
   12.39–13.15 vs 12.20–12.94, so +0.1 to +0.4 ms at the widest zoom; +12 draw calls and +8.9k triangles.
   The bench scene's woods are small; a battlefield forest needs its own measurement.
-- **Leafy shadows:** the crowns now cast through their cards and the trunks cast on their own. The shadow matches
-  the card crown's footprint and the trunks' shadows read, but the outline stays mostly smooth: leaf-scale
-  detail (0.3 to 0.5 m) is at the shadow map's 0.33 m texel, and the light-map bake filters edges over about
-  1.3 m. A tighter filter (tried: 0.5 instead of 1.2 texels a tap) sharpens every shadow on the map, rocks and
-  buildings too, so it belongs to the shadow-look plan, not here.
+- **Leafy shadows:** the crowns cast through their cards and the trunks cast on their own. The first try cut the
+  cards in the sun's pass with the screen's distance-boosted coverage, which filled every gap (the review's
+  finding, not the shadow map's 0.33 m texel as first thought); with a plain cut two mips finer, the shadow's
+  outline breaks into leaf lobes. Its inside stays solid where the crown is dense. The light-map bake filters
+  edges over about 1.3 m for every shadow on the map; a tighter filter is the shadow-look plan's.

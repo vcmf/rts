@@ -17,9 +17,6 @@ vec3 roleCol(float r,float t){
   return vec3(0.84,0.16,0.12);
 }
 void main(){
-  #ifdef TRUNK_ONLY
-  if(vRole<1.5)discard;                                         // the crown is drawn as cards (src/look/canopy.ts)
-  #endif
   vec3 N=normalize(vN);
   vec4 lm=LM(vW);
   #ifdef GRASSY

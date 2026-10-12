@@ -8,7 +8,7 @@ export const CELL = 512
 const BLACK = 14   // brightness at or below this is background
 
 // a picture's brightness, 0..255 per pixel
-function lumOf(img: CanvasImageSource & { width: number; height: number }): { w: number; h: number; l: Float32Array } {
+function brightnessOf(img: CanvasImageSource & { width: number; height: number }): { w: number; h: number; l: Float32Array } {
   const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height
   const g = cv.getContext('2d', { willReadFrequently: true })!; g.drawImage(img, 0, 0)
   const d = g.getImageData(0, 0, cv.width, cv.height).data, l = new Float32Array(cv.width * cv.height)
@@ -24,7 +24,7 @@ function gutter(empty: (k: number) => boolean, lo: number, hi: number): number {
 }
 
 export function atlasFromPicture(img: CanvasImageSource & { width: number; height: number }): HTMLCanvasElement {
-  const { w, h, l } = lumOf(img)
+  const { w, h, l } = brightnessOf(img)
   const rowEmpty = (y: number, x0: number, x1: number) => { for (let x = x0; x < x1; x++) if (l[y * w + x] > BLACK) return false; return true }
   const colEmpty = (x: number, y0: number, y1: number) => { for (let y = y0; y < y1; y++) if (l[y * w + x] > BLACK) return false; return true }
   const gx = gutter(x => colEmpty(x, 0, h), 0, w)

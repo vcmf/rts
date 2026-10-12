@@ -26,7 +26,7 @@ import DEPTH_FS from './shaders/depth.frag?raw'
 import BAKE_FS from './shaders/bake.frag?raw'
 import CARD_DEPTH_VS from './shaders/canopy-depth.vert?raw'
 import CARD_DEPTH_FS from './shaders/canopy-depth.frag?raw'
-import { CELL } from './leaves.ts'
+import { withCards } from './canopy.ts'
 
 export interface Bakes { lightCam: FreeCamera; shadowRT: RenderTargetTexture; lightMap: RenderTargetTexture; bakeMat: ShaderMaterial; lightVP: Matrix; smTexel: Vector2 }
 
@@ -54,18 +54,16 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   shadowRT.activeCamera = lightCam; shadowRT.clearColor = new Color4(1, 1, 1, 1)
   const terrains = scene.meshes.filter(m => m.name === 't')
   // terrain is NOT a shadow caster: it self-shadowed into diagonal 'acne' stripes; slopes facing away are already dark via N·L
-  // small plants don't cast either: thousands of tuft shadows streaked the ground along the sun direction; nor do
-  // the leaf cards (their crowns' pack meshes cast for them: docs/plans/active/l7a-canopy-cards.md)
-  shadowRT.renderList = scene.meshes.filter(m => m.name !== 'water' && m.name !== 'apron' && (m.name !== 't' || m === terrains[0]) && !/Grass|Flowers|Plant|Wheat|^cards_/.test(m.name))
+  // small plants don't cast either: thousands of tuft shadows streaked the ground along the sun direction.
+  // Under cards (docs/plans/active/l7a-canopy-cards.md) the carded pack models are disabled and cast nothing; their
+  // trunk meshes cast with the rest, and the crowns cast through their cards, turned to face the sun and cut by the
+  // leaf atlas (below)
+  shadowRT.renderList = scene.meshes.filter(m => m.name !== 'water' && m.name !== 'apron' && (m.name !== 't' || m === terrains[0]) && !/Grass|Flowers|Plant|Wheat|^cards_/.test(m.name) && (!cardCasters || m.isEnabled()))
   for (const m of shadowRT.renderList) shadowRT.setMaterialForRendering(m, depthMat)
-  // under cards (docs/plans/active/l7a-canopy-cards.md): the pack trees cast only their trunks, and the crowns cast
-  // through their cards, turned to face the sun and cut by the leaf atlas, so the shadows are as leafy as the crowns
   if (cardCasters) {
-    const trunkDepth = new ShaderMaterial('depthTrunks', scene, { vertexSource: DEPTH_VS, fragmentSource: DEPTH_FS }, { attributes: ['position', 'aRole'], uniforms: ['world', 'viewProjection'], defines: ['#define TRUNK_ONLY'] })
-    trunkDepth.backFaceCulling = true; trunkDepth.sideOrientation = Material.CounterClockWiseSideOrientation
-    const cardDepth = new ShaderMaterial('depthCards', scene, { vertexSource: CARD_DEPTH_VS, fragmentSource: CARD_DEPTH_FS }, { attributes: ['position', 'aCorner', 'aCard'], uniforms: ['world', 'viewProjection', 'view', 'uLeafSize'], samplers: ['uLeaf'] })
-    cardDepth.backFaceCulling = false; cardDepth.setTexture('uLeaf', cardCasters.leaf); cardDepth.setFloat('uLeafSize', CELL * 2)
-    for (const { pack, cards } of cardCasters.pairs) { shadowRT.setMaterialForRendering(pack, trunkDepth); shadowRT.renderList.push(cards); shadowRT.setMaterialForRendering(cards, cardDepth) }
+    const cardDepth = new ShaderMaterial('depthCards', scene, { vertexSource: withCards(CARD_DEPTH_VS), fragmentSource: withCards(CARD_DEPTH_FS) }, { attributes: ['position', 'aCorner', 'aCard'], uniforms: ['world', 'viewProjection', 'view'], samplers: ['uLeaf'] })
+    cardDepth.backFaceCulling = false; cardDepth.setTexture('uLeaf', cardCasters.leaf)
+    for (const cards of cardCasters.cards) { shadowRT.renderList.push(cards); shadowRT.setMaterialForRendering(cards, cardDepth) }
   }
   shadowRT.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE; shadowRT.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
   scene.customRenderTargets.push(shadowRT)
