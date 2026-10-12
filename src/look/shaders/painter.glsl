@@ -56,8 +56,10 @@ float shadowAt(vec3 wp,vec3 n){
   for(int x=0;x<2;x++)for(int y=0;y<2;y++)s+=step(texture2D(uShadowMap,uv+(vec2(float(x),float(y))*2.0-1.0+j)*uSMTexel).r,d);
   vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,uSMFade.x,e.x)*smoothstep(0.0,uSMFade.y,e.y);   // soft edge: far foliage past the box fades to lit
   return s/4.0*uShadowsOn*fade;}
-// BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask.
+// BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask, A the contact under trees (outside the
+// map: 1, no contact). groundOcc: the occlusion of the ground and what grows flat on it, contact included
 uniform sampler2D uLM;uniform mat4 uLMVP;uniform float uAO,uMist,uShafts,uBack;
+float groundOcc(vec4 lm){return lm.g*lm.a;}
 vec4 LM(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);vec2 uv=p.xy/p.w*0.5+0.5;
   if(uv.x<0.002||uv.y<0.002||uv.x>0.998||uv.y>0.998)return vec4(1.0,1.0,0.0,1.0);
   return texture2D(uLM,uv);}
@@ -65,7 +67,7 @@ vec4 LM(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);vec2 uv=p.xy/p.w*0.5+0.5;
 // the air column's sun visibility, read from the light map at 3 heights along the view ray.
 vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   float m=lm.b*uMist*exp(-hAbove*0.12);if(m<0.01)return c;
-  float air=lm.r;
+  float air=mix(1.0,lm.r,uShadowsOn);
   if(uShafts>0.5){vec3 v=normalize(uCamPos-wp);float s=0.0;
     for(int i=0;i<3;i++){float h=(float(i)+0.5)/3.0*7.0;vec3 q=wp+v*(h/max(v.y,0.25));
       s+=LM(q-uSunDir*((q.y-wp.y)/uSunDir.y)).r;}

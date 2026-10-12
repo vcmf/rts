@@ -1,5 +1,4 @@
 precision highp float;varying vec3 vW,vN;uniform vec3 uAlb;uniform float uMask;
-#define KEEP_HUE
 #include<painter>
 
 // a flat army block (docs/plans/active/l2-detail.md, the readability guard): one coat colour through the shared

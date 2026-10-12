@@ -46,7 +46,7 @@ void main(){
   #ifdef DETAIL_DEBUG_N
   gl_FragColor=vec4(N*0.5+0.5,1.0);return;   // the bank check's view: the shading normal
   #endif
-  float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,lm.g*lm.a,uAO);   // lm.a: the contact under trees
+  float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,groundOcc(lm),uAO);
   #ifdef WATERDATA
   vec4 wt=waterTexel(vW.xz);   // the water data here: the banks (albedo) and the shore band (below)
   #else

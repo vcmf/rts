@@ -30,7 +30,8 @@ The owner (2026-10-12): "the shadow work of our trees in the whole map looks wea
 
 ## Scope
 
-One shared change of the look, all in the painter and the bakes (no runtime cost added; the bakes run once):
+One shared change of the look, all in the painter and the bakes (no new pass; a few more operations a fragment in
+`shadowOf()` and `mist()`, unmeasured: an estimate of no visible cost; the bakes run once):
 
 - **A. Mist respects shadows** (`mist()` in `painter.glsl`): the veil thins where the ground lies in cast shadow,
   and shadowed air is darker and more saturated than lit air.
@@ -81,3 +82,7 @@ Pairs (not committed; `scratch/` in this worktree): `scratch/shadow/{near,mid,fa
   fading with the height); the system doc. Light: the tree flag read from a strength value (now explicit), the
   contact loop copied (folded into one), the cool colour normalised twice (simplified). Not observed: stair-steps
   from the tighter filter (the winter edge at 2× stays grain-broken).
+- **Round 2**: no severe finding. Fixed: the contact read by the terrain but not by the water's shore band nor
+  the grass (one `groundOcc()` for all three), the mist's air still showing shadow shapes with shadows off, the
+  cost claim (now an unmeasured estimate), the light map's channel comments, the core's real minimum size,
+  `KEEP_HUE` passed where the block material is made. Review stops here.
