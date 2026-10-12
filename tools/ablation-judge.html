@@ -111,7 +111,7 @@ function plan(screens, uid) {
   return { order, swap }
 }
 
-let screens = [], byId = {}, db = null, uid = null, mine = null, P = null, at = 0, tab = 'summer.yaw0', saving = Promise.resolve()
+let screens = [], byId = {}, db = null, uid = null, mine = null, P = null, at = 0, tab = 'summer.yaw0', saving = Promise.resolve(), saveOk = true
 
 async function boot() {
   try { screens = (await (await fetch('screens.json')).json()).screens } catch (e) { $('offline').hidden = false; $('offline').querySelector('p').textContent = 'The screens did not load. Reload the page.'; return }
@@ -179,16 +179,20 @@ function answer(id, k, val) {
   $('saveStatus').textContent = 'Saving…'; $('saveStatus').className = 'status'
   // one write at a time to the judge's document
   saving = saving.then(() => db.doc('answers/' + uid).set(body)).then(
-    () => { $('saveStatus').textContent = 'Saved'; $('saveStatus').className = 'status ok' },
-    e => { $('saveStatus').textContent = e?.code === 'invalid_argument' ? 'Not saved: this account cannot write here' : 'Not saved: check your connection, then answer again'; $('saveStatus').className = 'status warn' })
+    () => { saveOk = true; $('saveStatus').textContent = 'Saved'; $('saveStatus').className = 'status ok' },
+    e => { saveOk = false; $('saveStatus').textContent = e?.code === 'invalid_argument' ? 'Not saved: this account cannot write here' : 'Not saved: check your connection, then answer again'; $('saveStatus').className = 'status warn' })
 }
 
 $('prev').onclick = () => { if (at > 0) { at--; render(); scrollTo({ top: 0 }) } }
-$('next').onclick = () => {
+$('next').onclick = async () => {
   const id = P.order[at]
   if (!complete(id)) { $('saveStatus').textContent = 'Answer all five questions first'; $('saveStatus').className = 'status warn'; return }
-  if (at < P.order.length - 1) { at++; render(); scrollTo({ top: 0 }) } else if (allDone()) showDone()
-  else { at = P.order.findIndex(i => !complete(i)); render() }
+  if (at < P.order.length - 1) { at++; render(); scrollTo({ top: 0 }); return }
+  if (!allDone()) { at = P.order.findIndex(i => !complete(i)); render(); return }
+  // finished only once the last answers are saved
+  $('next').disabled = true; await saving; $('next').disabled = false
+  if (db && uid && !saveOk) { $('saveStatus').textContent = 'Your last answers are not saved yet: change one to save again, then finish'; $('saveStatus').className = 'status warn'; return }
+  showDone()
 }
 
 // the owner's view: every judge's progress, live

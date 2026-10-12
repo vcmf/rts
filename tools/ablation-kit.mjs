@@ -3,8 +3,8 @@
 // and zoom (H.264), with the readability guard's army-colour blocks on the ground and one tree type (?trees=one).
 //
 //   node tools/ablation-kit.mjs <look page URL> <outDir> [--seed <text>] [--arms <a,b>]
-//     --seed   names the files and draws the screens' sides (default: the date): a new seed, new names, so give the
-//              same seed to a partial run
+//     --seed   names the files and draws the screens' sides (default: random, kept in the key alone): anyone with
+//              the seed can tell the arms from the ids, so never a guessable one; a partial run needs the key's seed
 //     --arms   shoot only these arms (the kit is still assembled from every arm's shots in <outDir>/private/shots)
 //
 // Writes, under <outDir>:
@@ -19,16 +19,17 @@
 // rules every viewer would read and overwrite every judge's. Judges need Contributor access to save.
 // The page then shuffles the screens and swaps the sides per judge. Needs ffmpeg, and the machine's GPU
 // (SHOT_ANGLE, default metal): SwiftShader is too slow for the pans.
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ARMY_HEX, COVER_SPOTS, blocksAt } from './army-blocks.mjs'
 import { prepSteps, shoot, viewStep } from './look-page.mjs'
+import { SPEC } from '../src/look/spec.ts'
 
 const args = process.argv.slice(2), opt = name => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : null }
-const seed = opt('--seed') ?? new Date().toISOString().slice(0, 10), only = opt('--arms')?.split(',')
+const seed = opt('--seed') ?? randomBytes(16).toString('hex'), only = opt('--arms')?.split(',')
 const [url, outDir] = args
 if (!url || !outDir) { console.error('usage: node tools/ablation-kit.mjs <look page URL> <outDir> [--seed <text>] [--arms <a,b>]'); process.exit(2) }
 
@@ -38,10 +39,11 @@ const ARMS = ['flat', 'shader', 'bake', 'strokes', 'kuwahara']
 const PAIRS = [['flat', 'shader'], ['shader', 'bake'], ['bake', 'strokes'], ['bake', 'kuwahara']]
 for (const a of only ?? []) if (!ARMS.includes(a)) { console.error(`--arms: unknown arm ${a}`); process.exit(2) }
 // the framing (the Pratzen framing's stand-in): east of the hill, the ploughed field, the track, the road and the
-// village in frame. The bench's zooms (src/look/bench.ts: closest, default, widest at the steepest pitch) and yaws
-// (the default and the limits, decision 0010: SPEC.camera)
-const TARGET = [95, 8, -40], YAW0 = -Math.PI / 2 - 0.35, YAW_RANGE = Math.PI / 4
-const ZOOMS = { close: [0.80, 45], default: [0.80, 125], wide: [0.98, 260] }
+// village in frame. The bench's zooms (src/look/bench.ts: closest, default, widest at the steepest pitch; the default
+// pitch and distance src/look/post.ts's START) and yaws (the default and the limits, decision 0010: SPEC.camera)
+const CAM = SPEC.camera, START_BETA = 0.80, START_RADIUS = 125
+const TARGET = [95, CAM.focusY, -40], YAW0 = CAM.yaw0, YAW_RANGE = CAM.yawRange
+const ZOOMS = { close: [START_BETA, CAM.rMin], default: [START_BETA, START_RADIUS], wide: [CAM.betaMax, CAM.rMax] }
 const YAWS = { 'yaw-45': -YAW_RANGE, yaw0: 0, 'yaw+45': YAW_RANGE }
 const SEASONS = { summer: 0, winter: 3 }
 // the pans: FRAMES at 24 fps (3 s), the target moving along the screen's right by PAN of the zoom's distance (at the default
@@ -108,8 +110,9 @@ PAIRS.forEach(([a, b], p) => Object.keys(ZOOMS).forEach(zoom => {
   key.screens[sid] = { pair: [a, b], zoom, x, y }
   screens.push({ id: sid, zoom, x: { stills: sides.x.stills, clips: sides.x.clips }, y: { stills: sides.y.stills, clips: sides.y.clips } })
 }))
+// nothing publishable from a run with shots missing (a screen would show media/null)
+if (missing.length) { fs.rmSync(pub, { recursive: true, force: true }); console.error(`ablation-kit: ${missing.length} shots missing (shoot their arms first), e.g. ${missing.slice(0, 3).join(', ')}; nothing published`); process.exit(1) }
 fs.writeFileSync(path.join(pub, 'screens.json'), JSON.stringify({ screens }, null, 1))
 fs.writeFileSync(path.join(outDir, 'private', 'key.json'), JSON.stringify(key, null, 1))
 fs.copyFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'ablation-judge.html'), `${pub}/judge.html`)
-if (missing.length) { console.error(`ablation-kit: ${missing.length} shots missing (shoot their arms first), e.g. ${missing.slice(0, 3).join(', ')}`); process.exit(1) }
 console.log(`ablation-kit: ${screens.length} screens, ${Object.keys(ids).length} files in ${media}; the key in ${path.join(outDir, 'private', 'key.json')}`)

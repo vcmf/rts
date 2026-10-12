@@ -18,7 +18,14 @@ uniform sampler2D uMacro,uMacroFar;   // the bakes: the tile at SPEC.macro.texel
 #endif
 // the cover cell at a world point: class (0..9), field id (0 off fields, else a hash in 1..255), furrow direction
 // (rad), wear distance (m, to the nearest road, track or village ground; 25.5 at or past its reach)
-vec4 coverAt(vec2 xz){vec4 t=texture2D(uCover,xz/FAR_W+0.5);return vec4(floor(t.r*255.0+0.5),floor(t.g*255.0+0.5),t.b*3.14159265,t.a*25.5);}
+// (nearest, no mips: on WebGL2 read with zero derivatives, so a read in a branch the pixels of a quad take differently
+// is defined, as arm 4's strokes do)
+#ifdef WEBGL2
+vec4 coverTex(vec2 uv){return textureGrad(uCover,uv,vec2(0.0),vec2(0.0));}
+#else
+vec4 coverTex(vec2 uv){return texture2D(uCover,uv);}
+#endif
+vec4 coverAt(vec2 xz){vec4 t=coverTex(xz/FAR_W+0.5);return vec4(floor(t.r*255.0+0.5),floor(t.g*255.0+0.5),t.b*3.14159265,t.a*25.5);}
 // a class's colour; v in 0..1 its variation (0.5: the flat arm's)
 vec3 classColour(float k,float v){
   return k<1.5?mix(vec3(0.27,0.43,0.21),vec3(0.38,0.50,0.25),v)      // pasture (0 is the meadow: groundMeadow)
@@ -113,7 +120,8 @@ vec3 strokes(vec2 xz,vec3 c,float px){
     float e=length(vec2(max(abs(dot(d,u))-(hl-hw),0.0),dot(d,vec2(-u.y,u.x))))-hw;
     sm[k]=0.9*(1.0-smoothstep(-0.25,0.25,e));sp[k]=strokeHash(id+59.1);sc[k]=c;
     #ifdef WEBGL2
-    // the colour read only where the stroke reaches (explicit derivatives make the branch's reads safe)
+    // the colour read only where the stroke reaches (every read in macro() passes its derivatives, so is defined in a
+    // branch: texM, coverTex)
     if(sm[k]>0.0)
     #endif
     sc[k]=macro(o,0.0,px).rgb*(0.9+0.2*strokeHash(id+97.7))*mix(vec3(0.96,1.0,1.05),vec3(1.04,1.0,0.95),strokeHash(id+5.3));

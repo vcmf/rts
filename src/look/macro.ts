@@ -82,16 +82,20 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
     t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE; t.anisotropicFilteringLevel = mips ? 4 : 1; return t
   }
   const tile = target('macroTile', D.macroN), far = target('macroFar', D.macroFarN)
-  // arm 5's scratch: the bake before its filter, read texel by texel (made for a bake, then freed)
-  const scratch = (n: number) => {
+  // arm 5's scratch: the bake before its filter, read texel by texel; one a size, made on arm 5's first bake and kept
+  const makeScratch = (n: number) => {
     const t = new RenderTargetTexture('macroScratch', n, scene, { generateMipMaps: false, generateDepthBuffer: false, generateStencilBuffer: false, type: Constants.TEXTURETYPE_UNSIGNED_BYTE, samplingMode: Texture.NEAREST_SAMPLINGMODE, format: Constants.TEXTUREFORMAT_RGBA })
     t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE; return t
   }
+  const scratches = new Map<number, RenderTargetTexture>()
+  const scratch = (n: number) => { let t = scratches.get(n); if (!t) scratches.set(n, t = makeScratch(n)); return t }
   mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far) })
 
   const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover']
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: D.defines })
-  const kuwahara = new EffectWrapper({ engine, name: 'macroKuwahara', vertexShader: BAKE_VS, fragmentShader: KUWAHARA_FS, attributeNames: ['position'], uniformNames: ['uN', 'uR', 'uPx'], samplerNames: ['uSrc'] })
+  // arm 5's filter, compiled on its first bake
+  let kuwaharaW: EffectWrapper | null = null
+  const kuwahara = () => kuwaharaW ??= new EffectWrapper({ engine, name: 'macroKuwahara', vertexShader: BAKE_VS, fragmentShader: KUWAHARA_FS, attributeNames: ['position'], uniformNames: ['uN', 'uR', 'uPx'], samplerNames: ['uSrc'] })
   const renderer = new EffectRenderer(engine)
   // a lost context empties the targets: a bake that saw a loss reports it, and a restored context bakes again
   let losses = 0
@@ -116,38 +120,41 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
     engine.unBindFramebuffer(rt, false); renderer.restoreStates()   // makes the mips, on a mipmapped target
     return draws
   }
-  // one bake over the world square centred on 0 of side `world` m: the macro colour, then on arm 5 (kuw) its filter
-  const draw = async (t: RenderTargetTexture, n: number, world: number, kuw: boolean): Promise<BakeStats> => {
-    await ready(wrapper); if (kuw) await ready(kuwahara)
+  // one bake over the world square centred on 0 of side `world` m: the macro colour, then on arm 5 (kuw) its filter.
+  // mb: the target with its mips, and arm 5's scratch beside it (`temp`: a scratch freed after the bake, the full-size
+  // run's)
+  const draw = async (t: RenderTargetTexture, n: number, world: number, kuw: boolean, temp = false): Promise<BakeStats> => {
+    await ready(wrapper); if (kuw) await ready(kuwahara())
     const lost0 = losses, t0 = performance.now(), x0 = -world / 2
-    const src = kuw ? scratch(n) : t
+    const src = !kuw ? t : temp ? makeScratch(n) : scratch(n)
     try {
       let draws = pass(src, n, wrapper, (e, i, j, w, h) => {
         e.setFloat4('uRect', x0 + i / n * world, x0 + j / n * world, x0 + (i + w) / n * world, x0 + (j + h) / n * world)
         e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex)
       })
-      if (src !== t) draws += pass(t, n, kuwahara, (e, i, j, w, h) => {
+      if (src !== t) draws += pass(t, n, kuwahara(), (e, i, j, w, h) => {
         e.setTexture('uSrc', src); e.setFloat('uN', n); e.setFloat4('uPx', i, j, i + w, j + h)
         // 2 m on the tile, a texel on the far ring
         e.setFloat('uR', Math.max(1, Math.min(KUWAHARA_MAX, Math.round(s.kuwahara / (world / n)))))
       })
-      return { ms: performance.now() - t0, texels: n * n, draws, mb: bakeMB(n, n) * (mips ? 4 / 3 : 1), lost: losses > lost0 }
-    } finally { if (src !== t) src.dispose() }
+      return { ms: performance.now() - t0, texels: n * n, draws, mb: bakeMB(n, n) * (mips ? 4 / 3 : 1) + (kuw ? bakeMB(n, n) : 0), lost: losses > lost0 }
+    } finally { if (temp && src !== t) src.dispose() }
   }
   // the arm the page shows, and the baked arm wanted (bake, strokes or kuwahara: the last one set)
   let arm: MacroArm = 'bake', bakeArm: MacroArm = 'bake', checks: string[] = []
   // The bakes run one at a time, in the order asked (a new grain, a restored context, an arm, a check, a rebake): each
   // takes the arm and the checks wanted when it starts. The bake's shader's defines are the checks' (all but the class
   // view, which the bake ignores) and arm 4's strokes; `baked` is what the targets hold, set once a bake finishes
-  let effectKey = 'bake', baked = ''
+  let effectKey = '', baked = ''
   const NOTHING: BakeStats = { ms: 0, texels: 0, draws: 0, mb: 0, lost: false }
   const wantedDefs = () => [...checks.filter(d => d !== 'MACRO_DEBUG'), ...(bakeArm === 'strokes' ? ['MACRO_STROKES'] : [])].sort()
   const wantedKey = () => [bakeArm, ...wantedDefs()].join(' ')
   // the bake's shader set to the wanted defines
   const wanted = () => {
-    const defs = wantedDefs(), key = wantedKey()
-    if (key !== effectKey) { wrapper.updateEffect([...D.defines, ...defs.map(d => `#define ${d}`)].join('\n'), UNIFORMS, SAMPLERS); effectKey = key }
-    return { kuw: bakeArm === 'kuwahara', key }
+    // the shader's defines alone: the arm (bake or kuwahara, the same shader) is not one
+    const defs = wantedDefs(), dk = defs.join(' ')
+    if (dk !== effectKey) { wrapper.updateEffect([...D.defines, ...defs.map(d => `#define ${d}`)].join('\n'), UNIFORMS, SAMPLERS); effectKey = dk }
+    return { kuw: bakeArm === 'kuwahara', key: wantedKey() }
   }
   const bakeNow = async (): Promise<BakeStats> => {
     const w = wanted(); baked = ''
@@ -180,7 +187,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
     async bakeBench(side) {
       if (!(Number.isInteger(side) && side >= 64 && side <= D.spec.minSpec.maxTexture)) throw new Error(`?macroBench must be a whole number of texels, 64–${D.spec.minSpec.maxTexture}`)
       const t = target('macroBench', side)
-      return enqueue(async () => { try { return await draw(t, side, side * s.texel, wanted().kuw) } finally { t.dispose() } })
+      return enqueue(async () => { try { return await draw(t, side, side * s.texel, wanted().kuw, true) } finally { t.dispose() } })
     },
     async hash(which) {
       const t = which === 'tile' ? tile : far, data = await t.readPixels() as Uint8Array

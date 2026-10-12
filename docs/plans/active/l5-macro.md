@@ -178,8 +178,7 @@ The bake with strokes painted into it. A gather in the bake's fragment shader: n
 context under SwiftShader (`docs/proposals/engine-design.md` §6).
 - **Stroke centres:** one per cell of a jittered grid of 2 m (a stroke then stays within its cell's neighbours).
 - **Orientation:** in a frame turned along the field's furrows on fields, and along a slow noise flow on grass.
-- **Shape:** each stroke a soft-ended capsule 1.6–3 m long and 0.5–0.9 m wide.
-- **Colour:** the macro colour at its centre (one tap) with a small value jitter.
+- **Shape:** each stroke a soft-ended capsule 1.6–2.8 m long and 0.5–0.9 m wide.
 - **Colour:** the macro colour at its centre, its value jittered by up to 10% and its temperature a little (with
   the centre's colour alone the strokes changed the frame by about a level, too little to judge).
 - **Gather:** each texel reads the strokes of its 3×3 neighbour cells and lays them over its own colour in a
