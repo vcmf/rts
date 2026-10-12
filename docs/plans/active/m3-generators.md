@@ -93,4 +93,24 @@ M3a:
 
 ## Review rounds
 
-(appended during review)
+**M3a, round 1** (9 findings, 1 severe):
+- **Severe:** meander's pull back to its guide had no limit. Once past its belt, the heading spun: allowed parameters
+  threw from the exact trigonometry, or put the stream far off its belt. The heading is now clamped to 83° from the
+  guide's, so the channel always advances and a straight guide can never cross itself, whatever the seed (tested
+  on 240 runs). The belt must be at least the stream's width, and a generator's error is an issue on its feature.
+- **Moderate:**
+  - the guide's normal jumped at each vertex; it now turns smoothly, and guides turning more than 90° are refused
+    (a 90° turn tested on 40 seeds);
+  - the comment promising no loops is now true (above);
+  - the noise table's bounds used a different expression from its nodes', so the edge read past it (NaN); the
+    bounds now use the nodes' own expression, and a noise finer than the grid computes per node instead of
+    allocating a table larger than the grid;
+  - crossings at shared vertices counted twice, and touches counted. Each segment now owns its start only,
+    touches are skipped, and hits merge within a micrometre.
+- **Light:**
+  - the bucket search walks only each ring's edges;
+  - expansion validates before sorting, so paths need no remapping;
+  - the small helpers live in `src/map/util.ts`.
+- **Found while fixing:** the orientation test behind every crossing check read nearly collinear points as
+  crossing, from rounding in metres. It now runs on whole centimetres, exactly. Also, `cos(π/2)` is not 0 in
+  floats, so the 90° test uses the dot product instead.

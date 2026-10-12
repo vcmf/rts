@@ -9,8 +9,15 @@ export const isPt = (v: unknown): v is Pt => Array.isArray(v) && v.length === 2 
 // coordinates carry at most 1 cm (§3.1, keeps diffs stable)
 export const onCentimetres = (v: number): boolean => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6
 
-// the sign of the turn a → b → c: +1, −1 or 0 when collinear
-const orient = (a: Pt, b: Pt, c: Pt): number => { const v = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]); return v > 0 ? 1 : v < 0 ? -1 : 0 }
+// the sign of the turn a → b → c: +1, −1 or 0 when collinear. Exact: the language's coordinates are whole
+// centimetres (validated), so the test runs on integers (products up to about 1e12, far inside a double's exact
+// range); in metres, nearly collinear points rounded to opposite signs and two segments end to end on one line read
+// as crossing
+const icm = (v: number): number => Math.round(v * 100)
+const orient = (a: Pt, b: Pt, c: Pt): number => {
+  const v = (icm(b[0]) - icm(a[0])) * (icm(c[1]) - icm(a[1])) - (icm(b[1]) - icm(a[1])) * (icm(c[0]) - icm(a[0]))
+  return v > 0 ? 1 : v < 0 ? -1 : 0
+}
 const within = (a: Pt, b: Pt, p: Pt): boolean => Math.min(a[0], b[0]) <= p[0] && p[0] <= Math.max(a[0], b[0]) && Math.min(a[1], b[1]) <= p[1] && p[1] <= Math.max(a[1], b[1])
 
 // do segments ab and cd share any point (touching counts)?
@@ -106,18 +113,22 @@ export function pointAt(line: Pt[], s: number): [number, number, number, number]
   return [line[0][0], line[0][1], 1, 0]
 }
 
-// every point where two polylines cross, in order along the first
+// every point where two polylines cross, in order along the first. Each segment owns its start but not its end (the
+// last owns both), so a crossing at a shared vertex counts once; a vertex that only touches the other line, without
+// passing to its other side, is no crossing; hits within a micrometre of each other merge.
 export function crossings(a: Pt[], b: Pt[]): Pt[] {
-  const out: Pt[] = []
+  const out: Pt[] = [], side = (p: Pt, q: Pt, r: Pt) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
   for (let i = 0; i + 1 < a.length; i++) for (let j = 0; j + 1 < b.length; j++) {
     const p = a[i], q = a[i + 1], r = b[j], s = b[j + 1]
     const d = (q[0] - p[0]) * (s[1] - r[1]) - (q[1] - p[1]) * (s[0] - r[0])
     if (d === 0) continue
     const t = ((r[0] - p[0]) * (s[1] - r[1]) - (r[1] - p[1]) * (s[0] - r[0])) / d, u = ((r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0])) / d
-    if (t < 0 || t > 1 || u < 0 || u > 1) continue
+    if (t < 0 || u < 0 || t > 1 || u > 1 || (t === 1 && i + 2 < a.length) || (u === 1 && j + 2 < b.length)) continue
+    // at a vertex of either line, a touch (the neighbours on the same side of the other segment) is no crossing
+    if (t === 0 && i > 0 && side(r, s, a[i - 1]) * side(r, s, q) > 0) continue
+    if (u === 0 && j > 0 && side(p, q, b[j - 1]) * side(p, q, s) > 0) continue
     const hit: Pt = [p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])]
-    const last = out[out.length - 1]
-    if (!last || last[0] !== hit[0] || last[1] !== hit[1]) out.push(hit)   // a crossing at a shared vertex counts once
+    if (!out.some(h => Math.abs(h[0] - hit[0]) < 1e-6 && Math.abs(h[1] - hit[1]) < 1e-6)) out.push(hit)
   }
   return out
 }

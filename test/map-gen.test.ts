@@ -12,7 +12,7 @@ import { clump } from '../src/map/clump.ts'
 import { expand } from '../src/map/expand.ts'
 import { validate } from '../src/map/validate.ts'
 import { apply, nearLine, nearScan } from '../src/map/apply.ts'
-import { lineCrossing, lineLength, ringCrossing } from '../src/map/geometry.ts'
+import { crossings, lineCrossing, lineLength, ringCrossing } from '../src/map/geometry.ts'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps/kinds.json'), 'utf8')) as Catalogue
@@ -55,6 +55,22 @@ describe('M3a: meander', () => {
     expect(meander(GUIDE, 6, { amplitude: 30 }, 1234)).toEqual(line)
     expect(meander(GUIDE, 6, { amplitude: 30 }, 1235)).not.toEqual(line)
   })
+  it('on a straight guide it never crosses itself nor throws, whatever the seed (review round 1)', () => {
+    const straight: Pt[] = [[-1100, 0], [1100, 0]]
+    for (const bend of [0.5, 1.2, 1.45]) for (const amplitude of [6, 30]) for (let seed = 0; seed < 40; seed++) {
+      const l = meander(straight, 6, { amplitude, bend }, seed)
+      expect(lineCrossing(l)).toBeNull()
+      expect(Math.max(...l.map(q => Math.abs(q[1])))).toBeLessThan(amplitude * 1.35 + 6)
+    }
+  })
+  it('a guide turning 90° keeps the line clean; a sharper turn and a belt narrower than the stream are refused (review round 1)', () => {
+    const turn: Pt[] = [[-1000, 0], [0, 0], [0, 1000]]
+    for (let seed = 0; seed < 40; seed++) expect(lineCrossing(meander(turn, 6, { amplitude: 60 }, seed))).toBeNull()
+    expect(() => meander([[-1000, 0], [0, 0], [-500, 300]], 6, { amplitude: 30 }, 1)).toThrow(/90°/)
+    expect(() => meander(GUIDE, 30, { amplitude: 10 }, 1)).toThrow(/at least the stream's width/)
+    const { issues } = expand(mini([{ ...BROOK, width: 30, gen: { meander: { amplitude: 10 } } }]), cat)
+    expect(issues[0]).toMatchObject({ id: 'brook', path: 'features[0].gen.meander' })
+  })
   it('a smaller bend winds less', () => {
     const tight = lineLength(meander(GUIDE, 6, { amplitude: 30, bend: 1.6 }, 9)), gentle = lineLength(meander(GUIDE, 6, { amplitude: 30, bend: 0.5 }, 9))
     expect(gentle).toBeLessThan(tight)
@@ -82,6 +98,14 @@ describe('M3a: the base ground', () => {
     expect(lo).toBeGreaterThanOrEqual(-4); expect(hi).toBeLessThanOrEqual(4); expect(hi - lo).toBeGreaterThan(2)
     expect(apply(mini([{ id: 'ground', kind: 'relief.base' }]), cat).height.every(h => h === 0)).toBe(true)
   })
+  it('no node reads past its lattice table, and a noise finer than the grid takes the per-node path (review round 1)', () => {
+    for (const [w, scale] of [[196, 49], [206, 103], [400, 0.5]] as const) {
+      const n = w / 2, out = new Float64Array((n + 1) * (n + 1))
+      addFbmGrid(out, 5, -w / 2, -w / 2, n, n, 2, scale, 1)
+      expect(out.every(v => Number.isFinite(v))).toBe(true)
+      for (const [i, j] of [[0, 0], [n, n], [n, 0], [7, 3]]) expect(out[j * (n + 1) + i]).toBe(fbm(5, (-w / 2 + i * 2) / scale, (-w / 2 + j * 2) / scale))
+    }
+  })
   it('the grid fill gives fbm to the bit', () => {
     const out = new Float64Array(11 * 11)
     addFbmGrid(out, 77, -100, -60, 10, 10, 2, 300, 1)
@@ -96,6 +120,16 @@ describe('M3a: the line index answers as the scan', () => {
       const x = -1300 + r() * 2600, z = (k % 2 ? -60 + r() * 120 : -600 + r() * 1200)
       expect(nearLine(line, x, z)).toEqual(nearScan(line, x, z))
     }
+  })
+})
+
+describe('M3a: crossings (review round 1)', () => {
+  it('a crossing through a vertex counts once; a touch at a vertex is none; a plain crossing is one', () => {
+    const water: Pt[] = [[-100, 0], [0, 0], [100, 0]]
+    expect(crossings([[0, -50], [0, 50]], water)).toHaveLength(1)                  // through the water's vertex
+    expect(crossings([[-30, -50], [0, 0], [30, 50]], water)).toHaveLength(1)       // the road's vertex on the water, passing over
+    expect(crossings([[-30, -50], [0, 0], [30, -50]], water)).toHaveLength(0)      // a V that only touches
+    expect(crossings([[50, -50], [50, 50]], water)).toHaveLength(1)
   })
 })
 
@@ -121,7 +155,7 @@ describe('M3a: the validator and expansion', () => {
   })
   it('a bridge whose road crosses its meandered water twice must say near', () => {
     const road = { id: 'road', kind: 'way.road.lane', line: [[-400, 60], [-400, -60], [-200, -60], [-200, 60]] as Pt[] }   // down over the brook and back up
-    const m = mini([{ ...BROOK, line: [[-560, 0], [560, 0]] as Pt[], gen: { meander: { amplitude: 5, bend: 0.3 } } }, road, { id: 'bridge', kind: 'built.bridge', carries: 'road', crosses: 'brook' }])
+    const m = mini([{ ...BROOK, line: [[-560, 0], [560, 0]] as Pt[], gen: { meander: { amplitude: 6, bend: 0.3 } } }, road, { id: 'bridge', kind: 'built.bridge', carries: 'road', crosses: 'brook' }])
     const { issues } = expand(m, cat)
     expect(issues.map(i => `${i.id} ${i.path}`)).toContain('bridge features[2].near')   // its index in the file the author wrote
     const near = clone(m); near.features[2].near = [-300, 0]

@@ -4,6 +4,8 @@
 import type { AttrValue, Feature, FieldSpec, ShapeName } from './schema.ts'
 import { meander } from './meander.ts'
 import { clump } from './clump.ts'
+import { num } from './util.ts'
+import { HEADING_MAX } from './meander.ts'
 
 export interface ParamSpec extends FieldSpec { required?: boolean }
 export interface GenSpec {
@@ -13,7 +15,6 @@ export interface GenSpec {
   run(f: Feature, attrs: Record<string, AttrValue>, params: Record<string, number>, seed: number): Partial<Feature>
 }
 
-const num = (v: AttrValue | undefined, dflt: number): number => (typeof v === 'number' ? v : dflt)
 
 export const GENERATOR_SPECS: Record<string, GenSpec> = {
   meander: {
@@ -21,7 +22,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
     params: {
       amplitude: { type: 'number', unit: 'm', min: 1, max: 1000, required: true },   // the belt's half-width
       wavelength: { type: 'number', unit: 'm', min: 10, max: 10000 },               // along the valley; default 11 widths
-      bend: { type: 'number', unit: 'rad', min: 0.2, max: 1.85 },                    // the largest swing; default 1.2
+      bend: { type: 'number', unit: 'rad', min: 0.2, max: HEADING_MAX },             // the largest swing; default 1.2
     },
     run: (f, a, p, seed) => ({ line: meander(f.line!, num(a.width, 6), { amplitude: p.amplitude, wavelength: p.wavelength, bend: p.bend }, seed) }),
   },

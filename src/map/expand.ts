@@ -22,19 +22,22 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
     if (!f.gen) return f
     const name = Object.keys(f.gen)[0], params = f.gen[name] as Record<string, number>
     if (!Object.hasOwn(GENERATOR_SPECS, name)) { issues.push({ id: f.id, path: `features[${i}].gen`, message: `the "${name}" generator arrives in M3b; pin this feature's exact shape until then` }); return f }
-    const out = GENERATOR_SPECS[name].run(f, resolve(f, map, cat).attrs, params, seedOf(map.seed, f.id, name))
+    let out: Partial<Feature>
+    try { out = GENERATOR_SPECS[name].run(f, resolve(f, map, cat).attrs, params, seedOf(map.seed, f.id, name)) } catch (err) {
+      issues.push({ id: f.id, path: `features[${i}].gen.${name}`, message: (err as Error).message }); return f
+    }
     const kept = Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'gen' && !(SHAPES as readonly string[]).includes(k))) as Feature
     return { ...kept, ...out, origin: { generator: name, params, version: EXPAND_VERSION } }
   })
   if (issues.length) return { map, issues }
+  // the generators' output, checked as any map, in the author's order (so the paths name their file)
+  for (const i of validate({ ...map, features }, cat)) issues.push({ ...i, message: `after expansion: ${i.message}` })
+  const byIndex = features.map((f, i) => ({ f, i }))
   features.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-  const out: MapFile = { ...map, features }, at = new Map(map.features.map((f, i) => [f.id, i]))
-  // the generators' output, checked as any map
-  for (const i of validate(out, cat)) issues.push({ ...i, path: i.id !== null && at.has(i.id) ? i.path.replace(/^features\[\d+\]/, `features[${at.get(i.id)}]`) : i.path, message: `after expansion: ${i.message}` })
+  const out: MapFile = { ...map, features }
   // a bridge needs `near` when its road and its water cross more than once (paths name the author's file's order)
   const byId = new Map(features.map(f => [f.id, f]))
-  features.forEach(f => {
-    const i = at.get(f.id)!
+  byIndex.forEach(({ f, i }) => {
     if (!f.carries || !f.crosses || f.near) return
     const road = byId.get(f.carries)?.line, water = byId.get(f.crosses)?.line
     if (!road || !water) return

@@ -15,6 +15,7 @@ import { resolve } from './resolve.ts'
 import { crossings, inRing, lineLength, pointAt } from './geometry.ts'
 import { cos, sin } from '../sim/num.ts'
 import { seedOf } from './seed.ts'
+import { num, smooth } from './util.ts'
 import { addFbmGrid } from './noise.ts'
 
 export const CELL = 2   // m (decision 0021)
@@ -39,7 +40,6 @@ export interface Layers {
 }
 export const LAYER_NAMES = ['ground', 'veg', 'water', 'way', 'barrier', 'built', 'zone', 'edit'] as const
 
-const smooth = (s: number): number => { const t = s < 0 ? 0 : s > 1 ? 1 : s; return t * t * (3 - 2 * t) }
 // a landform's profile over t = distance / half-width (1 at the centre, 0 from t = 1 on)
 function profile(kind: AttrValue | undefined, t: number): number {
   if (t >= 1) return 0
@@ -121,10 +121,10 @@ function nearIndexed(ix: LineIndex, line: Pt[], px: number, pz: number): Near {
   const R = Math.max(ix.nx, ix.nz)
   for (let r = 0; r <= R; r++) {
     if (bk >= 0 && bd < Math.max(outside, (r - 1) * BUCKET)) break
-    for (let j = gj - r; j <= gj + r; j++) for (let i = gi - r; i <= gi + r; i++) {
-      if (i < 0 || j < 0 || i >= ix.nx || j >= ix.nz || (Math.abs(i - gi) !== r && Math.abs(j - gj) !== r)) continue
-      for (const k of ix.buckets[j * ix.nx + i]) visit(k)
-    }
+    // the ring's buckets only: its top and bottom rows, then its sides between them
+    const at = (i: number, j: number) => { if (i >= 0 && j >= 0 && i < ix.nx && j < ix.nz) for (const k of ix.buckets[j * ix.nx + i]) visit(k) }
+    for (let i = gi - r; i <= gi + r; i++) { at(i, gj - r); if (r) at(i, gj + r) }
+    for (let j = gj - r + 1; j <= gj + r - 1; j++) { at(gi - r, j); if (r) at(gi + r, j) }
   }
   return { d: bd, side, over, along }
 }
@@ -155,7 +155,6 @@ function areaField(f: Feature): Field | null {
   return null
 }
 
-const num = (v: AttrValue | undefined, dflt = 0): number => (typeof v === 'number' ? v : dflt)
 // a ramp's value at an input (edge distance or along-line distance), clamped to its first and last stops
 function ramp(v: AttrValue | undefined, input: { edge?: number; along?: number }, dflt: number): number {
   if (typeof v === 'number') return v

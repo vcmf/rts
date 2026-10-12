@@ -4,10 +4,10 @@
 import type { Pt } from './schema.ts'
 import { random } from './seed.ts'
 import { cos, sin, PI } from '../sim/num.ts'
+import { cm } from './util.ts'
 
 export interface ClumpParams { coherence?: number; raggedness?: number; points?: number }
 export const CLUMP_DEFAULTS = { coherence: 0.6, raggedness: 0.3, points: 48 }
-const cm = (v: number): number => Math.round(v * 100) / 100
 
 export function clump(centre: Pt, ra: number, rb: number, angle: number, p: ClumpParams, seed: number): Pt[] {
   const coherence = p.coherence ?? CLUMP_DEFAULTS.coherence, ragged = p.raggedness ?? CLUMP_DEFAULTS.raggedness, N = p.points ?? CLUMP_DEFAULTS.points

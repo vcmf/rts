@@ -28,14 +28,21 @@ export function addFbmGrid(out: Float64Array, seed: number, x0: number, z0: numb
   const W = nx + 1, acc = new Float64Array(out.length)
   let w = 1, f = 1, total = 0
   for (let o = 0; o < octaves; o++) {
-    const s = seed + o, k = f / scale
-    const li0 = Math.floor(x0 * k), lj0 = Math.floor(z0 * k), li1 = Math.floor((x0 + nx * cell) * k) + 1, lj1 = Math.floor((z0 + nz * cell) * k) + 1
-    const LW = li1 - li0 + 1, table = new Float64Array(LW * (lj1 - lj0 + 1))
+    const s = seed + o, X = (i: number) => (x0 + i * cell) / scale * f, Z = (j: number) => (z0 + j * cell) / scale * f
+    // the table's bounds from the very expressions the nodes use (monotonic in i, j), so no node reads past it
+    const li0 = Math.floor(X(0)), lj0 = Math.floor(Z(0)), li1 = Math.floor(X(nx)) + 1, lj1 = Math.floor(Z(nz)) + 1
+    const LW = li1 - li0 + 1, LH = lj1 - lj0 + 1
+    if (LW * LH > out.length) {
+      // a noise finer than the grid: a table would outgrow the grid itself, so each node computes its own values
+      for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) acc[j * W + i] += w * valueNoise(s, X(i), Z(j))
+      total += w; w *= 0.5; f *= 2; continue
+    }
+    const table = new Float64Array(LW * LH)
     for (let j = lj0; j <= lj1; j++) for (let i = li0; i <= li1; i++) table[(j - lj0) * LW + (i - li0)] = lattice(s, i, j)
     for (let j = 0; j <= nz; j++) {
-      const z = (z0 + j * cell) / scale * f, lj = Math.floor(z), fz = fade(z - lj), row = (lj - lj0) * LW
+      const z = Z(j), lj = Math.floor(z), fz = fade(z - lj), row = (lj - lj0) * LW
       for (let i = 0; i <= nx; i++) {
-        const x = (x0 + i * cell) / scale * f, li = Math.floor(x), fx = fade(x - li), t = row + (li - li0)
+        const x = X(i), li = Math.floor(x), fx = fade(x - li), t = row + (li - li0)
         const a = table[t], b = table[t + 1], c = table[t + LW], d = table[t + LW + 1]
         acc[j * W + i] += w * ((a + (b - a) * fx) * (1 - fz) + (c + (d - c) * fx) * fz)
       }
