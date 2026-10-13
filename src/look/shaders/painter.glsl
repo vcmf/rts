@@ -65,6 +65,7 @@ vec4 LM(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);vec2 uv=p.xy/p.w*0.5+0.5;
   return texture2D(uLM,uv);}
 // Valley mist: warm where the air is sunlit, cool where it's shadowed. Light shafts =
 // the air column's sun visibility, read from the light map at 3 heights along the view ray.
+// Known issue #62: the lit air tints sunlit snow orange.
 vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   float m=lm.b*uMist*exp(-hAbove*0.12);if(m<0.01)return c;
   float air=mix(1.0,lm.r,uShadowsOn);

@@ -2,6 +2,7 @@
 // quads on its surface, each expanded in view space to face the camera and alpha-tested against the leaf atlas
 // (src/look/leaves.ts). The technique is Pontus Karlsson's "quadmesh to billboards", the one Tiny Glade ships.
 // The cards stand where the model's crown triangles are, so composition and placement match the default arm.
+// Not the default arm yet: known issue #63 (the guard), decision 0022 (the soft ramp, proposed).
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 import { Color3 } from '@babylonjs/core/Maths/math.color.js'

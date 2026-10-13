@@ -285,7 +285,7 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
 
 ## Open questions
 
-- **The leaf-card crowns are not the default arm yet:** the guard's `wheat.France` block separates by 0.071 with
+- **The leaf-card crowns are not the default arm yet:** a dark coat in a tree's shadow loses separation with
   them (#63); decision 0022 (their soft ramp) is proposed; their outline aliases at the widest zoom (L8); a
   battlefield forest and the min-spec laptop are not measured (`docs/plans/active/track-e-results/shadows-foliage.md`).
 - **The guard has no block in a wood**, where the soft shadows make the floor darkest.

@@ -14,10 +14,26 @@ its frame size and which arms it compares; the plans hold the full runs.
 
 ## The cost of the stack
 
-`node tools/bench-look.mjs <page> --gpu metal --hold 4` at 1920×1080, run back to back on 2026-10-13; GPU frame p50
-in ms, the mean of the bench's three yaws (each run twice) at each zoom. Each bench has two arms of the terrain's
-grain: **l2**, the detail layer the page ships, and **l0**, the L0 grain it replaced (kept as a baseline). The JSON
-files are beside this one (`shadows-foliage-2026-10-13-*-mac-proxy.json`).
+**The reliable numbers are A/B runs on one page**, the two arms interleaved at each camera (A B B A), so the
+machine's state is the same for both; the paired difference per camera is reported with the repeat spread (the
+largest difference between two runs of one arm at one camera). On the normal scene:
+
+| One-page A/B (`--gpu metal`) | close | default | widest | where |
+|---|---|---|---|---|
+| Cards against pack crowns (`?bench=trees`) | about 0 | — | +0.1 to +0.4 ms | `docs/plans/done/l7a-canopy-cards.md` |
+| Volume light against L7a (`?bench=volume`) | within ±0.2 ms | within ±0.2 ms | within ±0.2 ms | `docs/plans/done/l7b-crown-volume.md` |
+
+**Where a forest fills the frame** (`?wood=big`, the forest bench, `docs/plans/active/forest-bench.md`): the cards
+cost about **+3 ms at the default zoom and +1.5 ms at the widest** against the pack crowns (the cleaner of two
+runs, its repeat spread under 0.6 ms); the default frame goes from 11.3 to 14.4 ms of the 16.7 ms a frame at
+60 fps, before units, smoke and anti-aliasing. The volume light's cost in the forest could not be read (the
+machine changed during the run). **This is the cards' open cost:** L7 owes a cheaper forest (far crowns as fewer,
+larger cards or the pack mesh; L7's depth pre-pass against overdraw) before the cards become the default.
+
+**Across runs** (`node tools/bench-look.mjs <page> --gpu metal --hold 4` at 1920×1080, four separate runs back to
+back on 2026-10-13; GPU frame p50 in ms, the mean of the three yaws, each run twice). Each bench has two arms of the
+terrain's grain: **l2**, the detail layer the page ships, and **l0**, the L0 grain it replaced. The JSON files are
+beside this one (`shadows-foliage-2026-10-13-*-mac-proxy.json`).
 
 | Zoom, arm | main before (923db25) | main after #58–#60 (0ed259f) | the same, `?trees=cards` | L7b (e41e38c), `?trees=cards` |
 |---|---|---|---|---|
@@ -27,17 +43,15 @@ files are beside this one (`shadows-foliage-2026-10-13-*-mac-proxy.json`).
 | Widest, l0 | 9.75 | 9.01 | 9.28 | 9.91 |
 | Draw calls, triangles | 39, 2.02 M | 39, 2.02 M | 51, 1.97 M | 51, 1.97 M |
 
-- **The noise, measured:** the same camera and arm run twice differs by up to 1.8 ms in the "before" bench (the
-  machine was busy) and by 0.03–0.13 ms in the three others (one camera 0.6 ms). So "before" against "after" says
-  nothing about the shadow look's per-frame cost (its extra shader operations remain an unmeasured estimate of no
-  visible cost); the three later benches compare.
-- **The cards** cost +0.17 ms (l2) to +0.27 ms (l0) at the widest zoom; **the volume light** a further +0.31 ms
-  (l2) to +0.63 ms (l0); together +0.5 to +0.9 ms at the widest zoom, about 0.2 to 0.3 ms at the closer zooms
-  (l2). The widest frame stays at 12.6 ms (l2) of the 16.7 ms a frame at 60 fps.
-- **Nothing per frame from the soft shadows:** they are baked on load, about 45 ms more (the sky's occlusion
-  25–32 ms on the CPU, the light-map bake 1.3 to 14 ms on the GPU).
-- **Not measured yet:** a battlefield forest (the bench's woods are small; the cards' cost grows with the trees on
-  screen: `?wood` is a dense wood to bench it), the min-spec laptop, the foliage overdraw (L7's acceptance).
+- **These differences are not costs.** One camera run twice differs by up to 1.8 ms in the "before" run (the machine
+  was busy), and by up to 0.9 ms (cards) and 1.1 ms (L7b) in the later ones, more than most of the differences
+  between the columns. The one-page A/Bs above are the measurement; this table shows only that no column is far
+  from the others on the normal scene.
+- **Not measured:** the shadow look's per-frame cost (its extra shader operations: an unmeasured estimate of no
+  visible cost; the "before" run is too noisy to show it); the min-spec laptop; the foliage overdraw.
+- **Nothing per frame from the soft shadows:** they are baked on load, 38–45 ms more on the dev Mac (the sky's
+  occlusion 25–32 ms on the CPU; the light-map bake from 1.1–1.4 ms to 14.1–14.2 ms on the GPU, about 13 ms
+  more). A slower GPU takes longer (unmeasured: an estimate of a few times the Mac's on an integrated one).
 
 ## The shadows
 

@@ -70,7 +70,7 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   // small plants don't cast either: thousands of tuft shadows streaked the ground along the sun direction.
   // Under cards (docs/plans/done/l7a-canopy-cards.md) the carded pack models cast nothing; their
   // trunk meshes cast with the rest, and the crowns cast through their cards, turned to face the sun and cut by the
-  // leaf atlas (below)
+  // leaf atlas (below). Known issue #63: their leafy shadow costs a dark coat its separation in the guard
   shadowRT.renderList = scene.meshes.filter(m => m.name !== 'water' && m.name !== 'apron' && (m.name !== 't' || m === terrains[0]) && !/Grass|Flowers|Plant|Wheat|^cards_/.test(m.name) && !cardCasters?.packs.includes(m as Mesh))
   for (const m of shadowRT.renderList) shadowRT.setMaterialForRendering(m, depthMat)
   if (cardCasters) {

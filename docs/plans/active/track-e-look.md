@@ -531,14 +531,16 @@ the pack crowns): results in `docs/plans/active/track-e-results/shadows-foliage.
 - **L7b, the crowns as volumes** (#61, `docs/plans/done/l7b-crown-volume.md`): a normal per pixel from the
   crown's ellipsoid, the light through it, a soft ramp (decision 0022, proposed), a darker core, a tilt per leaf
   (owner: "it's beautiful now the trees").
-- **Cost so far** (the dev Mac, a proxy): the cards and the volume light together +0.5 to +0.9 ms GPU at the
-  widest zoom, +12 draw calls (`docs/plans/active/track-e-results/shadows-foliage.md`).
+- **Cost so far:** `docs/plans/active/track-e-results/shadows-foliage.md` (the dev Mac, a proxy).
 
 **What L7 still owes:**
-- the cards as the default arm, once the guard passes with them (#63) and the owner accepts decision 0022;
+- the cards as the default arm, once the guard passes with them (#63), the owner accepts decision 0022 and a forest
+  costs less: about +3 ms GPU where one fills the frame (`docs/plans/active/forest-bench.md`), against fewer,
+  larger cards for far crowns, the pack mesh beyond a distance, or a depth pre-pass;
 - the outline at the widest zoom aliases: alpha-to-coverage on MSAA, L8's A/B;
-- the acceptance above, measured on the cards: overdraw, coverage across the zooms, foliage ≤ 3 ms, in a
-  battlefield forest (`?wood`) and on the min-spec laptop;
+- the acceptance above, measured on the cards: overdraw, coverage across the zooms, no heat ripple behind the
+  army blocks (alpha-tested cards make it likelier), foliage ≤ 3 ms, in a battlefield forest and on the min-spec
+  laptop;
 - pines and bushes are still pack meshes; bare winter trees; the building material; far woods.
 
 ## L8. Anti-aliasing (research P6)

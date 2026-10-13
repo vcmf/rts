@@ -174,8 +174,7 @@ accepted, the three bands above are the rule for every surface.
     so they are darker. On a wood's floor the shadow colour itself deepens, so
     a wood reads as one mass, darker inside than a lone tree's shadow.
 - **The valley mist thins over cast shadow**, so shadows still read in the
-  hollows. Lit snow must stay near-white; under the mist it turns orange today
-  (a known fault: #62).
+  hollows. Over snow it breaks §4b's rule today (a known fault: #62).
 
 ---
 
