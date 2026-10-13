@@ -1,4 +1,4 @@
-// street-village (docs/proposals/map-engine.md §3.4, docs/plans/active/m3-generators.md M3b): houses along a village's
+// street-village (docs/proposals/map-engine.md §3.4, docs/plans/done/m3-generators.md M3b): houses along a village's
 // road between `from` and `to` (metres along it), on both sides, set back from the road's edge and turned to face it,
 // with seeded lengths, depths and gaps. A house keeps clear of what the generator's `clear` test says (water, other
 // buildings, no-go zones, other ways and barriers, and the road itself where it bends back: src/map/generators.ts). Each side walks the stretch on its own; the side further behind takes the next house.

@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-13
 ---
 
-# 0024 Free-standing trees stand on the cells, as a list
+# 0029 Free-standing trees stand on the cells, as a list
 
 ## Context
 

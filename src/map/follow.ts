@@ -1,4 +1,4 @@
-// Shared edges (docs/plans/active/m3d-follow.md, docs/proposals/map-engine.md §3.2, decision 0025): an area's edge
+// Shared edges (docs/plans/done/m3d-follow.md, docs/proposals/map-engine.md §3.2, decision 0030): an area's edge
 // that is part of another feature's line, so a wood bounded by a stream shares the stream's bank (TopoJSON's arcs,
 // docs/research/map-language.md §6). The edge is the line itself: its centreline between the points nearest `from`
 // and `to`, as expanded (so it moves with a meander). Expansion puts those points into the area's outer ring and

@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-13
 code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0023-generators-form-a-chain, 0024-free-standing-trees, 0025-shared-edges-are-the-line]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line]
 ---
 
 # The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d)
@@ -57,7 +57,7 @@ maps/kinds.json ──► checkCatalogue ─┐
 - **Resolution** (`src/map/resolve.ts`): the catalogue along the path, the map preset, the feature's own fields,
   the season's overrides (the catalogue's, then the feature's), the state's overlay. This is the one place the order
   lives.
-- **Expansion** (`src/map/expand.ts`), as a chain over finished features only (decision 0023):
+- **Expansion** (`src/map/expand.ts`), as a chain over finished features only (decision 0028):
   - a generator sees only finished features: the author's without a generator, and the generators that have
     already run (their output and children). One still to run is invisible, so its input (a guide, a region)
     never leaks;
@@ -94,7 +94,7 @@ maps/kinds.json ──► checkCatalogue ─┐
     line shifted infinitesimally in a fixed direction), so a pass through a vertex crosses once and a touch
     nowhere; a line's own end on the other line takes its neighbour's side;
   - a pinned feature (no `gen`, with an `origin`) is just a feature;
-  - **shared edges** (`follow`, `src/map/follow.ts`, decision 0025): an area's outer ring may take part of a line
+  - **shared edges** (`follow`, `src/map/follow.ts`, decision 0030): an area's outer ring may take part of a line
     feature, so a wood shares a stream's bank. `{ id, offset?, from, to, at? }`, or a list: the edge is the line's
     own centreline between the points nearest `from` and `to` (as expanded, so it moves with a meander), in that
     order (on a closed line, the shorter way round), put before the ring's point `at` (default 0); the ring's own points hold the rest of the boundary (with a
@@ -153,7 +153,7 @@ maps/kinds.json ──► checkCatalogue ─┐
     (default 3 crowns), trunks a crown's width apart so the crowns stand apart, each crown clear of water, ways,
     buildings and barriers, seeded; the point leaves the map and the trees, with its kind and fields, are its
     children.
-- **Free-standing trees** (decision 0024): `growth: "tree"` kinds (`veg.tree`, `.poplar`, `.conifer`, `.willow`)
+- **Free-standing trees** (decision 0029): `growth: "tree"` kinds (`veg.tree`, `.poplar`, `.conifer`, `.willow`)
   with a `form` (round, columnar, conical), a `crown` radius and a row's `spacing`. A point is one tree, a line a
   row. They stand on the cells and change none: a poplar in a wheat field leaves the wheat. The validator keeps
   them their own kinds: `growth` cannot turn a feature into a tree or out of one, and `form`, `crown` and

@@ -1,6 +1,6 @@
 ---
-status: active
-last_reviewed: 2026-10-12
+status: done
+last_reviewed: 2026-10-13
 ---
 
 # Plan: M3, the generators
@@ -69,7 +69,7 @@ cannot be both short and rich.
   - fewer than `count` placed is an error unless `min` allows it;
   - `mix: [{ kind, count, … }]` places several kinds jointly, each child clear of every other (redesign 2).
 
-  Generators run as a chain (redesign 2, decision 0023): each after whatever it could read; a cycle is an error.
+  Generators run as a chain (redesign 2, decision 0028): each after whatever it could read; a cycle is an error.
   The region feature itself leaves the expanded map; its children stay.
 - **Five seeds:** `maps/generated.map.json`, an intent map in the valley's layout:
   - ridges and a meandered brook with its fords and bridge;
@@ -282,7 +282,7 @@ The round count restarts after this redesign. Round 3's other findings are taken
   - houses prune by box;
   - `pinnedParentsOf` is shared and validate uses `kindMatches`;
   - one `pending` set;
-  - the ordering rules are a decision record (0022).
+  - the ordering rules are a decision record (0027).
 
 **After the redesign, round 3** (2 severe): **stop and redesign** (more than three rounds of the same class of fault).
 - **Severe:** a `within` by kind, read softly, behaved as a keep-clear inside a group: a scatter that should stay
@@ -303,7 +303,7 @@ Every fault of the redesign's three rounds lived inside a group of generators th
   against the catalogue (kind, area shape, attributes in `set`, radii); `count` and the clump fields move into the
   entries.
 - `maps/generated.map.json`: the copses and fields scatters become one scatter, `groves`.
-- Decision 0023 supersedes 0022.
+- Decision 0028 supersedes 0027.
 
 The round count restarts.
 
@@ -311,7 +311,7 @@ The round count restarts.
 - **Severe:** two street villages read each other through `built`, so any map with two villages was a cycle, and
   the advice (one scatter's mix) could not apply. Street villages are now **peers**: neither reads nor sees the
   other's output, and once all have run their houses must lie 1 m apart, or it is an error naming both. A pinned
-  village's houses are hand-drawn features and are kept clear of. Decision 0023 is amended before merging.
+  village's houses are hand-drawn features and are kept clear of. Decision 0028 is amended before merging.
 - **Moderate:**
   - each try went to the entry furthest behind, so an entry that could not be placed starved the others; each
     entry now has its own budget of tries;
@@ -339,7 +339,7 @@ The round count restarts.
   parameter is wrong (they skip only a mix whose type is wrong); the message for a mix scatter's own fields no
   longer offers `set` for non-attributes.
 - **Light:** the peers' copied feature map and pairwise list are gone with the redesign of the check; the system
-  doc's front matter names decision 0023.
+  doc's front matter names decision 0028.
 
 **Redesign 2, round 3** (8 findings, 1 severe): **stop** (the third round with a severe finding).
 - **Severe:** on a bent road a village's ground, the convex hull of its houses, cuts across the bend up to 50 m
@@ -371,4 +371,4 @@ The round count restarts.
   corner).
 - **Not taken:** a ground that follows the road instead of a convex hull (the user chose the hull of the stretch;
   a village on a U-shaped road claims the inside of the U).
-- **Decision 0023** was amended during these rounds, before the PR merged; once on the epic it is fixed.
+- **Decision 0028** was amended during these rounds, before the PR merged; once on the epic it is fixed.

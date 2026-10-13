@@ -3,14 +3,14 @@ status: accepted
 date: 2026-10-13
 ---
 
-# 0025 A shared edge is the line itself; the area keeps off the line's cells
+# 0030 A shared edge is the line itself; the area keeps off the line's cells
 
 ## Context
 
 An area's edge may follow part of a line (`docs/proposals/map-engine.md` §3.2): a wood along a stream's bank, a
 field along a road. The first design computed the edge as an offset curve, at the line's painted reach plus an
 offset, so that the area's cells would start exactly where the line's stop. Three review rounds of M3d found the
-same class of fault each time (`docs/plans/active/m3d-follow.md`): the curve folded on inner bends, cut into the
+same class of fault each time (`docs/plans/done/m3d-follow.md`): the curve folded on inner bends, cut into the
 line at sharp corners, missed the line's other legs past its ends, and rounding put it millimetres inside the
 line's reach. The cells, not the curve, are what the sim and the draft read; an exact curve that matches a raster
 rule everywhere is the wrong problem.

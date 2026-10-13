@@ -1,4 +1,4 @@
-// M3d (docs/plans/active/m3d-follow.md, decision 0025): shared edges. An area's ring takes part of a line's
+// M3d (docs/plans/done/m3d-follow.md, decision 0030): shared edges. An area's ring takes part of a line's
 // centreline, and the area keeps off the cells the line takes: no cell is both, none between is left out.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
@@ -44,7 +44,7 @@ function check(m: MapFile, lineId: string, offset = 0) {
   return { map, L }
 }
 
-describe('M3d: shared edges (decision 0025)', () => {
+describe('M3d: shared edges (decision 0030)', () => {
   it("the ring takes the line's centreline between from and to; the expanded feature keeps off the line", () => {
     const { map } = check(mini([MEADOW, BROOK, wood({ id: 'brook', from: [-80, 5], to: [80, 5] })]), 'brook')
     const w = map.features.find(f => f.id === 'wood')!

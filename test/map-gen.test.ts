@@ -1,4 +1,4 @@
-// The generators (docs/plans/active/m3-generators.md, M3a): seeds, the base ground's noise, meander, clump, expansion
+// The generators (docs/plans/done/m3-generators.md, M3a): seeds, the base ground's noise, meander, clump, expansion
 // with origins, the validator's generator checks, and the fast paths' equality with the plain ones.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
@@ -333,7 +333,7 @@ describe('M3b: houses (review rounds)', () => {
   })
 })
 
-describe('M3b: the chain (decision 0023): each generator after what it reads; a cycle is an error', () => {
+describe('M3b: the chain (decision 0028): each generator after what it reads; a cycle is an error', () => {
   it("the file's order never matters", () => {
     const raw = JSON.parse(fs.readFileSync(path.join(root, 'maps/generated.map.json'), 'utf8')) as MapFile
     expect(expand({ ...raw, features: [...raw.features].reverse() }, cat).map).toEqual(expand(raw, cat).map)

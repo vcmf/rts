@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-13
 ---
 
@@ -18,7 +18,7 @@ an edge, stored once: the line itself.
 
 ## Scope
 
-- **`follow`** on an area feature (decision 0025, after redesign): one shared edge, or a list of them:
+- **`follow`** on an area feature (decision 0030, after redesign): one shared edge, or a list of them:
   `{ "id", "offset"?: m, "from": [x, z], "to": [x, z], "at"?: n }`.
   - `id`: a feature drawn as a line (a stream, a road, a hedge, a ditch…), generated or not;
   - `from`, `to`: points snapped to the nearest point of that line as expanded (like a ford's `near`), so the edge
@@ -29,7 +29,7 @@ an edge, stored once: the line itself.
   The area's own outer ring holds the rest of the boundary, and so decides the side; with a `follow` it may hold a
   single point.
 - **Expansion:** a feature with `follow` reads the ids it follows, so it runs after them in the chain (decision
-  0023): after a meander. Its ring takes the centrelines, it records `clear: [{ id, offset? }]`, and `follow`
+  0028): after a meander. Its ring takes the centrelines, it records `clear: [{ id, offset? }]`, and `follow`
   leaves the expanded map. If it also has a generator (a scatter's region), the ring is built first, and a
   scatter's children carry `clear`.
 - **Apply:** an area with `clear` paints none of the cells the line takes (by the line's own painting rule) nor any
@@ -92,7 +92,7 @@ shared arcs for now; the draft page drawing shared edges specially.
 - **Moderate:** ditches and cuts gave no reach; inner corners left a meadow cell.
 - The user chose **the edge is the line itself**.
 
-### Redesign: the line itself, and `clear` (decision 0025)
+### Redesign: the line itself, and `clear` (decision 0030)
 
 - The ring takes the line's centreline between `from` and `to`; no offset geometry (`side`, the mitre, the arcs,
   the loop removal and the chord check are gone).
@@ -124,7 +124,7 @@ The round count restarts.
 - **Not taken:** other readers of the ring (scatter `avoid`/`within`, a village's keep-clear) see it reach the
   centreline; recorded as an open question in the system doc (an avoid is only more careful; a within a little
   more generous).
-- **Light:** `at: null` is refused; one offset check for `follow` and `clear`; the system doc lists 0025.
+- **Light:** `at: null` is refused; one offset check for `follow` and `clear`; the system doc lists 0030.
 
 **Redesign, round 2** (10 findings, none severe: stop and fix what is worth it):
 - **Moderate:** on a closed line the edge took the long way round; now the shorter way, across the line's first

@@ -1,4 +1,4 @@
-// scatter (docs/proposals/map-engine.md §3.4, docs/plans/active/m3-generators.md M3b): `count` children inside a
+// scatter (docs/proposals/map-engine.md §3.4, docs/plans/done/m3-generators.md M3b): `count` children inside a
 // region, each a clump of radius between radiusMin and radiusMax, by seeded rejection sampling: a centre is kept when
 // its clump (at its largest possible radius) lies inside the region, `clearance` m clear of everything it avoids and
 // of its siblings, and, when asked, within reach of something it must stay near. The siblings sit in a grid and the

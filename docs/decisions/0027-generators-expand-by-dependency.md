@@ -1,9 +1,9 @@
 ---
-status: superseded by 0023
+status: superseded by 0028
 date: 2026-10-12
 ---
 
-# 0022 Generators expand by dependency, over finished features, with hard and soft reads
+# 0027 Generators expand by dependency, over finished features, with hard and soft reads
 
 ## Context
 
@@ -11,7 +11,7 @@ The map engine's generators (`docs/proposals/map-engine.md` §3.4) read each oth
 houses clear of water and buildings, a scatter keeps its clumps clear of what it avoids and near what it stays
 within. Track M's M3b review stopped three times on the order generators run in. Each time, a generator saw another
 generator's unexpanded input (a guide line, a scatter's region) or missed an output it should have kept clear of.
-Fixed passes and id order could not express it (`docs/plans/active/m3-generators.md`, the redesign and its rounds).
+Fixed passes and id order could not express it (`docs/plans/done/m3-generators.md`, the redesign and its rounds).
 
 ## Decision
 
