@@ -24,6 +24,10 @@
     {"id":"bridge","kind":"built.bridge","carries":"high-road","crosses":"brook"},
     {"id":"army-south","kind":"ground.meadow","area":[[[-420,-400],[320,-400],[320,-180],[-420,-180]]],"note":"side 0's ground in the S1e battle: kept clear of woods and fields"},
     {"id":"army-north","kind":"ground.meadow","area":[[[-320,180],[420,180],[420,400],[-320,400]]],"note":"side 1's ground, mirrored"},
+    {"id":"poplar-row","kind":"veg.tree.poplar","line":[[61.83,-900],[65.97,-850],[70.55,-800],[74.9,-750],[78.39,-700],[80.51,-650],[80.94,-600],[79.63,-550],[76.77,-500],[72.77,-450]],"note":"poplars along the high road, south of the armies"},
+    {"id":"poplars-west","kind":"veg.tree.poplar","point":[7.23,480],"gen":{"group":{"count":3}}},
+    {"id":"poplars-east","kind":"veg.tree.poplar","point":[102.23,560],"gen":{"group":{"count":2}}},
+    {"id":"lone-oak","kind":"veg.tree","point":[-150,-120]},
     {"id":"village","kind":"built.village","along":{"id":"high-road","from":1450,"to":1580},"houses":8,"gen":{"street-village":{"min":5}}},
     {"id":"groves","kind":"veg.wood.broad","area":[[[-580,-580],[580,-580],[580,580],[-580,580]]],"gen":{"scatter":{"mix":[{"kind":"veg.wood.broad","count":6,"radiusMin":30,"radiusMax":60,"min":4},{"kind":"ground.field.wheat","count":5,"radiusMin":30,"radiusMax":45,"coherence":0.8,"min":3}],"avoid":["water","way","built","army-south","army-north"],"clearance":20}},"note":"copses and wheat fields placed together, apart from each other"}
   ]

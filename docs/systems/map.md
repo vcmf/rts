@@ -1,11 +1,11 @@
 ---
 status: current
 last_reviewed: 2026-10-13
-code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0023-generators-form-a-chain]
+code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0023-generators-form-a-chain, 0024-free-standing-trees]
 ---
 
-# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3b)
+# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3c)
 
 A map is a strict JSON file (`maps/<id>.map.json`): a list of features, each with an id, a dotted kind from the
 kinds catalogue (`maps/kinds.json`), one shape and attribute overrides. This system checks such a file, resolves
@@ -130,7 +130,13 @@ maps/kinds.json ──► checkCatalogue ─┐
     map holds; a generator that ran and placed nothing still counts. Avoided features are skipped by their boxes
     and siblings sit in a grid: 200 children take about 15–25 ms. Circles and ellipses are measured as the 64-sided
     polygons that just contain them (`ringsOf`, `src/map/reach.ts`), so no distance to them comes out longer than
-    the truth. Fewer than `count` is an error unless `min` allows it.
+    the truth. Fewer than `count` is an error unless `min` allows it;
+  - `group`, on a tree point (`veg.tree.*`): `count` trees (2–5, default 3) within `spread` m of the point
+    (default 2.5 crowns), each at least a crown from the others, seeded; the point leaves the map and the trees,
+    with its kind and fields, are its children. It reads nothing.
+- **Free-standing trees** (decision 0024): `growth: "tree"` kinds (`veg.tree`, `.poplar`, `.conifer`, `.willow`)
+  with a `form` (round, columnar, conical), a `crown` radius and a row's `spacing`. A point is one tree, a line a
+  row. They stand on the cells and change none: a poplar in a wheat field leaves the wheat.
 - **The base ground** (`relief.base`): seeded value noise (`src/map/noise.ts`), `height` its amplitude and `width`
   its scale, three octaves, filled from per-octave lattice tables (`addFbmGrid`, equal to `fbm` to the bit).
 - **The layout** (`src/map/format.ts`): one feature per line, so diffs show which features changed.
@@ -155,9 +161,13 @@ maps/kinds.json ──► checkCatalogue ─┐
     `level` or the lowest point of its shore less the freeboard, deepest 10 m in. Each water cell's depth is its
     body's level less the cell's mean ground (`Layers.depth`, mm);
   - a bridge decks the road's cells over the water at the height of the higher of the road's two ends, 4 m past
-    each bank (the sim classifies them `bridge`: level, dry).
+    each bank (the sim classifies them `bridge`: level, dry);
+  - free-standing trees are a list, `Layers.trees` ({ x, z, k }, k the feature in the table): a point gives one, a
+    line a tree every `spacing` m from half a spacing in. No layer, no density, no sim class changes.
 - **The draft** (`src/map/draft.ts`): one pixel per cell, north up, colours from categories and attributes (never
-  kind names), hill shading from the north-west and contours every 2.5 m.
+  kind names), hill shading from the north-west and contours every 2.5 m. A way by its `surface` (earth, setts or
+  cobbles, brick, metalled); a tree as a disc of its crown (at least 2 m, so a poplar reads), darker for columnar
+  and conical forms.
 - **The page** (`app/map.html`, `src/app/map/`):
   - a worker compiles; the page draws with pan and zoom, outlines with ids, the play area, and the cell under
     the mouse with the feature in each layer;

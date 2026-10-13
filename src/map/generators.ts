@@ -12,7 +12,8 @@ import { scatterSites } from './scatter.ts'
 import type { Zone } from './reach.ts'
 import { boxDistance, boxOf, distanceTo, distanceToPolygon, matches } from './reach.ts'
 import { allowedIn, categoryOf, checkValue, kindChain, kindMeta } from './catalogue.ts'
-import { seedOf } from './seed.ts'
+import { random, seedOf } from './seed.ts'
+import { cos, sin, PI } from '../sim/num.ts'
 import { cm, num } from './util.ts'
 
 export interface ParamSpec extends FieldSpec { required?: boolean }
@@ -200,6 +201,27 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
         return { ...(single ?? { ...e.set, kind: e.kind }), id, area: [clump([cm(s.x), cm(s.z)], s.r, s.r, 0, { coherence: e.coherence, raggedness: e.raggedness }, seedOf(mapSeed, id, 'clump'))] } as Feature
       })
       return { self: null, children }
+    },
+  },
+  // a few free-standing trees around a point (two or three poplars by a farm): `count` trees within `spread` m of it,
+  // each at least a crown from the others, seeded; the point leaves the map, the trees are its children
+  group: {
+    kinds: ['veg.tree'], input: ['point'], output: 'point', removesSelf: true, childKinds: kind => [kind],
+    params: {
+      count: { type: 'int', unit: 'count', min: 2, max: 5 },
+      spread: { type: 'number', unit: 'm', min: 1, max: 50 },
+    },
+    run: ({ f, attrs, params, seed }) => {
+      const crown = num(attrs.crown, 4), count = P(params, 'count') ?? 3, spread = P(params, 'spread') ?? 2.5 * crown
+      const rnd = random(seed), pts: Pt[] = [], [cx, cz] = f.point!
+      for (let tries = 0; pts.length < count && tries < count * 200; tries++) {
+        // uniform in the disc: the radius as the square root of a uniform draw
+        const r = spread * Math.sqrt(rnd()), t = 2 * PI * rnd(), p: Pt = [cm(cx + r * cos(t)), cm(cz + r * sin(t))]
+        if (pts.every(q => (q[0] - p[0]) * (q[0] - p[0]) + (q[1] - p[1]) * (q[1] - p[1]) >= crown * crown)) pts.push(p)
+      }
+      if (pts.length < count) throw new Error(`placed ${pts.length} of ${count} trees a crown (${crown} m) apart within ${spread} m: widen spread or ask fewer`)
+      const own = Object.fromEntries(Object.entries(f).filter(([k]) => !['id', 'gen', 'point', 'origin'].includes(k)))
+      return { self: null, children: pts.map((p, k) => ({ ...own, id: `${f.id}-${k + 1}`, point: p }) as Feature) }
     },
   },
 }
