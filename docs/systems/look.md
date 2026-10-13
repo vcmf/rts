@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-13
 code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png]
-decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0003-no-blur-in-gameplay, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage]
+decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0003-no-blur-in-gameplay, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest]
 ---
 
 # The look page (Track E, L0)
@@ -200,8 +200,8 @@ shader); `?meadow=off` puts back the old scatter.
   shade from the clump field.
   `tools/meadow-grass-export.py` rebuilds `data/meadow-grass.json` from the pack's two grass files.
 - **The scatter under the meadow** (`src/look/nature.ts`): the old `Grass_Short` tufts are not placed, and the wheat
-  field is placed by a hash a 0.7 m cell with a ragged edge instead of a lattice, no taller than `WHEAT_HEIGHT_MAX`
-  (1.2 m, decision 0026); both keep
+  field is placed by a hash a 0.85 m cell with a ragged edge instead of a lattice; every wheat tuft, the old
+  lattice's too, is clamped in `add()` to `WHEAT_HEIGHT_MAX` (decision 0026); both keep
   the scatter's random stream, so nothing else moves. `tools/river-check.js` counts the meadow's growing cells in
   place of the tufts and checks the grass's footprint against the zones and the banks; `tools/look-check.js`
   checks no clump floats over the drawn tile (each sinks `MEADOW_SINK`).

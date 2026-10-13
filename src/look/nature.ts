@@ -132,7 +132,14 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     if (kind === 'reed') return !q || q.dist >= wetEdgeAt(q) + r   // reeds: at the water's edge, wholly on land
     return offBanks(q, r)                 // off the banks (W2: a point bar reaches farther)
   }
-  const groups: Record<string, Item[]> = {}; const add = (model: string, item: Item) => (groups[model] = groups[model] || []).push(item)
+  // every placement goes through add(): the standing wheat's scale is clamped here, so no path can draw it taller
+  // than WHEAT_HEIGHT_MAX (decision 0026; the scatter's random stream is untouched)
+  const wheatScaleMax = WHEAT_HEIGHT_MAX / NATURE.Wheat.max[1]
+  const groups: Record<string, Item[]> = {}
+  const add = (model: string, item: Item) => {
+    if (model === 'Wheat' && item[2] > wheatScaleMax) { item = [...item] as Item; item[2] = wheatScaleMax * (0.82 + 0.18 * Math.min(1, (item[2] - wheatScaleMax) / 0.4)) }
+    ;(groups[model] = groups[model] || []).push(item)
+  }
   // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
   const addPlaced = (model: string, item: Item, kind = '') => { const [x, z, s] = item; if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false; add(model, item); return true }
 
@@ -196,9 +203,9 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // the one placement rule (wheat on wheat, EDGE from the painted edge); its own stream
   if (meadow) {
     // the tufts' scale: from 0.82 to 1 of the one that reaches WHEAT_HEIGHT_MAX (decision 0026)
-    const WR = mulberry(57), sMax = WHEAT_HEIGHT_MAX / NATURE.Wheat.max[1]
-    for (let u = 0; u < 30; u += 0.7) for (let v = 0; v < 22; v += 0.7) {
-      const uu = u + WR() * 0.7, vv = v + WR() * 0.7, s = sMax * (0.82 + WR() * 0.18), yaw = WR() * 6.28, tint = WR()
+    const WR = mulberry(57)
+    for (let u = 0; u < 30; u += 0.85) for (let v = 0; v < 22; v += 0.85) {
+      const uu = u + WR() * 0.85, vv = v + WR() * 0.85, s = wheatScaleMax * (0.82 + WR() * 0.18), yaw = WR() * 6.28, tint = WR()
       if (Math.min(uu, 30 - uu, vv, 22 - vv) < fbm(uu * 0.35 + 3, vv * 0.35 - 1) * 1.6 || WR() < 0.06) continue
       const x = -60 + uu * 0.95 + vv * 0.25, z = -34 + vv - uu * 0.12
       addPlaced('Wheat', [x, z, s, yaw, tint])

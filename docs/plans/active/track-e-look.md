@@ -423,6 +423,10 @@ for the smoke-on arm.
 Cavalry and artillery figures are needed for the "arm" question. Placeholders of L1's budget are enough: a
 horse-and-rider mass, and a gun with crew.
 
+**Also (from L7, 2026-10-13):** #63, a dark coat losing its separation in a crown's deep shade (the guard's
+`wheat.France` with the leaf cards): to fix on the army side (a value lift or a rim for coats in shade), with the
+real figures; the investigation is on the issue.
+
 **Depends on:** L2, L3. **Estimate:** 2–3 days plus the test session.
 
 ## L5. Macro colour bake and ablation (`docs/proposals/prepainted-terrain.md`)
@@ -537,8 +541,7 @@ the pack crowns): results in `docs/plans/active/track-e-results/shadows-foliage.
 - the cards as the default arm, once a forest
   costs less (the cards' cost is highest where one fills the frame: `docs/plans/done/forest-bench.md`), against fewer,
   larger cards for far crowns, the pack mesh beyond a distance, or a depth pre-pass;
-  (#63, a dark coat losing its separation in a crown's shade, moved to L4 on 2026-10-13: the army side's to fix;
-  by the guard's rule the cards pass);
+  (#63 moved to L4, below; with the guard against main the cards pass: `docs/plans/active/wheat-height.md`);
 - the outline at the widest zoom aliases: alpha-to-coverage on MSAA, L8's A/B;
 - the acceptance above, measured on the cards: overdraw, coverage across the zooms, no heat ripple behind the
   army blocks (alpha-tested cards make it likelier), foliage ≤ 3 ms, in a battlefield forest and on the min-spec
@@ -655,6 +658,9 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
    comes first?
 
 ## Changes to this plan
+
+- **2026-10-13, #63 and the crops.** #63 moved from L7 to L4 (the army side's to fix); standing crops capped under a
+  soldier's chest (decision 0026).
 
 - **2026-10-13, the shadows and the crowns.** Recorded the shadow work (Results) and L7's progress (L7a, L7b,
   what L7 still owes); the owner's answer on tilt-shift (question 3); decision 0022 (proposed); known issues #62

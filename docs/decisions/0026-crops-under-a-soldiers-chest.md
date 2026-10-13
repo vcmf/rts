@@ -21,8 +21,8 @@ look's.
 
 ## Consequences
 
-- Good: a formation in a field reads; the guard's wheat blocks are whole again (`wheat.France` 0.090 to 0.098 on
-  the default page).
+- Good: a formation in a field reads; the guard's wheat blocks show whole again (their results:
+  `docs/plans/active/wheat-height.md`); a dark coat in a crown's shade there is still a palette question (#63).
 - Bad: fields look lower than history's; a scene that needs men hidden in the corn shows it through the sim's
   sight rules and the staff map, not the look.
 
