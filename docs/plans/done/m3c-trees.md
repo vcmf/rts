@@ -6,7 +6,7 @@ last_reviewed: 2026-10-13
 # Plan: M3c, trees and paved roads
 
 Track M, on `epic/map-engine` (decision 0020). One PR into the epic. Shared edges (`follow`), first planned as M3c
-in `docs/plans/active/m3-generators.md`, become M3d.
+in `docs/plans/done/m3-generators.md`, become M3d.
 
 ## Problem
 

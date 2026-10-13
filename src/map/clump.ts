@@ -1,4 +1,4 @@
-// clump (docs/proposals/map-engine.md §3.4, docs/plans/active/m3-generators.md): an organic outline around a point,
+// clump (docs/proposals/map-engine.md §3.4, docs/plans/done/m3-generators.md): an organic outline around a point,
 // a circle or an ellipse. A radial polygon (so always simple) whose radius swings by a few seeded low harmonics
 // (the shape) and, with raggedness, some higher ones (the edge's wobble); coherence 1 is the plain circle or ellipse.
 import type { Pt } from './schema.ts'

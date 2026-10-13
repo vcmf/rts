@@ -1,7 +1,7 @@
-// The generators (docs/proposals/map-engine.md §3.4, docs/plans/active/m3-generators.md): for each, the shape it
+// The generators (docs/proposals/map-engine.md §3.4, docs/plans/done/m3-generators.md): for each, the shape it
 // reads, the shape it writes, its parameters (checked by the validator like attributes), what it reads of the other
 // features, and the pure function that runs it. A generator's randomness comes from its seed alone:
-// hash(map.seed, the feature's id, its name). Expansion (src/map/expand.ts, decision 0023) runs each after everything
+// hash(map.seed, the feature's id, its name). Expansion (src/map/expand.ts, decision 0028) runs each after everything
 // it reads, as a chain (a cycle is an error), and shows it only finished features.
 import type { AttrValue, Catalogue, Feature, FieldSpec, Pt, ShapeName } from './schema.ts'
 import { HEADING_MAX, meander } from './meander.ts'
@@ -38,7 +38,7 @@ export interface GenSpec {
   // the kinds of the children it writes, when it writes any (ids <feature>-<n>)
   childKinds?(kind: string, params: Record<string, unknown>): string[]
   removesSelf?: boolean            // its own feature leaves the expanded map (a scatter's region)
-  // generators of this name never read each other (street villages, decision 0023): each declares where its output
+  // generators of this name never read each other (street villages, decision 0028): each declares where its output
   // can reach whatever its seed (a zone, and its own area), and two whose reaches come within `gap` are an error
   // before anything runs. Apart, neither can change the other's output, so neither needs to wait. Null: it cannot
   // tell (what it reaches from is not finished), which is an error too
@@ -165,7 +165,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
         const chain = typeof e.kind === 'string' ? kindChain(cat, e.kind) : null
         if (!chain) { out.push({ key: `${at}.kind`, message: 'must name a kind in the catalogue' }); return }
         if (!kindMeta(cat, chain).shapes.includes('area')) out.push({ key: `${at}.kind`, message: `${e.kind} takes no area` })
-        // a region that follows or keeps off a line hands its `clear` to every child (decision 0025)
+        // a region that follows or keeps off a line hands its `clear` to every child (decision 0030)
         if ((f.follow !== undefined || f.clear !== undefined) && !KEEPS_OFF.includes(categoryOf(e.kind as string))) out.push({ key: `${at}.kind`, message: `${e.kind} cannot keep off a line, and this region does (follow or clear)` })
         if (e.count === undefined) out.push({ key: `${at}.count`, message: 'is required' })
         for (const [k, spec] of Object.entries(CLUMP_PARAMS)) if (e[k] !== undefined) { const m = checkValue(spec, e[k]); if (m) out.push({ key: `${at}.${k}`, message: m }) }

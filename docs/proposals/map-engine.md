@@ -140,7 +140,7 @@ touches no ruleset.
 |---|---|---|
 | `relief` | `base` (seeded value noise: `height` the amplitude, `width` the scale; a landform, not a generator, since a field has no shape to pin), `hill`, `ridge` (along a line), `valley`, `plateau`, `scarp`; edits `raise`, `lower`, `level`, `cut`, `ditch` (a cut along a line, at least 2 cells wide, its cells also marked for the ruleset's crossing rule) | `dem` (an elevation file), `spot` heights, `basin`, `terrace` |
 | `ground` | `meadow`, `pasture`, `field` (`.wheat`, `.rye`, `.oats`: loam under a crop whose `stage` is standing, stubble or ploughed), `rough`, `marsh`, `yard` (village ground); moisture and snow as season attributes | `heath`, `sand`, `rock`, `bog`, `mud` as a weather state |
-| `veg` | `wood.broad`, `wood.conifer`, `wood.mixed`, `thicket`, `orchard` (rows), `reeds`, `scrub`; free-standing `tree`, `tree.poplar`, `tree.conifer`, `tree.willow` (a point, a row on a line, a `group`; decision 0024) | species presets, `vineyard`, `olive`, `wood.pasture`, `tallgrass` |
+| `veg` | `wood.broad`, `wood.conifer`, `wood.mixed`, `thicket`, `orchard` (rows), `reeds`, `scrub`; free-standing `tree`, `tree.poplar`, `tree.conifer`, `tree.willow` (a point, a row on a line, a `group`; decision 0029) | species presets, `vineyard`, `olive`, `wood.pasture`, `tallgrass` |
 | `water` | `stream`, `river` (lines with width, depth, flow, banks), `pond`, `lake` (areas with a level), `ford` (on a stream) | `canal`, `weir`, `dam`, `millrace`, `flood` (a level over a meadow), breakable ice |
 | `way` | `road.highway`, `road.lane`, `track`, `path`; `road.sunken` (a cut plus optional hedges) | `causeway`, `ferry` |
 | `barrier` | `hedge`, `wall`, `fence` (on the grid: height, thickness in cells, porosity, crossing, gaps) | `palisade`, `stakes`, `abatis` |
@@ -246,7 +246,7 @@ validate ──► relief ──► expand (generators) ──► apply (layers,
   order, never in the file's order (AoE II's and Civilization's lesson). A generator depends on the ids it
   references, and on every generator whose output or children could match the kinds it names (a `scatter`'s
   `avoid` and `within`, a village's water and buildings), never on itself. The dependencies must form a chain: a
-  cycle is an error, and kinds that must stay apart are placed jointly by one `scatter`'s `mix` (decision 0023). A
+  cycle is an error, and kinds that must stay apart are placed jointly by one `scatter`'s `mix` (decision 0028). A
   generator reads the relief and the expanded shapes of what it depends on, nothing else: a `meander` follows the
   valley, a `street-village` its road, a `scatter` avoids the woods. Its output is the expanded map.
 - **Apply** writes the expanded features into the five layers, in a fixed order owned by the engine:

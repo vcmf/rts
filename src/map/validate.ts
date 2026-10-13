@@ -106,12 +106,12 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       const states = kindStates(cat, chain)
       if (!Object.hasOwn(states, f.state)) bad(id, `${path}.state`, `${kind} has no state "${f.state}" (it has: ${Object.keys(states).join(', ') || 'none'})`)
     }
-    // shared edges and keeping off lines (decision 0025) hold where apply paints an area's cells and honours `clear`
+    // shared edges and keeping off lines (decision 0030) hold where apply paints an area's cells and honours `clear`
     // (KEEPS_OFF): never the relief (it moves heights, not cells) or water (it paints its own way)
     const keepsOff = KEEPS_OFF.includes(category)
     for (const k of ['follow', 'clear'] as const) if (f[k] !== undefined && !keepsOff) bad(id, `${path}.${k}`, `${kind} cannot keep off a line: shared edges are for ground, vegetation, buildings, earthworks and zones`)
     const offsetProblem = (v: unknown) => (v !== undefined && (typeof v !== 'number' || v < 0 || v > 500 || !onCentimetres(v)) ? 'must be 0 to 500 m, at most 2 decimals' : null)
-    // shared edges (docs/plans/active/m3d-follow.md): each follows a line feature, on an area feature
+    // shared edges (docs/plans/done/m3d-follow.md): each follows a line feature, on an area feature
     if (f.follow !== undefined) {
       const edges = listOf<unknown>(f.follow), fp = (n: number) => (Array.isArray(f.follow) ? `${path}.follow[${n}]` : `${path}.follow`)
       if (edges.length === 0) bad(id, `${path}.follow`, 'must be a shared edge or a list of them')
@@ -136,7 +136,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
         else if (t.line === undefined) bad(id, `${ep}.id`, `"${t.id}" is not drawn as a line; an edge follows a line (a stream, a road, a hedge…)`)
       })
     }
-    // lines an area keeps off (decision 0025): what a shared edge expands to, or the author's own
+    // lines an area keeps off (decision 0030): what a shared edge expands to, or the author's own
     if (f.clear !== undefined) {
       const many = Array.isArray(f.clear)
       if (f.area === undefined && f.circle === undefined && f.ellipse === undefined) bad(id, `${path}.clear`, 'keeps an area off lines: the feature needs an area, a circle or an ellipse')
@@ -200,7 +200,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       }
     }
 
-    // free-standing trees (decision 0024) are their own kinds: a feature cannot turn into one or out of one (it would
+    // free-standing trees (decision 0029) are their own kinds: a feature cannot turn into one or out of one (it would
     // paint nothing), and the trees' attributes mean nothing on other kinds
     const kindGrowth = chain.reduce<unknown>((g, n) => cat.kinds[n].set?.growth ?? g, undefined)
     if (f.growth !== undefined && (f.growth === 'tree') !== (kindGrowth === 'tree')) bad(id, `${path}.growth`, kindGrowth === 'tree' ? `${kind} is a free-standing tree; for an area of growth use another kind` : 'a free-standing tree is a kind of its own (veg.tree…), on a point or a line')

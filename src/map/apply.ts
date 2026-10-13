@@ -281,7 +281,7 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
   const paintArea = (f: Feature, layer: Uint16Array, k1: number, onCell?: (cell: number, edge: number) => void, needEdge = false) => {
     const field = areaField(f); if (!field) return
     const kept = keptOff(f)
-    // a ramp's `edge` counts from where the area's cells begin: its ring, or a line it keeps off (decision 0025)
+    // a ramp's `edge` counts from where the area's cells begin: its ring, or a line it keeps off (decision 0030)
     const edgeAt = (x: number, z: number) => {
       let e = field.edge(x, z)
       for (const l of kept?.lines ?? []) e = Math.min(e, Math.max(0, nearLine(l.line, x, z).d - l.near))   // never below 0 (past a line's end)
@@ -289,7 +289,7 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
     }
     cells(field.box, 0, (i, j, x, z) => { if (field.inside(x, z) && !kept?.masks.some(m => m[j * nx + i] === 1)) { layer[j * nx + i] = k1; onCell?.(j * nx + i, needEdge ? edgeAt(x, z) : 0) } })
   }
-  // the cells a line takes, by the very rule that paints it (decision 0025), and `offset` m more: an area that keeps
+  // the cells a line takes, by the very rule that paints it (decision 0030), and `offset` m more: an area that keeps
   // off it paints none of them, so no cell is both and none between is left out. One mask per line and offset, made
   // once, over the line's box only
   const masks = new Map<string, Uint8Array>()

@@ -9,5 +9,5 @@ export const cm = (v: number): number => Math.round(v * 100) / 100
 export const num = (v: AttrValue | undefined, dflt = 0): number => (typeof v === 'number' ? v : dflt)
 // a field that holds one value or a list of them, as a list
 export const listOf = <T>(v: unknown): T[] => (v === undefined ? [] : (Array.isArray(v) ? v : [v]) as T[])
-// a line an area keeps off (decision 0025): `clear: [{ id, offset? }]`
+// a line an area keeps off (decision 0030): `clear: [{ id, offset? }]`
 export interface Clear { id: string; offset?: number }

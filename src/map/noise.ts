@@ -1,4 +1,4 @@
-// Value noise for the base ground (docs/plans/active/m3-generators.md): seeded values on a unit lattice, blended with
+// Value noise for the base ground (docs/plans/done/m3-generators.md): seeded values on a unit lattice, blended with
 // a quintic (polynomial, so exact), summed over octaves. In [−1, 1] before scaling. No trigonometry.
 // a lattice value in [−1, 1): integer mixing of (seed, i, j), no allocation (this runs millions of times a map)
 function lattice(seed: number, i: number, j: number): number {

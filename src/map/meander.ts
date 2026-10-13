@@ -1,4 +1,4 @@
-// meander (docs/proposals/map-engine.md §3.4, docs/plans/active/m3-generators.md): a stream's bends along its guide
+// meander (docs/proposals/map-engine.md §3.4, docs/plans/done/m3-generators.md): a stream's bends along its guide
 // line, the valley's axis. The Kinoshita curve of the look world's river (src/look/world/author.ts, step 1) in the
 // exact maths: the channel's direction swings as θ0·sin φ (with a little skew and fattening), φ advancing along the
 // channel; each bend varies its amplitude and length by a seeded, slowly varying noise; a cubic restoring term holds

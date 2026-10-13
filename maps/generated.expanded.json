@@ -2,7 +2,7 @@
   "format": 1,
   "id": "generated",
   "name": "Generated Valley",
-  "note": "The five-seeds map (docs/plans/active/m3-generators.md, M3b): the valley's ridges and road, everything else from generators: a meandered brook with fords and a bridge, noise ground, copses and fields scattered together (one mix) clear of the water, the road, the village and both armies' ground, and a street village. Change the seed for another battlefield.",
+  "note": "The five-seeds map (docs/plans/done/m3-generators.md, M3b): the valley's ridges and road, everything else from generators: a meandered brook with fords and a bridge, noise ground, copses and fields scattered together (one mix) clear of the water, the road, the village and both armies' ground, and a street village. Change the seed for another battlefield.",
   "seed": 1,
   "season": "summer",
   "extent": {"w":2000,"h":2000},

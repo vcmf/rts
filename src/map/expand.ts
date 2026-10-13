@@ -33,7 +33,7 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
   const children: Feature[] = [], ran = new Set<string>(), failed = new Set<string>()
   const pinnedParents = pinnedParentsOf(map.features)
   const runOne = (authored: Feature) => {
-    // shared edges first (docs/plans/active/m3d-follow.md): each edge's points into the outer ring, before its `at`
+    // shared edges first (docs/plans/done/m3d-follow.md): each edge's points into the outer ring, before its `at`
     let f = authored
     if (f.follow) {
       const edges = followsOf(f), outer = [...f.area![0]], many = Array.isArray(f.follow)
@@ -70,7 +70,7 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
       children.push(child); current.set(child.id, child)
     }
   }
-  // the order (decision 0023): F reads G when F's selectors could match what G produces (G's id, its children's ids,
+  // the order (decision 0028): F reads G when F's selectors could match what G produces (G's id, its children's ids,
   // the kinds of G and of its children; not G's own kind when G leaves the map), and G is not F's peer. The reads must form a chain: the strongly connected groups of that graph
   // (Tarjan's algorithm, which emits a group after every group it depends on) are single generators, run in that
   // order, each seeing only finished features. A group of several is a cycle: an error naming its members and how to
@@ -111,7 +111,7 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
     if (failed.has(f.id) || gens.some(o => failed.has(o.id) && reads(f, o))) { failed.add(f.id); return }
     runOne(f)
   }
-  // peers (decision 0023) do not read each other, so they must not be able to meet: whatever their seeds, their zones
+  // peers (decision 0028) do not read each other, so they must not be able to meet: whatever their seeds, their zones
   // (and an author's own area) lie more than the gap apart, checked before anything runs. One issue per peer, naming
   // every peer too close to it
   for (const spec of new Set(gens.map(specOf))) if (spec?.peers) {

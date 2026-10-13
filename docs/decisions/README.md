@@ -11,6 +11,10 @@ edited after acceptance: to change a decision, write a new record and mark the o
 records are open until the owner accepts or rejects them (then their status changes once). Decisions taken earlier in October 2026 were
 recorded here on 2026-10-08.
 
+Track M's records 0027–0030 were written on `epic/map-engine` as 0022–0025 and renumbered on 2026-10-13, before
+the epic reached main, because main had taken those numbers (`docs/plans/active/m-decision-numbers.md`). Pull
+requests #56–#72 cite them by their old numbers: 0022 is 0027, 0023 is 0028, 0024 is 0029, 0025 is 0030.
+
 | # | Decision | Status |
 |---|---|---|
 | [0001](0001-painterly-look-in-materials.md) | The painterly look lives in assets and materials | accepted |
@@ -34,7 +38,7 @@ recorded here on 2026-10-08.
 | [0019](0019-shading-data-from-authored-surface.md) | Shading data finer than the heightfield comes from the authored surface | proposed |
 | [0020](0020-track-m-on-an-epic-branch.md) | The map engine is Track M, built on an epic branch | accepted |
 | [0021](0021-two-metre-map-cell.md) | Every map grid is built on one 2 m cell | accepted |
-| [0022](0022-generators-expand-by-dependency.md) | Generators expand by dependency, over finished features, with hard and soft reads | superseded by 0023 |
-| [0023](0023-generators-form-a-chain.md) | Generators form a chain; kinds that keep apart share one scatter's mix | accepted |
-| [0024](0024-free-standing-trees.md) | Free-standing trees stand on the cells, as a list | accepted |
-| [0025](0025-shared-edges-are-the-line.md) | A shared edge is the line itself; the area keeps off the line's cells | accepted |
+| [0027](0027-generators-expand-by-dependency.md) | Generators expand by dependency, over finished features, with hard and soft reads | superseded by 0028 |
+| [0028](0028-generators-form-a-chain.md) | Generators form a chain; kinds that keep apart share one scatter's mix | accepted |
+| [0029](0029-free-standing-trees.md) | Free-standing trees stand on the cells, as a list | accepted |
+| [0030](0030-shared-edges-are-the-line.md) | A shared edge is the line itself; the area keeps off the line's cells | accepted |
