@@ -18,7 +18,8 @@ assets, surfaces, lighting and effects authored to look painted, explicitly
 The reference images and what each is for are in §0.
 
 > Revision, Oct 2026: replaces the earlier "tin-soldier diorama" direction
-> (tilt-shift blur, figure bases, sky and horizon shots), which is retired.
+> (figure bases, sky and horizon shots), which is retired. A mild miniature-field
+> depth of field came back on 13 Oct 2026 as a player option (decision 0020).
 
 ---
 
@@ -42,7 +43,7 @@ or a decision, the rule wins, and the image's row says what to ignore.
 | Image | Take | Ignore |
 |---|---|---|
 | `design/refs/style-painterly.png` | **Brushwork and colour:** tapered grass flicks, flower dabs, broken edges, teal hue-shifted shadows, cloud-shadow patches | Its sky, horizon and ground-level camera |
-| `design/refs/north-star.png` | Composition only (superseded by the painted version) | Toy bases, tilt-shift, sky glow, glossy figurine finish |
+| `design/refs/north-star.png` | Composition only (superseded by the painted version) | Toy bases, its heavy tilt-shift (ours is mild, §1.6), sky glow, glossy figurine finish |
 | `design/refs/mood-wide.png` | Warm light temperature, gold-lit valley mist | Everything else: sky, mountains, cypresses, crowding, toy figures |
 | `design/refs/austerlitz-cavalry-v2.png` (v1 superseded) | Grey winter palette, hollow squares, a cavalry mass read as one shape, dust | Even texture density everywhere (noise) |
 | `design/refs/austerlitz-goldbach-v2.png` (v1 kept for close zoom) | Mid zoom: partly frozen meander, field-strip patchwork, tree lines along the stream | Crowding, little negative space |
@@ -53,6 +54,7 @@ or a decision, the rule wins, and the image's row says what to ignore.
 | `design/refs/eylau-cemetery-v1.png` | Snow on roofs and buildings, walled enclosures, hedges and fences as structure | Dense fallen; brown and grey roofs with no accent |
 | `design/refs/wagram-russbach-v1.png` | Escarpments and banks, bridges as crossings, wheat patches | Poplars that read as cypresses; a canal-straight stream (§6c) |
 | `design/refs/french-infantry-v1.png`, `-v1-rear` | Tripo input: silhouette, kit proportions, slender adult build, colour regions | Fine face, button and brass detail (§8); slight baked shading (§5); the shako is 1806 and later, so Austerlitz needs a bicorne variant |
+| `design/refs/tiny-glade-img-2.jpg`, `design/refs/tiny-glade-forest.jpg` (screenshots of *Tiny Glade*) | **Texture and design:** crowns built of painted leaf clumps with one soft, ball-like light and warm-to-cool shading; soft cool-tinted shadows and contact darkening; real grass blades and tufts at edges; dark mirror water with long reflections; a miniature-field depth of field over which the brushwork still reads | The palette (fairy tale, pastel pinks and teals: ours is epic and wargame, §4); the close camera; the cosy tone |
 | `design/refs/french-barracks-u-v2-front.png`, `-u-v2-rear` (v1 pair superseded) | Tripo input: a U footprint that reads from above, clear wall, roof and window regions | Baked directional light (§5); stone texture too fine; check the dormer and chimney counts match between views |
 
 ### What the set gets wrong (fix in the next generation, and never copy)
@@ -82,11 +84,12 @@ These are decisions, not preferences. Don't propose against them.
 3. **Tone:** epic, not cozy, not dark. Not Total War's realistic, dingy look.
 4. **The painterly look lives in the assets and materials,** not in a
    full-screen filter. Any post-processing is a light finishing pass at most.
-6. **No optical blur during gameplay.** Depth comes from *painting*: haze and
+6. **Blur is the player's choice.** Depth comes from *painting* first: haze and
    cooling toward the top of the screen, looser brushwork toward the edges,
-   valley mist and backlight. Depth of field is allowed only in **presentation
-   modes** (photo mode, replays, the opening fly-in, victory screen) and in
-   **video exports**. (Decided Oct 2026; see §6b.)
+   valley mist and backlight. A miniature-field depth of field sits on top as a
+   gameplay setting, **on by default**, mild enough that the brushwork and the
+   formations at the edges still read. Presentation modes and video exports use
+   stronger settings. (Decision 0020, Oct 2026, superseding 0003; see §6b.)
 5. **Readable first.** A player must read every formation, its side and its
    state in under a second.
 
@@ -113,7 +116,7 @@ These are decisions, not preferences. Don't propose against them.
 | "A painterly, irregular edge to any 3D object" (their biggest new tool) | **Edge breakup:** silhouettes dissolve into brush-dab shapes, using a world-space grain texture threshold at grazing angles |
 | "Stamp map": brushstroke images projected onto surfaces | **Brush library** (§7) projected in world space, never in screen space, so strokes never slide when the camera moves |
 | Rim light used liberally for a "graphic edge" | **Graphic warm rim** on units and foliage tops, hard-edged with grain breakup |
-| Detail at the focus, "looser, more impressionistic" toward the frame edges | Strokes grow larger and simpler away from the camera focus. **No optical blur during gameplay** (§1.6). |
+| Detail at the focus, "looser, more impressionistic" toward the frame edges | Strokes grow larger and simpler away from the camera focus. Gameplay depth of field is mild and optional (§1.6). |
 | Non-naturalistic colour (naturalistic felt "dingy") | **Hue-shifted shading ramp** (§4) |
 | Volumetric effects sculpted into graphic shapes, hand-drawn lines | **Illustrated effects:** smoke as shaped puffs with hard and soft edges, volleys as graphic flashes (§9) |
 | Animation stepped "on 2s and 4s" for action | **Units animated at 12 fps,** with the camera always smooth |
@@ -238,20 +241,23 @@ language never matches. **Assets are generated for this style** (§10).
 
 ## 6b. Depth & the cinematic layer
 
-**Why no blur in gameplay** (decision record):
-1. An RTS player reads the whole screen. Flanks and incoming threats live at
-   the edges, exactly where tilt-shift blurs.
-2. The camera pans constantly. Focus "pumps" as things scroll in and out of
-   the sharp band, which is tiring and stops feeling magical.
-3. Blur erases the painted grain and edges that carry the style.
-4. *The Last Wish* "illustrates" depth with looser brushwork, not lens blur.
-5. It is **not** a performance decision (depth of field ≈ 0.5–1 ms), so it can
-   be revisited cheaply.
+**Depth of field in gameplay** (decision 0020, superseding 0003). *Tiny Glade*
+(`design/refs/tiny-glade-img-2.jpg`, `design/refs/tiny-glade-forest.jpg`) shows that a tilt-shift blur over painted
+leaves, grass and water makes the field read as a miniature while the
+brushwork survives where the blur is mild. So:
+1. It is a player setting, **on by default**, focused on the camera's target
+   with a sharp band around it; its strength follows the zoom.
+2. It stays mild in the band the player reads: formations at the screen's edges
+   must still pass the readability guard with it on.
+3. Painting carries depth first; blur adds to it. The look checks measure the
+   paint with blur off.
+4. Cost: depth of field ≈ 0.5–1 ms (estimate), charged to the post budget.
 
-**Where depth of field IS used:** video exports (directed camera, focus
-follows the action) and in-game presentation modes. Gameplay depth of field
-exists only as an off-by-default setting. If playtests show the field feels
-flat, the fallback is a *very subtle* depth of field at the closest zoom only.
+The concerns that made 0003 (threats at the edges, focus pumping as the camera
+pans, blur erasing grain) are what the tuning and the toggle answer.
+
+**Where stronger depth of field is used:** video exports (directed camera, focus
+follows the action) and in-game presentation modes.
 
 **The cheap cinematic stack** (from `docs/research/cheap-painterly-postfx.md`):
 - **Bake what doesn't move:** terrain ambient occlusion, canopy contact

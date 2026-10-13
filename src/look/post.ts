@@ -1,5 +1,5 @@
 // The camera and the finishing passes (prototypes/painted-cinematic.html, docs/research/cheap-painterly-postfx.md):
-// [depth of field H, V, presentation and video only per decision 0003] → one fused pass (grade, bloom, vignette,
+// [depth of field H, V, a player option per decision 0020] → one fused pass (grade, bloom, vignette,
 // paper, dither). Materials write view distance into alpha, so depth of field needs no second scene render.
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
