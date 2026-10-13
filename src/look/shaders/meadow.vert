@@ -12,13 +12,13 @@ vec4 meadowAt(vec2 xz){return texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);}
 vec2 coverCell(vec2 xz){vec4 t=texture2D(uCover,xz/FAR_W+0.5);return floor(t.rg*255.0+0.5);}   // its class and field id
 // a crop by its class and the season (docs/plans/done/l5d-crops.md, uSeason 0 summer, 1 autumn, 2 late autumn, 3
 // winter): its height (m) in x, its colour at the tip in yzw. Wheat stands in summer (never over WHEAT_HEIGHT_MAX,
-// decision 0026), is cut to stubble (0.22 m) in autumn and ploughed under after, stubble short until the plough, the green
+// decision 0026), is cut to stubble (0.45 m) in autumn and ploughed under after, stubble short until the plough, the green
 // crop low all year, lower under the snow and toward its colour. The colour (the owner): lime to gold, orange and
 // brown with the season
 vec4 cropLook(float k,float j){
   float s=uSeason;
   if(k>5.5&&k<6.5){
-    float h=mix(WHEAT_HEIGHT_MAX*mix(0.84,1.0,j),0.22,smoothstep(0.55,0.95,s))*(1.0-smoothstep(1.55,1.95,s));
+    float h=mix(WHEAT_HEIGHT_MAX*mix(0.84,1.0,j),0.45,smoothstep(0.55,0.95,s))*(1.0-smoothstep(1.55,1.95,s));
     vec3 c=s<1.0?mix(vec3(0.72,0.60,0.27),vec3(0.70,0.49,0.24),s):mix(vec3(0.70,0.49,0.24),vec3(0.47,0.36,0.23),min(s-1.0,1.0));
     return vec4(h,c);}
   if(k>6.5&&k<7.5){
@@ -26,8 +26,8 @@ vec4 cropLook(float k,float j){
     vec3 c=mix(vec3(0.46,0.58,0.21),vec3(0.42,0.43,0.22),smoothstep(0.5,2.5,s));
     return vec4(h,mix(c,vec3(0.46,0.42,0.34),0.5*smoothstep(2.0,3.0,s)));}   // toward the winter ground (groundSeason)
   if(k<7.5||k>8.5)return vec4(0.0);   // not a sown class: nothing (Nature.crop grows none there)
-  float h=0.22*mix(0.8,1.0,j)*(1.0-smoothstep(1.55,1.95,s));
-  return vec4(h,mix(vec3(0.68,0.60,0.40),vec3(0.50,0.40,0.28),smoothstep(0.5,1.8,s)));}
+  float h=0.45*mix(0.8,1.0,j)*(1.0-smoothstep(1.55,1.95,s));
+  return vec4(h,mix(vec3(0.80,0.74,0.54),vec3(0.62,0.52,0.36),smoothstep(0.5,1.8,s)));}   // pale straw over the darker soil
 void main(){
   vec2 cell=uOrigin+aSlot*uCell;                                 // this slot in the world: what it draws hangs on the cell
   vec2 k=floor(cell/uCell+0.5);float h0=mHash(k+uCell*31.7),h1=mHash(k*1.31+5.3),h2=mHash(k*0.71-9.1),h3=mHash(k+71.9),h4=mHash(k*1.71+13.3),h5=mHash(k*0.53-27.7),h6=mHash(k*2.13+3.9);   // one hash a trait

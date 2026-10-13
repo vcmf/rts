@@ -209,8 +209,8 @@ shader); `?meadow=off` puts back the old scatter.
   channel (the crops' growth: `Nature.crop`, a sown field, wheat, green crop or stubble, with the grass's rules,
   edge and shrink) is above the grass's growth: never both on one patch. The vertex shader reads the cover's class
   at the root (`uCover`) and the season (`cropLook` in `meadow.vert`): wheat standing up to `WHEAT_HEIGHT_MAX`
-  (decision 0026) in summer, cut to 0.22 m stubble through autumn and gone by late autumn; the green crop 0.45 m,
-  lower under the snow; stubble 0.22 m until the plough. Narrower than grass, evenly sown (less clumping). Its
+  (decision 0026) in summer, cut to 0.45 m stubble through autumn and gone by late autumn; the green crop 0.45 m,
+  lower under the snow; stubble 0.45 m until the plough. Narrower than grass, evenly sown (less clumping). Its
   colour (the owner): lime at the stalk's foot to the season's colour at the tip, gold in summer, orange in autumn,
   brown after; the green crop lime to olive. Ploughed fields grow nothing.
 - **The meadow on the ground** (`meadowPattern` in `macro()`, `MEADOW`, a define on every painted material and on the
