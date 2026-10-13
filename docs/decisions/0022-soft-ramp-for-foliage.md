@@ -30,7 +30,8 @@ card material). Every other surface (ground, water, buildings, armies) keeps the
 - Good: the bands still decide the colours, so the palette and the cool shadow rule hold.
 - Bad: two ramps to keep in step; a change to the bands must be checked on the crowns too.
 - Bad: the crowns' GPU cost (L7b's, the results above) still to be measured in a forest and on the min-spec
-  laptop; the cards themselves cost about 3 ms where a forest fills the frame (the forest bench).
+  laptop; the cards themselves cost about 1.4 ms a frame where a forest fills the frame
+  (`docs/plans/done/forest-bench.md`).
 - Bad: the crowns hold more mid values than the ground, which the readability guard must keep watching (the cards'
   own shadow already costs a dark coat its separation: #63).
 

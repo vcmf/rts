@@ -16,18 +16,20 @@ its frame size and which arms it compares; the plans hold the full runs.
 
 **The reliable numbers are A/B runs on one page**, the two arms interleaved at each camera (A B B A), so the
 machine's state is the same for both; the paired difference per camera is reported with the repeat spread (the
-largest difference between two runs of one arm at one camera). On the normal scene:
+largest difference between two runs of one arm at one camera). On the normal scene, read on the GPU frame timer
+(it runs longer than the frame on ANGLE Metal, so these are differences, not frame times):
 
 | One-page A/B (`--gpu metal`) | close | default | widest | where |
 |---|---|---|---|---|
 | Cards against pack crowns (`?bench=trees`) | about 0 | — | +0.1 to +0.4 ms | `docs/plans/done/l7a-canopy-cards.md` |
 | Volume light against L7a (`?bench=volume`) | within ±0.2 ms | within ±0.2 ms | within ±0.2 ms | `docs/plans/done/l7b-crown-volume.md` |
 
-**Where a forest fills the frame** (`?wood=big`, the forest bench, `docs/plans/active/forest-bench.md`): the cards
-cost about **+3 ms at the default zoom and +1.5 ms at the widest** against the pack crowns (the cleaner of two
-runs, its repeat spread under 0.6 ms); the default frame goes from 11.3 to 14.4 ms of the 16.7 ms a frame at
-60 fps, before units, smoke and anti-aliasing. The volume light's cost in the forest could not be read (the
-machine changed during the run). **This is the cards' open cost:** L7 owes a cheaper forest (far crowns as fewer,
+**Where a forest fills the frame** (`?wood=big`, the forest bench, `docs/plans/done/forest-bench.md`; read on the
+frame interval, the page's own pace without vsync): the cards cost about **+1.4 ms a frame at the default zoom**
+(the cleaner of two runs, its repeats within 0.1 ms; the other run +1.05 to +2.15 ms) **and +0.2 to +1.3 ms at the
+widest**; the default frame goes from 6.7 to 8.1 ms of the 16.7 ms a frame at 60 fps, before units, smoke and
+anti-aliasing. The volume light's cost in the forest could not be read (its run's noise is larger than the
+effect). **This is the cards' open cost:** L7 owes a cheaper forest (far crowns as fewer,
 larger cards or the pack mesh; L7's depth pre-pass against overdraw) before the cards become the default.
 
 **Across runs** (`node tools/bench-look.mjs <page> --gpu metal --hold 4` at 1920×1080, four separate runs back to

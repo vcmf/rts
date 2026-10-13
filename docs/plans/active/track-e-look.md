@@ -535,7 +535,7 @@ the pack crowns): results in `docs/plans/active/track-e-results/shadows-foliage.
 
 **What L7 still owes:**
 - the cards as the default arm, once the guard passes with them (#63), the owner accepts decision 0022 and a forest
-  costs less: about +3 ms GPU where one fills the frame (`docs/plans/active/forest-bench.md`), against fewer,
+  costs less: about +1.4 ms a frame where one fills the frame (`docs/plans/done/forest-bench.md`), against fewer,
   larger cards for far crowns, the pack mesh beyond a distance, or a depth pre-pass;
 - the outline at the widest zoom aliases: alpha-to-coverage on MSAA, L8's A/B;
 - the acceptance above, measured on the cards: overdraw, coverage across the zooms, no heat ripple behind the

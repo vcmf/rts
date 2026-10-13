@@ -192,7 +192,7 @@ The plan: `docs/plans/done/soft-shadows.md`. On by default; `?soft=off` puts bac
   0.8, a wood's floor) the shadow colour itself darkens, to 0.62 at 0.35; before it, a wood's floor was the same flat
   shadow colour as a lone tree's shadow. Other materials (crowns, bushes, the army blocks) leave it at 1.
 - `?wood` adds one dense wood (70 tries, its own random stream) to judge it, `?wood=big` a forest of about 150 by
-  110 m for the forest bench (520 tries, `docs/plans/active/forest-bench.md`); `__look.sky` (`Bakes.sky`) reports the
+  110 m for the forest bench (520 tries, `docs/plans/done/forest-bench.md`); `__look.sky` (`Bakes.sky`) reports the
   sky bake's time and the occlusion's range, null with `?soft=off`. The painted materials take their define from
   the same options as the bakes (`softDefines()`).
 

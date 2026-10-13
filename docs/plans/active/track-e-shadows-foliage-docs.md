@@ -43,7 +43,8 @@ Not in scope: `docs/proposals/engine-design.md` (a proposal is frozen once built
 - **Round 2** (786d6ec): severe: round 1's noise figure was itself wrong (single cameras in the later runs differ
   by up to 0.9 and 1.1 ms between repeats), so the costs taken across runs sat inside the noise; the volume light's
   cost across runs contradicted its own one-page A/B. Now the one-page A/Bs are the measurement, and a forest bench
-  was run (`docs/plans/active/forest-bench.md`): the cards cost about 3 ms where a forest fills the frame.
+  was run (`docs/plans/done/forest-bench.md`): the cards cost about 1.4 ms a frame where a forest fills it (read on
+  the frame interval: the forest bench's own review found the GPU timer's 3 ms too long).
   Moderate: decision 0022 gave L7b's whole cost as the soft ramp's; the issues not cited at their code (#62 in
   `mist()`, #63 at the card casters); the load time misquoted (38–45 ms, a slower GPU longer); the triangle counts
   unreconciled (stated as such); numbers copied across docs (linked now); the heat-ripple check missing from what
