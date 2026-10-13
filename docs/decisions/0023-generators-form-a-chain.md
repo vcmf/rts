@@ -27,7 +27,8 @@ We will refuse groups, and give the one common mutual case its own construct:
   region (it leaves the map).
 - **Peers:** a generator may declare that others of its name are its peers (street villages). Peers never read each
   other. Each declares where its output can reach whatever its seed (a village: the convex hull of its stretch of
-  road, widened by a house, its setback and a yard, since its ground is a convex hull; and its own area); two peers
+  road, widened by a house, its setback and a yard, since its ground is a convex hull; with an area of its own,
+  which is then its ground, the stretch itself widened by a house and its setback, plus that area); two peers
   whose reaches come within the gap (1 m for buildings) are an error on both, before anything runs. A peer whose
   reach cannot be known before the run (built along a generated line) is an error. Apart, neither can change the other's output, so the order, the seeds and pinning one of them
   never matter. Two villages are common; they would otherwise be a cycle through `built`.

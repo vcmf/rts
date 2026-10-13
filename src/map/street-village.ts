@@ -19,9 +19,11 @@ export const HOUSE_SPAN = Math.sqrt(LENGTH[1] * LENGTH[1] + DEPTH[1] * DEPTH[1])
 // Where a village can reach, whatever its seed: a house's middle lies on the road between `from` and `to`, and its
 // corners and yard within `reach` of it (half the longest house, the setback past the road's edge, the deepest house,
 // a yard, and the rounding to centimetres). Its ground is the convex hull of its yards, so it can reach anywhere in
-// the convex hull of the stretch, widened by `reach` (on a bend, the inside of the bend too). Two villages whose
-// zones lie apart can never meet.
-export function villageZone(road: Pt[], roadWidth: number, from: number, to: number): Zone {
+// the convex hull of the stretch, widened by `reach` (on a bend, the inside of the bend too). A village with its own
+// area keeps it as its ground, so its houses reach only the stretch itself, widened (`open`). Two villages whose
+// zones lie apart can never meet. The margin covers the houses' rounding to centimetres and the zone's own (its ends
+// lie anywhere on the road, and the geometry's tests round to centimetres).
+export function villageZone(road: Pt[], roadWidth: number, from: number, to: number, ownArea = false): Zone {
   const end = Math.min(to, lineLength(road)), line: Pt[] = []
   if (end > from) {
     line.push(pointAt(road, from).slice(0, 2) as Pt)
@@ -33,8 +35,10 @@ export function villageZone(road: Pt[], roadWidth: number, from: number, to: num
     }
     line.push(pointAt(road, end).slice(0, 2) as Pt)
   }
-  const half = LENGTH[1] / 2, out = roadWidth / 2 + SETBACK + DEPTH[1], h = line.length ? hull(line) : []
-  return { hull: h.length >= 2 ? h : line.slice(0, 2), reach: Math.sqrt(half * half + out * out) + YARD + 0.02 }
+  const half = LENGTH[1] / 2, out = roadWidth / 2 + SETBACK + DEPTH[1], reach = Math.sqrt(half * half + out * out) + (ownArea ? 0 : YARD) + 0.05
+  if (ownArea) return { hull: line, reach, open: true }
+  const h = line.length ? hull(line) : []
+  return { hull: h.length >= 2 ? h : line.slice(0, 2), reach }
 }
 
 const overlaps = (a: Pt[], b: Pt[]): boolean => ringsTouch(a, b) || inRing(b, a[0]) || inRing(a, b[0])

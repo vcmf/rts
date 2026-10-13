@@ -390,7 +390,7 @@ describe('M3b: the chain (decision 0023): each generator after what it reads; a 
     for (let seed = 1; seed <= 10; seed++) {
       const close = expand(mini([ROAD, va, { ...vb, along: { id: 'road', from: 260, to: 400 } }], seed), cat)
       expect(close.issues.map(i => i.id)).toEqual(['va', 'vb'])
-      expect(close.issues[0].message).toMatch(/could come within 1 m of "vb": street-village generators do not see each other.*move their stretches apart/)
+      expect(close.issues[0].message).toMatch(/could come within 1 m of "vb" \(their zones meet\): street-village generators do not see each other.*move their stretches apart/)
     }
     // a village's own area counts: another village's reach must keep off it
     const walled = { ...va, area: [[[-60, -20], [60, -20], [60, 20], [-60, 20]]] as Pt[][], along: { id: 'road', from: 0, to: 100 } }
@@ -418,6 +418,10 @@ describe('M3b: the chain (decision 0023): each generator after what it reads; a 
     for (const id of ['a-vil', 'z-vil']) {
       const out = expand(mini([bent, lane, big, { ...VILLAGE, id, houses: 2, along: { id: 'lane', from: 20, to: 40 }, gen: { 'street-village': { min: 0 } } }]), cat)
       expect(out.issues.map(i => i.id).sort()).toEqual([id, 'village'].sort())
+      expect(out.issues[0].message).toMatch(/\((their zones meet|\d+\.\d m between their zones)\)/)
+      // with its own area, its ground is that area: its houses reach only the stretch, so the inside of the bend is free
+      const walled = { ...big, area: [[[-80, -60], [80, -60], [80, -20], [-80, -20]]] as Pt[][] }
+      expect(expand(mini([bent, lane, walled, { ...VILLAGE, id, houses: 2, along: { id: 'lane', from: 20, to: 40 }, gen: { 'street-village': { min: 0 } } }]), cat).issues).toEqual([])
     }
   })
   it('a generator reading a cycle or a failed generator is skipped: only the first errors are reported', () => {

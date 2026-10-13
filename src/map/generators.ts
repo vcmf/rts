@@ -115,7 +115,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
     reads: f => [f.along!.id, ...VILLAGE_KEEPS_CLEAR],
     peers: {
       gap: BUILT_GAP,
-      reach: (f, features, attrsOf) => { const road = features.get(f.along!.id); return road?.line ? villageZone(road.line, num(attrsOf(road.id).width, 5), f.along!.from, f.along!.to) : null },
+      reach: (f, features, attrsOf) => { const road = features.get(f.along!.id); return road?.line ? villageZone(road.line, num(attrsOf(road.id).width, 5), f.along!.from, f.along!.to, !!f.area) : null },
     },
     params: { min: { type: 'int', unit: 'count', min: 0, max: 500 } },
     run: ctx => {
@@ -128,7 +128,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
       const gap = (g: Feature) => matches('water', g, kindOf(g.id)) ? 2 : matches('barrier', g, kindOf(g.id)) ? num(attrsOf(g.id).thickness, 2) + 1 : BUILT_GAP
       const near = select(ctx, VILLAGE_KEEPS_CLEAR).filter(g => g.id !== along.id).map(g => ({ g, box: boxOf(g, attrsOf(g.id)), gap: gap(g) }))
       // a feature whose box lies farther than the gap plus a house's reach from a corner cannot touch the house
-      const clear = (house: Pt[]) => near.every(({ g, box, gap }) => house.every(([x, z]) => boxDistance(box, x, z) > gap + HOUSE_SPAN) || distanceToPolygon(g, attrsOf(g.id), house) > gap)
+      const clear = (house: Pt[]) => near.every(({ g, box, gap }) => house.some(([x, z]) => boxDistance(box, x, z) > gap + HOUSE_SPAN) || distanceToPolygon(g, attrsOf(g.id), house) > gap)
         && distanceToPolygon(roadF, roadA, house) > 1
       const row = streetVillage(road, rw, along.from, along.to, want, seed, { clear })
       if (row.houses.length < min) throw new Error(`placed ${row.houses.length} of ${want} houses between ${along.from} and ${along.to} m along "${along.id}"; lengthen the stretch, ask fewer houses, or allow fewer with min`)

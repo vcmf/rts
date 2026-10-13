@@ -360,3 +360,15 @@ The round count restarts.
   always farther than the gap, so seeing it changes nothing (the pinning test checks it).
 
 The round count restarts.
+
+**Redesign 3, round 1** (6 findings, none severe: stop and fix what is worth it):
+- **Moderate:**
+  - a village with its own area keeps it as its ground, so its zone is now the stretch widened by its houses (not
+    the hull of the stretch): the inside of its bend stays free;
+  - a village whose road is unfinished before the run is an error only when there is another village.
+- **Light:** the error says how far apart the two zones are; the zone's margin covers the centimetre rounding of
+  its ends too; the obstacle prefilter skips on one far corner (every point of a house lies within its span of any
+  corner).
+- **Not taken:** a ground that follows the road instead of a convex hull (the user chose the hull of the stretch;
+  a village on a U-shaped road claims the inside of the U).
+- **Decision 0023** was amended during these rounds, before the PR merged; once on the epic it is fixed.

@@ -99,7 +99,7 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
     const { gap, reach } = spec.peers, attrsOf = (id: string) => res(current.get(id)!).attrs
     const ps = gens.filter(g => specOf(g) === spec).map(g => ({ g, zone: reach(g, current, attrsOf) }))
     const close = new Map<string, string[]>()
-    for (const p of ps) if (!p.zone) {
+    if (ps.length > 1) for (const p of ps) if (!p.zone) {
       issues.push({ id: p.g.id, path: `features[${at.get(p.g.id)}].gen`, message: `cannot tell where it reaches before generators run (what it is built along is generated): ${Object.keys(p.g.gen!)[0]} generators must be kept apart beforehand` })
       failed.add(p.g.id)
     }
@@ -107,12 +107,13 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
     for (let a = 0; a < known.length; a++) for (let b = a + 1; b < known.length; b++) {
       const A = known[a], B = known[b], d = Math.min(zoneGap(A.zone!, B.zone!), A.g.area ? zoneToArea(B.zone!, A.g) : Infinity, B.g.area ? zoneToArea(A.zone!, B.g) : Infinity)
       if (d > gap) continue
-      close.set(A.g.id, [...(close.get(A.g.id) ?? []), B.g.id]); close.set(B.g.id, [...(close.get(B.g.id) ?? []), A.g.id])
+      const say = (o: string) => `"${o}" (${d > 0 ? `${d.toFixed(1)} m between their zones` : 'their zones meet'})`
+      close.set(A.g.id, [...(close.get(A.g.id) ?? []), say(B.g.id)]); close.set(B.g.id, [...(close.get(B.g.id) ?? []), say(A.g.id)])
     }
     for (const p of known) {
       const others = close.get(p.g.id)
       if (!others) continue
-      issues.push({ id: p.g.id, path: `features[${at.get(p.g.id)}].gen`, message: `it could come within ${gap} m of ${others.map(o => `"${o}"`).join(', ')}: ${Object.keys(p.g.gen!)[0]} generators do not see each other, so each keeps to its own ground (its stretch, the inside of its bends, and its own area): move their stretches apart` })
+      issues.push({ id: p.g.id, path: `features[${at.get(p.g.id)}].gen`, message: `it could come within ${gap} m of ${others.join(', ')}: ${Object.keys(p.g.gen!)[0]} generators do not see each other, so each keeps to its own ground (its stretch, the inside of its bends, and its own area): move their stretches apart` })
       failed.add(p.g.id)
     }
   }

@@ -78,21 +78,22 @@ export function lineDistance(a: Pt[], b: Pt[]): number {
   return d
 }
 // A zone: a convex polygon, filled (counter-clockwise; two points when it is a straight segment, none when empty),
-// widened by `reach`. How far apart two zones lie, and a zone from an area's edge: 0 when they meet.
-export interface Zone { hull: Pt[]; reach: number }
-const edgeOf = (h: Pt[]): Pt[] => (h.length > 2 ? closed(h) : h)
-const inHull = (h: Pt[], p: Pt): boolean => h.length > 2 && inRing(h, p)
+// or, when `open`, a polyline; either widened by `reach`. How far apart two zones lie, and a zone from an area's
+// edge: 0 when they meet.
+export interface Zone { hull: Pt[]; reach: number; open?: boolean }
+const edgeOf = (z: Zone): Pt[] => (!z.open && z.hull.length > 2 ? closed(z.hull) : z.hull)
+const inHull = (z: Zone, p: Pt): boolean => !z.open && z.hull.length > 2 && inRing(z.hull, p)
 export function zoneGap(a: Zone, b: Zone): number {
   if (!a.hull.length || !b.hull.length) return Infinity
-  if (inHull(a.hull, b.hull[0]) || inHull(b.hull, a.hull[0])) return 0
-  return Math.max(0, lineDistance(edgeOf(a.hull), edgeOf(b.hull)) - a.reach - b.reach)
+  if (inHull(a, b.hull[0]) || inHull(b, a.hull[0])) return 0
+  return Math.max(0, lineDistance(edgeOf(a), edgeOf(b)) - a.reach - b.reach)
 }
-export function zoneToArea({ hull, reach }: Zone, f: Feature): number {
+export function zoneToArea(z: Zone, f: Feature): number {
   const rings = ringsOf(f)
-  if (!hull.length || !rings) return Infinity
+  if (!z.hull.length || !rings) return Infinity
   let inside = false, d = Infinity
-  for (const r of rings) { if (inRing(r, hull[0])) inside = !inside; d = Math.min(d, lineDistance(edgeOf(hull), closed(r))) }
-  return inside || inHull(hull, rings[0][0]) ? 0 : Math.max(0, d - reach)
+  for (const r of rings) { if (inRing(r, z.hull[0])) inside = !inside; d = Math.min(d, lineDistance(edgeOf(z), closed(r))) }
+  return inside || inHull(z, rings[0][0]) ? 0 : Math.max(0, d - z.reach)
 }
 
 // does a feature match a selector: its id, the id of the feature it was generated from (a scatter's region names its
