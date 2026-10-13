@@ -163,8 +163,11 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #endif
   pDetail=gd;
   float gr=(gd-0.5)*uGrainAmt;
-  float ndl=dot(N,uSunDir);
-  float l=ndl+gr*0.55*jitter+(blot-0.5)*0.3*jitter;
+  float ndl=dot(N,uSunDir),ndlR=ndl;
+  #ifdef SOFT_RAMP
+  ndlR=(ndl+0.45)/1.45;   // the crowns as volumes (L7b): light wraps round a mass of leaves (the ramp only, not the rim)
+  #endif
+  float l=ndlR+gr*0.55*jitter+(blot-0.5)*0.3*jitter;
   l-=cloud(wp)*0.40+sh*1.25+(1.0-occ)*0.55;
   #ifdef DETAIL_ON
   // the band edges keep their width but never get narrower than the light's change across two pixels (no aliasing)
@@ -175,13 +178,20 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   float t=smoothstep(-0.06-bw*0.5,-0.06+bw*0.5,l)*0.55+smoothstep(0.34-bw*0.5,0.34+bw*0.5,l)*0.45;
   #endif
   #else
+  #ifdef SOFT_RAMP
+  float t=smoothstep(-0.40,0.0,l)*0.55+smoothstep(0.06,0.40,l)*0.45;   // the crowns as volumes (L7b): the same three colours, blended
+  #else
   float t=smoothstep(-0.10,-0.02,l)*0.55+smoothstep(0.30,0.38,l)*0.45;   // shadow | mid | light, grain-broken edges
+  #endif
   #endif
   vec3 shc=shadowOf(alb);
   #ifdef SKY_IN_SHADOW
   shc*=mix(0.62,1.0,smoothstep(0.35,0.8,pSky));   // deep sky occlusion (a wood floor) deepens the shadow itself (docs/plans/done/soft-shadows.md)
   #endif
   vec3 mid=alb*mix(vec3(0.86,0.92,0.98),uSunCol,0.30);
+  #ifdef SOFT_RAMP
+  mid=clamp(mix(vec3(dot(mid,vec3(0.3,0.59,0.11))),mid,1.3),0.0,1.0);   // the crowns turning side keeps its colour (L7b)
+  #endif
   vec3 lt=alb*uSunCol*mix(1.16,1.02,snow)+vec3(0.03,0.025,0.0)*(1.0-snow);
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
   c*=1.0+gr*0.38;                                                           // gouache grain in the value
