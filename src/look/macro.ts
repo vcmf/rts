@@ -14,6 +14,8 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import { withPainter, type Materials } from './materials.ts'
 import { D, bakeMB } from './spec.ts'
 import type { CoverGrid } from './world/cover.ts'
+import BRUSH_URL from '../../data/meadow-brush.png?url'
+import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 
 // the arms (macro.glsl): flat, shader, bake
 export const MACRO_ARMS = ['flat', 'shader', 'bake'] as const
@@ -45,7 +47,8 @@ export interface Macro {
   settled(): Promise<unknown>
 }
 
-export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Macro {
+// meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
+export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false): Macro {
   const engine = scene.getEngine() as AbstractEngine, s = D.spec.macro
   const coverTex = RawTexture.CreateRGBATexture(cover.tex, cover.n, cover.n, scene, false, false, Texture.NEAREST_SAMPLINGMODE)
   coverTex.wrapU = coverTex.wrapV = Texture.CLAMP_ADDRESSMODE
@@ -57,16 +60,20 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
     t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE; t.anisotropicFilteringLevel = mips ? 4 : 1; return t
   }
   const tile = target('macroTile', D.macroN), far = target('macroFar', D.macroFarN)
-  mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far) })
+  // the meadow's brush tile (tools/meadow-brush.py): the bake's pattern, the grass's shade (src/look/meadow.ts)
+  let brushError: string | null = null
+  const brush = meadow ? new Texture(BRUSH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) => { brushError = `the meadow's brush tile (${BRUSH_URL}) did not load: ${msg ?? 'unknown error'}` }) : null
+  if (brush) brush.wrapU = brush.wrapV = Texture.WRAP_ADDRESSMODE
+  mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); if (brush) m.setTexture('uMeadowBrush', brush) })
 
-  const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover']
-  const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: D.defines })
+  const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW'] : [])]
+  const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })
   const renderer = new EffectRenderer(engine)
   // a lost context empties the targets: a bake that saw a loss reports it, and a restored context bakes again
   let losses = 0
   engine.onContextLostObservable.add(() => { losses++ })
   engine.onContextRestoredObservable.add(() => { rebake() })
-  const ready = () => new Promise<void>((res, rej) => { const t0 = performance.now(); const poll = () => wrapper.effect.isReady() ? res() : performance.now() - t0 > 30000 ? rej(new Error(`macro bake: the shader did not compile: ${wrapper.effect.getCompilationError()}`)) : setTimeout(poll, 16); poll() })
+  const ready = () => new Promise<void>((res, rej) => { const t0 = performance.now(); const poll = () => brushError ? rej(new Error(brushError)) : wrapper.effect.isReady() && (!brush || brush.isReady()) ? res() : performance.now() - t0 > 30000 ? rej(new Error(`macro bake: the shader did not compile: ${wrapper.effect.getCompilationError()}`)) : setTimeout(poll, 16); poll() })
   // gl.readPixels of one texel waits for the GPU: the bake's time includes its work, not only its submission
   const gl = (engine as unknown as { _gl: WebGLRenderingContext })._gl
   // one target over the world square centred on 0 of side `world` m
@@ -81,7 +88,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
       engine.setViewport(new Viewport(i, j, w, h), 1, 1); renderer.applyEffectWrapper(wrapper)
       const e = wrapper.effect, x0 = -world / 2
       e.setFloat4('uRect', x0 + i / n * world, x0 + j / n * world, x0 + (i + w) / n * world, x0 + (j + h) / n * world)
-      e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex)
+      e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex); if (brush) e.setTexture('uMeadowBrush', brush)
       renderer.draw(); draws++
     }
     const px = new Uint8Array(4); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px)
@@ -89,10 +96,12 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
     return { ms: performance.now() - t0, texels: n * n, draws, mb: bakeMB(n, n) * (mips ? 4 / 3 : 1), lost: losses > lost0 }
   }
   let arm: MacroArm = 'bake'
+  const applyArm = (m: ShaderMaterial) => { for (const k of MACRO_ARMS) m.setDefine(`#define ${ARM_DEFINE[k]}`, k === arm) }
   const setArm = (a: MacroArm) => {
     if (!MACRO_ARMS.includes(a)) throw new Error(`unknown macro arm ${a}`)
-    arm = a; for (const m of mats.all) for (const k of MACRO_ARMS) m.setDefine(`#define ${ARM_DEFINE[k]}`, k === a)
+    arm = a; for (const m of mats.all) applyArm(m)
   }
+  mats.bindAll(applyArm)   // a painted material made later (the meadow's) gets the arm too
   const bake = async () => {
     const a = await draw(tile, D.macroN, D.spec.tile), b = await draw(far, D.macroFarN, D.spec.far)
     return { ms: a.ms + b.ms, texels: a.texels + b.texels, draws: a.draws + b.draws, mb: a.mb + b.mb, lost: a.lost || b.lost }
@@ -110,7 +119,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
     const defs = on.filter(d => d !== 'MACRO_DEBUG').sort().join(' ')
     if (defs === bakeDefs) return { ms: 0, texels: 0, draws: 0, mb: 0, lost: false }
     bakeDefs = defs
-    wrapper.updateEffect([...D.defines, ...on.filter(d => d !== 'MACRO_DEBUG').map(d => `#define ${d}`)].join('\n'), UNIFORMS, SAMPLERS)
+    wrapper.updateEffect([...DEFINES, ...on.filter(d => d !== 'MACRO_DEBUG').map(d => `#define ${d}`)].join('\n'), UNIFORMS, SAMPLERS)
     return bake()
   }
   return {

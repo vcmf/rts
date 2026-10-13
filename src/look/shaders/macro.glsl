@@ -77,6 +77,27 @@ vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*3
 // (colour, the snow's lie as LIE0 + lie/1.2). q 1: the bake's, the edges blended over 9 taps a metre apart with a
 // darker margin where classes meet (a headland or a verge); q 0: one tap. px: the footprint, m (the bake's texel, or
 // the pixel's)
+#ifdef MEADOW
+// the meadow pattern (docs/plans/done/l5c-meadow.md) on meadow and pasture (k, the class the ground paints): the
+// brush tile (data/meadow-brush.png) at two unrelated scales and turns, warped by a slow noise (no common period, no
+// repeat to see), read at the footprint px (the bake texel, or the pixel), and the clump field, its fine octave
+// fading with the footprint. The near grass takes its shade from the same tile and field (src/look/meadow.ts). In
+// the bake arm this costs nothing a frame: the bake holds it
+uniform sampler2D uMeadowBrush;
+float brushAt(vec2 uv,float s,float px){
+  #ifdef WEBGL2
+  return textureGrad(uMeadowBrush,uv,vec2(px/s,0.0),vec2(0.0,px/s)).r;
+  #else
+  return texture2D(uMeadowBrush,uv).r;
+  #endif
+}
+vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
+  float gr=k<0.5?1.0:k<1.5?0.75:0.0;if(gr<=0.0)return c;
+  vec2 w=(vec2(mValue(xz/23.0),mValue(xz/23.0+41.0))-0.5)*3.0;
+  float b=brushAt((xz+w)/7.3,7.3,px)*0.6+brushAt(mat2(0.8253,-0.5646,0.5646,0.8253)*(xz-w)/(7.3/2.618)+0.37,7.3/2.618,px)*0.4;
+  float cl=mix(clumpAt(xz),mValue(xz/3.2),smoothstep(0.35,1.2,px));
+  return c*mix(1.0,(1.0+(b-0.585)*1.1)*mix(0.93,1.07,cl),gr);}   // the gain makes up the contrast the bake texel blurs away
+#endif
 vec4 macro(vec2 xz,float q,float px){
   vec2 w=coverWarp(xz);vec4 cv=coverAt(w);Grain g=grainAt(xz);vec3 c;
   if(q>0.5){
@@ -86,6 +107,9 @@ vec4 macro(vec2 xz,float q,float px){
     c/=9.0;c*=1.0-0.10*smoothstep(0.0,4.0,other)*(1.0-smoothstep(4.0,9.0,other));
   }else c=cellColour(cv,g);
   float b=stripeBand(cv,xz,px,g);c*=1.0+stripeValue(cv.x)*b;c=wear(c,cv,g);
+  #ifdef MEADOW
+  c=meadowPattern(c,cv.x,xz,px);
+  #endif
   return vec4(c,LIE0-(b*stripeSnow(cv.x)+trodden(cv.x))/1.2);}
 // the shader arm's macro, and the bake arm's read, at a point, once a pixel (the colour and the snow's lie both use
 // them)
