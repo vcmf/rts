@@ -30,6 +30,10 @@ function groundColour(r: Resolved | undefined, veg: Resolved | undefined, densit
 const SHALLOW: RGB = [128, 178, 206], DEEP: RGB = [52, 96, 146]
 const water = (mm: number): RGB => { const t = Math.min(1, mm / 1500); return [SHALLOW[0] + (DEEP[0] - SHALLOW[0]) * t, SHALLOW[1] + (DEEP[1] - SHALLOW[1]) * t, SHALLOW[2] + (DEEP[2] - SHALLOW[2]) * t] }
 const WAY: RGB = [198, 170, 126], SUNKEN: RGB = [150, 120, 84], EDIT: RGB = [120, 100, 80]
+// a way by its surface: earth (tan), setts or cobbles (grey), brick (red), metalled (pale)
+const SURFACE: Record<string, RGB> = { earth: WAY, paved: [150, 146, 140], brick: [172, 98, 76], metalled: [196, 190, 176] }
+// a free-standing tree's crown by its form: broadleaf round, poplar columns and conifers darker
+const CROWN: Record<string, RGB> = { round: [74, 112, 58], columnar: [46, 86, 52], conical: [38, 72, 56] }
 function barrierColour(r: Resolved): RGB {
   const p = typeof r.attrs.porosity === 'number' ? r.attrs.porosity : 0
   return p >= 0.6 ? [120, 92, 60] : p > 0 ? [46, 74, 40] : [92, 88, 84]   // fence, hedge, wall
@@ -49,7 +53,7 @@ export function draft(L: Layers): Draft {
   const n = L.table.length + 1, cutCell: boolean[] = [], yard: boolean[] = [], way: RGB[] = [], barrier: RGB[] = [], built: RGB[] = [], groundCache = new Map<number, RGB>()
   for (let k = 1; k < n; k++) {
     const r = L.table[k - 1], cut = r.attrs.cut
-    way[k] = typeof cut === 'number' && cut > 0 ? SUNKEN : WAY; barrier[k] = barrierColour(r); built[k] = builtColour(r)
+    way[k] = typeof cut === 'number' && cut > 0 ? SUNKEN : SURFACE[r.attrs.surface as string] ?? WAY; barrier[k] = barrierColour(r); built[k] = builtColour(r)
     cutCell[k] = typeof r.attrs.depth === 'number' || (typeof cut === 'number' && cut > 0)
     yard[k] = r.attrs.roof === undefined && r.attrs.wall === undefined && r.kind !== 'built.bridge'
   }
@@ -86,6 +90,17 @@ export function draft(L: Layers): Draft {
     // north up: row 0 is the northern edge
     const o = ((nz - 1 - j) * nx + i) * 4
     data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255
+  }
+  // the trees over everything: a disc of the crown (a radius of at least a cell, 2 m, so a poplar reads), its middle darker
+  for (const t of L.trees) {
+    const a = L.table[t.k - 1].attrs, col = CROWN[a.form as string] ?? CROWN.round, R = Math.max(cell, typeof a.crown === 'number' ? a.crown : 4)
+    const i0 = Math.floor((t.x - R - L.x0) / cell), i1 = Math.floor((t.x + R - L.x0) / cell), j0 = Math.floor((t.z - R - L.z0) / cell), j1 = Math.floor((t.z + R - L.z0) / cell)
+    for (let j = Math.max(0, j0); j <= Math.min(nz - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(nx - 1, i1); i++) {
+      const dx = L.x0 + (i + 0.5) * cell - t.x, dz = L.z0 + (j + 0.5) * cell - t.z, d = Math.sqrt(dx * dx + dz * dz)
+      if (d > R) continue
+      const k = d < R / 2 ? 0.8 : 1, o = ((nz - 1 - j) * nx + i) * 4
+      data[o] = col[0] * k; data[o + 1] = col[1] * k; data[o + 2] = col[2] * k
+    }
   }
   return { w: nx, h: nz, data }
 }

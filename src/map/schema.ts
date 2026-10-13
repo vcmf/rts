@@ -89,5 +89,5 @@ export interface Catalogue {
   kinds: Record<string, KindSpec>
 }
 
-export const GENERATORS = ['meander', 'clump', 'street-village', 'scatter'] as const   // the specs: src/map/generators.ts
+export const GENERATORS = ['meander', 'clump', 'street-village', 'scatter', 'group'] as const   // the specs: src/map/generators.ts
 export const ID = /^[a-z0-9]+(-[a-z0-9]+)*$/

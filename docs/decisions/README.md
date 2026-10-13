@@ -36,3 +36,4 @@ recorded here on 2026-10-08.
 | [0021](0021-two-metre-map-cell.md) | Every map grid is built on one 2 m cell | accepted |
 | [0022](0022-generators-expand-by-dependency.md) | Generators expand by dependency, over finished features, with hard and soft reads | superseded by 0023 |
 | [0023](0023-generators-form-a-chain.md) | Generators form a chain; kinds that keep apart share one scatter's mix | accepted |
+| [0024](0024-free-standing-trees.md) | Free-standing trees stand on the cells, as a list | accepted |

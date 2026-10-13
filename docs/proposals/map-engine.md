@@ -140,7 +140,7 @@ touches no ruleset.
 |---|---|---|
 | `relief` | `base` (seeded value noise: `height` the amplitude, `width` the scale; a landform, not a generator, since a field has no shape to pin), `hill`, `ridge` (along a line), `valley`, `plateau`, `scarp`; edits `raise`, `lower`, `level`, `cut`, `ditch` (a cut along a line, at least 2 cells wide, its cells also marked for the ruleset's crossing rule) | `dem` (an elevation file), `spot` heights, `basin`, `terrace` |
 | `ground` | `meadow`, `pasture`, `field` (`.wheat`, `.rye`, `.oats`: loam under a crop whose `stage` is standing, stubble or ploughed), `rough`, `marsh`, `yard` (village ground); moisture and snow as season attributes | `heath`, `sand`, `rock`, `bog`, `mud` as a weather state |
-| `veg` | `wood.broad`, `wood.conifer`, `wood.mixed`, `thicket`, `orchard` (rows), `reeds`, `scrub` | species presets, `vineyard`, `olive`, `wood.pasture`, `tallgrass`, `treeline` |
+| `veg` | `wood.broad`, `wood.conifer`, `wood.mixed`, `thicket`, `orchard` (rows), `reeds`, `scrub`; free-standing `tree`, `tree.poplar`, `tree.conifer`, `tree.willow` (a point, a row on a line, a `group`; decision 0024) | species presets, `vineyard`, `olive`, `wood.pasture`, `tallgrass` |
 | `water` | `stream`, `river` (lines with width, depth, flow, banks), `pond`, `lake` (areas with a level), `ford` (on a stream) | `canal`, `weir`, `dam`, `millrace`, `flood` (a level over a meadow), breakable ice |
 | `way` | `road.highway`, `road.lane`, `track`, `path`; `road.sunken` (a cut plus optional hedges) | `causeway`, `ferry` |
 | `barrier` | `hedge`, `wall`, `fence` (on the grid: height, thickness in cells, porosity, crossing, gaps) | `palisade`, `stakes`, `abatis` |
@@ -174,6 +174,7 @@ validated parameters:
 | `clump` | any area kind at a point | an organic outline of a given size, coherence and raggedness (0 A.D.'s ClumpPlacer) |
 | `street-village` | `built.village` with `along` its road | houses (children) on both sides between `from` and `to`, set back and facing the road, clear of water, buildings, no-go zones, other ways and barriers; the village's area, when it has none, the hull of its houses; `min` |
 | `scatter` | any area kind given as its region | `count` children of the feature's kind and attributes, each a `clump` of radius `radiusMin`–`radiusMax`, `clearance` m clear of the kinds or ids it `avoid`s and of each other, within `reach` m of what it stays `within`; `min`; or `mix: [{ kind, count, … }]`, several kinds placed jointly, each child clear of every other |
+| `group` | a free-standing tree's point | `count` trees (2–5) within `spread` m, a crown apart (two or three poplars by a farm) |
 
 Expansion runs each generator after what it reads (hard: needs it; soft: keeps clear of it) and shows it only finished
 features; the order and its rules are in `docs/systems/map.md`.

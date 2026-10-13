@@ -37,6 +37,10 @@ export interface Layers {
   density: Uint8Array       // the vegetation's density × 255 (ramps evaluated per cell)
   depth: Uint16Array        // the water's depth over the cell, mm (the water's level less the cell's mean ground; 0: dry)
   streams: { id: string; step: number; levels: Float64Array }[]   // each stream's or river's level every `step` m from its first point
+  // the free-standing trees (growth "tree"), one by one: they stand on the cells and change none (a poplar in a
+  // wheat field leaves the wheat); k is the feature in `table`. A point gives one, a line a row: as many as whole
+  // `spacing`s fit in its length (at least one), evenly, half a step in from each end
+  trees: { x: number; z: number; k: number }[]
 }
 export const LAYER_NAMES = ['ground', 'veg', 'water', 'way', 'barrier', 'built', 'zone', 'edit'] as const
 
@@ -169,7 +173,7 @@ function ramp(v: AttrValue | undefined, input: { edge?: number; along?: number }
 export function apply(map: MapFile, cat: Catalogue): Layers {
   const c = CELL, nx = map.extent.w / c, nz = map.extent.h / c, x0 = -map.extent.w / 2, z0 = -map.extent.h / 2
   const n = nx * nz, U = () => new Uint16Array(n)
-  const L: Layers = { cell: c, nx, nz, x0, z0, height: new Float64Array((nx + 1) * (nz + 1)), table: [], ground: U(), veg: U(), water: U(), way: U(), barrier: U(), built: U(), zone: U(), edit: U(), density: new Uint8Array(n), depth: U(), streams: [] }
+  const L: Layers = { cell: c, nx, nz, x0, z0, height: new Float64Array((nx + 1) * (nz + 1)), table: [], ground: U(), veg: U(), water: U(), way: U(), barrier: U(), built: U(), zone: U(), edit: U(), density: new Uint8Array(n), depth: U(), streams: [], trees: [] }
   // features in painting order: priority, then id
   const order = map.features.map(f => ({ f, r: resolve(f, map, cat) })).sort((a, b) => a.r.priority - b.r.priority || (a.f.id < b.f.id ? -1 : a.f.id > b.f.id ? 1 : 0))
   order.forEach(({ r }) => L.table.push(r))
@@ -319,6 +323,15 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
   for (const { f, r } of order) {
     const cat0 = categoryOf(r.kind), k1 = index.get(f.id)!, a = r.attrs
     if (cat0 !== 'ground' && cat0 !== 'veg') continue
+    if (a.growth === 'tree') {
+      if (f.point) L.trees.push({ x: f.point[0], z: f.point[1], k: k1 })
+      else if (f.line) {
+        // as many trees as whole spacings fit (at least one), evenly, half a step in from each end
+        const len = lineLength(f.line), n = Math.max(1, Math.floor(len / num(a.spacing, 10)))
+        for (let m = 0; m < n; m++) { const [x, z] = pointAt(f.line, (m + 0.5) * len / n); L.trees.push({ x, z, k: k1 }) }
+      }
+      continue
+    }
     const dens = (cell: number, input: { edge?: number; along?: number }) => { L.density[cell] = Math.round(255 * Math.max(0, Math.min(1, ramp(a.density, input, 0)))) }
     if (f.line) paintLine(f.line, VEG_LINE / 2, L.veg, k1, (cell, along) => dens(cell, { along }))
     else {
