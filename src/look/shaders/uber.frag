@@ -1,10 +1,22 @@
 precision highp float;varying vec2 vUV;uniform sampler2D textureSampler,uGrain;uniform vec2 uRes;uniform float uGrade,uGrainOn,uBloom;
 vec3 shoulder(vec3 c){float m=max(c.r,max(c.g,c.b));if(m<=0.8)return c;float mm=0.8+0.2*(1.0-exp(-(m-0.8)/0.2));return c*(mm/m);}
 float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
-void main(){vec3 c=texture2D(textureSampler,vUV).rgb;
+#ifdef DOF
+// the depth of field's composite (decision 0024; dof.frag): textureSampler is the half-resolution blur and uSharp the
+// scene; the sharp scene where this pixel's blur is under a pixel (the blur not read), the blur where it passes two.
+// uHalfUV maps the screen to the blur (its size is the scene's halved, rounded down). The bloom gathers from the blur
+uniform sampler2D uSharp;uniform vec2 uTan,uHalfUV;uniform float uFocus,uBand,uK,uMaxPx;
+#include<dofcoc>
+vec3 base(){vec4 s=texture2D(uSharp,vUV);float w=smoothstep(0.5,2.0,coc(s.a,vUV));return w>0.0?mix(s.rgb,texture2D(textureSampler,vUV*uHalfUV).rgb,w):s.rgb;}
+#define BLOOM_UV(uv) ((uv)*uHalfUV)
+#else
+vec3 base(){return texture2D(textureSampler,vUV).rgb;}
+#define BLOOM_UV(uv) (uv)
+#endif
+void main(){vec3 c=base();
   if(uBloom>0.0){vec3 b=vec3(0.0);                                  // fused cheap bloom: highlights gathered on two rings
     for(int i=0;i<12;i++){float a=float(i)*0.5236+(i<6?0.0:0.26);float r=(i<6?6.0:16.0)*uRes.y/1080.0;
-      vec3 s=texture2D(textureSampler,vUV+vec2(cos(a),sin(a))*r/uRes).rgb;b+=max(s-vec3(0.70),0.0)*(i<6?1.0:0.6);}
+      vec3 s=texture2D(textureSampler,BLOOM_UV(vUV+vec2(cos(a),sin(a))*r/uRes)).rgb;b+=max(s-vec3(0.70),0.0)*(i<6?1.0:0.6);}
     c+=b*0.11*uBloom;}
   if(uGrade>0.0){float l=dot(c,vec3(0.2126,0.7152,0.0722));
     float green=clamp((c.g-max(c.r,c.b))*3.0,0.0,1.0);

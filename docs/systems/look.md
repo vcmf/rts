@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-13
 code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png]
-decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0003-no-blur-in-gameplay, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest]
+decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest]
 ---
 
 # The look page (Track E, L0)
@@ -51,7 +51,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
 | `src/look/meadow.ts` | The meadow near the camera (L5c, L5d, below): the meadow map (ground height, the grass's and the crops' growth), three rings of static grass and crop instances around the focus |
 | `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (`?trees=cards`, L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
-| `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), and the passes: depth of field (presentation only, decision 0003), the fused grade |
+| `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), and the passes: depth of field (a player option, decision 0024), the fused grade |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop, and the debug globals the checks read |
 | `src/look/bench.ts`, `src/look/gputimer.ts` | `?bench`: fixed cameras, frame times, GPU time per pass, draw calls, triangles, texture memory and the build hash, as JSON (below) |
 | `src/look/lab.ts` | Test objects the tools add: the readability guard's army blocks, the detail check's test hill |
@@ -69,6 +69,43 @@ page in a season (the bench runs in it); `?detail=l0` opens it with the L0 grain
 `shader` on WebGL1) and `?bench=macro` benches the three whose shaders differ (`flat`, `shader`, `bake`: the experimental arms
 draw with the bake's shader and differ in their bakes, measured by the macro check); `?trees=one` draws every tree as one broadleaf model, and `?trees=one,cards` as leaf cards (L5b's
 judging).
+`?dof=0|1` overrides the gameplay depth of field, on by default (decision 0024, below); `?bench=dof` benches it off
+and on.
+
+### The gameplay depth of field (decision 0024)
+
+The plan: `docs/plans/done/gameplay-dof.md`. The blur is a band at the top of the screen: only what lies beyond
+the focus blurs.
+
+- **The scene at half resolution** (`src/look/shaders/dofdown.frag`): each pixel holds the four scene pixels under
+  it, read at their centres: their colour averaged (a figure narrower than the block is blurred, not dropped) and the
+  farthest of their distances (a bilinear blend of two depths is no surface).
+- **The blur** (`src/look/shaders/dof.frag`) reads it at half resolution, each tap at a pixel's centre, after Dennis
+  Gustafsson's single-pass bokeh:
+  - taps on a golden-angle spiral, each counted where its own blur reaches the pixel (over a pixel either side: the
+      taps are a half-resolution texel apart), a tap that lands back on the pixel skipped; about 32 for a 10 px blur and
+    as many per unit of area as the blur grows, in five steps from 16 to 64 (past a 14 px blur, sparser);
+  - a sharp pixel skips the taps. This is exact, not an estimate: nothing nearer than the focus blurs, so a nearer
+    tap is sharper than the pixel, and a farther one is clamped (below) to under a pixel;
+  - a tap behind the pixel has its blur clamped to twice the pixel's, so a sharp crown never bleeds over the ground
+    behind it;
+- **The composite** is in the finishing pass (`uber.frag` with `DOF`). It keeps the sharp scene where the pixel's
+  blur is under a pixel and takes the blur where it passes two. The bloom gathers from the
+  half-resolution blur.
+- **The circle of confusion** (`src/look/shaders/dofcoc.glsl`, pixels at full resolution):
+  - beyond the focus, `1 − focus/z` past a sharp band, times a gain;
+  - nothing nearer than the focus. A blur nearer the camera failed the readability guard at the screen's foot, and
+    the owner asked for the blur at the top edge only.
+  - z is the depth along the view axis, from the distance the materials write to alpha and the pixel's ray.
+- **The focus** is the depth of the ground at the screen's centre: the centre ray marched against the terrain, eased
+  over a quarter second; a new view is taken at once.
+- **The constants** are `DOF` in `src/look/post.ts`: the sharp band, the gain, the largest blur in pixels at 1080
+  lines, and the share of it left at the widest zoom (the blur eases from the closest zoom to the widest). The
+  panel's "Blur strength" slider multiplies it. `window.__look.dof` is the same object, read every frame, so the
+  constants can be tuned live from the console.
+- **The checks:** the look tools load the page with `?dof=0` (`shoot()` in `tools/look-page.mjs`, and
+  `tools/check-negatives.mjs` for a URL), so they measure the paint. The readability guard is also run with
+  `?dof=1`.
 
 ### The ground's cover and macro colour (L5a)
 
@@ -263,7 +300,9 @@ The page runs 9 cameras (closest, default and widest zoom, each at yaw −45°, 
 and arm, frame times (p50, p95, max), GPU time per pass, draw calls and triangles, plus the estimated texture
 memory, the renderer and the build hash (`__BUILD__`, set by `vite.config.ts`). It shows the JSON with a link to
 save it, and puts it in `window.__bench`. Arms are variants of the page measured in the same session, A B B A per
-camera: `l2` (the page) and `l0` (the L0 grain on the terrain). `?benchat=<x>,<z>` (within the play area) makes the
+camera: `l2` (the page) and `l0` (the L0 grain on the terrain); `?bench=dof` `nodof` and `dof` (the bench page opens
+with the blur off unless its URL sets `?dof`, as do the debug views, `?water` and `?river=debug`, which write no
+distance to alpha). `?benchat=<x>,<z>` (within the play area) makes the
 cameras orbit that point instead of the camera's start, and the JSON records it as `focus` (the forest bench).
 - **GPU time** comes from our own `EXT_disjoint_timer_query_webgl2` queries (`src/look/gputimer.ts`). Queries
   cannot nest: whole-frame time is taken on alternate frames, the passes (terrain, scatter, water, other,

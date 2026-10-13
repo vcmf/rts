@@ -22,7 +22,7 @@ The style is designed in these documents; this plan schedules them and does not 
 | `docs/proposals/engine-design.md` | Scale and min-spec (§2), camera (§5), bakes and their memory limits (§6), units on the render side (§7), verification and frame budgets (§8), the order of work this plan extends (§10) |
 | `docs/plans/active/prototype-plan.md` | Prototype exit criteria (§1); the water workstream W2–W6 (§4) |
 | `docs/research/painterly-2d-on-3d.md` | Brush masks inside the ramp (not over it); which coordinates keep paint attached per surface (world for terrain, object-local for rigid props, authored UVs for skinned soldiers); the one-hill, one-tree, one-soldier validation scene |
-| Decisions | 0001 (look in assets and materials, not filters), 0002 (top-down, no sky), 0003 (no blur in gameplay), 0007 (battalions of about 100, one figure each), 0010 (locked camera and staff map), 0011 (scale and min-spec), 0012 (heightfield authority) |
+| Decisions | 0001 (look in assets and materials, not filters), 0002 (top-down, no sky), 0024 (gameplay depth of field is a player option, superseding 0003), 0007 (battalions of about 100, one figure each), 0010 (locked camera and staff map), 0011 (scale and min-spec), 0012 (heightfield authority) |
 | `docs/art-bible.md` §0 (reference images) | The targets the look is judged against, each with what to take from it and what to ignore |
 | The soldier animation trial (below, LA) | The first real figure: a Tripo French line infantryman, rigged, with authored clips |
 
@@ -579,8 +579,8 @@ Babylon VAT writes no velocity, and the 12 fps steps reset its history.
 - a cool shadow-tint volume;
 - a warm depth wash;
 - snow and ground brushwork in the albedo;
-- periphery simplification (lower grain and band contrast toward the far and frame edges; no blur, decision 0003);
-- a tilt-shift variant for A/B only;
+- periphery simplification (lower grain and band contrast toward the far and frame edges; depth of field is the player's, decision 0024);
+- the gameplay depth of field's default strength, tuned with the owner (decision 0024);
 - the video-tier frame (`docs/proposals/engine-design.md` §10 item 10): depth of field, mist, shafts, from a
   presentation camera.
 
@@ -645,6 +645,8 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
    (frame cost, formations at the frame's edges through the guard) decides. PR #64 (open) proposes it as a
    player option, on by default, in a decision numbered 0020, the number Track M's PR #49 (open) also uses:
    whichever merges second renumbers.
+   **Answered (2026-10-13):** a player option, on by default (decision 0024, renumbered from 0020 to clear
+   PR #49's numbers); the blur is a band at the top of the screen.
 4. **Stepped animation comfort:** ship 12 fps steps as a setting that can be turned off (Insomniac did),
    or fixed?
 5. **Soldier grain:** any at gameplay zoom, or only at the closest zoom (research open question)?
