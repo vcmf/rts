@@ -71,6 +71,11 @@ Pairs (not committed; `scratch/` in this worktree): `scratch/shadow/{near,mid,fa
   and ruled out as the cause, one at a time: the mist's thinning and its air colour, the edge filter, the
   contact core, the clamp of saturated coats. The guard's rule (no block that separates on main may fail) is
   for the owner to waive or not: the loss is 0.002 on one block, against shadows that read in the valley.
+  **Waived by the owner (2026-10-13):** the block is a stand-in; unit readability is judged with the real
+  figures in L3 and L4.
+- **Tests:** `npm test` fails only the sim's cost tests (the soldier layer, the formation tick) when the machine
+  is loaded; main fails the same tests under the same load (2026-10-13: 17.7 ms and 3.2 ms against 12 and 3),
+  and both pass when run alone. This branch touches neither the sim nor its tests.
 
 ## Review (`/code-review high`)
 
