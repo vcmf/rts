@@ -1,11 +1,11 @@
 ---
 status: current
 last_reviewed: 2026-10-13
-code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts]
+code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts]
 decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0023-generators-form-a-chain, 0024-free-standing-trees]
 ---
 
-# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3c)
+# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d)
 
 A map is a strict JSON file (`maps/<id>.map.json`): a list of features, each with an id, a dotted kind from the
 kinds catalogue (`maps/kinds.json`), one shape and attribute overrides. This system checks such a file, resolves
@@ -27,9 +27,8 @@ maps/kinds.json ──► checkCatalogue ─┐
 - The catalogue is the only place attributes, units, ranges and kinds are declared. Adding a kind or an attribute
   is a data change.
 - The draft page shows exactly what the code computes: the page's worker and the CLI run the same functions.
-- Not yet: generators (M3: a `gen` is validated but reported by `expand`), shared edges (`follow`, M3), water
-  levels and carving, bridge decks and works' earthworks (M2), compiling to the sim's or the look's data (M2, M4),
-  editing on the page.
+- Not yet: works' earthworks, compiling to the look's data (M4), areas sharing edges with other areas (only lines
+  are shared), editing on the page.
 
 ## Constraints
 
@@ -94,7 +93,17 @@ maps/kinds.json ──► checkCatalogue ─┐
     exact on whole centimetres: a point exactly on the other line is decided by simulation of simplicity (the first
     line shifted infinitesimally in a fixed direction), so a pass through a vertex crosses once and a touch
     nowhere; a line's own end on the other line takes its neighbour's side;
-  - a pinned feature (no `gen`, with an `origin`) is just a feature.
+  - a pinned feature (no `gen`, with an `origin`) is just a feature;
+  - **shared edges** (`follow`, `src/map/follow.ts`): an area's outer ring may take part of a line feature, so a
+    wood shares a stream's bank. `{ id, side, offset?, from, to, at? }`, or a list: `from` and `to` snap to the
+    nearest points of the line as expanded (so the edge moves with a meander) and the edge runs between them in
+    that order; it lies `side` of the line (looking along it), `offset` m past the line's edge (half its width);
+    its points go before the ring's point `at` (default 0), and the ring's own points hold the rest of the
+    boundary (with a `follow`, as few as one; the whole ring is checked after expansion). Each vertex moves along
+    the mean of its segments' normals, mitred to keep the offset, at most twice it. A feature with `follow` is in
+    the chain (it reads the lines it follows, so it waits for a meander; what reads it waits for its ring), and
+    `follow` leaves the expanded map. A street village's own area cannot follow (its reach is checked before
+    expansion).
 - **The generators** (`src/map/generators.ts`: for each, the shape it reads, the shape it writes, its checked
   parameters):
   - `meander` (`src/map/meander.ts`): the look world's Kinoshita curve in the exact maths, along the author's guide

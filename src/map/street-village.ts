@@ -4,7 +4,7 @@
 // buildings, no-go zones, other ways and barriers, and the road itself where it bends back: src/map/generators.ts). Each side walks the stretch on its own; the side further behind takes the next house.
 import type { Pt } from './schema.ts'
 import type { Zone } from './reach.ts'
-import { pointAt, inRing, ringsTouch, lineLength } from './geometry.ts'
+import { pointAt, inRing, ringsTouch, lineLength, stretch } from './geometry.ts'
 import { random } from './seed.ts'
 import { cm } from './util.ts'
 
@@ -24,17 +24,7 @@ export const HOUSE_SPAN = Math.sqrt(LENGTH[1] * LENGTH[1] + DEPTH[1] * DEPTH[1])
 // zones lie apart can never meet. The margin covers the houses' rounding to centimetres and the zone's own (its ends
 // lie anywhere on the road, and the geometry's tests round to centimetres).
 export function villageZone(road: Pt[], roadWidth: number, from: number, to: number, ownArea = false): Zone {
-  const end = Math.min(to, lineLength(road)), line: Pt[] = []
-  if (end > from) {
-    line.push(pointAt(road, from).slice(0, 2) as Pt)
-    let acc = 0
-    for (let k = 0; k + 1 < road.length; k++) {
-      const dx = road[k + 1][0] - road[k][0], dz = road[k + 1][1] - road[k][1]
-      acc += Math.sqrt(dx * dx + dz * dz)
-      if (acc > from && acc < end) line.push(road[k + 1])
-    }
-    line.push(pointAt(road, end).slice(0, 2) as Pt)
-  }
+  const end = Math.min(to, lineLength(road)), line: Pt[] = end > from ? stretch(road, from, end) : []
   const half = LENGTH[1] / 2, out = roadWidth / 2 + SETBACK + DEPTH[1], reach = Math.sqrt(half * half + out * out) + (ownArea ? 0 : YARD) + 0.05
   if (ownArea) return { hull: line, reach, open: true }
   const h = line.length ? hull(line) : []
