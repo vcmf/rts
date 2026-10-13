@@ -18,7 +18,7 @@ import { D } from './spec.ts'
 import { fbm, hash, mulberry } from './noise.ts'
 import { H } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges } from './river.ts'
-import { COVER, coverAt, inFormationZone, type CoverGrid } from './world/cover.ts'
+import { COVER, coverAt, fieldAt, inFormationZone, type CoverGrid } from './world/cover.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 import { cardMaterial, cardMesh, placeCards, type CardOptions } from './canopy.ts'
@@ -50,6 +50,9 @@ export interface Nature {
   // which the meadow map applies at every texel so that smoothing the cover never carries grass across them
   growth(x: number, z: number): [number, number]
   growthAllowed(x: number, z: number): boolean
+  // the crops' growth by the cover (docs/plans/done/l5d-crops.md): 1 where the point and the points EDGE round it
+  // are all one sown field (one class, wheat, green crop or stubble, and one field id; ploughed grows nothing), else 0
+  crop(x: number, z: number): number
 }
 
 // what may grow on each class of the cover (docs/plans/active/l5-macro.md): grass, flowers, plants, bushes, stumps
@@ -203,21 +206,10 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     if (!(meadow && mdl === 'Grass_Short')) addPlaced(mdl, item)   // under the meadow (src/look/meadow.ts) its grass replaces these tufts; the stream is unchanged
   }
   // a wheat field on the valley side between the floodplain and the formation zones (docs/art-bible.md §6c: fields above the floodplain)
-  const addWheat = (item: Item) => { if (!meadow) addPlaced('Wheat', item) }   // under the meadow the field below replaces this lattice; the stream is unchanged
+  const addWheat = (item: Item) => { if (!meadow) addPlaced('Wheat', item) }   // under the meadow its crops replace this lattice (src/look/meadow.ts); the stream is unchanged
   for (let u = 0; u < 30; u += 1.25) for (let v = 0; v < 22; v += 1.3) { const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5, z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5; if (rr() < 0.08) continue; addWheat([x, z, wheatScale(rr()), rr() * 6.28, rr()]) }
-  // the meadow's wheat (docs/plans/done/l5c-meadow.md): no rows nor columns, a tuft anywhere in each 0.85 m cell of
-  // the field's frame (about twice the lattice's), and a ragged edge (the noise pushes it in by up to 1.6 m), through
-  // the one placement rule (wheat on wheat, EDGE from the painted edge); its own stream
-  if (meadow) {
-    // the tufts' scale: from 0.82 to 1 of the one that reaches WHEAT_HEIGHT_MAX (decision 0026)
-    const WR = mulberry(57)
-    for (let u = 0; u < 30; u += 0.85) for (let v = 0; v < 22; v += 0.85) {
-      const uu = u + WR() * 0.85, vv = v + WR() * 0.85, s = wheatScale(WR()), yaw = WR() * 6.28, tint = WR()
-      if (Math.min(uu, 30 - uu, vv, 22 - vv) < fbm(uu * 0.35 + 3, vv * 0.35 - 1) * 1.6 || WR() < 0.06) continue
-      const x = -60 + uu * 0.95 + vv * 0.25, z = -34 + vv - uu * 0.12
-      addPlaced('Wheat', [x, z, s, yaw, tint])
-    }
-  }
+  // under the meadow the fields grow from the meadow's slots (src/look/meadow.ts, docs/plans/done/l5d-crops.md):
+  // no pack wheat tufts
   // far woods and hedgerows from cheap bush crowns, never in the apron band, whose ground only the apron mesh knows
   const far: Item[] = [], inBand = (x: number, z: number) => { const m = Math.max(Math.abs(x), Math.abs(z)); return m > D.spec.tile / 2 && m < D.band }
   for (let k = -8; k <= 8; k++) for (let t = -560; t <= 560; t += 6) {
@@ -292,7 +284,14 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // the meadow's growth: where the old tufts could stand (the placement rule: the cover's grassy classes and their
   // edges, off the banks and the water, out of the formation zones); pasture grazed shorter
   const growth = (x: number, z: number): [number, number] => coverAllows(cover, 'Grass_Short', x, z) ? [1, coverAt(cover, x, z) === COVER.pasture ? 0.65 : 1] : [0, 0]
+  // the crops' growth: a sown class (ploughed grows nothing) and the same field EDGE round it, so a crop never stands
+  // on another painted field, nor runs across two (the shader reads the class and the field's shade at its root)
+  const SOWN: readonly number[] = [COVER.wheat, COVER.green, COVER.stubble]
+  const crop = (x: number, z: number) => {
+    const c = coverAt(cover, x, z), f = fieldAt(cover, x, z)
+    return SOWN.includes(c) && AROUND.every(([dx, dz]) => coverAt(cover, x + dx * EDGE, z + dz * EDGE) === c && fieldAt(cover, x + dx * EDGE, z + dz * EDGE) === f) ? 1 : 0
+  }
   // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the outer ring's footprint and lean)
   const growthAllowed = (x: number, z: number) => !touchesZone(x, z, CLUMP_REACH) && offBanks(riverQuery(x, z), CLUMP_REACH)
-  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined, growth, growthAllowed }
+  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined, growth, growthAllowed, crop }
 }

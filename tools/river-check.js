@@ -54,10 +54,12 @@
   // under the look page's meadow (docs/plans/done/l5c-meadow.md) the grass is its clumps, not scatter: its growing
   // texels (1 m) stand in for the tufts
   const meadow = typeof __look !== 'undefined' && __look.meadow
-  if (meadow) pop.meadowCells = meadow.growingCells
-  check('population', pop.trees >= 60 && (meadow ? meadow.growingCells >= 2000 : pop.grass >= 2000) && pop.wheat >= 150 && pop.bushes >= 30 && pop.far >= 400, pop)
+  // and its crops (docs/plans/done/l5d-crops.md) the wheat tufts (about 159,000 texels over the tile; the scene's own
+  // wheat field is checked on its own below, cropsInSceneField)
+  if (meadow) { pop.meadowCells = meadow.growingCells; pop.cropCells = meadow.croppingCells }
+  check('population', pop.trees >= 60 && (meadow ? meadow.growingCells >= 2000 && meadow.croppingCells >= 100000 : pop.grass >= 2000 && pop.wheat >= 150) && pop.bushes >= 30 && pop.far >= 400, pop)
   // the meadow follows the placement rule too: its growth as the GPU reads it is 0 in the formation zones and over the
-  // water and its banks, at every half metre of a grid over the near field; and it grows over a real share of the tile (between a
+  // water and its banks (the crops too, and none on the floodplain), at every half metre of a grid over the near field; and it grows over a real share of the tile (between a
   // fifth and four fifths of its texels), so a growth that failed everywhere, or nowhere, is caught
   if (meadow) {
     // a clump's blades reach CLUMP_REACH (1.45 m) from its root: a growing point fails if its root, or any of eight
@@ -65,10 +67,14 @@
     // the bank rule's 0.4 m and more); over the ground the focus can bring rings to (the play area and 100 m of rings),
     // every half metre near the scene, every metre beyond
     const REACH = 1.4, ring = Array.from({ length: 8 }, (_, k) => [Math.cos(k * Math.PI / 4) * REACH, Math.sin(k * Math.PI / 4) * REACH])
-    let inZones = 0, onBanks = 0, sampled = 0
+    let inZones = 0, onBanks = 0, sampled = 0, cropsSampled = 0, cropsOnFloodplain = 0
     for (let x = -335; x <= 335; x += Math.abs(x) < 200 ? 0.5 : 1) for (let z = -335; z <= 335; z += Math.abs(z) < 200 ? 0.5 : 1) {
-      if (meadow.growthAt(x, z) <= 0) continue
+      const crop = meadow.cropAt(x, z) > 0
+      if (meadow.growthAt(x, z) <= 0 && !crop) continue
       sampled++
+      // a crop's reach off the floodplain too (the cover keeps fields off it: this guards the crops' growth against a
+      // change there)
+      if (crop) { cropsSampled++; if ([[0, 0], ...ring].some(([dx, dz]) => Math.abs(x + dx - C.axisX(z + dz)) < C.P.floodplainW / 2)) cropsOnFloodplain++ }
       for (const [dx, dz] of [[0, 0], ...ring]) {
         const px = x + dx, pz = z + dz
         if (KEEP_CLEAR(px, pz)) { inZones++; break }
@@ -78,6 +84,12 @@
     check('meadowInZones', inZones === 0, inZones)
     check('meadowOnWater', onBanks === 0, onBanks)
     check('meadowSampled', sampled > 100000, sampled)
+    check('cropsSampled', cropsSampled > 10000, cropsSampled)
+    check('cropsOnFloodplain', cropsOnFloodplain === 0, cropsOnFloodplain)
+    // the scene's own wheat field (src/look/nature.ts, the lattice's frame) grows: its crop points at every metre
+    let sceneField = 0
+    for (let u = 2; u < 28; u++) for (let v = 2; v < 20; v++) if (meadow.cropAt(-60 + u * 0.95 + v * 0.25, -34 + v - u * 0.12) > 0) sceneField++
+    check('cropsInSceneField', sceneField >= 150, sceneField)
     const share = meadow.growingCells / (SMW * SMW)   // SMW: the tile's width, m
     check('meadowShare', share > 0.2 && share < 0.8, +share.toFixed(3))
   }

@@ -49,7 +49,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/water.ts` | The water ribbon, its materials (the painted water, W4, `docs/systems/river.md`; and the same shader on the tile's ground, for the seam check) and the tree-reflection mask |
 | `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule (and, since L5a, the cover's: what grows on which class) |
 | `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
-| `src/look/meadow.ts` | The meadow near the camera (L5c, below): the meadow map (ground height, growth), three rings of static grass instances around the focus |
+| `src/look/meadow.ts` | The meadow near the camera (L5c, L5d, below): the meadow map (ground height, the grass's and the crops' growth), three rings of static grass and crop instances around the focus |
 | `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (`?trees=cards`, L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
 | `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), and the passes: depth of field (presentation only, decision 0003), the fused grade |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop, and the debug globals the checks read |
@@ -185,7 +185,7 @@ The plan: `docs/plans/done/shadow-look.md`.
   texel) under each tree, in the light map's alpha, which the ground, the water's shore band and the grass read
   (`groundOcc()`), and the crowns do not.
 
-### The meadow (L5c)
+### The meadow and the crops (L5c, L5d)
 
 The plan: `docs/plans/done/l5c-meadow.md`. On by default on WebGL2 (on WebGL1 the old scatter stays: the meadow reads a half-float texture in its vertex
 shader); `?meadow=off` puts back the old scatter.
@@ -205,6 +205,14 @@ shader); `?meadow=off` puts back the old scatter.
   each clump away across its ring's band (the rings hand over without an edge). The fragment shader is a lean
   `paint()` (the ramp, the cool band, the sky in the shadow, clouds; no grain, rim nor snow): the painted ground's
   colour under the root (the macro bake, `groundArm`; the flat class colour on the other arms), darker at the root and lighter, warmer at the tip. In winter the clumps shrink under the snow.
+- **The crops** (L5d, `docs/plans/done/l5d-crops.md`): the same slots grow a crop clump where the meadow map's A
+  channel (the crops' growth: `Nature.crop`, a sown field, wheat, green crop or stubble, with the grass's rules,
+  edge and shrink) is above the grass's growth: never both on one patch. The vertex shader reads the cover's class
+  at the root (`uCover`) and the season (`cropLook` in `meadow.vert`): wheat standing up to `WHEAT_HEIGHT_MAX`
+  (decision 0026) in summer, cut to 0.22 m stubble through autumn and gone by late autumn; the green crop 0.45 m,
+  lower under the snow; stubble 0.22 m until the plough. Narrower than grass, evenly sown (less clumping). Its
+  colour (the owner): lime at the stalk's foot to the season's colour at the tip, gold in summer, orange in autumn,
+  brown after; the green crop lime to olive. Ploughed fields grow nothing.
 - **The meadow on the ground** (`meadowPattern` in `macro()`, `MEADOW`, a define on every painted material and on the
   macro bake): on meadow and pasture (the warped class the ground paints), the brush tile (`data/meadow-brush.png`,
   at 7.3 m and 7.3/2.618 m, turned apart, warped by a slow noise: no common period; stamped by
@@ -213,14 +221,14 @@ shader); `?meadow=off` puts back the old scatter.
   terrain and the shore band agree; the grass takes its colour from that ground (read at its ring's cell) and its
   shade from the clump field.
   `tools/meadow-grass-export.py` rebuilds `data/meadow-grass.json` from the pack's two grass files.
-- **The scatter under the meadow** (`src/look/nature.ts`): the old `Grass_Short` tufts are not placed, and the wheat
-  field is placed by a hash a 0.85 m cell with a ragged edge instead of a lattice; every wheat tuft, the old
-  lattice's too, is clamped in `add()` to `WHEAT_HEIGHT_MAX` (decision 0026); both keep
-  the scatter's random stream, so nothing else moves. `tools/river-check.js` counts the meadow's growing cells in
-  place of the tufts and checks the grass's footprint against the zones and the banks; `tools/look-check.js`
+- **The scatter under the meadow** (`src/look/nature.ts`): the old `Grass_Short` tufts and the pack's wheat tufts
+  are not placed (the crops above replace them; `?meadow=off` keeps the wheat lattice, each tuft clamped in `add()`
+  to `WHEAT_HEIGHT_MAX`, decision 0026); the scatter's random stream is kept, so nothing else moves.
+  `tools/river-check.js` counts the meadow's growing and cropping cells in place of the tufts and checks the grass's
+  and the crops' footprint against the zones and the banks, and the crops off the floodplain; `tools/look-check.js`
   checks no clump floats over the drawn tile (each sinks `MEADOW_SINK`).
-- `?bench=meadow` benches the grass against none (the ground's pattern is baked); `__look.meadowBakeMs`,
-  `__look.meadow` (`growingCells`, `growthAt`: river-check's meadow checks).
+- `?bench=meadow` benches the grass and crops against none (the ground's pattern is baked); `__look.meadowBakeMs`,
+  `__look.meadow` (`growingCells`, `growthAt`, `croppingCells`, `cropAt`: river-check's meadow checks).
 
 ### Soft shadows (the sun's penumbra, the sky's occlusion)
 
