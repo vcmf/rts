@@ -134,11 +134,12 @@ Every surface is painted with **three value bands**, not a smooth gradient:
 The edges between bands are **broken by the grain texture**, so they read as
 brush edges rather than computed lines.
 
-**One exception, foliage crowns** (decision 0022, proposed): the same three
+**Proposed exception, foliage crowns** (decision 0022, open until the owner
+accepts it; built only in the leaf-card arm, `?trees=cards`): the same three
 colours, the shadow still cool, blended over a wide range of light instead of
 three steps, so a crown reads as a round mass of leaves. Its light wraps round
-the crown, it is darker inside, and single leaves catch the sun. Everything else
-keeps the three bands.
+the crown, it is darker inside, and single leaves catch the sun. Until 0022 is
+accepted, the three bands above are the rule for every surface.
 
 ### Palette
 - **80% calm field:** muted olive and yellow-greens, dry golds, teal-green
@@ -173,7 +174,8 @@ keeps the three bands.
     so they are darker. On a wood's floor the shadow colour itself deepens, so
     a wood reads as one mass, darker inside than a lone tree's shadow.
 - **The valley mist thins over cast shadow**, so shadows still read in the
-  hollows. Lit snow stays near-white under it (a known fault: #62).
+  hollows. Lit snow must stay near-white; under the mist it turns orange today
+  (a known fault: #62).
 
 ---
 

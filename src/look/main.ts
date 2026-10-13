@@ -73,9 +73,9 @@ const terrain = buildTerrain(scene, mats, look.far, look.bank, waterData)
 const waterSabParam = params.get('watersab')
 if (waterSabParam !== null && waterSabParam !== 'nodive') throw new Error(`?watersab must be nodive, not ${waterSabParam}`)
 const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }, waterSabParam !== 'nodive')
-// ?trees=cards: the crowns as leaf cards (docs/plans/active/l7a-canopy-cards.md); ?leaves=procedural draws the atlas
+// ?trees=cards: the crowns as leaf cards (docs/plans/done/l7a-canopy-cards.md); ?leaves=procedural draws the atlas
 // instead of reading the oak picture; ?cardsize, ?cardcover, ?cardsink tune the cards (src/look/canopy.ts); ?volume=off
-// puts back L7a's light, card by card (docs/plans/active/l7b-crown-volume.md)
+// puts back L7a's light, card by card (docs/plans/done/l7b-crown-volume.md)
 const treesParam = params.get('trees')
 if (treesParam !== null && treesParam !== 'cards') throw new Error(`?trees must be cards, not ${treesParam}`)
 const leavesParam = params.get('leaves') ?? 'oak'
@@ -300,9 +300,9 @@ if (params.has('bench')) {
   if (!(hold > 0)) throw new Error(`?hold must be a positive number of seconds, not ${params.get('hold')}`)
   // the arms: the detail layer, and the L0 grain it replaces (the cost gate: at most +1 ms GPU for the terrain)
   // ?bench=macro: the macro colour's arms instead (with the detail layer)
-  // ?trees=cards&bench=trees: the crowns' two arms, cards and the pack's (docs/plans/active/l7a-canopy-cards.md),
+  // ?trees=cards&bench=trees: the crowns' two arms, cards and the pack's (docs/plans/done/l7a-canopy-cards.md),
   // for their GPU time only: the shadow map is baked once, with the cards, so the pack arm keeps the cards' shadows
-  // ?trees=cards&bench=volume: the crowns lit as volumes against L7a's light (docs/plans/active/l7b-crown-volume.md)
+  // ?trees=cards&bench=volume: the crowns lit as volumes against L7a's light (docs/plans/done/l7b-crown-volume.md)
   if ((params.get('bench') === 'trees' || params.get('bench') === 'volume') && !nature.showCards) throw new Error(`?bench=${params.get('bench')} needs ?trees=cards`)
   if (params.get('bench') === 'volume' && params.has('volume')) throw new Error('?bench=volume switches the volume itself: drop ?volume')
   const show = nature.showCards

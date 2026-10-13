@@ -1,8 +1,8 @@
 ---
 status: current
 last_reviewed: 2026-10-13
-code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts]
-decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0003-no-blur-in-gameplay, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain]
+code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png]
+decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0003-no-blur-in-gameplay, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage]
 ---
 
 # The look page (Track E, L0)
@@ -131,7 +131,7 @@ grain at a constant size on screen (`docs/plans/active/l2-detail.md`).
 
 ### Leaf-card crowns (`?trees=cards`, L7a, an experiment)
 
-The plan: `docs/plans/active/l7a-canopy-cards.md`. Not the default: the arm the owner judges against the pack crowns.
+The plan: `docs/plans/done/l7a-canopy-cards.md`. Not the default: the arm the owner judges against the pack crowns.
 
 - **The cards** (`src/look/canopy.ts`, `shaders/canopy.vert|frag`, `shaders/cards.glsl`): each broadleaf, birch
   and willow crown becomes quads sampled on its crown triangles, expanded in view space to face the camera and
@@ -145,7 +145,7 @@ The plan: `docs/plans/active/l7a-canopy-cards.md`. Not the default: the arm the 
 - **Switches**: `?cardsize`, `?cardcover`, `?cardsink` (`CARD_DEFAULTS`); `?bench=trees` benches the cards
   against the pack crowns, for GPU time only (the shadow map is baked once, with the cards).
 
-- **The crowns as volumes** (L7b, `docs/plans/active/l7b-crown-volume.md`; `VOLUME` and `SOFT_RAMP` on the card
+- **The crowns as volumes** (L7b, `docs/plans/done/l7b-crown-volume.md`; `VOLUME` and `SOFT_RAMP` on the card
   materials, `?volume=off` puts back L7a's light): each card carries its crown's ellipsoid (`aEllC`, `aEllR`: the
   crown triangles' box centre, the mean of its x and z half-extents and its vertical one). Per pixel: the normal is the
   ellipsoid's, turned a little by each leaf's tilt (the atlas's G and B, the value's gradient read as a height,

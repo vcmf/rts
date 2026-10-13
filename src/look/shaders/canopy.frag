@@ -12,7 +12,7 @@ void main(){
   float val=mix(clamp(tx.r/max(tx.a,1e-3),0.0,1.0),0.6,smoothstep(1.5,4.0,lod));                 // far crowns: less value noise between leaves
   vec4 lm=LM(vW);
   #ifdef VOLUME
-  // the crown as a volume (docs/plans/active/l7b-crown-volume.md). q: the point in the unit sphere of the ellipsoid
+  // the crown as a volume (docs/plans/done/l7b-crown-volume.md). q: the point in the unit sphere of the ellipsoid
   vec3 q=(vW-vEllC)/vEllR;
   vec3 N=normalize(q/vEllR);                                    // A. the ellipsoid normal at this pixel
   vec2 tilt=(tx.gb/max(tx.a,1e-3)-0.5)*2.0*(1.0-smoothstep(1.5,4.0,lod));

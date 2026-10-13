@@ -6,7 +6,7 @@ last_reviewed: 2026-10-13
 # Plan: soft shadows (the sun's penumbra, the sky's occlusion)
 
 Track E, stage 1 (`docs/plans/active/track-e-look.md`), after the shadow look (`docs/plans/done/shadow-look.md`)
-and on top of the leaf-card crowns (`docs/plans/active/l7a-canopy-cards.md`). Art direction: `docs/art-bible.md`
+and on top of the leaf-card crowns (`docs/plans/done/l7a-canopy-cards.md`). Art direction: `docs/art-bible.md`
 §4 (the ramp; "shadows are painted shapes… with grain-broken edges"), §6b (static light baked once per map).
 
 ## Problem

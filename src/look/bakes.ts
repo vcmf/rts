@@ -68,7 +68,7 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   const terrains = scene.meshes.filter(m => m.name === 't')
   // terrain is NOT a shadow caster: it self-shadowed into diagonal 'acne' stripes; slopes facing away are already dark via N·L
   // small plants don't cast either: thousands of tuft shadows streaked the ground along the sun direction.
-  // Under cards (docs/plans/active/l7a-canopy-cards.md) the carded pack models cast nothing; their
+  // Under cards (docs/plans/done/l7a-canopy-cards.md) the carded pack models cast nothing; their
   // trunk meshes cast with the rest, and the crowns cast through their cards, turned to face the sun and cut by the
   // leaf atlas (below)
   shadowRT.renderList = scene.meshes.filter(m => m.name !== 'water' && m.name !== 'apron' && (m.name !== 't' || m === terrains[0]) && !/Grass|Flowers|Plant|Wheat|^cards_/.test(m.name) && !cardCasters?.packs.includes(m as Mesh))

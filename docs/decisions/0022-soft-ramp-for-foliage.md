@@ -10,9 +10,10 @@ date: 2026-10-13
 The art bible's core rule paints every surface in three value bands, light, mid and shadow, with grain-broken
 edges between them (`docs/art-bible.md` §4). On the leaf-card crowns (L7a) that rule cut each crown into three flat
 patches of whole cards. The owner (2026-10-13), of Tiny Glade's trees: the crowns are 2D textures, but their soft
-light makes them read as 3D volumes. L7b (#61, `docs/plans/active/l7b-crown-volume.md`) lit the card crowns as
+light makes them read as 3D volumes. L7b (#61, `docs/plans/done/l7b-crown-volume.md`) lit the card crowns as
 volumes; on one lone crown the light's range went from luma 131–170 to 84–182, and its distinct value levels from
-13 to 29, at no measurable GPU cost. The owner: "it's beautiful now the trees".
+13 to 29. Its GPU cost on the dev Mac (a proxy) is +0.3 to +0.6 ms at the widest zoom, on top of the cards' +0.2 to
++0.3 ms (`docs/plans/active/track-e-results/shadows-foliage.md`). The owner: "it's beautiful now the trees".
 
 ## Decision
 
@@ -27,6 +28,7 @@ card material). Every other surface (ground, water, buildings, armies) keeps the
   per leaf have a ramp that shows them.
 - Good: the bands still decide the colours, so the palette and the cool shadow rule hold.
 - Bad: two ramps to keep in step; a change to the bands must be checked on the crowns too.
+- Bad: a cost at the widest zoom (above), to be measured on the min-spec laptop and in a battlefield forest.
 - Bad: the crowns hold more mid values than the ground, which the readability guard must keep watching (the cards'
   own shadow already costs a dark coat its separation: #63).
 

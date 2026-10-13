@@ -60,7 +60,7 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
   return AROUND.every(([dx, dz]) => ok(coverAt(cover, x + dx * EDGE, z + dz * EDGE)))
 }
 
-// cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/active/l7a-canopy-cards.md, ?trees=cards)
+// cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md, ?trees=cards)
 export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off'): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')

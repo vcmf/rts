@@ -1,11 +1,11 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-13
 ---
 
 # Plan: L7b, the crowns' volume (soft light inside a leaf-card crown)
 
-Track E phase L7 (`docs/plans/active/track-e-look.md` §L7), after L7a (`docs/plans/active/l7a-canopy-cards.md`),
+Track E phase L7 (`docs/plans/active/track-e-look.md` §L7), after L7a (`docs/plans/done/l7a-canopy-cards.md`),
 on the card crowns (`?trees=cards`) only. Art direction: `docs/art-bible.md` §4 (the ramp), §5 (big readable masses).
 
 ## Problem

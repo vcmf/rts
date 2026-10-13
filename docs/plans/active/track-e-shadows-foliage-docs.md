@@ -22,9 +22,21 @@ each updated their own plan and `docs/systems/look.md`, but not the track's docu
 - `docs/systems/look.md`: the module table (`canopy.ts`, `leaves.ts`, the bakes), the open questions.
 - `docs/research/tiny-glade-look.md`: what the research on Tiny Glade found, and what we took from it.
 - Known issues as GitHub issues: #62 (the mist tints sunlit snow), #63 (the cards and a dark coat's separation).
+- The L7a and L7b plans move to `docs/plans/done/` (both merged); the code's comments that cite them follow.
 
 Not in scope: `docs/proposals/engine-design.md` (a proposal is frozen once built; its bakes live in the system doc).
 
 ## Acceptance
 
 - `node tools/check-docs.mjs` passes; `/code-review high` per the workflow.
+
+## Review (`/code-review high`)
+
+- **Round 1** (5b1fbf9): severe: the art bible stated the snow fault backwards; the cost table used one of the
+  bench's two arms without saying so, and its "±0.5 ms noise" was not measured (measured now: up to 1.8 ms in the
+  disturbed "before" bench, 0.03–0.13 ms in the others, so "before" against "after" shows nothing; the cards and
+  the volume light cost +0.5 to +0.9 ms at the widest zoom, not "nothing measurable"). Moderate: the shadows
+  table's conditions (frame size, arms, baselines) unstated; decision 0022's cost claim against the results; the
+  system doc's `code:` list; the art bible writing a proposed rule as the rule; the L7a and L7b plans left in
+  `active/`; the shadow look's missed targets unreported. Light: `wheat.Britain`'s known failure hidden by "every
+  other block passes"; numbers copied across docs (the track plan now links to the results). All fixed.

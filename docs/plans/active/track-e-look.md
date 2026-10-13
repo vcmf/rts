@@ -525,13 +525,14 @@ L1's. **Estimate:** 4–6 days, 2–3 PRs.
 **Progress (2026-10-13).** Built ahead of the phase, as experiments behind `?trees=cards` (the default arm keeps
 the pack crowns): results in `docs/plans/active/track-e-results/shadows-foliage.md`, the technique's source in
 `docs/research/tiny-glade-look.md`.
-- **L7a, leaf-card crowns** (#58, `docs/plans/active/l7a-canopy-cards.md`): each broadleaf, birch and willow
+- **L7a, leaf-card crowns** (#58, `docs/plans/done/l7a-canopy-cards.md`): each broadleaf, birch and willow
   crown as camera-facing cards cut by a greyscale clump atlas our palette paints, casting leafy shadows. Read as
   painted leaf masses at the near and mid zooms (owner: "it's the way").
-- **L7b, the crowns as volumes** (#61, `docs/plans/active/l7b-crown-volume.md`): a normal per pixel from the
+- **L7b, the crowns as volumes** (#61, `docs/plans/done/l7b-crown-volume.md`): a normal per pixel from the
   crown's ellipsoid, the light through it, a soft ramp (decision 0022, proposed), a darker core, a tilt per leaf
   (owner: "it's beautiful now the trees").
-- **Cost so far:** within the Mac's noise (about +0.1 to +0.5 ms GPU at the widest zoom, +12 draw calls).
+- **Cost so far** (the dev Mac, a proxy): the cards and the volume light together +0.5 to +0.9 ms GPU at the
+  widest zoom, +12 draw calls (`docs/plans/active/track-e-results/shadows-foliage.md`).
 
 **What L7 still owes:**
 - the cards as the default arm, once the guard passes with them (#63) and the owner accepts decision 0022;
@@ -671,9 +672,10 @@ tallies, and what changed from this plan).
 
 - **The shadows (2026-10-12/13, between L5 and L7; not a phase of this plan).** The owner: "the shadow work of our
   trees in the whole map looks weak". The shadow look (#59, `docs/plans/done/shadow-look.md`): the valley mist no
-  longer erases cast shadows (shadow over lit ground 0.98 to 0.78), a cooler shadow band at the same value, crisper
-  edges, a contact core under each tree. The soft shadows (#60, `docs/plans/done/soft-shadows.md`): the penumbra
-  grows with the distance to the caster, each crown hides its share of the sky, the shadow deepens on a wood's
-  floor; all baked on load (about 45 ms more), nothing per frame. The guard's one block on the threshold
-  (`wheat.France`, 0.098) was waived by the owner. Numbers: `track-e-results/shadows-foliage.md`.
+  longer erases cast shadows, a cooler shadow band at the same value, crisper edges, a contact core under each
+  tree. Its targets were missed (the valley narrowly, the slope by more): **slope shadows are still the weaker
+  ones**, open for L9w. The soft shadows (#60, `docs/plans/done/soft-shadows.md`): the penumbra grows with the
+  distance to the caster, each crown hides its share of the sky, the shadow deepens on a wood's floor; baked on
+  load, nothing per frame. The guard's one regressed block was waived by the owner. The numbers, in one place:
+  `track-e-results/shadows-foliage.md`.
 - **L7a and L7b:** under L7, above.

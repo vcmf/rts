@@ -1,4 +1,4 @@
-// Tree crowns as leaf cards (docs/plans/active/l7a-canopy-cards.md): the crown of a pack model becomes a cloud of
+// Tree crowns as leaf cards (docs/plans/done/l7a-canopy-cards.md): the crown of a pack model becomes a cloud of
 // quads on its surface, each expanded in view space to face the camera and alpha-tested against the leaf atlas
 // (src/look/leaves.ts). The technique is Pontus Karlsson's "quadmesh to billboards", the one Tiny Glade ships.
 // The cards stand where the model's crown triangles are, so composition and placement match the default arm.
@@ -24,7 +24,7 @@ export interface CardOptions {
   size: number      // a card's half-size, as a fraction of the crown's radius
   cover: number     // how many times the cards cover the crown's surface
   sink: number      // how far a card's centre sits inside the surface, in card half-sizes (keeps the outline's size)
-  volume: boolean   // the crown lit as a volume (docs/plans/active/l7b-crown-volume.md); off: L7a's light, card by card
+  volume: boolean   // the crown lit as a volume (docs/plans/done/l7b-crown-volume.md); off: L7a's light, card by card
 }
 export const CARD_DEFAULTS: CardOptions = { size: 0.32, cover: 2.6, sink: 0.8, volume: true }
 
