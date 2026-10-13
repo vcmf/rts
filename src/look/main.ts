@@ -56,13 +56,13 @@ const canvas = document.getElementById('c') as HTMLCanvasElement
 const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false }, false)
 engine.setHardwareScalingLevel(1)
 const scene = new Scene(engine); scene.skipPointerMovePicking = true
-// the light's mood (src/look/mood.ts), before any material is made
-setMood(new URLSearchParams(location.search).get('mood') ?? 'golden')
-scene.clearColor = new Color4(MOOD.hazeCool.r, MOOD.hazeCool.g, MOOD.hazeCool.b, 1)
 
 // ?soft=off: the shadows before the soft-shadow plan (docs/plans/done/soft-shadows.md); ?penumbra: metres of edge
 // radius per metre between a shadow and its caster
 const params = new URLSearchParams(location.search), softParam = params.get('soft'), penumbraParam = params.get('penumbra')
+// the light's mood (src/look/mood.ts), before any material is made
+setMood(params.get('mood') ?? 'golden')
+scene.clearColor = new Color4(MOOD.hazeCool.r, MOOD.hazeCool.g, MOOD.hazeCool.b, 1)
 if (softParam !== null && softParam !== 'off') throw new Error(`?soft must be off, not ${softParam}`)
 const soft: SoftOptions = { on: softParam !== 'off', penumbra: penumbraParam === null ? SOFT_DEFAULTS.penumbra : Number(penumbraParam) }
 if (penumbraParam !== null && (penumbraParam.trim() === '' || !Number.isFinite(soft.penumbra) || soft.penumbra < 0 || soft.penumbra > PENUMBRA_MAX)) throw new Error(`?penumbra must be a number from 0 to ${PENUMBRA_MAX}, not ${penumbraParam}`)
@@ -183,7 +183,7 @@ const fpsEl = byId('fps')
 const FROZEN = new URLSearchParams(location.search).has('frozen')   // golden screenshots (tools/golden.mjs): the clock stays at 0
 // sun colour follows the season: warm gold in summer and autumn, pale gold in winter (keeps snow white, not yellow)
 const SUNCOL = MOOD.sun.clone()
-scene.onBeforeRenderObservable.add(() => { const w = Math.max(0, Math.min(1, S.season - 2)); SUNCOL.copyFrom(Color3.Lerp(MOOD.sun, MOOD.winterSun, w)) })
+scene.onBeforeRenderObservable.add(() => { const w = Math.max(0, Math.min(1, S.season - 2)); Color3.LerpToRef(MOOD.sun, MOOD.winterSun, w, SUNCOL) })
 // the detail layer's pixel angle (src/look/shaders/painter.glsl): the angle one pixel of a SPEC.detail.lines-tall
 // frame spans, from the camera's actual vertical field of view (narrower than the SPEC's on frames wider than 16:9)
 let pixA = 0

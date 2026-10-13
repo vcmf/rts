@@ -2,7 +2,7 @@
 uniform sampler2D uGrain;
 uniform vec3 uSunDir,uSunCol,uShadowCol,uHazeCool,uHazeWarm,uCamPos,uFocus;
 // the mood's other colours (src/look/mood.ts)
-uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistShade,uMistLit;
+uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistShade,uMistLit,uWaterSky,uGlint,uFarRiver;   // uShadowTurn: divided by its luma
 uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason;
 
 vec3 G(vec2 uv){return texture2D(uGrain,uv).rgb;}
@@ -95,7 +95,7 @@ vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
   vec3 s=clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80;float v=dot(s,Y);   // the band of main, whose value is kept
   #ifndef KEEP_HUE
   vec3 t=clamp(mix(vec3(l),a,1.3),0.0,1.0)*uShadowCol;
-  s=mix(t/max(dot(t,Y),1e-4),uShadowTurn/dot(uShadowTurn,Y),0.25)*v;
+  s=mix(t/max(dot(t,Y),1e-4),uShadowTurn,0.25)*v;
   #endif
   return s+uShadowLift;}
 // THE TERRAIN'S DETAIL LAYER (docs/plans/active/l2-detail.md, L2b): the paint grain at a constant size on screen.

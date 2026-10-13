@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-13
 ---
 
@@ -19,13 +19,14 @@ do not change.**
   - the rim's and the backlight's tints;
   - the valley mist's shaded and lit air;
   - the haze (`atmos()`) and the clear colour;
+  - the water's painted sky, its glint, and the far ring's river line that matches it (added in review);
   - the grade: the muted greens, the saturation, the split tone, the lift in the darks, the top's haze;
   - the vignette.
 
   `MOODS.golden` is today's look, and `?mood=<name>` picks one (only `golden` for now).
 - The shaders read uniforms instead of those constants. `PAL` (`src/look/materials.ts`) comes from the mood.
 
-Not in scope: any colour change (LC1b, LC2), the water's own colours.
+Not in scope: any colour change (LC1b, LC2), the water's own body colours (not light).
 
 ## Acceptance
 
@@ -38,7 +39,22 @@ Not in scope: any colour change (LC1b, LC2), the water's own colours.
 - Goldens, main against this branch: pixel-identical at all 8 cameras (0 differing pixels), on the default arm
   (software GL) and the leaf-card arm (`?trees=cards`, on Metal: software GL's Chrome crashed rendering main's
   card arm, a tool limit, not this change).
-- `?mood=nope` stops the page with `?mood=nope: no such mood (golden)`.
-- `npm test`: the soldiers' cost budget (`test/soldiers.test.ts`, a sim timing test this change does not touch)
-  failed locally at 18.6 ms against 12, with the machine at a load of 15 (another session's headless Chrome); CI
-  runs it.
+- `?mood=nope` stops the page with `?mood must be one of golden, not nope` (and `?mood=constructor` the same).
+- `npm test`: exit 0 (19 files, 256 tests), at a load of about 5. An earlier run at a load of 15 (another session's
+  headless Chrome) failed the soldiers' cost budget, a sim timing test this change does not touch.
+
+## Review (`/code-review high`)
+
+- **Round 1** (the first commit): no severe finding, so the review stops here. Fixed:
+  - an inherited key (`?mood=constructor`) passed the mood check;
+  - the water's sky, its glint and the far ring's river line were still constants;
+  - a mood set after the materials were made would apply in part (`lockMood()` now refuses it);
+  - the uniform names were written in four places (one table, `MOOD_COLOURS`, now gives the names and the values, so
+    none is left unset);
+  - the shadow's turn divided by its luma per pixel (now once, on the CPU);
+  - a colour allocated a frame;
+  - the moods' keys untyped;
+  - the query string parsed twice.
+
+  The goldens are pixel-identical again on both arms. Left: the grade's uniforms sent every frame (cheap), and the
+  fragment uniform count on WebGL1 (an estimate, not measured: 11 more vec3 a material).

@@ -56,7 +56,7 @@ void main(){
   #ifdef FARRING
   float rm=texture2D(uRiverMask,vW.xz/FAR_W+0.5).r;                   // painted river line on the far ring
   alb=mix(alb,alb*vec3(0.72,0.78,0.70),smoothstep(0.0,0.15,rm));
-  alb=mix(alb,vec3(0.40,0.55,0.58),smoothstep(0.3,0.6,rm));   // the water mid tone after its sky tint, so the line matches the river at the tile edge
+  alb=mix(alb,uFarRiver,smoothstep(0.3,0.6,rm));   // the water mid tone after its sky tint, so the line matches the river at the tile edge
   #endif
   pSnowLie=snowLie(vW.xz,pxMacro());   // the fields' furrows hold the snow (macro.glsl)
   vec3 c=paint(alb,N,vW,occ,0.12,1.0,sh);
