@@ -23,7 +23,7 @@ are still under `docs/plans/active/`.
   table, the system doc's front matter and every citation in docs, code comments, tests and the example maps
   follow. The records' content is otherwise unchanged: this is a number, not a decision, so it is not an edit
   of an accepted record in the sense of the README's rule. The README notes the old numbers, since merged PRs
-  #56–#72 cite them.
+  #66–#72 and #49 cite them; 0023, which main never used, is retired.
 - M3's two plans move to `docs/plans/done/` (`docs/plans/done/m3-generators.md`, `docs/plans/done/m3d-follow.md`), and every path to them follows; the index
   lists them as done.
 - Main is not merged into the epic here: a squash-merged PR would flatten main's history into one commit. That
@@ -37,3 +37,9 @@ are still under `docs/plans/active/`.
   twice).
 - `npm test`, `npm run check:data` and `npm run build` pass; the example maps are unchanged apart from the plan
   path in their `note`.
+
+## Review (one round, a docs PR: decision 0025 on main)
+
+No severe finding. Fixed: the two moved plans said `status: active`; the README now states the renumber as the one
+change allowed to an accepted record, retires 0023, and names #49 among the PRs citing old numbers (its body is
+updated to the new ones). Kept: the done plans' round logs use the new numbers, read through the README's mapping.

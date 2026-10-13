@@ -1,6 +1,6 @@
 ---
-status: active
-last_reviewed: 2026-10-12
+status: done
+last_reviewed: 2026-10-13
 ---
 
 # Plan: M3, the generators
