@@ -311,8 +311,8 @@ if (params.has('bench')) {
   const arms = params.get('bench') === 'volume' ? [{ name: 'volume', apply: () => volume(true) }, { name: 'l7a', apply: () => volume(false) }] : params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? MACRO_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); macro.setArm(a) } })) : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
   // ?benchat=<x>,<z>: the cameras orbit that point instead of the start (the forest bench: docs/plans/active/forest-bench.md)
   // inside the play area: the camera's focus is clamped to it every frame (src/look/post.ts)
-  const atParts = params.get('benchat')?.split(','), at = atParts?.map(Number)
-  if (atParts && at && (atParts.length !== 2 || atParts.some(p => p.trim() === '') || !at.every(v => Number.isFinite(v) && Math.abs(v) <= D.spec.play)))
+  const at = params.get('benchat')?.split(',').map(p => p.trim() === '' ? NaN : Number(p))
+  if (at && (at.length !== 2 || !at.every(v => Number.isFinite(v) && Math.abs(v) <= D.spec.play)))
     throw new Error(`?benchat must be <x>,<z> in metres within ±${D.spec.play}, not ${params.get('benchat')}`)
   void runBench(scene, camera, passes, arms, hold, at ? { x: at[0], z: at[1] } : undefined).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
     (e: unknown) => { Object.assign(window, { __bench: { error: String(e) } }); console.error('bench failed:', e) })

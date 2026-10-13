@@ -148,7 +148,8 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   } finally { timing = false; seg(null); for (const u of undo) u(); inst.dispose() }
   const r = engine.getRenderingCanvas()
   return {
-    tool: 'look-bench', version: 2, build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
+    tool: 'look-bench', version: 3,   // 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
+    build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
     canvas: { w: engine.getRenderWidth(), h: engine.getRenderHeight(), cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
     gpuTimer: timer.available, holdS, focus, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
     note: timer.available ? 'GPU times from EXT_disjoint_timer_query_webgl2' : 'no GPU timer on this browser: GPU fields are null', runs,

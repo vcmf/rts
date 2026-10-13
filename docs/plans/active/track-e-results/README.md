@@ -20,3 +20,5 @@ Proxy runs from the dev Mac are kept too, with `mac-proxy` in the name; they pas
   dev Mac, a proxy.
 - `forest-2026-10-13-<build>-<arms>-mac-proxy.json`: the forest bench (`docs/plans/active/forest-bench.md`), the cards
   against the pack crowns (two runs) and the volume light against L7a, where a forest fills the frame; proxies.
+  Named by the commit their code is (2241ba9); their `build` field reads `61d031a-dirty`, the working tree before
+  that commit.

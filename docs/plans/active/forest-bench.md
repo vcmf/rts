@@ -5,7 +5,8 @@ last_reviewed: 2026-10-13
 
 # Plan: a forest bench (the leaf cards' cost where trees fill the frame)
 
-Track E, L7 (`docs/plans/active/track-e-look.md`, what L7 still owes: foliage ≤ 3 ms in a battlefield forest).
+Track E, L7 (`docs/plans/active/track-e-look.md`, what L7 still owes: the cards measured in a battlefield forest).
+The phase's gate, foliage ≤ 3 ms GPU, stays open: this bench measures what the cards add, not the foliage's total.
 The owner (2026-10-13), on the cards' cost: "is the performance cost dangerous?", then "do the forest bench".
 
 ## Problem
@@ -42,7 +43,7 @@ runs of one arm at one camera.
 **The measure is the frame interval** (`frameMs`, no vsync: the page's own pace). The GPU frame timer runs longer
 than the frame on ANGLE Metal (L2a's baseline), so its absolute values are not frame times; it is kept in the JSON.
 
-| Cards against pack crowns, frame interval p50 (ms) | close | default | widest |
+| Cards against pack crowns, frame interval (ms: the mean of the six runs' p50, three yaws twice) | close | default | widest |
 |---|---|---|---|
 | Run 1: cards, pack | 5.97, 5.47 | 11.28, 9.52 | 16.13, 15.03 |
 | Run 1: paired difference (yaw −45°, 0°, +45°) | +0.10, +0.40, +1.00 | +2.15, +1.05, +2.10 | +1.30, +0.95, +1.05 |
@@ -55,13 +56,15 @@ than the frame on ANGLE Metal (L2a's baseline), so its absolute values are not f
   within 0.1 ms; run 1 agrees, +1.05 to +2.15 ms, noisier) **and +0.2 to +1.3 ms at the widest.** The closest zoom is
   too noisy in run 2 to read; run 1 puts it at +0.1 to +1.0 ms.
 - **The default frame in the forest** (run 2): 6.7 ms with the pack crowns, 8.1 ms with the cards, of the 16.7 ms a
-  frame at 60 fps; before units, smoke and anti-aliasing. The machine's load changed between the runs (run 1's
-  frames are slower throughout), so the absolute values move from run to run; the paired differences are the result.
-- **The passes are not split here:** ANGLE Metal's per-pass queries add up to more than the frame (1.4–1.6 times),
+  frame at 60 fps; before units, smoke and anti-aliasing. The machine's load changed between the runs and within
+  them (run 1 is faster at the closest zoom and slower at the others; run 2's close yaw +45° changed between its
+  two cards runs), so the absolute values move from run to run; the paired differences are the result.
+- **The passes are not split here:** ANGLE Metal's per-pass queries add up to more than the frame (1.27 to 2.31 times),
   and the post pass rises with the cards as much as the scatter pass does, although it does not change with the arm.
-- **The volume light (L7b against L7a, one run):** not readable: its paired differences straddle zero at the
-  default and the widest zoom (−0.6 to +1.95 ms, −1.1 to −0.05 ms) with repeat spreads of 1.9 to 3.6 ms. L7b's own
-  bench on the normal scene put it within ±0.2 ms.
+- **The volume light (L7b against L7a, one run):** not readable: its paired differences point opposite ways at
+  different zooms (closest +0.55 to +1.05 ms, default −0.6 to +1.95, widest −1.1 to −0.05, the volume cheaper) with
+  repeat spreads of 3.6, 1.9 and 2.8 ms. L7b's own bench on the normal scene put it within ±0.2 ms, read on the GPU
+  frame timer (not the frame interval), so the two do not compare directly; it needs a quieter run.
 - Draw calls 51 against 39; triangles 2.62 M against 2.84 M here. L7a's plan counted +8.9k triangles for the cards
   on the normal scene; why the sign differs between the two scenes was not looked into.
 
@@ -76,3 +79,7 @@ than the frame on ANGLE Metal (L2a's baseline), so its absolute values are not f
   outside the play area recorded but clamped; an empty part of `?benchat` taken as 0; the cameras' order unstated;
   the holds unstated; the system doc; the JSON named by a hash that is not their code, and the checks unreported.
   All fixed.
+- **Round 2** (da61dac): no severe finding. Fixed: the volume bullet's signs and spreads; the load's change between
+  the runs misdescribed; the per-pass inflation's range (1.27 to 2.31); the 3 ms gate said to be open; L7b's ±0.2 ms
+  marked as the GPU timer's; the results folder's note on the files' build field; the table's aggregate named; the
+  `?benchat` check simplified; the bench JSON's version bumped (3: the focus). Review stops here.
