@@ -22,11 +22,11 @@ import UBER_FS from './shaders/uber.frag?raw'
 
 // the view the page opens on (the bench measures it as its default zoom)
 export const START = { beta: 0.80, radius: 125, x: -10, z: 2 }
-// the gameplay depth of field (decision 0020): the sharp band beyond the focus (1 - focus/z below it is sharp, z the
-// depth along the view axis) and the wider one nearer (1 - z/focus: the formations at the screen's foot keep their
-// edges, the readability guard), the gain past them, the largest blur in pixels at 1080 lines, and the share of it left at the widest zoom;
-// FOCUS_S the focus's easing time (s)
-export const DOF = { band: 0.06, near: 0.25, k: 4, px: 10, wide: 0.4 }
+// the gameplay depth of field (decision 0020), a band at the top of the screen: past a sharp band beyond the focus
+// (1 - focus/z below it is sharp, z the depth along the view axis; nothing nearer than the focus blurs), the gain past
+// it, the largest blur in pixels at 1080 lines, and the share of it left at the widest zoom (window.__look.dof tunes
+// them live); FOCUS_S the focus's easing time (s)
+export const DOF = { band: 0.2, k: 4, px: 7, wide: 0.4 }
 const FOCUS_S = 0.25
 const TAPS = [16, 24, 32, 48, 64]
 
@@ -91,20 +91,20 @@ export class Post {
     const HF = Constants.TEXTURETYPE_HALF_FLOAT
     // ratio: the size of the texture this pass reads, so the pass before it draws at that size
     const pp = (name: string, uni: string[], smp: string[], type: number, ratio = 1.0, defines: string | null = null) => { const p = new PostProcess(name, name, uni, smp, ratio, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, defines, type); if (!this.posts.length) p.samples = 4; this.posts.push(p); return p }
-    // the miniature field (decision 0020): focused on the ground at the screen's centre (focusDepth); sharp bands
-    // around it (DOF.band beyond, DOF.near nearer); the largest blur DOF.px at 1080 lines, strongest at the closest
+    // the miniature field (decision 0020): focused on the ground at the screen's centre (focusDepth); a sharp band
+    // beyond it (DOF.band; nothing nearer blurs); the largest blur DOF.px at 1080 lines, strongest at the closest
     // zoom and DOF.wide of it at the widest. The scene at half resolution (each four pixels' colour averaged, the
-    // farthest of their distances), its blur at half resolution, and the finishing pass puts the sharp scene (the first pass's input) back where the
-    // blur is under a pixel
-    const lens = ['uTan', 'uFocus', 'uBand', 'uNear', 'uK', 'uMaxPx'], c = D.spec.camera
+    // farthest of their distances), its blur at half resolution, and the finishing pass puts the sharp
+    // scene (the first pass's input) back where the blur is under a pixel
+    const lens = ['uTan', 'uFocus', 'uBand', 'uK', 'uMaxPx'], c = D.spec.camera
     const d = S.dof ? pp('dofdown', ['uTexel', 'uOut'], [], HF) : null
     const p = d ? pp('dof', ['uTexel', 'uHalf', 'uN', ...lens], [], HF, 0.5) : null
     let focus = 0, px = 0, tan = [0, 0]
-    const lensUniforms = (e: Effect) => { e.setFloat2('uTan', tan[0], tan[1]); e.setFloat('uFocus', focus); e.setFloat('uBand', DOF.band); e.setFloat('uNear', DOF.near); e.setFloat('uK', DOF.k); e.setFloat('uMaxPx', px) }
+    const lensUniforms = (e: Effect) => { e.setFloat2('uTan', tan[0], tan[1]); e.setFloat('uFocus', focus); e.setFloat('uBand', DOF.band); e.setFloat('uK', DOF.k); e.setFloat('uMaxPx', px) }
     if (d && p) {
       d.onApply = e => { e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uOut', p.width, p.height) }
-      // the taps: about 32 for a 10 px blur and as many per unit of area as the blur grows, in five steps (16 to 64:
-      // past a 14 px blur, sparser; a step moves every tap, so there are few)
+      // the taps: 16 up to a 7 px blur (the default's largest at 1080 lines), then as many per unit of area as the
+      // blur grows, in steps to 64 (past a 14 px blur, sparser; a step moves every tap, so there are few)
       p.onApply = e => {
         focus = this.focusDepth(engine.getDeltaTime() / 1000)
         const aspect = d.width / d.height, tf = Math.tan(camera.fov / 2), vert = camera.fovMode === Camera.FOVMODE_VERTICAL_FIXED

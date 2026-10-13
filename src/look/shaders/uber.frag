@@ -3,12 +3,11 @@ vec3 shoulder(vec3 c){float m=max(c.r,max(c.g,c.b));if(m<=0.8)return c;float mm=
 float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 #ifdef DOF
 // the depth of field's composite (decision 0020; dof.frag): textureSampler is the half-resolution blur and uSharp the
-// scene; the sharp scene where this pixel's blur and the blur a nearer tap spreads over it (the blur's alpha) are under
-// a pixel, the blur where they pass two. uHalfUV maps the screen to the blur (its size is the scene's halved, rounded
-// down). The bloom gathers from the blur
-uniform sampler2D uSharp;uniform vec2 uTan,uHalfUV;uniform float uFocus,uBand,uNear,uK,uMaxPx;
+// scene; the sharp scene where this pixel's blur is under a pixel (the blur not read), the blur where it passes two.
+// uHalfUV maps the screen to the blur (its size is the scene's halved, rounded down). The bloom gathers from the blur
+uniform sampler2D uSharp;uniform vec2 uTan,uHalfUV;uniform float uFocus,uBand,uK,uMaxPx;
 #include<dofcoc>
-vec3 base(){vec4 s=texture2D(uSharp,vUV);vec4 b=texture2D(textureSampler,vUV*uHalfUV);return mix(s.rgb,b.rgb,smoothstep(0.5,2.0,max(coc(s.a,vUV),b.a)));}
+vec3 base(){vec4 s=texture2D(uSharp,vUV);float w=smoothstep(0.5,2.0,coc(s.a,vUV));return w>0.0?mix(s.rgb,texture2D(textureSampler,vUV*uHalfUV).rgb,w):s.rgb;}
 #define BLOOM_UV(uv) ((uv)*uHalfUV)
 #else
 vec3 base(){return texture2D(textureSampler,vUV).rgb;}
