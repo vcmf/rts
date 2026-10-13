@@ -117,3 +117,14 @@ mid, far and winter views.
   into the macro bake and measured (above); a half-float map; river-check's meadow checks; `forcedInstanceCount`
   with an instanced slot buffer (no matrices, no special cases); the cull at two heights; `math.floor` in the tile;
   `tools/meadow-grass-export.py`. Left: the per-clump work at every vertex (WebGPU compute, later).
+- **Round 3** (6afaa8c): severe: the grass brush stamps were not git-ignored (a comment on the ignore line), fixed
+  at once (941b2bd). The owner chose to continue (2026-10-13) over a redesign; fixed in one pass: the rule leaks
+  (the shader's blend carried grass up to 1 m into zones and onto banks, and the double blend up to 1.5 m onto
+  roads and the wheat): the rules now zero each texel and the growing area shrinks a texel, so the GPU's single
+  bilinear read stays inside the allowed ground (one read, not four), and river-check samples the growth as the GPU
+  reads it, at every half metre, against the full bank rule; the grass's shade from the clump field alone (the ground
+  colour under it already holds the brush pattern); one hash a trait (yaw and lean no longer tied to the jitter);
+  the ground colour read from the bake (one read), the flat class colour on the other arms; the meadow's meshes in
+  the bench's scatter pass; the macro arm registered as a binder, so later materials get it. The meadow map's bake
+  now takes 272 ms on load (the rules at every texel; 64 ms before). Guard: `meadow.Russia` 0.157 (main 0.155),
+  `meadow.France` 0.222 (0.222). A confirming round follows.

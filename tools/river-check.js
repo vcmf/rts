@@ -52,19 +52,19 @@
   const count = re => Object.entries(groups).filter(([m]) => re.test(m)).reduce((a, [, v]) => a + v.length, 0)
   const pop = { trees: count(/Tree/), grass: count(/Grass|Flowers|Plant/), wheat: count(/Wheat/), bushes: count(/Bush/), far: FAR.length }
   // under the look page's meadow (docs/plans/active/l5c-meadow.md) the grass is its clumps, not scatter: its growing
-  // cells (2 m) stand in for the tufts
+  // texels (1 m) stand in for the tufts
   const meadow = typeof __look !== 'undefined' && __look.meadow
   if (meadow) pop.meadowCells = meadow.growingCells
   check('population', pop.trees >= 60 && (meadow ? meadow.growingCells >= 2000 : pop.grass >= 2000) && pop.wheat >= 150 && pop.bushes >= 30 && pop.far >= 400, pop)
-  // the meadow follows the placement rule too: its baked growth is 0 in the formation zones and over the water and
-  // its banks, at every metre of a grid over the near field; and it grows over a real share of the tile (between a
+  // the meadow follows the placement rule too: its growth as the GPU reads it is 0 in the formation zones and over the
+  // water and its banks, at every half metre of a grid over the near field; and it grows over a real share of the tile (between a
   // fifth and four fifths of its texels), so a growth that failed everywhere, or nowhere, is caught
   if (meadow) {
     let inZones = 0, onBanks = 0
-    for (let x = -200; x <= 200; x += 1) for (let z = -200; z <= 200; z += 1) {
+    for (let x = -200; x <= 200; x += 0.5) for (let z = -200; z <= 200; z += 0.5) {
       if (meadow.growthAt(x, z) <= 0) continue
       if (KEEP_CLEAR(x, z)) inZones++
-      const q = riverQuery(x, z); if (q && q.dist < lerpA(C.W, q) / 2) onBanks++
+      const q = riverQuery(x, z); if (q && q.dist < Math.max(lerpA(C.W, q) / 2 * 1.7, bankReachAt(q)) + 0.4) onBanks++   // the banks' rule (growthAllowed)
     }
     check('meadowInZones', inZones === 0, inZones)
     check('meadowOnWater', onBanks === 0, onBanks)

@@ -15,6 +15,7 @@ import { withPainter, type Materials } from './materials.ts'
 import { D, bakeMB } from './spec.ts'
 import type { CoverGrid } from './world/cover.ts'
 import BRUSH_URL from '../../data/meadow-brush.png?url'
+import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 
 // the arms (macro.glsl): flat, shader, bake
 export const MACRO_ARMS = ['flat', 'shader', 'bake'] as const
@@ -94,10 +95,12 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
     return { ms: performance.now() - t0, texels: n * n, draws, mb: bakeMB(n, n) * (mips ? 4 / 3 : 1), lost: losses > lost0 }
   }
   let arm: MacroArm = 'bake'
+  const applyArm = (m: ShaderMaterial) => { for (const k of MACRO_ARMS) m.setDefine(`#define ${ARM_DEFINE[k]}`, k === arm) }
   const setArm = (a: MacroArm) => {
     if (!MACRO_ARMS.includes(a)) throw new Error(`unknown macro arm ${a}`)
-    arm = a; for (const m of mats.all) for (const k of MACRO_ARMS) m.setDefine(`#define ${ARM_DEFINE[k]}`, k === a)
+    arm = a; for (const m of mats.all) applyArm(m)
   }
+  mats.bindAll(applyArm)   // a painted material made later (the meadow's) gets the arm too
   const bake = async () => {
     const a = await draw(tile, D.macroN, D.spec.tile), b = await draw(far, D.macroFarN, D.spec.far)
     return { ms: a.ms + b.ms, texels: a.texels + b.texels, draws: a.draws + b.draws, mb: a.mb + b.mb, lost: a.lost || b.lost }

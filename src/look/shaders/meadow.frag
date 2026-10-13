@@ -8,7 +8,13 @@ void main(){
   vec4 lm=LM(vW);float sh=(1.0-lm.r)*uShadowsOn;
   // the ground colour under the root, darker at the root and lighter, a little warmer, at the tip (the pack
   // Grass.png is that gradient), each clump a shade apart
-  vec3 g=groundSeason(groundArm(vRoot,0.5));   // the painted ground under the root (the macro colour, its arm)
+  // the painted ground under the root: the macro bake (one read), or, on the other arms (whose ground costs a whole
+  // macro colour a pixel, too much for many blades deep), the flat class colour
+  #ifdef MACRO_BAKE
+  vec3 g=groundSeason(groundArm(vRoot,0.5));
+  #else
+  vec3 g=groundSeason(groundBounce(vRoot));
+  #endif
   vec3 alb=g*mix(0.95,1.55,vV)*mix(0.92,1.10,vShade);
   alb=mix(alb,alb*vec3(1.04,1.08,0.80),vV*0.5);
   float lo=groundOcc(lm),occ=mix(0.8,1.0,vV)*mix(1.0,lo,uAO*0.6);

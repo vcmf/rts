@@ -185,10 +185,11 @@ The plan: `docs/plans/active/l5c-meadow.md`. On by default; `?meadow=off` puts b
   outside its ring's band of distance and outside the view, then reads the **meadow map** (a float texture at 1 m:
   the ground's height, the growth and the height factor, half floats, baked once: `Nature.growth`, the grassy cover
   and its edges on the 2 m cells, each texel interpolating the cells round it; then `Nature.growthAllowed` at the
-  texel, the formation zones and the banks, so no smoothing crosses them; pasture shorter) and the **clump field** (`shaders/meadow.glsl`), and shrinks
+  texel, with the cover's edge, the formation zones and the banks; then the growing area shrinks a texel, so the
+  GPU's bilinear read never crosses a rule; pasture shorter) and the **clump field** (`shaders/meadow.glsl`), and shrinks
   each clump away across its ring's band (the rings hand over without an edge). The fragment shader is a lean
   `paint()` (the ramp, the cool band, the sky in the shadow, clouds; no grain, rim nor snow): the painted ground's
-  colour under the root (the macro colour's arm, `groundArm`), darker at the root and lighter, warmer at the tip. In winter the clumps shrink under the snow.
+  colour under the root (the macro bake, `groundArm`; the flat class colour on the other arms), darker at the root and lighter, warmer at the tip. In winter the clumps shrink under the snow.
 - **The meadow on the ground** (`meadowPattern` in `macro()`, `MEADOW`, a define on every painted material and on the
   macro bake): on meadow and pasture (the warped class the ground paints), the brush tile (`data/meadow-brush.png`,
   at 7.3 m and 7.3/2.618 m, turned apart, warped by a slow noise: no common period; stamped by

@@ -115,7 +115,6 @@ const macroBake = await macro.bake()
 const camera = buildCamera(scene, canvas)
 // the meadow near the camera (docs/plans/active/l5c-meadow.md), after the bakes and the macro colour it reads
 const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, nature.growthAllowed) : null
-macro.setArm(macroArm)   // again: the meadow's materials are made after the first setArm, and read the arm's ground colour
 const post = new Post(camera, engine, S, () => mats.grain); post.build()
 
 /* ---------- UI ---------- */
@@ -205,7 +204,7 @@ Object.assign(window, {
 // the look checks' hooks (tools/guard.mjs, tools/detail-check.mjs): test objects, the materials, the meshes by pass,
 // and the detail layer's switches
 const lab = new Lab(scene, mats)
-const passes = { terrain: [terrain.tileGround, terrain.farGround, terrain.apron], scatter: scene.meshes.filter((m): m is Mesh => m instanceof Mesh && m.thinInstanceCount > 0), water: [water.mesh], post: () => post.passes }
+const passes = { terrain: [terrain.tileGround, terrain.farGround, terrain.apron], scatter: scene.meshes.filter((m): m is Mesh => m instanceof Mesh && (m.thinInstanceCount > 0 || m.forcedInstanceCount > 0)), water: [water.mesh], post: () => post.passes }
 const terrainMats = [terrain.terrainMat, terrain.farTerrainMat, terrain.hillMat], waterMats = [water.waterMat, water.groundMat]
 // the terrain's variants (src/look/shaders/painter.glsl): the L0 grain, the debug view, the checks' sabotages
 const DETAIL_DEFINES = ['DETAIL_L0', 'DETAIL_DEBUG', 'DETAIL_DEBUG_INC', 'DETAIL_DEBUG_N', 'DETAIL_SAB_IMPLICIT', 'DETAIL_SAB_STEP', 'BANKN_OFF']
