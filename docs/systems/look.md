@@ -324,8 +324,8 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
 
 ## Open questions
 
-- **The leaf-card crowns are not the default arm yet:** a dark coat in a tree's shadow loses separation with
-  them (#63); decision 0022 (their soft ramp) is accepted; their outline aliases at the widest zoom (L8); a
+- **The leaf-card crowns are not the default arm yet:** a dark coat in a crown's deep shade loses separation
+  with them (#63, moved to L4: the army side's to fix); decision 0022 (their soft ramp) is accepted; their outline aliases at the widest zoom (L8); a
   forest is where they cost the most (a cheaper forest is owed: `docs/plans/done/forest-bench.md`), and the min-spec laptop and the foliage's total
   against L7's gate are not measured (`docs/plans/active/track-e-results/shadows-foliage.md`).
 - **The guard has no block in a wood**, where the soft shadows make the floor darkest.

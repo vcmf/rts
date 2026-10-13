@@ -534,9 +534,11 @@ the pack crowns): results in `docs/plans/active/track-e-results/shadows-foliage.
 - **Cost so far:** `docs/plans/active/track-e-results/shadows-foliage.md` (the dev Mac, a proxy).
 
 **What L7 still owes:**
-- the cards as the default arm, once the guard passes with them (#63) and a forest
+- the cards as the default arm, once a forest
   costs less (the cards' cost is highest where one fills the frame: `docs/plans/done/forest-bench.md`), against fewer,
   larger cards for far crowns, the pack mesh beyond a distance, or a depth pre-pass;
+  (#63, a dark coat losing its separation in a crown's shade, moved to L4 on 2026-10-13: the army side's to fix;
+  by the guard's rule the cards pass);
 - the outline at the widest zoom aliases: alpha-to-coverage on MSAA, L8's A/B;
 - the acceptance above, measured on the cards: overdraw, coverage across the zooms, no heat ripple behind the
   army blocks (alpha-tested cards make it likelier), foliage ≤ 3 ms, in a battlefield forest and on the min-spec
