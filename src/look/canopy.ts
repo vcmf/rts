@@ -24,8 +24,9 @@ export interface CardOptions {
   size: number      // a card's half-size, as a fraction of the crown's radius
   cover: number     // how many times the cards cover the crown's surface
   sink: number      // how far a card's centre sits inside the surface, in card half-sizes (keeps the outline's size)
+  volume: boolean   // the crown lit as a volume (docs/plans/active/l7b-crown-volume.md); off: L7a's light, card by card
 }
-export const CARD_DEFAULTS: CardOptions = { size: 0.32, cover: 2.6, sink: 0.8 }
+export const CARD_DEFAULTS: CardOptions = { size: 0.32, cover: 2.6, sink: 0.8, volume: true }
 
 // one card mesh per model: four vertices per card (centre, corner, card data: half-size, rotation, atlas cell, the
 // sink in half-sizes; the role of the crown triangle it stands on) and the crown's sphere normals
@@ -39,6 +40,10 @@ export function cardMesh(scene: Scene, name: string, d: NatureModel, o: CardOpti
   const tris: number[] = [], areas: number[] = []
   let total = 0, rad = 0
   for (let v = 0; v < d.role.length; v++) if (crown(v)) rad = Math.max(rad, Math.hypot(P[v * 3] - cx, P[v * 3 + 1] - cy, P[v * 3 + 2] - cz))
+  // the crown's ellipsoid (L7b): its bounding box's centre, its horizontal and vertical half-extents
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
+  for (let v = 0; v < d.role.length; v++) if (crown(v)) for (let j = 0; j < 3; j++) { lo[j] = Math.min(lo[j], P[v * 3 + j]); hi[j] = Math.max(hi[j], P[v * 3 + j]) }
+  const ec = [0, 1, 2].map(j => (lo[j] + hi[j]) / 2), er = [Math.max(hi[0] - lo[0], hi[2] - lo[2]) / 2, (hi[1] - lo[1]) / 2]
   for (let t = 0; t < I.length; t += 3) {
     const [a, b, c] = [I[t], I[t + 1], I[t + 2]]; if (!crown(a) || !crown(b) || !crown(c)) continue
     const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2]
@@ -48,7 +53,7 @@ export function cardMesh(scene: Scene, name: string, d: NatureModel, o: CardOpti
   }
   if (!(total > 0)) throw new Error(`${name} has crown vertices but no crown triangle to turn into cards`)
   const r = o.size * rad, N = Math.max(12, Math.min(400, Math.ceil(o.cover * total / (4 * r * r))))
-  const R = mulberry(seed), pos: number[] = [], nrm: number[] = [], corner: number[] = [], card: number[] = [], cen: number[] = [], role: number[] = [], idx: number[] = []
+  const R = mulberry(seed), pos: number[] = [], nrm: number[] = [], corner: number[] = [], card: number[] = [], cen: number[] = [], role: number[] = [], ellC: number[] = [], ellR: number[] = [], idx: number[] = []
   for (let k = 0; k < N; k++) {
     // an area-weighted point on the crown's surface
     const pick = R() * total; let lo = 0, hi = areas.length - 1
@@ -60,7 +65,7 @@ export function cardMesh(scene: Scene, name: string, d: NatureModel, o: CardOpti
     const px = q[0] - nx * r * o.sink, py = q[1] - ny * r * o.sink, pz = q[2] - nz * r * o.sink
     const rot = R() * Math.PI * 2, cell = Math.floor(R() * 4), s = r * (0.8 + R() * 0.4)
     for (const [ex, ey] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-      pos.push(px, py, pz); nrm.push(nx, ny, nz); corner.push(ex, ey); card.push(s, rot, cell, o.sink * r / s); cen.push(cx, cy, cz); role.push(d.role[a])
+      pos.push(px, py, pz); nrm.push(nx, ny, nz); corner.push(ex, ey); card.push(s, rot, cell, o.sink * r / s); cen.push(cx, cy, cz); role.push(d.role[a]); ellC.push(...ec); ellR.push(...er)
     }
     const b0 = k * 4; idx.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3)
   }
@@ -68,12 +73,14 @@ export function cardMesh(scene: Scene, name: string, d: NatureModel, o: CardOpti
   m.setVerticesData(VertexBuffer.PositionKind, pos); m.setVerticesData(VertexBuffer.NormalKind, nrm); m.setIndices(idx)
   m.setVerticesData('aCorner', new Float32Array(corner), false, 2); m.setVerticesData('aCard', new Float32Array(card), false, 4)
   m.setVerticesData('aCrown', new Float32Array(cen), false, 3); m.setVerticesData('aRole', new Float32Array(role), false, 1)
+  m.setVerticesData('aEllC', new Float32Array(ellC), false, 3); m.setVerticesData('aEllR', new Float32Array(ellR), false, 2)
   return m
 }
 
 // the card material: the default crowns' palette, rim and backlight, the leaf atlas's value and coverage
-export function cardMaterial(mats: Materials, name: string, folA: string, folB: string, rim: number, leaf: BaseTexture): ShaderMaterial {
-  const m = mats.make(name, withCards(CANOPY_VS), CANOPY_FS, { attributes: ['position', 'normal', 'aCorner', 'aCard', 'aCrown', 'aRole', 'aTint'], uniforms: ['view', 'uFolA', 'uFolB', 'uRim', 'uKind', 'uLeafSize'], samplers: ['uLeaf'] })
+// volume: the crown lit as a volume (L7b: a normal per pixel from its ellipsoid, the light through it, the soft ramp)
+export function cardMaterial(mats: Materials, name: string, folA: string, folB: string, rim: number, leaf: BaseTexture, volume: boolean): ShaderMaterial {
+  const m = mats.make(name, withCards(CANOPY_VS), CANOPY_FS, { attributes: ['position', 'normal', 'aCorner', 'aCard', 'aCrown', 'aRole', 'aTint', 'aEllC', 'aEllR'], uniforms: ['view', 'uFolA', 'uFolB', 'uRim', 'uKind', 'uLeafSize'], samplers: ['uLeaf'], defines: volume ? ['#define VOLUME', '#define SOFT_RAMP'] : [] })
   m.setColor3('uFolA', Color3.FromHexString(folA)); m.setColor3('uFolB', Color3.FromHexString(folB)); m.setFloat('uRim', rim); m.setFloat('uKind', 0)
   m.setTexture('uLeaf', leaf); m.setFloat('uLeafSize', CELL * 2); m.backFaceCulling = false
   return m

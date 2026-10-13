@@ -1,5 +1,6 @@
 // The leaf-clump atlas for the card crowns (docs/plans/active/l7a-canopy-cards.md): four clumps in a 2×2 grid of
-// CELL² cells, R the painted value (normalised), A the coverage. Made from a picture of four clumps on black (any
+// CELL² cells, R the painted value (normalised), A the coverage, G and B each leaf's tilt (L7b: the value's gradient,
+// read as a height; 0.5 is flat). Made from a picture of four clumps on black (any
 // layout: split at the empty gutters nearest the middle) or drawn procedurally. The palette paints it (the
 // picture's colours are never used: docs/art-bible.md §4b).
 import { mulberry } from './noise.ts'
@@ -63,7 +64,24 @@ export function atlasFromPicture(img: CanvasImageSource & { width: number; heigh
     }
   })
   og.putImageData(od, 0, 0)
-  return out
+  return withTilt(out)
+}
+
+// each leaf's tilt (L7b, docs/plans/active/l7b-crown-volume.md): the value read as a height, its gradient over
+// TILT_PX pixels into G (across) and B (down), 0.5 flat; flat where there is no leaf, so the filter fades it out
+const TILT_PX = 3, TILT_GAIN = 5
+function withTilt(cv: HTMLCanvasElement): HTMLCanvasElement {
+  const g = cv.getContext('2d', { willReadFrequently: true })!, W = cv.width, H = cv.height, img = g.getImageData(0, 0, W, H), d = img.data
+  const v = new Float32Array(W * H); for (let i = 0; i < v.length; i++) v[i] = d[i * 4 + 3] > 0 ? d[i * 4] / 255 : 0
+  const at = (x: number, y: number) => v[Math.min(H - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))]
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const q = (y * W + x) * 4
+    if (d[q + 3] === 0) { d[q + 1] = d[q + 2] = 128; continue }
+    const gx = (at(x + TILT_PX, y) - at(x - TILT_PX, y)) / (2 * TILT_PX), gy = (at(x, y + TILT_PX) - at(x, y - TILT_PX)) / (2 * TILT_PX)
+    d[q + 1] = Math.round(128 + 127 * Math.max(-1, Math.min(1, -gx * TILT_GAIN * TILT_PX))); d[q + 2] = Math.round(128 + 127 * Math.max(-1, Math.min(1, -gy * TILT_GAIN * TILT_PX)))
+  }
+  g.putImageData(img, 0, 0)
+  return cv
 }
 
 // four clumps of lobed leaves drawn with canvas paths: dense in the middle, loose single leaves at the edge
@@ -98,7 +116,7 @@ export function atlasProcedural(seed = 7): HTMLCanvasElement {
       leaf(ox + Math.cos(a) * r, oy + Math.sin(a) * r, CELL * (0.08 + R() * 0.04), a + Math.PI / 2, 0.5 + R() * 0.3)
     }
   }
-  return out
+  return withTilt(out)
 }
 
 export const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((ok, no) => {

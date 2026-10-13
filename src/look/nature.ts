@@ -230,7 +230,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // under cards, a carded model is drawn as its trunk triangles (the trunks_ mesh) and its cards, which take the
   // crowns' palette; both cast into the sun's shadow pass (src/look/bakes.ts), the whole pack model is disabled
   const carded = (k: string) => !!cards && /^(CommonTree|BirchTree|Willow)_/.test(k)
-  const treeCards = cards && cardMaterial(mats, 'treeCards', '#4a7330', '#97a043', 0.45, cards.leaf), birchCards = cards && cardMaterial(mats, 'birchCards', '#7a9a3c', '#bcae55', 0.45, cards.leaf)
+  const treeCards = cards && cardMaterial(mats, 'treeCards', '#4a7330', '#97a043', 0.45, cards.leaf, cards.opts.volume), birchCards = cards && cardMaterial(mats, 'birchCards', '#7a9a3c', '#bcae55', 0.45, cards.leaf, cards.opts.volume)
   let seed = 1
   const swaps: ((on: boolean) => void)[] = [], cardMeshes: Mesh[] = [], packs: Mesh[] = []
   for (const [k, items] of Object.entries(groups)) {
