@@ -10,6 +10,7 @@ import PAINTER from './shaders/painter.glsl?raw'
 import WATERDATA from './shaders/waterdata.glsl?raw'
 import SHORE from './shaders/shore.glsl?raw'
 import MACRO from './shaders/macro.glsl?raw'
+import MEADOW from './shaders/meadow.glsl?raw'
 import { D } from './spec.ts'
 
 // the panel's state; t is the clock (cloud drift, water flow)
@@ -26,11 +27,11 @@ const MARK = '#include<painter>'
 // #include<macro>); a replacer function keeps `$` in the GLSL
 export const withPainter = (src: string): string => {
   if (!src.includes(MARK)) throw new Error(`a painted shader without ${MARK}`)
-  return src.replace(MARK, () => PAINTER).replace('#include<waterdata>', () => WATERDATA).replace('#include<shore>', () => SHORE).replace('#include<macro>', () => MACRO)
+  return src.replace(MARK, () => PAINTER).replace('#include<waterdata>', () => WATERDATA).replace('#include<shore>', () => SHORE).replace('#include<macro>', () => MEADOW + MACRO)   // the meadow's clump field before the macro colour, whose groundAt reads it (MEADOW)
 }
 
 // the ground's macro colour (src/look/shaders/macro.glsl): the cover grid and the bakes, on every painted material
-const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar']
+const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush']   // uMeadowBrush: the meadow's brush tile (MEADOW, src/look/meadow.ts)
 const COMMON = ['uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uSunCol', 'uShadowCol', 'uHazeCool', 'uHazeWarm', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA']
 
 // perFrame: false keeps a material out of `all` (no per-frame uniforms, no light map: the light-map bake draws into it)

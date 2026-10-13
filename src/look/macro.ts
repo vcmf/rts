@@ -14,6 +14,8 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import { withPainter, type Materials } from './materials.ts'
 import { D, bakeMB } from './spec.ts'
 import type { CoverGrid } from './world/cover.ts'
+import BRUSH_URL from '../../data/meadow-brush.png?url'
+import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 
 // the arms (macro.glsl): flat, shader, bake, and L5b's experiments, strokes (arm 4) and kuwahara (arm 5): bakes of
 // their own, read as the bake is
@@ -70,7 +72,8 @@ export interface Macro {
   settled(): Promise<unknown>
 }
 
-export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Macro {
+// meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
+export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false): Macro {
   const engine = scene.getEngine() as AbstractEngine, s = D.spec.macro
   const coverTex = RawTexture.CreateRGBATexture(cover.tex, cover.n, cover.n, scene, false, false, Texture.NEAREST_SAMPLINGMODE)
   coverTex.wrapU = coverTex.wrapV = Texture.CLAMP_ADDRESSMODE
@@ -89,10 +92,14 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
   }
   const scratches = new Map<number, RenderTargetTexture>()
   const scratch = (n: number) => { let t = scratches.get(n); if (!t) scratches.set(n, t = makeScratch(n)); return t }
-  mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far) })
+  // the meadow's brush tile (tools/meadow-brush.py): the bake's pattern, the grass's shade (src/look/meadow.ts)
+  let brushError: string | null = null
+  const brush = meadow ? new Texture(BRUSH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) => { brushError = `the meadow's brush tile (${BRUSH_URL}) did not load: ${msg ?? 'unknown error'}` }) : null
+  if (brush) brush.wrapU = brush.wrapV = Texture.WRAP_ADDRESSMODE
+  mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); if (brush) m.setTexture('uMeadowBrush', brush) })
 
-  const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover']
-  const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: D.defines })
+  const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW'] : [])]
+  const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })
   // arm 5's filter, compiled on its first bake
   let kuwaharaW: EffectWrapper | null = null
   const kuwahara = () => kuwaharaW ??= new EffectWrapper({ engine, name: 'macroKuwahara', vertexShader: BAKE_VS, fragmentShader: KUWAHARA_FS, attributeNames: ['position'], uniformNames: ['uN', 'uR', 'uPx'], samplerNames: ['uSrc'] })
@@ -101,7 +108,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
   let losses = 0
   engine.onContextLostObservable.add(() => { losses++ })
   engine.onContextRestoredObservable.add(() => { rebake() })
-  const ready = (w: EffectWrapper) => new Promise<void>((res, rej) => { const t0 = performance.now(); const poll = () => w.effect.isReady() ? res() : performance.now() - t0 > 30000 ? rej(new Error(`macro bake: the shader ${w.name} did not compile: ${w.effect.getCompilationError()}`)) : setTimeout(poll, 16); poll() })
+  const ready = (w: EffectWrapper) => new Promise<void>((res, rej) => { const t0 = performance.now(); const poll = () => brushError ? rej(new Error(brushError)) : w.effect.isReady() && (!brush || brush.isReady()) ? res() : performance.now() - t0 > 30000 ? rej(new Error(`macro bake: the shader ${w.name} did not compile: ${w.effect.getCompilationError()}`)) : setTimeout(poll, 16); poll() })
   const gl = (engine as unknown as { _gl: WebGLRenderingContext })._gl
   // one pass of a shader over all of a target's n² texels, bakeTile² at a time; `set` sets the draw's uniforms from
   // its texels (i, j, w, h)
@@ -130,7 +137,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
     try {
       let draws = pass(src, n, wrapper, (e, i, j, w, h) => {
         e.setFloat4('uRect', x0 + i / n * world, x0 + j / n * world, x0 + (i + w) / n * world, x0 + (j + h) / n * world)
-        e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex)
+        e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex); if (brush) e.setTexture('uMeadowBrush', brush)
       })
       if (src !== t) draws += pass(t, n, kuwahara(), (e, i, j, w, h) => {
         e.setTexture('uSrc', src); e.setFloat('uN', n); e.setFloat4('uPx', i, j, i + w, j + h)
@@ -142,6 +149,8 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
   }
   // the arm the page shows, and the baked arm wanted (bake, strokes or kuwahara: the last one set)
   let arm: MacroArm = 'bake', bakeArm: MacroArm = 'bake', checks: string[] = []
+  const applyArm = (m: ShaderMaterial) => { for (const d of MATERIAL_DEFINES) m.setDefine(`#define ${d}`, ARM_DEFINE[arm] === d) }
+  mats.bindAll(applyArm)   // a painted material made later (the meadow's) gets the arm too
   // The bakes run one at a time, in the order asked (a new grain, a restored context, an arm, a check, a rebake): each
   // takes the arm and the checks wanted when it starts. The bake's shader's defines are the checks' (all but the class
   // view, which the bake ignores) and arm 4's strokes; `baked` is what the targets hold, set once a bake finishes
@@ -153,7 +162,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
   const wanted = () => {
     // the shader's defines alone: the arm (bake or kuwahara, the same shader) is not one
     const defs = wantedDefs(), dk = defs.join(' ')
-    if (dk !== effectKey) { wrapper.updateEffect([...D.defines, ...defs.map(d => `#define ${d}`)].join('\n'), UNIFORMS, SAMPLERS); effectKey = dk }
+    if (dk !== effectKey) { wrapper.updateEffect([...DEFINES, ...defs.map(d => `#define ${d}`)].join('\n'), UNIFORMS, SAMPLERS); effectKey = dk }
     return { kuw: bakeArm === 'kuwahara', key: wantedKey() }
   }
   const bakeNow = async (): Promise<BakeStats> => {
@@ -178,7 +187,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid): Mac
   // a baked arm other than the one the bakes hold rebakes them
   const setArm = async (a: MacroArm): Promise<BakeStats> => {
     if (!MACRO_ARMS.includes(a)) throw new Error(`unknown macro arm ${a}`)
-    arm = a; for (const m of mats.all) for (const d of MATERIAL_DEFINES) m.setDefine(`#define ${d}`, ARM_DEFINE[a] === d)
+    arm = a; for (const m of mats.all) applyArm(m)
     if (!isBaked(a)) return NOTHING
     bakeArm = a; return rebakeIfChanged()
   }

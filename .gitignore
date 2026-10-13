@@ -7,6 +7,8 @@
 *.zip
 assets/nature-pack/
 assets/painted-foliage/
+# Devin Elle Kurtz's Grass and Fields stamps: royalty-free, not to be redistributed (docs/asset-sources.md)
+assets/grass-brushes/
 assets/**/*.blend
 assets/**/*.blend1
 
