@@ -1,5 +1,5 @@
 #extension GL_OES_standard_derivatives : enable
-precision highp float;varying vec3 vW,vN;varying float vV,vShade,vH;varying vec2 vRoot;uniform float uCell;
+precision highp float;varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;uniform float uCell;
 #include<painter>
 #include<shore>
 
@@ -18,6 +18,8 @@ void main(){
   #endif
   vec3 alb=g*mix(0.95,1.55,vV)*mix(0.92,1.10,vShade);
   alb=mix(alb,alb*vec3(1.04,1.08,0.80),vV*0.5);
+  // a crop: lime at the foot to its season colour at the tip (meadow.vert), each clump a shade apart
+  alb=vIsCrop>0.5?mix(vec3(0.38,0.48,0.18),vCrop,smoothstep(0.0,0.35,vV))*mix(0.9,1.12,vV)*mix(0.92,1.08,vShade):alb;
   float lo=groundOcc(lm),occ=mix(0.8,1.0,vV)*mix(1.0,lo,uAO*0.6);
   // paint(), lean: the ramp, the cool shadow band (deeper where the sky is hidden), the clouds, no grain, rim nor
   // snow (a blade is a few pixels: they would not show, and the blades are many layers deep)

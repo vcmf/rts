@@ -29,14 +29,14 @@
   out.yaw = yaws
   // 2b. the meadow's grass (docs/plans/done/l5c-meadow.md) never floats: where it grows, the height it stands on
   // (its meadow map, half floats, bilinear, sunk by SINK) is at or under the tile mesh's, at 4000 growing points over
-  // the ground the rings can reach
+  // the ground the rings can reach (its crops too, docs/plans/done/l5d-crops.md)
   const meadow = window.__look && window.__look.meadow
   if (meadow) {
     const SINK = 0.06   // src/look/meadow-spec.ts, MEADOW_SINK
     let worst = -1, n = 0
     for (let k = 0; k < 40000 && n < 4000; k++) {
       const x = (Math.random() - 0.5) * 670, z = (Math.random() - 0.5) * 670
-      if (meadow.growthAt(x, z) <= 0) continue
+      if (meadow.growthAt(x, z) <= 0 && meadow.cropAt(x, z) <= 0) continue
       n++; worst = Math.max(worst, meadow.groundAt(x, z) - SINK - tileGround.getHeightAtCoordinates(x, z))
     }
     out.meadowFloat = +worst.toFixed(3)
