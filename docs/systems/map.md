@@ -97,7 +97,7 @@ maps/kinds.json ──► checkCatalogue ─┐
   - **shared edges** (`follow`, `src/map/follow.ts`, decision 0025): an area's outer ring may take part of a line
     feature, so a wood shares a stream's bank. `{ id, offset?, from, to, at? }`, or a list: the edge is the line's
     own centreline between the points nearest `from` and `to` (as expanded, so it moves with a meander), in that
-    order, put before the ring's point `at` (default 0); the ring's own points hold the rest of the boundary (with a
+    order (on a closed line, the shorter way round), put before the ring's point `at` (default 0); the ring's own points hold the rest of the boundary (with a
     `follow`, as few as one; the whole ring is checked after expansion, and its errors say they count the expanded
     ring). The ring's other points decide the side. Expansion records `clear: [{ id, offset? }]` on the feature;
     `clear` may also be written by hand (a wood that keeps off a road it crosses). A feature with `follow` is in the
@@ -105,12 +105,12 @@ maps/kinds.json ──► checkCatalogue ─┐
     `follow` leaves the expanded map. A street village's own area cannot follow (its reach is checked before
     expansion);
   - **keeping off a line** (`clear`, apply): an area paints none of the cells its lines take, computed by the very
-    rule that paints each line (`paintLine` with `lineReach`, `barrierCells`, a cut's or a ditch's own mark), nor
-    any cell closer than `lineReach + offset` when an offset is given. So no cell is both the line's and the area's,
+    rule that paints each line (`paintLine` with `lineReach`, `barrierCells`, a cut's or a ditch's own mark, a
+    sunken way's cut), widened by the offset (so a hedge's gates and a stream's ends keep their shape). So no cell is both the line's and the area's,
     and (offset 0) none between them is left out, at any angle, on any seed; a scatter whose region follows a line
     passes `clear` to its children (a mix's too). A ramp's `edge` counts from where the cells begin. Only ground,
-    vegetation, buildings and zones take `follow` or `clear` (relief edits move heights, water paints its own
-    way). Other readers of the ring (a scatter's `avoid` and `within`, a village's keep-clear, the look in M4) see
+    vegetation, buildings, earthworks and zones take `follow` or `clear` (`KEEPS_OFF`; relief edits move heights,
+    water paints its own way), and a mix's entries too when its region does. Other readers of the ring (a scatter's `avoid` and `within`, a village's keep-clear, the look in M4) see
     it reach the line's centreline: an `avoid` keeps a little further off than it must, a `within` counts a
     little more as near. Open question: whether they should subtract the cleared band.
 - **The generators** (`src/map/generators.ts`: for each, the shape it reads, the shape it writes, its checked

@@ -125,3 +125,13 @@ The round count restarts.
   centreline; recorded as an open question in the system doc (an avoid is only more careful; a within a little
   more generous).
 - **Light:** `at: null` is refused; one offset check for `follow` and `clear`; the system doc lists 0025.
+
+**Redesign, round 2** (10 findings, none severe: stop and fix what is worth it):
+- **Moderate:** on a closed line the edge took the long way round; now the shorter way, across the line's first
+  point when that is shorter. An offset widens each line's own rule (a hedge's gates stay gates, a stream's ends
+  get no caps), not a plain distance. A mix entry that cannot keep off a line is refused when its region follows.
+- **Light, taken:** earthworks may keep off lines; a ramp counts from a sunken way's cut marks and never goes
+  below 0; the one-or-list helper and `Clear` live in `util.ts`; `KEEPS_OFF` is one list for the validator and
+  the scatter.
+- **Light, left:** a mask is a full grid of bytes per line and offset (memory, not time: about 4 MB per mask on a
+  4 km map); measured when a large map arrives.

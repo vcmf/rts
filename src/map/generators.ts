@@ -8,6 +8,7 @@ import { HEADING_MAX, meander } from './meander.ts'
 import type { ClumpParams } from './clump.ts'
 import { clump, clumpMaxRadius, CLUMP_DEFAULTS } from './clump.ts'
 import { HOUSE_SPAN, streetVillage, villageZone } from './street-village.ts'
+import { KEEPS_OFF } from './follow.ts'
 import { scatterSites } from './scatter.ts'
 import type { Zone } from './reach.ts'
 import { boxDistance, boxOf, distanceTo, distanceToPolygon, matches } from './reach.ts'
@@ -164,6 +165,8 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
         const chain = typeof e.kind === 'string' ? kindChain(cat, e.kind) : null
         if (!chain) { out.push({ key: `${at}.kind`, message: 'must name a kind in the catalogue' }); return }
         if (!kindMeta(cat, chain).shapes.includes('area')) out.push({ key: `${at}.kind`, message: `${e.kind} takes no area` })
+        // a region that follows or keeps off a line hands its `clear` to every child (decision 0025)
+        if ((f.follow !== undefined || f.clear !== undefined) && !KEEPS_OFF.includes(categoryOf(e.kind as string))) out.push({ key: `${at}.kind`, message: `${e.kind} cannot keep off a line, and this region does (follow or clear)` })
         if (e.count === undefined) out.push({ key: `${at}.count`, message: 'is required' })
         for (const [k, spec] of Object.entries(CLUMP_PARAMS)) if (e[k] !== undefined) { const m = checkValue(spec, e[k]); if (m) out.push({ key: `${at}.${k}`, message: m }) }
         if (typeof e.radiusMin === 'number' && typeof e.radiusMax === 'number' && e.radiusMax < e.radiusMin) out.push({ key: `${at}.radiusMax`, message: 'is below radiusMin' })

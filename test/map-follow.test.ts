@@ -6,6 +6,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Catalogue, MapFile, Pt } from '../src/map/schema.ts'
 import { expand } from '../src/map/expand.ts'
+import { followEdge } from '../src/map/follow.ts'
 import { validate, validateExpanded } from '../src/map/validate.ts'
 import { apply, nearLine } from '../src/map/apply.ts'
 import { inRing } from '../src/map/geometry.ts'
@@ -133,6 +134,28 @@ describe('M3d: shared edges (decision 0025)', () => {
     expect(paths({ area: [[[-80, -60], [80, -60], [80, 60], [-80, 60]]], clear: { id: 'meadow' } })).toContainEqual(expect.stringMatching(/clear\.id: "meadow" is not drawn as a line/))
     expect(paths({ area: [[[-80, -60], [80, -60], [80, 60], [-80, 60]]], clear: [{ id: 'brook', width: 3 }] })).toContainEqual(expect.stringMatching(/clear\[0\]\.width: unknown field/))
     expect(validate(mini([MEADOW, { id: 'road', kind: 'way.road', line: [[0, -250], [0, 250]] as Pt[] }, { id: 'v', kind: 'built.village', area: [[[10, 10]]] as Pt[][], along: { id: 'road', from: 10, to: 100 }, follow: { id: 'road', from: [0, -100], to: [0, 0] }, gen: { 'street-village': {} } }]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/a street-village feature's own area cannot follow/))
+  })
+  it('on a closed line the edge takes the shorter way, across its first point when that is shorter', () => {
+    const loop = { id: 'h', kind: 'barrier.hedge', line: [[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]] as Pt[] }
+    const out = expand(mini([MEADOW, loop, wood({ id: 'h', from: [0, 20], to: [20, 0] }, [[[-50, -50]]])]), cat)
+    expect(out.issues).toEqual([])
+    expect(outer(out.map)).toEqual([[0, 20], [0, 0], [20, 0], [-50, -50]])
+    expect(followEdge(loop.line, { id: 'h', from: [20, 0], to: [0, 20] })).toEqual([[20, 0], [0, 0], [0, 20]])
+  })
+  it("an offset widens the line's own rule: a hedge's gate stays a gate", () => {
+    const hedge = { id: 'h', kind: 'barrier.hedge', line: [[-200, 0], [200, 0]] as Pt[], gaps: { every: 10, width: 2 } }
+    for (const offset of [0, 1]) {
+      const { map } = expand(mini([MEADOW, hedge, { id: 'wood', kind: 'veg.wood.broad', area: [[[-80, -60], [80, -60], [80, 60], [-80, 60]]] as Pt[][], clear: { id: 'h', offset } }]), cat)
+      const L = apply(map, cat), woodK = 1 + L.table.findIndex(r => r.kind.startsWith('veg.wood')), row = Math.floor(300 / 2) * L.nx
+      const gate = Array.from({ length: 80 }, (_, i) => row + 110 + i).filter(c => !L.barrier[c] && Math.abs(L.x0 + ((c % L.nx) + 0.5) * 2) < 70)
+      expect(gate.length).toBeGreaterThan(0)
+      for (const c of gate) expect(L.veg[c]).toBe(woodK)   // the gate's cells stay the wood's: a way through
+    }
+  })
+  it("a region that follows hands clear to its mix's children: each entry must be able to keep off a line", () => {
+    const region = { id: 'g', kind: 'veg.wood', area: [[[200, -150], [-200, -150]]] as Pt[][], follow: { id: 'brook', from: [-200, 0], to: [200, 0] }, gen: { scatter: { mix: [{ kind: 'water.pond', count: 1 }, { kind: 'veg.wood.broad', count: 2 }] } } }
+    expect(validate(mini([MEADOW, BROOK, region]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/water\.pond cannot keep off a line/))
+    expect(validate(mini([MEADOW, BROOK, { id: 'r', kind: 'work.redoubt', area: [[[-40, -40], [40, -40], [40, -10], [-40, -10]]] as Pt[][], clear: { id: 'brook' } }]), cat)).toEqual([])
   })
   it('clear as one object is honoured as a list is', () => {
     const road = { id: 'road', kind: 'way.road', line: [[0, -250], [0, 250]] as Pt[], width: 6 }

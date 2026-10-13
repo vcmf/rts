@@ -15,7 +15,8 @@ import { resolve } from './resolve.ts'
 import { crossings, inRing, lineLength, pointAt } from './geometry.ts'
 import { cos, sin } from '../sim/num.ts'
 import { seedOf } from './seed.ts'
-import { num, smooth } from './util.ts'
+import type { Clear } from './util.ts'
+import { listOf, num, smooth } from './util.ts'
 import { addFbmGrid } from './noise.ts'
 
 export const CELL = 2   // m (decision 0021)
@@ -281,7 +282,11 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
     const field = areaField(f); if (!field) return
     const kept = keptOff(f)
     // a ramp's `edge` counts from where the area's cells begin: its ring, or a line it keeps off (decision 0025)
-    const edgeAt = (x: number, z: number) => kept ? Math.min(field.edge(x, z), ...kept.lines.map(l => nearLine(l.line, x, z).d - l.near)) : field.edge(x, z)
+    const edgeAt = (x: number, z: number) => {
+      let e = field.edge(x, z)
+      for (const l of kept?.lines ?? []) e = Math.min(e, Math.max(0, nearLine(l.line, x, z).d - l.near))   // never below 0 (past a line's end)
+      return e
+    }
     cells(field.box, 0, (i, j, x, z) => { if (field.inside(x, z) && !kept?.masks.some(m => m[j * nx + i] === 1)) { layer[j * nx + i] = k1; onCell?.(j * nx + i, needEdge ? edgeAt(x, z) : 0) } })
   }
   // the cells a line takes, by the very rule that paints it (decision 0025), and `offset` m more: an area that keeps
@@ -293,23 +298,24 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
     let t = masks.get(key)
     if (t) return t
     t = new Uint8Array(n)
+    // each line by its own rule, widened by the offset (so a hedge's gates and a stream's ends keep their shape)
     const m = t, g = byId.get(id)!, r = L.table[index.get(id)! - 1], line = g.line!, a = r.attrs, reach = lineReach(r.kind, a), put = (cell: number) => { m[cell] = 1 }
     const marks = (w2: number, edge: number) => cells(lineBox(line), w2 + edge + c, (i, j, x, z) => { if (editWeight(nearLine(line, x, z).d, w2, edge) >= 0.5) put(j * nx + i) })
-    if (categoryOf(r.kind) === 'barrier') barrierCells(line, num(a.thickness, 2), a.gaps as { every: number; width: number } | undefined, (i, j) => { if (i >= 0 && j >= 0 && i < nx && j < nz) put(j * nx + i) }, x0, z0)
-    else if (r.kind === 'relief.cut' || r.kind === 'relief.ditch') marks(num(a.width, EDIT_WIDTH) / 2, num(a.edge, 5))
-    else if (reach > 0) paintLine(line, reach, m, 1)
-    if (categoryOf(r.kind) === 'way' && num(a.cut) > 0) marks(num(a.width, EDIT_WIDTH) / 2, 1)   // a sunken way's cut marks a little wider
-    if (offset > 0) cells(lineBox(line), reach + offset + c, (i, j, x, z) => { if (nearLine(line, x, z).d < reach + offset) put(j * nx + i) })
+    if (categoryOf(r.kind) === 'barrier') barrierCells(line, num(a.thickness, 2) + 2 * offset / c, a.gaps as { every: number; width: number } | undefined, (i, j) => { if (i >= 0 && j >= 0 && i < nx && j < nz) put(j * nx + i) }, x0, z0)
+    else if (r.kind === 'relief.cut' || r.kind === 'relief.ditch') marks(num(a.width, EDIT_WIDTH) / 2 + offset, num(a.edge, 5))
+    else if (reach > 0) paintLine(line, reach + offset, m, 1)
+    if (categoryOf(r.kind) === 'way' && num(a.cut) > 0) marks(num(a.width, EDIT_WIDTH) / 2 + offset, 1)   // a sunken way's cut marks a little wider
     masks.set(key, m)
     return m
   }
   const keptOffOf = new Map<string, { masks: Uint8Array[]; lines: { line: Pt[]; near: number }[] } | null>()
   const keptOff = (f: Feature) => {
     if (keptOffOf.has(f.id)) return keptOffOf.get(f.id)!
-    const clear = (f.clear === undefined ? [] : Array.isArray(f.clear) ? f.clear : [f.clear]) as { id: string; offset?: number }[]   // one or a list
+    const clear = listOf<Clear>(f.clear)
     const out = clear.length ? {
       masks: clear.map(e => maskOf(e.id, e.offset ?? 0)),
-      lines: clear.map(e => { const r = L.table[index.get(e.id)! - 1]; return { line: byId.get(e.id)!.line!, near: lineReach(r.kind, r.attrs) + (e.offset ?? 0) } }),
+      // where the area's cells begin, from each line: its reach, a sunken way's cut marks (half a metre more), the offset
+      lines: clear.map(e => { const r = L.table[index.get(e.id)! - 1], cutWay = categoryOf(r.kind) === 'way' && num(r.attrs.cut) > 0; return { line: byId.get(e.id)!.line!, near: Math.max(lineReach(r.kind, r.attrs), cutWay ? num(r.attrs.width, EDIT_WIDTH) / 2 + 0.5 : 0) + (e.offset ?? 0) } }),
     } : null
     keptOffOf.set(f.id, out)
     return out

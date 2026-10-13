@@ -6,7 +6,8 @@ import { GENERATORS, ID, RESERVED, REFS, SEASONS, SHAPES } from './schema.ts'
 import type { GenSpec } from './generators.ts'
 import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import type { Issue } from './catalogue.ts'
-import { CLEAR_KEYS, FOLLOW_KEYS, listOf } from './follow.ts'
+import { CLEAR_KEYS, FOLLOW_KEYS, KEEPS_OFF } from './follow.ts'
+import { listOf } from './util.ts'
 import { allowedIn, categoryOf, checkCatalogue, checkValue, isKindName, kindChain, kindMeta, kindStates } from './catalogue.ts'
 import { kindMatches } from './reach.ts'
 import { barrierProblem, inRing, isPt, lineCrossing, lineFoldBack, lineLength, onCentimetres, ringArea2, ringCrossing, ringsTouch } from './geometry.ts'
@@ -105,10 +106,10 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       const states = kindStates(cat, chain)
       if (!Object.hasOwn(states, f.state)) bad(id, `${path}.state`, `${kind} has no state "${f.state}" (it has: ${Object.keys(states).join(', ') || 'none'})`)
     }
-    // shared edges and keeping off lines (decision 0025) hold where apply paints an area's cells and honours `clear`:
-    // ground, vegetation, buildings and zones, never an edit of the relief (it moves heights, not cells)
-    const keepsOff = ['ground', 'veg', 'built', 'zone'].includes(category) && !meta.edit
-    for (const k of ['follow', 'clear'] as const) if (f[k] !== undefined && !keepsOff) bad(id, `${path}.${k}`, `${kind} cannot keep off a line: shared edges are for ground, vegetation, buildings and zones`)
+    // shared edges and keeping off lines (decision 0025) hold where apply paints an area's cells and honours `clear`
+    // (KEEPS_OFF): never the relief (it moves heights, not cells) or water (it paints its own way)
+    const keepsOff = KEEPS_OFF.includes(category)
+    for (const k of ['follow', 'clear'] as const) if (f[k] !== undefined && !keepsOff) bad(id, `${path}.${k}`, `${kind} cannot keep off a line: shared edges are for ground, vegetation, buildings, earthworks and zones`)
     const offsetProblem = (v: unknown) => (v !== undefined && (typeof v !== 'number' || v < 0 || v > 500 || !onCentimetres(v)) ? 'must be 0 to 500 m, at most 2 decimals' : null)
     // shared edges (docs/plans/active/m3d-follow.md): each follows a line feature, on an area feature
     if (f.follow !== undefined) {
