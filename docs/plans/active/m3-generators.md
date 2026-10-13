@@ -340,3 +340,23 @@ The round count restarts.
   longer offers `set` for non-attributes.
 - **Light:** the peers' copied feature map and pairwise list are gone with the redesign of the check; the system
   doc's front matter names decision 0023.
+
+**Redesign 2, round 3** (8 findings, 1 severe): **stop** (the third round with a severe finding).
+- **Severe:** on a bent road a village's ground, the convex hull of its houses, cuts across the bend up to 50 m
+  from the road, outside the band the reach check trusted. A village inside the bend passed the check, and its
+  result depended on its id (no error as `a-vil`, "placed 0 of 2 houses" as `z-vil`).
+- The user chose **the hull of the stretch**: a village's zone is the convex hull of its stretch of road, widened
+  as the band was, so its convex ground can never leave it; on a bend it claims the inside of the bend.
+
+### Redesign 3: a village's zone
+
+- `villageZone` replaces `villageBand`; `zoneGap` and `zoneToArea` measure filled convex zones.
+- Taken with it from round 3: a village whose road is not finished before the run is an error rather than
+  skipped; one issue per village naming every village too close; the zone test samples the ground's edges on
+  stretches spanning the bend, and the reviewer's village-in-the-bend fails under either id; `HOUSE_SPAN` is
+  exported by street-village (no second copy of the house sizes); the `check` comment states the new contract; a
+  bad mix is no longer re-checked against its spec.
+- Not taken: hiding peers from each other again. With a zone that holds every output, a peer it could see is
+  always farther than the gap, so seeing it changes nothing (the pinning test checks it).
+
+The round count restarts.

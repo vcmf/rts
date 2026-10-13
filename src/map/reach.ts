@@ -77,16 +77,22 @@ export function lineDistance(a: Pt[], b: Pt[]): number {
   for (const [x, z] of a) d = Math.min(d, nearLine(b, x, z).d)
   return d
 }
-// How far apart two bands (the points within `reach` of a line) lie, and a band from an area's edge: 0 when they meet
-export interface Band { line: Pt[]; reach: number }
-export const bandGap = (a: Band, b: Band): number => (a.line.length && b.line.length ? Math.max(0, lineDistance(a.line, b.line) - a.reach - b.reach) : Infinity)
-export function bandToArea({ line, reach }: Band, f: Feature): number {
-  if (!line.length) return Infinity
+// A zone: a convex polygon, filled (counter-clockwise; two points when it is a straight segment, none when empty),
+// widened by `reach`. How far apart two zones lie, and a zone from an area's edge: 0 when they meet.
+export interface Zone { hull: Pt[]; reach: number }
+const edgeOf = (h: Pt[]): Pt[] => (h.length > 2 ? closed(h) : h)
+const inHull = (h: Pt[], p: Pt): boolean => h.length > 2 && inRing(h, p)
+export function zoneGap(a: Zone, b: Zone): number {
+  if (!a.hull.length || !b.hull.length) return Infinity
+  if (inHull(a.hull, b.hull[0]) || inHull(b.hull, a.hull[0])) return 0
+  return Math.max(0, lineDistance(edgeOf(a.hull), edgeOf(b.hull)) - a.reach - b.reach)
+}
+export function zoneToArea({ hull, reach }: Zone, f: Feature): number {
   const rings = ringsOf(f)
-  if (!rings) return Infinity
+  if (!hull.length || !rings) return Infinity
   let inside = false, d = Infinity
-  for (const r of rings) { if (inRing(r, line[0])) inside = !inside; d = Math.min(d, lineDistance(line, closed(r))) }
-  return inside ? 0 : Math.max(0, d - reach)
+  for (const r of rings) { if (inRing(r, hull[0])) inside = !inside; d = Math.min(d, lineDistance(edgeOf(hull), closed(r))) }
+  return inside || inHull(hull, rings[0][0]) ? 0 : Math.max(0, d - reach)
 }
 
 // does a feature match a selector: its id, the id of the feature it was generated from (a scatter's region names its

@@ -7,9 +7,9 @@ import type { AttrValue, Catalogue, Feature, FieldSpec, Pt, ShapeName } from './
 import { HEADING_MAX, meander } from './meander.ts'
 import type { ClumpParams } from './clump.ts'
 import { clump, clumpMaxRadius, CLUMP_DEFAULTS } from './clump.ts'
-import { streetVillage, villageBand } from './street-village.ts'
+import { HOUSE_SPAN, streetVillage, villageZone } from './street-village.ts'
 import { scatterSites } from './scatter.ts'
-import type { Band } from './reach.ts'
+import type { Zone } from './reach.ts'
 import { boxDistance, boxOf, distanceTo, distanceToPolygon, matches } from './reach.ts'
 import { allowedIn, categoryOf, checkValue, kindChain, kindMeta } from './catalogue.ts'
 import { seedOf } from './seed.ts'
@@ -37,11 +37,12 @@ export interface GenSpec {
   childKinds?(kind: string, params: Record<string, unknown>): string[]
   removesSelf?: boolean            // its own feature leaves the expanded map (a scatter's region)
   // generators of this name never read each other (street villages, decision 0023): each declares where its output
-  // can reach whatever its seed (a band around a line, and its own area), and two whose reaches come within `gap`
-  // are an error before anything runs. Apart, neither can change the other's output, so neither needs to wait
-  peers?: { gap: number; reach(f: Feature, features: Map<string, Feature>, attrsOf: (id: string) => Record<string, AttrValue>): Band | null }
-  // its own checks of its parameters, beyond their specs (a scatter's mix entries against the catalogue); run only
-  // when every parameter passed its spec
+  // can reach whatever its seed (a zone, and its own area), and two whose reaches come within `gap` are an error
+  // before anything runs. Apart, neither can change the other's output, so neither needs to wait. Null: it cannot
+  // tell (what it reaches from is not finished), which is an error too
+  peers?: { gap: number; reach(f: Feature, features: Map<string, Feature>, attrsOf: (id: string) => Record<string, AttrValue>): Zone | null }
+  // its own checks of its parameters, beyond their specs (a scatter's mix entries against the catalogue); always run,
+  // so each must skip a parameter of the wrong type (its spec's error is reported already)
   check?(params: Record<string, unknown>, cat: Catalogue, f: Feature): { key: string; message: string }[]
   run(ctx: GenContext): GenOutput
 }
@@ -62,8 +63,6 @@ const select = (ctx: GenContext, sels: string[]) => [...ctx.features.values()].f
 
 const VILLAGE_KEEPS_CLEAR = ['water', 'built', 'zone.nogo', 'way', 'barrier']   // what a house keeps clear of
 const BUILT_GAP = 1   // m between a house and any other building (another village's included)
-// the largest a street-village house may be (street-village.ts: LENGTH ≤ 13, DEPTH ≤ 9): the box pruning's margin
-const HOUSE_REACH = 16
 
 // a scatter's kinds: its mix's entries, or one entry from the scatter itself
 interface Entry { kind: string; count: number; radiusMin: number; radiusMax: number; min: number; coherence: number; raggedness: number; set: Record<string, AttrValue> }
@@ -116,7 +115,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
     reads: f => [f.along!.id, ...VILLAGE_KEEPS_CLEAR],
     peers: {
       gap: BUILT_GAP,
-      reach: (f, features, attrsOf) => { const road = features.get(f.along!.id); return road?.line ? villageBand(road.line, num(attrsOf(road.id).width, 5), f.along!.from, f.along!.to) : null },
+      reach: (f, features, attrsOf) => { const road = features.get(f.along!.id); return road?.line ? villageZone(road.line, num(attrsOf(road.id).width, 5), f.along!.from, f.along!.to) : null },
     },
     params: { min: { type: 'int', unit: 'count', min: 0, max: 500 } },
     run: ctx => {
@@ -129,7 +128,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
       const gap = (g: Feature) => matches('water', g, kindOf(g.id)) ? 2 : matches('barrier', g, kindOf(g.id)) ? num(attrsOf(g.id).thickness, 2) + 1 : BUILT_GAP
       const near = select(ctx, VILLAGE_KEEPS_CLEAR).filter(g => g.id !== along.id).map(g => ({ g, box: boxOf(g, attrsOf(g.id)), gap: gap(g) }))
       // a feature whose box lies farther than the gap plus a house's reach from a corner cannot touch the house
-      const clear = (house: Pt[]) => near.every(({ g, box, gap }) => house.every(([x, z]) => boxDistance(box, x, z) > gap + HOUSE_REACH) || distanceToPolygon(g, attrsOf(g.id), house) > gap)
+      const clear = (house: Pt[]) => near.every(({ g, box, gap }) => house.every(([x, z]) => boxDistance(box, x, z) > gap + HOUSE_SPAN) || distanceToPolygon(g, attrsOf(g.id), house) > gap)
         && distanceToPolygon(roadF, roadA, house) > 1
       const row = streetVillage(road, rw, along.from, along.to, want, seed, { clear })
       if (row.houses.length < min) throw new Error(`placed ${row.houses.length} of ${want} houses between ${along.from} and ${along.to} m along "${along.id}"; lengthen the stretch, ask fewer houses, or allow fewer with min`)
@@ -151,7 +150,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
     check: (p, cat, f) => {
       const out: { key: string; message: string }[] = []
       if (p.mix === undefined) { if (p.count === undefined) out.push({ key: 'count', message: 'is required (or give a mix)' }); return out }
-      if (checkValue(GENERATOR_SPECS.scatter.params.mix, p.mix)) return out   // its spec's error is reported already
+      if (!Array.isArray(p.mix) || p.mix.some(e => typeof e !== 'object' || e === null || Array.isArray(e))) return out   // its spec's error is reported already
       for (const k of Object.keys(CLUMP_PARAMS)) if (p[k] !== undefined) out.push({ key: k, message: 'belongs to each entry of a mix, not to the scatter' })
       const own = Object.keys(f).filter(k => !MIX_SCATTER_FIELDS.includes(k))
       if (own.length) out.push({ key: 'mix', message: `the scatter's own ${own.join(', ')} reach no child of a mix: each child takes only its entry's kind and set` })

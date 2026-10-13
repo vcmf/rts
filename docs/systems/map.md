@@ -66,10 +66,12 @@ maps/kinds.json ──► checkCatalogue ─┐
     buildings, no-go zones, ways and barriers; a scatter its `avoid` and `within`. Meander and clump read nothing;
   - F reads G when one of F's selectors could match what G produces (G's id, its children's ids, the kinds of G and
     of its children; not a scatter's own kind, as its region leaves the map); a generator never reads itself. Street
-    villages are peers (`peers`): they never read each other. A village can reach only a band around its stretch of
-    road (`villageBand`, `src/map/street-village.ts`: half the longest house, the setback, the deepest house and a
-    yard), plus its own area; two villages whose reaches come within 1 m are an error on both, before anything runs,
-    so the seeds, the order and pinning one never change the other. The generators run in dependency order (Tarjan's strongly
+    villages are peers (`peers`): they never read each other. A village can reach only its zone (`villageZone`,
+    `src/map/street-village.ts`): the convex hull of its stretch of road, widened by half the longest house, the
+    setback, the deepest house and a yard (its ground is the convex hull of its yards, so on a bend it claims the
+    inside of the bend), plus its own area. Two villages whose reaches come within 1 m are an error on both, before
+    anything runs, so the seeds, the order and pinning one never change the other. A village whose road is not
+    finished before the run (a generated line) is an error. The generators run in dependency order (Tarjan's strongly
     connected groups, each emitted after what it reads). The reads must form a chain: a group of two or more is a
     cycle, an error on each member naming what it reads, by which selector, and how to break it (drop one side's
     read; when all are scatters, place their kinds in one scatter's `mix`). So neither the

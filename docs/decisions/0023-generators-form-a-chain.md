@@ -26,9 +26,10 @@ We will refuse groups, and give the one common mutual case its own construct:
   generator never reads itself (a scatter's children keep apart by its own rules), nor the kind of a scatter's
   region (it leaves the map).
 - **Peers:** a generator may declare that others of its name are its peers (street villages). Peers never read each
-  other. Each declares where its output can reach whatever its seed (a village: a band around its stretch of road,
-  and its own area); two peers whose reaches come within the gap (1 m for buildings) are an error on both, before
-  anything runs. Apart, neither can change the other's output, so the order, the seeds and pinning one of them
+  other. Each declares where its output can reach whatever its seed (a village: the convex hull of its stretch of
+  road, widened by a house, its setback and a yard, since its ground is a convex hull; and its own area); two peers
+  whose reaches come within the gap (1 m for buildings) are an error on both, before anything runs. A peer whose
+  reach cannot be known before the run (built along a generated line) is an error. Apart, neither can change the other's output, so the order, the seeds and pinning one of them
   never matter. Two villages are common; they would otherwise be a cycle through `built`.
 - **A chain:** generators run in dependency order. A cycle of reads (two or more generators) is an error on each
   member. The error names what it reads, by which selector, and how to break the cycle.
@@ -48,7 +49,8 @@ We will refuse groups, and give the one common mutual case its own construct:
   scatter of ponds that avoids `built`. The message says how to fix it: drop one side's read (keeping clear on one
   side is enough), or, when all are scatters, one scatter's mix.
 - **Two street villages whose stretches lie close are an error** on every seed alike, even where the houses of one
-  seed would have fitted: the author moves their stretches apart (about 40 m between two stretches of one lane).
+  seed would have fitted: the author moves their stretches apart (about 40 m between two stretches of one lane). A
+  village on a bent road claims the inside of its bend.
 - **Every generator must declare its reads correctly**, as before.
 
 ## Alternatives considered

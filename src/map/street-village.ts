@@ -3,6 +3,7 @@
 // with seeded lengths, depths and gaps. A house keeps clear of what the generator's `clear` test says (water, other
 // buildings, no-go zones, other ways and barriers, and the road itself where it bends back: src/map/generators.ts). Each side walks the stretch on its own; the side further behind takes the next house.
 import type { Pt } from './schema.ts'
+import type { Zone } from './reach.ts'
 import { pointAt, inRing, ringsTouch, lineLength } from './geometry.ts'
 import { random } from './seed.ts'
 import { cm } from './util.ts'
@@ -12,10 +13,15 @@ export interface HouseRow { houses: Pt[][]; hull: Pt[] }
 
 const SETBACK = 3, LENGTH = [8, 13], DEPTH = [6, 9], GAP = [3, 9], YARD = 4   // m
 
+// the farthest apart two points of one house can lie (its diagonal, at the largest size)
+export const HOUSE_SPAN = Math.sqrt(LENGTH[1] * LENGTH[1] + DEPTH[1] * DEPTH[1])
+
 // Where a village can reach, whatever its seed: a house's middle lies on the road between `from` and `to`, and its
 // corners and yard within `reach` of it (half the longest house, the setback past the road's edge, the deepest house,
-// a yard, and the rounding to centimetres). So two villages whose bands lie apart can never meet.
-export function villageBand(road: Pt[], roadWidth: number, from: number, to: number): { line: Pt[]; reach: number } {
+// a yard, and the rounding to centimetres). Its ground is the convex hull of its yards, so it can reach anywhere in
+// the convex hull of the stretch, widened by `reach` (on a bend, the inside of the bend too). Two villages whose
+// zones lie apart can never meet.
+export function villageZone(road: Pt[], roadWidth: number, from: number, to: number): Zone {
   const end = Math.min(to, lineLength(road)), line: Pt[] = []
   if (end > from) {
     line.push(pointAt(road, from).slice(0, 2) as Pt)
@@ -27,8 +33,8 @@ export function villageBand(road: Pt[], roadWidth: number, from: number, to: num
     }
     line.push(pointAt(road, end).slice(0, 2) as Pt)
   }
-  const half = LENGTH[1] / 2, out = roadWidth / 2 + SETBACK + DEPTH[1]
-  return { line, reach: Math.sqrt(half * half + out * out) + YARD + 0.02 }
+  const half = LENGTH[1] / 2, out = roadWidth / 2 + SETBACK + DEPTH[1], h = line.length ? hull(line) : []
+  return { hull: h.length >= 2 ? h : line.slice(0, 2), reach: Math.sqrt(half * half + out * out) + YARD + 0.02 }
 }
 
 const overlaps = (a: Pt[], b: Pt[]): boolean => ringsTouch(a, b) || inRing(b, a[0]) || inRing(a, b[0])

@@ -8,7 +8,7 @@ import type { Catalogue, MapFile, Pt } from '../src/map/schema.ts'
 import { hash32, random, seedOf } from '../src/map/seed.ts'
 import { fbm, addFbmGrid } from '../src/map/noise.ts'
 import { meander } from '../src/map/meander.ts'
-import { villageBand } from '../src/map/street-village.ts'
+import { villageZone } from '../src/map/street-village.ts'
 import { clump } from '../src/map/clump.ts'
 import { expand } from '../src/map/expand.ts'
 import { validate } from '../src/map/validate.ts'
@@ -390,19 +390,34 @@ describe('M3b: the chain (decision 0023): each generator after what it reads; a 
     for (let seed = 1; seed <= 10; seed++) {
       const close = expand(mini([ROAD, va, { ...vb, along: { id: 'road', from: 260, to: 400 } }], seed), cat)
       expect(close.issues.map(i => i.id)).toEqual(['va', 'vb'])
-      expect(close.issues[0].message).toMatch(/could come within 1 m of "vb".*street-village generators do not see each other, so move their stretches apart/)
+      expect(close.issues[0].message).toMatch(/could come within 1 m of "vb": street-village generators do not see each other.*move their stretches apart/)
     }
     // a village's own area counts: another village's reach must keep off it
     const walled = { ...va, area: [[[-60, -20], [60, -20], [60, 20], [-60, 20]]] as Pt[][], along: { id: 'road', from: 0, to: 100 } }
     expect(expand(mini([ROAD, walled, { ...vb, along: { id: 'road', from: 300, to: 400 } }]), cat).issues.map(i => i.id)).toEqual(['va', 'vb'])
   })
-  it("a village's band holds every house and its ground, on bends too", () => {
-    const bent = { id: 'road', kind: 'way.road.lane', line: [[-300, -200], [0, 0], [300, -200]] as Pt[] }
-    for (let seed = 1; seed <= 10; seed++) {
-      const { map, issues } = expand(mini([bent, { ...VILLAGE, houses: 20, along: { id: 'road', from: 200, to: 500 }, gen: { 'street-village': { min: 1 } } }], seed), cat)
+  it("a village's zone holds every house and its whole ground (edges too), on bends too", () => {
+    const bent = { id: 'road', kind: 'way.road.lane', line: [[-300, -400], [0, 0], [300, -400]] as Pt[] }
+    for (const [from, to, houses] of [[200, 500, 20], [280, 450, 40], [380, 620, 60]]) for (let seed = 1; seed <= 5; seed++) {
+      const { map, issues } = expand(mini([bent, { ...VILLAGE, houses, along: { id: 'road', from, to }, gen: { 'street-village': { min: 1 } } }], seed), cat)
       expect(issues).toEqual([])
-      const band = villageBand(bent.line, 5, 200, 500)
-      for (const f of map.features.filter(g => g.id === 'village' || g.origin?.parent === 'village')) for (const p of f.area![0]) expect(nearLine(band.line, p[0], p[1]).d).toBeLessThanOrEqual(band.reach)
+      const zone = villageZone(bent.line, 5, from, to), ring = [...zone.hull, zone.hull[0]]
+      const outBy = (x: number, z: number) => (inRing(zone.hull, [x, z]) ? 0 : nearLine(ring, x, z).d)
+      for (const f of map.features.filter(g => g.id === 'village' || g.origin?.parent === 'village')) {
+        const r = f.area![0]
+        for (let k = 0; k < r.length; k++) for (let t = 0; t <= 1; t += 0.05) {
+          const [ax, az] = r[k], [bx, bz] = r[(k + 1) % r.length]
+          expect(outBy(ax + t * (bx - ax), az + t * (bz - az))).toBeLessThanOrEqual(zone.reach)
+        }
+      }
+    }
+  })
+  it('a village inside the bend of another is an error on both, whatever their ids', () => {
+    const bent = { id: 'road', kind: 'way.road.lane', line: [[-300, -400], [0, 0], [300, -400]] as Pt[] }, lane = { id: 'lane', kind: 'way.track', line: [[-30, -90], [30, -90]] as Pt[] }
+    const big = { ...VILLAGE, houses: 60, along: { id: 'road', from: 380, to: 620 }, gen: { 'street-village': { min: 1 } } }
+    for (const id of ['a-vil', 'z-vil']) {
+      const out = expand(mini([bent, lane, big, { ...VILLAGE, id, houses: 2, along: { id: 'lane', from: 20, to: 40 }, gen: { 'street-village': { min: 0 } } }]), cat)
+      expect(out.issues.map(i => i.id).sort()).toEqual([id, 'village'].sort())
     }
   })
   it('a generator reading a cycle or a failed generator is skipped: only the first errors are reported', () => {

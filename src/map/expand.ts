@@ -14,7 +14,7 @@ import { resolve } from './resolve.ts'
 import { seedOf } from './seed.ts'
 import { validate } from './validate.ts'
 import { crossings } from './geometry.ts'
-import { bandGap, bandToArea, kindMatches } from './reach.ts'
+import { kindMatches, zoneGap, zoneToArea } from './reach.ts'
 import { isKindName } from './catalogue.ts'
 
 export const EXPAND_VERSION = 3   // recorded in a generated feature's `origin`; bump when any generator's output changes
@@ -92,18 +92,28 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
     if (failed.has(f.id) || gens.some(o => failed.has(o.id) && reads(f, o))) { failed.add(f.id); return }
     runOne(f)
   }
-  // peers (decision 0023) do not read each other, so they must not be able to meet: whatever their seeds, their reaches
-  // (and an author's own area) lie more than the gap apart, checked before anything runs
+  // peers (decision 0023) do not read each other, so they must not be able to meet: whatever their seeds, their zones
+  // (and an author's own area) lie more than the gap apart, checked before anything runs. One issue per peer, naming
+  // every peer too close to it
   for (const spec of new Set(gens.map(specOf))) if (spec.peers) {
     const { gap, reach } = spec.peers, attrsOf = (id: string) => res(current.get(id)!).attrs
-    const ps = gens.filter(g => specOf(g) === spec).map(g => ({ g, band: reach(g, current, attrsOf) })).filter(p => p.band)
-    for (let a = 0; a < ps.length; a++) for (let b = a + 1; b < ps.length; b++) {
-      const A = ps[a], B = ps[b], d = Math.min(bandGap(A.band!, B.band!), A.g.area ? bandToArea(B.band!, A.g) : Infinity, B.g.area ? bandToArea(A.band!, B.g) : Infinity)
+    const ps = gens.filter(g => specOf(g) === spec).map(g => ({ g, zone: reach(g, current, attrsOf) }))
+    const close = new Map<string, string[]>()
+    for (const p of ps) if (!p.zone) {
+      issues.push({ id: p.g.id, path: `features[${at.get(p.g.id)}].gen`, message: `cannot tell where it reaches before generators run (what it is built along is generated): ${Object.keys(p.g.gen!)[0]} generators must be kept apart beforehand` })
+      failed.add(p.g.id)
+    }
+    const known = ps.filter(p => p.zone)
+    for (let a = 0; a < known.length; a++) for (let b = a + 1; b < known.length; b++) {
+      const A = known[a], B = known[b], d = Math.min(zoneGap(A.zone!, B.zone!), A.g.area ? zoneToArea(B.zone!, A.g) : Infinity, B.g.area ? zoneToArea(A.zone!, B.g) : Infinity)
       if (d > gap) continue
-      for (const [h, o] of [[A, B], [B, A]]) {
-        issues.push({ id: h.g.id, path: `features[${at.get(h.g.id)}].gen`, message: `it could come within ${gap} m of "${o.g.id}" (their stretches leave ${Math.max(0, d).toFixed(1)} m between their reaches): ${Object.keys(h.g.gen!)[0]} generators do not see each other, so move their stretches apart` })
-        failed.add(h.g.id)
-      }
+      close.set(A.g.id, [...(close.get(A.g.id) ?? []), B.g.id]); close.set(B.g.id, [...(close.get(B.g.id) ?? []), A.g.id])
+    }
+    for (const p of known) {
+      const others = close.get(p.g.id)
+      if (!others) continue
+      issues.push({ id: p.g.id, path: `features[${at.get(p.g.id)}].gen`, message: `it could come within ${gap} m of ${others.map(o => `"${o}"`).join(', ')}: ${Object.keys(p.g.gen!)[0]} generators do not see each other, so each keeps to its own ground (its stretch, the inside of its bends, and its own area): move their stretches apart` })
+      failed.add(p.g.id)
     }
   }
   for (const f of gens) if (!index.has(f.id)) strong(f)
