@@ -68,7 +68,8 @@ export function atlasFromPicture(img: CanvasImageSource & { width: number; heigh
 }
 
 // each leaf's tilt (L7b, docs/plans/active/l7b-crown-volume.md): the value read as a height, its gradient over
-// TILT_PX pixels into G (across) and B (down), 0.5 flat; flat where there is no leaf, so the filter fades it out
+// TILT_PX pixels into G (across) and B (down), 0.5 flat. The canvas keeps colour premultiplied, so where there is no
+// leaf G and B upload as 0 whatever is written: the shader divides them by the coverage, as it does the value
 const TILT_PX = 3, TILT_GAIN = 5
 function withTilt(cv: HTMLCanvasElement): HTMLCanvasElement {
   const g = cv.getContext('2d', { willReadFrequently: true })!, W = cv.width, H = cv.height, img = g.getImageData(0, 0, W, H), d = img.data
@@ -76,7 +77,7 @@ function withTilt(cv: HTMLCanvasElement): HTMLCanvasElement {
   const at = (x: number, y: number) => v[Math.min(H - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))]
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const q = (y * W + x) * 4
-    if (d[q + 3] === 0) { d[q + 1] = d[q + 2] = 128; continue }
+    if (d[q + 3] === 0) continue
     const gx = (at(x + TILT_PX, y) - at(x - TILT_PX, y)) / (2 * TILT_PX), gy = (at(x, y + TILT_PX) - at(x, y - TILT_PX)) / (2 * TILT_PX)
     d[q + 1] = Math.round(128 + 127 * Math.max(-1, Math.min(1, -gx * TILT_GAIN * TILT_PX))); d[q + 2] = Math.round(128 + 127 * Math.max(-1, Math.min(1, -gy * TILT_GAIN * TILT_PX)))
   }

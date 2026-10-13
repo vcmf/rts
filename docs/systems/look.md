@@ -146,13 +146,14 @@ The plan: `docs/plans/active/l7a-canopy-cards.md`. Not the default: the arm the 
 
 - **The crowns as volumes** (L7b, `docs/plans/active/l7b-crown-volume.md`; `VOLUME` and `SOFT_RAMP` on the card
   materials, `?volume=off` puts back L7a's light): each card carries its crown's ellipsoid (`aEllC`, `aEllR`: the
-  crown triangles' box centre and its horizontal and vertical half-extents). Per pixel: the normal is the
+  crown triangles' box centre, the mean of its x and z half-extents and its vertical one). Per pixel: the normal is the
   ellipsoid's, turned a little by each leaf's tilt (the atlas's G and B, the value's gradient read as a height,
   faded with the mip level); the light through the crown dims it (the distance to the sun inside the ellipsoid grown
   1.3 times, the cards' reach: 1 − exp(−0.75·t / r), at most 0.7); other trees' shadows are read where that ray
   leaves the crown; the core darkens to 0.72. The ramp is soft for foliage (`SOFT_RAMP` in `paint()`: the light
   wraps, (n·l + 0.45) / 1.45, the same three colours over a wide range, the mid colour kept saturated). The golden
   backlight keeps the card normals and is blocked by other trees only. `?bench=volume` benches it against L7a.
+
 ### The shadows' look
 
 The plan: `docs/plans/done/shadow-look.md`.

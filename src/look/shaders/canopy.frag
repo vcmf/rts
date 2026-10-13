@@ -16,13 +16,14 @@ void main(){
   vec3 q=(vW-vEllC)/vEllR;
   vec3 N=normalize(q/vEllR);                                    // A. the ellipsoid normal at this pixel
   vec2 tilt=(tx.gb/max(tx.a,1e-3)-0.5)*2.0*(1.0-smoothstep(1.5,4.0,lod));
-  N=normalize(N+(vTU*tilt.x-vTV*tilt.y)*0.55);                  // E. each leaf turns it a little
+  N=normalize(N+(vTU*tilt.x+vTV*tilt.y)*0.55);                  // E. each leaf turns it a little (canvas down is the atlas v)
   // B. metres of crown between here and the sun, through the ellipsoid grown by the cards reach (the leaves stand
   // out of the box of the crown triangles by about a card)
   vec3 qo=(vW-vEllC)/(vEllR*1.3),dq=uSunDir/(vEllR*1.3);float qa=dot(dq,dq),qb=dot(qo,dq),qc=dot(qo,qo)-1.0,disc=qb*qb-qa*qc;
-  float t=disc>0.0?max(0.0,(-qb+sqrt(disc))/qa):0.0;
+  float sq=sqrt(max(disc,0.0)),t1=(-qb-sq)/qa,t2=(-qb+sq)/qa;
+  float t=disc>0.0?max(0.0,t2-max(t1,0.0)):0.0;                 // the chord ahead, not the air before it
   float self=1.0-exp(-t*0.75/max(vEllR.x,vEllR.y));
-  float shO=shadowAt(vW+uSunDir*(t+0.2),uSunDir),sh=max(self*0.7,shO);   // other trees: where that ray leaves the crown
+  float shO=shadowAt(vW+uSunDir*max(t2,0.0),uSunDir),sh=max(self*0.7,shO);   // other trees: where that ray leaves the crown (shadowAt adds its 0.6 m)
   float core=mix(0.72,1.0,smoothstep(0.25,0.95,length(q)));    // D. deep inside, darker
   #else
   vec3 N=normalize(vN);

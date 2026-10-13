@@ -163,11 +163,11 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #endif
   pDetail=gd;
   float gr=(gd-0.5)*uGrainAmt;
-  float ndl=dot(N,uSunDir);
+  float ndl=dot(N,uSunDir),ndlR=ndl;
   #ifdef SOFT_RAMP
-  ndl=(ndl+0.45)/1.45;   // the crowns as volumes (L7b): light wraps round a mass of leaves
+  ndlR=(ndl+0.45)/1.45;   // the crowns as volumes (L7b): light wraps round a mass of leaves (the ramp only, not the rim)
   #endif
-  float l=ndl+gr*0.55*jitter+(blot-0.5)*0.3*jitter;
+  float l=ndlR+gr*0.55*jitter+(blot-0.5)*0.3*jitter;
   l-=cloud(wp)*0.40+sh*1.25+(1.0-occ)*0.55;
   #ifdef DETAIL_ON
   // the band edges keep their width but never get narrower than the light's change across two pixels (no aliasing)

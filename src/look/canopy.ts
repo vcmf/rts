@@ -40,10 +40,12 @@ export function cardMesh(scene: Scene, name: string, d: NatureModel, o: CardOpti
   const tris: number[] = [], areas: number[] = []
   let total = 0, rad = 0
   for (let v = 0; v < d.role.length; v++) if (crown(v)) rad = Math.max(rad, Math.hypot(P[v * 3] - cx, P[v * 3 + 1] - cy, P[v * 3 + 2] - cz))
-  // the crown's ellipsoid (L7b): its bounding box's centre, its horizontal and vertical half-extents
-  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
-  for (let v = 0; v < d.role.length; v++) if (crown(v)) for (let j = 0; j < 3; j++) { lo[j] = Math.min(lo[j], P[v * 3 + j]); hi[j] = Math.max(hi[j], P[v * 3 + j]) }
-  const ec = [0, 1, 2].map(j => (lo[j] + hi[j]) / 2), er = [Math.max(hi[0] - lo[0], hi[2] - lo[2]) / 2, (hi[1] - lo[1]) / 2]
+  // the crown's ellipsoid (L7b): its bounding box's centre, its horizontal half-extent (the mean of x and z: the
+  // instances turn about y, so one radius stays true under any yaw) and its vertical one; per vertex, as the card
+  // materials are shared between models
+  const bbLo = [Infinity, Infinity, Infinity], bbHi = [-Infinity, -Infinity, -Infinity]
+  for (let v = 0; v < d.role.length; v++) if (crown(v)) for (let j = 0; j < 3; j++) { bbLo[j] = Math.min(bbLo[j], P[v * 3 + j]); bbHi[j] = Math.max(bbHi[j], P[v * 3 + j]) }
+  const ec = [0, 1, 2].map(j => (bbLo[j] + bbHi[j]) / 2), er = [(bbHi[0] - bbLo[0] + bbHi[2] - bbLo[2]) / 4, (bbHi[1] - bbLo[1]) / 2]
   for (let t = 0; t < I.length; t += 3) {
     const [a, b, c] = [I[t], I[t + 1], I[t + 2]]; if (!crown(a) || !crown(b) || !crown(c)) continue
     const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2]

@@ -54,9 +54,9 @@ Pairs (not committed; `scratch/compare/crown-volume/` in the main checkout): `?t
 
 | One lone crown (near view, a box inside it) | L7a (`?volume=off`) | volume |
 |---|---|---|
-| Luma, 5th to 95th percentile | 131–170 | 86–170 |
-| Its thirds (dark, mid, light), share of pixels | 0.22, 0.41, 0.27 | 0.16, 0.34, 0.40 |
-| Value levels (4-luma bins holding over 1 % of it) | 13 | 24 |
+| Luma, 5th to 95th percentile | 131–170 | 84–182 |
+| Its thirds (dark, mid, light), share of pixels | 0.22, 0.41, 0.27 | 0.22, 0.34, 0.34 |
+| Value levels (4-luma bins holding over 1 % of it) | 13 | 29 |
 
 - **Look:** the crowns read as round masses: lit on the sun's side, darker to the far side and in the core, single
   leaves catching the light. Clearest in the wood. The first try was dull and grey: the cards stand inside the
@@ -69,3 +69,15 @@ Pairs (not committed; `scratch/compare/crown-volume/` in the main checkout): `?t
   measurable cost.
 - **Readability guard**, `?trees=cards` against main's `?trees=cards`: passes, with and without the volume.
 - **Goldens**, the default arm against main: match at all 8 cameras.
+
+## Review (`/code-review high`)
+
+- **Round 1** (18b110d): no severe finding. Fixed: the leaf tilt's vertical axis inverted (the atlas is uploaded
+  without a flip, so canvas down is the atlas v); the wrapped light also widening the warm rim onto the shadowed side
+  (the wrap now feeds the ramp only); the light path counting the air before a ray enters the crown (the chord
+  ahead); other trees' shadows read 0.8 m past the crown's edge (`shadowAt` adds its own 0.6 m); a dead write of the
+  flat tilt where the canvas keeps no colour, and its comment; the horizontal radius the larger of x and z (now
+  their mean: one radius stays true under an instance's yaw, two would need the instance's axes per pixel); two
+  same-named bounds; the card's axes built twice (`cardAxes()` in `cards.glsl`, shared with `cardOffset`); a missing
+  blank line in the system doc. Left: the ellipsoid as per-vertex attributes (the card materials are shared between
+  models). Measured again after the fixes (the table above); the guard and the goldens pass. Review stops here.
