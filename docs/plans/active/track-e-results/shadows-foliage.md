@@ -5,85 +5,67 @@ last_reviewed: 2026-10-13
 
 # Results: the shadows and the leaf-card crowns (2026-10-12/13)
 
-The measurements of four PRs in one place, for `docs/plans/active/track-e-look.md`: the shadow look (#59,
-`docs/plans/done/shadow-look.md`), the soft shadows (#60, `docs/plans/done/soft-shadows.md`), the leaf-card crowns
-(L7a, #58, `docs/plans/done/l7a-canopy-cards.md`) and their volume light (L7b, #61,
-`docs/plans/done/l7b-crown-volume.md`). Every number is from the dev Mac (Apple M1 Pro, ANGLE Metal, headless
-Chrome): a proxy that passes no gate. The min-spec laptop's run is still owed (owner question 1). Each table says
-its frame size and which arms it compares; the plans hold the full runs.
+What four PRs found, for `docs/plans/active/track-e-look.md`: the shadow look (#59, `docs/plans/done/shadow-look.md`),
+the soft shadows (#60, `docs/plans/done/soft-shadows.md`), the leaf-card crowns (L7a, #58,
+`docs/plans/done/l7a-canopy-cards.md`) and their volume light (L7b, #61, `docs/plans/done/l7b-crown-volume.md`).
 
-## The cost of the stack
+**One rule for the numbers here:** a cost is the paired difference of a one-page A/B (the bench runs both arms at
+each camera, A B B A, so the machine's state is the same for both), read on the **frame interval** (`frameMs`, no
+vsync: the page's own pace), with the repeat spread beside it. The GPU frame timer is not used: on ANGLE Metal it
+runs longer than the frame, by an amount that changes with the scene (`docs/plans/done/forest-bench.md`). Every
+other measurement stays in the plan that made it, with its method, and is linked from here. All runs are on the dev
+Mac (Apple M1 Pro, ANGLE Metal, headless Chrome): proxies that pass no gate.
 
-**The reliable numbers are A/B runs on one page**, the two arms interleaved at each camera (A B B A), so the
-machine's state is the same for both; the paired difference per camera is reported with the repeat spread (the
-largest difference between two runs of one arm at one camera). On the normal scene, read on the GPU frame timer
-(it runs longer than the frame on ANGLE Metal, so these are differences, not frame times):
+## The cards' and the volume light's cost
 
-| One-page A/B (`--gpu metal`) | close | default | widest | where |
-|---|---|---|---|---|
-| Cards against pack crowns (`?bench=trees`) | about 0 | — | +0.1 to +0.4 ms | `docs/plans/done/l7a-canopy-cards.md` |
-| Volume light against L7a (`?bench=volume`) | within ±0.2 ms | within ±0.2 ms | within ±0.2 ms | `docs/plans/done/l7b-crown-volume.md` |
+Frame interval p50 (ms): each arm's mean over the bench's three yaws, each run twice; the paired difference per
+camera in the order yaw −45°, 0°, +45°; the repeat spread is the largest difference between the two runs of one arm
+at one camera. `node tools/bench-look.mjs '…/app/look.html?trees=cards&bench=trees|volume' --gpu metal --hold 5`
+at 1920×1080 (the JSON beside this one, `shadows-foliage-2026-10-13-61d031a-*-mac-proxy.json`; the page was served
+from main at #65, whose card and crown code is #61's, and its `build` field reads 61d031a, the hash Vite read when
+it started). The forest's rows are run 2 of `docs/plans/done/forest-bench.md` (`?wood=big`, the cameras at the
+forest).
 
-**Where a forest fills the frame** (`?wood=big`, the forest bench, `docs/plans/done/forest-bench.md`; read on the
-frame interval, the page's own pace without vsync): the cards cost about **+1.4 ms a frame at the default zoom**
-(the cleaner of two runs, its repeats within 0.1 ms; the other run +1.05 to +2.15 ms) **and +0.2 to +1.3 ms at the
-widest**; the default frame goes from 6.7 to 8.1 ms of the 16.7 ms a frame at 60 fps, before units, smoke and
-anti-aliasing. The volume light's cost in the forest could not be read (its run's noise is larger than the
-effect). **This is the cards' open cost:** L7 owes a cheaper forest (far crowns as fewer,
-larger cards or the pack mesh; L7's depth pre-pass against overdraw) before the cards become the default.
-
-**Across runs** (`node tools/bench-look.mjs <page> --gpu metal --hold 4` at 1920×1080, four separate runs back to
-back on 2026-10-13; GPU frame p50 in ms, the mean of the three yaws, each run twice). Each bench has two arms of the
-terrain's grain: **l2**, the detail layer the page ships, and **l0**, the L0 grain it replaced. The JSON files are
-beside this one (`shadows-foliage-2026-10-13-*-mac-proxy.json`).
-
-| Zoom, arm | main before (923db25) | main after #58–#60 (0ed259f) | the same, `?trees=cards` | L7b (e41e38c), `?trees=cards` |
-|---|---|---|---|---|
-| Close, l2 | 6.17 | 5.53 | 5.53 | 5.67 |
-| Default, l2 | 8.26 | 7.73 | 7.79 | 7.98 |
-| Widest, l2 | 13.09 | 12.14 | 12.31 | 12.62 |
-| Widest, l0 | 9.75 | 9.01 | 9.28 | 9.91 |
-| Draw calls, triangles | 39, 2.02 M | 39, 2.02 M | 51, 1.97 M | 51, 1.97 M |
-
-- **These differences are not costs.** One camera run twice differs by up to 1.8 ms in the "before" run (the machine
-  was busy), and by up to 0.9 ms (cards) and 1.1 ms (L7b) in the later ones, more than most of the differences
-  between the columns. The one-page A/Bs above are the measurement; this table shows only that no column is far
-  from the others on the normal scene.
-- **Not measured:** the shadow look's per-frame cost (its extra shader operations: an unmeasured estimate of no
-  visible cost; the "before" run is too noisy to show it); the min-spec laptop; the foliage overdraw.
-- **Nothing per frame from the soft shadows:** they are baked on load, 38–45 ms more on the dev Mac (the sky's
-  occlusion 25–32 ms on the CPU; the light-map bake from 1.1–1.4 ms to 14.1–14.2 ms on the GPU, about 13 ms
-  more). A slower GPU takes longer (unmeasured: an estimate of a few times the Mac's on an integrated one).
-
-## The shadows
-
-From the plans; their frame size is 1600×900 and their crowns the leaf cards (`?trees=cards`).
-
-| Measured | before | after | where |
+| One-page A/B | close | default | widest |
 |---|---|---|---|
-| A tree's cast shadow ÷ the lit ground beside it, in the valley (luma) | 0.98 | 0.78 | #59 against main (the plan's target: at most 0.75) |
-| The same on the slope | 0.69 | 0.70, cooler | #59 against main (target: about 0.55, not reached) |
-| Shadow edges in the light map, 20→80 % width: the crispest 10 %, median, 90th percentile | 0.24, 0.31, 0.62 m | 0.24, 0.37, 1.06 m | #60, `?soft=off` against soft (both after #59) |
-| A dense wood's floor between trunks (luma, `?wood`, mid view) | 62.6 | 40.9 | #60, `?soft=off` against soft |
+| Normal scene, cards against pack crowns: the arms | 3.82, 3.82 | 4.87, 4.75 | 7.05, 6.80 |
+| — paired difference | −0.05, +0.05, 0.00 | +0.15, +0.05, +0.15 | +0.20, +0.10, +0.45 |
+| — repeat spread | 0.20 | 0.70 | 0.80 |
+| Normal scene, volume light against L7a: the arms | 3.08, 3.20 | 4.47, 4.55 | 6.95, 6.95 |
+| — paired difference | −0.25, −0.15, +0.05 | −0.05, −0.25, +0.05 | 0.00, 0.00, 0.00 |
+| — repeat spread | 0.60 | 0.50 | 0.10 |
+| Forest, cards against pack crowns: the arms | 9.92, 8.92 | 8.10, 6.70 | 8.52, 8.07 |
+| — paired difference | +0.40, −0.10, +2.70 | +1.30, +1.45, +1.45 | +0.40, +0.75, +0.20 |
+| — repeat spread | 5.10 | 0.10 | 0.70 |
 
-Both of the shadow look's targets were missed: the valley by 0.03, the slope by much more (a deeper variant reached
-0.65 and 0.62 but cost the guard more; `docs/plans/done/shadow-look.md`). Slope shadows are still the weaker ones.
+- **On the normal scene the cards cost up to about 0.45 ms a frame at the widest zoom and nothing measurable closer
+  in; the volume light costs nothing measurable** (its differences sit within its spreads, at the widest zoom
+  exactly 0 with a spread of 0.1 ms).
+- **Where a forest fills the frame the cards cost about 1.4 ms a frame at the default zoom** (repeats within
+  0.1 ms) **and 0.2 to 0.75 ms at the widest**; the closest zoom's run is too noisy to read. That frame stays at
+  8.1 ms of the 16.7 ms a frame at 60 fps, before units, smoke and anti-aliasing. This is the cards' cost to watch:
+  L7 owes a cheaper forest before they become the default (`docs/plans/active/track-e-look.md`, L7).
 
-## The crowns
+## Load time
 
-At 1600×900, a box inside one crown of the near view (`docs/plans/done/l7b-crown-volume.md`).
+The soft shadows are baked on load, nothing per frame: their bake times are in `docs/plans/done/soft-shadows.md`
+(the sky's occlusion on the CPU, the light-map bake on the GPU).
 
-| One lone crown | L7a cards (`?volume=off`) | L7b volume |
-|---|---|---|
-| Luma, 5th–95th percentile | 131–170 | 84–182 |
-| Value levels (4-luma bins over 1 % of it) | 13 | 29 |
+## What the plans found (their numbers are there)
 
-## The readability guard (`node tools/guard.mjs`)
+- **The shadows** (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`): cast shadows read in the
+  valley again; the slope's shadows stayed as weak as before, short of the shadow look's target (open for L9w);
+  shadow edges are crisp at a caster's foot and soft far from it; a wood's floor is darker than a lone tree's shadow.
+- **The crowns** (`docs/plans/done/l7a-canopy-cards.md`, `docs/plans/done/l7b-crown-volume.md`): the cards read
+  as painted leaf masses at the near and mid zooms; the volume light more than doubles a crown's range of values.
+- **The readability guard:** one block regressed: `wheat.France` (summer, a dark blue block in a tree's cast
+  shadow), waived by the owner for the shadow look, and lower again with the cards (#63). The guard checks a block
+  against its base only when the base separates it; the blocks that already fail on main (`fails*`, a palette
+  question: `l2a-baseline.md`) are not compared, so whether they moved is not known.
 
-- `wheat.France` in summer (a dark blue block in a tree's cast shadow) is the one block that regressed against
-  its base (threshold 0.10): 0.100 on main before, **0.098** after the shadow look (waived by the owner,
-  2026-10-13: a stand-in, judged again with the real figures in L3 and L4), the same with the soft shadows;
-  **0.071** with the leaf cards (#63, to fix before the cards become the default).
-- Some blocks fail on main already and still do (`fails*`, a palette question: `l2a-baseline.md`), among them
-  `wheat.Britain` at 0.099; none of them got worse.
-- The guard has no block inside a wood, where the floor is now darkest (above).
+## Not measured
+
+- The shadow look's per-frame cost (a few shader operations: an unmeasured estimate of no visible cost).
+- The volume light where a forest fills the frame (the forest bench's run was too noisy).
+- The foliage's total cost (L7's gate, ≤ 3 ms GPU): the benches measure what the cards add, not the total.
+- The min-spec laptop (owner question 1); the foliage overdraw; a heat ripple behind the army blocks.

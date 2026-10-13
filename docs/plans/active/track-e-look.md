@@ -535,7 +535,7 @@ the pack crowns): results in `docs/plans/active/track-e-results/shadows-foliage.
 
 **What L7 still owes:**
 - the cards as the default arm, once the guard passes with them (#63), the owner accepts decision 0022 and a forest
-  costs less: about +1.4 ms a frame where one fills the frame (`docs/plans/done/forest-bench.md`), against fewer,
+  costs less (the cards' cost is highest where one fills the frame: `docs/plans/done/forest-bench.md`), against fewer,
   larger cards for far crowns, the pack mesh beyond a distance, or a depth pre-pass;
 - the outline at the widest zoom aliases: alpha-to-coverage on MSAA, L8's A/B;
 - the acceptance above, measured on the cards: overdraw, coverage across the zooms, no heat ripple behind the
@@ -636,8 +636,9 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
 3. **Tilt-shift:** A/B it in L9, or rule it out now (decision 0003 forbids blur in gameplay; tilt-shift
    is blur)? **Owner (2026-10-13):** open, after Tiny Glade ("simply astonishing and beautiful"): it may come
    back if a measurement shows it is good. Decision 0003 stands until a new record replaces it; an experiment
-   (frame cost, formations at the frame's edges through the guard) decides. A first build is on its own
-   branch (`look/gameplay-dof`, not yet a PR).
+   (frame cost, formations at the frame's edges through the guard) decides. PR #64 (open) proposes it as a
+   player option, on by default, in a decision numbered 0020, the number Track M's PR #49 (open) also uses:
+   whichever merges second renumbers.
 4. **Stepped animation comfort:** ship 12 fps steps as a setting that can be turned off (Insomniac did),
    or fixed?
 5. **Soldier grain:** any at gameplay zoom, or only at the closest zoom (research open question)?

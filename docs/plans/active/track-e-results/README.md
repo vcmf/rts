@@ -19,9 +19,8 @@ Proxy runs from the dev Mac are kept too, with `mac-proxy` in the name; they pas
 - `l2b-2026-10-10-0c91f76-mac-proxy.json`: the bench with both arms (the detail layer, the L0 grain) on the
   dev Mac, a proxy.
 - [`shadows-foliage.md`](shadows-foliage.md): the shadow look, the soft shadows and the leaf-card crowns (L7a, L7b):
-  the stack's cost, the shadows, the crowns, the guard (2026-10-13).
-- `shadows-foliage-2026-10-13-<build>-<arm>-mac-proxy.json`: the four benches behind its cost table (main before,
-  main after, the cards, L7b), on the dev Mac, proxies.
+  the cards' and the volume light's cost (one-page A/Bs on the frame interval), what the plans found (2026-10-13).
+- `shadows-foliage-2026-10-13-<build>-<bench>-mac-proxy.json`: the one-page A/Bs behind its cost table, proxies.
 - `forest-2026-10-13-<build>-<arms>-mac-proxy.json`: the forest bench (`docs/plans/done/forest-bench.md`), the cards
   against the pack crowns (two runs) and the volume light against L7a, where a forest fills the frame; proxies.
   Named by the commit their code is (2241ba9); their `build` field reads `61d031a-dirty`, the working tree before

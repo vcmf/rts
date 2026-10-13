@@ -11,8 +11,7 @@ The art bible's core rule paints every surface in three value bands, light, mid 
 edges between them (`docs/art-bible.md` §4). On the leaf-card crowns (L7a) that rule cut each crown into three flat
 patches of whole cards. The owner (2026-10-13), of Tiny Glade's trees: the crowns are 2D textures, but their soft
 light makes them read as 3D volumes. L7b (#61, `docs/plans/done/l7b-crown-volume.md`) lit the card crowns as
-volumes; on one lone crown the light's range went from luma 131–170 to 84–182, and its distinct value levels from
-13 to 29. The soft ramp is one of L7b's five parts (the others: a normal per pixel, the light through the crown,
+volumes; a crown's range of values more than doubled (the plan's measurement). The soft ramp is one of L7b's five parts (the others: a normal per pixel, the light through the crown,
 the core, a tilt per leaf); its own cost was not measured apart from them, and L7b's is in
 `docs/plans/active/track-e-results/shadows-foliage.md`. The owner: "it's beautiful now the trees".
 
@@ -29,9 +28,8 @@ card material). Every other surface (ground, water, buildings, armies) keeps the
   per leaf have a ramp that shows them.
 - Good: the bands still decide the colours, so the palette and the cool shadow rule hold.
 - Bad: two ramps to keep in step; a change to the bands must be checked on the crowns too.
-- Bad: the crowns' GPU cost (L7b's, the results above) still to be measured in a forest and on the min-spec
-  laptop; the cards themselves cost about 1.4 ms a frame where a forest fills the frame
-  (`docs/plans/done/forest-bench.md`).
+- Bad: the crowns' cost (L7b's, the results above) still to be measured in a forest and on the min-spec laptop;
+  the cards themselves cost the most where a forest fills the frame (`docs/plans/done/forest-bench.md`).
 - Bad: the crowns hold more mid values than the ground, which the readability guard must keep watching (the cards'
   own shadow already costs a dark coat its separation: #63).
 
