@@ -4,6 +4,9 @@
 //   node tools/guard.mjs <look page URL> [outDir]                  every block must separate
 //   node tools/guard.mjs <look page URL> --base <URL> [outDir]     no block that separates on the base may fail
 //   node tools/guard.mjs <look page URL> --view cover ...           the cover's view (L5): blocks on each class
+//   node tools/guard.mjs <look page URL> --view crops ...           a stubble field, its crops grown (L5d)
+//   node tools/guard.mjs <look page URL> --seasons summer,autumn,winter ...   the seasons run (default summer,winter;
+//                                                                     the negative runs in summer, which is always run)
 //
 // For each season (summer, winter) at the default view: the ground alone, then the ground with the coat blocks. A
 // block's pixels come from two mask renders (the blocks flat white, then flat black: all of the block that shows,
@@ -21,13 +24,14 @@ import { fileURLToPath } from 'node:url'
 import * as png from './png.mjs'
 import { CAMS } from './golden.mjs'
 import { prepSteps, shoot, viewStep } from './look-page.mjs'
-import { ARMY_HEX, COVER_SPOTS, blocksAt } from './army-blocks.mjs'
+import { ARMY_HEX, COVER_SPOTS, CROP_SPOTS, blocksAt } from './army-blocks.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const W = 1280, H = 720, SEP = 0.10, MASKED = 96   // a block's pixel: its white and black mask renders differ by more than MASKED/255
 const START = CAMS.find(c => c[0] === 'start').slice(1, 5)   // the default view (the goldens' start): alpha, beta, radius, target
 const GREYS = [0.3, 0.7]   // the negative's two greys, from which each block's matched grey is interpolated
-const SEASONS = [['summer', 0, true], ['winter', 3, false]]   // name, season value, run the negative
+const SEASON_VALUES = { summer: 0, autumn: 1, late: 2, winter: 3 }
+let SEASONS = [['summer', 0, true], ['winter', 3, false]]   // name, season value, run the negative
 // cluster centres on the default view (world x, z, yaw), chosen to put the coats on each band of the ground: four
 // blocks in a column, 7 m apart
 const START_SPOTS = [
@@ -41,7 +45,9 @@ const START_SPOTS = [
 // --view cover (docs/plans/active/l5-macro.md): east of the hill, the coats on each class of the ground's cover
 // (COVER_SPOTS, tools/army-blocks.mjs)
 const COVER = [START[0], 0.8, 150, [150, 8, -25]]
-let VIEW = START, SPOTS = START_SPOTS
+// --view crops (docs/plans/done/stubble-height.md): over a stubble field (CROP_SPOTS), near enough that its crops grow
+const CROPS = [START[0], 0.7, 60, [118, 8, 132]]
+let VIEW = START, SPOTS = START_SPOTS, MIN_NEG = 12   // MIN_NEG: blocks the negative must measure (the crops view's one field holds 8)
 const blocks = (color = null) => blocksAt(SPOTS, color)
 
 const hex = g => '#' + Math.round(Math.min(1, Math.max(0, g)) * 255).toString(16).padStart(2, '0').repeat(3)
@@ -147,7 +153,7 @@ export function guard(url, outDir, baseUrl = null) {
   }
   const negs = [...cand.values()].filter(c => c.negSep != null), unmatched = [...cand.values()].filter(c => c.season === 'summer' && !c.hidden && c.negSep == null)
   if (unmatched.length) console.log(`negative: no grey matches the ground at ${unmatched.map(c => c.name).join(', ')} (not measured there)`)
-  if (negs.length < 12) { ok = false; console.log(`negative: only ${negs.length} blocks measured (at least 12)`) }
+  if (negs.length < MIN_NEG) { ok = false; console.log(`negative: only ${negs.length} blocks measured (at least ${MIN_NEG})`) }
   if (!negs.length) { ok = false; console.log('negative: NONE measured') }
   else console.log(`negative (summer, blocks at the grey that matches the ground's value): ${negs.filter(c => c.negSep >= SEP).length} of ${negs.length} separate (must be 0); largest ${Math.max(...negs.map(c => c.negSep)).toFixed(3)}`)
   if (base) console.log('fails*: does not separate here, nor on the base (a palette question for the owner, not a regression)')
@@ -157,8 +163,14 @@ export function guard(url, outDir, baseUrl = null) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2), bi = args.indexOf('--base'), baseUrl = bi >= 0 ? args.splice(bi, 2)[1] : null
   const vi = args.indexOf('--view'), view = vi >= 0 ? args.splice(vi, 2)[1] : 'start'
-  if (view === 'cover') { VIEW = COVER; SPOTS = COVER_SPOTS } else if (view !== 'start') { console.error('--view must be start or cover'); process.exit(2) }
+  if (view === 'cover') { VIEW = COVER; SPOTS = COVER_SPOTS } else if (view === 'crops') { VIEW = CROPS; SPOTS = CROP_SPOTS; MIN_NEG = 8 } else if (view !== 'start') { console.error('--view must be start, cover or crops'); process.exit(2) }
+  const si = args.indexOf('--seasons')
+  if (si >= 0) {
+    const names = (args.splice(si, 2)[1] ?? '').split(',')
+    if (!names.includes('summer') || names.some(n => !Object.hasOwn(SEASON_VALUES, n)) || new Set(names).size !== names.length) { console.error(`--seasons: names from ${Object.keys(SEASON_VALUES).join(', ')}, summer among them (the negative), each once`); process.exit(2) }
+    SEASONS = names.map(n => [n, SEASON_VALUES[n], n === 'summer'])
+  }
   const [url, out = path.join(ROOT, 'scratch/guard')] = args
-  if (!url || (bi >= 0 && !baseUrl)) { console.error('usage: node tools/guard.mjs <look page URL> [--base <URL>] [--view start|cover] [outDir]'); process.exit(2) }
+  if (!url || (bi >= 0 && !baseUrl)) { console.error('usage: node tools/guard.mjs <look page URL> [--base <URL>] [--view start|cover|crops] [--seasons summer,…] [outDir]'); process.exit(2) }
   try { const ok = guard(url, out, baseUrl); console.log(ok ? 'guard: ok' : 'guard: FAILED'); process.exit(ok ? 0 : 1) } catch (e) { console.error('guard.mjs:', e.message); process.exit(1) }
 }
