@@ -59,7 +59,7 @@ The soft shadows are baked on load, nothing per frame: their bake times are in `
   shadow), waived by the owner for the shadow look, and lower again with the cards (#63). The guard gates a block
   against its base only when the base separates it; the blocks that already fail on main (`fails*`, a palette
   question: `docs/plans/active/track-e-results/l2a-baseline.md`) are not gated, and their values with the cards were
-not recorded: a guard run against the base prints them (owed, with #63).
+recorded since: `docs/plans/done/wheat-height.md` (#63 moved to L4).
 
 ## Not measured
 

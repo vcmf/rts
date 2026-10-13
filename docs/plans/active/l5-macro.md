@@ -9,9 +9,9 @@ Track E phase L5 (`docs/plans/active/track-e-look.md` §L5), after water W5 (`do
 stage 1. Design: `docs/proposals/prepainted-terrain.md` (the macro bake, light at runtime, the ablation). Art
 direction: `docs/art-bible.md` §4 (palette), §7 (brushes), §11 (composition), and the targets in §0.
 
-Two PRs: **L5a** the ground's cover and the macro colour, baked and in the shader, with the switch between the
-arms; **L5b** the two experimental arms (baked strokes, Kuwahara on the bake), the judging kit, the judges'
-tally and the decision.
+Three PRs: **L5a** the ground's cover and the macro colour, baked and in the shader, with the switch between the
+arms; **L5b-1** the two experimental arms (baked strokes, Kuwahara on the bake) and the judging kit; **L5b-2**
+the judges' tally and the decision.
 
 ## Problem
 
@@ -166,12 +166,103 @@ painted river line stay.
   the bake arm within 0.2 ms of main.
 - A comparison page: main against the three arms in summer and winter, at the three zooms.
 
+## Approach (L5b)
+
+L5b is two PRs: **L5b-1** the two experimental arms and the judging kit; **L5b-2**, once the judges have answered,
+the tally, the decision record and the losing arms removed. The judges need the arms on the page and the kit
+published before they can start.
+
+### Arm 4: baked strokes (`?macro=strokes`)
+
+The bake with strokes painted into it. A gather in the bake's fragment shader: no per-stroke draws, which lost the
+context under SwiftShader (`docs/proposals/engine-design.md` §6).
+- **Stroke centres:** one per cell of a jittered grid of 2 m (a stroke then stays within its cell's neighbours).
+- **Orientation:** in a frame turned along the field's furrows on fields, and along a slow noise flow on grass.
+- **Shape:** each stroke a soft-ended capsule 1.6–2.8 m long and 0.5–0.9 m wide.
+- **Colour:** the macro colour at its centre, its value jittered by up to 10% and its temperature a little (with
+  the centre's colour alone the strokes changed the frame by about a level, too little to judge).
+- **Gather:** each texel reads the strokes of its 3×3 neighbour cells and lays them over its own colour in a
+  fixed order (by a hash of the cell), so the bake stays deterministic. A stroke's colour is read only where it
+  reaches the texel.
+- **The snow's lie** stays the texel's own, so the stripes keep holding the snow.
+
+The materials read the bake as in arm 3; only the bake's own shader changes.
+
+### Arm 5: Kuwahara on the bake (`?macro=kuwahara`)
+
+The arm-3 bake rendered into a scratch target, then a four-quadrant Kuwahara pass from it into the bake's target,
+done before the mips are made.
+- **Radius:** 4 texels (2 m) on the tile and 1 texel (4 m) on the far ring.
+- **What it filters:** RGB only. The alpha (the snow's lie) is the centre texel's, so the lie off fields stays
+  exactly 0 and the seam holds.
+- **Memory:** the scratch target exists only while the arm bakes.
+
+Arm 5 filters arm 3's bake, not arm 4's, and is judged against arm 3. Both arms are painterly abstractions of the
+same bake: stacking them would make a vote for arm 5 a vote for both, and the track plan already drops the
+strokes unless they beat arm 3.
+
+### The judging kit (a new tool in `tools/`, the ablation kit, and a private judging page)
+
+- **The framing:** the Pratzen framing has no place of its own in this world, so the kit uses a stand-in. Its
+  target is east of the hill, with the ploughed field, the track, the road and the village in frame (the winter
+  master's content: fields, a village, open slopes). It is shot at the bench's three zooms (`src/look/bench.ts`:
+  the closest, the default, the widest at the steepest pitch) and three yaws (the default and the yaw limits,
+  decision 0010).
+- **On the ground:** the readability guard's army-colour blocks, a column of the four coats at three spots, and
+  one tree type (`?trees=one`, every tree from one broadleaf model) so the trees' variety does not vary the
+  answer. After main gained the leaf-card crowns (L7a, L7b) and the soft shadows, the kit was rebuilt with
+  `?trees=one,cards`: the same single model, drawn as cards.
+- **Seasons:** summer and winter.
+- **Stills and motion:** per arm, one still per view and season, and a 3 s slow pan per season and zoom (yaw 0),
+  encoded as H.264 for the shimmer question.
+- **Pairs:** arm 1 against 2, 2 against 3, 3 against 4, 3 against 5. One screen per pair and zoom (12 screens),
+  each with the three yaws and both seasons as tabs and the two pans playing in sync.
+- **Blind:** each judge gets their own random screen order and random A/B sides; arm names are never shown.
+- **The questions per screen**, each answered A, B or the same:
+  - Which reads more as painted?
+  - In which are the ground's classes (fields, road, village, grass) easier to tell apart?
+  - In which do the coloured blocks stand out more from the ground?
+  - Which shimmers or tiles less in motion?
+  - Overall, which do you prefer?
+- **Answers:** stored in the judging page's store, one document per judge holding their answers by screen, so a
+  judge can stop and resume. Access rules let each judge read and write their own document alone and the owner
+  read all of them. Claude reads them back for the tally (L5b-2).
+- **The key:** which arm is which, written apart from the published files and kept from the judges until the
+  tally.
+
+### The rule (L5b-2)
+
+- A judge prefers the later arm of a pair when they choose it overall on at least 2 of its 3 zoom screens.
+- An arm is kept when most judges prefer it to its predecessor. A tie keeps the simpler arm.
+- The checklist's answers are reported, and they break no tie.
+- The decision record names the arm the page keeps and removes the others: the arms' code, their checks and the
+  switch's dead values.
+
+### Checks (L5b-1)
+
+- Arms 4 and 5:
+  - the seam is 0;
+  - the shimmer gates hold;
+  - the class check passes;
+  - the bake is deterministic;
+  - the guard passes (`--view cover` too);
+  - the bake's time is measured on the Mac's GPU and under SwiftShader;
+  - the bench covers arms 1–3. Arms 4 and 5 draw with arm 3's shader, so their cost is their bake's (the macro
+    check).
+- The kit: every screen has both arms' images and pans; no published file name, path or metadata reveals an arm;
+  the later arm is side x on half the screens, and each judge's A/B sides are drawn at random per screen.
+
 ## Acceptance (L5b)
 
-As the track plan's L5: at least 3 judges, blind, the checklist (does it read as painted? are the classes
-readable? do the army-colour blocks stand out from the ground? does it shimmer or tile?). An arm is kept only if
-the judges prefer it to the arm before it; the stroke painter is dropped unless arm 4 beats arm 3. The owner
-names the judges (`track-e-look.md`, open question 2).
+- **L5b-1:**
+  - arms 4 and 5 render and switch like arms 1–3, and pass the checks above;
+  - the kit is published, and one test run of the judging page stores and reads back an answer;
+  - the bake's time of arms 4 and 5 is measured against arm 3's.
+- **L5b-2:** as the track plan's L5:
+  - at least 3 judges, blind, using the checklist;
+  - an arm is kept only if the judges prefer it to the arm before it, and the stroke painter is dropped unless
+    arm 4 beats arm 3;
+  - the owner names the judges (`track-e-look.md`, open question 2).
 
 ## Risks
 
@@ -263,3 +354,50 @@ L5a 3–4 days; L5b 2 days of work plus the judges' time.
 - **Known limits:** the cover is authored here until the map format's compiler writes the grid; the staff map does not
   read the macro colour; stubble and wheat still turn warm orange in the golden light; the bake's road contrast is
   near its gate.
+
+## Results, L5b-1 (dev Mac)
+
+- **The arms:** strokes and kuwahara render on the terrain, the far ring and the shore band, switched by `?macro=` or
+  `__look.macro.setArm()` like arms 1–3; bakes run one at a time, so a switch made during a bake lands on the arm
+  asked for last.
+- **Classes** (median ΔE 2000, summer): field against grass, strokes 12.5, kuwahara 12.1 (bake 11.9); road against
+  grass, strokes 9.3, kuwahara 8.8 (bake 8.6). All ≥ 8.
+- **Shimmer** (worst pair, closest / widest, summer then winter): strokes 0.40% / 0.60%, 1.21% / 1.75%; kuwahara
+  0.40% / 0.60%, 1.21% / 1.75%; within 0.01 points of the bake everywhere.
+- **Seam:** exact (0/255) in all five arms.
+- **Determinism:** the hashes equal on load, on a rebake and on a second load for both arms. The bake arm still
+  hashes 49cfc64f / 943d2329, L5a's, so reading the cover through `coverTex` changed nothing.
+- **Bake** (the page's sizes, as the page reports it on load; Metal, two runs; SwiftShader with another session
+  loading the machine): bake 12–15 ms Metal, 1.2 s SwiftShader; strokes 42–44 ms, 4.2 s; kuwahara 21–24 ms, 2.6 s.
+  Full size (3600²) under SwiftShader: bake 4.5 s, strokes 19.1 s, kuwahara 11.5 s, the context held in each.
+  Memory with mips: 15.2 MB for bake and strokes, 26.5 MB for kuwahara (its scratch target is kept for rebakes).
+  Arms 4 and 5 draw with arm 3's shader, so their frame cost is arm 3's; the bench measures arms 1–3.
+- **Readability guard** (start view and `--view cover`, against `?macro=bake`): both arms pass.
+- **Existing checks:** `tools/check-negatives.mjs`, `tools/water-check.mjs --selftest`, `tools/water-look-check.mjs
+  --selftest`, `tools/detail-check.mjs --selftest`, `tools/macro-check.mjs --selftest`, `npm run check:data`, the
+  docs check: pass. `npm test`: 255 of 256 with the checks' Chromes and another session loading the machine (the
+  sim's cost test, 13.2 ms against 12); `test/soldiers.test.ts` passes alone.
+- **The kit:** 12 screens (4 pairs × 3 zooms), each with 6 stills a side (3 yaws × summer and winter) and a 3 s pan:
+  120 media files, 69 MB. The later arm is side x on 6 screens. Published as a private judging page with a
+  database (answers per judge, readable by the owner alone); a probe answer was written and read back, and a judge's
+  view saw only their own document. The key (`scratch/l5b-kit/key.json`, git-ignored) is committed with the tally in
+  L5b-2.
+- **Review:** round 1 (severe: the database rules undocumented; the key beside the published files; two bakes able
+  to race) fixed. Round 2 (nothing severe; fixed and stopped): Finish waits for the save, a random seed, the scratch
+  counted in memory, missing shots stop the kit, reads in branches through `coverTex`, the effect keyed on its
+  defines, trees placed as their own model, the kit's cameras from `SPEC.camera`, a lazy Kuwahara pass.
+- **Kit 2 (14 Oct 2026), after main's leaf-card crowns (L7a, L7b) and soft shadows were merged in:** the kit rebuilt
+  with `?trees=one,cards` on the same page link. It has 12 screens and 120 files, 87 MB, published in two parts, and
+  the old kit's files were removed. No judge had answered (the one answer document, the owner's, was empty). The key
+  is `scratch/l5b-kit2/private/key.json`, with a new random seed. Checks on the merged code:
+  - the golden against main matches at all 8 cameras;
+  - the guard passes for both arms against the bake, at the start view and `--view cover`;
+  - the water, detail and negatives checks, `npm run check:data` and the docs check pass;
+  - `npm test` gave 255 of 256 with the machine loaded (the sim's cost test, 14.2 ms against 12), and
+    `test/soldiers.test.ts` passes alone, 12 of 12.
+  - **The macro check's self-test fails** on its shimmer sabotage (`MACRO_SAB_STEP`, "the check cannot see this
+    sabotage"). Main gives identical numbers, so this is main's (#71), not the merge's. The gate itself, classes,
+    determinism (49cfc64f / 943d2329) and the bake pass.
+- **Known limits:** the stroke gather (nine cells, sorted) makes its bake about three times arm 3's; a judge who
+  opens the page's data or network panel can see which screens share files (the bake's in 3 pairs, the shader's in
+  2) though not which arm they are, so the blind rests on judges not inspecting.

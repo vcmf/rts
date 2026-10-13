@@ -1,8 +1,8 @@
 ---
 status: current
 last_reviewed: 2026-10-13
-code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png]
-decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage]
+code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png]
+decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest]
 ---
 
 # The look page (Track E, L0)
@@ -49,6 +49,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/water.ts` | The water ribbon, its materials (the painted water, W4, `docs/systems/river.md`; and the same shader on the tile's ground, for the seam check) and the tree-reflection mask |
 | `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule (and, since L5a, the cover's: what grows on which class) |
 | `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
+| `src/look/meadow.ts` | The meadow near the camera (L5c, L5d, below): the meadow map (ground height, the grass's and the crops' growth), three rings of static grass and crop instances around the focus |
 | `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (`?trees=cards`, L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
 | `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), and the passes: depth of field (a player option, decision 0024), the fused grade |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop, and the debug globals the checks read |
@@ -63,8 +64,11 @@ the contract of `tools/golden.mjs`; it also puts the prototype's global names on
 `window.__look` for the look tools: `lab`, `mats`, `passes`, and the detail layer's switches (`setDetail`, the
 terrain's variant defines; `grain`, the paint or the smooth grain; `terrainOnly`; `finishing`, the finishing
 passes on or off; `hill`; `quarter` and `shift`, the projection moved for the checks). `?season=<0..3>` opens the
-page in a season (the bench runs in it); `?detail=l0` opens it with the L0 grain on the terrain; `?macro=flat|shader|bake`
-picks the macro colour's arm (L5a, below; `bake` by default, `shader` on WebGL1) and `?bench=macro` benches the three.
+page in a season (the bench runs in it); `?detail=l0` opens it with the L0 grain on the terrain;
+`?macro=flat|shader|bake|strokes|kuwahara` picks the macro colour's arm (L5a and L5b, below; `bake` by default,
+`shader` on WebGL1) and `?bench=macro` benches the three whose shaders differ (`flat`, `shader`, `bake`: the experimental arms
+draw with the bake's shader and differ in their bakes, measured by the macro check); `?trees=one` draws every tree as one broadleaf model, and `?trees=one,cards` as leaf cards (L5b's
+judging).
 `?dof=0|1` overrides the gameplay depth of field, on by default (decision 0024, below); `?bench=dof` benches it off
 and on.
 
@@ -141,7 +145,18 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   edges wander that far). **Ground bounce:** trees take 15% of the ground's colour under their root into the albedo
   of their side away from the sun, near the ground; grass 25% all over. The colour is the class's flat colour in
   every arm (one read; the arms differ in the ground alone).
-- `window.__look.macro`: `setArm`, `setCheck` (the check's view and sabotages, rebaked), `hash`, `bake`.
+- **Two experimental arms (L5b)**, bakes of their own, read as the bake is (the materials' `MACRO_BAKE`); switching
+  to one rebakes. `strokes` (arm 4, `MACRO_STROKES` in the bake's shader alone): strokes of the macro colour laid
+  over it, one a 2 m cell, along the furrows on fields and a slow flow elsewhere, 1.6–2.8 m long, their value and
+  temperature jittered; a gather over the 3×3 neighbouring cells per texel, laid over in a hashed order, no per-stroke
+  draws; on the tile only (a
+  2 m stroke is under a far-ring texel). `kuwahara` (arm 5): the arm-3 bake into a scratch target, then a
+  four-quadrant Kuwahara filter (`SPEC.macro.kuwahara`, 2 m; a texel on the far ring) into the bake's target before
+  its mips; the alpha (the snow's lie) stays the texel's own, so the seam holds.
+- The bakes run one at a time, in the order asked (a new grain, a restored context, an arm, a check), each with the
+  arm and checks wanted when it starts.
+- `window.__look.macro`: `setArm` (a promise: a baked arm other than the one baked rebakes), `setCheck` (the check's
+  view and sabotages, rebaked), `hash`, `bake`.
 
 ### The detail layer (L2b)
 
@@ -206,6 +221,51 @@ The plan: `docs/plans/done/shadow-look.md`.
 - **Contact** (`bakes.ts`): a dark core of 0.45 crown radii (at least about 1.6 m: the occlusion map is about 1 m a
   texel) under each tree, in the light map's alpha, which the ground, the water's shore band and the grass read
   (`groundOcc()`), and the crowns do not.
+
+### The meadow and the crops (L5c, L5d)
+
+The plan: `docs/plans/done/l5c-meadow.md`. On by default on WebGL2 (on WebGL1 the old scatter stays: the meadow reads a half-float texture in its vertex
+shader); `?meadow=off` puts back the old scatter.
+
+- **The grass near the camera** (`src/look/meadow.ts`, `src/look/meadow-spec.ts`, `shaders/meadow.vert|frag`): clumps of the owner's pack grass
+  (`data/meadow-grass.json`, exported from its `Grass_Large` and `Grass_Small`) on three round rings around the
+  camera's focus (`RINGS`: cells of 0.5, 1 and 2 m, the slots of a 104-cell square within the ring's reach, the
+  large clump near and the small one farther, its footprint wider with the cell, its height the same: `HEIGHT`,
+  never over `HEIGHT_MAX`). Each ring is one instanced mesh with a static slot buffer (`forcedInstanceCount`: no
+  matrices); each frame it snaps to its cell. The vertex shader places a clump from its world cell's hash
+  (jitter, size, yaw, lean), so a clump never moves nor changes as the rings follow the camera; it exits first
+  outside its ring's band of distance and outside the view, then reads the **meadow map** (a float texture at 1 m:
+  the ground's height, the growth and the height factor, half floats, baked once: `Nature.growth`, the grassy cover
+  and its edges on the 2 m cells, each texel interpolating the cells round it; then the cover's edge and `Nature.growthAllowed` (roots `CLUMP_REACH`, 1.45 m, from the formation zones and the
+  banks, the widest clump's reach) at each texel near those edges; then the growing area shrinks a texel, so the
+  GPU's bilinear read never crosses a rule; pasture shorter) and the **clump field** (`shaders/meadow.glsl`), and shrinks
+  each clump away across its ring's band (the rings hand over without an edge). The fragment shader is a lean
+  `paint()` (the ramp, the cool band, the sky in the shadow, clouds; no grain, rim nor snow): the painted ground's
+  colour under the root (the macro bake, `groundArm`; the flat class colour on the other arms), darker at the root and lighter, warmer at the tip. In winter the clumps shrink under the snow.
+- **The crops** (L5d, `docs/plans/done/l5d-crops.md`): the same slots grow a crop clump where the meadow map's A
+  channel (the crops' growth: `Nature.crop`, a sown field, wheat, green crop or stubble, with the grass's rules,
+  edge and shrink) is above the grass's growth: never both on one patch. The vertex shader reads the cover's class
+  at the root (`uCover`) and the season (`cropLook` in `meadow.vert`): wheat standing up to `WHEAT_HEIGHT_MAX`
+  (decision 0026) in summer, cut to 0.22 m stubble through autumn and gone by late autumn; the green crop 0.45 m,
+  lower under the snow; stubble 0.22 m until the plough. Narrower than grass, evenly sown (less clumping). Its
+  colour (the owner): lime at the stalk's foot to the season's colour at the tip, gold in summer, orange in autumn,
+  brown after; the green crop lime to olive. Ploughed fields grow nothing.
+- **The meadow on the ground** (`meadowPattern` in `macro()`, `MEADOW`, a define on every painted material and on the
+  macro bake): on meadow and pasture (the warped class the ground paints), the brush tile (`data/meadow-brush.png`,
+  at 7.3 m and 7.3/2.618 m, turned apart, warped by a slow noise: no common period; stamped by
+  `tools/meadow-brush.py` from the owner's grass brush pack in the git-ignored `assets/grass-brushes/`), read at the
+  footprint, and the clump field. It is in the macro colour, so the bake arm holds it (nothing a frame) and the
+  terrain and the shore band agree; the grass takes its colour from that ground (read at its ring's cell) and its
+  shade from the clump field.
+  `tools/meadow-grass-export.py` rebuilds `data/meadow-grass.json` from the pack's two grass files.
+- **The scatter under the meadow** (`src/look/nature.ts`): the old `Grass_Short` tufts and the pack's wheat tufts
+  are not placed (the crops above replace them; `?meadow=off` keeps the wheat lattice, each tuft clamped in `add()`
+  to `WHEAT_HEIGHT_MAX`, decision 0026); the scatter's random stream is kept, so nothing else moves.
+  `tools/river-check.js` counts the meadow's growing and cropping cells in place of the tufts and checks the grass's
+  and the crops' footprint against the zones and the banks, and the crops off the floodplain; `tools/look-check.js`
+  checks no clump floats over the drawn tile (each sinks `MEADOW_SINK`).
+- `?bench=meadow` benches the grass and crops against none (the ground's pattern is baked); `__look.meadowBakeMs`,
+  `__look.meadow` (`growingCells`, `growthAt`, `croppingCells`, `cropAt`: river-check's meadow checks).
 
 ### Soft shadows (the sun's penumbra, the sky's occlusion)
 
@@ -278,6 +338,19 @@ second load, and the full-size bake (3600²) without a lost context. Run the sel
 bake's texture filtering smooths even the stripes' sabotage, and the flat arm has no stripes. The header has the
 measures and limits; the results are in the plan.
 
+### The judging kit (L5b)
+
+`node tools/ablation-kit.mjs <url> <outDir> [--seed <text>]`: every arm on the judging framing (east of the hill:
+the ploughed field, the track, the road, the village), at the bench's three zooms and three yaws, summer and winter,
+with the guard's cover blocks (`tools/army-blocks.mjs`) and `?trees=one,cards`; and a 3 s pan per season and zoom (H.264,
+ffmpeg). Under `<outDir>/publish/` it writes what the judging artifact publishes, and nothing else: the media under
+opaque ids, `screens.json` (12 screens: each pair of arms judged, by zoom; sides x and y, the later arm on x on half
+of them) and the judging page (`tools/ablation-judge.html`); under `<outDir>/private/`, never published, the shots
+named by arm and `key.json` (which arm is which). Published as a private artifact with the access rules in the
+kit's header, the page shows each judge the screens in their own order with their own A/B sides, asks the plan's
+five questions, and saves each judge's answers in one document of the artifact's store (`answers/<judge's id>`,
+readable by the judge and the owner alone: without the rules, by every viewer). The rule and the tally: the plan.
+
 ### The detail checks (L2b)
 
 `node tools/detail-check.mjs <url> [outDir] [--only …] [--defines …] [--selftest]`: scale stability over a zoom
@@ -320,13 +393,14 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
   pools against riffles, shimmer on the water. The page's hooks: `__look.waterSab` (the sabotages),
   `__look.groundAs` (the tile's ground drawn with the water's shader), `__look.waterAt` (the data at a point),
   `?watersab=nodive`.
-- `node tools/macro-check.mjs <url?macro=shader> --selftest` and `node tools/guard.mjs <url> --view cover` (L5a, above).
+- `node tools/macro-check.mjs <url?macro=shader> --selftest` and `node tools/guard.mjs <url> --view cover` (L5a, above);
+  for arms 4 and 5, `macro-check` and the guard against `?macro=bake` as the base (L5b).
 - `npm test` (lint and typecheck cover `src/look/`).
 
 ## Open questions
 
-- **The leaf-card crowns are not the default arm yet:** a dark coat in a tree's shadow loses separation with
-  them (#63); decision 0022 (their soft ramp) is proposed; their outline aliases at the widest zoom (L8); a
+- **The leaf-card crowns are not the default arm yet:** a dark coat in a crown's deep shade loses separation
+  with them (#63, moved to L4: the army side's to fix); decision 0022 (their soft ramp) is accepted; their outline aliases at the widest zoom (L8); a
   forest is where they cost the most (a cheaper forest is owed: `docs/plans/done/forest-bench.md`), and the min-spec laptop and the foliage's total
   against L7's gate are not measured (`docs/plans/active/track-e-results/shadows-foliage.md`).
 - **The guard has no block in a wood**, where the soft shadows make the floor darkest.

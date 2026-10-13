@@ -18,10 +18,11 @@ import { D } from './spec.ts'
 import { fbm, hash, mulberry } from './noise.ts'
 import { H } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges } from './river.ts'
-import { COVER, coverAt, inFormationZone, type CoverGrid } from './world/cover.ts'
+import { COVER, coverAt, fieldAt, inFormationZone, type CoverGrid } from './world/cover.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 import { cardMaterial, cardMesh, placeCards, type CardOptions } from './canopy.ts'
+import { CLUMP_REACH, WHEAT_HEIGHT_MAX } from './meadow-spec.ts'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 
 export interface NatureModel { pos: number[]; idx: number[]; role: number[]; min: number[]; max: number[] }
@@ -44,6 +45,14 @@ export interface Nature {
   // under cards: the card meshes, which cast the crowns' shadows, and the pack models they replace, which cast nothing
   // (src/look/bakes.ts; the trunk meshes cast the trunks')
   cardCasters?: { leaf: BaseTexture; cards: Mesh[]; packs: Mesh[] }
+  // the meadow's growth (src/look/meadow.ts): by the cover at a 2 m cell's centre, 0..1 and the grass's height factor
+  // (pasture shorter); and the placement rule's hard edges at any point (the formation zones, the banks, the water),
+  // which the meadow map applies at every texel so that smoothing the cover never carries grass across them
+  growth(x: number, z: number): [number, number]
+  growthAllowed(x: number, z: number): boolean
+  // the crops' growth by the cover (docs/plans/done/l5d-crops.md): 1 where the point and the points EDGE round it
+  // are all one sown field (one class, wheat, green crop or stubble, and one field id; ploughed grows nothing), else 0
+  crop(x: number, z: number): number
 }
 
 // what may grow on each class of the cover (docs/plans/active/l5-macro.md): grass, flowers, plants, bushes, stumps
@@ -60,8 +69,10 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
   return AROUND.every(([dx, dz]) => ok(coverAt(cover, x + dx * EDGE, z + dz * EDGE)))
 }
 
-// cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md, ?trees=cards)
-export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off'): Nature {
+// cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md, ?trees=cards);
+// meadow: the meadow's grass and wheat replace the tufts and the wheat lattice (docs/plans/done/l5c-meadow.md);
+// oneTree: every tree drawn as one broadleaf model, where and as large as it stands (L5b's judging: ?trees=one)
+export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off', meadow = false, oneTree = false): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
 
@@ -115,6 +126,8 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // exact: does the disc (x,z,r) overlap any formation zone? (the two boxes and the circle of KEEP_CLEAR)
   const boxD = (x: number, z: number, x0: number, x1: number, z0: number, z1: number) => Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(z0 - z, 0, z - z1))
   const touchesZone = (x: number, z: number, r: number) => KEEP_CLEAR(x, z) || boxD(x, z, -25, 15, -44, -2) < r || boxD(x, z, -14, 26, 7, 19) < r || Math.hypot(x - 34, z + 24) < Math.sqrt(160) + r
+  // off the banks by r m (W2: a point bar reaches farther): the scatter's rule, and the meadow's growth's
+  const offBanks = (q: ReturnType<typeof riverQuery>, r: number) => !q || q.dist >= Math.max(lerpA(RIVER.W, q) / 2 * 1.7, bankReachAt(q)) + r
   function placeable(x: number, z: number, r = 0, kind = ''): boolean {
     if (touchesZone(x, z, r)) return false
     const q = riverQuery(x, z)
@@ -122,16 +135,28 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     if (kind === 'stone') return !q || q.dist >= wetEdgeAt(q) + r || lerpA(RIVER.riffle, q) > 0.6
     if (kind === 'cutstone') return !!q && atCutBank(q) && r <= 1.2   // at a cut bank's foot, reaching at most 1.2 m
     if (kind === 'reed') return !q || q.dist >= wetEdgeAt(q) + r   // reeds: at the water's edge, wholly on land
-    return !q || q.dist >= Math.max(lerpA(RIVER.W, q) / 2 * 1.7, bankReachAt(q)) + r                 // off the banks (W2: a point bar reaches farther)
+    return offBanks(q, r)                 // off the banks (W2: a point bar reaches farther)
   }
-  const groups: Record<string, Item[]> = {}; const add = (model: string, item: Item) => (groups[model] = groups[model] || []).push(item)
+  // the standing wheat's scale (decision 0026): r in 0..1 to 0.82..1 of the one that reaches WHEAT_HEIGHT_MAX, at
+  // every place that sows wheat, so the placement rule tests the size that is drawn; add() caps it once more
+  const wheatScaleMax = WHEAT_HEIGHT_MAX / NATURE.Wheat.max[1], wheatScale = (r: number) => wheatScaleMax * (0.82 + 0.18 * r)
+  const groups: Record<string, Item[]> = {}
+  const add = (model: string, item: Item) => {
+    if (model === 'Wheat' && item[2] > wheatScaleMax) { item = [...item] as Item; item[2] = wheatScaleMax }
+    ;(groups[model] = groups[model] || []).push(item)
+  }
   // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
-  const addPlaced = (model: string, item: Item, kind = '') => { const [x, z, s] = item; if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false; add(model, item); return true }
+  // drawn: the model drawn there, when not the one placed (?trees=one)
+  const addPlaced = (model: string, item: Item, kind = '', drawn = model) => { const [x, z, s] = item; if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false; add(drawn, item); return true }
 
-  // a broadleaf or birch tree, and its crown for the occlusion (the crown's centre at 0.62 of the height)
+  // ?trees=one: the model drawn for a tree, placed as its own model (so the scatter is the page's), shadowed and
+  // reflected as the model drawn
+  const tree = (model: string) => oneTree ? 'CommonTree_1' : model
+  // a broadleaf or birch tree, and its crown for the occlusion (the crown's centre at 0.62 of the height), drawn as
+  // tree(mdl)
   const placeTree = (mdl: string, x: number, z: number, s: number, yaw: number, t: number) => {
-    if (!addPlaced(mdl, [x, z, s, yaw, t])) return false
-    const M = NATURE[mdl]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s)
+    if (!addPlaced(mdl, [x, z, s, yaw, t], '', tree(mdl))) return false
+    const M = NATURE[tree(mdl)]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s)
     return true
   }
   const TREE_MODELS = ['CommonTree_1', 'CommonTree_2', 'CommonTree_3', 'CommonTree_4', 'CommonTree_5']
@@ -158,11 +183,11 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const mdl = 'Willow_' + (1 + Math.floor(rr() * 3)), s = 2.6 + rr() * 0.9, side = rr() < 0.5 ? -1 : 1, off = C.W[i] / 2 * 1.7 + footprint(mdl, s) + 0.3 + rr() * 3; let x = C.px[i] - C.tz[i] * side * off, z = C.pz[i] + C.tx[i] * side * off
     // inside a bend the nearest water is closer than this sample's normal suggests: step outward until the rule accepts
     const yaw = rr() * 6.28, tint = 0.2 + rr() * 0.5; let ok = false
-    for (let t = 0; t < 6 && !ok; t++) { const o = off + t * 1.5; x = C.px[i] - C.tz[i] * side * o; z = C.pz[i] + C.tx[i] * side * o; ok = addPlaced(mdl, [x, z, s, yaw, tint]) }
+    for (let t = 0; t < 6 && !ok; t++) { const o = off + t * 1.5; x = C.px[i] - C.tz[i] * side * o; z = C.pz[i] + C.tx[i] * side * o; ok = addPlaced(mdl, [x, z, s, yaw, tint], '', tree(mdl)) }
     if (!ok) continue
-    const M = NATURE[mdl]; smTree(x, z, M.max[1] * 0.6 * s, (M.max[0] - M.min[0]) * 0.45 * s)
+    const M = NATURE[tree(mdl)]; smTree(x, z, M.max[1] * 0.6 * s, (M.max[0] - M.min[0]) * 0.45 * s)
   }
-  for (let i = 0; i < 5; i++) { const x = 150 + (rr() - 0.5) * 30, z = -40 + (rr() - 0.5) * 30; if (addPlaced('PineTree_' + (1 + Math.floor(rr() * 3)), [x, z, 3.6 + rr(), rr() * 6.28, rr()])) smTree(x, z, 6, 3.5) }
+  for (let i = 0; i < 5; i++) { const x = 150 + (rr() - 0.5) * 30, z = -40 + (rr() - 0.5) * 30; const mdl = 'PineTree_' + (1 + Math.floor(rr() * 3)), s = 3.6 + rr(); if (addPlaced(mdl, [x, z, s, rr() * 6.28, rr()], '', tree(mdl))) { if (oneTree) { const M = NATURE[tree(mdl)]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s) } else smTree(x, z, 6, 3.5) } }
   for (let i = 0; i < 90; i++) {   // bushes, a third of them with berries
     const a = rr() * 6.28, r = 14 + rr() * 120, x = Math.cos(a) * r + 8, z = Math.sin(a) * r, s = 1.8 + rr() * 1.4
     if (addPlaced(rr() < 0.33 ? 'BushBerries_' + (1 + Math.floor(rr() * 2)) : 'Bush_' + (1 + Math.floor(rr() * 2)), [x, z, s, rr() * 6.28, rr()])) smBlob(x, z, s * 0.6)
@@ -177,10 +202,14 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const a = rr() * 6.28, r = 4 + Math.pow(rr(), 0.8) * 175, x = Math.cos(a) * r, z = Math.sin(a) * r * 0.9 + 4
     const flowery = fbm(x * 0.03 + 4, z * 0.03 - 2) > 0.58, k = rr()
     const mdl = flowery && k < 0.5 ? 'Flowers' : k < 0.88 ? 'Grass_Short' : 'Plant_1'
-    addPlaced(mdl, [x, z, mdl === 'Plant_1' ? 1.3 : mdl === 'Flowers' ? 1.4 : 1.6 + rr() * 0.8, rr() * 6.28, rr()])
+    const item: Item = [x, z, mdl === 'Plant_1' ? 1.3 : mdl === 'Flowers' ? 1.4 : 1.6 + rr() * 0.8, rr() * 6.28, rr()]
+    if (!(meadow && mdl === 'Grass_Short')) addPlaced(mdl, item)   // under the meadow (src/look/meadow.ts) its grass replaces these tufts; the stream is unchanged
   }
   // a wheat field on the valley side between the floodplain and the formation zones (docs/art-bible.md §6c: fields above the floodplain)
-  for (let u = 0; u < 30; u += 1.25) for (let v = 0; v < 22; v += 1.3) { const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5, z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5; if (rr() < 0.08) continue; addPlaced('Wheat', [x, z, 1.5 + rr() * 0.4, rr() * 6.28, rr()]) }
+  const addWheat = (item: Item) => { if (!meadow) addPlaced('Wheat', item) }   // under the meadow its crops replace this lattice (src/look/meadow.ts); the stream is unchanged
+  for (let u = 0; u < 30; u += 1.25) for (let v = 0; v < 22; v += 1.3) { const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5, z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5; if (rr() < 0.08) continue; addWheat([x, z, wheatScale(rr()), rr() * 6.28, rr()]) }
+  // under the meadow the fields grow from the meadow's slots (src/look/meadow.ts, docs/plans/done/l5d-crops.md):
+  // no pack wheat tufts
   // far woods and hedgerows from cheap bush crowns, never in the apron band, whose ground only the apron mesh knows
   const far: Item[] = [], inBand = (x: number, z: number) => { const m = Math.max(Math.abs(x), Math.abs(z)); return m > D.spec.tile / 2 && m < D.band }
   for (let k = -8; k <= 8; k++) for (let t = -560; t <= 560; t += 6) {
@@ -252,5 +281,17 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // and none on the roads or the village ground (after the every-fourth choice, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
   place('Bush_1', farMat, far.filter((b, i) => i % 4 === 0 && drawn(b))); place('Bush_2', farMat, far.filter((b, i) => i % 4 === 2 && drawn(b)))
-  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined }
+  // the meadow's growth: where the old tufts could stand (the placement rule: the cover's grassy classes and their
+  // edges, off the banks and the water, out of the formation zones); pasture grazed shorter
+  const growth = (x: number, z: number): [number, number] => coverAllows(cover, 'Grass_Short', x, z) ? [1, coverAt(cover, x, z) === COVER.pasture ? 0.65 : 1] : [0, 0]
+  // the crops' growth: a sown class (ploughed grows nothing) and the same field EDGE round it, so a crop never stands
+  // on another painted field, nor runs across two (the shader reads the class and the field's shade at its root)
+  const SOWN: readonly number[] = [COVER.wheat, COVER.green, COVER.stubble]
+  const crop = (x: number, z: number) => {
+    const c = coverAt(cover, x, z), f = fieldAt(cover, x, z)
+    return SOWN.includes(c) && AROUND.every(([dx, dz]) => coverAt(cover, x + dx * EDGE, z + dz * EDGE) === c && fieldAt(cover, x + dx * EDGE, z + dz * EDGE) === f) ? 1 : 0
+  }
+  // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the outer ring's footprint and lean)
+  const growthAllowed = (x: number, z: number) => !touchesZone(x, z, CLUMP_REACH) && offBanks(riverQuery(x, z), CLUMP_REACH)
+  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined, growth, growthAllowed, crop }
 }

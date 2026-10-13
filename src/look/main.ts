@@ -17,6 +17,7 @@ import { runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { CLEAR, Materials, PAL, S } from './materials.ts'
 import { buildNature } from './nature.ts'
+import { buildMeadow } from './meadow.ts'
 import { DOF, Post, buildCamera } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
@@ -29,7 +30,7 @@ import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
-import { MACRO_ARMS, buildMacro, type MacroArm } from './macro.ts'
+import { MACRO_ARMS, SHADER_ARMS, buildMacro, type MacroArm } from './macro.ts'
 import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
 import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
@@ -63,7 +64,12 @@ if (softParam !== null && softParam !== 'off') throw new Error(`?soft must be of
 const soft: SoftOptions = { on: softParam !== 'off', penumbra: penumbraParam === null ? SOFT_DEFAULTS.penumbra : Number(penumbraParam) }
 if (penumbraParam !== null && (penumbraParam.trim() === '' || !Number.isFinite(soft.penumbra) || soft.penumbra < 0 || soft.penumbra > PENUMBRA_MAX)) throw new Error(`?penumbra must be a number from 0 to ${PENUMBRA_MAX}, not ${penumbraParam}`)
 if (penumbraParam !== null && !soft.on) throw new Error('?penumbra needs the soft shadows on (no ?soft=off)')
-const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), softDefines(soft))
+// ?meadow=off: the old sparse grass tufts and the wheat lattice instead of the meadow (docs/plans/done/l5c-meadow.md)
+const meadowParam = params.get('meadow')
+if (meadowParam !== null && meadowParam !== 'off') throw new Error(`?meadow must be off, not ${meadowParam}`)
+// the meadow reads a half-float texture in its vertex shader: WebGL2 only (on WebGL1 the old scatter stays)
+const meadowOn = meadowParam !== 'off' && engine.version >= 2
+const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [...softDefines(soft), ...(meadowOn ? ['#define MEADOW'] : [])])
 const keptGrains = new Set([mats.grain])   // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
 const waterT0 = performance.now(), waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData'), waterTexMs = performance.now() - waterT0
@@ -73,19 +79,22 @@ const terrain = buildTerrain(scene, mats, look.far, look.bank, waterData)
 const waterSabParam = params.get('watersab')
 if (waterSabParam !== null && waterSabParam !== 'nodive') throw new Error(`?watersab must be nodive, not ${waterSabParam}`)
 const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }, waterSabParam !== 'nodive')
+// ?trees=one: every tree one model (L5b's judging, docs/plans/active/l5-macro.md); with ?trees=one,cards, drawn as
+// leaf cards
 // ?trees=cards: the crowns as leaf cards (docs/plans/done/l7a-canopy-cards.md); ?leaves=procedural draws the atlas
 // instead of reading the oak picture; ?cardsize, ?cardcover, ?cardsink tune the cards (src/look/canopy.ts); ?volume=off
 // puts back L7a's light, card by card (docs/plans/done/l7b-crown-volume.md)
-const treesParam = params.get('trees')
-if (treesParam !== null && treesParam !== 'cards') throw new Error(`?trees must be cards, not ${treesParam}`)
+const treesParam = params.get('trees'), treeSet = new Set(treesParam?.split(',') ?? [])
+if (treesParam !== null && (treeSet.size === 0 || [...treeSet].some(k => k !== 'one' && k !== 'cards'))) throw new Error(`?trees must be one, cards or one,cards, not ${treesParam}`)
+const cardsOn = treeSet.has('cards')
 const leavesParam = params.get('leaves') ?? 'oak'
-for (const k of ['leaves', 'cardsize', 'cardcover', 'cardsink', 'volume']) if (params.has(k) && treesParam !== 'cards') throw new Error(`?${k} needs ?trees=cards`)
+for (const k of ['leaves', 'cardsize', 'cardcover', 'cardsink', 'volume']) if (params.has(k) && !cardsOn) throw new Error(`?${k} needs ?trees=cards`)
 if (leavesParam !== 'oak' && leavesParam !== 'procedural') throw new Error(`?leaves must be oak or procedural, not ${leavesParam}`)
 const cardOpt = (k: string, d: number) => { const v = Number(params.get(k) ?? d); if (!(v > 0)) throw new Error(`?${k} must be a positive number, not ${params.get(k)}`); return v }
 const cardOpts: CardOptions = { size: cardOpt('cardsize', CARD_DEFAULTS.size), cover: cardOpt('cardcover', CARD_DEFAULTS.cover), sink: cardOpt('cardsink', CARD_DEFAULTS.sink), volume: params.get('volume') !== 'off' }
 if (params.has('volume') && params.get('volume') !== 'off') throw new Error(`?volume must be off, not ${params.get('volume')}`)
 let leafTex: DynamicTexture | null = null
-if (treesParam === 'cards') {
+if (cardsOn) {
   const atlas = leavesParam === 'procedural' ? atlasProcedural() : atlasFromPicture(await loadImage(LEAF_URL))
   leafTex = new DynamicTexture('leaves', atlas, scene, true, Texture.TRILINEAR_SAMPLINGMODE); leafTex.hasAlpha = true
   leafTex.wrapU = leafTex.wrapV = Texture.CLAMP_ADDRESSMODE; leafTex.update(false)
@@ -93,20 +102,21 @@ if (treesParam === 'cards') {
 // ?wood: a dense wood (docs/plans/done/soft-shadows.md); ?wood=big: a forest (docs/plans/done/forest-bench.md)
 const woodParam = params.get('wood')
 if (woodParam !== null && woodParam !== '' && woodParam !== 'big') throw new Error(`?wood takes no value or big, not ${woodParam}`)
-const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { leaf: leafTex, opts: cardOpts } : undefined, woodParam === null ? 'off' : woodParam === 'big' ? 'big' : 'small')
+const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { leaf: leafTex, opts: cardOpts } : undefined, woodParam === null ? 'off' : woodParam === 'big' ? 'big' : 'small', meadowOn, treeSet.has('one'))
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 { const a = new Array(D.spec.water.stones * 4).fill(0); nature.stones.forEach((st, k) => a.splice(k * 4, 4, ...st))
   for (const m of [terrain.terrainMat, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
 const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy, nature.cardCasters, soft)
-// the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake picks the arm (bake by default),
+// the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
-const macro = buildMacro(scene, mats, look.cover)
+const macro = buildMacro(scene, mats, look.cover, meadowOn)
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)
-macro.setArm(macroArm)
-const macroBake = await macro.bake()
+// (a baked arm other than the bake's own bakes as it is set)
+const armBake = await macro.setArm(macroArm)
+const macroBake = armBake.texels ? armBake : await macro.bake()
 const camera = buildCamera(scene, canvas)
 // ?dof=0|1: the gameplay depth of field, on by default (decision 0024); the look tools load the page with it off
 const dofParam = params.get('dof')
@@ -115,6 +125,8 @@ if (dofParam !== null && dofParam !== '0' && dofParam !== '1') throw new Error(`
 // which write no distance to alpha)
 if (dofParam !== null) S.dof = +dofParam
 else if (params.has('bench') || params.has('water') || params.get('river') === 'debug') S.dof = 0
+// the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
+const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, nature.growthAllowed, nature.crop) : null
 const post = new Post(camera, engine, S, () => mats.grain, groundAt); post.build()
 
 /* ---------- UI ---------- */
@@ -207,7 +219,7 @@ Object.assign(window, {
 // the look checks' hooks (tools/guard.mjs, tools/detail-check.mjs): test objects, the materials, the meshes by pass,
 // and the detail layer's switches
 const lab = new Lab(scene, mats)
-const passes = { terrain: [terrain.tileGround, terrain.farGround, terrain.apron], scatter: scene.meshes.filter((m): m is Mesh => m instanceof Mesh && m.thinInstanceCount > 0), water: [water.mesh], post: () => post.passes }
+const passes = { terrain: [terrain.tileGround, terrain.farGround, terrain.apron], scatter: scene.meshes.filter((m): m is Mesh => m instanceof Mesh && (m.thinInstanceCount > 0 || m.forcedInstanceCount > 0)), water: [water.mesh], post: () => post.passes }
 const terrainMats = [terrain.terrainMat, terrain.farTerrainMat, terrain.hillMat], waterMats = [water.waterMat, water.groundMat]
 // the terrain's variants (src/look/shaders/painter.glsl): the L0 grain, the debug view, the checks' sabotages
 const DETAIL_DEFINES = ['DETAIL_L0', 'DETAIL_DEBUG', 'DETAIL_DEBUG_INC', 'DETAIL_DEBUG_N', 'DETAIL_SAB_IMPLICIT', 'DETAIL_SAB_STEP', 'BANKN_OFF']
@@ -254,7 +266,7 @@ const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   lab, mats, passes, post, setDetail,
   dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
-  sky: bakes.sky,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
+  sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, meadow: meadow ? { growingCells: meadow.growingCells, growthAt: meadow.growthAt, groundAt: meadow.groundAt, cropAt: meadow.cropAt, croppingCells: meadow.croppingCells } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
   hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),
   // the grain the terrain reads: the paint grain, or the seam check's smooth one (returns its steepest texel step)
   grain: (kind: 'paint' | 'smooth') => {
@@ -310,18 +322,20 @@ if (params.has('bench')) {
   const hold = Number(params.get('hold') ?? 3)
   if (!(hold > 0)) throw new Error(`?hold must be a positive number of seconds, not ${params.get('hold')}`)
   // the arms: the detail layer, and the L0 grain it replaces (the cost gate: at most +1 ms GPU for the terrain)
-  // ?bench=macro: the macro colour's arms instead (with the detail layer)
+  // ?bench=macro: the macro colour's arms whose shaders differ instead (with the detail layer)
   // ?bench=dof: the gameplay depth of field off and on (decision 0024)
   const dofArm = (on: number) => () => { setDetail([]); if (S.dof !== on) { S.dof = on; post.build(); syncButtons() } }
   // ?trees=cards&bench=trees: the crowns' two arms, cards and the pack's (docs/plans/done/l7a-canopy-cards.md),
   // for the frame's cost only (read the frame interval): the shadow map is baked once, with the cards, so the pack arm keeps the cards' shadows
+  // ?bench=meadow: the meadow's grass and crops against none (the ground's pattern is in the macro bake: nothing a frame)
+  if (params.get('bench') === 'meadow' && !meadow) throw new Error('?bench=meadow needs the meadow on (no ?meadow=off)')
   // ?trees=cards&bench=volume: the crowns lit as volumes against L7a's light (docs/plans/done/l7b-crown-volume.md)
   if ((params.get('bench') === 'trees' || params.get('bench') === 'volume') && !nature.showCards) throw new Error(`?bench=${params.get('bench')} needs ?trees=cards`)
   if (params.get('bench') === 'volume' && params.has('volume')) throw new Error('?bench=volume switches the volume itself: drop ?volume')
   const show = nature.showCards
   const cardMats = [...new Set((nature.cardCasters?.cards ?? []).map(m => m.material as ShaderMaterial))]
   const volume = (on: boolean) => { for (const m of cardMats) { m.setDefine('#define VOLUME', on); m.setDefine('#define SOFT_RAMP', on) } }
-  const arms = params.get('bench') === 'volume' ? [{ name: 'volume', apply: () => volume(true) }, { name: 'l7a', apply: () => volume(false) }] : params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? MACRO_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); macro.setArm(a) } })) : params.get('bench') === 'dof' ? [{ name: 'nodof', apply: dofArm(0) }, { name: 'dof', apply: dofArm(1) }] : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
+  const arms = params.get('bench') === 'meadow' && meadow ? [{ name: 'meadow', apply: () => meadow.setOn(true) }, { name: 'none', apply: () => meadow.setOn(false) }] : params.get('bench') === 'volume' ? [{ name: 'volume', apply: () => volume(true) }, { name: 'l7a', apply: () => volume(false) }] : params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? SHADER_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); return macro.setArm(a) } })) : params.get('bench') === 'dof' ? [{ name: 'nodof', apply: dofArm(0) }, { name: 'dof', apply: dofArm(1) }] : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
   // ?benchat=<x>,<z>: the cameras orbit that point instead of the start (the forest bench: docs/plans/done/forest-bench.md)
   // inside the play area: the camera's focus is clamped to it every frame (src/look/post.ts)
   const at = params.get('benchat')?.split(',').map(p => p.trim() === '' ? NaN : Number(p))

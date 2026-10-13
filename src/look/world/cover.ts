@@ -116,6 +116,12 @@ export function coverAt(g: CoverGrid, x: number, z: number): number {
   return i < 0 || j < 0 || i >= g.n || j >= g.n ? COVER.meadow : g.tex[(j * g.n + i) * 4]
 }
 
+// the field id at a world point (nearest cell; 0 off fields and off the grid): one field from the next
+export function fieldAt(g: CoverGrid, x: number, z: number): number {
+  const i = Math.floor((x - g.x0) / g.cell), j = Math.floor((z - g.z0) / g.cell)
+  return i < 0 || j < 0 || i >= g.n || j >= g.n ? 0 : g.tex[(j * g.n + i) * 4 + 1]
+}
+
 // Run-length coding by rows (classes lie in long runs): per run, the length (u16, little-endian) and the 4 bytes
 export function packCover(g: CoverGrid): Uint8Array {
   const out: number[] = [], t = g.tex

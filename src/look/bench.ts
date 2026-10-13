@@ -19,7 +19,7 @@ import { D } from './spec.ts'
 
 declare const __BUILD__: string
 
-export interface Arm { name: string; apply: () => void }
+export interface Arm { name: string; apply: () => unknown }   // apply may return a promise (a rebake): it is awaited
 export interface BenchPasses { terrain: Mesh[]; scatter: Mesh[]; water: Mesh[]; post: () => PostProcess[] }
 interface Cam { name: string; alpha: number; beta: number; radius: number }
 export interface RunStats {
@@ -123,7 +123,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
     for (const cam of cams) {
       camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; camera.target.set(focus.x, D.spec.camera.focusY, focus.z)
       for (const arm of [...arms, ...[...arms].reverse()]) {
-        arm.apply(); await scene.whenReadyAsync()
+        await arm.apply(); await scene.whenReadyAsync()
         for (let tries = 0; ; tries++) {
           await frames(10)
           timer.reset(); frameMs.length = draws.length = tris.length = 0; timed.clear(); lastT = 0; passFrames = 0; hidden = document.hidden

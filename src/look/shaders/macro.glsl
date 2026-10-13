@@ -5,7 +5,8 @@
 // shader arm runs it with q = 0 per pixel. The arms (one define, the page's ?macro):
 //   MACRO_FLAT    each class's colour alone (no variation, stripes, wear or broken edges): the ablation's arm 1
 //   MACRO_SHADER  macro(xz, 0) per pixel: arm 2
-//   MACRO_BAKE    the bake, read: arm 3
+//   MACRO_BAKE    the bake, read: arm 3, and arms 4 and 5 (L5b), whose bakes differ (MACRO_STROKES below; the
+//                 Kuwahara pass in src/look/macro.ts)
 // the cover grid (nearest): class, field id, furrow direction, wear distance
 uniform sampler2D uCover;
 // the snow's lie's zero, a byte (128/255), and under a byte from it the lie is 0: off the fields the bake's 8 bits
@@ -17,7 +18,14 @@ uniform sampler2D uMacro,uMacroFar;   // the bakes: the tile at SPEC.macro.texel
 #endif
 // the cover cell at a world point: class (0..9), field id (0 off fields, else a hash in 1..255), furrow direction
 // (rad), wear distance (m, to the nearest road, track or village ground; 25.5 at or past its reach)
-vec4 coverAt(vec2 xz){vec4 t=texture2D(uCover,xz/FAR_W+0.5);return vec4(floor(t.r*255.0+0.5),floor(t.g*255.0+0.5),t.b*3.14159265,t.a*25.5);}
+// (nearest, no mips: on WebGL2 read with zero derivatives, so a read in a branch the pixels of a quad take differently
+// is defined, as arm 4's strokes do)
+#ifdef WEBGL2
+vec4 coverTex(vec2 uv){return textureGrad(uCover,uv,vec2(0.0),vec2(0.0));}
+#else
+vec4 coverTex(vec2 uv){return texture2D(uCover,uv);}
+#endif
+vec4 coverAt(vec2 xz){vec4 t=coverTex(xz/FAR_W+0.5);return vec4(floor(t.r*255.0+0.5),floor(t.g*255.0+0.5),t.b*3.14159265,t.a*25.5);}
 // a class's colour; v in 0..1 its variation (0.5: the flat arm's)
 vec3 classColour(float k,float v){
   return k<1.5?mix(vec3(0.27,0.43,0.21),vec3(0.38,0.50,0.25),v)      // pasture (0 is the meadow: groundMeadow)
@@ -77,6 +85,27 @@ vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*3
 // (colour, the snow's lie as LIE0 + lie/1.2). q 1: the bake's, the edges blended over 9 taps a metre apart with a
 // darker margin where classes meet (a headland or a verge); q 0: one tap. px: the footprint, m (the bake's texel, or
 // the pixel's)
+#ifdef MEADOW
+// the meadow pattern (docs/plans/done/l5c-meadow.md) on meadow and pasture (k, the class the ground paints): the
+// brush tile (data/meadow-brush.png) at two unrelated scales and turns, warped by a slow noise (no common period, no
+// repeat to see), read at the footprint px (the bake texel, or the pixel), and the clump field, its fine octave
+// fading with the footprint. The near grass takes its shade from the same tile and field (src/look/meadow.ts). In
+// the bake arm this costs nothing a frame: the bake holds it
+uniform sampler2D uMeadowBrush;
+float brushAt(vec2 uv,float s,float px){
+  #ifdef WEBGL2
+  return textureGrad(uMeadowBrush,uv,vec2(px/s,0.0),vec2(0.0,px/s)).r;
+  #else
+  return texture2D(uMeadowBrush,uv).r;
+  #endif
+}
+vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
+  float gr=k<0.5?1.0:k<1.5?0.75:0.0;if(gr<=0.0)return c;
+  vec2 w=(vec2(mValue(xz/23.0),mValue(xz/23.0+41.0))-0.5)*3.0;
+  float b=brushAt((xz+w)/7.3,7.3,px)*0.6+brushAt(mat2(0.8253,-0.5646,0.5646,0.8253)*(xz-w)/(7.3/2.618)+0.37,7.3/2.618,px)*0.4;
+  float cl=mix(clumpAt(xz),mValue(xz/3.2),smoothstep(0.35,1.2,px));
+  return c*mix(1.0,(1.0+(b-0.585)*1.1)*mix(0.93,1.07,cl),gr);}   // the gain makes up the contrast the bake texel blurs away
+#endif
 vec4 macro(vec2 xz,float q,float px){
   vec2 w=coverWarp(xz);vec4 cv=coverAt(w);Grain g=grainAt(xz);vec3 c;
   if(q>0.5){
@@ -86,7 +115,53 @@ vec4 macro(vec2 xz,float q,float px){
     c/=9.0;c*=1.0-0.10*smoothstep(0.0,4.0,other)*(1.0-smoothstep(4.0,9.0,other));
   }else c=cellColour(cv,g);
   float b=stripeBand(cv,xz,px,g);c*=1.0+stripeValue(cv.x)*b;c=wear(c,cv,g);
+  #ifdef MEADOW
+  c=meadowPattern(c,cv.x,xz,px);
+  #endif
   return vec4(c,LIE0-(b*stripeSnow(cv.x)+trodden(cv.x))/1.2);}
+#ifdef MACRO_STROKES
+// ARM 4, BAKED STROKES (the bake's shader alone; L5b, an experiment: docs/proposals/prepainted-terrain.md): the bake's
+// colour laid over with strokes of its own colour, gathered per texel (no per-stroke draws, docs/proposals/
+// engine-design.md §6). One stroke a STROKE_CELL m cell, its centre jittered in the cell; along the field's furrows
+// on fields, along a slow flow elsewhere; 1.6-2.8 m long, 0.5-0.9 m wide; the macro colour at its centre, its value
+// jittered by up to 10% and its temperature a little (a painter's strokes vary: with the centre's colour alone they
+// changed the frame by about a level, too little to judge). A stroke reaches at most 1.65 m from its centre (half its
+// length and its soft edge), so a texel reads its cell's 3x3 neighbours; they are laid over in the order of a hash
+// of their cell (a fixed order by position would let one direction win every overlap). The snow's lie stays the
+// texel's own.
+#define STROKE_CELL 2.0
+float strokeHash(vec2 p){vec3 q=fract(vec3(p.xyx)*0.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
+vec3 strokes(vec2 xz,vec3 c,float px){
+  vec2 cell=floor(xz/STROKE_CELL);vec3 sc[9];float sm[9],sp[9];
+  for(int k=0;k<9;k++){
+    vec2 id=cell+vec2(float(k-(k/3)*3-1),float(k/3-1));
+    vec2 o=(id+vec2(strokeHash(id),strokeHash(id+17.3)))*STROKE_CELL;
+    vec4 cv=coverAt(coverWarp(o));
+    float a=cv.y>0.5?cv.z:(texM(uGrain,o/60.0,60.0).g-0.5)*6.2831853;
+    vec2 u=vec2(cos(a),sin(a)),d=xz-o;
+    float hl=0.8+0.6*strokeHash(id+41.9),hw=0.25+0.2*strokeHash(id+73.1);
+    // a capsule: the distance past its edge, m, soft over about a texel
+    float e=length(vec2(max(abs(dot(d,u))-(hl-hw),0.0),dot(d,vec2(-u.y,u.x))))-hw;
+    sm[k]=0.9*(1.0-smoothstep(-0.25,0.25,e));sp[k]=strokeHash(id+59.1);sc[k]=c;
+    #ifdef WEBGL2
+    // the colour read only where the stroke reaches (every read in macro() passes its derivatives, so is defined in a
+    // branch: texM, coverTex)
+    if(sm[k]>0.0)
+    #endif
+    sc[k]=macro(o,0.0,px).rgb*(0.9+0.2*strokeHash(id+97.7))*mix(vec3(0.96,1.0,1.05),vec3(1.04,1.0,0.95),strokeHash(id+5.3));
+  }
+  for(int i=0;i<8;i++)for(int j=0;j<8;j++)if(j<8-i&&sp[j]>sp[j+1]){
+    vec3 tc=sc[j];sc[j]=sc[j+1];sc[j+1]=tc;float t=sm[j];sm[j]=sm[j+1];sm[j+1]=t;t=sp[j];sp[j]=sp[j+1];sp[j+1]=t;}
+  for(int k=0;k<9;k++)c=mix(c,sc[k],sm[k]);
+  return c;}
+#endif
+// the bake's texel (src/look/macro.ts): the macro colour, with arm 4's strokes on the tile (on the far ring's 4 m
+// texels a stroke is under a texel)
+vec4 bakeTexel(vec2 xz,float px){vec4 m=macro(xz,1.0,px);
+  #ifdef MACRO_STROKES
+  if(px<1.0)m.rgb=strokes(xz,m.rgb,px);
+  #endif
+  return m;}
 // the shader arm's macro, and the bake arm's read, at a point, once a pixel (the colour and the snow's lie both use
 // them)
 vec2 pMacroXZ=vec2(1e9);vec4 pMacro;
