@@ -77,7 +77,8 @@ commits or PRs.
 ## Invariants
 
 - **Camera is always the top-down RTS view; there is no sky, ever.** Far zoom is the staff map.
-- **No optical blur during gameplay.** Depth of field only in presentation modes and video export.
+- **Blur is the player's choice** (decision 0024): gameplay depth of field is a setting, on by default and mild
+  enough that formations at the edges read; depth comes from painting first.
 - **The painterly look lives in assets and materials**, not in a heavy full-screen filter.
 - **Readable first**: armies are the most saturated objects on screen; never hide a formation.
 - **Pack colours are never used**: materials map to roles and our palette paints them.

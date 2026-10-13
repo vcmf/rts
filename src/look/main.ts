@@ -18,7 +18,7 @@ import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas 
 import { CLEAR, Materials, PAL, S } from './materials.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow } from './meadow.ts'
-import { Post, buildCamera } from './post.ts'
+import { DOF, Post, buildCamera } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
@@ -118,9 +118,16 @@ if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS
 const armBake = await macro.setArm(macroArm)
 const macroBake = armBake.texels ? armBake : await macro.bake()
 const camera = buildCamera(scene, canvas)
+// ?dof=0|1: the gameplay depth of field, on by default (decision 0024); the look tools load the page with it off
+const dofParam = params.get('dof')
+if (dofParam !== null && dofParam !== '0' && dofParam !== '1') throw new Error(`?dof must be 0 or 1, not ${dofParam}`)
+// (and off, unless ?dof sets it, on the bench, which compares with runs before decision 0024, and on the debug views,
+// which write no distance to alpha)
+if (dofParam !== null) S.dof = +dofParam
+else if (params.has('bench') || params.has('water') || params.get('river') === 'debug') S.dof = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, nature.growthAllowed, nature.crop) : null
-const post = new Post(camera, engine, S, () => mats.grain); post.build()
+const post = new Post(camera, engine, S, () => mats.grain, groundAt); post.build()
 
 /* ---------- UI ---------- */
 const byId = <T extends HTMLElement>(id: string): T => { const e = document.getElementById(id); if (!e) throw new Error(`look.html has no #${id}`); return e as T }
@@ -130,9 +137,12 @@ byId<HTMLSelectElement>('res').onchange = () => { S.res = +byId<HTMLSelectElemen
 const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
 type Toggle = typeof TOGGLES[number]
 const isToggle = (k: string | undefined): k is Toggle => (TOGGLES as readonly (string | undefined)[]).includes(k)
+// the buttons show the state (?dof and the bench's arms change it)
+const syncButtons = () => document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => { const k = b.dataset.k; if (isToggle(k)) { b.classList.toggle('on', !!S[k]); b.textContent = S[k] ? 'On' : 'Off' } })
+syncButtons()
 document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => b.onclick = () => {
   const k = b.dataset.k; if (!isToggle(k)) throw new Error(`panel button with an unknown data-k: ${k}`)
-  S[k] = S[k] ? 0 : 1; b.classList.toggle('on', !!S[k]); b.textContent = S[k] ? 'On' : 'Off'; if (k === 'dof') post.build()
+  S[k] = S[k] ? 0 : 1; syncButtons(); if (k === 'dof') post.build()
 })
 input('gamt').oninput = () => { S.gamt = +input('gamt').value }
 const SEASONS = ['Summer', 'Early autumn', 'Late autumn', 'Winter']
@@ -255,6 +265,7 @@ let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | n
 const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   lab, mats, passes, post, setDetail,
+  dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
   sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, meadow: meadow ? { growingCells: meadow.growingCells, growthAt: meadow.growthAt, groundAt: meadow.groundAt, cropAt: meadow.cropAt, croppingCells: meadow.croppingCells } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
   hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),
   // the grain the terrain reads: the paint grain, or the seam check's smooth one (returns its steepest texel step)
@@ -312,6 +323,8 @@ if (params.has('bench')) {
   if (!(hold > 0)) throw new Error(`?hold must be a positive number of seconds, not ${params.get('hold')}`)
   // the arms: the detail layer, and the L0 grain it replaces (the cost gate: at most +1 ms GPU for the terrain)
   // ?bench=macro: the macro colour's arms whose shaders differ instead (with the detail layer)
+  // ?bench=dof: the gameplay depth of field off and on (decision 0024)
+  const dofArm = (on: number) => () => { setDetail([]); if (S.dof !== on) { S.dof = on; post.build(); syncButtons() } }
   // ?trees=cards&bench=trees: the crowns' two arms, cards and the pack's (docs/plans/done/l7a-canopy-cards.md),
   // for the frame's cost only (read the frame interval): the shadow map is baked once, with the cards, so the pack arm keeps the cards' shadows
   // ?bench=meadow: the meadow's grass and crops against none (the ground's pattern is in the macro bake: nothing a frame)
@@ -322,7 +335,7 @@ if (params.has('bench')) {
   const show = nature.showCards
   const cardMats = [...new Set((nature.cardCasters?.cards ?? []).map(m => m.material as ShaderMaterial))]
   const volume = (on: boolean) => { for (const m of cardMats) { m.setDefine('#define VOLUME', on); m.setDefine('#define SOFT_RAMP', on) } }
-  const arms = params.get('bench') === 'meadow' && meadow ? [{ name: 'meadow', apply: () => meadow.setOn(true) }, { name: 'none', apply: () => meadow.setOn(false) }] : params.get('bench') === 'volume' ? [{ name: 'volume', apply: () => volume(true) }, { name: 'l7a', apply: () => volume(false) }] : params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? SHADER_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); return macro.setArm(a) } })) : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
+  const arms = params.get('bench') === 'meadow' && meadow ? [{ name: 'meadow', apply: () => meadow.setOn(true) }, { name: 'none', apply: () => meadow.setOn(false) }] : params.get('bench') === 'volume' ? [{ name: 'volume', apply: () => volume(true) }, { name: 'l7a', apply: () => volume(false) }] : params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? SHADER_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); return macro.setArm(a) } })) : params.get('bench') === 'dof' ? [{ name: 'nodof', apply: dofArm(0) }, { name: 'dof', apply: dofArm(1) }] : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
   // ?benchat=<x>,<z>: the cameras orbit that point instead of the start (the forest bench: docs/plans/done/forest-bench.md)
   // inside the play area: the camera's focus is clamped to it every frame (src/look/post.ts)
   const at = params.get('benchat')?.split(',').map(p => p.trim() === '' ? NaN : Number(p))
