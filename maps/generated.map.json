@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "id": "generated",
+  "name": "Generated Valley",
+  "note": "The five-seeds map (docs/plans/active/m3-generators.md, M3b): the valley's ridges and road, everything else from generators: a meandered brook with fords and a bridge, noise ground, copses and fields scattered together (one mix) clear of the water, the road, the village and both armies' ground, and a street village. Change the seed for another battlefield.",
+  "seed": 1,
+  "season": "summer",
+  "extent": {"w":2000,"h":2000},
+  "play": {"w":1200,"h":1200},
+  "features": [
+    {"id":"terrain","kind":"relief.base","height":2.5,"width":300},
+    {"id":"south-ridge","kind":"relief.ridge","line":[[-840,-286.99],[-720,-302.72],[-600,-302.76],[-480,-287.08],[-360,-266.51],[-240,-255.26],[-120,-261.1],[0,-280.0],[120,-298.9],[240,-304.74],[360,-293.49],[480,-272.92],[600,-257.24],[720,-257.28],[840,-273.01]],"height":16,"width":300},
+    {"id":"north-ridge","kind":"relief.ridge","line":[[-840,305.0],[-720,296.13],[-600,276.12],[-480,258.79],[-360,256.11],[-240,269.94],[-120,290.71],[0,304.09],[120,300.82],[240,283.17],[360,263.33],[480,255.0],[600,263.94],[720,283.97],[840,301.26]],"height":15,"width":300},
+    {"id":"south-hollow","kind":"relief.valley","line":[[-840,-400],[840,-400]],"height":-3,"width":100},
+    {"id":"north-hollow","kind":"relief.valley","line":[[-840,400],[840,400]],"height":-3,"width":100},
+    {"id":"high-road","kind":"way.road.lane","line":[[48.16,-1000],[49.75,-950],[52.83,-900],[56.97,-850],[61.55,-800],[65.9,-750],[69.39,-700],[71.51,-650],[71.94,-600],[70.63,-550],[67.77,-500],[63.77,-450],[59.22,-400],[54.79,-350],[51.11,-300],[48.74,-250],[48.01,-200],[49.03,-150],[51.65,-100],[55.5,-50],[60.0,0],[64.5,50],[68.35,100],[70.97,150],[71.99,200],[71.26,250],[68.89,300],[65.21,350],[60.78,400],[56.23,450],[52.23,500],[49.37,550],[48.06,600],[48.49,650],[50.61,700],[54.1,750],[58.45,800],[63.03,850],[67.17,900],[70.25,950],[71.84,1000]],"width":6},
+    {"id":"rough-south","kind":"ground.rough","area":[[[420,-200],[700,-200],[700,-160],[420,-160]]]},
+    {"id":"rough-north","kind":"ground.rough","area":[[[-700,160],[-420,160],[-420,200],[-700,200]]]},
+    {"id":"meadows","kind":"ground.meadow","area":[[[-1000,-1000],[1000,-1000],[1000,1000],[-1000,1000]]],"priority":0},
+    {"id":"name-brook","kind":"zone.label","point":[-520,60],"text":"the brook"},
+    {"id":"brook","kind":"water.stream","line":[[-1000,0],[0,10],[1000,0]],"width":6,"depth":0.8,"gen":{"meander":{"amplitude":35,"wavelength":200}}},
+    {"id":"ford-west","kind":"water.ford","on":"brook","near":[-260,5],"depth":0.5},
+    {"id":"ford-east","kind":"water.ford","on":"brook","near":[330,5],"depth":0.5},
+    {"id":"bridge","kind":"built.bridge","carries":"high-road","crosses":"brook"},
+    {"id":"army-south","kind":"ground.meadow","area":[[[-420,-400],[320,-400],[320,-180],[-420,-180]]],"note":"side 0's ground in the S1e battle: kept clear of woods and fields"},
+    {"id":"army-north","kind":"ground.meadow","area":[[[-320,180],[420,180],[420,400],[-320,400]]],"note":"side 1's ground, mirrored"},
+    {"id":"village","kind":"built.village","along":{"id":"high-road","from":1450,"to":1580},"houses":8,"gen":{"street-village":{"min":5}}},
+    {"id":"groves","kind":"veg.wood.broad","area":[[[-580,-580],[580,-580],[580,580],[-580,580]]],"gen":{"scatter":{"mix":[{"kind":"veg.wood.broad","count":6,"radiusMin":30,"radiusMax":60,"min":4},{"kind":"ground.field.wheat","count":5,"radiusMin":30,"radiusMax":45,"coherence":0.8,"min":3}],"avoid":["water","way","built","army-south","army-north"],"clearance":20}},"note":"copses and wheat fields placed together, apart from each other"}
+  ]
+}

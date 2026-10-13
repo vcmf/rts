@@ -34,3 +34,5 @@ recorded here on 2026-10-08.
 | [0019](0019-shading-data-from-authored-surface.md) | Shading data finer than the heightfield comes from the authored surface | proposed |
 | [0020](0020-track-m-on-an-epic-branch.md) | The map engine is Track M, built on an epic branch | accepted |
 | [0021](0021-two-metre-map-cell.md) | Every map grid is built on one 2 m cell | accepted |
+| [0022](0022-generators-expand-by-dependency.md) | Generators expand by dependency, over finished features, with hard and soft reads | superseded by 0023 |
+| [0023](0023-generators-form-a-chain.md) | Generators form a chain; kinds that keep apart share one scatter's mix | accepted |

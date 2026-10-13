@@ -8,32 +8,135 @@
 import type { Catalogue, Feature, MapFile } from './schema.ts'
 import { SHAPES } from './schema.ts'
 import type { Issue } from './catalogue.ts'
-import { GENERATOR_SPECS } from './generators.ts'
+import type { GenOutput } from './generators.ts'
+import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import { resolve } from './resolve.ts'
 import { seedOf } from './seed.ts'
 import { validate } from './validate.ts'
 import { crossings } from './geometry.ts'
+import { kindMatches, zoneGap, zoneToArea } from './reach.ts'
+import { isKindName } from './catalogue.ts'
 
-export const EXPAND_VERSION = 2   // recorded in a generated feature's `origin`; bump when any generator's output changes
+export const EXPAND_VERSION = 3   // recorded in a generated feature's `origin`; bump when any generator's output changes
+
+const idOrder = (a: Feature, b: Feature): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 
 export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Issue[] } {
-  const issues: Issue[] = []
-  const features = map.features.map((f, i): Feature => {
-    if (!f.gen) return f
-    const name = Object.keys(f.gen)[0], params = f.gen[name] as Record<string, number>
-    if (!Object.hasOwn(GENERATOR_SPECS, name)) { issues.push({ id: f.id, path: `features[${i}].gen`, message: `the "${name}" generator arrives in M3b; pin this feature's exact shape until then` }); return f }
-    let out: Partial<Feature>
-    try { out = GENERATOR_SPECS[name].run(f, resolve(f, map, cat).attrs, params, seedOf(map.seed, f.id, name)) } catch (err) {
-      issues.push({ id: f.id, path: `features[${i}].gen.${name}`, message: (err as Error).message }); return f
+  const issues: Issue[] = [], at = new Map(map.features.map((f, i) => [f.id, i]))
+  // the finished features, by id: the author's without a generator, then each generator's output once it has run. A
+  // generator sees only these: one still to run is invisible, so its input (a guide, a region) never leaks
+  const current = new Map(map.features.filter(f => !f.gen).map(f => [f.id, f])), resolved = new Map<string, ReturnType<typeof resolve>>()
+  const res = (f: Feature) => { let r = resolved.get(f.id); if (!r) { r = resolve(f, map, cat); resolved.set(f.id, r) } return r }
+  const children: Feature[] = [], ran = new Set<string>(), failed = new Set<string>()
+  const pinnedParents = pinnedParentsOf(map.features)
+  const runOne = (f: Feature) => {
+    const name = Object.keys(f.gen!)[0], params = f.gen![name] as Record<string, unknown>, spec = GENERATOR_SPECS[name]
+    const origin = { generator: name, params, version: EXPAND_VERSION }
+    let out: GenOutput
+    try {
+      out = spec.run({
+        f, kind: res(f).kind, attrs: res(f).attrs, params, seed: seedOf(map.seed, f.id, name), mapSeed: map.seed, features: current,
+        attrsOf: id => res(current.get(id)!).attrs, kindOf: id => res(current.get(id)!).kind,
+      })
+    } catch (err) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen.${name}`, message: (err as Error).message }); failed.add(f.id); return }
+    ran.add(f.id)
+    if (out.self !== null) {
+      // the feature without its generator, and without its old shape when the generator gives a new one (a village
+      // with its own area keeps it)
+      const isShape = (k: string) => (SHAPES as readonly string[]).includes(k), newShape = Object.keys(out.self).some(isShape)
+      const kept = Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'gen' && !(newShape && isShape(k)))) as Feature
+      current.set(f.id, { ...kept, ...out.self, origin } as Feature)
     }
-    const kept = Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'gen' && !(SHAPES as readonly string[]).includes(k))) as Feature
-    return { ...kept, ...out, origin: { generator: name, params, version: EXPAND_VERSION } }
-  })
+    for (const c of out.children ?? []) {
+      const child = { ...c, origin: { ...origin, parent: f.id } } as Feature
+      children.push(child); current.set(child.id, child)
+    }
+  }
+  // the order (decision 0023): F reads G when F's selectors could match what G produces (G's id, its children's ids,
+  // the kinds of G and of its children; not G's own kind when G leaves the map), and G is not F's peer. The reads must form a chain: the strongly connected groups of that graph
+  // (Tarjan's algorithm, which emits a group after every group it depends on) are single generators, run in that
+  // order, each seeing only finished features. A group of several is a cycle: an error naming its members and how to
+  // break it. A generator reading one that failed (or a cycle) is skipped, so the first error is the one reported.
+  // The file's order and the ids never matter (beyond seeds).
+  const gens = [...map.features.filter(f => f.gen)].sort(idOrder)
+  const specOf = (f: Feature) => GENERATOR_SPECS[Object.keys(f.gen!)[0]]
+  const paramsOf = (f: Feature) => f.gen![Object.keys(f.gen!)[0]] as Record<string, unknown>
+  const readsOf = new Map(gens.map(f => [f.id, specOf(f).reads?.(f, paramsOf(f)) ?? []]))
+  const produces = new Map(gens.map(g => { const k = res(g).kind; return [g.id, [...(specOf(g).removesSelf ? [] : [k]), ...(specOf(g).childKinds?.(k, paramsOf(g)) ?? [])]] }))
+  const matching = (f: Feature, g: Feature) => readsOf.get(f.id)!.filter(sel => sel === g.id || childOf(sel)?.parent === g.id || produces.get(g.id)!.some(k => kindMatches(sel, k)))
+  const peers = (f: Feature, g: Feature) => !!specOf(f).peers && specOf(f) === specOf(g)
+  const reads = (f: Feature, g: Feature) => f !== g && !peers(f, g) && matching(f, g).length > 0   // its own output is its own business (a scatter's siblings)
+  const index = new Map<string, number>(), low = new Map<string, number>(), onStack = new Set<string>(), stack: Feature[] = []
+  let counter = 0
+  const strong = (f: Feature) => {
+    index.set(f.id, counter); low.set(f.id, counter); counter++; stack.push(f); onStack.add(f.id)
+    for (const g of gens) {
+      if (!reads(f, g)) continue
+      if (!index.has(g.id)) { strong(g); low.set(f.id, Math.min(low.get(f.id)!, low.get(g.id)!)) }
+      else if (onStack.has(g.id)) low.set(f.id, Math.min(low.get(f.id)!, index.get(g.id)!))
+    }
+    if (low.get(f.id) !== index.get(f.id)) return
+    const group: Feature[] = []
+    let g: Feature
+    do { g = stack.pop()!; onStack.delete(g.id); group.push(g) } while (g !== f)
+    if (group.length > 1) {
+      group.sort(idOrder)
+      for (const h of group) {
+        const how = group.filter(o => reads(h, o)).map(o => `"${o.id}" (by ${matching(h, o).map(s => `'${s}'`).join(', ')})`).join(', ')
+        const mix = group.every(o => specOf(o) === GENERATOR_SPECS.scatter) ? ", or place their kinds jointly in one scatter's mix" : ''
+        issues.push({ id: h.id, path: `features[${at.get(h.id)}].gen`, message: `it reads ${how}, and they read it back: generators must form a chain. Drop one side's read (keeping clear on one side is enough)${mix}` })
+        failed.add(h.id)
+      }
+      return
+    }
+    if (failed.has(f.id) || gens.some(o => failed.has(o.id) && reads(f, o))) { failed.add(f.id); return }
+    runOne(f)
+  }
+  // peers (decision 0023) do not read each other, so they must not be able to meet: whatever their seeds, their zones
+  // (and an author's own area) lie more than the gap apart, checked before anything runs. One issue per peer, naming
+  // every peer too close to it
+  for (const spec of new Set(gens.map(specOf))) if (spec.peers) {
+    const { gap, reach } = spec.peers, attrsOf = (id: string) => res(current.get(id)!).attrs
+    const ps = gens.filter(g => specOf(g) === spec).map(g => ({ g, zone: reach(g, current, attrsOf) }))
+    const close = new Map<string, string[]>()
+    if (ps.length > 1) for (const p of ps) if (!p.zone) {
+      issues.push({ id: p.g.id, path: `features[${at.get(p.g.id)}].gen`, message: `cannot tell where it reaches before generators run (what it is built along is generated): ${Object.keys(p.g.gen!)[0]} generators must be kept apart beforehand` })
+      failed.add(p.g.id)
+    }
+    const known = ps.filter(p => p.zone)
+    for (let a = 0; a < known.length; a++) for (let b = a + 1; b < known.length; b++) {
+      const A = known[a], B = known[b], d = Math.min(zoneGap(A.zone!, B.zone!), A.g.area ? zoneToArea(B.zone!, A.g) : Infinity, B.g.area ? zoneToArea(A.zone!, B.g) : Infinity)
+      if (d > gap) continue
+      const say = (o: string) => `"${o}" (${d > 0 ? `${d.toFixed(1)} m between their zones` : 'their zones meet'})`
+      close.set(A.g.id, [...(close.get(A.g.id) ?? []), say(B.g.id)]); close.set(B.g.id, [...(close.get(B.g.id) ?? []), say(A.g.id)])
+    }
+    for (const p of known) {
+      const others = close.get(p.g.id)
+      if (!others) continue
+      issues.push({ id: p.g.id, path: `features[${at.get(p.g.id)}].gen`, message: `it could come within ${gap} m of ${others.join(', ')}: ${Object.keys(p.g.gen!)[0]} generators do not see each other, so each keeps to its own ground (its stretch, the inside of its bends, and its own area): move their stretches apart` })
+      failed.add(p.g.id)
+    }
+  }
+  for (const f of gens) if (!index.has(f.id)) strong(f)
+  // every selector that names a feature names one of the expanded map (or a generator that ran and made nothing, or
+  // the parent of pinned children): checked once everything has run, so the answer never depends on the order
+  for (const f of gens) if (ran.has(f.id)) for (const k of specOf(f).selects ?? []) {
+    const sels = (f.gen![Object.keys(f.gen!)[0]] as Record<string, unknown>)[k]
+    if (Array.isArray(sels)) sels.forEach((sel, n) => {
+      if (typeof sel === 'string' && !isKindName(cat, sel) && !current.has(sel) && !ran.has(sel) && !pinnedParents.has(sel)) issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen.${Object.keys(f.gen!)[0]}.${k}[${n}]`, message: `"${sel}" names nothing on the expanded map` })
+    })
+  }
   if (issues.length) return { map, issues }
-  // the generators' output, checked as any map, in the author's order (so the paths name their file)
-  for (const i of validate({ ...map, features }, cat)) issues.push({ ...i, message: `after expansion: ${i.message}` })
-  const byIndex = features.map((f, i) => ({ f, i }))
-  features.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  // the expanded features: the author's, in their order (generated ones at their new shape, removed ones gone), then
+  // the children; validated like any map, so the paths of the author's features name their file
+  const features = [...map.features.filter(f => current.has(f.id)).map(f => current.get(f.id)!), ...children]
+  for (const i of validate({ ...map, features }, cat)) {
+    const own = i.id !== null && at.has(i.id), child = !own && i.id !== null && children.some(c => c.id === i.id)
+    const parent = child ? children.find(c => c.id === i.id)!.origin!.parent! : null
+    issues.push({ ...i, id: parent ?? i.id, path: own ? i.path.replace(/^features\[\d+\]/, `features[${at.get(i.id!)}]`) : parent ? `features[${at.get(parent)}].gen (child ${i.id}: ${i.path})` : i.path, message: `after expansion: ${i.message}` })
+  }
+  const byIndex = features.filter(f => at.has(f.id)).map(f => ({ f, i: at.get(f.id)! }))
+  features.sort(idOrder)
   const out: MapFile = { ...map, features }
   // a bridge needs `near` when its road and its water cross more than once (paths name the author's file's order)
   const byId = new Map(features.map(f => [f.id, f]))
@@ -47,4 +150,3 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
   })
   return { map: out, issues }
 }
-

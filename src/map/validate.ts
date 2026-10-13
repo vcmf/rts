@@ -4,9 +4,10 @@
 import type { Catalogue, Feature, MapFile, Pt } from './schema.ts'
 import { GENERATORS, ID, RESERVED, REFS, SEASONS, SHAPES } from './schema.ts'
 import type { GenSpec } from './generators.ts'
-import { GENERATOR_SPECS } from './generators.ts'
+import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import type { Issue } from './catalogue.ts'
-import { allowedIn, categoryOf, checkCatalogue, checkValue, kindChain, kindMeta, kindStates } from './catalogue.ts'
+import { allowedIn, categoryOf, checkCatalogue, checkValue, isKindName, kindChain, kindMeta, kindStates } from './catalogue.ts'
+import { kindMatches } from './reach.ts'
 import { barrierProblem, inRing, isPt, lineCrossing, lineFoldBack, lineLength, onCentimetres, ringArea2, ringCrossing, ringsTouch } from './geometry.ts'
 
 export type { Issue }
@@ -65,12 +66,24 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
   map.features.forEach((f, i) => {
     if (!isObj(f) || typeof f.id !== 'string' || !ID.test(f.id)) { bad(null, `features[${i}].id`, 'every feature needs an id of lowercase letters, digits and dashes'); return }
     if (byId.has(f.id)) bad(f.id, `features[${i}].id`, `"${f.id}" is used twice`)
+    else if (Object.hasOwn(cat.categories, f.id)) bad(f.id, `features[${i}].id`, `"${f.id}" is a category's name: a selector naming it would mean both`)
     else byId.set(f.id, f as Feature)
   })
 
+  // the ids generated children will take, <parent>-<n> (childOf, src/map/generators.ts): reserved while their parent
+  // generates, so an author's feature never collides with one. The parents, and how one is pinned
+  const parents = new Map<string, string>()
+  for (const f of map.features) if (isObj(f) && typeof f.id === 'string' && isObj(f.gen)) {
+    const g = Object.keys(f.gen)[0], spec = Object.hasOwn(GENERATOR_SPECS, g) ? GENERATOR_SPECS[g] : undefined
+    if (spec?.childKinds) parents.set(f.id, spec.removesSelf ? `remove "${f.id}" itself (its region leaves the map) and keep its expanded children` : `replace "${f.id}" by its expanded form (it keeps the area it was given) and keep its expanded children`)
+  }
+  const parentOf = (x: string): string | undefined => { const c = childOf(x); return c && parents.has(c.parent) ? c.parent : undefined }
+  // ids that pinned children name as their parent: a selector may still name the parent to mean them
+  const pinnedParents = pinnedParentsOf(map.features.filter(f => isObj(f) && isObj(f.origin)) as Feature[])
   map.features.forEach((f, i) => {
     if (!isObj(f) || typeof f.id !== 'string') return
     const id = f.id, path = `features[${i}]`
+    if (parentOf(id)) bad(id, `${path}.id`, `"${id}" is reserved for the children of "${parentOf(id)}"; to pin them, ${parents.get(parentOf(id)!)}`)
     // the kind: its own, or its preset's
     let kind = f.kind
     if (f.preset !== undefined) {
@@ -91,7 +104,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       const states = kindStates(cat, chain)
       if (!Object.hasOwn(states, f.state)) bad(id, `${path}.state`, `${kind} has no state "${f.state}" (it has: ${Object.keys(states).join(', ') || 'none'})`)
     }
-    if (f.follow !== undefined) bad(id, `${path}.follow`, 'shared edges arrive with the generators (M3)')
+    if (f.follow !== undefined) bad(id, `${path}.follow`, 'shared edges arrive in M3c')
     // a generator: its name, its parameters, and (below) the shape it reads and the one it writes
     let gen: GenSpec | undefined
     if (f.gen !== undefined) {
@@ -105,20 +118,32 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
           const e = checkValue(gen.params[k], v); if (e) bad(id, `${gp}.${k}`, e)
         }
         for (const [k, spec] of Object.entries(gen.params)) if (spec.required && !(k in params)) bad(id, `${gp}.${k}`, 'is required')
+        // the generator's own checks (they skip a parameter whose type is already wrong)
+        for (const problem of gen.check?.(params as Record<string, unknown>, cat, f as Feature) ?? []) bad(id, `${gp}.${problem.key}`, problem.message)
+        // the parameters that name features: each an id (a generator's children too, <id>-<n>), a category, or a
+        // dotted kind prefix in the catalogue; never the feature itself
+        for (const k of gen.selects ?? []) {
+          const sel = (params as Record<string, unknown>)[k]
+          if (Array.isArray(sel)) sel.forEach((x, n) => {
+            if (typeof x !== 'string') return
+            if (x === id || parentOf(x) === id) bad(id, `${gp}.${k}[${n}]`, 'a feature cannot name itself or its own children')
+            else if (!byId.has(x) && !parentOf(x) && !pinnedParents.has(x) && !isKindName(cat, x)) bad(id, `${gp}.${k}[${n}]`, `"${x}" is no feature id, generated child, category or kind`)
+          })
+        }
       }
     }
-    if (f.origin !== undefined && (!isObj(f.origin) || typeof f.origin.generator !== 'string' || !isObj(f.origin.params) || !Number.isInteger(f.origin.version))) bad(id, `${path}.origin`, 'must be { "generator", "params", "version" }')
+    if (f.origin !== undefined && (!isObj(f.origin) || typeof f.origin.generator !== 'string' || !isObj(f.origin.params) || !Number.isInteger(f.origin.version) || (f.origin.parent !== undefined && typeof f.origin.parent !== 'string'))) bad(id, `${path}.origin`, 'must be { "generator", "params", "version", "parent"? }')
 
     // the shape
     const shapes = SHAPES.filter(s => f[s] !== undefined)
     if (shapes.length > 1) bad(id, path, `has ${shapes.length} shapes (${shapes.join(', ')}); a feature has one`)
-    else if (shapes.length === 0 && gen) bad(id, path, `needs a shape for its ${Object.keys(f.gen!)[0]} generator: one of ${gen.input.join(', ')}`)
+    else if (shapes.length === 0 && gen && !gen.input.includes('none')) bad(id, path, `needs a shape for its ${Object.keys(f.gen!)[0]} generator: one of ${gen.input.join(', ')}`)
     else if (shapes.length === 0 && !meta.shapes.includes('none') && f.gen === undefined) bad(id, path, `needs a shape: one of ${meta.shapes.join(', ')}`)
     else if (shapes.length === 1) {
       const s = shapes[0]
       // with a generator, the shape is its input, and its output must be a shape the kind takes
-      if (gen?.kinds && !gen.kinds.some(k => kind === k || kind.startsWith(k + '.'))) bad(id, `${path}.gen`, `the ${Object.keys(f.gen!)[0]} generator runs on ${gen.kinds.join(', ')}, not ${kind}`)
-      else if (gen && !gen.input.includes(s)) bad(id, `${path}.${s}`, `the ${Object.keys(f.gen!)[0]} generator reads ${gen.input.join(', ')}, not ${s}`)
+      if (gen?.kinds && !gen.kinds.some(k => kindMatches(k, kind))) bad(id, `${path}.gen`, `the ${Object.keys(f.gen!)[0]} generator runs on ${gen.kinds.join(', ')}, not ${kind}`)
+      else if (gen && !gen.input.includes(s as typeof gen.input[number])) bad(id, `${path}.${s}`, `the ${Object.keys(f.gen!)[0]} generator reads ${gen.input.join(', ')}, not ${s}`)
       else if (gen && !meta.shapes.includes(gen.output)) bad(id, `${path}.gen`, `the ${Object.keys(f.gen!)[0]} generator writes a ${gen.output}, which ${kind} does not take`)
       else if (!gen && !meta.shapes.includes(s)) bad(id, `${path}.${s}`, `${kind} takes ${meta.shapes.filter(x => x !== 'none').join(', ') || 'no shape'}, not ${s}`)
       else checkShape(s, f[s], `${path}.${s}`, extent, (p, m) => bad(id, p, m))

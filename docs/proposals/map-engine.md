@@ -172,8 +172,11 @@ validated parameters:
 |---|---|---|
 | `meander` | `water.stream`, `water.river` | the bends along a guide line (today's Kinoshita curve from `src/look/world/author.ts`), with width and depth per sample (narrower bends, pools and riffles); the water level is the compiler's (§4) |
 | `clump` | any area kind at a point | an organic outline of a given size, coherence and raggedness (0 A.D.'s ClumpPlacer) |
-| `street-village` | `built.village` | houses, yards and gardens along its road |
-| `scatter` | a region | N child features of a kind, with `avoid` and `within` constraints (a distance from other kinds or ids) (0 A.D.'s placer, painter and constraint triple, as data) |
+| `street-village` | `built.village` with `along` its road | houses (children) on both sides between `from` and `to`, set back and facing the road, clear of water, buildings, no-go zones, other ways and barriers; the village's area, when it has none, the hull of its houses; `min` |
+| `scatter` | any area kind given as its region | `count` children of the feature's kind and attributes, each a `clump` of radius `radiusMin`–`radiusMax`, `clearance` m clear of the kinds or ids it `avoid`s and of each other, within `reach` m of what it stays `within`; `min`; or `mix: [{ kind, count, … }]`, several kinds placed jointly, each child clear of every other |
+
+Expansion runs each generator after what it reads (hard: needs it; soft: keeps clear of it) and shows it only finished
+features; the order and its rules are in `docs/systems/map.md`.
 
 **The expanded map** is the same language with every `gen` run: exact lines, polygons and buildings. Each
 generated feature records where it came from (`origin`: the generator, its parameters and its version). To hand-tune
@@ -238,14 +241,13 @@ validate ──► relief ──► expand (generators) ──► apply (layers,
   rings, no self-intersection, inside the extent). It reports every error with the feature's id.
 - **Relief** comes first, always: the relief features (`relief.base` with its noise, the landforms) expand and
   are summed into the relief before any other feature runs. They read nothing but their own parameters.
-- **Expand** runs every other generator and gives every feature its exact shape. Features run in dependency
-  order, with ties broken by id, never in the file's order (AoE II's and Civilization's lesson). A feature depends
-  on the ids it references, and a `scatter` also on every feature of the kinds it names in `avoid` or `within`,
-  except itself and its own children. Two scatters never depend on each other: the one with the smaller id runs
-  first, and the later one sees its children. A
+- **Expand** runs every other generator and gives every feature its exact shape. Generators run in dependency
+  order, never in the file's order (AoE II's and Civilization's lesson). A generator depends on the ids it
+  references, and on every generator whose output or children could match the kinds it names (a `scatter`'s
+  `avoid` and `within`, a village's water and buildings), never on itself. The dependencies must form a chain: a
+  cycle is an error, and kinds that must stay apart are placed jointly by one `scatter`'s `mix` (decision 0023). A
   generator reads the relief and the expanded shapes of what it depends on, nothing else: a `meander` follows the
-  valley, a `street-village` its road, a `scatter` avoids the woods. A cycle is a validation error. Its output is
-  the expanded map.
+  valley, a `street-village` its road, a `scatter` avoids the woods. Its output is the expanded map.
 - **Apply** writes the expanded features into the five layers, in a fixed order owned by the engine:
   1. **relief:** the base and the landforms (already built);
   2. **relief edits** from every feature, now that all shapes exist (a sunken road's cut, a parapet and its ditch,
@@ -367,7 +369,7 @@ hedge and a village.
   "format": 1, "id": "two-ridges", "name": "Two Ridges", "seed": 41, "season": "summer",
   "extent": { "w": 2400, "h": 2400 }, "play": { "w": 1500, "h": 1500 },
   "features": [
-    { "id": "ground", "kind": "relief.base", "height": 4, "width": 400 },
+    { "id": "terrain", "kind": "relief.base", "height": 4, "width": 400 },
     { "id": "south-ridge", "kind": "relief.ridge", "line": [[-650, -300], [0, -260], [650, -320]], "height": 18, "width": 230, "steep": "right" },
     { "id": "north-ridge", "kind": "relief.ridge", "line": [[-650, 300], [650, 260]], "height": 14, "width": 260 },
     { "id": "meadows", "kind": "ground.meadow", "area": [[[-1200, -1200], [1200, -1200], [1200, 1200], [-1200, 1200]]], "priority": 0 },
