@@ -89,6 +89,9 @@ the oak picture and with the procedural atlas.
   finding, not the shadow map's 0.33 m texel as first thought); with a plain cut two mips finer, the shadow's
   outline breaks into leaf lobes. Its inside stays solid where the crown is dense. The light-map bake filters
   edges over about 1.3 m for every shadow on the map; a tighter filter is the shadow-look plan's.
+- **Tests:** `npm test` fails only the sim's cost tests when the machine is loaded; main fails the same tests
+  under the same load (2026-10-13), and both pass when run alone. This branch touches neither the sim nor its
+  tests.
 
 ## Review (`/code-review high`)
 
