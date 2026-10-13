@@ -99,7 +99,7 @@ const syncButtons = () => document.querySelectorAll<HTMLButtonElement>('.tg').fo
 syncButtons()
 document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => b.onclick = () => {
   const k = b.dataset.k; if (!isToggle(k)) throw new Error(`panel button with an unknown data-k: ${k}`)
-  S[k] = S[k] ? 0 : 1; b.classList.toggle('on', !!S[k]); b.textContent = S[k] ? 'On' : 'Off'; if (k === 'dof') post.build()
+  S[k] = S[k] ? 0 : 1; syncButtons(); if (k === 'dof') post.build()
 })
 input('gamt').oninput = () => { S.gamt = +input('gamt').value }
 const SEASONS = ['Summer', 'Early autumn', 'Late autumn', 'Winter']

@@ -21,9 +21,11 @@ import UBER_FS from './shaders/uber.frag?raw'
 
 // the view the page opens on (the bench measures it as its default zoom)
 export const START = { beta: 0.80, radius: 125, x: -10, z: 2 }
-// the gameplay depth of field (decision 0020): the sharp band (|1 - focus/d| below it is sharp), the gain past it, the
-// largest blur in pixels at 1080 lines, and the share of it left at the widest zoom
+// the gameplay depth of field (decision 0020): the sharp band (|1 - focus/z| below it is sharp, z the depth along the
+// view axis), the gain past it, the largest blur in pixels at 1080 lines, and the share of it left at the widest zoom;
+// FOCUS_S the focus's easing time (s)
 export const DOF = { band: 0.06, k: 4, px: 10, wide: 0.4 }
+const FOCUS_S = 0.25
 
 // the top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit
 export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateCamera {
@@ -61,20 +63,34 @@ export class Post {
   get passes(): PostProcess[] { return this.posts }
   // no finishing passes: the scene draws straight to the canvas (the detail check's debug view)
   clear(): void { this.posts.forEach(p => p.dispose(this.camera)); this.posts = [] }
+  // the depth along the view axis of the ground the screen's centre shows: the centre ray marched against the
+  // terrain (the target sits at a fixed height, inside a hill or above a valley, so neither it nor the ground under
+  // it is what the centre shows), eased over FOCUS_S so a pan over a hillside does not jump the sharp band; a jump
+  // of over a third (a new view) is taken at once
+  private focus = 0
+  private focusDepth(dt: number): number {
+    const c = this.camera, p = c.position, t = c.target
+    let fx = t.x - p.x, fy = t.y - p.y, fz = t.z - p.z; const l = Math.hypot(fx, fy, fz) || 1; fx /= l; fy /= l; fz /= l
+    const above = (d: number) => p.y + fy * d - this.ground(p.x + fx * d, p.z + fz * d)
+    const N = 96, far = 3 * c.radius; let d0 = 0, d1 = far
+    for (let i = 1; i <= N; i++) { const d = far * i / N; if (above(d) <= 0) { d1 = d; break } d0 = d }
+    if (d1 < far) for (let i = 0; i < 12; i++) { const m = (d0 + d1) / 2; if (above(m) > 0) d0 = m; else d1 = m }
+    const want = Math.max(1, d1 < far ? d1 : l)
+    this.focus = !this.focus || Math.abs(want - this.focus) > this.focus / 3 ? want : this.focus + (want - this.focus) * (1 - Math.exp(-Math.max(0, dt) / FOCUS_S))
+    return this.focus
+  }
   build(): void {
     const { camera, engine, S } = this
     this.posts.forEach(p => p.dispose(camera)); this.posts = []
     const HF = Constants.TEXTURETYPE_HALF_FLOAT
     const pp = (name: string, uni: string[], smp: string[], type: number) => { const p = new PostProcess(name, name, uni, smp, 1.0, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, null, type); if (!this.posts.length) p.samples = 4; this.posts.push(p); return p }
     if (S.dof) {
-      // the miniature field (decision 0020): focused on the ground under the camera's target (the target itself sits
-      // at a fixed height, inside a hill or above a valley), at its depth along the view axis; a sharp band of
-      // DOF.band around it; the largest blur DOF.px at 1080 lines, strongest at the closest zoom and DOF.wide of it
-      // at the widest
+      // the miniature field (decision 0020): focused on the ground at the screen's centre (focusDepth); a sharp band
+      // of DOF.band around it; the largest blur DOF.px at 1080 lines, strongest at the closest zoom and DOF.wide of
+      // it at the widest
       const p = pp('dof', ['uTexel', 'uTan', 'uFocus', 'uBand', 'uK', 'uMaxPx'], [], HF), c = D.spec.camera
       p.onApply = e => {
-        const t = camera.target, g = new Vector3(t.x, this.ground(t.x, t.z), t.z), fwd = t.subtract(camera.position).normalize()
-        const focus = Math.max(1, Vector3.Dot(g.subtract(camera.position), fwd))
+        const focus = this.focusDepth(engine.getDeltaTime() / 1000)
         const aspect = p.width / p.height, tf = Math.tan(camera.fov / 2), vert = camera.fovMode === Camera.FOVMODE_VERTICAL_FIXED
         const z = Math.min(1, Math.max(0, (camera.radius - c.rMin) / (c.rMax - c.rMin))), px = DOF.px * S.dofAmt * p.height / 1080 * (1 + (DOF.wide - 1) * z)
         e.setFloat2('uTexel', 1 / p.width, 1 / p.height); e.setFloat2('uTan', vert ? tf * aspect : tf, vert ? tf : tf / aspect)

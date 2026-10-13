@@ -72,11 +72,12 @@ and on.
 The plan: `docs/plans/active/gameplay-dof.md`. One pass (`src/look/shaders/dof.frag`) after Dennis Gustafsson's
 single-pass bokeh: a golden-angle spiral of at most 64 taps, each counted where its own blur reaches the pixel, and a
 tap behind the pixel clamped to twice the pixel's blur so a sharp crown never bleeds over the ground behind it. The
-circle of confusion is `|1 − focus/d|` past a sharp band, times a gain, d the view distance the materials write to
-alpha and the focus the camera's target. The constants are `DOF` in `src/look/post.ts`: the band, the gain, the
+circle of confusion is `|1 − focus/z|` past a sharp band, times a gain, z the depth along the view axis (from the
+distance the materials write to alpha and the pixel's ray) and the focus the depth of the ground at the screen's
+centre (the centre ray marched against the terrain, eased over a quarter second; a new view is taken at once). The constants are `DOF` in `src/look/post.ts`: the band, the gain, the
 largest blur in pixels at 1080 lines, and the share of it left at the widest zoom (the blur eases from the closest
 zoom to the widest). The panel's "Blur strength" slider multiplies it. The look tools load the page with `?dof=0`
-(`shoot()` in `tools/look-page.mjs`): the checks measure the paint; the readability
+(`shoot()` in `tools/look-page.mjs`, and `tools/check-negatives.mjs` for a URL): the checks measure the paint; the readability
 guard is also run with `?dof=1`.
 
 ### The ground's cover and macro colour (L5a)
