@@ -210,7 +210,8 @@ strokes unless they beat arm 3.
   decision 0010).
 - **On the ground:** the readability guard's army-colour blocks, a column of the four coats at three spots, and
   one tree type (`?trees=one`, every tree from one broadleaf model) so the trees' variety does not vary the
-  answer.
+  answer. After main gained the leaf-card crowns (L7a, L7b) and the soft shadows, the kit was rebuilt with
+  `?trees=one,cards`: the same single model, drawn as cards.
 - **Seasons:** summer and winter.
 - **Stills and motion:** per arm, one still per view and season, and a 3 s slow pan per season and zoom (yaw 0),
   encoded as H.264 for the shimmer question.

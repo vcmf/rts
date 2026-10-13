@@ -1,6 +1,7 @@
 // L5b's judging kit (docs/plans/active/l5-macro.md, The judging kit): the look page's five macro arms shot at the
 // judging framing, for the blind judging page. Each arm: a still per season, zoom and yaw, and a slow pan per season
-// and zoom (H.264), with the readability guard's army-colour blocks on the ground and one tree type (?trees=one).
+// and zoom (H.264), with the readability guard's army-colour blocks on the ground and one tree type drawn as
+// leaf-card crowns (?trees=one,cards: L7a and L7b's crowns, with main's soft shadows).
 //
 //   node tools/ablation-kit.mjs <look page URL> <outDir> [--seed <text>] [--arms <a,b>]
 //     --seed   names the files and draws the screens' sides (default: random, kept in the key alone): anyone with
@@ -58,7 +59,7 @@ const run = (cmd, a) => { const r = spawnSync(cmd, a, { encoding: 'utf8' }); if 
 
 // one page load an arm: the blocks, then every still, then the pans' frames (each pan encoded, its frames removed)
 for (const arm of only ?? ARMS) {
-  const u = new URL(url); u.searchParams.set('macro', arm); u.searchParams.set('trees', 'one')
+  const u = new URL(url); u.searchParams.set('macro', arm); u.searchParams.set('trees', 'one,cards')
   const blocks = blocksAt(COVER_SPOTS).map(b => ({ ...b, color: ARMY_HEX[b.color] }))
   const steps = [...prepSteps(), ['eval', `__look.lab.clearBlocks(); __look.lab.addBlocks(${JSON.stringify(blocks)}) + " blocks"`]]
   for (const [season, sv] of Object.entries(SEASONS)) for (const [zoom, [beta, r]] of Object.entries(ZOOMS)) {

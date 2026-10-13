@@ -40,7 +40,12 @@ void main(){
   float bw=0.15*(1.0-smoothstep(-0.1,0.4,dot(N,uSunDir)))*(1.0-smoothstep(0.0,6.0,vH));
   #endif
   vec3 alb=mix(roleCol(vRole,vTint),groundSeason(groundBounce(vRoot)),bw);
-  vec3 c=paint(alb,N,vW,vOcc*mix(1.0,lm.g,uAO*0.6),uRim,1.0,sh);
+  #ifdef GRASSY
+  float lo=groundOcc(lm);pSky=mix(1.0,lm.g,uAO);               // grass sits in the contact under a tree, as its ground does
+  #else
+  float lo=lm.g;
+  #endif
+  vec3 c=paint(alb,N,vW,vOcc*mix(1.0,lo,uAO*0.6),uRim,1.0,sh);
   #ifndef GRASSY
   if(vRole<1.5){                                                // golden backlight: crowns glow when the sun is behind them
     vec3 V=normalize(uCamPos-vW);

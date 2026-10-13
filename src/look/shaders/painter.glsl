@@ -56,23 +56,28 @@ float shadowAt(vec3 wp,vec3 n){
   for(int x=0;x<2;x++)for(int y=0;y<2;y++)s+=step(texture2D(uShadowMap,uv+(vec2(float(x),float(y))*2.0-1.0+j)*uSMTexel).r,d);
   vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,uSMFade.x,e.x)*smoothstep(0.0,uSMFade.y,e.y);   // soft edge: far foliage past the box fades to lit
   return s/4.0*uShadowsOn*fade;}
-// BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask.
+// BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask, A the contact under trees (outside the
+// map: 1, no contact). groundOcc: the occlusion of the ground and what grows flat on it, contact included
 uniform sampler2D uLM;uniform mat4 uLMVP;uniform float uAO,uMist,uShafts,uBack;
+float groundOcc(vec4 lm){return lm.g*lm.a;}
 vec4 LM(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);vec2 uv=p.xy/p.w*0.5+0.5;
-  if(uv.x<0.002||uv.y<0.002||uv.x>0.998||uv.y>0.998)return vec4(1.0,1.0,0.0,0.0);
+  if(uv.x<0.002||uv.y<0.002||uv.x>0.998||uv.y>0.998)return vec4(1.0,1.0,0.0,1.0);
   return texture2D(uLM,uv);}
 // Valley mist: warm where the air is sunlit, cool where it's shadowed. Light shafts =
 // the air column's sun visibility, read from the light map at 3 heights along the view ray.
+// Known issue #62: the lit air tints sunlit snow orange.
 vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   float m=lm.b*uMist*exp(-hAbove*0.12);if(m<0.01)return c;
-  float air=lm.r;
+  float air=mix(1.0,lm.r,uShadowsOn);
   if(uShafts>0.5){vec3 v=normalize(uCamPos-wp);float s=0.0;
     for(int i=0;i<3;i++){float h=(float(i)+0.5)/3.0*7.0;vec3 q=wp+v*(h/max(v.y,0.25));
       s+=LM(q-uSunDir*((q.y-wp.y)/uSunDir.y)).r;}
     air=s/3.0;}
   float n=G(wp.xz/55.0+uTime*vec2(0.004,0.0015)).g;
-  float t=clamp(m*(0.35+0.55*n),0.0,0.42);
-  return mix(c,mix(vec3(0.58,0.67,0.78),vec3(1.0,0.86,0.63),air),t);}
+  // thinner over the cast shadow on the ground, which keeps its shape; less so above the ground (a crown, a block), whose
+  // own light is not that of the ground
+  float t=clamp(m*(0.35+0.55*n),0.0,0.42)*mix(1.0,mix(0.55,1.0,1.0-(1.0-lm.r)*uShadowsOn),exp(-hAbove*0.5));
+  return mix(c,mix(vec3(0.42,0.53,0.68),vec3(1.0,0.86,0.63),air),t);}
 // view distance in alpha → depth of field without re-rendering the scene
 float depthA(vec3 wp){return clamp(length(wp-uCamPos)/1000.0,0.0,1.0);}
 // Big painted cloud shadows drifting over the land: the top-down camera's only "sky".
@@ -81,8 +86,16 @@ float cloud(vec3 wp){
   float c=0.62*G(p/330.0).g+0.38*G(p/131.0+vec2(0.37,0.11)).g;
   return smoothstep(0.60,0.635,c+(G(wp.xz/5.0).r-0.5)*0.06)*uClouds;
 }
-// Cool, more saturated shadow version of a colour (hue shift, never plain darkening).
-vec3 shadowOf(vec3 a){float l=dot(a,vec3(0.3,0.59,0.11));return clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80+vec3(0.02,0.04,0.07);}
+// the shadow band (docs/plans/done/shadow-look.md): more saturated than the base and turned toward a cool blue
+// violet at the same value (a darker band costs dark coats their separation, tools/guard.mjs). KEEP_HUE: the
+// army coats keep the band of main, so a coat in shadow loses none of its colour
+vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
+  vec3 s=clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80;float v=dot(s,Y);   // the band of main, whose value is kept
+  #ifndef KEEP_HUE
+  vec3 t=clamp(mix(vec3(l),a,1.3),0.0,1.0)*uShadowCol;const vec3 B=vec3(0.34,0.45,0.80);
+  s=mix(t/max(dot(t,Y),1e-4),B/dot(B,Y),0.25)*v;
+  #endif
+  return s+vec3(0.02,0.04,0.07);}
 // THE TERRAIN'S DETAIL LAYER (docs/plans/active/l2-detail.md, L2b): the paint grain at a constant size on screen.
 // DETAIL: the terrain's materials; DETAIL_L0 puts back the L0 grain (the bench's and the checks' baseline).
 // Biplanar projection (the two planes most facing the normal; the third has no weight, and on gentle ground nor has
@@ -96,6 +109,7 @@ vec3 shadowOf(vec3 a){float l=dot(a,vec3(0.3,0.59,0.11));return clamp(mix(vec3(l
 #endif
 uniform vec2 uGrainMean;    // the means of the grain's R and G channels: the renormalisations' centres
 uniform float uPixA;        // the angle of one pixel of a 1080-line frame, from the camera's vertical field of view
+float pSky=1.0;            // the ground sky occlusion (the light map G) for paint(), set by the ground materials only
 float pDetail;              // the detail grain of the last paint(), for DETAIL_DEBUG
 #ifdef DETAIL_ON
 vec3 dPx,dPy;int pMa,pMe;vec2 pW;float pFade;
@@ -150,8 +164,11 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #endif
   pDetail=gd;
   float gr=(gd-0.5)*uGrainAmt;
-  float ndl=dot(N,uSunDir);
-  float l=ndl+gr*0.55*jitter+(blot-0.5)*0.3*jitter;
+  float ndl=dot(N,uSunDir),ndlR=ndl;
+  #ifdef SOFT_RAMP
+  ndlR=(ndl+0.45)/1.45;   // the crowns as volumes (L7b): light wraps round a mass of leaves (the ramp only, not the rim)
+  #endif
+  float l=ndlR+gr*0.55*jitter+(blot-0.5)*0.3*jitter;
   l-=cloud(wp)*0.40+sh*1.25+(1.0-occ)*0.55;
   #ifdef DETAIL_ON
   // the band edges keep their width but never get narrower than the light's change across two pixels (no aliasing)
@@ -162,10 +179,20 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   float t=smoothstep(-0.06-bw*0.5,-0.06+bw*0.5,l)*0.55+smoothstep(0.34-bw*0.5,0.34+bw*0.5,l)*0.45;
   #endif
   #else
+  #ifdef SOFT_RAMP
+  float t=smoothstep(-0.40,0.0,l)*0.55+smoothstep(0.06,0.40,l)*0.45;   // the crowns as volumes (L7b): the same three colours, blended
+  #else
   float t=smoothstep(-0.10,-0.02,l)*0.55+smoothstep(0.30,0.38,l)*0.45;   // shadow | mid | light, grain-broken edges
   #endif
+  #endif
   vec3 shc=shadowOf(alb);
+  #ifdef SKY_IN_SHADOW
+  shc*=mix(0.62,1.0,smoothstep(0.35,0.8,pSky));   // deep sky occlusion (a wood floor) deepens the shadow itself (docs/plans/done/soft-shadows.md)
+  #endif
   vec3 mid=alb*mix(vec3(0.86,0.92,0.98),uSunCol,0.30);
+  #ifdef SOFT_RAMP
+  mid=clamp(mix(vec3(dot(mid,vec3(0.3,0.59,0.11))),mid,1.3),0.0,1.0);   // the crowns turning side keeps its colour (L7b)
+  #endif
   vec3 lt=alb*uSunCol*mix(1.16,1.02,snow)+vec3(0.03,0.025,0.0)*(1.0-snow);
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
   c*=1.0+gr*0.38;                                                           // gouache grain in the value

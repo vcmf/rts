@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-12
-code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts]
-decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0003-no-blur-in-gameplay, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain]
+last_reviewed: 2026-10-13
+code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png]
+decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0003-no-blur-in-gameplay, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage]
 ---
 
 # The look page (Track E, L0)
@@ -48,7 +48,8 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/terrain.ts` | Tile (1.79 m), far ring (14.3 m) and the apron that stitches them; the far ring's painted river mask; the bank normals' texture (W2, `docs/systems/river.md`; both it and the water data's, W3, from `src/look/span-texture.ts`). Their materials define `DETAIL` (the detail layer, below; on WebGL1 the material factory adds `DETAIL_L0`); the tile's also `BANKN` and `WATERDATA` (the shore band, W4), as do the water's |
 | `src/look/water.ts` | The water ribbon, its materials (the painted water, W4, `docs/systems/river.md`; and the same shader on the tile's ground, for the seam check) and the tree-reflection mask |
 | `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule (and, since L5a, the cover's: what grows on which class) |
-| `src/look/bakes.ts` | Sun shadow depth (once), occlusion and valley mask (CPU, once), the top-down light map (once) |
+| `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
+| `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (`?trees=cards`, L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
 | `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), and the passes: depth of field (presentation only, decision 0003), the fused grade |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop, and the debug globals the checks read |
 | `src/look/bench.ts`, `src/look/gputimer.ts` | `?bench`: fixed cameras, frame times, GPU time per pass, draw calls, triangles, texture memory and the build hash, as JSON (below) |
@@ -65,7 +66,7 @@ passes on or off; `hill`; `quarter` and `shift`, the projection moved for the ch
 page in a season (the bench runs in it); `?detail=l0` opens it with the L0 grain on the terrain;
 `?macro=flat|shader|bake|strokes|kuwahara` picks the macro colour's arm (L5a and L5b, below; `bake` by default,
 `shader` on WebGL1) and `?bench=macro` benches the three whose shaders differ (`flat`, `shader`, `bake`: the experimental arms
-draw with the bake's shader and differ in their bakes, measured by the macro check); `?trees=one` draws every tree as one broadleaf model (L5b's
+draw with the bake's shader and differ in their bakes, measured by the macro check); `?trees=one` draws every tree as one broadleaf model, and `?trees=one,cards` as leaf cards (L5b's
 judging).
 
 ### The ground's cover and macro colour (L5a)
@@ -142,13 +143,82 @@ grain at a constant size on screen (`docs/plans/active/l2-detail.md`).
 - `DETAIL_L0` puts back the L0 grain (the bench's second arm, the checks' baseline); `DETAIL_DEBUG` and
   `DETAIL_DEBUG_INC` and `DETAIL_DEBUG_N` (the shading normal) are the checks' views; `DETAIL_SAB_IMPLICIT` and `DETAIL_SAB_STEP` are sabotages, and so is `BANKN_OFF` (no bank normals).
 
+### Leaf-card crowns (`?trees=cards`, L7a, an experiment)
+
+The plan: `docs/plans/done/l7a-canopy-cards.md`. Not the default: the arm the owner judges against the pack crowns.
+
+- **The cards** (`src/look/canopy.ts`, `shaders/canopy.vert|frag`, `shaders/cards.glsl`): each broadleaf, birch
+  and willow crown becomes quads sampled on its crown triangles, expanded in view space to face the camera and
+  cut by a leaf-clump atlas; sphere normals, so a crown shades as one mass; each card takes its shadow at its
+  point on the crown surface. The trunk is a mesh of the model's triangles off the crown (`trunks_<model>`).
+- **The atlas** (`src/look/leaves.ts`): four clumps in 2×2 cells of 512², value in R and coverage in A, from the
+  picture `data/leaf-clumps-oak-v1.png` (four clumps on black, any layout) or drawn (`?leaves=procedural`).
+  Shift-dropping a picture on the page replaces it and re-bakes the shadows.
+- **Shadows** (`src/look/bakes.ts`): the cards cast in the sun's pass, facing the sun and cut by the atlas two
+  mips finer than the sun's view asks, so the gaps between leaves survive; the disabled pack models cast nothing.
+- **Switches**: `?cardsize`, `?cardcover`, `?cardsink` (`CARD_DEFAULTS`); `?bench=trees` benches the cards
+  against the pack crowns, for the frame's cost only (the shadow map is baked once, with the cards); read its frame
+  interval, not the GPU timer, which runs long on ANGLE Metal (`docs/plans/done/forest-bench.md`).
+
+- **The crowns as volumes** (L7b, `docs/plans/done/l7b-crown-volume.md`; `VOLUME` and `SOFT_RAMP` on the card
+  materials, `?volume=off` puts back L7a's light): each card carries its crown's ellipsoid (`aEllC`, `aEllR`: the
+  crown triangles' box centre, the mean of its x and z half-extents and its vertical one). Per pixel: the normal is the
+  ellipsoid's, turned a little by each leaf's tilt (the atlas's G and B, the value's gradient read as a height,
+  faded with the mip level); the light through the crown dims it (the distance to the sun inside the ellipsoid grown
+  1.3 times, the cards' reach: 1 − exp(−0.75·t / r), at most 0.7); other trees' shadows are read where that ray
+  leaves the crown; the core darkens to 0.72. The ramp is soft for foliage (`SOFT_RAMP` in `paint()`: the light
+  wraps, (n·l + 0.45) / 1.45, the same three colours over a wide range, the mid colour kept saturated). The golden
+  backlight keeps the card normals and is blocked by other trees only. `?bench=volume` benches it against L7a.
+
+### The shadows' look
+
+The plan: `docs/plans/done/shadow-look.md`.
+
+- **The shadow band** (`shadowOf()`, `painter.glsl`): more saturated than the base and turned 25 % toward a cool
+  blue violet, at the value the band had before, so dark coats keep their separation from shaded ground. The
+  army blocks (`block.frag`, `KEEP_HUE`) keep the older band, so a coat in shadow loses none of its colour.
+- **The valley mist** (`mist()`): thinner over cast shadow on the ground (to 55 % of its amount), less so above
+  the ground; shadowed air is darker and bluer. With shadows off the mist is whole.
+- **The edges** (`bake.frag`): the bake filters a shadow edge over 0.75 shadow texels a tap (was 1.2).
+- **Contact** (`bakes.ts`): a dark core of 0.45 crown radii (at least about 1.6 m: the occlusion map is about 1 m a
+  texel) under each tree, in the light map's alpha, which the ground, the water's shore band and the grass read
+  (`groundOcc()`), and the crowns do not.
+
+### Soft shadows (the sun's penumbra, the sky's occlusion)
+
+The plan: `docs/plans/done/soft-shadows.md`. On by default; `?soft=off` puts back the shadows before it.
+
+- **The penumbra** (`bake.frag`, `SOFT`): a blocker search of 16 taps in the sun's depth map, reaching the widest
+  penumbra (of a caster `FAR_MAX`, 40 m, along the light), gives the mean distance from the ground to its casters
+  (`DEPTH_M`, the sun camera's depth range, makes it metres); the filter's radius is that distance times `?penumbra`
+  (default 0.06, `SOFT_DEFAULTS`, at most `PENUMBRA_MAX` 0.2: an exaggerated sun, the real one's is 0.009), between the old filter's radius and
+  the search's reach, over 32 taps turned per texel. Radii are ground metres (`uSMGround`, a shadow texel on the
+  ground). The painted edge (the grain's threshold) widens and loosens with it, the grain acting in the penumbra
+  only. The bake costs about 14 ms on load on the dev Mac (1.3 ms before). A trunk's foot stays crisp; a
+  crown's outline 15 m along the light is soft.
+- **The sky's occlusion** (`skyOcclusion()`, `bakes.ts`, on the CPU on load): each crown and bush is a sphere (the
+  canopy list's last three numbers: its centre's height above the ground, its radius, its opacity); the ground at
+  each texel of the occlusion texture loses the cosine-weighted fraction cos θ · (r/d)² of its sky to each sphere
+  within 25 m, at most 0.42 times its opacity (the crowns read this texel too: 0.29 for a crown, under the old disc's
+  0.42; a bush's opacity 0.7, 0.29 against its old 0.30), splatted per sphere; the fractions multiply into G, over the terrain's ring test. It replaces the discs
+  under crowns and bushes; the contact core stays.
+- **Occlusion inside the shadow** (`paint()`, `SKY_IN_SHADOW`, a define on every painted material): where the
+  ground's sky occlusion (`pSky`, the light map's G, set by the terrain, the water and the grass only) is deep (below
+  0.8, a wood's floor) the shadow colour itself darkens, to 0.62 at 0.35; before it, a wood's floor was the same flat
+  shadow colour as a lone tree's shadow. Other materials (crowns, bushes, the army blocks) leave it at 1.
+- `?wood` adds one dense wood (70 tries, its own random stream) to judge it, `?wood=big` a forest of about 150 by
+  110 m for the forest bench (520 tries, `docs/plans/done/forest-bench.md`); `__look.sky` (`Bakes.sky`) reports the
+  sky bake's time and the occlusion's range, null with `?soft=off`. The painted materials take their define from
+  the same options as the bakes (`softDefines()`).
+
 ### The bench (`?bench`, L2a)
 
 The page runs 9 cameras (closest, default and widest zoom, each at yaw −45°, 0°, +45°) and records, per camera
 and arm, frame times (p50, p95, max), GPU time per pass, draw calls and triangles, plus the estimated texture
 memory, the renderer and the build hash (`__BUILD__`, set by `vite.config.ts`). It shows the JSON with a link to
 save it, and puts it in `window.__bench`. Arms are variants of the page measured in the same session, A B B A per
-camera: `l2` (the page) and `l0` (the L0 grain on the terrain).
+camera: `l2` (the page) and `l0` (the L0 grain on the terrain). `?benchat=<x>,<z>` (within the play area) makes the
+cameras orbit that point instead of the camera's start, and the JSON records it as `focus` (the forest bench).
 - **GPU time** comes from our own `EXT_disjoint_timer_query_webgl2` queries (`src/look/gputimer.ts`). Queries
   cannot nest: whole-frame time is taken on alternate frames, the passes (terrain, scatter, water, other,
   post) on the others, each as segments of consecutive draws, only in the camera's own render pass. Frames with
@@ -187,7 +257,7 @@ measures and limits; the results are in the plan.
 
 `node tools/ablation-kit.mjs <url> <outDir> [--seed <text>]`: every arm on the judging framing (east of the hill:
 the ploughed field, the track, the road, the village), at the bench's three zooms and three yaws, summer and winter,
-with the guard's cover blocks (`tools/army-blocks.mjs`) and `?trees=one`; and a 3 s pan per season and zoom (H.264,
+with the guard's cover blocks (`tools/army-blocks.mjs`) and `?trees=one,cards`; and a 3 s pan per season and zoom (H.264,
 ffmpeg). Under `<outDir>/publish/` it writes what the judging artifact publishes, and nothing else: the media under
 opaque ids, `screens.json` (12 screens: each pair of arms judged, by zoom; sides x and y, the later arm on x on half
 of them) and the judging page (`tools/ablation-judge.html`); under `<outDir>/private/`, never published, the shots
@@ -243,6 +313,13 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
 - `npm test` (lint and typecheck cover `src/look/`).
 
 ## Open questions
+
+- **The leaf-card crowns are not the default arm yet:** a dark coat in a tree's shadow loses separation with
+  them (#63); decision 0022 (their soft ramp) is proposed; their outline aliases at the widest zoom (L8); a
+  forest is where they cost the most (a cheaper forest is owed: `docs/plans/done/forest-bench.md`), and the min-spec laptop and the foliage's total
+  against L7's gate are not measured (`docs/plans/active/track-e-results/shadows-foliage.md`).
+- **The guard has no block in a wood**, where the soft shadows make the floor darkest.
+- **The valley mist tints sunlit snow orange** (#62).
 
 - The nature pack's data comes from `prototypes/` as a script that sets `window.NATURE`; it moves to a
   real module before the prototype is retired (L9).

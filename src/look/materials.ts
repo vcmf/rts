@@ -44,12 +44,13 @@ export class Materials {
   private readonly binders: ((m: ShaderMaterial) => void)[] = []
   grain: BaseTexture; grainMean: [number, number]   // the means of its R and G channels
   readonly webgl1: boolean   // the detail layer's materials keep the L0 grain (DETAIL_L0) whatever is asked
-  constructor(scene: Scene, grain: BaseTexture, grainMean: [number, number]) { this.scene = scene; this.grain = grain; this.grainMean = grainMean; this.webgl1 = scene.getEngine().version < 2 }
+  private readonly defines: string[]   // on every painted material (the page's switches: SKY_IN_SHADOW)
+  constructor(scene: Scene, grain: BaseTexture, grainMean: [number, number], defines: string[] = []) { this.scene = scene; this.grain = grain; this.grainMean = grainMean; this.defines = defines; this.webgl1 = scene.getEngine().version < 2 }
   make(name: string, vs: string, fs: string, { attributes = ['position', 'normal'], uniforms = [], samplers = [], alpha = false, defines = [], perFrame = true }: MatOptions = {}): ShaderMaterial {
     // the detail layer needs GLSL ES 3.00 (textureGrad): on WebGL1 its materials keep the L0 grain
     if (defines.includes('#define DETAIL') && this.webgl1) defines = [...defines, '#define DETAIL_L0']
     const m = new ShaderMaterial(name, this.scene, { vertexSource: vs, fragmentSource: withPainter(fs) },
-      { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...MACRO_SAMPLERS, ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM' && !MACRO_SAMPLERS.includes(x))], needAlphaBlending: alpha, defines: [...D.defines, ...defines] })
+      { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...MACRO_SAMPLERS, ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM' && !MACRO_SAMPLERS.includes(x))], needAlphaBlending: alpha, defines: [...D.defines, ...this.defines, ...defines] })
     m.setVector3('uSunDir', SUN); m.setColor3('uSunCol', PAL.sun); m.setColor3('uShadowCol', PAL.shadow)
     m.setColor3('uHazeCool', PAL.hazeCool); m.setColor3('uHazeWarm', PAL.hazeWarm); m.setTexture('uGrain', this.grain); m.setVector2('uGrainMean', new Vector2(...this.grainMean))
     this.every.push(m)
