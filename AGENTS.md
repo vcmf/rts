@@ -51,10 +51,13 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
 
 ## Workflow (every PR)
 
+By kind of PR (decision 0025): **code** follows all four steps; a **docs-only** PR gets at most one review round;
+a **research note** (`docs/research/`) needs no plan and no `/code-review` (check each claim against its source).
+
 1. **Plan**: a plan in `docs/plans/active/` (scope, approach, acceptance) before code.
 2. **Implement**. Update the system doc in `docs/systems/` and add a decision record for any new
    decision; move the plan to `docs/plans/done/` when merged.
-3. **Review**: run `/code-review high`.
+3. **Review**: run `/code-review high` (code; a docs-only PR: one round at most, then stop).
    - A round with **at least one severe issue**: fix and run another round.
    - Only moderate or light issues: fix what is worth fixing and **stop**.
    - **More than 3 rounds = stop and redesign** (the design is wrong, not the code). The round count
