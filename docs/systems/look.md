@@ -190,7 +190,8 @@ The plan: `docs/plans/done/soft-shadows.md`. On by default; `?soft=off` puts bac
   ground's sky occlusion (`pSky`, the light map's G, set by the terrain, the water and the grass only) is deep (below
   0.8, a wood's floor) the shadow colour itself darkens, to 0.62 at 0.35; before it, a wood's floor was the same flat
   shadow colour as a lone tree's shadow. Other materials (crowns, bushes, the army blocks) leave it at 1.
-- `?wood` adds one dense wood (70 tries, its own random stream) to judge it; `__look.sky` (`Bakes.sky`) reports the
+- `?wood` adds one dense wood (70 tries, its own random stream) to judge it, `?wood=big` a forest of about 150 by
+  110 m for the forest bench (520 tries, `docs/plans/active/forest-bench.md`); `__look.sky` (`Bakes.sky`) reports the
   sky bake's time and the occlusion's range, null with `?soft=off`. The painted materials take their define from
   the same options as the bakes (`softDefines()`).
 
@@ -200,7 +201,8 @@ The page runs 9 cameras (closest, default and widest zoom, each at yaw −45°, 
 and arm, frame times (p50, p95, max), GPU time per pass, draw calls and triangles, plus the estimated texture
 memory, the renderer and the build hash (`__BUILD__`, set by `vite.config.ts`). It shows the JSON with a link to
 save it, and puts it in `window.__bench`. Arms are variants of the page measured in the same session, A B B A per
-camera: `l2` (the page) and `l0` (the L0 grain on the terrain).
+camera: `l2` (the page) and `l0` (the L0 grain on the terrain). `?benchat=<x>,<z>` (within the play area) makes the
+cameras orbit that point instead of the camera's start, and the JSON records it as `focus` (the forest bench).
 - **GPU time** comes from our own `EXT_disjoint_timer_query_webgl2` queries (`src/look/gputimer.ts`). Queries
   cannot nest: whole-frame time is taken on alternate frames, the passes (terrain, scatter, water, other,
   post) on the others, each as segments of consecutive draws, only in the camera's own render pass. Frames with
