@@ -26,6 +26,10 @@ export const CELL = 2   // m (decision 0021)
 const FREEBOARD = 0.4, BANK_OUT = 3, LEVEL_STEP = 2, SHORE_IN = 10, BRIDGE_REACH = 4
 const WAY_WIDTH = 5, WATER_WIDTH = 6, EDIT_WIDTH = 4, LANDFORM_WIDTH = 100, VEG_LINE = 4, WORK_LINE = 6
 
+// a line edit's weight at distance d from its centreline: 1 within its half-width, then easing to 0 over its edge;
+// a cell is marked where it is at least one half
+const editWeight = (d: number, w2: number, edge: number): number => (d <= w2 ? 1 : edge > 0 ? smooth(1 - (d - w2) / edge) : 0)
+
 // How far from its centreline a line feature takes cells, as apply paints it (the painters below take it from here):
 // a road's or a stream's half-width, at least just over half a cell; a barrier's band; a cut's or a ditch's width and
 // half its soft edge (where its weight reaches one half); 0 for a line that takes no cell (a row of trees, a ridge)
@@ -255,7 +259,7 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
     const edge = categoryOf(kind) === 'way' ? 1 : num(a.edge, 5)
     const field = f.line ? null : areaField(f)
     const weight = (x: number, z: number): number => {
-      if (f.line) { const q = nearLine(f.line, x, z), w2 = num(a.width, EDIT_WIDTH) / 2; return q.d <= w2 ? 1 : edge > 0 ? smooth(1 - (q.d - w2) / edge) : 0 }
+      if (f.line) return editWeight(nearLine(f.line, x, z).d, num(a.width, EDIT_WIDTH) / 2, edge)
       const e = field!.edge(x, z); return e >= 0 ? 1 : edge > 0 ? smooth(1 + e / edge) : 0
     }
     const box = f.line ? lineBox(f.line) : field!.box, pad = (f.line ? num(a.width, EDIT_WIDTH) / 2 : 0) + edge + c
@@ -276,36 +280,44 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
   const paintArea = (f: Feature, layer: Uint16Array, k1: number, onCell?: (cell: number, edge: number) => void, needEdge = false) => {
     const field = areaField(f); if (!field) return
     const kept = keptOff(f)
-    cells(field.box, 0, (i, j, x, z) => { if (field.inside(x, z) && !kept?.(j * nx + i, x, z)) { layer[j * nx + i] = k1; onCell?.(j * nx + i, needEdge ? field.edge(x, z) : 0) } })
+    // a ramp's `edge` counts from where the area's cells begin: its ring, or a line it keeps off (decision 0025)
+    const edgeAt = (x: number, z: number) => kept ? Math.min(field.edge(x, z), ...kept.lines.map(l => nearLine(l.line, x, z).d - l.near)) : field.edge(x, z)
+    cells(field.box, 0, (i, j, x, z) => { if (field.inside(x, z) && !kept?.masks.some(m => m[j * nx + i] === 1)) { layer[j * nx + i] = k1; onCell?.(j * nx + i, needEdge ? edgeAt(x, z) : 0) } })
   }
-  // the cells a line takes, by the very rule that paints it (decision 0025): a shared edge's area keeps off them, and
-  // off `offset` m more, so no cell is both and none between is left out. Made once per line
-  const taken = new Map<string, Uint16Array>()
-  const takenBy = (id: string): Uint16Array => {
-    let t = taken.get(id)
+  // the cells a line takes, by the very rule that paints it (decision 0025), and `offset` m more: an area that keeps
+  // off it paints none of them, so no cell is both and none between is left out. One mask per line and offset, made
+  // once, over the line's box only
+  const masks = new Map<string, Uint8Array>()
+  const maskOf = (id: string, offset: number): Uint8Array => {
+    const key = `${id} ${offset}`
+    let t = masks.get(key)
     if (t) return t
-    t = new Uint16Array(n)
-    const g = byId.get(id)!, r = L.table[index.get(id)! - 1], put = (cell: number) => { t![cell] = 1 }
-    if (g.line && categoryOf(r.kind) === 'barrier') barrierCells(g.line, num(r.attrs.thickness, 2), r.attrs.gaps as { every: number; width: number } | undefined, (i, j) => { if (i >= 0 && j >= 0 && i < nx && j < nz) put(j * nx + i) }, x0, z0)
-    else if (g.line && (r.kind === 'relief.cut' || r.kind === 'relief.ditch')) {
-      // the edit's own mark: its weight at least one half (step 2)
-      const w2 = num(r.attrs.width, EDIT_WIDTH) / 2, edge = num(r.attrs.edge, 5)
-      cells(lineBox(g.line), w2 + edge + c, (i, j, x, z) => { const d = nearLine(g.line!, x, z).d; if ((d <= w2 ? 1 : edge > 0 ? smooth(1 - (d - w2) / edge) : 0) >= 0.5) put(j * nx + i) })
-    }
-    else if (g.line && lineReach(r.kind, r.attrs) > 0) paintLine(g.line, lineReach(r.kind, r.attrs), t, 1)
-    taken.set(id, t)
-    return t
+    t = new Uint8Array(n)
+    const m = t, g = byId.get(id)!, r = L.table[index.get(id)! - 1], line = g.line!, a = r.attrs, reach = lineReach(r.kind, a), put = (cell: number) => { m[cell] = 1 }
+    const marks = (w2: number, edge: number) => cells(lineBox(line), w2 + edge + c, (i, j, x, z) => { if (editWeight(nearLine(line, x, z).d, w2, edge) >= 0.5) put(j * nx + i) })
+    if (categoryOf(r.kind) === 'barrier') barrierCells(line, num(a.thickness, 2), a.gaps as { every: number; width: number } | undefined, (i, j) => { if (i >= 0 && j >= 0 && i < nx && j < nz) put(j * nx + i) }, x0, z0)
+    else if (r.kind === 'relief.cut' || r.kind === 'relief.ditch') marks(num(a.width, EDIT_WIDTH) / 2, num(a.edge, 5))
+    else if (reach > 0) paintLine(line, reach, m, 1)
+    if (categoryOf(r.kind) === 'way' && num(a.cut) > 0) marks(num(a.width, EDIT_WIDTH) / 2, 1)   // a sunken way's cut marks a little wider
+    if (offset > 0) cells(lineBox(line), reach + offset + c, (i, j, x, z) => { if (nearLine(line, x, z).d < reach + offset) put(j * nx + i) })
+    masks.set(key, m)
+    return m
   }
-  const keptOff = (f: Feature): ((cell: number, x: number, z: number) => boolean) | null => {
-    const clear = f.clear as { id: string; offset?: number }[] | undefined
-    if (!clear?.length) return null
-    const ls = clear.map(e => { const r = L.table[index.get(e.id)! - 1]; return { mask: takenBy(e.id), line: byId.get(e.id)!.line!, near: lineReach(r.kind, r.attrs) + (e.offset ?? 0), offset: e.offset ?? 0 } })
-    return (cell, x, z) => ls.some(l => l.mask[cell] === 1 || (l.offset > 0 && nearLine(l.line, x, z).d < l.near))
+  const keptOffOf = new Map<string, { masks: Uint8Array[]; lines: { line: Pt[]; near: number }[] } | null>()
+  const keptOff = (f: Feature) => {
+    if (keptOffOf.has(f.id)) return keptOffOf.get(f.id)!
+    const clear = (f.clear === undefined ? [] : Array.isArray(f.clear) ? f.clear : [f.clear]) as { id: string; offset?: number }[]   // one or a list
+    const out = clear.length ? {
+      masks: clear.map(e => maskOf(e.id, e.offset ?? 0)),
+      lines: clear.map(e => { const r = L.table[index.get(e.id)! - 1]; return { line: byId.get(e.id)!.line!, near: lineReach(r.kind, r.attrs) + (e.offset ?? 0) } }),
+    } : null
+    keptOffOf.set(f.id, out)
+    return out
   }
   // a line takes the cells whose centre lies strictly within its half-width, and at least the cells beside it (a
   // 1.5 m path, a 2 m rill): widths round the same way for every line (a 6 m stream and a 5 m road on even metres
   // both take 4 m, a 10 m stream 8 m), as the barrier rule does
-  const paintLine = (line: Pt[], halfWidth: number, layer: Uint16Array, k1: number, onCell?: (cell: number, along: number) => void) => {
+  const paintLine = (line: Pt[], halfWidth: number, layer: Uint16Array | Uint8Array, k1: number, onCell?: (cell: number, along: number) => void) => {
     const half = Math.max(halfWidth, c / 2 + 0.01)
     cells(lineBox(line), half + c, (i, j, x, z) => { const q = nearLine(line, x, z); if (q.d < half && q.over === 0) { layer[j * nx + i] = k1; onCell?.(j * nx + i, q.along) } })
   }
@@ -333,7 +345,7 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
         const t = q.d / hw, bed = levelAt(q.along) - ramp(a.depth, { along: q.along }, 0.8) * (1 - 0.5 * t * t)
         if (bed < H[k]) H[k] = bed
       })
-      paintLine(line, hw, L.water, k1, (cell, along) => { level[cell] = levelAt(along) })
+      paintLine(line, lineReach(r.kind, a), L.water, k1, (cell, along) => { level[cell] = levelAt(along) })   // the cells by lineReach, as a shared edge reads them
     } else if (f.on) {
       // a ford: the bed raised to the ford's depth over its width, along the stream nearest its point
       const st = streams.get(f.on); if (!st) continue

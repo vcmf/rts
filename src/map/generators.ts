@@ -80,7 +80,7 @@ const CLUMP_PARAMS: Record<string, ParamSpec> = {
 }
 const ENTRY_KEYS = ['kind', ...Object.keys(CLUMP_PARAMS), 'set']
 // the fields a mix scatter's feature may carry: its children take their entry's kind and set, nothing of the scatter's
-const MIX_SCATTER_FIELDS = ['id', 'kind', 'gen', 'area', 'note', 'source']
+const MIX_SCATTER_FIELDS = ['id', 'kind', 'gen', 'area', 'note', 'source', 'follow', 'clear']   // follow shapes the region; its clear reaches every child
 function entriesOf(kind: string, p: Record<string, unknown>): Entry[] {
   const one = (e: Record<string, unknown>, k: string, set: Record<string, AttrValue>): Entry => {
     const count = P(e, 'count')!, radiusMin = P(e, 'radiusMin') ?? 30
@@ -201,7 +201,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
       if (short.length) throw new Error(`placed ${short.map(({ e, n }) => `${n} of ${e.count} ${e.kind}`).join(', ')} in the region; widen it, ask fewer or smaller, ease the clearance, or allow fewer with min`)
       const children: Feature[] = sites.map((s, k) => {
         const id = `${f.id}-${k + 1}`, e = entries[s.entry]
-        return { ...(single ?? { ...e.set, kind: e.kind }), id, area: [clump([cm(s.x), cm(s.z)], s.r, s.r, 0, { coherence: e.coherence, raggedness: e.raggedness }, seedOf(mapSeed, id, 'clump'))] } as Feature
+        return { ...(single ?? { ...e.set, kind: e.kind, ...(f.clear !== undefined ? { clear: f.clear } : {}) }), id, area: [clump([cm(s.x), cm(s.z)], s.r, s.r, 0, { coherence: e.coherence, raggedness: e.raggedness }, seedOf(mapSeed, id, 'clump'))] } as Feature
       })
       return { self: null, children }
     },

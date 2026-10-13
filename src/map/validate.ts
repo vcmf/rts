@@ -105,6 +105,11 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       const states = kindStates(cat, chain)
       if (!Object.hasOwn(states, f.state)) bad(id, `${path}.state`, `${kind} has no state "${f.state}" (it has: ${Object.keys(states).join(', ') || 'none'})`)
     }
+    // shared edges and keeping off lines (decision 0025) hold where apply paints an area's cells and honours `clear`:
+    // ground, vegetation, buildings and zones, never an edit of the relief (it moves heights, not cells)
+    const keepsOff = ['ground', 'veg', 'built', 'zone'].includes(category) && !meta.edit
+    for (const k of ['follow', 'clear'] as const) if (f[k] !== undefined && !keepsOff) bad(id, `${path}.${k}`, `${kind} cannot keep off a line: shared edges are for ground, vegetation, buildings and zones`)
+    const offsetProblem = (v: unknown) => (v !== undefined && (typeof v !== 'number' || v < 0 || v > 500 || !onCentimetres(v)) ? 'must be 0 to 500 m, at most 2 decimals' : null)
     // shared edges (docs/plans/active/m3d-follow.md): each follows a line feature, on an area feature
     if (f.follow !== undefined) {
       const edges = listOf<unknown>(f.follow), fp = (n: number) => (Array.isArray(f.follow) ? `${path}.follow[${n}]` : `${path}.follow`)
@@ -118,9 +123,9 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
         const ep = fp(n)
         if (!isObj(e)) { bad(id, ep, `must be { ${FOLLOW_KEYS.join(', ')} }`); return }
         for (const k of Object.keys(e)) if (!FOLLOW_KEYS.includes(k)) bad(id, `${ep}.${k}`, `unknown field (${FOLLOW_KEYS.join(', ')})`)
-        if (e.offset !== undefined && (typeof e.offset !== 'number' || e.offset < 0 || e.offset > 500 || !onCentimetres(e.offset))) bad(id, `${ep}.offset`, 'must be 0 to 500 m, at most 2 decimals')
+        const op = offsetProblem(e.offset); if (op) bad(id, `${ep}.offset`, op)
         for (const k of ['from', 'to'] as const) { if (!isPt(e[k])) bad(id, `${ep}.${k}`, 'must be a point [x, z]'); else checkInside(e[k] as Pt, `${ep}.${k}`, extent, (p, m) => bad(id, p, m)) }
-        const atN = e.at ?? 0
+        const atN = e.at === undefined ? 0 : e.at
         if (typeof atN !== 'number' || !Number.isInteger(atN) || atN < 0 || atN > ringLen) bad(id, `${ep}.at`, `must be a whole number from 0 to ${ringLen} (a position in the outer ring)`)
         else if (ats.has(atN)) bad(id, `${ep}.at`, `another shared edge already goes at ${atN}`)
         else ats.add(atN)
@@ -138,7 +143,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
         const ep = many ? `${path}.clear[${n}]` : `${path}.clear`
         if (!isObj(e)) { bad(id, ep, `must be { ${CLEAR_KEYS.join(', ')} }`); return }
         for (const k of Object.keys(e)) if (!CLEAR_KEYS.includes(k)) bad(id, `${ep}.${k}`, `unknown field (${CLEAR_KEYS.join(', ')})`)
-        if (e.offset !== undefined && (typeof e.offset !== 'number' || e.offset < 0 || e.offset > 500 || !onCentimetres(e.offset))) bad(id, `${ep}.offset`, 'must be 0 to 500 m, at most 2 decimals')
+        const op = offsetProblem(e.offset); if (op) bad(id, `${ep}.offset`, op)
         const t = typeof e.id === 'string' ? byId.get(e.id) : undefined
         if (!t) bad(id, `${ep}.id`, `no feature "${String(e.id)}"`)
         else if (t.id === id) bad(id, `${ep}.id`, 'a feature cannot keep off itself')

@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-13
 code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0023-generators-form-a-chain, 0024-free-standing-trees]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0023-generators-form-a-chain, 0024-free-standing-trees, 0025-shared-edges-are-the-line]
 ---
 
 # The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d)
@@ -108,7 +108,11 @@ maps/kinds.json ──► checkCatalogue ─┐
     rule that paints each line (`paintLine` with `lineReach`, `barrierCells`, a cut's or a ditch's own mark), nor
     any cell closer than `lineReach + offset` when an offset is given. So no cell is both the line's and the area's,
     and (offset 0) none between them is left out, at any angle, on any seed; a scatter whose region follows a line
-    passes `clear` to its children.
+    passes `clear` to its children (a mix's too). A ramp's `edge` counts from where the cells begin. Only ground,
+    vegetation, buildings and zones take `follow` or `clear` (relief edits move heights, water paints its own
+    way). Other readers of the ring (a scatter's `avoid` and `within`, a village's keep-clear, the look in M4) see
+    it reach the line's centreline: an `avoid` keeps a little further off than it must, a `within` counts a
+    little more as near. Open question: whether they should subtract the cleared band.
 - **The generators** (`src/map/generators.ts`: for each, the shape it reads, the shape it writes, its checked
   parameters):
   - `meander` (`src/map/meander.ts`): the look world's Kinoshita curve in the exact maths, along the author's guide

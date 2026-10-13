@@ -107,3 +107,21 @@ shared arcs for now; the draft page drawing shared edges specially.
   cuts and ditches have their reach; the one-or-list helper is shared.
 
 The round count restarts.
+
+**Redesign, round 1** (10 findings, 1 severe):
+- **Severe:** a hand-written `clear` as one object passed validation but apply ignored it (it read a list); a
+  wood shared 120 cells with a road. Apply now takes one or a list.
+- **Moderate:**
+  - a ramp's `edge` counted from the centreline; it now counts from where the cells begin (the ring, or a cleared
+    line's reach plus offset);
+  - a mix scatter could not follow (its check refused `follow`); now it can, and every mix child takes `clear`;
+  - `follow` and `clear` on relief edits or water were accepted and ignored; now refused (ground, vegetation,
+    buildings and zones only);
+  - a sunken way's cut marks cells a little wider than its way: its mask includes them;
+  - masks are bytes, one per line and offset, made once over the line's box; the cut and ditch weight is one
+    helper (`editWeight`) for the edit pass and the masks; the water painter takes its cells' reach from
+    `lineReach`.
+- **Not taken:** other readers of the ring (scatter `avoid`/`within`, a village's keep-clear) see it reach the
+  centreline; recorded as an open question in the system doc (an avoid is only more careful; a within a little
+  more generous).
+- **Light:** `at: null` is refused; one offset check for `follow` and `clear`; the system doc lists 0025.

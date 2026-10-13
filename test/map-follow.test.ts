@@ -26,14 +26,14 @@ function check(m: MapFile, lineId: string, offset = 0) {
   const L = apply(map, cat)
   const woodK = 1 + L.table.findIndex(r => r.kind.startsWith('veg.wood')), line = map.features.find(f => f.id === lineId)! as { kind: string; line: Pt[] }
   const lineK = 1 + L.table.findIndex(r => r.kind === line.kind)
-  const layer = line.kind.startsWith('water') ? L.water : line.kind.startsWith('way') ? L.way : line.kind.startsWith('barrier') ? L.barrier : L.edit
+  const layers = [L.water, L.way, L.barrier, L.edit]   // a line's cells: any layer holding it (a sunken way's cut too)
   const ring = outer(map)
   let both = 0, neither = 0, inside = 0
   for (let j = 0; j < L.nz; j++) for (let i = 0; i < L.nx; i++) {
     const x = L.x0 + (i + 0.5) * L.cell, z = L.z0 + (j + 0.5) * L.cell, c = j * L.nx + i
     if (!inRing(ring, [x, z])) continue
     inside++
-    const isWood = L.veg[c] === woodK, isLine = layer[c] === lineK
+    const isWood = L.veg[c] === woodK, isLine = layers.some(l => l[c] === lineK)
     if (isWood && isLine) both++
     if (!isWood && !isLine && (offset === 0 || nearLine(line.line!, x, z).d >= 1 + offset + 20)) neither++   // with an offset, only far cells must be wood
     if (isWood && offset > 0) expect(isLine).toBe(false)
@@ -133,6 +133,44 @@ describe('M3d: shared edges (decision 0025)', () => {
     expect(paths({ area: [[[-80, -60], [80, -60], [80, 60], [-80, 60]]], clear: { id: 'meadow' } })).toContainEqual(expect.stringMatching(/clear\.id: "meadow" is not drawn as a line/))
     expect(paths({ area: [[[-80, -60], [80, -60], [80, 60], [-80, 60]]], clear: [{ id: 'brook', width: 3 }] })).toContainEqual(expect.stringMatching(/clear\[0\]\.width: unknown field/))
     expect(validate(mini([MEADOW, { id: 'road', kind: 'way.road', line: [[0, -250], [0, 250]] as Pt[] }, { id: 'v', kind: 'built.village', area: [[[10, 10]]] as Pt[][], along: { id: 'road', from: 10, to: 100 }, follow: { id: 'road', from: [0, -100], to: [0, 0] }, gen: { 'street-village': {} } }]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/a street-village feature's own area cannot follow/))
+  })
+  it('clear as one object is honoured as a list is', () => {
+    const road = { id: 'road', kind: 'way.road', line: [[0, -250], [0, 250]] as Pt[], width: 6 }
+    check(mini([MEADOW, road, { id: 'wood', kind: 'veg.wood.broad', area: [[[-80, -60], [80, -60], [80, 60], [-80, 60]]] as Pt[][], clear: { id: 'road' } }]), 'road')
+  })
+  it("an edge ramp counts from where the area's cells begin, not from the line's centreline", () => {
+    const m = mini([MEADOW, BROOK, { ...wood({ id: 'brook', from: [-80, 5], to: [80, 5] }), density: { edge: [[0, 0.2], [10, 1]] } }])
+    const L = apply(expand(m, cat).map, cat), at = (z: number) => L.density[Math.floor((z + 300) / 2) * L.nx + 150] / 255
+    expect(at(5)).toBeCloseTo(0.2 + 0.8 * 2 / 10, 1)   // the cell centred 5 m off is 2 m past the brook's 3 m reach
+    expect(at(15)).toBeCloseTo(1, 1)
+  })
+  it("a mix scatter's region can follow a line: every child keeps off it", () => {
+    const brook = { ...BROOK, gen: { meander: { amplitude: 30, wavelength: 160 } } }
+    const region = { id: 'groves', kind: 'veg.wood', area: [[[200, -150], [-200, -150]]] as Pt[][], follow: { id: 'brook', from: [-200, 0], to: [200, 0] }, gen: { scatter: { mix: [{ kind: 'veg.wood.broad', count: 3, radiusMin: 15, radiusMax: 20 }, { kind: 'ground.field.wheat', count: 2, radiusMin: 15, radiusMax: 20 }], clearance: 5 } } }
+    expect(validate(mini([MEADOW, brook, region]), cat)).toEqual([])
+    const { map, issues } = expand(mini([MEADOW, brook, region]), cat)
+    expect(issues).toEqual([])
+    const kids = map.features.filter(f => f.origin?.parent === 'groves'), L = apply(map, cat)
+    expect(kids).toHaveLength(5)
+    for (const c of kids) expect(c.clear).toEqual([{ id: 'brook' }])
+    let both = 0
+    for (let c = 0; c < L.water.length; c++) if (L.water[c] && (L.veg[c] && L.table[L.veg[c] - 1].kind !== 'ground.meadow')) both++
+    expect(both).toBe(0)
+  })
+  it("a sunken way's cut is kept off too", () => {
+    const sunken = { id: 'lane', kind: 'way.road.sunken', line: [[-250, 0], [250, 0]] as Pt[], width: 5 }
+    const { map } = check(mini([MEADOW, sunken, wood({ id: 'lane', from: [-80, 5], to: [80, 5] })]), 'lane')
+    const L = apply(map, cat), woodK = 1 + L.table.findIndex(r => r.kind.startsWith('veg.wood'))
+    let both = 0
+    for (let c = 0; c < L.edit.length; c++) if (L.edit[c] && L.veg[c] === woodK) both++
+    expect(both).toBe(0)
+  })
+  it('only ground, vegetation, buildings and zones keep off lines; at must be a number', () => {
+    const ok = { id: 'brook', from: [-80, 5], to: [80, 5] }
+    const msgs = (f: Record<string, unknown>) => validate(mini([MEADOW, BROOK, f as MapFile['features'][number]]), cat).map(i => `${i.path}: ${i.message}`)
+    expect(msgs({ id: 'flat', kind: 'relief.level', area: [[[80, 60], [-80, 60]]], follow: ok })).toContainEqual(expect.stringMatching(/follow: relief\.level cannot keep off a line/))
+    expect(msgs({ id: 'pond', kind: 'water.pond', area: [[[80, 60], [-80, 60]]], follow: ok })).toContainEqual(expect.stringMatching(/follow: water\.pond cannot keep off a line/))
+    expect(msgs({ ...wood({ ...ok, at: null }) })).toContainEqual(expect.stringMatching(/follow\.at: must be a whole number/))
   })
   it('an area that keeps clear of a line it crosses: split by the road, painted on both sides', () => {
     const road = { id: 'road', kind: 'way.road', line: [[0, -250], [0, 250]] as Pt[], width: 6 }
