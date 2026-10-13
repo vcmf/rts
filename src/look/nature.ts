@@ -31,7 +31,10 @@ export type Item = [x: number, z: number, scale: number, yaw: number, tint: numb
 
 export interface Nature {
   groups: Record<string, Item[]>; far: Item[]
-  canopy: [number, number, number, number, boolean][]   // crown and blob footprints for the light map's occlusion: x, z, r, strength, a tree's (its contact core)
+  // crown and blob footprints for the light map's occlusion: x, z, r, strength, a tree's (its contact core); and the
+  // sphere the sky's occlusion sees (docs/plans/done/soft-shadows.md): its centre's height above the ground, its
+  // radius, its opacity
+  canopy: [number, number, number, number, boolean, number, number, number][]
   KEEP_CLEAR(x: number, z: number): boolean
   touchesZone(x: number, z: number, r: number): boolean
   placeable(x: number, z: number, r?: number, kind?: string): boolean
@@ -58,7 +61,7 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
 }
 
 // cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/active/l7a-canopy-cards.md, ?trees=cards)
-export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }): Nature {
+export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood = false): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
 
@@ -100,7 +103,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
 
   const canopy: Nature['canopy'] = []
-  const smTree = (x: number, z: number, _crownY: number, cr: number) => { canopy.push([x, z, cr * 1.15, 0.42, true]); reflAdd(x, z, cr * 1.1) }, smBlob = (x: number, z: number, r: number) => canopy.push([x, z, r * 1.4, 0.30, false])
+  const smTree = (x: number, z: number, crownY: number, cr: number) => { canopy.push([x, z, cr * 1.15, 0.42, true, crownY, cr, 0.7]); reflAdd(x, z, cr * 1.1) }, smBlob = (x: number, z: number, r: number) => canopy.push([x, z, r * 1.4, 0.30, false, r * 0.4, r, 0.7])
 
   /* ---------- scattering: composition follows the north star ---------- */
   const R = mulberry(77), rr = () => R()
@@ -125,14 +128,28 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
   const addPlaced = (model: string, item: Item, kind = '') => { const [x, z, s] = item; if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false; add(model, item); return true }
 
+  // a broadleaf or birch tree, and its crown for the occlusion (the crown's centre at 0.62 of the height)
+  const placeTree = (mdl: string, x: number, z: number, s: number, yaw: number, t: number) => {
+    if (!addPlaced(mdl, [x, z, s, yaw, t])) return false
+    const M = NATURE[mdl]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s)
+    return true
+  }
   const TREE_MODELS = ['CommonTree_1', 'CommonTree_2', 'CommonTree_3', 'CommonTree_4', 'CommonTree_5']
   const clusters = [[-62, -22, 7], [-128, 4, 9], [-74, 58, 6], [42, 56, 8], [82, 32, 6], [-22, 72, 7], [112, -12, 5], [-150, 62, 8], [150, 72, 7], [-42, 122, 10], [62, 112, 8], [18, -80, 6], [-95, -70, 7], [120, -70, 6]]
   for (const [cx, cz, n] of clusters) for (let i = 0; i < n; i++) {
     const x = cx + (rr() - 0.5) * 42, z = cz + (rr() - 0.5) * 32
     const birch = rr() < 0.22, mdl = birch ? 'BirchTree_' + (1 + Math.floor(rr() * 5)) : TREE_MODELS[Math.floor(rr() * 5)], s = 3.4 + rr() * 1.4
-    if (!addPlaced(mdl, [x, z, s, rr() * 6.28, rr()])) continue
-    const M = NATURE[mdl]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s)
+    if (!placeTree(mdl, x, z, s, rr() * 6.28, rr())) continue
     if (rr() < 0.5) { const fx = x + (rr() - 0.5) * 6, fz = z + (rr() - 0.5) * 6; addPlaced('Plant_1', [fx, fz, 1.6 + rr(), rr() * 6.28, rr()]) }
+  }
+  // ?wood: one dense wood, to judge the sky's occlusion (docs/plans/done/soft-shadows.md); its own random stream,
+  // so the rest of the scatter is unchanged
+  if (wood) {
+    const W = mulberry(91)
+    for (let i = 0; i < 70; i++) {
+      const x = -105 + (W() - 0.5) * 50, z = -30 + (W() - 0.5) * 40, mdl = TREE_MODELS[Math.floor(W() * 5)], s = 3.4 + W() * 1.4
+      placeTree(mdl, x, z, s, W() * 6.28, W())
+    }
   }
   for (let i = 0, step = 0; i < RIVER.n; i += step) {   // willows follow the river banks
     step = Math.round((7 + rr() * 9) / (RIVER.P.W0 / 4)); const C = RIVER

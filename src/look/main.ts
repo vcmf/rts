@@ -11,7 +11,7 @@ import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
-import { buildBakes } from './bakes.ts'
+import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
 import { runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { CLEAR, Materials, PAL, S } from './materials.ts'
@@ -55,13 +55,19 @@ engine.setHardwareScalingLevel(1)
 const scene = new Scene(engine); scene.skipPointerMovePicking = true
 scene.clearColor = CLEAR
 
-const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0))
+// ?soft=off: the shadows before the soft-shadow plan (docs/plans/done/soft-shadows.md); ?penumbra: metres of edge
+// radius per metre between a shadow and its caster
+const params = new URLSearchParams(location.search), softParam = params.get('soft'), penumbraParam = params.get('penumbra')
+if (softParam !== null && softParam !== 'off') throw new Error(`?soft must be off, not ${softParam}`)
+const soft: SoftOptions = { on: softParam !== 'off', penumbra: penumbraParam === null ? SOFT_DEFAULTS.penumbra : Number(penumbraParam) }
+if (penumbraParam !== null && (penumbraParam.trim() === '' || !Number.isFinite(soft.penumbra) || soft.penumbra < 0 || soft.penumbra > PENUMBRA_MAX)) throw new Error(`?penumbra must be a number from 0 to ${PENUMBRA_MAX}, not ${penumbraParam}`)
+if (penumbraParam !== null && !soft.on) throw new Error('?penumbra needs the soft shadows on (no ?soft=off)')
+const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), softDefines(soft))
 const keptGrains = new Set([mats.grain])   // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
 const waterT0 = performance.now(), waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData'), waterTexMs = performance.now() - waterT0
 const terrain = buildTerrain(scene, mats, look.far, look.bank, waterData)
 // the page's options (?watersab, ?detail, ?water, ?bench: below)
-const params = new URLSearchParams(location.search)
 // ?watersab=nodive: the band check's sabotage (tools/water-look-check.mjs), the ribbon's columns never dive under the banks
 const waterSabParam = params.get('watersab')
 if (waterSabParam !== null && waterSabParam !== 'nodive') throw new Error(`?watersab must be nodive, not ${waterSabParam}`)
@@ -81,12 +87,13 @@ if (treesParam === 'cards') {
   leafTex = new DynamicTexture('leaves', atlas, scene, true, Texture.TRILINEAR_SAMPLINGMODE); leafTex.hasAlpha = true
   leafTex.wrapU = leafTex.wrapV = Texture.CLAMP_ADDRESSMODE; leafTex.update(false)
 }
-const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { leaf: leafTex, opts: cardOpts } : undefined)
+if (params.has('wood') && params.get('wood') !== '') throw new Error('?wood takes no value')
+const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { leaf: leafTex, opts: cardOpts } : undefined, params.has('wood'))
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 { const a = new Array(D.spec.water.stones * 4).fill(0); nature.stones.forEach((st, k) => a.splice(k * 4, 4, ...st))
   for (const m of [terrain.terrainMat, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
-const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy, nature.cardCasters)
+const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy, nature.cardCasters, soft)
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
 const macro = buildMacro(scene, mats, look.cover)
@@ -231,6 +238,7 @@ let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | n
 const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   lab, mats, passes, post, setDetail,
+  sky: bakes.sky,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
   hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),
   // the grain the terrain reads: the paint grain, or the seam check's smooth one (returns its steepest texel step)
   grain: (kind: 'paint' | 'smooth') => {

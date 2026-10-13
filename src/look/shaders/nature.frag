@@ -41,7 +41,7 @@ void main(){
   #endif
   vec3 alb=mix(roleCol(vRole,vTint),groundSeason(groundBounce(vRoot)),bw);
   #ifdef GRASSY
-  float lo=groundOcc(lm);                                       // grass sits in the contact under a tree, as its ground does
+  float lo=groundOcc(lm);pSky=mix(1.0,lm.g,uAO);               // grass sits in the contact under a tree, as its ground does
   #else
   float lo=lm.g;
   #endif

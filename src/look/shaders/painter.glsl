@@ -85,7 +85,7 @@ float cloud(vec3 wp){
   float c=0.62*G(p/330.0).g+0.38*G(p/131.0+vec2(0.37,0.11)).g;
   return smoothstep(0.60,0.635,c+(G(wp.xz/5.0).r-0.5)*0.06)*uClouds;
 }
-// the shadow band (docs/plans/active/shadow-look.md): more saturated than the base and turned toward a cool blue
+// the shadow band (docs/plans/done/shadow-look.md): more saturated than the base and turned toward a cool blue
 // violet at the same value (a darker band costs dark coats their separation, tools/guard.mjs). KEEP_HUE: the
 // army coats keep the band of main, so a coat in shadow loses none of its colour
 vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
@@ -108,6 +108,7 @@ vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
 #endif
 uniform vec2 uGrainMean;    // the means of the grain's R and G channels: the renormalisations' centres
 uniform float uPixA;        // the angle of one pixel of a 1080-line frame, from the camera's vertical field of view
+float pSky=1.0;            // the ground sky occlusion (the light map G) for paint(), set by the ground materials only
 float pDetail;              // the detail grain of the last paint(), for DETAIL_DEBUG
 #ifdef DETAIL_ON
 vec3 dPx,dPy;int pMa,pMe;vec2 pW;float pFade;
@@ -177,6 +178,9 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   float t=smoothstep(-0.10,-0.02,l)*0.55+smoothstep(0.30,0.38,l)*0.45;   // shadow | mid | light, grain-broken edges
   #endif
   vec3 shc=shadowOf(alb);
+  #ifdef SKY_IN_SHADOW
+  shc*=mix(0.62,1.0,smoothstep(0.35,0.8,pSky));   // deep sky occlusion (a wood floor) deepens the shadow itself (docs/plans/done/soft-shadows.md)
+  #endif
   vec3 mid=alb*mix(vec3(0.86,0.92,0.98),uSunCol,0.30);
   vec3 lt=alb*uSunCol*mix(1.16,1.02,snow)+vec3(0.03,0.025,0.0)*(1.0-snow);
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);

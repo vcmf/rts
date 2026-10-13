@@ -48,7 +48,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/terrain.ts` | Tile (1.79 m), far ring (14.3 m) and the apron that stitches them; the far ring's painted river mask; the bank normals' texture (W2, `docs/systems/river.md`; both it and the water data's, W3, from `src/look/span-texture.ts`). Their materials define `DETAIL` (the detail layer, below; on WebGL1 the material factory adds `DETAIL_L0`); the tile's also `BANKN` and `WATERDATA` (the shore band, W4), as do the water's |
 | `src/look/water.ts` | The water ribbon, its materials (the painted water, W4, `docs/systems/river.md`; and the same shader on the tile's ground, for the seam check) and the tree-reflection mask |
 | `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule (and, since L5a, the cover's: what grows on which class) |
-| `src/look/bakes.ts` | Sun shadow depth (once), occlusion and valley mask (CPU, once), the top-down light map (once): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the terrain reads (`docs/plans/active/shadow-look.md`) |
+| `src/look/bakes.ts` | Sun shadow depth (once), occlusion and valley mask (CPU, once), the top-down light map (once): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the terrain reads (`docs/plans/done/shadow-look.md`) |
 | `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), and the passes: depth of field (presentation only, decision 0003), the fused grade |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop, and the debug globals the checks read |
 | `src/look/bench.ts`, `src/look/gputimer.ts` | `?bench`: fixed cameras, frame times, GPU time per pass, draw calls, triangles, texture memory and the build hash, as JSON (below) |
@@ -146,7 +146,7 @@ The plan: `docs/plans/active/l7a-canopy-cards.md`. Not the default: the arm the 
 
 ### The shadows' look
 
-The plan: `docs/plans/active/shadow-look.md`.
+The plan: `docs/plans/done/shadow-look.md`.
 
 - **The shadow band** (`shadowOf()`, `painter.glsl`): more saturated than the base and turned 25 % toward a cool
   blue violet, at the value the band had before, so dark coats keep their separation from shaded ground. The
@@ -157,6 +157,32 @@ The plan: `docs/plans/active/shadow-look.md`.
 - **Contact** (`bakes.ts`): a dark core of 0.45 crown radii (at least about 1.6 m: the occlusion map is about 1 m a
   texel) under each tree, in the light map's alpha, which the ground, the water's shore band and the grass read
   (`groundOcc()`), and the crowns do not.
+
+### Soft shadows (the sun's penumbra, the sky's occlusion)
+
+The plan: `docs/plans/done/soft-shadows.md`. On by default; `?soft=off` puts back the shadows before it.
+
+- **The penumbra** (`bake.frag`, `SOFT`): a blocker search of 16 taps in the sun's depth map, reaching the widest
+  penumbra (of a caster `FAR_MAX`, 40 m, along the light), gives the mean distance from the ground to its casters
+  (`DEPTH_M`, the sun camera's depth range, makes it metres); the filter's radius is that distance times `?penumbra`
+  (default 0.06, `SOFT_DEFAULTS`, at most `PENUMBRA_MAX` 0.2: an exaggerated sun, the real one's is 0.009), between the old filter's radius and
+  the search's reach, over 32 taps turned per texel. Radii are ground metres (`uSMGround`, a shadow texel on the
+  ground). The painted edge (the grain's threshold) widens and loosens with it, the grain acting in the penumbra
+  only. The bake costs about 14 ms on load on the dev Mac (1.3 ms before). A trunk's foot stays crisp; a
+  crown's outline 15 m along the light is soft.
+- **The sky's occlusion** (`skyOcclusion()`, `bakes.ts`, on the CPU on load): each crown and bush is a sphere (the
+  canopy list's last three numbers: its centre's height above the ground, its radius, its opacity); the ground at
+  each texel of the occlusion texture loses the cosine-weighted fraction cos θ · (r/d)² of its sky to each sphere
+  within 25 m, at most 0.42 times its opacity (the crowns read this texel too: 0.29 for a crown, under the old disc's
+  0.42; a bush's opacity 0.7, 0.29 against its old 0.30), splatted per sphere; the fractions multiply into G, over the terrain's ring test. It replaces the discs
+  under crowns and bushes; the contact core stays.
+- **Occlusion inside the shadow** (`paint()`, `SKY_IN_SHADOW`, a define on every painted material): where the
+  ground's sky occlusion (`pSky`, the light map's G, set by the terrain, the water and the grass only) is deep (below
+  0.8, a wood's floor) the shadow colour itself darkens, to 0.62 at 0.35; before it, a wood's floor was the same flat
+  shadow colour as a lone tree's shadow. Other materials (crowns, bushes, the army blocks) leave it at 1.
+- `?wood` adds one dense wood (70 tries, its own random stream) to judge it; `__look.sky` (`Bakes.sky`) reports the
+  sky bake's time and the occlusion's range, null with `?soft=off`. The painted materials take their define from
+  the same options as the bakes (`softDefines()`).
 
 ### The bench (`?bench`, L2a)
 
