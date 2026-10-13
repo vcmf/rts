@@ -52,7 +52,8 @@ The coats lose their colour to three warm tints stacked (`docs/research/colour-a
 | valley, Austria | 0.33 → 0.73 (cream) | 0.33 → 0.06 |
 | valley, Britain | 3 → 22, 0.62 → 0.57 | 3 → 7, 0.62 → 0.47 |
 
-Main fails all 8 blocks. This branch passes all 8 with `units` = { tint 0.25, mist 0.04, grade 0 }. The mist cap set the
+Main fails 7 or 8 of the 8 blocks (the middle's British red passes there by 2° since the column is laid by
+`blocksAt`). This branch passes all 8 with `units` = { tint 0.25, mist 0.04, grade 0 }. The mist cap set the
 margin: at 0.06 the valley's Russian green failed (0.26 against 0.273), and at 0.12 three coats failed. The face
 selection matters too: the first one (the brightest 40 %) took the warm rim along the edges for the face. Pairs (not
 committed; `scratch/compare/coats/` in the main checkout): main beside this branch at both spots.
@@ -100,3 +101,15 @@ measurable nearer.
   Left:
   - the clear colour, no longer graded: the top-down camera shows no sky, and the far-edge golden passes its region;
   - the coat check's copy of the guard's block steps.
+- **Round 2** (a2ea5a7): one severe finding. Round 1's commit carried 44 stray renders (about 65 MB) in two folders
+  named `--view cover` and `--view crops …`: a shell loop passed the guard's flags as one argument, which the guard
+  took for its out dir (and ran the default view). They are removed, and the guard now rejects an argument it does
+  not know. The Cover and Crops results above come from the later runs, each view a command of its own. Also fixed:
+  - the clear colour graded as the materials grade the frame's top (`gradeColour`, `src/look/mood.ts`);
+  - the bloom's division by the tint done once, not per tap;
+  - the coat check's blocks laid by `blocksAt`;
+  - a white must also keep its lightness (0.6 or more);
+  - the system doc's front matter (decision 0027).
+
+  Left: the bloom's blue cast on a unit's own highlights and its undoing of the grade by `splitHi` alone (both
+  measured above). The valley's Russian green sits near its bound (0.27 to 0.28 against 0.273, run to run).

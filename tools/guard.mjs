@@ -170,6 +170,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (!names.includes('summer') || names.some(n => !Object.hasOwn(SEASON_VALUES, n)) || new Set(names).size !== names.length) { console.error(`--seasons: names from ${Object.keys(SEASON_VALUES).join(', ')}, summer among them (the negative), each once`); process.exit(2) }
     SEASONS = names.map(n => [n, SEASON_VALUES[n], n === 'summer'])
   }
+  const stray = args.find(a => a.startsWith('-'))   // a flag left unparsed (e.g. '--view cover' passed as one argument) would become the out dir
+  if (stray) { console.error(`guard.mjs: unknown argument ${JSON.stringify(stray)}`); process.exit(2) }
   const [url, out = path.join(ROOT, 'scratch/guard')] = args
   if (!url || (bi >= 0 && !baseUrl)) { console.error('usage: node tools/guard.mjs <look page URL> [--base <URL>] [--view start|cover|crops] [--seasons summer,…] [outDir]'); process.exit(2) }
   try { const ok = guard(url, out, baseUrl); console.log(ok ? 'guard: ok' : 'guard: FAILED'); process.exit(ok ? 0 : 1) } catch (e) { console.error('guard.mjs:', e.message); process.exit(1) }

@@ -5,7 +5,8 @@
 // renders (flat white, flat black), as the readability guard's; its lit top face is the 40 % of them after the
 // brightest 10 % (the rim along its edges). That
 // face's mean colour must keep the coat's hue within HUE degrees and HLS saturation at SAT of the painted one or
-// more; a near-white coat (painted lightness over 0.8) must not gain saturation (it would turn cream).
+// more; a near-white coat (painted lightness over 0.8) must not gain saturation (it would turn cream) nor fall under
+// a lightness of WHITE_L (grey).
 //
 //   node tools/coat-check.mjs <look page URL> [outDir]
 //     a ?mood= in the URL checks that mood (src/look/mood.ts): run it for every mood (LC2's candidates, each); the
@@ -19,14 +20,14 @@ import * as png from './png.mjs'
 import { CAMS } from './golden.mjs'
 import { blockPixels } from './guard.mjs'
 import { prepSteps, shoot, viewStep } from './look-page.mjs'
-import { ARMY_HEX } from './army-blocks.mjs'
+import { ARMY_HEX, blocksAt } from './army-blocks.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const W = 1280, H = 720, HUE = 10, SAT = 0.7, RIM = 0.1, TOP = 0.4
+const W = 1280, H = 720, HUE = 10, SAT = 0.7, WHITE_L = 0.6, RIM = 0.1, TOP = 0.4
 const START = CAMS.find(c => c[0] === 'start').slice(1, 5)
-// the two spots: [name, x, z] of the column's middle; the four coats 7 m apart along z
+// the two spots: [name, x, z] of the column's middle; the four coats 7 m apart along z (blocksAt's column)
 const SPOTS = [['middle', -10, 2], ['valley', 30, 62]]
-const blocks = ([s, x, z]) => Object.entries(ARMY_HEX).map(([coat, hex], i) => ({ name: `${s}.${coat}`, x, z: z + (i - 1.5) * 7, yaw: 0, color: hex }))
+const blocks = ([s, x, z]) => blocksAt([[s, x, z, 0]]).map(b => ({ ...b, color: ARMY_HEX[b.color] }))
 
 const hls = ([r, g, b]) => {
   r /= 255; g /= 255; b /= 255
@@ -62,8 +63,8 @@ export function coatCheck(url, out) {
       const mean = [0, 1, 2].map(i => top.reduce((a, k) => a + d[k + i], 0) / top.length)
       const painted = hls(hex2rgb(ARMY_HEX[name.split('.')[1]])), seen = hls(mean)
       const white = painted[2] > 0.8, dh = hueDiff(seen[0], painted[0])
-      const ok = white ? seen[1] <= painted[1] : dh <= HUE && seen[1] >= SAT * painted[1]
-      rows.push({ name, n: top.length, rgb: mean.map(Math.round), hue: [Math.round(painted[0]), Math.round(seen[0])], sat: [+painted[1].toFixed(2), +seen[1].toFixed(2)], fail: ok ? null : white ? 'a white turned saturated' : dh > HUE ? `hue off by ${Math.round(dh)}°` : `saturation under ${SAT} of the painted` })
+      const ok = white ? seen[1] <= painted[1] && seen[2] >= WHITE_L : dh <= HUE && seen[1] >= SAT * painted[1]
+      rows.push({ name, n: top.length, rgb: mean.map(Math.round), hue: [Math.round(painted[0]), Math.round(seen[0])], sat: [+painted[1].toFixed(2), +seen[1].toFixed(2)], fail: ok ? null : white ? (seen[1] > painted[1] ? 'a white turned saturated' : `a white turned grey (lightness under ${WHITE_L})`) : dh > HUE ? `hue off by ${Math.round(dh)}°` : `saturation under ${SAT} of the painted` })
     }
   }
   return rows

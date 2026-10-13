@@ -71,3 +71,15 @@ export function setMood(name: string): void {
   if (!Object.hasOwn(MOODS, name)) throw new Error(`?mood must be one of ${Object.keys(MOODS).join(', ')}, not ${name}`)
   MOOD = MOODS[name as MoodName]
 }
+
+// the grade (gradeOf, src/look/shaders/painter.glsl) of one colour at a height in the frame (0 bottom, 1 top), for what
+// no material draws: the clear colour, which shows only at the frame's top
+export function gradeColour(c: Color3, m: Mood, y: number): Color3 {
+  const g = m.grade, L = (v: Color3) => 0.2126 * v.r + 0.7152 * v.g + 0.0722 * v.b, l = L(c)
+  const sstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
+  const green = Math.min(1, Math.max(0, (c.g - Math.max(c.r, c.b)) * 3)) * g.greenAmt
+  let o = Color3.Lerp(c, new Color3(l * g.greenTint.r + (c.r - l) * g.greenChroma, l * g.greenTint.g + (c.g - l) * g.greenChroma, l * g.greenTint.b + (c.b - l) * g.greenChroma), green)
+  const lo = L(o); o = Color3.Lerp(new Color3(lo, lo, lo), o, g.sat)
+  o = o.multiply(Color3.Lerp(g.splitLo, g.splitHi, sstep(0.08, 0.75, l))).add(g.lift.scale(1 - l))
+  return Color3.Lerp(o, g.topHaze.scale(0.85 + l * 0.35), sstep(0.60, 1.0, y) * g.topAmt)
+}

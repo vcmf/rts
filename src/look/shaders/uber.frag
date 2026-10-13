@@ -24,8 +24,8 @@ void main(){vec3 c=base();
   // unit (not graded) blooms a little cool: it is divided by a tint it never had
   if(uBloom>0.0){vec3 b=vec3(0.0);vec3 hi=mix(vec3(1.0),uSplitHi,uGrade);
     for(int i=0;i<12;i++){float a=float(i)*0.5236+(i<6?0.0:0.26);float r=(i<6?6.0:16.0)*uRes.y/1080.0;
-      vec3 s=texture2D(textureSampler,BLOOM_UV(vUV+vec2(cos(a),sin(a))*r/uRes)).rgb/hi;b+=max(s-vec3(0.70),0.0)*(i<6?1.0:0.6);}
-    b=mix(vec3(dot(b,vec3(0.2126,0.7152,0.0722))),b,mix(1.0,uGradeSat,uGrade));
+      vec3 s=texture2D(textureSampler,BLOOM_UV(vUV+vec2(cos(a),sin(a))*r/uRes)).rgb;b+=max(s-0.70*hi,0.0)*(i<6?1.0:0.6);}   // = max(s/hi-0.70,0)*hi
+    b/=hi;b=mix(vec3(dot(b,vec3(0.2126,0.7152,0.0722))),b,mix(1.0,uGradeSat,uGrade));
     c+=b*hi*0.11*uBloom*(1.0-smoothstep(0.60,1.0,vUV.y)*uTopAmt*uGrade);}
   c=shoulder(c);
   vec2 q=(vUV-0.5)*vec2(uRes.x/uRes.y,1.0);c=mix(c,c*uVignette,smoothstep(0.45,1.05,length(q))*0.55);

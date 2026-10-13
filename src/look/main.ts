@@ -16,7 +16,7 @@ import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions 
 import { runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S } from './materials.ts'
-import { MOOD, setMood } from './mood.ts'
+import { gradeColour, MOOD, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow } from './meadow.ts'
 import { DOF, Post, buildCamera } from './post.ts'
@@ -62,7 +62,7 @@ const scene = new Scene(engine); scene.skipPointerMovePicking = true
 const params = new URLSearchParams(location.search), softParam = params.get('soft'), penumbraParam = params.get('penumbra')
 // the light's mood (src/look/mood.ts), before any material is made
 setMood(params.get('mood') ?? 'golden')
-scene.clearColor = new Color4(MOOD.hazeCool.r, MOOD.hazeCool.g, MOOD.hazeCool.b, 1)
+{ const k = gradeColour(MOOD.hazeCool, MOOD, 1); scene.clearColor = new Color4(k.r, k.g, k.b, 1) }   // graded as the materials are at the frame's top (it shows only there)
 if (softParam !== null && softParam !== 'off') throw new Error(`?soft must be off, not ${softParam}`)
 const soft: SoftOptions = { on: softParam !== 'off', penumbra: penumbraParam === null ? SOFT_DEFAULTS.penumbra : Number(penumbraParam) }
 if (penumbraParam !== null && (penumbraParam.trim() === '' || !Number.isFinite(soft.penumbra) || soft.penumbra < 0 || soft.penumbra > PENUMBRA_MAX)) throw new Error(`?penumbra must be a number from 0 to ${PENUMBRA_MAX}, not ${penumbraParam}`)
