@@ -21,7 +21,12 @@ export interface Mood {
   glint: Color3               // the sun's dabs on the water, × the sun (water.frag)
   farRiver: Color3            // the far ring's river line: the river's mid tone after its sky tint, so it meets the
                               // river at the tile's edge (terrain.frag, FARRING): follows waterSky
-  grade: {                    // the post pass's grade (src/look/shaders/uber.frag)
+  units: {                    // how much of the light units take (the painter's KEEP_HUE path: the army blocks, the figures)
+    tint: number              // of the sun's hue, 0..1 (its value always): the eye's white balance
+    mist: number              // the valley mist's most over them (0..0.42, the ground's most)
+    grade: number             // of the grade, 0..1
+  }
+  grade: {                    // the grade (gradeOf in src/look/shaders/painter.glsl, the last step of every painted material)
     greenTint: Color3         // a green's value turned toward this
     greenChroma: number       // how much of a green's chroma is kept
     greenAmt: number          // how far greens go to the muted green
@@ -46,6 +51,7 @@ export const MOODS = {
     mistShade: c(0.42, 0.53, 0.68), mistLit: c(1.0, 0.86, 0.63),
     hazeCool: c(0.60, 0.69, 0.78), hazeWarm: c(0.95, 0.80, 0.58),
     waterSky: c(0.62, 0.74, 0.86), glint: c(1.0, 0.86, 0.58), farRiver: c(0.40, 0.55, 0.58),
+    units: { tint: 0.25, mist: 0.04, grade: 0.0 },
     grade: {
       greenTint: c(1.03, 1.0, 0.88), greenChroma: 0.5, greenAmt: 0.85, sat: 0.9,
       splitLo: c(0.92, 0.99, 1.06), splitHi: c(1.08, 1.0, 0.85), lift: c(0.03, 0.02, 0.0),

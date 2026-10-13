@@ -83,7 +83,7 @@ const sat = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
 // each block's pixels: where its white and black mask renders differ, inside its box, and nearer its centre than any
 // other block whose box holds them. All of the block, not just the part that differs from the ground (which would
 // leave out exactly the pixels that make a block hard to read)
-function blockPixels(white, black, info) {
+export function blockPixels(white, black, info) {
   const sx = white.w / info.w, sy = white.h / info.h, px = new Map(info.boxes.map(b => [b.name, []]))
   for (let y = 0; y < white.h; y++) for (let x = 0; x < white.w; x++) {
     const k = (y * white.w + x) * 4

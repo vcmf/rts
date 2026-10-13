@@ -193,7 +193,7 @@ scene.onBeforeRenderObservable.add(() => {
   if (!FROZEN) S.t += Math.min(engine.getDeltaTime() / 1000, 0.05)
   for (const m of mats.all) {
     m.setVector3('uCamPos', camera.position); m.setVector3('uFocus', camera.target); m.setFloat('uTime', S.t)
-    m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
+    m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uGrade', S.grade); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
     m.setFloat('uPixA', pixA)
     m.setFloat('uAO', S.ao); m.setFloat('uMist', S.mist); m.setFloat('uShafts', S.shafts); m.setFloat('uBack', S.back)
   }
