@@ -23,10 +23,34 @@ camera: "yeah a bit taller pls".
 
 ## Results (2026-10-13)
 
-- Pairs (not committed; `scratch/compare/stubble/` in the main checkout): at 0.38 m the stubble added a faint texture
-  in the field's own colour; at 0.45 m with pale tips the stalks read over the soil.
-- Guard against main: passes at the default and the cover views.
-- river-check and look-check pass.
-- `npm test`: on this machine (load about 10) the soldiers' cost test (`test/soldiers.test.ts`, a sim timing budget)
-  failed in the full parallel run, at 15.3 and 16.3 ms against a 12 ms budget. It passed alone on this branch and on
-  main. This change touches only a shader and a doc; CI is the judge.
+- **Look** (pairs not committed; `scratch/compare/stubble/` in the main checkout): at 0.38 m the stubble added only a
+  faint texture in the field's own colour. At `STUBBLE_HEIGHT` (0.45 m) with pale straw tips (`stubbleTip`) the
+  stalks read over the soil, on the stubble fields and on the wheat cut in autumn.
+- **No clipping toward the white coats:** the tips' red is no higher than the standing wheat's. Pixels with a
+  channel at 245 or more, stubble field in summer: 1,322 against main's 1,843. Wheat field in autumn: 27,490 on both.
+- **Guard** against main: passes at the default and the cover views.
+- **Cost** (`?bench=meadow&benchat=100,140`, over the stubble field; Metal proxy, two runs an arm, the machine at a
+  load of about 11): the meadow arm at 5.08 and 5.08 / 5.52 and 5.62 / 6.77 and 6.82 ms (close / default / wide)
+  against main's 5.22 and 5.07 / 5.48 and 5.10 / 6.77 and 6.65 ms. That is within main's own run-to-run spread
+  (0.4 ms at the default zoom): no measurable cost.
+- **Checks:** river-check and look-check pass.
+- **`npm test`:** exit 0 (19 files, 256 tests). Three earlier full runs under load failed the soldiers' cost budget
+  (`test/soldiers.test.ts`, 12 ms; 15.3, 16.3 and 12.04 ms), a sim timing test this change does not touch. Main's
+  full run passed at a load of 16.
+
+## Review (`/code-review high`)
+
+- **Round 1** (the first commit): two severe findings, both fixed.
+  - The wheat cut to stubble in autumn kept the wheat's orange tips, so it did not read. It now takes the stubble's
+    pale straw (`stubbleTip`, shared).
+  - The pale tips' red (0.80) could clip toward white in the sun, against the white coats. It is now 0.72, the
+    standing wheat's, which is measured above.
+
+  Also fixed:
+  - the height is one constant (`STUBBLE_HEIGHT` in `src/look/meadow-spec.ts`), not two literals;
+  - the doc links it instead of copying it, and records the colour;
+  - stale comments;
+  - the cost and `npm test` measured (above).
+
+  Left: at the top of its range the stubble's footprint meets the 0.7 cap (grass proportions under the grass
+  height), which flattens a little of its width jitter.
