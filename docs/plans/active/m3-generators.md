@@ -306,3 +306,20 @@ Every fault of the redesign's three rounds lived inside a group of generators th
 - Decision 0023 supersedes 0022.
 
 The round count restarts.
+
+**Redesign 2, round 1** (8 findings, 1 severe):
+- **Severe:** two street villages read each other through `built`, so any map with two villages was a cycle, and
+  the advice (one scatter's mix) could not apply. Street villages are now **peers**: neither reads nor sees the
+  other's output, and once all have run their houses must lie 1 m apart, or it is an error naming both. A pinned
+  village's houses are hand-drawn features and are kept clear of. Decision 0023 is amended before merging.
+- **Moderate:**
+  - each try went to the entry furthest behind, so an entry that could not be placed starved the others; each
+    entry now has its own budget of tries;
+  - a mix scatter's own kind (never on the map) was counted as produced, giving false cycles;
+  - a `null` mix entry made the validator throw: the generator's own checks now run only when the parameters
+    passed their specs;
+  - the cycle advice suggested a mix for villages; it now says to drop one side's read, and offers a mix only
+    when every member is a scatter;
+  - a mix scatter's own attributes reached no child silently: now an error pointing to `set`.
+- **Light:** a non-list mix no longer also says "count is required"; the clump parameters have one spec, shared
+  by the scatter and its entries.

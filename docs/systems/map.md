@@ -65,10 +65,12 @@ maps/kinds.json ──► checkCatalogue ─┐
   - each generator declares what it `reads`, as selectors (`src/map/generators.ts`): a village its road, water,
     buildings, no-go zones, ways and barriers; a scatter its `avoid` and `within`. Meander and clump read nothing;
   - F reads G when one of F's selectors could match what G produces (G's id, its children's ids, the kinds of G and
-    of its children); a generator never reads itself. The generators run in dependency order (Tarjan's strongly
+    of its children; not a scatter's own kind, as its region leaves the map); a generator never reads itself. Street
+    villages are peers (`peers`): they neither read nor see each other's output, and once all have run their houses
+    must lie 1 m apart, or it is an error naming both. The generators run in dependency order (Tarjan's strongly
     connected groups, each emitted after what it reads). The reads must form a chain: a group of two or more is a
-    cycle, an error on each member naming what it reads, by which selector, and how to break it (kinds that must
-    stay apart go in one scatter's `mix`; a hand-drawn feature is named by id rather than by kind). So neither the
+    cycle, an error on each member naming what it reads, by which selector, and how to break it (drop one side's
+    read; when all are scatters, place their kinds in one scatter's `mix`). So neither the
     file's order nor the ids change the output (beyond seeds). A generator reading one that failed (or a cycle) is
     skipped, so the first error is the one reported. Once everything has run, every selector that names a feature
     must name one of the expanded map. A feature's id may not be a category's name (a selector would mean both);
@@ -113,8 +115,9 @@ maps/kinds.json ──► checkCatalogue ─┐
     region, `clearance` m clear of what it `avoid`s and of its siblings, and within `reach` of what it stays
     `within`. With `mix: [{ kind, count, radiusMin?, radiusMax?, min?, coherence?, raggedness?, set? }, …]` in place
     of `count` and the clump fields, it places several kinds jointly, every child `clearance` m from every other
-    whatever their kinds (each entry's children take its kind, the scatter's attributes, then its `set`; the
-    validator checks each entry against the catalogue). This is how woods and fields keep apart: two scatters
+    whatever their kinds (each entry's children take its kind and its `set`, so the scatter's feature carries no
+    attributes; the validator checks each entry against the catalogue). Each entry has 400 tries per child asked,
+    so one that cannot be placed gives up without starving the others. This is how woods and fields keep apart: two scatters
     avoiding each other would be a cycle. A selector is an id (a generator's id names its children too), a category or a kind prefix; a
     feature cannot name itself, and a `within` that matches nothing is an error. The largest radius comes from
     `clumpMaxRadius`, `clump`'s own bound. A selector that names a feature (an id, a child's id) must name one the

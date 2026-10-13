@@ -366,6 +366,28 @@ describe('M3b: the chain (decision 0023): each generator after what it reads; a 
     expect(ring.issues.map(i => i.id).sort()).toEqual(['aa', 'bb', 'cc'])
     const mutual = expand(mini([ROAD, VILLAGE, sc('ponds', 'water.pond', { avoid: ['built'] })]), cat)
     expect(mutual.issues.map(i => i.id).sort()).toEqual(['ponds', 'village'])
+    expect(mutual.issues[0].message).toMatch(/Drop one side's read/)
+    expect(mutual.issues[0].message).not.toMatch(/mix/)                             // a village cannot join a mix
+  })
+  it("a mix scatter's own kind is never on the map, so it is not read", () => {
+    const g2 = { id: 'g2', kind: 'veg.wood.broad', area: REGION, gen: { scatter: { mix: [{ kind: 'ground.field.wheat', count: 3, radiusMin: 20, radiusMax: 30 }], avoid: ['water'], clearance: 10 } } }
+    expect(expand(mini([g2, sc('h', 'water.pond', { avoid: ['veg'] })]), cat).issues).toEqual([])
+  })
+  it('street villages are peers: neither reads the other, and their houses must end up apart', () => {
+    const vb = { ...VILLAGE, id: 'vb', along: { id: 'road', from: 500, to: 700 } }
+    for (let seed = 1; seed <= 5; seed++) {
+      const { map, issues } = expand(mini([ROAD, { ...VILLAGE, id: 'va', along: { id: 'road', from: 50, to: 250 } }, vb], seed), cat)
+      expect(issues).toEqual([])
+      expect(kidsOf(map, 'va')).toHaveLength(6); expect(kidsOf(map, 'vb')).toHaveLength(6)
+    }
+    const crowd = expand(mini([ROAD, { ...VILLAGE, id: 'va', houses: 16, along: { id: 'road', from: 300, to: 500 } }, { ...vb, houses: 16, along: { id: 'road', from: 300, to: 500 } }]), cat)
+    expect(crowd.issues.map(i => i.id)).toEqual(['vb'])
+    expect(crowd.issues[0].message).toMatch(/"vb-\d+" comes within 1 m of "va-\d+": street-village generators do not see each other/)
+    // a pinned village's houses are hand-drawn features: a village keeps clear of them
+    const pinned = kidsOf(expand(mini([ROAD, { ...VILLAGE, id: 'va', along: { id: 'road', from: 300, to: 500 } }]), cat).map, 'va')
+    const next = expand(mini([ROAD, ...pinned, { ...vb, along: { id: 'road', from: 300, to: 600 }, gen: { 'street-village': { min: 1 } } }]), cat)
+    expect(next.issues).toEqual([])
+    expect(apart(kidsOf(next.map, 'vb'), pinned)).toBe(true)
   })
   it('a generator reading a cycle or a failed generator is skipped: only the first errors are reported', () => {
     const cyc = expand(mini([sc('aa', 'veg.wood', { avoid: ['bb'] }), sc('bb', 'ground.field', { avoid: ['aa'] }), sc('cc', 'water.pond', { within: ['aa'] })]), cat)
@@ -414,6 +436,11 @@ describe("M3b: scatter's mix: several kinds placed jointly", () => {
       for (const k of kids) expect(distanceToPolygon(road, {}, k.area![0])).toBeGreaterThan(1.5 + 1)   // clear of the road
     }
   })
+  it('an entry that cannot be placed gives up without starving the others', () => {
+    const { map, issues } = expand(mini([mixed([{ kind: 'veg.wood.broad', count: 6, radiusMin: 30, radiusMax: 40, min: 4 }, { kind: 'water.pond', count: 1, radiusMin: 600, radiusMax: 600, min: 0 }])]), cat)
+    expect(issues).toEqual([])
+    expect(kidsOf(map, 'groves').filter(k => k.kind === 'veg.wood.broad').length).toBeGreaterThanOrEqual(4)
+  })
   it('a shortfall names the entries that fell short; min per entry lowers the bar', () => {
     const tight = expand(mini([mixed([{ kind: 'veg.wood', count: 40, radiusMin: 80, radiusMax: 90 }, { kind: 'ground.field', count: 2, radiusMin: 20, radiusMax: 25 }])]), cat)
     expect(tight.issues[0]?.message).toMatch(/placed \d+ of 40 veg\.wood/)
@@ -429,6 +456,10 @@ describe("M3b: scatter's mix: several kinds placed jointly", () => {
     expect(paths([{ kind: 'veg.wood', count: 2 }], { count: 3 })).toContainEqual(expect.stringMatching(/scatter\.count: belongs to each entry of a mix/))
     expect(paths([{ kind: 'veg.wood', count: 2, radiusMin: 30, radiusMax: 20 }])).toContainEqual(expect.stringMatching(/mix\[0\]\.radiusMax: is below radiusMin/))
     expect(paths([{ kind: 'veg.wood', count: 2 }, { kind: 'ground.field', count: 2 }])).toEqual([])
+    expect(paths([null])).toEqual([expect.stringMatching(/scatter\.mix: must be a list of objects/)])        // reported, never thrown
+    expect(paths('veg' as unknown as unknown[])).toEqual([expect.stringMatching(/scatter\.mix: must be a list of objects/)])
+    const own = validate(mini([{ ...mixed([{ kind: 'veg.wood', count: 2 }]), density: 0.5 }]), cat).map(i => i.message)
+    expect(own).toContainEqual(expect.stringMatching(/the scatter's own density reach no child of a mix: give attributes to each entry with set/))
   })
 })
 

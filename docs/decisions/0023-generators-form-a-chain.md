@@ -23,12 +23,18 @@ We will refuse groups, and give the one common mutual case its own construct:
   generators that have already run (their output and children).
 - **Declared reads**, as in 0022: each generator lists the selectors it reads (ids, categories, kind prefixes). F
   reads G when one of them could match G's id, its children's ids, or the kinds G and its children will have. A
-  generator never reads itself (a scatter's children keep apart by its own rules).
+  generator never reads itself (a scatter's children keep apart by its own rules), nor the kind of a scatter's
+  region (it leaves the map).
+- **Peers:** a generator may declare that others of its name are its peers (street villages). Peers never read nor
+  see each other's output; once all have run, their children must lie a set gap apart (1 m for houses), or it is
+  an error naming both. Two villages are common; they would otherwise be a cycle through `built`.
 - **A chain:** generators run in dependency order. A cycle of reads (two or more generators) is an error on each
   member. The error names what it reads, by which selector, and how to break the cycle.
 - **Joint placement:** a scatter takes `mix: [{ kind, count, radiusMin?, radiusMax?, min?, coherence?,
   raggedness?, set? }, …]` and places every entry's clumps in one pass. Every child keeps the scatter's `clearance`
-  from every other, whatever their kinds. Woods and fields that must stay apart are one scatter, not two that
+  from every other, whatever their kinds; each entry has its own budget of tries, so one that cannot be placed
+  never starves the others. A mix's children take their entry's kind and `set` only, so the scatter's feature may
+  carry no attributes of its own. Woods and fields that must stay apart are one scatter, not two that
   avoid each other.
 - **Errors**, as in 0022: a generator reading a failed one (or a cycle) is skipped, so the first error is the one
   reported. A selector naming a feature must name one of the expanded map, checked once everything has run.
@@ -37,8 +43,9 @@ We will refuse groups, and give the one common mutual case its own construct:
 
 - **The output depends on neither the file's order nor the ids** (beyond seeds): there is no group to order.
 - **Some maps that 0022 accepted are now errors:** two scatters that avoid each other's kinds, or a village with a
-  scatter of ponds that avoids `built`. The message says how to fix it: one scatter's mix, or name a hand-drawn
-  feature by id instead of by kind.
+  scatter of ponds that avoids `built`. The message says how to fix it: drop one side's read (keeping clear on one
+  side is enough), or, when all are scatters, one scatter's mix.
+- **Two street villages too close are an error**, not quietly separated: the author moves their stretches.
 - **Every generator must declare its reads correctly**, as before.
 
 ## Alternatives considered

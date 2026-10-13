@@ -19,7 +19,8 @@ export interface ScatterRules {
 }
 
 // Joint placement: each try serves the entry furthest behind its count (ties to the earlier entry), so every kind
-// gets its share of the room; every site keeps `clearance` from every other, whatever their kinds.
+// gets its share of the room; every site keeps `clearance` from every other, whatever their kinds. Each entry has
+// its own budget of 400 tries per child asked, so one that cannot be placed gives up without starving the others.
 export function scatterSites(region: Pt[][], rules: ScatterRules, seed: number): ScatterSite[] {
   const rnd = random(seed), outer = region[0], xs = outer.map(p => p[0]), zs = outer.map(p => p[1])
   const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs), rings = region.map(r => [...r, r[0]] as Pt[])
@@ -28,10 +29,13 @@ export function scatterSites(region: Pt[][], rules: ScatterRules, seed: number):
   // siblings in a grid of cells as wide as the farthest two may need to be apart, so each try checks its neighbours only
   const reachMax = Math.max(...rules.entries.map(e => e.radiusMax * e.spread)), cell = 2 * reachMax + rules.clearance, grid = new Map<string, ScatterSite[]>()
   const key = (i: number, j: number) => `${i},${j}`
-  const placed = rules.entries.map(() => 0), total = rules.entries.reduce((n, e) => n + e.count, 0), sites: ScatterSite[] = []
-  for (let tries = 0; sites.length < total && tries < total * 400; tries++) {
+  const placed = rules.entries.map(() => 0), tried = rules.entries.map(() => 0), sites: ScatterSite[] = []
+  const open = (k: number) => placed[k] < rules.entries[k].count && tried[k] < rules.entries[k].count * 400
+  for (;;) {
     let e = -1
-    for (let k = 0; k < rules.entries.length; k++) if (placed[k] < rules.entries[k].count && (e < 0 || placed[k] / rules.entries[k].count < placed[e] / rules.entries[e].count)) e = k
+    for (let k = 0; k < rules.entries.length; k++) if (open(k) && (e < 0 || placed[k] / rules.entries[k].count < placed[e] / rules.entries[e].count)) e = k
+    if (e < 0) break
+    tried[e]++
     const en = rules.entries[e], x = x0 + rnd() * (x1 - x0), z = z0 + rnd() * (z1 - z0), r = en.radiusMin + rnd() * (en.radiusMax - en.radiusMin), R = r * en.spread
     if (!inside(x, z) || edge(x, z) < R) continue
     const gi = Math.floor((x - x0) / cell), gj = Math.floor((z - z0) / cell)

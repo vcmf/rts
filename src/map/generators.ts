@@ -35,8 +35,12 @@ export interface GenSpec {
   // the kinds of the children it writes, when it writes any (ids <feature>-<n>)
   childKinds?(kind: string, params: Record<string, unknown>): string[]
   removesSelf?: boolean            // its own feature leaves the expanded map (a scatter's region)
-  // its own checks of its parameters, beyond their specs (a scatter's mix entries against the catalogue)
-  check?(params: Record<string, unknown>, cat: Catalogue): { key: string; message: string }[]
+  // generators of this name never read each other's output: each runs as if the others were not there, and their
+  // outputs are checked apart once all have run (street villages: decision 0023)
+  peers?: { gap: number }
+  // its own checks of its parameters, beyond their specs (a scatter's mix entries against the catalogue); run only
+  // when every parameter passed its spec
+  check?(params: Record<string, unknown>, cat: Catalogue, f: Feature): { key: string; message: string }[]
   run(ctx: GenContext): GenOutput
 }
 
@@ -60,8 +64,17 @@ const HOUSE_REACH = 16
 
 // a scatter's kinds: its mix's entries, or one entry from the scatter itself
 interface Entry { kind: string; count: number; radiusMin: number; radiusMax: number; min: number; coherence: number; raggedness: number; set: Record<string, AttrValue> }
-const ENTRY_KEYS = ['kind', 'count', 'radiusMin', 'radiusMax', 'min', 'coherence', 'raggedness', 'set']
-const ONE_KIND_KEYS = ['count', 'radiusMin', 'radiusMax', 'min', 'coherence', 'raggedness']
+// a clump's parameters: the scatter's own for a single kind, each entry's in a mix
+const CLUMP_PARAMS: Record<string, ParamSpec> = {
+  count: { type: 'int', unit: 'count', min: 1, max: 500 },
+  radiusMin: { type: 'number', unit: 'm', min: 2, max: 2000 },
+  radiusMax: { type: 'number', unit: 'm', min: 2, max: 2000 },
+  min: { type: 'int', unit: 'count', min: 0, max: 500 },
+  coherence: { type: 'number', unit: '0..1', min: 0, max: 1 }, raggedness: { type: 'number', unit: '0..1', min: 0, max: 1 },
+}
+const ENTRY_KEYS = ['kind', ...Object.keys(CLUMP_PARAMS), 'set']
+// the fields a mix scatter's feature may carry: its children take their entry's kind and set, nothing of the scatter's
+const MIX_SCATTER_FIELDS = ['id', 'kind', 'gen', 'area', 'note', 'source']
 function entriesOf(kind: string, p: Record<string, unknown>): Entry[] {
   const one = (e: Record<string, unknown>, k: string, set: Record<string, AttrValue>): Entry => {
     const count = P(e, 'count')!, radiusMin = P(e, 'radiusMin') ?? 30
@@ -98,6 +111,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
   'street-village': {
     kinds: ['built.village'], input: ['area', 'none'], output: 'area', childKinds: () => ['built.house'],
     reads: f => [f.along!.id, ...VILLAGE_KEEPS_CLEAR],
+    peers: { gap: 1 },   // another street village is neither read nor avoided: their houses must end up 1 m apart
     params: { min: { type: 'int', unit: 'count', min: 0, max: 500 } },
     run: ctx => {
       const { f, attrs, params, seed, features, attrsOf, kindOf } = ctx
@@ -123,28 +137,25 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
     childKinds: (kind, p) => (Array.isArray(p.mix) ? (p.mix as Record<string, unknown>[]).map(e => String(e.kind)) : [kind]),
     reads: (_f, p) => [...list(p.avoid), ...list(p.within)],
     params: {
-      count: { type: 'int', unit: 'count', min: 1, max: 500 },
-      radiusMin: { type: 'number', unit: 'm', min: 2, max: 2000 },
-      radiusMax: { type: 'number', unit: 'm', min: 2, max: 2000 },
+      ...CLUMP_PARAMS,
       mix: { type: 'entries' },   // several kinds placed jointly: [{ kind, count, radiusMin?, radiusMax?, min?, coherence?, raggedness?, set? }]
       avoid: { type: 'list' }, clearance: { type: 'number', unit: 'm', min: 0, max: 2000 },
       within: { type: 'list' }, reach: { type: 'number', unit: 'm', min: 0, max: 5000 },
-      min: { type: 'int', unit: 'count', min: 0, max: 500 },
-      coherence: { type: 'number', unit: '0..1', min: 0, max: 1 }, raggedness: { type: 'number', unit: '0..1', min: 0, max: 1 },
     },
-    check: (p, cat) => {
+    check: (p, cat, f) => {
       const out: { key: string; message: string }[] = []
       if (!Array.isArray(p.mix)) { if (p.count === undefined) out.push({ key: 'count', message: 'is required (or give a mix)' }); return out }
-      for (const k of ONE_KIND_KEYS) if (p[k] !== undefined) out.push({ key: k, message: 'belongs to each entry of a mix, not to the scatter' })
+      for (const k of Object.keys(CLUMP_PARAMS)) if (p[k] !== undefined) out.push({ key: k, message: 'belongs to each entry of a mix, not to the scatter' })
+      const own = Object.keys(f).filter(k => !MIX_SCATTER_FIELDS.includes(k))
+      if (own.length) out.push({ key: 'mix', message: `the scatter's own ${own.join(', ')} reach no child of a mix: give attributes to each entry with set` })
       ;(p.mix as Record<string, unknown>[]).forEach((e, n) => {
         const at = `mix[${n}]`
         for (const k of Object.keys(e)) if (!ENTRY_KEYS.includes(k)) out.push({ key: `${at}.${k}`, message: `unknown field (${ENTRY_KEYS.join(', ')})` })
         const chain = typeof e.kind === 'string' ? kindChain(cat, e.kind) : null
         if (!chain) { out.push({ key: `${at}.kind`, message: 'must name a kind in the catalogue' }); return }
         if (!kindMeta(cat, chain).shapes.includes('area')) out.push({ key: `${at}.kind`, message: `${e.kind} takes no area` })
-        const specs: Record<string, FieldSpec> = { count: { type: 'int', min: 1, max: 500 }, radiusMin: { type: 'number', min: 2, max: 2000 }, radiusMax: { type: 'number', min: 2, max: 2000 }, min: { type: 'int', min: 0, max: 500 }, coherence: { type: 'number', min: 0, max: 1 }, raggedness: { type: 'number', min: 0, max: 1 } }
         if (e.count === undefined) out.push({ key: `${at}.count`, message: 'is required' })
-        for (const [k, spec] of Object.entries(specs)) if (e[k] !== undefined) { const m = checkValue(spec, e[k]); if (m) out.push({ key: `${at}.${k}`, message: m }) }
+        for (const [k, spec] of Object.entries(CLUMP_PARAMS)) if (e[k] !== undefined) { const m = checkValue(spec, e[k]); if (m) out.push({ key: `${at}.${k}`, message: m }) }
         if (typeof e.radiusMin === 'number' && typeof e.radiusMax === 'number' && e.radiusMax < e.radiusMin) out.push({ key: `${at}.radiusMax`, message: 'is below radiusMin' })
         if (e.set !== undefined) {
           if (typeof e.set !== 'object' || e.set === null || Array.isArray(e.set)) out.push({ key: `${at}.set`, message: 'must be an object of attributes' })
