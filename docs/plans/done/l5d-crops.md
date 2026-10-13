@@ -57,7 +57,7 @@ at the near view in summer, autumn, late autumn and winter, the mid view in summ
 
 ## Review (`/code-review high`)
 
-- **Round 1** (0ec3a5e): one severe finding. The crop's class came from the cover at its root, while the crops'
+- **Round 1** (5c06230): one severe finding. The crop's class came from the cover at its root, while the crops'
   growth took all sown classes as one, so wheat could stand on a painted green-crop strip where two fields meet.
   `Nature.crop` now needs one class EDGE round the point, which takes 198,596 texels down to 173,332, and an
   unknown class grows nothing. Also fixed:
