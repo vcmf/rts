@@ -205,7 +205,7 @@ shader); `?meadow=off` puts back the old scatter.
   each clump away across its ring's band (the rings hand over without an edge). The fragment shader is a lean
   `paint()` (the ramp, the cool band, the sky in the shadow, clouds; no grain, rim nor snow): the painted ground's
   colour under the root (the macro bake, `groundArm`; the flat class colour on the other arms), darker at the root and lighter, warmer at the tip. In winter the clumps shrink under the snow.
-- **The crops** (L5d, `docs/plans/done/l5d-crops.md`): the same slots grow a crop clump where the meadow map's A
+- **The crops** (L5d, `docs/plans/active/l5d-crops.md`): the same slots grow a crop clump where the meadow map's A
   channel (the crops' growth: `Nature.crop`, a sown field, wheat, green crop or stubble, with the grass's rules,
   edge and shrink) is above the grass's growth: never both on one patch. The vertex shader reads the cover's class
   at the root (`uCover`) and the season (`cropAt` in `meadow.vert`): wheat standing up to `WHEAT_HEIGHT_MAX`

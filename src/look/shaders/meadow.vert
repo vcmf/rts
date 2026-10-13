@@ -10,7 +10,7 @@ varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;
 // the blend never crosses a rule (src/look/meadow.ts)
 vec4 meadowAt(vec2 xz){return texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);}
 vec2 coverCell(vec2 xz){vec4 t=texture2D(uCover,xz/FAR_W+0.5);return floor(t.rg*255.0+0.5);}   // its class and field id
-// a crop by its class and the season (docs/plans/done/l5d-crops.md, uSeason 0 summer, 1 autumn, 2 late autumn, 3
+// a crop by its class and the season (docs/plans/active/l5d-crops.md, uSeason 0 summer, 1 autumn, 2 late autumn, 3
 // winter): its height (m) in x, its colour at the tip in yzw. Wheat stands in summer (never over WHEAT_HEIGHT_MAX,
 // decision 0026), is cut to stubble (0.22 m) in autumn and ploughed under after, stubble short until the plough, the green
 // crop low all year, lower under the snow and toward its colour. The colour (the owner): lime to gold, orange and
@@ -47,15 +47,19 @@ void main(){
   // the growth here, thinner between the clumps (a crop evenly sown, less so), and a clump shrinks away instead of
   // vanishing (no pop)
   float keep=crop?m.a*band*mix(0.8,1.0,c):m.g*band*mix(0.45,1.0,c),grow=smoothstep(h2-0.12,h2+0.12,keep);
+  // nothing where nothing grows (the smoothstep above is over 0 at a growth of 0 for a low hash, and the height factor
+  // is not zeroed by the rules: the zones and the banks)
+  if(keep<=0.0){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
   // the height the same on every ring and never over HEIGHT_MAX (a formation is never hidden), the footprint by the
   // ring (its cell), both shrinking away with the growth, winter: under the snow. A crop: its own height by class and
   // season, narrower than grass
   float j=mix(0.8,1.2,h3),hgt,fp;
   vec4 cr=vec4(0.0);
-  // its footprint narrower than grass and with its height (short stubble stays upright, not a flat splat), each
+  // its footprint narrower than grass, and under the grass height in the grass proportions (short stubble stays
+  // upright, not a flat splat), each
   // field a shade apart, as the ground paints it (cellColour in macro.glsl)
   if(crop){vec2 cc=coverCell(root);cr=cropAt(cc.x,h3);cr.yzw*=cc.y>0.5?0.94+0.12*fract(cc.y*0.6180339):1.0;
-    hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*0.7*clamp(cr.x/1.1,0.35,1.0);}
+    hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*min(0.7,cr.x/uHeight);}
   else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*mix(1.0,0.45,smoothstep(2.5,3.0,uSeason)),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;}
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
   float a=h4*6.2832,ca=cos(a),sa=sin(a);

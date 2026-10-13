@@ -63,25 +63,24 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   // shrinks by a texel, so the GPU's bilinear read, which blends a texel with its neighbours, never carries grass
   // across a rule (between the last growing texel and a zero one it stays inside the allowed ground)
   const G = MAP_N / 2
-  // the 2 m cells: f at each cell's centre (several values a call, one array each)
-  const cellGrids = (f: (x: number, z: number) => number[], n: number) => {
-    const a = Array.from({ length: n }, () => new Float32Array(G * G))
-    for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) { const v = f((i + 0.5) * 2 - TILE_W / 2, (j + 0.5) * 2 - TILE_W / 2); for (let c = 0; c < n; c++) a[c][j * G + i] = v[c] }
-    return a
-  }
+  // the 2 m cells: f at each cell's centre
+  const cellGrid = (f: (x: number, z: number, k: number) => number) => { const a = new Float32Array(G * G); for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) a[j * G + i] = f((i + 0.5) * 2 - TILE_W / 2, (j + 0.5) * 2 - TILE_W / 2, j * G + i); return a }
   const atCell = (a: Float32Array, i: number, j: number) => a[Math.min(G - 1, Math.max(0, j)) * G + Math.min(G - 1, Math.max(0, i))]
+  const sampler = (a: Float32Array) => (i: number, j: number) => atCell(a, i, j)
   // the hard rules at the 2 m cells' centres too: a texel whose four cells agree takes their answer, and only a texel
   // near a rule's edge (its cells disagree) is tested itself (a few in a hundred: the bake's time)
-  const [okCell] = cellGrids((x, z) => [allowed(x, z) ? 1 : 0], 1)
-  const [gCell, hCell] = cellGrids(growth, 2), [cCell] = cellGrids((x, z) => [crop(x, z)], 1)
+  const okCell = cellGrid((x, z) => allowed(x, z) ? 1 : 0)
+  // the grass's growth and height factor from one growth() call a cell
+  const gCell = new Float32Array(G * G), hCell = cellGrid((x, z, k) => { const [gr, h] = growth(x, z); gCell[k] = gr; return h })
+  const cCell = cellGrid((x, z) => crop(x, z))
   // one growth channel (the grass's by growth(), the crops' by crop()), each texel interpolating its cells, zeroed by
   // the cover's edge and the rules at the texel, then shrunk a texel against the GPU's blend
   const channel = (cell: Float32Array, cover: (x: number, z: number) => number): { g: Float32Array; count: number } => {
-    const raw = new Float32Array(MAP_N * MAP_N)
+    const raw = new Float32Array(MAP_N * MAP_N), at = sampler(cell)
     for (let j = 0; j < MAP_N; j++) for (let i = 0; i < MAP_N; i++) {
       const x = i + 0.5 - TILE_W / 2, z = j + 0.5 - TILE_W / 2, k = j * MAP_N + i
       const gu = (i + 0.5) / 2 - 0.5, gv = (j + 0.5) / 2 - 0.5, i0 = Math.floor(gu), j0 = Math.floor(gv)
-      const d = bilerp((a, b) => atCell(cell, a, b), gu, gv)
+      const d = bilerp(at, gu, gv)
       if (d <= 0) continue
       const c00 = atCell(cell, i0, j0), c10 = atCell(cell, i0 + 1, j0), c01 = atCell(cell, i0, j0 + 1), c11 = atCell(cell, i0 + 1, j0 + 1)
       const ok = atCell(okCell, i0, j0) + atCell(okCell, i0 + 1, j0) + atCell(okCell, i0, j0 + 1) + atCell(okCell, i0 + 1, j0 + 1)
@@ -102,9 +101,9 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   const grass = channel(gCell, (x, z) => growth(x, z)[0]), crops = channel(cCell, crop), g = grass.g, growingCells = grass.count
   // the meadow map: R the ground's height, G the grass's growth, B the grass's height factor, A the crops' growth
   // (half floats, filtered by the GPU)
-  const data = new Uint16Array(MAP_N * MAP_N * 4)
+  const data = new Uint16Array(MAP_N * MAP_N * 4), hAtCell = sampler(hCell)
   for (let j = 0; j < MAP_N; j++) for (let i = 0; i < MAP_N; i++) {
-    const k = j * MAP_N + i, hf = bilerp((a, b) => atCell(hCell, a, b), (i + 0.5) / 2 - 0.5, (j + 0.5) / 2 - 0.5)
+    const k = j * MAP_N + i, hf = bilerp(hAtCell, (i + 0.5) / 2 - 0.5, (j + 0.5) / 2 - 0.5)
     data[k * 4] = ToHalfFloat(heightAt(i + 0.5 - TILE_W / 2, j + 0.5 - TILE_W / 2)); data[k * 4 + 1] = ToHalfFloat(g[k]); data[k * 4 + 2] = ToHalfFloat(hf); data[k * 4 + 3] = ToHalfFloat(crops.g[k])
   }
   const map = new RawTexture(data, MAP_N, MAP_N, Constants.TEXTUREFORMAT_RGBA, scene, false, false, Texture.BILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_HALF_FLOAT)

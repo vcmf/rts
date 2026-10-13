@@ -54,9 +54,9 @@
   // under the look page's meadow (docs/plans/done/l5c-meadow.md) the grass is its clumps, not scatter: its growing
   // texels (1 m) stand in for the tufts
   const meadow = typeof __look !== 'undefined' && __look.meadow
-  // and its crops (docs/plans/done/l5d-crops.md) the wheat tufts
+  // and its crops (docs/plans/active/l5d-crops.md) the wheat tufts (about 173,000 texels: a floor well over a lost field)
   if (meadow) { pop.meadowCells = meadow.growingCells; pop.cropCells = meadow.croppingCells }
-  check('population', pop.trees >= 60 && (meadow ? meadow.growingCells >= 2000 && meadow.croppingCells >= 2000 : pop.grass >= 2000 && pop.wheat >= 150) && pop.bushes >= 30 && pop.far >= 400, pop)
+  check('population', pop.trees >= 60 && (meadow ? meadow.growingCells >= 2000 && meadow.croppingCells >= 100000 : pop.grass >= 2000 && pop.wheat >= 150) && pop.bushes >= 30 && pop.far >= 400, pop)
   // the meadow follows the placement rule too: its growth as the GPU reads it is 0 in the formation zones and over the
   // water and its banks (the crops too, and none on the floodplain), at every half metre of a grid over the near field; and it grows over a real share of the tile (between a
   // fifth and four fifths of its texels), so a growth that failed everywhere, or nowhere, is caught

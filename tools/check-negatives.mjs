@@ -24,7 +24,7 @@ const CASES = [
   ['river', 'real scene', null, null],
   ['river', 'a tree in the river', 'groups.CommonTree_1.push([RIVER.px[RIVER.n >> 1], RIVER.pz[RIVER.n >> 1], 4, 0, 0.5])', 'instancesOverWater'],
   ['river', 'a bush in a formation zone', '(groups.Bush_1 ||= []).push([-5, -20, 2, 0, 0.5])', 'instancesInZones'],
-  ['river', 'wheat on the floodplain', '{ const z = 40; groups.Wheat.push([RIVER.axisX(z) + 30, z, 1.0, 0, 0.5]) }', 'wheatOnFloodplain'],
+  ['river', 'wheat on the floodplain', '{ const z = 40; (groups.Wheat ||= []).push([RIVER.axisX(z) + 30, z, 1.0, 0, 0.5]) }', 'wheatOnFloodplain'],
 ]
 // the look page's own checks (tools/look-check.js): only where the page has them (the prototype has no SPEC)
 const LOOK_CASES = [
@@ -33,6 +33,8 @@ const LOOK_CASES = [
   ['river', 'cut banks on the inner side', 'for (let i = 0; i < RIVER.n; i++) RIVER.A[i] = -RIVER.A[i]', 'cutBankVsBar'],
   // W5a: a reed out on the meadow, far from the water
   ['river', 'a reed far from the water', '(groups.Reed ||= []).push([RIVER.px[RIVER.n >> 1] + 30, RIVER.pz[RIVER.n >> 1], 1.6, 0, 0.5])', 'reedsAwayFromWater'],
+  // L5d: the meadow's crops grown everywhere (docs/plans/active/l5d-crops.md)
+  ['river', 'crops everywhere', '__look.meadow.cropAt = () => 1', 'cropsOnFloodplain'],
   ['look', 'real scene', null, null],
   ['look', 'tile drawn 0.5 m high', 'tileGround.position.y = 0.5; tileGround.computeWorldMatrix(true)', 'tileHeights'],
   ['look', 'far ring at the old -0.9 m', 'farGround.position.y = -0.9; farGround.computeWorldMatrix(true)', 'farHeights'],

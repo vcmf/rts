@@ -1,5 +1,5 @@
 ---
-status: done
+status: active
 last_reviewed: 2026-10-13
 ---
 
@@ -44,12 +44,12 @@ at the near view in summer, autumn, late autumn and winter, the mid view in summ
 
 - **Look:** the wheat field is dense gold stalks, lime at the foot, about twice the grass's height and narrower,
   instead of the pack's sparse tufts; stubble in autumn is short and pale; late autumn and winter show the bare
-  ground (ploughed under, snow). Every sown field on the tile now grows (173,332 texels), not only the authored one.
-- **Cost** (`?bench=meadow`, M1 Pro Metal proxy, 4 s a camera, two runs an arm, interleaved with main; the machine
+  ground (ploughed under, snow). Every sown field on the tile now grows (158,924 texels after review round 2), not only the authored one.
+- **Cost** (measured before the review; round 2 only removes work: `?bench=meadow`, M1 Pro Metal proxy, 4 s a camera, two runs an arm, interleaved with main; the machine
   under other load, about 9): the meadow against none, this branch +1.05–1.25 ms close and default, +0.5–1.1 ms wide;
   main (its grass and wheat tufts) +1.05–1.15 ms and +0.15–1.0 ms. Within the runs' spread (up to 0.9 ms wide): no
   measurable cost over L5c.
-- **Checks:** river-check passes (meadowInZones and meadowOnWater, now counting the crops too, 0; cropsOnFloodplain 0; 195,779 crop points sampled),
+- **Checks:** river-check passes (meadowInZones and meadowOnWater, now counting the crops too, 0; cropsOnFloodplain 0; 182,315 crop points sampled; numbers after review round 2),
   look-check passes (nothing floats, worst −0.031 m), both with `?meadow=off` too (315 wheat tufts there).
 - **Readability guard** against main: passes, at the default view and the cover view; wheat.France in summer 0.101
   (main 0.098).
@@ -73,3 +73,21 @@ at the near view in summer, autumn, late autumn and winter, the mid view in summ
 
   Checks, guard and `npm test` pass again. Stubble draws but at 0.22 m barely shows from the RTS camera: left for
   the owner.
+- **Round 2** (a0f6cc6): two severe findings.
+  - `tools/check-negatives.mjs` crashed on the look page: no `Wheat` group under the meadow. It now makes the group
+    if needed, and a new case, crops everywhere, must fail `cropsOnFloodplain`. All 17 cases pass.
+  - A slot with no growth still drew short grass for a low hash (`grow` above 0 at a growth of 0; the height factor
+    is not zeroed by the rules), so about 9 % of the slots in the formation zones and on the banks showed grass up
+    to about 0.3 m. This was already on main. Such a slot now exits.
+
+  Also fixed:
+  - a crop ran across two touching fields of one class (the rule now needs one field, `fieldAt` in
+    `src/look/world/cover.ts`: 158,924 texels);
+  - the crop-count floor raised to 100,000;
+  - a stale comment;
+  - closures and arrays allocated a texel or a cell in the bake;
+  - the green crop in winter now goes toward the snowed ground under it, as the grass does;
+  - short crops keep grass proportions instead of thinning to nothing (the green crop had become invisible);
+  - the plan back in `active/` until the merge.
+
+  Checks, negatives, guard (wheat.France 0.101 against 0.098) and `npm test` pass.
