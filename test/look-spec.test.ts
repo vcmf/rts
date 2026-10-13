@@ -41,6 +41,7 @@ describe('world spec', () => {
     ['macro texels not dividing the tile', s => { s.macro.texel = 0.3 }, /macro: the tile/],
     ['a macro bake over the min-spec texture size', s => { s.macro.far = 0.25 }, /bake: macro far ring/],
     ['a macro bake draw out of range', s => { s.macro.bakeTile = 16 }, /macro: a bake draw/],
+    ['a Kuwahara radius past its loop', s => { s.macro.kuwahara = 3 }, /macro: the Kuwahara radius/],
   ]
   for (const [name, f, msg] of cases) it(`throws: ${name}`, () => { expect(() => derive(with_(f))).toThrow(msg) })
   it('sizes the shadow map at the texel target on the ground, and refuses one over min-spec', () => {

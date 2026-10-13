@@ -21,14 +21,13 @@ import { fileURLToPath } from 'node:url'
 import * as png from './png.mjs'
 import { CAMS } from './golden.mjs'
 import { prepSteps, shoot, viewStep } from './look-page.mjs'
+import { ARMY_HEX, COVER_SPOTS, blocksAt } from './army-blocks.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const W = 1280, H = 720, SEP = 0.10, MASKED = 96   // a block's pixel: its white and black mask renders differ by more than MASKED/255
 const START = CAMS.find(c => c[0] === 'start').slice(1, 5)   // the default view (the goldens' start): alpha, beta, radius, target
 const GREYS = [0.3, 0.7]   // the negative's two greys, from which each block's matched grey is interpolated
 const SEASONS = [['summer', 0, true], ['winter', 3, false]]   // name, season value, run the negative
-const ARMY_HEX = { France: '#2C4FA8', Russia: '#2F6B3C', Austria: '#E9E3D3', Britain: '#B3302A' }   // docs/art-bible.md §4
-const COATS = Object.keys(ARMY_HEX)
 // cluster centres on the default view (world x, z, yaw), chosen to put the coats on each band of the ground: four
 // blocks in a column, 7 m apart
 const START_SPOTS = [
@@ -39,15 +38,11 @@ const START_SPOTS = [
   ['wheat', -45, -17, 0],
   ['open-low', 45, 15, 0],
 ]
-// --view cover (docs/plans/active/l5-macro.md): east of the hill, the coats on each class of the ground's cover that
-// a 20 m line fits on, every block wholly on it: on the ploughed field (18 m across) lines along it, 4.5 m apart; on
-// the road a column of march, the lines end to end along it; on the village ground as on the default view. (The 3 m
-// track holds no line; the class check measures it.) Spots: name, x, z, the blocks' yaw (Babylon's: +yaw turns +x
-// toward −z), the column's direction (rad from +x toward +z; +z by default) and the spacing (7 m by default)
+// --view cover (docs/plans/active/l5-macro.md): east of the hill, the coats on each class of the ground's cover
+// (COVER_SPOTS, tools/army-blocks.mjs)
 const COVER = [START[0], 0.8, 150, [150, 8, -25]]
-const COVER_SPOTS = [['ploughed', 78, -38, -0.18, 0.18 + Math.PI / 2, 4.5], ['road', 185, -5, -Math.PI / 2, Math.PI / 2, 22], ['village', 228, -2, 0]]
 let VIEW = START, SPOTS = START_SPOTS
-const blocks = (color = null) => SPOTS.flatMap(([s, x, z, yaw, dir = Math.PI / 2, gap = 7]) => COATS.map((c, i) => ({ name: `${s}.${c}`, x: x + Math.cos(dir) * (i - 1.5) * gap, z: z + Math.sin(dir) * (i - 1.5) * gap, yaw, color: color ?? c })))
+const blocks = (color = null) => blocksAt(SPOTS, color)
 
 const hex = g => '#' + Math.round(Math.min(1, Math.max(0, g)) * 255).toString(16).padStart(2, '0').repeat(3)
 

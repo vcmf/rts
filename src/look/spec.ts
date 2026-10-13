@@ -40,8 +40,9 @@ export interface Spec {
   // water paint the same colour (the drawn surfaces disagree on the shore by less: tools/water-look-check.mjs)
   water: { texel: number; depth: [number, number]; sdf: number; band: number; stones: number }   // stones: the most stones in the water whose foam the water paints (W5a)
   // the ground's macro colour (docs/plans/active/l5-macro.md, L5a): baked at `texel` m over the tile and `far` m over
-  // the far ring, `bakeTile` texels square a draw; the cover grid (src/look/world/cover.ts) has `cover` m cells
-  macro: { texel: number; far: number; bakeTile: number; cover: number }
+  // the far ring, `bakeTile` texels square a draw; the cover grid (src/look/world/cover.ts) has `cover` m cells; arm 5
+  // (L5b) filters the bake over `kuwahara` m (on the far ring, a texel)
+  macro: { texel: number; far: number; bakeTile: number; cover: number; kuwahara: number }
 }
 
 export const SPEC: Spec = {
@@ -56,7 +57,7 @@ export const SPEC: Spec = {
   detail: { px: 2048, lines: 1080, index: 400, amp: 0.4, minCos: 0.05 },
   bank: { texel: 0.5, reach: 14, fade: 3, edge: 10, paint: 7.5 },
   water: { texel: 0.5, depth: [-1, 2], sdf: 16, band: 0.75, stones: 24 },
-  macro: { texel: 0.5, far: 4, bakeTile: 512, cover: 2 },
+  macro: { texel: 0.5, far: 4, bakeTile: 512, cover: 2, kuwahara: 2 },
 }
 
 export interface Derived {
@@ -139,6 +140,7 @@ export function derive(s: Spec = SPEC): Derived {
     if (!isInt(side / t)) bad.push(`macro: the ${k} (${side} m) is not a whole number of ${t} m texels`)
     else if (side / t > s.minSpec.maxTexture) bad.push(`bake: macro ${k} ${side / t}² > ${s.minSpec.maxTexture}² (min-spec)`)
   if (!(s.macro.bakeTile >= 64 && s.macro.bakeTile <= 2048)) bad.push('macro: a bake draw must be 64–2048 texels square')
+  if (!(s.macro.kuwahara > 0 && s.macro.kuwahara / s.macro.texel <= 4)) bad.push('macro: the Kuwahara radius must be over 0 and at most 4 tile texels (KUWAHARA_MAX, src/look/macro.ts)')
   if (!(s.detail.px > 0 && s.detail.lines > 0 && s.detail.index > 0 && s.detail.amp > 0 && s.detail.minCos > 0)) bad.push('detail: sizes must be positive')
   if (bad.length) throw new Error('world spec: ' + bad.join('; '))
   const sbias = (0.96 / (s.depth.far - s.depth.near)).toFixed(6)

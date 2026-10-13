@@ -66,8 +66,10 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
   return AROUND.every(([dx, dz]) => ok(coverAt(cover, x + dx * EDGE, z + dz * EDGE)))
 }
 
-// cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md, ?trees=cards)
-export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off', meadow = false): Nature {
+// cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md, ?trees=cards);
+// meadow: the meadow's grass and wheat replace the tufts and the wheat lattice (docs/plans/done/l5c-meadow.md);
+// oneTree: every tree drawn as one broadleaf model, where and as large as it stands (L5b's judging: ?trees=one)
+export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off', meadow = false, oneTree = false): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
 
@@ -134,12 +136,17 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
   const groups: Record<string, Item[]> = {}; const add = (model: string, item: Item) => (groups[model] = groups[model] || []).push(item)
   // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
-  const addPlaced = (model: string, item: Item, kind = '') => { const [x, z, s] = item; if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false; add(model, item); return true }
+  // drawn: the model drawn there, when not the one placed (?trees=one)
+  const addPlaced = (model: string, item: Item, kind = '', drawn = model) => { const [x, z, s] = item; if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false; add(drawn, item); return true }
 
-  // a broadleaf or birch tree, and its crown for the occlusion (the crown's centre at 0.62 of the height)
+  // ?trees=one: the model drawn for a tree, placed as its own model (so the scatter is the page's), shadowed and
+  // reflected as the model drawn
+  const tree = (model: string) => oneTree ? 'CommonTree_1' : model
+  // a broadleaf or birch tree, and its crown for the occlusion (the crown's centre at 0.62 of the height), drawn as
+  // tree(mdl)
   const placeTree = (mdl: string, x: number, z: number, s: number, yaw: number, t: number) => {
-    if (!addPlaced(mdl, [x, z, s, yaw, t])) return false
-    const M = NATURE[mdl]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s)
+    if (!addPlaced(mdl, [x, z, s, yaw, t], '', tree(mdl))) return false
+    const M = NATURE[tree(mdl)]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s)
     return true
   }
   const TREE_MODELS = ['CommonTree_1', 'CommonTree_2', 'CommonTree_3', 'CommonTree_4', 'CommonTree_5']
@@ -166,11 +173,11 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const mdl = 'Willow_' + (1 + Math.floor(rr() * 3)), s = 2.6 + rr() * 0.9, side = rr() < 0.5 ? -1 : 1, off = C.W[i] / 2 * 1.7 + footprint(mdl, s) + 0.3 + rr() * 3; let x = C.px[i] - C.tz[i] * side * off, z = C.pz[i] + C.tx[i] * side * off
     // inside a bend the nearest water is closer than this sample's normal suggests: step outward until the rule accepts
     const yaw = rr() * 6.28, tint = 0.2 + rr() * 0.5; let ok = false
-    for (let t = 0; t < 6 && !ok; t++) { const o = off + t * 1.5; x = C.px[i] - C.tz[i] * side * o; z = C.pz[i] + C.tx[i] * side * o; ok = addPlaced(mdl, [x, z, s, yaw, tint]) }
+    for (let t = 0; t < 6 && !ok; t++) { const o = off + t * 1.5; x = C.px[i] - C.tz[i] * side * o; z = C.pz[i] + C.tx[i] * side * o; ok = addPlaced(mdl, [x, z, s, yaw, tint], '', tree(mdl)) }
     if (!ok) continue
-    const M = NATURE[mdl]; smTree(x, z, M.max[1] * 0.6 * s, (M.max[0] - M.min[0]) * 0.45 * s)
+    const M = NATURE[tree(mdl)]; smTree(x, z, M.max[1] * 0.6 * s, (M.max[0] - M.min[0]) * 0.45 * s)
   }
-  for (let i = 0; i < 5; i++) { const x = 150 + (rr() - 0.5) * 30, z = -40 + (rr() - 0.5) * 30; if (addPlaced('PineTree_' + (1 + Math.floor(rr() * 3)), [x, z, 3.6 + rr(), rr() * 6.28, rr()])) smTree(x, z, 6, 3.5) }
+  for (let i = 0; i < 5; i++) { const x = 150 + (rr() - 0.5) * 30, z = -40 + (rr() - 0.5) * 30; const mdl = 'PineTree_' + (1 + Math.floor(rr() * 3)), s = 3.6 + rr(); if (addPlaced(mdl, [x, z, s, rr() * 6.28, rr()], '', tree(mdl))) { if (oneTree) { const M = NATURE[tree(mdl)]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s) } else smTree(x, z, 6, 3.5) } }
   for (let i = 0; i < 90; i++) {   // bushes, a third of them with berries
     const a = rr() * 6.28, r = 14 + rr() * 120, x = Math.cos(a) * r + 8, z = Math.sin(a) * r, s = 1.8 + rr() * 1.4
     if (addPlaced(rr() < 0.33 ? 'BushBerries_' + (1 + Math.floor(rr() * 2)) : 'Bush_' + (1 + Math.floor(rr() * 2)), [x, z, s, rr() * 6.28, rr()])) smBlob(x, z, s * 0.6)

@@ -64,8 +64,11 @@ the contract of `tools/golden.mjs`; it also puts the prototype's global names on
 `window.__look` for the look tools: `lab`, `mats`, `passes`, and the detail layer's switches (`setDetail`, the
 terrain's variant defines; `grain`, the paint or the smooth grain; `terrainOnly`; `finishing`, the finishing
 passes on or off; `hill`; `quarter` and `shift`, the projection moved for the checks). `?season=<0..3>` opens the
-page in a season (the bench runs in it); `?detail=l0` opens it with the L0 grain on the terrain; `?macro=flat|shader|bake`
-picks the macro colour's arm (L5a, below; `bake` by default, `shader` on WebGL1) and `?bench=macro` benches the three.
+page in a season (the bench runs in it); `?detail=l0` opens it with the L0 grain on the terrain;
+`?macro=flat|shader|bake|strokes|kuwahara` picks the macro colour's arm (L5a and L5b, below; `bake` by default,
+`shader` on WebGL1) and `?bench=macro` benches the three whose shaders differ (`flat`, `shader`, `bake`: the experimental arms
+draw with the bake's shader and differ in their bakes, measured by the macro check); `?trees=one` draws every tree as one broadleaf model, and `?trees=one,cards` as leaf cards (L5b's
+judging).
 
 ### The ground's cover and macro colour (L5a)
 
@@ -105,7 +108,18 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   edges wander that far). **Ground bounce:** trees take 15% of the ground's colour under their root into the albedo
   of their side away from the sun, near the ground; grass 25% all over. The colour is the class's flat colour in
   every arm (one read; the arms differ in the ground alone).
-- `window.__look.macro`: `setArm`, `setCheck` (the check's view and sabotages, rebaked), `hash`, `bake`.
+- **Two experimental arms (L5b)**, bakes of their own, read as the bake is (the materials' `MACRO_BAKE`); switching
+  to one rebakes. `strokes` (arm 4, `MACRO_STROKES` in the bake's shader alone): strokes of the macro colour laid
+  over it, one a 2 m cell, along the furrows on fields and a slow flow elsewhere, 1.6–2.8 m long, their value and
+  temperature jittered; a gather over the 3×3 neighbouring cells per texel, laid over in a hashed order, no per-stroke
+  draws; on the tile only (a
+  2 m stroke is under a far-ring texel). `kuwahara` (arm 5): the arm-3 bake into a scratch target, then a
+  four-quadrant Kuwahara filter (`SPEC.macro.kuwahara`, 2 m; a texel on the far ring) into the bake's target before
+  its mips; the alpha (the snow's lie) stays the texel's own, so the seam holds.
+- The bakes run one at a time, in the order asked (a new grain, a restored context, an arm, a check), each with the
+  arm and checks wanted when it starts.
+- `window.__look.macro`: `setArm` (a promise: a baked arm other than the one baked rebakes), `setCheck` (the check's
+  view and sabotages, rebaked), `hash`, `bake`.
 
 ### The detail layer (L2b)
 
@@ -276,6 +290,19 @@ second load, and the full-size bake (3600²) without a lost context. Run the sel
 bake's texture filtering smooths even the stripes' sabotage, and the flat arm has no stripes. The header has the
 measures and limits; the results are in the plan.
 
+### The judging kit (L5b)
+
+`node tools/ablation-kit.mjs <url> <outDir> [--seed <text>]`: every arm on the judging framing (east of the hill:
+the ploughed field, the track, the road, the village), at the bench's three zooms and three yaws, summer and winter,
+with the guard's cover blocks (`tools/army-blocks.mjs`) and `?trees=one,cards`; and a 3 s pan per season and zoom (H.264,
+ffmpeg). Under `<outDir>/publish/` it writes what the judging artifact publishes, and nothing else: the media under
+opaque ids, `screens.json` (12 screens: each pair of arms judged, by zoom; sides x and y, the later arm on x on half
+of them) and the judging page (`tools/ablation-judge.html`); under `<outDir>/private/`, never published, the shots
+named by arm and `key.json` (which arm is which). Published as a private artifact with the access rules in the
+kit's header, the page shows each judge the screens in their own order with their own A/B sides, asks the plan's
+five questions, and saves each judge's answers in one document of the artifact's store (`answers/<judge's id>`,
+readable by the judge and the owner alone: without the rules, by every viewer). The rule and the tally: the plan.
+
 ### The detail checks (L2b)
 
 `node tools/detail-check.mjs <url> [outDir] [--only …] [--defines …] [--selftest]`: scale stability over a zoom
@@ -318,7 +345,8 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
   pools against riffles, shimmer on the water. The page's hooks: `__look.waterSab` (the sabotages),
   `__look.groundAs` (the tile's ground drawn with the water's shader), `__look.waterAt` (the data at a point),
   `?watersab=nodive`.
-- `node tools/macro-check.mjs <url?macro=shader> --selftest` and `node tools/guard.mjs <url> --view cover` (L5a, above).
+- `node tools/macro-check.mjs <url?macro=shader> --selftest` and `node tools/guard.mjs <url> --view cover` (L5a, above);
+  for arms 4 and 5, `macro-check` and the guard against `?macro=bake` as the base (L5b).
 - `npm test` (lint and typecheck cover `src/look/`).
 
 ## Open questions
