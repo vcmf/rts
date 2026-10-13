@@ -250,7 +250,7 @@ let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | n
 const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   lab, mats, passes, post, setDetail,
-  sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
+  sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, meadow: meadow ? { growingCells: meadow.growingCells } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
   hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),
   // the grain the terrain reads: the paint grain, or the seam check's smooth one (returns its steepest texel step)
   grain: (kind: 'paint' | 'smooth') => {

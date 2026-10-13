@@ -18,6 +18,7 @@ import type { Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
 import GRASS from '../../data/meadow-grass.json?raw'
+import BRUSH_URL from '../../data/meadow-brush.png?url'
 import MEADOW_VS from './shaders/meadow.vert?raw'
 import MEADOW_FS from './shaders/meadow.frag?raw'
 import MEADOW_GLSL from './shaders/meadow.glsl?raw'
@@ -33,7 +34,7 @@ export const RINGS: Ring[] = [
   { cell: 2.0, n: 104, scale: 3.4 * 1.24, band: [38, 50, 80, 100], clump: 'Grass_Small' },
 ]
 
-export interface Meadow { meshes: Mesh[]; setOn(on: boolean): void; bakeMs: number }
+export interface Meadow { meshes: Mesh[]; setOn(on: boolean): void; bakeMs: number; growingCells: number }
 
 // growth(x, z): how much grass grows there (0..1) and its height factor, by the cover and the placement rule
 // (src/look/nature.ts)
@@ -42,12 +43,16 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   // the meadow map: R the ground's height, G the growth, B the height factor; the growth on a 2 m grid (the cover's
   // cell), the height at every texel
   const data = new Float32Array(MAP_N * MAP_N * 4), G = MAP_N / 2, grow = new Float32Array(G * G * 2)
+  let growingCells = 0
   for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
-    const [d, h] = growth((i + 0.5) * 2 - TILE_W / 2, (j + 0.5) * 2 - TILE_W / 2); grow[(j * G + i) * 2] = d; grow[(j * G + i) * 2 + 1] = h
+    const [d, h] = growth((i + 0.5) * 2 - TILE_W / 2, (j + 0.5) * 2 - TILE_W / 2); grow[(j * G + i) * 2] = d; grow[(j * G + i) * 2 + 1] = h; if (d > 0) growingCells++
   }
+  // each texel interpolates the 2 m cells round it (their centres), so the grass's edge follows no grid
+  const cellAt = (i: number, j: number, c: number) => grow[(Math.min(G - 1, Math.max(0, j)) * G + Math.min(G - 1, Math.max(0, i))) * 2 + c]
   for (let j = 0; j < MAP_N; j++) for (let i = 0; i < MAP_N; i++) {
-    const k = (j * MAP_N + i) * 4, g = ((j >> 1) * G + (i >> 1)) * 2
-    data[k] = heightAt(i + 0.5 - TILE_W / 2, j + 0.5 - TILE_W / 2); data[k + 1] = grow[g]; data[k + 2] = grow[g + 1]; data[k + 3] = 1
+    const k = (j * MAP_N + i) * 4, gu = (i + 0.5) / 2 - 0.5, gv = (j + 0.5) / 2 - 0.5, i0 = Math.floor(gu), j0 = Math.floor(gv), fu = gu - i0, fv = gv - j0
+    const bil = (c: number) => (cellAt(i0, j0, c) * (1 - fu) + cellAt(i0 + 1, j0, c) * fu) * (1 - fv) + (cellAt(i0, j0 + 1, c) * (1 - fu) + cellAt(i0 + 1, j0 + 1, c) * fu) * fv
+    data[k] = heightAt(i + 0.5 - TILE_W / 2, j + 0.5 - TILE_W / 2); data[k + 1] = bil(0); data[k + 2] = bil(1); data[k + 3] = 1
   }
   const map = new RawTexture(data, MAP_N, MAP_N, Constants.TEXTUREFORMAT_RGBA, scene, false, false, Texture.NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
   map.wrapU = map.wrapV = Texture.CLAMP_ADDRESSMODE
@@ -66,6 +71,9 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   }
   const clumps = { Grass_Large: indexed(src.Grass_Large), Grass_Small: indexed(src.Grass_Small) }
 
+  // the brush tile (tools/meadow-brush.py): the ground's pattern on every painted material, the grass's shade
+  const brush = new Texture(BRUSH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE); brush.wrapU = brush.wrapV = Texture.WRAP_ADDRESSMODE
+  mats.bindAll(m => m.setTexture('uMeadowBrush', brush))
   const meshes: Mesh[] = [], ringMats: ShaderMaterial[] = []
   RINGS.forEach((r, ri) => {
     const m = mats.make(`meadow${ri}`, MEADOW_VS.replace('#include<meadow>', () => MEADOW_GLSL), MEADOW_FS, {
@@ -76,11 +84,17 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
     const mesh = new Mesh(`meadowGrass${ri}`, scene)   // the name keeps it out of the sun's shadow pass (src/look/bakes.ts)
     const { pos, nrm, vv, idx } = clumps[r.clump]
     mesh.setVerticesData(VertexBuffer.PositionKind, pos); mesh.setVerticesData(VertexBuffer.NormalKind, nrm); mesh.setVerticesData('aV', vv, false, 1); mesh.setIndices(idx)
-    const slots = new Float32Array(r.n * r.n * 2)
-    for (let j = 0; j < r.n; j++) for (let i = 0; i < r.n; i++) { slots[(j * r.n + i) * 2] = i; slots[(j * r.n + i) * 2 + 1] = j }
+    // the slots a round ring can reach (the ring snaps by up to a cell, so a cell and a half of margin): the corners
+    // of the square and the hole the inner ring fills are left out
+    const sl: number[] = []
+    for (let j = 0; j < r.n; j++) for (let i = 0; i < r.n; i++) {
+      const d = Math.hypot((i + 0.5 - r.n / 2) * r.cell, (j + 0.5 - r.n / 2) * r.cell)
+      if (d <= r.band[3] + 1.5 * r.cell && (r.band[1] <= 0 || d >= r.band[0] - 1.5 * r.cell)) sl.push(i, j)
+    }
+    const slots = new Float32Array(sl), count = sl.length / 2
     // static thin instances (Babylon's instanced path wants a matrix a clump: identities, never rewritten; the
     // shader places the clump from its slot)
-    const eye = new Float32Array(r.n * r.n * 16); for (let k = 0; k < r.n * r.n; k++) { eye[k * 16] = eye[k * 16 + 5] = eye[k * 16 + 10] = eye[k * 16 + 15] = 1 }
+    const eye = new Float32Array(count * 16); for (let k = 0; k < count; k++) { eye[k * 16] = eye[k * 16 + 5] = eye[k * 16 + 10] = eye[k * 16 + 15] = 1 }
     mesh.thinInstanceSetBuffer('matrix', eye, 16, true); mesh.thinInstanceSetBuffer('aSlot', slots, 2, true)
     mesh.alwaysSelectAsActiveMesh = true; mesh.isPickable = false; mesh.material = m
     meshes.push(mesh); ringMats.push(m)
@@ -90,8 +104,8 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   const origins = RINGS.map(() => new Vector2()), centre = new Vector2()
   RINGS.forEach((_, ri) => { ringMats[ri].setVector2('uOrigin', origins[ri]); ringMats[ri].setVector2('uCentre', centre) })
   scene.onBeforeRenderObservable.add(() => {
-    const f = camera.target; centre.set(f.x, f.z); for (const m of ringMats) m.setFloat('uCentreY', heightAt(f.x, f.z))
-    RINGS.forEach((r, ri) => { origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell); ringMats[ri].setVector2('uOrigin', origins[ri]); ringMats[ri].setVector2('uCentre', centre) })
+    const f = camera.target, y = heightAt(f.x, f.z); centre.set(f.x, f.z)
+    RINGS.forEach((r, ri) => { origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell); ringMats[ri].setFloat('uCentreY', y) })
   })
-  return { meshes, setOn: on => { for (const m of meshes) m.setEnabled(on) }, bakeMs: performance.now() - t0 }
+  return { meshes, setOn: on => { for (const m of meshes) m.setEnabled(on) }, bakeMs: performance.now() - t0, growingCells }
 }

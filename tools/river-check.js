@@ -51,7 +51,11 @@
   // the scene is populated (guards every "nothing in X" check above against passing on an empty scene)
   const count = re => Object.entries(groups).filter(([m]) => re.test(m)).reduce((a, [, v]) => a + v.length, 0)
   const pop = { trees: count(/Tree/), grass: count(/Grass|Flowers|Plant/), wheat: count(/Wheat/), bushes: count(/Bush/), far: FAR.length }
-  check('population', pop.trees >= 60 && pop.grass >= 2000 && pop.wheat >= 150 && pop.bushes >= 30 && pop.far >= 400, pop)
+  // under the look page's meadow (docs/plans/active/l5c-meadow.md) the grass is its clumps, not scatter: its growing
+  // cells (2 m) stand in for the tufts
+  const meadow = typeof __look !== 'undefined' && __look.meadow
+  if (meadow) pop.meadowCells = meadow.growingCells
+  check('population', pop.trees >= 60 && (meadow ? meadow.growingCells >= 2000 : pop.grass >= 2000) && pop.wheat >= 150 && pop.bushes >= 30 && pop.far >= 400, pop)
 
   // 3. bends turn back (samples moving against the overall flow), also near the scene
   const dir = Math.sign(C.pz[C.n - 1] - C.pz[0]); let back = 0, backNear = 0

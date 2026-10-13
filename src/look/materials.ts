@@ -31,7 +31,7 @@ export const withPainter = (src: string): string => {
 }
 
 // the ground's macro colour (src/look/shaders/macro.glsl): the cover grid and the bakes, on every painted material
-const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar']
+const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush']   // uMeadowBrush: the meadow's brush tile (MEADOW, src/look/meadow.ts)
 const COMMON = ['uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uSunCol', 'uShadowCol', 'uHazeCool', 'uHazeWarm', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA']
 
 // perFrame: false keeps a material out of `all` (no per-frame uniforms, no light map: the light-map bake draws into it)

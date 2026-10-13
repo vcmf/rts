@@ -28,9 +28,10 @@ be like tiny glade: random, dense". In the code (`src/look/nature.ts`):
   a clump field (cells of a few metres sharing height, lean and shade: the patchwork), and fades each clump out by
   its distance with its own hash (no hard edge). Lit like the ground (its normal), darker at the root, lighter at
   the tip (the pack's `Grass.png` is that gradient), the ground's colour under it.
-- **B. The meadow's pattern on the ground** (`terrain.frag`, a shared `shaders/meadow.glsl`): the same clump field
-  as a light and dark patchwork on grass cover, so the far meadow reads as grass and the near clumps grow out of
-  the same pattern. Procedural first; a painted greyscale brush picture can replace it later.
+- **B. The meadow's pattern on the ground** (`groundAt`, a shared `shaders/meadow.glsl`): a brush tile
+  (`data/meadow-brush.png`, stamped by `tools/meadow-brush.py` from the owner's grass brush pack, which stays out of
+  git) and the clump field as a painterly light and dark patchwork on grass cover, so the far meadow reads as grass;
+  the near clumps take their shade from the same tile and field.
 - **C. The wheat without a lattice:** the field's tufts placed by a hash per cell (no rows or columns), denser, with
   a ragged edge.
 - `?meadow=off` puts back the old scatter; `?bench=meadow` benches the two.
@@ -64,10 +65,30 @@ mid, far and winter views.
   | Default | 7.17, 5.12 | +1.40, +2.45, +2.30 | 0.30 |
   | Widest | 8.63, 7.45 | +1.25, +1.25, +1.05 | 0.20 |
 
-  About +1.1 to +2.5 ms a frame: a large share of L7's 3 ms for all foliage. A flat fragment shader (a measurement,
+  About +1.1 to +2.5 ms a frame. After review round 1 (round rings, no grass in the formation zones):
+
+  | Zoom | meadow, none (ms) | paired difference | repeat spread |
+  |---|---|---|---|
+  | Closest | 5.17, 3.95 | +1.25, +1.20, +1.20 | 0.20 |
+  | Default | 7.32, 5.67 | +1.95, +1.65, +1.35 | 0.60 |
+  | Widest | 9.57, 8.55 | +0.85, +1.15, +1.05 | 0.60 |
+
+  About +0.9 to +2.0 ms a frame: still a large share of L7's 3 ms for all foliage. A flat fragment shader (a measurement,
   not shipped) put the shading at about half of it and the vertices (every slot's, early exits included) at the
   other half. The meadow map's bake: 64 ms on load (the CPU).
-- **Readability guard** (against main): passes after the grass was brightened (a first, darker meadow dropped
-  `meadow.Russia` to 0.077). The meadow blocks keep less margin than on main: `meadow.Russia` 0.110 (main 0.155),
-  `meadow.France` 0.149 (0.222).
+- **Readability guard** (against main): passes. A first, darker meadow dropped `meadow.Russia` to 0.077; the grass
+  was brightened (0.110), then kept out of the formation zones, as the placement rule asks: `meadow.Russia` 0.124
+  (main 0.155), `meadow.France` 0.220 (0.222).
+- **Checks:** `tools/river-check.js` (the meadow's growing cells stand in for the grass tufts in its population) and
+  `tools/look-check.js` (the meadow's identity matrices skipped) pass on the page; the wheat is 744 tufts (the
+  lattice's 382 or so).
 - **Not measured:** the min-spec laptop; the meadow with formations standing in it (the guard's blocks only).
+
+## Review (`/code-review high`)
+
+- **Round 1** (50de70a): severe: `tools/river-check.js`'s population failed (the grass tufts gone); grass in the
+  formation zones, against the placement rule. Moderate: the pattern's class unwarped (square steps at painted
+  edges); the growth copied a 2 m grid into 1 m texels (stepped grass edges); the pattern's fine octave aliasing
+  with distance; the wheat 3.4 times the lattice, not twice, unmeasured, its edge on the cover's grid; the meadow's
+  identity matrices walked by the look check; slots outside the round band; the bank rule copied. Light: uniforms
+  set again each frame. All fixed; the brush tile added in the same round (B).

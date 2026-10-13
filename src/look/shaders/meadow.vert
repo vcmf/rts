@@ -2,7 +2,7 @@ precision highp float;attribute vec3 position;attribute vec3 normal;attribute fl
 uniform mat4 viewProjection;uniform float uSeason;
 // the ring (src/look/meadow.ts): its snapped origin and its centre (the focus), its cell, the clumps scale, its band of distance from the centre
 // (in from x to y, out from z to w), the meadow map (R the ground height, G the growth, B the height factor)
-uniform vec2 uOrigin,uCentre;uniform float uCentreY;uniform float uCell,uScale;uniform vec4 uBand;uniform sampler2D uMeadow;
+uniform vec2 uOrigin,uCentre;uniform float uCentreY;uniform float uCell,uScale;uniform vec4 uBand;uniform sampler2D uMeadow,uMeadowBrush;
 varying vec3 vW,vN;varying float vV,vShade,vH;varying vec2 vRoot;
 #include<meadow>
 // the meadow map at a point: bilinear by hand over its texels (a float texture need not filter)
@@ -30,5 +30,6 @@ void main(){
   p.xz+=(vec2(h1,h3)-0.5)*0.25*p.y;                              // a little lean
   vec3 w=vec3(root.x,m.r-0.04,root.y)+p;
   vec3 n=normal;n.xz=vec2(ca*n.x-sa*n.z,sa*n.x+ca*n.z);
-  vN=n;vW=w;vV=aV;vShade=c;vH=p.y;vRoot=root;
+  vN=n;vW=w;vV=aV;vShade=mix(c,texture2D(uMeadowBrush,root/7.0).r,0.5);   // the ground pattern shade under it
+  vH=p.y;vRoot=root;
   gl_Position=viewProjection*vec4(w,1.0);}

@@ -177,22 +177,26 @@ The plan: `docs/plans/active/l5c-meadow.md`. On by default; `?meadow=off` puts b
 
 - **The grass near the camera** (`src/look/meadow.ts`, `shaders/meadow.vert|frag`): clumps of the owner's pack grass
   (`data/meadow-grass.json`, exported from its `Grass_Large` and `Grass_Small`) on three square rings around the
-  camera's focus (`RINGS`: cells of 0.5, 1 and 2 m, 104 slots a side, the large clump near and the small one
-  farther, scaled up with the cell). Each ring is one mesh of static thin instances (identity matrices and a slot,
+  camera's focus (`RINGS`: cells of 0.5, 1 and 2 m, the slots of a 104-cell square within the ring's reach, the
+  large clump near and the small one farther, scaled up with the cell). Each ring is one mesh of static thin instances (identity matrices and a slot,
   never rewritten); each frame it snaps to its cell. The vertex shader places a clump from its world cell's hash
   (jitter, size, yaw, lean), so a clump never moves nor changes as the rings follow the camera; it exits first
   outside its ring's band of distance and outside the view, then reads the **meadow map** (a float texture at 1 m:
   the ground's height, the growth and the height factor, baked once from `Nature.growth`: the grassy cover and its
-  edges, off the banks and the water; pasture shorter) and the **clump field** (`shaders/meadow.glsl`), and shrinks
+  edges, off the banks and the water, out of the formation zones; pasture shorter; each 1 m texel interpolating the
+  2 m cells round it) and the **clump field** (`shaders/meadow.glsl`), and shrinks
   each clump away across its ring's band (the rings hand over without an edge). The fragment shader is a lean
   `paint()` (the ramp, the cool band, the sky in the shadow, clouds; no grain, rim nor snow): the ground's colour
   under the root, darker at the root and lighter, warmer at the tip. In winter the clumps shrink under the snow.
-- **The meadow on the ground** (`groundAt`, `MEADOW`, a define on every painted material): the clump field as light
-  and dark patches on meadow and pasture, the same field the grass grows from; the terrain and the shore band both
-  read `groundAt`, so the banks keep their seam.
+- **The meadow on the ground** (`groundAt`, `MEADOW`, a define on every painted material): on meadow and pasture
+  (the class the ground paints, its edge warped), the brush tile (`data/meadow-brush.png`, two octaves, 7 and 2.6 m;
+  stamped by `tools/meadow-brush.py` from the owner's grass brush pack in the git-ignored `assets/grass-brushes/`)
+  and the clump field, its fine octave fading with the pixel's footprint; the grass takes its shade from the same
+  tile and field. The terrain and the shore band both read `groundAt`, so the banks keep their seam.
 - **The scatter under the meadow** (`src/look/nature.ts`): the old `Grass_Short` tufts are not placed, and the wheat
-  field is placed by a hash a 0.7 m cell with a ragged edge instead of a lattice; both keep the scatter's random
-  stream, so nothing else moves.
+  field is placed by a hash a 0.85 m cell (about twice the lattice) with a ragged edge instead of a lattice; both keep
+  the scatter's random stream, so nothing else moves. `tools/river-check.js` counts the meadow's growing cells in
+  place of the tufts; `tools/look-check.js` skips the meadow's meshes (their matrices are identities).
 - `?bench=meadow` benches the grass against none (the ground's pattern stays in both arms); `__look.meadowBakeMs`.
 
 ### Soft shadows (the sun's penumbra, the sky's occlusion)

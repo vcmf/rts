@@ -30,7 +30,7 @@
   // 3. every instance's pivot on the drawn ground
   let floating = 0, worstFloat = 0, tested = 0, inBand = 0
   for (const m of scene.meshes) {
-    if (!m.thinInstanceCount) continue
+    if (!m.thinInstanceCount || /^meadowGrass/.test(m.name)) continue   // the meadow's matrices are identities: its shader places the clumps
     for (const W of m.thinInstanceGetWorldMatrices()) {
       const o = W.getTranslation(), e = Math.max(Math.abs(o.x), Math.abs(o.z)); tested++
       if (e > S.tile / 2 && e < BAND) { inBand++; continue }

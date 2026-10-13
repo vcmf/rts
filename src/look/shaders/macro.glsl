@@ -99,6 +99,9 @@ vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
 #endif
 // THE GROUND'S COLOUR the terrain and the shore band start from, by arm (every painted material has one: setArm,
 // src/look/macro.ts; with none, the shader arm's)
+#ifdef MEADOW
+uniform sampler2D uMeadowBrush;
+#endif
 vec3 groundArm(vec2 xz,float px){
   #if defined(MACRO_BAKE)
   return bakeOnce(xz).rgb;
@@ -117,10 +120,20 @@ vec3 groundArm(vec2 xz,float px){
 vec3 groundAt(vec2 xz,float px){
   vec3 c=groundArm(xz,px);
   #ifdef MEADOW
-  // the meadow pattern (docs/plans/active/l5c-meadow.md): the clump field as light and dark patches on meadow and
-  // pasture, the same field the near grass grows from (src/look/meadow.ts), so the far meadow reads as grass
-  float k=coverAt(xz).x,gr=k<0.5?1.0:k<1.5?0.75:0.0;
-  c*=mix(1.0,mix(0.90,1.10,clumpAt(xz)),gr);
+  // the meadow pattern (docs/plans/active/l5c-meadow.md) on meadow and pasture (the class the ground paints, its
+  // edge warped): the brush tile (data/meadow-brush.png, two octaves) and the clump field, the same the near grass
+  // takes its shade from (src/look/meadow.ts), so the far meadow reads as grass. The fine clump octave fades with
+  // the pixel footprint (the brush tile has its mips)
+  #if defined(MACRO_FLAT)
+  float k=coverAt(xz).x;
+  #else
+  float k=coverAt(coverWarp(xz)).x;
+  #endif
+  float gr=k<0.5?1.0:k<1.5?0.75:0.0;
+  if(gr>0.0){
+    float b=texM(uMeadowBrush,xz/7.0,7.0).r*0.6+texM(uMeadowBrush,mat2(0.8,-0.6,0.6,0.8)*xz/2.6+0.37,2.6).r*0.4;
+    float cl=mix(clumpAt(xz),mValue(xz/3.2),smoothstep(0.35,1.2,px));
+    c*=mix(1.0,(1.0+(b-0.585)*0.55)*mix(0.93,1.07,cl),gr);}
   #endif
   return c;
 }
