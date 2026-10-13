@@ -132,12 +132,12 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     if (kind === 'reed') return !q || q.dist >= wetEdgeAt(q) + r   // reeds: at the water's edge, wholly on land
     return offBanks(q, r)                 // off the banks (W2: a point bar reaches farther)
   }
-  // every placement goes through add(): the standing wheat's scale is clamped here, so no path can draw it taller
-  // than WHEAT_HEIGHT_MAX (decision 0026; the scatter's random stream is untouched)
-  const wheatScaleMax = WHEAT_HEIGHT_MAX / NATURE.Wheat.max[1]
+  // the standing wheat's scale (decision 0026): r in 0..1 to 0.82..1 of the one that reaches WHEAT_HEIGHT_MAX, at
+  // every place that sows wheat, so the placement rule tests the size that is drawn; add() caps it once more
+  const wheatScaleMax = WHEAT_HEIGHT_MAX / NATURE.Wheat.max[1], wheatScale = (r: number) => wheatScaleMax * (0.82 + 0.18 * r)
   const groups: Record<string, Item[]> = {}
   const add = (model: string, item: Item) => {
-    if (model === 'Wheat' && item[2] > wheatScaleMax) { item = [...item] as Item; item[2] = wheatScaleMax * (0.82 + 0.18 * Math.min(1, (item[2] - wheatScaleMax) / 0.4)) }
+    if (model === 'Wheat' && item[2] > wheatScaleMax) { item = [...item] as Item; item[2] = wheatScaleMax }
     ;(groups[model] = groups[model] || []).push(item)
   }
   // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
@@ -197,7 +197,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
   // a wheat field on the valley side between the floodplain and the formation zones (docs/art-bible.md §6c: fields above the floodplain)
   const addWheat = (item: Item) => { if (!meadow) addPlaced('Wheat', item) }   // under the meadow the field below replaces this lattice; the stream is unchanged
-  for (let u = 0; u < 30; u += 1.25) for (let v = 0; v < 22; v += 1.3) { const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5, z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5; if (rr() < 0.08) continue; addWheat([x, z, 1.5 + rr() * 0.4, rr() * 6.28, rr()]) }
+  for (let u = 0; u < 30; u += 1.25) for (let v = 0; v < 22; v += 1.3) { const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5, z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5; if (rr() < 0.08) continue; addWheat([x, z, wheatScale(rr()), rr() * 6.28, rr()]) }
   // the meadow's wheat (docs/plans/done/l5c-meadow.md): no rows nor columns, a tuft anywhere in each 0.85 m cell of
   // the field's frame (about twice the lattice's), and a ragged edge (the noise pushes it in by up to 1.6 m), through
   // the one placement rule (wheat on wheat, EDGE from the painted edge); its own stream
@@ -205,7 +205,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     // the tufts' scale: from 0.82 to 1 of the one that reaches WHEAT_HEIGHT_MAX (decision 0026)
     const WR = mulberry(57)
     for (let u = 0; u < 30; u += 0.85) for (let v = 0; v < 22; v += 0.85) {
-      const uu = u + WR() * 0.85, vv = v + WR() * 0.85, s = wheatScaleMax * (0.82 + WR() * 0.18), yaw = WR() * 6.28, tint = WR()
+      const uu = u + WR() * 0.85, vv = v + WR() * 0.85, s = wheatScale(WR()), yaw = WR() * 6.28, tint = WR()
       if (Math.min(uu, 30 - uu, vv, 22 - vv) < fbm(uu * 0.35 + 3, vv * 0.35 - 1) * 1.6 || WR() < 0.06) continue
       const x = -60 + uu * 0.95 + vv * 0.25, z = -34 + vv - uu * 0.12
       addPlaced('Wheat', [x, z, s, yaw, tint])

@@ -21,8 +21,10 @@ look's.
 
 ## Consequences
 
-- Good: a formation in a field reads; the guard's wheat blocks show whole again (their results:
-  `docs/plans/active/wheat-height.md`); a dark coat in a crown's shade there is still a palette question (#63).
+- Good: a formation in a field is no longer hidden by it: the guard's wheat blocks show whole again (their results:
+  `docs/plans/done/wheat-height.md`).
+- Bad: shown is not separated: a dark coat in a field still falls under the guard's threshold on the default page,
+  more so in a crown's shade (#63, the army side's to fix in L4).
 - Bad: fields look lower than history's; a scene that needs men hidden in the corn shows it through the sim's
   sight rules and the staff map, not the look.
 

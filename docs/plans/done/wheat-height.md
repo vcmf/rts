@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-13
 ---
 
@@ -17,9 +17,9 @@ Track E, L7 (`docs/plans/active/track-e-look.md`). The owner (2026-10-13), after
 
 ## Scope
 
-- Every wheat tuft's scale clamped where the scatter adds it (`add()`, `src/look/nature.ts`), so neither the
-  meadow's field nor the old lattice (`?meadow=off`, WebGL1) stands taller than `WHEAT_HEIGHT_MAX`
-  (`src/look/meadow-spec.ts`); decision 0026.
+- Every place that sows wheat (the meadow's field and the old lattice, `?meadow=off` and WebGL1) takes its scale from
+  `wheatScale()` (`src/look/nature.ts`): 0.82 to 1 of the tuft that reaches `WHEAT_HEIGHT_MAX`
+  (`src/look/meadow-spec.ts`), so the placement rule tests the size drawn; `add()` caps it once more; decision 0026.
 - #63 moved to L4 (GitHub label, the track plan's L4 section).
 
 ## Acceptance
@@ -35,13 +35,14 @@ Track E, L7 (`docs/plans/active/track-e-look.md`). The owner (2026-10-13), after
 | Arm | `wheat.France` (main) | `wheat.Russia` (main) | visible pixels of `wheat.France` (main) | guard |
 |---|---|---|---|---|
 | default (the meadow) | 0.098 (0.090) | 0.177 (0.157) | 2188 (1782) | ok |
-| `?trees=cards` against main's default | 0.073 (0.090) | 0.172 (0.157) | 2187 | ok (`fails*`: main fails it too) |
+| `?trees=cards` against main's default | 0.073 (0.090) | 0.172 (0.157) | 2187 | not gated (`fails*`: main fails it too) |
 | `?meadow=off` against main's `?meadow=off` | 0.101 (0.098) | 0.178 (0.169) | 2242 | ok |
 
 - The wheat blocks show whole again. `wheat.France` is still under the 0.10 threshold on the default page (0.098) and
   with the cards (0.073, #63, now L4's); with the meadow off it passes (0.101).
-- The field's density is unchanged (0.85 m cells; a 0.7 m cell was tried and dropped: about half again the 408-triangle
-  tufts, unmeasured), so no cost is added.
+- No cost added: the wheat tufts number 690 with the meadow and 315 without, on main and here alike (counted on the
+  page, `groups.Wheat`), their scales 0.89 to 1.09 here against 1.5 to 1.9 on main. A 0.7 m cell was tried and
+  dropped (about half again the 408-triangle tufts).
 
 ## Review (`/code-review high`)
 
@@ -50,3 +51,12 @@ Track E, L7 (`docs/plans/active/track-e-look.md`). The owner (2026-10-13), after
   table); a stale cell comment; the denser cell unmeasured (dropped); the decision silent on it; #63 missing from
   L4's section and the change log; 0026 missing from the system doc's front matter; tuning values copied into the
   docs (linked to the constant now). All fixed.
+- **Round 2:** no severe finding. Fixed: the clamp flattened the old lattice to one height and the placement rule
+  tested the unclamped size (the scale now generated in range where wheat is sown, `wheatScale()`; `add()` keeps
+  a plain cap); the cards' gate restored in the track plan ("not gated", not "pass"); the decision names the
+  remaining gap; the instance counts measured (unchanged); the cards guarded against main's cards arm (below); the
+  results doc pointing here; the negative test's tuft within the cap. Review stops here.
+
+Each arm against main's same arm (after round 2's fixes): `?trees=cards` `wheat.France` 0.073 (main's cards 0.070),
+`wheat.Russia` 0.172 (0.151); default 0.098 (0.090), 0.177 (0.157); `?meadow=off` 0.102 (0.098), 0.179 (0.169). The
+guard passes on all three, and no block is worse than main's.
