@@ -90,8 +90,10 @@ if (treesParam === 'cards') {
   leafTex = new DynamicTexture('leaves', atlas, scene, true, Texture.TRILINEAR_SAMPLINGMODE); leafTex.hasAlpha = true
   leafTex.wrapU = leafTex.wrapV = Texture.CLAMP_ADDRESSMODE; leafTex.update(false)
 }
-if (params.has('wood') && params.get('wood') !== '') throw new Error('?wood takes no value')
-const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { leaf: leafTex, opts: cardOpts } : undefined, params.has('wood'))
+// ?wood: a dense wood (docs/plans/done/soft-shadows.md); ?wood=big: a forest (docs/plans/active/forest-bench.md)
+const woodParam = params.get('wood')
+if (woodParam !== null && woodParam !== '' && woodParam !== 'big') throw new Error(`?wood takes no value or big, not ${woodParam}`)
+const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { leaf: leafTex, opts: cardOpts } : undefined, woodParam === null ? 'off' : woodParam === 'big' ? 'big' : 'small')
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 { const a = new Array(D.spec.water.stones * 4).fill(0); nature.stones.forEach((st, k) => a.splice(k * 4, 4, ...st))
   for (const m of [terrain.terrainMat, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
@@ -291,6 +293,7 @@ if (params.has('water')) {
 if (params.has('macroBench')) void macro.bakeBench(Number(params.get('macroBench'))).then(r => { Object.assign(window, { __macroBench: r }); console.log('macro bench', r) }, (e: unknown) => { Object.assign(window, { __macroBench: { error: String(e) } }); console.error('macro bench failed:', e) })
 // ?bench (docs/plans/active/l2-detail.md): fixed cameras, the result shown with a link to save it, and in
 // window.__bench for tools/bench-look.mjs
+if (params.has('benchat') && !params.has('bench')) throw new Error('?benchat needs ?bench')
 if (params.has('bench')) {
   camera.detachControl()
   const hold = Number(params.get('hold') ?? 3)
@@ -306,6 +309,11 @@ if (params.has('bench')) {
   const cardMats = [...new Set((nature.cardCasters?.cards ?? []).map(m => m.material as ShaderMaterial))]
   const volume = (on: boolean) => { for (const m of cardMats) { m.setDefine('#define VOLUME', on); m.setDefine('#define SOFT_RAMP', on) } }
   const arms = params.get('bench') === 'volume' ? [{ name: 'volume', apply: () => volume(true) }, { name: 'l7a', apply: () => volume(false) }] : params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? MACRO_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); macro.setArm(a) } })) : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
-  void runBench(scene, camera, passes, arms, hold).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
+  // ?benchat=<x>,<z>: the cameras orbit that point instead of the start (the forest bench: docs/plans/active/forest-bench.md)
+  // inside the play area: the camera's focus is clamped to it every frame (src/look/post.ts)
+  const at = params.get('benchat')?.split(',').map(p => p.trim() === '' ? NaN : Number(p))
+  if (at && (at.length !== 2 || !at.every(v => Number.isFinite(v) && Math.abs(v) <= D.spec.play)))
+    throw new Error(`?benchat must be <x>,<z> in metres within ±${D.spec.play}, not ${params.get('benchat')}`)
+  void runBench(scene, camera, passes, arms, hold, at ? { x: at[0], z: at[1] } : undefined).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
     (e: unknown) => { Object.assign(window, { __bench: { error: String(e) } }); console.error('bench failed:', e) })
 }
