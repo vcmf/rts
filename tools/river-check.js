@@ -71,7 +71,9 @@
       const crop = meadow.cropAt(x, z) > 0
       if (meadow.growthAt(x, z) <= 0 && !crop) continue
       sampled++
-      if (crop) { cropsSampled++; if (Math.abs(x - C.axisX(z)) < C.P.floodplainW / 2) cropsOnFloodplain++ }
+      // a crop's reach off the floodplain too (the cover keeps fields off it: this guards the crops' growth against a
+      // change there)
+      if (crop) { cropsSampled++; if ([[0, 0], ...ring].some(([dx, dz]) => Math.abs(x + dx - C.axisX(z + dz)) < C.P.floodplainW / 2)) cropsOnFloodplain++ }
       for (const [dx, dz] of [[0, 0], ...ring]) {
         const px = x + dx, pz = z + dz
         if (KEEP_CLEAR(px, pz)) { inZones++; break }

@@ -44,13 +44,32 @@ at the near view in summer, autumn, late autumn and winter, the mid view in summ
 
 - **Look:** the wheat field is dense gold stalks, lime at the foot, about twice the grass's height and narrower,
   instead of the pack's sparse tufts; stubble in autumn is short and pale; late autumn and winter show the bare
-  ground (ploughed under, snow). Every sown field on the tile now grows (198,596 texels), not only the authored one.
+  ground (ploughed under, snow). Every sown field on the tile now grows (173,332 texels), not only the authored one.
 - **Cost** (`?bench=meadow`, M1 Pro Metal proxy, 4 s a camera, two runs an arm, interleaved with main; the machine
   under other load, about 9): the meadow against none, this branch +1.05–1.25 ms close and default, +0.5–1.1 ms wide;
   main (its grass and wheat tufts) +1.05–1.15 ms and +0.15–1.0 ms. Within the runs' spread (up to 0.9 ms wide): no
   measurable cost over L5c.
-- **Checks:** river-check passes (cropsInZones and on the banks 0, cropsOnFloodplain 0, 219,640 crop points sampled),
+- **Checks:** river-check passes (meadowInZones and meadowOnWater, now counting the crops too, 0; cropsOnFloodplain 0; 195,779 crop points sampled),
   look-check passes (nothing floats, worst −0.031 m), both with `?meadow=off` too (315 wheat tufts there).
-- **Readability guard** against main: passes, at the default view and the cover view; wheat.France in summer 0.100
+- **Readability guard** against main: passes, at the default view and the cover view; wheat.France in summer 0.101
   (main 0.098).
 - `npm test`: 19 files, 256 tests pass.
+
+## Review (`/code-review high`)
+
+- **Round 1** (0ec3a5e): one severe finding. The crop's class came from the cover at its root, while the crops'
+  growth took all sown classes as one, so wheat could stand on a painted green-crop strip where two fields meet.
+  `Nature.crop` now needs one class EDGE round the point, which takes 198,596 texels down to 173,332, and an
+  unknown class grows nothing. Also fixed:
+  - stubble and the green crop as wide as the wheat (the footprint now scales with the crop's height);
+  - the ground's colour read and thrown away for every crop pixel (the fragment shader branches first);
+  - the green crop's winter colour, and each field's own shade;
+  - `growth()` run twice a cell (one pass now);
+  - a double cast;
+  - four copies of the bilinear blend (`bilerp`);
+  - a comment moved off its code;
+  - the floodplain check, which now covers a crop's reach;
+  - this plan's check names and the bench comment.
+
+  Checks, guard and `npm test` pass again. Stubble draws but at 0.22 m barely shows from the RTS camera: left for
+  the owner.

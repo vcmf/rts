@@ -47,6 +47,12 @@ export interface Meadow {
   croppingCells: number                               // texels where a crop grows
 }
 
+// a bilinear blend of at(i, j) at the grid point (u, v)
+const bilerp = (at: (i: number, j: number) => number, u: number, v: number) => {
+  const i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j
+  return (at(i, j) * (1 - fu) + at(i + 1, j) * fu) * (1 - fv) + (at(i, j + 1) * (1 - fu) + at(i + 1, j + 1) * fu) * fv
+}
+
 // growth(x, z): how much grass grows at a point (0..1, by the cover and its edges) and its height factor; allowed(x,
 // z): the placement rule's hard edges at any point; crop(x, z): a sown field there, 0 or 1 (src/look/nature.ts)
 export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCamera, growth: (x: number, z: number) => [number, number], allowed: (x: number, z: number) => boolean, crop: (x: number, z: number) => number): Meadow {
@@ -57,22 +63,27 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   // shrinks by a texel, so the GPU's bilinear read, which blends a texel with its neighbours, never carries grass
   // across a rule (between the last growing texel and a zero one it stays inside the allowed ground)
   const G = MAP_N / 2
-  const cellGrid = (f: (x: number, z: number) => number) => { const a = new Float32Array(G * G); for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) a[j * G + i] = f((i + 0.5) * 2 - TILE_W / 2, (j + 0.5) * 2 - TILE_W / 2); return a }
-  const atCell = (a: Float32Array | Uint8Array, i: number, j: number) => a[Math.min(G - 1, Math.max(0, j)) * G + Math.min(G - 1, Math.max(0, i))]
+  // the 2 m cells: f at each cell's centre (several values a call, one array each)
+  const cellGrids = (f: (x: number, z: number) => number[], n: number) => {
+    const a = Array.from({ length: n }, () => new Float32Array(G * G))
+    for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) { const v = f((i + 0.5) * 2 - TILE_W / 2, (j + 0.5) * 2 - TILE_W / 2); for (let c = 0; c < n; c++) a[c][j * G + i] = v[c] }
+    return a
+  }
+  const atCell = (a: Float32Array, i: number, j: number) => a[Math.min(G - 1, Math.max(0, j)) * G + Math.min(G - 1, Math.max(0, i))]
   // the hard rules at the 2 m cells' centres too: a texel whose four cells agree takes their answer, and only a texel
   // near a rule's edge (its cells disagree) is tested itself (a few in a hundred: the bake's time)
-  const okCell = new Uint8Array(cellGrid(allowed as unknown as (x: number, z: number) => number).map(v => v ? 1 : 0))
-  const hCell = cellGrid((x, z) => growth(x, z)[1])
+  const [okCell] = cellGrids((x, z) => [allowed(x, z) ? 1 : 0], 1)
+  const [gCell, hCell] = cellGrids(growth, 2), [cCell] = cellGrids((x, z) => [crop(x, z)], 1)
   // one growth channel (the grass's by growth(), the crops' by crop()), each texel interpolating its cells, zeroed by
   // the cover's edge and the rules at the texel, then shrunk a texel against the GPU's blend
-  const channel = (cover: (x: number, z: number) => number): { g: Float32Array; count: number } => {
-    const cell = cellGrid(cover), raw = new Float32Array(MAP_N * MAP_N)
+  const channel = (cell: Float32Array, cover: (x: number, z: number) => number): { g: Float32Array; count: number } => {
+    const raw = new Float32Array(MAP_N * MAP_N)
     for (let j = 0; j < MAP_N; j++) for (let i = 0; i < MAP_N; i++) {
       const x = i + 0.5 - TILE_W / 2, z = j + 0.5 - TILE_W / 2, k = j * MAP_N + i
-      const gu = (i + 0.5) / 2 - 0.5, gv = (j + 0.5) / 2 - 0.5, i0 = Math.floor(gu), j0 = Math.floor(gv), fu = gu - i0, fv = gv - j0
-      const c00 = atCell(cell, i0, j0), c10 = atCell(cell, i0 + 1, j0), c01 = atCell(cell, i0, j0 + 1), c11 = atCell(cell, i0 + 1, j0 + 1)
-      const d = (c00 * (1 - fu) + c10 * fu) * (1 - fv) + (c01 * (1 - fu) + c11 * fu) * fv
+      const gu = (i + 0.5) / 2 - 0.5, gv = (j + 0.5) / 2 - 0.5, i0 = Math.floor(gu), j0 = Math.floor(gv)
+      const d = bilerp((a, b) => atCell(cell, a, b), gu, gv)
       if (d <= 0) continue
+      const c00 = atCell(cell, i0, j0), c10 = atCell(cell, i0 + 1, j0), c01 = atCell(cell, i0, j0 + 1), c11 = atCell(cell, i0 + 1, j0 + 1)
       const ok = atCell(okCell, i0, j0) + atCell(okCell, i0 + 1, j0) + atCell(okCell, i0, j0 + 1) + atCell(okCell, i0 + 1, j0 + 1)
       const coverOk = (c00 > 0 && c10 > 0 && c01 > 0 && c11 > 0) || cover(x, z) > 0, ruleOk = ok === 4 ? true : ok === 0 ? false : allowed(x, z)
       raw[k] = coverOk && ruleOk ? d : 0
@@ -88,13 +99,12 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
     }
     return { g, count }
   }
-  const grass = channel((x, z) => growth(x, z)[0]), crops = channel(crop), g = grass.g, growingCells = grass.count
+  const grass = channel(gCell, (x, z) => growth(x, z)[0]), crops = channel(cCell, crop), g = grass.g, growingCells = grass.count
   // the meadow map: R the ground's height, G the grass's growth, B the grass's height factor, A the crops' growth
   // (half floats, filtered by the GPU)
   const data = new Uint16Array(MAP_N * MAP_N * 4)
   for (let j = 0; j < MAP_N; j++) for (let i = 0; i < MAP_N; i++) {
-    const k = j * MAP_N + i, gu = (i + 0.5) / 2 - 0.5, gv = (j + 0.5) / 2 - 0.5, i0 = Math.floor(gu), j0 = Math.floor(gv), fu = gu - i0, fv = gv - j0
-    const hf = (atCell(hCell, i0, j0) * (1 - fu) + atCell(hCell, i0 + 1, j0) * fu) * (1 - fv) + (atCell(hCell, i0, j0 + 1) * (1 - fu) + atCell(hCell, i0 + 1, j0 + 1) * fu) * fv
+    const k = j * MAP_N + i, hf = bilerp((a, b) => atCell(hCell, a, b), (i + 0.5) / 2 - 0.5, (j + 0.5) / 2 - 0.5)
     data[k * 4] = ToHalfFloat(heightAt(i + 0.5 - TILE_W / 2, j + 0.5 - TILE_W / 2)); data[k * 4 + 1] = ToHalfFloat(g[k]); data[k * 4 + 2] = ToHalfFloat(hf); data[k * 4 + 3] = ToHalfFloat(crops.g[k])
   }
   const map = new RawTexture(data, MAP_N, MAP_N, Constants.TEXTUREFORMAT_RGBA, scene, false, false, Texture.BILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_HALF_FLOAT)
@@ -103,16 +113,12 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   // grass, or a crop, the shader may grow
   const bilinear = (a: Float32Array) => (x: number, z: number) => {
     const at = (i: number, j: number) => i < 0 || j < 0 || i >= MAP_N || j >= MAP_N ? 0 : a[j * MAP_N + i]
-    const u = x + TILE_W / 2 - 0.5, v = z + TILE_W / 2 - 0.5, i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j
-    return (at(i, j) * (1 - fu) + at(i + 1, j) * fu) * (1 - fv) + (at(i, j + 1) * (1 - fu) + at(i + 1, j + 1) * fu) * fv
+    return bilerp(at, x + TILE_W / 2 - 0.5, z + TILE_W / 2 - 0.5)
   }
   const growthAt = bilinear(g), cropAt = bilinear(crops.g)
   const hAt = (i: number, j: number) => heightAt(Math.min(MAP_N - 1, Math.max(0, i)) + 0.5 - TILE_W / 2, Math.min(MAP_N - 1, Math.max(0, j)) + 0.5 - TILE_W / 2)
-  const groundAtMap = (x: number, z: number) => {   // the half floats' rounding included
-    const u = x + TILE_W / 2 - 0.5, v = z + TILE_W / 2 - 0.5, i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j
-    const h = (a: number, b: number) => FromHalfFloat(ToHalfFloat(hAt(a, b)))
-    return (h(i, j) * (1 - fu) + h(i + 1, j) * fu) * (1 - fv) + (h(i, j + 1) * (1 - fu) + h(i + 1, j + 1) * fu) * fv
-  }
+  // the half floats' rounding included
+  const groundAtMap = (x: number, z: number) => bilerp((a, b) => FromHalfFloat(ToHalfFloat(hAt(a, b))), x + TILE_W / 2 - 0.5, z + TILE_W / 2 - 0.5)
 
   // the clumps, indexed (the export is a triangle list): the large near, the small (fewer vertices) farther
   const src = JSON.parse(GRASS) as Record<string, { pos: number[]; nrm: number[]; v: number[] }>

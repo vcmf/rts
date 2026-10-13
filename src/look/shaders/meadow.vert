@@ -9,21 +9,23 @@ varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;
 // the meadow map at a point: one bilinear read (half floats filter), its growing area shrunk a texel on the CPU so
 // the blend never crosses a rule (src/look/meadow.ts)
 vec4 meadowAt(vec2 xz){return texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);}
-float coverClass(vec2 xz){return floor(texture2D(uCover,xz/FAR_W+0.5).r*255.0+0.5);}
-// a crop by its class and the season (docs/plans/done/l5d-crops.md; uSeason 0 summer, 1 autumn, 2 late autumn, 3
+vec2 coverCell(vec2 xz){vec4 t=texture2D(uCover,xz/FAR_W+0.5);return floor(t.rg*255.0+0.5);}   // its class and field id
+// a crop by its class and the season (docs/plans/done/l5d-crops.md, uSeason 0 summer, 1 autumn, 2 late autumn, 3
 // winter): its height (m) in x, its colour at the tip in yzw. Wheat stands in summer (never over WHEAT_HEIGHT_MAX,
-// decision 0026), is cut to stubble (0.22 m) in autumn and ploughed under after; stubble short until the plough; the green
-// crop low all year, lower under the snow. The colour (the owner): lime to gold, orange and brown with the season
+// decision 0026), is cut to stubble (0.22 m) in autumn and ploughed under after, stubble short until the plough, the green
+// crop low all year, lower under the snow and toward its colour. The colour (the owner): lime to gold, orange and
+// brown with the season
 vec4 cropAt(float k,float j){
   float s=uSeason;
-  if(k<6.5){
+  if(k>5.5&&k<6.5){
     float h=mix(WHEAT_HEIGHT_MAX*mix(0.84,1.0,j),0.22,smoothstep(0.55,0.95,s))*(1.0-smoothstep(1.55,1.95,s));
     vec3 c=s<1.0?mix(vec3(0.72,0.60,0.27),vec3(0.70,0.49,0.24),s):mix(vec3(0.70,0.49,0.24),vec3(0.47,0.36,0.23),min(s-1.0,1.0));
     return vec4(h,c);}
-  if(k<7.5){
+  if(k>6.5&&k<7.5){
     float h=0.45*mix(0.85,1.0,j)*mix(1.0,0.5,smoothstep(2.5,3.0,s));
     vec3 c=mix(vec3(0.46,0.58,0.21),vec3(0.42,0.43,0.22),smoothstep(0.5,2.5,s));
-    return vec4(h,c);}
+    return vec4(h,mix(c,vec3(0.46,0.42,0.34),0.5*smoothstep(2.0,3.0,s)));}   // toward the winter ground (groundSeason)
+  if(k<7.5||k>8.5)return vec4(0.0);   // not a sown class: nothing (Nature.crop grows none there)
   float h=0.22*mix(0.8,1.0,j)*(1.0-smoothstep(1.55,1.95,s));
   return vec4(h,mix(vec3(0.68,0.60,0.40),vec3(0.50,0.40,0.28),smoothstep(0.5,1.8,s)));}
 void main(){
@@ -46,11 +48,14 @@ void main(){
   // vanishing (no pop)
   float keep=crop?m.a*band*mix(0.8,1.0,c):m.g*band*mix(0.45,1.0,c),grow=smoothstep(h2-0.12,h2+0.12,keep);
   // the height the same on every ring and never over HEIGHT_MAX (a formation is never hidden), the footprint by the
-  // ring (its cell), both shrinking away with the growth; winter: under the snow. A crop: its own height by class and
+  // ring (its cell), both shrinking away with the growth, winter: under the snow. A crop: its own height by class and
   // season, narrower than grass
   float j=mix(0.8,1.2,h3),hgt,fp;
   vec4 cr=vec4(0.0);
-  if(crop){cr=cropAt(coverClass(root),h3);hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*0.7;}
+  // its footprint narrower than grass and with its height (short stubble stays upright, not a flat splat), each
+  // field a shade apart, as the ground paints it (cellColour in macro.glsl)
+  if(crop){vec2 cc=coverCell(root);cr=cropAt(cc.x,h3);cr.yzw*=cc.y>0.5?0.94+0.12*fract(cc.y*0.6180339):1.0;
+    hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*0.7*clamp(cr.x/1.1,0.35,1.0);}
   else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*mix(1.0,0.45,smoothstep(2.5,3.0,uSeason)),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;}
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
   float a=h4*6.2832,ca=cos(a),sa=sin(a);

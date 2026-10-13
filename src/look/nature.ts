@@ -51,7 +51,7 @@ export interface Nature {
   growth(x: number, z: number): [number, number]
   growthAllowed(x: number, z: number): boolean
   // the crops' growth by the cover (docs/plans/done/l5d-crops.md): 1 where the point and the points EDGE round it
-  // are all a sown field (wheat, green crop, stubble; ploughed grows nothing), else 0
+  // are all one sown class (wheat, green crop, stubble; ploughed grows nothing), else 0
   crop(x: number, z: number): number
 }
 
@@ -284,9 +284,11 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // the meadow's growth: where the old tufts could stand (the placement rule: the cover's grassy classes and their
   // edges, off the banks and the water, out of the formation zones); pasture grazed shorter
   const growth = (x: number, z: number): [number, number] => coverAllows(cover, 'Grass_Short', x, z) ? [1, coverAt(cover, x, z) === COVER.pasture ? 0.65 : 1] : [0, 0]
-  // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the outer ring's footprint and lean)
+  // the crops' growth: a sown class (ploughed grows nothing) and the same class EDGE round it, so a crop never stands
+  // on another painted field (the shader reads the class at its root)
   const SOWN: readonly number[] = [COVER.wheat, COVER.green, COVER.stubble]
-  const crop = (x: number, z: number) => AROUND.every(([dx, dz]) => SOWN.includes(coverAt(cover, x + dx * EDGE, z + dz * EDGE))) ? 1 : 0
+  const crop = (x: number, z: number) => { const c = coverAt(cover, x, z); return SOWN.includes(c) && AROUND.every(([dx, dz]) => coverAt(cover, x + dx * EDGE, z + dz * EDGE) === c) ? 1 : 0 }
+  // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the outer ring's footprint and lean)
   const growthAllowed = (x: number, z: number) => !touchesZone(x, z, CLUMP_REACH) && offBanks(riverQuery(x, z), CLUMP_REACH)
   return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined, growth, growthAllowed, crop }
 }
