@@ -61,7 +61,7 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
 }
 
 // cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/active/l7a-canopy-cards.md, ?trees=cards)
-export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood = false): Nature {
+export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off'): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
 
@@ -142,12 +142,13 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     if (!placeTree(mdl, x, z, s, rr() * 6.28, rr())) continue
     if (rr() < 0.5) { const fx = x + (rr() - 0.5) * 6, fz = z + (rr() - 0.5) * 6; addPlaced('Plant_1', [fx, fz, 1.6 + rr(), rr() * 6.28, rr()]) }
   }
-  // ?wood: one dense wood, to judge the sky's occlusion (docs/plans/done/soft-shadows.md); its own random stream,
-  // so the rest of the scatter is unchanged
-  if (wood) {
-    const W = mulberry(91)
-    for (let i = 0; i < 70; i++) {
-      const x = -105 + (W() - 0.5) * 50, z = -30 + (W() - 0.5) * 40, mdl = TREE_MODELS[Math.floor(W() * 5)], s = 3.4 + W() * 1.4
+  // ?wood: one dense wood, to judge the sky's occlusion (docs/plans/done/soft-shadows.md); ?wood=big: a forest that
+  // fills the bench's frame (docs/plans/active/forest-bench.md); each its own random stream, so the rest of the
+  // scatter is unchanged
+  if (wood !== 'off') {
+    const W = mulberry(91), [cx, cz, w, h, n] = wood === 'big' ? [-110, -25, 150, 110, 520] : [-105, -30, 50, 40, 70]
+    for (let i = 0; i < n; i++) {
+      const x = cx + (W() - 0.5) * w, z = cz + (W() - 0.5) * h, mdl = TREE_MODELS[Math.floor(W() * 5)], s = 3.4 + W() * 1.4
       placeTree(mdl, x, z, s, W() * 6.28, W())
     }
   }

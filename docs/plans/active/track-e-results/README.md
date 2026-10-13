@@ -18,3 +18,5 @@ Proxy runs from the dev Mac are kept too, with `mac-proxy` in the name; they pas
 - [`l2b-detail.md`](l2b-detail.md): the detail layer's checks, goldens, guard and bench (L2b).
 - `l2b-2026-10-10-0c91f76-mac-proxy.json`: the bench with both arms (the detail layer, the L0 grain) on the
   dev Mac, a proxy.
+- `forest-2026-10-13-<build>-<arms>-mac-proxy.json`: the forest bench (`docs/plans/active/forest-bench.md`), the cards
+  against the pack crowns (two runs) and the volume light against L7a, where a forest fills the frame; proxies.

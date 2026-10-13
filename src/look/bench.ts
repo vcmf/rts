@@ -58,7 +58,8 @@ function rendererName(engine: AbstractEngine): string {
   return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER))
 }
 
-export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: BenchPasses, arms: Arm[], holdS: number): Promise<object> {
+// focus: the point the cameras orbit (the camera's start by default; the forest bench's ?benchat)
+export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: BenchPasses, arms: Arm[], holdS: number, focus: { x: number; z: number } = { x: START.x, z: START.z }): Promise<object> {
   const engine = scene.getEngine(), gl = (engine as unknown as { _gl: WebGL2RenderingContext })._gl
   const timer = new GpuTimer(gl), inst = new SceneInstrumentation(scene)
   let timing = false, passFrame = false, frameNo = 0, lastT = 0, passFrames = 0
@@ -120,7 +121,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   try {
     await seconds(2)   // shaders compiled, first frames out of the way
     for (const cam of cams) {
-      camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; camera.target.set(START.x, D.spec.camera.focusY, START.z)
+      camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; camera.target.set(focus.x, D.spec.camera.focusY, focus.z)
       for (const arm of [...arms, ...[...arms].reverse()]) {
         arm.apply(); await scene.whenReadyAsync()
         for (let tries = 0; ; tries++) {
@@ -149,7 +150,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   return {
     tool: 'look-bench', version: 2, build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
     canvas: { w: engine.getRenderWidth(), h: engine.getRenderHeight(), cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
-    gpuTimer: timer.available, holdS, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
+    gpuTimer: timer.available, holdS, focus, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
     note: timer.available ? 'GPU times from EXT_disjoint_timer_query_webgl2' : 'no GPU timer on this browser: GPU fields are null', runs,
   }
 }
