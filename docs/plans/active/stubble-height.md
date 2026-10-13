@@ -28,7 +28,13 @@ camera: "yeah a bit taller pls".
   stalks read over the soil, on the stubble fields and on the wheat cut in autumn.
 - **No clipping toward the white coats:** the tips' red is no higher than the standing wheat's. Pixels with a
   channel at 245 or more, stubble field in summer: 1,322 against main's 1,843. Wheat field in autumn: 27,490 on both.
-- **Guard** against main: passes at the default and the cover views.
+- **Guard** against main: passes at every view.
+  - `--view crops --seasons summer,autumn,winter` is new in this PR: two columns of the coats on the stubble field,
+    its crops grown.
+  - The default view with autumn added puts the wheat blocks on the cut wheat.
+  - The cover view passes too.
+  - Austrian white does not separate from the stubble field in summer and autumn (0.002 to 0.031, main 0.000 to
+    0.032): the stubble ground's value, not the crops. Filed as #78 (phase:L4).
 - **Cost** (`?bench=meadow&benchat=100,140`, over the stubble field; Metal proxy, two runs an arm, the machine at a
   load of about 11): the meadow arm at 5.08 and 5.08 / 5.52 and 5.62 / 6.77 and 6.82 ms (close / default / wide)
   against main's 5.22 and 5.07 / 5.48 and 5.10 / 6.77 and 6.65 ms. That is within main's own run-to-run spread
@@ -52,5 +58,16 @@ camera: "yeah a bit taller pls".
   - stale comments;
   - the cost and `npm test` measured (above).
 
-  Left: at the top of its range the stubble's footprint meets the 0.7 cap (grass proportions under the grass
+  Left (round 1): at the top of its range the stubble's footprint meets the 0.7 cap (grass proportions under the grass
   height), which flattens a little of its width jitter.
+- **Round 2** (6651921): one severe finding. The guard never looked at stubble nor at autumn, so its pass said
+  nothing about this change. It now has `--view crops` and `--seasons` (results above), and found #78, which also
+  fails on main. Also fixed:
+  - the stubble tip comment's claim, now pointed at the guard's measure;
+  - the doc's "orange in autumn" (the orange shows while the wheat is cut, 0.55 to 0.95);
+  - the green crop's height as its own constant (`GREEN_HEIGHT`);
+  - the short crops' footprint at 0.9 of their proportions, so the jitter stays under the cap;
+  - the comments' order;
+  - a redundant clamp.
+
+  `npm test` failed again under load (14.0 ms against the soldiers' 12 ms budget, load 11 to 15). CI runs it.

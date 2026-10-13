@@ -18,7 +18,7 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
-import { HEIGHT, HEIGHT_MAX, MEADOW_SINK, STUBBLE_HEIGHT, WHEAT_HEIGHT_MAX } from './meadow-spec.ts'
+import { GREEN_HEIGHT, HEIGHT, HEIGHT_MAX, MEADOW_SINK, STUBBLE_HEIGHT, WHEAT_HEIGHT_MAX } from './meadow-spec.ts'
 export { HEIGHT, HEIGHT_MAX }
 import GRASS from '../../data/meadow-grass.json?raw'
 import MEADOW_VS from './shaders/meadow.vert?raw'
@@ -140,7 +140,7 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   RINGS.forEach((r, ri) => {
     const m = mats.make(`meadow${ri}`, MEADOW_VS.replace('#include<meadow>', () => MEADOW_GLSL), MEADOW_FS, {
       attributes: ['position', 'normal', 'aV', 'aSlot'], uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand'], samplers: ['uMeadow'],
-      defines: [`#define MEADOW_N ${MAP_N.toFixed(1)}`, `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`, `#define MEADOW_SINK ${MEADOW_SINK.toFixed(3)}`, `#define WHEAT_HEIGHT_MAX ${WHEAT_HEIGHT_MAX.toFixed(2)}`, `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(2)}`],
+      defines: [`#define MEADOW_N ${MAP_N.toFixed(1)}`, `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`, `#define MEADOW_SINK ${MEADOW_SINK.toFixed(3)}`, `#define WHEAT_HEIGHT_MAX ${WHEAT_HEIGHT_MAX.toFixed(2)}`, `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(2)}`, `#define GREEN_HEIGHT ${GREEN_HEIGHT.toFixed(2)}`],
     })
     const c = clumps[r.clump]
     m.backFaceCulling = false; m.setTexture('uMeadow', map); m.setFloat('uCell', r.cell); m.setVector4('uBand', new Vector4(...r.band))

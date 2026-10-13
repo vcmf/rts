@@ -210,10 +210,11 @@ shader); `?meadow=off` puts back the old scatter.
   edge and shrink) is above the grass's growth: never both on one patch. The vertex shader reads the cover's class
   at the root (`uCover`) and the season (`cropLook` in `meadow.vert`): wheat standing up to `WHEAT_HEIGHT_MAX`
   (decision 0026) in summer, cut to stubble (`STUBBLE_HEIGHT`, `src/look/meadow-spec.ts`) through autumn and gone by
-  late autumn; the green crop lower, and lower still under the snow; stubble fields at `STUBBLE_HEIGHT` until the
+  late autumn; the green crop at `GREEN_HEIGHT`, lower under the snow; stubble fields at `STUBBLE_HEIGHT` until the
   plough. Narrower than grass, evenly sown (less clumping). Its colour (the owner): lime at the stalk's foot to the
-  season's colour at the tip, the standing wheat gold in summer and orange in autumn; stubble, the cut wheat's too,
-  a pale straw over the darker soil (`stubbleTip`, no redder than the standing wheat), browning by late autumn; the
+  season's colour at the tip, the standing wheat gold in summer, turning orange while it is cut; stubble, the cut
+  wheat's too, a pale straw over the darker soil (`stubbleTip`, no redder than the standing wheat), browning by late
+  autumn; the
   green crop lime to olive. Ploughed fields grow nothing.
 - **The meadow on the ground** (`meadowPattern` in `macro()`, `MEADOW`, a define on every painted material and on the
   macro bake): on meadow and pasture (the warped class the ground paints), the brush tile (`data/meadow-brush.png`,
@@ -288,6 +289,9 @@ blocks are painted by the shared painter at unit crispness, without snow (`NOSNO
 negative, in summer: the same blocks painted grey, each at the grey that matches the ground's value under it
 (interpolated from renders at two greys), must not separate. A block's pixels come from two mask renders (flat
 white, flat black), so hidden parts and ground-coloured parts are both counted right.
+`--view crops`: two columns of the coats on a stubble field with its crops grown (`CROP_SPOTS`,
+`tools/army-blocks.mjs`; the negative there needs 8 blocks, the field holds no more). `--seasons summer,autumn,…`
+picks the seasons run (default summer and winter; summer always, for the negative).
 
 `--view cover` (L5a) puts the clusters east of the hill instead, every block wholly on a class of the cover: lines
 along the ploughed field, a column of march on the road, the village ground (the 3 m track holds no 20 m line).

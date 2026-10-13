@@ -13,5 +13,5 @@ export const MEADOW_SINK = 0.06
 // the pre-modern cereals stood 1.2 to 1.8 m (the map's catalogue), the look keeps them lower
 export const WHEAT_HEIGHT_MAX = 1.2
 // the stubble's height, m, after the harvest (stubble fields, and the wheat cut in autumn): tall enough to read from
-// the RTS camera (the owner, 2026-10-13: 0.22 m did not), as tall as the green crop
-export const STUBBLE_HEIGHT = 0.45
+// the RTS camera (the owner, 2026-10-13: 0.22 m did not); and the green crop's, m, through the year
+export const STUBBLE_HEIGHT = 0.45, GREEN_HEIGHT = 0.45
