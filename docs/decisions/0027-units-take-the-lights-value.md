@@ -28,10 +28,11 @@ for a unit's shadow side; a unit's lit side is white-balanced. Each coat's lit c
 ## Consequences
 
 - Good: the coats keep their colour. At both of the note's spots every coat stays within 10° of its painted hue and
-  at 70 % of its saturation or more, and the white stays white (`docs/plans/active/lc1b-coats.md`). Readability
+  at 70 % of its saturation or more, and the white stays white (`docs/plans/done/lc1b-coats.md`). Readability
   improves: 45 of the guard's 48 default-view blocks separate better than before, and none newly fail.
 - Bad: a unit is a little less a part of the scene's light; its warmth comes from the shadow's contrast and the rim,
-  not a warm cast.
+  not a warm cast. It also takes none of the grade's haze toward the frame's top (a depth cue): with it, the coats at
+  the top lost about a third of their saturation (the valley spot, measured), against pillar 1.
 - Bad: every mood must set the three shares, and the coat check holds them to the bound.
 
 ## Alternatives considered

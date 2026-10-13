@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-14
 ---
 
@@ -8,6 +8,11 @@ last_reviewed: 2026-10-14
 Track E, LC1 (`docs/plans/active/track-e-look.md` §LC), its second half, after LC1a (`docs/plans/done/lc1a-moods.md`).
 The coats lose their colour to three warm tints stacked (`docs/research/colour-and-light-review.md`). Decision 0027
 (proposed): units take the light's value, not its hue.
+
+## Scope
+
+How units take the light (the painter's `KEEP_HUE` path), where the grade runs, the bloom that follows it, and a
+check of the coats' colour. Not in scope: the world's colours (LC2), the coats in a crown's deep shade (#63, L4).
 
 ## Approach
 
@@ -52,8 +57,8 @@ The coats lose their colour to three warm tints stacked (`docs/research/colour-a
 | valley, Austria | 0.33 → 0.73 (cream) | 0.33 → 0.06 |
 | valley, Britain | 3 → 22, 0.62 → 0.57 | 3 → 7, 0.62 → 0.47 |
 
-Main fails 7 or 8 of the 8 blocks (the middle's British red passes there by 2° since the column is laid by
-`blocksAt`). This branch passes all 8 with `units` = { tint 0.25, mist 0.04, grade 0 }. The mist cap set the
+Main fails all 8 blocks in the table's run. With the column laid by `blocksAt` (review round 2) main fails 7: its
+middle British red then measures hue 12, 9° off, inside the 10° bound. This branch passes all 8 with `units` = { tint 0.25, mist 0.04, grade 0 }. The mist cap set the
 margin: at 0.06 the valley's Russian green failed (0.26 against 0.273), and at 0.12 three coats failed. The face
 selection matters too: the first one (the brightest 40 %) took the warm rim along the edges for the face. Pairs (not
 committed; `scratch/compare/coats/` in the main checkout): main beside this branch at both spots.
@@ -113,3 +118,15 @@ measurable nearer.
 
   Left: the bloom's blue cast on a unit's own highlights and its undoing of the grade by `splitHi` alone (both
   measured above). The valley's Russian green sits near its bound (0.27 to 0.28 against 0.273, run to run).
+- **Round 3** (5e97492): no severe finding, so the review stops here. Fixed:
+  - the clear colour follows the grade's switch;
+  - a white must also not take another hue (60° off its own) over a saturation of 0.15;
+  - the art bible's line on the finishing pass (the grade is in the materials now);
+  - this plan's missing Scope section and its count of main's failures.
+
+  Tried: units taking the grade's haze toward the top whole (a depth cue, not a cast). It cost the valley's coats,
+  near the frame's top, about a third of their saturation (France 0.47 to 0.37, three coats failed). Reverted:
+  pillar 1 ranks first (decision 0027, Consequences).
+
+  Left: the bloom's cool cast on a unit's own highlights; `gradeColour` copies `gradeOf` without a test; the coat
+  check's copy of the guard's steps.

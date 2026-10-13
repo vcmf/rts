@@ -3,7 +3,7 @@ uniform sampler2D uGrain;
 uniform vec3 uSunDir,uSunCol,uShadowCol,uHazeCool,uHazeWarm,uCamPos,uFocus;
 // the mood's other colours (src/look/mood.ts)
 uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistShade,uMistLit,uWaterSky,uGlint,uFarRiver;   // uShadowTurn: divided by its luma
-// the grade (gradeOf, at the end of atmos), and how much of the light units take (KEEP_HUE: docs/plans/active/lc1b-coats.md)
+// the grade (gradeOf, at the end of atmos), and how much of the light units take (KEEP_HUE: docs/plans/done/lc1b-coats.md)
 uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade;
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
 uniform float uUnitTint,uUnitMist,uUnitGrade;
@@ -218,8 +218,10 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
 }
 // The grade (the mood's, src/look/mood.ts), the last step of every painted material (atmos), so units can take less
 // of it (uUnitGrade): muted warmer greens, the saturation, a split tone, a lift in the darks, a haze toward the top
-// of the frame. It was the finishing pass's, which cannot tell a coat from the meadow (docs/plans/active/lc1b-coats.md)
+// of the frame. It was the finishing pass's, which cannot tell a coat from the meadow (docs/plans/done/lc1b-coats.md)
 vec3 gradeOf(vec3 c){
+  // units take uUnitGrade of it all, the haze toward the top too: a depth cue, but pillar 1 (the armies readable)
+  // ranks first, and it takes a third of a coat's saturation at the frame's top
   float amt=uGrade;
   #ifdef KEEP_HUE
   amt*=uUnitGrade;

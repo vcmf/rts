@@ -290,8 +290,10 @@ question 3).
 - **Bake what doesn't move:** terrain ambient occlusion, canopy contact
   shading, the sun shadow and the sky's occlusion by crowns, baked once per
   map. No live SSAO.
-- **One merged finishing pass:** warm amber grade with split toning, soft
-  highlight roll-off, cool vignette, paper texture, dithering.
+- **The grade in the materials:** warm amber with split toning, the last
+  step of every painted material, so units can take less of it (decision
+  0027, proposed). **One merged finishing pass:** soft highlight roll-off,
+  cool vignette, paper texture, dithering.
 - **Valley mist and height fog in the materials:** warm where sunlit, cool
   in shadow. Light shafts form where tree shadows cross the mist.
 - **Golden backlight glow** on foliage, plus the graphic rim.

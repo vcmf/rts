@@ -1,4 +1,4 @@
-// The coat check (docs/plans/active/lc1b-coats.md, Track E LC1): the army coats keep their colour under the light.
+// The coat check (docs/plans/done/lc1b-coats.md, Track E LC1): the army coats keep their colour under the light.
 // Blocks in the four coats (docs/art-bible.md §4) at the two spots of docs/research/colour-and-light-review.md, at
 // the default view, summer, with the gameplay depth of field off (its band blurs the ground into the blocks): the
 // middle of the frame (outside the valley mist) and the valley floor (inside it). A block's pixels come from two mask
@@ -6,7 +6,7 @@
 // brightest 10 % (the rim along its edges). That
 // face's mean colour must keep the coat's hue within HUE degrees and HLS saturation at SAT of the painted one or
 // more; a near-white coat (painted lightness over 0.8) must not gain saturation (it would turn cream) nor fall under
-// a lightness of WHITE_L (grey).
+// a lightness of WHITE_L (grey), nor take another hue (60° off its own) over WHITE_TINT of saturation.
 //
 //   node tools/coat-check.mjs <look page URL> [outDir]
 //     a ?mood= in the URL checks that mood (src/look/mood.ts): run it for every mood (LC2's candidates, each); the
@@ -23,7 +23,7 @@ import { prepSteps, shoot, viewStep } from './look-page.mjs'
 import { ARMY_HEX, blocksAt } from './army-blocks.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const W = 1280, H = 720, HUE = 10, SAT = 0.7, WHITE_L = 0.6, RIM = 0.1, TOP = 0.4
+const W = 1280, H = 720, HUE = 10, SAT = 0.7, WHITE_L = 0.6, WHITE_TINT = 0.15, RIM = 0.1, TOP = 0.4
 const START = CAMS.find(c => c[0] === 'start').slice(1, 5)
 // the two spots: [name, x, z] of the column's middle; the four coats 7 m apart along z (blocksAt's column)
 const SPOTS = [['middle', -10, 2], ['valley', 30, 62]]
@@ -63,8 +63,10 @@ export function coatCheck(url, out) {
       const mean = [0, 1, 2].map(i => top.reduce((a, k) => a + d[k + i], 0) / top.length)
       const painted = hls(hex2rgb(ARMY_HEX[name.split('.')[1]])), seen = hls(mean)
       const white = painted[2] > 0.8, dh = hueDiff(seen[0], painted[0])
-      const ok = white ? seen[1] <= painted[1] && seen[2] >= WHITE_L : dh <= HUE && seen[1] >= SAT * painted[1]
-      rows.push({ name, n: top.length, rgb: mean.map(Math.round), hue: [Math.round(painted[0]), Math.round(seen[0])], sat: [+painted[1].toFixed(2), +seen[1].toFixed(2)], fail: ok ? null : white ? (seen[1] > painted[1] ? 'a white turned saturated' : `a white turned grey (lightness under ${WHITE_L})`) : dh > HUE ? `hue off by ${Math.round(dh)}°` : `saturation under ${SAT} of the painted` })
+      // a white: no more saturated than painted, light, and tinted toward another hue (60° off its own) at WHITE_TINT at most
+      const whiteOk = seen[1] <= painted[1] && seen[2] >= WHITE_L && (dh <= 60 || seen[1] <= WHITE_TINT)
+      const ok = white ? whiteOk : dh <= HUE && seen[1] >= SAT * painted[1]
+      rows.push({ name, n: top.length, rgb: mean.map(Math.round), hue: [Math.round(painted[0]), Math.round(seen[0])], sat: [+painted[1].toFixed(2), +seen[1].toFixed(2)], fail: ok ? null : white ? (seen[1] > painted[1] ? 'a white turned saturated' : seen[2] < WHITE_L ? `a white turned grey (lightness under ${WHITE_L})` : `a white tinted toward hue ${Math.round(seen[0])}`) : dh > HUE ? `hue off by ${Math.round(dh)}°` : `saturation under ${SAT} of the painted` })
     }
   }
   return rows
