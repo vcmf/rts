@@ -1,6 +1,6 @@
 ---
 status: active
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-13
 ---
 
 # Plan: Track E, the painterly look
@@ -522,6 +522,24 @@ winter trees the target images depend on, and the building material.
 **Depends on:** L2, LA2 (the first building); in stage 1 it measures its own budget rather than
 L1's. **Estimate:** 4–6 days, 2–3 PRs.
 
+**Progress (2026-10-13).** Built ahead of the phase, as experiments behind `?trees=cards` (the default arm keeps
+the pack crowns): results in `docs/plans/active/track-e-results/shadows-foliage.md`, the technique's source in
+`docs/research/tiny-glade-look.md`.
+- **L7a, leaf-card crowns** (#58, `docs/plans/active/l7a-canopy-cards.md`): each broadleaf, birch and willow
+  crown as camera-facing cards cut by a greyscale clump atlas our palette paints, casting leafy shadows. Read as
+  painted leaf masses at the near and mid zooms (owner: "it's the way").
+- **L7b, the crowns as volumes** (#61, `docs/plans/active/l7b-crown-volume.md`): a normal per pixel from the
+  crown's ellipsoid, the light through it, a soft ramp (decision 0022, proposed), a darker core, a tilt per leaf
+  (owner: "it's beautiful now the trees").
+- **Cost so far:** within the Mac's noise (about +0.1 to +0.5 ms GPU at the widest zoom, +12 draw calls).
+
+**What L7 still owes:**
+- the cards as the default arm, once the guard passes with them (#63) and the owner accepts decision 0022;
+- the outline at the widest zoom aliases: alpha-to-coverage on MSAA, L8's A/B;
+- the acceptance above, measured on the cards: overdraw, coverage across the zooms, foliage ≤ 3 ms, in a
+  battlefield forest (`?wood`) and on the min-spec laptop;
+- pines and bushes are still pack meshes; bare winter trees; the building material; far woods.
+
 ## L8. Anti-aliasing (research P6)
 
 **Goal:** choose the anti-aliasing by an A/B test.
@@ -613,7 +631,10 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
    machine stands in, and do its numbers gate?
 2. **The judges** for L4 and L5: who, and how many? The research's bars assume at least 5 and at least 3.
 3. **Tilt-shift:** A/B it in L9, or rule it out now (decision 0003 forbids blur in gameplay; tilt-shift
-   is blur)?
+   is blur)? **Owner (2026-10-13):** open, after Tiny Glade ("simply astonishing and beautiful"): it may come
+   back if a measurement shows it is good. Decision 0003 stands until a new record replaces it; an experiment
+   (frame cost, formations at the frame's edges through the guard) decides. A first build is on its own
+   branch (`look/gameplay-dof`, not yet a PR).
 4. **Stepped animation comfort:** ship 12 fps steps as a setting that can be turned off (Insomniac did),
    or fixed?
 5. **Soldier grain:** any at gameplay zoom, or only at the closest zoom (research open question)?
@@ -629,6 +650,10 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
 
 ## Changes to this plan
 
+- **2026-10-13, the shadows and the crowns.** Recorded the shadow work (Results) and L7's progress (L7a, L7b,
+  what L7 still owes); the owner's answer on tilt-shift (question 3); decision 0022 (proposed); known issues #62
+  and #63.
+
 - **2026-10-10, focus.** The owner put units on hold: stage 1 paints the landscape and buildings
   (L0, L2, water, L5, LA2, L7, L9w), with a readability guard standing in for L4; the unit phases
   move to stage 2 unchanged.
@@ -643,3 +668,12 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
 
 Each phase adds its results here (measurements, the JSON files in `track-e-results/`, the judges'
 tallies, and what changed from this plan).
+
+- **The shadows (2026-10-12/13, between L5 and L7; not a phase of this plan).** The owner: "the shadow work of our
+  trees in the whole map looks weak". The shadow look (#59, `docs/plans/done/shadow-look.md`): the valley mist no
+  longer erases cast shadows (shadow over lit ground 0.98 to 0.78), a cooler shadow band at the same value, crisper
+  edges, a contact core under each tree. The soft shadows (#60, `docs/plans/done/soft-shadows.md`): the penumbra
+  grows with the distance to the caster, each crown hides its share of the sky, the shadow deepens on a wood's
+  floor; all baked on load (about 45 ms more), nothing per frame. The guard's one block on the threshold
+  (`wheat.France`, 0.098) was waived by the owner. Numbers: `track-e-results/shadows-foliage.md`.
+- **L7a and L7b:** under L7, above.

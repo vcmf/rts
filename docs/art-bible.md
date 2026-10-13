@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-13
 ---
 
 # Art Direction: "The Painted Campaign"
@@ -134,6 +134,12 @@ Every surface is painted with **three value bands**, not a smooth gradient:
 The edges between bands are **broken by the grain texture**, so they read as
 brush edges rather than computed lines.
 
+**One exception, foliage crowns** (decision 0022, proposed): the same three
+colours, the shadow still cool, blended over a wide range of light instead of
+three steps, so a crown reads as a round mass of leaves. Its light wraps round
+the crown, it is darker inside, and single leaves catch the sun. Everything else
+keeps the three bands.
+
 ### Palette
 - **80% calm field:** muted olive and yellow-greens, dry golds, teal-green
   hollows. Never neon green.
@@ -159,6 +165,15 @@ brush edges rather than computed lines.
 - **Shadows are physically computed, then painted.** A real sun shadow pass
   plus ambient occlusion (Babylon) decides *where* shadow falls. Our shader
   decides *how it looks*: the cool shadow band, with edges broken by the grain.
+- **Two kinds of shadow, as built** (`docs/systems/look.md`):
+  - *The sun's:* crisp where a caster meets the ground and softer the farther
+    the shadow falls from it, as under a real sun, exaggerated. A trunk's foot
+    is sharp; a crown's outline is soft.
+  - *The sky's:* woods, hollows and the ground round each crown see less sky,
+    so they are darker. On a wood's floor the shadow colour itself deepens, so
+    a wood reads as one mass, darker inside than a lone tree's shadow.
+- **The valley mist thins over cast shadow**, so shadows still read in the
+  hollows. Lit snow stays near-white under it (a known fault: #62).
 
 ---
 
@@ -253,9 +268,15 @@ follows the action) and in-game presentation modes. Gameplay depth of field
 exists only as an off-by-default setting. If playtests show the field feels
 flat, the fallback is a *very subtle* depth of field at the closest zoom only.
 
+**Reopened (owner, 2026-10-13):** after Tiny Glade, whose tilt-shift is much of
+its miniature charm, gameplay depth of field is an open question again: it may
+come back if a measurement shows it is good. Decision 0003 holds until a new
+record replaces it (Track E's owner question 3).
+
 **The cheap cinematic stack** (from `docs/research/cheap-painterly-postfx.md`):
 - **Bake what doesn't move:** terrain ambient occlusion, canopy contact
-  shading and (later) sun shadow, baked once per map. No live SSAO.
+  shading, the sun shadow and the sky's occlusion by crowns, baked once per
+  map. No live SSAO.
 - **One merged finishing pass:** warm amber grade with split toning, soft
   highlight roll-off, cool vignette, paper texture, dithering.
 - **Valley mist and height fog in the materials:** warm where sunlit, cool
