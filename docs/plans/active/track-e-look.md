@@ -679,6 +679,6 @@ tallies, and what changed from this plan).
   tree. Its targets were missed (the valley narrowly, the slope by more): **slope shadows are still the weaker
   ones**, open for L9w. The soft shadows (#60, `docs/plans/done/soft-shadows.md`): the penumbra grows with the
   distance to the caster, each crown hides its share of the sky, the shadow deepens on a wood's floor; baked on
-  load, nothing per frame. The guard's one regressed block was waived by the owner. The numbers, in one place:
-  `track-e-results/shadows-foliage.md`.
+  load, nothing per frame. The guard's one regressed block was waived by the owner. The cost, and links to every
+  other number: `track-e-results/shadows-foliage.md`.
 - **L7a and L7b:** under L7, above.

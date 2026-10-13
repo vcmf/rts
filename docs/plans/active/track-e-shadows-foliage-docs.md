@@ -13,8 +13,8 @@ each updated their own plan and `docs/systems/look.md`, but not the track's docu
 
 - `docs/plans/active/track-e-look.md`: L7's progress (what is built, what L7 still owes), the shadow work as a
   stage-1 item, the owner's answer on tilt-shift (question 3), the change log.
-- `docs/plans/active/track-e-results/`: the day's measurements in one place (the cost of the stack, the shadows,
-  the crowns, the guard), with the bench JSON of the dev Mac (proxies).
+- `docs/plans/active/track-e-results/`: the cards' and the volume light's cost (one-page A/Bs on the frame
+  interval, with their JSON) and what the plans found, linked to the plans that hold the numbers.
 - `docs/art-bible.md`: the light as built (the penumbra, the sky's occlusion, the woods), the crowns' soft ramp as
   an exception to the three bands (a proposed decision), depth of field reopened as a question.
 - `docs/decisions/0022-soft-ramp-for-foliage.md` (proposed) and the decisions' index. (0020 and 0021 are taken by
@@ -56,3 +56,10 @@ Not in scope: `docs/proposals/engine-design.md` (a proposal is frozen once built
   (2026-10-13):** the results doc keeps only one-page A/Bs read on the frame interval (the normal scene run again
   that way, and the forest bench), every other number links to the plan that measured it, the across-run benches
   are dropped. The round count restarts.
+- **Redesign, round 1:** no severe finding (every number recomputed from the JSON matched). Fixed: the cards'
+  normal-scene cost read past its own repeat spread (now: nothing clear of the noise, as for the volume light);
+  the forest rows copied from the forest bench, and narrower than its range (now linked, with its range); a
+  headroom read from an absolute frame time; the JSON named by a stale build hash (now by their code, ae87e4c);
+  `?bench=trees` still "for GPU time" in the system doc and its code comment; the guard's `fails*` values called
+  unknowable (unrecorded: a guard run prints them, owed); the "numbers in one place" wording in the track plan and
+  this scope; the forest called unmeasured in the system doc; "A B B A" overstated. Review stops here.

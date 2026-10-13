@@ -143,7 +143,8 @@ The plan: `docs/plans/done/l7a-canopy-cards.md`. Not the default: the arm the ow
 - **Shadows** (`src/look/bakes.ts`): the cards cast in the sun's pass, facing the sun and cut by the atlas two
   mips finer than the sun's view asks, so the gaps between leaves survive; the disabled pack models cast nothing.
 - **Switches**: `?cardsize`, `?cardcover`, `?cardsink` (`CARD_DEFAULTS`); `?bench=trees` benches the cards
-  against the pack crowns, for GPU time only (the shadow map is baked once, with the cards).
+  against the pack crowns, for the frame's cost only (the shadow map is baked once, with the cards); read its frame
+  interval, not the GPU timer, which runs long on ANGLE Metal (`docs/plans/done/forest-bench.md`).
 
 - **The crowns as volumes** (L7b, `docs/plans/done/l7b-crown-volume.md`; `VOLUME` and `SOFT_RAMP` on the card
   materials, `?volume=off` puts back L7a's light): each card carries its crown's ellipsoid (`aEllC`, `aEllR`: the
@@ -287,7 +288,8 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
 
 - **The leaf-card crowns are not the default arm yet:** a dark coat in a tree's shadow loses separation with
   them (#63); decision 0022 (their soft ramp) is proposed; their outline aliases at the widest zoom (L8); a
-  battlefield forest and the min-spec laptop are not measured (`docs/plans/active/track-e-results/shadows-foliage.md`).
+  forest is where they cost the most (a cheaper forest is owed: `docs/plans/done/forest-bench.md`), and the min-spec laptop and the foliage's total
+  against L7's gate are not measured (`docs/plans/active/track-e-results/shadows-foliage.md`).
 - **The guard has no block in a wood**, where the soft shadows make the floor darkest.
 - **The valley mist tints sunlit snow orange** (#62).
 
