@@ -2,7 +2,7 @@
   "format": 1,
   "id": "generated",
   "name": "Generated Valley",
-  "note": "The five-seeds map (docs/plans/active/m3-generators.md, M3b): the valley's ridges and road, everything else from generators: a meandered brook with fords and a bridge, noise ground, copses and fields scattered clear of the water, the road, the village and both armies' ground, and a street village. Change the seed for another battlefield.",
+  "note": "The five-seeds map (docs/plans/active/m3-generators.md, M3b): the valley's ridges and road, everything else from generators: a meandered brook with fords and a bridge, noise ground, copses and fields scattered together (one mix) clear of the water, the road, the village and both armies' ground, and a street village. Change the seed for another battlefield.",
   "seed": 1,
   "season": "summer",
   "extent": {"w":2000,"h":2000},
@@ -25,7 +25,6 @@
     {"id":"army-south","kind":"ground.meadow","area":[[[-420,-400],[320,-400],[320,-180],[-420,-180]]],"note":"side 0's ground in the S1e battle: kept clear of woods and fields"},
     {"id":"army-north","kind":"ground.meadow","area":[[[-320,180],[420,180],[420,400],[-320,400]]],"note":"side 1's ground, mirrored"},
     {"id":"village","kind":"built.village","along":{"id":"high-road","from":1450,"to":1580},"houses":8,"gen":{"street-village":{"min":5}}},
-    {"id":"copses","kind":"veg.wood.broad","area":[[[-580,-580],[580,-580],[580,580],[-580,580]]],"gen":{"scatter":{"count":6,"radiusMin":30,"radiusMax":60,"avoid":["water","way","built","army-south","army-north"],"clearance":25,"min":4}}},
-    {"id":"fields","kind":"ground.field.wheat","area":[[[-580,-580],[580,-580],[580,580],[-580,580]]],"gen":{"scatter":{"count":5,"radiusMin":30,"radiusMax":45,"avoid":["water","way","built","veg","army-south","army-north"],"clearance":15,"coherence":0.8,"min":3}}}
+    {"id":"groves","kind":"veg.wood.broad","area":[[[-580,-580],[580,-580],[580,580],[-580,580]]],"gen":{"scatter":{"mix":[{"kind":"veg.wood.broad","count":6,"radiusMin":30,"radiusMax":60,"min":4},{"kind":"ground.field.wheat","count":5,"radiusMin":30,"radiusMax":45,"coherence":0.8,"min":3}],"avoid":["water","way","built","army-south","army-north"],"clearance":20}},"note":"copses and wheat fields placed together, apart from each other"}
   ]
 }

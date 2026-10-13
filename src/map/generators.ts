@@ -1,49 +1,42 @@
 // The generators (docs/proposals/map-engine.md §3.4, docs/plans/active/m3-generators.md): for each, the shape it
 // reads, the shape it writes, its parameters (checked by the validator like attributes), what it reads of the other
 // features, and the pure function that runs it. A generator's randomness comes from its seed alone:
-// hash(map.seed, the feature's id, its name). Expansion (src/map/expand.ts) runs each after what it reads, and shows
-// it only finished features.
-import type { AttrValue, Feature, FieldSpec, Pt, ShapeName } from './schema.ts'
+// hash(map.seed, the feature's id, its name). Expansion (src/map/expand.ts, decision 0023) runs each after everything
+// it reads, as a chain (a cycle is an error), and shows it only finished features.
+import type { AttrValue, Catalogue, Feature, FieldSpec, Pt, ShapeName } from './schema.ts'
 import { HEADING_MAX, meander } from './meander.ts'
 import type { ClumpParams } from './clump.ts'
 import { clump, clumpMaxRadius, CLUMP_DEFAULTS } from './clump.ts'
 import { streetVillage } from './street-village.ts'
 import { scatterSites } from './scatter.ts'
 import { boxDistance, boxOf, distanceTo, distanceToPolygon, matches } from './reach.ts'
+import { allowedIn, categoryOf, checkValue, kindChain, kindMeta } from './catalogue.ts'
 import { seedOf } from './seed.ts'
 import { cm, num } from './util.ts'
 
 export interface ParamSpec extends FieldSpec { required?: boolean }
-// a selector's state when a generator runs: a finished feature (or a generator that has run, whatever it produced),
-// a generator still to run (only ever a soft read inside a group of mutual readers: it sees nothing of it yet), or
-// nothing the map holds
-export type Status = 'finished' | 'pending' | 'unknown'
-// what a generator sees: its feature (resolved), its parameters and seed, and the finished features
+// what a generator sees: its feature (resolved), its parameters and seed, and the finished features (everything it
+// reads has run: the reads form a chain)
 export interface GenContext {
-  f: Feature; attrs: Record<string, AttrValue>; params: Record<string, unknown>; seed: number; mapSeed: number
+  f: Feature; kind: string; attrs: Record<string, AttrValue>; params: Record<string, unknown>; seed: number; mapSeed: number
   features: Map<string, Feature>; attrsOf(id: string): Record<string, AttrValue>; kindOf(id: string): string
-  isKind(sel: string): boolean       // a category or a kind of the catalogue (else a selector names a feature)
-  status(id: string): Status         // for a selector that names a feature
-  // the output of the generators that ran earlier in its group and wanted to keep clear of it (separation is mutual:
-  // if A keeps clear of B, they end up apart whichever runs first): it keeps clear of these too
-  keepClearOf: Feature[]
 }
 // its output: the feature's new shape (or null: the feature leaves the expanded map), and any children
 export interface GenOutput { self: Partial<Feature> | null; children?: Feature[] }
-// what it reads of the others, as selectors (ids, categories, kind prefixes). Hard: it cannot run without them (a
-// village's road, a scatter's `within`), so they always come first, and a loop of hard reads is an error. Soft: it
-// keeps clear of them (water, buildings, a scatter's `avoid`); inside a group of generators that read each other, a
-// soft read of one not yet run sees nothing of it.
-export interface Reads { hard: string[]; soft: string[] }
 export interface GenSpec {
   kinds?: string[]                 // the kinds (dotted prefixes) it may run on; any kind taking its output when absent
   input: (ShapeName | 'none')[]    // the shapes it reads (the feature's own shape, before expansion; 'none': no shape)
   output: ShapeName                // the shape it writes (for itself or its children), which the kind must take
   params: Record<string, ParamSpec>
   selects?: string[]               // the list parameters that name features (ids, categories or kind prefixes)
-  reads?(f: Feature, params: Record<string, unknown>): Reads
-  childKind?(kind: string): string // the kind of the children it writes, when it writes any (ids <feature>-<n>)
+  // what it reads of the other features, as selectors (ids, categories, kind prefixes): it runs after every generator
+  // whose output these could match
+  reads?(f: Feature, params: Record<string, unknown>): string[]
+  // the kinds of the children it writes, when it writes any (ids <feature>-<n>)
+  childKinds?(kind: string, params: Record<string, unknown>): string[]
   removesSelf?: boolean            // its own feature leaves the expanded map (a scatter's region)
+  // its own checks of its parameters, beyond their specs (a scatter's mix entries against the catalogue)
+  check?(params: Record<string, unknown>, cat: Catalogue): { key: string; message: string }[]
   run(ctx: GenContext): GenOutput
 }
 
@@ -52,22 +45,30 @@ export function childOf(id: string): { parent: string; n: number } | null {
   const m = /^(.*)-([1-9]\d*)$/.exec(id)
   return m ? { parent: m[1], n: Number(m[2]) } : null
 }
+// the parents that pinned children name (origin.parent): a selector may still name the parent to mean them
+export const pinnedParentsOf = (features: Feature[]): Set<string> => new Set(features.flatMap(f => (typeof f.origin?.parent === 'string' ? [f.origin.parent] : [])))
 
 const P = (p: Record<string, unknown>, k: string): number | undefined => (typeof p[k] === 'number' ? p[k] as number : undefined)
 const list = (v: unknown): string[] => (Array.isArray(v) ? v as string[] : [])
-// the finished features with a shape that a set of selectors matches (never the generator's own feature)
 const hasShape = (g: Feature) => !!(g.line || g.area || g.circle || g.ellipse || g.point)
+// the finished features with a shape that a set of selectors matches (never the generator's own feature), each once
 const select = (ctx: GenContext, sels: string[]) => [...ctx.features.values()].filter(g => g.id !== ctx.f.id && hasShape(g) && sels.some(s => matches(s, g, ctx.kindOf(g.id))))
 
-// the parents that pinned children name (origin.parent): a selector may still name the parent to mean them
-export const pinnedParentsOf = (features: Feature[]): Set<string> => new Set(features.flatMap(f => (f.origin?.parent ? [f.origin.parent] : [])))
-// every selector that names a feature must name one the map holds (a kind may match nothing on a map; a name that does
-// is a mistake: a child past its parent's count, a feature since removed)
-function checkNames(ctx: GenContext, sels: string[]): void {
-  for (const sel of sels) if (!ctx.isKind(sel) && ctx.status(sel) === 'unknown') throw new Error(`"${sel}" names nothing on the map`)
-}
+const VILLAGE_KEEPS_CLEAR = ['water', 'built', 'zone.nogo', 'way', 'barrier']   // what a house keeps clear of
+// the largest a street-village house may be (street-village.ts: LENGTH ≤ 13, DEPTH ≤ 9): the box pruning's margin
+const HOUSE_REACH = 16
 
-const VILLAGE_KEEPS_CLEAR = ['water', 'built', 'zone.nogo', 'way', 'barrier']   // soft reads: what a house keeps clear of
+// a scatter's kinds: its mix's entries, or one entry from the scatter itself
+interface Entry { kind: string; count: number; radiusMin: number; radiusMax: number; min: number; coherence: number; raggedness: number; set: Record<string, AttrValue> }
+const ENTRY_KEYS = ['kind', 'count', 'radiusMin', 'radiusMax', 'min', 'coherence', 'raggedness', 'set']
+const ONE_KIND_KEYS = ['count', 'radiusMin', 'radiusMax', 'min', 'coherence', 'raggedness']
+function entriesOf(kind: string, p: Record<string, unknown>): Entry[] {
+  const one = (e: Record<string, unknown>, k: string, set: Record<string, AttrValue>): Entry => {
+    const count = P(e, 'count')!, radiusMin = P(e, 'radiusMin') ?? 30
+    return { kind: k, count, radiusMin, radiusMax: P(e, 'radiusMax') ?? Math.max(radiusMin, 60), min: P(e, 'min') ?? count, coherence: P(e, 'coherence') ?? CLUMP_DEFAULTS.coherence, raggedness: P(e, 'raggedness') ?? CLUMP_DEFAULTS.raggedness, set }
+  }
+  return Array.isArray(p.mix) ? (p.mix as Record<string, unknown>[]).map(e => one(e, e.kind as string, (e.set ?? {}) as Record<string, AttrValue>)) : [one(p, kind, {})]
+}
 
 export const GENERATOR_SPECS: Record<string, GenSpec> = {
   meander: {
@@ -95,21 +96,20 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
     },
   },
   'street-village': {
-    kinds: ['built.village'], input: ['area', 'none'], output: 'area', childKind: () => 'built.house',
-    reads: f => ({ hard: [f.along!.id], soft: VILLAGE_KEEPS_CLEAR }),
+    kinds: ['built.village'], input: ['area', 'none'], output: 'area', childKinds: () => ['built.house'],
+    reads: f => [f.along!.id, ...VILLAGE_KEEPS_CLEAR],
     params: { min: { type: 'int', unit: 'count', min: 0, max: 500 } },
     run: ctx => {
       const { f, attrs, params, seed, features, attrsOf, kindOf } = ctx
       const along = f.along!, roadF = features.get(along.id)!, road = roadF.line!, roadA = attrsOf(along.id), rw = num(roadA.width, 5)
       const want = num(attrs.houses, 12), min = P(params, 'min') ?? want
-      // what a house keeps clear of, as a whole polygon: what its soft reads match among the finished features (its
-      // own road aside: a house keeps 1 m from it where it bends back), at 2 m from water, a barrier's band (its
-      // thickness in 2 m cells, centred, proposal §3.6) plus 1 m, and 1 m from the rest (a bridge has no shape)
+      // what a house keeps clear of, as a whole polygon (its own road aside: a house keeps 1 m from it where it bends
+      // back): 2 m from water, a barrier's band (its thickness in 2 m cells, centred, proposal §3.6) plus 1 m, and
+      // 1 m from the rest (a bridge has no shape)
       const gap = (g: Feature) => matches('water', g, kindOf(g.id)) ? 2 : matches('barrier', g, kindOf(g.id)) ? num(attrsOf(g.id).thickness, 2) + 1 : 1
-      const near = [...select(ctx, VILLAGE_KEEPS_CLEAR).filter(g => g.id !== along.id), ...ctx.keepClearOf.filter(hasShape)]
-        .map(g => ({ g, box: boxOf(g, attrsOf(g.id)), gap: gap(g) }))
-      // a house is far from a feature whose box is farther than the gap from every corner: skipped without measuring
-      const clear = (house: Pt[]) => near.every(({ g, box, gap }) => house.every(([x, z]) => boxDistance(box, x, z) > gap + 30) || distanceToPolygon(g, attrsOf(g.id), house) > gap)
+      const near = select(ctx, VILLAGE_KEEPS_CLEAR).filter(g => g.id !== along.id).map(g => ({ g, box: boxOf(g, attrsOf(g.id)), gap: gap(g) }))
+      // a feature whose box lies farther than the gap plus a house's reach from a corner cannot touch the house
+      const clear = (house: Pt[]) => near.every(({ g, box, gap }) => house.every(([x, z]) => boxDistance(box, x, z) > gap + HOUSE_REACH) || distanceToPolygon(g, attrsOf(g.id), house) > gap)
         && distanceToPolygon(roadF, roadA, house) > 1
       const row = streetVillage(road, rw, along.from, along.to, want, seed, { clear })
       if (row.houses.length < min) throw new Error(`placed ${row.houses.length} of ${want} houses between ${along.from} and ${along.to} m along "${along.id}"; lengthen the stretch, ask fewer houses, or allow fewer with min`)
@@ -119,39 +119,68 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
     },
   },
   scatter: {
-    input: ['area'], output: 'area', childKind: kind => kind, removesSelf: true, selects: ['avoid', 'within'],
-    reads: (_f, p) => ({ hard: list(p.within), soft: list(p.avoid) }),
+    input: ['area'], output: 'area', removesSelf: true, selects: ['avoid', 'within'],
+    childKinds: (kind, p) => (Array.isArray(p.mix) ? (p.mix as Record<string, unknown>[]).map(e => String(e.kind)) : [kind]),
+    reads: (_f, p) => [...list(p.avoid), ...list(p.within)],
     params: {
-      count: { type: 'int', unit: 'count', min: 1, max: 500, required: true },
+      count: { type: 'int', unit: 'count', min: 1, max: 500 },
       radiusMin: { type: 'number', unit: 'm', min: 2, max: 2000 },
       radiusMax: { type: 'number', unit: 'm', min: 2, max: 2000 },
+      mix: { type: 'entries' },   // several kinds placed jointly: [{ kind, count, radiusMin?, radiusMax?, min?, coherence?, raggedness?, set? }]
       avoid: { type: 'list' }, clearance: { type: 'number', unit: 'm', min: 0, max: 2000 },
       within: { type: 'list' }, reach: { type: 'number', unit: 'm', min: 0, max: 5000 },
       min: { type: 'int', unit: 'count', min: 0, max: 500 },
       coherence: { type: 'number', unit: '0..1', min: 0, max: 1 }, raggedness: { type: 'number', unit: '0..1', min: 0, max: 1 },
     },
+    check: (p, cat) => {
+      const out: { key: string; message: string }[] = []
+      if (!Array.isArray(p.mix)) { if (p.count === undefined) out.push({ key: 'count', message: 'is required (or give a mix)' }); return out }
+      for (const k of ONE_KIND_KEYS) if (p[k] !== undefined) out.push({ key: k, message: 'belongs to each entry of a mix, not to the scatter' })
+      ;(p.mix as Record<string, unknown>[]).forEach((e, n) => {
+        const at = `mix[${n}]`
+        for (const k of Object.keys(e)) if (!ENTRY_KEYS.includes(k)) out.push({ key: `${at}.${k}`, message: `unknown field (${ENTRY_KEYS.join(', ')})` })
+        const chain = typeof e.kind === 'string' ? kindChain(cat, e.kind) : null
+        if (!chain) { out.push({ key: `${at}.kind`, message: 'must name a kind in the catalogue' }); return }
+        if (!kindMeta(cat, chain).shapes.includes('area')) out.push({ key: `${at}.kind`, message: `${e.kind} takes no area` })
+        const specs: Record<string, FieldSpec> = { count: { type: 'int', min: 1, max: 500 }, radiusMin: { type: 'number', min: 2, max: 2000 }, radiusMax: { type: 'number', min: 2, max: 2000 }, min: { type: 'int', min: 0, max: 500 }, coherence: { type: 'number', min: 0, max: 1 }, raggedness: { type: 'number', min: 0, max: 1 } }
+        if (e.count === undefined) out.push({ key: `${at}.count`, message: 'is required' })
+        for (const [k, spec] of Object.entries(specs)) if (e[k] !== undefined) { const m = checkValue(spec, e[k]); if (m) out.push({ key: `${at}.${k}`, message: m }) }
+        if (typeof e.radiusMin === 'number' && typeof e.radiusMax === 'number' && e.radiusMax < e.radiusMin) out.push({ key: `${at}.radiusMax`, message: 'is below radiusMin' })
+        if (e.set !== undefined) {
+          if (typeof e.set !== 'object' || e.set === null || Array.isArray(e.set)) out.push({ key: `${at}.set`, message: 'must be an object of attributes' })
+          else for (const [a, v] of Object.entries(e.set)) {
+            const spec = Object.hasOwn(cat.attributes, a) ? cat.attributes[a] : undefined
+            if (!spec) out.push({ key: `${at}.set.${a}`, message: 'unknown attribute' })
+            else if (!allowedIn(cat, spec, categoryOf(e.kind as string))) out.push({ key: `${at}.set.${a}`, message: `is not an attribute of ${categoryOf(e.kind as string)}.* kinds` })
+            else { const m = checkValue(spec, v, true); if (m) out.push({ key: `${at}.set.${a}`, message: m }) }
+          }
+        }
+      })
+      return out
+    },
     run: ctx => {
       const { f, params, seed, mapSeed, attrsOf } = ctx
-      const count = P(params, 'count')!, rMin = P(params, 'radiusMin') ?? 30, rMax = P(params, 'radiusMax') ?? Math.max(rMin, 60)
-      if (rMax < rMin) throw new Error(`radiusMax (${rMax}) is below radiusMin (${rMin})`)
-      const coherence = P(params, 'coherence') ?? CLUMP_DEFAULTS.coherence, ragged = P(params, 'raggedness') ?? CLUMP_DEFAULTS.raggedness
-      checkNames(ctx, [...list(params.avoid), ...list(params.within)])
-      const avoid = [...select(ctx, list(params.avoid)), ...ctx.keepClearOf.filter(hasShape)].map(g => ({ g, box: boxOf(g, attrsOf(g.id)) }))
+      const entries = entriesOf(ctx.kind, params)
+      // a single kind's children carry the scatter's own fields (its kind or preset, its attributes); a mix's, their
+      // entry's kind and set
+      const single = Array.isArray(params.mix) ? null : Object.fromEntries(Object.entries(f).filter(([k]) => !['id', 'gen', 'area', 'origin'].includes(k)))
+      for (const e of entries) if (e.radiusMax < e.radiusMin) throw new Error(`radiusMax (${e.radiusMax}) is below radiusMin (${e.radiusMin})`)
+      const avoid = select(ctx, list(params.avoid)).map(g => ({ g, box: boxOf(g, attrsOf(g.id)) }))
       const within = select(ctx, list(params.within)).map(g => ({ g, box: boxOf(g, attrsOf(g.id)) }))
       if (list(params.within).length && !within.length) throw new Error(`nothing matches within (${list(params.within).join(', ')}): no child could be placed near it`)
       const reach = P(params, 'reach') ?? 100
       const sites = scatterSites(f.area!, {
-        count, radiusMin: rMin, radiusMax: rMax, clearance: P(params, 'clearance') ?? 20, spread: clumpMaxRadius(coherence, ragged),
+        entries: entries.map(e => ({ count: e.count, radiusMin: e.radiusMin, radiusMax: e.radiusMax, spread: clumpMaxRadius(e.coherence, e.raggedness) })),
+        clearance: P(params, 'clearance') ?? 20,
         // a feature whose box is already far enough cannot be too close: skipped without measuring it
         clear: (x, z, need) => avoid.every(({ g, box }) => boxDistance(box, x, z) >= need || distanceTo(g, attrsOf(g.id), x, z) >= need),
         near: within.length ? (x, z) => within.some(({ g, box }) => boxDistance(box, x, z) <= reach && distanceTo(g, attrsOf(g.id), x, z) <= reach) : undefined,
       }, seed)
-      const min = P(params, 'min') ?? count
-      if (sites.length < min) throw new Error(`placed ${sites.length} of ${count} in the region; widen it, ask fewer or smaller, ease the clearance, or allow fewer with min`)
-      const own = Object.fromEntries(Object.entries(f).filter(([k]) => !['id', 'gen', 'area', 'origin'].includes(k)))
+      const short = entries.map((e, k) => ({ e, n: sites.filter(s => s.entry === k).length })).filter(({ e, n }) => n < e.min)
+      if (short.length) throw new Error(`placed ${short.map(({ e, n }) => `${n} of ${e.count} ${e.kind}`).join(', ')} in the region; widen it, ask fewer or smaller, ease the clearance, or allow fewer with min`)
       const children: Feature[] = sites.map((s, k) => {
-        const id = `${f.id}-${k + 1}`
-        return { ...own, id, area: [clump([cm(s.x), cm(s.z)], s.r, s.r, 0, { coherence, raggedness: ragged }, seedOf(mapSeed, id, 'clump'))] } as Feature
+        const id = `${f.id}-${k + 1}`, e = entries[s.entry]
+        return { ...(single ?? { ...e.set, kind: e.kind }), id, area: [clump([cm(s.x), cm(s.z)], s.r, s.r, 0, { coherence: e.coherence, raggedness: e.raggedness }, seedOf(mapSeed, id, 'clump'))] } as Feature
       })
       return { self: null, children }
     },

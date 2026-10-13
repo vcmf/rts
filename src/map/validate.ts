@@ -75,7 +75,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
   const parents = new Map<string, string>()
   for (const f of map.features) if (isObj(f) && typeof f.id === 'string' && isObj(f.gen)) {
     const g = Object.keys(f.gen)[0], spec = Object.hasOwn(GENERATOR_SPECS, g) ? GENERATOR_SPECS[g] : undefined
-    if (spec?.childKind) parents.set(f.id, spec.removesSelf ? `remove "${f.id}" itself (its region leaves the map) and keep its expanded children` : `replace "${f.id}" by its expanded form (it keeps the area it was given) and keep its expanded children`)
+    if (spec?.childKinds) parents.set(f.id, spec.removesSelf ? `remove "${f.id}" itself (its region leaves the map) and keep its expanded children` : `replace "${f.id}" by its expanded form (it keeps the area it was given) and keep its expanded children`)
   }
   const parentOf = (x: string): string | undefined => { const c = childOf(x); return c && parents.has(c.parent) ? c.parent : undefined }
   // ids that pinned children name as their parent: a selector may still name the parent to mean them
@@ -118,6 +118,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
           const e = checkValue(gen.params[k], v); if (e) bad(id, `${gp}.${k}`, e)
         }
         for (const [k, spec] of Object.entries(gen.params)) if (spec.required && !(k in params)) bad(id, `${gp}.${k}`, 'is required')
+        for (const problem of gen.check?.(params as Record<string, unknown>, cat) ?? []) bad(id, `${gp}.${problem.key}`, problem.message)
         // the parameters that name features: each an id (a generator's children too, <id>-<n>), a category, or a
         // dotted kind prefix in the catalogue; never the feature itself
         for (const k of gen.selects ?? []) {

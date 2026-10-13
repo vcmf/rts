@@ -3,7 +3,7 @@
 import type { AttrSpec, AttrValue, Catalogue, FieldSpec, KindSpec, RefName, ShapeName, Season } from './schema.ts'
 import { REFS, SEASONS, SHAPES } from './schema.ts'
 
-const TYPES = ['number', 'int', 'enum', 'string', 'object']
+const TYPES = ['number', 'int', 'enum', 'string', 'object']   // the catalogue's attribute types (list and entries are for generator parameters)
 
 export interface Issue { id: string | null; path: string; message: string }
 
@@ -59,6 +59,7 @@ export function checkValue(spec: AttrSpec | FieldSpec, v: unknown, rampOk = fals
     case 'enum': return typeof v === 'string' && spec.values!.includes(v) ? null : `must be one of ${spec.values!.join(', ')}`
     case 'string': return typeof v === 'string' ? null : 'must be a string'
     case 'list': return Array.isArray(v) && v.length > 0 && v.every(x => typeof x === 'string') ? null : 'must be a list of names'
+    case 'entries': return Array.isArray(v) && v.length > 0 && v.every(x => typeof x === 'object' && x !== null && !Array.isArray(x)) ? null : 'must be a list of objects'
     case 'object': {
       if (typeof v !== 'object' || v === null || Array.isArray(v)) return 'must be an object'
       const fields = (spec as AttrSpec).fields ?? {}

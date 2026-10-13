@@ -58,24 +58,20 @@ maps/kinds.json ──► checkCatalogue ─┐
 - **Resolution** (`src/map/resolve.ts`): the catalogue along the path, the map preset, the feature's own fields,
   the season's overrides (the catalogue's, then the feature's), the state's overlay. This is the one place the order
   lives.
-- **Expansion** (`src/map/expand.ts`), by dependency, over finished features only (decision 0022):
+- **Expansion** (`src/map/expand.ts`), as a chain over finished features only (decision 0023):
   - a generator sees only finished features: the author's without a generator, and the generators that have
     already run (their output and children). One still to run is invisible, so its input (a guide, a region)
     never leaks;
-  - each generator declares what it `reads`, as selectors (`src/map/generators.ts`), hard or soft. Hard: it
-    cannot run without them, by name (a village's road, a scatter's `within` naming a feature). Soft: it keeps
-    clear of them (a village's water, buildings, no-go zones, ways and barriers; a scatter's `avoid`), and a
-    `within` by kind, which orders only softly. Meander and clump read nothing;
-  - F waits for G when what F reads could match what G produces (G's id, its children's ids, the kinds of G and of
-    its children). The strongly connected groups of that graph run in dependency order (Tarjan). Inside a group of
-    generators that read each other, hard reads come first, then the ids, each seeing the finished features: a
-    soft read of one not yet run sees nothing of it, but separation is mutual: a generator also keeps clear of the
-    earlier members that wanted to keep clear of it (`keepClearOf`), so a ring of avoids ends up pairwise apart. A
-    loop of hard reads is an error naming its members (those only waiting on it are skipped). The
-    file's order never matters; a rename can change the order only inside such a group (and, as always, the
-    renamed feature's seed). A generator whose reads include one that failed is skipped, so the first error is
-    the one reported. Once everything has run, every selector that names a feature must name one of the expanded
-    map. A feature's id may not be a category's name (a selector would mean both);
+  - each generator declares what it `reads`, as selectors (`src/map/generators.ts`): a village its road, water,
+    buildings, no-go zones, ways and barriers; a scatter its `avoid` and `within`. Meander and clump read nothing;
+  - F reads G when one of F's selectors could match what G produces (G's id, its children's ids, the kinds of G and
+    of its children); a generator never reads itself. The generators run in dependency order (Tarjan's strongly
+    connected groups, each emitted after what it reads). The reads must form a chain: a group of two or more is a
+    cycle, an error on each member naming what it reads, by which selector, and how to break it (kinds that must
+    stay apart go in one scatter's `mix`; a hand-drawn feature is named by id rather than by kind). So neither the
+    file's order nor the ids change the output (beyond seeds). A generator reading one that failed (or a cycle) is
+    skipped, so the first error is the one reported. Once everything has run, every selector that names a feature
+    must name one of the expanded map. A feature's id may not be a category's name (a selector would mean both);
   - an author's id of the form `<parent>-<n>` (`childOf`), where the parent writes children, is reserved while
     the parent generates. To pin a street-village's houses, replace the village by its expanded form (it keeps the
     area it was given) and keep its houses; to pin a scatter's children, remove the scatter feature itself (its
@@ -115,7 +111,11 @@ maps/kinds.json ──► checkCatalogue ─┐
   - `scatter` (`src/map/scatter.ts`), on an area kind given as its region: `count` clumps of the feature's kind and
     attributes, by seeded rejection sampling, each (at its largest radius, from clump's own harmonics) inside the
     region, `clearance` m clear of what it `avoid`s and of its siblings, and within `reach` of what it stays
-    `within`. A selector is an id (a generator's id names its children too), a category or a kind prefix; a
+    `within`. With `mix: [{ kind, count, radiusMin?, radiusMax?, min?, coherence?, raggedness?, set? }, …]` in place
+    of `count` and the clump fields, it places several kinds jointly, every child `clearance` m from every other
+    whatever their kinds (each entry's children take its kind, the scatter's attributes, then its `set`; the
+    validator checks each entry against the catalogue). This is how woods and fields keep apart: two scatters
+    avoiding each other would be a cycle. A selector is an id (a generator's id names its children too), a category or a kind prefix; a
     feature cannot name itself, and a `within` that matches nothing is an error. The largest radius comes from
     `clumpMaxRadius`, `clump`'s own bound. A selector that names a feature (an id, a child's id) must name one the
     map holds; a generator that ran and placed nothing still counts. Avoided features are skipped by their boxes

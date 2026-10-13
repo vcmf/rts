@@ -66,14 +66,16 @@ cannot be both short and rich.
   - each keeps `clearance` metres from the features it must `avoid` (kinds, as category or dotted prefixes, or
     ids) and from its siblings;
   - each lies within `reach` metres of a feature it must stay `within`, when that list is given;
-  - fewer than `count` placed is an error unless `min` allows it.
+  - fewer than `count` placed is an error unless `min` allows it;
+  - `mix: [{ kind, count, … }]` places several kinds jointly, each child clear of every other (redesign 2).
 
-  The order of expansion is by dependency (round 3's redesign): a scatter runs after whatever it could read. The
-  region feature itself leaves the expanded map; its children stay.
+  Generators run as a chain (redesign 2, decision 0023): each after whatever it could read; a cycle is an error.
+  The region feature itself leaves the expanded map; its children stay.
 - **Five seeds:** `maps/generated.map.json`, an intent map in the valley's layout:
   - ridges and a meandered brook with its fords and bridge;
   - noise ground;
-  - scattered copses kept off the water, the road and the armies' ground;
+  - one scatter of groves, woods and wheat fields in its mix, kept off the water, the road, the village and the
+    armies' ground;
   - a street village along the road.
 
   Five map seeds give five valid, distinct expansions that compile to sim data and run the S1e battle with finite
@@ -282,3 +284,25 @@ The round count restarts after this redesign. Round 3's other findings are taken
   - one `pending` set;
   - the ordering rules are a decision record (0022).
 
+**After the redesign, round 3** (2 severe): **stop and redesign** (more than three rounds of the same class of fault).
+- **Severe:** a `within` by kind, read softly, behaved as a keep-clear inside a group: a scatter that should stay
+  near the woods of a scatter not yet run saw none of them.
+- **Severe:** the order inside a group still depended on ids, so a rename could lose a clearance that mutual
+  separation was meant to keep.
+
+Every fault of the redesign's three rounds lived inside a group of generators that read each other. The user chose
+**no cycles, plus joint placement**.
+
+### Redesign 2: a chain, and a scatter's mix
+
+- Generators must form a chain. A cycle of reads (two or more) is an error on each member, naming what it reads,
+  by which selector, and how to break it. Hard and soft reads, mutual separation (`keepClearOf`) and the order
+  inside a group are gone.
+- The one common mutual case, kinds that must keep apart, is one scatter with `mix`: every entry's clumps are
+  placed in one pass, every child `clearance` from every other whatever their kinds. Each entry is checked
+  against the catalogue (kind, area shape, attributes in `set`, radii); `count` and the clump fields move into the
+  entries.
+- `maps/generated.map.json`: the copses and fields scatters become one scatter, `groves`.
+- Decision 0023 supersedes 0022.
+
+The round count restarts.

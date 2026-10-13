@@ -8,7 +8,7 @@
 import type { Catalogue, Feature, MapFile } from './schema.ts'
 import { SHAPES } from './schema.ts'
 import type { Issue } from './catalogue.ts'
-import type { GenOutput, Status } from './generators.ts'
+import type { GenOutput } from './generators.ts'
 import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import { resolve } from './resolve.ts'
 import { seedOf } from './seed.ts'
@@ -27,95 +27,50 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
   // generator sees only these: one still to run is invisible, so its input (a guide, a region) never leaks
   const current = new Map(map.features.filter(f => !f.gen).map(f => [f.id, f])), resolved = new Map<string, ReturnType<typeof resolve>>()
   const res = (f: Feature) => { let r = resolved.get(f.id); if (!r) { r = resolve(f, map, cat); resolved.set(f.id, r) } return r }
-  const children: Feature[] = [], ran = new Set<string>(), failed = new Set<string>(), outputs = new Map<string, Feature[]>()
+  const children: Feature[] = [], ran = new Set<string>(), failed = new Set<string>()
   const pinnedParents = pinnedParentsOf(map.features)
-  let keepClearOf: Feature[] = []
   const runOne = (f: Feature) => {
     const name = Object.keys(f.gen!)[0], params = f.gen![name] as Record<string, unknown>, spec = GENERATOR_SPECS[name]
     const origin = { generator: name, params, version: EXPAND_VERSION }
     let out: GenOutput
     try {
       out = spec.run({
-        f, attrs: res(f).attrs, params, seed: seedOf(map.seed, f.id, name), mapSeed: map.seed, features: current,
+        f, kind: res(f).kind, attrs: res(f).attrs, params, seed: seedOf(map.seed, f.id, name), mapSeed: map.seed, features: current,
         attrsOf: id => res(current.get(id)!).attrs, kindOf: id => res(current.get(id)!).kind,
-        isKind: sel => isKindName(cat, sel), status, keepClearOf,
       })
     } catch (err) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen.${name}`, message: (err as Error).message }); failed.add(f.id); return }
     ran.add(f.id)
-    const made: Feature[] = []
     if (out.self !== null) {
       // the feature without its generator, and without its old shape when the generator gives a new one (a village
       // with its own area keeps it)
       const isShape = (k: string) => (SHAPES as readonly string[]).includes(k), newShape = Object.keys(out.self).some(isShape)
       const kept = Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'gen' && !(newShape && isShape(k)))) as Feature
-      const self = { ...kept, ...out.self, origin } as Feature
-      current.set(f.id, self); made.push(self)
+      current.set(f.id, { ...kept, ...out.self, origin } as Feature)
     }
     for (const c of out.children ?? []) {
       const child = { ...c, origin: { ...origin, parent: f.id } } as Feature
-      children.push(child); current.set(child.id, child); made.push(child)
+      children.push(child); current.set(child.id, child)
     }
-    outputs.set(f.id, made)
   }
-  // the order: F waits for G when what F reads (its selectors, hard or soft) could match what G produces (G's id, its
-  // children's ids, the kinds of G and of its children). The strongly connected groups of that graph run in dependency
-  // order (Tarjan's algorithm emits a group after every group it depends on). Inside a group of generators that read
-  // each other, the hard reads come first (a loop of them cannot be run: an error naming its members), then the ids;
-  // each sees the finished features, so a soft read of one not yet run sees nothing of it. The file's order never
-  // matters. A generator whose reads include one that failed is skipped (the first error is the one to fix).
+  // the order (decision 0023): F reads G when F's selectors could match what G produces (G's id, its children's ids,
+  // the kinds of G and of its children). The reads must form a chain: the strongly connected groups of that graph
+  // (Tarjan's algorithm, which emits a group after every group it depends on) are single generators, run in that
+  // order, each seeing only finished features. A group of several is a cycle: an error naming its members and how to
+  // break it. A generator reading one that failed (or a cycle) is skipped, so the first error is the one reported.
+  // The file's order and the ids never matter (beyond seeds).
   const gens = [...map.features.filter(f => f.gen)].sort(idOrder)
   const specOf = (f: Feature) => GENERATOR_SPECS[Object.keys(f.gen!)[0]]
-  // the reads, split for ordering: a hard read that names a feature (an id, a child's id) must come first; a hard read
-  // by kind (`within: ['water']`) orders only softly (anything of the kind will do, often a hand-drawn one)
-  const readsOf = new Map(gens.map(f => {
-    const r = specOf(f).reads?.(f, f.gen![Object.keys(f.gen!)[0]] as Record<string, unknown>) ?? { hard: [], soft: [] }
-    return [f.id, { hard: r.hard.filter(s => !isKindName(cat, s)), soft: [...r.soft, ...r.hard.filter(s => isKindName(cat, s))] }]
-  }))
-  const produces = new Map(gens.map(g => { const k = res(g).kind, c = specOf(g).childKind; return [g.id, c ? [k, c(k)] : [k]] }))
-  const hits = (sels: string[], g: Feature) => sels.some(sel => sel === g.id || childOf(sel)?.parent === g.id || produces.get(g.id)!.some(k => kindMatches(sel, k)))
-  const hardOn = (f: Feature, g: Feature) => hits(readsOf.get(f.id)!.hard, g), softOn = (f: Feature, g: Feature) => hits(readsOf.get(f.id)!.soft, g)
-  const anyOn = (f: Feature, g: Feature) => hardOn(f, g) || softOn(f, g)
-  const pending = new Set(gens.map(g => g.id))
-  function status(id: string): Status {
-    if (current.has(id) || ran.has(id) || pinnedParents.has(id)) return 'finished'
-    const c = childOf(id)
-    return pending.has(id) || (c && pending.has(c.parent)) ? 'pending' : 'unknown'
-  }
-  const runGroup = (group: Feature[]) => {
-    // hard reads first inside the group (Kahn's algorithm, ties by id)
-    const left = new Set(group.map(g => g.id)), order: Feature[] = []
-    while (left.size) {
-      const ready = group.find(f => left.has(f.id) && !group.some(g => g !== f && left.has(g.id) && hardOn(f, g)))
-      if (!ready) break
-      order.push(ready); left.delete(ready.id)
-    }
-    // what is left holds loops of hard reads: their members are the error; those only waiting on them are skipped
-    if (left.size) {
-      const rest = group.filter(f => left.has(f.id)), reach = (f: Feature, g: Feature) => {
-        const seen = new Set<string>([f.id]), todo = [f]
-        while (todo.length) { const h = todo.pop()!; for (const k of rest) if (hardOn(h, k)) { if (k === g) return true; if (!seen.has(k.id)) { seen.add(k.id); todo.push(k) } } }
-        return false
-      }
-      for (const f of rest) {
-        failed.add(f.id); pending.delete(f.id)
-        const loop = rest.filter(g => reach(f, g) && reach(g, f))
-        if (loop.length) issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen`, message: `it needs, and is needed by, ${loop.filter(g => g !== f).map(g => `"${g.id}"`).join(', ') || 'itself'} (by within or along, by name): a loop no order can run` })
-      }
-    }
-    for (const f of order) {
-      if (gens.some(g => g !== f && failed.has(g.id) && anyOn(f, g))) { failed.add(f.id); pending.delete(f.id); continue }
-      // separation is mutual: keep clear of the earlier members of the group that wanted to keep clear of this one
-      keepClearOf = group.filter(g => g !== f && ran.has(g.id) && softOn(g, f)).flatMap(g => outputs.get(g.id) ?? [])
-      runOne(f); pending.delete(f.id)
-      keepClearOf = []
-    }
-  }
+  const paramsOf = (f: Feature) => f.gen![Object.keys(f.gen!)[0]] as Record<string, unknown>
+  const readsOf = new Map(gens.map(f => [f.id, specOf(f).reads?.(f, paramsOf(f)) ?? []]))
+  const produces = new Map(gens.map(g => { const k = res(g).kind; return [g.id, [k, ...(specOf(g).childKinds?.(k, paramsOf(g)) ?? [])]] }))
+  const matching = (f: Feature, g: Feature) => readsOf.get(f.id)!.filter(sel => sel === g.id || childOf(sel)?.parent === g.id || produces.get(g.id)!.some(k => kindMatches(sel, k)))
+  const reads = (f: Feature, g: Feature) => f !== g && matching(f, g).length > 0   // its own output is its own business (a scatter's siblings)
   const index = new Map<string, number>(), low = new Map<string, number>(), onStack = new Set<string>(), stack: Feature[] = []
   let counter = 0
   const strong = (f: Feature) => {
     index.set(f.id, counter); low.set(f.id, counter); counter++; stack.push(f); onStack.add(f.id)
     for (const g of gens) {
-      if (g === f || !anyOn(f, g)) continue
+      if (!reads(f, g)) continue
       if (!index.has(g.id)) { strong(g); low.set(f.id, Math.min(low.get(f.id)!, low.get(g.id)!)) }
       else if (onStack.has(g.id)) low.set(f.id, Math.min(low.get(f.id)!, index.get(g.id)!))
     }
@@ -123,7 +78,17 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
     const group: Feature[] = []
     let g: Feature
     do { g = stack.pop()!; onStack.delete(g.id); group.push(g) } while (g !== f)
-    runGroup(group.sort(idOrder))
+    if (group.length > 1) {
+      group.sort(idOrder)
+      for (const h of group) {
+        const how = group.filter(o => reads(h, o)).map(o => `"${o.id}" (by ${matching(h, o).map(s => `'${s}'`).join(', ')})`).join(', ')
+        issues.push({ id: h.id, path: `features[${at.get(h.id)}].gen`, message: `it reads ${how}, and they read it back: generators must form a chain. Keep kinds that must stay apart in one scatter's mix, or name hand-drawn features by id instead of a kind` })
+        failed.add(h.id)
+      }
+      return
+    }
+    if (gens.some(o => failed.has(o.id) && reads(f, o))) { failed.add(f.id); return }
+    runOne(f)
   }
   for (const f of gens) if (!index.has(f.id)) strong(f)
   // every selector that names a feature names one of the expanded map (or a generator that ran and made nothing, or

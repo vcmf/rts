@@ -283,7 +283,14 @@ describe('M3b: scatter', () => {
   })
 })
 
-describe('M3b: review round 1', () => {
+const REGION = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
+const kidsOf = (m: MapFile, parent: string) => m.features.filter(f => f.origin?.parent === parent)
+const apart = (as: MapFile['features'], bs: MapFile['features']) => as.every(a => bs.every(b => a === b || (!a.area![0].some(p => inRing(b.area![0], p)) && !b.area![0].some(p => inRing(a.area![0], p)))))
+const sc = (id: string, kind: string, p: Record<string, unknown>) => ({ id, kind, area: REGION, gen: { scatter: { count: 3, radiusMin: 20, radiusMax: 30, clearance: 5, ...p } } })
+const ROAD = { id: 'road', kind: 'way.road.lane', line: [[-400, 0], [400, 0]] as Pt[] }
+const VILLAGE = { id: 'village', kind: 'built.village', along: { id: 'road', from: 300, to: 500 }, houses: 6, gen: { 'street-village': { min: 1 } } }
+
+describe('M3b: houses (review rounds)', () => {
   const road = { id: 'road', kind: 'way.road.lane', line: [[0, -560], [0, 560]] as Pt[], width: 6 }
   const village = { id: 'village', kind: 'built.village', along: { id: 'road', from: 400, to: 720 }, houses: 12, gen: { 'street-village': { min: 1 } } }
   it('no house straddles a stream crossing its road (the house tested as a polygon, not by its corners)', () => {
@@ -291,95 +298,32 @@ describe('M3b: review round 1', () => {
     for (let seed = 1; seed <= 20; seed++) {
       const { map, issues } = expand(mini([road, brook, village], seed), cat)
       expect(issues).toEqual([])
-      for (const h of map.features.filter(f => f.origin?.parent === 'village')) {
-        const zs = h.area![0].map(p => p[1])
-        expect(Math.min(...zs) > 5 || Math.max(...zs) < -5).toBe(true)   // wholly off the water (3 m) and its 2 m margin
-      }
+      const houses = kidsOf(map, 'village')
+      expect(houses).toHaveLength(12)
+      for (const h of houses) { const zs = h.area![0].map(p => p[1]); expect(Math.min(...zs) > 5 || Math.max(...zs) < -5).toBe(true) }
     }
   })
-  it("the file's order changes nothing: a village before its meandered stream sees the meandered stream", () => {
-    const brook = { id: 'brook', kind: 'water.stream', line: [[-560, 0], [560, 0]] as Pt[], width: 6, gen: { meander: { amplitude: 40, wavelength: 150 } } }
-    for (const seed of [1, 2, 3]) expect(expand(mini([road, village, brook], seed), cat).map).toEqual(expand(mini([road, brook, village], seed), cat).map)
+  it('a village at a crossroads keeps its houses off the other road', () => {
+    const lane = { id: 'lane', kind: 'way.track', line: [[0, -400], [0, 400]] as Pt[], width: 3 }
+    const v = { ...VILLAGE, along: { id: 'road', from: 300, to: 520 }, houses: 10 }
+    for (let seed = 1; seed <= 30; seed++) {
+      const { map, issues } = expand(mini([ROAD, lane, v], seed), cat)
+      expect(issues).toEqual([])
+      expect(kidsOf(map, 'village')).toHaveLength(10)
+      for (const h of kidsOf(map, 'village')) expect(h.area![0].every(([x]) => Math.abs(x) > 1.5 + 1)).toBe(true)
+    }
   })
-  it('houses avoid a building of any shape; min 0 with no room gives an empty village', () => {
+  it('houses avoid a building of any shape and no-go zones; min 0 with no room gives an empty village', () => {
     const hut = { id: 'hut', kind: 'built.house', circle: [[8, -100], 6] as [Pt, number] }
-    const { map } = expand(mini([road, hut, { ...village, along: { id: 'road', from: 420, to: 500 } }]), cat)
-    for (const h of map.features.filter(f => f.origin?.parent === 'village')) expect(h.area![0].every(([x, z]) => Math.hypot(x - 8, z + 100) > 6)).toBe(true)
+    for (const h of kidsOf(expand(mini([road, hut, { ...village, along: { id: 'road', from: 420, to: 500 } }]), cat).map, 'village')) expect(h.area![0].every(([x, z]) => Math.hypot(x - 8, z + 100) > 6)).toBe(true)
+    const nogo = { id: 'keep-out', kind: 'zone.nogo', area: [[[-200, 2], [200, 2], [200, 40], [-200, 40]]] as Pt[][] }
+    const near = expand(mini([ROAD, nogo, { ...VILLAGE, along: { id: 'road', from: 300, to: 500 } }]), cat)
+    expect(near.issues).toEqual([])
+    for (const h of kidsOf(near.map, 'village')) expect(h.area![0].every(([x, z]) => !(Math.abs(x) <= 200 && z >= 2 && z <= 40))).toBe(true)
     const pond = { id: 'pond', kind: 'water.lake', area: [[[-200, -200], [200, -200], [200, 200], [-200, 200]]] as Pt[][] }
     const empty = expand(mini([road, pond, { ...village, along: { id: 'road', from: 400, to: 700 }, gen: { 'street-village': { min: 0 } } }]), cat)
     expect(empty.issues).toEqual([])
     expect(empty.map.features.find(f => f.id === 'village')!.area).toBeUndefined()
-  })
-  it("a scatter naming another scatter avoids its children, whichever id comes first; within that matches nothing is an error", () => {
-    const region = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
-    const woods = (id: string) => ({ id, kind: 'veg.wood', area: region, gen: { scatter: { count: 5, radiusMin: 30, radiusMax: 50 } } })
-    const fields = (id: string, woodsId: string) => ({ id, kind: 'ground.field', area: region, gen: { scatter: { count: 5, radiusMin: 20, radiusMax: 30, avoid: [woodsId], clearance: 10 } } })
-    for (const [w, fi] of [['a-woods', 'b-fields'], ['b-woods', 'a-fields']]) {
-      const { map, issues } = expand(mini([woods(w), fields(fi, w)]), cat)
-      expect(issues).toEqual([])
-      const ws = map.features.filter(f => f.origin?.parent === w), fs = map.features.filter(f => f.origin?.parent === fi)
-      expect(ws).toHaveLength(5); expect(fs).toHaveLength(5)
-      for (const a of fs) for (const b of ws) expect(a.area![0].some(p => inRing(b.area![0], p)) || b.area![0].some(p => inRing(a.area![0], p))).toBe(false)
-    }
-    const lonely = expand(mini([{ ...woods('w'), gen: { scatter: { count: 2, within: ['water'], reach: 10 } } }]), cat)
-    expect(lonely.issues[0]?.message).toMatch(/nothing matches within/)
-  })
-  it("a feature cannot name itself; a generated child's id is reserved, and a child can be named", () => {
-    const region = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
-    const issues = (fs: MapFile['features']) => validate(mini(fs), cat).map(i => `${i.path}: ${i.message}`)
-    expect(issues([{ id: 'c', kind: 'veg.wood', area: region, gen: { scatter: { count: 2, avoid: ['c'] } } }])).toContainEqual(expect.stringMatching(/avoid\[0\]: a feature cannot name itself/))
-    expect(issues([road, village, { id: 'village-2', kind: 'built.house', circle: [[50, 0], 5] }])).toContainEqual(expect.stringMatching(/features\[2\]\.id: "village-2" is reserved/))
-    expect(issues([road, village, { id: 'w', kind: 'veg.wood', area: region, gen: { scatter: { count: 2, avoid: ['village-3'] } } }])).toEqual([])
-  })
-})
-
-describe('M3b: review round 2', () => {
-  const region = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
-  const kidsOf = (m: MapFile, parent: string) => m.features.filter(f => f.origin?.parent === parent)
-  const apart = (as: MapFile['features'], bs: MapFile['features']) => as.every(a => bs.every(b => !a.area![0].some(p => inRing(b.area![0], p)) && !b.area![0].some(p => inRing(a.area![0], p))))
-  it('scatters order by what their children would be, not their ids: the five-seeds map with copses renamed woods still works', () => {
-    const raw = JSON.parse(fs.readFileSync(path.join(root, 'maps/generated.map.json'), 'utf8')) as MapFile
-    const renamed = JSON.parse(JSON.stringify(raw).replaceAll('"copses"', '"woods"')) as MapFile
-    for (const seed of [1, 2, 3]) {
-      const { map, issues } = expand({ ...renamed, seed }, cat)
-      expect(issues).toEqual([])
-      expect(kidsOf(map, 'woods').length).toBeGreaterThanOrEqual(4); expect(kidsOf(map, 'fields').length).toBeGreaterThanOrEqual(3)
-      expect(apart(kidsOf(map, 'fields'), kidsOf(map, 'woods'))).toBe(true)
-    }
-  })
-  it("a selector naming another scatter's child waits for it, whatever the ids", () => {
-    const woods = { id: 'woods', kind: 'veg.wood', area: region, gen: { scatter: { count: 4, radiusMin: 30, radiusMax: 40 } } }
-    const aaa = (p: Record<string, unknown>) => ({ id: 'aaa', kind: 'ground.field', area: region, gen: { scatter: { count: 4, radiusMin: 20, radiusMax: 25, ...p } } })
-    const { map, issues } = expand(mini([woods, aaa({ avoid: ['woods-1'], clearance: 30 })]), cat)
-    expect(issues).toEqual([])
-    const w1 = map.features.find(f => f.id === 'woods-1')!
-    expect(apart(kidsOf(map, 'aaa'), [w1])).toBe(true)
-    expect(expand(mini([woods, aaa({ within: ['woods-1'], reach: 200 })]), cat).issues).toEqual([])
-  })
-  it('scatters that read each other run in id order, each seeing the earlier ones (the redesign: no loop error)', () => {
-    const woods = { id: 'woods', kind: 'veg.wood', area: region, gen: { scatter: { count: 3, radiusMin: 30, radiusMax: 40, avoid: ['ground.field'] } } }
-    const fields = { id: 'fields', kind: 'ground.field', area: region, gen: { scatter: { count: 3, radiusMin: 20, radiusMax: 30, avoid: ['veg'] } } }
-    const { map, issues } = expand(mini([woods, fields]), cat)
-    expect(issues).toEqual([])
-    expect(apart(kidsOf(map, 'fields'), kidsOf(map, 'woods'))).toBe(true)
-  })
-  it("a child's id is the generator's while it generates; pinning means taking the generator away and keeping the children", () => {
-    const woods = { id: 'woods', kind: 'veg.wood', area: region, gen: { scatter: { count: 3, radiusMin: 30, radiusMax: 40 } } }
-    const { map } = expand(mini([woods]), cat), kids = kidsOf(map, 'woods')
-    expect(validate(mini([woods, kids[0]]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/reserved for the children of "woods"/))
-    const pinned = mini(kids.map(k => ({ ...k, note: 'hand-tuned' })))
-    expect(validate(pinned, cat)).toEqual([])
-    expect(expand(pinned, cat).map.features.map(f => f.note)).toEqual(['hand-tuned', 'hand-tuned', 'hand-tuned'])
-  })
-  it('a village at a crossroads keeps its houses off the other road', () => {
-    const road = { id: 'road', kind: 'way.road.lane', line: [[-400, 0], [400, 0]] as Pt[] }
-    const lane = { id: 'lane', kind: 'way.track', line: [[0, -400], [0, 400]] as Pt[], width: 3 }
-    const village = { id: 'village', kind: 'built.village', along: { id: 'road', from: 300, to: 520 }, houses: 10, gen: { 'street-village': { min: 1 } } }
-    for (let seed = 1; seed <= 30; seed++) {
-      const { map, issues } = expand(mini([road, lane, village], seed), cat)
-      expect(issues).toEqual([])
-      for (const h of kidsOf(map, 'village')) expect(h.area![0].every(([x]) => Math.abs(x) > 1.5 + 1)).toBe(true)
-    }
   })
   it("a house inside an area's hole is outside the area", () => {
     const lake = { id: 'lake', kind: 'water.lake', area: [[[-100, -100], [100, -100], [100, 100], [-100, 100]], [[-40, -40], [40, -40], [40, 40], [-40, 40]]] as Pt[][] }
@@ -388,144 +332,103 @@ describe('M3b: review round 2', () => {
   })
 })
 
-describe('M3b: the redesign (round 3): expansion by dependency, over finished features only', () => {
-  const region = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
-  const kidsOf = (m: MapFile, parent: string) => m.features.filter(f => f.origin?.parent === parent)
-  const road = { id: 'road', kind: 'way.road.lane', line: [[-400, 0], [400, 0]] as Pt[] }
-  const village = { id: 'village', kind: 'built.village', along: { id: 'road', from: 300, to: 520 }, houses: 10, gen: { 'street-village': { min: 1 } } }
+describe('M3b: the chain (decision 0023): each generator after what it reads; a cycle is an error', () => {
+  it("the file's order never matters", () => {
+    const raw = JSON.parse(fs.readFileSync(path.join(root, 'maps/generated.map.json'), 'utf8')) as MapFile
+    expect(expand({ ...raw, features: [...raw.features].reverse() }, cat).map).toEqual(expand(raw, cat).map)
+  })
   it("a village waits for a scatter of ponds and keeps clear of the ponds, never of the scatter's region", () => {
-    const ponds = { id: 'ponds', kind: 'water.pond', area: region, gen: { scatter: { count: 4, radiusMin: 15, radiusMax: 25, avoid: ['way'], clearance: 20 } } }
-    for (const fs of [[road, village, ponds], [ponds, road, village]]) {
+    const ponds = sc('ponds', 'water.pond', { count: 4, radiusMin: 15, radiusMax: 25, avoid: ['way'], clearance: 20 })
+    for (const fs of [[ROAD, { ...VILLAGE, houses: 10, along: { id: 'road', from: 300, to: 520 } }, ponds], [ponds, ROAD, { ...VILLAGE, houses: 10, along: { id: 'road', from: 300, to: 520 } }]]) {
       const { map, issues } = expand(mini(fs as MapFile['features']), cat)
       expect(issues).toEqual([])
-      const houses = kidsOf(map, 'village'), pondKids = kidsOf(map, 'ponds')
-      expect(houses).toHaveLength(10); expect(pondKids).toHaveLength(4)
-      for (const h of houses) for (const p of pondKids) expect(distanceToPolygon(p, {}, h.area![0])).toBeGreaterThan(2)
-    }
-  })
-  it('two scatters of one category, each avoiding the category, both expand, apart', () => {
-    const copses = { id: 'copses', kind: 'veg.wood', area: region, gen: { scatter: { count: 3, radiusMin: 25, radiusMax: 35, avoid: ['veg'], clearance: 10 } } }
-    const orchards = { id: 'orchards', kind: 'veg.orchard', area: region, gen: { scatter: { count: 3, radiusMin: 20, radiusMax: 30, avoid: ['veg'], clearance: 10 } } }
-    const { map, issues } = expand(mini([copses, orchards]), cat)
-    expect(issues).toEqual([])
-    const all = [...kidsOf(map, 'copses'), ...kidsOf(map, 'orchards')]
-    expect(all).toHaveLength(6)
-    for (const a of all) for (const b of all) if (a !== b) expect(a.area![0].some(p => inRing(b.area![0], p))).toBe(false)
-  })
-  it("a pinned scatter is still named by its id; an id that names nothing is an error; houses keep out of no-go zones", () => {
-    const woods = { id: 'woods', kind: 'veg.wood', area: region, gen: { scatter: { count: 2, radiusMin: 30, radiusMax: 40 } } }
-    const pinned = kidsOf(expand(mini([woods]), cat).map, 'woods')
-    const fields = (avoid: string[]) => ({ id: 'fields', kind: 'ground.field', area: region, gen: { scatter: { count: 2, radiusMin: 20, radiusMax: 30, avoid, clearance: 10 } } })
-    const m = mini([...pinned, fields(['woods'])])
-    expect(validate(m, cat)).toEqual([])
-    const out = expand(m, cat)
-    expect(out.issues).toEqual([])
-    for (const f of kidsOf(out.map, 'fields')) for (const w of pinned) expect(f.area![0].some(p => inRing(w.area![0], p))).toBe(false)
-    expect(validate(mini([woods, kidsOf(expand(mini([woods]), cat).map, 'woods')[0]]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/remove "woods" itself \(its region leaves the map\)/))
-    expect(expand(mini([woods, fields(['woods-9'])]), cat).issues[0]?.message).toMatch(/"woods-9" names nothing on the map/)
-    const nogo = { id: 'keep-out', kind: 'zone.nogo', area: [[[-200, 2], [200, 2], [200, 40], [-200, 40]]] as Pt[][] }
-    const near = expand(mini([road, nogo, { ...village, along: { id: 'road', from: 300, to: 500 } }]), cat)
-    expect(near.issues).toEqual([])
-    for (const h of kidsOf(near.map, 'village')) expect(h.area![0].every(([x, z]) => !(Math.abs(x) <= 200 && z >= 2 && z <= 40))).toBe(true)
-  })
-  it("the file's order never matters, for any mix of generators", () => {
-    const raw = JSON.parse(fs.readFileSync(path.join(root, 'maps/generated.map.json'), 'utf8')) as MapFile
-    const reversed = { ...raw, features: [...raw.features].reverse() }
-    expect(expand(reversed, cat).map).toEqual(expand(raw, cat).map)
-  })
-})
-
-describe('M3b: after the redesign, round 1: hard and soft reads', () => {
-  const region = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
-  const kidsOf = (m: MapFile, parent: string) => m.features.filter(f => f.origin?.parent === parent)
-  const sc = (id: string, kind: string, p: Record<string, unknown>) => ({ id, kind, area: region, gen: { scatter: { count: 3, radiusMin: 20, radiusMax: 30, ...p } } })
-  it('two scatters avoiding each other by id both expand (a soft read of one not yet run sees nothing of it)', () => {
-    const { map, issues } = expand(mini([sc('aa', 'veg.wood', { avoid: ['bb'] }), sc('bb', 'ground.field', { avoid: ['aa'] })]), cat)
-    expect(issues).toEqual([])
-    for (const a of kidsOf(map, 'aa')) for (const b of kidsOf(map, 'bb')) expect(a.area![0].some(p => inRing(b.area![0], p))).toBe(false)
-  })
-  it('a village and ponds within it read each other: the hard read runs first, whatever the ids', () => {
-    const road = { id: 'road', kind: 'way.road.lane', line: [[-400, 0], [400, 0]] as Pt[] }
-    for (const [v, p] of [['village', 'ponds'], ['zz-village', 'aa-ponds']]) {
-      const village = { id: v, kind: 'built.village', along: { id: 'road', from: 300, to: 500 }, houses: 6, gen: { 'street-village': { min: 1 } } }
-      const { map, issues } = expand(mini([road, village, sc(p, 'water.pond', { within: [v], reach: 120, avoid: ['way', 'built'], clearance: 10 })]), cat)
-      expect(issues).toEqual([])
-      expect(kidsOf(map, v).length).toBeGreaterThan(0); expect(kidsOf(map, p)).toHaveLength(3)
-    }
-  })
-  it('a loop of hard reads cannot run: one error naming each member; nothing else is reported', () => {
-    const { issues } = expand(mini([sc('aa', 'veg.wood', { within: ['bb'] }), sc('bb', 'ground.field', { within: ['aa'] })]), cat)
-    expect(issues.map(i => i.id).sort()).toEqual(['aa', 'bb'])
-    expect(issues[0].message).toMatch(/a loop no order can run/)
-  })
-  it('a scatter that placed nothing (min 0) is finished: naming it is no error', () => {
-    const zero = sc('zero', 'veg.wood', { count: 3, radiusMin: 400, radiusMax: 450, min: 0 })
-    const { issues } = expand(mini([zero, sc('cc', 'ground.field', { avoid: ['zero'] })]), cat)
-    expect(issues).toEqual([])
-  })
-  it('a failed generator skips those that read it: one error, the one to fix', () => {
-    const road = { id: 'road', kind: 'way.road.lane', line: [[-400, 0], [400, 0]] as Pt[] }
-    const village = { id: 'village', kind: 'built.village', along: { id: 'road', from: 300, to: 320 }, houses: 30, gen: { 'street-village': {} } }
-    const { issues } = expand(mini([road, village, sc('ponds', 'water.pond', { within: ['village'] })]), cat)
-    expect(issues.map(i => i.id)).toEqual(['village'])
-  })
-  it("a long thin ellipse is avoided by its true distance, not a radial guess", () => {
-    const thin = { id: 'thin', kind: 'zone.nogo', ellipse: [[0, 0], 200, 10, 0] as [Pt, number, number, number] }
-    expect(distanceTo(thin, {}, 190, 12)).toBeLessThan(10)
-    const { map } = expand(mini([thin, sc('w', 'veg.wood', { count: 6, avoid: ['thin'], clearance: 15 })]), cat)
-    for (const k of kidsOf(map, 'w')) for (const [x, z] of k.area![0]) expect((x / 200) * (x / 200) + (z / 10) * (z / 10)).toBeGreaterThan(1)
-  })
-  it('a scatter of 200 stays quick (box pruning, a sibling grid)', () => {
-    const t0 = performance.now(), { issues } = expand(mini([{ id: 'road', kind: 'way.road', line: [[-560, 0], [560, 0]] as Pt[] }, sc('many', 'veg.wood', { count: 200, radiusMin: 5, radiusMax: 8, avoid: ['way'], min: 150 })]), cat), ms = performance.now() - t0
-    expect(issues).toEqual([])
-    expect(ms).toBeLessThan(3000)   // measured 14–26 ms on the dev Mac (about 970 ms before the pruning); loose, as the machine is often loaded
-  })
-})
-
-describe('M3b: after the redesign, round 2: mutual separation, names checked once, kinds order softly', () => {
-  const region = [[[-500, -500], [500, -500], [500, 500], [-500, 500]]] as Pt[][]
-  const kidsOf = (m: MapFile, parent: string) => m.features.filter(f => f.origin?.parent === parent)
-  const sc = (id: string, kind: string, p: Record<string, unknown>) => ({ id, kind, area: region, gen: { scatter: { count: 4, radiusMin: 20, radiusMax: 30, clearance: 5, ...p } } })
-  const apart = (as: MapFile['features'], bs: MapFile['features']) => as.every(a => bs.every(b => !a.area![0].some(p => inRing(b.area![0], p)) && !b.area![0].some(p => inRing(a.area![0], p))))
-  it('three scatters avoiding each other in a ring end up pairwise apart, over five seeds', () => {
-    for (let seed = 1; seed <= 5; seed++) {
-      const { map, issues } = expand(mini([sc('aa', 'veg.wood', { avoid: ['ground'] }), sc('bb', 'ground.field', { avoid: ['water'] }), sc('cc', 'water.pond', { avoid: ['veg'] })], seed), cat)
-      expect(issues).toEqual([])
-      expect(apart(kidsOf(map, 'aa'), kidsOf(map, 'bb'))).toBe(true)
-      expect(apart(kidsOf(map, 'bb'), kidsOf(map, 'cc'))).toBe(true)
-      expect(apart(kidsOf(map, 'cc'), kidsOf(map, 'aa'))).toBe(true)
-    }
-  })
-  it('a village, ponds avoiding woods and woods avoiding buildings: no pond in a wood, no house in a pond', () => {
-    const road = { id: 'road', kind: 'way.road.lane', line: [[-400, 0], [400, 0]] as Pt[] }
-    const village = { id: 'village', kind: 'built.village', along: { id: 'road', from: 300, to: 500 }, houses: 6, gen: { 'street-village': { min: 1 } } }
-    for (let seed = 1; seed <= 5; seed++) {
-      const { map, issues } = expand(mini([road, village, sc('ponds', 'water.pond', { avoid: ['veg', 'way'] }), sc('woods', 'veg.wood', { avoid: ['built', 'way'] })], seed), cat)
-      expect(issues).toEqual([])
-      expect(apart(kidsOf(map, 'ponds'), kidsOf(map, 'woods'))).toBe(true)
+      expect(kidsOf(map, 'village')).toHaveLength(10); expect(kidsOf(map, 'ponds')).toHaveLength(4)
       for (const h of kidsOf(map, 'village')) for (const p of kidsOf(map, 'ponds')) expect(distanceToPolygon(p, {}, h.area![0])).toBeGreaterThan(2)
     }
   })
-  it('a name that names nothing is an error whatever the ids: a typo for a child is caught', () => {
-    for (const id of ['aa', 'zz']) {
-      const { issues } = expand(mini([sc(id, 'veg.wood', { avoid: ['bb-5'] }), sc('bb', 'ground.field', { count: 3, avoid: [id] })]), cat)
-      expect(issues.map(i => i.message)).toContainEqual(expect.stringMatching(/"bb-5" names nothing/))
+  it("a scatter avoiding another's kind, or naming one of its children, waits for it whatever the ids", () => {
+    for (const [w, fi] of [['a-woods', 'b-fields'], ['b-woods', 'a-fields']]) {
+      const { map, issues } = expand(mini([sc(w, 'veg.wood', { count: 5, radiusMin: 30, radiusMax: 50 }), sc(fi, 'ground.field', { count: 5, avoid: ['veg'], clearance: 10 })]), cat)
+      expect(issues).toEqual([])
+      expect(apart(kidsOf(map, fi), kidsOf(map, w))).toBe(true)
+    }
+    const woods = sc('woods', 'veg.wood', { count: 4, radiusMin: 30, radiusMax: 40 })
+    const named = expand(mini([woods, sc('aaa', 'ground.field', { count: 4, avoid: ['woods-1'], clearance: 30 })]), cat)
+    expect(named.issues).toEqual([])
+    expect(apart(kidsOf(named.map, 'aaa'), [named.map.features.find(f => f.id === 'woods-1')!])).toBe(true)
+    expect(expand(mini([woods, sc('aaa', 'ground.field', { within: ['woods-1'], reach: 200 })]), cat).issues).toEqual([])
+  })
+  it('generators that read each other are a cycle: an error on each member naming the others and how to break it', () => {
+    const two = expand(mini([sc('woods', 'veg.wood', { avoid: ['ground.field'] }), sc('fields', 'ground.field', { avoid: ['veg'] })]), cat)
+    expect(two.issues.map(i => i.id).sort()).toEqual(['fields', 'woods'])
+    expect(two.issues.find(i => i.id === 'woods')!.message).toMatch(/reads "fields" \(by 'ground\.field'\).*must form a chain.*one scatter's mix/)
+    const ring = expand(mini([sc('aa', 'veg.wood', { avoid: ['ground'] }), sc('bb', 'ground.field', { avoid: ['water'] }), sc('cc', 'water.pond', { avoid: ['veg'] })]), cat)
+    expect(ring.issues.map(i => i.id).sort()).toEqual(['aa', 'bb', 'cc'])
+    const mutual = expand(mini([ROAD, VILLAGE, sc('ponds', 'water.pond', { avoid: ['built'] })]), cat)
+    expect(mutual.issues.map(i => i.id).sort()).toEqual(['ponds', 'village'])
+  })
+  it('a generator reading a cycle or a failed generator is skipped: only the first errors are reported', () => {
+    const cyc = expand(mini([sc('aa', 'veg.wood', { avoid: ['bb'] }), sc('bb', 'ground.field', { avoid: ['aa'] }), sc('cc', 'water.pond', { within: ['aa'] })]), cat)
+    expect(cyc.issues.map(i => i.id).sort()).toEqual(['aa', 'bb'])
+    const village = { ...VILLAGE, along: { id: 'road', from: 300, to: 320 }, houses: 30, gen: { 'street-village': {} } }
+    expect(expand(mini([ROAD, village, sc('woods', 'veg.wood', { within: ['village'] })]), cat).issues.map(i => i.id)).toEqual(['village'])
+  })
+  it('names: a typo for a child is caught; a scatter that placed nothing is finished; a pinned scatter is still named by its id', () => {
+    expect(expand(mini([sc('aa', 'veg.wood', { avoid: ['bb-5'] }), sc('bb', 'ground.field', { count: 3 })]), cat).issues.map(i => i.message)).toContainEqual(expect.stringMatching(/"bb-5" names nothing/))
+    expect(expand(mini([sc('zero', 'veg.wood', { radiusMin: 400, radiusMax: 450, min: 0 }), sc('cc', 'ground.field', { avoid: ['zero'] })]), cat).issues).toEqual([])
+    const woods = sc('woods', 'veg.wood', { count: 2, radiusMin: 30, radiusMax: 40 }), pinned = kidsOf(expand(mini([woods]), cat).map, 'woods')
+    const m = mini([...pinned, sc('fields', 'ground.field', { count: 2, avoid: ['woods'], clearance: 10 })])
+    expect(validate(m, cat)).toEqual([])
+    const out = expand(m, cat)
+    expect(out.issues).toEqual([])
+    expect(apart(kidsOf(out.map, 'fields'), pinned)).toBe(true)
+    expect(validate(mini([woods, pinned[0]]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/remove "woods" itself \(its region leaves the map\)/))
+  })
+  it('a within matching only shapeless features is "nothing matches"; an id equal to a category is refused', () => {
+    expect(expand(mini([{ id: 'terrain', kind: 'relief.base' }, sc('w', 'veg.wood', { within: ['terrain'] })]), cat).issues[0]?.message).toMatch(/nothing matches within/)
+    expect(validate(mini([{ id: 'water', kind: 'veg.wood', circle: [[0, 0], 20] as [Pt, number] }]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/a category's name/))
+  })
+  it('a long thin ellipse is avoided by its true distance; a scatter of 200 stays quick', () => {
+    const thin = { id: 'thin', kind: 'zone.nogo', ellipse: [[0, 0], 200, 10, 0] as [Pt, number, number, number] }
+    expect(distanceTo(thin, {}, 190, 12)).toBeLessThan(10)
+    for (const k of kidsOf(expand(mini([thin, sc('w', 'veg.wood', { count: 6, avoid: ['thin'], clearance: 15 })]), cat).map, 'w')) for (const [x, z] of k.area![0]) expect((x / 200) * (x / 200) + (z / 10) * (z / 10)).toBeGreaterThan(1)
+    const t0 = performance.now(), { issues } = expand(mini([{ id: 'road', kind: 'way.road', line: [[-560, 0], [560, 0]] as Pt[] }, sc('many', 'veg.wood', { count: 200, radiusMin: 5, radiusMax: 8, avoid: ['way'], min: 150 })]), cat)
+    expect(issues).toEqual([])
+    expect(performance.now() - t0).toBeLessThan(3000)   // measured 14–26 ms on the dev Mac (about 970 ms before the pruning); loose, as the machine is often loaded
+  })
+})
+
+describe("M3b: scatter's mix: several kinds placed jointly", () => {
+  const mixed = (mix: unknown[], p: Record<string, unknown> = {}) => ({ id: 'groves', kind: 'veg.wood', area: REGION, gen: { scatter: { mix, clearance: 12, ...p } } })
+  it('each entry gets its count and kind; every child keeps clear of every other, whatever their kinds; set applies', () => {
+    for (let seed = 1; seed <= 5; seed++) {
+      const { map, issues } = expand(mini([ROAD, mixed([{ kind: 'veg.wood.broad', count: 5, radiusMin: 25, radiusMax: 40, set: { density: 0.8 } }, { kind: 'ground.field.wheat', count: 4, radiusMin: 20, radiusMax: 30 }, { kind: 'veg.orchard', count: 3, radiusMin: 15, radiusMax: 20 }], { avoid: ['way'] })], seed), cat)
+      expect(issues).toEqual([])
+      const kids = kidsOf(map, 'groves')
+      expect(kids.filter(k => k.kind === 'veg.wood.broad')).toHaveLength(5)
+      expect(kids.filter(k => k.kind === 'ground.field.wheat')).toHaveLength(4)
+      expect(kids.filter(k => k.kind === 'veg.orchard')).toHaveLength(3)
+      expect(kids.filter(k => k.kind === 'veg.wood.broad').every(k => k.density === 0.8)).toBe(true)
+      expect(apart(kids, kids)).toBe(true)
+      const road = map.features.find(f => f.id === 'road')!
+      for (const k of kids) expect(distanceToPolygon(road, {}, k.area![0])).toBeGreaterThan(1.5 + 1)   // clear of the road
     }
   })
-  it('a within by kind orders only softly: two pond scatters within water, with a stream, are no loop', () => {
-    const brook = { id: 'brook', kind: 'water.stream', line: [[-500, 0], [500, 0]] as Pt[] }
-    const { issues } = expand(mini([brook, sc('p1', 'water.pond', { within: ['water'], reach: 200 }), sc('p2', 'water.pond', { within: ['water'], reach: 200 })]), cat)
-    expect(issues).toEqual([])
+  it('a shortfall names the entries that fell short; min per entry lowers the bar', () => {
+    const tight = expand(mini([mixed([{ kind: 'veg.wood', count: 40, radiusMin: 80, radiusMax: 90 }, { kind: 'ground.field', count: 2, radiusMin: 20, radiusMax: 25 }])]), cat)
+    expect(tight.issues[0]?.message).toMatch(/placed \d+ of 40 veg\.wood/)
+    expect(expand(mini([mixed([{ kind: 'veg.wood', count: 40, radiusMin: 80, radiusMax: 90, min: 1 }, { kind: 'ground.field', count: 2, radiusMin: 20, radiusMax: 25, min: 1 }])]), cat).issues).toEqual([])
   })
-  it("a loop of hard reads names only its members; one only waiting on it is skipped silently", () => {
-    const { issues } = expand(mini([sc('aa', 'veg.wood', { within: ['bb'], avoid: ['cc'] }), sc('bb', 'ground.field', { within: ['aa'] }), sc('cc', 'water.pond', { within: ['aa'] })]), cat)
-    expect(issues.map(i => i.id).sort()).toEqual(['aa', 'bb'])
-    for (const i of issues) expect(i.message).not.toMatch(/"cc"/)
-  })
-  it('a within that matches only shapeless features is "nothing matches"; an id equal to a category is refused', () => {
-    const { issues } = expand(mini([{ id: 'terrain', kind: 'relief.base' }, sc('w', 'veg.wood', { within: ['terrain'] })]), cat)
-    expect(issues[0]?.message).toMatch(/nothing matches within/)
-    expect(validate(mini([{ id: 'water', kind: 'veg.wood', circle: [[0, 0], 20] as [Pt, number] }]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/a category's name/))
+  it('the validator checks each entry against the catalogue', () => {
+    const paths = (mix: unknown[], p: Record<string, unknown> = {}) => validate(mini([mixed(mix, p)]), cat).map(i => `${i.path}: ${i.message}`)
+    expect(paths([{ kind: 'veg.jungle', count: 2 }])).toContainEqual(expect.stringMatching(/mix\[0\]\.kind: must name a kind/))
+    expect(paths([{ kind: 'way.road', count: 2 }])).toContainEqual(expect.stringMatching(/mix\[0\]\.kind: way\.road takes no area/))
+    expect(paths([{ kind: 'veg.wood' }])).toContainEqual(expect.stringMatching(/mix\[0\]\.count: is required/))
+    expect(paths([{ kind: 'veg.wood', count: 2, colour: 'red' }])).toContainEqual(expect.stringMatching(/mix\[0\]\.colour: unknown field/))
+    expect(paths([{ kind: 'veg.wood', count: 2, set: { roof: 'tile' } }])).toContainEqual(expect.stringMatching(/mix\[0\]\.set\.roof: is not an attribute of veg/))
+    expect(paths([{ kind: 'veg.wood', count: 2 }], { count: 3 })).toContainEqual(expect.stringMatching(/scatter\.count: belongs to each entry of a mix/))
+    expect(paths([{ kind: 'veg.wood', count: 2, radiusMin: 30, radiusMax: 20 }])).toContainEqual(expect.stringMatching(/mix\[0\]\.radiusMax: is below radiusMin/))
+    expect(paths([{ kind: 'veg.wood', count: 2 }, { kind: 'ground.field', count: 2 }])).toEqual([])
   })
 })
 

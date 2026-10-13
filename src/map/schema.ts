@@ -59,7 +59,7 @@ export interface MapFile {
 }
 
 // the kinds catalogue (maps/kinds.json)
-export type AttrType = 'number' | 'int' | 'enum' | 'string' | 'object' | 'list'   // list: of strings (generator parameters)
+export type AttrType = 'number' | 'int' | 'enum' | 'string' | 'object' | 'list' | 'entries'   // list: of strings; entries: of objects, checked by their generator (generator parameters)
 export interface FieldSpec { type: AttrType; unit?: string; min?: number; max?: number; values?: string[]; even?: boolean }
 export interface AttrSpec extends FieldSpec {
   layers: string[]
