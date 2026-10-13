@@ -54,7 +54,8 @@
   // under the look page's meadow (docs/plans/done/l5c-meadow.md) the grass is its clumps, not scatter: its growing
   // texels (1 m) stand in for the tufts
   const meadow = typeof __look !== 'undefined' && __look.meadow
-  // and its crops (docs/plans/active/l5d-crops.md) the wheat tufts (about 173,000 texels: a floor well over a lost field)
+  // and its crops (docs/plans/done/l5d-crops.md) the wheat tufts (about 159,000 texels over the tile; the scene's own
+  // wheat field is checked on its own below, cropsInSceneField)
   if (meadow) { pop.meadowCells = meadow.growingCells; pop.cropCells = meadow.croppingCells }
   check('population', pop.trees >= 60 && (meadow ? meadow.growingCells >= 2000 && meadow.croppingCells >= 100000 : pop.grass >= 2000 && pop.wheat >= 150) && pop.bushes >= 30 && pop.far >= 400, pop)
   // the meadow follows the placement rule too: its growth as the GPU reads it is 0 in the formation zones and over the
@@ -85,6 +86,10 @@
     check('meadowSampled', sampled > 100000, sampled)
     check('cropsSampled', cropsSampled > 10000, cropsSampled)
     check('cropsOnFloodplain', cropsOnFloodplain === 0, cropsOnFloodplain)
+    // the scene's own wheat field (src/look/nature.ts, the lattice's frame) grows: its crop points at every metre
+    let sceneField = 0
+    for (let u = 2; u < 28; u++) for (let v = 2; v < 20; v++) if (meadow.cropAt(-60 + u * 0.95 + v * 0.25, -34 + v - u * 0.12) > 0) sceneField++
+    check('cropsInSceneField', sceneField >= 150, sceneField)
     const share = meadow.growingCells / (SMW * SMW)   // SMW: the tile's width, m
     check('meadowShare', share > 0.2 && share < 0.8, +share.toFixed(3))
   }

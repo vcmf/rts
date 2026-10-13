@@ -64,14 +64,15 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   // across a rule (between the last growing texel and a zero one it stays inside the allowed ground)
   const G = MAP_N / 2
   // the 2 m cells: f at each cell's centre
-  const cellGrid = (f: (x: number, z: number, k: number) => number) => { const a = new Float32Array(G * G); for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) a[j * G + i] = f((i + 0.5) * 2 - TILE_W / 2, (j + 0.5) * 2 - TILE_W / 2, j * G + i); return a }
+  const cellGrid = (f: (x: number, z: number) => number) => { const a = new Float32Array(G * G); for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) a[j * G + i] = f((i + 0.5) * 2 - TILE_W / 2, (j + 0.5) * 2 - TILE_W / 2); return a }
   const atCell = (a: Float32Array, i: number, j: number) => a[Math.min(G - 1, Math.max(0, j)) * G + Math.min(G - 1, Math.max(0, i))]
   const sampler = (a: Float32Array) => (i: number, j: number) => atCell(a, i, j)
   // the hard rules at the 2 m cells' centres too: a texel whose four cells agree takes their answer, and only a texel
   // near a rule's edge (its cells disagree) is tested itself (a few in a hundred: the bake's time)
   const okCell = cellGrid((x, z) => allowed(x, z) ? 1 : 0)
   // the grass's growth and height factor from one growth() call a cell
-  const gCell = new Float32Array(G * G), hCell = cellGrid((x, z, k) => { const [gr, h] = growth(x, z); gCell[k] = gr; return h })
+  const gCell = new Float32Array(G * G), hCell = new Float32Array(G * G)
+  for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) [gCell[j * G + i], hCell[j * G + i]] = growth((i + 0.5) * 2 - TILE_W / 2, (j + 0.5) * 2 - TILE_W / 2)
   const cCell = cellGrid((x, z) => crop(x, z))
   // one growth channel (the grass's by growth(), the crops' by crop()), each texel interpolating its cells, zeroed by
   // the cover's edge and the rules at the texel, then shrunk a texel against the GPU's blend

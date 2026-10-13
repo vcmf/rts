@@ -50,8 +50,8 @@ export interface Nature {
   // which the meadow map applies at every texel so that smoothing the cover never carries grass across them
   growth(x: number, z: number): [number, number]
   growthAllowed(x: number, z: number): boolean
-  // the crops' growth by the cover (docs/plans/active/l5d-crops.md): 1 where the point and the points EDGE round it
-  // are all one sown class (wheat, green crop, stubble; ploughed grows nothing), else 0
+  // the crops' growth by the cover (docs/plans/done/l5d-crops.md): 1 where the point and the points EDGE round it
+  // are all one sown field (one class, wheat, green crop or stubble, and one field id; ploughed grows nothing), else 0
   crop(x: number, z: number): number
 }
 
@@ -208,7 +208,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // a wheat field on the valley side between the floodplain and the formation zones (docs/art-bible.md §6c: fields above the floodplain)
   const addWheat = (item: Item) => { if (!meadow) addPlaced('Wheat', item) }   // under the meadow its crops replace this lattice (src/look/meadow.ts); the stream is unchanged
   for (let u = 0; u < 30; u += 1.25) for (let v = 0; v < 22; v += 1.3) { const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5, z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5; if (rr() < 0.08) continue; addWheat([x, z, wheatScale(rr()), rr() * 6.28, rr()]) }
-  // under the meadow the fields grow from the meadow's slots (src/look/meadow.ts, docs/plans/active/l5d-crops.md):
+  // under the meadow the fields grow from the meadow's slots (src/look/meadow.ts, docs/plans/done/l5d-crops.md):
   // no pack wheat tufts
   // far woods and hedgerows from cheap bush crowns, never in the apron band, whose ground only the apron mesh knows
   const far: Item[] = [], inBand = (x: number, z: number) => { const m = Math.max(Math.abs(x), Math.abs(z)); return m > D.spec.tile / 2 && m < D.band }

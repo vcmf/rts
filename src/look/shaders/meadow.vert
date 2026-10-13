@@ -10,12 +10,12 @@ varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;
 // the blend never crosses a rule (src/look/meadow.ts)
 vec4 meadowAt(vec2 xz){return texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);}
 vec2 coverCell(vec2 xz){vec4 t=texture2D(uCover,xz/FAR_W+0.5);return floor(t.rg*255.0+0.5);}   // its class and field id
-// a crop by its class and the season (docs/plans/active/l5d-crops.md, uSeason 0 summer, 1 autumn, 2 late autumn, 3
+// a crop by its class and the season (docs/plans/done/l5d-crops.md, uSeason 0 summer, 1 autumn, 2 late autumn, 3
 // winter): its height (m) in x, its colour at the tip in yzw. Wheat stands in summer (never over WHEAT_HEIGHT_MAX,
 // decision 0026), is cut to stubble (0.22 m) in autumn and ploughed under after, stubble short until the plough, the green
 // crop low all year, lower under the snow and toward its colour. The colour (the owner): lime to gold, orange and
 // brown with the season
-vec4 cropAt(float k,float j){
+vec4 cropLook(float k,float j){
   float s=uSeason;
   if(k>5.5&&k<6.5){
     float h=mix(WHEAT_HEIGHT_MAX*mix(0.84,1.0,j),0.22,smoothstep(0.55,0.95,s))*(1.0-smoothstep(1.55,1.95,s));
@@ -58,7 +58,7 @@ void main(){
   // its footprint narrower than grass, and under the grass height in the grass proportions (short stubble stays
   // upright, not a flat splat), each
   // field a shade apart, as the ground paints it (cellColour in macro.glsl)
-  if(crop){vec2 cc=coverCell(root);cr=cropAt(cc.x,h3);cr.yzw*=cc.y>0.5?0.94+0.12*fract(cc.y*0.6180339):1.0;
+  if(crop){vec2 cc=coverCell(root);cr=cropLook(cc.x,h3);cr.yzw*=cc.y>0.5?0.94+0.12*fract(cc.y*0.6180339):1.0;
     hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*min(0.7,cr.x/uHeight);}
   else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*mix(1.0,0.45,smoothstep(2.5,3.0,uSeason)),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;}
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}

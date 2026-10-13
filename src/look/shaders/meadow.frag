@@ -14,6 +14,8 @@ void main(){
     // in winter toward the snowed ground under it, as the grass is (the ground read only then)
     #ifdef MACRO_BAKE
     if(uSeason>2.0){pMdx=vec2(uCell,0.0);pMdy=vec2(0.0,uCell);alb=mix(alb,groundSeason(groundAt(vRoot,uCell))*mix(0.95,1.3,vV),0.7*smoothstep(2.0,3.0,uSeason));}
+    #else
+    if(uSeason>2.0)alb=mix(alb,groundSeason(groundBounce(vRoot))*mix(0.95,1.3,vV),0.7*smoothstep(2.0,3.0,uSeason));
     #endif
   }else{
     // grass: the ground colour under the root, darker at the root and lighter, a little warmer, at the tip (the pack

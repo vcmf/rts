@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-13
 ---
 
@@ -49,6 +49,8 @@ at the near view in summer, autumn, late autumn and winter, the mid view in summ
   under other load, about 9): the meadow against none, this branch +1.05–1.25 ms close and default, +0.5–1.1 ms wide;
   main (its grass and wheat tufts) +1.05–1.15 ms and +0.15–1.0 ms. Within the runs' spread (up to 0.9 ms wide): no
   measurable cost over L5c.
+- **Bake** (`__look.meadowBakeMs`, once a load, three loads each): 177–187 ms against main's 144–146 ms, about
+  +35 ms for the crops' channel (a second growth pass over the map).
 - **Checks:** river-check passes (meadowInZones and meadowOnWater, now counting the crops too, 0; cropsOnFloodplain 0; 182,315 crop points sampled; numbers after review round 2),
   look-check passes (nothing floats, worst −0.031 m), both with `?meadow=off` too (315 wheat tufts there).
 - **Readability guard** against main: passes, at the default view and the cover view; wheat.France in summer 0.101
@@ -91,3 +93,17 @@ at the near view in summer, autumn, late autumn and winter, the mid view in summ
   - the plan back in `active/` until the merge.
 
   Checks, negatives, guard (wheat.France 0.101 against 0.098) and `npm test` pass.
+- **Round 3** (436c097): no severe finding, so the review stops here. Fixed:
+  - the population floor missed the scene's own field going bare (new `cropsInSceneField`: 463 crop points, and the
+    negative "no crops" must fail it);
+  - a stale count in a comment, and a stale interface comment;
+  - the crops' winter colour now on the non-bake arms too;
+  - the shader's `cropAt` renamed `cropLook` (one name, two meanings);
+  - the side effect in `cellGrid` replaced by a plain loop;
+  - the bake time measured (above).
+
+  Left:
+  - Field ids are one byte, so two touching far strips of one class share an id about once in 255 and their crops
+    run together. That is rare and far out.
+  - The field shade and the cover decode are copied from `macro.glsl` rather than shared.
+  - `crop()` does two lookups a point.
