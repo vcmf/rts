@@ -1,5 +1,5 @@
 // The camera and the finishing passes (prototypes/painted-cinematic.html, docs/research/cheap-painterly-postfx.md):
-// [depth of field H, V, a player option per decision 0020] → one fused pass (grade, bloom, vignette,
+// [depth of field, one pass, a player option per decision 0020] → one fused pass (grade, bloom, vignette,
 // paper, dither). Materials write view distance into alpha, so depth of field needs no second scene render.
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
@@ -21,6 +21,9 @@ import UBER_FS from './shaders/uber.frag?raw'
 
 // the view the page opens on (the bench measures it as its default zoom)
 export const START = { beta: 0.80, radius: 125, x: -10, z: 2 }
+// the gameplay depth of field (decision 0020): the sharp band (|1 - focus/d| below it is sharp), the gain past it, the
+// largest blur in pixels at 1080 lines, and the share of it left at the widest zoom
+export const DOF = { band: 0.06, k: 4, px: 10, wide: 0.4 }
 
 // the top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit
 export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateCamera {
@@ -61,9 +64,15 @@ export class Post {
     this.posts.forEach(p => p.dispose(camera)); this.posts = []
     const HF = Constants.TEXTURETYPE_HALF_FLOAT
     const pp = (name: string, uni: string[], smp: string[], type: number) => { const p = new PostProcess(name, name, uni, smp, 1.0, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, null, type); if (!this.posts.length) p.samples = 4; this.posts.push(p); return p }
-    if (S.dof) for (const dir of [[1, 0], [0, 1]]) {
-      const p = pp('dof', ['uTexel', 'uDir', 'uFocus', 'uRange', 'uMaxPx'], [], HF)
-      p.onApply = e => { const f = camera.radius / 1000; e.setFloat2('uTexel', 1 / p.width, 1 / p.height); e.setFloat2('uDir', dir[0], dir[1]); e.setFloat('uFocus', f); e.setFloat('uRange', f * 0.32 + 0.012); e.setFloat('uMaxPx', 9 * S.dofAmt * p.height / 1080) }
+    if (S.dof) {
+      // the miniature field (decision 0020): focused on the camera's target; a sharp band of DOF.band around it; the
+      // largest blur DOF.px at 1080 lines, strongest at the closest zoom and DOF.wide of it at the widest
+      const p = pp('dof', ['uTexel', 'uFocus', 'uBand', 'uK', 'uMaxPx', 'uStep'], [], HF), c = D.spec.camera
+      p.onApply = e => {
+        const z = Math.min(1, Math.max(0, (camera.radius - c.rMin) / (c.rMax - c.rMin))), px = DOF.px * S.dofAmt * p.height / 1080 * (1 + (DOF.wide - 1) * z)
+        e.setFloat2('uTexel', 1 / p.width, 1 / p.height); e.setFloat('uFocus', camera.radius); e.setFloat('uBand', DOF.band); e.setFloat('uK', DOF.k)
+        e.setFloat('uMaxPx', px); e.setFloat('uStep', Math.max(0.5, px * px / 128))
+      }
     }
     const u = pp('uber', ['uRes', 'uGrade', 'uGrainOn', 'uBloom'], ['uGrain'], HF)
     u.onApply = e => { e.setFloat2('uRes', u.width, u.height); e.setFloat('uGrade', S.grade); e.setFloat('uGrainOn', S.grain); e.setFloat('uBloom', S.bloom); e.setTexture('uGrain', this.grain()) }

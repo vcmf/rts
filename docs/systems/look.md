@@ -64,6 +64,20 @@ terrain's variant defines; `grain`, the paint or the smooth grain; `terrainOnly`
 passes on or off; `hill`; `quarter` and `shift`, the projection moved for the checks). `?season=<0..3>` opens the
 page in a season (the bench runs in it); `?detail=l0` opens it with the L0 grain on the terrain; `?macro=flat|shader|bake`
 picks the macro colour's arm (L5a, below; `bake` by default, `shader` on WebGL1) and `?bench=macro` benches the three.
+`?dof=0|1` overrides the gameplay depth of field, on by default (decision 0020, below); `?bench=dof` benches it off
+and on.
+
+### The gameplay depth of field (decision 0020)
+
+The plan: `docs/plans/active/gameplay-dof.md`. One pass (`src/look/shaders/dof.frag`) after Dennis Gustafsson's
+single-pass bokeh: a golden-angle spiral of at most 64 taps, each counted where its own blur reaches the pixel, and a
+tap behind the pixel clamped to twice the pixel's blur so a sharp crown never bleeds over the ground behind it. The
+circle of confusion is `|1 − focus/d|` past a sharp band, times a gain, d the view distance the materials write to
+alpha and the focus the camera's target. The constants are `DOF` in `src/look/post.ts`: the band, the gain, the
+largest blur in pixels at 1080 lines, and the share of it left at the widest zoom (the blur eases from the closest
+zoom to the widest). The panel's "Blur strength" slider multiplies it. The look tools load the page with `?dof=0`
+(`shoot()` in `tools/look-page.mjs`, and `tools/bench-look.mjs`): the checks measure the paint; the readability
+guard is also run with `?dof=1`.
 
 ### The ground's cover and macro colour (L5a)
 
@@ -134,7 +148,8 @@ The page runs 9 cameras (closest, default and widest zoom, each at yaw −45°, 
 and arm, frame times (p50, p95, max), GPU time per pass, draw calls and triangles, plus the estimated texture
 memory, the renderer and the build hash (`__BUILD__`, set by `vite.config.ts`). It shows the JSON with a link to
 save it, and puts it in `window.__bench`. Arms are variants of the page measured in the same session, A B B A per
-camera: `l2` (the page) and `l0` (the L0 grain on the terrain).
+camera: `l2` (the page) and `l0` (the L0 grain on the terrain); `?bench=macro` the macro colour's arms; `?bench=dof`
+`nodof` and `dof`. The bench opens with the blur off unless its URL sets `?dof`.
 - **GPU time** comes from our own `EXT_disjoint_timer_query_webgl2` queries (`src/look/gputimer.ts`). Queries
   cannot nest: whole-frame time is taken on alternate frames, the passes (terrain, scatter, water, other,
   post) on the others, each as segments of consecutive draws, only in the camera's own render pass. Frames with

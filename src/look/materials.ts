@@ -13,7 +13,7 @@ import MACRO from './shaders/macro.glsl?raw'
 import { D } from './spec.ts'
 
 // the panel's state; t is the clock (cloud drift, water flow)
-export const S = { grain: 1, gamt: 0.9, edges: 1, clouds: 1, shadows: 1, ao: 1, mist: 1, shafts: 1, back: 1, grade: 1, bloom: 1, dof: 0, dofAmt: 1, res: 1, season: 0, t: 0 }
+export const S = { grain: 1, gamt: 0.9, edges: 1, clouds: 1, shadows: 1, ao: 1, mist: 1, shafts: 1, back: 1, grade: 1, bloom: 1, dof: 1, dofAmt: 1, res: 1, season: 0, t: 0 }
 export type LookState = typeof S
 
 export const SUN = new Vector3(-0.70, 0.45, 0.55).normalize()   // low side-back light, ~27° elevation

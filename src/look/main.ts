@@ -77,6 +77,10 @@ if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS
 macro.setArm(macroArm)
 const macroBake = await macro.bake()
 const camera = buildCamera(scene, canvas)
+// ?dof=0|1: the gameplay depth of field, on by default (decision 0020); the look tools load the page with it off
+const dofParam = params.get('dof')
+if (dofParam !== null && dofParam !== '0' && dofParam !== '1') throw new Error(`?dof must be 0 or 1, not ${dofParam}`)
+if (dofParam !== null) S.dof = +dofParam
 const post = new Post(camera, engine, S, () => mats.grain); post.build()
 
 /* ---------- UI ---------- */
@@ -87,6 +91,8 @@ byId<HTMLSelectElement>('res').onchange = () => { S.res = +byId<HTMLSelectElemen
 const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
 type Toggle = typeof TOGGLES[number]
 const isToggle = (k: string | undefined): k is Toggle => (TOGGLES as readonly (string | undefined)[]).includes(k)
+// the buttons show the state the page opened with (?dof may have changed it)
+document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => { const k = b.dataset.k; if (isToggle(k)) { b.classList.toggle('on', !!S[k]); b.textContent = S[k] ? 'On' : 'Off' } })
 document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => b.onclick = () => {
   const k = b.dataset.k; if (!isToggle(k)) throw new Error(`panel button with an unknown data-k: ${k}`)
   S[k] = S[k] ? 0 : 1; b.classList.toggle('on', !!S[k]); b.textContent = S[k] ? 'On' : 'Off'; if (k === 'dof') post.build()
@@ -252,7 +258,11 @@ if (params.has('bench')) {
   if (!(hold > 0)) throw new Error(`?hold must be a positive number of seconds, not ${params.get('hold')}`)
   // the arms: the detail layer, and the L0 grain it replaces (the cost gate: at most +1 ms GPU for the terrain)
   // ?bench=macro: the macro colour's arms instead (with the detail layer)
-  const arms = params.get('bench') === 'macro' ? MACRO_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); macro.setArm(a) } })) : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
+  // ?bench=dof: the gameplay depth of field off and on (decision 0020)
+  const dofArm = (on: number) => () => { setDetail([]); S.dof = on; post.build() }
+  const arms = params.get('bench') === 'macro' ? MACRO_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); macro.setArm(a) } }))
+    : params.get('bench') === 'dof' ? [{ name: 'nodof', apply: dofArm(0) }, { name: 'dof', apply: dofArm(1) }]
+    : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
   void runBench(scene, camera, passes, arms, hold).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
     (e: unknown) => { Object.assign(window, { __bench: { error: String(e) } }); console.error('bench failed:', e) })
 }

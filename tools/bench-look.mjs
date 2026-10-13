@@ -2,7 +2,7 @@
 // JSON. On this machine the numbers are a proxy and pass no gate; the laptop's run (the owner's) is the measurement.
 //
 //   node tools/bench-look.mjs <look page URL> [out.json] [--hold <s>] [--gpu <angle backend>] [--timeout <min>]
-//   A ?bench=<value> in the URL is kept (?bench=macro: the macro colour's arms, src/look/main.ts).
+//   A ?bench=<value> in the URL is kept (?bench=macro: the macro colour's arms; ?bench=dof: the depth of field off and on; src/look/main.ts).
 //     --hold     seconds measured per camera and arm (default 3; each run also takes at least 20 frames)
 //     --gpu      use the machine's GPU through that ANGLE backend (e.g. metal); default $SHOT_ANGLE, else SwiftShader
 //                (slow; it has the timer extension, but it times software rendering)
@@ -21,6 +21,8 @@ const [url, out = path.join(ROOT, 'scratch/bench.json')] = args
 if (!url || !(+hold > 0) || !(timeout > 0)) { console.error('usage: node tools/bench-look.mjs <look page URL> [out.json] [--hold <s>] [--gpu <backend>] [--timeout <min>]'); process.exit(2) }
 
 const u = new URL(url); u.searchParams.set('bench', u.searchParams.get('bench') ?? ''); u.searchParams.set('hold', hold)   // keeps ?bench=macro (the macro arms)
+// blur off unless the URL sets ?dof (decision 0020: the terrain lines compare with runs before it); ?bench=dof measures it
+if (!u.searchParams.has('dof')) u.searchParams.set('dof', '0')
 const steps = [['wait', 1000],
   ['eval', `(async () => { const end = Date.now() + ${timeout * 60000}; while (!window.__bench && Date.now() < end) await new Promise(r => setTimeout(r, 100)); if (!window.__bench) throw new Error("no bench result after ${timeout} min (--timeout)"); return "BENCH " + JSON.stringify(window.__bench) })()`]]
 let stdout
