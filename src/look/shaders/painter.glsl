@@ -1,6 +1,8 @@
 
 uniform sampler2D uGrain;
 uniform vec3 uSunDir,uSunCol,uShadowCol,uHazeCool,uHazeWarm,uCamPos,uFocus;
+// the mood's other colours (src/look/mood.ts)
+uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistShade,uMistLit,uWaterSky,uGlint,uFarRiver;   // uShadowTurn: divided by its luma
 uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason;
 
 vec3 G(vec2 uv){return texture2D(uGrain,uv).rgb;}
@@ -77,7 +79,7 @@ vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   // thinner over the cast shadow on the ground, which keeps its shape; less so above the ground (a crown, a block), whose
   // own light is not that of the ground
   float t=clamp(m*(0.35+0.55*n),0.0,0.42)*mix(1.0,mix(0.55,1.0,1.0-(1.0-lm.r)*uShadowsOn),exp(-hAbove*0.5));
-  return mix(c,mix(vec3(0.42,0.53,0.68),vec3(1.0,0.86,0.63),air),t);}
+  return mix(c,mix(uMistShade,uMistLit,air),t);}
 // view distance in alpha → depth of field without re-rendering the scene
 float depthA(vec3 wp){return clamp(length(wp-uCamPos)/1000.0,0.0,1.0);}
 // Big painted cloud shadows drifting over the land: the top-down camera's only "sky".
@@ -92,10 +94,10 @@ float cloud(vec3 wp){
 vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
   vec3 s=clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80;float v=dot(s,Y);   // the band of main, whose value is kept
   #ifndef KEEP_HUE
-  vec3 t=clamp(mix(vec3(l),a,1.3),0.0,1.0)*uShadowCol;const vec3 B=vec3(0.34,0.45,0.80);
-  s=mix(t/max(dot(t,Y),1e-4),B/dot(B,Y),0.25)*v;
+  vec3 t=clamp(mix(vec3(l),a,1.3),0.0,1.0)*uShadowCol;
+  s=mix(t/max(dot(t,Y),1e-4),uShadowTurn,0.25)*v;
   #endif
-  return s+vec3(0.02,0.04,0.07);}
+  return s+uShadowLift;}
 // THE TERRAIN'S DETAIL LAYER (docs/plans/active/l2-detail.md, L2b): the paint grain at a constant size on screen.
 // DETAIL: the terrain's materials; DETAIL_L0 puts back the L0 grain (the bench's and the checks' baseline).
 // Biplanar projection (the two planes most facing the normal; the third has no weight, and on gentle ground nor has
@@ -189,17 +191,17 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #ifdef SKY_IN_SHADOW
   shc*=mix(0.62,1.0,smoothstep(0.35,0.8,pSky));   // deep sky occlusion (a wood floor) deepens the shadow itself (docs/plans/done/soft-shadows.md)
   #endif
-  vec3 mid=alb*mix(vec3(0.86,0.92,0.98),uSunCol,0.30);
+  vec3 mid=alb*mix(uMidCool,uSunCol,0.30);
   #ifdef SOFT_RAMP
   mid=clamp(mix(vec3(dot(mid,vec3(0.3,0.59,0.11))),mid,1.3),0.0,1.0);   // the crowns turning side keeps its colour (L7b)
   #endif
-  vec3 lt=alb*uSunCol*mix(1.16,1.02,snow)+vec3(0.03,0.025,0.0)*(1.0-snow);
+  vec3 lt=alb*uSunCol*mix(1.16,1.02,snow)+uLitLift*(1.0-snow);
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
   c*=1.0+gr*0.38;                                                           // gouache grain in the value
   vec3 V=normalize(uCamPos-wp);
   float fres=1.0-max(dot(N,V),0.0);
   float rim=smoothstep(0.58,0.64,fres+(gd-0.5)*0.2)*smoothstep(-0.35,0.2,ndl);
-  c+=uSunCol*vec3(1.0,0.86,0.6)*rim*rimAmt*0.55*(1.0-cloud(wp)*0.7)*(1.0-sh);       // graphic warm rim
+  c+=uSunCol*uRimCol*rim*rimAmt*0.55*(1.0-cloud(wp)*0.7)*(1.0-sh);       // graphic warm rim
   return c;
 }
 // Top-down atmosphere: colour cools (and warms toward the sun side) away from the focus.

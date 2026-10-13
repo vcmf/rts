@@ -38,5 +38,5 @@ void main(){
   float back=clamp(dot(-normalize(V.xz+1e-4),normalize(uSunDir.xz)),0.0,1.0);back*=back;
   vec3 Nc=normalize(vN);                                        // the glow keeps the card normals of L7a (its amount, its spread)
   float edge=smoothstep(0.35,0.75,(1.0-abs(dot(Nc,V)))+(grainW(vW,Nc,2.4).r-0.5)*0.25);
-  c+=uSunCol*vec3(1.0,0.78,0.45)*back*edge*uBack*0.3*(1.0-shO);   // the sun through the leaves: only other trees block it    // half the default: the cards turn far more of the crown edge-on
+  c+=uSunCol*uBackCol*back*edge*uBack*0.3*(1.0-shO);   // the sun through the leaves: only other trees block it    // half the default: the cards turn far more of the crown edge-on
   gl_FragColor=vec4(atmos(mist(c,vW,lm,vH),vW),depthA(vW));}

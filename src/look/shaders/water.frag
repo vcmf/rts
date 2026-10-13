@@ -50,7 +50,7 @@ void main(){
     float along=(vTau-mod(uTime,STROKE_P))*STROKE_V;
     // 4. the painted sky tint at grazing view (no sky is drawn), less on rough water
     float fr=pow(1.0-max(V.y,0.0),2.5);
-    c=mix(c,vec3(0.62,0.74,0.86),(0.12+fr*0.40)*smoothstep(0.2,1.0,d)*(1.0-0.6*rough)*up*(1.0-0.7*frost()));   // less on winter's dark water
+    c=mix(c,uWaterSky,(0.12+fr*0.40)*smoothstep(0.2,1.0,d)*(1.0-0.6*rough)*up*(1.0-0.7*frost()));   // less on winter's dark water
     // 5. tree reflections: the mirrored view ray traced up to crown height in the baked canopy mask, broken on riffles
     float wob=(G(vec2(across*0.6,along*0.25)).r-0.5)*(0.9+1.6*rough);
     vec2 o=R.xz/max(R.y,0.2);
@@ -64,7 +64,7 @@ void main(){
     // 8. glitter: painted sun dabs, mostly on riffles
     float spec=pow(max(dot(R,uSunDir),0.0),5.0);
     float dab=aastep(mix(0.80,0.73,rough),G(vec2(along*0.10,across*0.25)).g)*aastep(0.5,G(vW.xz/9.0+mod(uTime,200.0/3.0)*0.015).g);
-    c+=uSunCol*mix(vec3(1.0,0.86,0.58),vec3(0.80,0.88,1.0),frost())*dab*(0.2+spec*1.6)*(1.0-cs)*smoothstep(0.15,0.5,d)*up*near*(1.0-0.7*frost());   // fewer and cold in winter (W5b)
+    c+=uSunCol*mix(uGlint,vec3(0.80,0.88,1.0),frost())*dab*(0.2+spec*1.6)*(1.0-cs)*smoothstep(0.15,0.5,d)*up*near*(1.0-0.7*frost());   // fewer and cold in winter (W5b)
     // 9. riffle foam: broken streaks along the current (the grain's dry-brush channel, long along x), bent into
     // chevrons pointing upstream, hard-edged
     float chev=G(vec2(along*0.05+abs(across)*0.02,across*0.03)).b;
