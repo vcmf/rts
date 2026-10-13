@@ -69,16 +69,38 @@ and on.
 
 ### The gameplay depth of field (decision 0020)
 
-The plan: `docs/plans/active/gameplay-dof.md`. One pass (`src/look/shaders/dof.frag`) after Dennis Gustafsson's
-single-pass bokeh: a golden-angle spiral of at most 64 taps, each counted where its own blur reaches the pixel, and a
-tap behind the pixel clamped to twice the pixel's blur so a sharp crown never bleeds over the ground behind it. The
-circle of confusion is `|1 − focus/z|` past a sharp band, times a gain, z the depth along the view axis (from the
-distance the materials write to alpha and the pixel's ray) and the focus the depth of the ground at the screen's
-centre (the centre ray marched against the terrain, eased over a quarter second; a new view is taken at once). The constants are `DOF` in `src/look/post.ts`: the band, the gain, the
-largest blur in pixels at 1080 lines, and the share of it left at the widest zoom (the blur eases from the closest
-zoom to the widest). The panel's "Blur strength" slider multiplies it. The look tools load the page with `?dof=0`
-(`shoot()` in `tools/look-page.mjs`, and `tools/check-negatives.mjs` for a URL): the checks measure the paint; the readability
-guard is also run with `?dof=1`.
+The plan: `docs/plans/active/gameplay-dof.md`.
+
+- **The scene at half resolution** (`src/look/shaders/dofdown.frag`): each pixel holds the four scene pixels under
+  it, read at their centres: their colour averaged (a figure narrower than the block is blurred, not dropped) and the
+  farthest of their distances (a bilinear blend of two depths is no surface).
+- **The blur** (`src/look/shaders/dof.frag`) reads it at half resolution, each tap at a pixel's centre, after Dennis
+  Gustafsson's single-pass bokeh:
+  - taps on a golden-angle spiral, each counted where its own blur reaches the pixel (over a pixel either side: the
+    taps are a half-resolution texel apart), a tap that lands back on the pixel skipped; about 32 for a 10 px blur and
+    as many per unit of area as the blur grows, in five steps from 16 to 64 (past a 14 px blur, sparser);
+  - a tap behind the pixel has its blur clamped to twice the pixel's, so a sharp crown never bleeds over the ground
+    behind it;
+  - its alpha is the largest blur that a tap nearer than the focus, and nearer than 0.97 of the pixel's depth (not
+    the same ground a little further down the screen), spreads over the pixel: only such a tap can blur a sharp
+    pixel.
+- **The composite** is in the finishing pass (`uber.frag` with `DOF`). It keeps the sharp scene where the pixel's
+  blur, and the blur a nearer tap spreads over it (the blur's alpha), are under a pixel. The bloom gathers from the
+  half-resolution blur.
+- **The circle of confusion** (`src/look/shaders/dofcoc.glsl`, pixels at full resolution):
+  - beyond the focus, `1 − focus/z` past a sharp band;
+  - nearer, `1 − z/focus` past a wider band, so the formations at the screen's foot keep their edges (the
+    readability guard failed with one band both sides);
+  - times a gain. z is the depth along the view axis, from the distance the materials write to alpha and the
+    pixel's ray.
+- **The focus** is the depth of the ground at the screen's centre: the centre ray marched against the terrain, eased
+  over a quarter second; a new view is taken at once.
+- **The constants** are `DOF` in `src/look/post.ts`: the two bands, the gain, the largest blur in pixels at 1080
+  lines, and the share of it left at the widest zoom (the blur eases from the closest zoom to the widest). The
+  panel's "Blur strength" slider multiplies it.
+- **The checks:** the look tools load the page with `?dof=0` (`shoot()` in `tools/look-page.mjs`, and
+  `tools/check-negatives.mjs` for a URL), so they measure the paint. The readability guard is also run with
+  `?dof=1`.
 
 ### The ground's cover and macro colour (L5a)
 
