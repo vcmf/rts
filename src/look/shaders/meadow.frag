@@ -40,6 +40,6 @@ void main(){
   #ifdef SKY_IN_SHADOW
   shc*=mix(0.62,1.0,smoothstep(0.35,0.8,mix(1.0,lm.g,uAO)));
   #endif
-  vec3 mid=alb*mix(vec3(0.86,0.92,0.98),uSunCol,0.30),lt=alb*uSunCol*1.16+vec3(0.03,0.025,0.0);
+  vec3 mid=alb*mix(uMidCool,uSunCol,0.30),lt=alb*uSunCol*1.16+uLitLift;
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
   gl_FragColor=vec4(atmos(mist(c,vW,lm,vH),vW),depthA(vW));}

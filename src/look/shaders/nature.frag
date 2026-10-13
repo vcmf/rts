@@ -51,6 +51,6 @@ void main(){
     vec3 V=normalize(uCamPos-vW);
     float back=clamp(dot(-normalize(V.xz+1e-4),normalize(uSunDir.xz)),0.0,1.0);back*=back;
     float edge=smoothstep(0.35,0.75,(1.0-abs(dot(N,V)))+(grainW(vW,N,2.4).r-0.5)*0.25);
-    c+=uSunCol*vec3(1.0,0.78,0.45)*back*edge*uBack*0.55*(1.0-sh);}
+    c+=uSunCol*uBackCol*back*edge*uBack*0.55*(1.0-sh);}
   #endif
   gl_FragColor=vec4(atmos(mist(c,vW,lm,vH),vW),depthA(vW));}

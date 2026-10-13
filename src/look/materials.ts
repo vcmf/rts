@@ -3,7 +3,6 @@
 // shadows), inlined into every fragment shader where it says #include<painter>.
 import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
-import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import PAINTER from './shaders/painter.glsl?raw'
@@ -11,6 +10,7 @@ import WATERDATA from './shaders/waterdata.glsl?raw'
 import SHORE from './shaders/shore.glsl?raw'
 import MACRO from './shaders/macro.glsl?raw'
 import MEADOW from './shaders/meadow.glsl?raw'
+import { MOOD } from './mood.ts'
 import { D } from './spec.ts'
 
 // the panel's state; t is the clock (cloud drift, water flow)
@@ -18,8 +18,6 @@ export const S = { grain: 1, gamt: 0.9, edges: 1, clouds: 1, shadows: 1, ao: 1, 
 export type LookState = typeof S
 
 export const SUN = new Vector3(-0.70, 0.45, 0.55).normalize()   // low side-back light, ~27° elevation
-export const PAL = { sun: new Color3(1.00, 0.84, 0.60), shadow: new Color3(0.45, 0.57, 0.76), hazeCool: new Color3(0.60, 0.69, 0.78), hazeWarm: new Color3(0.95, 0.80, 0.58) }
-export const CLEAR = new Color4(PAL.hazeCool.r, PAL.hazeCool.g, PAL.hazeCool.b, 1)
 
 const MARK = '#include<painter>'
 // every painted fragment shader includes the painter, and may include the water data's reads (#include<waterdata>)
@@ -32,7 +30,7 @@ export const withPainter = (src: string): string => {
 
 // the ground's macro colour (src/look/shaders/macro.glsl): the cover grid and the bakes, on every painted material
 const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush']   // uMeadowBrush: the meadow's brush tile (MEADOW, src/look/meadow.ts)
-const COMMON = ['uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uSunCol', 'uShadowCol', 'uHazeCool', 'uHazeWarm', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA']
+const COMMON = ['uShadowTurn', 'uShadowLift', 'uMidCool', 'uLitLift', 'uRimCol', 'uBackCol', 'uMistShade', 'uMistLit', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uSunCol', 'uShadowCol', 'uHazeCool', 'uHazeWarm', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA']
 
 // perFrame: false keeps a material out of `all` (no per-frame uniforms, no light map: the light-map bake draws into it)
 export interface MatOptions { attributes?: string[]; uniforms?: string[]; samplers?: string[]; alpha?: boolean; defines?: string[]; perFrame?: boolean }
@@ -52,8 +50,11 @@ export class Materials {
     if (defines.includes('#define DETAIL') && this.webgl1) defines = [...defines, '#define DETAIL_L0']
     const m = new ShaderMaterial(name, this.scene, { vertexSource: vs, fragmentSource: withPainter(fs) },
       { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...MACRO_SAMPLERS, ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM' && !MACRO_SAMPLERS.includes(x))], needAlphaBlending: alpha, defines: [...D.defines, ...this.defines, ...defines] })
-    m.setVector3('uSunDir', SUN); m.setColor3('uSunCol', PAL.sun); m.setColor3('uShadowCol', PAL.shadow)
-    m.setColor3('uHazeCool', PAL.hazeCool); m.setColor3('uHazeWarm', PAL.hazeWarm); m.setTexture('uGrain', this.grain); m.setVector2('uGrainMean', new Vector2(...this.grainMean))
+    // the light's colours, from the mood (src/look/mood.ts)
+    const M = MOOD
+    m.setVector3('uSunDir', SUN); m.setColor3('uSunCol', M.sun); m.setColor3('uShadowCol', M.shadow); m.setColor3('uShadowTurn', M.shadowTurn); m.setColor3('uShadowLift', M.shadowLift)
+    m.setColor3('uMidCool', M.midCool); m.setColor3('uLitLift', M.litLift); m.setColor3('uRimCol', M.rim); m.setColor3('uBackCol', M.back); m.setColor3('uMistShade', M.mistShade); m.setColor3('uMistLit', M.mistLit)
+    m.setColor3('uHazeCool', M.hazeCool); m.setColor3('uHazeWarm', M.hazeWarm); m.setTexture('uGrain', this.grain); m.setVector2('uGrainMean', new Vector2(...this.grainMean))
     this.every.push(m)
     if (perFrame) { this.all.push(m); for (const b of this.binders) b(m) }
     return m
