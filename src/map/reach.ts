@@ -55,14 +55,7 @@ function closed(r: Pt[]): Pt[] { let c = closedRings.get(r); if (!c) { c = [...r
 // segment's ends, once neither crosses the other); circles and ellipses as the polygons that just contain them.
 export function distanceToPolygon(f: Feature, attrs: Record<string, AttrValue>, poly: Pt[]): number {
   const ring = closed(poly)
-  const lineDist = (line: Pt[], halfWidth: number): number => {
-    for (let k = 0; k + 1 < line.length; k++) for (let e = 0; e + 1 < ring.length; e++) if (segmentsMeet(line[k], line[k + 1], ring[e], ring[e + 1])) return 0
-    if (line.some(p => inRing(poly, p))) return 0
-    let d = Infinity
-    for (const [x, z] of poly) d = Math.min(d, nearLine(line, x, z).d)
-    for (const [x, z] of line) d = Math.min(d, nearLine(ring, x, z).d)
-    return Math.max(0, d - halfWidth)
-  }
+  const lineDist = (line: Pt[], halfWidth: number): number => (line.some(p => inRing(poly, p)) ? 0 : Math.max(0, lineDistance(line, ring) - halfWidth))
   if (f.line) return lineDist(f.line, num(attrs.width, 0) / 2)
   const rings = ringsOf(f)
   if (rings) {
@@ -73,6 +66,27 @@ export function distanceToPolygon(f: Feature, attrs: Record<string, AttrValue>, 
   }
   if (f.point) return inRing(poly, f.point) ? 0 : nearLine(ring, f.point[0], f.point[1]).d
   return Infinity
+}
+
+// How far apart two polylines lie (0 when they meet): once no segments meet, the closest approach of two segments is
+// at one of their ends
+export function lineDistance(a: Pt[], b: Pt[]): number {
+  for (let k = 0; k + 1 < a.length; k++) for (let e = 0; e + 1 < b.length; e++) if (segmentsMeet(a[k], a[k + 1], b[e], b[e + 1])) return 0
+  let d = Infinity
+  for (const [x, z] of b) d = Math.min(d, nearLine(a, x, z).d)
+  for (const [x, z] of a) d = Math.min(d, nearLine(b, x, z).d)
+  return d
+}
+// How far apart two bands (the points within `reach` of a line) lie, and a band from an area's edge: 0 when they meet
+export interface Band { line: Pt[]; reach: number }
+export const bandGap = (a: Band, b: Band): number => (a.line.length && b.line.length ? Math.max(0, lineDistance(a.line, b.line) - a.reach - b.reach) : Infinity)
+export function bandToArea({ line, reach }: Band, f: Feature): number {
+  if (!line.length) return Infinity
+  const rings = ringsOf(f)
+  if (!rings) return Infinity
+  let inside = false, d = Infinity
+  for (const r of rings) { if (inRing(r, line[0])) inside = !inside; d = Math.min(d, lineDistance(line, closed(r))) }
+  return inside ? 0 : Math.max(0, d - reach)
 }
 
 // does a feature match a selector: its id, the id of the feature it was generated from (a scatter's region names its

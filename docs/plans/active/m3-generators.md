@@ -323,3 +323,20 @@ The round count restarts.
   - a mix scatter's own attributes reached no child silently: now an error pointing to `set`.
 - **Light:** a non-list mix no longer also says "count is required"; the clump parameters have one spec, shared
   by the scatter and its entries.
+
+**Redesign 2, round 2** (8 findings, 3 severe):
+- **Severe**, all from checking villages apart after the fact:
+  - pinning one village changed its neighbour (a pinned village is seen, an unpinned one was hidden);
+  - a village's ground (its hull or its own area) was never checked against the other's houses;
+  - whether two nearby villages were valid depended on the seed, which broke reseeding.
+
+  Fixed by checking **where a village can reach, whatever its seed**: a house's middle lies on the road between
+  `from` and `to`, so the houses and yard lie in a band around that stretch (`villageBand`). Two villages whose
+  bands (or one's band and the other's own area) come within 1 m are an error on both, before anything runs. Apart,
+  neither can change the other, so there is no hidden output and no after-the-fact check. Tested: pinning leaves
+  the neighbour equal on five seeds; the error is the same on ten seeds; the band holds every house on a bent road.
+- **Moderate:** the house gap is one constant (`BUILT_GAP`); the generator's own checks run even when another
+  parameter is wrong (they skip only a mix whose type is wrong); the message for a mix scatter's own fields no
+  longer offers `set` for non-attributes.
+- **Light:** the peers' copied feature map and pairwise list are gone with the redesign of the check; the system
+  doc's front matter names decision 0023.

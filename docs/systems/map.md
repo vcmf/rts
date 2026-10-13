@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-13
 code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0023-generators-form-a-chain]
 ---
 
 # The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3b)
@@ -66,8 +66,10 @@ maps/kinds.json ──► checkCatalogue ─┐
     buildings, no-go zones, ways and barriers; a scatter its `avoid` and `within`. Meander and clump read nothing;
   - F reads G when one of F's selectors could match what G produces (G's id, its children's ids, the kinds of G and
     of its children; not a scatter's own kind, as its region leaves the map); a generator never reads itself. Street
-    villages are peers (`peers`): they neither read nor see each other's output, and once all have run their houses
-    must lie 1 m apart, or it is an error naming both. The generators run in dependency order (Tarjan's strongly
+    villages are peers (`peers`): they never read each other. A village can reach only a band around its stretch of
+    road (`villageBand`, `src/map/street-village.ts`: half the longest house, the setback, the deepest house and a
+    yard), plus its own area; two villages whose reaches come within 1 m are an error on both, before anything runs,
+    so the seeds, the order and pinning one never change the other. The generators run in dependency order (Tarjan's strongly
     connected groups, each emitted after what it reads). The reads must form a chain: a group of two or more is a
     cycle, an error on each member naming what it reads, by which selector, and how to break it (drop one side's
     read; when all are scatters, place their kinds in one scatter's `mix`). So neither the

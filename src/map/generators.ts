@@ -7,8 +7,9 @@ import type { AttrValue, Catalogue, Feature, FieldSpec, Pt, ShapeName } from './
 import { HEADING_MAX, meander } from './meander.ts'
 import type { ClumpParams } from './clump.ts'
 import { clump, clumpMaxRadius, CLUMP_DEFAULTS } from './clump.ts'
-import { streetVillage } from './street-village.ts'
+import { streetVillage, villageBand } from './street-village.ts'
 import { scatterSites } from './scatter.ts'
+import type { Band } from './reach.ts'
 import { boxDistance, boxOf, distanceTo, distanceToPolygon, matches } from './reach.ts'
 import { allowedIn, categoryOf, checkValue, kindChain, kindMeta } from './catalogue.ts'
 import { seedOf } from './seed.ts'
@@ -35,9 +36,10 @@ export interface GenSpec {
   // the kinds of the children it writes, when it writes any (ids <feature>-<n>)
   childKinds?(kind: string, params: Record<string, unknown>): string[]
   removesSelf?: boolean            // its own feature leaves the expanded map (a scatter's region)
-  // generators of this name never read each other's output: each runs as if the others were not there, and their
-  // outputs are checked apart once all have run (street villages: decision 0023)
-  peers?: { gap: number }
+  // generators of this name never read each other (street villages, decision 0023): each declares where its output
+  // can reach whatever its seed (a band around a line, and its own area), and two whose reaches come within `gap`
+  // are an error before anything runs. Apart, neither can change the other's output, so neither needs to wait
+  peers?: { gap: number; reach(f: Feature, features: Map<string, Feature>, attrsOf: (id: string) => Record<string, AttrValue>): Band | null }
   // its own checks of its parameters, beyond their specs (a scatter's mix entries against the catalogue); run only
   // when every parameter passed its spec
   check?(params: Record<string, unknown>, cat: Catalogue, f: Feature): { key: string; message: string }[]
@@ -59,6 +61,7 @@ const hasShape = (g: Feature) => !!(g.line || g.area || g.circle || g.ellipse ||
 const select = (ctx: GenContext, sels: string[]) => [...ctx.features.values()].filter(g => g.id !== ctx.f.id && hasShape(g) && sels.some(s => matches(s, g, ctx.kindOf(g.id))))
 
 const VILLAGE_KEEPS_CLEAR = ['water', 'built', 'zone.nogo', 'way', 'barrier']   // what a house keeps clear of
+const BUILT_GAP = 1   // m between a house and any other building (another village's included)
 // the largest a street-village house may be (street-village.ts: LENGTH ≤ 13, DEPTH ≤ 9): the box pruning's margin
 const HOUSE_REACH = 16
 
@@ -111,7 +114,10 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
   'street-village': {
     kinds: ['built.village'], input: ['area', 'none'], output: 'area', childKinds: () => ['built.house'],
     reads: f => [f.along!.id, ...VILLAGE_KEEPS_CLEAR],
-    peers: { gap: 1 },   // another street village is neither read nor avoided: their houses must end up 1 m apart
+    peers: {
+      gap: BUILT_GAP,
+      reach: (f, features, attrsOf) => { const road = features.get(f.along!.id); return road?.line ? villageBand(road.line, num(attrsOf(road.id).width, 5), f.along!.from, f.along!.to) : null },
+    },
     params: { min: { type: 'int', unit: 'count', min: 0, max: 500 } },
     run: ctx => {
       const { f, attrs, params, seed, features, attrsOf, kindOf } = ctx
@@ -120,7 +126,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
       // what a house keeps clear of, as a whole polygon (its own road aside: a house keeps 1 m from it where it bends
       // back): 2 m from water, a barrier's band (its thickness in 2 m cells, centred, proposal §3.6) plus 1 m, and
       // 1 m from the rest (a bridge has no shape)
-      const gap = (g: Feature) => matches('water', g, kindOf(g.id)) ? 2 : matches('barrier', g, kindOf(g.id)) ? num(attrsOf(g.id).thickness, 2) + 1 : 1
+      const gap = (g: Feature) => matches('water', g, kindOf(g.id)) ? 2 : matches('barrier', g, kindOf(g.id)) ? num(attrsOf(g.id).thickness, 2) + 1 : BUILT_GAP
       const near = select(ctx, VILLAGE_KEEPS_CLEAR).filter(g => g.id !== along.id).map(g => ({ g, box: boxOf(g, attrsOf(g.id)), gap: gap(g) }))
       // a feature whose box lies farther than the gap plus a house's reach from a corner cannot touch the house
       const clear = (house: Pt[]) => near.every(({ g, box, gap }) => house.every(([x, z]) => boxDistance(box, x, z) > gap + HOUSE_REACH) || distanceToPolygon(g, attrsOf(g.id), house) > gap)
@@ -144,10 +150,11 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
     },
     check: (p, cat, f) => {
       const out: { key: string; message: string }[] = []
-      if (!Array.isArray(p.mix)) { if (p.count === undefined) out.push({ key: 'count', message: 'is required (or give a mix)' }); return out }
+      if (p.mix === undefined) { if (p.count === undefined) out.push({ key: 'count', message: 'is required (or give a mix)' }); return out }
+      if (checkValue(GENERATOR_SPECS.scatter.params.mix, p.mix)) return out   // its spec's error is reported already
       for (const k of Object.keys(CLUMP_PARAMS)) if (p[k] !== undefined) out.push({ key: k, message: 'belongs to each entry of a mix, not to the scatter' })
       const own = Object.keys(f).filter(k => !MIX_SCATTER_FIELDS.includes(k))
-      if (own.length) out.push({ key: 'mix', message: `the scatter's own ${own.join(', ')} reach no child of a mix: give attributes to each entry with set` })
+      if (own.length) out.push({ key: 'mix', message: `the scatter's own ${own.join(', ')} reach no child of a mix: each child takes only its entry's kind and set` })
       ;(p.mix as Record<string, unknown>[]).forEach((e, n) => {
         const at = `mix[${n}]`
         for (const k of Object.keys(e)) if (!ENTRY_KEYS.includes(k)) out.push({ key: `${at}.${k}`, message: `unknown field (${ENTRY_KEYS.join(', ')})` })

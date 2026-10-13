@@ -8,6 +8,7 @@ import type { Catalogue, MapFile, Pt } from '../src/map/schema.ts'
 import { hash32, random, seedOf } from '../src/map/seed.ts'
 import { fbm, addFbmGrid } from '../src/map/noise.ts'
 import { meander } from '../src/map/meander.ts'
+import { villageBand } from '../src/map/street-village.ts'
 import { clump } from '../src/map/clump.ts'
 import { expand } from '../src/map/expand.ts'
 import { validate } from '../src/map/validate.ts'
@@ -373,21 +374,36 @@ describe('M3b: the chain (decision 0023): each generator after what it reads; a 
     const g2 = { id: 'g2', kind: 'veg.wood.broad', area: REGION, gen: { scatter: { mix: [{ kind: 'ground.field.wheat', count: 3, radiusMin: 20, radiusMax: 30 }], avoid: ['water'], clearance: 10 } } }
     expect(expand(mini([g2, sc('h', 'water.pond', { avoid: ['veg'] })]), cat).issues).toEqual([])
   })
-  it('street villages are peers: neither reads the other, and their houses must end up apart', () => {
-    const vb = { ...VILLAGE, id: 'vb', along: { id: 'road', from: 500, to: 700 } }
+  it('street villages are peers: neither reads the other; their reaches must lie apart, whatever the seeds', () => {
+    const va = { ...VILLAGE, id: 'va', along: { id: 'road', from: 50, to: 250 } }, vb = { ...VILLAGE, id: 'vb', along: { id: 'road', from: 500, to: 700 } }
     for (let seed = 1; seed <= 5; seed++) {
-      const { map, issues } = expand(mini([ROAD, { ...VILLAGE, id: 'va', along: { id: 'road', from: 50, to: 250 } }, vb], seed), cat)
+      const { map, issues } = expand(mini([ROAD, va, vb], seed), cat)
       expect(issues).toEqual([])
       expect(kidsOf(map, 'va')).toHaveLength(6); expect(kidsOf(map, 'vb')).toHaveLength(6)
+      // pinning one (its expanded form and its houses) leaves the other as it was
+      const pinned = map.features.filter(f => f.id === 'va' || f.origin?.parent === 'va')
+      const again = expand(mini([ROAD, ...pinned, vb], seed), cat)
+      expect(again.issues).toEqual([])
+      expect(kidsOf(again.map, 'vb')).toEqual(kidsOf(map, 'vb'))
     }
-    const crowd = expand(mini([ROAD, { ...VILLAGE, id: 'va', houses: 16, along: { id: 'road', from: 300, to: 500 } }, { ...vb, houses: 16, along: { id: 'road', from: 300, to: 500 } }]), cat)
-    expect(crowd.issues.map(i => i.id)).toEqual(['vb'])
-    expect(crowd.issues[0].message).toMatch(/"vb-\d+" comes within 1 m of "va-\d+": street-village generators do not see each other/)
-    // a pinned village's houses are hand-drawn features: a village keeps clear of them
-    const pinned = kidsOf(expand(mini([ROAD, { ...VILLAGE, id: 'va', along: { id: 'road', from: 300, to: 500 } }]), cat).map, 'va')
-    const next = expand(mini([ROAD, ...pinned, { ...vb, along: { id: 'road', from: 300, to: 600 }, gen: { 'street-village': { min: 1 } } }]), cat)
-    expect(next.issues).toEqual([])
-    expect(apart(kidsOf(next.map, 'vb'), pinned)).toBe(true)
+    // too close is an error on both, before anything runs, so on every seed alike
+    for (let seed = 1; seed <= 10; seed++) {
+      const close = expand(mini([ROAD, va, { ...vb, along: { id: 'road', from: 260, to: 400 } }], seed), cat)
+      expect(close.issues.map(i => i.id)).toEqual(['va', 'vb'])
+      expect(close.issues[0].message).toMatch(/could come within 1 m of "vb".*street-village generators do not see each other, so move their stretches apart/)
+    }
+    // a village's own area counts: another village's reach must keep off it
+    const walled = { ...va, area: [[[-60, -20], [60, -20], [60, 20], [-60, 20]]] as Pt[][], along: { id: 'road', from: 0, to: 100 } }
+    expect(expand(mini([ROAD, walled, { ...vb, along: { id: 'road', from: 300, to: 400 } }]), cat).issues.map(i => i.id)).toEqual(['va', 'vb'])
+  })
+  it("a village's band holds every house and its ground, on bends too", () => {
+    const bent = { id: 'road', kind: 'way.road.lane', line: [[-300, -200], [0, 0], [300, -200]] as Pt[] }
+    for (let seed = 1; seed <= 10; seed++) {
+      const { map, issues } = expand(mini([bent, { ...VILLAGE, houses: 20, along: { id: 'road', from: 200, to: 500 }, gen: { 'street-village': { min: 1 } } }], seed), cat)
+      expect(issues).toEqual([])
+      const band = villageBand(bent.line, 5, 200, 500)
+      for (const f of map.features.filter(g => g.id === 'village' || g.origin?.parent === 'village')) for (const p of f.area![0]) expect(nearLine(band.line, p[0], p[1]).d).toBeLessThanOrEqual(band.reach)
+    }
   })
   it('a generator reading a cycle or a failed generator is skipped: only the first errors are reported', () => {
     const cyc = expand(mini([sc('aa', 'veg.wood', { avoid: ['bb'] }), sc('bb', 'ground.field', { avoid: ['aa'] }), sc('cc', 'water.pond', { within: ['aa'] })]), cat)
@@ -459,7 +475,9 @@ describe("M3b: scatter's mix: several kinds placed jointly", () => {
     expect(paths([null])).toEqual([expect.stringMatching(/scatter\.mix: must be a list of objects/)])        // reported, never thrown
     expect(paths('veg' as unknown as unknown[])).toEqual([expect.stringMatching(/scatter\.mix: must be a list of objects/)])
     const own = validate(mini([{ ...mixed([{ kind: 'veg.wood', count: 2 }]), density: 0.5 }]), cat).map(i => i.message)
-    expect(own).toContainEqual(expect.stringMatching(/the scatter's own density reach no child of a mix: give attributes to each entry with set/))
+    expect(own).toContainEqual(expect.stringMatching(/the scatter's own density reach no child of a mix: each child takes only its entry's kind and set/))
+    // a wrong parameter hides none of the generator's own checks
+    expect(validate(mini([{ ...sc('w', 'veg.wood', {}), gen: { scatter: { clearance: -1 } } }]), cat).map(i => i.path)).toEqual(expect.arrayContaining([expect.stringMatching(/clearance$/), expect.stringMatching(/count$/)]))
   })
 })
 

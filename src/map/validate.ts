@@ -113,14 +113,13 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       else if (Object.hasOwn(GENERATOR_SPECS, names[0])) {
         gen = GENERATOR_SPECS[names[0]]
         const gp = `${path}.gen.${names[0]}`
-        let fine = true
         for (const [k, v] of Object.entries(params)) {
-          if (!Object.hasOwn(gen.params, k)) { bad(id, `${gp}.${k}`, `unknown parameter (${Object.keys(gen.params).join(', ')})`); fine = false; continue }
-          const e = checkValue(gen.params[k], v); if (e) { bad(id, `${gp}.${k}`, e); fine = false }
+          if (!Object.hasOwn(gen.params, k)) { bad(id, `${gp}.${k}`, `unknown parameter (${Object.keys(gen.params).join(', ')})`); continue }
+          const e = checkValue(gen.params[k], v); if (e) bad(id, `${gp}.${k}`, e)
         }
-        for (const [k, spec] of Object.entries(gen.params)) if (spec.required && !(k in params)) { bad(id, `${gp}.${k}`, 'is required'); fine = false }
-        // the generator's own checks assume parameters of the right types
-        if (fine) for (const problem of gen.check?.(params as Record<string, unknown>, cat, f as Feature) ?? []) bad(id, `${gp}.${problem.key}`, problem.message)
+        for (const [k, spec] of Object.entries(gen.params)) if (spec.required && !(k in params)) bad(id, `${gp}.${k}`, 'is required')
+        // the generator's own checks (they skip a parameter whose type is already wrong)
+        for (const problem of gen.check?.(params as Record<string, unknown>, cat, f as Feature) ?? []) bad(id, `${gp}.${problem.key}`, problem.message)
         // the parameters that name features: each an id (a generator's children too, <id>-<n>), a category, or a
         // dotted kind prefix in the catalogue; never the feature itself
         for (const k of gen.selects ?? []) {

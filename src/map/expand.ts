@@ -14,7 +14,7 @@ import { resolve } from './resolve.ts'
 import { seedOf } from './seed.ts'
 import { validate } from './validate.ts'
 import { crossings } from './geometry.ts'
-import { boxOf, distanceToPolygon, kindMatches } from './reach.ts'
+import { bandGap, bandToArea, kindMatches } from './reach.ts'
 import { isKindName } from './catalogue.ts'
 
 export const EXPAND_VERSION = 3   // recorded in a generated feature's `origin`; bump when any generator's output changes
@@ -28,17 +28,14 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
   const current = new Map(map.features.filter(f => !f.gen).map(f => [f.id, f])), resolved = new Map<string, ReturnType<typeof resolve>>()
   const res = (f: Feature) => { let r = resolved.get(f.id); if (!r) { r = resolve(f, map, cat); resolved.set(f.id, r) } return r }
   const children: Feature[] = [], ran = new Set<string>(), failed = new Set<string>()
-  const madeBy = new Map<string, string>()   // a feature written in this expansion: the generator that wrote it
   const pinnedParents = pinnedParentsOf(map.features)
   const runOne = (f: Feature) => {
     const name = Object.keys(f.gen!)[0], params = f.gen![name] as Record<string, unknown>, spec = GENERATOR_SPECS[name]
     const origin = { generator: name, params, version: EXPAND_VERSION }
-    // a generator with peers sees none of their output (decision 0023: checked apart below, once all have run)
-    const seen = spec.peers ? new Map([...current].filter(([id]) => madeBy.get(id) !== name)) : current
     let out: GenOutput
     try {
       out = spec.run({
-        f, kind: res(f).kind, attrs: res(f).attrs, params, seed: seedOf(map.seed, f.id, name), mapSeed: map.seed, features: seen,
+        f, kind: res(f).kind, attrs: res(f).attrs, params, seed: seedOf(map.seed, f.id, name), mapSeed: map.seed, features: current,
         attrsOf: id => res(current.get(id)!).attrs, kindOf: id => res(current.get(id)!).kind,
       })
     } catch (err) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen.${name}`, message: (err as Error).message }); failed.add(f.id); return }
@@ -48,11 +45,11 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
       // with its own area keeps it)
       const isShape = (k: string) => (SHAPES as readonly string[]).includes(k), newShape = Object.keys(out.self).some(isShape)
       const kept = Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'gen' && !(newShape && isShape(k)))) as Feature
-      current.set(f.id, { ...kept, ...out.self, origin } as Feature); madeBy.set(f.id, name)
+      current.set(f.id, { ...kept, ...out.self, origin } as Feature)
     }
     for (const c of out.children ?? []) {
       const child = { ...c, origin: { ...origin, parent: f.id } } as Feature
-      children.push(child); current.set(child.id, child); madeBy.set(child.id, name)
+      children.push(child); current.set(child.id, child)
     }
   }
   // the order (decision 0023): F reads G when F's selectors could match what G produces (G's id, its children's ids,
@@ -92,8 +89,22 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
       }
       return
     }
-    if (gens.some(o => failed.has(o.id) && reads(f, o))) { failed.add(f.id); return }
+    if (failed.has(f.id) || gens.some(o => failed.has(o.id) && reads(f, o))) { failed.add(f.id); return }
     runOne(f)
+  }
+  // peers (decision 0023) do not read each other, so they must not be able to meet: whatever their seeds, their reaches
+  // (and an author's own area) lie more than the gap apart, checked before anything runs
+  for (const spec of new Set(gens.map(specOf))) if (spec.peers) {
+    const { gap, reach } = spec.peers, attrsOf = (id: string) => res(current.get(id)!).attrs
+    const ps = gens.filter(g => specOf(g) === spec).map(g => ({ g, band: reach(g, current, attrsOf) })).filter(p => p.band)
+    for (let a = 0; a < ps.length; a++) for (let b = a + 1; b < ps.length; b++) {
+      const A = ps[a], B = ps[b], d = Math.min(bandGap(A.band!, B.band!), A.g.area ? bandToArea(B.band!, A.g) : Infinity, B.g.area ? bandToArea(A.band!, B.g) : Infinity)
+      if (d > gap) continue
+      for (const [h, o] of [[A, B], [B, A]]) {
+        issues.push({ id: h.g.id, path: `features[${at.get(h.g.id)}].gen`, message: `it could come within ${gap} m of "${o.g.id}" (their stretches leave ${Math.max(0, d).toFixed(1)} m between their reaches): ${Object.keys(h.g.gen!)[0]} generators do not see each other, so move their stretches apart` })
+        failed.add(h.g.id)
+      }
+    }
   }
   for (const f of gens) if (!index.has(f.id)) strong(f)
   // every selector that names a feature names one of the expanded map (or a generator that ran and made nothing, or
@@ -103,17 +114,6 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
     if (Array.isArray(sels)) sels.forEach((sel, n) => {
       if (typeof sel === 'string' && !isKindName(cat, sel) && !current.has(sel) && !ran.has(sel) && !pinnedParents.has(sel)) issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen.${Object.keys(f.gen!)[0]}.${k}[${n}]`, message: `"${sel}" names nothing on the expanded map` })
     })
-  }
-  // peers never saw each other: their children (a street village's houses) must have ended up `gap` m apart; a pair
-  // whose boxes lie farther apart is skipped without measuring it
-  for (const [name, spec] of Object.entries(GENERATOR_SPECS)) if (spec.peers) {
-    const gap = spec.peers.gap, boxed = (c: Feature) => ({ c, box: boxOf(c, {}) })
-    const outs = gens.filter(g => ran.has(g.id) && specOf(g) === spec).map(g => ({ g, kids: children.filter(c => c.origin!.parent === g.id && c.area).map(boxed) }))
-    const apart = (a: ReturnType<typeof boxed>, b: ReturnType<typeof boxed>) => a.box[0] - b.box[2] >= gap || b.box[0] - a.box[2] >= gap || a.box[1] - b.box[3] >= gap || b.box[1] - a.box[3] >= gap || distanceToPolygon(b.c, {}, a.c.area![0]) >= gap
-    for (let a = 0; a < outs.length; a++) for (let b = a + 1; b < outs.length; b++) {
-      const hit = outs[a].kids.flatMap(x => outs[b].kids.filter(y => !apart(x, y)).map(y => [x.c.id, y.c.id]))[0]
-      if (hit) issues.push({ id: outs[b].g.id, path: `features[${at.get(outs[b].g.id)}].gen`, message: `"${hit[1]}" comes within ${gap} m of "${hit[0]}": ${name} generators do not see each other, so give them room apart` })
-    }
   }
   if (issues.length) return { map, issues }
   // the expanded features: the author's, in their order (generated ones at their new shape, removed ones gone), then

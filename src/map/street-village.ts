@@ -12,6 +12,25 @@ export interface HouseRow { houses: Pt[][]; hull: Pt[] }
 
 const SETBACK = 3, LENGTH = [8, 13], DEPTH = [6, 9], GAP = [3, 9], YARD = 4   // m
 
+// Where a village can reach, whatever its seed: a house's middle lies on the road between `from` and `to`, and its
+// corners and yard within `reach` of it (half the longest house, the setback past the road's edge, the deepest house,
+// a yard, and the rounding to centimetres). So two villages whose bands lie apart can never meet.
+export function villageBand(road: Pt[], roadWidth: number, from: number, to: number): { line: Pt[]; reach: number } {
+  const end = Math.min(to, lineLength(road)), line: Pt[] = []
+  if (end > from) {
+    line.push(pointAt(road, from).slice(0, 2) as Pt)
+    let acc = 0
+    for (let k = 0; k + 1 < road.length; k++) {
+      const dx = road[k + 1][0] - road[k][0], dz = road[k + 1][1] - road[k][1]
+      acc += Math.sqrt(dx * dx + dz * dz)
+      if (acc > from && acc < end) line.push(road[k + 1])
+    }
+    line.push(pointAt(road, end).slice(0, 2) as Pt)
+  }
+  const half = LENGTH[1] / 2, out = roadWidth / 2 + SETBACK + DEPTH[1]
+  return { line, reach: Math.sqrt(half * half + out * out) + YARD + 0.02 }
+}
+
 const overlaps = (a: Pt[], b: Pt[]): boolean => ringsTouch(a, b) || inRing(b, a[0]) || inRing(a, b[0])
 
 // the convex hull of the points (monotone chain), counter-clockwise
