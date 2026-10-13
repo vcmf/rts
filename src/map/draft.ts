@@ -91,13 +91,13 @@ export function draft(L: Layers): Draft {
     const o = ((nz - 1 - j) * nx + i) * 4
     data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255
   }
-  // the trees over everything: a disc of the crown (at least a cell in radius, so a poplar reads), its middle darker
+  // the trees over everything: a disc of the crown (a radius of at least a cell, 2 m, so a poplar reads), its middle darker
   for (const t of L.trees) {
     const a = L.table[t.k - 1].attrs, col = CROWN[a.form as string] ?? CROWN.round, R = Math.max(cell, typeof a.crown === 'number' ? a.crown : 4)
     const i0 = Math.floor((t.x - R - L.x0) / cell), i1 = Math.floor((t.x + R - L.x0) / cell), j0 = Math.floor((t.z - R - L.z0) / cell), j1 = Math.floor((t.z + R - L.z0) / cell)
     for (let j = Math.max(0, j0); j <= Math.min(nz - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(nx - 1, i1); i++) {
       const dx = L.x0 + (i + 0.5) * cell - t.x, dz = L.z0 + (j + 0.5) * cell - t.z, d = Math.sqrt(dx * dx + dz * dz)
-      if (d > Math.max(R, 0.75 * cell)) continue
+      if (d > R) continue
       const k = d < R / 2 ? 0.8 : 1, o = ((nz - 1 - j) * nx + i) * 4
       data[o] = col[0] * k; data[o + 1] = col[1] * k; data[o + 2] = col[2] * k
     }

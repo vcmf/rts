@@ -56,6 +56,8 @@ export function childOf(id: string): { parent: string; n: number } | null {
 // the parents that pinned children name (origin.parent): a selector may still name the parent to mean them
 export const pinnedParentsOf = (features: Feature[]): Set<string> => new Set(features.flatMap(f => (typeof f.origin?.parent === 'string' ? [f.origin.parent] : [])))
 
+// the fields a generator's children take from their parent: all but its id, generator, shape and origin
+const childFields = (f: Feature, shape: string): Record<string, unknown> => Object.fromEntries(Object.entries(f).filter(([k]) => !['id', 'gen', 'origin', shape].includes(k)))
 const P = (p: Record<string, unknown>, k: string): number | undefined => (typeof p[k] === 'number' ? p[k] as number : undefined)
 const list = (v: unknown): string[] => (Array.isArray(v) ? v as string[] : [])
 const hasShape = (g: Feature) => !!(g.line || g.area || g.circle || g.ellipse || g.point)
@@ -63,6 +65,7 @@ const hasShape = (g: Feature) => !!(g.line || g.area || g.circle || g.ellipse ||
 const select = (ctx: GenContext, sels: string[]) => [...ctx.features.values()].filter(g => g.id !== ctx.f.id && hasShape(g) && sels.some(s => matches(s, g, ctx.kindOf(g.id))))
 
 const VILLAGE_KEEPS_CLEAR = ['water', 'built', 'zone.nogo', 'way', 'barrier']   // what a house keeps clear of
+const TREE_KEEPS_CLEAR = ['water', 'way', 'built', 'barrier']   // what a group's crowns keep clear of
 const BUILT_GAP = 1   // m between a house and any other building (another village's included)
 
 // a scatter's kinds: its mix's entries, or one entry from the scatter itself
@@ -181,7 +184,7 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
       const entries = entriesOf(ctx.kind, params)
       // a single kind's children carry the scatter's own fields (its kind or preset, its attributes); a mix's, their
       // entry's kind and set
-      const single = Array.isArray(params.mix) ? null : Object.fromEntries(Object.entries(f).filter(([k]) => !['id', 'gen', 'area', 'origin'].includes(k)))
+      const single = Array.isArray(params.mix) ? null : childFields(f, 'area')
       for (const e of entries) if (e.radiusMax < e.radiusMin) throw new Error(`radiusMax (${e.radiusMax}) is below radiusMin (${e.radiusMin})`)
       const avoid = select(ctx, list(params.avoid)).map(g => ({ g, box: boxOf(g, attrsOf(g.id)) }))
       const within = select(ctx, list(params.within)).map(g => ({ g, box: boxOf(g, attrsOf(g.id)) }))
@@ -204,23 +207,29 @@ export const GENERATOR_SPECS: Record<string, GenSpec> = {
     },
   },
   // a few free-standing trees around a point (two or three poplars by a farm): `count` trees within `spread` m of it,
-  // each at least a crown from the others, seeded; the point leaves the map, the trees are its children
+  // their crowns apart (trunks a crown's width from each other) and clear of water, ways, buildings and barriers,
+  // seeded; the point leaves the map, the trees are its children
   group: {
     kinds: ['veg.tree'], input: ['point'], output: 'point', removesSelf: true, childKinds: kind => [kind],
+    reads: () => TREE_KEEPS_CLEAR,
     params: {
       count: { type: 'int', unit: 'count', min: 2, max: 5 },
       spread: { type: 'number', unit: 'm', min: 1, max: 50 },
     },
-    run: ({ f, attrs, params, seed }) => {
-      const crown = num(attrs.crown, 4), count = P(params, 'count') ?? 3, spread = P(params, 'spread') ?? 2.5 * crown
+    run: ctx => {
+      const { f, attrs, params, seed, attrsOf } = ctx
+      const crown = num(attrs.crown, 4), count = P(params, 'count') ?? 3, spread = P(params, 'spread') ?? 3 * crown
       const rnd = random(seed), pts: Pt[] = [], [cx, cz] = f.point!
+      // a crown keeps clear of the water, ways, buildings and barriers within its reach (those farther are skipped by their boxes)
+      const near = select(ctx, TREE_KEEPS_CLEAR).map(g => ({ g, box: boxOf(g, attrsOf(g.id)) })).filter(({ box }) => boxDistance(box, cx, cz) <= spread + crown)
+      const clear = (x: number, z: number) => near.every(({ g }) => distanceTo(g, attrsOf(g.id), x, z) > crown)
       for (let tries = 0; pts.length < count && tries < count * 200; tries++) {
         // uniform in the disc: the radius as the square root of a uniform draw
         const r = spread * Math.sqrt(rnd()), t = 2 * PI * rnd(), p: Pt = [cm(cx + r * cos(t)), cm(cz + r * sin(t))]
-        if (pts.every(q => (q[0] - p[0]) * (q[0] - p[0]) + (q[1] - p[1]) * (q[1] - p[1]) >= crown * crown)) pts.push(p)
+        if (clear(p[0], p[1]) && pts.every(q => (q[0] - p[0]) * (q[0] - p[0]) + (q[1] - p[1]) * (q[1] - p[1]) >= 4 * crown * crown)) pts.push(p)
       }
-      if (pts.length < count) throw new Error(`placed ${pts.length} of ${count} trees a crown (${crown} m) apart within ${spread} m: widen spread or ask fewer`)
-      const own = Object.fromEntries(Object.entries(f).filter(([k]) => !['id', 'gen', 'point', 'origin'].includes(k)))
+      if (pts.length < count) throw new Error(`placed ${pts.length} of ${count} trees ${2 * crown} m apart within ${spread} m, clear of water, ways, buildings and barriers: move the point, widen spread or ask fewer`)
+      const own = childFields(f, 'point')
       return { self: null, children: pts.map((p, k) => ({ ...own, id: `${f.id}-${k + 1}`, point: p }) as Feature) }
     },
   },

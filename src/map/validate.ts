@@ -154,6 +154,12 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       }
     }
 
+    // free-standing trees (decision 0024) are their own kinds: a feature cannot turn into one or out of one (it would
+    // paint nothing), and the trees' attributes mean nothing on other kinds
+    const kindGrowth = chain.reduce<unknown>((g, n) => cat.kinds[n].set?.growth ?? g, undefined)
+    if (f.growth !== undefined && (f.growth === 'tree') !== (kindGrowth === 'tree')) bad(id, `${path}.growth`, kindGrowth === 'tree' ? `${kind} is a free-standing tree; for an area of growth use another kind` : 'a free-standing tree is a kind of its own (veg.tree…), on a point or a line')
+    if (kindGrowth !== 'tree') for (const a of ['form', 'crown', 'spacing']) if (f[a] !== undefined) bad(id, `${path}.${a}`, 'is for free-standing trees (veg.tree…)')
+
     // references
     for (const r of REFS) {
       const want = meta.refs[r]

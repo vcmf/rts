@@ -38,8 +38,8 @@ export interface Layers {
   depth: Uint16Array        // the water's depth over the cell, mm (the water's level less the cell's mean ground; 0: dry)
   streams: { id: string; step: number; levels: Float64Array }[]   // each stream's or river's level every `step` m from its first point
   // the free-standing trees (growth "tree"), one by one: they stand on the cells and change none (a poplar in a
-  // wheat field leaves the wheat); k is the feature in `table`. A point gives one, a line a row, a tree every
-  // `spacing` m from half a spacing in
+  // wheat field leaves the wheat); k is the feature in `table`. A point gives one, a line a row: as many as whole
+  // `spacing`s fit in its length (at least one), evenly, half a step in from each end
   trees: { x: number; z: number; k: number }[]
 }
 export const LAYER_NAMES = ['ground', 'veg', 'water', 'way', 'barrier', 'built', 'zone', 'edit'] as const
@@ -326,8 +326,9 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
     if (a.growth === 'tree') {
       if (f.point) L.trees.push({ x: f.point[0], z: f.point[1], k: k1 })
       else if (f.line) {
-        const len = lineLength(f.line), sp = num(a.spacing, 10)
-        for (let s = sp / 2; s <= len; s += sp) { const [x, z] = pointAt(f.line, s); L.trees.push({ x, z, k: k1 }) }
+        // as many trees as whole spacings fit (at least one), evenly, half a step in from each end
+        const len = lineLength(f.line), n = Math.max(1, Math.floor(len / num(a.spacing, 10)))
+        for (let m = 0; m < n; m++) { const [x, z] = pointAt(f.line, (m + 0.5) * len / n); L.trees.push({ x, z, k: k1 }) }
       }
       continue
     }

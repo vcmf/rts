@@ -132,11 +132,14 @@ maps/kinds.json ──► checkCatalogue ─┐
     polygons that just contain them (`ringsOf`, `src/map/reach.ts`), so no distance to them comes out longer than
     the truth. Fewer than `count` is an error unless `min` allows it;
   - `group`, on a tree point (`veg.tree.*`): `count` trees (2–5, default 3) within `spread` m of the point
-    (default 2.5 crowns), each at least a crown from the others, seeded; the point leaves the map and the trees,
-    with its kind and fields, are its children. It reads nothing.
+    (default 3 crowns), trunks a crown's width apart so the crowns stand apart, each crown clear of water, ways,
+    buildings and barriers, seeded; the point leaves the map and the trees, with its kind and fields, are its
+    children.
 - **Free-standing trees** (decision 0024): `growth: "tree"` kinds (`veg.tree`, `.poplar`, `.conifer`, `.willow`)
   with a `form` (round, columnar, conical), a `crown` radius and a row's `spacing`. A point is one tree, a line a
-  row. They stand on the cells and change none: a poplar in a wheat field leaves the wheat.
+  row. They stand on the cells and change none: a poplar in a wheat field leaves the wheat. The validator keeps
+  them their own kinds: `growth` cannot turn a feature into a tree or out of one, and `form`, `crown` and
+  `spacing` belong to trees only.
 - **The base ground** (`relief.base`): seeded value noise (`src/map/noise.ts`), `height` its amplitude and `width`
   its scale, three octaves, filled from per-octave lattice tables (`addFbmGrid`, equal to `fbm` to the bit).
 - **The layout** (`src/map/format.ts`): one feature per line, so diffs show which features changed.
@@ -163,10 +166,11 @@ maps/kinds.json ──► checkCatalogue ─┐
   - a bridge decks the road's cells over the water at the height of the higher of the road's two ends, 4 m past
     each bank (the sim classifies them `bridge`: level, dry);
   - free-standing trees are a list, `Layers.trees` ({ x, z, k }, k the feature in the table): a point gives one, a
-    line a tree every `spacing` m from half a spacing in. No layer, no density, no sim class changes.
+    line as many as whole `spacing`s fit in its length (at least one), evenly, half a step in from each end. No
+    layer, no density, no sim class changes.
 - **The draft** (`src/map/draft.ts`): one pixel per cell, north up, colours from categories and attributes (never
   kind names), hill shading from the north-west and contours every 2.5 m. A way by its `surface` (earth, setts or
-  cobbles, brick, metalled); a tree as a disc of its crown (at least 2 m, so a poplar reads), darker for columnar
+  cobbles, brick, metalled); a tree as a disc of its crown (a radius of at least 2 m, so a poplar reads), darker for columnar
   and conical forms.
 - **The page** (`app/map.html`, `src/app/map/`):
   - a worker compiles; the page draws with pan and zoom, outlines with ids, the play area, and the cell under

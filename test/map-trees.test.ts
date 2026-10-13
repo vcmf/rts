@@ -21,6 +21,12 @@ describe('M3c: free-standing trees', () => {
     expect(msgs(mini([{ id: 't', kind: 'veg.tree', area: FIELD.area }]))).toContainEqual(expect.stringMatching(/veg\.tree/))
     expect(msgs(mini([{ id: 't', kind: 'veg.tree', point: [0, 0], form: 'weeping' }]))).toContainEqual(expect.stringMatching(/form/))
     expect(msgs(mini([{ id: 't', kind: 'veg.tree', line: [[-50, 0], [50, 0]] as Pt[], spacing: 1 }]))).toContainEqual(expect.stringMatching(/spacing/))
+    // no feature turns into a tree or out of one; the trees' attributes belong to trees
+    expect(msgs(mini([{ ...FIELD, growth: 'tree' }]))).toContainEqual(expect.stringMatching(/growth: a free-standing tree is a kind of its own/))
+    expect(msgs(mini([{ id: 'w', kind: 'veg.wood.broad', area: FIELD.area, growth: 'tree' }]))).toContainEqual(expect.stringMatching(/growth/))
+    expect(msgs(mini([{ id: 't', kind: 'veg.tree', point: [0, 0], growth: 'stand' }]))).toContainEqual(expect.stringMatching(/growth: veg\.tree is a free-standing tree/))
+    expect(msgs(mini([{ ...FIELD, crown: 3 }]))).toContainEqual(expect.stringMatching(/crown: is for free-standing trees/))
+    expect(msgs(mini([{ id: 't', kind: 'veg.tree', point: [0, 0], growth: 'tree' }]))).toEqual([])
   })
   it('group places count trees around its point, a crown apart, within spread; seeded; the point leaves the map', () => {
     const group = (seed: number, p: Record<string, unknown> = {}) => expand(mini([{ id: 'by-farm', kind: 'veg.tree.poplar', point: [20, 30], gen: { group: p } }], seed), cat)
@@ -32,8 +38,8 @@ describe('M3c: free-standing trees', () => {
       expect(trees).toHaveLength(3)
       for (const t of trees) {
         expect(t.kind).toBe('veg.tree.poplar')
-        expect(Math.hypot(t.point![0] - 20, t.point![1] - 30)).toBeLessThanOrEqual(2.5 * 1.5 + 0.01)
-        for (const u of trees) if (u !== t) expect(Math.hypot(t.point![0] - u.point![0], t.point![1] - u.point![1])).toBeGreaterThanOrEqual(1.5 - 0.02)
+        expect(Math.hypot(t.point![0] - 20, t.point![1] - 30)).toBeLessThanOrEqual(3 * 1.5 + 0.01)
+        for (const u of trees) if (u !== t) expect(Math.hypot(t.point![0] - u.point![0], t.point![1] - u.point![1])).toBeGreaterThanOrEqual(2 * 1.5 - 0.02)   // crowns apart
       }
     }
     expect(group(1).map).toEqual(outs[0].map)
@@ -42,12 +48,28 @@ describe('M3c: free-standing trees', () => {
     expect(msgs(mini([{ id: 'g', kind: 'veg.tree', point: [0, 0], gen: { group: { count: 6 } } }]))).toContainEqual(expect.stringMatching(/count/))
     expect(msgs(mini([{ id: 'g', kind: 'built.house', point: [0, 0], gen: { group: {} } }]))).toContainEqual(expect.stringMatching(/gen/))
     expect(group(1, { count: 5, spread: 1 }).issues[0]?.message).toMatch(/placed \d of 5 trees/)
+    expect(group(1, { count: 5 }).issues).toEqual([])   // five fit the default spread
+  })
+  it("a group's crowns keep clear of water, ways, buildings and barriers", () => {
+    const brook = { id: 'brook', kind: 'water.stream', line: [[-150, 0], [150, 0]] as Pt[], width: 6 }, house = { id: 'house', kind: 'built.house', area: [[[4, 2], [14, 2], [14, 10], [4, 10]]] as Pt[][] }
+    for (let seed = 1; seed <= 10; seed++) {
+      const { map, issues } = expand(mini([brook, house, { id: 'oaks', kind: 'veg.tree', point: [0, 8], gen: { group: { count: 3, spread: 14 } } }], seed), cat)
+      expect(issues).toEqual([])
+      for (const t of map.features.filter(f => f.origin?.parent === 'oaks')) {
+        const [x, z] = t.point!
+        expect(Math.abs(z)).toBeGreaterThan(3 + 4)                                                    // the stream's edge, plus a crown
+        expect(x < 4 - 4 || x > 14 + 4 || z < 2 - 4 || z > 10 + 4 || Math.hypot(Math.max(4 - x, 0, x - 14), Math.max(2 - z, 0, z - 10)) > 4).toBe(true)
+      }
+    }
   })
   it('apply lists the trees (a row every spacing m) and changes no cell', () => {
     const row = { id: 'row', kind: 'veg.tree.poplar', line: [[-60, 10], [60, 10]] as Pt[] }, lone = { id: 'oak', kind: 'veg.tree', point: [30, -40] as Pt }
     const bare = apply(mini([FIELD]), cat), withTrees = apply(mini([FIELD, row, lone]), cat)
-    expect(withTrees.trees).toHaveLength(15 + 1)   // 120 m at 8 m from 4 m in: 4, 12, … 116
+    expect(withTrees.trees).toHaveLength(15 + 1)   // 120 m holds 15 spacings of 8 m: a tree in the middle of each
     expect(withTrees.trees.filter(t => withTrees.table[t.k - 1].kind === 'veg.tree.poplar').map(t => t.x)).toEqual(Array.from({ length: 15 }, (_, n) => -56 + 8 * n))
+    // a row shorter than its spacing still has its tree, in its middle; a long one is even from end to end
+    expect(apply(mini([{ id: 'r', kind: 'veg.tree', line: [[0, 0], [4, 0]] as Pt[] }]), cat).trees.map(t => t.x)).toEqual([2])
+    expect(apply(mini([{ id: 'r', kind: 'veg.tree', line: [[0, 0], [25, 0]] as Pt[] }]), cat).trees.map(t => t.x)).toEqual([6.25, 18.75])
     expect(withTrees.trees.find(t => withTrees.table[t.k - 1].kind === 'veg.tree')).toMatchObject({ x: 30, z: -40 })
     const kinds = (L: ReturnType<typeof apply>, layer: Uint16Array) => Array.from(layer, k => (k ? L.table[k - 1].kind : ''))
     for (const layer of ['ground', 'veg', 'water', 'way', 'barrier', 'built', 'zone'] as const) expect(kinds(withTrees, withTrees[layer])).toEqual(kinds(bare, bare[layer]))

@@ -29,11 +29,10 @@ landmarks a player reads the ground by. The way surfaces lack brick: a road is p
   - `veg.tree.conifer`: conical, needle, 18 m, crown 2.5 m;
   - `veg.tree.willow`: round, low, wide (banks), 9 m, crown 4 m.
 - **`group`**, a generator on a tree point: `count` trees (2–5, default 3) within `spread` m of the point (default
-  2.5 crowns), each at least a crown from the others, seeded. The point leaves the map; the trees are its children.
-  It reads nothing.
+  3 crowns), trunks a crown's width apart, clear of water, ways, buildings and barriers, seeded. The point leaves the map; the trees are its children.
 - **Apply:** trees are not painted into the cells (a poplar in a wheat field leaves the wheat). They are a list on
-  the layers, `trees: { x, z, k }` (`k`: the feature in the table): a point gives one, a line one every `spacing` m
-  from half a spacing in.
+  the layers, `trees: { x, z, k }` (`k`: the feature in the table): a point gives one, a line as many as whole
+  spacings fit (at least one), evenly.
 - **Sim:** no change. A tree changes no cell, so no terrain class and no sim data move. Sight through rows is for
   when the sim has sight.
 - **Draft:** each tree as a disc of its crown, darker for conifers and poplars.
@@ -56,4 +55,16 @@ landmarks a player reads the ground by. The way surfaces lack brick: a road is p
 
 ## Review rounds
 
-(none yet)
+**Round 1** (8 findings, none severe: stop and fix what is worth it):
+- **Moderate:**
+  - `growth: "tree"` on an area (or a tree kind overridden to another growth) validated and then painted nothing;
+    the validator now keeps trees their own kinds, and `form`, `crown` and `spacing` belong to trees only;
+  - a group's trunks stood one crown radius apart, so crowns overlapped: now a crown's width;
+  - a row shorter than half a spacing gave no tree, and longer rows sat unevenly: now as many as whole spacings
+    fit, at least one, evenly;
+  - a group could put a tree in a stream, on a road or in a house: its crowns now keep clear of water, ways,
+    buildings and barriers (it reads them, so it runs after a village).
+- **Light, taken:** the draft's minimum crown is stated as a radius (2 m), and its dead test is gone; the fields a
+  child takes from its parent are one helper for scatter and group.
+- **Light, left:** the page's hover does not name trees (no cell holds one); the draft's crowns do not take the
+  hill shading or a zone's tint. Both are for the page and the look (M4).
