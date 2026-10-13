@@ -35,8 +35,8 @@ From the GPC 2024 talk by Tomasz Stachowiak (https://www.youtube.com/watch?v=jus
   - 64 taps on a golden-angle (Vogel) spiral out to the largest blur;
   - each tap counted where its own blur reaches the pixel;
   - a tap behind the pixel has its blur clamped to twice the pixel's, so sharp crowns do not bleed.
-- **The circle of confusion** is the thin lens's `|1 − focus/z|` past a sharp band (as built: a wider band nearer,
-  and the pass at half resolution; see Results), with z the depth along the view
+- **The circle of confusion** is the thin lens's `|1 − focus/z|` past a sharp band (as built: nothing nearer
+  than the focus blurs, and the pass is at half resolution; see Results), with z the depth along the view
   axis (from the distance the materials already write to alpha, and the pixel's ray).
   - The focus is the ground under the camera's target, at its depth along the view axis.
   - The largest blur is a pixel radius at 1080 lines, strongest at the closest zoom and 40% of it at the widest.
@@ -91,16 +91,23 @@ Built on 13 Oct 2026. The page opens with the blur on; `?dof=0` and the panel's 
 
 ### What changed from the plan
 
-- **A wider sharp band nearer than the focus** (`DOF.near` 0.25, against `DOF.band` 0.06 beyond). With one band on
-  both sides, the readability guard failed at the default view's foot: wheat.France fell from 0.100 to 0.088 (blurred
-  wheat in front of the block). Softening the whole lens (band 0.10, gain 3) only reached 0.093. The near band
-  brings it back to 0.100, and the tilt-shift look stays at the top of the screen.
+- **The blur is a band at the top of the screen; nothing nearer than the focus blurs.**
+  - With one band on both sides, the readability guard failed at the default view's foot: wheat.France fell from
+    0.100 to 0.088, from blurred wheat in front of the block. Softening the whole lens (band 0.10, gain 3) only
+    reached 0.093.
+  - A wider near band (0.25) first brought it back to 0.100.
+  - Then the owner asked to cut the blur further, mostly near the top edge, so the near side was dropped and the
+    lens softened: the sharp band runs to 20% beyond the focus (was 6%) and the largest blur is 7 px at 1080 lines
+    (was 10).
+  - With no blur nearer than the focus, a sharp pixel can skip the taps exactly: a nearer tap is sharper than it,
+    and a farther one is clamped to under a pixel. Only the band at the top pays for the taps.
+  - `window.__look.dof` tunes the constants live.
 - **Half resolution, in three steps**, because a single full-resolution pass of 64 taps cost about +8.7 ms of GPU
   frame on the Metal proxy:
   - `dofdown.frag`: the scene at half resolution, each four pixels' colour averaged and the farthest of their
     distances;
-  - `dof.frag`: the bokeh at half resolution, every read at a pixel's centre, the taps in five steps from 16 to 64 by
-    the blur's area, the spill from taps nearer than the focus and than the pixel;
+  - `dof.frag`: the bokeh at half resolution, every read at a pixel's centre, the taps in steps from 16 to 64 by the
+    blur's area, taps off the screen skipped;
   - the composite in the finishing pass (`uber.frag` with `DOF`), which keeps the sharp scene wherever the blur is
     under a pixel.
 - **A tiled early-out** (skip the taps where no blur is near) was built and dropped. Three review rounds kept finding
@@ -111,8 +118,8 @@ Built on 13 Oct 2026. The page opens with the blur on; `?dof=0` and the panel's 
 
 | Check | Exit |
 |---|---|
-| `tools/golden.mjs` against `origin/main`, blur off: 8 cameras match, 0.000% | 0 (the suite's first run lost headless Chrome mid-run, "DevTools socket closed"; rerun alone) |
-| `tools/guard.mjs ?dof=1 --base ?dof=0`, start view: no new failure; wheat.France 0.100 against 0.100 | 0 |
+| `tools/golden.mjs` against the branch's base on main, blur off: 8 cameras match, 0.000% | 0 |
+| `tools/guard.mjs ?dof=1 --base ?dof=0`, start view: no new failure | 0 |
 | `tools/guard.mjs ?dof=1 --view cover --base ?dof=0` | 0 |
 | `tools/water-look-check.mjs --selftest` | 0 |
 | `tools/water-check.mjs --selftest` | 0 |
@@ -121,36 +128,35 @@ Built on 13 Oct 2026. The page opens with the blur on; `?dof=0` and the panel's 
 | `npm test` (lint, typecheck, 255 tests) | 0 |
 | `node tools/check-docs.mjs` | 0 |
 
-Earlier runs of the water-look-check on this branch lost Chrome the same way; on main it passed (exit 0), and on
-the final code it passes.
+Some earlier runs lost headless Chrome mid-run ("DevTools socket closed") while the machine was loaded; the final
+run passed every check first time.
 
-### Cost: not met, the owner's decision
+### Cost: met
 
 `?bench=dof` on the Metal proxy (ANGLE Metal, Apple M1 Pro, 1920 × 1080), the GPU frame's median, blur off against
-on. Another session shared the machine throughout (load 11 to 23), so these are rough:
+on, two runs of the final code. Blur off took 7.7 ms at the default zoom, as in the morning's quieter runs, so these
+are comparable:
 
 | Version | close | default | wide |
 |---|---|---|---|
 | one pass, 64 taps, full resolution | +8.6 | +8.7 | +8.7 |
-| half resolution (without the down pass) | | +1.2 to +1.3 | |
-| the final design before review round 3's fixes | +1.8 | +1.45 to +1.5 | +1.0 |
-| the final code, while another process held the GPU (blur off itself took 11 to 15 ms, against 7.7 earlier) | +3.4 | +2.0 to +3.6 | +2.2 to +4.2 |
+| half resolution, blur on both sides of the focus | +1.8 | +1.45 to +1.5 | +1.0 |
+| **final: the top band only, the sharp pixels skipping the taps** | **+0.65 to +0.67** | **+0.68 to +0.79** | **+0.74** |
 
-The acceptance was ≤ 1 ms at the default zoom (decision 0020 estimated 0.5 to 1 ms), so **it is not met**: the best
-figure is about +1.5 ms. Before this ships beyond the look page:
-
-- **A clean bench** on an idle machine, and on the RTX 3060 target.
-- **The owner decides:** raise the post budget, or keep the blur and cut it further, or drop the default to off.
-  Cheaper options left: fewer taps at the default zoom, a quarter-resolution far band, or a lower-precision target.
+The acceptance (≤ 1 ms at the default zoom; decision 0020 estimated 0.5 to 1 ms) is met. It still wants a bench on
+the RTX 3060 target.
 
 ### Known limits
 
 - **Silhouettes:** the scene is 4× MSAA, and its resolve averages the distance in alpha at a silhouette, so an
   in-focus edge pixel can take a little blur. The bilinear upsample in the composite can give a 1 px fringe where a
   sharp crown meets blurred ground, and the averaged colour carries a crown's edge half a texel into the ground's blur.
-- **Zooming:** the tap count steps at three points across the zoom range, and snapped taps change texel one by one,
+- **Zooming:** the tap count steps as the blur grows (at the default strength, only past 1080 lines or above
+  strength 1.4), and snapped taps change texel one by one,
   so the blur's grain shifts while zooming (there is no TAA).
-- **The slider at 0** still pays the cost; the button turns it off.
+- **The slider at 0** still pays the down pass and the composite; the button turns it off.
+- **The passes cover the whole screen**, though only the rows beyond the focus can blur; the lower screen pays a read
+  and the lens per pixel before skipping. Limiting the passes to those rows is the next saving if one is needed.
 - **Debug views at run time** (`__look.waterView`, the detail debug) are blurred when the blur is on; their URLs
   (`?water`, `?river=debug`) open with it off.
 - **The game page** has no depth of field yet (out of scope).
@@ -165,6 +171,9 @@ figure is about +1.5 ms. Before this ships beyond the look page:
   - round 2 severe: the farthest-of-four dropped figures narrower than 2 px;
   - round 3 moderate only: the bloom's read at odd sizes, taps back on the centre, and the weight ramp were fixed;
     the zoom steps and the per-tap depth maths are listed above.
+- **The top band** (the owner's request): one round, moderate only. It confirmed the skip is exact. Taps off the top
+  edge, which re-read the edge row and smeared it, are now skipped; comments were corrected, and the composite no
+  longer reads the blur where the pixel is sharp.
 
 ### Related
 
