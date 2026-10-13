@@ -55,7 +55,9 @@ Effect.ShadersStore.uberFragmentShader = UBER_FS
 export class Post {
   private posts: PostProcess[] = []
   private readonly camera: ArcRotateCamera; private readonly engine: AbstractEngine; private readonly S: LookState; private readonly grain: () => BaseTexture
-  constructor(camera: ArcRotateCamera, engine: AbstractEngine, S: LookState, grain: () => BaseTexture) { this.camera = camera; this.engine = engine; this.S = S; this.grain = grain }
+  private readonly ground: (x: number, z: number) => number
+  // ground: the terrain's height, for the depth of field's focus
+  constructor(camera: ArcRotateCamera, engine: AbstractEngine, S: LookState, grain: () => BaseTexture, ground: (x: number, z: number) => number) { this.camera = camera; this.engine = engine; this.S = S; this.grain = grain; this.ground = ground }
   get passes(): PostProcess[] { return this.posts }
   // no finishing passes: the scene draws straight to the canvas (the detail check's debug view)
   clear(): void { this.posts.forEach(p => p.dispose(this.camera)); this.posts = [] }
@@ -65,13 +67,18 @@ export class Post {
     const HF = Constants.TEXTURETYPE_HALF_FLOAT
     const pp = (name: string, uni: string[], smp: string[], type: number) => { const p = new PostProcess(name, name, uni, smp, 1.0, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, null, type); if (!this.posts.length) p.samples = 4; this.posts.push(p); return p }
     if (S.dof) {
-      // the miniature field (decision 0020): focused on the camera's target; a sharp band of DOF.band around it; the
-      // largest blur DOF.px at 1080 lines, strongest at the closest zoom and DOF.wide of it at the widest
-      const p = pp('dof', ['uTexel', 'uFocus', 'uBand', 'uK', 'uMaxPx', 'uStep'], [], HF), c = D.spec.camera
+      // the miniature field (decision 0020): focused on the ground under the camera's target (the target itself sits
+      // at a fixed height, inside a hill or above a valley), at its depth along the view axis; a sharp band of
+      // DOF.band around it; the largest blur DOF.px at 1080 lines, strongest at the closest zoom and DOF.wide of it
+      // at the widest
+      const p = pp('dof', ['uTexel', 'uTan', 'uFocus', 'uBand', 'uK', 'uMaxPx'], [], HF), c = D.spec.camera
       p.onApply = e => {
+        const t = camera.target, g = new Vector3(t.x, this.ground(t.x, t.z), t.z), fwd = t.subtract(camera.position).normalize()
+        const focus = Math.max(1, Vector3.Dot(g.subtract(camera.position), fwd))
+        const aspect = p.width / p.height, tf = Math.tan(camera.fov / 2), vert = camera.fovMode === Camera.FOVMODE_VERTICAL_FIXED
         const z = Math.min(1, Math.max(0, (camera.radius - c.rMin) / (c.rMax - c.rMin))), px = DOF.px * S.dofAmt * p.height / 1080 * (1 + (DOF.wide - 1) * z)
-        e.setFloat2('uTexel', 1 / p.width, 1 / p.height); e.setFloat('uFocus', camera.radius); e.setFloat('uBand', DOF.band); e.setFloat('uK', DOF.k)
-        e.setFloat('uMaxPx', px); e.setFloat('uStep', Math.max(0.5, px * px / 128))
+        e.setFloat2('uTexel', 1 / p.width, 1 / p.height); e.setFloat2('uTan', vert ? tf * aspect : tf, vert ? tf : tf / aspect)
+        e.setFloat('uFocus', focus); e.setFloat('uBand', DOF.band); e.setFloat('uK', DOF.k); e.setFloat('uMaxPx', px)
       }
     }
     const u = pp('uber', ['uRes', 'uGrade', 'uGrainOn', 'uBloom'], ['uGrain'], HF)

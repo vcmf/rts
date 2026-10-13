@@ -76,7 +76,7 @@ circle of confusion is `|1 − focus/d|` past a sharp band, times a gain, d the 
 alpha and the focus the camera's target. The constants are `DOF` in `src/look/post.ts`: the band, the gain, the
 largest blur in pixels at 1080 lines, and the share of it left at the widest zoom (the blur eases from the closest
 zoom to the widest). The panel's "Blur strength" slider multiplies it. The look tools load the page with `?dof=0`
-(`shoot()` in `tools/look-page.mjs`, and `tools/bench-look.mjs`): the checks measure the paint; the readability
+(`shoot()` in `tools/look-page.mjs`): the checks measure the paint; the readability
 guard is also run with `?dof=1`.
 
 ### The ground's cover and macro colour (L5a)
@@ -149,7 +149,7 @@ and arm, frame times (p50, p95, max), GPU time per pass, draw calls and triangle
 memory, the renderer and the build hash (`__BUILD__`, set by `vite.config.ts`). It shows the JSON with a link to
 save it, and puts it in `window.__bench`. Arms are variants of the page measured in the same session, A B B A per
 camera: `l2` (the page) and `l0` (the L0 grain on the terrain); `?bench=macro` the macro colour's arms; `?bench=dof`
-`nodof` and `dof`. The bench opens with the blur off unless its URL sets `?dof`.
+`nodof` and `dof`. The bench page opens with the blur off unless its URL sets `?dof` (so do the debug views, `?water` and `?river=debug`, which write no distance to alpha).
 - **GPU time** comes from our own `EXT_disjoint_timer_query_webgl2` queries (`src/look/gputimer.ts`). Queries
   cannot nest: whole-frame time is taken on alternate frames, the passes (terrain, scatter, water, other,
   post) on the others, each as segments of consecutive draws, only in the camera's own render pass. Frames with

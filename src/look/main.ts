@@ -80,8 +80,11 @@ const camera = buildCamera(scene, canvas)
 // ?dof=0|1: the gameplay depth of field, on by default (decision 0020); the look tools load the page with it off
 const dofParam = params.get('dof')
 if (dofParam !== null && dofParam !== '0' && dofParam !== '1') throw new Error(`?dof must be 0 or 1, not ${dofParam}`)
+// (and off, unless ?dof sets it, on the bench, which compares with runs before decision 0020, and on the debug views,
+// which write no distance to alpha)
 if (dofParam !== null) S.dof = +dofParam
-const post = new Post(camera, engine, S, () => mats.grain); post.build()
+else if (params.has('bench') || params.has('water') || params.get('river') === 'debug') S.dof = 0
+const post = new Post(camera, engine, S, () => mats.grain, groundAt); post.build()
 
 /* ---------- UI ---------- */
 const byId = <T extends HTMLElement>(id: string): T => { const e = document.getElementById(id); if (!e) throw new Error(`look.html has no #${id}`); return e as T }
@@ -91,8 +94,9 @@ byId<HTMLSelectElement>('res').onchange = () => { S.res = +byId<HTMLSelectElemen
 const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
 type Toggle = typeof TOGGLES[number]
 const isToggle = (k: string | undefined): k is Toggle => (TOGGLES as readonly (string | undefined)[]).includes(k)
-// the buttons show the state the page opened with (?dof may have changed it)
-document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => { const k = b.dataset.k; if (isToggle(k)) { b.classList.toggle('on', !!S[k]); b.textContent = S[k] ? 'On' : 'Off' } })
+// the buttons show the state (?dof and the bench's arms change it)
+const syncButtons = () => document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => { const k = b.dataset.k; if (isToggle(k)) { b.classList.toggle('on', !!S[k]); b.textContent = S[k] ? 'On' : 'Off' } })
+syncButtons()
 document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => b.onclick = () => {
   const k = b.dataset.k; if (!isToggle(k)) throw new Error(`panel button with an unknown data-k: ${k}`)
   S[k] = S[k] ? 0 : 1; b.classList.toggle('on', !!S[k]); b.textContent = S[k] ? 'On' : 'Off'; if (k === 'dof') post.build()
@@ -259,7 +263,7 @@ if (params.has('bench')) {
   // the arms: the detail layer, and the L0 grain it replaces (the cost gate: at most +1 ms GPU for the terrain)
   // ?bench=macro: the macro colour's arms instead (with the detail layer)
   // ?bench=dof: the gameplay depth of field off and on (decision 0020)
-  const dofArm = (on: number) => () => { setDetail([]); S.dof = on; post.build() }
+  const dofArm = (on: number) => () => { setDetail([]); if (S.dof !== on) { S.dof = on; post.build(); syncButtons() } }
   const arms = params.get('bench') === 'macro' ? MACRO_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); macro.setArm(a) } }))
     : params.get('bench') === 'dof' ? [{ name: 'nodof', apply: dofArm(0) }, { name: 'dof', apply: dofArm(1) }]
     : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]

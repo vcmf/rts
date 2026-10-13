@@ -32,12 +32,12 @@ From the GPC 2024 talk by Tomasz Stachowiak (https://www.youtube.com/watch?v=jus
 ## Scope
 
 - **One bokeh pass** replacing the separable one, after Gustafsson:
-  - a golden-angle spiral of at most 64 taps;
+  - 64 taps on a golden-angle (Vogel) spiral out to the largest blur;
   - each tap counted where its own blur reaches the pixel;
   - a tap behind the pixel has its blur clamped to twice the pixel's, so sharp crowns do not bleed.
-- **The circle of confusion** is the thin lens's `|1 − focus/d|` past a sharp band, with d the view distance the
-  materials already write to alpha.
-  - The focus is the camera's target.
+- **The circle of confusion** is the thin lens's `|1 − focus/z|` past a sharp band, with z the depth along the view
+  axis (from the distance the materials already write to alpha, and the pixel's ray).
+  - The focus is the ground under the camera's target, at its depth along the view axis.
   - The largest blur is a pixel radius at 1080 lines, strongest at the closest zoom and 40% of it at the widest.
   - The constants are `DOF` in `src/look/post.ts`.
 - **The setting:** on by default; `?dof=0|1` overrides it. The panel's button shows the state the page opened with
@@ -45,7 +45,8 @@ From the GPC 2024 talk by Tomasz Stachowiak (https://www.youtube.com/watch?v=jus
 - **The tools:**
   - `tools/look-page.mjs` `shoot()` loads the page with `?dof=0` unless the URL sets `?dof`, so every check measures
     the paint (decision 0020).
-  - `tools/bench-look.mjs` does the same, and `?bench=dof` measures the pass off and on.
+  - The bench page (`?bench`) and the debug views (`?water`, `?river=debug`) open with it off unless `?dof` is set;
+    `?bench=dof` measures the pass off and on.
   - The readability guard runs with `?dof=1` as well.
 - **Out of scope:**
   - the game page (`app/index.html`): it has no depth of field yet, and the setting moves there with the renderer's
