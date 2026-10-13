@@ -156,6 +156,9 @@ buildings, armies) keeps the three bands.
 | Austria | `#E9E3D3` | grey-blue `#9FB0C4` |
 | Britain | `#B3302A` | white, black |
 
+**Crops stand under a soldier's chest** (decision 0026; `WHEAT_HEIGHT_MAX`): a
+standing field is drawn lower than history's, so a formation in it reads.
+
 ### Light setup
 - **Sun:** 20–35° elevation, from the side or behind relative to the default
   camera, so shadows are long and readable.

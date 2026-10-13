@@ -24,7 +24,7 @@ const CASES = [
   ['river', 'real scene', null, null],
   ['river', 'a tree in the river', 'groups.CommonTree_1.push([RIVER.px[RIVER.n >> 1], RIVER.pz[RIVER.n >> 1], 4, 0, 0.5])', 'instancesOverWater'],
   ['river', 'a bush in a formation zone', '(groups.Bush_1 ||= []).push([-5, -20, 2, 0, 0.5])', 'instancesInZones'],
-  ['river', 'wheat on the floodplain', '{ const z = 40; groups.Wheat.push([RIVER.axisX(z) + 30, z, 1.5, 0, 0.5]) }', 'wheatOnFloodplain'],
+  ['river', 'wheat on the floodplain', '{ const z = 40; groups.Wheat.push([RIVER.axisX(z) + 30, z, 1.0, 0, 0.5]) }', 'wheatOnFloodplain'],
 ]
 // the look page's own checks (tools/look-check.js): only where the page has them (the prototype has no SPEC)
 const LOOK_CASES = [

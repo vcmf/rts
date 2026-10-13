@@ -34,3 +34,4 @@ recorded here on 2026-10-08.
 | [0019](0019-shading-data-from-authored-surface.md) | Shading data finer than the heightfield comes from the authored surface | proposed |
 | [0022](0022-soft-ramp-for-foliage.md) | Foliage crowns are painted with a soft ramp | accepted |
 | [0025](0025-review-by-kind-of-pr.md) | Review rounds by kind of PR: code as before, docs one round at most, research none | accepted |
+| [0026](0026-crops-under-a-soldiers-chest.md) | Standing crops are drawn under a soldier's chest | accepted |
