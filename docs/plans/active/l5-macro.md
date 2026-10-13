@@ -386,6 +386,18 @@ L5a 3–4 days; L5b 2 days of work plus the judges' time.
   to race) fixed. Round 2 (nothing severe; fixed and stopped): Finish waits for the save, a random seed, the scratch
   counted in memory, missing shots stop the kit, reads in branches through `coverTex`, the effect keyed on its
   defines, trees placed as their own model, the kit's cameras from `SPEC.camera`, a lazy Kuwahara pass.
+- **Kit 2 (14 Oct 2026), after main's leaf-card crowns (L7a, L7b) and soft shadows were merged in:** the kit rebuilt
+  with `?trees=one,cards` on the same page link. It has 12 screens and 120 files, 87 MB, published in two parts, and
+  the old kit's files were removed. No judge had answered (the one answer document, the owner's, was empty). The key
+  is `scratch/l5b-kit2/private/key.json`, with a new random seed. Checks on the merged code:
+  - the golden against main matches at all 8 cameras;
+  - the guard passes for both arms against the bake, at the start view and `--view cover`;
+  - the water, detail and negatives checks, `npm run check:data` and the docs check pass;
+  - `npm test` gave 255 of 256 with the machine loaded (the sim's cost test, 14.2 ms against 12), and
+    `test/soldiers.test.ts` passes alone, 12 of 12.
+  - **The macro check's self-test fails** on its shimmer sabotage (`MACRO_SAB_STEP`, "the check cannot see this
+    sabotage"). Main gives identical numbers, so this is main's (#71), not the merge's. The gate itself, classes,
+    determinism (49cfc64f / 943d2329) and the bake pass.
 - **Known limits:** the stroke gather (nine cells, sorted) makes its bake about three times arm 3's; a judge who
   opens the page's data or network panel can see which screens share files (the bake's in 3 pairs, the shader's in
   2) though not which arm they are, so the blind rests on judges not inspecting.
