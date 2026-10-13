@@ -22,6 +22,7 @@ import { COVER, coverAt, inFormationZone, type CoverGrid } from './world/cover.t
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 import { cardMaterial, cardMesh, placeCards, type CardOptions } from './canopy.ts'
+import { CLUMP_REACH } from './meadow-spec.ts'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 
 export interface NatureModel { pos: number[]; idx: number[]; role: number[]; min: number[]; max: number[] }
@@ -276,6 +277,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // the meadow's growth: where the old tufts could stand (the placement rule: the cover's grassy classes and their
   // edges, off the banks and the water, out of the formation zones); pasture grazed shorter
   const growth = (x: number, z: number): [number, number] => coverAllows(cover, 'Grass_Short', x, z) ? [1, coverAt(cover, x, z) === COVER.pasture ? 0.65 : 1] : [0, 0]
-  const growthAllowed = (x: number, z: number) => !touchesZone(x, z, 0.8) && offBanks(riverQuery(x, z), 0.4)   // a clump reaches about 0.8 m
+  // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the outer ring's footprint and lean)
+  const growthAllowed = (x: number, z: number) => !touchesZone(x, z, CLUMP_REACH) && offBanks(riverQuery(x, z), CLUMP_REACH)
   return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined, growth, growthAllowed }
 }

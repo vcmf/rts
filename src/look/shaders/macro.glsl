@@ -123,7 +123,7 @@ vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
 #endif
 // THE GROUND'S COLOUR the terrain and the shore band start from, by arm (every painted material has one: setArm,
 // src/look/macro.ts; with none, the shader arm's)
-vec3 groundArm(vec2 xz,float px){
+vec3 groundAt(vec2 xz,float px){
   #if defined(MACRO_BAKE)
   return bakeOnce(xz).rgb;
   #elif defined(MACRO_SHADER)
@@ -138,7 +138,6 @@ vec3 groundArm(vec2 xz,float px){
   return macroOnce(xz,px).rgb;
   #endif
 }
-vec3 groundAt(vec2 xz,float px){return groundArm(xz,px);}
 // the class the arm paints at a point (the class check's view, MACRO_DEBUG): the warped lookup's, or the flat arm's
 float classAt(vec2 xz){
   #if defined(MACRO_FLAT)

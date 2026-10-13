@@ -128,3 +128,17 @@ mid, far and winter views.
   the bench's scatter pass; the macro arm registered as a binder, so later materials get it. The meadow map's bake
   now takes 272 ms on load (the rules at every texel; 64 ms before). Guard: `meadow.Russia` 0.157 (main 0.155),
   `meadow.France` 0.222 (0.222). A confirming round follows.
+- **Confirming round** (5ea8a72): round 3's fixes hold. Found: the rule held at each root, not across a clump's
+  blades (an outer-ring clump reaches 1.3 m: blades about 0.5 m into a zone, 0.9 m onto the bank strip), and the
+  checks looked at roots only, within 200 m. Fixed: the growth keeps roots `CLUMP_REACH` (1.45 m,
+  `src/look/meadow-spec.ts`) from the zones and the banks; river-check tests every growing point's footprint
+  (its root and eight points 1.4 m round it) over ±335 m, the ground the rings can reach; look-check tests that no
+  clump floats (it found the map's 1 m height off the drawn tile by up to 5.2 cm where grass grows, 31 cm at
+  creases where none does: the clumps now sink `MEADOW_SINK`, 6 cm); the slot margin 2.2 cells (the diagonal); the
+  brush tile loaded only with the meadow, with its own error; the outer rings' ground colour read at their cell's
+  footprint; no meadow on WebGL1 (a half-float texture in a vertex shader); stale comments and docs; the
+  `groundArm` alias and an unused field; the rules tested per texel only near their edges (the bake 272 to 151 ms).
+  Final: `npm test` 255 of 255; river-check and look-check pass; guard `meadow.Russia` 0.157 (main 0.155),
+  `meadow.France` 0.222 (0.222); the grass +1.0 to +1.1 ms a frame at the closest and default zooms, +0.2 to
+  +0.95 at the widest (`?bench=meadow`, repeats within 0.1 ms but 0.8 at the widest); the ground's pattern nothing a
+  frame (baked). Review stops here, as the owner agreed.

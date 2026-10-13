@@ -35,7 +35,6 @@ void main(){vec2 xz=mix(uRect.xy,uRect.zw,vUV);macroDerivs(xz);gl_FragColor=macr
 
 export interface BakeStats { ms: number; texels: number; draws: number; mb: number; lost: boolean }
 export interface Macro {
-  brush: Texture   // the meadow's brush tile
   cover: RawTexture; tile: RenderTargetTexture; far: RenderTargetTexture
   setArm(arm: MacroArm): void; arm(): MacroArm
   // the checks' variants on every painted material and the bake (rebaked)
@@ -62,8 +61,10 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   }
   const tile = target('macroTile', D.macroN), far = target('macroFar', D.macroFarN)
   // the meadow's brush tile (tools/meadow-brush.py): the bake's pattern, the grass's shade (src/look/meadow.ts)
-  const brush = new Texture(BRUSH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE); brush.wrapU = brush.wrapV = Texture.WRAP_ADDRESSMODE
-  mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uMeadowBrush', brush) })
+  let brushError: string | null = null
+  const brush = meadow ? new Texture(BRUSH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) => { brushError = `the meadow's brush tile (${BRUSH_URL}) did not load: ${msg ?? 'unknown error'}` }) : null
+  if (brush) brush.wrapU = brush.wrapV = Texture.WRAP_ADDRESSMODE
+  mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); if (brush) m.setTexture('uMeadowBrush', brush) })
 
   const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW'] : [])]
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })
@@ -72,7 +73,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   let losses = 0
   engine.onContextLostObservable.add(() => { losses++ })
   engine.onContextRestoredObservable.add(() => { rebake() })
-  const ready = () => new Promise<void>((res, rej) => { const t0 = performance.now(); const poll = () => wrapper.effect.isReady() && brush.isReady() ? res() : performance.now() - t0 > 30000 ? rej(new Error(`macro bake: the shader did not compile: ${wrapper.effect.getCompilationError()}`)) : setTimeout(poll, 16); poll() })
+  const ready = () => new Promise<void>((res, rej) => { const t0 = performance.now(); const poll = () => brushError ? rej(new Error(brushError)) : wrapper.effect.isReady() && (!brush || brush.isReady()) ? res() : performance.now() - t0 > 30000 ? rej(new Error(`macro bake: the shader did not compile: ${wrapper.effect.getCompilationError()}`)) : setTimeout(poll, 16); poll() })
   // gl.readPixels of one texel waits for the GPU: the bake's time includes its work, not only its submission
   const gl = (engine as unknown as { _gl: WebGLRenderingContext })._gl
   // one target over the world square centred on 0 of side `world` m
@@ -87,7 +88,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
       engine.setViewport(new Viewport(i, j, w, h), 1, 1); renderer.applyEffectWrapper(wrapper)
       const e = wrapper.effect, x0 = -world / 2
       e.setFloat4('uRect', x0 + i / n * world, x0 + j / n * world, x0 + (i + w) / n * world, x0 + (j + h) / n * world)
-      e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex); e.setTexture('uMeadowBrush', brush)
+      e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex); if (brush) e.setTexture('uMeadowBrush', brush)
       renderer.draw(); draws++
     }
     const px = new Uint8Array(4); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px)
@@ -122,7 +123,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
     return bake()
   }
   return {
-    cover: coverTex, brush, tile, far, setArm, arm: () => arm, bake, setCheck, settled: () => last,
+    cover: coverTex, tile, far, setArm, arm: () => arm, bake, setCheck, settled: () => last,
     async bakeBench(side) {
       if (!(Number.isInteger(side) && side >= 64 && side <= D.spec.minSpec.maxTexture)) throw new Error(`?macroBench must be a whole number of texels, 64–${D.spec.minSpec.maxTexture}`)
       const t = target('macroBench', side)

@@ -1,5 +1,5 @@
 #extension GL_OES_standard_derivatives : enable
-precision highp float;varying vec3 vW,vN;varying float vV,vShade,vH;varying vec2 vRoot;
+precision highp float;varying vec3 vW,vN;varying float vV,vShade,vH;varying vec2 vRoot;uniform float uCell;
 #include<painter>
 #include<shore>
 
@@ -11,7 +11,8 @@ void main(){
   // the painted ground under the root: the macro bake (one read), or, on the other arms (whose ground costs a whole
   // macro colour a pixel, too much for many blades deep), the flat class colour
   #ifdef MACRO_BAKE
-  vec3 g=groundSeason(groundArm(vRoot,0.5));
+  pMdx=vec2(uCell,0.0);pMdy=vec2(0.0,uCell);   // the bake read at the ring cell footprint, as the ground under it is filtered
+  vec3 g=groundSeason(groundAt(vRoot,uCell));
   #else
   vec3 g=groundSeason(groundBounce(vRoot));
   #endif

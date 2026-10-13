@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-13
-code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png]
+code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png]
 decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0003-no-blur-in-gameplay, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage]
 ---
 
@@ -173,10 +173,11 @@ The plan: `docs/plans/done/shadow-look.md`.
 
 ### The meadow (L5c)
 
-The plan: `docs/plans/active/l5c-meadow.md`. On by default; `?meadow=off` puts back the old scatter.
+The plan: `docs/plans/active/l5c-meadow.md`. On by default on WebGL2 (on WebGL1 the old scatter stays: the meadow reads a half-float texture in its vertex
+shader); `?meadow=off` puts back the old scatter.
 
-- **The grass near the camera** (`src/look/meadow.ts`, `shaders/meadow.vert|frag`): clumps of the owner's pack grass
-  (`data/meadow-grass.json`, exported from its `Grass_Large` and `Grass_Small`) on three square rings around the
+- **The grass near the camera** (`src/look/meadow.ts`, `src/look/meadow-spec.ts`, `shaders/meadow.vert|frag`): clumps of the owner's pack grass
+  (`data/meadow-grass.json`, exported from its `Grass_Large` and `Grass_Small`) on three round rings around the
   camera's focus (`RINGS`: cells of 0.5, 1 and 2 m, the slots of a 104-cell square within the ring's reach, the
   large clump near and the small one farther, its footprint wider with the cell, its height the same: `HEIGHT`,
   never over `HEIGHT_MAX`). Each ring is one instanced mesh with a static slot buffer (`forcedInstanceCount`: no
@@ -184,8 +185,8 @@ The plan: `docs/plans/active/l5c-meadow.md`. On by default; `?meadow=off` puts b
   (jitter, size, yaw, lean), so a clump never moves nor changes as the rings follow the camera; it exits first
   outside its ring's band of distance and outside the view, then reads the **meadow map** (a float texture at 1 m:
   the ground's height, the growth and the height factor, half floats, baked once: `Nature.growth`, the grassy cover
-  and its edges on the 2 m cells, each texel interpolating the cells round it; then `Nature.growthAllowed` at the
-  texel, with the cover's edge, the formation zones and the banks; then the growing area shrinks a texel, so the
+  and its edges on the 2 m cells, each texel interpolating the cells round it; then the cover's edge and `Nature.growthAllowed` (roots `CLUMP_REACH`, 1.45 m, from the formation zones and the
+  banks, the widest clump's reach) at each texel near those edges; then the growing area shrinks a texel, so the
   GPU's bilinear read never crosses a rule; pasture shorter) and the **clump field** (`shaders/meadow.glsl`), and shrinks
   each clump away across its ring's band (the rings hand over without an edge). The fragment shader is a lean
   `paint()` (the ramp, the cool band, the sky in the shadow, clouds; no grain, rim nor snow): the painted ground's
@@ -195,12 +196,14 @@ The plan: `docs/plans/active/l5c-meadow.md`. On by default; `?meadow=off` puts b
   at 7.3 m and 7.3/2.618 m, turned apart, warped by a slow noise: no common period; stamped by
   `tools/meadow-brush.py` from the owner's grass brush pack in the git-ignored `assets/grass-brushes/`), read at the
   footprint, and the clump field. It is in the macro colour, so the bake arm holds it (nothing a frame) and the
-  terrain and the shore band agree; the grass takes its shade from the same tile and field.
+  terrain and the shore band agree; the grass takes its colour from that ground (read at its ring's cell) and its
+  shade from the clump field.
   `tools/meadow-grass-export.py` rebuilds `data/meadow-grass.json` from the pack's two grass files.
 - **The scatter under the meadow** (`src/look/nature.ts`): the old `Grass_Short` tufts are not placed, and the wheat
   field is placed by a hash a 0.85 m cell (about twice the lattice) with a ragged edge instead of a lattice; both keep
   the scatter's random stream, so nothing else moves. `tools/river-check.js` counts the meadow's growing cells in
-  place of the tufts and checks the baked growth.
+  place of the tufts and checks the grass's footprint against the zones and the banks; `tools/look-check.js`
+  checks no clump floats over the drawn tile (each sinks `MEADOW_SINK`).
 - `?bench=meadow` benches the grass against none (the ground's pattern is baked); `__look.meadowBakeMs`,
   `__look.meadow` (`growingCells`, `growthAt`: river-check's meadow checks).
 

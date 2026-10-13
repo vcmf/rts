@@ -27,6 +27,22 @@
   for (const ask of [c.yaw0 + Math.PI / 2, c.yaw0 - Math.PI / 2, c.yaw0 + Math.PI]) { cam.alpha = ask; scene.render(); yaws.push(+cam.alpha.toFixed(4)); if (Math.abs(cam.alpha - c.yaw0) > c.yawRange + tol) fail.push(`yaw: asked ${ask.toFixed(2)}, the camera stayed at ${cam.alpha.toFixed(2)} (outside ±${c.yawRange.toFixed(3)})`) }
   cam.alpha = a0; scene.render()
   out.yaw = yaws
+  // 2b. the meadow's grass (docs/plans/active/l5c-meadow.md) never floats: where it grows, the height it stands on
+  // (its meadow map, half floats, bilinear, sunk by SINK) is at or under the tile mesh's, at 4000 growing points over
+  // the ground the rings can reach
+  const meadow = window.__look && window.__look.meadow
+  if (meadow) {
+    const SINK = 0.06   // src/look/meadow-spec.ts, MEADOW_SINK
+    let worst = -1, n = 0
+    for (let k = 0; k < 40000 && n < 4000; k++) {
+      const x = (Math.random() - 0.5) * 670, z = (Math.random() - 0.5) * 670
+      if (meadow.growthAt(x, z) <= 0) continue
+      n++; worst = Math.max(worst, meadow.groundAt(x, z) - SINK - tileGround.getHeightAtCoordinates(x, z))
+    }
+    out.meadowFloat = +worst.toFixed(3)
+    if (n < 1000) fail.push(`meadow: only ${n} growing points sampled`)
+    if (worst > 0) fail.push(`meadow: a clump floats ${worst.toFixed(3)} m over the drawn tile`)
+  }
   // 3. every instance's pivot on the drawn ground
   let floating = 0, worstFloat = 0, tested = 0, inBand = 0
   for (const m of scene.meshes) {

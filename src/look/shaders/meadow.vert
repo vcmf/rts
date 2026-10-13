@@ -31,7 +31,7 @@ void main(){
   float a=h4*6.2832,ca=cos(a),sa=sin(a);
   vec3 p=vec3(position.x*fp,position.y*hgt,position.z*fp);p.xz=vec2(ca*p.x-sa*p.z,sa*p.x+ca*p.z);
   p.xz+=(vec2(h5,h6)-0.5)*0.25*p.y;                              // a little lean
-  vec3 w=vec3(root.x,m.r-0.04,root.y)+p;
+  vec3 w=vec3(root.x,m.r-MEADOW_SINK,root.y)+p;   // sunk a little: the map's 1 m bilinear height is within that of the drawn ground where grass grows (tools/look-check.js)
   vec3 n=normal;n.xz=vec2(ca*n.x-sa*n.z,sa*n.x+ca*n.z);
   vN=n;vW=w;vV=aV;vShade=c;   // the clump field (the ground colour under it, groundArm, already holds the brush pattern)
   vH=p.y;vRoot=root;
