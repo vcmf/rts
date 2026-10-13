@@ -200,7 +200,8 @@ shader); `?meadow=off` puts back the old scatter.
   shade from the clump field.
   `tools/meadow-grass-export.py` rebuilds `data/meadow-grass.json` from the pack's two grass files.
 - **The scatter under the meadow** (`src/look/nature.ts`): the old `Grass_Short` tufts are not placed, and the wheat
-  field is placed by a hash a 0.85 m cell (about twice the lattice) with a ragged edge instead of a lattice; both keep
+  field is placed by a hash a 0.7 m cell with a ragged edge instead of a lattice, no taller than `WHEAT_HEIGHT_MAX`
+  (1.2 m, decision 0026); both keep
   the scatter's random stream, so nothing else moves. `tools/river-check.js` counts the meadow's growing cells in
   place of the tufts and checks the grass's footprint against the zones and the banks; `tools/look-check.js`
   checks no clump floats over the drawn tile (each sinks `MEADOW_SINK`).

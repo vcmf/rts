@@ -9,3 +9,6 @@ export const CLUMP_REACH = 1.45
 // how far a clump's root sinks under the meadow map's height, m: where grass grows that 1 m bilinear height is within
 // 5.2 cm of the drawn tile's triangles (measured 2026-10-13: tools/look-check.js checks no clump floats)
 export const MEADOW_SINK = 0.06
+// the standing crop's height, m, at most (decision 0026): under a soldier's chest, so a formation in a field reads;
+// the pre-modern cereals stood 1.2 to 1.8 m (the map's catalogue), the look keeps them lower
+export const WHEAT_HEIGHT_MAX = 1.2

@@ -22,7 +22,7 @@ import { COVER, coverAt, inFormationZone, type CoverGrid } from './world/cover.t
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 import { cardMaterial, cardMesh, placeCards, type CardOptions } from './canopy.ts'
-import { CLUMP_REACH } from './meadow-spec.ts'
+import { CLUMP_REACH, WHEAT_HEIGHT_MAX } from './meadow-spec.ts'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 
 export interface NatureModel { pos: number[]; idx: number[]; role: number[]; min: number[]; max: number[] }
@@ -195,9 +195,10 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // the field's frame (about twice the lattice's), and a ragged edge (the noise pushes it in by up to 1.6 m), through
   // the one placement rule (wheat on wheat, EDGE from the painted edge); its own stream
   if (meadow) {
-    const WR = mulberry(57)
-    for (let u = 0; u < 30; u += 0.85) for (let v = 0; v < 22; v += 0.85) {
-      const uu = u + WR() * 0.85, vv = v + WR() * 0.85, s = 1.5 + WR() * 0.4, yaw = WR() * 6.28, tint = WR()
+    // the tufts' scale: from 0.82 to 1 of the one that reaches WHEAT_HEIGHT_MAX (decision 0026)
+    const WR = mulberry(57), sMax = WHEAT_HEIGHT_MAX / NATURE.Wheat.max[1]
+    for (let u = 0; u < 30; u += 0.7) for (let v = 0; v < 22; v += 0.7) {
+      const uu = u + WR() * 0.7, vv = v + WR() * 0.7, s = sMax * (0.82 + WR() * 0.18), yaw = WR() * 6.28, tint = WR()
       if (Math.min(uu, 30 - uu, vv, 22 - vv) < fbm(uu * 0.35 + 3, vv * 0.35 - 1) * 1.6 || WR() < 0.06) continue
       const x = -60 + uu * 0.95 + vv * 0.25, z = -34 + vv - uu * 0.12
       addPlaced('Wheat', [x, z, s, yaw, tint])
