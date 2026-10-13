@@ -24,7 +24,7 @@ vec4 cropLook(float k,float j){
   float s=uSeason;
   if(k>5.5&&k<6.5){
     float cut=smoothstep(0.55,0.95,s),h=mix(WHEAT_HEIGHT_MAX*mix(0.84,1.0,j),STUBBLE_HEIGHT*mix(0.8,1.0,j),cut)*(1.0-smoothstep(1.55,1.95,s));
-    vec3 c=mix(mix(vec3(0.72,0.60,0.27),vec3(0.70,0.49,0.24),s),stubbleTip(s),cut);   // standing gold to orange, then cut to the stubble
+    vec3 c=mix(mix(vec3(0.72,0.60,0.27),vec3(0.70,0.49,0.24),min(s,1.0)),stubbleTip(s),cut);   // standing gold to orange, then cut to the stubble
     return vec4(h,c);}
   if(k>6.5&&k<7.5){
     float h=GREEN_HEIGHT*mix(0.85,1.0,j)*mix(1.0,0.5,smoothstep(2.5,3.0,s));
@@ -59,11 +59,11 @@ void main(){
   // season, narrower than grass
   float j=mix(0.8,1.2,h3),hgt,fp;
   vec4 cr=vec4(0.0);
-  // its footprint narrower than grass, and a crop lower than grass a little narrower than its proportions (upright,
-  // not a flat splat, its width jitter under the cap), each
+  // its footprint narrower than grass, and under the grass height in the grass proportions (a crop lower than grass
+  // stays upright, not a flat splat), each
   // field a shade apart, as the ground paints it (cellColour in macro.glsl)
   if(crop){vec2 cc=coverCell(root);cr=cropLook(cc.x,h3);cr.yzw*=cc.y>0.5?0.94+0.12*fract(cc.y*0.6180339):1.0;
-    hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*min(0.7,0.9*cr.x/uHeight);}
+    hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*min(0.7,cr.x/uHeight);}
   else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*mix(1.0,0.45,smoothstep(2.5,3.0,uSeason)),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;}
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
   float a=h4*6.2832,ca=cos(a),sa=sin(a);

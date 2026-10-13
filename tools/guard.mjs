@@ -45,7 +45,7 @@ const START_SPOTS = [
 // --view cover (docs/plans/active/l5-macro.md): east of the hill, the coats on each class of the ground's cover
 // (COVER_SPOTS, tools/army-blocks.mjs)
 const COVER = [START[0], 0.8, 150, [150, 8, -25]]
-// --view crops (docs/plans/active/stubble-height.md): over a stubble field (CROP_SPOTS), near enough that its crops grow
+// --view crops (docs/plans/done/stubble-height.md): over a stubble field (CROP_SPOTS), near enough that its crops grow
 const CROPS = [START[0], 0.7, 60, [118, 8, 132]]
 let VIEW = START, SPOTS = START_SPOTS, MIN_NEG = 12   // MIN_NEG: blocks the negative must measure (the crops view's one field holds 8)
 const blocks = (color = null) => blocksAt(SPOTS, color)
@@ -166,8 +166,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (view === 'cover') { VIEW = COVER; SPOTS = COVER_SPOTS } else if (view === 'crops') { VIEW = CROPS; SPOTS = CROP_SPOTS; MIN_NEG = 8 } else if (view !== 'start') { console.error('--view must be start, cover or crops'); process.exit(2) }
   const si = args.indexOf('--seasons')
   if (si >= 0) {
-    const names = args.splice(si, 2)[1].split(',')
-    if (!names.includes('summer') || names.some(n => !(n in SEASON_VALUES))) { console.error(`--seasons: names from ${Object.keys(SEASON_VALUES).join(', ')}, summer among them (the negative)`); process.exit(2) }
+    const names = (args.splice(si, 2)[1] ?? '').split(',')
+    if (!names.includes('summer') || names.some(n => !Object.hasOwn(SEASON_VALUES, n)) || new Set(names).size !== names.length) { console.error(`--seasons: names from ${Object.keys(SEASON_VALUES).join(', ')}, summer among them (the negative), each once`); process.exit(2) }
     SEASONS = names.map(n => [n, SEASON_VALUES[n], n === 'summer'])
   }
   const [url, out = path.join(ROOT, 'scratch/guard')] = args

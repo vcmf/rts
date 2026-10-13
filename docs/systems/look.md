@@ -214,8 +214,7 @@ shader); `?meadow=off` puts back the old scatter.
   plough. Narrower than grass, evenly sown (less clumping). Its colour (the owner): lime at the stalk's foot to the
   season's colour at the tip, the standing wheat gold in summer, turning orange while it is cut; stubble, the cut
   wheat's too, a pale straw over the darker soil (`stubbleTip`, no redder than the standing wheat), browning by late
-  autumn; the
-  green crop lime to olive. Ploughed fields grow nothing.
+  autumn; the green crop lime to olive. Ploughed fields grow nothing.
 - **The meadow on the ground** (`meadowPattern` in `macro()`, `MEADOW`, a define on every painted material and on the
   macro bake): on meadow and pasture (the warped class the ground paints), the brush tile (`data/meadow-brush.png`,
   at 7.3 m and 7.3/2.618 m, turned apart, warped by a slow noise: no common period; stamped by

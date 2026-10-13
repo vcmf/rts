@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-13
 ---
 
@@ -18,7 +18,8 @@ camera: "yeah a bit taller pls".
 ## Acceptance
 
 - Pairs against main: a stubble field in summer, the wheat field in autumn.
-- `node tools/guard.mjs` against main, the default and the cover views: no block worse than main's.
+- `node tools/guard.mjs` against main, the default and the cover views, and (added in review round 2) the new
+  `--view crops` with `--seasons summer,autumn,winter`: no block worse than main's.
 - river-check and look-check pass; `npm test`.
 
 ## Results (2026-10-13)
@@ -33,8 +34,9 @@ camera: "yeah a bit taller pls".
     its crops grown.
   - The default view with autumn added puts the wheat blocks on the cut wheat.
   - The cover view passes too.
-  - Austrian white does not separate from the stubble field in summer and autumn (0.002 to 0.031, main 0.000 to
-    0.032): the stubble ground's value, not the crops. Filed as #78 (phase:L4).
+  - Austrian white does not separate from the stubble field in summer, autumn or winter (0.014 to 0.086, main 0.014
+    to 0.084, with the blocks as laid in round 3): the stubble ground's value, not the crops. Filed as #78
+    (phase:L4).
 - **Cost** (`?bench=meadow&benchat=100,140`, over the stubble field; Metal proxy, two runs an arm, the machine at a
   load of about 11): the meadow arm at 5.08 and 5.08 / 5.52 and 5.62 / 6.77 and 6.82 ms (close / default / wide)
   against main's 5.22 and 5.07 / 5.48 and 5.10 / 6.77 and 6.65 ms. That is within main's own run-to-run spread
@@ -66,8 +68,17 @@ camera: "yeah a bit taller pls".
   - the stubble tip comment's claim, now pointed at the guard's measure;
   - the doc's "orange in autumn" (the orange shows while the wheat is cut, 0.55 to 0.95);
   - the green crop's height as its own constant (`GREEN_HEIGHT`);
-  - the short crops' footprint at 0.9 of their proportions, so the jitter stays under the cap;
+  - the short crops' footprint at 0.9 of their proportions, so the jitter stays under the cap (reverted in round 3);
   - the comments' order;
   - a redundant clamp.
 
   `npm test` failed again under load (14.0 ms against the soldiers' 12 ms budget, load 11 to 15). CI runs it.
+- **Round 3** (84e1b29): no severe finding, so the review stops here. Fixed:
+  - the crops view's blocks re-laid inside the stubble's crops (they reached the field's edge band);
+  - `--seasons` given no value, an inherited key or a repeated name now prints the usage message;
+  - the standing wheat's colour clamp restored;
+  - round 2's 0.9 footprint factor reverted (it also narrowed the green crop, unasked);
+  - the height defines at three decimals;
+  - the plan's and the doc's wording.
+
+  Left: the crops view's negative needs all 8 of its blocks matched (the field holds no more).
