@@ -5,7 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Catalogue, MapFile, Pt } from '../src/map/schema.ts'
 import { expand } from '../src/map/expand.ts'
-import { validate } from '../src/map/validate.ts'
+import { validate, validateExpanded } from '../src/map/validate.ts'
 import { apply, nearLine } from '../src/map/apply.ts'
 import { inRing, pointAt } from '../src/map/geometry.ts'
 
@@ -72,6 +72,41 @@ describe('M3d: shared edges', () => {
     expect(s.issues).toEqual([])
     for (const c of s.map.features.filter(f => f.origin?.parent === 'copses')) for (const [, z] of c.area![0]) expect(z).toBeLessThan(0)
   })
+  it('an inner bend never folds the edge: any seed, any offset, either side', () => {
+    const bent = { ...BROOK, line: [[-250, 0], [0, 0], [250, 50]] as Pt[] }
+    expect(expand(mini([MEADOW, bent, wood({ id: 'brook', side: 'left', from: [-80, 0], to: [0.01, 0] })]), cat).issues).toEqual([])
+    const brook = { ...BROOK, gen: { meander: { amplitude: 30, wavelength: 160 } } }
+    for (let seed = 1; seed <= 10; seed++) for (const offset of [0, 5, 10]) for (const side of ['left', 'right']) {
+      const far = side === 'left' ? 140 : -140
+      const out = expand(mini([MEADOW, brook, wood({ id: 'brook', side, offset, from: [-150, 0], to: [150, 0] }, [[[150, far], [-150, far]]])], seed), cat)
+      expect(out.issues).toEqual([])
+    }
+  })
+  it('the edge starts where the line stops painting: a hedge, a path and a stream share no cell with the wood', () => {
+    for (const line of [
+      { id: 'brook', kind: 'water.stream', line: [[-250, 1], [250, 1]] as Pt[], width: 6 },
+      { id: 'brook', kind: 'way.path', line: [[-250, 1], [250, 1]] as Pt[] },
+      { id: 'brook', kind: 'barrier.hedge', line: [[-250, 0], [250, 0]] as Pt[] },
+      { id: 'brook', kind: 'barrier.wall', line: [[-250, 0], [250, 0]] as Pt[], thickness: 4 },
+    ]) {
+      const { map, issues } = expand(mini([MEADOW, line, wood({ id: 'brook', side: 'left', from: [-80, 5], to: [80, 5] })]), cat)
+      expect(issues).toEqual([])
+      const L = apply(map, cat), woodK = L.table.findIndex(r => r.kind === 'veg.wood.broad') + 1
+      let shared = 0, wooded = 0
+      for (let c = 0; c < L.veg.length; c++) if (L.veg[c] === woodK) { wooded++; if (L.water[c] || L.way[c] || L.barrier[c]) shared++ }
+      expect(wooded).toBeGreaterThan(0)
+      expect(shared).toBe(0)
+      // and it touches: the row of cells just past the line's own is the wood's
+      const row = (z: number) => Math.floor((z + 300) / 2) * L.nx + 150
+      const first = [0, 1, 2, 3, 4, 5].map(k => row(k * 2 + 1)).find(c => !L.water[c] && !L.way[c] && !L.barrier[c])!
+      expect(L.veg[first]).toBe(woodK)
+    }
+  })
+  it('an expanded map keeps no shared edge', () => {
+    const m = mini([MEADOW, BROOK, wood({ id: 'brook', side: 'left', from: [-80, 5], to: [80, 5] })])
+    expect(validateExpanded(m, cat).map(i => i.message)).toContainEqual('an expanded map has no shared edges left')
+    expect(validateExpanded(expand(m, cat).map, cat)).toEqual([])
+  })
   it('an edge of no length, or a ring that crosses itself, is an error naming the feature', () => {
     expect(expand(mini([MEADOW, BROOK, wood({ id: 'brook', side: 'left', from: [-80, 5], to: [-80, 9] })]), cat).issues[0]).toMatchObject({ id: 'wood', path: 'features[2].follow', message: expect.stringMatching(/no length/) })
     const twisted = expand(mini([MEADOW, BROOK, wood({ id: 'brook', side: 'left', from: [-80, 5], to: [80, 5] }, [[[-80, 60], [80, 60]]])]), cat)
@@ -93,6 +128,6 @@ describe('M3d: shared edges', () => {
     expect(paths({ ...ok, colour: 'red' })).toContainEqual(expect.stringMatching(/follow\.colour: unknown field/))
     expect(paths({ ...ok, from: [900, 0] })).toContainEqual(expect.stringMatching(/follow\.from/))
     expect(paths(ok, { area: undefined, circle: [[0, 60], 20] })).toContainEqual(expect.stringMatching(/needs an "area"/))
-    expect(validate(mini([MEADOW, { id: 'road', kind: 'way.road', line: [[0, -250], [0, 250]] as Pt[] }, { id: 'v', kind: 'built.village', area: [[[10, 10]]] as Pt[][], along: { id: 'road', from: 10, to: 100 }, follow: { id: 'road', side: 'left', from: [0, -100], to: [0, 0] }, gen: { 'street-village': {} } }]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/street village's own area cannot follow/))
+    expect(validate(mini([MEADOW, { id: 'road', kind: 'way.road', line: [[0, -250], [0, 250]] as Pt[] }, { id: 'v', kind: 'built.village', area: [[[10, 10]]] as Pt[][], along: { id: 'road', from: 10, to: 100 }, follow: { id: 'road', side: 'left', from: [0, -100], to: [0, 0] }, gen: { 'street-village': {} } }]), cat).map(i => i.message)).toContainEqual(expect.stringMatching(/a street-village feature's own area cannot follow/))
   })
 })

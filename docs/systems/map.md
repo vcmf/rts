@@ -97,10 +97,14 @@ maps/kinds.json ──► checkCatalogue ─┐
   - **shared edges** (`follow`, `src/map/follow.ts`): an area's outer ring may take part of a line feature, so a
     wood shares a stream's bank. `{ id, side, offset?, from, to, at? }`, or a list: `from` and `to` snap to the
     nearest points of the line as expanded (so the edge moves with a meander) and the edge runs between them in
-    that order; it lies `side` of the line (looking along it), `offset` m past the line's edge (half its width);
+    that order; it lies `side` of the line (looking along it), `offset` m past where the line stops painting cells
+    (`lineReach`, `src/map/apply.ts`: a road's or stream's half-width, a barrier's band, at least a cell's half), so
+    the two share no cell and leave none between;
     its points go before the ring's point `at` (default 0), and the ring's own points hold the rest of the
     boundary (with a `follow`, as few as one; the whole ring is checked after expansion). Each vertex moves along
-    the mean of its segments' normals, mitred to keep the offset, at most twice it. A feature with `follow` is in
+    the mean of its segments' normals, mitred to keep the offset, at most twice it; points that step back against
+    the line (an inner bend shorter than the offset) are dropped and the loops an inner bend makes are cut out, so
+    the edge never folds, whatever the seed. A feature with `follow` is in
     the chain (it reads the lines it follows, so it waits for a meander; what reads it waits for its ring), and
     `follow` leaves the expanded map. A street village's own area cannot follow (its reach is checked before
     expansion).

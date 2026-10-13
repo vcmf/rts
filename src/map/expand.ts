@@ -10,14 +10,14 @@ import { SHAPES } from './schema.ts'
 import type { Issue } from './catalogue.ts'
 import type { GenOutput, GenSpec } from './generators.ts'
 import { followEdge, followsOf } from './follow.ts'
-import { num } from './util.ts'
+import { lineReach } from './apply.ts'
 import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import { resolve } from './resolve.ts'
 import { seedOf } from './seed.ts'
 import { validate } from './validate.ts'
 import { crossings } from './geometry.ts'
 import { kindMatches, zoneGap, zoneToArea } from './reach.ts'
-import { isKindName } from './catalogue.ts'
+import { categoryOf, isKindName } from './catalogue.ts'
 
 export const EXPAND_VERSION = 3   // recorded in a generated feature's `origin`; bump when any generator's output changes
 
@@ -38,8 +38,8 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
       const edges = followsOf(f), outer = [...f.area![0]]
       try {
         for (const e of [...edges].sort((a, b) => (b.at ?? 0) - (a.at ?? 0))) {
-          const line = current.get(e.id)!, hw = num(res(line).attrs.width, 0) / 2
-          outer.splice(e.at ?? 0, 0, ...followEdge(line.line!, hw, e))
+          const line = current.get(e.id)!
+          outer.splice(e.at ?? 0, 0, ...followEdge(line.line!, lineReach(categoryOf(res(line).kind), res(line).attrs), e))
         }
       } catch (err) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].follow`, message: (err as Error).message }); failed.add(f.id); return }
       f = { ...Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'follow')), area: [outer, ...f.area!.slice(1)] } as Feature
@@ -100,7 +100,7 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
       for (const h of group) {
         const how = group.filter(o => reads(h, o)).map(o => `"${o.id}" (by ${matching(h, o).map(s => `'${s}'`).join(', ')})`).join(', ')
         const mix = group.every(o => specOf(o) === GENERATOR_SPECS.scatter) ? ", or place their kinds jointly in one scatter's mix" : ''
-        issues.push({ id: h.id, path: `features[${at.get(h.id)}].gen`, message: `it reads ${how}, and they read it back: generators must form a chain. Drop one side's read (keeping clear on one side is enough)${mix}` })
+        issues.push({ id: h.id, path: `features[${at.get(h.id)}].${h.gen ? 'gen' : 'follow'}`, message: `it reads ${how}, and they read it back: generators must form a chain. Drop one side's read (keeping clear on one side is enough)${mix}` })
         failed.add(h.id)
       }
       return

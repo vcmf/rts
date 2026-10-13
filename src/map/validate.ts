@@ -110,7 +110,9 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       const edges = Array.isArray(f.follow) ? f.follow : [f.follow], fp = (n: number) => (Array.isArray(f.follow) ? `${path}.follow[${n}]` : `${path}.follow`)
       if (edges.length === 0) bad(id, `${path}.follow`, 'must be a shared edge or a list of them')
       if (!Array.isArray(f.area)) bad(id, `${path}.follow`, 'shapes the outer ring of an area: the feature needs an "area" (its other points)')
-      if (f.gen !== undefined && isObj(f.gen) && Object.keys(f.gen)[0] === 'street-village') bad(id, `${path}.follow`, "a street village's own area cannot follow a line (its reach is checked before expansion)")
+      // a generator with peers checks its reach against its own area before expansion, when the ring is not whole yet
+      const g0 = isObj(f.gen) ? Object.keys(f.gen)[0] : undefined
+      if (g0 !== undefined && Object.hasOwn(GENERATOR_SPECS, g0) && GENERATOR_SPECS[g0].peers) bad(id, `${path}.follow`, `a ${g0} feature's own area cannot follow a line (its reach is checked before expansion)`)
       const ats = new Set<number>(), ringLen = Array.isArray(f.area) && Array.isArray(f.area[0]) ? f.area[0].length : 0
       edges.forEach((e, n) => {
         const ep = fp(n)
@@ -321,6 +323,9 @@ function checkShape(s: typeof SHAPES[number], v: unknown, path: string, extent: 
 // an expanded map's own check: no generator left (§3.4)
 export function validateExpanded(map: MapFile, cat: Catalogue): Issue[] {
   const out = validate(map, cat)
-  map.features.forEach((f, i) => { if (f.gen !== undefined) out.push({ id: f.id, path: `features[${i}].gen`, message: 'an expanded map has no generators left' }) })
+  map.features.forEach((f, i) => {
+    if (f.gen !== undefined) out.push({ id: f.id, path: `features[${i}].gen`, message: 'an expanded map has no generators left' })
+    if (f.follow !== undefined) out.push({ id: f.id, path: `features[${i}].follow`, message: 'an expanded map has no shared edges left' })
+  })
   return out
 }

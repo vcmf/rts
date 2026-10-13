@@ -26,6 +26,18 @@ export const CELL = 2   // m (decision 0021)
 const FREEBOARD = 0.4, BANK_OUT = 3, LEVEL_STEP = 2, SHORE_IN = 10, BRIDGE_REACH = 4
 const WAY_WIDTH = 5, WATER_WIDTH = 6, EDIT_WIDTH = 4, LANDFORM_WIDTH = 100, VEG_LINE = 4, WORK_LINE = 6
 
+// How far from its centreline a line feature takes cells, as apply paints it: a cell whose centre lies closer (strictly)
+// is the line's. An edge that follows the line (src/map/follow.ts) starts here, so the two share no cell
+export function lineReach(category: string, attrs: Record<string, AttrValue>): number {
+  const c = CELL, painted = (hw: number) => Math.max(hw, c / 2 + 0.01)
+  if (category === 'barrier') return num(attrs.thickness, 2) * c / 2
+  if (category === 'water') return painted(Math.max(num(attrs.width, WATER_WIDTH) / 2, c / 2))
+  if (category === 'way') return painted(num(attrs.width, WAY_WIDTH) / 2)
+  if (category === 'veg') return attrs.growth === 'tree' ? 0 : painted(VEG_LINE / 2)   // a row of trees paints no cell
+  if (category === 'built' || category === 'work') return painted(WORK_LINE / 2)
+  return 0
+}
+
 export interface Layers {
   cell: number; nx: number; nz: number; x0: number; z0: number   // cells; cell (i, j) spans x0 + i·cell … + cell
   height: Float64Array      // (nx + 1) × (nz + 1) nodes, node (i, j) at (x0 + i·cell, z0 + j·cell), m above the datum

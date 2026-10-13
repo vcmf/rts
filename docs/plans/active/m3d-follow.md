@@ -47,11 +47,24 @@ shared arcs for now; the draft page drawing shared edges specially.
    stream's, and none between them is meadow) for five seeds.
 2. `from`/`to` in either order give the same ring, reversed; `side` and `offset` behave as stated; `at` places
    the edge.
-3. A cycle through `follow` (an area following a line that reads the area) is the chain's error.
+3. A cycle through `follow` (an area following a line that reads the area) is the chain's error. (No generator
+   that writes a line reads anything today, so no such cycle can be built yet; the error's path names `.follow`
+   for a feature without a generator.)
 4. The validator reports a bad reference, a non-line target, bad fields, and `follow` on a non-area.
 5. `npm test`, `check:data`, the build, the docs check and the page check pass; the valley's sim data is
    unchanged.
 
 ## Review rounds
 
-(none yet)
+**Round 1** (7 findings, 1 severe):
+- **Severe:** on the inner side of a bend the offset edge could fold (a loop, or a last point stepping back past
+  a vertex), so a map that validated failed "crosses itself" when only the meander's seed changed, even at offset
+  0. Points that step back against the line are dropped, walking from both ends, and loops are cut out where the
+  curve meets itself. Tested: the reviewer's bend, and a meandered brook over ten seeds, offsets 0, 5 and 10, on
+  both sides.
+- **Moderate:** the bank was the line's `width` / 2, not where apply paints: a hedge's band, a path's minimum
+  half-cell. `lineReach` (apply.ts) is now the one rule; tested on a stream, a path, a hedge and a wall (no shared
+  cell, none between).
+- **Light:** a cycle's path names `.follow` for a feature without a generator; an expanded map with a leftover
+  `follow` is refused; points are deduplicated after rounding to centimetres; the ban on `follow` keys on a
+  generator's `peers`, not on its name. Acceptance 3 is noted as not reachable yet.
