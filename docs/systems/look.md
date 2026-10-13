@@ -178,26 +178,30 @@ The plan: `docs/plans/active/l5c-meadow.md`. On by default; `?meadow=off` puts b
 - **The grass near the camera** (`src/look/meadow.ts`, `shaders/meadow.vert|frag`): clumps of the owner's pack grass
   (`data/meadow-grass.json`, exported from its `Grass_Large` and `Grass_Small`) on three square rings around the
   camera's focus (`RINGS`: cells of 0.5, 1 and 2 m, the slots of a 104-cell square within the ring's reach, the
-  large clump near and the small one farther, scaled up with the cell). Each ring is one mesh of static thin instances (identity matrices and a slot,
-  never rewritten); each frame it snaps to its cell. The vertex shader places a clump from its world cell's hash
+  large clump near and the small one farther, its footprint wider with the cell, its height the same: `HEIGHT`,
+  never over `HEIGHT_MAX`). Each ring is one instanced mesh with a static slot buffer (`forcedInstanceCount`: no
+  matrices); each frame it snaps to its cell. The vertex shader places a clump from its world cell's hash
   (jitter, size, yaw, lean), so a clump never moves nor changes as the rings follow the camera; it exits first
   outside its ring's band of distance and outside the view, then reads the **meadow map** (a float texture at 1 m:
-  the ground's height, the growth and the height factor, baked once from `Nature.growth`: the grassy cover and its
-  edges, off the banks and the water, out of the formation zones; pasture shorter; each 1 m texel interpolating the
-  2 m cells round it) and the **clump field** (`shaders/meadow.glsl`), and shrinks
+  the ground's height, the growth and the height factor, half floats, baked once: `Nature.growth`, the grassy cover
+  and its edges on the 2 m cells, each texel interpolating the cells round it; then `Nature.growthAllowed` at the
+  texel, the formation zones and the banks, so no smoothing crosses them; pasture shorter) and the **clump field** (`shaders/meadow.glsl`), and shrinks
   each clump away across its ring's band (the rings hand over without an edge). The fragment shader is a lean
-  `paint()` (the ramp, the cool band, the sky in the shadow, clouds; no grain, rim nor snow): the ground's colour
-  under the root, darker at the root and lighter, warmer at the tip. In winter the clumps shrink under the snow.
-- **The meadow on the ground** (`groundAt`, `MEADOW`, a define on every painted material): on meadow and pasture
-  (the class the ground paints, its edge warped), the brush tile (`data/meadow-brush.png`, two octaves, 7 and 2.6 m;
-  stamped by `tools/meadow-brush.py` from the owner's grass brush pack in the git-ignored `assets/grass-brushes/`)
-  and the clump field, its fine octave fading with the pixel's footprint; the grass takes its shade from the same
-  tile and field. The terrain and the shore band both read `groundAt`, so the banks keep their seam.
+  `paint()` (the ramp, the cool band, the sky in the shadow, clouds; no grain, rim nor snow): the painted ground's
+  colour under the root (the macro colour's arm, `groundArm`), darker at the root and lighter, warmer at the tip. In winter the clumps shrink under the snow.
+- **The meadow on the ground** (`meadowPattern` in `macro()`, `MEADOW`, a define on every painted material and on the
+  macro bake): on meadow and pasture (the warped class the ground paints), the brush tile (`data/meadow-brush.png`,
+  at 7.3 m and 7.3/2.618 m, turned apart, warped by a slow noise: no common period; stamped by
+  `tools/meadow-brush.py` from the owner's grass brush pack in the git-ignored `assets/grass-brushes/`), read at the
+  footprint, and the clump field. It is in the macro colour, so the bake arm holds it (nothing a frame) and the
+  terrain and the shore band agree; the grass takes its shade from the same tile and field.
+  `tools/meadow-grass-export.py` rebuilds `data/meadow-grass.json` from the pack's two grass files.
 - **The scatter under the meadow** (`src/look/nature.ts`): the old `Grass_Short` tufts are not placed, and the wheat
   field is placed by a hash a 0.85 m cell (about twice the lattice) with a ragged edge instead of a lattice; both keep
   the scatter's random stream, so nothing else moves. `tools/river-check.js` counts the meadow's growing cells in
-  place of the tufts; `tools/look-check.js` skips the meadow's meshes (their matrices are identities).
-- `?bench=meadow` benches the grass against none (the ground's pattern stays in both arms); `__look.meadowBakeMs`.
+  place of the tufts and checks the baked growth.
+- `?bench=meadow` benches the grass against none (the ground's pattern is baked); `__look.meadowBakeMs`,
+  `__look.meadow` (`growingCells`, `growthAt`: river-check's meadow checks).
 
 ### Soft shadows (the sun's penumbra, the sky's occlusion)
 

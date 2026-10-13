@@ -73,15 +73,29 @@ mid, far and winter views.
   | Default | 7.32, 5.67 | +1.95, +1.65, +1.35 | 0.60 |
   | Widest | 9.57, 8.55 | +0.85, +1.15, +1.05 | 0.60 |
 
-  About +0.9 to +2.0 ms a frame: still a large share of L7's 3 ms for all foliage. A flat fragment shader (a measurement,
+  About +0.9 to +2.0 ms a frame. After review round 2 (the height capped, the pattern moved into the macro colour's
+  bake, the instanced slots without matrices, a half-float map):
+
+  | Zoom | meadow, none (ms) | paired difference | repeat spread |
+  |---|---|---|---|
+  | Closest | 4.70, 3.78 | +0.80, +0.85, +1.10 | 0.70 |
+  | Default | 5.83, 4.65 | +1.25, +1.15, +1.15 | 0.20 |
+  | Widest | 7.82, 6.85 | +0.55, +1.15, +1.20 | 0.30 |
+
+  About +0.6 to +1.25 ms a frame for the grass. The ground's pattern is in the macro colour's bake (the default arm):
+  nothing a frame (the "none" arm, the pattern baked and the grass off, against `?meadow=off`, separate runs: 4.65
+  against 4.68 ms at the default zoom). Measured before that move, the pattern computed a pixel cost +0.75 to +1.95
+  ms on its own. The bake holds it a little softer than the pixel did (its 0.5 m texel). A flat fragment shader (a measurement,
   not shipped) put the shading at about half of it and the vertices (every slot's, early exits included) at the
   other half. The meadow map's bake: 64 ms on load (the CPU).
 - **Readability guard** (against main): passes. A first, darker meadow dropped `meadow.Russia` to 0.077; the grass
-  was brightened (0.110), then kept out of the formation zones, as the placement rule asks: `meadow.Russia` 0.124
-  (main 0.155), `meadow.France` 0.220 (0.222).
+  was brightened (0.110), kept out of the formation zones, as the placement rule asks (0.124), and its colour taken
+  from the painted ground: `meadow.Russia` 0.149 (main 0.155), `meadow.France` 0.221 (0.222).
+- **The grass's height:** 0.62 m typical, never over 0.85 m (`HEIGHT_MAX`), the same on every ring.
 - **Checks:** `tools/river-check.js` (the meadow's growing cells stand in for the grass tufts in its population) and
-  `tools/look-check.js` (the meadow's identity matrices skipped) pass on the page; the wheat is 744 tufts (the
-  lattice's 382 or so).
+  `tools/look-check.js` pass on the page; river-check also checks the baked growth (none in the formation zones nor
+  over the water, a metre grid over the near field; between a fifth and four fifths of the tile growing: 0.45); the
+  wheat is 690 tufts (the lattice's 382 or so).
 - **Not measured:** the min-spec laptop; the meadow with formations standing in it (the guard's blocks only).
 
 ## Review (`/code-review high`)
@@ -92,3 +106,14 @@ mid, far and winter views.
   with distance; the wheat 3.4 times the lattice, not twice, unmeasured, its edge on the cover's grid; the meadow's
   identity matrices walked by the look check; slots outside the round band; the bank rule copied. Light: uniforms
   set again each frame. All fixed; the brush tile added in the same round (B).
+- **Round 2** (5f49ec9): severe: the outer rings scaled the grass to 1.5–2.5 m (hiding a formation); the brush's
+  two octaves shared a 91 m period (a grid); the growth's interpolation carried grass up to 2 m into the formation
+  zones and onto banks. Moderate: the wheat skipped the cover's edge rule; the grass took the class's flat colour,
+  not the painted ground; the ground pattern's cost unmeasured; per-clump work at every vertex and a 10 MB float map;
+  a population check that could not fail; identity thin-instance matrices needing special cases; the cull margin in
+  clip units. Light: the brush tile's seam column, a comment, no tool to rebuild the grass data. Fixed: one height
+  for every ring under `HEIGHT_MAX`; unrelated scales, turn and a slow warp; the hard rules applied at every texel;
+  the wheat through the one placement rule; the grass coloured by the macro arm under its root; the pattern moved
+  into the macro bake and measured (above); a half-float map; river-check's meadow checks; `forcedInstanceCount`
+  with an instanced slot buffer (no matrices, no special cases); the cull at two heights; `math.floor` in the tile;
+  `tools/meadow-grass-export.py`. Left: the per-clump work at every vertex (WebGPU compute, later).

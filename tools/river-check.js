@@ -56,6 +56,21 @@
   const meadow = typeof __look !== 'undefined' && __look.meadow
   if (meadow) pop.meadowCells = meadow.growingCells
   check('population', pop.trees >= 60 && (meadow ? meadow.growingCells >= 2000 : pop.grass >= 2000) && pop.wheat >= 150 && pop.bushes >= 30 && pop.far >= 400, pop)
+  // the meadow follows the placement rule too: its baked growth is 0 in the formation zones and over the water and
+  // its banks, at every metre of a grid over the near field; and it grows over a real share of the tile (between a
+  // fifth and four fifths of its texels), so a growth that failed everywhere, or nowhere, is caught
+  if (meadow) {
+    let inZones = 0, onBanks = 0
+    for (let x = -200; x <= 200; x += 1) for (let z = -200; z <= 200; z += 1) {
+      if (meadow.growthAt(x, z) <= 0) continue
+      if (KEEP_CLEAR(x, z)) inZones++
+      const q = riverQuery(x, z); if (q && q.dist < lerpA(C.W, q) / 2) onBanks++
+    }
+    check('meadowInZones', inZones === 0, inZones)
+    check('meadowOnWater', onBanks === 0, onBanks)
+    const share = meadow.growingCells / (SMW * SMW)   // SMW: the tile's width, m
+    check('meadowShare', share > 0.2 && share < 0.8, +share.toFixed(3))
+  }
 
   // 3. bends turn back (samples moving against the overall flow), also near the scene
   const dir = Math.sign(C.pz[C.n - 1] - C.pz[0]); let back = 0, backNear = 0

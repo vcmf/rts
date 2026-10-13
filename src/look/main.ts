@@ -106,7 +106,7 @@ water.finish(scene)
 const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy, nature.cardCasters, soft)
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
-const macro = buildMacro(scene, mats, look.cover)
+const macro = buildMacro(scene, mats, look.cover, meadowOn)
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)
@@ -114,7 +114,8 @@ macro.setArm(macroArm)
 const macroBake = await macro.bake()
 const camera = buildCamera(scene, canvas)
 // the meadow near the camera (docs/plans/active/l5c-meadow.md), after the bakes and the macro colour it reads
-const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth) : null
+const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, nature.growthAllowed) : null
+macro.setArm(macroArm)   // again: the meadow's materials are made after the first setArm, and read the arm's ground colour
 const post = new Post(camera, engine, S, () => mats.grain); post.build()
 
 /* ---------- UI ---------- */
@@ -250,7 +251,7 @@ let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | n
 const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   lab, mats, passes, post, setDetail,
-  sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, meadow: meadow ? { growingCells: meadow.growingCells } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
+  sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, meadow: meadow ? { growingCells: meadow.growingCells, growthAt: meadow.growthAt } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
   hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),
   // the grain the terrain reads: the paint grain, or the seam check's smooth one (returns its steepest texel step)
   grain: (kind: 'paint' | 'smooth') => {
@@ -309,7 +310,7 @@ if (params.has('bench')) {
   // ?bench=macro: the macro colour's arms instead (with the detail layer)
   // ?trees=cards&bench=trees: the crowns' two arms, cards and the pack's (docs/plans/done/l7a-canopy-cards.md),
   // for the frame's cost only (read the frame interval): the shadow map is baked once, with the cards, so the pack arm keeps the cards' shadows
-  // ?bench=meadow: the meadow against none (its grass only: the ground's pattern stays)
+  // ?bench=meadow: the meadow's grass against none (the ground's pattern is in the macro bake: nothing a frame)
   if (params.get('bench') === 'meadow' && !meadow) throw new Error('?bench=meadow needs the meadow on (no ?meadow=off)')
   // ?trees=cards&bench=volume: the crowns lit as volumes against L7a's light (docs/plans/done/l7b-crown-volume.md)
   if ((params.get('bench') === 'trees' || params.get('bench') === 'volume') && !nature.showCards) throw new Error(`?bench=${params.get('bench')} needs ?trees=cards`)

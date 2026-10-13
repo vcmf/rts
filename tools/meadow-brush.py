@@ -7,7 +7,7 @@
 # Value, not colour (the palette paints it): a mid ground, soft lumps lighter and darker (the patchwork), then blade
 # clusters at every angle (seen from above, blades lie every way), their strokes lighter toward the light. Every
 # stamp is drawn with its wrapped copies, so the tile repeats without a seam. Deterministic (its own seed).
-import random, sys
+import math, random, sys
 from PIL import Image, ImageChops, ImageFilter
 
 SRC, OUT = sys.argv[1], sys.argv[2]
@@ -27,7 +27,7 @@ def stamp(canvas, mask, value, x, y, size, angle):
     tone = Image.new('L', m.size, value)
     for dx in (-N, 0, N):
         for dy in (-N, 0, N):
-            px, py = int(x - m.width / 2 + dx), int(y - m.height / 2 + dy)
+            px, py = math.floor(x - m.width / 2 + dx), math.floor(y - m.height / 2 + dy)   # floor: the wrapped copies land exactly a tile apart
             if px > N or py > N or px + m.width < 0 or py + m.height < 0: continue
             canvas.paste(tone, (px, py), m)
 
@@ -37,7 +37,7 @@ c = Image.new('L', (N, N), 118)
 for _ in range(90):    # the patchwork: soft lumps, lighter and darker
     stamp(c, rnd.choice(patches), rnd.randint(80, 165), rnd.uniform(0, N), rnd.uniform(0, N), rnd.randint(160, 420), rnd.uniform(0, 360))
 c = c.filter(ImageFilter.GaussianBlur(6))
-for _ in range(2600):  # the blades: dark gaps first, then lighter strokes over them
+for _ in range(2600):  # the blades: dark gaps and lighter strokes, mixed
     v = rnd.choice((rnd.randint(55, 105), rnd.randint(140, 215), rnd.randint(150, 235)))
     stamp(c, rnd.choice(blades), v, rnd.uniform(0, N), rnd.uniform(0, N), rnd.randint(60, 150), rnd.uniform(0, 360))
 # a last, faint unify: keep the strokes but take a little of the lumps' light back over them

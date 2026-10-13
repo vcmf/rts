@@ -44,8 +44,11 @@ export interface Nature {
   // under cards: the card meshes, which cast the crowns' shadows, and the pack models they replace, which cast nothing
   // (src/look/bakes.ts; the trunk meshes cast the trunks')
   cardCasters?: { leaf: BaseTexture; cards: Mesh[]; packs: Mesh[] }
-  // the meadow's growth at a point (src/look/meadow.ts): 0..1, and the grass's height factor (pasture shorter)
+  // the meadow's growth (src/look/meadow.ts): by the cover at a 2 m cell's centre, 0..1 and the grass's height factor
+  // (pasture shorter); and the placement rule's hard edges at any point (the formation zones, the banks, the water),
+  // which the meadow map applies at every texel so that smoothing the cover never carries grass across them
   growth(x: number, z: number): [number, number]
+  growthAllowed(x: number, z: number): boolean
 }
 
 // what may grow on each class of the cover (docs/plans/active/l5-macro.md): grass, flowers, plants, bushes, stumps
@@ -188,16 +191,15 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const addWheat = (item: Item) => { if (!meadow) addPlaced('Wheat', item) }   // under the meadow the field below replaces this lattice; the stream is unchanged
   for (let u = 0; u < 30; u += 1.25) for (let v = 0; v < 22; v += 1.3) { const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5, z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5; if (rr() < 0.08) continue; addWheat([x, z, 1.5 + rr() * 0.4, rr() * 6.28, rr()]) }
   // the meadow's wheat (docs/plans/active/l5c-meadow.md): no rows nor columns, a tuft anywhere in each 0.85 m cell of
-  // the field's frame (about twice the lattice's), and a ragged edge (the noise pushes it in by up to 1.6 m); inside
-  // the authored field (src/look/world/cover.ts: its polygon 1.5 m wider all round), so the noise draws the edge,
-  // not the cover's 2 m grid; its own stream
+  // the field's frame (about twice the lattice's), and a ragged edge (the noise pushes it in by up to 1.6 m), through
+  // the one placement rule (wheat on wheat, EDGE from the painted edge); its own stream
   if (meadow) {
     const WR = mulberry(57)
     for (let u = 0; u < 30; u += 0.85) for (let v = 0; v < 22; v += 0.85) {
       const uu = u + WR() * 0.85, vv = v + WR() * 0.85, s = 1.5 + WR() * 0.4, yaw = WR() * 6.28, tint = WR()
       if (Math.min(uu, 30 - uu, vv, 22 - vv) < fbm(uu * 0.35 + 3, vv * 0.35 - 1) * 1.6 || WR() < 0.06) continue
       const x = -60 + uu * 0.95 + vv * 0.25, z = -34 + vv - uu * 0.12
-      if (placeable(x, z, footprint('Wheat', s))) add('Wheat', [x, z, s, yaw, tint])
+      addPlaced('Wheat', [x, z, s, yaw, tint])
     }
   }
   // far woods and hedgerows from cheap bush crowns, never in the apron band, whose ground only the apron mesh knows
@@ -273,9 +275,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   place('Bush_1', farMat, far.filter((b, i) => i % 4 === 0 && drawn(b))); place('Bush_2', farMat, far.filter((b, i) => i % 4 === 2 && drawn(b)))
   // the meadow's growth: where the old tufts could stand (the placement rule: the cover's grassy classes and their
   // edges, off the banks and the water, out of the formation zones); pasture grazed shorter
-  const growth = (x: number, z: number): [number, number] => {
-    if (touchesZone(x, z, 0) || !coverAllows(cover, 'Grass_Short', x, z) || !offBanks(riverQuery(x, z), 0.4)) return [0, 0]
-    return [1, coverAt(cover, x, z) === COVER.pasture ? 0.65 : 1]
-  }
-  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined, growth }
+  const growth = (x: number, z: number): [number, number] => coverAllows(cover, 'Grass_Short', x, z) ? [1, coverAt(cover, x, z) === COVER.pasture ? 0.65 : 1] : [0, 0]
+  const growthAllowed = (x: number, z: number) => !touchesZone(x, z, 0.8) && offBanks(riverQuery(x, z), 0.4)   // a clump reaches about 0.8 m
+  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined, growth, growthAllowed }
 }
