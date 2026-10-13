@@ -1,6 +1,6 @@
 ---
-status: active
-last_reviewed: 2026-10-12
+status: done
+last_reviewed: 2026-10-13
 ---
 
 # Plan: L7a, tree crowns as leaf cards (an experiment)
@@ -88,7 +88,9 @@ the oak picture and with the procedural atlas.
   cards in the sun's pass with the screen's distance-boosted coverage, which filled every gap (the review's
   finding, not the shadow map's 0.33 m texel as first thought); with a plain cut two mips finer, the shadow's
   outline breaks into leaf lobes. Its inside stays solid where the crown is dense. The light-map bake filters
-  edges over about 1.3 m for every shadow on the map; a tighter filter is the shadow-look plan's.
+  edges over about 1.3 m for every shadow on the map; a tighter filter is the shadow-look plan's. (Since then the
+  shadow look tightened that filter and the soft shadows made it grow with the distance to the caster:
+  `docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`.)
 - **Tests:** `npm test` fails only the sim's cost tests when the machine is loaded; main fails the same tests
   under the same load (2026-10-13), and both pass when run alone. This branch touches neither the sim nor its
   tests.

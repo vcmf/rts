@@ -1,4 +1,4 @@
-// The leaf-clump atlas for the card crowns (docs/plans/active/l7a-canopy-cards.md): four clumps in a 2×2 grid of
+// The leaf-clump atlas for the card crowns (docs/plans/done/l7a-canopy-cards.md): four clumps in a 2×2 grid of
 // CELL² cells, R the painted value (normalised), A the coverage, G and B each leaf's tilt (L7b: the value's gradient,
 // read as a height; 0.5 is flat). Made from a picture of four clumps on black (any
 // layout: split at the empty gutters nearest the middle) or drawn procedurally. The palette paints it (the
@@ -67,7 +67,7 @@ export function atlasFromPicture(img: CanvasImageSource & { width: number; heigh
   return withTilt(out)
 }
 
-// each leaf's tilt (L7b, docs/plans/active/l7b-crown-volume.md): the value read as a height, its gradient over
+// each leaf's tilt (L7b, docs/plans/done/l7b-crown-volume.md): the value read as a height, its gradient over
 // TILT_PX pixels into G (across) and B (down), 0.5 flat. The canvas keeps colour premultiplied, so where there is no
 // leaf G and B upload as 0 whatever is written: the shader divides them by the coverage, as it does the value
 const TILT_PX = 3, TILT_GAIN = 5

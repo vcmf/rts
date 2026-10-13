@@ -60,7 +60,7 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
   return AROUND.every(([dx, dz]) => ok(coverAt(cover, x + dx * EDGE, z + dz * EDGE)))
 }
 
-// cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/active/l7a-canopy-cards.md, ?trees=cards)
+// cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md, ?trees=cards)
 export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off'): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
@@ -143,7 +143,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     if (rr() < 0.5) { const fx = x + (rr() - 0.5) * 6, fz = z + (rr() - 0.5) * 6; addPlaced('Plant_1', [fx, fz, 1.6 + rr(), rr() * 6.28, rr()]) }
   }
   // ?wood: one dense wood, to judge the sky's occlusion (docs/plans/done/soft-shadows.md); ?wood=big: a forest that
-  // fills the bench's frame (docs/plans/active/forest-bench.md); each its own random stream, so the rest of the
+  // fills the bench's frame (docs/plans/done/forest-bench.md); each its own random stream, so the rest of the
   // scatter is unchanged
   if (wood !== 'off') {
     const W = mulberry(91), [cx, cz, w, h, n] = wood === 'big' ? [-110, -25, 150, 110, 520] : [-105, -30, 50, 40, 70]
