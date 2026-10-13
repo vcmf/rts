@@ -113,7 +113,7 @@ square, `docs/systems/melee.md`), `s1d-guns` (a battery on the hill against a co
 as a flash at a company's front with a fading line to its target (a battery's roundshot: a line to where the
 ball stopped; canister: a fan); morale as a bar behind each battalion,
 named unless steady. Fire at will and Hold fire are panel orders. The page loads the scenario's map (`Scenario.map`, the formation field unless it names another) at the version
-in `src/scenarios/maps.ts`; `s1e-battle` (6 battalions, a regiment and a battery a side, holding fire) is on the
+in `src/scenarios/maps.ts`; `s1e-battle` (6 battalions, a regiment and a battery a side, firing at will; you command side 0) is on the
 1.2 km battlefield, where you command side 0 against side 1's plan. The readout shows each side's share of its men
 in the fight and, once decided, the result.
 

@@ -9,7 +9,7 @@ import { sectionHashes } from './serialize.ts'
 import { type SimData, DataVersionMismatch, hex } from './data.ts'
 import type { Compiled } from './ruleset.ts'
 
-export const SIM_VERSION = 's1e.2'   // bumped when the state or a rule changes: older replays no longer reproduce
+export const SIM_VERSION = 's1e.3'   // bumped when the state or a rule changes: older replays no longer reproduce
 
 export interface HashPoint { tick: number; hash: number; sections: [string, number][] }
 export interface Replay { simVersion: string; dataVersion: number; ruleset: number; scenario: string; seed: number; ticks: number; log: Stamped[] }
