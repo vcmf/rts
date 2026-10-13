@@ -17,13 +17,16 @@ vec3 base(){return texture2D(textureSampler,vUV).rgb;}
 #endif
 void main(){vec3 c=base();
   // fused cheap bloom: highlights gathered on two rings. The scene comes graded (gradeOf, painter.glsl), so the
-  // highlights' split tone (uSplitHi, the grade's tint where it is bright) is taken off before the threshold and put
-  // back on the bloom: it gathers as from the ungraded scene, and the per-channel threshold does not amplify the tint
-  if(uBloom>0.0){vec3 b=vec3(0.0);vec3 hi=uGrade>0.0?mix(vec3(1.0),uSplitHi,uGrade):vec3(1.0);
+  // grade's highlight tint (uSplitHi) is taken off each tap before the per-channel threshold and put back on the
+  // bloom, with the grade's saturation and its haze toward the top, which covered the bloom when the grade was here:
+  // it gathers as from the ungraded scene. A per-channel threshold on the graded scene amplifies the tint (winter's
+  // snow turned amber); a threshold on value changed the ground's bloom more (docs/plans/active/lc1b-coats.md). A
+  // unit (not graded) blooms a little cool: it is divided by a tint it never had
+  if(uBloom>0.0){vec3 b=vec3(0.0);vec3 hi=mix(vec3(1.0),uSplitHi,uGrade);
     for(int i=0;i<12;i++){float a=float(i)*0.5236+(i<6?0.0:0.26);float r=(i<6?6.0:16.0)*uRes.y/1080.0;
       vec3 s=texture2D(textureSampler,BLOOM_UV(vUV+vec2(cos(a),sin(a))*r/uRes)).rgb/hi;b+=max(s-vec3(0.70),0.0)*(i<6?1.0:0.6);}
-    b=mix(vec3(dot(b,vec3(0.2126,0.7152,0.0722))),b,mix(1.0,uGradeSat,uGrade));   // and the grade's saturation
-    c+=b*hi*0.11*uBloom*(1.0-smoothstep(0.60,1.0,vUV.y)*uTopAmt*uGrade);}   // the grade's haze toward the top covers it too
+    b=mix(vec3(dot(b,vec3(0.2126,0.7152,0.0722))),b,mix(1.0,uGradeSat,uGrade));
+    c+=b*hi*0.11*uBloom*(1.0-smoothstep(0.60,1.0,vUV.y)*uTopAmt*uGrade);}
   c=shoulder(c);
   vec2 q=(vUV-0.5)*vec2(uRes.x/uRes.y,1.0);c=mix(c,c*uVignette,smoothstep(0.45,1.05,length(q))*0.55);
   c*=1.0+(texture2D(uGrain,gl_FragCoord.xy/512.0).r-0.5)*0.06*uGrainOn;     // static paper

@@ -8,6 +8,8 @@
 // more; a near-white coat (painted lightness over 0.8) must not gain saturation (it would turn cream).
 //
 //   node tools/coat-check.mjs <look page URL> [outDir]
+//     a ?mood= in the URL checks that mood (src/look/mood.ts): run it for every mood (LC2's candidates, each); the
+//     depth of field is off unless the URL sets ?dof (tools/look-page.mjs)
 //
 // Prints a table; exit 1 when a coat fails. The page: the look page (npm run dev, or built and previewed).
 import fs from 'node:fs'
@@ -38,7 +40,6 @@ const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16))
 const hueDiff = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d }
 
 export function coatCheck(url, out) {
-  const u = new URL(url); u.searchParams.set('dof', '0')
   const steps = [...prepSteps(), viewStep(['coats', ...START, 0])]
   for (const spot of SPOTS) {
     steps.push(['eval', `(async () => { const L = __look.lab; L.clearBlocks(); L.addBlocks(${JSON.stringify(blocks(spot))})
@@ -47,7 +48,7 @@ export function coatCheck(url, out) {
     for (const v of [1, 0]) steps.push(['eval', `__look.lab.setMask(${v}); for (let i = 0; i < 3; i++) __proto.scene.render(); "mask ${v}"`], ['shot', `${spot[0]}.mask${v}`])
     steps.push(['eval', '__look.lab.setMask(-1); __look.lab.clearBlocks(); "cleared"'])
   }
-  const log = shoot(u.href, out, steps, W, H), boxes = {}
+  const log = shoot(url, out, steps, W, H), boxes = {}
   for (const line of log.split('\n')) { const m = /^EVAL "BOXES (\S+) (.*)"$/.exec(line); if (m) boxes[m[1]] = JSON.parse(JSON.parse(`"${m[2]}"`)) }
   const rows = []
   for (const [s] of SPOTS) {

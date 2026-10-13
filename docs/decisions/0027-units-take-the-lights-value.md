@@ -17,8 +17,9 @@ resolves this in life by white balance: under a warm sun we still see a blue coa
 ## Decision
 
 We will light units (the painter's `KEEP_HUE` path: the army blocks now, the figures from L3) with the light's
-value and only part of its hue. The share is a mood's `units.tint` (`src/look/mood.ts`, 0.25 in `golden`), with the
-lit band's warm lift scaled the same way. The valley mist over a unit is capped (`units.mist`, 0.04), and units take
+value and only part of its hue. The share is a mood's `units.tint` (`src/look/mood.ts`, 0.25 in `golden`); the
+lit band's warm lift is a cast, not light, so units take that share of it (a grey lift in its place would wash a
+dark coat's colour out). The valley mist over a unit is capped (`units.mist`, 0.04), and units take
 a share of the grade (`units.grade`, 0), now that the grade is part of each material (`gradeOf`,
 `src/look/shaders/painter.glsl`). Their shadow band keeps its cool hue, as before. Pillar 3 holds for the world and
 for a unit's shadow side; a unit's lit side is white-balanced. Each coat's lit colour is checked by
