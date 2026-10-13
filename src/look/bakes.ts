@@ -1,6 +1,6 @@
 // Static light, baked once (docs/art-bible.md §6b, docs/proposals/engine-design.md §6), ported from
 // prototypes/painted-cinematic.html: a sun shadow depth pass, a CPU occlusion and valley-mist mask, and a top-down
-// light map (R sun visibility, G occlusion, B valley mask) the materials read. Trees keep a small runtime lookup
+// light map (R sun visibility, G occlusion, B valley mask, A the contact under trees) the materials read. Trees keep a small runtime lookup
 // of the shadow map for self-shadowing.
 import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
@@ -87,10 +87,17 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
     }
     tg.putImageData(img, 0, 0); aog.imageSmoothingEnabled = true; aog.drawImage(tmp, 0, 0, AO_N, AO_N)
     aog.globalCompositeOperation = 'multiply'
-    for (const [x, z, r, a] of canopy) {
+    // every crown and blob darkens its footprint (G); each tree adds a dark core (docs/plans/active/shadow-look.md),
+    // 0.45 crown radii and at least 1.5 texels (about 1.6 m), in R, which the light map carries in its alpha to the
+    // ground alone (the crowns read G: the core would darken their tops)
+    const disc = (x: number, z: number, r: number, inner: string) => {
       const px = (x + TILE_W / 2) / TILE_W * AO_N, pz = (z + TILE_W / 2) / TILE_W * AO_N, pr = Math.max(1.5, r / TILE_W * AO_N)
-      const gr = aog.createRadialGradient(px, pz, 0, px, pz, pr); gr.addColorStop(0, `rgb(255,${Math.round(255 * (1 - a))},255)`); gr.addColorStop(1, 'rgb(255,255,255)')
+      const gr = aog.createRadialGradient(px, pz, 0, px, pz, pr); gr.addColorStop(0, inner); gr.addColorStop(1, 'rgb(255,255,255)')
       aog.fillStyle = gr; aog.beginPath(); aog.arc(px, pz, pr, 0, 7); aog.fill()
+    }
+    for (const [x, z, r, a, tree] of canopy) {
+      disc(x, z, r, `rgb(255,${Math.round(255 * (1 - a))},255)`)
+      if (tree) disc(x, z, r * 0.45, 'rgb(166,255,255)')
     }
   }
   const aoTex = new DynamicTexture('ao', aoCanvas, scene, true, Texture.BILINEAR_SAMPLINGMODE); aoTex.wrapU = aoTex.wrapV = Texture.CLAMP_ADDRESSMODE; aoTex.update(false)

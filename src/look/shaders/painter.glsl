@@ -56,23 +56,27 @@ float shadowAt(vec3 wp,vec3 n){
   for(int x=0;x<2;x++)for(int y=0;y<2;y++)s+=step(texture2D(uShadowMap,uv+(vec2(float(x),float(y))*2.0-1.0+j)*uSMTexel).r,d);
   vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,uSMFade.x,e.x)*smoothstep(0.0,uSMFade.y,e.y);   // soft edge: far foliage past the box fades to lit
   return s/4.0*uShadowsOn*fade;}
-// BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask.
+// BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask, A the contact under trees (outside the
+// map: 1, no contact). groundOcc: the occlusion of the ground and what grows flat on it, contact included
 uniform sampler2D uLM;uniform mat4 uLMVP;uniform float uAO,uMist,uShafts,uBack;
+float groundOcc(vec4 lm){return lm.g*lm.a;}
 vec4 LM(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);vec2 uv=p.xy/p.w*0.5+0.5;
-  if(uv.x<0.002||uv.y<0.002||uv.x>0.998||uv.y>0.998)return vec4(1.0,1.0,0.0,0.0);
+  if(uv.x<0.002||uv.y<0.002||uv.x>0.998||uv.y>0.998)return vec4(1.0,1.0,0.0,1.0);
   return texture2D(uLM,uv);}
 // Valley mist: warm where the air is sunlit, cool where it's shadowed. Light shafts =
 // the air column's sun visibility, read from the light map at 3 heights along the view ray.
 vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   float m=lm.b*uMist*exp(-hAbove*0.12);if(m<0.01)return c;
-  float air=lm.r;
+  float air=mix(1.0,lm.r,uShadowsOn);
   if(uShafts>0.5){vec3 v=normalize(uCamPos-wp);float s=0.0;
     for(int i=0;i<3;i++){float h=(float(i)+0.5)/3.0*7.0;vec3 q=wp+v*(h/max(v.y,0.25));
       s+=LM(q-uSunDir*((q.y-wp.y)/uSunDir.y)).r;}
     air=s/3.0;}
   float n=G(wp.xz/55.0+uTime*vec2(0.004,0.0015)).g;
-  float t=clamp(m*(0.35+0.55*n),0.0,0.42);
-  return mix(c,mix(vec3(0.58,0.67,0.78),vec3(1.0,0.86,0.63),air),t);}
+  // thinner over the cast shadow on the ground, which keeps its shape; less so above the ground (a crown, a block), whose
+  // own light is not that of the ground
+  float t=clamp(m*(0.35+0.55*n),0.0,0.42)*mix(1.0,mix(0.55,1.0,1.0-(1.0-lm.r)*uShadowsOn),exp(-hAbove*0.5));
+  return mix(c,mix(vec3(0.42,0.53,0.68),vec3(1.0,0.86,0.63),air),t);}
 // view distance in alpha → depth of field without re-rendering the scene
 float depthA(vec3 wp){return clamp(length(wp-uCamPos)/1000.0,0.0,1.0);}
 // Big painted cloud shadows drifting over the land: the top-down camera's only "sky".
@@ -81,8 +85,16 @@ float cloud(vec3 wp){
   float c=0.62*G(p/330.0).g+0.38*G(p/131.0+vec2(0.37,0.11)).g;
   return smoothstep(0.60,0.635,c+(G(wp.xz/5.0).r-0.5)*0.06)*uClouds;
 }
-// Cool, more saturated shadow version of a colour (hue shift, never plain darkening).
-vec3 shadowOf(vec3 a){float l=dot(a,vec3(0.3,0.59,0.11));return clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80+vec3(0.02,0.04,0.07);}
+// the shadow band (docs/plans/active/shadow-look.md): more saturated than the base and turned toward a cool blue
+// violet at the same value (a darker band costs dark coats their separation, tools/guard.mjs). KEEP_HUE: the
+// army coats keep the band of main, so a coat in shadow loses none of its colour
+vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
+  vec3 s=clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80;float v=dot(s,Y);   // the band of main, whose value is kept
+  #ifndef KEEP_HUE
+  vec3 t=clamp(mix(vec3(l),a,1.3),0.0,1.0)*uShadowCol;const vec3 B=vec3(0.34,0.45,0.80);
+  s=mix(t/max(dot(t,Y),1e-4),B/dot(B,Y),0.25)*v;
+  #endif
+  return s+vec3(0.02,0.04,0.07);}
 // THE TERRAIN'S DETAIL LAYER (docs/plans/active/l2-detail.md, L2b): the paint grain at a constant size on screen.
 // DETAIL: the terrain's materials; DETAIL_L0 puts back the L0 grain (the bench's and the checks' baseline).
 // Biplanar projection (the two planes most facing the normal; the third has no weight, and on gentle ground nor has

@@ -48,7 +48,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/terrain.ts` | Tile (1.79 m), far ring (14.3 m) and the apron that stitches them; the far ring's painted river mask; the bank normals' texture (W2, `docs/systems/river.md`; both it and the water data's, W3, from `src/look/span-texture.ts`). Their materials define `DETAIL` (the detail layer, below; on WebGL1 the material factory adds `DETAIL_L0`); the tile's also `BANKN` and `WATERDATA` (the shore band, W4), as do the water's |
 | `src/look/water.ts` | The water ribbon, its materials (the painted water, W4, `docs/systems/river.md`; and the same shader on the tile's ground, for the seam check) and the tree-reflection mask |
 | `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule (and, since L5a, the cover's: what grows on which class) |
-| `src/look/bakes.ts` | Sun shadow depth (once), occlusion and valley mask (CPU, once), the top-down light map (once) |
+| `src/look/bakes.ts` | Sun shadow depth (once), occlusion and valley mask (CPU, once), the top-down light map (once): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the terrain reads (`docs/plans/active/shadow-look.md`) |
 | `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), and the passes: depth of field (presentation only, decision 0003), the fused grade |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop, and the debug globals the checks read |
 | `src/look/bench.ts`, `src/look/gputimer.ts` | `?bench`: fixed cameras, frame times, GPU time per pass, draw calls, triangles, texture memory and the build hash, as JSON (below) |
@@ -143,6 +143,20 @@ The plan: `docs/plans/active/l7a-canopy-cards.md`. Not the default: the arm the 
   mips finer than the sun's view asks, so the gaps between leaves survive; the disabled pack models cast nothing.
 - **Switches**: `?cardsize`, `?cardcover`, `?cardsink` (`CARD_DEFAULTS`); `?bench=trees` benches the cards
   against the pack crowns, for GPU time only (the shadow map is baked once, with the cards).
+
+### The shadows' look
+
+The plan: `docs/plans/active/shadow-look.md`.
+
+- **The shadow band** (`shadowOf()`, `painter.glsl`): more saturated than the base and turned 25 % toward a cool
+  blue violet, at the value the band had before, so dark coats keep their separation from shaded ground. The
+  army blocks (`block.frag`, `KEEP_HUE`) keep the older band, so a coat in shadow loses none of its colour.
+- **The valley mist** (`mist()`): thinner over cast shadow on the ground (to 55 % of its amount), less so above
+  the ground; shadowed air is darker and bluer. With shadows off the mist is whole.
+- **The edges** (`bake.frag`): the bake filters a shadow edge over 0.75 shadow texels a tap (was 1.2).
+- **Contact** (`bakes.ts`): a dark core of 0.45 crown radii (at least about 1.6 m: the occlusion map is about 1 m a
+  texel) under each tree, in the light map's alpha, which the ground, the water's shore band and the grass read
+  (`groundOcc()`), and the crowns do not.
 
 ### The bench (`?bench`, L2a)
 

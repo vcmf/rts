@@ -31,7 +31,7 @@ export type Item = [x: number, z: number, scale: number, yaw: number, tint: numb
 
 export interface Nature {
   groups: Record<string, Item[]>; far: Item[]
-  canopy: [number, number, number, number][]   // crown and blob footprints for the light map's occlusion: x, z, r, strength
+  canopy: [number, number, number, number, boolean][]   // crown and blob footprints for the light map's occlusion: x, z, r, strength, a tree's (its contact core)
   KEEP_CLEAR(x: number, z: number): boolean
   touchesZone(x: number, z: number, r: number): boolean
   placeable(x: number, z: number, r?: number, kind?: string): boolean
@@ -100,7 +100,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
 
   const canopy: Nature['canopy'] = []
-  const smTree = (x: number, z: number, _crownY: number, cr: number) => { canopy.push([x, z, cr * 1.15, 0.42]); reflAdd(x, z, cr * 1.1) }, smBlob = (x: number, z: number, r: number) => canopy.push([x, z, r * 1.4, 0.30])
+  const smTree = (x: number, z: number, _crownY: number, cr: number) => { canopy.push([x, z, cr * 1.15, 0.42, true]); reflAdd(x, z, cr * 1.1) }, smBlob = (x: number, z: number, r: number) => canopy.push([x, z, r * 1.4, 0.30, false])
 
   /* ---------- scattering: composition follows the north star ---------- */
   const R = mulberry(77), rr = () => R()
