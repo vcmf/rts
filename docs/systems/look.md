@@ -173,7 +173,7 @@ The plan: `docs/plans/done/shadow-look.md`.
 
 ### The meadow (L5c)
 
-The plan: `docs/plans/active/l5c-meadow.md`. On by default on WebGL2 (on WebGL1 the old scatter stays: the meadow reads a half-float texture in its vertex
+The plan: `docs/plans/done/l5c-meadow.md`. On by default on WebGL2 (on WebGL1 the old scatter stays: the meadow reads a half-float texture in its vertex
 shader); `?meadow=off` puts back the old scatter.
 
 - **The grass near the camera** (`src/look/meadow.ts`, `src/look/meadow-spec.ts`, `shaders/meadow.vert|frag`): clumps of the owner's pack grass

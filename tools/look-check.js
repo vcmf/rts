@@ -27,7 +27,7 @@
   for (const ask of [c.yaw0 + Math.PI / 2, c.yaw0 - Math.PI / 2, c.yaw0 + Math.PI]) { cam.alpha = ask; scene.render(); yaws.push(+cam.alpha.toFixed(4)); if (Math.abs(cam.alpha - c.yaw0) > c.yawRange + tol) fail.push(`yaw: asked ${ask.toFixed(2)}, the camera stayed at ${cam.alpha.toFixed(2)} (outside ±${c.yawRange.toFixed(3)})`) }
   cam.alpha = a0; scene.render()
   out.yaw = yaws
-  // 2b. the meadow's grass (docs/plans/active/l5c-meadow.md) never floats: where it grows, the height it stands on
+  // 2b. the meadow's grass (docs/plans/done/l5c-meadow.md) never floats: where it grows, the height it stands on
   // (its meadow map, half floats, bilinear, sunk by SINK) is at or under the tile mesh's, at 4000 growing points over
   // the ground the rings can reach
   const meadow = window.__look && window.__look.meadow

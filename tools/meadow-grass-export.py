@@ -1,5 +1,5 @@
 # Export the owner's pack grass (Grass_Large.blend, Grass_Small.blend) to data/meadow-grass.json, the meadow's
-# clumps (docs/plans/active/l5c-meadow.md, src/look/meadow.ts). Run once per .blend, then merge:
+# clumps (docs/plans/done/l5c-meadow.md, src/look/meadow.ts). Run once per .blend, then merge:
 #   blender -b --disable-autoexec <pack>/Blends/Grass_Large.blend --python tools/meadow-grass-export.py -- Grass_Large data/meadow-grass.json
 #   blender -b --disable-autoexec <pack>/Blends/Grass_Small.blend --python tools/meadow-grass-export.py -- Grass_Small data/meadow-grass.json
 # Writes, or updates in that file, the clump as a triangle list: positions (Y up, metres, the root at the origin in

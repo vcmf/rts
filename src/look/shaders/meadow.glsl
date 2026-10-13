@@ -1,4 +1,4 @@
-// The meadow (docs/plans/active/l5c-meadow.md): a hash of a world cell (no sine: stable over the whole map) and
+// The meadow (docs/plans/done/l5c-meadow.md): a hash of a world cell (no sine: stable over the whole map) and
 // the clump field, cells of a few metres that share the height, lean and shade of their clumps, so the meadow is a
 // patchwork. Shared by the grass (meadow.vert) and the ground under it (terrain.frag), so the two agree.
 float mHash(vec2 p){vec3 q=fract(vec3(p.xyx)*vec3(0.1031,0.1030,0.0973));q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}

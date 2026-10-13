@@ -1,4 +1,4 @@
-// The meadow near the camera (docs/plans/active/l5c-meadow.md): clumps of the owner's pack grass (Grass_Large and
+// The meadow near the camera (docs/plans/done/l5c-meadow.md): clumps of the owner's pack grass (Grass_Large and
 // Grass_Small, data/meadow-grass.json) on three round rings around the camera's focus, cells of 0.5, 1 and 2 m. Each
 // ring is an instanced mesh with one static slot attribute (forcedInstanceCount: no matrices); the vertex shader (shaders/meadow.vert) snaps the
 // ring to its cell, places a clump from its world cell's hash, reads the meadow map (the ground's height and the

@@ -1,4 +1,4 @@
-# The meadow's brush texture (docs/plans/active/l5c-meadow.md): a seamless greyscale tile of grass seen from above,
+# The meadow's brush texture (docs/plans/done/l5c-meadow.md): a seamless greyscale tile of grass seen from above,
 # stamped at random from a grass brush pack's stamps (Devin Elle Kurtz's Grass and Fields expansion, kept out of git
 # in assets/grass-brushes/: royalty-free, but not to be redistributed). Only the tile is committed.
 #

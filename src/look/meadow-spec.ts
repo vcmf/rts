@@ -1,5 +1,5 @@
 // The meadow's numbers both the scatter and the meadow read (src/look/nature.ts, src/look/meadow.ts;
-// docs/plans/active/l5c-meadow.md), apart so the scatter does not load the meadow's shaders
+// docs/plans/done/l5c-meadow.md), apart so the scatter does not load the meadow's shaders
 // the grass's height, m: typical, and the most any clump reaches (well under a soldier's knee to hip: a formation
 // standing in the meadow is never hidden, docs/art-bible.md pillar 1)
 export const HEIGHT = 0.62, HEIGHT_MAX = 0.85

@@ -51,7 +51,7 @@
   // the scene is populated (guards every "nothing in X" check above against passing on an empty scene)
   const count = re => Object.entries(groups).filter(([m]) => re.test(m)).reduce((a, [, v]) => a + v.length, 0)
   const pop = { trees: count(/Tree/), grass: count(/Grass|Flowers|Plant/), wheat: count(/Wheat/), bushes: count(/Bush/), far: FAR.length }
-  // under the look page's meadow (docs/plans/active/l5c-meadow.md) the grass is its clumps, not scatter: its growing
+  // under the look page's meadow (docs/plans/done/l5c-meadow.md) the grass is its clumps, not scatter: its growing
   // texels (1 m) stand in for the tufts
   const meadow = typeof __look !== 'undefined' && __look.meadow
   if (meadow) pop.meadowCells = meadow.growingCells

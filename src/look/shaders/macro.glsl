@@ -78,7 +78,7 @@ vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*3
 // darker margin where classes meet (a headland or a verge); q 0: one tap. px: the footprint, m (the bake's texel, or
 // the pixel's)
 #ifdef MEADOW
-// the meadow pattern (docs/plans/active/l5c-meadow.md) on meadow and pasture (k, the class the ground paints): the
+// the meadow pattern (docs/plans/done/l5c-meadow.md) on meadow and pasture (k, the class the ground paints): the
 // brush tile (data/meadow-brush.png) at two unrelated scales and turns, warped by a slow noise (no common period, no
 // repeat to see), read at the footprint px (the bake texel, or the pixel), and the clump field, its fine octave
 // fading with the footprint. The near grass takes its shade from the same tile and field (src/look/meadow.ts). In

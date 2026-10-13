@@ -64,7 +64,7 @@ if (softParam !== null && softParam !== 'off') throw new Error(`?soft must be of
 const soft: SoftOptions = { on: softParam !== 'off', penumbra: penumbraParam === null ? SOFT_DEFAULTS.penumbra : Number(penumbraParam) }
 if (penumbraParam !== null && (penumbraParam.trim() === '' || !Number.isFinite(soft.penumbra) || soft.penumbra < 0 || soft.penumbra > PENUMBRA_MAX)) throw new Error(`?penumbra must be a number from 0 to ${PENUMBRA_MAX}, not ${penumbraParam}`)
 if (penumbraParam !== null && !soft.on) throw new Error('?penumbra needs the soft shadows on (no ?soft=off)')
-// ?meadow=off: the old sparse grass tufts and the wheat lattice instead of the meadow (docs/plans/active/l5c-meadow.md)
+// ?meadow=off: the old sparse grass tufts and the wheat lattice instead of the meadow (docs/plans/done/l5c-meadow.md)
 const meadowParam = params.get('meadow')
 if (meadowParam !== null && meadowParam !== 'off') throw new Error(`?meadow must be off, not ${meadowParam}`)
 // the meadow reads a half-float texture in its vertex shader: WebGL2 only (on WebGL1 the old scatter stays)
@@ -114,7 +114,7 @@ if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS
 macro.setArm(macroArm)
 const macroBake = await macro.bake()
 const camera = buildCamera(scene, canvas)
-// the meadow near the camera (docs/plans/active/l5c-meadow.md), after the bakes and the macro colour it reads
+// the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, nature.growthAllowed) : null
 const post = new Post(camera, engine, S, () => mats.grain); post.build()
 

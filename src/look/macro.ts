@@ -47,7 +47,7 @@ export interface Macro {
   settled(): Promise<unknown>
 }
 
-// meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/active/l5c-meadow.md), from the brush tile
+// meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
 export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false): Macro {
   const engine = scene.getEngine() as AbstractEngine, s = D.spec.macro
   const coverTex = RawTexture.CreateRGBATexture(cover.tex, cover.n, cover.n, scene, false, false, Texture.NEAREST_SAMPLINGMODE)

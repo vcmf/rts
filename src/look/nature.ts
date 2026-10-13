@@ -191,7 +191,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // a wheat field on the valley side between the floodplain and the formation zones (docs/art-bible.md §6c: fields above the floodplain)
   const addWheat = (item: Item) => { if (!meadow) addPlaced('Wheat', item) }   // under the meadow the field below replaces this lattice; the stream is unchanged
   for (let u = 0; u < 30; u += 1.25) for (let v = 0; v < 22; v += 1.3) { const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5, z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5; if (rr() < 0.08) continue; addWheat([x, z, 1.5 + rr() * 0.4, rr() * 6.28, rr()]) }
-  // the meadow's wheat (docs/plans/active/l5c-meadow.md): no rows nor columns, a tuft anywhere in each 0.85 m cell of
+  // the meadow's wheat (docs/plans/done/l5c-meadow.md): no rows nor columns, a tuft anywhere in each 0.85 m cell of
   // the field's frame (about twice the lattice's), and a ragged edge (the noise pushes it in by up to 1.6 m), through
   // the one placement rule (wheat on wheat, EDGE from the painted edge); its own stream
   if (meadow) {
