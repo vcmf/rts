@@ -21,6 +21,8 @@ import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges }
 import { COVER, coverAt, inFormationZone, type CoverGrid } from './world/cover.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
+import { cardMaterial, cardMesh, placeCards, type CardOptions } from './canopy.ts'
+import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 
 export interface NatureModel { pos: number[]; idx: number[]; role: number[]; min: number[]; max: number[] }
 declare global { interface Window { NATURE?: Record<string, NatureModel> } }
@@ -35,6 +37,10 @@ export interface Nature {
   placeable(x: number, z: number, r?: number, kind?: string): boolean
   footprint(model: string, s: number): number
   stones: [number, number, number, number][]   // the stones in the water (W5a): x, z, radius, the flow's direction (rad), for their foam
+  showCards?: (on: boolean) => void            // under cards: the crowns as cards, or the pack's (the bench's arms)
+  // under cards: the card meshes, which cast the crowns' shadows, and the pack models they replace, which cast nothing
+  // (src/look/bakes.ts; the trunk meshes cast the trunks')
+  cardCasters?: { leaf: BaseTexture; cards: Mesh[]; packs: Mesh[] }
 }
 
 // what may grow on each class of the cover (docs/plans/active/l5-macro.md): grass, flowers, plants, bushes, stumps
@@ -51,7 +57,8 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
   return AROUND.every(([dx, dz]) => ok(coverAt(cover, x + dx * EDGE, z + dz * EDGE)))
 }
 
-export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid): Nature {
+// cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/active/l7a-canopy-cards.md, ?trees=cards)
+export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
 
@@ -68,11 +75,13 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const reedMat = natMat('reeds', '#3f4f25', '#7d7a3c', { rim: 0.5, grassy: true })
 
   const FLIP = true   // OBJ winding is opposite to Babylon's default
-  function buildModel(name: string): Mesh {
-    const d = NATURE![name], m = new Mesh(name, scene)
+  // trunk: only the triangles off the crown (role 2 and up), for the cards arm, whose crowns are cards
+  function buildModel(name: string, trunk = false): Mesh {
+    const d = NATURE![name], m = new Mesh(trunk ? 'trunks_' + name : name, scene)
     const idx = FLIP ? d.idx.slice().reverse() : d.idx
-    m.setVerticesData(VertexBuffer.PositionKind, d.pos); m.setIndices(idx)
-    const nrm: number[] = []; VertexData.ComputeNormals(d.pos, idx, nrm); m.setVerticesData(VertexBuffer.NormalKind, nrm)
+    const nrm: number[] = []; VertexData.ComputeNormals(d.pos, idx, nrm)
+    m.setVerticesData(VertexBuffer.PositionKind, d.pos); m.setIndices(trunk ? idx.filter((_, k) => { const t = k - k % 3; return d.role[idx[t]] >= 2 && d.role[idx[t + 1]] >= 2 && d.role[idx[t + 2]] >= 2 }) : idx)
+    m.setVerticesData(VertexBuffer.NormalKind, nrm)
     m.setVerticesData('aRole', new Float32Array(d.role), false, 1)
     let cx = 0, cy = 0, cz = 0, n = 0; for (let i = 0; i < d.role.length; i++) if (d.role[i] <= 1) { cx += d.pos[i * 3]; cy += d.pos[i * 3 + 1]; cz += d.pos[i * 3 + 2]; n++ }
     if (!n) { cx = 0; cy = d.max[1] * 0.6; cz = 0; n = 1 }
@@ -81,12 +90,13 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     return m
   }
   const _m = new Matrix(), _q = new Quaternion(), _s = new Vector3(), _t = new Vector3()
-  function place(model: string, material: ShaderMaterial, items: Item[]): void {
-    if (!items.length) return
+  function place(model: string, material: ShaderMaterial, items: Item[]): { mesh: Mesh; buf: Float32Array; tint: Float32Array } | null {
+    if (!items.length) return null
     const m = buildModel(model); m.material = material; m.alwaysSelectAsActiveMesh = true
     const buf = new Float32Array(items.length * 16), tint = new Float32Array(items.length)
     items.forEach(([x, z, s, yaw, t, dy = 0], i) => { _t.set(x, H(x, z) + dy, z); Quaternion.RotationYawPitchRollToRef(yaw, 0, 0, _q); _s.set(s, s, s); Matrix.ComposeToRef(_s, _q, _t, _m); _m.copyToArray(buf, i * 16); tint[i] = t })
     m.thinInstanceSetBuffer('matrix', buf, 16, true); m.thinInstanceSetBuffer('aTint', tint, 1, true)
+    return { mesh: m, buf, tint }
   }
 
   const canopy: Nature['canopy'] = []
@@ -200,12 +210,29 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
       addPlaced('Reed', [x, z, 1.5 + rq() * 0.8, rq() * 6.28, rq()], 'reed')
     }
   }
+  // under cards, a carded model is drawn as its trunk triangles (the trunks_ mesh) and its cards, which take the
+  // crowns' palette; both cast into the sun's shadow pass (src/look/bakes.ts), the whole pack model is disabled
+  const carded = (k: string) => !!cards && /^(CommonTree|BirchTree|Willow)_/.test(k)
+  const treeCards = cards && cardMaterial(mats, 'treeCards', '#4a7330', '#97a043', 0.45, cards.leaf), birchCards = cards && cardMaterial(mats, 'birchCards', '#7a9a3c', '#bcae55', 0.45, cards.leaf)
+  let seed = 1
+  const swaps: ((on: boolean) => void)[] = [], cardMeshes: Mesh[] = [], packs: Mesh[] = []
   for (const [k, items] of Object.entries(groups)) {
-    const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : /Birch/.test(k) ? birchMat : /Pine/.test(k) ? pineMat : treeMat; place(k, material, items)
+    const birch = /Birch/.test(k)
+    const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : birch ? birchMat : /Pine/.test(k) ? pineMat : treeMat
+    const placed = place(k, material, items)
+    if (placed && cards && carded(k)) {
+      const trunks = buildModel(k, true), cm = cardMesh(scene, 'cards_' + k, NATURE[k], cards.opts, seed++), pack = placed.mesh
+      trunks.material = material; trunks.alwaysSelectAsActiveMesh = true
+      trunks.thinInstanceSetBuffer('matrix', placed.buf, 16, true); trunks.thinInstanceSetBuffer('aTint', placed.tint, 1, true)
+      placeCards(cm, (birch ? birchCards : treeCards) as ShaderMaterial, placed.buf, placed.tint)
+      const show = (on: boolean) => { cm.setEnabled(on); trunks.setEnabled(on); pack.setEnabled(!on) }
+      show(true); swaps.push(show); cardMeshes.push(cm); packs.push(pack)
+    }
   }
+  const showCards = cards ? (on: boolean) => { for (const f of swaps) f(on) } : undefined
   // the band is left out after the every-fourth choice, so every other bush stays the one the prototype drew
   // and none on the roads or the village ground (after the every-fourth choice, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
   place('Bush_1', farMat, far.filter((b, i) => i % 4 === 0 && drawn(b))); place('Bush_2', farMat, far.filter((b, i) => i % 4 === 2 && drawn(b)))
-  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones }
+  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined }
 }

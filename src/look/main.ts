@@ -29,6 +29,10 @@ import { spanTexture } from './span-texture.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
 import { MACRO_ARMS, buildMacro, type MacroArm } from './macro.ts'
+import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
+import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
+import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
+import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 
 declare global { interface Window { __T0?: number } }
 const T0 = window.__T0 ?? performance.now()   // load-time measurement (window.__buildMs), started by look.html
@@ -62,12 +66,27 @@ const params = new URLSearchParams(location.search)
 const waterSabParam = params.get('watersab')
 if (waterSabParam !== null && waterSabParam !== 'nodive') throw new Error(`?watersab must be nodive, not ${waterSabParam}`)
 const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }, waterSabParam !== 'nodive')
-const nature = buildNature(scene, mats, water.reflAdd, look.cover)
+// ?trees=cards: the crowns as leaf cards (docs/plans/active/l7a-canopy-cards.md); ?leaves=procedural draws the atlas
+// instead of reading the oak picture; ?cardsize, ?cardcover, ?cardsink tune the cards (src/look/canopy.ts)
+const treesParam = params.get('trees')
+if (treesParam !== null && treesParam !== 'cards') throw new Error(`?trees must be cards, not ${treesParam}`)
+const leavesParam = params.get('leaves') ?? 'oak'
+for (const k of ['leaves', 'cardsize', 'cardcover', 'cardsink']) if (params.has(k) && treesParam !== 'cards') throw new Error(`?${k} needs ?trees=cards`)
+if (leavesParam !== 'oak' && leavesParam !== 'procedural') throw new Error(`?leaves must be oak or procedural, not ${leavesParam}`)
+const cardOpt = (k: string, d: number) => { const v = Number(params.get(k) ?? d); if (!(v > 0)) throw new Error(`?${k} must be a positive number, not ${params.get(k)}`); return v }
+const cardOpts: CardOptions = { size: cardOpt('cardsize', CARD_DEFAULTS.size), cover: cardOpt('cardcover', CARD_DEFAULTS.cover), sink: cardOpt('cardsink', CARD_DEFAULTS.sink) }
+let leafTex: DynamicTexture | null = null
+if (treesParam === 'cards') {
+  const atlas = leavesParam === 'procedural' ? atlasProcedural() : atlasFromPicture(await loadImage(LEAF_URL))
+  leafTex = new DynamicTexture('leaves', atlas, scene, true, Texture.TRILINEAR_SAMPLINGMODE); leafTex.hasAlpha = true
+  leafTex.wrapU = leafTex.wrapV = Texture.CLAMP_ADDRESSMODE; leafTex.update(false)
+}
+const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { leaf: leafTex, opts: cardOpts } : undefined)
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 { const a = new Array(D.spec.water.stones * 4).fill(0); nature.stones.forEach((st, k) => a.splice(k * 4, 4, ...st))
   for (const m of [terrain.terrainMat, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
-const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy)
+const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy, nature.cardCasters)
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
 const macro = buildMacro(scene, mats, look.cover)
@@ -100,6 +119,21 @@ addEventListener('dragleave', () => dropEl.style.display = 'none')
 addEventListener('drop', e => {
   e.preventDefault(); dropEl.style.display = 'none'; const f = e.dataTransfer?.files[0]; if (!f || !/image/.test(f.type)) return
   const img = new Image()
+  // with Shift held, a picture of four leaf clumps on black replaces the cards' atlas
+  if (e.shiftKey) {
+    if (!leafTex) { console.warn('dropping a leaf picture needs ?trees=cards'); return }
+    const tex = leafTex
+    // the crowns cast through the atlas too: the render-once shadow map, and the light map after it, are redone
+    const url = URL.createObjectURL(f)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      let atlas: HTMLCanvasElement
+      try { atlas = atlasFromPicture(img) } catch (err) { alert(String(err)); return }
+      tex.getContext().clearRect(0, 0, atlas.width, atlas.height); tex.getContext().drawImage(atlas, 0, 0); tex.update(false)
+      nature.showCards?.(true); bakes.shadowRT.resetRefreshCounter()   // the shadows are baked with the cards shown
+    }
+    img.src = url; return
+  }
   img.onload = () => {
     const old = mats.grain, cv = makeGrainCanvas(lumOf(img)); mats.setGrain(grainTexture(scene, cv), grainMean(cv))
     bakes.lightMap.resetRefreshCounter(); if (!keptGrains.has(old)) old.dispose()
@@ -252,7 +286,11 @@ if (params.has('bench')) {
   if (!(hold > 0)) throw new Error(`?hold must be a positive number of seconds, not ${params.get('hold')}`)
   // the arms: the detail layer, and the L0 grain it replaces (the cost gate: at most +1 ms GPU for the terrain)
   // ?bench=macro: the macro colour's arms instead (with the detail layer)
-  const arms = params.get('bench') === 'macro' ? MACRO_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); macro.setArm(a) } })) : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
+  // ?trees=cards&bench=trees: the crowns' two arms, cards and the pack's (docs/plans/active/l7a-canopy-cards.md),
+  // for their GPU time only: the shadow map is baked once, with the cards, so the pack arm keeps the cards' shadows
+  if (params.get('bench') === 'trees' && !nature.showCards) throw new Error('?bench=trees needs ?trees=cards')
+  const show = nature.showCards
+  const arms = params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? MACRO_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); macro.setArm(a) } })) : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
   void runBench(scene, camera, passes, arms, hold).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
     (e: unknown) => { Object.assign(window, { __bench: { error: String(e) } }); console.error('bench failed:', e) })
 }

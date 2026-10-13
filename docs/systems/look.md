@@ -128,6 +128,22 @@ grain at a constant size on screen (`docs/plans/active/l2-detail.md`).
 - `DETAIL_L0` puts back the L0 grain (the bench's second arm, the checks' baseline); `DETAIL_DEBUG` and
   `DETAIL_DEBUG_INC` and `DETAIL_DEBUG_N` (the shading normal) are the checks' views; `DETAIL_SAB_IMPLICIT` and `DETAIL_SAB_STEP` are sabotages, and so is `BANKN_OFF` (no bank normals).
 
+### Leaf-card crowns (`?trees=cards`, L7a, an experiment)
+
+The plan: `docs/plans/active/l7a-canopy-cards.md`. Not the default: the arm the owner judges against the pack crowns.
+
+- **The cards** (`src/look/canopy.ts`, `shaders/canopy.vert|frag`, `shaders/cards.glsl`): each broadleaf, birch
+  and willow crown becomes quads sampled on its crown triangles, expanded in view space to face the camera and
+  cut by a leaf-clump atlas; sphere normals, so a crown shades as one mass; each card takes its shadow at its
+  point on the crown surface. The trunk is a mesh of the model's triangles off the crown (`trunks_<model>`).
+- **The atlas** (`src/look/leaves.ts`): four clumps in 2×2 cells of 512², value in R and coverage in A, from the
+  picture `data/leaf-clumps-oak-v1.png` (four clumps on black, any layout) or drawn (`?leaves=procedural`).
+  Shift-dropping a picture on the page replaces it and re-bakes the shadows.
+- **Shadows** (`src/look/bakes.ts`): the cards cast in the sun's pass, facing the sun and cut by the atlas two
+  mips finer than the sun's view asks, so the gaps between leaves survive; the disabled pack models cast nothing.
+- **Switches**: `?cardsize`, `?cardcover`, `?cardsink` (`CARD_DEFAULTS`); `?bench=trees` benches the cards
+  against the pack crowns, for GPU time only (the shadow map is baked once, with the cards).
+
 ### The bench (`?bench`, L2a)
 
 The page runs 9 cameras (closest, default and widest zoom, each at yaw −45°, 0°, +45°) and records, per camera
