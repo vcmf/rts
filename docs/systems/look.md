@@ -74,7 +74,7 @@ and on.
 
 ### The gameplay depth of field (decision 0024)
 
-The plan: `docs/plans/active/gameplay-dof.md`. The blur is a band at the top of the screen: only what lies beyond
+The plan: `docs/plans/done/gameplay-dof.md`. The blur is a band at the top of the screen: only what lies beyond
 the focus blurs.
 
 - **The scene at half resolution** (`src/look/shaders/dofdown.frag`): each pixel holds the four scene pixels under

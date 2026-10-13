@@ -273,7 +273,7 @@ brushwork survives where the blur is mild. So:
 3. Painting carries depth first; blur adds to it. The look checks measure the
    paint with blur off.
 4. Cost: about 0.7–0.8 ms at the default zoom (measured on the Metal proxy,
-   `docs/plans/active/gameplay-dof.md`), charged to the post budget.
+   `docs/plans/done/gameplay-dof.md`), charged to the post budget.
 
 The concerns that made 0003 (threats at the edges, focus pumping as the camera
 pans, blur erasing grain) are what the tuning and the toggle answer.
