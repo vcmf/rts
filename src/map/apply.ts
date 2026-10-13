@@ -27,11 +27,12 @@ const FREEBOARD = 0.4, BANK_OUT = 3, LEVEL_STEP = 2, SHORE_IN = 10, BRIDGE_REACH
 const WAY_WIDTH = 5, WATER_WIDTH = 6, EDIT_WIDTH = 4, LANDFORM_WIDTH = 100, VEG_LINE = 4, WORK_LINE = 6
 
 // How far from its centreline a line feature takes cells, as apply paints it: a cell whose centre lies closer (strictly)
-// is the line's. An edge that follows the line (src/map/follow.ts) starts here, so the two share no cell
+// is the line's. The painters below take it from here, and an edge that follows the line (src/map/follow.ts) starts
+// here, so the two share no cell (a barrier's band is barrierCells', from the same thickness)
 export function lineReach(category: string, attrs: Record<string, AttrValue>): number {
   const c = CELL, painted = (hw: number) => Math.max(hw, c / 2 + 0.01)
   if (category === 'barrier') return num(attrs.thickness, 2) * c / 2
-  if (category === 'water') return painted(Math.max(num(attrs.width, WATER_WIDTH) / 2, c / 2))
+  if (category === 'water') return painted(num(attrs.width, WATER_WIDTH) / 2)
   if (category === 'way') return painted(num(attrs.width, WAY_WIDTH) / 2)
   if (category === 'veg') return attrs.growth === 'tree' ? 0 : painted(VEG_LINE / 2)   // a row of trees paints no cell
   if (category === 'built' || category === 'work') return painted(WORK_LINE / 2)
@@ -345,7 +346,7 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
       continue
     }
     const dens = (cell: number, input: { edge?: number; along?: number }) => { L.density[cell] = Math.round(255 * Math.max(0, Math.min(1, ramp(a.density, input, 0)))) }
-    if (f.line) paintLine(f.line, VEG_LINE / 2, L.veg, k1, (cell, along) => dens(cell, { along }))
+    if (f.line) paintLine(f.line, lineReach(cat0, a), L.veg, k1, (cell, along) => dens(cell, { along }))
     else {
       if (cat0 === 'ground') paintArea(f, L.ground, k1)
       paintArea(f, L.veg, k1, (cell, edge) => dens(cell, { edge }), typeof a.density === 'object')
@@ -353,13 +354,13 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
   }
   for (const { f, r } of order) {
     const cat0 = categoryOf(r.kind), k1 = index.get(f.id)!, a = r.attrs
-    if (cat0 === 'way' && f.line) paintLine(f.line, num(a.width, WAY_WIDTH) / 2, L.way, k1)
+    if (cat0 === 'way' && f.line) paintLine(f.line, lineReach(cat0, a), L.way, k1)
     if (cat0 === 'barrier' && f.line) barrierCells(f.line, num(a.thickness, 2), a.gaps as { every: number; width: number } | undefined, (i, j) => { if (i >= 0 && j >= 0 && i < nx && j < nz) L.barrier[j * nx + i] = k1 }, x0, z0)
   }
   for (const { f, r } of order) {
     const cat0 = categoryOf(r.kind), k1 = index.get(f.id)!
     if (cat0 === 'built' || cat0 === 'work') {
-      if (f.line) paintLine(f.line, WORK_LINE / 2, L.built, k1)
+      if (f.line) paintLine(f.line, lineReach(cat0, r.attrs), L.built, k1)
       else if (f.area || f.circle || f.ellipse) paintArea(f, L.built, k1)
       else if (f.carries && f.crosses) {
         // the deck: the road's cells where it crosses the water, level with the higher of the road's two ends

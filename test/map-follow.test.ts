@@ -5,6 +5,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Catalogue, MapFile, Pt } from '../src/map/schema.ts'
 import { expand } from '../src/map/expand.ts'
+import { followEdge } from '../src/map/follow.ts'
+import { lineDistance } from '../src/map/reach.ts'
 import { validate, validateExpanded } from '../src/map/validate.ts'
 import { apply, nearLine } from '../src/map/apply.ts'
 import { inRing, pointAt } from '../src/map/geometry.ts'
@@ -81,6 +83,30 @@ describe('M3d: shared edges', () => {
       const out = expand(mini([MEADOW, brook, wood({ id: 'brook', side, offset, from: [-150, 0], to: [150, 0] }, [[[150, far], [-150, far]]])], seed), cat)
       expect(out.issues).toEqual([])
     }
+  })
+  it('a sharp corner, either side: the edge keeps its distance from both legs and shares no cell with the road', () => {
+    for (const deg of [100, 120, 135, 150, 170]) for (const side of ['left', 'right'] as const) {
+      const t = deg * Math.PI / 180, leg: Pt = [Math.round(Math.cos(t) * 200 * 100) / 100, Math.round(Math.sin(t) * 200 * 100) / 100]
+      const road = { id: 'road', kind: 'way.road', line: [[-200, 0], [0, 0], leg] as Pt[], width: 10 }
+      const to: Pt = [leg[0] * 0.75, leg[1] * 0.75]
+      const edge = followEdge(road.line, 5.01, { id: 'road', side, from: [-150, 0], to })
+      for (let k = 0; k + 1 < edge.length; k++) expect(lineDistance([edge[k], edge[k + 1]], road.line)).toBeGreaterThanOrEqual(5.01 - 0.02)
+      // the rest of the ring: inside the bend (left), far into the wedge; outside (right), far behind the corner
+      const bis: Pt = [(-1 + Math.cos(t)) / 2, Math.sin(t) / 2], bl = Math.hypot(bis[0], bis[1])
+      const r = (p: Pt): Pt => [Math.round(p[0]), Math.round(p[1])]
+      const rest: Pt[] = side === 'left' ? [r([bis[0] / bl * 120, bis[1] / bl * 120])]
+        : [r([to[0] + Math.sin(t) * 60, to[1] - Math.cos(t) * 60]), r([-bis[0] / bl * 80, -bis[1] / bl * 80]), [-150, -60]]   // around the outside
+      const { map, issues } = expand(mini([MEADOW, road, wood({ id: 'road', side, from: [-150, 0], to, at: 0 }, [rest])]), cat)
+      expect(issues).toEqual([])
+      const L = apply(map, cat), woodK = L.table.findIndex(r => r.kind === 'veg.wood.broad') + 1
+      let shared = 0
+      for (let c = 0; c < L.veg.length; c++) if (L.veg[c] === woodK && L.way[c]) shared++
+      expect(shared).toBe(0)
+    }
+  })
+  it('a hairpin narrower than twice the distance is an error naming where', () => {
+    const pin = { id: 'road', kind: 'way.road', line: [[-200, 0], [0, 0], [-200, 6]] as Pt[], width: 4 }
+    expect(() => followEdge(pin.line, 3, { id: 'road', side: 'left', offset: 2, from: [-150, 0], to: [-150, 6] })).toThrow(/bends too tightly/)
   })
   it('the edge starts where the line stops painting: a hedge, a path and a stream share no cell with the wood', () => {
     for (const line of [

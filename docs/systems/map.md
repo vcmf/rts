@@ -101,10 +101,13 @@ maps/kinds.json ──► checkCatalogue ─┐
     (`lineReach`, `src/map/apply.ts`: a road's or stream's half-width, a barrier's band, at least a cell's half), so
     the two share no cell and leave none between;
     its points go before the ring's point `at` (default 0), and the ring's own points hold the rest of the
-    boundary (with a `follow`, as few as one; the whole ring is checked after expansion). Each vertex moves along
-    the mean of its segments' normals, mitred to keep the offset, at most twice it; points that step back against
-    the line (an inner bend shorter than the offset) are dropped and the loops an inner bend makes are cut out, so
-    the edge never folds, whatever the seed. A feature with `follow` is in
+    boundary (with a `follow`, as few as one; the whole ring is checked after expansion). The edge is the standard
+    offset: points along each segment (every 2 m) moved along its normal, an arc at each outer corner whose chords
+    stay outside the distance, every point closer to the line than the distance dropped (what is left of an inner
+    bend is locally convex, so chords between kept points stay outside), loops cut out, near points merged and
+    straight runs kept to their ends. Every chord is then measured against the line exactly: a bend too tight for
+    the distance (a hairpin narrower than twice it) is an error naming where, never an edge inside the line. A
+    feature with `follow` is in
     the chain (it reads the lines it follows, so it waits for a meander; what reads it waits for its ring), and
     `follow` leaves the expanded map. A street village's own area cannot follow (its reach is checked before
     expansion).

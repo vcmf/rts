@@ -6,21 +6,23 @@ import type { Feature, Pt } from './schema.ts'
 import { nearLine } from './apply.ts'
 import { stretch } from './geometry.ts'
 import { cm } from './util.ts'
+import { lineDistance } from './reach.ts'
+import { atan2, cos, sin, PI } from '../sim/num.ts'
 
 export interface FollowEdge { id: string; side: 'left' | 'right'; offset?: number; from: Pt; to: Pt; at?: number }
 export const FOLLOW_KEYS = ['id', 'side', 'offset', 'from', 'to', 'at']
 // a feature's shared edges: none, one, or a list
 export const followsOf = (f: Feature): FollowEdge[] => (f.follow === undefined ? [] : (Array.isArray(f.follow) ? f.follow : [f.follow]) as FollowEdge[])
 
-// Where two segments p→q and r→s cross (touching included), as the fraction along p→q; null when they do not
+// Where two segments p→q and r→s cross (touching included), as the fraction along p→q; null when they do not or
+// when they are parallel (an offset curve's folds are never parallel to what they cross)
 function meet(p: Pt, q: Pt, r: Pt, s: Pt): number | null {
   const ux = q[0] - p[0], uz = q[1] - p[1], vx = s[0] - r[0], vz = s[1] - r[1], den = ux * vz - uz * vx
   if (den === 0) return null
   const t = ((r[0] - p[0]) * vz - (r[1] - p[1]) * vx) / den, u = ((r[0] - p[0]) * uz - (r[1] - p[1]) * ux) / den
   return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : null
 }
-// An offset curve folds over itself on the inner side of a bend (where a segment is shorter than the offset asks):
-// each loop is cut out at the point where the curve first meets itself again
+// An offset curve folds over itself at inner corners: each loop is cut out where the curve first meets itself again
 function untangle(pts: Pt[]): Pt[] {
   let out = pts
   for (let i = 0; i + 1 < out.length; i++) {
@@ -35,46 +37,62 @@ function untangle(pts: Pt[]): Pt[] {
   return out
 }
 
-// An offset point that steps backwards against the line (an inner bend shorter than the offset) folds the curve
-// into a spike: dropped, walking from the start, then from the end. `dirs[k]`: the line's direction into point k
-function forwardOnly(pts: Pt[], dirs: Pt[]): Pt[] {
-  const walk = (ps: Pt[], ds: Pt[], sign: number) => {
-    const keep = [0]
-    for (let k = 1; k < ps.length; k++) {
-      const l = ps[keep[keep.length - 1]], dx = ps[k][0] - l[0], dz = ps[k][1] - l[1]
-      if (sign * (dx * ds[k][0] + dz * ds[k][1]) > 0) keep.push(k)
-    }
-    return keep
-  }
-  const fwd = walk(pts, dirs, 1), p1 = fwd.map(k => pts[k]), d1 = fwd.map(k => dirs[k])
-  // backwards: the direction into point k is the line's direction out of it, reversed
-  const back = walk([...p1].reverse(), [...d1.slice(1), d1[d1.length - 1]].reverse(), -1)
-  return back.map(k => p1[p1.length - 1 - k]).reverse()
-}
+const ARC_STEP = PI / 12   // an outer corner's arc, in steps of at most 15°
+const SAMPLE = 2           // m: offset points along each segment, at most this far apart
+const TOL = 0.02           // m: the rounding to centimetres, and the arithmetic's slack
+const MERGE = 0.05         // m: points closer than this to the one before are one
 
-// The edge's points: the line's stretch between the points nearest `from` and `to`, each moved `reach + offset` to
-// the side (left: left of the line's own direction; `reach`: how far the line paints, apply's lineReach). A vertex
-// moves along the mean of its two segments' normals, lengthened to keep the offset from both (a mitre), at most
-// twice the offset, so a sharp turn cannot shoot out; the loops an inner bend makes are cut out; the points are on
-// whole centimetres, none repeated.
+// The edge's points: the line's stretch between the points nearest `from` and `to`, at `reach + offset` from it on
+// its side (left: left of the line's own direction; `reach`: where apply stops painting the line, lineReach):
+// - points along each segment (every SAMPLE m and its ends) moved along its normal, and at each outer corner an arc
+//   about the vertex whose chords stay outside the distance (a polygon around the circle);
+// - every point closer to the line than the distance dropped (the inner side of a bend: the points of a segment
+//   that its neighbours come too close to). What is left of an inner bend is locally convex, so a chord between
+//   two kept points stays outside the distance;
+// - the loops left by a bend tighter than the distance cut out where the curve meets itself.
+// The edge is then measured against the line, chord by chord, exactly: a bend too tight for the distance (a hairpin
+// narrower than twice it) is an error naming where, never an edge inside the line.
 export function followEdge(line: Pt[], halfWidth: number, e: FollowEdge): Pt[] {
   const a = nearLine(line, e.from[0], e.from[1]).along, b = nearLine(line, e.to[0], e.to[1]).along
-  if (a === b) throw new Error(`"from" and "to" meet the same point of "${e.id}": the edge along it has no length`)
-  const part = stretch(line, Math.min(a, b), Math.max(a, b)).filter((p, k, ps) => k === 0 || p[0] !== ps[k - 1][0] || p[1] !== ps[k - 1][1])
+  const part = a === b ? [] : stretch(line, Math.min(a, b), Math.max(a, b)).filter((p, k, ps) => k === 0 || p[0] !== ps[k - 1][0] || p[1] !== ps[k - 1][1])
+  if (part.length < 2) throw new Error(`"from" and "to" meet the same point of "${e.id}": the edge along it has no length`)
   const d = halfWidth + (e.offset ?? 0), s = e.side === 'left' ? 1 : -1
-  const normal = (k: number): [number, number] => {   // the left normal of segment k
-    const dx = part[k + 1][0] - part[k][0], dz = part[k + 1][1] - part[k][1], l = Math.sqrt(dx * dx + dz * dz)
-    return [-dz / l, dx / l]
+  // the side's unit normal of segment k
+  const nrm = (k: number): Pt => { const dx = part[k + 1][0] - part[k][0], dz = part[k + 1][1] - part[k][1], l = Math.sqrt(dx * dx + dz * dz); return [-s * dz / l, s * dx / l] }
+  const raw: Pt[] = []
+  for (let k = 0; k + 1 < part.length; k++) {
+    const n = nrm(k), [px, pz] = part[k], [qx, qz] = part[k + 1]
+    if (k > 0) {
+      // an outer corner (the line turns away from the side: turn > 0 is a left turn, whose outside is the right):
+      // an arc of points about the vertex
+      const m = nrm(k - 1), turn = m[0] * n[1] - m[1] * n[0], ang = Math.abs(atan2(turn, m[0] * n[0] + m[1] * n[1]))
+      if (s * turn < 0 && ang > 1e-9) {
+        const steps = Math.ceil(ang / ARC_STEP), r = d / cos(ang / steps / 2), a0 = atan2(m[1], m[0])
+        for (let q = 0; q < steps; q++) { const t = a0 + Math.sign(turn) * (q + 0.5) * ang / steps; raw.push([px + cos(t) * r, pz + sin(t) * r]) }
+      }
+    }
+    const L = Math.sqrt((qx - px) * (qx - px) + (qz - pz) * (qz - pz)), steps = Math.max(1, Math.ceil(L / SAMPLE))
+    for (let q = 0; q <= steps; q++) { const t = q / steps; raw.push([px + (qx - px) * t + n[0] * d, pz + (qz - pz) * t + n[1] * d]) }
   }
-  const out = part.map((p, k) => {
-    const n0 = normal(Math.max(0, k - 1)), n1 = normal(Math.min(part.length - 2, k))
-    let mx = n0[0] + n1[0], mz = n0[1] + n1[1]
-    const ml = Math.sqrt(mx * mx + mz * mz) || 1
-    mx /= ml; mz /= ml
-    const cos = mx * n1[0] + mz * n1[1], len = Math.min(2 * d, d / Math.max(cos, 1e-9))
-    return [p[0] + s * mx * len, p[1] + s * mz * len] as Pt
-  })
-  const dirs = part.map((_, k) => { const n = normal(Math.max(0, k - 1)); return [n[1], -n[0]] as Pt })   // the segment into k
-  const pts = untangle(forwardOnly(out, dirs)).map(([x, z]) => [cm(x), cm(z)] as Pt).filter((p, k, ps) => k === 0 || p[0] !== ps[k - 1][0] || p[1] !== ps[k - 1][1])
+  // kept: points at the full distance (measured before rounding, so a neighbour's overlap at an inner corner goes),
+  // on whole centimetres, none within MERGE of the one before, and none in the middle of a straight run
+  const far = (p: Pt) => nearLine(part, p[0], p[1]).d >= d - 1e-9
+  const tidy = (ps: Pt[]) => {
+    const out: Pt[] = []
+    for (const [x, z] of ps) {
+      const p: Pt = [cm(x), cm(z)], l = out[out.length - 1]
+      if (l && (p[0] - l[0]) * (p[0] - l[0]) + (p[1] - l[1]) * (p[1] - l[1]) < MERGE * MERGE) continue
+      const o = out[out.length - 2]
+      if (o && (l[0] - o[0]) * (p[1] - o[1]) - (l[1] - o[1]) * (p[0] - o[0]) === 0 && (l[0] - o[0]) * (p[0] - l[0]) + (l[1] - o[1]) * (p[1] - l[1]) > 0) out.pop()
+      out.push(p)
+    }
+    return out
+  }
+  const pts = tidy(untangle(tidy(raw.filter(far))))
+  if (pts.length < 2) throw new Error(`"${e.id}" bends too tightly between "from" and "to" for an edge ${d} m from it: move them, or lower the offset`)
+  for (let k = 0; k + 1 < pts.length; k++) {
+    const g = lineDistance([pts[k], pts[k + 1]], part)
+    if (g < d - TOL) throw new Error(`"${e.id}" bends too tightly near [${pts[k].map(v => Math.round(v)).join(', ')}] for an edge ${d} m from it (it comes within ${g.toFixed(2)} m): move "from" or "to", or lower the offset`)
+  }
   return a <= b ? pts : pts.reverse()
 }

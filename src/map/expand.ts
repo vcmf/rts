@@ -35,13 +35,12 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
     // shared edges first (docs/plans/active/m3d-follow.md): each edge's points into the outer ring, before its `at`
     let f = authored
     if (f.follow) {
-      const edges = followsOf(f), outer = [...f.area![0]]
-      try {
-        for (const e of [...edges].sort((a, b) => (b.at ?? 0) - (a.at ?? 0))) {
-          const line = current.get(e.id)!
-          outer.splice(e.at ?? 0, 0, ...followEdge(line.line!, lineReach(categoryOf(res(line).kind), res(line).attrs), e))
-        }
-      } catch (err) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].follow`, message: (err as Error).message }); failed.add(f.id); return }
+      const edges = followsOf(f), outer = [...f.area![0]], many = Array.isArray(f.follow)
+      for (const n of edges.map((_, n) => n).sort((a, b) => (edges[b].at ?? 0) - (edges[a].at ?? 0))) {
+        const e = edges[n], line = current.get(e.id)!
+        try { outer.splice(e.at ?? 0, 0, ...followEdge(line.line!, lineReach(categoryOf(res(line).kind), res(line).attrs), e)) }
+        catch (err) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].follow${many ? `[${n}]` : ''}`, message: (err as Error).message }); failed.add(f.id); return }
+      }
       f = { ...Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'follow')), area: [outer, ...f.area!.slice(1)] } as Feature
       if (!f.gen) { current.set(f.id, f); return }
     }
@@ -149,7 +148,9 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
   for (const i of validate({ ...map, features }, cat)) {
     const own = i.id !== null && at.has(i.id), child = !own && i.id !== null && children.some(c => c.id === i.id)
     const parent = child ? children.find(c => c.id === i.id)!.origin!.parent! : null
-    issues.push({ ...i, id: parent ?? i.id, path: own ? i.path.replace(/^features\[\d+\]/, `features[${at.get(i.id!)}]`) : parent ? `features[${at.get(parent)}].gen (child ${i.id}: ${i.path})` : i.path, message: `after expansion: ${i.message}` })
+    // a ring with shared edges is counted as expanded (the edges' points included), not as the author wrote it
+    const shared = own && map.features[at.get(i.id!)!].follow !== undefined && /\.area/.test(i.path) ? ' (counting the ring as expanded, its shared edges included)' : ''
+    issues.push({ ...i, id: parent ?? i.id, path: own ? i.path.replace(/^features\[\d+\]/, `features[${at.get(i.id!)}]`) : parent ? `features[${at.get(parent)}].gen (child ${i.id}: ${i.path})` : i.path, message: `after expansion: ${i.message}${shared}` })
   }
   const byIndex = features.filter(f => at.has(f.id)).map(f => ({ f, i: at.get(f.id)! }))
   features.sort(idOrder)

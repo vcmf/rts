@@ -68,3 +68,18 @@ shared arcs for now; the draft page drawing shared edges specially.
 - **Light:** a cycle's path names `.follow` for a feature without a generator; an expanded map with a leftover
   `follow` is refused; points are deduplicated after rounding to centimetres; the ban on `follow` keys on a
   generator's `peers`, not on its name. Acceptance 3 is noted as not reachable yet.
+
+**Round 2** (9 findings, 2 severe):
+- **Severe**, both from the mitre's cap at sharp corners (over 120°): on the inner side the capped corner sat
+  inside the line's reach, and on the outer side the chord from the capped point cut into it; the wood shared
+  70 to 150 cells with a 10 m road. The mitre is gone: the edge is now the standard offset (points along each
+  segment, arcs at outer corners with chords outside the distance, points too close dropped, loops cut out), and
+  every chord is measured against the line, so a bend too tight is an error naming where. Tested: a 10 m road
+  turning 100°, 120°, 135°, 150° and 170°, both sides: every chord at the distance, no shared cell; a hairpin is
+  an error. (While rebuilding it, the test for an outer corner had its sign inverted: arcs went inside. The
+  meander tests caught it.)
+- **Moderate:** errors after expansion on a ring with shared edges say that they count the expanded ring; a
+  failing edge in a list names `follow[n]`; a degenerate stretch is "no length", not a JavaScript error; apply's
+  line painters take their reach from `lineReach`, the one rule the edge uses.
+- **Light:** `forwardOnly` went with the mitre; rounding now happens before the loops are cut and again after.
+  `meet` stays beside `segmentsMeet` (it needs the fraction; parallel folds cannot happen on an offset curve).
