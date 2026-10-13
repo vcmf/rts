@@ -30,7 +30,7 @@ export const viewStep = ([name, a, b, r, t, season]) => ['eval', `(async () => {
   return "${name}" })()`]
 
 // runs tools/shot.mjs on the page (with ?frozen unless frozen is false, and with ?dof=0 unless the URL sets ?dof: the
-// checks measure the paint, decision 0020); env adds to the environment and wins over it; returns its stdout; throws
+// checks measure the paint, decision 0024); env adds to the environment and wins over it; returns its stdout; throws
 // with the full output on a failure
 export function shoot(url, dir, steps, w, h, { frozen = true, env = {} } = {}) {
   const u = new URL(url); if (frozen) u.searchParams.set('frozen', ''); if (!u.searchParams.has('dof')) u.searchParams.set('dof', '0')

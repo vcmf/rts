@@ -21,6 +21,8 @@ import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges }
 import { COVER, coverAt, inFormationZone, type CoverGrid } from './world/cover.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
+import { cardMaterial, cardMesh, placeCards, type CardOptions } from './canopy.ts'
+import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 
 export interface NatureModel { pos: number[]; idx: number[]; role: number[]; min: number[]; max: number[] }
 declare global { interface Window { NATURE?: Record<string, NatureModel> } }
@@ -29,12 +31,19 @@ export type Item = [x: number, z: number, scale: number, yaw: number, tint: numb
 
 export interface Nature {
   groups: Record<string, Item[]>; far: Item[]
-  canopy: [number, number, number, number][]   // crown and blob footprints for the light map's occlusion: x, z, r, strength
+  // crown and blob footprints for the light map's occlusion: x, z, r, strength, a tree's (its contact core); and the
+  // sphere the sky's occlusion sees (docs/plans/done/soft-shadows.md): its centre's height above the ground, its
+  // radius, its opacity
+  canopy: [number, number, number, number, boolean, number, number, number][]
   KEEP_CLEAR(x: number, z: number): boolean
   touchesZone(x: number, z: number, r: number): boolean
   placeable(x: number, z: number, r?: number, kind?: string): boolean
   footprint(model: string, s: number): number
   stones: [number, number, number, number][]   // the stones in the water (W5a): x, z, radius, the flow's direction (rad), for their foam
+  showCards?: (on: boolean) => void            // under cards: the crowns as cards, or the pack's (the bench's arms)
+  // under cards: the card meshes, which cast the crowns' shadows, and the pack models they replace, which cast nothing
+  // (src/look/bakes.ts; the trunk meshes cast the trunks')
+  cardCasters?: { leaf: BaseTexture; cards: Mesh[]; packs: Mesh[] }
 }
 
 // what may grow on each class of the cover (docs/plans/active/l5-macro.md): grass, flowers, plants, bushes, stumps
@@ -51,7 +60,8 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
   return AROUND.every(([dx, dz]) => ok(coverAt(cover, x + dx * EDGE, z + dz * EDGE)))
 }
 
-export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid): Nature {
+// cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md, ?trees=cards)
+export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off'): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
 
@@ -68,11 +78,13 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const reedMat = natMat('reeds', '#3f4f25', '#7d7a3c', { rim: 0.5, grassy: true })
 
   const FLIP = true   // OBJ winding is opposite to Babylon's default
-  function buildModel(name: string): Mesh {
-    const d = NATURE![name], m = new Mesh(name, scene)
+  // trunk: only the triangles off the crown (role 2 and up), for the cards arm, whose crowns are cards
+  function buildModel(name: string, trunk = false): Mesh {
+    const d = NATURE![name], m = new Mesh(trunk ? 'trunks_' + name : name, scene)
     const idx = FLIP ? d.idx.slice().reverse() : d.idx
-    m.setVerticesData(VertexBuffer.PositionKind, d.pos); m.setIndices(idx)
-    const nrm: number[] = []; VertexData.ComputeNormals(d.pos, idx, nrm); m.setVerticesData(VertexBuffer.NormalKind, nrm)
+    const nrm: number[] = []; VertexData.ComputeNormals(d.pos, idx, nrm)
+    m.setVerticesData(VertexBuffer.PositionKind, d.pos); m.setIndices(trunk ? idx.filter((_, k) => { const t = k - k % 3; return d.role[idx[t]] >= 2 && d.role[idx[t + 1]] >= 2 && d.role[idx[t + 2]] >= 2 }) : idx)
+    m.setVerticesData(VertexBuffer.NormalKind, nrm)
     m.setVerticesData('aRole', new Float32Array(d.role), false, 1)
     let cx = 0, cy = 0, cz = 0, n = 0; for (let i = 0; i < d.role.length; i++) if (d.role[i] <= 1) { cx += d.pos[i * 3]; cy += d.pos[i * 3 + 1]; cz += d.pos[i * 3 + 2]; n++ }
     if (!n) { cx = 0; cy = d.max[1] * 0.6; cz = 0; n = 1 }
@@ -81,16 +93,17 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     return m
   }
   const _m = new Matrix(), _q = new Quaternion(), _s = new Vector3(), _t = new Vector3()
-  function place(model: string, material: ShaderMaterial, items: Item[]): void {
-    if (!items.length) return
+  function place(model: string, material: ShaderMaterial, items: Item[]): { mesh: Mesh; buf: Float32Array; tint: Float32Array } | null {
+    if (!items.length) return null
     const m = buildModel(model); m.material = material; m.alwaysSelectAsActiveMesh = true
     const buf = new Float32Array(items.length * 16), tint = new Float32Array(items.length)
     items.forEach(([x, z, s, yaw, t, dy = 0], i) => { _t.set(x, H(x, z) + dy, z); Quaternion.RotationYawPitchRollToRef(yaw, 0, 0, _q); _s.set(s, s, s); Matrix.ComposeToRef(_s, _q, _t, _m); _m.copyToArray(buf, i * 16); tint[i] = t })
     m.thinInstanceSetBuffer('matrix', buf, 16, true); m.thinInstanceSetBuffer('aTint', tint, 1, true)
+    return { mesh: m, buf, tint }
   }
 
   const canopy: Nature['canopy'] = []
-  const smTree = (x: number, z: number, _crownY: number, cr: number) => { canopy.push([x, z, cr * 1.15, 0.42]); reflAdd(x, z, cr * 1.1) }, smBlob = (x: number, z: number, r: number) => canopy.push([x, z, r * 1.4, 0.30])
+  const smTree = (x: number, z: number, crownY: number, cr: number) => { canopy.push([x, z, cr * 1.15, 0.42, true, crownY, cr, 0.7]); reflAdd(x, z, cr * 1.1) }, smBlob = (x: number, z: number, r: number) => canopy.push([x, z, r * 1.4, 0.30, false, r * 0.4, r, 0.7])
 
   /* ---------- scattering: composition follows the north star ---------- */
   const R = mulberry(77), rr = () => R()
@@ -115,14 +128,29 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
   const addPlaced = (model: string, item: Item, kind = '') => { const [x, z, s] = item; if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false; add(model, item); return true }
 
+  // a broadleaf or birch tree, and its crown for the occlusion (the crown's centre at 0.62 of the height)
+  const placeTree = (mdl: string, x: number, z: number, s: number, yaw: number, t: number) => {
+    if (!addPlaced(mdl, [x, z, s, yaw, t])) return false
+    const M = NATURE[mdl]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s)
+    return true
+  }
   const TREE_MODELS = ['CommonTree_1', 'CommonTree_2', 'CommonTree_3', 'CommonTree_4', 'CommonTree_5']
   const clusters = [[-62, -22, 7], [-128, 4, 9], [-74, 58, 6], [42, 56, 8], [82, 32, 6], [-22, 72, 7], [112, -12, 5], [-150, 62, 8], [150, 72, 7], [-42, 122, 10], [62, 112, 8], [18, -80, 6], [-95, -70, 7], [120, -70, 6]]
   for (const [cx, cz, n] of clusters) for (let i = 0; i < n; i++) {
     const x = cx + (rr() - 0.5) * 42, z = cz + (rr() - 0.5) * 32
     const birch = rr() < 0.22, mdl = birch ? 'BirchTree_' + (1 + Math.floor(rr() * 5)) : TREE_MODELS[Math.floor(rr() * 5)], s = 3.4 + rr() * 1.4
-    if (!addPlaced(mdl, [x, z, s, rr() * 6.28, rr()])) continue
-    const M = NATURE[mdl]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s)
+    if (!placeTree(mdl, x, z, s, rr() * 6.28, rr())) continue
     if (rr() < 0.5) { const fx = x + (rr() - 0.5) * 6, fz = z + (rr() - 0.5) * 6; addPlaced('Plant_1', [fx, fz, 1.6 + rr(), rr() * 6.28, rr()]) }
+  }
+  // ?wood: one dense wood, to judge the sky's occlusion (docs/plans/done/soft-shadows.md); ?wood=big: a forest that
+  // fills the bench's frame (docs/plans/done/forest-bench.md); each its own random stream, so the rest of the
+  // scatter is unchanged
+  if (wood !== 'off') {
+    const W = mulberry(91), [cx, cz, w, h, n] = wood === 'big' ? [-110, -25, 150, 110, 520] : [-105, -30, 50, 40, 70]
+    for (let i = 0; i < n; i++) {
+      const x = cx + (W() - 0.5) * w, z = cz + (W() - 0.5) * h, mdl = TREE_MODELS[Math.floor(W() * 5)], s = 3.4 + W() * 1.4
+      placeTree(mdl, x, z, s, W() * 6.28, W())
+    }
   }
   for (let i = 0, step = 0; i < RIVER.n; i += step) {   // willows follow the river banks
     step = Math.round((7 + rr() * 9) / (RIVER.P.W0 / 4)); const C = RIVER
@@ -200,12 +228,29 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
       addPlaced('Reed', [x, z, 1.5 + rq() * 0.8, rq() * 6.28, rq()], 'reed')
     }
   }
+  // under cards, a carded model is drawn as its trunk triangles (the trunks_ mesh) and its cards, which take the
+  // crowns' palette; both cast into the sun's shadow pass (src/look/bakes.ts), the whole pack model is disabled
+  const carded = (k: string) => !!cards && /^(CommonTree|BirchTree|Willow)_/.test(k)
+  const treeCards = cards && cardMaterial(mats, 'treeCards', '#4a7330', '#97a043', 0.45, cards.leaf, cards.opts.volume), birchCards = cards && cardMaterial(mats, 'birchCards', '#7a9a3c', '#bcae55', 0.45, cards.leaf, cards.opts.volume)
+  let seed = 1
+  const swaps: ((on: boolean) => void)[] = [], cardMeshes: Mesh[] = [], packs: Mesh[] = []
   for (const [k, items] of Object.entries(groups)) {
-    const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : /Birch/.test(k) ? birchMat : /Pine/.test(k) ? pineMat : treeMat; place(k, material, items)
+    const birch = /Birch/.test(k)
+    const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : birch ? birchMat : /Pine/.test(k) ? pineMat : treeMat
+    const placed = place(k, material, items)
+    if (placed && cards && carded(k)) {
+      const trunks = buildModel(k, true), cm = cardMesh(scene, 'cards_' + k, NATURE[k], cards.opts, seed++), pack = placed.mesh
+      trunks.material = material; trunks.alwaysSelectAsActiveMesh = true
+      trunks.thinInstanceSetBuffer('matrix', placed.buf, 16, true); trunks.thinInstanceSetBuffer('aTint', placed.tint, 1, true)
+      placeCards(cm, (birch ? birchCards : treeCards) as ShaderMaterial, placed.buf, placed.tint)
+      const show = (on: boolean) => { cm.setEnabled(on); trunks.setEnabled(on); pack.setEnabled(!on) }
+      show(true); swaps.push(show); cardMeshes.push(cm); packs.push(pack)
+    }
   }
+  const showCards = cards ? (on: boolean) => { for (const f of swaps) f(on) } : undefined
   // the band is left out after the every-fourth choice, so every other bush stays the one the prototype drew
   // and none on the roads or the village ground (after the every-fourth choice, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
   place('Bush_1', farMat, far.filter((b, i) => i % 4 === 0 && drawn(b))); place('Bush_2', farMat, far.filter((b, i) => i % 4 === 2 && drawn(b)))
-  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones }
+  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined }
 }

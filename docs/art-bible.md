@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-13
 ---
 
 # Art Direction: "The Painted Campaign"
@@ -19,7 +19,7 @@ The reference images and what each is for are in §0.
 
 > Revision, Oct 2026: replaces the earlier "tin-soldier diorama" direction
 > (figure bases, sky and horizon shots), which is retired. A mild miniature-field
-> depth of field came back on 13 Oct 2026 as a player option (decision 0020).
+> depth of field came back on 13 Oct 2026 as a player option (decision 0024).
 
 ---
 
@@ -89,7 +89,7 @@ These are decisions, not preferences. Don't propose against them.
    valley mist and backlight. A miniature-field depth of field sits on top as a
    gameplay setting, **on by default**, mild enough that the brushwork and the
    formations at the edges still read. Presentation modes and video exports use
-   stronger settings. (Decision 0020, Oct 2026, superseding 0003; see §6b.)
+   stronger settings. (Decision 0024, Oct 2026, superseding 0003; see §6b.)
 5. **Readable first.** A player must read every formation, its side and its
    state in under a second.
 
@@ -137,6 +137,13 @@ Every surface is painted with **three value bands**, not a smooth gradient:
 The edges between bands are **broken by the grain texture**, so they read as
 brush edges rather than computed lines.
 
+**Proposed exception, foliage crowns** (decision 0022, open until the owner
+accepts it; built only in the leaf-card arm, `?trees=cards`): the same three
+colours, the shadow still cool, blended over a wide range of light instead of
+three steps, so a crown reads as a round mass of leaves. Its light wraps round
+the crown, it is darker inside, and single leaves catch the sun. Until 0022 is
+accepted, the three bands above are the rule for every surface.
+
 ### Palette
 - **80% calm field:** muted olive and yellow-greens, dry golds, teal-green
   hollows. Never neon green.
@@ -162,6 +169,15 @@ brush edges rather than computed lines.
 - **Shadows are physically computed, then painted.** A real sun shadow pass
   plus ambient occlusion (Babylon) decides *where* shadow falls. Our shader
   decides *how it looks*: the cool shadow band, with edges broken by the grain.
+- **Two kinds of shadow, as built** (`docs/systems/look.md`):
+  - *The sun's:* crisp where a caster meets the ground and softer the farther
+    the shadow falls from it, as under a real sun, exaggerated. A trunk's foot
+    is sharp; a crown's outline is soft.
+  - *The sky's:* woods, hollows and the ground round each crown see less sky,
+    so they are darker. On a wood's floor the shadow colour itself deepens, so
+    a wood reads as one mass, darker inside than a lone tree's shadow.
+- **The valley mist thins over cast shadow**, so shadows still read in the
+  hollows. Over snow it breaks §4b's rule today (a known fault: #62).
 
 ---
 
@@ -241,17 +257,20 @@ language never matches. **Assets are generated for this style** (§10).
 
 ## 6b. Depth & the cinematic layer
 
-**Depth of field in gameplay** (decision 0020, superseding 0003). *Tiny Glade*
+**Depth of field in gameplay** (decision 0024, superseding 0003). *Tiny Glade*
 (`design/refs/tiny-glade-img-2.jpg`, `design/refs/tiny-glade-forest.jpg`) shows that a tilt-shift blur over painted
 leaves, grass and water makes the field read as a miniature while the
 brushwork survives where the blur is mild. So:
-1. It is a player setting, **on by default**, focused on the camera's target
-   with a sharp band around it; its strength follows the zoom.
+1. It is a player setting, **on by default**, focused on the ground at the
+   screen's centre. Only what lies well beyond the focus blurs: a soft band at
+   the top of the screen. Nothing nearer than the focus blurs. Its strength
+   follows the zoom.
 2. It stays mild in the band the player reads: formations at the screen's edges
    must still pass the readability guard with it on.
 3. Painting carries depth first; blur adds to it. The look checks measure the
    paint with blur off.
-4. Cost: depth of field ≈ 0.5–1 ms (estimate), charged to the post budget.
+4. Cost: about 0.7–0.8 ms at the default zoom (measured on the Metal proxy,
+   `docs/plans/active/gameplay-dof.md`), charged to the post budget.
 
 The concerns that made 0003 (threats at the edges, focus pumping as the camera
 pans, blur erasing grain) are what the tuning and the toggle answer.
@@ -259,9 +278,15 @@ pans, blur erasing grain) are what the tuning and the toggle answer.
 **Where stronger depth of field is used:** video exports (directed camera, focus
 follows the action) and in-game presentation modes.
 
+**Reopened, then answered (owner, 2026-10-13):** after Tiny Glade, whose
+tilt-shift is much of its miniature charm, gameplay depth of field was an open
+question again. Decision 0024 answers it, with the measurement (Track E's owner
+question 3).
+
 **The cheap cinematic stack** (from `docs/research/cheap-painterly-postfx.md`):
 - **Bake what doesn't move:** terrain ambient occlusion, canopy contact
-  shading and (later) sun shadow, baked once per map. No live SSAO.
+  shading, the sun shadow and the sky's occlusion by crowns, baked once per
+  map. No live SSAO.
 - **One merged finishing pass:** warm amber grade with split toning, soft
   highlight roll-off, cool vignette, paper texture, dithering.
 - **Valley mist and height fog in the materials:** warm where sunlit, cool

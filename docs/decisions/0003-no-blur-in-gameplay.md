@@ -1,5 +1,5 @@
 ---
-status: superseded by 0020
+status: superseded by 0024
 date: 2026-10-08
 ---
 

@@ -9,7 +9,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const arg = process.argv[2] || 'prototypes/painted-cinematic.html', isUrl = /^https?:\/\//.test(arg)
-// a URL loads with the blur off unless it sets ?dof (decision 0020: the pixel checks measure the paint)
+// a URL loads with the blur off unless it sets ?dof (decision 0024: the pixel checks measure the paint)
 const page = isUrl ? (u => { if (!u.searchParams.has('dof')) u.searchParams.set('dof', '0'); return u.href })(new URL(arg)) : path.resolve(ROOT, arg)
 if (!isUrl && !fs.existsSync(page)) { console.error(`check-negatives: no page at ${page}`); process.exit(2) }
 const src = f => fs.readFileSync(path.join(ROOT, 'tools', f), 'utf8')

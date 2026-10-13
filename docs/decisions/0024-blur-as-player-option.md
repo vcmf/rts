@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-13
 ---
 
-# 0020 Depth of field in gameplay is a player option, on by default
+# 0024 Depth of field in gameplay is a player option, on by default
 
 Supersedes 0003.
 

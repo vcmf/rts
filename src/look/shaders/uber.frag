@@ -2,7 +2,7 @@ precision highp float;varying vec2 vUV;uniform sampler2D textureSampler,uGrain;u
 vec3 shoulder(vec3 c){float m=max(c.r,max(c.g,c.b));if(m<=0.8)return c;float mm=0.8+0.2*(1.0-exp(-(m-0.8)/0.2));return c*(mm/m);}
 float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 #ifdef DOF
-// the depth of field's composite (decision 0020; dof.frag): textureSampler is the half-resolution blur and uSharp the
+// the depth of field's composite (decision 0024; dof.frag): textureSampler is the half-resolution blur and uSharp the
 // scene; the sharp scene where this pixel's blur is under a pixel (the blur not read), the blur where it passes two.
 // uHalfUV maps the screen to the blur (its size is the scene's halved, rounded down). The bloom gathers from the blur
 uniform sampler2D uSharp;uniform vec2 uTan,uHalfUV;uniform float uFocus,uBand,uK,uMaxPx;

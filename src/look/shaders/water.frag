@@ -19,7 +19,7 @@ void main(){
   #ifdef WATER_DEBUG
   if(uWaterView>0.5){gl_FragColor=vec4(waterView(vW.xz),1.0);return;}   // the water data's debug views
   #endif
-  vec4 lm=LM(vW);float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,lm.g,uAO);
+  vec4 lm=LM(vW);float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,groundOcc(lm),uAO);pSky=mix(1.0,lm.g,uAO);
   vec4 t=waterTexel(vW.xz);float d=max(waterDepth(t),0.0),s=waterSdf(t),sp=length(waterFlow(t)),fws=fwidth(s);   // fws: the branches' margin (shore.glsl)
   vec2 ia=iceAt(vW.xz,sp,d);   // the ice here (shore.glsl), once for every layer
   #ifdef WATER_SAB_OWN

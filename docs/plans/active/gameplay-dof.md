@@ -5,7 +5,7 @@ last_reviewed: 2026-10-13
 
 # Plan: the miniature field, a gameplay depth of field
 
-Decision 0020 (13 Oct 2026, superseding 0003) makes depth of field a gameplay setting, on by default. This builds it
+Decision 0024 (13 Oct 2026, superseding 0003) makes depth of field a gameplay setting, on by default. This builds it
 on the look page. The owner's references are *Tiny Glade*'s (`design/refs/tiny-glade-img-2.jpg`,
 `design/refs/tiny-glade-forest.jpg`, art bible §0): a tilt-shift blur that makes the field read as a miniature while
 the painted texture still reads. Their leaf crowns are another branch's (L7a, `look/l7a-canopy-cards`, PR #58), and
@@ -45,7 +45,7 @@ From the GPC 2024 talk by Tomasz Stachowiak (https://www.youtube.com/watch?v=jus
   and calls it a gameplay setting. The "Blur strength" slider still multiplies it.
 - **The tools:**
   - `tools/look-page.mjs` `shoot()` loads the page with `?dof=0` unless the URL sets `?dof`, so every check measures
-    the paint (decision 0020).
+    the paint (decision 0024).
   - The bench page (`?bench`) and the debug views (`?water`, `?river=debug`) open with it off unless `?dof` is set;
     `?bench=dof` measures the pass off and on.
   - The readability guard runs with `?dof=1` as well.
@@ -62,7 +62,7 @@ From the GPC 2024 talk by Tomasz Stachowiak (https://www.youtube.com/watch?v=jus
   block that separates without blur may fail with it. The guard's blocks sit at the default view's centre and
   across the cover, near and far.
 - **Cost:** `?bench=dof` on the Metal proxy, 1920×1080, two runs, the post pass's GPU medians off and on.
-  Acceptance: ≤ 1 ms at the default zoom (decision 0020's estimate is 0.5–1 ms).
+  Acceptance: ≤ 1 ms at the default zoom (decision 0024's estimate is 0.5–1 ms).
 - **Also:** `npm test`, the docs check, `tools/check-negatives.mjs`, and the water and detail self-tests (through
   `shoot()`, blur off).
 
@@ -143,7 +143,7 @@ are comparable:
 | half resolution, blur on both sides of the focus | +1.8 | +1.45 to +1.5 | +1.0 |
 | **final: the top band only, the sharp pixels skipping the taps** | **+0.65 to +0.67** | **+0.68 to +0.79** | **+0.74** |
 
-The acceptance (≤ 1 ms at the default zoom; decision 0020 estimated 0.5 to 1 ms) is met. It still wants a bench on
+The acceptance (≤ 1 ms at the default zoom; decision 0024 estimated 0.5 to 1 ms) is met. It still wants a bench on
 the RTX 3060 target.
 
 ### Known limits

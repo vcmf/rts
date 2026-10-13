@@ -1,5 +1,5 @@
 precision highp float;varying vec2 vUV;uniform sampler2D textureSampler;uniform vec2 uTexel,uHalf,uTan;uniform float uFocus,uBand,uK,uMaxPx,uN;
-// the miniature field's depth of field (decision 0020; docs/plans/active/gameplay-dof.md), its blur, at half
+// the miniature field's depth of field (decision 0024; docs/plans/active/gameplay-dof.md), its blur, at half
 // resolution: one pass after Dennis Gustafsson's single-pass bokeh (each tap counted where its own blur reaches this
 // pixel, over a full-resolution pixel either side: the taps are a half-resolution texel apart), uN taps on a Vogel
 // spiral out to the largest blur (a tap that lands back on this pixel or off the screen skipped: the clamped edge

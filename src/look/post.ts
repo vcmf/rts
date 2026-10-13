@@ -1,5 +1,5 @@
 // The camera and the finishing passes (prototypes/painted-cinematic.html, docs/research/cheap-painterly-postfx.md):
-// [the depth of field, a player option per decision 0020: the scene at half resolution, its blur] → one fused pass (its composite, grade, bloom, vignette, paper, dither). Materials write view distance into alpha, so depth of field needs no second scene render.
+// [the depth of field, a player option per decision 0024: the scene at half resolution, its blur] → one fused pass (its composite, grade, bloom, vignette, paper, dither). Materials write view distance into alpha, so depth of field needs no second scene render.
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
@@ -22,7 +22,7 @@ import UBER_FS from './shaders/uber.frag?raw'
 
 // the view the page opens on (the bench measures it as its default zoom)
 export const START = { beta: 0.80, radius: 125, x: -10, z: 2 }
-// the gameplay depth of field (decision 0020), a band at the top of the screen: past a sharp band beyond the focus
+// the gameplay depth of field (decision 0024), a band at the top of the screen: past a sharp band beyond the focus
 // (1 - focus/z below it is sharp, z the depth along the view axis; nothing nearer than the focus blurs), the gain past
 // it, the largest blur in pixels at 1080 lines, and the share of it left at the widest zoom (window.__look.dof tunes
 // them live); FOCUS_S the focus's easing time (s)
@@ -91,7 +91,7 @@ export class Post {
     const HF = Constants.TEXTURETYPE_HALF_FLOAT
     // ratio: the size of the texture this pass reads, so the pass before it draws at that size
     const pp = (name: string, uni: string[], smp: string[], type: number, ratio = 1.0, defines: string | null = null) => { const p = new PostProcess(name, name, uni, smp, ratio, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, defines, type); if (!this.posts.length) p.samples = 4; this.posts.push(p); return p }
-    // the miniature field (decision 0020): focused on the ground at the screen's centre (focusDepth); a sharp band
+    // the miniature field (decision 0024): focused on the ground at the screen's centre (focusDepth); a sharp band
     // beyond it (DOF.band; nothing nearer blurs); the largest blur DOF.px at 1080 lines, strongest at the closest
     // zoom and DOF.wide of it at the widest. The scene at half resolution (each four pixels' colour averaged, the
     // farthest of their distances), its blur at half resolution, and the finishing pass puts the sharp
