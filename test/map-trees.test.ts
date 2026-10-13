@@ -1,4 +1,4 @@
-// M3c (docs/plans/active/m3c-trees.md): free-standing trees (points, rows, groups) and paved and brick roads
+// M3c (docs/plans/done/m3c-trees.md): free-standing trees (points, rows, groups) and paved and brick roads
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'

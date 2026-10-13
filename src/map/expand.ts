@@ -8,7 +8,10 @@
 import type { Catalogue, Feature, MapFile } from './schema.ts'
 import { SHAPES } from './schema.ts'
 import type { Issue } from './catalogue.ts'
-import type { GenOutput } from './generators.ts'
+import type { GenOutput, GenSpec } from './generators.ts'
+import type { Clear } from './util.ts'
+import { listOf } from './util.ts'
+import { followEdge, followsOf } from './follow.ts'
 import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import { resolve } from './resolve.ts'
 import { seedOf } from './seed.ts'
@@ -23,13 +26,28 @@ const idOrder = (a: Feature, b: Feature): number => (a.id < b.id ? -1 : a.id > b
 
 export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Issue[] } {
   const issues: Issue[] = [], at = new Map(map.features.map((f, i) => [f.id, i]))
-  // the finished features, by id: the author's without a generator, then each generator's output once it has run. A
-  // generator sees only these: one still to run is invisible, so its input (a guide, a region) never leaks
-  const current = new Map(map.features.filter(f => !f.gen).map(f => [f.id, f])), resolved = new Map<string, ReturnType<typeof resolve>>()
+  // the finished features, by id: the author's without a generator or a shared edge, then each of those once it has
+  // run. A generator sees only these: one still to run is invisible, so its input (a guide, a region) never leaks
+  const current = new Map(map.features.filter(f => !f.gen && !f.follow).map(f => [f.id, f])), resolved = new Map<string, ReturnType<typeof resolve>>()
   const res = (f: Feature) => { let r = resolved.get(f.id); if (!r) { r = resolve(f, map, cat); resolved.set(f.id, r) } return r }
   const children: Feature[] = [], ran = new Set<string>(), failed = new Set<string>()
   const pinnedParents = pinnedParentsOf(map.features)
-  const runOne = (f: Feature) => {
+  const runOne = (authored: Feature) => {
+    // shared edges first (docs/plans/active/m3d-follow.md): each edge's points into the outer ring, before its `at`
+    let f = authored
+    if (f.follow) {
+      const edges = followsOf(f), outer = [...f.area![0]], many = Array.isArray(f.follow)
+      for (const n of edges.map((_, n) => n).sort((a, b) => (edges[b].at ?? 0) - (edges[a].at ?? 0))) {
+        const e = edges[n], line = current.get(e.id), ep = `features[${at.get(f.id)}].follow${many ? `[${n}]` : ''}`
+        if (!line?.line) { issues.push({ id: f.id, path: ep, message: `"${e.id}" is no line once expanded` }); failed.add(f.id); return }
+        try { outer.splice(e.at ?? 0, 0, ...followEdge(line.line, e)) }
+        catch (err) { issues.push({ id: f.id, path: ep, message: (err as Error).message }); failed.add(f.id); return }
+      }
+      // the ring takes the lines' centrelines; apply keeps the area off the cells the lines take (`clear`)
+      const clear = [...listOf<Clear>(f.clear), ...edges.map(e => (e.offset ? { id: e.id, offset: e.offset } : { id: e.id }))]
+      f = { ...Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'follow')), area: [outer, ...f.area!.slice(1)], clear } as unknown as Feature
+      if (!f.gen) { current.set(f.id, f); return }
+    }
     const name = Object.keys(f.gen!)[0], params = f.gen![name] as Record<string, unknown>, spec = GENERATOR_SPECS[name]
     const origin = { generator: name, params, version: EXPAND_VERSION }
     let out: GenOutput
@@ -58,13 +76,14 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
   // order, each seeing only finished features. A group of several is a cycle: an error naming its members and how to
   // break it. A generator reading one that failed (or a cycle) is skipped, so the first error is the one reported.
   // The file's order and the ids never matter (beyond seeds).
-  const gens = [...map.features.filter(f => f.gen)].sort(idOrder)
-  const specOf = (f: Feature) => GENERATOR_SPECS[Object.keys(f.gen!)[0]]
-  const paramsOf = (f: Feature) => f.gen![Object.keys(f.gen!)[0]] as Record<string, unknown>
-  const readsOf = new Map(gens.map(f => [f.id, specOf(f).reads?.(f, paramsOf(f)) ?? []]))
-  const produces = new Map(gens.map(g => { const k = res(g).kind; return [g.id, [...(specOf(g).removesSelf ? [] : [k]), ...(specOf(g).childKinds?.(k, paramsOf(g)) ?? [])]] }))
+  // a feature with a shared edge is in the chain too: it reads the lines it follows
+  const gens = [...map.features.filter(f => f.gen || f.follow)].sort(idOrder)
+  const specOf = (f: Feature): GenSpec | undefined => (f.gen ? GENERATOR_SPECS[Object.keys(f.gen)[0]] : undefined)
+  const paramsOf = (f: Feature) => (f.gen ? f.gen[Object.keys(f.gen)[0]] as Record<string, unknown> : {})
+  const readsOf = new Map(gens.map(f => [f.id, [...followsOf(f).map(e => e.id), ...(specOf(f)?.reads?.(f, paramsOf(f)) ?? [])]]))
+  const produces = new Map(gens.map(g => { const k = res(g).kind, sp = specOf(g); return [g.id, [...(sp?.removesSelf ? [] : [k]), ...(sp?.childKinds?.(k, paramsOf(g)) ?? [])]] }))
   const matching = (f: Feature, g: Feature) => readsOf.get(f.id)!.filter(sel => sel === g.id || childOf(sel)?.parent === g.id || produces.get(g.id)!.some(k => kindMatches(sel, k)))
-  const peers = (f: Feature, g: Feature) => !!specOf(f).peers && specOf(f) === specOf(g)
+  const peers = (f: Feature, g: Feature) => !!specOf(f)?.peers && specOf(f) === specOf(g)
   const reads = (f: Feature, g: Feature) => f !== g && !peers(f, g) && matching(f, g).length > 0   // its own output is its own business (a scatter's siblings)
   const index = new Map<string, number>(), low = new Map<string, number>(), onStack = new Set<string>(), stack: Feature[] = []
   let counter = 0
@@ -84,7 +103,7 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
       for (const h of group) {
         const how = group.filter(o => reads(h, o)).map(o => `"${o.id}" (by ${matching(h, o).map(s => `'${s}'`).join(', ')})`).join(', ')
         const mix = group.every(o => specOf(o) === GENERATOR_SPECS.scatter) ? ", or place their kinds jointly in one scatter's mix" : ''
-        issues.push({ id: h.id, path: `features[${at.get(h.id)}].gen`, message: `it reads ${how}, and they read it back: generators must form a chain. Drop one side's read (keeping clear on one side is enough)${mix}` })
+        issues.push({ id: h.id, path: `features[${at.get(h.id)}].${h.gen ? 'gen' : 'follow'}`, message: `it reads ${how}, and they read it back: generators must form a chain. Drop one side's read (keeping clear on one side is enough)${mix}` })
         failed.add(h.id)
       }
       return
@@ -95,7 +114,7 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
   // peers (decision 0023) do not read each other, so they must not be able to meet: whatever their seeds, their zones
   // (and an author's own area) lie more than the gap apart, checked before anything runs. One issue per peer, naming
   // every peer too close to it
-  for (const spec of new Set(gens.map(specOf))) if (spec.peers) {
+  for (const spec of new Set(gens.map(specOf))) if (spec?.peers) {
     const { gap, reach } = spec.peers, attrsOf = (id: string) => res(current.get(id)!).attrs
     const ps = gens.filter(g => specOf(g) === spec).map(g => ({ g, zone: reach(g, current, attrsOf) }))
     const close = new Map<string, string[]>()
@@ -120,7 +139,7 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
   for (const f of gens) if (!index.has(f.id)) strong(f)
   // every selector that names a feature names one of the expanded map (or a generator that ran and made nothing, or
   // the parent of pinned children): checked once everything has run, so the answer never depends on the order
-  for (const f of gens) if (ran.has(f.id)) for (const k of specOf(f).selects ?? []) {
+  for (const f of gens) if (ran.has(f.id)) for (const k of specOf(f)?.selects ?? []) {
     const sels = (f.gen![Object.keys(f.gen!)[0]] as Record<string, unknown>)[k]
     if (Array.isArray(sels)) sels.forEach((sel, n) => {
       if (typeof sel === 'string' && !isKindName(cat, sel) && !current.has(sel) && !ran.has(sel) && !pinnedParents.has(sel)) issues.push({ id: f.id, path: `features[${at.get(f.id)}].gen.${Object.keys(f.gen!)[0]}.${k}[${n}]`, message: `"${sel}" names nothing on the expanded map` })
@@ -133,7 +152,9 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
   for (const i of validate({ ...map, features }, cat)) {
     const own = i.id !== null && at.has(i.id), child = !own && i.id !== null && children.some(c => c.id === i.id)
     const parent = child ? children.find(c => c.id === i.id)!.origin!.parent! : null
-    issues.push({ ...i, id: parent ?? i.id, path: own ? i.path.replace(/^features\[\d+\]/, `features[${at.get(i.id!)}]`) : parent ? `features[${at.get(parent)}].gen (child ${i.id}: ${i.path})` : i.path, message: `after expansion: ${i.message}` })
+    // a ring with shared edges is counted as expanded (the edges' points included), not as the author wrote it
+    const shared = own && map.features[at.get(i.id!)!].follow !== undefined && /\.area/.test(i.path) ? ' (counting the ring as expanded, its shared edges included)' : ''
+    issues.push({ ...i, id: parent ?? i.id, path: own ? i.path.replace(/^features\[\d+\]/, `features[${at.get(i.id!)}]`) : parent ? `features[${at.get(parent)}].gen (child ${i.id}: ${i.path})` : i.path, message: `after expansion: ${i.message}${shared}` })
   }
   const byIndex = features.filter(f => at.has(f.id)).map(f => ({ f, i: at.get(f.id)! }))
   features.sort(idOrder)

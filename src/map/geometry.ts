@@ -114,6 +114,19 @@ export function pointAt(line: Pt[], s: number): [number, number, number, number]
   return [line[0][0], line[0][1], 1, 0]
 }
 
+// the part of a polyline between distances a < b along it: its points at a and b and every vertex between
+export function stretch(line: Pt[], a: number, b: number): Pt[] {
+  const out: Pt[] = [pointAt(line, a).slice(0, 2) as Pt]
+  let acc = 0
+  for (let k = 0; k + 1 < line.length; k++) {
+    const dx = line[k + 1][0] - line[k][0], dz = line[k + 1][1] - line[k][1]
+    acc += Math.sqrt(dx * dx + dz * dz)
+    if (acc > a && acc < b) out.push(line[k + 1])
+  }
+  out.push(pointAt(line, b).slice(0, 2) as Pt)
+  return out
+}
+
 // every point where two polylines cross, in order along the first; exact, on whole centimetres (integers). A point
 // lying exactly on the other line is decided by "simulation of simplicity": the first line is taken as shifted by an
 // infinitesimal step along PERTURB, a direction no segment on a map is parallel to (its x is 1000003 times its z, and

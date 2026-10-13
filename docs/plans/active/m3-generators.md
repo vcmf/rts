@@ -81,7 +81,7 @@ cannot be both short and rich.
   Five map seeds give five valid, distinct expansions that compile to sim data and run the S1e battle with finite
   state.
 
-**M3d** (after M3b; M3c became trees and paved roads, `docs/plans/active/m3c-trees.md`): `follow`, shared edges. An area's ring may take part of another feature's line, offset to
+**M3d** (after M3b; M3c became trees and paved roads, `docs/plans/done/m3c-trees.md`): `follow`, shared edges. An area's ring may take part of another feature's line, offset to
 one side, so a wood bounded by a stream shares its bank. It changes the shape grammar (a ring point may then be a
 reference), so it is its own PR.
 

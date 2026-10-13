@@ -1,11 +1,11 @@
 ---
 status: current
 last_reviewed: 2026-10-13
-code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0023-generators-form-a-chain, 0024-free-standing-trees]
+code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0023-generators-form-a-chain, 0024-free-standing-trees, 0025-shared-edges-are-the-line]
 ---
 
-# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3c)
+# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d)
 
 A map is a strict JSON file (`maps/<id>.map.json`): a list of features, each with an id, a dotted kind from the
 kinds catalogue (`maps/kinds.json`), one shape and attribute overrides. This system checks such a file, resolves
@@ -27,9 +27,8 @@ maps/kinds.json ──► checkCatalogue ─┐
 - The catalogue is the only place attributes, units, ranges and kinds are declared. Adding a kind or an attribute
   is a data change.
 - The draft page shows exactly what the code computes: the page's worker and the CLI run the same functions.
-- Not yet: generators (M3: a `gen` is validated but reported by `expand`), shared edges (`follow`, M3), water
-  levels and carving, bridge decks and works' earthworks (M2), compiling to the sim's or the look's data (M2, M4),
-  editing on the page.
+- Not yet: works' earthworks, compiling to the look's data (M4), areas sharing edges with other areas (only lines
+  are shared), editing on the page.
 
 ## Constraints
 
@@ -94,7 +93,26 @@ maps/kinds.json ──► checkCatalogue ─┐
     exact on whole centimetres: a point exactly on the other line is decided by simulation of simplicity (the first
     line shifted infinitesimally in a fixed direction), so a pass through a vertex crosses once and a touch
     nowhere; a line's own end on the other line takes its neighbour's side;
-  - a pinned feature (no `gen`, with an `origin`) is just a feature.
+  - a pinned feature (no `gen`, with an `origin`) is just a feature;
+  - **shared edges** (`follow`, `src/map/follow.ts`, decision 0025): an area's outer ring may take part of a line
+    feature, so a wood shares a stream's bank. `{ id, offset?, from, to, at? }`, or a list: the edge is the line's
+    own centreline between the points nearest `from` and `to` (as expanded, so it moves with a meander), in that
+    order (on a closed line, the shorter way round), put before the ring's point `at` (default 0); the ring's own points hold the rest of the boundary (with a
+    `follow`, as few as one; the whole ring is checked after expansion, and its errors say they count the expanded
+    ring). The ring's other points decide the side. Expansion records `clear: [{ id, offset? }]` on the feature;
+    `clear` may also be written by hand (a wood that keeps off a road it crosses). A feature with `follow` is in the
+    chain (it reads the lines it follows, so it waits for a meander; what reads it waits for its ring), and
+    `follow` leaves the expanded map. A street village's own area cannot follow (its reach is checked before
+    expansion);
+  - **keeping off a line** (`clear`, apply): an area paints none of the cells its lines take, computed by the very
+    rule that paints each line (`paintLine` with `lineReach`, `barrierCells`, a cut's or a ditch's own mark, a
+    sunken way's cut), widened by the offset (so a hedge's gates and a stream's ends keep their shape). So no cell is both the line's and the area's,
+    and (offset 0) none between them is left out, at any angle, on any seed; a scatter whose region follows a line
+    passes `clear` to its children (a mix's too). A ramp's `edge` counts from where the cells begin. Only ground,
+    vegetation, buildings, earthworks and zones take `follow` or `clear` (`KEEPS_OFF`; relief edits move heights,
+    water paints its own way), and a mix's entries too when its region does. Other readers of the ring (a scatter's `avoid` and `within`, a village's keep-clear, the look in M4) see
+    it reach the line's centreline: an `avoid` keeps a little further off than it must, a `within` counts a
+    little more as near. Open question: whether they should subtract the cleared band.
 - **The generators** (`src/map/generators.ts`: for each, the shape it reads, the shape it writes, its checked
   parameters):
   - `meander` (`src/map/meander.ts`): the look world's Kinoshita curve in the exact maths, along the author's guide

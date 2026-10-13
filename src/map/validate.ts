@@ -6,6 +6,8 @@ import { GENERATORS, ID, RESERVED, REFS, SEASONS, SHAPES } from './schema.ts'
 import type { GenSpec } from './generators.ts'
 import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import type { Issue } from './catalogue.ts'
+import { CLEAR_KEYS, FOLLOW_KEYS, KEEPS_OFF } from './follow.ts'
+import { listOf } from './util.ts'
 import { allowedIn, categoryOf, checkCatalogue, checkValue, isKindName, kindChain, kindMeta, kindStates } from './catalogue.ts'
 import { kindMatches } from './reach.ts'
 import { barrierProblem, inRing, isPt, lineCrossing, lineFoldBack, lineLength, onCentimetres, ringArea2, ringCrossing, ringsTouch } from './geometry.ts'
@@ -104,7 +106,51 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       const states = kindStates(cat, chain)
       if (!Object.hasOwn(states, f.state)) bad(id, `${path}.state`, `${kind} has no state "${f.state}" (it has: ${Object.keys(states).join(', ') || 'none'})`)
     }
-    if (f.follow !== undefined) bad(id, `${path}.follow`, 'shared edges arrive in M3c')
+    // shared edges and keeping off lines (decision 0025) hold where apply paints an area's cells and honours `clear`
+    // (KEEPS_OFF): never the relief (it moves heights, not cells) or water (it paints its own way)
+    const keepsOff = KEEPS_OFF.includes(category)
+    for (const k of ['follow', 'clear'] as const) if (f[k] !== undefined && !keepsOff) bad(id, `${path}.${k}`, `${kind} cannot keep off a line: shared edges are for ground, vegetation, buildings, earthworks and zones`)
+    const offsetProblem = (v: unknown) => (v !== undefined && (typeof v !== 'number' || v < 0 || v > 500 || !onCentimetres(v)) ? 'must be 0 to 500 m, at most 2 decimals' : null)
+    // shared edges (docs/plans/active/m3d-follow.md): each follows a line feature, on an area feature
+    if (f.follow !== undefined) {
+      const edges = listOf<unknown>(f.follow), fp = (n: number) => (Array.isArray(f.follow) ? `${path}.follow[${n}]` : `${path}.follow`)
+      if (edges.length === 0) bad(id, `${path}.follow`, 'must be a shared edge or a list of them')
+      if (!Array.isArray(f.area)) bad(id, `${path}.follow`, 'shapes the outer ring of an area: the feature needs an "area" (its other points)')
+      // a generator with peers checks its reach against its own area before expansion, when the ring is not whole yet
+      const g0 = isObj(f.gen) ? Object.keys(f.gen)[0] : undefined
+      if (g0 !== undefined && Object.hasOwn(GENERATOR_SPECS, g0) && GENERATOR_SPECS[g0].peers) bad(id, `${path}.follow`, `a ${g0} feature's own area cannot follow a line (its reach is checked before expansion)`)
+      const ats = new Set<number>(), ringLen = Array.isArray(f.area) && Array.isArray(f.area[0]) ? f.area[0].length : 0
+      edges.forEach((e, n) => {
+        const ep = fp(n)
+        if (!isObj(e)) { bad(id, ep, `must be { ${FOLLOW_KEYS.join(', ')} }`); return }
+        for (const k of Object.keys(e)) if (!FOLLOW_KEYS.includes(k)) bad(id, `${ep}.${k}`, `unknown field (${FOLLOW_KEYS.join(', ')})`)
+        const op = offsetProblem(e.offset); if (op) bad(id, `${ep}.offset`, op)
+        for (const k of ['from', 'to'] as const) { if (!isPt(e[k])) bad(id, `${ep}.${k}`, 'must be a point [x, z]'); else checkInside(e[k] as Pt, `${ep}.${k}`, extent, (p, m) => bad(id, p, m)) }
+        const atN = e.at === undefined ? 0 : e.at
+        if (typeof atN !== 'number' || !Number.isInteger(atN) || atN < 0 || atN > ringLen) bad(id, `${ep}.at`, `must be a whole number from 0 to ${ringLen} (a position in the outer ring)`)
+        else if (ats.has(atN)) bad(id, `${ep}.at`, `another shared edge already goes at ${atN}`)
+        else ats.add(atN)
+        const t = typeof e.id === 'string' ? byId.get(e.id) : undefined
+        if (!t) bad(id, `${ep}.id`, `no feature "${String(e.id)}"`)
+        else if (t.id === id) bad(id, `${ep}.id`, 'a feature cannot follow itself')
+        else if (t.line === undefined) bad(id, `${ep}.id`, `"${t.id}" is not drawn as a line; an edge follows a line (a stream, a road, a hedge…)`)
+      })
+    }
+    // lines an area keeps off (decision 0025): what a shared edge expands to, or the author's own
+    if (f.clear !== undefined) {
+      const many = Array.isArray(f.clear)
+      if (f.area === undefined && f.circle === undefined && f.ellipse === undefined) bad(id, `${path}.clear`, 'keeps an area off lines: the feature needs an area, a circle or an ellipse')
+      listOf<unknown>(f.clear).forEach((e, n) => {
+        const ep = many ? `${path}.clear[${n}]` : `${path}.clear`
+        if (!isObj(e)) { bad(id, ep, `must be { ${CLEAR_KEYS.join(', ')} }`); return }
+        for (const k of Object.keys(e)) if (!CLEAR_KEYS.includes(k)) bad(id, `${ep}.${k}`, `unknown field (${CLEAR_KEYS.join(', ')})`)
+        const op = offsetProblem(e.offset); if (op) bad(id, `${ep}.offset`, op)
+        const t = typeof e.id === 'string' ? byId.get(e.id) : undefined
+        if (!t) bad(id, `${ep}.id`, `no feature "${String(e.id)}"`)
+        else if (t.id === id) bad(id, `${ep}.id`, 'a feature cannot keep off itself')
+        else if (t.line === undefined) bad(id, `${ep}.id`, `"${t.id}" is not drawn as a line`)
+      })
+    }
     // a generator: its name, its parameters, and (below) the shape it reads and the one it writes
     let gen: GenSpec | undefined
     if (f.gen !== undefined) {
@@ -146,7 +192,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
       else if (gen && !gen.input.includes(s as typeof gen.input[number])) bad(id, `${path}.${s}`, `the ${Object.keys(f.gen!)[0]} generator reads ${gen.input.join(', ')}, not ${s}`)
       else if (gen && !meta.shapes.includes(gen.output)) bad(id, `${path}.gen`, `the ${Object.keys(f.gen!)[0]} generator writes a ${gen.output}, which ${kind} does not take`)
       else if (!gen && !meta.shapes.includes(s)) bad(id, `${path}.${s}`, `${kind} takes ${meta.shapes.filter(x => x !== 'none').join(', ') || 'no shape'}, not ${s}`)
-      else checkShape(s, f[s], `${path}.${s}`, extent, (p, m) => bad(id, p, m))
+      else checkShape(s, f[s], `${path}.${s}`, extent, (p, m) => bad(id, p, m), s === 'area' && f.follow !== undefined)
       if (category === 'barrier' && s === 'line' && Array.isArray(f.line) && f.line.every(isPt)) {
         const e = barrierProblem(f.line as Pt[]); if (e) bad(id, `${path}.line[${e[0]}]`, e[1])
         // the band (up to 8 cells, 16 m) must fit inside the grid
@@ -238,7 +284,9 @@ function checkInside(p: Pt, path: string, extent: { w: number; h: number } | nul
   if (extent && (Math.abs(p[0]) + r > extent.w / 2 || Math.abs(p[1]) + r > extent.h / 2)) bad(path, `lies outside the extent (±${extent.w / 2}, ±${extent.h / 2} m)`)
 }
 
-function checkShape(s: typeof SHAPES[number], v: unknown, path: string, extent: { w: number; h: number } | null, bad: (p: string, m: string) => void): void {
+// `partial`: the outer ring is completed by shared edges (`follow`) at expansion, so it may hold a single point and
+// is checked as a ring only then (holes are checked as always)
+function checkShape(s: typeof SHAPES[number], v: unknown, path: string, extent: { w: number; h: number } | null, bad: (p: string, m: string) => void, partial = false): void {
   const pts = (a: unknown, min: number, p: string): Pt[] | null => {
     if (!Array.isArray(a) || a.length < min || !a.every(isPt)) { bad(p, `must be a list of at least ${min} points [x, z]`); return null }
     a.forEach((q, i) => checkInside(q, `${p}[${i}]`, extent, bad))
@@ -258,9 +306,9 @@ function checkShape(s: typeof SHAPES[number], v: unknown, path: string, extent: 
     }
     case 'area': {
       if (!Array.isArray(v) || v.length < 1) { bad(path, 'must be a list of rings: the outer ring, then holes'); return }
-      const rings = v.map((r, k) => pts(r, 3, `${path}[${k}]`))
+      const rings = v.map((r, k) => pts(r, partial && k === 0 ? 1 : 3, `${path}[${k}]`))
       rings.forEach((r, k) => {
-        if (!r) return
+        if (!r || (partial && k === 0)) return
         const last = r[r.length - 1]
         if (last[0] === r[0][0] && last[1] === r[0][1]) { bad(`${path}[${k}]`, 'rings close by themselves: drop the repeated last point'); rings[k] = null; return }
         const c = ringCrossing(r)
@@ -268,7 +316,7 @@ function checkShape(s: typeof SHAPES[number], v: unknown, path: string, extent: 
         if (ringArea2(r) === 0) { bad(`${path}[${k}]`, 'has no area (its points are in a line)'); rings[k] = null }
       })
       const outer = rings[0]
-      if (!outer) return
+      if (!outer || partial) return   // holes inside a ring that is not whole yet: checked after expansion
       rings.forEach((h, k) => {
         if (!h || k === 0) return
         const hp = `${path}[${k}]`
@@ -295,6 +343,9 @@ function checkShape(s: typeof SHAPES[number], v: unknown, path: string, extent: 
 // an expanded map's own check: no generator left (§3.4)
 export function validateExpanded(map: MapFile, cat: Catalogue): Issue[] {
   const out = validate(map, cat)
-  map.features.forEach((f, i) => { if (f.gen !== undefined) out.push({ id: f.id, path: `features[${i}].gen`, message: 'an expanded map has no generators left' }) })
+  map.features.forEach((f, i) => {
+    if (f.gen !== undefined) out.push({ id: f.id, path: `features[${i}].gen`, message: 'an expanded map has no generators left' })
+    if (f.follow !== undefined) out.push({ id: f.id, path: `features[${i}].follow`, message: 'an expanded map has no shared edges left' })
+  })
   return out
 }
