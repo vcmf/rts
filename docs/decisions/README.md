@@ -37,3 +37,4 @@ recorded here on 2026-10-08.
 | [0022](0022-generators-expand-by-dependency.md) | Generators expand by dependency, over finished features, with hard and soft reads | superseded by 0023 |
 | [0023](0023-generators-form-a-chain.md) | Generators form a chain; kinds that keep apart share one scatter's mix | accepted |
 | [0024](0024-free-standing-trees.md) | Free-standing trees stand on the cells, as a list | accepted |
+| [0025](0025-shared-edges-are-the-line.md) | A shared edge is the line itself; the area keeps off the line's cells | accepted |

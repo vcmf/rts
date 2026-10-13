@@ -9,15 +9,15 @@ import type { Catalogue, Feature, MapFile } from './schema.ts'
 import { SHAPES } from './schema.ts'
 import type { Issue } from './catalogue.ts'
 import type { GenOutput, GenSpec } from './generators.ts'
-import { followEdge, followsOf } from './follow.ts'
-import { lineReach } from './apply.ts'
+import type { Clear } from './follow.ts'
+import { followEdge, followsOf, listOf } from './follow.ts'
 import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import { resolve } from './resolve.ts'
 import { seedOf } from './seed.ts'
 import { validate } from './validate.ts'
 import { crossings } from './geometry.ts'
 import { kindMatches, zoneGap, zoneToArea } from './reach.ts'
-import { categoryOf, isKindName } from './catalogue.ts'
+import { isKindName } from './catalogue.ts'
 
 export const EXPAND_VERSION = 3   // recorded in a generated feature's `origin`; bump when any generator's output changes
 
@@ -37,11 +37,14 @@ export function expand(map: MapFile, cat: Catalogue): { map: MapFile; issues: Is
     if (f.follow) {
       const edges = followsOf(f), outer = [...f.area![0]], many = Array.isArray(f.follow)
       for (const n of edges.map((_, n) => n).sort((a, b) => (edges[b].at ?? 0) - (edges[a].at ?? 0))) {
-        const e = edges[n], line = current.get(e.id)!
-        try { outer.splice(e.at ?? 0, 0, ...followEdge(line.line!, lineReach(categoryOf(res(line).kind), res(line).attrs), e)) }
-        catch (err) { issues.push({ id: f.id, path: `features[${at.get(f.id)}].follow${many ? `[${n}]` : ''}`, message: (err as Error).message }); failed.add(f.id); return }
+        const e = edges[n], line = current.get(e.id), ep = `features[${at.get(f.id)}].follow${many ? `[${n}]` : ''}`
+        if (!line?.line) { issues.push({ id: f.id, path: ep, message: `"${e.id}" is no line once expanded` }); failed.add(f.id); return }
+        try { outer.splice(e.at ?? 0, 0, ...followEdge(line.line, e)) }
+        catch (err) { issues.push({ id: f.id, path: ep, message: (err as Error).message }); failed.add(f.id); return }
       }
-      f = { ...Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'follow')), area: [outer, ...f.area!.slice(1)] } as Feature
+      // the ring takes the lines' centrelines; apply keeps the area off the cells the lines take (`clear`)
+      const clear = [...listOf<Clear>(f.clear), ...edges.map(e => (e.offset ? { id: e.id, offset: e.offset } : { id: e.id }))]
+      f = { ...Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'follow')), area: [outer, ...f.area!.slice(1)], clear } as unknown as Feature
       if (!f.gen) { current.set(f.id, f); return }
     }
     const name = Object.keys(f.gen!)[0], params = f.gen![name] as Record<string, unknown>, spec = GENERATOR_SPECS[name]

@@ -28,8 +28,8 @@
     {"id":"poplars-west","kind":"veg.tree.poplar","point":[7.23,480],"gen":{"group":{"count":3}}},
     {"id":"poplars-east","kind":"veg.tree.poplar","point":[102.23,560],"gen":{"group":{"count":2}}},
     {"id":"lone-oak","kind":"veg.tree","point":[-150,-120]},
-    {"id":"brook-wood","kind":"veg.wood.broad","area":[[[-460,110],[-700,110]]],"follow":{"id":"brook","side":"left","from":[-700,0],"to":[-460,0]},"note":"shares the brook's north bank, wherever the meander puts it"},
-    {"id":"road-field","kind":"ground.field.wheat","area":[[[170,-560],[170,-720]]],"follow":{"id":"high-road","side":"right","offset":8,"from":[60,-720],"to":[60,-560]},"note":"along the high road, past the poplars on its verge"},
+    {"id":"brook-wood","kind":"veg.wood.broad","area":[[[-460,110],[-700,110]]],"follow":{"id":"brook","from":[-700,0],"to":[-460,0]},"note":"shares the brook's north bank, wherever the meander puts it"},
+    {"id":"road-field","kind":"ground.field.wheat","area":[[[170,-560],[170,-720]]],"follow":{"id":"high-road","offset":8,"from":[60,-720],"to":[60,-560]},"note":"along the high road, past the poplars on its verge"},
     {"id":"village","kind":"built.village","along":{"id":"high-road","from":1450,"to":1580},"houses":8,"gen":{"street-village":{"min":5}}},
     {"id":"groves","kind":"veg.wood.broad","area":[[[-580,-580],[580,-580],[580,580],[-580,580]]],"gen":{"scatter":{"mix":[{"kind":"veg.wood.broad","count":6,"radiusMin":30,"radiusMax":60,"min":4},{"kind":"ground.field.wheat","count":5,"radiusMin":30,"radiusMax":45,"coherence":0.8,"min":3}],"avoid":["water","way","built","army-south","army-north","brook-wood","road-field"],"clearance":20}},"note":"copses and wheat fields placed together, apart from each other"}
   ]

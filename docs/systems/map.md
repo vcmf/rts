@@ -94,23 +94,21 @@ maps/kinds.json ──► checkCatalogue ─┐
     line shifted infinitesimally in a fixed direction), so a pass through a vertex crosses once and a touch
     nowhere; a line's own end on the other line takes its neighbour's side;
   - a pinned feature (no `gen`, with an `origin`) is just a feature;
-  - **shared edges** (`follow`, `src/map/follow.ts`): an area's outer ring may take part of a line feature, so a
-    wood shares a stream's bank. `{ id, side, offset?, from, to, at? }`, or a list: `from` and `to` snap to the
-    nearest points of the line as expanded (so the edge moves with a meander) and the edge runs between them in
-    that order; it lies `side` of the line (looking along it), `offset` m past where the line stops painting cells
-    (`lineReach`, `src/map/apply.ts`: a road's or stream's half-width, a barrier's band, at least a cell's half), so
-    the two share no cell and leave none between;
-    its points go before the ring's point `at` (default 0), and the ring's own points hold the rest of the
-    boundary (with a `follow`, as few as one; the whole ring is checked after expansion). The edge is the standard
-    offset: points along each segment (every 2 m) moved along its normal, an arc at each outer corner whose chords
-    stay outside the distance, every point closer to the line than the distance dropped (what is left of an inner
-    bend is locally convex, so chords between kept points stay outside), loops cut out, near points merged and
-    straight runs kept to their ends. Every chord is then measured against the line exactly: a bend too tight for
-    the distance (a hairpin narrower than twice it) is an error naming where, never an edge inside the line. A
-    feature with `follow` is in
-    the chain (it reads the lines it follows, so it waits for a meander; what reads it waits for its ring), and
+  - **shared edges** (`follow`, `src/map/follow.ts`, decision 0025): an area's outer ring may take part of a line
+    feature, so a wood shares a stream's bank. `{ id, offset?, from, to, at? }`, or a list: the edge is the line's
+    own centreline between the points nearest `from` and `to` (as expanded, so it moves with a meander), in that
+    order, put before the ring's point `at` (default 0); the ring's own points hold the rest of the boundary (with a
+    `follow`, as few as one; the whole ring is checked after expansion, and its errors say they count the expanded
+    ring). The ring's other points decide the side. Expansion records `clear: [{ id, offset? }]` on the feature;
+    `clear` may also be written by hand (a wood that keeps off a road it crosses). A feature with `follow` is in the
+    chain (it reads the lines it follows, so it waits for a meander; what reads it waits for its ring), and
     `follow` leaves the expanded map. A street village's own area cannot follow (its reach is checked before
-    expansion).
+    expansion);
+  - **keeping off a line** (`clear`, apply): an area paints none of the cells its lines take, computed by the very
+    rule that paints each line (`paintLine` with `lineReach`, `barrierCells`, a cut's or a ditch's own mark), nor
+    any cell closer than `lineReach + offset` when an offset is given. So no cell is both the line's and the area's,
+    and (offset 0) none between them is left out, at any angle, on any seed; a scatter whose region follows a line
+    passes `clear` to its children.
 - **The generators** (`src/map/generators.ts`: for each, the shape it reads, the shape it writes, its checked
   parameters):
   - `meander` (`src/map/meander.ts`): the look world's Kinoshita curve in the exact maths, along the author's guide

@@ -6,7 +6,7 @@ import { GENERATORS, ID, RESERVED, REFS, SEASONS, SHAPES } from './schema.ts'
 import type { GenSpec } from './generators.ts'
 import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import type { Issue } from './catalogue.ts'
-import { FOLLOW_KEYS } from './follow.ts'
+import { CLEAR_KEYS, FOLLOW_KEYS, listOf } from './follow.ts'
 import { allowedIn, categoryOf, checkCatalogue, checkValue, isKindName, kindChain, kindMeta, kindStates } from './catalogue.ts'
 import { kindMatches } from './reach.ts'
 import { barrierProblem, inRing, isPt, lineCrossing, lineFoldBack, lineLength, onCentimetres, ringArea2, ringCrossing, ringsTouch } from './geometry.ts'
@@ -107,7 +107,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
     }
     // shared edges (docs/plans/active/m3d-follow.md): each follows a line feature, on an area feature
     if (f.follow !== undefined) {
-      const edges = Array.isArray(f.follow) ? f.follow : [f.follow], fp = (n: number) => (Array.isArray(f.follow) ? `${path}.follow[${n}]` : `${path}.follow`)
+      const edges = listOf<unknown>(f.follow), fp = (n: number) => (Array.isArray(f.follow) ? `${path}.follow[${n}]` : `${path}.follow`)
       if (edges.length === 0) bad(id, `${path}.follow`, 'must be a shared edge or a list of them')
       if (!Array.isArray(f.area)) bad(id, `${path}.follow`, 'shapes the outer ring of an area: the feature needs an "area" (its other points)')
       // a generator with peers checks its reach against its own area before expansion, when the ring is not whole yet
@@ -118,7 +118,6 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
         const ep = fp(n)
         if (!isObj(e)) { bad(id, ep, `must be { ${FOLLOW_KEYS.join(', ')} }`); return }
         for (const k of Object.keys(e)) if (!FOLLOW_KEYS.includes(k)) bad(id, `${ep}.${k}`, `unknown field (${FOLLOW_KEYS.join(', ')})`)
-        if (e.side !== 'left' && e.side !== 'right') bad(id, `${ep}.side`, 'must be "left" or "right" (of the line, looking along it)')
         if (e.offset !== undefined && (typeof e.offset !== 'number' || e.offset < 0 || e.offset > 500 || !onCentimetres(e.offset))) bad(id, `${ep}.offset`, 'must be 0 to 500 m, at most 2 decimals')
         for (const k of ['from', 'to'] as const) { if (!isPt(e[k])) bad(id, `${ep}.${k}`, 'must be a point [x, z]'); else checkInside(e[k] as Pt, `${ep}.${k}`, extent, (p, m) => bad(id, p, m)) }
         const atN = e.at ?? 0
@@ -129,6 +128,21 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
         if (!t) bad(id, `${ep}.id`, `no feature "${String(e.id)}"`)
         else if (t.id === id) bad(id, `${ep}.id`, 'a feature cannot follow itself')
         else if (t.line === undefined) bad(id, `${ep}.id`, `"${t.id}" is not drawn as a line; an edge follows a line (a stream, a road, a hedge…)`)
+      })
+    }
+    // lines an area keeps off (decision 0025): what a shared edge expands to, or the author's own
+    if (f.clear !== undefined) {
+      const many = Array.isArray(f.clear)
+      if (f.area === undefined && f.circle === undefined && f.ellipse === undefined) bad(id, `${path}.clear`, 'keeps an area off lines: the feature needs an area, a circle or an ellipse')
+      listOf<unknown>(f.clear).forEach((e, n) => {
+        const ep = many ? `${path}.clear[${n}]` : `${path}.clear`
+        if (!isObj(e)) { bad(id, ep, `must be { ${CLEAR_KEYS.join(', ')} }`); return }
+        for (const k of Object.keys(e)) if (!CLEAR_KEYS.includes(k)) bad(id, `${ep}.${k}`, `unknown field (${CLEAR_KEYS.join(', ')})`)
+        if (e.offset !== undefined && (typeof e.offset !== 'number' || e.offset < 0 || e.offset > 500 || !onCentimetres(e.offset))) bad(id, `${ep}.offset`, 'must be 0 to 500 m, at most 2 decimals')
+        const t = typeof e.id === 'string' ? byId.get(e.id) : undefined
+        if (!t) bad(id, `${ep}.id`, `no feature "${String(e.id)}"`)
+        else if (t.id === id) bad(id, `${ep}.id`, 'a feature cannot keep off itself')
+        else if (t.line === undefined) bad(id, `${ep}.id`, `"${t.id}" is not drawn as a line`)
       })
     }
     // a generator: its name, its parameters, and (below) the shape it reads and the one it writes

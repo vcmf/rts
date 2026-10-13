@@ -26,16 +26,17 @@ export const CELL = 2   // m (decision 0021)
 const FREEBOARD = 0.4, BANK_OUT = 3, LEVEL_STEP = 2, SHORE_IN = 10, BRIDGE_REACH = 4
 const WAY_WIDTH = 5, WATER_WIDTH = 6, EDIT_WIDTH = 4, LANDFORM_WIDTH = 100, VEG_LINE = 4, WORK_LINE = 6
 
-// How far from its centreline a line feature takes cells, as apply paints it: a cell whose centre lies closer (strictly)
-// is the line's. The painters below take it from here, and an edge that follows the line (src/map/follow.ts) starts
-// here, so the two share no cell (a barrier's band is barrierCells', from the same thickness)
-export function lineReach(category: string, attrs: Record<string, AttrValue>): number {
-  const c = CELL, painted = (hw: number) => Math.max(hw, c / 2 + 0.01)
+// How far from its centreline a line feature takes cells, as apply paints it (the painters below take it from here):
+// a road's or a stream's half-width, at least just over half a cell; a barrier's band; a cut's or a ditch's width and
+// half its soft edge (where its weight reaches one half); 0 for a line that takes no cell (a row of trees, a ridge)
+export function lineReach(kind: string, attrs: Record<string, AttrValue>): number {
+  const c = CELL, painted = (hw: number) => Math.max(hw, c / 2 + 0.01), category = categoryOf(kind)
   if (category === 'barrier') return num(attrs.thickness, 2) * c / 2
   if (category === 'water') return painted(num(attrs.width, WATER_WIDTH) / 2)
   if (category === 'way') return painted(num(attrs.width, WAY_WIDTH) / 2)
-  if (category === 'veg') return attrs.growth === 'tree' ? 0 : painted(VEG_LINE / 2)   // a row of trees paints no cell
+  if (category === 'veg') return attrs.growth === 'tree' ? 0 : painted(VEG_LINE / 2)
   if (category === 'built' || category === 'work') return painted(WORK_LINE / 2)
+  if (kind === 'relief.cut' || kind === 'relief.ditch') return num(attrs.width, EDIT_WIDTH) / 2 + num(attrs.edge, 5) / 2
   return 0
 }
 
@@ -274,7 +275,32 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
   // 3–6. the cell layers, in painting order within each
   const paintArea = (f: Feature, layer: Uint16Array, k1: number, onCell?: (cell: number, edge: number) => void, needEdge = false) => {
     const field = areaField(f); if (!field) return
-    cells(field.box, 0, (i, j, x, z) => { if (field.inside(x, z)) { layer[j * nx + i] = k1; onCell?.(j * nx + i, needEdge ? field.edge(x, z) : 0) } })
+    const kept = keptOff(f)
+    cells(field.box, 0, (i, j, x, z) => { if (field.inside(x, z) && !kept?.(j * nx + i, x, z)) { layer[j * nx + i] = k1; onCell?.(j * nx + i, needEdge ? field.edge(x, z) : 0) } })
+  }
+  // the cells a line takes, by the very rule that paints it (decision 0025): a shared edge's area keeps off them, and
+  // off `offset` m more, so no cell is both and none between is left out. Made once per line
+  const taken = new Map<string, Uint16Array>()
+  const takenBy = (id: string): Uint16Array => {
+    let t = taken.get(id)
+    if (t) return t
+    t = new Uint16Array(n)
+    const g = byId.get(id)!, r = L.table[index.get(id)! - 1], put = (cell: number) => { t![cell] = 1 }
+    if (g.line && categoryOf(r.kind) === 'barrier') barrierCells(g.line, num(r.attrs.thickness, 2), r.attrs.gaps as { every: number; width: number } | undefined, (i, j) => { if (i >= 0 && j >= 0 && i < nx && j < nz) put(j * nx + i) }, x0, z0)
+    else if (g.line && (r.kind === 'relief.cut' || r.kind === 'relief.ditch')) {
+      // the edit's own mark: its weight at least one half (step 2)
+      const w2 = num(r.attrs.width, EDIT_WIDTH) / 2, edge = num(r.attrs.edge, 5)
+      cells(lineBox(g.line), w2 + edge + c, (i, j, x, z) => { const d = nearLine(g.line!, x, z).d; if ((d <= w2 ? 1 : edge > 0 ? smooth(1 - (d - w2) / edge) : 0) >= 0.5) put(j * nx + i) })
+    }
+    else if (g.line && lineReach(r.kind, r.attrs) > 0) paintLine(g.line, lineReach(r.kind, r.attrs), t, 1)
+    taken.set(id, t)
+    return t
+  }
+  const keptOff = (f: Feature): ((cell: number, x: number, z: number) => boolean) | null => {
+    const clear = f.clear as { id: string; offset?: number }[] | undefined
+    if (!clear?.length) return null
+    const ls = clear.map(e => { const r = L.table[index.get(e.id)! - 1]; return { mask: takenBy(e.id), line: byId.get(e.id)!.line!, near: lineReach(r.kind, r.attrs) + (e.offset ?? 0), offset: e.offset ?? 0 } })
+    return (cell, x, z) => ls.some(l => l.mask[cell] === 1 || (l.offset > 0 && nearLine(l.line, x, z).d < l.near))
   }
   // a line takes the cells whose centre lies strictly within its half-width, and at least the cells beside it (a
   // 1.5 m path, a 2 m rill): widths round the same way for every line (a 6 m stream and a 5 m road on even metres
@@ -346,7 +372,7 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
       continue
     }
     const dens = (cell: number, input: { edge?: number; along?: number }) => { L.density[cell] = Math.round(255 * Math.max(0, Math.min(1, ramp(a.density, input, 0)))) }
-    if (f.line) paintLine(f.line, lineReach(cat0, a), L.veg, k1, (cell, along) => dens(cell, { along }))
+    if (f.line) paintLine(f.line, lineReach(r.kind, a), L.veg, k1, (cell, along) => dens(cell, { along }))
     else {
       if (cat0 === 'ground') paintArea(f, L.ground, k1)
       paintArea(f, L.veg, k1, (cell, edge) => dens(cell, { edge }), typeof a.density === 'object')
@@ -354,13 +380,13 @@ export function apply(map: MapFile, cat: Catalogue): Layers {
   }
   for (const { f, r } of order) {
     const cat0 = categoryOf(r.kind), k1 = index.get(f.id)!, a = r.attrs
-    if (cat0 === 'way' && f.line) paintLine(f.line, lineReach(cat0, a), L.way, k1)
+    if (cat0 === 'way' && f.line) paintLine(f.line, lineReach(r.kind, a), L.way, k1)
     if (cat0 === 'barrier' && f.line) barrierCells(f.line, num(a.thickness, 2), a.gaps as { every: number; width: number } | undefined, (i, j) => { if (i >= 0 && j >= 0 && i < nx && j < nz) L.barrier[j * nx + i] = k1 }, x0, z0)
   }
   for (const { f, r } of order) {
     const cat0 = categoryOf(r.kind), k1 = index.get(f.id)!
     if (cat0 === 'built' || cat0 === 'work') {
-      if (f.line) paintLine(f.line, lineReach(cat0, r.attrs), L.built, k1)
+      if (f.line) paintLine(f.line, lineReach(r.kind, r.attrs), L.built, k1)
       else if (f.area || f.circle || f.ellipse) paintArea(f, L.built, k1)
       else if (f.carries && f.crosses) {
         // the deck: the road's cells where it crosses the water, level with the higher of the road's two ends

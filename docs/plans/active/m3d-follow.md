@@ -18,23 +18,24 @@ an edge, stored once: the line itself.
 
 ## Scope
 
-- **`follow`** on an area feature: one shared edge, or a list of them:
-  `{ "id", "side": "left" | "right", "offset"?: m, "from": [x, z], "to": [x, z], "at"?: n }`.
-  - `id`: a feature drawn as a line (a stream, a road, a hedge…), generated or not;
-  - `from`, `to`: points snapped to the nearest point of that line's expanded shape (like a ford's `near`), so
-    the edge stays put when a meander changes; the edge runs along the line from one to the other, either way;
-  - `side`: left or right of the line, looking along its own direction;
-  - `offset`: metres beyond the line's edge (half its width), default 0 (the bank itself);
+- **`follow`** on an area feature (decision 0025, after redesign): one shared edge, or a list of them:
+  `{ "id", "offset"?: m, "from": [x, z], "to": [x, z], "at"?: n }`.
+  - `id`: a feature drawn as a line (a stream, a road, a hedge, a ditch…), generated or not;
+  - `from`, `to`: points snapped to the nearest point of that line as expanded (like a ford's `near`), so the edge
+    moves with a meander; the edge is the line's centreline between them, either way;
+  - `offset`: metres past where the line stops painting cells, default 0;
   - `at`: where the edge's points go in the area's outer ring (before the ring's point `at`), default 0.
 
-  The area's own outer ring holds the rest of the boundary; with a `follow` it may hold a single point.
+  The area's own outer ring holds the rest of the boundary, and so decides the side; with a `follow` it may hold a
+  single point.
 - **Expansion:** a feature with `follow` reads the ids it follows, so it runs after them in the chain (decision
-  0023): after a meander. Its outer ring is then built (the edge offset by vertex normals, mitred and capped, on
-  whole centimetres), and `follow` leaves the expanded map, like `gen`. If it also has a generator (a scatter's
-  region, a street village's own area), the ring is built first. The expanded map is validated as always, so a
-  ring that crosses itself (an offset too large for a bend) is an error naming the feature.
+  0023): after a meander. Its ring takes the centrelines, it records `clear: [{ id, offset? }]`, and `follow`
+  leaves the expanded map. If it also has a generator (a scatter's region), the ring is built first, and a
+  scatter's children carry `clear`.
+- **Apply:** an area with `clear` paints none of the cells the line takes (by the line's own painting rule) nor any
+  within `offset` past its reach. `clear` may be written by hand too.
 - **Validation** before expansion: the reference names a line feature; the fields' types and ranges; `follow`
-  only on area features; `at` within the ring; edges in a list at distinct `at`s.
+  only on area features; `at` within the ring; edges in a list at distinct `at`s; `clear`'s fields and lines.
 - **Maps:** `maps/generated.map.json` gains a wood along the brook's north bank and a field along the high road,
   each sharing its edge.
 
@@ -43,10 +44,10 @@ shared arcs for now; the draft page drawing shared edges specially.
 
 ## Acceptance
 
-1. A wood following a meandered stream's bank keeps its ring at the bank (offset 0: no cell of the wood is the
-   stream's, and none between them is meadow) for five seeds.
-2. `from`/`to` in either order give the same ring, reversed; `side` and `offset` behave as stated; `at` places
-   the edge.
+1. A wood following a line (a meandered stream, a road, a hedge, a wall, a path, a ditch, a cut; sharp corners and
+   a hairpin) shares no cell with it and leaves none between, on any seed (offset 0).
+2. `from`/`to` in either order give the same ring, reversed; `offset` keeps the area that far further off; `at`
+   places the edge.
 3. A cycle through `follow` (an area following a line that reads the area) is the chain's error. (No generator
    that writes a line reads anything today, so no such cycle can be built yet; the error's path names `.follow`
    for a feature without a generator.)
@@ -83,3 +84,26 @@ shared arcs for now; the draft page drawing shared edges specially.
   line painters take their reach from `lineReach`, the one rule the edge uses.
 - **Light:** `forwardOnly` went with the mitre; rounding now happens before the loops are cut and again after.
   `meet` stays beside `segmentsMeet` (it needs the fraction; parallel folds cannot happen on an offset curve).
+
+**Round 3** (10 findings, 2 severe): **stop** (the third round with a severe finding, the same class each time).
+- **Severe:** the edge was measured only against the followed stretch, so past `from` or `to` it could sit inside
+  another leg of the line (a hairpin); and rounding to centimetres put it millimetres inside the line's reach, so
+  a cell could be both (10 of 180 meander runs).
+- **Moderate:** ditches and cuts gave no reach; inner corners left a meadow cell.
+- The user chose **the edge is the line itself**.
+
+### Redesign: the line itself, and `clear` (decision 0025)
+
+- The ring takes the line's centreline between `from` and `to`; no offset geometry (`side`, the mitre, the arcs,
+  the loop removal and the chord check are gone).
+- Expansion records `clear: [{ id, offset? }]`; apply paints none of the area's cells that the line takes, by the
+  line's own rule (`paintLine` with `lineReach`, `barrierCells`, a cut's or a ditch's mark), nor any within
+  `offset` past its reach. `clear` may be written by hand.
+- Tests check the invariant on every case (each cell inside the ring is the line's or the area's, never both,
+  never neither): straight banks; meandered streams and bent roads over 15 seeds, three widths, both sides;
+  corners of 100° to 170° on both sides and a hairpin; hedges, walls, paths, ditches and cuts; a scatter's region.
+- Taken with it from round 3: errors on an expanded ring say they count it as expanded; a failing edge names
+  `follow[n]`; an expanded line that is no line is an error, not a JavaScript one; `lineReach` takes the kind, so
+  cuts and ditches have their reach; the one-or-list helper is shared.
+
+The round count restarts.

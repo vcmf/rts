@@ -23,7 +23,7 @@ export interface Origin { generator: string; params: Record<string, unknown>; ve
 
 // a feature's own fields; every other key is an attribute from the catalogue
 export const RESERVED = ['id', 'kind', 'preset', 'note', 'source', 'priority', 'state', 'seasons', 'gen', 'origin',
-  ...SHAPES, 'on', 'carries', 'crosses', 'near', 'along', 'follow'] as const
+  ...SHAPES, 'on', 'carries', 'crosses', 'near', 'along', 'follow', 'clear'] as const
 export const REFS = ['on', 'carries', 'crosses', 'near', 'along'] as const
 export type RefName = typeof REFS[number]
 
