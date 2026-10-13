@@ -44,6 +44,8 @@ export interface Nature {
   // under cards: the card meshes, which cast the crowns' shadows, and the pack models they replace, which cast nothing
   // (src/look/bakes.ts; the trunk meshes cast the trunks')
   cardCasters?: { leaf: BaseTexture; cards: Mesh[]; packs: Mesh[] }
+  // the meadow's growth at a point (src/look/meadow.ts): 0..1, and the grass's height factor (pasture shorter)
+  growth(x: number, z: number): [number, number]
 }
 
 // what may grow on each class of the cover (docs/plans/active/l5-macro.md): grass, flowers, plants, bushes, stumps
@@ -61,7 +63,7 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
 }
 
 // cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md, ?trees=cards)
-export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off'): Nature {
+export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off', meadow = false): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
 
@@ -177,10 +179,22 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const a = rr() * 6.28, r = 4 + Math.pow(rr(), 0.8) * 175, x = Math.cos(a) * r, z = Math.sin(a) * r * 0.9 + 4
     const flowery = fbm(x * 0.03 + 4, z * 0.03 - 2) > 0.58, k = rr()
     const mdl = flowery && k < 0.5 ? 'Flowers' : k < 0.88 ? 'Grass_Short' : 'Plant_1'
-    addPlaced(mdl, [x, z, mdl === 'Plant_1' ? 1.3 : mdl === 'Flowers' ? 1.4 : 1.6 + rr() * 0.8, rr() * 6.28, rr()])
+    const item: Item = [x, z, mdl === 'Plant_1' ? 1.3 : mdl === 'Flowers' ? 1.4 : 1.6 + rr() * 0.8, rr() * 6.28, rr()]
+    if (!(meadow && mdl === 'Grass_Short')) addPlaced(mdl, item)   // under the meadow (src/look/meadow.ts) its grass replaces these tufts; the stream is unchanged
   }
   // a wheat field on the valley side between the floodplain and the formation zones (docs/art-bible.md §6c: fields above the floodplain)
-  for (let u = 0; u < 30; u += 1.25) for (let v = 0; v < 22; v += 1.3) { const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5, z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5; if (rr() < 0.08) continue; addPlaced('Wheat', [x, z, 1.5 + rr() * 0.4, rr() * 6.28, rr()]) }
+  const addWheat = (item: Item) => { if (!meadow) addPlaced('Wheat', item) }   // under the meadow the field below replaces this lattice; the stream is unchanged
+  for (let u = 0; u < 30; u += 1.25) for (let v = 0; v < 22; v += 1.3) { const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5, z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5; if (rr() < 0.08) continue; addWheat([x, z, 1.5 + rr() * 0.4, rr() * 6.28, rr()]) }
+  // the meadow's wheat (docs/plans/active/l5c-meadow.md): no rows nor columns, a tuft anywhere in each 0.7 m cell of
+  // the field's frame, about twice as dense, and a ragged edge (the noise pushes it in by up to 1.6 m); its own stream
+  if (meadow) {
+    const WR = mulberry(57)
+    for (let u = 0; u < 30; u += 0.7) for (let v = 0; v < 22; v += 0.7) {
+      const uu = u + WR() * 0.7, vv = v + WR() * 0.7, s = 1.5 + WR() * 0.4, yaw = WR() * 6.28, tint = WR()
+      if (Math.min(uu, 30 - uu, vv, 22 - vv) < fbm(uu * 0.35 + 3, vv * 0.35 - 1) * 1.6 || WR() < 0.06) continue
+      addPlaced('Wheat', [-60 + uu * 0.95 + vv * 0.25, -34 + vv - uu * 0.12, s, yaw, tint])
+    }
+  }
   // far woods and hedgerows from cheap bush crowns, never in the apron band, whose ground only the apron mesh knows
   const far: Item[] = [], inBand = (x: number, z: number) => { const m = Math.max(Math.abs(x), Math.abs(z)); return m > D.spec.tile / 2 && m < D.band }
   for (let k = -8; k <= 8; k++) for (let t = -560; t <= 560; t += 6) {
@@ -252,5 +266,13 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // and none on the roads or the village ground (after the every-fourth choice, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
   place('Bush_1', farMat, far.filter((b, i) => i % 4 === 0 && drawn(b))); place('Bush_2', farMat, far.filter((b, i) => i % 4 === 2 && drawn(b)))
-  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined }
+  // the meadow's growth: where the old tufts could stand (the cover's grassy classes and their edges), off the banks
+  // and the water, in the formation zones too (soldiers stand in grass); pasture grazed shorter
+  const growth = (x: number, z: number): [number, number] => {
+    if (!coverAllows(cover, 'Grass_Short', x, z)) return [0, 0]
+    const q = riverQuery(x, z)
+    if (q && q.dist < Math.max(lerpA(RIVER.W, q) / 2 * 1.7, bankReachAt(q)) + 0.4) return [0, 0]
+    return [1, coverAt(cover, x, z) === COVER.pasture ? 0.65 : 1]
+  }
+  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined, growth }
 }

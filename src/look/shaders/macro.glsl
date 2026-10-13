@@ -99,7 +99,7 @@ vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
 #endif
 // THE GROUND'S COLOUR the terrain and the shore band start from, by arm (every painted material has one: setArm,
 // src/look/macro.ts; with none, the shader arm's)
-vec3 groundAt(vec2 xz,float px){
+vec3 groundArm(vec2 xz,float px){
   #if defined(MACRO_BAKE)
   return bakeOnce(xz).rgb;
   #elif defined(MACRO_SHADER)
@@ -113,6 +113,16 @@ vec3 groundAt(vec2 xz,float px){
   #else
   return macroOnce(xz,px).rgb;
   #endif
+}
+vec3 groundAt(vec2 xz,float px){
+  vec3 c=groundArm(xz,px);
+  #ifdef MEADOW
+  // the meadow pattern (docs/plans/active/l5c-meadow.md): the clump field as light and dark patches on meadow and
+  // pasture, the same field the near grass grows from (src/look/meadow.ts), so the far meadow reads as grass
+  float k=coverAt(xz).x,gr=k<0.5?1.0:k<1.5?0.75:0.0;
+  c*=mix(1.0,mix(0.90,1.10,clumpAt(xz)),gr);
+  #endif
+  return c;
 }
 // the class the arm paints at a point (the class check's view, MACRO_DEBUG): the warped lookup's, or the flat arm's
 float classAt(vec2 xz){

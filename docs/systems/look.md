@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-13
-code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png]
+code: [app/look.html, src/look/main.ts, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png]
 decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0003-no-blur-in-gameplay, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage]
 ---
 
@@ -49,6 +49,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/water.ts` | The water ribbon, its materials (the painted water, W4, `docs/systems/river.md`; and the same shader on the tile's ground, for the seam check) and the tree-reflection mask |
 | `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule (and, since L5a, the cover's: what grows on which class) |
 | `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
+| `src/look/meadow.ts` | The meadow near the camera (L5c, below): the meadow map (ground height, growth), three rings of static grass instances around the focus |
 | `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (`?trees=cards`, L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
 | `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), and the passes: depth of field (presentation only, decision 0003), the fused grade |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop, and the debug globals the checks read |
@@ -169,6 +170,30 @@ The plan: `docs/plans/done/shadow-look.md`.
 - **Contact** (`bakes.ts`): a dark core of 0.45 crown radii (at least about 1.6 m: the occlusion map is about 1 m a
   texel) under each tree, in the light map's alpha, which the ground, the water's shore band and the grass read
   (`groundOcc()`), and the crowns do not.
+
+### The meadow (L5c)
+
+The plan: `docs/plans/active/l5c-meadow.md`. On by default; `?meadow=off` puts back the old scatter.
+
+- **The grass near the camera** (`src/look/meadow.ts`, `shaders/meadow.vert|frag`): clumps of the owner's pack grass
+  (`data/meadow-grass.json`, exported from its `Grass_Large` and `Grass_Small`) on three square rings around the
+  camera's focus (`RINGS`: cells of 0.5, 1 and 2 m, 104 slots a side, the large clump near and the small one
+  farther, scaled up with the cell). Each ring is one mesh of static thin instances (identity matrices and a slot,
+  never rewritten); each frame it snaps to its cell. The vertex shader places a clump from its world cell's hash
+  (jitter, size, yaw, lean), so a clump never moves nor changes as the rings follow the camera; it exits first
+  outside its ring's band of distance and outside the view, then reads the **meadow map** (a float texture at 1 m:
+  the ground's height, the growth and the height factor, baked once from `Nature.growth`: the grassy cover and its
+  edges, off the banks and the water; pasture shorter) and the **clump field** (`shaders/meadow.glsl`), and shrinks
+  each clump away across its ring's band (the rings hand over without an edge). The fragment shader is a lean
+  `paint()` (the ramp, the cool band, the sky in the shadow, clouds; no grain, rim nor snow): the ground's colour
+  under the root, darker at the root and lighter, warmer at the tip. In winter the clumps shrink under the snow.
+- **The meadow on the ground** (`groundAt`, `MEADOW`, a define on every painted material): the clump field as light
+  and dark patches on meadow and pasture, the same field the grass grows from; the terrain and the shore band both
+  read `groundAt`, so the banks keep their seam.
+- **The scatter under the meadow** (`src/look/nature.ts`): the old `Grass_Short` tufts are not placed, and the wheat
+  field is placed by a hash a 0.7 m cell with a ragged edge instead of a lattice; both keep the scatter's random
+  stream, so nothing else moves.
+- `?bench=meadow` benches the grass against none (the ground's pattern stays in both arms); `__look.meadowBakeMs`.
 
 ### Soft shadows (the sun's penumbra, the sky's occlusion)
 
