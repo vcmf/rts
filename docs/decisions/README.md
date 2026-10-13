@@ -32,5 +32,5 @@ recorded here on 2026-10-08.
 | [0017](0017-paint-on-units-by-screen-size.md) | Paint on units follows their size on screen | proposed |
 | [0018](0018-battalion-of-400.md) | Battalions of about 400 soldiers, one figure each; the engine reaches 800 | accepted |
 | [0019](0019-shading-data-from-authored-surface.md) | Shading data finer than the heightfield comes from the authored surface | proposed |
-| [0022](0022-soft-ramp-for-foliage.md) | Foliage crowns are painted with a soft ramp | proposed |
+| [0022](0022-soft-ramp-for-foliage.md) | Foliage crowns are painted with a soft ramp | accepted |
 | [0025](0025-review-by-kind-of-pr.md) | Review rounds by kind of PR: code as before, docs one round at most, research none | accepted |

@@ -134,12 +134,12 @@ Every surface is painted with **three value bands**, not a smooth gradient:
 The edges between bands are **broken by the grain texture**, so they read as
 brush edges rather than computed lines.
 
-**Proposed exception, foliage crowns** (decision 0022, open until the owner
-accepts it; built only in the leaf-card arm, `?trees=cards`): the same three
-colours, the shadow still cool, blended over a wide range of light instead of
-three steps, so a crown reads as a round mass of leaves. Its light wraps round
-the crown, it is darker inside, and single leaves catch the sun. Until 0022 is
-accepted, the three bands above are the rule for every surface.
+**One exception, foliage crowns** (decision 0022, accepted 2026-10-13; built in
+the leaf-card arm, `?trees=cards`): the same three colours, the shadow still
+cool, blended over a wide range of light instead of three steps, so a crown
+reads as a round mass of leaves. Its light wraps round the crown, it is darker
+inside, and single leaves catch the sun. Every other surface (ground, water,
+buildings, armies) keeps the three bands.
 
 ### Palette
 - **80% calm field:** muted olive and yellow-greens, dry golds, teal-green

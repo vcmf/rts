@@ -529,12 +529,12 @@ the pack crowns): results in `docs/plans/active/track-e-results/shadows-foliage.
   crown as camera-facing cards cut by a greyscale clump atlas our palette paints, casting leafy shadows. Read as
   painted leaf masses at the near and mid zooms (owner: "it's the way").
 - **L7b, the crowns as volumes** (#61, `docs/plans/done/l7b-crown-volume.md`): a normal per pixel from the
-  crown's ellipsoid, the light through it, a soft ramp (decision 0022, proposed), a darker core, a tilt per leaf
+  crown's ellipsoid, the light through it, a soft ramp (decision 0022, accepted 2026-10-13), a darker core, a tilt per leaf
   (owner: "it's beautiful now the trees").
 - **Cost so far:** `docs/plans/active/track-e-results/shadows-foliage.md` (the dev Mac, a proxy).
 
 **What L7 still owes:**
-- the cards as the default arm, once the guard passes with them (#63), the owner accepts decision 0022 and a forest
+- the cards as the default arm, once the guard passes with them (#63) and a forest
   costs less (the cards' cost is highest where one fills the frame: `docs/plans/done/forest-bench.md`), against fewer,
   larger cards for far crowns, the pack mesh beyond a distance, or a depth pre-pass;
 - the outline at the widest zoom aliases: alpha-to-coverage on MSAA, L8's A/B;
