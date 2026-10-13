@@ -68,7 +68,7 @@ in two stages:
 
 | Stage | Phases | Notes |
 |---|---|---|
-| **1. The painted world (now)** | L0, L2, water W2–W5, L5, LA2, L7, L9w | L9w is L9's look match for ground, water, trees and buildings only (below) |
+| **1. The painted world (now)** | L0, L2, water W2–W5, L5, LA2, L7, LC, L9w | L9w is L9's look match for ground, water, trees and buildings only (below); LC (colour and light) was added by the owner's review of 2026-10-13 |
 | **2. Units (deferred)** | LA0, LA1, L1, L3, L4, L6, L8, the rest of L9 | Kept as written, so the plan is ready when units come back |
 
 What changes while units wait:
@@ -177,6 +177,7 @@ Some acceptance tests need people, not scripts. The owner arranges them:
 - **The readability test (L4):** at least 5 people, blind, 2 s exposures.
 - **The terrain ablation (L5):** at least 3 judges, blind, a fixed checklist.
 - **Anti-aliasing (L8):** a majority of reviewers.
+- **The mood (LC2):** the owner, blind, between three candidates.
 - **The look sign-offs (L9w in stage 1, L9 in stage 2):** the owner, against the target images.
 
 The style agent prepares the material (image sets, randomised order, answer sheets in
@@ -568,12 +569,45 @@ Babylon VAT writes no velocity, and the 12 fps steps reset its history.
 
 **Depends on:** L3, L7. **Estimate:** 2–3 days.
 
+## LC. Colour and light (the owner's review, 2026-10-13)
+
+**Why:** the owner's reference review (`docs/research/colour-and-light-review.md`): the colour theme must become
+"more epic and beautiful, not colourful in the sense of a normal camera" (low chroma, the values making the image,
+the armies the only strong colour), the landscape needs more variants (trees first), and the light tints everything
+orange. Measured: the coats lose their colour to three warm tints stacked (the sun's colour, the valley mist, the
+grade): the French blue from a saturation of 0.58 to 0.08 on the valley floor, the Russian green from hue 133 to
+93, the Austrian white yellow. That breaks art bible pillar 1.
+
+**Order (the owner):** colour first, then bounced light, then trees. One PR a row; each code PR brings its own plan
+in `docs/plans/active/`.
+
+| PR | What | Acceptance | Depends on |
+|---|---|---|---|
+| LC1 | **Moods as data, coats keep their colour.** The light's colours (sun, shadow, haze, mist, the grade, the backlight, the bloom's tint) move from shader constants into one mood table; today's look is its first mood. Unit materials take the light's value but little of its hue (the eye's white balance), in the shared painter's unit path (`KEEP_HUE`), so the figures of L3 and L4 inherit it; the mist over them is capped. The grade spares units through a mask the units write (the post pass cannot tell a Russian coat, hue 93 to 102, from the meadow by hue). A decision record (proposed): units take the light's value, not its hue, an exception to art bible pillar 3. | The ground's goldens unchanged at today's mood. The coat measure, new in the guard: each coat's lit top face at the two spots of the research note, everything on, within 10° of its painted hue and at 70 % of its painted saturation or more (the Austrian white: saturation 0.33 or less). The readability guard no worse. | L5 |
+| LC2 | **Three mood candidates** behind `?mood=`, each with an earth-tone terrain to match: the film's overcast (*Napoleon*, 2023), dusty warm (the ochre battle stills), autumn earth (the farm). A blind judging page, as L5b's. | The owner picks blind (Human gates); every candidate passes the guard and the coat measure. | LC1 |
+| LC3 | **The chosen mood becomes the default.** | A decision record (it replaces the art bible's "golden morning (default)"); art bible §4 (palette, light) rewritten; goldens re-baselined. | LC2 |
+| LC4 | **Bounced light on units and crowns:** a hemisphere ambient, the sky's colour from above and the ground's from below (the macro bake), times the sky's occlusion. It replaces the trees' 15 % ground tint (L5), so the ground is not counted twice. | The coat measure holds; pairs; the frame's cost measured. | LC1 |
+| LC5 | **Bounced light on the ground:** its own coarse RGB texture (the light map's four channels are taken; at about 2 m it costs a few MB), baked on load from the mood's light and the macro colour, and again when the season changes. This is light, not colour: the macro bake stays colour only (`docs/proposals/prepainted-terrain.md`), so a mood or a season costs a rebake of this texture alone. | Pairs; the bake's time (a season change included) and memory measured. | LC1, L5 |
+| LC6 | **Tree species as data:** oak and beech (tall and large; dark brown and smooth grey trunks), birch (white), Lombardy poplar (columnar, along the roads), willow (low and wide, by the water), fruit trees (low, round, by the villages), Scots pine, spruce (narrow dark cones); each species its trunk colour, shape range and where it grows. The shape range also scales the pack crowns (non-uniformly), so the world L9w signs off has the species' shapes. | Pairs; the forest bench (`?wood=big`) within 0.3 ms of main; the guard. | LC3, L7 |
+| LC7 | **The crowns' shapes per species** on the leaf-card crowns (their ellipsoid per species, a random shape within its range). | Pairs; the forest bench. Behind `?trees=cards` while the cards are not the default (#63 is L4's, stage 2). | LC6 |
+
+**Units in stage 1:** units otherwise stay as they are (Current focus). LC1 and LC4 change only how the light's
+colour reaches a coat, in the shared painter, which the figures inherit. #63 (a dark coat in a crown's deep shade)
+stays L4's: LC does not lift coats in shade.
+
+**Docs:** the art bible changes when the owner decides (LC3: the palette and the light; LC6–LC7: §4b's tree
+variety), not before, except LC1's decision record on pillar 3; `docs/systems/look.md` in every PR.
+
+**Feeds:** L9w (its palette, light and haze sign-off is judged in the chosen mood). **Estimate:** 6–10 days, with
+the owner's pick between LC2 and LC3.
+
 ## L9. Look match and prototype exit (research P7)
 
 **Goal:** the look locked against the targets, every budget still met, and the prototype phase closed
 (`docs/plans/active/prototype-plan.md` §1).
 
 **Build** (art bible §4, §6, §6b):
+- in the chosen mood's colours (LC3), so warm only as the mood is warm:
 - the warm saturated terminator;
 - the warm rim;
 - a cool shadow-tint volume;
@@ -599,7 +633,7 @@ terminator on ground and buildings, the rim on foliage tops only, shadow-tint vo
 simplification), signed off as described under Current focus. The units' items, the video-tier
 frame and the full prototype exit wait for stage 2. **Acceptance:** the owner's sign-off, and every
 stage-1 budget (terrain, foliage, buildings, water, post) still holding on the laptop with L9w's
-passes on. **Depends on:** L2, water W2–W5, L5, L7.
+passes on. **Depends on:** L2, water W2–W5, L5, L7, LC3 (the mood it is judged in).
 
 ---
 
@@ -612,6 +646,7 @@ L0 ──► L2 ──┬──► water W2–W5 ─────────┐
   │         ├──► L5 ──────────────────┤
   │         └──► L7 (after LA2) ──────┴──► L9w
   └──► LA2 ──────┘
+                      LC (colour and light: LC1–LC5 after L5, LC6–LC7 after L7; before L9w)
 ```
 
 Stage 2, units (deferred):
@@ -623,7 +658,7 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
                           L6 ─────────────┴──► L9 (full sign-off)
 ```
 
-- **Stage 1's critical path is L0, L2, L7, L9w.** L2 is the base every ground, water and building
+- **Stage 1's critical path is L0, L2, L7, LC, L9w** (L9w is judged in LC3's mood). L2 is the base every ground, water and building
   surface reuses.
 - **The order was risk-first** (L0, L1, L3, L4: performance and readability before most of the look).
   Deferring units moves those two risks later; the readability guard and the reserved unit budget
@@ -661,6 +696,9 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
    comes first?
 
 ## Changes to this plan
+
+- **2026-10-13, colour and light.** Added LC (colour, bounced light, tree species), from the owner's reference
+  review (`docs/research/colour-and-light-review.md`), before L9w.
 
 - **2026-10-13, #63 and the crops.** #63 moved from L7 to L4 (the army side's to fix); standing crops capped under a
   soldier's chest (decision 0026).
