@@ -8,7 +8,7 @@ last_reviewed: 2026-10-13
 Research notes, October 2026, for the look's ground (Track E, `docs/plans/active/track-e-look.md`) and the map's
 ground kinds (the map track's map-engine proposal, on its epic branch: PR #49). The owner's references, Tiny Glade screenshots kept in the owner's local `design/refs/` (not committed:
 `grass.webp`, `grass-2.jpeg`), show its meadow: dense blades darker at the root and lighter toward the tip, petals
-strewn over it; at mid distance the blades merge into soft lighter and darker patches). From three research agents
+strewn over it; at mid distance the blades merge into soft lighter and darker patches. From three research agents
 reading public sources; each finding is marked **sourced** (with its link) or **inference**. No cost below is ours:
 every figure is the source's, on its own hardware, and ours are to be measured.
 
