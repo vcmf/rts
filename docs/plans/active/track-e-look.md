@@ -1,6 +1,6 @@
 ---
 status: active
-last_reviewed: 2026-10-13
+last_reviewed: 2026-10-14
 ---
 
 # Plan: Track E, the painterly look
@@ -583,7 +583,7 @@ in `docs/plans/active/`.
 
 | PR | What | Acceptance | Depends on |
 |---|---|---|---|
-| LC1 | **Moods as data, coats keep their colour.** The light's colours (sun, shadow, haze, mist, the grade, the backlight, the bloom's tint) move from shader constants into one mood table; today's look is its first mood. Unit materials take the light's value but little of its hue (the eye's white balance), in the shared painter's unit path (`KEEP_HUE`), so the figures of L3 and L4 inherit it; the mist over them is capped. The grade spares units through a mask the units write (the post pass cannot tell a Russian coat, hue 93 to 102, from the meadow by hue). A decision record (proposed): units take the light's value, not its hue, an exception to art bible pillar 3. | The ground's goldens unchanged at today's mood. The coat measure, new in the guard: each coat's lit top face at the two spots of the research note, everything on, within 10° of its painted hue and at 70 % of its painted saturation or more (the Austrian white: saturation 0.33 or less). The readability guard no worse. | L5 |
+| LC1 | **Moods as data, coats keep their colour.** The light's colours (sun, shadow, haze, mist, the grade, the backlight, the bloom's tint) move from shader constants into one mood table; today's look is its first mood. Unit materials take the light's value but little of its hue (the eye's white balance), in the shared painter's unit path (`KEEP_HUE`), so the figures of L3 and L4 inherit it; the mist over them is capped. The grade moves into each material, where units take a share of it (the post pass cannot tell a Russian coat, hue 93 to 102, from the meadow by hue, and its alpha carries the depth of field's depth: decision 0027). A decision record (0027, accepted): units take the light's value, not its hue, an exception to art bible pillar 3. | The ground's goldens unchanged at today's mood. The coat measure, new in the guard: each coat's lit top face at the two spots of the research note, everything on, within the bounds of `tools/coat-check.mjs` (LC1b: 10° of its painted hue, 70 % of its saturation; LC1c, the owner judging by eye that units take some of the air: 20° and 45 %; the Austrian white no more saturated than painted). The readability guard no worse. | L5 |
 | LC2 | **Three mood candidates** behind `?mood=`, each with an earth-tone terrain to match: the film's overcast (*Napoleon*, 2023), dusty warm (the ochre battle stills), autumn earth (the farm). A blind judging page, as L5b's. | The owner picks blind (Human gates); every candidate passes the guard and the coat measure. | LC1 |
 | LC3 | **The chosen mood becomes the default.** | A decision record (it replaces the art bible's "golden morning (default)"); art bible §4 (palette, light) rewritten; goldens re-baselined. | LC2 |
 | LC4 | **Bounced light on units and crowns:** a hemisphere ambient, the sky's colour from above and the ground's from below (the macro bake), times the sky's occlusion. It replaces the trees' 15 % ground tint (L5), so the ground is not counted twice. | The coat measure holds; pairs; the frame's cost measured. | LC1 |

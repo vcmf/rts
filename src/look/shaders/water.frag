@@ -110,4 +110,4 @@ void main(){
     }
   }
   c=withStones(c,vW,s,sh,ia.x);   // the stones' foam, over every layer (shore.glsl)
-  gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}
+  gl_FragColor=vec4(airOf(c,vW,lm,0.0),depthA(vW));}

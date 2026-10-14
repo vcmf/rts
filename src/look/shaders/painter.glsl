@@ -84,7 +84,7 @@ vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   // own light is not that of the ground
   float t=clamp(m*(0.35+0.55*n),0.0,0.42)*mix(1.0,mix(0.55,1.0,1.0-(1.0-lm.r)*uShadowsOn),exp(-hAbove*0.5));
   #ifdef KEEP_HUE
-  t=min(t,uUnitMist);   // units: the air in front of them thinner (the mood), so their coats keep their colour
+  t=min(t,uUnitMist);   // units: the air in front of them thinner (the mood), at their own value (airOf)
   #endif
   return mix(c,mix(uMistShade,uMistLit,air),t);}
 // view distance in alpha → depth of field without re-rendering the scene
@@ -216,6 +216,8 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   c+=sunC*uRimCol*rim*rimAmt*0.55*(1.0-cloud(wp)*0.7)*(1.0-sh);       // graphic warm rim
   return c;
 }
+// Rec. 709 luma: the grade and the value units keep (the painted bands use the older 0.3, 0.59, 0.11)
+const vec3 LUMA=vec3(0.2126,0.7152,0.0722);
 // The grade (the mood's, src/look/mood.ts), the last step of every painted material (atmos), so units can take less
 // of it (uUnitGrade): muted warmer greens, the saturation, a split tone, a lift in the darks, a haze toward the top
 // of the frame. It was the finishing pass's, which cannot tell a coat from the meadow (docs/plans/done/lc1b-coats.md)
@@ -227,7 +229,7 @@ vec3 gradeOf(vec3 c){
   amt*=uUnitGrade;
   #endif
   if(amt<=0.0)return c;
-  const vec3 L=vec3(0.2126,0.7152,0.0722);float l=dot(c,L);
+  const vec3 L=LUMA;float l=dot(c,L);
   float green=clamp((c.g-max(c.r,c.b))*3.0,0.0,1.0);
   vec3 g=mix(c,vec3(l)*uGreenTint+(c-vec3(l))*uGreenChroma,green*uGreenAmt);
   g=mix(vec3(dot(g,L)),g,uGradeSat);
@@ -242,3 +244,14 @@ vec3 atmos(vec3 c,vec3 wp){
   float warm=max(dot(normalize(dv+1e-4),normalize(uSunDir.xz)),0.0);
   return gradeOf(mix(c,mix(uHazeCool,uHazeWarm,warm*0.65),f));
 }
+// the air over a painted colour, the last step of every material: the valley mist, the distance haze and the grade.
+// Units (KEEP_HUE) keep their value (Rec. 709 luma) under all of it, in one step: the air turns a coat toward its
+// colour, not its contrast with the ground (decision 0027, docs/plans/done/lc1c-unit-share.md: a white in a bright mist
+// turned toward the ground behind it). Then clamped at 1 by channel: the shoulder of the finishing pass scales a
+// colour by its largest channel, so a warm white over 1 would show darker than the neutral white the clamp leaves
+// (the guard: a white on winter stubble)
+vec3 airOf(vec3 c,vec3 wp,vec4 lm,float hAbove){vec3 a=atmos(mist(c,wp,lm,hAbove),wp);
+  #ifdef KEEP_HUE
+  a=min(a*(dot(c,LUMA)/max(dot(a,LUMA),1e-4)),vec3(1.0));
+  #endif
+  return a;}
