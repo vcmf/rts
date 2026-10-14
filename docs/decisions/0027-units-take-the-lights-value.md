@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-14
 ---
 
@@ -14,26 +14,31 @@ sun's colour, the valley mist and the grade. That breaks art bible pillar 1 (the
 on screen). Pillar 3 ("light as colour": warm where the sun hits) asks for the opposite, for every surface. The eye
 resolves this in life by white balance: under a warm sun we still see a blue coat as blue.
 
+The owner accepted the rule (2026-10-14) after judging the two ends side by side: units in the full light wash into
+the ground, units with almost none of it (LC1b's first shares) read as pasted onto the scene. They asked for the
+middle (`docs/plans/done/lc1c-unit-share.md`).
+
 ## Decision
 
 We will light units (the painter's `KEEP_HUE` path: the army blocks now, the figures from L3) with the light's
-value and only part of its hue. The share is a mood's `units.tint` (`src/look/mood.ts`, 0.25 in `golden`); the
+value and only part of its hue. The share is a mood's `units.tint` (`src/look/mood.ts`, 0.4 in `golden`); the
 lit band's warm lift is a cast, not light, so units take that share of it (a grey lift in its place would wash a
-dark coat's colour out). The valley mist over a unit is capped (`units.mist`, 0.04), and units take
-a share of the grade (`units.grade`, 0), now that the grade is part of each material (`gradeOf`,
-`src/look/shaders/painter.glsl`). Their shadow band keeps its cool hue, as before. Pillar 3 holds for the world and
+dark coat's colour out). The valley mist over a unit is capped (`units.mist`, 0.10, against the ground's 0.42), and units
+take a share of the grade (`units.grade`, 0.2), now that the grade is part of each material (`gradeOf`,
+`src/look/shaders/painter.glsl`); under the mist and the grade a unit keeps its value, so they turn its colour toward
+the air, not its contrast with the ground. Their shadow band keeps its cool hue, as before. Pillar 3 holds for the world and
 for a unit's shadow side; a unit's lit side is white-balanced. Each coat's lit colour is checked by
 `tools/coat-check.mjs`.
 
 ## Consequences
 
-- Good: the coats keep their colour. At both of the note's spots every coat stays within 10° of its painted hue and
-  at 70 % of its saturation or more, and the white stays white (`docs/plans/done/lc1b-coats.md`). Readability
-  improves: 45 of the guard's 48 default-view blocks separate better than before, and none newly fail.
-- Bad: a unit is a little less a part of the scene's light; its warmth comes from the shadow's contrast and the rim,
-  not a warm cast. It also takes none of the grade's haze toward the frame's top (a depth cue): with it, the coats at
-  the top lost about a third of their saturation (the valley spot, measured), against pillar 1.
-- Bad: every mood must set the three shares, and the coat check holds them to the bound.
+- Good: the coats keep their colour. At both of the note's spots every coat stays within 20° of its painted hue and
+  at 45 % of its saturation or more, and the white stays white (`tools/coat-check.mjs`,
+  `docs/plans/done/lc1c-unit-share.md`); in the full light the blue fell to 16 % in the valley and the green moved
+  55°. Keeping the value under the air keeps the guard: no block that separates on LC1b's shares fails.
+- Bad: a unit is a little less a part of the scene's light: it takes some of its warmth, the air and the grade, not
+  all. The Russian green, a dark coat near the meadow's hue, sets the bound: a share past golden's turns it olive.
+- Bad: every mood must set the three shares by eye, and the coat check holds them to the bound.
 
 ## Alternatives considered
 

@@ -12,6 +12,9 @@
 //     a ?mood= in the URL checks that mood (src/look/mood.ts): run it for every mood (LC2's candidates, each); the
 //     depth of field is off unless the URL sets ?dof (tools/look-page.mjs)
 //
+// The bounds (LC1c, docs/plans/done/lc1c-unit-share.md): the owner chose the coats to take some of the air (decision
+// 0027) over LC1b's tighter bounds; the full light (units 1, 1, 1, rendered before LC1c: the coats wash into the ground) fails 5 of 8.
+//
 // Prints a table; exit 1 when a coat fails. The page: the look page (npm run dev, or built and previewed).
 import fs from 'node:fs'
 import path from 'node:path'
@@ -23,7 +26,7 @@ import { prepSteps, shoot, viewStep } from './look-page.mjs'
 import { ARMY_HEX, blocksAt } from './army-blocks.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const W = 1280, H = 720, HUE = 10, SAT = 0.7, WHITE_L = 0.6, WHITE_TINT = 0.15, RIM = 0.1, TOP = 0.4
+const W = 1280, H = 720, HUE = 20, SAT = 0.45, WHITE_L = 0.6, WHITE_TINT = 0.15, RIM = 0.1, TOP = 0.4
 const START = CAMS.find(c => c[0] === 'start').slice(1, 5)
 // the two spots: [name, x, z] of the column's middle; the four coats 7 m apart along z (blocksAt's column)
 const SPOTS = [['middle', -10, 2], ['valley', 30, 62]]

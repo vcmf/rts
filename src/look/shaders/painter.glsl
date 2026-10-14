@@ -69,6 +69,8 @@ float groundOcc(vec4 lm){return lm.g*lm.a;}
 vec4 LM(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);vec2 uv=p.xy/p.w*0.5+0.5;
   if(uv.x<0.002||uv.y<0.002||uv.x>0.998||uv.y>0.998)return vec4(1.0,1.0,0.0,1.0);
   return texture2D(uLM,uv);}
+// a colour at the value (Rec. 709 luma) of another, for units (KEEP_HUE): the mist and the grade turn a coat, not its value
+vec3 keepValue(vec3 o,vec3 c){const vec3 L=vec3(0.2126,0.7152,0.0722);return min(o*(dot(c,L)/max(dot(o,L),1e-4)),vec3(1.0));}
 // Valley mist: warm where the air is sunlit, cool where it's shadowed. Light shafts =
 // the air column's sun visibility, read from the light map at 3 heights along the view ray.
 // Known issue #62: the lit air tints sunlit snow orange.
@@ -83,10 +85,13 @@ vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   // thinner over the cast shadow on the ground, which keeps its shape; less so above the ground (a crown, a block), whose
   // own light is not that of the ground
   float t=clamp(m*(0.35+0.55*n),0.0,0.42)*mix(1.0,mix(0.55,1.0,1.0-(1.0-lm.r)*uShadowsOn),exp(-hAbove*0.5));
+  vec3 o=mix(c,mix(uMistShade,uMistLit,air),t);
   #ifdef KEEP_HUE
-  t=min(t,uUnitMist);   // units: the air in front of them thinner (the mood), so their coats keep their colour
+  // units: the air in front of them thinner (the mood), and they keep their value under it (the guard: a white in a
+  // bright mist turned toward the ground behind it), so it takes their colour toward the air, not their contrast
+  o=mix(c,o,min(t,uUnitMist)/max(t,1e-4));o=keepValue(o,c);
   #endif
-  return mix(c,mix(uMistShade,uMistLit,air),t);}
+  return o;}
 // view distance in alpha → depth of field without re-rendering the scene
 float depthA(vec3 wp){return clamp(length(wp-uCamPos)/1000.0,0.0,1.0);}
 // Big painted cloud shadows drifting over the land: the top-down camera's only "sky".
@@ -234,6 +239,9 @@ vec3 gradeOf(vec3 c){
   g*=mix(uSplitLo,uSplitHi,smoothstep(0.08,0.75,l));
   g+=uLift*(1.0-l);
   g=mix(g,uTopHaze*(0.85+l*0.35),smoothstep(0.60,1.0,gl_FragCoord.y/uViewH)*uTopAmt);   // 0 at the frame's bottom
+  #ifdef KEEP_HUE
+  g=keepValue(g,c);   // units: the grade turns their colour, not their value (as the mist)
+  #endif
   return mix(c,g,amt);}
 // Top-down atmosphere: colour cools (and warms toward the sun side) away from the focus; then the grade.
 vec3 atmos(vec3 c,vec3 wp){
