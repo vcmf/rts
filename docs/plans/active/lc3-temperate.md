@@ -6,7 +6,7 @@ last_reviewed: 2026-10-14
 # Plan: LC2 and LC3, the temperate mood becomes the default
 
 Track E, LC2 and LC3 (`docs/plans/active/track-e-look.md` §LC). LC2's candidates were judged by the owner on a
-throwaway page (`app/moods.html` on the LC2 branch, never merged): the four moods blind on the full map with the
+throwaway page (moods.html on the LC2 branch, never merged): the four moods blind on the full map with the
 generated trees and the army blocks, the camera and the season carried over between them. The candidates: `overcast`
 (the film), `dusty` (the ochre stills), `autumn` (the farm), and today's `golden` as a control. The owner: dusty and
 autumn "too similar, too yellow-orange", overcast "too grey", golden "too colourful"; asked for golden "a bit cooler,
