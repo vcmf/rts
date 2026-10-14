@@ -22,8 +22,9 @@ the baked occlusion, the meadow's brush or the grass blades off.
 
 ## Scope
 
-The terrain's materials (`DETAIL_ON` in the painter: the terrain, the shore's land). Not trees, buildings, units or
-the meadow's blades, whose bands stay as they are (their grain-broken edges are the painted look on a form).
+The terrain's materials (`DETAIL_ON` in the painter: the terrain, the shore's land), and the cloud on the meadow's
+blades (a shade, as on the ground under them). Trees, buildings and units keep their bands (their grain-broken edges
+are the painted look on a form); they share `cloud()`'s softer, graded edge.
 
 ## Approach
 
@@ -31,7 +32,12 @@ the meadow's blades, whose bands stay as they are (their grain-broken edges are 
   angle, the cast shadow, the baked occlusion) with only a small grain wobble at its edge (painted edges, not
   islands); the grain and its blotches vary the value within a band (as `c*=1.0+gr*0.38` does already).
 - **Soft cloud shadows.** On the ground a cloud no longer drops the light into a darker band: it darkens and cools
-  the painted colour, a broad soft shape (as a cloud's shadow on a landscape), with a wider edge than today's.
+  the painted colour, a broad soft shape (as a cloud's shadow on a landscape), deepening from its edge to its middle.
+  On snow the shade is a deeper blue: a white coat reads there by that contrast.
+- **A near-white coat takes a fifth of the sun's hue** (the units' `KEEP_HUE` path, `wb`): with the cloud's graded
+  edge, the coat check's middle spot came out of a cloud's edge into full sun, and its Austrian white turned cream
+  (236, 220, 183). The eye balances on the brightest neutral, so a white takes less of the light's colour than a
+  coloured coat (the share stays the mood's `units.tint`, decision 0027). Found first on the LC2 branch.
 - **A little softer band edges** on the ground (the minimum width from 0.08 up), so the cast shadows' edges stay
   painted but nothing snaps.
 

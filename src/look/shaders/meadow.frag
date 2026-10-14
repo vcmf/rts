@@ -42,5 +42,5 @@ void main(){
   #endif
   vec3 mid=alb*mix(uMidCool,uSunCol,0.30),lt=alb*uSunCol*1.16+uLitLift;
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
-  c=cloudShade(c,vW);
+  c=cloudShade(c,vW,0.0);
   gl_FragColor=vec4(airOf(c,vW,lm,vH),depthA(vW));}
