@@ -20,7 +20,7 @@ import { Materials, S } from './materials.ts'
 import { gradeColour, MOOD, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow } from './meadow.ts'
-import { DOF, Post, buildCamera } from './post.ts'
+import { DOF, Post, buildCamera, typingIn } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
@@ -162,8 +162,9 @@ input('gamt').oninput = () => { S.gamt = +input('gamt').value }
 const SEASONS = ['Summer', 'Early autumn', 'Late autumn', 'Winter']
 input('season').oninput = () => { S.season = +input('season').value; byId('slabel').textContent = SEASONS[Math.min(3, Math.round(S.season))] }
 // under ?trees=gen the generated trees follow the season (twigs, thinning crowns), and on release of the slider their
-// shadows are baked again: a demo of a per-map setting (docs/art-bible.md §4b), whose sky occlusion stays the one
-// baked for the season the page opened in
+// shadows are baked again when what casts them changed. A judging aid of this page, as the grain's drop is: in the
+// game the season is set per map (docs/art-bible.md §4b) and the static light baked once for it. The sky's occlusion
+// stays the one baked for the season the page opened in
 if (nature.setSeason) {
   const setSeason = nature.setSeason
   input('season').addEventListener('input', () => setSeason(S.season))
@@ -174,14 +175,16 @@ if (nature.setSeason) {
   const panel = byId('panel'), show = byId('showp')
   const setHidden = (h: boolean) => { panel.classList.toggle('hidden', h); show.classList.toggle('hidden', !h) }
   byId('hidep').onclick = () => setHidden(true); show.onclick = () => setHidden(false)
-  addEventListener('keydown', e => { if (e.code === 'KeyH' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) && !e.metaKey && !e.ctrlKey) setHidden(!panel.classList.contains('hidden')) })
+  addEventListener('keydown', e => { if (e.code === 'KeyH' && !typingIn(e.target) && !e.metaKey && !e.ctrlKey) setHidden(!panel.classList.contains('hidden')) })
 }
 // zoom: a slider beside the wheel and the pinch (src/look/post.ts rtsControls), from the nearest zoom to the farthest
 // on a log scale, following the camera
 {
   const zoomEl = input('zoom'), lo = Math.log(camera.lowerRadiusLimit ?? 1), hi = Math.log(camera.upperRadiusLimit ?? 1000)
+  let dragging = false
+  zoomEl.addEventListener('pointerdown', () => { dragging = true }); addEventListener('pointerup', () => { dragging = false })
   zoomEl.oninput = () => { camera.radius = Math.exp(lo + (hi - lo) * +zoomEl.value) }
-  scene.onBeforeRenderObservable.add(() => { if (document.activeElement !== zoomEl) zoomEl.value = String((Math.log(camera.radius) - lo) / (hi - lo)) })
+  scene.onBeforeRenderObservable.add(() => { if (!dragging) zoomEl.value = String((Math.log(camera.radius) - lo) / (hi - lo)) })
 }
 const dropEl = byId('drop')
 addEventListener('dragover', e => { e.preventDefault(); dropEl.style.display = 'flex' })

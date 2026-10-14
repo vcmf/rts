@@ -253,21 +253,24 @@ function cardGeometry(tree) {
 }
 function norm(v) { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l] }
 
-// branches as tubes: a chain follows the thickest child; the other children start chains of their own at the
-// branching node (inside the parent's tube, so the joint needs no welding). Only nodes thicker than rMin are kept.
+// branches as tubes over the nodes of radius rMin to rMax: a chain follows the thickest child; the other children
+// start chains of their own at the branching node (inside the parent's tube, so the joint needs no welding). A node
+// in range whose parent is not (the twigs past a thick limb) starts a chain at that parent, so a limb's thin end
+// is the twigs' and no segment falls between the two meshes.
 function woodGeometry(tree, rMin, rMax) {
   const { nx, ny, nz, par, rad, kids } = tree, pos = [], nor = [], col = [], idx = []
-  const roots = []; for (let i = 0; i < nx.length; i++) if (par[i] < 0) roots.push(i)
-  const chains = [], stack = roots.map(r => [r, -1])
+  const inRange = i => rad[i] >= rMin && rad[i] < rMax
+  const chains = [], stack = []
+  for (let i = 0; i < nx.length; i++) if (inRange(i) && (par[i] < 0 || !inRange(par[i]))) stack.push([i, par[i]])
   while (stack.length) {
     const [start, from] = stack.pop(), chain = from >= 0 ? [from, start] : [start]
     let i = start
     while (true) {
-      const ks = kids[i].filter(c => rad[c] >= rMin); if (!ks.length) break
+      const ks = kids[i].filter(inRange); if (!ks.length) break
       ks.sort((a, b) => rad[b] - rad[a]); for (const c of ks.slice(1)) stack.push([c, i])
       i = ks[0]; chain.push(i)
     }
-    if (chain.length > 1 && rad[chain[from >= 0 ? 1 : 0]] < rMax) chains.push({ chain, side: from >= 0 })
+    if (chain.length > 1) chains.push({ chain, side: from >= 0 })
   }
   for (const { chain, side } of chains) {
     // keep a ring where the chain turns, thins or has run far: a straight run needs no rings in between

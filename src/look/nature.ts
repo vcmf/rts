@@ -128,7 +128,8 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // k: how much crown is left (a generated deciduous tree loses its leaves with the season: its contact and the sky it
   // hides go with them)
   const smTree = (x: number, z: number, crownY: number, cr: number, k = 1) => { canopy.push([x, z, cr * 1.15, 0.42 * k, true, crownY, cr, 0.7 * k]); reflAdd(x, z, cr * 1.1) }
-  const crownLeft = (model: string) => NATURE[model]?.deciduous && gen ? 1 - 0.8 * leafLoss(gen.season) : 1, smBlob = (x: number, z: number, r: number) => canopy.push([x, z, r * 1.4, 0.30, false, r * 0.4, r, 0.7])
+  // (only the cards thin: without them the crowns stay whole, and so does what they hide)
+  const crownLeft = (model: string) => NATURE[model]?.deciduous && gen && cards ? 1 - 0.8 * leafLoss(gen.season) : 1, smBlob = (x: number, z: number, r: number) => canopy.push([x, z, r * 1.4, 0.30, false, r * 0.4, r, 0.7])
 
   /* ---------- scattering: composition follows the north star ---------- */
   const R = mulberry(77), rr = () => R()
@@ -302,7 +303,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
       if (loses) lossCards.push(cm)
       // the twigs, as their own model beside it (drawn from TWIGS_FROM on: the bare crowns of late autumn and winter)
       const tw = NATURE[k].twigs
-      if (tw && tw.idx.length) {
+      if (tw && tw.idx.length && loses) {   // conifers keep their crowns: no twigs to show
         const tk = k + '~twigs'; NATURE[tk] = { ...tw, min: NATURE[k].min, max: NATURE[k].max }
         const tm = buildModel(tk); tm.material = material; tm.alwaysSelectAsActiveMesh = true
         tm.thinInstanceSetBuffer('matrix', placed.buf, 16, true); tm.thinInstanceSetBuffer('aTint', placed.tint, 1, true)
@@ -313,7 +314,8 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     }
   }
   const showCards = cards ? (on: boolean) => { for (const f of swaps) f(on) } : undefined
-  const setSeason = twigMeshes.length ? (s: number) => { season = s; const was = twigMeshes[0].isEnabled(), on = s >= TWIGS_FROM; for (const m of twigMeshes) m.setEnabled(on); return was !== on || lossCards.length > 0 } : undefined
+  // true when what casts shadows changed: the twigs shown or hidden, or the crowns' loss moved
+  const setSeason = twigMeshes.length ? (s: number) => { const lost = leafLoss(season); season = s; const was = twigMeshes[0].isEnabled(), on = s >= TWIGS_FROM; for (const m of twigMeshes) m.setEnabled(on); return was !== on || leafLoss(s) !== lost } : undefined
   // the band is left out after the every-fourth choice, so every other bush stays the one the prototype drew
   // and none on the roads or the village ground (after the every-fourth choice, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
@@ -349,10 +351,13 @@ const GEN_FOR: Record<string, [species: string, share: number][]> = {
 function addGenerated(NATURE: Record<string, NatureModel>) {
   const G = window.TREEGEN
   if (!G) throw new Error('?trees=gen needs prototypes/tree-core.js')
+  // the model divided by unit (the generator's output is linear in it: one growth, not two)
+  const scaled = (m: NatureModel, unit: number): NatureModel => ({ ...m, pos: m.pos.map(v => v / unit), min: m.min.map(v => v / unit), max: m.max.map(v => v / unit),
+    clumps: m.clumps?.map(q => ({ c: q.c.map(v => v / unit), r: q.r.map(v => v / unit) })), twigs: m.twigs && { ...m.twigs, pos: m.twigs.pos.map(v => v / unit) } })
   const reach = (m: NatureModel) => { let r = 0; for (let i = 0; i < m.pos.length; i += 3) r = Math.max(r, Math.hypot(m.pos[i], m.pos[i + 2])); return r }
   for (const [cls, species] of Object.entries(GEN_FOR)) {
     const packs = Object.keys(NATURE).filter(k => k.startsWith(cls + '_')), want = packs.reduce((a, k) => a + reach(NATURE[k]), 0) / packs.length
-    for (const [sp] of species) for (let v = 0; v < GEN_VARIANTS; v++) { const m = G.natureModel(sp, v + 1, 1); NATURE[`Gen_${sp}_${v + 1}`] = G.natureModel(sp, v + 1, reach(m) / want) }
+    for (const [sp] of species) for (let v = 0; v < GEN_VARIANTS; v++) { const m = G.natureModel(sp, v + 1, 1); NATURE[`Gen_${sp}_${v + 1}`] = scaled(m, reach(m) / want) }
   }
   // the extras stand at scale 1, in metres
   for (const sp of ['apple', 'poplar', 'hawthorn']) for (let v = 0; v < GEN_VARIANTS; v++) NATURE[`Gen_${sp}_${v + 1}`] = G.natureModel(sp, v + 1, 1)

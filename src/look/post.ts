@@ -56,6 +56,9 @@ export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateC
   return camera
 }
 
+// where a key types (a text field), not where it moves the camera; sliders and buttons keep the keys for the camera
+export const typingIn = (t: EventTarget | null): boolean => t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && !['range', 'checkbox', 'button', 'radio'].includes(t.type))
+
 // RTS controls: the arrows or WASD pan in the ground plane and Q and E turn, at a speed that grows with the zoom; a
 // trackpad's two-finger swipe pans (the ground follows the fingers) and its pinch zooms; a mouse wheel zooms. They
 // replace Babylon's keyboard (which turned the camera) and wheel (which only zoomed); dragging still turns and pans
@@ -68,7 +71,7 @@ function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasEl
     camera.target.x += fz * right + fx * fwd; camera.target.z += -fx * right + fz * fwd
   }
   const held = new Set<string>()
-  const typing = (e: KeyboardEvent) => e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement
+  const typing = (e: KeyboardEvent) => typingIn(e.target)
   addEventListener('keydown', e => { if (!typing(e) && !e.metaKey && !e.ctrlKey) { held.add(e.code); if (e.code.startsWith('Arrow')) e.preventDefault() } })
   addEventListener('keyup', e => held.delete(e.code))
   addEventListener('blur', () => held.clear())
@@ -79,14 +82,18 @@ function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasEl
     pan((on('ArrowRight', 'KeyD') - on('ArrowLeft', 'KeyA')) * step, (on('ArrowUp', 'KeyW') - on('ArrowDown', 'KeyS')) * step)
     camera.alpha += (on('KeyE') - on('KeyQ')) * TURN_PER_S * dt
   })
-  // a mouse wheel steps in lines, or in whole pixels of 50 or more with no sideways part; a trackpad scrolls smoothly
+  // a trackpad: Chrome reports its wheelDeltaY as 3 × deltaY; a mouse wheel: wheelDeltaY in steps of 120 (whatever the
+  // page's zoom does to deltaY), or lines elsewhere. A trackpad's swipe moves the ground with the fingers (natural
+  // scrolling: fingers up, deltaY > 0). Not measured on a real mouse yet: synthetic events carry no wheelDeltaY
   canvas.addEventListener('wheel', e => {
     e.preventDefault()
-    const mouse = e.deltaMode === 1 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY))
+    const wy = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY
+    const pad = wy !== undefined && Math.abs(Math.abs(wy) - 3 * Math.abs(e.deltaY)) < 1.5
+    const mouse = e.deltaMode === 1 || (!pad && e.deltaX === 0 && (wy ? wy % 120 === 0 : Math.abs(e.deltaY) >= 50))
     if (e.ctrlKey || mouse) {
       const lo = camera.lowerRadiusLimit ?? 1, hi = camera.upperRadiusLimit ?? 1e4
       camera.radius = Math.min(hi, Math.max(lo, camera.radius * Math.exp(e.deltaY * (e.ctrlKey ? PINCH : WHEEL))))
-    } else { const k = camera.radius * SWIPE; pan(e.deltaX * k, e.deltaY * k) }
+    } else { const k = camera.radius * SWIPE; pan(e.deltaX * k, -e.deltaY * k) }
   }, { passive: false })
 }
 

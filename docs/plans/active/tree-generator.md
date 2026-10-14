@@ -64,3 +64,10 @@ the generator to `tools/` as a seeded offline bake (species data in, GLB and cro
   quiet machine (load average under 4), recorded in `docs/plans/active/track-e-results/shadows-foliage.md`.
 
 ## Review rounds
+- **Round 1** (`/code-review high`, 10 findings). Severe: the twig mesh dropped the thin end of every chain that
+  started thick (fixed: the chains are built on the nodes of each radius range, starting at their parent outside
+  it). Fixed too: the vertical swipe ran against the fingers; the sky occlusion thinned under `?trees=gen` without
+  cards; a slider release re-baked when nothing changed; conifers had twig meshes; the mouse/trackpad test (now
+  Chrome's 3 × deltaY trackpad signature, else wheelDeltaY steps of 120); sliders swallowed the keys; each model was
+  grown twice. Kept: the re-bake on the slider's release, a judging aid of the look page as the grain's drop is (the
+  game bakes the map's season once); the duplicated ellipsoid sizes in `cardOpts` (light).
