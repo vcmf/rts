@@ -186,9 +186,11 @@ if (nature.setSeason && nature.shadowState) {
 {
   const zoomEl = input('zoom'), lo = Math.log(camera.lowerRadiusLimit ?? 1), hi = Math.log(camera.upperRadiusLimit ?? 1000)
   let dragging = false
-  zoomEl.addEventListener('pointerdown', () => { dragging = true }); for (const ev of ['pointerup', 'pointercancel']) addEventListener(ev, () => { dragging = false })
+  zoomEl.addEventListener('pointerdown', () => { dragging = true })
+  for (const ev of ['pointerup', 'pointercancel', 'blur']) addEventListener(ev, () => { dragging = false }); zoomEl.addEventListener('change', () => { dragging = false })
   zoomEl.oninput = () => { camera.radius = Math.exp(lo + (hi - lo) * +zoomEl.value) }
-  scene.onBeforeRenderObservable.add(() => { if (!dragging) zoomEl.value = String((Math.log(camera.radius) - lo) / (hi - lo)) })
+  let shown = NaN
+  scene.onBeforeRenderObservable.add(() => { if (!dragging && camera.radius !== shown) { shown = camera.radius; zoomEl.value = String((Math.log(shown) - lo) / (hi - lo)) } })
 }
 const dropEl = byId('drop')
 addEventListener('dragover', e => { e.preventDefault(); dropEl.style.display = 'flex' })

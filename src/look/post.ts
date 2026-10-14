@@ -43,7 +43,6 @@ export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateC
   // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the play area
   camera.mapPanning = true; scene.onBeforeRenderObservable.add(() => { const t = camera.target; t.x = Math.max(-PLAY, Math.min(PLAY, t.x)); t.z = Math.max(-PLAY, Math.min(PLAY, t.z)) })
   camera.upperRadiusLimit = c.rMax; camera.lowerBetaLimit = c.betaMin; camera.upperBetaLimit = c.betaMax
-  camera.wheelDeltaPercentage = 0.01
   camera.panningSensibility = 30; camera.minZ = 0.5; camera.maxZ = 5000; camera.fov = c.fov; camera.inertia = 0.88
   // the SPEC checked frames up to aspectMax: a wider screen keeps that frame's horizontal field of view and sees
   // less vertically, never more of the world than was checked
@@ -74,7 +73,8 @@ function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasEl
   const held = new Set<string>()
   const typing = (e: KeyboardEvent) => typingIn(e.target)
   addEventListener('keydown', e => { if (!typing(e) && !e.metaKey && !e.ctrlKey) { held.add(e.code); if (e.code.startsWith('Arrow')) e.preventDefault() } })
-  addEventListener('keyup', e => held.delete(e.code))
+  // (macOS sends no keyup for a key let go while Cmd is down: Cmd's own release clears them all)
+  addEventListener('keyup', e => { held.delete(e.code); if (e.key === 'Meta') held.clear() })
   addEventListener('blur', () => held.clear())
   const on = (...codes: string[]) => codes.some(c => held.has(c)) ? 1 : 0
   scene.onBeforeRenderObservable.add(() => {
@@ -93,7 +93,9 @@ function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasEl
     const mouse = e.deltaMode === 1 || (!pad && e.deltaX === 0 && (wy ? wy % 120 === 0 : Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY)))
     if (e.ctrlKey || mouse) {
       const lo = camera.lowerRadiusLimit ?? 1, hi = camera.upperRadiusLimit ?? 1e4
-      camera.radius = Math.min(hi, Math.max(lo, camera.radius * Math.exp(e.deltaY * (e.ctrlKey ? PINCH : WHEEL))))
+      // a pinch's steps are small (a few pixels); a wheel's notch, with or without Ctrl, a hundred (or a few lines)
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY
+      camera.radius = Math.min(hi, Math.max(lo, camera.radius * Math.exp(dy * (e.ctrlKey && Math.abs(dy) < 50 ? PINCH : WHEEL))))
     } else { const k = camera.radius * SWIPE; pan(e.deltaX * k, -e.deltaY * k) }
   }, { passive: false })
 }

@@ -319,7 +319,7 @@ function treeHash(t) { let h = 2166136261; const f = x => { h = Math.imul(h ^ (M
 function natureModel(key, seed, unit) {
   const spec = SPECIES[key], t = growTree(spec, seed), shown = t.clumps.filter(q => !q.core)
   const thick = spec.deciduous ? Math.max(spec.r0 * 3.2, 0.06) : spec.r0 * 3.2
-  const c = crownGeometry({ ...t, clumps: shown }), w = woodGeometry(t, thick, Infinity), tw = woodGeometry(t, spec.r0 * 1.2, thick)
+  const c = crownGeometry({ ...t, clumps: shown }), w = woodGeometry(t, thick, Infinity), tw = spec.deciduous ? woodGeometry(t, spec.r0 * 1.2, thick) : { pos: [], idx: [] }   // conifers keep their crowns: no twigs
   const pos = [...c.pos, ...w.pos].map(v => v / unit), n0 = c.pos.length / 3, bark = spec.birch ? 4 : 2
   const role = [...new Array(n0).fill(0), ...new Array(w.pos.length / 3).fill(bark)]
   const idx = [...c.idx, ...w.idx.map(i => i + n0)].reverse()

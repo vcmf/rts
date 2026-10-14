@@ -218,8 +218,10 @@ Not the default: the arm the owner judges against `?trees=cards`.
   four seeded variants per species, added to the pack as `Gen_<species>_<n>`: the crown clumps as foliage, the limbs
   as bark, and per crown vertex its clump, the clumps' ellipsoids and the twigs as their own mesh. The pack's trees are
   drawn as species by a share each, picked by the place (`GEN_FOR`: broadleaves oak, lime, beech; birches; willows
-  and alders; pines and spruces), each sized so its reach in plan is its pack class's mean; the placement rule tests
-  the drawn model's footprint too. An orchard, a hedgerow, a row of poplars, a forest of about 90 trees in the open south-west (broadleaves, a
+  and alders; pines and spruces), each sized so its reach in plan is its pack class's mean; the model placed decides
+  where a tree stands, as without `gen`, so the scatter's stream and layout are the pack arm's (checked: the same
+  non-tree instances), and a generated tree that would reach farther than the placement rule allows there is drawn
+  smaller, to the placed model's footprint. An orchard, a hedgerow, a row of poplars, a forest of about 90 trees in the open south-west (broadleaves, a
   spruce patch on one side, birches and hawthorns on its edge), a wood of about 40 in the north-east and two dozen
   lone field trees come from their own random stream (`extras`), so the scatter's is unchanged; each passes the
   placement rule. No copper beech: the palette's tint already turns about 5% of crowns copper.

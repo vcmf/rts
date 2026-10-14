@@ -79,3 +79,10 @@ the generator to `tools/` as a seeded offline bake (species data in, GLB and cro
   slider tick (now when a crown's shadow turns on or off); the default page loaded the generator (now a dynamic import
   under `?trees=gen`); `?season` was checked after the build; a cancelled touch left the zoom slider stuck; the bench's
   pack arm drew the twigs; the unused `chunk` key and a parameter that shadowed `leafLoss`.
+- **Round 3** (`/code-review high`, 10 findings, none severe: fixed what was worth it, and stopped). Fixed: the contact
+  core under a bare tree kept full strength with soft shadows on (now as strong as the crown is whole; the pack's
+  trees keep theirs); under `gen` a tree the drawn footprint rejected shifted the scatter's random stream (now the
+  placed model decides and the drawn tree shrinks to fit: the non-tree scatter checked identical to `?trees=cards`);
+  Firefox's line-mode wheel barely zoomed; Ctrl + mouse wheel zoomed as a pinch; macOS kept a key held after a
+  release under Cmd; the season was wired only when twigs existed; conifers' unused twigs were built; a dead wheel
+  setting; the zoom slider rewritten every frame. Left: the duplicated crown sizes (light).

@@ -115,7 +115,8 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
     }
     for (const [x, z, r, a, tree] of canopy) {
       if (!soft.on) disc(x, z, r, `rgb(255,${Math.round(255 * (1 - a))},255)`)   // soft: the sky's occlusion below instead
-      if (tree) disc(x, z, r * 0.45, 'rgb(166,255,255)')
+      // the core as strong as the crown is whole (a/0.42: 1 for every tree but a generated one losing its leaves)
+      if (tree) disc(x, z, r * 0.45, `rgb(${Math.round(255 - 89 * Math.min(1, a / 0.42))},255,255)`)
     }
     if (soft.on) sky = skyOcclusion(aog, canopy)
   }

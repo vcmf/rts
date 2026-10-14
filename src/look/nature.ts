@@ -164,8 +164,15 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
   // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
   // drawn: the model drawn there, when not the one placed (?trees=one)
-  // (under gen, the drawn model's footprint too: a generated tree is sized to its class's mean, not to the model placed)
-  const addPlaced = (model: string, item: Item, kind = '', drawn = model) => { const [x, z, s] = item; const r = genModels && drawn !== model ? Math.max(footprint(model, s), footprint(drawn, s)) : footprint(model, s); if (!placeable(x, z, r, kind) || !coverAllows(cover, model, x, z)) return false; add(drawn, item); return true }
+  // (under gen the model placed decides, as without it, so the scatter's random stream and layout stay the pack
+  // arm's; a generated tree, sized to its class's mean, that would reach farther than the rule allows there is drawn
+  // smaller, to the placed model's footprint)
+  const addPlaced = (model: string, item: Item, kind = '', drawn = model) => {
+    const [x, z, s] = item
+    if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false
+    if (genModels && drawn !== model && !placeable(x, z, footprint(drawn, s), kind)) { item = [...item] as Item; item[2] = s * footprint(model, s) / footprint(drawn, s) }
+    add(drawn, item); return true
+  }
 
   // ?trees=one: the model drawn for a tree, placed as its own model (so the scatter is the page's), shadowed and
   // reflected as the model drawn
@@ -320,8 +327,9 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const twigsOn = () => cardsShown && season >= TWIGS_FROM, showTwigs = () => { for (const m of twigMeshes) m.setEnabled(twigsOn()) }
   showTwigs()
   const showCards = cards ? (on: boolean) => { for (const f of swaps) f(on); cardsShown = on; showTwigs() } : undefined
-  const setSeason = twigMeshes.length ? (s: number) => { season = s; showTwigs() } : undefined
-  const shadowState = twigMeshes.length ? () => `${twigsOn()} ${leafLoss(season)}` : undefined
+  const seasonal = twigMeshes.length > 0 || lossCards.length > 0
+  const setSeason = seasonal ? (s: number) => { season = s; showTwigs() } : undefined
+  const shadowState = seasonal ? () => `${twigsOn()} ${leafLoss(season)}` : undefined
   // the band is left out after the every-fourth choice, so every other bush stays the one the prototype drew
   // and none on the roads or the village ground (after the every-fourth choice, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
