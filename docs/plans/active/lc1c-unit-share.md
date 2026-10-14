@@ -28,7 +28,14 @@ bounds, decision 0027 (accepted, its numbers), the docs that quote them. Not in 
   field in winter: 0.094 against 0.112): the bright mist and the grade's lift took the white's value toward the
   ground behind it. Lowering the mist alone (0.07) or the grade alone (0) did not clear it. With the value kept, both
   pass, with a margin (0.125, 0.107), and the valley white in summer, failing on main (0.088), now separates (0.102).
-  The shares then: { tint 0.4, mist 0.10, grade 0.2 }.
+  Keeping half the value instead (softer, more of the air) failed the winter stubble white again (0.099). The kept
+  value is clamped at 1 by channel (review round 1 asked to drop it, for the headroom over 1 of a lit top): unclamped,
+  the white on winter stubble fell under its bound (0.090, main 0.112), clamped it passes (0.107), measured twice. A
+  warm white kept over 1 clips by channel on screen, darker than the clamped one.
+- **The grade's share is 0.2, not A's 0.15:** at 0.15 the same winter stubble white fails (0.094): the grade's lift
+  in the highlights is what holds it above the snow.
+- **The grade's haze toward the frame's top** now reaches units at the grade's share. The coat check's valley spot
+  is in that band (the upper part of the default view), so it measures it.
 - **The coat check's bounds follow the owner's choice.** LC1b's (hue within 10°, saturation at 0.7 of the painted)
   were a first safe setting, met only by the pasted-on look: the Russian green, a dark coat near the meadow's hue,
   moves first. New bounds: hue within 20°, saturation at 0.45 of the painted or more; the white's rule is unchanged.
@@ -66,5 +73,6 @@ Measured at the final shares, { tint 0.4, mist 0.10, grade 0.2 }, with the value
   the air costs some separation, as expected: 59 blocks separate better, 73 a little less, the most by 0.030 (a white
   on a stubble field, 0.205 against 0.235, still twice the bound).
 - **The goldens:** a match at the 8 views, every region 0.000 % (units only).
-- **`npm test`:** the run failed the two sim timing budgets (`test/formations.test.ts`, `test/soldiers.test.ts`) at a
-  load average of 15 to 29; run alone, at the same load, both pass (41 of 41). The PR changes no sim code.
+- **`npm test`:** exit 0, 19 files, 256 tests (at a load average of 13). A first run, before review round 1, exited 1
+  on the two sim timing budgets (`test/formations.test.ts`, `test/soldiers.test.ts`) at a load average of 15 to 29;
+  run alone they passed (exit 0, 41 of 41). The PR changes no sim code.

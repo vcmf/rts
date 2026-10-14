@@ -70,7 +70,10 @@ vec4 LM(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);vec2 uv=p.xy/p.w*0.5+0.5;
   if(uv.x<0.002||uv.y<0.002||uv.x>0.998||uv.y>0.998)return vec4(1.0,1.0,0.0,1.0);
   return texture2D(uLM,uv);}
 // a colour at the value (Rec. 709 luma) of another, for units (KEEP_HUE): the mist and the grade turn a coat, not its value
-vec3 keepValue(vec3 o,vec3 c){const vec3 L=vec3(0.2126,0.7152,0.0722);return min(o*(dot(c,L)/max(dot(o,L),1e-4)),vec3(1.0));}
+// (clamped at 1: a warm white kept over 1 clips by channel on screen, darker, and the guard measured a white on
+// winter stubble falling under its bound unclamped, docs/plans/done/lc1c-unit-share.md)
+const vec3 LUMA=vec3(0.2126,0.7152,0.0722);
+vec3 keepValue(vec3 o,vec3 c){return min(o*(dot(c,LUMA)/max(dot(o,LUMA),1e-4)),vec3(1.0));}
 // Valley mist: warm where the air is sunlit, cool where it's shadowed. Light shafts =
 // the air column's sun visibility, read from the light map at 3 heights along the view ray.
 // Known issue #62: the lit air tints sunlit snow orange.
@@ -85,13 +88,12 @@ vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   // thinner over the cast shadow on the ground, which keeps its shape; less so above the ground (a crown, a block), whose
   // own light is not that of the ground
   float t=clamp(m*(0.35+0.55*n),0.0,0.42)*mix(1.0,mix(0.55,1.0,1.0-(1.0-lm.r)*uShadowsOn),exp(-hAbove*0.5));
-  vec3 o=mix(c,mix(uMistShade,uMistLit,air),t);
   #ifdef KEEP_HUE
   // units: the air in front of them thinner (the mood), and they keep their value under it (the guard: a white in a
   // bright mist turned toward the ground behind it), so it takes their colour toward the air, not their contrast
-  o=mix(c,o,min(t,uUnitMist)/max(t,1e-4));o=keepValue(o,c);
+  t=min(t,uUnitMist);return keepValue(mix(c,mix(uMistShade,uMistLit,air),t),c);
   #endif
-  return o;}
+  return mix(c,mix(uMistShade,uMistLit,air),t);}
 // view distance in alpha → depth of field without re-rendering the scene
 float depthA(vec3 wp){return clamp(length(wp-uCamPos)/1000.0,0.0,1.0);}
 // Big painted cloud shadows drifting over the land: the top-down camera's only "sky".
@@ -232,7 +234,7 @@ vec3 gradeOf(vec3 c){
   amt*=uUnitGrade;
   #endif
   if(amt<=0.0)return c;
-  const vec3 L=vec3(0.2126,0.7152,0.0722);float l=dot(c,L);
+  const vec3 L=LUMA;float l=dot(c,L);
   float green=clamp((c.g-max(c.r,c.b))*3.0,0.0,1.0);
   vec3 g=mix(c,vec3(l)*uGreenTint+(c-vec3(l))*uGreenChroma,green*uGreenAmt);
   g=mix(vec3(dot(g,L)),g,uGradeSat);
