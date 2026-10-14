@@ -7,4 +7,4 @@ void main(){if(uMask>=0.0){gl_FragColor=vec4(vec3(uMask),depthA(vW));return;}
   vec3 N=normalize(vN);vec4 lm=LM(vW);
   float sh=(1.0-lm.r)*uShadowsOn;
   vec3 c=paint(uAlb,N,vW,1.0,0.12,0.3,sh);
-  gl_FragColor=vec4(atmos(mist(c,vW,lm,0.9),vW),depthA(vW));}
+  gl_FragColor=vec4(airOf(c,vW,lm,0.9),depthA(vW));}
