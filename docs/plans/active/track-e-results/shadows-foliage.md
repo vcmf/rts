@@ -43,6 +43,29 @@ reads `build` 61d031a, the hash Vite read when its server started on the earlier
   move from run to run, so the headroom left is not read from them. This is the cards' cost to watch: L7 owes a
   cheaper forest before they become the default (`docs/plans/active/track-e-look.md`, L7).
 
+## The generated trees' cost (2026-10-14)
+
+`?trees=gen,cards` (the generated trees, decision 0031: the pack's trees as generated species plus a forest, a wood,
+an orchard, a hedgerow, poplars and field trees, 285 trees against 113) against `?trees=cards` (the pack crowns as
+cards), `docs/plans/active/tree-generator.md`. A two-page A/B, not one page: the pages build different scenes. Runs in
+the order A B B A per season, each the bench's nine cameras at `--hold 5`, 1920×1080, the `l2` arm (the page's
+default look), frame interval p50, each run the mean of its two in-page repeats; on the branch at 62b166b; the JSON
+beside this one (`tree-gen-2026-10-14-62b166b-*-mac-proxy.json`). The machine was loaded (load average 8–10 in
+summer; 29–49 during the first winter pair, 4–11 during the second): a proxy, wider than the earlier runs' noise.
+
+| B − A, ms (mean over the three yaws) | close | default | widest |
+|---|---|---|---|
+| Summer | −0.43 (spread 0.30) | −0.33 (0.65) | −0.41 (0.95) |
+| Winter (twigs on, crowns bare) | −0.18 (0.55) | +0.13 (0.50) | +0.26 (0.25) |
+
+- **Summer: no cost; if anything slightly faster** at every zoom (the largest single camera −0.77 ms). The scene's
+  triangles fall from 1.33M to 1.29M (the generated crowns' cards against the pack's) though the draw calls double,
+  52 to 103 (the variants and the extras).
+- **Winter: at most about +0.3 ms at the widest zoom** (one camera +0.68 ms, beyond its spread; the others within
+  it), none nearer. The twigs raise the scene to 2.00M triangles and 138 draw calls.
+- **Not measured:** the min-spec laptop; a frame where the forest fills the view (the bench's cameras do not aim at it);
+  the load on page open (the generator runs before the first frame).
+
 ## Load time
 
 The soft shadows are baked on load, nothing per frame: their bake times are in `docs/plans/done/soft-shadows.md`

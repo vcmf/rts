@@ -62,6 +62,8 @@ the generator to `tools/` as a seeded offline bake (species data in, GLB and cro
   their shadows are the tufts' and limbs' only (a screenshot); `?clumpvol=off` against the default, judged by the owner.
 - The cost: `tools/bench-look.mjs` paired A/B of `?trees=gen,cards` against `?trees=cards`, summer and winter, on a
   quiet machine (load average under 4), recorded in `docs/plans/active/track-e-results/shadows-foliage.md`.
+  Done 2026-10-14 on a loaded machine (load average 8–49, not under 4): summer no cost (−0.3 to −0.4 ms), winter at
+  most about +0.3 ms at the widest zoom; the numbers and caveats are in that file.
 
 ## Review rounds
 - **Round 1** (`/code-review high`, 10 findings). Severe: the twig mesh dropped the thin end of every chain that
