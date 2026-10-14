@@ -256,8 +256,9 @@ function build() {
   }
   // the shadow bake works in world space, so the trees are rotated into it here (their meshes rotate by yaw)
   for (const b of built) b.tree = rotated(b.tree, b.yaw)
+  bakedKey = null   // new trees: bake their shadows
   window.__stats = Object.fromEntries(Object.entries(stats).map(([k, s]) => [k, { trees: s.n, msPerTree: +(s.ms / s.n).toFixed(1), meanTris: Math.round(s.tris / s.n), maxTrisWithTwigs: s.maxTris, meanClumps: +(s.clumps / s.n).toFixed(1) }]))
-  applySeason()
+  applySeason(); updateLabels()
 }
 // the same tree turned by yaw (Babylon's rotation.y), for the shadow bake
 function rotated(t, yaw) {
@@ -281,9 +282,12 @@ function applySeason() {
   const g0 = [hex('#6a8a3e'), hex('#9ca452')], g1 = [hex('#7e7e40'), hex('#a89c58')], g2 = [hex('#6a5e3c'), hex('#8e8052')]
   const gc = j => [0, 1, 2].map(i => mix(mix(g0[j][i], g1[j][i], smooth(0.3, 1.3, season)), g2[j][i], smooth(1.3, 2.3, season)))
   groundMat.setVector3('uA', BABYLON.Vector3.FromArray(gc(0))); groundMat.setVector3('uB', BABYLON.Vector3.FromArray(gc(1))); groundMat.setFloat('uSnow', snow * 0.9)
-  bakeShadows(built.map(b => ({ tree: b.tree, offset: b.offset, foliageOn: b.foliageOn })))
-  updateLabels()
+  // the shadow canvas (a 2048² readback and upload) is baked again only when a crown's shadow turns on or off, not on
+  // every tick of the slider
+  const key = built.map(b => b.foliageOn ? 1 : 0).join('')
+  if (key !== bakedKey) { bakedKey = key; bakeShadows(built.map(b => ({ tree: b.tree, offset: b.offset, foliageOn: b.foliageOn }))) }
 }
+let bakedKey = null
 
 // ---------- labels, selection, skeleton view, export ----------
 const labelDivs = []

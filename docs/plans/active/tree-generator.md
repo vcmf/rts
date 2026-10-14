@@ -71,3 +71,11 @@ the generator to `tools/` as a seeded offline bake (species data in, GLB and cro
   Chrome's 3 × deltaY trackpad signature, else wheelDeltaY steps of 120); sliders swallowed the keys; each model was
   grown twice. Kept: the re-bake on the slider's release, a judging aid of the look page as the grain's drop is (the
   game bakes the map's season once); the duplicated ellipsoid sizes in `cardOpts` (light).
+- **Round 2** (`/code-review high`, 10 findings). Severe: round 1's fix stopped the slider's release from re-baking
+  (the drag's input events had already taken the "changed" signal). Fixed: the page records what cast the shadows at
+  each bake (`shadowState`, read after the shadow pass renders) and re-bakes on release when it differs; checked in the
+  page (no bake while dragging, one on release, none on a second release). Fixed too: the arrows reached the Render
+  scale list; the fallback mouse test lost its whole-pixel guard; the prototype re-baked its shadow canvas on every
+  slider tick (now when a crown's shadow turns on or off); the default page loaded the generator (now a dynamic import
+  under `?trees=gen`); `?season` was checked after the build; a cancelled touch left the zoom slider stuck; the bench's
+  pack arm drew the twigs; the unused `chunk` key and a parameter that shadowed `leafLoss`.

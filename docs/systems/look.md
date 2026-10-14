@@ -214,7 +214,7 @@ The plan: `docs/plans/done/l7a-canopy-cards.md`. Not the default: the arm the ow
 The plan: `docs/plans/active/tree-generator.md`; decision 0031 (proposed); the method: `docs/research/procedural-trees.md`.
 Not the default: the arm the owner judges against `?trees=cards`.
 
-- **The models** (`prototypes/tree-core.js`, a plain script the page imports; `addGenerated` in `src/look/nature.ts`):
+- **The models** (`prototypes/tree-core.js`, a plain script the page imports under `?trees=gen` only; `addGenerated` in `src/look/nature.ts`):
   four seeded variants per species, added to the pack as `Gen_<species>_<n>`: the crown clumps as foliage, the limbs
   as bark, and per crown vertex its clump, the clumps' ellipsoids and the twigs as their own mesh. The pack's trees are
   drawn as species by a share each, picked by the place (`GEN_FOR`: broadleaves oak, lime, beech; birches; willows
@@ -235,7 +235,7 @@ Not the default: the arm the owner judges against `?trees=cards`.
   casting into the sun's pass.
 - **The season on this page:** what is baked follows the season the page opens in (`?season`): the shadows, and the
   sky each crown hides and its contact core (lighter as a crown loses its leaves). Releasing the season slider re-bakes
-  the shadows; the sky's occlusion stays the one baked on load.
+  the shadows when what casts them changed since the last bake (`shadowState`); the sky's occlusion stays the one baked on load.
 
 ### The shadows' look
 

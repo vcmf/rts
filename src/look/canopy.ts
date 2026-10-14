@@ -90,9 +90,9 @@ export function cardMesh(scene: Scene, name: string, d: NatureModel, o: CardOpti
 
 // the card material: the default crowns' palette, rim and backlight, the leaf atlas's value and coverage
 // volume: the crown lit as a volume (L7b: a normal per pixel from its ellipsoid, the light through it, the soft ramp)
-// leafLoss: the crown thins with the season, card by card (src/look/shaders/cards.glsl; generated deciduous trees)
-export function cardMaterial(mats: Materials, name: string, folA: string, folB: string, rim: number, leaf: BaseTexture, volume: boolean, leafLoss = false): ShaderMaterial {
-  const m = mats.make(name, withCards(CANOPY_VS), withCards(CANOPY_FS), { attributes: ['position', 'normal', 'aCorner', 'aCard', 'aCrown', 'aRole', 'aTint', 'aEllC', 'aEllR'], uniforms: ['view', 'uFolA', 'uFolB', 'uRim', 'uKind', 'uLeafSize', 'uSeason'], samplers: ['uLeaf'], defines: [...(volume ? ['#define VOLUME', '#define SOFT_RAMP'] : []), ...(leafLoss ? ['#define LEAF_LOSS'] : [])] })
+// thins: the crown thins with the season, card by card (src/look/shaders/cards.glsl; generated deciduous trees)
+export function cardMaterial(mats: Materials, name: string, folA: string, folB: string, rim: number, leaf: BaseTexture, volume: boolean, thins = false): ShaderMaterial {
+  const m = mats.make(name, withCards(CANOPY_VS), withCards(CANOPY_FS), { attributes: ['position', 'normal', 'aCorner', 'aCard', 'aCrown', 'aRole', 'aTint', 'aEllC', 'aEllR'], uniforms: ['view', 'uFolA', 'uFolB', 'uRim', 'uKind', 'uLeafSize', 'uSeason'], samplers: ['uLeaf'], defines: [...(volume ? ['#define VOLUME', '#define SOFT_RAMP'] : []), ...(thins ? ['#define LEAF_LOSS'] : [])] })
   m.setColor3('uFolA', Color3.FromHexString(folA)); m.setColor3('uFolB', Color3.FromHexString(folB)); m.setFloat('uRim', rim); m.setFloat('uKind', 0)
   m.setTexture('uLeaf', leaf); m.setFloat('uLeafSize', CELL * 2); m.backFaceCulling = false
   return m

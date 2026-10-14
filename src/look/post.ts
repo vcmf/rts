@@ -56,8 +56,9 @@ export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateC
   return camera
 }
 
-// where a key types (a text field), not where it moves the camera; sliders and buttons keep the keys for the camera
-export const typingIn = (t: EventTarget | null): boolean => t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && !['range', 'checkbox', 'button', 'radio'].includes(t.type))
+// where a key types (a text field) or picks (a list), not where it moves the camera; sliders and buttons keep the keys
+// for the camera
+export const typingIn = (t: EventTarget | null): boolean => t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || (t instanceof HTMLInputElement && !['range', 'checkbox', 'button', 'radio'].includes(t.type))
 
 // RTS controls: the arrows or WASD pan in the ground plane and Q and E turn, at a speed that grows with the zoom; a
 // trackpad's two-finger swipe pans (the ground follows the fingers) and its pinch zooms; a mouse wheel zooms. They
@@ -89,7 +90,7 @@ function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasEl
     e.preventDefault()
     const wy = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY
     const pad = wy !== undefined && Math.abs(Math.abs(wy) - 3 * Math.abs(e.deltaY)) < 1.5
-    const mouse = e.deltaMode === 1 || (!pad && e.deltaX === 0 && (wy ? wy % 120 === 0 : Math.abs(e.deltaY) >= 50))
+    const mouse = e.deltaMode === 1 || (!pad && e.deltaX === 0 && (wy ? wy % 120 === 0 : Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY)))
     if (e.ctrlKey || mouse) {
       const lo = camera.lowerRadiusLimit ?? 1, hi = camera.upperRadiusLimit ?? 1e4
       camera.radius = Math.min(hi, Math.max(lo, camera.radius * Math.exp(e.deltaY * (e.ctrlKey ? PINCH : WHEEL))))

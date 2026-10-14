@@ -46,8 +46,10 @@ export interface Nature {
   footprint(model: string, s: number): number
   stones: [number, number, number, number][]   // the stones in the water (W5a): x, z, radius, the flow's direction (rad), for their foam
   showCards?: (on: boolean) => void            // under cards: the crowns as cards, or the pack's (the bench's arms)
-  // under gen: the season's twigs (shown from TWIGS_FROM); true when that changed what casts shadows
-  setSeason?: (season: number) => boolean
+  // under gen: the season's twigs (shown from TWIGS_FROM) and the crowns' loss; shadowState names what that makes cast
+  // shadows (the twigs on or off, the loss), for the bake to compare with the state it last baked
+  setSeason?: (season: number) => void
+  shadowState?: () => string
   // under cards: the card meshes, which cast the crowns' shadows, and the pack models they replace, which cast nothing
   // (src/look/bakes.ts; the trunk meshes cast the trunks')
   // lossCards: the card meshes whose crowns thin with the season (their shadow too), at season()
@@ -307,15 +309,19 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
         const tk = k + '~twigs'; NATURE[tk] = { ...tw, min: NATURE[k].min, max: NATURE[k].max }
         const tm = buildModel(tk); tm.material = material; tm.alwaysSelectAsActiveMesh = true
         tm.thinInstanceSetBuffer('matrix', placed.buf, 16, true); tm.thinInstanceSetBuffer('aTint', placed.tint, 1, true)
-        tm.setEnabled(season >= TWIGS_FROM); twigMeshes.push(tm)
+        twigMeshes.push(tm)
       }
       const show = (on: boolean) => { cm.setEnabled(on); trunks.setEnabled(on); pack.setEnabled(!on) }
       show(true); swaps.push(show); cardMeshes.push(cm); packs.push(pack)
     }
   }
-  const showCards = cards ? (on: boolean) => { for (const f of swaps) f(on) } : undefined
-  // true when what casts shadows changed: the twigs shown or hidden, or the crowns' loss moved
-  const setSeason = twigMeshes.length ? (s: number) => { const lost = leafLoss(season); season = s; const was = twigMeshes[0].isEnabled(), on = s >= TWIGS_FROM; for (const m of twigMeshes) m.setEnabled(on); return was !== on || leafLoss(s) !== lost } : undefined
+  // the twigs: drawn with the cards (the bench's pack arm shows the whole pack model instead), from TWIGS_FROM on
+  let cardsShown = true
+  const twigsOn = () => cardsShown && season >= TWIGS_FROM, showTwigs = () => { for (const m of twigMeshes) m.setEnabled(twigsOn()) }
+  showTwigs()
+  const showCards = cards ? (on: boolean) => { for (const f of swaps) f(on); cardsShown = on; showTwigs() } : undefined
+  const setSeason = twigMeshes.length ? (s: number) => { season = s; showTwigs() } : undefined
+  const shadowState = twigMeshes.length ? () => `${twigsOn()} ${leafLoss(season)}` : undefined
   // the band is left out after the every-fourth choice, so every other bush stays the one the prototype drew
   // and none on the roads or the village ground (after the every-fourth choice, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
@@ -332,7 +338,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
   // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the outer ring's footprint and lean)
   const growthAllowed = (x: number, z: number) => !touchesZone(x, z, CLUMP_REACH) && offBanks(riverQuery(x, z), CLUMP_REACH)
-  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, setSeason, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs, lossCards, season: () => season } : undefined, growth, growthAllowed, crop }
+  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, setSeason, shadowState, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs, lossCards, season: () => season } : undefined, growth, growthAllowed, crop }
 }
 
 // ?trees=gen (docs/plans/active/tree-generator.md): VARIANTS seeded models per species from prototypes/tree-core.js,

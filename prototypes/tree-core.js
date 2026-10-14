@@ -42,6 +42,7 @@ const SPECIES = {
   hawthorn:  { label: 'Hawthorn (hedge)', h: [2.6, 3.6], base: 0.12, w: 0.7, c: 0.5, pb: 2.0, pt: 2.0, N: 350, D: 0.22, di: 14, dk: 2.0, g: [0, 0.05, 0], n: 2.2, r0: 0.012, k: [3, 4], mode: 'clumps', squash: 0.85, lump: 0.32, stems: 4, lean: 0.25, leaf: ['#3d6130', '#87953f'], bark: '#4f463c', deciduous: true },
 }
 const SPECIES_KEYS = Object.keys(SPECIES)
+const CHUNK = 0.7   // how much thicker than the pipe model the trunk grows (twigs: none), for the art bible's sturdy trunk
 
 // ---------- the generator ----------
 // A tree: skeleton (nodes with parent and radius), crown clumps (ellipsoids), and their meshes' vertex data.
@@ -51,7 +52,7 @@ function growTree(spec, seed) {
   const profile = t => { const u = t < spec.c ? (spec.c - t) / Math.max(spec.c, 1e-3) : (t - spec.c) / Math.max(1 - spec.c, 1e-3), p = t < spec.c ? spec.pb : spec.pt; return Math.pow(Math.max(0, 1 - Math.pow(u, p)), 1 / p) }
   // the crown leans a little and is squeezed by a random amount sideways, so no two trees share an outline
   const leanX = (R() - 0.5) * 2 * spec.lean * H, leanZ = (R() - 0.5) * 2 * spec.lean * H, sqx = 1 + (R() - 0.5) * 0.3, sqz = 1 + (R() - 0.5) * 0.3
-  const inside = (x, y, z) => { const t = (y - crownBase) / crownH; if (t < 0 || t > 1) return false; const s = t; const dx = (x - leanX * s) / sqx, dz = (z - leanZ * s) / sqz; return Math.hypot(dx, dz) <= Wmax * profile(t) }
+  const inside = (x, y, z) => { const t = (y - crownBase) / crownH; if (t < 0 || t > 1) return false; const dx = (x - leanX * t) / sqx, dz = (z - leanZ * t) / sqz; return Math.hypot(dx, dz) <= Wmax * profile(t) }
   // attraction points, uniform in the envelope
   const P = []
   for (let tries = 0; P.length < spec.N && tries < spec.N * 60; tries++) {
@@ -127,7 +128,7 @@ function growTree(spec, seed) {
   // stylized: limbs thicken toward the trunk faster than the pipe model says (docs/art-bible.md §12: a short
   // sturdy trunk); twigs keep their radius, so the bare crown stays fine
   let rMax = 0; for (let i = 0; i < n; i++) rMax = Math.max(rMax, rad[i])
-  for (let i = 0; i < n; i++) rad[i] *= 1 + (spec.chunk ?? 0.7) * Math.sqrt(rad[i] / rMax)
+  for (let i = 0; i < n; i++) rad[i] *= 1 + CHUNK * Math.sqrt(rad[i] / rMax)
   const crown = fitCrown(spec, R, tips, nx, ny, nz, crownBase, crownH, leanX, leanZ, t => Wmax * profile(t) * (sqx + sqz) / 2)
   return { spec, seed, H, crownBase, crownH, P, nx, ny, nz, par, rad, kids, clumps: crown.clumps, hull: crown.hull }
 }

@@ -12,7 +12,6 @@ import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
-import '../../prototypes/tree-core.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
 import { runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
@@ -100,6 +99,9 @@ if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has(
 // the season the page opens in, for what is baked on load (the generated crowns' shadows and the sky they hide);
 // checked with ?season below
 const season0 = params.has('season') ? Number(params.get('season')) : 0
+if (!(season0 >= 0 && season0 <= 3)) throw new Error(`?season must be 0 to 3, not ${params.get('season')}`)
+// the generator (a plain script that sets window.TREEGEN), loaded only for the arm that draws its trees
+if (treeSet.has('gen')) await import('../../prototypes/tree-core.js')
 const cardsOn = treeSet.has('cards')
 const leavesParam = params.get('leaves') ?? 'oak'
 for (const k of ['leaves', 'cardsize', 'cardcover', 'cardsink', 'volume']) if (params.has(k) && !cardsOn) throw new Error(`?${k} needs ?trees=cards`)
@@ -165,10 +167,12 @@ input('season').oninput = () => { S.season = +input('season').value; byId('slabe
 // shadows are baked again when what casts them changed. A judging aid of this page, as the grain's drop is: in the
 // game the season is set per map (docs/art-bible.md §4b) and the static light baked once for it. The sky's occlusion
 // stays the one baked for the season the page opened in
-if (nature.setSeason) {
-  const setSeason = nature.setSeason
+if (nature.setSeason && nature.shadowState) {
+  const setSeason = nature.setSeason, shadowState = nature.shadowState
+  let baked = ''
+  bakes.shadowRT.onAfterRenderObservable.add(() => { baked = shadowState() })
   input('season').addEventListener('input', () => setSeason(S.season))
-  input('season').addEventListener('change', () => { if (setSeason(S.season)) bakes.shadowRT.resetRefreshCounter() })
+  input('season').addEventListener('change', () => { if (shadowState() !== baked) bakes.shadowRT.resetRefreshCounter() })
 }
 // the settings panel hides (its × or H) behind a small Settings button, and comes back from it (or H)
 {
@@ -182,7 +186,7 @@ if (nature.setSeason) {
 {
   const zoomEl = input('zoom'), lo = Math.log(camera.lowerRadiusLimit ?? 1), hi = Math.log(camera.upperRadiusLimit ?? 1000)
   let dragging = false
-  zoomEl.addEventListener('pointerdown', () => { dragging = true }); addEventListener('pointerup', () => { dragging = false })
+  zoomEl.addEventListener('pointerdown', () => { dragging = true }); for (const ev of ['pointerup', 'pointercancel']) addEventListener(ev, () => { dragging = false })
   zoomEl.oninput = () => { camera.radius = Math.exp(lo + (hi - lo) * +zoomEl.value) }
   scene.onBeforeRenderObservable.add(() => { if (!dragging) zoomEl.value = String((Math.log(camera.radius) - lo) / (hi - lo)) })
 }
@@ -339,7 +343,7 @@ Object.assign(window, { __look: {
 
 // ?season=<0..3>: open in that season (0 summer, 1 early autumn, 2 late autumn, 3 winter; the bench runs in it too)
 if (params.has('season')) {
-  const v = Number(params.get('season')); if (!(v >= 0 && v <= 3)) throw new Error(`?season must be 0 to 3, not ${params.get('season')}`)
+  const v = season0
   input('season').value = String(v); input('season').dispatchEvent(new Event('input'))
 }
 // ?detail=l0: the terrain with the L0 grain (compare by eye; the goldens of main against it match)
