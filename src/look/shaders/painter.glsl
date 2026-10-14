@@ -99,8 +99,8 @@ float cloud(vec3 wp){
   return smoothstep(0.59,0.72,c+(G(wp.xz/5.0).r-0.5)*0.06)*uClouds;   // deepening from the edge to the middle (docs/plans/done/ground-light.md)
 }
 // a painted colour under a cloud (cl, cloud()), on every material: darkened and cooled, not dropped into a darker band,
-// which the grain broke into dark islands, so the ground, a crown and a roof under one cloud take one shade (units
-// keep the drop: paint()).
+// which the grain broke into dark islands, so the ground, a crown, a roof and a coat under one cloud take one shade
+// (the owner, 2026-10-14: a coat reads by its colour and its shadow at its feet, docs/plans/done/units-cloud-shade.md).
 // On snow bluer and darker (luma 0.75 against 0.83): a white coat reads on snow under a cloud by that contrast (the
 // guard)
 const vec3 CLOUD_SHADE=vec3(0.78,0.83,0.92),CLOUD_SNOW=vec3(0.68,0.75,0.94);
@@ -208,9 +208,6 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   float l=ndlR+gr*0.55*jitter+(blot-0.5)*0.3*jitter-sh*1.25-(1.0-occ)*0.55;
   #endif
   float cl=cloud(wp);   // a shade below (cloudShade), not a drop of the light
-  #ifdef KEEP_HUE
-  l-=cl*0.40;   // units: the cloud drops their light a band, as before: a coat reads on bright ground under a cloud by that contrast (the guard)
-  #endif
   #ifdef DETAIL_ON
   // the band edges keep their width but never get narrower than the light's change across two pixels (no aliasing)
   #ifdef DETAIL_SAB_STEP
@@ -248,9 +245,7 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #ifdef DETAIL_ON
   c*=1.0+(blot-uGrainMean.y)*0.12*jitter;                                   // the blotches in the value (renormalised round their mean)
   #endif
-  #ifndef KEEP_HUE
   c=cloudShade(c,cl,snow);
-  #endif
   vec3 V=normalize(uCamPos-wp);
   float fres=1.0-max(dot(N,V),0.0);
   float rim=smoothstep(0.58,0.64,fres+(gd-0.5)*0.2)*smoothstep(-0.35,0.2,ndl);

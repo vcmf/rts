@@ -187,9 +187,9 @@ standing field is drawn lower than history's, so a formation in it reads.
   (the warm golden morning, the look up to LC3) stays as `?mood=golden`; a map
   may set its own mood (a dusk, a winter battle).
 - **Cloud shadows are soft shades,** not drops into a darker band: the ground,
-  crowns and roofs under a cloud darken and cool together, more toward its
-  middle, a deeper blue on snow; units drop a band, so a coat still reads
-  (decision 0032).
+  crowns, roofs and armies under a cloud darken and cool together, more toward
+  its middle, a deeper blue on snow. A coat reads by its colour and the shadow
+  at its feet, not by a darker band (the owner, 2026-10-14).
 - **Shadows are physically computed, then painted.** A real sun shadow pass
   plus ambient occlusion (Babylon) decides *where* shadow falls. Our shader
   decides *how it looks*: the cool shadow band, with edges broken by the grain.
