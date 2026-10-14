@@ -93,8 +93,12 @@ float depthA(vec3 wp){return clamp(length(wp-uCamPos)/1000.0,0.0,1.0);}
 float cloud(vec3 wp){
   vec2 p=wp.xz+uTime*vec2(2.2,0.8);
   float c=0.62*G(p/330.0).g+0.38*G(p/131.0+vec2(0.37,0.11)).g;
-  return smoothstep(0.60,0.635,c+(G(wp.xz/5.0).r-0.5)*0.06)*uClouds;
+  return smoothstep(0.56,0.68,c+(G(wp.xz/5.0).r-0.5)*0.06)*uClouds;   // a soft edge, a cloud shadow on a landscape (docs/plans/active/ground-light.md)
 }
+// the ground under a cloud (DETAIL_ON, the meadow blades): its colour darkened and cooled, not dropped into a darker
+// band, which the grain broke into dark islands
+const vec3 CLOUD_SHADE=vec3(0.74,0.79,0.90);
+vec3 cloudShade(vec3 c,vec3 wp){return mix(c,c*CLOUD_SHADE,cloud(wp));}
 // the shadow band (docs/plans/done/shadow-look.md): more saturated than the base and turned toward a cool blue
 // violet at the same value (a darker band costs dark coats their separation, tools/guard.mjs). KEEP_HUE: the
 // army coats keep the band of main, so a coat in shadow loses none of its colour
@@ -177,14 +181,20 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #ifdef SOFT_RAMP
   ndlR=(ndl+0.45)/1.45;   // the crowns as volumes (L7b): light wraps round a mass of leaves (the ramp only, not the rim)
   #endif
+  #ifdef DETAIL_ON
+  // the ground: the band follows the light (the sun, the cast shadow, the occlusion), the grain only wobbling its edge,
+  // and the grain blotches go to the value below: near a band edge they made islands of the darker band
+  float l=ndlR+gr*0.2*jitter-sh*1.25-(1.0-occ)*0.55;
+  #else
   float l=ndlR+gr*0.55*jitter+(blot-0.5)*0.3*jitter;
   l-=cloud(wp)*0.40+sh*1.25+(1.0-occ)*0.55;
+  #endif
   #ifdef DETAIL_ON
   // the band edges keep their width but never get narrower than the light's change across two pixels (no aliasing)
   #ifdef DETAIL_SAB_STEP
   float t=step(-0.06,l)*0.55+step(0.34,l)*0.45;                          // sabotage: hard band edges
   #else
-  float bw=max(0.08,2.0*fwidth(l));
+  float bw=max(0.12,2.0*fwidth(l));
   float t=smoothstep(-0.06-bw*0.5,-0.06+bw*0.5,l)*0.55+smoothstep(0.34-bw*0.5,0.34+bw*0.5,l)*0.45;
   #endif
   #else
@@ -210,6 +220,9 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   vec3 lt=alb*sunC*mix(1.16,1.02,snow)+liftC*(1.0-snow);
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
   c*=1.0+gr*0.38;                                                           // gouache grain in the value
+  #ifdef DETAIL_ON
+  c*=1.0+(blot-0.5)*0.12*jitter;c=cloudShade(c,wp);                         // the blotches in the value, the cloud as a shade
+  #endif
   vec3 V=normalize(uCamPos-wp);
   float fres=1.0-max(dot(N,V),0.0);
   float rim=smoothstep(0.58,0.64,fres+(gd-0.5)*0.2)*smoothstep(-0.35,0.2,ndl);

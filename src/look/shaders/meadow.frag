@@ -34,7 +34,7 @@ void main(){
   float lo=groundOcc(lm),occ=mix(0.8,1.0,vV)*mix(1.0,lo,uAO*0.6);
   // paint(), lean: the ramp, the cool shadow band (deeper where the sky is hidden), the clouds, no grain, rim nor
   // snow (a blade is a few pixels: they would not show, and the blades are many layers deep)
-  float l=dot(N,uSunDir)-cloud(vW)*0.40-sh*1.25-(1.0-occ)*0.55;
+  float l=dot(N,uSunDir)-sh*1.25-(1.0-occ)*0.55;   // the cloud as a shade below, as on the ground under it
   float t=smoothstep(-0.10,-0.02,l)*0.55+smoothstep(0.30,0.38,l)*0.45;
   vec3 shc=shadowOf(alb);
   #ifdef SKY_IN_SHADOW
@@ -42,4 +42,5 @@ void main(){
   #endif
   vec3 mid=alb*mix(uMidCool,uSunCol,0.30),lt=alb*uSunCol*1.16+uLitLift;
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
+  c=cloudShade(c,vW);
   gl_FragColor=vec4(airOf(c,vW,lm,vH),depthA(vW));}

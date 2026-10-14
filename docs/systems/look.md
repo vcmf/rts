@@ -173,11 +173,17 @@ grain at a constant size on screen (`docs/plans/active/l2-detail.md`).
   `SPEC.detail.index` (400 m), handed over by the index alone, so a variant with no weight is not read.
 - **Strength:** the blend's lost contrast is given back (variance renormalised), then scaled to `SPEC.detail.amp`
   (0.4) of the texture's own.
-- **Band edges:** never narrower than two pixels' change of the light value (`fwidth`), baked and cloud
+- **Band edges:** never narrower than two pixels' change of the light value (`fwidth`) nor than 0.12 of it, baked
   shadows included: where they step within a pixel the edge comes out about two pixels soft.
+- **The band follows the light** (`docs/plans/done/ground-light.md`): on the ground the band is chosen from the sun's
+  angle, the cast shadow and the occlusion, with only a small grain wobble (0.2 of the grain) at its edges; the
+  grain and its 21 m blotches vary the value inside a band. Before, the grain chose the band too, and near an edge
+  (a gentle slope, a cloud) it cut the ground into hard-edged islands of the darker band.
+- **Cloud shadows** on the ground darken and cool its colour (`cloudShade`, `CLOUD_SHADE`) instead of dropping its
+  light into a darker band; `cloud()`'s edge is soft (0.56 to 0.68 of the cloud field) for every material.
 - The pixel's angle is a uniform (`uPixA`) from the camera's actual vertical field of view, so on frames wider
   than 16:9 (which keep the horizontal one) the grain still spans the same share of the frame's height.
-- The 21 m blotch term reads the same planes at its fixed world size, renormalised the same way. Snow, cloud shadows and flowers are
+- The 21 m blotch term reads the same planes at its fixed world size, renormalised the same way. Snow and flowers are
   unchanged. Every read is a `textureGrad` from the world position's derivatives, taken once.
 - `DETAIL_L0` puts back the L0 grain (the bench's second arm, the checks' baseline); `DETAIL_DEBUG` and
   `DETAIL_DEBUG_INC` and `DETAIL_DEBUG_N` (the shading normal) are the checks' views; `DETAIL_SAB_IMPLICIT` and `DETAIL_SAB_STEP` are sabotages, and so is `BANKN_OFF` (no bank normals).
@@ -271,7 +277,8 @@ shader); `?meadow=off` puts back the old scatter.
   banks, the widest clump's reach) at each texel near those edges; then the growing area shrinks a texel, so the
   GPU's bilinear read never crosses a rule; pasture shorter) and the **clump field** (`shaders/meadow.glsl`), and shrinks
   each clump away across its ring's band (the rings hand over without an edge). The fragment shader is a lean
-  `paint()` (the ramp, the cool band, the sky in the shadow, clouds; no grain, rim nor snow): the painted ground's
+  `paint()` (the ramp, the cool band, the sky in the shadow, the cloud as the ground's shade, `cloudShade`; no grain,
+  rim nor snow): the painted ground's
   colour under the root (the macro bake, `groundArm`; the flat class colour on the other arms), darker at the root and lighter, warmer at the tip. In winter the clumps shrink under the snow.
 - **The crops** (L5d, `docs/plans/done/l5d-crops.md`): the same slots grow a crop clump where the meadow map's A
   channel (the crops' growth: `Nature.crop`, a sown field, wheat, green crop or stubble, with the grass's rules,
