@@ -1,4 +1,4 @@
-// The tree generator (docs/research/procedural-trees.md, docs/plans/active/tree-generator.md): space colonization in a
+// The tree generator (docs/research/procedural-trees.md, docs/plans/done/tree-generator.md): space colonization in a
 // species' crown envelope (Runions, Lane and Prusinkiewicz 2007), pipe-model radii, tube branches, and the branch tips
 // clustered into a few crown clumps (docs/art-bible.md §5: a tree is 3-6 crown clumps). A plain script, shared like
 // formation-core.js: prototypes/tree-gen.html loads it with a script tag, the look page imports it

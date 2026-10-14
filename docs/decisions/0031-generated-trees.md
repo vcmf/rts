@@ -11,7 +11,7 @@ Every tree on the field is a pack model (`src/look/nature.ts`), and the art bibl
 not have (oak, lime, birch, willow, alder, orchards, conifers, hedgerows: `docs/art-bible.md` §4b, §6c, §11). L7 still
 owes bare winter trees (`docs/plans/active/track-e-look.md` L7). The research
 (`docs/research/procedural-trees.md`) found standard methods for growing trees, and a prototype grew all of these
-species from data (`prototypes/tree-gen.html`, plan `docs/plans/active/tree-generator.md`). On the look page
+species from data (`prototypes/tree-gen.html`, plan `docs/plans/done/tree-generator.md`). On the look page
 (`?trees=gen,cards`) the generated trees take the whole painted look. Because the generator knows each tree's
 clumps and branches, the cards can light each clump as its own volume, and the crowns can thin to bare branches by
 season. The owner (2026-10-14): the prototype is "absolutely stunning"; this track exists to improve the trees.
@@ -20,7 +20,7 @@ height and crown": the generator is where that form comes from.
 
 Accepted by the owner on 2026-10-14 for its look ("better, more beautiful") and on the expectation of no
 performance regression. The default arm is measured unchanged (identical goldens); the generated arm's frame cost is
-not measured yet, and the plan's cost bench (`docs/plans/active/tree-generator.md`) confirms or revisits it.
+not measured yet, and the plan's cost bench (`docs/plans/done/tree-generator.md`) confirms or revisits it.
 
 ## Decision
 

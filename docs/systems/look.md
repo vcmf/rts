@@ -211,7 +211,7 @@ The plan: `docs/plans/done/l7a-canopy-cards.md`. Not the default: the arm the ow
 
 ### Generated trees (`?trees=gen,cards`, an experiment)
 
-The plan: `docs/plans/active/tree-generator.md`; decision 0031; the method: `docs/research/procedural-trees.md`.
+The plan: `docs/plans/done/tree-generator.md`; decision 0031; the method: `docs/research/procedural-trees.md`.
 Not the default: the arm the owner judges against `?trees=cards`.
 
 - **The models** (`prototypes/tree-core.js`, a plain script the page imports under `?trees=gen` only; `addGenerated` in `src/look/nature.ts`):

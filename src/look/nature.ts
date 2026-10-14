@@ -81,7 +81,7 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
 // cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md, ?trees=cards);
 // meadow: the meadow's grass and wheat replace the tufts and the wheat lattice (docs/plans/done/l5c-meadow.md);
 // oneTree: every tree drawn as one broadleaf model, where and as large as it stands (L5b's judging: ?trees=one)
-// gen: generated trees where the pack's stand (?trees=gen, docs/plans/active/tree-generator.md): the season the page
+// gen: generated trees where the pack's stand (?trees=gen, docs/plans/done/tree-generator.md): the season the page
 // opens in (the sky's occlusion is baked for it), and whether the cards take their clump's volume
 export interface GenOptions { season: number; clumpVolume: boolean }
 export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off', meadow = false, oneTree = false, gen: GenOptions | null = null): Nature {
@@ -349,7 +349,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, setSeason, shadowState, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs, lossCards, season: () => season } : undefined, growth, growthAllowed, crop }
 }
 
-// ?trees=gen (docs/plans/active/tree-generator.md): VARIANTS seeded models per species from prototypes/tree-core.js,
+// ?trees=gen (docs/plans/done/tree-generator.md): VARIANTS seeded models per species from prototypes/tree-core.js,
 // added to the pack as Gen_<species>_<n>. Each pack class's trees are drawn as its species (a share each, picked by the
 // place, so the scatter's random stream is unchanged), every model sized so its reach in plan is its class's mean: the
 // page's composition and its placement rule stay as they are.

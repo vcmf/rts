@@ -89,7 +89,7 @@ const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }
 // ?trees=cards: the crowns as leaf cards (docs/plans/done/l7a-canopy-cards.md); ?leaves=procedural draws the atlas
 // instead of reading the oak picture; ?cardsize, ?cardcover, ?cardsink tune the cards (src/look/canopy.ts); ?volume=off
 // puts back L7a's light, card by card (docs/plans/done/l7b-crown-volume.md); ?trees=gen,cards: generated trees
-// (prototypes/tree-core.js, docs/plans/active/tree-generator.md) where the pack's stand, and an orchard, a hedgerow and a
+// (prototypes/tree-core.js, docs/plans/done/tree-generator.md) where the pack's stand, and an orchard, a hedgerow and a
 // row of poplars
 const treesParam = params.get('trees'), treeSet = new Set(treesParam?.split(',') ?? [])
 if (treesParam !== null && (treeSet.size === 0 || [...treeSet].some(k => k !== 'one' && k !== 'cards' && k !== 'gen'))) throw new Error(`?trees must be one, cards, gen or a comma list of them, not ${treesParam}`)

@@ -18,7 +18,7 @@ import CANOPY_VS from './shaders/canopy.vert?raw'
 import CANOPY_FS from './shaders/canopy.frag?raw'
 import CARDS from './shaders/cards.glsl?raw'
 
-// the leaves a deciduous generated crown loses (docs/plans/active/tree-generator.md): none before season FROM, MOST of
+// the leaves a deciduous generated crown loses (docs/plans/done/tree-generator.md): none before season FROM, MOST of
 // its cards by season TO (late autumn to winter), a few tufts left clinging; the cards left shrink with it (to half:
 // a tuft, not a crown-sized card); read by the card shaders and the sky's occlusion
 export const LEAF_LOSS = { from: 1.5, to: 2.85, most: 0.97 }
@@ -37,7 +37,7 @@ export const CARD_DEFAULTS: CardOptions = { size: 0.32, cover: 2.6, sink: 0.8, v
 
 // one card mesh per model: four vertices per card (centre, corner, card data: half-size, rotation, atlas cell, the
 // sink in half-sizes; the role of the crown triangle it stands on) and the crown's sphere normals
-// clumpVolume: a model that knows its clumps (a generated tree, docs/plans/active/tree-generator.md) lights each card
+// clumpVolume: a model that knows its clumps (a generated tree, docs/plans/done/tree-generator.md) lights each card
 // in the ellipsoid of the clump it stands on, not the crown's: every clump a lit top and a dark core of its own
 export function cardMesh(scene: Scene, name: string, d: NatureModel, o: CardOptions, seed: number, clumpVolume = false): Mesh {
   const P = d.pos, I = d.idx, crown = (v: number) => d.role[v] <= 1

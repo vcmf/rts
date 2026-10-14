@@ -47,7 +47,7 @@ reads `build` 61d031a, the hash Vite read when its server started on the earlier
 
 `?trees=gen,cards` (the generated trees, decision 0031: the pack's trees as generated species plus a forest, a wood,
 an orchard, a hedgerow, poplars and field trees, 285 trees against 113) against `?trees=cards` (the pack crowns as
-cards), `docs/plans/active/tree-generator.md`. A two-page A/B, not one page: the pages build different scenes. Runs in
+cards), `docs/plans/done/tree-generator.md`. A two-page A/B, not one page: the pages build different scenes. Runs in
 the order A B B A per season, each the bench's nine cameras at `--hold 5`, 1920×1080, the `l2` arm (the page's
 default look), frame interval p50, each run the mean of its two in-page repeats; on the branch at 62b166b; the JSON
 beside this one (`tree-gen-2026-10-14-62b166b-*-mac-proxy.json`). The machine was loaded (load average 8–10 in

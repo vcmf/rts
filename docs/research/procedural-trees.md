@@ -10,7 +10,7 @@ art bible asks for (trunk, branches, crown) instead of taking them from a pack o
 is, which method fits a top-down painterly RTS? Written against `docs/art-bible.md` (§4b seasons, §5 the
 model contract, §6c the river's banks, §11 composition), L7's foliage work (`docs/plans/done/l7a-canopy-cards.md`,
 `docs/plans/done/l7b-crown-volume.md`) and `src/look/nature.ts`. The prototype that tests the answer is
-`prototypes/tree-gen.html` (plan: `docs/plans/active/tree-generator.md`).
+`prototypes/tree-gen.html` (plan: `docs/plans/done/tree-generator.md`).
 
 **Confidence tags** (the scheme of `docs/research/stylized-water.md`, plus [M])
 
