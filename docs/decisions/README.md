@@ -38,3 +38,4 @@ recorded here on 2026-10-08.
 | [0026](0026-crops-under-a-soldiers-chest.md) | Standing crops are drawn under a soldier's chest | accepted |
 | [0027](0027-units-take-the-lights-value.md) | Units take the light's value, not its hue | accepted |
 | [0031](0031-generated-trees.md) | Trees are generated from species data | accepted |
+| [0032](0032-units-under-clouds-and-whites.md) | Under a cloud units keep the band drop; a near-white coat takes less of the sun's hue | proposed |

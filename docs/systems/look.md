@@ -44,7 +44,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/heightfield.ts` | `heightAt` on the heightfield with CreateGround's own triangle split; `groundAt` adds the far ring's nodes beyond the tile; `H` is `groundAt` |
 | `src/look/river.ts` | The meander at run time (`docs/systems/river.md`): the shipped samples, a bucket grid, `riverQuery`, `bandOf` |
 | `src/look/grain.ts` | The procedural paint grain (R fine, G blotches, B streaks), a dropped PNG's luminance, the seam check's smooth grain, the R channel's mean |
-| `src/look/mood.ts` | The light's moods (LC1a, `docs/plans/done/lc1a-moods.md`): every colour of the light in one table (the sun and its winter colour, the shadow band's colour, turn and lift, the mid band's cool share, the lit band's lift, the rim's and the backlight's tints, the valley mist's air, the haze, the water's painted sky and glint, the grade and the vignette), read by the painter, the foliage, the meadow, the water and the finishing pass; `MOOD_COLOURS` (`src/look/materials.ts`) gives each material its share. A mood's `units` sets how much of the light units take (LC1b and LC1c, decision 0027: the painter's `KEEP_HUE` path takes the sun's value and `units.tint` of its hue, at most `units.mist` of the valley mist and `units.grade` of the grade, the air then put back at the unit's own value, clamped at 1: `airOf`); the grade itself is the last step of every painted material (`gradeOf` in `atmos()`), and the finishing pass's bloom takes the grade's highlight tint off each tap before its threshold and puts it back (a per-channel threshold on the graded scene amplified the tint). `tools/coat-check.mjs` checks each coat's lit colour (`docs/plans/done/lc1b-coats.md`; its bounds and golden's shares, chosen by the owner: `docs/plans/done/lc1c-unit-share.md`). `golden` is the look up to LC1a; `?mood=<name>` picks one, set before any material is made |
+| `src/look/mood.ts` | The light's moods (LC1a, `docs/plans/done/lc1a-moods.md`): every colour of the light in one table (the sun and its winter colour, the shadow band's colour, turn and lift, the mid band's cool share, the lit band's lift, the rim's and the backlight's tints, the valley mist's air, the haze, the water's painted sky and glint, the grade and the vignette), read by the painter, the foliage, the meadow, the water and the finishing pass; `MOOD_COLOURS` (`src/look/materials.ts`) gives each material its share. A mood's `units` sets how much of the light units take (LC1b and LC1c, decision 0027: the painter's `KEEP_HUE` path takes the sun's value and `units.tint` of its hue, a near-white coat a fifth of that (decision 0032), at most `units.mist` of the valley mist and `units.grade` of the grade, the air then put back at the unit's own value, clamped at 1: `airOf`); the grade itself is the last step of every painted material (`gradeOf` in `atmos()`), and the finishing pass's bloom takes the grade's highlight tint off each tap before its threshold and puts it back (a per-channel threshold on the graded scene amplified the tint). `tools/coat-check.mjs` checks each coat's lit colour (`docs/plans/done/lc1b-coats.md`; its bounds and golden's shares, chosen by the owner: `docs/plans/done/lc1c-unit-share.md`). `golden` is the look up to LC1a; `?mood=<name>` picks one, set before any material is made |
 | `src/look/materials.ts` | Panel state `S`, the sun's direction, and the material factory (it gives each material the mood's colours) that inlines `shaders/painter.glsl` at `#include<painter>`, the water data's reads (`#include<waterdata>`) and the shore band with the bank normals (`#include<shore>`, W4), which includes the macro colour (`#include<macro>`, L5a) |
 | `src/look/terrain.ts` | Tile (1.79 m), far ring (14.3 m) and the apron that stitches them; the far ring's painted river mask; the bank normals' texture (W2, `docs/systems/river.md`; both it and the water data's, W3, from `src/look/span-texture.ts`). Their materials define `DETAIL` (the detail layer, below; on WebGL1 the material factory adds `DETAIL_L0`); the tile's also `BANKN` and `WATERDATA` (the shore band, W4), as do the water's |
 | `src/look/water.ts` | The water ribbon, its materials (the painted water, W4, `docs/systems/river.md`; and the same shader on the tile's ground, for the seam check) and the tree-reflection mask |
@@ -173,11 +173,20 @@ grain at a constant size on screen (`docs/plans/active/l2-detail.md`).
   `SPEC.detail.index` (400 m), handed over by the index alone, so a variant with no weight is not read.
 - **Strength:** the blend's lost contrast is given back (variance renormalised), then scaled to `SPEC.detail.amp`
   (0.4) of the texture's own.
-- **Band edges:** never narrower than two pixels' change of the light value (`fwidth`), baked and cloud
+- **Band edges:** never narrower than two pixels' change of the light value (`fwidth`) nor than 0.12 of it, baked
   shadows included: where they step within a pixel the edge comes out about two pixels soft.
+- **The band follows the light** (`docs/plans/done/ground-light.md`): on the ground the band is chosen from the sun's
+  angle, the cast shadow and the occlusion, with only a small grain wobble (0.2 of the grain) at its edges; the
+  grain and its 21 m blotches vary the value inside a band. Before, the grain chose the band too, and near an edge
+  (a gentle slope, a cloud) it cut the ground into hard-edged islands of the darker band.
+- **Cloud shadows** darken and cool a painted colour (`cloudShade`: `CLOUD_SHADE`, a deeper blue `CLOUD_SNOW` on
+  snow, where a white coat reads by that contrast) instead of dropping its light into a darker band, on every painted
+  material (the ground, the meadow's blades, trees, buildings); units (`KEEP_HUE`) keep the band drop, decision 0032.
+  `cloud()` deepens from a cloud's edge to its middle (0.59 to 0.72 of the cloud field) for every material: light
+  near an edge, full inside (main's patchy shade on snow did the same by islands).
 - The pixel's angle is a uniform (`uPixA`) from the camera's actual vertical field of view, so on frames wider
   than 16:9 (which keep the horizontal one) the grain still spans the same share of the frame's height.
-- The 21 m blotch term reads the same planes at its fixed world size, renormalised the same way. Snow, cloud shadows and flowers are
+- The 21 m blotch term reads the same planes at its fixed world size, renormalised the same way. Snow and flowers are
   unchanged. Every read is a `textureGrad` from the world position's derivatives, taken once.
 - `DETAIL_L0` puts back the L0 grain (the bench's second arm, the checks' baseline); `DETAIL_DEBUG` and
   `DETAIL_DEBUG_INC` and `DETAIL_DEBUG_N` (the shading normal) are the checks' views; `DETAIL_SAB_IMPLICIT` and `DETAIL_SAB_STEP` are sabotages, and so is `BANKN_OFF` (no bank normals).
@@ -271,7 +280,8 @@ shader); `?meadow=off` puts back the old scatter.
   banks, the widest clump's reach) at each texel near those edges; then the growing area shrinks a texel, so the
   GPU's bilinear read never crosses a rule; pasture shorter) and the **clump field** (`shaders/meadow.glsl`), and shrinks
   each clump away across its ring's band (the rings hand over without an edge). The fragment shader is a lean
-  `paint()` (the ramp, the cool band, the sky in the shadow, clouds; no grain, rim nor snow): the painted ground's
+  `paint()` (the ramp, the cool band, the sky in the shadow, the cloud as the ground's shade, `cloudShade`; no grain,
+  rim nor snow): the painted ground's
   colour under the root (the macro bake, `groundArm`; the flat class colour on the other arms), darker at the root and lighter, warmer at the tip. In winter the clumps shrink under the snow.
 - **The crops** (L5d, `docs/plans/done/l5d-crops.md`): the same slots grow a crop clump where the meadow map's A
   channel (the crops' growth: `Nature.crop`, a sown field, wheat, green crop or stubble, with the grass's rules,
