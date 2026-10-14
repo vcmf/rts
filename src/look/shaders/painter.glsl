@@ -207,7 +207,7 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #else
   float l=ndlR+gr*0.55*jitter+(blot-0.5)*0.3*jitter-sh*1.25-(1.0-occ)*0.55;
   #endif
-  float cl=cloud(wp);   // a shade below (cloudShade; units its white-balanced share), not a drop of the light
+  float cl=cloud(wp);   // a shade below (cloudShade, for units their white-balanced share), not a drop of the light
   #ifdef DETAIL_ON
   // the band edges keep their width but never get narrower than the light's change across two pixels (no aliasing)
   #ifdef DETAIL_SAB_STEP
