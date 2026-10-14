@@ -65,7 +65,7 @@ export const MOODS = {
       topHaze: c(0.72, 0.76, 0.82), topAmt: 0.20, vignette: c(0.80, 0.87, 0.98),
     },
   },
-  // temperate, the default (LC3, docs/plans/active/lc3-temperate.md; the owner's pick of LC2's candidates: golden "a
+  // temperate, the default (LC3, docs/plans/done/lc3-temperate.md; the owner's pick of LC2's candidates: golden "a
   // bit cooler, less colourful, but not grey"): a paler, less warm sun, a bluer air, the world at 60 % of its chroma
   temperate: {
     sun: c(1.00, 0.93, 0.82), winterSun: c(0.96, 0.96, 0.94),

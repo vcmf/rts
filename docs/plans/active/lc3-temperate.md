@@ -66,3 +66,16 @@ Main at 71ece8a.
   slightly above main's own spread between runs (up to 0.13 ms, ground-light's bench).
 - **`npm test`:** exit 1 on the soldier layer's timing budget alone (`test/soldiers.test.ts`, 12.25 ms against 12,
   at a load average of 12); run alone it passes (exit 0, 12 of 12). The PR changes no sim code.
+
+## Review
+
+- **Round 1** (one severe): the far ring's river line went through the earth (`paint()`) and the tile's water did not,
+  a colour step at the tile's edge under temperate (golden's earth is 0, so its goldens could not see it). The water's
+  ramp, its winter colour and the ice now take the earth too (`shore.glsl`), so the river sits in the 60 % world and
+  meets the far line. The far spot's column now runs across the view (along it the blocks stacked on screen).
+
+## Left
+
+- `earthOf` runs per pixel for a value fixed per map: baking it into the macro colour and the foliage's colour
+  uniforms would save the measured +0.07 to +0.23 ms, a change of its own.
+- `earthOf` and the grade's green tint share one expression, in GLSL twice and in `gradeColour` once.

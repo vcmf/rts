@@ -171,9 +171,7 @@ float detailGrain(vec3 wp,vec3 N){
   float q=((1.0-o)*(1.0-o)*A.y+o*o*B.y)*dot(pW,pW);              // sum of the squared weights of every read
   return uGrainMean.x+(mix(A.x,B.x,o)-uGrainMean.x)/sqrt(q)*DETAIL_AMP*pFade;}
 #endif
-// THE paint function. jitter: how loose the brushwork is (1 = landscape, 0.3 = crisp units).
-// sh: extra shadow from the painted shadow map (0..1).
-// the earth (the mood, docs/plans/active/lc3-temperate.md): a colour of the world turned toward its value times the
+// the earth (the mood, docs/plans/done/lc3-temperate.md): a colour of the world turned toward its value times the
 // earth tint, with uEarthChroma of its own chroma, by uEarthAmt, before the light. Not units (KEEP_HUE): their coats
 // are painted, not grown
 vec3 earthOf(vec3 a){
@@ -185,6 +183,8 @@ vec3 earthOf(vec3 a){
   return mix(a,max(vec3(l)*uEarthTint+(a-vec3(l))*uEarthChroma,0.0),uEarthAmt);
   #endif
 }
+// THE paint function. jitter: how loose the brushwork is (1 = landscape, 0.3 = crisp units).
+// sh: extra shadow from the painted shadow map (0..1).
 vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh){
   alb=earthOf(alb);
   float snow=snowAt(N,wp);alb=mix(alb,vec3(0.80,0.81,0.84),snow);                           // snow: lit warm white, shadowed cool blue by the ramp
