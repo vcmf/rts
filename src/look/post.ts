@@ -39,6 +39,7 @@ export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateC
   // locked down (decision 0010): yaw ± the spec's range around the default, pitch and zoom inside the checked limits
   camera.lowerAlphaLimit = c.yaw0 - c.yawRange; camera.upperAlphaLimit = c.yaw0 + c.yawRange
   camera.lowerRadiusLimit = c.rMin
+  rtsControls(scene, camera, canvas)
   // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the play area
   camera.mapPanning = true; scene.onBeforeRenderObservable.add(() => { const t = camera.target; t.x = Math.max(-PLAY, Math.min(PLAY, t.x)); t.z = Math.max(-PLAY, Math.min(PLAY, t.z)) })
   camera.upperRadiusLimit = c.rMax; camera.lowerBetaLimit = c.betaMin; camera.upperBetaLimit = c.betaMax
@@ -53,6 +54,40 @@ export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateC
   }
   fit(); scene.getEngine().onResizeObservable.add(fit)
   return camera
+}
+
+// RTS controls: the arrows or WASD pan in the ground plane and Q and E turn, at a speed that grows with the zoom; a
+// trackpad's two-finger swipe pans (the ground follows the fingers) and its pinch zooms; a mouse wheel zooms. They
+// replace Babylon's keyboard (which turned the camera) and wheel (which only zoomed); dragging still turns and pans
+const PAN_PER_S = 0.9, TURN_PER_S = 1.2, SWIPE = 0.0016, PINCH = 0.01, WHEEL = 0.0012
+function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasElement): void {
+  camera.inputs.removeByType('ArcRotateCameraKeyboardMoveInput'); camera.inputs.removeByType('ArcRotateCameraMouseWheelInput')
+  // the ground's forward (away from the camera) and right, from the camera's yaw
+  const pan = (right: number, fwd: number) => {
+    const fx = -Math.cos(camera.alpha), fz = -Math.sin(camera.alpha)
+    camera.target.x += fz * right + fx * fwd; camera.target.z += -fx * right + fz * fwd
+  }
+  const held = new Set<string>()
+  const typing = (e: KeyboardEvent) => e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement
+  addEventListener('keydown', e => { if (!typing(e) && !e.metaKey && !e.ctrlKey) { held.add(e.code); if (e.code.startsWith('Arrow')) e.preventDefault() } })
+  addEventListener('keyup', e => held.delete(e.code))
+  addEventListener('blur', () => held.clear())
+  const on = (...codes: string[]) => codes.some(c => held.has(c)) ? 1 : 0
+  scene.onBeforeRenderObservable.add(() => {
+    if (!held.size) return
+    const dt = Math.min(0.1, scene.getEngine().getDeltaTime() / 1000), step = camera.radius * PAN_PER_S * dt
+    pan((on('ArrowRight', 'KeyD') - on('ArrowLeft', 'KeyA')) * step, (on('ArrowUp', 'KeyW') - on('ArrowDown', 'KeyS')) * step)
+    camera.alpha += (on('KeyE') - on('KeyQ')) * TURN_PER_S * dt
+  })
+  // a mouse wheel steps in lines, or in whole pixels of 50 or more with no sideways part; a trackpad scrolls smoothly
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault()
+    const mouse = e.deltaMode === 1 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY))
+    if (e.ctrlKey || mouse) {
+      const lo = camera.lowerRadiusLimit ?? 1, hi = camera.upperRadiusLimit ?? 1e4
+      camera.radius = Math.min(hi, Math.max(lo, camera.radius * Math.exp(e.deltaY * (e.ctrlKey ? PINCH : WHEEL))))
+    } else { const k = camera.radius * SWIPE; pan(e.deltaX * k, e.deltaY * k) }
+  }, { passive: false })
 }
 
 // the lens (#include<dofcoc>) inlined as the materials inline theirs (a replacer function keeps `$` in the GLSL)

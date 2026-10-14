@@ -18,8 +18,14 @@ import CANOPY_VS from './shaders/canopy.vert?raw'
 import CANOPY_FS from './shaders/canopy.frag?raw'
 import CARDS from './shaders/cards.glsl?raw'
 
+// the leaves a deciduous generated crown loses (docs/plans/active/tree-generator.md): none before season FROM, MOST of
+// its cards by season TO (late autumn to winter), a few tufts left clinging; the cards left shrink with it (to half:
+// a tuft, not a crown-sized card); read by the card shaders and the sky's occlusion
+export const LEAF_LOSS = { from: 1.5, to: 2.85, most: 0.97 }
+export const leafLoss = (season: number): number => { const t = Math.min(1, Math.max(0, (season - LEAF_LOSS.from) / (LEAF_LOSS.to - LEAF_LOSS.from))); return t * t * (3 - 2 * t) * LEAF_LOSS.most }
+const LOSS_DEFINES = `#define LOSS_FROM ${LEAF_LOSS.from.toFixed(3)}\n#define LOSS_TO ${LEAF_LOSS.to.toFixed(3)}\n#define LOSS_MOST ${LEAF_LOSS.most.toFixed(3)}\n`
 // the card expansion and atlas cell (src/look/shaders/cards.glsl) where a shader says #include<cards>
-export const withCards = (src: string): string => src.replace('#include<cards>', () => CARDS)
+export const withCards = (src: string): string => src.replace('#include<cards>', () => LOSS_DEFINES + CARDS)
 
 export interface CardOptions {
   size: number      // a card's half-size, as a fraction of the crown's radius
@@ -31,7 +37,9 @@ export const CARD_DEFAULTS: CardOptions = { size: 0.32, cover: 2.6, sink: 0.8, v
 
 // one card mesh per model: four vertices per card (centre, corner, card data: half-size, rotation, atlas cell, the
 // sink in half-sizes; the role of the crown triangle it stands on) and the crown's sphere normals
-export function cardMesh(scene: Scene, name: string, d: NatureModel, o: CardOptions, seed: number): Mesh {
+// clumpVolume: a model that knows its clumps (a generated tree, docs/plans/active/tree-generator.md) lights each card
+// in the ellipsoid of the clump it stands on, not the crown's: every clump a lit top and a dark core of its own
+export function cardMesh(scene: Scene, name: string, d: NatureModel, o: CardOptions, seed: number, clumpVolume = false): Mesh {
   const P = d.pos, I = d.idx, crown = (v: number) => d.role[v] <= 1
   let cx = 0, cy = 0, cz = 0, n = 0
   for (let v = 0; v < d.role.length; v++) if (crown(v)) { cx += P[v * 3]; cy += P[v * 3 + 1]; cz += P[v * 3 + 2]; n++ }
@@ -66,9 +74,9 @@ export function cardMesh(scene: Scene, name: string, d: NatureModel, o: CardOpti
     // the sphere normal: the crown shades as one mass, as the default arm's soft crowns do
     let nx = q[0] - cx, ny = q[1] - cy, nz = q[2] - cz; const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl
     const px = q[0] - nx * r * o.sink, py = q[1] - ny * r * o.sink, pz = q[2] - nz * r * o.sink
-    const rot = R() * Math.PI * 2, cell = Math.floor(R() * 4), s = r * (0.8 + R() * 0.4)
+    const rot = R() * Math.PI * 2, cell = Math.floor(R() * 4), s = r * (0.8 + R() * 0.4), ck = clumpVolume && d.clump && d.clumps ? d.clumps[d.clump[a]] : null
     for (const [ex, ey] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-      pos.push(px, py, pz); nrm.push(nx, ny, nz); corner.push(ex, ey); card.push(s, rot, cell, o.sink * r / s); cen.push(cx, cy, cz); role.push(d.role[a]); ellC.push(...ec); ellR.push(...er)
+      pos.push(px, py, pz); nrm.push(nx, ny, nz); corner.push(ex, ey); card.push(s, rot, cell, o.sink * r / s); cen.push(cx, cy, cz); role.push(d.role[a]); ellC.push(...(ck ? ck.c : ec)); ellR.push(...(ck ? ck.r : er))
     }
     const b0 = k * 4; idx.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3)
   }
@@ -82,8 +90,9 @@ export function cardMesh(scene: Scene, name: string, d: NatureModel, o: CardOpti
 
 // the card material: the default crowns' palette, rim and backlight, the leaf atlas's value and coverage
 // volume: the crown lit as a volume (L7b: a normal per pixel from its ellipsoid, the light through it, the soft ramp)
-export function cardMaterial(mats: Materials, name: string, folA: string, folB: string, rim: number, leaf: BaseTexture, volume: boolean): ShaderMaterial {
-  const m = mats.make(name, withCards(CANOPY_VS), CANOPY_FS, { attributes: ['position', 'normal', 'aCorner', 'aCard', 'aCrown', 'aRole', 'aTint', 'aEllC', 'aEllR'], uniforms: ['view', 'uFolA', 'uFolB', 'uRim', 'uKind', 'uLeafSize'], samplers: ['uLeaf'], defines: volume ? ['#define VOLUME', '#define SOFT_RAMP'] : [] })
+// leafLoss: the crown thins with the season, card by card (src/look/shaders/cards.glsl; generated deciduous trees)
+export function cardMaterial(mats: Materials, name: string, folA: string, folB: string, rim: number, leaf: BaseTexture, volume: boolean, leafLoss = false): ShaderMaterial {
+  const m = mats.make(name, withCards(CANOPY_VS), withCards(CANOPY_FS), { attributes: ['position', 'normal', 'aCorner', 'aCard', 'aCrown', 'aRole', 'aTint', 'aEllC', 'aEllR'], uniforms: ['view', 'uFolA', 'uFolB', 'uRim', 'uKind', 'uLeafSize', 'uSeason'], samplers: ['uLeaf'], defines: [...(volume ? ['#define VOLUME', '#define SOFT_RAMP'] : []), ...(leafLoss ? ['#define LEAF_LOSS'] : [])] })
   m.setColor3('uFolA', Color3.FromHexString(folA)); m.setColor3('uFolB', Color3.FromHexString(folB)); m.setFloat('uRim', rim); m.setFloat('uKind', 0)
   m.setTexture('uLeaf', leaf); m.setFloat('uLeafSize', CELL * 2); m.backFaceCulling = false
   return m

@@ -12,6 +12,7 @@ import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
+import '../../prototypes/tree-core.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
 import { runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
@@ -88,9 +89,17 @@ const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }
 // leaf cards
 // ?trees=cards: the crowns as leaf cards (docs/plans/done/l7a-canopy-cards.md); ?leaves=procedural draws the atlas
 // instead of reading the oak picture; ?cardsize, ?cardcover, ?cardsink tune the cards (src/look/canopy.ts); ?volume=off
-// puts back L7a's light, card by card (docs/plans/done/l7b-crown-volume.md)
+// puts back L7a's light, card by card (docs/plans/done/l7b-crown-volume.md); ?trees=gen,cards: generated trees
+// (prototypes/tree-core.js, docs/plans/active/tree-generator.md) where the pack's stand, and an orchard, a hedgerow and a
+// row of poplars
 const treesParam = params.get('trees'), treeSet = new Set(treesParam?.split(',') ?? [])
-if (treesParam !== null && (treeSet.size === 0 || [...treeSet].some(k => k !== 'one' && k !== 'cards'))) throw new Error(`?trees must be one, cards or one,cards, not ${treesParam}`)
+if (treesParam !== null && (treeSet.size === 0 || [...treeSet].some(k => k !== 'one' && k !== 'cards' && k !== 'gen'))) throw new Error(`?trees must be one, cards, gen or a comma list of them, not ${treesParam}`)
+if (treeSet.has('one') && treeSet.has('gen')) throw new Error('?trees takes one or gen, not both')
+// ?clumpvol=off (with gen): the generated crowns lit as one volume each, not one per clump (the A/B of the clumps' light)
+if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has('gen'))) throw new Error('?clumpvol takes off, with ?trees=gen')
+// the season the page opens in, for what is baked on load (the generated crowns' shadows and the sky they hide);
+// checked with ?season below
+const season0 = params.has('season') ? Number(params.get('season')) : 0
 const cardsOn = treeSet.has('cards')
 const leavesParam = params.get('leaves') ?? 'oak'
 for (const k of ['leaves', 'cardsize', 'cardcover', 'cardsink', 'volume']) if (params.has(k) && !cardsOn) throw new Error(`?${k} needs ?trees=cards`)
@@ -107,7 +116,7 @@ if (cardsOn) {
 // ?wood: a dense wood (docs/plans/done/soft-shadows.md); ?wood=big: a forest (docs/plans/done/forest-bench.md)
 const woodParam = params.get('wood')
 if (woodParam !== null && woodParam !== '' && woodParam !== 'big') throw new Error(`?wood takes no value or big, not ${woodParam}`)
-const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { leaf: leafTex, opts: cardOpts } : undefined, woodParam === null ? 'off' : woodParam === 'big' ? 'big' : 'small', meadowOn, treeSet.has('one'))
+const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { leaf: leafTex, opts: cardOpts } : undefined, woodParam === null ? 'off' : woodParam === 'big' ? 'big' : 'small', meadowOn, treeSet.has('one'), treeSet.has('gen') ? { season: season0, clumpVolume: params.get('clumpvol') !== 'off' } : null)
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 { const a = new Array(D.spec.water.stones * 4).fill(0); nature.stones.forEach((st, k) => a.splice(k * 4, 4, ...st))
   for (const m of [terrain.terrainMat, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
@@ -152,6 +161,28 @@ document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => b.onclick = () 
 input('gamt').oninput = () => { S.gamt = +input('gamt').value }
 const SEASONS = ['Summer', 'Early autumn', 'Late autumn', 'Winter']
 input('season').oninput = () => { S.season = +input('season').value; byId('slabel').textContent = SEASONS[Math.min(3, Math.round(S.season))] }
+// under ?trees=gen the generated trees follow the season (twigs, thinning crowns), and on release of the slider their
+// shadows are baked again: a demo of a per-map setting (docs/art-bible.md §4b), whose sky occlusion stays the one
+// baked for the season the page opened in
+if (nature.setSeason) {
+  const setSeason = nature.setSeason
+  input('season').addEventListener('input', () => setSeason(S.season))
+  input('season').addEventListener('change', () => { if (setSeason(S.season)) bakes.shadowRT.resetRefreshCounter() })
+}
+// the settings panel hides (its × or H) behind a small Settings button, and comes back from it (or H)
+{
+  const panel = byId('panel'), show = byId('showp')
+  const setHidden = (h: boolean) => { panel.classList.toggle('hidden', h); show.classList.toggle('hidden', !h) }
+  byId('hidep').onclick = () => setHidden(true); show.onclick = () => setHidden(false)
+  addEventListener('keydown', e => { if (e.code === 'KeyH' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) && !e.metaKey && !e.ctrlKey) setHidden(!panel.classList.contains('hidden')) })
+}
+// zoom: a slider beside the wheel and the pinch (src/look/post.ts rtsControls), from the nearest zoom to the farthest
+// on a log scale, following the camera
+{
+  const zoomEl = input('zoom'), lo = Math.log(camera.lowerRadiusLimit ?? 1), hi = Math.log(camera.upperRadiusLimit ?? 1000)
+  zoomEl.oninput = () => { camera.radius = Math.exp(lo + (hi - lo) * +zoomEl.value) }
+  scene.onBeforeRenderObservable.add(() => { if (document.activeElement !== zoomEl) zoomEl.value = String((Math.log(camera.radius) - lo) / (hi - lo)) })
+}
 const dropEl = byId('drop')
 addEventListener('dragover', e => { e.preventDefault(); dropEl.style.display = 'flex' })
 addEventListener('dragleave', () => dropEl.style.display = 'none')

@@ -195,8 +195,8 @@ material reads it:
 |---|---|---|---|---|
 | 0 | Summer | Muted olive and yellow-greens | Meadow greens, dry gold patches | Warm gold sun |
 | 1 | Early autumn | **Mixed colours** (below) | Greens turning golden | Warm gold sun |
-| 2 | Late autumn | Duller, browner, fewer bright crowns | Ochre and brown | Lower, warmer sun |
-| 3 | Winter | Bare-looking dark crowns with snow caps | Snow, painted blue in shadow | **Pale gold sun** |
+| 2 | Late autumn | Duller, browner, fewer bright crowns; **the crowns thin and the limbs show** | Ochre and brown | Lower, warmer sun |
+| 3 | Winter | **Bare branches**, a few brown tufts clinging, snow on the limbs (pack trees: dark crowns with snow caps) | Snow, painted blue in shadow | **Pale gold sun** |
 
 ### Tree colour variety
 - **The pack's own colours are never used.** Every model's materials map to
@@ -215,6 +215,14 @@ material reads it:
 - Every season's colours pass through the same painted lighting (warm lit,
   cool hue-shifted shadow, grain), so a red maple or a purple beech still
   belongs to the same painting.
+
+### Leaf fall (generated trees, decision 0031 proposed)
+- **Deciduous crowns lose their leaves with the season:** from late autumn the leaf cards drop one by one (never by
+  screen pixels: no dissolve noise) and shrink, until a few small tufts cling to bare branches in winter, as in the
+  Austerlitz reference (`design/refs/austerlitz-pratzen-v2.png`). The twigs show from late autumn.
+- **Conifers keep their crowns** and only cool in winter.
+- **The shadows follow:** a thinning crown casts a thinning shadow, a bare tree its limbs' shadow (twigs thinner than
+  a shadow texel cast none).
 
 ### Snow
 - **Snow is a shader effect, not separate models:** it settles on any surface
@@ -236,6 +244,7 @@ The paint comes from our shaders, so models must be **simple and clean**.
 | Rule | Why |
 |---|---|
 | **Big, readable masses.** A tree is 3–6 crown clumps, not leaves; a house is walls, roof and a few openings. | The paint adds the detail. Modelled detail fights it. |
+| **Each crown clump is lit as its own volume** (generated trees: decision 0031 proposed, `docs/research/procedural-trees.md`): a lit top, a dark core, light through its edge, as Tiny Glade's crowns read as several puffs (`design/refs/tiny-glade-img-2.jpg`) | A crown lit as one ball loses the clumps the model has |
 | **No baked lighting or shadows in textures.** Flat, evenly lit base colours only. | Our lighting ramp must own light and shadow. Baked shading doubles it and breaks under the game's sun. |
 | **Separate colour regions** (crown / trunk; wall / roof / door), either as separate materials or clean texture areas | The shader maps each region to a palette role |
 | **About 2–8k triangles** for a hero asset; fewer for scatter | Thousands of instances |
@@ -484,5 +493,5 @@ patches, a winding blue-teal stream. No sky, no horizon. 16:9, no text.
 - [ ] Brush library v1: grain first, then grass and foliage fills.
 - [ ] Do Tripo textures carry useful painted detail, or should we use geometry only plus our brush library?
 - [ ] The visual vocabulary for unit state (routing, fatigue) without bases.
-- [x] Winter preset concept → §4b (shader snow, pale sun). Still to decide: frozen water, and bare-branch models for deep winter.
+- [x] Winter preset concept → §4b (shader snow, pale sun). Still to decide: frozen water. Bare-branch models for deep winter: the generated trees (§4b leaf fall, decision 0031 proposed).
 - [ ] How strong the "looser away from the focus" effect should be at max zoom-out.
