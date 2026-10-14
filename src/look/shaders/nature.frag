@@ -53,4 +53,4 @@ void main(){
     float edge=smoothstep(0.35,0.75,(1.0-abs(dot(N,V)))+(grainW(vW,N,2.4).r-0.5)*0.25);
     c+=uSunCol*uBackCol*back*edge*uBack*0.55*(1.0-sh);}
   #endif
-  gl_FragColor=vec4(atmos(mist(c,vW,lm,vH),vW),depthA(vW));}
+  gl_FragColor=vec4(airOf(c,vW,lm,vH),depthA(vW));}

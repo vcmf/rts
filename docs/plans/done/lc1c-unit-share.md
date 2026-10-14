@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-14
 ---
 
@@ -22,8 +22,8 @@ bounds, decision 0027 (accepted, its numbers), the docs that quote them. Not in 
   blocks take some of the air and fade a little with it, every coat still names its colour. B (0.5, 0.15, 0.25)
   turned the white cream and the green olive; C (0.4, 0.15, 0) kept the hues but lost more saturation in the valley
   than A, with no gain in how the blocks sit.
-- **Units keep their value under the air, in one step** (`airOf` in `src/look/shaders/painter.glsl`, the `KEEP_HUE`
-  path, used by `block.frag`): the valley mist, the distance haze and the grade turn a coat's colour toward the air,
+- **Units keep their value under the air, in one step** (`airOf` in `src/look/shaders/painter.glsl`, the last step
+  of every material, so a unit material needs only `KEEP_HUE`; other materials draw as before): the valley mist, the distance haze and the grade turn a coat's colour toward the air,
   then the result is put back at the coat's own value (Rec. 709 luma) and clamped at 1 by channel. A first run with A
   as it was failed the guard on two Austrian whites that separate on main (the valley in autumn: 0.087 against main's
   0.110; a stubble field in winter: 0.094 against 0.112): the bright mist and the grade's lift took the white's value
@@ -69,13 +69,25 @@ Measured at the final shares, { tint 0.4, mist 0.08, grade 0.2 }, through `airOf
   | Britain | 3 → 8, 0.62 → 0.47 | 3 → 10, 0.62 → 0.41 |
 
   The binding coat is the valley's Russian green (0.20 against the bound's 0.176). The full light (a scratch mood,
-  before `airOf`), with the new bounds, fails 5 of 8 (the green's hue at both spots, the white, the valley blue).
+  units 1, 1, 1, through `airOf`) fails 5 of 8: the green's hue at both spots (40°, 55°), the white at both (saturation
+  0.73, 0.35), the valley blue (0.08).
 - **The guard** against main: start, cover and crops, summer, autumn and winter: ok, no block fails that separates on
   main (132 blocks). The valley's Austrian white in summer, failing on main (0.088), separates (0.101); the two whites
   that failed the first run: 0.124 (main 0.110) and 0.113 (main 0.112). Taking more of the air costs some
   separation, as expected: 59 blocks separate better, 73 a little less, the most by 0.028 (a white on a stubble
   field, 0.207 against 0.235, still twice the bound).
 - **The goldens:** a match at the 8 views, every region 0.000 % (units only).
-- **`npm test`:** exit 0, 19 files, 256 tests (at a load average of 14, after review round 2). A first run, before review round 1, exited 1
+- **`npm test`:** after review round 2, exit 0, 19 files, 256 tests (at a load average of 14); after round 3 (the
+  shaders only routed through `airOf`, the goldens a match), exit 1 on the soldier layer timing budget alone
+  (`test/soldiers.test.ts`, 25 ms per frame at a load average of 89), the rest passing; CI runs it on a quiet machine. A first run, before review round 1, exited 1
   on the two sim timing budgets (`test/formations.test.ts`, `test/soldiers.test.ts`) at a load average of 15 to 29;
   run alone they passed (exit 0, 41 of 41). The PR changes no sim code.
+
+## Left
+
+- **Far units take the full distance haze** (`atmos`, up to 0.72 of the haze 420 m from the focus), as on main; with
+  the value kept it now turns only their colour. No `units` share caps it and the coat check does not sample that far.
+  LC2 measures a far spot with each candidate and adds a share if a coat fails there.
+- The painted bands (`shadowOf`, the mid band, the units' white balance) still weigh value with (0.3, 0.59, 0.11), the
+  grade and `airOf` with Rec. 709: changing the bands moves every golden, a change of its own.
+- A lit British red clamps by channel: its hue drifts 3° to 8–10° (inside the bound).

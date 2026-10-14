@@ -21,7 +21,8 @@ void main(){vec3 c=base();
   // bloom, with the grade's saturation and its haze toward the top, which covered the bloom when the grade was here:
   // it gathers as from the ungraded scene. A per-channel threshold on the graded scene amplifies the tint (winter's
   // snow turned amber); a threshold on value changed the ground's bloom more (docs/plans/done/lc1b-coats.md). A
-  // unit (graded at units.grade only) blooms a little cool: it is divided by more of the tint than it has
+  // unit blooms a little cool and weak: graded at units.grade only, then put back at its value and clamped at 1
+  // (airOf), it is divided by more of the tint than it has
   if(uBloom>0.0){vec3 b=vec3(0.0);vec3 hi=mix(vec3(1.0),uSplitHi,uGrade);
     for(int i=0;i<12;i++){float a=float(i)*0.5236+(i<6?0.0:0.26);float r=(i<6?6.0:16.0)*uRes.y/1080.0;
       vec3 s=texture2D(textureSampler,BLOOM_UV(vUV+vec2(cos(a),sin(a))*r/uRes)).rgb;b+=max(s-0.70*hi,0.0)*(i<6?1.0:0.6);}   // = max(s/hi-0.70,0)*hi

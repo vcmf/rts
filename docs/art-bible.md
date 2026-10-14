@@ -103,6 +103,8 @@ These are decisions, not preferences. Don't propose against them.
    broken edges, chosen colours rather than computed ones.
 3. **Light as colour.** Light is expressed through temperature: warm where
    the sun hits, cool and saturated in shadow. Darkness alone is not light.
+   Units are the exception on their lit side: white-balanced, they take the
+   light's value and only part of its hue (decision 0027).
 4. **Sophisticated simplicity.** Shapes are simple, but the paint is rich.
    The production designer's line: simplification "couldn't be for a lack of
    sophistication."
@@ -292,7 +294,7 @@ question 3).
   map. No live SSAO.
 - **The grade in the materials:** warm amber with split toning, the last
   step of every painted material, so units can take less of it (decision
-  0027, proposed). **One merged finishing pass:** soft highlight roll-off,
+  0027). **One merged finishing pass:** soft highlight roll-off,
   cool vignette, paper texture, dithering.
 - **Valley mist and height fog in the materials:** warm where sunlit, cool
   in shadow. Light shafts form where tree shadows cross the mist.
