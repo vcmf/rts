@@ -13,7 +13,7 @@
 //     depth of field is off unless the URL sets ?dof (tools/look-page.mjs)
 //
 // The bounds (LC1c, docs/plans/done/lc1c-unit-share.md): the owner chose the coats to take some of the air (decision
-// 0027) over LC1b's tighter bounds; the full light (units 1, 1, 1, rendered before LC1c: the coats wash into the ground) fails 5 of 8.
+// 0027) over LC1b's tighter bounds. The full light (a scratch mood, units 1, 1, 1, measured there) failed 5 of 8.
 //
 // Prints a table; exit 1 when a coat fails. The page: the look page (npm run dev, or built and previewed).
 import fs from 'node:fs'

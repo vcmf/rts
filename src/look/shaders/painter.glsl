@@ -69,11 +69,6 @@ float groundOcc(vec4 lm){return lm.g*lm.a;}
 vec4 LM(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);vec2 uv=p.xy/p.w*0.5+0.5;
   if(uv.x<0.002||uv.y<0.002||uv.x>0.998||uv.y>0.998)return vec4(1.0,1.0,0.0,1.0);
   return texture2D(uLM,uv);}
-// a colour at the value (Rec. 709 luma) of another, for units (KEEP_HUE): the mist and the grade turn a coat, not its value
-// (clamped at 1: a warm white kept over 1 clips by channel on screen, darker, and the guard measured a white on
-// winter stubble falling under its bound unclamped, docs/plans/done/lc1c-unit-share.md)
-const vec3 LUMA=vec3(0.2126,0.7152,0.0722);
-vec3 keepValue(vec3 o,vec3 c){return min(o*(dot(c,LUMA)/max(dot(o,LUMA),1e-4)),vec3(1.0));}
 // Valley mist: warm where the air is sunlit, cool where it's shadowed. Light shafts =
 // the air column's sun visibility, read from the light map at 3 heights along the view ray.
 // Known issue #62: the lit air tints sunlit snow orange.
@@ -89,9 +84,7 @@ vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   // own light is not that of the ground
   float t=clamp(m*(0.35+0.55*n),0.0,0.42)*mix(1.0,mix(0.55,1.0,1.0-(1.0-lm.r)*uShadowsOn),exp(-hAbove*0.5));
   #ifdef KEEP_HUE
-  // units: the air in front of them thinner (the mood), and they keep their value under it (the guard: a white in a
-  // bright mist turned toward the ground behind it), so it takes their colour toward the air, not their contrast
-  t=min(t,uUnitMist);return keepValue(mix(c,mix(uMistShade,uMistLit,air),t),c);
+  t=min(t,uUnitMist);   // units: the air in front of them thinner (the mood), at their own value (airOf)
   #endif
   return mix(c,mix(uMistShade,uMistLit,air),t);}
 // view distance in alpha → depth of field without re-rendering the scene
@@ -234,16 +227,13 @@ vec3 gradeOf(vec3 c){
   amt*=uUnitGrade;
   #endif
   if(amt<=0.0)return c;
-  const vec3 L=LUMA;float l=dot(c,L);
+  const vec3 L=vec3(0.2126,0.7152,0.0722);float l=dot(c,L);
   float green=clamp((c.g-max(c.r,c.b))*3.0,0.0,1.0);
   vec3 g=mix(c,vec3(l)*uGreenTint+(c-vec3(l))*uGreenChroma,green*uGreenAmt);
   g=mix(vec3(dot(g,L)),g,uGradeSat);
   g*=mix(uSplitLo,uSplitHi,smoothstep(0.08,0.75,l));
   g+=uLift*(1.0-l);
   g=mix(g,uTopHaze*(0.85+l*0.35),smoothstep(0.60,1.0,gl_FragCoord.y/uViewH)*uTopAmt);   // 0 at the frame's bottom
-  #ifdef KEEP_HUE
-  g=keepValue(g,c);   // units: the grade turns their colour, not their value (as the mist)
-  #endif
   return mix(c,g,amt);}
 // Top-down atmosphere: colour cools (and warms toward the sun side) away from the focus; then the grade.
 vec3 atmos(vec3 c,vec3 wp){
@@ -252,3 +242,14 @@ vec3 atmos(vec3 c,vec3 wp){
   float warm=max(dot(normalize(dv+1e-4),normalize(uSunDir.xz)),0.0);
   return gradeOf(mix(c,mix(uHazeCool,uHazeWarm,warm*0.65),f));
 }
+// the air over a painted colour: the valley mist, the distance haze and the grade. Units (KEEP_HUE) keep their value
+// (Rec. 709 luma) under all of it, in one step: the air turns a coat toward its colour, not its contrast with the
+// ground (decision 0027, docs/plans/done/lc1c-unit-share.md: a white in a bright mist turned toward the ground behind
+// it). Then clamped at 1 by channel, everywhere a unit is drawn: the finishing pass's shoulder scales a colour by its
+// largest channel, so a warm white over 1 would show darker than the neutral white the clamp leaves (the guard: a
+// white on winter stubble)
+vec3 airOf(vec3 c,vec3 wp,vec4 lm,float hAbove){vec3 a=atmos(mist(c,wp,lm,hAbove),wp);
+  #ifdef KEEP_HUE
+  const vec3 L=vec3(0.2126,0.7152,0.0722);a=min(a*(dot(c,L)/max(dot(a,L),1e-4)),vec3(1.0));
+  #endif
+  return a;}

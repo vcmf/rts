@@ -23,10 +23,10 @@ middle (`docs/plans/done/lc1c-unit-share.md`).
 We will light units (the painter's `KEEP_HUE` path: the army blocks now, the figures from L3) with the light's
 value and only part of its hue. The share is a mood's `units.tint` (`src/look/mood.ts`, 0.4 in `golden`); the
 lit band's warm lift is a cast, not light, so units take that share of it (a grey lift in its place would wash a
-dark coat's colour out). The valley mist over a unit is capped (`units.mist`, 0.10, against the ground's 0.42), and units
+dark coat's colour out). The valley mist over a unit is capped (`units.mist`, 0.08, against the ground's 0.42), and units
 take a share of the grade (`units.grade`, 0.2), now that the grade is part of each material (`gradeOf`,
-`src/look/shaders/painter.glsl`); under the mist and the grade a unit keeps its value, so they turn its colour toward
-the air, not its contrast with the ground. Their shadow band keeps its cool hue, as before. Pillar 3 holds for the world and
+`src/look/shaders/painter.glsl`). Under all of the air (the mist, the distance haze, the grade) a unit keeps its value
+(`airOf`), so the air turns its colour, not its contrast with the ground. Their shadow band keeps its cool hue, as before. Pillar 3 holds for the world and
 for a unit's shadow side; a unit's lit side is white-balanced. Each coat's lit colour is checked by
 `tools/coat-check.mjs`.
 
@@ -38,6 +38,9 @@ for a unit's shadow side; a unit's lit side is white-balanced. Each coat's lit c
   55°. Keeping the value under the air keeps the guard: no block that separates on LC1b's shares fails.
 - Bad: a unit is a little less a part of the scene's light: it takes some of its warmth, the air and the grade, not
   all. The Russian green, a dark coat near the meadow's hue, sets the bound: a share past golden's turns it olive.
+- Bad: a far unit no longer fades in value with the distance haze (it did up to LC1b), only in colour: the depth
+  cue on units is the haze's hue, not its value. A unit's own highlights stop at 1 (clamped), so they bloom a little
+  less.
 - Bad: every mood must set the three shares by eye, and the coat check holds them to the bound.
 
 ## Alternatives considered
