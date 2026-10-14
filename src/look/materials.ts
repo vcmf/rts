@@ -39,8 +39,13 @@ const MOOD_COLOURS: Record<string, (m: Mood) => Color3> = {
   uSunCol: m => m.sun, uShadowCol: m => m.shadow, uShadowTurn: m => m.shadowTurn.scale(1 / luma(m.shadowTurn)), uShadowLift: m => m.shadowLift,
   uMidCool: m => m.midCool, uLitLift: m => m.litLift, uRimCol: m => m.rim, uBackCol: m => m.back, uMistShade: m => m.mistShade, uMistLit: m => m.mistLit,
   uHazeCool: m => m.hazeCool, uHazeWarm: m => m.hazeWarm, uWaterSky: m => m.waterSky, uGlint: m => m.glint, uFarRiver: m => m.farRiver,
+  uGreenTint: m => m.grade.greenTint, uSplitLo: m => m.grade.splitLo, uSplitHi: m => m.grade.splitHi, uLift: m => m.grade.lift, uTopHaze: m => m.grade.topHaze,
 }
-const COMMON = [...Object.keys(MOOD_COLOURS), 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA']
+const MOOD_FLOATS: Record<string, (m: Mood) => number> = {
+  uGreenChroma: m => m.grade.greenChroma, uGreenAmt: m => m.grade.greenAmt, uGradeSat: m => m.grade.sat, uTopAmt: m => m.grade.topAmt,
+  uUnitTint: m => m.units.tint, uUnitMist: m => m.units.mist, uUnitGrade: m => m.units.grade,
+}
+const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA']
 
 // perFrame: false keeps a material out of `all` (no per-frame uniforms, no light map: the light-map bake draws into it)
 export interface MatOptions { attributes?: string[]; uniforms?: string[]; samplers?: string[]; alpha?: boolean; defines?: string[]; perFrame?: boolean }
@@ -61,6 +66,7 @@ export class Materials {
     const m = new ShaderMaterial(name, this.scene, { vertexSource: vs, fragmentSource: withPainter(fs) },
       { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...MACRO_SAMPLERS, ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM' && !MACRO_SAMPLERS.includes(x))], needAlphaBlending: alpha, defines: [...D.defines, ...this.defines, ...defines] })
     for (const [u, f] of Object.entries(MOOD_COLOURS)) m.setColor3(u, f(MOOD))   // the light's colours (src/look/mood.ts)
+    for (const [u, f] of Object.entries(MOOD_FLOATS)) m.setFloat(u, f(MOOD))
     m.setVector3('uSunDir', SUN); m.setTexture('uGrain', this.grain); m.setVector2('uGrainMean', new Vector2(...this.grainMean))
     this.every.push(m)
     if (perFrame) { this.all.push(m); for (const b of this.binders) b(m) }

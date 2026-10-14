@@ -1,5 +1,5 @@
 // The camera and the finishing passes (prototypes/painted-cinematic.html, docs/research/cheap-painterly-postfx.md):
-// [the depth of field, a player option per decision 0024: the scene at half resolution, its blur] → one fused pass (its composite, grade, bloom, vignette, paper, dither). Materials write view distance into alpha, so depth of field needs no second scene render.
+// [the depth of field, a player option per decision 0024: the scene at half resolution, its blur] → one fused pass (its composite, bloom, vignette, paper, dither; the grade is the materials': gradeOf, src/look/shaders/painter.glsl). Materials write view distance into alpha, so depth of field needs no second scene render.
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
@@ -115,15 +115,13 @@ export class Post {
         e.setFloat('uN', TAPS.find(n => n >= 0.32 * px * px) ?? 64); lensUniforms(e)
       }
     }
-    const GRADE = ['uGreenTint', 'uSplitLo', 'uSplitHi', 'uLift', 'uTopHaze', 'uVignette', 'uGreenChroma', 'uGreenAmt', 'uGradeSat', 'uTopAmt']
-    const u = pp('uber', ['uRes', 'uGrade', 'uGrainOn', 'uBloom', ...GRADE, ...(p ? [...lens, 'uHalfUV'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], HF, p ? 0.5 : 1.0, p ? '#define DOF' : null)
+    const u = pp('uber', ['uRes', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], HF, p ? 0.5 : 1.0, p ? '#define DOF' : null)
     // uRes: the full resolution (with the depth of field, this pass reads the half-resolution blur)
     u.onApply = e => {
-      const r = d ?? u; e.setFloat2('uRes', r.width, r.height); e.setFloat('uGrade', S.grade); e.setFloat('uGrainOn', S.grain); e.setFloat('uBloom', S.bloom); e.setTexture('uGrain', this.grain())
-      // the mood's grade (src/look/mood.ts)
-      const g = MOOD.grade
-      e.setColor3('uGreenTint', g.greenTint); e.setColor3('uSplitLo', g.splitLo); e.setColor3('uSplitHi', g.splitHi); e.setColor3('uLift', g.lift); e.setColor3('uTopHaze', g.topHaze); e.setColor3('uVignette', g.vignette)
-      e.setFloat('uGreenChroma', g.greenChroma); e.setFloat('uGreenAmt', g.greenAmt); e.setFloat('uGradeSat', g.sat); e.setFloat('uTopAmt', g.topAmt)
+      const r = d ?? u; e.setFloat2('uRes', r.width, r.height); e.setFloat('uGrainOn', S.grain); e.setFloat('uBloom', S.bloom); e.setTexture('uGrain', this.grain())
+      // the mood's vignette, and the grade's parts the bloom takes off and puts back (its grade is in the painted
+      // materials: src/look/materials.ts)
+      e.setColor3('uVignette', MOOD.grade.vignette); e.setColor3('uSplitHi', MOOD.grade.splitHi); e.setFloat('uGradeSat', MOOD.grade.sat); e.setFloat('uTopAmt', MOOD.grade.topAmt); e.setFloat('uGrade', S.grade)
       if (d && p) { lensUniforms(e); e.setFloat2('uHalfUV', d.width / 2 / p.width, d.height / 2 / p.height); e.setTextureFromPostProcess('uSharp', d) }
     }
   }

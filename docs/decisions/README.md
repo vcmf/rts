@@ -36,3 +36,4 @@ recorded here on 2026-10-08.
 | [0024](0024-blur-as-player-option.md) | Depth of field in gameplay is a player option, on by default | accepted |
 | [0025](0025-review-by-kind-of-pr.md) | Review rounds by kind of PR: code as before, docs one round at most, research none | accepted |
 | [0026](0026-crops-under-a-soldiers-chest.md) | Standing crops are drawn under a soldier's chest | accepted |
+| [0027](0027-units-take-the-lights-value.md) | Units take the light's value, not its hue | proposed |

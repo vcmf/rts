@@ -16,7 +16,7 @@ import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions 
 import { runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S } from './materials.ts'
-import { MOOD, setMood } from './mood.ts'
+import { gradeColour, MOOD, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow } from './meadow.ts'
 import { DOF, Post, buildCamera } from './post.ts'
@@ -62,7 +62,9 @@ const scene = new Scene(engine); scene.skipPointerMovePicking = true
 const params = new URLSearchParams(location.search), softParam = params.get('soft'), penumbraParam = params.get('penumbra')
 // the light's mood (src/look/mood.ts), before any material is made
 setMood(params.get('mood') ?? 'golden')
-scene.clearColor = new Color4(MOOD.hazeCool.r, MOOD.hazeCool.g, MOOD.hazeCool.b, 1)
+// the clear colour, graded as the materials are at the frame's top (it shows only there), following the grade's switch
+const CLEAR_GRADED = gradeColour(MOOD.hazeCool, MOOD, 1)
+scene.clearColor = new Color4(CLEAR_GRADED.r, CLEAR_GRADED.g, CLEAR_GRADED.b, 1)
 if (softParam !== null && softParam !== 'off') throw new Error(`?soft must be off, not ${softParam}`)
 const soft: SoftOptions = { on: softParam !== 'off', penumbra: penumbraParam === null ? SOFT_DEFAULTS.penumbra : Number(penumbraParam) }
 if (penumbraParam !== null && (penumbraParam.trim() === '' || !Number.isFinite(soft.penumbra) || soft.penumbra < 0 || soft.penumbra > PENUMBRA_MAX)) throw new Error(`?penumbra must be a number from 0 to ${PENUMBRA_MAX}, not ${penumbraParam}`)
@@ -183,7 +185,7 @@ const fpsEl = byId('fps')
 const FROZEN = new URLSearchParams(location.search).has('frozen')   // golden screenshots (tools/golden.mjs): the clock stays at 0
 // sun colour follows the season: warm gold in summer and autumn, pale gold in winter (keeps snow white, not yellow)
 const SUNCOL = MOOD.sun.clone()
-scene.onBeforeRenderObservable.add(() => { const w = Math.max(0, Math.min(1, S.season - 2)); Color3.LerpToRef(MOOD.sun, MOOD.winterSun, w, SUNCOL) })
+scene.onBeforeRenderObservable.add(() => { const w = Math.max(0, Math.min(1, S.season - 2)); Color3.LerpToRef(MOOD.sun, MOOD.winterSun, w, SUNCOL); const k = Color3.Lerp(MOOD.hazeCool, CLEAR_GRADED, S.grade); scene.clearColor.set(k.r, k.g, k.b, 1) })
 // the detail layer's pixel angle (src/look/shaders/painter.glsl): the angle one pixel of a SPEC.detail.lines-tall
 // frame spans, from the camera's actual vertical field of view (narrower than the SPEC's on frames wider than 16:9)
 let pixA = 0
@@ -193,7 +195,7 @@ scene.onBeforeRenderObservable.add(() => {
   if (!FROZEN) S.t += Math.min(engine.getDeltaTime() / 1000, 0.05)
   for (const m of mats.all) {
     m.setVector3('uCamPos', camera.position); m.setVector3('uFocus', camera.target); m.setFloat('uTime', S.t)
-    m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
+    m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uGrade', S.grade); m.setFloat('uViewH', engine.getRenderHeight()); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
     m.setFloat('uPixA', pixA)
     m.setFloat('uAO', S.ao); m.setFloat('uMist', S.mist); m.setFloat('uShafts', S.shafts); m.setFloat('uBack', S.back)
   }

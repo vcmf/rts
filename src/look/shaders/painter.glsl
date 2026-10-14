@@ -3,6 +3,10 @@ uniform sampler2D uGrain;
 uniform vec3 uSunDir,uSunCol,uShadowCol,uHazeCool,uHazeWarm,uCamPos,uFocus;
 // the mood's other colours (src/look/mood.ts)
 uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistShade,uMistLit,uWaterSky,uGlint,uFarRiver;   // uShadowTurn: divided by its luma
+// the grade (gradeOf, at the end of atmos), and how much of the light units take (KEEP_HUE: docs/plans/done/lc1b-coats.md)
+uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade;
+uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
+uniform float uUnitTint,uUnitMist,uUnitGrade;
 uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason;
 
 vec3 G(vec2 uv){return texture2D(uGrain,uv).rgb;}
@@ -79,6 +83,9 @@ vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   // thinner over the cast shadow on the ground, which keeps its shape; less so above the ground (a crown, a block), whose
   // own light is not that of the ground
   float t=clamp(m*(0.35+0.55*n),0.0,0.42)*mix(1.0,mix(0.55,1.0,1.0-(1.0-lm.r)*uShadowsOn),exp(-hAbove*0.5));
+  #ifdef KEEP_HUE
+  t=min(t,uUnitMist);   // units: the air in front of them thinner (the mood), so their coats keep their colour
+  #endif
   return mix(c,mix(uMistShade,uMistLit,air),t);}
 // view distance in alpha → depth of field without re-rendering the scene
 float depthA(vec3 wp){return clamp(length(wp-uCamPos)/1000.0,0.0,1.0);}
@@ -191,23 +198,47 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #ifdef SKY_IN_SHADOW
   shc*=mix(0.62,1.0,smoothstep(0.35,0.8,pSky));   // deep sky occlusion (a wood floor) deepens the shadow itself (docs/plans/done/soft-shadows.md)
   #endif
-  vec3 mid=alb*mix(uMidCool,uSunCol,0.30);
+  // units see the light white-balanced (the eye): its value, and of its hue only uUnitTint (the mood)
+  vec3 sunC=uSunCol,liftC=uLitLift;
+  #ifdef KEEP_HUE
+  sunC=mix(vec3(dot(uSunCol,vec3(0.3,0.59,0.11))),uSunCol,uUnitTint);liftC*=uUnitTint;   // the lit band's lift is a warm cast, not light: units take the same share of it
+  #endif
+  vec3 mid=alb*mix(uMidCool,sunC,0.30);
   #ifdef SOFT_RAMP
   mid=clamp(mix(vec3(dot(mid,vec3(0.3,0.59,0.11))),mid,1.3),0.0,1.0);   // the crowns turning side keeps its colour (L7b)
   #endif
-  vec3 lt=alb*uSunCol*mix(1.16,1.02,snow)+uLitLift*(1.0-snow);
+  vec3 lt=alb*sunC*mix(1.16,1.02,snow)+liftC*(1.0-snow);
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
   c*=1.0+gr*0.38;                                                           // gouache grain in the value
   vec3 V=normalize(uCamPos-wp);
   float fres=1.0-max(dot(N,V),0.0);
   float rim=smoothstep(0.58,0.64,fres+(gd-0.5)*0.2)*smoothstep(-0.35,0.2,ndl);
-  c+=uSunCol*uRimCol*rim*rimAmt*0.55*(1.0-cloud(wp)*0.7)*(1.0-sh);       // graphic warm rim
+  c+=sunC*uRimCol*rim*rimAmt*0.55*(1.0-cloud(wp)*0.7)*(1.0-sh);       // graphic warm rim
   return c;
 }
-// Top-down atmosphere: colour cools (and warms toward the sun side) away from the focus.
+// The grade (the mood's, src/look/mood.ts), the last step of every painted material (atmos), so units can take less
+// of it (uUnitGrade): muted warmer greens, the saturation, a split tone, a lift in the darks, a haze toward the top
+// of the frame. It was the finishing pass's, which cannot tell a coat from the meadow (docs/plans/done/lc1b-coats.md)
+vec3 gradeOf(vec3 c){
+  // units take uUnitGrade of it all, the haze toward the top too: a depth cue, but pillar 1 (the armies readable)
+  // ranks first, and it takes a third of a coat's saturation at the frame's top
+  float amt=uGrade;
+  #ifdef KEEP_HUE
+  amt*=uUnitGrade;
+  #endif
+  if(amt<=0.0)return c;
+  const vec3 L=vec3(0.2126,0.7152,0.0722);float l=dot(c,L);
+  float green=clamp((c.g-max(c.r,c.b))*3.0,0.0,1.0);
+  vec3 g=mix(c,vec3(l)*uGreenTint+(c-vec3(l))*uGreenChroma,green*uGreenAmt);
+  g=mix(vec3(dot(g,L)),g,uGradeSat);
+  g*=mix(uSplitLo,uSplitHi,smoothstep(0.08,0.75,l));
+  g+=uLift*(1.0-l);
+  g=mix(g,uTopHaze*(0.85+l*0.35),smoothstep(0.60,1.0,gl_FragCoord.y/uViewH)*uTopAmt);   // 0 at the frame's bottom
+  return mix(c,g,amt);}
+// Top-down atmosphere: colour cools (and warms toward the sun side) away from the focus; then the grade.
 vec3 atmos(vec3 c,vec3 wp){
   vec2 dv=wp.xz-uFocus.xz;float d=length(dv);
   float f=smoothstep(110.0,420.0,d)*0.72;
   float warm=max(dot(normalize(dv+1e-4),normalize(uSunDir.xz)),0.0);
-  return mix(c,mix(uHazeCool,uHazeWarm,warm*0.65),f);
+  return gradeOf(mix(c,mix(uHazeCool,uHazeWarm,warm*0.65),f));
 }

@@ -83,7 +83,7 @@ const sat = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
 // each block's pixels: where its white and black mask renders differ, inside its box, and nearer its centre than any
 // other block whose box holds them. All of the block, not just the part that differs from the ground (which would
 // leave out exactly the pixels that make a block hard to read)
-function blockPixels(white, black, info) {
+export function blockPixels(white, black, info) {
   const sx = white.w / info.w, sy = white.h / info.h, px = new Map(info.boxes.map(b => [b.name, []]))
   for (let y = 0; y < white.h; y++) for (let x = 0; x < white.w; x++) {
     const k = (y * white.w + x) * 4
@@ -170,6 +170,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (!names.includes('summer') || names.some(n => !Object.hasOwn(SEASON_VALUES, n)) || new Set(names).size !== names.length) { console.error(`--seasons: names from ${Object.keys(SEASON_VALUES).join(', ')}, summer among them (the negative), each once`); process.exit(2) }
     SEASONS = names.map(n => [n, SEASON_VALUES[n], n === 'summer'])
   }
+  const stray = args.find(a => a.startsWith('-'))   // a flag left unparsed (e.g. '--view cover' passed as one argument) would become the out dir
+  if (stray) { console.error(`guard.mjs: unknown argument ${JSON.stringify(stray)}`); process.exit(2) }
   const [url, out = path.join(ROOT, 'scratch/guard')] = args
   if (!url || (bi >= 0 && !baseUrl)) { console.error('usage: node tools/guard.mjs <look page URL> [--base <URL>] [--view start|cover|crops] [--seasons summer,…] [outDir]'); process.exit(2) }
   try { const ok = guard(url, out, baseUrl); console.log(ok ? 'guard: ok' : 'guard: FAILED'); process.exit(ok ? 0 : 1) } catch (e) { console.error('guard.mjs:', e.message); process.exit(1) }
