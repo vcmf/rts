@@ -132,12 +132,15 @@ Every surface is painted with **three value bands**, not a smooth gradient:
 
 | Band | Colour rule |
 |---|---|
-| **Light** | Base colour × warm sun (`#FFD699`-ish). Slightly lifted and warmer. |
+| **Light** | Base colour × the mood's sun (temperate: a pale warm `#FFEDD1`-ish). Slightly lifted and warmer. |
 | **Mid-tone** | Base colour, slightly warm |
 | **Shadow** | **Hue-shifted cool:** toward teal, blue or violet, *more* saturated than the base, never just darker |
 
-The edges between bands are **broken by the grain texture**, so they read as
-brush edges rather than computed lines.
+The edges between bands are **broken by the grain texture** on forms (crowns,
+buildings, armies), so they read as brush edges rather than computed lines. On
+the **ground** the band follows the light alone, and the grain paints the
+value inside it: chosen by the grain, the ground broke into hard dark islands
+near every band edge (`docs/plans/done/ground-light.md`).
 
 **One exception, foliage crowns** (decision 0022, accepted 2026-10-13; built in
 the leaf-card arm, `?trees=cards`): the same three colours, the shadow still
@@ -147,8 +150,14 @@ inside, and single leaves catch the sun. Every other surface (ground, water,
 buildings, armies) keeps the three bands.
 
 ### Palette
-- **80% calm field:** muted olive and yellow-greens, dry golds, teal-green
-  hollows. Never neon green.
+The colour theme is **epic, not a normal camera's**: the landscape carries
+little colour and its **values** make the image; the armies and the flags are
+the only strong colour (the owner's review, `docs/research/colour-and-light-review.md`).
+The world's colours pass through the mood's **earth** (decision 0033): the
+default, `temperate`, keeps 60 % of their chroma, turned slightly warm-grey.
+
+- **80% calm field:** muted olive and grey-greens, pale straw, cool teal-green
+  hollows. Never neon green, never a saturated yellow-orange.
 - **20% accents, deliberately complementary:** orange flowers against teal
   shadow, red roofs, army colours.
 - **Armies are always the most saturated objects on screen.** Terrain never
@@ -169,8 +178,17 @@ standing field is drawn lower than history's, so a formation in it reads.
   camera, so shadows are long and readable.
 - **Shadows are painted shapes** in the cool shadow colour, with grain-broken
   edges. They are not dark grey overlays.
-- **Time-of-day presets** are just ramp colours: golden morning (default), high
-  afternoon, winter (pale gold sun, blue shadows), dusk.
+- **Moods** are data (`src/look/mood.ts`): every colour of the light, the grade,
+  the earth and how much of it units take. **The default is `temperate`**
+  (decision 0033, the owner's pick of LC2's candidates judged blind): a paler,
+  less warm sun than the old golden morning, a bluer air and shadow, the world
+  at 60 % of its chroma, "a bit cooler, less colourful, but not grey". `golden`
+  (the warm golden morning, the look up to LC3) stays as `?mood=golden`; a map
+  may set its own mood (a dusk, a winter battle).
+- **Cloud shadows are soft shades,** not drops into a darker band: the ground,
+  crowns and roofs under a cloud darken and cool together, more toward its
+  middle, a deeper blue on snow; units drop a band, so a coat still reads
+  (decision 0032).
 - **Shadows are physically computed, then painted.** A real sun shadow pass
   plus ambient occlusion (Babylon) decides *where* shadow falls. Our shader
   decides *how it looks*: the cool shadow band, with edges broken by the grain.

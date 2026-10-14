@@ -7,6 +7,7 @@ uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistSha
 uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade;
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
 uniform float uUnitTint,uUnitMist,uUnitGrade;
+uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt;   // the earth (the mood): the world toward earth tones
 uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason;
 
 // Rec. 709 luma: the grade and the value units keep (the painted bands use the older 0.3, 0.59, 0.11)
@@ -172,7 +173,20 @@ float detailGrain(vec3 wp,vec3 N){
 #endif
 // THE paint function. jitter: how loose the brushwork is (1 = landscape, 0.3 = crisp units).
 // sh: extra shadow from the painted shadow map (0..1).
+// the earth (the mood, docs/plans/active/lc3-temperate.md): a colour of the world turned toward its value times the
+// earth tint, with uEarthChroma of its own chroma, by uEarthAmt, before the light. Not units (KEEP_HUE): their coats
+// are painted, not grown
+vec3 earthOf(vec3 a){
+  #ifdef KEEP_HUE
+  return a;
+  #else
+  if(uEarthAmt<=0.0)return a;
+  float l=dot(a,LUMA);
+  return mix(a,max(vec3(l)*uEarthTint+(a-vec3(l))*uEarthChroma,0.0),uEarthAmt);
+  #endif
+}
 vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh){
+  alb=earthOf(alb);
   float snow=snowAt(N,wp);alb=mix(alb,vec3(0.80,0.81,0.84),snow);                           // snow: lit warm white, shadowed cool blue by the ramp
   #ifdef DETAIL_ON
   dPx=dFdx(wp);dPy=dFdy(wp);detailPlanes(wp,N);

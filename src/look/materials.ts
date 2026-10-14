@@ -40,9 +40,11 @@ const MOOD_COLOURS: Record<string, (m: Mood) => Color3> = {
   uMidCool: m => m.midCool, uLitLift: m => m.litLift, uRimCol: m => m.rim, uBackCol: m => m.back, uMistShade: m => m.mistShade, uMistLit: m => m.mistLit,
   uHazeCool: m => m.hazeCool, uHazeWarm: m => m.hazeWarm, uWaterSky: m => m.waterSky, uGlint: m => m.glint, uFarRiver: m => m.farRiver,
   uGreenTint: m => m.grade.greenTint, uSplitLo: m => m.grade.splitLo, uSplitHi: m => m.grade.splitHi, uLift: m => m.grade.lift, uTopHaze: m => m.grade.topHaze,
+  uEarthTint: m => m.earth.tint,
 }
 const MOOD_FLOATS: Record<string, (m: Mood) => number> = {
   uGreenChroma: m => m.grade.greenChroma, uGreenAmt: m => m.grade.greenAmt, uGradeSat: m => m.grade.sat, uTopAmt: m => m.grade.topAmt,
+  uEarthChroma: m => m.earth.chroma, uEarthAmt: m => m.earth.amt,
   uUnitTint: m => m.units.tint, uUnitMist: m => m.units.mist, uUnitGrade: m => m.units.grade,
 }
 const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA']
