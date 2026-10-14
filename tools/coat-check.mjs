@@ -5,7 +5,7 @@
 // renders (flat white, flat black), as the readability guard's; its lit top face is the 40 % of them after the
 // brightest 10 % (the rim along its edges). That
 // face's mean colour must keep the coat's hue within HUE degrees and HLS saturation at SAT of the painted one or
-// more; a near-white coat (painted lightness over 0.8) must not gain saturation (it would turn cream) nor fall under
+// more; a near-white coat (painted lightness over 0.8) must not gain chroma (it would turn cream) nor fall under
 // a lightness of WHITE_L (grey), nor take another hue (60° off its own) over WHITE_TINT of saturation.
 //
 //   node tools/coat-check.mjs <look page URL> [outDir]
@@ -26,7 +26,10 @@ import { prepSteps, shoot, viewStep } from './look-page.mjs'
 import { ARMY_HEX, blocksAt } from './army-blocks.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const W = 1280, H = 720, HUE = 20, SAT = 0.45, WHITE_L = 0.6, WHITE_TINT = 0.15, RIM = 0.1, TOP = 0.4
+// WHITE_CHROMA: how much more chroma (the largest channel less the smallest, in 8-bit steps) than painted a white may
+// take before it reads cream. Chroma, not HLS saturation: near white the latter rises with lightness alone (a white of
+// the painted chroma, lighter, measured more saturated: docs/plans/done/ground-light.md)
+const W = 1280, H = 720, HUE = 20, SAT = 0.45, WHITE_CHROMA = 8, WHITE_L = 0.6, WHITE_TINT = 0.15, RIM = 0.1, TOP = 0.4
 const START = CAMS.find(c => c[0] === 'start').slice(1, 5)
 // the two spots: [name, x, z] of the column's middle; the four coats 7 m apart along z (blocksAt's column)
 const SPOTS = [['middle', -10, 2], ['valley', 30, 62]]
@@ -66,10 +69,11 @@ export function coatCheck(url, out) {
       const mean = [0, 1, 2].map(i => top.reduce((a, k) => a + d[k + i], 0) / top.length)
       const painted = hls(hex2rgb(ARMY_HEX[name.split('.')[1]])), seen = hls(mean)
       const white = painted[2] > 0.8, dh = hueDiff(seen[0], painted[0])
-      // a white: no more saturated than painted, light, and tinted toward another hue (60° off its own) at WHITE_TINT at most
-      const whiteOk = seen[1] <= painted[1] && seen[2] >= WHITE_L && (dh <= 60 || seen[1] <= WHITE_TINT)
+      // a white: no more chroma than painted (WHITE_CHROMA), light, and tinted toward another hue (60° off its own) at WHITE_TINT at most
+      const chroma = c => Math.max(...c) - Math.min(...c), whiteChroma = chroma(mean) - chroma(hex2rgb(ARMY_HEX[name.split('.')[1]]))
+      const whiteOk = whiteChroma <= WHITE_CHROMA && seen[2] >= WHITE_L && (dh <= 60 || seen[1] <= WHITE_TINT)
       const ok = white ? whiteOk : dh <= HUE && seen[1] >= SAT * painted[1]
-      rows.push({ name, n: top.length, rgb: mean.map(Math.round), hue: [Math.round(painted[0]), Math.round(seen[0])], sat: [+painted[1].toFixed(2), +seen[1].toFixed(2)], fail: ok ? null : white ? (seen[1] > painted[1] ? 'a white turned saturated' : seen[2] < WHITE_L ? `a white turned grey (lightness under ${WHITE_L})` : `a white tinted toward hue ${Math.round(seen[0])}`) : dh > HUE ? `hue off by ${Math.round(dh)}°` : `saturation under ${SAT} of the painted` })
+      rows.push({ name, n: top.length, rgb: mean.map(Math.round), hue: [Math.round(painted[0]), Math.round(seen[0])], sat: [+painted[1].toFixed(2), +seen[1].toFixed(2)], fail: ok ? null : white ? (whiteChroma > WHITE_CHROMA ? `a white turned cream (chroma ${Math.round(whiteChroma)} steps over the painted)` : seen[2] < WHITE_L ? `a white turned grey (lightness under ${WHITE_L})` : `a white tinted toward hue ${Math.round(seen[0])}`) : dh > HUE ? `hue off by ${Math.round(dh)}°` : `saturation under ${SAT} of the painted` })
     }
   }
   return rows

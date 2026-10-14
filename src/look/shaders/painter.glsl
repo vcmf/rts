@@ -95,13 +95,15 @@ float depthA(vec3 wp){return clamp(length(wp-uCamPos)/1000.0,0.0,1.0);}
 float cloud(vec3 wp){
   vec2 p=wp.xz+uTime*vec2(2.2,0.8);
   float c=0.62*G(p/330.0).g+0.38*G(p/131.0+vec2(0.37,0.11)).g;
-  return smoothstep(0.59,0.72,c+(G(wp.xz/5.0).r-0.5)*0.06)*uClouds;   // a soft edge, a cloud shadow on a landscape (docs/plans/active/ground-light.md)
+  return smoothstep(0.59,0.72,c+(G(wp.xz/5.0).r-0.5)*0.06)*uClouds;   // deepening from the edge to the middle (docs/plans/done/ground-light.md)
 }
-// the ground under a cloud (DETAIL_ON, the meadow blades): its colour darkened and cooled, not dropped into a darker
-// band, which the grain broke into dark islands. Bluer on snow, and as dark: a white coat reads on snow under a cloud
-// by that contrast (the guard)
+// a painted colour under a cloud (cl, cloud()), on every material: darkened and cooled, not dropped into a darker band,
+// which the grain broke into dark islands, so the ground, a crown and a roof under one cloud take one shade (units
+// keep the drop: paint()).
+// On snow bluer and darker (luma 0.75 against 0.83): a white coat reads on snow under a cloud by that contrast (the
+// guard)
 const vec3 CLOUD_SHADE=vec3(0.78,0.83,0.92),CLOUD_SNOW=vec3(0.68,0.75,0.94);
-vec3 cloudShade(vec3 c,vec3 wp,float snow){return mix(c,c*mix(CLOUD_SHADE,CLOUD_SNOW,snow),cloud(wp));}
+vec3 cloudShade(vec3 c,float cl,float snow){return mix(c,c*mix(CLOUD_SHADE,CLOUD_SNOW,snow),cl);}
 // the shadow band (docs/plans/done/shadow-look.md): more saturated than the base and turned toward a cool blue
 // violet at the same value (a darker band costs dark coats their separation, tools/guard.mjs). KEEP_HUE: the
 // army coats keep the band of main, so a coat in shadow loses none of its colour
@@ -189,8 +191,11 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   // and the grain blotches go to the value below: near a band edge they made islands of the darker band
   float l=ndlR+gr*0.2*jitter-sh*1.25-(1.0-occ)*0.55;
   #else
-  float l=ndlR+gr*0.55*jitter+(blot-0.5)*0.3*jitter;
-  l-=cloud(wp)*0.40+sh*1.25+(1.0-occ)*0.55;
+  float l=ndlR+gr*0.55*jitter+(blot-0.5)*0.3*jitter-sh*1.25-(1.0-occ)*0.55;
+  #endif
+  float cl=cloud(wp);   // a shade below (cloudShade), not a drop of the light
+  #ifdef KEEP_HUE
+  l-=cl*0.40;   // units: the cloud drops their light a band, as before: a coat reads on bright ground under a cloud by that contrast (the guard)
   #endif
   #ifdef DETAIL_ON
   // the band edges keep their width but never get narrower than the light's change across two pixels (no aliasing)
@@ -214,9 +219,9 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   // units see the light white-balanced (the eye): its value, and of its hue only uUnitTint (the mood)
   vec3 sunC=uSunCol,liftC=uLitLift;
   #ifdef KEEP_HUE
-  // a near-white coat takes a fifth of the share: the eye balances on the brightest neutral (a white in full sun
-  // turned cream, docs/plans/active/ground-light.md). The lit band lift is a warm cast, not light: the same share of it
-  float wb=uUnitTint*mix(1.0,0.2,smoothstep(0.55,0.80,dot(alb,LUMA)));
+  // a near-white coat (light and of little chroma: not a yellow facing) takes a fifth of the share: the eye balances on
+  // the brightest neutral (a white in full sun turned cream, docs/plans/done/ground-light.md). The lit band lift is a warm cast, not light: the same share of it
+  float wb=uUnitTint*mix(1.0,0.2,smoothstep(0.55,0.80,dot(alb,LUMA))*(1.0-smoothstep(0.10,0.25,max(alb.r,max(alb.g,alb.b))-min(alb.r,min(alb.g,alb.b)))));
   sunC=mix(vec3(dot(uSunCol,vec3(0.3,0.59,0.11))),uSunCol,wb);liftC*=wb;
   #endif
   vec3 mid=alb*mix(uMidCool,sunC,0.30);
@@ -227,12 +232,15 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
   c*=1.0+gr*0.38;                                                           // gouache grain in the value
   #ifdef DETAIL_ON
-  c*=1.0+(blot-0.5)*0.12*jitter;c=cloudShade(c,wp,snow);                         // the blotches in the value, the cloud as a shade
+  c*=1.0+(blot-uGrainMean.y)*0.12*jitter;                                   // the blotches in the value (renormalised round their mean)
+  #endif
+  #ifndef KEEP_HUE
+  c=cloudShade(c,cl,snow);
   #endif
   vec3 V=normalize(uCamPos-wp);
   float fres=1.0-max(dot(N,V),0.0);
   float rim=smoothstep(0.58,0.64,fres+(gd-0.5)*0.2)*smoothstep(-0.35,0.2,ndl);
-  c+=sunC*uRimCol*rim*rimAmt*0.55*(1.0-cloud(wp)*0.7)*(1.0-sh);       // graphic warm rim
+  c+=sunC*uRimCol*rim*rimAmt*0.55*(1.0-cl*0.7)*(1.0-sh);       // graphic warm rim
   return c;
 }
 // The grade (the mood's, src/look/mood.ts), the last step of every painted material (atmos), so units can take less
