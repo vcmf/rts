@@ -1,6 +1,7 @@
 // The coat check (docs/plans/done/lc1b-coats.md, Track E LC1): the army coats keep their colour under the light.
 // Blocks in the four coats (docs/art-bible.md §4) at the two spots of docs/research/colour-and-light-review.md, at
-// the default view, summer, with the gameplay depth of field off (its band blurs the ground into the blocks): the
+// the default view, and at a far spot at the widest view (LC2: 135 m beyond its target in the frame's top band, a
+// column across the view, 60 pixels a block at least against 200), summer, with the gameplay depth of field off (its band blurs the ground into the blocks): the
 // middle of the frame (outside the valley mist) and the valley floor (inside it). A block's pixels come from two mask
 // renders (flat white, flat black), as the readability guard's; its lit top face is the 40 % of them after the
 // brightest 10 % (the rim along its edges). That
@@ -30,10 +31,18 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // take before it reads cream. Chroma, not HLS saturation: near white the latter rises with lightness alone (a white of
 // the painted chroma, lighter, measured more saturated: docs/plans/done/ground-light.md)
 const W = 1280, H = 720, HUE = 20, SAT = 0.45, WHITE_CHROMA = 8, WHITE_L = 0.6, WHITE_TINT = 0.15, RIM = 0.1, TOP = 0.4
-const START = CAMS.find(c => c[0] === 'start').slice(1, 5)
-// the two spots: [name, x, z] of the column's middle; the four coats 7 m apart along z (blocksAt's column)
-const SPOTS = [['middle', -10, 2], ['valley', 30, 62]]
-const blocks = ([s, x, z]) => blocksAt([[s, x, z, 0]]).map(b => ({ ...b, color: ARMY_HEX[b.color] }))
+const cam = n => CAMS.find(c => c[0] === n).slice(1, 5)
+const START = cam('start'), WIDE = cam('wide')
+// the far spot (LC2, docs/plans/done/lc3-temperate.md): at the widest view, FAR m beyond its target along the view, in
+// the frame's top band (the grade's haze toward the top, units' share of the grade). Not the distance haze: atmos()
+// starts 110 m from the focus, and at 135 m gives about 1 % (farther is out of the frame)
+const FAR = 135, [wa, , , [wx, , wz]] = WIDE
+// the spots: [name, x, z, view, fewest pixels, the column's direction, its gap] of the column's middle; the near spots'
+// four coats 7 m apart along z (blocksAt's column). A far block is small on screen: it needs fewer pixels, and its
+// column runs across the view (along it, the blocks would stack on screen), 26 m apart (a block is 20 m long)
+const SPOTS = [['middle', -10, 2, START, 200, Math.PI / 2, 7], ['valley', 30, 62, START, 200, Math.PI / 2, 7],
+  ['far', Math.round(wx - FAR * Math.cos(wa)), Math.round(wz - FAR * Math.sin(wa)), WIDE, 60, wa + Math.PI / 2, 26]]
+const blocks = ([s, x, z, , , dir, gap]) => blocksAt([[s, x, z, 0, dir, gap]]).map(b => ({ ...b, color: ARMY_HEX[b.color] }))
 
 const hls = ([r, g, b]) => {
   r /= 255; g /= 255; b /= 255
@@ -47,8 +56,10 @@ const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16))
 const hueDiff = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d }
 
 export function coatCheck(url, out) {
-  const steps = [...prepSteps(), viewStep(['coats', ...START, 0])]
+  const steps = [...prepSteps()]
+  let view = null
   for (const spot of SPOTS) {
+    if (spot[3] !== view) { view = spot[3]; steps.push(viewStep([`coats-${spot[0]}`, ...view, 0])) }
     steps.push(['eval', `(async () => { const L = __look.lab; L.clearBlocks(); L.addBlocks(${JSON.stringify(blocks(spot))})
       await __proto.scene.whenReadyAsync(true); for (let i = 0; i < 3; i++) __proto.scene.render()
       return "BOXES ${spot[0]} " + JSON.stringify({ w: __proto.scene.getEngine().getRenderWidth(), h: __proto.scene.getEngine().getRenderHeight(), boxes: L.blockBoxes() }) })()`], ['shot', `${spot[0]}.coats`])
@@ -58,12 +69,12 @@ export function coatCheck(url, out) {
   const log = shoot(url, out, steps, W, H), boxes = {}
   for (const line of log.split('\n')) { const m = /^EVAL "BOXES (\S+) (.*)"$/.exec(line); if (m) boxes[m[1]] = JSON.parse(JSON.parse(`"${m[2]}"`)) }
   const rows = []
-  for (const [s] of SPOTS) {
+  for (const [s, , , , fewest] of SPOTS) {
     if (!boxes[s]) throw new Error(`no block boxes for ${s}`)
     const im = name => png.read(fs.readFileSync(path.join(out, `${s}.${name}.png`)))
     const coats = im('coats'), px = blockPixels(im('mask1'), im('mask0'), boxes[s])
     for (const [name, ks] of px) {
-      if (ks.length < 200) { rows.push({ name, fail: `only ${ks.length} pixels` }); continue }
+      if (ks.length < fewest) { rows.push({ name, fail: `only ${ks.length} pixels` }); continue }
       const d = coats.data, lum = k => 0.2126 * d[k] + 0.7152 * d[k + 1] + 0.0722 * d[k + 2]
       const top = [...ks].sort((a, b) => lum(b) - lum(a)).slice(Math.round(ks.length * RIM), Math.round(ks.length * (RIM + TOP)))
       const mean = [0, 1, 2].map(i => top.reduce((a, k) => a + d[k + i], 0) / top.length)

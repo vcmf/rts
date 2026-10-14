@@ -31,6 +31,7 @@ void main(){
     alb=g*mix(0.95,1.55,vV)*mix(0.92,1.10,vShade);
     alb=mix(alb,alb*vec3(1.04,1.08,0.80),vV*0.5);
   }
+  alb=earthOf(alb);
   float lo=groundOcc(lm),occ=mix(0.8,1.0,vV)*mix(1.0,lo,uAO*0.6);
   // paint(), lean: the ramp, the cool shadow band (deeper where the sky is hidden), the clouds, no grain, rim nor
   // snow (a blade is a few pixels: they would not show, and the blades are many layers deep)

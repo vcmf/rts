@@ -21,6 +21,12 @@ export interface Mood {
   glint: Color3               // the sun's dabs on the water, × the sun (water.frag)
   farRiver: Color3            // the far ring's river line: the river's mid tone after its sky tint, so it meets the
                               // river at the tile's edge (terrain.frag, FARRING): follows waterSky
+  earth: {                    // the world's own colours turned toward earth tones (earthOf in src/look/shaders/painter.glsl,
+                              // on the albedo before the light; not units)
+    tint: Color3              // a colour's value × this (its luma near 1)
+    chroma: number            // how much of a colour's own chroma is kept
+    amt: number               // how far (0: the albedo as painted)
+  }
   units: {                    // how much of the light units take (the painter's KEEP_HUE path: the army blocks, the figures)
     tint: number              // of the sun's hue, 0..1 (its value always): the eye's white balance
     mist: number              // the valley mist's most over them (0..0.42, the ground's most)
@@ -43,7 +49,7 @@ export interface Mood {
 const c = (r: number, g: number, b: number) => new Color3(r, g, b)
 
 export const MOODS = {
-  // golden morning: the look up to LC1a (docs/art-bible.md §4, "golden morning (default)")
+  // golden morning: the look up to LC3 (?mood=golden), the default before it
   golden: {
     sun: c(1.00, 0.84, 0.60), winterSun: c(0.98, 0.95, 0.88),
     shadow: c(0.45, 0.57, 0.76), shadowTurn: c(0.34, 0.45, 0.80), shadowLift: c(0.02, 0.04, 0.07),
@@ -51,6 +57,7 @@ export const MOODS = {
     mistShade: c(0.42, 0.53, 0.68), mistLit: c(1.0, 0.86, 0.63),
     hazeCool: c(0.60, 0.69, 0.78), hazeWarm: c(0.95, 0.80, 0.58),
     waterSky: c(0.62, 0.74, 0.86), glint: c(1.0, 0.86, 0.58), farRiver: c(0.40, 0.55, 0.58),
+    earth: { tint: c(1, 1, 1), chroma: 1, amt: 0 },
     units: { tint: 0.4, mist: 0.08, grade: 0.2 },
     grade: {
       greenTint: c(1.03, 1.0, 0.88), greenChroma: 0.5, greenAmt: 0.85, sat: 0.9,
@@ -58,12 +65,29 @@ export const MOODS = {
       topHaze: c(0.72, 0.76, 0.82), topAmt: 0.20, vignette: c(0.80, 0.87, 0.98),
     },
   },
+  // temperate, the default (LC3, docs/plans/done/lc3-temperate.md; the owner's pick of LC2's candidates: golden "a
+  // bit cooler, less colourful, but not grey"): a paler, less warm sun, a bluer air, the world at 60 % of its chroma
+  temperate: {
+    sun: c(1.00, 0.93, 0.82), winterSun: c(0.96, 0.96, 0.94),
+    shadow: c(0.48, 0.57, 0.68), shadowTurn: c(0.38, 0.47, 0.72), shadowLift: c(0.02, 0.03, 0.04),
+    midCool: c(0.92, 0.93, 0.94), litLift: c(0.02, 0.018, 0.005), rim: c(1.0, 0.90, 0.72), back: c(1.0, 0.85, 0.60),
+    mistShade: c(0.48, 0.57, 0.68), mistLit: c(0.92, 0.88, 0.78),
+    hazeCool: c(0.60, 0.68, 0.78), hazeWarm: c(0.86, 0.80, 0.68),
+    waterSky: c(0.62, 0.73, 0.84), glint: c(1.0, 0.92, 0.75), farRiver: c(0.40, 0.54, 0.58),
+    earth: { tint: c(1.02, 1.0, 0.94), chroma: 0.6, amt: 1 },
+    units: { tint: 0.3, mist: 0.05, grade: 0.1 },
+    grade: {
+      greenTint: c(1.0, 1.0, 0.92), greenChroma: 0.6, greenAmt: 0.85, sat: 0.86,
+      splitLo: c(0.94, 0.99, 1.05), splitHi: c(1.04, 1.0, 0.93), lift: c(0.02, 0.02, 0.015),
+      topHaze: c(0.70, 0.76, 0.83), topAmt: 0.25, vignette: c(0.80, 0.86, 0.96),
+    },
+  },
 } satisfies Record<string, Mood>
 export type MoodName = keyof typeof MOODS
 
 // the mood in use: set once, before any material is made (src/look/main.ts); a material copies its colours when it
 // is made, so a later change would apply only in part: lockMood() (the first material) refuses it
-export let MOOD: Mood = MOODS.golden
+export let MOOD: Mood = MOODS.temperate
 let locked = false
 export const lockMood = (): void => { locked = true }
 export function setMood(name: string): void {
