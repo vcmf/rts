@@ -19,17 +19,28 @@ The test budget under coverage. Out of scope: which tests the coverage run skips
 
 ## Approach
 
-`testTimeout` three times as long when `COVERAGE` is set (360 s), 120 s otherwise. Every test stays in the coverage
+`testTimeout` 600 s under coverage (`COVERAGE` set, or `--coverage`), about three times the slowest test measured
+there on CI (196 s), and 120 s otherwise. Every test stays in the coverage
 run, so the brigade scenario's paths (its only test reaches the first rout at tick 13701 of 14000, measured) stay
-covered; a shorter replay would not reach them. `npm test` and the check job are unchanged.
+covered; a shorter replay would not reach them. `npm test` and the check job are unchanged. A budget for the long
+scenario tests alone was considered: every test is synchronous (vitest can only flag one after it ends), so the
+global budget delays no hang report.
 
 ## Acceptance
 
 - `npm test` unchanged (120 s); the coverage job passes, run by hand on this branch (`workflow_dispatch`: PRs into
   main do not run it) and again on main after the merge.
 
+Done: the coverage job passed, run by hand on this branch with the 360 s budget of the first commit (run
+38568065705; the brigade 93 s, the next two 60 s and 52 s: the runner's speed varies about twice between runs, the
+failing one 196 s). The run on main after the merge is the last check.
+
 ## Review rounds
 
 - **Round 1** (`/code-review high`, of a first approach: the brigade test as `longIt`). Its findings changed the
   design: that test is the brigade scenario's only one, so skipping it under coverage loses those paths; a shorter
   replay would not reach the first rout; and several other tests were near the budget too. Redesigned as above.
+- **Round 2** (`/code-review high`, the redesign; 7 findings, none severe: fixed what was worth it, stopped). Fixed:
+  the margin (360 s was 1.8 times the slowest; now 600 s, about three times); the budget keys on `--coverage` too; the
+  brigade test says why it is not `longIt`, and `test/fx.ts` states the exception; the CI header and `AGENTS.md`
+  mention the budget; the slowdown's explanation stays in `test/fx.ts`. Left: a budget per long test (above).

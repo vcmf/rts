@@ -242,6 +242,7 @@ describe('the wavering fall-back', () => {
 })
 
 describe('determinism', () => {
+  // long (11.5 s) but not longIt: the brigade scenario's only test, the only one to reach its first rout (tick 13701)
   it('the brigade: its replay reproduces', () => {
     const cr = shipped, sc = brigade(100), run = record(lev, cr, sc, 2, 14000, () => {})
     expect(play(run.replay, lev, cr, sc, run.hashes)).toBeNull()
