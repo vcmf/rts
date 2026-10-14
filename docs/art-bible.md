@@ -188,8 +188,9 @@ standing field is drawn lower than history's, so a formation in it reads.
   may set its own mood (a dusk, a winter battle).
 - **Cloud shadows are soft shades,** not drops into a darker band: the ground,
   crowns, roofs and armies under a cloud darken and cool together, more toward
-  its middle, a deeper blue on snow. A coat reads by its colour and the shadow
-  at its feet, not by a darker band (the owner, 2026-10-14).
+  its middle; snow takes a deeper blue, a coat only its share of the cool (as
+  of the sun's hue). A coat reads by its colour and the shadow at its feet, not
+  by a darker band (the owner, 2026-10-14).
 - **Shadows are physically computed, then painted.** A real sun shadow pass
   plus ambient occlusion (Babylon) decides *where* shadow falls. Our shader
   decides *how it looks*: the cool shadow band, with edges broken by the grain.

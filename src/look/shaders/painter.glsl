@@ -245,7 +245,13 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #ifdef DETAIL_ON
   c*=1.0+(blot-uGrainMean.y)*0.12*jitter;                                   // the blotches in the value (renormalised round their mean)
   #endif
+  #ifdef KEEP_HUE
+  // units: the cloud shade white-balanced as the sun is (its value, wb of its hue, decision 0027), so a white under a
+  // cloud does not turn blue
+  vec3 csh=CLOUD_SHADE;csh=mix(vec3(dot(csh,LUMA)),csh,wb);c=mix(c,c*csh,cl);
+  #else
   c=cloudShade(c,cl,snow);
+  #endif
   vec3 V=normalize(uCamPos-wp);
   float fres=1.0-max(dot(N,V),0.0);
   float rim=smoothstep(0.58,0.64,fres+(gd-0.5)*0.2)*smoothstep(-0.35,0.2,ndl);

@@ -16,6 +16,16 @@ soldier figures.
 The painter's unit path (`KEEP_HUE`): the cloud as the shared shade (`cloudShade`), not a band drop. Decision 0032
 rewritten to the white rule alone (open); decision 0033 accepted; the art bible's and the system doc's cloud lines.
 
+## Approach
+
+- In `paint()`, units (`KEEP_HUE`) lose the cloud's band drop and take the cloud as a shade, as every other material.
+- Review round 1 (severe): the shade's full cool hue turned a white under a cloud blue (a white allows 8 steps of
+  chroma; the shade gives it about 33), against decision 0027. Units' shade is white-balanced as the sun is: its value,
+  `wb` of its hue.
+- No frozen spot near the start sits clearly under a cloud since the ground's light (the graded edge): a cloud spot
+  for the coat check was tried and measured in sun, so it was dropped. The white balance holds by construction (the
+  shade's hue scaled by the same `wb` as the sun's).
+
 ## Acceptance
 
 - `tools/coat-check.mjs` 12 of 12.
