@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tree generator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #6f7f45; font: 13px/1.35 system-ui, sans-serif; }
+  canvas { width: 100%; height: 100%; display: block; outline: none; }
+  #ui { position: absolute; top: 10px; left: 10px; width: 250px; padding: 10px 12px; background: rgba(28, 30, 24, .82);
+        color: #eee; border-radius: 6px; }
+  #ui h1 { font-size: 14px; margin: 0 0 6px; }
+  #ui label { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+  #ui input[type=range] { flex: 1; }
+  #ui input[type=number] { width: 70px; }
+  #ui button { margin-top: 6px; }
+  #sel { margin-top: 8px; white-space: pre; font: 12px/1.35 ui-monospace, monospace; color: #cfd8b0; }
+  .lbl { position: absolute; transform: translate(-50%, -100%); color: #fff; font-weight: 600; font-size: 12px;
+         text-shadow: 0 1px 2px #000, 0 0 4px #000; pointer-events: none; white-space: nowrap; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@9.29.0/babylon.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs-serializers@9.29.0/babylonjs.serializers.min.js"></script>
+<script src="tree-core.js"></script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <h1>Tree generator</h1>
+  <label>Season <input id="season" type="range" min="0" max="3" step="0.01" value="0"><span id="seasonV"></span></label>
+  <label>Seed <input id="seed" type="number" value="1" step="1"> <button id="regen">Regrow</button></label>
+  <label><input id="crowns" type="checkbox" checked> crowns</label>
+  <label><input id="skel" type="checkbox"> skeleton and attraction points (selected)</label>
+  <label><input id="labels" type="checkbox" checked> labels</label>
+  <div id="sel">Click a tree to select it.</div>
+  <button id="export" disabled>Export selected as GLB</button>
+</div>
+<script>
+'use strict'
+// A procedural tree generator for the painterly look: space colonization in a species' crown envelope
+// (Runions, Lane and Prusinkiewicz 2007), pipe-model radii, tube branches, and the branch tips clustered into
+// a few crown clumps (docs/art-bible.md §5: a tree is 3-6 crown clumps). Background and sources:
+// docs/research/procedural-trees.md; plan: docs/plans/done/tree-generator.md.
+const T0 = performance.now()
+const Q = new URLSearchParams(location.search)
+
+const { SPECIES, SPECIES_KEYS, growTree, crownGeometry, woodGeometry, cardGeometry, treeHash, mulberry32, vnoise, clamp, mix, smooth, hex } = window.TREEGEN
+
+// ---------- scene ----------
+const canvas = document.getElementById('c')
+const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: false })
+const scene = new BABYLON.Scene(engine)
+scene.clearColor = new BABYLON.Color4(0.43, 0.5, 0.27, 1)
+// the RTS camera: always looking down, never at the horizon (decision 0002)
+const cam = new BABYLON.ArcRotateCamera('cam', -Math.PI / 2 - 0.25, 0.78, 150, new BABYLON.Vector3(0, 0, 0), scene)
+cam.lowerBetaLimit = 0.6; cam.upperBetaLimit = 0.9; cam.lowerRadiusLimit = 14; cam.upperRadiusLimit = 190; cam.fov = 0.7
+cam.wheelPrecision = 4; cam.panningSensibility = 40; cam.attachControl(canvas, true); cam.minZ = 1; cam.maxZ = 2000
+const zoom = Q.get('zoom'); if (zoom) cam.radius = +zoom
+if (Q.get('target')) { const [x, z] = Q.get('target').split(',').map(Number); cam.target.set(x, 0, z) }
+if (Q.get('alpha')) cam.alpha = +Q.get('alpha')
+if (Q.get('beta')) cam.beta = +Q.get('beta')
+
+const SUN = (() => { const el = 40 * Math.PI / 180, az = 2.35; return [Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)] })()
+
+const NOISE_GLSL = `
+float h3(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float vn(vec3 x){ vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
+float grain(vec3 p){ return vn(p * 1.7) * 0.5 + vn(p * 4.3) * 0.3 + vn(p * 11.0) * 0.2; }
+`
+BABYLON.Effect.ShadersStore.paintVertexShader = `
+precision highp float;
+attribute vec3 position; attribute vec3 normal; attribute vec4 color;
+uniform mat4 world; uniform mat4 viewProjection;
+varying vec3 vN; varying vec3 vP; varying vec4 vC; varying vec3 vL; varying vec2 vUV;
+#ifdef CARD
+attribute vec2 uv; uniform mat4 view;
+#endif
+void main(){
+  vec4 wp = world * vec4(position, 1.0); vL = position; vN = normalize(mat3(world) * normal); vC = color; vUV = vec2(0.0);
+#ifdef CARD
+  vec3 R = vec3(view[0][0], view[1][0], view[2][0]); vec3 U = vec3(view[0][1], view[1][1], view[2][1]);
+  wp.xyz += (R * uv.x + U * uv.y) * color.b * 4.0;
+  vN = normalize(vN + (R * uv.x + U * uv.y) * 0.35);
+  float a = color.g * 6.2831; vUV = mat2(cos(a), sin(a), -sin(a), cos(a)) * uv;
+#endif
+  vP = wp.xyz; gl_Position = viewProjection * wp; }`
+BABYLON.Effect.ShadersStore.paintFragmentShader = `
+precision highp float;
+varying vec3 vN; varying vec3 vP; varying vec4 vC; varying vec3 vL; varying vec2 vUV;
+uniform vec3 uSun; uniform vec3 uEye; uniform vec3 uDark; uniform vec3 uLight; uniform float uLoss; uniform float uSnow;
+uniform float uBirch; uniform float uFoliage;
+#ifdef CARD
+uniform sampler2D uDab;
+#endif
+uniform sampler2D uShadow; uniform vec4 uShadowRect;
+${NOISE_GLSL}
+void main(){
+  vec3 N = normalize(vN); vec3 V = normalize(uEye - vP);
+  float gr = grain(vP * (uFoliage > 0.5 ? 1.3 : 3.0));
+  if (uFoliage > 0.5 && gr + vC.g * 0.15 < uLoss * 1.15) discard;
+#ifdef CARD
+  if (texture2D(uDab, vUV * 0.5 + 0.5).a < 0.5) discard;
+#endif
+  float ndl = dot(N, uSun);
+  vec2 suv = (vP.xz - uShadowRect.xy) / uShadowRect.zw;
+  float sh = texture2D(uShadow, suv + (gr - 0.5) * 0.004).r;
+  float castSh = uFoliage > 0.5 ? mix(1.0, sh, smoothstep(0.0, 6.0, -vP.y + 7.0) * 0.35) : sh;
+  float t = (ndl * 0.5 + 0.5) * vC.r * mix(1.0, castSh, 0.8) + (gr - 0.5) * 0.32;
+  float w = uFoliage > 0.5 ? 0.09 : 0.04;
+  float lit = smoothstep(0.62 - w, 0.62 + w, t);
+  float mid = smoothstep(0.36 - w, 0.36 + w, t);
+  vec3 base = mix(uDark, uLight, 0.25 + 0.75 * lit);
+  if (uBirch > 0.5) { float mark = step(0.78, vn(vec3(vL.x * 3.0, vL.y * 9.0, vL.z * 3.0))); base = mix(base, vec3(0.16, 0.14, 0.13), mark * 0.85); }
+  vec3 shadowCol = mix(uDark * 0.78, vec3(0.16, 0.26, 0.38), 0.34);
+  vec3 col = mix(shadowCol, base, mid);
+  col *= mix(1.0, 1.06, lit) * vec3(1.03, 1.0, 0.93);
+  float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0) * smoothstep(-0.2, 0.4, ndl);
+  col += vec3(1.0, 0.82, 0.45) * rim * 0.35;
+  float snow = uSnow * smoothstep(0.35, 0.7, N.y + (gr - 0.5) * 0.4);
+  col = mix(col, mix(vec3(0.56, 0.68, 0.86), vec3(0.95, 0.96, 0.97), mid), snow);
+  gl_FragColor = vec4(col, 1.0);
+}`
+BABYLON.Effect.ShadersStore.groundVertexShader = `
+precision highp float;
+attribute vec3 position; uniform mat4 world; uniform mat4 viewProjection; varying vec3 vP;
+void main(){ vec4 wp = world * vec4(position, 1.0); vP = wp.xyz; gl_Position = viewProjection * wp; }`
+BABYLON.Effect.ShadersStore.groundFragmentShader = `
+precision highp float;
+varying vec3 vP; uniform sampler2D uShadow; uniform vec4 uShadowRect; uniform vec3 uA; uniform vec3 uB; uniform float uSnow;
+${NOISE_GLSL}
+void main(){
+  float gr = grain(vec3(vP.xz * 0.9, 0.0));
+  float patchy = vn(vec3(vP.xz * 0.025, 3.0)) * 0.7 + vn(vec3(vP.xz * 0.09, 7.0)) * 0.3;
+  vec3 col = mix(uA, uB, smoothstep(0.3, 0.75, patchy + (gr - 0.5) * 0.25));
+  vec2 suv = (vP.xz - uShadowRect.xy) / uShadowRect.zw;
+  float sh = 1.0;
+  if (suv.x > 0.0 && suv.x < 1.0 && suv.y > 0.0 && suv.y < 1.0) sh = texture2D(uShadow, suv + (gr - 0.5) * 0.006).r;
+  sh = smoothstep(0.35, 0.65, sh + (gr - 0.5) * 0.3);
+  vec3 shadowCol = mix(col * 0.55, vec3(0.14, 0.24, 0.36), 0.42);
+  vec3 grass = mix(shadowCol, col * vec3(1.03, 1.0, 0.9), sh);
+  vec3 snow = mix(vec3(0.56, 0.68, 0.86), vec3(0.95, 0.96, 0.97), sh);
+  gl_FragColor = vec4(mix(grass, snow, uSnow), 1.0);
+}`
+
+// the painted shadow map, baked once (static light is baked once per map): every clump's ellipsoid and every
+// trunk projected along the sun onto the ground, drawn on a 2D canvas
+const SH_SIZE = 2048, SH_RECT = [-150, -150, 300, 300]
+// the canvas is copied into a raw texture with its row 0 at v = 0, so canvas y is world z with no flip to guess
+const shadowCanvas = document.createElement('canvas'); shadowCanvas.width = shadowCanvas.height = SH_SIZE
+const shadowTex = new BABYLON.RawTexture(new Uint8Array(SH_SIZE * SH_SIZE * 4), SH_SIZE, SH_SIZE, BABYLON.Constants.TEXTUREFORMAT_RGBA, scene, false, false, BABYLON.Texture.BILINEAR_SAMPLINGMODE)
+shadowTex.wrapU = shadowTex.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE
+function bakeShadows(trees) {
+  const ctx = shadowCanvas.getContext('2d', { willReadFrequently: true }), px = SH_SIZE / SH_RECT[2]
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, SH_SIZE, SH_SIZE); ctx.fillStyle = '#000'; ctx.strokeStyle = '#000'
+  const toPx = (x, z) => [(x - SH_RECT[0]) * px, (z - SH_RECT[1]) * px]
+  const az = Math.atan2(SUN[2], SUN[0]), stretch = 1 / SUN[1]
+  for (const t of trees) {
+    const [ox, , oz] = t.offset, foliage = t.foliageOn
+    if (foliage) for (const q of t.tree.clumps) {
+      const gx = q.c[0] - SUN[0] / SUN[1] * q.c[1], gz = q.c[2] - SUN[2] / SUN[1] * q.c[1], [x, y] = toPx(gx + ox, gz + oz)
+      ctx.beginPath(); ctx.ellipse(x, y, q.r[0] * stretch * 0.9 * px, q.r[0] * 0.9 * px, az, 0, Math.PI * 2); ctx.fill()
+    }
+    const { nx, ny, nz, par, rad } = t.tree, lim = foliage ? 0.06 : 0.02
+    for (let i = 0; i < nx.length; i++) {
+      const p = par[i]; if (p < 0 || rad[i] < lim) continue
+      const a = toPx(nx[p] - SUN[0] / SUN[1] * ny[p] + ox, nz[p] - SUN[2] / SUN[1] * ny[p] + oz), b = toPx(nx[i] - SUN[0] / SUN[1] * ny[i] + ox, nz[i] - SUN[2] / SUN[1] * ny[i] + oz)
+      ctx.lineWidth = Math.max(1, rad[i] * 2 * px); ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke()
+    }
+  }
+  shadowTex.update(new Uint8Array(ctx.getImageData(0, 0, SH_SIZE, SH_SIZE).data.buffer))
+}
+
+const ground = BABYLON.MeshBuilder.CreateGround('ground', { width: 1400, height: 1400, subdivisions: 2 }, scene)
+const groundMat = new BABYLON.ShaderMaterial('groundMat', scene, { vertex: 'ground', fragment: 'ground' }, { attributes: ['position'], uniforms: ['world', 'viewProjection', 'uShadowRect', 'uA', 'uB', 'uSnow'], samplers: ['uShadow'] })
+groundMat.setTexture('uShadow', shadowTex); groundMat.setVector4('uShadowRect', new BABYLON.Vector4(...SH_RECT))
+ground.material = groundMat
+
+// the leaf-clump mask the cards are cut by: a dozen leaf dabs inside a circle, drawn once (L7a's technique,
+// docs/plans/done/l7a-canopy-cards.md; the game's atlas is data/leaf-clumps-oak-v1.png)
+const DAB = (() => {
+  const S = 256, t = new BABYLON.DynamicTexture('dab', { width: S, height: S }, scene, true), ctx = t.getContext(), R = mulberry32(17)
+  ctx.clearRect(0, 0, S, S); ctx.fillStyle = '#fff'
+  for (let i = 0; i < 22; i++) {
+    const a = R() * Math.PI * 2, r = Math.sqrt(R()) * S * 0.3, x = S / 2 + Math.cos(a) * r, y = S / 2 + Math.sin(a) * r
+    ctx.beginPath(); ctx.ellipse(x, y, S * (0.07 + R() * 0.07), S * (0.035 + R() * 0.035), R() * Math.PI, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.beginPath(); ctx.arc(S / 2, S / 2, S * 0.24, 0, Math.PI * 2); ctx.fill()
+  t.hasAlpha = true; t.update(); t.wrapU = t.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE; return t
+})()
+function paintMat(name, foliage, card = false) {
+  const m = new BABYLON.ShaderMaterial(name, scene, { vertex: 'paint', fragment: 'paint' }, { attributes: ['position', 'normal', 'color', ...(card ? ['uv'] : [])], uniforms: ['world', 'view', 'viewProjection', 'uSun', 'uEye', 'uDark', 'uLight', 'uLoss', 'uSnow', 'uBirch', 'uFoliage', 'uShadowRect'], samplers: ['uShadow', ...(card ? ['uDab'] : [])], defines: card ? ['#define CARD'] : [] })
+  m.setVector3('uSun', new BABYLON.Vector3(...SUN)); m.setFloat('uFoliage', foliage ? 1 : 0); m.setFloat('uBirch', 0); m.setFloat('uLoss', 0); m.setFloat('uSnow', 0)
+  if (card) { m.setTexture('uDab', DAB); m.backFaceCulling = false }
+  m.setTexture('uShadow', shadowTex); m.setVector4('uShadowRect', new BABYLON.Vector4(...SH_RECT))
+  m.onBindObservable.add(() => m.getEffect().setVector3('uEye', cam.position))
+  return m
+}
+
+// ---------- seasons (docs/art-bible.md §4b) ----------
+const AUTUMN = [['#94532a', '#c98a3e', 0.30], ['#8a7430', '#c6aa4c', 0.25], ['#723024', '#a84a32', 0.17], ['#4a2e3a', '#74505a', 0.04], ['#5e6e2e', '#a09c4a', 0.24]]
+const LATE = ['#5e4a2c', '#9a7a48']
+function foliageColour(spec, r, season) {
+  const summer = spec.leaf.map(hex), jit = (r - 0.5) * 0.1
+  const sum = summer.map(c => c.map((x, i) => clamp(x * (1 + jit) + (i === 1 ? jit * 0.1 : 0), 0, 1)))
+  if (!spec.deciduous) { const cool = smooth(2, 3, season) * 0.12; return sum.map(c => [c[0] * (1 - cool), c[1] * (1 - cool * 0.5), c[2] * (1 + cool)]) }
+  if (spec.copper) return sum
+  let acc = 0, pick = AUTUMN[AUTUMN.length - 1]; for (const a of AUTUMN) { acc += a[2]; if (r < acc) { pick = a; break } }
+  const aut = [hex(pick[0]), hex(pick[1])], late = LATE.map(hex)
+  const s1 = smooth(0.2, 1, season), s2 = smooth(1.2, 2, season)
+  return [0, 1].map(j => [0, 1, 2].map(i => mix(mix(sum[j][i], aut[j][i], s1), mix(aut[j][i], late[j][i], 0.55), s2)))
+}
+
+// ---------- the sheet: every species, a few seeds, and the structures (docs/art-bible.md §11) ----------
+const woodMats = {}, built = []
+let SEED = +(Q.get('seed') || 1)
+const CROWN = Q.get('crown') || 'cards'   // cards: leaf cards over a body; blobs: the clump meshes alone
+function layout() {
+  const L = [], cols = SPECIES_KEYS.length, dx = 22
+  SPECIES_KEYS.forEach((key, i) => { for (let s = 0; s < 3; s++) L.push({ key, seed: SEED + s, x: (i - (cols - 1) / 2) * dx, z: 46 - s * 24, label: s === 0 }) })
+  const R = mulberry32(SEED * 7919)
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) L.push({ key: 'apple', seed: SEED + 100 + r * 4 + c, x: -118 + c * 8 + (R() - 0.5), z: -22 - r * 8 + (R() - 0.5) })
+  for (let i = 0; i < 16; i++) L.push({ key: 'hawthorn', seed: SEED + 200 + i, x: -70 + i * 3.4 + (R() - 0.5), z: -24 + (R() - 0.5) * 0.8 })
+  const copse = ['oak', 'oak', 'lime', 'beech', 'oak', 'lime', 'beech', 'birch', 'oak', 'copper', 'lime', 'oak']
+  copse.forEach((key, i) => { const a = i * 2.4, r = 3 + Math.sqrt(i) * 5.5; L.push({ key, seed: SEED + 300 + i, x: 20 + Math.cos(a) * r, z: -36 + Math.sin(a) * r * 0.8 }) })
+  for (let i = 0; i < 8; i++) L.push({ key: i % 3 === 2 ? 'alder' : 'willow', seed: SEED + 400 + i, x: 62 + i * 9 + (R() - 0.5) * 3, z: -20 - Math.sin(i * 0.8) * 4 })
+  for (let i = 0; i < 7; i++) L.push({ key: 'poplar', seed: SEED + 500 + i, x: -110 + i * 11, z: -54 })
+  for (let i = 0; i < 9; i++) L.push({ key: i % 4 === 0 ? 'pine' : 'spruce', seed: SEED + 600 + i, x: 100 + (i % 3) * 9 + (R() - 0.5) * 3, z: -50 - Math.floor(i / 3) * 9 + (R() - 0.5) * 3 })
+  return L
+}
+function build() {
+  for (const b of built) { for (const k of ['wood', 'twigs', 'crown', 'cards', 'crownMat', 'cardMat']) b[k] && b[k].dispose() }
+  built.length = 0
+  const stats = {}
+  for (const item of layout()) {
+    const spec = SPECIES[item.key], t0 = performance.now(), tree = growTree(spec, item.seed)
+    const R = mulberry32(item.seed * 31 + 7), yaw = R() * Math.PI * 2
+    const woodMat = woodMats[item.key] || (woodMats[item.key] = (() => { const m = paintMat('wood_' + item.key, false), b = hex(spec.bark); m.setVector3('uDark', BABYLON.Vector3.FromArray(b.map(x => x * 0.7))); m.setVector3('uLight', BABYLON.Vector3.FromArray(b)); m.setFloat('uBirch', spec.birch ? 1 : 0); return m })())
+    const mk = (name, g, mat) => {
+      const m = new BABYLON.Mesh(name, scene), vd = new BABYLON.VertexData()
+      vd.positions = g.pos; vd.normals = g.nor; vd.colors = g.col; vd.indices = g.idx; if (g.uv) vd.uvs = g.uv; vd.applyToMesh(m)
+      m.material = mat; m.position.set(item.x, 0, item.z); m.rotation.y = yaw; m.isPickable = true; m.freezeWorldMatrix(); return m
+    }
+    // the wood: limbs thick enough to show under the crown; the twigs: the rest, for bare winter crowns
+    const thick = spec.deciduous ? Math.max(spec.r0 * 3.2, 0.06) : spec.r0 * 3.2, gW = woodGeometry(tree, thick, Infinity), gT = woodGeometry(tree, spec.r0 * 1.2, thick)
+    // the crown: an opaque body (the clumps, shrunk under the cards when cards are on) and the leaf cards
+    const useCards = CROWN === 'cards', gC = crownGeometry(tree, useCards ? 0.86 : 1), crownMat = paintMat('crown_' + built.length, true)
+    const gK = useCards ? cardGeometry(tree) : null, cardMat = useCards ? paintMat('cards_' + built.length, true, true) : null
+    const wood = mk('wood', gW, woodMat), twigs = spec.deciduous ? mk('twigs', gT, woodMat) : null, crown = mk('crown', gC, crownMat), cards = gK ? mk('cards', gK, cardMat) : null
+    const ms = performance.now() - t0, tris = { wood: gW.idx.length / 3, twigs: spec.deciduous ? gT.idx.length / 3 : 0, crown: gC.idx.length / 3 + (gK ? gK.idx.length / 3 : 0) }
+    const st = stats[item.key] || (stats[item.key] = { n: 0, ms: 0, tris: 0, maxTris: 0, clumps: 0 })
+    const live = tris.wood + tris.crown; st.n++; st.ms += ms; st.tris += live; st.maxTris = Math.max(st.maxTris, live + tris.twigs); st.clumps += tree.clumps.filter(q => !q.core).length
+    const b = { item, spec, tree, wood, twigs, crown, crownMat, cards, cardMat, tris, ms, colourRand: R(), offset: [item.x, 0, item.z], yaw }
+    for (const m of [wood, twigs, crown, cards]) if (m) m.metadata = { tree: b }
+    built.push(b)
+  }
+  // the shadow bake works in world space, so the trees are rotated into it here (their meshes rotate by yaw)
+  for (const b of built) b.tree = rotated(b.tree, b.yaw)
+  bakedKey = null   // new trees: bake their shadows
+  window.__stats = Object.fromEntries(Object.entries(stats).map(([k, s]) => [k, { trees: s.n, msPerTree: +(s.ms / s.n).toFixed(1), meanTris: Math.round(s.tris / s.n), maxTrisWithTwigs: s.maxTris, meanClumps: +(s.clumps / s.n).toFixed(1) }]))
+  applySeason(); updateLabels()
+}
+// the same tree turned by yaw (Babylon's rotation.y), for the shadow bake
+function rotated(t, yaw) {
+  const c = Math.cos(yaw), s = Math.sin(yaw), rx = (x, z) => x * c + z * s, rz = (x, z) => -x * s + z * c
+  return { ...t, nx: t.nx.map((x, i) => rx(x, t.nz[i])), nz: t.nz.map((z, i) => rz(t.nx[i], z)), clumps: t.clumps.map(q => ({ ...q, c: [rx(q.c[0], q.c[2]), q.c[1], rz(q.c[0], q.c[2])] })), local: t }
+}
+
+function applySeason() {
+  const season = +document.getElementById('season').value, showCrowns = document.getElementById('crowns').checked
+  document.getElementById('seasonV').textContent = ['summer', 'early autumn', 'late autumn', 'winter'][Math.min(3, Math.round(season))]
+  const loss = smooth(1.5, 2.85, season), snow = smooth(2.5, 3, season)
+  for (const b of built) {
+    const [d, l] = foliageColour(b.spec, b.spec.copper ? 0 : b.colourRand, season)
+    const lossHere = b.spec.deciduous ? loss : 0
+    for (const m of [b.crownMat, b.cardMat]) if (m) { m.setVector3('uDark', BABYLON.Vector3.FromArray(d)); m.setVector3('uLight', BABYLON.Vector3.FromArray(l)); m.setFloat('uLoss', lossHere); m.setFloat('uSnow', snow * 0.8) }
+    b.crown.setEnabled(showCrowns && lossHere < 0.99); b.cards && b.cards.setEnabled(showCrowns && lossHere < 0.99)
+    if (b.twigs) b.twigs.setEnabled(!showCrowns || lossHere > 0.2)
+    b.foliageOn = showCrowns && lossHere < 0.6
+  }
+  for (const m of Object.values(woodMats)) m.setFloat('uSnow', snow * 0.7)
+  const g0 = [hex('#6a8a3e'), hex('#9ca452')], g1 = [hex('#7e7e40'), hex('#a89c58')], g2 = [hex('#6a5e3c'), hex('#8e8052')]
+  const gc = j => [0, 1, 2].map(i => mix(mix(g0[j][i], g1[j][i], smooth(0.3, 1.3, season)), g2[j][i], smooth(1.3, 2.3, season)))
+  groundMat.setVector3('uA', BABYLON.Vector3.FromArray(gc(0))); groundMat.setVector3('uB', BABYLON.Vector3.FromArray(gc(1))); groundMat.setFloat('uSnow', snow * 0.9)
+  // the shadow canvas (a 2048² readback and upload) is baked again only when a crown's shadow turns on or off, not on
+  // every tick of the slider
+  const key = built.map(b => b.foliageOn ? 1 : 0).join('')
+  if (key !== bakedKey) { bakedKey = key; bakeShadows(built.map(b => ({ tree: b.tree, offset: b.offset, foliageOn: b.foliageOn }))) }
+}
+let bakedKey = null
+
+// ---------- labels, selection, skeleton view, export ----------
+const labelDivs = []
+function updateLabels() {
+  for (const d of labelDivs) d.remove(); labelDivs.length = 0
+  if (!document.getElementById('labels').checked) return
+  for (const b of built) if (b.item.label) { const d = document.createElement('div'); d.className = 'lbl'; d.textContent = b.spec.label; d.dataset.x = b.item.x; d.dataset.y = b.tree.H + 1.5; d.dataset.z = b.item.z; document.body.appendChild(d); labelDivs.push(d) }
+  const g = [['Orchard', -106, -12], ['Hedgerow', -44, -18], ['Copse', 20, -16], ['Willows and alders by a stream', 94, -8], ['Poplar row', -77, -46], ['Conifers', 110, -40]]
+  for (const [t, x, z] of g) { const d = document.createElement('div'); d.className = 'lbl'; d.textContent = t; d.dataset.x = x; d.dataset.y = 12; d.dataset.z = z; document.body.appendChild(d); labelDivs.push(d) }
+}
+let selected = null, skel = null
+function select(b) {
+  selected = b; skel && skel.dispose(); skel = null
+  const el = document.getElementById('sel'), btn = document.getElementById('export')
+  if (!b) { el.textContent = 'Click a tree to select it.'; btn.disabled = true; return }
+  btn.disabled = false
+  const t = b.tree.local
+  el.textContent = `${b.spec.label}, seed ${b.item.seed}\nheight ${t.H.toFixed(1)} m, ${t.nx.length} nodes\nclumps ${t.clumps.filter(q => !q.core).length} (+ core)\ntris: wood ${b.tris.wood}, crown ${b.tris.crown}\n      twigs ${b.tris.twigs} (bare only)\nbuilt in ${b.ms.toFixed(1)} ms, hash ${treeHash(t)}`
+  if (document.getElementById('skel').checked) {
+    const lines = []; for (let i = 0; i < t.nx.length; i++) if (t.par[i] >= 0) lines.push([new BABYLON.Vector3(t.nx[t.par[i]], t.ny[t.par[i]], t.nz[t.par[i]]), new BABYLON.Vector3(t.nx[i], t.ny[i], t.nz[i])])
+    skel = BABYLON.MeshBuilder.CreateLineSystem('skel', { lines }, scene); skel.color = new BABYLON.Color3(1, 0.9, 0.3)
+    const pts = []; for (let i = 0; i < t.P.length; i += 3) { const p = new BABYLON.Vector3(t.P[i], t.P[i + 1], t.P[i + 2]); pts.push([p, p.add(new BABYLON.Vector3(0, 0.12, 0))]) }
+    const pm = BABYLON.MeshBuilder.CreateLineSystem('pts', { lines: pts }, scene); pm.color = new BABYLON.Color3(0.3, 0.8, 1); pm.parent = skel
+    skel.position.set(...b.offset); skel.rotation.y = b.yaw
+  }
+}
+scene.onPointerObservable.add(pi => {
+  if (pi.type !== BABYLON.PointerEventTypes.POINTERTAP) return
+  const hit = scene.pick(scene.pointerX, scene.pointerY, m => !!m.metadata?.tree)
+  select(hit?.hit ? hit.pickedMesh.metadata.tree : null)
+})
+// GLB export of the selected tree: our materials are swapped for plain ones named by role (the palette paints
+// roles; docs/art-bible.md §4b), and each crown clump's ellipsoid travels in the glTF extras for the leaf cards
+async function exportSelected() {
+  const b = selected; if (!b) return
+  const roles = { wood: new BABYLON.StandardMaterial('bark', scene), twigs: null, crown: new BABYLON.StandardMaterial('foliage', scene), cards: null }
+  roles.twigs = roles.wood; roles.cards = roles.crown
+  const keep = []
+  for (const k of ['wood', 'twigs', 'crown', 'cards']) { const m = b[k]; if (!m) continue; keep.push([m, m.material]); m.material = roles[k] }
+  b.crown.metadata = { tree: b, gltf: { extras: { clumps: b.tree.local.clumps.map(q => ({ c: q.c, r: q.r, core: !!q.core })), species: b.item.key, seed: b.item.seed } } }
+  try {
+    const parts = keep.map(([m]) => m)
+    const data = await BABYLON.GLTF2Export.GLBAsync(scene, `${b.item.key}-${b.item.seed}`, { shouldExportNode: n => parts.includes(n) })
+    data.downloadFiles()
+  } finally {
+    for (const [m, mat] of keep) m.material = mat
+    for (const m of Object.values(roles)) m && m.dispose()
+  }
+}
+
+document.getElementById('season').value = Q.get('season') || 0
+document.getElementById('seed').value = SEED
+document.getElementById('season').oninput = applySeason
+document.getElementById('crowns').onchange = applySeason
+document.getElementById('labels').onchange = updateLabels
+document.getElementById('skel').onchange = () => select(selected)
+document.getElementById('regen').onclick = () => { SEED = +document.getElementById('seed').value; select(null); build() }
+document.getElementById('export').onclick = exportSelected
+if (Q.get('labels') === '0') document.getElementById('labels').checked = false
+
+build()
+// the determinism check: two builds of the same species and seed give the same geometry
+window.__determinism = () => SPECIES_KEYS.every(k => treeHash(growTree(SPECIES[k], 42)) === treeHash(growTree(SPECIES[k], 42)))
+window.__select = (key, i = 0) => select(built.filter(b => b.item.key === key)[i])
+window.__buildMs = performance.now() - T0
+
+const v3 = new BABYLON.Vector3()
+engine.runRenderLoop(() => {
+  scene.render()
+  const vp = scene.getTransformMatrix(), w = engine.getRenderWidth(), h = engine.getRenderHeight(), sx = canvas.clientWidth / w, sy = canvas.clientHeight / h
+  for (const d of labelDivs) {
+    v3.set(+d.dataset.x, +d.dataset.y, +d.dataset.z)
+    const p = BABYLON.Vector3.Project(v3, BABYLON.Matrix.IdentityReadOnly, vp, cam.viewport.toGlobal(w, h))
+    d.style.left = p.x * sx + 'px'; d.style.top = p.y * sy + 'px'; d.style.display = p.z > 0 && p.z < 1 ? '' : 'none'
+  }
+})
+addEventListener('resize', () => engine.resize())
+</script>
+</body>
+</html>

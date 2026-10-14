@@ -39,10 +39,10 @@ export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateC
   // locked down (decision 0010): yaw ± the spec's range around the default, pitch and zoom inside the checked limits
   camera.lowerAlphaLimit = c.yaw0 - c.yawRange; camera.upperAlphaLimit = c.yaw0 + c.yawRange
   camera.lowerRadiusLimit = c.rMin
+  rtsControls(scene, camera, canvas)
   // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the play area
   camera.mapPanning = true; scene.onBeforeRenderObservable.add(() => { const t = camera.target; t.x = Math.max(-PLAY, Math.min(PLAY, t.x)); t.z = Math.max(-PLAY, Math.min(PLAY, t.z)) })
   camera.upperRadiusLimit = c.rMax; camera.lowerBetaLimit = c.betaMin; camera.upperBetaLimit = c.betaMax
-  camera.wheelDeltaPercentage = 0.01
   camera.panningSensibility = 30; camera.minZ = 0.5; camera.maxZ = 5000; camera.fov = c.fov; camera.inertia = 0.88
   // the SPEC checked frames up to aspectMax: a wider screen keeps that frame's horizontal field of view and sees
   // less vertically, never more of the world than was checked
@@ -53,6 +53,51 @@ export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateC
   }
   fit(); scene.getEngine().onResizeObservable.add(fit)
   return camera
+}
+
+// where a key types (a text field) or picks (a list), not where it moves the camera; sliders and buttons keep the keys
+// for the camera
+export const typingIn = (t: EventTarget | null): boolean => t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || (t instanceof HTMLInputElement && !['range', 'checkbox', 'button', 'radio'].includes(t.type))
+
+// RTS controls: the arrows or WASD pan in the ground plane and Q and E turn, at a speed that grows with the zoom; a
+// trackpad's two-finger swipe pans (the ground follows the fingers) and its pinch zooms; a mouse wheel zooms. They
+// replace Babylon's keyboard (which turned the camera) and wheel (which only zoomed); dragging still turns and pans
+const PAN_PER_S = 0.9, TURN_PER_S = 1.2, SWIPE = 0.0016, PINCH = 0.01, WHEEL = 0.0012
+function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasElement): void {
+  camera.inputs.removeByType('ArcRotateCameraKeyboardMoveInput'); camera.inputs.removeByType('ArcRotateCameraMouseWheelInput')
+  // the ground's forward (away from the camera) and right, from the camera's yaw
+  const pan = (right: number, fwd: number) => {
+    const fx = -Math.cos(camera.alpha), fz = -Math.sin(camera.alpha)
+    camera.target.x += fz * right + fx * fwd; camera.target.z += -fx * right + fz * fwd
+  }
+  const held = new Set<string>()
+  const typing = (e: KeyboardEvent) => typingIn(e.target)
+  addEventListener('keydown', e => { if (!typing(e) && !e.metaKey && !e.ctrlKey) { held.add(e.code); if (e.code.startsWith('Arrow')) e.preventDefault() } })
+  // (macOS sends no keyup for a key let go while Cmd is down: Cmd's own release clears them all)
+  addEventListener('keyup', e => { held.delete(e.code); if (e.key === 'Meta') held.clear() })
+  addEventListener('blur', () => held.clear())
+  const on = (...codes: string[]) => codes.some(c => held.has(c)) ? 1 : 0
+  scene.onBeforeRenderObservable.add(() => {
+    if (!held.size) return
+    const dt = Math.min(0.1, scene.getEngine().getDeltaTime() / 1000), step = camera.radius * PAN_PER_S * dt
+    pan((on('ArrowRight', 'KeyD') - on('ArrowLeft', 'KeyA')) * step, (on('ArrowUp', 'KeyW') - on('ArrowDown', 'KeyS')) * step)
+    camera.alpha += (on('KeyE') - on('KeyQ')) * TURN_PER_S * dt
+  })
+  // a trackpad: Chrome reports its wheelDeltaY as 3 × deltaY; a mouse wheel: wheelDeltaY in steps of 120 (whatever the
+  // page's zoom does to deltaY), or lines elsewhere. A trackpad's swipe moves the ground with the fingers (natural
+  // scrolling: fingers up, deltaY > 0). Not measured on a real mouse yet: synthetic events carry no wheelDeltaY
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault()
+    const wy = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY
+    const pad = wy !== undefined && Math.abs(Math.abs(wy) - 3 * Math.abs(e.deltaY)) < 1.5
+    const mouse = e.deltaMode === 1 || (!pad && e.deltaX === 0 && (wy ? wy % 120 === 0 : Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY)))
+    if (e.ctrlKey || mouse) {
+      const lo = camera.lowerRadiusLimit ?? 1, hi = camera.upperRadiusLimit ?? 1e4
+      // a pinch's steps are small (a few pixels); a wheel's notch, with or without Ctrl, a hundred (or a few lines)
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY
+      camera.radius = Math.min(hi, Math.max(lo, camera.radius * Math.exp(dy * (e.ctrlKey && Math.abs(dy) < 50 ? PINCH : WHEEL))))
+    } else { const k = camera.radius * SWIPE; pan(e.deltaX * k, -e.deltaY * k) }
+  }, { passive: false })
 }
 
 // the lens (#include<dofcoc>) inlined as the materials inline theirs (a replacer function keeps `$` in the GLSL)

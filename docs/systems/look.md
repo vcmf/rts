@@ -1,8 +1,8 @@
 ---
 status: current
 last_reviewed: 2026-10-14
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png]
-decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js]
+decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees]
 ---
 
 # The look page (Track E, L0)
@@ -52,7 +52,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
 | `src/look/meadow.ts` | The meadow near the camera (L5c, L5d, below): the meadow map (ground height, the grass's and the crops' growth), three rings of static grass and crop instances around the focus |
 | `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (`?trees=cards`, L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
-| `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), and the passes: depth of field (a player option, decision 0024), then one fused finishing pass (bloom, vignette, paper, dither; the grade is in the materials since LC1b) |
+| `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), with RTS controls (`rtsControls`: the arrows or WASD pan in the ground plane and Q, E turn, faster as it zooms out; a trackpad's two-finger swipe pans and its pinch zooms; a mouse wheel zooms; dragging turns and pans; the panel's Zoom slider follows), and the passes: depth of field (a player option, decision 0024), then one fused finishing pass (bloom, vignette, paper, dither; the grade is in the materials since LC1b) |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop, and the debug globals the checks read |
 | `src/look/bench.ts`, `src/look/gputimer.ts` | `?bench`: fixed cameras, frame times, GPU time per pass, draw calls, triangles, texture memory and the build hash, as JSON (below) |
 | `src/look/lab.ts` | Test objects the tools add: the readability guard's army blocks, the detail check's test hill |
@@ -208,6 +208,36 @@ The plan: `docs/plans/done/l7a-canopy-cards.md`. Not the default: the arm the ow
   leaves the crown; the core darkens to 0.72. The ramp is soft for foliage (`SOFT_RAMP` in `paint()`: the light
   wraps, (n·l + 0.45) / 1.45, the same three colours over a wide range, the mid colour kept saturated). The golden
   backlight keeps the card normals and is blocked by other trees only. `?bench=volume` benches it against L7a.
+
+### Generated trees (`?trees=gen,cards`, an experiment)
+
+The plan: `docs/plans/done/tree-generator.md`; decision 0031; the method: `docs/research/procedural-trees.md`.
+Not the default: the arm the owner judges against `?trees=cards`.
+
+- **The models** (`prototypes/tree-core.js`, a plain script the page imports under `?trees=gen` only; `addGenerated` in `src/look/nature.ts`):
+  four seeded variants per species, added to the pack as `Gen_<species>_<n>`: the crown clumps as foliage, the limbs
+  as bark, and per crown vertex its clump, the clumps' ellipsoids and the twigs as their own mesh. The pack's trees are
+  drawn as species by a share each, picked by the place (`GEN_FOR`: broadleaves oak, lime, beech; birches; willows
+  and alders; pines and spruces), each sized so its reach in plan is its pack class's mean; the model placed decides
+  where a tree stands, as without `gen`, so the scatter's stream and layout are the pack arm's (checked: the same
+  non-tree instances), and a generated tree that would reach farther than the placement rule allows there is drawn
+  smaller, to the placed model's footprint. An orchard, a hedgerow, a row of poplars, a forest of about 90 trees in the open south-west (broadleaves, a
+  spruce patch on one side, birches and hawthorns on its edge), a wood of about 40 in the north-east and two dozen
+  lone field trees come from their own random stream (`extras`), so the scatter's is unchanged; each passes the
+  placement rule. No copper beech: the palette's tint already turns about 5% of crowns copper.
+- **One volume per clump** (`cardMesh(…, clumpVolume)` in `src/look/canopy.ts`): each card carries the ellipsoid of
+  the clump it stands on in `aEllC`, `aEllR`, so L7b's light runs per clump; `?clumpvol=off` gives each crown one
+  ellipsoid, as the pack crowns have. A column's cards are sized to its width, not its height (`cardOpts`).
+- **Leaf fall** (`LEAF_LOSS` in `src/look/shaders/cards.glsl`, the curve in `LEAF_LOSS` of `canopy.ts`): a deciduous
+  crown's cards drop by their own draw (`cardDrop`: the card's rotation and place) as the season passes late autumn,
+  most of them by winter, and the cards left shrink to half (`tuftScale`); the shadow pass cuts the same cards
+  (`depthCardsLoss` in `src/look/bakes.ts`, its season stored on the material before the pass: thin instances draw
+  with an effect of their own). Conifers keep their cards.
+- **Twigs** (`TWIGS_FROM` in `nature.ts`): a thin-instanced mesh per model beside the trunks, drawn from season 1.4,
+  casting into the sun's pass.
+- **The season on this page:** what is baked follows the season the page opens in (`?season`): the shadows, and the
+  sky each crown hides and its contact core (lighter as a crown loses its leaves). Releasing the season slider re-bakes
+  the shadows when what casts them changed since the last bake (`shadowState`); the sky's occlusion stays the one baked on load.
 
 ### The shadows' look
 

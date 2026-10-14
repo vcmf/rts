@@ -2,7 +2,9 @@
 
 Single-file prototypes (Babylon.js 9 for 3D, Canvas 2D for maps). `painted-cinematic.html` is the
 current world prototype, `staff-map.html` the staff-map feel prototype and `formation-map.html` the
-formation test (2D map; its logic is in `formation-core.js`, shared as a plain script); the others
+formation test (2D map; its logic is in `formation-core.js`, shared as a plain script), `tree-gen.html` the
+procedural tree generator (its logic is in `tree-core.js`, which the look page's `?trees=gen` also uses;
+`docs/research/procedural-trees.md`); the others
 are earlier steps kept for comparison.
 
 - **Single file, runnable from `file://`**: no build step, Babylon from the CDN at a pinned

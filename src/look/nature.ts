@@ -21,12 +21,16 @@ import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges }
 import { COVER, coverAt, fieldAt, inFormationZone, type CoverGrid } from './world/cover.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
-import { cardMaterial, cardMesh, placeCards, type CardOptions } from './canopy.ts'
+import { cardMaterial, cardMesh, leafLoss, placeCards, type CardOptions } from './canopy.ts'
 import { CLUMP_REACH, WHEAT_HEIGHT_MAX } from './meadow-spec.ts'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 
-export interface NatureModel { pos: number[]; idx: number[]; role: number[]; min: number[]; max: number[] }
-declare global { interface Window { NATURE?: Record<string, NatureModel> } }
+// a generated tree (prototypes/tree-core.js) adds: per crown vertex its clump, the clumps' ellipsoids (centre,
+// [horizontal, vertical] radii), its twigs as their own mesh, and whether it loses its leaves
+export interface NatureModel { pos: number[]; idx: number[]; role: number[]; min: number[]; max: number[]; clump?: number[]; clumps?: { c: number[]; r: number[] }[]; twigs?: { pos: number[]; idx: number[]; role: number[] }; deciduous?: boolean }
+// the tree generator (prototypes/tree-core.js): a species and a seed to a pack-shaped model, divided by unit
+interface TreeGen { natureModel(key: string, seed: number, unit: number): NatureModel }
+declare global { interface Window { NATURE?: Record<string, NatureModel>; TREEGEN?: TreeGen } }
 
 export type Item = [x: number, z: number, scale: number, yaw: number, tint: number, dy?: number]
 
@@ -42,9 +46,14 @@ export interface Nature {
   footprint(model: string, s: number): number
   stones: [number, number, number, number][]   // the stones in the water (W5a): x, z, radius, the flow's direction (rad), for their foam
   showCards?: (on: boolean) => void            // under cards: the crowns as cards, or the pack's (the bench's arms)
+  // under gen: the season's twigs (shown from TWIGS_FROM) and the crowns' loss; shadowState names what that makes cast
+  // shadows (the twigs on or off, the loss), for the bake to compare with the state it last baked
+  setSeason?: (season: number) => void
+  shadowState?: () => string
   // under cards: the card meshes, which cast the crowns' shadows, and the pack models they replace, which cast nothing
   // (src/look/bakes.ts; the trunk meshes cast the trunks')
-  cardCasters?: { leaf: BaseTexture; cards: Mesh[]; packs: Mesh[] }
+  // lossCards: the card meshes whose crowns thin with the season (their shadow too), at season()
+  cardCasters?: { leaf: BaseTexture; cards: Mesh[]; packs: Mesh[]; lossCards: Mesh[]; season: () => number }
   // the meadow's growth (src/look/meadow.ts): by the cover at a 2 m cell's centre, 0..1 and the grass's height factor
   // (pasture shorter); and the placement rule's hard edges at any point (the formation zones, the banks, the water),
   // which the meadow map applies at every texel so that smoothing the cover never carries grass across them
@@ -72,9 +81,13 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
 // cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md, ?trees=cards);
 // meadow: the meadow's grass and wheat replace the tufts and the wheat lattice (docs/plans/done/l5c-meadow.md);
 // oneTree: every tree drawn as one broadleaf model, where and as large as it stands (L5b's judging: ?trees=one)
-export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off', meadow = false, oneTree = false): Nature {
+// gen: generated trees where the pack's stand (?trees=gen, docs/plans/done/tree-generator.md): the season the page
+// opens in (the sky's occlusion is baked for it), and whether the cards take their clump's volume
+export interface GenOptions { season: number; clumpVolume: boolean }
+export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, z: number, r: number) => void, cover: CoverGrid, cards?: { leaf: BaseTexture; opts: CardOptions }, wood: 'off' | 'small' | 'big' = 'off', meadow = false, oneTree = false, gen: GenOptions | null = null): Nature {
   const NATURE = window.NATURE
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
+  const genModels = gen ? addGenerated(NATURE) : null
 
   const natMat = (name: string, folA: string, folB: string, { rim = 0.8, grassy = false, kind = grassy ? 2 : 0 }: { rim?: number; grassy?: boolean; kind?: number } = {}): ShaderMaterial => {
     const m = mats.make(name, NAT_VS, NAT_FS, { attributes: ['position', 'normal', 'aRole', 'aCrown', 'aTint'], uniforms: ['uFolA', 'uFolB', 'uRim', 'uKind'], samplers: [], defines: grassy ? ['#define GRASSY'] : [] })
@@ -114,7 +127,11 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
 
   const canopy: Nature['canopy'] = []
-  const smTree = (x: number, z: number, crownY: number, cr: number) => { canopy.push([x, z, cr * 1.15, 0.42, true, crownY, cr, 0.7]); reflAdd(x, z, cr * 1.1) }, smBlob = (x: number, z: number, r: number) => canopy.push([x, z, r * 1.4, 0.30, false, r * 0.4, r, 0.7])
+  // k: how much crown is left (a generated deciduous tree loses its leaves with the season: its contact and the sky it
+  // hides go with them)
+  const smTree = (x: number, z: number, crownY: number, cr: number, k = 1) => { canopy.push([x, z, cr * 1.15, 0.42 * k, true, crownY, cr, 0.7 * k]); reflAdd(x, z, cr * 1.1) }
+  // (only the cards thin: without them the crowns stay whole, and so does what they hide)
+  const crownLeft = (model: string) => NATURE[model]?.deciduous && gen && cards ? 1 - 0.8 * leafLoss(gen.season) : 1, smBlob = (x: number, z: number, r: number) => canopy.push([x, z, r * 1.4, 0.30, false, r * 0.4, r, 0.7])
 
   /* ---------- scattering: composition follows the north star ---------- */
   const R = mulberry(77), rr = () => R()
@@ -147,16 +164,24 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
   // add an instance only if its footprint passes the placement rule; the ONLY way scatter adds instances
   // drawn: the model drawn there, when not the one placed (?trees=one)
-  const addPlaced = (model: string, item: Item, kind = '', drawn = model) => { const [x, z, s] = item; if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false; add(drawn, item); return true }
+  // (under gen the model placed decides, as without it, so the scatter's random stream and layout stay the pack
+  // arm's; a generated tree, sized to its class's mean, that would reach farther than the rule allows there is drawn
+  // smaller, to the placed model's footprint)
+  const addPlaced = (model: string, item: Item, kind = '', drawn = model) => {
+    const [x, z, s] = item
+    if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false
+    if (genModels && drawn !== model && !placeable(x, z, footprint(drawn, s), kind)) { item = [...item] as Item; item[2] = s * footprint(model, s) / footprint(drawn, s) }
+    add(drawn, item); return true
+  }
 
   // ?trees=one: the model drawn for a tree, placed as its own model (so the scatter is the page's), shadowed and
   // reflected as the model drawn
-  const tree = (model: string) => oneTree ? 'CommonTree_1' : model
+  const tree = (model: string, x = 0, z = 0) => oneTree ? 'CommonTree_1' : genModels ? genModels.pick(model, x, z) : model
   // a broadleaf or birch tree, and its crown for the occlusion (the crown's centre at 0.62 of the height), drawn as
   // tree(mdl)
   const placeTree = (mdl: string, x: number, z: number, s: number, yaw: number, t: number) => {
-    if (!addPlaced(mdl, [x, z, s, yaw, t], '', tree(mdl))) return false
-    const M = NATURE[tree(mdl)]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s)
+    if (!addPlaced(mdl, [x, z, s, yaw, t], '', tree(mdl, x, z))) return false
+    const M = NATURE[tree(mdl, x, z)]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s, crownLeft(tree(mdl, x, z)))
     return true
   }
   const TREE_MODELS = ['CommonTree_1', 'CommonTree_2', 'CommonTree_3', 'CommonTree_4', 'CommonTree_5']
@@ -183,11 +208,14 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const mdl = 'Willow_' + (1 + Math.floor(rr() * 3)), s = 2.6 + rr() * 0.9, side = rr() < 0.5 ? -1 : 1, off = C.W[i] / 2 * 1.7 + footprint(mdl, s) + 0.3 + rr() * 3; let x = C.px[i] - C.tz[i] * side * off, z = C.pz[i] + C.tx[i] * side * off
     // inside a bend the nearest water is closer than this sample's normal suggests: step outward until the rule accepts
     const yaw = rr() * 6.28, tint = 0.2 + rr() * 0.5; let ok = false
-    for (let t = 0; t < 6 && !ok; t++) { const o = off + t * 1.5; x = C.px[i] - C.tz[i] * side * o; z = C.pz[i] + C.tx[i] * side * o; ok = addPlaced(mdl, [x, z, s, yaw, tint], '', tree(mdl)) }
+    for (let t = 0; t < 6 && !ok; t++) { const o = off + t * 1.5; x = C.px[i] - C.tz[i] * side * o; z = C.pz[i] + C.tx[i] * side * o; ok = addPlaced(mdl, [x, z, s, yaw, tint], '', tree(mdl, x, z)) }
     if (!ok) continue
-    const M = NATURE[tree(mdl)]; smTree(x, z, M.max[1] * 0.6 * s, (M.max[0] - M.min[0]) * 0.45 * s)
+    const M = NATURE[tree(mdl, x, z)]; smTree(x, z, M.max[1] * 0.6 * s, (M.max[0] - M.min[0]) * 0.45 * s, crownLeft(tree(mdl, x, z)))
   }
-  for (let i = 0; i < 5; i++) { const x = 150 + (rr() - 0.5) * 30, z = -40 + (rr() - 0.5) * 30; const mdl = 'PineTree_' + (1 + Math.floor(rr() * 3)), s = 3.6 + rr(); if (addPlaced(mdl, [x, z, s, rr() * 6.28, rr()], '', tree(mdl))) { if (oneTree) { const M = NATURE[tree(mdl)]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s) } else smTree(x, z, 6, 3.5) } }
+  for (let i = 0; i < 5; i++) { const x = 150 + (rr() - 0.5) * 30, z = -40 + (rr() - 0.5) * 30; const mdl = 'PineTree_' + (1 + Math.floor(rr() * 3)), s = 3.6 + rr(); if (addPlaced(mdl, [x, z, s, rr() * 6.28, rr()], '', tree(mdl, x, z))) { if (oneTree || genModels) { const M = NATURE[tree(mdl, x, z)]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s) } else smTree(x, z, 6, 3.5) } }
+  // under gen: an orchard, a hedgerow, a row of poplars, a forest, a wood and lone field trees, from their own random
+  // stream (the scatter's is unchanged)
+  if (genModels) for (const [mdl, x, z, s] of genModels.extras()) if (addPlaced(mdl, [x, z, s, hash(x, z) * 6.28, hash(z, x)])) { const M = NATURE[mdl]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s, crownLeft(mdl)) }
   for (let i = 0; i < 90; i++) {   // bushes, a third of them with berries
     const a = rr() * 6.28, r = 14 + rr() * 120, x = Math.cos(a) * r + 8, z = Math.sin(a) * r, s = 1.8 + rr() * 1.4
     if (addPlaced(rr() < 0.33 ? 'BushBerries_' + (1 + Math.floor(rr() * 2)) : 'Bush_' + (1 + Math.floor(rr() * 2)), [x, z, s, rr() * 6.28, rr()])) smBlob(x, z, s * 0.6)
@@ -259,24 +287,49 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
   // under cards, a carded model is drawn as its trunk triangles (the trunks_ mesh) and its cards, which take the
   // crowns' palette; both cast into the sun's shadow pass (src/look/bakes.ts), the whole pack model is disabled
-  const carded = (k: string) => !!cards && /^(CommonTree|BirchTree|Willow)_/.test(k)
+  const carded = (k: string) => !!cards && /^(CommonTree|BirchTree|Willow|Gen)_/.test(k)
   const treeCards = cards && cardMaterial(mats, 'treeCards', '#4a7330', '#97a043', 0.45, cards.leaf, cards.opts.volume), birchCards = cards && cardMaterial(mats, 'birchCards', '#7a9a3c', '#bcae55', 0.45, cards.leaf, cards.opts.volume)
+  // generated conifers are carded too, in the pines' palette and kind (they stay green)
+  const pineCards = cards && genModels && cardMaterial(mats, 'pineCards', '#2f5a36', '#4f7a3e', 0.4, cards.leaf, cards.opts.volume)
+  if (pineCards) pineCards.setFloat('uKind', 1)
+  // generated deciduous crowns thin with the season (src/look/shaders/cards.glsl)
+  const lossTreeCards = cards && genModels && cardMaterial(mats, 'treeCardsLoss', '#4a7330', '#97a043', 0.45, cards.leaf, cards.opts.volume, true)
+  const lossBirchCards = cards && genModels && cardMaterial(mats, 'birchCardsLoss', '#7a9a3c', '#bcae55', 0.45, cards.leaf, cards.opts.volume, true)
+  let season = gen?.season ?? 0
+  const twigMeshes: Mesh[] = [], lossCards: Mesh[] = []
   let seed = 1
   const swaps: ((on: boolean) => void)[] = [], cardMeshes: Mesh[] = [], packs: Mesh[] = []
   for (const [k, items] of Object.entries(groups)) {
-    const birch = /Birch/.test(k)
-    const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : birch ? birchMat : /Pine/.test(k) ? pineMat : treeMat
+    const birch = /Birch|^Gen_birch/.test(k), conifer = /Pine|^Gen_(pine|spruce)/.test(k)
+    const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : birch ? birchMat : conifer ? pineMat : treeMat
     const placed = place(k, material, items)
     if (placed && cards && carded(k)) {
-      const trunks = buildModel(k, true), cm = cardMesh(scene, 'cards_' + k, NATURE[k], cards.opts, seed++), pack = placed.mesh
+      const trunks = buildModel(k, true), cm = cardMesh(scene, 'cards_' + k, NATURE[k], genModels?.cardOpts(k, cards.opts) ?? cards.opts, seed++, !!gen?.clumpVolume), pack = placed.mesh
       trunks.material = material; trunks.alwaysSelectAsActiveMesh = true
       trunks.thinInstanceSetBuffer('matrix', placed.buf, 16, true); trunks.thinInstanceSetBuffer('aTint', placed.tint, 1, true)
-      placeCards(cm, (birch ? birchCards : treeCards) as ShaderMaterial, placed.buf, placed.tint)
+      const loses = !!NATURE[k].deciduous && !!lossTreeCards
+      placeCards(cm, (conifer && pineCards ? pineCards : loses ? (birch ? lossBirchCards : lossTreeCards) : birch ? birchCards : treeCards) as ShaderMaterial, placed.buf, placed.tint)
+      if (loses) lossCards.push(cm)
+      // the twigs, as their own model beside it (drawn from TWIGS_FROM on: the bare crowns of late autumn and winter)
+      const tw = NATURE[k].twigs
+      if (tw && tw.idx.length && loses) {   // conifers keep their crowns: no twigs to show
+        const tk = k + '~twigs'; NATURE[tk] = { ...tw, min: NATURE[k].min, max: NATURE[k].max }
+        const tm = buildModel(tk); tm.material = material; tm.alwaysSelectAsActiveMesh = true
+        tm.thinInstanceSetBuffer('matrix', placed.buf, 16, true); tm.thinInstanceSetBuffer('aTint', placed.tint, 1, true)
+        twigMeshes.push(tm)
+      }
       const show = (on: boolean) => { cm.setEnabled(on); trunks.setEnabled(on); pack.setEnabled(!on) }
       show(true); swaps.push(show); cardMeshes.push(cm); packs.push(pack)
     }
   }
-  const showCards = cards ? (on: boolean) => { for (const f of swaps) f(on) } : undefined
+  // the twigs: drawn with the cards (the bench's pack arm shows the whole pack model instead), from TWIGS_FROM on
+  let cardsShown = true
+  const twigsOn = () => cardsShown && season >= TWIGS_FROM, showTwigs = () => { for (const m of twigMeshes) m.setEnabled(twigsOn()) }
+  showTwigs()
+  const showCards = cards ? (on: boolean) => { for (const f of swaps) f(on); cardsShown = on; showTwigs() } : undefined
+  const seasonal = twigMeshes.length > 0 || lossCards.length > 0
+  const setSeason = seasonal ? (s: number) => { season = s; showTwigs() } : undefined
+  const shadowState = seasonal ? () => `${twigsOn()} ${leafLoss(season)}` : undefined
   // the band is left out after the every-fourth choice, so every other bush stays the one the prototype drew
   // and none on the roads or the village ground (after the every-fourth choice, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
@@ -293,5 +346,80 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
   // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the outer ring's footprint and lean)
   const growthAllowed = (x: number, z: number) => !touchesZone(x, z, CLUMP_REACH) && offBanks(riverQuery(x, z), CLUMP_REACH)
-  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs } : undefined, growth, growthAllowed, crop }
+  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, setSeason, shadowState, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs, lossCards, season: () => season } : undefined, growth, growthAllowed, crop }
+}
+
+// ?trees=gen (docs/plans/done/tree-generator.md): VARIANTS seeded models per species from prototypes/tree-core.js,
+// added to the pack as Gen_<species>_<n>. Each pack class's trees are drawn as its species (a share each, picked by the
+// place, so the scatter's random stream is unchanged), every model sized so its reach in plan is its class's mean: the
+// page's composition and its placement rule stay as they are.
+const GEN_VARIANTS = 4
+const TWIGS_FROM = 1.4   // the season the twigs show from: just before the crowns start to thin (LEAF_LOSS.from)
+const GEN_FOR: Record<string, [species: string, share: number][]> = {
+  // (no copper beech: the palette's tint already turns about 5% of crowns copper, docs/art-bible.md §4b)
+  CommonTree: [['oak', 0.5], ['lime', 0.25], ['beech', 0.25]],
+  BirchTree: [['birch', 1]],
+  Willow: [['willow', 0.65], ['alder', 0.35]],
+  PineTree: [['pine', 0.4], ['spruce', 0.6]],
+}
+function addGenerated(NATURE: Record<string, NatureModel>) {
+  const G = window.TREEGEN
+  if (!G) throw new Error('?trees=gen needs prototypes/tree-core.js')
+  // the model divided by unit (the generator's output is linear in it: one growth, not two)
+  const scaled = (m: NatureModel, unit: number): NatureModel => ({ ...m, pos: m.pos.map(v => v / unit), min: m.min.map(v => v / unit), max: m.max.map(v => v / unit),
+    clumps: m.clumps?.map(q => ({ c: q.c.map(v => v / unit), r: q.r.map(v => v / unit) })), twigs: m.twigs && { ...m.twigs, pos: m.twigs.pos.map(v => v / unit) } })
+  const reach = (m: NatureModel) => { let r = 0; for (let i = 0; i < m.pos.length; i += 3) r = Math.max(r, Math.hypot(m.pos[i], m.pos[i + 2])); return r }
+  for (const [cls, species] of Object.entries(GEN_FOR)) {
+    const packs = Object.keys(NATURE).filter(k => k.startsWith(cls + '_')), want = packs.reduce((a, k) => a + reach(NATURE[k]), 0) / packs.length
+    for (const [sp] of species) for (let v = 0; v < GEN_VARIANTS; v++) { const m = G.natureModel(sp, v + 1, 1); NATURE[`Gen_${sp}_${v + 1}`] = scaled(m, reach(m) / want) }
+  }
+  // the extras stand at scale 1, in metres
+  for (const sp of ['apple', 'poplar', 'hawthorn']) for (let v = 0; v < GEN_VARIANTS; v++) NATURE[`Gen_${sp}_${v + 1}`] = G.natureModel(sp, v + 1, 1)
+  const variant = (sp: string, x: number, z: number) => `Gen_${sp}_${1 + Math.floor(hash(z * 0.37, x * 0.37) * GEN_VARIANTS)}`
+  return {
+    pick(model: string, x: number, z: number): string {
+      const species = GEN_FOR[model.replace(/_\d+$/, '')]
+      if (!species) return model
+      let u = hash(x * 0.61, z * 0.61), sp = species[species.length - 1][0]
+      for (const [s, share] of species) { if (u < share) { sp = s; break } u -= share }
+      return variant(sp, x, z)
+    },
+    // an orchard on the valley side, a hedgerow along a field, a row of poplars along the road's line, a forest in
+    // the open south-west, a smaller wood in the north-east and lone trees in the fields; [model, x, z, scale]: the
+    // extras stand in metres, the classes' species at the pack's scale (3.4 to 4.8, as the scatter places them)
+    extras(): [string, number, number, number][] {
+      const R = mulberry(93), out: [string, number, number, number][] = [], packS = () => 3.4 + R() * 1.4
+      for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) { const x = 55 + c * 8 + (R() - 0.5), z = -82 - r * 8 + (R() - 0.5); out.push([variant('apple', x, z), x, z, 1]) }
+      for (let i = 0; i < 18; i++) { const x = -150 + i * 3.4 + (R() - 0.5), z = 28 + i * 0.9 + (R() - 0.5) * 0.8; out.push([variant('hawthorn', x, z), x, z, 1]) }
+      for (let i = 0; i < 9; i++) { const x = -40 + i * 11, z = 98 + i * 1.5; out.push([variant('poplar', x, z), x, z, 1]) }
+      // a wood: darts in a lumpy outline (radius rx, rz, its edge wandering by a third), at least `gap` m apart;
+      // birches and hawthorns on the edge, a patch of spruce on one side
+      const wood = (cx: number, cz: number, rx: number, rz: number, n: number, gap: number, spruceSide: number) => {
+        const pts: [number, number][] = []
+        for (let t = 0; t < n * 30 && pts.length < n; t++) {
+          const a = R() * Math.PI * 2, u = Math.sqrt(R()), edge = 1 + 0.33 * (hash(Math.cos(a) * 3, Math.sin(a) * 3) - 0.5) * 2
+          if (u > edge) continue
+          const x = cx + Math.cos(a) * rx * u, z = cz + Math.sin(a) * rz * u
+          if (pts.some(([px, pz]) => Math.hypot(px - x, pz - z) < gap)) continue
+          pts.push([x, z])
+          const rim = u / edge, side = Math.cos(a - spruceSide)
+          const sp = rim > 0.85 ? (R() < 0.5 ? 'hawthorn' : 'birch') : side > 0.6 && rim > 0.3 ? 'spruce' : R() < 0.5 ? 'oak' : R() < 0.6 ? 'beech' : R() < 0.6 ? 'lime' : 'birch'
+          out.push([variant(sp, x, z), x, z, sp === 'hawthorn' ? 1 : packS()])
+        }
+      }
+      wood(-170, -160, 55, 42, 95, 7.5, 0.6)
+      wood(150, 160, 34, 26, 40, 7.5, 3.6)
+      // lone field trees: oaks and limes, the odd pear-shaped apple
+      for (let i = 0; i < 26; i++) { const x = (R() - 0.5) * 420, z = (R() - 0.5) * 420, sp = R() < 0.55 ? 'oak' : R() < 0.7 ? 'lime' : 'apple'; out.push([variant(sp, x, z), x, z, sp === 'apple' ? 1 : packS()]) }
+      return out
+    },
+    // a column's cards: sized to its width, not its height (src/look/canopy.ts sizes cards by the crown's radius)
+    cardOpts(model: string, o: CardOptions): CardOptions {
+      const m = NATURE[model]; if (!m || !model.startsWith('Gen_')) return o
+      const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
+      for (let v = 0; v < m.role.length; v++) if (m.role[v] <= 1) for (let j = 0; j < 3; j++) { lo[j] = Math.min(lo[j], m.pos[v * 3 + j]); hi[j] = Math.max(hi[j], m.pos[v * 3 + j]) }
+      const rh = (hi[0] - lo[0] + hi[2] - lo[2]) / 4, rv = (hi[1] - lo[1]) / 2
+      return rv > rh ? { ...o, size: o.size * rh / rv } : o
+    },
+  }
 }

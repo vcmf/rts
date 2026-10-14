@@ -76,7 +76,11 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   if (cardCasters) {
     const cardDepth = new ShaderMaterial('depthCards', scene, { vertexSource: withCards(CARD_DEPTH_VS), fragmentSource: withCards(CARD_DEPTH_FS) }, { attributes: ['position', 'aCorner', 'aCard'], uniforms: ['world', 'viewProjection', 'view'], samplers: ['uLeaf'] })
     cardDepth.backFaceCulling = false; cardDepth.setTexture('uLeaf', cardCasters.leaf)
-    for (const cards of cardCasters.cards) { shadowRT.renderList.push(cards); shadowRT.setMaterialForRendering(cards, cardDepth) }
+    // crowns that thin with the season (generated deciduous trees, docs/plans/done/tree-generator.md) cast through
+    // the same cut, at the season the bake runs in
+    const lossDepth = cardCasters.lossCards.length ? new ShaderMaterial('depthCardsLoss', scene, { vertexSource: withCards(CARD_DEPTH_VS), fragmentSource: withCards(CARD_DEPTH_FS) }, { attributes: ['position', 'aCorner', 'aCard'], uniforms: ['world', 'viewProjection', 'view', 'uSeason'], samplers: ['uLeaf'], defines: ['#define LEAF_LOSS'] }) : null
+    if (lossDepth) { lossDepth.backFaceCulling = false; lossDepth.setTexture('uLeaf', cardCasters.leaf); shadowRT.onBeforeRenderObservable.add(() => lossDepth.setFloat('uSeason', cardCasters.season())) }   // stored on the material: thin instances draw with an effect of their own
+    for (const cards of cardCasters.cards) { shadowRT.renderList.push(cards); shadowRT.setMaterialForRendering(cards, lossDepth && cardCasters.lossCards.includes(cards) ? lossDepth : cardDepth) }
   }
   shadowRT.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE; shadowRT.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
   scene.customRenderTargets.push(shadowRT)
@@ -111,7 +115,8 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
     }
     for (const [x, z, r, a, tree] of canopy) {
       if (!soft.on) disc(x, z, r, `rgb(255,${Math.round(255 * (1 - a))},255)`)   // soft: the sky's occlusion below instead
-      if (tree) disc(x, z, r * 0.45, 'rgb(166,255,255)')
+      // the core as strong as the crown is whole (a/0.42: 1 for every tree but a generated one losing its leaves)
+      if (tree) disc(x, z, r * 0.45, `rgb(${Math.round(255 - 89 * Math.min(1, a / 0.42))},255,255)`)
     }
     if (soft.on) sky = skyOcclusion(aog, canopy)
   }
