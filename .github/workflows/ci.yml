@@ -3,7 +3,7 @@
 # coverage: PRs into an epic/** branch, pushes to main or an epic/** branch, and by hand; not PRs into main.
 # Coverage instrumentation makes the sim's long scenarios about six times slower, so the coverage run skips the
 # tests marked longIt (test/fx.ts; they run in check): 144 s locally instead of 317 s, for 0.6 points of
-# statement coverage. It reports to Codecov.
+# statement coverage. A test there has a longer budget than in check (vitest.config.ts). It reports to Codecov.
 # The cost tests skip themselves when CI is set (shared runners are too noisy for millisecond budgets).
 # tools/app-check.mjs (headless browser) is not run here yet.
 name: ci
