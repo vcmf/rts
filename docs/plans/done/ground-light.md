@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-14
 ---
 
@@ -22,9 +22,9 @@ the baked occlusion, the meadow's brush or the grass blades off.
 
 ## Scope
 
-The terrain's materials (`DETAIL_ON` in the painter: the terrain, the shore's land), and the cloud on the meadow's
-blades (a shade, as on the ground under them). Trees, buildings and units keep their bands (their grain-broken edges
-are the painted look on a form); they share `cloud()`'s softer, graded edge.
+The terrain's materials (`DETAIL_ON` in the painter: the terrain, the shore's land): the band and the grain. The cloud
+on every painted material: a shade (the ground, the meadow's blades, trees, buildings), units keeping its band drop.
+Trees, buildings and units keep their grain-broken band edges (the painted look on a form).
 
 ## Approach
 
@@ -75,3 +75,13 @@ Main at 2856dae, the look page with `?trees=gen,cards` where shot. Sheets in `sc
 - **The frame's cost** (`tools/bench-look.mjs`, the GPU frame's median, Metal; main twice, the branch once): the same
   or a little less at every camera, -0.01 to -0.13 ms, within main's own spread between its two runs (up to 0.13).
 - **`npm test`:** exit 0, 256 tests.
+- **Review:** round 1 (one severe: the cloud a shade on the ground alone, objects read as cut-outs) and round 2
+  (moderate only: the blades' snow shade from the snow under them, the docs, decision 0032 proposed). Rechecked after
+  each: the guard (start and crops after round 2), the coat check.
+
+## Left
+
+- **WebGL1** (`DETAIL_L0`, the material factory's fallback, and the bench's `l0` arm): its ground keeps the grain in the
+  band choice, so the islands remain there. The L0 path is shared with trees and buildings and cannot tell the ground
+  from them; the target is WebGL2.
+- A light low-chroma coat (a grey or buff greatcoat) takes the near-white share too (decision 0032).

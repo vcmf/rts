@@ -42,5 +42,5 @@ void main(){
   #endif
   vec3 mid=alb*mix(uMidCool,uSunCol,0.30),lt=alb*uSunCol*1.16+uLitLift;
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
-  c=cloudShade(c,cloud(vW),smoothstep(2.0,3.0,uSeason));   // the snowed ground's shade in winter, as under them
+  c=cloudShade(c,cloud(vW),snowAt(vec3(0.0,1.0,0.0),vec3(vRoot.x,vW.y,vRoot.y)));   // the shade of the ground under the root, snowed or not
   gl_FragColor=vec4(airOf(c,vW,lm,vH),depthA(vW));}
