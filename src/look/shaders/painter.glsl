@@ -207,7 +207,7 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #else
   float l=ndlR+gr*0.55*jitter+(blot-0.5)*0.3*jitter-sh*1.25-(1.0-occ)*0.55;
   #endif
-  float cl=cloud(wp);   // a shade below (cloudShade), not a drop of the light
+  float cl=cloud(wp);   // a shade below (cloudShade; units its white-balanced share), not a drop of the light
   #ifdef DETAIL_ON
   // the band edges keep their width but never get narrower than the light's change across two pixels (no aliasing)
   #ifdef DETAIL_SAB_STEP
@@ -248,7 +248,7 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #ifdef KEEP_HUE
   // units: the cloud shade white-balanced as the sun is (its value, wb of its hue, decision 0027), so a white under a
   // cloud does not turn blue
-  vec3 csh=CLOUD_SHADE;csh=mix(vec3(dot(csh,LUMA)),csh,wb);c=mix(c,c*csh,cl);
+  vec3 csh=mix(CLOUD_SHADE,CLOUD_SNOW,snow);csh=mix(vec3(dot(csh,vec3(0.3,0.59,0.11))),csh,wb);c=mix(c,c*csh,cl);
   #else
   c=cloudShade(c,cl,snow);
   #endif
