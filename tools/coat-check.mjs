@@ -1,7 +1,7 @@
 // The coat check (docs/plans/done/lc1b-coats.md, Track E LC1): the army coats keep their colour under the light.
 // Blocks in the four coats (docs/art-bible.md §4) at the two spots of docs/research/colour-and-light-review.md, at
-// the default view, and at a far spot at the widest view (LC2: 135 m beyond its target, a column across the view,
-// 60 pixels a block at least against 200), summer, with the gameplay depth of field off (its band blurs the ground into the blocks): the
+// the default view, and at a far spot at the widest view (LC2: 135 m beyond its target in the frame's top band, a
+// column across the view, 60 pixels a block at least against 200), summer, with the gameplay depth of field off (its band blurs the ground into the blocks): the
 // middle of the frame (outside the valley mist) and the valley floor (inside it). A block's pixels come from two mask
 // renders (flat white, flat black), as the readability guard's; its lit top face is the 40 % of them after the
 // brightest 10 % (the rim along its edges). That
@@ -33,14 +33,15 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const W = 1280, H = 720, HUE = 20, SAT = 0.45, WHITE_CHROMA = 8, WHITE_L = 0.6, WHITE_TINT = 0.15, RIM = 0.1, TOP = 0.4
 const cam = n => CAMS.find(c => c[0] === n).slice(1, 5)
 const START = cam('start'), WIDE = cam('wide')
-// the far spot (LC2, docs/plans/done/lc3-temperate.md): at the widest view, FAR m beyond its target along the view
-// (toward the frame's top), where the distance haze (atmos) is
+// the far spot (LC2, docs/plans/done/lc3-temperate.md): at the widest view, FAR m beyond its target along the view, in
+// the frame's top band (the grade's haze toward the top, units' share of the grade). Not the distance haze: atmos()
+// starts 110 m from the focus, and at 135 m gives about 1 % (farther is out of the frame)
 const FAR = 135, [wa, , , [wx, , wz]] = WIDE
-// the spots: [name, x, z, view, fewest pixels, the column's direction, its gap] of the column's middle; the four coats
-// 7 m apart along z (blocksAt's column). A far block is small on screen: it needs fewer pixels, and its column runs
-// across the view (along it, the blocks would stack on screen)
+// the spots: [name, x, z, view, fewest pixels, the column's direction, its gap] of the column's middle; the near spots'
+// four coats 7 m apart along z (blocksAt's column). A far block is small on screen: it needs fewer pixels, and its
+// column runs across the view (along it, the blocks would stack on screen), 26 m apart (a block is 20 m long)
 const SPOTS = [['middle', -10, 2, START, 200, Math.PI / 2, 7], ['valley', 30, 62, START, 200, Math.PI / 2, 7],
-  ['far', Math.round(wx - FAR * Math.cos(wa)), Math.round(wz - FAR * Math.sin(wa)), WIDE, 60, wa + Math.PI / 2, 20]]
+  ['far', Math.round(wx - FAR * Math.cos(wa)), Math.round(wz - FAR * Math.sin(wa)), WIDE, 60, wa + Math.PI / 2, 26]]
 const blocks = ([s, x, z, , , dir, gap]) => blocksAt([[s, x, z, 0, dir, gap]]).map(b => ({ ...b, color: ARMY_HEX[b.color] }))
 
 const hls = ([r, g, b]) => {

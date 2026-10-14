@@ -158,7 +158,8 @@ default, `temperate`, keeps 60 % of their chroma, turned slightly warm-grey.
 
 - **80% calm field:** muted olive and grey-greens, pale straw, cool teal-green
   hollows. Never neon green, never a saturated yellow-orange.
-- **20% accents, deliberately complementary:** orange flowers against teal
+- **20% accents, deliberately complementary** (muted by the earth as the field is, so they stay accents, never
+  rivals of the coats): orange flowers against teal
   shadow, red roofs, army colours.
 - **Armies are always the most saturated objects on screen.** Terrain never
   matches their saturation.

@@ -42,7 +42,7 @@ own mood.
 ## Consequences
 
 - Good: the landscape recedes and the armies read as the strongest colour. The coat check passes, including a new far
-  spot. Against golden, 116 of the guard's 132 blocks separate better.
+  spot (the widest view's top band). Against golden, 116 of the guard's 132 blocks separate better.
 - Bad: the Austrian white on winter snow separates less, because the snow is whiter (two blocks under the bound,
   accepted by the owner; #78).
 - Good: a mood is all data. Another map's light (a dusk, a winter battle) is a new table entry, judged the same way.

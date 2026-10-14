@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-14
 ---
 
@@ -73,6 +73,17 @@ Main at 71ece8a.
   a colour step at the tile's edge under temperate (golden's earth is 0, so its goldens could not see it). The water's
   ramp, its winter colour and the ice now take the earth too (`shore.glsl`), so the river sits in the 60 % world and
   meets the far line. The far spot's column now runs across the view (along it the blocks stacked on screen).
+
+- **Round 2** (moderate only): the far spot's claim corrected (the frame's top band; the distance haze starts beyond
+  the widest frame), its blocks 26 m apart (they touched), the water's tree reflections take the earth, the art
+  bible's accents muted with the field.
+- **The water checks** (`tools/water-look-check.mjs`, after round 1's change to the water): foam, winter, leaves and
+  the rest pass; two fail.
+  - **Banks:** the cut bank fails on main too (its value); under temperate it is also less warm than the meadow, by
+    0.015 against the 0.03 asked (main: 0.071 against 0.012), the earth muting its brown.
+  - **Shimmer:** at the widest view in winter, 11.4 % of the frame's pixels change between camera steps against
+    main's 7.5 % (limit 11 %); the water's own pixels pass (8.8 %). Temperate's whiter snow sets the ground's small
+    dark bits against it more strongly.
 
 ## Left
 
