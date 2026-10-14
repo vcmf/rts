@@ -30,7 +30,7 @@ it grows the branches before it adds the crown.
   pack class, plus an orchard, a hedgerow and a row of poplars. They take the page's whole look: the leaf atlas
   and L7a's cards, L7b's crown volume, the crowns' cast shadows, the soft shadows and the contact under each crown.
   The default arm is unchanged.
-- On that arm, what the generator's data allows (decision 0031, proposed; the owner, 2026-10-14: the official page
+- On that arm, what the generator's data allows (decision 0031, accepted 2026-10-14; the owner, 2026-10-14: the official page
   lacked both the prototype's thinning canopy and its branches):
   - **one volume per clump:** each card lit in its clump's ellipsoid, not the crown's (`?clumpvol=off` for the A/B);
   - **leaf fall:** deciduous cards drop and shrink from late autumn to winter, in the cards drawn and in the shadow

@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-14
 ---
 
@@ -17,6 +17,10 @@ clumps and branches, the cards can light each clump as its own volume, and the c
 season. The owner (2026-10-14): the prototype is "absolutely stunning"; this track exists to improve the trees.
 On the map engine's branch, decision 0029 keeps free-standing trees as a list the look places "with its form,
 height and crown": the generator is where that form comes from.
+
+Accepted by the owner on 2026-10-14 for its look ("better, more beautiful") and on the expectation of no
+performance regression. The default arm is measured unchanged (identical goldens); the generated arm's frame cost is
+not measured yet, and the plan's cost bench (`docs/plans/active/tree-generator.md`) confirms or revisits it.
 
 ## Decision
 
