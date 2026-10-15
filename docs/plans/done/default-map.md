@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-15
 ---
 
@@ -16,7 +16,7 @@ right edge.
 - **A large wheat field** in the start view: about 90 × 56 m at (50, 48), its drill along x (at (80, 12), tried
   first, it sat past the view's right edge). The
   formation zones and the floodplain clip it as any field (`authorCover`).
-- **A bare-earth drove** between the wheat and the ploughed field (about 90 × 8 m at (80, -23)).
+- **A bare-earth drove** between the wheat and the ploughed field (about 76 × 8 m at (86, -18), meadow on both sides).
 - **Trees off fields and bare ground:** a tree or a stone that falls on a field or bare earth is placed but not drawn
   (rejected, it drew a new candidate and shifted the scatter's stream: a moved bush hid a guard block). Bushes and
   grass already keep to grass.
@@ -73,3 +73,11 @@ autumn, the wide view.
   - Smaller: the system doc's scatter rule, the plan paths, one `GRASSY_MODEL` pattern.
   - Left: `cropsInSceneField` samples the old field's lattice only, and with `?meadow=off` the new field has no pack
     wheat (the lattice sows the old field).
+- **Round 2** (no severe): only the lone field trees under gen stand in fields, never on bare earth (the woods and
+  the orchard are hidden there too); the hidden test reaches the tree's footprint, so no crown hangs over the field;
+  a hidden copse tree sows no undergrowth (its draws still taken, the stream unchanged); the drove moved to (86, -18)
+  with meadow on both sides and clear of the zone. The wheat hides the copses at (42, 56) and (82, 32), noted in
+  `cover.ts`. Left: one random stream for the whole scatter (a seeded stream per loop would make a plain rejection
+  safe and retire `'hidden'`, at the cost of one accepted layout change).
+- **Final checks:** the guard ok at cover and crops, at start the #78 block at 0.097; the river check clean, with and
+  without `?trees=gen,cards`; `npm test` 256 of 256.

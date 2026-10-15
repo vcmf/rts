@@ -66,8 +66,9 @@ export interface Nature {
 
 // what may grow on each class of the cover (docs/plans/active/l5-macro.md): grass, flowers, plants, bushes, stumps
 // and logs on grass (meadow, pasture, a copse's floor); wheat on wheat; stones anywhere but roads, tracks and the
-// village; trees and the far hedgerows' bushes too. The roads and the village keep clear of the copses (a rejected
-// copse tree would shift the scatter's stream after it: the scatter's counts match main's)
+// village; trees and the far hedgerows' bushes too, but hidden on fields and bare earth (addPlaced). The roads and the
+// village keep clear of the copses (a rejected copse tree would shift the scatter's stream after it: the scatter's
+// counts match main's)
 const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood], LINE_COVER: readonly number[] = [COVER.road, COVER.track, COVER.village]
 const TRODDEN: readonly number[] = [...LINE_COVER, COVER.bare]
 // the models that keep to grass (coverAllows), and so never stand on a field: the hidden rule below skips them
@@ -174,11 +175,15 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // 'drawn', 'hidden' or false (rejected). A tree or a stone within EDGE of a field or bare earth is 'hidden': placed
   // but not drawn, and its callers skip its crown's shadow, its occlusion and its reflection. Rejected, it would draw a
   // new candidate and shift the scatter's stream, moving every tree after it (docs/plans/done/default-map.md).
-  // onFields: the lone field trees under gen stand in the fields on purpose (decision 0031)
+  // The reach: the footprint (its crown) and EDGE (the painted edge's wander). onFields: the lone field trees under gen
+  // stand in the fields on purpose (decision 0031), never on bare earth
   const addPlaced = (model: string, item: Item, kind = '', drawn = model, onFields = false): Placed => {
     const [x, z, s] = item
     if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false
-    if (!onFields && model !== 'Wheat' && !GRASSY_MODEL.test(model) && AROUND.some(([dx, dz]) => { const k = coverAt(cover, x + dx * EDGE, z + dz * EDGE); return isField(k) || k === COVER.bare })) return 'hidden'
+    if (model !== 'Wheat' && !GRASSY_MODEL.test(model)) {
+      const reach = EDGE + footprint(model, s)
+      if (AROUND.some(([dx, dz]) => { const k = coverAt(cover, x + dx * reach, z + dz * reach); return k === COVER.bare || (!onFields && isField(k)) })) return 'hidden'
+    }
     if (genModels && drawn !== model && !placeable(x, z, footprint(drawn, s), kind)) { item = [...item] as Item; item[2] = s * footprint(model, s) / footprint(drawn, s) }
     add(drawn, item); return 'drawn'
   }
@@ -188,20 +193,21 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const tree = (model: string, x = 0, z = 0) => oneTree ? 'CommonTree_1' : genModels ? genModels.pick(model, x, z) : model
   // a broadleaf or birch tree, and its crown for the occlusion (the crown's centre at 0.62 of the height), drawn as
   // tree(mdl)
-  const placeTree = (mdl: string, x: number, z: number, s: number, yaw: number, t: number) => {
+  const placeTree = (mdl: string, x: number, z: number, s: number, yaw: number, t: number): Placed => {
     const r = addPlaced(mdl, [x, z, s, yaw, t], '', tree(mdl, x, z))
-    if (!r) return false
-    if (r === 'hidden') return true
+    if (r !== 'drawn') return r
     const M = NATURE[tree(mdl, x, z)]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s, crownLeft(tree(mdl, x, z)))
-    return true
+    return 'drawn'
   }
   const TREE_MODELS = ['CommonTree_1', 'CommonTree_2', 'CommonTree_3', 'CommonTree_4', 'CommonTree_5']
   const clusters = [[-62, -22, 7], [-128, 4, 9], [-74, 58, 6], [42, 56, 8], [82, 32, 6], [-22, 72, 7], [112, -12, 5], [-150, 62, 8], [150, 72, 7], [-42, 122, 10], [62, 112, 8], [18, -80, 6], [-95, -70, 7], [120, -70, 6]]
   for (const [cx, cz, n] of clusters) for (let i = 0; i < n; i++) {
     const x = cx + (rr() - 0.5) * 42, z = cz + (rr() - 0.5) * 32
     const birch = rr() < 0.22, mdl = birch ? 'BirchTree_' + (1 + Math.floor(rr() * 5)) : TREE_MODELS[Math.floor(rr() * 5)], s = 3.4 + rr() * 1.4
-    if (!placeTree(mdl, x, z, s, rr() * 6.28, rr())) continue
-    if (rr() < 0.5) { const fx = x + (rr() - 0.5) * 6, fz = z + (rr() - 0.5) * 6; addPlaced('Plant_1', [fx, fz, 1.6 + rr(), rr() * 6.28, rr()]) }
+    const pt = placeTree(mdl, x, z, s, rr() * 6.28, rr())
+    if (!pt) continue
+    // its undergrowth: drawn from the stream as before, placed only by a drawn tree
+    if (rr() < 0.5) { const fx = x + (rr() - 0.5) * 6, fz = z + (rr() - 0.5) * 6, fs = 1.6 + rr(), fy = rr() * 6.28, ft = rr(); if (pt === 'drawn') addPlaced('Plant_1', [fx, fz, fs, fy, ft]) }
   }
   // ?wood: one dense wood, to judge the sky's occlusion (docs/plans/done/soft-shadows.md); ?wood=big: a forest that
   // fills the bench's frame (docs/plans/done/forest-bench.md); each its own random stream, so the rest of the
@@ -227,7 +233,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   for (let i = 0; i < 5; i++) { const x = 150 + (rr() - 0.5) * 30, z = -40 + (rr() - 0.5) * 30; const mdl = 'PineTree_' + (1 + Math.floor(rr() * 3)), s = 3.6 + rr(); if (addPlaced(mdl, [x, z, s, rr() * 6.28, rr()], '', tree(mdl, x, z)) === 'drawn') { if (oneTree || genModels) { const M = NATURE[tree(mdl, x, z)]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s) } else smTree(x, z, 6, 3.5) } }
   // under gen: an orchard, a hedgerow, a row of poplars, a forest, a wood and lone field trees, from their own random
   // stream (the scatter's is unchanged)
-  if (genModels) for (const [mdl, x, z, s] of genModels.extras()) if (addPlaced(mdl, [x, z, s, hash(x, z) * 6.28, hash(z, x)], '', mdl, true) === 'drawn') { const M = NATURE[mdl]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s, crownLeft(mdl)) }
+  if (genModels) for (const [mdl, x, z, s, lone] of genModels.extras()) if (addPlaced(mdl, [x, z, s, hash(x, z) * 6.28, hash(z, x)], '', mdl, lone === true) === 'drawn') { const M = NATURE[mdl]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s, crownLeft(mdl)) }
   for (let i = 0; i < 90; i++) {   // bushes, a third of them with berries
     const a = rr() * 6.28, r = 14 + rr() * 120, x = Math.cos(a) * r + 8, z = Math.sin(a) * r, s = 1.8 + rr() * 1.4
     if (addPlaced(rr() < 0.33 ? 'BushBerries_' + (1 + Math.floor(rr() * 2)) : 'Bush_' + (1 + Math.floor(rr() * 2)), [x, z, s, rr() * 6.28, rr()])) smBlob(x, z, s * 0.6)
@@ -399,8 +405,8 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
     // an orchard on the valley side, a hedgerow along a field, a row of poplars along the road's line, a forest in
     // the open south-west, a smaller wood in the north-east and lone trees in the fields; [model, x, z, scale]: the
     // extras stand in metres, the classes' species at the pack's scale (3.4 to 4.8, as the scatter places them)
-    extras(): [string, number, number, number][] {
-      const R = mulberry(93), out: [string, number, number, number][] = [], packS = () => 3.4 + R() * 1.4
+    extras(): [string, number, number, number, boolean?][] {   // the fifth: a lone field tree (stands in a field)
+      const R = mulberry(93), out: [string, number, number, number, boolean?][] = [], packS = () => 3.4 + R() * 1.4
       for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) { const x = 55 + c * 8 + (R() - 0.5), z = -82 - r * 8 + (R() - 0.5); out.push([variant('apple', x, z), x, z, 1]) }
       for (let i = 0; i < 18; i++) { const x = -150 + i * 3.4 + (R() - 0.5), z = 28 + i * 0.9 + (R() - 0.5) * 0.8; out.push([variant('hawthorn', x, z), x, z, 1]) }
       for (let i = 0; i < 9; i++) { const x = -40 + i * 11, z = 98 + i * 1.5; out.push([variant('poplar', x, z), x, z, 1]) }
@@ -422,7 +428,7 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
       wood(-170, -160, 55, 42, 95, 7.5, 0.6)
       wood(150, 160, 34, 26, 40, 7.5, 3.6)
       // lone field trees: oaks and limes, the odd pear-shaped apple
-      for (let i = 0; i < 26; i++) { const x = (R() - 0.5) * 420, z = (R() - 0.5) * 420, sp = R() < 0.55 ? 'oak' : R() < 0.7 ? 'lime' : 'apple'; out.push([variant(sp, x, z), x, z, sp === 'apple' ? 1 : packS()]) }
+      for (let i = 0; i < 26; i++) { const x = (R() - 0.5) * 420, z = (R() - 0.5) * 420, sp = R() < 0.55 ? 'oak' : R() < 0.7 ? 'lime' : 'apple'; out.push([variant(sp, x, z), x, z, sp === 'apple' ? 1 : packS(), true]) }
       return out
     },
     // a column's cards: sized to its width, not its height (src/look/canopy.ts sizes cards by the crown's radius)

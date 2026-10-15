@@ -40,10 +40,10 @@ const FIELDS: { poly: Pt[]; cls: CoverClass; dir: number }[] = [
   { poly: rect(-222, 30, 24, 46, 1.45), cls: COVER.green, dir: 1.45 },
   // bare earth: a trampled gateway where the track meets the fields (docs/plans/done/ground-surface.md)
   { poly: rect(44, -52, 9, 6, 0.2), cls: COVER.bare, dir: 0 },
-  // the default map's fields (docs/plans/done/default-map.md): a large wheat field in the start view's right half,
-  // and a bare drove between it and the ploughed field
+  // the default map's fields (docs/plans/done/default-map.md): a large wheat field in the start view (over the
+  // copses at (42, 56) and (82, 32), whose trees it hides), and a bare drove between it and the ploughed field
   { poly: rect(50, 48, 45, 28, 0.1), cls: COVER.wheat, dir: 0.1 },
-  { poly: rect(80, -23, 45, 4, 0.15), cls: COVER.bare, dir: 0 },
+  { poly: rect(86, -18, 38, 4, 0.15), cls: COVER.bare, dir: 0 },   // meadow on both sides, clear of the zone at (34, -24)
 ]
 // a rectangle: centre, half sizes along and across its direction, the direction
 function rect(cx: number, cz: number, ha: number, hc: number, a: number): Pt[] {
