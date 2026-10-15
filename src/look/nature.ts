@@ -68,13 +68,17 @@ export interface Nature {
 // and logs on grass (meadow, pasture, a copse's floor); wheat on wheat; stones anywhere but roads, tracks and the
 // village; trees and the far hedgerows' bushes too. The roads and the village keep clear of the copses (a rejected
 // copse tree would shift the scatter's stream after it: the scatter's counts match main's)
-const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood], TRODDEN: readonly number[] = [COVER.road, COVER.track, COVER.village, COVER.bare]
+const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood], LINE_COVER: readonly number[] = [COVER.road, COVER.track, COVER.village]
+const TRODDEN: readonly number[] = [...LINE_COVER, COVER.bare]
+// the models that keep to grass (coverAllows), and so never stand on a field: the hidden rule below skips them
+const GRASSY_MODEL = /^(Grass|Flowers|Plant_1|Bush|TreeStump|WoodLog)/
 // The point and eight points EDGE m around it must all pass: the shader paints a class edge pushed up to 1.5 m along
 // each axis by the grain (coverWarp, src/look/shaders/macro.glsl), and the bake blends it over ±1 m, so an instance
 // nearer an edge could stand on another painted class
 const EDGE = 2.5, AROUND = [[0, 0], ...Array.from({ length: 8 }, (_, k) => [Math.cos(k * Math.PI / 4), Math.sin(k * Math.PI / 4)])]
+type Placed = false | 'drawn' | 'hidden'
 function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boolean {
-  const ok = (c: number) => model === 'Wheat' ? c === COVER.wheat : /^(Grass|Flowers|Plant_1|Bush|TreeStump|WoodLog)/.test(model) ? GRASSY_COVER.includes(c) : !TRODDEN.includes(c)
+  const ok = (c: number) => model === 'Wheat' ? c === COVER.wheat : GRASSY_MODEL.test(model) ? GRASSY_COVER.includes(c) : !LINE_COVER.includes(c)
   return AROUND.every(([dx, dz]) => ok(coverAt(cover, x + dx * EDGE, z + dz * EDGE)))
 }
 
@@ -167,15 +171,16 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // (under gen the model placed decides, as without it, so the scatter's random stream and layout stay the pack
   // arm's; a generated tree, sized to its class's mean, that would reach farther than the rule allows there is drawn
   // smaller, to the placed model's footprint)
-  const addPlaced = (model: string, item: Item, kind = '', drawn = model) => {
+  // 'drawn', 'hidden' or false (rejected). A tree or a stone within EDGE of a field or bare earth is 'hidden': placed
+  // but not drawn, and its callers skip its crown's shadow, its occlusion and its reflection. Rejected, it would draw a
+  // new candidate and shift the scatter's stream, moving every tree after it (docs/plans/done/default-map.md).
+  // onFields: the lone field trees under gen stand in the fields on purpose (decision 0031)
+  const addPlaced = (model: string, item: Item, kind = '', drawn = model, onFields = false): Placed => {
     const [x, z, s] = item
     if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false
-    // a tree or a stone on a field or bare earth is placed but not drawn (docs/plans/active/default-map.md): rejected,
-    // it would draw a new candidate and shift the scatter's stream, moving every tree after it
-    const k = coverAt(cover, x, z)
-    if (!/^(Grass|Flowers|Plant_1|Bush|TreeStump|WoodLog|Wheat)/.test(model) && (isField(k) || k === COVER.bare)) return true
+    if (!onFields && model !== 'Wheat' && !GRASSY_MODEL.test(model) && AROUND.some(([dx, dz]) => { const k = coverAt(cover, x + dx * EDGE, z + dz * EDGE); return isField(k) || k === COVER.bare })) return 'hidden'
     if (genModels && drawn !== model && !placeable(x, z, footprint(drawn, s), kind)) { item = [...item] as Item; item[2] = s * footprint(model, s) / footprint(drawn, s) }
-    add(drawn, item); return true
+    add(drawn, item); return 'drawn'
   }
 
   // ?trees=one: the model drawn for a tree, placed as its own model (so the scatter is the page's), shadowed and
@@ -184,7 +189,9 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // a broadleaf or birch tree, and its crown for the occlusion (the crown's centre at 0.62 of the height), drawn as
   // tree(mdl)
   const placeTree = (mdl: string, x: number, z: number, s: number, yaw: number, t: number) => {
-    if (!addPlaced(mdl, [x, z, s, yaw, t], '', tree(mdl, x, z))) return false
+    const r = addPlaced(mdl, [x, z, s, yaw, t], '', tree(mdl, x, z))
+    if (!r) return false
+    if (r === 'hidden') return true
     const M = NATURE[tree(mdl, x, z)]; smTree(x, z, (M.max[1] * 0.62) * s, (Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45) * s, crownLeft(tree(mdl, x, z)))
     return true
   }
@@ -211,22 +218,23 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     if (Math.abs(C.px[i]) > 175 || Math.abs(C.pz[i]) > 175 || rr() < 0.45) continue
     const mdl = 'Willow_' + (1 + Math.floor(rr() * 3)), s = 2.6 + rr() * 0.9, side = rr() < 0.5 ? -1 : 1, off = C.W[i] / 2 * 1.7 + footprint(mdl, s) + 0.3 + rr() * 3; let x = C.px[i] - C.tz[i] * side * off, z = C.pz[i] + C.tx[i] * side * off
     // inside a bend the nearest water is closer than this sample's normal suggests: step outward until the rule accepts
-    const yaw = rr() * 6.28, tint = 0.2 + rr() * 0.5; let ok = false
+    const yaw = rr() * 6.28, tint = 0.2 + rr() * 0.5; let ok: Placed = false
     for (let t = 0; t < 6 && !ok; t++) { const o = off + t * 1.5; x = C.px[i] - C.tz[i] * side * o; z = C.pz[i] + C.tx[i] * side * o; ok = addPlaced(mdl, [x, z, s, yaw, tint], '', tree(mdl, x, z)) }
     if (!ok) continue
+    if (ok === 'hidden') continue
     const M = NATURE[tree(mdl, x, z)]; smTree(x, z, M.max[1] * 0.6 * s, (M.max[0] - M.min[0]) * 0.45 * s, crownLeft(tree(mdl, x, z)))
   }
-  for (let i = 0; i < 5; i++) { const x = 150 + (rr() - 0.5) * 30, z = -40 + (rr() - 0.5) * 30; const mdl = 'PineTree_' + (1 + Math.floor(rr() * 3)), s = 3.6 + rr(); if (addPlaced(mdl, [x, z, s, rr() * 6.28, rr()], '', tree(mdl, x, z))) { if (oneTree || genModels) { const M = NATURE[tree(mdl, x, z)]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s) } else smTree(x, z, 6, 3.5) } }
+  for (let i = 0; i < 5; i++) { const x = 150 + (rr() - 0.5) * 30, z = -40 + (rr() - 0.5) * 30; const mdl = 'PineTree_' + (1 + Math.floor(rr() * 3)), s = 3.6 + rr(); if (addPlaced(mdl, [x, z, s, rr() * 6.28, rr()], '', tree(mdl, x, z)) === 'drawn') { if (oneTree || genModels) { const M = NATURE[tree(mdl, x, z)]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s) } else smTree(x, z, 6, 3.5) } }
   // under gen: an orchard, a hedgerow, a row of poplars, a forest, a wood and lone field trees, from their own random
   // stream (the scatter's is unchanged)
-  if (genModels) for (const [mdl, x, z, s] of genModels.extras()) if (addPlaced(mdl, [x, z, s, hash(x, z) * 6.28, hash(z, x)])) { const M = NATURE[mdl]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s, crownLeft(mdl)) }
+  if (genModels) for (const [mdl, x, z, s] of genModels.extras()) if (addPlaced(mdl, [x, z, s, hash(x, z) * 6.28, hash(z, x)], '', mdl, true) === 'drawn') { const M = NATURE[mdl]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s, crownLeft(mdl)) }
   for (let i = 0; i < 90; i++) {   // bushes, a third of them with berries
     const a = rr() * 6.28, r = 14 + rr() * 120, x = Math.cos(a) * r + 8, z = Math.sin(a) * r, s = 1.8 + rr() * 1.4
     if (addPlaced(rr() < 0.33 ? 'BushBerries_' + (1 + Math.floor(rr() * 2)) : 'Bush_' + (1 + Math.floor(rr() * 2)), [x, z, s, rr() * 6.28, rr()])) smBlob(x, z, s * 0.6)
   }
   for (let i = 0; i < 46; i++) {
     const a = rr() * 6.28, r = 10 + rr() * 110, x = Math.cos(a) * r, z = Math.sin(a) * r, s = 1.6 + rr() * 2.4
-    if (addPlaced(rr() < 0.7 ? 'Rock_Moss_' + (1 + Math.floor(rr() * 4)) : 'Rock_' + (1 + Math.floor(rr() * 2)), [x, z, s, rr() * 6.28, rr(), -0.15 * s], 'stone')) smBlob(x, z, s * 0.35)
+    if (addPlaced(rr() < 0.7 ? 'Rock_Moss_' + (1 + Math.floor(rr() * 4)) : 'Rock_' + (1 + Math.floor(rr() * 2)), [x, z, s, rr() * 6.28, rr(), -0.15 * s], 'stone') === 'drawn') smBlob(x, z, s * 0.35)
   }
   for (let i = 0; i < 5; i++) { const x = -20 + (rr() - 0.5) * 120, z = 60 + (rr() - 0.5) * 80; addPlaced(i % 2 ? 'TreeStump' : 'WoodLog_Moss', [x, z, 2.2, rr() * 6.28, rr()]) }
   // grass tufts and flowers over the whole near field, densest around the hill
@@ -269,7 +277,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const x = C.px[i] - C.tz[i] * n, z = C.pz[i] + C.tx[i] * n, mdl = rs() < 0.5 ? 'Rock_' + (1 + Math.floor(rs() * 2)) : 'Rock_Moss_' + (3 + Math.floor(rs() * 2))
     const top = C.zw[i] - H(x, z) + 0.35 + rs() * 0.35, s = Math.max(1, top / (NATURE![mdl].max[1] * 0.95))
     if (s > 3) continue   // too deep there for the pack's rocks to stand out of the water
-    if (addPlaced(mdl, [x, z, s, rs() * 6.28, rs(), -0.05 * s], kind)) { stones.push([x, z, meanRadius(mdl, s), Math.atan2(C.tz[i], C.tx[i])]); smBlob(x, z, s * 0.3) }
+    if (addPlaced(mdl, [x, z, s, rs() * 6.28, rs(), -0.05 * s], kind) === 'drawn') { stones.push([x, z, meanRadius(mdl, s), Math.atan2(C.tz[i], C.tx[i])]); smBlob(x, z, s * 0.3) }
   }
   // the scatter's own stones that stand in the water (on riffles) have foam too
   for (const [mdl, items] of Object.entries(groups)) if (/^Rock/.test(mdl)) for (const [x, z, s] of items) {

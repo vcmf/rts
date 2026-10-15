@@ -46,11 +46,11 @@ autumn, the wide view.
 
 - **The look:** the wheat sits in the start view's upper right, cut to pale stubble in autumn and ploughed under after
   (L5d), the drove between it and the ploughed field. The scatter still re-rolls round the new field: the grass tufts
-  and flowers retry where the cover changed and shift the stream after them, so trees elsewhere stand differently than
-  on main (the scatter's own behaviour; the trees in the field are placed, then not drawn).
+  and flowers retry where the cover changed and shift the stream after them, which round 1 fixed: trees and stones in a field are
+  placed, then not drawn, so the trees elsewhere stand where they did on main.
 - **The guard** against main: ok at cover and crops. At start one block falls under the bound: the Austrian white at
   "open-low" (45, 15), now on the wheat's southern edge, in autumn when the wheat is pale stubble, 0.068 against
-  main's 0.105. It is the case of #78 (recorded there, the owner's standing call). In winter the same block now
+  main's 0.105 (0.097 after review round 1, the trees' stream as main's again). It is the case of #78 (recorded there, the owner's standing call). In winter the same block now
   separates (0.108, main 0.035).
 - **The river check:** no crops on the floodplain or in the zones, 463 crop clumps in the scene's field (≥ 150), no
   instance over the water or in the zones.
@@ -58,3 +58,18 @@ autumn, the wide view.
   cover test passes. The look data's `--check` matches.
 - **The frame's cost** (`tools/bench-look.mjs`, Metal, one run each, a load average of 6 to 15): -0.51 to +0.24 ms
   across the 9 cameras, within noise.
+
+## Review
+
+- **Round 1** (severe):
+  - **A hidden tree or stone still left its crown's shadow, occlusion and reflection**, because the callers did their
+    side work on any true return. `addPlaced` now returns `'drawn'`, `'hidden'` or false, and the side work runs on
+    `'drawn'` alone.
+  - **Under `?trees=gen` the lone field trees** were hidden too; they stand in the fields on purpose (`onFields`).
+  - **Trees on bare earth were still rejected** (bare earth was in `TRODDEN`, shifting the stream). `coverAllows` now
+    keeps trees off the lines' ground alone (`LINE_COVER`), and bare earth hides them.
+  - **The hidden test reads the point and eight points around it,** as the placement rule does, so no trunk stands at
+    a field's painted rim.
+  - Smaller: the system doc's scatter rule, the plan paths, one `GRASSY_MODEL` pattern.
+  - Left: `cropsInSceneField` samples the old field's lattice only, and with `?meadow=off` the new field has no pack
+    wheat (the lattice sows the old field).

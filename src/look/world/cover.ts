@@ -38,10 +38,9 @@ const FIELDS: { poly: Pt[]; cls: CoverClass; dir: number }[] = [
   { poly: rect(118, 132, 26, 22, -0.3), cls: COVER.stubble, dir: -0.3 },
   // a green crop on the west valley side
   { poly: rect(-222, 30, 24, 46, 1.45), cls: COVER.green, dir: 1.45 },
-  // bare earth: a trampled gateway where the track meets the fields (docs/plans/done/ground-surface.md; the map's
-  // larger bare ground comes with the default map's PR)
+  // bare earth: a trampled gateway where the track meets the fields (docs/plans/done/ground-surface.md)
   { poly: rect(44, -52, 9, 6, 0.2), cls: COVER.bare, dir: 0 },
-  // the default map's fields (docs/plans/active/default-map.md): a large wheat field in the start view's right half,
+  // the default map's fields (docs/plans/done/default-map.md): a large wheat field in the start view's right half,
   // and a bare drove between it and the ploughed field
   { poly: rect(50, 48, 45, 28, 0.1), cls: COVER.wheat, dir: 0.1 },
   { poly: rect(80, -23, 45, 4, 0.15), cls: COVER.bare, dir: 0 },
