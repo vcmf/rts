@@ -29,7 +29,7 @@ float pxGround(vec3 wp){vec2 f=fwidth(wp.xz);return max(f.x,f.y);}
 // the ground's colour through the seasons (summer, early and late autumn, winter: uSeason 0..3), for the terrain and
 // the shore band alike
 vec3 groundSeason(vec3 c){
-  vec3 au=mix(c,vec3(0.70,0.60,0.34),0.45),la=mix(c,vec3(0.52,0.42,0.27),0.6),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
+  vec3 au=mix(c,vec3(0.68,0.59,0.37),0.78),la=mix(c,vec3(0.52,0.42,0.27),0.6),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
   return uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
 // The world position's screen derivatives, taken by each shader's main before any branch (macroDerivs): the ground's
 // reads (the meadow's here, the macro colour's, src/look/shaders/macro.glsl) pass them explicitly, so a read in a
@@ -81,8 +81,8 @@ vec3 bankPaint(vec3 c,vec2 xz,float land,float h,float ny){
   vec2 fw=fwidth(xz);float px=max(fw.x,fw.y),far=smoothstep(0.12,0.35,px),e=0.1*far;
   float gr=G(xz/3.0).g-0.5;
   c=mix(c*vec3(0.80,0.86,0.80),c,smoothstep(1.0,6.0,land+gr*1.5));                                   // damp grass
-  float earth=smoothstep(0.94+e,0.74-e,ny)*smoothstep(4.0,1.0,land+gr);
-  c=mix(c,vec3(0.52,0.36,0.20)*(0.9+0.2*G(xz/2.0).g),earth);                                          // bare earth
+  float earth=smoothstep(0.985+e,0.85-e,ny)*smoothstep(4.0,1.0,land+gr);   // from gentler slopes than before W5, so a cut bank reads as earth under the temperate earth (#88)
+  c=mix(c,vec3(0.56,0.35,0.16)*(0.9+0.2*G(xz/2.0).g),earth);                                          // bare earth
   float bar=smoothstep(0.8,0.2,h)*smoothstep(4.5,1.0,land+gr)*smoothstep(0.86-e,0.95+e,ny);
   vec3 gv=vec3(0.66,0.65,0.60)*(0.88+0.24*G(xz/1.1).g);gv=mix(gv,vec3(0.50,0.49,0.45),smoothstep(0.58,0.68,G(xz/2.9+0.3).g)*0.5*(1.0-far));
   c=mix(c,gv,bar*0.9);                                                                                  // gravel: pale grey, darker pebbles

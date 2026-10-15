@@ -37,7 +37,8 @@ vec3 classColour(float k,float v){
         :k<6.5?mix(vec3(0.51,0.47,0.32),vec3(0.57,0.52,0.36),v)      // wheat: olive-gold straw (the warm sun turns it gold), between the dark coats and the white
         :k<7.5?mix(vec3(0.37,0.50,0.20),vec3(0.45,0.56,0.24),v)      // green crop
         :k<8.5?mix(vec3(0.60,0.59,0.50),vec3(0.67,0.65,0.55),v)      // stubble: grey straw (the warm sun turns pale straw orange)
-        :mix(vec3(0.58,0.48,0.36),vec3(0.64,0.53,0.40),v);           // ploughed: dry earth, lighter than the dark coats
+        :k<9.5?mix(vec3(0.58,0.48,0.36),vec3(0.64,0.53,0.40),v)       // ploughed: dry earth, lighter than the dark coats
+        :mix(vec3(0.52,0.44,0.34),vec3(0.60,0.51,0.39),v);           // bare: trodden, dry earth, no grass (its surface: dirtOn)
                                                                        // (the readability guard, tools/guard.mjs --view cover)
 }
 // the grain's soft blotches at about scale s m without its repeat: G(xz/s) tiles every s m, so two reads at
@@ -72,16 +73,40 @@ float stripeBand(vec4 cv,vec2 xz,float px,Grain g){
   return cv.y>0.5?b:0.0;}
 // how much the stripes move the value, and the snow's lie (snowAt, painter.glsl: furrows hold snow, ridges show the
 // earth: the winter master's ploughed stripes), by class
-float stripeValue(float k){return k<6.5?0.05:k<7.5?0.06:k<8.5?0.06:0.09;}
+float stripeValue(float k){return k<6.5?0.05:k<7.5?0.06:k<8.5?0.06:k<9.5?0.09:0.0;}   // bare: none
 float stripeSnow(float k){return k<8.5?0.3:0.5;}
 // roads, tracks and the village ground are trodden: they hold less snow, so they still read in winter
-float trodden(float k){return k>2.5&&k<3.5?0.45:k>3.5&&k<4.5?0.35:k>4.5&&k<5.5?0.2:0.0;}
+float trodden(float k){return k>2.5&&k<3.5?0.45:k>3.5&&k<4.5?0.35:k>4.5&&k<5.5?0.2:k>9.5?0.3:0.0;}   // bare: as a track
 // worn grass near roads, tracks and the village: thinning to trodden earth over a few metres, broken by the grain
 vec3 wear(vec3 c,vec4 cv,Grain g){
   float w=1.0-smoothstep(0.5,4.0,cv.w+(g.wear-0.5)*3.0);
   return cv.x>1.5?c:mix(c,vec3(0.56,0.53,0.45),w*(0.3+0.4*g.wearDab));}
 // the class lookup's point, pushed by the grain's soft blotches (±1.5 m) so a class edge wanders like a painted one
 vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*3.0;}
+// THE DIRT SURFACE (docs/plans/active/ground-surface.md): where the ground is bare (a track, the village's trodden
+// ground, ploughed land, bare earth, a little on the road, the worn ground by the lines), the dirt texture (the
+// owner's, scratches, drag marks and splats, about DIRT_M m a repeat) in its value, around 1 so the class colour holds
+// on average. Mipmapped: its fine marks average out where a pixel spans them, so they do not flicker
+uniform sampler2D uDirt;
+const float DIRT_M=15.0;
+float bareness(vec4 cv){
+  float k=cv.x;
+  float b=k>3.5&&k<4.5?1.0:k>4.5&&k<5.5?1.0:k>8.5?1.0:k>2.5&&k<3.5?0.4:0.0;
+  return max(b,(1.0-smoothstep(0.5,4.0,cv.w))*0.7*step(k,1.5));}
+float pBare=0.0;   // the last dirtOn's bareness: the season turns grass, not bare earth (terrain.frag)
+vec3 dirtOn(vec3 c,vec2 xz){
+  // the unwarped cell first (one read): most ground is grass and returns here; the warped lookup (four more reads) only
+  // on bare ground, where its edge then wanders as the macro colour's does (a 1.5 m fringe outside a bare edge keeps
+  // the colour without the marks)
+  pBare=0.0;if(bareness(coverAt(xz))<=0.0)return c;
+  vec4 cv=coverAt(coverWarp(xz));float b=bareness(cv);if(b<=0.0)return c;
+  if(cv.x>4.5&&cv.x<5.5)b*=smoothstep(0.42,0.6,blot(xz+0.7,13.0));   // the village: its trodden patches, not the grass between (cellColour)
+  pBare=b;
+  // two reads at unrelated scales and a turn, so the texture's own marks (a dark smear) do not repeat in rows; their
+  // mean's lost contrast given back
+  vec2 q=mat2(0.799,-0.602,0.602,0.799)*xz/(DIRT_M*1.618)+vec2(0.37,0.61);
+  float d=(texM(uDirt,xz/DIRT_M,DIRT_M).r+texM(uDirt,q,DIRT_M*1.618).r)*0.5;   // explicit derivatives: these reads are in a branch
+  return c*mix(1.0,clamp(1.0+(d-0.5)*0.8,0.6,1.35),b);}
 // (colour, the snow's lie as LIE0 + lie/1.2). q 1: the bake's, the edges blended over 9 taps a metre apart with a
 // darker margin where classes meet (a headland or a verge); q 0: one tap. px: the footprint, m (the bake's texel, or
 // the pixel's)

@@ -125,7 +125,14 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   meadow is the old `groundMeadow`), a low-frequency variation, each field's own shade, stripes along its furrows
   (ridge-and-furrow lands on ploughed ground, faint drill bands on crops, faded with the pixel's footprint), wear
   near the lines, and edges that wander (the class lookup's point pushed ±1.5 m by the grain's blotches). Colour
-  only: the light stays in `paint()`. Every read passes the world position's screen derivatives explicitly
+  only: the light stays in `paint()`. The class `bare` (10): trodden or dry earth, no grass, no crops, no stripes, not
+  a field (`isField`).
+- **The dirt surface** (`dirtOn` in `macro.glsl`, at the terrain's fragment: `docs/plans/done/ground-surface.md`):
+  where the ground is bare (track, the village's trodden patches, ploughed and bare earth, a little on the road, the
+  worn ground by the lines), the owner's dirt texture (`data/ground-dirt-v1.png`, made seamless) multiplies the
+  value, two reads at 15 and 24 m a repeat and a turn apart so its marks do not repeat in rows; mipmapped, so they
+  average out at far zoom. The unwarped cell is read first and grass returns there. The season turns the grass:
+  bare ground takes a quarter of it (`pBare`), so a ploughed field does not melt into the autumn meadow. Every read passes the world position's screen derivatives explicitly
   (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's
   reads too): a read in a branch the pixels of
   a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.

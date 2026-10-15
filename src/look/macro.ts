@@ -15,6 +15,7 @@ import { withPainter, type Materials } from './materials.ts'
 import { D, bakeMB } from './spec.ts'
 import type { CoverGrid } from './world/cover.ts'
 import BRUSH_URL from '../../data/meadow-brush.png?url'
+import DIRT_URL from '../../data/ground-dirt-v1.png?url'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 
 // the arms (macro.glsl): flat, shader, bake, and L5b's experiments, strokes (arm 4) and kuwahara (arm 5): bakes of
@@ -96,7 +97,10 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   let brushError: string | null = null
   const brush = meadow ? new Texture(BRUSH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) => { brushError = `the meadow's brush tile (${BRUSH_URL}) did not load: ${msg ?? 'unknown error'}` }) : null
   if (brush) brush.wrapU = brush.wrapV = Texture.WRAP_ADDRESSMODE
-  mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); if (brush) m.setTexture('uMeadowBrush', brush) })
+  // the dirt surface on bare ground (dirtOn in macro.glsl, docs/plans/active/ground-surface.md): the owner's dirt texture
+  const dirt = new Texture(DIRT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) => { brushError = `the dirt texture (${DIRT_URL}) did not load: ${msg ?? 'unknown error'}` })
+  dirt.wrapU = dirt.wrapV = Texture.WRAP_ADDRESSMODE; dirt.anisotropicFilteringLevel = 4
+  mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); if (brush) m.setTexture('uMeadowBrush', brush) })
 
   const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW'] : [])]
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })

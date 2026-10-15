@@ -216,7 +216,7 @@ material reads it:
 | Value | Season | Trees | Ground | Light |
 |---|---|---|---|---|
 | 0 | Summer | Muted olive and yellow-greens | Meadow greens, dry gold patches | Warm gold sun |
-| 1 | Early autumn | **Mixed colours** (below) | Greens turning golden | Warm gold sun |
+| 1 | Early autumn | **Mixed colours** (below) | The meadow straw and olive; bare earth (tracks, ploughed land) keeps its brown | Warm gold sun |
 | 2 | Late autumn | Duller, browner, fewer bright crowns; **the crowns thin and the limbs show** | Ochre and brown | Lower, warmer sun |
 | 3 | Winter | **Bare branches**, a few brown tufts clinging, snow on the limbs (pack trees: dark crowns with snow caps) | Snow, painted blue in shadow | **Pale gold sun** |
 
