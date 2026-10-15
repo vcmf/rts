@@ -38,6 +38,10 @@
 //   the surface eroded 2 px, 3.1% and 11.3%: W5b's plan), so there the limits are main's, rounded down: the mask
 //   under SHIMMER_WINTER and SHIMMER_WINTER_WIDE, the water's own pixels (the ice, its edges and rime, the open
 //   riffles) under SHIMMER_ICE and SHIMMER_ICE_WIDE: W5b's water must shimmer less than main's.
+//   The widest limits re-baselined for the temperate mood (decision 0033, docs/plans/done/temperate-fixes.md, the
+//   owner's call): its frame is about 7 % more contrasty, half the rise, the rest spread over the grain, the painted
+//   edges and the bloom. Main measured 3.68 to 3.84 % (summer) and 11.1 to 11.4 % (winter) there: 3.9 and 11.5; in
+//   autumn 4.11 % since the ground's stronger straw turn (docs/plans/done/ground-surface.md): 4.2
 //   Sabotage: aliased hard edges (WATER_SAB_STEP).
 // Frames are 1280×720. Exit 1 on a failure.
 import fs from 'node:fs'
@@ -56,7 +60,7 @@ const W = 1280, H = 720, CAM = SPEC.camera, BAND = SPEC.water.band, SDF = SPEC.w
 const [, A0, BETA0, R0] = CAMS.find(c => c[0] === 'start')
 const SEAM_P95 = 2, SEAM_MAX = 6, SEAM_MIN_PX = 500
 const POOL = 0.2, RIFFLE = 0.5, LUMA_GAP = 0.03, BRIGHT = 0.2, FOAM_RATIO = 2, FOAM_MIN = 0.02
-const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.035, SHIMMER_WINTER = 0.032, SHIMMER_WINTER_WIDE = 0.108, SHIMMER_ICE = 0.03, SHIMMER_ICE_WIDE = 0.11
+const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.039, SHIMMER_AUTUMN_WIDE = 0.042, SHIMMER_WINTER = 0.032, SHIMMER_WINTER_WIDE = 0.115, SHIMMER_ICE = 0.03, SHIMMER_ICE_WIDE = 0.11
 
 let C = null
 const river = () => {
@@ -192,7 +196,7 @@ function pools(url, dir, sab) {
 function shimmerViews() {
   const c = river(), bi = sharpest(), t = `${[c.px[bi], CAM.focusY, c.pz[bi]]}`
   return (v => process.env.SHIMMER_ONLY ? v.filter(x => process.env.SHIMMER_ONLY.split(',').includes(x[0])) : v)([['closest', A0, CAM.betaMin, CAM.rMin, t, 0, SHIMMER_MAX], ['widest', A0, CAM.betaMax, CAM.rMax, t, 0, SHIMMER_WIDE],
-    ['closest-autumn', A0, CAM.betaMin, CAM.rMin, t, 1.5, SHIMMER_MAX], ['widest-autumn', A0, CAM.betaMax, CAM.rMax, t, 1.5, SHIMMER_WIDE],
+    ['closest-autumn', A0, CAM.betaMin, CAM.rMin, t, 1.5, SHIMMER_MAX], ['widest-autumn', A0, CAM.betaMax, CAM.rMax, t, 1.5, SHIMMER_AUTUMN_WIDE],
     ['closest-winter', A0, CAM.betaMin, CAM.rMin, t, 3, SHIMMER_WINTER, SHIMMER_ICE], ['widest-winter', A0, CAM.betaMax, CAM.rMax, t, 3, SHIMMER_WINTER_WIDE, SHIMMER_ICE_WIDE]])
 }
 function shimmer(url, dir, sab) {

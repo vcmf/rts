@@ -30,7 +30,7 @@ vec4 coverAt(vec2 xz){vec4 t=coverTex(xz/FAR_W+0.5);return vec4(floor(t.r*255.0+
 vec3 classColour(float k,float v){
   return k<1.5?mix(vec3(0.27,0.43,0.21),vec3(0.38,0.50,0.25),v)      // pasture (0 is the meadow: groundMeadow)
         :k<2.5?mix(vec3(0.17,0.29,0.22),vec3(0.25,0.36,0.25),v)      // wood floor
-        :k<3.5?mix(vec3(0.48,0.49,0.50),vec3(0.54,0.55,0.56),v)      // road: cool grey dust, a mid value (it reads against the
+        :k<3.5?mix(vec3(0.40,0.45,0.56),vec3(0.46,0.51,0.62),v)      // road: cool grey dust, a mid value, bluer under the temperate earth (#88) (it reads against the
                                                                        // meadow by hue: a pale road hid the Austrian white, the guard)
         :k<4.5?mix(vec3(0.49,0.48,0.46),vec3(0.55,0.54,0.52),v)      // track
         :k<5.5?mix(vec3(0.45,0.41,0.34),vec3(0.53,0.48,0.39),v)      // village ground (trodden earth: cellColour mixes grass in), darker
