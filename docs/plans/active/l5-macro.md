@@ -293,8 +293,8 @@ L5a 3–4 days; L5b 2 days of work plus the judges' time.
   1 m furrows would sit at its Nyquist limit and belong to the runtime detail.
 - **Colours set by the guard:** the ploughed earth, the wheat, the stubble and the road are lighter, darker or
   greyer than first painted. Dark earth matched the French and Russian coats' value; pale straw and a pale road the
-  Austrian white's once the warm sun lit them. The road now reads against the meadow by hue (a cool grey) more than
-  by value (`tools/guard.mjs --view cover`, a second view with lines wholly on each class, is new; the 3 m track
+  Austrian white's once the warm sun lit them. The road read against the meadow by hue (a cool grey) more than
+  by value (since #88, under the temperate earth, by value: a pale cool grey, `docs/plans/done/temperate-fixes.md`) (`tools/guard.mjs --view cover`, a second view with lines wholly on each class, is new; the 3 m track
   holds no 20 m line and is left to the class check).
 - **Explicit derivatives on every read** (`macroDerivs`, `textureGrad`, the meadow's reads too): reads in branches the
   pixels of a quad take differently (a class edge, the shore band's sides) made the bake differ run to run on the

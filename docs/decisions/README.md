@@ -40,3 +40,4 @@ recorded here on 2026-10-08.
 | [0031](0031-generated-trees.md) | Trees are generated from species data | accepted |
 | [0032](0032-units-under-clouds-and-whites.md) | A near-white coat takes less of the sun's hue (open until the figures) | proposed |
 | [0033](0033-temperate-is-the-default-mood.md) | The temperate mood is the default | accepted |
+| [0034](0034-checks-re-baselined-for-the-default-mood.md) | The shimmer gate at the widest view is re-baselined for the temperate mood | accepted |
