@@ -151,7 +151,10 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   per-texel noise, over a wider band, and the lie fades out as a pixel spans 0.35 to 1.2 m.
 - **The scatter follows the cover:** grass, flowers, plants, bushes, stumps and logs on grass; wheat on wheat;
   nothing on roads, tracks or village ground; the point and eight points 2.5 m around it must all pass (the painted
-  edges wander that far). **Ground bounce:** trees take 15% of the ground's colour under their root into the albedo
+  edges wander that far). A tree or a stone within that reach of a field or bare earth is placed but not drawn
+  (`addPlaced` returns `'hidden'`, and its callers skip its crown's shadow, occlusion and reflection), so the scatter's
+  random stream, and every tree after it, stays where it was (`docs/plans/done/default-map.md`); the lone field trees
+  under `?trees=gen` stand in the fields on purpose. **Ground bounce:** trees take 15% of the ground's colour under their root into the albedo
   of their side away from the sun, near the ground; grass 25% all over. The colour is the class's flat colour in
   every arm (one read; the arms differ in the ground alone).
 - **Two experimental arms (L5b)**, bakes of their own, read as the bake is (the materials' `MACRO_BAKE`); switching
