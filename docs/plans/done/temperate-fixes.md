@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-15
 ---
 
@@ -54,3 +54,7 @@ Main at 64715e3.
 
 - **Round 1** (severe): the bluer road sat on the French coat's hue. It is now a pale cool grey; the track is apart;
   the limits have headroom; the check's header and the docs are fixed.
+- **Round 2** (no severe): decision 0034 records the re-baseline; the macro check's track limit named (`TRACK_DE`),
+  its pooled helper gone; its header's limits are its own now; the L5 plan's road line. Left: the worn band beside a
+  road (`wear()`, a warm earth) was tuned for the grey road; the road's 0.149 margin for the Austrian white is not
+  checked in late autumn (the guard runs summer, autumn and winter).
