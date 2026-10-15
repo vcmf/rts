@@ -28,9 +28,13 @@ vec3 bankNormal(vec3 N,vec2 xz){
 float pxGround(vec3 wp){vec2 f=fwidth(wp.xz);return max(f.x,f.y);}
 // the ground's colour through the seasons (summer, early and late autumn, winter: uSeason 0..3), for the terrain and
 // the shore band alike
+// The season turns what is green (docs/plans/done/ground-surface.md): a colour takes the whole turn as far as it is
+// green, a quarter of it where it is not (bare earth, stone, gravel, a cut bank, dry gold), so a ploughed field or a bank
+// does not melt into the autumn meadow, smoothly across every edge
 vec3 groundSeason(vec3 c){
   vec3 au=mix(c,vec3(0.68,0.59,0.37),0.78),la=mix(c,vec3(0.52,0.42,0.27),0.6),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
-  return uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
+  vec3 s=uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);
+  return mix(c,s,mix(0.25,1.0,smoothstep(-0.03,0.02,c.g-max(c.r,c.b))));}   // a yellow-green counts as green, earth, stone and dry gold (red over green) not
 // The world position's screen derivatives, taken by each shader's main before any branch (macroDerivs): the ground's
 // reads (the meadow's here, the macro colour's, src/look/shaders/macro.glsl) pass them explicitly, so a read in a
 // branch the pixels of a 2×2 quad take differently (a class edge, the shore band's sides) still picks its mip level
@@ -59,9 +63,6 @@ vec3 groundMeadow(vec2 xz){
 // steep ground goes stony (ny: the normal's y)
 vec3 groundSteep(vec3 c,float ny){return mix(c,vec3(0.55,0.52,0.46),smoothstep(0.80,0.62,ny)*0.5);}
 #include<macro>
-// the season over the ground: bare earth (dirtOn's pBare) takes a quarter of the turn, so a ploughed field or a track
-// does not melt into the autumn meadow (docs/plans/done/ground-surface.md)
-vec3 seasonOf(vec3 c){vec3 sc=groundSeason(c);return mix(sc,mix(c,sc,0.25),pBare);}
 // a hard painted edge, anti-aliased over about two pixels (no shimmer when the view moves): 0 below t, 1 above
 float aastep(float t,float v){
   #ifdef WATER_SAB_STEP
@@ -96,7 +97,7 @@ vec3 bankPaint(vec3 c,vec2 xz,float land,float h,float ny){
 // the shore band's ground: the terrain's (groundAt, stony where steep) with the banks painted over it, through the
 // seasons: the same colour the terrain paints there
 vec3 landAlbedo(vec2 xz,float land,float h){float ny=bankNormal(vec3(0.0,1.0,0.0),xz).y;
-  return seasonOf(bankPaint(groundSteep(dirtOn(groundAt(xz,pxMacro()),xz),ny),xz,land,h,ny));}
+  return groundSeason(bankPaint(groundSteep(dirtOn(groundAt(xz,pxMacro()),xz,pxMacro()),ny),xz,land,h,ny));}
 // the bed: silt in pools, pale gravel where the current runs, weed in slow deeper water; the damp edge at depth 0
 // la: the ground at the water's edge (used to 0.3 m deep)
 vec3 bedAlbedo(vec2 xz,float depth,float speed,vec3 la){

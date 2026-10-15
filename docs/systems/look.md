@@ -131,9 +131,11 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   where the ground is bare (track, the village's trodden patches, ploughed and bare earth, a little on the road, the
   worn ground by the lines), the owner's dirt texture (`data/ground-dirt-v1.png`, made seamless) multiplies the
   value about its mean (0.458), two reads at 15 and 24 m a repeat so its marks do not repeat in rows; mipmapped, so
-  they average out at far zoom. Three cheap reads (the cell and two 1.5 m off it) first: grass far from a line returns
-  there. The season turns the grass (`seasonOf`, on the terrain and the shore band alike): bare ground takes a quarter
-  of it (`pBare`, the class's bareness, not the worn grass's), so a ploughed field does not melt into the autumn meadow. Every read passes the world position's screen derivatives explicitly
+  they average out at far zoom (the marks fade out as a pixel spans 0.35 to 0.9 m). Five cheap reads (the cell and its
+  corners 1.5 m off) first: grass far from a line returns there. On the terrain and the shore band alike.
+- **The season turns what is green** (`groundSeason` in `shore.glsl`, every ground colour's season): a colour takes
+  the whole turn as far as it is green, a quarter of it where it is not (bare earth, stone, gravel, a cut bank, dry
+  gold), so a ploughed field or a bank does not melt into the autumn meadow, smoothly across every edge. Every read passes the world position's screen derivatives explicitly
   (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's
   reads too): a read in a branch the pixels of
   a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.

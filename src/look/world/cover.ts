@@ -15,7 +15,7 @@ import { RIVER } from '../river.ts'
 export const COVER = { meadow: 0, pasture: 1, wood: 2, road: 3, track: 4, village: 5, wheat: 6, green: 7, stubble: 8, ploughed: 9, bare: 10 } as const
 export type CoverClass = typeof COVER[keyof typeof COVER]
 export const WEAR_STEP = 0.1
-// bare earth (docs/plans/active/ground-surface.md) is not a field: no id, no stripes, no crops
+// bare earth (docs/plans/done/ground-surface.md) is not a field: no id, no stripes, no crops
 export const isField = (c: number): boolean => c >= COVER.wheat && c <= COVER.ploughed
 
 export interface CoverGrid { n: number; cell: number; x0: number; z0: number; tex: Uint8Array }   // tex: n² cells × 4 bytes, row j at z0 + (j + ½)·cell
@@ -34,13 +34,13 @@ const FIELDS: { poly: Pt[]; cls: CoverClass; dir: number }[] = [
   { poly: [[-61.8, -35.6], [-29.9, -39.6], [-24.2, -14.2], [-56.0, -10.4]], cls: COVER.wheat, dir: Math.atan2(-0.12, 0.95) },
   // a ploughed field east of the hill, between the copses
   { poly: rect(78, -38, 30, 9, 0.18), cls: COVER.ploughed, dir: 0.18 },
-  // bare earth: a trampled gateway where the track meets the fields (docs/plans/done/ground-surface.md; the map's
-  // larger bare ground comes with the default map's PR)
-  { poly: rect(44, -52, 9, 6, 0.2), cls: COVER.bare, dir: 0 },
   // stubble north-east, past the copse at (62, 112)
   { poly: rect(118, 132, 26, 22, -0.3), cls: COVER.stubble, dir: -0.3 },
   // a green crop on the west valley side
   { poly: rect(-222, 30, 24, 46, 1.45), cls: COVER.green, dir: 1.45 },
+  // bare earth: a trampled gateway where the track meets the fields (docs/plans/done/ground-surface.md; the map's
+  // larger bare ground comes with the default map's PR)
+  { poly: rect(44, -52, 9, 6, 0.2), cls: COVER.bare, dir: 0 },
 ]
 // a rectangle: centre, half sizes along and across its direction, the direction
 function rect(cx: number, cz: number, ha: number, hc: number, a: number): Pt[] {

@@ -10,7 +10,7 @@ uniform sampler2D uRiverMask;
 // the ground's colour: its cover's (groundAt, the macro colour's arm: macro.glsl, shared with the shore band), stony
 // where steep, the banks, the seasons. wt: the water data here (WATERDATA)
 vec3 albedo(vec3 wp,vec3 n,vec4 wt){
-  vec3 m=dirtOn(groundAt(wp.xz,pxMacro()),wp.xz),c=groundSteep(m,n.y);
+  vec3 m=dirtOn(groundAt(wp.xz,pxMacro()),wp.xz,pxMacro()),c=groundSteep(m,n.y);
   // stream banks: on the tile from the water data (W5, bankPaint in src/look/shaders/shore.glsl); within BANK_EDGE of
   // the tile's edge, and on the apron and the far ring, from aRiver, as before W5 (the bands over the ground, then the
   // stony steep ground over them), which the far ring's painted line continues
@@ -28,7 +28,7 @@ vec3 albedo(vec3 wp,vec3 n,vec4 wt){
   #else
   c=cr;
   #endif
-  return seasonOf(c);   // the season turns the grass, not bare earth (shore.glsl)
+  return groundSeason(c);
 }
 void main(){
   macroDerivs(vW.xz);   // before any branch (shore.glsl)

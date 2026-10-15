@@ -31,7 +31,7 @@ texture of their own (free to commit), which as the paint grain averaged away at
   average out at far zoom instead of flickering.
 - **`COVER.bare` = 10**, kept out of `isField` (no id, no stripes); its colour in `classColour` (a dry brown between
   the track and ploughed, darker than the white coat, lighter than the dark coats: the guard).
-- **Autumn:** `groundSeason`'s autumn target and share.
+- **Autumn:** `groundSeason`'s autumn target and share, weighted by how green the colour is (review round 2).
 - **#88 shimmer:** the snow's edge noise at far zoom (`snowAt`'s per-texel grain) faded to the soft blotches as a
   pixel spans more ground; measured with `tools/water-look-check.mjs --only shimmer`.
 - **#88 banks:** the bank's bare earth a little warmer, so the earth leaves it warmer than the meadow.
@@ -69,6 +69,13 @@ the village and a track close, the default view in summer and autumn, the plough
   return on grass; main's own spread between runs up to 0.85 ms at the widest under a load average of 9): +0.14 to
   +0.25 ms at the close and default zooms, +0.38 to +0.54 at the widest. Mostly the one extra cover read a terrain
   pixel; the macro bake's alpha (the snow's lie) leaves no channel to bake the bareness in.
+- **After review round 2** (the season by greenness, with the green test loosened so a yellow-green counts as green):
+  - The guard is ok at start and crops. At cover, the Austrian white on the village ground in autumn is at 0.094
+    against main's 0.127 (bound 0.10): the village's grass patches turn to light straw. It is recorded on #78 under
+    the owner's standing call on the Austrian white.
+  - The banks are ok (0.043). The coat check is ok.
+  - The macro check's class contrast between the road and the grass fails on main too, from the temperate mood
+    (6.7 against 8, here 7.1; recorded on #88). Its shimmer on the fields, determinism and bake are ok.
 - **The look data** rebuilt: one bare patch, a trampled gateway where the track meets the fields (44, -52), so the
   cover test's "every class the macro colour paints is on the map" holds; bare earth carries no field id. The map's
   larger bare ground comes in PR 3. `--check` matches.
@@ -94,3 +101,15 @@ the village and a track close, the default view in summer and autumn, the plough
   - **The rotated second read** had its derivatives in the wrong frame. Now it is a scale and an offset.
   - **Bare earth:** kept clear of trees and stones (`TRODDEN`), and of the formation zones and the floodplain.
   - **The dirt's load error** is reported, not a bake's.
+- **Round 2** (one severe):
+  - **The stronger autumn turn hit all non-grass paint** at full strength (the #88 cut bank's earth, gravel, steep
+    stone), so in autumn the bank melted into the meadow. The bareness flag, a hidden global with a hard edge, is gone:
+    `groundSeason` itself weights the turn by how green a colour is. That is smooth across every edge, and the same for
+    the ground's bounce under trees and the meadow's blades.
+  - **The dirt's pre-check reads the four corners** (one diagonal missed edges along the other), with a margin on the
+    wear distance.
+  - **No dirt on the flat arm** and under the class check's sabotage.
+  - **The gateway appended to the fields:** inserted, it renumbered the later fields' ids and moved their shade and
+    stripes.
+  - **The marks fade out at far zoom,** saving the reads where they average to the mean.
+  - **The cover test checks bare earth** off the floodplain and the formation zones.

@@ -33,7 +33,7 @@ vec3 classColour(float k,float v){
         :k<3.5?mix(vec3(0.48,0.49,0.50),vec3(0.54,0.55,0.56),v)      // road: cool grey dust, a mid value (it reads against the
                                                                        // meadow by hue: a pale road hid the Austrian white, the guard)
         :k<4.5?mix(vec3(0.49,0.48,0.46),vec3(0.55,0.54,0.52),v)      // track
-        :k<5.5?mix(vec3(0.47,0.43,0.36),vec3(0.55,0.50,0.41),v)      // village ground (trodden earth: cellColour mixes grass in), darker
+        :k<5.5?mix(vec3(0.45,0.41,0.34),vec3(0.53,0.48,0.39),v)      // village ground (trodden earth: cellColour mixes grass in), darker
                                                                        // than the Austrian white in autumn too (the guard: it keeps its earth)
         :k<6.5?mix(vec3(0.51,0.47,0.32),vec3(0.57,0.52,0.36),v)      // wheat: olive-gold straw (the warm sun turns it gold), between the dark coats and the white
         :k<7.5?mix(vec3(0.37,0.50,0.20),vec3(0.45,0.56,0.24),v)      // green crop
@@ -84,26 +84,31 @@ vec3 wear(vec3 c,vec4 cv,Grain g){
   return cv.x>1.5?c:mix(c,vec3(0.56,0.53,0.45),w*(0.3+0.4*g.wearDab));}
 // the class lookup's point, pushed by the grain's soft blotches (±1.5 m) so a class edge wanders like a painted one
 vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*3.0;}
-// THE DIRT SURFACE (docs/plans/active/ground-surface.md): where the ground is bare (a track, the village's trodden
+// THE DIRT SURFACE (docs/plans/done/ground-surface.md): where the ground is bare (a track, the village's trodden
 // ground, ploughed land, bare earth, a little on the road, the worn ground by the lines), the dirt texture (the
 // owner's, scratches, drag marks and splats, about DIRT_M m a repeat) in its value, around 1 so the class colour holds
 // on average. Mipmapped: its fine marks average out where a pixel spans them, so they do not flicker
 uniform sampler2D uDirt;
 const float DIRT_M=15.0;
 // a class's bareness: 1 on track, village, ploughed and bare, a little on the road (dust). The worn ground by the lines
-// takes the dirt's marks by wearOf, not its season (it is half grass: the season turns it, review round 1)
+// takes the dirt's marks by wearOf
 float classBare(float k){return k>3.5&&k<4.5?1.0:k>4.5&&k<5.5?1.0:k>8.5?1.0:k>2.5&&k<3.5?0.4:0.0;}
 float wearOf(vec4 cv){return (1.0-smoothstep(0.5,4.0,cv.w))*0.5*step(cv.x,1.5);}
-float pBare=0.0;   // the last dirtOn's class bareness: the season turns grass, not bare earth (seasonOf in shore.glsl)
-vec3 dirtOn(vec3 c,vec2 xz){
-  // the unwarped cell and two cells 1.5 m off it on the diagonals (the warp's reach) first, three cheap reads: most
-  // ground is grass far from a line and returns here. The warped lookup (four more reads) only near bare ground, so its
-  // edge wanders as the macro colour's does
-  pBare=0.0;vec4 c0=coverAt(xz);
-  if(classBare(c0.x)+classBare(coverAt(xz+vec2(1.5)).x)+classBare(coverAt(xz-vec2(1.5)).x)<=0.0&&c0.w>=4.0)return c;
+// px: the pixel's footprint (m): the marks fade out as it spans them (the mipmap averages them to their mean)
+vec3 dirtOn(vec3 c,vec2 xz,float px){
+  #if defined(MACRO_FLAT)||defined(MACRO_SAB_ONECLASS)
+  return c;   // the flat arm and the class check's sabotage: the class colour alone
+  #endif
+  float fade=1.0-smoothstep(0.35,0.9,px);if(fade<=0.0)return c;
+  // the unwarped cell and its four corners 1.5 m off (the warp's reach) first, five cheap reads: most ground is grass
+  // far from a line and returns here. The warped lookup (four more reads) only near bare ground, so its edge wanders as
+  // the macro colour's does
+  vec4 c0=coverAt(xz);
+  float near=classBare(c0.x)+classBare(coverAt(xz+vec2(1.5)).x)+classBare(coverAt(xz-vec2(1.5)).x)+classBare(coverAt(xz+vec2(1.5,-1.5)).x)+classBare(coverAt(xz+vec2(-1.5,1.5)).x);
+  if(near<=0.0&&c0.w>=5.5)return c;
   vec4 cv=coverAt(coverWarp(xz));float k=cv.x,b=classBare(k);
   if(k>4.5&&k<5.5)b*=smoothstep(0.42,0.6,blot(xz+0.7,13.0));   // the village: its trodden patches, not the grass between (cellColour)
-  pBare=b;b=max(b,wearOf(cv));if(b<=0.0)return c;
+  b=max(b,wearOf(cv))*fade;if(b<=0.0)return c;
   // two reads at unrelated scales and offsets, so the texture's own marks (a dark smear) do not repeat in rows, about
   // its measured mean (0.458), so the class colour holds on average
   float d=(texM(uDirt,xz/DIRT_M,DIRT_M).r+texM(uDirt,xz/(DIRT_M*1.618)+vec2(0.37,0.61),DIRT_M*1.618).r)*0.5;
