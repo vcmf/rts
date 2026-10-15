@@ -92,8 +92,11 @@ const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }
 // puts back L7a's light, card by card (docs/plans/done/l7b-crown-volume.md); ?trees=gen,cards: generated trees
 // (prototypes/tree-core.js, docs/plans/done/tree-generator.md) where the pack's stand, and an orchard, a hedgerow and a
 // row of poplars
-const treesParam = params.get('trees'), treeSet = new Set(treesParam?.split(',') ?? [])
-if (treesParam !== null && (treeSet.size === 0 || [...treeSet].some(k => k !== 'one' && k !== 'cards' && k !== 'gen'))) throw new Error(`?trees must be one, cards, gen or a comma list of them, not ${treesParam}`)
+// the generated trees with leaf-card crowns by default (docs/plans/done/gen-trees-default.md, decision 0031);
+// ?trees=pack draws the pack's trees
+const treesParam = params.get('trees')
+const treeSet = new Set(treesParam === 'pack' ? [] : (treesParam ?? 'gen,cards').split(','))
+if (treesParam !== null && treesParam !== 'pack' && (treeSet.size === 0 || [...treeSet].some(k => k !== 'one' && k !== 'cards' && k !== 'gen'))) throw new Error(`?trees must be pack, one, cards, gen or a comma list of the last three, not ${treesParam}`)
 if (treeSet.has('one') && treeSet.has('gen')) throw new Error('?trees takes one or gen, not both')
 // ?clumpvol=off (with gen): the generated crowns lit as one volume each, not one per clump (the A/B of the clumps' light)
 if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has('gen'))) throw new Error('?clumpvol takes off, with ?trees=gen')

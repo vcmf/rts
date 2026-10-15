@@ -236,10 +236,12 @@ The plan: `docs/plans/done/l7a-canopy-cards.md`. Not the default: the arm the ow
   wraps, (n·l + 0.45) / 1.45, the same three colours over a wide range, the mid colour kept saturated). The golden
   backlight keeps the card normals and is blocked by other trees only. `?bench=volume` benches it against L7a.
 
-### Generated trees (`?trees=gen,cards`, an experiment)
+### Generated trees (the default; `?trees=gen,cards`)
 
 The plan: `docs/plans/done/tree-generator.md`; decision 0031; the method: `docs/research/procedural-trees.md`.
-Not the default: the arm the owner judges against `?trees=cards`.
+The default since `docs/plans/done/gen-trees-default.md` (the owner, 2026-10-15): the look page draws the generated trees
+with leaf-card crowns unless `?trees` says otherwise; `?trees=pack` draws the pack's trees, `?trees=cards` the pack's
+crowns as cards.
 
 - **The models** (`prototypes/tree-core.js`, a plain script the page imports under `?trees=gen` only; `addGenerated` in `src/look/nature.ts`):
   four seeded variants per species, added to the pack as `Gen_<species>_<n>`: the crown clumps as foliage, the limbs
