@@ -125,7 +125,8 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   meadow is the old `groundMeadow`), a low-frequency variation, each field's own shade, stripes along its furrows
   (ridge-and-furrow lands on ploughed ground, faint drill bands on crops, faded with the pixel's footprint), wear
   near the lines, and edges that wander (the class lookup's point pushed ±1.5 m by the grain's blotches). Colour
-  only: the light stays in `paint()`. The class `bare` (10): trodden or dry earth, no grass, no crops, no stripes, not
+  only: the light stays in `paint()`. Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
+  The class `bare` (10): trodden or dry earth, no grass, no crops, no stripes, not
   a field (`isField`).
 - **The dirt surface** (`dirtOn` in `macro.glsl`, at the terrain's fragment: `docs/plans/done/ground-surface.md`):
   where the ground is bare (track, the village's trodden patches, ploughed and bare earth, a little on the road, the
@@ -134,11 +135,8 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   they average out at far zoom (the marks fade out as a pixel spans 0.35 to 0.9 m). Five cheap reads (the cell and its
   corners 1.5 m off) first: grass far from a line returns there. On the terrain and the shore band alike.
 - **The season turns what is green** (`groundSeason` in `shore.glsl`, every ground colour's season): a colour takes
-  the whole turn as far as it is green, a quarter of it where it is not (bare earth, stone, gravel, a cut bank, dry
-  gold), so a ploughed field or a bank does not melt into the autumn meadow, smoothly across every edge. Every read passes the world position's screen derivatives explicitly
-  (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's
-  reads too): a read in a branch the pixels of
-  a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
+  the whole turn as far as it is green, a quarter of it where green is no higher than red or blue (a grey road, bare earth, stone, gravel,
+  a cut bank, dry gold), for the autumn turns; winter mutes every colour as before. So a ploughed field or a bank does not melt into the autumn meadow, smoothly across every edge.
 - **Three arms, one switch** (`?macro`): `flat`, each class's colour alone, unwarped (the ablation's arm 1);
   `shader`, `macro(xz, 0)` per pixel, one tap; `bake`, one read of the bake. `groundAt()` gives the arm's colour
   to the terrain, the far ring and the shore band alike (so the seam holds), and `snowLie()` the snow's lie.

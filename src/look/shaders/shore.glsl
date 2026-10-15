@@ -33,8 +33,10 @@ float pxGround(vec3 wp){vec2 f=fwidth(wp.xz);return max(f.x,f.y);}
 // does not melt into the autumn meadow, smoothly across every edge
 vec3 groundSeason(vec3 c){
   vec3 au=mix(c,vec3(0.68,0.59,0.37),0.78),la=mix(c,vec3(0.52,0.42,0.27),0.6),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
-  vec3 s=uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);
-  return mix(c,s,mix(0.25,1.0,smoothstep(-0.03,0.02,c.g-max(c.r,c.b))));}   // a yellow-green counts as green, earth, stone and dry gold (red over green) not
+  // the autumn turns (to late autumn) by greenness: a yellow-green counts as green, a grey road, earth, stone and dry gold
+  // (green no higher than red or blue) take a quarter. Winter mutes every colour, as before
+  float g=mix(0.25,1.0,smoothstep(-0.005,0.03,c.g-max(c.r,c.b)));au=mix(c,au,g);la=mix(c,la,g);
+  return uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
 // The world position's screen derivatives, taken by each shader's main before any branch (macroDerivs): the ground's
 // reads (the meadow's here, the macro colour's, src/look/shaders/macro.glsl) pass them explicitly, so a read in a
 // branch the pixels of a 2×2 quad take differently (a class edge, the shore band's sides) still picks its mip level

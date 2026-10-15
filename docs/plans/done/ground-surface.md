@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-14
 ---
 
@@ -52,7 +52,7 @@ the village and a track close, the default view in summer and autumn, the plough
 
 - **The look:** the ploughed field, the track and the village's trodden ground carry the dirt texture's scratches,
   drag marks and smears; read once, its dark smear repeated in rows every 15 m, so two reads at unrelated scales and a
-  turn are mixed. The autumn meadow turns to straw and olive (`groundSeason`'s autumn share 0.45 to 0.78). On main the
+  an offset are mixed (a turn, tried, had its derivatives in the wrong frame: review round 1). The autumn meadow turns to straw and olive (`groundSeason`'s autumn share 0.45 to 0.78). On main the
   ploughed field melted into the autumn meadow, the season turning it too: bare ground now takes a quarter of the
   turn.
 - **#88, the banks:** the cut bank's bare earth covered few of the check's cut-bank pixels (painted pure red, its
@@ -67,8 +67,8 @@ the village and a track close, the default view in summer and autumn, the plough
   checks:** band, seam, pools, banks, foam, winter and leaves ok; shimmer as above.
 - **The frame's cost** (`tools/bench-look.mjs`, Metal, the GPU frame's median, one run each side after the early
   return on grass; main's own spread between runs up to 0.85 ms at the widest under a load average of 9): +0.14 to
-  +0.25 ms at the close and default zooms, +0.38 to +0.54 at the widest. Mostly the one extra cover read a terrain
-  pixel; the macro bake's alpha (the snow's lie) leaves no channel to bake the bareness in.
+  +0.25 ms at the close and default zooms, +0.38 to +0.54 at the widest. Measured before review: the pre-check is now five cover reads on grass (the warp, the dirt reads only near bare
+  ground, faded out at far zoom); the macro bake's alpha (the snow's lie) leaves no channel to bake the bareness in.
 - **After review round 2** (the season by greenness, with the green test loosened so a yellow-green counts as green):
   - The guard is ok at start and crops. At cover, the Austrian white on the village ground in autumn is at 0.094
     against main's 0.127 (bound 0.10): the village's grass patches turn to light straw. It is recorded on #78 under
@@ -113,3 +113,12 @@ the village and a track close, the default view in summer and autumn, the plough
     stripes.
   - **The marks fade out at far zoom,** saving the reads where they average to the mean.
   - **The cover test checks bare earth** off the floodplain and the formation zones.
+- **Final checks after round 3:** the guard ok at start and crops, the village white in autumn 0.098 at cover (#78,
+  accepted); the coat check ok; the macro check's field|grass 9.4 (bare earth included), road|grass 7.1 (main 6.7,
+  #88); the water checks as before; `npm test` the soldier timing budget alone under load, passing alone.
+- **Round 3** (no severe): the dirt off until its texture has loaded (`uDirtOn`, the empty texture read 0 and
+  darkened bare ground by a third), the wear's early-return margin 7 m (the warp reaches another cell's centre), the
+  green test so a grey road takes a quarter of the turn, winter muting every colour as before, bare earth in the
+  macro check's field contrast, the system doc's misplaced sentence. Left: the dirt's mask from one warped cell (a
+  pixel edge where the bake blends over a metre), its band along the wear not jittered as `wear()`'s, `dirtOn` not
+  cached a pixel (two or three calls by the river).

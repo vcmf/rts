@@ -98,8 +98,9 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   const brush = meadow ? new Texture(BRUSH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) => { brushError = `the meadow's brush tile (${BRUSH_URL}) did not load: ${msg ?? 'unknown error'}` }) : null
   if (brush) brush.wrapU = brush.wrapV = Texture.WRAP_ADDRESSMODE
   // the dirt surface on bare ground (dirtOn in macro.glsl, docs/plans/done/ground-surface.md): the owner's dirt texture
-  // a failed load is reported, not a bake's error (no bake reads it): bare ground then has no marks
-  const dirt = new Texture(DIRT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) => console.error(`the dirt texture (${DIRT_URL}) did not load: ${msg ?? 'unknown error'}`))
+  // the marks only once it has loaded (uDirtOn, 0 until then: the empty texture reads 0 and would darken bare ground by
+  // a third); a failed load is reported, not a bake's error (no bake reads it), and bare ground then has no marks
+  const dirt = new Texture(DIRT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => mats.bindAll(m => m.setFloat('uDirtOn', 1)), (msg?: string) => console.error(`the dirt texture (${DIRT_URL}) did not load: ${msg ?? 'unknown error'}`))
   dirt.wrapU = dirt.wrapV = Texture.WRAP_ADDRESSMODE; dirt.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); if (brush) m.setTexture('uMeadowBrush', brush) })
 

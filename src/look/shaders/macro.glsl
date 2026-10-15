@@ -88,7 +88,7 @@ vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*3
 // ground, ploughed land, bare earth, a little on the road, the worn ground by the lines), the dirt texture (the
 // owner's, scratches, drag marks and splats, about DIRT_M m a repeat) in its value, around 1 so the class colour holds
 // on average. Mipmapped: its fine marks average out where a pixel spans them, so they do not flicker
-uniform sampler2D uDirt;
+uniform sampler2D uDirt;uniform float uDirtOn;   // 1 once the dirt texture has loaded (src/look/macro.ts)
 const float DIRT_M=15.0;
 // a class's bareness: 1 on track, village, ploughed and bare, a little on the road (dust). The worn ground by the lines
 // takes the dirt's marks by wearOf
@@ -99,13 +99,13 @@ vec3 dirtOn(vec3 c,vec2 xz,float px){
   #if defined(MACRO_FLAT)||defined(MACRO_SAB_ONECLASS)
   return c;   // the flat arm and the class check's sabotage: the class colour alone
   #endif
-  float fade=1.0-smoothstep(0.35,0.9,px);if(fade<=0.0)return c;
+  float fade=(1.0-smoothstep(0.35,0.9,px))*uDirtOn;if(fade<=0.0)return c;
   // the unwarped cell and its four corners 1.5 m off (the warp's reach) first, five cheap reads: most ground is grass
   // far from a line and returns here. The warped lookup (four more reads) only near bare ground, so its edge wanders as
   // the macro colour's does
   vec4 c0=coverAt(xz);
   float near=classBare(c0.x)+classBare(coverAt(xz+vec2(1.5)).x)+classBare(coverAt(xz-vec2(1.5)).x)+classBare(coverAt(xz+vec2(1.5,-1.5)).x)+classBare(coverAt(xz+vec2(-1.5,1.5)).x);
-  if(near<=0.0&&c0.w>=5.5)return c;
+  if(near<=0.0&&c0.w>=7.0)return c;   // the wear's reach (4 m) and the warp's to another cell's centre (2.8 m)
   vec4 cv=coverAt(coverWarp(xz));float k=cv.x,b=classBare(k);
   if(k>4.5&&k<5.5)b*=smoothstep(0.42,0.6,blot(xz+0.7,13.0));   // the village: its trodden patches, not the grass between (cellColour)
   b=max(b,wearOf(cv))*fade;if(b<=0.0)return c;
