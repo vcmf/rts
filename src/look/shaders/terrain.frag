@@ -28,10 +28,7 @@ vec3 albedo(vec3 wp,vec3 n,vec4 wt){
   #else
   c=cr;
   #endif
-  // the season turns the grass: bare earth (dirtOn's pBare) takes a quarter of it, so a ploughed field or a track does
-  // not melt into the autumn meadow (docs/plans/active/ground-surface.md)
-  vec3 sc=groundSeason(c);
-  return mix(sc,mix(c,sc,0.25),pBare);
+  return seasonOf(c);   // the season turns the grass, not bare earth (shore.glsl)
 }
 void main(){
   macroDerivs(vW.xz);   // before any branch (shore.glsl)

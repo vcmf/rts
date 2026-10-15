@@ -72,4 +72,25 @@ the village and a track close, the default view in summer and autumn, the plough
 - **The look data** rebuilt: one bare patch, a trampled gateway where the track meets the fields (44, -52), so the
   cover test's "every class the macro colour paints is on the map" holds; bare earth carries no field id. The map's
   larger bare ground comes in PR 3. `--check` matches.
-- **`npm test`:** exit 0, 256 tests.
+- **`npm test`:** after review round 1, exit 1 on the soldier layer's timing budget alone under load; run alone it
+  passes (12 of 12). The PR changes no sim code.
+- **After review round 1:** the guard ok at start and crops; at cover the Austrian white on the village ground in
+  autumn fell to 0.097 (main 0.127; the village now keeps its earth through the autumn), so the village's earth is a
+  little darker: 0.104. The water checks as before (banks ok, shimmer as main's).
+
+## Review
+
+- **Round 1** (several severe):
+  - **The worn ground by the lines kept out of the season:** this left a green band along every road in autumn,
+    which is the owner's complaint. It now takes the dirt's marks only (`wearOf`); `pBare` is the class's bareness.
+  - **A straw halo outside bare edges:** the early return read only the unwarped cell. Three cheap reads now cover the
+    warp's reach.
+  - **The shore band's land:** it had no dirt and the full season turn, a seam at fords. It now takes `dirtOn` and
+    `seasonOf` as the terrain does.
+  - **The bank earth's top edge** went over 1 at far zoom: the colour of flat shores changed with zoom.
+  - **The snow edge's footprint fade read `fwidth` inside a branch** (undefined derivatives). It is reverted, since it
+    did not fix the shimmer anyway.
+  - **The dirt texture's mean is 0.458:** the value is centred there.
+  - **The rotated second read** had its derivatives in the wrong frame. Now it is a scale and an offset.
+  - **Bare earth:** kept clear of trees and stones (`TRODDEN`), and of the formation zones and the floodplain.
+  - **The dirt's load error** is reported, not a bake's.

@@ -31,9 +31,7 @@ float snowAt(vec3 N,vec3 wp){
   // wider band (snow against bare earth is the frame's strongest contrast; a width from fwidth would step by 2×2
   // pixels, W5b's lesson)
   // (blended in with the lie's size, so the edge changes nowhere abruptly, and with no lie it is exactly the old one)
-  // and where a pixel spans more than about half a metre, the soft blotches too: the per-texel noise flickered at the far
-  // zoom in winter as the camera moved (#88)
-  vec3 gw=grainW(wp,N,4.0);float m=max(smoothstep(0.0,0.05,abs(pSnowLie)),smoothstep(0.25,0.8,length(fwidth(wp.xz))));
+  vec3 gw=grainW(wp,N,4.0);float m=smoothstep(0.0,0.05,abs(pSnowLie));
   float x=N.y*1.15*s+(mix(gw.r,gw.g,m)-0.5)*0.4+(s-1.0)*0.35+pSnowLie,w=mix(0.085,0.25,m);
   return smoothstep(0.635-w,0.635+w,x)*pSnowK;}
 // Per-tree foliage colour. t = per-instance random; kind: 0 deciduous, 1 evergreen, 2 grass.

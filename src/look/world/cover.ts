@@ -107,7 +107,7 @@ export function authorCover(far: number, cell: number): CoverGrid {
     for (const l of LINES) { const d = lineD(l.pts, x, z) - l.w / 2; if (d < 0) { cls = l.cls; id = 0 } wear = Math.min(wear, Math.max(0, d)) }
     if (inPoly(VILLAGE, x, z)) { cls = COVER.village; id = 0; wear = 0 } else wear = Math.min(wear, ringD(VILLAGE, x, z))
     // the floodplain and the formation zones keep their meadow (the zones clip the fields that touch them)
-    if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village)) { cls = COVER.meadow; id = 0 }
+    if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village || cls === COVER.bare)) { cls = COVER.meadow; id = 0 }
     tex[o] = cls; tex[o + 1] = id; tex[o + 2] = id ? Math.round(((dir % Math.PI + Math.PI) % Math.PI) / Math.PI * 255) % 256 : 0
     tex[o + 3] = Math.min(255, Math.round(Math.min(wear, WEAR_REACH) / WEAR_STEP))
   }

@@ -59,6 +59,9 @@ vec3 groundMeadow(vec2 xz){
 // steep ground goes stony (ny: the normal's y)
 vec3 groundSteep(vec3 c,float ny){return mix(c,vec3(0.55,0.52,0.46),smoothstep(0.80,0.62,ny)*0.5);}
 #include<macro>
+// the season over the ground: bare earth (dirtOn's pBare) takes a quarter of the turn, so a ploughed field or a track
+// does not melt into the autumn meadow (docs/plans/done/ground-surface.md)
+vec3 seasonOf(vec3 c){vec3 sc=groundSeason(c);return mix(sc,mix(c,sc,0.25),pBare);}
 // a hard painted edge, anti-aliased over about two pixels (no shimmer when the view moves): 0 below t, 1 above
 float aastep(float t,float v){
   #ifdef WATER_SAB_STEP
@@ -81,7 +84,7 @@ vec3 bankPaint(vec3 c,vec2 xz,float land,float h,float ny){
   vec2 fw=fwidth(xz);float px=max(fw.x,fw.y),far=smoothstep(0.12,0.35,px),e=0.1*far;
   float gr=G(xz/3.0).g-0.5;
   c=mix(c*vec3(0.80,0.86,0.80),c,smoothstep(1.0,6.0,land+gr*1.5));                                   // damp grass
-  float earth=smoothstep(0.985+e,0.85-e,ny)*smoothstep(4.0,1.0,land+gr);   // from gentler slopes than before W5, so a cut bank reads as earth under the temperate earth (#88)
+  float earth=smoothstep(0.985,0.85-e,ny)*smoothstep(4.0,1.0,land+gr);   // from gentler slopes than W5 had, so a cut bank reads as earth under the temperate earth (#88), its top edge under 1 at every zoom
   c=mix(c,vec3(0.56,0.35,0.16)*(0.9+0.2*G(xz/2.0).g),earth);                                          // bare earth
   float bar=smoothstep(0.8,0.2,h)*smoothstep(4.5,1.0,land+gr)*smoothstep(0.86-e,0.95+e,ny);
   vec3 gv=vec3(0.66,0.65,0.60)*(0.88+0.24*G(xz/1.1).g);gv=mix(gv,vec3(0.50,0.49,0.45),smoothstep(0.58,0.68,G(xz/2.9+0.3).g)*0.5*(1.0-far));
@@ -93,7 +96,7 @@ vec3 bankPaint(vec3 c,vec2 xz,float land,float h,float ny){
 // the shore band's ground: the terrain's (groundAt, stony where steep) with the banks painted over it, through the
 // seasons: the same colour the terrain paints there
 vec3 landAlbedo(vec2 xz,float land,float h){float ny=bankNormal(vec3(0.0,1.0,0.0),xz).y;
-  return groundSeason(bankPaint(groundSteep(groundAt(xz,pxMacro()),ny),xz,land,h,ny));}
+  return seasonOf(bankPaint(groundSteep(dirtOn(groundAt(xz,pxMacro()),xz),ny),xz,land,h,ny));}
 // the bed: silt in pools, pale gravel where the current runs, weed in slow deeper water; the damp edge at depth 0
 // la: the ground at the water's edge (used to 0.3 m deep)
 vec3 bedAlbedo(vec2 xz,float depth,float speed,vec3 la){

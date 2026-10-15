@@ -33,7 +33,8 @@ vec3 classColour(float k,float v){
         :k<3.5?mix(vec3(0.48,0.49,0.50),vec3(0.54,0.55,0.56),v)      // road: cool grey dust, a mid value (it reads against the
                                                                        // meadow by hue: a pale road hid the Austrian white, the guard)
         :k<4.5?mix(vec3(0.49,0.48,0.46),vec3(0.55,0.54,0.52),v)      // track
-        :k<5.5?mix(vec3(0.50,0.46,0.38),vec3(0.58,0.53,0.43),v)      // village ground (trodden earth: cellColour mixes grass in)
+        :k<5.5?mix(vec3(0.47,0.43,0.36),vec3(0.55,0.50,0.41),v)      // village ground (trodden earth: cellColour mixes grass in), darker
+                                                                       // than the Austrian white in autumn too (the guard: it keeps its earth)
         :k<6.5?mix(vec3(0.51,0.47,0.32),vec3(0.57,0.52,0.36),v)      // wheat: olive-gold straw (the warm sun turns it gold), between the dark coats and the white
         :k<7.5?mix(vec3(0.37,0.50,0.20),vec3(0.45,0.56,0.24),v)      // green crop
         :k<8.5?mix(vec3(0.60,0.59,0.50),vec3(0.67,0.65,0.55),v)      // stubble: grey straw (the warm sun turns pale straw orange)
@@ -89,24 +90,24 @@ vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*3
 // on average. Mipmapped: its fine marks average out where a pixel spans them, so they do not flicker
 uniform sampler2D uDirt;
 const float DIRT_M=15.0;
-float bareness(vec4 cv){
-  float k=cv.x;
-  float b=k>3.5&&k<4.5?1.0:k>4.5&&k<5.5?1.0:k>8.5?1.0:k>2.5&&k<3.5?0.4:0.0;
-  return max(b,(1.0-smoothstep(0.5,4.0,cv.w))*0.7*step(k,1.5));}
-float pBare=0.0;   // the last dirtOn's bareness: the season turns grass, not bare earth (terrain.frag)
+// a class's bareness: 1 on track, village, ploughed and bare, a little on the road (dust). The worn ground by the lines
+// takes the dirt's marks by wearOf, not its season (it is half grass: the season turns it, review round 1)
+float classBare(float k){return k>3.5&&k<4.5?1.0:k>4.5&&k<5.5?1.0:k>8.5?1.0:k>2.5&&k<3.5?0.4:0.0;}
+float wearOf(vec4 cv){return (1.0-smoothstep(0.5,4.0,cv.w))*0.5*step(cv.x,1.5);}
+float pBare=0.0;   // the last dirtOn's class bareness: the season turns grass, not bare earth (seasonOf in shore.glsl)
 vec3 dirtOn(vec3 c,vec2 xz){
-  // the unwarped cell first (one read): most ground is grass and returns here; the warped lookup (four more reads) only
-  // on bare ground, where its edge then wanders as the macro colour's does (a 1.5 m fringe outside a bare edge keeps
-  // the colour without the marks)
-  pBare=0.0;if(bareness(coverAt(xz))<=0.0)return c;
-  vec4 cv=coverAt(coverWarp(xz));float b=bareness(cv);if(b<=0.0)return c;
-  if(cv.x>4.5&&cv.x<5.5)b*=smoothstep(0.42,0.6,blot(xz+0.7,13.0));   // the village: its trodden patches, not the grass between (cellColour)
-  pBare=b;
-  // two reads at unrelated scales and a turn, so the texture's own marks (a dark smear) do not repeat in rows; their
-  // mean's lost contrast given back
-  vec2 q=mat2(0.799,-0.602,0.602,0.799)*xz/(DIRT_M*1.618)+vec2(0.37,0.61);
-  float d=(texM(uDirt,xz/DIRT_M,DIRT_M).r+texM(uDirt,q,DIRT_M*1.618).r)*0.5;   // explicit derivatives: these reads are in a branch
-  return c*mix(1.0,clamp(1.0+(d-0.5)*0.8,0.6,1.35),b);}
+  // the unwarped cell and two cells 1.5 m off it on the diagonals (the warp's reach) first, three cheap reads: most
+  // ground is grass far from a line and returns here. The warped lookup (four more reads) only near bare ground, so its
+  // edge wanders as the macro colour's does
+  pBare=0.0;vec4 c0=coverAt(xz);
+  if(classBare(c0.x)+classBare(coverAt(xz+vec2(1.5)).x)+classBare(coverAt(xz-vec2(1.5)).x)<=0.0&&c0.w>=4.0)return c;
+  vec4 cv=coverAt(coverWarp(xz));float k=cv.x,b=classBare(k);
+  if(k>4.5&&k<5.5)b*=smoothstep(0.42,0.6,blot(xz+0.7,13.0));   // the village: its trodden patches, not the grass between (cellColour)
+  pBare=b;b=max(b,wearOf(cv));if(b<=0.0)return c;
+  // two reads at unrelated scales and offsets, so the texture's own marks (a dark smear) do not repeat in rows, about
+  // its measured mean (0.458), so the class colour holds on average
+  float d=(texM(uDirt,xz/DIRT_M,DIRT_M).r+texM(uDirt,xz/(DIRT_M*1.618)+vec2(0.37,0.61),DIRT_M*1.618).r)*0.5;
+  return c*mix(1.0,clamp(1.0+(d-0.458)*0.8,0.6,1.35),b);}
 // (colour, the snow's lie as LIE0 + lie/1.2). q 1: the bake's, the edges blended over 9 taps a metre apart with a
 // darker margin where classes meet (a headland or a verge); q 0: one tap. px: the footprint, m (the bake's texel, or
 // the pixel's)
