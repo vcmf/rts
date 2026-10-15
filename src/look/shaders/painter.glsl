@@ -6,8 +6,8 @@ uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistSha
 // the grade (gradeOf, at the end of atmos), and how much of the light units take (KEEP_HUE: docs/plans/done/lc1b-coats.md)
 uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade;
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
-uniform float uUnitTint,uUnitMist,uUnitGrade;
-uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt;   // the earth (the mood): the world toward earth tones
+uniform float uUnitTint,uUnitMist,uUnitGrade,uUnitBounce;
+uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt,uBounce;   // the earth (the mood): the world toward earth tones
 uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason;
 
 // Rec. 709 luma: the grade and the value units keep (the painted bands use the older 0.3, 0.59, 0.11)
@@ -21,10 +21,9 @@ float pSnowK=1.0;   // a weight on the snow, for a surface it only partly settle
 // added to the snow's threshold where the ground holds more or less of it (the fields' furrows and ridges: snowLie in
 // src/look/shaders/macro.glsl)
 float pSnowLie=0.0;
-float snowAt(vec3 N,vec3 wp){
-  #ifdef NOSNOW
-  return 0.0;
-  #endif
+// snowLies: where snow lies, for any material (the ground's bounce reads it under a unit, LC4). snowAt: on this
+// material, none under NOSNOW (a unit carries none)
+float snowLies(vec3 N,vec3 wp){
   float s=clamp(uSeason-2.0,0.0,1.0);if(s<=0.0)return 0.0;
   // where the ground moves the threshold (pSnowLie: the fields' furrows) the snow's edge runs across open ground, and
   // there it breaks on the grain's soft blotches (G), not its per-texel noise (R), which speckles under a pixel, over a
@@ -52,7 +51,14 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
   vec3 la=mix(au*vec3(0.80,0.62,0.50),vec3(0.46,0.30,0.18),0.45);       // late autumn: browner, duller
   vec3 wi=vec3(0.34,0.29,0.24);                                         // winter: bare-looking, snow does the rest
   return uSeason<1.0?mix(summer,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);
+}float snowAt(vec3 N,vec3 wp){
+  #ifdef NOSNOW
+  return 0.0;
+  #else
+  return snowLies(N,wp);
+  #endif
 }
+
 // REAL sun shadow from the depth pass; PCF taps jittered by the paint grain,
 // so shadow edges come out brushy instead of pixel-sharp.
 uniform sampler2D uShadowMap;uniform mat4 uLightVP;uniform vec2 uSMTexel,uSMFade;uniform float uShadowsOn;
@@ -174,15 +180,18 @@ float detailGrain(vec3 wp,vec3 N){
 // the earth (the mood, docs/plans/done/lc3-temperate.md): a colour of the world turned toward its value times the
 // earth tint, with uEarthChroma of its own chroma, by uEarthAmt, before the light. Not units (KEEP_HUE): their coats
 // are painted, not grown
+vec3 earthMix(vec3 a){if(uEarthAmt<=0.0)return a;float l=dot(a,LUMA);return mix(a,max(vec3(l)*uEarthTint+(a-vec3(l))*uEarthChroma,0.0),uEarthAmt);}
 vec3 earthOf(vec3 a){
   #ifdef KEEP_HUE
   return a;
   #else
-  if(uEarthAmt<=0.0)return a;
-  float l=dot(a,LUMA);
-  return mix(a,max(vec3(l)*uEarthTint+(a-vec3(l))*uEarthChroma,0.0),uEarthAmt);
+  return earthMix(a);
   #endif
 }
+// THE GROUND'S BOUNCE (LC4, docs/plans/done/lc4-bounce.md): the colour of the ground under the point, set by the
+// material before paint() (the painter reads no ground: shore.glsl's bounceAt), lighting what faces down or sideways in
+// the shadow and mid bands, by the mood's uBounce. Units take its full hue: a local cast the eye does not balance away
+vec3 pBounce=vec3(0.0);
 // THE paint function. jitter: how loose the brushwork is (1 = landscape, 0.3 = crisp units).
 // sh: extra shadow from the painted shadow map (0..1).
 vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh){
@@ -241,6 +250,13 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #endif
   vec3 lt=alb*sunC*mix(1.16,1.02,snow)+liftC*(1.0-snow);
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
+  #ifdef BOUNCE
+  vec3 bc=pBounce;   // its full hue on units too: the eye balances on the main light (the sun), not on a bounce off coloured ground
+  #ifdef KEEP_HUE
+  bc*=uUnitBounce;   // units: a share of it, so a coat keeps its value against its ground (the guard)
+  #endif
+  c+=alb*bc*uBounce*(0.5-0.5*N.y)*(1.0-smoothstep(0.55,1.0,t))*occ;   // from below, the sun's band left to the sun
+  #endif
   c*=1.0+gr*0.38;                                                           // gouache grain in the value
   #ifdef DETAIL_ON
   c*=1.0+(blot-uGrainMean.y)*0.12*jitter;                                   // the blotches in the value (renormalised round their mean)

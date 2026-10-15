@@ -150,6 +150,12 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
 - **The fields in winter:** the furrows hold the snow and the ridges show the earth (the winter master's stripes):
   `pSnowLie` moves `snowAt()`'s threshold. There the snow's edge breaks on the grain's soft blotches, not its
   per-texel noise, over a wider band, and the lie fades out as a pixel spans 0.35 to 1.2 m.
+- **The ground's bounce** (LC4, `docs/plans/done/lc4-bounce.md`): in `paint()` under `BOUNCE`, light from below in
+  the colour of the ground under the point (`bounceAt`: the class's colour through the season and the mood's earth,
+  toward white as snow lies), on faces looking down or sideways, in the shadow and mid bands, times the occlusion, by
+  the mood's `bounce`. Trees and stones (`nature.frag`), the crowns (`canopy.frag`) and the army blocks (`block.frag`)
+  take it; the trees' old 15 % albedo tint toward the ground is gone. Units take its full hue (a local cast the eye
+  does not balance away) at `units.bounce` of its strength. `?bounce=<0..2>` tries a strength.
 - **The scatter follows the cover:** grass, flowers, plants, bushes, stumps and logs on grass; wheat on wheat;
   nothing on roads, tracks or village ground; the point and eight points 2.5 m around it must all pass (the painted
   edges wander that far). A tree or a stone within that reach of a field or bare earth is placed but not drawn

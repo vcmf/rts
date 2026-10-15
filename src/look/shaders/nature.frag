@@ -31,15 +31,13 @@ void main(){
     if(fres>0.42&&g<(fres-0.42)*1.9)discard;
   }
   #endif
-  // the ground's bounce (docs/plans/active/l5-macro.md): the macro colour under the root tints the albedo on the side
-  // away from the sun, most near the ground (grass all over: it shades like its ground), so a copse on its dark floor
-  // and a tuft on stubble sit in their ground; the ramp then lights it like the rest
+  // grass: the macro colour under the root tints the albedo all over (it shades like its ground, docs/plans/active/
+  // l5-macro.md), so a tuft on stubble sits in its ground. Trees and stones take the ground's bounce as light (LC4)
   #ifdef GRASSY
-  float bw=0.25;
+  vec3 alb=mix(roleCol(vRole,vTint),groundSeason(groundBounce(vRoot)),0.25);
   #else
-  float bw=0.15*(1.0-smoothstep(-0.1,0.4,dot(N,uSunDir)))*(1.0-smoothstep(0.0,6.0,vH));
+  vec3 alb=roleCol(vRole,vTint);pBounce=bounceAt(vRoot,vW.y-vH,vH,0.0);   // the trees, the stones: lit by the ground's bounce in paint() (LC4), not tinted
   #endif
-  vec3 alb=mix(roleCol(vRole,vTint),groundSeason(groundBounce(vRoot)),bw);
   #ifdef GRASSY
   float lo=groundOcc(lm);pSky=mix(1.0,lm.g,uAO);               // grass sits in the contact under a tree, as its ground does
   #else

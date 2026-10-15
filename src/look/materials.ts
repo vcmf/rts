@@ -44,8 +44,8 @@ const MOOD_COLOURS: Record<string, (m: Mood) => Color3> = {
 }
 const MOOD_FLOATS: Record<string, (m: Mood) => number> = {
   uGreenChroma: m => m.grade.greenChroma, uGreenAmt: m => m.grade.greenAmt, uGradeSat: m => m.grade.sat, uTopAmt: m => m.grade.topAmt,
-  uEarthChroma: m => m.earth.chroma, uEarthAmt: m => m.earth.amt,
-  uUnitTint: m => m.units.tint, uUnitMist: m => m.units.mist, uUnitGrade: m => m.units.grade,
+  uEarthChroma: m => m.earth.chroma, uEarthAmt: m => m.earth.amt, uBounce: m => m.bounce,
+  uUnitTint: m => m.units.tint, uUnitMist: m => m.units.mist, uUnitGrade: m => m.units.grade, uUnitBounce: m => m.units.bounce,
 }
 const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA', 'uDirtOn']
 
