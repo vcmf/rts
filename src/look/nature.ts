@@ -18,7 +18,7 @@ import { D } from './spec.ts'
 import { fbm, hash, mulberry } from './noise.ts'
 import { H } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, wetEdgeAt, wetEdges } from './river.ts'
-import { COVER, coverAt, fieldAt, inFormationZone, type CoverGrid } from './world/cover.ts'
+import { COVER, coverAt, fieldAt, inFormationZone, isField, type CoverGrid } from './world/cover.ts'
 import NAT_VS from './shaders/nature.vert?raw'
 import NAT_FS from './shaders/nature.frag?raw'
 import { cardMaterial, cardMesh, leafLoss, placeCards, type CardOptions } from './canopy.ts'
@@ -170,6 +170,10 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const addPlaced = (model: string, item: Item, kind = '', drawn = model) => {
     const [x, z, s] = item
     if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false
+    // a tree or a stone on a field or bare earth is placed but not drawn (docs/plans/active/default-map.md): rejected,
+    // it would draw a new candidate and shift the scatter's stream, moving every tree after it
+    const k = coverAt(cover, x, z)
+    if (!/^(Grass|Flowers|Plant_1|Bush|TreeStump|WoodLog|Wheat)/.test(model) && (isField(k) || k === COVER.bare)) return true
     if (genModels && drawn !== model && !placeable(x, z, footprint(drawn, s), kind)) { item = [...item] as Item; item[2] = s * footprint(model, s) / footprint(drawn, s) }
     add(drawn, item); return true
   }

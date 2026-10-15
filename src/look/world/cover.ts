@@ -41,6 +41,10 @@ const FIELDS: { poly: Pt[]; cls: CoverClass; dir: number }[] = [
   // bare earth: a trampled gateway where the track meets the fields (docs/plans/done/ground-surface.md; the map's
   // larger bare ground comes with the default map's PR)
   { poly: rect(44, -52, 9, 6, 0.2), cls: COVER.bare, dir: 0 },
+  // the default map's fields (docs/plans/active/default-map.md): a large wheat field in the start view's right half,
+  // and a bare drove between it and the ploughed field
+  { poly: rect(50, 48, 45, 28, 0.1), cls: COVER.wheat, dir: 0.1 },
+  { poly: rect(80, -23, 45, 4, 0.15), cls: COVER.bare, dir: 0 },
 ]
 // a rectangle: centre, half sizes along and across its direction, the direction
 function rect(cx: number, cz: number, ha: number, hc: number, a: number): Pt[] {
