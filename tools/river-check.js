@@ -45,12 +45,13 @@
   check('reedsAwayFromWater', reedsAway === 0, reedsAway)
   check('wheatOnFloodplain', wheatOnFloodplain === 0, wheatOnFloodplain)
   // bank trees exist: docs/art-bible.md §6c asks for a broken line of willows along the banks near the scene
-  const willows = Object.entries(groups).filter(([m]) => /^Willow/.test(m)).reduce((a, [, v]) => a + v.length, 0)
+  // the pack's willows, or the generated species drawn for them (the look page's default)
+  const willows = Object.entries(groups).filter(([m]) => /^(Willow|Gen_(willow|alder)_)/.test(m)).reduce((a, [, v]) => a + v.length, 0)
   check('willows', willows >= 12, willows)
 
   // the scene is populated (guards every "nothing in X" check above against passing on an empty scene)
   const count = re => Object.entries(groups).filter(([m]) => re.test(m)).reduce((a, [, v]) => a + v.length, 0)
-  const pop = { trees: count(/Tree/), grass: count(/Grass|Flowers|Plant/), wheat: count(/Wheat/), bushes: count(/Bush/), far: FAR.length }
+  const pop = { trees: count(/Tree|^Gen_/), grass: count(/Grass|Flowers|Plant/), wheat: count(/Wheat/), bushes: count(/Bush/), far: FAR.length }
   // under the look page's meadow (docs/plans/done/l5c-meadow.md) the grass is its clumps, not scatter: its growing
   // texels (1 m) stand in for the tufts
   const meadow = typeof __look !== 'undefined' && __look.meadow

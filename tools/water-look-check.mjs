@@ -380,7 +380,11 @@ const SABOTAGE = { band: [['nodive']], seam: [['WATER_SAB_OWN'], ['WATER_SAB_TER
 function main() {
   const args = process.argv.slice(2), self = args.includes('--selftest'), oi = args.indexOf('--only')
   const only = oi >= 0 ? args.splice(oi, 2)[1].split(',') : Object.keys(CHECKS)
-  const [url, out = path.join(ROOT, 'scratch/water-look-check')] = args.filter(a => a !== '--selftest')
+  const [url0, out = path.join(ROOT, 'scratch/water-look-check')] = args.filter(a => a !== '--selftest')
+  // the river and its banks measured under the pack's trees unless the URL names a set: the generated woods (the look
+  // page's default, docs/plans/done/gen-trees-default.md) overhang the river and shade the bank's meadow samples, which
+  // these checks were tuned without
+  const url = url0 && !/[?&]trees=/.test(url0) ? url0 + (url0.includes('?') ? '&' : '?') + 'trees=pack' : url0
   if (!url || only.some(k => !CHECKS[k])) { console.error('usage: node tools/water-look-check.mjs <look page URL> [outDir] [--only band,seam,pools,shimmer,banks,foam,winter,leaves] [--selftest]'); process.exit(2) }
   let ok = true
   for (const k of only) {
