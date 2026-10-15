@@ -30,12 +30,17 @@ Main at 92b44b1. Every run's exit code.
 
 - **The page:** no `?trees` draws the generated trees with leaf-card crowns; `?trees=pack` draws the pack's; a bad
   value throws.
-- **The guard** (exit 0 at each view), against main at `?trees=gen,cards` (like with like), start, cover and crops,
-  three seasons: ok. **The coat check:** exit 0.
+- **The guard** (exit 0 at each view), start, cover and crops, three seasons: against main at `?trees=gen,cards` (like
+  with like), ok; against main's default, the pack's trees (what the switch costs), ok: no block newly fails. #63 (a
+  dark coat in a crown's deep shade) stays L4's. **The coat check:** exit 0.
+- **The frame's cost** (`tools/bench-look.mjs`, Metal, the GPU frame's median, twice each side, a load average of 3 to
+  7, the spread between runs under 0.05 ms): close -0.02 ms, default +0.13 to +0.24 (8.4 ms a frame), widest +0.52 to
+  +0.77 (13 to 14 ms): the generated woods, the orchard and the poplars, and the crowns' cards.
 - **The river check** with no `?trees`: exit 0 after review round 1, which counts the generated willows and alders for
   the pack's willows (23, at least 12) and the generated trees in the population (218).
 - **`tools/water-look-check.mjs`:** exit 0, every check. **`tools/check-negatives.mjs`:** exit 0, every check passes
-  the scene and catches its sabotage. Both pin the pack's trees on the look page unless the URL names a set: the
+  the scene and catches its sabotage. The water check, and the negatives' render cases only (the river and look cases
+  run on the default), pin the pack's trees on the look page unless the URL names a set: the
   generated woods overhang the river (the render check saw 78 % of the river points at the mid view, against 80 %)
   and shade the bank's meadow samples (the bar's grey margin 0.016, against 0.03). These checks were tuned without
   them and measure the water, not the trees.
@@ -55,3 +60,7 @@ Main at 92b44b1. Every run's exit code.
     art bible's winter row, main.ts's comment).
   - **Follow-ups:** #96 (the trees grow on every load, about 0.46 s: bake them offline), #97 (the far woods and
     hedgerows are still the pack's bushes).
+- **Round 2** (no severe): the guard against the pack's trees and the bench, both measured; the negatives pin the
+  pack only for the render check; `?bench=trees` rejects `gen`, not a string; the messages name the default. Left: the
+  pinning rule is written in two tools (a shared helper); the willows count includes the generated alders (35 % of
+  the willow class).

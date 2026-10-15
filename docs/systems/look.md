@@ -51,7 +51,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule (and, since L5a, the cover's: what grows on which class) |
 | `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
 | `src/look/meadow.ts` | The meadow near the camera (L5c, L5d, below): the meadow map (ground height, the grass's and the crops' growth), three rings of static grass and crop instances around the focus |
-| `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (`?trees=cards`, L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
+| `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (the default with the generated trees; `?trees=cards` on the pack's; L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
 | `src/look/post.ts` | The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), with RTS controls (`rtsControls`: the arrows or WASD pan in the ground plane and Q, E turn, faster as it zooms out; a trackpad's two-finger swipe pans and its pinch zooms; a mouse wheel zooms; dragging turns and pans; the panel's Zoom slider follows), and the passes: depth of field (a player option, decision 0024), then one fused finishing pass (bloom, vignette, paper, dither; the grade is in the materials since LC1b) |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop, and the debug globals the checks read |
 | `src/look/bench.ts`, `src/look/gputimer.ts` | `?bench`: fixed cameras, frame times, GPU time per pass, draw calls, triangles, texture memory and the build hash, as JSON (below) |
@@ -465,8 +465,9 @@ river's parameters in `src/look/world/author.ts` (rebuild the look data after a 
 
 ## Open questions
 
-- **The leaf-card crowns are not the default arm yet:** a dark coat in a crown's deep shade loses separation
-  with them (#63, moved to L4: the army side's to fix); decision 0022 (their soft ramp) is accepted; their outline aliases at the widest zoom (L8); a
+- **The leaf-card crowns are the default** (with the generated trees, `docs/plans/done/gen-trees-default.md`, the
+  owner's call): a dark coat in a crown's deep shade loses separation with them (#63, L4: the army side's to fix; the
+  guard against the pack's trees found no block newly failing); decision 0022 (their soft ramp) is accepted; their outline aliases at the widest zoom (L8); a
   forest is where they cost the most (a cheaper forest is owed: `docs/plans/done/forest-bench.md`), and the min-spec laptop and the foliage's total
   against L7's gate are not measured (`docs/plans/active/track-e-results/shadows-foliage.md`).
 - **The guard has no block in a wood**, where the soft shadows make the floor darkest.

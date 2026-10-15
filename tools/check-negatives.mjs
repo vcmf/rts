@@ -10,9 +10,11 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const arg = process.argv[2] || 'prototypes/painted-cinematic.html', isUrl = /^https?:\/\//.test(arg)
 // a URL loads with the blur off unless it sets ?dof (decision 0024: the pixel checks measure the paint)
-// on the look page, the pack's trees unless the URL names a set: the render check's river points and the river check
-// were tuned without the generated woods (the default, docs/plans/done/gen-trees-default.md), which overhang the river
-const page = isUrl ? (u => { if (!u.searchParams.has('dof')) u.searchParams.set('dof', '0'); if (/look\.html$/.test(u.pathname) && !u.searchParams.has('trees')) u.searchParams.set('trees', 'pack'); return u.href })(new URL(arg)) : path.resolve(ROOT, arg)
+const page = isUrl ? (u => { if (!u.searchParams.has('dof')) u.searchParams.set('dof', '0'); return u.href })(new URL(arg)) : path.resolve(ROOT, arg)
+// the render check's river points on the look page, the pack's trees unless the URL names a set: the generated woods
+// (the default, docs/plans/done/gen-trees-default.md) overhang the river there (78 % of its points seen at the mid view,
+// against 80 %); the river and look checks run on the default
+const renderPage = isUrl ? (u => { if (/look\.html$/.test(u.pathname) && !u.searchParams.has('trees')) u.searchParams.set('trees', 'pack'); return u.href })(new URL(page)) : page
 if (!isUrl && !fs.existsSync(page)) { console.error(`check-negatives: no page at ${page}`); process.exit(2) }
 const src = f => fs.readFileSync(path.join(ROOT, 'tools', f), 'utf8')
 const CHECKS = { render: src('render-check.js'), river: src('river-check.js'), look: src('look-check.js') }
@@ -58,7 +60,8 @@ for (let q = 0; q < queue.length; q++) {
   const steps = [['wait', 1000], ['eval', '(async () => { for (let i = 0; i < 1200 && !window.__proto; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__proto) throw new Error("the page never set window.__proto (120 s)"); return "page built" })()'], ['wait', 1000], ['eval', CAPTURE],
     ...(sabotage ? [['eval', sabotage + '; "SABOTAGED"']] : []),
     ['eval', CHECKS[check] + '; "CHECK RAN"'], ['eval', REPORT]]
-  const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), isUrl ? page : pathToFileURL(page).href, path.join(ROOT, 'scratch/check-negatives'), '1280', '720', JSON.stringify(steps)],
+  const pg = check === 'render' ? renderPage : page
+  const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), isUrl ? pg : pathToFileURL(pg).href, path.join(ROOT, 'scratch/check-negatives'), '1280', '720', JSON.stringify(steps)],
     { encoding: 'utf8', env: { SHOT_TIMEOUT_S: '300', SHOT_LOAD_S: '300', ...process.env } })
   const out = r.stdout + r.stderr
   const applied = !sabotage || out.includes('EVAL "SABOTAGED"'), ran = out.includes('EVAL "CHECK RAN"')

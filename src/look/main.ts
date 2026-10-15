@@ -204,7 +204,7 @@ addEventListener('drop', e => {
   const img = new Image()
   // with Shift held, a picture of four leaf clumps on black replaces the cards' atlas
   if (e.shiftKey) {
-    if (!leafTex) { console.warn('dropping a leaf picture needs ?trees=cards'); return }
+    if (!leafTex) { console.warn('dropping a leaf picture needs the leaf-card crowns (the default, or ?trees=cards)'); return }
     const tex = leafTex
     // the crowns cast through the atlas too: the render-once shadow map, and the light map after it, are redone
     const url = URL.createObjectURL(f)
@@ -382,7 +382,7 @@ if (params.has('bench')) {
   if ((params.get('bench') === 'trees' || params.get('bench') === 'volume') && !nature.showCards) throw new Error(`?bench=${params.get('bench')} needs the leaf-card crowns`)
   // ?bench=trees compares the pack's crowns as cards against the pack's trees (L7a): under gen the other arm would be the
   // generated meshes, so it asks for ?trees=cards explicitly
-  if (params.get('bench') === 'trees' && treesParam !== 'cards') throw new Error('?bench=trees compares the pack as cards and as meshes: add ?trees=cards')
+  if (params.get('bench') === 'trees' && treeSet.has('gen')) throw new Error('?bench=trees compares the pack as cards and as meshes: add ?trees=cards')
   if (params.get('bench') === 'volume' && params.has('volume')) throw new Error('?bench=volume switches the volume itself: drop ?volume')
   const show = nature.showCards
   const cardMats = [...new Set((nature.cardCasters?.cards ?? []).map(m => m.material as ShaderMaterial))]
