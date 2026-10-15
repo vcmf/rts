@@ -26,13 +26,32 @@ the pack's trees unless the URL asked for `?trees=gen,cards` (decision 0031, the
 
 ## Results
 
-Main at 92b44b1.
+Main at 92b44b1. Every run's exit code.
 
-- **The page:** no `?trees` draws the generated trees with leaf-card crowns; `?trees=pack` the pack's; a bad value
-  throws.
-- **The guard** against main at `?trees=gen,cards` (like with like), start, cover and crops, three seasons: ok.
-- **The coat check:** ok. **The river check** with no `?trees`: no instance over the water or in the zones, no crops
-  on the floodplain, 463 crop clumps in the scene's field.
-- **The goldens** (main's default, the pack's trees, against the new default) differ where trees stand: 4 to 13 of 16
-  regions a view. This is the expected change.
-- **`npm test`:** the soldier timing budget alone under load; alone it passes (12 of 12).
+- **The page:** no `?trees` draws the generated trees with leaf-card crowns; `?trees=pack` draws the pack's; a bad
+  value throws.
+- **The guard** (exit 0 at each view), against main at `?trees=gen,cards` (like with like), start, cover and crops,
+  three seasons: ok. **The coat check:** exit 0.
+- **The river check** with no `?trees`: exit 0 after review round 1, which counts the generated willows and alders for
+  the pack's willows (23, at least 12) and the generated trees in the population (218).
+- **`tools/water-look-check.mjs`:** exit 0, every check. **`tools/check-negatives.mjs`:** exit 0, every check passes
+  the scene and catches its sabotage. Both pin the pack's trees on the look page unless the URL names a set: the
+  generated woods overhang the river (the render check saw 78 % of the river points at the mid view, against 80 %)
+  and shade the bank's meadow samples (the bar's grey margin 0.016, against 0.03). These checks were tuned without
+  them and measure the water, not the trees.
+- **`tools/macro-check.mjs`:** exit 0. **`tools/detail-check.mjs`:** exit 0.
+- **The goldens** (main's default, the pack's trees, against the new default) differ where trees stand: 4 to 13 of
+  16 regions a view. This is the expected change.
+- **`npm test`:** exit 0, 256 tests.
+
+## Review
+
+- **Round 1** (severe):
+  - **The river check's counts** were keyed by the drawn model (0 willows, 3 trees). It now counts the generated
+    species.
+  - **The negatives' tree sabotage** named `CommonTree_1`.
+  - **`?bench=trees`** now asks for `?trees=cards` (its arms compare the pack's crowns).
+  - The validation is simplified, the card options' errors are clearer, and the stale docs are fixed (`docs/systems/look.md`, the
+    art bible's winter row, main.ts's comment).
+  - **Follow-ups:** #96 (the trees grow on every load, about 0.46 s: bake them offline), #97 (the far woods and
+    hedgerows are still the pack's bushes).

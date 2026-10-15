@@ -243,7 +243,7 @@ The default since `docs/plans/done/gen-trees-default.md` (the owner, 2026-10-15)
 with leaf-card crowns unless `?trees` says otherwise; `?trees=pack` draws the pack's trees, `?trees=cards` the pack's
 crowns as cards.
 
-- **The models** (`prototypes/tree-core.js`, a plain script the page imports under `?trees=gen` only; `addGenerated` in `src/look/nature.ts`):
+- **The models** (`prototypes/tree-core.js`, a plain script the page imports under `?trees=gen`, the default; `addGenerated` in `src/look/nature.ts`):
   four seeded variants per species, added to the pack as `Gen_<species>_<n>`: the crown clumps as foliage, the limbs
   as bark, and per crown vertex its clump, the clumps' ellipsoids and the twigs as their own mesh. The pack's trees are
   drawn as species by a share each, picked by the place (`GEN_FOR`: broadleaves oak, lime, beech; birches; willows

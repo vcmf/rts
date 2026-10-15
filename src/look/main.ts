@@ -89,14 +89,14 @@ const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }
 // leaf cards
 // ?trees=cards: the crowns as leaf cards (docs/plans/done/l7a-canopy-cards.md); ?leaves=procedural draws the atlas
 // instead of reading the oak picture; ?cardsize, ?cardcover, ?cardsink tune the cards (src/look/canopy.ts); ?volume=off
-// puts back L7a's light, card by card (docs/plans/done/l7b-crown-volume.md); ?trees=gen,cards: generated trees
+// puts back L7a's light, card by card (docs/plans/done/l7b-crown-volume.md); ?trees=gen,cards (the default): generated trees
 // (prototypes/tree-core.js, docs/plans/done/tree-generator.md) where the pack's stand, and an orchard, a hedgerow and a
 // row of poplars
 // the generated trees with leaf-card crowns by default (docs/plans/done/gen-trees-default.md, decision 0031);
 // ?trees=pack draws the pack's trees
-const treesParam = params.get('trees')
-const treeSet = new Set(treesParam === 'pack' ? [] : (treesParam ?? 'gen,cards').split(','))
-if (treesParam !== null && treesParam !== 'pack' && (treeSet.size === 0 || [...treeSet].some(k => k !== 'one' && k !== 'cards' && k !== 'gen'))) throw new Error(`?trees must be pack, one, cards, gen or a comma list of the last three, not ${treesParam}`)
+const treesParam = params.get('trees'), trees = treesParam ?? 'gen,cards'
+const treeSet = new Set(trees === 'pack' ? [] : trees.split(','))
+if (trees !== 'pack' && [...treeSet].some(k => k !== 'one' && k !== 'cards' && k !== 'gen')) throw new Error(`?trees must be pack, or one, cards and gen in a comma list, not ${treesParam}`)
 if (treeSet.has('one') && treeSet.has('gen')) throw new Error('?trees takes one or gen, not both')
 // ?clumpvol=off (with gen): the generated crowns lit as one volume each, not one per clump (the A/B of the clumps' light)
 if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has('gen'))) throw new Error('?clumpvol takes off, with ?trees=gen')
@@ -108,7 +108,7 @@ if (!(season0 >= 0 && season0 <= 3)) throw new Error(`?season must be 0 to 3, no
 if (treeSet.has('gen')) await import('../../prototypes/tree-core.js')
 const cardsOn = treeSet.has('cards')
 const leavesParam = params.get('leaves') ?? 'oak'
-for (const k of ['leaves', 'cardsize', 'cardcover', 'cardsink', 'volume']) if (params.has(k) && !cardsOn) throw new Error(`?${k} needs ?trees=cards`)
+for (const k of ['leaves', 'cardsize', 'cardcover', 'cardsink', 'volume']) if (params.has(k) && !cardsOn) throw new Error(`?${k} needs the leaf-card crowns (the default, or ?trees=cards)`)
 if (leavesParam !== 'oak' && leavesParam !== 'procedural') throw new Error(`?leaves must be oak or procedural, not ${leavesParam}`)
 const cardOpt = (k: string, d: number) => { const v = Number(params.get(k) ?? d); if (!(v > 0)) throw new Error(`?${k} must be a positive number, not ${params.get(k)}`); return v }
 const cardOpts: CardOptions = { size: cardOpt('cardsize', CARD_DEFAULTS.size), cover: cardOpt('cardcover', CARD_DEFAULTS.cover), sink: cardOpt('cardsink', CARD_DEFAULTS.sink), volume: params.get('volume') !== 'off' }
@@ -379,7 +379,10 @@ if (params.has('bench')) {
   // ?bench=meadow: the meadow's grass and crops against none (the ground's pattern is in the macro bake: nothing a frame)
   if (params.get('bench') === 'meadow' && !meadow) throw new Error('?bench=meadow needs the meadow on (no ?meadow=off)')
   // ?trees=cards&bench=volume: the crowns lit as volumes against L7a's light (docs/plans/done/l7b-crown-volume.md)
-  if ((params.get('bench') === 'trees' || params.get('bench') === 'volume') && !nature.showCards) throw new Error(`?bench=${params.get('bench')} needs ?trees=cards`)
+  if ((params.get('bench') === 'trees' || params.get('bench') === 'volume') && !nature.showCards) throw new Error(`?bench=${params.get('bench')} needs the leaf-card crowns`)
+  // ?bench=trees compares the pack's crowns as cards against the pack's trees (L7a): under gen the other arm would be the
+  // generated meshes, so it asks for ?trees=cards explicitly
+  if (params.get('bench') === 'trees' && treesParam !== 'cards') throw new Error('?bench=trees compares the pack as cards and as meshes: add ?trees=cards')
   if (params.get('bench') === 'volume' && params.has('volume')) throw new Error('?bench=volume switches the volume itself: drop ?volume')
   const show = nature.showCards
   const cardMats = [...new Set((nature.cardCasters?.cards ?? []).map(m => m.material as ShaderMaterial))]
