@@ -62,7 +62,7 @@ const scene = new Scene(engine); scene.skipPointerMovePicking = true
 const params = new URLSearchParams(location.search), softParam = params.get('soft'), penumbraParam = params.get('penumbra')
 // the light's mood (src/look/mood.ts), before any material is made
 setMood(params.get('mood') ?? 'temperate')
-if (params.has('bounce')) setBounce(params.get('bounce') === '' ? NaN : Number(params.get('bounce')))
+if (params.has('bounce')) { const b = params.get('bounce') ?? ''; setBounce(/^\d+(\.\d+)?$/.test(b) ? Number(b) : NaN) }
 // the clear colour, graded as the materials are at the frame's top (it shows only there), following the grade's switch
 const CLEAR_GRADED = gradeColour(MOOD.hazeCool, MOOD, 1)
 scene.clearColor = new Color4(CLEAR_GRADED.r, CLEAR_GRADED.g, CLEAR_GRADED.b, 1)

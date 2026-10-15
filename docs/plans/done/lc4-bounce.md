@@ -86,3 +86,9 @@ Main at b657297.
 - **After round 2:** the guard at start, the Austrian white in the valley in summer at 0.099 and the British red on
   the winter meadow at 0.099; at cover, the village white in winter at 0.091 (the snow's bounce now on); crops ok. All
   accepted on #78. The coat check ok; `npm test` exit 0, 256 tests.
+- **Round 3** (no severe): a unit's own shade applies whatever the shadows' switch (off, units took about 3× the
+  guarded bounce); units' bounce takes the sun white-balanced as their direct light (decision 0027), the ground's cast
+  whole; the L7a cards (`?volume=off`) keep the old ground tint; the bounce's range documented 0..2; `?bounce=` parsed
+  strictly. Left: the bounce's ground part is constant a tree and a block (compute it once an instance, #94); the
+  block includes the whole shore code for one ground read; the bounce's snow ignores the fields' furrows
+  (`pSnowLie`).

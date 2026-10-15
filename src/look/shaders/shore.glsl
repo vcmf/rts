@@ -72,8 +72,12 @@ vec3 groundSteep(vec3 c,float ny){return mix(c,vec3(0.55,0.52,0.46),smoothstep(0
 vec3 bounceAt(vec2 xz,float y,float h,float shade){
   vec3 g=earthMix(groundSeason(groundBounce(xz)));
   g=mix(g,vec3(0.80,0.81,0.84),snowLies(vec3(0.0,1.0,0.0),vec3(xz.x,y,xz.y)));
-  float sun=mix(1.0,min(LM(vec3(xz.x,y,xz.y)).r,1.0-shade),uShadowsOn);
-  return g*uSunCol*mix(0.35,1.0,sun)*(1.0-smoothstep(0.0,8.0,h));}
+  float sun=min(mix(1.0,LM(vec3(xz.x,y,xz.y)).r,uShadowsOn),1.0-shade);   // a caster's own shade, whatever the shadows' switch
+  vec3 sunC=uSunCol;
+  #ifdef KEEP_HUE
+  sunC=mix(vec3(dot(uSunCol,vec3(0.3,0.59,0.11))),uSunCol,uUnitTint);   // units: the sun white-balanced as in their direct light (0027), the ground's own cast whole
+  #endif
+  return g*sunC*mix(0.35,1.0,sun)*(1.0-smoothstep(0.0,8.0,h));}
 // a hard painted edge, anti-aliased over about two pixels (no shimmer when the view moves): 0 below t, 1 above
 float aastep(float t,float v){
   #ifdef WATER_SAB_STEP

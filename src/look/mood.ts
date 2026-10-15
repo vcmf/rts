@@ -27,7 +27,7 @@ export interface Mood {
     chroma: number            // how much of a colour's own chroma is kept
     amt: number               // how far (0: the albedo as painted)
   }
-  bounce: number              // the ground's bounce on units and crowns (LC4: paint(), BOUNCE), 0..1
+  bounce: number              // the ground's bounce on units and crowns (LC4: paint(), BOUNCE), 0..2 (0.7 in the moods)
   units: {                    // how much of the light units take (the painter's KEEP_HUE path: the army blocks, the figures)
     tint: number              // of the sun's hue, 0..1 (its value always): the eye's white balance
     mist: number              // the valley mist's most over them (0..0.42, the ground's most)
