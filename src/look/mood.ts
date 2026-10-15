@@ -99,7 +99,7 @@ export function setMood(name: string): void {
   if (!Object.hasOwn(MOODS, name)) throw new Error(`?mood must be one of ${Object.keys(MOODS).join(', ')}, not ${name}`)
   MOOD = MOODS[name as MoodName]
 }
-// ?bounce=<0..2> on the look page: the ground's bounce tried live (LC4), on a copy of the mood
+// ?bounce=<0..2> on the look page: the ground's bounce at a strength, set on load (LC4), on a copy of the mood
 export function setBounce(v: number): void {
   if (locked) throw new Error('setBounce: the materials are made: set it before them')
   if (!(v >= 0 && v <= 2)) throw new Error(`?bounce must be 0 to 2, not ${v}`)

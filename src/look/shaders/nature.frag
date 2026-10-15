@@ -34,11 +34,10 @@ void main(){
   // grass: the macro colour under the root tints the albedo all over (it shades like its ground, docs/plans/active/
   // l5-macro.md), so a tuft on stubble sits in its ground. Trees and stones take the ground's bounce as light (LC4)
   #ifdef GRASSY
-  float bw=0.25;
+  vec3 alb=mix(roleCol(vRole,vTint),groundSeason(groundBounce(vRoot)),0.25);
   #else
-  float bw=0.0;pBounce=bounceAt(vRoot);   // the trees, the stones: lit by the ground's bounce in paint() (LC4), not tinted
+  vec3 alb=roleCol(vRole,vTint);pBounce=bounceAt(vRoot,vW.y-vH,vH);   // the trees, the stones: lit by the ground's bounce in paint() (LC4), not tinted
   #endif
-  vec3 alb=mix(roleCol(vRole,vTint),groundSeason(groundBounce(vRoot)),bw);
   #ifdef GRASSY
   float lo=groundOcc(lm);pSky=mix(1.0,lm.g,uAO);               // grass sits in the contact under a tree, as its ground does
   #else

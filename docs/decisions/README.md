@@ -41,3 +41,4 @@ recorded here on 2026-10-08.
 | [0032](0032-units-under-clouds-and-whites.md) | A near-white coat takes less of the sun's hue (open until the figures) | proposed |
 | [0033](0033-temperate-is-the-default-mood.md) | The temperate mood is the default | accepted |
 | [0034](0034-checks-re-baselined-for-the-default-mood.md) | The shimmer gate at the widest view is re-baselined for the temperate mood | accepted |
+| [0035](0035-units-take-the-bounce-hue.md) | Units take the ground's bounce at its full hue, at a share of its strength | accepted |

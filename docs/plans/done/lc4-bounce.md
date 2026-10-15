@@ -53,9 +53,26 @@ Main at b657297.
   just under: the Austrian white in the valley, 0.087 in summer and 0.099 in autumn (main 0.106 and 0.118), and the
   British red on the winter meadow, 0.099 (main 0.101). At cover, one: the Austrian white on the village ground in
   winter, 0.073 (main 0.101; the snow's bounce). The owner's call (2026-10-15): accept, recorded on #78. Crops: ok.
-- **The coat check:** ok. **`npm test`:** exit 0, 256 tests.
-- **The goldens** differ where trees are (the crowns' bounce in place of the tint): a mean difference of 1 to 2/255 a
-  region, the ground unchanged.
+- **The coat check:** ok. **`npm test`:** exit 0, 256 tests (after round 1: the soldier timing budget alone under
+  load; alone it passes).
+- **The guard after round 1:** at start two blocks under the bound, the Austrian white in the valley in summer (0.088)
+  and the British red on the winter meadow (0.098); the autumn valley white recovered. At cover the village white in
+  winter at 0.086 (from 0.073). Crops ok. All accepted on #78.
+- **The goldens** differ where trees are (the crowns' bounce in place of the tint): before review a mean difference of
+  1 to 2/255 a region; after round 1 (the bounce lit by the ground's sun, faded with height) 0.09 to 0.34/255, the
+  ground unchanged.
 - **The frame's cost:** not measured reliably. Three bench runs swung by ±1 to ±6 ms on both sides, at a load average
   of 27 to 30 from macOS's own indexing and an install (`mds`, `installd`). The term costs one cover read a tree or
-  block pixel and a few multiplies (an estimate: well under 0.1 ms). To measure on a quiet machine.
+  block pixel and a few multiplies (an estimate: well under 0.1 ms). To measure on a quiet machine: #94.
+
+## Review
+
+- **Round 1** (severe): `block.frag` lacked the derivatives extension that `shore.glsl` needs (WebGL1 would not
+  compile it). The design also changed:
+  - **The bounce is lit:** the sun's colour and the ground's own light map (a third in shadow, the sky's); before, a
+    shaded floor bounced as brightly as sunlit wheat.
+  - **It fades with height** (gone by 8 m), as the old tint did.
+  - **It whitens where snow lies** (`snowAt`), not by the season alone.
+  - **Card crowns without the volume normal take none** (their card normals would speckle it).
+  - Smaller: the trees' dead mix is gone, an empty `?bounce=` is an error, decision 0035 records the units' rule,
+    and #94 tracks the bench.
