@@ -32,16 +32,17 @@
 //   (the data's textures have no mips), in summer, and in autumn (the leaves) and winter (the ice's edges, W5b), everything drawn, the image shifted a quarter pixel a frame; within 6 px of the water's pixels, a pixel shimmers when its luma
 //   differs by over 8/255 from the previous frame resampled a quarter pixel along. Under SHIMMER_MAX per pair at the
 //   closest zoom; at the widest, where the river's outline (the painted shoreline, the banks hiding the water) is a
-//   large share of the mask, under SHIMMER_WIDE (main measured 6.3% there, the same mask and view: W4's plan). In
+//   large share of the mask, under SHIMMER_WIDE (main measured 6.3% there at W4, the same mask and view: W4's plan; re-baselined since, below). In
 //   winter, bright snow and ice make every painted edge and the grain's clusters pop more (main measures 3.3% at the
 //   closest zoom and 10.9% at the widest, the same views and mask, with W4's even ice; and on the water's own pixels,
 //   the surface eroded 2 px, 3.1% and 11.3%: W5b's plan), so there the limits are main's, rounded down: the mask
 //   under SHIMMER_WINTER and SHIMMER_WINTER_WIDE, the water's own pixels (the ice, its edges and rime, the open
 //   riffles) under SHIMMER_ICE and SHIMMER_ICE_WIDE: W5b's water must shimmer less than main's.
-//   The widest limits re-baselined for the temperate mood (decision 0033, docs/plans/done/temperate-fixes.md, the
-//   owner's call): its frame is about 7 % more contrasty, half the rise, the rest spread over the grain, the painted
-//   edges and the bloom. Main measured 3.68 to 3.84 % (summer) and 11.1 to 11.4 % (winter) there: 3.9 and 11.5; in
-//   autumn 4.11 % since the ground's stronger straw turn (docs/plans/done/ground-surface.md): 4.2
+//   The widest limits re-baselined for the temperate mood (decision 0033, the owner's call: docs/plans/done/
+//   temperate-fixes.md), so no longer main's rounded down: its frame is about 7 % more contrasty (half the rise), the
+//   rest spread over the grain, the painted edges and the bloom. Main measured 3.68 to 3.84 % in summer, 4.11 % in
+//   autumn (after the ground's straw turn) and 11.03 to 11.4 % in winter; the limits sit a run's spread above them:
+//   4.0, 4.4 and 11.8 %.
 //   Sabotage: aliased hard edges (WATER_SAB_STEP).
 // Frames are 1280×720. Exit 1 on a failure.
 import fs from 'node:fs'
@@ -60,7 +61,7 @@ const W = 1280, H = 720, CAM = SPEC.camera, BAND = SPEC.water.band, SDF = SPEC.w
 const [, A0, BETA0, R0] = CAMS.find(c => c[0] === 'start')
 const SEAM_P95 = 2, SEAM_MAX = 6, SEAM_MIN_PX = 500
 const POOL = 0.2, RIFFLE = 0.5, LUMA_GAP = 0.03, BRIGHT = 0.2, FOAM_RATIO = 2, FOAM_MIN = 0.02
-const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.039, SHIMMER_AUTUMN_WIDE = 0.042, SHIMMER_WINTER = 0.032, SHIMMER_WINTER_WIDE = 0.115, SHIMMER_ICE = 0.03, SHIMMER_ICE_WIDE = 0.11
+const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.04, SHIMMER_AUTUMN_WIDE = 0.044, SHIMMER_WINTER = 0.032, SHIMMER_WINTER_WIDE = 0.118, SHIMMER_ICE = 0.03, SHIMMER_ICE_WIDE = 0.11
 
 let C = null
 const river = () => {
@@ -211,7 +212,7 @@ function shimmer(url, dir, sab) {
   shoot(url, dir, steps, W, H)
   const lum = img => { const v = new Float32Array(W * H); for (let i = 0; i < v.length; i++) v[i] = lumaAt(img, i) * 255; return v }
   let ok = true
-  const lines = [`shimmer: the water and its shore, luma off by over ${ERR}/255 from the previous frame resampled ${STEP} px along (per pair under ${(SHIMMER_MAX * 100).toFixed(1)}% at the closest zoom, ${(SHIMMER_WIDE * 100).toFixed(1)}% at the widest; in winter ${(SHIMMER_WINTER * 100).toFixed(1)}% and ${(SHIMMER_WINTER_WIDE * 100).toFixed(1)}%, main's)`]
+  const lines = [`shimmer: the water and its shore, luma off by over ${ERR}/255 from the previous frame resampled ${STEP} px along (per pair under ${(SHIMMER_MAX * 100).toFixed(1)}% at the closest zoom, ${(SHIMMER_WIDE * 100).toFixed(1)}% at the widest (${(SHIMMER_AUTUMN_WIDE * 100).toFixed(1)}% in autumn); in winter ${(SHIMMER_WINTER * 100).toFixed(1)}% and ${(SHIMMER_WINTER_WIDE * 100).toFixed(1)}%)`]
   for (const [n, , , , , , lim, coreLim] of shimmerViews()) {
     // the water's pixels, dilated 6 px (the shore band on the terrain's side, the shore foam)
     const surf = load(dir, `${n}.surface`), rows = new Uint8Array(W * H), mask = new Uint8Array(W * H), R = 6
