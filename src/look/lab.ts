@@ -34,7 +34,7 @@ export class Lab {
   addBlocks(specs: BlockSpec[]): number {
     for (const s of specs) {
       let m = this.blockMats.get(s.color)
-      if (!m) { m = this.mats.make(`block${s.color}`, BLOCK_VS, BLOCK_FS, { uniforms: ['uAlb', 'uMask'], defines: ['#define NOSNOW', '#define KEEP_HUE'] }); m.setColor3('uAlb', Color3.FromHexString(s.color)); m.setFloat('uMask', this.mask); this.blockMats.set(s.color, m) }
+      if (!m) { m = this.mats.make(`block${s.color}`, BLOCK_VS, BLOCK_FS, { uniforms: ['uAlb', 'uMask'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE'] }); m.setColor3('uAlb', Color3.FromHexString(s.color)); m.setFloat('uMask', this.mask); this.blockMats.set(s.color, m) }
       const b = CreateBox(s.name, { width: BLOCK.w, height: BLOCK.h, depth: BLOCK.d }, this.scene)
       // on its lowest corner, so it never floats; on a slope the high side sinks into the ground
       const c = Math.cos(s.yaw), n = Math.sin(s.yaw), hw = BLOCK.w / 2, hd = BLOCK.d / 2

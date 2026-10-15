@@ -65,6 +65,9 @@ vec3 groundMeadow(vec2 xz){
 // steep ground goes stony (ny: the normal's y)
 vec3 groundSteep(vec3 c,float ny){return mix(c,vec3(0.55,0.52,0.46),smoothstep(0.80,0.62,ny)*0.5);}
 #include<macro>
+// the ground's colour under a point for the bounce (LC4): its class, through the season and the mood's earth, toward
+// white as the snow lies in winter
+vec3 bounceAt(vec2 xz){return mix(earthMix(groundSeason(groundBounce(xz))),vec3(0.86),0.8*smoothstep(2.0,3.0,uSeason));}
 // a hard painted edge, anti-aliased over about two pixels (no shimmer when the view moves): 0 below t, 1 above
 float aastep(float t,float v){
   #ifdef WATER_SAB_STEP
