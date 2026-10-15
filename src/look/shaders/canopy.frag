@@ -35,7 +35,7 @@ void main(){
   float core=1.0,shO=sh;
   #endif
   #ifdef VOLUME
-  pBounce=bounceAt(vRoot,vW.y-vH,vH);   // the ground's bounce, as light in paint() (LC4): on the crown's volume normal only
+  pBounce=bounceAt(vRoot,vW.y-vH,vH,0.0);   // the ground's bounce, as light in paint() (LC4): on the crown's volume normal only
   #endif
   vec3 alb=foliage(uFolA,uFolB,vTint,uKind)*mix(0.80,1.12,val)   // the painted value of the leaves
     *mix(vec3(1.0),vec3(0.72,0.86,0.92),step(0.5,vRole));                                                          // the inner leaves (role 1), as the pack crowns paint them

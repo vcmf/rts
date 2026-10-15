@@ -23,8 +23,9 @@ sun and the air.
 ## Consequences
 
 - Good: a coat over wheat has a warm underside, and one over meadow a green one: the owner's "tilt".
-- Bad: with the share, three blocks fall just under the bound at start and one at cover. The owner accepted them on
-  2026-10-15, and they are recorded on #78.
+- Bad: with the share, a few blocks fall just under the bound (the Austrian white in the valley and on the winter
+  village ground, the British red on the winter meadow). The owner accepted them on 2026-10-15, and the final numbers
+  are recorded on #78 and in the plan.
 - Every mood sets `units.bounce`.
 
 ## Alternatives considered

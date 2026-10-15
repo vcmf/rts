@@ -21,10 +21,9 @@ float pSnowK=1.0;   // a weight on the snow, for a surface it only partly settle
 // added to the snow's threshold where the ground holds more or less of it (the fields' furrows and ridges: snowLie in
 // src/look/shaders/macro.glsl)
 float pSnowLie=0.0;
-float snowAt(vec3 N,vec3 wp){
-  #ifdef NOSNOW
-  return 0.0;
-  #endif
+// snowLies: where snow lies, for any material (the ground's bounce reads it under a unit, LC4). snowAt: on this
+// material, none under NOSNOW (a unit carries none)
+float snowLies(vec3 N,vec3 wp){
   float s=clamp(uSeason-2.0,0.0,1.0);if(s<=0.0)return 0.0;
   // where the ground moves the threshold (pSnowLie: the fields' furrows) the snow's edge runs across open ground, and
   // there it breaks on the grain's soft blotches (G), not its per-texel noise (R), which speckles under a pixel, over a
@@ -52,7 +51,14 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
   vec3 la=mix(au*vec3(0.80,0.62,0.50),vec3(0.46,0.30,0.18),0.45);       // late autumn: browner, duller
   vec3 wi=vec3(0.34,0.29,0.24);                                         // winter: bare-looking, snow does the rest
   return uSeason<1.0?mix(summer,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);
+}float snowAt(vec3 N,vec3 wp){
+  #ifdef NOSNOW
+  return 0.0;
+  #else
+  return snowLies(N,wp);
+  #endif
 }
+
 // REAL sun shadow from the depth pass; PCF taps jittered by the paint grain,
 // so shadow edges come out brushy instead of pixel-sharp.
 uniform sampler2D uShadowMap;uniform mat4 uLightVP;uniform vec2 uSMTexel,uSMFade;uniform float uShadowsOn;

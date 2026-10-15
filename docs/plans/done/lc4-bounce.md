@@ -76,3 +76,13 @@ Main at b657297.
   - **Card crowns without the volume normal take none** (their card normals would speckle it).
   - Smaller: the trees' dead mix is gone, an empty `?bounce=` is an error, decision 0035 records the units' rule,
     and #94 tracks the bench.
+- **Round 2** (severe): blocks compile with `NOSNOW`, so their bounce never whitened on snow (`snowAt` returned 0).
+  The bounce now reads `snowLies`, the snow on the ground whatever the material. Also:
+  - **A unit's own shadow:** the ground a unit's shadow side faces is in its own shadow, which neither map holds. Its
+    bounce is the sky's (`shade` 1).
+  - **One colour per block:** the block reads its centre's ground (`vRoot`), as a tree reads its root, with no seam
+    across a class edge.
+  - Smaller: the track plan's LC4 row describes what was built, and decision 0035's consequences match the plan.
+- **After round 2:** the guard at start, the Austrian white in the valley in summer at 0.099 and the British red on
+  the winter meadow at 0.099; at cover, the village white in winter at 0.091 (the snow's bounce now on); crops ok. All
+  accepted on #78. The coat check ok; `npm test` exit 0, 256 tests.

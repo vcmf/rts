@@ -1,5 +1,5 @@
 #extension GL_OES_standard_derivatives : enable
-precision highp float;varying vec3 vW,vN;uniform vec3 uAlb;uniform float uMask;
+precision highp float;varying vec3 vW,vN;varying vec2 vRoot;uniform vec3 uAlb;uniform float uMask;
 #include<painter>
 #include<shore>
 
@@ -8,6 +8,9 @@ precision highp float;varying vec3 vW,vN;uniform vec3 uAlb;uniform float uMask;
 void main(){if(uMask>=0.0){gl_FragColor=vec4(vec3(uMask),depthA(vW));return;}
   vec3 N=normalize(vN);vec4 lm=LM(vW);
   float sh=(1.0-lm.r)*uShadowsOn;
-  pBounce=bounceAt(vW.xz,vW.y,0.0);   // the ground's bounce under the block (LC4)
+  // the ground's bounce under the block (LC4): its centre's ground, one colour a block as a tree's. The bounce lights
+  // its shadow side, which faces the ground in its own shadow (neither the light map nor the shadow map holds a unit):
+  // that ground is lit by the sky alone
+  pBounce=bounceAt(vRoot,vW.y,0.0,1.0);
   vec3 c=paint(uAlb,N,vW,1.0,0.12,0.3,sh);
   gl_FragColor=vec4(airOf(c,vW,lm,0.9),depthA(vW));}

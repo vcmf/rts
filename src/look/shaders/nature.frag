@@ -36,7 +36,7 @@ void main(){
   #ifdef GRASSY
   vec3 alb=mix(roleCol(vRole,vTint),groundSeason(groundBounce(vRoot)),0.25);
   #else
-  vec3 alb=roleCol(vRole,vTint);pBounce=bounceAt(vRoot,vW.y-vH,vH);   // the trees, the stones: lit by the ground's bounce in paint() (LC4), not tinted
+  vec3 alb=roleCol(vRole,vTint);pBounce=bounceAt(vRoot,vW.y-vH,vH,0.0);   // the trees, the stones: lit by the ground's bounce in paint() (LC4), not tinted
   #endif
   #ifdef GRASSY
   float lo=groundOcc(lm);pSky=mix(1.0,lm.g,uAO);               // grass sits in the contact under a tree, as its ground does

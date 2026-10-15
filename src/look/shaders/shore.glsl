@@ -67,11 +67,12 @@ vec3 groundSteep(vec3 c,float ny){return mix(c,vec3(0.55,0.52,0.46),smoothstep(0
 #include<macro>
 // the light the ground under a point bounces (LC4): its colour (the class, through the season and the mood's earth,
 // toward the snow's white where snow lies there: snowAt) times the light that reaches it (the sun's colour, its light
-// map's sun, a third of it in shadow: the sky's), fading with the height h above it (gone by about 8 m)
-vec3 bounceAt(vec2 xz,float y,float h){
+// map's sun, a third of it in shadow: the sky's), fading with the height h above it (gone by about 8 m). shade: the
+// caster's own shadow on that ground, for what the light map does not hold (a unit's shadow side)
+vec3 bounceAt(vec2 xz,float y,float h,float shade){
   vec3 g=earthMix(groundSeason(groundBounce(xz)));
-  g=mix(g,vec3(0.80,0.81,0.84),snowAt(vec3(0.0,1.0,0.0),vec3(xz.x,y,xz.y)));
-  float sun=mix(1.0,LM(vec3(xz.x,y,xz.y)).r,uShadowsOn);
+  g=mix(g,vec3(0.80,0.81,0.84),snowLies(vec3(0.0,1.0,0.0),vec3(xz.x,y,xz.y)));
+  float sun=mix(1.0,min(LM(vec3(xz.x,y,xz.y)).r,1.0-shade),uShadowsOn);
   return g*uSunCol*mix(0.35,1.0,sun)*(1.0-smoothstep(0.0,8.0,h));}
 // a hard painted edge, anti-aliased over about two pixels (no shimmer when the view moves): 0 below t, 1 above
 float aastep(float t,float v){
