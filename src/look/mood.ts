@@ -32,6 +32,7 @@ export interface Mood {
     tint: number              // of the sun's hue, 0..1 (its value always): the eye's white balance
     mist: number              // the valley mist's most over them (0..0.42, the ground's most)
     grade: number             // of the grade, 0..1
+    bounce: number            // of the ground's bounce (LC4), 0..1: less than the trees, so a coat keeps its value against its ground
   }
   grade: {                    // the grade (gradeOf in src/look/shaders/painter.glsl, the last step of every painted material)
     greenTint: Color3         // a green's value turned toward this
@@ -60,7 +61,7 @@ export const MOODS = {
     waterSky: c(0.62, 0.74, 0.86), glint: c(1.0, 0.86, 0.58), farRiver: c(0.40, 0.55, 0.58),
     earth: { tint: c(1, 1, 1), chroma: 1, amt: 0 },
     bounce: 0.7,
-    units: { tint: 0.4, mist: 0.08, grade: 0.2 },
+    units: { tint: 0.4, mist: 0.08, grade: 0.2, bounce: 0.35 },
     grade: {
       greenTint: c(1.03, 1.0, 0.88), greenChroma: 0.5, greenAmt: 0.85, sat: 0.9,
       splitLo: c(0.92, 0.99, 1.06), splitHi: c(1.08, 1.0, 0.85), lift: c(0.03, 0.02, 0.0),
@@ -78,7 +79,7 @@ export const MOODS = {
     waterSky: c(0.62, 0.73, 0.84), glint: c(1.0, 0.92, 0.75), farRiver: c(0.40, 0.54, 0.58),
     earth: { tint: c(1.02, 1.0, 0.94), chroma: 0.6, amt: 1 },
     bounce: 0.7,
-    units: { tint: 0.3, mist: 0.05, grade: 0.1 },
+    units: { tint: 0.3, mist: 0.05, grade: 0.1, bounce: 0.35 },
     grade: {
       greenTint: c(1.0, 1.0, 0.92), greenChroma: 0.6, greenAmt: 0.85, sat: 0.86,
       splitLo: c(0.94, 0.99, 1.05), splitHi: c(1.04, 1.0, 0.93), lift: c(0.02, 0.02, 0.015),

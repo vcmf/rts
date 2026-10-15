@@ -6,7 +6,7 @@ uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistSha
 // the grade (gradeOf, at the end of atmos), and how much of the light units take (KEEP_HUE: docs/plans/done/lc1b-coats.md)
 uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade;
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
-uniform float uUnitTint,uUnitMist,uUnitGrade;
+uniform float uUnitTint,uUnitMist,uUnitGrade,uUnitBounce;
 uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt,uBounce;   // the earth (the mood): the world toward earth tones
 uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason;
 
@@ -182,7 +182,7 @@ vec3 earthOf(vec3 a){
   return earthMix(a);
   #endif
 }
-// THE GROUND'S BOUNCE (LC4, docs/plans/active/lc4-bounce.md): the colour of the ground under the point, set by the
+// THE GROUND'S BOUNCE (LC4, docs/plans/done/lc4-bounce.md): the colour of the ground under the point, set by the
 // material before paint() (the painter reads no ground: shore.glsl's bounceAt), lighting what faces down or sideways in
 // the shadow and mid bands, by the mood's uBounce. Units take its full hue: a local cast the eye does not balance away
 vec3 pBounce=vec3(0.0);
@@ -246,6 +246,9 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
   #ifdef BOUNCE
   vec3 bc=pBounce;   // its full hue on units too: the eye balances on the main light (the sun), not on a bounce off coloured ground
+  #ifdef KEEP_HUE
+  bc*=uUnitBounce;   // units: a share of it, so a coat keeps its value against its ground (the guard)
+  #endif
   c+=alb*bc*uBounce*(0.5-0.5*N.y)*(1.0-smoothstep(0.55,1.0,t))*occ;   // from below, the sun's band left to the sun
   #endif
   c*=1.0+gr*0.38;                                                           // gouache grain in the value
