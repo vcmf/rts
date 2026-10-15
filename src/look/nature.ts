@@ -68,7 +68,7 @@ export interface Nature {
 // and logs on grass (meadow, pasture, a copse's floor); wheat on wheat; stones anywhere but roads, tracks and the
 // village; trees and the far hedgerows' bushes too. The roads and the village keep clear of the copses (a rejected
 // copse tree would shift the scatter's stream after it: the scatter's counts match main's)
-const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood], TRODDEN: readonly number[] = [COVER.road, COVER.track, COVER.village]
+const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood], TRODDEN: readonly number[] = [COVER.road, COVER.track, COVER.village, COVER.bare]
 // The point and eight points EDGE m around it must all pass: the shader paints a class edge pushed up to 1.5 m along
 // each axis by the grain (coverWarp, src/look/shaders/macro.glsl), and the bake blends it over ±1 m, so an instance
 // nearer an edge could stand on another painted class

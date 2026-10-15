@@ -30,7 +30,7 @@ describe('the authored cover', () => {
     let fields = 0
     for (let j = 0; j < g.n; j += 3) for (let i = 0; i < g.n; i += 3) {
       const x = g.x0 + (i + 0.5) * g.cell, z = g.z0 + (j + 0.5) * g.cell, c = g.tex[(j * g.n + i) * 4]
-      if (!isField(c) && c !== COVER.village) continue
+      if (!isField(c) && c !== COVER.village && c !== COVER.bare) continue
       fields++
       expect(!onFloodplain(x, z) && !inFormationZone(x, z), `class ${c} at ${x},${z}`).toBe(true)
     }

@@ -12,10 +12,11 @@ import { hash, vn } from '../noise.ts'
 import { axisX } from './author.ts'
 import { RIVER } from '../river.ts'
 
-export const COVER = { meadow: 0, pasture: 1, wood: 2, road: 3, track: 4, village: 5, wheat: 6, green: 7, stubble: 8, ploughed: 9 } as const
+export const COVER = { meadow: 0, pasture: 1, wood: 2, road: 3, track: 4, village: 5, wheat: 6, green: 7, stubble: 8, ploughed: 9, bare: 10 } as const
 export type CoverClass = typeof COVER[keyof typeof COVER]
 export const WEAR_STEP = 0.1
-export const isField = (c: number): boolean => c >= COVER.wheat
+// bare earth (docs/plans/done/ground-surface.md) is not a field: no id, no stripes, no crops
+export const isField = (c: number): boolean => c >= COVER.wheat && c <= COVER.ploughed
 
 export interface CoverGrid { n: number; cell: number; x0: number; z0: number; tex: Uint8Array }   // tex: n² cells × 4 bytes, row j at z0 + (j + ½)·cell
 
@@ -37,6 +38,9 @@ const FIELDS: { poly: Pt[]; cls: CoverClass; dir: number }[] = [
   { poly: rect(118, 132, 26, 22, -0.3), cls: COVER.stubble, dir: -0.3 },
   // a green crop on the west valley side
   { poly: rect(-222, 30, 24, 46, 1.45), cls: COVER.green, dir: 1.45 },
+  // bare earth: a trampled gateway where the track meets the fields (docs/plans/done/ground-surface.md; the map's
+  // larger bare ground comes with the default map's PR)
+  { poly: rect(44, -52, 9, 6, 0.2), cls: COVER.bare, dir: 0 },
 ]
 // a rectangle: centre, half sizes along and across its direction, the direction
 function rect(cx: number, cz: number, ha: number, hc: number, a: number): Pt[] {
@@ -98,12 +102,12 @@ export function authorCover(far: number, cell: number): CoverGrid {
     let cls: number = COVER.meadow, id = 0, dir = 0
     const fs = farStrip(x, z)
     if (fs) { cls = fs[0]; if (isField(cls)) { id = idByte(fs[1]); dir = FAR_DIR } }
-    FIELDS.forEach((f, k) => { if (inPoly(f.poly, x, z)) { cls = f.cls; id = idByte(1000 + k); dir = f.dir } })
+    FIELDS.forEach((f, k) => { if (inPoly(f.poly, x, z)) { cls = f.cls; id = isField(f.cls) ? idByte(1000 + k) : 0; dir = f.dir } })   // bare earth: no id
     let wear = Infinity
     for (const l of LINES) { const d = lineD(l.pts, x, z) - l.w / 2; if (d < 0) { cls = l.cls; id = 0 } wear = Math.min(wear, Math.max(0, d)) }
     if (inPoly(VILLAGE, x, z)) { cls = COVER.village; id = 0; wear = 0 } else wear = Math.min(wear, ringD(VILLAGE, x, z))
     // the floodplain and the formation zones keep their meadow (the zones clip the fields that touch them)
-    if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village)) { cls = COVER.meadow; id = 0 }
+    if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village || cls === COVER.bare)) { cls = COVER.meadow; id = 0 }
     tex[o] = cls; tex[o + 1] = id; tex[o + 2] = id ? Math.round(((dir % Math.PI + Math.PI) % Math.PI) / Math.PI * 255) % 256 : 0
     tex[o + 3] = Math.min(255, Math.round(Math.min(wear, WEAR_REACH) / WEAR_STEP))
   }

@@ -41,7 +41,7 @@ const W = 1280, H = 720, CAM = SPEC.camera, BOUNDARY = 24, FIELD_DE = 8, ROAD_DE
 const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.035, SHIMMER_WINTER = 0.013, FULL = 3600
 const [, A0] = CAMS.find(c => c[0] === 'start')
 // the cover's classes (src/look/world/cover.ts): grass 0–1, wood 2, road 3, track 4, village 5, fields 6–9
-const GRASS = c => c <= 1, ROAD = c => c === 3 || c === 4, FIELD = c => c >= 6 && c <= 9
+const GRASS = c => c <= 1, ROAD = c => c === 3 || c === 4, FIELD = c => c >= 6 && c <= 10   // 10: bare earth (docs/plans/done/ground-surface.md)
 const CLASS_VIEWS = [['far-fields', A0 + 0.35, 0.70, 260, [-100, 8, 150], 0], ['near-fields', A0, 0.70, 110, [90, 8, -40], 0], ['road', A0, 0.65, 110, [195, 8, -10], 0]]
 const SHIMMER_VIEWS = [['closest', A0, CAM.betaMin, CAM.rMin, [78, 8, -38], 0, SHIMMER_MAX], ['widest', A0, CAM.betaMax, CAM.rMax, [120, 8, 200], 0, SHIMMER_WIDE],
   ['closest-winter', A0, CAM.betaMin, CAM.rMin, [78, 8, -38], 3, SHIMMER_WINTER], ['widest-winter', A0, CAM.betaMax, CAM.rMax, [120, 8, 200], 3, SHIMMER_WIDE]]
