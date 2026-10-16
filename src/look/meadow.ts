@@ -32,7 +32,7 @@ const TILE_W = D.spec.tile, MAP_N = Math.round(TILE_W)   // the meadow map: 1 m 
 // (m: in from band[0] to band[1], out from band[2] to band[3]; the next ring fades in where this one fades out), and
 // its clump
 // the camera's radius over which the inner rings give way to the outer one (m): the default view is 125, the widest 260
-const WIDE: [number, number] = [150, 200], NO_WIDE = new URLSearchParams(location.search).has('nowide')   // ?nowide: the rings as before (the A/B)
+const WIDE: [number, number] = [150, 200]   // (buildMeadow's wide: false, ?nowide, keeps the rings as before: the A/B)
 export interface Ring { cell: number; n: number; spread: number; band: [number, number, number, number]; clump: 'Grass_Large' | 'Grass_Small' }
 export const RINGS: Ring[] = [
   { cell: 0.5, n: 104, spread: 1.6, band: [0, 0, 18, 25], clump: 'Grass_Large' },   // band[1] 0: no fade in
@@ -57,7 +57,7 @@ const bilerp = (at: (i: number, j: number) => number, u: number, v: number) => {
 
 // growth(x, z): how much grass grows at a point (0..1, by the cover and its edges) and its height factor; allowed(x,
 // z): the placement rule's hard edges at any point; crop(x, z): a sown field there, 0 or 1 (src/look/nature.ts)
-export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCamera, growth: (x: number, z: number) => [number, number], allowed: (x: number, z: number) => boolean, crop: (x: number, z: number) => number): Meadow {
+export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCamera, growth: (x: number, z: number) => [number, number], allowed: (x: number, z: number) => boolean, crop: (x: number, z: number) => number, wide = true): Meadow {
   const t0 = performance.now()
   // the meadow map: R the ground's height, G the growth, B the height factor (half floats, filtered by the GPU). The
   // cover's growth on its 2 m grid, each texel interpolating the cells round it (the edge follows no grid); then the
@@ -138,14 +138,14 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   }
   const clumps = { Grass_Large: indexed(src.Grass_Large), Grass_Small: indexed(src.Grass_Small) }
 
-  const meshes: Mesh[] = [], ringMats: ShaderMaterial[] = []
+  const meshes: Mesh[] = [], ringMats: ShaderMaterial[] = [], ringCounts: [number, number][] = []   // the slots: the ring's, and with the hole
   RINGS.forEach((r, ri) => {
     const m = mats.make(`meadow${ri}`, MEADOW_VS.replace('#include<meadow>', () => MEADOW_GLSL), MEADOW_FS, {
       attributes: ['position', 'normal', 'aV', 'aSlot'], uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand'], samplers: ['uMeadow', 'uGB'],
       defines: ['#define GROUND_BOUNCE', `#define MEADOW_N ${MAP_N.toFixed(1)}`, `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`, `#define MEADOW_SINK ${MEADOW_SINK.toFixed(3)}`, `#define WHEAT_HEIGHT_MAX ${WHEAT_HEIGHT_MAX.toFixed(2)}`, `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(3)}`, `#define GREEN_HEIGHT ${GREEN_HEIGHT.toFixed(3)}`],
     })
     const c = clumps[r.clump]
-    m.backFaceCulling = false; m.setTexture('uMeadow', map); m.setFloat('uCell', r.cell); m.setVector4('uBand', new Vector4(...r.band))
+    m.backFaceCulling = false; m.setTexture('uMeadow', map); m.setFloat('uCell', r.cell)
     // the footprint by the ring (its spread, against the clump's own proportions), the height the same on every ring
     m.setFloat('uSpread', r.spread * c.top / HEIGHT); m.setFloat('uHeight', HEIGHT)
     const mesh = new Mesh(`meadowGrass${ri}`, scene)   // the name keeps it out of the sun's shadow pass (src/look/bakes.ts)
@@ -154,13 +154,17 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
     // cell, so 2.2 cells of margin, the diagonal's): the corners
     // of the square and the hole the inner ring fills are left out (but not the outer ring's: zoomed out it covers
     // the hole, WIDE)
-    const sl: number[] = [], outer = ri === RINGS.length - 1
+    // (the outer ring's hole slots last: drawn only while the hole is being covered, holeFrom on)
+    const sl: number[] = [], hole: number[] = [], outer = ri === RINGS.length - 1
     for (let j = 0; j < r.n; j++) for (let i = 0; i < r.n; i++) {
       const d = Math.hypot((i + 0.5 - r.n / 2) * r.cell, (j + 0.5 - r.n / 2) * r.cell)
-      if (d <= r.band[3] + 2.2 * r.cell && (outer || r.band[1] <= 0 || d >= r.band[0] - 2.2 * r.cell)) sl.push(i, j)
+      if (d > r.band[3] + 2.2 * r.cell) continue
+      if (r.band[1] <= 0 || d >= r.band[0] - 2.2 * r.cell) sl.push(i, j)
+      else if (outer && wide) hole.push(i, j)
     }
+    ringCounts.push([sl.length / 2, (sl.length + hole.length) / 2]); sl.push(...hole)
     mesh.setVerticesBuffer(new VertexBuffer(scene.getEngine(), new Float32Array(sl), 'aSlot', false, false, 2, true))
-    mesh.forcedInstanceCount = sl.length / 2; mesh.alwaysSelectAsActiveMesh = true; mesh.isPickable = false; mesh.material = m
+    mesh.forcedInstanceCount = ringCounts[ri][0]; mesh.alwaysSelectAsActiveMesh = true; mesh.isPickable = false; mesh.material = m
     meshes.push(mesh); ringMats.push(m)
   })
   // each frame each ring snaps to its cell around the camera's focus; a material keeps the vector it is given (not a
@@ -172,11 +176,12 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   // cells, larger clumps: a clump is a few pixels there) is drawn; the clumps fade as the bands move (no pop)
   const bands = RINGS.map(r => new Vector4(...r.band)); RINGS.forEach((_, ri) => ringMats[ri].setVector4('uBand', bands[ri]))
   scene.onBeforeRenderObservable.add(() => {
-    const t = NO_WIDE ? 0 : Math.min(1, Math.max(0, (camera.radius - WIDE[0]) / (WIDE[1] - WIDE[0]))), k = 1 - t * t * (3 - 2 * t)
+    const t = wide ? Math.min(1, Math.max(0, (camera.radius - WIDE[0]) / (WIDE[1] - WIDE[0]))) : 0, k = 1 - t * t * (3 - 2 * t)
     RINGS.forEach((r, ri) => {
       const outer = ri === RINGS.length - 1, b = bands[ri]
       b.set(r.band[0] * k, r.band[1] * k, outer ? r.band[2] : r.band[2] * k, outer ? r.band[3] : r.band[3] * k)
       meshes[ri].isVisible = b.w > 0   // (visibility: the page's own switches set enabled)
+      meshes[ri].forcedInstanceCount = ringCounts[ri][t > 0 ? 1 : 0]
     })
     const f = camera.target, y = heightAt(f.x, f.z); centre.set(f.x, f.z)
     RINGS.forEach((r, ri) => { origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell); ringMats[ri].setFloat('uCentreY', y) })

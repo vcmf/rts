@@ -41,7 +41,7 @@ export interface Nature {
   // above the root, m
   trunks: [number, number, number, number][]
   // the far trees' culling (farCuller): all of them while the shadow pass bakes, those in view otherwise
-  farCull: { all(on: boolean): void; meshes: Mesh[] } | null
+  farCull: { all(on: boolean): void; off(): void } | null
   // crown and blob footprints for the light map's occlusion: x, z, r, strength, a tree's (its contact core); and the
   // sphere the sky's occlusion sees (docs/plans/done/soft-shadows.md): its centre's height above the ground, its
   // radius, its opacity
@@ -580,7 +580,7 @@ function farCuller(scene: Scene, groups: FarGroup[], cardsAll: (k: string) => bo
   const ready = () => work.every(w => w.g.meshes.every(m => !m.material || m.material.isReady(m, true)))
   // every instance on both sides, the crown unfaded (the warm-up's draw)
   const fillBoth = () => { for (const w of work) for (const side of [w.near, w.far]) { side.buf.set(w.g.buf); side.tint.set(w.g.tint); side.fade.fill(side === w.near ? 0 : 1); for (const m of side.meshes) { m.isVisible = true; m.thinInstanceCount = w.c.length / 4; m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('aTint'); if (fades(m)) m.thinInstanceBufferUpdated('aFade') } } }
-  let full = false, last = ''
+  let full = false, last = '', dead = false
   const pack = (all: boolean) => {
     const cam = scene.activeCamera!, planes = all ? [] : Frustum.GetPlanes(cam.getTransformationMatrix()), P = cam.position, A2 = (CARDS_M - FADE_M) ** 2, B2 = (CARDS_M + FADE_M) ** 2
     for (const w of work) {
@@ -603,7 +603,7 @@ function farCuller(scene: Scene, groups: FarGroup[], cardsAll: (k: string) => bo
   }
   // just before the game camera draws, its matrices brought up to date (the page moves the camera before the render)
   scene.onBeforeCameraRenderObservable.add(cam => {
-    if (cam !== scene.activeCamera) return
+    if (cam !== scene.activeCamera || dead) return
     // (WARM_MAX frames at most: a material that never readies is reported, and the culling goes on without it)
     if (warm >= 0) {
       if (full) { full = false; fillBoth() }
@@ -616,5 +616,6 @@ function farCuller(scene: Scene, groups: FarGroup[], cardsAll: (k: string) => bo
     const key = `${season()} ${cam.getTransformationMatrix().asArray().join(',')}`
     if (key !== last) { last = key; pack(false) }
   })
-  return { all(on: boolean) { if (on) { full = true; pack(true) } }, meshes: work.flatMap(w => w.g.meshes) }
+  // off: no far tree at all, its shadows included (the ?far=off A/B): every count 0, never packed again
+  return { all(on: boolean) { if (on && !dead) { full = true; pack(true) } }, off() { dead = true; for (const w of work) for (const m of w.g.meshes) { m.isVisible = false; m.thinInstanceCount = 0 } } }
 }

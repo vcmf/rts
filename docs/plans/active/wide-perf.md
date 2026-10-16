@@ -37,3 +37,9 @@ most; the anti-aliasing's target and the meadow cost more.
 - **2× MSAA** (`?msaa=2`): about 1 ms at every zoom, the owner measured about 100 fps with it alone; edges a little
   noisier: kept as a future quality preset, not the default.
 - **Captures:** the widest and start views against main: no visible change (mean 0.4 and 0.26 of 255).
+- **Review round 1** (moderate): the 8-bit target clips colours over 1 before the shoulder and the bloom (water
+  glints, rim highlights): measured at the start view, 24 pixels differ by more than 20 of 255 (glints, a stone's
+  foam), no contour bands toward the corners (the diff amplified 12×): kept, a known trade. `?far=off` now holds
+  through the season and drops the far trees' shadows too (the far woods' whole cost); the outer ring's hole slots
+  drawn only while zooming out (the default zoom no longer pays for them); `?rt16` and `?nowide` strict; the post
+  types simplified; a dead uniform set removed.

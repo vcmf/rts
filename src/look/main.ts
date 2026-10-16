@@ -60,6 +60,8 @@ const scene = new Scene(engine); scene.skipPointerMovePicking = true
 // ?soft=off: the shadows before the soft-shadow plan (docs/plans/done/soft-shadows.md); ?penumbra: metres of edge
 // radius per metre between a shadow and its caster
 const params = new URLSearchParams(location.search), softParam = params.get('soft'), penumbraParam = params.get('penumbra')
+// a switch with no value (?rt16, ?nowide): present, or present as 1; any other value throws
+const flag = (k: string): boolean => { if (!params.has(k)) return false; const v = params.get(k); if (v !== '' && v !== '1') throw new Error(`?${k} takes no value, not ${v}`); return true }
 // the light's mood (src/look/mood.ts), before any material is made
 setMood(params.get('mood') ?? 'temperate')
 if (params.has('bounce')) { const b = params.get('bounce') ?? ''; setBounce(/^\d+(\.\d+)?$/.test(b) ? Number(b) : NaN) }
@@ -129,9 +131,10 @@ const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { l
   for (const m of [terrain.terrainMat, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
 const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy, nature.cardCasters, soft, nature.trunks, nature.farCull)
+// ?far=off: no far tree, nor its shadows (built before the bakes: the far woods' whole cost; the A/B)
 if (params.has('far')) {
   if (params.get('far') !== 'off') throw new Error(`?far must be off, not ${params.get('far')}`)
-  for (const m of nature.farCull?.meshes ?? []) m.setEnabled(false)
+  nature.farCull?.off()
 }
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
@@ -151,9 +154,9 @@ if (dofParam !== null && dofParam !== '0' && dofParam !== '1') throw new Error(`
 if (dofParam !== null) S.dof = +dofParam
 else if (params.has('bench') || params.has('water') || params.get('river') === 'debug') S.dof = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
-const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, nature.growthAllowed, nature.crop) : null
+const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, nature.growthAllowed, nature.crop, !flag('nowide')) : null
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
-if (params.has('rt16')) MSAA.byte = false
+if (flag('rt16')) MSAA.byte = false
 const post = new Post(camera, engine, S, () => mats.grain, groundAt); post.build()
 
 /* ---------- UI ---------- */
