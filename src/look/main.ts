@@ -164,17 +164,20 @@ const byId = <T extends HTMLElement>(id: string): T => { const e = document.getE
 const input = (id: string) => byId<HTMLInputElement>(id)
 input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
 // the render scale (docs/plans/active/dynamic-scale.md): a fixed one from the panel, or Auto (S.res 0, the default): by
-// zoom, 1 up to AUTO_R[0] m of the camera's radius, easing to AUTO_MIN at AUTO_R[1] (the widest), in steps of
-// AUTO_STEP (each change resizes the frame's targets: a few over the whole range). The interface is HTML over the
-// canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
-const AUTO_R = [180, 260], AUTO_MIN = 0.85, AUTO_STEP = 0.05
-let scaleNow = 1
+// zoom, from the camera's radius, a level of AUTO (each change resizes the frame's targets: three over the whole range,
+// out to the SPEC's widest), changed only once the radius is AUTO_HOLD m past the level's edge (no flicker at an edge).
+// The interface is HTML over the canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
+const RMAX = D.spec.camera.rMax, AUTO: [number, number][] = [[RMAX - 60, 1], [RMAX - 47, 0.95], [RMAX - 33, 0.9], [Infinity, 0.85]], AUTO_HOLD = 4
+let scaleNow = 1, level = 0
 const applyScale = (s: number) => { if (s !== scaleNow) { scaleNow = s; engine.setHardwareScalingLevel(1 / s) } }
-byId<HTMLSelectElement>('res').onchange = () => { S.res = +byId<HTMLSelectElement>('res').value; if (S.res) applyScale(S.res) }
+byId<HTMLSelectElement>('res').onchange = () => { S.res = +byId<HTMLSelectElement>('res').value }
 scene.onBeforeRenderObservable.add(() => {
+  const sel = byId<HTMLSelectElement>('res'); if (+sel.value !== S.res) sel.value = String(S.res)   // the panel follows a scale set elsewhere (the tools)
   if (S.res) { applyScale(S.res); return }
-  const t = Math.min(1, Math.max(0, (camera.radius - AUTO_R[0]) / (AUTO_R[1] - AUTO_R[0])))
-  applyScale(Math.round((1 - (1 - AUTO_MIN) * t * t * (3 - 2 * t)) / AUTO_STEP) * AUTO_STEP)
+  const r = camera.radius
+  while (level < AUTO.length - 1 && r > AUTO[level][0] + AUTO_HOLD) level++
+  while (level > 0 && r < AUTO[level - 1][0] - AUTO_HOLD) level--
+  applyScale(AUTO[level][1])
 })
 const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
 // ?bloom=0: open with the bloom off (an A/B, docs/plans/done/frame-readout.md)

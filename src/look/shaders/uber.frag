@@ -1,4 +1,4 @@
-precision highp float;varying vec2 vUV;uniform sampler2D textureSampler,uGrain;uniform vec2 uRes;uniform float uGrainOn,uBloom,uGrade;
+precision highp float;varying vec2 vUV;uniform sampler2D textureSampler,uGrain;uniform vec2 uRes;uniform float uGrainOn,uBloom,uGrade,uRenderScale;
 // the mood's vignette (src/look/mood.ts; its grade is in the painted materials: gradeOf, painter.glsl)
 uniform vec3 uVignette,uSplitHi;uniform float uGradeSat,uTopAmt;
 vec3 shoulder(vec3 c){float m=max(c.r,max(c.g,c.b));if(m<=0.8)return c;float mm=0.8+0.2*(1.0-exp(-(m-0.8)/0.2));return c*(mm/m);}
@@ -30,6 +30,6 @@ void main(){vec3 c=base();
     c+=b*hi*0.11*uBloom*(1.0-smoothstep(0.60,1.0,vUV.y)*uTopAmt*uGrade);}
   c=shoulder(c);
   vec2 q=(vUV-0.5)*vec2(uRes.x/uRes.y,1.0);c=mix(c,c*uVignette,smoothstep(0.45,1.05,length(q))*0.55);
-  c*=1.0+(texture2D(uGrain,gl_FragCoord.xy/512.0).r-0.5)*0.06*uGrainOn;     // static paper
+  c*=1.0+(texture2D(uGrain,gl_FragCoord.xy/(512.0*uRenderScale)).r-0.5)*0.06*uGrainOn;     // static paper, fixed on the screen whatever the render scale
   c+=(h(gl_FragCoord.xy)+h(gl_FragCoord.yx+17.3)-1.0)/255.0;                 // dither against banding in mist & vignette
   gl_FragColor=vec4(c,1.0);}

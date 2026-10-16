@@ -23,7 +23,7 @@ export interface Arm { name: string; apply: () => unknown }   // apply may retur
 export interface BenchPasses { terrain: Mesh[]; scatter: Mesh[]; water: Mesh[]; post: () => PostProcess[] }
 interface Cam { name: string; alpha: number; beta: number; radius: number }
 export interface RunStats {
-  cam: string; arm: string; frames: number
+  cam: string; arm: string; size: [number, number]; frames: number   // size: the frame drawn (the render scale: Auto lowers it at the widest zoom)
   frameMs: Stat; gpuMs: Record<string, Stat | null>; passesOverFrame: number | null; drawCalls: number; triangles: number; segments: Record<string, number>
 }
 interface Stat { p50: number; p95: number; max: number; n: number }
@@ -143,7 +143,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
         // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
         const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
         const passesFit = gpuMs.frame ? +(sum / gpuMs.frame.p50).toFixed(2) : null
-        runs.push({ cam: cam.name, arm: arm.name, frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
+        runs.push({ cam: cam.name, arm: arm.name, size: [engine.getRenderWidth(), engine.getRenderHeight()], frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
       }
     }
   } finally { timing = false; seg(null); for (const u of undo) u(); inst.dispose() }

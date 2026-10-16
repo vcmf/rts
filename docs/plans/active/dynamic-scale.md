@@ -13,7 +13,9 @@ scene drawn at fewer pixels where they buy the least, the interface at full reso
 
 - **Render scale "Auto"**, the panel's new default (the fixed 0.75×, 1×, 1.5× stay): by zoom, 1 up to a camera radius
   of 180 m, easing to 0.85 at 260 m (the widest), in steps of 0.05 (each change resizes the frame's targets: three
-  over the whole range). The interface is HTML over the canvas and stays sharp.
+  over the whole range). The interface is HTML over the canvas and stays sharp. As built (review round 1): four
+  levels by the radius, 1 / 0.95 / 0.9 / 0.85 with edges 60, 47 and 33 m inside the SPEC's widest (`rMax`), each
+  changed only 4 m past its edge (no flicker); the paper grain kept to the screen's pixels at any scale.
 - **The check tools pin it to 1** (`tools/look-page.mjs`'s prep step, `tools/check-negatives.mjs`), so their pixels
   compare as before; the bench measures Auto (what a player gets).
 - Not a frame-time controller (it would oscillate and resize mid-play): a later step, with the armies.
@@ -30,3 +32,16 @@ scene drawn at fewer pixels where they buy the least, the interface at full reso
 - **The owner's screen** at the widest zoom: 108 fps at 1×, **120 at Auto** ("it achieve 120fps not bad").
 - **The scale by zoom** (the render width at 1600 px): radius 125, 180, 200 → 1; 220 → 0.95; 240 and 260 → 0.85.
 - **The widest view at Auto against 1×:** a little softer at the crowns' edges and the river's highlights.
+- **The levels** (the radius out, then back): 125, 198, 202 → 1; 206, 216 → 0.95; 230 → 0.9; 260 → 0.85; back in, 228
+  → 0.85, 222 and 212 → 0.9, 202 → 0.95, 195 → 1: each level holds 4 m past its edge.
+- **Owed to the armies** (review round 1): units at the widest zoom are a few pixels; a lower render scale costs them
+  sharpness (AGENTS.md: readable first). When units land, either their pass draws at full resolution or Auto's floor
+  becomes frame-time driven (it lowers the scale only when the frame needs it): decided with the unit work, measured.
+
+## Review
+
+- **Round 1:** the render check run alone (its header's way, without the tools' prep step) read the frame at its
+  old size once Auto shrank it at the wide view: it pins the scale itself now. The scale flipped at a level's edge
+  with nothing to hold it (each flip a resize): four levels with 4 m of hysteresis. The paper grain was sampled in
+  render pixels (coarser and jumping at each level): in screen pixels now. The bench records each run's frame size.
+  The widest from the SPEC; the panel follows a scale set elsewhere. Noted for the armies: above.
