@@ -54,7 +54,7 @@ const GB_N = 512, GB_STEP = 2.7, GB_SIGMA = 4.5
 const TRUNK_DARK = 0.85, LM_ONLY = 0x10000000
 const FAR_MAX = 40    // m along the light: the farthest caster the penumbra search reaches (a 18 m crown top at the sun's 27°)
 
-export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, canopy: Nature['canopy'], cardCasters: Nature['cardCasters'] | undefined, soft: SoftOptions, trunks: Nature['trunks'] = []): Bakes {
+export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, canopy: Nature['canopy'], cardCasters: Nature['cardCasters'] | undefined, soft: SoftOptions, trunks: Nature['trunks'] = [], farCull: Nature['farCull'] = null): Bakes {
   /* ---------- shadow pass: an orthographic camera at the sun, depth of every caster, rendered ONCE ---------- */
   const lightCam = new FreeCamera('lightCam', SUN.scale(700), scene); lightCam.setTarget(Vector3.Zero())
   let smTexel: Vector2, smFade: Vector2, sm: { w: number; h: number }, smGround: Vector2
@@ -92,6 +92,8 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
     for (const cards of cardCasters.cards) { shadowRT.renderList.push(cards); shadowRT.setMaterialForRendering(cards, lossDepth && cardCasters.lossCards.includes(cards) ? lossDepth : cardDepth) }
   }
   shadowRT.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE; shadowRT.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
+  // the far trees are culled to the view per instance (src/look/nature.ts, farCuller): every one casts while it bakes
+  if (farCull) { shadowRT.onBeforeRenderObservable.add(() => farCull.all(true)); shadowRT.onAfterRenderObservable.add(() => farCull.all(false)) }
   scene.customRenderTargets.push(shadowRT)
   lightCam.computeWorldMatrix()
   const lightVP = lightCam.getViewMatrix(true).multiply(lightCam.getProjectionMatrix(true))

@@ -6,6 +6,7 @@ import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import { Color3 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
+import { Frustum } from '@babylonjs/core/Maths/math.frustum.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
@@ -39,6 +40,8 @@ export interface Nature {
   // every drawn tree's trunk for its baked shadow (src/look/bakes.ts): root x, z, trunk radius and the crown's base
   // above the root, m
   trunks: [number, number, number, number][]
+  // the far trees' culling (farCuller): all of them while the shadow pass bakes, those in view otherwise
+  farCull: { all(on: boolean): void } | null
   // crown and blob footprints for the light map's occlusion: x, z, r, strength, a tree's (its contact core); and the
   // sphere the sky's occlusion sees (docs/plans/done/soft-shadows.md): its centre's height above the ground, its
   // radius, its opacity
@@ -125,11 +128,6 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     return m
   }
   const _m = new Matrix(), _q = new Quaternion(), _s = new Vector3(), _t = new Vector3()
-  // culled by a box round its instances, PAD m wider (a card stands out of its root's box), not always drawn
-  const boxed = (m: Mesh) => {
-    m.alwaysSelectAsActiveMesh = false; m.thinInstanceRefreshBoundingInfo(false)
-    const bi = m.getBoundingInfo(), pad = new Vector3(PAD, PAD, PAD); bi.reConstruct(bi.minimum.subtract(pad), bi.maximum.add(pad))
-  }
   function place(model: string, material: ShaderMaterial, items: Item[]): { mesh: Mesh; buf: Float32Array; tint: Float32Array } | null {
     if (!items.length) return null
     const m = buildModel(model); m.material = material; m.alwaysSelectAsActiveMesh = true
@@ -338,18 +336,19 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const swaps: ((on: boolean) => void)[] = [], cardMeshes: Mesh[] = [], packs: Mesh[] = []
   // one model's instances: the model (the pack's crowns, or under the cards its trunks, its cards and its twigs).
   // cull: culled by a box round its instances (the far woods' sectors); otherwise always drawn, as before
-  const drawGroup = (k: string, items: Item[], cull = false) => {
+  const drawGroup = (k: string, items: Item[]): { meshes: Mesh[]; buf: Float32Array; tint: Float32Array } | null => {
     const birch = /Birch|^Gen_birch/.test(k), conifer = /Pine|^Gen_(pine|spruce)/.test(k)
     const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : birch ? birchMat : conifer ? pineMat : treeMat
     const placed = place(k, material, items)
-    if (placed && cull) boxed(placed.mesh)
-    if (placed && cards && carded(k)) {
+    if (!placed) return null
+    const meshes = [placed.mesh]
+    if (cards && carded(k)) {
       const trunks = buildModel(k, true), cm = cardMesh(scene, 'cards_' + k, NATURE[k], genModels?.cardOpts(k, cards.opts) ?? cards.opts, seed++, !!gen?.clumpVolume), pack = placed.mesh
       trunks.material = material; trunks.alwaysSelectAsActiveMesh = true
       trunks.thinInstanceSetBuffer('matrix', placed.buf, 16, true); trunks.thinInstanceSetBuffer('aTint', placed.tint, 1, true)
       const loses = !!NATURE[k].deciduous && !!lossTreeCards
       placeCards(cm, (conifer && pineCards ? pineCards : loses ? (birch ? lossBirchCards : lossTreeCards) : birch ? birchCards : treeCards) as ShaderMaterial, placed.buf, placed.tint)
-      if (cull) { boxed(trunks); boxed(cm) }
+      meshes.push(trunks, cm)
       if (loses) lossCards.push(cm)
       // the twigs, as their own model beside it (drawn from TWIGS_FROM on: the bare crowns of late autumn and winter)
       const tw = NATURE[k].twigs
@@ -357,12 +356,12 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
         const tk = k + '~twigs'; NATURE[tk] ??= { ...tw, min: NATURE[k].min, max: NATURE[k].max }
         const tm = buildModel(tk); tm.material = material; tm.alwaysSelectAsActiveMesh = true
         tm.thinInstanceSetBuffer('matrix', placed.buf, 16, true); tm.thinInstanceSetBuffer('aTint', placed.tint, 1, true)
-        if (cull) boxed(tm)
-        twigMeshes.push(tm)
+        meshes.push(tm); twigMeshes.push(tm)
       }
       const show = (on: boolean) => { cm.setEnabled(on); trunks.setEnabled(on); pack.setEnabled(!on) }
       show(true); swaps.push(show); cardMeshes.push(cm); packs.push(pack)
     }
+    return { meshes, buf: placed.buf, tint: placed.tint }
   }
   for (const [k, items] of Object.entries(groups)) drawGroup(k, items)
   // the twigs: drawn with the cards (the bench's pack arm shows the whole pack model instead), from TWIGS_FROM on
@@ -379,18 +378,17 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // under the generated trees the far woods are the same trees as near (docs/plans/active/trees-perf-trunks.md): each
   // item its species' generated model, with its cards, its leaf fall and its twigs, sized so the larger of its reach
   // and its height over SIZE_H fills Bush_1's footprint at the item's scale; every other item in the hedgerows (as the
-  // bushes), every one in the woods; FAR_VARIANTS of each species' models, drawn in four quadrants round the centre,
-  // each culled by its box (a sector a model: about 70 draws in view at most)
-  const farTrees: Record<string, Item[]> = {}
+  // bushes), every one in the woods; FAR_VARIANTS of each species' models, each one mesh whose instances in view are
+  // chosen every frame the view moves (farCull)
+  const farTrees: Record<string, Item[]> = {}, farCulled: FarGroup[] = []
   if (genModels) {
-    const bySector: Record<string, Item[]> = {}
     far.forEach((b, i) => {
       if (!((i >= hedgeN || i % 2 === 0) && drawn(b))) return
       const [x, z, fs] = b, k = `Gen_${farSp[i]}_${1 + Math.floor(hash(z * 0.37, x * 0.37) * FAR_VARIANTS)}`, item = [...b] as Item
       item[2] = footprint('Bush_1', fs) / genModels.size(k)
-      ;(farTrees[k] ||= []).push(item); (bySector[`${k}|${Math.floor((Math.atan2(z, x) + Math.PI) / (Math.PI / 2)) % 4}`] ||= []).push(item)
+      ;(farTrees[k] ||= []).push(item)
     })
-    for (const [key, items] of Object.entries(bySector)) drawGroup(key.split('|')[0], items, true)
+    for (const [k, items] of Object.entries(farTrees)) { const g = drawGroup(k, items); if (g) farCulled.push({ ...g, items, r: genModels.size(k) }) }
   } else { place('Bush_1', farMat, far.filter((b, i) => i % 4 === 0 && drawn(b))); place('Bush_2', farMat, far.filter((b, i) => i % 4 === 2 && drawn(b))) }
   // the meadow's growth: where the old tufts could stand (the placement rule: the cover's grassy classes and their
   // edges, off the banks and the water, out of the formation zones); pasture grazed shorter
@@ -418,7 +416,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     if (!(r > 0) || !(base > 0) || !isFinite(base)) continue
     for (const [x, z, s] of items) trunks.push([x, z, r * s, base * s])
   }
-  return { groups, far, canopy, trunks, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, setSeason, shadowState, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs, lossCards, season: () => season } : undefined, growth, growthAllowed, crop }
+  return { groups, far, canopy, trunks, farCull: farCuller(scene, farCulled), KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, setSeason, shadowState, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs, lossCards, season: () => season } : undefined, growth, growthAllowed, crop }
 }
 
 // ?trees=gen (docs/plans/done/tree-generator.md): VARIANTS seeded models per species from prototypes/tree-core.js,
@@ -430,9 +428,8 @@ const TRUNK_TAPER = 0.6   // a trunk's radius above its root flare, over the fla
 // the far trees (their size): a height over SIZE_H counts as reach (an oak's is 1.36 its reach: a birch or a spruce
 // stands about a third taller, as near, not twice), and the hedgerow's odd oak's size over the thorns'
 const SIZE_H = 1.8, HEDGE_OAK = 1.6
-// the far trees' models a species (of GEN_VARIANTS), and the margin round each culling box, m (a card stands out of
-// its root's box)
-const FAR_VARIANTS = 2, PAD = 8
+// the far trees' models a species (of GEN_VARIANTS)
+const FAR_VARIANTS = 2
 const TWIGS_FROM = 1.4   // the season the twigs show from: just before the crowns start to thin (LEAF_LOSS.from)
 const GEN_FOR: Record<string, [species: string, share: number][]> = {
   // (no copper beech: the palette's tint already turns about 5% of crowns copper, docs/art-bible.md §4b)
@@ -507,4 +504,41 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
       return rv > rh ? { ...o, size: o.size * rh / rv } : o
     },
   }
+}
+
+// the far trees (docs/plans/active/trees-perf-trunks.md): one mesh a model for every one of its instances in the far
+// ring, which no box culls (each surrounds the tile). Every frame the view has moved, each instance is tested against
+// the view's frustum (a sphere at its crown, its size its radius: SPHERE_K of it) and the ones in view are packed
+// to the front of the meshes' buffers, whose count is set to them. all(true) draws every one (the shadow pass's bake)
+interface FarGroup { meshes: Mesh[]; buf: Float32Array; tint: Float32Array; items: Item[]; r: number }
+const SPHERE_K = 1.4
+function farCuller(scene: Scene, groups: FarGroup[]): Nature['farCull'] {
+  if (!groups.length) return null
+  const work = groups.map(g => {
+    const buf = new Float32Array(g.buf), tint = new Float32Array(g.tint)
+    for (const m of g.meshes) { m.thinInstanceSetBuffer('matrix', buf, 16, false); m.thinInstanceSetBuffer('aTint', tint, 1, false) }
+    // the sphere: the instance's place (its matrix's translation), raised by its size, the size times its scale
+    const c = g.items.map((it, i) => [g.buf[i * 16 + 12], g.buf[i * 16 + 13] + g.r * it[2] * 0.6, g.buf[i * 16 + 14], g.r * it[2] * SPHERE_K])
+    return { g, buf, tint, c }
+  })
+  let full = false, last = ''
+  const pack = (all: boolean) => {
+    const planes = all ? null : Frustum.GetPlanes(scene.activeCamera!.getTransformationMatrix())
+    for (const w of work) {
+      let n = 0
+      for (let i = 0; i < w.c.length; i++) {
+        const [x, y, z, r] = w.c[i]
+        if (planes && planes.some(p => p.normal.x * x + p.normal.y * y + p.normal.z * z + p.d < -r)) continue
+        if (n !== i) { w.buf.set(w.g.buf.subarray(i * 16, i * 16 + 16), n * 16); w.tint[n] = w.g.tint[i] }
+        n++
+      }
+      for (const m of w.g.meshes) { m.thinInstanceCount = n; m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('aTint') }
+    }
+  }
+  scene.onBeforeRenderObservable.add(() => {
+    const cam = scene.activeCamera; if (!cam || full) return
+    const key = cam.getTransformationMatrix().asArray().join(',')
+    if (key !== last) { last = key; pack(false) }
+  })
+  return { all(on: boolean) { full = on; last = ''; if (on) pack(true) } }
 }

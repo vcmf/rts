@@ -128,7 +128,7 @@ const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { l
 { const a = new Array(D.spec.water.stones * 4).fill(0); nature.stones.forEach((st, k) => a.splice(k * 4, 4, ...st))
   for (const m of [terrain.terrainMat, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
-const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy, nature.cardCasters, soft, nature.trunks)
+const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy, nature.cardCasters, soft, nature.trunks, nature.farCull)
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
 const macro = buildMacro(scene, mats, look.cover, meadowOn)
