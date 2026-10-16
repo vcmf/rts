@@ -62,7 +62,9 @@ public on Tiny Glade or Manor Lords.
 3. **The terrain:** skip reads whose weight is zero (the macro bakes read both arms, the dirt test's five cover
    reads), detail by distance, then a cached clipmap if that is not enough.
 4. **Draw the discarding meshes before the ground; no `discard` in materials that never cut** (trunks, stones).
-5. **Bloom at half resolution.**
+5. **Bloom at half resolution:** tried and dropped (2026-10-16). On the frame interval the bloom costs 0.1 to 0.3 ms
+   (`?bloom=0` against on, the bench, twice); its half-resolution pass cost as much as it saved. A timing that waits
+   on every frame (a read-back) had made it look like 1.5 ms: it serialises the GPU and inflates the last passes.
 6. **Per-clump constants in the vertex shader** (the ground under a clump's root, its snow, its bounce).
 7. **Render scale** as a dynamic floor on the min-spec laptop.
 8. **The grain's anisotropic filtering** 4 → 2 (a look change at grazing angles: an A/B for the owner).

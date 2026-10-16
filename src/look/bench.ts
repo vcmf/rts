@@ -28,7 +28,8 @@ export interface RunStats {
 }
 interface Stat { p50: number; p95: number; max: number; n: number }
 
-const q = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : NaN }
+// a quantile (the bench's and the page's frame readout, src/look/main.ts)
+export const q = (a: ArrayLike<number>, p: number): number => { const s = Array.from(a).sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : NaN }
 const MIN_FRAMES = 20
 const stat = (a: number[]): Stat => ({ p50: +q(a, 0.5).toFixed(3), p95: +q(a, 0.95).toFixed(3), max: +Math.max(...a).toFixed(3), n: a.length })
 

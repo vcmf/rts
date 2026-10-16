@@ -13,7 +13,7 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
-import { runBench, showBench } from './bench.ts'
+import { q, runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S } from './materials.ts'
 import { gradeColour, MOOD, setBounce, setGroundBounce, setMood } from './mood.ts'
@@ -156,6 +156,8 @@ const input = (id: string) => byId<HTMLInputElement>(id)
 input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
 byId<HTMLSelectElement>('res').onchange = () => { S.res = +byId<HTMLSelectElement>('res').value; engine.setHardwareScalingLevel(1 / S.res) }
 const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
+// ?bloom=0: open with the bloom off (an A/B, docs/plans/done/frame-readout.md)
+if (params.has('bloom')) { if (params.get('bloom') !== '0') throw new Error(`?bloom must be 0, not ${params.get('bloom')}`); S.bloom = 0 }
 type Toggle = typeof TOGGLES[number]
 const isToggle = (k: string | undefined): k is Toggle => (TOGGLES as readonly (string | undefined)[]).includes(k)
 // the buttons show the state (?dof and the bench's arms change it)
@@ -255,9 +257,27 @@ scene.onBeforeRenderObservable.add(() => {
     m.setFloat('uPixA', pixA)
     m.setFloat('uAO', S.ao); m.setFloat('uMist', S.mist); m.setFloat('uShafts', S.shafts); m.setFloat('uBack', S.back)
   }
-  fpsEl.textContent = engine.getFps().toFixed(0) + ' fps'
 })
-engine.runRenderLoop(() => scene.render())
+// the frame readout (top right; docs/plans/done/frame-readout.md): over the last FRAMES frames (fewer until there are
+// as many), the frame interval's median (and as fps) and its slowest 5 % (with vsync on, the display's slots), the
+// render's CPU time (the JavaScript, until the GPU's work is queued), and the share of frames that took longer than
+// one and a half of the median: frames that missed their slot (the display's rate shows as the median; a page that
+// keeps up has none, whatever the rate)
+const FRAMES = 120, iv = new Float32Array(FRAMES), cpu = new Float32Array(FRAMES)
+let fi = 0, lastT = 0, shown = 0
+engine.runRenderLoop(() => {
+  const t0 = performance.now()
+  scene.render()
+  const t1 = performance.now()
+  if (lastT) { iv[fi % FRAMES] = t0 - lastT; cpu[fi % FRAMES] = t1 - t0; fi++ }
+  lastT = t0
+  if (fi > 0 && t1 - shown > 500) {
+    shown = t1
+    const n = Math.min(fi, FRAMES), ivs = Array.from(iv.subarray(0, n)).sort((x, y) => x - y), med = ivs[n >> 1], p95 = ivs[Math.min(n - 1, Math.floor(0.95 * n))]
+    let missed = 0; for (const v of ivs) if (v > 1.5 * med) missed++
+    fpsEl.textContent = `${(1000 / med).toFixed(0)} fps · frame ${med.toFixed(1)} ms (p95 ${p95.toFixed(1)}) · cpu ${q(cpu.subarray(0, n), 0.5).toFixed(1)} ms · ${Math.round(100 * missed / n)}% missed`
+  }
+})
 addEventListener('resize', () => engine.resize())
 if (new URLSearchParams(location.search).get('river') === 'debug') {   // centre line: light = riffle, dark blue = pool
   const pts: Vector3[] = [], cols: Color4[] = [], C = RIVER
