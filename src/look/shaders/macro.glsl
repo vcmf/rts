@@ -199,9 +199,17 @@ vec4 bakeTexel(vec2 xz,float px){vec4 m=macro(xz,1.0,px);
 vec2 pMacroXZ=vec2(1e9);vec4 pMacro;
 vec4 macroOnce(vec2 xz,float px){if(xz!=pMacroXZ){pMacroXZ=xz;pMacro=macro(xz,0.0,px);}return pMacro;}
 #ifdef MACRO_BAKE
-// the tile's bake, handing over to the far ring's over the tile's last 60 m (both read always)
+// the tile's bake, handing over to the far ring's over the tile's last 60 m: each read only where it has weight (texM
+// takes its own gradients under WebGL2: safe in a branch), the same colour with one read fewer nearly everywhere
 vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
-  pMacro=mix(texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W),texM(uMacroFar,xz/FAR_W+0.5,FAR_W),smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y))));}
+  float w=smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y)));
+  #ifdef WEBGL2
+  vec4 a=w<1.0?texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W):vec4(0.0),b=w>0.0?texM(uMacroFar,xz/FAR_W+0.5,FAR_W):vec4(0.0);
+  pMacro=w<=0.0?a:w>=1.0?b:mix(a,b,w);
+  #else
+  pMacro=mix(texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W),texM(uMacroFar,xz/FAR_W+0.5,FAR_W),w);   // WebGL1: texture2D takes its gradients from the quad, so both read always
+  #endif
+  }
   return pMacro;}
 #endif
 // THE GROUND'S COLOUR the terrain and the shore band start from, by arm (every painted material has one: setArm,
