@@ -506,33 +506,37 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
   }
 }
 
-// the far trees (docs/plans/active/trees-perf-trunks.md): one mesh a model for every one of its instances in the far
-// ring, which no box culls (each surrounds the tile). Every frame the view has moved, each instance is tested against
-// the view's frustum (a sphere at its crown, its size its radius: SPHERE_K of it) and the ones in view are packed
-// to the front of the meshes' buffers, whose count is set to them. all(true) draws every one (the shadow pass's bake)
+// the far trees (docs/plans/active/trees-perf-trunks.md): for each model its meshes (meshes[0] its own crown mesh,
+// the rest its trunks, cards and twigs) hold every one of its instances in the far ring, which no box culls (each
+// surrounds the tile). Every frame the view has moved, each instance is tested against the view's frustum (a sphere
+// at its crown, SPHERE_K of its size its radius); those in view within CARDS_M of the camera go to the cards' meshes,
+// the farther ones to the crown mesh (no alpha test, a few pixels wide there), each packed to the front of its
+// buffers, whose count is set to them. all(true) draws every one with its cards (the shadow pass's bake)
 interface FarGroup { meshes: Mesh[]; buf: Float32Array; tint: Float32Array; items: Item[]; r: number }
-const SPHERE_K = 1.4
+const SPHERE_K = 1.4, CARDS_M = 220
 function farCuller(scene: Scene, groups: FarGroup[]): Nature['farCull'] {
   if (!groups.length) return null
   const work = groups.map(g => {
-    const buf = new Float32Array(g.buf), tint = new Float32Array(g.tint)
-    for (const m of g.meshes) { m.thinInstanceSetBuffer('matrix', buf, 16, false); m.thinInstanceSetBuffer('aTint', tint, 1, false) }
+    const near = { buf: new Float32Array(g.buf), tint: new Float32Array(g.tint), meshes: g.meshes.slice(1) }
+    const far = { buf: new Float32Array(g.buf), tint: new Float32Array(g.tint), meshes: g.meshes.slice(0, 1) }
+    for (const side of [near, far]) for (const m of side.meshes) { m.thinInstanceSetBuffer('matrix', side.buf, 16, false); m.thinInstanceSetBuffer('aTint', side.tint, 1, false) }
     // the sphere: the instance's place (its matrix's translation), raised by its size, the size times its scale
     const c = g.items.map((it, i) => [g.buf[i * 16 + 12], g.buf[i * 16 + 13] + g.r * it[2] * 0.6, g.buf[i * 16 + 14], g.r * it[2] * SPHERE_K])
-    return { g, buf, tint, c }
+    return { g, near, far, c }
   })
   let full = false, last = ''
   const pack = (all: boolean) => {
-    const planes = all ? null : Frustum.GetPlanes(scene.activeCamera!.getTransformationMatrix())
+    const cam = scene.activeCamera!, planes = all ? null : Frustum.GetPlanes(cam.getTransformationMatrix()), P = cam.globalPosition
     for (const w of work) {
-      let n = 0
+      let nn = 0, nf = 0
       for (let i = 0; i < w.c.length; i++) {
         const [x, y, z, r] = w.c[i]
         if (planes && planes.some(p => p.normal.x * x + p.normal.y * y + p.normal.z * z + p.d < -r)) continue
-        if (n !== i) { w.buf.set(w.g.buf.subarray(i * 16, i * 16 + 16), n * 16); w.tint[n] = w.g.tint[i] }
-        n++
+        const side = all || Math.hypot(x - P.x, y - P.y, z - P.z) < CARDS_M ? w.near : w.far, n = side === w.near ? nn++ : nf++
+        side.buf.set(w.g.buf.subarray(i * 16, i * 16 + 16), n * 16); side.tint[n] = w.g.tint[i]
       }
-      for (const m of w.g.meshes) { m.thinInstanceCount = n; m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('aTint') }
+      for (const [side, n] of [[w.near, nn], [w.far, nf]] as const) for (const m of side.meshes) { m.thinInstanceCount = n; m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('aTint') }
+      w.far.meshes[0].setEnabled(true)   // the crown mesh, which the cards' swap hides (their meshes' own switches stay: the twigs follow the season)
     }
   }
   scene.onBeforeRenderObservable.add(() => {
