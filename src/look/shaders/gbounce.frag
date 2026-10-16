@@ -3,7 +3,7 @@ precision highp float;varying vec3 vW,vN;varying float vRiver;
 #include<painter>
 #include<waterdata>
 #include<shore>
-// THE BOUNCE MAP (LC5, docs/plans/active/lc5-ground-bounce.md): rendered top-down over the tile once the light map is
+// THE BOUNCE MAP (LC5, docs/plans/done/lc5-ground-bounce.md): rendered top-down over the tile once the light map is
 // baked, and again when the season is released. At each texel the light the ground around it sends back (LC4s
 // bounceAt: its colour through the season and the earth, white where snow lies, times the sun and the light map),
 // gathered over a 7 by 7 Gaussian of GB_STEP m taps (sigma GB_SIGMA m), so a point takes the light of the ground

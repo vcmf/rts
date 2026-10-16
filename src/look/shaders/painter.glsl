@@ -193,7 +193,7 @@ vec3 earthOf(vec3 a){
 // material before paint() (the painter reads no ground: shore.glsl's bounceAt), lighting what faces down or sideways in
 // the shadow and mid bands, by the mood's uBounce. Units take its full hue: a local cast the eye does not balance away
 vec3 pBounce=vec3(0.0);
-// THE GROUND'S BOUNCE ON THE GROUND (LC5, docs/plans/active/lc5-ground-bounce.md): the bounce map here (the light the
+// THE GROUND'S BOUNCE ON THE GROUND (LC5, docs/plans/done/lc5-ground-bounce.md): the bounce map here (the light the
 // ground around sends back, src/look/bakes.ts), set by the ground before paint(), filling its cast shadows (sh) by
 // the mood's uGroundBounce: a shadow on a sunlit field takes the field's colour, a wood floor stays dark
 vec3 pGround=vec3(0.0);
