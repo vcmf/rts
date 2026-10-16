@@ -149,6 +149,7 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   groundBounce.wrapU = groundBounce.wrapV = Texture.CLAMP_ADDRESSMODE
   groundBounce.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE; scene.customRenderTargets.push(groundBounce)
   lightMap.onAfterRenderObservable.add(() => groundBounce.resetRefreshCounter())
+  mats.bindAll(m => m.setTexture('uGB', groundBounce))   // read where GROUND_BOUNCE is defined (the ground, the water's shore band, the meadow)
   return { lightCam, shadowRT, lightMap, groundBounce, bakeMat, lightVP, smTexel, sky }
 }
 

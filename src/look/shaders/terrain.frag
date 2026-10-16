@@ -7,9 +7,6 @@ precision highp float;varying vec3 vW,vN;varying float vRiver;
 #ifdef FARRING
 uniform sampler2D uRiverMask;
 #endif
-#ifdef GROUND_BOUNCE
-uniform sampler2D uGB;   // the bounce map (LC5, src/look/bakes.ts), over the tile as the light map
-#endif
 // the ground's colour: its cover's (groundAt, the macro colour's arm: macro.glsl, shared with the shore band), stony
 // where steep, the banks, the seasons. wt: the water data here (WATERDATA)
 vec3 albedo(vec3 wp,vec3 n,vec4 wt){
@@ -63,7 +60,7 @@ void main(){
   #endif
   pSnowLie=snowLie(vW.xz,pxMacro());   // the fields' furrows hold the snow (macro.glsl)
   #ifdef GROUND_BOUNCE
-  {vec4 p=uLMVP*vec4(vW,1.0);vec2 uv=p.xy/p.w*0.5+0.5;if(uv.x>0.002&&uv.y>0.002&&uv.x<0.998&&uv.y<0.998)pGround=texture2D(uGB,uv).rgb;}   // none off the tile, as LM()
+  pGround=groundBounceAt(vW);   // the bounce map (LC5)
   #endif
   vec3 c=paint(alb,N,vW,occ,0.12,1.0,sh);
   #ifdef DETAIL_DEBUG_INC

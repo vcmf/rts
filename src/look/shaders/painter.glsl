@@ -75,7 +75,8 @@ float shadowAt(vec3 wp,vec3 n){
 // map: 1, no contact). groundOcc: the occlusion of the ground and what grows flat on it, contact included
 uniform sampler2D uLM;uniform mat4 uLMVP;uniform float uAO,uMist,uShafts,uBack;
 float groundOcc(vec4 lm){return lm.g*lm.a;}
-vec4 LM(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);vec2 uv=p.xy/p.w*0.5+0.5;
+vec2 lmUV(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);return p.xy/p.w*0.5+0.5;}   // the tile's top-down maps' coordinates (the light map, the bounce map)
+vec4 LM(vec3 wp){vec2 uv=lmUV(wp);
   if(uv.x<0.002||uv.y<0.002||uv.x>0.998||uv.y>0.998)return vec4(1.0,1.0,0.0,1.0);
   return texture2D(uLM,uv);}
 // Valley mist: warm where the air is sunlit, cool where it's shadowed. Light shafts =
@@ -196,6 +197,21 @@ vec3 pBounce=vec3(0.0);
 // ground around sends back, src/look/bakes.ts), set by the ground before paint(), filling its cast shadows (sh) by
 // the mood's uGroundBounce: a shadow on a sunlit field takes the field's colour, a wood floor stays dark
 vec3 pGround=vec3(0.0);
+#ifdef GROUND_BOUNCE
+uniform sampler2D uGB;   // the bounce map (src/look/bakes.ts), over the tile as the light map
+// the bounce map at wp, fading out over the tile's last GB_EDGE of its side (about 32 m): the apron and the far ring
+// have none, so a shadow across the tile's edge does not step there
+vec3 groundBounceAt(vec3 wp){vec2 uv=lmUV(wp);float e=min(min(uv.x,uv.y),min(1.0-uv.x,1.0-uv.y));
+  return texture2D(uGB,clamp(uv,0.0,1.0)).rgb*smoothstep(0.0,0.04,e);}
+#endif
+// the fill a cast shadow takes (sh, in the band t, its occlusion occ; a third of it on snow, whose shadows stay blue)
+vec3 groundFill(vec3 alb,float sh,float t,float occ,float snow){
+  #ifdef GROUND_BOUNCE
+  return alb*pGround*uGroundBounce*sh*(1.0-smoothstep(0.55,1.0,t))*occ*mix(1.0,0.35,snow);
+  #else
+  return vec3(0.0);
+  #endif
+}
 // THE paint function. jitter: how loose the brushwork is (1 = landscape, 0.3 = crisp units).
 // sh: extra shadow from the painted shadow map (0..1).
 vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh){
@@ -261,9 +277,7 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #endif
   c+=alb*bc*uBounce*(0.5-0.5*N.y)*(1.0-smoothstep(0.55,1.0,t))*occ;   // from below, the sun's band left to the sun
   #endif
-  #ifdef GROUND_BOUNCE
-  c+=alb*pGround*uGroundBounce*sh*(1.0-smoothstep(0.55,1.0,t))*occ*mix(1.0,0.35,snow);   // in cast shadow only (a slope turned from the sun keeps its modelling), a third on snow (its shadows stay blue)
-  #endif
+  c+=groundFill(alb,sh,t,occ,snow);   // in cast shadow only: a slope turned from the sun keeps its modelling
   c*=1.0+gr*0.38;                                                           // gouache grain in the value
   #ifdef DETAIL_ON
   c*=1.0+(blot-uGrainMean.y)*0.12*jitter;                                   // the blotches in the value (renormalised round their mean)

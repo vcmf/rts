@@ -16,6 +16,9 @@ float reflAt(vec2 xz){vec2 uv=(xz+TILE_HALF)/TILE_W;if(uv.x<0.0||uv.y<0.0||uv.x>
 void main(){
   macroDerivs(vW.xz);   // before any branch (shore.glsl)
   pSnowLie=snowLie(vW.xz,pxMacro());   // the snow's lie, as the terrain's (the shore band's land side: the seam)
+  #ifdef GROUND_BOUNCE
+  pGround=groundBounceAt(vW);   // the bounce map, as the terrain's (LC5: the shore band paints as the ground does)
+  #endif
   #ifdef WATER_DEBUG
   if(uWaterView>0.5){gl_FragColor=vec4(waterView(vW.xz),1.0);return;}   // the water data's debug views
   #endif

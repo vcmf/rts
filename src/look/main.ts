@@ -129,7 +129,6 @@ const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { l
   for (const m of [terrain.terrainMat, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
 const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy, nature.cardCasters, soft)
-for (const m of [terrain.terrainMat, terrain.hillMat]) m.setTexture('uGB', bakes.groundBounce)   // the bounce map (LC5)
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
 const macro = buildMacro(scene, mats, look.cover, meadowOn)
@@ -168,8 +167,13 @@ document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => b.onclick = () 
 })
 input('gamt').oninput = () => { S.gamt = +input('gamt').value }
 const SEASONS = ['Summer', 'Early autumn', 'Late autumn', 'Winter']
-// the bounce map (LC5) reads the season: baked again when the slider is released
-input('season').addEventListener('change', () => bakes.groundBounce.resetRefreshCounter())
+// the bounce map (LC5) reads the season, the shadows' switch and the grain: baked again once they hold for a frame
+// after a change (a dragged slider rebakes when it stops), however they were set (the slider, or the checks' S.season)
+{
+  const key = () => `${S.season} ${S.shadows} ${mats.grain.uniqueId}`
+  let baked = key(), last = baked
+  scene.onBeforeRenderObservable.add(() => { const k = key(); if (k !== baked && k === last) { bakes.groundBounce.resetRefreshCounter(); baked = k } last = k })
+}
 input('season').oninput = () => { S.season = +input('season').value; byId('slabel').textContent = SEASONS[Math.min(3, Math.round(S.season))] }
 // under ?trees=gen the generated trees follow the season (twigs, thinning crowns), and on release of the slider their
 // shadows are baked again when what casts them changed. A judging aid of this page, as the grain's drop is: in the
