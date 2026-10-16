@@ -31,6 +31,8 @@ const TILE_W = D.spec.tile, MAP_N = Math.round(TILE_W)   // the meadow map: 1 m 
 // with the cell, their height does not: a clump is never taller than HEIGHT_MAX), its band of distance from the focus
 // (m: in from band[0] to band[1], out from band[2] to band[3]; the next ring fades in where this one fades out), and
 // its clump
+// the camera's radius over which the inner rings give way to the outer one (m): the default view is 125, the widest 260
+const WIDE: [number, number] = [150, 200], NO_WIDE = new URLSearchParams(location.search).has('nowide')   // ?nowide: the rings as before (the A/B)
 export interface Ring { cell: number; n: number; spread: number; band: [number, number, number, number]; clump: 'Grass_Large' | 'Grass_Small' }
 export const RINGS: Ring[] = [
   { cell: 0.5, n: 104, spread: 1.6, band: [0, 0, 18, 25], clump: 'Grass_Large' },   // band[1] 0: no fade in
@@ -150,11 +152,12 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
     mesh.setVerticesData(VertexBuffer.PositionKind, c.pos); mesh.setVerticesData(VertexBuffer.NormalKind, c.nrm); mesh.setVerticesData('aV', c.vv, false, 1); mesh.setIndices(c.idx)
     // the slots a round ring can reach (the ring snaps by up to a cell on each axis and the root jitters by up to a
     // cell, so 2.2 cells of margin, the diagonal's): the corners
-    // of the square and the hole the inner ring fills are left out
-    const sl: number[] = []
+    // of the square and the hole the inner ring fills are left out (but not the outer ring's: zoomed out it covers
+    // the hole, WIDE)
+    const sl: number[] = [], outer = ri === RINGS.length - 1
     for (let j = 0; j < r.n; j++) for (let i = 0; i < r.n; i++) {
       const d = Math.hypot((i + 0.5 - r.n / 2) * r.cell, (j + 0.5 - r.n / 2) * r.cell)
-      if (d <= r.band[3] + 2.2 * r.cell && (r.band[1] <= 0 || d >= r.band[0] - 2.2 * r.cell)) sl.push(i, j)
+      if (d <= r.band[3] + 2.2 * r.cell && (outer || r.band[1] <= 0 || d >= r.band[0] - 2.2 * r.cell)) sl.push(i, j)
     }
     mesh.setVerticesBuffer(new VertexBuffer(scene.getEngine(), new Float32Array(sl), 'aSlot', false, false, 2, true))
     mesh.forcedInstanceCount = sl.length / 2; mesh.alwaysSelectAsActiveMesh = true; mesh.isPickable = false; mesh.material = m
@@ -164,7 +167,17 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   // copy), so the vectors are set once and changed in place
   const origins = RINGS.map(() => new Vector2()), centre = new Vector2()
   RINGS.forEach((_, ri) => { ringMats[ri].setVector2('uOrigin', origins[ri]); ringMats[ri].setVector2('uCentre', centre) })
+  // zoomed out (docs/plans/active/wide-perf.md): from WIDE[0] to WIDE[1] m of the camera's radius the inner rings'
+  // bands shrink to the focus and the outer ring's grows in to it, so at the widest zoom only the outer ring (2 m
+  // cells, larger clumps: a clump is a few pixels there) is drawn; the clumps fade as the bands move (no pop)
+  const bands = RINGS.map(r => new Vector4(...r.band)); RINGS.forEach((_, ri) => ringMats[ri].setVector4('uBand', bands[ri]))
   scene.onBeforeRenderObservable.add(() => {
+    const t = NO_WIDE ? 0 : Math.min(1, Math.max(0, (camera.radius - WIDE[0]) / (WIDE[1] - WIDE[0]))), k = 1 - t * t * (3 - 2 * t)
+    RINGS.forEach((r, ri) => {
+      const outer = ri === RINGS.length - 1, b = bands[ri]
+      b.set(r.band[0] * k, r.band[1] * k, outer ? r.band[2] : r.band[2] * k, outer ? r.band[3] : r.band[3] * k)
+      meshes[ri].isVisible = b.w > 0   // (visibility: the page's own switches set enabled)
+    })
     const f = camera.target, y = heightAt(f.x, f.z); centre.set(f.x, f.z)
     RINGS.forEach((r, ri) => { origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell); ringMats[ri].setFloat('uCentreY', y) })
   })

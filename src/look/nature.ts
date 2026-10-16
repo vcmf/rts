@@ -41,7 +41,7 @@ export interface Nature {
   // above the root, m
   trunks: [number, number, number, number][]
   // the far trees' culling (farCuller): all of them while the shadow pass bakes, those in view otherwise
-  farCull: { all(on: boolean): void } | null
+  farCull: { all(on: boolean): void; meshes: Mesh[] } | null
   // crown and blob footprints for the light map's occlusion: x, z, r, strength, a tree's (its contact core); and the
   // sphere the sky's occlusion sees (docs/plans/done/soft-shadows.md): its centre's height above the ground, its
   // radius, its opacity
@@ -616,5 +616,5 @@ function farCuller(scene: Scene, groups: FarGroup[], cardsAll: (k: string) => bo
     const key = `${season()} ${cam.getTransformationMatrix().asArray().join(',')}`
     if (key !== last) { last = key; pack(false) }
   })
-  return { all(on: boolean) { if (on) { full = true; pack(true) } } }
+  return { all(on: boolean) { if (on) { full = true; pack(true) } }, meshes: work.flatMap(w => w.g.meshes) }
 }
