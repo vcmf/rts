@@ -268,7 +268,7 @@ crowns as cards.
   spruce patch on one side, birches and hawthorns on its edge), a wood of about 40 in the north-east and two dozen
   lone field trees come from their own random stream (`extras`), so the scatter's is unchanged; each passes the
   placement rule. No copper beech: the palette's tint already turns about 5% of crowns copper.
-- **The far woods** (`buildNature`'s far list, `farCuller` in `src/look/nature.ts`, docs/plans/active/trees-perf-trunks.md):
+- **The far woods** (`buildNature`'s far list, `farCuller` in `src/look/nature.ts`, docs/plans/done/trees-perf-trunks.md):
   under `?trees=gen` the far ring's hedgerows and woods (r 190 to 640 m) are the near scatter's generated trees, with
   their cards, leaf fall and twigs (`drawGroup`): two of each species' four models, each item sized so the larger of
   its reach in plan and its height over 1.8 (`SIZE_H`) is `Bush_1`'s footprint at the item's scale (an oak fills it, a

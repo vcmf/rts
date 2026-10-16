@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-16
 ---
 
@@ -85,3 +85,4 @@ Main at c5c1854. Every run's exit code. Captures in `scratch/compare/trees-every
   owner saw it too); fixed by the cross-fade and the crown mesh's light, reviewed as their own step: one trunk in the
   band, a dither offset per tree, the warm-up kept through the shadow pass with a time limit, the far card materials
   from the near ones' arguments.
+- **The owner (2026-10-16):** "yeah squash merge".

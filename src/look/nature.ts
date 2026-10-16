@@ -402,7 +402,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // the pack's bushes: the band is left out after the every-fourth choice, so every other bush stays the one the
   // prototype drew, and none on the roads or the village ground (after that choice too, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
-  // under the generated trees the far woods are the same trees as near (docs/plans/active/trees-perf-trunks.md): each
+  // under the generated trees the far woods are the same trees as near (docs/plans/done/trees-perf-trunks.md): each
   // item its species' generated model, with its cards, its leaf fall and its twigs, sized so the larger of its reach
   // and its height over SIZE_H fills Bush_1's footprint at the item's scale; every other item in the hedgerows (as the
   // bushes), every one in the woods; FAR_VARIANTS of each species' models, each one mesh whose instances in view are
@@ -522,7 +522,7 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
       return out
     },
     // a generated model's size: the larger of its reach in plan and its height over SIZE_H (a far tree's scale,
-    // docs/plans/active/trees-perf-trunks.md)
+    // docs/plans/done/trees-perf-trunks.md)
     size(k: string): number {
       let v = sizes[k]
       if (v === undefined) v = sizes[k] = Math.max(reach(NATURE[k]), NATURE[k].max[1] / SIZE_H)
@@ -539,7 +539,7 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
   }
 }
 
-// the far trees (docs/plans/active/trees-perf-trunks.md): for each model its meshes (meshes[0] its own crown mesh,
+// the far trees (docs/plans/done/trees-perf-trunks.md): for each model its meshes (meshes[0] its own crown mesh,
 // the rest its trunks, cards and twigs) hold every one of its instances in the far ring, which no box culls (each
 // surrounds the tile). Just before the game camera draws, when its view or the season has changed, each instance is
 // tested against the view's frustum (a sphere at its crown, SPHERE_K of its size and SPHERE_PAD m its radius: it

@@ -142,7 +142,7 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   const lightMap = new RenderTargetTexture('lightmap', LM_N, scene, false, true, Constants.TEXTURETYPE_UNSIGNED_BYTE, false, Texture.BILINEAR_SAMPLINGMODE)
   lightMap.activeCamera = lmCam; lightMap.clearColor = new Color4(1, 1, 0, 1); lightMap.renderList = [terrains[0]]; lightMap.setMaterialForRendering(terrains[0], bakeMat)
   lightMap.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE; scene.customRenderTargets.push(lightMap)
-  // the trunks' shadows (docs/plans/active/trees-perf-trunks.md): a trunk is thinner than two of the shadow map's
+  // the trunks' shadows (docs/plans/done/trees-perf-trunks.md): a trunk is thinner than two of the shadow map's
   // texels and the soft filter washed it out, so each is drawn into the light map's sun after the terrain, as a quad
   // on the ground from its root away from the sun to where its crown's shadow starts, multiplied in
   const trunkMesh = trunkShadows(scene, trunks)

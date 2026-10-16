@@ -7,7 +7,7 @@ last_reviewed: 2026-10-16
 
 Research notes, October 2026. The owner (2026-10-16): 60 fps is the hard target, 120 fps a soft one, "without
 compromising much". Two passes: a reading of our own code and a headless count of its draws, and a survey of the
-published techniques. What was built from them is in `docs/plans/active/trees-perf-trunks.md`.
+published techniques. What was built from them is in `docs/plans/done/trees-perf-trunks.md`.
 
 ## 1. Measure the frame interval, not only the GPU timer
 
