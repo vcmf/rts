@@ -190,8 +190,9 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh,vec2 ia){
   pSnowK=1.0-smoothstep(0.0,0.05,dd);
   // the ground at the water's edge shows through to 0.3 m (painted only there, past it by the derivatives' margin)
   vec3 la=vec3(0.0);if(dd<0.3+1.5*fwidth(dd))la=landAlbedo(wp.xz,0.0,0.0);
+  vec3 pg=pGround;pGround*=pSnowK;   // nor the ground's bounce (LC5): the bed under the water takes none
   vec3 bed=paint(bedAlbedo(wp.xz,dd,sp,la),bankNormal(vec3(0.0,1.0,0.0),wp.xz),wp,occ,0.12,1.0,sh);
-  pSnowK=1.0;
+  pSnowK=1.0;pGround=pg;
   // 2. absorption, red first; the painted ramp (shallow green-ochre, turquoise, deep teal) in bands broken by the grain
   float dn=dd*(1.0+0.35*(G(wp.xz/5.0).g-0.5)*uGrainAmt);
   vec3 T=exp(-vec3(3.0,1.5,1.1)*dn);

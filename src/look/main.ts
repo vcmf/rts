@@ -168,11 +168,15 @@ document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => b.onclick = () 
 input('gamt').oninput = () => { S.gamt = +input('gamt').value }
 const SEASONS = ['Summer', 'Early autumn', 'Late autumn', 'Winter']
 // the bounce map (LC5) reads the season, the shadows' switch and the grain: baked again once they hold for a frame
-// after a change (a dragged slider rebakes when it stops), however they were set (the slider, or the checks' S.season)
+// after a change, however they were set (the checks set S.season), but not while the season slider is held (it bakes
+// when released). A bake for any other reason (the light map's) records what it was baked for, so none runs twice
 {
   const key = () => `${S.season} ${S.shadows} ${mats.grain.uniqueId}`
-  let baked = key(), last = baked
-  scene.onBeforeRenderObservable.add(() => { const k = key(); if (k !== baked && k === last) { bakes.groundBounce.resetRefreshCounter(); baked = k } last = k })
+  let baked = key(), last = baked, held = false
+  input('season').addEventListener('pointerdown', () => { held = true })
+  input('season').addEventListener('change', () => { held = false }); window.addEventListener('pointerup', () => { held = false })   // released without a change too
+  bakes.groundBounce.onAfterRenderObservable.add(() => { baked = key() })
+  scene.onBeforeRenderObservable.add(() => { const k = key(); if (k !== baked && k === last && !held) bakes.groundBounce.resetRefreshCounter(); last = k })
 }
 input('season').oninput = () => { S.season = +input('season').value; byId('slabel').textContent = SEASONS[Math.min(3, Math.round(S.season))] }
 // under ?trees=gen the generated trees follow the season (twigs, thinning crowns), and on release of the slider their

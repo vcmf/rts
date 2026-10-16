@@ -199,10 +199,11 @@ vec3 pBounce=vec3(0.0);
 vec3 pGround=vec3(0.0);
 #ifdef GROUND_BOUNCE
 uniform sampler2D uGB;   // the bounce map (src/look/bakes.ts), over the tile as the light map
-// the bounce map at wp, fading out over the tile's last GB_EDGE of its side (about 32 m): the apron and the far ring
+#define GB_EDGE (32.0/TILE_W)   // the bounce map's fade at the tile's edge: 32 m, as a share of the tile's side
+// the bounce map at wp, fading out over the tile's last GB_EDGE of its side: the apron and the far ring
 // have none, so a shadow across the tile's edge does not step there
 vec3 groundBounceAt(vec3 wp){vec2 uv=lmUV(wp);float e=min(min(uv.x,uv.y),min(1.0-uv.x,1.0-uv.y));
-  return texture2D(uGB,clamp(uv,0.0,1.0)).rgb*smoothstep(0.0,0.04,e);}
+  return texture2D(uGB,clamp(uv,0.0,1.0)).rgb*smoothstep(0.0,GB_EDGE,e);}
 #endif
 // the fill a cast shadow takes (sh, in the band t, its occlusion occ; a third of it on snow, whose shadows stay blue)
 vec3 groundFill(vec3 alb,float sh,float t,float occ,float snow){
