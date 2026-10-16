@@ -37,23 +37,36 @@ pack's `Bush_1` and `Bush_2` crowns, in one flat green (`farMat`).
 
 ## Results
 
-Main at cc56fca. Every run's exit code.
+Main at cc56fca. Every run's exit code. After review round 1 (the numbers of the first cut are in the round's notes
+below).
 
 - **The look** (captures at the wide and far-edge views, summer, autumn and winter, against main): the woods read as
-  woods of the generated species, the spruce woods stay green in autumn, no crown floats. The first cut drew every
-  other wood item, as the bushes were: the generated trees stand apart where the bushes massed, so the woods looked
-  thin; every wood item is drawn now (the hedgerows keep every other one). In winter the far broadleaves keep their
-  snow-capped crowns, as the bushes did, while the near ones go bare: issue #98.
+  woods of the generated species, the spruce woods stay green in autumn, no crown floats (a trunk from the root and a
+  limb to each clump). Every wood item is drawn: drawn every other, as the bushes were, the generated trees stood
+  apart where the bushes massed and the woods looked thin; the hedgerows keep every other one. Each model is sized so
+  the larger of its reach and its height over 1.8 fills `Bush_1`'s footprint: an oak (height 1.36 its reach) fills it,
+  a birch or a spruce stands about a third taller and narrower; the hedgerow's odd oak stands 1.6 times the thorns'
+  size where that fits (its item scaled, so the far list's footprint is what is drawn). In winter the far broadleaves
+  keep their snow-capped crowns, as the bushes did, while the near ones go bare: issue #98.
 - **The frame's cost** (`tools/bench-look.mjs`, Metal, 1920×1080, the l2 arm's GPU frame median averaged over the
-  three yaws, twice each side, interleaved, a load average of 6 to 11 with the owner's apps running): main 8.50 and
-  8.83 ms default, 13.70 and 13.55 widest, 6.44 and 6.64 close; this branch 8.80 and 8.60, 13.96 and 13.52, 6.65 and
-  6.49. The difference (-0.23 to +0.30 ms) is inside the runs' spread. Triangles drawn 1,210,268 to 1,370,316
-  (+160k), draws 103 to 107.
-- **The guard** against main, the default, cover and crops views, summer, autumn and winter: exit 0 each.
-- **`tools/check-negatives.mjs`:** exit 0 (the river check on the real scene passes, its far items' footprint
-  unchanged). **`tools/macro-check.mjs`:** exit 0.
+  three yaws, twice each side, interleaved, a load average of 4 to 8): main 8.54 and 8.56 ms default, 13.41 and 13.81
+  widest, 6.39 and 6.47 close; this branch 8.40 and 8.48, 13.25 and 13.43, 6.45 and 6.51. The difference (-0.38 to
+  +0.12 ms) is inside the runs' spread. Triangles drawn 1,210,268 to 1,407,804 (+198k), draws 103 to 107.
+- **The guard** against main, the default view, summer, autumn and winter: exit 0 (and before round 1, the default,
+  cover and crops views: exit 0 each).
+- **`tools/check-negatives.mjs`:** exit 0; its real-scene river case is `tools/river-check.js` on the default page
+  (passes: the far items' footprint is what is drawn). **`tools/macro-check.mjs`** (before round 1): exit 0.
 - **The goldens** against main: start, the yaws, close, river and winter identical; wide (11 of 16 regions) and
   far-edge (15 of 16) differ: the far ring, the expected change.
-- **`npm test`:** 255 of 256 under a load of 13 to 16; the one failure was the sim's timing budget
-  (`test/soldiers.test.ts`, 16.3 ms against 12), which passes alone (exit 0, 12 tests). **`node tools/check-docs.mjs`:**
+- **`npm test`:** exit 0, 256 tests (a load average under 6; at 13 to 17 the sim's timing budgets in
+  `test/soldiers.test.ts` and `test/formations.test.ts` fail, as before this branch). **`node tools/check-docs.mjs`:**
   exit 0.
+
+## Review
+
+- **Round 1** (treated as severe: the look): every species was sized to the same reach, so the hedgerow's oak could
+  not be told from the thorns and the woods' oaks stood half the birches' height; the trunk joined only the lowest
+  clump, from a foot off the pivot, so other clumps could float; birch trunks were brown. Fixed as above, with the
+  species' own lump on the generator's smooth noise and the model cache keyed by size. The first cut measured
+  -0.23 to +0.30 ms, +160k triangles. Kept: the once-subdivided icosphere is its own copy in `nature.ts` (the
+  generator subdivides twice; its icosphere is not exported, and the far crowns are built from its clumps alone).
