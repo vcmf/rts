@@ -26,9 +26,9 @@ stand-ins the camera can come within reach of (they read as plain blobs up close
   from its root away from the sun to its crown's base: crisp at the root, softening along it, fading where the
   crown's shadow starts. Baked: nothing a frame.
 - **Toward 120 fps:** the research (`docs/research/frame-rate-120.md`); A/Bs of its cheapest items, kept where they
-  pay without a visible change: the grain's anisotropic filtering (`?aniso`), the ground drawn after the other opaque
-  meshes (`?order=terrainlast`). The bench reports the frame interval beside the GPU timer (the timer over-reports on
-  this Mac).
+  pay without a visible change. As built: the grain's anisotropic filtering (4 to 2 or 1) and the ground drawn after
+  the other opaque meshes were tried and dropped (results); one of the two macro bakes is read only where it has
+  weight (the same pixels). Judged by the frame interval beside the GPU timer (the timer over-reports on this Mac).
 - Docs: `docs/systems/look.md`, the track plan (L7's table, the frame targets), the research note.
 
 ## Acceptance
