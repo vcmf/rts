@@ -11,7 +11,7 @@
 // spills onto the land, nothing covers it).
 (() => {
   const C = RIVER, cam = __proto.camera, gl = engine._gl, out = {}, fail = []
-  __proto.S.res = 1; scene.render()   // the render scale pinned to 1: the page's Auto would resize the frame at the wide views
+  const res0 = __proto.S.res; __proto.S.res = 1; scene.render()   // the render scale pinned to 1 (Auto would resize the frame at the wide views), put back at the end
   const W = engine.getRenderWidth(true), Hh = engine.getRenderHeight(true)   // true: the screen, not the last bound render target
   const water = scene.getMeshByName('water'), blank = new B.DynamicTexture('blankMask', 4, scene, false)
   blank.getContext().fillRect(0, 0, 4, 4); blank.update(false)                // black: no river line
@@ -94,5 +94,6 @@
   if (!views.some(v => out[v.name]?.bankN >= 20)) fail.push('no view tested the banks')
   if (!views.some(v => out[v.name]?.farN >= 20)) fail.push('no view tested the far-ring line')
   if (fail.length) console.error('render-check FAILED: ' + fail.join(', '))
+  __proto.S.res = res0
   return JSON.stringify(out)
 })()
