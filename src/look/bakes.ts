@@ -93,7 +93,7 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   }
   shadowRT.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE; shadowRT.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
   // the far trees are culled to the view per instance (src/look/nature.ts, farCuller): every one casts while it bakes
-  if (farCull) { shadowRT.onBeforeRenderObservable.add(() => farCull.all(true)); shadowRT.onAfterRenderObservable.add(() => farCull.all(false)) }
+  if (farCull) shadowRT.onBeforeRenderObservable.add(() => farCull.all(true))   // undone by the game camera's next draw
   scene.customRenderTargets.push(shadowRT)
   lightCam.computeWorldMatrix()
   const lightVP = lightCam.getViewMatrix(true).multiply(lightCam.getProjectionMatrix(true))
