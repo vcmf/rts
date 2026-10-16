@@ -43,5 +43,10 @@ void main(){
   #endif
   vec3 mid=alb*mix(uMidCool,uSunCol,0.30),lt=alb*uSunCol*1.16+uLitLift;
   vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
-  c=cloudShade(c,cloud(vW),snowAt(vec3(0.0,1.0,0.0),vec3(vRoot.x,vW.y,vRoot.y)));   // the shade of the ground under the root, snowed or not
+  float rs=snowAt(vec3(0.0,1.0,0.0),vec3(vRoot.x,vW.y,vRoot.y));
+  #ifdef GROUND_BOUNCE
+  pGround=groundBounceAt(vec3(vRoot.x,vW.y,vRoot.y));   // the fill of the ground's cast shadows (LC5), at the root as the ground under it
+  #endif
+  c+=groundFill(alb,sh,t,occ,rs);
+  c=cloudShade(c,cloud(vW),rs);   // the shade of the ground under the root, snowed or not
   gl_FragColor=vec4(airOf(c,vW,lm,vH),depthA(vW));}

@@ -59,6 +59,9 @@ void main(){
   alb=mix(alb,uFarRiver,smoothstep(0.3,0.6,rm));   // the water mid tone after its sky tint, so the line matches the river at the tile edge
   #endif
   pSnowLie=snowLie(vW.xz,pxMacro());   // the fields' furrows hold the snow (macro.glsl)
+  #ifdef GROUND_BOUNCE
+  pGround=groundBounceAt(vW);   // the bounce map (LC5)
+  #endif
   vec3 c=paint(alb,N,vW,occ,0.12,1.0,sh);
   #ifdef DETAIL_DEBUG_INC
   // the checks' incidence view: |cos| in red; the biplanar major plane's weight in green; in blue, where the bank

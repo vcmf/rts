@@ -24,12 +24,14 @@ import TER_VS from './shaders/terrain.vert?raw'
 import DEPTH_VS from './shaders/depth.vert?raw'
 import DEPTH_FS from './shaders/depth.frag?raw'
 import BAKE_FS from './shaders/bake.frag?raw'
+import GB_FS from './shaders/gbounce.frag?raw'
 import CARD_DEPTH_VS from './shaders/canopy-depth.vert?raw'
 import CARD_DEPTH_FS from './shaders/canopy-depth.frag?raw'
 import { withCards } from './canopy.ts'
 
 // sky: the sky's occlusion's time on load and the occlusion's range after it (null with the soft shadows off)
-export interface Bakes { lightCam: FreeCamera; shadowRT: RenderTargetTexture; lightMap: RenderTargetTexture; bakeMat: ShaderMaterial; lightVP: Matrix; smTexel: Vector2; sky: SkyBake | null }
+// groundBounce: the bounce map (LC5), rebaked after the light map and when the season is released (src/look/main.ts)
+export interface Bakes { lightCam: FreeCamera; shadowRT: RenderTargetTexture; lightMap: RenderTargetTexture; groundBounce: RenderTargetTexture; bakeMat: ShaderMaterial; lightVP: Matrix; smTexel: Vector2; sky: SkyBake | null }
 export interface SkyBake { ms: number; min: number; mean: number }
 
 const TILE_W = D.spec.tile, AO_N = D.spec.sizes.aoTex, LM_N = D.spec.sizes.lightMap, LZ0 = D.spec.depth.near, LZ1 = D.spec.depth.far, SM_FADE_M = D.spec.shadowFade
@@ -43,6 +45,8 @@ export const PENUMBRA_MAX = 0.2   // past it the search's 16 taps spread too thi
 export const softDefines = (soft: SoftOptions): string[] => soft.on ? ['#define SKY_IN_SHADOW'] : []
 const SKY_REACH = 25   // m: a sphere farther than this hides too little sky to count
 const INSIDE = 0.42   // the most sky one sphere hides, times its opacity (0.29 for a crown: the old disc was 0.42)
+// the bounce map (LC5): texels a side over the tile (1.6 m), and its gather's tap spacing and Gaussian sigma, m
+const GB_N = 512, GB_STEP = 2.7, GB_SIGMA = 4.5
 const FAR_MAX = 40    // m along the light: the farthest caster the penumbra search reaches (a 18 m crown top at the sun's 27°)
 
 export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, canopy: Nature['canopy'], cardCasters: Nature['cardCasters'] | undefined, soft: SoftOptions): Bakes {
@@ -136,7 +140,17 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   lmCam.computeWorldMatrix()
   const lmVP = lmCam.getViewMatrix(true).multiply(lmCam.getProjectionMatrix(true))
   mats.bindAll(m => { m.setTexture('uLM', lightMap); m.setMatrix('uLMVP', lmVP) })
-  return { lightCam, shadowRT, lightMap, bakeMat, lightVP, smTexel, sky }
+
+  /* ---------- the bounce map (LC5, docs/plans/active/lc5-ground-bounce.md): the light the ground around each point
+     sends back, top-down over the tile with the light map's camera, after it (it reads the light map) ---------- */
+  const gbMat = mats.make('gbounce', TER_VS, GB_FS, { attributes: ['position', 'normal', 'aRiver'], defines: [`#define GB_STEP ${GB_STEP.toFixed(2)}`, `#define GB_SIGMA ${GB_SIGMA.toFixed(2)}`] })
+  const groundBounce = new RenderTargetTexture('groundBounce', GB_N, scene, false, true, Constants.TEXTURETYPE_UNSIGNED_BYTE, false, Texture.BILINEAR_SAMPLINGMODE)
+  groundBounce.activeCamera = lmCam; groundBounce.clearColor = new Color4(0, 0, 0, 1); groundBounce.renderList = [terrains[0]]; groundBounce.setMaterialForRendering(terrains[0], gbMat)
+  groundBounce.wrapU = groundBounce.wrapV = Texture.CLAMP_ADDRESSMODE
+  groundBounce.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE; scene.customRenderTargets.push(groundBounce)
+  lightMap.onAfterRenderObservable.add(() => groundBounce.resetRefreshCounter())
+  mats.bindAll(m => m.setTexture('uGB', groundBounce))   // read where GROUND_BOUNCE is defined (the ground, the water's shore band, the meadow)
+  return { lightCam, shadowRT, lightMap, groundBounce, bakeMat, lightVP, smTexel, sky }
 }
 
 // The sky's occlusion (docs/plans/done/soft-shadows.md, B): the ground at each texel of the occlusion texture sees

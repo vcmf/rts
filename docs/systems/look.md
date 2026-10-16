@@ -156,6 +156,20 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   the mood's `bounce`. Trees and stones (`nature.frag`), the crowns (`canopy.frag`) and the army blocks (`block.frag`)
   take it; the trees' old 15 % albedo tint toward the ground is gone. Units take its full hue (a local cast the eye
   does not balance away) at `units.bounce` of its strength. `?bounce=<0..2>` tries a strength.
+- **The ground's bounce on the ground** (LC5, `docs/plans/done/lc5-ground-bounce.md`): the bounce map
+  (`groundBounce` in `src/look/bakes.ts`, `gbounce.frag`), 512 texels a side over the tile (about 1.6 m, 1 MB),
+  rendered top-down with the light map's camera after it, and again whenever the season, the shadows' switch or the
+  grain change and then hold for a frame (`src/look/main.ts`: a dragged slider rebakes when it stops; the checks set
+  `S.season` directly): at each texel `bounceAt` gathered over a 7 by 7 Gaussian (taps 2.7 m apart, sigma 4.5 m, the
+  fields' snow lie at each), the light the ground around sends back, its own the most. Read where `GROUND_BOUNCE` is
+  defined (`groundBounceAt`, `groundFill` in `painter.glsl`): the tile's and the hill's terrain, the water's shore
+  band (so it paints as the ground beside it) and the meadow's clumps (at their root): `alb × the map × the mood's
+  groundBounce × the cast shadow × occ`, out of the sun's band, a third of it on snow so its shadows stay blue,
+  fading out over the tile's last 32 m (the apron has none). A
+  crown's shadow on a sunlit field takes the field's colour; a slope turned from the sun is not lit by it (it kept the
+  hill's modelling), nor a wood's floor (its neighbours are in shadow). The far ring has none (the light map does not
+  cover it). `?gbounce=<0..2>` sets the strength (0: off, the same frame as without). The bake: about 7 ms on the M1
+  Pro's GPU (Metal), about 1 s under SwiftShader; `window.__look.gbBakeMs()` measures it.
 - **The scatter follows the cover:** grass, flowers, plants, bushes, stumps and logs on grass; wheat on wheat;
   nothing on roads, tracks or village ground; the point and eight points 2.5 m around it must all pass (the painted
   edges wander that far). A tree or a stone within that reach of a field or bare earth is placed but not drawn
