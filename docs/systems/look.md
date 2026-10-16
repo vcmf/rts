@@ -254,12 +254,14 @@ crowns as cards.
   spruce patch on one side, birches and hawthorns on its edge), a wood of about 40 in the north-east and two dozen
   lone field trees come from their own random stream (`extras`), so the scatter's is unchanged; each passes the
   placement rule. No copper beech: the palette's tint already turns about 5% of crowns copper.
-- **The far woods** (`farModel` in `addGenerated`, docs/plans/active/far-woods-gen.md): under `?trees=gen` the far
+- **The far woods** (`farModel` in `addGenerated`, docs/plans/done/far-woods-gen.md): under `?trees=gen` the far
   ring's hedgerows and woods (r 190 to 640 m) are low-detail generated crowns, not the pack's bushes: each species'
   first model's clumps as once-subdivided icospheres (80 triangles a clump, the near crowns' flatter undersides, a
-  little lumpy) on a four-sided trunk to the lowest clump, about 250 to 500 triangles a model, sized so its reach in
-  plan is `Bush_1`'s at the item's scale (the placement rule's footprint). The hedgerows are mostly hawthorn with the
-  odd oak, every other item as the bushes were; the woods every item, oak, beech, lime and birch, about one wood in
+  lumpy by the species' own lump) on a four-sided trunk from the root to the lowest clump and a limb from there to each
+  other clump, about 250 to 530 triangles a model, sized so the larger of its reach in plan and its height over 1.8
+  (`SIZE_H`) is `Bush_1`'s footprint at the item's scale: an oak fills it, a birch or a spruce stands taller and
+  narrower, and none reaches past the placement rule's footprint. The hedgerows are mostly hawthorn with the
+  odd oak (1.6 times their size where that fits, its item scaled), every other item as the bushes were; the woods every item, oak, beech, lime and birch, about one wood in
   four mostly spruce. Birch and spruce take their own far colours, so a spruce wood stays green in autumn. In winter
   the far broadleaves keep their crowns (snow-capped), as the bushes did; the near ones go bare.
 - **One volume per clump** (`cardMesh(…, clumpVolume)` in `src/look/canopy.ts`): each card carries the ellipsoid of

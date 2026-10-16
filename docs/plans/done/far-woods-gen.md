@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-16
 ---
 
@@ -13,13 +13,14 @@ pack's `Bush_1` and `Bush_2` crowns, in one flat green (`farMat`).
 
 - Under `?trees=gen` (the default), the far items are drawn as **low-detail generated crowns**: each species' first
   generated model, its clumps as once-subdivided icospheres (80 triangles a clump, against 320 near) with the near
-  crowns' flatter undersides and a little lumpiness, and a short four-sided trunk up to the lowest clump. About 250 to
-  500 triangles a model, as the bushes (268 and 364).
+  crowns' flatter undersides and a little lumpiness, and a short four-sided trunk up to the lowest clump (round 1:
+  and a limb to each other clump). About 250 to 530 triangles a model, against the bushes' 268 and 364.
 - **Species:** the hedgerows mostly hawthorn with the odd oak; the woods oak, beech, lime and birch, and about one wood
   in four mostly spruce. Birch and spruce take their own far colours (the near birch and pine colours, the far rim),
   so a spruce wood stays green in autumn as the near pines do.
 - **The same items:** the far list, its filter (every other item, none in the apron band or on trodden ground), its
-  positions, yaws and tints are unchanged. Each model is sized so its reach in plan is `Bush_1`'s at the item's scale:
+  positions, yaws and tints are unchanged (as built: every wood item is drawn, and the hedgerow's odd oak is scaled
+  up where it fits; see the results). Each model is sized so its reach in plan is `Bush_1`'s at the item's scale:
   the placement rule (`footprint('Bush_1', s)`) and the river check stay true. Birches and spruces stand taller for
   their reach, as they do near.
 - `?trees=pack` and the other values keep the bushes. The near scatter's pack bushes, stumps and logs are not trees
@@ -70,3 +71,9 @@ below).
   species' own lump on the generator's smooth noise and the model cache keyed by size. The first cut measured
   -0.23 to +0.30 ms, +160k triangles. Kept: the once-subdivided icosphere is its own copy in `nature.ts` (the
   generator subdivides twice; its icosphere is not exported, and the far crowns are built from its clumps alone).
+- **Round 2** (moderate and light: the last round): the limbs' section now lies across their axis (it was flat in
+  plan, so a level limb was a ribbon); the sizing height includes the lump; the bark comes from the species' `birch`
+  flag; a missing generated model throws instead of being grown unscaled; the docs' geometry and triangle count are
+  fixed. The winter mismatch is labelled a known issue (#98). Kept: the parallel species list (`farSp`), filled at
+  each push. After round 2: `tools/check-negatives.mjs` exit 0; the goldens as above (only wide and far-edge differ);
+  `npx tsc`, eslint and `node tools/check-docs.mjs` exit 0.
