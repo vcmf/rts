@@ -75,6 +75,8 @@ float shadowAt(vec3 wp,vec3 n){
 // map: 1, no contact). groundOcc: the occlusion of the ground and what grows flat on it, contact included
 uniform sampler2D uLM;uniform mat4 uLMVP;uniform float uAO,uMist,uShafts,uBack;
 float groundOcc(vec4 lm){return lm.g*lm.a;}
+// a screen-door threshold in 0..1 (interleaved gradient noise): two draws cut by it at f and 1 - f share every pixel
+float dither(vec2 fc){return fract(52.9829189*fract(dot(fc,vec2(0.06711056,0.00583715))));}
 vec2 lmUV(vec3 wp){vec4 p=uLMVP*vec4(wp,1.0);return p.xy/p.w*0.5+0.5;}   // the tile's top-down maps' coordinates (the light map, the bounce map)
 vec4 LM(vec3 wp){vec2 uv=lmUV(wp);
   if(uv.x<0.002||uv.y<0.002||uv.x>0.998||uv.y>0.998)return vec4(1.0,1.0,0.0,1.0);
@@ -193,7 +195,7 @@ vec3 earthOf(vec3 a){
 // material before paint() (the painter reads no ground: shore.glsl's bounceAt), lighting what faces down or sideways in
 // the shadow and mid bands, by the mood's uBounce. Units take its full hue: a local cast the eye does not balance away
 vec3 pBounce=vec3(0.0);
-// THE GROUND'S BOUNCE ON THE GROUND (LC5, docs/plans/active/lc5-ground-bounce.md): the bounce map here (the light the
+// THE GROUND'S BOUNCE ON THE GROUND (LC5, docs/plans/done/lc5-ground-bounce.md): the bounce map here (the light the
 // ground around sends back, src/look/bakes.ts), set by the ground before paint(), filling its cast shadows (sh) by
 // the mood's uGroundBounce: a shadow on a sunlit field takes the field's colour, a wood floor stays dark
 vec3 pGround=vec3(0.0);

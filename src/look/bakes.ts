@@ -14,6 +14,7 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import { Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Matrix } from '@babylonjs/core/Maths/math.vector.js'
+import { Mesh as MeshCtor } from '@babylonjs/core/Meshes/mesh.js'
 import type { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { SUN, type Materials } from './materials.ts'
@@ -25,6 +26,8 @@ import DEPTH_VS from './shaders/depth.vert?raw'
 import DEPTH_FS from './shaders/depth.frag?raw'
 import BAKE_FS from './shaders/bake.frag?raw'
 import GB_FS from './shaders/gbounce.frag?raw'
+import TRUNK_VS from './shaders/trunkshadow.vert?raw'
+import TRUNK_FS from './shaders/trunkshadow.frag?raw'
 import CARD_DEPTH_VS from './shaders/canopy-depth.vert?raw'
 import CARD_DEPTH_FS from './shaders/canopy-depth.frag?raw'
 import { withCards } from './canopy.ts'
@@ -47,9 +50,11 @@ const SKY_REACH = 25   // m: a sphere farther than this hides too little sky to 
 const INSIDE = 0.42   // the most sky one sphere hides, times its opacity (0.29 for a crown: the old disc was 0.42)
 // the bounce map (LC5): texels a side over the tile (1.6 m), and its gather's tap spacing and Gaussian sigma, m
 const GB_N = 512, GB_STEP = 2.7, GB_SIGMA = 4.5
+// the trunks' baked shadows: how dark at full strength (times the sun), and a layer no camera of the game sees
+const TRUNK_DARK = 0.85, LM_ONLY = 0x10000000
 const FAR_MAX = 40    // m along the light: the farthest caster the penumbra search reaches (a 18 m crown top at the sun's 27°)
 
-export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, canopy: Nature['canopy'], cardCasters: Nature['cardCasters'] | undefined, soft: SoftOptions): Bakes {
+export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, canopy: Nature['canopy'], cardCasters: Nature['cardCasters'] | undefined, soft: SoftOptions, trunks: Nature['trunks'] = [], farCull: Nature['farCull'] = null): Bakes {
   /* ---------- shadow pass: an orthographic camera at the sun, depth of every caster, rendered ONCE ---------- */
   const lightCam = new FreeCamera('lightCam', SUN.scale(700), scene); lightCam.setTarget(Vector3.Zero())
   let smTexel: Vector2, smFade: Vector2, sm: { w: number; h: number }, smGround: Vector2
@@ -87,6 +92,8 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
     for (const cards of cardCasters.cards) { shadowRT.renderList.push(cards); shadowRT.setMaterialForRendering(cards, lossDepth && cardCasters.lossCards.includes(cards) ? lossDepth : cardDepth) }
   }
   shadowRT.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE; shadowRT.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE)
+  // the far trees are culled to the view per instance (src/look/nature.ts, farCuller): every one casts while it bakes
+  if (farCull) shadowRT.onBeforeRenderObservable.add(() => farCull.all(true))   // undone by the game camera's next draw
   scene.customRenderTargets.push(shadowRT)
   lightCam.computeWorldMatrix()
   const lightVP = lightCam.getViewMatrix(true).multiply(lightCam.getProjectionMatrix(true))
@@ -135,13 +142,23 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   const lightMap = new RenderTargetTexture('lightmap', LM_N, scene, false, true, Constants.TEXTURETYPE_UNSIGNED_BYTE, false, Texture.BILINEAR_SAMPLINGMODE)
   lightMap.activeCamera = lmCam; lightMap.clearColor = new Color4(1, 1, 0, 1); lightMap.renderList = [terrains[0]]; lightMap.setMaterialForRendering(terrains[0], bakeMat)
   lightMap.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE; scene.customRenderTargets.push(lightMap)
+  // the trunks' shadows (docs/plans/done/trees-perf-trunks.md): a trunk is thinner than two of the shadow map's
+  // texels and the soft filter washed it out, so each is drawn into the light map's sun after the terrain, as a quad
+  // on the ground from its root away from the sun to where its crown's shadow starts, multiplied in
+  const trunkMesh = trunkShadows(scene, trunks)
+  if (trunkMesh) {
+    const tm = new ShaderMaterial('trunkShadow', scene, { vertexSource: TRUNK_VS, fragmentSource: TRUNK_FS }, { attributes: ['position', 'aUV'], uniforms: ['viewProjection'], needAlphaBlending: true, defines: [`#define TRUNK_DARK ${TRUNK_DARK.toFixed(2)}`] })
+    tm.alphaMode = Constants.ALPHA_MULTIPLY; tm.disableDepthWrite = true; tm.depthFunction = Constants.ALWAYS; tm.backFaceCulling = false
+    trunkMesh.material = tm; trunkMesh.renderingGroupId = 1; trunkMesh.layerMask = LM_ONLY   // hidden from the game camera; the light map draws its render list whatever the mask
+    lightMap.renderList.push(trunkMesh)
+  }
   // the bake must see a COMPLETE shadow map: re-bake every time the shadow pass actually renders
   shadowRT.onAfterRenderObservable.add(() => lightMap.resetRefreshCounter())
   lmCam.computeWorldMatrix()
   const lmVP = lmCam.getViewMatrix(true).multiply(lmCam.getProjectionMatrix(true))
   mats.bindAll(m => { m.setTexture('uLM', lightMap); m.setMatrix('uLMVP', lmVP) })
 
-  /* ---------- the bounce map (LC5, docs/plans/active/lc5-ground-bounce.md): the light the ground around each point
+  /* ---------- the bounce map (LC5, docs/plans/done/lc5-ground-bounce.md): the light the ground around each point
      sends back, top-down over the tile with the light map's camera, after it (it reads the light map) ---------- */
   const gbMat = mats.make('gbounce', TER_VS, GB_FS, { attributes: ['position', 'normal', 'aRiver'], defines: [`#define GB_STEP ${GB_STEP.toFixed(2)}`, `#define GB_SIGMA ${GB_SIGMA.toFixed(2)}`] })
   const groundBounce = new RenderTargetTexture('groundBounce', GB_N, scene, false, true, Constants.TEXTURETYPE_UNSIGNED_BYTE, false, Texture.BILINEAR_SAMPLINGMODE)
@@ -179,4 +196,20 @@ function skyOcclusion(g: CanvasRenderingContext2D, canopy: Nature['canopy']): Sk
   for (let k = 0; k < vis.length; k++) { d[k * 4 + 1] = Math.round(d[k * 4 + 1] * vis[k]); lo = Math.min(lo, d[k * 4 + 1] / 255); sum += d[k * 4 + 1] / 255 }
   g.putImageData(img, 0, 0)
   return { ms: performance.now() - t0, min: lo, mean: sum / vis.length }
+}
+
+// the trunks' shadow quads (on the ground, a little above it: the light map's camera looks straight down), one mesh
+function trunkShadows(scene: Scene, trunks: Nature['trunks']): Mesh | null {
+  if (!trunks.length) return null
+  const g = Math.hypot(SUN.x, SUN.z), dx = -SUN.x / g, dz = -SUN.z / g, px = -dz, pz = dx, along = g / SUN.y
+  const pos: number[] = [], uv: number[] = [], idx: number[] = []
+  for (const [x, z, r, base] of trunks) {
+    const L = base * along, y = heightAt(x, z) + 0.5, i = pos.length / 3
+    for (const [u, v] of [[-1, 0], [1, 0], [1, 1], [-1, 1]]) { pos.push(x + px * r * u + dx * (L * v - r * (1 - v)), y, z + pz * r * u + dz * (L * v - r * (1 - v))); uv.push(u, v) }
+    idx.push(i, i + 1, i + 2, i, i + 2, i + 3)
+  }
+  const m = new MeshCtor('trunkShadows', scene)
+  m.setVerticesData(VertexBuffer.PositionKind, pos); m.setVerticesData('aUV', uv, false, 2); m.setIndices(idx)
+  m.isPickable = false; m.alwaysSelectAsActiveMesh = true
+  return m
 }

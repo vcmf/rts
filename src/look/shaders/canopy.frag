@@ -1,10 +1,13 @@
 #extension GL_OES_standard_derivatives : enable
-precision highp float;varying vec3 vW,vN,vS;varying float vTint,vOcc,vH,vRole;varying vec2 vRoot,vUV;varying vec3 vEllC,vEllR,vTU,vTV;varying float vDrop;uniform vec3 uFolA,uFolB;uniform float uRim,uKind,uLeafSize;uniform sampler2D uLeaf;
+precision highp float;varying vec3 vW,vN,vS;varying float vTint,vOcc,vH,vRole;varying vec2 vRoot,vUV;varying vec3 vEllC,vEllR,vTU,vTV;varying float vDrop,vFade;uniform vec3 uFolA,uFolB;uniform float uRim,uKind,uLeafSize;uniform sampler2D uLeaf;
 #include<cards>
 #include<painter>
 #include<shore>
 
 void main(){
+  #ifdef FAR_FADE
+  if(dither(gl_FragCoord.xy+vTint*61.0)<vFade)discard;   // the cards give way to the crown mesh, pixel by pixel (its pixels are the others)
+  #endif
   #ifdef LEAF_LOSS
   if(vDrop<leafLoss(uSeason))discard;
   #endif

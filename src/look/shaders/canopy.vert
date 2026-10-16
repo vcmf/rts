@@ -7,11 +7,15 @@ uniform float uSeason;
 
 #ifdef INSTANCES
 attribute float aTint;
+#ifdef FAR_FADE
+attribute float aFade;   // a far tree's fade to its crown mesh (src/look/nature.ts, farCuller)
+#endif
 #endif
 #include<cards>
 varying vec3 vW,vN,vS;varying float vTint,vOcc,vH,vRole;varying vec2 vRoot,vUV;
 varying vec3 vEllC,vEllR,vTU,vTV;   // L7b: the crown ellipsoid in the world, the card texture axes in the world
 varying float vDrop;                 // LEAF_LOSS: the card's draw (cards.glsl)
+varying float vFade;                 // FAR_FADE: 0 all cards, 1 all crown mesh
 void main(){
   #include<instancesVertex>
   vec4 c=finalWorld*vec4(position,1.0);
@@ -32,4 +36,8 @@ void main(){
   #ifdef INSTANCES
   t=aTint;
   #endif
-  vTint=t;gl_Position=viewProjection*vec4(w,1.0);}
+  vTint=t;vFade=0.0;
+  #if defined(INSTANCES)&&defined(FAR_FADE)
+  vFade=aFade;
+  #endif
+  gl_Position=viewProjection*vec4(w,1.0);}

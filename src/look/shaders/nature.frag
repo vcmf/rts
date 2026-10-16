@@ -1,5 +1,8 @@
 #extension GL_OES_standard_derivatives : enable
 precision highp float;varying vec3 vW,vN;varying float vRole,vTint,vOcc,vH;varying vec2 vRoot;uniform vec3 uFolA,uFolB;uniform float uRim,uKind;
+#ifdef FAR_CROWN
+varying vec3 vEllC,vEllR;varying float vFade;
+#endif
 #include<painter>
 #include<shore>
 
@@ -19,10 +22,30 @@ vec3 roleCol(float r,float t){
 void main(){
   vec3 N=normalize(vN);
   vec4 lm=LM(vW);
+  #ifdef FAR_CROWN
+  // the dither's share first (the cards draw the rest, the instance's tint offsetting the pattern so trees do not share
+  // it); the bark only past the band, where no trunks mesh draws it
+  if(vRole<1.5?dither(gl_FragCoord.xy+vTint*61.0)>=vFade:vFade<1.0)discard;
+  #endif
   #ifdef GRASSY
   float sh=(1.0-lm.r)*uShadowsOn;
+  #elif defined(FAR_CROWN)
+  float sh=vRole<1.5?0.0:shadowAt(vW,N);   // the crown's own: below
   #else
   float sh=shadowAt(vW,N);
+  #endif
+  float core=1.0,shO=sh;
+  #ifdef FAR_CROWN
+  // a far tree's crown mesh lit as its cards are (canopy.frag, VOLUME: docs/plans/done/l7b-crown-volume.md): the
+  // ellipsoid's normal, the crown's own shade along the sun, a darker core; and cut by the dither where its cards
+  // still stand (their fade)
+  if(vRole<1.5){
+    vec3 q=(vW-vEllC)/vEllR;N=normalize(q/vEllR);
+    vec3 qo=(vW-vEllC)/(vEllR*1.3),dq=uSunDir/(vEllR*1.3);float qa=dot(dq,dq),qb=dot(qo,dq),qc=dot(qo,qo)-1.0,disc=qb*qb-qa*qc;
+    float sq=sqrt(max(disc,0.0)),t1=(-qb-sq)/qa,t2=(-qb+sq)/qa,tt=disc>0.0?max(0.0,t2-max(t1,0.0)):0.0;
+    shO=shadowAt(vW+uSunDir*max(t2,0.0),uSunDir);sh=max((1.0-exp(-tt*0.75/max(vEllR.x,vEllR.y)))*0.7,shO);
+    core=mix(0.72,1.0,smoothstep(0.25,0.95,length(q)));
+  }
   #endif
   #ifndef GRASSY
   if(vRole<1.5&&uEdges>0.5){                                   // painted silhouette: crowns break up like dabs
@@ -43,12 +66,17 @@ void main(){
   #else
   float lo=lm.g;
   #endif
-  vec3 c=paint(alb,N,vW,vOcc*mix(1.0,lo,uAO*0.6),uRim,1.0,sh);
+  vec3 c=paint(alb,N,vW,core*vOcc*mix(1.0,lo,uAO*0.6),uRim,1.0,sh);
   #ifndef GRASSY
   if(vRole<1.5){                                                // golden backlight: crowns glow when the sun is behind them
     vec3 V=normalize(uCamPos-vW);
     float back=clamp(dot(-normalize(V.xz+1e-4),normalize(uSunDir.xz)),0.0,1.0);back*=back;
     float edge=smoothstep(0.35,0.75,(1.0-abs(dot(N,V)))+(grainW(vW,N,2.4).r-0.5)*0.25);
-    c+=uSunCol*uBackCol*back*edge*uBack*0.55*(1.0-sh);}
+    #ifdef FAR_CROWN
+    c+=uSunCol*uBackCol*back*edge*uBack*0.3*(1.0-shO);   // as the cards' glow
+    #else
+    c+=uSunCol*uBackCol*back*edge*uBack*0.55*(1.0-sh);
+    #endif
+  }
   #endif
   gl_FragColor=vec4(airOf(c,vW,lm,vH),depthA(vW));}

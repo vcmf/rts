@@ -6,6 +6,7 @@ import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import { Color3 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
+import { Frustum } from '@babylonjs/core/Maths/math.frustum.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
@@ -29,13 +30,18 @@ import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture
 // [horizontal, vertical] radii), its twigs as their own mesh, and whether it loses its leaves
 export interface NatureModel { pos: number[]; idx: number[]; role: number[]; min: number[]; max: number[]; clump?: number[]; clumps?: { c: number[]; r: number[] }[]; twigs?: { pos: number[]; idx: number[]; role: number[] }; deciduous?: boolean }
 // the tree generator (prototypes/tree-core.js): a species and a seed to a pack-shaped model, divided by unit
-interface TreeGen { natureModel(key: string, seed: number, unit: number): NatureModel; SPECIES: Record<string, { lump: number; birch?: boolean }>; vnoise(x: number, y: number, z: number): number }
+interface TreeGen { natureModel(key: string, seed: number, unit: number): NatureModel }
 declare global { interface Window { NATURE?: Record<string, NatureModel>; TREEGEN?: TreeGen } }
 
 export type Item = [x: number, z: number, scale: number, yaw: number, tint: number, dy?: number]
 
 export interface Nature {
   groups: Record<string, Item[]>; far: Item[]
+  // every drawn tree's trunk for its baked shadow (src/look/bakes.ts): root x, z, trunk radius and the crown's base
+  // above the root, m
+  trunks: [number, number, number, number][]
+  // the far trees' culling (farCuller): all of them while the shadow pass bakes, those in view otherwise
+  farCull: { all(on: boolean): void } | null
   // crown and blob footprints for the light map's occlusion: x, z, r, strength, a tree's (its contact core); and the
   // sphere the sky's occlusion sees (docs/plans/done/soft-shadows.md): its centre's height above the ground, its
   // radius, its opacity
@@ -94,8 +100,9 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   if (!NATURE) throw new Error('the nature pack data is missing: run node tools/obj-to-js.mjs')
   const genModels = gen ? addGenerated(NATURE) : null
 
-  const natMat = (name: string, folA: string, folB: string, { rim = 0.8, grassy = false, kind = grassy ? 2 : 0 }: { rim?: number; grassy?: boolean; kind?: number } = {}): ShaderMaterial => {
-    const m = mats.make(name, NAT_VS, NAT_FS, { attributes: ['position', 'normal', 'aRole', 'aCrown', 'aTint'], uniforms: ['uFolA', 'uFolB', 'uRim', 'uKind'], samplers: [], defines: grassy ? ['#define GRASSY'] : ['#define BOUNCE'] })
+  // farCrown: a far tree's crown mesh, lit as its cards and faded with them (farCuller)
+  const natMat = (name: string, folA: string, folB: string, { rim = 0.8, grassy = false, kind = grassy ? 2 : 0, farCrown = false }: { rim?: number; grassy?: boolean; kind?: number; farCrown?: boolean } = {}): ShaderMaterial => {
+    const m = mats.make(name, NAT_VS, NAT_FS, { attributes: ['position', 'normal', 'aRole', 'aCrown', 'aTint', ...(farCrown ? ['aEllC', 'aEllR', 'aFade'] : [])], uniforms: ['uFolA', 'uFolB', 'uRim', 'uKind'], samplers: [], defines: grassy ? ['#define GRASSY'] : ['#define BOUNCE', ...(farCrown ? ['#define FAR_CROWN', '#define SOFT_RAMP'] : [])] })
     m.setColor3('uFolA', Color3.FromHexString(folA)); m.setColor3('uFolB', Color3.FromHexString(folB)); m.setFloat('uRim', rim); m.setFloat('uKind', kind); return m
   }
   const treeMat = natMat('trees', '#4a7330', '#97a043', { rim: 0.9 })
@@ -108,7 +115,8 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
 
   const FLIP = true   // OBJ winding is opposite to Babylon's default
   // trunk: only the triangles off the crown (role 2 and up), for the cards arm, whose crowns are cards
-  function buildModel(name: string, trunk = false): Mesh {
+  // ell: each crown vertex its clump's ellipsoid (a far tree's crown mesh, FAR_CROWN)
+  function buildModel(name: string, trunk = false, ell = false): Mesh {
     const d = NATURE![name], m = new Mesh(trunk ? 'trunks_' + name : name, scene)
     const idx = FLIP ? d.idx.slice().reverse() : d.idx
     const nrm: number[] = []; VertexData.ComputeNormals(d.pos, idx, nrm)
@@ -119,12 +127,18 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     if (!n) { cx = 0; cy = d.max[1] * 0.6; cz = 0; n = 1 }
     const cr = new Float32Array(d.role.length * 3); for (let i = 0; i < d.role.length; i++) { cr[i * 3] = cx / n; cr[i * 3 + 1] = cy / n; cr[i * 3 + 2] = cz / n }
     m.setVerticesData('aCrown', cr, false, 3)
+    // a generated crown's clump ellipsoids, per vertex (a far tree's crown mesh is lit by them: FAR_CROWN)
+    if (ell && d.clump && d.clumps) {
+      const ec = new Float32Array(d.role.length * 3), er = new Float32Array(d.role.length * 2)
+      for (let v = 0; v < d.clump.length; v++) { const q = d.clumps[d.clump[v]]; ec.set(q.c, v * 3); er[v * 2] = q.r[0]; er[v * 2 + 1] = q.r[1] }
+      m.setVerticesData('aEllC', ec, false, 3); m.setVerticesData('aEllR', er, false, 2)
+    }
     return m
   }
   const _m = new Matrix(), _q = new Quaternion(), _s = new Vector3(), _t = new Vector3()
-  function place(model: string, material: ShaderMaterial, items: Item[]): { mesh: Mesh; buf: Float32Array; tint: Float32Array } | null {
+  function place(model: string, material: ShaderMaterial, items: Item[], ell = false): { mesh: Mesh; buf: Float32Array; tint: Float32Array } | null {
     if (!items.length) return null
-    const m = buildModel(model); m.material = material; m.alwaysSelectAsActiveMesh = true
+    const m = buildModel(model, false, ell); m.material = material; m.alwaysSelectAsActiveMesh = true
     const buf = new Float32Array(items.length * 16), tint = new Float32Array(items.length)
     items.forEach(([x, z, s, yaw, t, dy = 0], i) => { _t.set(x, H(x, z) + dy, z); Quaternion.RotationYawPitchRollToRef(yaw, 0, 0, _q); _s.set(s, s, s); Matrix.ComposeToRef(_s, _q, _t, _m); _m.copyToArray(buf, i * 16); tint[i] = t })
     m.thinInstanceSetBuffer('matrix', buf, 16, true); m.thinInstanceSetBuffer('aTint', tint, 1, true)
@@ -257,7 +271,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // under the meadow the fields grow from the meadow's slots (src/look/meadow.ts, docs/plans/done/l5d-crops.md):
   // no pack wheat tufts
   // far woods and hedgerows, never in the apron band, whose ground only the apron mesh knows: the pack's bush crowns,
-  // or under the generated trees each item's species' far stand-in (farModel)
+  // or under the generated trees each item's species' generated tree (drawGroup, farCuller)
   // farSp: each far item's species under the generated trees (docs/plans/done/far-woods-gen.md): the hedgerows
   // mostly hawthorn with the odd oak, the woods broadleaf, about one in four mostly spruce
   const far: Item[] = [], farSp: string[] = [], inBand = (x: number, z: number) => { const m = Math.max(Math.abs(x), Math.abs(z)); return m > D.spec.tile / 2 && m < D.band }
@@ -317,40 +331,66 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // under cards, a carded model is drawn as its trunk triangles (the trunks_ mesh) and its cards, which take the
   // crowns' palette; both cast into the sun's shadow pass (src/look/bakes.ts), the whole pack model is disabled
   const carded = (k: string) => !!cards && /^(CommonTree|BirchTree|Willow|Gen)_/.test(k)
-  const treeCards = cards && cardMaterial(mats, 'treeCards', '#4a7330', '#97a043', 0.45, cards.leaf, cards.opts.volume), birchCards = cards && cardMaterial(mats, 'birchCards', '#7a9a3c', '#bcae55', 0.45, cards.leaf, cards.opts.volume)
+  // a card material, and (farCardsOf) its far trees' twin from the same arguments: faded into their crown meshes
+  const cardArgs = new Map<ShaderMaterial, [string, string, string, number, boolean, number]>()
+  const cardMat = (name: string, a: string, b: string, rim: number, thins = false, kind = 0): ShaderMaterial | null => {
+    if (!cards) return null
+    const m = cardMaterial(mats, name, a, b, rim, cards.leaf, cards.opts.volume, thins); m.setFloat('uKind', kind); cardArgs.set(m, [name, a, b, rim, thins, kind]); return m
+  }
+  const treeCards = cardMat('treeCards', '#4a7330', '#97a043', 0.45), birchCards = cardMat('birchCards', '#7a9a3c', '#bcae55', 0.45)
   // generated conifers are carded too, in the pines' palette and kind (they stay green)
-  const pineCards = cards && genModels && cardMaterial(mats, 'pineCards', '#2f5a36', '#4f7a3e', 0.4, cards.leaf, cards.opts.volume)
-  if (pineCards) pineCards.setFloat('uKind', 1)
+  const pineCards = genModels && cardMat('pineCards', '#2f5a36', '#4f7a3e', 0.4, false, 1)
   // generated deciduous crowns thin with the season (src/look/shaders/cards.glsl)
-  const lossTreeCards = cards && genModels && cardMaterial(mats, 'treeCardsLoss', '#4a7330', '#97a043', 0.45, cards.leaf, cards.opts.volume, true)
-  const lossBirchCards = cards && genModels && cardMaterial(mats, 'birchCardsLoss', '#7a9a3c', '#bcae55', 0.45, cards.leaf, cards.opts.volume, true)
+  const lossTreeCards = genModels && cardMat('treeCardsLoss', '#4a7330', '#97a043', 0.45, true)
+  const lossBirchCards = genModels && cardMat('birchCardsLoss', '#7a9a3c', '#bcae55', 0.45, true)
+  // the far trees' (farCuller): their cards faded by a dither into their crown meshes, lit as the cards (with the
+  // cards' volume light only: without it the crown mesh keeps the pack's light, as the cards keep L7a's)
+  const farCards = new Map<ShaderMaterial, ShaderMaterial>()
+  const farCardsOf = (m: ShaderMaterial): ShaderMaterial => {
+    let f = farCards.get(m); const args = cardArgs.get(m)
+    if (!f && cards && args) {
+      const [name, a, b, rim, thins, kind] = args
+      f = cardMaterial(mats, name + 'Far', a, b, rim, cards.leaf, cards.opts.volume, thins, true); f.setFloat('uKind', kind); farCards.set(m, f)
+    }
+    return f ?? m
+  }
+  const farCrowns = genModels && cards && cards.opts.volume ? { tree: natMat('treesFar', '#4a7330', '#97a043', { rim: 0.45, farCrown: true }), birch: natMat('birchFar', '#7a9a3c', '#bcae55', { rim: 0.45, farCrown: true }), pine: natMat('pinesFar', '#2f5a36', '#4f7a3e', { rim: 0.4, kind: 1, farCrown: true }) } : null
   let season = gen?.season ?? 0
   const twigMeshes: Mesh[] = [], lossCards: Mesh[] = []
   let seed = 1
   const swaps: ((on: boolean) => void)[] = [], cardMeshes: Mesh[] = [], packs: Mesh[] = []
-  for (const [k, items] of Object.entries(groups)) {
+  // one model's instances: the model (the pack's crowns, or under the cards its trunks, its cards and its twigs)
+  // far: a far tree's (farCuller draws its crown mesh past CARDS_M and its cards nearer: no swap between them)
+  const drawGroup = (k: string, items: Item[], far = false): { meshes: Mesh[]; buf: Float32Array; tint: Float32Array } | null => {
     const birch = /Birch|^Gen_birch/.test(k), conifer = /Pine|^Gen_(pine|spruce)/.test(k)
     const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : birch ? birchMat : conifer ? pineMat : treeMat
-    const placed = place(k, material, items)
-    if (placed && cards && carded(k)) {
+    const placed = place(k, far && farCrowns ? (birch ? farCrowns.birch : conifer ? farCrowns.pine : farCrowns.tree) : material, items, far && !!farCrowns)
+    if (!placed) return null
+    const meshes = [placed.mesh]
+    if (cards && carded(k)) {
       const trunks = buildModel(k, true), cm = cardMesh(scene, 'cards_' + k, NATURE[k], genModels?.cardOpts(k, cards.opts) ?? cards.opts, seed++, !!gen?.clumpVolume), pack = placed.mesh
       trunks.material = material; trunks.alwaysSelectAsActiveMesh = true
       trunks.thinInstanceSetBuffer('matrix', placed.buf, 16, true); trunks.thinInstanceSetBuffer('aTint', placed.tint, 1, true)
       const loses = !!NATURE[k].deciduous && !!lossTreeCards
-      placeCards(cm, (conifer && pineCards ? pineCards : loses ? (birch ? lossBirchCards : lossTreeCards) : birch ? birchCards : treeCards) as ShaderMaterial, placed.buf, placed.tint)
+      const cmat = (conifer && pineCards ? pineCards : loses ? (birch ? lossBirchCards : lossTreeCards) : birch ? birchCards : treeCards) as ShaderMaterial
+      placeCards(cm, far ? farCardsOf(cmat) : cmat, placed.buf, placed.tint)
+      meshes.push(trunks, cm)
       if (loses) lossCards.push(cm)
       // the twigs, as their own model beside it (drawn from TWIGS_FROM on: the bare crowns of late autumn and winter)
       const tw = NATURE[k].twigs
       if (tw && tw.idx.length && loses) {   // conifers keep their crowns: no twigs to show
-        const tk = k + '~twigs'; NATURE[tk] = { ...tw, min: NATURE[k].min, max: NATURE[k].max }
+        const tk = k + '~twigs'; NATURE[tk] ??= { ...tw, min: NATURE[k].min, max: NATURE[k].max }
         const tm = buildModel(tk); tm.material = material; tm.alwaysSelectAsActiveMesh = true
         tm.thinInstanceSetBuffer('matrix', placed.buf, 16, true); tm.thinInstanceSetBuffer('aTint', placed.tint, 1, true)
-        twigMeshes.push(tm)
+        meshes.push(tm); twigMeshes.push(tm)
       }
       const show = (on: boolean) => { cm.setEnabled(on); trunks.setEnabled(on); pack.setEnabled(!on) }
-      show(true); swaps.push(show); cardMeshes.push(cm); packs.push(pack)
+      if (!far) { show(true); swaps.push(show) }
+      cardMeshes.push(cm); packs.push(pack)
     }
+    return { meshes, buf: placed.buf, tint: placed.tint }
   }
+  for (const [k, items] of Object.entries(groups)) drawGroup(k, items)
   // the twigs: drawn with the cards (the bench's pack arm shows the whole pack model instead), from TWIGS_FROM on
   let cardsShown = true
   const twigsOn = () => cardsShown && season >= TWIGS_FROM, showTwigs = () => { for (const m of twigMeshes) m.setEnabled(twigsOn()) }
@@ -362,13 +402,20 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // the pack's bushes: the band is left out after the every-fourth choice, so every other bush stays the one the
   // prototype drew, and none on the roads or the village ground (after that choice too, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
+  // under the generated trees the far woods are the same trees as near (docs/plans/done/trees-perf-trunks.md): each
+  // item its species' generated model, with its cards, its leaf fall and its twigs, sized so the larger of its reach
+  // and its height over SIZE_H fills Bush_1's footprint at the item's scale; every other item in the hedgerows (as the
+  // bushes), every one in the woods; FAR_VARIANTS of each species' models, each one mesh whose instances in view are
+  // chosen every frame the view moves (farCull)
+  const farTrees: Record<string, Item[]> = {}, farCulled: FarGroup[] = []
   if (genModels) {
-    // the same items, each species' low-detail crown at Bush_1's reach (docs/plans/done/far-woods-gen.md): every other
-    // one in the hedgerows, as the bushes, but every one in the woods, whose trees stand apart where the bushes massed
-    const farOf: Record<string, Item[]> = {}
-    far.forEach((b, i) => { if ((i >= hedgeN || i % 2 === 0) && drawn(b)) (farOf[farSp[i]] ||= []).push(b) })
-    const farBirch = natMat('farBirch', '#7a9a3c', '#bcae55', { rim: 0.4 }), farPine = natMat('farPines', '#2f5a36', '#4f7a3e', { rim: 0.4, kind: 1 })
-    for (const [sp, items] of Object.entries(farOf)) place(genModels.farModel(sp, footprint('Bush_1', 1)), sp === 'birch' ? farBirch : sp === 'spruce' ? farPine : farMat, items)
+    far.forEach((b, i) => {
+      if (!((i >= hedgeN || i % 2 === 0) && drawn(b))) return
+      const [x, z, fs] = b, k = `Gen_${farSp[i]}_${1 + Math.floor(hash(z * 0.37, x * 0.37) * FAR_VARIANTS)}`, item = [...b] as Item
+      item[2] = footprint('Bush_1', fs) / genModels.size(k)
+      ;(farTrees[k] ||= []).push(item)
+    })
+    for (const [k, items] of Object.entries(farTrees)) { const g = drawGroup(k, items, true); if (g) farCulled.push({ ...g, items, r: genModels.size(k), k }) }
   } else { place('Bush_1', farMat, far.filter((b, i) => i % 4 === 0 && drawn(b))); place('Bush_2', farMat, far.filter((b, i) => i % 4 === 2 && drawn(b))) }
   // the meadow's growth: where the old tufts could stand (the placement rule: the cover's grassy classes and their
   // edges, off the banks and the water, out of the formation zones); pasture grazed shorter
@@ -382,7 +429,23 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   }
   // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the outer ring's footprint and lean)
   const growthAllowed = (x: number, z: number) => !touchesZone(x, z, CLUMP_REACH) && offBanks(riverQuery(x, z), CLUMP_REACH)
-  return { groups, far, canopy, KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, setSeason, shadowState, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs, lossCards, season: () => season } : undefined, growth, growthAllowed, crop }
+  // the trunks (their shadows, baked into the light map): per model its trunk's radius and its crown's
+  // lowest point, times each instance's scale
+  const trunks: Nature['trunks'] = [], TRUNK = /^(CommonTree|BirchTree|PineTree|Willow|Gen)_/   // trees, not stumps
+  // (the far trees' only where the light map reaches: the tile)
+  const onTile = ([x, z]: Item) => Math.max(Math.abs(x), Math.abs(z)) < D.spec.tile / 2
+  for (const [k, items] of [...Object.entries(groups), ...Object.entries(farTrees).map(([k, v]) => [k, v.filter(onTile)] as const)]) {
+    if (!TRUNK.test(k)) continue
+    const m = NATURE[k]; let r = 0, base = Infinity
+    for (let v = 0; v < m.role.length; v++) if (m.role[v] <= 1) base = Math.min(base, m.pos[v * 3 + 1])
+    // the bark's reach at its foot, times TRUNK_TAPER: the trunk above its root flare (a generated trunk has no ring
+    // between its foot and its first fork to measure)
+    for (let v = 0; v < m.role.length; v++) { const y = m.pos[v * 3 + 1]; if (m.role[v] >= 2 && y < m.max[1] * 0.08) r = Math.max(r, Math.hypot(m.pos[v * 3], m.pos[v * 3 + 2])) }
+    r *= TRUNK_TAPER
+    if (!(r > 0) || !(base > 0) || !isFinite(base)) continue
+    for (const [x, z, s] of items) trunks.push([x, z, r * s, base * s])
+  }
+  return { groups, far, canopy, trunks, farCull: farCuller(scene, farCulled, (k: string) => !!NATURE[k].deciduous && !!cards && leafLoss(season) > BARE_FROM, () => season), KEEP_CLEAR, touchesZone, placeable, footprint, stones, showCards, setSeason, shadowState, cardCasters: cards ? { leaf: cards.leaf, cards: cardMeshes, packs, lossCards, season: () => season } : undefined, growth, growthAllowed, crop }
 }
 
 // ?trees=gen (docs/plans/done/tree-generator.md): VARIANTS seeded models per species from prototypes/tree-core.js,
@@ -390,22 +453,15 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
 // place, so the scatter's random stream is unchanged), every model sized so its reach in plan is its class's mean: the
 // page's composition and its placement rule stay as they are.
 const GEN_VARIANTS = 4
-// the far stand-ins (farModel): a height over SIZE_H counts as reach (an oak's is 1.36 its reach: a birch or a spruce
+const TRUNK_TAPER = 0.6   // a trunk's radius above its root flare, over the flare's (the trunks' baked shadows)
+// the far trees (their size): a height over SIZE_H counts as reach (an oak's is 1.36 its reach: a birch or a spruce
 // stands about a third taller, as near, not twice), and the hedgerow's odd oak's size over the thorns'
 const SIZE_H = 1.8, HEDGE_OAK = 1.6
-// the unit icosahedron subdivided once (42 vertices, 80 triangles), for the far stand-ins
-const ICO1 = (() => {
-  const t = (1 + Math.sqrt(5)) / 2, v = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]].map(p => { const l = Math.hypot(p[0], p[1], p[2]); return p.map(x => x / l) })
-  const f0 = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]]
-  const mid = new Map<string, number>(), m = (a: number, b: number) => {
-    const key = a < b ? `${a},${b}` : `${b},${a}`; let i = mid.get(key)
-    if (i === undefined) { const p = [0, 1, 2].map(j => v[a][j] + v[b][j]), l = Math.hypot(p[0], p[1], p[2]); i = v.push(p.map(x => x / l)) - 1; mid.set(key, i) }
-    return i
-  }
-  const f: number[][] = []
-  for (const [a, b, c] of f0) { const ab = m(a, b), bc = m(b, c), ca = m(c, a); f.push([a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]) }
-  return { v, f }
-})()
+// the far trees' models a species (of GEN_VARIANTS)
+const FAR_VARIANTS = 2
+// the leaf loss past which a far deciduous tree keeps its cards at every distance: its crown mesh neither thins nor
+// shows its twigs, so past CARDS_M it would stand in full leaf beside bare ones
+const BARE_FROM = 0.02
 const TWIGS_FROM = 1.4   // the season the twigs show from: just before the crowns start to thin (LEAF_LOSS.from)
 const GEN_FOR: Record<string, [species: string, share: number][]> = {
   // (no copper beech: the palette's tint already turns about 5% of crowns copper, docs/art-bible.md §4b)
@@ -427,7 +483,7 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
   }
   // the extras stand at scale 1, in metres
   for (const sp of ['apple', 'poplar', 'hawthorn']) for (let v = 0; v < GEN_VARIANTS; v++) NATURE[`Gen_${sp}_${v + 1}`] = G.natureModel(sp, v + 1, 1)
-  const variant = (sp: string, x: number, z: number) => `Gen_${sp}_${1 + Math.floor(hash(z * 0.37, x * 0.37) * GEN_VARIANTS)}`
+  const variant = (sp: string, x: number, z: number) => `Gen_${sp}_${1 + Math.floor(hash(z * 0.37, x * 0.37) * GEN_VARIANTS)}`, sizes: Record<string, number> = {}
   return {
     pick(model: string, x: number, z: number): string {
       const species = GEN_FOR[model.replace(/_\d+$/, '')]
@@ -465,41 +521,12 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
       for (let i = 0; i < 26; i++) { const x = (R() - 0.5) * 420, z = (R() - 0.5) * 420, sp = R() < 0.55 ? 'oak' : R() < 0.7 ? 'lime' : 'apple'; out.push([variant(sp, x, z), x, z, sp === 'apple' ? 1 : packS(), true]) }
       return out
     },
-    // a far stand-in (docs/plans/done/far-woods-gen.md): the species' first model's clumps as once-subdivided
-    // icospheres, their undersides flatter as near, lumpy by the species' own lump on the generator's smooth noise; a
-    // trunk from the root up to the lowest clump and a limb from there to each other clump (no twigs: at 190 m and
-    // more they are under a pixel). Sized so the larger of its reach in plan and its height over SIZE_H is `size`: a
-    // broadleaf fills the footprint as the bush did, a birch or a spruce stands taller and narrower; it never reaches
-    // farther than `size`, the placement rule's footprint at scale 1
-    farModel(sp: string, size: number): string {
-      const key = `GenFar_${sp}_${size}`
-      if (NATURE[key]) return key
-      const g = NATURE[`Gen_${sp}_1`]
-      if (!g?.clumps) throw new Error(`farModel: no generated ${sp} (only the species addGenerated grows have far stand-ins)`)
-      const qs = g.clumps, lump = G.SPECIES[sp].lump, bark = G.SPECIES[sp].birch ? 4 : 2
-      const pos: number[] = [], idx: number[] = [], role: number[] = []
-      qs.forEach((q, n) => {
-        const base = pos.length / 3
-        for (const [x, y, z] of ICO1.v) { const l = 1 + lump * (G.vnoise(x * 1.9 + n * 97, y * 1.9, z * 1.9 - n * 97) - 0.5) * 2; pos.push(q.c[0] + x * q.r[0] * l, q.c[1] + (y < 0 ? y * 0.72 : y) * q.r[1] * l, q.c[2] + z * q.r[0] * l); role.push(0) }
-        for (const [a, b, c] of ICO1.f) idx.push(base + a, base + c, base + b)
-      })
-      // a four-sided prism from a to b, r thick, its section across the axis (u, v: perpendicular to it and each other)
-      const prism = (a: number[], b: number[], r: number) => {
-        const base = pos.length / 3, d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], l = Math.hypot(d[0], d[1], d[2]) || 1, t = d.map(x => x / l)
-        const h = Math.abs(t[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], u0 = [h[1] * t[2] - h[2] * t[1], h[2] * t[0] - h[0] * t[2], h[0] * t[1] - h[1] * t[0]], ul = Math.hypot(u0[0], u0[1], u0[2])
-        const u = u0.map(x => x / ul), v = [t[1] * u[2] - t[2] * u[1], t[2] * u[0] - t[0] * u[2], t[0] * u[1] - t[1] * u[0]]
-        for (const [cu, cv] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) for (const p of [a, b]) { for (let j = 0; j < 3; j++) pos.push(p[j] + (u[j] * cu + v[j] * cv) * r); role.push(bark) }
-        for (let k = 0; k < 4; k++) { const i = base + k * 2, j = base + ((k + 1) % 4) * 2; idx.push(i, j, i + 1, j, j + 1, i + 1) }
-      }
-      const low = qs.reduce((m, q) => q.c[1] < m.c[1] ? q : m), tr = Math.min(...qs.map(q => q.r[0])) * 0.18
-      prism([0, 0, 0], low.c, tr)
-      for (const q of qs) if (q !== low) prism(low.c, q.c, tr * 0.6)
-      let top = 0; for (let i = 1; i < pos.length; i += 3) top = Math.max(top, pos[i])
-      const k = size / Math.max(reach({ pos } as NatureModel), top / SIZE_H), p = pos.map(v => v * k)
-      const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity]
-      for (let i = 0; i < p.length; i++) { min[i % 3] = Math.min(min[i % 3], p[i]); max[i % 3] = Math.max(max[i % 3], p[i]) }
-      NATURE[key] = { pos: p, idx: idx.reverse(), role, min, max }
-      return key
+    // a generated model's size: the larger of its reach in plan and its height over SIZE_H (a far tree's scale,
+    // docs/plans/done/trees-perf-trunks.md)
+    size(k: string): number {
+      let v = sizes[k]
+      if (v === undefined) v = sizes[k] = Math.max(reach(NATURE[k]), NATURE[k].max[1] / SIZE_H)
+      return v
     },
     // a column's cards: sized to its width, not its height (src/look/canopy.ts sizes cards by the crown's radius)
     cardOpts(model: string, o: CardOptions): CardOptions {
@@ -510,4 +537,84 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
       return rv > rh ? { ...o, size: o.size * rh / rv } : o
     },
   }
+}
+
+// the far trees (docs/plans/done/trees-perf-trunks.md): for each model its meshes (meshes[0] its own crown mesh,
+// the rest its trunks, cards and twigs) hold every one of its instances in the far ring, which no box culls (each
+// surrounds the tile). Just before the game camera draws, when its view or the season has changed, each instance is
+// tested against the view's frustum (a sphere at its crown, SPHERE_K of its size and SPHERE_PAD m its radius: it
+// holds the crown and its cards); those in view nearer than CARDS_M go to the cards' meshes, the farther ones to the
+// crown mesh (no alpha test; lit as the cards are), and over FADE_M either side of it to both, the cards giving way to
+// the crown mesh pixel by pixel (a dither, aFade: no pop as a tree crosses it); each packed to the front of its buffers, whose count is set to them, a mesh with none hidden (a count of 0
+// is drawn as one model at the origin). Without cards the crown mesh takes every distance; a deciduous model past
+// BARE_FROM's leaf loss keeps its cards at every distance (cardsAll). all(true) draws every one with its cards (the
+// shadow pass, which can also call it from a readiness check that never draws: the game camera's next draw undoes it)
+interface FarGroup { meshes: Mesh[]; buf: Float32Array; tint: Float32Array; items: Item[]; r: number; k?: string }
+const SPHERE_K = 1.6, SPHERE_PAD = 3, CARDS_M = 220, FADE_M = 30, WARM_MAX = 600   // frames
+// a mesh whose material reads the fade (the far cards and crown meshes)
+const fades = (m: Mesh) => !!(m.material as ShaderMaterial | null)?.options.attributes.includes('aFade')
+// an instance i of a group, its fade f, at slot n of a side's buffers
+const put = (side: { buf: Float32Array; tint: Float32Array; fade: Float32Array }, n: number, g: { buf: Float32Array; tint: Float32Array }, i: number, f: number) => {
+  for (let j = 0; j < 16; j++) side.buf[n * 16 + j] = g.buf[i * 16 + j]
+  side.tint[n] = g.tint[i]; side.fade[n] = f
+}
+function farCuller(scene: Scene, groups: FarGroup[], cardsAll: (k: string) => boolean, season: () => number): Nature['farCull'] {
+  if (!groups.length) return null
+  const work = groups.map(g => {
+    // without cards (?trees=gen alone) the crown mesh is all there is, at every distance
+    const carded = g.meshes.length > 1
+    const n = g.items.length
+    const near = { buf: new Float32Array(g.buf), tint: new Float32Array(g.tint), fade: new Float32Array(n), meshes: carded ? g.meshes.slice(1) : g.meshes }
+    const far = { buf: new Float32Array(g.buf), tint: new Float32Array(g.tint), fade: new Float32Array(n).fill(1), meshes: carded ? g.meshes.slice(0, 1) : [] }
+    for (const side of [near, far]) for (const m of side.meshes) { m.thinInstanceSetBuffer('matrix', side.buf, 16, false); m.thinInstanceSetBuffer('aTint', side.tint, 1, false); if (fades(m)) m.thinInstanceSetBuffer('aFade', side.fade, 1, false) }
+    // the sphere: the instance's place (its matrix's translation), raised by its size, the size times its scale
+    const c = new Float32Array(g.items.length * 4)
+    g.items.forEach((it, i) => c.set([g.buf[i * 16 + 12], g.buf[i * 16 + 13] + g.r * it[2] * 0.9, g.buf[i * 16 + 14], g.r * it[2] * SPHERE_K + SPHERE_PAD], i * 4))
+    return { g, near, far, c, carded }
+  })
+  for (const w of work) w.g.meshes[0].setEnabled(true)   // the crown mesh: no cards' swap for the far trees (drawGroup's far)
+  // warm: until every far mesh's material is ready, each draws all its instances (both sides, the crown unfaded over
+  // the cards: the page is loading), so each compiles in its own draw; culled after. Otherwise a material would first
+  // compile when a tree reaches its side of the band, the tree missing for those frames
+  let warm = 0
+  const ready = () => work.every(w => w.g.meshes.every(m => !m.material || m.material.isReady(m, true)))
+  // every instance on both sides, the crown unfaded (the warm-up's draw)
+  const fillBoth = () => { for (const w of work) for (const side of [w.near, w.far]) { side.buf.set(w.g.buf); side.tint.set(w.g.tint); side.fade.fill(side === w.near ? 0 : 1); for (const m of side.meshes) { m.isVisible = true; m.thinInstanceCount = w.c.length / 4; m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('aTint'); if (fades(m)) m.thinInstanceBufferUpdated('aFade') } } }
+  let full = false, last = ''
+  const pack = (all: boolean) => {
+    const cam = scene.activeCamera!, planes = all ? [] : Frustum.GetPlanes(cam.getTransformationMatrix()), P = cam.position, A2 = (CARDS_M - FADE_M) ** 2, B2 = (CARDS_M + FADE_M) ** 2
+    for (const w of work) {
+      let nn = 0, nf = 0
+      const every = all || !w.carded || cardsAll(w.g.k ?? '')
+      for (let i = 0; i < w.c.length / 4; i++) {
+        const x = w.c[i * 4], y = w.c[i * 4 + 1], z = w.c[i * 4 + 2], r = w.c[i * 4 + 3]
+        let out = false
+        for (let j = 0; j < planes.length; j++) { const p = planes[j]; if (p.normal.x * x + p.normal.y * y + p.normal.z * z + p.d < -r) { out = true; break } }
+        if (out) continue
+        // the fade: 0 nearer than CARDS_M - FADE_M (cards only), 1 past CARDS_M + FADE_M (crown mesh only), between
+        // them both, each drawing the dither's share
+        const dx = x - P.x, dy = y - P.y, dz = z - P.z, d2 = dx * dx + dy * dy + dz * dz
+        const f = every || d2 <= A2 ? 0 : d2 >= B2 ? 1 : (t => t * t * (3 - 2 * t))((Math.sqrt(d2) - CARDS_M + FADE_M) / (2 * FADE_M))
+        if (f < 1) { put(w.near, nn, w.g, i, f); nn++ }
+        if (f > 0) { put(w.far, nf, w.g, i, f); nf++ }
+      }
+      for (const [side, n] of [[w.near, nn], [w.far, nf]] as const) for (const m of side.meshes) { m.isVisible = n > 0; m.thinInstanceCount = n; m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('aTint'); if (fades(m)) m.thinInstanceBufferUpdated('aFade') }
+    }
+  }
+  // just before the game camera draws, its matrices brought up to date (the page moves the camera before the render)
+  scene.onBeforeCameraRenderObservable.add(cam => {
+    if (cam !== scene.activeCamera) return
+    // (WARM_MAX frames at most: a material that never readies is reported, and the culling goes on without it)
+    if (warm >= 0) {
+      if (full) { full = false; fillBoth() }
+      if (!ready() && ++warm < WARM_MAX) return
+      if (warm >= WARM_MAX) console.warn('far trees: a material was not ready after the warm-up: culling without it')
+      warm = -1; last = ''
+    }
+    if (full) { full = false; last = '' }
+    cam.getViewMatrix(); cam.getProjectionMatrix()
+    const key = `${season()} ${cam.getTransformationMatrix().asArray().join(',')}`
+    if (key !== last) { last = key; pack(false) }
+  })
+  return { all(on: boolean) { if (on) { full = true; pack(true) } } }
 }
