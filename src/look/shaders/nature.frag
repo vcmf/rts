@@ -22,8 +22,15 @@ vec3 roleCol(float r,float t){
 void main(){
   vec3 N=normalize(vN);
   vec4 lm=LM(vW);
+  #ifdef FAR_CROWN
+  // the dither's share first (the cards draw the rest, the instance's tint offsetting the pattern so trees do not share
+  // it); the bark only past the band, where no trunks mesh draws it
+  if(vRole<1.5?dither(gl_FragCoord.xy+vTint*61.0)>=vFade:vFade<1.0)discard;
+  #endif
   #ifdef GRASSY
   float sh=(1.0-lm.r)*uShadowsOn;
+  #elif defined(FAR_CROWN)
+  float sh=vRole<1.5?0.0:shadowAt(vW,N);   // the crown's own: below
   #else
   float sh=shadowAt(vW,N);
   #endif
@@ -33,7 +40,6 @@ void main(){
   // ellipsoid's normal, the crown's own shade along the sun, a darker core; and cut by the dither where its cards
   // still stand (their fade)
   if(vRole<1.5){
-    if(dither(gl_FragCoord.xy)>=vFade)discard;
     vec3 q=(vW-vEllC)/vEllR;N=normalize(q/vEllR);
     vec3 qo=(vW-vEllC)/(vEllR*1.3),dq=uSunDir/(vEllR*1.3);float qa=dot(dq,dq),qb=dot(qo,dq),qc=dot(qo,qo)-1.0,disc=qb*qb-qa*qc;
     float sq=sqrt(max(disc,0.0)),t1=(-qb-sq)/qa,t2=(-qb+sq)/qa,tt=disc>0.0?max(0.0,t2-max(t1,0.0)):0.0;

@@ -115,7 +115,8 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
 
   const FLIP = true   // OBJ winding is opposite to Babylon's default
   // trunk: only the triangles off the crown (role 2 and up), for the cards arm, whose crowns are cards
-  function buildModel(name: string, trunk = false): Mesh {
+  // ell: each crown vertex its clump's ellipsoid (a far tree's crown mesh, FAR_CROWN)
+  function buildModel(name: string, trunk = false, ell = false): Mesh {
     const d = NATURE![name], m = new Mesh(trunk ? 'trunks_' + name : name, scene)
     const idx = FLIP ? d.idx.slice().reverse() : d.idx
     const nrm: number[] = []; VertexData.ComputeNormals(d.pos, idx, nrm)
@@ -127,7 +128,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const cr = new Float32Array(d.role.length * 3); for (let i = 0; i < d.role.length; i++) { cr[i * 3] = cx / n; cr[i * 3 + 1] = cy / n; cr[i * 3 + 2] = cz / n }
     m.setVerticesData('aCrown', cr, false, 3)
     // a generated crown's clump ellipsoids, per vertex (a far tree's crown mesh is lit by them: FAR_CROWN)
-    if (d.clump && d.clumps) {
+    if (ell && d.clump && d.clumps) {
       const ec = new Float32Array(d.role.length * 3), er = new Float32Array(d.role.length * 2)
       for (let v = 0; v < d.clump.length; v++) { const q = d.clumps[d.clump[v]]; ec.set(q.c, v * 3); er[v * 2] = q.r[0]; er[v * 2 + 1] = q.r[1] }
       m.setVerticesData('aEllC', ec, false, 3); m.setVerticesData('aEllR', er, false, 2)
@@ -135,9 +136,9 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     return m
   }
   const _m = new Matrix(), _q = new Quaternion(), _s = new Vector3(), _t = new Vector3()
-  function place(model: string, material: ShaderMaterial, items: Item[]): { mesh: Mesh; buf: Float32Array; tint: Float32Array } | null {
+  function place(model: string, material: ShaderMaterial, items: Item[], ell = false): { mesh: Mesh; buf: Float32Array; tint: Float32Array } | null {
     if (!items.length) return null
-    const m = buildModel(model); m.material = material; m.alwaysSelectAsActiveMesh = true
+    const m = buildModel(model, false, ell); m.material = material; m.alwaysSelectAsActiveMesh = true
     const buf = new Float32Array(items.length * 16), tint = new Float32Array(items.length)
     items.forEach(([x, z, s, yaw, t, dy = 0], i) => { _t.set(x, H(x, z) + dy, z); Quaternion.RotationYawPitchRollToRef(yaw, 0, 0, _q); _s.set(s, s, s); Matrix.ComposeToRef(_s, _q, _t, _m); _m.copyToArray(buf, i * 16); tint[i] = t })
     m.thinInstanceSetBuffer('matrix', buf, 16, true); m.thinInstanceSetBuffer('aTint', tint, 1, true)
@@ -330,26 +331,30 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // under cards, a carded model is drawn as its trunk triangles (the trunks_ mesh) and its cards, which take the
   // crowns' palette; both cast into the sun's shadow pass (src/look/bakes.ts), the whole pack model is disabled
   const carded = (k: string) => !!cards && /^(CommonTree|BirchTree|Willow|Gen)_/.test(k)
-  const treeCards = cards && cardMaterial(mats, 'treeCards', '#4a7330', '#97a043', 0.45, cards.leaf, cards.opts.volume), birchCards = cards && cardMaterial(mats, 'birchCards', '#7a9a3c', '#bcae55', 0.45, cards.leaf, cards.opts.volume)
+  // a card material, and (farCardsOf) its far trees' twin from the same arguments: faded into their crown meshes
+  const cardArgs = new Map<ShaderMaterial, [string, string, string, number, boolean, number]>()
+  const cardMat = (name: string, a: string, b: string, rim: number, thins = false, kind = 0): ShaderMaterial | null => {
+    if (!cards) return null
+    const m = cardMaterial(mats, name, a, b, rim, cards.leaf, cards.opts.volume, thins); m.setFloat('uKind', kind); cardArgs.set(m, [name, a, b, rim, thins, kind]); return m
+  }
+  const treeCards = cardMat('treeCards', '#4a7330', '#97a043', 0.45), birchCards = cardMat('birchCards', '#7a9a3c', '#bcae55', 0.45)
   // generated conifers are carded too, in the pines' palette and kind (they stay green)
-  const pineCards = cards && genModels && cardMaterial(mats, 'pineCards', '#2f5a36', '#4f7a3e', 0.4, cards.leaf, cards.opts.volume)
-  if (pineCards) pineCards.setFloat('uKind', 1)
+  const pineCards = genModels && cardMat('pineCards', '#2f5a36', '#4f7a3e', 0.4, false, 1)
   // generated deciduous crowns thin with the season (src/look/shaders/cards.glsl)
-  const lossTreeCards = cards && genModels && cardMaterial(mats, 'treeCardsLoss', '#4a7330', '#97a043', 0.45, cards.leaf, cards.opts.volume, true)
-  const lossBirchCards = cards && genModels && cardMaterial(mats, 'birchCardsLoss', '#7a9a3c', '#bcae55', 0.45, cards.leaf, cards.opts.volume, true)
-  // the far trees' (farCuller): their cards faded by a dither into their crown meshes, lit as the cards
+  const lossTreeCards = genModels && cardMat('treeCardsLoss', '#4a7330', '#97a043', 0.45, true)
+  const lossBirchCards = genModels && cardMat('birchCardsLoss', '#7a9a3c', '#bcae55', 0.45, true)
+  // the far trees' (farCuller): their cards faded by a dither into their crown meshes, lit as the cards (with the
+  // cards' volume light only: without it the crown mesh keeps the pack's light, as the cards keep L7a's)
   const farCards = new Map<ShaderMaterial, ShaderMaterial>()
   const farCardsOf = (m: ShaderMaterial): ShaderMaterial => {
-    let f = farCards.get(m)
-    if (!f && cards) {
-      const spec: Record<string, [string, string, number, boolean]> = { treeCards: ['#4a7330', '#97a043', 0.45, false], birchCards: ['#7a9a3c', '#bcae55', 0.45, false], pineCards: ['#2f5a36', '#4f7a3e', 0.4, false], treeCardsLoss: ['#4a7330', '#97a043', 0.45, true], birchCardsLoss: ['#7a9a3c', '#bcae55', 0.45, true] }
-      const [a, b, rim, thins] = spec[m.name]
-      f = cardMaterial(mats, m.name + 'Far', a, b, rim, cards.leaf, cards.opts.volume, thins, true); if (m.name === 'pineCards') f.setFloat('uKind', 1)
-      farCards.set(m, f)
+    let f = farCards.get(m); const args = cardArgs.get(m)
+    if (!f && cards && args) {
+      const [name, a, b, rim, thins, kind] = args
+      f = cardMaterial(mats, name + 'Far', a, b, rim, cards.leaf, cards.opts.volume, thins, true); f.setFloat('uKind', kind); farCards.set(m, f)
     }
     return f ?? m
   }
-  const farCrowns = genModels && cards ? { tree: natMat('treesFar', '#4a7330', '#97a043', { rim: 0.45, farCrown: true }), birch: natMat('birchFar', '#7a9a3c', '#bcae55', { rim: 0.45, farCrown: true }), pine: natMat('pinesFar', '#2f5a36', '#4f7a3e', { rim: 0.4, kind: 1, farCrown: true }) } : null
+  const farCrowns = genModels && cards && cards.opts.volume ? { tree: natMat('treesFar', '#4a7330', '#97a043', { rim: 0.45, farCrown: true }), birch: natMat('birchFar', '#7a9a3c', '#bcae55', { rim: 0.45, farCrown: true }), pine: natMat('pinesFar', '#2f5a36', '#4f7a3e', { rim: 0.4, kind: 1, farCrown: true }) } : null
   let season = gen?.season ?? 0
   const twigMeshes: Mesh[] = [], lossCards: Mesh[] = []
   let seed = 1
@@ -359,7 +364,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const drawGroup = (k: string, items: Item[], far = false): { meshes: Mesh[]; buf: Float32Array; tint: Float32Array } | null => {
     const birch = /Birch|^Gen_birch/.test(k), conifer = /Pine|^Gen_(pine|spruce)/.test(k)
     const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : birch ? birchMat : conifer ? pineMat : treeMat
-    const placed = place(k, far && farCrowns ? (birch ? farCrowns.birch : conifer ? farCrowns.pine : farCrowns.tree) : material, items)
+    const placed = place(k, far && farCrowns ? (birch ? farCrowns.birch : conifer ? farCrowns.pine : farCrowns.tree) : material, items, far && !!farCrowns)
     if (!placed) return null
     const meshes = [placed.mesh]
     if (cards && carded(k)) {
@@ -545,7 +550,9 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
 // BARE_FROM's leaf loss keeps its cards at every distance (cardsAll). all(true) draws every one with its cards (the
 // shadow pass, which can also call it from a readiness check that never draws: the game camera's next draw undoes it)
 interface FarGroup { meshes: Mesh[]; buf: Float32Array; tint: Float32Array; items: Item[]; r: number; k?: string }
-const SPHERE_K = 1.6, SPHERE_PAD = 3, CARDS_M = 220, FADE_M = 30
+const SPHERE_K = 1.6, SPHERE_PAD = 3, CARDS_M = 220, FADE_M = 30, WARM_MAX = 600   // frames
+// a mesh whose material reads the fade (the far cards and crown meshes)
+const fades = (m: Mesh) => !!(m.material as ShaderMaterial | null)?.options.attributes.includes('aFade')
 // an instance i of a group, its fade f, at slot n of a side's buffers
 const put = (side: { buf: Float32Array; tint: Float32Array; fade: Float32Array }, n: number, g: { buf: Float32Array; tint: Float32Array }, i: number, f: number) => {
   for (let j = 0; j < 16; j++) side.buf[n * 16 + j] = g.buf[i * 16 + j]
@@ -559,7 +566,7 @@ function farCuller(scene: Scene, groups: FarGroup[], cardsAll: (k: string) => bo
     const n = g.items.length
     const near = { buf: new Float32Array(g.buf), tint: new Float32Array(g.tint), fade: new Float32Array(n), meshes: carded ? g.meshes.slice(1) : g.meshes }
     const far = { buf: new Float32Array(g.buf), tint: new Float32Array(g.tint), fade: new Float32Array(n).fill(1), meshes: carded ? g.meshes.slice(0, 1) : [] }
-    for (const side of [near, far]) for (const m of side.meshes) { m.thinInstanceSetBuffer('matrix', side.buf, 16, false); m.thinInstanceSetBuffer('aTint', side.tint, 1, false); m.thinInstanceSetBuffer('aFade', side.fade, 1, false) }
+    for (const side of [near, far]) for (const m of side.meshes) { m.thinInstanceSetBuffer('matrix', side.buf, 16, false); m.thinInstanceSetBuffer('aTint', side.tint, 1, false); if (fades(m)) m.thinInstanceSetBuffer('aFade', side.fade, 1, false) }
     // the sphere: the instance's place (its matrix's translation), raised by its size, the size times its scale
     const c = new Float32Array(g.items.length * 4)
     g.items.forEach((it, i) => c.set([g.buf[i * 16 + 12], g.buf[i * 16 + 13] + g.r * it[2] * 0.9, g.buf[i * 16 + 14], g.r * it[2] * SPHERE_K + SPHERE_PAD], i * 4))
@@ -569,8 +576,10 @@ function farCuller(scene: Scene, groups: FarGroup[], cardsAll: (k: string) => bo
   // warm: until every far mesh's material is ready, each draws all its instances (both sides, the crown unfaded over
   // the cards: the page is loading), so each compiles in its own draw; culled after. Otherwise a material would first
   // compile when a tree reaches its side of the band, the tree missing for those frames
-  let warm = true
+  let warm = 0
   const ready = () => work.every(w => w.g.meshes.every(m => !m.material || m.material.isReady(m, true)))
+  // every instance on both sides, the crown unfaded (the warm-up's draw)
+  const fillBoth = () => { for (const w of work) for (const side of [w.near, w.far]) { side.buf.set(w.g.buf); side.tint.set(w.g.tint); side.fade.fill(side === w.near ? 0 : 1); for (const m of side.meshes) { m.isVisible = true; m.thinInstanceCount = w.c.length / 4; m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('aTint'); if (fades(m)) m.thinInstanceBufferUpdated('aFade') } } }
   let full = false, last = ''
   const pack = (all: boolean) => {
     const cam = scene.activeCamera!, planes = all ? [] : Frustum.GetPlanes(cam.getTransformationMatrix()), P = cam.position, A2 = (CARDS_M - FADE_M) ** 2, B2 = (CARDS_M + FADE_M) ** 2
@@ -589,13 +598,19 @@ function farCuller(scene: Scene, groups: FarGroup[], cardsAll: (k: string) => bo
         if (f < 1) { put(w.near, nn, w.g, i, f); nn++ }
         if (f > 0) { put(w.far, nf, w.g, i, f); nf++ }
       }
-      for (const [side, n] of [[w.near, nn], [w.far, nf]] as const) for (const m of side.meshes) { m.isVisible = n > 0; m.thinInstanceCount = n; m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('aTint'); m.thinInstanceBufferUpdated('aFade') }
+      for (const [side, n] of [[w.near, nn], [w.far, nf]] as const) for (const m of side.meshes) { m.isVisible = n > 0; m.thinInstanceCount = n; m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('aTint'); if (fades(m)) m.thinInstanceBufferUpdated('aFade') }
     }
   }
   // just before the game camera draws, its matrices brought up to date (the page moves the camera before the render)
   scene.onBeforeCameraRenderObservable.add(cam => {
     if (cam !== scene.activeCamera) return
-    if (warm) { if (!ready()) return; warm = false }
+    // (WARM_MAX frames at most: a material that never readies is reported, and the culling goes on without it)
+    if (warm >= 0) {
+      if (full) { full = false; fillBoth() }
+      if (!ready() && ++warm < WARM_MAX) return
+      if (warm >= WARM_MAX) console.warn('far trees: a material was not ready after the warm-up: culling without it')
+      warm = -1; last = ''
+    }
     if (full) { full = false; last = '' }
     cam.getViewMatrix(); cam.getProjectionMatrix()
     const key = `${season()} ${cam.getTransformationMatrix().asArray().join(',')}`

@@ -19,7 +19,8 @@ stand-ins the camera can come within reach of (they read as plain blobs up close
 - **Their cost:** one mesh a model holds every far instance; each frame the view moves, the instances in the view's
   frustum are packed to the front of its buffers (`farCuller`), those within 220 m of the camera with their cards,
   the farther ones with the model's own crown mesh (no alpha test, a few pixels wide there). The shadow pass bakes
-  with every far tree and its cards.
+  with every far tree and its cards. As built, after the owner saw the switch pop ("there's some clear visual change"):
+  a dithered cross-fade over 190 to 250 m, and the crown mesh lit as the cards (their volume light per clump).
 - **The trunks' shadows:** a trunk is thinner than two of the shadow map's texels (0.33 m) and the soft filter washed
   it out. Each drawn tree's trunk is drawn into the light map's sun after the terrain, once, as a quad on the ground
   from its root away from the sun to its crown's base: crisp at the root, softening along it, fading where the

@@ -6,7 +6,7 @@ precision highp float;varying vec3 vW,vN,vS;varying float vTint,vOcc,vH,vRole;va
 
 void main(){
   #ifdef FAR_FADE
-  if(dither(gl_FragCoord.xy)<vFade)discard;   // the cards give way to the crown mesh, pixel by pixel (its pixels are the others)
+  if(dither(gl_FragCoord.xy+vTint*61.0)<vFade)discard;   // the cards give way to the crown mesh, pixel by pixel (its pixels are the others)
   #endif
   #ifdef LEAF_LOSS
   if(vDrop<leafLoss(uSeason))discard;

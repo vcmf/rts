@@ -276,10 +276,15 @@ crowns as cards.
   mostly hawthorn with the odd oak (1.6 times their size where that fits, its item scaled), every other item as the
   bushes were; the woods every item, oak, beech, lime and birch, about one wood in four mostly spruce. **Culled per
   instance:** one mesh a model holds every far instance (no box culls a ring); just before the game camera draws, the
-  instances in its frustum (a sphere at the crown) are packed to the front of the buffers, those within 220 m of the
-  camera (`CARDS_M`) with their cards, the farther ones with the model's own crown mesh (no alpha test, a few pixels
-  wide there; without cards, the crown mesh at every distance). The shadow pass bakes with every far tree and its
-  cards (`farCull.all`).
+  instances in its frustum (a sphere holding the crown and its cards) are packed to the front of the buffers: nearer
+  than 190 m with their cards, past 250 m with the model's own crown mesh, and between (`CARDS_M` 220 m ± `FADE_M`
+  30 m) with both, the cards giving way to the crown pixel by pixel (a dither offset per tree by its tint, the
+  instance's `aFade`): no pop as a tree crosses it. The crown mesh is lit as the cards are (`FAR_CROWN` in
+  `nature.frag`: each vertex its clump's ellipsoid, the soft ramp, the crown's own shade along the sun, the darker
+  core), with the cards' volume light only; its bark draws only past the band, where no trunks mesh does. Without
+  cards the crown mesh takes every distance; a deciduous far tree past the leaf fall's start keeps its cards at every
+  distance (the crown mesh neither thins nor shows twigs). Until every far material is compiled the far meshes draw
+  all their instances (600 frames at most). The shadow pass bakes with every far tree and its cards (`farCull.all`).
 - **The trunks' shadows** (`trunkShadows` in `src/look/bakes.ts`, `trunkshadow.*`): a trunk is thinner than two of
   the shadow map's 0.33 m texels and the soft filter washed it out. Each drawn tree's trunk (its bark's radius at the
   foot times 0.6, `TRUNK_TAPER`; its crown's lowest point) is drawn into the light map's sun after the terrain, once,
