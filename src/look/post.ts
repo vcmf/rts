@@ -28,6 +28,11 @@ export const START = { beta: 0.80, radius: 125, x: -10, z: 2 }
 // it, the largest blur in pixels at 1080 lines, and the share of it left at the widest zoom (window.__look.dof tunes
 // them live); FOCUS_S the focus's easing time (s)
 export const DOF = { band: 0.2, k: 4, px: 7, wide: 0.4 }
+// the scene's MSAA samples (4; ?msaa=1 for the frame-rate A/Bs, src/look/main.ts)
+// byte: the scene's MSAA target 8 bits a channel, not half floats (docs/plans/done/wide-perf.md: the same frame, 0.4 to
+// 0.8 ms less at the widest zoom); not under the depth of field, whose distance in alpha needs the half floats; ?rt16
+// for the A/B
+export const MSAA = { samples: 4, byte: true }
 const FOCUS_S = 0.25
 const TAPS = [16, 24, 32, 48, 64]
 
@@ -134,9 +139,9 @@ export class Post {
   build(): void {
     const { camera, engine, S } = this
     this.posts.forEach(p => p.dispose(camera)); this.posts = []
-    const HF = Constants.TEXTURETYPE_HALF_FLOAT
+    const HF = Constants.TEXTURETYPE_HALF_FLOAT, sceneType = MSAA.byte && !S.dof ? Constants.TEXTURETYPE_UNSIGNED_BYTE : HF   // the scene's target: the first pass's input
     // ratio: the size of the texture this pass reads, so the pass before it draws at that size
-    const pp = (name: string, uni: string[], smp: string[], type: number, ratio = 1.0, defines: string | null = null) => { const p = new PostProcess(name, name, uni, smp, ratio, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, defines, type); if (!this.posts.length) p.samples = 4; this.posts.push(p); return p }
+    const pp = (name: string, uni: string[], smp: string[], type: number, ratio = 1.0, defines: string | null = null) => { const p = new PostProcess(name, name, uni, smp, ratio, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, defines, type); if (!this.posts.length) { p.samples = MSAA.samples } this.posts.push(p); return p }
     // the miniature field (decision 0024): focused on the ground at the screen's centre (focusDepth); a sharp band
     // beyond it (DOF.band; nothing nearer blurs); the largest blur DOF.px at 1080 lines, strongest at the closest
     // zoom and DOF.wide of it at the widest. The scene at half resolution (each four pixels' colour averaged, the
@@ -160,7 +165,7 @@ export class Post {
         e.setFloat('uN', TAPS.find(n => n >= 0.32 * px * px) ?? 64); lensUniforms(e)
       }
     }
-    const u = pp('uber', ['uRes', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], HF, p ? 0.5 : 1.0, p ? '#define DOF' : null)
+    const u = pp('uber', ['uRes', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, p ? 0.5 : 1.0, p ? '#define DOF' : null)
     // uRes: the full resolution (with the depth of field, this pass reads the half-resolution blur)
     u.onApply = e => {
       const r = d ?? u; e.setFloat2('uRes', r.width, r.height); e.setFloat('uGrainOn', S.grain); e.setFloat('uBloom', S.bloom); e.setTexture('uGrain', this.grain())
