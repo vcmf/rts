@@ -156,6 +156,10 @@ const input = (id: string) => byId<HTMLInputElement>(id)
 input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
 byId<HTMLSelectElement>('res').onchange = () => { S.res = +byId<HTMLSelectElement>('res').value; engine.setHardwareScalingLevel(1 / S.res) }
 const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
+// ?bloom=0: open with the bloom off (an A/B, docs/plans/active/frame-readout.md)
+if (params.has('bloom')) { if (params.get('bloom') !== '0') throw new Error(`?bloom must be 0, not ${params.get('bloom')}`); S.bloom = 0 }
+// ?bloom=0: open with the bloom off (the frame-rate A/Bs, docs/plans/active/bloom-half.md)
+if (params.has('bloom')) { if (params.get('bloom') !== '0') throw new Error(`?bloom must be 0, not ${params.get('bloom')}`); S.bloom = 0 }
 type Toggle = typeof TOGGLES[number]
 const isToggle = (k: string | undefined): k is Toggle => (TOGGLES as readonly (string | undefined)[]).includes(k)
 // the buttons show the state (?dof and the bench's arms change it)
@@ -255,9 +259,26 @@ scene.onBeforeRenderObservable.add(() => {
     m.setFloat('uPixA', pixA)
     m.setFloat('uAO', S.ao); m.setFloat('uMist', S.mist); m.setFloat('uShafts', S.shafts); m.setFloat('uBack', S.back)
   }
-  fpsEl.textContent = engine.getFps().toFixed(0) + ' fps'
 })
-engine.runRenderLoop(() => scene.render())
+// the frame readout (top right; docs/plans/active/frame-readout.md): over the last FRAMES frames, the frame interval's
+// median and its slowest 5 % (with vsync on, the display's slots: a frame past 8.3 ms on a 120 Hz screen waits for the
+// next one), the render's CPU time (the JavaScript, until the GPU's work is queued), and the share of frames past
+// 8.3 ms (120 fps). The interval past the CPU time is the GPU's, or the display's wait
+const FRAMES = 120, iv = new Float32Array(FRAMES), cpu = new Float32Array(FRAMES)
+let fi = 0, lastT = 0, shown = 0
+const pct = (a: Float32Array, q: number) => { const s = Array.from(a).sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(q * s.length))] }
+engine.runRenderLoop(() => {
+  const t0 = performance.now()
+  scene.render()
+  const t1 = performance.now()
+  if (lastT) { iv[fi % FRAMES] = t0 - lastT; cpu[fi % FRAMES] = t1 - t0; fi++ }
+  lastT = t0
+  if (fi >= FRAMES && t1 - shown > 500) {
+    shown = t1
+    let slow = 0; for (const v of iv) if (v > 1000 / 120) slow++
+    fpsEl.textContent = `${(1000 / pct(iv, 0.5)).toFixed(0)} fps · frame ${pct(iv, 0.5).toFixed(1)} ms (p95 ${pct(iv, 0.95).toFixed(1)}) · cpu ${pct(cpu, 0.5).toFixed(1)} ms · ${Math.round(100 * slow / FRAMES)}% > 8.3 ms`
+  }
+})
 addEventListener('resize', () => engine.resize())
 if (new URLSearchParams(location.search).get('river') === 'debug') {   // centre line: light = riffle, dark blue = pool
   const pts: Vector3[] = [], cols: Color4[] = [], C = RIVER
