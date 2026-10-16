@@ -29,7 +29,7 @@ export const START = { beta: 0.80, radius: 125, x: -10, z: 2 }
 // them live); FOCUS_S the focus's easing time (s)
 export const DOF = { band: 0.2, k: 4, px: 7, wide: 0.4 }
 // the scene's MSAA samples (4; ?msaa=1 for the frame-rate A/Bs, src/look/main.ts)
-// byte: the scene's MSAA target 8 bits a channel, not half floats (docs/plans/active/wide-perf.md: the same frame, 0.4 to
+// byte: the scene's MSAA target 8 bits a channel, not half floats (docs/plans/done/wide-perf.md: the same frame, 0.4 to
 // 0.8 ms less at the widest zoom); not under the depth of field, whose distance in alpha needs the half floats; ?rt16
 // for the A/B
 export const MSAA = { samples: 4, byte: true }

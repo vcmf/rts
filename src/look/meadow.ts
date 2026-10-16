@@ -171,7 +171,7 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   // copy), so the vectors are set once and changed in place
   const origins = RINGS.map(() => new Vector2()), centre = new Vector2()
   RINGS.forEach((_, ri) => { ringMats[ri].setVector2('uOrigin', origins[ri]); ringMats[ri].setVector2('uCentre', centre) })
-  // zoomed out (docs/plans/active/wide-perf.md): from WIDE[0] to WIDE[1] m of the camera's radius the inner rings'
+  // zoomed out (docs/plans/done/wide-perf.md): from WIDE[0] to WIDE[1] m of the camera's radius the inner rings'
   // bands shrink to the focus and the outer ring's grows in to it, so at the widest zoom only the outer ring (2 m
   // cells, larger clumps: a clump is a few pixels there) is drawn; the clumps fade as the bands move (no pop)
   const bands = RINGS.map(r => new Vector4(...r.band)); RINGS.forEach((_, ri) => ringMats[ri].setVector4('uBand', bands[ri]))

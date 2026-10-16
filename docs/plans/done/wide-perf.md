@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-16
 ---
 
@@ -43,3 +43,8 @@ most; the anti-aliasing's target and the meadow cost more.
   through the season and drops the far trees' shadows too (the far woods' whole cost); the outer ring's hole slots
   drawn only while zooming out (the default zoom no longer pays for them); `?rt16` and `?nowide` strict; the post
   types simplified; a dead uniform set removed.
+- **The checks** on the final code: the guard (the default, cover and crops views, three seasons), the coat check,
+  the negatives, the water and macro checks: exit 0 each. The goldens against main: every view differs a little (the
+  8-bit target's rounding: under 1 % of a region's pixels past 6 of 255, a mean of 0.6 to 0.8); the wide and far-edge
+  views more (6 to 9 %, a mean of 1.6 to 2.2: the meadow's outer ring alone at the widest zoom): the expected change.
+- **The owner** (2026-10-16): "yes squash merge".

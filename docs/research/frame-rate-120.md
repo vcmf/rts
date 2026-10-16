@@ -71,7 +71,7 @@ public on Tiny Glade or Manor Lords.
 
 ## 5. Measured at the widest zoom (2026-10-16)
 
-The frame interval with one part off at a time (`docs/plans/active/wide-perf.md`): 4× MSAA ≈2.4 ms, the meadow ≈1.2,
+The frame interval with one part off at a time (`docs/plans/done/wide-perf.md`): 4× MSAA ≈2.4 ms, the meadow ≈1.2,
 the far woods ≈0.6, the bloom ≈0.2, the terrain's detail grain and the leaf cards ~0. So far-tree impostors could win
 0.6 ms at most; built instead: the MSAA target in 8 bits (same image) and the meadow's rings by zoom (94 → 108 fps on
 the owner's screen). Next: a dynamic render scale at the widest zoom.
