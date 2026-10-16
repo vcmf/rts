@@ -520,6 +520,7 @@ the table below is done and the acceptance is measured.
 | **Edge Breakup** on environment layers only (units masked out) | **Not started** | |
 | **Stroke-shaped alpha masks** on the cards (or object-space hashed alpha, so swaying trees do not slide through the grain) | **Not started** (the clump atlas stands in) | |
 | **Spherized crown normals** | **Done** by L7b (the ellipsoid's normal) | |
+| **Maps from data** (the owner, 2026-10-16: the work must serve every map, not only the demo): (1) where trees stand comes from the map (tree places and species from the map editor, `~/workspace/rts-map-editor`), not from the look page's scatter in `src/look/nature.ts`, which codes the demo's far ring, woods, orchard and lone trees; (2) the far trees' culling and level of detail (`farCuller`) moves out of the scatter into its own module taking any instance list; (3) the near and far split follows the map (today the far ring's 190 m and the play area's 235 m are the demo's constants; the 220 m cards distance is the camera's and stays) | **Owed**, with the map track (what a map hands the renderer) | `docs/plans/active/trees-perf-trunks.md` |
 
 **Acceptance** (research P5), measured on the cards, in a battlefield forest and on the min-spec laptop (the dev
 Mac's numbers are a proxy: `docs/plans/active/track-e-results/shadows-foliage.md`):
