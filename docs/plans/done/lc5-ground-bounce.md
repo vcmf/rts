@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-16
 ---
 
@@ -83,3 +83,4 @@ Main at acefd2c. Every run's exit code. Pairs in `scratch/compare/lc5/` (not com
   After round 2: the goldens (`?gbounce=0` matches main), `tools/water-look-check.mjs`, `tools/check-negatives.mjs`,
   the guard (default view, three seasons): exit 0 each; `npm test` exit 0, 256 tests; `node tools/check-docs.mjs`
   exit 0.
+- **The owner (2026-10-16):** "bounce is okay lets go with it": accepted at the mood's 0.5.

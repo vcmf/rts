@@ -156,7 +156,7 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   the mood's `bounce`. Trees and stones (`nature.frag`), the crowns (`canopy.frag`) and the army blocks (`block.frag`)
   take it; the trees' old 15 % albedo tint toward the ground is gone. Units take its full hue (a local cast the eye
   does not balance away) at `units.bounce` of its strength. `?bounce=<0..2>` tries a strength.
-- **The ground's bounce on the ground** (LC5, `docs/plans/active/lc5-ground-bounce.md`): the bounce map
+- **The ground's bounce on the ground** (LC5, `docs/plans/done/lc5-ground-bounce.md`): the bounce map
   (`groundBounce` in `src/look/bakes.ts`, `gbounce.frag`), 512 texels a side over the tile (about 1.6 m, 1 MB),
   rendered top-down with the light map's camera after it, and again whenever the season, the shadows' switch or the
   grain change and then hold for a frame (`src/look/main.ts`: a dragged slider rebakes when it stops; the checks set
