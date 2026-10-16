@@ -500,56 +500,40 @@ checked again with two battalions and smoke.
 **Goal:** painted crowns and silhouettes that hold at every zoom within the foliage budget. The bare
 winter trees the target images depend on, and the building material.
 
-**Build:**
-- spherized crown normals;
-- stroke-shaped alpha masks on crown cards (or object-space hashed alpha, so swaying trees do not slide
-  through the grain);
-- alpha-to-coverage on 4× MSAA, toggled around foliage draws, with coverage-preserving mips baked
-  offline;
-- a depth pre-pass if overdraw at the worst zoom passes 2–3×;
-- Edge Breakup on environment layers only (units masked out);
-- **the building material** (research §c buildings 1, 3, 5): biplanar or object-local grain with
-  oriented strokes feeding the normal before the ramp, painted-opacity skirts on silhouettes, and
-  painting LOD by zoom; first on LA2's barracks. Its marks stay attached over the game camera's range
-  (yaw −45° to +45°, every zoom, a pan; decision 0010);
-- far woods switched to painted terrain colour;
-- **a first attempt at bare winter trees:** thin branches clamped to at least 1 px with alpha-to-coverage,
-  painted-opacity skirts for the twig mass. The research has no evidence here (§c foliage 6), so this is
-  a design spike with screenshots for the owner. In stage 1 it is a gate: bare trees good enough for
-  L9w's winter target, judged by the owner.
+**Status (2026-10-16): in progress.** The crowns are done and are the default; what is left is their cost and their
+edges at the widest zoom, the bushes, the winter far woods and the building material. L7 closes when every row of
+the table below is done and the acceptance is measured.
 
-**Acceptance** (research P5):
+| Part | Status | Where |
+|---|---|---|
+| **L7a, leaf-card crowns:** each crown as camera-facing cards cut by a greyscale clump atlas our palette paints, casting leafy shadows (owner: "it's the way") | **Done** (#58) | `docs/plans/done/l7a-canopy-cards.md` |
+| **L7b, the crowns as volumes:** a normal per pixel from the crown's ellipsoid, the light through it, a soft ramp (decision 0022), a darker core, a tilt per leaf (owner: "it's beautiful now the trees") | **Done** (#61) | `docs/plans/done/l7b-crown-volume.md` |
+| **Generated trees** (the other track's generator, decision 0031): species, one volume per clump, leaf fall, twigs | **Done** (#84) | `docs/plans/done/tree-generator.md` |
+| **Cards and generated trees as the default** (`?trees=gen,cards`; `?trees=pack` for the pack's) | **Done** (#95) | `docs/plans/done/gen-trees-default.md` |
+| **Far woods** as low-detail generated crowns | **Done** (#99), but the camera reaches about 400 of them (the play area's edge is 235 m, the far ring starts at 190 m) and up close they read as plain blobs: the ones within reach to become full carded trees | `docs/plans/done/far-woods-gen.md` |
+| **Bare winter trees:** a first attempt is the generator's leaf fall and twigs; in stage 1 a gate, judged by the owner for L9w's winter target | **To judge** | |
+| **The cost at the widest zoom:** the cards cost most where a forest fills the frame (`docs/plans/done/forest-bench.md`); fewer, larger cards for far crowns, plain meshes beyond a distance, or a depth pre-pass if overdraw passes 2–3× | **Owed** (with the frame-rate targets: 60 fps hard, 120 fps soft, owner 2026-10-16) | |
+| **The edges:** the crowns' outline aliases at the widest zoom: alpha-to-coverage on 4× MSAA, toggled around foliage draws, with coverage-preserving mips baked offline (L8's A/B) | **Owed** | |
+| **Bushes:** still the pack's meshes | **Owed** | |
+| **Winter far woods:** their broadleaves keep their crowns while the near ones go bare | **Owed** (#98) | |
+| **The building material** (research §c buildings 1, 3, 5): biplanar or object-local grain with oriented strokes feeding the normal before the ramp, painted-opacity skirts on silhouettes, painting LOD by zoom; its marks stay attached over the game camera's range (yaw −45° to +45°, every zoom, a pan; decision 0010) | **Owed**, first on LA2's barracks (waits on LA2) | |
+| **Edge Breakup** on environment layers only (units masked out) | **Not started** | |
+| **Stroke-shaped alpha masks** on the cards (or object-space hashed alpha, so swaying trees do not slide through the grain) | **Not started** (the clump atlas stands in) | |
+| **Spherized crown normals** | **Done** by L7b (the ellipsoid's normal) | |
+
+**Acceptance** (research P5), measured on the cards, in a battlefield forest and on the min-spec laptop (the dev
+Mac's numbers are a proxy: `docs/plans/active/track-e-results/shadows-foliage.md`):
 - average foliage overdraw ≤ 2–3× at the worst zoom;
 - crown coverage within ±10% from the nearest to the farthest zoom;
-- no heat ripple behind units (in stage 1, behind the army-colour blocks; L4 re-checks with units);
+- no heat ripple behind units (in stage 1, behind the army-colour blocks; L4 re-checks with units; alpha-tested
+  cards make it likelier);
 - foliage ≤ 3 ms GPU.
 
+None of these is measured yet. #63 (a dark coat in a crown's deep shade) moved to L4 (the army side's to fix); the
+guard's values with the cards: `docs/plans/done/wheat-height.md`.
+
 **Depends on:** L2, LA2 (the first building); in stage 1 it measures its own budget rather than
-L1's. **Estimate:** 4–6 days, 2–3 PRs.
-
-**Progress (2026-10-13).** Built ahead of the phase, as experiments behind `?trees=cards` (the default arm keeps
-the pack crowns): results in `docs/plans/active/track-e-results/shadows-foliage.md`, the technique's source in
-`docs/research/tiny-glade-look.md`.
-- **L7a, leaf-card crowns** (#58, `docs/plans/done/l7a-canopy-cards.md`): each broadleaf, birch and willow
-  crown as camera-facing cards cut by a greyscale clump atlas our palette paints, casting leafy shadows. Read as
-  painted leaf masses at the near and mid zooms (owner: "it's the way").
-- **L7b, the crowns as volumes** (#61, `docs/plans/done/l7b-crown-volume.md`): a normal per pixel from the
-  crown's ellipsoid, the light through it, a soft ramp (decision 0022, accepted 2026-10-13), a darker core, a tilt per leaf
-  (owner: "it's beautiful now the trees").
-- **Cost so far:** `docs/plans/active/track-e-results/shadows-foliage.md` (the dev Mac, a proxy).
-
-**What L7 still owes:**
-- the cards as the default arm, once the guard passes with them (#63, now L4's: a dark coat in a crown's shade;
-  the guard does not gate that block today only because main fails it too) and a forest
-  costs less (the cards' cost is highest where one fills the frame: `docs/plans/done/forest-bench.md`), against fewer,
-  larger cards for far crowns, the pack mesh beyond a distance, or a depth pre-pass;
-  (the guard's values with the cards: `docs/plans/done/wheat-height.md`);
-- the outline at the widest zoom aliases: alpha-to-coverage on MSAA, L8's A/B;
-- the acceptance above, measured on the cards: overdraw, coverage across the zooms, no heat ripple behind the
-  army blocks (alpha-tested cards make it likelier), foliage ≤ 3 ms, in a battlefield forest and on the min-spec
-  laptop;
-- bushes are still pack meshes (the pines and the far woods are generated since #95 and docs/plans/done/far-woods-gen.md);
-  the far woods' broadleaves keep their crowns in winter; the building material.
+L1's.
 
 ## L8. Anti-aliasing (research P6)
 
@@ -704,6 +688,8 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
 - **2026-10-13, #63 and the crops.** #63 moved from L7 to L4 (the army side's to fix); standing crops capped under a
   soldier's chest (decision 0026).
 
+- **2026-10-16, L7's status.** L7's section rewritten as a status table (done, owed, not started): its text still
+  read as if the cards were an experiment behind `?trees=cards`, though they are the default since #95.
 - **2026-10-13, the shadows and the crowns.** Recorded the shadow work (Results) and L7's progress (L7a, L7b,
   what L7 still owes); the owner's answer on tilt-shift (question 3); decision 0022 (proposed); known issues #62
   and #63.
@@ -731,4 +717,4 @@ tallies, and what changed from this plan).
   distance to the caster, each crown hides its share of the sky, the shadow deepens on a wood's floor; baked on
   load, nothing per frame. The guard's one regressed block was waived by the owner. The cost, and links to every
   other number: `track-e-results/shadows-foliage.md`.
-- **L7a and L7b:** under L7, above.
+- **L7a, L7b and the generated trees:** under L7's status table, above.
