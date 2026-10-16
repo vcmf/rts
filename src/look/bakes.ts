@@ -50,7 +50,7 @@ const SKY_REACH = 25   // m: a sphere farther than this hides too little sky to 
 const INSIDE = 0.42   // the most sky one sphere hides, times its opacity (0.29 for a crown: the old disc was 0.42)
 // the bounce map (LC5): texels a side over the tile (1.6 m), and its gather's tap spacing and Gaussian sigma, m
 const GB_N = 512, GB_STEP = 2.7, GB_SIGMA = 4.5
-// the trunks' baked shadows: how dark at full strength (times the sun), and the layer only the light map's camera sees
+// the trunks' baked shadows: how dark at full strength (times the sun), and a layer no camera of the game sees
 const TRUNK_DARK = 0.85, LM_ONLY = 0x10000000
 const FAR_MAX = 40    // m along the light: the farthest caster the penumbra search reaches (a 18 m crown top at the sun's 27°)
 
@@ -149,7 +149,7 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   if (trunkMesh) {
     const tm = new ShaderMaterial('trunkShadow', scene, { vertexSource: TRUNK_VS, fragmentSource: TRUNK_FS }, { attributes: ['position', 'aUV'], uniforms: ['viewProjection'], needAlphaBlending: true, defines: [`#define TRUNK_DARK ${TRUNK_DARK.toFixed(2)}`] })
     tm.alphaMode = Constants.ALPHA_MULTIPLY; tm.disableDepthWrite = true; tm.depthFunction = Constants.ALWAYS; tm.backFaceCulling = false
-    trunkMesh.material = tm; trunkMesh.renderingGroupId = 1; trunkMesh.layerMask = LM_ONLY; lmCam.layerMask = 0x0FFFFFFF | LM_ONLY
+    trunkMesh.material = tm; trunkMesh.renderingGroupId = 1; trunkMesh.layerMask = LM_ONLY   // hidden from the game camera; the light map draws its render list whatever the mask
     lightMap.renderList.push(trunkMesh)
   }
   // the bake must see a COMPLETE shadow map: re-bake every time the shadow pass actually renders

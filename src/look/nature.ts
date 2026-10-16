@@ -263,7 +263,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // under the meadow the fields grow from the meadow's slots (src/look/meadow.ts, docs/plans/done/l5d-crops.md):
   // no pack wheat tufts
   // far woods and hedgerows, never in the apron band, whose ground only the apron mesh knows: the pack's bush crowns,
-  // or under the generated trees each item's species' far stand-in (farModel)
+  // or under the generated trees each item's species' generated tree (drawGroup, farCuller)
   // farSp: each far item's species under the generated trees (docs/plans/done/far-woods-gen.md): the hedgerows
   // mostly hawthorn with the odd oak, the woods broadleaf, about one in four mostly spruce
   const far: Item[] = [], farSp: string[] = [], inBand = (x: number, z: number) => { const m = Math.max(Math.abs(x), Math.abs(z)); return m > D.spec.tile / 2 && m < D.band }
@@ -334,9 +334,9 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const twigMeshes: Mesh[] = [], lossCards: Mesh[] = []
   let seed = 1
   const swaps: ((on: boolean) => void)[] = [], cardMeshes: Mesh[] = [], packs: Mesh[] = []
-  // one model's instances: the model (the pack's crowns, or under the cards its trunks, its cards and its twigs).
-  // cull: culled by a box round its instances (the far woods' sectors); otherwise always drawn, as before
-  const drawGroup = (k: string, items: Item[]): { meshes: Mesh[]; buf: Float32Array; tint: Float32Array } | null => {
+  // one model's instances: the model (the pack's crowns, or under the cards its trunks, its cards and its twigs)
+  // far: a far tree's (farCuller draws its crown mesh past CARDS_M and its cards nearer: no swap between them)
+  const drawGroup = (k: string, items: Item[], far = false): { meshes: Mesh[]; buf: Float32Array; tint: Float32Array } | null => {
     const birch = /Birch|^Gen_birch/.test(k), conifer = /Pine|^Gen_(pine|spruce)/.test(k)
     const material = k === 'Reed' ? reedMat : /Grass|Flowers|Plant_1|Wheat/.test(k) ? grassMat : birch ? birchMat : conifer ? pineMat : treeMat
     const placed = place(k, material, items)
@@ -359,7 +359,8 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
         meshes.push(tm); twigMeshes.push(tm)
       }
       const show = (on: boolean) => { cm.setEnabled(on); trunks.setEnabled(on); pack.setEnabled(!on) }
-      show(true); swaps.push(show); cardMeshes.push(cm); packs.push(pack)
+      if (!far) { show(true); swaps.push(show) }
+      cardMeshes.push(cm); packs.push(pack)
     }
     return { meshes, buf: placed.buf, tint: placed.tint }
   }
@@ -388,7 +389,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
       item[2] = footprint('Bush_1', fs) / genModels.size(k)
       ;(farTrees[k] ||= []).push(item)
     })
-    for (const [k, items] of Object.entries(farTrees)) { const g = drawGroup(k, items); if (g) farCulled.push({ ...g, items, r: genModels.size(k) }) }
+    for (const [k, items] of Object.entries(farTrees)) { const g = drawGroup(k, items, true); if (g) farCulled.push({ ...g, items, r: genModels.size(k) }) }
   } else { place('Bush_1', farMat, far.filter((b, i) => i % 4 === 0 && drawn(b))); place('Bush_2', farMat, far.filter((b, i) => i % 4 === 2 && drawn(b))) }
   // the meadow's growth: where the old tufts could stand (the placement rule: the cover's grassy classes and their
   // edges, off the banks and the water, out of the formation zones); pasture grazed shorter
@@ -404,7 +405,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const growthAllowed = (x: number, z: number) => !touchesZone(x, z, CLUMP_REACH) && offBanks(riverQuery(x, z), CLUMP_REACH)
   // the trunks (their shadows, baked into the light map): per model its trunk's radius and its crown's
   // lowest point, times each instance's scale
-  const trunks: Nature['trunks'] = [], TRUNK = /Tree|^Gen_/
+  const trunks: Nature['trunks'] = [], TRUNK = /^(CommonTree|BirchTree|PineTree|Willow|Gen)_/   // trees, not stumps
   for (const [k, items] of [...Object.entries(groups), ...Object.entries(farTrees)]) {
     if (!TRUNK.test(k)) continue
     const m = NATURE[k]; let r = 0, base = Infinity
@@ -451,7 +452,7 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
   }
   // the extras stand at scale 1, in metres
   for (const sp of ['apple', 'poplar', 'hawthorn']) for (let v = 0; v < GEN_VARIANTS; v++) NATURE[`Gen_${sp}_${v + 1}`] = G.natureModel(sp, v + 1, 1)
-  const variant = (sp: string, x: number, z: number) => `Gen_${sp}_${1 + Math.floor(hash(z * 0.37, x * 0.37) * GEN_VARIANTS)}`
+  const variant = (sp: string, x: number, z: number) => `Gen_${sp}_${1 + Math.floor(hash(z * 0.37, x * 0.37) * GEN_VARIANTS)}`, sizes: Record<string, number> = {}
   return {
     pick(model: string, x: number, z: number): string {
       const species = GEN_FOR[model.replace(/_\d+$/, '')]
@@ -492,8 +493,9 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
     // a generated model's size: the larger of its reach in plan and its height over SIZE_H (a far tree's scale,
     // docs/plans/active/trees-perf-trunks.md)
     size(k: string): number {
-      const m = NATURE[k]; let r = 0; for (let i = 0; i < m.pos.length; i += 3) r = Math.max(r, Math.hypot(m.pos[i], m.pos[i + 2]))
-      return Math.max(r, m.max[1] / SIZE_H)
+      let v = sizes[k]
+      if (v === undefined) { const m = NATURE[k]; let r = 0; for (let i = 0; i < m.pos.length; i += 3) r = Math.max(r, Math.hypot(m.pos[i], m.pos[i + 2])); v = sizes[k] = Math.max(r, m.max[1] / SIZE_H) }
+      return v
     },
     // a column's cards: sized to its width, not its height (src/look/canopy.ts sizes cards by the crown's radius)
     cardOpts(model: string, o: CardOptions): CardOptions {
@@ -517,16 +519,19 @@ const SPHERE_K = 1.4, CARDS_M = 220
 function farCuller(scene: Scene, groups: FarGroup[]): Nature['farCull'] {
   if (!groups.length) return null
   const work = groups.map(g => {
-    const near = { buf: new Float32Array(g.buf), tint: new Float32Array(g.tint), meshes: g.meshes.slice(1) }
-    const far = { buf: new Float32Array(g.buf), tint: new Float32Array(g.tint), meshes: g.meshes.slice(0, 1) }
+    // without cards (?trees=gen alone) the crown mesh is all there is, at every distance
+    const carded = g.meshes.length > 1
+    const near = { buf: new Float32Array(g.buf), tint: new Float32Array(g.tint), meshes: carded ? g.meshes.slice(1) : g.meshes }
+    const far = { buf: new Float32Array(g.buf), tint: new Float32Array(g.tint), meshes: carded ? g.meshes.slice(0, 1) : [] }
     for (const side of [near, far]) for (const m of side.meshes) { m.thinInstanceSetBuffer('matrix', side.buf, 16, false); m.thinInstanceSetBuffer('aTint', side.tint, 1, false) }
     // the sphere: the instance's place (its matrix's translation), raised by its size, the size times its scale
     const c = g.items.map((it, i) => [g.buf[i * 16 + 12], g.buf[i * 16 + 13] + g.r * it[2] * 0.6, g.buf[i * 16 + 14], g.r * it[2] * SPHERE_K])
     return { g, near, far, c }
   })
+  for (const w of work) w.g.meshes[0].setEnabled(true)   // the crown mesh: no cards' swap for the far trees (drawGroup's far)
   let full = false, last = ''
   const pack = (all: boolean) => {
-    const cam = scene.activeCamera!, planes = all ? null : Frustum.GetPlanes(cam.getTransformationMatrix()), P = cam.globalPosition
+    const cam = scene.activeCamera!, planes = all ? null : Frustum.GetPlanes(cam.getTransformationMatrix()), P = cam.position
     for (const w of work) {
       let nn = 0, nf = 0
       for (let i = 0; i < w.c.length; i++) {
@@ -536,13 +541,14 @@ function farCuller(scene: Scene, groups: FarGroup[]): Nature['farCull'] {
         side.buf.set(w.g.buf.subarray(i * 16, i * 16 + 16), n * 16); side.tint[n] = w.g.tint[i]
       }
       for (const [side, n] of [[w.near, nn], [w.far, nf]] as const) for (const m of side.meshes) { m.thinInstanceCount = n; m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('aTint') }
-      w.far.meshes[0].setEnabled(true)   // the crown mesh, which the cards' swap hides (their meshes' own switches stay: the twigs follow the season)
     }
   }
-  scene.onBeforeRenderObservable.add(() => {
-    const cam = scene.activeCamera; if (!cam || full) return
+  // just before the game camera draws, its matrices brought up to date (the page moves the camera before the render)
+  scene.onBeforeCameraRenderObservable.add(cam => {
+    if (cam !== scene.activeCamera || full) return
+    cam.getViewMatrix(); cam.getProjectionMatrix()
     const key = cam.getTransformationMatrix().asArray().join(',')
     if (key !== last) { last = key; pack(false) }
   })
-  return { all(on: boolean) { full = on; last = ''; if (on) pack(true) } }
+  return { all(on: boolean) { full = on; last = ''; pack(on) } }
 }

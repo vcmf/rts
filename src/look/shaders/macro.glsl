@@ -205,7 +205,7 @@ vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
   float w=smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y)));
   #ifdef WEBGL2
   vec4 a=w<1.0?texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W):vec4(0.0),b=w>0.0?texM(uMacroFar,xz/FAR_W+0.5,FAR_W):vec4(0.0);
-  pMacro=w<=0.0?a:w>=1.0?b:mix(a,b,w);
+  pMacro=mix(a,b,w);   // the side not read has no weight
   #else
   pMacro=mix(texM(uMacro,(xz+TILE_HALF)/TILE_W,TILE_W),texM(uMacroFar,xz/FAR_W+0.5,FAR_W),w);   // WebGL1: texture2D takes its gradients from the quad, so both read always
   #endif

@@ -268,16 +268,23 @@ crowns as cards.
   spruce patch on one side, birches and hawthorns on its edge), a wood of about 40 in the north-east and two dozen
   lone field trees come from their own random stream (`extras`), so the scatter's is unchanged; each passes the
   placement rule. No copper beech: the palette's tint already turns about 5% of crowns copper.
-- **The far woods** (`farModel` in `addGenerated`, docs/plans/done/far-woods-gen.md): under `?trees=gen` the far
-  ring's hedgerows and woods (r 190 to 640 m) are low-detail generated crowns, not the pack's bushes: each species'
-  first model's clumps as once-subdivided icospheres (80 triangles a clump, the near crowns' flatter undersides, a
-  lumpy by the species' own lump) on a four-sided trunk from the root to the lowest clump and a limb from there to each
-  other clump, about 250 to 530 triangles a model, sized so the larger of its reach in plan and its height over 1.8
-  (`SIZE_H`) is `Bush_1`'s footprint at the item's scale: an oak fills it, a birch or a spruce stands taller and
-  narrower, and none reaches past the placement rule's footprint. The hedgerows are mostly hawthorn with the
-  odd oak (1.6 times their size where that fits, its item scaled), every other item as the bushes were; the woods every item, oak, beech, lime and birch, about one wood in
-  four mostly spruce. Birch and spruce take their own far colours, so a spruce wood stays green in autumn. In winter
-  the far broadleaves keep their crowns (snow-capped), as the bushes did; the near ones go bare.
+- **The far woods** (`buildNature`'s far list, `farCuller` in `src/look/nature.ts`, docs/plans/active/trees-perf-trunks.md):
+  under `?trees=gen` the far ring's hedgerows and woods (r 190 to 640 m) are the near scatter's generated trees, with
+  their cards, leaf fall and twigs (`drawGroup`): two of each species' four models, each item sized so the larger of
+  its reach in plan and its height over 1.8 (`SIZE_H`) is `Bush_1`'s footprint at the item's scale (an oak fills it, a
+  birch or a spruce stands taller and narrower, none reaches past the placement rule's footprint). The hedgerows are
+  mostly hawthorn with the odd oak (1.6 times their size where that fits, its item scaled), every other item as the
+  bushes were; the woods every item, oak, beech, lime and birch, about one wood in four mostly spruce. **Culled per
+  instance:** one mesh a model holds every far instance (no box culls a ring); just before the game camera draws, the
+  instances in its frustum (a sphere at the crown) are packed to the front of the buffers, those within 220 m of the
+  camera (`CARDS_M`) with their cards, the farther ones with the model's own crown mesh (no alpha test, a few pixels
+  wide there; without cards, the crown mesh at every distance). The shadow pass bakes with every far tree and its
+  cards (`farCull.all`).
+- **The trunks' shadows** (`trunkShadows` in `src/look/bakes.ts`, `trunkshadow.*`): a trunk is thinner than two of
+  the shadow map's 0.33 m texels and the soft filter washed it out. Each drawn tree's trunk (its bark's radius at the
+  foot times 0.6, `TRUNK_TAPER`; its crown's lowest point) is drawn into the light map's sun after the terrain, once,
+  multiplied in: a quad on the ground from the root away from the sun to where the crown's shadow starts, crisp at
+  the root, softening along it, 0.85 dark (`TRUNK_DARK`). Nothing a frame.
 - **One volume per clump** (`cardMesh(…, clumpVolume)` in `src/look/canopy.ts`): each card carries the ellipsoid of
   the clump it stands on in `aEllC`, `aEllR`, so L7b's light runs per clump; `?clumpvol=off` gives each crown one
   ellipsoid, as the pack crowns have. A column's cards are sized to its width, not its height (`cardOpts`).
