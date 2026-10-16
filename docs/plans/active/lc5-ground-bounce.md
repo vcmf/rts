@@ -20,7 +20,8 @@ the same cool as one in a wood.
   2.7 m apart, sigma 4.5 m, in the bake's own fragment: no blur passes), so a point takes the light of the ground
   around it.
 - **Baked on load and again when the season is released** (the slider's `change`), and whenever the light map is
-  rebaked (its own observer). Light, not colour: the macro colour's bake is unchanged.
+  rebaked (its own observer). As built (review round 1): whenever the season, the shadows' switch or the grain change
+  and hold for a frame, however they were set. Light, not colour: the macro colour's bake is unchanged.
 - **The ground reads it** (`#define GROUND_BOUNCE`, the tile's and the hill's terrain materials; not the far ring,
   which the light map does not cover): in paint(), in its cast shadows (as built: the shadow and mid bands at first
   lit the hill's whole shaded slope and flattened it), `alb × bounce × the mood's groundBounce × the cast shadow ×
@@ -61,4 +62,17 @@ Main at acefd2c. Every run's exit code. Pairs in `scratch/compare/lc5/` (not com
   against main: every view differs (the shadows), the expected change.
 - **The guard** against main, the default, cover and crops views, summer, autumn and winter: exit 0 each.
   **`tools/coat-check.mjs`:** exit 0. **`tools/check-negatives.mjs`:** exit 0. **`tools/macro-check.mjs`:** exit 0.
+  After review round 1 (the bounce map rebaked for the checks' seasons, which the first runs did not have: their
+  autumn and winter measured a summer map), again: the goldens (`?gbounce=0` matches main), the guard at the three
+  views and seasons, the coat check, the negatives, the macro check, and `tools/water-look-check.mjs` (the shore
+  band now takes the fill): exit 0 each.
 - **`npm test`:** 255 of 256 at a load of 16 (the sim's timing budget, `test/soldiers.test.ts`, 12.19 ms against 12).
+
+## Review
+
+- **Round 1** (severe): the checks set `S.season` directly, so the bounce map stayed the season the page opened in
+  (it rebaked on the slider's release only); it now rebakes when the season, the shadows' switch or the grain change
+  and hold for a frame. The water's shore band and the meadow's clumps did not take the fill (a seam at the band, dark
+  clumps on a lifted shadow); they do. The map stopped hard at the tile's edge; it fades over the last 32 m. The bake
+  ignored the fields' snow lie. One helper for the tile maps' coordinates (`lmUV`). Kept: the bake runs at
+  `?gbounce=0` too (the off arm is then the same frame as main), and `setGroundBounce` beside `setBounce`.
