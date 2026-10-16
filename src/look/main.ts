@@ -163,7 +163,19 @@ const post = new Post(camera, engine, S, () => mats.grain, groundAt); post.build
 const byId = <T extends HTMLElement>(id: string): T => { const e = document.getElementById(id); if (!e) throw new Error(`look.html has no #${id}`); return e as T }
 const input = (id: string) => byId<HTMLInputElement>(id)
 input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
-byId<HTMLSelectElement>('res').onchange = () => { S.res = +byId<HTMLSelectElement>('res').value; engine.setHardwareScalingLevel(1 / S.res) }
+// the render scale (docs/plans/active/dynamic-scale.md): a fixed one from the panel, or Auto (S.res 0, the default): by
+// zoom, 1 up to AUTO_R[0] m of the camera's radius, easing to AUTO_MIN at AUTO_R[1] (the widest), in steps of
+// AUTO_STEP (each change resizes the frame's targets: a few over the whole range). The interface is HTML over the
+// canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
+const AUTO_R = [180, 260], AUTO_MIN = 0.85, AUTO_STEP = 0.05
+let scaleNow = 1
+const applyScale = (s: number) => { if (s !== scaleNow) { scaleNow = s; engine.setHardwareScalingLevel(1 / s) } }
+byId<HTMLSelectElement>('res').onchange = () => { S.res = +byId<HTMLSelectElement>('res').value; if (S.res) applyScale(S.res) }
+scene.onBeforeRenderObservable.add(() => {
+  if (S.res) { applyScale(S.res); return }
+  const t = Math.min(1, Math.max(0, (camera.radius - AUTO_R[0]) / (AUTO_R[1] - AUTO_R[0])))
+  applyScale(Math.round((1 - (1 - AUTO_MIN) * t * t * (3 - 2 * t)) / AUTO_STEP) * AUTO_STEP)
+})
 const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
 // ?bloom=0: open with the bloom off (an A/B, docs/plans/done/frame-readout.md)
 // ?far=off (below, after the bakes), ?msaa=1 (before the passes): the widest zoom's A/Bs (docs/plans/done/wide-perf.md)

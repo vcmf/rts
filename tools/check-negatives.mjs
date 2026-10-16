@@ -57,7 +57,7 @@ let bad = 0, hasSpec = false   // the look cases run when the page has a SPEC (r
 const queue = [...CASES]
 for (let q = 0; q < queue.length; q++) {
   const [check, name, sabotage, expect] = queue[q]
-  const steps = [['wait', 1000], ['eval', '(async () => { for (let i = 0; i < 1200 && !window.__proto; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__proto) throw new Error("the page never set window.__proto (120 s)"); return "page built" })()'], ['wait', 1000], ['eval', CAPTURE],
+  const steps = [['wait', 1000], ['eval', '(async () => { for (let i = 0; i < 1200 && !window.__proto; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__proto) throw new Error("the page never set window.__proto (120 s)"); return "page built" })()'], ['wait', 1000], ['eval', '__proto.S.res = 1; "scale 1"'], ['eval', CAPTURE],
     ...(sabotage ? [['eval', sabotage + '; "SABOTAGED"']] : []),
     ['eval', CHECKS[check] + '; "CHECK RAN"'], ['eval', REPORT]]
   const pg = check === 'render' ? renderPage : page
