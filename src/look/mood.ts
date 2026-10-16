@@ -28,6 +28,7 @@ export interface Mood {
     amt: number               // how far (0: the albedo as painted)
   }
   bounce: number              // the ground's bounce on units and crowns (LC4: paint(), BOUNCE), 0..2 (0.7 in the moods)
+  groundBounce: number        // the ground's bounce on the ground (LC5: the bounce map, paint(), GROUND_BOUNCE), 0..2
   units: {                    // how much of the light units take (the painter's KEEP_HUE path: the army blocks, the figures)
     tint: number              // of the sun's hue, 0..1 (its value always): the eye's white balance
     mist: number              // the valley mist's most over them (0..0.42, the ground's most)
@@ -60,7 +61,7 @@ export const MOODS = {
     hazeCool: c(0.60, 0.69, 0.78), hazeWarm: c(0.95, 0.80, 0.58),
     waterSky: c(0.62, 0.74, 0.86), glint: c(1.0, 0.86, 0.58), farRiver: c(0.40, 0.55, 0.58),
     earth: { tint: c(1, 1, 1), chroma: 1, amt: 0 },
-    bounce: 0.7,
+    bounce: 0.7, groundBounce: 0.5,
     units: { tint: 0.4, mist: 0.08, grade: 0.2, bounce: 0.35 },
     grade: {
       greenTint: c(1.03, 1.0, 0.88), greenChroma: 0.5, greenAmt: 0.85, sat: 0.9,
@@ -78,7 +79,7 @@ export const MOODS = {
     hazeCool: c(0.60, 0.68, 0.78), hazeWarm: c(0.86, 0.80, 0.68),
     waterSky: c(0.62, 0.73, 0.84), glint: c(1.0, 0.92, 0.75), farRiver: c(0.40, 0.54, 0.58),
     earth: { tint: c(1.02, 1.0, 0.94), chroma: 0.6, amt: 1 },
-    bounce: 0.7,
+    bounce: 0.7, groundBounce: 0.5,
     units: { tint: 0.3, mist: 0.05, grade: 0.1, bounce: 0.35 },
     grade: {
       greenTint: c(1.0, 1.0, 0.92), greenChroma: 0.6, greenAmt: 0.85, sat: 0.86,
@@ -104,6 +105,12 @@ export function setBounce(v: number): void {
   if (locked) throw new Error('setBounce: the materials are made: set it before them')
   if (!(v >= 0 && v <= 2)) throw new Error(`?bounce must be 0 to 2, not ${v}`)
   MOOD = { ...MOOD, bounce: v }
+}
+// ?gbounce=<0..2> on the look page: the ground's bounce on the ground (LC5), as setBounce
+export function setGroundBounce(v: number): void {
+  if (locked) throw new Error('setGroundBounce: the materials are made: set it before them')
+  if (!(v >= 0 && v <= 2)) throw new Error(`?gbounce must be 0 to 2, not ${v}`)
+  MOOD = { ...MOOD, groundBounce: v }
 }
 
 // the grade (gradeOf, src/look/shaders/painter.glsl) of one colour at a height in the frame (0 bottom, 1 top), for what

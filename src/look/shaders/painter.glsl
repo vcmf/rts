@@ -7,7 +7,7 @@ uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistSha
 uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade;
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
 uniform float uUnitTint,uUnitMist,uUnitGrade,uUnitBounce;
-uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt,uBounce;   // the earth (the mood): the world toward earth tones
+uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt,uBounce,uGroundBounce;   // the earth (the mood): the world toward earth tones
 uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason;
 
 // Rec. 709 luma: the grade and the value units keep (the painted bands use the older 0.3, 0.59, 0.11)
@@ -192,6 +192,10 @@ vec3 earthOf(vec3 a){
 // material before paint() (the painter reads no ground: shore.glsl's bounceAt), lighting what faces down or sideways in
 // the shadow and mid bands, by the mood's uBounce. Units take its full hue: a local cast the eye does not balance away
 vec3 pBounce=vec3(0.0);
+// THE GROUND'S BOUNCE ON THE GROUND (LC5, docs/plans/active/lc5-ground-bounce.md): the bounce map here (the light the
+// ground around sends back, src/look/bakes.ts), set by the ground before paint(), filling its cast shadows (sh) by
+// the mood's uGroundBounce: a shadow on a sunlit field takes the field's colour, a wood floor stays dark
+vec3 pGround=vec3(0.0);
 // THE paint function. jitter: how loose the brushwork is (1 = landscape, 0.3 = crisp units).
 // sh: extra shadow from the painted shadow map (0..1).
 vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh){
@@ -256,6 +260,9 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   bc*=uUnitBounce;   // units: a share of it, so a coat keeps its value against its ground (the guard)
   #endif
   c+=alb*bc*uBounce*(0.5-0.5*N.y)*(1.0-smoothstep(0.55,1.0,t))*occ;   // from below, the sun's band left to the sun
+  #endif
+  #ifdef GROUND_BOUNCE
+  c+=alb*pGround*uGroundBounce*sh*(1.0-smoothstep(0.55,1.0,t))*occ*mix(1.0,0.35,snow);   // in cast shadow only (a slope turned from the sun keeps its modelling), a third on snow (its shadows stay blue)
   #endif
   c*=1.0+gr*0.38;                                                           // gouache grain in the value
   #ifdef DETAIL_ON

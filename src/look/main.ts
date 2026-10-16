@@ -16,7 +16,7 @@ import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions 
 import { runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S } from './materials.ts'
-import { gradeColour, MOOD, setBounce, setMood } from './mood.ts'
+import { gradeColour, MOOD, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow } from './meadow.ts'
 import { DOF, Post, buildCamera, typingIn } from './post.ts'
@@ -63,6 +63,7 @@ const params = new URLSearchParams(location.search), softParam = params.get('sof
 // the light's mood (src/look/mood.ts), before any material is made
 setMood(params.get('mood') ?? 'temperate')
 if (params.has('bounce')) { const b = params.get('bounce') ?? ''; setBounce(/^\d+(\.\d+)?$/.test(b) ? Number(b) : NaN) }
+if (params.has('gbounce')) { const b = params.get('gbounce') ?? ''; setGroundBounce(/^\d+(\.\d+)?$/.test(b) ? Number(b) : NaN) }   // LC5
 // the clear colour, graded as the materials are at the frame's top (it shows only there), following the grade's switch
 const CLEAR_GRADED = gradeColour(MOOD.hazeCool, MOOD, 1)
 scene.clearColor = new Color4(CLEAR_GRADED.r, CLEAR_GRADED.g, CLEAR_GRADED.b, 1)
@@ -128,6 +129,7 @@ const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { l
   for (const m of [terrain.terrainMat, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
 const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy, nature.cardCasters, soft)
+for (const m of [terrain.terrainMat, terrain.hillMat]) m.setTexture('uGB', bakes.groundBounce)   // the bounce map (LC5)
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
 const macro = buildMacro(scene, mats, look.cover, meadowOn)
@@ -166,6 +168,8 @@ document.querySelectorAll<HTMLButtonElement>('.tg').forEach(b => b.onclick = () 
 })
 input('gamt').oninput = () => { S.gamt = +input('gamt').value }
 const SEASONS = ['Summer', 'Early autumn', 'Late autumn', 'Winter']
+// the bounce map (LC5) reads the season: baked again when the slider is released
+input('season').addEventListener('change', () => bakes.groundBounce.resetRefreshCounter())
 input('season').oninput = () => { S.season = +input('season').value; byId('slabel').textContent = SEASONS[Math.min(3, Math.round(S.season))] }
 // under ?trees=gen the generated trees follow the season (twigs, thinning crowns), and on release of the slider their
 // shadows are baked again when what casts them changed. A judging aid of this page, as the grain's drop is: in the
@@ -317,6 +321,19 @@ Object.assign(window, { __look: {
   dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
   sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, meadow: meadow ? { growingCells: meadow.growingCells, growthAt: meadow.growthAt, groundAt: meadow.groundAt, cropAt: meadow.cropAt, croppingCells: meadow.croppingCells } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
   hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),
+  // the bounce map (LC5): its target, and the time of one bake: the median of n frames with it and of n without,
+  // each waited on by reading the map back (ms; gl.finish does not wait under ANGLE's Metal)
+  groundBounce: bakes.groundBounce,
+  gbBakeMs: async (n = 11) => {
+    const t: Record<'bake' | 'none', number[]> = { bake: [], none: [] }, gb = bakes.groundBounce
+    for (let i = 0; i < n; i++) for (const k of ['bake', 'none'] as const) {
+      await gb.readPixels(); const t0 = performance.now()
+      if (k === 'bake') gb.resetRefreshCounter()
+      scene.render(); await gb.readPixels(); t[k].push(performance.now() - t0)
+    }
+    const med = (a: number[]) => a.sort((x, y) => x - y)[a.length >> 1]
+    return { bake: med(t.bake), none: med(t.none) }
+  },
   // the grain the terrain reads: the paint grain, or the seam check's smooth one (returns its steepest texel step)
   grain: (kind: 'paint' | 'smooth') => {
     const old = mats.grain
