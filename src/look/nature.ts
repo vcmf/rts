@@ -29,7 +29,7 @@ import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture
 // [horizontal, vertical] radii), its twigs as their own mesh, and whether it loses its leaves
 export interface NatureModel { pos: number[]; idx: number[]; role: number[]; min: number[]; max: number[]; clump?: number[]; clumps?: { c: number[]; r: number[] }[]; twigs?: { pos: number[]; idx: number[]; role: number[] }; deciduous?: boolean }
 // the tree generator (prototypes/tree-core.js): a species and a seed to a pack-shaped model, divided by unit
-interface TreeGen { natureModel(key: string, seed: number, unit: number): NatureModel }
+interface TreeGen { natureModel(key: string, seed: number, unit: number): NatureModel; SPECIES: Record<string, { lump: number }>; vnoise(x: number, y: number, z: number): number }
 declare global { interface Window { NATURE?: Record<string, NatureModel>; TREEGEN?: TreeGen } }
 
 export type Item = [x: number, z: number, scale: number, yaw: number, tint: number, dy?: number]
@@ -256,13 +256,17 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   for (let u = 0; u < 30; u += 1.25) for (let v = 0; v < 22; v += 1.3) { const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5, z = -34 + v - u * 0.12 + (rr() - 0.5) * 0.5; if (rr() < 0.08) continue; addWheat([x, z, wheatScale(rr()), rr() * 6.28, rr()]) }
   // under the meadow the fields grow from the meadow's slots (src/look/meadow.ts, docs/plans/done/l5d-crops.md):
   // no pack wheat tufts
-  // far woods and hedgerows from cheap bush crowns, never in the apron band, whose ground only the apron mesh knows
+  // far woods and hedgerows, never in the apron band, whose ground only the apron mesh knows: the pack's bush crowns,
+  // or under the generated trees each item's species' far stand-in (farModel)
   // farSp: each far item's species under the generated trees (docs/plans/active/far-woods-gen.md): the hedgerows
   // mostly hawthorn with the odd oak, the woods broadleaf, about one in four mostly spruce
   const far: Item[] = [], farSp: string[] = [], inBand = (x: number, z: number) => { const m = Math.max(Math.abs(x), Math.abs(z)); return m > D.spec.tile / 2 && m < D.band }
   for (let k = -8; k <= 8; k++) for (let t = -560; t <= 560; t += 6) {
     const qx = k * 70 + (hash(k, t) - 0.5) * 2, qy = t, x = 0.8 * qx - 0.6 * qy, z = 0.6 * qx + 0.8 * qy, r = Math.hypot(x, z)
-    const fs = 3.6 + hash(k, t * 3) * 2.0; if (r < 190 || r > 640 || hash(k * 7, Math.floor(t / 60)) < 0.35 || !placeable(x, z, footprint('Bush_1', fs))) continue; far.push([x, z, fs, hash(t, k) * 6.28, hash(k, t)]); farSp.push(hash(t * 3, k) < 0.8 ? 'hawthorn' : 'oak')
+    const fs = 3.6 + hash(k, t * 3) * 2.0; if (r < 190 || r > 640 || hash(k * 7, Math.floor(t / 60)) < 0.35 || !placeable(x, z, footprint('Bush_1', fs))) continue; // under the generated trees the hedgerow's odd oak stands HEDGE_OAK times the thorns' size where it fits (its item
+    // scaled, so the far list's footprint stays what is drawn)
+    const oak = genModels && hash(t * 3, k) >= 0.8 && placeable(x, z, footprint('Bush_1', fs * HEDGE_OAK))
+    far.push([x, z, oak ? fs * HEDGE_OAK : fs, hash(t, k) * 6.28, hash(k, t)]); farSp.push(oak ? 'oak' : 'hawthorn')
   }
   const hedgeN = far.length
   for (let w = 0; w < 20; w++) {
@@ -355,8 +359,8 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   const seasonal = twigMeshes.length > 0 || lossCards.length > 0
   const setSeason = seasonal ? (s: number) => { season = s; showTwigs() } : undefined
   const shadowState = seasonal ? () => `${twigsOn()} ${leafLoss(season)}` : undefined
-  // the band is left out after the every-fourth choice, so every other bush stays the one the prototype drew
-  // and none on the roads or the village ground (after the every-fourth choice, so the others stay main's)
+  // the pack's bushes: the band is left out after the every-fourth choice, so every other bush stays the one the
+  // prototype drew, and none on the roads or the village ground (after that choice too, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
   if (genModels) {
     // the same items, each species' low-detail crown at Bush_1's reach (docs/plans/active/far-woods-gen.md): every other
@@ -386,6 +390,9 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
 // place, so the scatter's random stream is unchanged), every model sized so its reach in plan is its class's mean: the
 // page's composition and its placement rule stay as they are.
 const GEN_VARIANTS = 4
+// the far stand-ins (farModel): a height over SIZE_H counts as reach (an oak's is 1.36 its reach: a birch or a spruce
+// stands about a third taller, as near, not twice), and the hedgerow's odd oak's size over the thorns'
+const SIZE_H = 1.8, HEDGE_OAK = 1.6
 // the unit icosahedron subdivided once (42 vertices, 80 triangles), for the far stand-ins
 const ICO1 = (() => {
   const t = (1 + Math.sqrt(5)) / 2, v = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]].map(p => { const l = Math.hypot(p[0], p[1], p[2]); return p.map(x => x / l) })
@@ -459,23 +466,33 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
       return out
     },
     // a far stand-in (docs/plans/active/far-woods-gen.md): the species' first model's clumps as once-subdivided
-    // icospheres, their undersides flatter as near, a little lumpy, on a four-sided trunk to the lowest clump; sized so
-    // its reach in plan is `reach` (no limbs, no twigs: at 190 m and more they are under a pixel)
-    farModel(sp: string, reach: number): string {
-      const key = `GenFar_${sp}`
+    // icospheres, their undersides flatter as near, lumpy by the species' own lump on the generator's smooth noise; a
+    // trunk from the root up to the lowest clump and a limb from there to each other clump (no twigs: at 190 m and
+    // more they are under a pixel). Sized so the larger of its reach in plan and its height over SIZE_H is `size`: a
+    // broadleaf fills the footprint as the bush did, a birch or a spruce stands taller and narrower; it never reaches
+    // farther than `size`, the placement rule's footprint at scale 1
+    farModel(sp: string, size: number): string {
+      const key = `GenFar_${sp}_${size}`
       if (NATURE[key]) return key
-      const g = NATURE[`Gen_${sp}_1`] ?? (NATURE[`Gen_${sp}_1`] = G.natureModel(sp, 1, 1)), qs = g.clumps!
+      const g = NATURE[`Gen_${sp}_1`] ?? (NATURE[`Gen_${sp}_1`] = G.natureModel(sp, 1, 1)), qs = g.clumps!, lump = G.SPECIES[sp].lump, bark = sp === 'birch' ? 4 : 2
       const pos: number[] = [], idx: number[] = [], role: number[] = []
       qs.forEach((q, n) => {
         const base = pos.length / 3
-        for (const [x, y, z] of ICO1.v) { const lump = 1 + 0.24 * (hash(x * 3 + n, y * 3 + z * 7) - 0.5); pos.push(q.c[0] + x * q.r[0] * lump, q.c[1] + (y < 0 ? y * 0.72 : y) * q.r[1] * lump, q.c[2] + z * q.r[0] * lump); role.push(0) }
+        for (const [x, y, z] of ICO1.v) { const l = 1 + lump * (G.vnoise(x * 1.9 + n * 97, y * 1.9, z * 1.9 - n * 97) - 0.5) * 2; pos.push(q.c[0] + x * q.r[0] * l, q.c[1] + (y < 0 ? y * 0.72 : y) * q.r[1] * l, q.c[2] + z * q.r[0] * l); role.push(0) }
         for (const [a, b, c] of ICO1.f) idx.push(base + a, base + c, base + b)
       })
-      const low = qs.reduce((m, q) => q.c[1] < m.c[1] ? q : m), tr = Math.min(...qs.map(q => q.r[0])) * 0.18, base = pos.length / 3
-      for (const [x, z] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) for (const y of [0, low.c[1]]) { pos.push(low.c[0] * (y ? 1 : 0.7) + x * tr, y, low.c[2] * (y ? 1 : 0.7) + z * tr); role.push(2) }
-      for (let k = 0; k < 4; k++) { const a = base + k * 2, b = base + ((k + 1) % 4) * 2; idx.push(a, b, a + 1, b, b + 1, a + 1) }
-      let r = 0; for (let i = 0; i < pos.length; i += 3) r = Math.max(r, Math.hypot(pos[i], pos[i + 2]))
-      const k = reach / r, p = pos.map(v => v * k), min = [0, 1, 2].map(j => Math.min(...p.filter((_, i) => i % 3 === j))), max = [0, 1, 2].map(j => Math.max(...p.filter((_, i) => i % 3 === j)))
+      // a four-sided prism from a to b, r thick
+      const prism = (a: number[], b: number[], r: number) => {
+        const base = pos.length / 3
+        for (const [dx, dz] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) for (const p of [a, b]) { pos.push(p[0] + dx * r, p[1], p[2] + dz * r); role.push(bark) }
+        for (let k = 0; k < 4; k++) { const i = base + k * 2, j = base + ((k + 1) % 4) * 2; idx.push(i, j, i + 1, j, j + 1, i + 1) }
+      }
+      const low = qs.reduce((m, q) => q.c[1] < m.c[1] ? q : m), tr = Math.min(...qs.map(q => q.r[0])) * 0.18
+      prism([0, 0, 0], low.c, tr)
+      for (const q of qs) if (q !== low) prism(low.c, q.c, tr * 0.6)
+      const k = size / Math.max(reach({ pos } as NatureModel), (Math.max(...qs.map(q => q.c[1] + q.r[1]))) / SIZE_H), p = pos.map(v => v * k)
+      const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity]
+      for (let i = 0; i < p.length; i++) { min[i % 3] = Math.min(min[i % 3], p[i]); max[i % 3] = Math.max(max[i % 3], p[i]) }
       NATURE[key] = { pos: p, idx: idx.reverse(), role, min, max }
       return key
     },
