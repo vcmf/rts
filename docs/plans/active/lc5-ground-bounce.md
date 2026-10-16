@@ -66,7 +66,7 @@ Main at acefd2c. Every run's exit code. Pairs in `scratch/compare/lc5/` (not com
   autumn and winter measured a summer map), again: the goldens (`?gbounce=0` matches main), the guard at the three
   views and seasons, the coat check, the negatives, the macro check, and `tools/water-look-check.mjs` (the shore
   band now takes the fill): exit 0 each.
-- **`npm test`:** 255 of 256 at a load of 16 (the sim's timing budget, `test/soldiers.test.ts`, 12.19 ms against 12).
+- **`npm test`:** 255 of 256 at a load of 16 (the sim's timing budget, `test/soldiers.test.ts`, 12.19 ms against 12); after round 2, exit 0 (below).
 
 ## Review
 
@@ -76,3 +76,10 @@ Main at acefd2c. Every run's exit code. Pairs in `scratch/compare/lc5/` (not com
   clumps on a lifted shadow); they do. The map stopped hard at the tile's edge; it fades over the last 32 m. The bake
   ignored the fields' snow lie. One helper for the tile maps' coordinates (`lmUV`). Kept: the bake runs at
   `?gbounce=0` too (the off arm is then the same frame as main), and `setGroundBounce` beside `setBounce`.
+- **Round 2** (moderate and light: the last round): no rebake while the season slider is held (a slow drag rebaked
+  at every pause), none twice (a bake for the light map's sake records its inputs); the bed under the water takes no
+  fill; the bake's snow lie dropped (always 0 at a 1.6 m texel); `GB_EDGE` from the tile's side; the track plan's
+  row as built. Kept: the polled key of the bake's inputs, and the water near a bank counted as the ground under it.
+  After round 2: the goldens (`?gbounce=0` matches main), `tools/water-look-check.mjs`, `tools/check-negatives.mjs`,
+  the guard (default view, three seasons): exit 0 each; `npm test` exit 0, 256 tests; `node tools/check-docs.mjs`
+  exit 0.
