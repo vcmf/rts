@@ -257,14 +257,21 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // under the meadow the fields grow from the meadow's slots (src/look/meadow.ts, docs/plans/done/l5d-crops.md):
   // no pack wheat tufts
   // far woods and hedgerows from cheap bush crowns, never in the apron band, whose ground only the apron mesh knows
-  const far: Item[] = [], inBand = (x: number, z: number) => { const m = Math.max(Math.abs(x), Math.abs(z)); return m > D.spec.tile / 2 && m < D.band }
+  // farSp: each far item's species under the generated trees (docs/plans/active/far-woods-gen.md): the hedgerows
+  // mostly hawthorn with the odd oak, the woods broadleaf, about one in four mostly spruce
+  const far: Item[] = [], farSp: string[] = [], inBand = (x: number, z: number) => { const m = Math.max(Math.abs(x), Math.abs(z)); return m > D.spec.tile / 2 && m < D.band }
   for (let k = -8; k <= 8; k++) for (let t = -560; t <= 560; t += 6) {
     const qx = k * 70 + (hash(k, t) - 0.5) * 2, qy = t, x = 0.8 * qx - 0.6 * qy, z = 0.6 * qx + 0.8 * qy, r = Math.hypot(x, z)
-    const fs = 3.6 + hash(k, t * 3) * 2.0; if (r < 190 || r > 640 || hash(k * 7, Math.floor(t / 60)) < 0.35 || !placeable(x, z, footprint('Bush_1', fs))) continue; far.push([x, z, fs, hash(t, k) * 6.28, hash(k, t)])
+    const fs = 3.6 + hash(k, t * 3) * 2.0; if (r < 190 || r > 640 || hash(k * 7, Math.floor(t / 60)) < 0.35 || !placeable(x, z, footprint('Bush_1', fs))) continue; far.push([x, z, fs, hash(t, k) * 6.28, hash(k, t)]); farSp.push(hash(t * 3, k) < 0.8 ? 'hawthorn' : 'oak')
   }
+  const hedgeN = far.length
   for (let w = 0; w < 20; w++) {
     const a = hash(w, 51) * 6.283, r = 230 + hash(w, 52) * 320, cx = Math.cos(a) * r, cz = Math.sin(a) * r
-    for (let i = 0; i < 34; i++) { const x = cx + (hash(w, i) - 0.5) * 80, z = cz + (hash(i, w) - 0.5) * 55, fs = 5 + hash(i + w, 9) * 3; if (!placeable(x, z, footprint('Bush_1', fs))) continue; far.push([x, z, fs, hash(i, w * 3) * 6.28, hash(w, i * 2)]) }
+    const spruce = hash(w, 53) < 0.25
+    for (let i = 0; i < 34; i++) {
+      const x = cx + (hash(w, i) - 0.5) * 80, z = cz + (hash(i, w) - 0.5) * 55, fs = 5 + hash(i + w, 9) * 3; if (!placeable(x, z, footprint('Bush_1', fs))) continue; far.push([x, z, fs, hash(i, w * 3) * 6.28, hash(w, i * 2)])
+      const u = hash(i * 5, w * 7); farSp.push(spruce ? (u < 0.8 ? 'spruce' : 'birch') : u < 0.35 ? 'oak' : u < 0.6 ? 'beech' : u < 0.8 ? 'lime' : u < 0.92 ? 'birch' : 'spruce')
+    }
   }
   // stones on purpose (W5a, docs/plans/done/w5-banks.md; docs/art-bible.md §6c): in riffles, and at the foot of the
   // sharper cut banks, sized to stand 0.35–0.7 m out of the water there, so the water makes foam around them. Their own
@@ -351,7 +358,14 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // the band is left out after the every-fourth choice, so every other bush stays the one the prototype drew
   // and none on the roads or the village ground (after the every-fourth choice, so the others stay main's)
   const drawn = ([x, z]: Item) => !inBand(x, z) && !TRODDEN.includes(coverAt(cover, x, z))
-  place('Bush_1', farMat, far.filter((b, i) => i % 4 === 0 && drawn(b))); place('Bush_2', farMat, far.filter((b, i) => i % 4 === 2 && drawn(b)))
+  if (genModels) {
+    // the same items, each species' low-detail crown at Bush_1's reach (docs/plans/active/far-woods-gen.md): every other
+    // one in the hedgerows, as the bushes, but every one in the woods, whose trees stand apart where the bushes massed
+    const farOf: Record<string, Item[]> = {}
+    far.forEach((b, i) => { if ((i >= hedgeN || i % 2 === 0) && drawn(b)) (farOf[farSp[i]] ||= []).push(b) })
+    const farBirch = natMat('farBirch', '#7a9a3c', '#bcae55', { rim: 0.4 }), farPine = natMat('farPines', '#2f5a36', '#4f7a3e', { rim: 0.4, kind: 1 })
+    for (const [sp, items] of Object.entries(farOf)) place(genModels.farModel(sp, footprint('Bush_1', 1)), sp === 'birch' ? farBirch : sp === 'spruce' ? farPine : farMat, items)
+  } else { place('Bush_1', farMat, far.filter((b, i) => i % 4 === 0 && drawn(b))); place('Bush_2', farMat, far.filter((b, i) => i % 4 === 2 && drawn(b))) }
   // the meadow's growth: where the old tufts could stand (the placement rule: the cover's grassy classes and their
   // edges, off the banks and the water, out of the formation zones); pasture grazed shorter
   const growth = (x: number, z: number): [number, number] => coverAllows(cover, 'Grass_Short', x, z) ? [1, coverAt(cover, x, z) === COVER.pasture ? 0.65 : 1] : [0, 0]
@@ -372,6 +386,19 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
 // place, so the scatter's random stream is unchanged), every model sized so its reach in plan is its class's mean: the
 // page's composition and its placement rule stay as they are.
 const GEN_VARIANTS = 4
+// the unit icosahedron subdivided once (42 vertices, 80 triangles), for the far stand-ins
+const ICO1 = (() => {
+  const t = (1 + Math.sqrt(5)) / 2, v = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]].map(p => { const l = Math.hypot(p[0], p[1], p[2]); return p.map(x => x / l) })
+  const f0 = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]]
+  const mid = new Map<string, number>(), m = (a: number, b: number) => {
+    const key = a < b ? `${a},${b}` : `${b},${a}`; let i = mid.get(key)
+    if (i === undefined) { const p = [0, 1, 2].map(j => v[a][j] + v[b][j]), l = Math.hypot(p[0], p[1], p[2]); i = v.push(p.map(x => x / l)) - 1; mid.set(key, i) }
+    return i
+  }
+  const f: number[][] = []
+  for (const [a, b, c] of f0) { const ab = m(a, b), bc = m(b, c), ca = m(c, a); f.push([a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]) }
+  return { v, f }
+})()
 const TWIGS_FROM = 1.4   // the season the twigs show from: just before the crowns start to thin (LEAF_LOSS.from)
 const GEN_FOR: Record<string, [species: string, share: number][]> = {
   // (no copper beech: the palette's tint already turns about 5% of crowns copper, docs/art-bible.md §4b)
@@ -430,6 +457,27 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
       // lone field trees: oaks and limes, the odd pear-shaped apple
       for (let i = 0; i < 26; i++) { const x = (R() - 0.5) * 420, z = (R() - 0.5) * 420, sp = R() < 0.55 ? 'oak' : R() < 0.7 ? 'lime' : 'apple'; out.push([variant(sp, x, z), x, z, sp === 'apple' ? 1 : packS(), true]) }
       return out
+    },
+    // a far stand-in (docs/plans/active/far-woods-gen.md): the species' first model's clumps as once-subdivided
+    // icospheres, their undersides flatter as near, a little lumpy, on a four-sided trunk to the lowest clump; sized so
+    // its reach in plan is `reach` (no limbs, no twigs: at 190 m and more they are under a pixel)
+    farModel(sp: string, reach: number): string {
+      const key = `GenFar_${sp}`
+      if (NATURE[key]) return key
+      const g = NATURE[`Gen_${sp}_1`] ?? (NATURE[`Gen_${sp}_1`] = G.natureModel(sp, 1, 1)), qs = g.clumps!
+      const pos: number[] = [], idx: number[] = [], role: number[] = []
+      qs.forEach((q, n) => {
+        const base = pos.length / 3
+        for (const [x, y, z] of ICO1.v) { const lump = 1 + 0.24 * (hash(x * 3 + n, y * 3 + z * 7) - 0.5); pos.push(q.c[0] + x * q.r[0] * lump, q.c[1] + (y < 0 ? y * 0.72 : y) * q.r[1] * lump, q.c[2] + z * q.r[0] * lump); role.push(0) }
+        for (const [a, b, c] of ICO1.f) idx.push(base + a, base + c, base + b)
+      })
+      const low = qs.reduce((m, q) => q.c[1] < m.c[1] ? q : m), tr = Math.min(...qs.map(q => q.r[0])) * 0.18, base = pos.length / 3
+      for (const [x, z] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) for (const y of [0, low.c[1]]) { pos.push(low.c[0] * (y ? 1 : 0.7) + x * tr, y, low.c[2] * (y ? 1 : 0.7) + z * tr); role.push(2) }
+      for (let k = 0; k < 4; k++) { const a = base + k * 2, b = base + ((k + 1) % 4) * 2; idx.push(a, b, a + 1, b, b + 1, a + 1) }
+      let r = 0; for (let i = 0; i < pos.length; i += 3) r = Math.max(r, Math.hypot(pos[i], pos[i + 2]))
+      const k = reach / r, p = pos.map(v => v * k), min = [0, 1, 2].map(j => Math.min(...p.filter((_, i) => i % 3 === j))), max = [0, 1, 2].map(j => Math.max(...p.filter((_, i) => i % 3 === j)))
+      NATURE[key] = { pos: p, idx: idx.reverse(), role, min, max }
+      return key
     },
     // a column's cards: sized to its width, not its height (src/look/canopy.ts sizes cards by the crown's radius)
     cardOpts(model: string, o: CardOptions): CardOptions {

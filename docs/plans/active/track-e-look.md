@@ -548,7 +548,8 @@ the pack crowns): results in `docs/plans/active/track-e-results/shadows-foliage.
 - the acceptance above, measured on the cards: overdraw, coverage across the zooms, no heat ripple behind the
   army blocks (alpha-tested cards make it likelier), foliage ≤ 3 ms, in a battlefield forest and on the min-spec
   laptop;
-- pines and bushes are still pack meshes; bare winter trees; the building material; far woods.
+- bushes are still pack meshes (the pines and the far woods are generated since #95 and docs/plans/active/far-woods-gen.md);
+  the far woods' broadleaves keep their crowns in winter; the building material.
 
 ## L8. Anti-aliasing (research P6)
 

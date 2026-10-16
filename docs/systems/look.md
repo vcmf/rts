@@ -254,6 +254,14 @@ crowns as cards.
   spruce patch on one side, birches and hawthorns on its edge), a wood of about 40 in the north-east and two dozen
   lone field trees come from their own random stream (`extras`), so the scatter's is unchanged; each passes the
   placement rule. No copper beech: the palette's tint already turns about 5% of crowns copper.
+- **The far woods** (`farModel` in `addGenerated`, docs/plans/active/far-woods-gen.md): under `?trees=gen` the far
+  ring's hedgerows and woods (r 190 to 640 m) are low-detail generated crowns, not the pack's bushes: each species'
+  first model's clumps as once-subdivided icospheres (80 triangles a clump, the near crowns' flatter undersides, a
+  little lumpy) on a four-sided trunk to the lowest clump, about 250 to 500 triangles a model, sized so its reach in
+  plan is `Bush_1`'s at the item's scale (the placement rule's footprint). The hedgerows are mostly hawthorn with the
+  odd oak, every other item as the bushes were; the woods every item, oak, beech, lime and birch, about one wood in
+  four mostly spruce. Birch and spruce take their own far colours, so a spruce wood stays green in autumn. In winter
+  the far broadleaves keep their crowns (snow-capped), as the bushes did; the near ones go bare.
 - **One volume per clump** (`cardMesh(…, clumpVolume)` in `src/look/canopy.ts`): each card carries the ellipsoid of
   the clump it stands on in `aEllC`, `aEllR`, so L7b's light runs per clump; `?clumpvol=off` gives each crown one
   ellipsoid, as the pack crowns have. A column's cards are sized to its width, not its height (`cardOpts`).
@@ -431,7 +439,7 @@ header has the measures and the limits; the results are in `docs/plans/active/tr
   reaches 160 m from the focus, and the tile ends 400 m out (the old 150 m margin came from screenshots).
 - The shadow map is sized from its fitted box at 0.33 m on the ground (about 3647 × 4906 instead of 3072²).
 - The far ring sits at its authored height (the prototype lowered it 0.9 m, so the apron sloped and far bushes floated).
-- Instances stand on the drawn triangles, not on the formula; no far bush stands in the 14 m apron band.
+- Instances stand on the drawn triangles, not on the formula; no far bush or far tree stands in the 14 m apron band.
 - The reflection mask is blurred in JS instead of by a canvas filter.
 
 ## Tunables
