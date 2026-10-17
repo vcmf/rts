@@ -2,7 +2,7 @@
 # Preview videos of every clip: a close view and the RTS camera's pitch. Needs blender and ffmpeg.
 set -e
 CODE="$(cd "$(dirname "$0")" && pwd)"
-cd "$(cd "$CODE/../../.." && pwd)/output/unitpipe/units"             # the work folder (paths.py)
+cd "$(python3 "$CODE/../paths.py" work units)"                      # the work folder (paths.py)
 OUT=videos; mkdir -p $OUT frames
 render() {   # unit clip name cam [extra args]
   u=$1; c=$2; n=$3; cam=$4; shift 4
@@ -40,5 +40,9 @@ for v in close rts; do
   : > $OUT/l.txt
   for c in DrawSabre IdleSabre SabreCutRight SabreCutLeft SabreThrust SabreParry SabreFight SheatheSabre; do echo "file 'cavalry-$c-$v.mp4'" >> $OUT/l.txt; done
   ffmpeg -y -loglevel error -f concat -safe 0 -i $OUT/l.txt -c copy $OUT/cavalry-sabre-$v.mp4 && rm $OUT/l.txt
+done
+# publish the previews with their figures
+for f in fr-foot-artillery:battery fr-cuirassier:cavalry; do
+  d="$(python3 "$CODE/../paths.py" published ${f%%:*})/videos"; mkdir -p "$d"; cp $OUT/${f#*:}-*.mp4 "$d/"
 done
 echo done

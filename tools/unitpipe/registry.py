@@ -44,11 +44,16 @@ def build():
     return dict(version=1, figures={fid: figure_entry(fid, m) for fid, m in FIGURES.items()})
 
 
-text = json.dumps(build(), indent=1, sort_keys=False) + '\n'
+missing = [fid for fid in FIGURES if not (paths.OUTPUT / 'figures' / fid / 'clips.json').exists()]
+if missing:
+    print('registry: not published yet:', ', '.join(missing), '(run the pipelines first)')
+    sys.exit(1)
+reg = build()
+text = json.dumps(reg, indent=1, sort_keys=False) + '\n'
 if '--check' in sys.argv:
     same = paths.REGISTRY.exists() and paths.REGISTRY.read_text() == text
     print('registry:', 'up to date' if same else 'differs from the published figures (run registry.py)')
     sys.exit(0 if same else 1)
 paths.REGISTRY.parent.mkdir(parents=True, exist_ok=True)
 paths.REGISTRY.write_text(text)
-print('wrote', paths.REGISTRY, sum(len(f['clips']) for f in build()['figures'].values()), 'clips')
+print('wrote', paths.REGISTRY, sum(len(f['clips']) for f in reg['figures'].values()), 'clips')

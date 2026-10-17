@@ -3,12 +3,12 @@
 # Stops at the first failing step. Needs Blender 5.2.2 (blender on PATH), ffmpeg and python3.
 set -e
 CODE="$(cd "$(dirname "$0")" && pwd)"
-WORK="$(cd "$CODE/../../.." && pwd)/output/unitpipe/infantry"       # git-ignored (tools/unitpipe/paths.py)
-mkdir -p "$WORK" && cd "$WORK"
+WORK="$(python3 "$CODE/../paths.py" work infantry)"                  # git-ignored (tools/unitpipe/paths.py)
+cd "$WORK"
 B="blender -b --python-exit-code 1 -P"
 $B $CODE/inspect.py > inspect.log           # the Tripo FBX (assets/tripo) -> source-inspected.blend
 $B $CODE/components.py > components.log     # its loose parts -> components.json
-$B $CODE/build.py -- --skip-stills        # every clip -> soldier-animated.blend/.glb, clips.json, contacts.json
+$B $CODE/build.py                        # every clip -> soldier-animated.blend/.glb, clips.json, contacts.json
 $B $CODE/validate-drill.py                # drill clips: hands, joins, rigid weapon, ground, pops, cuff, readability
 $B $CODE/validate.py                      # the older clips' own checks
 $B $CODE/roundtrip.py                     # the GLB reimports with every action animated

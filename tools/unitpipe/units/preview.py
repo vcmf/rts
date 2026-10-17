@@ -45,10 +45,10 @@ c0 = Vector((x, y, z)); A = math.radians(az); E = math.radians(el)
 d = Vector((math.sin(A) * math.cos(E), -math.cos(A) * math.cos(E), math.sin(E)))
 cam.data.ortho_scale = size
 speed = float(kw.get('follow', 0))
-meta = {}
 mp = Path(bpy.data.filepath).parent
-for f in mp.glob('*-clips.json'):
-    meta.update(json.loads(f.read_text()))
+unit = Path(bpy.data.filepath).stem.split('-')[0]          # battery-animated.blend -> battery
+table = mp / f'{unit}-clips.json'
+meta = json.loads(table.read_text()) if table.exists() else {}
 events = meta.get(kw['clip'], {}).get('events', {})
 
 

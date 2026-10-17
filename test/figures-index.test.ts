@@ -2,12 +2,16 @@
 // from the published clip tables; these checks keep it consistent for the game and the docs that read it.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { napoleonic } from '../src/rulesets/napoleonic.ts'
+import type { UnitType } from '../src/sim/ruleset.ts'
 
 type Clip = { frames: number, loop: boolean, events: Record<string, number[]>, root_speed?: number, next?: string[], starts?: string, ends?: string }
-type Figure = { kind: string, pipeline: string, sources: string[], fps: number, m_per_unit: number, files: string[], clips: Record<string, Clip> }
+type Figure = { kind: UnitType['figure'], pipeline: string, sources: string[], fps: number, m_per_unit: number, files: string[], clips: Record<string, Clip> }
 const index = JSON.parse(readFileSync(new URL('../data/figures/index.json', import.meta.url), 'utf8')) as { version: number, figures: Record<string, Figure> }
 const sources = JSON.parse(readFileSync(new URL('../tools/unitpipe/sources.json', import.meta.url), 'utf8')) as Record<string, unknown>
 const figures = Object.entries(index.figures)
+// the kinds of figure the rulesets draw (UnitType.figure)
+const kinds = Object.values(napoleonic.types).map(t => t.figure)
 
 describe('figure registry', () => {
   it('has figures, each named army-kind, of a kind the rulesets know', () => {
@@ -15,7 +19,7 @@ describe('figure registry', () => {
     expect(figures.length).toBeGreaterThan(0)
     for (const [id, f] of figures) {
       expect(id).toMatch(/^[a-z]+(-[a-z]+)+$/)
-      expect(['foot', 'mounted', 'crewed']).toContain(f.kind)
+      expect(kinds).toContain(f.kind)
       expect(f.fps).toBe(24)
       expect(f.files.length).toBeGreaterThan(0)
     }

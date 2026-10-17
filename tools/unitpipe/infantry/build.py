@@ -8,18 +8,17 @@ from types import SimpleNamespace
 from pathlib import Path
 from mathutils import Vector, Matrix, Quaternion
 ROOT=paths.work('infantry')
-SOURCE=ROOT          # the work folder: source-inspected.blend, components.json
 CODE=Path(__file__).resolve().parent
 sys.path.insert(0,str(CODE))
 from render_setup import setup
-bpy.ops.wm.open_mainfile(filepath=str(SOURCE/'source-inspected.blend'))
+bpy.ops.wm.open_mainfile(filepath=str(ROOT/'source-inspected.blend'))
 rig=next(o for o in bpy.context.scene.objects if o.type=='ARMATURE')
 mesh=next(o for o in bpy.context.scene.objects if o.type=='MESH')
 rig.animation_data_clear()
 prefix='mixamorig:'
 def bone(n):return rig.pose.bones[prefix+n]
 rest={b.name:b.matrix_local.copy() for b in rig.data.bones}
-components=json.loads((SOURCE/'components.json').read_text())
+components=json.loads((ROOT/'components.json').read_text())
 gunids=[]; packids=[]
 for c in components:
     if c['max'][1]<-.09 and c['min'][0]<-.045:
@@ -519,19 +518,13 @@ scene=bpy.context.scene;scene.render.fps=24;scene.frame_start=1;scene.frame_end=
 scene.timeline_markers.new('Musket fire',frame=30)
 scene.timeline_markers.new('Bayonet contact (BayonetAttack)',frame=17)
 rig.animation_data.action=run
-setup(SOURCE)
+setup(ROOT)
 bpy.data.objects['PreviewGround'].location.z=0
 scene.camera.data.ortho_scale=1.95
 scene.camera.location=(1.8,-2.8,2.6)
 scene.camera.rotation_euler=(Vector((0,0,.72))-scene.camera.location).to_track_quat('-Z','Y').to_euler()
 scene.frame_end=17;scene.frame_set(1)
 bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'soldier-animated.blend'))
-for a,frames in []:
-    if '--skip-stills' in sys.argv:break
-    rig.animation_data.action=a
-    for f in frames:
-        scene.frame_set(f);scene.render.filepath=str(ROOT/(a.name.lower()+'-'+str(f)+'.png'))
-        bpy.ops.render.render(write_still=True)
 # Only the soldier, skeleton and rigid weapon bone are game assets.
 bpy.ops.object.select_all(action='DESELECT');mesh.select_set(True);rig.select_set(True)
 rig.animation_data.action=walk;scene.frame_set(1)

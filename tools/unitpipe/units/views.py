@@ -7,11 +7,6 @@ sc=bpy.context.scene
 sc.render.engine='BLENDER_EEVEE' if 'BLENDER_EEVEE' in [e.identifier for e in bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items] else 'BLENDER_EEVEE_NEXT'
 sc.render.resolution_x=sc.render.resolution_y=512
 w=bpy.data.worlds.new('W'); sc.world=w; w.use_nodes=True; w.node_tree.nodes['Background'].inputs[0].default_value=(.5,.52,.55,1)
-src=Path(bpy.data.filepath).parent/'source'
-for im in bpy.data.images:
-    if im.source=='FILE':
-        p=list((src).rglob(Path(im.filepath).name))
-        if p: im.filepath=str(p[0]); im.reload()
 meshes=[o for o in sc.objects if o.type=='MESH']
 lo=Vector([min((o.matrix_world@Vector(b))[i] for o in meshes for b in o.bound_box) for i in range(3)])
 hi=Vector([max((o.matrix_world@Vector(b))[i] for o in meshes for b in o.bound_box) for i in range(3)])

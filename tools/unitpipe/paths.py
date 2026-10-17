@@ -34,3 +34,9 @@ def published(figure):
     d = OUTPUT / 'figures' / figure
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+if __name__ == '__main__':      # for the shell scripts: python3 paths.py work <pipeline> | published <figure>
+    import sys
+    kind, arg = sys.argv[1:3]
+    print({'work': work, 'published': published}[kind](arg))

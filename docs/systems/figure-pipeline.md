@@ -39,14 +39,15 @@ its .fbm texture folder in its model folder, then `python3 tools/unitpipe/source
 ```sh
 ./tools/unitpipe/infantry/run-all.sh   # the infantryman: build, check, LODs, previews, publish (about 15 min)
 ./tools/unitpipe/units/run-all.sh      # the gun and crew, the cavalryman: prep, combine, animate, check, publish (2 min)
-./tools/unitpipe/units/videos.sh       # their preview videos (about 30 min)
+./tools/unitpipe/units/videos.sh       # their preview videos, published with the figures (about 30 min)
 python3 tools/unitpipe/registry.py     # data/figures/index.json from the published clip tables (--check to compare)
 python3 tools/unitpipe/sources.py --check
 ```
 
-Each run-all stops at the first failure and every check prints its result and exits non-zero on failure.
-The infantryman's comparison with the versions that made its accepted clips needs those archived Blender
-files in output/unitpipe/infantry-archive/ (v7, v8); without them it says it skipped.
+Each run-all stops at the first failing step (judged by its exit code, never by grepping its output) and
+keeps every step's full log in the work folder. The infantryman's comparison with the versions that made its
+accepted clips needs those archived Blender files in output/unitpipe/infantry-archive/ (v7, v8): without them
+it fails, unless UNITPIPE_SKIP_COMPARE=1 says on purpose that it is not run.
 
 ## Constraints
 
