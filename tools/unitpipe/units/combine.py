@@ -163,7 +163,7 @@ elif which == 'cavalry':
     pp = json.loads((K.ROOT / 'pistol-prep.json').read_text())
     mz = Vector(pp['muzzle'])
     y = haxis; z = Vector((0, -1, 0)) - y * Vector((0, -1, 0)).dot(y); z.normalize(); x = y.cross(z)
-    G = hmouth + y * (HOLSTER_MUZZLE - mz.y) - z * mz.z         # the muzzle HOLSTER_MUZZLE deep, on the axis
+    G = hmouth + y * (HOLSTER_MUZZLE - mz.y) - z * mz.z - x * mz.x   # the muzzle HOLSTER_MUZZLE deep, on the axis
     held = Matrix((x, y, z)).transposed().to_4x4(); held.translation = G
     pistol = next(o for o in append('pistol-prepped.blend', {'PistolMesh'}) if o.type == 'MESH')
     pistol.data.transform(held)

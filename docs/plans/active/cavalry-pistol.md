@@ -103,3 +103,8 @@ Out: reloading on horseback, firing at the walk or trot, the left holster.
   across the knuckles), placed in the holster by its muzzle so it sits as before. The closer grip made the
   draw's pull pass 8 cm from the shoulder (a 109° wrist for a frame): the scabbard now aims in front of the
   face and may slide 25 cm on its slings.
+- **Round 5** (`/code-review high`, on the grip fix): moderate only, fixed and stopped: the handle's fit
+  kept in the barrel's vertical plane and refused under four slices; the handle's angle taken with its sign
+  and an impossible grip refused (no default grip left in `Arm`); the holstered muzzle on the axis sideways
+  too; the fist's offset in one place; the stale `handle_top` dropped. The scabbard's 25 cm drop (24.6 cm
+  used) was checked in renders: it swings along the outside of the boot, clear of the horse.

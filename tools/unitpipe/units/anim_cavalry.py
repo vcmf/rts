@@ -26,7 +26,7 @@ P = K.Poser(rig)
 H = Horse(P, mesh)
 R = biped.Biped(P, 'Rider:', 0.0)   # its own grip, from the gloved hand's bones
 ARM = Arm(P, R, 'Right')
-ARM.hold_pistol(math.acos(max(-1.0, min(1.0, info['pistol']['handle_axis'][1]))))   # the handle's angle off the barrel
+ARM.hold_pistol(info['pistol']['handle_axis'])
 UP = Vector((0, 0, 1))
 
 GAITS = {

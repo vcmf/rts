@@ -232,11 +232,13 @@ elif name == 'pistol':
         if len(sl) >= 3:
             cs.append(Vector((sum(v.x for v in sl) / len(sl), (max(v.y for v in sl) + min(v.y for v in sl)) / 2,
                               (max(v.z for v in sl) + min(v.z for v in sl)) / 2)))
+    if len(cs) < 4:
+        raise SystemExit('pistol: the handle was not found (%d of 7 slices of the stock\'s last 7 cm have vertices)' % len(cs))
     grip = sum(cs, Vector()) / len(cs)
+    grip.y = muzzle.y                    # mid-width: on the bore's vertical plane (the lock and guard are not symmetric)
     sxx = sum((c.x - grip.x) ** 2 for c in cs)
-    up_handle = -Vector((1, sum((c.x - grip.x) * (c.y - grip.y) for c in cs) / sxx,
-                         sum((c.x - grip.x) * (c.z - grip.z) for c in cs) / sxx)).normalized()   # towards the muzzle
-    top = grip + up_handle * .035
+    # the axis in the barrel's vertical plane (no sideways cant), from the butt up towards the muzzle
+    up_handle = -Vector((1, 0, sum((c.x - grip.x) * (c.z - grip.z) for c in cs) / sxx)).normalized()
     R = Matrix.Rotation(-math.pi / 2, 4, 'Z')                        # -X (the muzzle) -> +Y
     mesh.data.transform(R @ Matrix.Translation(-grip))
     # a few pixels at the RTS camera: Tripo's 10,000 triangles collapsed to about 1,200
@@ -245,7 +247,7 @@ elif name == 'pistol':
     bpy.context.view_layer.objects.active = mesh
     bpy.ops.object.modifier_apply(modifier=dec.name)
     to = lambda p: (R @ Matrix.Translation(-grip)) @ p
-    info.update(scale=s, length=L, muzzle=list(to(muzzle)), butt=list(to(butt)), handle_top=list(to(top)),
+    info.update(scale=s, length=L, muzzle=list(to(muzzle)), butt=list(to(butt)),
                 handle_axis=list((R.to_3x3() @ up_handle).normalized()))
     info['triangles_source'] = tris0
 

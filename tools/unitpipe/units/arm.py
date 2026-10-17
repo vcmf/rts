@@ -14,8 +14,8 @@ the side). Here the arm leads and the weapon follows: an arm state gives
   dev      the wrist bent towards the little finger (+, ulnar) or the thumb (-), within -20..35
 
 Blending these numbers moves the hand on arcs about the shoulder, as an arm does. The weapon is held in a
-fixed grip: the sabre's blade continues the thumb's line, its edge along the knuckles; the pistol's barrel
-continues the fingers.
+fixed grip in the hollow of the fist: the sabre's blade continues the thumb's line, its edge along the
+knuckles; the pistol is held by its handle, lying a little across the line of the knuckles (hold_pistol).
 """
 import math
 from mathutils import Vector, Matrix, Quaternion
@@ -41,12 +41,19 @@ class Arm:
         h0 = biped.hand0[side]
         self.f0 = h0['M0'].col[0].copy(); self.n0 = h0['M0'].col[1].copy(); self.s0 = h0['s0']
         self.palm_len = h0['wrist_to_mid']
-        self.pistol_rise = D(10)       # the barrel's rise above the fingers (set from the pistol's handle)
+        self.pistol_rise = None        # the barrel's rise above the fingers: hold_pistol() sets it
 
-    def hold_pistol(self, handle_angle, across=D(20)):
-        """Hold the pistol by its handle: the handle (at handle_angle from the barrel) lies `across` degrees off
-        the fist's hollow axis (the line of the knuckles), towards the fingers; the barrel follows."""
-        self.pistol_rise = math.pi / 2 - across - handle_angle
+    def hold_pistol(self, handle_axis, across=D(20)):
+        """Hold the pistol by its handle (its axis from the butt up, in the pistol's frame: +Y the barrel, +Z the
+        lock's top): the handle lies `across` degrees off the line of the knuckles, towards the fingers; the
+        barrel follows."""
+        h = Vector(handle_axis)
+        if h.z <= 0:
+            raise ValueError('the handle must rise towards the lock (+Z): %s' % (tuple(h),))
+        rise = math.pi / 2 - across - math.atan2(h.z, h.y)
+        if not 0 <= rise < math.pi / 2:
+            raise ValueError('no grip for a handle %.0f degrees off the barrel' % math.degrees(math.atan2(h.z, h.y)))
+        self.pistol_rise = rise
 
     def shoulder(self):
         return self.P.head(self.upper)
@@ -136,7 +143,7 @@ class Arm:
         f = (y * math.cos(rise) - z * math.sin(rise)).normalized()      # the barrel is the fingers raised by `rise`
         t = (z - f * z.dot(f)).normalized()
         n = (t.cross(f) * self.s0).normalized()                           # t = s0 * f x n
-        wrist = M.to_translation() - f * (FIST[0] * self.palm_len) - n * (FIST[1] * self.palm_len)
+        wrist = M.to_translation() - (self.palm_centre(Vector(), f, n))
         return wrist, self.B.hand_rot(self.side, f, n)
 
     def pistol(self, wrist, f, n, t, rise=None):
