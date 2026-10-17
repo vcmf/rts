@@ -4,8 +4,7 @@ precision highp float;varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCro
 #include<shore>
 
 void main(){
-  // grass shades like the ground it grows from; a crop's standing stalks less so (their sides take the light)
-  vec3 N=normalize(mix(normalize(vN),vec3(0.0,1.0,0.0),vIsCrop>0.5?0.45:0.75));
+  vec3 N=normalize(mix(normalize(vN),vec3(0.0,1.0,0.0),0.75));  // grass shades like the ground it grows from (a crop too: less, its stalks' shadow sides went blue-grey)
   vec4 lm=LM(vW);float sh=(1.0-lm.r)*uShadowsOn;
   vec3 alb;
   if(vIsCrop>0.5){

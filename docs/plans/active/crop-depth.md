@@ -17,7 +17,8 @@ grass, dark orange for wheat) then put the grass/wheat on".
   The height cap stays (decision 0026, 1.2 m): straight stalks lose none of it to the lean.
 - **The dark ground under the near clumps** (`meadowUnder`, `shore.glsl`): the ground's colour times a deep green
   under grass and the green crop, a deep ochre under wheat and stubble, as the meadow map's growth says, within the
-  meadow's reach (60 to 100 m from the focus), less as the camera rises past 130 m, none with the meadow off; the
+  meadow's reach (its outer ring's band, 80 to 100 m from the focus), fading out as its inner rings do when the camera
+  rises (WIDE, 150 to 200 m), none with the meadow off; the
   terrain and the water's land side alike (one ground, no seam).
 - Docs: `docs/systems/look.md` (the meadow).
 
@@ -50,6 +51,13 @@ grass, dark orange for wheat) then put the grass/wheat on".
   material. Fixed as above.
 - **Round 2** (severe: the checks' ground alone kept the dark under-layer, so the macro check measured darkened
   ground): `terrainOnly` turns it off. Also: the taper by the measured fan (a linear one left the stalks fanning on
-  the outer rings), a crop's normals less pulled up in the fragment shader (the vertex levelling was undone there),
+  the outer rings), 
   the season factors shared with the clumps, the reach and the zoom fade from the meadow's own numbers (each frame),
   the cover read only under a crop, the plan's approach.
+- **Round 3** (moderate and light: the last round): the under-layer's zoom strength from the rings' own (so `?nowide`
+  keeps it); a crop's by its height (the green crop and the stubble half); a stale comment and a dead array; the
+  plan's numbers. Also two of round 2's slips: the under-layer's strength (0.45) had been dropped, darkening the
+  field twice as much, and a crop's normals pulled up too little (blue-grey stalk sides): back to the grass's 0.75, the shading the owner
+  approved. Kept: the terrain's
+  guard around the call (the hill compiles no shore section: the reviewer's pass-through lives inside it); the
+  shore band's repeated meadow reads.

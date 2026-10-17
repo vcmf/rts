@@ -58,7 +58,7 @@ void main(){
   alb=mix(alb,alb*vec3(0.72,0.78,0.70),smoothstep(0.0,0.15,rm));
   alb=mix(alb,uFarRiver,smoothstep(0.3,0.6,rm));   // the water mid tone after its sky tint, so the line matches the river at the tile edge
   #endif
-  #if defined(MEADOW)&&defined(MEADOW_UNDER)
+  #if defined(MEADOW)&&defined(MEADOW_UNDER)   // (guarded: the hill compiles no shore section, where meadowUnder lives)
   alb=meadowUnder(alb,vW.xz);   // the dark ground under the near grass and crops (shore.glsl, the tile only)
   #endif
   pSnowLie=snowLie(vW.xz,pxMacro());   // the fields' furrows hold the snow (macro.glsl)

@@ -181,9 +181,12 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   // zoomed out (docs/plans/done/wide-perf.md): from WIDE[0] to WIDE[1] m of the camera's radius the inner rings'
   // bands shrink to the focus and the outer ring's grows in to it, so at the widest zoom only the outer ring (2 m
   // cells, larger clumps: a clump is a few pixels there) is drawn; the clumps fade as the bands move (no pop)
+  const under = new Vector3(0, 0, 0), outer = RINGS[RINGS.length - 1].band
+  let underOn = true, meadowOn = true
   const bands = RINGS.map(r => new Vector4(...r.band)); RINGS.forEach((_, ri) => ringMats[ri].setVector4('uBand', bands[ri]))
   scene.onBeforeRenderObservable.add(() => {
     const t = wide ? Math.min(1, Math.max(0, (camera.radius - WIDE[0]) / (WIDE[1] - WIDE[0]))) : 0, k = 1 - t * t * (3 - 2 * t)
+    under.z = underOn && meadowOn ? k : 0
     RINGS.forEach((r, ri) => {
       const outer = ri === RINGS.length - 1, b = bands[ri]
       b.set(r.band[0] * k, r.band[1] * k, outer ? r.band[2] : r.band[2] * k, outer ? r.band[3] : r.band[3] * k)
@@ -193,9 +196,8 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
     const f = camera.target, y = heightAt(f.x, f.z); centre.set(f.x, f.z)
     RINGS.forEach((r, ri) => { origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell); ringMats[ri].setFloat('uCentreY', y) })
   })
-  const unders: ShaderMaterial[] = [], under = new Vector3(0, 0, 0), outer = RINGS[RINGS.length - 1].band
-  let underOn = true, meadowOn = true
-  // the reach: the outer ring's band; the strength: fading over the zoom where the inner rings give way (WIDE)
-  scene.onBeforeRenderObservable.add(() => { const t = Math.min(1, Math.max(0, (camera.radius - WIDE[0]) / (WIDE[1] - WIDE[0]))); under.set(outer[2], outer[3], underOn && meadowOn ? 1 - t * t * (3 - 2 * t) : 0) })
-  return { meshes, setOn: on => { meadowOn = on; for (const m of meshes) m.setEnabled(on) }, under: ms => { for (const u of ms) { u.setTexture('uMeadow', map); u.setVector3('uUnder', under); unders.push(u) } }, underOn: on => { underOn = on }, bakeMs: performance.now() - t0, growingCells, growthAt, groundAt: groundAtMap, cropAt, croppingCells: crops.count }
+  // the under-layer's reach: the outer ring's band; its strength: the inner rings' (k, set with them below: zoomed out,
+  // where only the outer ring's sparse clumps stand, the field reads as it did)
+  under.set(outer[2], outer[3], 1)
+  return { meshes, setOn: on => { meadowOn = on; for (const m of meshes) m.setEnabled(on) }, under: ms => { for (const u of ms) { u.setTexture('uMeadow', map); u.setVector3('uUnder', under) } }, underOn: on => { underOn = on }, bakeMs: performance.now() - t0, growingCells, growthAt, groundAt: groundAtMap, cropAt, croppingCells: crops.count }
 }

@@ -120,12 +120,15 @@ vec3 bankPaint(vec3 c,vec2 xz,float land,float h,float ny){
 uniform sampler2D uMeadow;uniform vec3 uUnder;
 #define UNDER_GRASS vec3(0.62,0.74,0.55)   // the ground's colour times this: a deep green
 #define UNDER_CROP vec3(0.74,0.58,0.42)    // a deep ochre, toward orange
+#define UNDER_AMT 0.45                     // how far toward them
 vec3 meadowUnder(vec3 alb,vec2 xz){
   float near=uUnder.z*(1.0-smoothstep(uUnder.x,uUnder.y,length(xz-uFocus.xz)));
   if(near<=0.0)return alb;
   vec4 m=texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);
-  if(m.a>m.g){float k=coverAt(xz).x;bool green=k>6.5&&k<7.5;return mix(alb,alb*(green?UNDER_GRASS:UNDER_CROP),clamp(m.a*cropSeasonK(k,uSeason),0.0,1.0)*near);}
-  return mix(alb,alb*UNDER_GRASS,clamp(m.g*m.b*grassSeasonK(uSeason),0.0,1.0)*near);}
+  // (a crop by its height as the clumps: the low green crop half, the wheat cut to stubble half as the harvest goes)
+  if(m.a>m.g){float k=coverAt(xz).x;bool green=k>6.5&&k<7.5;float h=green?0.5:mix(1.0,0.5,smoothstep(0.55,0.95,uSeason));
+    return mix(alb,alb*(green?UNDER_GRASS:UNDER_CROP),clamp(m.a*h*cropSeasonK(k,uSeason),0.0,1.0)*near*UNDER_AMT);}
+  return mix(alb,alb*UNDER_GRASS,clamp(m.g*m.b*grassSeasonK(uSeason),0.0,1.0)*near*UNDER_AMT);}
 #else
 vec3 meadowUnder(vec3 alb,vec2 xz){return alb;}
 #endif

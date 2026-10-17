@@ -73,7 +73,7 @@ void main(){
   if(crop)p.xz*=CROP_WIDE/(1.0+CROP_FAN*aV);   // the grass clump's spread grows about 1 + CROP_FAN aV up its blades (measured): undone, the stalks parallel, CROP_WIDE times the root's spread
   p.xz+=(vec2(h5,h6)-0.5)*(crop?0.06:0.25)*p.y;                  // a little lean
   vec3 w=vec3(root.x,m.r-MEADOW_SINK,root.y)+p;   // sunk a little: the map's 1 m bilinear height is within that of the drawn ground where grass grows (tools/look-check.js)
-  vec3 n=normal;n.xz=vec2(ca*n.x-sa*n.z,sa*n.x+ca*n.z);   // a crop's stalks stand: their normals turn level
+  vec3 n=normal;n.xz=vec2(ca*n.x-sa*n.z,sa*n.x+ca*n.z);
   vN=n;vW=w;vV=aV;vShade=c;   // the clump field (the ground colour under it, groundArm, already holds the brush pattern)
   vH=p.y;vRoot=root;vIsCrop=crop?1.0:0.0;vCrop=cr.yzw;
   gl_Position=viewProjection*vec4(w,1.0);}
