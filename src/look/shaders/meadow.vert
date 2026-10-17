@@ -70,7 +70,7 @@ void main(){
   vec3 p=vec3(position.x*fp,position.y*hgt,position.z*fp);p.xz=vec2(ca*p.x-sa*p.z,sa*p.x+ca*p.z);
   // a crop's stalks stand straight (docs/plans/active/crop-depth.md): a blade's spread drawn in toward its root's
   // axis as it rises (the grass clump fans out), and barely any lean
-  if(crop)p.xz*=mix(1.0,CROP_STRAIGHT,aV);
+  if(crop)p.xz*=mix(CROP_WIDE,CROP_WIDE*CROP_STRAIGHT,aV);   // (wider at the root: the field as full as before)
   p.xz+=(vec2(h5,h6)-0.5)*(crop?0.06:0.25)*p.y;                  // a little lean
   vec3 w=vec3(root.x,m.r-MEADOW_SINK,root.y)+p;   // sunk a little: the map's 1 m bilinear height is within that of the drawn ground where grass grows (tools/look-check.js)
   vec3 n=normal;n.xz=vec2(ca*n.x-sa*n.z,sa*n.x+ca*n.z);

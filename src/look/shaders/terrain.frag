@@ -23,7 +23,7 @@ vec3 meadowUnder(vec3 alb,vec2 xz){
   float near=(1.0-smoothstep(UNDER_R.x,UNDER_R.y,length(xz-uFocus.xz)))*(1.0-smoothstep(130.0,190.0,length(uCamPos-uFocus)));if(near<=0.0)return alb;
   vec4 m=texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);bool crop=m.a>m.g;
   float grow=crop?m.a*(1.0-smoothstep(1.55,1.95,uSeason)):m.g*m.b*mix(1.0,0.45,smoothstep(2.5,3.0,uSeason));
-  float amt=clamp(grow,0.0,1.0)*near*mix(0.7,1.0,clumpAt(xz))*UNDER_AMT;
+  float amt=clamp(grow,0.0,1.0)*near*UNDER_AMT;
   return mix(alb,alb*(crop?UNDER_CROP:UNDER_GRASS),amt);}
 #endif
 // the ground's colour: its cover's (groundAt, the macro colour's arm: macro.glsl, shared with the shore band), stony
