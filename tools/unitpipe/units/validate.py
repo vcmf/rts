@@ -88,6 +88,8 @@ ends = {}
 for name, meta in clips.items():
     for nxt in meta.get('next', []):
         for clip, fr in ((name, meta['frames']), (nxt, 1)):
+            if (clip, fr) in ends:
+                continue
             rig.animation_data.action = bpy.data.actions[clip]
             if hasattr(rig.animation_data, 'action_slot') and bpy.data.actions[clip].slots:
                 rig.animation_data.action_slot = bpy.data.actions[clip].slots[0]

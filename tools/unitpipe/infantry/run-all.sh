@@ -21,3 +21,8 @@ for d in *-frames; do
   ffmpeg -y -loglevel error -framerate 12 -i $d/%04d.png -c:v libx264 -pix_fmt yuv420p -movflags +faststart ${d%-frames}.mp4
 done
 python3 $CODE/publish.py            # -> output/figures/fr-line-infantry/
+PUB="$(python3 "$CODE/../paths.py" published fr-line-infantry)"
+for l in lod0 lod1 lod2; do              # every published GLB reimports with every clip of the table
+  $B $CODE/../units/roundtrip.py -- "$PUB/soldier-$l.glb" "$PUB/clips.json" > roundtrip-$l.log 2>&1 || { tail -20 roundtrip-$l.log; exit 1; }
+  echo "ok   roundtrip-$l.log"
+done

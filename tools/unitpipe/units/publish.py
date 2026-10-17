@@ -19,6 +19,8 @@ bpy.context.view_layer.objects.active = rig
 for a in bpy.data.actions:          # only this unit's clips go out
     a.use_fake_user = a.name in clips
 rig.animation_data.action = bpy.data.actions[next(iter(clips))]
+for old in out.glob('*.glb'):     # nothing stale stays (videos are published by videos.sh)
+    old.unlink()
 glb = out / f'{unit}.glb'
 bpy.ops.export_scene.gltf(filepath=str(glb), export_format='GLB', use_selection=True, export_animations=True,
                           export_animation_mode='ACTIONS', export_frame_range=False, export_force_sampling=True)
@@ -26,9 +28,4 @@ tris = sum(len(p.vertices) - 2 for p in mesh.data.polygons)
 table = dict(figure=figure, unit=unit, m_per_unit=1.0, fps=24, facing='-Y in Blender, written as +Z in the glTF',
              triangles=tris, bones=len(rig.data.bones), clips=clips)
 (out / 'clips.json').write_text(json.dumps(table, indent=1))
-vids = sorted((ROOT / 'videos').glob(f'{unit}-*.mp4'))
-if vids:
-    (out / 'videos').mkdir(exist_ok=True)
-    for v in vids:
-        shutil.copy2(v, out / 'videos' / v.name)
 print('PUBLISHED', glb, glb.stat().st_size, 'bytes', tris, 'triangles', len(clips), 'clips')

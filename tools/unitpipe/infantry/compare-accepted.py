@@ -8,13 +8,13 @@ import paths   # work files in output/unitpipe/infantry, the source in assets/tr
 import bpy
 from pathlib import Path
 root=paths.work('infantry')
-# the archived versions that made the accepted clips (v7, v8): not in the repository. Without them the check
+# the archived version that made the accepted clips it compares (v8): not in the repository. Without it the check
 # fails, unless UNITPIPE_SKIP_COMPARE=1 says on purpose that it is not run
 import os
 ARCHIVE=paths.OUTPUT/'unitpipe'/'infantry-archive'
 if not (ARCHIVE/'v8'/'soldier-animated.blend').exists():
     skip=os.environ.get('UNITPIPE_SKIP_COMPARE')=='1'
-    print('COMPARE', 'SKIPPED on purpose' if skip else 'FAILED', ': no archive at', ARCHIVE, '(copy the archived v7 and v8 folders there)')
+    print('COMPARE', 'SKIPPED on purpose' if skip else 'FAILED', ': no archive at', ARCHIVE, '(copy the archived v8 folder there)')
     raise SystemExit(0 if skip else 1)
 CHECK={'v8':[('Reload',272),('BayonetGuard',33),('BayonetThrust',30),('ButtStroke',36)]}
 def poses(blend,clips):

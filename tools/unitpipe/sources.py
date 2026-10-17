@@ -38,5 +38,12 @@ if '--check' in sys.argv:
                 print('MISMATCH' if got else 'MISSING', rel)
     print('sources:', 'ok' if not bad else f'{bad} problem(s)', f'({sum(len(m["files"]) for m in listed.values())} files)')
     sys.exit(1 if bad else 0)
-LIST.write_text(json.dumps(scan(), indent=1) + '\n')
+found = scan()
+listed = json.loads(LIST.read_text()) if LIST.exists() else {}
+lost = [m for m in listed if m not in found]
+if not found or (lost and '--force' not in sys.argv):
+    print('sources: not written:', 'no files in ' + str(paths.ASSETS) if not found else 'missing ' + ', '.join(lost),
+          '(restore them, or --force to drop them from the list)')
+    sys.exit(1)
+LIST.write_text(json.dumps(found, indent=1) + '\n')
 print('wrote', LIST)

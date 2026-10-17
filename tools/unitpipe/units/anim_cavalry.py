@@ -21,7 +21,6 @@ from timeline import ease
 D = math.radians
 rig = bpy.data.objects['CavalryRig']; mesh = bpy.data.objects['CavalryMesh']
 info = json.loads((ROOT / 'cavalry-combined.json').read_text())
-grip0 = json.loads((ROOT / 'gunner-prep.json').read_text())['grip']
 P = K.Poser(rig)
 H = Horse(P, mesh)
 R = biped.Biped(P, 'Rider:', 0.0)   # its own grip, from the gloved hand's bones

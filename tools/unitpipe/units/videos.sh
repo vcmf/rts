@@ -7,7 +7,8 @@ OUT=videos; mkdir -p $OUT frames
 render() {   # unit clip name cam [extra args]
   u=$1; c=$2; n=$3; cam=$4; shift 4
   rm -rf frames/$n; mkdir -p frames/$n
-  blender -b $u-animated.blend -P $CODE/preview.py -- clip=$c out=frames/$n/f cam=$cam "$@" > /dev/null 2>&1
+  blender -b --python-exit-code 1 $u-animated.blend -P $CODE/preview.py -- clip=$c out=frames/$n/f cam=$cam "$@" > frames/$n.log 2>&1 \
+    || { echo "FAIL preview $n"; tail -30 frames/$n.log; exit 1; }
   ffmpeg -y -loglevel error -framerate 24 -pattern_type glob -i "frames/$n/f.*.png" -c:v libx264 -pix_fmt yuv420p -crf 20 $OUT/$n.mp4
   echo "video $OUT/$n.mp4"
 }
@@ -43,6 +44,6 @@ for v in close rts; do
 done
 # publish the previews with their figures
 for f in fr-foot-artillery:battery fr-cuirassier:cavalry; do
-  d="$(python3 "$CODE/../paths.py" published ${f%%:*})/videos"; mkdir -p "$d"; cp $OUT/${f#*:}-*.mp4 "$d/"
+  d="$(python3 "$CODE/../paths.py" published ${f%%:*})/videos"; rm -rf "$d"; mkdir -p "$d"; cp $OUT/${f#*:}-*.mp4 "$d/"
 done
 echo done

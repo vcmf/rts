@@ -8,6 +8,7 @@ import json, shutil
 from pathlib import Path
 ROOT = paths.work('infantry')
 OUT = paths.published('fr-line-infantry')
+for old in list(OUT.glob('*.glb')) + list((OUT / 'previews').glob('*.mp4')): old.unlink()   # nothing stale stays
 (OUT / 'previews').mkdir(parents=True, exist_ok=True)
 table = json.loads((ROOT / 'clips.json').read_text())
 gaits = json.loads((ROOT / 'gaits.json').read_text())   # written by build.py

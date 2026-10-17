@@ -12,8 +12,9 @@ from pathlib import Path
 
 CODE = Path(__file__).resolve().parent
 REPO = CODE.parent.parent
-ASSETS = Path(os.environ.get('UNITPIPE_ASSETS', REPO / 'assets' / 'tripo'))
-OUTPUT = Path(os.environ.get('UNITPIPE_OUTPUT', REPO / 'output'))
+# overrides are made absolute: the scripts change folder, so a relative path would move under them
+ASSETS = Path(os.environ.get('UNITPIPE_ASSETS', REPO / 'assets' / 'tripo')).expanduser().resolve()
+OUTPUT = Path(os.environ.get('UNITPIPE_OUTPUT', REPO / 'output')).expanduser().resolve()
 REGISTRY = REPO / 'data' / 'figures' / 'index.json'
 
 

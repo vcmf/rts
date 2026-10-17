@@ -46,8 +46,8 @@ python3 tools/unitpipe/sources.py --check
 
 Each run-all stops at the first failing step (judged by its exit code, never by grepping its output) and
 keeps every step's full log in the work folder. The infantryman's comparison with the versions that made its
-accepted clips needs those archived Blender files in output/unitpipe/infantry-archive/ (v7, v8): without them
-it fails, unless UNITPIPE_SKIP_COMPARE=1 says on purpose that it is not run.
+accepted clips needs the archived Blender file of v8 in output/unitpipe/infantry-archive/v8/: without it it
+fails, unless UNITPIPE_SKIP_COMPARE=1 says on purpose that it is not run.
 
 ## Constraints
 
@@ -174,7 +174,7 @@ guide is tools/unitpipe/infantry/AUTHORING.md.
   ramrod, ground, wrists, pops, the left cuff clear of the stock while aiming, readability minimums);
   validate.py the older clips; roundtrip.py the GLB; compare-accepted.py that untouched clips are
   identical to the archived versions; lod.py and validate-lod.py three LODs (9.7k, 1,200 and 248
-  triangles) on every clip. DRILL_DEBUG=1 prints unreachable grips instead of failing.
+  triangles) on every clip, and every published LOD GLB reimports with every clip. DRILL_DEBUG=1 prints unreachable grips instead of failing.
 
 ## Verification of this layout
 

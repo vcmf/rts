@@ -64,3 +64,10 @@ committed figure data files, the pistol.
   videos are published with their figure, the preview reads only its unit's clip table, a stale texture relink
   and dead code removed, the registry built once and failing clearly when nothing is published, the plan's
   registry contents corrected, the test's figure kinds read from the ruleset.
+- **Round 2** (`/code-review high`): moderate only, fixed and stopped: override paths made absolute (a relative
+  one moved under the scripts' change of folder); the infantryman's published LOD GLBs reimported with every
+  clip (the roundtrip read an intermediate file); the video script judged by Blender's exit code; the source
+  list never overwritten by an empty scan; each publish replaces its figure's files; an unused input of the
+  cavalry build, a repeated join evaluation and a double publishing of videos removed; the comparison names
+  only the archive it reads (v8). Left: the two copies of the loose-part finder (infantry and units) are to be
+  merged when the infantryman moves onto the units' toolkit.
