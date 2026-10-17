@@ -86,6 +86,48 @@ float aastep(float t,float v){
   float w=max(fwidth(v)*1.2,1e-5);return smoothstep(t-w,t+w,v);
   #endif
 }
+#ifdef ROADS
+// THE ROADS (docs/plans/active/roads.md): rutted brown earth over the tile, laid in each road's frame (the road frame,
+// built by tools/build-look-data.ts: R the signed distance across its centre line, ±8 m, G B its direction, A its half
+// width, /8 m), its edge broken into the worn grass. On it, wheel ruts (two pairs on a road, a pair on a track), darker
+// and smoother, streaked along the road, a lighter crown between them, and the grit of the owner's photo (data/
+// road-grit-v1.png, uRoadOn once it has loaded) at two unrelated scales. Darker and wetter in late autumn
+uniform sampler2D uRoad,uRoadGrit;uniform float uRoadOn;
+// one wheel track: its centre wandering across by up to 0.35 m along the way, its edges rough (a fine noise eating
+// into them), broken here and there (k: its seed)
+float track1(float a,vec2 xz,float s,float c,float k){
+  float off=(mValue(vec2(s/13.0,k))-0.5)*0.7,w=0.3+0.22*mValue(vec2(s/7.0,k+5.0))+(mValue(xz/0.35+k*3.0)-0.5)*0.22;
+  float t=1.0-smoothstep(w*0.5,w,abs(a-c-off));
+  // cut into pieces of uneven length (about 2 to 8 m, gaps of 1 to 4 m), each track breaking at its own places, the
+  // pieces fading in and out over a few decimetres
+  float piece=mValue(vec2(s/3.2,k+11.0))*0.7+mValue(vec2(s/1.1,k+17.0))*0.3;
+  return t*smoothstep(0.42,0.52,piece);}
+vec3 roadPaint(vec3 c,vec2 xz){
+  vec4 r=texture2D(uRoad,(xz+TILE_HALF)/TILE_W);float hw=r.a*8.0;if(hw<0.2)return c;
+  float a=(r.r*2.0-1.0)*8.0;vec2 dir=r.gb*2.0-1.0;dir/=max(length(dir),1e-3);float s=dot(xz,dir);
+  // the edge: ragged, the grass biting in and the dirt spilling out over a metre or two
+  float wob=(mValue(vec2(s/4.0,7.3))-0.5)*2.2+(mValue(vec2(s/1.1,2.1))-0.5)*0.9+(mValue(xz/0.6)-0.5)*0.5;
+  float inside=1.0-smoothstep(hw-0.9+wob*0.5,hw+0.4+wob,abs(a));if(inside<=0.0)return c;
+  // the earth: a warm beige, browner and wetter in late autumn
+  vec3 earth=mix(vec3(0.60,0.53,0.42),vec3(0.47,0.40,0.31),smoothstep(0.8,2.0,uSeason));
+  // a junction (where the roads' directions 1.5 m around disagree, the frame blending two lines): trampled, no tracks
+  float agree=1.0;
+  for(int i=0;i<4;i++){vec2 o=vec2(float(i==0)-float(i==1),float(i==2)-float(i==3))*1.5;vec4 t=texture2D(uRoad,(xz+o+TILE_HALF)/TILE_W);
+    if(t.a>0.02){vec2 d2=t.gb*2.0-1.0;agree=min(agree,abs(dot(dir,d2/max(length(d2),1e-3))));}}
+  float jn=1.0-smoothstep(0.86,0.97,agree);
+  // the wheel tracks: pale, dusty, packed by the wheels (lighter than the road, never dark lines), rough-edged and
+  // broken; a pair on a track, on a road a pair and a fainter outer one
+  float tr=hw>3.0?max(max(track1(a,xz,s,-0.9,1.0),track1(a,xz,s,0.9,2.0)),0.6*max(track1(a,xz,s,-2.6,3.0),track1(a,xz,s,2.6,4.0))):max(track1(a,xz,s,-0.8,1.0),track1(a,xz,s,0.8,2.0));
+  tr*=1.0-jn;
+  float st=mValue(vec2(s/11.0,a*1.3))*0.6+mValue(vec2(s/3.3,a*3.7+9.0))*0.4;   // streaks along the road
+  float trod=max(smoothstep(0.6,0.8,mValue(xz/2.7+13.0)),jn*0.5),dust=smoothstep(0.55,0.85,mValue(xz/4.1-7.0));   // trodden patches, pale dust
+  float g=(texM(uRoadGrit,xz/1.9,1.9).r*0.6+texM(uRoadGrit,mat2(0.8253,-0.5646,0.5646,0.8253)*xz/3.1+0.37,3.1).r*0.4-0.5)*uRoadOn;
+  vec3 col=earth*mix(0.93,1.07,st)*mix(1.0,0.9,trod)*mix(1.0,1.1,dust)*(1.0+g*1.2);
+  col=mix(col,vec3(0.74,0.66,0.52)*mix(0.95,1.05,st)*(1.0+g*0.6),tr*0.75);   // the tracks: pale beige dust
+  return mix(c,col,inside);}
+#else
+vec3 roadPaint(vec3 c,vec2 xz){return c;}
+#endif
 #if defined(WATERDATA)&&defined(BANKN)
 #define SHORE
 // THE BANKS (W5, docs/plans/done/w5-banks.md; docs/art-bible.md §6c, research §2.9): painted over a ground colour
@@ -135,7 +177,7 @@ vec3 meadowUnder(vec3 alb,vec2 xz){return alb;}
 // the shore band's ground: the terrain's (groundAt, stony where steep) with the banks painted over it, through the
 // seasons: the same colour the terrain paints there
 vec3 landAlbedo(vec2 xz,float land,float h){float ny=bankNormal(vec3(0.0,1.0,0.0),xz).y;
-  return meadowUnder(groundSeason(bankPaint(groundSteep(dirtOn(groundAt(xz,pxMacro()),xz,pxMacro()),ny),xz,land,h,ny)),xz);}
+  return meadowUnder(groundSeason(bankPaint(groundSteep(roadPaint(dirtOn(groundAt(xz,pxMacro()),xz,pxMacro()),xz),ny),xz,land,h,ny)),xz);}
 // the bed: silt in pools, pale gravel where the current runs, weed in slow deeper water; the damp edge at depth 0
 // la: the ground at the water's edge (used to 0.3 m deep)
 vec3 bedAlbedo(vec2 xz,float depth,float speed,vec3 la){

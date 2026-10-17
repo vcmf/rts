@@ -50,11 +50,32 @@ function rect(cx: number, cz: number, ha: number, hc: number, a: number): Pt[] {
   const ux = Math.cos(a), uz = Math.sin(a), vx = -uz, vz = ux
   return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([s, t]) => [cx + s * ha * ux + t * hc * vx, cz + s * ha * uz + t * hc * vz] as Pt)
 }
-// the road (6 m) along the east of the valley, the track (3 m) from it toward the hill, the village ground beside the road
+// the road (6 m) along the east of the valley, the track (3 m) from it toward the hill, the village ground beside the road;
+// and (docs/plans/active/roads.md) a road across the valley south of the formation zones, fording the river, to the
+// village, a lane north from it past the large wheat field, and the village's trampled square where they meet
 const ROAD: Pt[] = [[198, -1300], [190, -600], [178, -260], [184, -60], [186, 60], [176, 260], [188, 600], [200, 1300]]
 const TRACK: Pt[] = [[184, -60], [150, -58], [118, -46], [70, -54], [44, -40]]
+const CROSS: Pt[] = [[-1300, -96], [-600, -88], [-300, -78], [-180, -70], [-110, -66], [-40, -58], [40, -66], [110, -72], [184, -62]]
+const LANE: Pt[] = [[108, -71], [112, -20], [114, 30], [110, 90], [84, 150], [70, 260], [60, 600], [40, 1300]]
 const VILLAGE: Pt[] = [[196, -40], [244, -46], [256, 8], [238, 34], [198, 26]]
-const LINES: { pts: Pt[]; w: number; cls: CoverClass }[] = [{ pts: ROAD, w: 6, cls: COVER.road }, { pts: TRACK, w: 3, cls: COVER.track }]
+const SQUARE: Pt[] = [[168, -82], [204, -84], [206, -46], [170, -44]]   // the trampled square where the roads meet the village
+// the roads and tracks (a line, its width, its class): also the road frame's lines (tools/build-look-data.ts)
+// a line made a country road's: its corners rounded (Chaikin's corner cutting, four times) and a meander laid across it,
+// a slow wave a few metres either side (k: its seed), resampled every few metres; its ends where they were (joins)
+function curvy(p: readonly Pt[], amp: number, k: number): Pt[] {
+  let q: Pt[] = [...p]
+  for (let it = 0; it < 4; it++) { const r: Pt[] = [q[0]]; for (let i = 0; i < q.length - 1; i++) { const [a, b] = [q[i], q[i + 1]]; r.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]) } r.push(q[q.length - 1]); q = r }
+  const out: Pt[] = []; let s = 0
+  for (let i = 0; i < q.length; i++) {
+    if (i > 0) s += Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1])
+    const a = q[Math.max(0, i - 1)], b = q[Math.min(q.length - 1, i + 1)], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1
+    const ends = Math.min(1, i / 6, (q.length - 1 - i) / 6)   // the joins stay put
+    const m = amp * ends * (Math.sin(s / 97 + k) * 0.6 + Math.sin(s / 41 + k * 2.3) * 0.4)
+    out.push([q[i][0] - dz / l * m, q[i][1] + dx / l * m])
+  }
+  return out
+}
+export const LINES: { pts: readonly Pt[]; w: number; cls: CoverClass }[] = [{ pts: curvy(ROAD, 9, 1), w: 8, cls: COVER.road }, { pts: curvy(CROSS, 15, 2), w: 8, cls: COVER.road }, { pts: curvy(LANE, 10, 3), w: 5, cls: COVER.track }, { pts: curvy(TRACK, 5, 4), w: 3, cls: COVER.track }]
 const WEAR_REACH = 25.5   // the distance channel's reach, m (255 · WEAR_STEP)
 
 // the far strip fields: in a frame turned 0.6435 rad (the far hedgerows' frame, src/look/nature.ts), bands 70 m wide
@@ -108,7 +129,7 @@ export function authorCover(far: number, cell: number): CoverGrid {
     FIELDS.forEach((f, k) => { if (inPoly(f.poly, x, z)) { cls = f.cls; id = isField(f.cls) ? idByte(1000 + k) : 0; dir = f.dir } })   // bare earth: no id
     let wear = Infinity
     for (const l of LINES) { const d = lineD(l.pts, x, z) - l.w / 2; if (d < 0) { cls = l.cls; id = 0 } wear = Math.min(wear, Math.max(0, d)) }
-    if (inPoly(VILLAGE, x, z)) { cls = COVER.village; id = 0; wear = 0 } else wear = Math.min(wear, ringD(VILLAGE, x, z))
+    if (inPoly(VILLAGE, x, z) || inPoly(SQUARE, x, z)) { cls = COVER.village; id = 0; wear = 0 } else wear = Math.min(wear, ringD(VILLAGE, x, z), ringD(SQUARE, x, z))
     // the floodplain and the formation zones keep their meadow (the zones clip the fields that touch them)
     if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village || cls === COVER.bare)) { cls = COVER.meadow; id = 0 }
     tex[o] = cls; tex[o + 1] = id; tex[o + 2] = id ? Math.round(((dir % Math.PI + Math.PI) % Math.PI) / Math.PI * 255) % 256 : 0

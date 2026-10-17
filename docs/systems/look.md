@@ -115,7 +115,9 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
 - **The cover** (`src/look/world/cover.ts`, authored in Node until the map format's world compiler writes the
   same grid, `docs/proposals/map-format.md`): strip fields on the valley sides and beyond the play area (wheat,
   green crop, stubble, ploughed; each with an id and a furrow direction), meadow and pasture, a road along the
-  valley's east side, a track toward the hill, village ground beside the road. Nothing but meadow on the
+  valley's east side, a road across the valley south of the formation zones to the village, a lane north past the
+  wheat field, a track toward the hill, village ground and a trampled square where the roads meet (every line rounded
+  and meandering: `docs/plans/active/roads.md`). Nothing but meadow on the
   floodplain (art bible §6c) or in the formation zones. Rasterised to a grid of `SPEC.macro.cover` m cells (2 m)
   over the far ring, 4 bytes a cell: the class, the field's id, the furrow direction, the distance to the
   nearest road, track or village (the wear's). The class `wood` is in the format but not authored: a floor over a
@@ -125,8 +127,10 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   meadow is the old `groundMeadow`), a low-frequency variation, each field's own shade, stripes along its furrows
   (ridge-and-furrow lands on ploughed ground, faint drill bands on crops, faded with the pixel's footprint), wear
   near the lines, and edges that wander (the class lookup's point pushed ±1.5 m by the grain's blotches). Colour
-  only: the light stays in `paint()`. The road is a pale cool grey dust and the track a warm brown-grey earth
-  (`docs/plans/done/temperate-fixes.md`): each reads against the temperate meadow, the road by value. Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
+  only: the light stays in `paint()`. The road is a brown-beige earth and the track a warm brown-grey earth; on the tile both are painted as rutted
+  dirt in each road's frame (the road frame in the look data: the distance across the nearest line, its direction,
+  its half width), wheel tracks of pale dust cut into pieces, ragged edges, the owner's grit photo (`roadPaint` in
+  `shore.glsl`, `docs/plans/active/roads.md`). Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
   The class `bare` (10): trodden or dry earth, no grass, no crops, no stripes, not
   a field (`isField`).
 - **The dirt surface** (`dirtOn` in `macro.glsl`, at the terrain's fragment: `docs/plans/done/ground-surface.md`):

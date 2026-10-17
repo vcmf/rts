@@ -16,16 +16,16 @@ export const LOOK_VERSION = 5
 // The bank normals (docs/plans/done/w2-river-banks.md): 3 bytes, the normal's x and z as (v·0.5 + 0.5)·255 and the
 // weight ·255. The water data (docs/plans/done/w3-water-data.md): 4 bytes, src/look/world/water-data.ts.
 export interface SpanGrid { n: number; cell: number; x0: number; z0: number; ch: number; spans: Float32Array; tex: Uint8Array }
-export interface LookData { hf: Heightfield; far: Grid; river: RiverSamples; bank: SpanGrid; water: SpanGrid; cover: CoverGrid }   // far: the far ring's nodes
+export interface LookData { hf: Heightfield; far: Grid; river: RiverSamples; bank: SpanGrid; water: SpanGrid; road: SpanGrid; cover: CoverGrid }   // far: the far ring's nodes
 
-const SPAN_GRIDS = ['bank', 'water'] as const
+const SPAN_GRIDS = ['bank', 'water', 'road'] as const
 type GridMeta = { n: number; cell: number; x0: number; z0: number; ch: number }
 
 interface Meta {
   hf: { n: number; cell: number; x0: number; z0: number; min: number; max: number }
   far: { n: number; cell: number; x0: number; z0: number }
   river: { P: RiverParams; n: number }
-  bank: GridMeta; water: GridMeta
+  bank: GridMeta; water: GridMeta; road: GridMeta
   cover: { n: number; cell: number; x0: number; z0: number }
   arrays: [string, number, 'f32' | 'u8'][]
 }
@@ -41,7 +41,7 @@ export function encodeLook(d: LookData): Uint8Array {
     hf: { n: d.hf.n, cell: d.hf.cell, x0: d.hf.x0, z0: d.hf.z0, min: d.hf.min, max: d.hf.max },
     far: { n: d.far.n, cell: d.far.cell, x0: d.far.x0, z0: d.far.z0 },
     river: { P: d.river.P, n: d.river.n },
-    bank: gridMeta(d.bank), water: gridMeta(d.water),
+    bank: gridMeta(d.bank), water: gridMeta(d.water), road: gridMeta(d.road),
     cover: { n: d.cover.n, cell: d.cover.cell, x0: d.cover.x0, z0: d.cover.z0 },
     arrays: arrays.map(([k, a]) => [k, a.length, type(a)]),
   }
@@ -93,7 +93,7 @@ export function decodeLook(buf: ArrayBuffer): LookData {
   }
   if (!meta.cover || !u8.coverRuns) throw new Error('look data: no cover grid')
   const cover: CoverGrid = { ...meta.cover, tex: unpackCover(meta.cover.n, u8.coverRuns) }
-  return { hf: { ...meta.hf, h: arr.hf }, far: { ...meta.far, h: arr.far }, river, bank: grid('bank'), water: grid('water'), cover }
+  return { hf: { ...meta.hf, h: arr.hf }, far: { ...meta.far, h: arr.far }, river, bank: grid('bank'), water: grid('water'), road: grid('road'), cover }
 }
 
 // a span grid unpacked into n² texels of 4 bytes (RGBA, for a texture), the uncovered ones `fill` (RGBA)

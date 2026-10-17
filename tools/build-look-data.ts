@@ -14,7 +14,7 @@ import { encodeLook, type LookData, type SpanGrid } from '../src/look/world/data
 import { bakeWater, packWater } from '../src/look/world/water-data.ts'
 import { sstep } from '../src/look/noise.ts'
 import { riverQuery } from '../src/look/river.ts'
-import { authorCover } from '../src/look/world/cover.ts'
+import { authorCover, LINES } from '../src/look/world/cover.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const LOOK_FILE = path.join(ROOT, 'data/painted-world.lookdata')
@@ -41,6 +41,34 @@ function bankNormals(H: (x: number, z: number) => number): SpanGrid {
   return { n, cell, x0, z0, ch: 3, spans: Float32Array.from(spans), tex: Uint8Array.from(tex) }
 }
 
+// The road frame (docs/plans/active/roads.md): near each road or track (out to road.edge m past its side), the signed
+// distance across its centre line (R: ±8 m over the bytes), the line's direction there (G, B: x and z, ±1), and its
+// half width (A: /8 m over the bytes; 0 off the roads), from the nearest line, so the shader lays the ruts, the crown
+// and the streaks along it. Over the tile, as row spans
+function roadFrame(): SpanGrid {
+  const r = D.spec.road, n = D.roadN, cell = r.texel, x0 = -D.spec.tile / 2, z0 = x0
+  const spans: number[] = [], tex: number[] = [], enc = (v: number) => Math.round((Math.max(-1, Math.min(1, v)) * 0.5 + 0.5) * 255)
+  for (let j = 0; j < n; j++) {
+    let open = -1
+    for (let i = 0; i <= n; i++) {
+      const x = x0 + (i + 0.5) * cell, z = z0 + (j + 0.5) * cell
+      let best: { d: number; across: number; dx: number; dz: number; hw: number } | null = null
+      if (i < n) for (const l of LINES) for (let k = 0; k < l.pts.length - 1; k++) {
+        const a = l.pts[k], b = l.pts[k + 1], sx = b[0] - a[0], sz = b[1] - a[1], len = Math.hypot(sx, sz), ux = sx / len, uz = sz / len
+        const t = Math.max(0, Math.min(len, (x - a[0]) * ux + (z - a[1]) * uz)), px = a[0] + ux * t, pz = a[1] + uz * t, d = Math.hypot(x - px, z - pz)
+        if (d - l.w / 2 > r.edge || (best && d - l.w / 2 >= best.d - best.hw)) continue
+        best = { d, across: (x - a[0]) * -uz + (z - a[1]) * ux, dx: ux, dz: uz, hw: l.w / 2 }
+      }
+      const inside = !!best
+      if (inside && open < 0) open = i
+      if (!inside && open >= 0) { spans.push(j, open, i - open); open = -1 }
+      if (!best) continue
+      tex.push(enc(best.across / 8), enc(best.dx), enc(best.dz), Math.round(best.hw / 8 * 255))
+    }
+  }
+  return { n, cell, x0, z0, ch: 4, spans: Float32Array.from(spans), tex: Uint8Array.from(tex) }
+}
+
 export function buildLookData(): Uint8Array {
   const s = D.spec, w = authorWorld()
   // the heightfield: tile nodes col 0..tileSub, plus hfMargin nodes beyond each side
@@ -58,6 +86,7 @@ export function buildLookData(): Uint8Array {
     far: { n: fn, cell: s.far / s.farSub, x0: -s.far / 2, z0: -s.far / 2, h: fh },
     river: w.samples,
     bank: bankNormals(w.H),
+    road: roadFrame(),
     water: packWater(bakeWater(w.H)),
     cover: authorCover(s.far, s.macro.cover),
   }

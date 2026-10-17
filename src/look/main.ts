@@ -29,6 +29,7 @@ import { checkLookData, decodeLook, unpackSpans } from './world/data.ts'
 import { buildTerrain } from './terrain.ts'
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
+import ROAD_GRIT_URL from '../../data/road-grit-v1.png?url'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
 import { MACRO_ARMS, SHADER_ARMS, buildMacro, type MacroArm } from './macro.ts'
@@ -88,6 +89,15 @@ const terrain = buildTerrain(scene, mats, look.far, look.bank, waterData)
 const waterSabParam = params.get('watersab')
 if (waterSabParam !== null && waterSabParam !== 'nodive') throw new Error(`?watersab must be nodive, not ${waterSabParam}`)
 const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }, waterSabParam !== 'nodive')
+// the roads (docs/plans/active/roads.md): the road frame over the tile, and the owner's grit photo (its marks only once
+// loaded: uRoadOn), on the tile's terrain and the water's land side
+{
+  const frame = spanTexture(scene, look.road, [128, 128, 128, 0], 'roadFrame')
+  const roadMats = [terrain.terrainMat, water.waterMat, water.groundMat]
+  const grit = new Texture(ROAD_GRIT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => { for (const m of roadMats) m.setFloat('uRoadOn', 1) }, (msg?: string) => console.error(`the road grit (${ROAD_GRIT_URL}) did not load: ${msg ?? 'unknown error'}`))
+  grit.wrapU = grit.wrapV = Texture.WRAP_ADDRESSMODE; grit.anisotropicFilteringLevel = 4
+  for (const m of roadMats) { m.setTexture('uRoad', frame); m.setTexture('uRoadGrit', grit); m.setFloat('uRoadOn', 0) }
+}
 // ?trees=one: every tree one model (L5b's judging, docs/plans/active/l5-macro.md); with ?trees=one,cards, drawn as
 // leaf cards
 // ?trees=cards: the crowns as leaf cards (docs/plans/done/l7a-canopy-cards.md); ?leaves=procedural draws the atlas
