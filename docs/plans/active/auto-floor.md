@@ -12,8 +12,11 @@ times, the owner chose: "Zoom-based, lower floor".
 ## Scope
 
 - Auto's levels by the camera's radius: 1, 0.9, 0.8 and **0.75** at the widest, the edges at 72, 80 and 88 % of the
-  SPEC's zoom range (about 200, 217 and 234 m), 4 m of hysteresis each way: three changes over the whole zoom.
-- Docs: `docs/systems/look.md`, the research note.
+  SPEC's zoom range, 4 m of hysteresis each way: three changes over the whole zoom.
+- Decision 0036 (the frame-rate targets, Auto by zoom). Docs: `docs/systems/look.md`, the research note.
+- **Owed to the armies** (carried from `docs/plans/done/dynamic-scale.md`): units at the widest zoom will be a few
+  pixels; a full-resolution pass for units, or the GPU-timed scale, so the widest zoom does not cost them their
+  readability.
 
 ## Acceptance
 
@@ -36,3 +39,9 @@ calibrated per platform, with the zoom curve as its fallback), decided then by m
 
 - The levels (the radius out, then back): 125, 198 → 1; 206, 220 → 0.9; 232 → 0.8; 240, 260 → 0.75; back in, 236 →
   0.75, 228 → 0.8, 212 → 0.9, 195 → 1.
+
+## Review
+
+- **Round 1** (light and moderate): the readability debt carried forward (above); the reasoning in decision 0036, not
+  only here; the source comment cites the decision (a stable path); metre values out of the prose (the code derives
+  them). The steps double to 0.1 (three changes instead of six): a softer jump at each, accepted for fewer resizes.
