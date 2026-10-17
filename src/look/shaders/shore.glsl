@@ -152,7 +152,8 @@ vec3 roadPaint(vec3 c,vec2 xz){
   float wob=mix(wobS,wobW,jn)+(mValue(xz/0.6)-0.5)*0.5;
   // (out to about 0.5 m past the line's side, found at the warped point as the class cells under it: their edge, within
   // a cell of it, in the same earth: the road and track classes' colours are ROAD_EARTH's and TRACK_EARTH's)
-  float rag=wob*clamp(hw/4.0,0.5,1.0),inside=(1.0-smoothstep(hw-0.3+rag*0.3,hw+0.5+rag*0.4,dist))*(1.0-smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y))));
+  float rag=wob*clamp(hw/4.0,0.5,1.0),inside=(1.0-smoothstep(hw-0.3+rag*0.3,hw+0.5+rag*0.4,dist))*(1.0-smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y))))
+    *(1.0-smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y))));   // (and as the tile's bake hands over to the far ring's, which has none: bakeOnce)
   if(inside<=0.0)return c;
   // none at a junction, nor round a dead end's cap. Where a pixel spans more than a track is wide (0.3 m: far out) they
   // are not drawn but their mean, a light dusting (under a pixel they would shimmer, and cost: docs/plans/active/roads.md)

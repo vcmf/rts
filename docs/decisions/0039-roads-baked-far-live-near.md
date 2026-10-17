@@ -20,15 +20,18 @@ one, only from mid zoom or close zoom".
   tracks a light dusting (a track is about a pixel wide there and would shimmer), no grit. Not the far ring's 4 m bake.
 - **The tile's ground has two materials**, with the live roads and without; beyond 170 m of camera radius (±4 m) it
   takes the one without, and the baked roads show. Over the 50 m before the switch the live roads fade to the baked
-  look (the tracks to their dusting, the grit out), so the swap shows nothing. Both are compiled before the first
+  look (the tracks to their dusting, the grit out), so at the swap only the edge's sharpness changes (the bake's
+  0.5 m texels). Both are compiled before the first
   frame, and the swap waits until the material it goes to is ready (one not ready is not drawn).
-- **The water's land side** (the shore band) shows the baked roads at every zoom: only the ford crosses it.
+- **The water's land side** (the shore band) paints the roads live at every zoom, faded as the tile's: only the ford
+  crosses it, a few pixels.
 - **The shader arm** (no bake) keeps the live roads at every zoom.
 
 ## Consequences
 
-- Good: the widest zoom costs what main does (+0.1 ms); the near roads keep their tracks and grit.
-- Bad: the default view (125 m) still pays the live roads (+1.0 ms on this Mac); under 170 m the live roads paint over
+- Good: the widest zoom costs about what main does; the near roads keep their tracks and grit (measured:
+  `docs/plans/active/roads.md`, Performance).
+- Bad: the default view (125 m) still pays the live roads; under 170 m the live roads paint over
   the baked ones, whose 0.5 m texels soften the ragged edge a little.
 
 ## Alternatives considered

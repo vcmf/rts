@@ -25,7 +25,7 @@ import TER_VS from './shaders/terrain.vert?raw'
 import TER_FS from './shaders/terrain.frag?raw'
 
 export interface Terrain {
-  terrainMat: ShaderMaterial; terrainBakedMat: ShaderMaterial; farTerrainMat: ShaderMaterial; hillMat: ShaderMaterial; bankN: RawTexture
+  terrainMat: ShaderMaterial; terrainBakedMat: ShaderMaterial; tileMats: ShaderMaterial[]; farTerrainMat: ShaderMaterial; hillMat: ShaderMaterial; bankN: RawTexture
   riverMask: DynamicTexture; riverMaskCanvas: HTMLCanvasElement
   tileGround: GroundMesh; farGround: GroundMesh; apron: Mesh
 }
@@ -41,10 +41,11 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   // them by zoom: docs/plans/active/roads.md). On WebGL1 one, without
   const make = (name: string, roads: boolean) => mats.make(name, TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones', 'uUnder', 'uRoadOn', 'uRoadSegN', 'uRoadFar'], samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE', '#define MEADOW_UNDER', ...(roads ? ['#define ROADS'] : [])] })
   const terrainMat = make('terrain', !mats.webgl1), terrainBakedMat = mats.webgl1 ? terrainMat : make('terrainBaked', false)
-  for (const m of new Set([terrainMat, terrainBakedMat])) m.setTexture('uWater', water)
+  const tileMats = [...new Set([terrainMat, terrainBakedMat])]
   // the bank normals: x, z of the normal, the weight; the uncovered texels a level normal of no weight (the vertex
   // normals hold there)
-  const bankN = spanTexture(scene, bank, [128, 128, 0, 0], 'bankN'); terrainMat.setTexture('uBankN', bankN); terrainBakedMat.setTexture('uBankN', bankN)
+  const bankN = spanTexture(scene, bank, [128, 128, 0, 0], 'bankN')
+  for (const m of tileMats) { m.setTexture('uWater', water); m.setTexture('uBankN', bankN) }
   // the bank colours turn symmetric over the bank normals' edge fade, to meet the far ring's painted river (stroked
   // at the river's width) at the tile's edge
   const edgeK = (x: number, z: number) => 1 - sstep(TILE_W / 2 - D.spec.bank.edge, TILE_W / 2, Math.max(Math.abs(x), Math.abs(z)))
@@ -115,6 +116,6 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   }
   const apron = new Mesh('apron', scene), vd = new VertexData(); vd.positions = pos; vd.normals = nor; vd.indices = idx; vd.applyToMesh(apron)
   apron.setVerticesData('aRiver', new Float32Array(rv), false, 1); apron.material = farTerrainMat
-  return { terrainMat, terrainBakedMat, farTerrainMat, hillMat, bankN, riverMask, riverMaskCanvas, tileGround, farGround, apron }
+  return { terrainMat, terrainBakedMat, tileMats, farTerrainMat, hillMat, bankN, riverMask, riverMaskCanvas, tileGround, farGround, apron }
 }
 

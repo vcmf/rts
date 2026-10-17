@@ -115,11 +115,16 @@ each, 2026-10-17). With the road shader on the terrain at every zoom: wide 6.6 �
 4.5. Off (no ROADS define): equal to main; present but never run (an always-taken early return): wide +0.7, default
 +0.5 (the shader's size alone, on every ground pixel). The owner chose: far out the roads baked, the live shader from
 mid zoom in. So the macro bake paints the roads into the ground's colour at its 0.5 m texel (their wheel tracks there a
-light dusting: a track is finer than a pixel that far out), and the terrain and the water's land side switch to their
-shader without ROADS beyond 170 m (±4 m: `src/look/main.ts`, both variants compiled before the first frame). Then:
-wide 6.58 → 6.69, default 5.86 → 6.90, close 4.43 → 4.57. Its review (severe): the live roads changed at the switch (full tracks and grit
+light dusting: a track is finer than a pixel that far out), and the tile's terrain switches to its shader without ROADS
+beyond 170 m (±4 m: `src/look/main.ts`). That first build (one material, its define switched): wide 6.58 → 6.69,
+default 5.86 → 6.90, close 4.43 → 4.57. Its review (severe): the live roads changed at the switch (full tracks and grit
 against the bake's dusting), the dirt marks showed on the baked roads only, the shader arm lost its roads far out, and a
 define switch could leave the ground undrawn while its shader compiled. Now two materials swapped when ready, the live
 roads fading to the baked look over the 50 m before the switch (uRoadFar), no dirt marks on the tile's painted roads, the
-shader arm live at every zoom, the water's land side baked, no roads in the far ring's 4 m bake (decision 0039).
+shader arm live at every zoom, no roads in the far ring's 4 m bake (decision 0039). Its round 2 (moderate only:
+the last): the water's land side painted the roads live again (a seam at the ford's shore band otherwise, and the shader
+arm without its roads there), faded as the tile's; the live roads fade near the tile's edge as the bake hands over
+to the far ring's; the tile's two materials one list (`tileMats`); the baked one compiled at load only for a baked arm.
+Left: at the swap the road's edge softens to the bake's 0.5 m texels; track cells past the paint's edge (up to a cover
+cell) have no dirt marks.
 
