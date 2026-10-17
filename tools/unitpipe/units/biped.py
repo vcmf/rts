@@ -53,6 +53,11 @@ def blend(a, b, t):
     return b if t >= .5 else a
 
 
+# the hollow of a closed fist, where a held grip's axis runs: palm lengths (wrist to the middle finger's knuckle)
+# along the fingers and towards the palm, from the wrist. Measured on the rider's hand closed at .95 (the mean
+# of its finger joints); 1.45 and .45, guessed before, put the grip out at the fingertips.
+FIST = (.80, .25)
+
 class Biped:
     def __init__(self, P, prefix, rest_yaw=0.0, grip0=None):
         self.P = P; self.pre = prefix; self.rest_yaw = rest_yaw
@@ -91,7 +96,7 @@ class Biped:
             ind = unturn @ rest[n('RightHandIndex1')].to_translation(); pin = unturn @ rest[n('RightHandPinky1')].to_translation()
             u = ind - pin; u = (u - f * u.dot(f)).normalized()
             L = (mid - h).length
-            g = h + f * (L * 1.45) + nrm * (L * .45)
+            g = h + f * (L * FIST[0]) + nrm * (L * FIST[1])
             self.grip0 = dict(axis=list(u), point=list(g), wrist=list(h))
         # rest foot direction (canonical), per side
         self.foot0 = {}

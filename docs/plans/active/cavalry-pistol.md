@@ -94,3 +94,12 @@ Out: reloading on horseback, firing at the walk or trot, the left holster.
   elbow's swivel as an argument, not from a cache filled earlier; `_POSING` is reset if posing fails; dead
   code removed; the prep records the stretched scabbard's bounds. Not taken: posing the pull through arm
   states (an alternative design, not a defect), and the solve's cost (light).
+
+- **2026-10-17**, the owner: "it's much better, it's just the sword not inside the hand, same for pistol". Measured:
+  both grips sat 5.5 cm from the hollow of the fist, out at the fingertips (the hand's grip point was a guess);
+  the pistol's "grip" was 3.5 cm forward of its handle, and the barrel laid along the fingers put the handle
+  49° across the hand. Fixed: the fist's hollow measured on the curled hand (both grips now within 1 mm of
+  it), the handle found by fitting the stock's last 7 cm in the prep, the pistol held by its handle (20°
+  across the knuckles), placed in the holster by its muzzle so it sits as before. The closer grip made the
+  draw's pull pass 8 cm from the shoulder (a 109° wrist for a frame): the scabbard now aims in front of the
+  face and may slide 25 cm on its slings.

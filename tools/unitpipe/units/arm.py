@@ -19,6 +19,7 @@ continues the fingers.
 """
 import math
 from mathutils import Vector, Matrix, Quaternion
+from biped import FIST
 
 D = math.radians
 FLEX = (-60.0, 60.0)
@@ -40,6 +41,12 @@ class Arm:
         h0 = biped.hand0[side]
         self.f0 = h0['M0'].col[0].copy(); self.n0 = h0['M0'].col[1].copy(); self.s0 = h0['s0']
         self.palm_len = h0['wrist_to_mid']
+        self.pistol_rise = D(10)       # the barrel's rise above the fingers (set from the pistol's handle)
+
+    def hold_pistol(self, handle_angle, across=D(20)):
+        """Hold the pistol by its handle: the handle (at handle_angle from the barrel) lies `across` degrees off
+        the fist's hollow axis (the line of the knuckles), towards the fingers; the barrel follows."""
+        self.pistol_rise = math.pi / 2 - across - handle_angle
 
     def shoulder(self):
         return self.P.head(self.upper)
@@ -110,7 +117,8 @@ class Arm:
         return best[2]
 
     def palm_centre(self, wrist, f, n):
-        return wrist + f * (1.45 * self.palm_len) + n * (.45 * self.palm_len)
+        """The hollow of the closed fist (biped.FIST), where the weapon's grip sits."""
+        return wrist + f * (FIST[0] * self.palm_len) + n * (FIST[1] * self.palm_len)
 
     def sabre(self, wrist, f, n, t, tilt=D(18)):
         """The sabre in a hammer grip: the blade continues the thumb's line, leaning a little towards the
@@ -120,18 +128,21 @@ class Arm:
         M = Matrix((x, y, z)).transposed().to_4x4(); M.translation = self.palm_centre(wrist, f, n)
         return M
 
-    def hand_on_pistol(self, M, rise=D(10)):
+    def hand_on_pistol(self, M, rise=None):
         """The hand that holds the pistol at M with this module's grip (the inverse of pistol()): its wrist and
         its rotation for the biped. Used where the pistol is placed first (in its holster)."""
+        rise = self.pistol_rise if rise is None else rise
         y = M.col[1].to_3d().normalized(); z = M.col[2].to_3d().normalized()
         f = (y * math.cos(rise) - z * math.sin(rise)).normalized()      # the barrel is the fingers raised by `rise`
         t = (z - f * z.dot(f)).normalized()
         n = (t.cross(f) * self.s0).normalized()                           # t = s0 * f x n
-        wrist = M.to_translation() - f * (1.45 * self.palm_len) - n * (.45 * self.palm_len)
+        wrist = M.to_translation() - f * (FIST[0] * self.palm_len) - n * (FIST[1] * self.palm_len)
         return wrist, self.B.hand_rot(self.side, f, n)
 
-    def pistol(self, wrist, f, n, t, rise=D(10)):
-        """The pistol: the barrel continues the fingers, raised a little; the lock's top along the thumb."""
+    def pistol(self, wrist, f, n, t, rise=None):
+        """The pistol: the barrel continues the fingers, raised by its rise (hold_pistol); the lock's top towards
+        the thumb's side."""
+        rise = self.pistol_rise if rise is None else rise
         y = (f * math.cos(rise) + t * math.sin(rise)).normalized()
         z = t - y * t.dot(y); z.normalize(); x = y.cross(z)
         M = Matrix((x, y, z)).transposed().to_4x4(); M.translation = self.palm_centre(wrist, f, n)

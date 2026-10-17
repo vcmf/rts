@@ -224,9 +224,19 @@ elif name == 'pistol':
     muzzle = Vector((x0, sum(v.y for v in face) / len(face), (max(v.z for v in face) + min(v.z for v in face)) / 2))
     cap = [v for v in vs if v.x > x1 - .015]                         # the butt cap
     butt = Vector((sum(v.x for v in cap) / len(cap), sum(v.y for v in cap) / len(cap), min(v.z for v in cap) + .012))
-    top = Vector((x0 + .66 * L, muzzle.y, muzzle.z - .028))          # where the handle meets the lock
-    grip = top.lerp(butt, .45)
-    up_handle = (top - butt).normalized()
+    # the handle: the stock's last 7 cm, a centre per centimetre (mid-height, mid-width), a line fitted through
+    # them; the grip is their mean, its axis runs from the butt up to the lock
+    cs = []
+    for k in range(7):
+        sl = [v for v in vs if x1 - .07 + .01 * k <= v.x < x1 - .06 + .01 * k]
+        if len(sl) >= 3:
+            cs.append(Vector((sum(v.x for v in sl) / len(sl), (max(v.y for v in sl) + min(v.y for v in sl)) / 2,
+                              (max(v.z for v in sl) + min(v.z for v in sl)) / 2)))
+    grip = sum(cs, Vector()) / len(cs)
+    sxx = sum((c.x - grip.x) ** 2 for c in cs)
+    up_handle = -Vector((1, sum((c.x - grip.x) * (c.y - grip.y) for c in cs) / sxx,
+                         sum((c.x - grip.x) * (c.z - grip.z) for c in cs) / sxx)).normalized()   # towards the muzzle
+    top = grip + up_handle * .035
     R = Matrix.Rotation(-math.pi / 2, 4, 'Z')                        # -X (the muzzle) -> +Y
     mesh.data.transform(R @ Matrix.Translation(-grip))
     # a few pixels at the RTS camera: Tripo's 10,000 triangles collapsed to about 1,200

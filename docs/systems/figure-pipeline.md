@@ -137,8 +137,10 @@ Poses are solved per frame by script and keyed on every bone:
   state gives the wrist's direction and distance from the shoulder in the chest's frame, the elbow's swivel
   (+ out to the arm's side), the forearm's turn (pronation, −85° to 90° from the handshake) and the wrist's
   bend (flexion within ±60°, deviation from −20° to 35°), and the weapon follows the fist (the sabre's blade
-  continues the thumb's line, leaning towards the fingers by its roll in the hand; the pistol's barrel
-  continues the fingers). Blending states moves the hand on arcs about the shoulder. A state can instead
+  continues the thumb's line, leaning towards the fingers by its roll in the hand; the pistol is held by its
+  handle, which lies 20° across the line of the knuckles, the barrel following). A held grip sits in the
+  hollow of the closed fist (`biped.FIST`, measured on the rider's curled hand: 0.80 palm lengths along the
+  fingers, 0.25 towards the palm); the first guess put it at the fingertips. Blending states moves the hand on arcs about the shoulder. A state can instead
   name the blade's direction: the swivel, turn, bend and (for the sabre) roll that point the weapon there,
   near the authored swivel and roll and with the wrist nearest neutral (steeply dearer past 36°), are
   searched once before any frame is posed (`aim_wrist`). Placing the hand by a point and a weapon direction,
@@ -153,7 +155,8 @@ Poses are solved per frame by script and keyed on every bone:
   blade directions blended directly leave the swing's path undefined. In the draw the blade lies in the
   scabbard and slides out along it, the tip clearing it at `drawn`; the scabbard swings forward on its slings
   towards the drawing hand and slides down them as far as the arm is short for the blade (Tripo's arm is
-  47.5 cm from shoulder to wrist; the grip must travel 1.09 m), then the arm carries the blade over to the
+  47.5 cm from shoulder to wrist; the grip must travel 1.09 m; it passes in front of the face, 14 cm from the
+  shoulder), then the arm carries the blade over to the
   guard while the scabbard falls back.
 - **The pistol** is posed the same way, its lock's top asked to face up. In the draw the hand takes the butt
   in the aim's grip; the holster points at the shoulder, as a pommel holster does, so the rider sits back and

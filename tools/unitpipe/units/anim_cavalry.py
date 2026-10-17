@@ -26,6 +26,7 @@ P = K.Poser(rig)
 H = Horse(P, mesh)
 R = biped.Biped(P, 'Rider:', 0.0)   # its own grip, from the gloved hand's bones
 ARM = Arm(P, R, 'Right')
+ARM.hold_pistol(math.acos(max(-1.0, min(1.0, info['pistol']['handle_axis'][1]))))   # the handle's angle off the barrel
 UP = Vector((0, 0, 1))
 
 GAITS = {
@@ -512,9 +513,9 @@ def apply_seamed(pose, Rs, seat, sm, target, k, weapon):
 
 DRAW_T = dict(reach=8, grab=10, out=20, guard=30)
 CLEAR = .03                       # how far the sabre's tip is out of the scabbard where the pull ends (`drawn`)
-SWING_AIM = Vector((0, -.10, .10))  # the scabbard's mouth turns to point here (from the right shoulder, the chest's frame)
+SWING_AIM = Vector((0, -.20, .10))  # the scabbard's mouth turns to point here (from the right shoulder, the chest's frame)
 SWING_MAX = D(70)
-DROP_MAX = .20                    # how far the scabbard may slide down its slings
+DROP_MAX = .25                    # how far the scabbard may slide down its slings
 REACH_END = .92                   # the grip's distance from the shoulder where the pull ends, as a share of the arm
                                   # (shoulder to wrist): the arm still bent, the wrist within its reach limit
 PULL_S = dict(chest=(D(28), D(8), 0), head=(D(20), D(14)))      # the rider as the pull starts...

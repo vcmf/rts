@@ -159,10 +159,11 @@ elif which == 'cavalry':
     # the pistol rests in its holster, as its child: holstered is every clip's default. Its frame (barrel +Y,
     # lock top +Z, the grip's centre at the origin) is placed with the bore on the holster's axis, muzzle down,
     # the lock's top forward so the butt curves back towards the rider
+    HOLSTER_MUZZLE = .22                # how deep the muzzle sits in the holster
     pp = json.loads((K.ROOT / 'pistol-prep.json').read_text())
-    bore = Vector(pp['muzzle']).z
+    mz = Vector(pp['muzzle'])
     y = haxis; z = Vector((0, -1, 0)) - y * Vector((0, -1, 0)).dot(y); z.normalize(); x = y.cross(z)
-    G = hmouth - y * .06 - z * bore
+    G = hmouth + y * (HOLSTER_MUZZLE - mz.y) - z * mz.z         # the muzzle HOLSTER_MUZZLE deep, on the axis
     held = Matrix((x, y, z)).transposed().to_4x4(); held.translation = G
     pistol = next(o for o in append('pistol-prepped.blend', {'PistolMesh'}) if o.type == 'MESH')
     pistol.data.transform(held)
