@@ -135,7 +135,7 @@ float brushAt(vec2 uv,float s,float px){
 // the brush combed along the flow (?grass=flow, docs/plans/active/grass-flow.md): each FLOW_CELL m cell reads the tile
 // in its own frame, turned to the flow at its centre and stretched along it (a varying turn of one frame would smear
 // far from the origin), the four nearest blended bilinearly with their contrast kept (the sum's spread over the
-// weights' norm, about the tile's mean), at the two scales of the default; 8 reads, in the bake only
+// weights' norm, about the tile's mean), at the two scales of the default; 8 reads, on near pixels only (strokeK)
 #define FLOW_CELL 5.0
 // x: the brush, combed; y: the comb's own strokes, value noise stretched about seven times along the flow (5 m by
 // 0.7 m, and an octave at half that), the scale the bake's 0.5 m texel holds, about 0.5 (blended as the brush)
@@ -152,20 +152,24 @@ vec2 combedBrush(vec2 xz,float px){
   float n=1.0/sqrt(max(ww,1e-4));
   return vec2(0.585+s*n,0.5+sc*n);}
 #endif
+// the strokes by the footprint px (m a pixel): whole up close, gone by the default zoom's far half, so the widest
+// zooms see the soft masses and bands, not hundreds of 5 m strokes (the owner, 2026-10-17: zoomed out "weird"); the
+// bake's texel (0.5 m) is past the fade, so the bake holds none: the bake arm adds them at runtime (groundAt)
+float strokeK(float px){return 1.0-smoothstep(0.07,0.15,px);}
+// the strokes' multiplier at a point: lighter along the comb, a deeper green in its gaps (never toward black: the
+// owner, "use a darker green"), k their weight (strokeK)
+vec3 combStrokes(vec2 xz,float px,float k){
+  vec3 fl=flowAt(xz);vec2 cb=combedBrush(xz,px);float dv=((cb.x-0.585)*0.6+(cb.y-0.5)*mix(0.35,0.8,fl.z))*k;
+  float deep=smoothstep(0.0,-0.22,dv);
+  return (1.0+max(dv,0.0)*1.25)*mix(vec3(1.0),vec3(0.70,0.86,0.66),deep);}
 vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
   float gr=k<0.5?1.0:k<1.5?0.75:0.0;if(gr<=0.0)return c;
   #ifdef GRASS_FLOW
-  // combed: the strokes along the flow; light and dark streaks where it leans to or from the sun (the sun is fixed
-  // per map: the bake holds it), deeper green gaps, soft masses at a few metres (the far zooms' fluff)
-  vec3 fl=flowAt(xz);vec2 cb=combedBrush(xz,px);float dv=(cb.x-0.585)*0.6+(cb.y-0.5)*mix(0.35,0.8,fl.z);
-  // the strokes lighten in value and darken into a deeper green, never toward black: past the clumps the bake's
-  // strokes stand alone, and a dark half in value read as smeared dark strides (the owner, 2026-10-17: "use a darker
-  // green"); deep: how far a stroke goes into its gap, 0..1
-  float deep=smoothstep(0.0,-0.22,dv);dv=max(dv,0.0);
-  float streak=dot(fl.xy,FLOW_SUN)*mix(0.35,1.0,fl.z);
-  float mass=mix(0.9,1.1,mValue(xz/11.0+3.0));
-  vec3 gap=mix(vec3(1.0),vec3(0.70,0.86,0.66),deep);   // the gaps: a deeper, more saturated green (red and blue drop more than green)
-  vec3 t=(1.0+dv*1.25)*(1.0+0.2*streak)*mass*gap*mix(0.93,1.07,clumpAt(xz));
+  // combed (docs/plans/active/grass-flow.md): broad soft bands where the flow leans to or from the sun (the sun is
+  // fixed per map: the bake holds it), soft masses at a few metres, the clump field; the strokes by the footprint
+  vec3 fl=flowAt(xz);float streak=dot(fl.xy,FLOW_SUN)*mix(0.35,1.0,fl.z);
+  vec3 t=vec3((1.0+0.1*streak)*mix(0.93,1.07,mValue(xz/11.0+3.0))*mix(0.94,1.06,clumpAt(xz)));
+  float sk=strokeK(px);if(sk>0.0)t*=combStrokes(xz,px,sk);
   return c*mix(vec3(1.0),t,gr);
   #endif
   vec2 w=(vec2(mValue(xz/23.0),mValue(xz/23.0+41.0))-0.5)*3.0;
@@ -250,7 +254,15 @@ vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
 // THE GROUND'S COLOUR the terrain and the shore band start from, by arm (every painted material has one: setArm,
 // src/look/macro.ts; with none, the shader arm's)
 vec3 groundAt(vec2 xz,float px){
-  #if defined(MACRO_BAKE)
+  #if defined(MACRO_BAKE)&&defined(MEADOW)&&defined(GRASS_FLOW)
+  // the comb's strokes, by the footprint (strokeK): near pixels only, on meadow and pasture
+  vec3 g=bakeOnce(xz).rgb;float sk=strokeK(px);
+  // (how much is grass: four warped taps 1.2 m apart, so the strokes fade over a class edge as the bake's blend does,
+  // not at the cover grid's cells)
+  if(sk>0.0){float gr=0.0;for(int i=0;i<4;i++){vec2 o=vec2(i==0?1.2:i==1?-1.2:0.0,i==2?1.2:i==3?-1.2:0.0);float k=coverAt(coverWarp(xz+o)).x;gr+=(k<0.5?1.0:k<1.5?0.75:0.0)*0.25;}
+    if(gr>0.0)g*=mix(vec3(1.0),combStrokes(xz,px,sk),gr);}
+  return g;
+  #elif defined(MACRO_BAKE)
   return bakeOnce(xz).rgb;
   #elif defined(MACRO_SHADER)
   return macroOnce(xz,px).rgb;
