@@ -147,6 +147,15 @@ elif which == 'cavalry':
     bpy.context.view_layer.objects.active = blade; bpy.ops.object.join(); sabre = bpy.context.object
     for o in bpy.context.selected_objects: o.select_set(False)
     prop_bone(hrig, sabre, 'Sabre', (0, 0, 0), (0, .3, 0))
+    # the pistol (pistol-prepped.blend: barrel along +Y, the grip's centre at the origin) on its own bone,
+    # and its holster at the front of the saddle on the right, the muzzle down: where French cavalry carried it
+    pistol = next(o for o in append('pistol-prepped.blend', {'PistolMesh'}) if o.type == 'MESH')
+    prop_bone(hrig, pistol, 'Pistol', (0, 0, 0), (0, .3, 0))
+    holster_leather = K.flat_material('Holster', (.16, .09, .05))
+    hmouth = Vector((-.17, hp['seat'][1] - .30, hp['seat'][2] + .04))
+    haxis = Vector((-.22, -.38, -.90)).normalized()             # down, forward and out, along the shoulder
+    holster = K.make_prop('Holster', [('cyl', hmouth, hmouth + haxis * .25, .040, .030, 10)], holster_leather)
+    prop_bone(hrig, holster, 'Holster', hmouth, hmouth + haxis * .25, 'Horse:Back')
     # the tack (the Tripo horse has none): a shabraque and a saddle cut from the horse's own skin and pushed
     # out along its normals, so they fit the body and deform with it; a rolled cloak behind the saddle
     sy, sz = seat.y, seat.z
@@ -206,8 +215,9 @@ elif which == 'cavalry':
         o.vertex_groups.new(name='Rider:mixamorig:LeftHand').add(hd_ids, 1.0, 'REPLACE')
         o.parent = hrig; mod = o.modifiers.new('Armature', 'ARMATURE'); mod.object = hrig
         reins.append(o)
-    rig, mesh = join(hrig, [r], [hmesh, m, sabre] + tack + reins, 'Cavalry')
-    info = dict(horse=hp | dict(profile=None), rider=dp, seat=list(seat), sabre=dict(length=1.055, grip=0.0), bit=[0, bit_y, bit_z])
+    rig, mesh = join(hrig, [r], [hmesh, m, sabre, pistol, holster] + tack + reins, 'Cavalry')
+    info = dict(horse=hp | dict(profile=None), rider=dp, seat=list(seat), sabre=dict(length=1.055, grip=0.0), bit=[0, bit_y, bit_z],
+                pistol=json.loads((K.ROOT / 'pistol-prep.json').read_text()), holster=dict(mouth=list(hmouth), axis=list(haxis), length=.25))
     (K.ROOT / 'cavalry-combined.json').write_text(json.dumps(info, indent=1))
     K.save(K.ROOT / 'cavalry-combined.blend')
     print('COMBINED cavalry', len(rig.data.bones), 'bones', sum(len(p.vertices) - 2 for p in mesh.data.polygons), 'triangles')

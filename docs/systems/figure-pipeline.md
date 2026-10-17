@@ -16,7 +16,7 @@ clip table, and record the figure in the registry. Everything is a Blender Pytho
 |---|---|---|---|
 | `fr-line-infantry` | foot | 51 (march, fire drill, kneeling, bayonet, moves, falls, morale) | tools/unitpipe/infantry |
 | `fr-foot-artillery` | crewed | a light gun and a crew of four: Idle, Load, Ready, Fire | tools/unitpipe/units |
-| `fr-cuirassier` | mounted | the horse and rider: gaits and the sabre (14) | tools/unitpipe/units |
+| `fr-cuirassier` | mounted | the horse and rider: gaits, the sabre and the pistol (20) | tools/unitpipe/units |
 
 Every figure and clip, with lengths, events and root speeds, is in `data/figures/index.json`.
 
@@ -74,6 +74,7 @@ the skeleton or a known part, never the bounding box (headgear and plumes would 
 | dragoon (rider) | hip joint at 0.90 m | 1.84 | 1.84 m with the crest |
 | horse | back at the croup 1.56 m (a 15-hand cavalry horse) | 2.49 | 2.5 m nose to tail |
 | light cannon | wheel diameter 1.35 m (a field carriage) | 4.08 | 4.1 m muzzle to trail, barrel 2.0 m |
+| pistol (a prop, not rigged) | overall length 0.35 m (a cavalry pistol) | 0.35 | turned so its barrel points +Y with the grip's centre at the origin |
 
 The scale is applied to mesh and armature (no object scale reaches the export), and every model faces
 **−Y** (the horse came facing −X); ground at z = 0. The infantryman, built first, keeps its model units
@@ -107,7 +108,9 @@ Tripo's auto-rig is a starting point, never trusted as is:
 - **Cavalry:** the horse, the rider (`Rider:`), a sabre on its own bone, and tack the Tripo horse lacks: a
   shabraque and saddle cut from the horse's own skin and pushed out along its normals (so they fit and
   deform with it), a rolled cloak, and reins whose ends are skinned one to the horse's head and one to the
-  rider's hand, so they stretch between the two. 20,500 triangles.
+  rider's hand, so they stretch between the two; a **pistol** on its own bone and its **holster** at the
+  front of the saddle on the right, where French cavalry carried it (the pistol sits in it in every clip
+  that does not draw it). 30,600 triangles (the pistol's 10,000 want a lighter LOD).
 - Copies of one model share one material; UV layers get one name first. **Hiding a prop** is its bone
   scaled to 0.1%, parked at a fixed point so joins stay exact.
 
@@ -130,6 +133,10 @@ Poses are solved per frame by script and keyed on every bone:
 - **The sabre** is keyed as states in the saddle's frame (grip, blade direction, chest, head). A cut needs
   an over-the-head key between the wind-up and the blow: two nearly opposite blade directions blended
   directly leave the swing's path undefined.
+- **The pistol** is keyed the same way (grip, barrel, the lock's top), its clips in the shape of
+  decision 0037: DrawPistol and HolsterPistol (from and to Idle), ReadyPistol (a loop, muzzle up),
+  PresentPistol (the wind-up the game stretches), AimPistol (a loop it holds), FirePistol (anchored on its
+  `shot` at frame 3: the kick, back to the ready; the horse starts at the shot).
 - Every clip that chains starts and ends on a pose its neighbours share; reactions (a horse's toss at a
   blow) are zero at both ends.
 

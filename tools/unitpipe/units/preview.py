@@ -83,6 +83,37 @@ if kw.get('fx') == 'battery' and 'shot' in events:
             k = 1 - math.exp(-t / 6)
             s.location = mz + o * k + Vector((0, 0, t * .01))
             s.scale = (r * (.3 + 1.0 * k) * (1 if t < 60 else max(.0001, 1 - (t - 60) / 40)),) * 3
+elif kw.get('fx') == 'pistol' and 'shot' in events:
+    # a pistol's flash and a puff of smoke at its muzzle, which moves with the Pistol bone
+    shot = events['shot'] if isinstance(events['shot'], int) else events['shot'][0]
+    muzzle_local = Vector(json.loads((mp / 'cavalry-combined.json').read_text())['pistol']['muzzle'])
+    fl = bpy.data.materials.new('Flash'); fl.use_nodes = True
+    b = fl.node_tree.nodes['Principled BSDF']; b.inputs['Emission Color'].default_value = (1, .7, .3, 1); b.inputs['Emission Strength'].default_value = 30
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=1); flash = bpy.context.object; flash.data.materials.append(fl)
+    sm = bpy.data.materials.new('Smoke'); sm.use_nodes = True
+    b = sm.node_tree.nodes['Principled BSDF']; b.inputs['Base Color'].default_value = (.82, .82, .8, 1); b.inputs['Roughness'].default_value = 1
+    import random
+    random.seed(5)
+    puffs = []
+    for i in range(6):
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=1); o = bpy.context.object; o.data.materials.append(sm)
+        puffs.append((o, random.uniform(.15, .9), Vector((random.uniform(-.1, .1), random.uniform(-.1, .1), random.uniform(0, .15))), random.uniform(.06, .12)))
+    state = {}
+    def fx(frame):
+        pb = rig.pose.bones['Pistol']
+        M = rig.matrix_world @ pb.matrix
+        mz = M @ muzzle_local; bdir = (M.to_3x3() @ Vector((0, 1, 0))).normalized()
+        if frame == shot:
+            state['mz'], state['dir'] = mz.copy(), bdir.copy()
+        t = frame - shot
+        flash.location = mz + bdir * .06
+        flash.scale = (.05, .05, .05) if 0 <= t < 2 else (.0001,) * 3
+        for o, d, j, r in puffs:
+            if t < 0 or 'mz' not in state:
+                o.scale = (.0001,) * 3; continue
+            k = 1 - math.exp(-t / 5)
+            o.location = state['mz'] + state['dir'] * d * k + j * k + Vector((0, 0, t * .004))
+            o.scale = (r * (.3 + k) * (1 if t < 40 else max(.0001, 1 - (t - 40) / 30)),) * 3
 else:
     def fx(frame):
         pass

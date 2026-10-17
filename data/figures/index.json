@@ -498,7 +498,8 @@
    "pipeline": "units",
    "sources": [
     "french-army/horse",
-    "french-army/dragoon"
+    "french-army/dragoon",
+    "french-army/pistol"
    ],
    "fps": 24,
    "m_per_unit": 1.0,
@@ -506,6 +507,28 @@
     "cavalry.glb"
    ],
    "clips": {
+    "AimPistol": {
+     "frames": 37,
+     "loop": true,
+     "events": {},
+     "next": [
+      "FirePistol"
+     ]
+    },
+    "DrawPistol": {
+     "frames": 28,
+     "loop": false,
+     "events": {
+      "drawn": [
+       17
+      ]
+     },
+     "next": [
+      "ReadyPistol",
+      "PresentPistol",
+      "HolsterPistol"
+     ]
+    },
     "DrawSabre": {
      "frames": 31,
      "loop": false,
@@ -521,6 +544,20 @@
       "SabreThrust",
       "SabreParry",
       "SabreFight"
+     ]
+    },
+    "FirePistol": {
+     "frames": 25,
+     "loop": false,
+     "events": {
+      "shot": [
+       3
+      ]
+     },
+     "next": [
+      "ReadyPistol",
+      "PresentPistol",
+      "HolsterPistol"
      ]
     },
     "Gallop": {
@@ -551,12 +588,25 @@
       "GallopCut"
      ]
     },
+    "HolsterPistol": {
+     "frames": 28,
+     "loop": false,
+     "events": {
+      "holstered": [
+       11
+      ]
+     },
+     "next": [
+      "Idle"
+     ]
+    },
     "Idle": {
      "frames": 96,
      "loop": true,
      "events": {},
      "next": [
-      "DrawSabre"
+      "DrawSabre",
+      "DrawPistol"
      ]
     },
     "IdleSabre": {
@@ -570,6 +620,24 @@
       "SabreParry",
       "SabreFight",
       "SheatheSabre"
+     ]
+    },
+    "PresentPistol": {
+     "frames": 13,
+     "loop": false,
+     "events": {},
+     "next": [
+      "AimPistol",
+      "FirePistol"
+     ]
+    },
+    "ReadyPistol": {
+     "frames": 49,
+     "loop": true,
+     "events": {},
+     "next": [
+      "PresentPistol",
+      "HolsterPistol"
      ]
     },
     "SabreCutLeft": {

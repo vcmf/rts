@@ -198,6 +198,37 @@ elif name == 'dragoon':
     info.update(scale=s, scabbard=dict(count=scab['count'], min=list(scab['min']), max=list(scab['max']), mouth=list(stop), tip=list(sbot)),
                 hilt=dict(parts=len(hilt), count=len(hilt_ids), centre=list(hc)))
 
+if name == 'pistol':
+    # a prop, not rigged: a cavalry pistol of 35 cm (the AN XIII is about 35 cm). Turned so its barrel points
+    # +Y with the grip's centre at the origin: the Pistol bone's frame (combine.py), as the sabre's
+    lo, hi = K.mesh_bounds([mesh])
+    s = .35 / (hi.x - lo.x)
+    mesh.scale = (s,) * 3
+    for o in bpy.context.selected_objects: o.select_set(False)
+    mesh.select_set(True); bpy.context.view_layer.objects.active = mesh
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    vs = [v.co.copy() for v in mesh.data.vertices]
+    x0 = min(v.x for v in vs); x1 = max(v.x for v in vs); L = x1 - x0
+    face = [v for v in vs if v.x < x0 + .004]                       # the muzzle's face (the barrel points -X)
+    muzzle = Vector((x0, sum(v.y for v in face) / len(face), (max(v.z for v in face) + min(v.z for v in face)) / 2))
+    cap = [v for v in vs if v.x > x1 - .015]                         # the butt cap
+    butt = Vector((sum(v.x for v in cap) / len(cap), sum(v.y for v in cap) / len(cap), min(v.z for v in cap) + .012))
+    top = Vector((x0 + .66 * L, muzzle.y, muzzle.z - .028))          # where the handle meets the lock
+    grip = top.lerp(butt, .45)
+    up_handle = (top - butt).normalized()
+    R = Matrix.Rotation(-math.pi / 2, 4, 'Z')                        # -X (the muzzle) -> +Y
+    mesh.data.transform(R @ Matrix.Translation(-grip))
+    to = lambda p: (R @ Matrix.Translation(-grip)) @ p
+    info.update(scale=s, length=L, muzzle=list(to(muzzle)), butt=list(to(butt)), handle_top=list(to(top)),
+                handle_axis=list((R.to_3x3() @ up_handle).normalized()))
+    mesh.name = 'PistolMesh'
+    lo = Vector([min(v.co[i] for v in mesh.data.vertices) for i in range(3)])
+    hi = Vector([max(v.co[i] for v in mesh.data.vertices) for i in range(3)])
+    info.update(bounds=[list(lo), list(hi)], size=list(hi - lo), triangles=sum(len(p.vertices) - 2 for p in mesh.data.polygons))
+    (K.ROOT / f'{name}-prep.json').write_text(json.dumps(info, indent=1, default=list))
+    K.save(K.ROOT / f'{name}-prepped.blend')
+    print('PREP', name, json.dumps(info, default=list))
+    raise SystemExit(0)
 if name != 'light-cannon':
     # Tripo's weights leak between distant bones: keep only bones within reach of each vertex
     info['weights_removed'] = K.clean_weights(rig, mesh, {'horse': .45}.get(name, .16))

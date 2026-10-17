@@ -135,6 +135,34 @@ def rider(gait=None, t=0.0, sabre=False, lean=0.0, absorb=0.0):
 
 
 HIDE = Matrix.Diagonal((.001, .001, .001, 1))
+PISTOL = info['pistol']
+HANDLE = Vector(PISTOL['handle_axis'])         # from the butt to the top of the grip, in the pistol's frame
+
+
+def pistol_matrix(G, B, Z):
+    """The Pistol bone at its grip G, barrel along B, the lock's top towards Z."""
+    y = B.normalized(); z = Z - y * Z.dot(y)
+    if z.length < 1e-4:
+        z = Vector((0, 0, 1)) - y * y.z
+    z.normalize(); x = y.cross(z)
+    M = Matrix((x, y, z)).transposed().to_4x4(); M.translation = G
+    return M
+
+
+def holster_frame():
+    pb = P.pb['Holster']
+    return pb.head.copy(), (pb.tail - pb.head).normalized()
+
+
+def pistol_holstered():
+    """The pistol in its holster: barrel down the holster, the grip just out of its mouth, the butt
+    curving back towards the rider."""
+    mouth, axis = holster_frame()
+    return pistol_matrix(mouth - axis * .07, axis, Vector((0, -1, 0)))
+
+
+def holster_pistol():
+    P.set('Pistol', pistol_holstered())
 
 
 def build_cycle(name, gait, sabre=False):
@@ -154,6 +182,7 @@ def build_cycle(name, gait, sabre=False):
             st = dict(HIGH, G=HIGH['G'] + Vector((0, -.03 * sway, .02 * sway)), B=(HIGH['B'] + Vector((0, -.1 * sway, 0))).normalized())
             M = apply_sabre(pose, Rs, seat, st)
         R.set_pose(pose)
+        holster_pistol()
         if sabre:
             P.set('Sabre', M); P.set('Rider:Hilt', P.pb['Rider:Hilt'].matrix @ HIDE)
         else:
@@ -200,6 +229,7 @@ def build_idle(name='Idle', frames=96):
         pose, Rs, seat = rider()
         pose['head'] = (D(12) * math.sin(2 * math.pi * t), D(-2))
         R.set_pose(pose)
+        holster_pistol()
         P.set('Sabre', HIDE)
         P.key_all(f)
     K.finish_action(rig, act, frames)
@@ -301,6 +331,7 @@ def sabre_clip(name, frames, keys, loop=False, react=None, stand_amp=0.0, events
             st = state_at(keys, f - 1)
             M = apply_sabre(pose, Rs, seat, st)
         R.set_pose(pose)
+        holster_pistol()
         P.set('Sabre', M if M is not None else HIDE)
         if hide_hilt:
             P.set('Rider:Hilt', P.pb['Rider:Hilt'].matrix @ HIDE)
@@ -415,6 +446,7 @@ def gallop_cut(name='GallopCut'):
                   B=(st['B'] + Vector((0, -.1 * sway, 0)) * w).normalized())
         M = apply_sabre(pose, Rs, seat, st)
         R.set_pose(pose)
+        holster_pistol()
         P.set('Sabre', M); P.set('Rider:Hilt', P.pb['Rider:Hilt'].matrix @ HIDE)
         P.key_all(f)
     K.finish_action(rig, act, N + 1)
@@ -426,6 +458,124 @@ def build_draw(name, reverse=False):
     m = sabre_clip(name, n, None, draw=(n, reverse))
     m['events'] = {'drawn': DRAW_T['grab']} if not reverse else {'sheathed': n - 1 - DRAW_T['grab']}
     return m
+
+
+# ------------------------------------------------------------------ the pistol
+# Pistol states in the saddle's frame (x = the horse's left, -y forward, z up, from the seat): G the grip's
+# centre, B the barrel, Z the lock's top; the rider's chest (yaw + = to his left), head, lean. The clips
+# follow decision 0037: PresentPistol is the wind-up the game stretches, AimPistol the loop it holds,
+# FirePistol is anchored on its `shot`.
+def PS(G, B, Z, chest=(0, 0, 0), head=(0, D(-3)), lean=0.0):
+    return dict(G=Vector(G), B=Vector(B).normalized(), Z=Vector(Z).normalized(), chest=chest, head=head, lean=lean)
+
+
+READY_P = PS((-.26, -.22, .68), (-.05, -.25, 1), (0, 1, .2), chest=(D(-6), D(2), 0), head=(D(-6), D(-3)))
+AIM_P = PS((-.43, -.36, .64), (-.5, -.866, .02), (0, 0, 1), chest=(D(-25), D(6), 0), head=(D(-24), D(2)), lean=D(4))
+RECOIL_P = PS((-.40, -.30, .71), (-.42, -.72, .55), (.1, .45, .9), chest=(D(-23), D(2), 0), head=(D(-22), D(-2)), lean=D(1))
+SHOT_P = 3                                      # FirePistol's shot frame (1-based, as every event)
+
+
+def blend_pistol(a, b, t):
+    return dict(G=a['G'].lerp(b['G'], t), B=a['B'].slerp(b['B'], t), Z=a['Z'].slerp(b['Z'], t),
+                chest=tuple(x + (y - x) * t for x, y in zip(a['chest'], b['chest'])),
+                head=tuple(x + (y - x) * t for x, y in zip(a['head'], b['head'])), lean=a['lean'] + (b['lean'] - a['lean']) * t)
+
+
+def pistol_at(keys, f):
+    if f <= keys[0][0]:
+        return keys[0][1]
+    for (fa, a, _), (fb, b, e) in zip(keys, keys[1:]):
+        if f <= fb:
+            return blend_pistol(a, b, ease(e, (f - fa) / max(1e-9, fb - fa)))
+    return keys[-1][1]
+
+
+def apply_pistol(pose, Rs, seat, st):
+    """The pistol in the right hand for this state; returns its bone's matrix."""
+    G = seat + Rs @ st['G']; B = (Rs @ st['B']).normalized(); Z = (Rs @ st['Z']).normalized()
+    M = pistol_matrix(G, B, Z)
+    pose['hands']['Right'] = ('grip', G, M.to_3x3() @ HANDLE, -B)
+    pose['curl']['Right'] = .95
+    pose['elbow']['Right'] = Vector((.7, .5, -.5))
+    pose['chest'] = (st['chest'][0], pose['chest'][1] + st['chest'][1], st['chest'][2])
+    pose['head'] = st['head']
+    h = pose['hips']; pose['hips'] = (h[0], h[1], h[2] + st['lean'], h[3])
+    return M
+
+
+DRAW_P = dict(reach=9, grab=11, out=17, ready=27)
+
+
+def draw_pistol_pose(pose, Rs, seat, fr):
+    """From Idle's pose (fr 0) to READY_P (fr DRAW_P['ready']): reach down to the butt, out of the holster
+    along it, up to the ready. Returns the pistol's matrix."""
+    T = DRAW_P
+    mouth, axis = holster_frame()
+    held = pistol_holstered()
+    rest_hand = seat + Rs @ Vector((-.20, -.22, .10))
+    if fr < T['grab']:
+        k = ease('smooth', fr / T['grab'])
+        pose['chest'] = (D(-10) * k, pose['chest'][1] + D(16) * k, D(-6) * k); pose['head'] = (D(-10) * k, D(-2) + D(18) * k)
+        h = pose['hips']; pose['hips'] = (h[0], h[1], h[2] + D(8) * k, h[3])
+        if fr < T['reach']:
+            G = held.to_translation(); w = rest_hand.lerp(G + Vector((0, .05, .06)), k)
+            pose['hands']['Right'] = ('wrist', w, Vector((.2, -1, -.6)), Vector((.6, 0, -.6)))
+        else:
+            pose['hands']['Right'] = ('grip', held.to_translation(), held.to_3x3() @ HANDLE, -axis)
+            pose['curl']['Right'] = .95
+        return held
+    if fr < T['out']:
+        k = ease('in', (fr - T['grab']) / (T['out'] - T['grab']))
+        M = held.copy(); M.translation = held.to_translation() - axis * (.30 * k)
+        pose['hands']['Right'] = ('grip', M.to_translation(), M.to_3x3() @ HANDLE, -axis)
+        pose['curl']['Right'] = .95
+        pose['chest'] = (D(-10), pose['chest'][1] + D(16) - D(8) * k, D(-6)); pose['head'] = (D(-10), D(16) - D(8) * k)
+        h = pose['hips']; pose['hips'] = (h[0], h[1], h[2] + D(8) - D(4) * k, h[3])
+        return M
+    k = ease('smooth', (fr - T['out']) / (T['ready'] - T['out']))
+    Ri = Rs.inverted()
+    G_out = held.to_translation() - axis * .30
+    out = dict(G=Ri @ (G_out - seat), B=(Ri @ axis).normalized(), Z=(Ri @ held.col[2].to_3d()).normalized(),
+               chest=(D(-10), D(8), D(-6)), head=(D(-10), D(8)), lean=D(4))
+    return apply_pistol(pose, Rs, seat, blend_pistol(out, READY_P, k))
+
+
+def pistol_clip(name, frames, keys=None, loop=False, react=None, stand_amp=0.0, events=None, draw=None):
+    """A standing clip with the pistol: keyed states, or the draw (draw = True, or 'reverse' to holster)."""
+    act = K.new_action(rig, name)
+    for f in range(1, frames + 1):
+        t = (f - 1) / (frames - 1)
+        P.reset()
+        horse_stand(t if stand_amp else 0.0, stand_amp, react(t) if react else None)
+        pose, Rs, seat = rider()
+        pose['head'] = (0, D(-2))
+        if draw:
+            R.set_pose(pose)                 # seat him first: the holster hangs from the horse's back
+            fr = f - 1 if draw is True else frames - f
+            M = draw_pistol_pose(pose, Rs, seat, fr)
+        else:
+            M = apply_pistol(pose, Rs, seat, pistol_at(keys, f - 1))
+        R.set_pose(pose)
+        P.set('Pistol', M)
+        P.set('Sabre', HIDE)
+        P.key_all(f)
+    K.finish_action(rig, act, frames)
+    return dict(frames=frames, loop=loop, root_speed=0.0, fps=K.FPS, events=events or {})
+
+
+def shot_react(t0, t1):
+    """The horse starts at the shot: head up, a step of the body (zero outside t0..t1)."""
+    def r(t):
+        if not (t0 <= t <= t1):
+            return {}
+        e = math.sin(math.pi * (t - t0) / (t1 - t0))
+        return dict(toss=D(-14) * e, nod=D(-6) * e, roll=D(-2) * e, dz=.01 * e)
+    return r
+
+
+def aim_sway(t):
+    s = math.sin(2 * math.pi * t); c = math.sin(4 * math.pi * t)
+    return dict(AIM_P, G=AIM_P['G'] + Vector((.004 * c, 0, .006 * s)), B=(AIM_P['B'] + Vector((0, 0, .01 * s))).normalized())
 
 
 CLIPS = {'Idle': lambda: build_idle(), 'Walk': lambda: build_cycle('Walk', 'Walk'), 'Trot': lambda: build_cycle('Trot', 'Trot'),
@@ -440,13 +590,26 @@ CLIPS = {'Idle': lambda: build_idle(), 'Walk': lambda: build_cycle('Walk', 'Walk
          'SabreParry': lambda: sabre_clip('SabreParry', 21, PARRY_KEYS, react=jolt(.3, .65, D(2)), events={'parry': 8}),
          'SabreFight': lambda: sabre_clip('SabreFight', 117, fight_keys(), loop=True, react=fight_react,
                                           events={'hit': [13, 63, 93], 'parry': 40}),
-         'GallopCut': lambda: gallop_cut()}
-NEXT = {'Idle': ['DrawSabre'], 'DrawSabre': ['IdleSabre', 'SabreCutRight', 'SabreCutLeft', 'SabreThrust', 'SabreParry', 'SabreFight'],
+         'GallopCut': lambda: gallop_cut(),
+         'DrawPistol': lambda: pistol_clip('DrawPistol', DRAW_P['ready'] + 1, draw=True, events={'drawn': DRAW_P['out']}),
+         'HolsterPistol': lambda: pistol_clip('HolsterPistol', DRAW_P['ready'] + 1, draw='reverse',
+                                              events={'holstered': DRAW_P['ready'] + 1 - DRAW_P['out']}),
+         'ReadyPistol': lambda: pistol_clip('ReadyPistol', 49, [(0, READY_P, 'smooth'), (24, dict(READY_P, G=READY_P['G'] + Vector((0, .01, -.015))), 'smooth'),
+                                                                 (48, READY_P, 'smooth')], loop=True, stand_amp=.5),
+         'PresentPistol': lambda: pistol_clip('PresentPistol', 13, [(0, READY_P, 'smooth'), (12, AIM_P, 'smooth')]),
+         'AimPistol': lambda: pistol_clip('AimPistol', 37, [(f, aim_sway(f / 36), 'linear') for f in range(0, 37, 3)], loop=True),
+         'FirePistol': lambda: pistol_clip('FirePistol', 25, [(0, AIM_P, 'smooth'), (SHOT_P - 1, AIM_P, 'linear'), (SHOT_P + 2, RECOIL_P, 'snap'),
+                                                             (SHOT_P + 8, dict(RECOIL_P, G=RECOIL_P['G'] + Vector((0, .02, .03))), 'out'), (24, READY_P, 'smooth')],
+                                           react=shot_react(.08, .5), events={'shot': SHOT_P})}
+NEXT = {'Idle': ['DrawSabre', 'DrawPistol'], 'DrawSabre': ['IdleSabre', 'SabreCutRight', 'SabreCutLeft', 'SabreThrust', 'SabreParry', 'SabreFight'],
         'IdleSabre': ['SabreCutRight', 'SabreCutLeft', 'SabreThrust', 'SabreParry', 'SabreFight', 'SheatheSabre'],
         'SabreCutRight': ['IdleSabre', 'SabreCutLeft', 'SabreThrust'], 'SabreCutLeft': ['IdleSabre', 'SabreCutRight'],
         'SabreThrust': ['IdleSabre', 'SabreParry'], 'SabreParry': ['IdleSabre', 'SabreCutRight'],
         'SabreFight': ['IdleSabre', 'SheatheSabre'], 'SheatheSabre': ['Idle'],
-        'GallopSabre': ['GallopCut'], 'GallopCut': ['GallopSabre']}
+        'GallopSabre': ['GallopCut'], 'GallopCut': ['GallopSabre'],
+        'DrawPistol': ['ReadyPistol', 'PresentPistol', 'HolsterPistol'], 'ReadyPistol': ['PresentPistol', 'HolsterPistol'],
+        'PresentPistol': ['AimPistol', 'FirePistol'], 'AimPistol': ['FirePistol'], 'FirePistol': ['ReadyPistol', 'PresentPistol', 'HolsterPistol'],
+        'HolsterPistol': ['Idle']}
 if __name__ == '__main__':
     want = K.args()[0].split(',') if K.args() else list(CLIPS)
     meta = {}
