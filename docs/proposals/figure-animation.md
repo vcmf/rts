@@ -34,9 +34,8 @@ with 16,000 instanced figures.
 
 The first figures exist outside the repository (output/soldier-animation/, not tracked): a French line
 infantryman (51 clips), a light gun and a crew of four (Idle, Load, Ready, Fire), a heavy cavalryman
-and his horse (gaits and fourteen sabre clips). Their clips have different lengths (Load 10 s, Fire
-6.9 s, the musket's Reload 11.3 s) while the ruleset says a musket reloads in about 25 s ±20% and a gun
-in 25 s (`src/rulesets/napoleonic.ts`). And the simulation fires a loaded company on the tick its
+and his horse (gaits and fourteen sabre clips). Their clips have their own lengths (the musket's Reload 11.3 s, the gun's Load 10 s, its Fire 6.9 s), while
+the ruleset's reloads (`src/rulesets/napoleonic.ts`) are more than twice as long. And the simulation fires a loaded company on the tick its
 reload runs out (`src/sim/fire.ts`, which records `volleyTick`), so the renderer learns of a volley only
 after it happened and cannot play "present arms" before it.
 
@@ -85,17 +84,24 @@ can read (hashed like the rest): `phase`, `phaseStart` (tick) and `phaseEnd` (ti
 
 | Action | Phases (durations from the ruleset) | Event |
 |---|---|---|
-| Musketry | loaded → **presenting** (`present`, from drill quality) → volley at `phaseEnd` → reloading (`reload` ± jitter) → loaded | `volley` at the end of presenting |
-| Artillery | loading (`reload` ± jitter, × crew) → **laid** (open: waits for a target) → fired → running up (`runUp`) → loading | `shot` |
+| Musketry | loaded → **presenting** (`present`) → volley at `phaseEnd` → reloading (the ruleset's reload ± jitter) → loaded | `volley` at the end of presenting |
+| Artillery | loading (the ruleset's reload ± jitter, × crew) → **laid** (open: waits for a target) → **firing** (`fireLead`: the linstock to the vent) → shot at `phaseEnd` → running up → loading | `shot` at the end of firing |
 | Charge and melee | approach (walk, trot, gallop at the ruleset's paces) → contact → melee (open) | losses on ticks |
 | Movement | the battalion's speed and heading each tick | — |
 | Loss | a man removed on a tick | `fell` |
 
-The one change to today's simulation: **a volley is scheduled.** When a company is loaded and has a
-target it commits; the volley resolves `present` seconds later (a better battalion presents faster,
-the owner's ask of 2026-10-12). Whether the volley may be aborted (the target lost, an order) and what
-it costs is a ruleset question. Musketry's numbers stay as they are (reload about 25 s); the present time
-is new data. This belongs to the logic track (`docs/proposals/sim-design.md`, `docs/systems/fire-morale.md`).
+The change to today's simulation: **every visible event is scheduled.** When a company is loaded and has
+a target it commits; the volley resolves `present` seconds later. A laid gun with a target commits and
+fires `fireLead` later. **The lead rule:** every event the renderer anchors is announced at least the
+clip's anchor lead ahead (the frames before the clip's event), so a phase with an open end (laid, holding
+fire) always ends through a fixed final phase of at least that length. The present time is new ruleset
+data by the battalion's drill quality: today the ruleset has only a drill-time factor, which every
+battalion starts at 1 (`src/sim/commands.ts`), so the quality behind it is to be added. While presenting,
+the target is held; a volley is called off when the target is out of reach or the company is ordered to
+move or charge, keeps its load, and **cannot be called off in its last anchor lead** (the men are already
+firing). The phase is a field of its own, not read from the reload countdown, which today doubles as a
+0.5 s retry timer (the known ask in `docs/plans/active/track-e-look.md`, which this contract answers). This
+belongs to the logic track (`docs/proposals/sim-design.md`, `docs/systems/fire-morale.md`).
 
 ### 2. Bindings: from a phase to clips
 
@@ -107,12 +113,15 @@ data, next to the ruleset but never read by the simulation (decision 0005).
 | `anchor` | a clip's event frame lands on the simulation's event tick; the clip starts that many frames early | the musket's Fire event `fire` (frame 3) on the volley tick |
 | `stretch` | the clip is played at a rate within limits (say 0.8–1.25×) to fill the phase | Present over `present`; Reload over `reload` |
 | `fill` | a looping clip holds whatever the stretch cannot cover | Aim after Present; Ready after Load; OrderArms after Reload |
-| `rate` | playback rate = speed ÷ the clip's root speed, within limits; outside them the next gait | Walk 1.7 m/s, Trot 3.3, Gallop 6.5 |
-| `cosmetic` | free timing; the simulation does not count it | individual men ±0.3 s around a company volley (the ripple); idle variation |
+| `rate` | playback rate = speed ÷ the clip's root speed, within limits; outside them the next gait | the cavalry's walk, trot and gallop at the ruleset's paces |
+| `cosmetic` | free timing; the simulation does not count it | individual men up to 0.3 s **after** a company volley's tick, never before (the ripple); idle variation |
 
 For the musket: presenting → Present (stretch) + Aim (fill); the volley → Fire (anchor); reloading →
-Reload (stretch) + OrderArms (fill). For the gun: loading → Load (stretch) + Ready (fill); the shot →
-Fire (anchor, the recoil and run-up inside it). The clips built so far were made in this shape (Present,
+Reload (stretch) + OrderArms (fill). For the gun: loading → Load (stretch) + Ready (fill); laid → Ready;
+firing → Fire (anchored on its `shot`, the recoil and run-up inside it). With the fill capped at half a
+phase, the clips as built would not pass the check: the musket's Reload and the gun's Load are too short
+for the ruleset's reloads, and need slower variants (more of the drill, not more standing) before the
+bindings land. The clips built so far were made in this shape (Present,
 Aim, Fire for the musket; Load, Ready, Fire for the gun), as the owner asked when the firing was split.
 
 Rules for losses and melee: a man the simulation removed falls on that tick (a fall clip, then the
@@ -125,8 +134,8 @@ anchored event, not the simulation tick directly, so they always coincide with t
 For each figure: `(clip, clip time) = f(phase, now − phaseStart, binding, figure seed)`. No animation
 state is carried from frame to frame, so a replay jump, a save, a figure entering the view or changing
 LOD shows the right pose at once. This is what the instanced figures already take: a clip range and a
-start time per instance, the clock in a uniform (the crowd bench, L1a/L1b of
-`docs/plans/active/track-e-look.md`). Stepping at 12 fps (`docs/art-bible.md`) quantises an anchor to
+start time per instance, the clock in a uniform (built for the crowd benchmark of
+`docs/plans/active/track-e-look.md` L1, on a branch not merged at the time of writing). Stepping at 12 fps (`docs/art-bible.md`) quantises an anchor to
 1/12 s, under the 0.25 s that is still read as "on the shot".
 
 ### 4. The build-time contract
@@ -134,8 +143,11 @@ start time per instance, the clock in a uniform (the crowd bench, L1a/L1b of
 A test reads the ruleset, the bindings and the clip registry and checks, for every binding:
 - the clips exist and their events exist (`fire`, `shot`, `hit`, `cartridge_in`…; one name per kind of
   event once the figures are in the registry: today the musket says `fire` and the gun `shot`);
-- the phase's whole range can be shown: for Reload, `reload × (1 ± jitter)` lies within the clip's
-  length × the stretch limits, plus any fill;
+- the phase's whole range can be shown: for Reload, the ruleset's `reload × (1 ± jitter)` is at least the
+  clip's length × the lowest rate, and at most its length × the highest rate plus a **capped fill** (a hold
+  loop may fill at most a set share of the phase, half to start with: beyond it a man would idle while the
+  simulation says he is busy, and a new or slower clip is needed);
+- every anchored event's lead is no longer than the phase that announces it (the lead rule above);
 - clips that a binding chains join exactly (the pipeline already checks joins frame by frame);
 - root speeds and gait thresholds cover the ruleset's paces.
 
@@ -151,7 +163,7 @@ tools/
                        the horse, validate, publish; one module per figure's clips
 data/
   figures/
-    <figure>.unitdata  game-ready, generated: meshes per LOD and baked animation (as the crowd bench's soldier)
+    <figure>.unitdata  game-ready, generated: meshes per LOD and baked animation
     index.json         the registry, generated: figures, LODs, bones, clips (frames, fps, loop, events,
                        root speed, joins), each source's hash and the pipeline version
 src/rulesets/
@@ -160,7 +172,6 @@ src/rulesets/
 docs/systems/
   figures              the system doc once built, with a catalogue generated from the registry
 output/                git-ignored: previews, videos, reports
-```
 ```
 
 - **One owner per fact:** a duration lives in the ruleset, a clip's facts in the registry, their link
@@ -212,7 +223,11 @@ output/                git-ignored: previews, videos, reports
 
 ## Review
 
-Not yet reviewed.
+One round (`/code-review high`, decision 0025), on the PR. Changed: artillery gets a scheduled firing
+phase and every open-ended phase ends through a fixed lead (an anchored clip needs its event announced);
+the ripple is late-only and a volley cannot be called off in its last lead (no flash on a volley that
+never happens); the build-time check caps the hold loop; the phase is its own field, not the reload
+countdown; ruleset values linked, not copied; drill quality named as new data.
 
 ## Sources
 
