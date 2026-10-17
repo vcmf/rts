@@ -34,7 +34,7 @@ def import_fbx(name):
     before = set(bpy.data.objects)
     bpy.ops.import_scene.fbx(filepath=str(path))
     new = [o for o in bpy.data.objects if o not in before]
-    rig = next(o for o in new if o.type == 'ARMATURE')
+    rig = next((o for o in new if o.type == 'ARMATURE'), None)    # a prop (the pistol) has none
     mesh = next(o for o in new if o.type == 'MESH')
     # textures: point every image at the .fbm folder next to the FBX and pack it
     for im in bpy.data.images:

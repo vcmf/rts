@@ -42,6 +42,16 @@ for v in close rts; do
   for c in DrawSabre IdleSabre SabreCutRight SabreCutLeft SabreThrust SabreParry SabreFight SheatheSabre; do echo "file 'cavalry-$c-$v.mp4'" >> $OUT/l.txt; done
   ffmpeg -y -loglevel error -f concat -safe 0 -i $OUT/l.txt -c copy $OUT/cavalry-sabre-$v.mp4 && rm $OUT/l.txt
 done
+# the pistol: drawn, presented, aimed, fired, holstered (the flash and smoke are preview only)
+for c in DrawPistol ReadyPistol PresentPistol AimPistol LowerPistol FirePistol HolsterPistol; do
+  render cavalry $c cavalry-$c-close -0.3,-0.4,1.6,3.8,-100,10 res=960x540 fx=pistol
+  render cavalry $c cavalry-$c-rts 0,0,0.6,9,-30,55 res=960x540 fx=pistol
+done
+for v in close rts; do
+  : > $OUT/l.txt
+  for c in DrawPistol ReadyPistol PresentPistol AimPistol LowerPistol PresentPistol AimPistol FirePistol ReadyPistol HolsterPistol; do echo "file 'cavalry-$c-$v.mp4'" >> $OUT/l.txt; done
+  ffmpeg -y -loglevel error -f concat -safe 0 -i $OUT/l.txt -c copy $OUT/cavalry-pistol-$v.mp4 && rm $OUT/l.txt
+done
 # publish the previews with their figures
 for f in fr-foot-artillery:battery fr-cuirassier:cavalry; do
   d="$(python3 "$CODE/../paths.py" published ${f%%:*})/videos"; rm -rf "$d"; mkdir -p "$d"; cp $OUT/${f#*:}-*.mp4 "$d/"

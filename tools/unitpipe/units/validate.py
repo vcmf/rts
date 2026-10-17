@@ -7,7 +7,10 @@ blender -b <unit>-animated.blend -P validate.py -- <battery|cavalry>   ->  valid
   2.5 cm a frame over the ground, the clip's root motion included (the single lift-off frame of a hoof
   pivots about the fetlock, not the toe: up to about 2.2 cm at the walk);
 - loops close: the last frame equals the first (max vertex distance under 1 mm);
-- joins: a clip's last frame equals the first frame of each clip it leads to ('next' in the clips file).
+- joins: a clip's last frame equals the first frame of each clip it leads to ('next' in the clips file);
+- wrists: no hand holding or using a weapon bent more than 40 degrees off its forearm, and none past 70 while it
+  reaches for a weapon in its scabbard or holster or puts it back (a wrist manages about 80 in flexion and 70 in
+  extension; the rider's weapon arm is posed by its joints, arm.py, and must stay so).
 """
 import bpy, json, sys, math
 from pathlib import Path
@@ -35,6 +38,16 @@ else:
             feet[f'{role}.{side}'] = ids_of([f'{role}:mixamorig:{side}Foot', f'{role}:mixamorig:{side}ToeBase'])
 
 
+pb = rig.pose.bones
+WRIST_MAX = 40.0       # holding or using a weapon
+WRIST_REACH = 70.0     # reaching for a weapon in its scabbard or holster, or putting it back
+# the wrists held to it: the cavalryman's weapon arm (posed by its joints); the crew's hands are posed on their
+# tools by grips and are reported, not yet held (the measure is in the validation file)
+WRISTS = [(f'Rider:mixamorig:{s}ForeArm', f'Rider:mixamorig:{s}Hand') for s in ('Right',)] if unit == 'cavalry' else []
+REPORT_ONLY = [(f'{r}:mixamorig:{s}ForeArm', f'{r}:mixamorig:{s}Hand') for r in ('Sponger', 'Loader', 'Ventsman', 'Firer')
+               for s in ('Left', 'Right')] if unit == 'battery' else []
+
+
 def frame_coords(f):
     sc.frame_set(f)
     dg = bpy.context.evaluated_depsgraph_get()
@@ -52,9 +65,12 @@ for name, meta in clips.items():
     if hasattr(rig.animation_data, 'action_slot') and act.slots:
         rig.animation_data.action_slot = act.slots[0]
     n = meta['frames']; v = meta.get('root_speed', 0.0)
-    prev = None; worst_slide = {}; low = 1e9; first = None; last = None
+    prev = None; worst_slide = {}; low = 1e9; first = None; last = None; worst_wrist = {}
     for f in range(1, n + 1):
         co = frame_coords(f)
+        for fa, hd in WRISTS + REPORT_ONLY:
+            a = math.degrees((pb[fa].tail - pb[fa].head).angle(pb[hd].tail - pb[hd].head))
+            worst_wrist[hd] = max(worst_wrist.get(hd, 0.0), a)
         low = min(low, min(c.z for c in co))
         shift = Vector((0, -v * (f - 1) / 24, 0))       # the unit moves along -Y at root speed
         cur = {}
@@ -70,11 +86,16 @@ for name, meta in clips.items():
         prev = cur
         if f == 1: first = co
         if f == n: last = co
-    r = dict(lowest=round(low, 4), slide_cm={k: round(d * 100, 2) for k, d in worst_slide.items()})
+    r = dict(lowest=round(low, 4), slide_cm={k: round(d * 100, 2) for k, d in worst_slide.items()},
+             wrist_deg={k: round(v, 1) for k, v in worst_wrist.items()})
     fails = []
     if low < -.02: fails.append(f'below ground {low:.3f}')
     bad = {k: d for k, d in worst_slide.items() if d > .025}
     if bad: fails.append('slide ' + ', '.join(f'{k} {d*100:.1f} cm' for k, d in bad.items()))
+    held = {hd for _, hd in WRISTS}
+    limit = WRIST_REACH if any(w in name for w in ('Draw', 'Sheathe', 'Holster')) else WRIST_MAX
+    bent = {k: v for k, v in worst_wrist.items() if k in held and v > limit}
+    if bent: fails.append('wrist ' + ', '.join(f'{k} {v:.0f} deg' for k, v in bent.items()))
     if meta.get('loop'):
         gap = max((a - b).length for a, b in zip(first, last))
         r['loop_gap_mm'] = round(gap * 1000, 2)

@@ -14,7 +14,7 @@ import paths
 FIGURES = {   # figure id -> its pipeline, its sources, its kind (the ruleset's `figure`)
     'fr-line-infantry': dict(pipeline='infantry', kind='foot', sources=['french-army/line-infantry-trial']),
     'fr-foot-artillery': dict(pipeline='units', kind='crewed', sources=['french-army/gunner', 'french-army/light-cannon']),
-    'fr-cuirassier': dict(pipeline='units', kind='mounted', sources=['french-army/horse', 'french-army/dragoon']),
+    'fr-cuirassier': dict(pipeline='units', kind='mounted', sources=['french-army/horse', 'french-army/dragoon', 'french-army/pistol']),
 }
 
 

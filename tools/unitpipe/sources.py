@@ -13,6 +13,7 @@ NOTES = {   # where each export came from (Tripo, exported as FBX with its textu
     'french-army/line-infantry-trial': 'the trial infantryman (2026-10), an earlier export than line-infantry.zip',
     'french-army/gunner': 'gunner.zip, 2026-10-17', 'french-army/light-cannon': 'light-cannon.zip, 2026-10-17',
     'french-army/horse': 'horse+3d+model.zip, 2026-10-17', 'french-army/dragoon': 'dragoon.zip, 2026-10-17 (dressed as a cuirassier)',
+    'french-army/pistol': 'pistol.zip, 2026-10-17 (a flintlock cavalry pistol, unrigged)',
 }
 
 

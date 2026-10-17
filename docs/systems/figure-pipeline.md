@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-17
-code: [tools/unitpipe/paths.py, tools/unitpipe/sources.py, tools/unitpipe/registry.py, tools/unitpipe/infantry/build.py, tools/unitpipe/infantry/drill.py, tools/unitpipe/units/unitkit.py, tools/unitpipe/units/biped.py, tools/unitpipe/units/timeline.py, tools/unitpipe/units/horse.py, data/figures/index.json, test/figures-index.test.ts]
+code: [tools/unitpipe/paths.py, tools/unitpipe/sources.py, tools/unitpipe/registry.py, tools/unitpipe/infantry/build.py, tools/unitpipe/infantry/drill.py, tools/unitpipe/units/unitkit.py, tools/unitpipe/units/biped.py, tools/unitpipe/units/timeline.py, tools/unitpipe/units/horse.py, tools/unitpipe/units/arm.py, data/figures/index.json, test/figures-index.test.ts]
 decisions: [0018-battalion-of-400, 0037-simulation-owns-animation-timing, 0038-figure-pipeline-layout]
 ---
 
@@ -16,7 +16,7 @@ clip table, and record the figure in the registry. Everything is a Blender Pytho
 |---|---|---|---|
 | `fr-line-infantry` | foot | 51 (march, fire drill, kneeling, bayonet, moves, falls, morale) | tools/unitpipe/infantry |
 | `fr-foot-artillery` | crewed | a light gun and a crew of four: Idle, Load, Ready, Fire | tools/unitpipe/units |
-| `fr-cuirassier` | mounted | the horse and rider: gaits and the sabre (14) | tools/unitpipe/units |
+| `fr-cuirassier` | mounted | the horse and rider: gaits, the sabre and the pistol (21) | tools/unitpipe/units |
 
 Every figure and clip, with lengths, events and root speeds, is in `data/figures/index.json`.
 
@@ -74,6 +74,7 @@ the skeleton or a known part, never the bounding box (headgear and plumes would 
 | dragoon (rider) | hip joint at 0.90 m | 1.84 | 1.84 m with the crest |
 | horse | back at the croup 1.56 m (a 15-hand cavalry horse) | 2.49 | 2.5 m nose to tail |
 | light cannon | wheel diameter 1.35 m (a field carriage) | 4.08 | 4.1 m muzzle to trail, barrel 2.0 m |
+| pistol (a prop, not rigged) | overall length 0.35 m (a cavalry pistol) | 0.35 | barrel turned to +Y, the grip's centre at the origin, decimated to 1,200 triangles |
 
 The scale is applied to mesh and armature (no object scale reaches the export), and every model faces
 **−Y** (the horse came facing −X); ground at z = 0. The infantryman, built first, keeps its model units
@@ -89,7 +90,9 @@ Tripo's auto-rig is a starting point, never trusted as is:
 - **Coat skirts follow the arms** (`free_coat_from_arms`): vertices between 0.45 and 1.08 m that are not
   mainly arm lose their arm influences.
 - **Props become rigid bones**: the gunner's sponge-rammer (its loose part found by shape), the rider's
-  sabre hilt (hidden while the sabre is out), the scabbard rigid on the hips.
+  scabbard on a bone of its own at its mouth, hung from the hips, so a draw can swing it on its slings,
+  and stretched from Tripo's 69 cm to 98 cm to hold the 97 cm blade; the sabre's hilt rides in it (hidden
+  while the sabre is out).
 - **The horse's tail** is re-skinned to the root and its two bones (it was half on the hind legs); bones
   renamed from `tripo::0_Left_Limb_2` and `bone_17` to `Horse:FL3`, `Horse:FR4`… (front or hind, left or
   right, joint 1–6).
@@ -107,7 +110,10 @@ Tripo's auto-rig is a starting point, never trusted as is:
 - **Cavalry:** the horse, the rider (`Rider:`), a sabre on its own bone, and tack the Tripo horse lacks: a
   shabraque and saddle cut from the horse's own skin and pushed out along its normals (so they fit and
   deform with it), a rolled cloak, and reins whose ends are skinned one to the horse's head and one to the
-  rider's hand, so they stretch between the two. 20,500 triangles.
+  rider's hand, so they stretch between the two; a **pistol** on its own bone and its **holster** at the
+  front of the saddle on the right, where French cavalry carried it; the pistol's rest pose is in it, as its
+  child, so it sits there in every clip that does not draw it. About 21,700 triangles (the pistol decimated
+  from Tripo's 10,000 to 1,200 in the prep).
 - Copies of one model share one material; UV layers get one name first. **Hiding a prop** is its bone
   scaled to 0.1%, parked at a fixed point so joins stay exact.
 
@@ -127,19 +133,56 @@ Poses are solved per frame by script and keyed on every bone:
   in stance a hoof moves back at exactly the gait's speed, in the swing it leaves and lands at that speed,
   and the body is **lowered automatically** until every planted leg reaches its hoof (the front legs are
   nearly straight at rest).
-- **The sabre** is keyed as states in the saddle's frame (grip, blade direction, chest, head). A cut needs
-  an over-the-head key between the wind-up and the blow: two nearly opposite blade directions blended
-  directly leave the swing's path undefined.
+- **Weapons in the rider's hand** (units/arm.py) are posed by the arm's joints, not by the weapon: an arm
+  state gives the wrist's direction and distance from the shoulder in the chest's frame, the elbow's swivel
+  (+ out to the arm's side), the forearm's turn (pronation, −85° to 90° from the handshake) and the wrist's
+  bend (flexion within ±60°, deviation from −20° to 35°), and the weapon follows the fist (the sabre's blade
+  continues the thumb's line, leaning towards the fingers by its roll in the hand; the pistol is held by its
+  handle, which lies 20° across the line of the knuckles, the barrel following). A held grip sits in the
+  hollow of the closed fist (`biped.FIST`, measured on the rider's curled hand: 0.80 palm lengths along the
+  fingers, 0.25 towards the palm); the first guess put it at the fingertips. Blending states moves the hand on arcs about the shoulder. A state can instead
+  name the blade's direction: the swivel, turn, bend and (for the sabre) roll that point the weapon there,
+  near the authored swivel and roll and with the wrist nearest neutral (steeply dearer past 36°), are
+  searched once before any frame is posed (`aim_wrist`). Placing the hand by a point and a weapon direction,
+  as before, bent the wrist 90 to 150 degrees.
+- **A hand on a weapon that is still in its scabbard or holster** is placed by the weapon: a grip round a rod
+  wraps it from the side that keeps the wrist straightest, remembering its last choice so the hand does not
+  flip (`Biped.natural_grip`), and the elbow goes where the forearm best lines up with the hand
+  (`Arm.easiest_elbow`). Where a draw hands over to arm states, the two methods differ a little; the
+  difference (wrist, hand, elbow, the weapon in the hand) is applied in full there and fades out by the
+  draw's end, so nothing jumps.
+- **The sabre**: a cut needs an over-the-head state between the wind-up and the blow: two nearly opposite
+  blade directions blended directly leave the swing's path undefined. In the draw the blade lies in the
+  scabbard and slides out along it, the tip clearing it at `drawn`; the scabbard swings forward on its slings
+  towards the drawing hand and slides down them as far as the arm is short for the blade (Tripo's arm is
+  47.5 cm from shoulder to wrist; the grip must travel 1.09 m; it passes in front of the face, 14 cm from the
+  shoulder), then the arm carries the blade over to the
+  guard while the scabbard falls back.
+- **The pistol** is posed the same way, its lock's top asked to face up. In the draw the hand takes the butt
+  in the aim's grip; the holster points at the shoulder, as a pommel holster does, so the rider sits back and
+  turns his shoulder back as he pulls it out. Its clips in the shape of
+  decision 0037: DrawPistol and HolsterPistol (from and to Idle), ReadyPistol (a loop, muzzle up),
+  PresentPistol (the wind-up the game stretches), AimPistol (a loop it holds), LowerPistol (an aim called off,
+  back to the ready), FirePistol (anchored on its `shot` at frame 3: the kick, back to the ready; the horse
+  starts at the shot).
 - Every clip that chains starts and ends on a pose its neighbours share; reactions (a horse's toss at a
   blow) are zero at both ends.
 
 The clips of each figure, their chains and events: `data/figures/index.json`.
 
+**Events** are 1-based frames of their clip (a clip's key k is its frame k + 1). Their meaning is the same for
+every figure: `shot` (the charge fires: the flash, the recoil starts), `hit` (a blow lands), `parry` (a blow is
+taken), `drawn` (a weapon clears its scabbard or holster), `sheathed` and `holstered` (from this frame it is
+fully back in), `cartridge_out` and `cartridge_in` (the loader's cartridge appears, is rammed out of sight).
+The game anchors clips on them (decision 0037).
+
 ### 5. Check (units/validate.py)
 
 On the deformed mesh, every frame of every clip: nothing below the ground (−2 cm); a hoof or boot on the
 ground moves less than 2.5 cm a frame over it, root motion included (a hoof's lift-off frame folds about
-the fetlock, not the toe: up to 2.2 cm at the walk); loops close and every listed join matches (< 1 mm).
+the fetlock, not the toe: up to 2.2 cm at the walk); loops close and every listed join matches (< 1 mm); the rider's right wrist (the angle between the forearm and
+the hand's fingers) stays within 40° in every clip that holds or uses a weapon and 70° while drawing or
+putting one back (`wrist_deg` in the check's output); the crew's wrists are reported, not yet checked.
 Numbers do not replace looking: the stretched thumb, the flaring coat, the kicking tail, the fist below
 the sabre's grip and the crew all facing one way were found in renders, not by a check.
 
@@ -190,5 +233,6 @@ lengths, loops, events inside their clips, every chain naming a clip of its figu
 - The infantryman on the units' toolkit and in metres, and the musket's Reload and the gun's Load too
   short for the ruleset's reloads (decision 0037's capped hold loop, `docs/proposals/figure-animation.md`).
 - Gait changes have no clips; no walk or trot with the sabre out.
+- The gun crew's wrists bend 40 to 170 degrees in Load and Fire (the rider's arm system is the fix).
 - The tack is made, not modelled; the rider is dressed as a cuirassier; his gloved fist closes on the
   sabre's grip only approximately; eight of the ruleset's twelve gunners are not in the drill.
