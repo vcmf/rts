@@ -87,7 +87,7 @@ float aastep(float t,float v){
   #endif
 }
 #ifdef ROADS
-// THE ROADS (docs/plans/active/roads.md): rutted dirt over the tile, laid in the nearest road's frame (roadAt, from the
+// THE ROADS (docs/plans/done/roads.md): rutted dirt over the tile, laid in the nearest road's frame (roadAt, from the
 // segments and their grid built by tools/build-look-data.ts: the signed distance across, the distance along, the half
 // width, a junction weight), found where the class map has it (the cover's warp), its edge ragged into the grass, fading out over the tile's last metres (the apron paints
 // the road class's colour, the same earth). On it: wheel tracks of pale beige dust (a pair on a track, on a road a
@@ -156,7 +156,7 @@ vec3 roadPaint(vec3 c,vec2 xz){
     *(1.0-smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y))));   // (and as the tile's bake hands over to the far ring's, which has none: bakeOnce)
   if(inside<=0.0)return c;
   // none at a junction, nor round a dead end's cap. Where a pixel spans more than a track is wide (0.3 m: far out) they
-  // are not drawn but their mean, a light dusting (under a pixel they would shimmer, and cost: docs/plans/active/roads.md)
+  // are not drawn but their mean, a light dusting (under a pixel they would shimmer, and cost: docs/plans/done/roads.md)
   float lod=(1.0-smoothstep(0.2,0.35,pxMacro()))*(1.0-uRoadFar),fade=(1.0-jn)*(1.0-smoothstep(0.0,0.8,past)),tr=fade*0.12*(1.0-lod);
   if(fade*lod>0.0)tr+=fade*lod*(r.w<0.5?max(max(track1(a,xz,s,-0.9,1.0),track1(a,xz,s,0.9,2.0)),0.6*max(track1(a,xz,s,-2.6,3.0),track1(a,xz,s,2.6,4.0))):max(track1(a,xz,s,-0.8,1.0),track1(a,xz,s,0.8,2.0)));
   float st=mix(mValue(vec2(s/11.0,a*1.3))*0.6+mValue(vec2(s/3.3,a*3.7+9.0))*0.4,mValue(xz/3.0+5.0),jn);   // streaks along the road

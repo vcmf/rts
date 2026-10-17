@@ -43,7 +43,7 @@ function bankNormals(H: (x: number, z: number) => number): SpanGrid {
 
 type Pt = readonly [number, number]
 
-// The roads (docs/plans/active/roads.md): every segment of every line, and a grid over the tile listing, per cell, the
+// The roads (docs/plans/done/roads.md): every segment of every line, and a grid over the tile listing, per cell, the
 // segments that reach within their half width and SPEC.road.reach m of it (the shader finds the nearest exactly, with no
 // filtering: no ghost where two lines or two sides meet). Throws if a cell needs more than ROAD_SLOTS
 export function roadGrid(): RoadGrid {

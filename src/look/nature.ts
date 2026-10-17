@@ -74,7 +74,7 @@ export interface Nature {
 // and logs on grass (meadow, pasture, a copse's floor); wheat on wheat; stones anywhere but roads, tracks and the
 // village; trees and the far hedgerows' bushes too, but hidden on fields and bare earth (addPlaced). Anything on a road,
 // a track or the village is placed but hidden (addPlaced): rejected, it would draw a new candidate and shift the
-// scatter's stream after it, so a new road would move every tree (docs/plans/active/roads.md)
+// scatter's stream after it, so a new road would move every tree (docs/plans/done/roads.md)
 const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood], LINE_COVER: readonly number[] = [COVER.road, COVER.track, COVER.village]
 const TRODDEN: readonly number[] = [...LINE_COVER, COVER.bare]
 // the models that keep to grass (coverAllows), and so never stand on a field: the hidden rule below skips them

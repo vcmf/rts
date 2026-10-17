@@ -77,7 +77,7 @@ export interface Macro {
 
 // meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
 // the roads' textures (src/look/main.ts): the bake paints them in (BAKE_FS, roadPaint as far out: uRoadFar 1), so far out the ground's
-// bake holds the roads and the terrain's live road shader runs only nearer (docs/plans/active/roads.md)
+// bake holds the roads and the terrain's live road shader runs only nearer (docs/plans/done/roads.md)
 export interface RoadTextures { segs: BaseTexture; grid: BaseTexture; grit: BaseTexture; n: number }
 export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false, roads?: RoadTextures): Macro {
   const engine = scene.getEngine() as AbstractEngine, s = D.spec.macro

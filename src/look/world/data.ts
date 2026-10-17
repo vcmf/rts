@@ -9,14 +9,14 @@ import { ROAD_SLOTS, type Derived } from '../spec.ts'
 import { SAMPLE_KEYS, type RiverParams, type RiverSamples } from '../river.ts'
 import { packCover, unpackCover, type CoverGrid } from './cover.ts'
 
-export const LOOK_VERSION = 8   // 8: the roads as segments (with mitre tangents) and a grid of them (docs/plans/active/roads.md)
+export const LOOK_VERSION = 8   // 8: the roads as segments (with mitre tangents) and a grid of them (docs/plans/done/roads.md)
 
 // A grid of n² texels of `cell` metres from (x0, z0) with ch bytes a texel, stored only where covered: spans are (row,
 // first column, count) triples, tex holds ch bytes per covered texel in span order. The rest take the user's fill.
 // The bank normals (docs/plans/done/w2-river-banks.md): 3 bytes, the normal's x and z as (v·0.5 + 0.5)·255 and the
 // weight ·255. The water data (docs/plans/done/w3-water-data.md): 4 bytes, src/look/world/water-data.ts.
 export interface SpanGrid { n: number; cell: number; x0: number; z0: number; ch: number; spans: Float32Array; tex: Uint8Array }
-// the roads (docs/plans/active/roads.md): their segments (12 floats each: ax, az, bx, bz, the distance along their line
+// the roads (docs/plans/done/roads.md): their segments (12 floats each: ax, az, bx, bz, the distance along their line
 // at a, the line's half width, its index, its flags (1 its start is a free end, 2 its end, 4 a track's earth), and its mitre tangents at a and b) and a grid over the tile of `cell` m cells, ROAD_SLOTS segment indices a
 // cell (−1: none), every segment that reaches within its half width and SPEC.road.reach m of the cell
 export { ROAD_SLOTS }

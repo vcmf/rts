@@ -34,7 +34,7 @@ export interface Spec {
   // river's corridor out to `reach` m from its centre line, faded out over the last `fade` m, and over the last
   // `edge` m before the tile's edge (where the apron and the far ring shade with their vertex normals)
   bank: { texel: number; reach: number; fade: number; edge: number; paint: number }   // paint: the banks' colours reach this far from the water, m (W5a)
-  // the roads (docs/plans/active/roads.md): a grid of `cell` m cells over the tile, each listing the road segments within
+  // the roads (docs/plans/done/roads.md): a grid of `cell` m cells over the tile, each listing the road segments within
   // their half width and `reach` m of it; their paint reaches `paint` m past a side (the cover's warp and wobble), the
   // junction weight is full within it of another line's side and gone by `junction` m; a pixel looks for a road only
   // where the cover's distance to a line (2 m cells) is under `near` m

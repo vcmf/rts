@@ -51,7 +51,7 @@ function rect(cx: number, cz: number, ha: number, hc: number, a: number): Pt[] {
   return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([s, t]) => [cx + s * ha * ux + t * hc * vx, cz + s * ha * uz + t * hc * vz] as Pt)
 }
 // the road (8 m) along the east of the valley, the track (3 m) from it toward the hill, the village ground beside the road;
-// and (docs/plans/active/roads.md) a road across the valley south of the formation zones, fording the river, to the
+// and (docs/plans/done/roads.md) a road across the valley south of the formation zones, fording the river, to the
 // village, a lane north from it past the large wheat field, and the village's trampled square where they meet
 const ROAD: Pt[] = [[198, -1300], [190, -600], [178, -260], [184, -60], [186, 60], [176, 260], [188, 600], [200, 1300]]
 const TRACK: Pt[] = [[184, -60], [150, -58], [118, -46], [70, -54], [44, -40]]

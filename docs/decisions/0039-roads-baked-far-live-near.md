@@ -7,7 +7,7 @@ date: 2026-10-17
 
 ## Context
 
-The roads (`docs/plans/active/roads.md`) are painted in the terrain's shader: each ground pixel near a road finds its
+The roads (`docs/plans/done/roads.md`) are painted in the terrain's shader: each ground pixel near a road finds its
 nearest road segment and lays wheel tracks, ragged edges and the grit in its frame. The bench (Metal, this Mac, main and
 the branch interleaved) put that at +2.1 ms a frame at the widest zoom, +1.0 at the default, +0.1 close; with the code
 present but never run, still +0.7 at the widest: the shader's size alone slowed every ground pixel. The widest zoom is
@@ -30,7 +30,7 @@ one, only from mid zoom or close zoom".
 ## Consequences
 
 - Good: the widest zoom costs about what main does; the near roads keep their tracks and grit (measured:
-  `docs/plans/active/roads.md`, Performance).
+  `docs/plans/done/roads.md`, Performance).
 - Bad: the default view (125 m) still pays the live roads; under 170 m the live roads paint over
   the baked ones, whose 0.5 m texels soften the ragged edge a little.
 
@@ -38,5 +38,5 @@ one, only from mid zoom or close zoom".
 
 - One material, the roads' define switched by zoom: Babylon draws nothing while a material's new shader compiles, and
   a define change recompiles; two materials keep both compiled.
-- The switch below the default view (about 110 m): the default view at main's cost, its tracks only nearer; the owner's
-  call, open.
+- The switch below the default view (about 110 m): the default view at main's cost, its tracks only nearer. The
+  owner kept 170 m (2026-10-17).

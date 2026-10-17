@@ -92,7 +92,7 @@ const terrain = buildTerrain(scene, mats, look.far, look.bank, waterData)
 const waterSabParam = params.get('watersab')
 if (waterSabParam !== null && waterSabParam !== 'nodive') throw new Error(`?watersab must be nodive, not ${waterSabParam}`)
 const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }, waterSabParam !== 'nodive')
-// the roads (docs/plans/active/roads.md): their segments and grid, and the owner's grit photo (its marks only once
+// the roads (docs/plans/done/roads.md): their segments and grid, and the owner's grit photo (its marks only once
 // loaded: uRoadOn), on the tile's terrain (live from mid zoom in: below) and the water's land side, and in the macro bake
 let roadTex: RoadTextures | undefined
 if (!mats.webgl1) {   // (float textures: the roads' shader is WebGL2's)
@@ -167,7 +167,7 @@ if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS
 const armBake = await macro.setArm(macroArm)
 const macroBake = armBake.texels ? armBake : await macro.bake()
 const camera = buildCamera(scene, canvas)
-// the roads' live shader only from mid zoom in (docs/plans/active/roads.md, decision 0039): farther out the macro bake
+// the roads' live shader only from mid zoom in (docs/plans/done/roads.md, decision 0039): farther out the macro bake
 // holds them and the tile's ground takes its material without them (the shader's size alone cost every ground pixel).
 // Nearing ROAD_LIVE_R the live roads fade to the baked look (uRoadFar: the wheel tracks to their dusting, the grit out),
 // so at the swap only the edge's sharpness changes (the bake's 0.5 m texels). Both materials are compiled before the first frame, and the swap waits until the one it

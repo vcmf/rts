@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-17
 ---
 
@@ -128,7 +128,8 @@ to the far ring's; the tile's two materials one list (`tileMats`); the baked one
 Left: at the swap the road's edge softens to the bake's 0.5 m texels; track cells past the paint's edge (up to a cover
 cell) have no dirt marks.
 
-As built (two materials, the fade, the water's land side live; main and the branch interleaved, two runs each,
+The switch stays at 170 m (the owner, 2026-10-17: "go", on the recommendation: the default view keeps its live
+tracks). As built (two materials, the fade, the water's land side live; main and the branch interleaved, two runs each,
 2026-10-17): wide 6.62 → 6.74, default 5.87 → 6.97, close 4.42 → 4.56.
 
 ## Checks (final code, 2026-10-17)
@@ -138,6 +139,6 @@ As built (two materials, the fade, the water's land side live; main and the bran
 - `node tools/macro-check.mjs`: ok (road|grass 9.3, track|grass 9.9, field|grass 9.4; main: 11.2, 9.1).
 - `node tools/water-look-check.mjs`: banks FAIL: the cut bank as main's (red over green 0.043, luma 0.514), the
   meadow 0.004 warmer (0.016: copse trees standing on the new road by the ford are hidden, their shadows gone); main
-  passed by 0.001. Everything else ok.
+  passed by 0.001. Everything else ok. **Accepted by the owner** (2026-10-17): "i accet the cut bank near miss".
 - `node tools/golden.mjs`: differs where the roads are (1–8 of 16 regions a camera).
 

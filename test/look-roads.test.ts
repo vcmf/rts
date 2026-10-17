@@ -1,4 +1,4 @@
-// The roads' segments and grid (docs/plans/active/roads.md): the shader's roadAt, emulated, finds in its cell the
+// The roads' segments and grid (docs/plans/done/roads.md): the shader's roadAt, emulated, finds in its cell the
 // exact nearest segment everywhere the paint or the junction weight reads; a line's free ends are flagged only on its
 // first and last segments; the distance along, as roadAt picks its segment (strict, in the cell's order, the mitre
 // slab breaking a tie), is continuous round every bend, inside and out.
