@@ -56,6 +56,7 @@ def blend(a, b, t):
 class Biped:
     def __init__(self, P, prefix, rest_yaw=0.0, grip0=None):
         self.P = P; self.pre = prefix; self.rest_yaw = rest_yaw
+        self._grips = {}
         self.grip0 = grip0
         n = lambda s: prefix + 'mixamorig:' + s
         self.n = n
@@ -136,6 +137,47 @@ class Biped:
         R = F1 @ F0.transposed()
         return Vector(point) + R @ off0, R
 
+    def natural_grip(self, side, point, axis, wdir, pose, memory=None):
+        """A grip round a rod, the hand wrapping it from the side that keeps the wrist straightest for where the
+        elbow goes (a hand can hold a rod from any side; one fixed side bent wrists past 100 degrees). `wdir`
+        is the author's preference, weighed in lightly; `memory` names the grip, which then stays near the side it
+        took the frame before (no flip between two near-equal sides). Returns (wrist, hand rotation, the wrist's side)."""
+        P = self.P; n = self.n
+        u = Vector(axis).normalized()
+        ref = Vector(wdir) - u * Vector(wdir).dot(u)
+        if ref.length < 1e-6:
+            ref = u.orthogonal()
+        ref.normalize()
+        sh = P.head(n(side + 'Arm'))
+        pos, yaw, lean, roll = pose['hips']
+        cy, cl, cr = pose.get('chest', (0, 0, 0))
+        Rc = body_rot(yaw, lean, roll) @ body_rot(cy, cl, cr)
+        out = 1 if side == 'Left' else -1
+        v = pose.get('elbow', {}).get(side)
+        v = Vector(v) if v is not None else Vector((.6, .5, -.4))
+        pole = sh + Rc @ Vector((out * v.x, v.y, v.z))
+        l1 = P.length[n(side + 'Arm')]; l2 = P.length[n(side + 'ForeArm')]
+        f0 = self.hand0[side]['M0'].col[0]
+        best = None
+        for k in range(24):
+            wd = Quaternion(u, 2 * math.pi * k / 24) @ ref
+            w, R = self.rod_grip(side, point, u, wd)
+            d = w - sh; dist = min(max(d.length, abs(l1 - l2) + 1e-4), (l1 + l2) * .999); d.normalize()
+            pl = pole - sh; pl -= d * pl.dot(d)
+            pl = pl.normalized() if pl.length > 1e-8 else Vector((0, 0, 1))
+            along = (l1 * l1 - l2 * l2 + dist * dist) / (2 * dist)
+            elbow = sh + d * along + pl * math.sqrt(max(0, l1 * l1 - along * along))
+            y = (w - elbow).normalized()
+            c = (R @ f0).angle(y) + .25 * wd.angle(ref)
+            last = self._grips.get(memory) if memory else None
+            if last is not None:
+                c += .6 * wd.angle(last)
+            if best is None or c < best[0]:
+                best = (c, w, R, wd)
+        if memory:
+            self._grips[memory] = best[3].copy()
+        return best[1], best[2], best[3]
+
     def set_pose(self, pose, props=None):
         P = self.P; n = self.n
         pos, yaw, lean, roll = pose['hips']
@@ -208,7 +250,7 @@ class Biped:
                 w = w + wd.normalized() * pad
             return w, R
         if kind == 'grip':                        # ('grip', point, axis, wrist side)
-            return self.rod_grip(side, Vector(spec[1]), Vector(spec[2]), Vector(spec[3]))
+            return self.natural_grip(side, Vector(spec[1]), Vector(spec[2]), Vector(spec[3]), pose, memory=(side, 'grip'))[:2]
         if kind == 'point':                       # ('point', pos, back) a grip on a horizontal rod along X
             return self.grip(side, Vector(spec[1]), Vector(spec[3]) if len(spec) > 3 else Vector((1, 0, 0)), Vector(spec[2]))
         raise ValueError(kind)

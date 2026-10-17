@@ -15,6 +15,7 @@ from mathutils import Vector, Matrix
 ROOT = Path(bpy.data.filepath).parent            # the work folder, where the combined blend is
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import unitkit as K, biped
+from arm import Arm, aim_wrist
 from horse import Horse, LEGS
 from timeline import ease
 
@@ -24,6 +25,7 @@ info = json.loads((ROOT / 'cavalry-combined.json').read_text())
 P = K.Poser(rig)
 H = Horse(P, mesh)
 R = biped.Biped(P, 'Rider:', 0.0)   # its own grip, from the gloved hand's bones
+ARM = Arm(P, R, 'Right')
 UP = Vector((0, 0, 1))
 
 GAITS = {
@@ -111,6 +113,7 @@ def saddle_frame():
 # the right hand resting on the thigh (wrist in the saddle's frame, fingers, palm): Idle's, and where the draws
 # start and the returns end
 REST_HAND = (Vector((-.20, -.22, .10)), Vector((.2, -1, -.6)), Vector((.6, 0, -.6)))
+REST_ARM = dict(az=5.0, el=-65.0, r=.95, sw=15.0, pron=30.0, flex=10.0, dev=0.0)
 ELBOW_REST = Vector((.5, .8, -.4))
 
 
@@ -140,6 +143,19 @@ def rider(gait=None, t=0.0, sabre=False, lean=0.0, absorb=0.0):
 
 
 HIDE = Matrix.Diagonal((.001, .001, .001, 1))
+
+
+def rest_hand(pose):
+    """The right hand resting on the thigh, posed by the arm (REST_ARM) so the wrist stays straight at any
+    gait or lean. Seats the rider first (the shoulder must be where the chest puts it)."""
+    R.set_pose(pose)
+    Rc = chest_rot(pose)
+    wrist, elbow, f, n, t, Rh = ARM.solve(REST_ARM, Rc)
+    pose['hands']['Right'] = ('resolved', wrist, Rh)
+    vl = Rc.inverted() @ (elbow - ARM.shoulder())
+    pose['elbow']['Right'] = Vector((-vl.x, vl.y, vl.z))
+    pose['curl']['Right'] = .4
+    return wrist, Rh
 PISTOL = info['pistol']
 HANDLE = Vector(PISTOL['handle_axis'])         # from the butt to the top of the grip, in the pistol's frame
 
@@ -158,6 +174,9 @@ def pistol_matrix(G, B, Z):
 
 def build_cycle(name, gait, sabre=False):
     g = GAITS[gait]; T = g['T']
+    if sabre:
+        resolve(HIGH, 'Sabre')
+    R._grips.clear()
     act = K.new_action(rig, name)
     for f in range(1, T + 2):
         t = ((f - 1) % T) / T
@@ -167,10 +186,13 @@ def build_cycle(name, gait, sabre=False):
         absorb = -dz * (.6 if gait != 'Walk' else .3)
         pose, Rs, seat = rider(gait, t, sabre, lean, absorb)
         M = None
+        if not sabre:
+            rest_hand(pose)
         if sabre:
             # the raised sabre, swaying with the stride (GallopCut starts and ends on this)
             sway = math.sin(2 * math.pi * t)
-            st = dict(HIGH, G=HIGH['G'] + Vector((0, -.03 * sway, .02 * sway)), B=(HIGH['B'] + Vector((0, -.1 * sway, 0))).normalized())
+            hi = _RESOLVED[(id(HIGH), 'Sabre')][1]
+            st = dict(hi, el=hi['el'] + 3.0 * sway, az=hi['az'] - 1.5 * sway)
             M, _ = apply_sabre(pose, Rs, seat, st)
         R.set_pose(pose)
         if sabre:
@@ -211,6 +233,7 @@ def horse_stand(t=0.0, amp=1.0, react=None):
 
 
 def build_idle(name='Idle', frames=96):
+    R._grips.clear()
     act = K.new_action(rig, name)
     for f in range(1, frames + 1):
         t = (f - 1) / (frames - 1)
@@ -218,6 +241,7 @@ def build_idle(name='Idle', frames=96):
         horse_stand(t)
         pose, Rs, seat = rider()
         pose['head'] = (D(12) * math.sin(2 * math.pi * t), D(-2))
+        rest_hand(pose)
         R.set_pose(pose)
         P.set('Sabre', HIDE)
         P.key_all(f)
@@ -225,48 +249,133 @@ def build_idle(name='Idle', frames=96):
     return dict(frames=frames, loop=True, root_speed=0.0, fps=K.FPS)
 
 
-# ------------------------------------------------------------------ the sabre
-# A sabre state, in the saddle's frame (x = the horse's left, -y = forward, z up, from the seat):
-# G the grip's centre, B the blade's direction, and the rider's chest (yaw + = to his left, lean,
-# roll) and head. Clips are keyed lists of states, blended with an ease.
-def S_(G, B, chest=(0, 0, 0), head=(0, D(-3)), lean=0.0, rise=0.0):
-    return dict(G=Vector(G), B=Vector(B).normalized(), chest=chest, head=head, lean=lean, rise=rise)
+# ------------------------------------------------------------------ the weapons
+# Weapon poses are arm states (arm.py): the wrist about the shoulder (az + to his right, el + up, r a share of
+# the arm's reach), the elbow's swivel, the forearm's turn (pron + palm down), the wrist's bend (flex, dev);
+# plus the rider's chest (yaw + = to his left, lean, roll), head, lean and rise. The weapon follows the fist,
+# so the wrist stays within what a wrist can do. Clips are keyed lists of states, blended number by number,
+# which moves the hand on arcs about the shoulder.
+def A_(az, el, r, sw=20, pron=0, flex=0, dev=0, tilt=18, chest=(0, 0, 0), head=(0, D(-3)), lean=0.0, rise=0.0):
+    """An arm state. tilt: how far the sabre's hilt is rolled in the fingers towards the line of the forearm
+    (18 the hammer grip of a cut, about 60 for the point)."""
+    return dict(az=float(az), el=float(el), r=float(r), sw=float(sw), pron=float(pron), flex=float(flex), dev=float(dev),
+                tilt=float(tilt), chest=chest, head=head, lean=lean, rise=rise)
 
 
-SHOULDER_R = Vector((-.20, .02, .62))
-GUARD = S_((-.24, -.40, .56), (0, -.55, .85), chest=(D(-6), D(4), 0))
-HIGH = S_((-.22, -.18, 1.02), (0, -.45, 1), chest=(D(-4), D(2), 0))
-WIND_R = S_((-.14, .04, .96), (.15, .85, -.25), chest=(D(18), D(-4), D(-4)), head=(D(-20), D(-2)))
-OVER_R = S_((-.26, -.10, 1.0), (-.25, -.15, 1), chest=(D(4), D(0), D(-6)), head=(D(-22), D(2)))
-CUT_R_MID = S_((-.46, -.36, .74), (-.6, -.65, .3), chest=(D(-14), D(8), D(-6)), head=(D(-25), D(8)), rise=.04)
-CUT_R_END = S_((-.55, -.28, .26), (-.45, -.35, -.8), chest=(D(-28), D(14), D(-14)), head=(D(-30), D(18)), lean=D(6), rise=.06)
-FOLLOW_R = S_((-.50, .02, .30), (-.25, .55, -.75), chest=(D(-30), D(10), D(-12)), head=(D(-30), D(15)), rise=.03)
-WIND_L = S_((-.32, -.02, .96), (-.55, .55, .45), chest=(D(-22), D(-2), D(-4)), head=(D(10), D(0)))
-OVER_L = S_((-.18, -.26, .98), (.15, -.3, 1), chest=(D(-6), D(4), 0), head=(D(14), D(2)))
-CUT_L_MID = S_((-.06, -.52, .76), (.7, -.6, .2), chest=(D(10), D(10), D(4)), head=(D(20), D(8)), rise=.04)
-CUT_L_END = S_((.30, -.48, .40), (.7, -.15, -.7), chest=(D(34), D(16), D(10)), head=(D(30), D(18)), lean=D(6), rise=.06)
-FOLLOW_L = S_((.22, -.20, .32), (.35, .45, -.8), chest=(D(36), D(12), D(10)), head=(D(28), D(14)), rise=.03)
-THRUST_BACK = S_((-.26, -.06, .58), (0, -1, .06), chest=(D(14), D(-2), 0), head=(D(-4), D(4)))
-THRUST_OUT = S_((-.24, -.72, .62), (0, -1, -.03), chest=(D(-16), D(18), 0), head=(D(-6), D(10)), lean=D(14), rise=.06)
-PARRY = S_((-.24, -.26, .96), (1, -.25, .12), chest=(D(-4), D(-4), 0), head=(0, D(-12)))
+# the sabre: on guard, raised for the charge, the cuts (wind-up over the shoulder, over the top, the blow,
+# the follow-through), the point and the head parry
+def W_(az, el, r, sw, blade, up=None, **kw):
+    """An arm state whose forearm turn and wrist bend are solved (aim_wrist) to point the weapon along `blade`
+    (the saddle's frame: +x the horse's left, -y forward, +z up)."""
+    st = A_(az, el, r, sw=sw, **kw)
+    st['blade'] = tuple(blade); st['up'] = tuple(up) if up else None
+    return st
 
 
-DIRECTIONS = ('B', 'Z')                      # unit vectors in a weapon state: blended on the sphere
+GUARD = W_(22, -12, .74, 25, (-.2, -.7, .7), chest=(D(-6), D(4), 0))
+HIGH = W_(12, 58, .9, 30, (0, -.35, 1), chest=(D(-4), D(2), 0))
+WIND_R = W_(40, 70, .5, 70, (-.3, .8, -.5), chest=(D(18), D(-4), D(-4)), head=(D(-20), D(-2)))
+OVER_R = W_(30, 75, .8, 45, (-.2, .3, .95), chest=(D(4), 0, D(-6)), head=(D(-22), D(2)))
+CUT_R_MID = W_(35, 20, .95, 25, (-.4, -.8, .4), chest=(D(-14), D(8), D(-6)), head=(D(-25), D(8)), rise=.04)
+CUT_R_END = W_(35, -40, .96, 15, (-.5, -.8, -.25), chest=(D(-28), D(14), D(-14)), head=(D(-30), D(18)), lean=D(6), rise=.06)
+FOLLOW_R = W_(70, -65, .9, 15, (-.3, .3, -.9), chest=(D(-30), D(10), D(-12)), head=(D(-30), D(15)), rise=.03)
+WIND_L = W_(-38, 35, .5, 30, (-.5, .8, .3), chest=(D(-22), D(-2), D(-4)), head=(D(10), 0))
+OVER_L = W_(-18, 58, .72, 40, (.2, .2, 1), chest=(D(-6), D(4), 0), head=(D(14), D(2)))
+CUT_L_MID = W_(-14, 20, .9, 30, (.7, -.6, .3), chest=(D(10), D(10), D(4)), head=(D(20), D(8)), rise=.04)
+CUT_L_END = W_(-30, -25, .92, 25, (.8, -.5, -.2), chest=(D(34), D(16), D(10)), head=(D(30), D(18)), lean=D(6), rise=.06)
+FOLLOW_L = W_(-45, -40, .8, 30, (.6, .2, -.75), chest=(D(36), D(12), D(10)), head=(D(28), D(14)), rise=.03)
+THRUST_BACK = W_(28, -25, .55, 15, (0, -1, .1), tilt=60, chest=(D(14), D(-2), 0), head=(D(-4), D(4)))
+THRUST_OUT = W_(15, 0, .95, 20, (-.1, -1, -.05), tilt=60, chest=(D(-16), D(18), 0), head=(D(-6), D(10)), lean=D(14), rise=.06)
+PARRY = W_(30, 70, .76, 50, (1, -.1, .1), chest=(D(-4), D(-4), 0), head=(0, D(-12)))
+PARRY_HIT = dict(PARRY, el=PARRY['el'] - 5.0, r=PARRY['r'] - .05, chest=(D(-4), D(-8), 0), head=(0, D(-8)))
+
+# the pistol: the ready (muzzle up before the shoulder), the aim (arm out to the front right, wrist straight,
+# the lock on top: the chest turns the 25 degrees, the arm points along it), the kick (the hand thrown up and back)
+READY_P = W_(18, 6, .45, 8, (0, -.15, 1), up=(0, 1, .2), chest=(D(-6), D(2), 0), head=(D(-6), D(-3)))
+AIM_P = W_(5, 4, .97, 10, (-.5, -.87, .03), up=(0, 0, 1), chest=(D(-25), D(6), 0), head=(D(-24), D(2)), lean=D(4))
+RECOIL_P = W_(7, 13, .86, 20, (-.45, -.75, .5), up=(0, .4, .9), chest=(D(-23), D(2), 0), head=(D(-22), D(-2)), lean=D(1))
+SHOT_P = 3                                      # FirePistol's shot frame (1-based, as every event)
+SHOULDER_R = Vector((-.20, .02, .62))           # where the right shoulder sits over the seat (the draws' wrist side)
+
+
+def chest_rot(pose):
+    pos, yaw, lean, roll = pose['hips']
+    cy, cl, cr = pose['chest']
+    return biped.body_rot(yaw, lean, roll) @ biped.body_rot(cy, cl, cr)
+
+
+def apply_arm(pose, Rs, seat, st, weapon):
+    """Pose the right arm from an arm state and put the weapon in its fist. Returns (weapon matrix, wrist,
+    hand rotation): the last two let a draw blend into the state."""
+    pose['chest'] = (st['chest'][0], pose['chest'][1] + st['chest'][1], st['chest'][2])
+    pose['head'] = st['head']
+    h = pose['hips']
+    pose['hips'] = (h[0] + Rs @ Vector((0, 0, st['rise'])), h[1], h[2] + st['lean'], h[3])
+    R.set_pose(pose)                                  # the shoulder, where the chest put it
+    Rc = chest_rot(pose)
+    wrist, elbow, f, n, t, Rh = ARM.solve(st, Rc)
+    pose['hands']['Right'] = ('resolved', wrist, Rh)
+    vl = Rc.inverted() @ (elbow - ARM.shoulder())
+    pose['elbow']['Right'] = Vector((-vl.x, vl.y, vl.z))   # Biped mirrors x for the right arm
+    pose['curl']['Right'] = .95
+    M = ARM.sabre(wrist, f, n, t, D(st['tilt'])) if weapon == 'Sabre' else ARM.pistol(wrist, f, n, t)
+    return M, wrist, Rh
 
 
 def blend_state(a, b, t):
-    """Blend two weapon states (the sabre's or the pistol's): directions slerped, the rest lerped."""
+    """Blend two arm states number by number (angles, reach, the rider's chest and head)."""
     out = {}
     for k, va in a.items():
+        if k in ('blade', 'up'):
+            continue
         vb = b[k]
-        if k in DIRECTIONS:
-            out[k] = va.slerp(vb, t)
-        elif isinstance(va, Vector):
-            out[k] = va.lerp(vb, t)
-        elif isinstance(va, tuple):
+        if isinstance(va, tuple):
             out[k] = tuple(x + (y - x) * t for x, y in zip(va, vb))
         else:
             out[k] = va + (vb - va) * t
+    return out
+
+
+_RESOLVED = {}
+
+
+def resolve(st, weapon):
+    """An arm state with its wrist solved for its blade target (once per state, cached)."""
+    if 'blade' not in st:
+        return st
+    key = (id(st), weapon)
+    if key not in _RESOLVED:
+        P.reset(); horse_stand(0, 0)
+        pose, Rs, seat = rider()
+        pose['chest'] = (st['chest'][0], pose['chest'][1] + st['chest'][1], st['chest'][2])
+        h = pose['hips']; pose['hips'] = (h[0], h[1], h[2] + st['lean'], h[3])
+        R.set_pose(pose)
+        up = Rs @ Vector(st['up']) if st.get('up') else None
+        out = aim_wrist(ARM, st, chest_rot(pose), weapon, Rs @ Vector(st['blade']), up)
+        out = {k: v for k, v in out.items() if k not in ('blade', 'up')}
+        _RESOLVED[key] = (st, out)        # the state is held so its id stays unique
+        P.reset()
+    return _RESOLVED[key][1]
+
+
+def matching_state(pose, wrist, blade, weapon, sw=25.0, chest=(0, 0, 0), head=(0, D(-3)), lean=0.0):
+    """The arm state whose wrist is at `wrist` and whose weapon points along `blade` (world), with the rider's
+    chest and head given: where a draw's pull ends, so the rest of the draw blends arm state to arm state."""
+    Rc = chest_rot(pose)
+    d = Rc.inverted() @ (wrist - ARM.shoulder())
+    L = ARM.l1 + ARM.l2
+    r = d.length / L; d.normalize()
+    az = math.degrees(math.atan2(d.x * ARM.out, -d.y)); el = math.degrees(math.asin(max(-1, min(1, d.z))))
+    st = A_(az, el, r, sw=sw, chest=chest, head=head, lean=lean)
+    return aim_wrist(ARM, st, Rc, weapon, blade)
+
+
+def varied(st, weapon, **delta):
+    """A solved state with small changes: numbers are added to, tuples (chest, head) replaced; its wrist stays
+    the solved one, so a breath or a settle does not turn the hand."""
+    out = dict(resolve(st, weapon))
+    for k, v in delta.items():
+        out[k] = v if isinstance(v, tuple) else out[k] + v
     return out
 
 
@@ -296,17 +405,13 @@ PISTOL_ELBOW = Vector((.7, .5, -.5))
 
 
 def apply_sabre(pose, Rs, seat, st):
-    """Put the sabre in the right hand for this state; returns the sabre bone's matrix."""
-    G = seat + Rs @ st['G']; B = (Rs @ st['B']).normalized()
-    sh = seat + Rs @ SHOULDER_R
-    pose['hands']['Right'] = ('grip', G, B, sh - G)
-    pose['curl']['Right'] = .95
-    pose['elbow']['Right'] = SABRE_ELBOW.copy()
-    pose['chest'] = (st['chest'][0], pose['chest'][1] + st['chest'][1], st['chest'][2])
-    pose['head'] = st['head']
-    h = pose['hips']
-    pose['hips'] = (h[0] + Rs @ Vector((0, 0, st['rise'])), h[1], h[2] + st['lean'], h[3])
-    return sabre_matrix(G, B, Rs), True
+    """The sabre in the right fist for this arm state; returns (its matrix, the hilt hidden)."""
+    return apply_arm(pose, Rs, seat, st, 'Sabre')[0], True
+
+
+def apply_pistol(pose, Rs, seat, st):
+    """The pistol in the right fist for this arm state; returns (its matrix, False)."""
+    return apply_arm(pose, Rs, seat, st, 'Pistol')[0], False
 
 
 def hilt_frame():
@@ -323,6 +428,10 @@ def stand_clip(name, frames, keys=None, weapon='Sabre', loop=False, react=None, 
     its return (draw='in'). react(t) adds a reaction of the horse, zero at both ends."""
     apply = apply_sabre if weapon == 'Sabre' else apply_pistol
     draw_fn = draw_pose if weapon == 'Sabre' else draw_pistol_pose
+    if keys:
+        keys = [(f, resolve(st, weapon), e) for f, st, e in keys]     # wrists solved before any frame is posed
+    resolve(GUARD if weapon == 'Sabre' else READY_P, weapon)          # where a draw ends
+    R._grips.clear()
     act = K.new_action(rig, name)
     for f in range(1, frames + 1):
         t = (f - 1) / (frames - 1)
@@ -331,8 +440,7 @@ def stand_clip(name, frames, keys=None, weapon='Sabre', loop=False, react=None, 
         pose, Rs, seat = rider()
         pose['head'] = (0, D(-2))
         if draw:
-            if weapon == 'Sabre':
-                R.set_pose(pose)             # seat him first: the scabbard hangs from his hips
+            R.set_pose(pose)                 # seat him first: the scabbard hangs from his hips, the shoulder sits
             M, hide_hilt = draw_fn(pose, Rs, seat, f - 1 if draw == 'out' else frames - f)
         else:
             M, hide_hilt = apply(pose, Rs, seat, state_at(keys, f - 1))
@@ -356,13 +464,13 @@ def pistol_clip(name, frames, keys, **kw):
 def reach_hand(pose, Rs, seat, k, point, axis, wdir):
     """The right hand from its resting place to a grip round a rod (k 0..1), without a jump where the grip
     takes over: wrist and rotation are blended to exactly the grip's."""
-    w0 = seat + Rs @ REST_HAND[0]
-    R0 = R.hand_rot('Right', REST_HAND[1], REST_HAND[2])
-    w1, R1 = R.rod_grip('Right', point, axis, wdir)
+    w0, R0 = rest_hand(pose)
+    w1, R1, _ = R.natural_grip('Right', point, axis, wdir, pose, memory=('Right', 'grip'))
     pose['hands']['Right'] = ('resolved', w0.lerp(w1, k), R0.to_quaternion().slerp(R1.to_quaternion(), k).to_matrix())
 
 
 DRAW_T = dict(reach=8, grab=10, out=20, guard=30)
+PULL = .85        # the straight pull along the scabbard, as a share of the blade (the arm takes it the rest of the way)
 
 
 def draw_pose(pose, Rs, seat, fr):
@@ -381,19 +489,23 @@ def draw_pose(pose, Rs, seat, fr):
     if fr < T['out']:
         # out along the scabbard, up and forward
         k = ease('in', (fr - T['grab']) / (T['out'] - T['grab']))
-        grip_pt = mouth - d * (.085 + L_SAB * k)
+        grip_pt = mouth - d * (.085 + PULL * L_SAB * k)
         pose['hands']['Right'] = ('grip', grip_pt, -d, (seat + Rs @ SHOULDER_R) - grip_pt)
         pose['curl']['Right'] = .95
         pose['chest'] = (D(28) - D(20) * k, pose['chest'][1] + D(8), 0); pose['head'] = (D(20) - D(10) * k, D(14) - D(8) * k)
         pose['elbow']['Right'] = ELBOW_REST.lerp(SABRE_ELBOW_OUT, k)
         return sabre_matrix(grip_pt, -d, Rs), True
-    # from the end of the draw to the guard
+    # (the drawn event stays where the straight pull ends)
+    # from the end of the pull to the guard, arm state to arm state
     k = ease('smooth', (fr - T['out']) / (T['guard'] - T['out']))
-    G_out = mouth - d * (.085 + L_SAB)
-    out = dict(G=Rs.inverted() @ (G_out - seat), B=(Rs.inverted() @ -d).normalized(), chest=(D(8), D(8), 0), head=(D(10), D(6)), lean=0.0, rise=0.0)
-    res = apply_sabre(pose, Rs, seat, blend_state(out, GUARD, k))
-    pose['elbow']['Right'] = SABRE_ELBOW_OUT.lerp(SABRE_ELBOW, k)
-    return res
+    G_out = mouth - d * (.085 + PULL * L_SAB)
+    base = pose['chest'][1]
+    pose['chest'] = (D(8), base + D(8), 0); pose['head'] = (D(10), D(6))
+    R.set_pose(pose)
+    w_out, _, _ = R.natural_grip('Right', G_out, -d, (seat + Rs @ SHOULDER_R) - G_out, pose, memory=('Right', 'grip'))
+    out = matching_state(pose, w_out, -d, 'Sabre', chest=(D(8), D(8), 0), head=(D(10), D(6)))
+    pose['chest'] = (0, base, 0)
+    return apply_arm(pose, Rs, seat, blend_state(out, resolve(GUARD, 'Sabre'), k), 'Sabre')[0], True
 
 
 def fight_react(t):
@@ -426,7 +538,7 @@ def cut_keys(side):
 
 
 THRUST_KEYS = [(0, GUARD, 'smooth'), (7, THRUST_BACK, 'out'), (11, THRUST_OUT, 'snap'), (15, THRUST_OUT, 'linear'), (24, GUARD, 'smooth')]
-PARRY_KEYS = [(0, GUARD, 'smooth'), (5, PARRY, 'snap'), (8, S_(PARRY['G'] + Vector((0, .04, -.05)), PARRY['B'], (D(-4), D(-8), 0), (0, D(-8))), 'out'),
+PARRY_KEYS = [(0, GUARD, 'smooth'), (5, PARRY, 'snap'), (8, PARRY_HIT, 'out'),
               (11, PARRY, 'smooth'), (20, GUARD, 'smooth')]
 
 
@@ -448,12 +560,14 @@ def gallop_cut(name='GallopCut'):
     """A cut down to the right at the gallop, over two strides, from and back to the raised sabre."""
     g = GAITS['Gallop']; T = g['T']; N = 2 * T
     hi0 = HIGH
-    keys = [(0, hi0, 'smooth'), (7, S_((-.12, .06, 1.0), (.1, .9, -.1), chest=(D(16), D(-2), D(-4)), head=(D(-15), 0)), 'out'),
+    keys = [(0, hi0, 'smooth'), (7, dict(WIND_R, chest=(D(16), D(-2), D(-4)), head=(D(-15), 0)), 'out'),
             (9, OVER_R, 'in'),
-            (11, S_((-.48, -.40, .78), (-.6, -.7, .2), chest=(D(-16), D(10), D(-8)), head=(D(-25), D(10)), rise=.03), 'linear'),
-            (14, S_((-.56, -.26, .30), (-.45, -.3, -.8), chest=(D(-26), D(16), D(-14)), head=(D(-30), D(18)), lean=D(4), rise=.05), 'linear'),
-            (19, S_((-.48, .06, .36), (-.2, .6, -.75), chest=(D(-26), D(10), D(-10)), head=(D(-25), D(10))), 'out'),
+            (11, dict(CUT_R_MID, rise=.03), 'linear'),
+            (14, dict(CUT_R_END, lean=D(4), rise=.05), 'linear'),
+            (19, dict(FOLLOW_R, rise=0.0), 'out'),
             (N, hi0, 'smooth')]
+    keys = [(f, resolve(st, 'Sabre'), e) for f, st, e in keys]
+    R._grips.clear()
     act = K.new_action(rig, name)
     for f in range(1, N + 2):
         t = ((f - 1) % T) / T
@@ -465,8 +579,7 @@ def gallop_cut(name='GallopCut'):
         # the stride's sway of the raised sabre (as in GallopSabre) where the state is the raised one
         sway = math.sin(2 * math.pi * t)
         w = 1.0 - min(1.0, min(f - 1, N - (f - 1)) / 5.0)
-        st = dict(st, G=st['G'] + Vector((0, -.03 * sway, .02 * sway)) * w,
-                  B=(st['B'] + Vector((0, -.1 * sway, 0)) * w).normalized())
+        st = dict(st, el=st['el'] + 3.0 * sway * w, az=st['az'] - 1.5 * sway * w)
         M, _ = apply_sabre(pose, Rs, seat, st)
         R.set_pose(pose)
         P.set('Sabre', M); P.set('Rider:Hilt', P.pb['Rider:Hilt'].matrix @ HIDE)
@@ -485,66 +598,46 @@ def build_draw(name, weapon, reverse=False):
     return m
 
 
-# ------------------------------------------------------------------ the pistol
-# Pistol states in the saddle's frame (x = the horse's left, -y forward, z up, from the seat): G the grip's
-# centre, B the barrel, Z the lock's top; the rider's chest (yaw + = to his left), head, lean. The clips
-# follow decision 0037: PresentPistol is the wind-up the game stretches, AimPistol the loop it holds,
-# FirePistol is anchored on its `shot`.
-def PS(G, B, Z, chest=(0, 0, 0), head=(0, D(-3)), lean=0.0):
-    return dict(G=Vector(G), B=Vector(B).normalized(), Z=Vector(Z).normalized(), chest=chest, head=head, lean=lean)
-
-
-READY_P = PS((-.26, -.22, .68), (-.05, -.25, 1), (0, 1, .2), chest=(D(-6), D(2), 0), head=(D(-6), D(-3)))
-AIM_P = PS((-.43, -.36, .64), (-.5, -.866, .02), (0, 0, 1), chest=(D(-25), D(6), 0), head=(D(-24), D(2)), lean=D(4))
-RECOIL_P = PS((-.40, -.30, .71), (-.42, -.72, .55), (.1, .45, .9), chest=(D(-23), D(2), 0), head=(D(-22), D(-2)), lean=D(1))
-SHOT_P = 3                                      # FirePistol's shot frame (1-based, as every event)
-
-
-def apply_pistol(pose, Rs, seat, st):
-    """The pistol in the right hand for this state; returns its bone's matrix."""
-    G = seat + Rs @ st['G']; B = (Rs @ st['B']).normalized(); Z = (Rs @ st['Z']).normalized()
-    M = pistol_matrix(G, B, Z)
-    pose['hands']['Right'] = ('grip', G, M.to_3x3() @ HANDLE, -B)
-    pose['curl']['Right'] = .95
-    pose['elbow']['Right'] = PISTOL_ELBOW.copy()
-    pose['chest'] = (st['chest'][0], pose['chest'][1] + st['chest'][1], st['chest'][2])
-    pose['head'] = st['head']
-    h = pose['hips']; pose['hips'] = (h[0], h[1], h[2] + st['lean'], h[3])
-    return M, False
-
-
 DRAW_P = dict(reach=9, grab=11, out=17, ready=27)
 
 
 def draw_pistol_pose(pose, Rs, seat, fr):
     """From Idle's pose (fr 0) to READY_P (fr DRAW_P['ready']): reach down to the butt, out of the holster
-    along it, up to the ready. Returns (the pistol's matrix, False)."""
+    along it, up to the ready. The hand holds the pistol with the aim's grip (arm.py) throughout, worked back
+    from the pistol where the pistol leads. Returns (the pistol's matrix, False)."""
     T = DRAW_P
     held = P.pb['Pistol'].matrix.copy()          # its rest: in the holster, as the horse stands now
     axis = held.col[1].to_3d().normalized()      # the barrel, down into the holster
-    grip_axis = held.to_3x3() @ HANDLE
     if fr < T['grab']:
         k = ease('smooth', fr / T['grab'])
         pose['chest'] = (D(-10) * k, pose['chest'][1] + D(16) * k, D(-6) * k); pose['head'] = (D(-10) * k, D(-2) + D(18) * k)
         h = pose['hips']; pose['hips'] = (h[0], h[1], h[2] + D(8) * k, h[3])
         kr = ease('smooth', min(1.0, fr / T['reach']))
-        reach_hand(pose, Rs, seat, kr, held.to_translation(), grip_axis, -axis)
+        w0, R0 = rest_hand(pose)
+        w1, R1 = ARM.hand_on_pistol(held)
+        pose['hands']['Right'] = ('resolved', w0.lerp(w1, kr), R0.to_quaternion().slerp(R1.to_quaternion(), kr).to_matrix())
         pose['curl']['Right'] = .4 + .55 * kr
         return held, False
     if fr < T['out']:
         k = ease('in', (fr - T['grab']) / (T['out'] - T['grab']))
         M = held.copy(); M.translation = held.to_translation() - axis * (.30 * k)
-        pose['hands']['Right'] = ('grip', M.to_translation(), grip_axis, -axis)
+        w, Rh = ARM.hand_on_pistol(M)
+        pose['hands']['Right'] = ('resolved', w, Rh)
         pose['curl']['Right'] = .95
-        pose['elbow']['Right'] = ELBOW_REST.lerp(PISTOL_ELBOW, k)
         pose['chest'] = (D(-10), pose['chest'][1] + D(16) - D(8) * k, D(-6)); pose['head'] = (D(-10), D(16) - D(8) * k)
         h = pose['hips']; pose['hips'] = (h[0], h[1], h[2] + D(8) - D(4) * k, h[3])
         return M, False
+    # from the end of the pull to the ready, arm state to arm state
     k = ease('smooth', (fr - T['out']) / (T['ready'] - T['out']))
-    Ri = Rs.inverted()
-    out = dict(G=Ri @ (held.to_translation() - axis * .30 - seat), B=(Ri @ axis).normalized(), Z=(Ri @ held.col[2].to_3d()).normalized(),
-               chest=(D(-10), D(8), D(-6)), head=(D(-10), D(8)), lean=D(4))
-    return apply_pistol(pose, Rs, seat, blend_state(out, READY_P, k))
+    M_out = held.copy(); M_out.translation = held.to_translation() - axis * .30
+    base = pose['chest'][1]; lean0 = pose['hips'][2]
+    pose['chest'] = (D(-10), base + D(8), D(-6)); pose['head'] = (D(-10), D(8))
+    h = pose['hips']; pose['hips'] = (h[0], h[1], lean0 + D(4), h[3])
+    R.set_pose(pose)
+    w_out, _ = ARM.hand_on_pistol(M_out)
+    out = matching_state(pose, w_out, axis, 'Pistol', chest=(D(-10), D(8), D(-6)), head=(D(-10), D(8)), lean=D(4))
+    pose['chest'] = (0, base, 0); pose['hips'] = h[:2] + (lean0, h[3])
+    return apply_arm(pose, Rs, seat, blend_state(out, resolve(READY_P, 'Pistol'), k), 'Pistol')[0], False
 
 
 def shot_react(t0, t1):
@@ -553,15 +646,17 @@ def shot_react(t0, t1):
 
 
 def aim_sway(t):
-    s = math.sin(2 * math.pi * t); c = math.sin(4 * math.pi * t)
-    return dict(AIM_P, G=AIM_P['G'] + Vector((.004 * c, 0, .006 * s)), B=(AIM_P['B'] + Vector((0, 0, .01 * s))).normalized())
+    """The held aim breathes: a little drift of the wrist about the shoulder (zero at both ends)."""
+    s1 = math.sin(2 * math.pi * t); c = math.sin(4 * math.pi * t)
+    aim = resolve(AIM_P, 'Pistol')
+    return dict(aim, az=aim['az'] + .6 * c, el=aim['el'] + .8 * s1)
 
 
 CLIPS = {'Idle': lambda: build_idle(), 'Walk': lambda: build_cycle('Walk', 'Walk'), 'Trot': lambda: build_cycle('Trot', 'Trot'),
          'Gallop': lambda: build_cycle('Gallop', 'Gallop'), 'GallopSabre': lambda: build_cycle('GallopSabre', 'Gallop', sabre=True),
          'DrawSabre': lambda: build_draw('DrawSabre', 'Sabre'),
          'SheatheSabre': lambda: build_draw('SheatheSabre', 'Sabre', reverse=True),
-         'IdleSabre': lambda: stand_clip('IdleSabre', 49, [(0, GUARD, 'smooth'), (24, S_(GUARD['G'] + Vector((0, .02, -.02)), GUARD['B'], GUARD['chest'], (D(8), D(-2))), 'smooth'), (48, GUARD, 'smooth')],
+         'IdleSabre': lambda: stand_clip('IdleSabre', 49, [(0, GUARD, 'smooth'), (24, varied(GUARD, 'Sabre', el=-3.0, head=(D(8), D(-2))), 'smooth'), (48, GUARD, 'smooth')],
                                          loop=True, stand_amp=.5),
          'SabreCutRight': lambda: stand_clip('SabreCutRight', 29, cut_keys('R'), react=jolt(.4, .75, D(-3)), events={'hit': 14 + 1}),
          'SabreCutLeft': lambda: stand_clip('SabreCutLeft', 29, cut_keys('L'), react=jolt(.4, .75, D(3)), events={'hit': 14 + 1}),
@@ -572,13 +667,13 @@ CLIPS = {'Idle': lambda: build_idle(), 'Walk': lambda: build_cycle('Walk', 'Walk
          'GallopCut': lambda: gallop_cut(),
          'DrawPistol': lambda: build_draw('DrawPistol', 'Pistol'),
          'HolsterPistol': lambda: build_draw('HolsterPistol', 'Pistol', reverse=True),
-         'ReadyPistol': lambda: pistol_clip('ReadyPistol', 49, [(0, READY_P, 'smooth'), (24, dict(READY_P, G=READY_P['G'] + Vector((0, .01, -.015))), 'smooth'),
+         'ReadyPistol': lambda: pistol_clip('ReadyPistol', 49, [(0, READY_P, 'smooth'), (24, varied(READY_P, 'Pistol', el=-3.0), 'smooth'),
                                                                  (48, READY_P, 'smooth')], loop=True, stand_amp=.5),
          'PresentPistol': lambda: pistol_clip('PresentPistol', 13, [(0, READY_P, 'smooth'), (12, AIM_P, 'smooth')]),
          'LowerPistol': lambda: pistol_clip('LowerPistol', 13, [(0, AIM_P, 'smooth'), (12, READY_P, 'smooth')]),
          'AimPistol': lambda: pistol_clip('AimPistol', 37, [(f, aim_sway(f / 36), 'linear') for f in range(0, 37)], loop=True),
          'FirePistol': lambda: pistol_clip('FirePistol', 25, [(0, AIM_P, 'smooth'), (SHOT_P - 1, AIM_P, 'linear'), (SHOT_P + 2, RECOIL_P, 'snap'),
-                                                             (SHOT_P + 8, dict(RECOIL_P, G=RECOIL_P['G'] + Vector((0, .02, .03))), 'out'), (24, READY_P, 'smooth')],
+                                                             (SHOT_P + 8, varied(RECOIL_P, 'Pistol', el=4.0, r=-.03), 'out'), (24, READY_P, 'smooth')],
                                            react=shot_react(.08, .5), events={'shot': SHOT_P})}
 NEXT = {'Idle': ['DrawSabre', 'DrawPistol'], 'DrawSabre': ['IdleSabre', 'SabreCutRight', 'SabreCutLeft', 'SabreThrust', 'SabreParry', 'SabreFight'],
         'IdleSabre': ['SabreCutRight', 'SabreCutLeft', 'SabreThrust', 'SabreParry', 'SabreFight', 'SheatheSabre'],

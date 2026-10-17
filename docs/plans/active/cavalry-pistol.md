@@ -42,6 +42,8 @@ Out: reloading on horseback, firing at the walk or trot, the left holster.
   reach (no pop) and the draw events' meaning, and every sabre and battery event made 1-based as the registry
   says (the battery's checks identical).
 - The registry regenerated and its test, `npm test` and `node tools/check-docs.mjs` pass.
+- The rider's right wrist within 40° in every clip holding or using a weapon, 70° in the draws and returns
+  (the check fails otherwise).
 - Close-ups of the holster, the hand on the butt and the aim reviewed; videos from the side and the RTS
   pitch for the owner.
 
@@ -61,3 +63,14 @@ Out: reloading on horseback, firing at the walk or trot, the left holster.
   the sabre's and the battery's events made 1-based like the registry (the gun's shot was a frame early); the
   aim's sway keyed every frame; the events' meaning written in the system doc; the rest hand and the reactions
   shared; the rider seated before a draw only for the sabre; the plan's claim of unchanged clips corrected.
+
+## Owner's review
+
+- **2026-10-17**: "the fighting movements seem not natural; hand movements in both pistol shooting and sword
+  fighting are not correct". Measured: the rider's wrist bent 90 to 150 degrees in the sabre and pistol clips
+  (the hand was placed by a point and the weapon's direction, the forearm left to the IK). Reworked: the arm
+  is posed by its joints (units/arm.py), every weapon state solved for a straight wrist, the draws reworked,
+  the holster turned along the reach, and the wrist checked in units/validate.py. Now: the gaits 7.7°, the
+  sabre and pistol clips at most 37.5°, the draws and returns 65.5° and 66.6°. Every clip of the rider was
+  re-authored, so their poses change; lengths and events do not. The crew's wrists (40 to 170 degrees) are the
+  next fix, out of this PR.

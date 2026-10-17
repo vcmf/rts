@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-17
-code: [tools/unitpipe/paths.py, tools/unitpipe/sources.py, tools/unitpipe/registry.py, tools/unitpipe/infantry/build.py, tools/unitpipe/infantry/drill.py, tools/unitpipe/units/unitkit.py, tools/unitpipe/units/biped.py, tools/unitpipe/units/timeline.py, tools/unitpipe/units/horse.py, data/figures/index.json, test/figures-index.test.ts]
+code: [tools/unitpipe/paths.py, tools/unitpipe/sources.py, tools/unitpipe/registry.py, tools/unitpipe/infantry/build.py, tools/unitpipe/infantry/drill.py, tools/unitpipe/units/unitkit.py, tools/unitpipe/units/biped.py, tools/unitpipe/units/timeline.py, tools/unitpipe/units/horse.py, tools/unitpipe/units/arm.py, data/figures/index.json, test/figures-index.test.ts]
 decisions: [0018-battalion-of-400, 0037-simulation-owns-animation-timing, 0038-figure-pipeline-layout]
 ---
 
@@ -131,10 +131,20 @@ Poses are solved per frame by script and keyed on every bone:
   in stance a hoof moves back at exactly the gait's speed, in the swing it leaves and lands at that speed,
   and the body is **lowered automatically** until every planted leg reaches its hoof (the front legs are
   nearly straight at rest).
-- **The sabre** is keyed as states in the saddle's frame (grip, blade direction, chest, head). A cut needs
-  an over-the-head key between the wind-up and the blow: two nearly opposite blade directions blended
-  directly leave the swing's path undefined.
-- **The pistol** is keyed the same way (grip, barrel, the lock's top), its clips in the shape of
+- **Weapons in the rider's hand** (units/arm.py) are posed by the arm's joints, not by the weapon: an arm
+  state gives the wrist's direction and distance from the shoulder in the chest's frame, the elbow's swivel,
+  the forearm's turn (pronation) and the wrist's bend (flexion within ±60°, deviation from −20° to 35°), and
+  the weapon follows the fist in a fixed grip (the sabre's blade continues the thumb's line, the pistol's
+  barrel the fingers). Blending states moves the hand on arcs about the shoulder. A state can instead name
+  the blade's direction: the turn and bend that point the weapon there, with the wrist nearest neutral, are
+  searched once before posing (`aim_wrist`). Placing the hand by a point and a weapon direction, as before,
+  bent the wrist 90 to 150 degrees. A grip on a moving prop picks the side to wrap that keeps the wrist
+  straightest, remembering its last choice so the hand does not flip (`Biped.natural_grip`).
+- **The sabre**: a cut needs an over-the-head state between the wind-up and the blow: two nearly opposite
+  blade directions blended directly leave the swing's path undefined. The draw pulls the blade straight out
+  of its scabbard for 85% of its length, then blends arm states.
+- **The pistol** is posed the same way, the lock's top asked to face up; the draw holds the hand on the
+  holstered butt (the inverse of the grip) until it clears, the holster pointing along the rider's reach. Its clips in the shape of
   decision 0037: DrawPistol and HolsterPistol (from and to Idle), ReadyPistol (a loop, muzzle up),
   PresentPistol (the wind-up the game stretches), AimPistol (a loop it holds), LowerPistol (an aim called off,
   back to the ready), FirePistol (anchored on its `shot` at frame 3: the kick, back to the ready; the horse
@@ -154,7 +164,9 @@ The game anchors clips on them (decision 0037).
 
 On the deformed mesh, every frame of every clip: nothing below the ground (−2 cm); a hoof or boot on the
 ground moves less than 2.5 cm a frame over it, root motion included (a hoof's lift-off frame folds about
-the fetlock, not the toe: up to 2.2 cm at the walk); loops close and every listed join matches (< 1 mm).
+the fetlock, not the toe: up to 2.2 cm at the walk); loops close and every listed join matches (< 1 mm); the rider's right wrist (the angle between the forearm and
+the hand's fingers) stays within 40° in every clip that holds or uses a weapon and 70° while drawing or
+putting one back (`wrist_deg` in the check's output); the crew's wrists are reported, not yet checked.
 Numbers do not replace looking: the stretched thumb, the flaring coat, the kicking tail, the fist below
 the sabre's grip and the crew all facing one way were found in renders, not by a check.
 
@@ -205,5 +217,6 @@ lengths, loops, events inside their clips, every chain naming a clip of its figu
 - The infantryman on the units' toolkit and in metres, and the musket's Reload and the gun's Load too
   short for the ruleset's reloads (decision 0037's capped hold loop, `docs/proposals/figure-animation.md`).
 - Gait changes have no clips; no walk or trot with the sabre out.
+- The gun crew's wrists bend 40 to 170 degrees in Load and Fire (the rider's arm system is the fix).
 - The tack is made, not modelled; the rider is dressed as a cuirassier; his gloved fist closes on the
   sabre's grip only approximately; eight of the ruleset's twelve gunners are not in the drill.

@@ -151,7 +151,9 @@ elif which == 'cavalry':
     # and its holster at the front of the saddle on the right, the muzzle down: where French cavalry carried it
     holster_leather = K.flat_material('Holster', (.16, .09, .05))
     hmouth = Vector((-.17, seat.y - .30, seat.z + .04))
-    haxis = Vector((-.22, -.38, -.90)).normalized()             # down, forward and out, along the shoulder
+    # down and forward along the line of the rider's reach from his right shoulder, so the hand that reaches for
+    # the butt takes it with a straight wrist
+    haxis = Vector((.0, -.48, -.88)).normalized()
     holster = K.make_prop('Holster', [('cyl', hmouth, hmouth + haxis * .25, .040, .030, 10)], holster_leather)
     prop_bone(hrig, holster, 'Holster', hmouth, hmouth + haxis * .25, 'Horse:Back')
     # the pistol rests in its holster, as its child: holstered is every clip's default. Its frame (barrel +Y,
