@@ -194,7 +194,8 @@ def aim_wrist(arm, st, Rc, weapon, blade, up=None, swing=30, roll=25):
     out = dict(st, sw=float(sw), pron=float(p), flex=float(fl), dev=float(dv))
     if len(tilts) > 1:                  # the roll in the fingers, for the arm found (then the wrist again, finely)
         tilt = min(tilts, key=lambda tl: cost(sw, p, fl, dv, tl))
-        b2 = min(((sw, p2, f2, d2) for p2 in rng(*PRON, p, 2) for f2 in rng(*FLEX, fl, 2) for d2 in rng(*DEV, dv, 2)),
-                 key=lambda a: cost(*a, tilt))
-        out = dict(st, sw=float(sw), pron=float(b2[1]), flex=float(b2[2]), dev=float(b2[3]), tilt=float(tilt))
+        cands = [(sw, p, fl, dv)] + [(sw, p2, f2, d2) for p2 in rng(*PRON, p, 2) for f2 in rng(*FLEX, fl, 2) for d2 in rng(*DEV, dv, 2)]
+        b2 = min(cands, key=lambda a: cost(*a, tilt))       # the arm found is a candidate: never worse than it
+        if cost(*b2, tilt) < best[0]:
+            out = dict(st, sw=float(sw), pron=float(b2[1]), flex=float(b2[2]), dev=float(b2[3]), tilt=float(tilt))
     return out

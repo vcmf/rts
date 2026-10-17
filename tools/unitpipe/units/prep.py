@@ -204,7 +204,9 @@ elif name == 'dragoon':
     K.obj_mode()
     K.rigid(mesh, scab['ids'], 'Scabbard')
     K.rigid(mesh, hilt_ids, 'Hilt')
-    info.update(scale=s, scabbard=dict(count=scab['count'], min=list(scab['min']), max=list(scab['max']), mouth=list(stop), tip=list(sbot)),
+    sv = [mesh.data.vertices[i].co for i in scab['ids']]           # its bounds as stretched
+    info.update(scale=s, scabbard=dict(count=scab['count'], min=[min(v[k] for v in sv) for k in range(3)],
+                                       max=[max(v[k] for v in sv) for k in range(3)], mouth=list(stop), tip=list(sbot)),
                 hilt=dict(parts=len(hilt), count=len(hilt_ids), centre=list(hc)))
 
 elif name == 'pistol':

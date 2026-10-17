@@ -403,9 +403,10 @@ def apply_pistol(pose, Rs, seat, st):
 
 
 def hilt_frame():
-    """The scabbard's mouth and its direction (into the scabbard), as the rider sits and the scabbard hangs now."""
+    """The scabbard's mouth, its direction (into the scabbard) and the hilt's centre, as the rider sits and the
+    scabbard hangs now."""
     pb = P.pb['Rider:Scabbard']
-    return pb.head.copy(), (pb.tail - pb.head).normalized()
+    return pb.head.copy(), (pb.tail - pb.head).normalized(), P.pb['Rider:Hilt'].head.copy()
 
 
 def swing_scabbard(q, drop=0.0):
@@ -428,6 +429,15 @@ def stand_clip(name, frames, keys=None, weapon='Sabre', loop=False, react=None, 
     R._grips.clear(); _SEAM.clear()
     act = K.new_action(rig, name)
     _POSING[0] = True
+    try:
+        _pose_frames(name, frames, keys, weapon, react, stand_amp, draw, apply, draw_fn)
+    finally:
+        _POSING[0] = False
+    K.finish_action(rig, act, frames)
+    return dict(frames=frames, loop=loop, root_speed=0.0, fps=K.FPS, events=events or {})
+
+
+def _pose_frames(name, frames, keys, weapon, react, stand_amp, draw, apply, draw_fn):
     for f in range(1, frames + 1):
         t = (f - 1) / (frames - 1)
         P.reset()
@@ -448,9 +458,6 @@ def stand_clip(name, frames, keys=None, weapon='Sabre', loop=False, react=None, 
             P.set('Pistol', M)
             P.set('Sabre', HIDE)
         P.key_all(f)
-    _POSING[0] = False
-    K.finish_action(rig, act, frames)
-    return dict(frames=frames, loop=loop, root_speed=0.0, fps=K.FPS, events=events or {})
 
 
 def pistol_clip(name, frames, keys, **kw):
@@ -472,19 +479,19 @@ def reach_hand(pose, k, w1, R1, pole1):
 _SEAM = {}
 
 
-def seam(pose, Rs, weapon, wrist_a, Rh_a, M_a, pole_a, blade, chest, head, lean=0.0):
-    """The pull's last pose (wrist_a, Rh_a, the weapon M_a, the elbow pole_a), the pose set as at the pull's
-    end: returns the matching state and the differences to fade."""
-    if 'out' not in _SEAM:
-        R.set_pose(pose)
-        Rc = chest_rot(pose)
-        st = matching_state(pose, wrist_a, blade, weapon, sw=_SEAM['elbow']['sw'], up=M_a.col[2].to_3d(),
-                            chest=chest, head=head, lean=lean)
-        wrist, elbow, f, n, t, Rh = ARM.solve(st, Rc)
-        hand = lambda w, r: Matrix.Translation(w) @ r.to_4x4()
-        _SEAM['out'] = dict(state=st, dw=wrist_a - wrist, dq=(Rh_a @ Rh.inverted()).to_quaternion(),
-                            rel_a=hand(wrist_a, Rh_a).inverted() @ M_a,
-                            dpole=pole_a - elbow_pole(Rc, elbow))
+def seam(pose, weapon, wrist_a, Rh_a, M_a, pole_a, sw_a, blade, chest, head, lean=0.0):
+    """The pull's last pose (wrist_a, Rh_a, the weapon M_a, the elbow pole_a at swivel sw_a), the pose set as at
+    the pull's end: the matching state and the differences to fade, kept in _SEAM['out'] (the callers solve it
+    once per clip)."""
+    R.set_pose(pose)
+    Rc = chest_rot(pose)
+    st = matching_state(pose, wrist_a, blade, weapon, sw=sw_a, up=M_a.col[2].to_3d(),
+                        chest=chest, head=head, lean=lean)
+    wrist, elbow, f, n, t, Rh = ARM.solve(st, Rc)
+    hand = lambda w, r: Matrix.Translation(w) @ r.to_4x4()
+    _SEAM['out'] = dict(state=st, dw=wrist_a - wrist, dq=(Rh_a @ Rh.inverted()).to_quaternion(),
+                        rel_a=hand(wrist_a, Rh_a).inverted() @ M_a,
+                        dpole=pole_a - elbow_pole(Rc, elbow))
     return _SEAM['out']
 
 
@@ -508,21 +515,28 @@ CLEAR = .03                       # how far the sabre's tip is out of the scabba
 SWING_AIM = Vector((0, -.10, .10))  # the scabbard's mouth turns to point here (from the right shoulder, the chest's frame)
 SWING_MAX = D(70)
 DROP_MAX = .20                    # how far the scabbard may slide down its slings
-REACH_END = .92                   # the wrist's distance from the shoulder where the pull ends, as a share of the arm
+REACH_END = .92                   # the grip's distance from the shoulder where the pull ends, as a share of the arm
+                                  # (shoulder to wrist): the arm still bent, the wrist within its reach limit
 PULL_S = dict(chest=(D(28), D(8), 0), head=(D(20), D(14)))      # the rider as the pull starts...
 PULL_S_END = dict(chest=(D(8), D(8), 0), head=(D(10), D(6)))    # ...and ends
 
 
-def sabre_hand(pose, Rs, seat, grip, d):
+def sabre_hand(pose, Rs, seat, grip, d, swivel=False):
     """The right hand round the sabre's grip, the blade along d, the elbow where the wrist bends least (the pose
-    seated with its chest). Returns (wrist, hand rotation, elbow pole)."""
+    seated with its chest): the wrap and the elbow solved in turn until they agree (two or three rounds). Returns
+    (wrist, hand rotation, elbow pole, the elbow's swivel)."""
     Rc = chest_rot(pose)
     wdir = (seat + Rs @ SHOULDER_R) - grip
-    w, Rh, _ = R.natural_grip('Right', grip, d, wdir, pose, memory=('Right', 'grip'))
-    e = ARM.easiest_elbow(w, Rh @ ARM.f0, Rc, _SEAM.setdefault('elbow', {}))
-    pose['elbow']['Right'] = elbow_pole(Rc, e)
-    w, Rh, _ = R.natural_grip('Right', grip, d, wdir, pose, memory=('Right', 'grip'))   # for the elbow it takes
-    return w, Rh, pose['elbow']['Right'].copy()
+    mem = _SEAM.setdefault('elbow', {})
+    side = None
+    for _ in range(4):
+        w, Rh, s = R.natural_grip('Right', grip, d, wdir, pose, memory=('Right', 'grip'))
+        if side is not None and s.angle(side) < 1e-6:
+            break
+        side = s
+        e = ARM.easiest_elbow(w, Rh @ ARM.f0, Rc, mem)
+        pose['elbow']['Right'] = elbow_pole(Rc, e)
+    return w, Rh, pose['elbow']['Right'].copy(), mem['sw']
 
 
 def scabbard_swing(pose, base, pull):
@@ -532,13 +546,16 @@ def scabbard_swing(pose, base, pull):
     if 'swing' not in _SEAM:
         c, hd = pose['chest'], pose['head']
         set_body(pose, base, PULL_S_END); R.set_pose(pose)
-        mouth, d = hilt_frame()
+        mouth, d, hilt = hilt_frame()
         sh = ARM.shoulder()
         aim = sh + chest_rot(pose) @ SWING_AIM
         q = (-d).rotation_difference((aim - mouth).normalized())
         q = Quaternion(q.axis, min(q.angle, SWING_MAX))
         d1 = q @ d
-        far = lambda drop: (pull(mouth + d1 * drop, d1, 1.0) - sh).length
+        hilt1 = mouth + q @ (hilt - mouth)
+        far = lambda drop: (pull(mouth + d1 * drop, d1, hilt1 + d1 * drop, 1.0) - sh).length
+        if far(DROP_MAX) > REACH_END * (ARM.l1 + ARM.l2):
+            raise RuntimeError('the sabre cannot be drawn: the grip ends %.2f m from the shoulder' % far(DROP_MAX))
         lo, hi = 0.0, DROP_MAX              # the grip's distance from the shoulder falls as the scabbard drops
         for _ in range(30):
             mid = (lo + hi) / 2
@@ -565,17 +582,20 @@ def draw_pose(pose, Rs, seat, fr):
     T = DRAW_T
     L_SAB = info['sabre']['length']
     base = pose['chest'][1]
-    pull = lambda mouth, d, k: mouth - d * (.085 + (L_SAB - .085 + CLEAR) * k)   # the grip, from the hilt to the tip clear
+
+    def pull(mouth, d, hilt, k):
+        """The grip, from where the hilt shows (k 0: no jump as the sabre replaces it) to the tip clear of the
+        mouth (k 1); the blade runs L_SAB from the grip, into the scabbard."""
+        h = (hilt - mouth).dot(-d)
+        return mouth - d * (h + (L_SAB + CLEAR - h) * k)
     if fr < T['grab']:
         # the right hand crosses the body to the hilt at the left hip, the chest turning to it
         k = ease('smooth', fr / T['grab'])
         set_body(pose, base, dict(chest=(0, 0, 0), head=(0, D(-2))), PULL_S, k)
         R.set_pose(pose)
-        mouth, d = hilt_frame()
+        mouth, d, hilt = hilt_frame()
         kr = ease('smooth', min(1.0, fr / T['reach']))
-        rest_pole = pose['elbow']['Right']
-        w1, R1, pole1 = sabre_hand(pose, Rs, seat, pull(mouth, d, 0.0), d)
-        pose['elbow']['Right'] = rest_pole
+        w1, R1, pole1 = sabre_hand(pose, Rs, seat, pull(mouth, d, hilt, 0.0), d)[:3]
         reach_hand(pose, kr, w1, R1, pole1)
         pose['curl']['Right'] = .4 + .55 * kr
         return None, False
@@ -587,9 +607,9 @@ def draw_pose(pose, Rs, seat, fr):
         set_body(pose, base, PULL_S, PULL_S_END, k)
         R.set_pose(pose)
         swing_scabbard(Quaternion().slerp(q, ks), drop * ks)
-        mouth, d = hilt_frame()
-        grip = pull(mouth, d, k)
-        w, Rh, pole = sabre_hand(pose, Rs, seat, grip, d)
+        mouth, d, hilt = hilt_frame()
+        grip = pull(mouth, d, hilt, k)
+        w, Rh, pole = sabre_hand(pose, Rs, seat, grip, d)[:3]
         pose['hands']['Right'] = ('resolved', w, Rh)
         pose['curl']['Right'] = .95
         return sabre_matrix(grip, d, Rs), True
@@ -600,10 +620,10 @@ def draw_pose(pose, Rs, seat, fr):
         set_body(pose, base, PULL_S_END)
         R.set_pose(pose)
         swing_scabbard(q, drop)
-        mouth, d = hilt_frame()
-        G = pull(mouth, d, 1.0)
-        w_a, R_a, pole_a = sabre_hand(pose, Rs, seat, G, d)
-        seam(pose, Rs, 'Sabre', w_a, R_a, sabre_matrix(G, d, Rs), pole_a, d, PULL_S_END['chest'], PULL_S_END['head'])
+        mouth, d, hilt = hilt_frame()
+        G = pull(mouth, d, hilt, 1.0)
+        w_a, R_a, pole_a, sw_a = sabre_hand(pose, Rs, seat, G, d, swivel=True)
+        seam(pose, 'Sabre', w_a, R_a, sabre_matrix(G, d, Rs), pole_a, sw_a, d, PULL_S_END['chest'], PULL_S_END['head'])
         pose['chest'] = (0, base, 0)
     M = apply_seamed(pose, Rs, seat, _SEAM['out'], resolve(GUARD, 'Sabre'), k, 'Sabre')
     swing_scabbard(Quaternion().slerp(q, 1.0 - k), drop * (1.0 - k))
@@ -709,11 +729,12 @@ PULL_P_END = dict(chest=(D(-22), D(-4), D(-6)), head=(D(-12), D(6)), lean=D(-6))
 
 def pistol_hand(pose, M):
     """The right hand on the pistol at M (the aim's grip), the elbow where the wrist bends least (the pose seated
-    with its chest). Returns (wrist, hand rotation, elbow pole)."""
+    with its chest). Returns (wrist, hand rotation, elbow pole, the elbow's swivel)."""
     Rc = chest_rot(pose)
     w, Rh = ARM.hand_on_pistol(M)
-    e = ARM.easiest_elbow(w, Rh @ ARM.f0, Rc, _SEAM.setdefault('elbow', {}))
-    return w, Rh, elbow_pole(Rc, e)
+    mem = _SEAM.setdefault('elbow', {})
+    e = ARM.easiest_elbow(w, Rh @ ARM.f0, Rc, mem)
+    return w, Rh, elbow_pole(Rc, e), mem['sw']
 
 
 def draw_pistol_pose(pose, Rs, seat, fr):
@@ -729,9 +750,7 @@ def draw_pistol_pose(pose, Rs, seat, fr):
         set_body(pose, base, dict(chest=(0, 0, 0), head=(0, D(-2))), REACH_P, k, lean0)
         kr = ease('smooth', min(1.0, fr / T['reach']))
         R.set_pose(pose)
-        rest_pole = pose['elbow']['Right']
-        w1, R1, pole1 = pistol_hand(pose, held)
-        pose['elbow']['Right'] = rest_pole
+        w1, R1, pole1, _ = pistol_hand(pose, held)
         reach_hand(pose, kr, w1, R1, pole1)
         pose['curl']['Right'] = .4 + .55 * kr
         return held, False
@@ -741,7 +760,7 @@ def draw_pistol_pose(pose, Rs, seat, fr):
         M = held.copy(); M.translation = out_of(k)
         set_body(pose, base, REACH_P, PULL_P_END, ease('smooth', (fr - T['grab']) / (T['out'] - T['grab'])), lean0)
         R.set_pose(pose)
-        w, Rh, pose['elbow']['Right'] = pistol_hand(pose, M)
+        w, Rh, pose['elbow']['Right'], _ = pistol_hand(pose, M)
         pose['hands']['Right'] = ('resolved', w, Rh)
         pose['curl']['Right'] = .95
         return M, False
@@ -752,8 +771,8 @@ def draw_pistol_pose(pose, Rs, seat, fr):
         set_body(pose, base, PULL_P_END, lean0=lean0)
         M_out = held.copy(); M_out.translation = out_of(1.0)
         R.set_pose(pose)
-        w_a, R_a, pole_a = pistol_hand(pose, M_out)
-        seam(pose, Rs, 'Pistol', w_a, R_a, M_out, pole_a, axis, PULL_P_END['chest'], PULL_P_END['head'], lean=PULL_P_END['lean'])
+        w_a, R_a, pole_a, sw_a = pistol_hand(pose, M_out)
+        seam(pose, 'Pistol', w_a, R_a, M_out, pole_a, sw_a, axis, PULL_P_END['chest'], PULL_P_END['head'], lean=PULL_P_END['lean'])
         pose['chest'] = (0, base, 0); pose['hips'] = h
     return apply_seamed(pose, Rs, seat, _SEAM['out'], resolve(READY_P, 'Pistol'), k, 'Pistol'), False
 

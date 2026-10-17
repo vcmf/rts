@@ -87,3 +87,10 @@ Out: reloading on horseback, firing at the walk or trot, the left holster.
   swivel's sign fixed and the forearm's turn limited, `aim_wrist` searching the swivel and the sabre's roll
   in the hand too (every keyed sabre state now within 36° of wrist and 14° of its blade target); `resolve()`
   refusing to run mid-frame; the dead code removed.
+- **Round 4** (`/code-review high`, the second on the arm system): moderate only, fixed and stopped: the
+  sabre's roll pass could return a pose worse than the search's best; the grip's wrap and the elbow are now
+  solved in turn until they agree; the draw raises an error if the scabbard cannot drop far enough for the
+  arm; the grip starts where the hilt shows (no jump as the sabre replaces it); the hand-over takes the
+  elbow's swivel as an argument, not from a cache filled earlier; `_POSING` is reset if posing fails; dead
+  code removed; the prep records the stretched scabbard's bounds. Not taken: posing the pull through arm
+  states (an alternative design, not a defect), and the solve's cost (light).
