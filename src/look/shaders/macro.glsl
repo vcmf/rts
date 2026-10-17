@@ -109,6 +109,9 @@ vec3 dirtOn(vec3 c,vec2 xz,float px){
   if(near<=0.0&&c0.w>=7.0)return c;   // the wear's reach (4 m) and the warp's to another cell's centre (2.8 m)
   vec4 cv=coverAt(coverWarp(xz));float k=cv.x,b=classBare(k);
   if(k>4.5&&k<5.5)b*=smoothstep(0.42,0.6,blot(xz+0.7,13.0));   // the village: its trodden patches, not the grass between (cellColour)
+  #ifdef WEBGL2
+  if(k>2.5&&k<4.5)b*=smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y)));   // on the tile the roads are painted (roadPaint, live or baked: shore.glsl), their own grit
+  #endif
   b=max(b,wearOf(cv))*fade;if(b<=0.0)return c;
   // two reads at unrelated scales and offsets, so the texture's own marks (a dark smear) do not repeat in rows, about
   // its measured mean (0.458), so the class colour holds on average

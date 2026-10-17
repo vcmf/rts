@@ -130,7 +130,8 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   only: the light stays in `paint()`. The road is a beige earth and the track a paler one; on the tile both are painted as rutted
   dirt in each road's frame (the nearest road segment, found in the shader from the look data's grid of them: the
   distance across and along, the half width, a junction weight), wheel tracks of pale dust cut into pieces, ragged edges, the owner's grit photo (`roadPaint` in
-  `shore.glsl`, `docs/plans/active/roads.md`). Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
+  `shore.glsl`, `docs/plans/active/roads.md`). Far out the macro bake holds them (tracks a dusting, no grit) and the
+  tile's ground takes its material without the live roads beyond 170 m; nearer they fade in (decision 0039). Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
   The class `bare` (10): trodden or dry earth, no grass, no crops, no stripes, not
   a field (`isField`).
 - **The dirt surface** (`dirtOn` in `macro.glsl`, at the terrain's fragment: `docs/plans/done/ground-surface.md`):

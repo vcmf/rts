@@ -95,7 +95,9 @@ float aastep(float t,float v){
 // own places; trodden patches, pale dust, streaks along the road; trampled flat at a junction; the grit of the owner's
 // photo (data/road-grit-v1.png, uRoadOn once it has loaded) at two scales (explicit gradients: they follow the early
 // returns). WebGL2 only (src/look/terrain.ts). The season turns it as the rest of the ground
-uniform sampler2D uRoadSegs,uRoadGrid,uRoadGrit;uniform float uRoadOn,uRoadSegN;
+// uRoadFar: 0 near, 1 as far out as the live roads go (src/look/main.ts, ROAD_LIVE_R) and in the macro bake: the wheel
+// tracks thin to their dusting and the grit fades, so the live roads meet the baked ones where the terrain swaps them
+uniform sampler2D uRoadSegs,uRoadGrid,uRoadGrit;uniform float uRoadOn,uRoadSegN,uRoadFar;
 // a road's earth and a track's (a little paler: it reads against the grass at its width), the class colours' means
 // (classColour in macro.glsl: change both together). The season turns it as the rest of the ground (groundSeason)
 #define ROAD_EARTH vec3(0.60,0.53,0.42)
@@ -154,11 +156,12 @@ vec3 roadPaint(vec3 c,vec2 xz){
   if(inside<=0.0)return c;
   // none at a junction, nor round a dead end's cap. Where a pixel spans more than a track is wide (0.3 m: far out) they
   // are not drawn but their mean, a light dusting (under a pixel they would shimmer, and cost: docs/plans/active/roads.md)
-  float lod=1.0-smoothstep(0.2,0.35,pxMacro()),fade=(1.0-jn)*(1.0-smoothstep(0.0,0.8,past)),tr=fade*0.12*(1.0-lod);
+  float lod=(1.0-smoothstep(0.2,0.35,pxMacro()))*(1.0-uRoadFar),fade=(1.0-jn)*(1.0-smoothstep(0.0,0.8,past)),tr=fade*0.12*(1.0-lod);
   if(fade*lod>0.0)tr+=fade*lod*(r.w<0.5?max(max(track1(a,xz,s,-0.9,1.0),track1(a,xz,s,0.9,2.0)),0.6*max(track1(a,xz,s,-2.6,3.0),track1(a,xz,s,2.6,4.0))):max(track1(a,xz,s,-0.8,1.0),track1(a,xz,s,0.8,2.0)));
   float st=mix(mValue(vec2(s/11.0,a*1.3))*0.6+mValue(vec2(s/3.3,a*3.7+9.0))*0.4,mValue(xz/3.0+5.0),jn);   // streaks along the road
   float trod=max(smoothstep(0.6,0.8,mValue(xz/2.7+13.0)),jn*0.5),dust=smoothstep(0.55,0.85,mValue(xz/4.1-7.0));   // trodden patches, pale dust
-  float g=(texM(uRoadGrit,xz/1.9,1.9).r*0.6+textureGrad(uRoadGrit,mat2(0.8253,-0.5646,0.5646,0.8253)*xz/3.1+0.37,mat2(0.8253,-0.5646,0.5646,0.8253)*pMdx/3.1,mat2(0.8253,-0.5646,0.5646,0.8253)*pMdy/3.1).r*0.4-0.5)*uRoadOn;
+  float g=0.0;
+  if(uRoadOn*(1.0-uRoadFar)>0.0)g=(1.0-uRoadFar)*(texM(uRoadGrit,xz/1.9,1.9).r*0.6+textureGrad(uRoadGrit,mat2(0.8253,-0.5646,0.5646,0.8253)*xz/3.1+0.37,mat2(0.8253,-0.5646,0.5646,0.8253)*pMdx/3.1,mat2(0.8253,-0.5646,0.5646,0.8253)*pMdy/3.1).r*0.4-0.5)*uRoadOn;
   // (at a junction the two lines' earths meet half and half, as the patterns there: where a road meets a track they
   // would step. A road meeting a road keeps its earth)
   vec3 col=mix(mix(ROAD_EARTH,TRACK_EARTH,r.w),mix(ROAD_EARTH,TRACK_EARTH,(r.w+ot)*0.5),jn)*mix(0.93,1.07,st)*mix(1.0,0.9,trod)*mix(1.0,1.1,dust)*(1.0+g*1.2);

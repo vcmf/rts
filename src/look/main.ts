@@ -32,9 +32,10 @@ import { buildTerrain } from './terrain.ts'
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 import ROAD_GRIT_URL from '../../data/road-grit-v1.png?url'
+import { sstep } from './noise.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
-import { MACRO_ARMS, SHADER_ARMS, buildMacro, type MacroArm, type RoadTextures } from './macro.ts'
+import { MACRO_ARMS, SHADER_ARMS, buildMacro, isBakedArm, type MacroArm, type RoadTextures } from './macro.ts'
 import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
 import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
@@ -148,7 +149,7 @@ if (woodParam !== null && woodParam !== '' && woodParam !== 'big') throw new Err
 const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { leaf: leafTex, opts: cardOpts } : undefined, woodParam === null ? 'off' : woodParam === 'big' ? 'big' : 'small', meadowOn, treeSet.has('one'), treeSet.has('gen') ? { season: season0, clumpVolume: params.get('clumpvol') !== 'off' } : null)
 // the stones in the water, for their foam (src/look/shaders/shore.glsl): the terrain's band and the water paint it
 { const a = new Array(D.spec.water.stones * 4).fill(0); nature.stones.forEach((st, k) => a.splice(k * 4, 4, ...st))
-  for (const m of [terrain.terrainMat, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
+  for (const m of [terrain.terrainMat, terrain.terrainBakedMat, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
 const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy, nature.cardCasters, soft, nature.trunks, nature.farCull)
 // ?far=off: no far tree, nor its shadows (built before the bakes: the far woods' whole cost; the A/B)
@@ -166,21 +167,25 @@ if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS
 const armBake = await macro.setArm(macroArm)
 const macroBake = armBake.texels ? armBake : await macro.bake()
 const camera = buildCamera(scene, canvas)
-// the roads' live shader only from mid zoom in (docs/plans/active/roads.md): farther out the macro bake holds them
-// (its wheel tracks a dusting, finer than a pixel there), and the terrain's shader without them costs nothing for them.
-// Both variants compiled before the first frame, so crossing ROAD_LIVE_R swaps two compiled shaders
-const ROAD_LIVE_R = 170, ROAD_HOLD = 4
-const roadMats = roadTex ? [terrain.terrainMat, water.waterMat, water.groundMat] : []
-let roadsLive = true
-const setRoads = (on: boolean) => { roadsLive = on; for (const m of roadMats) m.setDefine('#define ROADS', on) }
-const compileRoads = (on: boolean) => { setRoads(on); return Promise.all(roadMats.map(m => { const mesh = scene.meshes.find(x => x.material === m); return mesh ? m.forceCompilationAsync(mesh) : undefined })) }
-if (roadMats.length) { await compileRoads(false); await compileRoads(camera.radius < ROAD_LIVE_R) }
-scene.onBeforeRenderObservable.add(() => {
-  if (!roadMats.length) return
-  const r = camera.radius
-  if (roadsLive && r > ROAD_LIVE_R + ROAD_HOLD) setRoads(false)
-  else if (!roadsLive && r < ROAD_LIVE_R - ROAD_HOLD) setRoads(true)
-})
+// the roads' live shader only from mid zoom in (docs/plans/active/roads.md, decision 0039): farther out the macro bake
+// holds them and the tile's ground takes its material without them (the shader's size alone cost every ground pixel).
+// Nearing ROAD_LIVE_R the live roads fade to the baked look (uRoadFar: the wheel tracks to their dusting, the grit out),
+// so the swap shows nothing. Both materials are compiled before the first frame, and the swap waits until the one it
+// goes to is ready (a material not ready is not drawn). The shader arm has no bake to hold them: live at every zoom
+const ROAD_LIVE_R = 170, ROAD_HOLD = 4, ROAD_FADE = 50
+if (roadTex) {
+  const live = terrain.terrainMat, baked = terrain.terrainBakedMat, ground = terrain.tileGround
+  await Promise.all([live.forceCompilationAsync(ground), baked.forceCompilationAsync(ground)])
+  let far = false
+  scene.onBeforeRenderObservable.add(() => {
+    const r = camera.radius
+    live.setFloat('uRoadFar', sstep(ROAD_LIVE_R - ROAD_FADE, ROAD_LIVE_R - ROAD_HOLD, r))
+    if (ground.material !== live && ground.material !== baked) return   // (the debug views' water ground)
+    far = isBakedArm(macro.arm()) && (far ? r > ROAD_LIVE_R - ROAD_HOLD : r > ROAD_LIVE_R + ROAD_HOLD)
+    const want = far ? baked : live
+    if (ground.material !== want && want.isReady(ground)) ground.material = want
+  })
+}
 // ?dof=0|1: the gameplay depth of field, on by default (decision 0024); the look tools load the page with it off
 const dofParam = params.get('dof')
 if (dofParam !== null && dofParam !== '0' && dofParam !== '1') throw new Error(`?dof must be 0 or 1, not ${dofParam}`)
@@ -190,7 +195,7 @@ if (dofParam !== null) S.dof = +dofParam
 else if (params.has('bench') || params.has('water') || params.get('river') === 'debug') S.dof = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, nature.growthAllowed, nature.crop, !flag('nowide')) : null
-meadow?.under([terrain.terrainMat, water.waterMat, water.groundMat])   // the dark ground under its clumps (shore.glsl)
+meadow?.under([terrain.terrainMat, terrain.terrainBakedMat, water.waterMat, water.groundMat])   // the dark ground under its clumps (shore.glsl)
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false
 if (flag('nanmark')) { DEBUG.nanmark = true; MSAA.byte = false }   // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
@@ -366,7 +371,7 @@ Object.assign(window, {
 // and the detail layer's switches
 const lab = new Lab(scene, mats)
 const passes = { terrain: [terrain.tileGround, terrain.farGround, terrain.apron], scatter: scene.meshes.filter((m): m is Mesh => m instanceof Mesh && (m.thinInstanceCount > 0 || m.forcedInstanceCount > 0)), water: [water.mesh], post: () => post.passes }
-const terrainMats = [terrain.terrainMat, terrain.farTerrainMat, terrain.hillMat], waterMats = [water.waterMat, water.groundMat]
+const terrainMats = [terrain.terrainMat, terrain.terrainBakedMat, terrain.farTerrainMat, terrain.hillMat], waterMats = [water.waterMat, water.groundMat]
 // the terrain's variants (src/look/shaders/painter.glsl): the L0 grain, the debug view, the checks' sabotages
 const DETAIL_DEFINES = ['DETAIL_L0', 'DETAIL_DEBUG', 'DETAIL_DEBUG_INC', 'DETAIL_DEBUG_N', 'DETAIL_SAB_IMPLICIT', 'DETAIL_SAB_STEP', 'BANKN_OFF']
 // the water's materials take the two that change the shore band (it paints with the terrain's paint() and normals).
@@ -386,7 +391,7 @@ const project = (k: number, tx: number, ty: number) => {
 // 2 shore distance, 3 flow, 4 and 5 the raw texels, 6 the surface (the water white); sab: the page check's sabotage
 // (the texture read upside down)
 const WATER_VIEWS = ['off', 'depth', 'sdf', 'flow', 'raw', 'alpha', 'surface']
-const dataMats = [terrain.terrainMat, ...waterMats]
+const dataMats = [terrain.terrainMat, terrain.terrainBakedMat, ...waterMats]
 const waterView = (v: number, sab = false) => {
   if (!WATER_VIEWS[v]) throw new Error(`unknown water view ${v}`)
   for (const m of dataMats) { m.setDefine('#define WATER_DEBUG', v > 0); m.setDefine('#define WATER_SAB_FLIP', sab); m.setFloat('uWaterView', v) }
