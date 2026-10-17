@@ -33,7 +33,7 @@ export const DOF = { band: 0.2, k: 4, px: 7, wide: 0.4 }
 // 0.8 ms less at the widest zoom); not under the depth of field, whose distance in alpha needs the half floats; ?rt16
 // for the A/B
 export const MSAA = { samples: 4, byte: true }
-// ?nanmark: a pixel that is not a number shows magenta instead of its neighbours' mean (docs/plans/active/nan-guard.md)
+// ?nanmark: a pixel that is not a number shows magenta instead of its neighbours' mean (docs/plans/done/nan-guard.md)
 export const DEBUG = { nanmark: false }
 const FOCUS_S = 0.25
 const TAPS = [16, 24, 32, 48, 64]

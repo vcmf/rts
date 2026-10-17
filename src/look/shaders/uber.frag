@@ -1,7 +1,7 @@
 precision highp float;varying vec2 vUV;uniform sampler2D textureSampler,uGrain;uniform vec2 uRes;uniform float uGrainOn,uBloom,uGrade,uRenderScale;
 // the mood's vignette (src/look/mood.ts; its grade is in the painted materials: gradeOf, painter.glsl)
 uniform vec3 uVignette,uSplitHi;uniform float uGradeSat,uTopAmt;
-// ?nanmark: a repaired pixel shows magenta, so the material that writes it can be found (docs/plans/active/nan-guard.md)
+// ?nanmark: a repaired pixel shows magenta, so the material that writes it can be found (docs/plans/done/nan-guard.md)
 #ifdef NANMARK
 #define MARK(c) vec3(1.0,0.0,1.0)
 #else
@@ -15,12 +15,12 @@ float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 // uHalfUV maps the screen to the blur (its size is the scene's halved, rounded down). The bloom gathers from the blur
 uniform sampler2D uSharp;uniform vec2 uTan,uHalfUV;uniform float uFocus,uBand,uK,uMaxPx;
 #include<dofcoc>
-// (a sharp pixel that is not a finite number takes the blur, which dofdown cleaned: docs/plans/active/nan-guard.md)
+// (a sharp pixel that is not a finite number takes the blur, which dofdown cleaned: docs/plans/done/nan-guard.md)
 vec3 base(){vec4 s=texture2D(uSharp,vUV);if(!all(lessThan(abs(s),vec4(65504.0))))return MARK(texture2D(textureSampler,vUV*uHalfUV).rgb);
   float w=smoothstep(0.5,2.0,coc(s.a,vUV));return w>0.0?mix(s.rgb,texture2D(textureSampler,vUV*uHalfUV).rgb,w):s.rgb;}
 #define BLOOM_UV(uv) ((uv)*uHalfUV)
 #else
-// (a pixel that is not a finite number takes its neighbours' mean: docs/plans/active/nan-guard.md; the default 8-bit
+// (a pixel that is not a finite number takes its neighbours' mean: docs/plans/done/nan-guard.md; the default 8-bit
 // target cannot hold one, the half floats of ?rt16 and ?nanmark can)
 bool ok3(vec3 s){return all(lessThan(abs(s),vec3(65504.0)));}
 vec3 base(){vec3 s=texture2D(textureSampler,vUV).rgb;if(ok3(s))return s;

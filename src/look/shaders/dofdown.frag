@@ -3,7 +3,7 @@ precision highp float;varying vec2 vUV;uniform sampler2D textureSampler;uniform 
 // under it (the block 2o, 2o + 1 of output pixel o, so an odd size drops the last row or column rather than drifting),
 // read at their centres: their colour averaged (a figure narrower than the block is blurred, not dropped) and the
 // farthest of their distances (a blend of two depths would be no surface), in alpha as the materials write it
-// The depth of field's one guard (docs/plans/active/nan-guard.md): a pixel that is not a finite number (a NaN or an
+// The depth of field's one guard (docs/plans/done/nan-guard.md): a pixel that is not a finite number (a NaN or an
 // infinity some material wrote; the blur would spread it into a dark block) is left out of the average; with all four
 // out, the ring two pixels round them is averaged instead. The test (abs below the half float's largest) is one no
 // compiler folds away, as it may x == x

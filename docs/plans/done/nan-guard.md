@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-17
 ---
 
@@ -39,3 +39,4 @@ spreads it to its taps.
   magenta pixels and no black; `?dof=0&nanmark` 452 and no black: the mark finds them. Without the mark, a whole
   surface of bad pixels has no good neighbour to take (3,904 black under the depth of field): an isolated pixel, the
   owner's case, is repaired; a whole bad surface stays dark, and `?nanmark` shows where.
+- The goldens against main after the rework: match. `npm test` runs in CI.
