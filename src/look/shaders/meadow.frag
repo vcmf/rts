@@ -24,6 +24,7 @@ void main(){
     // the flat class colour
     #if defined(MACRO_BAKE)&&defined(GRASS_FLOW)
     pMdx=vec2(uCell,0.0);pMdy=vec2(0.0,uCell);   // the bake read at the ring cell footprint, as the ground under it is filtered
+    pFlowGrow=1.0;   // (grass grows here: its autumn keeps the comb value, groundSeason)
     vec3 g=groundSeason(bakeOnce(vRoot).rgb);   // the bake alone: no grass grows where the ground's comb or short grass would change it
     #elif defined(MACRO_BAKE)
     pMdx=vec2(uCell,0.0);pMdy=vec2(0.0,uCell);   // the bake read at the ring cell footprint, as the ground under it is filtered

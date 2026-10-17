@@ -31,8 +31,9 @@ float pxGround(vec3 wp){vec2 f=fwidth(wp.xz);return max(f.x,f.y);}
 // The season turns what is green (docs/plans/done/ground-surface.md): a colour takes the whole turn as far as it is
 // green, a quarter of it where it is not (bare earth, stone, gravel, a cut bank, dry gold), so a ploughed field or a bank
 // does not melt into the autumn meadow, smoothly across every edge
-// how much grass grows at the ground being painted (the combed meadow: groundAt sets it; 1 elsewhere, the grass's own)
-float pFlowGrow=1.0;
+// how much grass grows at the ground being painted, for the combed meadow's autumn (groundSeason): set by the bake arm's
+// groundAt, and by the grass for itself (meadow.frag); 0 elsewhere (the bounce, the roots: the default's autumn)
+float pFlowGrow=0.0;
 vec3 groundSeason(vec3 c){
   // the autumn turns (to late autumn) by greenness: a yellow-green counts as green, a grey road, earth, stone and dry gold
   // (green no higher than red or blue) take a quarter. Winter mutes every colour, as before

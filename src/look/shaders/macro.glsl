@@ -187,7 +187,9 @@ vec3 combStrokes(vec2 xz,float px,float k){
 #endif
 vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
   float gr=k<0.5?1.0:k<1.5?0.75:0.0;if(gr<=0.0)return c;
-  #ifdef GRASS_FLOW
+  // (the combed meadow needs the bake arm, whose groundAt matches the default where no grass grows: the shader arm keeps
+  // the default pattern)
+  #if defined(GRASS_FLOW)&&!defined(MACRO_SHADER)
   // combed (docs/plans/active/grass-flow.md): broad soft bands where the flow leans to or from the sun (the sun is
   // fixed per map: the bake holds it), soft masses at a few metres, the clump field; the strokes by the footprint
   vec3 t=vec3(combBroad(xz)*mix(0.93,1.07,clumpAt(xz)));

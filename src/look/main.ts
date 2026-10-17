@@ -16,7 +16,7 @@ import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions 
 import { q, runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S, SUN } from './materials.ts'
-import { buildFlow, COMB_PERIOD } from './flow.ts'
+import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
 import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { gradeColour, MOOD, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
@@ -90,7 +90,7 @@ const sunXZ = new Vector2(SUN.x, SUN.z).normalize()
 // ?grassoff=strokes,dense,big,hue (with flow): one part of the arm off at a time, for the cost's ablation
 const GRASS_PARTS = ['strokes', 'dense', 'big', 'hue'], grassOff = params.get('grassoff')?.split(',') ?? []
 if (grassOff.some(k => !GRASS_PARTS.includes(k)) || (grassOff.length && grassParam !== 'flow')) throw new Error(`?grassoff takes ${GRASS_PARTS.join(', ')}, with ?grass=flow`)
-const grassDefines = grassParam === 'flow' ? ['#define GRASS_FLOW', `#define FLOW_SUN vec2(${sunXZ.x.toFixed(4)},${sunXZ.y.toFixed(4)})`, `#define COMB_PERIOD ${COMB_PERIOD.toFixed(1)}`, ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`)] : []
+const grassDefines = grassParam === 'flow' ? ['#define GRASS_FLOW', `#define FLOW_SUN vec2(${sunXZ.x.toFixed(4)},${sunXZ.y.toFixed(4)})`, `#define COMB_PERIOD ${COMB_PERIOD.toFixed(1)}`, ...flowDefines(), ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`)] : []
 const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [...softDefines(soft), ...(meadowOn ? ['#define MEADOW', ...grassDefines] : [])])
 const keptGrains = new Set([mats.grain])   // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
@@ -152,7 +152,7 @@ if (params.has('far')) {
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
 // the flow's textures (?grass=flow, src/look/flow.ts), on every painted material and the bake
-const flowTex = grassParam === 'flow' && meadowOn ? buildFlow(scene) : null
+const flowTex = grassParam === 'flow' ? buildFlow(scene) : null
 if (flowTex) mats.bindAll(m => { m.setTexture('uFlow', flowTex.flow); m.setTexture('uComb', flowTex.comb) })
 const macro = buildMacro(scene, mats, look.cover, meadowOn, grassDefines, flowTex)
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
@@ -172,7 +172,7 @@ else if (params.has('bench') || params.has('water') || params.get('river') === '
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 // (the combed meadow's clumps reach farther: their roots keep farther from the formation zones and the banks)
 const grassReach = grassParam === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
-const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, (x, z) => nature.growthAllowed(x, z, grassReach), nature.crop, !flag('nowide'), grassReach) : null
+const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, (x, z) => nature.growthAllowed(x, z, grassReach), nature.crop, !flag('nowide'), grassReach, (x, z) => nature.growthAllowed(x, z)) : null
 meadow?.under([terrain.terrainMat, water.waterMat, water.groundMat])   // the dark ground under its clumps (shore.glsl)
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false
@@ -395,7 +395,8 @@ const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   lab, mats, passes, post, setDetail,
   dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
-  sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, meadow: meadow ? { growingCells: meadow.growingCells, growthAt: meadow.growthAt, groundAt: meadow.groundAt, cropAt: meadow.cropAt, croppingCells: meadow.croppingCells } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
+  sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, flowBuildMs: flowTex?.ms ?? null,   // (the combed meadow's flow textures, on load)
+   meadow: meadow ? { reach: meadow.reach, growingCells: meadow.growingCells, growthAt: meadow.growthAt, groundAt: meadow.groundAt, cropAt: meadow.cropAt, croppingCells: meadow.croppingCells } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
   hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),
   // the bounce map (LC5): its target, and the time of one bake: the median of n frames with it and of n without,
   // each waited on by reading the map back (ms; gl.finish does not wait under ANGLE's Metal)

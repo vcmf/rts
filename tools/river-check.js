@@ -63,11 +63,13 @@
   // water and its banks (the crops too, and none on the floodplain), at every half metre of a grid over the near field; and it grows over a real share of the tile (between a
   // fifth and four fifths of its texels), so a growth that failed everywhere, or nowhere, is caught
   if (meadow) {
-    // a clump's blades reach CLUMP_REACH (1.45 m) from its root: a growing point fails if its root, or any of eight
+    // a clump's blades reach the page's grass reach (__look.meadow.reach: CLUMP_REACH, 1.45 m, or the combed meadow's
+    // CLUMP_REACH_FLOW) from its root, a crop's CLUMP_REACH: a growing point fails if its root, or any of eight
     // points that far round it, stands in a zone or on the water and its banks' strip (the growth's own margin covers
     // the bank rule's 0.4 m and more); over the ground the focus can bring rings to (the play area and 100 m of rings),
     // every half metre near the scene, every metre beyond
-    const REACH = 1.4, ring = Array.from({ length: 8 }, (_, k) => [Math.cos(k * Math.PI / 4) * REACH, Math.sin(k * Math.PI / 4) * REACH])
+    const ringOf = (R) => Array.from({ length: 8 }, (_, k) => [Math.cos(k * Math.PI / 4) * R, Math.sin(k * Math.PI / 4) * R])
+    const ring = ringOf(1.4), grassRing = ringOf((meadow.reach ?? 1.45) - 0.05)   // (a little inside the reach: the growth's own margin)
     let inZones = 0, onBanks = 0, sampled = 0, cropsSampled = 0, cropsOnFloodplain = 0
     for (let x = -335; x <= 335; x += Math.abs(x) < 200 ? 0.5 : 1) for (let z = -335; z <= 335; z += Math.abs(z) < 200 ? 0.5 : 1) {
       const crop = meadow.cropAt(x, z) > 0
@@ -76,7 +78,7 @@
       // a crop's reach off the floodplain too (the cover keeps fields off it: this guards the crops' growth against a
       // change there)
       if (crop) { cropsSampled++; if ([[0, 0], ...ring].some(([dx, dz]) => Math.abs(x + dx - C.axisX(z + dz)) < C.P.floodplainW / 2)) cropsOnFloodplain++ }
-      for (const [dx, dz] of [[0, 0], ...ring]) {
+      for (const [dx, dz] of [[0, 0], ...(meadow.growthAt(x, z) > 0 ? grassRing : ring)]) {
         const px = x + dx, pz = z + dz
         if (KEEP_CLEAR(px, pz)) { inZones++; break }
         const q = riverQuery(px, pz); if (q && q.dist < lerpA(C.W, q) / 2 * 1.7) { onBanks++; break }

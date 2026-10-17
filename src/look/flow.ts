@@ -7,6 +7,7 @@ import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { D } from './spec.ts'
+import { sstep } from './noise.ts'
 
 const fract = (x: number) => x - Math.floor(x)
 // mHash and mValue (src/look/shaders/meadow.glsl)
@@ -20,11 +21,16 @@ function mValue(x: number, y: number): number {
   const a = mHash(i, j), b = mHash(i + 1, j), c = mHash(i, j + 1), e = mHash(i + 1, j + 1)
   return (a + (b - a) * u) * (1 - v) + (c + (e - c) * u) * v
 }
-const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
+// the field's numbers, one home: this and the GLSL (flowDefines) both read them. scale: its patches (m, a patch combed
+// one way over 30-60 m, as the references); warp, warpAmt: the domain warp's scale and reach; oct2, oct2K: the second
+// octave's weight and frequency; turns: how far the angle wanders (rad); lieScale, lieLo, lieHi: how far it lies over
+export const FLOW = { scale: 70, warp: 120, warpAmt: 0.9, oct2: 0.2, oct2K: 2.1, turns: 7.5, lieScale: 19, lieLo: 0.2, lieHi: 0.8 }
+export const flowDefines = (): string[] => [['SCALE', FLOW.scale], ['WARP', FLOW.warp], ['WARP_AMT', FLOW.warpAmt], ['OCT2', FLOW.oct2], ['OCT2_K', FLOW.oct2K], ['TURNS', FLOW.turns], ['LIE_SCALE', FLOW.lieScale], ['LIE_LO', FLOW.lieLo], ['LIE_HI', FLOW.lieHi]]
+  .map(([k, v]) => `#define FLOW_${k} ${(v as number).toFixed(4)}`)
 export function flowAt(x: number, z: number): [number, number, number] {
-  const qx = x / 70 + (mValue(x / 120, z / 120) - 0.5) * 0.9, qz = z / 70 + (mValue(x / 120 + 19, z / 120 + 19) - 0.5) * 0.9
-  const a = (mValue(qx, qz) * 0.8 + mValue(qx * 2.1 + 5, qz * 2.1 + 5) * 0.2) * 7.5
-  return [Math.cos(a), Math.sin(a), smooth(0.2, 0.8, mValue(x / 19 + 31, z / 19 + 31))]
+  const F = FLOW, qx = x / F.scale + (mValue(x / F.warp, z / F.warp) - 0.5) * F.warpAmt, qz = z / F.scale + (mValue(x / F.warp + 19, z / F.warp + 19) - 0.5) * F.warpAmt
+  const a = (mValue(qx, qz) * (1 - F.oct2) + mValue(qx * F.oct2K + 5, qz * F.oct2K + 5) * F.oct2) * F.turns
+  return [Math.cos(a), Math.sin(a), sstep(F.lieLo, F.lieHi, mValue(x / F.lieScale + 31, z / F.lieScale + 31))]
 }
 
 // FLOW_TEXEL m texels over the tile: RG the lean (×0.5 + 0.5), B how far it lies over; bilinear

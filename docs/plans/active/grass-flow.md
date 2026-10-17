@@ -113,3 +113,17 @@ removal already skips hidden terrain); a camera-following near bake of the strok
   kept only where grass grows), and under the winter's snow the clumps, their density and the strokes are the
   default's. Then the guard passes (summer, autumn, winter; the cover view), both blocks at main's values, and
   `meadow.Britain` in autumn at 0.151 (main 0.024).
+- **Round 2** (`/code-review high`, 10 findings). Severe: a ring with every chunk culled kept a forced count of 0,
+  which Babylon draws as one clump without instances, in another shader variant (fixed: such a ring is not drawn).
+  Fixed too: crops kept the combed grass's wider reach (their own rule again: crop cells as the default's); the river
+  check tested 1.4 m whatever the reach (it reads the page's `__look.meadow.reach`: under `?grass=flow` no grass within
+  2.6 m of a zone or the water); the shader arm missed the zone fix (the combed meadow needs the bake arm; the shader arm
+  keeps the default pattern); the autumn's value-keeping read a global defaulting to on (now off unless set where grass
+  grows); the flow field's numbers in two places (one home, `FLOW` in `src/look/flow.ts`, given to the GLSL as defines);
+  the meadow map bound twice; the system doc copied tuning values (it names the constants). Left: the zone ground is
+  rebuilt per pixel, an approximation of the default's bake (exact on meadow, within a few levels on pasture and up
+  close); the short grass's cover read where no grass grows (the widest zoom's extra cost, above).
+- **The checks again** on the final code: goldens identical (8 cameras); the guard passes (summer, autumn, winter;
+  the cover view); `tools/river-check.js` passes on both arms (under `?grass=flow`: no grass in the zones or on the
+  water at 2.6 m, the crop cells as the default's); `npm test` 260 passed. (Babylon's shader preprocessor treats a
+  semicolon in a comment as code, as it does an apostrophe: two rebuilds lost to it.)

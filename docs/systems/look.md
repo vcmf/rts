@@ -350,23 +350,28 @@ shader); `?meadow=off` puts back the old scatter.
   wheat's too, a pale straw over the darker soil (`stubbleTip`, no redder than the standing wheat), browning by late
   autumn; the green crop lime to olive. Ploughed fields grow nothing.
 - **The combed meadow** (`?grass=flow`, an experiment: `docs/plans/active/grass-flow.md`; the research:
-  `docs/research/painterly-grass.md`). Not the default: the arm the owner judges against today's meadow.
-  - **The flow** (`flowAt` in `shaders/meadow.glsl`): a slow map-wide lean and how far the grass lies over, patches
-    30–60 m combed one way. Made once on load into a texture at 2 m (`src/look/flow.ts`, `flowTex`), which the ground,
-    the bake and the clumps read; the field itself beyond the tile.
-  - **The bake** holds the broad part (`meadowPattern` under `GRASS_FLOW`): soft bands where the flow leans to or from
-    the sun (`FLOW_SUN`, fixed per map), soft masses, the clump field.
+  `docs/research/painterly-grass.md`). Not the default: the arm the owner judges against today's meadow. It needs the
+  bake arm (on the shader arm the meadow keeps the default pattern).
+  - **The flow** (`flowAt` in `shaders/meadow.glsl`, its numbers `FLOW` in `src/look/flow.ts`, given as defines): a slow
+    map-wide lean and how far the grass lies over. Made once on load into a texture (`FLOW_TEXEL`, `src/look/flow.ts`;
+    `flowTex`), which the ground, the bake and the clumps read; the field itself beyond the tile.
+  - **The bake** holds the broad part (`combBroad`): soft bands where the flow leans to or from the sun (`FLOW_SUN`,
+    fixed per map), soft masses, and the clump field.
   - **The strokes at runtime** (`groundAt` under `GRASS_FLOW`, `combStrokes`): the brush tile and a tiling comb noise
-    (`uComb`) read along the flow in 5 m cells, lighter along the comb and a deeper green in its gaps; by the pixel's
-    footprint (`strokeK`: whole up close, gone by the default zoom's far half) and by the meadow's growth (`uMeadow`, the map the ground's under-layer reads:
-    only where grass stands). Where none grows (the formation zones, the banks) the short grass's brush instead.
-  - **The clumps** (`meadow.vert`, `meadow.frag`): 1.4 times wider, 15% taller (never over `HEIGHT_MAX`), fewer thinned
-    between the patches, leaning with the flow, a hue each from blue-green to yellow-lime; they read the bake alone.
-  - **The seasons:** `groundSeason` keeps the pattern's value through autumn (`GRASS_FLOW`), so it reads as golden fur.
-  - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan).
-- **Ring chunks culled on the CPU** (`cullRing` in `src/look/meadow.ts`, both arms): each ring's slots in 8 × 8 chunks,
-  only the chunks in view and in the band drawn, their slots packed into the instance buffer when the set changes;
-  the vertex shader still culls each clump.
+    (`uComb`, `COMB_PERIOD`) read along the flow in `FLOW_CELL` cells, lighter along the comb and a deeper green in its
+    gaps; by the pixel's footprint (`strokeK`) and the meadow's growth (`uMeadow`, the map the ground's under-layer
+    reads), none under the winter's snow. Where no grass grows (the formation zones, the banks) the ground is the
+    default's: the broad part divided out, the short grass's brush back (`shortGrass`).
+  - **The clumps** (`meadow.vert`, `meadow.frag`): wider and a little taller (never over `HEIGHT_MAX`), fewer thinned
+    between the patches, leaning with the flow, a hue each (`vHue`); as the default's under the winter's snow. They
+    read the bake alone. Their roots keep `CLUMP_REACH_FLOW` from the formation zones and the banks (crops keep
+    `CLUMP_REACH`), which `tools/river-check.js` checks at the page's reach (`__look.meadow.reach`).
+  - **The seasons:** `groundSeason` keeps the pattern's value through autumn where grass grows (`pFlowGrow`).
+  - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan);
+    `__look.flowBuildMs`: the flow textures' time on load.
+- **Ring chunks culled on the CPU** (`cullRing` in `src/look/meadow.ts`, `CHUNKS`, both arms): only the chunks in view
+  and in the band drawn, their slots packed into the instance buffer when the set changes (a ring with none is not
+  drawn); the vertex shader still culls each clump.
 - **The meadow on the ground** (`meadowPattern` in `macro()`, `MEADOW`, a define on every painted material and on the
   macro bake): on meadow and pasture (the warped class the ground paints), the brush tile (`data/meadow-brush.png`,
   at 7.3 m and 7.3/2.618 m, turned apart, warped by a slow noise: no common period; stamped by
