@@ -19,7 +19,7 @@ import { Materials, S } from './materials.ts'
 import { gradeColour, MOOD, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow } from './meadow.ts'
-import { DOF, MSAA, Post, buildCamera, typingIn } from './post.ts'
+import { DEBUG, DOF, MSAA, Post, buildCamera, typingIn } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
@@ -157,6 +157,7 @@ else if (params.has('bench') || params.has('water') || params.get('river') === '
 const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, nature.growthAllowed, nature.crop, !flag('nowide')) : null
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false
+if (flag('nanmark')) { DEBUG.nanmark = true; MSAA.byte = false }   // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
 const post = new Post(camera, engine, S, () => mats.grain, groundAt); post.build()
 
 /* ---------- UI ---------- */

@@ -1,6 +1,12 @@
 precision highp float;varying vec2 vUV;uniform sampler2D textureSampler,uGrain;uniform vec2 uRes;uniform float uGrainOn,uBloom,uGrade,uRenderScale;
 // the mood's vignette (src/look/mood.ts; its grade is in the painted materials: gradeOf, painter.glsl)
 uniform vec3 uVignette,uSplitHi;uniform float uGradeSat,uTopAmt;
+// ?nanmark: a repaired pixel shows magenta, so the material that writes it can be found (docs/plans/done/nan-guard.md)
+#ifdef NANMARK
+#define MARK(c) vec3(1.0,0.0,1.0)
+#else
+#define MARK(c) (c)
+#endif
 vec3 shoulder(vec3 c){float m=max(c.r,max(c.g,c.b));if(m<=0.8)return c;float mm=0.8+0.2*(1.0-exp(-(m-0.8)/0.2));return c*(mm/m);}
 float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 #ifdef DOF
@@ -9,10 +15,18 @@ float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 // uHalfUV maps the screen to the blur (its size is the scene's halved, rounded down). The bloom gathers from the blur
 uniform sampler2D uSharp;uniform vec2 uTan,uHalfUV;uniform float uFocus,uBand,uK,uMaxPx;
 #include<dofcoc>
-vec3 base(){vec4 s=texture2D(uSharp,vUV);float w=smoothstep(0.5,2.0,coc(s.a,vUV));return w>0.0?mix(s.rgb,texture2D(textureSampler,vUV*uHalfUV).rgb,w):s.rgb;}
+// (a sharp pixel that is not a finite number takes the blur, which dofdown cleaned: docs/plans/done/nan-guard.md)
+vec3 base(){vec4 s=texture2D(uSharp,vUV);if(!all(lessThan(abs(s),vec4(65504.0))))return MARK(texture2D(textureSampler,vUV*uHalfUV).rgb);
+  float w=smoothstep(0.5,2.0,coc(s.a,vUV));return w>0.0?mix(s.rgb,texture2D(textureSampler,vUV*uHalfUV).rgb,w):s.rgb;}
 #define BLOOM_UV(uv) ((uv)*uHalfUV)
 #else
-vec3 base(){return texture2D(textureSampler,vUV).rgb;}
+// (a pixel that is not a finite number takes its neighbours' mean: docs/plans/done/nan-guard.md; the default 8-bit
+// target cannot hold one, the half floats of ?rt16 and ?nanmark can)
+bool ok3(vec3 s){return all(lessThan(abs(s),vec3(65504.0)));}
+vec3 base(){vec3 s=texture2D(textureSampler,vUV).rgb;if(ok3(s))return s;
+  vec3 m=vec3(0.0);float n=0.0;
+  for(int i=0;i<8;i++){float a=float(i)*0.7854;vec3 t=texture2D(textureSampler,vUV+vec2(cos(a),sin(a))*2.0/uRes).rgb;if(ok3(t)){m+=t;n+=1.0;}}
+  return MARK(n>0.0?m/n:vec3(0.0));}
 #define BLOOM_UV(uv) (uv)
 #endif
 void main(){vec3 c=base();

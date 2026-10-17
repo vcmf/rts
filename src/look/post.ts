@@ -33,6 +33,8 @@ export const DOF = { band: 0.2, k: 4, px: 7, wide: 0.4 }
 // 0.8 ms less at the widest zoom); not under the depth of field, whose distance in alpha needs the half floats; ?rt16
 // for the A/B
 export const MSAA = { samples: 4, byte: true }
+// ?nanmark: a pixel that is not a number shows magenta instead of its neighbours' mean (docs/plans/done/nan-guard.md)
+export const DEBUG = { nanmark: false }
 const FOCUS_S = 0.25
 const TAPS = [16, 24, 32, 48, 64]
 
@@ -165,7 +167,7 @@ export class Post {
         e.setFloat('uN', TAPS.find(n => n >= 0.32 * px * px) ?? 64); lensUniforms(e)
       }
     }
-    const u = pp('uber', ['uRes', 'uRenderScale', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, p ? 0.5 : 1.0, p ? '#define DOF' : null)
+    const u = pp('uber', ['uRes', 'uRenderScale', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, p ? 0.5 : 1.0, [p ? '#define DOF' : '', DEBUG.nanmark ? '#define NANMARK' : ''].filter(Boolean).join('\n') || null)
     // uRes: the full resolution (with the depth of field, this pass reads the half-resolution blur)
     u.onApply = e => {
       const r = d ?? u; e.setFloat2('uRes', r.width, r.height); e.setFloat('uGrainOn', S.grain); e.setFloat('uBloom', S.bloom); e.setTexture('uGrain', this.grain())
