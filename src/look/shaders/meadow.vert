@@ -51,7 +51,7 @@ void main(){
   // the growth here, thinner between the clumps (a crop evenly sown, less so), and a clump shrinks away instead of
   // vanishing (no pop)
   float keep=crop?m.a*band*mix(0.8,1.0,c):m.g*band*mix(0.45,1.0,c);
-  #ifdef GRASS_FLOW
+  #if defined(GRASS_FLOW)&&!defined(GRASS_NO_DENSE)
   if(!crop)keep=m.g*band*mix(0.8,1.0,c);   // denser (the owner, 2026-10-17): fewer clumps thinned between the patches
   #endif
   float grow=smoothstep(h2-0.12,h2+0.12,keep);
@@ -69,7 +69,7 @@ void main(){
   if(crop){vec2 cc=coverCell(root);cr=cropLook(cc.x,h3);cr.yzw*=cc.y>0.5?0.94+0.12*fract(cc.y*0.6180339):1.0;
     hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*min(0.7,cr.x/uHeight);}
   else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*mix(1.0,0.45,smoothstep(2.5,3.0,uSeason)),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;
-    #ifdef GRASS_FLOW
+    #if defined(GRASS_FLOW)&&!defined(GRASS_NO_BIG)
     hgt=min(hgt*1.15,HEIGHT_MAX);fp*=1.4;   // larger blades (the owner): wider clumps, a little taller, never over HEIGHT_MAX
     #endif
   }
@@ -79,7 +79,7 @@ void main(){
   #ifdef GRASS_FLOW
   // combed (docs/plans/active/grass-flow.md): the clump leans with the flow, bending more toward its tips (the
   // offset grows with the height squared), as far as the flow lies it over, the hash a small jitter; not crops
-  vec3 fl=flowAt(root);
+  vec3 fl=flowTex(root);
   if(!crop)p.xz+=(fl.xy*mix(0.18,0.75,fl.z)*p.y/max(hgt,0.05)+(vec2(h5,h6)-0.5)*0.12)*p.y;
   else p.xz+=(vec2(h5,h6)-0.5)*0.25*p.y;
   #else

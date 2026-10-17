@@ -139,15 +139,23 @@ float brushAt(vec2 uv,float s,float px){
 #define FLOW_CELL 5.0
 // x: the brush, combed; y: the comb's own strokes, value noise stretched about seven times along the flow (5 m by
 // 0.7 m, and an octave at half that), the scale the bake's 0.5 m texel holds, about 0.5 (blended as the brush)
+uniform sampler2D uComb;   // the comb's noise, tiling (src/look/flow.ts: COMB_PERIOD lattice cells a repeat)
+float combAt(vec2 p,float o){
+  #ifdef WEBGL2
+  vec4 t=textureLod(uComb,p/32.0,0.0);
+  #else
+  vec4 t=texture2D(uComb,p/32.0);
+  #endif
+  return o>0.5?t.g:t.r;}
 vec2 combedBrush(vec2 xz,float px){
   vec2 g=xz/FLOW_CELL-0.5,id=floor(g),f=fract(g);float s=0.0,sc=0.0,ww=0.0;
   for(int k=0;k<4;k++){
     vec2 o=vec2(float(k-(k/2)*2),float(k/2)),cc=(id+o+0.5)*FLOW_CELL;
     float w=(o.x>0.5?f.x:1.0-f.x)*(o.y>0.5?f.y:1.0-f.y);
-    vec2 u=flowAt(cc).xy,d=xz-cc,l=vec2(dot(d,u)/3.0,dot(d,vec2(-u.y,u.x)))+vec2(mHash(id+o),mHash(id+o+7.7))*7.3;
+    vec2 u=flowTex(cc).xy,d=xz-cc,l=vec2(dot(d,u)/3.0,dot(d,vec2(-u.y,u.x)))+vec2(mHash(id+o),mHash(id+o+7.7))*7.3;
     float b=brushAt(l/7.3,7.3,px)*0.6+brushAt(l/(7.3/2.618)+0.37,7.3/2.618,px)*0.4;
     vec2 dl=vec2(dot(d,u),dot(d,vec2(-u.y,u.x)))+vec2(mHash(id+o+3.1),mHash(id+o+9.4))*40.0;
-    float cm=mValue(vec2(dl.x/5.0,dl.y/0.7))*0.65+mValue(vec2(dl.x/2.4,dl.y/0.35)+11.0)*0.35;
+    float cm=combAt(vec2(dl.x/5.0,dl.y/0.7),0.0)*0.65+combAt(vec2(dl.x/2.4,dl.y/0.35)+11.0,1.0)*0.35;
     s+=(b-0.585)*w;sc+=(cm-0.5)*w;ww+=w*w;}
   float n=1.0/sqrt(max(ww,1e-4));
   return vec2(0.585+s*n,0.5+sc*n);}
@@ -160,7 +168,7 @@ float strokeK(float px){return 1.0-smoothstep(0.07,0.15,px);}
 // the strokes' multiplier at a point: lighter along the comb, a deeper green in its gaps (never toward black: the
 // owner, "use a darker green"), k their weight (strokeK)
 vec3 combStrokes(vec2 xz,float px,float k){
-  vec3 fl=flowAt(xz);vec2 cb=combedBrush(xz,px);float dv=((cb.x-0.585)*0.6+(cb.y-0.5)*mix(0.35,0.8,fl.z))*k*0.6;   // 0.6: the strides softer, the near grass carries the look (the owner)
+  vec3 fl=flowTex(xz);vec2 cb=combedBrush(xz,px);float dv=((cb.x-0.585)*0.6+(cb.y-0.5)*mix(0.35,0.8,fl.z))*k*0.6;   // 0.6: the strides softer, the near grass carries the look (the owner)
   float deep=smoothstep(0.0,-0.22,dv);
   return (1.0+max(dv,0.0)*1.25)*mix(vec3(1.0),vec3(0.70,0.86,0.66),deep);}
 #endif
@@ -169,7 +177,7 @@ vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
   #ifdef GRASS_FLOW
   // combed (docs/plans/active/grass-flow.md): broad soft bands where the flow leans to or from the sun (the sun is
   // fixed per map: the bake holds it), soft masses at a few metres, the clump field; the strokes by the footprint
-  vec3 fl=flowAt(xz);float streak=dot(fl.xy,FLOW_SUN)*mix(0.35,1.0,fl.z);
+  vec3 fl=flowTex(xz);float streak=dot(fl.xy,FLOW_SUN)*mix(0.35,1.0,fl.z);
   vec3 t=vec3((1.0+0.1*streak)*mix(0.93,1.07,mValue(xz/11.0+3.0))*mix(0.94,1.06,clumpAt(xz)));
   float sk=strokeK(px);if(sk>0.0)t*=combStrokes(xz,px,sk);
   return c*mix(vec3(1.0),t,gr);
@@ -271,15 +279,15 @@ vec3 groundAt(vec2 xz,float px){
   // formation zones and on the banks), where none grows the short grass's brush instead (the owner, 2026-10-17: the
   // strokes alone, with no grass, looked wrong); grass beyond the tile counts as growing
   vec3 g=bakeOnce(xz).rgb;float sk=strokeK(px);
+  #ifdef GRASS_NO_STROKES
+  sk=0.0;
+  #endif
   bool onTile=max(abs(xz.x),abs(xz.y))<TILE_HALF-1.0;
   float grow=onTile?smoothstep(0.15,0.7,texture2D(uGrowth,(xz+TILE_HALF)/TILE_W).g):1.0;
-  if(grow<1.0||sk>0.0){
-    // (how much is grass: four warped taps 1.2 m apart, so the pattern fades over a class edge as the bake's blend
-    // does, not at the cover grid's cells)
-    float gr=0.0;for(int i=0;i<4;i++){vec2 o=vec2(i==0?1.2:i==1?-1.2:0.0,i==2?1.2:i==3?-1.2:0.0);float k=coverAt(coverWarp(xz+o)).x;gr+=(k<0.5?1.0:k<1.5?0.75:0.0)*0.25;}
-    if(gr>0.0){
-      if(grow<1.0)g*=mix(1.0,shortGrass(xz,px),gr*(1.0-grow));
-      if(sk*grow>0.0)g*=mix(vec3(1.0),combStrokes(xz,px,sk*grow),gr);}}
+  // the strokes where grass grows (the growth already keeps to meadow and pasture and fades over their edges); the
+  // short grass where it does not, on the meadow classes only (one warped cover read, there alone)
+  if(sk*grow>0.0)g*=combStrokes(xz,px,sk*grow);
+  if(grow<1.0){float k=coverAt(coverWarp(xz)).x;float gr=k<0.5?1.0:k<1.5?0.75:0.0;if(gr>0.0)g*=mix(1.0,shortGrass(xz,px),gr*(1.0-grow));}
   return g;
   #elif defined(MACRO_BAKE)
   return bakeOnce(xz).rgb;

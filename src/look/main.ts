@@ -16,6 +16,7 @@ import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions 
 import { q, runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
 import { Materials, S, SUN } from './materials.ts'
+import { buildFlow } from './flow.ts'
 import { gradeColour, MOOD, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow } from './meadow.ts'
@@ -85,7 +86,10 @@ const grassParam = params.get('grass')
 if (grassParam !== null && grassParam !== 'flow') throw new Error(`?grass must be flow, not ${grassParam}`)
 if (grassParam && !meadowOn) throw new Error('?grass=flow needs the meadow (WebGL2, no ?meadow=off)')
 const sunXZ = new Vector2(SUN.x, SUN.z).normalize()
-const grassDefines = grassParam === 'flow' ? ['#define GRASS_FLOW', `#define FLOW_SUN vec2(${sunXZ.x.toFixed(4)},${sunXZ.y.toFixed(4)})`] : []
+// ?grassoff=strokes,dense,big,hue (with flow): one part of the arm off at a time, for the cost's ablation
+const GRASS_PARTS = ['strokes', 'dense', 'big', 'hue'], grassOff = params.get('grassoff')?.split(',') ?? []
+if (grassOff.some(k => !GRASS_PARTS.includes(k)) || (grassOff.length && grassParam !== 'flow')) throw new Error(`?grassoff takes ${GRASS_PARTS.join(', ')}, with ?grass=flow`)
+const grassDefines = grassParam === 'flow' ? ['#define GRASS_FLOW', `#define FLOW_SUN vec2(${sunXZ.x.toFixed(4)},${sunXZ.y.toFixed(4)})`, ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`)] : []
 const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [...softDefines(soft), ...(meadowOn ? ['#define MEADOW', ...grassDefines] : [])])
 const keptGrains = new Set([mats.grain])   // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
@@ -146,7 +150,10 @@ if (params.has('far')) {
 }
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
-const macro = buildMacro(scene, mats, look.cover, meadowOn, grassDefines)
+// the flow's textures (?grass=flow, src/look/flow.ts), on every painted material and the bake
+const flowTex = grassParam === 'flow' && meadowOn ? buildFlow(scene) : null
+if (flowTex) mats.bindAll(m => { m.setTexture('uFlow', flowTex.flow); m.setTexture('uComb', flowTex.comb) })
+const macro = buildMacro(scene, mats, look.cover, meadowOn, grassDefines, flowTex)
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)

@@ -18,7 +18,7 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
-import { GREEN_HEIGHT, HEIGHT, HEIGHT_MAX, MEADOW_SINK, STUBBLE_HEIGHT, WHEAT_HEIGHT_MAX } from './meadow-spec.ts'
+import { CLUMP_REACH, GREEN_HEIGHT, HEIGHT, HEIGHT_MAX, MEADOW_SINK, STUBBLE_HEIGHT, WHEAT_HEIGHT_MAX } from './meadow-spec.ts'
 export { HEIGHT, HEIGHT_MAX }
 import GRASS from '../../data/meadow-grass.json?raw'
 import MEADOW_VS from './shaders/meadow.vert?raw'
@@ -39,6 +39,34 @@ export const RINGS: Ring[] = [
   { cell: 1.0, n: 104, spread: 2.85, band: [18, 25, 38, 50], clump: 'Grass_Small' },
   { cell: 2.0, n: 104, spread: 4.2, band: [38, 50, 80, 100], clump: 'Grass_Small' },
 ]
+
+// a ring's chunk: its slots' range on the ring's square, and its slots (the hole's apart: drawn only zoomed out)
+interface Chunk { i0: number; i1: number; j0: number; j1: number; slots: Float32Array; hole: Float32Array }
+const CHUNKS = 8
+// the chunks of a ring to draw (index × 2, + 1 for its hole slots): their square on the ground (the slots' cells, the
+// roots' jitter and a clump's reach) against the band (b: in from x to y, out from z to w) and the view (vp, the
+// view-projection's column-major array), the ground from 20 m under to 20 m over the focus height y, as the vertex
+// shader's own cull tests each clump, with its 1.15 margin
+function cullRing(r: Ring, ch: Chunk[], o: Vector2, c: Vector2, y: number, b: Vector4, vp: ArrayLike<number>, holes: boolean): number[] {
+  const keep: number[] = [], pad = r.cell * 2.2 + CLUMP_REACH * 1.4
+  ch.forEach((k, idx) => {
+    const x0 = o.x + k.i0 * r.cell - pad, x1 = o.x + k.i1 * r.cell + pad, z0 = o.y + k.j0 * r.cell - pad, z1 = o.y + k.j1 * r.cell + pad
+    // the nearest and farthest distance from the focus to the square, against the band
+    const dx = Math.max(x0 - c.x, 0, c.x - x1), dz = Math.max(z0 - c.y, 0, c.y - z1), near = Math.hypot(dx, dz)
+    const far = Math.hypot(Math.max(Math.abs(x0 - c.x), Math.abs(x1 - c.x)), Math.max(Math.abs(z0 - c.y), Math.abs(z1 - c.y)))
+    if (near > b.w || (b.y > 0 && far < b.x)) return
+    // all eight corners past one edge of the frame: out of view
+    let ox = 0, oX = 0, oy = 0, oY = 0, ow = 0
+    for (const px of [x0, x1]) for (const pz of [z0, z1]) for (const py of [y - 20, y + 20]) {
+      const cx = vp[0] * px + vp[4] * py + vp[8] * pz + vp[12], cy = vp[1] * px + vp[5] * py + vp[9] * pz + vp[13], cw = vp[3] * px + vp[7] * py + vp[11] * pz + vp[15]
+      if (cx > cw * 1.15) ox++; if (cx < -cw * 1.15) oX++; if (cy > cw * 1.15) oy++; if (cy < -cw * 1.15) oY++; if (cw < 0) ow++
+    }
+    if (ox === 8 || oX === 8 || oy === 8 || oY === 8 || ow === 8) return
+    if (k.slots.length) keep.push(idx * 2)
+    if (holes && k.hole.length) keep.push(idx * 2 + 1)
+  })
+  return keep
+}
 
 export interface Meadow {
   meshes: Mesh[]; setOn(on: boolean): void; bakeMs: number
@@ -141,6 +169,7 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   const clumps = { Grass_Large: indexed(src.Grass_Large), Grass_Small: indexed(src.Grass_Small) }
 
   const meshes: Mesh[] = [], ringMats: ShaderMaterial[] = [], ringCounts: [number, number][] = []   // the slots: the ring's, and with the hole
+  const chunks: Chunk[][] = [], slotBufs: Float32Array[] = [], slotVBs: VertexBuffer[] = [], drawn: string[] = RINGS.map(() => '')
   RINGS.forEach((r, ri) => {
     const m = mats.make(`meadow${ri}`, MEADOW_VS.replace('#include<meadow>', () => MEADOW_GLSL), MEADOW_FS, {
       attributes: ['position', 'normal', 'aV', 'aSlot'], uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand'], samplers: ['uMeadow', 'uGB'],
@@ -157,16 +186,26 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
     // of the square and the hole the inner ring fills are left out (but not the outer ring's: zoomed out it covers
     // the hole, WIDE)
     // (the outer ring's hole slots last: drawn only while the hole is being covered, holeFrom on)
-    const sl: number[] = [], hole: number[] = [], outer = ri === RINGS.length - 1
-    for (let j = 0; j < r.n; j++) for (let i = 0; i < r.n; i++) {
-      const d = Math.hypot((i + 0.5 - r.n / 2) * r.cell, (j + 0.5 - r.n / 2) * r.cell)
-      if (d > r.band[3] + 2.2 * r.cell) continue
-      if (r.band[1] <= 0 || d >= r.band[0] - 2.2 * r.cell) sl.push(i, j)
-      else if (outer && wide) hole.push(i, j)
+    // the slots by chunk (CHUNKS × CHUNKS of the ring's square), so the frame draws only the chunks in view and in the
+    // band (cullRing, below): a slot culled by the vertex shader still costs its every vertex (the clump's 58 to 108)
+    const outer = ri === RINGS.length - 1, ch: Chunk[] = []
+    for (let cj = 0; cj < CHUNKS; cj++) for (let ci = 0; ci < CHUNKS; ci++) {
+      const i0 = Math.floor(ci * r.n / CHUNKS), i1 = Math.floor((ci + 1) * r.n / CHUNKS), j0 = Math.floor(cj * r.n / CHUNKS), j1 = Math.floor((cj + 1) * r.n / CHUNKS)
+      const sl: number[] = [], hole: number[] = []
+      for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
+        const d = Math.hypot((i + 0.5 - r.n / 2) * r.cell, (j + 0.5 - r.n / 2) * r.cell)
+        if (d > r.band[3] + 2.2 * r.cell) continue
+        if (r.band[1] <= 0 || d >= r.band[0] - 2.2 * r.cell) sl.push(i, j)
+        else if (outer && wide) hole.push(i, j)
+      }
+      if (sl.length || hole.length) ch.push({ i0, i1, j0, j1, slots: new Float32Array(sl), hole: new Float32Array(hole) })
     }
-    ringCounts.push([sl.length / 2, (sl.length + hole.length) / 2]); sl.push(...hole)
-    mesh.setVerticesBuffer(new VertexBuffer(scene.getEngine(), new Float32Array(sl), 'aSlot', false, false, 2, true))
-    mesh.forcedInstanceCount = ringCounts[ri][0]; mesh.alwaysSelectAsActiveMesh = true; mesh.isPickable = false; mesh.material = m
+    const total = ch.reduce((a, c) => a + c.slots.length + c.hole.length, 0) / 2
+    ringCounts.push([ch.reduce((a, c) => a + c.slots.length, 0) / 2, total]); chunks.push(ch)
+    const buf = new Float32Array(total * 2); slotBufs.push(buf)
+    const vb = new VertexBuffer(scene.getEngine(), buf, 'aSlot', true, false, 2, true); slotVBs.push(vb)
+    mesh.setVerticesBuffer(vb)
+    mesh.forcedInstanceCount = 0; mesh.alwaysSelectAsActiveMesh = true; mesh.isPickable = false; mesh.material = m
     meshes.push(mesh); ringMats.push(m)
   })
   // each frame each ring snaps to its cell around the camera's focus; a material keeps the vector it is given (not a
@@ -183,10 +222,19 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
       const outer = ri === RINGS.length - 1, b = bands[ri]
       b.set(r.band[0] * k, r.band[1] * k, outer ? r.band[2] : r.band[2] * k, outer ? r.band[3] : r.band[3] * k)
       meshes[ri].isVisible = b.w > 0   // (visibility: the page's own switches set enabled)
-      meshes[ri].forcedInstanceCount = ringCounts[ri][t > 0 ? 1 : 0]
     })
     const f = camera.target, y = heightAt(f.x, f.z); centre.set(f.x, f.z)
     RINGS.forEach((r, ri) => { origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell); ringMats[ri].setFloat('uCentreY', y) })
+    // the chunks in view and in the band, their slots packed at the buffer's start (copied only when the set changes)
+    const vp = scene.getTransformMatrix().m
+    RINGS.forEach((r, ri) => {
+      if (!meshes[ri].isVisible) return
+      const o = origins[ri], b = bands[ri], keep = cullRing(r, chunks[ri], o, centre, y, b, vp, t > 0), key = keep.join(',')
+      if (key === drawn[ri]) return
+      drawn[ri] = key; const buf = slotBufs[ri]; let n = 0
+      for (const k of keep) { const c = chunks[ri][k >> 1], part = k & 1 ? c.hole : c.slots; buf.set(part, n); n += part.length }
+      slotVBs[ri].update(buf); meshes[ri].forcedInstanceCount = n / 2
+    })
   })
   return { meshes, setOn: on => { for (const m of meshes) m.setEnabled(on) }, bakeMs: performance.now() - t0, growingCells, growthAt, groundAt: groundAtMap, cropAt, croppingCells: crops.count }
 }

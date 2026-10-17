@@ -13,3 +13,12 @@ vec3 flowAt(vec2 xz){
   vec2 q=xz/70.0+(vec2(mValue(xz/120.0),mValue(xz/120.0+19.0))-0.5)*0.9;
   float a=(mValue(q)*0.8+mValue(q*2.1+5.0)*0.2)*7.5;
   return vec3(cos(a),sin(a),smoothstep(0.2,0.8,mValue(xz/19.0+31.0)));}
+#ifdef GRASS_FLOW
+// the flow as the textures hold it (src/look/flow.ts: made once from the field above, 2 m texels over the tile), one
+// fetch; the field itself beyond the tile (the far ring's bake)
+uniform sampler2D uFlow;
+vec3 flowTex(vec2 xz){
+  if(max(abs(xz.x),abs(xz.y))>TILE_HALF-2.0)return flowAt(xz);
+  vec4 t=texture2D(uFlow,(xz+TILE_HALF)/TILE_W);vec2 d=t.rg*2.0-1.0;
+  return vec3(d/max(length(d),1e-4),t.b);}
+#endif
