@@ -1,0 +1,67 @@
+{
+ "french-army/dragoon": {
+  "note": "dragoon.zip, 2026-10-17 (dressed as a cuirassier)",
+  "files": {
+   "french-army/dragoon/tripo_convert_60fde0d1-7d56-45b6-8f6d-4678ac497b0e.fbm/tripo_image_60fde0d1-7d56-45b6-8f6d-4678ac497b0e_0_0.jpg": {
+    "sha256": "a6d51a8827464f25538a18943eab7a85df284040ff915954d57a90ea06013a06",
+    "bytes": 1369609
+   },
+   "french-army/dragoon/tripo_convert_60fde0d1-7d56-45b6-8f6d-4678ac497b0e.fbx": {
+    "sha256": "58e5747895ba20de2be2107a9fdcd8d81d9c00a85c0060a442eee97ce6da1f12",
+    "bytes": 593724
+   }
+  }
+ },
+ "french-army/gunner": {
+  "note": "gunner.zip, 2026-10-17",
+  "files": {
+   "french-army/gunner/tripo_convert_36ceac42-9656-40a3-b492-6b4f61871cd7.fbm/tripo_image_36ceac42-9656-40a3-b492-6b4f61871cd7_0_0.jpg": {
+    "sha256": "45a8762861c7c1146d436154b18be396cc343121f0418f158142ea99c4ed7c9c",
+    "bytes": 1416092
+   },
+   "french-army/gunner/tripo_convert_36ceac42-9656-40a3-b492-6b4f61871cd7.fbx": {
+    "sha256": "2db47c979a0bebbbe500c5c34a752f9c0efd4f7695c925856f1f1936ddd4b3a1",
+    "bytes": 556428
+   }
+  }
+ },
+ "french-army/horse": {
+  "note": "horse+3d+model.zip, 2026-10-17",
+  "files": {
+   "french-army/horse/tripo_convert_557ae2f9-7acf-4c3d-9e79-4a353f99071f.fbm/tripo_image_557ae2f9-7acf-4c3d-9e79-4a353f99071f_0_0.jpg": {
+    "sha256": "2441bab3c72b648b98c601678fd38ec7fb4fb208215b32c834fd1a2af8c6ee02",
+    "bytes": 977341
+   },
+   "french-army/horse/tripo_convert_557ae2f9-7acf-4c3d-9e79-4a353f99071f.fbx": {
+    "sha256": "dd726ff641dd63ed07a4df6297f4b9cbd1bb1a7700aeadfe8196d5f2c0ef7be3",
+    "bytes": 545996
+   }
+  }
+ },
+ "french-army/light-cannon": {
+  "note": "light-cannon.zip, 2026-10-17",
+  "files": {
+   "french-army/light-cannon/tripo_convert_30d035dd-3825-4bde-83e7-1bdae04b0761.fbm/tripo_image_30d035dd-3825-4bde-83e7-1bdae04b0761_0_0.jpg": {
+    "sha256": "94d0cc6ee4ec6cdea6d1f49f83df50ba9451efde5786650dd01f8f91663ad219",
+    "bytes": 1321296
+   },
+   "french-army/light-cannon/tripo_convert_30d035dd-3825-4bde-83e7-1bdae04b0761.fbx": {
+    "sha256": "98d8e3b63457b58ea4b1ba93150bc88203024dbac732928e92f7e0b133ce1140",
+    "bytes": 599196
+   }
+  }
+ },
+ "french-army/line-infantry-trial": {
+  "note": "the trial infantryman (2026-10), an earlier export than line-infantry.zip",
+  "files": {
+   "french-army/line-infantry-trial/tripo_convert_a3aeff2b-dfd6-4cf6-ae1a-65ed965cef1b.fbm/tripo_image_a3aeff2b-dfd6-4cf6-ae1a-65ed965cef1b_0_0.jpg": {
+    "sha256": "3dbae07bc7ba4a273a46c641bd346c5265eb3a5c74d17c07e144bdcff4ad1c2f",
+    "bytes": 1216707
+   },
+   "french-army/line-infantry-trial/tripo_convert_a3aeff2b-dfd6-4cf6-ae1a-65ed965cef1b.fbx": {
+    "sha256": "01b870ab4f3c833638267a50912c4d5bf7848c51533781cfcaa3d79d6f5aed9c",
+    "bytes": 537772
+   }
+  }
+ }
+}
