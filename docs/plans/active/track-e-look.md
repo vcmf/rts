@@ -125,8 +125,9 @@ clip graph, LA0). Started when `volleyTick` changes, it fires visibly late. The 
 retry timer, and a company keeps a target it cannot fire at (`docs/systems/fire-morale.md`). The ask
 is an accessor the logic track defines, such as the tick a company will fire if nothing changes.
 Until it lands, the renderer starts at the volley and accepts the lag; it never predicts the sim's
-decisions on its own. The sim's reload is longer than the reload clip, so figures hold the ready
-pose for the rest; the clip is never stretched to fit.
+decisions on its own. Decision 0037 (2026-10-17) answers the ask: scheduled phases with their own field,
+and clips fitted to them by bindings (anchored, stretched within limits, a capped hold loop),
+`docs/proposals/figure-animation.md`.
 
 ### Rules
 
