@@ -106,4 +106,16 @@ blended two lines or two sides, holes, 39 MB): redesigned to segments (below).
   met, so a road meeting a road turned paler: each line's earth now (the nearest other line's class kept too). The
   bend test picks as roadAt does, over the cell, and fails with the tie-break removed. No end segment under half a
   step. The system doc's earths; a stale comment. Left: the warp is read twice where the ground and the road both
-  need it, and the mitre texel is read for every listed segment (both measured in the bench below, not fixed here).
+  need it (measured in the bench below).
+
+## Performance
+
+The bench (`tools/bench-look.mjs`, Metal, this Mac; frame interval, ms; main and the branch interleaved, two runs
+each, 2026-10-17). With the road shader on the terrain at every zoom: wide 6.6 → 8.7, default 5.8 → 6.9, close 4.4 →
+4.5. Off (no ROADS define): equal to main; present but never run (an always-taken early return): wide +0.7, default
++0.5 (the shader's size alone, on every ground pixel). The owner chose: far out the roads baked, the live shader from
+mid zoom in. So the macro bake paints the roads into the ground's colour at its 0.5 m texel (their wheel tracks there a
+light dusting: a track is finer than a pixel that far out), and the terrain and the water's land side switch to their
+shader without ROADS beyond 170 m (±4 m: `src/look/main.ts`, both variants compiled before the first frame). Then:
+wide 6.58 → 6.69, default 5.86 → 6.90, close 4.43 → 4.57.
+

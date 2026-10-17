@@ -34,7 +34,7 @@ import { spanTexture } from './span-texture.ts'
 import ROAD_GRIT_URL from '../../data/road-grit-v1.png?url'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
-import { MACRO_ARMS, SHADER_ARMS, buildMacro, type MacroArm } from './macro.ts'
+import { MACRO_ARMS, SHADER_ARMS, buildMacro, type MacroArm, type RoadTextures } from './macro.ts'
 import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
 import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
@@ -93,6 +93,7 @@ if (waterSabParam !== null && waterSabParam !== 'nodive') throw new Error(`?wate
 const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }, waterSabParam !== 'nodive')
 // the roads (docs/plans/active/roads.md): their segments and grid, and the owner's grit photo (its marks only once
 // loaded: uRoadOn), on the tile's terrain and the water's land side
+let roadTex: RoadTextures | undefined
 if (!mats.webgl1) {   // (float textures: the roads' shader is WebGL2's)
   // the segments (three RGBA floats each, in a row) and the grid of their indices (ROAD_SLOTS / 4 texels a cell, in a row),
   // read texel by texel (nearest): the shader finds the nearest segment exactly
@@ -105,6 +106,7 @@ if (!mats.webgl1) {   // (float textures: the roads' shader is WebGL2's)
   const grit = new Texture(ROAD_GRIT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => mats.bindAll(m => m.setFloat('uRoadOn', 1)), (msg?: string) => console.error(`the road grit (${ROAD_GRIT_URL}) did not load: ${msg ?? 'unknown error'}`))
   grit.wrapU = grit.wrapV = Texture.WRAP_ADDRESSMODE; grit.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uRoadSegs', segs); m.setTexture('uRoadGrid', grid); m.setFloat('uRoadSegN', sn); m.setTexture('uRoadGrit', grit) })
+  roadTex = { segs, grid, grit, n: sn }
 }
 // ?trees=one: every tree one model (L5b's judging, docs/plans/active/l5-macro.md); with ?trees=one,cards, drawn as
 // leaf cards
@@ -156,7 +158,7 @@ if (params.has('far')) {
 }
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
-const macro = buildMacro(scene, mats, look.cover, meadowOn)
+const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex)
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)
@@ -164,6 +166,21 @@ if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS
 const armBake = await macro.setArm(macroArm)
 const macroBake = armBake.texels ? armBake : await macro.bake()
 const camera = buildCamera(scene, canvas)
+// the roads' live shader only from mid zoom in (docs/plans/active/roads.md): farther out the macro bake holds them
+// (its wheel tracks a dusting, finer than a pixel there), and the terrain's shader without them costs nothing for them.
+// Both variants compiled before the first frame, so crossing ROAD_LIVE_R swaps two compiled shaders
+const ROAD_LIVE_R = 170, ROAD_HOLD = 4
+const roadMats = roadTex ? [terrain.terrainMat, water.waterMat, water.groundMat] : []
+let roadsLive = true
+const setRoads = (on: boolean) => { roadsLive = on; for (const m of roadMats) m.setDefine('#define ROADS', on) }
+const compileRoads = (on: boolean) => { setRoads(on); return Promise.all(roadMats.map(m => { const mesh = scene.meshes.find(x => x.material === m); return mesh ? m.forceCompilationAsync(mesh) : undefined })) }
+if (roadMats.length) { await compileRoads(false); await compileRoads(camera.radius < ROAD_LIVE_R) }
+scene.onBeforeRenderObservable.add(() => {
+  if (!roadMats.length) return
+  const r = camera.radius
+  if (roadsLive && r > ROAD_LIVE_R + ROAD_HOLD) setRoads(false)
+  else if (!roadsLive && r < ROAD_LIVE_R - ROAD_HOLD) setRoads(true)
+})
 // ?dof=0|1: the gameplay depth of field, on by default (decision 0024); the look tools load the page with it off
 const dofParam = params.get('dof')
 if (dofParam !== null && dofParam !== '0' && dofParam !== '1') throw new Error(`?dof must be 0 or 1, not ${dofParam}`)

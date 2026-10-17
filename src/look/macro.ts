@@ -14,6 +14,7 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import { withPainter, type Materials } from './materials.ts'
 import { D, bakeMB } from './spec.ts'
 import type { CoverGrid } from './world/cover.ts'
+import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 import BRUSH_URL from '../../data/meadow-brush.png?url'
 import DIRT_URL from '../../data/ground-dirt-v1.png?url'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
@@ -38,7 +39,8 @@ const BAKE_FS = `#extension GL_OES_standard_derivatives : enable
 precision highp float;varying vec2 vUV;uniform vec4 uRect;uniform float uTexel;
 #include<painter>
 #include<shore>
-void main(){vec2 xz=mix(uRect.xy,uRect.zw,vUV);macroDerivs(xz);gl_FragColor=bakeTexel(xz,uTexel);}`
+void main(){vec2 xz=mix(uRect.xy,uRect.zw,vUV);macroDerivs(xz);gl_FragColor=bakeTexel(xz,uTexel);
+  gl_FragColor.rgb=roadPaint(gl_FragColor.rgb,xz);}`   // the roads at the texel (ROADS: their wheel tracks a light dusting, roadPaint's far arm)
 // Arm 5's pass (L5b): a four-quadrant Kuwahara filter over a finished bake (uSrc, nearest, uN² texels) into the
 // bake's target, uR texels a side (at most KUWAHARA_MAX). Each texel takes the mean colour of the quadrant whose
 // colours vary least; the alpha (the snow's lie) stays its own, so off the fields the lie stays exactly 0 (macro.glsl).
@@ -74,7 +76,10 @@ export interface Macro {
 }
 
 // meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
-export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false): Macro {
+// the roads' textures (src/look/main.ts): the bake paints them in (bakeTexel, macro.glsl), so far out the ground's
+// bake holds the roads and the terrain's live road shader runs only nearer (docs/plans/active/roads.md)
+export interface RoadTextures { segs: BaseTexture; grid: BaseTexture; grit: BaseTexture; n: number }
+export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false, roads?: RoadTextures): Macro {
   const engine = scene.getEngine() as AbstractEngine, s = D.spec.macro
   const coverTex = RawTexture.CreateRGBATexture(cover.tex, cover.n, cover.n, scene, false, false, Texture.NEAREST_SAMPLINGMODE)
   coverTex.wrapU = coverTex.wrapV = Texture.CLAMP_ADDRESSMODE
@@ -104,7 +109,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   dirt.wrapU = dirt.wrapV = Texture.WRAP_ADDRESSMODE; dirt.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); if (brush) m.setTexture('uMeadowBrush', brush) })
 
-  const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW'] : [])]
+  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW'] : []), ...(roads ? ['#define ROADS'] : [])]
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })
   // arm 5's filter, compiled on its first bake
   let kuwaharaW: EffectWrapper | null = null
@@ -144,6 +149,8 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
       let draws = pass(src, n, wrapper, (e, i, j, w, h) => {
         e.setFloat4('uRect', x0 + i / n * world, x0 + j / n * world, x0 + (i + w) / n * world, x0 + (j + h) / n * world)
         e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex); if (brush) e.setTexture('uMeadowBrush', brush)
+        // the roads, without the grit (its marks are finer than a texel)
+        if (roads) { e.setTexture('uRoadSegs', roads.segs); e.setTexture('uRoadGrid', roads.grid); e.setTexture('uRoadGrit', roads.grit); e.setFloat('uRoadSegN', roads.n); e.setFloat('uRoadOn', 0) }
       })
       if (src !== t) draws += pass(t, n, kuwahara(), (e, i, j, w, h) => {
         e.setTexture('uSrc', src); e.setFloat('uN', n); e.setFloat4('uPx', i, j, i + w, j + h)
