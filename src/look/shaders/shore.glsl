@@ -113,8 +113,8 @@ float track1(float a,vec2 xz,float s,float c,float k){
 // end: a round cap); jn a junction weight (full within ROAD_PAINT m of another line's side, the paint's reach, gone by
 // ROAD_JUNCTION), past how far past a line's free end (its first or last segment's). hw 0: no road near. Only where
 // the cover's distance to a line says one is near (one read, most of the tile: src/look/spec.ts, road)
-vec4 roadAt(vec2 xz,out float jn,out float dist,out float past){
-  jn=0.0;dist=1e9;past=0.0;
+vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT){
+  jn=0.0;dist=1e9;past=0.0;otherT=0.0;float bestT=0.0;
   if(coverAt(xz).w>ROAD_NEAR)return vec4(0.0);
   vec2 g=(xz+TILE_HALF)/ROAD_CELL;
   if(any(lessThan(g,vec2(0.0)))||any(greaterThanEqual(g,vec2(ROAD_N))))return vec4(0.0);
@@ -129,8 +129,9 @@ vec4 roadAt(vec2 xz,out float jn,out float dist,out float past){
       // (outside a bend both segments are as near, to their shared end: the one whose mitre slab holds xz wins, so the
       // distance along changes over at the mitre line, where both read the bend's)
       float dd=length(xz-p),score=dd-s1.y+(d0>=0.0&&d1>=0.0?0.0:1e-3),side=dot(xz-s0.xy,vec2(-u.y,u.x));
-      if(s1.z!=bestLine&&bestLine>=0.0){if(score<best)other=min(other,best);else{other=min(other,score);continue;}}
-      if(score<best){best=score;bestLine=s1.z;dist=dd;past=max(mod(s1.w,2.0)>0.5?-t0:0.0,mod(floor(s1.w/2.0),2.0)>0.5?t0-len:0.0);
+      float tk=mod(floor(s1.w/4.0),2.0);   // (the line's earth: 1 a track's)
+      if(s1.z!=bestLine&&bestLine>=0.0){if(score<best){if(best<other){other=best;otherT=bestT;}}else{if(score<other){other=score;otherT=tk;}continue;}}
+      if(score<best){best=score;bestLine=s1.z;bestT=tk;dist=dd;past=max(mod(s1.w,2.0)>0.5?-t0:0.0,mod(floor(s1.w/2.0),2.0)>0.5?t0-len:0.0);
         r=vec4(side,s1.x+len*clamp(d0/max(d0+d1,1e-3),0.0,1.0)+s1.z*10000.0,s1.y,mod(floor(s1.w/4.0),2.0));}}}
   jn=1.0-smoothstep(ROAD_PAINT,ROAD_JUNCTION,other);
   return r;}
@@ -141,7 +142,7 @@ vec3 roadPaint(vec3 c,vec2 xz){
   // the road where the class map has it: found at the cover's warped point (macro.glsl, coverWarp), so the paint and
   // the class cells under it share one edge (a gentle sway of up to 1.5 m, over tens of metres)
   if(coverAt(xz).w>ROAD_NEAR+2.2)return c;   // (most of the tile, before the warp: it moves a point up to 2.1 m)
-  float jn,dist,past;vec4 r=roadAt(coverWarp(xz),jn,dist,past);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
+  float jn,dist,past,ot;vec4 r=roadAt(coverWarp(xz),jn,dist,past,ot);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
   // the patterns laid along the road (by s) give way at a junction, where s jumps from one line to the other, to the
   // same patterns laid in the world (by xz)
   float wobS=(mValue(vec2(s/4.0,7.3))-0.5)*1.6+(mValue(vec2(s/1.1,2.1))-0.5)*0.7,wobW=(mValue(xz/4.0+7.3)-0.5)*1.6+(mValue(xz/1.1+2.1)-0.5)*0.7;
@@ -155,8 +156,9 @@ vec3 roadPaint(vec3 c,vec2 xz){
   float st=mix(mValue(vec2(s/11.0,a*1.3))*0.6+mValue(vec2(s/3.3,a*3.7+9.0))*0.4,mValue(xz/3.0+5.0),jn);   // streaks along the road
   float trod=max(smoothstep(0.6,0.8,mValue(xz/2.7+13.0)),jn*0.5),dust=smoothstep(0.55,0.85,mValue(xz/4.1-7.0));   // trodden patches, pale dust
   float g=(texM(uRoadGrit,xz/1.9,1.9).r*0.6+textureGrad(uRoadGrit,mat2(0.8253,-0.5646,0.5646,0.8253)*xz/3.1+0.37,mat2(0.8253,-0.5646,0.5646,0.8253)*pMdx/3.1,mat2(0.8253,-0.5646,0.5646,0.8253)*pMdy/3.1).r*0.4-0.5)*uRoadOn;
-  // (one earth at a junction, as the patterns there: where a road meets a track the two earths would step)
-  vec3 col=mix(mix(ROAD_EARTH,TRACK_EARTH,r.w),(ROAD_EARTH+TRACK_EARTH)*0.5,jn)*mix(0.93,1.07,st)*mix(1.0,0.9,trod)*mix(1.0,1.1,dust)*(1.0+g*1.2);
+  // (at a junction the two lines' earths meet half and half, as the patterns there: where a road meets a track they
+  // would step. A road meeting a road keeps its earth)
+  vec3 col=mix(mix(ROAD_EARTH,TRACK_EARTH,r.w),mix(ROAD_EARTH,TRACK_EARTH,(r.w+ot)*0.5),jn)*mix(0.93,1.07,st)*mix(1.0,0.9,trod)*mix(1.0,1.1,dust)*(1.0+g*1.2);
   col=mix(col,vec3(0.74,0.66,0.52)*mix(0.95,1.05,st)*(1.0+g*0.6),tr*0.75);   // the tracks: pale beige dust
   return mix(c,col,inside);}
 #else

@@ -45,17 +45,19 @@ describe('roads', () => {
   })
   it('reads the distance along continuously round every bend, inside and out', () => {
     // roadAt's pick among a bend's two segments: the lower score, the first listed on a tie (strict <)
-    const pick = (i: number, x: number, z: number) => { const a = look(i, x, z), b = look(i + 1, x, z); return b.score < a.score ? b.s : a.s }
+    // (another line's nearer near a junction: there the shader lays its patterns in the world, not by s: NaN, skipped)
+    const pick = (i: number, x: number, z: number) => { let best = Infinity, sv = NaN; for (const k of cellIds(x, z)) { const l = look(k, x, z); if (l.score < best) { best = l.score; sv = seg(k)[6] === seg(i)[6] ? l.s : NaN } } return sv }
     let bends = 0
     for (let i = 0; i < sn - 1; i++) {
       const a = seg(i), b = seg(i + 1)
       if (a[6] !== b[6]) continue
       const vx = a[2], vz = a[3]
+      if (Math.abs(vx) > SPEC.tile / 2 - 6 || Math.abs(vz) > SPEC.tile / 2 - 6) continue
       for (const r of [1, 3, 5]) {   // a circle round the shared vertex, in 0.5° steps: s moves by under r·step plus float32
         let prev = pick(i, vx + r, vz)
         for (let k = 1; k <= 720; k++) {
           const t = k * Math.PI / 360, cur = pick(i, vx + r * Math.cos(t), vz + r * Math.sin(t))
-          expect(Math.abs(cur - prev)).toBeLessThan(r * Math.PI / 360 * 1.5 + 2e-3)
+          if (!Number.isNaN(cur) && !Number.isNaN(prev)) expect(Math.abs(cur - prev)).toBeLessThan(r * Math.PI / 360 * 1.5 + 2e-3)
           prev = cur
         }
       }

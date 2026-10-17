@@ -88,9 +88,10 @@ function resample(p: readonly Pt[], step: number): Pt[] {
     while (t < len) { out.push([a[0] + (b[0] - a[0]) * t / len, a[1] + (b[1] - a[1]) * t / len]); t += step }
     carry = len - (t - step)
   }
+  if (out.length > 1 && Math.hypot(...[0, 1].map(k => p[p.length - 1][k] - out[out.length - 1][k]) as [number, number]) < step / 2) out.pop()   // (no end segment under half a step)
   out.push(p[p.length - 1]); return out
 }
-// (their half widths, 1.5, 2.5 and 4 m, are also roadPaint's in shore.glsl: change both together)
+// (a line's class picks its earth and wheel tracks in shore.glsl, roadPaint: a flag in its segments, roadGrid)
 export const LINES: { pts: readonly Pt[]; w: number; cls: CoverClass }[] = [{ pts: resample(curvy(ROAD, 9, 1), 8), w: 8, cls: COVER.road }, { pts: resample(curvy(CROSS, 15, 2), 8), w: 8, cls: COVER.road }, { pts: resample(curvy(LANE, 10, 3), 8), w: 5, cls: COVER.track }, { pts: resample(curvy(TRACK, 5, 4), 8), w: 3, cls: COVER.track }]
 const WEAR_REACH = 25.5   // the distance channel's reach, m (255 · WEAR_STEP)
 

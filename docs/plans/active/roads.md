@@ -102,3 +102,8 @@ blended two lines or two sides, holes, 39 MB): redesigned to segments (below).
   earth at a junction, and the earth chosen by the line's class (a flag in the segment), not its width. The warp ran on
   every tile pixel: the cover's distance read first. Willows stepping out from the bank stopped at a road (hidden): they
   step past it again. The system doc's version and scatter rule; stale comments; ROAD_REACH's alias gone.
+- **Second redesign, round 2** (moderate only: the last round): a junction's earth was the two earths' mean whatever
+  met, so a road meeting a road turned paler: each line's earth now (the nearest other line's class kept too). The
+  bend test picks as roadAt does, over the cell, and fails with the tie-break removed. No end segment under half a
+  step. The system doc's earths; a stale comment. Left: the warp is read twice where the ground and the road both
+  need it, and the mitre texel is read for every listed segment (both measured in the bench below, not fixed here).
