@@ -124,7 +124,7 @@ vec3 bankPaint(vec3 c,vec2 xz,float land,float h,float ny){
 // the meadow's (src/look/meadow.ts, each frame): its reach from the focus (x to y m) and its strength (z: 0 with the
 // meadow off, and less as the camera rises: zoomed out the clumps thin to the outer ring's). The terrain and the
 // water's land side both take it (one ground: the seam)
-uniform sampler2D uMeadow;uniform vec3 uUnder;
+uniform vec3 uUnder;   // (the meadow map, uMeadow: declared in macro.glsl)
 #define UNDER_GRASS vec3(0.62,0.74,0.55)   // the ground's colour times this: a deep green
 #define UNDER_CROP vec3(0.74,0.58,0.42)    // a deep ochre, toward orange
 #define UNDER_AMT 0.45                     // how far toward them

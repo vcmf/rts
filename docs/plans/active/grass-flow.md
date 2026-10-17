@@ -46,7 +46,7 @@ too sparse and one colour. So:
 - **The bake holds the broad part only:** soft bands where the flow leans to or from the sun, soft masses, the clump
   field. Nothing a frame.
 - **The strokes at runtime, by zoom** (`strokeK`: whole up close, gone by the default zoom's far half) and **by growth**
-  (the meadow map, `uGrowth`): only where grass stands; the short grass's brush where none grows. The dark side a
+  (the meadow map, `uMeadow`, shared with the ground's under-layer): only where grass stands; the short grass's brush where none grows. The dark side a
   deeper green, never toward black. At 60% since the denser clumps carry the close look.
 - **The clumps:** 1.4 times wider, 15% taller (never over `HEIGHT_MAX`), fewer thinned between the patches, a hue each
   (blue-green to yellow-lime, stronger toward the tips), leaning with the flow.

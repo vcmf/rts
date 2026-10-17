@@ -117,6 +117,11 @@ vec3 dirtOn(vec3 c,vec2 xz,float px){
 // (colour, the snow's lie as LIE0 + lie/1.2). q 1: the bake's, the edges blended over 9 taps a metre apart with a
 // darker margin where classes meet (a headland or a verge); q 0: one tap. px: the footprint, m (the bake's texel, or
 // the pixel's)
+#if defined(MEADOW)&&(defined(MEADOW_UNDER)||(defined(MACRO_BAKE)&&defined(GRASS_FLOW)))
+// the meadow map (src/look/meadow.ts: G the grass's growth, B its height factor, A the crop's): the ground's
+// under-layer (shore.glsl) and the combed meadow's strokes (groundAt) read it
+uniform sampler2D uMeadow;
+#endif
 #ifdef MEADOW
 // the meadow pattern (docs/plans/done/l5c-meadow.md) on meadow and pasture (k, the class the ground paints): the
 // brush tile (data/meadow-brush.png) at two unrelated scales and turns, warped by a slow noise (no common period, no
@@ -264,7 +269,6 @@ vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
 // THE GROUND'S COLOUR the terrain and the shore band start from, by arm (every painted material has one: setArm,
 // src/look/macro.ts; with none, the shader arm's)
 #if defined(MACRO_BAKE)&&defined(MEADOW)&&defined(GRASS_FLOW)
-uniform sampler2D uGrowth;
 // the short grass where the meadow grows none (the formation zones, the banks): the default's brush pattern, its
 // multiplier (meadowPattern's)
 float shortGrass(vec2 xz,float px){
@@ -283,7 +287,7 @@ vec3 groundAt(vec2 xz,float px){
   sk=0.0;
   #endif
   bool onTile=max(abs(xz.x),abs(xz.y))<TILE_HALF-1.0;
-  float grow=onTile?smoothstep(0.15,0.7,texture2D(uGrowth,(xz+TILE_HALF)/TILE_W).g):1.0;
+  float grow=onTile?smoothstep(0.15,0.7,texture2D(uMeadow,(xz+TILE_HALF)/TILE_W).g):1.0;
   // the strokes where grass grows (the growth already keeps to meadow and pasture and fades over their edges); the
   // short grass where it does not, on the meadow classes only (one warped cover read, there alone)
   if(sk*grow>0.0)g*=combStrokes(xz,px,sk*grow);

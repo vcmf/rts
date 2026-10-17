@@ -358,7 +358,7 @@ shader); `?meadow=off` puts back the old scatter.
     the sun (`FLOW_SUN`, fixed per map), soft masses, the clump field.
   - **The strokes at runtime** (`groundAt` under `GRASS_FLOW`, `combStrokes`): the brush tile and a tiling comb noise
     (`uComb`) read along the flow in 5 m cells, lighter along the comb and a deeper green in its gaps; by the pixel's
-    footprint (`strokeK`: whole up close, gone by the default zoom's far half) and by the meadow's growth (`uGrowth`:
+    footprint (`strokeK`: whole up close, gone by the default zoom's far half) and by the meadow's growth (`uMeadow`, the map the ground's under-layer reads:
     only where grass stands). Where none grows (the formation zones, the banks) the short grass's brush instead.
   - **The clumps** (`meadow.vert`, `meadow.frag`): 1.4 times wider, 15% taller (never over `HEIGHT_MAX`), fewer thinned
     between the patches, leaning with the flow, a hue each from blue-green to yellow-lime; they read the bake alone.
