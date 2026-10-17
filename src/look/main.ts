@@ -25,7 +25,7 @@ import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
 import { D, checkGround } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
-import { checkLookData, decodeLook, unpackSpans, ROAD_SLOTS } from './world/data.ts'
+import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS } from './world/data.ts'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { buildTerrain } from './terrain.ts'
@@ -93,19 +93,18 @@ if (waterSabParam !== null && waterSabParam !== 'nodive') throw new Error(`?wate
 const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }, waterSabParam !== 'nodive')
 // the roads (docs/plans/active/roads.md): their segments and grid, and the owner's grit photo (its marks only once
 // loaded: uRoadOn), on the tile's terrain and the water's land side
-{
-  // the segments (two RGBA floats each, in a row) and the grid of their indices (ROAD_SLOTS / 4 texels a cell, in a row),
+if (!mats.webgl1) {   // (float textures: the roads' shader is WebGL2's)
+  // the segments (three RGBA floats each, in a row) and the grid of their indices (ROAD_SLOTS / 4 texels a cell, in a row),
   // read texel by texel (nearest): the shader finds the nearest segment exactly
-  const R = look.roads, sn = R.segs.length / 8
-  const segs = RawTexture.CreateRGBATexture(R.segs, sn * 2, 1, scene, false, false, Texture.NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
+  const R = look.roads, sn = R.segs.length / ROAD_SEG
+  const segs = RawTexture.CreateRGBATexture(R.segs, sn * ROAD_SEG / 4, 1, scene, false, false, Texture.NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
   const grid = RawTexture.CreateRGBATexture(R.ids, R.n * ROAD_SLOTS / 4, R.n, scene, false, false, Texture.NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
   for (const t of [segs, grid]) t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
   segs.name = 'roadSegs'; grid.name = 'roadGrid'
-  const roadMats = [terrain.terrainMat, water.waterMat, water.groundMat]
-  for (const m of roadMats) m.setFloat('uRoadOn', 0)   // (before the grit, whose load turns it on)
-  const grit = new Texture(ROAD_GRIT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => { for (const m of roadMats) m.setFloat('uRoadOn', 1) }, (msg?: string) => console.error(`the road grit (${ROAD_GRIT_URL}) did not load: ${msg ?? 'unknown error'}`))
+  mats.bindAll(m => m.setFloat('uRoadOn', 0))   // (before the grit, whose load turns it on: every material, as the dirt)
+  const grit = new Texture(ROAD_GRIT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => mats.bindAll(m => m.setFloat('uRoadOn', 1)), (msg?: string) => console.error(`the road grit (${ROAD_GRIT_URL}) did not load: ${msg ?? 'unknown error'}`))
   grit.wrapU = grit.wrapV = Texture.WRAP_ADDRESSMODE; grit.anisotropicFilteringLevel = 4
-  for (const m of roadMats) { m.setTexture('uRoadSegs', segs); m.setTexture('uRoadGrid', grid); m.setFloat('uRoadSegN', sn); m.setTexture('uRoadGrit', grit) }
+  mats.bindAll(m => { m.setTexture('uRoadSegs', segs); m.setTexture('uRoadGrid', grid); m.setFloat('uRoadSegN', sn); m.setTexture('uRoadGrit', grit) })
 }
 // ?trees=one: every tree one model (L5b's judging, docs/plans/active/l5-macro.md); with ?trees=one,cards, drawn as
 // leaf cards

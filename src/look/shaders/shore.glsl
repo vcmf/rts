@@ -93,10 +93,10 @@ float aastep(float t,float v){
 // the road class's colour, the same earth). On it: wheel tracks of pale beige dust (a pair on a track, on a road a
 // pair and a fainter outer one), rough-edged, wandering a little, cut into pieces of uneven length, each track at its
 // own places; trodden patches, pale dust, streaks along the road; trampled flat at a junction; the grit of the owner's
-// photo (data/road-grit-v1.png, uRoadOn once it has loaded) at two scales (WebGL2 only: its reads follow the early
-// returns, which texM's explicit gradients make safe). Browner and wetter in late autumn
+// photo (data/road-grit-v1.png, uRoadOn once it has loaded) at two scales (explicit gradients: they follow the early
+// returns). WebGL2 only (src/look/terrain.ts). The season turns it as the rest of the ground
 uniform sampler2D uRoadSegs,uRoadGrid,uRoadGrit;uniform float uRoadOn,uRoadSegN;
-vec3 roadEarth(){return vec3(0.60,0.53,0.42);}   // (the season turns it as the rest of the ground: groundSeason)
+vec3 roadEarth(float hw){return hw>3.0?vec3(0.60,0.53,0.42):vec3(0.66,0.58,0.45);}   // a road, a track (a little paler: it reads against the grass at its width). The season turns it as the rest of the ground (groundSeason)
 // one wheel track: its centre wandering across by up to 0.35 m along the way, its edges rough (a fine noise eating
 // into them), cut into pieces (about 2 to 8 m, gaps of 1 to 4 m) at its own places (k: its seed)
 float track1(float a,vec2 xz,float s,float c,float k){
@@ -105,13 +105,14 @@ float track1(float a,vec2 xz,float s,float c,float k){
   float piece=mValue(vec2(s/3.2,k+11.0))*0.7+mValue(vec2(s/1.1,k+17.0))*0.3;
   return t*smoothstep(0.42,0.52,piece);}
 // the nearest road at xz, exactly (its segments listed in the grid's cell, src/look/main.ts): the signed distance
-// across its line (continuous, also past a dead end), the distance along it (plus 10 km a line), its half width, and
-// the distance to it (past a dead end, to its end: a round cap); jn a junction weight (another line's side within 2.6
-// m, the paint's reach, fading out over 6 m), past how far past a dead end. hw 0: no road near. Only where the cover's
-// distance to a line says one is near (one read, most of the tile)
+// across its line (continuous, also past a dead end), the distance along it (plus 10 km a line: read between the
+// segment's mitre lines, so continuous round a bend), its half width, and the distance to it (past a dead end, to its
+// end: a round cap); jn a junction weight (full within ROAD_PAINT m of another line's side, the paint's reach, gone by
+// ROAD_JUNCTION), past how far past a line's free end (its first or last segment's). hw 0: no road near. Only where
+// the cover's distance to a line says one is near (one read, most of the tile: src/look/spec.ts, road)
 vec4 roadAt(vec2 xz,out float jn,out float dist,out float past){
   jn=0.0;dist=1e9;past=0.0;
-  if(coverAt(xz).w>5.5)return vec4(0.0);   // (the 2 m cells: the paint reaches 2.6 m, the cells 1.4 m beyond)
+  if(coverAt(xz).w>ROAD_NEAR)return vec4(0.0);
   vec2 g=(xz+TILE_HALF)/ROAD_CELL;
   if(any(lessThan(g,vec2(0.0)))||any(greaterThanEqual(g,vec2(ROAD_N))))return vec4(0.0);
   vec2 c=floor(g);float best=1e9,other=1e9,bestLine=-1.0;vec4 r=vec4(0.0);bool done=false;
@@ -119,31 +120,36 @@ vec4 roadAt(vec2 xz,out float jn,out float dist,out float past){
     if(done)break;
     vec4 ids=texture2D(uRoadGrid,vec2(c.x*float(ROAD_SLOTS/4)+float(k)+0.5,c.y+0.5)/vec2(ROAD_N*float(ROAD_SLOTS/4),ROAD_N));
     for(int q=0;q<4;q++){float id=q==0?ids.x:q==1?ids.y:q==2?ids.z:ids.w;if(id<0.0){done=true;break;}
-      vec4 s0=texture2D(uRoadSegs,vec2(id*2.0+0.5,0.5)/vec2(uRoadSegN*2.0,1.0)),s1=texture2D(uRoadSegs,vec2(id*2.0+1.5,0.5)/vec2(uRoadSegN*2.0,1.0));
+      vec2 W=vec2(uRoadSegN*3.0,1.0);vec4 s0=texture2D(uRoadSegs,vec2(id*3.0+0.5,0.5)/W),s1=texture2D(uRoadSegs,vec2(id*3.0+1.5,0.5)/W);
       vec2 d=s0.zw-s0.xy;float len=length(d);vec2 u=d/len;float t0=dot(xz-s0.xy,u),t=clamp(t0,0.0,len);vec2 p=s0.xy+u*t;
       float dd=length(xz-p),score=dd-s1.y,side=dot(xz-s0.xy,vec2(-u.y,u.x));
       if(s1.z!=bestLine&&bestLine>=0.0){if(score<best)other=min(other,best);else{other=min(other,score);continue;}}
-      if(score<best){best=score;bestLine=s1.z;dist=dd;past=max(0.0,max(-t0,t0-len));r=vec4(side,s1.x+t+s1.z*10000.0,s1.y,0.0);}}}
-  jn=1.0-smoothstep(2.6,6.0,other);
+      if(score<best){best=score;bestLine=s1.z;dist=dd;past=max(mod(s1.w,2.0)>0.5?-t0:0.0,s1.w>1.5?t0-len:0.0);
+        vec4 m=texture2D(uRoadSegs,vec2(id*3.0+2.5,0.5)/W);float d0=dot(xz-s0.xy,m.xy),d1=dot(s0.zw-xz,m.zw);
+        r=vec4(side,s1.x+len*clamp(d0/max(d0+d1,1e-3),0.0,1.0)+s1.z*10000.0,s1.y,0.0);}}}
+  jn=1.0-smoothstep(ROAD_PAINT,ROAD_JUNCTION,other);
   return r;}
 vec3 roadPaint(vec3 c,vec2 xz){
-  float jn,dist,past;vec4 r=roadAt(xz,jn,dist,past);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
+  #if defined(MACRO_FLAT)||defined(MACRO_SAB_ONECLASS)
+  return c;   // the flat arm and the class check's sabotage: the class colour alone (as dirtOn)
+  #endif
+  // the road where the class map has it: found at the cover's warped point (macro.glsl, coverWarp), so the paint and
+  // the class cells under it share one edge (a gentle sway of up to 1.5 m, over tens of metres)
+  float jn,dist,past;vec4 r=roadAt(coverWarp(xz),jn,dist,past);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
   // the patterns laid along the road (by s) give way at a junction, where s jumps from one line to the other, to the
   // same patterns laid in the world (by xz)
   float wobS=(mValue(vec2(s/4.0,7.3))-0.5)*1.6+(mValue(vec2(s/1.1,2.1))-0.5)*0.7,wobW=(mValue(xz/4.0+7.3)-0.5)*1.6+(mValue(xz/1.1+2.1)-0.5)*0.7;
   float wob=mix(wobS,wobW,jn)+(mValue(xz/0.6)-0.5)*0.5;
-  // (out to about 1.6 m past the line's side: the class map's 2 m cells, under it, end within 1.4 m of it)
-  float inside=(1.0-smoothstep(hw+0.2+wob*0.3,hw+1.9+wob*0.5,dist))*(1.0-smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y))));
+  // (out to about 2 m past the line's side: the class map's 2 m cells, under it, end within 1.4 m of it, and its warp
+  // pushes them up to 1.5 m more, in the same earth: the road and track classes' colour is roadEarth's)
+  float rag=wob*clamp(hw/4.0,0.5,1.0),inside=(1.0-smoothstep(hw-0.3+rag*0.3,hw+0.5+rag*0.4,dist))*(1.0-smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y))));
   if(inside<=0.0)return c;
-  float tr=hw>3.0?max(max(track1(a,xz,s,-0.9,1.0),track1(a,xz,s,0.9,2.0)),0.6*max(track1(a,xz,s,-2.6,3.0),track1(a,xz,s,2.6,4.0))):max(track1(a,xz,s,-0.8,1.0),track1(a,xz,s,0.8,2.0));
-  tr*=(1.0-jn)*(1.0-smoothstep(0.0,0.8,past));   // none at a junction, nor round a dead end's cap
+  float tr=0.0,fade=(1.0-jn)*(1.0-smoothstep(0.0,0.8,past));   // none at a junction, nor round a dead end's cap
+  if(fade>0.0)tr=fade*(hw>3.0?max(max(track1(a,xz,s,-0.9,1.0),track1(a,xz,s,0.9,2.0)),0.6*max(track1(a,xz,s,-2.6,3.0),track1(a,xz,s,2.6,4.0))):max(track1(a,xz,s,-0.8,1.0),track1(a,xz,s,0.8,2.0)));
   float st=mix(mValue(vec2(s/11.0,a*1.3))*0.6+mValue(vec2(s/3.3,a*3.7+9.0))*0.4,mValue(xz/3.0+5.0),jn);   // streaks along the road
   float trod=max(smoothstep(0.6,0.8,mValue(xz/2.7+13.0)),jn*0.5),dust=smoothstep(0.55,0.85,mValue(xz/4.1-7.0));   // trodden patches, pale dust
-  float g=0.0;
-  #ifdef WEBGL2
-  g=(texM(uRoadGrit,xz/1.9,1.9).r*0.6+textureGrad(uRoadGrit,mat2(0.8253,-0.5646,0.5646,0.8253)*xz/3.1+0.37,mat2(0.8253,-0.5646,0.5646,0.8253)*pMdx/3.1,mat2(0.8253,-0.5646,0.5646,0.8253)*pMdy/3.1).r*0.4-0.5)*uRoadOn;
-  #endif
-  vec3 col=roadEarth()*mix(0.93,1.07,st)*mix(1.0,0.9,trod)*mix(1.0,1.1,dust)*(1.0+g*1.2);
+  float g=(texM(uRoadGrit,xz/1.9,1.9).r*0.6+textureGrad(uRoadGrit,mat2(0.8253,-0.5646,0.5646,0.8253)*xz/3.1+0.37,mat2(0.8253,-0.5646,0.5646,0.8253)*pMdx/3.1,mat2(0.8253,-0.5646,0.5646,0.8253)*pMdy/3.1).r*0.4-0.5)*uRoadOn;
+  vec3 col=roadEarth(hw)*mix(0.93,1.07,st)*mix(1.0,0.9,trod)*mix(1.0,1.1,dust)*(1.0+g*1.2);
   col=mix(col,vec3(0.74,0.66,0.52)*mix(0.95,1.05,st)*(1.0+g*0.6),tr*0.75);   // the tracks: pale beige dust
   return mix(c,col,inside);}
 #else

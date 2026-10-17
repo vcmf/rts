@@ -10,7 +10,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { D } from '../src/look/spec.ts'
 import { authorWorld, authoredNormal } from '../src/look/world/author.ts'
-import { encodeLook, ROAD_REACH, ROAD_SLOTS, type LookData, type RoadGrid, type SpanGrid } from '../src/look/world/data.ts'
+import { encodeLook, ROAD_REACH, ROAD_SEG, ROAD_SLOTS, type LookData, type RoadGrid, type SpanGrid } from '../src/look/world/data.ts'
 import { bakeWater, packWater } from '../src/look/world/water-data.ts'
 import { sstep } from '../src/look/noise.ts'
 import { riverQuery } from '../src/look/river.ts'
@@ -41,15 +41,27 @@ function bankNormals(H: (x: number, z: number) => number): SpanGrid {
   return { n, cell, x0, z0, ch: 3, spans: Float32Array.from(spans), tex: Uint8Array.from(tex) }
 }
 
+type Pt = readonly [number, number]
+
 // The roads (docs/plans/active/roads.md): every segment of every line, and a grid over the tile listing, per cell, the
 // segments that reach within their half width and ROAD_REACH m of it (the shader finds the nearest exactly, with no
 // filtering: no ghost where two lines or two sides meet). Throws if a cell needs more than ROAD_SLOTS
-function roadGrid(): RoadGrid {
+export function roadGrid(): RoadGrid {
   const g = D.spec.road, n = D.roadN, cell = g.cell, x0 = -D.spec.tile / 2, z0 = x0, segs: number[] = []
-  LINES.forEach((l, li) => { let along = 0; for (let k = 0; k < l.pts.length - 1; k++) { const a = l.pts[k], b = l.pts[k + 1]; segs.push(a[0], a[1], b[0], b[1], along, l.w / 2, li, 0); along += Math.hypot(b[0] - a[0], b[1] - a[1]) } })
+  // the mitre tangents (the mean of the two segments' directions at a bend, the segment's own at a free end): the shader
+  // reads the distance along between them, so it is continuous round a bend (no step at the bisector)
+  LINES.forEach((l, li) => {
+    const p = l.pts, last = p.length - 2, dir = (k: number): Pt => { const dx = p[k + 1][0] - p[k][0], dz = p[k + 1][1] - p[k][1], m = Math.hypot(dx, dz); return [dx / m, dz / m] }
+    const mitre = (u: Pt, v: Pt): Pt => { const m = Math.hypot(u[0] + v[0], u[1] + v[1]); return [(u[0] + v[0]) / m, (u[1] + v[1]) / m] }
+    let along = 0
+    for (let k = 0; k <= last; k++) {
+      const a = p[k], b = p[k + 1], u = dir(k), m0 = k > 0 ? mitre(dir(k - 1), u) : u, m1 = k < last ? mitre(u, dir(k + 1)) : u
+      segs.push(a[0], a[1], b[0], b[1], along, l.w / 2, li, (k === 0 ? 1 : 0) + (k === last ? 2 : 0), m0[0], m0[1], m1[0], m1[1]); along += Math.hypot(b[0] - a[0], b[1] - a[1])
+    }
+  })
   const ids = new Float32Array(n * n * ROAD_SLOTS).fill(-1), used = new Uint8Array(n * n)
-  for (let s = 0; s < segs.length / 8; s++) {
-    const [ax, az, bx, bz, , hw] = segs.slice(s * 8, s * 8 + 6), r = hw + ROAD_REACH + cell * 0.71
+  for (let s = 0; s < segs.length / ROAD_SEG; s++) {
+    const [ax, az, bx, bz, , hw] = segs.slice(s * ROAD_SEG, s * ROAD_SEG + 6), r = hw + ROAD_REACH + cell * 0.71
     const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - r - x0) / cell)), i1 = Math.min(n - 1, Math.floor((Math.max(ax, bx) + r - x0) / cell))
     const j0 = Math.max(0, Math.floor((Math.min(az, bz) - r - z0) / cell)), j1 = Math.min(n - 1, Math.floor((Math.max(az, bz) + r - z0) / cell))
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
@@ -63,8 +75,8 @@ function roadGrid(): RoadGrid {
   // only the segments a cell lists (the lines run far past the tile), renumbered
   const keep = [...new Set(Array.from(ids).filter(v => v >= 0))].sort((a, b) => a - b), map = new Map(keep.map((v, k) => [v, k]))
   for (let k = 0; k < ids.length; k++) if (ids[k] >= 0) ids[k] = map.get(ids[k])!
-  const out = new Float32Array(keep.length * 8); keep.forEach((v, k) => out.set(segs.slice(v * 8, v * 8 + 8), k * 8))
-  if (keep.length * 2 > D.spec.minSpec.maxTexture) throw new Error(`roads: ${keep.length} segments on the tile, over the min-spec's ${D.spec.minSpec.maxTexture / 2}`)
+  const out = new Float32Array(keep.length * ROAD_SEG); keep.forEach((v, k) => out.set(segs.slice(v * ROAD_SEG, (v + 1) * ROAD_SEG), k * ROAD_SEG))
+  if (keep.length * ROAD_SEG / 4 > D.spec.minSpec.maxTexture) throw new Error(`roads: ${keep.length} segments on the tile, over the min-spec's ${D.spec.minSpec.maxTexture * 4 / ROAD_SEG}`)
   return { segs: out, n, cell, x0, z0, ids }
 }
 

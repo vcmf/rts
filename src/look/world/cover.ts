@@ -8,9 +8,10 @@
 //   G the field's id, a byte hashed from the field (0 off fields): its stripes' phase and its colour's variation;
 //   B the furrow direction, 0..255 for 0..π (the angle from +x toward +z), on fields;
 //   A the distance to the nearest road, track or village ground, in WEAR_STEP m (0 on them, 255 at or past the reach).
-import { hash, vn } from '../noise.ts'
+import { hash, sstep, vn } from '../noise.ts'
 import { axisX } from './author.ts'
-import { RIVER } from '../river.ts'
+import { RIVER, lerpA, riverQuery } from '../river.ts'
+import { SPEC } from '../spec.ts'
 
 export const COVER = { meadow: 0, pasture: 1, wood: 2, road: 3, track: 4, village: 5, wheat: 6, green: 7, stubble: 8, ploughed: 9, bare: 10 } as const
 export type CoverClass = typeof COVER[keyof typeof COVER]
@@ -25,6 +26,12 @@ export interface CoverGrid { n: number; cell: number; x0: number; z0: number; te
 export const inFormationZone = (x: number, z: number): boolean => (Math.abs(x + 5) < 20 && z > -44 && z < -2) || (z > 7 && z < 19 && x > -14 && x < 26) || ((x - 34) ** 2 + (z + 24) ** 2 < 160)
 // the floodplain (art bible §6c: fields and villages sit on the valley sides, above it): the valley axis ± half the
 // river's floodplain width (generateRiver in src/look/world/author.ts; the river must be set)
+// on a river's banks: within the banks' paint of its water. There the banks own the ground's colour (the cut bank's
+// earth, W5): a road fords them with its paint, and the wear beside it (macro.glsl, wear and wearOf: gone at 4 m plus
+// its 1.5 m of noise) stays off, its distance kept at BANK_WEAR, still within the roads' search (SPEC.road.near)
+const onBank = (x: number, z: number): boolean => { const q = riverQuery(x, z); return !!q && q.dist < lerpA(RIVER.W, q) / 2 + SPEC.bank.paint }
+const BANK_WEAR = 5.4
+if (BANK_WEAR > SPEC.road.near) throw new Error('cover: BANK_WEAR must stay within the roads\' search (SPEC.road.near)')
 export const onFloodplain = (x: number, z: number): boolean => Math.abs(x - axisX(z)) < RIVER.P.floodplainW / 2
 
 type Pt = readonly [number, number]
@@ -71,7 +78,7 @@ function curvy(p: readonly Pt[], amp: number, k: number): Pt[] {
   let q: Pt[] = [...p]
   for (let it = 0; it < 4; it++) { const r: Pt[] = [q[0]]; for (let i = 0; i < q.length - 1; i++) { const [a, b] = [q[i], q[i + 1]]; r.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]) } r.push(q[q.length - 1]); q = r }
   const len: number[] = [0]; for (let i = 1; i < q.length; i++) len.push(len[i - 1] + Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1]))
-  const total = len[len.length - 1], fade = (d: number) => { const t = Math.min(1, d / FADE_M); return t * t * (3 - 2 * t) }
+  const total = len[len.length - 1], fade = (d: number) => sstep(0, FADE_M, d)
   return q.map((pt, i) => {
     const a = q[Math.max(0, i - 1)], b = q[Math.min(q.length - 1, i + 1)], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1, s = len[i]
     const f = fade(Math.min(s, total - s, ...JOINS.map(j => Math.hypot(pt[0] - j[0], pt[1] - j[1]))))
@@ -91,7 +98,7 @@ function resample(p: readonly Pt[], step: number): Pt[] {
   out.push(p[p.length - 1]); return out
 }
 // (their half widths, 1.5, 2.5 and 4 m, are also roadPaint's in shore.glsl: change both together)
-export const LINES: { pts: readonly Pt[]; w: number; cls: CoverClass }[] = [{ pts: resample(curvy(ROAD, 9, 1), 6), w: 8, cls: COVER.road }, { pts: resample(curvy(CROSS, 15, 2), 6), w: 8, cls: COVER.road }, { pts: resample(curvy(LANE, 10, 3), 6), w: 5, cls: COVER.track }, { pts: resample(curvy(TRACK, 5, 4), 6), w: 3, cls: COVER.track }]
+export const LINES: { pts: readonly Pt[]; w: number; cls: CoverClass }[] = [{ pts: resample(curvy(ROAD, 9, 1), 8), w: 8, cls: COVER.road }, { pts: resample(curvy(CROSS, 15, 2), 8), w: 8, cls: COVER.road }, { pts: resample(curvy(LANE, 10, 3), 8), w: 5, cls: COVER.track }, { pts: resample(curvy(TRACK, 5, 4), 8), w: 3, cls: COVER.track }]
 const WEAR_REACH = 25.5   // the distance channel's reach, m (255 · WEAR_STEP)
 
 // the far strip fields: in a frame turned 0.6435 rad (the far hedgerows' frame, src/look/nature.ts), bands 70 m wide
@@ -152,6 +159,7 @@ export function authorCover(far: number, cell: number): CoverGrid {
     if (inPoly(VILLAGE, x, z) || inPoly(SQUARE, x, z)) { cls = COVER.village; id = 0; wear = 0 } else wear = Math.min(wear, ringD(VILLAGE, x, z), ringD(SQUARE, x, z))
     // the floodplain and the formation zones keep their meadow (the zones clip the fields that touch them)
     if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village || cls === COVER.bare)) { cls = COVER.meadow; id = 0 }
+    if (wear < BANK_WEAR && onBank(x, z)) wear = BANK_WEAR
     tex[o] = cls; tex[o + 1] = id; tex[o + 2] = id ? Math.round(((dir % Math.PI + Math.PI) % Math.PI) / Math.PI * 255) % 256 : 0
     tex[o + 3] = Math.min(255, Math.round(Math.min(wear, WEAR_REACH) / WEAR_STEP))
   }

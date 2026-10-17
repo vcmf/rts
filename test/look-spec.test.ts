@@ -38,6 +38,8 @@ describe('world spec', () => {
     ['no shore band', s => { s.water.band = 0 }, /water: the shore band/],
     ['bank colours past the bank normals', s => { s.bank.paint = 13 }, /bank: the banks' colours/],
     ['too many stones for the foam loop', s => { s.water.stones = 100 }, /water: the stones/],
+    ['road grid listing less than the junction weight reads', s => { s.road.reach = 5 }, /road: the paint/],
+    ['road search narrower than the paint', s => { s.road.near = 4 }, /road: near/],
     ['macro texels not dividing the tile', s => { s.macro.texel = 0.3 }, /macro: the tile/],
     ['a macro bake over the min-spec texture size', s => { s.macro.far = 0.25 }, /bake: macro far ring/],
     ['a macro bake draw out of range', s => { s.macro.bakeTile = 16 }, /macro: a bake draw/],

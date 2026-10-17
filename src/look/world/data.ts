@@ -5,22 +5,23 @@
 // arrays in the order the meta lists them (float32, or bytes padded to 4). The cover (docs/plans/active/l5-macro.md):
 // its grid's runs, src/look/world/cover.ts.
 import type { Grid, Heightfield } from '../heightfield.ts'
-import { ROAD_SLOTS, type Derived } from '../spec.ts'
+import { ROAD_SLOTS, SPEC, type Derived } from '../spec.ts'
 import { SAMPLE_KEYS, type RiverParams, type RiverSamples } from '../river.ts'
 import { packCover, unpackCover, type CoverGrid } from './cover.ts'
 
-export const LOOK_VERSION = 7   // 7: the roads as segments and a grid of them (docs/plans/active/roads.md)
+export const LOOK_VERSION = 8   // 8: the roads as segments (with mitre tangents) and a grid of them (docs/plans/active/roads.md)
 
 // A grid of n² texels of `cell` metres from (x0, z0) with ch bytes a texel, stored only where covered: spans are (row,
 // first column, count) triples, tex holds ch bytes per covered texel in span order. The rest take the user's fill.
 // The bank normals (docs/plans/done/w2-river-banks.md): 3 bytes, the normal's x and z as (v·0.5 + 0.5)·255 and the
 // weight ·255. The water data (docs/plans/done/w3-water-data.md): 4 bytes, src/look/world/water-data.ts.
 export interface SpanGrid { n: number; cell: number; x0: number; z0: number; ch: number; spans: Float32Array; tex: Uint8Array }
-// the roads (docs/plans/active/roads.md): their segments (8 floats each: ax, az, bx, bz, the distance along their line
-// at a, the line's half width, its index, 0) and a grid over the tile of `cell` m cells, ROAD_SLOTS segment indices a
+// the roads (docs/plans/active/roads.md): their segments (12 floats each: ax, az, bx, bz, the distance along their line
+// at a, the line's half width, its index, its free ends (1 its start, 2 its end), and its mitre tangents at a and b) and a grid over the tile of `cell` m cells, ROAD_SLOTS segment indices a
 // cell (−1: none), every segment that reaches within its half width and ROAD_REACH m of the cell
-export const ROAD_REACH = 7   // the paint reaches 2.6 m past a side, the junction weight 6 m
+export const ROAD_REACH = SPEC.road.reach
 export { ROAD_SLOTS }
+export const ROAD_SEG = 12   // floats a segment (three RGBA texels)
 export interface RoadGrid { segs: Float32Array; n: number; cell: number; x0: number; z0: number; ids: Float32Array }
 export interface LookData { hf: Heightfield; far: Grid; river: RiverSamples; bank: SpanGrid; water: SpanGrid; roads: RoadGrid; cover: CoverGrid }   // far: the far ring's nodes
 
@@ -97,7 +98,7 @@ export function decodeLook(buf: ArrayBuffer): LookData {
     if (tex.length !== covered * m.ch) throw new Error(`look data: the ${g} grid holds ${tex.length / m.ch} texels, its spans cover ${covered}`)
     return { ...m, spans, tex }
   }
-  if (!meta.roads || !arr.roadSegs || !arr.roadIds || arr.roadSegs.length % 8 || arr.roadIds.length !== meta.roads.n * meta.roads.n * ROAD_SLOTS) throw new Error('look data: no road grid, or a short one')
+  if (!meta.roads || !arr.roadSegs || !arr.roadIds || arr.roadSegs.length % ROAD_SEG || arr.roadIds.length !== meta.roads.n * meta.roads.n * ROAD_SLOTS) throw new Error('look data: no road grid, or a short one')
   const roads: RoadGrid = { ...meta.roads, segs: arr.roadSegs, ids: arr.roadIds }
   if (!meta.cover || !u8.coverRuns) throw new Error('look data: no cover grid')
   const cover: CoverGrid = { ...meta.cover, tex: unpackCover(meta.cover.n, u8.coverRuns) }
@@ -127,7 +128,7 @@ export function checkLookData(d: Derived, look: LookData): void {
   if (look.far.h.length !== fn * fn) bad.push(`far ring has ${look.far.h.length} heights, not ${fn * fn}`)
   for (const [name, g, gn, texel, ch] of [['bank normals', look.bank, d.bankN, s.bank.texel, 3], ['water data', look.water, d.waterN, s.water.texel, 4]] as const)
     if (g.n !== gn || g.ch !== ch || !near(g.cell, texel) || !near(g.x0, -s.tile / 2) || !near(g.z0, -s.tile / 2)) bad.push(`${name} ${g.n}² of ${g.cell} m (${g.ch} bytes) from ${g.x0}, the spec wants ${gn}² of ${texel} m (${ch} bytes) from ${-s.tile / 2}`)
-  if (look.roads.n !== d.roadN || !near(look.roads.cell, s.road.cell) || !near(look.roads.x0, -s.tile / 2) || !near(look.roads.z0, -s.tile / 2) || ROAD_SLOTS % 4) bad.push(`road grid ${look.roads.n}² of ${look.roads.cell} m, the spec wants ${d.roadN}² of ${s.road.cell} m`)
+  if (look.roads.n !== d.roadN || !near(look.roads.cell, s.road.cell) || !near(look.roads.x0, -s.tile / 2) || !near(look.roads.z0, -s.tile / 2)) bad.push(`road grid ${look.roads.n}² of ${look.roads.cell} m, the spec wants ${d.roadN}² of ${s.road.cell} m`)
   if (!near(look.cover.cell, s.macro.cover) || !near(look.cover.n * look.cover.cell, s.far) || !near(look.cover.x0, -s.far / 2) || !near(look.cover.z0, -s.far / 2)) bad.push(`cover ${look.cover.n}² of ${look.cover.cell} m from ${look.cover.x0}, the spec wants ${s.macro.cover} m cells over the far ring (${s.far} m) from ${-s.far / 2}`)
   if (bad.length) throw new Error('look data does not match the world spec (run node tools/build-look-data.ts): ' + bad.join('; '))
 }

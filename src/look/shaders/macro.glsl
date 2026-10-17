@@ -33,7 +33,7 @@ vec3 classColour(float k,float v){
         :k<3.5?mix(vec3(0.57,0.50,0.39),vec3(0.62,0.55,0.44),v)      // road: beige earth (docs/plans/active/roads.md: the near tile paints
                                                                        // its tracks over it, roadPaint in shore.glsl, on the same earth), no
                                                                        // blue near the French coat's hue
-        :k<4.5?mix(vec3(0.48,0.43,0.37),vec3(0.54,0.49,0.42),v)      // track: warm brown-grey earth (#88)
+        :k<4.5?mix(vec3(0.63,0.55,0.43),vec3(0.68,0.60,0.47),v)      // track: the track's earth (roadEarth, docs/plans/active/roads.md)
         :k<5.5?mix(vec3(0.45,0.41,0.34),vec3(0.53,0.48,0.39),v)      // village ground (trodden earth: cellColour mixes grass in), darker
                                                                        // than the Austrian white in autumn too (the guard: it keeps its earth)
         :k<6.5?mix(vec3(0.51,0.47,0.32),vec3(0.57,0.52,0.36),v)      // wheat: olive-gold straw (the warm sun turns it gold), between the dark coats and the white

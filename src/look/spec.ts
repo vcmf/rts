@@ -34,8 +34,11 @@ export interface Spec {
   // river's corridor out to `reach` m from its centre line, faded out over the last `fade` m, and over the last
   // `edge` m before the tile's edge (where the apron and the far ring shade with their vertex normals)
   bank: { texel: number; reach: number; fade: number; edge: number; paint: number }   // paint: the banks' colours reach this far from the water, m (W5a)
-  // the roads' grid (docs/plans/active/roads.md): cells of `cell` m over the tile, each listing the road segments near it
-  road: { cell: number }
+  // the roads (docs/plans/active/roads.md): a grid of `cell` m cells over the tile, each listing the road segments within
+  // their half width and `reach` m of it; their paint reaches `paint` m past a side (the cover's warp and wobble), the
+  // junction weight is full within it of another line's side and gone by `junction` m; a pixel looks for a road only
+  // where the cover's distance to a line (2 m cells) is under `near` m
+  road: { cell: number; reach: number; paint: number; junction: number; near: number }
   // the water data (docs/plans/done/w3-water-data.md): texels of `texel` m over the tile; the depth (the water level
   // minus the ground, signed) stored over depth[0]..depth[1] m, the shore distance over ±sdf m. The shore band
   // (docs/plans/done/w4-water-surface.md): within `band` m of the shoreline, on either side, the terrain and the
@@ -58,7 +61,7 @@ export const SPEC: Spec = {
   shadowFade: 32,
   detail: { px: 2048, lines: 1080, index: 400, amp: 0.4, minCos: 0.05 },
   bank: { texel: 0.5, reach: 14, fade: 3, edge: 10, paint: 7.5 },
-  road: { cell: 8 },
+  road: { cell: 8, reach: 7, paint: 3.2, junction: 6, near: 5.5 },
   water: { texel: 0.5, depth: [-1, 2], sdf: 16, band: 0.75, stones: 24 },
   macro: { texel: 0.5, far: 4, bakeTile: 512, cover: 2, kuwahara: 2 },
 }
@@ -133,6 +136,9 @@ export function derive(s: Spec = SPEC): Derived {
   if (s.sizes.aoCell >= 4) bad.push('bake: occlusion cells must be finer than the narrowest channel (4 m)')
   for (const [k, n] of Object.entries(s.sizes)) if (k !== 'aoCell' && n > s.minSpec.maxTexture) bad.push(`bake: ${k} ${n}² > ${s.minSpec.maxTexture}² (min-spec)`)
   if (s.depth.near >= s.depth.far) bad.push('bake: sun depth range out of order')
+  if (ROAD_SLOTS % 4) bad.push(`road: ROAD_SLOTS (${ROAD_SLOTS}) is not a whole number of RGBA texels`)
+  if (!(s.road.paint < s.road.junction && s.road.junction <= s.road.reach)) bad.push('road: the paint must reach less far than the junction weight, and that no further than the grid lists')
+  if (!(s.road.near >= s.road.paint + s.macro.cover * 0.71 && s.road.near <= 25.5)) bad.push('road: near must cover the paint plus a cover cell half diagonal, within the cover distance channel (25.5 m)')
   if (!isInt(s.tile / s.road.cell)) bad.push(`road: the tile (${s.tile} m) is not a whole number of ${s.road.cell} m cells`)
   if (!isInt(s.tile / s.bank.texel)) bad.push(`bank: the tile (${s.tile} m) is not a whole number of ${s.bank.texel} m texels`)
   else if (s.tile / s.bank.texel > s.minSpec.maxTexture) bad.push(`bake: bank normals ${s.tile / s.bank.texel}² > ${s.minSpec.maxTexture}² (min-spec)`)
@@ -153,7 +159,7 @@ export function derive(s: Spec = SPEC): Derived {
   const sbias = (0.96 / (s.depth.far - s.depth.near)).toFixed(6)
   return {
     spec: s, cell, farCell, band: s.tile / 2 + farCell, hfMargin: Math.ceil(s.aoMargin / cell), footprint, sbias, bankN: Math.round(s.tile / s.bank.texel), roadN: Math.round(s.tile / s.road.cell), macroN: Math.round(s.tile / s.macro.texel), macroFarN: Math.round(s.far / s.macro.far), waterN: Math.round(s.tile / s.water.texel),
-    defines: [`#define SBIAS ${sbias}`, `#define FAR_W ${s.far.toFixed(1)}`, `#define TILE_HALF ${(s.tile / 2).toFixed(1)}`, `#define TILE_W ${s.tile.toFixed(1)}`, `#define ROAD_CELL ${s.road.cell.toFixed(1)}`, `#define ROAD_N ${Math.round(s.tile / s.road.cell)}.0`, `#define ROAD_SLOTS ${ROAD_SLOTS}`,
+    defines: [`#define SBIAS ${sbias}`, `#define FAR_W ${s.far.toFixed(1)}`, `#define TILE_HALF ${(s.tile / 2).toFixed(1)}`, `#define TILE_W ${s.tile.toFixed(1)}`, `#define ROAD_CELL ${s.road.cell.toFixed(1)}`, `#define ROAD_N ${Math.round(s.tile / s.road.cell)}.0`, `#define ROAD_SLOTS ${ROAD_SLOTS}`, `#define ROAD_PAINT ${s.road.paint.toFixed(3)}`, `#define ROAD_JUNCTION ${s.road.junction.toFixed(3)}`, `#define ROAD_NEAR ${s.road.near.toFixed(3)}`,
       // amp: the grain's deviation, as a fraction of the texture's own; minCos: the incidence's floor (the pixel angle
       // is the uniform uPixA: it follows the camera's field of view)
       `#define DETAIL_MINCOS ${s.detail.minCos.toFixed(3)}`, `#define DETAIL_PX ${s.detail.px.toFixed(1)}`, `#define DETAIL_INDEX ${s.detail.index.toFixed(1)}`, `#define DETAIL_AMP ${s.detail.amp.toFixed(3)}`,
@@ -174,6 +180,7 @@ export function shadowMapSize(d: Derived, boxW: number, boxH: number, sunSinElev
   // the two render targets also hold a depth buffer each (4 bytes a texel)
   const mb = 2 * bakeMB(w, h) + 2 * bakeMB(s.sizes.lightMap, s.sizes.lightMap) + bakeMB(s.sizes.aoTex, s.sizes.aoTex) + bakeMB(s.sizes.riverMask, s.sizes.riverMask) + bakeMB(s.sizes.reflMask, s.sizes.reflMask)
     + bakeMB(d.bankN, d.bankN) + bakeMB(d.waterN, d.waterN)   // the bank normals and the water data (no mips: src/look/span-texture.ts)
+    + bakeMB(d.roadN * ROAD_SLOTS / 4, d.roadN, 16) + bakeMB(s.minSpec.maxTexture, 1, 16)   // the roads grid and at most a row of segments (RGBA float)
     + (bakeMB(d.macroN, d.macroN) + bakeMB(d.macroFarN, d.macroFarN)) * 4 / 3 + bakeMB(s.far / s.macro.cover, s.far / s.macro.cover)   // the macro colour (mipmapped) and the cover grid
   if (mb > s.minSpec.bakeMB) throw new Error(`world spec: bake: ${mb.toFixed(0)} MB of bakes > ${s.minSpec.bakeMB} MB (min-spec)`)
   return { w, h }
