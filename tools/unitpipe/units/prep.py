@@ -1,6 +1,6 @@
 """Step 1 and 2 of the workflow for one model: re-scale to metres and improve the rig.
 
-blender -b -P prep.py -- <gunner|light-cannon|horse|dragoon>   ->  <name>-prepped.blend, <name>-prep.json
+blender -b -P prep.py -- <gunner|light-cannon|horse|dragoon|pistol>   ->  <name>-prepped.blend, <name>-prep.json
 """
 import bpy, json, math, sys
 from pathlib import Path
@@ -198,7 +198,7 @@ elif name == 'dragoon':
     info.update(scale=s, scabbard=dict(count=scab['count'], min=list(scab['min']), max=list(scab['max']), mouth=list(stop), tip=list(sbot)),
                 hilt=dict(parts=len(hilt), count=len(hilt_ids), centre=list(hc)))
 
-if name == 'pistol':
+elif name == 'pistol':
     # a prop, not rigged: a cavalry pistol of 35 cm (the AN XIII is about 35 cm). Turned so its barrel points
     # +Y with the grip's centre at the origin: the Pistol bone's frame (combine.py), as the sabre's
     lo, hi = K.mesh_bounds([mesh])
@@ -218,26 +218,30 @@ if name == 'pistol':
     up_handle = (top - butt).normalized()
     R = Matrix.Rotation(-math.pi / 2, 4, 'Z')                        # -X (the muzzle) -> +Y
     mesh.data.transform(R @ Matrix.Translation(-grip))
+    # a few pixels at the RTS camera: Tripo's 10,000 triangles collapsed to about 1,200
+    tris0 = sum(len(p.vertices) - 2 for p in mesh.data.polygons)
+    dec = mesh.modifiers.new('Decimate', 'DECIMATE'); dec.ratio = 1200 / tris0
+    bpy.context.view_layer.objects.active = mesh
+    bpy.ops.object.modifier_apply(modifier=dec.name)
     to = lambda p: (R @ Matrix.Translation(-grip)) @ p
     info.update(scale=s, length=L, muzzle=list(to(muzzle)), butt=list(to(butt)), handle_top=list(to(top)),
                 handle_axis=list((R.to_3x3() @ up_handle).normalized()))
-    mesh.name = 'PistolMesh'
-    lo = Vector([min(v.co[i] for v in mesh.data.vertices) for i in range(3)])
-    hi = Vector([max(v.co[i] for v in mesh.data.vertices) for i in range(3)])
-    info.update(bounds=[list(lo), list(hi)], size=list(hi - lo), triangles=sum(len(p.vertices) - 2 for p in mesh.data.polygons))
-    (K.ROOT / f'{name}-prep.json').write_text(json.dumps(info, indent=1, default=list))
-    K.save(K.ROOT / f'{name}-prepped.blend')
-    print('PREP', name, json.dumps(info, default=list))
-    raise SystemExit(0)
-if name != 'light-cannon':
+    info['triangles_source'] = tris0
+
+if rig is not None and name != 'light-cannon':
     # Tripo's weights leak between distant bones: keep only bones within reach of each vertex
     info['weights_removed'] = K.clean_weights(rig, mesh, {'horse': .45}.get(name, .16))
 if name in ('gunner', 'dragoon'):
     # the coat below the elbows belongs to the body, not the arms
     info['coat_freed'] = K.free_coat_from_arms(mesh, .45, 1.08)
-rig.name = {'gunner': 'GunnerRig', 'light-cannon': 'GunRig', 'horse': 'HorseRig', 'dragoon': 'RiderRig'}[name]
-mesh.name = rig.name.replace('Rig', 'Mesh')
-lo, hi = K.mesh_bounds([mesh])
+if rig is not None:
+    rig.name = {'gunner': 'GunnerRig', 'light-cannon': 'GunRig', 'horse': 'HorseRig', 'dragoon': 'RiderRig'}[name]
+    mesh.name = rig.name.replace('Rig', 'Mesh')
+else:
+    mesh.name = 'PistolMesh'
+bpy.context.view_layer.update()
+lo = Vector([min((mesh.matrix_world @ v.co)[i] for v in mesh.data.vertices) for i in range(3)])
+hi = Vector([max((mesh.matrix_world @ v.co)[i] for v in mesh.data.vertices) for i in range(3)])
 info.update(bounds=[list(lo), list(hi)], size=list(hi - lo), triangles=sum(len(p.vertices) - 2 for p in mesh.data.polygons))
 (K.ROOT / f'{name}-prep.json').write_text(json.dumps(info, indent=1, default=list))
 K.save(K.ROOT / f'{name}-prepped.blend')

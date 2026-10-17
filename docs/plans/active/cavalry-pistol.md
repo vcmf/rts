@@ -21,8 +21,7 @@ bone in the cavalry rig with a holster at the front right of the saddle, the pis
 clip that does not draw it; six clips (DrawPistol, ReadyPistol, PresentPistol, AimPistol, FirePistol,
 HolsterPistol) with their joins and events; a muzzle flash in the previews; the registry and the system doc.
 
-Out: reloading on horseback, firing at the walk or trot, a lighter pistol mesh (it is 10,000 triangles), the
-left holster.
+Out: reloading on horseback, firing at the walk or trot, the left holster.
 
 ## Approach
 
@@ -45,3 +44,13 @@ left holster.
   pitch for the owner.
 
 ## Review rounds
+
+- **Round 1** (`/code-review high`): severe: the holstered pistol lay beside its holster (the bore runs 6 cm
+  off the grip's axis) and kept a fixed roll while the horse turned; the draw and holster events were off by
+  about 7 frames and `drawn` meant something else for the sabre. Fixed: the pistol's rest pose is in the
+  holster, as its child (bore on the holster's axis), so holstered is every clip's default and moves with the
+  horse; `drawn` is where a weapon clears its scabbard or holster and `sheathed` / `holstered` where it is
+  fully back, for both weapons; the reaching hand blends to exactly the grip's wrist and rotation (no pop,
+  in both draws); the pistol is decimated to about 1,200 triangles in the prep; one state blend and one
+  standing-clip builder for both weapons; the prep's pistol branch is part of the chain; a robust fallback
+  for the pistol's frame.

@@ -149,13 +149,28 @@ elif which == 'cavalry':
     prop_bone(hrig, sabre, 'Sabre', (0, 0, 0), (0, .3, 0))
     # the pistol (pistol-prepped.blend: barrel along +Y, the grip's centre at the origin) on its own bone,
     # and its holster at the front of the saddle on the right, the muzzle down: where French cavalry carried it
-    pistol = next(o for o in append('pistol-prepped.blend', {'PistolMesh'}) if o.type == 'MESH')
-    prop_bone(hrig, pistol, 'Pistol', (0, 0, 0), (0, .3, 0))
     holster_leather = K.flat_material('Holster', (.16, .09, .05))
     hmouth = Vector((-.17, hp['seat'][1] - .30, hp['seat'][2] + .04))
     haxis = Vector((-.22, -.38, -.90)).normalized()             # down, forward and out, along the shoulder
     holster = K.make_prop('Holster', [('cyl', hmouth, hmouth + haxis * .25, .040, .030, 10)], holster_leather)
     prop_bone(hrig, holster, 'Holster', hmouth, hmouth + haxis * .25, 'Horse:Back')
+    # the pistol rests in its holster, as its child: holstered is every clip's default. Its frame (barrel +Y,
+    # lock top +Z, the grip's centre at the origin) is placed with the bore on the holster's axis, muzzle down,
+    # the lock's top forward so the butt curves back towards the rider
+    pp = json.loads((K.ROOT / 'pistol-prep.json').read_text())
+    bore = Vector(pp['muzzle']).z
+    y = haxis; z = Vector((0, -1, 0)) - y * Vector((0, -1, 0)).dot(y); z.normalize(); x = y.cross(z)
+    G = hmouth - y * .06 - z * bore
+    held = Matrix((x, y, z)).transposed().to_4x4(); held.translation = G
+    pistol = next(o for o in append('pistol-prepped.blend', {'PistolMesh'}) if o.type == 'MESH')
+    pistol.data.transform(held)
+    ebs = K.edit(hrig)
+    pb_ = K.add_bone(ebs, 'Pistol', G, G + y * .3, 'Holster')
+    pb_.matrix = held; pb_.length = .3
+    K.obj_mode()
+    pistol.parent = hrig
+    pistol.vertex_groups.new(name='Pistol').add(list(range(len(pistol.data.vertices))), 1.0, 'REPLACE')
+    pistol.modifiers.new('Armature', 'ARMATURE').object = hrig
     # the tack (the Tripo horse has none): a shabraque and a saddle cut from the horse's own skin and pushed
     # out along its normals, so they fit the body and deform with it; a rolled cloak behind the saddle
     sy, sz = seat.y, seat.z
