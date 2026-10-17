@@ -15,7 +15,24 @@ vec3 base(){vec4 s=texture2D(uSharp,vUV);float w=smoothstep(0.5,2.0,coc(s.a,vUV)
 vec3 base(){return texture2D(textureSampler,vUV).rgb;}
 #define BLOOM_UV(uv) (uv)
 #endif
-void main(){vec3 c=base();
+// a pixel that is not a number (a NaN some material wrote) takes its neighbours' mean, or under ?nanmark shows magenta,
+// so its source can be found (docs/plans/active/nan-guard.md)
+#ifdef DOF
+#define SCENE uSharp
+#else
+#define SCENE textureSampler
+#endif
+vec3 finite(vec3 c){
+  if(c==c)return c;
+  #ifdef NANMARK
+  return vec3(1.0,0.0,1.0);
+  #else
+  vec3 m=vec3(0.0);float n=0.0;
+  for(int i=0;i<4;i++){vec3 s=texture2D(SCENE,vUV+vec2(float(i==0)-float(i==1),float(i==2)-float(i==3))/uRes).rgb;if(s==s){m+=s;n+=1.0;}}
+  return n>0.0?m/n:vec3(0.5);
+  #endif
+}
+void main(){vec3 c=finite(base());
   // fused cheap bloom: highlights gathered on two rings. The scene comes graded (gradeOf, painter.glsl), so the
   // grade's highlight tint (uSplitHi) is taken off each tap before the per-channel threshold and put back on the
   // bloom, with the grade's saturation and its haze toward the top, which covered the bloom when the grade was here:
@@ -25,7 +42,7 @@ void main(){vec3 c=base();
   // (airOf), it is divided by more of the tint than it has
   if(uBloom>0.0){vec3 b=vec3(0.0);vec3 hi=mix(vec3(1.0),uSplitHi,uGrade);
     for(int i=0;i<12;i++){float a=float(i)*0.5236+(i<6?0.0:0.26);float r=(i<6?6.0:16.0)*uRes.y/1080.0;
-      vec3 s=texture2D(textureSampler,BLOOM_UV(vUV+vec2(cos(a),sin(a))*r/uRes)).rgb;b+=max(s-0.70*hi,0.0)*(i<6?1.0:0.6);}   // = max(s/hi-0.70,0)*hi
+      vec3 s=texture2D(textureSampler,BLOOM_UV(vUV+vec2(cos(a),sin(a))*r/uRes)).rgb;if(s==s)b+=max(s-0.70*hi,0.0)*(i<6?1.0:0.6);}   // a NaN tap left out   // = max(s/hi-0.70,0)*hi
     b/=hi;b=mix(vec3(dot(b,vec3(0.2126,0.7152,0.0722))),b,mix(1.0,uGradeSat,uGrade));
     c+=b*hi*0.11*uBloom*(1.0-smoothstep(0.60,1.0,vUV.y)*uTopAmt*uGrade);}
   c=shoulder(c);
