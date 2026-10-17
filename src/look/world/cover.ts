@@ -55,9 +55,10 @@ function rect(cx: number, cz: number, ha: number, hc: number, a: number): Pt[] {
 // village, a lane north from it past the large wheat field, and the village's trampled square where they meet
 const ROAD: Pt[] = [[198, -1300], [190, -600], [178, -260], [184, -60], [186, 60], [176, 260], [188, 600], [200, 1300]]
 const TRACK: Pt[] = [[184, -60], [150, -58], [118, -46], [70, -54], [44, -40]]
-// (it fords the river at a riffle, art bible §6c: FORD, a join so the meander leaves it there)
-const FORD: Pt = [-95, -74]
-const CROSS: Pt[] = [[-1300, -96], [-600, -88], [-300, -78], [-180, -72], [-118, -74], FORD, [-72, -73], [-30, -60], [40, -66], [110, -72], [184, -62]]
+// (it fords the river at a riffle where the river runs north–south, square across it, art bible §6c: FORD, a join so
+// the meander leaves it there)
+const FORD: Pt = [-83.4, -42.4]
+const CROSS: Pt[] = [[-1300, -96], [-600, -88], [-300, -76], [-180, -58], [-118, -43], FORD, [-52, -45], [-30, -56], [40, -66], [110, -72], [184, -62]]
 const LANE: Pt[] = [[108, -71], [112, -20], [114, 30], [110, 90], [84, 150], [70, 260], [60, 600], [40, 1300]]
 const VILLAGE: Pt[] = [[196, -40], [244, -46], [256, 8], [238, 34], [198, 26]]
 const SQUARE: Pt[] = [[168, -82], [204, -84], [206, -46], [170, -44]]   // the trampled square where the roads meet the village
@@ -118,7 +119,7 @@ const inPoly = (p: readonly Pt[], x: number, z: number): boolean => {
   for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > z) !== (p[j][1] > z) && x < (p[j][0] - p[i][0]) * (z - p[i][1]) / (p[j][1] - p[i][1]) + p[i][0]) inside = !inside
   return inside
 }
-const segD = (x: number, z: number, a: Pt, b: Pt): number => {
+export const segD = (x: number, z: number, a: Pt, b: Pt): number => {
   const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz)))
   return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz)
 }

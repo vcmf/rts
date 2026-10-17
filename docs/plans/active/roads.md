@@ -12,7 +12,7 @@ ugly, rough lines in beige", then "use rupture lines (a line is cut at multiple 
 ## Scope
 
 - **More roads** (`src/look/world/cover.ts`): a road (8 m) across the valley south of the formation zones, fording the
-  river at a riffle (art bible §6c) to the village; a lane (5 m) north past the large wheat field; the village's trampled square where they meet;
+  river at a riffle where it runs north–south, square across it (art bible §6c), to the village; a lane (5 m) north past the large wheat field; the village's trampled square where they meet;
   the old road widened to 8 m, the lane 5 m. Every line's corners rounded and a gentle meander laid across it (a few to
   15 m), its ends kept (the joins).
 - **The roads as segments** (`tools/build-look-data.ts`, `roadGrid`; the look data's version 7): every line resampled
@@ -62,3 +62,11 @@ blended two lines or two sides, holes, 39 MB): redesigned to segments (below).
   the shader finds the nearest segment exactly from a grid of them (no filtering), 0.2 MB. Also: the road's colour
   turns with the season by the ground's own pass (it had its own darkening, unlike the class colour beyond the tile);
   the cross road fords at a riffle (art bible §6c), not in a pool.
+- **Redesign round 1** (severe): the ford's riffle lay on an east–west reach, so the road ran 25 m along the bed: moved
+  to a riffle on a north–south reach (−83, −42), the road square across it. Past a dead end the tracks looped round
+  the cap (the across flips there): the across is the line's continuous side, the cap the distance, the tracks gone
+  past the end. Seams at junctions where the along jumps from one line to the other: the patterns there laid in the
+  world instead (the junction weight full within the paint's reach). Every tile pixel read the grid: one read of the
+  cover's distance to a line first. The float textures need WebGL2 (the roads off on WebGL1). The segments trimmed to
+  the tile's (and checked against the min-spec's texture size); the grit's rotated gradients; the grit's switch set
+  before its load; the grid's z0 and slots checked; the segment distance shared with the cover's.

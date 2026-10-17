@@ -102,9 +102,10 @@ const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }
   for (const t of [segs, grid]) t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
   segs.name = 'roadSegs'; grid.name = 'roadGrid'
   const roadMats = [terrain.terrainMat, water.waterMat, water.groundMat]
+  for (const m of roadMats) m.setFloat('uRoadOn', 0)   // (before the grit, whose load turns it on)
   const grit = new Texture(ROAD_GRIT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => { for (const m of roadMats) m.setFloat('uRoadOn', 1) }, (msg?: string) => console.error(`the road grit (${ROAD_GRIT_URL}) did not load: ${msg ?? 'unknown error'}`))
   grit.wrapU = grit.wrapV = Texture.WRAP_ADDRESSMODE; grit.anisotropicFilteringLevel = 4
-  for (const m of roadMats) { m.setTexture('uRoadSegs', segs); m.setTexture('uRoadGrid', grid); m.setFloat('uRoadSegN', sn); m.setTexture('uRoadGrit', grit); m.setFloat('uRoadOn', 0) }
+  for (const m of roadMats) { m.setTexture('uRoadSegs', segs); m.setTexture('uRoadGrid', grid); m.setFloat('uRoadSegN', sn); m.setTexture('uRoadGrit', grit) }
 }
 // ?trees=one: every tree one model (L5b's judging, docs/plans/active/l5-macro.md); with ?trees=one,cards, drawn as
 // leaf cards

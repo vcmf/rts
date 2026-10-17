@@ -127,7 +127,7 @@ export function checkLookData(d: Derived, look: LookData): void {
   if (look.far.h.length !== fn * fn) bad.push(`far ring has ${look.far.h.length} heights, not ${fn * fn}`)
   for (const [name, g, gn, texel, ch] of [['bank normals', look.bank, d.bankN, s.bank.texel, 3], ['water data', look.water, d.waterN, s.water.texel, 4]] as const)
     if (g.n !== gn || g.ch !== ch || !near(g.cell, texel) || !near(g.x0, -s.tile / 2) || !near(g.z0, -s.tile / 2)) bad.push(`${name} ${g.n}² of ${g.cell} m (${g.ch} bytes) from ${g.x0}, the spec wants ${gn}² of ${texel} m (${ch} bytes) from ${-s.tile / 2}`)
-  if (look.roads.n !== d.roadN || !near(look.roads.cell, s.road.cell) || !near(look.roads.x0, -s.tile / 2)) bad.push(`road grid ${look.roads.n}² of ${look.roads.cell} m, the spec wants ${d.roadN}² of ${s.road.cell} m`)
+  if (look.roads.n !== d.roadN || !near(look.roads.cell, s.road.cell) || !near(look.roads.x0, -s.tile / 2) || !near(look.roads.z0, -s.tile / 2) || ROAD_SLOTS % 4) bad.push(`road grid ${look.roads.n}² of ${look.roads.cell} m, the spec wants ${d.roadN}² of ${s.road.cell} m`)
   if (!near(look.cover.cell, s.macro.cover) || !near(look.cover.n * look.cover.cell, s.far) || !near(look.cover.x0, -s.far / 2) || !near(look.cover.z0, -s.far / 2)) bad.push(`cover ${look.cover.n}² of ${look.cover.cell} m from ${look.cover.x0}, the spec wants ${s.macro.cover} m cells over the far ring (${s.far} m) from ${-s.far / 2}`)
   if (bad.length) throw new Error('look data does not match the world spec (run node tools/build-look-data.ts): ' + bad.join('; '))
 }

@@ -14,7 +14,7 @@ import { encodeLook, ROAD_REACH, ROAD_SLOTS, type LookData, type RoadGrid, type 
 import { bakeWater, packWater } from '../src/look/world/water-data.ts'
 import { sstep } from '../src/look/noise.ts'
 import { riverQuery } from '../src/look/river.ts'
-import { authorCover, LINES } from '../src/look/world/cover.ts'
+import { authorCover, LINES, segD } from '../src/look/world/cover.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const LOOK_FILE = path.join(ROOT, 'data/painted-world.lookdata')
@@ -53,14 +53,19 @@ function roadGrid(): RoadGrid {
     const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - r - x0) / cell)), i1 = Math.min(n - 1, Math.floor((Math.max(ax, bx) + r - x0) / cell))
     const j0 = Math.max(0, Math.floor((Math.min(az, bz) - r - z0) / cell)), j1 = Math.min(n - 1, Math.floor((Math.max(az, bz) + r - z0) / cell))
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-      const cx = x0 + (i + 0.5) * cell, cz = z0 + (j + 0.5) * cell, dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((cx - ax) * dx + (cz - az) * dz) / (dx * dx + dz * dz)))
-      if (Math.hypot(cx - ax - t * dx, cz - az - t * dz) > r) continue
+      const cx = x0 + (i + 0.5) * cell, cz = z0 + (j + 0.5) * cell
+      if (segD(cx, cz, [ax, az], [bx, bz]) > r) continue
       const o = j * n + i
       if (used[o] >= ROAD_SLOTS) throw new Error(`roads: the cell at ${cx}, ${cz} needs more than ${ROAD_SLOTS} segments (raise ROAD_SLOTS, or shrink the cell)`)
       ids[o * ROAD_SLOTS + used[o]++] = s
     }
   }
-  return { segs: Float32Array.from(segs), n, cell, x0, z0, ids }
+  // only the segments a cell lists (the lines run far past the tile), renumbered
+  const keep = [...new Set(Array.from(ids).filter(v => v >= 0))].sort((a, b) => a - b), map = new Map(keep.map((v, k) => [v, k]))
+  for (let k = 0; k < ids.length; k++) if (ids[k] >= 0) ids[k] = map.get(ids[k])!
+  const out = new Float32Array(keep.length * 8); keep.forEach((v, k) => out.set(segs.slice(v * 8, v * 8 + 8), k * 8))
+  if (keep.length * 2 > D.spec.minSpec.maxTexture) throw new Error(`roads: ${keep.length} segments on the tile, over the min-spec's ${D.spec.minSpec.maxTexture / 2}`)
+  return { segs: out, n, cell, x0, z0, ids }
 }
 
 export function buildLookData(): Uint8Array {
