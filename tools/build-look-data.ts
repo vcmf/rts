@@ -8,13 +8,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { D } from '../src/look/spec.ts'
+import { D, ROAD_SLOTS } from '../src/look/spec.ts'
 import { authorWorld, authoredNormal } from '../src/look/world/author.ts'
-import { encodeLook, ROAD_REACH, ROAD_SEG, ROAD_SLOTS, type LookData, type RoadGrid, type SpanGrid } from '../src/look/world/data.ts'
+import { encodeLook, ROAD_SEG, type LookData, type RoadGrid, type SpanGrid } from '../src/look/world/data.ts'
 import { bakeWater, packWater } from '../src/look/world/water-data.ts'
 import { sstep } from '../src/look/noise.ts'
 import { riverQuery } from '../src/look/river.ts'
-import { authorCover, LINES, segD } from '../src/look/world/cover.ts'
+import { authorCover, COVER, LINES, segD } from '../src/look/world/cover.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const LOOK_FILE = path.join(ROOT, 'data/painted-world.lookdata')
@@ -44,7 +44,7 @@ function bankNormals(H: (x: number, z: number) => number): SpanGrid {
 type Pt = readonly [number, number]
 
 // The roads (docs/plans/active/roads.md): every segment of every line, and a grid over the tile listing, per cell, the
-// segments that reach within their half width and ROAD_REACH m of it (the shader finds the nearest exactly, with no
+// segments that reach within their half width and SPEC.road.reach m of it (the shader finds the nearest exactly, with no
 // filtering: no ghost where two lines or two sides meet). Throws if a cell needs more than ROAD_SLOTS
 export function roadGrid(): RoadGrid {
   const g = D.spec.road, n = D.roadN, cell = g.cell, x0 = -D.spec.tile / 2, z0 = x0, segs: number[] = []
@@ -56,12 +56,12 @@ export function roadGrid(): RoadGrid {
     let along = 0
     for (let k = 0; k <= last; k++) {
       const a = p[k], b = p[k + 1], u = dir(k), m0 = k > 0 ? mitre(dir(k - 1), u) : u, m1 = k < last ? mitre(u, dir(k + 1)) : u
-      segs.push(a[0], a[1], b[0], b[1], along, l.w / 2, li, (k === 0 ? 1 : 0) + (k === last ? 2 : 0), m0[0], m0[1], m1[0], m1[1]); along += Math.hypot(b[0] - a[0], b[1] - a[1])
+      segs.push(a[0], a[1], b[0], b[1], along, l.w / 2, li, (k === 0 ? 1 : 0) + (k === last ? 2 : 0) + (l.cls === COVER.track ? 4 : 0), m0[0], m0[1], m1[0], m1[1]); along += Math.hypot(b[0] - a[0], b[1] - a[1])
     }
   })
   const ids = new Float32Array(n * n * ROAD_SLOTS).fill(-1), used = new Uint8Array(n * n)
   for (let s = 0; s < segs.length / ROAD_SEG; s++) {
-    const [ax, az, bx, bz, , hw] = segs.slice(s * ROAD_SEG, s * ROAD_SEG + 6), r = hw + ROAD_REACH + cell * 0.71
+    const [ax, az, bx, bz, , hw] = segs.slice(s * ROAD_SEG, s * ROAD_SEG + 6), r = hw + g.reach + cell * 0.71
     const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - r - x0) / cell)), i1 = Math.min(n - 1, Math.floor((Math.max(ax, bx) + r - x0) / cell))
     const j0 = Math.max(0, Math.floor((Math.min(az, bz) - r - z0) / cell)), j1 = Math.min(n - 1, Math.floor((Math.max(az, bz) + r - z0) / cell))
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {

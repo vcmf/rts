@@ -15,7 +15,7 @@ ugly, rough lines in beige", then "use rupture lines (a line is cut at multiple 
   river at a riffle where it runs north–south, square across it (art bible §6c), to the village; a lane (5 m) north past the large wheat field; the village's trampled square where they meet;
   the old road widened to 8 m, the lane 5 m. Every line's corners rounded and a gentle meander laid across it (a few to
   15 m), its ends kept (the joins).
-- **The roads as segments** (`tools/build-look-data.ts`, `roadGrid`; the look data's version 7): every line resampled
+- **The roads as segments** (`tools/build-look-data.ts`, `roadGrid`; the look data's version 8): every line resampled
   every 8 m, its segments (the distance along the line at each start, its half width, its index), and a grid of 8 m
   cells over the tile listing up to 16 segments near each (the segment's three texels: its ends, its distance along, half width, line and free ends, its mitre tangents). The shader (`roadAt`) finds the nearest exactly: the
   signed distance across (a round cap past a dead end), the distance along, the half width, a junction weight (another
@@ -96,3 +96,9 @@ blended two lines or two sides, holes, 39 MB): redesigned to segments (below).
   every tree after it (four copses cross the new lines). Anything on a road, a track or the village is placed but
   hidden now (`src/look/nature.ts`), so the layout is main's but for what stands on the roads, and no road change
   moves it again.
+- **Second redesign, round 1** (severe): outside a bend the two segments tied and the first listed won the whole wedge,
+  its clamped ratio pinning the distance along (a notch in the tracks): the mitre slab breaks the tie now, and the test
+  walks a circle round every bend as roadAt picks. Where a road met a track the two earths stepped (one paler): one
+  earth at a junction, and the earth chosen by the line's class (a flag in the segment), not its width. The warp ran on
+  every tile pixel: the cover's distance read first. Willows stepping out from the bank stopped at a road (hidden): they
+  step past it again. The system doc's version and scatter rule; stale comments; ROAD_REACH's alias gone.

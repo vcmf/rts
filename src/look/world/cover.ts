@@ -62,7 +62,7 @@ const CROSS: Pt[] = [[-1300, -96], [-600, -88], [-300, -76], [-180, -58], [-118,
 const LANE: Pt[] = [[108, -71], [112, -20], [114, 30], [110, 90], [84, 150], [70, 260], [60, 600], [40, 1300]]
 const VILLAGE: Pt[] = [[196, -40], [244, -46], [256, 8], [238, 34], [198, 26]]
 const SQUARE: Pt[] = [[168, -82], [204, -84], [206, -46], [170, -44]]   // the trampled square where the roads meet the village
-// the roads and tracks (a line, its width, its class): also the road frame's lines (tools/build-look-data.ts)
+// the roads and tracks (a line, its width, its class): also the roads' segments (tools/build-look-data.ts, roadGrid)
 // a line made a country road's: its corners rounded (Chaikin's corner cutting, four times) and a meander laid across it,
 // a slow wave a few metres either side (k: its seed), fading to nothing within FADE_M of its ends and of the joins
 // (JOINS: where a line meets another, which must stay put)

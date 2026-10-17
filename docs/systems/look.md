@@ -38,7 +38,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/spec.ts` | The world SPEC: sizes declared once, the rest derived (cells, the apron band, the camera footprint, the shader macros), and the invariants checked on derive: grids meet exactly, the tile holds play ⊕ margin, the far ring holds every view, no frame corner near the horizon, yaw ≤ ±45°, bakes at their texel targets and within min-spec. The shadow map is sized from its fitted box at the texel target |
 | `src/look/world/author.ts` | The authoring formulas (`baseH`, the meander's generation, the trough and the carve). Run in Node by the build tool; the page uses them only for checks |
 | `tools/build-look-data.ts` | Builds `data/painted-world.lookdata`: the heightfield (tile plus `aoMargin`), the far ring's nodes, the river's samples, the bank normals (W2), the water data (W3, `src/look/world/water-data.ts`) and the cover (L5a, below) (`--check` compares) |
-| `src/look/world/data.ts` | The look data's binary format (version 7): arrays, span grids (a grid's covered texels only) for the bank normals and the water data, the cover's runs, and the roads' segments and grid |
+| `src/look/world/data.ts` | The look data's binary format (version 8): arrays, span grids (a grid's covered texels only) for the bank normals and the water data, the cover's runs, and the roads' segments and grid |
 | `src/look/world/cover.ts` | The ground's cover (L5a, below): authored, rasterised to a grid, run-length coded |
 | `src/look/macro.ts` | The cover's texture, the macro colour's bake and its arms (L5a, below) |
 | `src/look/heightfield.ts` | `heightAt` on the heightfield with CreateGround's own triangle split; `groundAt` adds the far ring's nodes beyond the tile; `H` is `groundAt` |
@@ -175,8 +175,8 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   cover it). `?gbounce=<0..2>` sets the strength (0: off, the same frame as without). The bake: about 7 ms on the M1
   Pro's GPU (Metal), about 1 s under SwiftShader; `window.__look.gbBakeMs()` measures it.
 - **The scatter follows the cover:** grass, flowers, plants, bushes, stumps and logs on grass; wheat on wheat;
-  nothing on roads, tracks or village ground; the point and eight points 2.5 m around it must all pass (the painted
-  edges wander that far). A tree or a stone within that reach of a field or bare earth is placed but not drawn
+  the point and eight points 2.5 m around it must all pass (the painted edges wander that far). Anything on a road, a
+  track or village ground, and a tree or a stone within that reach of a field or bare earth, is placed but not drawn
   (`addPlaced` returns `'hidden'`, and its callers skip its crown's shadow, occlusion and reflection), so the scatter's
   random stream, and every tree after it, stays where it was (`docs/plans/done/default-map.md`); the lone field trees
   under `?trees=gen` stand in the fields on purpose. **Ground bounce:** trees take 15% of the ground's colour under their root into the albedo
