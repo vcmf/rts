@@ -38,7 +38,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/spec.ts` | The world SPEC: sizes declared once, the rest derived (cells, the apron band, the camera footprint, the shader macros), and the invariants checked on derive: grids meet exactly, the tile holds play ⊕ margin, the far ring holds every view, no frame corner near the horizon, yaw ≤ ±45°, bakes at their texel targets and within min-spec. The shadow map is sized from its fitted box at the texel target |
 | `src/look/world/author.ts` | The authoring formulas (`baseH`, the meander's generation, the trough and the carve). Run in Node by the build tool; the page uses them only for checks |
 | `tools/build-look-data.ts` | Builds `data/painted-world.lookdata`: the heightfield (tile plus `aoMargin`), the far ring's nodes, the river's samples, the bank normals (W2), the water data (W3, `src/look/world/water-data.ts`) and the cover (L5a, below) (`--check` compares) |
-| `src/look/world/data.ts` | The look data's binary format (version 5): arrays, span grids (a grid's covered texels only) for the bank normals and the water data, and the cover's runs |
+| `src/look/world/data.ts` | The look data's binary format (version 8): arrays, span grids (a grid's covered texels only) for the bank normals and the water data, the cover's runs, and the roads' segments and grid |
 | `src/look/world/cover.ts` | The ground's cover (L5a, below): authored, rasterised to a grid, run-length coded |
 | `src/look/macro.ts` | The cover's texture, the macro colour's bake and its arms (L5a, below) |
 | `src/look/heightfield.ts` | `heightAt` on the heightfield with CreateGround's own triangle split; `groundAt` adds the far ring's nodes beyond the tile; `H` is `groundAt` |
@@ -115,7 +115,9 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
 - **The cover** (`src/look/world/cover.ts`, authored in Node until the map format's world compiler writes the
   same grid, `docs/proposals/map-format.md`): strip fields on the valley sides and beyond the play area (wheat,
   green crop, stubble, ploughed; each with an id and a furrow direction), meadow and pasture, a road along the
-  valley's east side, a track toward the hill, village ground beside the road. Nothing but meadow on the
+  valley's east side, a road across the valley south of the formation zones to the village, a lane north past the
+  wheat field, a track toward the hill, village ground and a trampled square where the roads meet (every line rounded
+  and meandering: `docs/plans/done/roads.md`). Nothing but meadow on the
   floodplain (art bible §6c) or in the formation zones. Rasterised to a grid of `SPEC.macro.cover` m cells (2 m)
   over the far ring, 4 bytes a cell: the class, the field's id, the furrow direction, the distance to the
   nearest road, track or village (the wear's). The class `wood` is in the format but not authored: a floor over a
@@ -125,8 +127,11 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   meadow is the old `groundMeadow`), a low-frequency variation, each field's own shade, stripes along its furrows
   (ridge-and-furrow lands on ploughed ground, faint drill bands on crops, faded with the pixel's footprint), wear
   near the lines, and edges that wander (the class lookup's point pushed ±1.5 m by the grain's blotches). Colour
-  only: the light stays in `paint()`. The road is a pale cool grey dust and the track a warm brown-grey earth
-  (`docs/plans/done/temperate-fixes.md`): each reads against the temperate meadow, the road by value. Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
+  only: the light stays in `paint()`. The road is a beige earth and the track a paler one; on the tile both are painted as rutted
+  dirt in each road's frame (the nearest road segment, found in the shader from the look data's grid of them: the
+  distance across and along, the half width, a junction weight), wheel tracks of pale dust cut into pieces, ragged edges, the owner's grit photo (`roadPaint` in
+  `shore.glsl`, `docs/plans/done/roads.md`). Far out the macro bake holds them (tracks a dusting, no grit) and the
+  tile's ground takes its material without the live roads beyond 170 m; nearer they fade in (decision 0039). Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
   The class `bare` (10): trodden or dry earth, no grass, no crops, no stripes, not
   a field (`isField`).
 - **The dirt surface** (`dirtOn` in `macro.glsl`, at the terrain's fragment: `docs/plans/done/ground-surface.md`):
@@ -171,8 +176,8 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   cover it). `?gbounce=<0..2>` sets the strength (0: off, the same frame as without). The bake: about 7 ms on the M1
   Pro's GPU (Metal), about 1 s under SwiftShader; `window.__look.gbBakeMs()` measures it.
 - **The scatter follows the cover:** grass, flowers, plants, bushes, stumps and logs on grass; wheat on wheat;
-  nothing on roads, tracks or village ground; the point and eight points 2.5 m around it must all pass (the painted
-  edges wander that far). A tree or a stone within that reach of a field or bare earth is placed but not drawn
+  the point and eight points 2.5 m around it must all pass (the painted edges wander that far). Anything on a road, a
+  track or village ground, and a tree or a stone within that reach of a field or bare earth, is placed but not drawn
   (`addPlaced` returns `'hidden'`, and its callers skip its crown's shadow, occlusion and reflection), so the scatter's
   random stream, and every tree after it, stays where it was (`docs/plans/done/default-map.md`); the lone field trees
   under `?trees=gen` stand in the fields on purpose. **Ground bounce:** trees take 15% of the ground's colour under their root into the albedo
