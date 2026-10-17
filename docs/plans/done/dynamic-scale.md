@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-17
 ---
 
@@ -59,3 +59,4 @@ scene drawn at fewer pixels where they buy the least, the interface at full reso
   the guard (the default, cover and crops views, three seasons), the coat check: exit 0; the negatives, the water and
   macro checks: exit 0 (their run had the bug, which they do not see: geometry and the water). The bench was not
   clean (another program held the load at 14 to 21): the owner's screen, with the readout, is the measure.
+- **The owner** (2026-10-16): "seems good it achieve 120fps not bad"; merged on that (the bloom fix after it: re-check owed on their screen).

@@ -163,7 +163,7 @@ const post = new Post(camera, engine, S, () => mats.grain, groundAt); post.build
 const byId = <T extends HTMLElement>(id: string): T => { const e = document.getElementById(id); if (!e) throw new Error(`look.html has no #${id}`); return e as T }
 const input = (id: string) => byId<HTMLInputElement>(id)
 input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
-// the render scale (docs/plans/active/dynamic-scale.md): a fixed one from the panel, or Auto (S.res 0, the default): by
+// the render scale (docs/plans/done/dynamic-scale.md): a fixed one from the panel, or Auto (S.res 0, the default): by
 // zoom, from the camera's radius, a level of AUTO (each change resizes the frame's targets: three over the whole range;
 // the edges at 72, 78 and 85 % of the SPEC's zoom range: about 200, 213 and 228 m), changed only once the radius is AUTO_HOLD m past the level's edge (no flicker at an edge).
 // The interface is HTML over the canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
