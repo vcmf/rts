@@ -156,14 +156,15 @@ vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
   float gr=k<0.5?1.0:k<1.5?0.75:0.0;if(gr<=0.0)return c;
   #ifdef GRASS_FLOW
   // combed: the strokes along the flow; light and dark streaks where it leans to or from the sun (the sun is fixed
-  // per map: the bake holds it), deeper and cooler gaps, soft masses at a few metres (the far zooms' fluff)
+  // per map: the bake holds it), deeper green gaps, soft masses at a few metres (the far zooms' fluff)
   vec3 fl=flowAt(xz);vec2 cb=combedBrush(xz,px);float dv=(cb.x-0.585)*0.6+(cb.y-0.5)*mix(0.35,0.8,fl.z);
-  // the strokes lighten more than they darken: past the clumps the bake's strokes stand alone, and their dark half
-  // read as smeared dark strides (the owner, 2026-10-17); the gaps stay a soft shade
-  dv=dv>0.0?dv:dv*0.35;
+  // the strokes lighten in value and darken into a deeper green, never toward black: past the clumps the bake's
+  // strokes stand alone, and a dark half in value read as smeared dark strides (the owner, 2026-10-17: "use a darker
+  // green"); deep: how far a stroke goes into its gap, 0..1
+  float deep=smoothstep(0.0,-0.22,dv);dv=max(dv,0.0);
   float streak=dot(fl.xy,FLOW_SUN)*mix(0.35,1.0,fl.z);
   float mass=mix(0.9,1.1,mValue(xz/11.0+3.0));
-  vec3 gap=mix(vec3(1.0),vec3(0.94,0.97,1.02),smoothstep(0.0,-0.09,dv));   // the gaps between the strokes: darker, cooler
+  vec3 gap=mix(vec3(1.0),vec3(0.70,0.86,0.66),deep);   // the gaps: a deeper, more saturated green (red and blue drop more than green)
   vec3 t=(1.0+dv*1.25)*(1.0+0.2*streak)*mass*gap*mix(0.93,1.07,clumpAt(xz));
   return c*mix(vec3(1.0),t,gr);
   #endif
