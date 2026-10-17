@@ -37,7 +37,7 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   // DETAIL: the detail layer (src/look/shaders/painter.glsl), on the terrain and the water. BANKN: the tile shades the
   // river's banks with the fine bank normals (docs/plans/done/w2-river-banks.md). WATERDATA: the water data (W3), for
   // the shore band the tile paints near the water as the water does (docs/plans/done/w4-water-surface.md)
-  const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones'], samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE', '#define MEADOW_UNDER'] })
+  const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones', 'uMeadowOn'], samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE', '#define MEADOW_UNDER'] })
   terrainMat.setTexture('uWater', water)
   // the bank normals: x, z of the normal, the weight; the uncovered texels a level normal of no weight (the vertex
   // normals hold there)
@@ -46,7 +46,7 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   // at the river's width) at the tile's edge
   const edgeK = (x: number, z: number) => 1 - sstep(TILE_W / 2 - D.spec.bank.edge, TILE_W / 2, Math.max(Math.abs(x), Math.abs(z)))
   // the lab's test hill: the terrain's material without the ground's bank normals (they would shade its faces)
-  const hillMat = mats.make('hill', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], samplers: ['uGB', 'uMeadow'], defines: ['#define DETAIL', '#define GROUND_BOUNCE', '#define MEADOW_UNDER'] })
+  const hillMat = mats.make('hill', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], samplers: ['uGB'], defines: ['#define DETAIL', '#define GROUND_BOUNCE'] })
   // far ring: the river painted from a mask (the samples stroked at their widths), since 15 m vertices can't hold it
   const riverMaskCanvas = document.createElement('canvas'); riverMaskCanvas.width = riverMaskCanvas.height = MASK_N
   // one path per run of equal (half-pixel) width: a canvas filter or a stroke per sample loses the GL context in SwiftShader

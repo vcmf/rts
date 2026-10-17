@@ -111,8 +111,32 @@ vec3 bankPaint(vec3 c,vec2 xz,float land,float h,float ny){
 }
 // the shore band's ground: the terrain's (groundAt, stony where steep) with the banks painted over it, through the
 // seasons: the same colour the terrain paints there
+#if defined(MEADOW)&&defined(MEADOW_UNDER)
+// THE GROUND UNDER THE NEAR GRASS AND CROPS (docs/plans/active/crop-depth.md): darker, in the plant's own deep tone (a
+// deep green under grass and the green crop, a deep ochre under wheat and stubble), as the growth there says (the
+// meadow map: G the grass, B its height factor, A the crop; src/look/meadow.ts), so the gaps between the blades read
+// as depth and shade. Only where the clumps are drawn: within UNDER_R of the focus, less as the camera rises (zoomed
+// out the clumps thin to the outer ring's), none while the meadow is off (uMeadowOn); the wheat's and the stubble's
+// fade with their heights through the seasons, as the grass's. The terrain and the water's land side both take it (one
+// ground: the seam)
+uniform sampler2D uMeadow;uniform float uMeadowOn;
+#define UNDER_R vec2(60.0,100.0)
+#define UNDER_AMT 0.45
+#define UNDER_GRASS vec3(0.62,0.74,0.55)   // the ground's colour times this: a deep green
+#define UNDER_CROP vec3(0.74,0.58,0.42)    // a deep ochre, toward orange
+vec3 meadowUnder(vec3 alb,vec2 xz){
+  float near=uMeadowOn*(1.0-smoothstep(UNDER_R.x,UNDER_R.y,length(xz-uFocus.xz)))*(1.0-smoothstep(130.0,190.0,length(uCamPos-uFocus)));
+  if(near<=0.0)return alb;
+  vec4 m=texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);
+  float g=m.g*m.b*mix(1.0,0.45,smoothstep(2.5,3.0,uSeason)),k=coverAt(xz).x;bool green=k>6.5&&k<7.5;
+  float cr=m.a*(green?mix(1.0,0.5,smoothstep(2.5,3.0,uSeason)):1.0-smoothstep(1.55,1.95,uSeason));
+  bool crop=m.a>m.g;
+  return mix(alb,alb*(crop&&!green?UNDER_CROP:UNDER_GRASS),clamp(crop?cr:g,0.0,1.0)*near*UNDER_AMT);}
+#else
+vec3 meadowUnder(vec3 alb,vec2 xz){return alb;}
+#endif
 vec3 landAlbedo(vec2 xz,float land,float h){float ny=bankNormal(vec3(0.0,1.0,0.0),xz).y;
-  return groundSeason(bankPaint(groundSteep(dirtOn(groundAt(xz,pxMacro()),xz,pxMacro()),ny),xz,land,h,ny));}
+  return meadowUnder(groundSeason(bankPaint(groundSteep(dirtOn(groundAt(xz,pxMacro()),xz,pxMacro()),ny),xz,land,h,ny)),xz);}
 // the bed: silt in pools, pale gravel where the current runs, weed in slow deeper water; the damp edge at depth 0
 // la: the ground at the water's edge (used to 0.3 m deep)
 vec3 bedAlbedo(vec2 xz,float depth,float speed,vec3 la){

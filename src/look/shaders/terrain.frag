@@ -7,25 +7,6 @@ precision highp float;varying vec3 vW,vN;varying float vRiver;
 #ifdef FARRING
 uniform sampler2D uRiverMask;
 #endif
-#if defined(MEADOW)&&defined(MEADOW_UNDER)
-// THE GROUND UNDER THE NEAR GRASS AND CROPS (docs/plans/active/crop-depth.md): darker, in the plant's own deep tone
-// (a deep green under grass, a deep ochre under a crop), as the growth there (the meadow map: G the grass, A the crop,
-// src/look/meadow.ts) and the clump field say, so the gaps between the blades read as depth and their shade. Only
-// where the clumps are drawn (within UNDER_R of the focus, fading out with the meadow's outer ring); the stubble's
-// and the grass's fade with their heights through the seasons
-uniform sampler2D uMeadow;
-#define UNDER_R vec2(60.0,100.0)
-#define UNDER_AMT 0.45
-#define UNDER_GRASS vec3(0.62,0.74,0.55)   // the ground's colour times this: a deep green
-#define UNDER_CROP vec3(0.74,0.58,0.42)    // a deep ochre, toward orange
-vec3 meadowUnder(vec3 alb,vec2 xz){
-  // (and less as the camera rises: zoomed out the clumps thin to the outer ring's and the ground carries the field)
-  float near=(1.0-smoothstep(UNDER_R.x,UNDER_R.y,length(xz-uFocus.xz)))*(1.0-smoothstep(130.0,190.0,length(uCamPos-uFocus)));if(near<=0.0)return alb;
-  vec4 m=texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);bool crop=m.a>m.g;
-  float grow=crop?m.a*(1.0-smoothstep(1.55,1.95,uSeason)):m.g*m.b*mix(1.0,0.45,smoothstep(2.5,3.0,uSeason));
-  float amt=clamp(grow,0.0,1.0)*near*UNDER_AMT;
-  return mix(alb,alb*(crop?UNDER_CROP:UNDER_GRASS),amt);}
-#endif
 // the ground's colour: its cover's (groundAt, the macro colour's arm: macro.glsl, shared with the shore band), stony
 // where steep, the banks, the seasons. wt: the water data here (WATERDATA)
 vec3 albedo(vec3 wp,vec3 n,vec4 wt){
@@ -77,9 +58,7 @@ void main(){
   alb=mix(alb,alb*vec3(0.72,0.78,0.70),smoothstep(0.0,0.15,rm));
   alb=mix(alb,uFarRiver,smoothstep(0.3,0.6,rm));   // the water mid tone after its sky tint, so the line matches the river at the tile edge
   #endif
-  #if defined(MEADOW)&&defined(MEADOW_UNDER)&&!defined(FARRING)
-  alb=meadowUnder(alb,vW.xz);
-  #endif
+  alb=meadowUnder(alb,vW.xz);   // the dark ground under the near grass and crops (shore.glsl)
   pSnowLie=snowLie(vW.xz,pxMacro());   // the fields' furrows hold the snow (macro.glsl)
   #ifdef GROUND_BOUNCE
   pGround=groundBounceAt(vW);   // the bounce map (LC5)

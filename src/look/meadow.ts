@@ -32,9 +32,10 @@ const TILE_W = D.spec.tile, MAP_N = Math.round(TILE_W)   // the meadow map: 1 m 
 // (m: in from band[0] to band[1], out from band[2] to band[3]; the next ring fades in where this one fades out), and
 // its clump
 // the camera's radius over which the inner rings give way to the outer one (m): the default view is 125, the widest 260
-// a crop's stalk at its tip, drawn in to this share of the grass clump's spread (straight, docs/plans/active/crop-depth.md)
-const CROP_STRAIGHT = 0.4, CROP_WIDE = 1.5
 const WIDE: [number, number] = [150, 200]   // (buildMeadow's wide: false, ?nowide, keeps the rings as before: the A/B)
+// a crop's clump (docs/plans/active/crop-depth.md): CROP_WIDE times the grass clump's spread at the root, and drawn in
+// to CROP_STRAIGHT of that at the tip, where the grass fans out to about 1.6 times its root's: the stalks stand straight
+const CROP_STRAIGHT = 0.64, CROP_WIDE = 1.5
 export interface Ring { cell: number; n: number; spread: number; band: [number, number, number, number]; clump: 'Grass_Large' | 'Grass_Small' }
 export const RINGS: Ring[] = [
   { cell: 0.5, n: 104, spread: 1.6, band: [0, 0, 18, 25], clump: 'Grass_Large' },   // band[1] 0: no fade in
@@ -44,6 +45,8 @@ export const RINGS: Ring[] = [
 
 export interface Meadow {
   meshes: Mesh[]; setOn(on: boolean): void; bakeMs: number
+  // the ground's dark under-layer (shore.glsl, MEADOW_UNDER) on these materials: the meadow map, on while the meadow is
+  under(ms: ShaderMaterial[]): void
   growingCells: number                                // texels of the meadow map where grass grows
   growthAt(x: number, z: number): number              // the growth at a point as the GPU reads it (the checks: tools/river-check.js)
   groundAt(x: number, z: number): number              // the ground's height the grass stands on, as the GPU reads it (tools/look-check.js)
@@ -148,7 +151,6 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
     })
     const c = clumps[r.clump]
     m.backFaceCulling = false; m.setTexture('uMeadow', map); m.setFloat('uCell', r.cell)
-    if (ri === 0) mats.bindAll(x => x.setTexture('uMeadow', map))   // the ground reads it too: its dark under-layer (terrain.frag, MEADOW_UNDER)
     // the footprint by the ring (its spread, against the clump's own proportions), the height the same on every ring
     m.setFloat('uSpread', r.spread * c.top / HEIGHT); m.setFloat('uHeight', HEIGHT)
     const mesh = new Mesh(`meadowGrass${ri}`, scene)   // the name keeps it out of the sun's shadow pass (src/look/bakes.ts)
@@ -189,5 +191,6 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
     const f = camera.target, y = heightAt(f.x, f.z); centre.set(f.x, f.z)
     RINGS.forEach((r, ri) => { origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell); ringMats[ri].setFloat('uCentreY', y) })
   })
-  return { meshes, setOn: on => { for (const m of meshes) m.setEnabled(on) }, bakeMs: performance.now() - t0, growingCells, growthAt, groundAt: groundAtMap, cropAt, croppingCells: crops.count }
+  const unders: ShaderMaterial[] = []
+  return { meshes, setOn: on => { for (const m of meshes) m.setEnabled(on); for (const u of unders) u.setFloat('uMeadowOn', on ? 1 : 0) }, under: ms => { for (const u of ms) { u.setTexture('uMeadow', map); u.setFloat('uMeadowOn', 1); unders.push(u) } }, bakeMs: performance.now() - t0, growingCells, growthAt, groundAt: groundAtMap, cropAt, croppingCells: crops.count }
 }
