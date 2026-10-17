@@ -1,0 +1,69 @@
+---
+status: done
+last_reviewed: 2026-10-17
+---
+
+# Plan: straight crop stalks and a dark ground under the near grass and crops
+
+The owner (2026-10-17): the wheat (the grass clumps reused) should stand "more straight upward" and higher; the grass
+and crops cast no shade among themselves: "use the grass texture on the terrain with darker tone (dark green for
+grass, dark orange for wheat) then put the grass/wheat on".
+
+## Scope
+
+- **Straight crops** (`meadow.vert`): a crop's clump CROP_WIDE (1.5) times the grass clump's spread at its root, its
+  fan undone (the grass's blades spread about 1 + 1.15 aV up their height: measured from `data/meadow-grass.json`),
+  so its stalks stand parallel; barely any lean.
+  The height cap stays (decision 0026, 1.2 m): straight stalks lose none of it to the lean.
+- **The dark ground under the near clumps** (`meadowUnder`, `shore.glsl`): the ground's colour times a deep green
+  under grass and the green crop, a deep ochre under wheat and stubble, as the meadow map's growth says, within the
+  meadow's reach (its outer ring's band, 80 to 100 m from the focus), fading out as its inner rings do when the camera
+  rises (WIDE, 150 to 200 m), none with the meadow off; the
+  terrain and the water's land side alike (one ground, no seam).
+- Docs: `docs/systems/look.md` (the meadow).
+
+## Approach
+
+- The crop's shape in `meadow.vert` (no new mesh): the grass clump's horizontal spread divided by its measured fan
+  (1 + CROP_FAN aV) and scaled by CROP_WIDE; a crop's normals less pulled up in `meadow.frag`.
+- The under-layer in `shore.glsl` (`meadowUnder`, both the terrain and the water's land side), reading the meadow
+  map, its reach and strength set each frame by `src/look/meadow.ts` (the outer ring's band, the zoom's WIDE), its
+  season factors shared with the clumps (`meadow.glsl`); off with the meadow, and while the checks draw the ground
+  alone (`terrainOnly`).
+
+## Acceptance
+
+- Captures before and after (the wheat close and at the default zoom, the meadow grass); the owner judges.
+- The bench against main; the guard (its crops view: a formation in a field), the coat, negatives, water, macro
+  checks, the goldens: once, at the end. `npm test`, `node tools/check-docs.mjs`.
+
+## Results
+
+- **The owner** (2026-10-17): "looks good"; the stalks first came out sparse (each clump narrower): fuller since.
+- **The bench** (Metal, the frame interval, main / this branch, twice, before the review's fixes): close 4.43 / 4.70
+  to 4.83 ms, default 5.76 / 6.33 to 6.42, widest 6.54 / 6.75 to 6.83: +0.3 to 0.6 ms.
+
+- **The checks** on the final code: the guard's cover and crops views (three seasons), the coat check, the negatives,
+  the water and macro checks: exit 0. The guard's default view: two blocks under the bound (the darker ground under the
+  grass closer to their coats): sunlit-slope.Britain summer 0.077 (main 0.127), flat.Austria autumn 0.086 (main 0.112);
+  **accepted by the owner** (2026-10-17: "i do think we can accept"), recorded on #78. The goldens differ (the
+  under-layer, the crops), the expected change.
+
+## Review
+
+- **Round 1:** the stalks leaned inward (a cone, CROP_STRAIGHT 0.4): 0.64 from the mesh's measured fan; their
+  normals were the fan's; the green crop lost its under-layer in late autumn and was darkened ochre; the meadow's
+  switch left the ground dark; the water's land side had none (a seam); the lab hill took it; the map bound to every
+  material. Fixed as above.
+- **Round 2** (severe: the checks' ground alone kept the dark under-layer, so the macro check measured darkened
+  ground): `terrainOnly` turns it off. Also: the taper by the measured fan (a linear one left the stalks fanning on
+  the outer rings), 
+  the season factors shared with the clumps, the reach and the zoom fade from the meadow's own numbers (each frame),
+  the cover read only under a crop, the plan's approach.
+- **Round 3** (moderate and light: the last round): the under-layer's zoom strength from the rings' own (so `?nowide`
+  keeps it); a crop's by its height (the green crop and the stubble half); a stale comment and a dead array; the
+  plan's numbers. Also two of round 2's slips: the under-layer's strength (0.45) had been dropped, darkening the
+  field twice as much, and a crop's normals pulled up too little (blue-grey stalk sides): back to the grass's 0.75, the shading the owner
+  approved. Kept: the terrain's
+  guard around the call (the hill compiles no shore section: the reviewer's pass-through lives inside it); the
+  shore band's repeated meadow reads.
