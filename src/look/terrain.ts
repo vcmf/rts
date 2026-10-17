@@ -37,7 +37,7 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   // DETAIL: the detail layer (src/look/shaders/painter.glsl), on the terrain and the water. BANKN: the tile shades the
   // river's banks with the fine bank normals (docs/plans/done/w2-river-banks.md). WATERDATA: the water data (W3), for
   // the shore band the tile paints near the water as the water does (docs/plans/done/w4-water-surface.md)
-  const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones'], samplers: ['uBankN', 'uWater', 'uGB'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE'] })
+  const terrainMat = mats.make('terrain', TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones', 'uUnder'], samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE', '#define MEADOW_UNDER'] })
   terrainMat.setTexture('uWater', water)
   // the bank normals: x, z of the normal, the weight; the uncovered texels a level normal of no weight (the vertex
   // normals hold there)
