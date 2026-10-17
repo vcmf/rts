@@ -165,10 +165,11 @@ export class Post {
         e.setFloat('uN', TAPS.find(n => n >= 0.32 * px * px) ?? 64); lensUniforms(e)
       }
     }
-    const u = pp('uber', ['uRes', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, p ? 0.5 : 1.0, p ? '#define DOF' : null)
+    const u = pp('uber', ['uRes', 'uRenderScale', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, p ? 0.5 : 1.0, p ? '#define DOF' : null)
     // uRes: the full resolution (with the depth of field, this pass reads the half-resolution blur)
     u.onApply = e => {
       const r = d ?? u; e.setFloat2('uRes', r.width, r.height); e.setFloat('uGrainOn', S.grain); e.setFloat('uBloom', S.bloom); e.setTexture('uGrain', this.grain())
+      e.setFloat('uRenderScale', S.res ? 1 : 1 / engine.getHardwareScalingLevel())   // Auto: the paper in screen pixels (the fixed scales as before)
       // the mood's vignette, and the grade's parts the bloom takes off and puts back (its grade is in the painted
       // materials: src/look/materials.ts)
       e.setColor3('uVignette', MOOD.grade.vignette); e.setColor3('uSplitHi', MOOD.grade.splitHi); e.setFloat('uGradeSat', MOOD.grade.sat); e.setFloat('uTopAmt', MOOD.grade.topAmt); e.setFloat('uGrade', S.grade)

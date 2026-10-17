@@ -163,7 +163,24 @@ const post = new Post(camera, engine, S, () => mats.grain, groundAt); post.build
 const byId = <T extends HTMLElement>(id: string): T => { const e = document.getElementById(id); if (!e) throw new Error(`look.html has no #${id}`); return e as T }
 const input = (id: string) => byId<HTMLInputElement>(id)
 input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
-byId<HTMLSelectElement>('res').onchange = () => { S.res = +byId<HTMLSelectElement>('res').value; engine.setHardwareScalingLevel(1 / S.res) }
+// the render scale (docs/plans/done/dynamic-scale.md): a fixed one from the panel, or Auto (S.res 0, the default): by
+// zoom, from the camera's radius, a level of AUTO (each change resizes the frame's targets: three over the whole range;
+// the edges at 72, 78 and 85 % of the SPEC's zoom range: about 200, 213 and 228 m), changed only once the radius is AUTO_HOLD m past the level's edge (no flicker at an edge).
+// The interface is HTML over the canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
+const { rMin, rMax } = D.spec.camera, at = (f: number) => rMin + f * (rMax - rMin)   // the edges as shares of the zoom range
+const AUTO: [number, number][] = [[at(0.72), 1], [at(0.78), 0.95], [at(0.85), 0.9], [Infinity, 0.85]], AUTO_HOLD = 4
+let scaleNow = 1, level = 0
+const applyScale = (s: number) => { if (s !== scaleNow) { scaleNow = s; engine.setHardwareScalingLevel(1 / s) } }
+const resSel = byId<HTMLSelectElement>('res')
+resSel.onchange = () => { S.res = +resSel.value }
+scene.onBeforeRenderObservable.add(() => {
+  if (+resSel.value !== S.res) resSel.value = String(S.res)   // the panel follows a scale set elsewhere (the tools)
+  if (S.res) { applyScale(S.res); return }
+  const r = camera.radius
+  while (level < AUTO.length - 1 && r > AUTO[level][0] + AUTO_HOLD) level++
+  while (level > 0 && r < AUTO[level - 1][0] - AUTO_HOLD) level--
+  applyScale(AUTO[level][1])
+})
 const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
 // ?bloom=0: open with the bloom off (an A/B, docs/plans/done/frame-readout.md)
 // ?far=off (below, after the bakes), ?msaa=1 (before the passes): the widest zoom's A/Bs (docs/plans/done/wide-perf.md)

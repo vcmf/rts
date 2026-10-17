@@ -23,7 +23,7 @@ export interface Arm { name: string; apply: () => unknown }   // apply may retur
 export interface BenchPasses { terrain: Mesh[]; scatter: Mesh[]; water: Mesh[]; post: () => PostProcess[] }
 interface Cam { name: string; alpha: number; beta: number; radius: number }
 export interface RunStats {
-  cam: string; arm: string; frames: number
+  cam: string; arm: string; size: [number, number]; frames: number   // size: the frame drawn (the render scale: Auto lowers it at the widest zoom)
   frameMs: Stat; gpuMs: Record<string, Stat | null>; passesOverFrame: number | null; drawCalls: number; triangles: number; segments: Record<string, number>
 }
 interface Stat { p50: number; p95: number; max: number; n: number }
@@ -118,6 +118,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   const frames = (n: number) => new Promise<void>(r => { let k = 0; const o = engine.onEndFrameObservable.add(() => { if (++k >= n) { engine.onEndFrameObservable.remove(o); r() } }) })
   const seconds = (s: number) => new Promise<void>(r => setTimeout(r, s * 1000))
 
+  const canvas0 = [engine.getRenderWidth(true), engine.getRenderHeight(true)]   // the page's frame before any camera (a wide one draws smaller at Auto)
   const runs: RunStats[] = [], cams = cameras()
   try {
     await seconds(2)   // shaders compiled, first frames out of the way
@@ -143,15 +144,15 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
         // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
         const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
         const passesFit = gpuMs.frame ? +(sum / gpuMs.frame.p50).toFixed(2) : null
-        runs.push({ cam: cam.name, arm: arm.name, frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
+        runs.push({ cam: cam.name, arm: arm.name, size: [engine.getRenderWidth(true), engine.getRenderHeight(true)], frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
       }
     }
   } finally { timing = false; seg(null); for (const u of undo) u(); inst.dispose() }
   const r = engine.getRenderingCanvas()
   return {
-    tool: 'look-bench', version: 3,   // 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
+    tool: 'look-bench', version: 4,   // 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
     build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
-    canvas: { w: engine.getRenderWidth(), h: engine.getRenderHeight(), cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
+    canvas: { w: canvas0[0], h: canvas0[1], cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
     gpuTimer: timer.available, holdS, focus, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
     note: timer.available ? 'GPU times from EXT_disjoint_timer_query_webgl2' : 'no GPU timer on this browser: GPU fields are null', runs,
   }
