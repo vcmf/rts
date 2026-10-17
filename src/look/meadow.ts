@@ -111,6 +111,8 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   }
   const map = new RawTexture(data, MAP_N, MAP_N, Constants.TEXTUREFORMAT_RGBA, scene, false, false, Texture.BILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_HALF_FLOAT)
   map.wrapU = map.wrapV = Texture.CLAMP_ADDRESSMODE
+  // the ground reads it too under ?grass=flow (groundAt, src/look/shaders/macro.glsl): the comb only where grass grows
+  mats.bindAll(m => m.setTexture('uGrowth', map))
   // the growth as the GPU reads it (bilinear over the texel centres), for the checks: anything it gives above 0 is
   // grass, or a crop, the shader may grow
   const bilinear = (a: Float32Array) => (x: number, z: number) => {

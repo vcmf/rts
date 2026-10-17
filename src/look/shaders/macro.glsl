@@ -152,6 +152,7 @@ vec2 combedBrush(vec2 xz,float px){
   float n=1.0/sqrt(max(ww,1e-4));
   return vec2(0.585+s*n,0.5+sc*n);}
 #endif
+#ifdef GRASS_FLOW
 // the strokes by the footprint px (m a pixel): whole up close, gone by the default zoom's far half, so the widest
 // zooms see the soft masses and bands, not hundreds of 5 m strokes (the owner, 2026-10-17: zoomed out "weird"); the
 // bake's texel (0.5 m) is past the fade, so the bake holds none: the bake arm adds them at runtime (groundAt)
@@ -162,6 +163,7 @@ vec3 combStrokes(vec2 xz,float px,float k){
   vec3 fl=flowAt(xz);vec2 cb=combedBrush(xz,px);float dv=((cb.x-0.585)*0.6+(cb.y-0.5)*mix(0.35,0.8,fl.z))*k;
   float deep=smoothstep(0.0,-0.22,dv);
   return (1.0+max(dv,0.0)*1.25)*mix(vec3(1.0),vec3(0.70,0.86,0.66),deep);}
+#endif
 vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
   float gr=k<0.5?1.0:k<1.5?0.75:0.0;if(gr<=0.0)return c;
   #ifdef GRASS_FLOW
@@ -253,14 +255,31 @@ vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
 #endif
 // THE GROUND'S COLOUR the terrain and the shore band start from, by arm (every painted material has one: setArm,
 // src/look/macro.ts; with none, the shader arm's)
+#if defined(MACRO_BAKE)&&defined(MEADOW)&&defined(GRASS_FLOW)
+uniform sampler2D uGrowth;
+// the short grass where the meadow grows none (the formation zones, the banks): the default's brush pattern, its
+// multiplier (meadowPattern's)
+float shortGrass(vec2 xz,float px){
+  vec2 w=(vec2(mValue(xz/23.0),mValue(xz/23.0+41.0))-0.5)*3.0;
+  float b=brushAt((xz+w)/7.3,7.3,px)*0.6+brushAt(mat2(0.8253,-0.5646,0.5646,0.8253)*(xz-w)/(7.3/2.618)+0.37,7.3/2.618,px)*0.4;
+  return 1.0+(b-0.585)*1.1;}
+#endif
 vec3 groundAt(vec2 xz,float px){
   #if defined(MACRO_BAKE)&&defined(MEADOW)&&defined(GRASS_FLOW)
   // the comb's strokes, by the footprint (strokeK): near pixels only, on meadow and pasture
+  // the comb is the tops of grass that stands: by the meadow's growth (the map, 1 m texels, over the tile; none in the
+  // formation zones and on the banks), where none grows the short grass's brush instead (the owner, 2026-10-17: the
+  // strokes alone, with no grass, looked wrong); grass beyond the tile counts as growing
   vec3 g=bakeOnce(xz).rgb;float sk=strokeK(px);
-  // (how much is grass: four warped taps 1.2 m apart, so the strokes fade over a class edge as the bake's blend does,
-  // not at the cover grid's cells)
-  if(sk>0.0){float gr=0.0;for(int i=0;i<4;i++){vec2 o=vec2(i==0?1.2:i==1?-1.2:0.0,i==2?1.2:i==3?-1.2:0.0);float k=coverAt(coverWarp(xz+o)).x;gr+=(k<0.5?1.0:k<1.5?0.75:0.0)*0.25;}
-    if(gr>0.0)g*=mix(vec3(1.0),combStrokes(xz,px,sk),gr);}
+  bool onTile=max(abs(xz.x),abs(xz.y))<TILE_HALF-1.0;
+  float grow=onTile?smoothstep(0.15,0.7,texture2D(uGrowth,(xz+TILE_HALF)/TILE_W).g):1.0;
+  if(grow<1.0||sk>0.0){
+    // (how much is grass: four warped taps 1.2 m apart, so the pattern fades over a class edge as the bake's blend
+    // does, not at the cover grid's cells)
+    float gr=0.0;for(int i=0;i<4;i++){vec2 o=vec2(i==0?1.2:i==1?-1.2:0.0,i==2?1.2:i==3?-1.2:0.0);float k=coverAt(coverWarp(xz+o)).x;gr+=(k<0.5?1.0:k<1.5?0.75:0.0)*0.25;}
+    if(gr>0.0){
+      if(grow<1.0)g*=mix(1.0,shortGrass(xz,px),gr*(1.0-grow));
+      if(sk*grow>0.0)g*=mix(vec3(1.0),combStrokes(xz,px,sk*grow),gr);}}
   return g;
   #elif defined(MACRO_BAKE)
   return bakeOnce(xz).rgb;
