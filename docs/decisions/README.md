@@ -43,3 +43,4 @@ recorded here on 2026-10-08.
 | [0034](0034-checks-re-baselined-for-the-default-mood.md) | The shimmer gate at the widest view is re-baselined for the temperate mood | accepted |
 | [0035](0035-units-take-the-bounce-hue.md) | Units take the ground's bounce at its full hue, at a share of its strength | accepted |
 | [0036](0036-frame-rate-targets-and-render-scale.md) | Frame rate: 60 fps hard, 120 fps soft; the render scale by zoom | accepted |
+| [0037](0037-simulation-owns-animation-timing.md) | The simulation owns timing; animation is fitted to its phases | accepted |
