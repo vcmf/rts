@@ -32,6 +32,8 @@ const TILE_W = D.spec.tile, MAP_N = Math.round(TILE_W)   // the meadow map: 1 m 
 // (m: in from band[0] to band[1], out from band[2] to band[3]; the next ring fades in where this one fades out), and
 // its clump
 // the camera's radius over which the inner rings give way to the outer one (m): the default view is 125, the widest 260
+// a crop's stalk at its tip, drawn in to this share of the grass clump's spread (straight, docs/plans/active/crop-depth.md)
+const CROP_STRAIGHT = 0.3
 const WIDE: [number, number] = [150, 200]   // (buildMeadow's wide: false, ?nowide, keeps the rings as before: the A/B)
 export interface Ring { cell: number; n: number; spread: number; band: [number, number, number, number]; clump: 'Grass_Large' | 'Grass_Small' }
 export const RINGS: Ring[] = [
@@ -142,10 +144,11 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   RINGS.forEach((r, ri) => {
     const m = mats.make(`meadow${ri}`, MEADOW_VS.replace('#include<meadow>', () => MEADOW_GLSL), MEADOW_FS, {
       attributes: ['position', 'normal', 'aV', 'aSlot'], uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand'], samplers: ['uMeadow', 'uGB'],
-      defines: ['#define GROUND_BOUNCE', `#define MEADOW_N ${MAP_N.toFixed(1)}`, `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`, `#define MEADOW_SINK ${MEADOW_SINK.toFixed(3)}`, `#define WHEAT_HEIGHT_MAX ${WHEAT_HEIGHT_MAX.toFixed(2)}`, `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(3)}`, `#define GREEN_HEIGHT ${GREEN_HEIGHT.toFixed(3)}`],
+      defines: ['#define GROUND_BOUNCE', `#define MEADOW_N ${MAP_N.toFixed(1)}`, `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`, `#define MEADOW_SINK ${MEADOW_SINK.toFixed(3)}`, `#define WHEAT_HEIGHT_MAX ${WHEAT_HEIGHT_MAX.toFixed(2)}`, `#define CROP_STRAIGHT ${CROP_STRAIGHT.toFixed(2)}`, `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(3)}`, `#define GREEN_HEIGHT ${GREEN_HEIGHT.toFixed(3)}`],
     })
     const c = clumps[r.clump]
     m.backFaceCulling = false; m.setTexture('uMeadow', map); m.setFloat('uCell', r.cell)
+    if (ri === 0) mats.bindAll(x => x.setTexture('uMeadow', map))   // the ground reads it too: its dark under-layer (terrain.frag, MEADOW_UNDER)
     // the footprint by the ring (its spread, against the clump's own proportions), the height the same on every ring
     m.setFloat('uSpread', r.spread * c.top / HEIGHT); m.setFloat('uHeight', HEIGHT)
     const mesh = new Mesh(`meadowGrass${ri}`, scene)   // the name keeps it out of the sun's shadow pass (src/look/bakes.ts)
