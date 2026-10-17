@@ -7,7 +7,7 @@ last_reviewed: 2026-10-17
 
 ## Problem
 
-The owner (2026-10-17) wants the meadow to have Tiny Glade's beauty (`design/refs/tiny-glade/`, owner-local). The
+The owner (2026-10-17) wants the meadow to have Tiny Glade's beauty (the owner's Tiny Glade screenshots, kept locally, not committed). The
 research (`docs/research/painterly-grass.md`) found what makes that grass read as painted: combed flow (patches
 sharing a lean), light and dark streaks from it, a strong root-to-tip gradient, deep soft gaps, soft value masses
 at distance. Our meadow has none of the flow: the brush tile's blades lie every way (`tools/meadow-brush.py`), and
@@ -23,6 +23,10 @@ Step 1 of the research's order, as an arm of the look page, `?grass=flow` (the d
   and stretched along it, light and dark streaks by the lean against the sun, deeper cool gaps, soft value masses;
   still in the macro bake, so nothing a frame;
 - **the 3D clumps lean with it** (`meadow.vert`): their turn and lean from the field, the hash only jittering it.
+
+Grown with the owner's rounds (below): the strokes at runtime by zoom and by growth, larger, denser clumps with a hue
+each, the seasons keeping the pattern; then the cost review: the flow and the comb as textures, ring chunks culled on
+the CPU.
 
 Out of scope: shells, near blades, flowers and petals, parting around props and units (later steps).
 

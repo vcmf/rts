@@ -8,7 +8,7 @@ last_reviewed: 2026-10-17
 Research notes, October 2026, from three research agents reading public sources and our code, for the meadow
 (`docs/systems/look.md`, "The meadow and the crops"). It extends `docs/research/grass-and-fields.md` (Tiny Glade's
 renderer, Total War) and `docs/research/painterly-2d-on-3d.md`. The owner's references are Tiny Glade screenshots in
-the owner-local `design/refs/tiny-glade/`. Tags: **sourced** (the link says it), **secondary** (a third party's
+the owner's local design/refs/tiny-glade/ (not committed). Tags: **sourced** (the link says it), **secondary** (a third party's
 summary), **inference** (ours, reasoning shown), **estimate** (a cost we computed, not measured).
 
 ## 1. Our camera decides first
