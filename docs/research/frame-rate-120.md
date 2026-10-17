@@ -75,3 +75,6 @@ The frame interval with one part off at a time (`docs/plans/done/wide-perf.md`):
 the far woods ≈0.6, the bloom ≈0.2, the terrain's detail grain and the leaf cards ~0. So far-tree impostors could win
 0.6 ms at most; built instead: the MSAA target in 8 bits (same image) and the meadow's rings by zoom (94 → 108 fps on
 the owner's screen). Then an automatic render scale by zoom (0.85 at the widest: 108 → 120 fps on the owner's screen; `docs/plans/done/dynamic-scale.md`).
+
+Auto's floor then went to 0.75 at the widest (decision 0036, `docs/plans/done/auto-floor.md`; the owner's screen: a
+fixed 0.75× reached the 120 cap); a scale driven by missed frames was tried and dropped (the same plan says why).
