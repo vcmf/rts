@@ -38,7 +38,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/spec.ts` | The world SPEC: sizes declared once, the rest derived (cells, the apron band, the camera footprint, the shader macros), and the invariants checked on derive: grids meet exactly, the tile holds play ⊕ margin, the far ring holds every view, no frame corner near the horizon, yaw ≤ ±45°, bakes at their texel targets and within min-spec. The shadow map is sized from its fitted box at the texel target |
 | `src/look/world/author.ts` | The authoring formulas (`baseH`, the meander's generation, the trough and the carve). Run in Node by the build tool; the page uses them only for checks |
 | `tools/build-look-data.ts` | Builds `data/painted-world.lookdata`: the heightfield (tile plus `aoMargin`), the far ring's nodes, the river's samples, the bank normals (W2), the water data (W3, `src/look/world/water-data.ts`) and the cover (L5a, below) (`--check` compares) |
-| `src/look/world/data.ts` | The look data's binary format (version 5): arrays, span grids (a grid's covered texels only) for the bank normals and the water data, and the cover's runs |
+| `src/look/world/data.ts` | The look data's binary format (version 7): arrays, span grids (a grid's covered texels only) for the bank normals and the water data, the cover's runs, and the roads' segments and grid |
 | `src/look/world/cover.ts` | The ground's cover (L5a, below): authored, rasterised to a grid, run-length coded |
 | `src/look/macro.ts` | The cover's texture, the macro colour's bake and its arms (L5a, below) |
 | `src/look/heightfield.ts` | `heightAt` on the heightfield with CreateGround's own triangle split; `groundAt` adds the far ring's nodes beyond the tile; `H` is `groundAt` |
@@ -128,8 +128,8 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   (ridge-and-furrow lands on ploughed ground, faint drill bands on crops, faded with the pixel's footprint), wear
   near the lines, and edges that wander (the class lookup's point pushed ±1.5 m by the grain's blotches). Colour
   only: the light stays in `paint()`. The road is a brown-beige earth and the track a warm brown-grey earth; on the tile both are painted as rutted
-  dirt in each road's frame (the road frame in the look data: the distance across the nearest line, its direction,
-  its half width), wheel tracks of pale dust cut into pieces, ragged edges, the owner's grit photo (`roadPaint` in
+  dirt in each road's frame (the nearest road segment, found in the shader from the look data's grid of them: the
+  distance across and along, the half width, a junction weight), wheel tracks of pale dust cut into pieces, ragged edges, the owner's grit photo (`roadPaint` in
   `shore.glsl`, `docs/plans/active/roads.md`). Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
   The class `bare` (10): trodden or dry earth, no grass, no crops, no stripes, not
   a field (`isField`).

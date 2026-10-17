@@ -34,8 +34,8 @@ export interface Spec {
   // river's corridor out to `reach` m from its centre line, faded out over the last `fade` m, and over the last
   // `edge` m before the tile's edge (where the apron and the far ring shade with their vertex normals)
   bank: { texel: number; reach: number; fade: number; edge: number; paint: number }   // paint: the banks' colours reach this far from the water, m (W5a)
-  // the road frame (docs/plans/active/roads.md): texels of `texel` m over the tile, out to `edge` m past a road's side
-  road: { texel: number; edge: number }
+  // the roads' grid (docs/plans/active/roads.md): cells of `cell` m over the tile, each listing the road segments near it
+  road: { cell: number }
   // the water data (docs/plans/done/w3-water-data.md): texels of `texel` m over the tile; the depth (the water level
   // minus the ground, signed) stored over depth[0]..depth[1] m, the shore distance over ±sdf m. The shore band
   // (docs/plans/done/w4-water-surface.md): within `band` m of the shoreline, on either side, the terrain and the
@@ -58,7 +58,7 @@ export const SPEC: Spec = {
   shadowFade: 32,
   detail: { px: 2048, lines: 1080, index: 400, amp: 0.4, minCos: 0.05 },
   bank: { texel: 0.5, reach: 14, fade: 3, edge: 10, paint: 7.5 },
-  road: { texel: 0.5, edge: 4 },
+  road: { cell: 8 },
   water: { texel: 0.5, depth: [-1, 2], sdf: 16, band: 0.75, stones: 24 },
   macro: { texel: 0.5, far: 4, bakeTile: 512, cover: 2, kuwahara: 2 },
 }
@@ -70,7 +70,7 @@ export interface Derived {
   hfMargin: number      // heightfield nodes beyond the tile on each side
   footprint: number     // the largest ground distance from the focus to a frame corner over every allowed view, m
   bankN: number         // the bank normal map's texels per side
-  roadN: number         // the road frame's texels per side
+  roadN: number         // the roads' grid cells per side
   macroN: number; macroFarN: number   // the macro bakes' texels per side: the tile's, the far ring's
   waterN: number        // the water data's texels per side
   sbias: string         // the shadow bias, 0.96 m in the sun camera's depth, as shader text
@@ -105,6 +105,8 @@ export const footprintOf = (s: Spec): number => reachOf(s, [[-1, 1], [1, 1], [-1
 // toward the camera reach farther on higher ground, so both ends of the tile's range bound it
 export const nearReachOf = (s: Spec): number => reachOf(s, [[-1, 0], [1, 0], [-1, -1], [1, -1]], [s.ground.lo, s.ground.hi])
 
+// the road segments a cell of the roads' grid lists (src/look/world/data.ts, the shader's roadAt)
+export const ROAD_SLOTS = 16
 export function derive(s: Spec = SPEC): Derived {
   const bad: string[] = []
   const cell = s.tile / s.tileSub, farCell = s.far / s.farSub, c = s.camera
@@ -131,6 +133,7 @@ export function derive(s: Spec = SPEC): Derived {
   if (s.sizes.aoCell >= 4) bad.push('bake: occlusion cells must be finer than the narrowest channel (4 m)')
   for (const [k, n] of Object.entries(s.sizes)) if (k !== 'aoCell' && n > s.minSpec.maxTexture) bad.push(`bake: ${k} ${n}² > ${s.minSpec.maxTexture}² (min-spec)`)
   if (s.depth.near >= s.depth.far) bad.push('bake: sun depth range out of order')
+  if (!isInt(s.tile / s.road.cell)) bad.push(`road: the tile (${s.tile} m) is not a whole number of ${s.road.cell} m cells`)
   if (!isInt(s.tile / s.bank.texel)) bad.push(`bank: the tile (${s.tile} m) is not a whole number of ${s.bank.texel} m texels`)
   else if (s.tile / s.bank.texel > s.minSpec.maxTexture) bad.push(`bake: bank normals ${s.tile / s.bank.texel}² > ${s.minSpec.maxTexture}² (min-spec)`)
   if (!(s.bank.fade > 0 && s.bank.fade < s.bank.reach && s.bank.edge > 0 && s.bank.edge < s.tile / 2)) bad.push('bank: the fades must be positive, the corridor\'s inside the reach and the edge\'s inside the tile')
@@ -149,8 +152,8 @@ export function derive(s: Spec = SPEC): Derived {
   if (bad.length) throw new Error('world spec: ' + bad.join('; '))
   const sbias = (0.96 / (s.depth.far - s.depth.near)).toFixed(6)
   return {
-    spec: s, cell, farCell, band: s.tile / 2 + farCell, hfMargin: Math.ceil(s.aoMargin / cell), footprint, sbias, bankN: Math.round(s.tile / s.bank.texel), roadN: Math.round(s.tile / s.road.texel), macroN: Math.round(s.tile / s.macro.texel), macroFarN: Math.round(s.far / s.macro.far), waterN: Math.round(s.tile / s.water.texel),
-    defines: [`#define SBIAS ${sbias}`, `#define FAR_W ${s.far.toFixed(1)}`, `#define TILE_HALF ${(s.tile / 2).toFixed(1)}`, `#define TILE_W ${s.tile.toFixed(1)}`,
+    spec: s, cell, farCell, band: s.tile / 2 + farCell, hfMargin: Math.ceil(s.aoMargin / cell), footprint, sbias, bankN: Math.round(s.tile / s.bank.texel), roadN: Math.round(s.tile / s.road.cell), macroN: Math.round(s.tile / s.macro.texel), macroFarN: Math.round(s.far / s.macro.far), waterN: Math.round(s.tile / s.water.texel),
+    defines: [`#define SBIAS ${sbias}`, `#define FAR_W ${s.far.toFixed(1)}`, `#define TILE_HALF ${(s.tile / 2).toFixed(1)}`, `#define TILE_W ${s.tile.toFixed(1)}`, `#define ROAD_CELL ${s.road.cell.toFixed(1)}`, `#define ROAD_N ${Math.round(s.tile / s.road.cell)}.0`, `#define ROAD_SLOTS ${ROAD_SLOTS}`,
       // amp: the grain's deviation, as a fraction of the texture's own; minCos: the incidence's floor (the pixel angle
       // is the uniform uPixA: it follows the camera's field of view)
       `#define DETAIL_MINCOS ${s.detail.minCos.toFixed(3)}`, `#define DETAIL_PX ${s.detail.px.toFixed(1)}`, `#define DETAIL_INDEX ${s.detail.index.toFixed(1)}`, `#define DETAIL_AMP ${s.detail.amp.toFixed(3)}`,

@@ -10,7 +10,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { D } from '../src/look/spec.ts'
 import { authorWorld, authoredNormal } from '../src/look/world/author.ts'
-import { encodeLook, type LookData, type SpanGrid } from '../src/look/world/data.ts'
+import { encodeLook, ROAD_REACH, ROAD_SLOTS, type LookData, type RoadGrid, type SpanGrid } from '../src/look/world/data.ts'
 import { bakeWater, packWater } from '../src/look/world/water-data.ts'
 import { sstep } from '../src/look/noise.ts'
 import { riverQuery } from '../src/look/river.ts'
@@ -41,46 +41,26 @@ function bankNormals(H: (x: number, z: number) => number): SpanGrid {
   return { n, cell, x0, z0, ch: 3, spans: Float32Array.from(spans), tex: Uint8Array.from(tex) }
 }
 
-// The road frame (docs/plans/active/roads.md): near each road or track (out to road.edge m past its side), four
-// floats (bytes of float32, ch 16): the signed distance across the nearest line (past a dead end, the distance to its
-// end: a round cap), the distance along it (from its start, plus 10 km a line, so lines differ), its half width, and a
-// junction weight (1 where another line's side is within a metre, fading out over JUNCTION_M), from the nearest line.
-// Each segment rasterised over its own strip of texels, its ends rounded (the nearest segment wins: a bend's outside
-// is its shared point's). Over the tile, as row spans
-const JUNCTION_M = 6
-function roadFrame(): SpanGrid {
-  const r = D.spec.road, n = D.roadN, cell = r.texel, x0 = -D.spec.tile / 2, z0 = x0
-  const best = new Float32Array(n * n).fill(Infinity), other = new Float32Array(n * n).fill(Infinity), line = new Int16Array(n * n).fill(-1), val = new Float32Array(n * n * 3)
-  LINES.forEach((l, li) => {
-    let along = li * 10000
-    for (let k = 0; k < l.pts.length - 1; k++) {
-      const a = l.pts[k], b = l.pts[k + 1], sx = b[0] - a[0], sz = b[1] - a[1], len = Math.hypot(sx, sz), ux = sx / len, uz = sz / len, reach = l.w / 2 + r.edge + JUNCTION_M
-      const i0 = Math.max(0, Math.floor((Math.min(a[0], b[0]) - reach - x0) / cell)), i1 = Math.min(n - 1, Math.ceil((Math.max(a[0], b[0]) + reach - x0) / cell))
-      const j0 = Math.max(0, Math.floor((Math.min(a[1], b[1]) - reach - z0) / cell)), j1 = Math.min(n - 1, Math.ceil((Math.max(a[1], b[1]) + reach - z0) / cell))
-      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-        const x = x0 + (i + 0.5) * cell, z = z0 + (j + 0.5) * cell, t0 = (x - a[0]) * ux + (z - a[1]) * uz
-        const t = Math.max(0, Math.min(len, t0)), px = a[0] + ux * t, pz = a[1] + uz * t, d = Math.hypot(x - px, z - pz), score = d - l.w / 2, o = j * n + i
-        if (line[o] !== li && line[o] >= 0) { if (score < best[o]) other[o] = Math.min(other[o], best[o]); else { other[o] = Math.min(other[o], score); continue } }
-        if (score >= best[o]) continue
-        const side = (x - a[0]) * -uz + (z - a[1]) * ux
-        best[o] = score; line[o] = li; val[o * 3] = side < 0 ? -d : d; val[o * 3 + 1] = along + t; val[o * 3 + 2] = l.w / 2
-      }
-      along += len
-    }
-  })
-  const spans: number[] = [], f32: number[] = []
-  for (let j = 0; j < n; j++) {
-    let open = -1
-    for (let i = 0; i <= n; i++) {
-      const o = j * n + i, inside = i < n && best[o] <= r.edge
-      if (inside && open < 0) open = i
-      if (!inside && open >= 0) { spans.push(j, open, i - open); open = -1 }
-      if (!inside) continue
-      const jn = 1 - sstep(1, JUNCTION_M, other[o])
-      f32.push(val[o * 3], val[o * 3 + 1], val[o * 3 + 2], jn)
+// The roads (docs/plans/active/roads.md): every segment of every line, and a grid over the tile listing, per cell, the
+// segments that reach within their half width and ROAD_REACH m of it (the shader finds the nearest exactly, with no
+// filtering: no ghost where two lines or two sides meet). Throws if a cell needs more than ROAD_SLOTS
+function roadGrid(): RoadGrid {
+  const g = D.spec.road, n = D.roadN, cell = g.cell, x0 = -D.spec.tile / 2, z0 = x0, segs: number[] = []
+  LINES.forEach((l, li) => { let along = 0; for (let k = 0; k < l.pts.length - 1; k++) { const a = l.pts[k], b = l.pts[k + 1]; segs.push(a[0], a[1], b[0], b[1], along, l.w / 2, li, 0); along += Math.hypot(b[0] - a[0], b[1] - a[1]) } })
+  const ids = new Float32Array(n * n * ROAD_SLOTS).fill(-1), used = new Uint8Array(n * n)
+  for (let s = 0; s < segs.length / 8; s++) {
+    const [ax, az, bx, bz, , hw] = segs.slice(s * 8, s * 8 + 6), r = hw + ROAD_REACH + cell * 0.71
+    const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - r - x0) / cell)), i1 = Math.min(n - 1, Math.floor((Math.max(ax, bx) + r - x0) / cell))
+    const j0 = Math.max(0, Math.floor((Math.min(az, bz) - r - z0) / cell)), j1 = Math.min(n - 1, Math.floor((Math.max(az, bz) + r - z0) / cell))
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const cx = x0 + (i + 0.5) * cell, cz = z0 + (j + 0.5) * cell, dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((cx - ax) * dx + (cz - az) * dz) / (dx * dx + dz * dz)))
+      if (Math.hypot(cx - ax - t * dx, cz - az - t * dz) > r) continue
+      const o = j * n + i
+      if (used[o] >= ROAD_SLOTS) throw new Error(`roads: the cell at ${cx}, ${cz} needs more than ${ROAD_SLOTS} segments (raise ROAD_SLOTS, or shrink the cell)`)
+      ids[o * ROAD_SLOTS + used[o]++] = s
     }
   }
-  return { n, cell, x0, z0, ch: 16, spans: Float32Array.from(spans), tex: new Uint8Array(Float32Array.from(f32).buffer) }
+  return { segs: Float32Array.from(segs), n, cell, x0, z0, ids }
 }
 
 export function buildLookData(): Uint8Array {
@@ -100,7 +80,7 @@ export function buildLookData(): Uint8Array {
     far: { n: fn, cell: s.far / s.farSub, x0: -s.far / 2, z0: -s.far / 2, h: fh },
     river: w.samples,
     bank: bankNormals(w.H),
-    road: roadFrame(),
+    roads: roadGrid(),
     water: packWater(bakeWater(w.H)),
     cover: authorCover(s.far, s.macro.cover),
   }

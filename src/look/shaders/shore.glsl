@@ -95,8 +95,8 @@ float aastep(float t,float v){
 // own places; trodden patches, pale dust, streaks along the road; trampled flat at a junction; the grit of the owner's
 // photo (data/road-grit-v1.png, uRoadOn once it has loaded) at two scales (WebGL2 only: its reads follow the early
 // returns, which texM's explicit gradients make safe). Browner and wetter in late autumn
-uniform sampler2D uRoad,uRoadGrit;uniform float uRoadOn;
-vec3 roadEarth(){return mix(vec3(0.60,0.53,0.42),vec3(0.47,0.40,0.31),smoothstep(0.8,2.0,uSeason));}
+uniform sampler2D uRoadSegs,uRoadGrid,uRoadGrit;uniform float uRoadOn,uRoadSegN;
+vec3 roadEarth(){return vec3(0.60,0.53,0.42);}   // (the season turns it as the rest of the ground: groundSeason)
 // one wheel track: its centre wandering across by up to 0.35 m along the way, its edges rough (a fine noise eating
 // into them), cut into pieces (about 2 to 8 m, gaps of 1 to 4 m) at its own places (k: its seed)
 float track1(float a,vec2 xz,float s,float c,float k){
@@ -104,13 +104,25 @@ float track1(float a,vec2 xz,float s,float c,float k){
   float t=1.0-smoothstep(w*0.5,w,abs(a-c-off));
   float piece=mValue(vec2(s/3.2,k+11.0))*0.7+mValue(vec2(s/1.1,k+17.0))*0.3;
   return t*smoothstep(0.42,0.52,piece);}
+// the nearest road at xz, exactly (its segments listed in the grid's cell, src/look/main.ts): the signed distance
+// across it (past a dead end, the distance to its end: a round cap), the distance along it (plus 10 km a line), its
+// half width; and a junction weight (another line's side within a metre, fading out over 6 m). hw 0: no road near
+vec4 roadAt(vec2 xz,out float jn){
+  vec2 g=(xz+TILE_HALF)/ROAD_CELL;jn=0.0;
+  if(any(lessThan(g,vec2(0.0)))||any(greaterThanEqual(g,vec2(ROAD_N))))return vec4(0.0);
+  vec2 c=floor(g);float best=1e9,other=1e9,bestLine=-1.0;vec4 r=vec4(0.0);
+  for(int k=0;k<ROAD_SLOTS/4;k++){
+    vec4 ids=texture2D(uRoadGrid,vec2(c.x*float(ROAD_SLOTS/4)+float(k)+0.5,c.y+0.5)/vec2(ROAD_N*float(ROAD_SLOTS/4),ROAD_N));
+    for(int q=0;q<4;q++){float id=q==0?ids.x:q==1?ids.y:q==2?ids.z:ids.w;if(id<0.0)break;
+      vec4 s0=texture2D(uRoadSegs,vec2(id*2.0+0.5,0.5)/vec2(uRoadSegN*2.0,1.0)),s1=texture2D(uRoadSegs,vec2(id*2.0+1.5,0.5)/vec2(uRoadSegN*2.0,1.0));
+      vec2 d=s0.zw-s0.xy;float len=length(d);vec2 u=d/len;float t=clamp(dot(xz-s0.xy,u),0.0,len);vec2 p=s0.xy+u*t;
+      float dist=length(xz-p),score=dist-s1.y,side=dot(xz-s0.xy,vec2(-u.y,u.x));
+      if(s1.z!=bestLine&&bestLine>=0.0){if(score<best)other=min(other,best);else{other=min(other,score);continue;}}
+      if(score<best){best=score;bestLine=s1.z;r=vec4(side<0.0?-dist:dist,s1.x+t+s1.z*10000.0,s1.y,0.0);}}}
+  jn=1.0-smoothstep(1.0,6.0,other);
+  return r;}
 vec3 roadPaint(vec3 c,vec2 xz){
-  vec4 r=texture2D(uRoad,(xz+TILE_HALF)/TILE_W);float hw=r.z,a=r.x,s=r.y,jn=r.w;if(hw<0.2)return c;
-  // at the frame's outer edge a texel blends with an empty one (far across, no width): its across can pass through 0,
-  // a road where none is. A sample whose half width is none of the lines' (ROAD_HW: cover.ts LINES) is such a blend,
-  // unless at a junction, where two widths meet
-  if(jn<0.3&&min(min(abs(hw-1.5),abs(hw-2.5)),abs(hw-4.0))>0.03)return c;
-  // the edge: ragged, the grass biting in and the dirt spilling out over a metre or two
+  float jn;vec4 r=roadAt(xz,jn);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
   float wob=(mValue(vec2(s/4.0,7.3))-0.5)*1.6+(mValue(vec2(s/1.1,2.1))-0.5)*0.7+(mValue(xz/0.6)-0.5)*0.5;
   // (out to about 1.6 m past the line's side: the class map's 2 m cells, under it, end within 1.4 m of it)
   float inside=(1.0-smoothstep(hw+0.2+wob*0.3,hw+1.9+wob*0.5,abs(a)))*(1.0-smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y))));

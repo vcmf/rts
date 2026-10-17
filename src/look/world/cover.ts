@@ -50,12 +50,14 @@ function rect(cx: number, cz: number, ha: number, hc: number, a: number): Pt[] {
   const ux = Math.cos(a), uz = Math.sin(a), vx = -uz, vz = ux
   return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([s, t]) => [cx + s * ha * ux + t * hc * vx, cz + s * ha * uz + t * hc * vz] as Pt)
 }
-// the road (6 m) along the east of the valley, the track (3 m) from it toward the hill, the village ground beside the road;
+// the road (8 m) along the east of the valley, the track (3 m) from it toward the hill, the village ground beside the road;
 // and (docs/plans/active/roads.md) a road across the valley south of the formation zones, fording the river, to the
 // village, a lane north from it past the large wheat field, and the village's trampled square where they meet
 const ROAD: Pt[] = [[198, -1300], [190, -600], [178, -260], [184, -60], [186, 60], [176, 260], [188, 600], [200, 1300]]
 const TRACK: Pt[] = [[184, -60], [150, -58], [118, -46], [70, -54], [44, -40]]
-const CROSS: Pt[] = [[-1300, -96], [-600, -88], [-300, -78], [-180, -70], [-110, -66], [-40, -58], [40, -66], [110, -72], [184, -62]]
+// (it fords the river at a riffle, art bible §6c: FORD, a join so the meander leaves it there)
+const FORD: Pt = [-95, -74]
+const CROSS: Pt[] = [[-1300, -96], [-600, -88], [-300, -78], [-180, -72], [-118, -74], FORD, [-72, -73], [-30, -60], [40, -66], [110, -72], [184, -62]]
 const LANE: Pt[] = [[108, -71], [112, -20], [114, 30], [110, 90], [84, 150], [70, 260], [60, 600], [40, 1300]]
 const VILLAGE: Pt[] = [[196, -40], [244, -46], [256, 8], [238, 34], [198, 26]]
 const SQUARE: Pt[] = [[168, -82], [204, -84], [206, -46], [170, -44]]   // the trampled square where the roads meet the village
@@ -63,7 +65,7 @@ const SQUARE: Pt[] = [[168, -82], [204, -84], [206, -46], [170, -44]]   // the t
 // a line made a country road's: its corners rounded (Chaikin's corner cutting, four times) and a meander laid across it,
 // a slow wave a few metres either side (k: its seed), fading to nothing within FADE_M of its ends and of the joins
 // (JOINS: where a line meets another, which must stay put)
-const JOINS: Pt[] = [[184, -60], [184, -62], [108, -71]], FADE_M = 45
+const JOINS: Pt[] = [[184, -60], [184, -62], [108, -71], FORD], FADE_M = 45
 function curvy(p: readonly Pt[], amp: number, k: number): Pt[] {
   let q: Pt[] = [...p]
   for (let it = 0; it < 4; it++) { const r: Pt[] = [q[0]]; for (let i = 0; i < q.length - 1; i++) { const [a, b] = [q[i], q[i + 1]]; r.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]) } r.push(q[q.length - 1]); q = r }
@@ -76,8 +78,19 @@ function curvy(p: readonly Pt[], amp: number, k: number): Pt[] {
     return [pt[0] - dz / l * m, pt[1] + dx / l * m] as Pt
   })
 }
+// a line resampled every `step` m along it (its ends kept): the roads' segments, few enough a cell (src/look/world/data.ts)
+function resample(p: readonly Pt[], step: number): Pt[] {
+  const out: Pt[] = [p[0]]; let carry = 0
+  for (let i = 0; i < p.length - 1; i++) {
+    const [a, b] = [p[i], p[i + 1]], len = Math.hypot(b[0] - a[0], b[1] - a[1])
+    let t = step - carry
+    while (t < len) { out.push([a[0] + (b[0] - a[0]) * t / len, a[1] + (b[1] - a[1]) * t / len]); t += step }
+    carry = len - (t - step)
+  }
+  out.push(p[p.length - 1]); return out
+}
 // (their half widths, 1.5, 2.5 and 4 m, are also roadPaint's in shore.glsl: change both together)
-export const LINES: { pts: readonly Pt[]; w: number; cls: CoverClass }[] = [{ pts: curvy(ROAD, 9, 1), w: 8, cls: COVER.road }, { pts: curvy(CROSS, 15, 2), w: 8, cls: COVER.road }, { pts: curvy(LANE, 10, 3), w: 5, cls: COVER.track }, { pts: curvy(TRACK, 5, 4), w: 3, cls: COVER.track }]
+export const LINES: { pts: readonly Pt[]; w: number; cls: CoverClass }[] = [{ pts: resample(curvy(ROAD, 9, 1), 6), w: 8, cls: COVER.road }, { pts: resample(curvy(CROSS, 15, 2), 6), w: 8, cls: COVER.road }, { pts: resample(curvy(LANE, 10, 3), 6), w: 5, cls: COVER.track }, { pts: resample(curvy(TRACK, 5, 4), 6), w: 3, cls: COVER.track }]
 const WEAR_REACH = 25.5   // the distance channel's reach, m (255 · WEAR_STEP)
 
 // the far strip fields: in a frame turned 0.6435 rad (the far hedgerows' frame, src/look/nature.ts), bands 70 m wide

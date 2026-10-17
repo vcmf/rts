@@ -12,13 +12,15 @@ ugly, rough lines in beige", then "use rupture lines (a line is cut at multiple 
 ## Scope
 
 - **More roads** (`src/look/world/cover.ts`): a road (8 m) across the valley south of the formation zones, fording the
-  river to the village; a lane (5 m) north past the large wheat field; the village's trampled square where they meet;
+  river at a riffle (art bible §6c) to the village; a lane (5 m) north past the large wheat field; the village's trampled square where they meet;
   the old road widened to 8 m, the lane 5 m. Every line's corners rounded and a gentle meander laid across it (a few to
   15 m), its ends kept (the joins).
-- **The road frame** (`tools/build-look-data.ts`, `roadFrame`): a span grid over the tile (0.5 m texels, out to 4 m
-  past a road's side) of four floats: the signed distance across the nearest line (a round cap past a dead end), the
-  distance along it, its half width, a junction weight; each segment rasterised over its own strip. About 2.1 MB in
-  the look data (5.5 MB in all, from 3.4); the build takes 5 s.
+- **The roads as segments** (`tools/build-look-data.ts`, `roadGrid`; the look data's version 7): every line resampled
+  every 6 m, its segments (the distance along the line at each start, its half width, its index), and a grid of 8 m
+  cells over the tile listing up to 16 segments near each. The shader (`roadAt`) finds the nearest exactly: the
+  signed distance across (a round cap past a dead end), the distance along, the half width, a junction weight (another
+  line's side within a metre, fading over 6 m). Nothing filtered: no ghost where two lines or two sides meet. About
+  0.2 MB of textures; the look data 4.3 MB (from 3.4); the build takes 6 s.
 - **The road's paint** (`roadPaint`, `shore.glsl`; the tile's terrain and the water's land side): a warm beige earth,
   browner and wetter in late autumn; its edge ragged into the grass; wheel tracks of pale beige dust (a pair on a
   track, on a road a pair and a fainter outer one), rough-edged, wandering a little, cut into pieces of uneven length,
@@ -30,9 +32,10 @@ ugly, rough lines in beige", then "use rupture lines (a line is cut at multiple 
 
 ## Approach
 
-The class grid (2 m cells) cannot hold a road's direction, so a baked frame grid gives every point near a road its
-place across it and its direction; the shader lays everything in that frame. Junctions are found where the frame's
-direction disagrees with its neighbours'.
+The class grid (2 m cells) cannot hold a road's direction or its length, so each ground pixel near a road finds its
+nearest segment in the shader, from a grid of the segments near each cell; everything is laid in that frame (across,
+along). As built: a baked, filtered frame grid came first and failed two review rounds (ghost lines where the filter
+blended two lines or two sides, holes, 39 MB): redesigned to segments (below).
 
 ## Acceptance
 
@@ -54,3 +57,8 @@ direction disagrees with its neighbours'.
   of each end and join). Square stubs at dead ends (a round cap now). A colour step at the tile's edge (faded, and the
   class colour the same earth). The grit read after early returns on WebGL1 (WebGL2 only). The data check and its
   version (6). The build took 87 s (each segment's own strip, the cover's lines skipped by their boxes: 5 s).
+- **Round 2** (severe): ghost strips out of dead ends and junction corners (the filter blending +d and −d, or two
+  lines), and the frame's 39 MB of float texture missing from the min-spec budget. **Redesigned** (the count restarts):
+  the shader finds the nearest segment exactly from a grid of them (no filtering), 0.2 MB. Also: the road's colour
+  turns with the season by the ground's own pass (it had its own darkening, unlike the class colour beyond the tile);
+  the cross road fords at a riffle (art bible §6c), not in a pool.
