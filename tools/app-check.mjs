@@ -12,6 +12,7 @@ import { loadSimData, compileRuleset, play } from '../src/sim/index.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { PAGE_SCENARIOS } from '../src/scenarios/page.ts'
 import { DEFAULT_MAP } from '../src/scenarios/maps.ts'
+import { reportSession } from './battle-report.ts'
 
 const out = process.argv[2] || 'scratch/app-check', PORT = 4178
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -106,10 +107,13 @@ const battle = [
   ['shot', 'battle-1-ford'],
   // S1e-2: you command side 0 only; side 1 follows its plan (its first line has come down from its ridge at z 230)
   ['eval', `APP.select([8, 0]); const sel = [...APP.selected].join(","); APP.select([]); \`SIDES selected \${sel}, enemy first line at z \${[8, 9, 10].map(i => APP.w.f.z[i].toFixed(0)).join(" ")}\``],
+  // S1e-3: a moment marked for the playtest; the report of the session prints it (below)
+  ['eval', 'APP.mark("the enemy first line is down"); `MARKS ${APP.session().marks.length}`'],
   // on to the result (at most the scenario's 40 minutes), in 3-minute steps
   ...Array.from({ length: 12 }, () => ['eval', 'if (!APP.result().tick) APP.advance(180); `t ${(APP.w.meta[0] / 1200).toFixed(1)} min`']),
   ['eval', 'APP.view(0, -60, 0.8); const r = APP.result(); `RESULT ${r.winner} at ${(r.tick / 1200).toFixed(1)} min`'],
   ['shot', 'battle-2-result'],
+  ['eval', '"SESSION " + JSON.stringify(APP.session().marks)'],
   REPLAY,
 ]
 
@@ -139,6 +143,16 @@ async function run(scenario, steps) {
   const bad = play(replay, dataOf(PAGE_SCENARIOS[scenario].map ?? DEFAULT_MAP), cr, PAGE_SCENARIOS[scenario], hashes)
   console.log(bad ? `replay MISMATCH ${JSON.stringify(bad)}` : `replay: ${replay.log.length} commands, ${hashes.length} hashes reproduced in Node`)
   if (bad) return false
+  // the playtest's report (tools/battle-report.ts) of the session, with its mark, reaches the result
+  if (scenario === 's1e-battle') {
+    const sline = text.split('\n').find(l => l.startsWith('EVAL "SESSION '))
+    if (!sline) { console.log('no session exported'); return false }
+    const marks = JSON.parse(JSON.parse(sline.slice(5)).slice(8))
+    const lines = reportSession(dataOf(PAGE_SCENARIOS[scenario].map ?? DEFAULT_MAP), cr, PAGE_SCENARIOS[scenario], { replay, hashes, marks })
+    const ok = lines.some(l => /MARK the enemy first line is down$/.test(l)) && lines.some(l => /THE END: /.test(l))
+    console.log(`REPORT ${lines.length} lines, the mark ${ok ? 'and the end found' : 'or the end MISSING'}`)
+    if (!ok) return false
+  }
   const panel = text.match(/PANEL (\d+) (\d+)/)
   if (scenario === 's1c-firefight' && !/ROUT [12] /.test(text)) { console.log('the firefight did not end in a rout'); return false }
   if (scenario === 's1c-brigade' && !/CONTAGION [23] /.test(text)) { console.log('the brigade fight did not spread a break'); return false }

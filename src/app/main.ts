@@ -7,14 +7,14 @@ import { loadSimData, compileRuleset, makeWorld, typeOf, issue, advanceTick, for
   type Command, type Stamped, type World, type HashPoint, type Replay, type Dropped } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
-import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS } from '../scenarios/page.ts'
+import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS, PAGE_SEED } from '../scenarios/page.ts'
 import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
 
 // the soldier layer steps once a frame, up to MEN_DT of game time (tested at that step); a longer frame
 // takes more steps, at most MEN_STEPS (then the men fall behind the sim and catch up)
-const SEED = 20261009, SPEEDS = [0, 1, 2, 4, 8], MEN_DT = 0.2, MEN_STEPS = 4
+const SPEEDS = [0, 1, 2, 4, 8], MEN_DT = 0.2, MEN_STEPS = 4
 
 async function main(): Promise<void> {
   const asked = new URLSearchParams(location.search).get('scenario') ?? '', scenario = PAGE_SCENARIOS[Object.hasOwn(PAGE_SCENARIOS, asked) ? asked : DEFAULT_SCENARIO]
@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   if (!urls[mapName] || MAP_VERSIONS[mapName] === undefined) throw new Error(`scenario ${scenario.name}: no map ${mapName} (src/scenarios/maps.ts and the page's data imports)`)
   const data = loadSimData(new Uint8Array(await (await fetch(urls[mapName])).arrayBuffer()), MAP_VERSIONS[mapName])
   const cr = compileRuleset(napoleonic)
-  const w: World = makeWorld(data, cr, SEED, false)
+  const w: World = makeWorld(data, cr, PAGE_SEED, false)
   attachScenario(w, scenario); scenario.setup(w)
   // the side you command (S1e-2): a scenario that names one lets you select only its formations; none, both
   const mine = (i: number): boolean => scenario.player === undefined || w.f.side[i] === scenario.player
@@ -86,16 +86,22 @@ async function main(): Promise<void> {
   document.querySelectorAll<HTMLElement>('[data-cmd]').forEach(el => { el.onclick = () => forSelection(orders[el.dataset.cmd!]) })
   document.querySelectorAll<HTMLElement>('[data-view]').forEach(el => { el.onclick = () => {
     if (el.dataset.view === 'slots') { showSlots = !showSlots; el.classList.toggle('on', showSlots) }
-    if (el.dataset.view === 'replay') copyReplay() } })
-  // to the clipboard, or (no clipboard: plain http, permission refused) as a downloaded file
+    if (el.dataset.view === 'replay') saveSession() } })
+  // the session (the replay, its hashes and the moments marked) as a downloaded file, for tools/battle-report.ts
   let note = '', noteT = 0
-  const copyReplay = async () => {
-    const text = JSON.stringify(replay())
-    try { await navigator.clipboard.writeText(text); note = 'replay copied' } catch {
-      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = `${scenario.name}-replay.json`; a.click(); URL.revokeObjectURL(a.href)
-      note = 'replay saved as a file'
-    }
-    noteT = performance.now()
+  const saveSession = () => {
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-')
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(session())], { type: 'application/json' })); a.download = `${scenario.name}-${stamp}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10_000)   // revoked at once, some browsers cancel the download
+    note = 'session saved as a file'; noteT = performance.now()
+  }
+  // M marks a moment of the playtest (docs/plans/active/s1e3-playtest.md): the prompt holds the page (and the
+  // battle) while you say what happened; Cancel marks nothing. The report prints where everyone stood then
+  const marks: { tick: number; note: string }[] = []
+  const mark = (text?: string) => {
+    const said = text ?? prompt('What happened here? (optional)')
+    if (said === null) return
+    marks.push({ tick: w.meta[M_TICK], note: said.trim() })
+    note = `moment ${marks.length} marked`; noteT = performance.now()
   }
 
   // the mouse: click a battalion to select (shift adds), drag a box, click the ground to march; right-drag
@@ -155,6 +161,7 @@ async function main(): Promise<void> {
     else if (e.key === 'Escape') { selected.clear(); charging = false }
     else if (e.key === 'c' || e.key === 'C') armCharge()
     else if ('1248'.includes(e.key)) setSpeed(+e.key)
+    else if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey) mark()   // not Cmd+M (minimise)
   })
 
   function drawScale(): void {
@@ -184,7 +191,8 @@ async function main(): Promise<void> {
   }
   // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce, as far as it has run:
   // commands issued while paused wait for their tick and are left out
-  const replay = (): { replay: Replay; hashes: HashPoint[] } => ({ replay: { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name, seed: SEED, ticks: w.meta[M_TICK], log: log.filter(s => s.tick <= w.meta[M_TICK]) }, hashes })
+  const replay = (): { replay: Replay; hashes: HashPoint[] } => ({ replay: { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name, seed: PAGE_SEED, ticks: w.meta[M_TICK], log: log.filter(s => s.tick <= w.meta[M_TICK]) }, hashes })
+  const session = () => ({ ...replay(), marks: [...marks] })
 
   // headless hooks (tools/app-check.mjs): orders and time without real time passing
   Object.assign(window, { APP: {
@@ -197,7 +205,7 @@ async function main(): Promise<void> {
     view: (cx: number, cz: number, k: number) => { view.cx = cx; view.cz = cz; view.k = k; mapDirty = true; draw() },
     drawMs: () => { const a = performance.now(); for (let n = 0; n < 20; n++) map.drawUnits(ug, view, layer, selected, false); return (performance.now() - a) / 20 },
     mapMs: () => { const a = performance.now(); map.drawMap(mg, view); return performance.now() - a },
-    hash: () => hex(hashWorld(w)), replay, stats: () => ({ simMs, drawMs, fps }), toS: (x: number, z: number) => toS(view, x, z), buildMs,
+    hash: () => hex(hashWorld(w)), replay, session, mark, stats: () => ({ simMs, drawMs, fps }), toS: (x: number, z: number) => toS(view, x, z), buildMs,
   } })
   requestAnimationFrame(frame)
 }
