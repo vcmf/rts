@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-17
 ---
 
@@ -39,6 +39,9 @@ calibrated per platform, with the zoom curve as its fallback), decided then by m
 
 - The levels (the radius out, then back): 125, 198 → 1; 206, 220 → 0.9; 232 → 0.8; 240, 260 → 0.75; back in, 236 →
   0.75, 228 → 0.8, 212 → 0.9, 195 → 1.
+
+- The goldens against main: a match (the tools pin the scale to 1). The owner's screen: a fixed 0.75× at the widest
+  zoom reached the 120 cap (2026-10-17); Auto's own number at the widest is to be read there with the readout.
 
 ## Review
 

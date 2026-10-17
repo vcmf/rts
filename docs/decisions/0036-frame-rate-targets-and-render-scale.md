@@ -12,7 +12,7 @@ soft target". The look page measured on the dev Mac (the frame interval: `docs/r
 default zooms well above 120 fps, the widest zoom short of it. After the 8-bit MSAA target and the meadow by zoom
 (`docs/plans/done/wide-perf.md`) the owner's screen showed 108 fps at the widest zoom; an automatic render scale by zoom
 (`docs/plans/done/dynamic-scale.md`) 111; a fixed 0.75× the 120 cap. A render scale driven by the frames that miss
-the display's refresh was built and failed three review rounds (`docs/plans/active/auto-floor.md` says how: a page
+the display's refresh was built and failed three review rounds (`docs/plans/done/auto-floor.md` says how: a page
 infers its display from when its callbacks run, and the refresh rate, the CPU, stalls and monitor changes corrupt
 that).
 
