@@ -6,6 +6,9 @@ export const HEIGHT = 0.62, HEIGHT_MAX = 0.85
 // how far a clump's blades reach from its root, m, at most: the outer ring's (Grass_Small's 0.26 m radius × its
 // spread 4.2 × the jitter 1.2, and its lean); the growth keeps roots this far from the formation zones and the banks
 export const CLUMP_REACH = 1.45
+// the combed meadow's (?grass=flow, docs/plans/active/grass-flow.md): the outer ring's footprint 1.4 times (1.83 m), the
+// flow's lean at the tip (at most 0.75 × HEIGHT_MAX, 0.64 m) and its jitter (0.07 m)
+export const CLUMP_REACH_FLOW = 2.6
 // how far a clump's root sinks under the meadow map's height, m: where grass grows that 1 m bilinear height is within
 // 5.2 cm of the drawn tile's triangles (measured 2026-10-13: tools/look-check.js checks no clump floats)
 export const MEADOW_SINK = 0.06

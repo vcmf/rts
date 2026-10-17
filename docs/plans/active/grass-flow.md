@@ -98,3 +98,18 @@ removal already skips hidden terrain); a camera-following near bake of the strok
 - The readability guard (`tools/guard.mjs`) with `?grass=flow` no worse than the default.
 
 ## Review rounds
+- **Round 1** (`/code-review high`, 10 findings). Severe: the combed clumps reach about 2.5 m (1.4 times wider, the
+  flow's lean) but kept 1.45 m from the formation zones and the banks (fixed: `CLUMP_REACH_FLOW`, 2.6 m, for the
+  meadow map's rules and the chunks' cull). Fixed too: the grass read the bake at its finest level (the ring's footprint
+  again); the scatter pass missed the meadow (each ring starts with its slots); the chunks were culled against the last
+  frame's camera (now before the camera's render); the autumn value-keeping touched every ground class (green ground
+  only); a reversed `smoothstep`; the clump's hue from an interpolated varying (now hashed in the vertex shader); the
+  shader arm's strokes ungated (the strokes on the bake arm only); per-frame allocations in the cull; the brush pattern
+  duplicated, `COMB_PERIOD` hard-coded, the comb's unused mips.
+- **The checks** (the machine free, 2026-10-18): goldens against origin/main identical at all 8 cameras (the chunks
+  included); `npm test` 260 passed. The guard with `?grass=flow` first failed twice against main: `open-low.Austria`
+  in autumn (0.091, main 0.108: the formation zones' ground differed) and `meadow.Britain` in winter (0.097, main
+  0.104). Fixed: where no grass grows the ground is the default's (the broad bands divided out, the autumn value
+  kept only where grass grows), and under the winter's snow the clumps, their density and the strokes are the
+  default's. Then the guard passes (summer, autumn, winter; the cover view), both blocks at main's values, and
+  `meadow.Britain` in autumn at 0.151 (main 0.024).

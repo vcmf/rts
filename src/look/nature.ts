@@ -64,7 +64,7 @@ export interface Nature {
   // (pasture shorter); and the placement rule's hard edges at any point (the formation zones, the banks, the water),
   // which the meadow map applies at every texel so that smoothing the cover never carries grass across them
   growth(x: number, z: number): [number, number]
-  growthAllowed(x: number, z: number): boolean
+  growthAllowed(x: number, z: number, reach?: number): boolean   // reach: the clumps' (CLUMP_REACH by default)
   // the crops' growth by the cover (docs/plans/done/l5d-crops.md): 1 where the point and the points EDGE round it
   // are all one sown field (one class, wheat, green crop or stubble, and one field id; ploughed grows nothing), else 0
   crop(x: number, z: number): number
@@ -428,7 +428,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     return SOWN.includes(c) && AROUND.every(([dx, dz]) => coverAt(cover, x + dx * EDGE, z + dz * EDGE) === c && fieldAt(cover, x + dx * EDGE, z + dz * EDGE) === f) ? 1 : 0
   }
   // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the outer ring's footprint and lean)
-  const growthAllowed = (x: number, z: number) => !touchesZone(x, z, CLUMP_REACH) && offBanks(riverQuery(x, z), CLUMP_REACH)
+  const growthAllowed = (x: number, z: number, reach = CLUMP_REACH) => !touchesZone(x, z, reach) && offBanks(riverQuery(x, z), reach)
   // the trunks (their shadows, baked into the light map): per model its trunk's radius and its crown's
   // lowest point, times each instance's scale
   const trunks: Nature['trunks'] = [], TRUNK = /^(CommonTree|BirchTree|PineTree|Willow|Gen)_/   // trees, not stumps

@@ -136,7 +136,15 @@ float brushAt(vec2 uv,float s,float px){
   return texture2D(uMeadowBrush,uv).r;
   #endif
 }
+// the brush pattern of the default: the tile at two unrelated scales and turns, warped by a slow noise (meadowPattern, and the
+// combed meadow's short grass)
+float meadowBrush(vec2 xz,float px){
+  vec2 w=(vec2(mValue(xz/23.0),mValue(xz/23.0+41.0))-0.5)*3.0;
+  return brushAt((xz+w)/7.3,7.3,px)*0.6+brushAt(mat2(0.8253,-0.5646,0.5646,0.8253)*(xz-w)/(7.3/2.618)+0.37,7.3/2.618,px)*0.4;}
 #ifdef GRASS_FLOW
+// the combed meadow's broad part, a multiplier (in the bake, meadowPattern): soft bands where the flow leans to or from
+// the sun, soft masses (where no grass grows groundAt divides it out, so the ground there is as the default)
+float combBroad(vec2 xz){vec3 fl=flowTex(xz);return (1.0+0.1*dot(fl.xy,FLOW_SUN)*mix(0.35,1.0,fl.z))*mix(0.93,1.07,mValue(xz/11.0+3.0));}
 // the brush combed along the flow (?grass=flow, docs/plans/active/grass-flow.md): each FLOW_CELL m cell reads the tile
 // in its own frame, turned to the flow at its centre and stretched along it (a varying turn of one frame would smear
 // far from the origin), the four nearest blended bilinearly with their contrast kept (the sum's spread over the
@@ -144,12 +152,12 @@ float brushAt(vec2 uv,float s,float px){
 #define FLOW_CELL 5.0
 // x: the brush, combed; y: the comb's own strokes, value noise stretched about seven times along the flow (5 m by
 // 0.7 m, and an octave at half that), the scale the bake's 0.5 m texel holds, about 0.5 (blended as the brush)
-uniform sampler2D uComb;   // the comb's noise, tiling (src/look/flow.ts: COMB_PERIOD lattice cells a repeat)
+uniform sampler2D uComb;   // the comb's noise, tiling (src/look/flow.ts: COMB_PERIOD lattice cells a repeat, a define)
 float combAt(vec2 p,float o){
   #ifdef WEBGL2
-  vec4 t=textureLod(uComb,p/32.0,0.0);
+  vec4 t=textureLod(uComb,p/COMB_PERIOD,0.0);
   #else
-  vec4 t=texture2D(uComb,p/32.0);
+  vec4 t=texture2D(uComb,p/COMB_PERIOD);
   #endif
   return o>0.5?t.g:t.r;}
 vec2 combedBrush(vec2 xz,float px){
@@ -174,7 +182,7 @@ float strokeK(float px){return 1.0-smoothstep(0.07,0.15,px);}
 // owner, "use a darker green"), k their weight (strokeK)
 vec3 combStrokes(vec2 xz,float px,float k){
   vec3 fl=flowTex(xz);vec2 cb=combedBrush(xz,px);float dv=((cb.x-0.585)*0.6+(cb.y-0.5)*mix(0.35,0.8,fl.z))*k*0.6;   // 0.6: the strides softer, the near grass carries the look (the owner)
-  float deep=smoothstep(0.0,-0.22,dv);
+  float deep=1.0-smoothstep(-0.22,0.0,dv);
   return (1.0+max(dv,0.0)*1.25)*mix(vec3(1.0),vec3(0.70,0.86,0.66),deep);}
 #endif
 vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
@@ -182,13 +190,12 @@ vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
   #ifdef GRASS_FLOW
   // combed (docs/plans/active/grass-flow.md): broad soft bands where the flow leans to or from the sun (the sun is
   // fixed per map: the bake holds it), soft masses at a few metres, the clump field; the strokes by the footprint
-  vec3 fl=flowTex(xz);float streak=dot(fl.xy,FLOW_SUN)*mix(0.35,1.0,fl.z);
-  vec3 t=vec3((1.0+0.1*streak)*mix(0.93,1.07,mValue(xz/11.0+3.0))*mix(0.94,1.06,clumpAt(xz)));
-  float sk=strokeK(px);if(sk>0.0)t*=combStrokes(xz,px,sk);
+  vec3 t=vec3(combBroad(xz)*mix(0.93,1.07,clumpAt(xz)));
+  // (the strokes: the bake arm adds them at runtime, by the footprint and the growth, groundAt; the shader arm shows
+  // the broad part alone)
   return c*mix(vec3(1.0),t,gr);
   #endif
-  vec2 w=(vec2(mValue(xz/23.0),mValue(xz/23.0+41.0))-0.5)*3.0;
-  float b=brushAt((xz+w)/7.3,7.3,px)*0.6+brushAt(mat2(0.8253,-0.5646,0.5646,0.8253)*(xz-w)/(7.3/2.618)+0.37,7.3/2.618,px)*0.4;
+  float b=meadowBrush(xz,px);
   float cl=mix(clumpAt(xz),mValue(xz/3.2),smoothstep(0.35,1.2,px));
   return c*mix(1.0,(1.0+(b-0.585)*1.1)*mix(0.93,1.07,cl),gr);}   // the gain makes up the contrast the bake texel blurs away
 #endif
@@ -269,12 +276,9 @@ vec4 bakeOnce(vec2 xz){if(xz!=pMacroXZ){pMacroXZ=xz;
 // THE GROUND'S COLOUR the terrain and the shore band start from, by arm (every painted material has one: setArm,
 // src/look/macro.ts; with none, the shader arm's)
 #if defined(MACRO_BAKE)&&defined(MEADOW)&&defined(GRASS_FLOW)
-// the short grass where the meadow grows none (the formation zones, the banks): the default's brush pattern, its
+// the short grass where the meadow grows none (the formation zones, the banks): the brush pattern of the default, its
 // multiplier (meadowPattern's)
-float shortGrass(vec2 xz,float px){
-  vec2 w=(vec2(mValue(xz/23.0),mValue(xz/23.0+41.0))-0.5)*3.0;
-  float b=brushAt((xz+w)/7.3,7.3,px)*0.6+brushAt(mat2(0.8253,-0.5646,0.5646,0.8253)*(xz-w)/(7.3/2.618)+0.37,7.3/2.618,px)*0.4;
-  return 1.0+(b-0.585)*1.1;}
+float shortGrass(vec2 xz,float px){return 1.0+(meadowBrush(xz,px)-0.585)*1.1;}
 #endif
 vec3 groundAt(vec2 xz,float px){
   #if defined(MACRO_BAKE)&&defined(MEADOW)&&defined(GRASS_FLOW)
@@ -287,11 +291,13 @@ vec3 groundAt(vec2 xz,float px){
   sk=0.0;
   #endif
   bool onTile=max(abs(xz.x),abs(xz.y))<TILE_HALF-1.0;
-  float grow=onTile?smoothstep(0.15,0.7,texture2D(uMeadow,(xz+TILE_HALF)/TILE_W).g):1.0;
+  float grow=onTile?smoothstep(0.15,0.7,texture2D(uMeadow,(xz+TILE_HALF)/TILE_W).g):1.0;pFlowGrow=grow;
+  sk*=1.0-smoothstep(2.0,2.8,uSeason);   // (none under the snow of winter, as on the default)
   // the strokes where grass grows (the growth already keeps to meadow and pasture and fades over their edges); the
   // short grass where it does not, on the meadow classes only (one warped cover read, there alone)
   if(sk*grow>0.0)g*=combStrokes(xz,px,sk*grow);
-  if(grow<1.0){float k=coverAt(coverWarp(xz)).x;float gr=k<0.5?1.0:k<1.5?0.75:0.0;if(gr>0.0)g*=mix(1.0,shortGrass(xz,px),gr*(1.0-grow));}
+  // (where none grows the ground is the default meadow's: the broad bands divided out, the short grass's brush back)
+  if(grow<1.0){float k=coverAt(coverWarp(xz)).x;float gr=k<0.5?1.0:k<1.5?0.75:0.0;if(gr>0.0)g*=mix(1.0,shortGrass(xz,px)/combBroad(xz),gr*(1.0-grow));}
   return g;
   #elif defined(MACRO_BAKE)
   return bakeOnce(xz).rgb;

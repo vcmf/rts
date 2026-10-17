@@ -53,7 +53,8 @@ export function buildFlow(scene: Scene): FlowTextures {
     const k = (j * m + i) * 4, x = i / COMB_RES, y = j / COMB_RES
     c[k] = Math.round(tiled(x, y, 0) * 255); c[k + 1] = Math.round(tiled(x, y, 57) * 255); c[k + 2] = 0; c[k + 3] = 255
   }
-  const comb = new RawTexture(c, m, m, Constants.TEXTUREFORMAT_RGBA, scene, true, false, Texture.TRILINEAR_SAMPLINGMODE)
+  // (no mips: read at level 0 where the strokes show, a footprint under 0.15 m, about a texel)
+  const comb = new RawTexture(c, m, m, Constants.TEXTUREFORMAT_RGBA, scene, false, false, Texture.BILINEAR_SAMPLINGMODE)
   comb.wrapU = comb.wrapV = Texture.WRAP_ADDRESSMODE
   return { flow, comb, ms: performance.now() - t0 }
 }

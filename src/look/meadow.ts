@@ -49,28 +49,31 @@ interface Chunk { i0: number; i1: number; j0: number; j1: number; slots: Float32
 const CHUNKS = 8
 // the chunks of a ring to draw (index × 2, + 1 for its hole slots): their square on the ground (the slots' cells, the
 // roots' jitter and a clump's reach) against the band (b: in from x to y, out from z to w) and the view (vp, the
-// view-projection's column-major array), the ground from 20 m under to 20 m over the focus height y, as the vertex
-// shader's own cull tests each clump, with its 1.15 margin
-function cullRing(r: Ring, ch: Chunk[], o: Vector2, c: Vector2, y: number, b: Vector4, vp: ArrayLike<number>, holes: boolean): number[] {
-  const keep: number[] = [], pad = r.cell * 2.2 + CLUMP_REACH * 1.4
-  ch.forEach((k, idx) => {
-    const x0 = o.x + k.i0 * r.cell - pad, x1 = o.x + k.i1 * r.cell + pad, z0 = o.y + k.j0 * r.cell - pad, z1 = o.y + k.j1 * r.cell + pad
+// view-projection's column-major array: this frame's), the ground from 20 m under to 20 m over the focus height y, as
+// the vertex shader's own cull tests each clump, with its 1.15 margin; into keep (reused: nothing allocated a frame)
+function cullRing(r: Ring, ch: Chunk[], o: Vector2, c: Vector2, y: number, b: Vector4, vp: ArrayLike<number>, holes: boolean, reach: number, keep: number[]): void {
+  keep.length = 0
+  const pad = r.cell * 2.2 + reach
+  for (let idx = 0; idx < ch.length; idx++) {
+    const k = ch[idx], x0 = o.x + k.i0 * r.cell - pad, x1 = o.x + k.i1 * r.cell + pad, z0 = o.y + k.j0 * r.cell - pad, z1 = o.y + k.j1 * r.cell + pad
     // the nearest and farthest distance from the focus to the square, against the band
-    const dx = Math.max(x0 - c.x, 0, c.x - x1), dz = Math.max(z0 - c.y, 0, c.y - z1), near = Math.hypot(dx, dz)
+    const near = Math.hypot(Math.max(x0 - c.x, 0, c.x - x1), Math.max(z0 - c.y, 0, c.y - z1))
     const far = Math.hypot(Math.max(Math.abs(x0 - c.x), Math.abs(x1 - c.x)), Math.max(Math.abs(z0 - c.y), Math.abs(z1 - c.y)))
-    if (near > b.w || (b.y > 0 && far < b.x)) return
+    if (near > b.w || (b.y > 0 && far < b.x)) continue
     // all eight corners past one edge of the frame: out of view
     let ox = 0, oX = 0, oy = 0, oY = 0, ow = 0
-    for (const px of [x0, x1]) for (const pz of [z0, z1]) for (const py of [y - 20, y + 20]) {
+    for (let q = 0; q < 8; q++) {
+      const px = q & 1 ? x1 : x0, pz = q & 2 ? z1 : z0, py = q & 4 ? y + 20 : y - 20
       const cx = vp[0] * px + vp[4] * py + vp[8] * pz + vp[12], cy = vp[1] * px + vp[5] * py + vp[9] * pz + vp[13], cw = vp[3] * px + vp[7] * py + vp[11] * pz + vp[15]
       if (cx > cw * 1.15) ox++; if (cx < -cw * 1.15) oX++; if (cy > cw * 1.15) oy++; if (cy < -cw * 1.15) oY++; if (cw < 0) ow++
     }
-    if (ox === 8 || oX === 8 || oy === 8 || oY === 8 || ow === 8) return
+    if (ox === 8 || oX === 8 || oy === 8 || oY === 8 || ow === 8) continue
     if (k.slots.length) keep.push(idx * 2)
     if (holes && k.hole.length) keep.push(idx * 2 + 1)
-  })
-  return keep
+  }
 }
+// two lists of chunks the same
+const sameList = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i])
 
 export interface Meadow {
   meshes: Mesh[]; setOn(on: boolean): void; bakeMs: number
@@ -92,7 +95,8 @@ const bilerp = (at: (i: number, j: number) => number, u: number, v: number) => {
 
 // growth(x, z): how much grass grows at a point (0..1, by the cover and its edges) and its height factor; allowed(x,
 // z): the placement rule's hard edges at any point; crop(x, z): a sown field there, 0 or 1 (src/look/nature.ts)
-export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCamera, growth: (x: number, z: number) => [number, number], allowed: (x: number, z: number) => boolean, crop: (x: number, z: number) => number, wide = true): Meadow {
+// reach: the clumps' (CLUMP_REACH, or the combed meadow's), for the chunks' cull
+export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCamera, growth: (x: number, z: number) => [number, number], allowed: (x: number, z: number) => boolean, crop: (x: number, z: number) => number, wide = true, reach = CLUMP_REACH): Meadow {
   const t0 = performance.now()
   // the meadow map: R the ground's height, G the growth, B the height factor (half floats, filtered by the GPU). The
   // cover's growth on its 2 m grid, each texel interpolating the cells round it (the edge follows no grid); then the
@@ -176,8 +180,8 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   }
   const clumps = { Grass_Large: indexed(src.Grass_Large), Grass_Small: indexed(src.Grass_Small) }
 
-  const meshes: Mesh[] = [], ringMats: ShaderMaterial[] = [], ringCounts: [number, number][] = []   // the slots: the ring's, and with the hole
-  const chunks: Chunk[][] = [], slotBufs: Float32Array[] = [], slotVBs: VertexBuffer[] = [], drawn: string[] = RINGS.map(() => '')
+  const meshes: Mesh[] = [], ringMats: ShaderMaterial[] = []
+  const chunks: Chunk[][] = [], slotBufs: Float32Array[] = [], slotVBs: VertexBuffer[] = [], drawn: number[][] = RINGS.map(() => [-1]), keep: number[] = []
   RINGS.forEach((r, ri) => {
     const m = mats.make(`meadow${ri}`, MEADOW_VS.replace('#include<meadow>', () => MEADOW_GLSL), MEADOW_FS, {
       attributes: ['position', 'normal', 'aV', 'aSlot'], uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand'], samplers: ['uMeadow', 'uGB'],
@@ -208,12 +212,13 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
       }
       if (sl.length || hole.length) ch.push({ i0, i1, j0, j1, slots: new Float32Array(sl), hole: new Float32Array(hole) })
     }
-    const total = ch.reduce((a, c) => a + c.slots.length + c.hole.length, 0) / 2
-    ringCounts.push([ch.reduce((a, c) => a + c.slots.length, 0) / 2, total]); chunks.push(ch)
-    const buf = new Float32Array(total * 2); slotBufs.push(buf)
+    chunks.push(ch)
+    // the buffer starts with every slot of the ring (the hole's after), the frame's cull packs it from the first frame
+    const buf = new Float32Array(ch.reduce((a, c) => a + c.slots.length + c.hole.length, 0)); slotBufs.push(buf)
+    let n0 = 0; for (const c of ch) { buf.set(c.slots, n0); n0 += c.slots.length }
     const vb = new VertexBuffer(scene.getEngine(), buf, 'aSlot', true, false, 2, true); slotVBs.push(vb)
     mesh.setVerticesBuffer(vb)
-    mesh.forcedInstanceCount = 0; mesh.alwaysSelectAsActiveMesh = true; mesh.isPickable = false; mesh.material = m
+    mesh.forcedInstanceCount = n0 / 2; mesh.alwaysSelectAsActiveMesh = true; mesh.isPickable = false; mesh.material = m
     meshes.push(mesh); ringMats.push(m)
   })
   // each frame each ring snaps to its cell around the camera's focus; a material keeps the vector it is given (not a
@@ -236,15 +241,21 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
     })
     const f = camera.target, y = heightAt(f.x, f.z); centre.set(f.x, f.z)
     RINGS.forEach((r, ri) => { origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell); ringMats[ri].setFloat('uCentreY', y) })
-    // the chunks in view and in the band, their slots packed at the buffer's start (copied only when the set changes)
+    focusY = y; holes = t > 0
+  })
+  // the chunks in view and in the band, their slots packed at the buffer's start (copied only when the set changes),
+  // once the camera's view-projection is this frame's (just before its render; the render targets' cameras skipped)
+  let focusY = 0, holes = false
+  scene.onBeforeCameraRenderObservable.add(cam => {
+    if (cam !== camera) return
     const vp = scene.getTransformMatrix().m
     RINGS.forEach((r, ri) => {
       if (!meshes[ri].isVisible) return
-      const o = origins[ri], b = bands[ri], keep = cullRing(r, chunks[ri], o, centre, y, b, vp, t > 0), key = keep.join(',')
-      if (key === drawn[ri]) return
-      drawn[ri] = key; const buf = slotBufs[ri]; let n = 0
+      cullRing(r, chunks[ri], origins[ri], centre, focusY, bands[ri], vp, holes, reach, keep)
+      if (sameList(keep, drawn[ri])) return
+      drawn[ri] = keep.slice(); const buf = slotBufs[ri]; let n = 0
       for (const k of keep) { const c = chunks[ri][k >> 1], part = k & 1 ? c.hole : c.slots; buf.set(part, n); n += part.length }
-      slotVBs[ri].update(buf); meshes[ri].forcedInstanceCount = n / 2
+      slotVBs[ri].updateDirectly(buf.subarray(0, n), 0); meshes[ri].forcedInstanceCount = n / 2
     })
   })
   // the under-layer's reach: the outer ring's band; its strength: the inner rings' (k, set with them below: zoomed out,

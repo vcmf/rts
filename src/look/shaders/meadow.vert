@@ -4,7 +4,7 @@ uniform mat4 viewProjection;uniform float uSeason;
 // (in from x to y, out from z to w), the meadow map (R the ground height, G the growth, B the height factor, A the
 // crops growth), the cover grid (nearest: its class, src/look/shaders/macro.glsl)
 uniform vec2 uOrigin,uCentre;uniform float uCentreY;uniform float uCell,uSpread,uHeight;uniform vec4 uBand;uniform sampler2D uMeadow,uCover;
-varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;
+varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop,vHue;varying vec2 vRoot;
 #include<meadow>
 // the meadow map at a point: one bilinear read (half floats filter), its growing area shrunk a texel on the CPU so
 // the blend never crosses a rule (src/look/meadow.ts)
@@ -52,7 +52,7 @@ void main(){
   // vanishing (no pop)
   float keep=crop?m.a*band*mix(0.8,1.0,c):m.g*band*mix(0.45,1.0,c);
   #if defined(GRASS_FLOW)&&!defined(GRASS_NO_DENSE)
-  if(!crop)keep=m.g*band*mix(0.8,1.0,c);   // denser (the owner, 2026-10-17): fewer clumps thinned between the patches
+  if(!crop)keep=m.g*band*mix(mix(0.45,0.8,1.0-smoothstep(2.0,2.8,uSeason)),1.0,c);   // denser (the owner, 2026-10-17): fewer clumps thinned between the patches, as the default under the snow of winter
   #endif
   float grow=smoothstep(h2-0.12,h2+0.12,keep);
   // nothing where nothing grows (the smoothstep above is over 0 at a growth of 0 for a low hash, and the height factor
@@ -70,7 +70,8 @@ void main(){
     hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*min(0.7,cr.x/uHeight);}
   else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*grassSeasonK(uSeason),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;
     #if defined(GRASS_FLOW)&&!defined(GRASS_NO_BIG)
-    hgt=min(hgt*1.15,HEIGHT_MAX);fp*=1.4;   // larger blades (the owner): wider clumps, a little taller, never over HEIGHT_MAX
+    float big=1.0-smoothstep(2.0,2.8,uSeason);   // (as the default under the snow of winter)
+    hgt=min(hgt*mix(1.0,1.15,big),HEIGHT_MAX);fp*=mix(1.0,1.4,big);   // larger blades (the owner): wider clumps, a little taller, never over HEIGHT_MAX
     #endif
   }
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
@@ -90,6 +91,7 @@ void main(){
   #endif
   vec3 w=vec3(root.x,m.r-MEADOW_SINK,root.y)+p;   // sunk a little: the map's 1 m bilinear height is within that of the drawn ground where grass grows (tools/look-check.js)
   vec3 n=normal;n.xz=vec2(ca*n.x-sa*n.z,sa*n.x+ca*n.z);
+  vHue=mHash(k*1.93+41.7);   // the clump's own hue (the combed meadow, meadow.frag): one per clump, from its cell
   vN=n;vW=w;vV=aV;vShade=c;   // the clump field (the ground colour under it, groundArm, already holds the brush pattern)
   vH=p.y;vRoot=root;vIsCrop=crop?1.0:0.0;vCrop=cr.yzw;
   gl_Position=viewProjection*vec4(w,1.0);}
