@@ -90,7 +90,9 @@ Tripo's auto-rig is a starting point, never trusted as is:
 - **Coat skirts follow the arms** (`free_coat_from_arms`): vertices between 0.45 and 1.08 m that are not
   mainly arm lose their arm influences.
 - **Props become rigid bones**: the gunner's sponge-rammer (its loose part found by shape), the rider's
-  sabre hilt (hidden while the sabre is out), the scabbard rigid on the hips.
+  scabbard on a bone of its own at its mouth, hung from the hips, so a draw can swing it on its slings,
+  and stretched from Tripo's 69 cm to 98 cm to hold the 97 cm blade; the sabre's hilt rides in it (hidden
+  while the sabre is out).
 - **The horse's tail** is re-skinned to the root and its two bones (it was half on the hind legs); bones
   renamed from `tripo::0_Left_Limb_2` and `bone_17` to `Horse:FL3`, `Horse:FR4`… (front or hind, left or
   right, joint 1–6).
@@ -132,19 +134,30 @@ Poses are solved per frame by script and keyed on every bone:
   and the body is **lowered automatically** until every planted leg reaches its hoof (the front legs are
   nearly straight at rest).
 - **Weapons in the rider's hand** (units/arm.py) are posed by the arm's joints, not by the weapon: an arm
-  state gives the wrist's direction and distance from the shoulder in the chest's frame, the elbow's swivel,
-  the forearm's turn (pronation) and the wrist's bend (flexion within ±60°, deviation from −20° to 35°), and
-  the weapon follows the fist in a fixed grip (the sabre's blade continues the thumb's line, the pistol's
-  barrel the fingers). Blending states moves the hand on arcs about the shoulder. A state can instead name
-  the blade's direction: the turn and bend that point the weapon there, with the wrist nearest neutral, are
-  searched once before posing (`aim_wrist`). Placing the hand by a point and a weapon direction, as before,
-  bent the wrist 90 to 150 degrees. A grip on a moving prop picks the side to wrap that keeps the wrist
-  straightest, remembering its last choice so the hand does not flip (`Biped.natural_grip`).
+  state gives the wrist's direction and distance from the shoulder in the chest's frame, the elbow's swivel
+  (+ out to the arm's side), the forearm's turn (pronation, −85° to 90° from the handshake) and the wrist's
+  bend (flexion within ±60°, deviation from −20° to 35°), and the weapon follows the fist (the sabre's blade
+  continues the thumb's line, leaning towards the fingers by its roll in the hand; the pistol's barrel
+  continues the fingers). Blending states moves the hand on arcs about the shoulder. A state can instead
+  name the blade's direction: the swivel, turn, bend and (for the sabre) roll that point the weapon there,
+  near the authored swivel and roll and with the wrist nearest neutral (steeply dearer past 36°), are
+  searched once before any frame is posed (`aim_wrist`). Placing the hand by a point and a weapon direction,
+  as before, bent the wrist 90 to 150 degrees.
+- **A hand on a weapon that is still in its scabbard or holster** is placed by the weapon: a grip round a rod
+  wraps it from the side that keeps the wrist straightest, remembering its last choice so the hand does not
+  flip (`Biped.natural_grip`), and the elbow goes where the forearm best lines up with the hand
+  (`Arm.easiest_elbow`). Where a draw hands over to arm states, the two methods differ a little; the
+  difference (wrist, hand, elbow, the weapon in the hand) is applied in full there and fades out by the
+  draw's end, so nothing jumps.
 - **The sabre**: a cut needs an over-the-head state between the wind-up and the blow: two nearly opposite
-  blade directions blended directly leave the swing's path undefined. The draw pulls the blade straight out
-  of its scabbard for 85% of its length, then blends arm states.
-- **The pistol** is posed the same way, the lock's top asked to face up; the draw holds the hand on the
-  holstered butt (the inverse of the grip) until it clears, the holster pointing along the rider's reach. Its clips in the shape of
+  blade directions blended directly leave the swing's path undefined. In the draw the blade lies in the
+  scabbard and slides out along it, the tip clearing it at `drawn`; the scabbard swings forward on its slings
+  towards the drawing hand and slides down them as far as the arm is short for the blade (Tripo's arm is
+  47.5 cm from shoulder to wrist; the grip must travel 1.09 m), then the arm carries the blade over to the
+  guard while the scabbard falls back.
+- **The pistol** is posed the same way, its lock's top asked to face up. In the draw the hand takes the butt
+  in the aim's grip; the holster points at the shoulder, as a pommel holster does, so the rider sits back and
+  turns his shoulder back as he pulls it out. Its clips in the shape of
   decision 0037: DrawPistol and HolsterPistol (from and to Idle), ReadyPistol (a loop, muzzle up),
   PresentPistol (the wind-up the game stretches), AimPistol (a loop it holds), LowerPistol (an aim called off,
   back to the ready), FirePistol (anchored on its `shot` at frame 3: the kick, back to the ready; the horse

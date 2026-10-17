@@ -74,3 +74,16 @@ Out: reloading on horseback, firing at the walk or trot, the left holster.
   sabre and pistol clips at most 37.5°, the draws and returns 65.5° and 66.6°. Every clip of the rider was
   re-authored, so their poses change; lengths and events do not. The crew's wrists (40 to 170 degrees) are the
   next fix, out of this PR.
+
+- **Round 3** (`/code-review high`, the first on the arm system): severe: both draws jumped where the pull
+  handed over to arm states (the hand, the weapon's roll, the elbow), and the elbow jumped at the grab; the
+  sabre's tip was still in the scabbard at `drawn`; the elbow's swivel sign was reversed (+ took it inwards);
+  the forearm's turn had no limit. Measuring the fix found more: the sabre's blade had always pointed up
+  out of the fist during the draw, never in the scabbard, and the grip ended 1.5 arm-lengths from the
+  shoulder (the hand trailed it); the pistol's pull ended with the hand 0.21 arm-lengths from the shoulder.
+  Fixed: the scabbard on its own bone, stretched to hold the blade, swinging forward and sliding down its
+  slings in the draw while the blade slides out of it; the rider sitting back in the pistol's pull; the
+  elbow placed for the straightest wrist while the weapon leads; the hand-over's difference faded out; the
+  swivel's sign fixed and the forearm's turn limited, `aim_wrist` searching the swivel and the sabre's roll
+  in the hand too (every keyed sabre state now within 36° of wrist and 14° of its blade target); `resolve()`
+  refusing to run mid-frame; the dead code removed.

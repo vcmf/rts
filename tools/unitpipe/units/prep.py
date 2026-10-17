@@ -178,6 +178,7 @@ elif name == 'horse':
                 barrel_half_width=max(abs(v.x) for v in vs if abs(v.y - seat[0]) < .15 and 1.0 < v.z < 1.35))
 
 elif name == 'dragoon':
+    SCABBARD_LEN = .98         # holds the 97 cm blade
     s = .90 / rig.data.bones['mixamorig:Hips'].head_local.z
     K.rescale(rig, mesh, s)
     comps = K.components(mesh)
@@ -186,15 +187,23 @@ elif name == 'dragoon':
     top = scab['max'].z
     hilt = [c for c in comps if c is not scab and c['count'] < 120 and c['center'].x > .15
             and top - .12 < c['center'].z < top + .15 and (c['max'] - c['min']).z < .2]
-    K.rigid(mesh, scab['ids'], 'mixamorig:Hips')
     hilt_ids = [i for c in hilt for i in c['ids']]
     hc = sum((c['center'] for c in hilt), Vector()) / max(1, len(hilt))
-    ebs = K.edit(rig)
-    K.add_bone(ebs, 'Hilt', hc, hc + Vector((0, 0, .1)), 'mixamorig:Hips')
-    K.obj_mode()
-    K.rigid(mesh, hilt_ids, 'Hilt')
     a, b = axis_ends(mesh, scab['ids'])
     stop, sbot = (a, b) if a.z > b.z else (b, a)       # the mouth is the upper end
+    # Tripo's scabbard (69 cm) is shorter than the sabre's blade (combine.py, 97 cm): stretched along its axis
+    # from the mouth to SCABBARD_LEN, the length of a cuirassier's scabbard
+    ax = (sbot - stop).normalized(); grow = SCABBARD_LEN / (sbot - stop).length
+    for i in scab['ids']:
+        v = mesh.data.vertices[i]; v.co = v.co + ax * ((v.co - stop).dot(ax) * (grow - 1))
+    sbot = stop + ax * SCABBARD_LEN
+    # its own bone from the mouth, hung from the hips, so a draw can swing it on its slings; the hilt rides in it
+    ebs = K.edit(rig)
+    K.add_bone(ebs, 'Scabbard', stop, sbot, 'mixamorig:Hips')
+    K.add_bone(ebs, 'Hilt', hc, hc + Vector((0, 0, .1)), 'Scabbard')
+    K.obj_mode()
+    K.rigid(mesh, scab['ids'], 'Scabbard')
+    K.rigid(mesh, hilt_ids, 'Hilt')
     info.update(scale=s, scabbard=dict(count=scab['count'], min=list(scab['min']), max=list(scab['max']), mouth=list(stop), tip=list(sbot)),
                 hilt=dict(parts=len(hilt), count=len(hilt_ids), centre=list(hc)))
 
