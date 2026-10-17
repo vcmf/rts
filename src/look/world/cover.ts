@@ -10,8 +10,7 @@
 //   A the distance to the nearest road, track or village ground, in WEAR_STEP m (0 on them, 255 at or past the reach).
 import { hash, sstep, vn } from '../noise.ts'
 import { axisX } from './author.ts'
-import { RIVER, lerpA, riverQuery } from '../river.ts'
-import { SPEC } from '../spec.ts'
+import { RIVER } from '../river.ts'
 
 export const COVER = { meadow: 0, pasture: 1, wood: 2, road: 3, track: 4, village: 5, wheat: 6, green: 7, stubble: 8, ploughed: 9, bare: 10 } as const
 export type CoverClass = typeof COVER[keyof typeof COVER]
@@ -26,12 +25,6 @@ export interface CoverGrid { n: number; cell: number; x0: number; z0: number; te
 export const inFormationZone = (x: number, z: number): boolean => (Math.abs(x + 5) < 20 && z > -44 && z < -2) || (z > 7 && z < 19 && x > -14 && x < 26) || ((x - 34) ** 2 + (z + 24) ** 2 < 160)
 // the floodplain (art bible §6c: fields and villages sit on the valley sides, above it): the valley axis ± half the
 // river's floodplain width (generateRiver in src/look/world/author.ts; the river must be set)
-// on a river's banks: within the banks' paint of its water. There the banks own the ground's colour (the cut bank's
-// earth, W5): a road fords them with its paint, and the wear beside it (macro.glsl, wear and wearOf: gone at 4 m plus
-// its 1.5 m of noise) stays off, its distance kept at BANK_WEAR, still within the roads' search (SPEC.road.near)
-const onBank = (x: number, z: number): boolean => { const q = riverQuery(x, z); return !!q && q.dist < lerpA(RIVER.W, q) / 2 + SPEC.bank.paint }
-const BANK_WEAR = 5.4
-if (BANK_WEAR > SPEC.road.near) throw new Error('cover: BANK_WEAR must stay within the roads\' search (SPEC.road.near)')
 export const onFloodplain = (x: number, z: number): boolean => Math.abs(x - axisX(z)) < RIVER.P.floodplainW / 2
 
 type Pt = readonly [number, number]
@@ -159,7 +152,6 @@ export function authorCover(far: number, cell: number): CoverGrid {
     if (inPoly(VILLAGE, x, z) || inPoly(SQUARE, x, z)) { cls = COVER.village; id = 0; wear = 0 } else wear = Math.min(wear, ringD(VILLAGE, x, z), ringD(SQUARE, x, z))
     // the floodplain and the formation zones keep their meadow (the zones clip the fields that touch them)
     if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village || cls === COVER.bare)) { cls = COVER.meadow; id = 0 }
-    if (wear < BANK_WEAR && onBank(x, z)) wear = BANK_WEAR
     tex[o] = cls; tex[o + 1] = id; tex[o + 2] = id ? Math.round(((dir % Math.PI + Math.PI) % Math.PI) / Math.PI * 255) % 256 : 0
     tex[o + 3] = Math.min(255, Math.round(Math.min(wear, WEAR_REACH) / WEAR_STEP))
   }
