@@ -25,3 +25,9 @@ scratch/
 
 # golden selftest copies (tools/golden.mjs), removed after each run
 prototypes/.golden-selftest-*
+
+# The figure pipeline (tools/unitpipe/paths.py): Tripo sources (listed by hash in tools/unitpipe/sources.json),
+# work files, renders and published figures
+assets/tripo/
+output/
+__pycache__/
