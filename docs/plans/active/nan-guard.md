@@ -14,7 +14,11 @@ spreads it to its taps.
 ## Scope
 
 - The downsample (`dofdown.frag`) leaves a NaN pixel out of its average; the bloom leaves a NaN tap out; the finishing
-  pass (`uber.frag`) gives a NaN pixel its neighbours' mean.
+  pass (`uber.frag`) gives a NaN pixel its neighbours' mean. As built (review round 1): one test, a value's absolute
+  below the half float's largest (it rejects infinities too, and no compiler folds it away as it may x == x); under
+  the depth of field its one guard is the downsample (all four out: the ring two pixels round), and a bad sharp pixel
+  takes the clean blur; without it the finishing pass gives a bad pixel its ring's mean (the 8-bit default cannot
+  hold one); `?nanmark` turns the half-float target on (an 8-bit target stores a NaN as 0, which nothing can mark).
 - `?nanmark`: a NaN pixel shows magenta instead, so its source can be found when it happens (then fixed at the
   source, in its own PR).
 - Docs: `docs/systems/look.md` (the finishing pass).
@@ -29,3 +33,9 @@ spreads it to its taps.
 - Compiled and ready: `?nanmark`, `?dof=1&nanmark`, `?dof=1`, `?dof=0&nanmark`. The goldens against main: match.
 - Not reproduced here (about 200 views at 1× and 0.75×, time advancing, every frame scanned for black): the source
   stays open; `?nanmark` is how to catch it.
+- **Review round 1** (moderate): x == x missed infinities and may be folded away; `?nanmark` could not see a NaN in the
+  8-bit target; three guards where one per path does; a hard grey fallback. Reworked as above.
+- **The guards exercised** (a NaN forced into every far crown, `uRim` set to NaN, 1280×720): `?dof=1&nanmark` 455
+  magenta pixels and no black; `?dof=0&nanmark` 452 and no black: the mark finds them. Without the mark, a whole
+  surface of bad pixels has no good neighbour to take (3,904 black under the depth of field): an isolated pixel, the
+  owner's case, is repaired; a whole bad surface stays dark, and `?nanmark` shows where.
