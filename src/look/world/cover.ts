@@ -61,20 +61,22 @@ const VILLAGE: Pt[] = [[196, -40], [244, -46], [256, 8], [238, 34], [198, 26]]
 const SQUARE: Pt[] = [[168, -82], [204, -84], [206, -46], [170, -44]]   // the trampled square where the roads meet the village
 // the roads and tracks (a line, its width, its class): also the road frame's lines (tools/build-look-data.ts)
 // a line made a country road's: its corners rounded (Chaikin's corner cutting, four times) and a meander laid across it,
-// a slow wave a few metres either side (k: its seed), resampled every few metres; its ends where they were (joins)
+// a slow wave a few metres either side (k: its seed), fading to nothing within FADE_M of its ends and of the joins
+// (JOINS: where a line meets another, which must stay put)
+const JOINS: Pt[] = [[184, -60], [184, -62], [108, -71]], FADE_M = 45
 function curvy(p: readonly Pt[], amp: number, k: number): Pt[] {
   let q: Pt[] = [...p]
   for (let it = 0; it < 4; it++) { const r: Pt[] = [q[0]]; for (let i = 0; i < q.length - 1; i++) { const [a, b] = [q[i], q[i + 1]]; r.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]) } r.push(q[q.length - 1]); q = r }
-  const out: Pt[] = []; let s = 0
-  for (let i = 0; i < q.length; i++) {
-    if (i > 0) s += Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1])
-    const a = q[Math.max(0, i - 1)], b = q[Math.min(q.length - 1, i + 1)], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1
-    const ends = Math.min(1, i / 6, (q.length - 1 - i) / 6)   // the joins stay put
-    const m = amp * ends * (Math.sin(s / 97 + k) * 0.6 + Math.sin(s / 41 + k * 2.3) * 0.4)
-    out.push([q[i][0] - dz / l * m, q[i][1] + dx / l * m])
-  }
-  return out
+  const len: number[] = [0]; for (let i = 1; i < q.length; i++) len.push(len[i - 1] + Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1]))
+  const total = len[len.length - 1], fade = (d: number) => { const t = Math.min(1, d / FADE_M); return t * t * (3 - 2 * t) }
+  return q.map((pt, i) => {
+    const a = q[Math.max(0, i - 1)], b = q[Math.min(q.length - 1, i + 1)], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1, s = len[i]
+    const f = fade(Math.min(s, total - s, ...JOINS.map(j => Math.hypot(pt[0] - j[0], pt[1] - j[1]))))
+    const m = amp * f * (Math.sin(s / 97 + k) * 0.6 + Math.sin(s / 41 + k * 2.3) * 0.4)
+    return [pt[0] - dz / l * m, pt[1] + dx / l * m] as Pt
+  })
 }
+// (their half widths, 1.5, 2.5 and 4 m, are also roadPaint's in shore.glsl: change both together)
 export const LINES: { pts: readonly Pt[]; w: number; cls: CoverClass }[] = [{ pts: curvy(ROAD, 9, 1), w: 8, cls: COVER.road }, { pts: curvy(CROSS, 15, 2), w: 8, cls: COVER.road }, { pts: curvy(LANE, 10, 3), w: 5, cls: COVER.track }, { pts: curvy(TRACK, 5, 4), w: 3, cls: COVER.track }]
 const WEAR_REACH = 25.5   // the distance channel's reach, m (255 · WEAR_STEP)
 
@@ -108,6 +110,9 @@ const segD = (x: number, z: number, a: Pt, b: Pt): number => {
   return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz)
 }
 const lineD = (p: readonly Pt[], x: number, z: number): number => { let d = Infinity; for (let i = 0; i < p.length - 1; i++) d = Math.min(d, segD(x, z, p[i], p[i + 1])); return d }
+// a line's bounding box: a point farther from it than `reach` is farther from the line (a quick skip)
+const boxOf = (p: readonly Pt[]) => { let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity; for (const [x, z] of p) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z) } return { x0, x1, z0, z1 } }
+const boxD = (b: { x0: number; x1: number; z0: number; z1: number }, x: number, z: number) => Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.z0 - z, 0, z - b.z1))
 const ringD = (p: readonly Pt[], x: number, z: number): number => Math.min(lineD(p, x, z), segD(x, z, p[p.length - 1], p[0]))
 
 // a field id's byte: never 0 (0 is off fields)
@@ -118,6 +123,7 @@ const idByte = (id: number): number => 1 + Math.floor(hash(id * 0.731 + 0.19, id
 // light map's occlusion already darkens the ground under each crown (src/look/bakes.ts); a floor over a cluster's
 // whole spread darkened open ground between its trees (the readability guard's blocks there stopped reading).
 export function authorCover(far: number, cell: number): CoverGrid {
+  const lineBoxes = LINES.map(l => boxOf(l.pts))
   const n = Math.round(far / cell), x0 = -far / 2, z0 = -far / 2, tex = new Uint8Array(n * n * 4)
   for (const f of FIELDS) for (const [x, z] of f.poly) if (onFloodplain(x, z)) throw new Error(`cover: field corner ${x.toFixed(0)},${z.toFixed(0)} on the floodplain`)
   for (const [x, z] of VILLAGE) if (inFormationZone(x, z) || onFloodplain(x, z)) throw new Error('cover: the village is in a formation zone or on the floodplain')
@@ -128,7 +134,7 @@ export function authorCover(far: number, cell: number): CoverGrid {
     if (fs) { cls = fs[0]; if (isField(cls)) { id = idByte(fs[1]); dir = FAR_DIR } }
     FIELDS.forEach((f, k) => { if (inPoly(f.poly, x, z)) { cls = f.cls; id = isField(f.cls) ? idByte(1000 + k) : 0; dir = f.dir } })   // bare earth: no id
     let wear = Infinity
-    for (const l of LINES) { const d = lineD(l.pts, x, z) - l.w / 2; if (d < 0) { cls = l.cls; id = 0 } wear = Math.min(wear, Math.max(0, d)) }
+    LINES.forEach((l, li) => { if (boxD(lineBoxes[li], x, z) > WEAR_REACH + l.w) return; const d = lineD(l.pts, x, z) - l.w / 2; if (d < 0) { cls = l.cls; id = 0 } wear = Math.min(wear, Math.max(0, d)) })
     if (inPoly(VILLAGE, x, z) || inPoly(SQUARE, x, z)) { cls = COVER.village; id = 0; wear = 0 } else wear = Math.min(wear, ringD(VILLAGE, x, z), ringD(SQUARE, x, z))
     // the floodplain and the formation zones keep their meadow (the zones clip the fields that touch them)
     if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village || cls === COVER.bare)) { cls = COVER.meadow; id = 0 }

@@ -9,7 +9,7 @@ import type { Derived } from '../spec.ts'
 import { SAMPLE_KEYS, type RiverParams, type RiverSamples } from '../river.ts'
 import { packCover, unpackCover, type CoverGrid } from './cover.ts'
 
-export const LOOK_VERSION = 5
+export const LOOK_VERSION = 6   // 6: the road frame (docs/plans/active/roads.md)
 
 // A grid of n² texels of `cell` metres from (x0, z0) with ch bytes a texel, stored only where covered: spans are (row,
 // first column, count) triples, tex holds ch bytes per covered texel in span order. The rest take the user's fill.
@@ -81,7 +81,7 @@ export function decodeLook(buf: ArrayBuffer): LookData {
   const grid = (g: typeof SPAN_GRIDS[number]): SpanGrid => {
     const m = meta[g], spans = arr[g + 'Spans'], tex = u8[g + 'Tex']
     if (!m || !spans || !tex || spans.length % 3) throw new Error(`look data: no ${g} grid`)
-    if (!Number.isInteger(m.ch) || m.ch < 1 || m.ch > 4) throw new Error(`look data: the ${g} grid has ${m.ch} bytes a texel (1 to 4)`)
+    if (!Number.isInteger(m.ch) || !((m.ch >= 1 && m.ch <= 4) || m.ch === 16)) throw new Error(`look data: the ${g} grid has ${m.ch} bytes a texel (1 to 4, or 16: four floats)`)
     let covered = 0
     for (let i = 0; i < spans.length; i += 3) {
       const j = spans[i], i0 = spans[i + 1], len = spans[i + 2]
@@ -97,6 +97,17 @@ export function decodeLook(buf: ArrayBuffer): LookData {
 }
 
 // a span grid unpacked into n² texels of 4 bytes (RGBA, for a texture), the uncovered ones `fill` (RGBA)
+// a span grid of four float32 a texel (ch 16) unpacked into n² RGBA floats, the uncovered ones `fill`
+export function unpackSpansF32(g: SpanGrid, fill: [number, number, number, number]): Float32Array {
+  const n = g.n, data = new Float32Array(n * n * 4), src = new Float32Array(g.tex.slice().buffer)   // (a copy: the bytes may not sit on a 4-byte boundary)
+  for (let o = 0; o < n * n; o++) data.set(fill, o * 4)
+  let t = 0
+  for (let s = 0; s < g.spans.length; s += 3) {
+    const j = g.spans[s], i0 = g.spans[s + 1], len = g.spans[s + 2]
+    for (let i = i0; i < i0 + len; i++, t++) data.set(src.subarray(t * 4, t * 4 + 4), (j * n + i) * 4)
+  }
+  return data
+}
 export function unpackSpans(g: SpanGrid, fill: [number, number, number, number]): Uint8Array {
   const n = g.n, ch = g.ch, data = new Uint8Array(n * n * 4)
   new Uint32Array(data.buffer).fill((fill[0] | fill[1] << 8 | fill[2] << 16 | fill[3] << 24) >>> 0)   // bytes in little-endian order: every browser
@@ -117,7 +128,7 @@ export function checkLookData(d: Derived, look: LookData): void {
   if (look.hf.h.length !== n * n) bad.push(`heightfield has ${look.hf.h.length} heights, not ${n * n}`)
   if (look.far.n !== fn || !near(look.far.cell, d.farCell) || !near(look.far.x0, -s.far / 2) || !near(look.far.z0, -s.far / 2)) bad.push(`far ring ${look.far.n} nodes of ${look.far.cell} m, the spec wants ${fn} of ${d.farCell} m`)
   if (look.far.h.length !== fn * fn) bad.push(`far ring has ${look.far.h.length} heights, not ${fn * fn}`)
-  for (const [name, g, gn, texel, ch] of [['bank normals', look.bank, d.bankN, s.bank.texel, 3], ['water data', look.water, d.waterN, s.water.texel, 4]] as const)
+  for (const [name, g, gn, texel, ch] of [['bank normals', look.bank, d.bankN, s.bank.texel, 3], ['water data', look.water, d.waterN, s.water.texel, 4], ['road frame', look.road, d.roadN, s.road.texel, 16]] as const)
     if (g.n !== gn || g.ch !== ch || !near(g.cell, texel) || !near(g.x0, -s.tile / 2) || !near(g.z0, -s.tile / 2)) bad.push(`${name} ${g.n}² of ${g.cell} m (${g.ch} bytes) from ${g.x0}, the spec wants ${gn}² of ${texel} m (${ch} bytes) from ${-s.tile / 2}`)
   if (!near(look.cover.cell, s.macro.cover) || !near(look.cover.n * look.cover.cell, s.far) || !near(look.cover.x0, -s.far / 2) || !near(look.cover.z0, -s.far / 2)) bad.push(`cover ${look.cover.n}² of ${look.cover.cell} m from ${look.cover.x0}, the spec wants ${s.macro.cover} m cells over the far ring (${s.far} m) from ${-s.far / 2}`)
   if (bad.length) throw new Error('look data does not match the world spec (run node tools/build-look-data.ts): ' + bad.join('; '))

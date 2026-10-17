@@ -25,7 +25,9 @@ import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
 import { D, checkGround } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
-import { checkLookData, decodeLook, unpackSpans } from './world/data.ts'
+import { checkLookData, decodeLook, unpackSpans, unpackSpansF32 } from './world/data.ts'
+import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
+import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { buildTerrain } from './terrain.ts'
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
@@ -92,7 +94,11 @@ const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }
 // the roads (docs/plans/active/roads.md): the road frame over the tile, and the owner's grit photo (its marks only once
 // loaded: uRoadOn), on the tile's terrain and the water's land side
 {
-  const frame = spanTexture(scene, look.road, [128, 128, 128, 0], 'roadFrame')
+  // four floats a texel (across, along, half width, junction), linear where the GPU filters floats; off the roads far
+  // across (no road there, and none half-way to it: no ghost of one beside a road)
+  const lin = engine.getCaps().textureFloatLinearFiltering
+  const frame = RawTexture.CreateRGBATexture(unpackSpansF32(look.road, [99, 0, 0, 0]), look.road.n, look.road.n, scene, false, false, lin ? Texture.BILINEAR_SAMPLINGMODE : Texture.NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
+  frame.wrapU = frame.wrapV = Texture.CLAMP_ADDRESSMODE; frame.name = 'roadFrame'
   const roadMats = [terrain.terrainMat, water.waterMat, water.groundMat]
   const grit = new Texture(ROAD_GRIT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => { for (const m of roadMats) m.setFloat('uRoadOn', 1) }, (msg?: string) => console.error(`the road grit (${ROAD_GRIT_URL}) did not load: ${msg ?? 'unknown error'}`))
   grit.wrapU = grit.wrapV = Texture.WRAP_ADDRESSMODE; grit.anisotropicFilteringLevel = 4

@@ -87,42 +87,43 @@ float aastep(float t,float v){
   #endif
 }
 #ifdef ROADS
-// THE ROADS (docs/plans/active/roads.md): rutted brown earth over the tile, laid in each road's frame (the road frame,
-// built by tools/build-look-data.ts: R the signed distance across its centre line, ±8 m, G B its direction, A its half
-// width, /8 m), its edge broken into the worn grass. On it, wheel ruts (two pairs on a road, a pair on a track), darker
-// and smoother, streaked along the road, a lighter crown between them, and the grit of the owner's photo (data/
-// road-grit-v1.png, uRoadOn once it has loaded) at two unrelated scales. Darker and wetter in late autumn
+// THE ROADS (docs/plans/active/roads.md): rutted dirt over the tile, laid in each road's frame (the road frame, built by
+// tools/build-look-data.ts, four floats: the signed distance across the nearest line, the distance along it, its half
+// width, a junction weight), its edge ragged into the grass, fading out over the tile's last metres (the apron paints
+// the road class's colour, the same earth). On it: wheel tracks of pale beige dust (a pair on a track, on a road a
+// pair and a fainter outer one), rough-edged, wandering a little, cut into pieces of uneven length, each track at its
+// own places; trodden patches, pale dust, streaks along the road; trampled flat at a junction; the grit of the owner's
+// photo (data/road-grit-v1.png, uRoadOn once it has loaded) at two scales (WebGL2 only: its reads follow the early
+// returns, which texM's explicit gradients make safe). Browner and wetter in late autumn
 uniform sampler2D uRoad,uRoadGrit;uniform float uRoadOn;
+vec3 roadEarth(){return mix(vec3(0.60,0.53,0.42),vec3(0.47,0.40,0.31),smoothstep(0.8,2.0,uSeason));}
 // one wheel track: its centre wandering across by up to 0.35 m along the way, its edges rough (a fine noise eating
-// into them), broken here and there (k: its seed)
+// into them), cut into pieces (about 2 to 8 m, gaps of 1 to 4 m) at its own places (k: its seed)
 float track1(float a,vec2 xz,float s,float c,float k){
   float off=(mValue(vec2(s/13.0,k))-0.5)*0.7,w=0.3+0.22*mValue(vec2(s/7.0,k+5.0))+(mValue(xz/0.35+k*3.0)-0.5)*0.22;
   float t=1.0-smoothstep(w*0.5,w,abs(a-c-off));
-  // cut into pieces of uneven length (about 2 to 8 m, gaps of 1 to 4 m), each track breaking at its own places, the
-  // pieces fading in and out over a few decimetres
   float piece=mValue(vec2(s/3.2,k+11.0))*0.7+mValue(vec2(s/1.1,k+17.0))*0.3;
   return t*smoothstep(0.42,0.52,piece);}
 vec3 roadPaint(vec3 c,vec2 xz){
-  vec4 r=texture2D(uRoad,(xz+TILE_HALF)/TILE_W);float hw=r.a*8.0;if(hw<0.2)return c;
-  float a=(r.r*2.0-1.0)*8.0;vec2 dir=r.gb*2.0-1.0;dir/=max(length(dir),1e-3);float s=dot(xz,dir);
+  vec4 r=texture2D(uRoad,(xz+TILE_HALF)/TILE_W);float hw=r.z,a=r.x,s=r.y,jn=r.w;if(hw<0.2)return c;
+  // at the frame's outer edge a texel blends with an empty one (far across, no width): its across can pass through 0,
+  // a road where none is. A sample whose half width is none of the lines' (ROAD_HW: cover.ts LINES) is such a blend,
+  // unless at a junction, where two widths meet
+  if(jn<0.3&&min(min(abs(hw-1.5),abs(hw-2.5)),abs(hw-4.0))>0.03)return c;
   // the edge: ragged, the grass biting in and the dirt spilling out over a metre or two
-  float wob=(mValue(vec2(s/4.0,7.3))-0.5)*2.2+(mValue(vec2(s/1.1,2.1))-0.5)*0.9+(mValue(xz/0.6)-0.5)*0.5;
-  float inside=1.0-smoothstep(hw-0.9+wob*0.5,hw+0.4+wob,abs(a));if(inside<=0.0)return c;
-  // the earth: a warm beige, browner and wetter in late autumn
-  vec3 earth=mix(vec3(0.60,0.53,0.42),vec3(0.47,0.40,0.31),smoothstep(0.8,2.0,uSeason));
-  // a junction (where the roads' directions 1.5 m around disagree, the frame blending two lines): trampled, no tracks
-  float agree=1.0;
-  for(int i=0;i<4;i++){vec2 o=vec2(float(i==0)-float(i==1),float(i==2)-float(i==3))*1.5;vec4 t=texture2D(uRoad,(xz+o+TILE_HALF)/TILE_W);
-    if(t.a>0.02){vec2 d2=t.gb*2.0-1.0;agree=min(agree,abs(dot(dir,d2/max(length(d2),1e-3))));}}
-  float jn=1.0-smoothstep(0.86,0.97,agree);
-  // the wheel tracks: pale, dusty, packed by the wheels (lighter than the road, never dark lines), rough-edged and
-  // broken; a pair on a track, on a road a pair and a fainter outer one
+  float wob=(mValue(vec2(s/4.0,7.3))-0.5)*1.6+(mValue(vec2(s/1.1,2.1))-0.5)*0.7+(mValue(xz/0.6)-0.5)*0.5;
+  // (out to about 1.6 m past the line's side: the class map's 2 m cells, under it, end within 1.4 m of it)
+  float inside=(1.0-smoothstep(hw+0.2+wob*0.3,hw+1.9+wob*0.5,abs(a)))*(1.0-smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y))));
+  if(inside<=0.0)return c;
   float tr=hw>3.0?max(max(track1(a,xz,s,-0.9,1.0),track1(a,xz,s,0.9,2.0)),0.6*max(track1(a,xz,s,-2.6,3.0),track1(a,xz,s,2.6,4.0))):max(track1(a,xz,s,-0.8,1.0),track1(a,xz,s,0.8,2.0));
   tr*=1.0-jn;
   float st=mValue(vec2(s/11.0,a*1.3))*0.6+mValue(vec2(s/3.3,a*3.7+9.0))*0.4;   // streaks along the road
   float trod=max(smoothstep(0.6,0.8,mValue(xz/2.7+13.0)),jn*0.5),dust=smoothstep(0.55,0.85,mValue(xz/4.1-7.0));   // trodden patches, pale dust
-  float g=(texM(uRoadGrit,xz/1.9,1.9).r*0.6+texM(uRoadGrit,mat2(0.8253,-0.5646,0.5646,0.8253)*xz/3.1+0.37,3.1).r*0.4-0.5)*uRoadOn;
-  vec3 col=earth*mix(0.93,1.07,st)*mix(1.0,0.9,trod)*mix(1.0,1.1,dust)*(1.0+g*1.2);
+  float g=0.0;
+  #ifdef WEBGL2
+  g=(texM(uRoadGrit,xz/1.9,1.9).r*0.6+texM(uRoadGrit,mat2(0.8253,-0.5646,0.5646,0.8253)*xz/3.1+0.37,3.1).r*0.4-0.5)*uRoadOn;
+  #endif
+  vec3 col=roadEarth()*mix(0.93,1.07,st)*mix(1.0,0.9,trod)*mix(1.0,1.1,dust)*(1.0+g*1.2);
   col=mix(col,vec3(0.74,0.66,0.52)*mix(0.95,1.05,st)*(1.0+g*0.6),tr*0.75);   // the tracks: pale beige dust
   return mix(c,col,inside);}
 #else

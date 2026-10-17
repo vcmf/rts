@@ -33,9 +33,9 @@ export interface Spec {
   // the fine bank normals (docs/plans/done/w2-river-banks.md): texels of `texel` m over the tile, covering the
   // river's corridor out to `reach` m from its centre line, faded out over the last `fade` m, and over the last
   // `edge` m before the tile's edge (where the apron and the far ring shade with their vertex normals)
-  bank: { texel: number; reach: number; fade: number; edge: number; paint: number }
+  bank: { texel: number; reach: number; fade: number; edge: number; paint: number }   // paint: the banks' colours reach this far from the water, m (W5a)
   // the road frame (docs/plans/active/roads.md): texels of `texel` m over the tile, out to `edge` m past a road's side
-  road: { texel: number; edge: number }   // paint: the banks' colours reach this far from the water, m (W5a)
+  road: { texel: number; edge: number }
   // the water data (docs/plans/done/w3-water-data.md): texels of `texel` m over the tile; the depth (the water level
   // minus the ground, signed) stored over depth[0]..depth[1] m, the shore distance over ±sdf m. The shore band
   // (docs/plans/done/w4-water-surface.md): within `band` m of the shoreline, on either side, the terrain and the

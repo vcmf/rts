@@ -41,32 +41,46 @@ function bankNormals(H: (x: number, z: number) => number): SpanGrid {
   return { n, cell, x0, z0, ch: 3, spans: Float32Array.from(spans), tex: Uint8Array.from(tex) }
 }
 
-// The road frame (docs/plans/active/roads.md): near each road or track (out to road.edge m past its side), the signed
-// distance across its centre line (R: ±8 m over the bytes), the line's direction there (G, B: x and z, ±1), and its
-// half width (A: /8 m over the bytes; 0 off the roads), from the nearest line, so the shader lays the ruts, the crown
-// and the streaks along it. Over the tile, as row spans
+// The road frame (docs/plans/active/roads.md): near each road or track (out to road.edge m past its side), four
+// floats (bytes of float32, ch 16): the signed distance across the nearest line (past a dead end, the distance to its
+// end: a round cap), the distance along it (from its start, plus 10 km a line, so lines differ), its half width, and a
+// junction weight (1 where another line's side is within a metre, fading out over JUNCTION_M), from the nearest line.
+// Each segment rasterised over its own strip of texels, its ends rounded (the nearest segment wins: a bend's outside
+// is its shared point's). Over the tile, as row spans
+const JUNCTION_M = 6
 function roadFrame(): SpanGrid {
   const r = D.spec.road, n = D.roadN, cell = r.texel, x0 = -D.spec.tile / 2, z0 = x0
-  const spans: number[] = [], tex: number[] = [], enc = (v: number) => Math.round((Math.max(-1, Math.min(1, v)) * 0.5 + 0.5) * 255)
+  const best = new Float32Array(n * n).fill(Infinity), other = new Float32Array(n * n).fill(Infinity), line = new Int16Array(n * n).fill(-1), val = new Float32Array(n * n * 3)
+  LINES.forEach((l, li) => {
+    let along = li * 10000
+    for (let k = 0; k < l.pts.length - 1; k++) {
+      const a = l.pts[k], b = l.pts[k + 1], sx = b[0] - a[0], sz = b[1] - a[1], len = Math.hypot(sx, sz), ux = sx / len, uz = sz / len, reach = l.w / 2 + r.edge + JUNCTION_M
+      const i0 = Math.max(0, Math.floor((Math.min(a[0], b[0]) - reach - x0) / cell)), i1 = Math.min(n - 1, Math.ceil((Math.max(a[0], b[0]) + reach - x0) / cell))
+      const j0 = Math.max(0, Math.floor((Math.min(a[1], b[1]) - reach - z0) / cell)), j1 = Math.min(n - 1, Math.ceil((Math.max(a[1], b[1]) + reach - z0) / cell))
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const x = x0 + (i + 0.5) * cell, z = z0 + (j + 0.5) * cell, t0 = (x - a[0]) * ux + (z - a[1]) * uz
+        const t = Math.max(0, Math.min(len, t0)), px = a[0] + ux * t, pz = a[1] + uz * t, d = Math.hypot(x - px, z - pz), score = d - l.w / 2, o = j * n + i
+        if (line[o] !== li && line[o] >= 0) { if (score < best[o]) other[o] = Math.min(other[o], best[o]); else { other[o] = Math.min(other[o], score); continue } }
+        if (score >= best[o]) continue
+        const side = (x - a[0]) * -uz + (z - a[1]) * ux
+        best[o] = score; line[o] = li; val[o * 3] = side < 0 ? -d : d; val[o * 3 + 1] = along + t; val[o * 3 + 2] = l.w / 2
+      }
+      along += len
+    }
+  })
+  const spans: number[] = [], f32: number[] = []
   for (let j = 0; j < n; j++) {
     let open = -1
     for (let i = 0; i <= n; i++) {
-      const x = x0 + (i + 0.5) * cell, z = z0 + (j + 0.5) * cell
-      let best: { d: number; across: number; dx: number; dz: number; hw: number } | null = null
-      if (i < n) for (const l of LINES) for (let k = 0; k < l.pts.length - 1; k++) {
-        const a = l.pts[k], b = l.pts[k + 1], sx = b[0] - a[0], sz = b[1] - a[1], len = Math.hypot(sx, sz), ux = sx / len, uz = sz / len
-        const t = Math.max(0, Math.min(len, (x - a[0]) * ux + (z - a[1]) * uz)), px = a[0] + ux * t, pz = a[1] + uz * t, d = Math.hypot(x - px, z - pz)
-        if (d - l.w / 2 > r.edge || (best && d - l.w / 2 >= best.d - best.hw)) continue
-        best = { d, across: (x - a[0]) * -uz + (z - a[1]) * ux, dx: ux, dz: uz, hw: l.w / 2 }
-      }
-      const inside = !!best
+      const o = j * n + i, inside = i < n && best[o] <= r.edge
       if (inside && open < 0) open = i
       if (!inside && open >= 0) { spans.push(j, open, i - open); open = -1 }
-      if (!best) continue
-      tex.push(enc(best.across / 8), enc(best.dx), enc(best.dz), Math.round(best.hw / 8 * 255))
+      if (!inside) continue
+      const jn = 1 - sstep(1, JUNCTION_M, other[o])
+      f32.push(val[o * 3], val[o * 3 + 1], val[o * 3 + 2], jn)
     }
   }
-  return { n, cell, x0, z0, ch: 4, spans: Float32Array.from(spans), tex: Uint8Array.from(tex) }
+  return { n, cell, x0, z0, ch: 16, spans: Float32Array.from(spans), tex: new Uint8Array(Float32Array.from(f32).buffer) }
 }
 
 export function buildLookData(): Uint8Array {
