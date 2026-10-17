@@ -160,7 +160,7 @@ float strokeK(float px){return 1.0-smoothstep(0.07,0.15,px);}
 // the strokes' multiplier at a point: lighter along the comb, a deeper green in its gaps (never toward black: the
 // owner, "use a darker green"), k their weight (strokeK)
 vec3 combStrokes(vec2 xz,float px,float k){
-  vec3 fl=flowAt(xz);vec2 cb=combedBrush(xz,px);float dv=((cb.x-0.585)*0.6+(cb.y-0.5)*mix(0.35,0.8,fl.z))*k;
+  vec3 fl=flowAt(xz);vec2 cb=combedBrush(xz,px);float dv=((cb.x-0.585)*0.6+(cb.y-0.5)*mix(0.35,0.8,fl.z))*k*0.6;   // 0.6: the strides softer, the near grass carries the look (the owner)
   float deep=smoothstep(0.0,-0.22,dv);
   return (1.0+max(dv,0.0)*1.25)*mix(vec3(1.0),vec3(0.70,0.86,0.66),deep);}
 #endif

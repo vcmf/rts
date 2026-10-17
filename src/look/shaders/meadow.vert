@@ -50,7 +50,11 @@ void main(){
   bool crop=m.a>m.g;
   // the growth here, thinner between the clumps (a crop evenly sown, less so), and a clump shrinks away instead of
   // vanishing (no pop)
-  float keep=crop?m.a*band*mix(0.8,1.0,c):m.g*band*mix(0.45,1.0,c),grow=smoothstep(h2-0.12,h2+0.12,keep);
+  float keep=crop?m.a*band*mix(0.8,1.0,c):m.g*band*mix(0.45,1.0,c);
+  #ifdef GRASS_FLOW
+  if(!crop)keep=m.g*band*mix(0.8,1.0,c);   // denser (the owner, 2026-10-17): fewer clumps thinned between the patches
+  #endif
+  float grow=smoothstep(h2-0.12,h2+0.12,keep);
   // nothing where nothing grows (the smoothstep above is over 0 at a growth of 0 for a low hash, and the height factor
   // is not zeroed by the rules: the zones and the banks)
   if(keep<=0.0){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
@@ -64,7 +68,11 @@ void main(){
   // field a shade apart, as the ground paints it (cellColour in macro.glsl)
   if(crop){vec2 cc=coverCell(root);cr=cropLook(cc.x,h3);cr.yzw*=cc.y>0.5?0.94+0.12*fract(cc.y*0.6180339):1.0;
     hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*min(0.7,cr.x/uHeight);}
-  else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*mix(1.0,0.45,smoothstep(2.5,3.0,uSeason)),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;}
+  else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*mix(1.0,0.45,smoothstep(2.5,3.0,uSeason)),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;
+    #ifdef GRASS_FLOW
+    hgt=min(hgt*1.15,HEIGHT_MAX);fp*=1.4;   // larger blades (the owner): wider clumps, a little taller, never over HEIGHT_MAX
+    #endif
+  }
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
   float a=h4*6.2832,ca=cos(a),sa=sin(a);
   vec3 p=vec3(position.x*fp,position.y*hgt,position.z*fp);p.xz=vec2(ca*p.x-sa*p.z,sa*p.x+ca*p.z);
