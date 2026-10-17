@@ -53,3 +53,9 @@ scene drawn at fewer pixels where they buy the least, the interface at full reso
   frame that changes level 12.0 ms against 10.7 for one that does not (each waited on, so inflated): about 1.3 ms
   once at each of three crossings over a full zoom. Accepted: the card fade's dither stays in render pixels (it jumps
   slightly at a level; at the widest zoom the cards are past the fade).
+- **The checks** (after a fix the first run found: round 2's edit had put a comment mid-line in `post.ts`, which
+  turned off the bloom's strength, the grain's switch and its texture; the owner's 120 fps was measured on that page,
+  without the bloom, about 0.1 to 0.3 ms): the goldens against main match at every view (the scale pinned to 1);
+  the guard (the default, cover and crops views, three seasons), the coat check: exit 0; the negatives, the water and
+  macro checks: exit 0 (their run had the bug, which they do not see: geometry and the water). The bench was not
+  clean (another program held the load at 14 to 21): the owner's screen, with the readout, is the measure.
