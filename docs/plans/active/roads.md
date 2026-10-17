@@ -87,3 +87,12 @@ blended two lines or two sides, holes, 39 MB): redesigned to segments (below).
   near; checked, with negative cases), the junction weight full out to the paint's reach (3.2 m); the road textures
   in the min-spec budget; the road uniforms bound through `bindAll`; the track pass skipped where it is zero; the
   system doc's track colour. Fixed without a fourth round: the fix is local, and the new test pins it.
+- **The checks, then a second redesign** (the count restarts): the macro check's road and track contrast fell to 5.5
+  (main 11.2, the gate 8): the road had two edges, the class cells' (warped by coverWarp, up to 1.5 m) and the paint's
+  (the exact line), and the paint spilled onto the grass beside the class edge. The paint now finds the road at the
+  cover's warped point (one edge, a gentle sway), its edge tighter (out to about 0.5 m past the side), the tracks'
+  earth paler than the road's (it reads against the summer grass): road 9.2, track 9.3. The guard's Russian block and
+  the cut bank failed with the scatter's layout: a tree or bush rejected on a new road drew a new candidate and moved
+  every tree after it (four copses cross the new lines). Anything on a road, a track or the village is placed but
+  hidden now (`src/look/nature.ts`), so the layout is main's but for what stands on the roads, and no road change
+  moves it again.
