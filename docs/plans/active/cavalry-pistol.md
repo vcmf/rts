@@ -18,8 +18,8 @@ wind-up the game can stretch, a loop it holds, a shot it anchors.
 
 In: the pistol as a source (assets/tripo, listed by hash), re-scaled and turned in the prep step; on its own
 bone in the cavalry rig with a holster at the front right of the saddle, the pistol sitting in it in every
-clip that does not draw it; six clips (DrawPistol, ReadyPistol, PresentPistol, AimPistol, FirePistol,
-HolsterPistol) with their joins and events; a muzzle flash in the previews; the registry and the system doc.
+clip that does not draw it; seven clips (DrawPistol, ReadyPistol, PresentPistol, AimPistol, LowerPistol,
+FirePistol, HolsterPistol) with their joins and events; a muzzle flash in the previews; the registry and the system doc.
 
 Out: reloading on horseback, firing at the walk or trot, the left holster.
 
@@ -38,7 +38,9 @@ Out: reloading on horseback, firing at the walk or trot, the left holster.
 - `./tools/unitpipe/units/run-all.sh` passes: every pistol clip on the ground and slide checks, every join
   listed (Idle → DrawPistol → ReadyPistol → PresentPistol → AimPistol → FirePistol → ReadyPistol or
   HolsterPistol → Idle) exact.
-- Every earlier clip and its check result unchanged; the battery unchanged.
+- Every earlier clip and its check result unchanged, except where review asked: DrawSabre and SheatheSabre's
+  reach (no pop) and the draw events' meaning, and every sabre and battery event made 1-based as the registry
+  says (the battery's checks identical).
 - The registry regenerated and its test, `npm test` and `node tools/check-docs.mjs` pass.
 - Close-ups of the holster, the hand on the butt and the aim reviewed; videos from the side and the RTS
   pitch for the owner.
@@ -54,3 +56,8 @@ Out: reloading on horseback, firing at the walk or trot, the left holster.
   in both draws); the pistol is decimated to about 1,200 triangles in the prep; one state blend and one
   standing-clip builder for both weapons; the prep's pistol branch is part of the chain; a robust fallback
   for the pistol's frame.
+- **Round 2** (`/code-review high`): moderate only, fixed and stopped: the elbow blended through both draws (it
+  snapped where a phase handed over); LowerPistol, so an aim can be called off without a shot (decision 0037);
+  the sabre's and the battery's events made 1-based like the registry (the gun's shot was a frame early); the
+  aim's sway keyed every frame; the events' meaning written in the system doc; the rest hand and the reactions
+  shared; the rider seated before a draw only for the sabre; the plan's claim of unchanged clips corrected.

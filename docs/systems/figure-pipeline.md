@@ -16,7 +16,7 @@ clip table, and record the figure in the registry. Everything is a Blender Pytho
 |---|---|---|---|
 | `fr-line-infantry` | foot | 51 (march, fire drill, kneeling, bayonet, moves, falls, morale) | tools/unitpipe/infantry |
 | `fr-foot-artillery` | crewed | a light gun and a crew of four: Idle, Load, Ready, Fire | tools/unitpipe/units |
-| `fr-cuirassier` | mounted | the horse and rider: gaits, the sabre and the pistol (20) | tools/unitpipe/units |
+| `fr-cuirassier` | mounted | the horse and rider: gaits, the sabre and the pistol (21) | tools/unitpipe/units |
 
 Every figure and clip, with lengths, events and root speeds, is in `data/figures/index.json`.
 
@@ -136,12 +136,19 @@ Poses are solved per frame by script and keyed on every bone:
   directly leave the swing's path undefined.
 - **The pistol** is keyed the same way (grip, barrel, the lock's top), its clips in the shape of
   decision 0037: DrawPistol and HolsterPistol (from and to Idle), ReadyPistol (a loop, muzzle up),
-  PresentPistol (the wind-up the game stretches), AimPistol (a loop it holds), FirePistol (anchored on its
-  `shot` at frame 3: the kick, back to the ready; the horse starts at the shot).
+  PresentPistol (the wind-up the game stretches), AimPistol (a loop it holds), LowerPistol (an aim called off,
+  back to the ready), FirePistol (anchored on its `shot` at frame 3: the kick, back to the ready; the horse
+  starts at the shot).
 - Every clip that chains starts and ends on a pose its neighbours share; reactions (a horse's toss at a
   blow) are zero at both ends.
 
 The clips of each figure, their chains and events: `data/figures/index.json`.
+
+**Events** are 1-based frames of their clip (a clip's key k is its frame k + 1). Their meaning is the same for
+every figure: `shot` (the charge fires: the flash, the recoil starts), `hit` (a blow lands), `parry` (a blow is
+taken), `drawn` (a weapon clears its scabbard or holster), `sheathed` and `holstered` (from this frame it is
+fully back in), `cartridge_out` and `cartridge_in` (the loader's cartridge appears, is rammed out of sight).
+The game anchors clips on them (decision 0037).
 
 ### 5. Check (units/validate.py)
 

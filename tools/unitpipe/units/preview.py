@@ -61,7 +61,7 @@ def place(frame):
 
 
 if kw.get('fx') == 'battery' and 'shot' in events:
-    shot = events['shot'] + 1
+    shot = events['shot']                          # a 1-based frame, as every event
     mz = Vector(json.loads((mp / 'battery-combined.json').read_text())['gun']['muzzle'])
     fl = bpy.data.materials.new('Flash'); fl.use_nodes = True
     b = fl.node_tree.nodes['Principled BSDF']; b.inputs['Emission Color'].default_value = (1, .7, .3, 1); b.inputs['Emission Strength'].default_value = 30

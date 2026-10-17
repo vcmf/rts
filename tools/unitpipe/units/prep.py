@@ -239,9 +239,8 @@ if rig is not None:
     mesh.name = rig.name.replace('Rig', 'Mesh')
 else:
     mesh.name = 'PistolMesh'
-bpy.context.view_layer.update()
-lo = Vector([min((mesh.matrix_world @ v.co)[i] for v in mesh.data.vertices) for i in range(3)])
-hi = Vector([max((mesh.matrix_world @ v.co)[i] for v in mesh.data.vertices) for i in range(3)])
+mesh.data.update(); bpy.context.view_layer.update()
+lo, hi = K.mesh_bounds([mesh])
 info.update(bounds=[list(lo), list(hi)], size=list(hi - lo), triangles=sum(len(p.vertices) - 2 for p in mesh.data.polygons))
 (K.ROOT / f'{name}-prep.json').write_text(json.dumps(info, indent=1, default=list))
 K.save(K.ROOT / f'{name}-prepped.blend')
