@@ -166,10 +166,11 @@ const input = (id: string) => byId<HTMLInputElement>(id)
 input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
 // the render scale (docs/plans/done/dynamic-scale.md): a fixed one from the panel, or Auto (S.res 0, the default): by
 // zoom, from the camera's radius, a level of AUTO (each change resizes the frame's targets: three over the whole range;
-// the edges at 72, 78 and 85 % of the SPEC's zoom range: about 200, 213 and 228 m), changed only once the radius is AUTO_HOLD m past the level's edge (no flicker at an edge).
+// the edges at 72, 80 and 88 % of the SPEC's zoom range: about 200, 217 and 234 m; 0.75 at the widest:
+// docs/plans/active/auto-floor.md), changed only once the radius is AUTO_HOLD m past the level's edge (no flicker at an edge).
 // The interface is HTML over the canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
 const { rMin, rMax } = D.spec.camera, at = (f: number) => rMin + f * (rMax - rMin)   // the edges as shares of the zoom range
-const AUTO: [number, number][] = [[at(0.72), 1], [at(0.78), 0.95], [at(0.85), 0.9], [Infinity, 0.85]], AUTO_HOLD = 4
+const AUTO: [number, number][] = [[at(0.72), 1], [at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.75]], AUTO_HOLD = 4
 let scaleNow = 1, level = 0
 const applyScale = (s: number) => { if (s !== scaleNow) { scaleNow = s; engine.setHardwareScalingLevel(1 / s) } }
 const resSel = byId<HTMLSelectElement>('res')
