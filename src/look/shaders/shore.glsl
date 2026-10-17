@@ -32,7 +32,14 @@ float pxGround(vec3 wp){vec2 f=fwidth(wp.xz);return max(f.x,f.y);}
 // green, a quarter of it where it is not (bare earth, stone, gravel, a cut bank, dry gold), so a ploughed field or a bank
 // does not melt into the autumn meadow, smoothly across every edge
 vec3 groundSeason(vec3 c){
+  #ifdef GRASS_FLOW
+  // the combed meadow keeps its value through the seasons (docs/plans/active/grass-flow.md): the season's colour taken
+  // at the pixel's value against the meadow's (about 0.4), so its streaks and gaps do not fade to 22% in autumn
+  float r=clamp(dot(c,vec3(0.3,0.59,0.11))/0.40,0.55,1.6);
+  vec3 au=mix(c,vec3(0.68,0.59,0.37)*r,0.78),la=mix(c,vec3(0.52,0.42,0.27)*r,0.6),wi=mix(c,vec3(0.46,0.42,0.34)*r,0.7);
+  #else
   vec3 au=mix(c,vec3(0.68,0.59,0.37),0.78),la=mix(c,vec3(0.52,0.42,0.27),0.6),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
+  #endif
   // the autumn turns (to late autumn) by greenness: a yellow-green counts as green, a grey road, earth, stone and dry gold
   // (green no higher than red or blue) take a quarter. Winter mutes every colour, as before
   float g=mix(0.25,1.0,smoothstep(-0.005,0.03,c.g-max(c.r,c.b)));au=mix(c,au,g);la=mix(c,la,g);

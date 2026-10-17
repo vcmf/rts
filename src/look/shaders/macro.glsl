@@ -131,8 +131,39 @@ float brushAt(vec2 uv,float s,float px){
   return texture2D(uMeadowBrush,uv).r;
   #endif
 }
+#ifdef GRASS_FLOW
+// the brush combed along the flow (?grass=flow, docs/plans/active/grass-flow.md): each FLOW_CELL m cell reads the tile
+// in its own frame, turned to the flow at its centre and stretched along it (a varying turn of one frame would smear
+// far from the origin), the four nearest blended bilinearly with their contrast kept (the sum's spread over the
+// weights' norm, about the tile's mean), at the two scales of the default; 8 reads, in the bake only
+#define FLOW_CELL 5.0
+// x: the brush, combed; y: the comb's own strokes, value noise stretched about seven times along the flow (5 m by
+// 0.7 m, and an octave at half that), the scale the bake's 0.5 m texel holds, about 0.5 (blended as the brush)
+vec2 combedBrush(vec2 xz,float px){
+  vec2 g=xz/FLOW_CELL-0.5,id=floor(g),f=fract(g);float s=0.0,sc=0.0,ww=0.0;
+  for(int k=0;k<4;k++){
+    vec2 o=vec2(float(k-(k/2)*2),float(k/2)),cc=(id+o+0.5)*FLOW_CELL;
+    float w=(o.x>0.5?f.x:1.0-f.x)*(o.y>0.5?f.y:1.0-f.y);
+    vec2 u=flowAt(cc).xy,d=xz-cc,l=vec2(dot(d,u)/3.0,dot(d,vec2(-u.y,u.x)))+vec2(mHash(id+o),mHash(id+o+7.7))*7.3;
+    float b=brushAt(l/7.3,7.3,px)*0.6+brushAt(l/(7.3/2.618)+0.37,7.3/2.618,px)*0.4;
+    vec2 dl=vec2(dot(d,u),dot(d,vec2(-u.y,u.x)))+vec2(mHash(id+o+3.1),mHash(id+o+9.4))*40.0;
+    float cm=mValue(vec2(dl.x/5.0,dl.y/0.7))*0.65+mValue(vec2(dl.x/2.4,dl.y/0.35)+11.0)*0.35;
+    s+=(b-0.585)*w;sc+=(cm-0.5)*w;ww+=w*w;}
+  float n=1.0/sqrt(max(ww,1e-4));
+  return vec2(0.585+s*n,0.5+sc*n);}
+#endif
 vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
   float gr=k<0.5?1.0:k<1.5?0.75:0.0;if(gr<=0.0)return c;
+  #ifdef GRASS_FLOW
+  // combed: the strokes along the flow; light and dark streaks where it leans to or from the sun (the sun is fixed
+  // per map: the bake holds it), deeper and cooler gaps, soft masses at a few metres (the far zooms' fluff)
+  vec3 fl=flowAt(xz);vec2 cb=combedBrush(xz,px);float dv=(cb.x-0.585)*0.6+(cb.y-0.5)*mix(0.35,0.8,fl.z);
+  float streak=dot(fl.xy,FLOW_SUN)*mix(0.35,1.0,fl.z);
+  float mass=mix(0.9,1.1,mValue(xz/11.0+3.0));
+  vec3 gap=mix(vec3(1.0),vec3(0.86,0.93,1.04),smoothstep(0.0,-0.25,dv));   // the gaps between the strokes: darker, cooler
+  vec3 t=(1.0+dv*1.25)*(1.0+0.2*streak)*mass*gap*mix(0.93,1.07,clumpAt(xz));
+  return c*mix(vec3(1.0),t,gr);
+  #endif
   vec2 w=(vec2(mValue(xz/23.0),mValue(xz/23.0+41.0))-0.5)*3.0;
   float b=brushAt((xz+w)/7.3,7.3,px)*0.6+brushAt(mat2(0.8253,-0.5646,0.5646,0.8253)*(xz-w)/(7.3/2.618)+0.37,7.3/2.618,px)*0.4;
   float cl=mix(clumpAt(xz),mValue(xz/3.2),smoothstep(0.35,1.2,px));

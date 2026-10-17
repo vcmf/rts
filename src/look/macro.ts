@@ -74,7 +74,8 @@ export interface Macro {
 }
 
 // meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
-export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false): Macro {
+// flow: the meadow's pattern combed (GRASS_FLOW, ?grass=flow): the materials' defines it shares (src/look/main.ts)
+export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false, flow: string[] = []): Macro {
   const engine = scene.getEngine() as AbstractEngine, s = D.spec.macro
   const coverTex = RawTexture.CreateRGBATexture(cover.tex, cover.n, cover.n, scene, false, false, Texture.NEAREST_SAMPLINGMODE)
   coverTex.wrapU = coverTex.wrapV = Texture.CLAMP_ADDRESSMODE
@@ -104,7 +105,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   dirt.wrapU = dirt.wrapV = Texture.WRAP_ADDRESSMODE; dirt.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); if (brush) m.setTexture('uMeadowBrush', brush) })
 
-  const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW'] : [])]
+  const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : [])]
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })
   // arm 5's filter, compiled on its first bake
   let kuwaharaW: EffectWrapper | null = null

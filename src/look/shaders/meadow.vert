@@ -68,7 +68,15 @@ void main(){
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
   float a=h4*6.2832,ca=cos(a),sa=sin(a);
   vec3 p=vec3(position.x*fp,position.y*hgt,position.z*fp);p.xz=vec2(ca*p.x-sa*p.z,sa*p.x+ca*p.z);
+  #ifdef GRASS_FLOW
+  // combed (docs/plans/active/grass-flow.md): the clump leans with the flow, bending more toward its tips (the
+  // offset grows with the height squared), as far as the flow lies it over, the hash a small jitter; not crops
+  vec3 fl=flowAt(root);
+  if(!crop)p.xz+=(fl.xy*mix(0.18,0.75,fl.z)*p.y/max(hgt,0.05)+(vec2(h5,h6)-0.5)*0.12)*p.y;
+  else p.xz+=(vec2(h5,h6)-0.5)*0.25*p.y;
+  #else
   p.xz+=(vec2(h5,h6)-0.5)*0.25*p.y;                              // a little lean
+  #endif
   vec3 w=vec3(root.x,m.r-MEADOW_SINK,root.y)+p;   // sunk a little: the map's 1 m bilinear height is within that of the drawn ground where grass grows (tools/look-check.js)
   vec3 n=normal;n.xz=vec2(ca*n.x-sa*n.z,sa*n.x+ca*n.z);
   vN=n;vW=w;vV=aV;vShade=c;   // the clump field (the ground colour under it, groundArm, already holds the brush pattern)
