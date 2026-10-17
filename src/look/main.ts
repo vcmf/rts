@@ -407,6 +407,7 @@ Object.assign(window, { __look: {
   // the terrain alone (and the lab's hill), or everything; the finishing passes on or off (off: the frame is the
   // terrain's own output, as the debug view needs)
   terrainOnly: (on: boolean) => {
+    meadow?.underOn(!on)   // the ground alone: without the dark under-layer of the meadow it hides
     if (on) for (const m of scene.meshes) { if (m instanceof Mesh && m.isEnabled() && !terrainMats.includes(m.material as never) && m !== terrain.tileGround) { m.setEnabled(false); hidden.push(m) } }
     else { for (const m of hidden) m.setEnabled(true); hidden.length = 0 }
   },

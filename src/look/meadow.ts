@@ -12,7 +12,7 @@ import { Constants } from '@babylonjs/core/Engines/constants.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
-import { Vector2, Vector4 } from '@babylonjs/core/Maths/math.vector.js'
+import { Vector2, Vector3, Vector4 } from '@babylonjs/core/Maths/math.vector.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
@@ -33,9 +33,10 @@ const TILE_W = D.spec.tile, MAP_N = Math.round(TILE_W)   // the meadow map: 1 m 
 // its clump
 // the camera's radius over which the inner rings give way to the outer one (m): the default view is 125, the widest 260
 const WIDE: [number, number] = [150, 200]   // (buildMeadow's wide: false, ?nowide, keeps the rings as before: the A/B)
-// a crop's clump (docs/plans/active/crop-depth.md): CROP_WIDE times the grass clump's spread at the root, and drawn in
-// to CROP_STRAIGHT of that at the tip, where the grass fans out to about 1.6 times its root's: the stalks stand straight
-const CROP_STRAIGHT = 0.64, CROP_WIDE = 1.5
+// a crop's clump (docs/plans/active/crop-depth.md): CROP_WIDE times the grass clump's spread at the root, its fan undone:
+// the grass clumps' blades spread about 1 + CROP_FAN aV up their height (measured from data/meadow-grass.json: Large
+// 0.31, 0.43, 0.58 at aV 0, 0.4, 0.8; Small 0.25, 0.34, 0.50), so the stalks stand parallel
+const CROP_FAN = 1.15, CROP_WIDE = 1.5
 export interface Ring { cell: number; n: number; spread: number; band: [number, number, number, number]; clump: 'Grass_Large' | 'Grass_Small' }
 export const RINGS: Ring[] = [
   { cell: 0.5, n: 104, spread: 1.6, band: [0, 0, 18, 25], clump: 'Grass_Large' },   // band[1] 0: no fade in
@@ -45,8 +46,9 @@ export const RINGS: Ring[] = [
 
 export interface Meadow {
   meshes: Mesh[]; setOn(on: boolean): void; bakeMs: number
-  // the ground's dark under-layer (shore.glsl, MEADOW_UNDER) on these materials: the meadow map, on while the meadow is
-  under(ms: ShaderMaterial[]): void
+  // the ground's dark under-layer (shore.glsl, MEADOW_UNDER) on these materials: the meadow map, and each frame its
+  // reach and strength (off while the meadow is off or hidden: underOn)
+  under(ms: ShaderMaterial[]): void; underOn(on: boolean): void
   growingCells: number                                // texels of the meadow map where grass grows
   growthAt(x: number, z: number): number              // the growth at a point as the GPU reads it (the checks: tools/river-check.js)
   groundAt(x: number, z: number): number              // the ground's height the grass stands on, as the GPU reads it (tools/look-check.js)
@@ -147,7 +149,7 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   RINGS.forEach((r, ri) => {
     const m = mats.make(`meadow${ri}`, MEADOW_VS.replace('#include<meadow>', () => MEADOW_GLSL), MEADOW_FS, {
       attributes: ['position', 'normal', 'aV', 'aSlot'], uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand'], samplers: ['uMeadow', 'uGB'],
-      defines: ['#define GROUND_BOUNCE', `#define MEADOW_N ${MAP_N.toFixed(1)}`, `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`, `#define MEADOW_SINK ${MEADOW_SINK.toFixed(3)}`, `#define WHEAT_HEIGHT_MAX ${WHEAT_HEIGHT_MAX.toFixed(2)}`, `#define CROP_STRAIGHT ${CROP_STRAIGHT.toFixed(2)}`, `#define CROP_WIDE ${CROP_WIDE.toFixed(2)}`, `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(3)}`, `#define GREEN_HEIGHT ${GREEN_HEIGHT.toFixed(3)}`],
+      defines: ['#define GROUND_BOUNCE', `#define MEADOW_N ${MAP_N.toFixed(1)}`, `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`, `#define MEADOW_SINK ${MEADOW_SINK.toFixed(3)}`, `#define WHEAT_HEIGHT_MAX ${WHEAT_HEIGHT_MAX.toFixed(2)}`, `#define CROP_FAN ${CROP_FAN.toFixed(2)}`, `#define CROP_WIDE ${CROP_WIDE.toFixed(2)}`, `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(3)}`, `#define GREEN_HEIGHT ${GREEN_HEIGHT.toFixed(3)}`],
     })
     const c = clumps[r.clump]
     m.backFaceCulling = false; m.setTexture('uMeadow', map); m.setFloat('uCell', r.cell)
@@ -191,6 +193,9 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
     const f = camera.target, y = heightAt(f.x, f.z); centre.set(f.x, f.z)
     RINGS.forEach((r, ri) => { origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell); ringMats[ri].setFloat('uCentreY', y) })
   })
-  const unders: ShaderMaterial[] = []
-  return { meshes, setOn: on => { for (const m of meshes) m.setEnabled(on); for (const u of unders) u.setFloat('uMeadowOn', on ? 1 : 0) }, under: ms => { for (const u of ms) { u.setTexture('uMeadow', map); u.setFloat('uMeadowOn', 1); unders.push(u) } }, bakeMs: performance.now() - t0, growingCells, growthAt, groundAt: groundAtMap, cropAt, croppingCells: crops.count }
+  const unders: ShaderMaterial[] = [], under = new Vector3(0, 0, 0), outer = RINGS[RINGS.length - 1].band
+  let underOn = true, meadowOn = true
+  // the reach: the outer ring's band; the strength: fading over the zoom where the inner rings give way (WIDE)
+  scene.onBeforeRenderObservable.add(() => { const t = Math.min(1, Math.max(0, (camera.radius - WIDE[0]) / (WIDE[1] - WIDE[0]))); under.set(outer[2], outer[3], underOn && meadowOn ? 1 - t * t * (3 - 2 * t) : 0) })
+  return { meshes, setOn: on => { meadowOn = on; for (const m of meshes) m.setEnabled(on) }, under: ms => { for (const u of ms) { u.setTexture('uMeadow', map); u.setVector3('uUnder', under); unders.push(u) } }, underOn: on => { underOn = on }, bakeMs: performance.now() - t0, growingCells, growthAt, groundAt: groundAtMap, cropAt, croppingCells: crops.count }
 }
