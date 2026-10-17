@@ -5,7 +5,7 @@ last_reviewed: 2026-10-17
 
 # Plan: the figure pipeline in the repository
 
-Agreed with the owner on 2026-10-17 (the figure animation proposal, PR #108, open question 3): move the
+Agreed with the owner on 2026-10-17 (`docs/proposals/figure-animation.md`, open question 3): move the
 animation pipeline into the repository as it is, with a generated registry, before more animation work.
 
 ## Problem

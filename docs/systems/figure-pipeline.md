@@ -2,7 +2,7 @@
 status: current
 last_reviewed: 2026-10-17
 code: [tools/unitpipe/paths.py, tools/unitpipe/sources.py, tools/unitpipe/registry.py, tools/unitpipe/infantry/build.py, tools/unitpipe/infantry/drill.py, tools/unitpipe/units/unitkit.py, tools/unitpipe/units/biped.py, tools/unitpipe/units/timeline.py, tools/unitpipe/units/horse.py, data/figures/index.json, test/figures-index.test.ts]
-decisions: [0018-battalion-of-400, 0038-figure-pipeline-layout]
+decisions: [0018-battalion-of-400, 0037-simulation-owns-animation-timing, 0038-figure-pipeline-layout]
 ---
 
 # Figure pipeline: Tripo models to animated figures
@@ -188,7 +188,7 @@ lengths, loops, events inside their clips, every chain naming a clip of its figu
 - LODs for the gun and crew and the cavalryman, and a bake of multi-part figures for the game (the bake on
   the crowd-bench branch knows only the infantryman).
 - The infantryman on the units' toolkit and in metres, and the musket's Reload and the gun's Load too
-  short for the ruleset's reloads (decision 0037's capped hold loop).
+  short for the ruleset's reloads (decision 0037's capped hold loop, `docs/proposals/figure-animation.md`).
 - Gait changes have no clips; no walk or trot with the sabre out.
 - The tack is made, not modelled; the rider is dressed as a cuirassier; his gloved fist closes on the
   sabre's grip only approximately; eight of the ruleset's twelve gunners are not in the drill.

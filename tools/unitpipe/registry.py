@@ -1,5 +1,5 @@
 """The figure registry: every published figure and its clips, in one generated file the game and the docs
-read (the figure animation proposal, decision 0038).
+read (docs/proposals/figure-animation.md, decision 0038).
 
 python3 tools/unitpipe/registry.py           write data/figures/index.json from output/figures/*/clips.json
 python3 tools/unitpipe/registry.py --check   exit 1 if the committed file differs from what would be written

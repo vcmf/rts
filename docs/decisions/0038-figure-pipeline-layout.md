@@ -11,7 +11,7 @@ The animation pipeline (a line infantryman, a gun and its crew, a cavalryman on 
 untracked folder of one checkout, each script using its own folder as source, work area and output. Nothing
 was versioned or reviewed, and nothing in the repository said which figures and clips exist. The owner
 agreed on 2026-10-17 to move it in as it is, with a generated registry, before more animation work (the
-figure animation proposal, open question 3).
+figure animation proposal, `docs/proposals/figure-animation.md`, open question 3).
 
 ## Decision
 
