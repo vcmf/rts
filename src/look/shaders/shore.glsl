@@ -110,7 +110,7 @@ vec3 bankPaint(vec3 c,vec2 xz,float land,float h,float ny){
   #endif
 }
 #if defined(MEADOW)&&defined(MEADOW_UNDER)
-// THE GROUND UNDER THE NEAR GRASS AND CROPS (docs/plans/active/crop-depth.md): darker, in the plant's own deep tone (a
+// THE GROUND UNDER THE NEAR GRASS AND CROPS (docs/plans/done/crop-depth.md): darker, in the plant's own deep tone (a
 // deep green under grass and the green crop, a deep ochre under wheat and stubble), as the growth there says (the
 // meadow map: G the grass, B its height factor, A the crop; src/look/meadow.ts) and the season's height (meadow.glsl,
 // as the clumps), so the gaps between the blades read as depth and shade. Only where the clumps are drawn: uUnder is

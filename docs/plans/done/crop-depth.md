@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-17
 ---
 
@@ -42,6 +42,12 @@ grass, dark orange for wheat) then put the grass/wheat on".
 - **The owner** (2026-10-17): "looks good"; the stalks first came out sparse (each clump narrower): fuller since.
 - **The bench** (Metal, the frame interval, main / this branch, twice, before the review's fixes): close 4.43 / 4.70
   to 4.83 ms, default 5.76 / 6.33 to 6.42, widest 6.54 / 6.75 to 6.83: +0.3 to 0.6 ms.
+
+- **The checks** on the final code: the guard's cover and crops views (three seasons), the coat check, the negatives,
+  the water and macro checks: exit 0. The guard's default view: two blocks under the bound (the darker ground under the
+  grass closer to their coats): sunlit-slope.Britain summer 0.077 (main 0.127), flat.Austria autumn 0.086 (main 0.112);
+  **accepted by the owner** (2026-10-17: "i do think we can accept"), recorded on #78. The goldens differ (the
+  under-layer, the crops), the expected change.
 
 ## Review
 

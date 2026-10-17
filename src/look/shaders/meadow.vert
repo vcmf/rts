@@ -68,7 +68,7 @@ void main(){
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
   float a=h4*6.2832,ca=cos(a),sa=sin(a);
   vec3 p=vec3(position.x*fp,position.y*hgt,position.z*fp);p.xz=vec2(ca*p.x-sa*p.z,sa*p.x+ca*p.z);
-  // a crop's stalks stand straight (docs/plans/active/crop-depth.md): a blade's spread drawn in toward its root's
+  // a crop's stalks stand straight (docs/plans/done/crop-depth.md): a blade's spread drawn in toward its root's
   // axis as it rises (the grass clump fans out), and barely any lean
   if(crop)p.xz*=CROP_WIDE/(1.0+CROP_FAN*aV);   // the grass clump's spread grows about 1 + CROP_FAN aV up its blades (measured): undone, the stalks parallel, CROP_WIDE times the root's spread
   p.xz+=(vec2(h5,h6)-0.5)*(crop?0.06:0.25)*p.y;                  // a little lean

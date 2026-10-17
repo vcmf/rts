@@ -33,7 +33,7 @@ const TILE_W = D.spec.tile, MAP_N = Math.round(TILE_W)   // the meadow map: 1 m 
 // its clump
 // the camera's radius over which the inner rings give way to the outer one (m): the default view is 125, the widest 260
 const WIDE: [number, number] = [150, 200]   // (buildMeadow's wide: false, ?nowide, keeps the rings as before: the A/B)
-// a crop's clump (docs/plans/active/crop-depth.md): CROP_WIDE times the grass clump's spread at the root, its fan undone:
+// a crop's clump (docs/plans/done/crop-depth.md): CROP_WIDE times the grass clump's spread at the root, its fan undone:
 // the grass clumps' blades spread about 1 + CROP_FAN aV up their height (measured from data/meadow-grass.json: Large
 // 0.31, 0.43, 0.58 at aV 0, 0.4, 0.8; Small 0.25, 0.34, 0.50), so the stalks stand parallel
 const CROP_FAN = 1.15, CROP_WIDE = 1.5
