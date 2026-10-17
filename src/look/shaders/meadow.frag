@@ -22,7 +22,9 @@ void main(){
     // Grass.png is that gradient), each clump a shade apart. The painted ground under the root: the macro bake (one
     // read), or, on the other arms (whose ground costs a whole macro colour a pixel, too much for many blades deep),
     // the flat class colour
-    #ifdef MACRO_BAKE
+    #if defined(MACRO_BAKE)&&defined(GRASS_FLOW)
+    vec3 g=groundSeason(bakeOnce(vRoot).rgb);   // the bake alone: no grass grows where the ground's comb or short grass would change it
+    #elif defined(MACRO_BAKE)
     pMdx=vec2(uCell,0.0);pMdy=vec2(0.0,uCell);   // the bake read at the ring cell footprint, as the ground under it is filtered
     vec3 g=groundSeason(groundAt(vRoot,uCell));
     #else
@@ -30,6 +32,13 @@ void main(){
     #endif
     alb=g*mix(0.95,1.55,vV)*mix(0.92,1.10,vShade);
     alb=mix(alb,alb*vec3(1.04,1.08,0.80),vV*0.5);
+    #if defined(GRASS_FLOW)&&!defined(GRASS_NO_HUE)
+    // each clump its own hue, as the references' tufts (the owner, 2026-10-17): from a deeper blue-green to a warm
+    // yellow-lime, by a hash of its root (a clump's every vertex shares it), stronger toward the tips
+    vec3 hq=fract(vec3(vRoot.xyx*0.1731)*vec3(0.1031,0.1030,0.0973)*97.0);hq+=dot(hq,hq.yzx+33.33);float hr=fract((hq.x+hq.y)*hq.z);
+    vec3 tint=hr<0.5?mix(vec3(0.78,0.98,0.90),vec3(1.0),hr*2.0):mix(vec3(1.0),vec3(1.22,1.10,0.66),(hr-0.5)*2.0);
+    alb*=mix(vec3(1.0),tint,0.6+0.4*vV);
+    #endif
   }
   alb=earthOf(alb);
   float lo=groundOcc(lm),occ=mix(0.8,1.0,vV)*mix(1.0,lo,uAO*0.6);

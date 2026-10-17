@@ -30,7 +30,7 @@ export const withPainter = (src: string): string => {
 }
 
 // the ground's macro colour (src/look/shaders/macro.glsl): the cover grid and the bakes, on every painted material
-const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush', 'uDirt']   // uMeadowBrush: the meadow's brush tile (MEADOW, src/look/meadow.ts)
+const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush', 'uDirt', 'uGrowth', 'uFlow', 'uComb']   // uGrowth: the meadow map (?grass=flow, src/look/meadow.ts)   // uMeadowBrush: the meadow's brush tile (MEADOW, src/look/meadow.ts)
 // the mood's colours each material takes (src/look/mood.ts), by uniform: one table gives both the uniform names and
 // their values, so none is left unset (an unset vec3 reads black). The shadow's turn is divided by its luma here
 // (shadowOf works on hue at the same value), not per pixel

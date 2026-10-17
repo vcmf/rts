@@ -15,6 +15,7 @@ import { withPainter, type Materials } from './materials.ts'
 import { D, bakeMB } from './spec.ts'
 import type { CoverGrid } from './world/cover.ts'
 import BRUSH_URL from '../../data/meadow-brush.png?url'
+import type { FlowTextures } from './flow.ts'
 import DIRT_URL from '../../data/ground-dirt-v1.png?url'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 
@@ -74,7 +75,9 @@ export interface Macro {
 }
 
 // meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
-export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false): Macro {
+// flow: the meadow's pattern combed (GRASS_FLOW, ?grass=flow): the materials' defines it shares (src/look/main.ts)
+// flowTex: the flow's textures (src/look/flow.ts), which the bake reads too
+export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false, flow: string[] = [], flowTex: FlowTextures | null = null): Macro {
   const engine = scene.getEngine() as AbstractEngine, s = D.spec.macro
   const coverTex = RawTexture.CreateRGBATexture(cover.tex, cover.n, cover.n, scene, false, false, Texture.NEAREST_SAMPLINGMODE)
   coverTex.wrapU = coverTex.wrapV = Texture.CLAMP_ADDRESSMODE
@@ -104,7 +107,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   dirt.wrapU = dirt.wrapV = Texture.WRAP_ADDRESSMODE; dirt.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); if (brush) m.setTexture('uMeadowBrush', brush) })
 
-  const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW'] : [])]
+  const UNIFORMS = ['uRect', 'uTexel', 'uSeason'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uFlow', 'uComb'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : [])]
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })
   // arm 5's filter, compiled on its first bake
   let kuwaharaW: EffectWrapper | null = null
@@ -143,7 +146,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
     try {
       let draws = pass(src, n, wrapper, (e, i, j, w, h) => {
         e.setFloat4('uRect', x0 + i / n * world, x0 + j / n * world, x0 + (i + w) / n * world, x0 + (j + h) / n * world)
-        e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex); if (brush) e.setTexture('uMeadowBrush', brush)
+        e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex); if (brush) e.setTexture('uMeadowBrush', brush); if (flowTex) { e.setTexture('uFlow', flowTex.flow); e.setTexture('uComb', flowTex.comb) }
       })
       if (src !== t) draws += pass(t, n, kuwahara(), (e, i, j, w, h) => {
         e.setTexture('uSrc', src); e.setFloat('uN', n); e.setFloat4('uPx', i, j, i + w, j + h)

@@ -50,7 +50,11 @@ void main(){
   bool crop=m.a>m.g;
   // the growth here, thinner between the clumps (a crop evenly sown, less so), and a clump shrinks away instead of
   // vanishing (no pop)
-  float keep=crop?m.a*band*mix(0.8,1.0,c):m.g*band*mix(0.45,1.0,c),grow=smoothstep(h2-0.12,h2+0.12,keep);
+  float keep=crop?m.a*band*mix(0.8,1.0,c):m.g*band*mix(0.45,1.0,c);
+  #if defined(GRASS_FLOW)&&!defined(GRASS_NO_DENSE)
+  if(!crop)keep=m.g*band*mix(0.8,1.0,c);   // denser (the owner, 2026-10-17): fewer clumps thinned between the patches
+  #endif
+  float grow=smoothstep(h2-0.12,h2+0.12,keep);
   // nothing where nothing grows (the smoothstep above is over 0 at a growth of 0 for a low hash, and the height factor
   // is not zeroed by the rules: the zones and the banks)
   if(keep<=0.0){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
@@ -64,14 +68,26 @@ void main(){
   // field a shade apart, as the ground paints it (cellColour in macro.glsl)
   if(crop){vec2 cc=coverCell(root);cr=cropLook(cc.x,h3);cr.yzw*=cc.y>0.5?0.94+0.12*fract(cc.y*0.6180339):1.0;
     hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*min(0.7,cr.x/uHeight);}
-  else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*grassSeasonK(uSeason),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;}
+  else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*grassSeasonK(uSeason),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;
+    #if defined(GRASS_FLOW)&&!defined(GRASS_NO_BIG)
+    hgt=min(hgt*1.15,HEIGHT_MAX);fp*=1.4;   // larger blades (the owner): wider clumps, a little taller, never over HEIGHT_MAX
+    #endif
+  }
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
   float a=h4*6.2832,ca=cos(a),sa=sin(a);
   vec3 p=vec3(position.x*fp,position.y*hgt,position.z*fp);p.xz=vec2(ca*p.x-sa*p.z,sa*p.x+ca*p.z);
   // a crop's stalks stand straight (docs/plans/done/crop-depth.md): a blade's spread drawn in toward its root's
   // axis as it rises (the grass clump fans out), and barely any lean
   if(crop)p.xz*=CROP_WIDE/(1.0+CROP_FAN*aV);   // the grass clump's spread grows about 1 + CROP_FAN aV up its blades (measured): undone, the stalks parallel, CROP_WIDE times the root's spread
+  #ifdef GRASS_FLOW
+  // combed (docs/plans/active/grass-flow.md): the clump leans with the flow, bending more toward its tips (the
+  // offset grows with the height squared), as far as the flow lies it over, the hash a small jitter; not crops
+  vec3 fl=flowTex(root);
+  if(!crop)p.xz+=(fl.xy*mix(0.18,0.75,fl.z)*p.y/max(hgt,0.05)+(vec2(h5,h6)-0.5)*0.12)*p.y;
+  else p.xz+=(vec2(h5,h6)-0.5)*0.06*p.y;
+  #else
   p.xz+=(vec2(h5,h6)-0.5)*(crop?0.06:0.25)*p.y;                  // a little lean
+  #endif
   vec3 w=vec3(root.x,m.r-MEADOW_SINK,root.y)+p;   // sunk a little: the map's 1 m bilinear height is within that of the drawn ground where grass grows (tools/look-check.js)
   vec3 n=normal;n.xz=vec2(ca*n.x-sa*n.z,sa*n.x+ca*n.z);
   vN=n;vW=w;vV=aV;vShade=c;   // the clump field (the ground colour under it, groundArm, already holds the brush pattern)

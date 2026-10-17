@@ -7,7 +7,7 @@ import { Engine } from '@babylonjs/core/Engines/engine.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
-import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
+import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { Scene } from '@babylonjs/core/scene.js'
@@ -15,7 +15,8 @@ import '../../prototypes/nature-pack.data.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
 import { q, runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
-import { Materials, S } from './materials.ts'
+import { Materials, S, SUN } from './materials.ts'
+import { buildFlow } from './flow.ts'
 import { gradeColour, MOOD, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow } from './meadow.ts'
@@ -78,7 +79,18 @@ const meadowParam = params.get('meadow')
 if (meadowParam !== null && meadowParam !== 'off') throw new Error(`?meadow must be off, not ${meadowParam}`)
 // the meadow reads a half-float texture in its vertex shader: WebGL2 only (on WebGL1 the old scatter stays)
 const meadowOn = meadowParam !== 'off' && engine.version >= 2
-const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [...softDefines(soft), ...(meadowOn ? ['#define MEADOW'] : [])])
+// ?grass=flow: the meadow combed (docs/plans/active/grass-flow.md): its pattern and clumps along a flow field, light and
+// dark streaks by the lean against the sun (its direction on the ground, FLOW_SUN), on the ground's bake and the
+// clumps' materials alike
+const grassParam = params.get('grass')
+if (grassParam !== null && grassParam !== 'flow') throw new Error(`?grass must be flow, not ${grassParam}`)
+if (grassParam && !meadowOn) throw new Error('?grass=flow needs the meadow (WebGL2, no ?meadow=off)')
+const sunXZ = new Vector2(SUN.x, SUN.z).normalize()
+// ?grassoff=strokes,dense,big,hue (with flow): one part of the arm off at a time, for the cost's ablation
+const GRASS_PARTS = ['strokes', 'dense', 'big', 'hue'], grassOff = params.get('grassoff')?.split(',') ?? []
+if (grassOff.some(k => !GRASS_PARTS.includes(k)) || (grassOff.length && grassParam !== 'flow')) throw new Error(`?grassoff takes ${GRASS_PARTS.join(', ')}, with ?grass=flow`)
+const grassDefines = grassParam === 'flow' ? ['#define GRASS_FLOW', `#define FLOW_SUN vec2(${sunXZ.x.toFixed(4)},${sunXZ.y.toFixed(4)})`, ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`)] : []
+const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [...softDefines(soft), ...(meadowOn ? ['#define MEADOW', ...grassDefines] : [])])
 const keptGrains = new Set([mats.grain])   // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
 const waterT0 = performance.now(), waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData'), waterTexMs = performance.now() - waterT0
@@ -138,7 +150,10 @@ if (params.has('far')) {
 }
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
-const macro = buildMacro(scene, mats, look.cover, meadowOn)
+// the flow's textures (?grass=flow, src/look/flow.ts), on every painted material and the bake
+const flowTex = grassParam === 'flow' && meadowOn ? buildFlow(scene) : null
+if (flowTex) mats.bindAll(m => { m.setTexture('uFlow', flowTex.flow); m.setTexture('uComb', flowTex.comb) })
+const macro = buildMacro(scene, mats, look.cover, meadowOn, grassDefines, flowTex)
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)

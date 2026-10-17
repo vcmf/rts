@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-14
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts]
 decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0033-temperate-is-the-default-mood]
 ---
 
@@ -349,6 +349,24 @@ shader); `?meadow=off` puts back the old scatter.
   season's colour at the tip, the standing wheat gold in summer, turning orange while it is cut; stubble, the cut
   wheat's too, a pale straw over the darker soil (`stubbleTip`, no redder than the standing wheat), browning by late
   autumn; the green crop lime to olive. Ploughed fields grow nothing.
+- **The combed meadow** (`?grass=flow`, an experiment: `docs/plans/active/grass-flow.md`; the research:
+  `docs/research/painterly-grass.md`). Not the default: the arm the owner judges against today's meadow.
+  - **The flow** (`flowAt` in `shaders/meadow.glsl`): a slow map-wide lean and how far the grass lies over, patches
+    30–60 m combed one way. Made once on load into a texture at 2 m (`src/look/flow.ts`, `flowTex`), which the ground,
+    the bake and the clumps read; the field itself beyond the tile.
+  - **The bake** holds the broad part (`meadowPattern` under `GRASS_FLOW`): soft bands where the flow leans to or from
+    the sun (`FLOW_SUN`, fixed per map), soft masses, the clump field.
+  - **The strokes at runtime** (`groundAt` under `GRASS_FLOW`, `combStrokes`): the brush tile and a tiling comb noise
+    (`uComb`) read along the flow in 5 m cells, lighter along the comb and a deeper green in its gaps; by the pixel's
+    footprint (`strokeK`: whole up close, gone by the default zoom's far half) and by the meadow's growth (`uGrowth`:
+    only where grass stands). Where none grows (the formation zones, the banks) the short grass's brush instead.
+  - **The clumps** (`meadow.vert`, `meadow.frag`): 1.4 times wider, 15% taller (never over `HEIGHT_MAX`), fewer thinned
+    between the patches, leaning with the flow, a hue each from blue-green to yellow-lime; they read the bake alone.
+  - **The seasons:** `groundSeason` keeps the pattern's value through autumn (`GRASS_FLOW`), so it reads as golden fur.
+  - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan).
+- **Ring chunks culled on the CPU** (`cullRing` in `src/look/meadow.ts`, both arms): each ring's slots in 8 × 8 chunks,
+  only the chunks in view and in the band drawn, their slots packed into the instance buffer when the set changes;
+  the vertex shader still culls each clump.
 - **The meadow on the ground** (`meadowPattern` in `macro()`, `MEADOW`, a define on every painted material and on the
   macro bake): on meadow and pasture (the warped class the ground paints), the brush tile (`data/meadow-brush.png`,
   at 7.3 m and 7.3/2.618 m, turned apart, warped by a slow noise: no common period; stamped by
