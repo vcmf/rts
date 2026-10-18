@@ -189,8 +189,10 @@ const grassAllowed = grassReach === CLUMP_REACH ? nature.growthAllowed : (x: num
 const meadowMap = meadowOn ? buildMeadowMap(scene, mats, nature.growth, grassAllowed, nature.crop, nature.growthAllowed) : null
 // the combed meadow's near bake runs only where its strokes show: out to the strokes' ring, at the zooms where a pixel
 // can be under the strokes' largest footprint (STROKE_FOOT; at the focus, the ground the screen's centre shows, under
-// twice it, for the frame's foot, nearer than the focus). pixA and the focus are the last frame's (none yet: it bakes)
-const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, { reach: RINGS[0].band[3], shows: () => !focusDist || pixA * focusDist < 2 * STROKE_FOOT })
+// twice it, for the frame's foot, nearer than the focus), in the render's own pixels as strokeK measures them (pixA is
+// at the SPEC's lines). The marched depth, not the eased one (no lag as the camera zooms in), the last frame's (none
+// yet: it bakes)
+const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, { reach: RINGS[0].band[3], shows: () => !focusDist || pixA * D.spec.detail.lines / engine.getRenderHeight() * focusDist < 2 * STROKE_FOOT })
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)
@@ -357,7 +359,7 @@ scene.onBeforeRenderObservable.add(() => {
   pixA = 2 * tv / D.spec.detail.lines
   if (!FROZEN) S.t += Math.min(engine.getDeltaTime() / 1000, 0.05)
   // the depth of field's focus and the view axis, which every material encodes its lens term against (painter.glsl depthA)
-  const focusZ = post.updateFocus(engine.getDeltaTime() / 1000); focusDist = focusZ; camFwd.copyFrom(camera.target).subtractInPlace(camera.position).normalize()
+  const focusZ = post.updateFocus(engine.getDeltaTime() / 1000, S.dof > 0 || grassParam === 'flow'); focusDist = post.focusRaw; camFwd.copyFrom(camera.target).subtractInPlace(camera.position).normalize()
   for (const m of mats.all) {
     m.setFloat('uFocusZ', focusZ); m.setVector3('uCamFwd', camFwd)
     m.setVector3('uCamPos', camera.position); m.setVector3('uFocus', camera.target); m.setFloat('uTime', S.t)

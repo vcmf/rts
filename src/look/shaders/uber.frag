@@ -29,16 +29,22 @@ vec3 base(){vec4 s=texture2D(uSharp,vUV);if(!okPx(s))return MARK(texture2D(textu
   // near layer darker and cooler by its coverage (a foreground framing the scene)
   float l=dot(b.rgb,vec3(0.2126,0.7152,0.0722));
   b.rgb=mix(b.rgb,mix(vec3(l),b.rgb,0.55)*0.9+0.1,uDofPaint.x*fw*clamp(cf/max(uMaxPx,1.0),0.0,1.0));
-  b.rgb*=mix(vec3(1.0),vec3(0.80,0.85,0.94),uDofPaint.y*b.a);
-  return mix(s.rgb,b.rgb,w);}
+  vec3 tint=mix(vec3(1.0),vec3(0.80,0.85,0.94),uDofPaint.y*b.a);
+  // where this pixel has no far blur: the near colour taken back out of the blur (b = the scene's half-resolution
+  // colour c0, one bilinear read of the sharp scene at the 2 x 2 block's centre, under the near layer by its coverage),
+  // laid over the sharp scene by its coverage, so a sharp pixel round a blurred crown keeps its own detail
+  vec3 nearOnly=s.rgb;
+  if(fw<1.0&&b.a>0.02){vec3 c0=texture2D(uSharp,(floor(vUV*uRes*0.5)*2.0+1.0)/uRes).rgb;
+    nearOnly=mix(s.rgb,clamp((b.rgb-c0*(1.0-b.a))/b.a,0.0,1.0)*tint,w);}
+  return mix(nearOnly,mix(s.rgb,b.rgb*tint,w),fw);}
 #define BLOOM_UV(uv) ((uv)*uHalfUV)
 #else
-// (a pixel that is not a finite number takes its neighbours' mean: docs/plans/done/nan-guard.md; the default 8-bit
-// target cannot hold one, the half floats of ?rt16 and ?nanmark can)
+// (a pixel that is not a finite number takes its neighbours' mean: docs/plans/done/nan-guard.md; the half floats of
+// ?rt16 and ?nanmark hold one, the default 8-bit target stores it black with the alpha code 0, painter.glsl lensOut)
 bool ok3(vec3 s){return all(lessThan(abs(s),vec3(65504.0)));}
-vec3 base(){vec3 s=texture2D(textureSampler,vUV).rgb;if(ok3(s))return s;
+vec3 base(){vec4 s4=texture2D(textureSampler,vUV);vec3 s=s4.rgb;if(ok3(s)&&s4.a>=0.5/255.0)return s;
   vec3 m=vec3(0.0);float n=0.0;
-  for(int i=0;i<8;i++){float a=float(i)*0.7854;vec3 t=texture2D(textureSampler,vUV+vec2(cos(a),sin(a))*2.0/uRes).rgb;if(ok3(t)){m+=t;n+=1.0;}}
+  for(int i=0;i<8;i++){float a=float(i)*0.7854;vec4 t=texture2D(textureSampler,vUV+vec2(cos(a),sin(a))*2.0/uRes);if(ok3(t.rgb)&&t.a>=0.5/255.0){m+=t.rgb;n+=1.0;}}
   return MARK(n>0.0?m/n:vec3(0.0));}
 #define BLOOM_UV(uv) (uv)
 #endif

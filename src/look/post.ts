@@ -134,16 +134,20 @@ export class Post {
   // it is what the centre shows), eased over FOCUS_S so a pan over a hillside does not jump the sharp band; a jump
   // of over a third (a new view) is taken at once
   private focus = 0
-  // each frame before the scene renders (src/look/main.ts): the materials encode their lens term against it (marched
-  // with the depth of field off too: turned on, it starts from the true focus; the near bake's zoom reads it)
-  updateFocus(dt: number): number {
+  // the marched depth, not eased (the near bake's zoom gate: src/look/main.ts)
+  focusRaw = 0
+  // each frame before the scene renders (src/look/main.ts): the materials encode their lens term against it. need:
+  // whether anything reads it (the depth of field, the near bake); else not marched, and the next march is taken at
+  // once (a depth of field turned on starts from the true focus)
+  updateFocus(dt: number, need = true): number {
+    if (!need) { this.focus = this.focusRaw = 0; return 1 }
     const c = this.camera, p = c.position, t = c.target
     let fx = t.x - p.x, fy = t.y - p.y, fz = t.z - p.z; const l = Math.hypot(fx, fy, fz) || 1; fx /= l; fy /= l; fz /= l
     const above = (d: number) => p.y + fy * d - this.ground(p.x + fx * d, p.z + fz * d)
     const N = 96, far = 3 * c.radius; let d0 = 0, d1 = far
     for (let i = 1; i <= N; i++) { const d = far * i / N; if (above(d) <= 0) { d1 = d; break } d0 = d }
     if (d1 < far) for (let i = 0; i < 12; i++) { const m = (d0 + d1) / 2; if (above(m) > 0) d0 = m; else d1 = m }
-    const want = Math.max(1, d1 < far ? d1 : l)
+    const want = Math.max(1, d1 < far ? d1 : l); this.focusRaw = want
     this.focus = !this.focus || Math.abs(want - this.focus) > this.focus / 3 ? want : this.focus + (want - this.focus) * (1 - Math.exp(-Math.max(0, dt) / FOCUS_S))
     return this.focus
   }

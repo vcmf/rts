@@ -88,6 +88,7 @@ judges.
   - the near layer stored alone where its coverage was tiny reached the bloom: stored at four times its coverage;
   - the near bake's zoom gate reads the marched focus and `STROKE_FOOT` (shared with strokeK), and the focus is marched
     with the depth of field off again (turned on, it starts from the true focus);
+  - (round 3 below replaced the four-times coverage);
   - documented, not changed: a unit's edge pixels, shared with the ground by the MSAA resolve, take a share of the
     ground's blur; two surface codes either side of 170 can resolve to it (at the focus, sharp either way).
 - **Step 1 measured** (the dev Mac, paired one-page A/B, `?bench=dof`): the depth of field's passes cost 0.1–0.4 ms at
@@ -112,3 +113,17 @@ judges.
   The bilateral composite is not needed: the composite takes each pixel's own blur from its full-resolution lens term,
   so a sharp pixel stays sharp next to a blurred one (no fringe seen in the oblique shots); left out.
   The run-to-run drift is up to 0.7 ms at the third view (the same build measured +0.1–0.2 and +0.8 an hour apart).
+- **Round 3** (9 findings, none severe: fixed what was worth it, and the rounds stop):
+  - the four-times coverage cut the near blur's soft rim, and the far gather leaked where the composite takes no far
+    blur: the blur stores the far gather by the composite's weight of it and the near layer by its coverage (what the
+    bloom reads), and the composite takes the near colour back out where a pixel has no far blur (one bilinear read of
+    the sharp scene for the half-resolution colour), so a sharp pixel round a crown keeps its detail;
+  - the near bake's gate in the render's own pixels and on the marched depth (no lag zooming in); the focus marched
+    only when the depth of field or the near bake reads it;
+  - the units and the depth of field off mark and repair a colour that is not a number too (the code 0);
+  - left: a patch of three or more pixels that are not a number, round which no pixel is usable, comes out black (as
+    before the 8 bits; none known).
+  After: goldens match (default and `?grass=flow`), the guard ok at the start and cover views, a unit's fully covered
+  pixels 0.3–0.6 levels on average (10 at most); the cost +0.1 and +0.1–0.2 ms at two views and +1.0–1.1 ms at the
+  third (this session's state; the same view measured +0.1–0.2 earlier in the day): past the +0.8 ms acceptance there,
+  for the owner's screen to judge.

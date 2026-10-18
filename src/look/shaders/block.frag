@@ -13,4 +13,4 @@ void main(){if(uMask>=0.0){gl_FragColor=vec4(vec3(uMask),UNIT_A);return;}   // (
   // that ground is lit by the sky alone
   pBounce=bounceAt(vRoot,vW.y,0.0,1.0);
   vec3 c=paint(uAlb,N,vW,1.0,0.12,0.3,sh);
-  gl_FragColor=vec4(airOf(c,vW,lm,0.9),UNIT_A);}   // (UNIT_A: a unit, never blurred)
+  vec3 o=airOf(c,vW,lm,0.9);gl_FragColor=vec4(o,all(lessThan(abs(o),vec3(65504.0)))?UNIT_A:0.0);}   // (UNIT_A: a unit, never blurred, 0 a colour that is not a number: lensOut)

@@ -21,7 +21,7 @@ void main(){
     vec4 s=texture2D(textureSampler,uv);
     float sz=lensS(s.a),ss=cocS(sz);if(sz>s0)ss=min(ss,cs*2.0);
     col+=mix(col/tot,s.rgb,smoothstep(r-1.0,r+1.0,ss));tot+=1.0;}
-  col/=tot;
+  col/=tot;col=mix(c0.rgb,col,smoothstep(0.5,2.0,cs));   // (the far blur by the composite's own weight: none leaks under it)
   float tn=vUV.y<uNScreen+uNMaxPx*uTexel.y?uNMaxPx:0.0,na=0.0;
   if(tn>=0.5){vec3 nc=vec3(0.0);float nw=0.0,reach=0.0;ang=0.0;
     float c0n=cocN(s0,vUV);if(c0n>=0.5){float w=1.0/max(c0n*c0n,1.0);nc+=c0.rgb*w;nw+=w;reach+=1.0;}
@@ -32,8 +32,7 @@ void main(){
       if(k>0.0){float w=k/max(cn*cn,1.0);nc+=s.rgb*w;nw+=w;reach+=k;}}
     na=smoothstep(0.0,0.6,reach/(uNN+1.0));
     if(isUnit(c0.a))na=min(na,0.5);
-    // (where this pixel has no far blur, the near layer at four times its coverage, whole from a quarter: the composite
-    // lays it over the sharp scene by its coverage, so the sharp pixels round a blurred crown take little of the
-    // half-resolution colour, while the bloom, which reads this colour, sees the near layer only where it covers)
-    if(nw>0.0)col=mix(col,nc/nw,cs>=0.5?na:min(1.0,4.0*na));}
+    // (the near layer over the far result by its coverage: what the bloom reads; the composite takes the near colour
+    // back out of it where a pixel has no far blur, uber.frag)
+    if(nw>0.0)col=mix(col,nc/nw,na);}
   gl_FragColor=vec4(col,na);}

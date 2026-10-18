@@ -105,9 +105,11 @@ take it. A unit's own pixels never blur.
     weighed by its blur's area (a thin near edge does not swamp the colour); their coverage is the share that reaches.
     The near layer goes over the far result, premultiplied, its coverage in alpha, so a near blur spreads over pixels
     that are sharp themselves. Over a unit its coverage is held to a half (a formation shows through a blurred crown),
-  in the blur and again on the unit's own full-resolution pixel in the composite. Where a pixel has no far blur, the
-  near layer alone goes to the composite, so the sharp pixels round a blurred crown take none of the half-resolution
-  colour.
+  in the blur and again on the unit's own full-resolution pixel in the composite. The far result is the far gather by
+  the composite's own weight of it (none leaks where the composite takes no far blur); the bloom reads this colour.
+  Where a pixel has no far blur, the composite takes the near colour back out of it (the scene's half-resolution colour
+  read as one bilinear tap of the sharp scene) and lays it over the sharp scene by its coverage, so a sharp pixel round
+  a blurred crown keeps its own detail and the crown's soft rim its full reach.
 - **The composite** is in the finishing pass (`uber.frag` with `DOF`): the sharp scene where the pixel's own far blur
   is under a pixel and no near layer covers it; elsewhere the blur, by the larger of the far blur's weight and the
   near coverage. Where it blurs: a 3 × 3 tent over the half-resolution blur (four bilinear taps, the spiral's noise
@@ -386,8 +388,10 @@ shader); `?meadow=off` puts back the old scatter.
     fixed per map), soft masses, and the clump field.
   - **The strokes from a near bake** (`combNear` in `src/look/macro.ts`, `combDv`; the ground reads it in `groundAt`
     with one fetch, `nearComb`, `combFromDv`): the brush tile and a tiling comb noise (`uComb`, `COMB_PERIOD`) read along
-    the flow in `FLOW_CELL` cells, rendered into a square round the focus again when the focus moves (the strokes in
-    the ground's own shader cost about 1 ms on every terrain pixel: the plan). Lighter along the comb and a deeper green
+    the flow in `FLOW_CELL` cells, rendered into a square round the focus (the strokes' ring and the step either side)
+    again when the focus moves 6 m, on a baked arm at a zoom where the strokes can show (the marched focus depth in
+    render pixels under twice `STROKE_FOOT`, the footprint `strokeK` fades to; the strokes in the ground's own shader
+    cost about 1 ms on every terrain pixel: the plan). Lighter along the comb and a deeper green
     in its gaps; by the pixel's footprint (`strokeK`), over the inner ring only (`STROKE_RINGS`: the rings are centred on
     the focus, so the bottom of the frame stands under the sparser outer rings), by the meadow's growth (`uMeadow`,
     `meadowGrowth`), none under the winter's snow.
