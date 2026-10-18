@@ -54,6 +54,7 @@ designs written before building (frozen once built, their lasting content moves 
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
   [`plans/active/grass-flow.md`](plans/active/grass-flow.md) (the combed meadow, `?grass=flow`),
+  [`plans/active/dof-v2.md`](plans/active/dof-v2.md) (depth of field v2: 8 bits, near and far, painted),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
   [`plans/active/s1c-fire-morale.md`](plans/active/s1c-fire-morale.md) (S1c),
   [`plans/active/s1c2-morale-machine.md`](plans/active/s1c2-morale-machine.md) (S1c-2),
@@ -76,6 +77,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`research/colour-and-light-review.md`](research/colour-and-light-review.md): the owner's colour and light references, and the coats' colour lost to the warm light, measured.
 - [`research/grass-and-fields.md`](research/grass-and-fields.md): grass and fields at an RTS camera: Tiny Glade, Total War, the techniques (ground pattern, blades, cards, shells) and their pitfalls.
 - [`research/painterly-grass.md`](research/painterly-grass.md): Tiny Glade's grass, the techniques that read as painted, what fits the RTS camera and the budget.
+- [`research/dof-v2.md`](research/dof-v2.md): game depth of field near and far (Jimenez 2014, Gustafsson), what reads as painted, what fit our frame (measured).
 - [`research/procedural-trees.md`](research/procedural-trees.md): generating trees: L-systems, Weber–Penn, space colonization, growth models, the pipe model, clump crowns and bare winter trees.
 - [`research/frame-rate-120.md`](research/frame-rate-120.md): toward 120 fps: where the look page's frame goes (the frame interval, not the timer), the published techniques, ranked for us.
 - [`research/tiny-glade-look.md`](research/tiny-glade-look.md): Tiny Glade's look (leaf cards, soft volume light, PCSS shadows, no filter in play) and what Track E took from it.

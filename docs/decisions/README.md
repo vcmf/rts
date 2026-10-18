@@ -46,3 +46,4 @@ recorded here on 2026-10-08.
 | [0037](0037-simulation-owns-animation-timing.md) | The simulation owns timing; animation is fitted to its phases | accepted |
 | [0038](0038-figure-pipeline-layout.md) | Figures: code in tools, sources out of git, a generated registry | accepted |
 | [0039](0039-roads-baked-far-live-near.md) | Roads: baked far out, painted live from mid zoom in | accepted |
+| [0040](0040-near-field-depth-of-field.md) | The gameplay depth of field blurs the near field too, in the bottom band, never the units | proposed |

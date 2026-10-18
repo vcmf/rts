@@ -25,14 +25,15 @@ summarised in `docs/research/dof-v2.md`.
    view axis) encoded in the alpha's 8 bits, not the distance; one code is the units' ("never blur"). The focus and the
    camera's forward axis reach every material each frame.
 2. **A prefilter at half resolution:** colour weighted by blur (no leaks), the decoded blur once per pixel.
-3. **Blur tiles:** the largest near and far blur a tile, dilated by one tile: the near blur spreads over sharp pixels
+3. **Blur tiles** (dropped, measured: the near band does their work, below): the largest near and far blur a tile, dilated by one tile: the near blur spreads over sharp pixels
    (the industry's fix: Jimenez 2014, Unreal, CryEngine), and a tile with no blur skips the gathers.
 4. **Two gathers at half resolution,** each limited to its band: the far one at the top of the frame (as today), the
    near one in the bottom band of the frame, its premultiplied colour and coverage composited over the scene, its
    coverage over a unit capped.
-5. **A 3×3 postfilter** (noise and flicker without temporal anti-aliasing), and **a bilateral composite** (no fringe).
+5. **A 3×3 postfilter** (noise and flicker without temporal anti-aliasing), and **a bilateral composite** (no fringe;
+   not needed, below).
 6. **The painted look:** colour and value follow the blur (the far band toward the haze, the near band darker and
-   cooler), the sharp-to-blur boundary broken by a world-fixed brush noise.
+   cooler), the sharp-to-blur boundary broken by a world-fixed brush noise (dropped, measured: below).
 
 Out of scope: a Kuwahara "paint" defocus (a follow-up, measured); highlight sprites and polygonal bokeh
 (presentation modes, decision 0024).
@@ -51,6 +52,19 @@ judges.
   unit pixel's blur is 0.
 - The goldens with `?dof=0` identical to the base (the look tools measure the paint with the blur off).
 - The owner's judgement on screen: near and far, close and wide zooms.
+
+## Results
+
+- **Goldens with `?dof=0`** against the stack's base (`look/grass-flow`): match at all eight cameras (worst region
+  0.003% of pixels).
+- **The readability guard with `?dof=1` against `?dof=0`**: ok at the start view (48 blocks, summer and winter) and the
+  cover view (24); no block that separates with the blur off fails with it on. The separation moves by at most 0.024
+  (start) and 0.051 (cover). The winter Austrians that fail both ways are the grey greatcoats (a palette question).
+- **A unit's pixels are not blurred:** on the guard's renders, the pixels a block covers fully (its masks differing by
+  more than 250 of 255, one pixel in from its edge) move by 0.2–0.7 levels of 255 on average, 10 at most, between the
+  blur on and off: the bloom and paper over the blurred surroundings. A looser mask (96) shows larger changes at the
+  pixels a grass blade crosses in front of a block: the blade blurs, as it should.
+- **The owner on screen (2026-10-18):** 120 fps at the close, mid and wide zooms with the depth of field on.
 
 ## Review rounds
 - **Step 1 measured** (the dev Mac, paired one-page A/B, `?bench=dof`): the depth of field's passes cost 0.1–0.4 ms at
