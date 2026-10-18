@@ -22,7 +22,8 @@ summarised in `docs/research/dof-v2.md`.
 ## Scope
 
 1. **The scene stays 8 bits.** The materials write the lens term (how far behind or in front of the focus, along the
-   view axis) encoded in the alpha's 8 bits, not the distance; one code is the units' ("never blur"). The focus and the
+   view axis) encoded in the alpha's 8 bits, not the distance (first one code for the units, "never blur"; dropped
+   after the review rounds: units blur by their depth as the scene does, the owner, decision 0040). The focus and the
    camera's forward axis reach every material each frame.
 2. **A prefilter at half resolution:** colour weighted by blur (no leaks), the decoded blur once per pixel.
 3. **Blur tiles** (dropped, measured: the near band does their work, below): the largest near and far blur a tile, dilated by one tile: the near blur spreads over sharp pixels
@@ -49,7 +50,8 @@ judges.
 - The cost against the depth of field off, at every zoom: at most +0.8 ms (the dev Mac, the frame interval, paired
   runs); against today's depth of field on: cheaper.
 - Formations: the readability guard with `?dof=1` against `?dof=0` at the start and cover views, and a check that a
-  unit pixel's blur is 0.
+  unit pixel's blur is 0 (dropped with the owner's call, decision 0040: units blur by their depth, mildly, in the
+  bands only).
 - The goldens with `?dof=0` identical to the base (the look tools measure the paint with the blur off).
 - The owner's judgement on screen: near and far, close and wide zooms.
 
@@ -127,3 +129,9 @@ judges.
   pixels 0.3–0.6 levels on average (10 at most); the cost +0.1 and +0.1–0.2 ms at two views and +1.0–1.1 ms at the
   third (this session's state; the same view measured +0.1–0.2 earlier in the day): past the +0.8 ms acceptance there,
   for the owner's screen to judge.
+- **The owner's call (2026-10-18), after round 3:** units blur by their depth as the scene does ("it's normal a unit
+  take some blur"; a sharp unit in a blurred far field is wrong). The unit code and the near cap over units are gone:
+  one code range for every surface. The readability guard, which places its blocks for the ground's classes, not the
+  screen's bands, has five of its six start clusters in the sharp middle (separation unchanged within 0.005) and one in
+  the far band (0.04–0.06 less, still ok); the owner: a mild blur on units in the top and bottom bands is by design, so
+  the guard judging the sharp middle is what readability asks. No outline check added.

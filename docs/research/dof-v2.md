@@ -45,7 +45,7 @@ rather than cut, a look that is "magnifique", and no frame-rate loss at 120 fps.
 
 ## What fits our frame (measured)
 
-- **The 8-bit scene.** The lens term encoded in the alpha's 8 bits (one code for the units, never blurred) lets the
+- **The 8-bit scene.** The lens term encoded in the alpha's 8 bits lets the
   scene's MSAA target stay 8 bits a channel with the depth of field on. A first measure missed it: the first blur
   pass still made the scene's target in half floats; with it fixed, the 8-bit target is most of the saving.
 - **No tiles.** Two small tile passes cost about 0.7 ms on the dev Mac. Our near blur lives only in the bottom band of

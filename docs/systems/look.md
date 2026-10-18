@@ -78,14 +78,11 @@ and on.
 The plans: `docs/plans/done/gameplay-dof.md`, then `docs/plans/active/dof-v2.md` (the research:
 `docs/research/dof-v2.md`). Two blurs, each in its band of the frame: what lies beyond the focus blurs toward the
 top, what lies nearer the camera blurs in the bottom share of the frame only, so the formations in the middle never
-take it. A unit's own pixels never blur.
+take it. Units blur by their depth as the scene does (decision 0040).
 
 - **The lens term in alpha** (`depthA`, `src/look/shaders/painter.glsl`): every material writes s = 1 − focus/z (z
   the depth along the view axis; the focus and the axis reach the materials each frame from `src/look/main.ts`) over
-  −1 to 0.5, in the alpha's codes 1 to 254. The code 170 (at the focus) is the units' (`block.frag`), read as sharp,
-  and no surface writes it. The 4× MSAA resolve averages codes: a unit's edge pixel holds a lens term between the
-  unit's (the focus) and the ground's behind it, so it takes a share of that ground's blur (under a pixel at the focus,
-  more where the ground behind is far), not the far ground's whole blur as with a far code. 0 marks a pixel whose colour
+  −1 to 0.5, in the alpha's codes 1 to 254, the units (`block.frag`) as every surface. 0 marks a pixel whose colour
   is not a number (`lensOut`, painter.glsl: the 8-bit target would store it black; left out of the downsample, the blur
   in its place), 255 the clear, the farthest. So the scene's MSAA target
   stays 8 bits a channel with the depth of field on (`MSAA` in post.ts, `docs/plans/done/wide-perf.md`), and the two
@@ -104,8 +101,7 @@ take it. A unit's own pixels never blur.
     above it): 8 to 24 taps out to the largest near blur, each counted where its own near blur reaches the pixel,
     weighed by its blur's area (a thin near edge does not swamp the colour); their coverage is the share that reaches.
     The near layer goes over the far result, premultiplied, its coverage in alpha, so a near blur spreads over pixels
-    that are sharp themselves. Over a unit its coverage is held to a half (a formation shows through a blurred crown),
-  in the blur and again on the unit's own full-resolution pixel in the composite. The far result is the far gather by
+    that are sharp themselves. The far result is the far gather by
   the composite's own weight of it (none leaks where the composite takes no far blur); the bloom reads this colour.
   Where a pixel has no far blur, the composite takes the near colour back out of it (the scene's half-resolution colour
   read as one bilinear tap of the sharp scene) and lays it over the sharp scene by its coverage, so a sharp pixel round

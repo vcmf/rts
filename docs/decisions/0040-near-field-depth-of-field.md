@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-18
 ---
 
-# 0040 The gameplay depth of field blurs the near field too, in the bottom band, never the units
+# 0040 The gameplay depth of field blurs the near field too, in the bottom band, units with the scene
 
 ## Context
 
@@ -16,21 +16,24 @@ depth of field that reads as painted. The research: `docs/research/dof-v2.md`.
 
 We will blur the near field as well as the far one, each within its band of the frame: the far blur toward the top
 (as before), the near blur only in the bottom share of the frame (`DOF_NEAR.screen`, 0.3), so the formations in the
-middle never take it. A unit's own pixels are never blurred: units write one alpha code, at the focus, that no surface
-writes, which the blur reads as sharp. (A unit's edge pixels, which the MSAA resolve shares with the ground behind, take
-a share of that ground's blur.) A blurred foreground spreads over a unit at half coverage at most. The blur's colour follows it:
-the far blur toward the haze, the near layer darker and cooler.
+middle never take it. Units blur by their own depth as the scene does: a formation in the far band blurs with the
+ground round it, one under a blurred crown is covered as the ground is (the owner, 2026-10-18: "it's normal a unit take
+some blur", against a sharp unit in a blurred far field; the blur is mild and only in the top and bottom bands).
+Readability is the guard's to check, with the blur on, where the game is played: the sharp middle of the frame. A
+unit's mild blur in the bands is by design, not a readability failure. The blur's colour follows it: the far blur toward the haze, the near layer darker and cooler.
 
 ## Consequences
 
 The frame's foot reads as a painted foreground instead of a cut. The readability guard passes with the depth of field
-on at the start and cover views, and a unit pixel's colour moves by at most 10 levels out of 255 (the bloom and paper
-over the blurred surroundings). The cost against the depth of field off: up to +0.7 ms at the oblique mid zooms on the
-dev Mac (`docs/plans/active/dof-v2.md`). A unit in the bottom band behind a blurred crown is half hidden; that is the
-cap's purpose and its limit.
+on at the start and cover views (`docs/plans/active/dof-v2.md`). No special case for units in the lens term: one code
+range for every surface, so the MSAA resolve's averaging of codes at a unit's edge is the same soft edge as any other
+object's. The cost against the depth of field off: +0.1 to +1.1 ms at the oblique mid zooms on the dev Mac, by view
+and session (the plan).
 
 ## Alternatives considered
 
 - Keep the near field sharp and cut (0024 as built): the owner's complaint.
 - A near blur over the whole frame: blurs formations near the camera; fails "readable first".
 - Fade near objects out instead of blurring them: removes what the player may need to see, and reads as a glitch.
+- Units never blurred (a unit alpha code, the near layer held to half coverage over it), as first built: a sharp unit
+  in a blurred far field breaks the miniature, and the MSAA resolve blurs a unit's edge anyway; the owner rejected it.

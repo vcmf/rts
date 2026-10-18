@@ -5,7 +5,7 @@ precision highp float;varying vec3 vW,vN;varying vec2 vRoot;uniform vec3 uAlb;un
 
 // a flat army block (docs/plans/active/l2-detail.md, the readability guard): one coat colour through the shared
 // painter at unit crispness, lit and shadowed like the ground under it. uMask ≥ 0: flat grey, the guard's pixel mask
-void main(){if(uMask>=0.0){gl_FragColor=vec4(vec3(uMask),UNIT_A);return;}   // (UNIT_A: a unit, never blurred, painter.glsl depthA)
+void main(){if(uMask>=0.0){gl_FragColor=vec4(vec3(uMask),depthA(vW));return;}   // (its lens term: a unit blurs by its depth, painter.glsl depthA)
   vec3 N=normalize(vN);vec4 lm=LM(vW);
   float sh=(1.0-lm.r)*uShadowsOn;
   // the ground's bounce under the block (LC4): its centre's ground, one colour a block as a tree's. The bounce lights
@@ -13,4 +13,4 @@ void main(){if(uMask>=0.0){gl_FragColor=vec4(vec3(uMask),UNIT_A);return;}   // (
   // that ground is lit by the sky alone
   pBounce=bounceAt(vRoot,vW.y,0.0,1.0);
   vec3 c=paint(uAlb,N,vW,1.0,0.12,0.3,sh);
-  vec3 o=airOf(c,vW,lm,0.9);gl_FragColor=vec4(o,all(lessThan(abs(o),vec3(65504.0)))?UNIT_A:0.0);}   // (UNIT_A: a unit, never blurred, 0 a colour that is not a number: lensOut)
+  gl_FragColor=lensOut(airOf(c,vW,lm,0.9),vW);}   // (its lens term, as every surface: painter.glsl)

@@ -102,17 +102,12 @@ vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
 // view distance in alpha → depth of field without re-rendering the scene
 // the depth of field lens term in alpha (docs/plans/active/dof-v2.md): s = 1 - focus/z, z the depth along the view axis
 // (uFocusZ: the focus, uCamFwd: the axis), over -1 (half the focus distance) to 0.5 (twice it), in the codes 1 to 254 of
-// the alpha's 8 bits. The code UNIT_A (170, at the focus: s about 0) is the units, which never blur (block.frag); a
-// surface never writes it (171 instead), so a unit's pixels hold it. The 4x MSAA resolve averages codes: a unit's edge
-// holds a lens term between the unit's and the ground's (a share of the ground's blur, under a pixel at the focus,
-// more where the ground behind is far), and two surface samples either side of 170 can make it (at the focus: sharp
-// either way). The code 0 is a pixel that is
-// not a number (an 8-bit target stores one as 0), 255 the clear (no surface: the farthest). The scene target stays 8
-// bits with the depth of field on (dofcoc.glsl reads the codes)
-#define UNIT_A (170.0/255.0)
+// the alpha's 8 bits; every surface writes it, the units too (they blur by their depth as the scene does: the owner,
+// decision 0040). The code 0 is a pixel that is not a number (an 8-bit target stores one as 0), 255 the clear (no
+// surface: the farthest). The scene target stays 8 bits with the depth of field on (dofcoc.glsl reads the codes)
 uniform float uFocusZ;uniform vec3 uCamFwd;
 float depthA(vec3 wp){float s=1.0-uFocusZ/max(dot(wp-uCamPos,uCamFwd),0.01);
-  float c=1.0+floor((clamp(s,-1.0,0.5)+1.0)/1.5*253.0+0.5);return (c==170.0?171.0:c)/255.0;}
+  return (1.0+floor((clamp(s,-1.0,0.5)+1.0)/1.5*253.0+0.5))/255.0;}
 // a surface's output: its colour and lens code, the code 0 where the colour is not a finite number (the 8-bit target
 // would store it black, which the depth of field could not tell from paint: docs/plans/done/nan-guard.md). The test
 // (abs below the half float's largest) is one no compiler folds away, as it may x == x

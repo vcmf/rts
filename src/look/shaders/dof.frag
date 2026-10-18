@@ -9,8 +9,7 @@ precision highp float;varying vec2 vUV;uniform sampler2D textureSampler;uniform 
 // NEAR, after Jimenez 2014: in the bottom band of the frame, where a near blur can reach (its own band and the largest
 // near blur above it), uNN taps (by the largest near blur, as the far taps) out to the largest near blur, each counted where its own near
 // blur reaches this pixel, weighed by its blur's area (a thin near edge does not swamp the colour), their coverage the
-// share that reaches: the near layer, premultiplied, over the far result. Over a unit its coverage is held to a half
-// (a formation shows through a blurred crown: AGENTS.md, readable first). The composite (uber.frag) takes the
+// share that reaches: the near layer, premultiplied, over the far result. The composite (uber.frag) takes the
 // coverage in alpha, so the near blur spreads over pixels that are sharp themselves
 #include<dofcoc>
 void main(){
@@ -31,7 +30,6 @@ void main(){
       vec4 s=texture2D(textureSampler,uv);float cn=cocN(lensS(s.a),uv),k=smoothstep(r-1.0,r+1.0,cn);
       if(k>0.0){float w=k/max(cn*cn,1.0);nc+=s.rgb*w;nw+=w;reach+=k;}}
     na=smoothstep(0.0,0.6,reach/(uNN+1.0));
-    if(isUnit(c0.a))na=min(na,0.5);
     // (the near layer over the far result by its coverage: what the bloom reads; the composite takes the near colour
     // back out of it where a pixel has no far blur, uber.frag)
     if(nw>0.0)col=mix(col,nc/nw,na);}

@@ -20,7 +20,6 @@ uniform sampler2D uSharp;uniform vec2 uHalfUV,uHalfTexel,uDofPaint;
 vec3 base(){vec4 s=texture2D(uSharp,vUV);if(!okPx(s))return MARK(texture2D(textureSampler,vUV*uHalfUV).rgb);
   // the far blur by this pixel's own circle, the near layer by the coverage it spread here (the blur's alpha: dof.frag)
   vec2 hu=vUV*uHalfUV;vec4 b=texture2D(textureSampler,hu);float cf=coc(s.a,vUV),fw=smoothstep(0.5,2.0,cf),w=max(fw,b.a);
-  if(isUnit(s.a))w=min(w,0.5);   // (a unit's own pixel: a blurred crown over it at half coverage at most, decision 0040)
   if(w<=0.0)return s.rgb;
   // the postfilter: four bilinear taps half a texel off on the diagonals, a 3 x 3 tent over the half-resolution blur
   // (its spiral noise and flicker smoothed, without temporal anti-aliasing)
