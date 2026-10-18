@@ -38,3 +38,11 @@ summer and autumn, close on the river, the widest); the owner judges, then wheth
 - First pass (contrast 0.22, the mist at a third, the ground's colour kept more): the owner, "it's over contrasted and
   it's not even orange and yellow" in autumn, with Tiny Glade's autumn (soft, airy, pastel crowns, pale straw). Now:
   contrast 0.05, the mist at 0.55, less of the ground's colour, a lighter frame edge, the warm autumn.
+- Second pass: the owner, "still too saturated", "try first to have a similar palette" (Tiny Glade's). Measured
+  Tiny Glade's frames against ours (median luma, chroma, the darkest and lightest 15 %'s mean colour): theirs are no
+  less saturated (autumn chroma 0.40, ours 0.20) but their shadows keep the surface's own hue, a darker warm brown on
+  orange ground, a dark green on grass (0.41,0.25,0.14 and 0.19,0.25,0.12), where ours turned blue-grey (0.24,0.25,0.29)
+  against a warm light; and their greens are fresher. Now in epic: the shadow a near-neutral warm multiplier turned
+  toward a warm brown, the mid band and the darks' split tone neutral, the shaded mist warm; the sun less yellow; the
+  earth turn and the greens' muting mostly off (earth 0.35, green 0.3); the wheat and the autumn ground a softer
+  straw-peach. Autumn chroma 0.40, summer 0.28 (Tiny Glade's 0.40 and 0.24).

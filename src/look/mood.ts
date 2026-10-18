@@ -94,18 +94,18 @@ export const MOODS = {
   // "over contrasted"): temperate's air thinner, a warmer sun against cooler shade, a little more of the world's own
   // colour, the values barely spread; autumn one family of warm pastels (Tiny Glade's)
   epic: {
-    sun: c(1.00, 0.91, 0.74), winterSun: c(0.97, 0.95, 0.90),
-    shadow: c(0.43, 0.52, 0.67), shadowTurn: c(0.32, 0.42, 0.76), shadowLift: c(0.02, 0.03, 0.05),
-    midCool: c(0.88, 0.92, 0.98), litLift: c(0.03, 0.022, 0.0), rim: c(1.0, 0.86, 0.62), back: c(1.0, 0.80, 0.50),
-    mistShade: c(0.44, 0.54, 0.68), mistLit: c(0.96, 0.86, 0.70), mist: 0.55, autumn: 1,
+    sun: c(1.00, 0.95, 0.84), winterSun: c(0.97, 0.95, 0.90),
+    shadow: c(0.50, 0.45, 0.43), shadowTurn: c(0.52, 0.34, 0.26), shadowLift: c(0.0, 0.0, 0.0),
+    midCool: c(0.98, 0.96, 0.94), litLift: c(0.03, 0.022, 0.0), rim: c(1.0, 0.86, 0.62), back: c(1.0, 0.80, 0.50),
+    mistShade: c(0.62, 0.56, 0.52), mistLit: c(0.96, 0.86, 0.70), mist: 0.4, autumn: 1,
     hazeCool: c(0.56, 0.65, 0.76), hazeWarm: c(0.92, 0.78, 0.60),
     waterSky: c(0.22, 0.32, 0.38), glint: c(1.0, 0.88, 0.62), farRiver: c(0.15, 0.26, 0.29),
-    earth: { tint: c(1.0, 1.0, 0.96), chroma: 0.62, amt: 1 },
+    earth: { tint: c(1.0, 1.0, 0.97), chroma: 0.85, amt: 0.35 },
     bounce: 0.7, groundBounce: 0.5,
     units: { tint: 0.3, mist: 0.05, grade: 0.1, bounce: 0.35 },
     grade: {
-      greenTint: c(0.97, 1.0, 0.94), greenChroma: 0.85, greenAmt: 0.6, sat: 0.9,
-      splitLo: c(0.90, 0.97, 1.06), splitHi: c(1.05, 1.0, 0.92), lift: c(0.012, 0.012, 0.014),
+      greenTint: c(0.96, 1.0, 0.96), greenChroma: 1.0, greenAmt: 0.3, sat: 0.9,
+      splitLo: c(1.0, 0.98, 0.96), splitHi: c(1.05, 1.0, 0.92), lift: c(0.012, 0.012, 0.014),
       topHaze: c(0.66, 0.73, 0.82), topAmt: 0.14, vignette: c(0.78, 0.84, 0.94), contrast: 0.05,
     },
   },

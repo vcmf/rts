@@ -29,7 +29,7 @@ vec4 cropLook(float k,float j){
   if(k>5.5&&k<6.5){
     // (the mood's warm autumn: the wheat stands tall through autumn, gold to a deep orange, until the plough)
     float cut=smoothstep(0.55,0.95,s)*(1.0-uAutumnWarm),h=mix(WHEAT_HEIGHT_MAX*mix(0.84,1.0,j),STUBBLE_HEIGHT*mix(0.8,1.0,j),cut)*cropSeasonK(k,s);
-    vec3 c=mix(mix(vec3(0.72,0.60,0.27),mix(vec3(0.70,0.49,0.24),vec3(0.84,0.46,0.18),uAutumnWarm),min(s,1.0)),stubbleTip(s),cut);   // standing gold to orange, then cut to the stubble
+    vec3 c=mix(mix(vec3(0.72,0.60,0.27),mix(vec3(0.70,0.49,0.24),vec3(0.82,0.60,0.32),uAutumnWarm),min(s,1.0)),stubbleTip(s),cut);   // standing gold to orange, then cut to the stubble
     return vec4(h,c);}
   if(k>6.5&&k<7.5){
     float h=GREEN_HEIGHT*mix(0.85,1.0,j)*cropSeasonK(k,s);
