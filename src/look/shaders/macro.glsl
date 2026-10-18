@@ -304,7 +304,9 @@ vec3 groundAt(vec2 xz,float px){
   #ifdef GRASS_NO_STROKES
   sk=0.0;
   #endif
-  float grow=meadowGrowth(xz);pFlowGrow=grow;
+  // (the growth read only where it is used: the strokes, and the autumn value-keeping, groundSeason; a summer pixel past
+  // the strokes skips it: on every ground pixel it cost up to 0.9 ms, the paired bench, docs/plans/active/dof-v2.md)
+  float grow=sk>0.0||uSeason>0.0?meadowGrowth(xz):1.0;pFlowGrow=grow;
   if(sk*grow>0.0)g*=combFromDv(nearComb(xz)*sk*grow);   // (one read: the near bake, src/look/macro.ts)
   return g;
   #elif defined(MACRO_BAKE)

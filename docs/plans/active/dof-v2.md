@@ -53,3 +53,11 @@ judges.
 - The owner's judgement on screen: near and far, close and wide zooms.
 
 ## Review rounds
+- **Step 1 measured** (the dev Mac, paired one-page A/B, `?bench=dof`): the depth of field's passes cost 0.1–0.4 ms at
+  the default zoom (0.1–0.3 close, 0.1–1.0 wide); the 8-bit target with the lens term saves about 0.3 ms at the close
+  zoom and nothing measurable at the default. The earlier "1.4 ms" came from two page loads, which differ by up to
+  0.9 ms on this Mac run to run: an attribution error, corrected here.
+- **The combed meadow, paired** (`?grass=flow&bench=grass`, `bench=grassparts`: GRASS_FLOW and its parts toggled in one
+  page): +0.1–0.8 ms, the same with the depth of field off or on; every part off but the mode on +0.1–0.4 (the noise's
+  size); no single part carries it (each 0.0–0.6, by camera). The growth read on every ground pixel was not it (made
+  conditional: no change). Left as is: many small costs.
