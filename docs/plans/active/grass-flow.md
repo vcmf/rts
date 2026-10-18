@@ -127,3 +127,14 @@ removal already skips hidden terrain); a camera-following near bake of the strok
   the cover view); `tools/river-check.js` passes on both arms (under `?grass=flow`: no grass in the zones or on the
   water at 2.6 m, the crop cells as the default's); `npm test` 260 passed. (Babylon's shader preprocessor treats a
   semicolon in a comment as code, as it does an apostrophe: two rebuilds lost to it.)
+- **Round 3** (`/code-review high`, 10 findings, none severe: fixed what was worth it, and stopped). Fixed: the instance
+  buffer uploaded in part, which Babylon keeps to rebuild a lost context (the whole buffer now); the clumps' hue and
+  lean stayed on under the winter's snow (now as the default's, as the docs say); `CLUMP_REACH_FLOW` worked out by hand
+  from the shader's numbers (now computed from `GRASS_WIDE`, `GRASS_TALL`, `LEAN_MIN`, `LEAN_MAX`, `LEAN_JITTER` in
+  `src/look/meadow-spec.ts`, which the shader reads as defines); the default page ran the growth rule twice on load
+  (one pass when the reaches agree); the clumps took the full autumn value at the growing area's faded edge (now the
+  growth at their root); a seam at the tile's edge (the growth and the flow blended over its last 10 m); the hue's
+  hash on every arm (the combed meadow only); the value noise copied in `src/look/flow.ts`. Left: the global the autumn
+  reads (`pFlowGrow`, set where grass grows; a parameter would touch every caller of `groundSeason`).
+- **The checks on the final code:** goldens identical (8 cameras); the guard passes (summer, autumn, winter; the cover
+  view); `tools/river-check.js` passes on both arms; `npm test` 260 passed.

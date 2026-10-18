@@ -16,9 +16,10 @@ function mHash(x: number, y: number): number {
   const d = a * (b + 33.33) + b * (c + 33.33) + c * (a + 33.33); a += d; b += d; c += d
   return fract((a + b) * c)
 }
-function mValue(x: number, y: number): number {
+// (h: the lattice's hash, mHash by default; the comb's wraps it to tile)
+function mValue(x: number, y: number, h: (i: number, j: number) => number = mHash): number {
   const i = Math.floor(x), j = Math.floor(y); let u = x - i, v = y - j; u = u * u * (3 - 2 * u); v = v * v * (3 - 2 * v)
-  const a = mHash(i, j), b = mHash(i + 1, j), c = mHash(i, j + 1), e = mHash(i + 1, j + 1)
+  const a = h(i, j), b = h(i + 1, j), c = h(i, j + 1), e = h(i + 1, j + 1)
   return (a + (b - a) * u) * (1 - v) + (c + (e - c) * u) * v
 }
 // the field's numbers, one home: this and the GLSL (flowDefines) both read them. scale: its patches (m, a patch combed
@@ -50,11 +51,8 @@ export function buildFlow(scene: Scene): FlowTextures {
   flow.wrapU = flow.wrapV = Texture.CLAMP_ADDRESSMODE
   // the comb's noise, tiling: the lattice wraps at COMB_PERIOD
   const m = COMB_PERIOD * COMB_RES, c = new Uint8Array(m * m * 4)
-  const tiled = (x: number, y: number, o: number) => {
-    const i = Math.floor(x), j = Math.floor(y); let u = x - i, v = y - j; u = u * u * (3 - 2 * u); v = v * v * (3 - 2 * v)
-    const w = (p: number) => ((p % COMB_PERIOD) + COMB_PERIOD) % COMB_PERIOD, h = (a: number, b: number) => mHash(w(a) + o, w(b) + o)
-    return (h(i, j) + (h(i + 1, j) - h(i, j)) * u) * (1 - v) + (h(i, j + 1) + (h(i + 1, j + 1) - h(i, j + 1)) * u) * v
-  }
+  const w = (p: number) => ((p % COMB_PERIOD) + COMB_PERIOD) % COMB_PERIOD
+  const tiled = (x: number, y: number, o: number) => mValue(x, y, (a, b) => mHash(w(a) + o, w(b) + o))
   for (let j = 0; j < m; j++) for (let i = 0; i < m; i++) {
     const k = (j * m + i) * 4, x = i / COMB_RES, y = j / COMB_RES
     c[k] = Math.round(tiled(x, y, 0) * 255); c[k + 1] = Math.round(tiled(x, y, 57) * 255); c[k + 2] = 0; c[k + 3] = 255

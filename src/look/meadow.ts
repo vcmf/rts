@@ -18,7 +18,7 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
-import { CLUMP_REACH, GREEN_HEIGHT, HEIGHT, HEIGHT_MAX, MEADOW_SINK, STUBBLE_HEIGHT, WHEAT_HEIGHT_MAX } from './meadow-spec.ts'
+import { CLUMP_REACH, grassDefinesForClumps, GREEN_HEIGHT, HEIGHT, HEIGHT_MAX, MEADOW_SINK, STUBBLE_HEIGHT, WHEAT_HEIGHT_MAX } from './meadow-spec.ts'
 export { HEIGHT, HEIGHT_MAX }
 import GRASS from '../../data/meadow-grass.json?raw'
 import MEADOW_VS from './shaders/meadow.vert?raw'
@@ -187,7 +187,7 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   RINGS.forEach((r, ri) => {
     const m = mats.make(`meadow${ri}`, MEADOW_VS.replace('#include<meadow>', () => MEADOW_GLSL), MEADOW_FS, {
       attributes: ['position', 'normal', 'aV', 'aSlot'], uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand'], samplers: ['uMeadow', 'uGB'],
-      defines: ['#define GROUND_BOUNCE', `#define MEADOW_N ${MAP_N.toFixed(1)}`, `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`, `#define MEADOW_SINK ${MEADOW_SINK.toFixed(3)}`, `#define WHEAT_HEIGHT_MAX ${WHEAT_HEIGHT_MAX.toFixed(2)}`, `#define CROP_FAN ${CROP_FAN.toFixed(2)}`, `#define CROP_WIDE ${CROP_WIDE.toFixed(2)}`, `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(3)}`, `#define GREEN_HEIGHT ${GREEN_HEIGHT.toFixed(3)}`],
+      defines: [...grassDefinesForClumps(), '#define GROUND_BOUNCE', `#define MEADOW_N ${MAP_N.toFixed(1)}`, `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`, `#define MEADOW_SINK ${MEADOW_SINK.toFixed(3)}`, `#define WHEAT_HEIGHT_MAX ${WHEAT_HEIGHT_MAX.toFixed(2)}`, `#define CROP_FAN ${CROP_FAN.toFixed(2)}`, `#define CROP_WIDE ${CROP_WIDE.toFixed(2)}`, `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(3)}`, `#define GREEN_HEIGHT ${GREEN_HEIGHT.toFixed(3)}`],
     })
     const c = clumps[r.clump]
     m.backFaceCulling = false; m.setTexture('uMeadow', map); m.setFloat('uCell', r.cell)
@@ -259,7 +259,7 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
       if (sameList(keep, drawn[ri])) return
       drawn[ri] = keep.slice(); const buf = slotBufs[ri]; let n = 0
       for (const k of keep) { const c = chunks[ri][k >> 1], part = k & 1 ? c.hole : c.slots; buf.set(part, n); n += part.length }
-      slotVBs[ri].updateDirectly(buf.subarray(0, n), 0); meshes[ri].forcedInstanceCount = n / 2
+      slotVBs[ri].updateDirectly(buf, 0); meshes[ri].forcedInstanceCount = n / 2   // (the whole buffer: Babylon keeps what it is given to rebuild a lost context)
     })
   })
   // the under-layer's reach: the outer ring's band; its strength: the inner rings' (k, set with them below: zoomed out,

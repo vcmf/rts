@@ -292,8 +292,9 @@ vec3 groundAt(vec2 xz,float px){
   #ifdef GRASS_NO_STROKES
   sk=0.0;
   #endif
-  bool onTile=max(abs(xz.x),abs(xz.y))<TILE_HALF-1.0;
-  float grow=onTile?smoothstep(0.15,0.7,texture2D(uMeadow,(xz+TILE_HALF)/TILE_W).g):1.0;pFlowGrow=grow;
+  // (beyond the tile it counts as growing, faded in over its last 10 m: no seam where a zone or a bank meets the edge)
+  float edge=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,max(abs(xz.x),abs(xz.y)));
+  float grow=mix(edge<1.0?smoothstep(0.15,0.7,texture2D(uMeadow,(xz+TILE_HALF)/TILE_W).g):1.0,1.0,edge);pFlowGrow=grow;
   sk*=1.0-smoothstep(2.0,2.8,uSeason);   // (none under the snow of winter, as on the default)
   // the strokes where grass grows (the growth already keeps to meadow and pasture and fades over their edges); the
   // short grass where it does not, on the meadow classes only (one warped cover read, there alone)

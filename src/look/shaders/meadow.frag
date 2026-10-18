@@ -1,5 +1,8 @@
 #extension GL_OES_standard_derivatives : enable
-precision highp float;varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop,vHue;varying vec2 vRoot;uniform float uCell;
+precision highp float;varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;uniform float uCell;
+#ifdef GRASS_FLOW
+varying vec3 vFlow;
+#endif
 #include<painter>
 #include<shore>
 
@@ -24,7 +27,7 @@ void main(){
     // the flat class colour
     #if defined(MACRO_BAKE)&&defined(GRASS_FLOW)
     pMdx=vec2(uCell,0.0);pMdy=vec2(0.0,uCell);   // the bake read at the ring cell footprint, as the ground under it is filtered
-    pFlowGrow=1.0;   // (grass grows here: its autumn keeps the comb value, groundSeason)
+    pFlowGrow=smoothstep(0.15,0.7,vFlow.y);   // (the growth at its root, as the ground under it: groundAt)
     vec3 g=groundSeason(bakeOnce(vRoot).rgb);   // the bake alone: no grass grows where the ground's comb or short grass would change it
     #elif defined(MACRO_BAKE)
     pMdx=vec2(uCell,0.0);pMdy=vec2(0.0,uCell);   // the bake read at the ring cell footprint, as the ground under it is filtered
@@ -38,9 +41,9 @@ void main(){
     // each clump its own hue, as the references' tufts (the owner, 2026-10-17): from a deeper blue-green to a warm
     // yellow-lime, by a hash of its cell (vHue, meadow.vert: the same on every vertex, so no speckle), stronger toward
     // the tips
-    float hr=vHue;
+    float hr=vFlow.x;
     vec3 tint=hr<0.5?mix(vec3(0.78,0.98,0.90),vec3(1.0),hr*2.0):mix(vec3(1.0),vec3(1.22,1.10,0.66),(hr-0.5)*2.0);
-    alb*=mix(vec3(1.0),tint,0.6+0.4*vV);
+    alb*=mix(vec3(1.0),tint,(0.6+0.4*vV)*vFlow.z);   // (none under the snow of winter, as the default)
     #endif
   }
   alb=earthOf(alb);

@@ -6,9 +6,15 @@ export const HEIGHT = 0.62, HEIGHT_MAX = 0.85
 // how far a clump's blades reach from its root, m, at most: the outer ring's (Grass_Small's 0.26 m radius × its
 // spread 4.2 × the jitter 1.2, and its lean); the growth keeps roots this far from the formation zones and the banks
 export const CLUMP_REACH = 1.45
-// the combed meadow's (?grass=flow, docs/plans/active/grass-flow.md): the outer ring's footprint 1.4 times (1.83 m), the
-// flow's lean at the tip (at most 0.75 × HEIGHT_MAX, 0.64 m) and its jitter (0.07 m)
-export const CLUMP_REACH_FLOW = 2.6
+// the combed meadow's clumps (?grass=flow, docs/plans/active/grass-flow.md; meadow.vert reads these as defines): how
+// much wider and taller than the default's, and the flow's lean at the tip as a share of the height (from upright to
+// combed flat), with the hash's jitter
+export const GRASS_WIDE = 1.4, GRASS_TALL = 1.15, LEAN_MIN = 0.18, LEAN_MAX = 0.75, LEAN_JITTER = 0.12
+// their reach, from those: the outer ring's footprint (Grass_Small's 0.26 m radius × its spread 4.2 × the jitter 1.2)
+// widened, and the lean and its jitter at the tallest (HEIGHT_MAX), with 5 cm to spare
+export const CLUMP_REACH_FLOW = 0.26 * 4.2 * 1.2 * GRASS_WIDE + (LEAN_MAX + LEAN_JITTER * Math.SQRT1_2) * HEIGHT_MAX + 0.05
+export const grassDefinesForClumps = (): string[] => [['GRASS_WIDE', GRASS_WIDE], ['GRASS_TALL', GRASS_TALL], ['LEAN_MIN', LEAN_MIN], ['LEAN_MAX', LEAN_MAX], ['LEAN_JITTER', LEAN_JITTER]]
+  .map(([k, v]) => `#define ${k} ${(v as number).toFixed(3)}`)
 // how far a clump's root sinks under the meadow map's height, m: where grass grows that 1 m bilinear height is within
 // 5.2 cm of the drawn tile's triangles (measured 2026-10-13: tools/look-check.js checks no clump floats)
 export const MEADOW_SINK = 0.06

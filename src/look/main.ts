@@ -172,7 +172,8 @@ else if (params.has('bench') || params.has('water') || params.get('river') === '
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 // (the combed meadow's clumps reach farther: their roots keep farther from the formation zones and the banks)
 const grassReach = grassParam === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
-const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, (x, z) => nature.growthAllowed(x, z, grassReach), nature.crop, !flag('nowide'), grassReach, (x, z) => nature.growthAllowed(x, z)) : null
+const grassAllowed = grassReach === CLUMP_REACH ? nature.growthAllowed : (x: number, z: number) => nature.growthAllowed(x, z, grassReach)   // (the same rule as the crops' on the default: one pass)
+const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, grassAllowed, nature.crop, !flag('nowide'), grassReach, nature.growthAllowed) : null
 meadow?.under([terrain.terrainMat, water.waterMat, water.groundMat])   // the dark ground under its clumps (shore.glsl)
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false
