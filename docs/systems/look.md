@@ -155,11 +155,25 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   The class `bare` (10): trodden or dry earth, no grass, no crops, no stripes, not
   a field (`isField`).
 - **The dirt surface** (`dirtOn` in `macro.glsl`, at the terrain's fragment: `docs/plans/done/ground-surface.md`):
-  where the ground is bare (track, the village's trodden patches, ploughed and bare earth, a little on the road, the
+  where the ground is bare (track, the village's trodden patches, ploughed land, a little on the road, the
   worn ground by the lines), the owner's dirt texture (`data/ground-dirt-v1.png`, made seamless) multiplies the
   value about its mean (0.458), two reads at 15 and 24 m a repeat so its marks do not repeat in rows; mipmapped, so
   they average out at far zoom (the marks fade out as a pixel spans 0.35 to 0.9 m). Five cheap reads (the cell and its
   corners 1.5 m off) first: grass far from a line returns there. On the terrain and the shore band alike.
+- **Bare earth where nothing grows** (`docs/plans/active/bare-earth.md`): a grassy class (meadow, pasture, a copse's
+  floor) where the meadow map's growth is 0 (a formation zone, a bank, a field's margin: no blades there) paints the
+  soil, not the grass's green (`bareOf` in `macro.glsl`, in `macro()`: the bake and the shader arm), and the class
+  `bare` is the soil too. Generic, as the map engine's ground (Track M: a kind's `material` and its `growth`, the yard
+  `earth` with growth none): bare where nothing grows, by any cause, and **the soil by material** (`soilColour`: loam
+  only today, the cover having no material; clay, sand, gravel when a map asks). The bareness reads the growth at the
+  cover's warped point over four taps a metre apart (the map's 2 m cells stepped along a diagonal edge), its edge
+  wandering by the grain.
+- **The earth's surface up close** (`earthOn` in `macro.glsl`, after `dirtOn`): the owner's cracked earth
+  (`data/ground-earth-v1.png`, made from the local reference by `tools/earth-texture.py`: the central square in grey,
+  the photo's broad light divided out, made seamless) multiplies bare ground's value about its mean (0.631), two reads
+  at 5 and 8 m a repeat at unrelated turns; fading out from a 6 to a 25 cm footprint (past it its marks are under a
+  pixel and the bake's soil alone shows). The growth first, one read shared with the under-layer (`meadowTexel`):
+  grass returns there; then the class, unwarped. `?bench=earth` benches it off and on.
 - **The season turns what is green** (`groundSeason` in `shore.glsl`, every ground colour's season): a colour takes
   the whole turn as far as it is green, a quarter of it where green is no higher than red or blue (the pale road, the brown track, bare earth, stone, gravel,
   a cut bank, dry gold), for the autumn turns; winter mutes every colour as before. So a ploughed field or a bank does not melt into the autumn meadow, smoothly across every edge.

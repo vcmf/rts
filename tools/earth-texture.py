@@ -1,16 +1,17 @@
 # The bare earth's texture (docs/plans/active/bare-earth.md): the owner's photo of dry, cracked earth made into a
 # seamless greyscale tile, data/ground-earth-v1.png. Its value only: the pack's colours are never used, our palette
-# paints the earth (macro.glsl). The photo is local (design/refs/texture/ground-texture.jpg, not committed).
+# paints the earth (macro.glsl). The photo is local (ground-texture.jpg in the owner's refs, texture folder, not committed).
 #
 #   python3 tools/earth-texture.py [photo] [out] [size]
 #
 # The central square, in grey, the photo's broad light taken off (a blur of it divided out, so the tile's repeat shows
 # no bright corner), resized to size² (1024), then made seamless: the tile mixed with itself shifted by half, the
 # shifted copy where the tile's edges would meet. Prints the tile's mean (the shader keeps the earth's colour about it).
+import os
 import sys
 from PIL import Image, ImageChops, ImageFilter, ImageStat
 
-src = sys.argv[1] if len(sys.argv) > 1 else 'design/refs/texture/ground-texture.jpg'
+src = sys.argv[1] if len(sys.argv) > 1 else os.path.join('design', 'refs', 'texture', 'ground-texture.jpg')
 out = sys.argv[2] if len(sys.argv) > 2 else 'data/ground-earth-v1.png'
 N = int(sys.argv[3]) if len(sys.argv) > 3 else 1024
 

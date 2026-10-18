@@ -12,7 +12,7 @@ is false (the grass is the meadow's blades; ground without them is bare earth), 
 grows on a grassy class (meadow, pasture, a copse's floor), the meadow map's growth is 0: the formation zones (kept
 clear for the units), the river banks' reach and the margins the rules shrink. There the terrain paints the grassy
 class's green macro colour (the bake: 0.5 m a texel, magnified at the close zooms), with no blades over it. The owner's
-texture: `design/refs/texture/ground-texture.jpg` (dry, cracked earth, 5000 × 3750, local, not committed).
+texture: ground-texture.jpg in the owner's local refs, texture folder (dry, cracked earth, 5000 × 3750, not committed).
 
 ## Generic, not this map's
 
@@ -21,8 +21,8 @@ kind sets a `material` (loam, clay, sand, gravel, rock, peat, earth), `moisture`
 `growth` (none, low, stand, tree); the yard is earth with growth none, every grassy kind loam. So the look keys bare
 ground on what grows, not on this map's zones: **bare where nothing grows** (the growth 0, by any cause: a rule such as
 a formation zone or a bank, a field's margin, a kind with growth none such as the yard, today's `bare` class), and
-**the soil by material**: its colour and texture from a soil table by material (`SOIL` in the look's data: loam and
-earth now, the owner's texture; clay, sand and gravel when a map asks), so Track M's `material` (and `moisture`, to
+**the soil by material**: its colour and texture from a soil table by material (`soilColour` in `macro.glsl`: loam
+now, the owner's texture; clay, sand and gravel when a map asks), so Track M's `material` (and `moisture`, to
 darken it) plug in when the map engine lands. Today's cover grid has no material: every class reads loam.
 
 ## Scope
@@ -35,7 +35,7 @@ darken it) plug in when the map engine lands. Today's cover grid has no material
    zoom: in the macro bake (the wide zooms) and in the terrain's live paint (the close ones). The bare class (`bare`)
    takes the same earth.
 3. **Its detail up close:** the earth texture multiplies the earth's value at the terrain's fragment (two reads at
-   unrelated scales and offsets, about a 4 m repeat, mipmapped), fading out as the pixel's footprint spans it.
+   unrelated scales and offsets, a 5 m repeat, mipmapped), fading out as the pixel's footprint spans it.
 4. Seasons: the earth goes with the ground's season (the autumn turn, snow) as the bare class does.
 
 Not in scope: the tracks', villages' and ploughed land's surface (they keep `data/ground-dirt-v1.png`); new cover
@@ -58,3 +58,20 @@ on the earth's pixels only, behind the same footprint fade as the dirt (`dirtOn`
 - The cost: paired one-page A/B (`?bench=earth`: the earth's live detail off and on) at the default, close and wide
   zooms, at most +0.3 ms on the dev Mac.
 - Goldens: the change shows where expected (the zones, the bare class) and nowhere else.
+
+## Results
+
+- **The owner on screen (2026-10-18):** "it looks nice": the formation zones and the margins (banks, headlands) as
+  earth accepted.
+- **The cost** (`?bench=earth`, paired in one page, the dev Mac, GPU frame p50): the first version +0.8–1.0 ms at
+  every zoom (the growth and class read on every pixel, the surface fading out only at a 0.5 m footprint). After the
+  growth read first, and the fade from 6 to 25 cm: wide +0.1, default +0.35, close +0.5 ms. Of the close cost, the
+  growth and class about 0.27, the two earth reads about 0.2. The machine was shared with another agent's renders
+  during the last runs (load up to 15): to measure again quiet.
+- **The readability guard** against main: ok at the start view (largest drop in separation 0.033) and the cover view
+  (0.055). The cover run took three attempts: the first timed out and the second's Chrome exited, with the machine
+  shared; the cover camera alone renders on both builds.
+- **Goldens** against main: differ where expected, the formation zones and the growth's margins (the river's banks,
+  every grassy class's edge with another class) at the summer cameras; winter identical (the snow covers the soil).
+  The margins end with the meadow map at the tile's edge (beyond it the growth counts as whole: meadowGrowth).
+- `npm test`: 265 tests pass.
