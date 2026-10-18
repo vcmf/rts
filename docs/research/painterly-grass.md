@@ -94,7 +94,7 @@ The budget: 60 fps hard, 120 soft (decision 0036); scatter and foliage about 3 m
 ## 5. Recommendation (the order the plans follow)
 
 1. **The ground pattern combed** (flow, streaks, deep gaps, soft masses), in the bake: every zoom, nothing a frame;
-   the 3D clumps lean with the same field. Plan: `docs/plans/active/grass-flow.md`.
+   the 3D clumps lean with the same field. Plan: `docs/plans/done/grass-flow.md`.
 2. **Shells** near the camera, reading the same flow and strokes, the root-to-tip gradient by layer.
 3. **Sparse blades** at the closest zoom only, then flowers and petals, the autumn fur, parting around units.
 

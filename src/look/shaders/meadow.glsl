@@ -13,7 +13,7 @@ float grassSeasonK(float s){return mix(1.0,0.45,smoothstep(2.5,3.0,s));}
 float cropSeasonK(float k,float s){return k>6.5&&k<7.5?mix(1.0,0.5,smoothstep(2.5,3.0,s)):1.0-smoothstep(1.55,1.95,s);}
 float clumpAt(vec2 xz){return clamp(mValue(xz/3.2)*0.65+mValue(xz/1.1+17.0)*0.35,0.0,1.0);}
 #ifdef GRASS_FLOW
-// the grass's flow (?grass=flow, docs/plans/active/grass-flow.md): xy the way it leans on the ground (a unit vector),
+// the grass's flow (?grass=flow, docs/plans/done/grass-flow.md): xy the way it leans on the ground (a unit vector),
 // z how far it lies over (0 upright, 1 combed flat). Slow and swirling (two octaves, domain-warped). Its numbers are
 // FLOW in src/look/flow.ts, given as defines (the same field the textures hold, so the two cannot drift apart)
 vec3 flowAt(vec2 xz){

@@ -155,7 +155,7 @@ float meadowBrush(vec2 xz,float px){
 // the combed meadow's broad part, a multiplier (in the bake, meadowPattern): soft bands where the flow leans to or from
 // the sun, soft masses (where no grass grows groundAt divides it out, so the ground there is as the default)
 float combBroad(vec2 xz){vec3 fl=flowTex(xz);return (1.0+0.1*dot(fl.xy,FLOW_SUN)*mix(0.35,1.0,fl.z))*mix(0.93,1.07,mValue(xz/11.0+3.0));}
-// the brush combed along the flow (?grass=flow, docs/plans/active/grass-flow.md): each FLOW_CELL m cell reads the tile
+// the brush combed along the flow (?grass=flow, docs/plans/done/grass-flow.md): each FLOW_CELL m cell reads the tile
 // in its own frame, turned to the flow at its centre and stretched along it (a varying turn of one frame would smear
 // far from the origin), the four nearest blended bilinearly with their contrast kept (the sum's spread over the
 // weights' norm, about the tile's mean), at the two scales of the default; on near pixels only (strokeK)
@@ -187,7 +187,7 @@ vec2 combedBrush(vec2 xz,float px){
 // the strokes by the footprint px (m a pixel): whole up close, gone by the default zoom's far half, so the widest
 // zooms see the soft masses and bands, not hundreds of 5 m strokes (the owner, 2026-10-17: zoomed out "weird"); the
 // bake's texel (0.5 m) is past the fade, so the bake holds none: the bake arm adds them at runtime (groundAt)
-float strokeK(float px){return 1.0-smoothstep(0.07,0.15,px);}
+float strokeK(float px){return 1.0-smoothstep(STROKE_FOOT*0.07/0.15,STROKE_FOOT,px);}   // (STROKE_FOOT 0.15 m: src/look/main.ts)
 // the strokes' multiplier at a point: lighter along the comb, a deeper green in its gaps (never toward black: the
 // owner, "use a darker green"), k their weight (strokeK)
 // the strokes' value at a point, signed, at full weight (the near bake renders it: src/look/macro.ts, combNear)
@@ -207,7 +207,7 @@ vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
   float b=meadowBrush(xz,px);
   float cl=mix(clumpAt(xz),mValue(xz/3.2),smoothstep(0.35,1.2,px));
   float t=(1.0+(b-0.585)*1.1)*mix(0.93,1.07,cl);   // the gain makes up the contrast the bake texel blurs away
-  // the combed meadow (docs/plans/active/grass-flow.md), in the bake (the shader arm keeps the default pattern): where
+  // the combed meadow (docs/plans/done/grass-flow.md), in the bake (the shader arm keeps the default pattern): where
   // grass grows the broad soft bands where the flow leans to or from the sun (fixed per map), soft masses and the clump
   // field; where none grows (the zones, the banks) the default pattern exactly. The strokes: at runtime (groundAt)
   #if defined(GRASS_FLOW)&&!defined(MACRO_SHADER)
@@ -304,7 +304,9 @@ vec3 groundAt(vec2 xz,float px){
   #ifdef GRASS_NO_STROKES
   sk=0.0;
   #endif
-  float grow=meadowGrowth(xz);pFlowGrow=grow;
+  // (the growth read only where it is used: the strokes, and the autumn value-keeping, groundSeason; a summer pixel past
+  // the strokes skips it: on every ground pixel it cost up to 0.9 ms, the paired bench, docs/plans/done/dof-v2.md)
+  float grow=sk>0.0||uSeason>0.0?meadowGrowth(xz):1.0;pFlowGrow=grow;
   if(sk*grow>0.0)g*=combFromDv(nearComb(xz)*sk*grow);   // (one read: the near bake, src/look/macro.ts)
   return g;
   #elif defined(MACRO_BAKE)

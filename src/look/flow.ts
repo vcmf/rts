@@ -1,4 +1,4 @@
-// The grass's flow as textures (?grass=flow, docs/plans/active/grass-flow.md), made once on load, so the ground, the
+// The grass's flow as textures (?grass=flow, docs/plans/done/grass-flow.md), made once on load, so the ground, the
 // bake and the clumps read the same flow with one fetch instead of evaluating it (five value noises a call; the
 // strokes made several calls a pixel). The field: flowAt in src/look/shaders/meadow.glsl, here in JS (its hash in
 // float64: the textures, not the GLSL, are the field wherever they reach)

@@ -6,7 +6,7 @@ export const HEIGHT = 0.62, HEIGHT_MAX = 0.85
 // how far a clump's blades reach from its root, m, at most: the outer ring's (Grass_Small's 0.26 m radius × its
 // spread 4.2 × the jitter 1.2, and its lean); the growth keeps roots this far from the formation zones and the banks
 export const CLUMP_REACH = 1.45
-// the combed meadow's clumps (?grass=flow, docs/plans/active/grass-flow.md; meadow.vert reads these as defines): how
+// the combed meadow's clumps (?grass=flow, docs/plans/done/grass-flow.md; meadow.vert reads these as defines): how
 // much wider and taller than the default's, and the flow's lean at the tip as a share of the height (from upright to
 // combed flat), with the hash's jitter
 export const GRASS_WIDE = 1.4, GRASS_TALL = 1.15, LEAN_MIN = 0.18, LEAN_MAX = 0.75, LEAN_JITTER = 0.12

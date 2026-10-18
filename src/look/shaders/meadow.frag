@@ -64,4 +64,4 @@ void main(){
   #endif
   c+=groundFill(alb,sh,t,occ,rs);
   c=cloudShade(c,cloud(vW),rs);   // the shade of the ground under the root, snowed or not
-  gl_FragColor=vec4(airOf(c,vW,lm,vH),depthA(vW));}
+  gl_FragColor=lensOut(airOf(c,vW,lm,vH),vW);}

@@ -89,8 +89,9 @@ export interface Macro {
 export interface RoadTextures { segs: BaseTexture; grid: BaseTexture; grit: BaseTexture; n: number }
 // flow: the meadow's pattern combed (GRASS_FLOW, ?grass=flow): the materials' defines it shares (src/look/main.ts);
 // flowTex: the flow's textures (src/look/flow.ts), which the bake reads too; meadowMap: the meadow map
-// (src/look/meadow.ts), which the combed meadow's bake reads (the default pattern where no grass grows)
-export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false, roads?: RoadTextures, flow: string[] = [], flowTex: FlowTextures | null = null, meadowMap: BaseTexture | null = null): Macro {
+// (src/look/meadow.ts), which the combed meadow's bake reads (the default pattern where no grass grows); near: the near
+// bake's reach (the strokes' ring, m from the focus) and whether its strokes can show (the zoom)
+export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false, roads?: RoadTextures, flow: string[] = [], flowTex: FlowTextures | null = null, meadowMap: BaseTexture | null = null, near: { reach: number; shows: () => boolean } = { reach: 25, shows: () => true }): Macro {
   const engine = scene.getEngine() as AbstractEngine, s = D.spec.macro
   const coverTex = RawTexture.CreateRGBATexture(cover.tex, cover.n, cover.n, scene, false, false, Texture.NEAREST_SAMPLINGMODE)
   coverTex.wrapU = coverTex.wrapV = Texture.CLAMP_ADDRESSMODE
@@ -215,12 +216,13 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
     if (!isBakedArm(a)) return NOTHING
     bakeArm = a; return rebakeIfChanged()
   }
-  // the combed meadow's near bake (?grass=flow, docs/plans/active/grass-flow.md): the strokes value (combDv in
-  // macro.glsl) over a square of NEAR_W m round the camera's focus, at NEAR_N texels a side, rendered again when the focus
-  // has moved NEAR_STEP m; the ground reads it with one fetch (nearComb). The strokes in the ground's own shader cost
+  // the combed meadow's near bake (?grass=flow, docs/plans/done/grass-flow.md): the strokes value (combDv in
+  // macro.glsl) over a square round the camera's focus that holds the strokes' ring however far the focus has moved
+  // since (NEAR_W m: the reach and NEAR_STEP either side), at NEAR_N texels a side, rendered again when the focus has
+  // moved NEAR_STEP m, on a baked arm (the only ground that reads it) at a zoom where the strokes show; the ground reads it with one fetch (nearComb). The strokes in the ground's own shader cost
   // about 1 ms a frame on every terrain pixel, the branch not taken too (measured: the plan)
   if (flowTex && meadow) {
-    const NEAR_W = 64, NEAR_N = 1024, NEAR_STEP = 6
+    const NEAR_STEP = 6, NEAR_W = 2 * (Math.ceil(near.reach) + NEAR_STEP + 1), NEAR_N = 1024
     const nearRT = new RenderTargetTexture('combNear', NEAR_N, scene, { generateMipMaps: false, generateDepthBuffer: false, generateStencilBuffer: false, type: Constants.TEXTURETYPE_HALF_FLOAT, samplingMode: Texture.BILINEAR_SAMPLINGMODE, format: Constants.TEXTUREFORMAT_RGBA })
     nearRT.wrapU = nearRT.wrapV = Texture.CLAMP_ADDRESSMODE
     const nearW = new EffectWrapper({ engine, name: 'combNear', vertexShader: BAKE_VS, fragmentShader: withPainter(NEAR_FS), attributeNames: ['position'], uniformNames: ['uRect', 'uTexel'], samplerNames: SAMPLERS, defines: DEFINES })
@@ -229,7 +231,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
     const nearRenderer = new EffectRenderer(engine)
     scene.onBeforeRenderObservable.add(() => {
       const cam = scene.activeCamera as { target?: { x: number; z: number } } | null, f = cam?.target
-      if (!f || (Math.abs(f.x - centre.x) < NEAR_STEP && Math.abs(f.z - centre.z) < NEAR_STEP)) return
+      if (!f || !isBakedArm(arm) || !near.shows() || (Math.abs(f.x - centre.x) < NEAR_STEP && Math.abs(f.z - centre.z) < NEAR_STEP)) return
       if (!nearW.effect.isReady() || (brush && !brush.isReady())) return
       // snapped to whole texels, so a texel always lands on the same world point
       const t = NEAR_W / NEAR_N, x0 = Math.round((f.x - NEAR_W / 2) / t) * t, z0 = Math.round((f.z - NEAR_W / 2) / t) * t
