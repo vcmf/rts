@@ -21,7 +21,7 @@ import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { gradeColour, MOOD, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
-import { DEBUG, DOF, MSAA, Post, buildCamera, typingIn } from './post.ts'
+import { DEBUG, DOF, DOF_NEAR, MSAA, Post, buildCamera, typingIn } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
@@ -218,6 +218,8 @@ if (dofParam !== null && dofParam !== '0' && dofParam !== '1') throw new Error(`
 // (and off, unless ?dof sets it, on the bench, which compares with runs before decision 0024, and on the debug views,
 // which write no distance to alpha)
 if (dofParam !== null) S.dof = +dofParam
+// ?dofnear=0: the near blur off (its cost's A/B: docs/plans/active/dof-v2.md)
+if (params.get('dofnear') === '0') DOF_NEAR.px = 0
 else if (params.has('bench') || params.has('water') || params.get('river') === 'debug') S.dof = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach) : null
@@ -447,6 +449,7 @@ const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   lab, mats, passes, post, setDetail,
   dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
+  dofNear: DOF_NEAR,   // the near blur's (docs/plans/active/dof-v2.md), the same
   sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, flowBuildMs: flowTex?.ms ?? null,   // (the combed meadow's flow textures, on load)
    meadow: meadow ? { reach: meadow.reach, growingCells: meadow.growingCells, growthAt: meadow.growthAt, groundAt: meadow.groundAt, cropAt: meadow.cropAt, croppingCells: meadow.croppingCells } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
   hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),

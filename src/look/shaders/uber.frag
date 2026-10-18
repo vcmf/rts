@@ -13,11 +13,12 @@ float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 // the depth of field's composite (decision 0024; dof.frag): textureSampler is the half-resolution blur and uSharp the
 // scene; the sharp scene where this pixel's blur is under a pixel (the blur not read), the blur where it passes two.
 // uHalfUV maps the screen to the blur (its size is the scene's halved, rounded down). The bloom gathers from the blur
-uniform sampler2D uSharp;uniform vec2 uTan,uHalfUV;uniform float uFocus,uBand,uK,uMaxPx;
+uniform sampler2D uSharp;uniform vec2 uHalfUV;
 #include<dofcoc>
 // (a sharp pixel that is not a finite number takes the blur, which dofdown cleaned: docs/plans/done/nan-guard.md)
 vec3 base(){vec4 s=texture2D(uSharp,vUV);if(!all(lessThan(abs(s),vec4(65504.0))))return MARK(texture2D(textureSampler,vUV*uHalfUV).rgb);
-  float w=smoothstep(0.5,2.0,coc(s.a,vUV));return w>0.0?mix(s.rgb,texture2D(textureSampler,vUV*uHalfUV).rgb,w):s.rgb;}
+  // the far blur by this pixel's own circle, the near layer by the coverage it spread here (the blur's alpha: dof.frag)
+  vec4 b=texture2D(textureSampler,vUV*uHalfUV);float w=max(smoothstep(0.5,2.0,coc(s.a,vUV)),b.a);return w>0.0?mix(s.rgb,b.rgb,w):s.rgb;}
 #define BLOOM_UV(uv) ((uv)*uHalfUV)
 #else
 // (a pixel that is not a finite number takes its neighbours' mean: docs/plans/done/nan-guard.md; the default 8-bit
