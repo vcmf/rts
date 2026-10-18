@@ -41,7 +41,7 @@ vec3 groundSeason(vec3 c){
   // straw then a warm brown, olive grass too, sooner, dry grass lighter than green
   float gs=smoothstep(-0.005,0.03,c.g-max(c.r,c.b));
   #if AUTUMN_ON
-  gs=max(gs,smoothstep(-0.05,0.01,c.g-c.r)*smoothstep(0.0,0.06,c.g-c.b)*AUTUMN_WARM);
+  gs=max(gs,clamp((c.g-c.r+0.05)*16.7,0.0,1.0)*clamp((c.g-c.b)*16.7,0.0,1.0)*AUTUMN_WARM);   // (an olive grass, green about red over blue, turns too: linear ramps, every blade pixel runs it)
   #define AU_C mix(vec3(0.68,0.59,0.37),vec3(0.62,0.55,0.44),AUTUMN_WARM)
   #define AU_K mix(0.78,0.84,AUTUMN_WARM)
   #define LA_C mix(vec3(0.52,0.42,0.27),vec3(0.60,0.40,0.24),AUTUMN_WARM)
