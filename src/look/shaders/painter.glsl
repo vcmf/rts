@@ -4,7 +4,7 @@ uniform vec3 uSunDir,uSunCol,uShadowCol,uHazeCool,uHazeWarm,uCamPos,uFocus;
 // the mood's other colours (src/look/mood.ts)
 uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistShade,uMistLit,uWaterSky,uGlint,uFarRiver;   // uShadowTurn: divided by its luma
 // the grade (gradeOf, at the end of atmos), and how much of the light units take (KEEP_HUE: docs/plans/done/lc1b-coats.md)
-uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade,uMoodMist,uContrast;
+uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade,uMoodMist,uContrast,uAutumnWarm;
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
 uniform float uUnitTint,uUnitMist,uUnitGrade,uUnitBounce;
 uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt,uBounce,uGroundBounce;   // the earth (the mood): the world toward earth tones
@@ -39,7 +39,7 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
   float h=fract(t*7.13);
   summer=mix(summer,vec3(0.36,0.18,0.24),step(0.95,h)*step(kind,0.5));   // a rare copper beech, all year
   if(kind>1.5){                                                            // grass: one field colour per season
-    vec3 au=mix(summer,vec3(0.72,0.62,0.32),0.55),la=mix(summer,vec3(0.55,0.44,0.26),0.7),wi=vec3(0.50,0.45,0.34);
+    vec3 au=mix(summer,mix(vec3(0.72,0.62,0.32),vec3(0.86,0.70,0.46),uAutumnWarm),0.55),la=mix(summer,vec3(0.55,0.44,0.26),0.7),wi=vec3(0.50,0.45,0.34);
     return uSeason<1.0?mix(summer,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
   if(kind>0.5)return mix(summer,summer*vec3(0.78,0.88,0.95),clamp(uSeason-2.0,0.0,1.0));   // conifers stay green
   vec3 au=h<0.30?mix(vec3(0.86,0.46,0.12),vec3(0.96,0.62,0.18),t)      // orange
@@ -48,6 +48,11 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
          :h<0.76?vec3(0.48,0.20,0.34)                                  // purple, rare
          :h<0.95?mix(summer,vec3(0.72,0.62,0.22),0.45)                 // still turning
          :vec3(0.36,0.18,0.24);
+  // the mood's warm autumn (uAutumnWarm, docs/plans/active/epic-palette.md): one family of warm pastels, as Tiny
+  // Glade's, peach, apricot, soft orange and butter, instead of the mixed wood
+  vec3 pa=h<0.35?mix(vec3(0.95,0.58,0.32),vec3(0.98,0.70,0.42),t):h<0.65?mix(vec3(0.97,0.76,0.40),vec3(0.99,0.86,0.55),t)
+         :h<0.85?mix(vec3(0.90,0.46,0.28),vec3(0.95,0.58,0.36),t):vec3(0.94,0.62,0.52);
+  au=mix(au,pa,uAutumnWarm);
   vec3 la=mix(au*vec3(0.80,0.62,0.50),vec3(0.46,0.30,0.18),0.45);       // late autumn: browner, duller
   vec3 wi=vec3(0.34,0.29,0.24);                                         // winter: bare-looking, snow does the rest
   return uSeason<1.0?mix(summer,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);

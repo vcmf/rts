@@ -43,6 +43,7 @@ void main(){
     // the tips
     float hr=vFlow.x;
     vec3 tint=hr<0.5?mix(vec3(0.78,0.98,0.90),vec3(1.0),hr*2.0):mix(vec3(1.0),vec3(1.22,1.10,0.66),(hr-0.5)*2.0);
+    tint=mix(tint,max(tint,vec3(1.0,0.96,0.86)),uAutumnWarm*smoothstep(0.3,1.0,uSeason));   // (its blue-green side warmed through the warm autumn)
     alb*=mix(vec3(1.0),tint,(0.6+0.4*vV)*vFlow.z);   // (none under the snow of winter, as the default)
     #endif
   }

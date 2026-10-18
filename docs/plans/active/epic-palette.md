@@ -15,7 +15,11 @@ someway so it's look more like 'epic version' of tiny glade". Stacked on the dar
   deeper shade, more of the world's own colour kept, the values spread about a mid grey, a darker frame edge.
 - **Two new mood fields:** `mist` (the valley mist's amount) and `grade.contrast` (the values spread, the colour
   kept: `gradeOf`). The existing moods keep their look (1 and 0).
-- Later, in its own PR: the autumn grass and the tall orange wheat (the owner's other ask).
+- **A warm autumn** (the mood's `autumn`, 1 in epic, 0 elsewhere): the crowns one family of warm pastels (peach,
+  apricot, soft orange, butter: `foliage()`), the ground and grass a pale yellow straw then a warm brown, olive grass
+  turning too and dry grass lighter than green (`groundSeason`), the clumps' blue-green tint warmed, the wheat standing
+  tall through autumn, gold to a deep orange, until the plough (`meadow.vert`). The owner: "also we need to change
+  grass and wheat color -> yellow orange brown shade as well in autumn".
 
 ## Approach
 
@@ -28,3 +32,9 @@ summer and autumn, close on the river, the widest); the owner judges, then wheth
 - The guard, coat and negatives checks under `?mood=epic` (armies stay the most saturated, readable first), the macro,
   water checks and goldens (unchanged under temperate); the bench (no cost expected). `npm test`,
   `node tools/check-docs.mjs`.
+
+## Results
+
+- First pass (contrast 0.22, the mist at a third, the ground's colour kept more): the owner, "it's over contrasted and
+  it's not even orange and yellow" in autumn, with Tiny Glade's autumn (soft, airy, pastel crowns, pale straw). Now:
+  contrast 0.05, the mist at 0.55, less of the ground's colour, a lighter frame edge, the warm autumn.
