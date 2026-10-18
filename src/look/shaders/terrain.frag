@@ -89,5 +89,6 @@ void main(){
   float ws=waterSdf(wt),fws=fwidth(ws);   // fws: the branches' margin (shore.glsl)
   if(ws>-WATER_BAND-0.4-1.5*fws&&ws<WATER_BAND+1.5*fws){vec2 ia=iceAt(vW.xz,length(waterFlow(wt)),max(waterDepth(wt),0.0));   // the ice, once (shore.glsl)
     c=mix(c,withStones(shore(vW,wt,occ,sh,fws,ia),vW,ws,sh,ia.x),smoothstep(-WATER_BAND-0.4,-WATER_BAND,ws)*step(ws,WATER_BAND));}
+  lm.b*=waterMist(ws);   // the valley mist thinner over the water, as the water's (shore.glsl)
   #endif
   gl_FragColor=lensOut(airOf(c,vW,lm,0.0),vW);}

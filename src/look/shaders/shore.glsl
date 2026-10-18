@@ -297,6 +297,10 @@ float stoneFoam(vec2 xz,float s){
 vec3 withStones(vec3 c,vec3 wp,float s,float sh,float ice){
   float cs=max(cloud(wp)*0.6,sh);
   return mix(c,FOAM*mix(1.0,0.78,cs),stoneFoam(wp.xz,s)*0.85*(1.0-0.9*ice));}
+// the valley mist's share over the water at shore distance s (docs/plans/active/dark-water.md): a third over open
+// water (it washed the dark water pale), thinning from the shoreline across the band, the same on the terrain's band
+// and the water's own (the seam); the land keeps all of it
+float waterMist(float s){return 1.0-0.65*smoothstep(0.0,WATER_BAND+0.5,s);}
 // the ground at the water's edge, lit with the authored surface's normal: t its water texel
 vec3 shoreLand(vec3 wp,vec4 t,float occ,float sh){return paint(landAlbedo(wp.xz,max(-waterSdf(t),0.0),-waterDepth(t)),bankNormal(vec3(0.0,1.0,0.0),wp.xz),wp,occ,0.12,1.0,sh);}
 // the water's lower layers (research §2.8, layers 1, 2, 7, the shore foam, the ice): d the depth, s the shore distance,
@@ -315,9 +319,9 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh,vec2 ia){
   pSnowK=1.0;pGround=pg;
   // 2. absorption, red first; the painted ramp (shallow green-ochre, turquoise, deep teal) in bands broken by the grain
   float dn=dd*(1.0+0.35*(G(wp.xz/5.0).g-0.5)*uGrainAmt);
-  vec3 T=exp(-vec3(3.0,1.5,1.1)*dn);
+  vec3 T=exp(-vec3(3.0,1.5,1.1)*1.6*dn);   // (dark from about half a metre: docs/plans/active/dark-water.md)
   float b=(1.0-T.g)*3.0+(G(wp.xz/2.0).r-0.5)*0.5;
-  vec3 wc=earthOf(mix(mix(vec3(0.34,0.50,0.38),vec3(0.14,0.37,0.40),smoothstep(0.9,1.1,b)),vec3(0.06,0.22,0.28),smoothstep(2.0,2.2,b)));   // the mood's earth, as the bed and the far ring's river line (paint)
+  vec3 wc=earthOf(mix(mix(vec3(0.30,0.44,0.33),vec3(0.07,0.22,0.24),smoothstep(0.9,1.1,b)),vec3(0.025,0.10,0.12),smoothstep(2.0,2.2,b)));   // the mood's earth, as the bed and the far ring's river line (paint)
   vec3 c=bed*T+wc*(1.0-T);
   // 7. tree and cloud shadows cool the water, deep water more (the bed is already shadowed)
   float cs=max(cloud(wp)*0.6,sh);c=mix(c,c*vec3(0.58,0.70,0.88),cs*smoothstep(0.1,0.8,dd));

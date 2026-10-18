@@ -58,11 +58,11 @@ void main(){
     float wob=(G(vec2(across*0.6,along*0.25)).r-0.5)*(0.9+1.6*rough);
     vec2 o=R.xz/max(R.y,0.2);
     float rf=max(reflAt(vW.xz+o*4.0+vec2(wob,0.0)),reflAt(vW.xz+o*7.5+vec2(wob*1.5,0.0)));
-    c=mix(c,earthOf(vec3(0.08,0.17,0.13)),smoothstep(0.25,0.6,rf)*0.62*smoothstep(0.15,0.5,d)*(1.0-0.7*rough)*up);
+    c=mix(c,earthOf(vec3(0.04,0.09,0.07)),smoothstep(0.25,0.6,rf)*0.75*smoothstep(0.15,0.5,d)*(1.0-0.7*rough)*up);
     // 6. strokes along the current: light marks (more on riffles), a few dark ones in pools, none where it is slow
     float st=G(vec2(along*0.05,across*0.12)).b,st2=G(vec2(along*0.10+0.37,across*0.35+0.2)).g;
     float slow=smoothstep(0.08,0.25,sp),marks=smoothstep(0.62,0.80,st*0.6+st2*0.4)*smoothstep(0.15,0.6,d)*slow;
-    c=mix(c,c*1.12+vec3(0.03,0.05,0.05),marks*(0.35+0.4*rough)*up*near);
+    c=mix(c,c*1.12+vec3(0.03,0.05,0.05),marks*(0.12+0.35*rough)*up*near);   // (few on calm water: docs/plans/active/dark-water.md)
     c=mix(c,c*0.82,smoothstep(0.70,0.85,st2)*0.25*(1.0-rough)*smoothstep(0.3,0.8,d)*slow*up*near);
     // 8. glitter: painted sun dabs, mostly on riffles
     float spec=pow(max(dot(R,uSunDir),0.0),5.0);
@@ -71,7 +71,7 @@ void main(){
     // 9. riffle foam: broken streaks along the current (the grain's dry-brush channel, long along x), bent into
     // chevrons pointing upstream, hard-edged
     float chev=G(vec2(along*0.05+abs(across)*0.02,across*0.03)).b;
-    float riff=smoothstep(0.35,0.65,riffle)*aastep(0.66,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);
+    float riff=smoothstep(0.35,0.65,riffle)*aastep(0.70,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);   // (thinner over the dark water: docs/plans/active/dark-water.md)
     c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.85*up*near);
     // 10. autumn leaves (W5b): from early autumn until the ice, drifting with the current on slow water (none from a
     // speed of 0.62). Cells in the time of travel's coordinates (4 along by 1.6 m across), the clock wrapped to a period
@@ -113,4 +113,5 @@ void main(){
     }
   }
   c=withStones(c,vW,s,sh,ia.x);   // the stones' foam, over every layer (shore.glsl)
-  gl_FragColor=lensOut(airOf(c,vW,lm,0.0),vW);}
+  vec4 lmw=lm;lmw.b*=waterMist(s);   // the valley mist thinner over the water (shore.glsl)
+  gl_FragColor=lensOut(airOf(c,vW,lmw,0.0),vW);}
