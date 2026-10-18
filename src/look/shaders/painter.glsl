@@ -336,13 +336,17 @@ vec3 gradeOf(vec3 c){
   vec3 g=mix(c,vec3(l)*uGreenTint+(c-vec3(l))*uGreenChroma,green*uGreenAmt);
   // the greens turned toward teal in summer (the mood's greenHue, Tiny Glade's blue-greens: docs/plans/active/
   // epic-palette.md): their colour about the grey axis, the value kept
-  if(uGreenHue>0.0){float an=uGreenHue*clamp((c.g-c.b)*4.0,0.0,1.0)*smoothstep(0.0,0.06,c.g-c.r);   // (uGreenHue: the season's, none in autumn)   // (clear greens only: a straw turning would go lime)
+  #if MOOD_GRADE   // (the mood's teal turn and contrast: compiled in only where the mood has them, src/look/materials.ts)
+  if(uGreenHue>0.0){float an=uGreenHue*clamp((c.g-c.b)*4.0,0.0,1.0)*smoothstep(0.0,0.06,c.g-c.r);   // (uGreenHue: the season's, none in autumn: clear greens only, a straw turning would go lime)
     float w=an/uGreenHue;vec3 k=vec3(0.57735),d=g-vec3(dot(g,L));d=d*cos(an)+cross(k,d)*sin(an)+k*dot(k,d)*(1.0-cos(an));
     g=(d*mix(1.0,uGreenChroma,w)+vec3(dot(g,L)))*mix(1.0,0.9,w);}   // (muted by the mood's greenChroma and a little deeper as they turn)
+  #endif
   g=mix(vec3(dot(g,L)),g,uGradeSat);   // (the season's: src/look/main.ts, seasonLight)
   g*=mix(uSplitLo,uSplitHi,smoothstep(0.08,0.75,l));
   g+=uLift*(1.0-l);
+  #if MOOD_GRADE
   g*=clamp(0.42+(l-0.42)*(1.0+uContrast),0.0,1.5)/max(l,1e-3);   // the values spread about a mid grey, the colour kept (the mood's contrast)
+  #endif
   g=mix(g,uTopHaze*(0.85+l*0.35),smoothstep(0.60,1.0,gl_FragCoord.y/uViewH)*uTopAmt);   // 0 at the frame's bottom
   return mix(c,g,amt);}
 // Top-down atmosphere: colour cools (and warms toward the sun side) away from the focus; then the grade.
