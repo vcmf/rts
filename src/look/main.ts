@@ -20,7 +20,7 @@ import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
 import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { gradeColour, MOOD, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
-import { buildMeadow } from './meadow.ts'
+import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
 import { DEBUG, DOF, MSAA, Post, buildCamera, typingIn } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
@@ -90,7 +90,10 @@ const sunXZ = new Vector2(SUN.x, SUN.z).normalize()
 // ?grassoff=strokes,dense,big,hue (with flow): one part of the arm off at a time, for the cost's ablation
 const GRASS_PARTS = ['strokes', 'dense', 'big', 'hue'], grassOff = params.get('grassoff')?.split(',') ?? []
 if (grassOff.some(k => !GRASS_PARTS.includes(k)) || (grassOff.length && grassParam !== 'flow')) throw new Error(`?grassoff takes ${GRASS_PARTS.join(', ')}, with ?grass=flow`)
-const grassDefines = grassParam === 'flow' ? ['#define GRASS_FLOW', `#define FLOW_SUN vec2(${sunXZ.x.toFixed(4)},${sunXZ.y.toFixed(4)})`, `#define COMB_PERIOD ${COMB_PERIOD.toFixed(1)}`, ...flowDefines(), ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`)] : []
+// the camera's distance from the focus over which the combed clumps go from larger and denser to the default's (the
+// closest zoom is 45 m, the default view 125)
+const CLOSE_ZOOM: [number, number] = [70, 110]
+const grassDefines = grassParam === 'flow' ? ['#define GRASS_FLOW', `#define FLOW_SUN vec2(${sunXZ.x.toFixed(4)},${sunXZ.y.toFixed(4)})`, `#define COMB_PERIOD ${COMB_PERIOD.toFixed(1)}`, `#define STROKE_RINGS vec2(${RINGS[0].band[2].toFixed(1)},${RINGS[0].band[3].toFixed(1)})`, `#define CLOSE_ZOOM vec2(${CLOSE_ZOOM[0].toFixed(1)},${CLOSE_ZOOM[1].toFixed(1)})`, ...flowDefines(), ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`)] : []
 const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [...softDefines(soft), ...(meadowOn ? ['#define MEADOW', ...grassDefines] : [])])
 const keptGrains = new Set([mats.grain])   // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
@@ -154,7 +157,13 @@ if (params.has('far')) {
 // the flow's textures (?grass=flow, src/look/flow.ts), on every painted material and the bake
 const flowTex = grassParam === 'flow' ? buildFlow(scene) : null
 if (flowTex) mats.bindAll(m => { m.setTexture('uFlow', flowTex.flow); m.setTexture('uComb', flowTex.comb) })
-const macro = buildMacro(scene, mats, look.cover, meadowOn, grassDefines, flowTex)
+// the meadow map (src/look/meadow.ts), before the ground's bake: the combed meadow bakes the default pattern where no grass
+// grows and the combed one where it does (the combed clumps reach farther: their roots keep farther from the zones and the
+// banks; the crops keep the default's rule)
+const grassReach = grassParam === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
+const grassAllowed = grassReach === CLUMP_REACH ? nature.growthAllowed : (x: number, z: number) => nature.growthAllowed(x, z, grassReach)   // (the same rule as the crops' on the default: one pass)
+const meadowMap = meadowOn ? buildMeadowMap(scene, mats, nature.growth, grassAllowed, nature.crop, nature.growthAllowed) : null
+const macro = buildMacro(scene, mats, look.cover, meadowOn, grassDefines, flowTex, meadowMap?.map ?? null)
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)
@@ -170,10 +179,7 @@ if (dofParam !== null && dofParam !== '0' && dofParam !== '1') throw new Error(`
 if (dofParam !== null) S.dof = +dofParam
 else if (params.has('bench') || params.has('water') || params.get('river') === 'debug') S.dof = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
-// (the combed meadow's clumps reach farther: their roots keep farther from the formation zones and the banks)
-const grassReach = grassParam === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
-const grassAllowed = grassReach === CLUMP_REACH ? nature.growthAllowed : (x: number, z: number) => nature.growthAllowed(x, z, grassReach)   // (the same rule as the crops' on the default: one pass)
-const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, grassAllowed, nature.crop, !flag('nowide'), grassReach, nature.growthAllowed) : null
+const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach) : null
 meadow?.under([terrain.terrainMat, water.waterMat, water.groundMat])   // the dark ground under its clumps (shore.glsl)
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false

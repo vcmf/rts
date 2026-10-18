@@ -6,6 +6,7 @@ uniform mat4 viewProjection;uniform float uSeason;
 uniform vec2 uOrigin,uCentre;uniform float uCentreY;uniform float uCell,uSpread,uHeight;uniform vec4 uBand;uniform sampler2D uMeadow,uCover;
 varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;
 #ifdef GRASS_FLOW
+uniform vec3 uCamPos,uFocus;   // (the zoom: how far the camera stands from the focus)
 varying vec3 vFlow;   // the combed meadow: the clump hue (a hash), the growth at its root, how far it is from winter (1 to 0)
 #endif
 #include<meadow>
@@ -53,9 +54,17 @@ void main(){
   bool crop=m.a>m.g;
   // the growth here, thinner between the clumps (a crop evenly sown, less so), and a clump shrinks away instead of
   // vanishing (no pop)
+  #ifdef GRASS_FLOW
+  float big=1.0-smoothstep(2.0,2.8,uSeason);   // the combed meadow, as the default under the snow of winter
+  // larger and denser up close only (the owner judged them there): whole to CLOSE_ZOOM.x m of the camera from the focus,
+  // the default by CLOSE_ZOOM.y, on the inner rings (the outer ring clumps are a few pixels: there it was fill, not look)
+  float nearK=big*step(uCell,1.5)*(1.0-smoothstep(CLOSE_ZOOM.x,CLOSE_ZOOM.y,length(uCamPos-uFocus)));
+  #endif
   float keep=crop?m.a*band*mix(0.8,1.0,c):m.g*band*mix(0.45,1.0,c);
   #if defined(GRASS_FLOW)&&!defined(GRASS_NO_DENSE)
-  if(!crop)keep=m.g*band*mix(mix(0.45,0.8,1.0-smoothstep(2.0,2.8,uSeason)),1.0,c);   // denser (the owner, 2026-10-17): fewer clumps thinned between the patches, as the default under the snow of winter
+  // denser (the owner, 2026-10-17): fewer clumps thinned between the patches, on the inner rings only (the outer ring's
+  // clumps are a few pixels: denser there was fill, not look), as the default under the snow of winter
+  if(!crop)keep=m.g*band*mix(mix(0.45,0.8,nearK),1.0,c);
   #endif
   float grow=smoothstep(h2-0.12,h2+0.12,keep);
   // nothing where nothing grows (the smoothstep above is over 0 at a growth of 0 for a low hash, and the height factor
@@ -65,9 +74,6 @@ void main(){
   // ring (its cell), both shrinking away with the growth, winter: under the snow. A crop: its own height by class and
   // season, narrower than grass
   float j=mix(0.8,1.2,h3),hgt,fp;
-  #ifdef GRASS_FLOW
-  float big=1.0-smoothstep(2.0,2.8,uSeason);   // the combed meadow, as the default under the snow of winter
-  #endif
   vec4 cr=vec4(0.0);
   // its footprint narrower than grass, and under the grass height in the grass proportions (a crop lower than grass
   // stays upright, not a flat splat), each
@@ -76,7 +82,7 @@ void main(){
     hgt=min(cr.x*grow*mix(0.9,1.05,c),WHEAT_HEIGHT_MAX);fp=uSpread*uHeight*grow*j*min(0.7,cr.x/uHeight);}
   else{hgt=min(uHeight*grow*m.b*j*mix(0.75,1.15,c)*grassSeasonK(uSeason),HEIGHT_MAX);fp=uSpread*uHeight*grow*j;
     #if defined(GRASS_FLOW)&&!defined(GRASS_NO_BIG)
-    hgt=min(hgt*mix(1.0,GRASS_TALL,big),HEIGHT_MAX);fp*=mix(1.0,GRASS_WIDE,big);   // larger blades (the owner): wider clumps, a little taller, never over HEIGHT_MAX
+    hgt=min(hgt*mix(1.0,GRASS_TALL,nearK),HEIGHT_MAX);fp*=mix(1.0,GRASS_WIDE,nearK);   // larger blades (the owner): wider clumps, a little taller, never over HEIGHT_MAX
     #endif
   }
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}

@@ -75,6 +75,11 @@ function cullRing(r: Ring, ch: Chunk[], o: Vector2, c: Vector2, y: number, b: Ve
 // two lists of chunks the same
 const sameList = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i])
 
+// the meadow map (buildMeadowMap): R the ground's height, G the grass's growth, B its height factor, A the crops' growth
+export interface MeadowMap {
+  map: RawTexture; growingCells: number; croppingCells: number; ms: number
+  growthAt(x: number, z: number): number; cropAt(x: number, z: number): number; groundAt(x: number, z: number): number
+}
 export interface Meadow {
   meshes: Mesh[]; setOn(on: boolean): void; bakeMs: number
   // the ground's dark under-layer (shore.glsl, MEADOW_UNDER) on these materials: the meadow map, and each frame its
@@ -96,9 +101,9 @@ const bilerp = (at: (i: number, j: number) => number, u: number, v: number) => {
 
 // growth(x, z): how much grass grows at a point (0..1, by the cover and its edges) and its height factor; allowed(x,
 // z): the placement rule's hard edges at any point; crop(x, z): a sown field there, 0 or 1 (src/look/nature.ts)
-// reach: the grass clumps' (CLUMP_REACH, or the combed meadow's), for the chunks' cull; allowedCrop: the crops' rule (the
-// grass's by default: a combed clump reaches farther than a crop's, which neither widens nor leans)
-export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCamera, growth: (x: number, z: number) => [number, number], allowed: (x: number, z: number) => boolean, crop: (x: number, z: number) => number, wide = true, reach = CLUMP_REACH, allowedCrop = allowed): Meadow {
+// allowedCrop: the crops' rule (the grass's by default: a combed clump reaches farther than a crop's, which neither
+// widens nor leans). Built before the ground's bake: the combed meadow's bake reads it (src/look/macro.ts)
+export function buildMeadowMap(scene: Scene, mats: Materials, growth: (x: number, z: number) => [number, number], allowed: (x: number, z: number) => boolean, crop: (x: number, z: number) => number, allowedCrop = allowed): MeadowMap {
   const t0 = performance.now()
   // the meadow map: R the ground's height, G the growth, B the height factor (half floats, filtered by the GPU). The
   // cover's growth on its 2 m grid, each texel interpolating the cells round it (the edge follows no grid); then the
@@ -165,6 +170,12 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   const hAt = (i: number, j: number) => heightAt(Math.min(MAP_N - 1, Math.max(0, i)) + 0.5 - TILE_W / 2, Math.min(MAP_N - 1, Math.max(0, j)) + 0.5 - TILE_W / 2)
   // the half floats' rounding included
   const groundAtMap = (x: number, z: number) => bilerp((a, b) => FromHalfFloat(ToHalfFloat(hAt(a, b))), x + TILE_W / 2 - 0.5, z + TILE_W / 2 - 0.5)
+  return { map, growingCells, growthAt, cropAt, croppingCells: crops.count, groundAt: groundAtMap, ms: performance.now() - t0 }
+}
+
+// mm: the meadow map (buildMeadowMap); reach: the grass clumps' (CLUMP_REACH, or the combed meadow's), for the chunks' cull
+export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCamera, mm: MeadowMap, wide = true, reach = CLUMP_REACH): Meadow {
+  const t0 = performance.now(), { map, growingCells, growthAt, cropAt, groundAt: groundAtMap } = mm
 
   // the clumps, indexed (the export is a triangle list): the large near, the small (fewer vertices) farther
   const src = JSON.parse(GRASS) as Record<string, { pos: number[]; nrm: number[]; v: number[] }>
@@ -266,5 +277,5 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   // where only the outer ring's sparse clumps stand, the field reads as it did)
   under.set(outer[2], outer[3], 1)
   // (under() sets the reach on the given materials; the map itself, uMeadow, is bound on every painted material above)
-  return { meshes, setOn: on => { meadowOn = on; for (const m of meshes) m.setEnabled(on) }, under: ms => { for (const u of ms) u.setVector3('uUnder', under) }, underOn: on => { underOn = on }, bakeMs: performance.now() - t0, reach, growingCells, growthAt, groundAt: groundAtMap, cropAt, croppingCells: crops.count }
+  return { meshes, setOn: on => { meadowOn = on; for (const m of meshes) m.setEnabled(on) }, under: ms => { for (const u of ms) u.setVector3('uUnder', under) }, underOn: on => { underOn = on }, bakeMs: mm.ms + performance.now() - t0, reach, growingCells, growthAt, groundAt: groundAtMap, cropAt, croppingCells: mm.croppingCells }
 }

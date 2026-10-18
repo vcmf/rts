@@ -30,7 +30,7 @@ export const withPainter = (src: string): string => {
 }
 
 // the ground's macro colour (src/look/shaders/macro.glsl): the cover grid and the bakes, on every painted material
-const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush', 'uDirt', 'uMeadow', 'uFlow', 'uComb']   // uMeadowBrush: the meadow's brush tile (MEADOW, src/look/meadow.ts); uMeadow: the meadow map (the ground under the grass, the combed meadow); uFlow, uComb: the flow's textures (src/look/flow.ts)
+const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush', 'uDirt', 'uMeadow', 'uFlow', 'uComb', 'uCombNear']   // uMeadowBrush: the meadow's brush tile (MEADOW, src/look/meadow.ts); uMeadow: the meadow map (the ground under the grass, the combed meadow); uFlow, uComb: the flow's textures (src/look/flow.ts)
 // the mood's colours each material takes (src/look/mood.ts), by uniform: one table gives both the uniform names and
 // their values, so none is left unset (an unset vec3 reads black). The shadow's turn is divided by its luma here
 // (shadowOf works on hue at the same value), not per pixel
@@ -47,7 +47,7 @@ const MOOD_FLOATS: Record<string, (m: Mood) => number> = {
   uEarthChroma: m => m.earth.chroma, uEarthAmt: m => m.earth.amt, uBounce: m => m.bounce, uGroundBounce: m => m.groundBounce,
   uUnitTint: m => m.units.tint, uUnitMist: m => m.units.mist, uUnitGrade: m => m.units.grade, uUnitBounce: m => m.units.bounce,
 }
-const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA', 'uDirtOn']
+const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA', 'uDirtOn', 'uCombNearRect']
 
 // perFrame: false keeps a material out of `all` (no per-frame uniforms, no light map: the light-map bake draws into it)
 export interface MatOptions { attributes?: string[]; uniforms?: string[]; samplers?: string[]; alpha?: boolean; defines?: string[]; perFrame?: boolean }
