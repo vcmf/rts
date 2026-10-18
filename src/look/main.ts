@@ -354,7 +354,7 @@ const SUNCOL = MOOD.sun.clone()
 // the mood's light by the season (docs/plans/active/epic-palette.md), blended once a frame for every material instead of
 // per pixel: the shadow band's colour and turn from summer's to autumn's as the leaves turn (season 0.3 to 0.8), then to
 // winter's (2.2 to 3); the grade's saturation (the mood's summerSat outside autumn); the greens' teal turn (none in autumn)
-const SEASON_LIGHT = { shadow: new Color3(), turn: new Color3(), sat: 1, greenHue: 0, ground: 0, tip: new Color3(1.04, 1.08, 0.80), tipWarm: 0 }
+const SEASON_LIGHT = { shadow: new Color3(), turn: new Color3(), sat: 1, greenHue: 0, ground: 0, tip: new Color3(1.04, 1.08, 0.80), tipWarm: 0, greenRot: new Float32Array(9) }
 scene.onBeforeRenderObservable.add(() => {
   const s = S.season, ak = sstep(0.3, 0.8, s) * (1 - sstep(2.2, 3, s)), wk = sstep(2.2, 3, s), M = MOOD
   const mix3 = (a: Color3, b: Color3, c: Color3) => Color3.Lerp(Color3.Lerp(a, b, ak), c, wk)
@@ -363,6 +363,10 @@ scene.onBeforeRenderObservable.add(() => {
   SEASON_LIGHT.turn = mix3(unit(M.shadowTurn), unit(M.shadowTurnAutumn), unit(M.shadowTurnWinter))
   SEASON_LIGHT.sat = M.grade.sat * (M.grade.summerSat + (1 - M.grade.summerSat) * ak)
   SEASON_LIGHT.greenHue = M.grade.greenHue * Math.PI / 180 * (1 - ak)
+  // the greens' turn about the grey axis by greenHue, their colour muted to greenChroma (Rodrigues, column-major for GLSL)
+  { const a = SEASON_LIGHT.greenHue, k = 1 / Math.sqrt(3), co = Math.cos(a), si = Math.sin(a), t = 1 - co, m = M.grade.greenChroma, r = SEASON_LIGHT.greenRot
+    const R = [[co + k * k * t, k * k * t - k * si, k * k * t + k * si], [k * k * t + k * si, co + k * k * t, k * k * t - k * si], [k * k * t - k * si, k * k * t + k * si, co + k * k * t]]
+    for (let col = 0; col < 3; col++) for (let row = 0; row < 3; row++) r[col * 3 + row] = R[row][col] * m }
   // the ground's season to autumn (groundSeason): sooner in the warm autumn (no long half-green, half-straw lime)
   // the grass blades' tips (meadow.frag): lime, warmed in the warm autumn
   SEASON_LIGHT.tipWarm = M.autumn * sstep(0.3, 1, s); SEASON_LIGHT.tip = Color3.Lerp(new Color3(1.04, 1.08, 0.80), new Color3(1.06, 1.0, 0.86), SEASON_LIGHT.tipWarm)
@@ -385,7 +389,7 @@ scene.onBeforeRenderObservable.add(() => {
     m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uGrade', S.grade); m.setFloat('uViewH', engine.getRenderHeight()); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
     m.setFloat('uPixA', pixA)
     m.setFloat('uAO', S.ao); m.setFloat('uMist', S.mist); m.setFloat('uShafts', S.shafts); m.setFloat('uBack', S.back)
-    m.setColor3('uShadowCol', SEASON_LIGHT.shadow); m.setColor3('uShadowTurn', SEASON_LIGHT.turn); m.setFloat('uGradeSat', SEASON_LIGHT.sat); m.setFloat('uGreenHue', SEASON_LIGHT.greenHue); m.setFloat('uSeasonGround', SEASON_LIGHT.ground); m.setColor3('uTipTint', SEASON_LIGHT.tip); m.setFloat('uTipWarm', SEASON_LIGHT.tipWarm)
+    m.setColor3('uShadowCol', SEASON_LIGHT.shadow); m.setColor3('uShadowTurn', SEASON_LIGHT.turn); m.setFloat('uGradeSat', SEASON_LIGHT.sat); m.setFloat('uGreenHue', SEASON_LIGHT.greenHue); m.setMatrix3x3('uGreenRot', SEASON_LIGHT.greenRot); m.setFloat('uSeasonGround', SEASON_LIGHT.ground); m.setColor3('uTipTint', SEASON_LIGHT.tip); m.setFloat('uTipWarm', SEASON_LIGHT.tipWarm)
   }
 })
 // the frame readout (top right; docs/plans/done/frame-readout.md): over the last FRAMES frames (fewer until there are

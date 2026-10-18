@@ -119,6 +119,7 @@ export const MOODS = {
     },
   },
 } satisfies Record<string, Mood>
+
 export type MoodName = keyof typeof MOODS
 
 // the mood in use: set once, before any material is made (src/look/main.ts); a material copies its colours when it
