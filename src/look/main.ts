@@ -533,9 +533,9 @@ if (params.has('bench')) {
   // ?bench=macro: the macro colour's arms whose shaders differ instead (with the detail layer)
   // ?bench=earth: the bare earth's surface up close off and on (earthOn, docs/plans/active/bare-earth.md)
   // ?bench=dof: the gameplay depth of field off and on (decision 0024)
-  // (each material set as it stands, no binder left behind: the texture's load sets 1 once, before the bench's warm-up
-  // on a local page)
-  const earthArm = (on: number) => () => { for (const m of mats.all) m.setFloat('uEarthOn', on) }
+  // (each material set as it stands, no binder left behind, once the texture's load has set 1: else a late load would
+  // turn the off arm on)
+  const earthArm = (on: number) => async () => { await macro.earthLoaded; for (const m of mats.all) m.setFloat('uEarthOn', on) }
   const dofArm = (on: number) => () => { setDetail([]); if (S.dof !== on) { S.dof = on; post.build(); syncButtons() } }
   // ?trees=cards&bench=trees: the crowns' two arms, cards and the pack's (docs/plans/done/l7a-canopy-cards.md),
   // for the frame's cost only (read the frame interval): the shadow map is baked once, with the cards, so the pack arm keeps the cards' shadows

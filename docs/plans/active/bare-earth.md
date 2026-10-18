@@ -39,8 +39,9 @@ darken it) plug in when the map engine lands. Today's cover grid has no material
 4. Seasons: the earth goes with the ground's season (the autumn turn) as the bare class does; under snow a grassy
    class's soil keeps its class's whole snow (as trodden, a zone's breadth showed the snow's pattern repeating).
 
-Not in scope: the tracks', villages' and ploughed land's surface (they keep `data/ground-dirt-v1.png`); new cover
-classes or map edits.
+Not in scope: new cover classes or map edits. (Amended after review round 1: the cracks' mask is the macro colour, so
+all bare loam takes them up close, the ploughed land, the roads and tracks too, their dirt marks handing over to the
+cracks by the same weight; the villages, under the soil's red, keep the dirt.)
 
 ## Approach
 
@@ -85,3 +86,15 @@ on the earth's pixels only, behind the same footprint fade as the dirt (`dirtOn`
   default +0.1, wide 0.0 to +0.1 ms; the frame within 0.2 ms. Inside the +0.3 ms acceptance. (Before, with the
   growth and class read on every pixel: up to +1.0 ms; a mask from the warped class on soil-coloured pixels: +0.6 to
   +1.0.)
+- **Review round 2** (10 findings, none severe: fixed what was worth it, the rounds stop): one weight for the cracks
+  and the dirt's hand-over (`earthWeight`, with `uEarthOn`: the dirt stays where the cracks are off, and no stacking
+  with the wear's dirt); the meadow's orange flowers out of the mask (no saturated colour is earth); the far ring's
+  margins as part soil in its 4 m texels and the tile's edge weight at the warped point; the bake's growth taps apart
+  from the pixel's cached texel; the bench's arms after the texture's load; the plan's scope amended (all bare loam);
+  the tile's masks built a row at a time (the same output, a second).
+- **Final:** `npm test` 265 pass; goldens against main differ only in the bare zones and margins (summer), winter
+  identical; the guard ok at the start (largest drop 0.034) and cover (0.055) views; the cost (paired, GPU frame p50,
+  1 s holds) close +0.17 to +0.25, default +0.12 to +0.15 ms, wide within the noise.
+- **The "Chrome exited" failures** during these runs were another session on the machine running
+  `pkill -f headless`, which kills every headless Chrome (Chrome's own log stopped with no crash). Retried until they
+  ran through.

@@ -82,6 +82,8 @@ export interface Macro {
   hash(which: 'tile' | 'far'): Promise<string>
   // the last bake started (by a new grain, a restored context, a check), settled
   settled(): Promise<unknown>
+  // the earth's texture loaded (or failed: earthOn stays off), so uEarthOn holds (the bench's arms, src/look/main.ts)
+  earthLoaded: Promise<void>
 }
 
 // meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
@@ -121,7 +123,8 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   const dirt = new Texture(DIRT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => mats.bindAll(m => m.setFloat('uDirtOn', 1)), (msg?: string) => console.error(`the dirt texture (${DIRT_URL}) did not load: ${msg ?? 'unknown error'}`))
   dirt.wrapU = dirt.wrapV = Texture.WRAP_ADDRESSMODE; dirt.anisotropicFilteringLevel = 4
   // the bare earth's surface (earthOn in macro.glsl, docs/plans/active/bare-earth.md): the owner's cracked earth, as the dirt
-  const earth = new Texture(EARTH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => mats.bindAll(m => m.setFloat('uEarthOn', 1)), (msg?: string) => console.error(`the earth texture (${EARTH_URL}) did not load: ${msg ?? 'unknown error'}`))
+  let earthDone = () => {}; const earthLoaded = new Promise<void>(r => { earthDone = r })
+  const earth = new Texture(EARTH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => { mats.bindAll(m => m.setFloat('uEarthOn', 1)); earthDone() }, (msg?: string) => { console.error(`the earth texture (${EARTH_URL}) did not load: ${msg ?? 'unknown error'}`); earthDone() })
   earth.wrapU = earth.wrapV = Texture.WRAP_ADDRESSMODE; earth.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); m.setTexture('uEarth', earth); if (brush) m.setTexture('uMeadowBrush', brush) })
 
@@ -250,7 +253,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
     })
   }
   return {
-    cover: coverTex, tile, far, setArm, arm: () => arm, bake, setCheck, settled: () => last,
+    cover: coverTex, tile, far, setArm, arm: () => arm, bake, setCheck, settled: () => last, earthLoaded,
     async bakeBench(side) {
       if (!(Number.isInteger(side) && side >= 64 && side <= D.spec.minSpec.maxTexture)) throw new Error(`?macroBench must be a whole number of texels, 64–${D.spec.minSpec.maxTexture}`)
       const t = target('macroBench', side)

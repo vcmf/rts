@@ -35,11 +35,8 @@ B = N // 6   # the blend's width at each edge
 def ramp(d): t = min(1.0, d / B); return t * t * (3 - 2 * t)
 def seamless(im, axis):
   shifted = ImageChops.offset(im, N // 2 if axis == 0 else 0, N // 2 if axis == 1 else 0)
-  mask = Image.new('L', (N, N)); pm = mask.load()
-  for y in range(N):
-    for x in range(N):
-      d = x if axis == 0 else y
-      pm[x, y] = round(255 * ramp(min(d, N - 1 - d)))
+  line = Image.new('L', (N, 1)); line.putdata([round(255 * ramp(min(d, N - 1 - d))) for d in range(N)])   # one row of the ramp
+  mask = line.resize((N, N), Image.NEAREST) if axis == 0 else line.transpose(Image.Transpose.TRANSPOSE).resize((N, N), Image.NEAREST)
   return Image.composite(im, shifted, mask)
 tile = seamless(seamless(flat, 0), 1)
 tile.save(out, optimize=True)

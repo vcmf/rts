@@ -96,6 +96,14 @@ vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*3
 // owner's, scratches, drag marks and splats, about DIRT_M m a repeat) in its value, around 1 so the class colour holds
 // on average. Mipmapped: its fine marks average out where a pixel spans them, so they do not flicker
 uniform sampler2D uDirt;uniform float uDirtOn;   // 1 once the dirt texture has loaded (src/look/macro.ts)
+uniform sampler2D uEarth;uniform float uEarthOn;   // the earth's surface (earthOn, below): 1 once its texture has loaded
+// how far a pixel of macro colour c takes the earth's cracks (earthOn), at footprint px: the colour is the mask (the bake
+// painted the soil where the ground is bare), as far as it reads as bare loam (its red over its green by 1.10 to 1.18:
+// the grass, wheat, stubble and village stay under) and is no saturated colour (a meadow's orange flower is no earth:
+// the soil's red over its blue is under half its red), up close (from a 6 to a 25 cm footprint). The dirt (dirtOn)
+// hands over to the cracks by this one weight
+float earthWeight(vec3 c,float px){
+  return smoothstep(1.10,1.18,c.r/max(c.g,0.01))*(1.0-smoothstep(0.5,0.6,(c.r-c.b)/max(c.r,0.01)))*(1.0-smoothstep(0.06,0.25,px))*uEarthOn;}
 const float DIRT_M=15.0;
 // a class's bareness: 1 on track, village, ploughed and bare, a little on the road (dust). The worn ground by the lines
 // takes the dirt's marks by wearOf
@@ -118,8 +126,7 @@ vec3 dirtOn(vec3 c,vec2 xz,float px){
   #ifdef WEBGL2
   if(k>2.5&&k<4.5)b*=smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y)));   // on the tile the roads are painted (roadPaint, live or baked: shore.glsl), their own grit
   #endif
-  b*=1.0-(1.0-smoothstep(0.06,0.25,px))*smoothstep(1.10,1.18,c.r/max(c.g,0.01));   // (soil-coloured ground: the earth's cracks up close, earthOn, the dirt's marks past them)
-  b=max(b,wearOf(cv))*fade;if(b<=0.0)return c;
+  b=max(b,wearOf(cv))*fade*(1.0-earthWeight(c,px));if(b<=0.0)return c;   // (where the cracks lie, not the dirt too)
   // two reads at unrelated scales and offsets, so the texture's own marks (a dark smear) do not repeat in rows, about
   // its measured mean (0.458), so the class colour holds on average
   float d=(texM(uDirt,xz/DIRT_M,DIRT_M).r+texM(uDirt,xz/(DIRT_M*1.618)+vec2(0.37,0.61),DIRT_M*1.618).r)*0.5;
@@ -143,6 +150,10 @@ vec4 meadowTexel(vec2 xz){if(xz!=pMeadowXZ){pMeadowXZ=xz;pMeadow=texture2D(uMead
 float meadowGrowth(vec2 xz){
   float edge=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,max(abs(xz.x),abs(xz.y)));
   return mix(edge<1.0?smoothstep(0.15,0.7,meadowTexel(xz).g):1.0,1.0,edge);}
+// the same, read apart from the pixel's one cached texel (the bake's several taps round a point: bareOf)
+float growthAt(vec2 xz){
+  float edge=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,max(abs(xz.x),abs(xz.y)));
+  return mix(edge<1.0?smoothstep(0.15,0.7,texture2D(uMeadow,(xz+TILE_HALF)/TILE_W).g):1.0,1.0,edge);}
 // the bareness at a point of class k: a grassy class (meadow, pasture, a copse's floor) by the grass that does not
 // grow there, its edge wandering by the grain (no line along the map's texels), the bare class whole
 // (the growth at the cover's warped point, four taps a metre apart: the map's 2 m cells would step along a diagonal
@@ -152,10 +163,12 @@ float meadowGrowth(vec2 xz){
 // grassy class, so no seam where the map ends and the far ring has its margins too). w: the cover's warped point
 // (coverWarp, as macro() reads the class)
 float bareOf(float k,vec2 xz,vec2 w){if(k>9.5)return 1.0;if(k>2.5)return 0.0;
-  float gr=0.25*(meadowGrowth(w+vec2(1.0))+meadowGrowth(w-vec2(1.0))+meadowGrowth(w+vec2(1.0,-1.0))+meadowGrowth(w+vec2(-1.0,1.0)));
-  float te=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,max(abs(xz.x),abs(xz.y)));
+  float gr=0.25*(growthAt(w+vec2(1.0))+growthAt(w-vec2(1.0))+growthAt(w+vec2(1.0,-1.0))+growthAt(w+vec2(-1.0,1.0)));
+  // (the far bake's texel is 4 m: a 2.5 m margin covers part of one, so it paints as part soil, by the share of the
+  // ring round it that is another class)
+  float te=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,max(abs(w.x),abs(w.y)));
   if(te>0.0){float n=0.0;for(int i=0;i<8;i++){float a=float(i)*0.7853982;n+=step(coverAt(w+vec2(cos(a),sin(a))*2.5).x,2.5);}
-    gr=min(gr,mix(1.0,smoothstep(6.5,8.0,n),te));}
+    gr=min(gr,mix(1.0,1.0-0.7*(1.0-smoothstep(4.0,8.0,n)),te));}
   if(gr>=1.0)return 0.0;
   return 1.0-smoothstep(0.0,1.0,gr+(texM(uGrain,xz/9.0+0.21,9.0).g-0.5)*0.6*(1.0-gr));}
 #endif
@@ -163,20 +176,12 @@ float bareOf(float k,vec2 xz,vec2 w){if(k>9.5)return 1.0;if(k>2.5)return 0.0;
 // its value) multiplies bare ground's value, about its mean (0.632) so the soil's colour holds on average, read twice
 // at unrelated scales and offsets (no repeat in rows), fading out as the pixel spans it (the mipmap keeps the mean).
 // Bare ground: the bare class, and a grassy class where nothing grows (bareOf), the earth texture being loam (soilColour)
-uniform sampler2D uEarth;uniform float uEarthOn;   // 1 once the texture has loaded (src/look/macro.ts)
 const float EARTH_M=5.0;
 vec3 earthOn(vec3 c,vec2 xz,float px){
   #if defined(MACRO_FLAT)||defined(MACRO_SAB_ONECLASS)
   return c;
   #endif
-  float fade=(1.0-smoothstep(0.06,0.25,px))*uEarthOn;if(fade<=0.0)return c;   // (past a 25 cm footprint its marks are under a pixel, the bare class takes the dirt's there, dirtOn)
-  // c, the macro colour (summer: the bake's, or the shader arm's) is the mask: the bake painted the soil where the ground
-  // is bare (bareOf), so how far a pixel reads as soil is how bare it is, its edge the bake's own, at no read. The soil's
-  // red stands over its green by about a fifth, the grass's green over its red, the wheat, stubble and village nearer
-  // even than the soil (under 1.1). Bare loam of every kind takes it: the soil, the ploughed land, the roads and
-  // tracks (their own paint lies over it near the camera, roadPaint), all one material
-  float e=smoothstep(1.10,1.18,c.r/max(c.g,0.01));
-  e*=fade;if(e<=0.0)return c;
+  float e=earthWeight(c,px);if(e<=0.0)return c;   // (the mask: earthWeight, above)
   // (the second read turned: its gradients turned with it, for the anisotropic filter)
   mat2 R=mat2(0.8253,-0.5646,0.5646,0.8253);vec2 u2=R*xz/(EARTH_M*1.618)+vec2(0.37,0.61);
   #ifdef WEBGL2
