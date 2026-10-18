@@ -68,3 +68,10 @@ judges.
   they are gone: the near blur only lives in the bottom band of the frame (`DOF_NEAR.screen`), so the band says where a
   near gather runs (scope step 3 dropped). After: +0.2, +0.6–0.7 and +0.1–0.2 ms over the depth of field off (four
   runs), inside the +0.8 ms acceptance.
+- **Steps 5 and 6** (paired, the same three views): the 3 × 3 tent postfilter (four bilinear taps in the composite,
+  only where a pixel blurs) and the painted colour (`DOF_PAINT`, far 0.5, near 0.7) cost nothing measurable (0.0–0.1 ms). The world-fixed
+  brush noise on the lens term (a value noise in `depthA`, every material) cost 0.2–0.9 ms, the most where the meadow's
+  blades overdraw, even limited to the lens terms where it moves the blur: dropped, past the budget for a soft edge.
+  The bilateral composite is not needed: the composite takes each pixel's own blur from its full-resolution lens term,
+  so a sharp pixel stays sharp next to a blurred one (no fringe seen in the oblique shots); left out.
+  The run-to-run drift is up to 0.7 ms at the third view (the same build measured +0.1–0.2 and +0.8 an hour apart).

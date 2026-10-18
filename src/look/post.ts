@@ -32,6 +32,9 @@ export const DOF = { band: 0.2, k: 4, px: 7, wide: 0.4 }
 // largest blur in pixels at 1080 lines (eased by the zoom as the far one) and the share of the frame from the bottom it
 // reaches (the formations in the middle never take it)
 export const DOF_NEAR = { band: 0.04, k: 4, px: 8, screen: 0.3 }
+// the blur's painted look (docs/plans/active/dof-v2.md): the far blur's colour toward the haze (lighter, greyer) by its
+// size, the near layer darker and cooler by its coverage (uber.frag)
+export const DOF_PAINT = { far: 0.5, near: 0.7 }
 // the scene's MSAA samples (4; ?msaa=1 for the frame-rate A/Bs, src/look/main.ts)
 // byte: the scene's MSAA target 8 bits a channel, not half floats (docs/plans/done/wide-perf.md: the same frame, 0.4 to
 // 0.8 ms less at the widest zoom); not under the depth of field, whose distance in alpha needs the half floats; ?rt16
@@ -184,7 +187,7 @@ export class Post {
         e.setFloat('uNN', Math.min(24, Math.max(8, Math.ceil(0.25 * npx * npx)))); lensUniforms(e)
       }
     }
-    const u = pp('uber', ['uRes', 'uRenderScale', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, p ? 0.5 : 1.0, [p ? '#define DOF' : '', DEBUG.nanmark ? '#define NANMARK' : ''].filter(Boolean).join('\n') || null)
+    const u = pp('uber', ['uRes', 'uRenderScale', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV', 'uHalfTexel', 'uDofPaint'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, p ? 0.5 : 1.0, [p ? '#define DOF' : '', DEBUG.nanmark ? '#define NANMARK' : ''].filter(Boolean).join('\n') || null)
     // uRes: the full resolution (with the depth of field, this pass reads the half-resolution blur)
     u.onApply = e => {
       const r = d ?? u; e.setFloat2('uRes', r.width, r.height); e.setFloat('uGrainOn', S.grain); e.setFloat('uBloom', S.bloom); e.setTexture('uGrain', this.grain())
@@ -192,7 +195,7 @@ export class Post {
       // the mood's vignette, and the grade's parts the bloom takes off and puts back (its grade is in the painted
       // materials: src/look/materials.ts)
       e.setColor3('uVignette', MOOD.grade.vignette); e.setColor3('uSplitHi', MOOD.grade.splitHi); e.setFloat('uGradeSat', MOOD.grade.sat); e.setFloat('uTopAmt', MOOD.grade.topAmt); e.setFloat('uGrade', S.grade)
-      if (d && half) { lensUniforms(e); e.setFloat2('uHalfUV', d.width / 2 / half.width, d.height / 2 / half.height); e.setTextureFromPostProcess('uSharp', d) }
+      if (d && half) { lensUniforms(e); e.setFloat2('uHalfUV', d.width / 2 / half.width, d.height / 2 / half.height); e.setFloat2('uHalfTexel', 1 / half.width, 1 / half.height); e.setFloat2('uDofPaint', DOF_PAINT.far, DOF_PAINT.near); e.setTextureFromPostProcess('uSharp', d) }
     }
   }
 }

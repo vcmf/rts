@@ -13,12 +13,22 @@ float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 // the depth of field's composite (decision 0024; dof.frag): textureSampler is the half-resolution blur and uSharp the
 // scene; the sharp scene where this pixel's blur is under a pixel (the blur not read), the blur where it passes two.
 // uHalfUV maps the screen to the blur (its size is the scene's halved, rounded down). The bloom gathers from the blur
-uniform sampler2D uSharp;uniform vec2 uHalfUV;
+uniform sampler2D uSharp;uniform vec2 uHalfUV,uHalfTexel,uDofPaint;
 #include<dofcoc>
 // (a sharp pixel that is not a finite number takes the blur, which dofdown cleaned: docs/plans/done/nan-guard.md)
 vec3 base(){vec4 s=texture2D(uSharp,vUV);if(!all(lessThan(abs(s),vec4(65504.0))))return MARK(texture2D(textureSampler,vUV*uHalfUV).rgb);
   // the far blur by this pixel's own circle, the near layer by the coverage it spread here (the blur's alpha: dof.frag)
-  vec4 b=texture2D(textureSampler,vUV*uHalfUV);float w=max(smoothstep(0.5,2.0,coc(s.a,vUV)),b.a);return w>0.0?mix(s.rgb,b.rgb,w):s.rgb;}
+  vec2 hu=vUV*uHalfUV;vec4 b=texture2D(textureSampler,hu);float cf=coc(s.a,vUV),fw=smoothstep(0.5,2.0,cf),w=max(fw,b.a);
+  if(w<=0.0)return s.rgb;
+  // the postfilter: four bilinear taps half a texel off on the diagonals, a 3 x 3 tent over the half-resolution blur
+  // (its spiral noise and flicker smoothed, without temporal anti-aliasing)
+  vec2 o=0.5*uHalfTexel;b=0.25*(texture2D(textureSampler,hu+o)+texture2D(textureSampler,hu-o)+texture2D(textureSampler,hu+vec2(o.x,-o.y))+texture2D(textureSampler,hu+vec2(-o.x,o.y)));
+  // the painted look: the far blur toward the haze by its size (lighter and greyer, as distance in a painting), the
+  // near layer darker and cooler by its coverage (a foreground framing the scene)
+  float l=dot(b.rgb,vec3(0.2126,0.7152,0.0722));
+  b.rgb=mix(b.rgb,mix(vec3(l),b.rgb,0.55)*0.9+0.1,uDofPaint.x*fw*clamp(cf/max(uMaxPx,1.0),0.0,1.0));
+  b.rgb*=mix(vec3(1.0),vec3(0.80,0.85,0.94),uDofPaint.y*b.a);
+  return mix(s.rgb,b.rgb,w);}
 #define BLOOM_UV(uv) ((uv)*uHalfUV)
 #else
 // (a pixel that is not a finite number takes its neighbours' mean: docs/plans/done/nan-guard.md; the default 8-bit

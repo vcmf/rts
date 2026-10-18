@@ -21,7 +21,7 @@ import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { gradeColour, MOOD, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
-import { DEBUG, DOF, DOF_NEAR, MSAA, Post, buildCamera, typingIn } from './post.ts'
+import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
@@ -449,6 +449,7 @@ const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   lab, mats, passes, post, setDetail,
   dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
+  dofPaint: DOF_PAINT,   // the blur's painted look (the same)
   dofNear: DOF_NEAR,   // the near blur's (docs/plans/active/dof-v2.md), the same
   sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, flowBuildMs: flowTex?.ms ?? null,   // (the combed meadow's flow textures, on load)
    meadow: meadow ? { reach: meadow.reach, growingCells: meadow.growingCells, growthAt: meadow.growthAt, groundAt: meadow.groundAt, cropAt: meadow.cropAt, croppingCells: meadow.croppingCells } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
