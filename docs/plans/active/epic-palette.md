@@ -65,3 +65,7 @@ summer and autumn, close on the river, the widest); the owner judges, then wheth
 - Sixth pass: "better but still too light, the yellow too strong". The autumn ground and grass a mid-value warm tan
   (0.62,0.55,0.44: darker than the crowns, as Tiny Glade's), dry grass lifted less (the comb's streaks kept): ground
   luma median 0.73 to 0.60 at the widest, chroma 0.18.
+- Seventh pass: early autumn "nice now"; summer "a bit saturated" (chroma 0.13 against the old summer's 0.11, its
+  lights a yellow-lime the greens' muting does not count as green). A summer and winter saturation (`grade.summerSat`,
+  0.85 in epic, × sat outside autumn: `gradeOf`), and the greens and the world's own colour a little more muted:
+  summer chroma 0.11, autumn unchanged (0.18).

@@ -55,6 +55,7 @@ export interface Mood {
     vignette: Color3          // the frame's corners × this
     contrast: number          // the values spread about a mid grey, colour kept (0: none; gradeOf)
     greenHue: number          // degrees the greens turn toward teal in summer (0: none; gradeOf)
+    summerSat: number         // the saturation kept outside autumn, × sat (1: as autumn; gradeOf)
   }
 }
 
@@ -75,7 +76,7 @@ export const MOODS = {
     grade: {
       greenTint: c(1.03, 1.0, 0.88), greenChroma: 0.5, greenAmt: 0.85, sat: 0.9,
       splitLo: c(0.92, 0.99, 1.06), splitHi: c(1.08, 1.0, 0.85), lift: c(0.03, 0.02, 0.0),
-      topHaze: c(0.72, 0.76, 0.82), topAmt: 0.20, vignette: c(0.80, 0.87, 0.98), contrast: 0, greenHue: 0,
+      topHaze: c(0.72, 0.76, 0.82), topAmt: 0.20, vignette: c(0.80, 0.87, 0.98), contrast: 0, greenHue: 0, summerSat: 1,
     },
   },
   // temperate, the default (LC3, docs/plans/done/lc3-temperate.md; the owner's pick of LC2's candidates: golden "a
@@ -93,7 +94,7 @@ export const MOODS = {
     grade: {
       greenTint: c(1.0, 1.0, 0.92), greenChroma: 0.6, greenAmt: 0.85, sat: 0.86,
       splitLo: c(0.94, 0.99, 1.05), splitHi: c(1.04, 1.0, 0.93), lift: c(0.02, 0.02, 0.015),
-      topHaze: c(0.70, 0.76, 0.83), topAmt: 0.25, vignette: c(0.80, 0.86, 0.96), contrast: 0, greenHue: 0,
+      topHaze: c(0.70, 0.76, 0.83), topAmt: 0.25, vignette: c(0.80, 0.86, 0.96), contrast: 0, greenHue: 0, summerSat: 1,
     },
   },
   // epic (docs/plans/active/epic-palette.md; the owner, 2026-10-18: "an 'epic version' of tiny glade"; the first pass
@@ -108,13 +109,13 @@ export const MOODS = {
     mistShade: c(0.62, 0.56, 0.52), mistLit: c(0.96, 0.86, 0.70), mist: 0.4, autumn: 1,
     hazeCool: c(0.56, 0.65, 0.76), hazeWarm: c(0.92, 0.78, 0.60),
     waterSky: c(0.22, 0.32, 0.38), glint: c(1.0, 0.88, 0.62), farRiver: c(0.15, 0.26, 0.29),
-    earth: { tint: c(1.0, 1.0, 0.97), chroma: 0.85, amt: 0.35 },
+    earth: { tint: c(1.0, 1.0, 0.97), chroma: 0.75, amt: 0.45 },
     bounce: 0.7, groundBounce: 0.5,
     units: { tint: 0.3, mist: 0.05, grade: 0.1, bounce: 0.35 },
     grade: {
-      greenTint: c(0.84, 0.92, 0.92), greenChroma: 0.8, greenAmt: 0.85, sat: 0.85,
+      greenTint: c(0.84, 0.92, 0.92), greenChroma: 0.66, greenAmt: 0.85, sat: 0.85,
       splitLo: c(0.97, 0.99, 1.02), splitHi: c(1.02, 1.0, 0.96), lift: c(0.012, 0.012, 0.014),
-      topHaze: c(0.66, 0.73, 0.82), topAmt: 0.14, vignette: c(0.78, 0.84, 0.94), contrast: 0.05, greenHue: 25,
+      topHaze: c(0.66, 0.73, 0.82), topAmt: 0.14, vignette: c(0.78, 0.84, 0.94), contrast: 0.05, greenHue: 25, summerSat: 0.85,
     },
   },
 } satisfies Record<string, Mood>

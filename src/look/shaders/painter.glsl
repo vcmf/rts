@@ -5,7 +5,7 @@ uniform vec3 uSunDir,uSunCol,uShadowCol,uHazeCool,uHazeWarm,uCamPos,uFocus;
 uniform vec3 uShadowAutumn,uShadowTurnAutumn,uShadowWinter,uShadowTurnWinter,uCloudSnow;
 uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistShade,uMistLit,uWaterSky,uGlint,uFarRiver;   // uShadowTurn: divided by its luma
 // the grade (gradeOf, at the end of atmos), and how much of the light units take (KEEP_HUE: docs/plans/done/lc1b-coats.md)
-uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade,uMoodMist,uContrast,uAutumnWarm,uGreenHue;
+uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade,uMoodMist,uContrast,uAutumnWarm,uGreenHue,uSummerSat;
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
 uniform float uUnitTint,uUnitMist,uUnitGrade,uUnitBounce;
 uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt,uBounce,uGroundBounce;   // the earth (the mood): the world toward earth tones
@@ -338,7 +338,7 @@ vec3 gradeOf(vec3 c){
   if(uGreenHue>0.0){float an=uGreenHue*clamp((c.g-c.b)*4.0,0.0,1.0)*smoothstep(0.0,0.06,c.g-c.r)*(1.0-autumnK());   // (clear greens only: a straw turning would go lime)
     float w=an/uGreenHue;vec3 k=vec3(0.57735),d=g-vec3(dot(g,L));d=d*cos(an)+cross(k,d)*sin(an)+k*dot(k,d)*(1.0-cos(an));
     g=(d*mix(1.0,uGreenChroma,w)+vec3(dot(g,L)))*mix(1.0,0.9,w);}   // (muted by the mood's greenChroma and a little deeper as they turn)
-  g=mix(vec3(dot(g,L)),g,uGradeSat);
+  g=mix(vec3(dot(g,L)),g,uGradeSat*mix(uSummerSat,1.0,autumnK()));   // (the mood's summer and winter a little calmer than autumn)
   g*=mix(uSplitLo,uSplitHi,smoothstep(0.08,0.75,l));
   g+=uLift*(1.0-l);
   g*=clamp(0.42+(l-0.42)*(1.0+uContrast),0.0,1.5)/max(l,1e-3);   // the values spread about a mid grey, the colour kept (the mood's contrast)
