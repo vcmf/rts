@@ -8,7 +8,9 @@ precision highp float;varying vec2 vUV;uniform sampler2D textureSampler;uniform 
 // out, the ring two pixels round them is averaged instead. The test (abs below the half float's largest) is one no
 // compiler folds away, as it may x == x
 bool ok(vec4 s){return all(lessThan(abs(s),vec4(65504.0)));}
-void main(){vec2 q=floor(vUV*uOut)*2.0+0.5;vec3 c=vec3(0.0);float a=0.0,n=0.0;
-  for(int i=0;i<4;i++){vec4 s=texture2D(textureSampler,(q+vec2(float(i-i/2*2),float(i/2)))*uTexel);if(ok(s)){c+=s.rgb;a=max(a,s.a);n+=1.0;}}
-  if(n==0.0)for(int i=0;i<4;i++){vec4 s=texture2D(textureSampler,(q+0.5+vec2(float(i-i/2*2)*2.0-1.0,float(i/2)*2.0-1.0)*2.0)*uTexel);if(ok(s)){c+=s.rgb;a=max(a,s.a);n+=1.0;}}
-  gl_FragColor=vec4(c/max(n,1.0),n>0.0?a:1.0);}
+// (a unit, alpha 1, is left out of the farthest: a block of units alone stays a unit)
+float far1(float a,float s){return s>254.5/255.0?a:max(a,s);}
+void main(){vec2 q=floor(vUV*uOut)*2.0+0.5;vec3 c=vec3(0.0);float a=-1.0,n=0.0;
+  for(int i=0;i<4;i++){vec4 s=texture2D(textureSampler,(q+vec2(float(i-i/2*2),float(i/2)))*uTexel);if(ok(s)){c+=s.rgb;a=far1(a,s.a);n+=1.0;}}
+  if(n==0.0)for(int i=0;i<4;i++){vec4 s=texture2D(textureSampler,(q+0.5+vec2(float(i-i/2*2)*2.0-1.0,float(i/2)*2.0-1.0)*2.0)*uTexel);if(ok(s)){c+=s.rgb;a=far1(a,s.a);n+=1.0;}}
+  gl_FragColor=vec4(c/max(n,1.0),a<0.0?1.0:a);}

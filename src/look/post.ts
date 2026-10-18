@@ -127,6 +127,8 @@ export class Post {
   // it is what the centre shows), eased over FOCUS_S so a pan over a hillside does not jump the sharp band; a jump
   // of over a third (a new view) is taken at once
   private focus = 0
+  // each frame before the scene renders (src/look/main.ts): the materials encode their lens term against it
+  updateFocus(dt: number): number { return this.focusDepth(dt) }
   private focusDepth(dt: number): number {
     const c = this.camera, p = c.position, t = c.target
     let fx = t.x - p.x, fy = t.y - p.y, fz = t.z - p.z; const l = Math.hypot(fx, fy, fz) || 1; fx /= l; fy /= l; fz /= l
@@ -141,7 +143,9 @@ export class Post {
   build(): void {
     const { camera, engine, S } = this
     this.posts.forEach(p => p.dispose(camera)); this.posts = []
-    const HF = Constants.TEXTURETYPE_HALF_FLOAT, sceneType = MSAA.byte && !S.dof ? Constants.TEXTURETYPE_UNSIGNED_BYTE : HF   // the scene's target: the first pass's input
+    // the scene's target, the first pass's input: 8 bits with the depth of field too (the lens term in alpha, 8 bits:
+    // painter.glsl depthA; docs/plans/active/dof-v2.md)
+    const HF = Constants.TEXTURETYPE_HALF_FLOAT, sceneType = MSAA.byte ? Constants.TEXTURETYPE_UNSIGNED_BYTE : HF
     // ratio: the size of the texture this pass reads, so the pass before it draws at that size
     const pp = (name: string, uni: string[], smp: string[], type: number, ratio = 1.0, defines: string | null = null) => { const p = new PostProcess(name, name, uni, smp, ratio, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, defines, type); if (!this.posts.length) { p.samples = MSAA.samples } this.posts.push(p); return p }
     // the miniature field (decision 0024): focused on the ground at the screen's centre (focusDepth); a sharp band
@@ -159,7 +163,7 @@ export class Post {
       // the taps: 16 up to a 7 px blur (the default's largest at 1080 lines), then as many per unit of area as the
       // blur grows, in steps to 64 (past a 14 px blur, sparser; a step moves every tap, so there are few)
       p.onApply = e => {
-        focus = this.focusDepth(engine.getDeltaTime() / 1000)
+        focus = this.focus   // (updateFocus, each frame before the scene: the materials encode against it)
         const aspect = d.width / d.height, tf = Math.tan(camera.fov / 2), vert = camera.fovMode === Camera.FOVMODE_VERTICAL_FIXED
         const z = Math.min(1, Math.max(0, (camera.radius - c.rMin) / (c.rMax - c.rMin)))
         px = DOF.px * S.dofAmt * d.height / 1080 * (1 + (DOF.wide - 1) * z); tan = vert ? [tf * aspect, tf] : [tf, tf / aspect]

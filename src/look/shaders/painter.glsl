@@ -100,7 +100,11 @@ vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   #endif
   return mix(c,mix(uMistShade,uMistLit,air),t);}
 // view distance in alpha → depth of field without re-rendering the scene
-float depthA(vec3 wp){return clamp(length(wp-uCamPos)/1000.0,0.0,1.0);}
+// the depth of field lens term in alpha (docs/plans/active/dof-v2.md): s = 1 - focus/z, z the depth along the view axis
+// (uFocusZ: the focus, uCamFwd: the axis), over -1 (half the focus distance) to 0.5 (twice it) in 8 bits, to 0 to 254/255.
+// The code 1 is the units, which never blur (block.frag). The scene target stays 8 bits with the depth of field on
+uniform float uFocusZ;uniform vec3 uCamFwd;
+float depthA(vec3 wp){float s=1.0-uFocusZ/max(dot(wp-uCamPos,uCamFwd),0.01);return (clamp(s,-1.0,0.5)+1.0)/1.5*(254.0/255.0);}
 // Big painted cloud shadows drifting over the land: the top-down camera's only "sky".
 float cloud(vec3 wp){
   vec2 p=wp.xz+uTime*vec2(2.2,0.8);

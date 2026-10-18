@@ -343,11 +343,15 @@ scene.onBeforeRenderObservable.add(() => { const w = Math.max(0, Math.min(1, S.s
 // the detail layer's pixel angle (src/look/shaders/painter.glsl): the angle one pixel of a SPEC.detail.lines-tall
 // frame spans, from the camera's actual vertical field of view (narrower than the SPEC's on frames wider than 16:9)
 let pixA = 0
+const camFwd = new Vector3()
 scene.onBeforeRenderObservable.add(() => {
   const tv = camera.fovMode === Camera.FOVMODE_VERTICAL_FIXED ? Math.tan(camera.fov / 2) : Math.tan(camera.fov / 2) / engine.getAspectRatio(camera)
   pixA = 2 * tv / D.spec.detail.lines
   if (!FROZEN) S.t += Math.min(engine.getDeltaTime() / 1000, 0.05)
+  // the depth of field's focus and the view axis, which every material encodes its lens term against (painter.glsl depthA)
+  const focusZ = post.updateFocus(engine.getDeltaTime() / 1000); camFwd.copyFrom(camera.target).subtractInPlace(camera.position).normalize()
   for (const m of mats.all) {
+    m.setFloat('uFocusZ', focusZ); m.setVector3('uCamFwd', camFwd)
     m.setVector3('uCamPos', camera.position); m.setVector3('uFocus', camera.target); m.setFloat('uTime', S.t)
     m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uGrade', S.grade); m.setFloat('uViewH', engine.getRenderHeight()); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
     m.setFloat('uPixA', pixA)
