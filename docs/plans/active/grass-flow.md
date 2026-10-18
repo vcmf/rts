@@ -138,3 +138,14 @@ removal already skips hidden terrain); a camera-following near bake of the strok
   reads (`pFlowGrow`, set where grass grows; a parameter would touch every caller of `groundSeason`).
 - **The checks on the final code:** goldens identical (8 cameras); the guard passes (summer, autumn, winter; the cover
   view); `tools/river-check.js` passes on both arms; `npm test` 260 passed.
+- **The owner's fps** (2026-10-18, the close zoom, a 120 Hz screen): the default 120 (the cap), `?grass=flow` 109–110,
+  without the strokes 111, without the larger denser clumps 111; and strides at the bottom of the frame without grass.
+  Measured (the dev Mac, best of three): with every part off the arm costs as the default; the strokes alone were the
+  last ~1 ms, at every zoom, even where few pixels drew them (their code in the ground's shader slowed all of it).
+  Changed: the strokes from a near bake (one fetch in the ground; the bake again when the focus moves 6 m); over the
+  inner ring only (the rings are centred on the focus: the bottom of the frame stood under the sparser outer rings,
+  the owner's strides); the larger, denser clumps up close only (`CLOSE_ZOOM`); the default pattern where no grass grows
+  baked (the meadow map before the bake), not rebuilt a pixel. Then: close 4.4–4.5 ms (the default 4.4), default
+  5.9–6.1 (5.7–5.8), widest 6.6–7.1 (5.9–7.0). Merged main's roads (#113). The checks again: goldens identical, the
+  guard (three seasons, the cover view), the river check on both arms, `npm test` 265 passed, the docs check: all pass.
+  These changes came after the three review rounds.

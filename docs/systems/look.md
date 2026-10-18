@@ -362,13 +362,17 @@ shader); `?meadow=off` puts back the old scatter.
     `flowTex`), which the ground, the bake and the clumps read; the field itself beyond the tile.
   - **The bake** holds the broad part (`combBroad`): soft bands where the flow leans to or from the sun (`FLOW_SUN`,
     fixed per map), soft masses, and the clump field.
-  - **The strokes at runtime** (`groundAt` under `GRASS_FLOW`, `combStrokes`): the brush tile and a tiling comb noise
-    (`uComb`, `COMB_PERIOD`) read along the flow in `FLOW_CELL` cells, lighter along the comb and a deeper green in its
-    gaps; by the pixel's footprint (`strokeK`) and the meadow's growth (`uMeadow`, the map the ground's under-layer
-    reads), none under the winter's snow. Where no grass grows (the formation zones, the banks) the ground is the
-    default's: the broad part divided out, the short grass's brush back (`shortGrass`).
-  - **The clumps** (`meadow.vert`, `meadow.frag`): wider and a little taller (never over `HEIGHT_MAX`), fewer thinned
-    between the patches, leaning with the flow, a hue each (`vHue`); as the default's under the winter's snow. They
+  - **The strokes from a near bake** (`combNear` in `src/look/macro.ts`, `combDv`; the ground reads it in `groundAt`
+    with one fetch, `nearComb`, `combFromDv`): the brush tile and a tiling comb noise (`uComb`, `COMB_PERIOD`) read along
+    the flow in `FLOW_CELL` cells, rendered into a square round the focus again when the focus moves (the strokes in
+    the ground's own shader cost about 1 ms on every terrain pixel: the plan). Lighter along the comb and a deeper green
+    in its gaps; by the pixel's footprint (`strokeK`), over the inner ring only (`STROKE_RINGS`: the rings are centred on
+    the focus, so the bottom of the frame stands under the sparser outer rings), by the meadow's growth (`uMeadow`,
+    `meadowGrowth`), none under the winter's snow.
+  - **Where no grass grows** (the formation zones, the banks) the bake holds the default pattern (`meadowPattern` blends
+    the default's and the combed by `meadowGrowth`: the meadow map is built before the bake, `buildMeadowMap`).
+  - **The clumps** (`meadow.vert`, `meadow.frag`): up close (`CLOSE_ZOOM`, the inner rings) wider and a little taller
+    (never over `HEIGHT_MAX`) and fewer thinned between the patches, leaning with the flow, a hue each (`vHue`); as the default's under the winter's snow. They
     read the bake alone. Their roots keep `CLUMP_REACH_FLOW` from the formation zones and the banks (crops keep
     `CLUMP_REACH`), which `tools/river-check.js` checks at the page's reach (`__look.meadow.reach`).
   - **The seasons:** `groundSeason` keeps the pattern's value through autumn where grass grows (`pFlowGrow`).
