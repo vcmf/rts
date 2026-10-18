@@ -14,12 +14,14 @@ more close to reality". The art bible already asks for it (§6c: pools of "deep,
 - **Deep water dark:** the absorption ramp's turquoise and deep teal darker, reached at less depth (`shoreWater`,
   `shore.glsl`); the painted sky tint (the moods' `waterSky`) a dark blue-teal, not a pale sky; the far ring's river
   line (`farRiver`) to match.
-- **The reflections stronger and darker** (the trees' mirror, `water.frag` layer 5).
+- **The trees' mirror** a dark green (`water.frag` layer 5), above the dark water's value, as Tiny Glade's: the
+  crowns read in it.
 - **Fewer light marks:** the strokes along the current mostly on riffles; the riffle foam a little thinner, the
   riffles still the lighter water (the fords: §6c, and the pools-and-riffles check).
-- **The valley mist a third over the water** (its mask, `src/look/bakes.ts`): it washed the river pale (with it off,
-  the first pass's water was already dark); thinning from the shoreline across the shore band, so every surface
-  over the river (the water, the band, stones, units fording) takes the same air.
+- **The valley mist a third over the water** (the light map's mist channel, `bake.frag`, from the water data's shore
+  distance: `waterMist` in `waterdata.glsl`): it washed the river pale (with it off, the first pass's water was
+  already dark); thinning from the shoreline across the shore band, so every surface over the river (the water, the
+  band, stones, units fording) takes the same air.
 - **Winter's open water** darker than the new deep teal (it lightened it otherwise).
 - Unchanged: the banks, the ice, the leaves, the glitter (sun dabs read better on dark water).
 
@@ -46,3 +48,6 @@ widest), the owner judges.
   vanished on the dark pools (a dark green above the water's value now); the mist thinned only in the terrain's and
   the water's shaders, so stones and units in a ford stood pale on the dark water (in the mist's mask now); the plan
   not in the index; the docs.
+- **Round 2** (severe): the mist mask's 3 m cells and a symmetric half width could not follow the shoreline (thinner
+  mist on dry point bars, blotchy on narrow channels): thinned in the light map's bake (0.26 m texels) from the water
+  data's shore distance instead. The reflections' wording.
