@@ -19,6 +19,7 @@ import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture
 import BRUSH_URL from '../../data/meadow-brush.png?url'
 import type { FlowTextures } from './flow.ts'
 import DIRT_URL from '../../data/ground-dirt-v1.png?url'
+import EARTH_URL from '../../data/ground-earth-v1.png?url'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 
 // the arms (macro.glsl): flat, shader, bake, and L5b's experiments, strokes (arm 4) and kuwahara (arm 5): bakes of
@@ -81,6 +82,8 @@ export interface Macro {
   hash(which: 'tile' | 'far'): Promise<string>
   // the last bake started (by a new grain, a restored context, a check), settled
   settled(): Promise<unknown>
+  // the earth's texture loaded (or failed: earthOn stays off), so uEarthOn holds (the bench's arms, src/look/main.ts)
+  earthLoaded: Promise<void>
 }
 
 // meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
@@ -119,9 +122,13 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   // a third); a failed load is reported, not a bake's error (no bake reads it), and bare ground then has no marks
   const dirt = new Texture(DIRT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => mats.bindAll(m => m.setFloat('uDirtOn', 1)), (msg?: string) => console.error(`the dirt texture (${DIRT_URL}) did not load: ${msg ?? 'unknown error'}`))
   dirt.wrapU = dirt.wrapV = Texture.WRAP_ADDRESSMODE; dirt.anisotropicFilteringLevel = 4
-  mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); if (brush) m.setTexture('uMeadowBrush', brush) })
+  // the bare earth's surface (earthOn in macro.glsl, docs/plans/done/bare-earth.md): the owner's cracked earth, as the dirt
+  let earthDone = () => {}; const earthLoaded = new Promise<void>(r => { earthDone = r })
+  const earth = new Texture(EARTH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => { mats.bindAll(m => m.setFloat('uEarthOn', 1)); earthDone() }, (msg?: string) => { console.error(`the earth texture (${EARTH_URL}) did not load: ${msg ?? 'unknown error'}`); earthDone() })
+  earth.wrapU = earth.wrapV = Texture.WRAP_ADDRESSMODE; earth.anisotropicFilteringLevel = 4
+  mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); m.setTexture('uEarth', earth); if (brush) m.setTexture('uMeadowBrush', brush) })
 
-  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit', 'uFlow', 'uComb', 'uMeadow'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : []), ...(roads ? ['#define ROADS'] : [])]
+  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit', 'uFlow', 'uComb', 'uMeadow'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : []), ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []), ...(roads ? ['#define ROADS'] : [])]
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })
   // arm 5's filter, compiled on its first bake
   let kuwaharaW: EffectWrapper | null = null
@@ -246,7 +253,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
     })
   }
   return {
-    cover: coverTex, tile, far, setArm, arm: () => arm, bake, setCheck, settled: () => last,
+    cover: coverTex, tile, far, setArm, arm: () => arm, bake, setCheck, settled: () => last, earthLoaded,
     async bakeBench(side) {
       if (!(Number.isInteger(side) && side >= 64 && side <= D.spec.minSpec.maxTexture)) throw new Error(`?macroBench must be a whole number of texels, 64–${D.spec.minSpec.maxTexture}`)
       const t = target('macroBench', side)

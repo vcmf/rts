@@ -26,6 +26,12 @@ vec4 coverTex(vec2 uv){return textureGrad(uCover,uv,vec2(0.0),vec2(0.0));}
 vec4 coverTex(vec2 uv){return texture2D(uCover,uv);}
 #endif
 vec4 coverAt(vec2 xz){vec4 t=coverTex(xz/FAR_W+0.5);return vec4(floor(t.r*255.0+0.5),floor(t.g*255.0+0.5),t.b*3.14159265,t.a*25.5);}
+// THE SOIL (docs/plans/done/bare-earth.md): the colour of bare ground, where nothing grows, by its material (the map
+// engine's ground material: loam, clay, sand, gravel, rock, peat, earth). Today's cover has no material: every class
+// is loam (earth, the map engine's yard, paints as loam). v in 0..1 its variation. Its surface up close: earthOn
+#define SOIL_LOAM 0.0
+vec3 soilColour(float m,float v){
+  return mix(vec3(0.53,0.44,0.33),vec3(0.62,0.52,0.38),v);}   // loam: dry, warm earth (the owner's reference, its value: data/ground-earth-v1.png)
 // a class's colour; v in 0..1 its variation (0.5: the flat arm's)
 vec3 classColour(float k,float v){
   return k<1.5?mix(vec3(0.27,0.43,0.21),vec3(0.38,0.50,0.25),v)      // pasture (0 is the meadow: groundMeadow)
@@ -40,7 +46,7 @@ vec3 classColour(float k,float v){
         :k<7.5?mix(vec3(0.37,0.50,0.20),vec3(0.45,0.56,0.24),v)      // green crop
         :k<8.5?mix(vec3(0.60,0.59,0.50),vec3(0.67,0.65,0.55),v)      // stubble: grey straw (the warm sun turns pale straw orange)
         :k<9.5?mix(vec3(0.58,0.48,0.36),vec3(0.64,0.53,0.40),v)       // ploughed: dry earth, lighter than the dark coats
-        :mix(vec3(0.52,0.44,0.34),vec3(0.60,0.51,0.39),v);           // bare: trodden, dry earth, no grass (its surface: dirtOn)
+        :soilColour(SOIL_LOAM,v);                                     // bare: trodden, dry earth, no grass (its surface: earthOn)
                                                                        // (the readability guard, tools/guard.mjs --view cover)
 }
 // the grain's soft blotches at about scale s m without its repeat: G(xz/s) tiles every s m, so two reads at
@@ -90,6 +96,14 @@ vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*3
 // owner's, scratches, drag marks and splats, about DIRT_M m a repeat) in its value, around 1 so the class colour holds
 // on average. Mipmapped: its fine marks average out where a pixel spans them, so they do not flicker
 uniform sampler2D uDirt;uniform float uDirtOn;   // 1 once the dirt texture has loaded (src/look/macro.ts)
+uniform sampler2D uEarth;uniform float uEarthOn;   // the earth's surface (earthOn, below): 1 once its texture has loaded
+// how far a pixel of macro colour c takes the earth's cracks (earthOn), at footprint px: the colour is the mask (the bake
+// painted the soil where the ground is bare), as far as it reads as bare loam (its red over its green by 1.10 to 1.18:
+// the grass, wheat, stubble and village stay under) and is no saturated colour (a meadow's orange flower is no earth:
+// the soil's red over its blue is under half its red), up close (from a 6 to a 25 cm footprint). The dirt (dirtOn)
+// hands over to the cracks by this one weight
+float earthWeight(vec3 c,float px){
+  return smoothstep(1.10,1.18,c.r/max(c.g,0.01))*(1.0-smoothstep(0.5,0.6,(c.r-c.b)/max(c.r,0.01)))*(1.0-smoothstep(0.06,0.25,px))*uEarthOn;}
 const float DIRT_M=15.0;
 // a class's bareness: 1 on track, village, ploughed and bare, a little on the road (dust). The worn ground by the lines
 // takes the dirt's marks by wearOf
@@ -112,7 +126,7 @@ vec3 dirtOn(vec3 c,vec2 xz,float px){
   #ifdef WEBGL2
   if(k>2.5&&k<4.5)b*=smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y)));   // on the tile the roads are painted (roadPaint, live or baked: shore.glsl), their own grit
   #endif
-  b=max(b,wearOf(cv))*fade;if(b<=0.0)return c;
+  b=max(b,wearOf(cv))*fade*(1.0-earthWeight(c,px));if(b<=0.0)return c;   // (where the cracks lie, not the dirt too)
   // two reads at unrelated scales and offsets, so the texture's own marks (a dark smear) do not repeat in rows, about
   // its measured mean (0.458), so the class colour holds on average
   float d=(texM(uDirt,xz/DIRT_M,DIRT_M).r+texM(uDirt,xz/(DIRT_M*1.618)+vec2(0.37,0.61),DIRT_M*1.618).r)*0.5;
@@ -120,18 +134,63 @@ vec3 dirtOn(vec3 c,vec2 xz,float px){
 // (colour, the snow's lie as LIE0 + lie/1.2). q 1: the bake's, the edges blended over 9 taps a metre apart with a
 // darker margin where classes meet (a headland or a verge); q 0: one tap. px: the footprint, m (the bake's texel, or
 // the pixel's)
-#if defined(MEADOW)&&(defined(MEADOW_UNDER)||defined(GRASS_FLOW))
+#if defined(MEADOW)&&(defined(MEADOW_UNDER)||defined(GRASS_FLOW)||defined(MEADOW_MAP))
 // the meadow map (src/look/meadow.ts: G the grass's growth, B its height factor, A the crop's): the ground's
-// under-layer (shore.glsl) and the combed meadow's strokes (groundAt) read it
+// under-layer (shore.glsl), the bare ground where nothing grows (bareOf) and the combed meadow's strokes (groundAt)
+// read it (MEADOW_MAP: the bake, src/look/macro.ts)
 uniform sampler2D uMeadow;
+#define HAS_MEADOW_MAP
+// the meadow map's texel at a point, read once a pixel (the bare earth, the under-layer and the strokes share it)
+vec2 pMeadowXZ=vec2(1e9);vec4 pMeadow;
+vec4 meadowTexel(vec2 xz){if(xz!=pMeadowXZ){pMeadowXZ=xz;pMeadow=texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);}return pMeadow;}
 #endif
-#if defined(MEADOW)&&defined(GRASS_FLOW)
+#ifdef HAS_MEADOW_MAP
 // how much grass grows at a point, 0..1 (the meadow map: none in the formation zones and on the banks); beyond the tile
 // it counts as growing, faded in over its last 10 m, so a zone or a bank meeting the edge leaves no seam
 float meadowGrowth(vec2 xz){
   float edge=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,max(abs(xz.x),abs(xz.y)));
+  return mix(edge<1.0?smoothstep(0.15,0.7,meadowTexel(xz).g):1.0,1.0,edge);}
+// the same, read apart from the pixel's one cached texel (the bake's several taps round a point: bareOf)
+float growthAt(vec2 xz){
+  float edge=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,max(abs(xz.x),abs(xz.y)));
   return mix(edge<1.0?smoothstep(0.15,0.7,texture2D(uMeadow,(xz+TILE_HALF)/TILE_W).g):1.0,1.0,edge);}
+// the bareness at a point of class k: a grassy class (meadow, pasture, a copse's floor) by the grass that does not
+// grow there, its edge wandering by the grain (no line along the map's texels), the bare class whole
+// (the growth at the cover's warped point, four taps a metre apart: the map's 2 m cells would step along a diagonal
+// edge, so the earth's edge wanders as the classes' do. Where the macro colour is made: the bake, or the shader arm)
+// Beyond the meadow map (the tile: past it, and over its last 10 m, the growth counts as whole), the margins from the
+// cover itself, by the same rule the grass is placed by (src/look/nature.ts coverAllows: every point 2.5 m round a
+// grassy class, so no seam where the map ends and the far ring has its margins too). w: the cover's warped point
+// (coverWarp, as macro() reads the class)
+float bareOf(float k,vec2 xz,vec2 w){if(k>9.5)return 1.0;if(k>2.5)return 0.0;
+  float gr=0.25*(growthAt(w+vec2(1.0))+growthAt(w-vec2(1.0))+growthAt(w+vec2(1.0,-1.0))+growthAt(w+vec2(-1.0,1.0)));
+  // (the far bake's texel is 4 m: a 2.5 m margin covers part of one, so it paints as part soil, by the share of the
+  // ring round it that is another class)
+  float te=smoothstep(TILE_HALF-11.0,TILE_HALF-1.0,max(abs(w.x),abs(w.y)));
+  if(te>0.0){float n=0.0;for(int i=0;i<8;i++){float a=float(i)*0.7853982;n+=step(coverAt(w+vec2(cos(a),sin(a))*2.5).x,2.5);}
+    gr=min(gr,mix(1.0,1.0-0.7*(1.0-smoothstep(4.0,8.0,n)),te));}
+  if(gr>=1.0)return 0.0;
+  return 1.0-smoothstep(0.0,1.0,gr+(texM(uGrain,xz/9.0+0.21,9.0).g-0.5)*0.6*(1.0-gr));}
 #endif
+// THE EARTH'S SURFACE up close (docs/plans/done/bare-earth.md): the owner's cracked earth (data/ground-earth-v1.png,
+// its value) multiplies bare ground's value, about its mean (0.632) so the soil's colour holds on average, read twice
+// at unrelated scales and offsets (no repeat in rows), fading out as the pixel spans it (the mipmap keeps the mean).
+// Bare ground: the bare class, and a grassy class where nothing grows (bareOf), the earth texture being loam (soilColour)
+const float EARTH_M=5.0;
+vec3 earthOn(vec3 c,vec2 xz,float px){
+  #if defined(MACRO_FLAT)||defined(MACRO_SAB_ONECLASS)
+  return c;
+  #endif
+  float e=earthWeight(c,px);if(e<=0.0)return c;   // (the mask: earthWeight, above)
+  // (the second read turned: its gradients turned with it, for the anisotropic filter)
+  mat2 R=mat2(0.8253,-0.5646,0.5646,0.8253);vec2 u2=R*xz/(EARTH_M*1.618)+vec2(0.37,0.61);
+  #ifdef WEBGL2
+  float d2=textureGrad(uEarth,u2,R*pMdx/(EARTH_M*1.618),R*pMdy/(EARTH_M*1.618)).r;
+  #else
+  float d2=texture2D(uEarth,u2).r;
+  #endif
+  float d=texM(uEarth,xz/EARTH_M,EARTH_M).r*0.6+d2*0.4;
+  return c*mix(1.0,clamp(1.0+(d-0.632)*1.3,0.45,1.4),e);}
 #ifdef MEADOW
 // the meadow pattern (docs/plans/done/l5c-meadow.md) on meadow and pasture (k, the class the ground paints): the
 // brush tile (data/meadow-brush.png) at two unrelated scales and turns, warped by a slow noise (no common period, no
@@ -216,7 +275,7 @@ vec3 meadowPattern(vec3 c,float k,vec2 xz,float px){
   return c*mix(1.0,t,gr);}
 #endif
 vec4 macro(vec2 xz,float q,float px){
-  vec2 w=coverWarp(xz);vec4 cv=coverAt(w);Grain g=grainAt(xz);vec3 c;
+  vec2 w=coverWarp(xz);vec4 cv=coverAt(w);Grain g=grainAt(xz);vec3 c;float e=0.0;
   if(q>0.5){
     c=vec3(0.0);float other=0.0;
     for(int i=-1;i<=1;i++)for(int j=-1;j<=1;j++){vec2 o=vec2(float(i),float(j));vec4 t=coverAt(w+o);
@@ -227,6 +286,13 @@ vec4 macro(vec2 xz,float q,float px){
   #ifdef MEADOW
   c=meadowPattern(c,cv.x,xz,px);
   #endif
+  #ifdef HAS_MEADOW_MAP
+  // bare where nothing grows: a grassy class's ground with no grass on it (a formation zone, a bank, a field's margin:
+  // the meadow map's growth) is the soil, not the grass's green (the owner, 2026-10-18)
+  e=bareOf(cv.x,xz,w);if(e>0.0)c=mix(c,soilColour(SOIL_LOAM,smoothstep(0.3,0.7,g.v)),e);
+  #endif
+  // (bare soil on a grassy class keeps that class's snow: whole. Trodden as the bare class, a formation zone's breadth
+  // of snow showed the snow's own pattern repeating, docs/plans/done/bare-earth.md)
   return vec4(c,LIE0-(b*stripeSnow(cv.x)+trodden(cv.x))/1.2);}
 #ifdef MACRO_STROKES
 // ARM 4, BAKED STROKES (the bake's shader alone; L5b, an experiment: docs/proposals/prepainted-terrain.md): the bake's
