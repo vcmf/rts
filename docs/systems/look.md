@@ -170,10 +170,16 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   wandering by the grain.
 - **The earth's surface up close** (`earthOn` in `macro.glsl`, after `dirtOn`): the owner's cracked earth
   (`data/ground-earth-v1.png`, made from the local reference by `tools/earth-texture.py`: the central square in grey,
-  the photo's broad light divided out, made seamless) multiplies bare ground's value about its mean (0.631), two reads
-  at 5 and 8 m a repeat at unrelated turns; fading out from a 6 to a 25 cm footprint (past it its marks are under a
-  pixel and the bake's soil alone shows). The growth first, one read shared with the under-layer (`meadowTexel`):
-  grass returns there; then the class, unwarped. `?bench=earth` benches it off and on.
+  the photo's broad light divided out, made seamless one axis at a time) multiplies bare loam's value about its mean
+  (0.632), two reads at 5 and 8 m a repeat at unrelated turns (the turned read's gradients turned with it), fading out
+  from a 6 to a 25 cm footprint. Its mask is the macro colour itself: the bake painted the soil where the ground is
+  bare, so a pixel takes the cracks as far as it reads as soil (its red over its green by 1.10 to 1.18: the grass, the
+  wheat, the stubble and the village stay under), at no read, its edge the bake's own. So all bare loam takes it: the
+  soil, the ploughed land, the roads and the tracks (their own paint over it near the camera); the dirt's marks
+  (`dirtOn`) hand over to it up close by the same weight. The bareness in the bake reads the growth at the cover's
+  warped point (four taps a metre apart), and beyond the meadow map (the tile's last 10 m and the far ring) the
+  margins from the cover by the grass's own rule (2.5 m round), so no seam where the map ends. Bare soil on a grassy
+  class keeps that class's snow (whole: trodden, a zone's breadth of snow showed the snow's pattern repeating). `?bench=earth` benches it off and on.
 - **The season turns what is green** (`groundSeason` in `shore.glsl`, every ground colour's season): a colour takes
   the whole turn as far as it is green, a quarter of it where green is no higher than red or blue (the pale road, the brown track, bare earth, stone, gravel,
   a cut bank, dry gold), for the autumn turns; winter mutes every colour as before. So a ploughed field or a bank does not melt into the autumn meadow, smoothly across every edge.

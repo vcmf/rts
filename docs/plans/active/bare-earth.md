@@ -36,7 +36,8 @@ darken it) plug in when the map engine lands. Today's cover grid has no material
    takes the same earth.
 3. **Its detail up close:** the earth texture multiplies the earth's value at the terrain's fragment (two reads at
    unrelated scales and offsets, a 5 m repeat, mipmapped), fading out as the pixel's footprint spans it.
-4. Seasons: the earth goes with the ground's season (the autumn turn, snow) as the bare class does.
+4. Seasons: the earth goes with the ground's season (the autumn turn) as the bare class does; under snow a grassy
+   class's soil keeps its class's whole snow (as trodden, a zone's breadth showed the snow's pattern repeating).
 
 Not in scope: the tracks', villages' and ploughed land's surface (they keep `data/ground-dirt-v1.png`); new cover
 classes or map edits.
@@ -75,3 +76,12 @@ on the earth's pixels only, behind the same footprint fade as the dirt (`dirtOn`
   every grassy class's edge with another class) at the summer cameras; winter identical (the snow covers the soil).
   The margins end with the meadow map at the tile's edge (beyond it the growth counts as whole: meadowGrowth).
 - `npm test`: 265 tests pass.
+- **Review round 1** (10 findings), fixed: the cracks' mask is now the bake's own colour (the live mask's unwarped,
+  one-tap edge disagreed with the bake's by up to 1.5 m: cracks on green, a 2 m staircase); the margins beyond the
+  meadow map from the cover (they ended on the tile's square); the tile seamless one axis at a time (a cut at each
+  edge's middle); the bare class's dirt past the cracks (mid zooms had no marks); bare soil held snow as the bare class (reverted: the goldens showed the snow's own pattern repeating in rows over a
+  formation zone's breadth; the soil on a grassy class keeps its class's whole snow, scope 4 so amended); the turned read's gradients; the bench arm without binders; `bareOf` takes macro's warp.
+- **The cost after round 1** (`?bench=earth`, paired, GPU frame p50; the machine shared, load 16 to 19): close +0.2,
+  default +0.1, wide 0.0 to +0.1 ms; the frame within 0.2 ms. Inside the +0.3 ms acceptance. (Before, with the
+  growth and class read on every pixel: up to +1.0 ms; a mask from the warped class on soil-coloured pixels: +0.6 to
+  +1.0.)

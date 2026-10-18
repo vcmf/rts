@@ -5,8 +5,10 @@
 #   python3 tools/earth-texture.py [photo] [out] [size]
 #
 # The central square, in grey, the photo's broad light taken off (a blur of it divided out, so the tile's repeat shows
-# no bright corner), resized to size² (1024), then made seamless: the tile mixed with itself shifted by half, the
-# shifted copy where the tile's edges would meet. Prints the tile's mean (the shader keeps the earth's colour about it).
+# no bright corner), resized to size² (1024), then made seamless one axis at a time: the tile mixed with itself shifted
+# by half along x, the shifted copy at the left and right edges (whose own seam, in its middle, falls where the tile
+# itself is kept), then the same along y on that result (a mask that is the product of both edges' ramps would keep the
+# shifted copy's seam at the middle of each edge). Prints the tile's mean (the shader keeps the earth's colour about it).
 import os
 import sys
 from PIL import Image, ImageChops, ImageFilter, ImageStat
@@ -28,13 +30,17 @@ for y in range(N):
   for x in range(N):
     pf[x, y] = max(0, min(255, round(pi[x, y] * mean / max(pb[x, y], 1))))
 
-# seamless: the half-shifted copy where the tile's edges meet, the tile itself in its middle, a smooth mask between
-shifted = ImageChops.offset(flat, N // 2, N // 2)
-mask = Image.new('L', (N, N)); pm = mask.load(); B = N // 6   # the blend's width at each edge
+# seamless, one axis at a time: the half-shifted copy at the edges, the tile in the middle, a smooth ramp between
+B = N // 6   # the blend's width at each edge
 def ramp(d): t = min(1.0, d / B); return t * t * (3 - 2 * t)
-for y in range(N):
-  for x in range(N):
-    pm[x, y] = round(255 * ramp(min(x, N - 1 - x)) * ramp(min(y, N - 1 - y)))
-tile = Image.composite(flat, shifted, mask)
+def seamless(im, axis):
+  shifted = ImageChops.offset(im, N // 2 if axis == 0 else 0, N // 2 if axis == 1 else 0)
+  mask = Image.new('L', (N, N)); pm = mask.load()
+  for y in range(N):
+    for x in range(N):
+      d = x if axis == 0 else y
+      pm[x, y] = round(255 * ramp(min(d, N - 1 - d)))
+  return Image.composite(im, shifted, mask)
+tile = seamless(seamless(flat, 0), 1)
 tile.save(out, optimize=True)
 print(f'{out}: {N}x{N}, mean {ImageStat.Stat(tile).mean[0] / 255:.3f}')
