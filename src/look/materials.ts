@@ -26,7 +26,8 @@ const MARK = '#include<painter>'
 // #include<macro>); a replacer function keeps `$` in the GLSL
 export const withPainter = (src: string): string => {
   if (!src.includes(MARK)) throw new Error(`a painted shader without ${MARK}`)
-  return src.replace(MARK, () => PAINTER).replace('#include<waterdata>', () => WATERDATA).replace('#include<shore>', () => SHORE).replace('#include<macro>', () => MEADOW + MACRO)   // the meadow's clump field before the macro colour, whose groundAt reads it (MEADOW)
+  // the mood's warm autumn as a constant (AUTUMN_WARM: the mood is fixed for the page), so the compiler folds it away
+  return src.replace(MARK, () => `#define AUTUMN_WARM ${MOOD.autumn.toFixed(3)}\n#define AUTUMN_ON ${MOOD.autumn > 0 ? 1 : 0}\n` + PAINTER).replace('#include<waterdata>', () => WATERDATA).replace('#include<shore>', () => SHORE).replace('#include<macro>', () => MEADOW + MACRO)   // the meadow's clump field before the macro colour, whose groundAt reads it (MEADOW)
 }
 
 // the ground's macro colour (src/look/shaders/macro.glsl): the cover grid and the bakes, on every painted material
