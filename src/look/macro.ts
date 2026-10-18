@@ -122,7 +122,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   // a third); a failed load is reported, not a bake's error (no bake reads it), and bare ground then has no marks
   const dirt = new Texture(DIRT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => mats.bindAll(m => m.setFloat('uDirtOn', 1)), (msg?: string) => console.error(`the dirt texture (${DIRT_URL}) did not load: ${msg ?? 'unknown error'}`))
   dirt.wrapU = dirt.wrapV = Texture.WRAP_ADDRESSMODE; dirt.anisotropicFilteringLevel = 4
-  // the bare earth's surface (earthOn in macro.glsl, docs/plans/active/bare-earth.md): the owner's cracked earth, as the dirt
+  // the bare earth's surface (earthOn in macro.glsl, docs/plans/done/bare-earth.md): the owner's cracked earth, as the dirt
   let earthDone = () => {}; const earthLoaded = new Promise<void>(r => { earthDone = r })
   const earth = new Texture(EARTH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => { mats.bindAll(m => m.setFloat('uEarthOn', 1)); earthDone() }, (msg?: string) => { console.error(`the earth texture (${EARTH_URL}) did not load: ${msg ?? 'unknown error'}`); earthDone() })
   earth.wrapU = earth.wrapV = Texture.WRAP_ADDRESSMODE; earth.anisotropicFilteringLevel = 4

@@ -531,7 +531,7 @@ if (params.has('bench')) {
   if (!(hold > 0)) throw new Error(`?hold must be a positive number of seconds, not ${params.get('hold')}`)
   // the arms: the detail layer, and the L0 grain it replaces (the cost gate: at most +1 ms GPU for the terrain)
   // ?bench=macro: the macro colour's arms whose shaders differ instead (with the detail layer)
-  // ?bench=earth: the bare earth's surface up close off and on (earthOn, docs/plans/active/bare-earth.md)
+  // ?bench=earth: the bare earth's surface up close off and on (earthOn, docs/plans/done/bare-earth.md)
   // ?bench=dof: the gameplay depth of field off and on (decision 0024)
   // (each material set as it stands, no binder left behind, once the texture's load has set 1: else a late load would
   // turn the off arm on)

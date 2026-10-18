@@ -26,7 +26,7 @@ vec4 coverTex(vec2 uv){return textureGrad(uCover,uv,vec2(0.0),vec2(0.0));}
 vec4 coverTex(vec2 uv){return texture2D(uCover,uv);}
 #endif
 vec4 coverAt(vec2 xz){vec4 t=coverTex(xz/FAR_W+0.5);return vec4(floor(t.r*255.0+0.5),floor(t.g*255.0+0.5),t.b*3.14159265,t.a*25.5);}
-// THE SOIL (docs/plans/active/bare-earth.md): the colour of bare ground, where nothing grows, by its material (the map
+// THE SOIL (docs/plans/done/bare-earth.md): the colour of bare ground, where nothing grows, by its material (the map
 // engine's ground material: loam, clay, sand, gravel, rock, peat, earth). Today's cover has no material: every class
 // is loam (earth, the map engine's yard, paints as loam). v in 0..1 its variation. Its surface up close: earthOn
 #define SOIL_LOAM 0.0
@@ -172,7 +172,7 @@ float bareOf(float k,vec2 xz,vec2 w){if(k>9.5)return 1.0;if(k>2.5)return 0.0;
   if(gr>=1.0)return 0.0;
   return 1.0-smoothstep(0.0,1.0,gr+(texM(uGrain,xz/9.0+0.21,9.0).g-0.5)*0.6*(1.0-gr));}
 #endif
-// THE EARTH'S SURFACE up close (docs/plans/active/bare-earth.md): the owner's cracked earth (data/ground-earth-v1.png,
+// THE EARTH'S SURFACE up close (docs/plans/done/bare-earth.md): the owner's cracked earth (data/ground-earth-v1.png,
 // its value) multiplies bare ground's value, about its mean (0.632) so the soil's colour holds on average, read twice
 // at unrelated scales and offsets (no repeat in rows), fading out as the pixel spans it (the mipmap keeps the mean).
 // Bare ground: the bare class, and a grassy class where nothing grows (bareOf), the earth texture being loam (soilColour)
@@ -292,7 +292,7 @@ vec4 macro(vec2 xz,float q,float px){
   e=bareOf(cv.x,xz,w);if(e>0.0)c=mix(c,soilColour(SOIL_LOAM,smoothstep(0.3,0.7,g.v)),e);
   #endif
   // (bare soil on a grassy class keeps that class's snow: whole. Trodden as the bare class, a formation zone's breadth
-  // of snow showed the snow's own pattern repeating, docs/plans/active/bare-earth.md)
+  // of snow showed the snow's own pattern repeating, docs/plans/done/bare-earth.md)
   return vec4(c,LIE0-(b*stripeSnow(cv.x)+trodden(cv.x))/1.2);}
 #ifdef MACRO_STROKES
 // ARM 4, BAKED STROKES (the bake's shader alone; L5b, an experiment: docs/proposals/prepainted-terrain.md): the bake's

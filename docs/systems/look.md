@@ -160,7 +160,7 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   value about its mean (0.458), two reads at 15 and 24 m a repeat so its marks do not repeat in rows; mipmapped, so
   they average out at far zoom (the marks fade out as a pixel spans 0.35 to 0.9 m). Five cheap reads (the cell and its
   corners 1.5 m off) first: grass far from a line returns there. On the terrain and the shore band alike.
-- **Bare earth where nothing grows** (`docs/plans/active/bare-earth.md`): a grassy class (meadow, pasture, a copse's
+- **Bare earth where nothing grows** (`docs/plans/done/bare-earth.md`): a grassy class (meadow, pasture, a copse's
   floor) where the meadow map's growth is 0 (a formation zone, a bank, a field's margin: no blades there) paints the
   soil, not the grass's green (`bareOf` in `macro.glsl`, in `macro()`: the bake and the shader arm), and the class
   `bare` is the soil too. Generic, as the map engine's ground (Track M: a kind's `material` and its `growth`, the yard

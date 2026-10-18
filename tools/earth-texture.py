@@ -1,4 +1,4 @@
-# The bare earth's texture (docs/plans/active/bare-earth.md): the owner's photo of dry, cracked earth made into a
+# The bare earth's texture (docs/plans/done/bare-earth.md): the owner's photo of dry, cracked earth made into a
 # seamless greyscale tile, data/ground-earth-v1.png. Its value only: the pack's colours are never used, our palette
 # paints the earth (macro.glsl). The photo is local (ground-texture.jpg in the owner's refs, texture folder, not committed).
 #
