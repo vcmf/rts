@@ -15,6 +15,7 @@ export interface Mood {
   back: Color3                // the sun through the leaves' tint, × the sun (the foliage's backlight)
   mistShade: Color3           // the valley mist's air where it is in shadow
   mistLit: Color3             // the valley mist's air where it is sunlit
+  mist: number                // the valley mist's amount (1: LC3's; mist() in painter.glsl)
   hazeCool: Color3            // the distance's haze away from the sun (atmos()), and the clear colour
   hazeWarm: Color3            // the distance's haze toward the sun (atmos())
   waterSky: Color3            // the painted sky the water shows at a grazing view (water.frag; no sky is drawn)
@@ -46,6 +47,7 @@ export interface Mood {
     topHaze: Color3           // the haze toward the frame's top (depth by painting)
     topAmt: number            // how much of it at the top
     vignette: Color3          // the frame's corners × this
+    contrast: number          // the values spread about a mid grey, colour kept (0: none; gradeOf)
   }
 }
 
@@ -57,7 +59,7 @@ export const MOODS = {
     sun: c(1.00, 0.84, 0.60), winterSun: c(0.98, 0.95, 0.88),
     shadow: c(0.45, 0.57, 0.76), shadowTurn: c(0.34, 0.45, 0.80), shadowLift: c(0.02, 0.04, 0.07),
     midCool: c(0.86, 0.92, 0.98), litLift: c(0.03, 0.025, 0.0), rim: c(1.0, 0.86, 0.6), back: c(1.0, 0.78, 0.45),
-    mistShade: c(0.42, 0.53, 0.68), mistLit: c(1.0, 0.86, 0.63),
+    mistShade: c(0.42, 0.53, 0.68), mistLit: c(1.0, 0.86, 0.63), mist: 1,
     hazeCool: c(0.60, 0.69, 0.78), hazeWarm: c(0.95, 0.80, 0.58),
     waterSky: c(0.22, 0.32, 0.38), glint: c(1.0, 0.86, 0.58), farRiver: c(0.15, 0.26, 0.29),
     earth: { tint: c(1, 1, 1), chroma: 1, amt: 0 },
@@ -66,7 +68,7 @@ export const MOODS = {
     grade: {
       greenTint: c(1.03, 1.0, 0.88), greenChroma: 0.5, greenAmt: 0.85, sat: 0.9,
       splitLo: c(0.92, 0.99, 1.06), splitHi: c(1.08, 1.0, 0.85), lift: c(0.03, 0.02, 0.0),
-      topHaze: c(0.72, 0.76, 0.82), topAmt: 0.20, vignette: c(0.80, 0.87, 0.98),
+      topHaze: c(0.72, 0.76, 0.82), topAmt: 0.20, vignette: c(0.80, 0.87, 0.98), contrast: 0,
     },
   },
   // temperate, the default (LC3, docs/plans/done/lc3-temperate.md; the owner's pick of LC2's candidates: golden "a
@@ -75,7 +77,7 @@ export const MOODS = {
     sun: c(1.00, 0.93, 0.82), winterSun: c(0.96, 0.96, 0.94),
     shadow: c(0.48, 0.57, 0.68), shadowTurn: c(0.38, 0.47, 0.72), shadowLift: c(0.02, 0.03, 0.04),
     midCool: c(0.92, 0.93, 0.94), litLift: c(0.02, 0.018, 0.005), rim: c(1.0, 0.90, 0.72), back: c(1.0, 0.85, 0.60),
-    mistShade: c(0.48, 0.57, 0.68), mistLit: c(0.92, 0.88, 0.78),
+    mistShade: c(0.48, 0.57, 0.68), mistLit: c(0.92, 0.88, 0.78), mist: 1,
     hazeCool: c(0.60, 0.68, 0.78), hazeWarm: c(0.86, 0.80, 0.68),
     waterSky: c(0.22, 0.32, 0.38), glint: c(1.0, 0.92, 0.75), farRiver: c(0.15, 0.26, 0.29),
     earth: { tint: c(1.02, 1.0, 0.94), chroma: 0.6, amt: 1 },
@@ -84,7 +86,26 @@ export const MOODS = {
     grade: {
       greenTint: c(1.0, 1.0, 0.92), greenChroma: 0.6, greenAmt: 0.85, sat: 0.86,
       splitLo: c(0.94, 0.99, 1.05), splitHi: c(1.04, 1.0, 0.93), lift: c(0.02, 0.02, 0.015),
-      topHaze: c(0.70, 0.76, 0.83), topAmt: 0.25, vignette: c(0.80, 0.86, 0.96),
+      topHaze: c(0.70, 0.76, 0.83), topAmt: 0.25, vignette: c(0.80, 0.86, 0.96), contrast: 0,
+    },
+  },
+  // epic (docs/plans/active/epic-palette.md; the owner, 2026-10-18: "an 'epic version' of tiny glade", more contrasted):
+  // temperate's air cleared (the mist at a third, little top haze), a warmer sun against cooler, deeper shade, the
+  // world's own colour more kept, the values spread, a darker frame edge
+  epic: {
+    sun: c(1.00, 0.91, 0.74), winterSun: c(0.97, 0.95, 0.90),
+    shadow: c(0.38, 0.47, 0.64), shadowTurn: c(0.30, 0.40, 0.78), shadowLift: c(0.01, 0.02, 0.04),
+    midCool: c(0.88, 0.92, 0.98), litLift: c(0.03, 0.022, 0.0), rim: c(1.0, 0.86, 0.62), back: c(1.0, 0.80, 0.50),
+    mistShade: c(0.44, 0.54, 0.68), mistLit: c(0.96, 0.86, 0.70), mist: 0.35,
+    hazeCool: c(0.56, 0.65, 0.76), hazeWarm: c(0.92, 0.78, 0.60),
+    waterSky: c(0.22, 0.32, 0.38), glint: c(1.0, 0.88, 0.62), farRiver: c(0.15, 0.26, 0.29),
+    earth: { tint: c(1.0, 1.0, 0.96), chroma: 0.74, amt: 1 },
+    bounce: 0.7, groundBounce: 0.5,
+    units: { tint: 0.3, mist: 0.05, grade: 0.1, bounce: 0.35 },
+    grade: {
+      greenTint: c(0.97, 1.0, 0.94), greenChroma: 0.85, greenAmt: 0.6, sat: 0.98,
+      splitLo: c(0.90, 0.97, 1.06), splitHi: c(1.05, 1.0, 0.92), lift: c(0.0, 0.0, 0.005),
+      topHaze: c(0.66, 0.73, 0.82), topAmt: 0.10, vignette: c(0.68, 0.74, 0.88), contrast: 0.22,
     },
   },
 } satisfies Record<string, Mood>

@@ -4,7 +4,7 @@ uniform vec3 uSunDir,uSunCol,uShadowCol,uHazeCool,uHazeWarm,uCamPos,uFocus;
 // the mood's other colours (src/look/mood.ts)
 uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistShade,uMistLit,uWaterSky,uGlint,uFarRiver;   // uShadowTurn: divided by its luma
 // the grade (gradeOf, at the end of atmos), and how much of the light units take (KEEP_HUE: docs/plans/done/lc1b-coats.md)
-uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade;
+uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade,uMoodMist,uContrast;
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
 uniform float uUnitTint,uUnitMist,uUnitGrade,uUnitBounce;
 uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt,uBounce,uGroundBounce;   // the earth (the mood): the world toward earth tones
@@ -85,7 +85,7 @@ vec4 LM(vec3 wp){vec2 uv=lmUV(wp);
 // the air column's sun visibility, read from the light map at 3 heights along the view ray.
 // Known issue #62: the lit air tints sunlit snow orange.
 vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
-  float m=lm.b*uMist*exp(-hAbove*0.12);if(m<0.01)return c;
+  float m=lm.b*uMist*uMoodMist*exp(-hAbove*0.12);if(m<0.01)return c;
   float air=mix(1.0,lm.r,uShadowsOn);
   if(uShafts>0.5){vec3 v=normalize(uCamPos-wp);float s=0.0;
     for(int i=0;i<3;i++){float h=(float(i)+0.5)/3.0*7.0;vec3 q=wp+v*(h/max(v.y,0.25));
@@ -326,6 +326,7 @@ vec3 gradeOf(vec3 c){
   g=mix(vec3(dot(g,L)),g,uGradeSat);
   g*=mix(uSplitLo,uSplitHi,smoothstep(0.08,0.75,l));
   g+=uLift*(1.0-l);
+  g*=clamp(0.42+(l-0.42)*(1.0+uContrast),0.0,1.5)/max(l,1e-3);   // the values spread about a mid grey, the colour kept (the mood's contrast)
   g=mix(g,uTopHaze*(0.85+l*0.35),smoothstep(0.60,1.0,gl_FragCoord.y/uViewH)*uTopAmt);   // 0 at the frame's bottom
   return mix(c,g,amt);}
 // Top-down atmosphere: colour cools (and warms toward the sun side) away from the focus; then the grade.
