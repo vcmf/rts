@@ -7,7 +7,7 @@ import { Engine } from '@babylonjs/core/Engines/engine.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
-import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
+import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { Scene } from '@babylonjs/core/scene.js'
@@ -15,11 +15,13 @@ import '../../prototypes/nature-pack.data.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
 import { q, runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
-import { Materials, S } from './materials.ts'
+import { Materials, S, SUN } from './materials.ts'
+import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
+import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { gradeColour, MOOD, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
-import { buildMeadow } from './meadow.ts'
-import { DEBUG, DOF, MSAA, Post, buildCamera, typingIn } from './post.ts'
+import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
+import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
@@ -82,7 +84,24 @@ const meadowParam = params.get('meadow')
 if (meadowParam !== null && meadowParam !== 'off') throw new Error(`?meadow must be off, not ${meadowParam}`)
 // the meadow reads a half-float texture in its vertex shader: WebGL2 only (on WebGL1 the old scatter stays)
 const meadowOn = meadowParam !== 'off' && engine.version >= 2
-const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [...softDefines(soft), ...(meadowOn ? ['#define MEADOW'] : [])])
+// ?grass=flow: the meadow combed (docs/plans/done/grass-flow.md): its pattern and clumps along a flow field, light and
+// dark streaks by the lean against the sun (its direction on the ground, FLOW_SUN), on the ground's bake and the
+// clumps' materials alike
+const grassParam = params.get('grass')
+if (grassParam !== null && grassParam !== 'flow') throw new Error(`?grass must be flow, not ${grassParam}`)
+if (grassParam && !meadowOn) throw new Error('?grass=flow needs the meadow (WebGL2, no ?meadow=off)')
+const sunXZ = new Vector2(SUN.x, SUN.z).normalize()
+// ?grassoff=strokes,dense,big,hue (with flow): one part of the arm off at a time, for the cost's ablation
+const GRASS_PARTS = ['strokes', 'dense', 'big', 'hue'], grassOff = params.get('grassoff')?.split(',') ?? []
+if (grassOff.some(k => !GRASS_PARTS.includes(k)) || (grassOff.length && grassParam !== 'flow')) throw new Error(`?grassoff takes ${GRASS_PARTS.join(', ')}, with ?grass=flow`)
+// the camera's distance from the focus over which the combed clumps go from larger and denser to the default's (the
+// closest zoom is 45 m, the default view 125)
+const CLOSE_ZOOM: [number, number] = [70, 110]
+// the strokes' largest footprint, m a pixel (strokeK, macro.glsl: whole under about half of it, gone past it); the near
+// bake reads it too (below)
+const STROKE_FOOT = 0.15
+const grassDefines = grassParam === 'flow' ? ['#define GRASS_FLOW', `#define FLOW_SUN vec2(${sunXZ.x.toFixed(4)},${sunXZ.y.toFixed(4)})`, `#define COMB_PERIOD ${COMB_PERIOD.toFixed(1)}`, `#define STROKE_RINGS vec2(${RINGS[0].band[2].toFixed(1)},${RINGS[0].band[3].toFixed(1)})`, `#define CLOSE_ZOOM vec2(${CLOSE_ZOOM[0].toFixed(1)},${CLOSE_ZOOM[1].toFixed(1)})`, `#define STROKE_FOOT ${STROKE_FOOT.toFixed(3)}`, ...flowDefines(), ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`)] : []
+const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [...softDefines(soft), ...(meadowOn ? ['#define MEADOW', ...grassDefines] : [])])
 const keptGrains = new Set([mats.grain])   // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
 const waterT0 = performance.now(), waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData'), waterTexMs = performance.now() - waterT0
@@ -159,7 +178,21 @@ if (params.has('far')) {
 }
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
-const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex)
+// the flow's textures (?grass=flow, src/look/flow.ts), on every painted material and the bake
+const flowTex = grassParam === 'flow' ? buildFlow(scene) : null
+if (flowTex) mats.bindAll(m => { m.setTexture('uFlow', flowTex.flow); m.setTexture('uComb', flowTex.comb) })
+// the meadow map (src/look/meadow.ts), before the ground's bake: the combed meadow bakes the default pattern where no grass
+// grows and the combed one where it does (the combed clumps reach farther: their roots keep farther from the zones and the
+// banks; the crops keep the default's rule)
+const grassReach = grassParam === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
+const grassAllowed = grassReach === CLUMP_REACH ? nature.growthAllowed : (x: number, z: number) => nature.growthAllowed(x, z, grassReach)   // (the same rule as the crops' on the default: one pass)
+const meadowMap = meadowOn ? buildMeadowMap(scene, mats, nature.growth, grassAllowed, nature.crop, nature.growthAllowed) : null
+// the combed meadow's near bake runs only where its strokes show: out to the strokes' ring, at the zooms where a pixel
+// can be under the strokes' largest footprint (STROKE_FOOT; at the focus, the ground the screen's centre shows, under
+// twice it, for the frame's foot, nearer than the focus), in the render's own pixels as strokeK measures them (pixA is
+// at the SPEC's lines). The marched depth, not the eased one (no lag as the camera zooms in), the last frame's (none
+// yet: it bakes)
+const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, { reach: RINGS[0].band[3], shows: () => !focusDist || pixA * D.spec.detail.lines / engine.getRenderHeight() * focusDist < 2 * STROKE_FOOT })
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)
@@ -194,8 +227,10 @@ if (dofParam !== null && dofParam !== '0' && dofParam !== '1') throw new Error(`
 // which write no distance to alpha)
 if (dofParam !== null) S.dof = +dofParam
 else if (params.has('bench') || params.has('water') || params.get('river') === 'debug') S.dof = 0
+// ?dofnear=0: the near blur off (its cost's A/B: docs/plans/done/dof-v2.md)
+if (params.get('dofnear') === '0') DOF_NEAR.px = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
-const meadow = meadowOn ? buildMeadow(scene, mats, camera, nature.growth, nature.growthAllowed, nature.crop, !flag('nowide')) : null
+const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach) : null
 meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat])   // the dark ground under its clumps (shore.glsl)
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false
@@ -317,12 +352,16 @@ const SUNCOL = MOOD.sun.clone()
 scene.onBeforeRenderObservable.add(() => { const w = Math.max(0, Math.min(1, S.season - 2)); Color3.LerpToRef(MOOD.sun, MOOD.winterSun, w, SUNCOL); const k = Color3.Lerp(MOOD.hazeCool, CLEAR_GRADED, S.grade); scene.clearColor.set(k.r, k.g, k.b, 1) })
 // the detail layer's pixel angle (src/look/shaders/painter.glsl): the angle one pixel of a SPEC.detail.lines-tall
 // frame spans, from the camera's actual vertical field of view (narrower than the SPEC's on frames wider than 16:9)
-let pixA = 0
+let pixA = 0, focusDist = 0
+const camFwd = new Vector3()
 scene.onBeforeRenderObservable.add(() => {
   const tv = camera.fovMode === Camera.FOVMODE_VERTICAL_FIXED ? Math.tan(camera.fov / 2) : Math.tan(camera.fov / 2) / engine.getAspectRatio(camera)
   pixA = 2 * tv / D.spec.detail.lines
   if (!FROZEN) S.t += Math.min(engine.getDeltaTime() / 1000, 0.05)
+  // the depth of field's focus and the view axis, which every material encodes its lens term against (painter.glsl depthA)
+  const focusZ = post.updateFocus(engine.getDeltaTime() / 1000, S.dof > 0 || grassParam === 'flow'); focusDist = post.focusRaw; camFwd.copyFrom(camera.target).subtractInPlace(camera.position).normalize()
   for (const m of mats.all) {
+    m.setFloat('uFocusZ', focusZ); m.setVector3('uCamFwd', camFwd)
     m.setVector3('uCamPos', camera.position); m.setVector3('uFocus', camera.target); m.setFloat('uTime', S.t)
     m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uGrade', S.grade); m.setFloat('uViewH', engine.getRenderHeight()); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
     m.setFloat('uPixA', pixA)
@@ -418,7 +457,10 @@ const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   lab, mats, passes, post, setDetail,
   dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
-  sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, meadow: meadow ? { growingCells: meadow.growingCells, growthAt: meadow.growthAt, groundAt: meadow.groundAt, cropAt: meadow.cropAt, croppingCells: meadow.croppingCells } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
+  dofPaint: DOF_PAINT,   // the blur's painted look (the same)
+  dofNear: DOF_NEAR,   // the near blur's (docs/plans/done/dof-v2.md), the same
+  sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, flowBuildMs: flowTex?.ms ?? null,   // (the combed meadow's flow textures, on load)
+   meadow: meadow ? { reach: meadow.reach, growingCells: meadow.growingCells, growthAt: meadow.growthAt, groundAt: meadow.groundAt, cropAt: meadow.cropAt, croppingCells: meadow.croppingCells } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
   hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),
   // the bounce map (LC5): its target, and the time of one bake: the median of n frames with it and of n without,
   // each waited on by reading the map back (ms; gl.finish does not wait under ANGLE's Metal)
@@ -504,7 +546,14 @@ if (params.has('bench')) {
   const show = nature.showCards
   const cardMats = [...new Set((nature.cardCasters?.cards ?? []).map(m => m.material as ShaderMaterial))]
   const volume = (on: boolean) => { for (const m of cardMats) { m.setDefine('#define VOLUME', on); m.setDefine('#define SOFT_RAMP', on) } }
-  const arms = params.get('bench') === 'meadow' && meadow ? [{ name: 'meadow', apply: () => meadow.setOn(true) }, { name: 'none', apply: () => meadow.setOn(false) }] : params.get('bench') === 'volume' ? [{ name: 'volume', apply: () => volume(true) }, { name: 'l7a', apply: () => volume(false) }] : params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? SHADER_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); return macro.setArm(a) } })) : params.get('bench') === 'dof' ? [{ name: 'nodof', apply: dofArm(0) }, { name: 'dof', apply: dofArm(1) }] : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
+  // ?grass=flow&bench=grass: the combed meadow on and off in one page (GRASS_FLOW on every painted material and the
+  // clumps), so its cost is a paired difference (docs/plans/done/dof-v2.md: two page loads differ by up to 0.9 ms)
+  // ?grass=flow&bench=grassparts: the same, one part off at a time (the ablation's switches, GRASS_NO_*; a part ?grassoff
+  // turns off stays off). The arms switch the materials only: the macro tile keeps its combed bake and the near bake runs
+  // in every arm, so 'none' measures the materials' share of the combed meadow, not all of it
+  const grassArm = (on: boolean, off: string[] = []) => () => { for (const m of mats.all) { m.setDefine('#define GRASS_FLOW', on); for (const k of ['STROKES', 'HUE', 'DENSE', 'BIG', 'LEAN']) m.setDefine(`#define GRASS_NO_${k}`, off.includes(k) || grassOff.includes(k.toLowerCase())) } }
+  const arms = params.get('bench') === 'grass' && grassParam === 'flow' ? [{ name: 'flow', apply: grassArm(true) }, { name: 'none', apply: grassArm(false) }]
+    : params.get('bench') === 'grassparts' && grassParam === 'flow' ? [{ name: 'flow', apply: grassArm(true) }, { name: 'nostrokes', apply: grassArm(true, ['STROKES']) }, { name: 'nolean', apply: grassArm(true, ['LEAN']) }, { name: 'noclose', apply: grassArm(true, ['DENSE', 'BIG']) }, { name: 'nohue', apply: grassArm(true, ['HUE']) }, { name: 'alloff', apply: grassArm(true, ['STROKES', 'HUE', 'DENSE', 'BIG', 'LEAN']) }, { name: 'none', apply: grassArm(false) }] : params.get('bench') === 'meadow' && meadow ? [{ name: 'meadow', apply: () => meadow.setOn(true) }, { name: 'none', apply: () => meadow.setOn(false) }] : params.get('bench') === 'volume' ? [{ name: 'volume', apply: () => volume(true) }, { name: 'l7a', apply: () => volume(false) }] : params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? SHADER_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); return macro.setArm(a) } })) : params.get('bench') === 'dof' ? [{ name: 'nodof', apply: dofArm(0) }, { name: 'dof', apply: dofArm(1) }] : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
   // ?benchat=<x>,<z>: the cameras orbit that point instead of the start (the forest bench: docs/plans/done/forest-bench.md)
   // inside the play area: the camera's focus is clamped to it every frame (src/look/post.ts)
   const at = params.get('benchat')?.split(',').map(p => p.trim() === '' ? NaN : Number(p))

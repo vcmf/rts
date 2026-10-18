@@ -18,7 +18,7 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D } from './spec.ts'
-import { GREEN_HEIGHT, HEIGHT, HEIGHT_MAX, MEADOW_SINK, STUBBLE_HEIGHT, WHEAT_HEIGHT_MAX } from './meadow-spec.ts'
+import { CLUMP_REACH, grassDefinesForClumps, GREEN_HEIGHT, HEIGHT, HEIGHT_MAX, MEADOW_SINK, STUBBLE_HEIGHT, WHEAT_HEIGHT_MAX } from './meadow-spec.ts'
 export { HEIGHT, HEIGHT_MAX }
 import GRASS from '../../data/meadow-grass.json?raw'
 import MEADOW_VS from './shaders/meadow.vert?raw'
@@ -44,11 +44,48 @@ export const RINGS: Ring[] = [
   { cell: 2.0, n: 104, spread: 4.2, band: [38, 50, 80, 100], clump: 'Grass_Small' },
 ]
 
+// a ring's chunk: its slots' range on the ring's square, and its slots (the hole's apart: drawn only zoomed out)
+interface Chunk { i0: number; i1: number; j0: number; j1: number; slots: Float32Array; hole: Float32Array }
+const CHUNKS = 8
+// the chunks of a ring to draw (index × 2, + 1 for its hole slots): their square on the ground (the slots' cells, the
+// roots' jitter and a clump's reach) against the band (b: in from x to y, out from z to w) and the view (vp, the
+// view-projection's column-major array: this frame's), the ground from 20 m under to 20 m over the focus height y, as
+// the vertex shader's own cull tests each clump, with its 1.15 margin; into keep (reused: nothing allocated a frame)
+function cullRing(r: Ring, ch: Chunk[], o: Vector2, c: Vector2, y: number, b: Vector4, vp: ArrayLike<number>, holes: boolean, reach: number, keep: number[]): void {
+  keep.length = 0
+  const pad = r.cell * 2.2 + reach
+  for (let idx = 0; idx < ch.length; idx++) {
+    const k = ch[idx], x0 = o.x + k.i0 * r.cell - pad, x1 = o.x + k.i1 * r.cell + pad, z0 = o.y + k.j0 * r.cell - pad, z1 = o.y + k.j1 * r.cell + pad
+    // the nearest and farthest distance from the focus to the square, against the band
+    const near = Math.hypot(Math.max(x0 - c.x, 0, c.x - x1), Math.max(z0 - c.y, 0, c.y - z1))
+    const far = Math.hypot(Math.max(Math.abs(x0 - c.x), Math.abs(x1 - c.x)), Math.max(Math.abs(z0 - c.y), Math.abs(z1 - c.y)))
+    if (near > b.w || (b.y > 0 && far < b.x)) continue
+    // all eight corners past one edge of the frame: out of view
+    let ox = 0, oX = 0, oy = 0, oY = 0, ow = 0
+    for (let q = 0; q < 8; q++) {
+      const px = q & 1 ? x1 : x0, pz = q & 2 ? z1 : z0, py = q & 4 ? y + 20 : y - 20
+      const cx = vp[0] * px + vp[4] * py + vp[8] * pz + vp[12], cy = vp[1] * px + vp[5] * py + vp[9] * pz + vp[13], cw = vp[3] * px + vp[7] * py + vp[11] * pz + vp[15]
+      if (cx > cw * 1.15) ox++; if (cx < -cw * 1.15) oX++; if (cy > cw * 1.15) oy++; if (cy < -cw * 1.15) oY++; if (cw < 0) ow++
+    }
+    if (ox === 8 || oX === 8 || oy === 8 || oY === 8 || ow === 8) continue
+    if (k.slots.length) keep.push(idx * 2)
+    if (holes && k.hole.length) keep.push(idx * 2 + 1)
+  }
+}
+// two lists of chunks the same
+const sameList = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i])
+
+// the meadow map (buildMeadowMap): R the ground's height, G the grass's growth, B its height factor, A the crops' growth
+export interface MeadowMap {
+  map: RawTexture; growingCells: number; croppingCells: number; ms: number
+  growthAt(x: number, z: number): number; cropAt(x: number, z: number): number; groundAt(x: number, z: number): number
+}
 export interface Meadow {
   meshes: Mesh[]; setOn(on: boolean): void; bakeMs: number
   // the ground's dark under-layer (shore.glsl, MEADOW_UNDER) on these materials: the meadow map, and each frame its
   // reach and strength (off while the meadow is off or hidden: underOn)
   under(ms: ShaderMaterial[]): void; underOn(on: boolean): void
+  reach: number                                       // how far a grass clump reaches from its root, m (the checks: tools/river-check.js)
   growingCells: number                                // texels of the meadow map where grass grows
   growthAt(x: number, z: number): number              // the growth at a point as the GPU reads it (the checks: tools/river-check.js)
   groundAt(x: number, z: number): number              // the ground's height the grass stands on, as the GPU reads it (tools/look-check.js)
@@ -64,7 +101,9 @@ const bilerp = (at: (i: number, j: number) => number, u: number, v: number) => {
 
 // growth(x, z): how much grass grows at a point (0..1, by the cover and its edges) and its height factor; allowed(x,
 // z): the placement rule's hard edges at any point; crop(x, z): a sown field there, 0 or 1 (src/look/nature.ts)
-export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCamera, growth: (x: number, z: number) => [number, number], allowed: (x: number, z: number) => boolean, crop: (x: number, z: number) => number, wide = true): Meadow {
+// allowedCrop: the crops' rule (the grass's by default: a combed clump reaches farther than a crop's, which neither
+// widens nor leans). Built before the ground's bake: the combed meadow's bake reads it (src/look/macro.ts)
+export function buildMeadowMap(scene: Scene, mats: Materials, growth: (x: number, z: number) => [number, number], allowed: (x: number, z: number) => boolean, crop: (x: number, z: number) => number, allowedCrop = allowed): MeadowMap {
   const t0 = performance.now()
   // the meadow map: R the ground's height, G the growth, B the height factor (half floats, filtered by the GPU). The
   // cover's growth on its 2 m grid, each texel interpolating the cells round it (the edge follows no grid); then the
@@ -78,14 +117,14 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   const sampler = (a: Float32Array) => (i: number, j: number) => atCell(a, i, j)
   // the hard rules at the 2 m cells' centres too: a texel whose four cells agree takes their answer, and only a texel
   // near a rule's edge (its cells disagree) is tested itself (a few in a hundred: the bake's time)
-  const okCell = cellGrid((x, z) => allowed(x, z) ? 1 : 0)
+  const okGrass = cellGrid((x, z) => allowed(x, z) ? 1 : 0), okCrop = allowedCrop === allowed ? okGrass : cellGrid((x, z) => allowedCrop(x, z) ? 1 : 0)
   // the grass's growth and height factor from one growth() call a cell
   const gCell = new Float32Array(G * G), hCell = new Float32Array(G * G)
   for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) [gCell[j * G + i], hCell[j * G + i]] = growth((i + 0.5) * 2 - TILE_W / 2, (j + 0.5) * 2 - TILE_W / 2)
   const cCell = cellGrid((x, z) => crop(x, z))
   // one growth channel (the grass's by growth(), the crops' by crop()), each texel interpolating its cells, zeroed by
   // the cover's edge and the rules at the texel, then shrunk a texel against the GPU's blend
-  const channel = (cell: Float32Array, cover: (x: number, z: number) => number): { g: Float32Array; count: number } => {
+  const channel = (cell: Float32Array, cover: (x: number, z: number) => number, okCell: Float32Array, ruleAt: (x: number, z: number) => boolean): { g: Float32Array; count: number } => {
     const raw = new Float32Array(MAP_N * MAP_N), at = sampler(cell)
     for (let j = 0; j < MAP_N; j++) for (let i = 0; i < MAP_N; i++) {
       const x = i + 0.5 - TILE_W / 2, z = j + 0.5 - TILE_W / 2, k = j * MAP_N + i
@@ -94,7 +133,7 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
       if (d <= 0) continue
       const c00 = atCell(cell, i0, j0), c10 = atCell(cell, i0 + 1, j0), c01 = atCell(cell, i0, j0 + 1), c11 = atCell(cell, i0 + 1, j0 + 1)
       const ok = atCell(okCell, i0, j0) + atCell(okCell, i0 + 1, j0) + atCell(okCell, i0, j0 + 1) + atCell(okCell, i0 + 1, j0 + 1)
-      const coverOk = (c00 > 0 && c10 > 0 && c01 > 0 && c11 > 0) || cover(x, z) > 0, ruleOk = ok === 4 ? true : ok === 0 ? false : allowed(x, z)
+      const coverOk = (c00 > 0 && c10 > 0 && c01 > 0 && c11 > 0) || cover(x, z) > 0, ruleOk = ok === 4 ? true : ok === 0 ? false : ruleAt(x, z)
       raw[k] = coverOk && ruleOk ? d : 0
     }
     const g = new Float32Array(MAP_N * MAP_N); let count = 0
@@ -108,7 +147,7 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
     }
     return { g, count }
   }
-  const grass = channel(gCell, (x, z) => growth(x, z)[0]), crops = channel(cCell, crop), g = grass.g, growingCells = grass.count
+  const grass = channel(gCell, (x, z) => growth(x, z)[0], okGrass, allowed), crops = channel(cCell, crop, okCrop, allowedCrop), g = grass.g, growingCells = grass.count
   // the meadow map: R the ground's height, G the grass's growth, B the grass's height factor, A the crops' growth
   // (half floats, filtered by the GPU)
   const data = new Uint16Array(MAP_N * MAP_N * 4), hAtCell = sampler(hCell)
@@ -118,6 +157,9 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   }
   const map = new RawTexture(data, MAP_N, MAP_N, Constants.TEXTUREFORMAT_RGBA, scene, false, false, Texture.BILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_HALF_FLOAT)
   map.wrapU = map.wrapV = Texture.CLAMP_ADDRESSMODE
+  // every painted material reads it under ?grass=flow (groundAt, src/look/shaders/macro.glsl): the comb only where grass
+  // grows (the ground's under-layer, below, binds it to the terrain and the water too)
+  mats.bindAll(m => m.setTexture('uMeadow', map))
   // the growth as the GPU reads it (bilinear over the texel centres), for the checks: anything it gives above 0 is
   // grass, or a crop, the shader may grow
   const bilinear = (a: Float32Array) => (x: number, z: number) => {
@@ -128,6 +170,12 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   const hAt = (i: number, j: number) => heightAt(Math.min(MAP_N - 1, Math.max(0, i)) + 0.5 - TILE_W / 2, Math.min(MAP_N - 1, Math.max(0, j)) + 0.5 - TILE_W / 2)
   // the half floats' rounding included
   const groundAtMap = (x: number, z: number) => bilerp((a, b) => FromHalfFloat(ToHalfFloat(hAt(a, b))), x + TILE_W / 2 - 0.5, z + TILE_W / 2 - 0.5)
+  return { map, growingCells, growthAt, cropAt, croppingCells: crops.count, groundAt: groundAtMap, ms: performance.now() - t0 }
+}
+
+// mm: the meadow map (buildMeadowMap); reach: the grass clumps' (CLUMP_REACH, or the combed meadow's), for the chunks' cull
+export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCamera, mm: MeadowMap, wide = true, reach = CLUMP_REACH): Meadow {
+  const t0 = performance.now(), { map, growingCells, growthAt, cropAt, groundAt: groundAtMap } = mm
 
   // the clumps, indexed (the export is a triangle list): the large near, the small (fewer vertices) farther
   const src = JSON.parse(GRASS) as Record<string, { pos: number[]; nrm: number[]; v: number[] }>
@@ -145,11 +193,12 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
   }
   const clumps = { Grass_Large: indexed(src.Grass_Large), Grass_Small: indexed(src.Grass_Small) }
 
-  const meshes: Mesh[] = [], ringMats: ShaderMaterial[] = [], ringCounts: [number, number][] = []   // the slots: the ring's, and with the hole
+  const meshes: Mesh[] = [], ringMats: ShaderMaterial[] = []
+  const chunks: Chunk[][] = [], slotBufs: Float32Array[] = [], slotVBs: VertexBuffer[] = [], drawn: number[][] = RINGS.map(() => [-1]), keep: number[] = []
   RINGS.forEach((r, ri) => {
     const m = mats.make(`meadow${ri}`, MEADOW_VS.replace('#include<meadow>', () => MEADOW_GLSL), MEADOW_FS, {
       attributes: ['position', 'normal', 'aV', 'aSlot'], uniforms: ['uOrigin', 'uCentre', 'uCentreY', 'uCell', 'uSpread', 'uHeight', 'uBand'], samplers: ['uMeadow', 'uGB'],
-      defines: ['#define GROUND_BOUNCE', `#define MEADOW_N ${MAP_N.toFixed(1)}`, `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`, `#define MEADOW_SINK ${MEADOW_SINK.toFixed(3)}`, `#define WHEAT_HEIGHT_MAX ${WHEAT_HEIGHT_MAX.toFixed(2)}`, `#define CROP_FAN ${CROP_FAN.toFixed(2)}`, `#define CROP_WIDE ${CROP_WIDE.toFixed(2)}`, `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(3)}`, `#define GREEN_HEIGHT ${GREEN_HEIGHT.toFixed(3)}`],
+      defines: [...grassDefinesForClumps(), '#define GROUND_BOUNCE', `#define MEADOW_N ${MAP_N.toFixed(1)}`, `#define HEIGHT_MAX ${HEIGHT_MAX.toFixed(2)}`, `#define MEADOW_SINK ${MEADOW_SINK.toFixed(3)}`, `#define WHEAT_HEIGHT_MAX ${WHEAT_HEIGHT_MAX.toFixed(2)}`, `#define CROP_FAN ${CROP_FAN.toFixed(2)}`, `#define CROP_WIDE ${CROP_WIDE.toFixed(2)}`, `#define STUBBLE_HEIGHT ${STUBBLE_HEIGHT.toFixed(3)}`, `#define GREEN_HEIGHT ${GREEN_HEIGHT.toFixed(3)}`],
     })
     const c = clumps[r.clump]
     m.backFaceCulling = false; m.setTexture('uMeadow', map); m.setFloat('uCell', r.cell)
@@ -162,16 +211,27 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
     // of the square and the hole the inner ring fills are left out (but not the outer ring's: zoomed out it covers
     // the hole, WIDE)
     // (the outer ring's hole slots last: drawn only while the hole is being covered, holeFrom on)
-    const sl: number[] = [], hole: number[] = [], outer = ri === RINGS.length - 1
-    for (let j = 0; j < r.n; j++) for (let i = 0; i < r.n; i++) {
-      const d = Math.hypot((i + 0.5 - r.n / 2) * r.cell, (j + 0.5 - r.n / 2) * r.cell)
-      if (d > r.band[3] + 2.2 * r.cell) continue
-      if (r.band[1] <= 0 || d >= r.band[0] - 2.2 * r.cell) sl.push(i, j)
-      else if (outer && wide) hole.push(i, j)
+    // the slots by chunk (CHUNKS × CHUNKS of the ring's square), so the frame draws only the chunks in view and in the
+    // band (cullRing, below): a slot culled by the vertex shader still costs its every vertex (the clump's 58 to 108)
+    const outer = ri === RINGS.length - 1, ch: Chunk[] = []
+    for (let cj = 0; cj < CHUNKS; cj++) for (let ci = 0; ci < CHUNKS; ci++) {
+      const i0 = Math.floor(ci * r.n / CHUNKS), i1 = Math.floor((ci + 1) * r.n / CHUNKS), j0 = Math.floor(cj * r.n / CHUNKS), j1 = Math.floor((cj + 1) * r.n / CHUNKS)
+      const sl: number[] = [], hole: number[] = []
+      for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
+        const d = Math.hypot((i + 0.5 - r.n / 2) * r.cell, (j + 0.5 - r.n / 2) * r.cell)
+        if (d > r.band[3] + 2.2 * r.cell) continue
+        if (r.band[1] <= 0 || d >= r.band[0] - 2.2 * r.cell) sl.push(i, j)
+        else if (outer && wide) hole.push(i, j)
+      }
+      if (sl.length || hole.length) ch.push({ i0, i1, j0, j1, slots: new Float32Array(sl), hole: new Float32Array(hole) })
     }
-    ringCounts.push([sl.length / 2, (sl.length + hole.length) / 2]); sl.push(...hole)
-    mesh.setVerticesBuffer(new VertexBuffer(scene.getEngine(), new Float32Array(sl), 'aSlot', false, false, 2, true))
-    mesh.forcedInstanceCount = ringCounts[ri][0]; mesh.alwaysSelectAsActiveMesh = true; mesh.isPickable = false; mesh.material = m
+    chunks.push(ch)
+    // the buffer starts with every slot of the ring (the hole's after), the frame's cull packs it from the first frame
+    const buf = new Float32Array(ch.reduce((a, c) => a + c.slots.length + c.hole.length, 0)); slotBufs.push(buf)
+    let n0 = 0; for (const c of ch) { buf.set(c.slots, n0); n0 += c.slots.length }
+    const vb = new VertexBuffer(scene.getEngine(), buf, 'aSlot', true, false, 2, true); slotVBs.push(vb)
+    mesh.setVerticesBuffer(vb)
+    mesh.forcedInstanceCount = n0 / 2; mesh.alwaysSelectAsActiveMesh = true; mesh.isPickable = false; mesh.material = m
     meshes.push(mesh); ringMats.push(m)
   })
   // each frame each ring snaps to its cell around the camera's focus; a material keeps the vector it is given (not a
@@ -191,13 +251,31 @@ export function buildMeadow(scene: Scene, mats: Materials, camera: ArcRotateCame
       const outer = ri === RINGS.length - 1, b = bands[ri]
       b.set(r.band[0] * k, r.band[1] * k, outer ? r.band[2] : r.band[2] * k, outer ? r.band[3] : r.band[3] * k)
       meshes[ri].isVisible = b.w > 0   // (visibility: the page's own switches set enabled)
-      meshes[ri].forcedInstanceCount = ringCounts[ri][t > 0 ? 1 : 0]
     })
     const f = camera.target, y = heightAt(f.x, f.z); centre.set(f.x, f.z)
     RINGS.forEach((r, ri) => { origins[ri].set((Math.floor(f.x / r.cell) - r.n / 2) * r.cell, (Math.floor(f.z / r.cell) - r.n / 2) * r.cell); ringMats[ri].setFloat('uCentreY', y) })
+    focusY = y; holes = t > 0
+  })
+  // the chunks in view and in the band, their slots packed at the buffer's start (copied only when the set changes),
+  // once the camera's view-projection is this frame's (just before its render; the render targets' cameras skipped)
+  let focusY = 0, holes = false
+  scene.onBeforeCameraRenderObservable.add(cam => {
+    if (cam !== camera) return
+    const vp = scene.getTransformMatrix().m
+    RINGS.forEach((r, ri) => {
+      if (!meshes[ri].isVisible) return
+      cullRing(r, chunks[ri], origins[ri], centre, focusY, bands[ri], vp, holes, reach, keep)
+      // (none in view: not drawn, a forced count of 0 would draw one clump without instances, in another shader variant)
+      meshes[ri].isVisible = keep.length > 0
+      if (sameList(keep, drawn[ri])) return
+      drawn[ri] = keep.slice(); const buf = slotBufs[ri]; let n = 0
+      for (const k of keep) { const c = chunks[ri][k >> 1], part = k & 1 ? c.hole : c.slots; buf.set(part, n); n += part.length }
+      slotVBs[ri].updateDirectly(buf, 0); meshes[ri].forcedInstanceCount = n / 2   // (the whole buffer: Babylon keeps what it is given to rebuild a lost context)
+    })
   })
   // the under-layer's reach: the outer ring's band; its strength: the inner rings' (k, set with them below: zoomed out,
   // where only the outer ring's sparse clumps stand, the field reads as it did)
   under.set(outer[2], outer[3], 1)
-  return { meshes, setOn: on => { meadowOn = on; for (const m of meshes) m.setEnabled(on) }, under: ms => { for (const u of ms) { u.setTexture('uMeadow', map); u.setVector3('uUnder', under) } }, underOn: on => { underOn = on }, bakeMs: performance.now() - t0, growingCells, growthAt, groundAt: groundAtMap, cropAt, croppingCells: crops.count }
+  // (under() sets the reach on the given materials; the map itself, uMeadow, is bound on every painted material above)
+  return { meshes, setOn: on => { meadowOn = on; for (const m of meshes) m.setEnabled(on) }, under: ms => { for (const u of ms) u.setVector3('uUnder', under) }, underOn: on => { underOn = on }, bakeMs: mm.ms + performance.now() - t0, reach, growingCells, growthAt, groundAt: groundAtMap, cropAt, croppingCells: mm.croppingCells }
 }

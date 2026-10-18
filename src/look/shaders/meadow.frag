@@ -1,5 +1,8 @@
 #extension GL_OES_standard_derivatives : enable
 precision highp float;varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;uniform float uCell;
+#ifdef GRASS_FLOW
+varying vec3 vFlow;
+#endif
 #include<painter>
 #include<shore>
 
@@ -22,7 +25,11 @@ void main(){
     // Grass.png is that gradient), each clump a shade apart. The painted ground under the root: the macro bake (one
     // read), or, on the other arms (whose ground costs a whole macro colour a pixel, too much for many blades deep),
     // the flat class colour
-    #ifdef MACRO_BAKE
+    #if defined(MACRO_BAKE)&&defined(GRASS_FLOW)
+    pMdx=vec2(uCell,0.0);pMdy=vec2(0.0,uCell);   // the bake read at the ring cell footprint, as the ground under it is filtered
+    pFlowGrow=smoothstep(0.15,0.7,vFlow.y);   // (the growth at its root, as the ground under it: groundAt)
+    vec3 g=groundSeason(bakeOnce(vRoot).rgb);   // the bake alone: no grass grows where the ground's comb or short grass would change it
+    #elif defined(MACRO_BAKE)
     pMdx=vec2(uCell,0.0);pMdy=vec2(0.0,uCell);   // the bake read at the ring cell footprint, as the ground under it is filtered
     vec3 g=groundSeason(groundAt(vRoot,uCell));
     #else
@@ -30,6 +37,14 @@ void main(){
     #endif
     alb=g*mix(0.95,1.55,vV)*mix(0.92,1.10,vShade);
     alb=mix(alb,alb*vec3(1.04,1.08,0.80),vV*0.5);
+    #if defined(GRASS_FLOW)&&!defined(GRASS_NO_HUE)
+    // each clump its own hue, as the references' tufts (the owner, 2026-10-17): from a deeper blue-green to a warm
+    // yellow-lime, by a hash of its cell (vHue, meadow.vert: the same on every vertex, so no speckle), stronger toward
+    // the tips
+    float hr=vFlow.x;
+    vec3 tint=hr<0.5?mix(vec3(0.78,0.98,0.90),vec3(1.0),hr*2.0):mix(vec3(1.0),vec3(1.22,1.10,0.66),(hr-0.5)*2.0);
+    alb*=mix(vec3(1.0),tint,(0.6+0.4*vV)*vFlow.z);   // (none under the snow of winter, as the default)
+    #endif
   }
   alb=earthOf(alb);
   float lo=groundOcc(lm),occ=mix(0.8,1.0,vV)*mix(1.0,lo,uAO*0.6);
@@ -49,4 +64,4 @@ void main(){
   #endif
   c+=groundFill(alb,sh,t,occ,rs);
   c=cloudShade(c,cloud(vW),rs);   // the shade of the ground under the root, snowed or not
-  gl_FragColor=vec4(airOf(c,vW,lm,vH),depthA(vW));}
+  gl_FragColor=lensOut(airOf(c,vW,lm,vH),vW);}

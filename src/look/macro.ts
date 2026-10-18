@@ -10,12 +10,14 @@ import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { RenderTargetTexture } from '@babylonjs/core/Materials/Textures/renderTargetTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import { Viewport } from '@babylonjs/core/Maths/math.viewport.js'
+import { Vector4 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { withPainter, type Materials } from './materials.ts'
 import { D, bakeMB } from './spec.ts'
 import type { CoverGrid } from './world/cover.ts'
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 import BRUSH_URL from '../../data/meadow-brush.png?url'
+import type { FlowTextures } from './flow.ts'
 import DIRT_URL from '../../data/ground-dirt-v1.png?url'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 
@@ -35,6 +37,12 @@ export const MACRO_CHECK_DEFINES = ['MACRO_DEBUG', 'MACRO_SAB_ONECLASS', 'MACRO_
 
 const BAKE_VS = 'precision highp float;attribute vec2 position;varying vec2 vUV;void main(){vUV=position*0.5+0.5;gl_Position=vec4(position,0.0,1.0);}'
 // uRect: the world rectangle (x0, z0, x1, z1) of the draw; uTexel: the bake's texel, m (the stripes' footprint)
+// the near bake (combNear, below): the strokes signed value at each texel of its square
+const NEAR_FS = `#extension GL_OES_standard_derivatives : enable
+precision highp float;varying vec2 vUV;uniform vec4 uRect;uniform float uTexel;
+#include<painter>
+#include<shore>
+void main(){vec2 xz=mix(uRect.xy,uRect.zw,vUV);macroDerivs(xz);gl_FragColor=vec4(combDv(xz,uTexel),0.0,0.0,1.0);}`
 const BAKE_FS = `#extension GL_OES_standard_derivatives : enable
 precision highp float;varying vec2 vUV;uniform vec4 uRect;uniform float uTexel;
 #include<painter>
@@ -79,7 +87,11 @@ export interface Macro {
 // the roads' textures (src/look/main.ts): the bake paints them in (BAKE_FS, roadPaint as far out: uRoadFar 1), so far out the ground's
 // bake holds the roads and the terrain's live road shader runs only nearer (docs/plans/done/roads.md)
 export interface RoadTextures { segs: BaseTexture; grid: BaseTexture; grit: BaseTexture; n: number }
-export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false, roads?: RoadTextures): Macro {
+// flow: the meadow's pattern combed (GRASS_FLOW, ?grass=flow): the materials' defines it shares (src/look/main.ts);
+// flowTex: the flow's textures (src/look/flow.ts), which the bake reads too; meadowMap: the meadow map
+// (src/look/meadow.ts), which the combed meadow's bake reads (the default pattern where no grass grows); near: the near
+// bake's reach (the strokes' ring, m from the focus) and whether its strokes can show (the zoom)
+export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, meadow = false, roads?: RoadTextures, flow: string[] = [], flowTex: FlowTextures | null = null, meadowMap: BaseTexture | null = null, near: { reach: number; shows: () => boolean } = { reach: 25, shows: () => true }): Macro {
   const engine = scene.getEngine() as AbstractEngine, s = D.spec.macro
   const coverTex = RawTexture.CreateRGBATexture(cover.tex, cover.n, cover.n, scene, false, false, Texture.NEAREST_SAMPLINGMODE)
   coverTex.wrapU = coverTex.wrapV = Texture.CLAMP_ADDRESSMODE
@@ -109,7 +121,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   dirt.wrapU = dirt.wrapV = Texture.WRAP_ADDRESSMODE; dirt.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); if (brush) m.setTexture('uMeadowBrush', brush) })
 
-  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW'] : []), ...(roads ? ['#define ROADS'] : [])]
+  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit', 'uFlow', 'uComb', 'uMeadow'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : []), ...(roads ? ['#define ROADS'] : [])]
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })
   // arm 5's filter, compiled on its first bake
   let kuwaharaW: EffectWrapper | null = null
@@ -148,7 +160,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
     try {
       let draws = pass(src, n, wrapper, (e, i, j, w, h) => {
         e.setFloat4('uRect', x0 + i / n * world, x0 + j / n * world, x0 + (i + w) / n * world, x0 + (j + h) / n * world)
-        e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex); if (brush) e.setTexture('uMeadowBrush', brush)
+        e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex); if (brush) e.setTexture('uMeadowBrush', brush); if (flowTex) { e.setTexture('uFlow', flowTex.flow); e.setTexture('uComb', flowTex.comb) } if (meadowMap) e.setTexture('uMeadow', meadowMap)
         // the roads, without the grit (its marks are finer than a texel)
         if (roads) { e.setTexture('uRoadSegs', roads.segs); e.setTexture('uRoadGrid', roads.grid); e.setTexture('uRoadGrit', roads.grit); e.setFloat('uRoadSegN', roads.n); e.setFloat('uRoadOn', 0); e.setFloat('uRoadFar', 1) }
       })
@@ -203,6 +215,35 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
     arm = a; for (const m of mats.all) applyArm(m)
     if (!isBakedArm(a)) return NOTHING
     bakeArm = a; return rebakeIfChanged()
+  }
+  // the combed meadow's near bake (?grass=flow, docs/plans/done/grass-flow.md): the strokes value (combDv in
+  // macro.glsl) over a square round the camera's focus that holds the strokes' ring however far the focus has moved
+  // since (NEAR_W m: the reach and NEAR_STEP either side), at NEAR_N texels a side, rendered again when the focus has
+  // moved NEAR_STEP m, on a baked arm (the only ground that reads it) at a zoom where the strokes show; the ground reads it with one fetch (nearComb). The strokes in the ground's own shader cost
+  // about 1 ms a frame on every terrain pixel, the branch not taken too (measured: the plan)
+  if (flowTex && meadow) {
+    const NEAR_STEP = 6, NEAR_W = 2 * (Math.ceil(near.reach) + NEAR_STEP + 1), NEAR_N = 1024
+    const nearRT = new RenderTargetTexture('combNear', NEAR_N, scene, { generateMipMaps: false, generateDepthBuffer: false, generateStencilBuffer: false, type: Constants.TEXTURETYPE_HALF_FLOAT, samplingMode: Texture.BILINEAR_SAMPLINGMODE, format: Constants.TEXTUREFORMAT_RGBA })
+    nearRT.wrapU = nearRT.wrapV = Texture.CLAMP_ADDRESSMODE
+    const nearW = new EffectWrapper({ engine, name: 'combNear', vertexShader: BAKE_VS, fragmentShader: withPainter(NEAR_FS), attributeNames: ['position'], uniformNames: ['uRect', 'uTexel'], samplerNames: SAMPLERS, defines: DEFINES })
+    const rect = new Vector4(1e6, 1e6, NEAR_W, 0), centre = { x: NaN, z: NaN }
+    mats.bindAll(m => { m.setTexture('uCombNear', nearRT); m.setVector4('uCombNearRect', rect) })
+    const nearRenderer = new EffectRenderer(engine)
+    scene.onBeforeRenderObservable.add(() => {
+      const cam = scene.activeCamera as { target?: { x: number; z: number } } | null, f = cam?.target
+      if (!f || !isBakedArm(arm) || !near.shows() || (Math.abs(f.x - centre.x) < NEAR_STEP && Math.abs(f.z - centre.z) < NEAR_STEP)) return
+      if (!nearW.effect.isReady() || (brush && !brush.isReady())) return
+      // snapped to whole texels, so a texel always lands on the same world point
+      const t = NEAR_W / NEAR_N, x0 = Math.round((f.x - NEAR_W / 2) / t) * t, z0 = Math.round((f.z - NEAR_W / 2) / t) * t
+      nearRenderer.saveStates(); engine.bindFramebuffer(nearRT.renderTarget!, undefined, undefined, undefined, true)
+      engine.setViewport(new Viewport(0, 0, NEAR_N, NEAR_N), 1, 1); nearRenderer.applyEffectWrapper(nearW)   // (in texels, as the bake's pass)
+      const e = nearW.effect
+      e.setFloat4('uRect', x0, z0, x0 + NEAR_W, z0 + NEAR_W); e.setFloat('uTexel', t)
+      e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex); if (brush) e.setTexture('uMeadowBrush', brush)
+      e.setTexture('uFlow', flowTex.flow); e.setTexture('uComb', flowTex.comb); if (meadowMap) e.setTexture('uMeadow', meadowMap)
+      nearRenderer.draw(); engine.unBindFramebuffer(nearRT.renderTarget!, false); nearRenderer.restoreStates()
+      centre.x = f.x; centre.z = f.z; rect.set(x0, z0, NEAR_W, 0)
+    })
   }
   return {
     cover: coverTex, tile, far, setArm, arm: () => arm, bake, setCheck, settled: () => last,

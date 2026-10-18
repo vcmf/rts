@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-14
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts]
 decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0033-temperate-is-the-default-mood]
 ---
 
@@ -52,7 +52,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
 | `src/look/meadow.ts` | The meadow near the camera (L5c, L5d, below): the meadow map (ground height, the grass's and the crops' growth), three rings of static grass and crop instances around the focus |
 | `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (the default with the generated trees; `?trees=cards` on the pack's; L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
-| `src/look/post.ts` | A pixel that is not a finite number is left out of the depth of field's downsample, or takes its neighbours' mean in the finishing pass (`?nanmark` shows it magenta, on half floats: `docs/plans/done/nan-guard.md`). The scene renders into a 4× MSAA target of 8 bits a channel (half floats under the depth of field: `MSAA` in post.ts, `docs/plans/done/wide-perf.md`). The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), with RTS controls (`rtsControls`: the arrows or WASD pan in the ground plane and Q, E turn, faster as it zooms out; a trackpad's two-finger swipe pans and its pinch zooms; a mouse wheel zooms; dragging turns and pans; the panel's Zoom slider follows), and the passes: depth of field (a player option, decision 0024), then one fused finishing pass (bloom, vignette, paper, dither; the grade is in the materials since LC1b) |
+| `src/look/post.ts` | A pixel that is not a finite number is left out of the depth of field's downsample, or takes its neighbours' mean in the finishing pass (`?nanmark` shows it magenta, on half floats: `docs/plans/done/nan-guard.md`). The scene renders into a 4× MSAA target of 8 bits a channel, the depth of field's too (`MSAA` in post.ts, `docs/plans/done/wide-perf.md`). The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), with RTS controls (`rtsControls`: the arrows or WASD pan in the ground plane and Q, E turn, faster as it zooms out; a trackpad's two-finger swipe pans and its pinch zooms; a mouse wheel zooms; dragging turns and pans; the panel's Zoom slider follows), and the passes: depth of field (a player option, decision 0024), then one fused finishing pass (bloom, vignette, paper, dither; the grade is in the materials since LC1b) |
 | `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop (and its readout, top right: over the last 120 frames the frame interval's median and slowest 5 %, the render's CPU time, the share of frames that missed their slot (past one and a half of the median); `docs/plans/done/frame-readout.md`), and the debug globals the checks read; `?bloom=0` opens with the bloom off; the render scale defaults to Auto (by zoom: 1, 0.9, 0.8 and 0.75 as the camera's radius passes 72, 80 and 88 % of its range, 4 m of hysteresis each way: decision 0036, which records why it is not driven by missed frames; the paper grain stays in screen pixels; the check tools pin it to 1: `docs/plans/done/dynamic-scale.md`); `?msaa=1|2|4`, `?far=off`, `?rt16`, `?nowide` are the frame-rate A/Bs (`docs/plans/done/wide-perf.md`) |
 | `src/look/bench.ts`, `src/look/gputimer.ts` | `?bench`: fixed cameras, frame times, GPU time per pass, draw calls, triangles, texture memory and the build hash, as JSON (below) |
 | `src/look/lab.ts` | Test objects the tools add: the readability guard's army blocks, the detail check's test hill |
@@ -73,40 +73,60 @@ judging).
 `?dof=0|1` overrides the gameplay depth of field, on by default (decision 0024, below); `?bench=dof` benches it off
 and on.
 
-### The gameplay depth of field (decision 0024)
+### The gameplay depth of field (decisions 0024, 0040)
 
-The plan: `docs/plans/done/gameplay-dof.md`. The blur is a band at the top of the screen: only what lies beyond
-the focus blurs.
+The plans: `docs/plans/done/gameplay-dof.md`, then `docs/plans/done/dof-v2.md` (the research:
+`docs/research/dof-v2.md`). Two blurs, each in its band of the frame: what lies beyond the focus blurs toward the
+top, what lies nearer the camera blurs in the bottom share of the frame only, so the formations in the middle never
+take it. Units blur by their depth as the scene does (decision 0040).
 
+- **The lens term in alpha** (`depthA`, `src/look/shaders/painter.glsl`): every material writes s = 1 − focus/z (z
+  the depth along the view axis; the focus and the axis reach the materials each frame from `src/look/main.ts`) over
+  −1 to 0.5, in the alpha's codes 1 to 254, the units (`block.frag`) as every surface. 0 marks a pixel whose colour
+  is not a number (`lensOut`, painter.glsl: the 8-bit target would store it black; left out of the downsample, the blur
+  in its place), 255 the clear, the farthest. So the scene's MSAA target
+  stays 8 bits a channel with the depth of field on (`MSAA` in post.ts, `docs/plans/done/wide-perf.md`), and the two
+  blur passes take the scene's type too.
 - **The scene at half resolution** (`src/look/shaders/dofdown.frag`): each pixel holds the four scene pixels under
-  it, read at their centres: their colour averaged (a figure narrower than the block is blurred, not dropped) and the
-  farthest of their distances (a bilinear blend of two depths is no surface).
-- **The blur** (`src/look/shaders/dof.frag`) reads it at half resolution, each tap at a pixel's centre, after Dennis
-  Gustafsson's single-pass bokeh:
-  - taps on a golden-angle spiral, each counted where its own blur reaches the pixel (over a pixel either side: the
-      taps are a half-resolution texel apart), a tap that lands back on the pixel skipped; about 32 for a 10 px blur and
-    as many per unit of area as the blur grows, in five steps from 16 to 64 (past a 14 px blur, sparser);
-  - a sharp pixel skips the taps. This is exact, not an estimate: nothing nearer than the focus blurs, so a nearer
-    tap is sharper than the pixel, and a farther one is clamped (below) to under a pixel;
-  - a tap behind the pixel has its blur clamped to twice the pixel's, so a sharp crown never bleeds over the ground
-    behind it;
-- **The composite** is in the finishing pass (`uber.frag` with `DOF`). It keeps the sharp scene where the pixel's
-  blur is under a pixel and takes the blur where it passes two. The bloom gathers from the
+  it, read at their centres: their colour averaged (a figure narrower than the block is blurred, not dropped) and one
+  of their lens terms, the nearest where it lies past the near band (a near silhouette survives the half resolution),
+  else the farthest (a blend of two depths is no surface). A unit is left out of both.
+- **The blur** (`src/look/shaders/dof.frag`) at half resolution, each tap at a pixel's centre:
+  - **far**, after Dennis Gustafsson's single-pass bokeh: taps on a golden-angle spiral, each counted where its own
+    blur reaches the pixel (over a pixel either side: the taps are a half-resolution texel apart), a tap that lands
+    back on the pixel skipped; about 32 for a 10 px blur and as many per unit of area as the blur grows, in five steps
+    from 16 to 64. A sharp pixel skips the taps. A tap behind the pixel has its blur clamped to twice the pixel's, so
+    a sharp crown never bleeds over the ground behind it;
+  - **near**, after Jimenez 2014, only in the bottom band (`DOF_NEAR.screen` of the frame and the largest near blur
+    above it): 8 to 24 taps out to the largest near blur, each counted where its own near blur reaches the pixel,
+    weighed by its blur's area (a thin near edge does not swamp the colour); their coverage is the share that reaches.
+    The near layer goes over the far result, premultiplied, its coverage in alpha, so a near blur spreads over pixels
+    that are sharp themselves. The far result is the far gather by
+  the composite's own weight of it (none leaks where the composite takes no far blur); the bloom reads this colour.
+  Where a pixel has no far blur, the composite takes the near colour back out of it (the scene's half-resolution colour
+  read as one bilinear tap of the sharp scene) and lays it over the sharp scene by its coverage, so a sharp pixel round
+  a blurred crown keeps its own detail and the crown's soft rim its full reach.
+- **The composite** is in the finishing pass (`uber.frag` with `DOF`): the sharp scene where the pixel's own far blur
+  is under a pixel and no near layer covers it; elsewhere the blur, by the larger of the far blur's weight and the
+  near coverage. Where it blurs: a 3 × 3 tent over the half-resolution blur (four bilinear taps, the spiral's noise
+  smoothed without temporal anti-aliasing), then the painted colour (`DOF_PAINT`): the far blur toward the haze
+  (lighter, greyer) by its size, the near layer darker and cooler by its coverage. The bloom gathers from the
   half-resolution blur.
-- **The circle of confusion** (`src/look/shaders/dofcoc.glsl`, pixels at full resolution):
-  - beyond the focus, `1 − focus/z` past a sharp band, times a gain;
-  - nothing nearer than the focus. A blur nearer the camera failed the readability guard at the screen's foot, and
-    the owner asked for the blur at the top edge only.
-  - z is the depth along the view axis, from the distance the materials write to alpha and the pixel's ray.
+- **The circle of confusion** (`src/look/shaders/dofcoc.glsl`, pixels at full resolution): beyond the focus, s past
+  a sharp band times a gain (`DOF`); nearer, −s past the near band times its gain (`DOF_NEAR`), faded to nothing over
+  the bottom band's height.
 - **The focus** is the depth of the ground at the screen's centre: the centre ray marched against the terrain, eased
   over a quarter second; a new view is taken at once.
-- **The constants** are `DOF` in `src/look/post.ts`: the sharp band, the gain, the largest blur in pixels at 1080
-  lines, and the share of it left at the widest zoom (the blur eases from the closest zoom to the widest). The
-  panel's "Blur strength" slider multiplies it. `window.__look.dof` is the same object, read every frame, so the
-  constants can be tuned live from the console.
+- **The constants** are `DOF`, `DOF_NEAR` and `DOF_PAINT` in `src/look/post.ts`: the sharp bands, the gains, the
+  largest blurs in pixels at 1080 lines, the share of the far one left at the widest zoom (both ease from the closest
+  zoom to the widest), the near band's share of the frame, and the painted colour's amounts. The panel's "Blur
+  strength" slider multiplies the blurs. `window.__look.dof`, `__look.dofNear` and `__look.dofPaint` are the same
+  objects, read every frame, for live tuning; `?dofnear=0` turns the near blur off.
+- **The cost** (the dev Mac, paired one-page runs at three oblique mid zooms): +0.1 to +0.7 ms over the depth of
+  field off; `?bench=dof` benches it off and on.
 - **The checks:** the look tools load the page with `?dof=0` (`shoot()` in `tools/look-page.mjs`, and
   `tools/check-negatives.mjs` for a URL), so they measure the paint. The readability guard is also run with
-  `?dof=1`.
+  `?dof=1` against `?dof=0`, at the start and cover views.
 
 ### The ground's cover and macro colour (L5a)
 
@@ -354,6 +374,35 @@ shader); `?meadow=off` puts back the old scatter.
   season's colour at the tip, the standing wheat gold in summer, turning orange while it is cut; stubble, the cut
   wheat's too, a pale straw over the darker soil (`stubbleTip`, no redder than the standing wheat), browning by late
   autumn; the green crop lime to olive. Ploughed fields grow nothing.
+- **The combed meadow** (`?grass=flow`, an experiment: `docs/plans/done/grass-flow.md`; the research:
+  `docs/research/painterly-grass.md`). Not the default: the arm the owner judges against today's meadow. It needs the
+  bake arm (on the shader arm the meadow keeps the default pattern).
+  - **The flow** (`flowAt` in `shaders/meadow.glsl`, its numbers `FLOW` in `src/look/flow.ts`, given as defines): a slow
+    map-wide lean and how far the grass lies over. Made once on load into a texture (`FLOW_TEXEL`, `src/look/flow.ts`;
+    `flowTex`), which the ground, the bake and the clumps read; the field itself beyond the tile.
+  - **The bake** holds the broad part (`combBroad`): soft bands where the flow leans to or from the sun (`FLOW_SUN`,
+    fixed per map), soft masses, and the clump field.
+  - **The strokes from a near bake** (`combNear` in `src/look/macro.ts`, `combDv`; the ground reads it in `groundAt`
+    with one fetch, `nearComb`, `combFromDv`): the brush tile and a tiling comb noise (`uComb`, `COMB_PERIOD`) read along
+    the flow in `FLOW_CELL` cells, rendered into a square round the focus (the strokes' ring and the step either side)
+    again when the focus moves 6 m, on a baked arm at a zoom where the strokes can show (the marched focus depth in
+    render pixels under twice `STROKE_FOOT`, the footprint `strokeK` fades to; the strokes in the ground's own shader
+    cost about 1 ms on every terrain pixel: the plan). Lighter along the comb and a deeper green
+    in its gaps; by the pixel's footprint (`strokeK`), over the inner ring only (`STROKE_RINGS`: the rings are centred on
+    the focus, so the bottom of the frame stands under the sparser outer rings), by the meadow's growth (`uMeadow`,
+    `meadowGrowth`), none under the winter's snow.
+  - **Where no grass grows** (the formation zones, the banks) the bake holds the default pattern (`meadowPattern` blends
+    the default's and the combed by `meadowGrowth`: the meadow map is built before the bake, `buildMeadowMap`).
+  - **The clumps** (`meadow.vert`, `meadow.frag`): up close (`CLOSE_ZOOM`, the inner rings) wider and a little taller
+    (never over `HEIGHT_MAX`) and fewer thinned between the patches, leaning with the flow, a hue each (`vHue`); as the default's under the winter's snow. They
+    read the bake alone. Their roots keep `CLUMP_REACH_FLOW` from the formation zones and the banks (crops keep
+    `CLUMP_REACH`), which `tools/river-check.js` checks at the page's reach (`__look.meadow.reach`).
+  - **The seasons:** `groundSeason` keeps the pattern's value through autumn where grass grows (`pFlowGrow`).
+  - `?grassoff=strokes,dense,big,hue` turns one part off, for the cost's ablation (its numbers: the plan);
+    `__look.flowBuildMs`: the flow textures' time on load.
+- **Ring chunks culled on the CPU** (`cullRing` in `src/look/meadow.ts`, `CHUNKS`, both arms): only the chunks in view
+  and in the band drawn, their slots packed into the instance buffer when the set changes (a ring with none is not
+  drawn); the vertex shader still culls each clump.
 - **The meadow on the ground** (`meadowPattern` in `macro()`, `MEADOW`, a define on every painted material and on the
   macro bake): on meadow and pasture (the warped class the ground paints), the brush tile (`data/meadow-brush.png`,
   at 7.3 m and 7.3/2.618 m, turned apart, warped by a slow noise: no common period; stamped by
