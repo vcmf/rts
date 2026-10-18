@@ -40,7 +40,7 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
   float h=fract(t*7.13);
   summer=mix(summer,vec3(0.36,0.18,0.24),step(0.95,h)*step(kind,0.5));   // a rare copper beech, all year
   if(kind>1.5){                                                            // grass: one field colour per season
-    vec3 au=mix(summer,mix(vec3(0.72,0.62,0.32),vec3(0.86,0.70,0.46),uAutumnWarm),0.55),la=mix(summer,vec3(0.55,0.44,0.26),0.7),wi=vec3(0.50,0.45,0.34);
+    vec3 au=mix(summer,mix(vec3(0.72,0.62,0.32),vec3(0.78,0.71,0.56),uAutumnWarm),0.55),la=mix(summer,vec3(0.55,0.44,0.26),0.7),wi=vec3(0.50,0.45,0.34);
     return uSeason<1.0?mix(summer,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
   if(kind>0.5)return mix(summer,summer*vec3(0.78,0.88,0.95),clamp(uSeason-2.0,0.0,1.0));   // conifers stay green
   vec3 au=h<0.30?mix(vec3(0.86,0.46,0.12),vec3(0.96,0.62,0.18),t)      // orange
@@ -52,7 +52,7 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
   // the mood's warm autumn (uAutumnWarm, docs/plans/active/epic-palette.md): one family of warm pastels, as Tiny
   // Glade's, peach, apricot, soft orange and butter, instead of the mixed wood
   vec3 pa=h<0.35?mix(vec3(0.95,0.58,0.32),vec3(0.98,0.70,0.42),t):h<0.65?mix(vec3(0.97,0.76,0.40),vec3(0.99,0.86,0.55),t)
-         :h<0.85?mix(vec3(0.90,0.46,0.28),vec3(0.95,0.58,0.36),t):vec3(0.94,0.62,0.52);
+         :h<0.85?mix(vec3(0.90,0.46,0.28),vec3(0.95,0.58,0.36),t):vec3(0.92,0.66,0.50);
   pa=mix(vec3(dot(pa,vec3(0.3,0.59,0.11))),pa,0.78);   // (softened: the owner, the first pastels too saturated)
   au=mix(au,pa,uAutumnWarm);
   vec3 la=mix(au*vec3(0.80,0.62,0.50),vec3(0.46,0.30,0.18),0.45);       // late autumn: browner, duller

@@ -59,3 +59,6 @@ summer and autumn, close on the river, the widest); the owner judges, then wheth
   snow a mood colour (`cloudSnow`, a soft lavender-grey in epic), the winter sun a cool white; the greens turned 25°
   (hue median 103°: the old 74°, the teal 126°) and less muted; the autumn pastels a quarter toward grey, the straw
   paler; the warm autumn turning sooner and the teal turn on clear greens only (a half-turned straw went lime).
+- Fifth pass: early autumn "still too saturated". Measured: its HSV saturation (median 0.33) under Tiny Glade's autumn
+  (0.52), so the loud part is the ground, a large even yellow under a strategy camera (Tiny Glade's frames are mostly
+  crowns). The autumn ground and grass a calmer beige straw (0.75,0.71,0.61), the pink pastel a peach.
