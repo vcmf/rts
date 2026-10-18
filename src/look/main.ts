@@ -15,7 +15,7 @@ import '../../prototypes/nature-pack.data.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
 import { q, runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
-import { Materials, S, SUN } from './materials.ts'
+import { Materials, S, SUN, luma } from './materials.ts'
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
 import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { gradeColour, MOOD, setBounce, setGroundBounce, setMood } from './mood.ts'
@@ -351,6 +351,19 @@ const fpsEl = byId('fps')
 const FROZEN = new URLSearchParams(location.search).has('frozen')   // golden screenshots (tools/golden.mjs): the clock stays at 0
 // sun colour follows the season: warm gold in summer and autumn, pale gold in winter (keeps snow white, not yellow)
 const SUNCOL = MOOD.sun.clone()
+// the mood's light by the season (docs/plans/active/epic-palette.md), blended once a frame for every material instead of
+// per pixel: the shadow band's colour and turn from summer's to autumn's as the leaves turn (season 0.3 to 0.8), then to
+// winter's (2.2 to 3); the grade's saturation (the mood's summerSat outside autumn); the greens' teal turn (none in autumn)
+const SEASON_LIGHT = { shadow: new Color3(), turn: new Color3(), sat: 1, greenHue: 0 }
+scene.onBeforeRenderObservable.add(() => {
+  const s = S.season, ak = sstep(0.3, 0.8, s) * (1 - sstep(2.2, 3, s)), wk = sstep(2.2, 3, s), M = MOOD
+  const mix3 = (a: Color3, b: Color3, c: Color3) => Color3.Lerp(Color3.Lerp(a, b, ak), c, wk)
+  SEASON_LIGHT.shadow = mix3(M.shadow, M.shadowAutumn, M.shadowWinter)
+  const unit = (c: Color3) => c.scale(1 / luma(c))
+  SEASON_LIGHT.turn = mix3(unit(M.shadowTurn), unit(M.shadowTurnAutumn), unit(M.shadowTurnWinter))
+  SEASON_LIGHT.sat = M.grade.sat * (M.grade.summerSat + (1 - M.grade.summerSat) * ak)
+  SEASON_LIGHT.greenHue = M.grade.greenHue * Math.PI / 180 * (1 - ak)
+})
 scene.onBeforeRenderObservable.add(() => { const w = Math.max(0, Math.min(1, S.season - 2)); Color3.LerpToRef(MOOD.sun, MOOD.winterSun, w, SUNCOL); const k = Color3.Lerp(MOOD.hazeCool, CLEAR_GRADED, S.grade); scene.clearColor.set(k.r, k.g, k.b, 1) })
 // the detail layer's pixel angle (src/look/shaders/painter.glsl): the angle one pixel of a SPEC.detail.lines-tall
 // frame spans, from the camera's actual vertical field of view (narrower than the SPEC's on frames wider than 16:9)
@@ -368,6 +381,7 @@ scene.onBeforeRenderObservable.add(() => {
     m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uGrade', S.grade); m.setFloat('uViewH', engine.getRenderHeight()); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
     m.setFloat('uPixA', pixA)
     m.setFloat('uAO', S.ao); m.setFloat('uMist', S.mist); m.setFloat('uShafts', S.shafts); m.setFloat('uBack', S.back)
+    m.setColor3('uShadowCol', SEASON_LIGHT.shadow); m.setColor3('uShadowTurn', SEASON_LIGHT.turn); m.setFloat('uGradeSat', SEASON_LIGHT.sat); m.setFloat('uGreenHue', SEASON_LIGHT.greenHue)
   }
 })
 // the frame readout (top right; docs/plans/done/frame-readout.md): over the last FRAMES frames (fewer until there are

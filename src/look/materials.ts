@@ -34,18 +34,18 @@ const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush', 'uDirt'
 // the mood's colours each material takes (src/look/mood.ts), by uniform: one table gives both the uniform names and
 // their values, so none is left unset (an unset vec3 reads black). The shadow's turn is divided by its luma here
 // (shadowOf works on hue at the same value), not per pixel
-const luma = (c: Color3) => 0.3 * c.r + 0.59 * c.g + 0.11 * c.b
+export const luma = (c: Color3) => 0.3 * c.r + 0.59 * c.g + 0.11 * c.b
 const MOOD_COLOURS: Record<string, (m: Mood) => Color3> = {
-  uSunCol: m => m.sun, uShadowCol: m => m.shadow, uShadowTurn: m => m.shadowTurn.scale(1 / luma(m.shadowTurn)), uShadowLift: m => m.shadowLift, uShadowAutumn: m => m.shadowAutumn, uShadowTurnAutumn: m => m.shadowTurnAutumn.scale(1 / luma(m.shadowTurnAutumn)), uShadowWinter: m => m.shadowWinter, uCloudSnow: m => m.cloudSnow, uShadowTurnWinter: m => m.shadowTurnWinter.scale(1 / luma(m.shadowTurnWinter)),
+  uSunCol: m => m.sun, uShadowCol: m => m.shadow, uShadowTurn: m => m.shadowTurn.scale(1 / luma(m.shadowTurn)), uShadowLift: m => m.shadowLift, uCloudSnow: m => m.cloudSnow,
   uMidCool: m => m.midCool, uLitLift: m => m.litLift, uRimCol: m => m.rim, uBackCol: m => m.back, uMistShade: m => m.mistShade, uMistLit: m => m.mistLit,
   uHazeCool: m => m.hazeCool, uHazeWarm: m => m.hazeWarm, uWaterSky: m => m.waterSky, uGlint: m => m.glint, uFarRiver: m => m.farRiver,
   uGreenTint: m => m.grade.greenTint, uSplitLo: m => m.grade.splitLo, uSplitHi: m => m.grade.splitHi, uLift: m => m.grade.lift, uTopHaze: m => m.grade.topHaze,
   uEarthTint: m => m.earth.tint,
 }
 const MOOD_FLOATS: Record<string, (m: Mood) => number> = {
-  uGreenChroma: m => m.grade.greenChroma, uGreenAmt: m => m.grade.greenAmt, uGradeSat: m => m.grade.sat, uTopAmt: m => m.grade.topAmt,
+  uGreenChroma: m => m.grade.greenChroma, uGreenAmt: m => m.grade.greenAmt, uGradeSat: m => m.grade.sat * m.grade.summerSat, uTopAmt: m => m.grade.topAmt,
   uEarthChroma: m => m.earth.chroma, uEarthAmt: m => m.earth.amt, uBounce: m => m.bounce, uGroundBounce: m => m.groundBounce,
-  uMoodMist: m => m.mist, uAutumnWarm: m => m.autumn, uContrast: m => m.grade.contrast, uGreenHue: m => m.grade.greenHue * Math.PI / 180, uSummerSat: m => m.grade.summerSat, uUnitTint: m => m.units.tint, uUnitMist: m => m.units.mist, uUnitGrade: m => m.units.grade, uUnitBounce: m => m.units.bounce,
+  uMoodMist: m => m.mist, uAutumnWarm: m => m.autumn, uContrast: m => m.grade.contrast, uGreenHue: m => m.grade.greenHue * Math.PI / 180, uUnitTint: m => m.units.tint, uUnitMist: m => m.units.mist, uUnitGrade: m => m.units.grade, uUnitBounce: m => m.units.bounce,
 }
 const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA', 'uDirtOn', 'uEarthOn', 'uCombNearRect', 'uFocusZ', 'uCamFwd']
 
