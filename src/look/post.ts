@@ -134,9 +134,10 @@ export class Post {
   // it is what the centre shows), eased over FOCUS_S so a pan over a hillside does not jump the sharp band; a jump
   // of over a third (a new view) is taken at once
   private focus = 0
-  // each frame before the scene renders (src/look/main.ts): the materials encode their lens term against it
-  updateFocus(dt: number): number { return this.focusDepth(dt) }
-  private focusDepth(dt: number): number {
+  // each frame before the scene renders (src/look/main.ts): the materials encode their lens term against it (with the
+  // depth of field off nothing reads it: the last focus, not marched)
+  updateFocus(dt: number): number {
+    if (!this.S.dof && this.focus) return this.focus
     const c = this.camera, p = c.position, t = c.target
     let fx = t.x - p.x, fy = t.y - p.y, fz = t.z - p.z; const l = Math.hypot(fx, fy, fz) || 1; fx /= l; fy /= l; fz /= l
     const above = (d: number) => p.y + fy * d - this.ground(p.x + fx * d, p.z + fz * d)
@@ -155,11 +156,12 @@ export class Post {
     const HF = Constants.TEXTURETYPE_HALF_FLOAT, sceneType = MSAA.byte ? Constants.TEXTURETYPE_UNSIGNED_BYTE : HF
     // ratio: the size of the texture this pass reads, so the pass before it draws at that size
     const pp = (name: string, uni: string[], smp: string[], type: number, ratio = 1.0, defines: string | null = null) => { const p = new PostProcess(name, name, uni, smp, ratio, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, defines, type); if (!this.posts.length) { p.samples = MSAA.samples } this.posts.push(p); return p }
-    // the miniature field (decision 0024): focused on the ground at the screen's centre (focusDepth); a sharp band
-    // beyond it (DOF.band; nothing nearer blurs); the largest blur DOF.px at 1080 lines, strongest at the closest
-    // zoom and DOF.wide of it at the widest. The scene at half resolution (each four pixels' colour averaged, the
-    // farthest of their distances), its blur at half resolution, and the finishing pass puts the sharp
-    // scene (the first pass's input) back where the blur is under a pixel
+    // the miniature field (decisions 0024, 0040): focused on the ground at the screen's centre (updateFocus); a sharp
+    // band beyond it (DOF.band) and one nearer (DOF_NEAR.band, in the bottom DOF_NEAR.screen of the frame only); the
+    // largest blurs DOF.px and DOF_NEAR.px at 1080 lines, strongest at the closest zoom and DOF.wide of it at the widest.
+    // The scene at half resolution (each four pixels' colour averaged, one lens term: dofdown.frag), its blur at half
+    // resolution, and the finishing pass puts the sharp scene (the first pass's input) back where the blur is under a
+    // pixel and no near layer covers it
     const lens = ['uBand', 'uK', 'uMaxPx', 'uNBand', 'uNK', 'uNMaxPx', 'uNScreen'], c = D.spec.camera
     // the chain: the scene at half resolution (dofdown), the blur at half resolution (dof: far and near), the finishing
     // pass (uber). A pass draws into the next one's input, at the next one's ratio. (No tile passes: the near blur lies
@@ -167,21 +169,20 @@ export class Post {
     // 0.7 ms on the Mac, measured: docs/plans/active/dof-v2.md)
     const d = S.dof ? pp('dofdown', ['uTexel', 'uOut', ...lens], [], sceneType) : null
     const p = d ? pp('dof', ['uTexel', 'uHalf', 'uN', 'uNN', ...lens], [], sceneType, 0.5) : null
-    const half = p
     let px = 0, npx = 0
     const lensUniforms = (e: Effect) => { e.setFloat('uBand', DOF.band); e.setFloat('uK', DOF.k); e.setFloat('uMaxPx', px); e.setFloat('uNBand', DOF_NEAR.band); e.setFloat('uNK', DOF_NEAR.k); e.setFloat('uNMaxPx', npx); e.setFloat('uNScreen', DOF_NEAR.screen) }
-    if (d && p && half) {
+    if (d && p) {
       // the blurs by the zoom (strongest at the closest zoom, DOF.wide of it at the widest) and the frame's lines, each
       // frame before the first pass
       d.onApply = e => {
         const z = Math.min(1, Math.max(0, (camera.radius - c.rMin) / (c.rMax - c.rMin))), ease = S.dofAmt * d.height / 1080 * (1 + (DOF.wide - 1) * z)
         px = DOF.px * ease; npx = DOF_NEAR.px * ease
-        e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uOut', half.width, half.height); lensUniforms(e)
+        e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uOut', p.width, p.height); lensUniforms(e)
       }
       // the taps: 16 up to a 7 px blur (the default's largest at 1080 lines), then as many per unit of area as the
       // blur grows, in steps to 64 (past a 14 px blur, sparser; a step moves every tap, so there are few)
       p.onApply = e => {
-        e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uHalf', 1 / half.width, 1 / half.height)
+        e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uHalf', 1 / p.width, 1 / p.height)
         e.setFloat('uN', TAPS.find(n => n >= 0.32 * px * px) ?? 64)
         // the near taps: as many per unit of area of its largest blur, 8 to 24 (a near layer is soft: fewer taps do)
         e.setFloat('uNN', Math.min(24, Math.max(8, Math.ceil(0.25 * npx * npx)))); lensUniforms(e)
@@ -195,7 +196,7 @@ export class Post {
       // the mood's vignette, and the grade's parts the bloom takes off and puts back (its grade is in the painted
       // materials: src/look/materials.ts)
       e.setColor3('uVignette', MOOD.grade.vignette); e.setColor3('uSplitHi', MOOD.grade.splitHi); e.setFloat('uGradeSat', MOOD.grade.sat); e.setFloat('uTopAmt', MOOD.grade.topAmt); e.setFloat('uGrade', S.grade)
-      if (d && half) { lensUniforms(e); e.setFloat2('uHalfUV', d.width / 2 / half.width, d.height / 2 / half.height); e.setFloat2('uHalfTexel', 1 / half.width, 1 / half.height); e.setFloat2('uDofPaint', DOF_PAINT.far, DOF_PAINT.near); e.setTextureFromPostProcess('uSharp', d) }
+      if (d && p) { lensUniforms(e); e.setFloat2('uHalfUV', d.width / 2 / p.width, d.height / 2 / p.height); e.setFloat2('uHalfTexel', 1 / p.width, 1 / p.height); e.setFloat2('uDofPaint', DOF_PAINT.far, DOF_PAINT.near); e.setTextureFromPostProcess('uSharp', d) }
     }
   }
 }

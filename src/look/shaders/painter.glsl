@@ -101,10 +101,16 @@ vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   return mix(c,mix(uMistShade,uMistLit,air),t);}
 // view distance in alpha → depth of field without re-rendering the scene
 // the depth of field lens term in alpha (docs/plans/active/dof-v2.md): s = 1 - focus/z, z the depth along the view axis
-// (uFocusZ: the focus, uCamFwd: the axis), over -1 (half the focus distance) to 0.5 (twice it) in 8 bits, to 0 to 254/255.
-// The code 1 is the units, which never blur (block.frag). The scene target stays 8 bits with the depth of field on
+// (uFocusZ: the focus, uCamFwd: the axis), over -1 (half the focus distance) to 0.5 (twice it), in the codes 1 to 254 of
+// the alpha's 8 bits. The code UNIT_A (170, at the focus: s about 0) is the units, which never blur (block.frag); a
+// surface never writes it (171 instead), so only a unit's own pixels hold it (an edge the 4x MSAA resolve averages
+// with the ground holds a lens term between the two, at the focus where the ground is). The code 0 is a pixel that is
+// not a number (an 8-bit target stores one as 0), 255 the clear (no surface: the farthest). The scene target stays 8
+// bits with the depth of field on (dofcoc.glsl reads the codes)
+#define UNIT_A (170.0/255.0)
 uniform float uFocusZ;uniform vec3 uCamFwd;
-float depthA(vec3 wp){float s=1.0-uFocusZ/max(dot(wp-uCamPos,uCamFwd),0.01);return (clamp(s,-1.0,0.5)+1.0)/1.5*(254.0/255.0);}
+float depthA(vec3 wp){float s=1.0-uFocusZ/max(dot(wp-uCamPos,uCamFwd),0.01);
+  float c=1.0+floor((clamp(s,-1.0,0.5)+1.0)/1.5*253.0+0.5);return (c==170.0?171.0:c)/255.0;}
 // Big painted cloud shadows drifting over the land: the top-down camera's only "sky".
 float cloud(vec3 wp){
   vec2 p=wp.xz+uTime*vec2(2.2,0.8);

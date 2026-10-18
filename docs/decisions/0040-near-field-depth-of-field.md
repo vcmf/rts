@@ -16,8 +16,8 @@ depth of field that reads as painted. The research: `docs/research/dof-v2.md`.
 
 We will blur the near field as well as the far one, each within its band of the frame: the far blur toward the top
 (as before), the near blur only in the bottom share of the frame (`DOF_NEAR.screen`, 0.3), so the formations in the
-middle never take it. A unit's own pixels are never blurred: the materials write one alpha code for units, which the
-blur reads as sharp. A blurred foreground spreads over a unit at half coverage at most. The blur's colour follows it:
+middle never take it. A unit's own pixels are never blurred: units write one alpha code, at the focus, that no surface
+writes, which the blur reads as sharp. A blurred foreground spreads over a unit at half coverage at most. The blur's colour follows it:
 the far blur toward the haze, the near layer darker and cooler.
 
 ## Consequences

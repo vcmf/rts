@@ -67,6 +67,21 @@ judges.
 - **The owner on screen (2026-10-18):** 120 fps at the close, mid and wide zooms with the depth of field on.
 
 ## Review rounds
+
+- **Round 1** (`/code-review high`, 10 findings, 3 severe), all fixed:
+  - `?dofnear` broke the `?dof` override's else (`?bench&dof=1` ran without the blur);
+  - the units' alpha code 1 sat next to the far lens terms, so the MSAA resolve gave a unit's edge a far blur: the
+    units' code is now 170 (at the focus), which no surface writes, and the clear (255) is the farthest again;
+  - the near cap held only where a whole half-resolution block was a unit: the composite caps a unit's own pixel too;
+  - the 8-bit chain lost the NaN guard: alpha 0 now marks such a pixel (left out of the downsample, the blur in its
+    place);
+  - an in-focus pixel by a blurred crown took the half-resolution colour twice: the near layer alone goes to the
+    composite where a pixel has no far blur;
+  - the near bake runs only on a baked arm, at the zooms where its strokes show, its square derived from the strokes'
+    ring; the grass bench arms keep `?grassoff` and say what 'none' measures; the focus march skips with the blur off.
+  After: the guard ok at the start and cover views; a unit's edge pixels (the looser mask) move by 8–10 levels at the
+  99th percentile, 41–45 before; the cost the same as before the fixes (paired, both builds in one session; the third
+  view +0.8–0.9 ms in this session).
 - **Step 1 measured** (the dev Mac, paired one-page A/B, `?bench=dof`): the depth of field's passes cost 0.1–0.4 ms at
   the default zoom (0.1–0.3 close, 0.1–1.0 wide); the 8-bit target with the lens term saves about 0.3 ms at the close
   zoom and nothing measurable at the default. The earlier "1.4 ms" came from two page loads, which differ by up to

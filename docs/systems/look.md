@@ -82,7 +82,10 @@ take it. A unit's own pixels never blur.
 
 - **The lens term in alpha** (`depthA`, `src/look/shaders/painter.glsl`): every material writes s = 1 − focus/z (z
   the depth along the view axis; the focus and the axis reach the materials each frame from `src/look/main.ts`) over
-  −1 to 0.5, in the alpha's 8 bits; the code 1 is the units' (`block.frag`), read as sharp. So the scene's MSAA target
+  −1 to 0.5, in the alpha's codes 1 to 254. The code 170 (at the focus) is the units' (`block.frag`), read as sharp,
+  and no surface writes it, so the 4× MSAA resolve that averages a unit's edge with the ground gives a lens term at the
+  focus, not a far one (no halo round a unit); 0 is a pixel that is not a number (the 8-bit target stores one as 0:
+  left out of the downsample, the blur in its place), 255 the clear, the farthest. So the scene's MSAA target
   stays 8 bits a channel with the depth of field on (`MSAA` in post.ts, `docs/plans/done/wide-perf.md`), and the two
   blur passes take the scene's type too.
 - **The scene at half resolution** (`src/look/shaders/dofdown.frag`): each pixel holds the four scene pixels under
@@ -99,7 +102,10 @@ take it. A unit's own pixels never blur.
     above it): 8 to 24 taps out to the largest near blur, each counted where its own near blur reaches the pixel,
     weighed by its blur's area (a thin near edge does not swamp the colour); their coverage is the share that reaches.
     The near layer goes over the far result, premultiplied, its coverage in alpha, so a near blur spreads over pixels
-    that are sharp themselves. Over a unit its coverage is held to a half (a formation shows through a blurred crown).
+    that are sharp themselves. Over a unit its coverage is held to a half (a formation shows through a blurred crown),
+  in the blur and again on the unit's own full-resolution pixel in the composite. Where a pixel has no far blur, the
+  near layer alone goes to the composite, so the sharp pixels round a blurred crown take none of the half-resolution
+  colour.
 - **The composite** is in the finishing pass (`uber.frag` with `DOF`): the sharp scene where the pixel's own far blur
   is under a pixel and no near layer covers it; elsewhere the blur, by the larger of the far blur's weight and the
   near coverage. Where it blurs: a 3 × 3 tent over the half-resolution blur (four bilinear taps, the spiral's noise

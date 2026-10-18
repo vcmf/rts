@@ -184,7 +184,10 @@ if (flowTex) mats.bindAll(m => { m.setTexture('uFlow', flowTex.flow); m.setTextu
 const grassReach = grassParam === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
 const grassAllowed = grassReach === CLUMP_REACH ? nature.growthAllowed : (x: number, z: number) => nature.growthAllowed(x, z, grassReach)   // (the same rule as the crops' on the default: one pass)
 const meadowMap = meadowOn ? buildMeadowMap(scene, mats, nature.growth, grassAllowed, nature.crop, nature.growthAllowed) : null
-const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null)
+// the combed meadow's near bake runs only where its strokes show: out to the strokes' ring, at the zooms where a pixel
+// can be under the strokes' largest footprint (strokeK, macro.glsl: 0.15 m; at the focus under twice it, for the frame's
+// foot, nearer than the focus)
+const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, { reach: RINGS[0].band[3], shows: () => pixA * camera.radius < 0.3 })
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)
@@ -218,9 +221,9 @@ if (dofParam !== null && dofParam !== '0' && dofParam !== '1') throw new Error(`
 // (and off, unless ?dof sets it, on the bench, which compares with runs before decision 0024, and on the debug views,
 // which write no distance to alpha)
 if (dofParam !== null) S.dof = +dofParam
+else if (params.has('bench') || params.has('water') || params.get('river') === 'debug') S.dof = 0
 // ?dofnear=0: the near blur off (its cost's A/B: docs/plans/active/dof-v2.md)
 if (params.get('dofnear') === '0') DOF_NEAR.px = 0
-else if (params.has('bench') || params.has('water') || params.get('river') === 'debug') S.dof = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach) : null
 meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat])   // the dark ground under its clumps (shore.glsl)
@@ -540,8 +543,10 @@ if (params.has('bench')) {
   const volume = (on: boolean) => { for (const m of cardMats) { m.setDefine('#define VOLUME', on); m.setDefine('#define SOFT_RAMP', on) } }
   // ?grass=flow&bench=grass: the combed meadow on and off in one page (GRASS_FLOW on every painted material and the
   // clumps), so its cost is a paired difference (docs/plans/active/dof-v2.md: two page loads differ by up to 0.9 ms)
-  // ?grass=flow&bench=grassparts: the same, one part off at a time (the ablation's switches, GRASS_NO_*)
-  const grassArm = (on: boolean, off: string[] = []) => () => { for (const m of mats.all) { m.setDefine('#define GRASS_FLOW', on); for (const k of ['STROKES', 'HUE', 'DENSE', 'BIG', 'LEAN']) m.setDefine(`#define GRASS_NO_${k}`, off.includes(k)) } }
+  // ?grass=flow&bench=grassparts: the same, one part off at a time (the ablation's switches, GRASS_NO_*; a part ?grassoff
+  // turns off stays off). The arms switch the materials only: the macro tile keeps its combed bake and the near bake runs
+  // in every arm, so 'none' measures the materials' share of the combed meadow, not all of it
+  const grassArm = (on: boolean, off: string[] = []) => () => { for (const m of mats.all) { m.setDefine('#define GRASS_FLOW', on); for (const k of ['STROKES', 'HUE', 'DENSE', 'BIG', 'LEAN']) m.setDefine(`#define GRASS_NO_${k}`, off.includes(k) || grassOff.includes(k.toLowerCase())) } }
   const arms = params.get('bench') === 'grass' && grassParam === 'flow' ? [{ name: 'flow', apply: grassArm(true) }, { name: 'none', apply: grassArm(false) }]
     : params.get('bench') === 'grassparts' && grassParam === 'flow' ? [{ name: 'flow', apply: grassArm(true) }, { name: 'nostrokes', apply: grassArm(true, ['STROKES']) }, { name: 'nolean', apply: grassArm(true, ['LEAN']) }, { name: 'noclose', apply: grassArm(true, ['DENSE', 'BIG']) }, { name: 'nohue', apply: grassArm(true, ['HUE']) }, { name: 'alloff', apply: grassArm(true, ['STROKES', 'HUE', 'DENSE', 'BIG', 'LEAN']) }, { name: 'none', apply: grassArm(false) }] : params.get('bench') === 'meadow' && meadow ? [{ name: 'meadow', apply: () => meadow.setOn(true) }, { name: 'none', apply: () => meadow.setOn(false) }] : params.get('bench') === 'volume' ? [{ name: 'volume', apply: () => volume(true) }, { name: 'l7a', apply: () => volume(false) }] : params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? SHADER_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); return macro.setArm(a) } })) : params.get('bench') === 'dof' ? [{ name: 'nodof', apply: dofArm(0) }, { name: 'dof', apply: dofArm(1) }] : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
   // ?benchat=<x>,<z>: the cameras orbit that point instead of the start (the forest bench: docs/plans/done/forest-bench.md)

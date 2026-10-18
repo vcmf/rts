@@ -15,10 +15,12 @@ float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 // uHalfUV maps the screen to the blur (its size is the scene's halved, rounded down). The bloom gathers from the blur
 uniform sampler2D uSharp;uniform vec2 uHalfUV,uHalfTexel,uDofPaint;
 #include<dofcoc>
-// (a sharp pixel that is not a finite number takes the blur, which dofdown cleaned: docs/plans/done/nan-guard.md)
-vec3 base(){vec4 s=texture2D(uSharp,vUV);if(!all(lessThan(abs(s),vec4(65504.0))))return MARK(texture2D(textureSampler,vUV*uHalfUV).rgb);
+// (a sharp pixel that is not a finite number, or on the 8-bit target the alpha code 0 that stores one, takes the blur,
+// which dofdown cleaned: docs/plans/done/nan-guard.md)
+vec3 base(){vec4 s=texture2D(uSharp,vUV);if(!all(lessThan(abs(s),vec4(65504.0)))||isBad(s.a))return MARK(texture2D(textureSampler,vUV*uHalfUV).rgb);
   // the far blur by this pixel's own circle, the near layer by the coverage it spread here (the blur's alpha: dof.frag)
   vec2 hu=vUV*uHalfUV;vec4 b=texture2D(textureSampler,hu);float cf=coc(s.a,vUV),fw=smoothstep(0.5,2.0,cf),w=max(fw,b.a);
+  if(isUnit(s.a))w=min(w,0.5);   // (a unit's own pixel: a blurred crown over it at half coverage at most, decision 0040)
   if(w<=0.0)return s.rgb;
   // the postfilter: four bilinear taps half a texel off on the diagonals, a 3 x 3 tent over the half-resolution blur
   // (its spiral noise and flicker smoothed, without temporal anti-aliasing)
