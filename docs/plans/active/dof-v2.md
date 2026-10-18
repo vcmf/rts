@@ -61,3 +61,10 @@ judges.
   page): +0.1–0.8 ms, the same with the depth of field off or on; every part off but the mode on +0.1–0.4 (the noise's
   size); no single part carries it (each 0.0–0.6, by camera). The growth read on every ground pixel was not it (made
   conditional: no change). Left as is: many small costs.
+- **Mid zoom, oblique** (the owner: 104–105 fps with the depth of field on, 120 off; paired at three oblique views,
+  `beta` 0.93–0.97): the near blur and its tiles cost +1.0–1.4 ms. Two causes, both fixed. (1) Step 1 never took effect:
+  the first pass (`dofdown`) still made the scene's target in half floats, so the scene stayed 16 bits under the depth
+  of field; now both depth-of-field targets take the scene's type (8 bits). (2) The two tile passes cost about 0.7 ms;
+  they are gone: the near blur only lives in the bottom band of the frame (`DOF_NEAR.screen`), so the band says where a
+  near gather runs (scope step 3 dropped). After: +0.2, +0.6–0.7 and +0.1–0.2 ms over the depth of field off (four
+  runs), inside the +0.8 ms acceptance.

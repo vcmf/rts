@@ -18,7 +18,6 @@ import { D } from './spec.ts'
 import DOFCOC from './shaders/dofcoc.glsl?raw'
 import DOF_FS from './shaders/dof.frag?raw'
 import DOFDOWN_FS from './shaders/dofdown.frag?raw'
-import DOFTILE_FS from './shaders/doftile.frag?raw'
 import UBER_FS from './shaders/uber.frag?raw'
 import { MOOD } from './mood.ts'
 
@@ -115,7 +114,6 @@ function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasEl
 // the lens (#include<dofcoc>) inlined as the materials inline theirs (a replacer function keeps `$` in the GLSL)
 const withLens = (src: string) => src.replace('#include<dofcoc>', () => DOFCOC)
 Effect.ShadersStore.dofdownFragmentShader = withLens(DOFDOWN_FS)
-Effect.ShadersStore.doftileFragmentShader = withLens(DOFTILE_FS)
 Effect.ShadersStore.dofFragmentShader = withLens(DOF_FS)
 Effect.ShadersStore.uberFragmentShader = withLens(UBER_FS)
 
@@ -160,30 +158,30 @@ export class Post {
     // farthest of their distances), its blur at half resolution, and the finishing pass puts the sharp
     // scene (the first pass's input) back where the blur is under a pixel
     const lens = ['uBand', 'uK', 'uMaxPx', 'uNBand', 'uNK', 'uNMaxPx', 'uNScreen'], c = D.spec.camera
-    // the chain: the scene at half resolution (dofdown), the near tiles (doftile: the largest near blur a tile of 8 x 8
-    // half-resolution pixels, then dilated by one tile), the blur at half resolution (dof: far and near), the finishing
-    // pass (uber). A pass draws into the next one's input, at the next one's ratio
-    const d = S.dof ? pp('dofdown', ['uTexel', 'uOut', ...lens], [], HF) : null
-    const t = d ? pp('doftile', ['uSrc', 'uTiles', 'uDilate', ...lens], [], HF, 0.5) : null
-    const x = t ? pp('doftile', ['uSrc', 'uTiles', 'uDilate', ...lens], [], HF, 1 / 16) : null
-    const p = x ? pp('dof', ['uTexel', 'uHalf', 'uN', ...lens], ['uColor'], HF, 1 / 16) : null
+    // the chain: the scene at half resolution (dofdown), the blur at half resolution (dof: far and near), the finishing
+    // pass (uber). A pass draws into the next one's input, at the next one's ratio. (No tile passes: the near blur lies
+    // in the bottom band of the frame only, so the band says where it can reach; two small tile passes cost about
+    // 0.7 ms on the Mac, measured: docs/plans/active/dof-v2.md)
+    const d = S.dof ? pp('dofdown', ['uTexel', 'uOut', ...lens], [], sceneType) : null
+    const p = d ? pp('dof', ['uTexel', 'uHalf', 'uN', 'uNN', ...lens], [], sceneType, 0.5) : null
+    const half = p
     let px = 0, npx = 0
     const lensUniforms = (e: Effect) => { e.setFloat('uBand', DOF.band); e.setFloat('uK', DOF.k); e.setFloat('uMaxPx', px); e.setFloat('uNBand', DOF_NEAR.band); e.setFloat('uNK', DOF_NEAR.k); e.setFloat('uNMaxPx', npx); e.setFloat('uNScreen', DOF_NEAR.screen) }
-    if (d && t && x && p) {
+    if (d && p && half) {
       // the blurs by the zoom (strongest at the closest zoom, DOF.wide of it at the widest) and the frame's lines, each
       // frame before the first pass
       d.onApply = e => {
         const z = Math.min(1, Math.max(0, (camera.radius - c.rMin) / (c.rMax - c.rMin))), ease = S.dofAmt * d.height / 1080 * (1 + (DOF.wide - 1) * z)
         px = DOF.px * ease; npx = DOF_NEAR.px * ease
-        e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uOut', t.width, t.height); lensUniforms(e)
+        e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uOut', half.width, half.height); lensUniforms(e)
       }
-      t.onApply = e => { e.setFloat2('uSrc', t.width, t.height); e.setFloat2('uTiles', x.width, x.height); e.setFloat('uDilate', 0); lensUniforms(e) }
-      x.onApply = e => { e.setFloat2('uSrc', x.width, x.height); e.setFloat2('uTiles', x.width, x.height); e.setFloat('uDilate', 1); lensUniforms(e) }
       // the taps: 16 up to a 7 px blur (the default's largest at 1080 lines), then as many per unit of area as the
       // blur grows, in steps to 64 (past a 14 px blur, sparser; a step moves every tap, so there are few)
       p.onApply = e => {
-        e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uHalf', 1 / t.width, 1 / t.height); e.setTextureFromPostProcess('uColor', t)
-        e.setFloat('uN', TAPS.find(n => n >= 0.32 * px * px) ?? 64); lensUniforms(e)
+        e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uHalf', 1 / half.width, 1 / half.height)
+        e.setFloat('uN', TAPS.find(n => n >= 0.32 * px * px) ?? 64)
+        // the near taps: as many per unit of area of its largest blur, 8 to 24 (a near layer is soft: fewer taps do)
+        e.setFloat('uNN', Math.min(24, Math.max(8, Math.ceil(0.25 * npx * npx)))); lensUniforms(e)
       }
     }
     const u = pp('uber', ['uRes', 'uRenderScale', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, p ? 0.5 : 1.0, [p ? '#define DOF' : '', DEBUG.nanmark ? '#define NANMARK' : ''].filter(Boolean).join('\n') || null)
@@ -194,7 +192,7 @@ export class Post {
       // the mood's vignette, and the grade's parts the bloom takes off and puts back (its grade is in the painted
       // materials: src/look/materials.ts)
       e.setColor3('uVignette', MOOD.grade.vignette); e.setColor3('uSplitHi', MOOD.grade.splitHi); e.setFloat('uGradeSat', MOOD.grade.sat); e.setFloat('uTopAmt', MOOD.grade.topAmt); e.setFloat('uGrade', S.grade)
-      if (d && t) { lensUniforms(e); e.setFloat2('uHalfUV', d.width / 2 / t.width, d.height / 2 / t.height); e.setTextureFromPostProcess('uSharp', d) }
+      if (d && half) { lensUniforms(e); e.setFloat2('uHalfUV', d.width / 2 / half.width, d.height / 2 / half.height); e.setTextureFromPostProcess('uSharp', d) }
     }
   }
 }
