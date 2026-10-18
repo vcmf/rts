@@ -35,26 +35,38 @@ float pxGround(vec3 wp){vec2 f=fwidth(wp.xz);return max(f.x,f.y);}
 // groundAt, and by the grass for itself (meadow.frag); 0 elsewhere (the bounce, the roots: the default's autumn)
 float pFlowGrow=0.0;
 vec3 groundSeason(vec3 c){
-  if(uSeason<=0.0)return c;   // (uniform: summer is the colour as painted)
-  // the autumn turns (to late autumn) by greenness (under the mood's warm autumn further, to a yellow-orange straw, then
-  // a warm brown: docs/plans/active/epic-palette.md): a yellow-green counts as green, a grey road, earth, stone and dry gold
-  // (green no higher than red or blue) take a quarter. Winter mutes every colour, as before
+  // the autumn turns (to late autumn) by greenness: a yellow-green counts as green, a grey road, earth, stone and dry gold
+  // (green no higher than red or blue) take a quarter. Winter mutes every colour, as before. The mood's warm autumn
+  // (AUTUMN_ON, docs/plans/active/epic-palette.md: compiled in only where the mood has it) turns further, to a beige
+  // straw then a warm brown, olive grass too, sooner, dry grass lighter than green
   float gs=smoothstep(-0.005,0.03,c.g-max(c.r,c.b));
-  gs=max(gs,AUTUMN_WARM*smoothstep(-0.05,0.01,c.g-c.r)*smoothstep(0.0,0.06,c.g-c.b));   // (the warm autumn: an olive grass, green about red over blue, turns too)
+  #if AUTUMN_ON
+  gs=max(gs,smoothstep(-0.05,0.01,c.g-c.r)*smoothstep(0.0,0.06,c.g-c.b)*AUTUMN_WARM);
+  #define AU_C mix(vec3(0.68,0.59,0.37),vec3(0.62,0.55,0.44),AUTUMN_WARM)
+  #define AU_K mix(0.78,0.84,AUTUMN_WARM)
+  #define LA_C mix(vec3(0.52,0.42,0.27),vec3(0.60,0.40,0.24),AUTUMN_WARM)
+  #define LA_K mix(0.6,0.85,AUTUMN_WARM)
+  #else
+  #define AU_C vec3(0.68,0.59,0.37)
+  #define AU_K 0.78
+  #define LA_C vec3(0.52,0.42,0.27)
+  #define LA_K 0.6
+  #endif
   float g=mix(0.25,1.0,gs);
   #ifdef GRASS_FLOW
   // the combed meadow keeps its value through autumn (docs/plans/done/grass-flow.md): on green ground only (the
   // meadow; a road, earth and stone as before), the season's colour taken at the pixel's value against the meadow's
-  // (about 0.4), so its streaks and gaps do not fade to 22% in autumn
+  // (about 0.4), so its streaks and gaps do not fade to 22% in autumn (where grass grows: the zones keep the default)
   float r=mix(1.0,clamp(dot(c,vec3(0.3,0.59,0.11))/0.40,0.55,1.6),gs*pFlowGrow);
-  r=mix(r,max(r,0.75),AUTUMN_WARM);   // (the warm autumn: dry grass lighter than green, its streaks kept above that)   // (where grass grows: the zones keep the default colour)
-  vec3 au=mix(c,mix(vec3(0.68,0.59,0.37),vec3(0.62,0.55,0.44),AUTUMN_WARM)*r,mix(0.78,0.84,AUTUMN_WARM)),la=mix(c,mix(vec3(0.52,0.42,0.27),vec3(0.60,0.40,0.24),AUTUMN_WARM)*r,mix(0.6,0.85,AUTUMN_WARM)),wi=mix(c,vec3(0.46,0.42,0.34),0.7);   // (winter as before: under the snow)
+  #if AUTUMN_ON
+  r=mix(r,max(r,0.75),AUTUMN_WARM);
+  #endif
+  vec3 au=mix(c,AU_C*r,AU_K),la=mix(c,LA_C*r,LA_K),wi=mix(c,vec3(0.46,0.42,0.34),0.7);   // (winter as before: under the snow)
   #else
-  vec3 au=mix(c,mix(vec3(0.68,0.59,0.37),vec3(0.62,0.55,0.44),AUTUMN_WARM),mix(0.78,0.84,AUTUMN_WARM)),la=mix(c,mix(vec3(0.52,0.42,0.27),vec3(0.60,0.40,0.24),AUTUMN_WARM),mix(0.6,0.85,AUTUMN_WARM)),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
+  vec3 au=mix(c,AU_C,AU_K),la=mix(c,LA_C,LA_K),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
   #endif
   au=mix(c,au,g);la=mix(c,la,g);
-  float s1=mix(uSeason,smoothstep(0.0,0.8,uSeason),AUTUMN_WARM);   // (the warm autumn turns sooner: no long half-green, half-straw lime)
-  return uSeason<1.0?mix(c,au,s1):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
+  return uSeason<1.0?mix(c,au,uSeasonGround):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}   // uSeasonGround: the season to autumn, sooner in the warm autumn (src/look/main.ts)
 // The world position's screen derivatives, taken by each shader's main before any branch (macroDerivs): the ground's
 // reads (the meadow's here, the macro colour's, src/look/shaders/macro.glsl) pass them explicitly, so a read in a
 // branch the pixels of a 2×2 quad take differently (a class edge, the shore band's sides) still picks its mip level

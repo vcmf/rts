@@ -9,7 +9,7 @@ uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChr
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
 uniform float uUnitTint,uUnitMist,uUnitGrade,uUnitBounce;
 uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt,uBounce,uGroundBounce;   // the earth (the mood): the world toward earth tones
-uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason;
+uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason,uSeasonGround;
 
 // Rec. 709 luma: the grade and the value units keep (the painted bands use the older 0.3, 0.59, 0.11)
 const vec3 LUMA=vec3(0.2126,0.7152,0.0722);

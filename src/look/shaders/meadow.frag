@@ -36,14 +36,20 @@ void main(){
     vec3 g=groundSeason(groundBounce(vRoot));
     #endif
     alb=g*mix(0.95,1.55,vV)*mix(0.92,1.10,vShade);
+    #if AUTUMN_ON
     alb=mix(alb,alb*mix(vec3(1.04,1.08,0.80),vec3(1.06,1.0,0.86),AUTUMN_WARM*smoothstep(0.3,1.0,uSeason)),vV*0.5);   // (the tips: lime, warmed in the warm autumn)
+    #else
+    alb=mix(alb,alb*vec3(1.04,1.08,0.80),vV*0.5);
+    #endif
     #if defined(GRASS_FLOW)&&!defined(GRASS_NO_HUE)
     // each clump its own hue, as the references' tufts (the owner, 2026-10-17): from a deeper blue-green to a warm
     // yellow-lime, by a hash of its cell (vHue, meadow.vert: the same on every vertex, so no speckle), stronger toward
     // the tips
     float hr=vFlow.x;
     vec3 tint=hr<0.5?mix(vec3(0.78,0.98,0.90),vec3(1.0),hr*2.0):mix(vec3(1.0),vec3(1.22,1.10,0.66),(hr-0.5)*2.0);
+    #if AUTUMN_ON
     tint=mix(tint,max(tint,vec3(1.0,0.96,0.86)),AUTUMN_WARM*smoothstep(0.3,1.0,uSeason));   // (its blue-green side warmed through the warm autumn)
+    #endif
     alb*=mix(vec3(1.0),tint,(0.6+0.4*vV)*vFlow.z);   // (none under the snow of winter, as the default)
     #endif
   }
