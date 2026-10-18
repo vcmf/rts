@@ -36,7 +36,7 @@ const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush', 'uDirt'
 // (shadowOf works on hue at the same value), not per pixel
 const luma = (c: Color3) => 0.3 * c.r + 0.59 * c.g + 0.11 * c.b
 const MOOD_COLOURS: Record<string, (m: Mood) => Color3> = {
-  uSunCol: m => m.sun, uShadowCol: m => m.shadow, uShadowTurn: m => m.shadowTurn.scale(1 / luma(m.shadowTurn)), uShadowLift: m => m.shadowLift, uShadowAutumn: m => m.shadowAutumn, uShadowTurnAutumn: m => m.shadowTurnAutumn.scale(1 / luma(m.shadowTurnAutumn)),
+  uSunCol: m => m.sun, uShadowCol: m => m.shadow, uShadowTurn: m => m.shadowTurn.scale(1 / luma(m.shadowTurn)), uShadowLift: m => m.shadowLift, uShadowAutumn: m => m.shadowAutumn, uShadowTurnAutumn: m => m.shadowTurnAutumn.scale(1 / luma(m.shadowTurnAutumn)), uShadowWinter: m => m.shadowWinter, uCloudSnow: m => m.cloudSnow, uShadowTurnWinter: m => m.shadowTurnWinter.scale(1 / luma(m.shadowTurnWinter)),
   uMidCool: m => m.midCool, uLitLift: m => m.litLift, uRimCol: m => m.rim, uBackCol: m => m.back, uMistShade: m => m.mistShade, uMistLit: m => m.mistLit,
   uHazeCool: m => m.hazeCool, uHazeWarm: m => m.hazeWarm, uWaterSky: m => m.waterSky, uGlint: m => m.glint, uFarRiver: m => m.farRiver,
   uGreenTint: m => m.grade.greenTint, uSplitLo: m => m.grade.splitLo, uSplitHi: m => m.grade.splitHi, uLift: m => m.grade.lift, uTopHaze: m => m.grade.topHaze,

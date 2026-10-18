@@ -47,12 +47,13 @@ vec3 groundSeason(vec3 c){
   // (about 0.4), so its streaks and gaps do not fade to 22% in autumn
   float r=mix(1.0,clamp(dot(c,vec3(0.3,0.59,0.11))/0.40,0.55,1.6),gs*pFlowGrow);
   r=mix(r,max(r,0.88),uAutumnWarm);   // (the warm autumn: dry grass lighter than green, its streaks kept above that)   // (where grass grows: the zones keep the default colour)
-  vec3 au=mix(c,mix(vec3(0.68,0.59,0.37),vec3(0.82,0.72,0.52),uAutumnWarm)*r,mix(0.78,0.84,uAutumnWarm)),la=mix(c,mix(vec3(0.52,0.42,0.27),vec3(0.60,0.40,0.24),uAutumnWarm)*r,mix(0.6,0.85,uAutumnWarm)),wi=mix(c,vec3(0.46,0.42,0.34),0.7);   // (winter as before: under the snow)
+  vec3 au=mix(c,mix(vec3(0.68,0.59,0.37),vec3(0.80,0.73,0.58),uAutumnWarm)*r,mix(0.78,0.84,uAutumnWarm)),la=mix(c,mix(vec3(0.52,0.42,0.27),vec3(0.60,0.40,0.24),uAutumnWarm)*r,mix(0.6,0.85,uAutumnWarm)),wi=mix(c,vec3(0.46,0.42,0.34),0.7);   // (winter as before: under the snow)
   #else
-  vec3 au=mix(c,mix(vec3(0.68,0.59,0.37),vec3(0.82,0.72,0.52),uAutumnWarm),mix(0.78,0.84,uAutumnWarm)),la=mix(c,mix(vec3(0.52,0.42,0.27),vec3(0.60,0.40,0.24),uAutumnWarm),mix(0.6,0.85,uAutumnWarm)),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
+  vec3 au=mix(c,mix(vec3(0.68,0.59,0.37),vec3(0.80,0.73,0.58),uAutumnWarm),mix(0.78,0.84,uAutumnWarm)),la=mix(c,mix(vec3(0.52,0.42,0.27),vec3(0.60,0.40,0.24),uAutumnWarm),mix(0.6,0.85,uAutumnWarm)),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
   #endif
   au=mix(c,au,g);la=mix(c,la,g);
-  return uSeason<1.0?mix(c,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
+  float s1=mix(uSeason,smoothstep(0.0,0.8,uSeason),uAutumnWarm);   // (the warm autumn turns sooner: no long half-green, half-straw lime)
+  return uSeason<1.0?mix(c,au,s1):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
 // The world position's screen derivatives, taken by each shader's main before any branch (macroDerivs): the ground's
 // reads (the meadow's here, the macro colour's, src/look/shaders/macro.glsl) pass them explicitly, so a read in a
 // branch the pixels of a 2×2 quad take differently (a class edge, the shore band's sides) still picks its mip level

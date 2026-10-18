@@ -52,3 +52,10 @@ summer and autumn, close on the river, the widest); the owner judges, then wheth
   `shadowAutumn` and `shadowTurnAutumn`: cool over summer's greens, warm over autumn's oranges, as the leaves turn),
   the greens turn toward teal in summer and are muted as they turn (`grade.greenHue`, 60°, in `gradeOf`), the sun a
   neutral white, a little less saturation overall. Summer greens' hue now 118-160°.
+- Fourth pass: the owner, early autumn "still a bit too saturated", summer "too cool, make it a bit warmer" (the
+  old green was good: rebalance), winter "not cool enough, too saturated" (with Tiny Glade's winter). Measured: its
+  winter's shadows a dark, near-neutral mauve (0.26,0.22,0.24), ours a pale saturated blue (0.55,0.58,0.65, mostly
+  the clouds' shade on snow). Now: a winter shadow pair (`shadowWinter`, `shadowTurnWinter`) and the clouds' shade on
+  snow a mood colour (`cloudSnow`, a soft lavender-grey in epic), the winter sun a cool white; the greens turned 25°
+  (hue median 103°: the old 74°, the teal 126°) and less muted; the autumn pastels a quarter toward grey, the straw
+  paler; the warm autumn turning sooner and the teal turn on clear greens only (a half-turned straw went lime).

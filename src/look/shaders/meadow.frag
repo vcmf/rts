@@ -36,7 +36,7 @@ void main(){
     vec3 g=groundSeason(groundBounce(vRoot));
     #endif
     alb=g*mix(0.95,1.55,vV)*mix(0.92,1.10,vShade);
-    alb=mix(alb,alb*vec3(1.04,1.08,0.80),vV*0.5);
+    alb=mix(alb,alb*mix(vec3(1.04,1.08,0.80),vec3(1.06,1.0,0.86),uAutumnWarm*smoothstep(0.3,1.0,uSeason)),vV*0.5);   // (the tips: lime, warmed in the warm autumn)
     #if defined(GRASS_FLOW)&&!defined(GRASS_NO_HUE)
     // each clump its own hue, as the references' tufts (the owner, 2026-10-17): from a deeper blue-green to a warm
     // yellow-lime, by a hash of its cell (vHue, meadow.vert: the same on every vertex, so no speckle), stronger toward
