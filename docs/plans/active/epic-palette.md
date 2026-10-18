@@ -6,7 +6,7 @@ last_reviewed: 2026-10-18
 # Plan: an epic mood, after Tiny Glade
 
 The owner (2026-10-18), after Tiny Glade's look: "can we make our theme a bit more contrasted, a bit more epic, but
-someway so it's look more like 'epic version' of tiny glade". Stacked on the dark water (`plans/active/dark-water.md`).
+someway so it's look more like 'epic version' of tiny glade". Stacked on the dark water (`docs/plans/active/dark-water.md`).
 
 ## Scope
 
