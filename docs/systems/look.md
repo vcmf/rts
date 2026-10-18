@@ -357,7 +357,9 @@ The plan: `docs/plans/done/shadow-look.md`.
   blue violet, at the value the band had before, so dark coats keep their separation from shaded ground. The
   army blocks (`block.frag`, `KEEP_HUE`) keep the older band, so a coat in shadow loses none of its colour.
 - **The valley mist** (`mist()`): thinner over cast shadow on the ground (to 55 % of its amount), less so above
-  the ground; shadowed air is darker and bluer. With shadows off the mist is whole.
+  the ground; shadowed air is darker and bluer. With shadows off the mist is whole. Over the river a third of it,
+  from the shoreline across the shore band, in its mask (`src/look/bakes.ts`), so every surface there takes the same
+  air: it washed the dark water pale (`docs/plans/active/dark-water.md`).
 - **The edges** (`bake.frag`): the bake filters a shadow edge over 0.75 shadow texels a tap (was 1.2).
 - **Contact** (`bakes.ts`): a dark core of 0.45 crown radii (at least about 1.6 m: the occlusion map is about 1 m a
   texel) under each tree, in the light map's alpha, which the ground, the water's shore band and the grass read

@@ -297,10 +297,6 @@ float stoneFoam(vec2 xz,float s){
 vec3 withStones(vec3 c,vec3 wp,float s,float sh,float ice){
   float cs=max(cloud(wp)*0.6,sh);
   return mix(c,FOAM*mix(1.0,0.78,cs),stoneFoam(wp.xz,s)*0.85*(1.0-0.9*ice));}
-// the valley mist's share over the water at shore distance s (docs/plans/active/dark-water.md): a third over open
-// water (it washed the dark water pale), thinning from the shoreline across the band, the same on the terrain's band
-// and the water's own (the seam); the land keeps all of it
-float waterMist(float s){return 1.0-0.65*smoothstep(0.0,WATER_BAND+0.5,s);}
 // the ground at the water's edge, lit with the authored surface's normal: t its water texel
 vec3 shoreLand(vec3 wp,vec4 t,float occ,float sh){return paint(landAlbedo(wp.xz,max(-waterSdf(t),0.0),-waterDepth(t)),bankNormal(vec3(0.0,1.0,0.0),wp.xz),wp,occ,0.12,1.0,sh);}
 // the water's lower layers (research §2.8, layers 1, 2, 7, the shore foam, the ice): d the depth, s the shore distance,
@@ -337,7 +333,7 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh,vec2 ia){
   // drifts of snow on it, near the banks mostly; the rime white along its edge
   if(frost()>0.0){   // uniform: the grain's derivatives hold
     float F=frost();
-    c=mix(c,earthOf(vec3(0.05,0.12,0.20))*mix(1.0,0.75,cs),F*0.75*smoothstep(0.0,0.3,dd));
+    c=mix(c,earthOf(vec3(0.015,0.06,0.10))*mix(1.0,0.75,cs),F*0.75*smoothstep(0.0,0.3,dd));   // (darker than the deep teal: docs/plans/active/dark-water.md)
     vec3 ic=earthOf(mix(vec3(0.48,0.60,0.70),vec3(0.66,0.75,0.82),smoothstep(0.6,0.0,dd)));   // bluer and darker than the snow
     // the cracks: thin lines where the grain crosses its middle, at least 1.5 pixels wide, their ink spread (the
     // derivative taken before abs(): at the line's centre abs() folds it to 0)

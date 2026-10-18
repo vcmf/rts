@@ -19,7 +19,9 @@ import type { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { SUN, type Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
+import { RIVER, lerpA, riverQuery } from './river.ts'
 import { D, shadowMapSize } from './spec.ts'
+import { sstep } from './noise.ts'
 import type { Nature } from './nature.ts'
 import TER_VS from './shaders/terrain.vert?raw'
 import DEPTH_VS from './shaders/depth.vert?raw'
@@ -112,7 +114,11 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
       const near = ring(x, z, 7), far = ring(x, z, D.spec.aoRing)
       const ao = 1 - Math.min(0.35, Math.max(0, (near - h) * 0.10))   // hollows and stream banks
       const valley = Math.min(1, Math.max(0, (far - h) / 3.2))         // low ground relative to 40 m around
-      const k = (j * N + i) * 4; d[k] = 255; d[k + 1] = ao * 255; d[k + 2] = valley * valley * (3 - 2 * valley) * 255; d[k + 3] = 255
+      // over the water a third of it, from the shoreline across the shore band (docs/plans/active/dark-water.md): it
+      // washed the dark water pale. In the mask, so every surface over the river takes the same air (the water, the
+      // band, stones, units fording)
+      const q = riverQuery(x, z), wet = q ? lerpA(RIVER.W, q) / 2 - q.dist : -1, overWater = 1 - 0.65 * sstep(0, D.spec.water.band + 0.5, wet)
+      const k = (j * N + i) * 4; d[k] = 255; d[k + 1] = ao * 255; d[k + 2] = valley * valley * (3 - 2 * valley) * overWater * 255; d[k + 3] = 255
     }
     tg.putImageData(img, 0, 0); aog.imageSmoothingEnabled = true; aog.drawImage(tmp, 0, 0, AO_N, AO_N)
     aog.globalCompositeOperation = 'multiply'
