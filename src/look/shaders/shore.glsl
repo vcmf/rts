@@ -221,7 +221,7 @@ uniform vec3 uUnder;   // (the meadow map, uMeadow: declared in macro.glsl)
 vec3 meadowUnder(vec3 alb,vec2 xz){
   float near=uUnder.z*(1.0-smoothstep(uUnder.x,uUnder.y,length(xz-uFocus.xz)));
   if(near<=0.0)return alb;
-  vec4 m=texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);
+  vec4 m=meadowTexel(xz);   // (macro.glsl: read once)
   // (a crop by its height as the clumps: the low green crop half, the wheat cut to stubble half as the harvest goes)
   if(m.a>m.g){float k=coverAt(xz).x;bool green=k>6.5&&k<7.5;float h=green?0.5:mix(1.0,0.5,smoothstep(0.55,0.95,uSeason));
     return mix(alb,alb*(green?UNDER_GRASS:UNDER_CROP),clamp(m.a*h*cropSeasonK(k,uSeason),0.0,1.0)*near*UNDER_AMT);}
@@ -232,7 +232,7 @@ vec3 meadowUnder(vec3 alb,vec2 xz){return alb;}
 // the shore band's ground: the terrain's (groundAt, stony where steep) with the banks painted over it, through the
 // seasons: the same colour the terrain paints there
 vec3 landAlbedo(vec2 xz,float land,float h){float ny=bankNormal(vec3(0.0,1.0,0.0),xz).y;
-  return meadowUnder(groundSeason(bankPaint(groundSteep(roadPaint(dirtOn(groundAt(xz,pxMacro()),xz,pxMacro()),xz),ny),xz,land,h,ny)),xz);}
+  return meadowUnder(groundSeason(bankPaint(groundSteep(roadPaint(earthOn(dirtOn(groundAt(xz,pxMacro()),xz,pxMacro()),xz,pxMacro()),xz),ny),xz,land,h,ny)),xz);}
 // the bed: silt in pools, pale gravel where the current runs, weed in slow deeper water; the damp edge at depth 0
 // la: the ground at the water's edge (used to 0.3 m deep)
 vec3 bedAlbedo(vec2 xz,float depth,float speed,vec3 la){
