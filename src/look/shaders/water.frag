@@ -48,6 +48,8 @@ void main(){
     #endif
     // 3. calm and rough: riffles, and fast shallow water, break the surface
     float rough=max(smoothstep(0.3,0.65,riffle),smoothstep(0.6,0.9,sp)*smoothstep(1.2,0.5,d));
+    // broken, aerated water reads lighter: the riffles, the fords (art bible §6c), over the dark pools
+    c=mix(c,c*1.5+vec3(0.03,0.06,0.06),smoothstep(0.3,0.65,riffle)*0.8*up*(1.0-0.7*frost()));
     // the strokes' coordinate along the flow: the time of travel against the clock, wrapped to a whole period
     // (research §4.3: features stretch where the water is fast and never shear)
     float along=(vTau-mod(uTime,STROKE_P))*STROKE_V;
@@ -69,13 +71,13 @@ void main(){
     c=mix(c,c*0.82,smoothstep(0.70,0.85,st2)*0.25*(1.0-rough)*smoothstep(0.3,0.8,d)*slow*up*near);
     // 8. glitter: painted sun dabs, mostly on riffles
     float spec=pow(max(dot(R,uSunDir),0.0),5.0);
-    float dab=aastep(mix(0.80,0.73,rough),G(vec2(along*0.10,across*0.25)).g)*aastep(0.5,G(vW.xz/9.0+mod(uTime,200.0/3.0)*0.015).g);
+    float dab=smoothstep(mix(0.78,0.71,rough),mix(0.84,0.77,rough),G(vec2(along*0.10,across*0.25)).g)*aastep(0.5,G(vW.xz/9.0+mod(uTime,200.0/3.0)*0.015).g);   // (soft-edged: hard dabs shimmered on the dark water)
     c+=uSunCol*mix(uGlint,vec3(0.80,0.88,1.0),frost())*dab*(0.2+spec*1.6)*(1.0-cs)*smoothstep(0.15,0.5,d)*up*near*(1.0-0.7*frost());   // fewer and cold in winter (W5b)
     // 9. riffle foam: broken streaks along the current (the grain's dry-brush channel, long along x), bent into
     // chevrons pointing upstream, hard-edged
     float chev=G(vec2(along*0.05+abs(across)*0.02,across*0.03)).b;
     float riff=smoothstep(0.35,0.65,riffle)*aastep(0.70,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);   // (thinner over the dark water: docs/plans/active/dark-water.md)
-    c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.85*up*near);
+    c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.65*up*near);   // (softer on the dark water: its edges shimmered)
     // 10. autumn leaves (W5b): from early autumn until the ice, drifting with the current on slow water (none from a
     // speed of 0.62). Cells in the time of travel's coordinates (4 along by 1.6 m across), the clock wrapped to a period
     // of LEAF_P*STROKE_V = 200 along (50 cells, the hash's period along: the wrap is seamless, the layout repeats only

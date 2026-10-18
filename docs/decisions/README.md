@@ -48,3 +48,4 @@ recorded here on 2026-10-08.
 | [0039](0039-roads-baked-far-live-near.md) | Roads: baked far out, painted live from mid zoom in | accepted |
 | [0040](0040-near-field-depth-of-field.md) | The gameplay depth of field blurs the near field too, in the bottom band, units with the scene | accepted |
 | [0041](0041-combed-meadow-default.md) | The combed meadow is the default grass | accepted |
+| [0042](0042-dark-water-shimmer-limits.md) | Dark water: the water's shimmer limits re-baselined | accepted |

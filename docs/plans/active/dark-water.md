@@ -57,3 +57,12 @@ widest), the owner judges.
   step at every shoreline otherwise); the absorption's coefficients folded; the comments. Fixed without a fourth
   round: local constants, checked by the batch below. Left: cast shadows show little on the deepest pools (the
   shadow multiplies a near-black teal); winter's ice keeps the thinner mist (the light map is baked once).
+
+## Checks
+
+- The water check's first run: the riffles no lighter than the pools by 0.03 (0.309 against 0.291: the shallows
+  darkened, the riffles lost the pale mist that lit them), and the shimmer over its limits. Now: main's absorption in
+  the shallows (1.6 times it from about 0.4 m), the rough water lifted (broken, aerated water reads lighter: §6c), the
+  riffle foam softer, the glitter's dabs soft-edged: pools 0.289, riffles 0.374, ok. The shimmer stays above main's
+  (1.17 % closest, 5.57 % widest: every edge on dark water is more contrasty); the owner, after looking at it moving:
+  re-baseline (decision 0042).
