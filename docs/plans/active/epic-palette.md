@@ -69,3 +69,15 @@ summer and autumn, close on the river, the widest); the owner judges, then wheth
   lights a yellow-lime the greens' muting does not count as green). A summer and winter saturation (`grade.summerSat`,
   0.85 in epic, × sat outside autumn: `gradeOf`), and the greens and the world's own colour a little more muted:
   summer chroma 0.11, autumn unchanged (0.18).
+
+## Performance
+
+After the rebase on main's terrain textures (#116), the owner saw 100-104 fps at a river view where main holds 120.
+Bench (`tools/bench-look.mjs`, Metal, this Mac, `?benchat=-60,-20&season=0.8`, frame interval ms, interleaved): the
+dark water as main; this branch +0.45 at the default zoom under either mood (+0.45 close under epic). Bisected by
+swapping shaders and by test moods. Fixed: the season's shadow colours, saturation and the ground's season timing
+blended once a frame on the CPU (`seasonLight`, `src/look/main.ts`), not per pixel; the warm autumn behind a
+compile-time `#if` (a `mix(a, b, 0.0)` by a constant still computes `b`: no float folding); the blades' tip colours
+once a frame; epic's faint contrast dropped (0.05); the greens' teal turn a matrix built once a frame (it took a sine
+and cosine a pixel, of every material: about 0.25 ms). Now, epic against main: summer (0.3) default 10.19 against
+10.22, autumn (0.8) 10.09 against 10.33, wide and close within 0.05.
