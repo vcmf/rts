@@ -58,7 +58,10 @@ void main(){
     float wob=(G(vec2(across*0.6,along*0.25)).r-0.5)*(0.9+1.6*rough);
     vec2 o=R.xz/max(R.y,0.2);
     float rf=max(reflAt(vW.xz+o*4.0+vec2(wob,0.0)),reflAt(vW.xz+o*7.5+vec2(wob*1.5,0.0)));
-    c=mix(c,earthOf(vec3(0.10,0.20,0.14)),smoothstep(0.25,0.6,rf)*0.7*smoothstep(0.15,0.5,d)*(1.0-0.7*rough)*up);
+    // (the crowns' mirror: a dark green, a dark russet as they turn, gone as they go bare, cooled in shade as the water
+    // under it: docs/plans/active/dark-water.md)
+    vec3 rc=earthOf(mix(vec3(0.10,0.20,0.14),vec3(0.18,0.12,0.08),smoothstep(0.8,1.4,uSeason)))*mix(vec3(1.0),vec3(0.58,0.70,0.88),cs);
+    c=mix(c,rc,smoothstep(0.25,0.6,rf)*0.7*(1.0-smoothstep(1.8,2.3,uSeason))*smoothstep(0.15,0.5,d)*(1.0-0.7*rough)*up);
     // 6. strokes along the current: light marks (more on riffles), a few dark ones in pools, none where it is slow
     float st=G(vec2(along*0.05,across*0.12)).b,st2=G(vec2(along*0.10+0.37,across*0.35+0.2)).g;
     float slow=smoothstep(0.08,0.25,sp),marks=smoothstep(0.62,0.80,st*0.6+st2*0.4)*smoothstep(0.15,0.6,d)*slow;

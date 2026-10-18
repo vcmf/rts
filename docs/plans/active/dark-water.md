@@ -15,7 +15,7 @@ more close to reality". The art bible already asks for it (§6c: pools of "deep,
   `shore.glsl`); the painted sky tint (the moods' `waterSky`) a dark blue-teal, not a pale sky; the far ring's river
   line (`farRiver`) to match.
 - **The trees' mirror** a dark green (`water.frag` layer 5), above the dark water's value, as Tiny Glade's: the
-  crowns read in it.
+  crowns read in it. A dark russet as they turn, gone as they go bare, cooled in shade as the water under it.
 - **Fewer light marks:** the strokes along the current mostly on riffles; the riffle foam a little thinner, the
   riffles still the lighter water (the fords: §6c, and the pools-and-riffles check).
 - **The valley mist a third over the water** (the light map's mist channel, `bake.frag`, from the water data's shore
@@ -27,7 +27,7 @@ more close to reality". The art bible already asks for it (§6c: pools of "deep,
 
 ## Approach
 
-Constants and mood colours, and the mist's mask over the water; no new pass. A/B captures against main (summer, autumn, winter; close, default,
+Constants and mood colours, and the mist thinned over the water in the light map's bake; no new pass. A/B captures against main (summer, autumn, winter; close, default,
 widest), the owner judges.
 
 ## Acceptance
@@ -39,8 +39,9 @@ widest), the owner judges.
 
 ## Results
 
-- **The owner** (2026-10-18): "it's good enough yes" (the first pass with the mist thinned in the two shaders; the
-  mask's version looks the same: `scratch/compare/water/ab5.jpg`, not committed).
+- **The owner** (2026-10-18): "it's good enough yes", on the first pass (the mist thinned in the two shaders); the
+  built version (the light map's) captured the same in the same views (`scratch/compare/water/ab6.jpg`, not
+  committed): the owner to see it once more before the merge.
 
 ## Review
 
@@ -51,3 +52,8 @@ widest), the owner judges.
 - **Round 2** (severe): the mist mask's 3 m cells and a symmetric half width could not follow the shoreline (thinner
   mist on dry point bars, blotchy on narrow channels): thinned in the light map's bake (0.26 m texels) from the water
   data's shore distance instead. The reflections' wording.
+- **Round 3** (the last; moderate, one visible): the trees' green mirror showed on winter's water (the trees bare)
+  and stayed lit in shade: it follows the season and the shade now. The mist's thinning over a few metres (a sharp
+  step at every shoreline otherwise); the absorption's coefficients folded; the comments. Fixed without a fourth
+  round: local constants, checked by the batch below. Left: cast shadows show little on the deepest pools (the
+  shadow multiplies a near-black teal); winter's ice keeps the thinner mist (the light map is baked once).

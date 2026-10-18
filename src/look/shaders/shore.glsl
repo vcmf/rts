@@ -315,7 +315,7 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh,vec2 ia){
   pSnowK=1.0;pGround=pg;
   // 2. absorption, red first; the painted ramp (shallow green-ochre, turquoise, deep teal) in bands broken by the grain
   float dn=dd*(1.0+0.35*(G(wp.xz/5.0).g-0.5)*uGrainAmt);
-  vec3 T=exp(-vec3(3.0,1.5,1.1)*1.6*dn);   // (dark from about half a metre: docs/plans/active/dark-water.md)
+  vec3 T=exp(-vec3(4.8,2.4,1.76)*dn);   // (dark from about half a metre: docs/plans/active/dark-water.md)
   float b=(1.0-T.g)*3.0+(G(wp.xz/2.0).r-0.5)*0.5;
   vec3 wc=earthOf(mix(mix(vec3(0.30,0.44,0.33),vec3(0.07,0.22,0.24),smoothstep(0.9,1.1,b)),vec3(0.025,0.10,0.12),smoothstep(2.0,2.2,b)));   // the mood's earth, as the bed and the far ring's river line (paint)
   vec3 c=bed*T+wc*(1.0-T);
