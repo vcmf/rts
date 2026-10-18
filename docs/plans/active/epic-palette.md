@@ -62,3 +62,6 @@ summer and autumn, close on the river, the widest); the owner judges, then wheth
 - Fifth pass: early autumn "still too saturated". Measured: its HSV saturation (median 0.33) under Tiny Glade's autumn
   (0.52), so the loud part is the ground, a large even yellow under a strategy camera (Tiny Glade's frames are mostly
   crowns). The autumn ground and grass a calmer beige straw (0.75,0.71,0.61), the pink pastel a peach.
+- Sixth pass: "better but still too light, the yellow too strong". The autumn ground and grass a mid-value warm tan
+  (0.62,0.55,0.44: darker than the crowns, as Tiny Glade's), dry grass lifted less (the comb's streaks kept): ground
+  luma median 0.73 to 0.60 at the widest, chroma 0.18.
