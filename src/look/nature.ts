@@ -72,9 +72,9 @@ export interface Nature {
 
 // what may grow on each class of the cover (docs/plans/active/l5-macro.md): grass, flowers, plants, bushes, stumps
 // and logs on grass (meadow, pasture, a copse's floor); wheat on wheat; stones anywhere but roads, tracks and the
-// village; trees and the far hedgerows' bushes too, but hidden on fields and bare earth (addPlaced). The roads and the
-// village keep clear of the copses (a rejected copse tree would shift the scatter's stream after it: the scatter's
-// counts match main's)
+// village; trees and the far hedgerows' bushes too, but hidden on fields and bare earth (addPlaced). Anything on a road,
+// a track or the village is placed but hidden (addPlaced): rejected, it would draw a new candidate and shift the
+// scatter's stream after it, so a new road would move every tree (docs/plans/done/roads.md)
 const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood], LINE_COVER: readonly number[] = [COVER.road, COVER.track, COVER.village]
 const TRODDEN: readonly number[] = [...LINE_COVER, COVER.bare]
 // the models that keep to grass (coverAllows), and so never stand on a field: the hidden rule below skips them
@@ -191,9 +191,13 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   // new candidate and shift the scatter's stream, moving every tree after it (docs/plans/done/default-map.md).
   // The reach: the footprint (its crown) and EDGE (the painted edge's wander). onFields: the lone field trees under gen
   // stand in the fields on purpose (decision 0031), never on bare earth
+  const onLines = (x: number, z: number) => AROUND.some(([dx, dz]) => LINE_COVER.includes(coverAt(cover, x + dx * EDGE, z + dz * EDGE)))
   const addPlaced = (model: string, item: Item, kind = '', drawn = model, onFields = false): Placed => {
     const [x, z, s] = item
-    if (!placeable(x, z, footprint(model, s), kind) || !coverAllows(cover, model, x, z)) return false
+    if (!placeable(x, z, footprint(model, s), kind)) return false
+    // on a road, a track or the village: placed but hidden, so the roads can change without moving the rest
+    if (onLines(x, z)) return 'hidden'
+    if (!coverAllows(cover, model, x, z)) return false
     if (model !== 'Wheat' && !GRASSY_MODEL.test(model)) {
       const reach = EDGE + footprint(model, s)
       if (AROUND.some(([dx, dz]) => { const k = coverAt(cover, x + dx * reach, z + dz * reach); return k === COVER.bare || (!onFields && isField(k)) })) return 'hidden'
@@ -239,7 +243,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
     const mdl = 'Willow_' + (1 + Math.floor(rr() * 3)), s = 2.6 + rr() * 0.9, side = rr() < 0.5 ? -1 : 1, off = C.W[i] / 2 * 1.7 + footprint(mdl, s) + 0.3 + rr() * 3; let x = C.px[i] - C.tz[i] * side * off, z = C.pz[i] + C.tx[i] * side * off
     // inside a bend the nearest water is closer than this sample's normal suggests: step outward until the rule accepts
     const yaw = rr() * 6.28, tint = 0.2 + rr() * 0.5; let ok: Placed = false
-    for (let t = 0; t < 6 && !ok; t++) { const o = off + t * 1.5; x = C.px[i] - C.tz[i] * side * o; z = C.pz[i] + C.tx[i] * side * o; ok = addPlaced(mdl, [x, z, s, yaw, tint], '', tree(mdl, x, z)) }
+    for (let t = 0; t < 6 && !ok; t++) { const o = off + t * 1.5; x = C.px[i] - C.tz[i] * side * o; z = C.pz[i] + C.tx[i] * side * o; if (onLines(x, z)) continue; ok = addPlaced(mdl, [x, z, s, yaw, tint], '', tree(mdl, x, z)) }   // (stepping past a road too)
     if (!ok) continue
     if (ok === 'hidden') continue
     const M = NATURE[tree(mdl, x, z)]; smTree(x, z, M.max[1] * 0.6 * s, (M.max[0] - M.min[0]) * 0.45 * s, crownLeft(tree(mdl, x, z)))
@@ -250,7 +254,7 @@ export function buildNature(scene: Scene, mats: Materials, reflAdd: (x: number, 
   if (genModels) for (const [mdl, x, z, s, lone] of genModels.extras()) if (addPlaced(mdl, [x, z, s, hash(x, z) * 6.28, hash(z, x)], '', mdl, lone === true) === 'drawn') { const M = NATURE[mdl]; smTree(x, z, M.max[1] * 0.62 * s, Math.max(M.max[0] - M.min[0], M.max[2] - M.min[2]) * 0.45 * s, crownLeft(mdl)) }
   for (let i = 0; i < 90; i++) {   // bushes, a third of them with berries
     const a = rr() * 6.28, r = 14 + rr() * 120, x = Math.cos(a) * r + 8, z = Math.sin(a) * r, s = 1.8 + rr() * 1.4
-    if (addPlaced(rr() < 0.33 ? 'BushBerries_' + (1 + Math.floor(rr() * 2)) : 'Bush_' + (1 + Math.floor(rr() * 2)), [x, z, s, rr() * 6.28, rr()])) smBlob(x, z, s * 0.6)
+    if (addPlaced(rr() < 0.33 ? 'BushBerries_' + (1 + Math.floor(rr() * 2)) : 'Bush_' + (1 + Math.floor(rr() * 2)), [x, z, s, rr() * 6.28, rr()]) === 'drawn') smBlob(x, z, s * 0.6)
   }
   for (let i = 0; i < 46; i++) {
     const a = rr() * 6.28, r = 10 + rr() * 110, x = Math.cos(a) * r, z = Math.sin(a) * r, s = 1.6 + rr() * 2.4
