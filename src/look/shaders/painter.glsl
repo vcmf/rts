@@ -2,9 +2,10 @@
 uniform sampler2D uGrain;
 uniform vec3 uSunDir,uSunCol,uShadowCol,uHazeCool,uHazeWarm,uCamPos,uFocus;
 // the mood's other colours (src/look/mood.ts)
+uniform vec3 uShadowAutumn,uShadowTurnAutumn;
 uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistShade,uMistLit,uWaterSky,uGlint,uFarRiver;   // uShadowTurn: divided by its luma
 // the grade (gradeOf, at the end of atmos), and how much of the light units take (KEEP_HUE: docs/plans/done/lc1b-coats.md)
-uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade,uMoodMist,uContrast,uAutumnWarm;
+uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade,uMoodMist,uContrast,uAutumnWarm,uGreenHue;
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
 uniform float uUnitTint,uUnitMist,uUnitGrade,uUnitBounce;
 uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt,uBounce,uGroundBounce;   // the earth (the mood): the world toward earth tones
@@ -133,11 +134,14 @@ vec3 cloudShade(vec3 c,float cl,float snow){return mix(c,c*mix(CLOUD_SHADE,CLOUD
 // the shadow band (docs/plans/done/shadow-look.md): more saturated than the base and turned toward a cool blue
 // violet at the same value (a darker band costs dark coats their separation, tools/guard.mjs). KEEP_HUE: the
 // army coats keep the band of main, so a coat in shadow loses none of its colour
-vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
-  vec3 s=clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80;float v=dot(s,Y);   // the band of main, whose value is kept
+// the season's share of autumn (as the leaves turn: 0 summer, 1 from autumn to late autumn, easing into winter's): the
+// mood's shadow turns from cool to warm with it
+float autumnK(){return smoothstep(0.4,1.0,uSeason)*(1.0-smoothstep(2.2,3.0,uSeason));}
+vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);float ak=autumnK();vec3 SC=mix(uShadowCol,uShadowAutumn,ak),ST=mix(uShadowTurn,uShadowTurnAutumn,ak);
+  vec3 s=clamp(mix(vec3(l),a,1.15),0.0,1.0)*SC*0.80;float v=dot(s,Y);   // the band of main, whose value is kept
   #ifndef KEEP_HUE
-  vec3 t=clamp(mix(vec3(l),a,1.3),0.0,1.0)*uShadowCol;
-  s=mix(t/max(dot(t,Y),1e-4),uShadowTurn,0.25)*v;
+  vec3 t=clamp(mix(vec3(l),a,1.3),0.0,1.0)*SC;
+  s=mix(t/max(dot(t,Y),1e-4),ST,0.25)*v;
   #endif
   return s+uShadowLift;}
 // THE TERRAIN'S DETAIL LAYER (docs/plans/active/l2-detail.md, L2b): the paint grain at a constant size on screen.
@@ -328,6 +332,11 @@ vec3 gradeOf(vec3 c){
   const vec3 L=LUMA;float l=dot(c,L);
   float green=clamp((c.g-max(c.r,c.b))*3.0,0.0,1.0);
   vec3 g=mix(c,vec3(l)*uGreenTint+(c-vec3(l))*uGreenChroma,green*uGreenAmt);
+  // the greens turned toward teal in summer (the mood's greenHue, Tiny Glade's blue-greens: docs/plans/active/
+  // epic-palette.md): their colour about the grey axis, the value kept
+  if(uGreenHue>0.0){float an=uGreenHue*clamp((c.g-c.b)*4.0,0.0,1.0)*smoothstep(0.0,0.06,c.g-c.r*0.85)*(1.0-autumnK());
+    float w=an/uGreenHue;vec3 k=vec3(0.57735),d=g-vec3(dot(g,L));d=d*cos(an)+cross(k,d)*sin(an)+k*dot(k,d)*(1.0-cos(an));
+    g=(d*mix(1.0,uGreenChroma,w)+vec3(dot(g,L)))*mix(1.0,0.9,w);}   // (muted by the mood's greenChroma and a little deeper as they turn)
   g=mix(vec3(dot(g,L)),g,uGradeSat);
   g*=mix(uSplitLo,uSplitHi,smoothstep(0.08,0.75,l));
   g+=uLift*(1.0-l);

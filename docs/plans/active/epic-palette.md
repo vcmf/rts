@@ -46,3 +46,9 @@ summer and autumn, close on the river, the widest); the owner judges, then wheth
   toward a warm brown, the mid band and the darks' split tone neutral, the shaded mist warm; the sun less yellow; the
   earth turn and the greens' muting mostly off (earth 0.35, green 0.3); the wheat and the autumn ground a softer
   straw-peach. Autumn chroma 0.40, summer 0.28 (Tiny Glade's 0.40 and 0.24).
+- Third pass: the owner, autumn "in good direction", summer (and spring) to look like Tiny Glade's glade. Measured:
+  its greens' hue 143-197° (blue-green), ours 61-85° (yellow-green), the same chroma (0.16); its shadows a deep blue
+  (0.03,0.11,0.22), its lights a cool mint. So the shadow now turns with the season (two new mood colours,
+  `shadowAutumn` and `shadowTurnAutumn`: cool over summer's greens, warm over autumn's oranges, as the leaves turn),
+  the greens turn toward teal in summer and are muted as they turn (`grade.greenHue`, 60°, in `gradeOf`), the sun a
+  neutral white, a little less saturation overall. Summer greens' hue now 118-160°.
