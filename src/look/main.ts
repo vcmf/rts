@@ -84,7 +84,7 @@ const meadowParam = params.get('meadow')
 if (meadowParam !== null && meadowParam !== 'off') throw new Error(`?meadow must be off, not ${meadowParam}`)
 // the meadow reads a half-float texture in its vertex shader: WebGL2 only (on WebGL1 the old scatter stays)
 const meadowOn = meadowParam !== 'off' && engine.version >= 2
-// ?grass=flow: the meadow combed (docs/plans/active/grass-flow.md): its pattern and clumps along a flow field, light and
+// ?grass=flow: the meadow combed (docs/plans/done/grass-flow.md): its pattern and clumps along a flow field, light and
 // dark streaks by the lean against the sun (its direction on the ground, FLOW_SUN), on the ground's bake and the
 // clumps' materials alike
 const grassParam = params.get('grass')
@@ -227,7 +227,7 @@ if (dofParam !== null && dofParam !== '0' && dofParam !== '1') throw new Error(`
 // which write no distance to alpha)
 if (dofParam !== null) S.dof = +dofParam
 else if (params.has('bench') || params.has('water') || params.get('river') === 'debug') S.dof = 0
-// ?dofnear=0: the near blur off (its cost's A/B: docs/plans/active/dof-v2.md)
+// ?dofnear=0: the near blur off (its cost's A/B: docs/plans/done/dof-v2.md)
 if (params.get('dofnear') === '0') DOF_NEAR.px = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach) : null
@@ -458,7 +458,7 @@ Object.assign(window, { __look: {
   lab, mats, passes, post, setDetail,
   dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
   dofPaint: DOF_PAINT,   // the blur's painted look (the same)
-  dofNear: DOF_NEAR,   // the near blur's (docs/plans/active/dof-v2.md), the same
+  dofNear: DOF_NEAR,   // the near blur's (docs/plans/done/dof-v2.md), the same
   sky: bakes.sky, meadowBakeMs: meadow?.bakeMs ?? null, flowBuildMs: flowTex?.ms ?? null,   // (the combed meadow's flow textures, on load)
    meadow: meadow ? { reach: meadow.reach, growingCells: meadow.growingCells, growthAt: meadow.growthAt, groundAt: meadow.groundAt, cropAt: meadow.cropAt, croppingCells: meadow.croppingCells } : null,   // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
   hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),
@@ -547,7 +547,7 @@ if (params.has('bench')) {
   const cardMats = [...new Set((nature.cardCasters?.cards ?? []).map(m => m.material as ShaderMaterial))]
   const volume = (on: boolean) => { for (const m of cardMats) { m.setDefine('#define VOLUME', on); m.setDefine('#define SOFT_RAMP', on) } }
   // ?grass=flow&bench=grass: the combed meadow on and off in one page (GRASS_FLOW on every painted material and the
-  // clumps), so its cost is a paired difference (docs/plans/active/dof-v2.md: two page loads differ by up to 0.9 ms)
+  // clumps), so its cost is a paired difference (docs/plans/done/dof-v2.md: two page loads differ by up to 0.9 ms)
   // ?grass=flow&bench=grassparts: the same, one part off at a time (the ablation's switches, GRASS_NO_*; a part ?grassoff
   // turns off stays off). The arms switch the materials only: the macro tile keeps its combed bake and the near bake runs
   // in every arm, so 'none' measures the materials' share of the combed meadow, not all of it

@@ -100,7 +100,7 @@ vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
   #endif
   return mix(c,mix(uMistShade,uMistLit,air),t);}
 // view distance in alpha → depth of field without re-rendering the scene
-// the depth of field lens term in alpha (docs/plans/active/dof-v2.md): s = 1 - focus/z, z the depth along the view axis
+// the depth of field lens term in alpha (docs/plans/done/dof-v2.md): s = 1 - focus/z, z the depth along the view axis
 // (uFocusZ: the focus, uCamFwd: the axis), over -1 (half the focus distance) to 0.5 (twice it), in the codes 1 to 254 of
 // the alpha's 8 bits; every surface writes it, the units too (they blur by their depth as the scene does: the owner,
 // decision 0040). The code 0 is a pixel that is not a number (an 8-bit target stores one as 0), 255 the clear (no

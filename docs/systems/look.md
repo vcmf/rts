@@ -75,7 +75,7 @@ and on.
 
 ### The gameplay depth of field (decisions 0024, 0040)
 
-The plans: `docs/plans/done/gameplay-dof.md`, then `docs/plans/active/dof-v2.md` (the research:
+The plans: `docs/plans/done/gameplay-dof.md`, then `docs/plans/done/dof-v2.md` (the research:
 `docs/research/dof-v2.md`). Two blurs, each in its band of the frame: what lies beyond the focus blurs toward the
 top, what lies nearer the camera blurs in the bottom share of the frame only, so the formations in the middle never
 take it. Units blur by their depth as the scene does (decision 0040).
@@ -374,7 +374,7 @@ shader); `?meadow=off` puts back the old scatter.
   season's colour at the tip, the standing wheat gold in summer, turning orange while it is cut; stubble, the cut
   wheat's too, a pale straw over the darker soil (`stubbleTip`, no redder than the standing wheat), browning by late
   autumn; the green crop lime to olive. Ploughed fields grow nothing.
-- **The combed meadow** (`?grass=flow`, an experiment: `docs/plans/active/grass-flow.md`; the research:
+- **The combed meadow** (`?grass=flow`, an experiment: `docs/plans/done/grass-flow.md`; the research:
   `docs/research/painterly-grass.md`). Not the default: the arm the owner judges against today's meadow. It needs the
   bake arm (on the shader arm the meadow keeps the default pattern).
   - **The flow** (`flowAt` in `shaders/meadow.glsl`, its numbers `FLOW` in `src/look/flow.ts`, given as defines): a slow

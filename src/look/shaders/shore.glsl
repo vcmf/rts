@@ -39,7 +39,7 @@ vec3 groundSeason(vec3 c){
   // (green no higher than red or blue) take a quarter. Winter mutes every colour, as before
   float gs=smoothstep(-0.005,0.03,c.g-max(c.r,c.b)),g=mix(0.25,1.0,gs);
   #ifdef GRASS_FLOW
-  // the combed meadow keeps its value through autumn (docs/plans/active/grass-flow.md): on green ground only (the
+  // the combed meadow keeps its value through autumn (docs/plans/done/grass-flow.md): on green ground only (the
   // meadow; a road, earth and stone as before), the season's colour taken at the pixel's value against the meadow's
   // (about 0.4), so its streaks and gaps do not fade to 22% in autumn
   float r=mix(1.0,clamp(dot(c,vec3(0.3,0.59,0.11))/0.40,0.55,1.6),gs*pFlowGrow);   // (where grass grows: the zones keep the default colour)

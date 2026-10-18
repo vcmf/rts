@@ -1,5 +1,5 @@
 precision highp float;varying vec2 vUV;uniform sampler2D textureSampler;uniform vec2 uTexel,uHalf;uniform float uN,uNN;
-// the depth of field's blur at half resolution (docs/plans/active/dof-v2.md). textureSampler: the scene at half
+// the depth of field's blur at half resolution (docs/plans/done/dof-v2.md). textureSampler: the scene at half
 // resolution (dofdown.frag), each read at a pixel's centre (uHalf its texel; uTexel the full resolution's, the unit of
 // the blur).
 // FAR, after Dennis Gustafsson's single-pass bokeh: uN taps on a Vogel spiral out to the largest blur, each counted where

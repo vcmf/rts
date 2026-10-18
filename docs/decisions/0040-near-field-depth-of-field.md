@@ -25,7 +25,7 @@ unit's mild blur in the bands is by design, not a readability failure. The blur'
 ## Consequences
 
 The frame's foot reads as a painted foreground instead of a cut. The readability guard passes with the depth of field
-on at the start and cover views (`docs/plans/active/dof-v2.md`). No special case for units in the lens term: one code
+on at the start and cover views (`docs/plans/done/dof-v2.md`). No special case for units in the lens term: one code
 range for every surface, so the MSAA resolve's averaging of codes at a unit's edge is the same soft edge as any other
 object's. The cost against the depth of field off: +0.1 to +1.1 ms at the oblique mid zooms on the dev Mac, by view
 and session (the plan).

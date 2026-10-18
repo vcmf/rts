@@ -28,11 +28,11 @@ export const START = { beta: 0.80, radius: 125, x: -10, z: 2 }
 // it, the largest blur in pixels at 1080 lines, and the share of it left at the widest zoom (window.__look.dof tunes
 // them live); FOCUS_S the focus's easing time (s)
 export const DOF = { band: 0.2, k: 4, px: 7, wide: 0.4 }
-// the near blur (docs/plans/active/dof-v2.md): its sharp band nearer than the focus (in 1 - focus/z), its gain, its
+// the near blur (docs/plans/done/dof-v2.md): its sharp band nearer than the focus (in 1 - focus/z), its gain, its
 // largest blur in pixels at 1080 lines (eased by the zoom as the far one) and the share of the frame from the bottom it
 // reaches (the formations in the middle never take it)
 export const DOF_NEAR = { band: 0.04, k: 4, px: 8, screen: 0.3 }
-// the blur's painted look (docs/plans/active/dof-v2.md): the far blur's colour toward the haze (lighter, greyer) by its
+// the blur's painted look (docs/plans/done/dof-v2.md): the far blur's colour toward the haze (lighter, greyer) by its
 // size, the near layer darker and cooler by its coverage (uber.frag)
 export const DOF_PAINT = { far: 0.5, near: 0.7 }
 // the scene's MSAA samples (4; ?msaa=1 for the frame-rate A/Bs, src/look/main.ts)
@@ -155,7 +155,7 @@ export class Post {
     const { camera, engine, S } = this
     this.posts.forEach(p => p.dispose(camera)); this.posts = []
     // the scene's target, the first pass's input: 8 bits with the depth of field too (the lens term in alpha, 8 bits:
-    // painter.glsl depthA; docs/plans/active/dof-v2.md)
+    // painter.glsl depthA; docs/plans/done/dof-v2.md)
     const HF = Constants.TEXTURETYPE_HALF_FLOAT, sceneType = MSAA.byte ? Constants.TEXTURETYPE_UNSIGNED_BYTE : HF
     // ratio: the size of the texture this pass reads, so the pass before it draws at that size
     const pp = (name: string, uni: string[], smp: string[], type: number, ratio = 1.0, defines: string | null = null) => { const p = new PostProcess(name, name, uni, smp, ratio, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, defines, type); if (!this.posts.length) { p.samples = MSAA.samples } this.posts.push(p); return p }
@@ -169,7 +169,7 @@ export class Post {
     // the chain: the scene at half resolution (dofdown), the blur at half resolution (dof: far and near), the finishing
     // pass (uber). A pass draws into the next one's input, at the next one's ratio. (No tile passes: the near blur lies
     // in the bottom band of the frame only, so the band says where it can reach; two small tile passes cost about
-    // 0.7 ms on the Mac, measured: docs/plans/active/dof-v2.md)
+    // 0.7 ms on the Mac, measured: docs/plans/done/dof-v2.md)
     const d = S.dof ? pp('dofdown', ['uTexel', 'uOut', ...lens], [], sceneType) : null
     const p = d ? pp('dof', ['uTexel', 'uHalf', 'uN', 'uNN', ...lens], [], sceneType, 0.5) : null
     let px = 0, npx = 0

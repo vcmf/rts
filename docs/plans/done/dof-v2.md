@@ -1,11 +1,11 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-18
 ---
 
 # Plan: depth of field v2: cheaper, near and far, painted
 
-Stacked on `docs/plans/active/grass-flow.md` (PR #112): this branch starts from it and merges with it.
+Stacked on `docs/plans/done/grass-flow.md` (PR #112): this branch starts from it and merges with it.
 
 ## Problem
 

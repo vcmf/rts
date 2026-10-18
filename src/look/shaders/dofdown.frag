@@ -1,5 +1,5 @@
 precision highp float;varying vec2 vUV;uniform sampler2D textureSampler;uniform vec2 uTexel,uOut;
-// the depth of field's scene at half resolution (docs/plans/active/dof-v2.md; dof.frag reads it): each
+// the depth of field's scene at half resolution (docs/plans/done/dof-v2.md; dof.frag reads it): each
 // pixel the four scene pixels under it (the block 2o, 2o + 1 of output pixel o, so an odd size drops the last row or
 // column rather than drifting), read at their centres: their colour averaged (a figure narrower than the block is
 // blurred, not dropped) and one of their lens terms: the nearest where it lies past the near band (a near silhouette

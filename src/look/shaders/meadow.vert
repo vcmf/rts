@@ -92,7 +92,7 @@ void main(){
   // axis as it rises (the grass clump fans out), and barely any lean
   if(crop)p.xz*=CROP_WIDE/(1.0+CROP_FAN*aV);   // the grass clump's spread grows about 1 + CROP_FAN aV up its blades (measured): undone, the stalks parallel, CROP_WIDE times the root's spread
   #ifdef GRASS_FLOW
-  // combed (docs/plans/active/grass-flow.md): the clump leans with the flow, bending more toward its tips (the
+  // combed (docs/plans/done/grass-flow.md): the clump leans with the flow, bending more toward its tips (the
   // offset grows with the height squared), as far as the flow lies it over, the hash a small jitter; not crops
   #ifdef GRASS_NO_LEAN
   vec3 fl=vec3(1.0,0.0,0.0);   // (the ablation: no flow read a vertex)

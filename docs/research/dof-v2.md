@@ -6,7 +6,7 @@ last_reviewed: 2026-10-18
 # Depth of field v2: near and far, cheap, painted
 
 Research notes, October 2026, from three research agents (high-quality game depth of field, painterly and
-strategy-game blur, our own cost), for the plan `docs/plans/active/dof-v2.md` and the system doc
+strategy-game blur, our own cost), for the plan `docs/plans/done/dof-v2.md` and the system doc
 `docs/systems/look.md` ("The gameplay depth of field"). Tags: **sourced** (the reference says it), **inference**
 (ours, reasoning shown), **measured** (the dev Mac, paired one-page runs, the plan's numbers).
 

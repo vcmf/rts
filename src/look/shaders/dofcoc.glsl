@@ -1,4 +1,4 @@
-// the depth of field lens (dof.frag, dofdown.frag and the composite in uber.frag; docs/plans/active/dof-v2.md). The
+// the depth of field lens (dof.frag, dofdown.frag and the composite in uber.frag; docs/plans/done/dof-v2.md). The
 // materials write the lens term s = 1 - focus/z in alpha (painter.glsl depthA: the codes 1 to 254 over -1 to 0.5); 0
 // is a pixel that is not a number (isBad); 255 the clear, the farthest. cocS: the far circle of confusion in pixels at
 // full resolution, past a sharp band beyond the focus. cocN: the

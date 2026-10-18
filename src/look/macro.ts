@@ -216,7 +216,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
     if (!isBakedArm(a)) return NOTHING
     bakeArm = a; return rebakeIfChanged()
   }
-  // the combed meadow's near bake (?grass=flow, docs/plans/active/grass-flow.md): the strokes value (combDv in
+  // the combed meadow's near bake (?grass=flow, docs/plans/done/grass-flow.md): the strokes value (combDv in
   // macro.glsl) over a square round the camera's focus that holds the strokes' ring however far the focus has moved
   // since (NEAR_W m: the reach and NEAR_STEP either side), at NEAR_N texels a side, rendered again when the focus has
   // moved NEAR_STEP m, on a baked arm (the only ground that reads it) at a zoom where the strokes show; the ground reads it with one fetch (nearComb). The strokes in the ground's own shader cost
