@@ -83,9 +83,11 @@ take it. A unit's own pixels never blur.
 - **The lens term in alpha** (`depthA`, `src/look/shaders/painter.glsl`): every material writes s = 1 − focus/z (z
   the depth along the view axis; the focus and the axis reach the materials each frame from `src/look/main.ts`) over
   −1 to 0.5, in the alpha's codes 1 to 254. The code 170 (at the focus) is the units' (`block.frag`), read as sharp,
-  and no surface writes it, so the 4× MSAA resolve that averages a unit's edge with the ground gives a lens term at the
-  focus, not a far one (no halo round a unit); 0 is a pixel that is not a number (the 8-bit target stores one as 0:
-  left out of the downsample, the blur in its place), 255 the clear, the farthest. So the scene's MSAA target
+  and no surface writes it. The 4× MSAA resolve averages codes: a unit's edge pixel holds a lens term between the
+  unit's (the focus) and the ground's behind it, so it takes a share of that ground's blur (under a pixel at the focus,
+  more where the ground behind is far), not the far ground's whole blur as with a far code. 0 marks a pixel whose colour
+  is not a number (`lensOut`, painter.glsl: the 8-bit target would store it black; left out of the downsample, the blur
+  in its place), 255 the clear, the farthest. So the scene's MSAA target
   stays 8 bits a channel with the depth of field on (`MSAA` in post.ts, `docs/plans/done/wide-perf.md`), and the two
   blur passes take the scene's type too.
 - **The scene at half resolution** (`src/look/shaders/dofdown.frag`): each pixel holds the four scene pixels under

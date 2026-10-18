@@ -187,7 +187,7 @@ vec2 combedBrush(vec2 xz,float px){
 // the strokes by the footprint px (m a pixel): whole up close, gone by the default zoom's far half, so the widest
 // zooms see the soft masses and bands, not hundreds of 5 m strokes (the owner, 2026-10-17: zoomed out "weird"); the
 // bake's texel (0.5 m) is past the fade, so the bake holds none: the bake arm adds them at runtime (groundAt)
-float strokeK(float px){return 1.0-smoothstep(0.07,0.15,px);}
+float strokeK(float px){return 1.0-smoothstep(STROKE_FOOT*0.07/0.15,STROKE_FOOT,px);}   // (STROKE_FOOT 0.15 m: src/look/main.ts)
 // the strokes' multiplier at a point: lighter along the comb, a deeper green in its gaps (never toward black: the
 // owner, "use a darker green"), k their weight (strokeK)
 // the strokes' value at a point, signed, at full weight (the near bake renders it: src/look/macro.ts, combNear)

@@ -79,4 +79,4 @@ void main(){
     #endif
   }
   #endif
-  gl_FragColor=vec4(airOf(c,vW,lm,vH),depthA(vW));}
+  gl_FragColor=lensOut(airOf(c,vW,lm,vH),vW);}

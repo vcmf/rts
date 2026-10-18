@@ -97,7 +97,10 @@ if (grassOff.some(k => !GRASS_PARTS.includes(k)) || (grassOff.length && grassPar
 // the camera's distance from the focus over which the combed clumps go from larger and denser to the default's (the
 // closest zoom is 45 m, the default view 125)
 const CLOSE_ZOOM: [number, number] = [70, 110]
-const grassDefines = grassParam === 'flow' ? ['#define GRASS_FLOW', `#define FLOW_SUN vec2(${sunXZ.x.toFixed(4)},${sunXZ.y.toFixed(4)})`, `#define COMB_PERIOD ${COMB_PERIOD.toFixed(1)}`, `#define STROKE_RINGS vec2(${RINGS[0].band[2].toFixed(1)},${RINGS[0].band[3].toFixed(1)})`, `#define CLOSE_ZOOM vec2(${CLOSE_ZOOM[0].toFixed(1)},${CLOSE_ZOOM[1].toFixed(1)})`, ...flowDefines(), ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`)] : []
+// the strokes' largest footprint, m a pixel (strokeK, macro.glsl: whole under about half of it, gone past it); the near
+// bake reads it too (below)
+const STROKE_FOOT = 0.15
+const grassDefines = grassParam === 'flow' ? ['#define GRASS_FLOW', `#define FLOW_SUN vec2(${sunXZ.x.toFixed(4)},${sunXZ.y.toFixed(4)})`, `#define COMB_PERIOD ${COMB_PERIOD.toFixed(1)}`, `#define STROKE_RINGS vec2(${RINGS[0].band[2].toFixed(1)},${RINGS[0].band[3].toFixed(1)})`, `#define CLOSE_ZOOM vec2(${CLOSE_ZOOM[0].toFixed(1)},${CLOSE_ZOOM[1].toFixed(1)})`, `#define STROKE_FOOT ${STROKE_FOOT.toFixed(3)}`, ...flowDefines(), ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`)] : []
 const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [...softDefines(soft), ...(meadowOn ? ['#define MEADOW', ...grassDefines] : [])])
 const keptGrains = new Set([mats.grain])   // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
@@ -185,9 +188,9 @@ const grassReach = grassParam === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
 const grassAllowed = grassReach === CLUMP_REACH ? nature.growthAllowed : (x: number, z: number) => nature.growthAllowed(x, z, grassReach)   // (the same rule as the crops' on the default: one pass)
 const meadowMap = meadowOn ? buildMeadowMap(scene, mats, nature.growth, grassAllowed, nature.crop, nature.growthAllowed) : null
 // the combed meadow's near bake runs only where its strokes show: out to the strokes' ring, at the zooms where a pixel
-// can be under the strokes' largest footprint (strokeK, macro.glsl: 0.15 m; at the focus under twice it, for the frame's
-// foot, nearer than the focus)
-const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, { reach: RINGS[0].band[3], shows: () => pixA * camera.radius < 0.3 })
+// can be under the strokes' largest footprint (STROKE_FOOT; at the focus, the ground the screen's centre shows, under
+// twice it, for the frame's foot, nearer than the focus). pixA and the focus are the last frame's (none yet: it bakes)
+const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, { reach: RINGS[0].band[3], shows: () => !focusDist || pixA * focusDist < 2 * STROKE_FOOT })
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)
@@ -347,14 +350,14 @@ const SUNCOL = MOOD.sun.clone()
 scene.onBeforeRenderObservable.add(() => { const w = Math.max(0, Math.min(1, S.season - 2)); Color3.LerpToRef(MOOD.sun, MOOD.winterSun, w, SUNCOL); const k = Color3.Lerp(MOOD.hazeCool, CLEAR_GRADED, S.grade); scene.clearColor.set(k.r, k.g, k.b, 1) })
 // the detail layer's pixel angle (src/look/shaders/painter.glsl): the angle one pixel of a SPEC.detail.lines-tall
 // frame spans, from the camera's actual vertical field of view (narrower than the SPEC's on frames wider than 16:9)
-let pixA = 0
+let pixA = 0, focusDist = 0
 const camFwd = new Vector3()
 scene.onBeforeRenderObservable.add(() => {
   const tv = camera.fovMode === Camera.FOVMODE_VERTICAL_FIXED ? Math.tan(camera.fov / 2) : Math.tan(camera.fov / 2) / engine.getAspectRatio(camera)
   pixA = 2 * tv / D.spec.detail.lines
   if (!FROZEN) S.t += Math.min(engine.getDeltaTime() / 1000, 0.05)
   // the depth of field's focus and the view axis, which every material encodes its lens term against (painter.glsl depthA)
-  const focusZ = post.updateFocus(engine.getDeltaTime() / 1000); camFwd.copyFrom(camera.target).subtractInPlace(camera.position).normalize()
+  const focusZ = post.updateFocus(engine.getDeltaTime() / 1000); focusDist = focusZ; camFwd.copyFrom(camera.target).subtractInPlace(camera.position).normalize()
   for (const m of mats.all) {
     m.setFloat('uFocusZ', focusZ); m.setVector3('uCamFwd', camFwd)
     m.setVector3('uCamPos', camera.position); m.setVector3('uFocus', camera.target); m.setFloat('uTime', S.t)

@@ -134,10 +134,9 @@ export class Post {
   // it is what the centre shows), eased over FOCUS_S so a pan over a hillside does not jump the sharp band; a jump
   // of over a third (a new view) is taken at once
   private focus = 0
-  // each frame before the scene renders (src/look/main.ts): the materials encode their lens term against it (with the
-  // depth of field off nothing reads it: the last focus, not marched)
+  // each frame before the scene renders (src/look/main.ts): the materials encode their lens term against it (marched
+  // with the depth of field off too: turned on, it starts from the true focus; the near bake's zoom reads it)
   updateFocus(dt: number): number {
-    if (!this.S.dof && this.focus) return this.focus
     const c = this.camera, p = c.position, t = c.target
     let fx = t.x - p.x, fy = t.y - p.y, fz = t.z - p.z; const l = Math.hypot(fx, fy, fz) || 1; fx /= l; fy /= l; fz /= l
     const above = (d: number) => p.y + fy * d - this.ground(p.x + fx * d, p.z + fz * d)
@@ -171,7 +170,7 @@ export class Post {
     const p = d ? pp('dof', ['uTexel', 'uHalf', 'uN', 'uNN', ...lens], [], sceneType, 0.5) : null
     let px = 0, npx = 0
     const lensUniforms = (e: Effect) => { e.setFloat('uBand', DOF.band); e.setFloat('uK', DOF.k); e.setFloat('uMaxPx', px); e.setFloat('uNBand', DOF_NEAR.band); e.setFloat('uNK', DOF_NEAR.k); e.setFloat('uNMaxPx', npx); e.setFloat('uNScreen', DOF_NEAR.screen) }
-    if (d && p) {
+    if (d && p) {   // (p is made only with d: the test narrows both)
       // the blurs by the zoom (strongest at the closest zoom, DOF.wide of it at the widest) and the frame's lines, each
       // frame before the first pass
       d.onApply = e => {

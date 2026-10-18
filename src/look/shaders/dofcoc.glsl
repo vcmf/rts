@@ -6,6 +6,9 @@
 uniform float uBand,uK,uMaxPx,uNBand,uNK,uNMaxPx,uNScreen;
 bool isUnit(float a){return abs(a*255.0-170.0)<0.5;}
 bool isBad(float a){return a<0.5/255.0;}
+// a pixel the depth of field can use: finite (the half floats of ?rt16) and not the code 0 (the 8-bit target's not a
+// number: painter.glsl lensOut). The test is one no compiler folds away, as it may x == x
+bool okPx(vec4 s){return all(lessThan(abs(s),vec4(65504.0)))&&!isBad(s.a);}
 float lensS(float a){return isUnit(a)?0.0:clamp((a*255.0-1.0)/253.0,0.0,1.0)*1.5-1.0;}
 float cocS(float s){return clamp((s-uBand)*uK,0.0,1.0)*uMaxPx;}
 float cocN(float s,vec2 uv){return clamp((-s-uNBand)*uNK,0.0,1.0)*uNMaxPx*(1.0-smoothstep(0.0,uNScreen,uv.y));}

@@ -82,6 +82,14 @@ judges.
   After: the guard ok at the start and cover views; a unit's edge pixels (the looser mask) move by 8–10 levels at the
   99th percentile, 41–45 before; the cost the same as before the fixes (paired, both builds in one session; the third
   view +0.8–0.9 ms in this session).
+- **Round 2** (8 findings, 2 severe), fixed:
+  - a colour that is not a number stored black with a valid lens code: the materials now write the code 0 for it
+    (`lensOut`), and one test (`okPx`, dofcoc.glsl) serves the downsample and the composite;
+  - the near layer stored alone where its coverage was tiny reached the bloom: stored at four times its coverage;
+  - the near bake's zoom gate reads the marched focus and `STROKE_FOOT` (shared with strokeK), and the focus is marched
+    with the depth of field off again (turned on, it starts from the true focus);
+  - documented, not changed: a unit's edge pixels, shared with the ground by the MSAA resolve, take a share of the
+    ground's blur; two surface codes either side of 170 can resolve to it (at the focus, sharp either way).
 - **Step 1 measured** (the dev Mac, paired one-page A/B, `?bench=dof`): the depth of field's passes cost 0.1–0.4 ms at
   the default zoom (0.1–0.3 close, 0.1–1.0 wide); the 8-bit target with the lens term saves about 0.3 ms at the close
   zoom and nothing measurable at the default. The earlier "1.4 ms" came from two page loads, which differ by up to

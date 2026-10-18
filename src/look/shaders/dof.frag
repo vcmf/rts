@@ -32,7 +32,8 @@ void main(){
       if(k>0.0){float w=k/max(cn*cn,1.0);nc+=s.rgb*w;nw+=w;reach+=k;}}
     na=smoothstep(0.0,0.6,reach/(uNN+1.0));
     if(isUnit(c0.a))na=min(na,0.5);
-    // (where this pixel has no far blur, the near layer alone: the composite lays it over the sharp scene by its
-    // coverage, so the sharp pixels round a blurred crown take none of the half-resolution colour)
-    if(nw>0.0)col=cs>=0.5?mix(col,nc/nw,na):nc/nw;}
+    // (where this pixel has no far blur, the near layer at four times its coverage, whole from a quarter: the composite
+    // lays it over the sharp scene by its coverage, so the sharp pixels round a blurred crown take little of the
+    // half-resolution colour, while the bloom, which reads this colour, sees the near layer only where it covers)
+    if(nw>0.0)col=mix(col,nc/nw,cs>=0.5?na:min(1.0,4.0*na));}
   gl_FragColor=vec4(col,na);}
