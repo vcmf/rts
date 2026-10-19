@@ -47,9 +47,10 @@ void main(){
     float riffle=vRiffle;
     #endif
     // 3. calm and rough: riffles, and fast shallow water, break the surface
-    float rough=max(smoothstep(0.3,0.65,riffle),smoothstep(0.6,0.9,sp)*smoothstep(1.2,0.5,d));
+    float rif=smoothstep(0.3,0.65,riffle),rough=max(rif,smoothstep(0.6,0.9,sp)*smoothstep(1.2,0.5,d));
     // broken, aerated water reads lighter: the riffles, the fords (art bible §6c), over the dark pools
-    c=mix(c,c*1.5+vec3(0.03,0.06,0.06),smoothstep(0.3,0.65,riffle)*0.8*up*(1.0-0.7*frost()));
+    // (none in winter, where the riffles stay the dark open water between the ice, nor its light in shade)
+    c=mix(c,c*1.5+vec3(0.03,0.06,0.06)*(1.0-0.6*cs),rif*0.8*up*(1.0-frost()));
     // the strokes' coordinate along the flow: the time of travel against the clock, wrapped to a whole period
     // (research §4.3: features stretch where the water is fast and never shear)
     float along=(vTau-mod(uTime,STROKE_P))*STROKE_V;
@@ -71,7 +72,8 @@ void main(){
     c=mix(c,c*0.82,smoothstep(0.70,0.85,st2)*0.25*(1.0-rough)*smoothstep(0.3,0.8,d)*slow*up*near);
     // 8. glitter: painted sun dabs, mostly on riffles
     float spec=pow(max(dot(R,uSunDir),0.0),5.0);
-    float dab=smoothstep(mix(0.78,0.71,rough),mix(0.84,0.77,rough),G(vec2(along*0.10,across*0.25)).g)*aastep(0.5,G(vW.xz/9.0+mod(uTime,200.0/3.0)*0.015).g);   // (soft-edged: hard dabs shimmered on the dark water)
+    float gd=G(vec2(along*0.10,across*0.25)).g,dw=max(0.03,1.2*fwidth(gd)),dt=mix(0.81,0.74,rough);   // (soft-edged, at least a pixel: hard dabs shimmered on the dark water)
+    float dab=smoothstep(dt-dw,dt+dw,gd)*aastep(0.5,G(vW.xz/9.0+mod(uTime,200.0/3.0)*0.015).g);
     c+=uSunCol*mix(uGlint,vec3(0.80,0.88,1.0),frost())*dab*(0.2+spec*1.6)*(1.0-cs)*smoothstep(0.15,0.5,d)*up*near*(1.0-0.7*frost());   // fewer and cold in winter (W5b)
     // 9. riffle foam: broken streaks along the current (the grain's dry-brush channel, long along x), bent into
     // chevrons pointing upstream, hard-edged

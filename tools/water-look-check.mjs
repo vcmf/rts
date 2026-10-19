@@ -37,7 +37,7 @@
 //   closest zoom and 10.9% at the widest, the same views and mask, with W4's even ice; and on the water's own pixels,
 //   the surface eroded 2 px, 3.1% and 11.3%: W5b's plan), so there the limits are main's, rounded down: the mask
 //   under SHIMMER_WINTER and SHIMMER_WINTER_WIDE, the water's own pixels (the ice, its edges and rime, the open
-//   riffles) under SHIMMER_ICE and SHIMMER_ICE_WIDE: W5b's water must shimmer less than main's.
+//   riffles) under SHIMMER_ICE and SHIMMER_ICE_WIDE: W5b's water had to shimmer less than main's (since decision 0042: the dark water's own measurements, below).
 //   The widest limits re-baselined for the temperate mood (decision 0034, the owner's call,
 //   docs/plans/done/temperate-fixes.md), so no longer main's rounded down: its frame is about 7 % more contrasty (half the rise), the
 //   rest spread over the grain, the painted edges and the bloom. Main measured 3.68 to 3.84 % in summer, 4.11 % in
