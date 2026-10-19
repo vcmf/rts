@@ -112,7 +112,7 @@ export const MOODS = {
     bounce: 0.7, groundBounce: 0.5,
     units: { tint: 0.3, mist: 0.05, grade: 0.1, bounce: 0.35 },
     grade: {
-      greenTint: c(0.84, 0.92, 0.92), greenChroma: 0.66, greenAmt: 0.85, sat: 0.85,
+      greenTint: c(0.93, 1.01, 1.01), greenChroma: 0.66, greenAmt: 0.85, sat: 0.85,   // greenTint: the greens' value kept, about 1 (darker grass lost the dark coats: the guard)
       splitLo: c(0.97, 0.99, 1.02), splitHi: c(1.02, 1.0, 0.96), lift: c(0.012, 0.012, 0.014),
       topHaze: c(0.66, 0.73, 0.82), topAmt: 0.14, vignette: c(0.78, 0.84, 0.94), greenHue: 25, summerSat: 0.85,
     },

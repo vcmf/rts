@@ -344,7 +344,7 @@ vec3 gradeOf(vec3 c){
   // active/epic-palette.md) in one step: uGreenRot is the turn times greenChroma about the grey axis, built once a
   // frame as the season moves (src/look/main.ts; no turn in autumn, the mute alone), the yellow-greens taken too while it turns
   float wt=max(green*uGreenAmt,uGreenK*clamp((c.g-c.b)*4.0,0.0,1.0)*smoothstep(0.0,0.06,c.g-c.r));   // uGreenK: the turn's share, 1 in summer to 0 in autumn (continuous)
-  vec3 g=mix(c,(vec3(l)*uGreenTint+uGreenRot*(c-vec3(l)))*mix(1.0,0.93,wt*uGreenK),wt);
+  vec3 g=mix(c,vec3(l)*uGreenTint+uGreenRot*(c-vec3(l)),wt);   // (the value kept: a darker grass lost the dark coats, tools/guard.mjs)
   #else
   vec3 g=mix(c,vec3(l)*uGreenTint+(c-vec3(l))*uGreenChroma,green*uGreenAmt);
   #endif
