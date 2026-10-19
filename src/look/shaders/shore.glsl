@@ -315,9 +315,11 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh,vec2 ia){
   pSnowK=1.0;pGround=pg;
   // 2. absorption, red first; the painted ramp (shallow green-ochre, turquoise, deep teal) in bands broken by the grain
   float dn=dd*(1.0+0.35*(G(wp.xz/5.0).g-0.5)*uGrainAmt);
-  vec3 T=exp(-vec3(3.0,1.5,1.1)*dn);
+  // (main's absorption in the shallows, the riffles' light water, rising to 1.6 times it from 0.25 to 0.6 m deep: the
+  // pools dark, docs/plans/done/dark-water.md)
+  vec3 T=exp(-vec3(3.0,1.5,1.1)*mix(1.0,1.6,smoothstep(0.25,0.6,dd))*dn);
   float b=(1.0-T.g)*3.0+(G(wp.xz/2.0).r-0.5)*0.5;
-  vec3 wc=earthOf(mix(mix(vec3(0.34,0.50,0.38),vec3(0.14,0.37,0.40),smoothstep(0.9,1.1,b)),vec3(0.06,0.22,0.28),smoothstep(2.0,2.2,b)));   // the mood's earth, as the bed and the far ring's river line (paint)
+  vec3 wc=earthOf(mix(mix(vec3(0.30,0.44,0.33),vec3(0.07,0.22,0.24),smoothstep(0.9,1.1,b)),vec3(0.025,0.10,0.12),smoothstep(2.0,2.2,b)));   // the mood's earth, as the bed and the far ring's river line (paint)
   vec3 c=bed*T+wc*(1.0-T);
   // 7. tree and cloud shadows cool the water, deep water more (the bed is already shadowed)
   float cs=max(cloud(wp)*0.6,sh);c=mix(c,c*vec3(0.58,0.70,0.88),cs*smoothstep(0.1,0.8,dd));
@@ -333,8 +335,10 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh,vec2 ia){
   // drifts of snow on it, near the banks mostly; the rime white along its edge
   if(frost()>0.0){   // uniform: the grain's derivatives hold
     float F=frost();
-    c=mix(c,earthOf(vec3(0.05,0.12,0.20))*mix(1.0,0.75,cs),F*0.75*smoothstep(0.0,0.3,dd));
-    vec3 ic=earthOf(mix(vec3(0.48,0.60,0.70),vec3(0.66,0.75,0.82),smoothstep(0.6,0.0,dd)));   // bluer and darker than the snow
+    c=mix(c,earthOf(vec3(0.015,0.06,0.10))*mix(1.0,0.75,cs),F*0.75*smoothstep(0.0,0.3,dd));   // (darker than the deep teal: docs/plans/done/dark-water.md)
+    // bluer and darker than the snow. A little lighter than before the dark water: the valley mist, a third over the
+    // water now (waterMist), lifts it less than it did (docs/plans/done/dark-water.md)
+    vec3 ic=earthOf(mix(vec3(0.48,0.60,0.70),vec3(0.66,0.75,0.82),smoothstep(0.6,0.0,dd))*1.12);
     // the cracks: thin lines where the grain crosses its middle, at least 1.5 pixels wide, their ink spread (the
     // derivative taken before abs(): at the line's centre abs() folds it to 0)
     float gc=G(wp.xz/9.0).g-0.5,fc=fwidth(gc),cw=max(0.03,1.5*fc);

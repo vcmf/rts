@@ -37,12 +37,17 @@
 //   closest zoom and 10.9% at the widest, the same views and mask, with W4's even ice; and on the water's own pixels,
 //   the surface eroded 2 px, 3.1% and 11.3%: W5b's plan), so there the limits are main's, rounded down: the mask
 //   under SHIMMER_WINTER and SHIMMER_WINTER_WIDE, the water's own pixels (the ice, its edges and rime, the open
-//   riffles) under SHIMMER_ICE and SHIMMER_ICE_WIDE: W5b's water must shimmer less than main's.
+//   riffles) under SHIMMER_ICE and SHIMMER_ICE_WIDE: W5b's water had to shimmer less than main's (since decision 0042: the dark water's own measurements, below).
 //   The widest limits re-baselined for the temperate mood (decision 0034, the owner's call,
 //   docs/plans/done/temperate-fixes.md), so no longer main's rounded down: its frame is about 7 % more contrasty (half the rise), the
 //   rest spread over the grain, the painted edges and the bloom. Main measured 3.68 to 3.84 % in summer, 4.11 % in
 //   autumn (after the ground's straw turn) and 11.03 to 11.4 % in winter; the limits sit a run's spread above them:
 //   4.0, 4.4 and 11.8 %.
+//   Re-baselined for the dark water (decision 0042, the owner's call, docs/plans/done/dark-water.md): dark water
+//   against pale banks and light foam makes every painted edge more contrasty, so more of its pixels pass 8/255 under
+//   the same quarter-pixel move. It measured, worst of a run: 1.17 % closest (1.19 % in autumn), 5.57 % widest
+//   (5.99 % in autumn), winter 3.20 % and 12.52 %, the water's own 2.97 % and 14.51 %; the limits sit a run's spread
+//   above them: 1.3, 6.0, 6.5, 3.5, 13.5, 3.2 and 15.5 %.
 //   Sabotage: aliased hard edges (WATER_SAB_STEP).
 // Frames are 1280×720. Exit 1 on a failure.
 import fs from 'node:fs'
@@ -61,7 +66,7 @@ const W = 1280, H = 720, CAM = SPEC.camera, BAND = SPEC.water.band, SDF = SPEC.w
 const [, A0, BETA0, R0] = CAMS.find(c => c[0] === 'start')
 const SEAM_P95 = 2, SEAM_MAX = 6, SEAM_MIN_PX = 500
 const POOL = 0.2, RIFFLE = 0.5, LUMA_GAP = 0.03, BRIGHT = 0.2, FOAM_RATIO = 2, FOAM_MIN = 0.02
-const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.04, SHIMMER_AUTUMN_WIDE = 0.044, SHIMMER_WINTER = 0.032, SHIMMER_WINTER_WIDE = 0.118, SHIMMER_ICE = 0.03, SHIMMER_ICE_WIDE = 0.11
+const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.013, SHIMMER_WIDE = 0.06, SHIMMER_AUTUMN_WIDE = 0.065, SHIMMER_WINTER = 0.035, SHIMMER_WINTER_WIDE = 0.135, SHIMMER_ICE = 0.032, SHIMMER_ICE_WIDE = 0.155
 
 let C = null
 const river = () => {

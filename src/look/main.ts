@@ -172,7 +172,7 @@ const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { l
 { const a = new Array(D.spec.water.stones * 4).fill(0); nature.stones.forEach((st, k) => a.splice(k * 4, 4, ...st))
   for (const m of [...terrain.tileMats, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
-const bakes = buildBakes(scene, mats, terrain.tileGround, nature.canopy, nature.cardCasters, soft, nature.trunks, nature.farCull)
+const bakes = buildBakes(scene, mats, waterData, terrain.tileGround, nature.canopy, nature.cardCasters, soft, nature.trunks, nature.farCull)
 // ?far=off: no far tree, nor its shadows (built before the bakes: the far woods' whole cost; the A/B)
 if (params.has('far')) {
   if (params.get('far') !== 'off') throw new Error(`?far must be off, not ${params.get('far')}`)

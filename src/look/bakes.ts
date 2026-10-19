@@ -17,6 +17,7 @@ import type { Matrix } from '@babylonjs/core/Maths/math.vector.js'
 import { Mesh as MeshCtor } from '@babylonjs/core/Meshes/mesh.js'
 import type { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import type { Scene } from '@babylonjs/core/scene.js'
+import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 import { SUN, type Materials } from './materials.ts'
 import { heightAt } from './heightfield.ts'
 import { D, shadowMapSize } from './spec.ts'
@@ -54,7 +55,7 @@ const GB_N = 512, GB_STEP = 2.7, GB_SIGMA = 4.5
 const TRUNK_DARK = 0.85, LM_ONLY = 0x10000000
 const FAR_MAX = 40    // m along the light: the farthest caster the penumbra search reaches (a 18 m crown top at the sun's 27°)
 
-export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, canopy: Nature['canopy'], cardCasters: Nature['cardCasters'] | undefined, soft: SoftOptions, trunks: Nature['trunks'] = [], farCull: Nature['farCull'] = null): Bakes {
+export function buildBakes(scene: Scene, mats: Materials, water: BaseTexture, tileGround: Mesh, canopy: Nature['canopy'], cardCasters: Nature['cardCasters'] | undefined, soft: SoftOptions, trunks: Nature['trunks'] = [], farCull: Nature['farCull'] = null): Bakes {
   /* ---------- shadow pass: an orthographic camera at the sun, depth of every caster, rendered ONCE ---------- */
   const lightCam = new FreeCamera('lightCam', SUN.scale(700), scene); lightCam.setTarget(Vector3.Zero())
   let smTexel: Vector2, smFade: Vector2, sm: { w: number; h: number }, smGround: Vector2
@@ -134,9 +135,9 @@ export function buildBakes(scene: Scene, mats: Materials, tileGround: Mesh, cano
   const aoTex = new DynamicTexture('ao', aoCanvas, scene, true, Texture.BILINEAR_SAMPLINGMODE); aoTex.wrapU = aoTex.wrapV = Texture.CLAMP_ADDRESSMODE; aoTex.update(false)
 
   /* ---------- light-map bake: a top-down ortho render of the terrain, once ---------- */
-  const bakeMat = mats.make('bake', TER_VS, BAKE_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uPenumbra', 'uSMGround'], samplers: ['uAOTex'], perFrame: false, defines: soft.on ? ['#define SOFT', `#define DEPTH_M ${(LZ1 - LZ0).toFixed(1)}`, `#define FAR_MAX ${FAR_MAX.toFixed(1)}`] : [] })   // never bind uLM (its own target) or update it per frame
+  const bakeMat = mats.make('bake', TER_VS, BAKE_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uPenumbra', 'uSMGround'], samplers: ['uAOTex', 'uWater'], perFrame: false, defines: ['#define WATERDATA', ...(soft.on ? ['#define SOFT', `#define DEPTH_M ${(LZ1 - LZ0).toFixed(1)}`, `#define FAR_MAX ${FAR_MAX.toFixed(1)}`] : [])] })   // never bind uLM (its own target) or update it per frame
   bakeMat.setFloat('uPenumbra', soft.penumbra); bakeMat.setVector2('uSMGround', smGround)
-  bakeMat.setTexture('uAOTex', aoTex); bakeMat.setTexture('uShadowMap', shadowRT); bakeMat.setMatrix('uLightVP', lightVP); bakeMat.setVector2('uSMTexel', smTexel)
+  bakeMat.setTexture('uAOTex', aoTex); bakeMat.setTexture('uWater', water); bakeMat.setTexture('uShadowMap', shadowRT); bakeMat.setMatrix('uLightVP', lightVP); bakeMat.setVector2('uSMTexel', smTexel)
   const lmCam = new FreeCamera('lmCam', new Vector3(0, 500, 0), scene); lmCam.setTarget(new Vector3(0, 0, 0.01))
   lmCam.mode = Camera.ORTHOGRAPHIC_CAMERA; Object.assign(lmCam, { orthoLeft: -TILE_W / 2, orthoRight: TILE_W / 2, orthoTop: TILE_W / 2, orthoBottom: -TILE_W / 2, minZ: 1, maxZ: 1000 })
   const lightMap = new RenderTargetTexture('lightmap', LM_N, scene, false, true, Constants.TEXTURETYPE_UNSIGNED_BYTE, false, Texture.BILINEAR_SAMPLINGMODE)

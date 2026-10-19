@@ -47,7 +47,10 @@ void main(){
     float riffle=vRiffle;
     #endif
     // 3. calm and rough: riffles, and fast shallow water, break the surface
-    float rough=max(smoothstep(0.3,0.65,riffle),smoothstep(0.6,0.9,sp)*smoothstep(1.2,0.5,d));
+    float rif=smoothstep(0.3,0.65,riffle),rough=max(rif,smoothstep(0.6,0.9,sp)*smoothstep(1.2,0.5,d));
+    // broken, aerated water reads lighter: the riffles, the fords (art bible §6c), over the dark pools
+    // (none in winter, where the riffles stay the dark open water between the ice, nor its light in shade)
+    c=mix(c,c*1.5+vec3(0.03,0.06,0.06)*(1.0-0.6*cs),rif*0.8*up*(1.0-frost()));
     // the strokes' coordinate along the flow: the time of travel against the clock, wrapped to a whole period
     // (research §4.3: features stretch where the water is fast and never shear)
     float along=(vTau-mod(uTime,STROKE_P))*STROKE_V;
@@ -58,21 +61,25 @@ void main(){
     float wob=(G(vec2(across*0.6,along*0.25)).r-0.5)*(0.9+1.6*rough);
     vec2 o=R.xz/max(R.y,0.2);
     float rf=max(reflAt(vW.xz+o*4.0+vec2(wob,0.0)),reflAt(vW.xz+o*7.5+vec2(wob*1.5,0.0)));
-    c=mix(c,earthOf(vec3(0.08,0.17,0.13)),smoothstep(0.25,0.6,rf)*0.62*smoothstep(0.15,0.5,d)*(1.0-0.7*rough)*up);
+    // (the crowns' mirror: a dark green, a dark russet as they turn, gone as they go bare, cooled in shade as the water
+    // under it: docs/plans/done/dark-water.md)
+    vec3 rc=earthOf(mix(vec3(0.10,0.20,0.14),vec3(0.18,0.12,0.08),smoothstep(0.8,1.4,uSeason)))*mix(vec3(1.0),vec3(0.58,0.70,0.88),cs);
+    c=mix(c,rc,smoothstep(0.25,0.6,rf)*0.7*(1.0-smoothstep(1.8,2.3,uSeason))*smoothstep(0.15,0.5,d)*(1.0-0.7*rough)*up);
     // 6. strokes along the current: light marks (more on riffles), a few dark ones in pools, none where it is slow
     float st=G(vec2(along*0.05,across*0.12)).b,st2=G(vec2(along*0.10+0.37,across*0.35+0.2)).g;
     float slow=smoothstep(0.08,0.25,sp),marks=smoothstep(0.62,0.80,st*0.6+st2*0.4)*smoothstep(0.15,0.6,d)*slow;
-    c=mix(c,c*1.12+vec3(0.03,0.05,0.05),marks*(0.35+0.4*rough)*up*near);
+    c=mix(c,c*1.12+vec3(0.03,0.05,0.05),marks*(0.12+0.35*rough)*up*near);   // (few on calm water: docs/plans/done/dark-water.md)
     c=mix(c,c*0.82,smoothstep(0.70,0.85,st2)*0.25*(1.0-rough)*smoothstep(0.3,0.8,d)*slow*up*near);
     // 8. glitter: painted sun dabs, mostly on riffles
     float spec=pow(max(dot(R,uSunDir),0.0),5.0);
-    float dab=aastep(mix(0.80,0.73,rough),G(vec2(along*0.10,across*0.25)).g)*aastep(0.5,G(vW.xz/9.0+mod(uTime,200.0/3.0)*0.015).g);
+    float gd=G(vec2(along*0.10,across*0.25)).g,dw=max(0.03,1.2*fwidth(gd)),dt=mix(0.81,0.74,rough);   // (soft-edged, at least a pixel: hard dabs shimmered on the dark water)
+    float dab=smoothstep(dt-dw,dt+dw,gd)*aastep(0.5,G(vW.xz/9.0+mod(uTime,200.0/3.0)*0.015).g);
     c+=uSunCol*mix(uGlint,vec3(0.80,0.88,1.0),frost())*dab*(0.2+spec*1.6)*(1.0-cs)*smoothstep(0.15,0.5,d)*up*near*(1.0-0.7*frost());   // fewer and cold in winter (W5b)
     // 9. riffle foam: broken streaks along the current (the grain's dry-brush channel, long along x), bent into
     // chevrons pointing upstream, hard-edged
     float chev=G(vec2(along*0.05+abs(across)*0.02,across*0.03)).b;
-    float riff=smoothstep(0.35,0.65,riffle)*aastep(0.66,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);
-    c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.85*up*near);
+    float riff=smoothstep(0.35,0.65,riffle)*aastep(0.70,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);   // (thinner over the dark water: docs/plans/done/dark-water.md)
+    c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.65*up*near);   // (softer on the dark water: its edges shimmered)
     // 10. autumn leaves (W5b): from early autumn until the ice, drifting with the current on slow water (none from a
     // speed of 0.62). Cells in the time of travel's coordinates (4 along by 1.6 m across), the clock wrapped to a period
     // of LEAF_P*STROKE_V = 200 along (50 cells, the hash's period along: the wrap is seamless, the layout repeats only

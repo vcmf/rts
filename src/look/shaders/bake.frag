@@ -1,5 +1,6 @@
 precision highp float;varying vec3 vW,vN;uniform sampler2D uAOTex;uniform float uPenumbra;uniform vec2 uSMGround;
 #include<painter>
+#include<waterdata>
 
 void main(){vec3 N=normalize(vN);
   vec4 lp=uLightVP*vec4(vW+N*0.35,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;float d=q.z*0.5+0.5-SBIAS;
@@ -27,4 +28,7 @@ void main(){vec3 N=normalize(vN);
   vis=smoothstep(0.35,0.65,vis+(G(vW.xz/3.0).r-0.5)*0.35);                  // painted edge, decided once
   #endif
   vec4 a=texture2D(uAOTex,(vW.xz+TILE_HALF)/TILE_W);
+  #ifdef WATERDATA
+  a.b*=waterMist(waterSdf(waterTexel(vW.xz)));   // the mist thinner over the water (waterdata.glsl)
+  #endif
   gl_FragColor=vec4(vis,a.g,a.b,a.r);}   // A: the contact under trees (src/look/bakes.ts)
