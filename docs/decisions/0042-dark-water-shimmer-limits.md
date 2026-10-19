@@ -7,7 +7,7 @@ date: 2026-10-18
 
 ## Context
 
-The dark water (`docs/plans/active/dark-water.md`, after Tiny Glade's and the art bible's §6c) passes every water
+The dark water (`docs/plans/done/dark-water.md`, after Tiny Glade's and the art bible's §6c) passes every water
 check but the shimmer: dark water against pale banks, light foam and riffles makes every painted edge more contrasty,
 so more pixels change by over 8/255 under the check's quarter-pixel move (`tools/water-look-check.mjs`). Main: 0.63 %
 closest, 3.6 % widest; the dark water: 1.17 % and 5.57 %, against limits of 1.0 % and 4.0 %. Fewer light marks or less

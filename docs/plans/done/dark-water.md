@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-18
 ---
 
@@ -71,3 +71,16 @@ widest), the owner judges.
   third over the water lifted the ice less); the ice a little lighter now (× 1.12): 82.8 %, the shimmer still within
   its limits. The gravel bar 0.002 short of its gate (luma 0.612, 0.614 needed) as on main (the same numbers: #116's
   terrain), not this PR's.
+- Final review (one pass over the changes after round 3): severe, the decision's number (0041 taken on main by
+  #117): renumbered 0042, rebased on #117. Moderate, fixed: no riffle lift in winter (the open water between the ice
+  stays dark) nor its light in shade; the glitter's edge at least a pixel wide (fwidth); comments. Left: the ice
+  × 1.12 makes the winter gate pass by brightening the ice rather than by the mist it had (the light map is baked
+  once a map, not a season).
+- The batch again on the rebased preview builds (main #117 against this branch): the guards, coat, negatives ok;
+  water ok but the gravel bar (shimmer 0.91 % closest, 5.27 % widest, winter 82.8 % frozen; the self-test catches
+  every sabotage); macro: field|grass 6.2 and road|grass 4.5 under their gate of 8, the same numbers on main (#116,
+  #117), as the bar; goldens: differ on the water.
+- Performance: the owner, on the preview builds (`vite build` + `vite preview`), main and this branch both at 120 fps
+  in the river view that had shown 100-105 on the dev servers (the dev server's overhead, not the water). The bench
+  (`tools/bench-look.mjs`, Metal, four interleaved rounds) too noisy on this machine to resolve under 1 ms: default
+  7.3-7.6 ms both, with outliers near 9.7 on either.

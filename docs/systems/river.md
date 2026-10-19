@@ -77,7 +77,7 @@ W3 (`docs/plans/done/w3-water-data.md`), the painted water, its shoreline from t
   faded in past the band, calm against rough water (the riffle, fast shallow water), the painted sky tint, the
   tree reflections, strokes on the time of travel (they stretch in fast water and never shear), glitter and riffle
   foam. Hard edges threshold the grain's soft blotches and are anti-aliased over a pixel (no shimmer). Dark water
-  (`docs/plans/active/dark-water.md`, after the art bible's §6c and Tiny Glade): a deep teal from about half a metre,
+  (`docs/plans/done/dark-water.md`, after the art bible's §6c and Tiny Glade): a deep teal from about half a metre,
   a dark painted sky tint, the trees' mirror a dark green, few light marks on calm water, the valley mist a third over
   the water.
 - **The banks (W5a):** painted from the water data and the bank normals (`bankPaint()` in

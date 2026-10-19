@@ -62,13 +62,13 @@ void main(){
     vec2 o=R.xz/max(R.y,0.2);
     float rf=max(reflAt(vW.xz+o*4.0+vec2(wob,0.0)),reflAt(vW.xz+o*7.5+vec2(wob*1.5,0.0)));
     // (the crowns' mirror: a dark green, a dark russet as they turn, gone as they go bare, cooled in shade as the water
-    // under it: docs/plans/active/dark-water.md)
+    // under it: docs/plans/done/dark-water.md)
     vec3 rc=earthOf(mix(vec3(0.10,0.20,0.14),vec3(0.18,0.12,0.08),smoothstep(0.8,1.4,uSeason)))*mix(vec3(1.0),vec3(0.58,0.70,0.88),cs);
     c=mix(c,rc,smoothstep(0.25,0.6,rf)*0.7*(1.0-smoothstep(1.8,2.3,uSeason))*smoothstep(0.15,0.5,d)*(1.0-0.7*rough)*up);
     // 6. strokes along the current: light marks (more on riffles), a few dark ones in pools, none where it is slow
     float st=G(vec2(along*0.05,across*0.12)).b,st2=G(vec2(along*0.10+0.37,across*0.35+0.2)).g;
     float slow=smoothstep(0.08,0.25,sp),marks=smoothstep(0.62,0.80,st*0.6+st2*0.4)*smoothstep(0.15,0.6,d)*slow;
-    c=mix(c,c*1.12+vec3(0.03,0.05,0.05),marks*(0.12+0.35*rough)*up*near);   // (few on calm water: docs/plans/active/dark-water.md)
+    c=mix(c,c*1.12+vec3(0.03,0.05,0.05),marks*(0.12+0.35*rough)*up*near);   // (few on calm water: docs/plans/done/dark-water.md)
     c=mix(c,c*0.82,smoothstep(0.70,0.85,st2)*0.25*(1.0-rough)*smoothstep(0.3,0.8,d)*slow*up*near);
     // 8. glitter: painted sun dabs, mostly on riffles
     float spec=pow(max(dot(R,uSunDir),0.0),5.0);
@@ -78,7 +78,7 @@ void main(){
     // 9. riffle foam: broken streaks along the current (the grain's dry-brush channel, long along x), bent into
     // chevrons pointing upstream, hard-edged
     float chev=G(vec2(along*0.05+abs(across)*0.02,across*0.03)).b;
-    float riff=smoothstep(0.35,0.65,riffle)*aastep(0.70,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);   // (thinner over the dark water: docs/plans/active/dark-water.md)
+    float riff=smoothstep(0.35,0.65,riffle)*aastep(0.70,chev)*aastep(0.45,G(vW.xz/11.0+0.3).g);   // (thinner over the dark water: docs/plans/done/dark-water.md)
     c=mix(c,FOAM*mix(1.0,0.78,cs),riff*0.65*up*near);   // (softer on the dark water: its edges shimmered)
     // 10. autumn leaves (W5b): from early autumn until the ice, drifting with the current on slow water (none from a
     // speed of 0.62). Cells in the time of travel's coordinates (4 along by 1.6 m across), the clock wrapped to a period

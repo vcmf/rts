@@ -12,7 +12,7 @@ vec4 waterTexel(vec2 xz){vec2 uv=(xz+TILE_HALF)/TILE_W;
 float waterDepth(vec4 t){return WATER_D0+t.r*(WATER_D1-WATER_D0);}
 float waterSdf(vec4 t){return (t.g*2.0-1.0)*WATER_SDF;}
 vec2 waterFlow(vec4 t){return (t.ba*255.0-128.0)/127.0;}   // 128 ± 127: 0 exactly at 128
-// the valley mist's share at shore distance s (docs/plans/active/dark-water.md): a third over the water, from the
+// the valley mist's share at shore distance s (docs/plans/done/dark-water.md): a third over the water, from the
 // shoreline, softly over a metre either side (it washed the dark water pale); the land keeps the rest. In the light map's
 // mist channel (bake.frag), so every surface over the river takes the same air
 float waterMist(float s){return 1.0-0.65*smoothstep(-1.0,WATER_BAND+1.0,s);}   // (over a few metres: air, not a contour)

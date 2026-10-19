@@ -43,7 +43,7 @@
 //   rest spread over the grain, the painted edges and the bloom. Main measured 3.68 to 3.84 % in summer, 4.11 % in
 //   autumn (after the ground's straw turn) and 11.03 to 11.4 % in winter; the limits sit a run's spread above them:
 //   4.0, 4.4 and 11.8 %.
-//   Re-baselined for the dark water (decision 0042, the owner's call, docs/plans/active/dark-water.md): dark water
+//   Re-baselined for the dark water (decision 0042, the owner's call, docs/plans/done/dark-water.md): dark water
 //   against pale banks and light foam makes every painted edge more contrasty, so more of its pixels pass 8/255 under
 //   the same quarter-pixel move. It measured, worst of a run: 1.17 % closest (1.19 % in autumn), 5.57 % widest
 //   (5.99 % in autumn), winter 3.20 % and 12.52 %, the water's own 2.97 % and 14.51 %; the limits sit a run's spread
