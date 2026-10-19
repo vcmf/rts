@@ -37,7 +37,7 @@ void main(){
     vec3 g=groundSeason(groundBounce(vRoot));
     #endif
     alb=g*mix(0.95,1.55,vV)*mix(0.92,1.10,vShade);
-    #if AUTUMN_ON
+    #ifdef AUTUMN_ON
     alb=mix(alb,alb*uTipTint,vV*0.5);   // (the tips: lime, warmed in the warm autumn: uTipTint, src/look/main.ts)
     #else
     alb=mix(alb,alb*vec3(1.04,1.08,0.80),vV*0.5);
@@ -48,7 +48,7 @@ void main(){
     // the tips
     float hr=vFlow.x;
     vec3 tint=hr<0.5?mix(vec3(0.78,0.98,0.90),vec3(1.0),hr*2.0):mix(vec3(1.0),vec3(1.22,1.10,0.66),(hr-0.5)*2.0);
-    #if AUTUMN_ON
+    #ifdef AUTUMN_ON
     tint=mix(tint,max(tint,vec3(1.0,0.96,0.86)),uTipWarm);   // (its blue-green side warmed through the warm autumn: uTipWarm, src/look/main.ts)
     #endif
     alb*=mix(vec3(1.0),tint,(0.6+0.4*vV)*vFlow.z);   // (none under the snow of winter, as the default)

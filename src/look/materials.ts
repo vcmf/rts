@@ -11,7 +11,7 @@ import SHORE from './shaders/shore.glsl?raw'
 import MACRO from './shaders/macro.glsl?raw'
 import MEADOW from './shaders/meadow.glsl?raw'
 import type { Color3 } from '@babylonjs/core/Maths/math.color.js'
-import { lockMood, MOOD, type Mood } from './mood.ts'
+import { lockMood, MOOD, SEASON, type Mood } from './mood.ts'
 import { D } from './spec.ts'
 
 // the panel's state; t is the clock (cloud drift, water flow)
@@ -26,8 +26,8 @@ const MARK = '#include<painter>'
 // #include<macro>); a replacer function keeps `$` in the GLSL
 export const withPainter = (src: string): string => {
   if (!src.includes(MARK)) throw new Error(`a painted shader without ${MARK}`)
-  // the mood's warm autumn as a constant (AUTUMN_WARM: the mood is fixed for the page), so the compiler folds it away
-  return src.replace(MARK, () => `#define AUTUMN_WARM ${MOOD.autumn.toFixed(3)}\n#define AUTUMN_ON ${MOOD.autumn > 0 ? 1 : 0}\n#define MOOD_GRADE ${MOOD.grade.greenHue > 0 ? 1 : 0}\n#define MOOD_CONTRAST ${MOOD.grade.contrast > 0 ? 1 : 0}\n` + PAINTER).replace('#include<waterdata>', () => WATERDATA).replace('#include<shore>', () => SHORE).replace('#include<macro>', () => MEADOW + MACRO)   // the meadow's clump field before the macro colour, whose groundAt reads it (MEADOW)
+  // the mood's warm autumn as a constant (AUTUMN_WARM: the mood is fixed for the page), so the compiler folds it away; the switches defined only when on (Babylon's preprocessor reads `#if X` as `defined X`: tested with #ifdef)
+  return src.replace(MARK, () => `#define AUTUMN_WARM ${MOOD.autumn.toFixed(3)}\n${MOOD.autumn > 0 ? '#define AUTUMN_ON\n' : ''}${MOOD.grade.greenHue > 0 ? '#define MOOD_GRADE\n' : ''}${MOOD.grade.contrast > 0 ? '#define MOOD_CONTRAST\n' : ''}` + PAINTER).replace('#include<waterdata>', () => WATERDATA).replace('#include<shore>', () => SHORE).replace('#include<macro>', () => MEADOW + MACRO)   // the meadow's clump field before the macro colour, whose groundAt reads it (MEADOW)
 }
 
 // the ground's macro colour (src/look/shaders/macro.glsl): the cover grid and the bakes, on every painted material
@@ -35,7 +35,7 @@ const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush', 'uDirt'
 // the mood's colours each material takes (src/look/mood.ts), by uniform: one table gives both the uniform names and
 // their values, so none is left unset (an unset vec3 reads black). The shadow's turn is divided by its luma here
 // (shadowOf works on hue at the same value), not per pixel
-export const luma = (c: Color3) => 0.3 * c.r + 0.59 * c.g + 0.11 * c.b
+const luma = (c: Color3) => 0.3 * c.r + 0.59 * c.g + 0.11 * c.b
 const MOOD_COLOURS: Record<string, (m: Mood) => Color3> = {
   uSunCol: m => m.sun, uShadowCol: m => m.shadow, uShadowTurn: m => m.shadowTurn.scale(1 / luma(m.shadowTurn)), uShadowLift: m => m.shadowLift, uCloudSnow: m => m.cloudSnow,
   uMidCool: m => m.midCool, uLitLift: m => m.litLift, uRimCol: m => m.rim, uBackCol: m => m.back, uMistShade: m => m.mistShade, uMistLit: m => m.mistLit,
@@ -44,11 +44,11 @@ const MOOD_COLOURS: Record<string, (m: Mood) => Color3> = {
   uEarthTint: m => m.earth.tint,
 }
 const MOOD_FLOATS: Record<string, (m: Mood) => number> = {
-  uGreenChroma: m => m.grade.greenChroma, uGreenAmt: m => m.grade.greenAmt, uGradeSat: m => m.grade.sat * m.grade.summerSat, uTopAmt: m => m.grade.topAmt,
+  uGreenChroma: m => m.grade.greenChroma, uGreenAmt: m => m.grade.greenAmt,  uTopAmt: m => m.grade.topAmt,
   uEarthChroma: m => m.earth.chroma, uEarthAmt: m => m.earth.amt, uBounce: m => m.bounce, uGroundBounce: m => m.groundBounce,
-  uMoodMist: m => m.mist, uAutumnWarm: m => m.autumn, uContrast: m => m.grade.contrast, uGreenHue: m => m.grade.greenHue * Math.PI / 180, uUnitTint: m => m.units.tint, uUnitMist: m => m.units.mist, uUnitGrade: m => m.units.grade, uUnitBounce: m => m.units.bounce,
+  uMoodMist: m => m.mist, uAutumnWarm: m => m.autumn, uContrast: m => m.grade.contrast, uUnitTint: m => m.units.tint, uUnitMist: m => m.units.mist, uUnitGrade: m => m.units.grade, uUnitBounce: m => m.units.bounce,
 }
-const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA', 'uDirtOn', 'uSeasonGround', 'uTipTint', 'uTipWarm', 'uGreenRot', 'uEarthOn', 'uCombNearRect', 'uFocusZ', 'uCamFwd']
+const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA', 'uDirtOn', 'uSeasonGround', 'uTipTint', 'uTipWarm', 'uGreenRot', 'uGreenK', 'uGradeSat', 'uEarthOn', 'uCombNearRect', 'uFocusZ', 'uCamFwd']
 
 // perFrame: false keeps a material out of `all` (no per-frame uniforms, no light map: the light-map bake draws into it)
 export interface MatOptions { attributes?: string[]; uniforms?: string[]; samplers?: string[]; alpha?: boolean; defines?: string[]; perFrame?: boolean }
@@ -70,6 +70,9 @@ export class Materials {
       { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...MACRO_SAMPLERS, ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM' && !MACRO_SAMPLERS.includes(x))], needAlphaBlending: alpha, defines: [...D.defines, ...this.defines, ...defines] })
     for (const [u, f] of Object.entries(MOOD_COLOURS)) m.setColor3(u, f(MOOD))   // the light's colours (src/look/mood.ts)
     for (const [u, f] of Object.entries(MOOD_FLOATS)) m.setFloat(u, f(MOOD))
+    // the season's light, as it is when made (src/look/main.ts keeps the per-frame ones current; a perFrame:false
+    // material keeps these)
+    m.setColor3('uShadowCol', SEASON.shadow); m.setColor3('uShadowTurn', SEASON.turn); m.setFloat('uGradeSat', SEASON.sat); m.setFloat('uGreenK', SEASON.greenK); m.setMatrix3x3('uGreenRot', SEASON.greenRot); m.setFloat('uSeasonGround', SEASON.ground); m.setColor3('uTipTint', SEASON.tip); m.setFloat('uTipWarm', SEASON.tipWarm)
     m.setVector3('uSunDir', SUN); m.setTexture('uGrain', this.grain); m.setVector2('uGrainMean', new Vector2(...this.grainMean))
     this.every.push(m)
     if (perFrame) { this.all.push(m); for (const b of this.binders) b(m) }

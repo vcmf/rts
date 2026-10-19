@@ -40,17 +40,8 @@ vec3 groundSeason(vec3 c){
   // (AUTUMN_ON, docs/plans/active/epic-palette.md: compiled in only where the mood has it) turns further, to a beige
   // straw then a warm brown, olive grass too, sooner, dry grass lighter than green
   float gs=smoothstep(-0.005,0.03,c.g-max(c.r,c.b));
-  #if AUTUMN_ON
+  #ifdef AUTUMN_ON
   gs=max(gs,clamp((c.g-c.r+0.05)*16.7,0.0,1.0)*clamp((c.g-c.b)*16.7,0.0,1.0)*AUTUMN_WARM);   // (an olive grass, green about red over blue, turns too: linear ramps, every blade pixel runs it)
-  #define AU_C mix(vec3(0.68,0.59,0.37),vec3(0.62,0.55,0.44),AUTUMN_WARM)
-  #define AU_K mix(0.78,0.84,AUTUMN_WARM)
-  #define LA_C mix(vec3(0.52,0.42,0.27),vec3(0.60,0.40,0.24),AUTUMN_WARM)
-  #define LA_K mix(0.6,0.85,AUTUMN_WARM)
-  #else
-  #define AU_C vec3(0.68,0.59,0.37)
-  #define AU_K 0.78
-  #define LA_C vec3(0.52,0.42,0.27)
-  #define LA_K 0.6
   #endif
   float g=mix(0.25,1.0,gs);
   #ifdef GRASS_FLOW
@@ -58,12 +49,13 @@ vec3 groundSeason(vec3 c){
   // meadow; a road, earth and stone as before), the season's colour taken at the pixel's value against the meadow's
   // (about 0.4), so its streaks and gaps do not fade to 22% in autumn (where grass grows: the zones keep the default)
   float r=mix(1.0,clamp(dot(c,vec3(0.3,0.59,0.11))/0.40,0.55,1.6),gs*pFlowGrow);
-  #if AUTUMN_ON
+  #ifdef AUTUMN_ON
   r=mix(r,max(r,0.75),AUTUMN_WARM);
   #endif
-  vec3 au=mix(c,AU_C*r,AU_K),la=mix(c,LA_C*r,LA_K),wi=mix(c,vec3(0.46,0.42,0.34),0.7);   // (winter as before: under the snow)
+  // (the warm autumn's colours by AUTUMN_WARM, a constant: 0 folds them to the temperate ones exactly)
+  vec3 au=mix(c,mix(vec3(0.68,0.59,0.37),vec3(0.62,0.55,0.44),AUTUMN_WARM)*r,mix(0.78,0.84,AUTUMN_WARM)),la=mix(c,mix(vec3(0.52,0.42,0.27),vec3(0.60,0.40,0.24),AUTUMN_WARM)*r,mix(0.6,0.85,AUTUMN_WARM)),wi=mix(c,vec3(0.46,0.42,0.34),0.7);   // (winter as before: under the snow)
   #else
-  vec3 au=mix(c,AU_C,AU_K),la=mix(c,LA_C,LA_K),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
+  vec3 au=mix(c,mix(vec3(0.68,0.59,0.37),vec3(0.62,0.55,0.44),AUTUMN_WARM),mix(0.78,0.84,AUTUMN_WARM)),la=mix(c,mix(vec3(0.52,0.42,0.27),vec3(0.60,0.40,0.24),AUTUMN_WARM),mix(0.6,0.85,AUTUMN_WARM)),wi=mix(c,vec3(0.46,0.42,0.34),0.7);
   #endif
   au=mix(c,au,g);la=mix(c,la,g);
   return uSeason<1.0?mix(c,au,uSeasonGround):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}   // uSeasonGround: the season to autumn, sooner in the warm autumn (src/look/main.ts)
@@ -241,7 +233,7 @@ vec3 meadowUnder(vec3 alb,vec2 xz){
   if(near<=0.0)return alb;
   vec4 m=meadowTexel(xz);   // (macro.glsl: read once)
   // (a crop by its height as the clumps: the low green crop half, the wheat cut to stubble half as the harvest goes)
-  if(m.a>m.g){float k=coverAt(xz).x;bool green=k>6.5&&k<7.5;float h=green?0.5:mix(1.0,0.5,smoothstep(0.55,0.95,uSeason));
+  if(m.a>m.g){float k=coverAt(xz).x;bool green=k>6.5&&k<7.5;float h=green?0.5:mix(1.0,0.5,smoothstep(0.55,0.95,uSeason)*(1.0-AUTUMN_WARM));   // (the warm autumn: the wheat stands, meadow.vert)
     return mix(alb,alb*(green?UNDER_GRASS:UNDER_CROP),clamp(m.a*h*cropSeasonK(k,uSeason),0.0,1.0)*near*UNDER_AMT);}
   return mix(alb,alb*UNDER_GRASS,clamp(m.g*m.b*grassSeasonK(uSeason),0.0,1.0)*near*UNDER_AMT);}
 #else

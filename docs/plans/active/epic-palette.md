@@ -81,3 +81,15 @@ compile-time `#if` (a `mix(a, b, 0.0)` by a constant still computes `b`: no floa
 once a frame; epic's faint contrast dropped (0.05); the greens' teal turn a matrix built once a frame (it took a sine
 and cosine a pixel, of every material: about 0.25 ms). Now, epic against main: summer (0.3) default 10.19 against
 10.22, autumn (0.8) 10.09 against 10.33, wide and close within 0.05.
+
+## Review
+
+- **Round 1** (severe): Babylon's shader preprocessor reads `#if X` as `defined X`, so the mood switches
+  (`AUTUMN_ON`, `MOOD_GRADE`, `MOOD_CONTRAST`), always defined as 0 or 1, compiled every mood's paths in for every
+  mood: temperate was not main's. Now defined only when on, tested with `#ifdef`; temperate checked pixel-identical to
+  main (SwiftShader, three seasons: 0 pixels differ). Also: the pastel autumn gated from season 0 (it popped at 0.3);
+  the teal turn's share continuous (`uGreenK`; it popped near 0.8); the season's light one function (`seasonLight` in
+  `src/look/mood.ts`) for the materials' initial values, the per-frame update (only when the season moves, no
+  allocation) and the finishing pass's bloom, whose saturation and the clear colour now follow the season; the shade
+  under the wheat follows the standing crop; the river's autumn leaves the pastels. Fixing it, a comment pasted
+  mid-line in `post.ts` cut off the bloom's `uTopAmt` and `uGrade` (found by the pixel comparison).

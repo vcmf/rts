@@ -2,10 +2,10 @@
 uniform sampler2D uGrain;
 uniform vec3 uSunDir,uSunCol,uShadowCol,uHazeCool,uHazeWarm,uCamPos,uFocus;
 // the mood's other colours (src/look/mood.ts)
-uniform vec3 uCloudSnow;uniform mat3 uGreenRot;
+uniform vec3 uCloudSnow;uniform mat3 uGreenRot;uniform float uGreenK;
 uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistShade,uMistLit,uWaterSky,uGlint,uFarRiver;   // uShadowTurn: divided by its luma
 // the grade (gradeOf, at the end of atmos), and how much of the light units take (KEEP_HUE: docs/plans/done/lc1b-coats.md)
-uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade,uMoodMist,uContrast,uGreenHue;
+uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade,uMoodMist,uContrast;
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
 uniform float uUnitTint,uUnitMist,uUnitGrade,uUnitBounce;
 uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt,uBounce,uGroundBounce;   // the earth (the mood): the world toward earth tones
@@ -51,8 +51,8 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
          :vec3(0.36,0.18,0.24);
   // the mood's warm autumn (AUTUMN_WARM, docs/plans/active/epic-palette.md): one family of warm pastels, as Tiny
   // Glade's, peach, apricot, soft orange and butter, instead of the mixed wood
-  #if AUTUMN_ON
-  if(uSeason>0.3){   // (uniform: autumn has begun)
+  #ifdef AUTUMN_ON
+  if(uSeason>0.0){   // (uniform: past summer)
   vec3 pa=h<0.35?mix(vec3(0.95,0.58,0.32),vec3(0.98,0.70,0.42),t):h<0.65?mix(vec3(0.97,0.76,0.40),vec3(0.99,0.86,0.55),t)
          :h<0.85?mix(vec3(0.90,0.46,0.28),vec3(0.95,0.58,0.36),t):vec3(0.92,0.66,0.50);
   pa=mix(vec3(dot(pa,vec3(0.3,0.59,0.11))),pa,0.78);   // (softened: the owner, the first pastels too saturated)
@@ -333,19 +333,19 @@ vec3 gradeOf(vec3 c){
   if(amt<=0.0)return c;
   const vec3 L=LUMA;float l=dot(c,L);
   float green=clamp((c.g-max(c.r,c.b))*3.0,0.0,1.0);
-  #if MOOD_GRADE
+  #ifdef MOOD_GRADE
   // the greens muted and, in summer, turned toward teal (the mood's greenHue, Tiny Glade's blue-greens: docs/plans/
   // active/epic-palette.md) in one step: uGreenRot is the turn times greenChroma about the grey axis, built once a
   // frame (src/look/main.ts; no turn in autumn, the mute alone), the yellow-greens taken too while it turns
-  float wt=max(green*uGreenAmt,step(0.0001,uGreenHue)*clamp((c.g-c.b)*4.0,0.0,1.0)*smoothstep(0.0,0.06,c.g-c.r));
-  vec3 g=mix(c,(vec3(l)*uGreenTint+uGreenRot*(c-vec3(l)))*mix(1.0,0.93,wt*step(0.0001,uGreenHue)),wt);
+  float wt=max(green*uGreenAmt,uGreenK*clamp((c.g-c.b)*4.0,0.0,1.0)*smoothstep(0.0,0.06,c.g-c.r));   // uGreenK: the turn's share, 1 in summer to 0 in autumn (continuous)
+  vec3 g=mix(c,(vec3(l)*uGreenTint+uGreenRot*(c-vec3(l)))*mix(1.0,0.93,wt*uGreenK),wt);
   #else
   vec3 g=mix(c,vec3(l)*uGreenTint+(c-vec3(l))*uGreenChroma,green*uGreenAmt);
   #endif
   g=mix(vec3(dot(g,L)),g,uGradeSat);   // (the season's: src/look/main.ts, seasonLight)
   g*=mix(uSplitLo,uSplitHi,smoothstep(0.08,0.75,l));
   g+=uLift*(1.0-l);
-  #if MOOD_CONTRAST
+  #ifdef MOOD_CONTRAST
   g*=clamp(0.42+(l-0.42)*(1.0+uContrast),0.0,1.5)/max(l,1e-3);   // the values spread about a mid grey, the colour kept (the mood's contrast)
   #endif
   g=mix(g,uTopHaze*(0.85+l*0.35),smoothstep(0.60,1.0,gl_FragCoord.y/uViewH)*uTopAmt);   // 0 at the frame's bottom

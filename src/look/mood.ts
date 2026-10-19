@@ -147,12 +147,43 @@ export function setGroundBounce(v: number): void {
 
 // the grade (gradeOf, src/look/shaders/painter.glsl) of one colour at a height in the frame (0 bottom, 1 top), for what
 // no material draws: the clear colour, which shows only at the frame's top
-export function gradeColour(c: Color3, m: Mood, y: number): Color3 {
+// The mood's light by the season (docs/plans/active/epic-palette.md), the one source for every material's initial
+// values (src/look/materials.ts) and the per-frame update (src/look/main.ts): the shadow band's colour and turn from
+// summer's to autumn's as the leaves turn (season 0.3 to 0.8), then to winter's (2.2 to 3); the grade's saturation
+// (summerSat outside autumn); the greens' teal turn as a matrix about the grey axis, muted to greenChroma (column-
+// major for GLSL), and its share (greenK: none in autumn); the ground's season (sooner in the warm autumn); the grass
+// tips' lime, warmed in the warm autumn. Writes into `out` (no allocation a frame)
+export interface SeasonLight { shadow: Color3; turn: Color3; sat: number; greenK: number; greenRot: Float32Array; ground: number; tip: Color3; tipWarm: number }
+export const newSeasonLight = (): SeasonLight => ({ shadow: new Color3(), turn: new Color3(), sat: 1, greenK: 0, greenRot: new Float32Array(9), ground: 0, tip: new Color3(), tipWarm: 0 })
+const TIP_LIME = new Color3(1.04, 1.08, 0.80), TIP_WARM = new Color3(1.06, 1.0, 0.86)
+const lumaW = (c: Color3) => 0.3 * c.r + 0.59 * c.g + 0.11 * c.b
+const unitTurns = new WeakMap<Mood, [Color3, Color3, Color3]>()
+export function seasonLight(m: Mood, s: number, out: SeasonLight): SeasonLight {
+  const st = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
+  const ak = st(0.3, 0.8, s) * (1 - st(2.2, 3, s)), wk = st(2.2, 3, s)
+  Color3.LerpToRef(m.shadow, m.shadowAutumn, ak, out.shadow); Color3.LerpToRef(out.shadow, m.shadowWinter, wk, out.shadow)
+  let u = unitTurns.get(m); if (!u) unitTurns.set(m, u = [m.shadowTurn, m.shadowTurnAutumn, m.shadowTurnWinter].map(c => c.scale(1 / lumaW(c))) as [Color3, Color3, Color3])
+  Color3.LerpToRef(u[0], u[1], ak, out.turn); Color3.LerpToRef(out.turn, u[2], wk, out.turn)
+  out.sat = m.grade.sat * (m.grade.summerSat + (1 - m.grade.summerSat) * ak)
+  out.greenK = m.grade.greenHue > 0 ? 1 - ak : 0
+  const a = m.grade.greenHue * Math.PI / 180 * out.greenK, k = 1 / Math.sqrt(3), co = Math.cos(a), si = Math.sin(a), t = 1 - co, g = m.grade.greenChroma, kk = k * k * t, ks = k * si, r = out.greenRot
+  // R[row][col] = (row === col ? co : 0) + kk + (skew), stored column-major
+  r[0] = (co + kk) * g; r[1] = (kk + ks) * g; r[2] = (kk - ks) * g
+  r[3] = (kk - ks) * g; r[4] = (co + kk) * g; r[5] = (kk + ks) * g
+  r[6] = (kk + ks) * g; r[7] = (kk - ks) * g; r[8] = (co + kk) * g
+  out.ground = Math.min(s, 1) + (st(0, 0.8, s) - Math.min(s, 1)) * m.autumn
+  out.tipWarm = m.autumn * st(0.3, 1, s); Color3.LerpToRef(TIP_LIME, TIP_WARM, out.tipWarm, out.tip)
+  return out
+}
+// the season's light in use (src/look/main.ts updates it as the season moves; the finishing pass reads its saturation)
+export const SEASON: SeasonLight = newSeasonLight()
+
+export function gradeColour(c: Color3, m: Mood, y: number, sat = m.grade.sat): Color3 {
   const g = m.grade, L = (v: Color3) => 0.2126 * v.r + 0.7152 * v.g + 0.0722 * v.b, l = L(c)
   const sstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
   const green = Math.min(1, Math.max(0, (c.g - Math.max(c.r, c.b)) * 3)) * g.greenAmt
   let o = Color3.Lerp(c, new Color3(l * g.greenTint.r + (c.r - l) * g.greenChroma, l * g.greenTint.g + (c.g - l) * g.greenChroma, l * g.greenTint.b + (c.b - l) * g.greenChroma), green)
-  const lo = L(o); o = Color3.Lerp(new Color3(lo, lo, lo), o, g.sat)
+  const lo = L(o); o = Color3.Lerp(new Color3(lo, lo, lo), o, sat)
   o = o.multiply(Color3.Lerp(g.splitLo, g.splitHi, sstep(0.08, 0.75, l))).add(g.lift.scale(1 - l))
   return Color3.Lerp(o, g.topHaze.scale(0.85 + l * 0.35), sstep(0.60, 1.0, y) * g.topAmt)
 }
