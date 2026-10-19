@@ -96,7 +96,7 @@ export const MOODS = {
       topHaze: c(0.70, 0.76, 0.83), topAmt: 0.25, vignette: c(0.80, 0.86, 0.96), greenHue: 0, summerSat: 1,
     },
   },
-  // epic (docs/plans/active/epic-palette.md; the owner, 2026-10-18: "an 'epic version' of tiny glade"; the first pass
+  // epic (docs/plans/done/epic-palette.md; the owner, 2026-10-18: "an 'epic version' of tiny glade"; the first pass
   // "over contrasted"): temperate's air thinner, a warmer sun against cooler shade, a little more of the world's own
   // colour, the values barely spread; autumn one family of warm pastels (Tiny Glade's)
   epic: {
@@ -147,7 +147,7 @@ export function setGroundBounce(v: number): void {
 
 // the grade (gradeOf, src/look/shaders/painter.glsl) of one colour at a height in the frame (0 bottom, 1 top), for what
 // no material draws: the clear colour, which shows only at the frame's top
-// The mood's light by the season (docs/plans/active/epic-palette.md), the one source for every material's initial
+// The mood's light by the season (docs/plans/done/epic-palette.md), the one source for every material's initial
 // values (src/look/materials.ts) and the per-frame update (src/look/main.ts): the shadow band's colour and turn from
 // summer's to autumn's as the leaves turn (season 0.3 to 0.8), then to winter's (2.2 to 3); the grade's saturation
 // (summerSat outside autumn); the greens' teal turn as a matrix about the grey axis, muted to greenChroma (column-

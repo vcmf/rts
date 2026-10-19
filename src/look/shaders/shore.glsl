@@ -37,7 +37,7 @@ float pFlowGrow=0.0;
 vec3 groundSeason(vec3 c){
   // the autumn turns (to late autumn) by greenness: a yellow-green counts as green, a grey road, earth, stone and dry gold
   // (green no higher than red or blue) take a quarter. Winter mutes every colour, as before. The mood's warm autumn
-  // (AUTUMN_ON, docs/plans/active/epic-palette.md: compiled in only where the mood has it) turns further, to a beige
+  // (AUTUMN_ON, docs/plans/done/epic-palette.md: compiled in only where the mood has it) turns further, to a beige
   // straw then a warm brown, olive grass too, sooner, dry grass lighter than green
   float gs=smoothstep(-0.005,0.03,c.g-max(c.r,c.b));
   #ifdef AUTUMN_ON

@@ -48,6 +48,10 @@
 //   the same quarter-pixel move. It measured, worst of a run: 1.17 % closest (1.19 % in autumn), 5.57 % widest
 //   (5.99 % in autumn), winter 3.20 % and 12.52 %, the water's own 2.97 % and 14.51 %; the limits sit a run's spread
 //   above them: 1.3, 6.0, 6.5, 3.5, 13.5, 3.2 and 15.5 %.
+//   Re-baselined again for the epic mood, the default (decision 0044, the owner's call): its thinner mist and air make
+//   the river's edges more contrasty. Measured, worst of a run: 1.15 % closest (1.22 % in autumn), 6.83 % widest (6.82 %
+//   in autumn), winter 3.83 % and 13.90 %, the water's own 3.51 % and 15.73 %; the limits a run's spread above them:
+//   1.3, 7.2, 7.2, 4.0, 14.5, 3.7 and 16.5 %.
 //   Sabotage: aliased hard edges (WATER_SAB_STEP).
 // Frames are 1280×720. Exit 1 on a failure.
 import fs from 'node:fs'
@@ -66,7 +70,7 @@ const W = 1280, H = 720, CAM = SPEC.camera, BAND = SPEC.water.band, SDF = SPEC.w
 const [, A0, BETA0, R0] = CAMS.find(c => c[0] === 'start')
 const SEAM_P95 = 2, SEAM_MAX = 6, SEAM_MIN_PX = 500
 const POOL = 0.2, RIFFLE = 0.5, LUMA_GAP = 0.03, BRIGHT = 0.2, FOAM_RATIO = 2, FOAM_MIN = 0.02
-const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.013, SHIMMER_WIDE = 0.06, SHIMMER_AUTUMN_WIDE = 0.065, SHIMMER_WINTER = 0.035, SHIMMER_WINTER_WIDE = 0.135, SHIMMER_ICE = 0.032, SHIMMER_ICE_WIDE = 0.155
+const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.013, SHIMMER_WIDE = 0.072, SHIMMER_AUTUMN_WIDE = 0.072, SHIMMER_WINTER = 0.040, SHIMMER_WINTER_WIDE = 0.145, SHIMMER_ICE = 0.037, SHIMMER_ICE_WIDE = 0.165
 
 let C = null
 const river = () => {

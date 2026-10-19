@@ -49,7 +49,7 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
          :h<0.76?vec3(0.48,0.20,0.34)                                  // purple, rare
          :h<0.95?mix(summer,vec3(0.72,0.62,0.22),0.45)                 // still turning
          :vec3(0.36,0.18,0.24);
-  // the mood's warm autumn (AUTUMN_WARM, docs/plans/active/epic-palette.md): one family of warm pastels, as Tiny
+  // the mood's warm autumn (AUTUMN_WARM, docs/plans/done/epic-palette.md): one family of warm pastels, as Tiny
   // Glade's, peach, apricot, soft orange and butter, instead of the mixed wood
   #ifdef AUTUMN_ON
   if(uSeason>0.0){   // (uniform: past summer)

@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-18
 ---
 
@@ -125,3 +125,9 @@ and cosine a pixel, of every material: about 0.25 ms). Now, epic against main: s
 - Third batch: the guard's cover view one near-miss, Austria (white) on the village ground in autumn, sep 0.097
   (main 0.104, the gate 0.100): the lighter ground that keeps the dark coats readable lifts the village toward the
   white. **Accepted by the owner** (2026-10-19): "yes accept it as near miss".
+- The rest of the batch under epic: water: the shimmer over decision 0042's limits (6.83 % widest; epic's thinner
+  air makes the edges more contrasty): re-baselined, decision 0044 (the owner: "accept the re-baseline"); the winter
+  ice under its gate (pools frozen 76.6 %, gate 80 %: epic's thinner mist): #120 (the owner: "file the issue on
+  winter ice"); the gravel bar as on main (#118). Macro: field|grass 6.8, road|grass 4.8 (main 6.2, 4.5: #118).
+  Goldens: differ everywhere (the default mood). The owner, on the production builds: this view at 114-115 fps on
+  main too ("it's not tied to this pr").
