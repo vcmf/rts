@@ -333,14 +333,14 @@ vec3 gradeOf(vec3 c){
   if(amt<=0.0)return c;
   const vec3 L=LUMA;float l=dot(c,L);
   float green=clamp((c.g-max(c.r,c.b))*3.0,0.0,1.0);
+  #if MOOD_GRADE
+  // the greens muted and, in summer, turned toward teal (the mood's greenHue, Tiny Glade's blue-greens: docs/plans/
+  // active/epic-palette.md) in one step: uGreenRot is the turn times greenChroma about the grey axis, built once a
+  // frame (src/look/main.ts; no turn in autumn, the mute alone), the yellow-greens taken too while it turns
+  float wt=max(green*uGreenAmt,step(0.0001,uGreenHue)*clamp((c.g-c.b)*4.0,0.0,1.0)*smoothstep(0.0,0.06,c.g-c.r));
+  vec3 g=mix(c,(vec3(l)*uGreenTint+uGreenRot*(c-vec3(l)))*mix(1.0,0.93,wt*step(0.0001,uGreenHue)),wt);
+  #else
   vec3 g=mix(c,vec3(l)*uGreenTint+(c-vec3(l))*uGreenChroma,green*uGreenAmt);
-  // the greens turned toward teal in summer (the mood's greenHue, Tiny Glade's blue-greens: docs/plans/active/
-  // epic-palette.md): their colour about the grey axis, the value kept
-  #if MOOD_GRADE   // (the mood's teal turn and contrast: compiled in only where the mood has them, src/look/materials.ts)
-  // (the turn, muted by the mood's greenChroma and a little deeper, as one matrix about the grey axis built once a frame:
-  // uGreenRot, src/look/main.ts; each pixel takes it by how clearly green it is)
-  if(uGreenHue>0.0){float w=clamp((c.g-c.b)*4.0,0.0,1.0)*smoothstep(0.0,0.06,c.g-c.r);
-    vec3 gl=vec3(dot(g,L)),d=g-gl;g=mix(g,(uGreenRot*d+gl)*0.9,w);}
   #endif
   g=mix(vec3(dot(g,L)),g,uGradeSat);   // (the season's: src/look/main.ts, seasonLight)
   g*=mix(uSplitLo,uSplitHi,smoothstep(0.08,0.75,l));
