@@ -122,3 +122,6 @@ and cosine a pixel, of every material: about 0.25 ms). Now, epic against main: s
   at temperate's no change; the top haze and the vignette back to temperate's 0.096; temperate's lift 0.099; the winter
   sun a brighter cool white (0.99,1.0,1.02) 0.107, ok. The look a touch lighter (median luma +0.01 to +0.03), the hues
   the same.
+- Third batch: the guard's cover view one near-miss, Austria (white) on the village ground in autumn, sep 0.097
+  (main 0.104, the gate 0.100): the lighter ground that keeps the dark coats readable lifts the village toward the
+  white. **Accepted by the owner** (2026-10-19): "yes accept it as near miss".
