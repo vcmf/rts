@@ -1,6 +1,6 @@
 """Step 1 and 2 of the workflow for one model: re-scale to metres and improve the rig.
 
-blender -b -P prep.py -- <gunner|light-cannon|horse|dragoon>   ->  <name>-prepped.blend, <name>-prep.json
+blender -b -P prep.py -- <gunner|light-cannon|horse|dragoon|pistol>   ->  <name>-prepped.blend, <name>-prep.json
 """
 import bpy, json, math, sys
 from pathlib import Path
@@ -178,6 +178,7 @@ elif name == 'horse':
                 barrel_half_width=max(abs(v.x) for v in vs if abs(v.y - seat[0]) < .15 and 1.0 < v.z < 1.35))
 
 elif name == 'dragoon':
+    SCABBARD_LEN = .98         # holds the 97 cm blade
     s = .90 / rig.data.bones['mixamorig:Hips'].head_local.z
     K.rescale(rig, mesh, s)
     comps = K.components(mesh)
@@ -186,26 +187,82 @@ elif name == 'dragoon':
     top = scab['max'].z
     hilt = [c for c in comps if c is not scab and c['count'] < 120 and c['center'].x > .15
             and top - .12 < c['center'].z < top + .15 and (c['max'] - c['min']).z < .2]
-    K.rigid(mesh, scab['ids'], 'mixamorig:Hips')
     hilt_ids = [i for c in hilt for i in c['ids']]
     hc = sum((c['center'] for c in hilt), Vector()) / max(1, len(hilt))
-    ebs = K.edit(rig)
-    K.add_bone(ebs, 'Hilt', hc, hc + Vector((0, 0, .1)), 'mixamorig:Hips')
-    K.obj_mode()
-    K.rigid(mesh, hilt_ids, 'Hilt')
     a, b = axis_ends(mesh, scab['ids'])
     stop, sbot = (a, b) if a.z > b.z else (b, a)       # the mouth is the upper end
-    info.update(scale=s, scabbard=dict(count=scab['count'], min=list(scab['min']), max=list(scab['max']), mouth=list(stop), tip=list(sbot)),
+    # Tripo's scabbard (69 cm) is shorter than the sabre's blade (combine.py, 97 cm): stretched along its axis
+    # from the mouth to SCABBARD_LEN, the length of a cuirassier's scabbard
+    ax = (sbot - stop).normalized(); grow = SCABBARD_LEN / (sbot - stop).length
+    for i in scab['ids']:
+        v = mesh.data.vertices[i]; v.co = v.co + ax * ((v.co - stop).dot(ax) * (grow - 1))
+    sbot = stop + ax * SCABBARD_LEN
+    # its own bone from the mouth, hung from the hips, so a draw can swing it on its slings; the hilt rides in it
+    ebs = K.edit(rig)
+    K.add_bone(ebs, 'Scabbard', stop, sbot, 'mixamorig:Hips')
+    K.add_bone(ebs, 'Hilt', hc, hc + Vector((0, 0, .1)), 'Scabbard')
+    K.obj_mode()
+    K.rigid(mesh, scab['ids'], 'Scabbard')
+    K.rigid(mesh, hilt_ids, 'Hilt')
+    sv = [mesh.data.vertices[i].co for i in scab['ids']]           # its bounds as stretched
+    info.update(scale=s, scabbard=dict(count=scab['count'], min=[min(v[k] for v in sv) for k in range(3)],
+                                       max=[max(v[k] for v in sv) for k in range(3)], mouth=list(stop), tip=list(sbot)),
                 hilt=dict(parts=len(hilt), count=len(hilt_ids), centre=list(hc)))
 
-if name != 'light-cannon':
+elif name == 'pistol':
+    # a prop, not rigged: a cavalry pistol of 35 cm (the AN XIII is about 35 cm). Turned so its barrel points
+    # +Y with the grip's centre at the origin: the Pistol bone's frame (combine.py), as the sabre's
+    lo, hi = K.mesh_bounds([mesh])
+    s = .35 / (hi.x - lo.x)
+    mesh.scale = (s,) * 3
+    for o in bpy.context.selected_objects: o.select_set(False)
+    mesh.select_set(True); bpy.context.view_layer.objects.active = mesh
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    vs = [v.co.copy() for v in mesh.data.vertices]
+    x0 = min(v.x for v in vs); x1 = max(v.x for v in vs); L = x1 - x0
+    face = [v for v in vs if v.x < x0 + .004]                       # the muzzle's face (the barrel points -X)
+    muzzle = Vector((x0, sum(v.y for v in face) / len(face), (max(v.z for v in face) + min(v.z for v in face)) / 2))
+    cap = [v for v in vs if v.x > x1 - .015]                         # the butt cap
+    butt = Vector((sum(v.x for v in cap) / len(cap), sum(v.y for v in cap) / len(cap), min(v.z for v in cap) + .012))
+    # the handle: the stock's last 7 cm, a centre per centimetre (mid-height, mid-width), a line fitted through
+    # them; the grip is their mean, its axis runs from the butt up to the lock
+    cs = []
+    for k in range(7):
+        sl = [v for v in vs if x1 - .07 + .01 * k <= v.x < x1 - .06 + .01 * k]
+        if len(sl) >= 3:
+            cs.append(Vector((sum(v.x for v in sl) / len(sl), (max(v.y for v in sl) + min(v.y for v in sl)) / 2,
+                              (max(v.z for v in sl) + min(v.z for v in sl)) / 2)))
+    if len(cs) < 4:
+        raise SystemExit('pistol: the handle was not found (%d of 7 slices of the stock\'s last 7 cm have vertices)' % len(cs))
+    grip = sum(cs, Vector()) / len(cs)
+    grip.y = muzzle.y                    # mid-width: on the bore's vertical plane (the lock and guard are not symmetric)
+    sxx = sum((c.x - grip.x) ** 2 for c in cs)
+    # the axis in the barrel's vertical plane (no sideways cant), from the butt up towards the muzzle
+    up_handle = -Vector((1, 0, sum((c.x - grip.x) * (c.z - grip.z) for c in cs) / sxx)).normalized()
+    R = Matrix.Rotation(-math.pi / 2, 4, 'Z')                        # -X (the muzzle) -> +Y
+    mesh.data.transform(R @ Matrix.Translation(-grip))
+    # a few pixels at the RTS camera: Tripo's 10,000 triangles collapsed to about 1,200
+    tris0 = sum(len(p.vertices) - 2 for p in mesh.data.polygons)
+    dec = mesh.modifiers.new('Decimate', 'DECIMATE'); dec.ratio = 1200 / tris0
+    bpy.context.view_layer.objects.active = mesh
+    bpy.ops.object.modifier_apply(modifier=dec.name)
+    to = lambda p: (R @ Matrix.Translation(-grip)) @ p
+    info.update(scale=s, length=L, muzzle=list(to(muzzle)), butt=list(to(butt)),
+                handle_axis=list((R.to_3x3() @ up_handle).normalized()))
+    info['triangles_source'] = tris0
+
+if rig is not None and name != 'light-cannon':
     # Tripo's weights leak between distant bones: keep only bones within reach of each vertex
     info['weights_removed'] = K.clean_weights(rig, mesh, {'horse': .45}.get(name, .16))
 if name in ('gunner', 'dragoon'):
     # the coat below the elbows belongs to the body, not the arms
     info['coat_freed'] = K.free_coat_from_arms(mesh, .45, 1.08)
-rig.name = {'gunner': 'GunnerRig', 'light-cannon': 'GunRig', 'horse': 'HorseRig', 'dragoon': 'RiderRig'}[name]
-mesh.name = rig.name.replace('Rig', 'Mesh')
+if rig is not None:
+    rig.name = {'gunner': 'GunnerRig', 'light-cannon': 'GunRig', 'horse': 'HorseRig', 'dragoon': 'RiderRig'}[name]
+    mesh.name = rig.name.replace('Rig', 'Mesh')
+else:
+    mesh.name = 'PistolMesh'
+mesh.data.update(); bpy.context.view_layer.update()
 lo, hi = K.mesh_bounds([mesh])
 info.update(bounds=[list(lo), list(hi)], size=list(hi - lo), triangles=sum(len(p.vertices) - 2 for p in mesh.data.polygons))
 (K.ROOT / f'{name}-prep.json').write_text(json.dumps(info, indent=1, default=list))

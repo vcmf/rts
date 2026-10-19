@@ -451,7 +451,7 @@
      "loop": false,
      "events": {
       "shot": [
-       14
+       15
       ]
      },
      "next": [
@@ -472,10 +472,10 @@
      "loop": false,
      "events": {
       "cartridge_in": [
-       127
+       128
       ],
       "cartridge_out": [
-       80
+       81
       ]
      },
      "next": [
@@ -498,7 +498,8 @@
    "pipeline": "units",
    "sources": [
     "french-army/horse",
-    "french-army/dragoon"
+    "french-army/dragoon",
+    "french-army/pistol"
    ],
    "fps": 24,
    "m_per_unit": 1.0,
@@ -506,12 +507,35 @@
     "cavalry.glb"
    ],
    "clips": {
+    "AimPistol": {
+     "frames": 37,
+     "loop": true,
+     "events": {},
+     "next": [
+      "FirePistol",
+      "LowerPistol"
+     ]
+    },
+    "DrawPistol": {
+     "frames": 28,
+     "loop": false,
+     "events": {
+      "drawn": [
+       18
+      ]
+     },
+     "next": [
+      "ReadyPistol",
+      "PresentPistol",
+      "HolsterPistol"
+     ]
+    },
     "DrawSabre": {
      "frames": 31,
      "loop": false,
      "events": {
       "drawn": [
-       10
+       21
       ]
      },
      "next": [
@@ -521,6 +545,20 @@
       "SabreThrust",
       "SabreParry",
       "SabreFight"
+     ]
+    },
+    "FirePistol": {
+     "frames": 25,
+     "loop": false,
+     "events": {
+      "shot": [
+       3
+      ]
+     },
+     "next": [
+      "ReadyPistol",
+      "PresentPistol",
+      "HolsterPistol"
      ]
     },
     "Gallop": {
@@ -534,7 +572,7 @@
      "loop": false,
      "events": {
       "hit": [
-       13
+       15
       ]
      },
      "root_speed": 6.5,
@@ -551,12 +589,25 @@
       "GallopCut"
      ]
     },
+    "HolsterPistol": {
+     "frames": 28,
+     "loop": false,
+     "events": {
+      "holstered": [
+       17
+      ]
+     },
+     "next": [
+      "Idle"
+     ]
+    },
     "Idle": {
      "frames": 96,
      "loop": true,
      "events": {},
      "next": [
-      "DrawSabre"
+      "DrawSabre",
+      "DrawPistol"
      ]
     },
     "IdleSabre": {
@@ -572,12 +623,41 @@
       "SheatheSabre"
      ]
     },
+    "LowerPistol": {
+     "frames": 13,
+     "loop": false,
+     "events": {},
+     "next": [
+      "ReadyPistol",
+      "PresentPistol",
+      "HolsterPistol"
+     ]
+    },
+    "PresentPistol": {
+     "frames": 13,
+     "loop": false,
+     "events": {},
+     "next": [
+      "AimPistol",
+      "FirePistol",
+      "LowerPistol"
+     ]
+    },
+    "ReadyPistol": {
+     "frames": 49,
+     "loop": true,
+     "events": {},
+     "next": [
+      "PresentPistol",
+      "HolsterPistol"
+     ]
+    },
     "SabreCutLeft": {
      "frames": 29,
      "loop": false,
      "events": {
       "hit": [
-       13
+       15
       ]
      },
      "next": [
@@ -590,7 +670,7 @@
      "loop": false,
      "events": {
       "hit": [
-       13
+       15
       ]
      },
      "next": [
@@ -604,12 +684,12 @@
      "loop": true,
      "events": {
       "hit": [
-       13,
-       63,
-       93
+       15,
+       64,
+       95
       ],
       "parry": [
-       40
+       41
       ]
      },
      "next": [
@@ -622,7 +702,7 @@
      "loop": false,
      "events": {
       "parry": [
-       8
+       9
       ]
      },
      "next": [
@@ -635,7 +715,7 @@
      "loop": false,
      "events": {
       "hit": [
-       11
+       12
       ]
      },
      "next": [
@@ -648,7 +728,7 @@
      "loop": false,
      "events": {
       "sheathed": [
-       20
+       21
       ]
      },
      "next": [

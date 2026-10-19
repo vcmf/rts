@@ -11,7 +11,7 @@ step() {   # step <log> <command...>: run, keep the full output in <log>, fail w
   if "$@" > "$log" 2>&1; then echo "ok   $log"; else s=$?; echo "FAIL $log (exit $s)"; tail -40 "$log"; exit $s; fi
 }
 B="blender -b --python-exit-code 1"
-for m in gunner light-cannon horse dragoon; do step prep-$m.log $B -P $CODE/prep.py -- $m; done
+for m in gunner light-cannon horse dragoon pistol; do step prep-$m.log $B -P $CODE/prep.py -- $m; done
 step combine-battery.log $B -P $CODE/combine.py -- battery
 step combine-cavalry.log $B -P $CODE/combine.py -- cavalry
 step anim-battery.log $B battery-combined.blend -P $CODE/anim_battery.py

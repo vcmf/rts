@@ -337,7 +337,7 @@ def make_load():
           head=(D(-8), D(10)))
     settle(c, 239, FIREP)
     fire_ready(c, 239)
-    c.events = {'cartridge_out': 80, 'cartridge_in': 127}
+    c.events = {'cartridge_out': 80 + 1, 'cartridge_in': 127 + 1}     # 1-based frames: key k is frame k + 1
     return c
 
 
@@ -473,7 +473,7 @@ def make_fire():
     S.walk(120, 138, (sx, sy), syaw)
     st.carry(118, 165, S, staff_side_of)
     settle(c, 165, {})
-    c.events = {'shot': SHOT}
+    c.events = {'shot': SHOT + 1}                 # 1-based: the recoil starts at key SHOT
     return c
 
 

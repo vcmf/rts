@@ -63,5 +63,18 @@
     "bytes": 537772
    }
   }
+ },
+ "french-army/pistol": {
+  "note": "pistol.zip, 2026-10-17 (a flintlock cavalry pistol, unrigged)",
+  "files": {
+   "french-army/pistol/tripo_convert_732b5916-0ba9-4086-81d9-11fb9577d292.fbm/tripo_image_732b5916-0ba9-4086-81d9-11fb9577d292_0_0.jpg": {
+    "sha256": "3caf4e8235832e95591dcfe4b1241af43b255354fb94331b2aba95487f865e04",
+    "bytes": 1544397
+   },
+   "french-army/pistol/tripo_convert_732b5916-0ba9-4086-81d9-11fb9577d292.fbx": {
+    "sha256": "95558150e181946400b83f0eecc6556b93fe499f7f0408466646dde39160b587",
+    "bytes": 328508
+   }
+  }
  }
 }
