@@ -106,3 +106,13 @@ and cosine a pixel, of every material: about 0.25 ms). Now, epic against main: s
   names and values, one snapshot shared as the season moves; one smoothstep; the system doc's decisions (0043) and
   stale comments. Left: the wheat's warm autumn still a uniform in `meadow.vert` (the vertex shader takes no painter
   defines). Temperate re-checked pixel-identical to main, epic as before.
+
+## Checks
+
+- First batch (epic the default): the guard failed in summer, the dark coats (France, Russia, Britain) on sunlit
+  slopes, open ground and roads no longer separating (sep 0.06-0.10, main 0.11-0.15): epic's summer greens were darker
+  (greenTint's value 0.90 and a further × 0.93 as they turned). Now the greens keep their value (greenTint about 1, no
+  darkening): the summer guard ok, sep at main's (France on the sunlit slope 0.143, main 0.132); the look a touch
+  lighter, the hue the same (median 123°). Making that change, a comment pasted mid-line in `mood.ts` cut off epic's
+  greenAmt and sat (the frame black): `test/look-moods.test.ts` now checks every mood's fields and season light finite
+  (it fails on that line).
