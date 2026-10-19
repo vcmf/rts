@@ -69,7 +69,7 @@ const params = new URLSearchParams(location.search), softParam = params.get('sof
 // a switch with no value (?rt16, ?nowide): present, or present as 1; any other value throws
 const flag = (k: string): boolean => { if (!params.has(k)) return false; const v = params.get(k); if (v !== '' && v !== '1') throw new Error(`?${k} takes no value, not ${v}`); return true }
 // the light's mood (src/look/mood.ts), before any material is made
-setMood(params.get('mood') ?? 'temperate')
+setMood(params.get('mood') ?? 'epic')   // the default mood (decision 0043); ?mood=temperate for LC3's
 if (params.has('bounce')) { const b = params.get('bounce') ?? ''; setBounce(/^\d+(\.\d+)?$/.test(b) ? Number(b) : NaN) }
 if (params.has('gbounce')) { const b = params.get('gbounce') ?? ''; setGroundBounce(/^\d+(\.\d+)?$/.test(b) ? Number(b) : NaN) }   // LC5
 // the clear colour, graded as the materials are at the frame's top (it shows only there), following the grade's switch

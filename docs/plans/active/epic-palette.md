@@ -10,7 +10,7 @@ someway so it's look more like 'epic version' of tiny glade". After the dark wat
 
 ## Scope
 
-- **A new mood, `epic`** (`src/look/mood.ts`, `?mood=epic`), beside `temperate` (the default until the owner picks):
+- **A new mood, `epic`** (`src/look/mood.ts`), the default (decision 0043; the owner, 2026-10-19: "default mood is epic"; `?mood=temperate` for LC3's):
   the air cleared (the valley mist at about a third, little haze at the frame's top), a warmer sun against cooler,
   deeper shade, more of the world's own colour kept, the values spread about a mid grey, a darker frame edge.
 - **Two new mood fields:** `mist` (the valley mist's amount) and `grade.contrast` (the values spread, the colour

@@ -124,7 +124,7 @@ export type MoodName = keyof typeof MOODS
 
 // the mood in use: set once, before any material is made (src/look/main.ts); a material copies its colours when it
 // is made, so a later change would apply only in part: lockMood() (the first material) refuses it
-export let MOOD: Mood = MOODS.temperate
+export let MOOD: Mood = MOODS.epic   // the default (decision 0043)
 let locked = false
 export const lockMood = (): void => { locked = true }
 export function setMood(name: string): void {
