@@ -1,5 +1,5 @@
 precision highp float;attribute vec3 position;attribute vec3 normal;attribute float aV;attribute vec2 aSlot;
-uniform mat4 viewProjection;uniform float uSeason;
+uniform mat4 viewProjection;uniform float uSeason,uAutumnWarm;   // uAutumnWarm: the mood's (src/look/mood.ts)
 // the ring (src/look/meadow.ts): its snapped origin and its centre (the focus), its cell, the clumps spread and height (one height on every ring), its band of distance from the centre
 // (in from x to y, out from z to w), the meadow map (R the ground height, G the growth, B the height factor, A the
 // crops growth), the cover grid (nearest: its class, src/look/shaders/macro.glsl)
@@ -27,8 +27,9 @@ vec3 stubbleTip(float s){return mix(vec3(0.72,0.67,0.49),vec3(0.58,0.49,0.34),sm
 vec4 cropLook(float k,float j){
   float s=uSeason;
   if(k>5.5&&k<6.5){
-    float cut=smoothstep(0.55,0.95,s),h=mix(WHEAT_HEIGHT_MAX*mix(0.84,1.0,j),STUBBLE_HEIGHT*mix(0.8,1.0,j),cut)*cropSeasonK(k,s);
-    vec3 c=mix(mix(vec3(0.72,0.60,0.27),vec3(0.70,0.49,0.24),min(s,1.0)),stubbleTip(s),cut);   // standing gold to orange, then cut to the stubble
+    // (the mood's warm autumn: the wheat stands tall through autumn, gold to a deep orange, until the plough)
+    float cut=smoothstep(0.55,0.95,s)*(1.0-uAutumnWarm),h=mix(WHEAT_HEIGHT_MAX*mix(0.84,1.0,j),STUBBLE_HEIGHT*mix(0.8,1.0,j),cut)*cropSeasonK(k,s);
+    vec3 c=mix(mix(vec3(0.72,0.60,0.27),mix(vec3(0.70,0.49,0.24),vec3(0.82,0.60,0.32),uAutumnWarm),min(s,1.0)),stubbleTip(s),cut);   // standing gold to orange, then cut to the stubble
     return vec4(h,c);}
   if(k>6.5&&k<7.5){
     float h=GREEN_HEIGHT*mix(0.85,1.0,j)*cropSeasonK(k,s);

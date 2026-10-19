@@ -2,13 +2,14 @@
 uniform sampler2D uGrain;
 uniform vec3 uSunDir,uSunCol,uShadowCol,uHazeCool,uHazeWarm,uCamPos,uFocus;
 // the mood's other colours (src/look/mood.ts)
+uniform vec3 uCloudSnow,uUnitShadow;uniform mat3 uGreenRot;uniform float uGreenK;
 uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistShade,uMistLit,uWaterSky,uGlint,uFarRiver;   // uShadowTurn: divided by its luma
 // the grade (gradeOf, at the end of atmos), and how much of the light units take (KEEP_HUE: docs/plans/done/lc1b-coats.md)
-uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade;
+uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade,uMoodMist;
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
 uniform float uUnitTint,uUnitMist,uUnitGrade,uUnitBounce;
 uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt,uBounce,uGroundBounce;   // the earth (the mood): the world toward earth tones
-uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason;
+uniform float uTime,uGrainAmt,uEdges,uClouds,uSeason,uSeasonGround;
 
 // Rec. 709 luma: the grade and the value units keep (the painted bands use the older 0.3, 0.59, 0.11)
 const vec3 LUMA=vec3(0.2126,0.7152,0.0722);
@@ -39,7 +40,7 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
   float h=fract(t*7.13);
   summer=mix(summer,vec3(0.36,0.18,0.24),step(0.95,h)*step(kind,0.5));   // a rare copper beech, all year
   if(kind>1.5){                                                            // grass: one field colour per season
-    vec3 au=mix(summer,vec3(0.72,0.62,0.32),0.55),la=mix(summer,vec3(0.55,0.44,0.26),0.7),wi=vec3(0.50,0.45,0.34);
+    vec3 au=mix(summer,mix(vec3(0.72,0.62,0.32),vec3(0.66,0.58,0.45),AUTUMN_WARM),0.55),la=mix(summer,vec3(0.55,0.44,0.26),0.7),wi=vec3(0.50,0.45,0.34);
     return uSeason<1.0?mix(summer,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);}
   if(kind>0.5)return mix(summer,summer*vec3(0.78,0.88,0.95),clamp(uSeason-2.0,0.0,1.0));   // conifers stay green
   vec3 au=h<0.30?mix(vec3(0.86,0.46,0.12),vec3(0.96,0.62,0.18),t)      // orange
@@ -48,6 +49,15 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
          :h<0.76?vec3(0.48,0.20,0.34)                                  // purple, rare
          :h<0.95?mix(summer,vec3(0.72,0.62,0.22),0.45)                 // still turning
          :vec3(0.36,0.18,0.24);
+  // the mood's warm autumn (AUTUMN_WARM, docs/plans/done/epic-palette.md): one family of warm pastels, as Tiny
+  // Glade's, peach, apricot, soft orange and butter, instead of the mixed wood
+  #ifdef AUTUMN_ON
+  if(uSeason>0.0){   // (uniform: past summer)
+  vec3 pa=h<0.35?mix(vec3(0.95,0.58,0.32),vec3(0.98,0.70,0.42),t):h<0.65?mix(vec3(0.97,0.76,0.40),vec3(0.99,0.86,0.55),t)
+         :h<0.85?mix(vec3(0.90,0.46,0.28),vec3(0.95,0.58,0.36),t):vec3(0.92,0.66,0.50);
+  pa=mix(vec3(dot(pa,vec3(0.3,0.59,0.11))),pa,0.78);   // (softened: the owner, the first pastels too saturated)
+  au=mix(au,pa,AUTUMN_WARM);}
+  #endif
   vec3 la=mix(au*vec3(0.80,0.62,0.50),vec3(0.46,0.30,0.18),0.45);       // late autumn: browner, duller
   vec3 wi=vec3(0.34,0.29,0.24);                                         // winter: bare-looking, snow does the rest
   return uSeason<1.0?mix(summer,au,uSeason):uSeason<2.0?mix(au,la,uSeason-1.0):mix(la,wi,uSeason-2.0);
@@ -85,7 +95,7 @@ vec4 LM(vec3 wp){vec2 uv=lmUV(wp);
 // the air column's sun visibility, read from the light map at 3 heights along the view ray.
 // Known issue #62: the lit air tints sunlit snow orange.
 vec3 mist(vec3 c,vec3 wp,vec4 lm,float hAbove){
-  float m=lm.b*uMist*exp(-hAbove*0.12);if(m<0.01)return c;
+  float m=lm.b*uMist*uMoodMist*exp(-hAbove*0.12);if(m<0.01)return c;
   float air=mix(1.0,lm.r,uShadowsOn);
   if(uShafts>0.5){vec3 v=normalize(uCamPos-wp);float s=0.0;
     for(int i=0;i<3;i++){float h=(float(i)+0.5)/3.0*7.0;vec3 q=wp+v*(h/max(v.y,0.25));
@@ -123,13 +133,20 @@ float cloud(vec3 wp){
 // (the owner, 2026-10-14: a coat reads by its colour and its shadow at its feet, docs/plans/done/units-cloud-shade.md).
 // On snow bluer and darker (luma 0.75 against 0.83): a white coat reads on snow under a cloud by that contrast (the
 // guard)
-const vec3 CLOUD_SHADE=vec3(0.78,0.83,0.92),CLOUD_SNOW=vec3(0.68,0.75,0.94);
-vec3 cloudShade(vec3 c,float cl,float snow){return mix(c,c*mix(CLOUD_SHADE,CLOUD_SNOW,snow),cl);}
+const vec3 CLOUD_SHADE=vec3(0.78,0.83,0.92);   // a cloud shade (on snow the mood colour uCloudSnow)
+vec3 cloudShade(vec3 c,float cl,float snow){return mix(c,c*mix(CLOUD_SHADE,uCloudSnow,snow),cl);}
 // the shadow band (docs/plans/done/shadow-look.md): more saturated than the base and turned toward a cool blue
 // violet at the same value (a darker band costs dark coats their separation, tools/guard.mjs). KEEP_HUE: the
 // army coats keep the band of main, so a coat in shadow loses none of its colour
+// (the shadow band's colour and turn follow the season: seasonLight, src/look/mood.ts. Units keep the mood's summer
+// band all year, uUnitShadow: a coat's shadow never turns muddy with the season, tools/guard.mjs)
 vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
-  vec3 s=clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80;float v=dot(s,Y);   // the band of main, whose value is kept
+  #ifdef KEEP_HUE
+  vec3 s=clamp(mix(vec3(l),a,1.15),0.0,1.0)*uUnitShadow*0.80;
+  #else
+  vec3 s=clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80;
+  #endif
+  float v=dot(s,Y);   // the band of main, whose value is kept
   #ifndef KEEP_HUE
   vec3 t=clamp(mix(vec3(l),a,1.3),0.0,1.0)*uShadowCol;
   s=mix(t/max(dot(t,Y),1e-4),uShadowTurn,0.25)*v;
@@ -299,7 +316,7 @@ vec3 paint(vec3 alb,vec3 N,vec3 wp,float occ,float rimAmt,float jitter,float sh)
   #ifdef KEEP_HUE
   // units: the cloud shade white-balanced as the sun is (its value, wb of its hue, decision 0027), so a white under a
   // cloud does not turn blue
-  vec3 csh=mix(CLOUD_SHADE,CLOUD_SNOW,snow);csh=mix(vec3(dot(csh,vec3(0.3,0.59,0.11))),csh,wb);c=mix(c,c*csh,cl);
+  vec3 csh=mix(CLOUD_SHADE,uCloudSnow,snow);csh=mix(vec3(dot(csh,vec3(0.3,0.59,0.11))),csh,wb);c=mix(c,c*csh,cl);
   #else
   c=cloudShade(c,cl,snow);
   #endif
@@ -322,8 +339,16 @@ vec3 gradeOf(vec3 c){
   if(amt<=0.0)return c;
   const vec3 L=LUMA;float l=dot(c,L);
   float green=clamp((c.g-max(c.r,c.b))*3.0,0.0,1.0);
+  #if defined(MOOD_GRADE)&&!defined(KEEP_HUE)   // (units keep their hue: no teal turn on a green coat, decision 0027)
+  // the greens muted and, in summer, turned toward teal (the mood's greenHue, Tiny Glade's blue-greens: docs/plans/
+  // active/epic-palette.md) in one step: uGreenRot is the turn times greenChroma about the grey axis, built once a
+  // frame as the season moves (src/look/main.ts; no turn in autumn, the mute alone), the yellow-greens taken too while it turns
+  float wt=max(green*uGreenAmt,uGreenK*clamp((c.g-c.b)*4.0,0.0,1.0)*smoothstep(0.0,0.06,c.g-c.r));   // uGreenK: the turn's share, 1 in summer to 0 in autumn (continuous)
+  vec3 g=mix(c,vec3(l)*uGreenTint+uGreenRot*(c-vec3(l)),wt);   // (the value kept: a darker grass lost the dark coats, tools/guard.mjs)
+  #else
   vec3 g=mix(c,vec3(l)*uGreenTint+(c-vec3(l))*uGreenChroma,green*uGreenAmt);
-  g=mix(vec3(dot(g,L)),g,uGradeSat);
+  #endif
+  g=mix(vec3(dot(g,L)),g,uGradeSat);   // (the season's: src/look/main.ts, seasonLight)
   g*=mix(uSplitLo,uSplitHi,smoothstep(0.08,0.75,l));
   g+=uLift*(1.0-l);
   g=mix(g,uTopHaze*(0.85+l*0.35),smoothstep(0.60,1.0,gl_FragCoord.y/uViewH)*uTopAmt);   // 0 at the frame's bottom

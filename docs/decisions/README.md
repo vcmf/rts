@@ -39,7 +39,7 @@ recorded here on 2026-10-08.
 | [0027](0027-units-take-the-lights-value.md) | Units take the light's value, not its hue | accepted |
 | [0031](0031-generated-trees.md) | Trees are generated from species data | accepted |
 | [0032](0032-units-under-clouds-and-whites.md) | A near-white coat takes less of the sun's hue (open until the figures) | proposed |
-| [0033](0033-temperate-is-the-default-mood.md) | The temperate mood is the default | accepted |
+| [0033](0033-temperate-is-the-default-mood.md) | The temperate mood is the default | superseded by 0043 |
 | [0034](0034-checks-re-baselined-for-the-default-mood.md) | The shimmer gate at the widest view is re-baselined for the temperate mood | accepted |
 | [0035](0035-units-take-the-bounce-hue.md) | Units take the ground's bounce at its full hue, at a share of its strength | accepted |
 | [0036](0036-frame-rate-targets-and-render-scale.md) | Frame rate: 60 fps hard, 120 fps soft; the render scale by zoom | accepted |
@@ -49,3 +49,5 @@ recorded here on 2026-10-08.
 | [0040](0040-near-field-depth-of-field.md) | The gameplay depth of field blurs the near field too, in the bottom band, units with the scene | accepted |
 | [0041](0041-combed-meadow-default.md) | The combed meadow is the default grass | accepted |
 | [0042](0042-dark-water-shimmer-limits.md) | Dark water: the water's shimmer limits re-baselined | accepted |
+| [0043](0043-epic-is-the-default-mood.md) | The epic mood, after Tiny Glade, is the default | accepted |
+| [0044](0044-epic-shimmer-limits.md) | The water's shimmer limits re-baselined for the epic mood | accepted |

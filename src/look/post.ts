@@ -19,7 +19,7 @@ import DOFCOC from './shaders/dofcoc.glsl?raw'
 import DOF_FS from './shaders/dof.frag?raw'
 import DOFDOWN_FS from './shaders/dofdown.frag?raw'
 import UBER_FS from './shaders/uber.frag?raw'
-import { MOOD } from './mood.ts'
+import { MOOD, SEASON } from './mood.ts'
 
 // the view the page opens on (the bench measures it as its default zoom)
 export const START = { beta: 0.80, radius: 125, x: -10, z: 2 }
@@ -198,7 +198,7 @@ export class Post {
       e.setFloat('uRenderScale', S.res ? 1 : 1 / engine.getHardwareScalingLevel())   // Auto: the paper in screen pixels (the fixed scales as before)
       // the mood's vignette, and the grade's parts the bloom takes off and puts back (its grade is in the painted
       // materials: src/look/materials.ts)
-      e.setColor3('uVignette', MOOD.grade.vignette); e.setColor3('uSplitHi', MOOD.grade.splitHi); e.setFloat('uGradeSat', MOOD.grade.sat); e.setFloat('uTopAmt', MOOD.grade.topAmt); e.setFloat('uGrade', S.grade)
+      e.setColor3('uVignette', MOOD.grade.vignette); e.setColor3('uSplitHi', MOOD.grade.splitHi); e.setFloat('uGradeSat', SEASON.sat); e.setFloat('uTopAmt', MOOD.grade.topAmt); e.setFloat('uGrade', S.grade)   // (uGradeSat: the season's, as the materials')
       if (d && p) { lensUniforms(e); e.setFloat2('uHalfUV', d.width / 2 / p.width, d.height / 2 / p.height); e.setFloat2('uHalfTexel', 1 / p.width, 1 / p.height); e.setFloat2('uDofPaint', DOF_PAINT.far, DOF_PAINT.near); e.setTextureFromPostProcess('uSharp', d) }
     }
   }

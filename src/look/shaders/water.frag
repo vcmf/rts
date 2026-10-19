@@ -112,7 +112,12 @@ void main(){
         vec2 ax=vec2(0.5,0.28)*L,qa=q/ax;float e=length(qa),dist=(e-1.0)/max(length(qa/ax)/max(e,1e-4),1e-4);   // ≈ metres outside the edge
         float lf=1.0-smoothstep(-0.6*px,0.6*px,dist);
         if(lf>leaf){leaf=lf;float pick=fract(h.z*5.71);
-          lc=pick<0.35?vec3(0.86,0.46,0.12):pick<0.6?vec3(0.92,0.74,0.22):pick<0.82?vec3(0.70,0.17,0.10):vec3(0.46,0.30,0.18);}
+          #ifdef AUTUMN_ON
+          lc=pick<0.35?vec3(0.95,0.62,0.38):pick<0.6?vec3(0.97,0.78,0.45):pick<0.82?vec3(0.90,0.50,0.32):vec3(0.62,0.44,0.30);   // (the warm autumn's pastels, as the crowns)
+          #else
+          lc=pick<0.35?vec3(0.86,0.46,0.12):pick<0.6?vec3(0.92,0.74,0.22):pick<0.82?vec3(0.70,0.17,0.10):vec3(0.46,0.30,0.18);
+          #endif
+          }
       }
       // late autumn browner (the trees' palette, painter.glsl), all a little darker for being wet
       lc=mix(lc,mix(lc*vec3(0.80,0.62,0.50),vec3(0.46,0.30,0.18),0.45),clamp(uSeason-1.0,0.0,1.0))*0.9;
