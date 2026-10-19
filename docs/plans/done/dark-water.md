@@ -79,7 +79,7 @@ widest), the owner judges.
 - The batch again on the rebased preview builds (main #117 against this branch): the guards, coat, negatives ok;
   water ok but the gravel bar (shimmer 0.91 % closest, 5.27 % widest, winter 82.8 % frozen; the self-test catches
   every sabotage); macro: field|grass 6.2 and road|grass 4.5 under their gate of 8, the same numbers on main (#116,
-  #117), as the bar; goldens: differ on the water.
+  #117), as the bar: #118; goldens: differ on the water.
 - Performance: the owner, on the preview builds (`vite build` + `vite preview`), main and this branch both at 120 fps
   in the river view that had shown 100-105 on the dev servers (the dev server's overhead, not the water). The bench
   (`tools/bench-look.mjs`, Metal, four interleaved rounds) too noisy on this machine to resolve under 1 ms: default
