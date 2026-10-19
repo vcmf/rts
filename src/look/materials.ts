@@ -11,7 +11,7 @@ import SHORE from './shaders/shore.glsl?raw'
 import MACRO from './shaders/macro.glsl?raw'
 import MEADOW from './shaders/meadow.glsl?raw'
 import type { Color3 } from '@babylonjs/core/Maths/math.color.js'
-import { lockMood, MOOD, SEASON, type Mood } from './mood.ts'
+import { lockMood, MOOD, SEASON, type Mood, type SeasonLight } from './mood.ts'
 import { D } from './spec.ts'
 
 // the panel's state; t is the clock (cloud drift, water flow)
@@ -33,8 +33,8 @@ export const withPainter = (src: string): string => {
 // the ground's macro colour (src/look/shaders/macro.glsl): the cover grid and the bakes, on every painted material
 const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush', 'uDirt', 'uEarth', 'uMeadow', 'uFlow', 'uComb', 'uCombNear']   // uMeadowBrush: the meadow's brush tile (MEADOW, src/look/meadow.ts); uMeadow: the meadow map (the ground under the grass, the combed meadow); uFlow, uComb: the flow's textures (src/look/flow.ts)
 // the mood's colours each material takes (src/look/mood.ts), by uniform: one table gives both the uniform names and
-// their values, so none is left unset (an unset vec3 reads black). The shadow's turn is divided by its luma here
-// (shadowOf works on hue at the same value), not per pixel
+// their values, so none is left unset (an unset vec3 reads black). The shadow band's colour and turn follow the season:
+// SEASON_UNIFORMS below
 const MOOD_COLOURS: Record<string, (m: Mood) => Color3> = {
   uSunCol: m => m.sun, uUnitShadow: m => m.shadow, uShadowLift: m => m.shadowLift, uCloudSnow: m => m.cloudSnow,
   uMidCool: m => m.midCool, uLitLift: m => m.litLift, uRimCol: m => m.rim, uBackCol: m => m.back, uMistShade: m => m.mistShade, uMistLit: m => m.mistLit,
@@ -47,17 +47,22 @@ const MOOD_FLOATS: Record<string, (m: Mood) => number> = {
   uEarthChroma: m => m.earth.chroma, uEarthAmt: m => m.earth.amt, uBounce: m => m.bounce, uGroundBounce: m => m.groundBounce,
   uMoodMist: m => m.mist, uAutumnWarm: m => m.autumn, uUnitTint: m => m.units.tint, uUnitMist: m => m.units.mist, uUnitGrade: m => m.units.grade, uUnitBounce: m => m.units.bounce,
 }
-const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA', 'uDirtOn', 'uSeasonGround', 'uTipTint', 'uTipWarm', 'uGreenRot', 'uGreenK', 'uGradeSat', 'uShadowCol', 'uShadowTurn', 'uEarthOn', 'uCombNearRect', 'uFocusZ', 'uCamFwd']
+// the season's light (seasonLight, src/look/mood.ts) as uniforms: one table gives the names (COMMON) and how each is
+// set from a snapshot of SEASON, so none is left unset (an unset vec3 reads black)
+const SEASON_UNIFORMS: Record<string, (m: ShaderMaterial, s: SeasonLight) => void> = {
+  uShadowCol: (m, s) => m.setColor3('uShadowCol', s.shadow), uShadowTurn: (m, s) => m.setColor3('uShadowTurn', s.turn), uGradeSat: (m, s) => m.setFloat('uGradeSat', s.sat),
+  uGreenK: (m, s) => m.setFloat('uGreenK', s.greenK), uGreenRot: (m, s) => m.setMatrix3x3('uGreenRot', s.greenRot), uSeasonGround: (m, s) => m.setFloat('uSeasonGround', s.ground),
+  uTipTint: (m, s) => m.setColor3('uTipTint', s.tip), uTipWarm: (m, s) => m.setFloat('uTipWarm', s.tipWarm),
+}
+// a copy of SEASON (a material keeps the objects it is given: Babylon stores colours and matrices by reference)
+export const seasonSnapshot = (): SeasonLight => ({ ...SEASON, shadow: SEASON.shadow.clone(), turn: SEASON.turn.clone(), greenRot: SEASON.greenRot.slice(), tip: SEASON.tip.clone() })
+export function setSeasonUniforms(m: ShaderMaterial, s: SeasonLight = seasonSnapshot()): void { for (const f of Object.values(SEASON_UNIFORMS)) f(m, s) }
+const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA', 'uDirtOn', ...Object.keys(SEASON_UNIFORMS), 'uEarthOn', 'uCombNearRect', 'uFocusZ', 'uCamFwd']
 
 // perFrame: false keeps a material out of `all` (no per-frame uniforms, no light map: the light-map bake draws into it)
 export interface MatOptions { attributes?: string[]; uniforms?: string[]; samplers?: string[]; alpha?: boolean; defines?: string[]; perFrame?: boolean }
 
 // every painted material, so per-frame uniforms and a new grain reach all of them
-// the season's light on a material (seasonLight, src/look/mood.ts): copies, so a material holds the values it was given
-export function setSeasonUniforms(m: ShaderMaterial): void {
-  m.setColor3('uShadowCol', SEASON.shadow.clone()); m.setColor3('uShadowTurn', SEASON.turn.clone()); m.setFloat('uGradeSat', SEASON.sat); m.setFloat('uGreenK', SEASON.greenK)
-  m.setMatrix3x3('uGreenRot', SEASON.greenRot.slice()); m.setFloat('uSeasonGround', SEASON.ground); m.setColor3('uTipTint', SEASON.tip.clone()); m.setFloat('uTipWarm', SEASON.tipWarm)
-}
 export class Materials {
   readonly all: ShaderMaterial[] = []
   private readonly every: ShaderMaterial[] = []   // all, and the ones kept out of it (the bake's)

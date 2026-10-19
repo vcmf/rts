@@ -339,10 +339,10 @@ vec3 gradeOf(vec3 c){
   if(amt<=0.0)return c;
   const vec3 L=LUMA;float l=dot(c,L);
   float green=clamp((c.g-max(c.r,c.b))*3.0,0.0,1.0);
-  #ifdef MOOD_GRADE
+  #if defined(MOOD_GRADE)&&!defined(KEEP_HUE)   // (units keep their hue: no teal turn on a green coat, decision 0027)
   // the greens muted and, in summer, turned toward teal (the mood's greenHue, Tiny Glade's blue-greens: docs/plans/
   // active/epic-palette.md) in one step: uGreenRot is the turn times greenChroma about the grey axis, built once a
-  // frame (src/look/main.ts; no turn in autumn, the mute alone), the yellow-greens taken too while it turns
+  // frame as the season moves (src/look/main.ts; no turn in autumn, the mute alone), the yellow-greens taken too while it turns
   float wt=max(green*uGreenAmt,uGreenK*clamp((c.g-c.b)*4.0,0.0,1.0)*smoothstep(0.0,0.06,c.g-c.r));   // uGreenK: the turn's share, 1 in summer to 0 in autumn (continuous)
   vec3 g=mix(c,(vec3(l)*uGreenTint+uGreenRot*(c-vec3(l)))*mix(1.0,0.93,wt*uGreenK),wt);
   #else

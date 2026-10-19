@@ -76,7 +76,7 @@ After the rebase on main's terrain textures (#116), the owner saw 100-104 fps at
 Bench (`tools/bench-look.mjs`, Metal, this Mac, `?benchat=-60,-20&season=0.8`, frame interval ms, interleaved): the
 dark water as main; this branch +0.45 at the default zoom under either mood (+0.45 close under epic). Bisected by
 swapping shaders and by test moods. Fixed: the season's shadow colours, saturation and the ground's season timing
-blended once a frame on the CPU (`seasonLight`, `src/look/main.ts`), not per pixel; the warm autumn behind a
+recomputed on the CPU as the season moves (`seasonLight`, `src/look/main.ts`), not per pixel; the warm autumn behind a
 compile-time `#if` (a `mix(a, b, 0.0)` by a constant still computes `b`: no float folding); the blades' tip colours
 once a frame; epic's faint contrast dropped (0.05); the greens' teal turn a matrix built once a frame (it took a sine
 and cosine a pixel, of every material: about 0.25 ms). Now, epic against main: summer (0.3) default 10.19 against
@@ -100,3 +100,9 @@ and cosine a pixel, of every material: about 0.25 ms). Now, epic against main: s
   uniforms set by one function, as copies, only when the season moves; the shadow entries that the season overwrote,
   and the faint contrast (0 in every mood since the performance pass), removed; `?season` parsed and checked once.
   Temperate re-checked pixel-identical to main; epic's summer and autumn as approved.
+- **Round 3** (the last; moderate, one on readability): green coats took part of the summer teal turn through the
+  units' share of the grade: units excluded (`KEEP_HUE`, decision 0027). Also: SEASON seeded from the mood at the
+  first material (never black whatever the order); the season's uniforms one table (`SEASON_UNIFORMS`) for their
+  names and values, one snapshot shared as the season moves; one smoothstep; the system doc's decisions (0043) and
+  stale comments. Left: the wheat's warm autumn still a uniform in `meadow.vert` (the vertex shader takes no painter
+  defines). Temperate re-checked pixel-identical to main, epic as before.

@@ -15,7 +15,7 @@ import '../../prototypes/nature-pack.data.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
 import { q, runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
-import { Materials, S, SUN, setSeasonUniforms } from './materials.ts'
+import { Materials, S, SUN, seasonSnapshot, setSeasonUniforms } from './materials.ts'
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
 import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
@@ -358,7 +358,7 @@ let seasonAt = -1, clearGraded = CLEAR_GRADED
 scene.onBeforeRenderObservable.add(() => {
   if (S.season === seasonAt) return
   seasonAt = S.season; seasonLight(MOOD, S.season, SEASON); clearGraded = gradeColour(MOOD.hazeCool, MOOD, 1, SEASON.sat)
-  for (const m of mats.all) setSeasonUniforms(m)
+  const snap = seasonSnapshot(); for (const m of mats.all) setSeasonUniforms(m, snap)   // (one copy shared by the per-frame materials)
 })
 scene.onBeforeRenderObservable.add(() => { const w = Math.max(0, Math.min(1, S.season - 2)); Color3.LerpToRef(MOOD.sun, MOOD.winterSun, w, SUNCOL); const k = Color3.Lerp(MOOD.hazeCool, clearGraded, S.grade); scene.clearColor.set(k.r, k.g, k.b, 1) })
 // the detail layer's pixel angle (src/look/shaders/painter.glsl): the angle one pixel of a SPEC.detail.lines-tall

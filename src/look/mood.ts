@@ -125,7 +125,8 @@ export type MoodName = keyof typeof MOODS
 // is made, so a later change would apply only in part: lockMood() (the first material) refuses it
 export let MOOD: Mood = MOODS.epic   // the default (decision 0043)
 let locked = false
-export const lockMood = (): void => { locked = true }
+// (the first material: SEASON seeded from the mood at summer if the page has not set it, never black)
+export const lockMood = (): void => { locked = true; if (!seasonSeeded) seasonLight(MOOD, 0, SEASON) }
 export function setMood(name: string): void {
   if (locked) throw new Error('setMood: the materials are made: the mood is set before them')
   if (!Object.hasOwn(MOODS, name)) throw new Error(`?mood must be one of ${Object.keys(MOODS).join(', ')}, not ${name}`)
@@ -156,13 +157,16 @@ export interface SeasonLight { shadow: Color3; turn: Color3; sat: number; greenK
 export const newSeasonLight = (): SeasonLight => ({ shadow: new Color3(), turn: new Color3(), sat: 1, greenK: 0, greenRot: new Float32Array(9), ground: 0, tip: new Color3(), tipWarm: 0 })
 const TIP_LIME = new Color3(1.04, 1.08, 0.80), TIP_WARM = new Color3(1.06, 1.0, 0.86)
 export const lumaW = (c: Color3): number => 0.3 * c.r + 0.59 * c.g + 0.11 * c.b   // (the painter's luma weights: shadowOf)
-const unitTurns = new WeakMap<Mood, [Color3, Color3, Color3]>()
+const normTurns = new WeakMap<Mood, [Color3, Color3, Color3]>()   // the shadow turns divided by their luma (shadowOf works on hue at the same value)
+const smooth = (a: number, b: number, x: number): number => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
+let seasonSeeded = false
 export function seasonLight(m: Mood, s: number, out: SeasonLight): SeasonLight {
-  const st = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
+  if (out === SEASON) seasonSeeded = true
+  const st = smooth
   // ak: summer to autumn (it stays 1 after: winter's own weight wk takes over the colours from autumn's)
   const ak = st(0.3, 0.8, s), wk = st(2.2, 3, s)
   Color3.LerpToRef(m.shadow, m.shadowAutumn, ak, out.shadow); Color3.LerpToRef(out.shadow, m.shadowWinter, wk, out.shadow)
-  let u = unitTurns.get(m); if (!u) unitTurns.set(m, u = [m.shadowTurn, m.shadowTurnAutumn, m.shadowTurnWinter].map(c => c.scale(1 / lumaW(c))) as [Color3, Color3, Color3])
+  let u = normTurns.get(m); if (!u) normTurns.set(m, u = [m.shadowTurn, m.shadowTurnAutumn, m.shadowTurnWinter].map(c => c.scale(1 / lumaW(c))) as [Color3, Color3, Color3])
   Color3.LerpToRef(u[0], u[1], ak, out.turn); Color3.LerpToRef(out.turn, u[2], wk, out.turn)
   // the saturation: summerSat in summer and in winter (calmer), autumn's whole in between
   out.sat = m.grade.sat * (m.grade.summerSat + (1 - m.grade.summerSat) * ak * (1 - wk))
@@ -181,7 +185,7 @@ export const SEASON: SeasonLight = newSeasonLight()
 
 export function gradeColour(c: Color3, m: Mood, y: number, sat = m.grade.sat): Color3 {
   const g = m.grade, L = (v: Color3) => 0.2126 * v.r + 0.7152 * v.g + 0.0722 * v.b, l = L(c)
-  const sstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
+  const sstep = smooth
   const green = Math.min(1, Math.max(0, (c.g - Math.max(c.r, c.b)) * 3)) * g.greenAmt
   let o = Color3.Lerp(c, new Color3(l * g.greenTint.r + (c.r - l) * g.greenChroma, l * g.greenTint.g + (c.g - l) * g.greenChroma, l * g.greenTint.b + (c.b - l) * g.greenChroma), green)
   const lo = L(o); o = Color3.Lerp(new Color3(lo, lo, lo), o, sat)
