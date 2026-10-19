@@ -394,9 +394,9 @@ shader); `?meadow=off` puts back the old scatter.
   season's colour at the tip, the standing wheat gold in summer, turning orange while it is cut; stubble, the cut
   wheat's too, a pale straw over the darker soil (`stubbleTip`, no redder than the standing wheat), browning by late
   autumn; the green crop lime to olive. Ploughed fields grow nothing.
-- **The combed meadow** (`?grass=flow`, an experiment: `docs/plans/done/grass-flow.md`; the research:
-  `docs/research/painterly-grass.md`). Not the default: the arm the owner judges against today's meadow. It needs the
-  bake arm (on the shader arm the meadow keeps the default pattern).
+- **The combed meadow**, the default grass (decision 0041; `?grass=brush` the brush pattern before it, also the
+  fallback without the meadow: WebGL1, `?meadow=off`; `docs/plans/done/grass-flow.md`; the research:
+  `docs/research/painterly-grass.md`). It needs the bake arm (on the shader arm the meadow keeps the brush pattern).
   - **The flow** (`flowAt` in `shaders/meadow.glsl`, its numbers `FLOW` in `src/look/flow.ts`, given as defines): a slow
     map-wide lean and how far the grass lies over. Made once on load into a texture (`FLOW_TEXEL`, `src/look/flow.ts`;
     `flowTex`), which the ground, the bake and the clumps read; the field itself beyond the tile.

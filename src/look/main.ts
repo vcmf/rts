@@ -84,23 +84,25 @@ const meadowParam = params.get('meadow')
 if (meadowParam !== null && meadowParam !== 'off') throw new Error(`?meadow must be off, not ${meadowParam}`)
 // the meadow reads a half-float texture in its vertex shader: WebGL2 only (on WebGL1 the old scatter stays)
 const meadowOn = meadowParam !== 'off' && engine.version >= 2
-// ?grass=flow: the meadow combed (docs/plans/done/grass-flow.md): its pattern and clumps along a flow field, light and
-// dark streaks by the lean against the sun (its direction on the ground, FLOW_SUN), on the ground's bake and the
-// clumps' materials alike
+// the meadow's grass (decision 0041): flow, the default, the meadow combed (docs/plans/done/grass-flow.md): its pattern
+// and clumps along a flow field, light and dark streaks by the lean against the sun (its direction on the ground,
+// FLOW_SUN), on the ground's bake and the clumps' materials alike. ?grass=brush: the brush pattern before it (the
+// comparisons). Without the meadow (WebGL1, ?meadow=off) the brush pattern, as flow needs the meadow
 const grassParam = params.get('grass')
-if (grassParam !== null && grassParam !== 'flow') throw new Error(`?grass must be flow, not ${grassParam}`)
-if (grassParam && !meadowOn) throw new Error('?grass=flow needs the meadow (WebGL2, no ?meadow=off)')
+if (grassParam !== null && grassParam !== 'flow' && grassParam !== 'brush') throw new Error(`?grass must be flow or brush, not ${grassParam}`)
+if (grassParam === 'flow' && !meadowOn) throw new Error('?grass=flow needs the meadow (WebGL2, no ?meadow=off)')
+const grassMode = grassParam ?? (meadowOn ? 'flow' : 'brush')
 const sunXZ = new Vector2(SUN.x, SUN.z).normalize()
 // ?grassoff=strokes,dense,big,hue (with flow): one part of the arm off at a time, for the cost's ablation
 const GRASS_PARTS = ['strokes', 'dense', 'big', 'hue'], grassOff = params.get('grassoff')?.split(',') ?? []
-if (grassOff.some(k => !GRASS_PARTS.includes(k)) || (grassOff.length && grassParam !== 'flow')) throw new Error(`?grassoff takes ${GRASS_PARTS.join(', ')}, with ?grass=flow`)
+if (grassOff.some(k => !GRASS_PARTS.includes(k)) || (grassOff.length && grassMode !== 'flow')) throw new Error(`?grassoff takes ${GRASS_PARTS.join(', ')}, with the combed meadow (not ?grass=brush)`)
 // the camera's distance from the focus over which the combed clumps go from larger and denser to the default's (the
 // closest zoom is 45 m, the default view 125)
 const CLOSE_ZOOM: [number, number] = [70, 110]
 // the strokes' largest footprint, m a pixel (strokeK, macro.glsl: whole under about half of it, gone past it); the near
 // bake reads it too (below)
 const STROKE_FOOT = 0.15
-const grassDefines = grassParam === 'flow' ? ['#define GRASS_FLOW', `#define FLOW_SUN vec2(${sunXZ.x.toFixed(4)},${sunXZ.y.toFixed(4)})`, `#define COMB_PERIOD ${COMB_PERIOD.toFixed(1)}`, `#define STROKE_RINGS vec2(${RINGS[0].band[2].toFixed(1)},${RINGS[0].band[3].toFixed(1)})`, `#define CLOSE_ZOOM vec2(${CLOSE_ZOOM[0].toFixed(1)},${CLOSE_ZOOM[1].toFixed(1)})`, `#define STROKE_FOOT ${STROKE_FOOT.toFixed(3)}`, ...flowDefines(), ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`)] : []
+const grassDefines = grassMode === 'flow' ? ['#define GRASS_FLOW', `#define FLOW_SUN vec2(${sunXZ.x.toFixed(4)},${sunXZ.y.toFixed(4)})`, `#define COMB_PERIOD ${COMB_PERIOD.toFixed(1)}`, `#define STROKE_RINGS vec2(${RINGS[0].band[2].toFixed(1)},${RINGS[0].band[3].toFixed(1)})`, `#define CLOSE_ZOOM vec2(${CLOSE_ZOOM[0].toFixed(1)},${CLOSE_ZOOM[1].toFixed(1)})`, `#define STROKE_FOOT ${STROKE_FOOT.toFixed(3)}`, ...flowDefines(), ...grassOff.map(k => `#define GRASS_NO_${k.toUpperCase()}`)] : []
 const grain0 = makeGrainCanvas(null), mats = new Materials(scene, grainTexture(scene, grain0), grainMean(grain0), [...softDefines(soft), ...(meadowOn ? ['#define MEADOW', ...grassDefines] : [])])
 const keptGrains = new Set([mats.grain])   // grains the look tools switch back to (window.__look.grain): never disposed
 // the water data (docs/plans/done/w3-water-data.md): the terrain's shore band and the water read it
@@ -179,12 +181,12 @@ if (params.has('far')) {
 // the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm (bake by default),
 // set once every material is made; the bake runs before the first frame
 // the flow's textures (?grass=flow, src/look/flow.ts), on every painted material and the bake
-const flowTex = grassParam === 'flow' ? buildFlow(scene) : null
+const flowTex = grassMode === 'flow' ? buildFlow(scene) : null
 if (flowTex) mats.bindAll(m => { m.setTexture('uFlow', flowTex.flow); m.setTexture('uComb', flowTex.comb) })
 // the meadow map (src/look/meadow.ts), before the ground's bake: the combed meadow bakes the default pattern where no grass
 // grows and the combed one where it does (the combed clumps reach farther: their roots keep farther from the zones and the
 // banks; the crops keep the default's rule)
-const grassReach = grassParam === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
+const grassReach = grassMode === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
 const grassAllowed = grassReach === CLUMP_REACH ? nature.growthAllowed : (x: number, z: number) => nature.growthAllowed(x, z, grassReach)   // (the same rule as the crops' on the default: one pass)
 const meadowMap = meadowOn ? buildMeadowMap(scene, mats, nature.growth, grassAllowed, nature.crop, nature.growthAllowed) : null
 // the combed meadow's near bake runs only where its strokes show: out to the strokes' ring, at the zooms where a pixel
@@ -359,7 +361,7 @@ scene.onBeforeRenderObservable.add(() => {
   pixA = 2 * tv / D.spec.detail.lines
   if (!FROZEN) S.t += Math.min(engine.getDeltaTime() / 1000, 0.05)
   // the depth of field's focus and the view axis, which every material encodes its lens term against (painter.glsl depthA)
-  const focusZ = post.updateFocus(engine.getDeltaTime() / 1000, S.dof > 0 || grassParam === 'flow'); focusDist = post.focusRaw; camFwd.copyFrom(camera.target).subtractInPlace(camera.position).normalize()
+  const focusZ = post.updateFocus(engine.getDeltaTime() / 1000, S.dof > 0 || grassMode === 'flow'); focusDist = post.focusRaw; camFwd.copyFrom(camera.target).subtractInPlace(camera.position).normalize()
   for (const m of mats.all) {
     m.setFloat('uFocusZ', focusZ); m.setVector3('uCamFwd', camFwd)
     m.setVector3('uCamPos', camera.position); m.setVector3('uFocus', camera.target); m.setFloat('uTime', S.t)
@@ -556,8 +558,8 @@ if (params.has('bench')) {
   // turns off stays off). The arms switch the materials only: the macro tile keeps its combed bake and the near bake runs
   // in every arm, so 'none' measures the materials' share of the combed meadow, not all of it
   const grassArm = (on: boolean, off: string[] = []) => () => { for (const m of mats.all) { m.setDefine('#define GRASS_FLOW', on); for (const k of ['STROKES', 'HUE', 'DENSE', 'BIG', 'LEAN']) m.setDefine(`#define GRASS_NO_${k}`, off.includes(k) || grassOff.includes(k.toLowerCase())) } }
-  const arms = params.get('bench') === 'grass' && grassParam === 'flow' ? [{ name: 'flow', apply: grassArm(true) }, { name: 'none', apply: grassArm(false) }]
-    : params.get('bench') === 'grassparts' && grassParam === 'flow' ? [{ name: 'flow', apply: grassArm(true) }, { name: 'nostrokes', apply: grassArm(true, ['STROKES']) }, { name: 'nolean', apply: grassArm(true, ['LEAN']) }, { name: 'noclose', apply: grassArm(true, ['DENSE', 'BIG']) }, { name: 'nohue', apply: grassArm(true, ['HUE']) }, { name: 'alloff', apply: grassArm(true, ['STROKES', 'HUE', 'DENSE', 'BIG', 'LEAN']) }, { name: 'none', apply: grassArm(false) }] : params.get('bench') === 'meadow' && meadow ? [{ name: 'meadow', apply: () => meadow.setOn(true) }, { name: 'none', apply: () => meadow.setOn(false) }] : params.get('bench') === 'volume' ? [{ name: 'volume', apply: () => volume(true) }, { name: 'l7a', apply: () => volume(false) }] : params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? SHADER_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); return macro.setArm(a) } })) : params.get('bench') === 'earth' ? [{ name: 'earth', apply: earthArm(1) }, { name: 'noearth', apply: earthArm(0) }]: params.get('bench') === 'dof' ? [{ name: 'nodof', apply: dofArm(0) }, { name: 'dof', apply: dofArm(1) }] : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
+  const arms = params.get('bench') === 'grass' && grassMode === 'flow' ? [{ name: 'flow', apply: grassArm(true) }, { name: 'none', apply: grassArm(false) }]
+    : params.get('bench') === 'grassparts' && grassMode === 'flow' ? [{ name: 'flow', apply: grassArm(true) }, { name: 'nostrokes', apply: grassArm(true, ['STROKES']) }, { name: 'nolean', apply: grassArm(true, ['LEAN']) }, { name: 'noclose', apply: grassArm(true, ['DENSE', 'BIG']) }, { name: 'nohue', apply: grassArm(true, ['HUE']) }, { name: 'alloff', apply: grassArm(true, ['STROKES', 'HUE', 'DENSE', 'BIG', 'LEAN']) }, { name: 'none', apply: grassArm(false) }] : params.get('bench') === 'meadow' && meadow ? [{ name: 'meadow', apply: () => meadow.setOn(true) }, { name: 'none', apply: () => meadow.setOn(false) }] : params.get('bench') === 'volume' ? [{ name: 'volume', apply: () => volume(true) }, { name: 'l7a', apply: () => volume(false) }] : params.get('bench') === 'trees' && show ? [{ name: 'cards', apply: () => show(true) }, { name: 'pack', apply: () => show(false) }] : params.get('bench') === 'macro' ? SHADER_ARMS.map(a => ({ name: a, apply: () => { setDetail([]); return macro.setArm(a) } })) : params.get('bench') === 'earth' ? [{ name: 'earth', apply: earthArm(1) }, { name: 'noearth', apply: earthArm(0) }]: params.get('bench') === 'dof' ? [{ name: 'nodof', apply: dofArm(0) }, { name: 'dof', apply: dofArm(1) }] : [{ name: 'l2', apply: () => setDetail([]) }, { name: 'l0', apply: () => setDetail(['DETAIL_L0']) }]
   // ?benchat=<x>,<z>: the cameras orbit that point instead of the start (the forest bench: docs/plans/done/forest-bench.md)
   // inside the play area: the camera's focus is clamped to it every frame (src/look/post.ts)
   const at = params.get('benchat')?.split(',').map(p => p.trim() === '' ? NaN : Number(p))
