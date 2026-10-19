@@ -53,7 +53,6 @@ export interface Mood {
     topHaze: Color3           // the haze toward the frame's top (depth by painting)
     topAmt: number            // how much of it at the top
     vignette: Color3          // the frame's corners × this
-    contrast: number          // the values spread about a mid grey, colour kept (0: none; gradeOf)
     greenHue: number          // degrees the greens turn toward teal in summer (0: none; gradeOf)
     summerSat: number         // the saturation kept outside autumn, × sat (1: as autumn; gradeOf)
   }
@@ -76,7 +75,7 @@ export const MOODS = {
     grade: {
       greenTint: c(1.03, 1.0, 0.88), greenChroma: 0.5, greenAmt: 0.85, sat: 0.9,
       splitLo: c(0.92, 0.99, 1.06), splitHi: c(1.08, 1.0, 0.85), lift: c(0.03, 0.02, 0.0),
-      topHaze: c(0.72, 0.76, 0.82), topAmt: 0.20, vignette: c(0.80, 0.87, 0.98), contrast: 0, greenHue: 0, summerSat: 1,
+      topHaze: c(0.72, 0.76, 0.82), topAmt: 0.20, vignette: c(0.80, 0.87, 0.98), greenHue: 0, summerSat: 1,
     },
   },
   // temperate, the default (LC3, docs/plans/done/lc3-temperate.md; the owner's pick of LC2's candidates: golden "a
@@ -94,7 +93,7 @@ export const MOODS = {
     grade: {
       greenTint: c(1.0, 1.0, 0.92), greenChroma: 0.6, greenAmt: 0.85, sat: 0.86,
       splitLo: c(0.94, 0.99, 1.05), splitHi: c(1.04, 1.0, 0.93), lift: c(0.02, 0.02, 0.015),
-      topHaze: c(0.70, 0.76, 0.83), topAmt: 0.25, vignette: c(0.80, 0.86, 0.96), contrast: 0, greenHue: 0, summerSat: 1,
+      topHaze: c(0.70, 0.76, 0.83), topAmt: 0.25, vignette: c(0.80, 0.86, 0.96), greenHue: 0, summerSat: 1,
     },
   },
   // epic (docs/plans/active/epic-palette.md; the owner, 2026-10-18: "an 'epic version' of tiny glade"; the first pass
@@ -115,7 +114,7 @@ export const MOODS = {
     grade: {
       greenTint: c(0.84, 0.92, 0.92), greenChroma: 0.66, greenAmt: 0.85, sat: 0.85,
       splitLo: c(0.97, 0.99, 1.02), splitHi: c(1.02, 1.0, 0.96), lift: c(0.012, 0.012, 0.014),
-      topHaze: c(0.66, 0.73, 0.82), topAmt: 0.14, vignette: c(0.78, 0.84, 0.94), contrast: 0, greenHue: 25, summerSat: 0.85,
+      topHaze: c(0.66, 0.73, 0.82), topAmt: 0.14, vignette: c(0.78, 0.84, 0.94), greenHue: 25, summerSat: 0.85,
     },
   },
 } satisfies Record<string, Mood>
@@ -156,16 +155,18 @@ export function setGroundBounce(v: number): void {
 export interface SeasonLight { shadow: Color3; turn: Color3; sat: number; greenK: number; greenRot: Float32Array; ground: number; tip: Color3; tipWarm: number }
 export const newSeasonLight = (): SeasonLight => ({ shadow: new Color3(), turn: new Color3(), sat: 1, greenK: 0, greenRot: new Float32Array(9), ground: 0, tip: new Color3(), tipWarm: 0 })
 const TIP_LIME = new Color3(1.04, 1.08, 0.80), TIP_WARM = new Color3(1.06, 1.0, 0.86)
-const lumaW = (c: Color3) => 0.3 * c.r + 0.59 * c.g + 0.11 * c.b
+export const lumaW = (c: Color3): number => 0.3 * c.r + 0.59 * c.g + 0.11 * c.b   // (the painter's luma weights: shadowOf)
 const unitTurns = new WeakMap<Mood, [Color3, Color3, Color3]>()
 export function seasonLight(m: Mood, s: number, out: SeasonLight): SeasonLight {
   const st = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
-  const ak = st(0.3, 0.8, s) * (1 - st(2.2, 3, s)), wk = st(2.2, 3, s)
+  // ak: summer to autumn (it stays 1 after: winter's own weight wk takes over the colours from autumn's)
+  const ak = st(0.3, 0.8, s), wk = st(2.2, 3, s)
   Color3.LerpToRef(m.shadow, m.shadowAutumn, ak, out.shadow); Color3.LerpToRef(out.shadow, m.shadowWinter, wk, out.shadow)
   let u = unitTurns.get(m); if (!u) unitTurns.set(m, u = [m.shadowTurn, m.shadowTurnAutumn, m.shadowTurnWinter].map(c => c.scale(1 / lumaW(c))) as [Color3, Color3, Color3])
   Color3.LerpToRef(u[0], u[1], ak, out.turn); Color3.LerpToRef(out.turn, u[2], wk, out.turn)
-  out.sat = m.grade.sat * (m.grade.summerSat + (1 - m.grade.summerSat) * ak)
-  out.greenK = m.grade.greenHue > 0 ? 1 - ak : 0
+  // the saturation: summerSat in summer and in winter (calmer), autumn's whole in between
+  out.sat = m.grade.sat * (m.grade.summerSat + (1 - m.grade.summerSat) * ak * (1 - wk))
+  out.greenK = m.grade.greenHue > 0 ? 1 - ak : 0   // (summer only: none from autumn on, winter included)
   const a = m.grade.greenHue * Math.PI / 180 * out.greenK, k = 1 / Math.sqrt(3), co = Math.cos(a), si = Math.sin(a), t = 1 - co, g = m.grade.greenChroma, kk = k * k * t, ks = k * si, r = out.greenRot
   // R[row][col] = (row === col ? co : 0) + kk + (skew), stored column-major
   r[0] = (co + kk) * g; r[1] = (kk + ks) * g; r[2] = (kk - ks) * g

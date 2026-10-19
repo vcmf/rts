@@ -2,10 +2,10 @@
 uniform sampler2D uGrain;
 uniform vec3 uSunDir,uSunCol,uShadowCol,uHazeCool,uHazeWarm,uCamPos,uFocus;
 // the mood's other colours (src/look/mood.ts)
-uniform vec3 uCloudSnow;uniform mat3 uGreenRot;uniform float uGreenK;
+uniform vec3 uCloudSnow,uUnitShadow;uniform mat3 uGreenRot;uniform float uGreenK;
 uniform vec3 uShadowTurn,uShadowLift,uMidCool,uLitLift,uRimCol,uBackCol,uMistShade,uMistLit,uWaterSky,uGlint,uFarRiver;   // uShadowTurn: divided by its luma
 // the grade (gradeOf, at the end of atmos), and how much of the light units take (KEEP_HUE: docs/plans/done/lc1b-coats.md)
-uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade,uMoodMist,uContrast;
+uniform vec3 uGreenTint,uSplitLo,uSplitHi,uLift,uTopHaze;uniform float uGreenChroma,uGreenAmt,uGradeSat,uTopAmt,uGrade,uMoodMist;
 uniform float uViewH;   // the height of the target the scene is drawn into, for the grade's haze toward the top
 uniform float uUnitTint,uUnitMist,uUnitGrade,uUnitBounce;
 uniform vec3 uEarthTint;uniform float uEarthChroma,uEarthAmt,uBounce,uGroundBounce;   // the earth (the mood): the world toward earth tones
@@ -138,9 +138,15 @@ vec3 cloudShade(vec3 c,float cl,float snow){return mix(c,c*mix(CLOUD_SHADE,uClou
 // the shadow band (docs/plans/done/shadow-look.md): more saturated than the base and turned toward a cool blue
 // violet at the same value (a darker band costs dark coats their separation, tools/guard.mjs). KEEP_HUE: the
 // army coats keep the band of main, so a coat in shadow loses none of its colour
-// (the shadow band's colour and turn follow the season, blended once a frame on the CPU: src/look/main.ts, seasonLight)
+// (the shadow band's colour and turn follow the season: seasonLight, src/look/mood.ts. Units keep the mood's summer
+// band all year, uUnitShadow: a coat's shadow never turns muddy with the season, tools/guard.mjs)
 vec3 shadowOf(vec3 a){const vec3 Y=vec3(0.3,0.59,0.11);float l=dot(a,Y);
-  vec3 s=clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80;float v=dot(s,Y);   // the band of main, whose value is kept
+  #ifdef KEEP_HUE
+  vec3 s=clamp(mix(vec3(l),a,1.15),0.0,1.0)*uUnitShadow*0.80;
+  #else
+  vec3 s=clamp(mix(vec3(l),a,1.15),0.0,1.0)*uShadowCol*0.80;
+  #endif
+  float v=dot(s,Y);   // the band of main, whose value is kept
   #ifndef KEEP_HUE
   vec3 t=clamp(mix(vec3(l),a,1.3),0.0,1.0)*uShadowCol;
   s=mix(t/max(dot(t,Y),1e-4),uShadowTurn,0.25)*v;
@@ -345,9 +351,6 @@ vec3 gradeOf(vec3 c){
   g=mix(vec3(dot(g,L)),g,uGradeSat);   // (the season's: src/look/main.ts, seasonLight)
   g*=mix(uSplitLo,uSplitHi,smoothstep(0.08,0.75,l));
   g+=uLift*(1.0-l);
-  #ifdef MOOD_CONTRAST
-  g*=clamp(0.42+(l-0.42)*(1.0+uContrast),0.0,1.5)/max(l,1e-3);   // the values spread about a mid grey, the colour kept (the mood's contrast)
-  #endif
   g=mix(g,uTopHaze*(0.85+l*0.35),smoothstep(0.60,1.0,gl_FragCoord.y/uViewH)*uTopAmt);   // 0 at the frame's bottom
   return mix(c,g,amt);}
 // Top-down atmosphere: colour cools (and warms toward the sun side) away from the focus; then the grade.

@@ -14,7 +14,7 @@ someway so it's look more like 'epic version' of tiny glade". After the dark wat
   the air cleared (the valley mist at about a third, little haze at the frame's top), a warmer sun against cooler,
   deeper shade, more of the world's own colour kept, the values spread about a mid grey, a darker frame edge.
 - **Two new mood fields:** `mist` (the valley mist's amount) and `grade.contrast` (the values spread, the colour
-  kept: `gradeOf`). The existing moods keep their look (1 and 0).
+  kept: `gradeOf`, since removed: round 2). The existing moods keep their look (1 and 0).
 - **A warm autumn** (the mood's `autumn`, 1 in epic, 0 elsewhere): the crowns one family of warm pastels (peach,
   apricot, soft orange, butter: `foliage()`), the ground and grass a pale yellow straw then a warm brown, olive grass
   turning too and dry grass lighter than green (`groundSeason`), the clumps' blue-green tint warmed, the wheat standing
@@ -93,3 +93,10 @@ and cosine a pixel, of every material: about 0.25 ms). Now, epic against main: s
   allocation) and the finishing pass's bloom, whose saturation and the clear colour now follow the season; the shade
   under the wheat follows the standing crop; the river's autumn leaves the pastels. Fixing it, a comment pasted
   mid-line in `post.ts` cut off the bloom's `uTopAmt` and `uGrade` (found by the pixel comparison).
+- **Round 2** (severe for readability): the army coats' shadow band (KEEP_HUE) followed the season's shadow colour,
+  a warm brown in epic's autumn that muddies a dark coat: units keep the mood's summer band all year (`uUnitShadow`).
+  Also: the fade to winter was applied twice (the shadow swung back toward summer's blue mid-way): autumn's weight now
+  rises once and winter's takes over; the teal turn stays off from autumn on (it came back in winter); the season's
+  uniforms set by one function, as copies, only when the season moves; the shadow entries that the season overwrote,
+  and the faint contrast (0 in every mood since the performance pass), removed; `?season` parsed and checked once.
+  Temperate re-checked pixel-identical to main; epic's summer and autumn as approved.

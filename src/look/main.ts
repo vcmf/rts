@@ -15,7 +15,7 @@ import '../../prototypes/nature-pack.data.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
 import { q, runBench, showBench } from './bench.ts'
 import { grainMean, grainTexture, lumOf, makeGrainCanvas, makeSmoothGrainCanvas } from './grain.ts'
-import { Materials, S, SUN } from './materials.ts'
+import { Materials, S, SUN, setSeasonUniforms } from './materials.ts'
 import { buildFlow, COMB_PERIOD, flowDefines } from './flow.ts'
 import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
@@ -70,7 +70,11 @@ const params = new URLSearchParams(location.search), softParam = params.get('sof
 const flag = (k: string): boolean => { if (!params.has(k)) return false; const v = params.get(k); if (v !== '' && v !== '1') throw new Error(`?${k} takes no value, not ${v}`); return true }
 // the light's mood (src/look/mood.ts), before any material is made
 setMood(params.get('mood') ?? 'epic')   // the default mood (decision 0043); ?mood=temperate for LC3's
-seasonLight(MOOD, params.has('season') ? Number(params.get('season')) : 0, SEASON)   // (the materials' initial values: src/look/materials.ts)
+// the season the page opens in (?season), for what is baked on load (the generated crowns' shadows and the sky they
+// hide) and the season's light the materials are made with
+const season0 = params.has('season') ? Number(params.get('season')) : 0
+if (!(season0 >= 0 && season0 <= 3)) throw new Error(`?season must be 0 to 3, not ${params.get('season')}`)
+seasonLight(MOOD, season0, SEASON)   // (the materials' initial values: src/look/materials.ts)
 if (params.has('bounce')) { const b = params.get('bounce') ?? ''; setBounce(/^\d+(\.\d+)?$/.test(b) ? Number(b) : NaN) }
 if (params.has('gbounce')) { const b = params.get('gbounce') ?? ''; setGroundBounce(/^\d+(\.\d+)?$/.test(b) ? Number(b) : NaN) }   // LC5
 // the clear colour, graded as the materials are at the frame's top (it shows only there), following the grade's switch
@@ -146,10 +150,6 @@ if (trees !== 'pack' && [...treeSet].some(k => k !== 'one' && k !== 'cards' && k
 if (treeSet.has('one') && treeSet.has('gen')) throw new Error('?trees takes one or gen, not both')
 // ?clumpvol=off (with gen): the generated crowns lit as one volume each, not one per clump (the A/B of the clumps' light)
 if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has('gen'))) throw new Error('?clumpvol takes off, with ?trees=gen')
-// the season the page opens in, for what is baked on load (the generated crowns' shadows and the sky they hide);
-// checked with ?season below
-const season0 = params.has('season') ? Number(params.get('season')) : 0
-if (!(season0 >= 0 && season0 <= 3)) throw new Error(`?season must be 0 to 3, not ${params.get('season')}`)
 // the generator (a plain script that sets window.TREEGEN), loaded only for the arm that draws its trees
 if (treeSet.has('gen')) await import('../../prototypes/tree-core.js')
 const cardsOn = treeSet.has('cards')
@@ -358,6 +358,7 @@ let seasonAt = -1, clearGraded = CLEAR_GRADED
 scene.onBeforeRenderObservable.add(() => {
   if (S.season === seasonAt) return
   seasonAt = S.season; seasonLight(MOOD, S.season, SEASON); clearGraded = gradeColour(MOOD.hazeCool, MOOD, 1, SEASON.sat)
+  for (const m of mats.all) setSeasonUniforms(m)
 })
 scene.onBeforeRenderObservable.add(() => { const w = Math.max(0, Math.min(1, S.season - 2)); Color3.LerpToRef(MOOD.sun, MOOD.winterSun, w, SUNCOL); const k = Color3.Lerp(MOOD.hazeCool, clearGraded, S.grade); scene.clearColor.set(k.r, k.g, k.b, 1) })
 // the detail layer's pixel angle (src/look/shaders/painter.glsl): the angle one pixel of a SPEC.detail.lines-tall
@@ -376,7 +377,6 @@ scene.onBeforeRenderObservable.add(() => {
     m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uGrade', S.grade); m.setFloat('uViewH', engine.getRenderHeight()); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
     m.setFloat('uPixA', pixA)
     m.setFloat('uAO', S.ao); m.setFloat('uMist', S.mist); m.setFloat('uShafts', S.shafts); m.setFloat('uBack', S.back)
-    m.setColor3('uShadowCol', SEASON.shadow); m.setColor3('uShadowTurn', SEASON.turn); m.setFloat('uGradeSat', SEASON.sat); m.setFloat('uGreenK', SEASON.greenK); m.setMatrix3x3('uGreenRot', SEASON.greenRot); m.setFloat('uSeasonGround', SEASON.ground); m.setColor3('uTipTint', SEASON.tip); m.setFloat('uTipWarm', SEASON.tipWarm)
   }
 })
 // the frame readout (top right; docs/plans/done/frame-readout.md): over the last FRAMES frames (fewer until there are
