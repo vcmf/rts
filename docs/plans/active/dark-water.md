@@ -66,3 +66,8 @@ widest), the owner judges.
   riffle foam softer, the glitter's dabs soft-edged: pools 0.289, riffles 0.374, ok. The shimmer stays above main's
   (1.17 % closest, 5.57 % widest: every edge on dark water is more contrasty); the owner, after looking at it moving:
   re-baseline (decision 0042).
+- The full batch on the preview builds (after main's #116): the guards (default, cover, crops; three seasons), coat,
+  negatives: ok. Water: the winter ice under its gate (pools frozen 76.1 %, main 86.6 %, the gate 80 %: the mist a
+  third over the water lifted the ice less); the ice a little lighter now (× 1.12): 82.8 %, the shimmer still within
+  its limits. The gravel bar 0.002 short of its gate (luma 0.612, 0.614 needed) as on main (the same numbers: #116's
+  terrain), not this PR's.

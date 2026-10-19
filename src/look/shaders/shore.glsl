@@ -336,7 +336,9 @@ vec3 shoreWater(vec3 wp,float d,float s,float sp,float occ,float sh,vec2 ia){
   if(frost()>0.0){   // uniform: the grain's derivatives hold
     float F=frost();
     c=mix(c,earthOf(vec3(0.015,0.06,0.10))*mix(1.0,0.75,cs),F*0.75*smoothstep(0.0,0.3,dd));   // (darker than the deep teal: docs/plans/active/dark-water.md)
-    vec3 ic=earthOf(mix(vec3(0.48,0.60,0.70),vec3(0.66,0.75,0.82),smoothstep(0.6,0.0,dd)));   // bluer and darker than the snow
+    // bluer and darker than the snow. A little lighter than before the dark water: the valley mist, a third over the
+    // water now (waterMist), lifted it (docs/plans/active/dark-water.md)
+    vec3 ic=earthOf(mix(vec3(0.48,0.60,0.70),vec3(0.66,0.75,0.82),smoothstep(0.6,0.0,dd))*1.12);
     // the cracks: thin lines where the grain crosses its middle, at least 1.5 pixels wide, their ink spread (the
     // derivative taken before abs(): at the line's centre abs() folds it to 0)
     float gc=G(wp.xz/9.0).g-0.5,fc=fwidth(gc),cw=max(0.03,1.5*fc);
