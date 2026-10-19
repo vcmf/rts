@@ -100,10 +100,10 @@ export const MOODS = {
   // "over contrasted"): temperate's air thinner, a warmer sun against cooler shade, a little more of the world's own
   // colour, the values barely spread; autumn one family of warm pastels (Tiny Glade's)
   epic: {
-    sun: c(0.98, 0.98, 0.93), winterSun: c(0.95, 0.96, 0.98),
+    sun: c(0.98, 0.98, 0.93), winterSun: c(0.99, 1.0, 1.02),
     shadow: c(0.40, 0.52, 0.70), shadowTurn: c(0.24, 0.42, 0.80), shadowLift: c(0.0, 0.01, 0.02),
     shadowAutumn: c(0.50, 0.45, 0.43), shadowTurnAutumn: c(0.52, 0.34, 0.26),
-    shadowWinter: c(0.46, 0.44, 0.50), shadowTurnWinter: c(0.46, 0.42, 0.52), cloudSnow: c(0.74, 0.73, 0.80),
+    shadowWinter: c(0.57, 0.55, 0.62), shadowTurnWinter: c(0.46, 0.42, 0.52), cloudSnow: c(0.74, 0.73, 0.80),
     midCool: c(0.94, 0.97, 0.98), litLift: c(0.03, 0.022, 0.0), rim: c(1.0, 0.86, 0.62), back: c(1.0, 0.80, 0.50),
     mistShade: c(0.62, 0.56, 0.52), mistLit: c(0.96, 0.86, 0.70), mist: 0.4, autumn: 1,
     hazeCool: c(0.56, 0.65, 0.76), hazeWarm: c(0.92, 0.78, 0.60),
@@ -113,8 +113,8 @@ export const MOODS = {
     units: { tint: 0.3, mist: 0.05, grade: 0.1, bounce: 0.35 },
     grade: {
       greenTint: c(0.93, 1.01, 1.01), greenChroma: 0.66, greenAmt: 0.85, sat: 0.85,   // greenTint: the greens' value kept, about 1 (darker grass lost the dark coats: the guard)
-      splitLo: c(0.97, 0.99, 1.02), splitHi: c(1.02, 1.0, 0.96), lift: c(0.012, 0.012, 0.014),
-      topHaze: c(0.66, 0.73, 0.82), topAmt: 0.14, vignette: c(0.78, 0.84, 0.94), greenHue: 25, summerSat: 0.85,
+      splitLo: c(0.97, 0.99, 1.02), splitHi: c(1.02, 1.0, 0.96), lift: c(0.02, 0.02, 0.018),
+      topHaze: c(0.70, 0.76, 0.83), topAmt: 0.25, vignette: c(0.80, 0.86, 0.96), greenHue: 25, summerSat: 0.85,
     },
   },
 } satisfies Record<string, Mood>

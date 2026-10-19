@@ -116,3 +116,9 @@ and cosine a pixel, of every material: about 0.25 ms). Now, epic against main: s
   lighter, the hue the same (median 123°). Making that change, a comment pasted mid-line in `mood.ts` cut off epic's
   greenAmt and sat (the frame black): `test/look-moods.test.ts` now checks every mood's fields and season light finite
   (it fails on that line).
+- Second batch: the guard failed one block, Britain on the meadow in winter (sep 0.080, main 0.104): epic's sunlit
+  winter meadow darker than temperate's (luma 0.603 against main's 0.633), not the coat. Measured one change at a
+  time (summer and winter guard each): the winter shadow lighter (0.57,0.55,0.62, the lavender kept) 0.085; the mist
+  at temperate's no change; the top haze and the vignette back to temperate's 0.096; temperate's lift 0.099; the winter
+  sun a brighter cool white (0.99,1.0,1.02) 0.107, ok. The look a touch lighter (median luma +0.01 to +0.03), the hues
+  the same.
