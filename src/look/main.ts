@@ -30,7 +30,7 @@ import { axisX, baseH } from './world/author.ts'
 import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS } from './world/data.ts'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
-import { buildTerrain } from './terrain.ts'
+import { buildTerrain, splitByRoad } from './terrain.ts'
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 import ROAD_GRIT_URL from '../../data/road-grit-v1.png?url'
@@ -209,18 +209,24 @@ const camera = buildCamera(scene, canvas)
 // so at the swap only the edge's sharpness changes (the bake's 0.5 m texels). Both materials are compiled before the first frame, and the swap waits until the one it
 // goes to is ready (a material not ready is not drawn). The shader arm has no bake to hold them: live at every zoom
 const ROAD_LIVE_R = 170, ROAD_HOLD = 4, ROAD_FADE = 50
+const splitParam = params.get('split')
+if (splitParam !== null && splitParam !== '0') throw new Error(`?split must be 0, not ${splitParam}`)
 if (roadTex) {
   const live = terrain.terrainMat, baked = terrain.terrainBakedMat, ground = terrain.tileGround
-  await Promise.all([live, ...(isBakedArm(macro.arm()) ? [baked] : [])].map(m => m.forceCompilationAsync(ground)))   // (another arm compiles it on its first swap)
+  // near too, the live shader only on the triangles near a road (terrain.ts, splitByRoad: the same pixels to a step of
+  // rounding, about 1.1 ms a frame less at the default and closest zooms); ?split=0 (above): the live shader on the whole tile, the A/B
+  const split = splitParam === '0' ? live : splitByRoad(terrain, look.cover)
+  await Promise.all([live, baked].map(m => m.forceCompilationAsync(ground)))
   let far = false
   scene.onBeforeRenderObservable.add(() => {
     const r = camera.radius
     const fade = sstep(ROAD_LIVE_R - ROAD_HOLD - ROAD_FADE, ROAD_LIVE_R - ROAD_HOLD, r)
     for (const m of [live, water.waterMat, water.groundMat]) m.setFloat('uRoadFar', fade)
-    if (ground.material !== live && ground.material !== baked) return   // (the debug views' water ground)
+    if (ground.material !== live && ground.material !== split && ground.material !== baked) return   // (the debug views' water ground)
     far = isBakedArm(macro.arm()) && (far ? r > ROAD_LIVE_R - ROAD_HOLD : r > ROAD_LIVE_R + ROAD_HOLD)
-    const want = far ? baked : live
-    if (ground.material !== want && want.isReady(ground)) ground.material = want
+    const want = far ? baked : split
+    // (a MultiMaterial is always ready: the split waits on its two materials)
+    if (ground.material !== want && (want === split ? live.isReady(ground) && baked.isReady(ground) : want.isReady(ground))) ground.material = want
   })
 }
 // ?dof=0|1: the gameplay depth of field, on by default (decision 0024); the look tools load the page with it off

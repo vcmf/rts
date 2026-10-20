@@ -4,6 +4,7 @@
 // triangle inside the band one far cell beyond the tile; the apron fills that band, joining the tile's edge
 // vertices to the far ring's vertices one for one.
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
+import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
 import type { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
@@ -11,6 +12,7 @@ import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js
 import type { GroundMesh } from '@babylonjs/core/Meshes/groundMesh.js'
 import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
+import { SubMesh } from '@babylonjs/core/Meshes/subMesh.js'
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { Materials } from './materials.ts'
@@ -20,12 +22,13 @@ import { sstep } from './noise.ts'
 import { D } from './spec.ts'
 import type { Grid } from './heightfield.ts'
 import type { SpanGrid } from './world/data.ts'
+import { WEAR_STEP, type CoverGrid } from './world/cover.ts'
 import { spanTexture } from './span-texture.ts'
 import TER_VS from './shaders/terrain.vert?raw'
 import TER_FS from './shaders/terrain.frag?raw'
 
 export interface Terrain {
-  terrainMat: ShaderMaterial; terrainBakedMat: ShaderMaterial; tileMats: ShaderMaterial[]; farTerrainMat: ShaderMaterial; hillMat: ShaderMaterial; bankN: RawTexture
+  terrainMat: ShaderMaterial; terrainBakedMat: ShaderMaterial; terrainSplitMat: MultiMaterial; tileMats: ShaderMaterial[]; farTerrainMat: ShaderMaterial; hillMat: ShaderMaterial; bankN: RawTexture
   riverMask: DynamicTexture; riverMaskCanvas: HTMLCanvasElement
   tileGround: GroundMesh; farGround: GroundMesh; apron: Mesh
 }
@@ -42,6 +45,10 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   const make = (name: string, roads: boolean) => mats.make(name, TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones', 'uUnder', 'uRoadOn', 'uRoadSegN', 'uRoadFar'], samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE', '#define MEADOW_UNDER', ...(roads ? ['#define ROADS'] : [])] })
   const terrainMat = make('terrain', !mats.webgl1), terrainBakedMat = mats.webgl1 ? terrainMat : make('terrainBaked', false)
   const tileMats = [...new Set([terrainMat, terrainBakedMat])]
+  // the tile ground's two materials by triangle (src/look/main.ts: the live roads only near a road), made here so the
+  // ground keeps its place in the opaque draws (Babylon sorts them by the mesh's material's creation: after the trees
+  // the ground cost more, docs/plans/done/trees-perf-trunks.md)
+  const terrainSplitMat = new MultiMaterial('terrainRoads', scene); terrainSplitMat.subMaterials = [terrainMat, terrainBakedMat]
   // the bank normals: x, z of the normal, the weight; the uncovered texels a level normal of no weight (the vertex
   // normals hold there)
   const bankN = spanTexture(scene, bank, [128, 128, 0, 0], 'bankN')
@@ -116,6 +123,33 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   }
   const apron = new Mesh('apron', scene), vd = new VertexData(); vd.positions = pos; vd.normals = nor; vd.indices = idx; vd.applyToMesh(apron)
   apron.setVerticesData('aRiver', new Float32Array(rv), false, 1); apron.material = farTerrainMat
-  return { terrainMat, terrainBakedMat, tileMats, farTerrainMat, hillMat, bankN, riverMask, riverMaskCanvas, tileGround, farGround, apron }
+  return { terrainMat, terrainBakedMat, terrainSplitMat, tileMats, farTerrainMat, hillMat, bankN, riverMask, riverMaskCanvas, tileGround, farGround, apron }
 }
 
+// The live roads' shader only where a road can paint (docs/plans/done/headroom.md: its size alone cost every ground
+// pixel; about 1.1 ms a frame at the default and closest zooms): the tile's triangles whose grid cell lies within the
+// road gate of a line by the cover's wear distance (roadPaint's first test, shore.glsl: D.roadGate; the cover is read
+// nearest, so its texels under the cell and 1 m round it, against a texel of slack) drawn first, as submesh 0, with the
+// live material; the rest, submesh 1, with the material without (there roadPaint returns its colour unchanged: the
+// same pixels, but for a step of rounding between the two programs). Returns the tile ground's material for it
+export function splitByRoad(t: Terrain, cover: CoverGrid): MultiMaterial {
+  const g = t.tileGround, P = g.getVerticesData(VertexBuffer.PositionKind)!, ix = g.getIndices()!, C = cover, M = 1
+  const n = TILE_SUB, w = TILE_W / n, h = TILE_W / 2, lim = Math.ceil(D.roadGate / WEAR_STEP) + 1
+  const at = (v: number) => Math.min(C.n - 1, Math.max(0, Math.floor(v))), cellOf = (v: number) => Math.min(n - 1, Math.max(0, Math.floor((v + h) / w)))
+  const nearRoad = new Uint8Array(n * n)
+  for (let cz = 0; cz < n; cz++) for (let cx = 0; cx < n; cx++) {
+    const x0 = cx * w - h, z0 = cz * w - h
+    search: for (let j = at((z0 - M - C.z0) / C.cell); j <= at((z0 + w + M - C.z0) / C.cell); j++) for (let i = at((x0 - M - C.x0) / C.cell); i <= at((x0 + w + M - C.x0) / C.cell); i++) if (C.tex[(j * C.n + i) * 4 + 3] <= lim) { nearRoad[cz * n + cx] = 1; break search }
+  }
+  // each triangle by its centroid's cell (it lies inside it), once; then the live ones first
+  const live = new Uint8Array(ix.length / 3); let nLive = 0
+  for (let k = 0; k < live.length; k++) {
+    let x = 0, z = 0; for (let q = 0; q < 3; q++) { x += P[ix[k * 3 + q] * 3]; z += P[ix[k * 3 + q] * 3 + 2] }
+    live[k] = nearRoad[cellOf(z / 3) * n + cellOf(x / 3)]; nLive += live[k] * 3
+  }
+  const out = new Uint32Array(ix.length); let a = 0, b = nLive
+  for (let k = 0; k < live.length; k++) { const o = live[k] ? a : b; out[o] = ix[k * 3]; out[o + 1] = ix[k * 3 + 1]; out[o + 2] = ix[k * 3 + 2]; if (live[k]) a += 3; else b += 3 }
+  g.setIndices(out); g.subMeshes = []
+  const nv = P.length / 3; new SubMesh(0, 0, nv, 0, nLive, g); new SubMesh(1, 0, nv, nLive, ix.length - nLive, g)
+  return t.terrainSplitMat
+}

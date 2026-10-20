@@ -60,6 +60,11 @@ function rendererName(engine: AbstractEngine): string {
 }
 
 // focus: the point the cameras orbit (the camera's start by default; the forest bench's ?benchat)
+// ?passes=0: whole frames only, no pass timers (their queries split the Metal render pass; the frames between were
+// measured the same with them and without, 2026-10-20: docs/plans/done/headroom.md)
+const passesParam = new URLSearchParams(location.search).get('passes')
+if (passesParam !== null && passesParam !== '0') throw new Error(`?passes must be 0, not ${passesParam}`)
+const WHOLE_ONLY = passesParam === '0'
 export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: BenchPasses, arms: Arm[], holdS: number, focus: { x: number; z: number } = { x: START.x, z: START.z }): Promise<object> {
   const engine = scene.getEngine(), gl = (engine as unknown as { _gl: WebGL2RenderingContext })._gl
   const timer = new GpuTimer(gl), inst = new SceneInstrumentation(scene)
@@ -101,7 +106,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   const begin = engine.onBeginFrameObservable.add(() => {
     const t = performance.now(); if (timing && lastT && !passFrame) frameMs.push(t - lastT); lastT = t   // passFrame: the frame that just ended
     timer.poll(); timer.newFrame(); frameNo++; hookPosts()
-    passFrame = timer.available && frameNo % 2 === 0   // without a timer every frame is a whole frame
+    passFrame = timer.available && frameNo % 2 === 0 && !WHOLE_ONLY   // without a timer every frame is a whole frame
     if (timing && !passFrame) timer.begin('frame')
     if (timing && passFrame) passFrames++
   })
@@ -143,18 +148,18 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
         for (const [k, v] of timed) segments[k] = +(v / nPass).toFixed(1)
         // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
         const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
-        const passesFit = gpuMs.frame ? +(sum / gpuMs.frame.p50).toFixed(2) : null
+        const passesFit = gpuMs.frame && !WHOLE_ONLY ? +(sum / gpuMs.frame.p50).toFixed(2) : null
         runs.push({ cam: cam.name, arm: arm.name, size: [engine.getRenderWidth(true), engine.getRenderHeight(true)], frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
       }
     }
   } finally { timing = false; seg(null); for (const u of undo) u(); inst.dispose() }
   const r = engine.getRenderingCanvas()
   return {
-    tool: 'look-bench', version: 4,   // 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
+    tool: 'look-bench', version: 5,   // 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
     build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
     canvas: { w: canvas0[0], h: canvas0[1], cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
-    gpuTimer: timer.available, holdS, focus, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
-    note: timer.available ? 'GPU times from EXT_disjoint_timer_query_webgl2' : 'no GPU timer on this browser: GPU fields are null', runs,
+    gpuTimer: timer.available, wholeOnly: WHOLE_ONLY, holdS, focus, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
+    note: WHOLE_ONLY ? 'whole frames only (?passes=0): the pass fields are null by design' : timer.available ? 'GPU times from EXT_disjoint_timer_query_webgl2' : 'no GPU timer on this browser: GPU fields are null', runs,
   }
 }
 

@@ -166,15 +166,17 @@ vec3 roadPaint(vec3 c,vec2 xz){
   #endif
   // the road where the class map has it: found at the cover's warped point (macro.glsl, coverWarp), so the paint and
   // the class cells under it share one edge (a gentle sway of up to 1.5 m, over tens of metres)
-  if(coverAt(xz).w>ROAD_NEAR+2.2)return c;   // (most of the tile, before the warp: it moves a point up to 2.1 m)
+  if(coverAt(xz).w>ROAD_GATE)return c;   // (most of the tile, before the warp: ROAD_NEAR and the warp's reach, src/look/spec.ts)
   float jn,dist,past,ot;vec4 r=roadAt(coverWarp(xz),jn,dist,past,ot);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
   // the patterns laid along the road (by s) give way at a junction, where s jumps from one line to the other, to the
   // same patterns laid in the world (by xz)
   float wobS=(mValue(vec2(s/4.0,7.3))-0.5)*1.6+(mValue(vec2(s/1.1,2.1))-0.5)*0.7,wobW=(mValue(xz/4.0+7.3)-0.5)*1.6+(mValue(xz/1.1+2.1)-0.5)*0.7;
   float wob=mix(wobS,wobW,jn)+(mValue(xz/0.6)-0.5)*0.5;
   // (out to about 0.5 m past the line's side, found at the warped point as the class cells under it: their edge, within
-  // a cell of it, in the same earth: the road and track classes' colours are ROAD_EARTH's and TRACK_EARTH's)
-  float rag=wob*clamp(hw/4.0,0.5,1.0),inside=(1.0-smoothstep(hw-0.3+rag*0.3,hw+0.5+rag*0.4,dist))*(1.0-smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y))))
+  // a cell of it, in the same earth: the road and track classes' colours are ROAD_EARTH's and TRACK_EARTH's). Never
+  // past ROAD_EDGE m from the side (about 1.06 here, |wob| under 1.4): ROAD_NEAR, the road gate and the road split's
+  // triangles rest on it (src/look/spec.ts, road.edge)
+  float rag=wob*clamp(hw/4.0,0.5,1.0),inside=(1.0-smoothstep(hw-0.3+rag*0.3,min(hw+0.5+rag*0.4,hw+ROAD_EDGE),dist))*(1.0-smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y))))
     *(1.0-smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y))));   // (and as the tile's bake hands over to the far ring's, which has none: bakeOnce)
   if(inside<=0.0)return c;
   // none at a junction, nor round a dead end's cap. Where a pixel spans more than a track is wide (0.3 m: far out) they
