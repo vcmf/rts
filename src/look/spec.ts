@@ -37,7 +37,9 @@ export interface Spec {
   // the roads (docs/plans/done/roads.md): a grid of `cell` m cells over the tile, each listing the road segments within
   // their half width and `reach` m of it; their paint reaches `paint` m past a side (the cover's warp and wobble), the
   // junction weight is full within it of another line's side and gone by `junction` m; a pixel looks for a road only
-  // where the cover's distance to a line (2 m cells) is under `near` m
+  // where the cover's distance to a line (2 m cells) is under `near` m: the paint reaches at most 1.07 m past a side at
+  // the warped point (roadPaint, shore.glsl), a cover texel's centre lies within √2 m of it, its distance is rounded to
+  // 0.05 m, so 2.6 m loses no painted pixel (docs/plans/active/headroom.md)
   road: { cell: number; reach: number; paint: number; junction: number; near: number }
   // the water data (docs/plans/done/w3-water-data.md): texels of `texel` m over the tile; the depth (the water level
   // minus the ground, signed) stored over depth[0]..depth[1] m, the shore distance over ±sdf m. The shore band
@@ -61,7 +63,7 @@ export const SPEC: Spec = {
   shadowFade: 32,
   detail: { px: 2048, lines: 1080, index: 400, amp: 0.4, minCos: 0.05 },
   bank: { texel: 0.5, reach: 14, fade: 3, edge: 10, paint: 7.5 },
-  road: { cell: 8, reach: 7, paint: 3.2, junction: 6, near: 5.5 },
+  road: { cell: 8, reach: 7, paint: 3.2, junction: 6, near: 2.6 },
   water: { texel: 0.5, depth: [-1, 2], sdf: 16, band: 0.75, stones: 24 },
   macro: { texel: 0.5, far: 4, bakeTile: 512, cover: 2, kuwahara: 2 },
 }
@@ -138,7 +140,8 @@ export function derive(s: Spec = SPEC): Derived {
   if (s.depth.near >= s.depth.far) bad.push('bake: sun depth range out of order')
   if (ROAD_SLOTS % 4) bad.push(`road: ROAD_SLOTS (${ROAD_SLOTS}) is not a whole number of RGBA texels`)
   if (!(s.road.paint < s.road.junction && s.road.junction <= s.road.reach)) bad.push('road: the paint must reach less far than the junction weight, and that no further than the grid lists')
-  if (!(s.road.near >= s.road.paint + s.macro.cover * 0.71 && s.road.near <= 25.5)) bad.push('road: near must cover the paint plus a cover cell half diagonal, within the cover distance channel (25.5 m)')
+  // (the paint's reach less the cover's warp, 2.12 m: the cover is read at the warped point, roadAt; plus the distance's rounding)
+  if (!(s.road.near >= s.road.paint - 2.12 + s.macro.cover * 0.71 + 0.05 && s.road.near <= 25.5)) bad.push('road: near must cover the paint past the warp plus a cover cell half diagonal, within the cover distance channel (25.5 m)')
   if (!isInt(s.tile / s.road.cell)) bad.push(`road: the tile (${s.tile} m) is not a whole number of ${s.road.cell} m cells`)
   if (!isInt(s.tile / s.bank.texel)) bad.push(`bank: the tile (${s.tile} m) is not a whole number of ${s.bank.texel} m texels`)
   else if (s.tile / s.bank.texel > s.minSpec.maxTexture) bad.push(`bake: bank normals ${s.tile / s.bank.texel}² > ${s.minSpec.maxTexture}² (min-spec)`)

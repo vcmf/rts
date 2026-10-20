@@ -60,6 +60,9 @@ function rendererName(engine: AbstractEngine): string {
 }
 
 // focus: the point the cameras orbit (the camera's start by default; the forest bench's ?benchat)
+// ?passes=0: whole frames only, no pass timers (their queries split the Metal render pass; the frames between were
+// measured the same with them and without, 2026-10-20: docs/plans/active/headroom.md)
+const WHOLE_ONLY = new URLSearchParams(location.search).get('passes') === '0'
 export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: BenchPasses, arms: Arm[], holdS: number, focus: { x: number; z: number } = { x: START.x, z: START.z }): Promise<object> {
   const engine = scene.getEngine(), gl = (engine as unknown as { _gl: WebGL2RenderingContext })._gl
   const timer = new GpuTimer(gl), inst = new SceneInstrumentation(scene)
@@ -101,7 +104,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   const begin = engine.onBeginFrameObservable.add(() => {
     const t = performance.now(); if (timing && lastT && !passFrame) frameMs.push(t - lastT); lastT = t   // passFrame: the frame that just ended
     timer.poll(); timer.newFrame(); frameNo++; hookPosts()
-    passFrame = timer.available && frameNo % 2 === 0   // without a timer every frame is a whole frame
+    passFrame = timer.available && frameNo % 2 === 0 && !WHOLE_ONLY   // without a timer every frame is a whole frame
     if (timing && !passFrame) timer.begin('frame')
     if (timing && passFrame) passFrames++
   })

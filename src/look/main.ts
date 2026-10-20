@@ -10,6 +10,8 @@ import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
+import { SubMesh } from '@babylonjs/core/Meshes/subMesh.js'
+import type { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
@@ -35,6 +37,7 @@ import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 import ROAD_GRIT_URL from '../../data/road-grit-v1.png?url'
 import { sstep } from './noise.ts'
+import { WEAR_STEP } from './world/cover.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
 import { MACRO_ARMS, SHADER_ARMS, buildMacro, isBakedArm, type MacroArm, type RoadTextures } from './macro.ts'
@@ -209,17 +212,42 @@ const camera = buildCamera(scene, canvas)
 // so at the swap only the edge's sharpness changes (the bake's 0.5 m texels). Both materials are compiled before the first frame, and the swap waits until the one it
 // goes to is ready (a material not ready is not drawn). The shader arm has no bake to hold them: live at every zoom
 const ROAD_LIVE_R = 170, ROAD_HOLD = 4, ROAD_FADE = 50
+let roadSplit: MultiMaterial | null = null
 if (roadTex) {
   const live = terrain.terrainMat, baked = terrain.terrainBakedMat, ground = terrain.tileGround
-  await Promise.all([live, ...(isBakedArm(macro.arm()) ? [baked] : [])].map(m => m.forceCompilationAsync(ground)))   // (another arm compiles it on its first swap)
+  // near too, the live shader only where a road can paint (docs/plans/active/headroom.md: its size alone cost every
+  // ground pixel; about 1.1 ms a frame at the default and closest zooms): the tile's triangles within reach of a line
+  // by the cover's wear distance (roadPaint's first test, shore.glsl: ROAD_NEAR + 2.2 m; the cover is read nearest,
+  // so its texels under a triangle and 1 m round it, against a texel of slack) drawn first with it, the rest with the
+  // material without (there roadPaint returns its colour unchanged: the same pixels). Both by one material made with
+  // the terrain's (terrain.terrainSplitMat: its place in the opaque draws). ?split=0: the live shader on the whole
+  // tile (the A/B)
+  if (params.get('split') !== '0') {
+    const P = ground.getVerticesData(VertexBuffer.PositionKind)!, ix = ground.getIndices()!, C = look.cover, M = 1
+    const lim = Math.ceil((D.spec.road.near + 2.2) / WEAR_STEP) + 1, at = (v: number) => Math.min(C.n - 1, Math.max(0, Math.floor(v)))
+    const near = (x0: number, x1: number, z0: number, z1: number) => {
+      for (let j = at((z0 - M - C.z0) / C.cell); j <= at((z1 + M - C.z0) / C.cell); j++) for (let i = at((x0 - M - C.x0) / C.cell); i <= at((x1 + M - C.x0) / C.cell); i++) if (C.tex[(j * C.n + i) * 4 + 3] <= lim) return true
+      return false
+    }
+    const roads: number[] = [], rest: number[] = []
+    for (let t = 0; t < ix.length; t += 3) {
+      const xs = [P[ix[t] * 3], P[ix[t + 1] * 3], P[ix[t + 2] * 3]], zs = [P[ix[t] * 3 + 2], P[ix[t + 1] * 3 + 2], P[ix[t + 2] * 3 + 2]]
+      ;(near(Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)) ? roads : rest).push(ix[t], ix[t + 1], ix[t + 2])
+    }
+    ground.setIndices([...roads, ...rest]); ground.subMeshes = []
+    const nv = P.length / 3; new SubMesh(0, 0, nv, 0, roads.length, ground); new SubMesh(1, 0, nv, roads.length, rest.length, ground)
+    roadSplit = terrain.terrainSplitMat
+  }
+  await Promise.all([live, baked].map(m => m.forceCompilationAsync(ground)))
+  const split = roadSplit ?? live
   let far = false
   scene.onBeforeRenderObservable.add(() => {
     const r = camera.radius
     const fade = sstep(ROAD_LIVE_R - ROAD_HOLD - ROAD_FADE, ROAD_LIVE_R - ROAD_HOLD, r)
     for (const m of [live, water.waterMat, water.groundMat]) m.setFloat('uRoadFar', fade)
-    if (ground.material !== live && ground.material !== baked) return   // (the debug views' water ground)
+    if (ground.material !== live && ground.material !== split && ground.material !== baked) return   // (the debug views' water ground)
     far = isBakedArm(macro.arm()) && (far ? r > ROAD_LIVE_R - ROAD_HOLD : r > ROAD_LIVE_R + ROAD_HOLD)
-    const want = far ? baked : live
+    const want = far ? baked : split
     if (ground.material !== want && want.isReady(ground)) ground.material = want
   })
 }
@@ -266,6 +294,11 @@ scene.onBeforeRenderObservable.add(() => {
 const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
 // ?bloom=0: open with the bloom off (an A/B, docs/plans/done/frame-readout.md)
 // ?far=off (below, after the bakes), ?msaa=1 (before the passes): the widest zoom's A/Bs (docs/plans/done/wide-perf.md)
+// ?hide=<prefix,...>: meshes whose name starts with one of these not drawn, ?off=<toggle,...>: those panel switches
+// off on load: the cost ablations (docs/plans/active/headroom.md; after the bakes, which keep the meshes)
+{ const hide = (params.get('hide') ?? '').split(',').filter(Boolean)
+  if (hide.length) scene.onBeforeRenderObservable.add(() => { for (const m of scene.meshes) if (hide.some(p => m.name.startsWith(p)) && m.isEnabled()) m.setEnabled(false) }) }
+for (const k of (params.get('off') ?? '').split(',').filter(Boolean)) { if (!(TOGGLES as readonly string[]).includes(k)) throw new Error(`?off takes ${TOGGLES.join(', ')}, not ${k}`); (S as Record<string, number>)[k] = 0 }
 if (params.has('bloom')) { if (params.get('bloom') !== '0') throw new Error(`?bloom must be 0, not ${params.get('bloom')}`); S.bloom = 0 }
 type Toggle = typeof TOGGLES[number]
 const isToggle = (k: string | undefined): k is Toggle => (TOGGLES as readonly (string | undefined)[]).includes(k)

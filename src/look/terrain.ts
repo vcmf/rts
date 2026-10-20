@@ -4,6 +4,7 @@
 // triangle inside the band one far cell beyond the tile; the apron fills that band, joining the tile's edge
 // vertices to the far ring's vertices one for one.
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
+import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
 import type { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
@@ -25,7 +26,7 @@ import TER_VS from './shaders/terrain.vert?raw'
 import TER_FS from './shaders/terrain.frag?raw'
 
 export interface Terrain {
-  terrainMat: ShaderMaterial; terrainBakedMat: ShaderMaterial; tileMats: ShaderMaterial[]; farTerrainMat: ShaderMaterial; hillMat: ShaderMaterial; bankN: RawTexture
+  terrainMat: ShaderMaterial; terrainBakedMat: ShaderMaterial; terrainSplitMat: MultiMaterial; tileMats: ShaderMaterial[]; farTerrainMat: ShaderMaterial; hillMat: ShaderMaterial; bankN: RawTexture
   riverMask: DynamicTexture; riverMaskCanvas: HTMLCanvasElement
   tileGround: GroundMesh; farGround: GroundMesh; apron: Mesh
 }
@@ -42,6 +43,10 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   const make = (name: string, roads: boolean) => mats.make(name, TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones', 'uUnder', 'uRoadOn', 'uRoadSegN', 'uRoadFar'], samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE', '#define MEADOW_UNDER', ...(roads ? ['#define ROADS'] : [])] })
   const terrainMat = make('terrain', !mats.webgl1), terrainBakedMat = mats.webgl1 ? terrainMat : make('terrainBaked', false)
   const tileMats = [...new Set([terrainMat, terrainBakedMat])]
+  // the tile ground's two materials by triangle (src/look/main.ts: the live roads only near a road), made here so the
+  // ground keeps its place in the opaque draws (Babylon sorts them by the mesh's material's creation: after the trees
+  // the ground cost more, docs/plans/done/trees-perf-trunks.md)
+  const terrainSplitMat = new MultiMaterial('terrainRoads', scene); terrainSplitMat.subMaterials = [terrainMat, terrainBakedMat]
   // the bank normals: x, z of the normal, the weight; the uncovered texels a level normal of no weight (the vertex
   // normals hold there)
   const bankN = spanTexture(scene, bank, [128, 128, 0, 0], 'bankN')
@@ -116,6 +121,6 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   }
   const apron = new Mesh('apron', scene), vd = new VertexData(); vd.positions = pos; vd.normals = nor; vd.indices = idx; vd.applyToMesh(apron)
   apron.setVerticesData('aRiver', new Float32Array(rv), false, 1); apron.material = farTerrainMat
-  return { terrainMat, terrainBakedMat, tileMats, farTerrainMat, hillMat, bankN, riverMask, riverMaskCanvas, tileGround, farGround, apron }
+  return { terrainMat, terrainBakedMat, terrainSplitMat, tileMats, farTerrainMat, hillMat, bankN, riverMask, riverMaskCanvas, tileGround, farGround, apron }
 }
 
