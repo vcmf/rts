@@ -35,6 +35,8 @@ import { buildBuildings } from './buildings.ts'
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 import ROAD_GRIT_URL from '../../data/road-grit-v1.png?url'
+import PAVING_URL from '../../data/paving-v1.png?url'
+import { BUILDINGS, paveShape } from './world/buildings.ts'
 import { sstep } from './noise.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
@@ -137,7 +139,14 @@ if (!mats.webgl1) {   // (float textures: the roads' shader is WebGL2's)
   const grit = new Texture(ROAD_GRIT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => mats.bindAll(m => m.setFloat('uRoadOn', 1)), (msg?: string) => console.error(`the road grit (${ROAD_GRIT_URL}) did not load: ${msg ?? 'unknown error'}`))
   grit.wrapU = grit.wrapV = Texture.WRAP_ADDRESSMODE; grit.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uRoadSegs', segs); m.setTexture('uRoadGrid', grid); m.setFloat('uRoadSegN', sn); m.setTexture('uRoadGrit', grit) })
-  roadTex = { segs, grid, grit, n: sn }
+  // the buildings' paving (docs/plans/active/buildings.md; shore.glsl, pavePaint): the owner's cobbles and the
+  // buildings' shapes, on every material that paints the roads; the cobbles' mean until the texture has loaded
+  const shapes = BUILDINGS.map(paveShape)
+  if (shapes.length > 16) throw new Error(`buildings: ${shapes.length} paved yards, the shader takes 16 (shore.glsl, pavePaint)`)
+  const pave = { tex: new Texture(PAVING_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => mats.bindAll(m => m.setFloat('uPaveOn', 1)), (msg?: string) => console.error(`the paving (${PAVING_URL}) did not load: ${msg ?? 'unknown error'}`)), a: shapes.flatMap(s => s.a), b: shapes.flatMap(s => s.b), n: shapes.length }
+  pave.tex.wrapU = pave.tex.wrapV = Texture.WRAP_ADDRESSMODE; pave.tex.anisotropicFilteringLevel = 4
+  mats.bindAll(m => { m.setFloat('uPaveOn', 0); m.setTexture('uPaving', pave.tex); m.setArray4('uPaveA', pave.a); m.setArray4('uPaveB', pave.b); m.setFloat('uPaveN', pave.n) })
+  roadTex = { segs, grid, grit, n: sn, pave }
 }
 // ?trees=one: every tree one model (L5b's judging, docs/plans/active/l5-macro.md); with ?trees=one,cards, drawn as
 // leaf cards

@@ -11,7 +11,7 @@
 import { hash, sstep, vn } from '../noise.ts'
 import { axisX } from './author.ts'
 import { RIVER } from '../river.ts'
-import { BUILDINGS, FOOT, onBuilding } from './buildings.ts'
+import { BUILDINGS, PAVE_WOBBLE, onPaving, paveShape } from './buildings.ts'
 
 export const COVER = { meadow: 0, pasture: 1, wood: 2, road: 3, track: 4, village: 5, wheat: 6, green: 7, stubble: 8, ploughed: 9, bare: 10 } as const
 export type CoverClass = typeof COVER[keyof typeof COVER]
@@ -145,7 +145,8 @@ export function authorCover(far: number, cell: number): CoverGrid {
   for (const [x, z] of VILLAGE) if (inFormationZone(x, z) || onFloodplain(x, z)) throw new Error('cover: the village is in a formation zone or on the floodplain')
   // the buildings (world/buildings.ts): none in a formation zone, on the floodplain, or on a road or a track
   for (const b of BUILDINGS) {
-    const r = Math.max(FOOT[b.model].r ?? 0, Math.hypot(FOOT[b.model].hx ?? 0, FOOT[b.model].hz ?? 0)) * b.scale
+    // (its paving's farthest reach and its wobble)
+    const q = paveShape(b).b, r = (q[0] < 0 ? -q[0] : Math.hypot(q[0], Math.max(q[1], q[2]))) + PAVE_WOBBLE
     if (inFormationZone(b.x, b.z) || onFloodplain(b.x, b.z) || LINES.some(l => lineD(l.pts, b.x, b.z) < l.w / 2 + r)) throw new Error(`cover: the ${b.model} at ${b.x}, ${b.z} is in a formation zone, on the floodplain or on a road`)
   }
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
@@ -157,9 +158,10 @@ export function authorCover(far: number, cell: number): CoverGrid {
     let wear = Infinity
     LINES.forEach((l, li) => { if (boxD(lineBoxes[li], x, z) > WEAR_REACH + l.w) return; const d = lineD(l.pts, x, z) - l.w / 2; if (d < 0) { cls = l.cls; id = 0 } wear = Math.min(wear, Math.max(0, d)) })
     if (inPoly(VILLAGE, x, z) || inPoly(SQUARE, x, z)) { cls = COVER.village; id = 0; wear = 0 } else wear = Math.min(wear, ringD(VILLAGE, x, z), ringD(SQUARE, x, z))
-    // under a building and a metre round it the village's trodden ground, whatever the class (nothing grows through
-    // a floor: the scatter, the meadow and the crops keep off the village), worn as the village is
-    if (onBuilding(x, z, 1)) { cls = COVER.village; id = 0; wear = 0 }
+    // under a building, its paved yard and a margin round it (the paving's ragged edge, a cover texel's half diagonal,
+    // slack) the village's trodden ground, whatever the class (nothing grows through a floor or the paving: the scatter,
+    // the meadow and the crops keep off the village), worn as the village is (the road split's live ground: pavePaint)
+    if (onPaving(x, z, PAVE_WOBBLE + cell * 0.71 + 0.3)) { cls = COVER.village; id = 0; wear = 0 }
     // the floodplain and the formation zones keep their meadow (the zones clip the fields that touch them)
     if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village || cls === COVER.bare)) { cls = COVER.meadow; id = 0 }
     tex[o] = cls; tex[o + 1] = id; tex[o + 2] = id ? Math.round(((dir % Math.PI + Math.PI) % Math.PI) / Math.PI * 255) % 256 : 0

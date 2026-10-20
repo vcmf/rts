@@ -368,6 +368,11 @@ zone, on the floodplain or on a road, and paints its footprint and a metre round
 grass, crop, tree or stone grows through a floor (`docs/plans/active/buildings.md`). Static: their shadows go into the
 sun's bake with the scene's meshes, the sky they hide into the light map's occlusion as a blob at their foot (the
 trees' contact). The instance yaw, measured on the page: a local point (x, z) goes to (x cos − z sin, x sin + z cos).
+Each stands in a paved yard (`pavePaint` in `shore.glsl`, in `roadPaint`'s path): the owner's cobbles
+(`data/paving-v1.png`, 4.5 m a repeat) over its footprint grown by a margin (the house's wider at its door, toward the
+road; the windmill's a ring), the exact shapes as uniform arrays (`paveShape`, ≤ 16), the edge ragged by a noise-wobbled
+distance; read only where the cover paints the village's ground worn to nothing, which the buildings' cover reaches
+(so only the road split's live material carries it); the macro bake paints the cobbles' mean.
 
 ### The shadows' look
 

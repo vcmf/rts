@@ -32,3 +32,27 @@ export function onBuilding(x: number, z: number, pad = 0): boolean {
     return Math.abs(lx) <= f.hx! * b.scale + pad && Math.abs(lz) <= f.hz! * b.scale + pad
   })
 }
+
+// the paved yard round each building (the owner, 2026-10-20: docs/plans/active/buildings.md): its footprint grown by
+// side m all round, the house's by front m at its door (its local −z: a yard toward the road); its edge ragged into the
+// ground by the shader (shore.glsl, pavePaint: up to PAVE_WOBBLE m past it)
+export const PAVE: Record<Building['model'], { side: number; front: number }> = { windmill: { side: 3, front: 3 }, house: { side: 2.5, front: 6 } }
+export const PAVE_WOBBLE = 1.15
+// a building's paving as the shader takes it (≤ 16 buildings): a, its centre and its turn (x, z, cos yaw, sin yaw); b,
+// a box's half width, its reach behind (+z) and in front (−z) of the centre, its corners' radius, m, or for a circle
+// (−radius, 0, 0, 0)
+export function paveShape(b: Building): { a: [number, number, number, number]; b: [number, number, number, number] } {
+  const f = FOOT[b.model], p = PAVE[b.model], c = Math.cos(b.yaw), s = Math.sin(b.yaw)
+  if (f.r !== undefined) return { a: [b.x, b.z, c, s], b: [-(f.r * b.scale + p.side), 0, 0, 0] }
+  return { a: [b.x, b.z, c, s], b: [f.hx! * b.scale + p.side, f.hz! * b.scale + p.side, f.hz! * b.scale + p.front, 1.5] }
+}
+// whether (x, z) lies on a building's paving, grown by pad m (its local frame: the inverse of its yaw)
+export function onPaving(x: number, z: number, pad = 0): boolean {
+  return BUILDINGS.some(b => {
+    const { a, b: q } = paveShape(b), dx = x - a[0], dz = z - a[1]
+    if (q[0] < 0) return Math.hypot(dx, dz) <= -q[0] + pad
+    const lx = dx * a[2] + dz * a[3], lz = -dx * a[3] + dz * a[2]
+    return Math.abs(lx) <= q[0] + pad && lz <= q[1] + pad && lz >= -q[2] - pad
+  })
+}
+

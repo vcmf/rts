@@ -160,13 +160,44 @@ vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT)
         r=vec4(side,s1.x+len*clamp(d0/max(d0+d1,1e-3),0.0,1.0)+s1.z*10000.0,s1.y,mod(floor(s1.w/4.0),2.0));}}}
   jn=1.0-smoothstep(ROAD_PAINT,ROAD_JUNCTION,other);
   return r;}
+// THE PAVING (docs/plans/active/buildings.md): a paved yard round each building, the owner's cobbles (data/paving-v1.png,
+// uPaving, about PAVE_M m a repeat) on the ground under it, its edge ragged into the ground. The buildings' shapes
+// (src/look/world/buildings.ts, paveShape: uPaveN of them): a, the centre and the turn (x, z, cos, sin); b, a box's half
+// width, its reach behind and in front of the centre and its corners' radius, or a circle (−radius). Only where the
+// cover paints the village's ground worn to nothing (a building's footprint and its yard are: cover.ts), so the live
+// roads' material alone carries it (the road split, terrain.ts) and the rest of the village pays a loop of a few
+// buildings. Its colours kept near their mean (PAVE_KEEP) so it reads as ground; the season, the snow and the light are
+// the ground's (it is painted before them). uPaveOn 0 (the macro bake, or the texture not loaded): the cobbles' mean,
+// what a 0.5 m texel would show
+uniform vec4 uPaveA[16],uPaveB[16];uniform float uPaveN,uPaveOn;uniform sampler2D uPaving;
+#define PAVE_M 4.5
+#define PAVE_MEAN vec3(0.558,0.481,0.369)
+#define PAVE_KEEP 0.8
+vec3 pavePaint(vec3 c,vec2 xz){
+  float d=1e9;
+  for(int i=0;i<16;i++){
+    if(float(i)>=uPaveN)break;
+    vec4 a=uPaveA[i],b=uPaveB[i];vec2 p=xz-a.xy,l=vec2(p.x*a.z+p.y*a.w,-p.x*a.w+p.y*a.z);float e;
+    if(b.x<0.0)e=length(l)+b.x;
+    else{float zc=(b.y-b.z)*0.5;vec2 q=abs(vec2(l.x,l.y-zc))-vec2(b.x,(b.y+b.z)*0.5)+b.w;e=length(max(q,0.0))+min(max(q.x,q.y),0.0)-b.w;}
+    d=min(d,e);
+  }
+  // (the edge's wobble within ±0.78 m, its blend 0.35 m: exactly 0 past 1.15 m out, PAVE_WOBBLE)
+  if(d>1.2)return c;
+  float wob=(mValue(xz/2.3+3.1)-0.5)*1.1+(mValue(xz/0.7+8.7)-0.5)*0.45,k=1.0-smoothstep(-0.3,0.35,d+wob);
+  if(k<=0.0)return c;
+  vec3 p=PAVE_MEAN;
+  if(uPaveOn>0.5)p=PAVE_MEAN+(texM(uPaving,xz/PAVE_M,PAVE_M).rgb-PAVE_MEAN)*PAVE_KEEP;
+  return mix(c,p,k);}
 vec3 roadPaint(vec3 c,vec2 xz){
   #if defined(MACRO_FLAT)||defined(MACRO_SAB_ONECLASS)
   return c;   // the flat arm and the class check's sabotage: the class colour alone (as dirtOn)
   #endif
   // the road where the class map has it: found at the cover's warped point (macro.glsl, coverWarp), so the paint and
   // the class cells under it share one edge (a gentle sway of up to 1.5 m, over tens of metres)
-  if(coverAt(xz).w>ROAD_GATE)return c;   // (most of the tile, before the warp: ROAD_NEAR and the warp's reach, src/look/spec.ts)
+  vec4 cv0=coverAt(xz);
+  if(cv0.w>ROAD_GATE)return c;   // (most of the tile, before the warp: ROAD_NEAR and the warp's reach, src/look/spec.ts)
+  if(cv0.x>4.5&&cv0.x<5.5&&cv0.w<0.05)c=pavePaint(c,xz);   // (the village's ground worn to nothing: the buildings')
   float jn,dist,past,ot;vec4 r=roadAt(coverWarp(xz),jn,dist,past,ot);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
   // the patterns laid along the road (by s) give way at a junction, where s jumps from one line to the other, to the
   // same patterns laid in the world (by xz)

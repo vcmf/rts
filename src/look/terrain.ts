@@ -42,7 +42,7 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   // the shore band the tile paints near the water as the water does (docs/plans/done/w4-water-surface.md)
   // two: with the live roads (ROADS, WebGL2) and without, where the macro bake holds them far out (src/look/main.ts swaps
   // them by zoom: docs/plans/done/roads.md). On WebGL1 one, without
-  const make = (name: string, roads: boolean) => mats.make(name, TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones', 'uUnder', 'uRoadOn', 'uRoadSegN', 'uRoadFar'], samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE', '#define MEADOW_UNDER', ...(roads ? ['#define ROADS'] : [])] })
+  const make = (name: string, roads: boolean) => mats.make(name, TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones', 'uUnder', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN', 'uPaveOn'], samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit', 'uPaving'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE', '#define MEADOW_UNDER', ...(roads ? ['#define ROADS'] : [])] })
   const terrainMat = make('terrain', !mats.webgl1), terrainBakedMat = mats.webgl1 ? terrainMat : make('terrainBaked', false)
   const tileMats = [...new Set([terrainMat, terrainBakedMat])]
   // the tile ground's two materials by triangle (src/look/main.ts: the live roads only near a road), made here so the

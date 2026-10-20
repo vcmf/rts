@@ -40,6 +40,18 @@ things get runtime light); the colour by palette roles with the texture's value 
   the trunks' route fits, and in the ground bounce; static, baked once.
 - **Performance**: one draw a model (instanced), about 9k faces in all; the bench before and after.
 
+- **The paving** (the owner, 2026-10-20: "makes more sense"): a paved yard under each building, the owner's seamless
+  painterly cobbles (`data/paving-v1.png`, 1024²; its prompt: "top-down seamless tileable cobblestones and flagstones
+  in packed earth, hand-painted, even flat light, muted grey stone and ochre joints, each stone ~1/30 of the image").
+  The house's footprint grown 2.5 m all round and 6 m at its door (a yard toward the road), the windmill's a ring 3 m
+  round its base; exact shapes (the footprints' centre, half sizes and turn, or a circle) as uniform arrays (≤ 16),
+  its edge ragged into the ground by a noise-wobbled distance (as the roads' edge). Painted in `roadPaint`'s path
+  (shore.glsl, `pavePaint`) only where the cover paints the village's ground worn to nothing: the buildings' cover
+  grows to the paving's reach, so the road split's live material carries it and the rest of the ground pays nothing.
+  Tiled at 4.5 m (stones about 15 cm), mipmapped, read with explicit gradients; its colours kept at 0.8 of their spread
+  round the mean; the season, snow and light the ground's. The macro bake paints the cobbles' mean (at 0.5 m texels
+  the stones average to it).
+
 ## Acceptance
 
 - The windmill and the houses on the map, painted in the look: screenshots at the start view, close, wide, each season,
@@ -63,5 +75,6 @@ things get runtime light); the colour by palette roles with the texture's value 
   and the light map's occlusion (a blob at each building's foot, as the trees').
 - The instance yaw measured on the page: a local point (x, z) goes to (x cos − z sin, x sin + z cos) (a yaw of π/2
   turned the houses' fronts east: fixed to −π/2).
+- The paving built (2026-10-20): `pavePaint`, the cover's footprints grown to the yards (`onPaving`).
 - To do: the owner's look; the bench against main; the guard and the checks.
 
