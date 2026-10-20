@@ -44,8 +44,9 @@ export function paveShape(b: Building): { a: [number, number, number, number]; b
   return { a: [b.x, b.z, c, s], b: [f.hx! * b.scale + p.side, f.hz! * b.scale + p.side, f.hz! * b.scale + p.front, 1.5] }
 }
 // the signed distance from (x, z) to a building's paving, m (negative inside): its local frame (toLocal), a rounded box
-// off centre along z (its reach behind and in front differ) or a circle, as the shader measures it (pavePaint)
-function paveSdf(b: Building, x: number, z: number): number {
+// off centre along z (its reach behind and in front differ) or a circle. The shader's pavePaint (shore.glsl) measures
+// the same, line for line: change both together (test/buildings.test.ts pins this one)
+export function paveSdf(b: Building, x: number, z: number): number {
   const q = paveShape(b).b, [lx, lz] = toLocal(b.yaw, x - b.x, z - b.z)
   if (q[0] < 0) return Math.hypot(lx, lz) + q[0]
   const zc = (q[1] - q[2]) / 2, ax = Math.abs(lx) - q[0] + q[3], az = Math.abs(lz - zc) - (q[1] + q[2]) / 2 + q[3]

@@ -4,7 +4,7 @@
 // toWorld matches its Matrix, toLocal undoes it, and a house's yard lies before its door at every quarter turn
 import { describe, expect, it } from 'vitest'
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
-import { BUILDINGS, PAVE_GAP, pavePoly, polyGap, toLocal, toWorld, type Building } from '../src/look/world/buildings.ts'
+import { BUILDINGS, FOOT, PAVE, PAVE_GAP, paveSdf, pavePoly, polyGap, toLocal, toWorld, type Building } from '../src/look/world/buildings.ts'
 
 const box = (x: number, z: number, hx: number, hz: number): [number, number][] => [[x - hx, z - hz], [x + hx, z - hz], [x + hx, z + hz], [x - hx, z + hz]]
 
@@ -43,4 +43,20 @@ describe('the turn', () => {
 })
 // (onPaving asks of the authored buildings: one house alone, by its polygon)
 const onPavingOf = (b: Building, x: number, z: number) => polyGap(pavePoly(b), [[x - 0.01, z - 0.01], [x + 0.01, z - 0.01], [x + 0.01, z + 0.01], [x - 0.01, z + 0.01]]) === 0
+
+describe('the yard\'s distance', () => {
+  it('reaches further before the door than behind it, the shader\'s rounded box', () => {
+    const b: Building = { model: 'house', x: 10, z: -5, yaw: 0.7, scale: 1.0 }, f = FOOT.house, p = PAVE.house
+    const at = (lx: number, lz: number) => { const [x, z] = toWorld(b.yaw, lx, lz); return paveSdf(b, b.x + x, b.z + z) }
+    // the yard's edges: its door's (local −z) at hz + front, its back at hz + side, its sides at hx + side
+    expect(at(0, -(f.hz! + p.front))).toBeCloseTo(0, 6); expect(at(0, f.hz! + p.side)).toBeCloseTo(0, 6); expect(at(f.hx! + p.side, 0)).toBeCloseTo(0, 6)
+    expect(at(0, -(f.hz! + p.front) - 2)).toBeCloseTo(2, 6); expect(at(0, 0)).toBeLessThan(0)
+    // a point 8 m before the door is on the yard, 8 m behind is not
+    expect(at(0, -8)).toBeLessThan(0); expect(at(0, 8)).toBeGreaterThan(0)
+    // its corners rounded (1.5 m): the corner point itself lies outside by (√2 − 1)·1.5
+    expect(at(f.hx! + p.side, f.hz! + p.side)).toBeCloseTo((Math.SQRT2 - 1) * 1.5, 6)
+    const w: Building = { model: 'windmill', x: 0, z: 0, yaw: 2, scale: 1 }
+    expect(paveSdf(w, FOOT.windmill.r! + PAVE.windmill.side, 0)).toBeCloseTo(0, 6)
+  })
+})
 

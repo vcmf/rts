@@ -87,13 +87,17 @@ things get runtime light); the colour by palette roles with the texture's value 
   no texture read past it; the macro bake paints the same. The windmill's specks (its tower, the slates too): the sun's
   shadow on the surface itself near the light's grazing angle and the grain at the ground's strength on flat faces:
   the shadow looked up 15 cm off the surface, the band edges' grain at a third; the detail texture over its local mean
-  (a texel's guessed role flipped on the brown tower); the tower's wall warmer, to the reference's ochre. Left: the
-  sails' cast shadow steps across the tower at the shadow map's resolution.
+  (a texel's guessed role flipped on the brown tower); the tower's wall warmer, to the reference's ochre. (The
+  sails' cast shadow stepped across the tower at the shadow map's resolution; the solid blades, below, cast it now.)
 - The triangles cut (the owner, 2026-10-20: about 26 cm a triangle at the source, two or three pixels at the default
-  zoom, under one wide): the import dissolves the flat regions (within 4°, never across a role or a UV seam: across
+  zoom, under one wide, so likely shaded several times a pixel: an estimate, the bench to measure it): the import dissolves the flat regions (within 4°, never across a role or a UV seam: across
   one the detail's UVs smeared over the house's back roof) and collapses to 2,300 triangles a model (the windmill
   7,842 → 2,300, the house 8,277 → 2,299; the data file 1.62 → 0.57 MB). The windmill's lattice sails (2,334 of its
   triangles), which no cut keeps, are made again in the same X as four solid canvas blades (the accent role, a pale
-  canvas) on timber stocks.
+  canvas) on timber stocks. Review round 2: the model centred on its base band, not its whole box (the sails, now
+  to one side, had moved the windmill's tower 0.74 m off its origin); the new boxes' faces outward (they faced in);
+  the arms clustered by angle and exactly four required; the sails on a neutral detail texel; the collapse not held at
+  the UV seams (held, it could not cut: Tripo's atlas puts 94-96 % of the vertices on one) but its smear measured and
+  bounded (0.000 for both).
 - To do: the owner's look; the bench against main; the guard and the checks.
 

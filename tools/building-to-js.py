@@ -4,13 +4,18 @@
 # data/buildings/<model>-detail.png. Pack colours are never used (AGENTS.md): each face takes a role (wall, roof,
 # timber, opening, accent) by the median colour of the texels under it, nearest in Lab to the model's reference colours
 # (MODELS, below); the page paints each role from the palette. The detail keeps the texture's value only, each texel
-# over its neighbourhood's mean (so it varies about 1: the fine courses and slates), stored as 128 = 1.
+# over its neighbourhood's mean (so it varies about 1: the fine courses and slates), stored as 128 = 1, with a neutral
+# block (value 1) the generated faces take. Each model is cut to about MODELS[...]['tris'] triangles (the flat regions
+# dissolved within a role and a UV island, then collapsed; the export fails if the cut smears the detail: SMEAR_MAX),
+# the windmill's lattice sails made again first as four solid blades on stocks (sails; MODELS['windmill']['sails']),
+# and centred on its base (the footprint: BASE_BAND).
 #
 # Usage (from rts/; the zips are the owner's, in the git-ignored assets/buildings):
 #   blender -b --python tools/building-to-js.py -- windmill assets/buildings/windmill.zip
 #   blender -b --python tools/building-to-js.py -- house assets/buildings/house.zip
-#   (a .fbx path works too; --analyse prints the texture's colour clusters instead; --render <png> saves the faces
-#   painted by role, flat, for checking the classification)
+#   (a .fbx path works too; --analyse prints the texture's colour clusters instead; --render <png> saves three views
+#   of the model as cut, painted by role, flat, for checking the classification, and with --full the model before the
+#   cut; with --tex the views textured with its own texture, for checking the UVs)
 import bpy, bmesh, json, math, os, sys, tempfile, zipfile
 import numpy as np
 
@@ -18,12 +23,18 @@ ROLES = ['wall', 'roof', 'timber', 'opening', 'accent']   # the role ids are the
 # per model: its height or length in metres (the axis the model is fitted on), and reference colours (sRGB 0-255) per
 # role, picked from the texture's clusters (--analyse); a role may list several
 MODELS = {
-    'windmill': {'fit': ('height', 15.0), 'tris': 2300, 'sails': True, 'refs': {
+    'windmill': {'fit': ('height', 15.0), 'tris': 2300, 'refs': {
         'wall': [(191, 125, 65), (161, 105, 59), (212, 148, 87), (226, 170, 105)],
         'roof': [(122, 49, 29), (150, 62, 36), (100, 40, 26)],
         'timber': [(99, 64, 37), (114, 77, 47), (83, 51, 29), (66, 38, 21)],
         'opening': [(36, 24, 16), (24, 18, 14)],
-    }, 'up': {'roof': (0.15, 1.01), 'wall': (-0.2, 0.75), 'opening': (-0.5, 0.5)}},
+    }, 'up': {'roof': (0.15, 1.01), 'wall': (-0.2, 0.75), 'opening': (-0.5, 0.5)},
+       # the lattice sails (sails(), the model's units): a loose part in the plane y `plane`, thinner across it than
+       # `thin`, and either longer than `long` or off the tower's front column (|x| over `column`, or its centre's height
+       # out of `window_z`: the tower's windows lie in that plane too); the new stock's width and depth, the blade's start
+       # along the arm (a share), its offset to the side, width and depth
+       'sails': {'plane': (-0.2, -0.155), 'thin': 0.03, 'long': 0.08, 'column': 0.12, 'window_z': (0.45, 0.72),
+                 'stock': (0.012, 0.010), 'blade': (0.22, 0.026, 0.048, 0.004)}},
     'house': {'fit': ('length', 11.0), 'tris': 2300, 'refs': {
         'wall': [(174, 154, 125), (188, 167, 138), (158, 139, 113), (201, 180, 151), (217, 197, 169)],
         'roof': [(90, 85, 78), (68, 65, 60), (114, 103, 88)],
@@ -36,6 +47,8 @@ MODELS = {
 # 'up': per role the range of a face's normal's upward component it may take (a roof faces up, a wall stands): the
 # colours alone do not split a shaded wall from a slate or a lit beam from a wall stone; 'zr': the range of a face's
 # height, as a share of the model's, a role may take (the house's terracotta chimney pots: its frames are timber)
+SMEAR_MAX = 0.02   # the share of the surface the cut may smear (smear) before the export fails
+BASE_BAND = 0.06   # the base band the model is centred on, a share of its height
 DISSOLVE_DEG = 4   # the planar dissolve's angle: faces flatter than this to each other merge (within a role)
 DETAIL_BOX, DETAIL_CLIP = 4, (0.6, 1.5)   # the detail's local mean: a 9-texel box at 512²; its range
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -112,21 +125,28 @@ def main():
     print(name, 'faces', nf, {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()})
     if '--render' in args and '--full' in args: render(obj, role, args[args.index('--render') + 1], img if '--tex' in args else None); return
     # the triangles cut to about cfg['tris'] (about 26 cm a triangle at the source: two or three pixels at the default
-    # zoom, under one wide, so the GPU shaded each pixel several times): the roles as materials first, so no face of one
+    # zoom, under one wide, so the GPU likely shaded each pixel several times: an estimate, the bench measures it): the
+    # roles as materials first, so no face of one
     # role merges with another's; the windmill's lattice sails, which no cut keeps, made again as solid blades (sails)
     before = {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()}
     set_roles(obj, role)
-    if cfg.get('sails'): sails(obj, px)
+    smear0 = smear(obj)
+    if cfg.get('sails'): sails(obj, cfg['sails'])
     decimate(obj, cfg['tris'])
     me = obj.data; uvl = me.uv_layers.active.data   # (the mesh's layers made again by the cut: read them anew)
     role = np.array([f.material_index for f in me.polygons])
     after = {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()}
     print(name, 'tris', sum(before.values()), '->', len(me.polygons), 'by role', before, '->', after)
+    sm = smear(obj); print(name, f'smear (the surface share whose texel density strays 4x from the median): {smear0:.3f} -> {sm:.3f}')
+    if sm > SMEAR_MAX: raise SystemExit(f'{name}: the cut smeared {sm:.3f} of the surface\'s detail (over {SMEAR_MAX})')
     if '--render' in args: render(obj, role, args[args.index('--render') + 1], img if '--tex' in args else None); return
     # the fit: Blender's Z up; the model to its height, or its length along x
     co = np.array([v.co[:] for v in me.vertices]); lo, hi = co.min(0), co.max(0)
     axis, size = cfg['fit']; k = size / ((hi[2] - lo[2]) if axis == 'height' else (hi[0] - lo[0]))
-    cx, cy = (lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2
+    # centred on its footprint: the base band's middle (its lowest BASE_BAND of the height), not the whole box, which
+    # the sails reach out of one side (the instance's origin is the footprint's centre: the paving, the ground's
+    # samples, the occlusion blob)
+    bb = co[co[:, 2] <= lo[2] + BASE_BAND * (hi[2] - lo[2])]; cx, cy = (bb[:, 0].min() + bb[:, 0].max()) / 2, (bb[:, 1].min() + bb[:, 1].max()) / 2
     # sharp past 30°: the corner normals, split where the faces meet at more than that
     for p in me.polygons: p.use_smooth = True
     bpy.context.view_layer.objects.active = obj; obj.select_set(True)
@@ -145,6 +165,9 @@ def main():
                 uvs += [round(u[0], 4), round(u[1], 4)]; rol.append(int(role[f.index]))
             idx.append(key[kk])
     p3 = np.array(pos).reshape(-1, 3)
+    b1 = p3[p3[:, 1] < 1.0]; bc = ((b1[:, 0].min() + b1[:, 0].max()) / 2, (b1[:, 2].min() + b1[:, 2].max()) / 2)
+    print(name, 'base (under 1 m) centred at', np.round(bc, 3))
+    if max(abs(bc[0]), abs(bc[1])) > 0.02: raise SystemExit(f'{name}: the base is centred at {bc}, not on the origin')
     data = {'pos': pos, 'nrm': nrm, 'uv': uvs, 'role': rol, 'idx': idx, 'min': p3.min(0).round(3).tolist(), 'max': p3.max(0).round(3).tolist()}
     print(name, 'verts', len(rol), 'tris', len(idx) // 3, 'size m', (p3.max(0) - p3.min(0)).round(2).tolist())
     # the detail: the texture's value over its local mean (a box of DETAIL_BOX texels round it), so only the fine
@@ -157,7 +180,11 @@ def main():
     k_ = DETAIL_BOX; pad = np.pad(val, k_, mode='edge'); c_ = pad.cumsum(0).cumsum(1); c_ = np.pad(c_, ((1, 0), (1, 0)))
     n_ = 2 * k_ + 1; loc = (c_[n_:, n_:] - c_[:-n_, n_:] - c_[n_:, :-n_] + c_[:-n_, :-n_]) / (n_ * n_)
     det = np.clip(val / np.maximum(loc, 1e-3), *DETAIL_CLIP)
+    if sw_ != 512 or sh_ != 512: raise SystemExit(f'{name}: the detail is {sw_}x{sh_}, NEUTRAL_UV assumes 512²')
+    det[:NEUTRAL_N, :NEUTRAL_N] = 1.0   # (the neutral block: rows from the bottom, as the UVs)
     det8 = np.clip(det * 128, 0, 255).astype(np.uint8)
+    nv = det8[int(NEUTRAL_UV[1] * sh_), int(NEUTRAL_UV[0] * sw_)] / 128
+    if not 0.95 <= nv <= 1.05: raise SystemExit(f'{name}: the neutral texel reads {nv}')
     out_dir = os.path.join(REPO, 'data', 'buildings'); os.makedirs(out_dir, exist_ok=True)
     im = bpy.data.images.new(name + '-detail', sw_, sh_, alpha=False); g = det8.astype(np.float32) / 255
     im.pixels[:] = np.dstack([g, g, g, np.ones_like(g)]).ravel(); im.filepath_raw = os.path.join(out_dir, name + '-detail.png'); im.file_format = 'PNG'; im.save()
@@ -178,7 +205,12 @@ def set_roles(obj, role):   # each face's role as its material index (a material
 
 def decimate(obj, target):
     # first the flat regions dissolved (walls, roof planes, the tower's courses: within DISSOLVE_DEG, never across a
-    # role), then collapsed to the target; triangles at the end. Deterministic (Blender's modifiers, no randomness)
+    # role or a UV seam), then collapsed to the target. Each face keeps its role (its material) through the collapse, so
+    # no triangle is of two roles; the borders and the UV seams are not held: Tripo's atlas puts 94-96 % of the vertices
+    # on a seam and its parts leave open edges everywhere, and held they kept the cut from cutting (the house 8,277 to
+    # 7,682 with the seams held, 6,478 with the role borders and open edges). What the collapse does to the detail is
+    # measured instead (smear, printed and bounded in main: the surface share whose texel density strays 4x) and seen
+    # (--render --tex). Triangles at the end. Deterministic (Blender's modifiers, no randomness)
     bpy.context.view_layer.objects.active = obj; obj.select_set(True)
     m = obj.modifiers.new('dissolve', 'DECIMATE'); m.decimate_type = 'DISSOLVE'; m.angle_limit = math.radians(DISSOLVE_DEG); m.delimit = {'MATERIAL', 'UV'}
     bpy.ops.object.modifier_apply(modifier=m.name); triangulate(obj)
@@ -188,13 +220,31 @@ def decimate(obj, target):
         bpy.ops.object.modifier_apply(modifier=m.name)
     triangulate(obj)
 
+def smear(obj):
+    # the share of the surface whose texel density (UV area over area) strays more than 4x from the model's median: a
+    # cut that stretches a face over a UV seam smears the detail there (faces with no UV area, the generated sails on
+    # the neutral texel, left out)
+    me = obj.data; uvl = me.uv_layers.active.data; a3, au = [], []
+    for f in me.polygons:
+        if len(f.loop_indices) < 3: continue
+        uv = [uvl[li].uv for li in f.loop_indices]; u0 = uv[0]
+        au.append(sum(abs((uv[i][0] - u0[0]) * (uv[i + 1][1] - u0[1]) - (uv[i + 1][0] - u0[0]) * (uv[i][1] - u0[1])) for i in range(1, len(uv) - 1)) / 2); a3.append(f.area)
+    a3, au = np.array(a3), np.array(au); ok = (a3 > 1e-9) & (au > 1e-12); dens = au[ok] / a3[ok]; med = np.median(dens)
+    bad = (dens > med * 4) | (dens < med / 4)
+    return float(a3[ok][bad].sum() / a3[ok].sum())
+
 def triangulate(obj):
     bm = bmesh.new(); bm.from_mesh(obj.data); bmesh.ops.triangulate(bm, faces=bm.faces[:]); bm.to_mesh(obj.data); bm.free()
 
-def sails(obj, px):
-    # the windmill's sails: its lattice (thin loose parts in the plane just before the cap) taken out and made again as
-    # four arms in the same X: a stock (timber, a long thin box) and a solid blade on its trailing side (the canvas: the
-    # accent role), the hub and each arm's direction and length from the lattice's own vertices
+# the detail's neutral texel: a block of NEUTRAL_N texels at the detail's corner written at value 1 (main), where the
+# generated faces (the windmill's sails) take their UV, so they show their palette colour as it is
+NEUTRAL_N = 9
+NEUTRAL_UV = ((NEUTRAL_N // 2 + 0.5) / 512, (NEUTRAL_N // 2 + 0.5) / 512)
+
+def sails(obj, cfg):
+    # the windmill's sails: its lattice (thin loose parts in the plane just before the cap: cfg, MODELS) taken out and
+    # made again as four arms in the same X: a stock (timber, a long thin box) and a solid blade on its trailing side
+    # (the canvas: the accent role), the hub and each arm's direction and length from the lattice's own vertices
     me = obj.data; bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table(); bm.verts.ensure_lookup_table()
     seen, parts = set(), []
     for f in bm.faces:
@@ -207,39 +257,50 @@ def sails(obj, px):
                 for h in v.link_faces:
                     if h.index not in seen: seen.add(h.index); stack.append(h)
         parts.append(comp)
-    sail = []
+    sail, (y0, y1) = [], cfg['plane']
     for comp in parts:
         c = np.array([v.co[:] for g in comp for v in g.verts]); lo, hi = c.min(0), c.max(0)
-        # in the sails' plane (y −0.195 to −0.16, the model's units), thin across it; off the tower's front column
-        # (its windows are in that plane too: they stay)
-        if lo[1] > -0.2 and hi[1] < -0.155 and hi[1] - lo[1] < 0.03 and (max(hi[0] - lo[0], hi[2] - lo[2]) > 0.08 or abs((lo[0] + hi[0]) / 2) > 0.12 or (lo[2] + hi[2]) / 2 > 0.72 or (lo[2] + hi[2]) / 2 < 0.45):
+        mz = (lo[2] + hi[2]) / 2
+        if lo[1] > y0 and hi[1] < y1 and hi[1] - lo[1] < cfg['thin'] and (max(hi[0] - lo[0], hi[2] - lo[2]) > cfg['long'] or abs((lo[0] + hi[0]) / 2) > cfg['column'] or mz > cfg['window_z'][1] or mz < cfg['window_z'][0]):
             sail += comp
     if not sail: raise SystemExit('the windmill: no sails found in their plane')
     sv = np.array([v.co[:] for g in sail for v in g.verts]); hub = np.array([np.median(sv[:, 0]), sv[:, 1].min(), np.median(sv[:, 2])])
-    # the arms: the lattice's vertices by quadrant round the hub (the X), each arm along its farthest vertices' mean
+    # the arms: the lattice's vertices round the hub split into four by angle (from the quadrants, then each vertex to
+    # its nearest arm's angle, three times over), each arm along its farthest vertices' mean
     d = sv[:, [0, 2]] - hub[[0, 2]]; ang = np.arctan2(d[:, 1], d[:, 0]); rr = np.hypot(d[:, 0], d[:, 1])
+    arm_ang = np.array([-0.75 * np.pi, -0.25 * np.pi, 0.25 * np.pi, 0.75 * np.pi])
+    for _ in range(3):
+        lab = np.abs(np.angle(np.exp(1j * (ang[:, None] - arm_ang[None])))).argmin(1)
+        for q in range(4):
+            m_ = lab == q
+            if m_.sum() >= 10: far = rr[m_] >= np.percentile(rr[m_], 90); u = d[m_][far].mean(0); arm_ang[q] = np.arctan2(u[1], u[0])
     arms = []
     for q in range(4):
-        m_ = (ang >= -np.pi + q * np.pi / 2) & (ang < -np.pi + (q + 1) * np.pi / 2)
+        m_ = lab == q
         if m_.sum() < 10: continue
-        far = rr[m_] >= np.percentile(rr[m_], 90); u = d[m_][far].mean(0); u /= np.linalg.norm(u)
-        arms.append((u, np.percentile(rr[m_], 99.5)))
+        arms.append((np.array([np.cos(arm_ang[q]), np.sin(arm_ang[q])]), np.percentile(rr[m_], 99.5)))
     print('the sails: hub', hub.round(3), 'arms', [(a[0].round(2).tolist(), round(float(a[1]), 3)) for a in arms], 'lattice faces', len(sail))
+    if len(arms) != 4: raise SystemExit(f'the windmill: {len(arms)} sail arms found, four expected')
     bmesh.ops.delete(bm, geom=list({g for g in sail}), context='FACES')
-    # the detail's UV: a texel of the detail near 1 (the new faces then take their palette colour as is)
-    uv1 = (0.5, 0.5)
-    uvl = bm.loops.layers.uv.active
+    uvl = bm.loops.layers.uv.active; made = []
     def box(c0, c1, wdt, dep, mat):   # a box from c0 to c1 (x, z in the plane, y the plane's depth), wdt across, dep deep
         a = np.array([c0[0], hub[1], c0[1]]); b = np.array([c1[0], hub[1], c1[1]]); t = (b - a) / np.linalg.norm(b - a); n_ = np.array([0.0, 1.0, 0.0]); s_ = np.cross(t, n_)
         vs = [bm.verts.new((p + s_ * sx * wdt / 2 + n_ * sy * dep / 2).tolist()) for p in (a, b) for sx in (-1, 1) for sy in (-1, 1)]
+        ctr = (a + b) / 2
         for q_ in ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)):
-            f = bm.faces.new([vs[i] for i in q_]); f.material_index = mat
-            for l in f.loops: l[uvl].uv = uv1
+            f = bm.faces.new([vs[i] for i in q_]); f.material_index = mat; f.normal_update()
+            # (outward: each face's normal away from its box's centre)
+            if np.dot(np.array(f.normal[:]), np.array(f.calc_center_median()[:]) - ctr) < 0: f.normal_flip()
+            for l in f.loops: l[uvl].uv = NEUTRAL_UV
+            made.append((f, ctr))
     for u, L in arms:
         side = np.array([-u[1], u[0]])   # the blade on the arm's one side (the sails turn one way: the same side each)
-        h2 = hub[[0, 2]]
-        box(h2, h2 + u * L, 0.012, 0.010, ROLES.index('timber'))
-        box(h2 + u * L * 0.22 + side * 0.026, h2 + u * L + side * 0.026, 0.048, 0.004, ROLES.index('accent'))
+        h2 = hub[[0, 2]]; st, (b0, bo, bw, bd) = cfg['stock'], cfg['blade']
+        box(h2, h2 + u * L, st[0], st[1], ROLES.index('timber'))
+        box(h2 + u * L * b0 + side * bo, h2 + u * L + side * bo, bw, bd, ROLES.index('accent'))
+    out = sum(1 for f, ctr in made if np.dot(np.array(f.normal[:]), np.array(f.calc_center_median()[:]) - ctr) > 0)
+    print(f'the sails: {out} of {len(made)} new faces face out')
+    if out != len(made): raise SystemExit('the windmill: a sail face faces in')
     bm.normal_update(); bm.to_mesh(me); bm.free()
 
 def render(obj, role, out, img=None):   # the faces by role, flat; or (img) the model's own texture, as a check of the UVs

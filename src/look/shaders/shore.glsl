@@ -178,6 +178,7 @@ vec3 pavePaint(vec3 c,vec2 xz){
   for(int i=0;i<16;i++){
     if(float(i)>=uPaveN)break;
     vec4 a=uPaveA[i],b=uPaveB[i];vec2 p=xz-a.xy,l=vec2(p.x*a.z-p.y*a.w,p.x*a.w+p.y*a.z);float e;
+    // (paveSdf in src/look/world/buildings.ts measures the same, line for line: change both together)
     if(b.x<0.0)e=length(l)+b.x;
     else{float zc=(b.y-b.z)*0.5;vec2 q=abs(vec2(l.x,l.y-zc))-vec2(b.x,(b.y+b.z)*0.5)+b.w;e=length(max(q,0.0))+min(max(q.x,q.y),0.0)-b.w;}
     d=min(d,e);
