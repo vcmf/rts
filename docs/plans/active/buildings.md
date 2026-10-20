@@ -104,5 +104,13 @@ things get runtime light); the colour by palette roles with the texture's value 
   got ready on the owner's GPU. The paving now under `PAVING` (the tile terrain's live material, 16 units) and
   `PAVING_FAR` (the macro bake, no texture); the water's 16. `Materials.make` counts each compiled program's samplers
   and stops the page past 16; `tools/shot.mjs` stops a run at once on a shader that does not compile.
+- Review round 3 (2026-10-20): the guard counts the fragment stage alone (Metal's limit is a stage's) and stops the
+  page from its render loop (Babylon caught the throw in onCompiled and kept the effect drawing); the cobbles packed
+  into the road grit's G and B (`tools/paving-pack.py`: the two principal axes keep 99.7 % of their colours' variance,
+  1/255 rms), so the terrain's live material is at 15 units; the sails built after the cut (a cut after them could
+  flatten their thin boxes), their faces checked then; the generated faces a UV below 0, no detail (Tripo packs its
+  atlas full: a neutral block in a corner overwrote both models' detail); the yards' zone and floodplain check over the
+  yard's cover margin; `tools/shot.mjs` stops only on a compile error no fallback follows; `segD` shared
+  (`world/geom.ts`).
 - To do: the owner's look; the bench against main; the guard and the checks.
 

@@ -161,25 +161,26 @@ vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT)
   jn=1.0-smoothstep(ROAD_PAINT,ROAD_JUNCTION,other);
   return r;}
 // THE PAVING (docs/plans/active/buildings.md): a paved yard round each building, the owner's cobbles (data/paving-v1.png,
-// uPaving, about PAVE_M m a repeat) on the ground under it, its edge ragged into the ground. The buildings' shapes
+// about PAVE_M m a repeat) on the ground under it, its edge ragged into the ground. The cobbles ride in the road grit's
+// G and B (data/road-grit-v2.png, tools/paving-pack.py: their colour along its two principal axes, PAVE_U and PAVE_V
+// about PAVE_MEAN, 99.7 % of its variance), so the paving binds no texture unit of its own (16 on Metal: the live
+// material's at 15). The buildings' shapes
 // (src/look/world/buildings.ts, paveShape: uPaveN of them): a, the centre and the turn (x, z, cos, sin); b, a box's half
 // width, its reach behind and in front of the centre and its corners' radius, or a circle (−radius); l, the point in
 // the building's frame (world/buildings.ts, toLocal: Babylon's instance yaw undone). Only where the
 // cover paints the village's ground worn to nothing (a building's footprint and its yard are: cover.ts), so the live
 // roads' material alone carries it (the road split, terrain.ts) and the rest of the village pays a loop of a few
 // buildings. Its colours kept near their mean (PAVE_KEEP) so it reads as ground; the season, the snow and the light are
-// the ground's (it is painted before them). uPaveOn 0 (the texture not loaded) or PAVING_FAR (the macro bake): the far
+// the ground's (it is painted before them). uRoadOn 0 (the grit not loaded) or PAVING_FAR (the macro bake): the far
 // look (below)
 // PAVING: the cobbles and their far look (the tile terrain's live material: src/look/terrain.ts); PAVING_FAR: the far
-// look alone, no texture (the macro bake). Neither on the water's materials: the paving's sampler would be one too many
-// on Metal (16 a fragment shader: Materials.make counts them), and no building stands at the water
+// look alone, no texture (the macro bake). Neither on the water's materials (no building stands at the water)
 #if defined(PAVING)||defined(PAVING_FAR)
 uniform vec4 uPaveA[16],uPaveB[16];uniform float uPaveN;
-#ifdef PAVING
-uniform float uPaveOn;uniform sampler2D uPaving;
-#endif
 #define PAVE_M 4.5
-#define PAVE_MEAN vec3(0.558,0.481,0.369)
+#define PAVE_MEAN vec3(0.5577,0.4809,0.3693)
+#define PAVE_U vec3(0.5117,0.5443,0.6739)
+#define PAVE_V vec3(0.1897,0.0613,-0.1936)
 #define PAVE_KEEP 0.8
 vec3 pavePaint(vec3 c,vec2 xz){
   float d=1e9;
@@ -197,12 +198,12 @@ vec3 pavePaint(vec3 c,vec2 xz){
   if(k<=0.0)return c;
   // the level of detail (as the roads' tracks and grit): the cobbles while a pixel spans under half a stone (7 cm),
   // gone by 22 cm; past them their mean in a soft blotch over a few metres, no texture read; under them the same
-  // blotch, so the cobbles' mean (their mipmaps') meets it. The macro bake (uPaveOn 0, 0.5 m texels) paints the same
+  // blotch, so the cobbles' mean (their mipmaps') meets it. The macro bake (PAVING_FAR, 0.5 m texels) paints the same
   float v=0.6*mValue(xz/3.3+1.7)+0.4*mValue(xz/1.4+5.3),bl=0.92+0.16*v;
   vec3 p=PAVE_MEAN*bl;
   #ifdef PAVING
-  float lod=(1.0-smoothstep(0.07,0.22,pxMacro()))*step(0.5,uPaveOn);
-  if(lod>0.0)p=mix(p,(PAVE_MEAN+(texM(uPaving,xz/PAVE_M,PAVE_M).rgb-PAVE_MEAN)*PAVE_KEEP)*bl,lod);
+  float lod=(1.0-smoothstep(0.07,0.22,pxMacro()))*step(0.5,uRoadOn);
+  if(lod>0.0){vec2 t=texM(uRoadGrit,xz/PAVE_M,PAVE_M).gb-0.5;p=mix(p,(PAVE_MEAN+(PAVE_U*t.x+PAVE_V*t.y)*PAVE_KEEP)*bl,lod);}
   #endif
   return mix(c,p,k);}
 #endif

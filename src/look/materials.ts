@@ -90,21 +90,35 @@ export class Materials {
     m.onCompiled = e => this.checkSamplers(name, e)
     return m
   }
-  // a fragment shader may use 16 texture units on Metal (ANGLE's MAX_TEXTURE_IMAGE_UNITS there; SwiftShader allows more,
-  // so a material over it compiled in the checks and failed on the owner's GPU: the paving's sampler on the water). Each
-  // compiled program's active samplers counted (vertex and fragment together: strict) and the page stopped past 16;
-  // the counts kept for the tools (window.__look.samplers)
+  // a fragment shader may use 16 texture units on Metal (ANGLE's MAX_TEXTURE_IMAGE_UNITS there, a limit per stage;
+  // SwiftShader allows more, so a material over it compiled in the checks and failed on the owner's GPU: the paving's
+  // sampler on the water). Counted per compiled program, the fragment stage's alone: the program's active samplers (the
+  // compiler keeps only those a stage really reads) that the final fragment source names past their declaration (a
+  // vertex-only fetch, a wind or height map, counts against the vertex stage's own limit, not this one). A material
+  // over it is logged at once and stops the page at its next frame (failSamplers, from main.ts's render loop:
+  // Babylon catches a throw in onCompiled and keeps the effect drawing), so the tools fail it on any GPU. The counts
+  // kept for the tools (window.__look.mats.samplers)
   readonly samplers: Record<string, number> = {}
+  private readonly over: string[] = []
   private checkSamplers(name: string, e: Effect): void {
     const gl = (this.scene.getEngine() as unknown as { _gl?: WebGL2RenderingContext })._gl
     const prog = (e as unknown as { _pipelineContext?: { program?: WebGLProgram } })._pipelineContext?.program
     if (!gl || !prog) return
     const SAMPLER = new Set<number>([gl.SAMPLER_2D, gl.SAMPLER_3D, gl.SAMPLER_CUBE, gl.SAMPLER_2D_SHADOW, gl.SAMPLER_2D_ARRAY, gl.SAMPLER_2D_ARRAY_SHADOW, gl.SAMPLER_CUBE_SHADOW, gl.INT_SAMPLER_2D, gl.INT_SAMPLER_3D, gl.INT_SAMPLER_CUBE, gl.INT_SAMPLER_2D_ARRAY, gl.UNSIGNED_INT_SAMPLER_2D, gl.UNSIGNED_INT_SAMPLER_3D, gl.UNSIGNED_INT_SAMPLER_CUBE, gl.UNSIGNED_INT_SAMPLER_2D_ARRAY])
+    const fs = e.fragmentSourceCode ?? '', uses = (u: string) => (fs.match(new RegExp(`\\b${u}\\b`, 'g')) ?? []).length > 1
     let n = 0
-    for (let i = 0, k = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS) as number; i < k; i++) { const u = gl.getActiveUniform(prog, i); if (u && SAMPLER.has(u.type)) n += u.size }
+    for (let i = 0, k = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS) as number; i < k; i++) {
+      const u = gl.getActiveUniform(prog, i)
+      if (u && SAMPLER.has(u.type) && uses(u.name.replace(/\[0\]$/, ''))) n += u.size
+    }
     this.samplers[name] = Math.max(this.samplers[name] ?? 0, n)
-    if (n > MAX_SAMPLERS) throw new Error(`the material ${name} uses ${n} texture units, over ${MAX_SAMPLERS} (Metal's per fragment shader: src/look/materials.ts)`)
+    if (n > MAX_SAMPLERS && !this.over.includes(name)) {
+      this.over.push(name)
+      console.error(`the material ${name} reads ${n} textures in its fragment shader, over ${MAX_SAMPLERS} (Metal's: src/look/materials.ts)`)
+    }
   }
+  // the page stopped by a material over the units (checkSamplers): each frame, from main.ts's render loop
+  failSamplers(): void { if (this.over.length) throw new Error(`materials over ${MAX_SAMPLERS} fragment textures: ${this.over.join(', ')} (src/look/materials.ts)`) }
   // a new grain texture for every painted material, the bake's too; mean: its R and G channels' (the detail layer
   // renormalises about them)
   setGrain(grain: BaseTexture, mean: [number, number]): void {

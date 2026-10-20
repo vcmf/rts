@@ -89,9 +89,9 @@ export interface Macro {
 // meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
 // the roads' textures (src/look/main.ts): the bake paints them in (BAKE_FS, roadPaint as far out: uRoadFar 1), so far out the ground's
 // bake holds the roads and the terrain's live road shader runs only nearer (docs/plans/done/roads.md)
-// pave: the buildings' paving (shore.glsl, pavePaint): its texture and shapes (src/look/world/buildings.ts, paveShape);
-// the bake paints its far look (PAVING_FAR: no texture; at its texels the cobbles average to their mean)
-export interface RoadTextures { segs: BaseTexture; grid: BaseTexture; grit: BaseTexture; n: number; pave: { tex: BaseTexture; a: number[]; b: number[]; n: number } }
+// pave: the buildings' paved yards (shore.glsl, pavePaint): their shapes (src/look/world/buildings.ts, paveShape); the
+// bake paints their far look (PAVING_FAR: no texture read; at its texels the cobbles average to their mean)
+export interface RoadTextures { segs: BaseTexture; grid: BaseTexture; grit: BaseTexture; n: number; pave: { a: number[]; b: number[]; n: number } }
 // flow: the meadow's pattern combed (GRASS_FLOW, ?grass=flow): the materials' defines it shares (src/look/main.ts);
 // flowTex: the flow's textures (src/look/flow.ts), which the bake reads too; meadowMap: the meadow map
 // (src/look/meadow.ts), which the combed meadow's bake reads (the default pattern where no grass grows); near: the near

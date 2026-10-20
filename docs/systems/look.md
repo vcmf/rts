@@ -361,7 +361,8 @@ solid canvas blades on timber stocks (the accent role). The role is the median c
 under the face, nearest in Lab to the model's reference colours, with priors on the face's orientation (a roof faces
 up, a wall and an opening stand) and height (the house's terracotta chimney pots). Pack colours are never used: the
 page paints each role from its palette (`src/look/buildings.ts`, `PALETTE`, muted against the armies), and the texture
-keeps only its value about each role's mean (`data/buildings/<model>-detail.png`, 128 = 1), a third of it showing
+keeps only its value over its local mean (a box of texels round each: `data/buildings/<model>-detail.png`, 128 = 1;
+the faces the export makes, the windmill's sails, a UV below 0 and no detail), a third of it showing
 (`DETAIL_AMT`) under the paint's grain (`shaders/building.frag`: the painter's ramp, the cast shadow, the sky's
 occlusion, the ground's bounce, the snow on what faces up, the air). One instanced mesh a model. Placed in
 `src/look/world/buildings.ts` (authored: the windmill in the large wheat field; six houses in an irregular cluster in
@@ -371,10 +372,13 @@ Matrix (`test/buildings.test.ts`) and on the page: a local point (x, z) goes to 
 (`toWorld`, `toLocal`: the one rule the footprints, the yards, the ground's samples and `pavePaint`'s frame use); the
 models' fronts face −z before it, so a yaw of π/2 faces west. Each stands in a paved yard (`pavePaint` in `shore.glsl`,
 in `roadPaint`'s path, under `PAVING` on the tile terrain's live material only, `PAVING_FAR`, the far look without a
-texture, on the macro bake: the water's materials are at Metal's 16 texture units a fragment shader, and the paving's
-sampler on them was a 17th, which ANGLE-Metal refused, so the page never got ready there; `Materials.make` counts
-each compiled program's active samplers and stops the page past 16, `MAX_SAMPLERS`, and `tools/shot.mjs` stops a run at
-once on a shader that does not compile): the owner's cobbles (`data/paving-v1.png`, 4.5 m a repeat) over its footprint grown by a margin
+texture, on the macro bake; the cobbles ride in the road grit's G and B, `data/road-grit-v2.png`, made by
+`tools/paving-pack.py` from the grit and `data/paving-v1.png`: their colour along its two principal axes about its mean,
+so the paving binds no texture unit of its own. Metal allows 16 a fragment shader (SwiftShader more: a 17th, the paving's
+own texture on the water, compiled in the checks and kept the page from ever getting ready on the owner's GPU):
+`Materials.make` counts each compiled program's fragment-stage samplers (`MAX_SAMPLERS`; the counts at
+`window.__look.mats.samplers`), logs a material over them and stops the page at its next frame; `tools/shot.mjs` stops a
+run on a shader Babylon cannot compile and has no fallback for): the owner's cobbles (4.5 m a repeat) over its footprint grown by a margin
 (the house's by 2.5 m and by 6 m before its door; the windmill's a 3 m ring), the exact shapes as uniform arrays
 (`paveShape`, ≤ 16), the edge ragged by a noise-wobbled distance (up to `PAVE_WOBBLE`, 1.15 m, past it). The cover
 paints each yard and a margin round it (`PAVE_WOBBLE` + 0.71 of a cover cell + 0.3 m) as the village's ground worn to

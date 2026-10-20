@@ -12,6 +12,7 @@ import { hash, sstep, vn } from '../noise.ts'
 import { axisX } from './author.ts'
 import { RIVER } from '../river.ts'
 import { BUILDINGS, PAVE_GAP, PAVE_WOBBLE, onPaving, paveDist, pavePoly, polyGap, polyLineGap } from './buildings.ts'
+import { segD } from './geom.ts'
 
 export const COVER = { meadow: 0, pasture: 1, wood: 2, road: 3, track: 4, village: 5, wheat: 6, green: 7, stubble: 8, ploughed: 9, bare: 10 } as const
 export type CoverClass = typeof COVER[keyof typeof COVER]
@@ -121,10 +122,7 @@ const inPoly = (p: readonly Pt[], x: number, z: number): boolean => {
   for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > z) !== (p[j][1] > z) && x < (p[j][0] - p[i][0]) * (z - p[i][1]) / (p[j][1] - p[i][1]) + p[i][0]) inside = !inside
   return inside
 }
-export const segD = (x: number, z: number, a: Pt, b: Pt): number => {
-  const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz)))
-  return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz)
-}
+export { segD }
 const lineD = (p: readonly Pt[], x: number, z: number): number => { let d = Infinity; for (let i = 0; i < p.length - 1; i++) d = Math.min(d, segD(x, z, p[i], p[i + 1])); return d }
 // a line's bounding box: a point farther from it than `reach` is farther from the line (a quick skip)
 const boxOf = (p: readonly Pt[]) => { let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity; for (const [x, z] of p) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z) } return { x0, x1, z0, z1 } }
@@ -157,8 +155,10 @@ export function authorCover(far: number, cell: number): CoverGrid {
     const road = LINES.find(l => polyLineGap(yards[k], l.pts) < l.w / 2 + YARD_PAD)
     if (road) throw new Error(`cover: the ${b.model}'s yard at ${b.x}, ${b.z} reaches a ${road.cls === COVER.road ? 'road' : 'track'}`)
     const xs = yards[k].map(p => p[0]), zs = yards[k].map(p => p[1])
-    for (let x = Math.min(...xs); x <= Math.max(...xs); x += 1) for (let z = Math.min(...zs); z <= Math.max(...zs); z += 1)
-      if (onPaving(x, z) && (inFormationZone(x, z) || onFloodplain(x, z))) throw new Error(`cover: the ${b.model}'s yard at ${b.x}, ${b.z} reaches a formation zone or the floodplain (at ${x.toFixed(0)}, ${z.toFixed(0)})`)
+    // (the yard's ground in the cover, YARD_PAD past its paving: a zone's or the floodplain's meadow inside that would cut
+    // the cobbles' ragged edge straight)
+    for (let x = Math.min(...xs) - YARD_PAD; x <= Math.max(...xs) + YARD_PAD; x += 1) for (let z = Math.min(...zs) - YARD_PAD; z <= Math.max(...zs) + YARD_PAD; z += 1)
+      if (onPaving(x, z, YARD_PAD) && (inFormationZone(x, z) || onFloodplain(x, z))) throw new Error(`cover: the ${b.model}'s yard at ${b.x}, ${b.z} reaches a formation zone or the floodplain (at ${x.toFixed(0)}, ${z.toFixed(0)})`)
   })
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const x = x0 + (i + 0.5) * cell, z = z0 + (j + 0.5) * cell, o = (j * n + i) * 4

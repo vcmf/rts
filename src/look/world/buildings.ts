@@ -6,6 +6,7 @@
 // pavePaint) all use (test/buildings.test.ts pins it against Babylon's Matrix; measured on the page too: a house at a
 // yaw of −π/2 + 0.14 has its door, local (0, −3.35), 3.32 m east of its centre). The models' fronts (the house's door)
 // face −z before the turn: a yaw of 0 faces −z (south), π/2 −x (west, the road), −π/2 +x (east), π +z (north)
+import { segD } from './geom.ts'
 export interface Building { model: 'windmill' | 'house'; x: number; z: number; yaw: number; scale: number }
 // a local offset (x, z) of a building turned by yaw, in the world (the inverse: toLocal)
 export const toWorld = (yaw: number, x: number, z: number): [number, number] => { const c = Math.cos(yaw), s = Math.sin(yaw); return [x * c + z * s, -x * s + z * c] }
@@ -71,7 +72,6 @@ export function pavePoly(b: Building): [number, number][] {
 }
 type P2 = [number, number]
 type R2 = readonly [number, number]
-const segPt = (x: number, z: number, a: R2, b: R2) => { const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1))); return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz) }
 const side = (a: R2, b: R2, c: R2) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
 const crosses = (a: R2, b: R2, c: R2, e: R2) => side(a, b, c) !== side(a, b, e) && side(c, e, a) !== side(c, e, b)
 const inside = (pt: R2, poly: P2[]) => { const s = poly.map((v, i) => side(v, poly[(i + 1) % poly.length], pt)); return s.every(v => v >= 0) || s.every(v => v <= 0) }
@@ -81,7 +81,7 @@ export function polyGap(p: P2[], q: P2[]): number {
   if (p.some(v => inside(v, q)) || q.some(v => inside(v, p))) return 0
   for (let i = 0; i < p.length; i++) for (let j = 0; j < q.length; j++) if (crosses(p[i], p[(i + 1) % p.length], q[j], q[(j + 1) % q.length])) return 0
   let d = Infinity
-  for (const [P, R] of [[p, q], [q, p]]) for (const v of P) for (let i = 0; i < R.length; i++) d = Math.min(d, segPt(v[0], v[1], R[i], R[(i + 1) % R.length]))
+  for (const [P, R] of [[p, q], [q, p]]) for (const v of P) for (let i = 0; i < R.length; i++) d = Math.min(d, segD(v[0], v[1], R[i], R[(i + 1) % R.length]))
   return d
 }
 // the distance from a convex polygon to a polyline, m (0 where the line enters it)
@@ -90,7 +90,7 @@ export function polyLineGap(poly: P2[], line: readonly R2[]): number {
   let d = Infinity
   for (let k = 0; k + 1 < line.length; k++) {
     const a = line[k], b = line[k + 1]
-    for (let i = 0; i < poly.length; i++) { const c = poly[i], e = poly[(i + 1) % poly.length]; if (crosses(a, b, c, e)) return 0; d = Math.min(d, segPt(c[0], c[1], a, b), segPt(a[0], a[1], c, e), segPt(b[0], b[1], c, e)) }
+    for (let i = 0; i < poly.length; i++) { const c = poly[i], e = poly[(i + 1) % poly.length]; if (crosses(a, b, c, e)) return 0; d = Math.min(d, segD(c[0], c[1], a, b), segD(a[0], a[1], c, e), segD(b[0], b[1], c, e)) }
   }
   return d
 }

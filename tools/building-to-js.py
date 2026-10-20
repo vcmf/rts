@@ -131,8 +131,11 @@ def main():
     before = {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()}
     set_roles(obj, role)
     smear0 = smear(obj)
-    if cfg.get('sails'): sails(obj, cfg['sails'])
-    decimate(obj, cfg['tris'])
+    # the windmill's lattice taken out and measured first (its arms), the cut, then the solid blades built on the cut
+    # mesh (a cut after them flattened their thin boxes: their faces checked once built, so built last)
+    plan = sails_find(obj, cfg['sails']) if cfg.get('sails') else None
+    decimate(obj, cfg['tris'] - (SAIL_TRIS if plan else 0))
+    if plan: sails_build(obj, cfg['sails'], *plan); triangulate(obj)
     me = obj.data; uvl = me.uv_layers.active.data   # (the mesh's layers made again by the cut: read them anew)
     role = np.array([f.material_index for f in me.polygons])
     after = {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()}
@@ -180,11 +183,7 @@ def main():
     k_ = DETAIL_BOX; pad = np.pad(val, k_, mode='edge'); c_ = pad.cumsum(0).cumsum(1); c_ = np.pad(c_, ((1, 0), (1, 0)))
     n_ = 2 * k_ + 1; loc = (c_[n_:, n_:] - c_[:-n_, n_:] - c_[n_:, :-n_] + c_[:-n_, :-n_]) / (n_ * n_)
     det = np.clip(val / np.maximum(loc, 1e-3), *DETAIL_CLIP)
-    if sw_ != 512 or sh_ != 512: raise SystemExit(f'{name}: the detail is {sw_}x{sh_}, NEUTRAL_UV assumes 512²')
-    det[:NEUTRAL_N, :NEUTRAL_N] = 1.0   # (the neutral block: rows from the bottom, as the UVs)
     det8 = np.clip(det * 128, 0, 255).astype(np.uint8)
-    nv = det8[int(NEUTRAL_UV[1] * sh_), int(NEUTRAL_UV[0] * sw_)] / 128
-    if not 0.95 <= nv <= 1.05: raise SystemExit(f'{name}: the neutral texel reads {nv}')
     out_dir = os.path.join(REPO, 'data', 'buildings'); os.makedirs(out_dir, exist_ok=True)
     im = bpy.data.images.new(name + '-detail', sw_, sh_, alpha=False); g = det8.astype(np.float32) / 255
     im.pixels[:] = np.dstack([g, g, g, np.ones_like(g)]).ravel(); im.filepath_raw = os.path.join(out_dir, name + '-detail.png'); im.file_format = 'PNG'; im.save()
@@ -236,12 +235,11 @@ def smear(obj):
 def triangulate(obj):
     bm = bmesh.new(); bm.from_mesh(obj.data); bmesh.ops.triangulate(bm, faces=bm.faces[:]); bm.to_mesh(obj.data); bm.free()
 
-# the detail's neutral texel: a block of NEUTRAL_N texels at the detail's corner written at value 1 (main), where the
-# generated faces (the windmill's sails) take their UV, so they show their palette colour as it is
-NEUTRAL_N = 9
-NEUTRAL_UV = ((NEUTRAL_N // 2 + 0.5) / 512, (NEUTRAL_N // 2 + 0.5) / 512)
+# the generated faces' UV (the windmill's sails): below 0, which building.frag reads as no detail (value 1), so they
+# show their palette colour as it is and no texel of the atlas is given up for them (Tripo packs it full)
+NEUTRAL_UV = (-1.0, -1.0)
 
-def sails(obj, cfg):
+def sails_find(obj, cfg):
     # the windmill's sails: its lattice (thin loose parts in the plane just before the cap: cfg, MODELS) taken out and
     # made again as four arms in the same X: a stock (timber, a long thin box) and a solid blade on its trailing side
     # (the canvas: the accent role), the hub and each arm's direction and length from the lattice's own vertices
@@ -282,6 +280,15 @@ def sails(obj, cfg):
     print('the sails: hub', hub.round(3), 'arms', [(a[0].round(2).tolist(), round(float(a[1]), 3)) for a in arms], 'lattice faces', len(sail))
     if len(arms) != 4: raise SystemExit(f'the windmill: {len(arms)} sail arms found, four expected')
     bmesh.ops.delete(bm, geom=list({g for g in sail}), context='FACES')
+    bm.normal_update(); bm.to_mesh(me); bm.free()
+    return hub, arms
+
+# the triangles of the generated sails: four arms, a stock and a blade each, six quads a box
+SAIL_TRIS = 4 * 2 * 6 * 2
+
+def sails_build(obj, cfg, hub, arms):
+    # the stocks and blades (sails_find's hub and arms) built on the cut mesh, each box's faces outward (checked)
+    me = obj.data; bm = bmesh.new(); bm.from_mesh(me)
     uvl = bm.loops.layers.uv.active; made = []
     def box(c0, c1, wdt, dep, mat):   # a box from c0 to c1 (x, z in the plane, y the plane's depth), wdt across, dep deep
         a = np.array([c0[0], hub[1], c0[1]]); b = np.array([c1[0], hub[1], c1[1]]); t = (b - a) / np.linalg.norm(b - a); n_ = np.array([0.0, 1.0, 0.0]); s_ = np.cross(t, n_)
