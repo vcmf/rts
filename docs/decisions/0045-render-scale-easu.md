@@ -10,7 +10,7 @@ date: 2026-10-20
 Decision 0036 set 60 fps as the hard target and 120 fps as the soft one, and a render scale by zoom: 1 at the close
 and default zooms, 0.9, 0.8 and 0.75 farther out, the browser stretching the smaller canvas (bilinear). The owner
 (2026-10-19): 114-118 fps at the river view at default zoom on main, and the armies still to come; the aim is about
-150 fps uncapped for the world (PR #122's plan). Measured on the production build (Metal, headless
+150 fps uncapped for the world (`docs/plans/done/headroom.md`). Measured on the production build (Metal, headless
 1920×1080, interleaved, three rounds, medians): a fixed 0.9 saves about 1.1 ms at the default and closest zooms, the
 largest single lever found; stretched, it is visibly softer (the grass, the crowns' edges, the paper grain). FSR 1's
 edge-adaptive upscale (EASU, AMD; shipped with Babylon 9.29) at 0.9 is hard to tell from 1 in side-by-side crops; its

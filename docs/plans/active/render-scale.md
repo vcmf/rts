@@ -5,8 +5,9 @@ last_reviewed: 2026-10-20
 
 # Plan: the render scale 0.9 near, upscaled by EASU
 
-Frame headroom, step 2 (step 1 the road split, PR #122, whose plan records the cost ablations). The owner
-(2026-10-20): yes to the render scale 0.9, with a good upscaler. Decision 0045 records the choice; this plan the work.
+Frame headroom, step 2 (step 1 the road split, #122: `docs/plans/done/headroom.md`, with the cost ablations). The
+owner (2026-10-20): yes to the render scale 0.9, with a good upscaler. Decision 0045 records the choice; this plan the
+work.
 
 ## Scope
 
