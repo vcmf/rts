@@ -22,6 +22,7 @@ if (!fs.existsSync(CHROME)) { console.error(`Chrome not found at ${CHROME} (set 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-'))
 let chrome, ws, pageErrors = 0
+const FATAL = ['Unable to compile effect', 'texture image units count exceeds']
 // close the socket, stop Chrome, wait for it to exit (it flushes the profile on the way out), then remove the profile
 async function cleanup() {
   try { ws?.close() } catch {}
@@ -62,7 +63,12 @@ try {
     if (m.id && pend[m.id]) { pend[m.id](m); delete pend[m.id] }
     if (m.method === 'Page.loadEventFired') loaded = true
     if (m.method === 'Runtime.exceptionThrown') { pageErrors++; console.log('EXC', JSON.stringify(m.params.exceptionDetails).slice(0, 600)) }
-    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') { pageErrors++; console.log('ERR', JSON.stringify(m.params.args.map(a => a.value)).slice(0, 400)) }
+    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') {
+      pageErrors++; const text = JSON.stringify(m.params.args.map(a => a.value)); console.log('ERR', text.slice(0, 400))
+      // a shader that does not compile never makes its material ready: the page waits forever (the bench waited its
+      // whole hour on Metal): stop at once, failed (FATAL: the messages that end a run)
+      if (FATAL.some(f => text.includes(f))) { console.error('shot.mjs: the page logged a fatal error, stopping:', text.slice(0, 300)); cleanup().then(() => process.exit(1)); return }
+    }
   }
   const TIMEOUT = +(process.env.SHOT_TIMEOUT_S || 60) * 1000   // per DevTools call; long evals (formation-measure.js) raise it
   const send = (method, params = {}) => new Promise((res, rej) => {

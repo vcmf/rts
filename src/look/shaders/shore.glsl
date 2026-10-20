@@ -168,8 +168,16 @@ vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT)
 // cover paints the village's ground worn to nothing (a building's footprint and its yard are: cover.ts), so the live
 // roads' material alone carries it (the road split, terrain.ts) and the rest of the village pays a loop of a few
 // buildings. Its colours kept near their mean (PAVE_KEEP) so it reads as ground; the season, the snow and the light are
-// the ground's (it is painted before them). uPaveOn 0 (the macro bake, or the texture not loaded): the far look (below)
-uniform vec4 uPaveA[16],uPaveB[16];uniform float uPaveN,uPaveOn;uniform sampler2D uPaving;
+// the ground's (it is painted before them). uPaveOn 0 (the texture not loaded) or PAVING_FAR (the macro bake): the far
+// look (below)
+// PAVING: the cobbles and their far look (the tile terrain's live material: src/look/terrain.ts); PAVING_FAR: the far
+// look alone, no texture (the macro bake). Neither on the water's materials: the paving's sampler would be one too many
+// on Metal (16 a fragment shader: Materials.make counts them), and no building stands at the water
+#if defined(PAVING)||defined(PAVING_FAR)
+uniform vec4 uPaveA[16],uPaveB[16];uniform float uPaveN;
+#ifdef PAVING
+uniform float uPaveOn;uniform sampler2D uPaving;
+#endif
 #define PAVE_M 4.5
 #define PAVE_MEAN vec3(0.558,0.481,0.369)
 #define PAVE_KEEP 0.8
@@ -190,10 +198,14 @@ vec3 pavePaint(vec3 c,vec2 xz){
   // the level of detail (as the roads' tracks and grit): the cobbles while a pixel spans under half a stone (7 cm),
   // gone by 22 cm; past them their mean in a soft blotch over a few metres, no texture read; under them the same
   // blotch, so the cobbles' mean (their mipmaps') meets it. The macro bake (uPaveOn 0, 0.5 m texels) paints the same
-  float v=0.6*mValue(xz/3.3+1.7)+0.4*mValue(xz/1.4+5.3),bl=0.92+0.16*v,lod=(1.0-smoothstep(0.07,0.22,pxMacro()))*step(0.5,uPaveOn);
+  float v=0.6*mValue(xz/3.3+1.7)+0.4*mValue(xz/1.4+5.3),bl=0.92+0.16*v;
   vec3 p=PAVE_MEAN*bl;
+  #ifdef PAVING
+  float lod=(1.0-smoothstep(0.07,0.22,pxMacro()))*step(0.5,uPaveOn);
   if(lod>0.0)p=mix(p,(PAVE_MEAN+(texM(uPaving,xz/PAVE_M,PAVE_M).rgb-PAVE_MEAN)*PAVE_KEEP)*bl,lod);
+  #endif
   return mix(c,p,k);}
+#endif
 vec3 roadPaint(vec3 c,vec2 xz){
   #if defined(MACRO_FLAT)||defined(MACRO_SAB_ONECLASS)
   return c;   // the flat arm and the class check's sabotage: the class colour alone (as dirtOn)
@@ -202,7 +214,9 @@ vec3 roadPaint(vec3 c,vec2 xz){
   // the class cells under it share one edge (a gentle sway of up to 1.5 m, over tens of metres)
   vec4 cv0=coverAt(xz);
   if(cv0.w>ROAD_GATE)return c;   // (most of the tile, before the warp: ROAD_NEAR and the warp's reach, src/look/spec.ts)
+  #if defined(PAVING)||defined(PAVING_FAR)
   if(cv0.x>4.5&&cv0.x<5.5&&cv0.w<0.05)c=pavePaint(c,xz);   // (the village's ground worn to nothing: the buildings')
+  #endif
   float jn,dist,past,ot;vec4 r=roadAt(coverWarp(xz),jn,dist,past,ot);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
   // the patterns laid along the road (by s) give way at a junction, where s jumps from one line to the other, to the
   // same patterns laid in the world (by xz)

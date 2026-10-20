@@ -13,6 +13,7 @@ import MEADOW from './shaders/meadow.glsl?raw'
 import type { Color3 } from '@babylonjs/core/Maths/math.color.js'
 import { lockMood, MOOD, SEASON, type Mood, type SeasonLight } from './mood.ts'
 import { D } from './spec.ts'
+import type { Effect } from '@babylonjs/core/Materials/effect.js'
 
 // the panel's state; t is the clock (cloud drift, water flow)
 export const S = { grain: 1, gamt: 0.9, edges: 1, clouds: 1, shadows: 1, ao: 1, mist: 1, shafts: 1, back: 1, grade: 1, bloom: 1, dof: 1, dofAmt: 1, res: 0, season: 0, t: 0 }
@@ -63,6 +64,7 @@ const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uGra
 export interface MatOptions { attributes?: string[]; uniforms?: string[]; samplers?: string[]; alpha?: boolean; defines?: string[]; perFrame?: boolean }
 
 // every painted material, so per-frame uniforms and a new grain reach all of them
+export const MAX_SAMPLERS = 16
 export class Materials {
   readonly all: ShaderMaterial[] = []
   private readonly every: ShaderMaterial[] = []   // all, and the ones kept out of it (the bake's)
@@ -85,7 +87,23 @@ export class Materials {
     m.setVector3('uSunDir', SUN); m.setTexture('uGrain', this.grain); m.setVector2('uGrainMean', new Vector2(...this.grainMean))
     this.every.push(m)
     if (perFrame) { this.all.push(m); for (const b of this.binders) b(m) }
+    m.onCompiled = e => this.checkSamplers(name, e)
     return m
+  }
+  // a fragment shader may use 16 texture units on Metal (ANGLE's MAX_TEXTURE_IMAGE_UNITS there; SwiftShader allows more,
+  // so a material over it compiled in the checks and failed on the owner's GPU: the paving's sampler on the water). Each
+  // compiled program's active samplers counted (vertex and fragment together: strict) and the page stopped past 16;
+  // the counts kept for the tools (window.__look.samplers)
+  readonly samplers: Record<string, number> = {}
+  private checkSamplers(name: string, e: Effect): void {
+    const gl = (this.scene.getEngine() as unknown as { _gl?: WebGL2RenderingContext })._gl
+    const prog = (e as unknown as { _pipelineContext?: { program?: WebGLProgram } })._pipelineContext?.program
+    if (!gl || !prog) return
+    const SAMPLER = new Set<number>([gl.SAMPLER_2D, gl.SAMPLER_3D, gl.SAMPLER_CUBE, gl.SAMPLER_2D_SHADOW, gl.SAMPLER_2D_ARRAY, gl.SAMPLER_2D_ARRAY_SHADOW, gl.SAMPLER_CUBE_SHADOW, gl.INT_SAMPLER_2D, gl.INT_SAMPLER_3D, gl.INT_SAMPLER_CUBE, gl.INT_SAMPLER_2D_ARRAY, gl.UNSIGNED_INT_SAMPLER_2D, gl.UNSIGNED_INT_SAMPLER_3D, gl.UNSIGNED_INT_SAMPLER_CUBE, gl.UNSIGNED_INT_SAMPLER_2D_ARRAY])
+    let n = 0
+    for (let i = 0, k = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS) as number; i < k; i++) { const u = gl.getActiveUniform(prog, i); if (u && SAMPLER.has(u.type)) n += u.size }
+    this.samplers[name] = Math.max(this.samplers[name] ?? 0, n)
+    if (n > MAX_SAMPLERS) throw new Error(`the material ${name} uses ${n} texture units, over ${MAX_SAMPLERS} (Metal's per fragment shader: src/look/materials.ts)`)
   }
   // a new grain texture for every painted material, the bake's too; mean: its R and G channels' (the detail layer
   // renormalises about them)

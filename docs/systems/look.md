@@ -370,7 +370,11 @@ to it), each on its footprint's lowest ground, sunk 0.2 m. The turn is Babylon's
 Matrix (`test/buildings.test.ts`) and on the page: a local point (x, z) goes to (x cos + z sin, −x sin + z cos)
 (`toWorld`, `toLocal`: the one rule the footprints, the yards, the ground's samples and `pavePaint`'s frame use); the
 models' fronts face −z before it, so a yaw of π/2 faces west. Each stands in a paved yard (`pavePaint` in `shore.glsl`,
-in `roadPaint`'s path): the owner's cobbles (`data/paving-v1.png`, 4.5 m a repeat) over its footprint grown by a margin
+in `roadPaint`'s path, under `PAVING` on the tile terrain's live material only, `PAVING_FAR`, the far look without a
+texture, on the macro bake: the water's materials are at Metal's 16 texture units a fragment shader, and the paving's
+sampler on them was a 17th, which ANGLE-Metal refused, so the page never got ready there; `Materials.make` counts
+each compiled program's active samplers and stops the page past 16, `MAX_SAMPLERS`, and `tools/shot.mjs` stops a run at
+once on a shader that does not compile): the owner's cobbles (`data/paving-v1.png`, 4.5 m a repeat) over its footprint grown by a margin
 (the house's by 2.5 m and by 6 m before its door; the windmill's a 3 m ring), the exact shapes as uniform arrays
 (`paveShape`, ≤ 16), the edge ragged by a noise-wobbled distance (up to `PAVE_WOBBLE`, 1.15 m, past it). The cover
 paints each yard and a margin round it (`PAVE_WOBBLE` + 0.71 of a cover cell + 0.3 m) as the village's ground worn to

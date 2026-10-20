@@ -99,5 +99,10 @@ things get runtime light); the colour by palette roles with the texture's value 
   the arms clustered by angle and exactly four required; the sails on a neutral detail texel; the collapse not held at
   the UV seams (held, it could not cut: Tripo's atlas puts 94-96 % of the vertices on one) but its smear measured and
   bounded (0.000 for both).
+- Metal (2026-10-20): the paving's sampler, in `roadPaint`'s path, reached the water's materials too, a 17th texture
+  unit, which ANGLE-Metal refuses (16 a fragment shader; SwiftShader allows more, so the checks passed): the page never
+  got ready on the owner's GPU. The paving now under `PAVING` (the tile terrain's live material, 16 units) and
+  `PAVING_FAR` (the macro bake, no texture); the water's 16. `Materials.make` counts each compiled program's samplers
+  and stops the page past 16; `tools/shot.mjs` stops a run at once on a shader that does not compile.
 - To do: the owner's look; the bench against main; the guard and the checks.
 

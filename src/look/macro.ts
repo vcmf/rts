@@ -90,7 +90,7 @@ export interface Macro {
 // the roads' textures (src/look/main.ts): the bake paints them in (BAKE_FS, roadPaint as far out: uRoadFar 1), so far out the ground's
 // bake holds the roads and the terrain's live road shader runs only nearer (docs/plans/done/roads.md)
 // pave: the buildings' paving (shore.glsl, pavePaint): its texture and shapes (src/look/world/buildings.ts, paveShape);
-// the bake paints its mean (uPaveOn 0: at its texels the cobbles average to it)
+// the bake paints its far look (PAVING_FAR: no texture; at its texels the cobbles average to their mean)
 export interface RoadTextures { segs: BaseTexture; grid: BaseTexture; grit: BaseTexture; n: number; pave: { tex: BaseTexture; a: number[]; b: number[]; n: number } }
 // flow: the meadow's pattern combed (GRASS_FLOW, ?grass=flow): the materials' defines it shares (src/look/main.ts);
 // flowTex: the flow's textures (src/look/flow.ts), which the bake reads too; meadowMap: the meadow map
@@ -130,7 +130,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   earth.wrapU = earth.wrapV = Texture.WRAP_ADDRESSMODE; earth.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); m.setTexture('uEarth', earth); if (brush) m.setTexture('uMeadowBrush', brush) })
 
-  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN', 'uPaveOn'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit', 'uPaving', 'uFlow', 'uComb', 'uMeadow'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : []), ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []), ...(roads ? ['#define ROADS'] : [])]
+  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit', 'uFlow', 'uComb', 'uMeadow'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : []), ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []), ...(roads ? ['#define ROADS', '#define PAVING_FAR'] : [])]
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })
   // arm 5's filter, compiled on its first bake
   let kuwaharaW: EffectWrapper | null = null
@@ -171,7 +171,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
         e.setFloat4('uRect', x0 + i / n * world, x0 + j / n * world, x0 + (i + w) / n * world, x0 + (j + h) / n * world)
         e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex); if (brush) e.setTexture('uMeadowBrush', brush); if (flowTex) { e.setTexture('uFlow', flowTex.flow); e.setTexture('uComb', flowTex.comb) } if (meadowMap) e.setTexture('uMeadow', meadowMap)
         // the roads, without the grit (its marks are finer than a texel)
-        if (roads) { e.setTexture('uRoadSegs', roads.segs); e.setTexture('uRoadGrid', roads.grid); e.setTexture('uRoadGrit', roads.grit); e.setFloat('uRoadSegN', roads.n); e.setFloat('uRoadOn', 0); e.setTexture('uPaving', roads.pave.tex); e.setArray4('uPaveA', roads.pave.a); e.setArray4('uPaveB', roads.pave.b); e.setFloat('uPaveN', roads.pave.n); e.setFloat('uPaveOn', 0); e.setFloat('uRoadFar', 1) }
+        if (roads) { e.setTexture('uRoadSegs', roads.segs); e.setTexture('uRoadGrid', roads.grid); e.setTexture('uRoadGrit', roads.grit); e.setFloat('uRoadSegN', roads.n); e.setFloat('uRoadOn', 0); e.setArray4('uPaveA', roads.pave.a); e.setArray4('uPaveB', roads.pave.b); e.setFloat('uPaveN', roads.pave.n); e.setFloat('uRoadFar', 1) }
       })
       if (src !== t) draws += pass(t, n, kuwahara(), (e, i, j, w, h) => {
         e.setTexture('uSrc', src); e.setFloat('uN', n); e.setFloat4('uPx', i, j, i + w, j + h)
