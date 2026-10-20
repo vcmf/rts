@@ -12,6 +12,8 @@ import { PostProcess } from '@babylonjs/core/PostProcesses/postProcess.js'
 // the passes' vertex shader, loaded up front: PostProcess imports it lazily, but in the built page that load never
 // completed and the grade pass stayed not-ready (observed in L0c; the CDN build has it registered from the start)
 import '@babylonjs/core/Shaders/postprocess.vertex.js'
+// FSR 1's edge-adaptive upscale (EASU, AMD), as Babylon ships it: its source, our grain after it (easu, below)
+import '@babylonjs/core/Shaders/fsr1Upscale.fragment.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { LookState } from './materials.ts'
 import { D } from './spec.ts'
@@ -119,9 +121,25 @@ const withLens = (src: string) => src.replace('#include<dofcoc>', () => DOFCOC)
 Effect.ShadersStore.dofdownFragmentShader = withLens(DOFDOWN_FS)
 Effect.ShadersStore.dofFragmentShader = withLens(DOF_FS)
 Effect.ShadersStore.uberFragmentShader = withLens(UBER_FS)
+// the upscale (the render scale under 1, docs/plans/active/render-scale.md): FSR 1's EASU from the scene's pixels to
+// the screen's, then the paper grain and the dither the finishing pass leaves to it (uber.frag, UPSCALED), at the
+// screen's pixels: the paper is not stretched. The shader is Babylon's, its main replaced
+{
+  const src = Effect.ShadersStore.fsr1UpscalePixelShader, at = src.lastIndexOf('void main()')
+  if (at < 0) throw new Error('post: FSR 1 upscale shader without its main')
+  Effect.ShadersStore.easuFragmentShader = src.slice(0, at) + `uniform sampler2D uGrain;uniform float uGrainOn;
+float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+void main(){vec3 c=FsrEasuF(ivec2(gl_FragCoord.xy),con0,con1,con2,con3);
+  c*=1.0+(texture2D(uGrain,gl_FragCoord.xy/512.0).r-0.5)*0.06*uGrainOn;
+  c+=(h(gl_FragCoord.xy)+h(gl_FragCoord.yx+17.3)-1.0)/255.0;
+  gl_FragColor=vec4(c,1.0);}`
+}
 
 export class Post {
   private posts: PostProcess[] = []
+  // the scene's render scale under the screen (1: none), set by the page (main.ts: the zoom's Auto); under 1 the
+  // chain draws at it and EASU upscales (?upscale=bilinear: the canvas drawn smaller and stretched, as before)
+  scale = 1
   private readonly camera: ArcRotateCamera; private readonly engine: AbstractEngine; private readonly S: LookState; private readonly grain: () => BaseTexture
   private readonly ground: (x: number, z: number) => number
   // ground: the terrain's height, for the depth of field's focus
@@ -170,8 +188,9 @@ export class Post {
     // pass (uber). A pass draws into the next one's input, at the next one's ratio. (No tile passes: the near blur lies
     // in the bottom band of the frame only, so the band says where it can reach; two small tile passes cost about
     // 0.7 ms on the Mac, measured: docs/plans/done/dof-v2.md)
-    const d = S.dof ? pp('dofdown', ['uTexel', 'uOut', ...lens], [], sceneType) : null
-    const p = d ? pp('dof', ['uTexel', 'uHalf', 'uN', 'uNN', ...lens], [], sceneType, 0.5) : null
+    const k = this.scale, up = k < 1
+    const d = S.dof ? pp('dofdown', ['uTexel', 'uOut', ...lens], [], sceneType, k) : null
+    const p = d ? pp('dof', ['uTexel', 'uHalf', 'uN', 'uNN', ...lens], [], sceneType, 0.5 * k) : null
     let px = 0, npx = 0
     const lensUniforms = (e: Effect) => { e.setFloat('uBand', DOF.band); e.setFloat('uK', DOF.k); e.setFloat('uMaxPx', px); e.setFloat('uNBand', DOF_NEAR.band); e.setFloat('uNK', DOF_NEAR.k); e.setFloat('uNMaxPx', npx); e.setFloat('uNScreen', DOF_NEAR.screen) }
     if (d && p) {   // (p is made only with d: the test narrows both)
@@ -191,7 +210,7 @@ export class Post {
         e.setFloat('uNN', Math.min(24, Math.max(8, Math.ceil(0.25 * npx * npx)))); lensUniforms(e)
       }
     }
-    const u = pp('uber', ['uRes', 'uRenderScale', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV', 'uHalfTexel', 'uDofPaint'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, p ? 0.5 : 1.0, [p ? '#define DOF' : '', DEBUG.nanmark ? '#define NANMARK' : ''].filter(Boolean).join('\n') || null)
+    const u = pp('uber', ['uRes', 'uRenderScale', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV', 'uHalfTexel', 'uDofPaint'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, (p ? 0.5 : 1.0) * k, [p ? '#define DOF' : '', DEBUG.nanmark ? '#define NANMARK' : '', up ? '#define UPSCALED' : ''].filter(Boolean).join('\n') || null)
     // uRes: the full resolution (with the depth of field, this pass reads the half-resolution blur)
     u.onApply = e => {
       const r = d ?? u; e.setFloat2('uRes', r.width, r.height); e.setFloat('uGrainOn', S.grain); e.setFloat('uBloom', S.bloom); e.setTexture('uGrain', this.grain())
@@ -200,6 +219,17 @@ export class Post {
       // materials: src/look/materials.ts)
       e.setColor3('uVignette', MOOD.grade.vignette); e.setColor3('uSplitHi', MOOD.grade.splitHi); e.setFloat('uGradeSat', SEASON.sat); e.setFloat('uTopAmt', MOOD.grade.topAmt); e.setFloat('uGrade', S.grade)   // (uGradeSat: the season's, as the materials')
       if (d && p) { lensUniforms(e); e.setFloat2('uHalfUV', d.width / 2 / p.width, d.height / 2 / p.height); e.setFloat2('uHalfTexel', 1 / p.width, 1 / p.height); e.setFloat2('uDofPaint', DOF_PAINT.far, DOF_PAINT.near); e.setTextureFromPostProcess('uSharp', d) }
+    }
+    // the upscale: the finishing pass draws into its input at the scene's scale, it draws the screen
+    if (up) {
+      const x = pp('easu', ['con0', 'con1', 'con2', 'con3', 'uGrainOn'], ['uGrain'], Constants.TEXTURETYPE_UNSIGNED_BYTE, k)
+      x.onApply = e => {
+        const iw = x.width, ih = x.height, ow = engine.getRenderWidth(), oh = engine.getRenderHeight()
+        // (FsrEasuCon: the input's viewport is the whole of its texture)
+        e.setFloat4('con0', iw / ow, ih / oh, 0.5 * iw / ow - 0.5, 0.5 * ih / oh - 0.5)
+        e.setFloat4('con1', 1 / iw, 1 / ih, 1 / iw, -1 / ih); e.setFloat4('con2', -1 / iw, 2 / ih, 1 / iw, 2 / ih); e.setFloat4('con3', 0, 4 / ih, 0, 0)
+        e.setFloat('uGrainOn', S.grain); e.setTexture('uGrain', this.grain())
+      }
     }
   }
 }

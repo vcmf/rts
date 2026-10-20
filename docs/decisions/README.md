@@ -42,7 +42,7 @@ recorded here on 2026-10-08.
 | [0033](0033-temperate-is-the-default-mood.md) | The temperate mood is the default | superseded by 0043 |
 | [0034](0034-checks-re-baselined-for-the-default-mood.md) | The shimmer gate at the widest view is re-baselined for the temperate mood | accepted |
 | [0035](0035-units-take-the-bounce-hue.md) | Units take the ground's bounce at its full hue, at a share of its strength | accepted |
-| [0036](0036-frame-rate-targets-and-render-scale.md) | Frame rate: 60 fps hard, 120 fps soft; the render scale by zoom | accepted |
+| [0036](0036-frame-rate-targets-and-render-scale.md) | Frame rate: 60 fps hard, 120 fps soft; the render scale by zoom | superseded by 0045 |
 | [0037](0037-simulation-owns-animation-timing.md) | The simulation owns timing; animation is fitted to its phases | accepted |
 | [0038](0038-figure-pipeline-layout.md) | Figures: code in tools, sources out of git, a generated registry | accepted |
 | [0039](0039-roads-baked-far-live-near.md) | Roads: baked far out, painted live from mid zoom in | accepted |
@@ -51,4 +51,5 @@ recorded here on 2026-10-08.
 | [0042](0042-dark-water-shimmer-limits.md) | Dark water: the water's shimmer limits re-baselined | accepted |
 | [0043](0043-epic-is-the-default-mood.md) | The epic mood, after Tiny Glade, is the default | accepted |
 | [0044](0044-epic-shimmer-limits.md) | The water's shimmer limits re-baselined for the epic mood | accepted |
+| [0045](0045-render-scale-easu.md) | The render scale 0.9 from the closest zoom, upscaled by EASU | accepted |
 | [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | accepted |

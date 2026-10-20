@@ -61,6 +61,10 @@ setRiver(look.river); setHeightfield(look.hf, look.far, D.spec.tile / 2)
 const canvas = document.getElementById('c') as HTMLCanvasElement
 const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false }, false)
 engine.setHardwareScalingLevel(1)
+// the scene's own lines: the canvas's, or under the upscale its scale of them (upScale: the finishing chain's first
+// target's, set with post.scale below; Babylon floors a pass's size)
+let upScale = 1
+const sceneH = () => (engine.getRenderHeight() * upScale) | 0
 const scene = new Scene(engine); scene.skipPointerMovePicking = true
 
 // ?soft=off: the shadows before the soft-shadow plan (docs/plans/done/soft-shadows.md); ?penumbra: metres of edge
@@ -195,7 +199,7 @@ const meadowMap = meadowOn ? buildMeadowMap(scene, mats, nature.growth, grassAll
 // twice it, for the frame's foot, nearer than the focus), in the render's own pixels as strokeK measures them (pixA is
 // at the SPEC's lines). The marched depth, not the eased one (no lag as the camera zooms in), the last frame's (none
 // yet: it bakes)
-const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, { reach: RINGS[0].band[3], shows: () => !focusDist || pixA * D.spec.detail.lines / engine.getRenderHeight() * focusDist < 2 * STROKE_FOOT })
+const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, { reach: RINGS[0].band[3], shows: () => !focusDist || pixA * D.spec.detail.lines / sceneH() * focusDist < 2 * STROKE_FOOT })
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)
@@ -256,9 +260,24 @@ input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
 // level's edge (no flicker at an edge).
 // The interface is HTML over the canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
 const { rMin, rMax } = D.spec.camera, at = (f: number) => rMin + f * (rMax - rMin)   // the edges as shares of the zoom range
-const AUTO: [number, number][] = [[at(0.72), 1], [at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.75]], AUTO_HOLD = 4
+// From the closest zoom 0.9 (the owner, 2026-10-20: docs/plans/active/render-scale.md), upscaled by FSR 1's EASU in the
+// finishing chain (post.scale: the canvas stays at the page's pixels, the paper grain laid after the upscale);
+// ?upscale=bilinear: the canvas drawn smaller and stretched by the browser, as before (the A/B)
+const AUTO: [number, number][] = [[at(0.72), 0.9], [at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.75]], AUTO_HOLD = 4
+const upscaleParam = params.get('upscale')
+if (upscaleParam !== null && upscaleParam !== 'bilinear') throw new Error(`?upscale must be bilinear, not ${upscaleParam}`)
 let scaleNow = 1, level = 0
-const applyScale = (s: number) => { if (s !== scaleNow) { scaleNow = s; engine.setHardwareScalingLevel(1 / s) } }
+// EASU from 0.9 up (its pass costs about 0.35 ms at the screen's pixels: under 0.9, at the wide zooms, it cost more
+// than it saved, so there the browser's stretch as before)
+const EASU_MIN = 0.9
+const applyScale = (s: number) => {
+  if (s === scaleNow) return
+  scaleNow = s
+  const easu = upscaleParam !== 'bilinear' && s >= EASU_MIN && s < 1
+  engine.setHardwareScalingLevel(easu ? 1 : 1 / s)
+  const k = easu ? s : 1
+  if (post.scale !== k) { post.scale = upScale = k; post.build() }
+}
 const resSel = byId<HTMLSelectElement>('res')
 resSel.onchange = () => { S.res = +resSel.value }
 scene.onBeforeRenderObservable.add(() => {
@@ -380,7 +399,7 @@ scene.onBeforeRenderObservable.add(() => {
   for (const m of mats.all) {
     m.setFloat('uFocusZ', focusZ); m.setVector3('uCamFwd', camFwd)
     m.setVector3('uCamPos', camera.position); m.setVector3('uFocus', camera.target); m.setFloat('uTime', S.t)
-    m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uGrade', S.grade); m.setFloat('uViewH', engine.getRenderHeight()); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
+    m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uGrade', S.grade); m.setFloat('uViewH', sceneH()); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
     m.setFloat('uPixA', pixA)
     m.setFloat('uAO', S.ao); m.setFloat('uMist', S.mist); m.setFloat('uShafts', S.shafts); m.setFloat('uBack', S.back)
   }
