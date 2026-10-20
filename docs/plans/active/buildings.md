@@ -33,7 +33,7 @@ things get runtime light); the colour by palette roles with the texture's value 
   north-east part, `rect(50, 48, ...)`), the houses (6-8, the one model turned and scaled ±10 %) in the village
   ground east of the road, facing the road; none in a formation zone, on the floodplain, on a road or track. Each
   sits on the heightfield at its footprint's lowest corner, sunk 0.2 m.
-- **The ground under them**: the cover grid's footprints (and a metre round them) as the village's trodden ground
+- **The ground under them**: the cover grid's footprints (and their yards, below) as the village's trodden ground
   (`village`, not `bare`: the scatter keeps its stones off the village, not off bare earth), so nothing grows through
   a floor (the meadow's and the scatter's own rules read the cover; a hidden placement keeps the scatter's stream).
 - **Light**: in the shadow bake (it takes the scene's meshes: check the name filter), in the light map's occlusion if
@@ -72,10 +72,13 @@ things get runtime light); the colour by palette roles with the texture's value 
 
 - Built: the import (roles: windmill 727 wall, 144 roof, 6,947 timber, 24 openings of 7,842 faces; house 2,408 wall,
   1,691 roof, 2,450 timber, 863 openings, 865 accent of 8,277), the material, the placement (the windmill at (78, 66),
-  seven houses in the village facing the road), the footprints in the cover (the look data rebuilt), the shadow bake
+  houses in the village), the footprints in the cover (the look data rebuilt), the shadow bake
   and the light map's occlusion (a blob at each building's foot, as the trees').
-- The instance yaw measured on the page: a local point (x, z) goes to (x cos − z sin, x sin + z cos) (a yaw of π/2
-  turned the houses' fronts east: fixed to −π/2).
+- The instance yaw: first read wrongly from a screenshot (the yards were then built in the inverse frame, behind the
+  turned houses' doors); review round 1 measured it, with Babylon's Matrix and on the page (house 1 at a yaw of
+  −π/2 + 0.14 had its door, local (0, −3.35), at (+3.32, −0.47) from its centre): a local point (x, z) goes to
+  (x cos + z sin, −x sin + z cos). Now one rule (`toWorld`, `toLocal`) for the footprints, yards, ground samples and
+  the shader's frame, pinned by `test/buildings.test.ts`.
 - The paving built (2026-10-20): `pavePaint`, the cover's footprints grown to the yards (`onPaving`).
 - The owner's second round (2026-10-20): the houses each a quarter turn of its own (doors to the road, gable to it,
   side-on, back to it) and a little more, in an irregular cluster; six fit the village ground with their yards at

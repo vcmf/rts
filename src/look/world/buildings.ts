@@ -1,14 +1,19 @@
 // The demo map's buildings (docs/plans/active/buildings.md): authored, deterministic. Each a model of
 // prototypes/buildings.data.js (tools/building-to-js.py: metres, its base at 0, centred on its footprint), where it
-// stands (x, z), its turn (yaw, rad, Babylon's instance yaw: a local point (x, z) goes to (x cos − z sin, x sin + z cos),
-// measured on the page), its scale. The models' fronts (the house's door) face −z before the turn, so a yaw of −π/2
-// faces −x (the road, west of the village)
+// stands (x, z), its turn (yaw, rad) and its scale. The turn is Babylon's instance yaw (Quaternion.RotationYawPitchRoll
+// in Matrix.Compose, src/look/buildings.ts), which takes a local point (x, z) to (x cos + z sin, −x sin + z cos): toWorld
+// and toLocal below, the one rule the footprints, the yards, the ground's samples and the shader's frame (shore.glsl,
+// pavePaint) all use (test/buildings.test.ts pins it against Babylon's Matrix; measured on the page too: a house at a
+// yaw of −π/2 + 0.14 has its door, local (0, −3.35), 3.32 m east of its centre). The models' fronts (the house's door)
+// face −z before the turn: a yaw of 0 faces −z (south), π/2 −x (west, the road), −π/2 +x (east), π +z (north)
 export interface Building { model: 'windmill' | 'house'; x: number; z: number; yaw: number; scale: number }
+// a local offset (x, z) of a building turned by yaw, in the world (the inverse: toLocal)
+export const toWorld = (yaw: number, x: number, z: number): [number, number] => { const c = Math.cos(yaw), s = Math.sin(yaw); return [x * c + z * s, -x * s + z * c] }
+export const toLocal = (yaw: number, x: number, z: number): [number, number] => { const c = Math.cos(yaw), s = Math.sin(yaw); return [x * c - z * s, x * s + z * c] }
 // each model's ground footprint before its scale: a circle's radius (the windmill's tower and gallery) or a box's half
-// sizes along its own x and z (the house's walls, its eaves), m: the cover's village ground under it (cover.ts), so
-// nothing grows through a floor
+// sizes along its own x and z (the house's walls, its eaves), m
 export const FOOT: Record<Building['model'], { r?: number; hx?: number; hz?: number }> = { windmill: { r: 4.4 }, house: { hx: 5.6, hz: 4.4 } }
-const Q = Math.PI / 2   // a quarter turn: 0 the door south (−z), −Q west (to the road), Q east, 2Q north
+const Q = Math.PI / 2   // a quarter turn: 0 the door south (−z), Q west (to the road), −Q east, 2Q north
 export const BUILDINGS: readonly Building[] = [
   // the windmill in the large wheat field's north-east part (cover.ts: rect(50, 48, 45, 28, 0.1)), its sails to the
   // south-west, toward the start view
@@ -16,27 +21,17 @@ export const BUILDINGS: readonly Building[] = [
   // the village (cover.ts, VILLAGE): an irregular cluster east of the road, the houses turned each a quarter turn of its
   // own (two doors to the road, one gable to it, two side-on, one back to it) and a little more, their paved yards at
   // least PAVE_GAP apart (cover.ts checks it); six fit the village ground with their yards
-  { model: 'house', x: 208, z: -30, yaw: -Q + 0.14, scale: 1.0 },
+  { model: 'house', x: 208, z: -30, yaw: Q + 0.14, scale: 1.0 },
   { model: 'house', x: 232, z: -38, yaw: -0.12, scale: 0.95 },
   { model: 'house', x: 214, z: -6, yaw: 2 * Q + 0.1, scale: 1.04 },
-  { model: 'house', x: 240, z: -12, yaw: Q - 0.18, scale: 0.92 },
-  { model: 'house', x: 212, z: 20, yaw: -Q - 0.2, scale: 1.0 },
+  { model: 'house', x: 240, z: -12, yaw: -Q - 0.18, scale: 0.92 },
+  { model: 'house', x: 212, z: 20, yaw: Q - 0.2, scale: 1.0 },
   { model: 'house', x: 240, z: 18, yaw: 2 * Q + 0.16, scale: 1.06 },
 ]
 export const PAVE_GAP = 4   // the least ground between two buildings' paved yards, m
-// whether (x, z) lies on a building's footprint, grown by pad m
-export function onBuilding(x: number, z: number, pad = 0): boolean {
-  return BUILDINGS.some(b => {
-    const f = FOOT[b.model], dx = x - b.x, dz = z - b.z
-    if (f.r !== undefined) return Math.hypot(dx, dz) <= f.r * b.scale + pad
-    // into the building's own frame (the inverse of its yaw)
-    const c = Math.cos(b.yaw), s = Math.sin(b.yaw), lx = dx * c + dz * s, lz = -dx * s + dz * c
-    return Math.abs(lx) <= f.hx! * b.scale + pad && Math.abs(lz) <= f.hz! * b.scale + pad
-  })
-}
 
 // the paved yard round each building (the owner, 2026-10-20: docs/plans/active/buildings.md): its footprint grown by
-// side m all round, the house's by front m at its door (its local −z: a yard toward the road); its edge ragged into the
+// side m all round, the house's by front m at its door (its local −z: a yard before its door); its edge ragged into the
 // ground by the shader (shore.glsl, pavePaint: up to PAVE_WOBBLE m past it)
 export const PAVE: Record<Building['model'], { side: number; front: number }> = { windmill: { side: 3, front: 3 }, house: { side: 2.5, front: 6 } }
 export const PAVE_WOBBLE = 1.15
@@ -48,36 +43,53 @@ export function paveShape(b: Building): { a: [number, number, number, number]; b
   if (f.r !== undefined) return { a: [b.x, b.z, c, s], b: [-(f.r * b.scale + p.side), 0, 0, 0] }
   return { a: [b.x, b.z, c, s], b: [f.hx! * b.scale + p.side, f.hz! * b.scale + p.side, f.hz! * b.scale + p.front, 1.5] }
 }
-// whether (x, z) lies on a building's paving, grown by pad m (its local frame: the inverse of its yaw)
-export function onPaving(x: number, z: number, pad = 0): boolean {
-  return BUILDINGS.some(b => {
-    const { a, b: q } = paveShape(b), dx = x - a[0], dz = z - a[1]
-    if (q[0] < 0) return Math.hypot(dx, dz) <= -q[0] + pad
-    const lx = dx * a[2] + dz * a[3], lz = -dx * a[3] + dz * a[2]
-    return Math.abs(lx) <= q[0] + pad && lz <= q[1] + pad && lz >= -q[2] - pad
-  })
+// the signed distance from (x, z) to a building's paving, m (negative inside): its local frame (toLocal), a rounded box
+// off centre along z (its reach behind and in front differ) or a circle, as the shader measures it (pavePaint)
+function paveSdf(b: Building, x: number, z: number): number {
+  const q = paveShape(b).b, [lx, lz] = toLocal(b.yaw, x - b.x, z - b.z)
+  if (q[0] < 0) return Math.hypot(lx, lz) + q[0]
+  const zc = (q[1] - q[2]) / 2, ax = Math.abs(lx) - q[0] + q[3], az = Math.abs(lz - zc) - (q[1] + q[2]) / 2 + q[3]
+  return Math.hypot(Math.max(ax, 0), Math.max(az, 0)) + Math.min(Math.max(ax, az), 0) - q[3]
 }
+// the yards once, with each one's reach from its centre (the cover's authoring asks at every texel: onPaving, paveDist)
+let yards: { b: Building; reach: number }[] | null = null
+const theYards = () => yards ??= BUILDINGS.map(b => { const q = paveShape(b).b; return { b, reach: q[0] < 0 ? -q[0] : Math.hypot(q[0], Math.max(q[1], q[2])) } })
+// the distance from (x, z) to the nearest paving, m (0 on it); Infinity past far m of every yard's reach
+export function paveDist(x: number, z: number, far = 30): number {
+  let d = Infinity
+  for (const y of theYards()) if (Math.hypot(x - y.b.x, z - y.b.z) <= y.reach + far) d = Math.min(d, Math.max(0, paveSdf(y.b, x, z)))
+  return d
+}
+// whether (x, z) lies on a building's paving grown by pad m
+export const onPaving = (x: number, z: number, pad = 0): boolean => paveDist(x, z, pad) <= pad
 // a building's paving as a polygon on the ground (a box's four corners, a circle's sixteen points), in its turn
 export function pavePoly(b: Building): [number, number][] {
-  const { a, b: q } = paveShape(b), at = (lx: number, lz: number): [number, number] => [a[0] + lx * a[2] - lz * a[3], a[1] + lx * a[3] + lz * a[2]]
+  const q = paveShape(b).b, at = (lx: number, lz: number): [number, number] => { const [wx, wz] = toWorld(b.yaw, lx, lz); return [b.x + wx, b.z + wz] }
   if (q[0] < 0) return Array.from({ length: 16 }, (_, k) => at(Math.cos(k * Math.PI / 8) * -q[0], Math.sin(k * Math.PI / 8) * -q[0]))
   return [at(-q[0], -q[2]), at(q[0], -q[2]), at(q[0], q[1]), at(-q[0], q[1])]
 }
-// the gap between two convex polygons, m: 0 where they overlap (a point of one in the other), else the least distance
-// between their edges
-export function polyGap(p: [number, number][], q: [number, number][]): number {
-  const inside = (pt: [number, number], poly: [number, number][]) => poly.every((v, i) => { const w = poly[(i + 1) % poly.length]; return (w[0] - v[0]) * (pt[1] - v[1]) - (w[1] - v[1]) * (pt[0] - v[0]) >= 0 })
-    || poly.every((v, i) => { const w = poly[(i + 1) % poly.length]; return (w[0] - v[0]) * (pt[1] - v[1]) - (w[1] - v[1]) * (pt[0] - v[0]) <= 0 })
+type P2 = [number, number]
+type R2 = readonly [number, number]
+const segPt = (x: number, z: number, a: R2, b: R2) => { const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1))); return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz) }
+const side = (a: R2, b: R2, c: R2) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
+const crosses = (a: R2, b: R2, c: R2, e: R2) => side(a, b, c) !== side(a, b, e) && side(c, e, a) !== side(c, e, b)
+const inside = (pt: R2, poly: P2[]) => { const s = poly.map((v, i) => side(v, poly[(i + 1) % poly.length], pt)); return s.every(v => v >= 0) || s.every(v => v <= 0) }
+// the gap between two convex polygons, m: 0 where they overlap (a point of one in the other, or edges crossing as a
+// plus), else the least distance between their edges
+export function polyGap(p: P2[], q: P2[]): number {
   if (p.some(v => inside(v, q)) || q.some(v => inside(v, p))) return 0
-  // (two boxes crossing as a plus: no corner of one in the other, but their edges cross)
-  const side = (a: [number, number], b: [number, number], c: [number, number]) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
-  for (let i = 0; i < p.length; i++) for (let j = 0; j < q.length; j++) {
-    const a = p[i], b = p[(i + 1) % p.length], c = q[j], e = q[(j + 1) % q.length]
-    if (side(a, b, c) !== side(a, b, e) && side(c, e, a) !== side(c, e, b)) return 0
-  }
-  const segPt = (x: number, z: number, a: [number, number], b: [number, number]) => { const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz))); return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz) }
+  for (let i = 0; i < p.length; i++) for (let j = 0; j < q.length; j++) if (crosses(p[i], p[(i + 1) % p.length], q[j], q[(j + 1) % q.length])) return 0
   let d = Infinity
-  for (const [P, Q] of [[p, q], [q, p]]) for (const v of P) for (let i = 0; i < Q.length; i++) d = Math.min(d, segPt(v[0], v[1], Q[i], Q[(i + 1) % Q.length]))
+  for (const [P, R] of [[p, q], [q, p]]) for (const v of P) for (let i = 0; i < R.length; i++) d = Math.min(d, segPt(v[0], v[1], R[i], R[(i + 1) % R.length]))
   return d
 }
-
+// the distance from a convex polygon to a polyline, m (0 where the line enters it)
+export function polyLineGap(poly: P2[], line: readonly R2[]): number {
+  if (line.some(v => inside(v, poly))) return 0
+  let d = Infinity
+  for (let k = 0; k + 1 < line.length; k++) {
+    const a = line[k], b = line[k + 1]
+    for (let i = 0; i < poly.length; i++) { const c = poly[i], e = poly[(i + 1) % poly.length]; if (crosses(a, b, c, e)) return 0; d = Math.min(d, segPt(c[0], c[1], a, b), segPt(a[0], a[1], c, e), segPt(b[0], b[1], c, e)) }
+  }
+  return d
+}

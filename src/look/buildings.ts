@@ -12,7 +12,7 @@ import '../../prototypes/buildings.data.js'
 import type { Materials } from './materials.ts'
 import type { Nature } from './nature.ts'
 import { H } from './heightfield.ts'
-import { BUILDINGS, FOOT, type Building } from './world/buildings.ts'
+import { BUILDINGS, FOOT, toWorld, type Building } from './world/buildings.ts'
 import BUILDING_VS from './shaders/building.vert?raw'
 import BUILDING_FS from './shaders/building.frag?raw'
 import WINDMILL_DETAIL from '../../data/buildings/windmill-detail.png?url'
@@ -50,9 +50,9 @@ export function buildBuildings(scene: Scene, mats: Materials, canopy: Nature['ca
     // each on its footprint's lowest ground (its corners and its centre, or round its circle), sunk 0.2 m so no gap shows
     const buf = new Float32Array(items.length * 16)
     items.forEach((b, i) => {
-      const f = FOOT[b.model], c = Math.cos(b.yaw), s = Math.sin(b.yaw)
+      const f = FOOT[b.model]
       const pts: [number, number][] = f.r !== undefined ? Array.from({ length: 8 }, (_, k) => [Math.cos(k * Math.PI / 4) * f.r! * b.scale, Math.sin(k * Math.PI / 4) * f.r! * b.scale])
-        : [[-f.hx!, -f.hz!], [f.hx!, -f.hz!], [f.hx!, f.hz!], [-f.hx!, f.hz!]].map(([x, z]) => [(x * c - z * s) * b.scale, (x * s + z * c) * b.scale])
+        : [[-f.hx!, -f.hz!], [f.hx!, -f.hz!], [f.hx!, f.hz!], [-f.hx!, f.hz!]].map(([x, z]) => toWorld(b.yaw, x * b.scale, z * b.scale))
       const y = Math.min(H(b.x, b.z), ...pts.map(([dx, dz]) => H(b.x + dx, b.z + dz))) - 0.2
       _t.set(b.x, y, b.z); Quaternion.RotationYawPitchRollToRef(b.yaw, 0, 0, _q); _s.set(b.scale, b.scale, b.scale); Matrix.ComposeToRef(_s, _q, _t, _m); _m.copyToArray(buf, i * 16)
       // the sky it hides at its foot (the light map's occlusion, as a tree's contact: nature.ts smBlob)

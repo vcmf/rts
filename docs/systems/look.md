@@ -362,22 +362,26 @@ page paints each role from its palette (`src/look/buildings.ts`, `PALETTE`, mute
 keeps only its value about each role's mean (`data/buildings/<model>-detail.png`, 128 = 1), a third of it showing
 (`DETAIL_AMT`) under the paint's grain (`shaders/building.frag`: the painter's ramp, the cast shadow, the sky's
 occlusion, the ground's bounce, the snow on what faces up, the air). One instanced mesh a model. Placed in
-`src/look/world/buildings.ts` (authored: the windmill in the large wheat field, seven houses in the village facing the
-road), each on its footprint's lowest ground, sunk 0.2 m; the cover's authoring fails if one stands in a formation
-zone, on the floodplain or on a road, and paints its footprint and a metre round it as the village's ground, so no
-grass, crop, tree or stone grows through a floor (`docs/plans/active/buildings.md`). Static: their shadows go into the
-sun's bake with the scene's meshes, the sky they hide into the light map's occlusion as a blob at their foot (the
-trees' contact). The instance yaw, measured on the page: a local point (x, z) goes to (x cos − z sin, x sin + z cos).
-Each stands in a paved yard (`pavePaint` in `shore.glsl`, in `roadPaint`'s path): the owner's cobbles
-(`data/paving-v1.png`, 4.5 m a repeat) over its footprint grown by a margin (the house's wider at its door, toward the
-road; the windmill's a ring), the exact shapes as uniform arrays (`paveShape`, ≤ 16), the edge ragged by a noise-wobbled
-distance; read only where the cover paints the village's ground worn to nothing, which the buildings' cover reaches
-(so only the road split's live material carries it); the macro bake paints the cobbles' mean. Its level of detail as the roads': the cobbles fade out from a 7 cm to a
-22 cm pixel footprint into their mean in a soft blotch over a few metres (no texture read past it), what the macro bake
-paints too. The houses each turn a quarter turn of their own, their yards (on the door's side) at least `PAVE_GAP`
-apart (the cover's authoring checks it). The detail texture is the texture's value over its local mean; the buildings
-look the sun's shadow up 15 cm off their surface and break their band edges with a third of the ground's grain (on
-flat faces the full grain and the shadow's self-test made specks).
+`src/look/world/buildings.ts` (authored: the windmill in the large wheat field; six houses in an irregular cluster in
+the village, each turned a quarter turn of its own and a little more: doors to the road, a gable to it, side-on, a back
+to it), each on its footprint's lowest ground, sunk 0.2 m. The turn is Babylon's instance yaw, verified against its
+Matrix (`test/buildings.test.ts`) and on the page: a local point (x, z) goes to (x cos + z sin, −x sin + z cos)
+(`toWorld`, `toLocal`: the one rule the footprints, the yards, the ground's samples and `pavePaint`'s frame use); the
+models' fronts face −z before it, so a yaw of π/2 faces west. Each stands in a paved yard (`pavePaint` in `shore.glsl`,
+in `roadPaint`'s path): the owner's cobbles (`data/paving-v1.png`, 4.5 m a repeat) over its footprint grown by a margin
+(the house's by 2.5 m and by 6 m before its door; the windmill's a 3 m ring), the exact shapes as uniform arrays
+(`paveShape`, ≤ 16), the edge ragged by a noise-wobbled distance (up to `PAVE_WOBBLE`, 1.15 m, past it). The cover
+paints each yard and a margin round it (`PAVE_WOBBLE` + 0.71 of a cover cell + 0.3 m) as the village's ground worn to
+nothing, so no grass, crop, tree or stone grows on it and only the road split's live material reads it (its roads and
+tracks keep their class); past that margin the yard's distance feeds the wear as the village's ring does, so the
+trodden edge fades. The cover's authoring fails if a yard comes within that margin of a road or a track, reaches a
+formation zone or the floodplain (a point every metre over it), or lies within `PAVE_GAP` (4 m) of another yard. The
+paving's level of detail is the roads': the cobbles fade out from a 7 cm to a 22 cm pixel footprint into their mean in
+a soft blotch over a few metres (no texture read past it), which the macro bake paints too. The detail texture is the
+texture's value over its local mean (box-averaged to 512²); the buildings look the sun's shadow up 15 cm off their
+surface and break their band edges with a third of the ground's grain (on flat faces the full grain and the shadow's
+self-test made specks). Static: their shadows go into the sun's bake with the scene's meshes, the sky they hide into
+the light map's occlusion as a blob at their foot (the trees' contact).
 
 ### The shadows' look
 

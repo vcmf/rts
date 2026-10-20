@@ -163,7 +163,8 @@ vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT)
 // THE PAVING (docs/plans/active/buildings.md): a paved yard round each building, the owner's cobbles (data/paving-v1.png,
 // uPaving, about PAVE_M m a repeat) on the ground under it, its edge ragged into the ground. The buildings' shapes
 // (src/look/world/buildings.ts, paveShape: uPaveN of them): a, the centre and the turn (x, z, cos, sin); b, a box's half
-// width, its reach behind and in front of the centre and its corners' radius, or a circle (−radius). Only where the
+// width, its reach behind and in front of the centre and its corners' radius, or a circle (−radius); l, the point in
+// the building's frame (world/buildings.ts, toLocal: Babylon's instance yaw undone). Only where the
 // cover paints the village's ground worn to nothing (a building's footprint and its yard are: cover.ts), so the live
 // roads' material alone carries it (the road split, terrain.ts) and the rest of the village pays a loop of a few
 // buildings. Its colours kept near their mean (PAVE_KEEP) so it reads as ground; the season, the snow and the light are
@@ -176,7 +177,7 @@ vec3 pavePaint(vec3 c,vec2 xz){
   float d=1e9;
   for(int i=0;i<16;i++){
     if(float(i)>=uPaveN)break;
-    vec4 a=uPaveA[i],b=uPaveB[i];vec2 p=xz-a.xy,l=vec2(p.x*a.z+p.y*a.w,-p.x*a.w+p.y*a.z);float e;
+    vec4 a=uPaveA[i],b=uPaveB[i];vec2 p=xz-a.xy,l=vec2(p.x*a.z-p.y*a.w,p.x*a.w+p.y*a.z);float e;
     if(b.x<0.0)e=length(l)+b.x;
     else{float zc=(b.y-b.z)*0.5;vec2 q=abs(vec2(l.x,l.y-zc))-vec2(b.x,(b.y+b.z)*0.5)+b.w;e=length(max(q,0.0))+min(max(q.x,q.y),0.0)-b.w;}
     d=min(d,e);

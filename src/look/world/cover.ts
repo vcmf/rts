@@ -11,7 +11,7 @@
 import { hash, sstep, vn } from '../noise.ts'
 import { axisX } from './author.ts'
 import { RIVER } from '../river.ts'
-import { BUILDINGS, PAVE_GAP, PAVE_WOBBLE, onPaving, paveShape, pavePoly, polyGap } from './buildings.ts'
+import { BUILDINGS, PAVE_GAP, PAVE_WOBBLE, onPaving, paveDist, pavePoly, polyGap, polyLineGap } from './buildings.ts'
 
 export const COVER = { meadow: 0, pasture: 1, wood: 2, road: 3, track: 4, village: 5, wheat: 6, green: 7, stubble: 8, ploughed: 9, bare: 10 } as const
 export type CoverClass = typeof COVER[keyof typeof COVER]
@@ -150,11 +150,16 @@ export function authorCover(far: number, cell: number): CoverGrid {
     const g = polyGap(yards[i], yards[j])
     if (g < PAVE_GAP) throw new Error(`cover: the yards of the buildings at ${BUILDINGS[i].x}, ${BUILDINGS[i].z} and ${BUILDINGS[j].x}, ${BUILDINGS[j].z} are ${g.toFixed(1)} m apart (at least ${PAVE_GAP})`)
   }
-  for (const b of BUILDINGS) {
-    // (its paving's farthest reach and its wobble)
-    const q = paveShape(b).b, r = (q[0] < 0 ? -q[0] : Math.hypot(q[0], Math.max(q[1], q[2]))) + PAVE_WOBBLE
-    if (inFormationZone(b.x, b.z) || onFloodplain(b.x, b.z) || LINES.some(l => lineD(l.pts, b.x, b.z) < l.w / 2 + r)) throw new Error(`cover: the ${b.model} at ${b.x}, ${b.z} is in a formation zone, on the floodplain or on a road`)
-  }
+  // (the yard's ground in the cover reaches YARD_PAD past its paving, below: the road's edge kept clear of that; the whole
+  // yard, by a point every metre over it, out of the zones and off the floodplain)
+  const YARD_PAD = PAVE_WOBBLE + cell * 0.71 + 0.3
+  BUILDINGS.forEach((b, k) => {
+    const road = LINES.find(l => polyLineGap(yards[k], l.pts) < l.w / 2 + YARD_PAD)
+    if (road) throw new Error(`cover: the ${b.model}'s yard at ${b.x}, ${b.z} reaches a ${road.cls === COVER.road ? 'road' : 'track'}`)
+    const xs = yards[k].map(p => p[0]), zs = yards[k].map(p => p[1])
+    for (let x = Math.min(...xs); x <= Math.max(...xs); x += 1) for (let z = Math.min(...zs); z <= Math.max(...zs); z += 1)
+      if (onPaving(x, z) && (inFormationZone(x, z) || onFloodplain(x, z))) throw new Error(`cover: the ${b.model}'s yard at ${b.x}, ${b.z} reaches a formation zone or the floodplain (at ${x.toFixed(0)}, ${z.toFixed(0)})`)
+  })
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const x = x0 + (i + 0.5) * cell, z = z0 + (j + 0.5) * cell, o = (j * n + i) * 4
     let cls: number = COVER.meadow, id = 0, dir = 0
@@ -167,7 +172,11 @@ export function authorCover(far: number, cell: number): CoverGrid {
     // under a building, its paved yard and a margin round it (the paving's ragged edge, a cover texel's half diagonal,
     // slack) the village's trodden ground, whatever the class (nothing grows through a floor or the paving: the scatter,
     // the meadow and the crops keep off the village), worn as the village is (the road split's live ground: pavePaint)
-    if (onPaving(x, z, PAVE_WOBBLE + cell * 0.71 + 0.3)) { cls = COVER.village; id = 0; wear = 0 }
+    // (a road or a track keeps its class: the check above keeps them clear; and past it the yard's ground fades worn as
+    // the village's does, by its distance: YARD_PAD in, the ring's, so its edge does not step on the grid)
+    const yd = paveDist(x, z, WEAR_REACH + YARD_PAD)
+    if (yd <= YARD_PAD && cls !== COVER.road && cls !== COVER.track) { cls = COVER.village; id = 0; wear = 0 }
+    else wear = Math.min(wear, Math.max(0, yd - YARD_PAD))
     // the floodplain and the formation zones keep their meadow (the zones clip the fields that touch them)
     if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village || cls === COVER.bare)) { cls = COVER.meadow; id = 0 }
     tex[o] = cls; tex[o + 1] = id; tex[o + 2] = id ? Math.round(((dir % Math.PI + Math.PI) % Math.PI) / Math.PI * 255) % 256 : 0

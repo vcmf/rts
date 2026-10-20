@@ -52,10 +52,19 @@ def load(path):
         tmp = tempfile.mkdtemp(prefix='building-'); zipfile.ZipFile(path).extractall(tmp)
         path = next(os.path.join(r, f) for r, _, fs in os.walk(tmp) for f in fs if f.lower().endswith('.fbx'))
     bpy.ops.import_scene.fbx(filepath=path)
-    obj = next(o for o in bpy.data.objects if o.type == 'MESH')
-    img = next(n.image for m in obj.data.materials if m and m.use_nodes for n in m.node_tree.nodes if n.type == 'TEX_IMAGE' and n.image)
-    w, h = img.size
-    px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)[..., :3]   # rows from the bottom, linear? (sRGB stored as is)
+    # one mesh: several (a part a node) joined into it, their transforms applied
+    meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+    if not meshes: raise SystemExit(f'{path}: no mesh')
+    if len(meshes) > 1:
+        bpy.ops.object.select_all(action='DESELECT')
+        for o in meshes: o.select_set(True)
+        bpy.context.view_layer.objects.active = meshes[0]; bpy.ops.object.join()
+    obj = bpy.context.view_layer.objects.active if len(meshes) > 1 else meshes[0]
+    imgs = {n.image for m in obj.data.materials if m and m.use_nodes for n in m.node_tree.nodes if n.type == 'TEX_IMAGE' and n.image}
+    if len(imgs) != 1: raise SystemExit(f'{path}: {len(imgs)} textures, one expected (a Tripo export bakes one)')
+    img = imgs.pop(); w, h = img.size
+    buf = np.empty(w * h * 4, dtype=np.float32); img.pixels.foreach_get(buf)
+    px = buf.reshape(h, w, 4)[..., :3]   # rows from the bottom; the texture's sRGB values as stored
     return obj, img, px
 
 def clusters(px, k=10):
@@ -107,8 +116,8 @@ def main():
     cx, cy = (lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2
     # sharp past 30°: the corner normals, split where the faces meet at more than that
     for p in me.polygons: p.use_smooth = True
-    try: bpy.context.view_layer.objects.active = obj; obj.select_set(True); bpy.ops.object.shade_smooth_by_angle(angle=math.radians(30))
-    except Exception as e: print('smooth by angle:', e)
+    bpy.context.view_layer.objects.active = obj; obj.select_set(True)
+    if 'FINISHED' not in bpy.ops.object.shade_smooth_by_angle(angle=math.radians(30)): raise SystemExit('the sharp edges (shade smooth by angle) failed')
     cn = me.corner_normals
     pos, nrm, uvs, rol, idx, key = [], [], [], [], [], {}
     for f in me.polygons:
@@ -128,7 +137,9 @@ def main():
     # the detail: the texture's value over its local mean (a box of DETAIL_BOX texels round it), so only the fine
     # value (stone courses, slates, planks) is kept, whatever the region: a texel's role guessed by its colour flipped
     # between neighbours on the windmill's brown tower (mortar read as timber) and blotched it. Clipped to DETAIL_CLIP
-    st = max(1, w // 512); small = px[::st, ::st]; sh_, sw_ = small.shape[:2]   # (512² is enough for a value detail)
+    # (512² is enough for a value detail: each texel the mean of its st × st block, no aliasing)
+    st = max(1, w // 512); hh, ww = h // st * st, w // st * st
+    small = px[:hh, :ww].reshape(hh // st, st, ww // st, st, 3).mean((1, 3)); sh_, sw_ = small.shape[:2]
     val = small @ np.array([0.2126, 0.7152, 0.0722])
     k_ = DETAIL_BOX; pad = np.pad(val, k_, mode='edge'); c_ = pad.cumsum(0).cumsum(1); c_ = np.pad(c_, ((1, 0), (1, 0)))
     n_ = 2 * k_ + 1; loc = (c_[n_:, n_:] - c_[:-n_, n_:] - c_[n_:, :-n_] + c_[:-n_, :-n_]) / (n_ * n_)
