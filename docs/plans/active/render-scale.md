@@ -23,7 +23,7 @@ Frame headroom, step 2 (step 1 the road split, PR #122, whose plan records the c
   0) and a dither; the grain and dither one definition for both passes (`PAPER`). Over 1 (the panel's Retina) the
   hardware scale, the chain copying. On WebGL1, under `?upscale=bilinear`, and if the last pass does not compile or
   Babylon does not keep a size object (`Post.fail`: the chain made again without it, an error logged) the hardware
-  scale, and Auto's closest level at 1, as before.
+  scale, and decision 0036's Auto (1, then 0.9 from 72 %: AUTO_STRETCH), as before.
 - **The scene's own lines** (`sceneH`): the grade's haze toward the top (`uViewH`) and the near strokes' visibility
   test measure the target the scene draws into, not the canvas.
 - `?upscale=bilinear`: the stretch at every scale (the A/B).

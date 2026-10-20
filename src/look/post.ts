@@ -129,7 +129,7 @@ Effect.ShadersStore.dofFragmentShader = withLens(DOF_FS)
 Effect.ShadersStore.uberFragmentShader = withLens(UBER_FS)
 // the last pass under the render scale (decision 0045, docs/plans/active/render-scale.md): the chain draws at the scale
 // and this pass draws the screen, by uMode: 0 a copy (the scale 1: texel for texel, the same pixels), 1 bilinear (the
-// stretch the browser made before: the wide zooms' scales and over 1), 2 FSR 1's edge-adaptive upscale, EASU (from 0.9
+// stretch the browser made before: the wide zooms' scales), 2 FSR 1's edge-adaptive upscale, EASU (from 0.9
 // up, under 1). Upscaled (1 and 2) the paper grain is laid here, at the screen's pixels (the finishing pass leaves it:
 // uGrainHere 0), and a dither after the filter (the finishing pass's own comes before its 8-bit target and is averaged
 // away). EASU is Babylon's port (fsr1Upscale), its four 2 x 2 gathers read once each, as colour (the port reads each
@@ -143,7 +143,7 @@ const EASU_MAIN = (easu: boolean) => `void main(){
   ${easu ? 'if(uMode>1.5)c=FsrEasuF(ivec2(gl_FragCoord.xy),con0,con1,con2,con3);' : ''}
   c=paperOf(c,gl_FragCoord.xy,uGrainOn)+ditherOf(gl_FragCoord.xy);
   gl_FragColor=vec4(c,1.0);}`
-export let EASU_OK = false
+let EASU_OK = false, EASU_WHY = ''
 // FSR 1's FsrEasuCon (ffx_fsr1.h), as Babylon's ThinFSR1UpscalePostProcess.updateConstants: the input's viewport vw x vh
 // in its texture iw x ih, drawn to ow x oh
 const FSR1_CONSTANTS = (e: Effect, vw: number, vh: number, iw: number, ih: number, ow: number, oh: number): void => {
@@ -161,10 +161,13 @@ const FSR1_CONSTANTS = (e: Effect, vw: number, vh: number, iw: number, ih: numbe
   EASU_OK = n === 4 && fn >= 0 && at > fn
   if (EASU_OK) Effect.ShadersStore.easuFragmentShader = src.slice(0, fn) + gather + src.slice(fn, at) + EASU_HEAD + EASU_MAIN(true)
   else {
-    console.error(`post: FSR 1's upscale shader not as expected (${n} gathers of 4): the render scale stretches bilinear`)
+    EASU_WHY = `FSR 1's upscale shader not as expected (${n} gathers of 4)`
     Effect.ShadersStore.easuFragmentShader = 'uniform sampler2D textureSampler;varying vec2 vUV;\n' + EASU_HEAD + EASU_MAIN(false)
   }
 }
+
+// (a pass's size object Babylon did not keep: build, Post.fail)
+class KeptSize extends Error {}
 
 export class Post {
   private posts: PostProcess[] = []
@@ -180,7 +183,7 @@ export class Post {
   get upscale(): boolean { return this.upscaleWanted && !this.failed }
   private sizes: { size: { width: number; height: number }; f: number }[] = []
   get scale(): number { return this.k }
-  set scale(k: number) { this.k = k; this.resize() }
+  set scale(k: number) { this.k = k }   // (the sizes at the next resize: main.ts, after the hardware scale)
   // the passes' sizes from the canvas's and the scale (each frame: the canvas may change too)
   resize(): void {
     const w = this.engine.getRenderWidth(true), h = this.engine.getRenderHeight(true)
@@ -222,16 +225,24 @@ export class Post {
     return this.focus
   }
   // the upscale given up (above): the scale 1, the chain made again without its last pass (after this frame)
-  private fail(why: string): void {
+  private fail(why: string, now = false): void {
     if (this.failed) return
     console.error(`post: ${why}: the render scale takes the hardware scale`)
     this.failed = true; this.k = 1
-    setTimeout(() => { if (this.posts.length) this.build() })
+    if (now) this.build(); else setTimeout(() => { if (this.posts.length) this.build() })
   }
   // the chain made, in place of the one before (on load, the depth of field switched, a tool's finishing(true))
   build(): void {
+    try { this.make() } catch (e) {
+      if (!(e instanceof KeptSize)) throw e
+      this.posts.forEach(p => p.dispose(this.camera)); this.posts = []; this.sizes = []
+      this.fail('Babylon does not keep a pass\'s size object', true)
+    }
+  }
+  private make(): void {
     const { camera, engine, S } = this
     this.posts.forEach(p => p.dispose(camera)); this.posts = []; this.sizes = []
+    if (this.upscale && !EASU_OK) console.error(`post: ${EASU_WHY}: the render scale stretches bilinear`)
     // the scene's target, the first pass's input: 8 bits with the depth of field too (the lens term in alpha, 8 bits:
     // painter.glsl depthA; docs/plans/done/dof-v2.md)
     const HF = Constants.TEXTURETYPE_HALF_FLOAT, sceneType = MSAA.byte ? Constants.TEXTURETYPE_UNSIGNED_BYTE : HF
@@ -242,7 +253,7 @@ export class Post {
       if (size) this.sizes.push({ size, f: ratio })
       // (the options' form: Babylon keeps its size object, the positional form copies it)
       const p = new PostProcess(name, name, { uniforms: uni, samplers: smp, size: size ?? ratio, camera, samplingMode: Texture.BILINEAR_SAMPLINGMODE, engine, reusable: false, defines, textureType: type })
-      if (size && (p as unknown as { _options: unknown })._options !== size) this.fail('Babylon does not keep a pass\'s size object')
+      if (size && (p as unknown as { _options: unknown })._options !== size) throw new KeptSize()
       if (!this.posts.length) { p.samples = MSAA.samples }
       this.posts.push(p); return p
     }

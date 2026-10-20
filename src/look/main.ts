@@ -271,6 +271,8 @@ const { rMin, rMax } = D.spec.camera, at = (f: number) => rMin + f * (rMax - rMi
 // upscale (WebGL1, ?upscale=bilinear, or the upscale given up: post.upscale) the hardware scale, as before, and the
 // closest level at 1, as before
 const AUTO: [number, number][] = [[at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.75]], AUTO_HOLD = 4
+// (without the upscale, main's: 1, then 0.9 from 72 %, as decision 0036 had it)
+const AUTO_STRETCH: [number, number][] = [[at(0.72), 1], [at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.75]]
 let scaleNow = 1, upNow = false, level = 0
 const applyScale = (s: number) => {
   const up = post.upscale
@@ -283,12 +285,15 @@ const resSel = byId<HTMLSelectElement>('res')
 resSel.onchange = () => { S.res = +resSel.value }
 const scaleTick = () => {
   if (+resSel.value !== S.res) resSel.value = String(S.res)   // the panel follows a scale set elsewhere (the tools)
-  post.resize()   // (the canvas may change size too)
-  if (S.res) { applyScale(S.res); return }
-  const r = camera.radius
-  while (level < AUTO.length - 1 && r > AUTO[level][0] + AUTO_HOLD) level++
-  while (level > 0 && r < AUTO[level - 1][0] - AUTO_HOLD) level--
-  applyScale(level === 0 && !post.upscale ? 1 : AUTO[level][1])
+  if (S.res) applyScale(S.res)
+  else {
+    const r = camera.radius, auto = post.upscale ? AUTO : AUTO_STRETCH
+    if (level >= auto.length) level = auto.length - 1
+    while (level < auto.length - 1 && r > auto[level][0] + AUTO_HOLD) level++
+    while (level > 0 && r < auto[level - 1][0] - AUTO_HOLD) level--
+    applyScale(auto[level][1])
+  }
+  post.resize()   // (the passes' sizes after the canvas's: the hardware scale above, or the window)
 }
 // the first level before the chain is made (it is made once, at the scale the first frame draws at)
 scaleTick(); post.build()
