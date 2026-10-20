@@ -72,8 +72,7 @@ draw with the bake's shader and differ in their bakes, measured by the macro che
 judging).
 `?dof=0|1` overrides the gameplay depth of field, on by default (decision 0024, below); `?bench=dof` benches it off
 and on.
-The cost ablations: `?hide=<prefix,...>` hides the meshes whose names start so, `?off=<toggle,...>` opens with those
-panel switches off; `?bench&passes=0` times whole frames only, without the per-pass GPU timers.
+`?bench&passes=0` times whole frames only, without the per-pass GPU timers.
 
 ### The gameplay depth of field (decisions 0024, 0040)
 
@@ -153,7 +152,7 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   dirt in each road's frame (the nearest road segment, found in the shader from the look data's grid of them: the
   distance across and along, the half width, a junction weight), wheel tracks of pale dust cut into pieces, ragged edges, the owner's grit photo (`roadPaint` in
   `shore.glsl`, `docs/plans/done/roads.md`). Far out the macro bake holds them (tracks a dusting, no grit) and the
-  tile's ground takes its material without the live roads beyond 170 m; nearer they fade in (decision 0039). Nearer too, only the tile's triangles within reach of a road (the cover's distance to a line under the road gate: `ROAD_NEAR`, the cover's warp and slack, `src/look/spec.ts`) take the live roads' material; the rest take the one without, by one `MultiMaterial` made with the terrain's (its place in the opaque draws): the same pixels, about 1.1 ms a frame less at the default and closest zooms (`docs/plans/active/headroom.md`; `?split=0` draws the whole tile live). Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
+  tile's ground takes its material without the live roads beyond 170 m; nearer they fade in (decision 0039). Nearer too, only the tile's triangles within reach of a road (the cover's distance to a line under the road gate: `ROAD_NEAR`, the cover's warp and slack, `src/look/spec.ts`) take the live roads' material; the rest take the one without, by one `MultiMaterial` made with the terrain's (its place in the opaque draws; `splitByRoad` in `terrain.ts`): the same pixels but for a step of rounding on a few (the two programs), about 1.1 ms a frame less at the default and closest zooms (`docs/plans/active/headroom.md`; `?split=0` draws the whole tile live). Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
   The class `bare` (10): trodden or dry earth, no grass, no crops, no stripes, not
   a field (`isField`).
 - **The dirt surface** (`dirtOn` in `macro.glsl`, at the terrain's fragment: `docs/plans/done/ground-surface.md`):

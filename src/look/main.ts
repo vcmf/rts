@@ -10,8 +10,6 @@ import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
-import { SubMesh } from '@babylonjs/core/Meshes/subMesh.js'
-import type { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import '../../prototypes/nature-pack.data.js'
 import { buildBakes, PENUMBRA_MAX, softDefines, SOFT_DEFAULTS, type SoftOptions } from './bakes.ts'
@@ -32,12 +30,11 @@ import { axisX, baseH } from './world/author.ts'
 import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS } from './world/data.ts'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
-import { buildTerrain } from './terrain.ts'
+import { buildTerrain, splitByRoad } from './terrain.ts'
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 import ROAD_GRIT_URL from '../../data/road-grit-v1.png?url'
 import { sstep } from './noise.ts'
-import { WEAR_STEP } from './world/cover.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
 import { MACRO_ARMS, SHADER_ARMS, buildMacro, isBakedArm, type MacroArm, type RoadTextures } from './macro.ts'
@@ -212,37 +209,14 @@ const camera = buildCamera(scene, canvas)
 // so at the swap only the edge's sharpness changes (the bake's 0.5 m texels). Both materials are compiled before the first frame, and the swap waits until the one it
 // goes to is ready (a material not ready is not drawn). The shader arm has no bake to hold them: live at every zoom
 const ROAD_LIVE_R = 170, ROAD_HOLD = 4, ROAD_FADE = 50
-let roadSplit: MultiMaterial | null = null
+const splitParam = params.get('split')
+if (splitParam !== null && splitParam !== '0') throw new Error(`?split must be 0, not ${splitParam}`)
 if (roadTex) {
   const live = terrain.terrainMat, baked = terrain.terrainBakedMat, ground = terrain.tileGround
-  // near too, the live shader only where a road can paint (docs/plans/active/headroom.md: its size alone cost every
-  // ground pixel; about 1.1 ms a frame at the default and closest zooms): the tile's triangles within reach of a line
-  // by the cover's wear distance (roadPaint's first test, shore.glsl: D.roadGate; the cover is read nearest, so its
-  // texels under a grid cell and 1 m round it, against a texel of slack, and each triangle takes its cell's answer)
-  // drawn first with it, the rest with the material without (there roadPaint returns its colour unchanged: the same
-  // pixels). Both by one material made with the terrain's (terrain.terrainSplitMat: its place in the opaque draws).
-  // ?split=0: the live shader on the whole tile (the A/B)
-  const splitParam = params.get('split')
-  if (splitParam !== null && splitParam !== '0') throw new Error(`?split must be 0, not ${splitParam}`)
-  if (splitParam === null) {
-    const P = ground.getVerticesData(VertexBuffer.PositionKind)!, ix = ground.getIndices()!, C = look.cover, M = 1
-    const n = D.spec.tileSub, w = D.spec.tile / n, h = D.spec.tile / 2, lim = Math.ceil(D.roadGate / WEAR_STEP) + 1
-    const at = (v: number) => Math.min(C.n - 1, Math.max(0, Math.floor(v))), cellOf = (v: number) => Math.min(n - 1, Math.max(0, Math.floor((v + h) / w)))
-    const nearRoad = new Uint8Array(n * n)
-    for (let cz = 0; cz < n; cz++) for (let cx = 0; cx < n; cx++) {
-      const x0 = cx * w - h, z0 = cz * w - h
-      search: for (let j = at((z0 - M - C.z0) / C.cell); j <= at((z0 + w + M - C.z0) / C.cell); j++) for (let i = at((x0 - M - C.x0) / C.cell); i <= at((x0 + w + M - C.x0) / C.cell); i++) if (C.tex[(j * C.n + i) * 4 + 3] <= lim) { nearRoad[cz * n + cx] = 1; break search }
-    }
-    const isLive = (t: number) => { let x = 0, z = 0; for (let k = 0; k < 3; k++) { x += P[ix[t + k] * 3]; z += P[ix[t + k] * 3 + 2] } return nearRoad[cellOf(z / 3) * n + cellOf(x / 3)] === 1 }
-    let nLive = 0; for (let t = 0; t < ix.length; t += 3) if (isLive(t)) nLive += 3
-    const out = new Uint32Array(ix.length); let a = 0, b = nLive
-    for (let t = 0; t < ix.length; t += 3) { const o = isLive(t) ? a : b; out[o] = ix[t]; out[o + 1] = ix[t + 1]; out[o + 2] = ix[t + 2]; if (o === a) a += 3; else b += 3 }
-    ground.setIndices(out); ground.subMeshes = []
-    const nv = P.length / 3; new SubMesh(0, 0, nv, 0, nLive, ground); new SubMesh(1, 0, nv, nLive, ix.length - nLive, ground)
-    roadSplit = terrain.terrainSplitMat
-  }
+  // near too, the live shader only on the triangles near a road (terrain.ts, splitByRoad: the same pixels to a step of
+  // rounding, about 1.1 ms a frame less at the default and closest zooms); ?split=0 (above): the live shader on the whole tile, the A/B
+  const split = splitParam === '0' ? live : splitByRoad(terrain, look.cover)
   await Promise.all([live, baked].map(m => m.forceCompilationAsync(ground)))
-  const split = roadSplit ?? live
   let far = false
   scene.onBeforeRenderObservable.add(() => {
     const r = camera.radius
@@ -298,11 +272,6 @@ scene.onBeforeRenderObservable.add(() => {
 const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
 // ?bloom=0: open with the bloom off (an A/B, docs/plans/done/frame-readout.md)
 // ?far=off (below, after the bakes), ?msaa=1 (before the passes): the widest zoom's A/Bs (docs/plans/done/wide-perf.md)
-// ?hide=<prefix,...>: meshes whose name starts with one of these not drawn, ?off=<toggle,...>: those panel switches
-// off on load: the cost ablations (docs/plans/active/headroom.md; after the bakes, which keep the meshes)
-{ const hide = (params.get('hide') ?? '').split(',').filter(Boolean), off = (m: { name: string; setEnabled(on: boolean): void }) => { if (hide.some(p => m.name.startsWith(p))) m.setEnabled(false) }
-  if (hide.length) { for (const m of scene.meshes) off(m); scene.onNewMeshAddedObservable.add(off) } }
-for (const k of (params.get('off') ?? '').split(',').filter(Boolean)) { if (!(TOGGLES as readonly string[]).includes(k)) throw new Error(`?off takes ${TOGGLES.join(', ')}, not ${k}`); (S as Record<string, number>)[k] = 0 }
 if (params.has('bloom')) { if (params.get('bloom') !== '0') throw new Error(`?bloom must be 0, not ${params.get('bloom')}`); S.bloom = 0 }
 type Toggle = typeof TOGGLES[number]
 const isToggle = (k: string | undefined): k is Toggle => (TOGGLES as readonly (string | undefined)[]).includes(k)

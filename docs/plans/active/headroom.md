@@ -30,9 +30,10 @@ owner's browser). Cost of each, by its absence, default / widest / closest zoom,
 | grade | 0.3 | 0.2 | 0.5 |
 | near trees (crowns and cards) | 0.3 | 0.6 | 0.1 |
 | props | 0.2 | 0.1 | 0.2 |
-| shadows, occlusion, grain, edges, clouds, backlight, DOF, detail layer | ~0 | ~0 | ~0 |
+| shadows, occlusion, grain, edges, clouds, backlight, detail layer | ~0 | ~0 | ~0 |
 
-Inside them:
+The depth of field is not in the table: its switch (the panel's, set on load) left the passes built, so its run
+measured the full page. Inside them:
 
 - **The terrain's colour**: the roads 1.9 ms of it at default zoom (the earth 0.4, the meadow's dark under-layer 0.2,
   the dirt and the comb about 0). Of the roads, about 0.7 ms was the shader's size alone (compiled in, never run:
@@ -58,14 +59,16 @@ Battlefield 3's and Unreal's virtual texturing), the meadow's per-clump terms ev
 
 - **The road split**: near the camera too, only the tile's triangles within reach of a road take the live roads'
   material (`ROADS`); the rest take the material without them, whose `roadPaint` returns the colour unchanged, so
-  the pixels are the same. The test is the shader's own first one (the cover's wear distance under `ROAD_NEAR` +
-  2.2 m), on the cover's nearest texels under a triangle and 1 m round it, with a texel of slack. One
-  `MultiMaterial`, made with the terrain's materials so the ground keeps its place in the opaque draws. Far out the
-  baked material as before. `?split=0`: the live material on the whole tile (the A/B).
-- **`ROAD_NEAR` 5.5 → 2.6 m**: the paint reaches at most 1.07 m past a side at the warped point where the cover is
-  read; a cover texel's centre within √2 m, its distance rounded to 0.05 m. The spec's check counted the warp twice.
-  Fewer triangles live.
-- **The bench's `?passes=0`** (whole frames only) and the ablation switches `?hide=`, `?off=` kept.
+  the pixels are the same (but for a step of rounding between the two programs). The test is the shader's own first
+  one (the cover's wear distance under the road gate: `ROAD_NEAR`, the cover's warp `macro.warp`, and slack), on the
+  cover's nearest texels under a triangle's grid cell and 1 m round it, with a texel of slack (`splitByRoad`,
+  `src/look/terrain.ts`). One `MultiMaterial`, made with the terrain's materials so the ground keeps its place in the
+  opaque draws. Far out the baked material as before. `?split=0`: the live material on the whole tile (the A/B).
+- **`ROAD_NEAR` 5.5 → 2.6 m**: the paint reaches at most `road.edge` (1.07 m; the shader clamps its ragged edge there)
+  past a side at the warped point where the cover is read; a cover texel's centre within √2 m, its distance rounded
+  to 0.05 m. The spec's check counted the warp twice. Fewer triangles live.
+- **The bench's `?passes=0`** (whole frames only; the result says so). The investigation's mesh and panel switches
+  are not kept (they changed the bakes, or left passes built).
 
 ## Acceptance
 

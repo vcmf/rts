@@ -173,10 +173,10 @@ vec3 roadPaint(vec3 c,vec2 xz){
   float wobS=(mValue(vec2(s/4.0,7.3))-0.5)*1.6+(mValue(vec2(s/1.1,2.1))-0.5)*0.7,wobW=(mValue(xz/4.0+7.3)-0.5)*1.6+(mValue(xz/1.1+2.1)-0.5)*0.7;
   float wob=mix(wobS,wobW,jn)+(mValue(xz/0.6)-0.5)*0.5;
   // (out to about 0.5 m past the line's side, found at the warped point as the class cells under it: their edge, within
-  // a cell of it, in the same earth: the road and track classes' colours are ROAD_EARTH's and TRACK_EARTH's). At most
-  // 1.07 m past the side (|wob| under 1.4): the spec's road.paint less the warp holds it, and ROAD_NEAR and the road
-  // split's triangles rest on it (src/look/spec.ts): widen it, widen them
-  float rag=wob*clamp(hw/4.0,0.5,1.0),inside=(1.0-smoothstep(hw-0.3+rag*0.3,hw+0.5+rag*0.4,dist))*(1.0-smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y))))
+  // a cell of it, in the same earth: the road and track classes' colours are ROAD_EARTH's and TRACK_EARTH's). Never
+  // past ROAD_EDGE m from the side (about 1.06 here, |wob| under 1.4): ROAD_NEAR, the road gate and the road split's
+  // triangles rest on it (src/look/spec.ts, road.edge)
+  float rag=wob*clamp(hw/4.0,0.5,1.0),inside=(1.0-smoothstep(hw-0.3+rag*0.3,min(hw+0.5+rag*0.4,hw+ROAD_EDGE),dist))*(1.0-smoothstep(TILE_HALF-30.0,TILE_HALF-4.0,max(abs(xz.x),abs(xz.y))))
     *(1.0-smoothstep(TILE_HALF-60.0,TILE_HALF,max(abs(xz.x),abs(xz.y))));   // (and as the tile's bake hands over to the far ring's, which has none: bakeOnce)
   if(inside<=0.0)return c;
   // none at a junction, nor round a dead end's cap. Where a pixel spans more than a track is wide (0.3 m: far out) they

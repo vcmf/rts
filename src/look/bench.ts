@@ -148,7 +148,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
         for (const [k, v] of timed) segments[k] = +(v / nPass).toFixed(1)
         // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
         const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
-        const passesFit = gpuMs.frame ? +(sum / gpuMs.frame.p50).toFixed(2) : null
+        const passesFit = gpuMs.frame && !WHOLE_ONLY ? +(sum / gpuMs.frame.p50).toFixed(2) : null
         runs.push({ cam: cam.name, arm: arm.name, size: [engine.getRenderWidth(true), engine.getRenderHeight(true)], frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
       }
     }
