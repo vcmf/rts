@@ -61,9 +61,9 @@ setRiver(look.river); setHeightfield(look.hf, look.far, D.spec.tile / 2)
 const canvas = document.getElementById('c') as HTMLCanvasElement
 const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false }, false)
 engine.setHardwareScalingLevel(1)
-// the scene's own lines (the finishing chain's, once made below: under the upscale, its first target's)
-let postRef: Post | null = null
-const sceneH = () => postRef?.sceneLines() ?? engine.getRenderHeight()
+// the scene's own lines (the finishing chain's: under the upscale, its first target's; called only from the frames,
+// after the chain is made below)
+const sceneH = () => post.sceneLines()
 const scene = new Scene(engine); scene.skipPointerMovePicking = true
 
 // ?soft=off: the shadows before the soft-shadow plan (docs/plans/done/soft-shadows.md); ?penumbra: metres of edge
@@ -247,7 +247,7 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat])   // the d
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false
 if (flag('nanmark')) { DEBUG.nanmark = true; MSAA.byte = false }   // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
-const post = new Post(camera, engine, S, () => mats.grain, groundAt); postRef = post
+const post = new Post(camera, engine, S, () => mats.grain, groundAt)
 
 /* ---------- UI ---------- */
 const byId = <T extends HTMLElement>(id: string): T => { const e = document.getElementById(id); if (!e) throw new Error(`look.html has no #${id}`); return e as T }
@@ -266,27 +266,27 @@ const AUTO: [number, number][] = [[at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.
 const upscaleParam = params.get('upscale')
 if (upscaleParam !== null && upscaleParam !== 'bilinear') throw new Error(`?upscale must be bilinear, not ${upscaleParam}`)
 let scaleNow = 1, level = 0
-// EASU at Auto's 0.9 (its pass costs about 0.35 ms at the screen's pixels: under 0.9, at the wide zooms, it cost more
-// than it saved, so there the browser's stretch as before). WebGL2 only (FSR 1's shader is GLSL ES 3); a fixed scale
-// from the panel or a tool stretches as before. The chain is rebuilt at a change only while it is up (a tool's
-// finishing(false) keeps it down)
+// EASU from 0.9 up, under 1 (its pass costs about 0.35 ms at the screen's pixels: under 0.9, at the wide zooms, it
+// cost more than it saved, so there the browser's stretch as before), Auto's or the panel's alike. WebGL2 only (FSR
+// 1's shader is GLSL ES 3). A change of the chain's scale is made aside and swapped in once ready, the hardware scale
+// with it (post.rescale): no frame without its passes; a change of the stretch alone at once, as before
 const EASU_MIN = 0.9
-const applyScale = (s: number, auto: boolean) => {
-  const easu = auto && !mats.webgl1 && upscaleParam !== 'bilinear' && s >= EASU_MIN && s < 1, k = easu ? s : 1
-  if (s === scaleNow && post.scale === k) return
+const applyScale = (s: number) => {
+  if (s === scaleNow) return
   scaleNow = s
-  engine.setHardwareScalingLevel(easu ? 1 : 1 / s)
-  if (post.scale !== k) { post.scale = k; if (post.built) post.build() }
+  const easu = !mats.webgl1 && upscaleParam !== 'bilinear' && s >= EASU_MIN && s < 1, k = easu ? s : 1, hw = easu ? 1 : 1 / s
+  post.rescale(k, () => engine.setHardwareScalingLevel(hw))
 }
 const resSel = byId<HTMLSelectElement>('res')
 resSel.onchange = () => { S.res = +resSel.value }
 const scaleTick = () => {
   if (+resSel.value !== S.res) resSel.value = String(S.res)   // the panel follows a scale set elsewhere (the tools)
-  if (S.res) { applyScale(S.res, false); return }
+  post.tick()
+  if (S.res) { applyScale(S.res); return }
   const r = camera.radius
   while (level < AUTO.length - 1 && r > AUTO[level][0] + AUTO_HOLD) level++
   while (level > 0 && r < AUTO[level - 1][0] - AUTO_HOLD) level--
-  applyScale(AUTO[level][1], true)
+  applyScale(AUTO[level][1])
 }
 // the first level before the chain is made (it is made once, at the scale the first frame draws at)
 scaleTick(); post.build()

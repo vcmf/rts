@@ -22,9 +22,10 @@ closest 8.52, 7.67, 7.45). At the widest zoom, already at 0.75, EASU cost 0.7 ms
 - **60 fps hard, 120 fps soft**, as decision 0036.
 - **The render scale's Auto by zoom: 0.9 from the closest zoom**, then 0.8 and 0.75 as the camera's radius passes 80
   and 88 % of its range (4 m of hysteresis, as before). Not driven by missed frames (decision 0036's reasons).
-- **At Auto's 0.9 the finishing chain upscales by EASU** (`src/look/post.ts`, WebGL2): the canvas stays at the
-  page's pixels, the scene and its passes draw at the scale, the paper grain is laid after the upscale, at the
-  screen's pixels (the dither stays before the 8-bit target). Under 0.9, a fixed scale from the panel or a tool, and
+- **At a scale from 0.9 up, under 1 (Auto's 0.9, or the panel's), the finishing chain upscales by EASU**
+  (`src/look/post.ts`, WebGL2): the canvas stays at the page's pixels, the scene and its passes draw at the scale,
+  the paper grain is laid after the upscale, at the screen's pixels (the dither before the 8-bit target and after the
+  upscale). A change of the chain's scale is made aside and swapped in once its passes are ready. Under 0.9 and on
   WebGL1: the canvas drawn smaller and stretched, as before.
   No sharpening pass (RCAS): at 0.9 there is little to recover, and it would fight the painted softness.
 - `?upscale=bilinear` keeps the stretch at every scale (the A/B). The check tools still pin the scale to 1.
@@ -33,7 +34,8 @@ closest 8.52, 7.67, 7.45). At the widest zoom, already at 0.75, EASU cost 0.7 ms
 
 - Good: about 0.7 ms a frame less at the default zoom and 0.85 at the closest, the near views nearly as sharp as at 1.
 - Bad: from 72 to 80 % of the zoom range, 0.9 stretched before, EASU's pass now costs its 0.35-0.45 ms more there
-  (measured at the default zoom; not benched in that band).
+  (measured at the default zoom; not benched in that band). At 80 % the step in sharpness is larger than before: 0.9
+  upscaled to 0.8 stretched (was 0.9 stretched to 0.8 stretched).
 - Bad: the scene has 0.81 of the pixels at every zoom now: units are drawn at 0.9 from the closest zoom. Decision
   0036's debt, a full-resolution pass for units (or the GPU-timed scale), is now owed at every zoom, before the armies
   land. EASU only enlarges what was drawn: detail under a scene pixel can still break up.

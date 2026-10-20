@@ -123,13 +123,25 @@ Effect.ShadersStore.dofFragmentShader = withLens(DOF_FS)
 Effect.ShadersStore.uberFragmentShader = withLens(UBER_FS)
 // the upscale (the render scale under 1, docs/plans/active/render-scale.md): FSR 1's EASU from the scene's pixels to
 // the screen's, then the paper grain the finishing pass leaves to it (uber.frag, UPSCALED), at the screen's pixels:
-// the paper is not stretched (the dither stays in the finishing pass: it must come before its 8-bit target). The shader is Babylon's, its main replaced
+// the paper is not stretched; the dither both before the finishing pass's 8-bit target and after the upscale (its
+// filter averages the first one away before the canvas's 8 bits). The shader is Babylon's, its main replaced
 {
-  const src = Effect.ShadersStore.fsr1UpscalePixelShader, at = src.lastIndexOf('void main()')
-  if (at < 0) throw new Error('post: FSR 1 upscale shader without its main')
-  Effect.ShadersStore.easuFragmentShader = src.slice(0, at) + `uniform sampler2D uGrain;uniform float uGrainOn;
+  // (its four 2 x 2 gathers read once each, as colour: Babylon's port reads each texel once per channel, 48 reads a pixel
+  // for 16; the same values in the same order, so the same result)
+  const gather = 'void easuGather(vec2 p,out vec4 r,out vec4 g,out vec4 b){ivec2 s=textureSize(textureSampler,0),mx=s-ivec2(1),q=ivec2(floor(p*vec2(s)-0.5));' +
+    'vec3 a=texelFetch(textureSampler,clamp(q+ivec2(0,1),ivec2(0),mx),0).rgb,c=texelFetch(textureSampler,clamp(q+ivec2(1,1),ivec2(0),mx),0).rgb,' +
+    'd=texelFetch(textureSampler,clamp(q+ivec2(1,0),ivec2(0),mx),0).rgb,e=texelFetch(textureSampler,clamp(q,ivec2(0),mx),0).rgb;' +
+    'r=vec4(a.r,c.r,d.r,e.r);g=vec4(a.g,c.g,d.g,e.g);b=vec4(a.b,c.b,d.b,e.b);}\n'
+  let src = Effect.ShadersStore.fsr1UpscalePixelShader, n = 0
+  src = src.replace(/vec4 (\w+)R=FsrEasuRF\((p\d)\);\s*vec4 \1G=FsrEasuGF\(\2\);\s*vec4 \1B=FsrEasuBF\(\2\);/g, (_m, v: string, q: string) => { n++; return `vec4 ${v}R,${v}G,${v}B;easuGather(${q},${v}R,${v}G,${v}B);` })
+  const fn = src.indexOf('vec3 FsrEasuF('), at = src.lastIndexOf('void main()')
+  if (n !== 4 || fn < 0 || at < 0) throw new Error(`post: FSR 1 upscale shader not as expected (${n} gathers of 4)`)
+  src = src.slice(0, fn) + gather + src.slice(fn)
+  Effect.ShadersStore.easuFragmentShader = src.slice(0, src.lastIndexOf('void main()')) + `uniform sampler2D uGrain;uniform float uGrainOn;
+float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 void main(){vec3 c=FsrEasuF(ivec2(gl_FragCoord.xy),con0,con1,con2,con3);
   c*=1.0+(texture2D(uGrain,gl_FragCoord.xy/512.0).r-0.5)*0.06*uGrainOn;
+  c+=(h(gl_FragCoord.xy)+h(gl_FragCoord.yx+17.3)-1.0)/255.0;
   gl_FragColor=vec4(c,1.0);}`
 }
 
@@ -144,11 +156,11 @@ export class Post {
   constructor(camera: ArcRotateCamera, engine: AbstractEngine, S: LookState, grain: () => BaseTexture, ground: (x: number, z: number) => number) { this.camera = camera; this.engine = engine; this.S = S; this.grain = grain; this.ground = ground }
   get passes(): PostProcess[] { return this.posts }
   // no finishing passes: the scene draws straight to the canvas (the detail check's debug view)
-  clear(): void { this.posts.forEach(p => p.dispose(this.camera)); this.posts = [] }
+  clear(): void { this.dropPending(); this.posts.forEach(p => p.dispose(this.camera)); this.posts = [] }
   get built(): boolean { return this.posts.length > 0 }
   // the lines of the target the scene draws into: the canvas's, or with the upscale the first pass's (Babylon floors a
   // pass's size as here)
-  sceneLines(): number { const h = this.engine.getRenderHeight(); return this.built && this.scale < 1 ? (h * this.scale) | 0 : h }
+  sceneLines(): number { const h = this.engine.getRenderHeight(true); return this.built && this.scale < 1 ? (h * this.scale) | 0 : h }
   // the depth along the view axis of the ground the screen's centre shows: the centre ray marched against the
   // terrain (the target sits at a fixed height, inside a hill or above a valley, so neither it nor the ground under
   // it is what the centre shows), eased over FOCUS_S so a pan over a hillside does not jump the sharp band; a jump
@@ -171,14 +183,36 @@ export class Post {
     this.focus = !this.focus || Math.abs(want - this.focus) > this.focus / 3 ? want : this.focus + (want - this.focus) * (1 - Math.exp(-Math.max(0, dt) / FOCUS_S))
     return this.focus
   }
-  build(): void {
-    const { camera, engine, S } = this
-    this.posts.forEach(p => p.dispose(camera)); this.posts = []
+  // the chain made at once, in place of the one before (the depth of field switched, a tool's finishing(true))
+  build(): void { this.dropPending(); this.posts.forEach(p => p.dispose(this.camera)); this.posts = this.make(this.camera) }
+  // a new render scale k (main.ts, Auto): its chain made aside, not attached, so its passes compile while the one
+  // before still draws (the unchanged passes' shaders come from the engine's cache); swapped in by tick() once each of
+  // its passes is ready, with swap (the page's hardware scale) in the same frame: no frame without its passes. The
+  // chain's own scale again, or no chain up (a tool's finishing(false)): at once (a chain still being made is dropped)
+  rescale(k: number, swap: () => void): void {
+    this.dropPending()
+    if (!this.built || k === this.scale) { this.scale = k; swap(); return }
+    const was = this.scale; this.scale = k; const posts = this.make(null); this.scale = was
+    this.pending = { posts, scale: k, swap }
+  }
+  // each frame before the scene renders (main.ts)
+  tick(): void {
+    const n = this.pending
+    if (!n || !n.posts.every(p => p.isReady())) return
+    this.pending = null; this.posts.forEach(p => p.dispose(this.camera))
+    for (const p of n.posts) this.camera.attachPostProcess(p)
+    this.posts = n.posts; this.scale = n.scale; n.swap()
+  }
+  private pending: { posts: PostProcess[]; scale: number; swap: () => void } | null = null
+  private dropPending(): void { this.pending?.posts.forEach(p => p.dispose()); this.pending = null }
+  // the chain at this.scale, attached to cam (null: not attached)
+  private make(cam: ArcRotateCamera | null): PostProcess[] {
+    const { camera, engine, S } = this, out: PostProcess[] = []
     // the scene's target, the first pass's input: 8 bits with the depth of field too (the lens term in alpha, 8 bits:
     // painter.glsl depthA; docs/plans/done/dof-v2.md)
     const HF = Constants.TEXTURETYPE_HALF_FLOAT, sceneType = MSAA.byte ? Constants.TEXTURETYPE_UNSIGNED_BYTE : HF
     // ratio: the size of the texture this pass reads, so the pass before it draws at that size
-    const pp = (name: string, uni: string[], smp: string[], type: number, ratio = 1.0, defines: string | null = null) => { const p = new PostProcess(name, name, uni, smp, ratio, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, defines, type); if (!this.posts.length) { p.samples = MSAA.samples } this.posts.push(p); return p }
+    const pp = (name: string, uni: string[], smp: string[], type: number, ratio = 1.0, defines: string | null = null) => { const p = new PostProcess(name, name, uni, smp, ratio, cam, Texture.BILINEAR_SAMPLINGMODE, engine, false, defines, type); if (!out.length) { p.samples = MSAA.samples } out.push(p); return p }
     // the miniature field (decisions 0024, 0040): focused on the ground at the screen's centre (updateFocus); a sharp
     // band beyond it (DOF.band) and one nearer (DOF_NEAR.band, in the bottom DOF_NEAR.screen of the frame only); the
     // largest blurs DOF.px and DOF_NEAR.px at 1080 lines, strongest at the closest zoom and DOF.wide of it at the widest.
@@ -233,5 +267,6 @@ export class Post {
         e.setFloat('uGrainOn', S.grain); e.setTexture('uGrain', this.grain())
       }
     }
+    return out
   }
 }

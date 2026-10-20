@@ -157,7 +157,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   } finally { timing = false; seg(null); for (const u of undo) u(); inst.dispose() }
   const r = engine.getRenderingCanvas()
   return {
-    tool: 'look-bench', version: 5,   // 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
+    tool: 'look-bench', version: 6,   // 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
     build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
     canvas: { w: canvas0[0], h: canvas0[1], cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
     gpuTimer: timer.available, wholeOnly: WHOLE_ONLY, holdS, focus, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
