@@ -90,7 +90,7 @@ vec3 wear(vec3 c,vec4 cv,Grain g){
   float w=1.0-smoothstep(0.5,4.0,cv.w+(g.wear-0.5)*3.0);
   return cv.x>1.5?c:mix(c,vec3(0.56,0.53,0.45),w*(0.3+0.4*g.wearDab));}
 // the class lookup's point, pushed by the grain's soft blotches (±1.5 m) so a class edge wanders like a painted one
-vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*3.0;}
+vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*COVER_WARP;}
 // THE DIRT SURFACE (docs/plans/done/ground-surface.md): where the ground is bare (a track, the village's trodden
 // ground, ploughed land, bare earth, a little on the road, the worn ground by the lines), the dirt texture (the
 // owner's, scratches, drag marks and splats, about DIRT_M m a repeat) in its value, around 1 so the class colour holds

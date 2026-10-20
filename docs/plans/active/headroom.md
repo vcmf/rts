@@ -70,7 +70,8 @@ Battlefield 3's and Unreal's virtual texturing), the meadow's per-clump terms ev
 ## Acceptance
 
 - Golden screenshots (`tools/golden.mjs`) against main: every view's pixels identical (the far-edge view differs by
-  a few pixels from main to main too). Met: 0 differing pixels, 2026-10-20.
+  a few pixels from main to main too). Met: 0 differing pixels, 2026-10-20; after review round 1 (the triangles classed by
+  their grid cell, a few more live) 4 pixels of 1/255 in two views: the two shader programs round apart by a step.
 - The bench against `?split=0`, whole frames, interleaved, 3 rounds: about 1.1 ms less at default and closest zoom
   (10.37 / 10.43 / 10.67 against 11.57 / 11.67 / 11.62 default; 8.05 / 8.22 / 8.32 against 9.37 / 9.65 / 8.95
   closest; the machine loaded, so the absolute numbers high), none at the widest (the baked material there).

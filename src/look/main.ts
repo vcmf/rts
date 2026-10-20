@@ -217,25 +217,28 @@ if (roadTex) {
   const live = terrain.terrainMat, baked = terrain.terrainBakedMat, ground = terrain.tileGround
   // near too, the live shader only where a road can paint (docs/plans/active/headroom.md: its size alone cost every
   // ground pixel; about 1.1 ms a frame at the default and closest zooms): the tile's triangles within reach of a line
-  // by the cover's wear distance (roadPaint's first test, shore.glsl: ROAD_NEAR + 2.2 m; the cover is read nearest,
-  // so its texels under a triangle and 1 m round it, against a texel of slack) drawn first with it, the rest with the
-  // material without (there roadPaint returns its colour unchanged: the same pixels). Both by one material made with
-  // the terrain's (terrain.terrainSplitMat: its place in the opaque draws). ?split=0: the live shader on the whole
-  // tile (the A/B)
-  if (params.get('split') !== '0') {
+  // by the cover's wear distance (roadPaint's first test, shore.glsl: D.roadGate; the cover is read nearest, so its
+  // texels under a grid cell and 1 m round it, against a texel of slack, and each triangle takes its cell's answer)
+  // drawn first with it, the rest with the material without (there roadPaint returns its colour unchanged: the same
+  // pixels). Both by one material made with the terrain's (terrain.terrainSplitMat: its place in the opaque draws).
+  // ?split=0: the live shader on the whole tile (the A/B)
+  const splitParam = params.get('split')
+  if (splitParam !== null && splitParam !== '0') throw new Error(`?split must be 0, not ${splitParam}`)
+  if (splitParam === null) {
     const P = ground.getVerticesData(VertexBuffer.PositionKind)!, ix = ground.getIndices()!, C = look.cover, M = 1
-    const lim = Math.ceil((D.spec.road.near + 2.2) / WEAR_STEP) + 1, at = (v: number) => Math.min(C.n - 1, Math.max(0, Math.floor(v)))
-    const near = (x0: number, x1: number, z0: number, z1: number) => {
-      for (let j = at((z0 - M - C.z0) / C.cell); j <= at((z1 + M - C.z0) / C.cell); j++) for (let i = at((x0 - M - C.x0) / C.cell); i <= at((x1 + M - C.x0) / C.cell); i++) if (C.tex[(j * C.n + i) * 4 + 3] <= lim) return true
-      return false
+    const n = D.spec.tileSub, w = D.spec.tile / n, h = D.spec.tile / 2, lim = Math.ceil(D.roadGate / WEAR_STEP) + 1
+    const at = (v: number) => Math.min(C.n - 1, Math.max(0, Math.floor(v))), cellOf = (v: number) => Math.min(n - 1, Math.max(0, Math.floor((v + h) / w)))
+    const nearRoad = new Uint8Array(n * n)
+    for (let cz = 0; cz < n; cz++) for (let cx = 0; cx < n; cx++) {
+      const x0 = cx * w - h, z0 = cz * w - h
+      search: for (let j = at((z0 - M - C.z0) / C.cell); j <= at((z0 + w + M - C.z0) / C.cell); j++) for (let i = at((x0 - M - C.x0) / C.cell); i <= at((x0 + w + M - C.x0) / C.cell); i++) if (C.tex[(j * C.n + i) * 4 + 3] <= lim) { nearRoad[cz * n + cx] = 1; break search }
     }
-    const roads: number[] = [], rest: number[] = []
-    for (let t = 0; t < ix.length; t += 3) {
-      const xs = [P[ix[t] * 3], P[ix[t + 1] * 3], P[ix[t + 2] * 3]], zs = [P[ix[t] * 3 + 2], P[ix[t + 1] * 3 + 2], P[ix[t + 2] * 3 + 2]]
-      ;(near(Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)) ? roads : rest).push(ix[t], ix[t + 1], ix[t + 2])
-    }
-    ground.setIndices([...roads, ...rest]); ground.subMeshes = []
-    const nv = P.length / 3; new SubMesh(0, 0, nv, 0, roads.length, ground); new SubMesh(1, 0, nv, roads.length, rest.length, ground)
+    const isLive = (t: number) => { let x = 0, z = 0; for (let k = 0; k < 3; k++) { x += P[ix[t + k] * 3]; z += P[ix[t + k] * 3 + 2] } return nearRoad[cellOf(z / 3) * n + cellOf(x / 3)] === 1 }
+    let nLive = 0; for (let t = 0; t < ix.length; t += 3) if (isLive(t)) nLive += 3
+    const out = new Uint32Array(ix.length); let a = 0, b = nLive
+    for (let t = 0; t < ix.length; t += 3) { const o = isLive(t) ? a : b; out[o] = ix[t]; out[o + 1] = ix[t + 1]; out[o + 2] = ix[t + 2]; if (o === a) a += 3; else b += 3 }
+    ground.setIndices(out); ground.subMeshes = []
+    const nv = P.length / 3; new SubMesh(0, 0, nv, 0, nLive, ground); new SubMesh(1, 0, nv, nLive, ix.length - nLive, ground)
     roadSplit = terrain.terrainSplitMat
   }
   await Promise.all([live, baked].map(m => m.forceCompilationAsync(ground)))
@@ -248,7 +251,8 @@ if (roadTex) {
     if (ground.material !== live && ground.material !== split && ground.material !== baked) return   // (the debug views' water ground)
     far = isBakedArm(macro.arm()) && (far ? r > ROAD_LIVE_R - ROAD_HOLD : r > ROAD_LIVE_R + ROAD_HOLD)
     const want = far ? baked : split
-    if (ground.material !== want && want.isReady(ground)) ground.material = want
+    // (a MultiMaterial is always ready: the split waits on its two materials)
+    if (ground.material !== want && (want === split ? live.isReady(ground) && baked.isReady(ground) : want.isReady(ground))) ground.material = want
   })
 }
 // ?dof=0|1: the gameplay depth of field, on by default (decision 0024); the look tools load the page with it off
@@ -296,8 +300,8 @@ const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 
 // ?far=off (below, after the bakes), ?msaa=1 (before the passes): the widest zoom's A/Bs (docs/plans/done/wide-perf.md)
 // ?hide=<prefix,...>: meshes whose name starts with one of these not drawn, ?off=<toggle,...>: those panel switches
 // off on load: the cost ablations (docs/plans/active/headroom.md; after the bakes, which keep the meshes)
-{ const hide = (params.get('hide') ?? '').split(',').filter(Boolean)
-  if (hide.length) scene.onBeforeRenderObservable.add(() => { for (const m of scene.meshes) if (hide.some(p => m.name.startsWith(p)) && m.isEnabled()) m.setEnabled(false) }) }
+{ const hide = (params.get('hide') ?? '').split(',').filter(Boolean), off = (m: { name: string; setEnabled(on: boolean): void }) => { if (hide.some(p => m.name.startsWith(p))) m.setEnabled(false) }
+  if (hide.length) { for (const m of scene.meshes) off(m); scene.onNewMeshAddedObservable.add(off) } }
 for (const k of (params.get('off') ?? '').split(',').filter(Boolean)) { if (!(TOGGLES as readonly string[]).includes(k)) throw new Error(`?off takes ${TOGGLES.join(', ')}, not ${k}`); (S as Record<string, number>)[k] = 0 }
 if (params.has('bloom')) { if (params.get('bloom') !== '0') throw new Error(`?bloom must be 0, not ${params.get('bloom')}`); S.bloom = 0 }
 type Toggle = typeof TOGGLES[number]
