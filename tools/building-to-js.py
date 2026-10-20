@@ -4,7 +4,7 @@
 # data/buildings/<model>-detail.png. Pack colours are never used (AGENTS.md): each face takes a role (wall, roof,
 # timber, opening, accent) by the median colour of the texels under it, nearest in Lab to the model's reference colours
 # (MODELS, below); the page paints each role from the palette. The detail keeps the texture's value only, each texel
-# divided by its role's mean value (so it varies about 1 within a role), stored as 128 = 1.
+# over its neighbourhood's mean (so it varies about 1: the fine courses and slates), stored as 128 = 1.
 #
 # Usage (from rts/; the zips are the owner's, in the git-ignored assets/buildings):
 #   blender -b --python tools/building-to-js.py -- windmill assets/buildings/windmill.zip
@@ -36,6 +36,7 @@ MODELS = {
 # 'up': per role the range of a face's normal's upward component it may take (a roof faces up, a wall stands): the
 # colours alone do not split a shaded wall from a slate or a lit beam from a wall stone; 'zr': the range of a face's
 # height, as a share of the model's, a role may take (the house's terracotta chimney pots: its frames are timber)
+DETAIL_BOX, DETAIL_CLIP = 4, (0.6, 1.5)   # the detail's local mean: a 9-texel box at 512²; its range
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 def srgb_to_lab(c):   # c: (..., 3) in 0..1
@@ -124,11 +125,14 @@ def main():
     p3 = np.array(pos).reshape(-1, 3)
     data = {'pos': pos, 'nrm': nrm, 'uv': uvs, 'role': rol, 'idx': idx, 'min': p3.min(0).round(3).tolist(), 'max': p3.max(0).round(3).tolist()}
     print(name, 'verts', len(rol), 'tris', len(idx) // 3, 'size m', (p3.max(0) - p3.min(0)).round(2).tolist())
-    # the detail: the texture's value, each texel over its role's mean value (the texel's role by the same rule)
+    # the detail: the texture's value over its local mean (a box of DETAIL_BOX texels round it), so only the fine
+    # value (stone courses, slates, planks) is kept, whatever the region: a texel's role guessed by its colour flipped
+    # between neighbours on the windmill's brown tower (mortar read as timber) and blotched it. Clipped to DETAIL_CLIP
     st = max(1, w // 512); small = px[::st, ::st]; sh_, sw_ = small.shape[:2]   # (512² is enough for a value detail)
-    tr = classify(small.reshape(-1, 3).astype(np.float64), cfg['refs']).reshape(sh_, sw_)
-    val = small @ np.array([0.2126, 0.7152, 0.0722]); det = np.ones_like(val)
-    for r in np.unique(tr): m_ = val[tr == r].mean(); det[tr == r] = val[tr == r] / max(m_, 1e-3)
+    val = small @ np.array([0.2126, 0.7152, 0.0722])
+    k_ = DETAIL_BOX; pad = np.pad(val, k_, mode='edge'); c_ = pad.cumsum(0).cumsum(1); c_ = np.pad(c_, ((1, 0), (1, 0)))
+    n_ = 2 * k_ + 1; loc = (c_[n_:, n_:] - c_[:-n_, n_:] - c_[n_:, :-n_] + c_[:-n_, :-n_]) / (n_ * n_)
+    det = np.clip(val / np.maximum(loc, 1e-3), *DETAIL_CLIP)
     det8 = np.clip(det * 128, 0, 255).astype(np.uint8)
     out_dir = os.path.join(REPO, 'data', 'buildings'); os.makedirs(out_dir, exist_ok=True)
     im = bpy.data.images.new(name + '-detail', sw_, sh_, alpha=False); g = det8.astype(np.float32) / 255

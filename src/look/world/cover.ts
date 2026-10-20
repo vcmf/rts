@@ -11,7 +11,7 @@
 import { hash, sstep, vn } from '../noise.ts'
 import { axisX } from './author.ts'
 import { RIVER } from '../river.ts'
-import { BUILDINGS, PAVE_WOBBLE, onPaving, paveShape } from './buildings.ts'
+import { BUILDINGS, PAVE_GAP, PAVE_WOBBLE, onPaving, paveShape, pavePoly, polyGap } from './buildings.ts'
 
 export const COVER = { meadow: 0, pasture: 1, wood: 2, road: 3, track: 4, village: 5, wheat: 6, green: 7, stubble: 8, ploughed: 9, bare: 10 } as const
 export type CoverClass = typeof COVER[keyof typeof COVER]
@@ -143,7 +143,13 @@ export function authorCover(far: number, cell: number): CoverGrid {
   const n = Math.round(far / cell), x0 = -far / 2, z0 = -far / 2, tex = new Uint8Array(n * n * 4)
   for (const f of FIELDS) for (const [x, z] of f.poly) if (onFloodplain(x, z)) throw new Error(`cover: field corner ${x.toFixed(0)},${z.toFixed(0)} on the floodplain`)
   for (const [x, z] of VILLAGE) if (inFormationZone(x, z) || onFloodplain(x, z)) throw new Error('cover: the village is in a formation zone or on the floodplain')
-  // the buildings (world/buildings.ts): none in a formation zone, on the floodplain, or on a road or a track
+  // the buildings (world/buildings.ts): their paved yards at least PAVE_GAP apart; none in a formation zone, on the
+  // floodplain, or on a road or a track
+  const yards = BUILDINGS.map(pavePoly)
+  for (let i = 0; i < yards.length; i++) for (let j = i + 1; j < yards.length; j++) {
+    const g = polyGap(yards[i], yards[j])
+    if (g < PAVE_GAP) throw new Error(`cover: the yards of the buildings at ${BUILDINGS[i].x}, ${BUILDINGS[i].z} and ${BUILDINGS[j].x}, ${BUILDINGS[j].z} are ${g.toFixed(1)} m apart (at least ${PAVE_GAP})`)
+  }
   for (const b of BUILDINGS) {
     // (its paving's farthest reach and its wobble)
     const q = paveShape(b).b, r = (q[0] < 0 ? -q[0] : Math.hypot(q[0], Math.max(q[1], q[2]))) + PAVE_WOBBLE

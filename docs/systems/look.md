@@ -372,7 +372,12 @@ Each stands in a paved yard (`pavePaint` in `shore.glsl`, in `roadPaint`'s path)
 (`data/paving-v1.png`, 4.5 m a repeat) over its footprint grown by a margin (the house's wider at its door, toward the
 road; the windmill's a ring), the exact shapes as uniform arrays (`paveShape`, ≤ 16), the edge ragged by a noise-wobbled
 distance; read only where the cover paints the village's ground worn to nothing, which the buildings' cover reaches
-(so only the road split's live material carries it); the macro bake paints the cobbles' mean.
+(so only the road split's live material carries it); the macro bake paints the cobbles' mean. Its level of detail as the roads': the cobbles fade out from a 7 cm to a
+22 cm pixel footprint into their mean in a soft blotch over a few metres (no texture read past it), what the macro bake
+paints too. The houses each turn a quarter turn of their own, their yards (on the door's side) at least `PAVE_GAP`
+apart (the cover's authoring checks it). The detail texture is the texture's value over its local mean; the buildings
+look the sun's shadow up 15 cm off their surface and break their band edges with a third of the ground's grain (on
+flat faces the full grain and the shadow's self-test made specks).
 
 ### The shadows' look
 

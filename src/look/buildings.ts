@@ -25,7 +25,7 @@ declare global { interface Window { BUILDINGS?: Record<string, BuildingModel> } 
 // against the armies (readable first: the guard): the windmill's warm ochre stone and red cap, the cottages' pale
 // limestone and blue-grey slate, timber a dark brown, the openings near black, the chimney pots terracotta
 const PALETTE: Record<Building['model'], { wall: string; roof: string; timber: string; opening: string; accent: string; detail: string }> = {
-  windmill: { wall: '#b8915e', roof: '#9a4a32', timber: '#5e4330', opening: '#1f1a17', accent: '#9a4a32', detail: WINDMILL_DETAIL },
+  windmill: { wall: '#bd8247', roof: '#9a4a32', timber: '#5e4330', opening: '#1f1a17', accent: '#9a4a32', detail: WINDMILL_DETAIL },
   house: { wall: '#cbbfa6', roof: '#5d636b', timber: '#64472f', opening: '#1c1c1e', accent: '#a5643f', detail: HOUSE_DETAIL },
 }
 const DETAIL_AMT = 0.35   // how much of the texture's value shows (the paint's grain is on top)

@@ -17,9 +17,12 @@ vec3 roleCol(float r){
 void main(){
   vec3 N=normalize(vN);
   vec4 lm=LM(vW);
-  float sh=shadowAt(vW,N);
+  // the sun's shadow looked up 15 cm off the surface along its normal (a wall or a roof near the light's grazing angle
+  // shadowed itself in specks: the tower, the slates)
+  float sh=shadowAt(vW+N*0.15,N);
   float d=texture2D(uDetail,vUV).r*255.0/128.0;
   vec3 alb=roleCol(vRole)*mix(1.0,d,uDetailAmt);
   pBounce=bounceAt(vRoot,vW.y-vH,vH,0.0);
-  vec3 c=paint(alb,N,vW,mix(1.0,lm.g,uAO*0.6),0.4,1.0,sh);
+  // (the grain breaks the band edges at a third of the ground's: on a flat wall it broke them into pixel specks)
+  vec3 c=paint(alb,N,vW,mix(1.0,lm.g,uAO*0.6),0.4,0.3,sh);
   gl_FragColor=lensOut(airOf(c,vW,lm,vH),vW);}

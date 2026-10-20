@@ -167,8 +167,7 @@ vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT)
 // cover paints the village's ground worn to nothing (a building's footprint and its yard are: cover.ts), so the live
 // roads' material alone carries it (the road split, terrain.ts) and the rest of the village pays a loop of a few
 // buildings. Its colours kept near their mean (PAVE_KEEP) so it reads as ground; the season, the snow and the light are
-// the ground's (it is painted before them). uPaveOn 0 (the macro bake, or the texture not loaded): the cobbles' mean,
-// what a 0.5 m texel would show
+// the ground's (it is painted before them). uPaveOn 0 (the macro bake, or the texture not loaded): the far look (below)
 uniform vec4 uPaveA[16],uPaveB[16];uniform float uPaveN,uPaveOn;uniform sampler2D uPaving;
 #define PAVE_M 4.5
 #define PAVE_MEAN vec3(0.558,0.481,0.369)
@@ -186,8 +185,12 @@ vec3 pavePaint(vec3 c,vec2 xz){
   if(d>1.2)return c;
   float wob=(mValue(xz/2.3+3.1)-0.5)*1.1+(mValue(xz/0.7+8.7)-0.5)*0.45,k=1.0-smoothstep(-0.3,0.35,d+wob);
   if(k<=0.0)return c;
-  vec3 p=PAVE_MEAN;
-  if(uPaveOn>0.5)p=PAVE_MEAN+(texM(uPaving,xz/PAVE_M,PAVE_M).rgb-PAVE_MEAN)*PAVE_KEEP;
+  // the level of detail (as the roads' tracks and grit): the cobbles while a pixel spans under half a stone (7 cm),
+  // gone by 22 cm; past them their mean in a soft blotch over a few metres, no texture read; under them the same
+  // blotch, so the cobbles' mean (their mipmaps') meets it. The macro bake (uPaveOn 0, 0.5 m texels) paints the same
+  float v=0.6*mValue(xz/3.3+1.7)+0.4*mValue(xz/1.4+5.3),bl=0.92+0.16*v,lod=(1.0-smoothstep(0.07,0.22,pxMacro()))*step(0.5,uPaveOn);
+  vec3 p=PAVE_MEAN*bl;
+  if(lod>0.0)p=mix(p,(PAVE_MEAN+(texM(uPaving,xz/PAVE_M,PAVE_M).rgb-PAVE_MEAN)*PAVE_KEEP)*bl,lod);
   return mix(c,p,k);}
 vec3 roadPaint(vec3 c,vec2 xz){
   #if defined(MACRO_FLAT)||defined(MACRO_SAB_ONECLASS)

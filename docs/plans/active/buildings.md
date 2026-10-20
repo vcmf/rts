@@ -50,7 +50,8 @@ things get runtime light); the colour by palette roles with the texture's value 
   grows to the paving's reach, so the road split's live material carries it and the rest of the ground pays nothing.
   Tiled at 4.5 m (stones about 15 cm), mipmapped, read with explicit gradients; its colours kept at 0.8 of their spread
   round the mean; the season, snow and light the ground's. The macro bake paints the cobbles' mean (at 0.5 m texels
-  the stones average to it).
+  the stones average to it). Its level of detail as the roads': the cobbles fade out from a 7 cm to a 22 cm pixel
+  footprint into their mean in a soft blotch (no texture read past it), the bake's look, so the swap is seamless.
 
 ## Acceptance
 
@@ -76,5 +77,14 @@ things get runtime light); the colour by palette roles with the texture's value 
 - The instance yaw measured on the page: a local point (x, z) goes to (x cos − z sin, x sin + z cos) (a yaw of π/2
   turned the houses' fronts east: fixed to −π/2).
 - The paving built (2026-10-20): `pavePaint`, the cover's footprints grown to the yards (`onPaving`).
+- The owner's second round (2026-10-20): the houses each a quarter turn of its own (doors to the road, gable to it,
+  side-on, back to it) and a little more, in an irregular cluster; six fit the village ground with their yards at
+  least 4 m apart (`PAVE_GAP`, checked by the cover's authoring and `test/buildings.test.ts`). The paving's level of
+  detail as the roads': the cobbles fade out from a 7 cm to a 22 cm pixel footprint into their mean in a soft blotch,
+  no texture read past it; the macro bake paints the same. The windmill's specks (its tower, the slates too): the sun's
+  shadow on the surface itself near the light's grazing angle and the grain at the ground's strength on flat faces:
+  the shadow looked up 15 cm off the surface, the band edges' grain at a third; the detail texture over its local mean
+  (a texel's guessed role flipped on the brown tower); the tower's wall warmer, to the reference's ochre. Left: the
+  sails' cast shadow steps across the tower at the shadow map's resolution.
 - To do: the owner's look; the bench against main; the guard and the checks.
 
