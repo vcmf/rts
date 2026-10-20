@@ -123,6 +123,8 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   const frames = (n: number) => new Promise<void>(r => { let k = 0; const o = engine.onEndFrameObservable.add(() => { if (++k >= n) { engine.onEndFrameObservable.remove(o); r() } }) })
   const seconds = (s: number) => new Promise<void>(r => setTimeout(r, s * 1000))
 
+  // the scene's frame: the finishing chain's first target (under the upscale smaller than the canvas), or the canvas
+  const sceneSize = (): [number, number] => { const p = passes.post()[0]; return p ? [p.width, p.height] : [engine.getRenderWidth(true), engine.getRenderHeight(true)] }
   const canvas0 = [engine.getRenderWidth(true), engine.getRenderHeight(true)]   // the page's frame before any camera (a wide one draws smaller at Auto)
   const runs: RunStats[] = [], cams = cameras()
   try {
@@ -149,7 +151,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
         // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
         const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
         const passesFit = gpuMs.frame && !WHOLE_ONLY ? +(sum / gpuMs.frame.p50).toFixed(2) : null
-        runs.push({ cam: cam.name, arm: arm.name, size: [engine.getRenderWidth(true), engine.getRenderHeight(true)], frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
+        runs.push({ cam: cam.name, arm: arm.name, size: sceneSize(), frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
       }
     }
   } finally { timing = false; seg(null); for (const u of undo) u(); inst.dispose() }

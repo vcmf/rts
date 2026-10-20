@@ -62,9 +62,9 @@ void main(){vec3 c=base();
     c+=b*hi*0.11*uBloom*(1.0-smoothstep(0.60,1.0,vUV.y)*uTopAmt*uGrade);}
   c=shoulder(c);
   vec2 q=(vUV-0.5)*vec2(uRes.x/uRes.y,1.0);c=mix(c,c*uVignette,smoothstep(0.45,1.05,length(q))*0.55);
-  // (upscaled, the paper and the dither are laid after the upscale, at the screen's pixels: easu, src/look/post.ts)
+  // (upscaled, the paper is laid after the upscale, at the screen's pixels: easu, src/look/post.ts)
   #ifndef UPSCALED
   c*=1.0+(texture2D(uGrain,gl_FragCoord.xy/(512.0*uRenderScale)).r-0.5)*0.06*uGrainOn;     // static paper, fixed on the screen whatever the render scale
-  c+=(h(gl_FragCoord.xy)+h(gl_FragCoord.yx+17.3)-1.0)/255.0;                 // dither against banding in mist & vignette
   #endif
+  c+=(h(gl_FragCoord.xy)+h(gl_FragCoord.yx+17.3)-1.0)/255.0;                 // dither against banding in mist & vignette
   gl_FragColor=vec4(c,1.0);}

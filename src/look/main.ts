@@ -61,10 +61,9 @@ setRiver(look.river); setHeightfield(look.hf, look.far, D.spec.tile / 2)
 const canvas = document.getElementById('c') as HTMLCanvasElement
 const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false }, false)
 engine.setHardwareScalingLevel(1)
-// the scene's own lines: the canvas's, or under the upscale its scale of them (upScale: the finishing chain's first
-// target's, set with post.scale below; Babylon floors a pass's size)
-let upScale = 1
-const sceneH = () => (engine.getRenderHeight() * upScale) | 0
+// the scene's own lines (the finishing chain's, once made below: under the upscale, its first target's)
+let postRef: Post | null = null
+const sceneH = () => postRef?.sceneLines() ?? engine.getRenderHeight()
 const scene = new Scene(engine); scene.skipPointerMovePicking = true
 
 // ?soft=off: the shadows before the soft-shadow plan (docs/plans/done/soft-shadows.md); ?penumbra: metres of edge
@@ -248,46 +247,50 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat])   // the d
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false
 if (flag('nanmark')) { DEBUG.nanmark = true; MSAA.byte = false }   // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
-const post = new Post(camera, engine, S, () => mats.grain, groundAt); post.build()
+const post = new Post(camera, engine, S, () => mats.grain, groundAt); postRef = post
 
 /* ---------- UI ---------- */
 const byId = <T extends HTMLElement>(id: string): T => { const e = document.getElementById(id); if (!e) throw new Error(`look.html has no #${id}`); return e as T }
 const input = (id: string) => byId<HTMLInputElement>(id)
 input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
-// the render scale (decision 0036): a fixed one from the panel, or Auto (S.res 0, the default): by zoom, from the
-// camera's radius, a level of AUTO (each change resizes the frame's targets: three over the whole range; the edges at
-// 72, 80 and 88 % of the SPEC's zoom range, 0.75 at the widest), changed only once the radius is AUTO_HOLD m past the
-// level's edge (no flicker at an edge).
+// the render scale (decision 0045, after 0036): a fixed one from the panel, or Auto (S.res 0, the default): by zoom,
+// from the camera's radius, a level of AUTO (each change resizes the frame's targets: two over the whole range; the
+// edges at 80 and 88 % of the SPEC's zoom range, 0.75 at the widest), changed only once the radius is AUTO_HOLD m
+// past the level's edge (no flicker at an edge).
 // The interface is HTML over the canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
 const { rMin, rMax } = D.spec.camera, at = (f: number) => rMin + f * (rMax - rMin)   // the edges as shares of the zoom range
 // From the closest zoom 0.9 (the owner, 2026-10-20: docs/plans/active/render-scale.md), upscaled by FSR 1's EASU in the
 // finishing chain (post.scale: the canvas stays at the page's pixels, the paper grain laid after the upscale);
 // ?upscale=bilinear: the canvas drawn smaller and stretched by the browser, as before (the A/B)
-const AUTO: [number, number][] = [[at(0.72), 0.9], [at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.75]], AUTO_HOLD = 4
+const AUTO: [number, number][] = [[at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.75]], AUTO_HOLD = 4
 const upscaleParam = params.get('upscale')
 if (upscaleParam !== null && upscaleParam !== 'bilinear') throw new Error(`?upscale must be bilinear, not ${upscaleParam}`)
 let scaleNow = 1, level = 0
-// EASU from 0.9 up (its pass costs about 0.35 ms at the screen's pixels: under 0.9, at the wide zooms, it cost more
-// than it saved, so there the browser's stretch as before)
+// EASU at Auto's 0.9 (its pass costs about 0.35 ms at the screen's pixels: under 0.9, at the wide zooms, it cost more
+// than it saved, so there the browser's stretch as before). WebGL2 only (FSR 1's shader is GLSL ES 3); a fixed scale
+// from the panel or a tool stretches as before. The chain is rebuilt at a change only while it is up (a tool's
+// finishing(false) keeps it down)
 const EASU_MIN = 0.9
-const applyScale = (s: number) => {
-  if (s === scaleNow) return
+const applyScale = (s: number, auto: boolean) => {
+  const easu = auto && !mats.webgl1 && upscaleParam !== 'bilinear' && s >= EASU_MIN && s < 1, k = easu ? s : 1
+  if (s === scaleNow && post.scale === k) return
   scaleNow = s
-  const easu = upscaleParam !== 'bilinear' && s >= EASU_MIN && s < 1
   engine.setHardwareScalingLevel(easu ? 1 : 1 / s)
-  const k = easu ? s : 1
-  if (post.scale !== k) { post.scale = upScale = k; post.build() }
+  if (post.scale !== k) { post.scale = k; if (post.built) post.build() }
 }
 const resSel = byId<HTMLSelectElement>('res')
 resSel.onchange = () => { S.res = +resSel.value }
-scene.onBeforeRenderObservable.add(() => {
+const scaleTick = () => {
   if (+resSel.value !== S.res) resSel.value = String(S.res)   // the panel follows a scale set elsewhere (the tools)
-  if (S.res) { applyScale(S.res); return }
+  if (S.res) { applyScale(S.res, false); return }
   const r = camera.radius
   while (level < AUTO.length - 1 && r > AUTO[level][0] + AUTO_HOLD) level++
   while (level > 0 && r < AUTO[level - 1][0] - AUTO_HOLD) level--
-  applyScale(AUTO[level][1])
-})
+  applyScale(AUTO[level][1], true)
+}
+// the first level before the chain is made (it is made once, at the scale the first frame draws at)
+scaleTick(); post.build()
+scene.onBeforeRenderObservable.add(scaleTick)
 const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
 // ?bloom=0: open with the bloom off (an A/B, docs/plans/done/frame-readout.md)
 // ?far=off (below, after the bakes), ?msaa=1 (before the passes): the widest zoom's A/Bs (docs/plans/done/wide-perf.md)

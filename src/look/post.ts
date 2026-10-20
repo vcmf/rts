@@ -122,16 +122,14 @@ Effect.ShadersStore.dofdownFragmentShader = withLens(DOFDOWN_FS)
 Effect.ShadersStore.dofFragmentShader = withLens(DOF_FS)
 Effect.ShadersStore.uberFragmentShader = withLens(UBER_FS)
 // the upscale (the render scale under 1, docs/plans/active/render-scale.md): FSR 1's EASU from the scene's pixels to
-// the screen's, then the paper grain and the dither the finishing pass leaves to it (uber.frag, UPSCALED), at the
-// screen's pixels: the paper is not stretched. The shader is Babylon's, its main replaced
+// the screen's, then the paper grain the finishing pass leaves to it (uber.frag, UPSCALED), at the screen's pixels:
+// the paper is not stretched (the dither stays in the finishing pass: it must come before its 8-bit target). The shader is Babylon's, its main replaced
 {
   const src = Effect.ShadersStore.fsr1UpscalePixelShader, at = src.lastIndexOf('void main()')
   if (at < 0) throw new Error('post: FSR 1 upscale shader without its main')
   Effect.ShadersStore.easuFragmentShader = src.slice(0, at) + `uniform sampler2D uGrain;uniform float uGrainOn;
-float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 void main(){vec3 c=FsrEasuF(ivec2(gl_FragCoord.xy),con0,con1,con2,con3);
   c*=1.0+(texture2D(uGrain,gl_FragCoord.xy/512.0).r-0.5)*0.06*uGrainOn;
-  c+=(h(gl_FragCoord.xy)+h(gl_FragCoord.yx+17.3)-1.0)/255.0;
   gl_FragColor=vec4(c,1.0);}`
 }
 
@@ -147,6 +145,10 @@ export class Post {
   get passes(): PostProcess[] { return this.posts }
   // no finishing passes: the scene draws straight to the canvas (the detail check's debug view)
   clear(): void { this.posts.forEach(p => p.dispose(this.camera)); this.posts = [] }
+  get built(): boolean { return this.posts.length > 0 }
+  // the lines of the target the scene draws into: the canvas's, or with the upscale the first pass's (Babylon floors a
+  // pass's size as here)
+  sceneLines(): number { const h = this.engine.getRenderHeight(); return this.built && this.scale < 1 ? (h * this.scale) | 0 : h }
   // the depth along the view axis of the ground the screen's centre shows: the centre ray marched against the
   // terrain (the target sits at a fixed height, inside a hill or above a valley, so neither it nor the ground under
   // it is what the centre shows), eased over FOCUS_S so a pan over a hillside does not jump the sharp band; a jump
