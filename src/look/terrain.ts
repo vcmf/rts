@@ -126,7 +126,7 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   return { terrainMat, terrainBakedMat, terrainSplitMat, tileMats, farTerrainMat, hillMat, bankN, riverMask, riverMaskCanvas, tileGround, farGround, apron }
 }
 
-// The live roads' shader only where a road can paint (docs/plans/active/headroom.md: its size alone cost every ground
+// The live roads' shader only where a road can paint (docs/plans/done/headroom.md: its size alone cost every ground
 // pixel; about 1.1 ms a frame at the default and closest zooms): the tile's triangles whose grid cell lies within the
 // road gate of a line by the cover's wear distance (roadPaint's first test, shore.glsl: D.roadGate; the cover is read
 // nearest, so its texels under the cell and 1 m round it, against a texel of slack) drawn first, as submesh 0, with the

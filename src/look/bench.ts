@@ -61,7 +61,7 @@ function rendererName(engine: AbstractEngine): string {
 
 // focus: the point the cameras orbit (the camera's start by default; the forest bench's ?benchat)
 // ?passes=0: whole frames only, no pass timers (their queries split the Metal render pass; the frames between were
-// measured the same with them and without, 2026-10-20: docs/plans/active/headroom.md)
+// measured the same with them and without, 2026-10-20: docs/plans/done/headroom.md)
 const passesParam = new URLSearchParams(location.search).get('passes')
 if (passesParam !== null && passesParam !== '0') throw new Error(`?passes must be 0, not ${passesParam}`)
 const WHOLE_ONLY = passesParam === '0'

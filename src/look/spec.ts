@@ -39,7 +39,7 @@ export interface Spec {
   // junction weight is full within it of another line's side and gone by `junction` m; a pixel looks for a road only
   // where the cover's distance to a line (2 m cells) is under `near` m: the paint reaches at most `edge` m past a side
   // at the warped point (roadPaint, shore.glsl, clamps its ragged edge there), a cover texel's centre lies within √2 m
-  // of it, its distance is rounded to 0.05 m, so 2.6 m loses no painted pixel (docs/plans/active/headroom.md). Before
+  // of it, its distance is rounded to 0.05 m, so 2.6 m loses no painted pixel (docs/plans/done/headroom.md). Before
   // the warp a pixel looks only within the gate (Derived.roadGate: `near` plus the warp's reach and slack)
   road: { cell: number; reach: number; paint: number; junction: number; near: number; edge: number }
   // the water data (docs/plans/done/w3-water-data.md): texels of `texel` m over the tile; the depth (the water level
