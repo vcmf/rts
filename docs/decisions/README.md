@@ -51,3 +51,4 @@ recorded here on 2026-10-08.
 | [0042](0042-dark-water-shimmer-limits.md) | Dark water: the water's shimmer limits re-baselined | accepted |
 | [0043](0043-epic-is-the-default-mood.md) | The epic mood, after Tiny Glade, is the default | accepted |
 | [0044](0044-epic-shimmer-limits.md) | The water's shimmer limits re-baselined for the epic mood | accepted |
+| [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | proposed |
