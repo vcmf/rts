@@ -32,10 +32,13 @@ work.
 
 ## Acceptance
 
-- The bench (production build, Metal, interleaved, three rounds) against main and against `?upscale=bilinear`: at
-  the default and closest zooms about 0.7-0.85 ms under main; the widest zoom as main. Measured on the draft
-  (EASU at every scale): default 9.78 against main 10.45 and the stretch 9.35; closest 7.67, 8.52, 7.45; widest 8.23
-  against 7.55 (hence the stretch under 0.9).
+- The bench (production build, Metal, interleaved, three rounds) against main (with the road split, #122) and against
+  `?upscale=bilinear`. Met, 2026-10-20, ms (main / this / `?upscale=bilinear`): default 9.97, 10.02, 9.97 / 9.50,
+  9.48, 9.48 / 10.02, 9.98, 10.00; closest 8.10, 8.03, 8.00 / 7.52, 7.33, 7.52 / 8.12, 7.93, 8.03; widest 7.45, 7.50,
+  7.47 / 7.77, 7.82, 7.77 / 7.58, 7.55, 7.53. So about 0.5-0.6 ms less near and 0.3 more at the widest (the chain's
+  bilinear pass in place of the browser's stretch); `?upscale=bilinear` is main. (The draft's, EASU at every scale
+  with 48 reads a pixel: default 9.78 against main's 10.45 then; EASU's cost is its pass, not its reads: 16 reads
+  measured the same.)
 - Side-by-side crops (main at 1, 0.9 stretched, 0.9 EASU) shown to the owner: accepted 2026-10-20.
 - The checks pin the scale to 1: as main (golden screenshots identical; the checks' known failures #118, #120).
 - `npm test`.

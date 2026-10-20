@@ -35,7 +35,11 @@ closest 8.52, 7.67, 7.45). At the widest zoom, already at 0.75, EASU cost 0.7 ms
 
 ## Consequences
 
-- Good: about 0.7 ms a frame less at the default zoom and 0.85 at the closest, the near views nearly as sharp as at 1.
+- Good: measured on the final code against main with the road split (production build, Metal, headless 1920×1080,
+  interleaved, three rounds): default zoom 9.49 ms against 9.99, closest 7.46 against 8.04, so about 0.5-0.6 ms a
+  frame less, the near views nearly as sharp as at 1.
+- Bad: the widest zoom 7.79 against 7.47 ms: the last pass's bilinear upscale in the chain costs about 0.3 ms where
+  the browser's stretch was free (the price of never making the chain again at a change of scale).
 - Bad: at a fixed 1 or over (the panel's 1 and 1.5, the check tools' 1) the last pass copies the frame: one
   full-screen pass more than before (at 1.5, at its pixels), for the same pixels (Auto has no level at 1 any more).
 - Bad: from 72 to 80 % of the zoom range, 0.9 stretched before, EASU's pass now costs its 0.35-0.45 ms more there
