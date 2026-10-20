@@ -13,7 +13,7 @@ import type { Materials } from './materials.ts'
 import type { Nature } from './nature.ts'
 import { H } from './heightfield.ts'
 import { BUILDINGS, FOOT, toWorld, type Building } from './world/buildings.ts'
-import { COLS, tileOf, type LitInstance } from './building-light.ts'
+import { COLS, MAX_LOD, TILE, tileOf, type LitInstance } from './building-light.ts'
 import BUILDING_VS from './shaders/building.vert?raw'
 import BUILDING_FS from './shaders/building.frag?raw'
 import WINDMILL_DETAIL from '../../data/buildings/windmill-detail.png?url'
@@ -43,7 +43,7 @@ export function buildBuildings(scene: Scene, mats: Materials, canopy: Nature['ca
     if (!items.length) continue
     if (!d) throw new Error(`the buildings data has no ${model}: run tools/building-to-js.py`)
     const p = PALETTE[model]
-    const mat = mats.make('building_' + model, BUILDING_VS, BUILDING_FS, { attributes: ['position', 'normal', 'uv', 'aRole', 'aUV2', 'aTile'], uniforms: ['uWall', 'uRoof', 'uTimber', 'uOpening', 'uAccent', 'uDetailAmt'], samplers: ['uDetail', 'uBldLight', 'uBldBounce'], defines: [...(baked ? ['#define BLD_BAKED', `#define BLD_COLS ${COLS.toFixed(1)}`, `#define BLD_ROWS ${Math.ceil(BUILDINGS.length / COLS).toFixed(1)}`] : []), ...(bounce ? ['#define BOUNCE'] : [])] })
+    const mat = mats.make('building_' + model, BUILDING_VS, BUILDING_FS, { attributes: ['position', 'normal', 'uv', 'aRole', 'aUV2', 'aTile'], uniforms: ['uWall', 'uRoof', 'uTimber', 'uOpening', 'uAccent', 'uDetailAmt'], samplers: ['uDetail', 'uBldLight', 'uBldBounce'], defines: [...(baked ? ['#define BLD_BAKED', `#define BLD_COLS ${COLS.toFixed(1)}`, `#define BLD_ROWS ${Math.ceil(BUILDINGS.length / COLS).toFixed(1)}`, `#define BLD_SIZE vec2(${(COLS * TILE).toFixed(1)},${(Math.ceil(BUILDINGS.length / COLS) * TILE).toFixed(1)})`, `#define BLD_MAXLOD ${MAX_LOD.toFixed(1)}`] : []), ...(bounce ? ['#define BOUNCE'] : [])] })
     for (const [u, hex] of [['uWall', p.wall], ['uRoof', p.roof], ['uTimber', p.timber], ['uOpening', p.opening], ['uAccent', p.accent]] as const) mat.setColor3(u, Color3.FromHexString(hex))
     mat.setFloat('uDetailAmt', DETAIL_AMT)
     mat.setTexture('uDetail', new Texture(p.detail, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) => console.error(`the ${model}'s detail texture (${p.detail}): ${msg}`)))

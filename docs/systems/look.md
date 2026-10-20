@@ -401,12 +401,14 @@ The buildings' static light is baked once (`src/look/building-light.ts`, `docs/p
 atlas of one 256² tile an instance (1024 × 512 RGBA8, the raw bake and its dilation, about 4 MB), each building
 drawn in its light UVs (`aUV2`, a second layer the import makes: Blender's smart project) with the sun's visibility
 (`shadowAtRaw`, the panel's switch applied at runtime), the light map's sky occlusion, mist mask and sun; four texels
-filled round every island. Rebaked with the light map (after the sun's shadow map: a season's release, the leaves'
+filled round every island (twice four), then mipmapped and read no coarser than level 3: a tile's 256 texels divide
+into level-3 blocks and its islands keep 8 texels from its edge, so no read reaches a neighbour's tile (without mips
+the minified reads at the default zoom cost 1.1 ms more than the runtime's taps, measured). Rebaked with the light map (after the sun's shadow map: a season's release, the leaves'
 drop, a new grain). `building.frag` reads it once (`BLD_BAKED`) in place of `shadowAt`, `LM` and `bounceAt`; the
 ground's bounce at each building's root is baked into a texel an instance (rebaked with the ground's bounce map) and
 faded with the height at runtime, and now lights the walls (`BOUNCE`: it was computed and never added before).
-`?bldlm=0` restores the runtime path; `?bldbounce=0` drops the bounce. The bake took about 62-71 ms on Metal on load
-(3.2 s in SwiftShader).
+`?bldlm=0` restores the runtime path; `?bldbounce=0` drops the bounce. The bake took about 0.5 s on Metal on load
+(loaded machine; 62-71 ms before the second dilation and the mips).
 
 ### The shadows' look
 

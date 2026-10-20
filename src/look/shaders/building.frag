@@ -23,7 +23,10 @@ vec3 roleCol(float r){
 void main(){
   vec3 N=normalize(vN);
   #ifdef BLD_BAKED
-  vec4 bk=texture2D(uBldLight,vLUV);
+  // (its mip level from the light UVs' footprint in the atlas's texels, no coarser than BLD_MAXLOD: past it a read would
+  // reach a neighbour's tile, building-light.ts)
+  vec2 lx=dFdx(vLUV)*BLD_SIZE,ly=dFdy(vLUV)*BLD_SIZE;
+  vec4 bk=textureLod(uBldLight,vLUV,clamp(0.5*log2(max(dot(lx,lx),dot(ly,ly))),0.0,BLD_MAXLOD));
   vec4 lm=vec4((bk.a*255.0-1.0)/254.0,bk.g,bk.b,1.0);float sh=bk.r*uShadowsOn;
   pBounce=texelFetch(uBldBounce,ivec2(int(vTileI+0.5),0),0).rgb*(1.0-smoothstep(0.0,8.0,vH));   // (bounceAt's fade)
   #else

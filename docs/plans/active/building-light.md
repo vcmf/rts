@@ -60,5 +60,13 @@ once (static light is baked once per map: AGENTS.md).
   0.15-0.22 % by more than 12 levels (the shadow's edges at the bake's texels); the bounce on against off: 1.6-8.1 %
   differ, most in winter (the snow's bounce lifts the walls' feet), by 4 levels on average. To the owner:
   the main checkout's output/buildings-review/7-light-bake.png.
-- To do: the bench (the coordinator), the owner's look at the bounce.
+- Measured (the coordinator, Metal): close 7.63/8.03 ms baked against 8.18/8.42 runtime (0.4 ms saved); but at the
+  default zoom 1.1 ms slower than the runtime: the atlas had no mips (minified, its reads missed the cache). Now
+  mipmapped (trilinear, its chain made after the dilation) and read no coarser than level 3 (`MAX_LOD`): a tile's side
+  divides into level-3 blocks, its islands 8 texels (`INSET`, one level-3 block) from its edge, the dilation two passes
+  of four texels: no read at levels 0-3 reaches a neighbour's tile, no unwritten texel darkens an edge. The A/B against
+  the runtime: 0.81 / 0.53 / 0.27 % of the pixels differ at the close, default and widest zoom (0.16 / 0.08 / 0.04 % by
+  more than 12 levels: the shadow's edges), no tile bleeding at the walls' and roofs' edges. The bake about 0.5 s on
+  Metal on load (a loaded machine). Texture units on Metal: the building 5, the terrain 15, the water 16.
+- To do: the bench again (the coordinator), the owner's look at the bounce.
 

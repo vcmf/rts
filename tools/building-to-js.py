@@ -151,12 +151,13 @@ def main():
     # the sails reach out of one side (the instance's origin is the footprint's centre: the paving, the ground's
     # samples, the occlusion blob)
     bb = co[co[:, 2] <= lo[2] + BASE_BAND * (hi[2] - lo[2])]; cx, cy = (bb[:, 0].min() + bb[:, 0].max()) / 2, (bb[:, 1].min() + bb[:, 1].max()) / 2
+    light_uvs(obj)   # (the light bake's UVs, a second layer, first: its edit mode would leave the corner normals stale)
     # sharp past 30°: the corner normals, split where the faces meet at more than that
     for p in me.polygons: p.use_smooth = True
     bpy.context.view_layer.objects.active = obj; obj.select_set(True)
     if 'FINISHED' not in bpy.ops.object.shade_smooth_by_angle(angle=math.radians(30)): raise SystemExit('the sharp edges (shade smooth by angle) failed')
     cn = me.corner_normals
-    uv2 = light_uvs(obj); uvl = me.uv_layers[0].data   # (the light bake's UVs: a second layer; the detail's the first)
+    uv2 = me.uv_layers['light'].data; uvl = me.uv_layers[0].data   # (the light bake's UVs; the detail's the first layer)
     pos, nrm, uvs, uv2s, rol, idx, key = [], [], [], [], [], [], {}
     for f in me.polygons:
         for li in f.loop_indices:
