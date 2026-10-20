@@ -355,7 +355,9 @@ crowns as cards.
 
 The owner's Tripo models (`assets/buildings`, git-ignored; art bible §10) go through `tools/building-to-js.py`
 (Blender headless; its header has the commands) to `prototypes/buildings.data.js`: metres, normals sharp past 30°, UV0
-and a role per face (0 wall, 1 roof, 2 timber, 3 opening, 4 accent). The role is the median colour of the texels
+and a role per face (0 wall, 1 roof, 2 timber, 3 opening, 4 accent). The import cuts each model to about 2,300 triangles (the
+flat regions dissolved within a role and a UV island, then collapsed); the windmill's lattice sails made again as four
+solid canvas blades on timber stocks (the accent role). The role is the median colour of the texels
 under the face, nearest in Lab to the model's reference colours, with priors on the face's orientation (a roof faces
 up, a wall and an opening stand) and height (the house's terracotta chimney pots). Pack colours are never used: the
 page paints each role from its palette (`src/look/buildings.ts`, `PALETTE`, muted against the armies), and the texture

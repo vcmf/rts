@@ -18,13 +18,13 @@ ROLES = ['wall', 'roof', 'timber', 'opening', 'accent']   # the role ids are the
 # per model: its height or length in metres (the axis the model is fitted on), and reference colours (sRGB 0-255) per
 # role, picked from the texture's clusters (--analyse); a role may list several
 MODELS = {
-    'windmill': {'fit': ('height', 15.0), 'refs': {
+    'windmill': {'fit': ('height', 15.0), 'tris': 2300, 'sails': True, 'refs': {
         'wall': [(191, 125, 65), (161, 105, 59), (212, 148, 87), (226, 170, 105)],
         'roof': [(122, 49, 29), (150, 62, 36), (100, 40, 26)],
         'timber': [(99, 64, 37), (114, 77, 47), (83, 51, 29), (66, 38, 21)],
         'opening': [(36, 24, 16), (24, 18, 14)],
     }, 'up': {'roof': (0.15, 1.01), 'wall': (-0.2, 0.75), 'opening': (-0.5, 0.5)}},
-    'house': {'fit': ('length', 11.0), 'refs': {
+    'house': {'fit': ('length', 11.0), 'tris': 2300, 'refs': {
         'wall': [(174, 154, 125), (188, 167, 138), (158, 139, 113), (201, 180, 151), (217, 197, 169)],
         'roof': [(90, 85, 78), (68, 65, 60), (114, 103, 88)],
         'timber': [(166, 104, 66), (140, 86, 54), (112, 84, 58)],
@@ -36,6 +36,7 @@ MODELS = {
 # 'up': per role the range of a face's normal's upward component it may take (a roof faces up, a wall stands): the
 # colours alone do not split a shaded wall from a slate or a lit beam from a wall stone; 'zr': the range of a face's
 # height, as a share of the model's, a role may take (the house's terracotta chimney pots: its frames are timber)
+DISSOLVE_DEG = 4   # the planar dissolve's angle: faces flatter than this to each other merge (within a role)
 DETAIL_BOX, DETAIL_CLIP = 4, (0.6, 1.5)   # the detail's local mean: a 9-texel box at 512²; its range
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -109,7 +110,19 @@ def main():
     hz = (fz - fz.min()) / max(fz.max() - fz.min(), 1e-6)
     role = classify(cols, cfg['refs'], cfg.get('up'), nz, cfg.get('zr'), hz)
     print(name, 'faces', nf, {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()})
-    if '--render' in args: render(obj, role, args[args.index('--render') + 1]); return
+    if '--render' in args and '--full' in args: render(obj, role, args[args.index('--render') + 1], img if '--tex' in args else None); return
+    # the triangles cut to about cfg['tris'] (about 26 cm a triangle at the source: two or three pixels at the default
+    # zoom, under one wide, so the GPU shaded each pixel several times): the roles as materials first, so no face of one
+    # role merges with another's; the windmill's lattice sails, which no cut keeps, made again as solid blades (sails)
+    before = {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()}
+    set_roles(obj, role)
+    if cfg.get('sails'): sails(obj, px)
+    decimate(obj, cfg['tris'])
+    me = obj.data; uvl = me.uv_layers.active.data   # (the mesh's layers made again by the cut: read them anew)
+    role = np.array([f.material_index for f in me.polygons])
+    after = {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()}
+    print(name, 'tris', sum(before.values()), '->', len(me.polygons), 'by role', before, '->', after)
+    if '--render' in args: render(obj, role, args[args.index('--render') + 1], img if '--tex' in args else None); return
     # the fit: Blender's Z up; the model to its height, or its length along x
     co = np.array([v.co[:] for v in me.vertices]); lo, hi = co.min(0), co.max(0)
     axis, size = cfg['fit']; k = size / ((hi[2] - lo[2]) if axis == 'height' else (hi[0] - lo[0]))
@@ -158,7 +171,78 @@ def main():
         f.write('window.BUILDINGS=' + json.dumps(allm, separators=(',', ':')) + ';\n')
     print('wrote', out, os.path.getsize(out), 'bytes;', im.filepath_raw)
 
-def render(obj, role, out):
+def set_roles(obj, role):   # each face's role as its material index (a material a role)
+    me = obj.data; me.materials.clear()
+    for r in ROLES: me.materials.append(bpy.data.materials.get('role_' + r) or bpy.data.materials.new('role_' + r))
+    for f in me.polygons: f.material_index = int(role[f.index])
+
+def decimate(obj, target):
+    # first the flat regions dissolved (walls, roof planes, the tower's courses: within DISSOLVE_DEG, never across a
+    # role), then collapsed to the target; triangles at the end. Deterministic (Blender's modifiers, no randomness)
+    bpy.context.view_layer.objects.active = obj; obj.select_set(True)
+    m = obj.modifiers.new('dissolve', 'DECIMATE'); m.decimate_type = 'DISSOLVE'; m.angle_limit = math.radians(DISSOLVE_DEG); m.delimit = {'MATERIAL', 'UV'}
+    bpy.ops.object.modifier_apply(modifier=m.name); triangulate(obj)
+    n = len(obj.data.polygons)
+    if n > target:
+        m = obj.modifiers.new('collapse', 'DECIMATE'); m.decimate_type = 'COLLAPSE'; m.ratio = target / n; m.use_collapse_triangulate = True
+        bpy.ops.object.modifier_apply(modifier=m.name)
+    triangulate(obj)
+
+def triangulate(obj):
+    bm = bmesh.new(); bm.from_mesh(obj.data); bmesh.ops.triangulate(bm, faces=bm.faces[:]); bm.to_mesh(obj.data); bm.free()
+
+def sails(obj, px):
+    # the windmill's sails: its lattice (thin loose parts in the plane just before the cap) taken out and made again as
+    # four arms in the same X: a stock (timber, a long thin box) and a solid blade on its trailing side (the canvas: the
+    # accent role), the hub and each arm's direction and length from the lattice's own vertices
+    me = obj.data; bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table(); bm.verts.ensure_lookup_table()
+    seen, parts = set(), []
+    for f in bm.faces:
+        if f.index in seen: continue
+        stack, comp = [f], []
+        seen.add(f.index)
+        while stack:
+            g = stack.pop(); comp.append(g)
+            for v in g.verts:
+                for h in v.link_faces:
+                    if h.index not in seen: seen.add(h.index); stack.append(h)
+        parts.append(comp)
+    sail = []
+    for comp in parts:
+        c = np.array([v.co[:] for g in comp for v in g.verts]); lo, hi = c.min(0), c.max(0)
+        # in the sails' plane (y −0.195 to −0.16, the model's units), thin across it; off the tower's front column
+        # (its windows are in that plane too: they stay)
+        if lo[1] > -0.2 and hi[1] < -0.155 and hi[1] - lo[1] < 0.03 and (max(hi[0] - lo[0], hi[2] - lo[2]) > 0.08 or abs((lo[0] + hi[0]) / 2) > 0.12 or (lo[2] + hi[2]) / 2 > 0.72 or (lo[2] + hi[2]) / 2 < 0.45):
+            sail += comp
+    if not sail: raise SystemExit('the windmill: no sails found in their plane')
+    sv = np.array([v.co[:] for g in sail for v in g.verts]); hub = np.array([np.median(sv[:, 0]), sv[:, 1].min(), np.median(sv[:, 2])])
+    # the arms: the lattice's vertices by quadrant round the hub (the X), each arm along its farthest vertices' mean
+    d = sv[:, [0, 2]] - hub[[0, 2]]; ang = np.arctan2(d[:, 1], d[:, 0]); rr = np.hypot(d[:, 0], d[:, 1])
+    arms = []
+    for q in range(4):
+        m_ = (ang >= -np.pi + q * np.pi / 2) & (ang < -np.pi + (q + 1) * np.pi / 2)
+        if m_.sum() < 10: continue
+        far = rr[m_] >= np.percentile(rr[m_], 90); u = d[m_][far].mean(0); u /= np.linalg.norm(u)
+        arms.append((u, np.percentile(rr[m_], 99.5)))
+    print('the sails: hub', hub.round(3), 'arms', [(a[0].round(2).tolist(), round(float(a[1]), 3)) for a in arms], 'lattice faces', len(sail))
+    bmesh.ops.delete(bm, geom=list({g for g in sail}), context='FACES')
+    # the detail's UV: a texel of the detail near 1 (the new faces then take their palette colour as is)
+    uv1 = (0.5, 0.5)
+    uvl = bm.loops.layers.uv.active
+    def box(c0, c1, wdt, dep, mat):   # a box from c0 to c1 (x, z in the plane, y the plane's depth), wdt across, dep deep
+        a = np.array([c0[0], hub[1], c0[1]]); b = np.array([c1[0], hub[1], c1[1]]); t = (b - a) / np.linalg.norm(b - a); n_ = np.array([0.0, 1.0, 0.0]); s_ = np.cross(t, n_)
+        vs = [bm.verts.new((p + s_ * sx * wdt / 2 + n_ * sy * dep / 2).tolist()) for p in (a, b) for sx in (-1, 1) for sy in (-1, 1)]
+        for q_ in ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)):
+            f = bm.faces.new([vs[i] for i in q_]); f.material_index = mat
+            for l in f.loops: l[uvl].uv = uv1
+    for u, L in arms:
+        side = np.array([-u[1], u[0]])   # the blade on the arm's one side (the sails turn one way: the same side each)
+        h2 = hub[[0, 2]]
+        box(h2, h2 + u * L, 0.012, 0.010, ROLES.index('timber'))
+        box(h2 + u * L * 0.22 + side * 0.026, h2 + u * L + side * 0.026, 0.048, 0.004, ROLES.index('accent'))
+    bm.normal_update(); bm.to_mesh(me); bm.free()
+
+def render(obj, role, out, img=None):   # the faces by role, flat; or (img) the model's own texture, as a check of the UVs
     cols = [(0.85, 0.75, 0.55, 1), (0.75, 0.15, 0.1, 1), (0.35, 0.2, 0.1, 1), (0.05, 0.05, 0.05, 1), (0.2, 0.6, 0.9, 1)]
     mats = []
     for r, c in enumerate(cols):
@@ -166,7 +250,11 @@ def render(obj, role, out):
     me = obj.data; me.materials.clear()
     for m in mats: me.materials.append(m)
     for f in me.polygons: f.material_index = int(role[f.index])
-    sc = bpy.context.scene; sc.render.engine = 'BLENDER_WORKBENCH'; sc.display.shading.light = 'STUDIO'; sc.display.shading.color_type = 'MATERIAL'
+    if img:
+        tm = bpy.data.materials.new('tex'); tm.use_nodes = True; n = tm.node_tree.nodes.new('ShaderNodeTexImage'); n.image = img; tm.node_tree.nodes.active = n
+        me.materials.clear(); me.materials.append(tm)
+        for f in me.polygons: f.material_index = 0
+    sc = bpy.context.scene; sc.render.engine = 'BLENDER_WORKBENCH'; sc.display.shading.light = 'STUDIO'; sc.display.shading.color_type = 'TEXTURE' if img else 'MATERIAL'
     sc.render.resolution_x = 900; sc.render.resolution_y = 600
     sc.world = bpy.data.worlds.new('w'); sc.world.color = (0.8, 0.8, 0.8)
     import mathutils
