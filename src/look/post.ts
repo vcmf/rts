@@ -127,7 +127,7 @@ const withLens = (src: string) => src.replace('#include<dofcoc>', () => DOFCOC).
 Effect.ShadersStore.dofdownFragmentShader = withLens(DOFDOWN_FS)
 Effect.ShadersStore.dofFragmentShader = withLens(DOF_FS)
 Effect.ShadersStore.uberFragmentShader = withLens(UBER_FS)
-// the last pass under the render scale (decision 0045, docs/plans/active/render-scale.md): the chain draws at the scale
+// the last pass under the render scale (decision 0045, docs/plans/done/render-scale.md): the chain draws at the scale
 // and this pass draws the screen, by uMode: 0 a copy (the scale 1: texel for texel, the same pixels), 1 bilinear (the
 // stretch the browser made before: the wide zooms' scales), 2 FSR 1's edge-adaptive upscale, EASU (from 0.9
 // up, under 1). Upscaled (1 and 2) the paper grain is laid here, at the screen's pixels (the finishing pass leaves it:

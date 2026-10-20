@@ -264,7 +264,7 @@ input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
 // past the level's edge (no flicker at an edge).
 // The interface is HTML over the canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
 const { rMin, rMax } = D.spec.camera, at = (f: number) => rMin + f * (rMax - rMin)   // the edges as shares of the zoom range
-// From the closest zoom 0.9 (the owner, 2026-10-20: docs/plans/active/render-scale.md). With the upscale (above) the
+// From the closest zoom 0.9 (the owner, 2026-10-20: docs/plans/done/render-scale.md). With the upscale (above) the
 // canvas stays at the page's pixels and the finishing chain draws at the scale, resized in place (post.scale: no pass
 // made again), its last pass drawing the screen: EASU at 0.9, bilinear at the wide zooms' scales (EASU cost more than
 // it saved there), a copy at 1 (the tools' pinned scale: the same pixels); over 1 (the panel's Retina) and without the
