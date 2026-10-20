@@ -80,6 +80,33 @@ Battlefield 3's and Unreal's virtual texturing), the meadow's per-clump terms ev
   closest; the machine loaded, so the absolute numbers high), none at the widest (the baked material there).
 - The checks as main; `npm test`.
 
+## After (2026-10-20): what paid, what did not, what is left
+
+Measured as above (production build, Metal, headless 1920×1080, interleaved; noisy when other work loaded the machine:
+rounds with the base off its usual value were set aside).
+
+- **Paid**: this PR's road split, about 1.1 ms at the default and closest zooms (#122); the render scale 0.9 upscaled
+  by EASU, about 0.5-0.6 ms more there and 0.3 ms dearer at the widest (#124, decision 0045). The default view about
+  10.5 ms in the morning, about 9.5 at night; in the owner's browser (its window at CSS pixels, about 0.8 of the
+  bench's cost) a steady 120 fps, about 7.7 ms by that ratio (an estimate: the readout is capped at the display's 8.3).
+- **Did not pay** (each drafted, golden-checked and benched against its base; none kept, so the next round need not
+  try them again):
+  - early-outs in the road paint (exact) and a tighter road search (exact): within noise;
+  - the MSAA depth invalidated before the resolve: within noise;
+  - the meadow's per-clump state in a texture per ring (`perf/meadow-clumps`, not pushed): 0.3 ms slower (5-7 float
+    texel reads a vertex cost more than the arithmetic they replaced);
+  - EASU's gathers read once each (16 reads a pixel for 48): the same time (its cost is its pass, not its reads);
+  - the leaf cards and crowns alpha-tested, drawn front to back; the terrain's cloud, mist and haze per vertex; the
+    bloom gathered at half resolution (`perf/cheap-wins`, not pushed): each the same or slower.
+- **The lesson**: the frame's cost is spread thin (no hotspot); invisible micro-changes do not pay on this GPU, doing
+  less work does (fewer shader paths per pixel, fewer pixels).
+- **Left, in order** (the owner, 2026-10-20: paused here; the world's budget sized from the armies' measured cost once
+  they render, then these pulled in order):
+  1. the terrain's colour cached in camera-following levels, the live pass a few reads: estimate 2-2.7 ms, 1-2 weeks,
+     pixels close but not identical up close (the footprint fades to retune per level);
+  2. 2× MSAA (0.7 ms, measured), alpha-to-coverage on the cards: visible, the owner's call;
+  3. far-tree impostors (the widest zoom).
+
 ## Next (each its own plan and PR; drafted and measured first, reviewed once it works: the owner, 2026-10-20)
 
 - **The meadow's clumps**: their per-clump state (root, height, growth, crop, flow; the light, snow, cloud and air at
