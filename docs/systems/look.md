@@ -49,6 +49,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/terrain.ts` | Tile (1.79 m), far ring (14.3 m) and the apron that stitches them; the far ring's painted river mask; the bank normals' texture (W2, `docs/systems/river.md`; both it and the water data's, W3, from `src/look/span-texture.ts`). Their materials define `DETAIL` (the detail layer, below; on WebGL1 the material factory adds `DETAIL_L0`); the tile's also `BANKN` and `WATERDATA` (the shore band, W4), as do the water's |
 | `src/look/water.ts` | The water ribbon, its materials (the painted water, W4, `docs/systems/river.md`; and the same shader on the tile's ground, for the seam check) and the tree-reflection mask |
 | `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule (and, since L5a, the cover's: what grows on which class) |
+| `src/look/buildings.ts`, `src/look/world/buildings.ts`, `tools/building-to-js.py` | The buildings (`docs/plans/active/buildings.md`): the owner's Tripo models (a windmill, a stone house) to `prototypes/buildings.data.js` with a role per face, painted by role from the palette with the texture's value as detail; placed (authored) in the wheat field and the village; their footprints the village's ground in the cover; in the shadow bake and the light map's occlusion |
 | `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
 | `src/look/meadow.ts` | The meadow near the camera (L5c, L5d, below): the meadow map (ground height, the grass's and the crops' growth), three rings of static grass and crop instances around the focus |
 | `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (the default with the generated trees; `?trees=cards` on the pack's; L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
@@ -349,6 +350,24 @@ crowns as cards.
 - **The season on this page:** what is baked follows the season the page opens in (`?season`): the shadows, and the
   sky each crown hides and its contact core (lighter as a crown loses its leaves). Releasing the season slider re-bakes
   the shadows when what casts them changed since the last bake (`shadowState`); the sky's occlusion stays the one baked on load.
+
+### The buildings
+
+The owner's Tripo models (`assets/buildings`, git-ignored; art bible §10) go through `tools/building-to-js.py`
+(Blender headless; its header has the commands) to `prototypes/buildings.data.js`: metres, normals sharp past 30°, UV0
+and a role per face (0 wall, 1 roof, 2 timber, 3 opening, 4 accent). The role is the median colour of the texels
+under the face, nearest in Lab to the model's reference colours, with priors on the face's orientation (a roof faces
+up, a wall and an opening stand) and height (the house's terracotta chimney pots). Pack colours are never used: the
+page paints each role from its palette (`src/look/buildings.ts`, `PALETTE`, muted against the armies), and the texture
+keeps only its value about each role's mean (`data/buildings/<model>-detail.png`, 128 = 1), a third of it showing
+(`DETAIL_AMT`) under the paint's grain (`shaders/building.frag`: the painter's ramp, the cast shadow, the sky's
+occlusion, the ground's bounce, the snow on what faces up, the air). One instanced mesh a model. Placed in
+`src/look/world/buildings.ts` (authored: the windmill in the large wheat field, seven houses in the village facing the
+road), each on its footprint's lowest ground, sunk 0.2 m; the cover's authoring fails if one stands in a formation
+zone, on the floodplain or on a road, and paints its footprint and a metre round it as the village's ground, so no
+grass, crop, tree or stone grows through a floor (`docs/plans/active/buildings.md`). Static: their shadows go into the
+sun's bake with the scene's meshes, the sky they hide into the light map's occlusion as a blob at their foot (the
+trees' contact). The instance yaw, measured on the page: a local point (x, z) goes to (x cos − z sin, x sin + z cos).
 
 ### The shadows' look
 

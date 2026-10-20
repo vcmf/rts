@@ -17,12 +17,13 @@ things get runtime light); the colour by palette roles with the texture's value 
 ## Approach
 
 - **Import** (`tools/building-to-js.py`, Blender headless, as `tools/blend-to-js.py`): the FBX to a JS data file
-  (`prototypes/buildings.data.js`, generated, like `nature-pack.data.js`): positions in metres (the model scaled to a
-  set height: the windmill about 14 m to the cap, the house about 11 m long), normals, UV0, and a per-vertex role. The
+  (`prototypes/buildings.data.js`, generated, like `prototypes/nature-pack.data.js`): positions in metres (the model
+  scaled to a set height: the windmill about 14 m to the cap, the house about 11 m long), normals, UV0, and a
+  per-vertex role. The
   role per face by its texture: the median colour under the face's UV triangle, nearest (in Lab) to a short list of
   reference colours per model (wall, roof, timber, opening), the list in the script beside the model. The value
   detail: the texture to greyscale, each role's own mean divided out (so it varies about 1 per role), a small
-  mipmapped texture per model (`prototypes/buildings/<model>-detail.png`, generated).
+  mipmapped texture per model (`data/buildings/<model>-detail.png`, generated).
 - **Material** (`src/look/buildings.ts`, `shaders/building.vert/.frag`): the painter (`withPainter`, as nature.frag):
   the role's palette colour (new mood-aware role colours: a pale stone wall, an ochre tower, a slate roof, a red tile
   cap, dark timber, dark openings) times the detail value (its contrast set low: 0.25-0.4, the paint's grain on top),
@@ -32,8 +33,9 @@ things get runtime light); the colour by palette roles with the texture's value 
   north-east part, `rect(50, 48, ...)`), the houses (6-8, the one model turned and scaled ±10 %) in the village
   ground east of the road, facing the road; none in a formation zone, on the floodplain, on a road or track. Each
   sits on the heightfield at its footprint's lowest corner, sunk 0.2 m.
-- **The ground under them**: the cover grid's footprints as `bare` (trodden: no grass, no crops, no trees, no stones
-  grow there; the meadow's and the scatter's own rules read the cover), so nothing pokes through a floor.
+- **The ground under them**: the cover grid's footprints (and a metre round them) as the village's trodden ground
+  (`village`, not `bare`: the scatter keeps its stones off the village, not off bare earth), so nothing grows through
+  a floor (the meadow's and the scatter's own rules read the cover; a hidden placement keeps the scatter's stream).
 - **Light**: in the shadow bake (it takes the scene's meshes: check the name filter), in the light map's occlusion if
   the trunks' route fits, and in the ground bounce; static, baked once.
 - **Performance**: one draw a model (instanced), about 9k faces in all; the bench before and after.
@@ -52,3 +54,14 @@ things get runtime light); the colour by palette roles with the texture's value 
 
 - The light map's sky occlusion near a building (a dark ring at its foot, as under the trees?).
 - The windmill at the field's edge or centre: the owner's eye.
+
+## Status (2026-10-20)
+
+- Built: the import (roles: windmill 727 wall, 144 roof, 6,947 timber, 24 openings of 7,842 faces; house 2,408 wall,
+  1,691 roof, 2,450 timber, 863 openings, 865 accent of 8,277), the material, the placement (the windmill at (78, 66),
+  seven houses in the village facing the road), the footprints in the cover (the look data rebuilt), the shadow bake
+  and the light map's occlusion (a blob at each building's foot, as the trees').
+- The instance yaw measured on the page: a local point (x, z) goes to (x cos − z sin, x sin + z cos) (a yaw of π/2
+  turned the houses' fronts east: fixed to −π/2).
+- To do: the owner's look; the bench against main; the guard and the checks.
+
