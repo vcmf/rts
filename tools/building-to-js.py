@@ -47,6 +47,7 @@ MODELS = {
 # 'up': per role the range of a face's normal's upward component it may take (a roof faces up, a wall stands): the
 # colours alone do not split a shaded wall from a slate or a lit beam from a wall stone; 'zr': the range of a face's
 # height, as a share of the model's, a role may take (the house's terracotta chimney pots: its frames are timber)
+LIGHT_MARGIN = 0.012   # the light UVs' islands apart, a share of the square (3 texels of a 256² tile)
 SMEAR_MAX = 0.02   # the share of the surface the cut may smear (smear) before the export fails
 BASE_BAND = 0.06   # the base band the model is centred on, a share of its height
 DISSOLVE_DEG = 4   # the planar dissolve's angle: faces flatter than this to each other merge (within a role)
@@ -155,23 +156,24 @@ def main():
     bpy.context.view_layer.objects.active = obj; obj.select_set(True)
     if 'FINISHED' not in bpy.ops.object.shade_smooth_by_angle(angle=math.radians(30)): raise SystemExit('the sharp edges (shade smooth by angle) failed')
     cn = me.corner_normals
-    pos, nrm, uvs, rol, idx, key = [], [], [], [], [], {}
+    uv2 = light_uvs(obj); uvl = me.uv_layers[0].data   # (the light bake's UVs: a second layer; the detail's the first)
+    pos, nrm, uvs, uv2s, rol, idx, key = [], [], [], [], [], [], {}
     for f in me.polygons:
         for li in f.loop_indices:
-            vi = me.loops[li].vertex_index; n = cn[li].vector; u = uvl[li].uv
-            kk = (vi, round(n[0], 2), round(n[1], 2), round(n[2], 2), round(u[0], 4), round(u[1], 4), int(role[f.index]))
+            vi = me.loops[li].vertex_index; n = cn[li].vector; u = uvl[li].uv; u2 = uv2[li].uv
+            kk = (vi, round(n[0], 2), round(n[1], 2), round(n[2], 2), round(u[0], 4), round(u[1], 4), round(u2[0], 4), round(u2[1], 4), int(role[f.index]))
             if kk not in key:
                 key[kk] = len(rol); c = me.vertices[vi].co
                 # Blender Z-up -> Babylon Y-up (x, z, y), as tools/blend-to-js.py; centred on the footprint, the base at 0
                 pos += [round((c.x - cx) * k, 3), round((c.z - lo[2]) * k, 3), round((c.y - cy) * k, 3)]
                 nrm += [round(n[0], 2), round(n[2], 2), round(n[1], 2)]
-                uvs += [round(u[0], 4), round(u[1], 4)]; rol.append(int(role[f.index]))
+                uvs += [round(u[0], 4), round(u[1], 4)]; uv2s += [round(u2[0], 4), round(u2[1], 4)]; rol.append(int(role[f.index]))
             idx.append(key[kk])
     p3 = np.array(pos).reshape(-1, 3)
     b1 = p3[p3[:, 1] < 1.0]; bc = ((b1[:, 0].min() + b1[:, 0].max()) / 2, (b1[:, 2].min() + b1[:, 2].max()) / 2)
     print(name, 'base (under 1 m) centred at', np.round(bc, 3))
     if max(abs(bc[0]), abs(bc[1])) > 0.02: raise SystemExit(f'{name}: the base is centred at {bc}, not on the origin')
-    data = {'pos': pos, 'nrm': nrm, 'uv': uvs, 'role': rol, 'idx': idx, 'min': p3.min(0).round(3).tolist(), 'max': p3.max(0).round(3).tolist()}
+    data = {'pos': pos, 'nrm': nrm, 'uv': uvs, 'uv2': uv2s, 'role': rol, 'idx': idx, 'min': p3.min(0).round(3).tolist(), 'max': p3.max(0).round(3).tolist()}
     print(name, 'verts', len(rol), 'tris', len(idx) // 3, 'size m', (p3.max(0) - p3.min(0)).round(2).tolist())
     # the detail: the texture's value over its local mean (a box of DETAIL_BOX texels round it), so only the fine
     # value (stone courses, slates, planks) is kept, whatever the region: a texel's role guessed by its colour flipped
@@ -218,6 +220,23 @@ def decimate(obj, target):
         m = obj.modifiers.new('collapse', 'DECIMATE'); m.decimate_type = 'COLLAPSE'; m.ratio = target / n; m.use_collapse_triangulate = True
         bpy.ops.object.modifier_apply(modifier=m.name)
     triangulate(obj)
+
+def light_uvs(obj):
+    # the light bake's UVs (src/look/building-light.ts: a 256² tile an instance): Blender's smart UV project into a
+    # second layer, the islands LIGHT_MARGIN apart (a few texels of the tile: its dilation fills them) and scaled to fill
+    # the square; the detail's UVs (the first layer) untouched
+    me = obj.data
+    if len(me.uv_layers) > 1: raise SystemExit('the model already has a second UV layer')
+    layer = me.uv_layers.new(name='light'); me.uv_layers.active = layer
+    bpy.context.view_layer.objects.active = obj; obj.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
+    r = bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=LIGHT_MARGIN, area_weight=0.0, correct_aspect=True, scale_to_bounds=True)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    if 'FINISHED' not in r: raise SystemExit('the light UVs (smart project) failed')
+    me.uv_layers.active = me.uv_layers[0]
+    l2 = me.uv_layers['light'].data; u = np.array([l2[i].uv[:] for i in range(len(l2))])
+    if u.min() < -1e-4 or u.max() > 1 + 1e-4: raise SystemExit(f'the light UVs leave the square ({u.min()}, {u.max()})')
+    return me.uv_layers['light'].data
 
 def smear(obj):
     # the share of the surface whose texel density (UV area over area) strays more than 4x from the model's median: a
