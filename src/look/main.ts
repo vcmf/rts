@@ -267,13 +267,17 @@ const { rMin, rMax } = D.spec.camera, at = (f: number) => rMin + f * (rMax - rMi
 // From the closest zoom 0.9 (the owner, 2026-10-20: docs/plans/active/render-scale.md). With the upscale (above) the
 // canvas stays at the page's pixels and the finishing chain draws at the scale, resized in place (post.scale: no pass
 // made again), its last pass drawing the screen: EASU at 0.9, bilinear at the wide zooms' scales (EASU cost more than
-// it saved there), a copy at 1 (the tools' pinned scale: the same pixels); without it the hardware scale, as before
+// it saved there), a copy at 1 (the tools' pinned scale: the same pixels); over 1 (the panel's Retina) and without the
+// upscale (WebGL1, ?upscale=bilinear, or the upscale given up: post.upscale) the hardware scale, as before, and the
+// closest level at 1, as before
 const AUTO: [number, number][] = [[at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.75]], AUTO_HOLD = 4
-let scaleNow = 1, level = 0
+let scaleNow = 1, upNow = false, level = 0
 const applyScale = (s: number) => {
-  if (s === scaleNow) return
-  scaleNow = s
-  if (upscale) post.scale = s; else engine.setHardwareScalingLevel(1 / s)
+  const up = post.upscale
+  if (s === scaleNow && up === upNow) return
+  scaleNow = s; upNow = up
+  const k = up ? Math.min(s, 1) : 1
+  post.scale = k; engine.setHardwareScalingLevel(k / s)
 }
 const resSel = byId<HTMLSelectElement>('res')
 resSel.onchange = () => { S.res = +resSel.value }
@@ -284,7 +288,7 @@ const scaleTick = () => {
   const r = camera.radius
   while (level < AUTO.length - 1 && r > AUTO[level][0] + AUTO_HOLD) level++
   while (level > 0 && r < AUTO[level - 1][0] - AUTO_HOLD) level--
-  applyScale(AUTO[level][1])
+  applyScale(level === 0 && !post.upscale ? 1 : AUTO[level][1])
 }
 // the first level before the chain is made (it is made once, at the scale the first frame draws at)
 scaleTick(); post.build()

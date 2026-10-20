@@ -20,7 +20,10 @@ Frame headroom, step 2 (step 1 the road split, PR #122, whose plan records the c
   The last pass `easu` draws the screen by a uniform mode: a copy at 1 (texel for texel), EASU from 0.9 up and under
   1 (Babylon's `fsr1Upscale`, its main replaced and its gathers read once each; a port of another shape: bilinear in
   its place, the page up), bilinear otherwise; upscaled, it lays the paper grain (the finishing pass's `uGrainHere`
-  0) and a dither. On WebGL1 the hardware scale as before (the stretch).
+  0) and a dither; the grain and dither one definition for both passes (`PAPER`). Over 1 (the panel's Retina) the
+  hardware scale, the chain copying. On WebGL1, under `?upscale=bilinear`, and if the last pass does not compile or
+  Babylon does not keep a size object (`Post.fail`: the chain made again without it, an error logged) the hardware
+  scale, and Auto's closest level at 1, as before.
 - **The scene's own lines** (`sceneH`): the grade's haze toward the top (`uViewH`) and the near strokes' visibility
   test measure the target the scene draws into, not the canvas.
 - `?upscale=bilinear`: the stretch at every scale (the A/B).

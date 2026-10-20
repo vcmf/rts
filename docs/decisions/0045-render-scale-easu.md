@@ -27,14 +27,17 @@ closest 8.52, 7.67, 7.45). At the widest zoom, already at 0.75, EASU cost 0.7 ms
   shader compiled, as the hardware scale did). The last pass: **EASU from 0.9 up, under 1**; bilinear at the other
   scales (the wide zooms', the panel's 0.75 and 1.5); a copy at 1 (the check tools' pinned scale: the same pixels).
   Upscaled, the paper grain is laid after the upscale, at the screen's pixels, and a dither after it too (the
-  finishing pass keeps its own, before its 8-bit target). On WebGL1: the canvas drawn smaller and stretched, as
-  before.
+  finishing pass keeps its own, before its 8-bit target). Over 1 (the panel's Retina): the hardware scale, as before.
+  On WebGL1, under `?upscale=bilinear`, or if the last pass fails to compile (the page then gives the upscale up): the
+  hardware scale and Auto's closest level at 1, all as before.
   No sharpening pass (RCAS): at 0.9 there is little to recover, and it would fight the painted softness.
 - `?upscale=bilinear` keeps the stretch at every scale (the A/B). The check tools still pin the scale to 1.
 
 ## Consequences
 
 - Good: about 0.7 ms a frame less at the default zoom and 0.85 at the closest, the near views nearly as sharp as at 1.
+- Bad: at a fixed 1 (the panel's, the check tools') the last pass copies the frame: one full-screen pass more than
+  before, for the same pixels (Auto has no level at 1 any more).
 - Bad: from 72 to 80 % of the zoom range, 0.9 stretched before, EASU's pass now costs its 0.35-0.45 ms more there
   (measured at the default zoom; not benched in that band). At 80 % the step in sharpness is larger than before: 0.9
   upscaled to 0.8 stretched (was 0.9 stretched to 0.8 stretched).
