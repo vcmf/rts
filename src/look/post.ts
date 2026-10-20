@@ -12,6 +12,8 @@ import { PostProcess } from '@babylonjs/core/PostProcesses/postProcess.js'
 // the passes' vertex shader, loaded up front: PostProcess imports it lazily, but in the built page that load never
 // completed and the grade pass stayed not-ready (observed in L0c; the CDN build has it registered from the start)
 import '@babylonjs/core/Shaders/postprocess.vertex.js'
+// FSR 1's edge-adaptive upscale (EASU, AMD), as Babylon ships it: its source, our grain after it (easu, below)
+import '@babylonjs/core/Shaders/fsr1Upscale.fragment.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { LookState } from './materials.ts'
 import { D } from './spec.ts'
@@ -115,20 +117,91 @@ function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasEl
 }
 
 // the lens (#include<dofcoc>) inlined as the materials inline theirs (a replacer function keeps `$` in the GLSL)
-const withLens = (src: string) => src.replace('#include<dofcoc>', () => DOFCOC)
+// the paper grain (the grain texture over 512 screen pixels, ±3 %) and the dither (±1/255), one definition for the
+// finishing pass and the last pass (the grain is laid in one of them: uGrainHere)
+const PAPER = `float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+vec3 paperOf(vec3 c,vec2 px,float on){return c*(1.0+(texture2D(uGrain,px/512.0).r-0.5)*0.06*on);}
+vec3 ditherOf(vec2 px){return vec3((h(px)+h(px.yx+17.3)-1.0)/255.0);}
+`
+const withLens = (src: string) => src.replace('#include<dofcoc>', () => DOFCOC).replace('#include<paper>', () => PAPER)
 Effect.ShadersStore.dofdownFragmentShader = withLens(DOFDOWN_FS)
 Effect.ShadersStore.dofFragmentShader = withLens(DOF_FS)
 Effect.ShadersStore.uberFragmentShader = withLens(UBER_FS)
+// the last pass under the render scale (decision 0045, docs/plans/done/render-scale.md): the chain draws at the scale
+// and this pass draws the screen, by uMode: 0 a copy (the scale 1: texel for texel, the same pixels), 1 bilinear (the
+// stretch the browser made before: the wide zooms' scales), 2 FSR 1's edge-adaptive upscale, EASU (from 0.9
+// up, under 1). Upscaled (1 and 2) the paper grain is laid here, at the screen's pixels (the finishing pass leaves it:
+// uGrainHere 0), and a dither after the filter (the finishing pass's own comes before its 8-bit target and is averaged
+// away). EASU is Babylon's port (fsr1Upscale), its four 2 x 2 gathers read once each, as colour (the port reads each
+// texel once per channel: 48 reads a pixel for 16, the same values in the same order); a port of another shape leaves
+// the pass without it (EASU_OK false: bilinear in its place), the page still up
+const EASU_HEAD = `uniform sampler2D uGrain;uniform float uGrainOn,uMode;
+${PAPER}`
+const EASU_MAIN = (easu: boolean) => `void main(){
+  if(uMode<0.5){gl_FragColor=vec4(texelFetch(textureSampler,ivec2(gl_FragCoord.xy),0).rgb,1.0);return;}
+  vec3 c=texture2D(textureSampler,vUV).rgb;
+  ${easu ? 'if(uMode>1.5)c=FsrEasuF(ivec2(gl_FragCoord.xy),con0,con1,con2,con3);' : ''}
+  c=paperOf(c,gl_FragCoord.xy,uGrainOn)+ditherOf(gl_FragCoord.xy);
+  gl_FragColor=vec4(c,1.0);}`
+let EASU_OK = false, EASU_WHY = ''
+// FSR 1's FsrEasuCon (ffx_fsr1.h), as Babylon's ThinFSR1UpscalePostProcess.updateConstants: the input's viewport vw x vh
+// in its texture iw x ih, drawn to ow x oh
+const FSR1_CONSTANTS = (e: Effect, vw: number, vh: number, iw: number, ih: number, ow: number, oh: number): void => {
+  e.setFloat4('con0', vw / ow, vh / oh, 0.5 * vw / ow - 0.5, 0.5 * vh / oh - 0.5)
+  e.setFloat4('con1', 1 / iw, 1 / ih, 1 / iw, -1 / ih); e.setFloat4('con2', -1 / iw, 2 / ih, 1 / iw, 2 / ih); e.setFloat4('con3', 0, 4 / ih, 0, 0)
+}
+{
+  const gather = 'void easuGather(vec2 p,out vec4 r,out vec4 g,out vec4 b){ivec2 s=textureSize(textureSampler,0),mx=s-ivec2(1),q=ivec2(floor(p*vec2(s)-0.5));' +
+    'vec3 a=texelFetch(textureSampler,clamp(q+ivec2(0,1),ivec2(0),mx),0).rgb,c=texelFetch(textureSampler,clamp(q+ivec2(1,1),ivec2(0),mx),0).rgb,' +
+    'd=texelFetch(textureSampler,clamp(q+ivec2(1,0),ivec2(0),mx),0).rgb,e=texelFetch(textureSampler,clamp(q,ivec2(0),mx),0).rgb;' +
+    'r=vec4(a.r,c.r,d.r,e.r);g=vec4(a.g,c.g,d.g,e.g);b=vec4(a.b,c.b,d.b,e.b);}\n'
+  let src = Effect.ShadersStore.fsr1UpscalePixelShader ?? '', n = 0
+  src = src.replace(/vec4 (\w+)R=FsrEasuRF\((p\d)\);\s*vec4 \1G=FsrEasuGF\(\2\);\s*vec4 \1B=FsrEasuBF\(\2\);/g, (_m, v: string, q: string) => { n++; return `vec4 ${v}R,${v}G,${v}B;easuGather(${q},${v}R,${v}G,${v}B);` })
+  const fn = src.indexOf('vec3 FsrEasuF('), at = src.lastIndexOf('void main()')
+  EASU_OK = n === 4 && fn >= 0 && at > fn
+  if (EASU_OK) Effect.ShadersStore.easuFragmentShader = src.slice(0, fn) + gather + src.slice(fn, at) + EASU_HEAD + EASU_MAIN(true)
+  else {
+    EASU_WHY = `FSR 1's upscale shader not as expected (${n} gathers of 4)`
+    Effect.ShadersStore.easuFragmentShader = 'uniform sampler2D textureSampler;varying vec2 vUV;\n' + EASU_HEAD + EASU_MAIN(false)
+  }
+}
+
+// (a pass's size object Babylon did not keep: build, Post.fail)
+class KeptSize extends Error {}
 
 export class Post {
   private posts: PostProcess[] = []
+  // the scene's render scale (1: the canvas's pixels; set by the page: main.ts, Auto or the panel). With the upscale
+  // (WebGL2, not ?upscale=bilinear: main.ts) the canvas stays at the page's pixels and the chain draws at the scale,
+  // its passes resized in place (each pass's size is an object of this class's, which Babylon reads at each frame: no
+  // pass is made again, no shader compiled); without it the page's hardware scale, as before
+  private k = 1
+  private readonly upscaleWanted: boolean
+  private failed = false
+  // the chain draws at the scale (its last pass drawing the screen); false once the last pass failed to compile, or
+  // Babylon would not keep a pass's size object: the page then takes the hardware scale (main.ts)
+  get upscale(): boolean { return this.upscaleWanted && !this.failed }
+  private sizes: { size: { width: number; height: number }; f: number }[] = []
+  get scale(): number { return this.k }
+  set scale(k: number) { this.k = k }   // (the sizes at the next resize: main.ts, after the hardware scale)
+  // the passes' sizes from the canvas's and the scale (each frame: the canvas may change too)
+  resize(): void {
+    const w = this.engine.getRenderWidth(true), h = this.engine.getRenderHeight(true)
+    for (const { size, f } of this.sizes) { size.width = Math.max(1, (w * this.k * f) | 0); size.height = Math.max(1, (h * this.k * f) | 0) }
+  }
+  // the last pass's mode (EASU_HEAD): a copy at 1, EASU from 0.9 up, else bilinear
+  private mode(): number { return this.k === 1 ? 0 : this.k >= 0.9 && this.k < 1 && EASU_OK ? 2 : 1 }
   private readonly camera: ArcRotateCamera; private readonly engine: AbstractEngine; private readonly S: LookState; private readonly grain: () => BaseTexture
   private readonly ground: (x: number, z: number) => number
   // ground: the terrain's height, for the depth of field's focus
-  constructor(camera: ArcRotateCamera, engine: AbstractEngine, S: LookState, grain: () => BaseTexture, ground: (x: number, z: number) => number) { this.camera = camera; this.engine = engine; this.S = S; this.grain = grain; this.ground = ground }
+  // upscale: the chain draws at the scale and its last pass draws the screen (above)
+  constructor(camera: ArcRotateCamera, engine: AbstractEngine, S: LookState, grain: () => BaseTexture, ground: (x: number, z: number) => number, upscale: boolean) { this.camera = camera; this.engine = engine; this.S = S; this.grain = grain; this.ground = ground; this.upscaleWanted = upscale }
   get passes(): PostProcess[] { return this.posts }
   // no finishing passes: the scene draws straight to the canvas (the detail check's debug view)
-  clear(): void { this.posts.forEach(p => p.dispose(this.camera)); this.posts = [] }
+  clear(): void { this.posts.forEach(p => p.dispose(this.camera)); this.posts = []; this.sizes = [] }
+  // the lines of the target the scene draws into: the first pass's (with the upscale its size, as set: in the frame of a
+  // change too), or the canvas's
+  sceneLines(): number { return this.sizes[0]?.size.height ?? this.engine.getRenderHeight(true) }
   // the depth along the view axis of the ground the screen's centre shows: the centre ray marched against the
   // terrain (the target sits at a fixed height, inside a hill or above a valley, so neither it nor the ground under
   // it is what the centre shows), eased over FOCUS_S so a pan over a hillside does not jump the sharp band; a jump
@@ -151,14 +224,39 @@ export class Post {
     this.focus = !this.focus || Math.abs(want - this.focus) > this.focus / 3 ? want : this.focus + (want - this.focus) * (1 - Math.exp(-Math.max(0, dt) / FOCUS_S))
     return this.focus
   }
+  // the upscale given up (above): the scale 1, the chain made again without its last pass (after this frame)
+  private fail(why: string, now = false): void {
+    if (this.failed) return
+    console.error(`post: ${why}: the render scale takes the hardware scale`)
+    this.failed = true; this.k = 1
+    if (now) this.build(); else setTimeout(() => { if (this.posts.length) this.build() })
+  }
+  // the chain made, in place of the one before (on load, the depth of field switched, a tool's finishing(true))
   build(): void {
+    try { this.make() } catch (e) {
+      if (!(e instanceof KeptSize)) throw e
+      this.posts.forEach(p => p.dispose(this.camera)); this.posts = []; this.sizes = []
+      this.fail('Babylon does not keep a pass\'s size object', true)
+    }
+  }
+  private make(): void {
     const { camera, engine, S } = this
-    this.posts.forEach(p => p.dispose(camera)); this.posts = []
+    this.posts.forEach(p => p.dispose(camera)); this.posts = []; this.sizes = []
+    if (this.upscale && !EASU_OK) console.error(`post: ${EASU_WHY}: the render scale stretches bilinear`)
     // the scene's target, the first pass's input: 8 bits with the depth of field too (the lens term in alpha, 8 bits:
     // painter.glsl depthA; docs/plans/done/dof-v2.md)
     const HF = Constants.TEXTURETYPE_HALF_FLOAT, sceneType = MSAA.byte ? Constants.TEXTURETYPE_UNSIGNED_BYTE : HF
-    // ratio: the size of the texture this pass reads, so the pass before it draws at that size
-    const pp = (name: string, uni: string[], smp: string[], type: number, ratio = 1.0, defines: string | null = null) => { const p = new PostProcess(name, name, uni, smp, ratio, camera, Texture.BILINEAR_SAMPLINGMODE, engine, false, defines, type); if (!this.posts.length) { p.samples = MSAA.samples } this.posts.push(p); return p }
+    // ratio: the size of the texture this pass reads, as a share of the scene's, so the pass before it draws at that
+    // size (with the upscale an object of sizes, resized in place: resize)
+    const pp = (name: string, uni: string[], smp: string[], type: number, ratio = 1.0, defines: string | null = null) => {
+      const size = this.upscale ? { width: 1, height: 1 } : null
+      if (size) this.sizes.push({ size, f: ratio })
+      // (the options' form: Babylon keeps its size object, the positional form copies it)
+      const p = new PostProcess(name, name, { uniforms: uni, samplers: smp, size: size ?? ratio, camera, samplingMode: Texture.BILINEAR_SAMPLINGMODE, engine, reusable: false, defines, textureType: type })
+      if (size && (p as unknown as { _options: unknown })._options !== size) throw new KeptSize()
+      if (!this.posts.length) { p.samples = MSAA.samples }
+      this.posts.push(p); return p
+    }
     // the miniature field (decisions 0024, 0040): focused on the ground at the screen's centre (updateFocus); a sharp
     // band beyond it (DOF.band) and one nearer (DOF_NEAR.band, in the bottom DOF_NEAR.screen of the frame only); the
     // largest blurs DOF.px and DOF_NEAR.px at 1080 lines, strongest at the closest zoom and DOF.wide of it at the widest.
@@ -191,15 +289,29 @@ export class Post {
         e.setFloat('uNN', Math.min(24, Math.max(8, Math.ceil(0.25 * npx * npx)))); lensUniforms(e)
       }
     }
-    const u = pp('uber', ['uRes', 'uRenderScale', 'uGrainOn', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV', 'uHalfTexel', 'uDofPaint'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, p ? 0.5 : 1.0, [p ? '#define DOF' : '', DEBUG.nanmark ? '#define NANMARK' : ''].filter(Boolean).join('\n') || null)
+    const u = pp('uber', ['uRes', 'uRenderScale', 'uGrainOn', 'uGrainHere', 'uBloom', 'uGrade', 'uVignette', 'uSplitHi', 'uGradeSat', 'uTopAmt', ...(p ? [...lens, 'uHalfUV', 'uHalfTexel', 'uDofPaint'] : [])], ['uGrain', ...(p ? ['uSharp'] : [])], sceneType, p ? 0.5 : 1.0, [p ? '#define DOF' : '', DEBUG.nanmark ? '#define NANMARK' : ''].filter(Boolean).join('\n') || null)
     // uRes: the full resolution (with the depth of field, this pass reads the half-resolution blur)
     u.onApply = e => {
       const r = d ?? u; e.setFloat2('uRes', r.width, r.height); e.setFloat('uGrainOn', S.grain); e.setFloat('uBloom', S.bloom); e.setTexture('uGrain', this.grain())
       e.setFloat('uRenderScale', S.res ? 1 : 1 / engine.getHardwareScalingLevel())   // Auto: the paper in screen pixels (the fixed scales as before)
+      e.setFloat('uGrainHere', this.upscale && this.mode() > 0 ? 0 : 1)   // (upscaled, the last pass lays the paper)
       // the mood's vignette, and the grade's parts the bloom takes off and puts back (its grade is in the painted
       // materials: src/look/materials.ts)
       e.setColor3('uVignette', MOOD.grade.vignette); e.setColor3('uSplitHi', MOOD.grade.splitHi); e.setFloat('uGradeSat', SEASON.sat); e.setFloat('uTopAmt', MOOD.grade.topAmt); e.setFloat('uGrade', S.grade)   // (uGradeSat: the season's, as the materials')
       if (d && p) { lensUniforms(e); e.setFloat2('uHalfUV', d.width / 2 / p.width, d.height / 2 / p.height); e.setFloat2('uHalfTexel', 1 / p.width, 1 / p.height); e.setFloat2('uDofPaint', DOF_PAINT.far, DOF_PAINT.near); e.setTextureFromPostProcess('uSharp', d) }
     }
+    // the last pass (EASU_HEAD): the finishing pass draws into its input at the scene's size, it draws the screen
+    if (this.upscale) {
+      const x = pp('easu', ['con0', 'con1', 'con2', 'con3', 'uGrainOn', 'uMode'], ['uGrain'], Constants.TEXTURETYPE_UNSIGNED_BYTE)
+      x.onApply = e => {
+        // (FsrEasuCon, Babylon's: the input's viewport is the whole of its texture)
+        const iw = x.width, ih = x.height; FSR1_CONSTANTS(e, iw, ih, iw, ih, engine.getRenderWidth(true), engine.getRenderHeight(true))
+        e.setFloat('uMode', this.mode()); e.setFloat('uGrainOn', S.grain); e.setTexture('uGrain', this.grain())
+      }
+      // (a last pass that does not compile would leave the screen undrawn: the chain made again without it)
+      const onErr = (eff: Effect) => eff.onErrorObservable.add(() => this.fail('the last pass did not compile'))
+      const eff = x.getEffect(); if (eff) onErr(eff); x.onEffectCreatedObservable.add(onErr)
+    }
+    this.resize()
   }
 }

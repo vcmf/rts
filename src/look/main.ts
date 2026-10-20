@@ -61,6 +61,9 @@ setRiver(look.river); setHeightfield(look.hf, look.far, D.spec.tile / 2)
 const canvas = document.getElementById('c') as HTMLCanvasElement
 const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false }, false)
 engine.setHardwareScalingLevel(1)
+// the scene's own lines (the finishing chain's: under the upscale, its first target's; called only from the frames,
+// after the chain is made below)
+const sceneH = () => post.sceneLines()
 const scene = new Scene(engine); scene.skipPointerMovePicking = true
 
 // ?soft=off: the shadows before the soft-shadow plan (docs/plans/done/soft-shadows.md); ?penumbra: metres of edge
@@ -195,7 +198,7 @@ const meadowMap = meadowOn ? buildMeadowMap(scene, mats, nature.growth, grassAll
 // twice it, for the frame's foot, nearer than the focus), in the render's own pixels as strokeK measures them (pixA is
 // at the SPEC's lines). The marched depth, not the eased one (no lag as the camera zooms in), the last frame's (none
 // yet: it bakes)
-const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, { reach: RINGS[0].band[3], shows: () => !focusDist || pixA * D.spec.detail.lines / engine.getRenderHeight() * focusDist < 2 * STROKE_FOOT })
+const macro = buildMacro(scene, mats, look.cover, meadowOn, roadTex, grassDefines, flowTex, meadowMap?.map ?? null, { reach: RINGS[0].band[3], shows: () => !focusDist || pixA * D.spec.detail.lines / sceneH() * focusDist < 2 * STROKE_FOOT })
 // (WebGL1 cannot mipmap the bakes, whose stripes would then alias: there the shader arm is the default)
 const macroArm = (params.get('macro') ?? (mats.webgl1 ? 'shader' : 'bake')) as MacroArm
 if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS.join(', ')}, not ${params.get('macro')}`)
@@ -244,31 +247,57 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat])   // the d
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false
 if (flag('nanmark')) { DEBUG.nanmark = true; MSAA.byte = false }   // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
-const post = new Post(camera, engine, S, () => mats.grain, groundAt); post.build()
+// ?upscale=bilinear: the canvas drawn smaller and stretched by the browser at every scale, as before decision 0045
+// (the A/B); WebGL1 the same (the chain's last pass reads texels by index: GLSL ES 3)
+const upscaleParam = params.get('upscale')
+if (upscaleParam !== null && upscaleParam !== 'bilinear') throw new Error(`?upscale must be bilinear, not ${upscaleParam}`)
+const upscale = !mats.webgl1 && upscaleParam === null
+const post = new Post(camera, engine, S, () => mats.grain, groundAt, upscale)
 
 /* ---------- UI ---------- */
 const byId = <T extends HTMLElement>(id: string): T => { const e = document.getElementById(id); if (!e) throw new Error(`look.html has no #${id}`); return e as T }
 const input = (id: string) => byId<HTMLInputElement>(id)
 input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
-// the render scale (decision 0036): a fixed one from the panel, or Auto (S.res 0, the default): by zoom, from the
-// camera's radius, a level of AUTO (each change resizes the frame's targets: three over the whole range; the edges at
-// 72, 80 and 88 % of the SPEC's zoom range, 0.75 at the widest), changed only once the radius is AUTO_HOLD m past the
-// level's edge (no flicker at an edge).
+// the render scale (decision 0045, after 0036): a fixed one from the panel, or Auto (S.res 0, the default): by zoom,
+// from the camera's radius, a level of AUTO (each change resizes the frame's targets: two over the whole range; the
+// edges at 80 and 88 % of the SPEC's zoom range, 0.75 at the widest), changed only once the radius is AUTO_HOLD m
+// past the level's edge (no flicker at an edge).
 // The interface is HTML over the canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
 const { rMin, rMax } = D.spec.camera, at = (f: number) => rMin + f * (rMax - rMin)   // the edges as shares of the zoom range
-const AUTO: [number, number][] = [[at(0.72), 1], [at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.75]], AUTO_HOLD = 4
-let scaleNow = 1, level = 0
-const applyScale = (s: number) => { if (s !== scaleNow) { scaleNow = s; engine.setHardwareScalingLevel(1 / s) } }
+// From the closest zoom 0.9 (the owner, 2026-10-20: docs/plans/done/render-scale.md). With the upscale (above) the
+// canvas stays at the page's pixels and the finishing chain draws at the scale, resized in place (post.scale: no pass
+// made again), its last pass drawing the screen: EASU at 0.9, bilinear at the wide zooms' scales (EASU cost more than
+// it saved there), a copy at 1 (the tools' pinned scale: the same pixels); over 1 (the panel's Retina) and without the
+// upscale (WebGL1, ?upscale=bilinear, or the upscale given up: post.upscale) the hardware scale, as before, and the
+// closest level at 1, as before
+const AUTO: [number, number][] = [[at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.75]], AUTO_HOLD = 4
+// (without the upscale, main's: 1, then 0.9 from 72 %, as decision 0036 had it)
+const AUTO_STRETCH: [number, number][] = [[at(0.72), 1], [at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.75]]
+let scaleNow = 1, upNow = false, level = 0
+const applyScale = (s: number) => {
+  const up = post.upscale
+  if (s === scaleNow && up === upNow) return
+  scaleNow = s; upNow = up
+  const k = up ? Math.min(s, 1) : 1
+  post.scale = k; engine.setHardwareScalingLevel(k / s)
+}
 const resSel = byId<HTMLSelectElement>('res')
 resSel.onchange = () => { S.res = +resSel.value }
-scene.onBeforeRenderObservable.add(() => {
+const scaleTick = () => {
   if (+resSel.value !== S.res) resSel.value = String(S.res)   // the panel follows a scale set elsewhere (the tools)
-  if (S.res) { applyScale(S.res); return }
-  const r = camera.radius
-  while (level < AUTO.length - 1 && r > AUTO[level][0] + AUTO_HOLD) level++
-  while (level > 0 && r < AUTO[level - 1][0] - AUTO_HOLD) level--
-  applyScale(AUTO[level][1])
-})
+  if (S.res) applyScale(S.res)
+  else {
+    const r = camera.radius, auto = post.upscale ? AUTO : AUTO_STRETCH
+    if (level >= auto.length) level = auto.length - 1
+    while (level < auto.length - 1 && r > auto[level][0] + AUTO_HOLD) level++
+    while (level > 0 && r < auto[level - 1][0] - AUTO_HOLD) level--
+    applyScale(auto[level][1])
+  }
+  post.resize()   // (the passes' sizes after the canvas's: the hardware scale above, or the window)
+}
+// the first level before the chain is made (it is made once, at the scale the first frame draws at)
+scaleTick(); post.build()
+scene.onBeforeRenderObservable.add(scaleTick)
 const TOGGLES = ['grain', 'edges', 'clouds', 'shadows', 'ao', 'mist', 'shafts', 'back', 'grade', 'bloom', 'dof'] as const
 // ?bloom=0: open with the bloom off (an A/B, docs/plans/done/frame-readout.md)
 // ?far=off (below, after the bakes), ?msaa=1 (before the passes): the widest zoom's A/Bs (docs/plans/done/wide-perf.md)
@@ -380,7 +409,7 @@ scene.onBeforeRenderObservable.add(() => {
   for (const m of mats.all) {
     m.setFloat('uFocusZ', focusZ); m.setVector3('uCamFwd', camFwd)
     m.setVector3('uCamPos', camera.position); m.setVector3('uFocus', camera.target); m.setFloat('uTime', S.t)
-    m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uGrade', S.grade); m.setFloat('uViewH', engine.getRenderHeight()); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
+    m.setFloat('uGrainAmt', S.grain ? S.gamt : 0); m.setFloat('uGrade', S.grade); m.setFloat('uViewH', sceneH()); m.setFloat('uShadowsOn', S.shadows); m.setFloat('uSeason', S.season); m.setColor3('uSunCol', SUNCOL); m.setFloat('uEdges', S.edges); m.setFloat('uClouds', S.clouds)
     m.setFloat('uPixA', pixA)
     m.setFloat('uAO', S.ao); m.setFloat('uMist', S.mist); m.setFloat('uShafts', S.shafts); m.setFloat('uBack', S.back)
   }

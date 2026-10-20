@@ -123,6 +123,8 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   const frames = (n: number) => new Promise<void>(r => { let k = 0; const o = engine.onEndFrameObservable.add(() => { if (++k >= n) { engine.onEndFrameObservable.remove(o); r() } }) })
   const seconds = (s: number) => new Promise<void>(r => setTimeout(r, s * 1000))
 
+  // the scene's frame: the finishing chain's first target (under the upscale smaller than the canvas), or the canvas
+  const sceneSize = (): [number, number] => { const p = passes.post()[0]; return p ? [p.width, p.height] : [engine.getRenderWidth(true), engine.getRenderHeight(true)] }
   const canvas0 = [engine.getRenderWidth(true), engine.getRenderHeight(true)]   // the page's frame before any camera (a wide one draws smaller at Auto)
   const runs: RunStats[] = [], cams = cameras()
   try {
@@ -149,13 +151,13 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
         // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
         const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
         const passesFit = gpuMs.frame && !WHOLE_ONLY ? +(sum / gpuMs.frame.p50).toFixed(2) : null
-        runs.push({ cam: cam.name, arm: arm.name, size: [engine.getRenderWidth(true), engine.getRenderHeight(true)], frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
+        runs.push({ cam: cam.name, arm: arm.name, size: sceneSize(), frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
       }
     }
   } finally { timing = false; seg(null); for (const u of undo) u(); inst.dispose() }
   const r = engine.getRenderingCanvas()
   return {
-    tool: 'look-bench', version: 5,   // 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
+    tool: 'look-bench', version: 6,   // 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
     build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
     canvas: { w: canvas0[0], h: canvas0[1], cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
     gpuTimer: timer.available, wholeOnly: WHOLE_ONLY, holdS, focus, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
