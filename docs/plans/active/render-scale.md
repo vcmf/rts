@@ -12,12 +12,15 @@ Frame headroom, step 2 (step 1 the road split, PR #122, whose plan records the c
 
 - **Auto by zoom** (`src/look/main.ts`, `AUTO`): 0.9 from the closest zoom (was 1 up to 72 % of the zoom range), then
   0.8 and 0.75 as before.
-- **The upscale** (`src/look/post.ts`): at Auto's 0.9 (WebGL2), the canvas stays at the page's pixels
-  (hardware scale 1); the finishing chain draws at `post.scale` (the scene into its first pass at that ratio, the
-  depth of field's half-resolution passes at half of it, the finishing pass `uber` at it), then a last pass `easu`:
-  FSR 1's EASU as Babylon ships it (`fsr1Upscale`, its main replaced) to the screen's pixels, then the paper grain
-  (`uber.frag` leaves it to it: `UPSCALED`; the dither stays before the 8-bit target). Under 0.9, a fixed scale and
-  WebGL1: the hardware scale as before (the stretch).
+- **The upscale** (`src/look/post.ts`): on WebGL2 the canvas stays at the page's pixels (hardware scale 1). The
+  finishing chain draws at `post.scale`: each pass's size is an object `Post` owns and Babylon reads at each frame,
+  set from the canvas's size and the scale (`resize`), so a change of scale resizes the targets in place, as the
+  hardware scale did: no pass made again, no shader compiled (review round 3's redesign: rebuilding the chain at a
+  change, then swapping a chain made aside, left frames without passes, stuck scales and asynchronous tool pins).
+  The last pass `easu` draws the screen by a uniform mode: a copy at 1 (texel for texel), EASU from 0.9 up and under
+  1 (Babylon's `fsr1Upscale`, its main replaced and its gathers read once each; a port of another shape: bilinear in
+  its place, the page up), bilinear otherwise; upscaled, it lays the paper grain (the finishing pass's `uGrainHere`
+  0) and a dither. On WebGL1 the hardware scale as before (the stretch).
 - **The scene's own lines** (`sceneH`): the grade's haze toward the top (`uViewH`) and the near strokes' visibility
   test measure the target the scene draws into, not the canvas.
 - `?upscale=bilinear`: the stretch at every scale (the A/B).

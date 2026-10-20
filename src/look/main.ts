@@ -247,7 +247,12 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat])   // the d
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false
 if (flag('nanmark')) { DEBUG.nanmark = true; MSAA.byte = false }   // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
-const post = new Post(camera, engine, S, () => mats.grain, groundAt)
+// ?upscale=bilinear: the canvas drawn smaller and stretched by the browser at every scale, as before decision 0045
+// (the A/B); WebGL1 the same (the chain's last pass reads texels by index: GLSL ES 3)
+const upscaleParam = params.get('upscale')
+if (upscaleParam !== null && upscaleParam !== 'bilinear') throw new Error(`?upscale must be bilinear, not ${upscaleParam}`)
+const upscale = !mats.webgl1 && upscaleParam === null
+const post = new Post(camera, engine, S, () => mats.grain, groundAt, upscale)
 
 /* ---------- UI ---------- */
 const byId = <T extends HTMLElement>(id: string): T => { const e = document.getElementById(id); if (!e) throw new Error(`look.html has no #${id}`); return e as T }
@@ -259,29 +264,22 @@ input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
 // past the level's edge (no flicker at an edge).
 // The interface is HTML over the canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
 const { rMin, rMax } = D.spec.camera, at = (f: number) => rMin + f * (rMax - rMin)   // the edges as shares of the zoom range
-// From the closest zoom 0.9 (the owner, 2026-10-20: docs/plans/active/render-scale.md), upscaled by FSR 1's EASU in the
-// finishing chain (post.scale: the canvas stays at the page's pixels, the paper grain laid after the upscale);
-// ?upscale=bilinear: the canvas drawn smaller and stretched by the browser, as before (the A/B)
+// From the closest zoom 0.9 (the owner, 2026-10-20: docs/plans/active/render-scale.md). With the upscale (above) the
+// canvas stays at the page's pixels and the finishing chain draws at the scale, resized in place (post.scale: no pass
+// made again), its last pass drawing the screen: EASU at 0.9, bilinear at the wide zooms' scales (EASU cost more than
+// it saved there), a copy at 1 (the tools' pinned scale: the same pixels); without it the hardware scale, as before
 const AUTO: [number, number][] = [[at(0.8), 0.9], [at(0.88), 0.8], [Infinity, 0.75]], AUTO_HOLD = 4
-const upscaleParam = params.get('upscale')
-if (upscaleParam !== null && upscaleParam !== 'bilinear') throw new Error(`?upscale must be bilinear, not ${upscaleParam}`)
 let scaleNow = 1, level = 0
-// EASU from 0.9 up, under 1 (its pass costs about 0.35 ms at the screen's pixels: under 0.9, at the wide zooms, it
-// cost more than it saved, so there the browser's stretch as before), Auto's or the panel's alike. WebGL2 only (FSR
-// 1's shader is GLSL ES 3). A change of the chain's scale is made aside and swapped in once ready, the hardware scale
-// with it (post.rescale): no frame without its passes; a change of the stretch alone at once, as before
-const EASU_MIN = 0.9
 const applyScale = (s: number) => {
   if (s === scaleNow) return
   scaleNow = s
-  const easu = !mats.webgl1 && upscaleParam !== 'bilinear' && s >= EASU_MIN && s < 1, k = easu ? s : 1, hw = easu ? 1 : 1 / s
-  post.rescale(k, () => engine.setHardwareScalingLevel(hw))
+  if (upscale) post.scale = s; else engine.setHardwareScalingLevel(1 / s)
 }
 const resSel = byId<HTMLSelectElement>('res')
 resSel.onchange = () => { S.res = +resSel.value }
 const scaleTick = () => {
   if (+resSel.value !== S.res) resSel.value = String(S.res)   // the panel follows a scale set elsewhere (the tools)
-  post.tick()
+  post.resize()   // (the canvas may change size too)
   if (S.res) { applyScale(S.res); return }
   const r = camera.radius
   while (level < AUTO.length - 1 && r > AUTO[level][0] + AUTO_HOLD) level++

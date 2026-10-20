@@ -22,11 +22,13 @@ closest 8.52, 7.67, 7.45). At the widest zoom, already at 0.75, EASU cost 0.7 ms
 - **60 fps hard, 120 fps soft**, as decision 0036.
 - **The render scale's Auto by zoom: 0.9 from the closest zoom**, then 0.8 and 0.75 as the camera's radius passes 80
   and 88 % of its range (4 m of hysteresis, as before). Not driven by missed frames (decision 0036's reasons).
-- **At a scale from 0.9 up, under 1 (Auto's 0.9, or the panel's), the finishing chain upscales by EASU**
-  (`src/look/post.ts`, WebGL2): the canvas stays at the page's pixels, the scene and its passes draw at the scale,
-  the paper grain is laid after the upscale, at the screen's pixels (the dither before the 8-bit target and after the
-  upscale). A change of the chain's scale is made aside and swapped in once its passes are ready. Under 0.9 and on
-  WebGL1: the canvas drawn smaller and stretched, as before.
+- **The finishing chain draws at the scale and its last pass draws the screen** (`src/look/post.ts`, WebGL2): the
+  canvas stays at the page's pixels; a change of scale resizes the chain's targets in place (no pass made again, no
+  shader compiled, as the hardware scale did). The last pass: **EASU from 0.9 up, under 1**; bilinear at the other
+  scales (the wide zooms', the panel's 0.75 and 1.5); a copy at 1 (the check tools' pinned scale: the same pixels).
+  Upscaled, the paper grain is laid after the upscale, at the screen's pixels, and a dither after it too (the
+  finishing pass keeps its own, before its 8-bit target). On WebGL1: the canvas drawn smaller and stretched, as
+  before.
   No sharpening pass (RCAS): at 0.9 there is little to recover, and it would fight the painted softness.
 - `?upscale=bilinear` keeps the stretch at every scale (the A/B). The check tools still pin the scale to 1.
 
