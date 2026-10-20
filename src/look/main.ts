@@ -31,6 +31,7 @@ import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS } from './
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { buildTerrain, splitByRoad } from './terrain.ts'
+import { buildBuildings } from './buildings.ts'
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 import ROAD_GRIT_URL from '../../data/road-grit-v1.png?url'
@@ -176,6 +177,9 @@ const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { l
 { const a = new Array(D.spec.water.stones * 4).fill(0); nature.stones.forEach((st, k) => a.splice(k * 4, 4, ...st))
   for (const m of [...terrain.tileMats, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
+// the buildings (docs/plans/active/buildings.md), before the bakes: their shadows and the sky they hide are baked with
+// the trees'
+buildBuildings(scene, mats, nature.canopy)
 const bakes = buildBakes(scene, mats, waterData, terrain.tileGround, nature.canopy, nature.cardCasters, soft, nature.trunks, nature.farCull)
 // ?far=off: no far tree, nor its shadows (built before the bakes: the far woods' whole cost; the A/B)
 if (params.has('far')) {
