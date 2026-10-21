@@ -37,13 +37,16 @@ export const PAVE_GAP = 4   // the least ground between two buildings' paved yar
 export const PAVE: Record<Building['model'], { side: number; front: number }> = { windmill: { side: 3, front: 3 }, house: { side: 2.5, front: 6 } }
 export const PAVE_WOBBLE = 1.15
 // the paving's reach past its yard: the shader paints nothing past it (pavePaint's first test), the cover marks every
-// texel a pixel within it can read (YARD_MARK, cover.ts), the road split gives those the paving's material (terrain.ts)
+// texel a pixel within it can read (YARD_BASE, cover.ts), the road split gives those the paving's material (terrain.ts)
 export const PAVE_REACH = PAVE_WOBBLE + 0.05
-// a yard's cover texel: its B byte (the furrows' direction, read only where a field's id is: a village texel's is 0);
-// the paving runs only there (shore.glsl, roadPaint)
-export const YARD_MARK = 255
+// a yard's cover texel: its B byte (the furrows' direction, read only where a field's id is: a village texel's is 0)
+// names the building whose paving its pixels can show (BUILDINGS' order, the shader's uPaveA/uPaveB: ≤ 16): YARD_BASE
+// plus its index where one yard is within reach of the texel (PAVE_REACH and a texel's half diagonal: a painted pixel's
+// own yard is), YARD_ALL where two are (between close yards: every shape evaluated, as before). The paving runs only
+// on these (shore.glsl, roadPaint, pavePaint)
+export const YARD_BASE = 240, YARD_ALL = 239
 // the paving's constants as the shader's defines (the materials that paint it: terrain.ts, macro.ts)
-export const paveDefines = (): string[] => [`#define PAVE_REACH ${PAVE_REACH.toFixed(3)}`, `#define YARD_MARK ${YARD_MARK.toFixed(1)}`]
+export const paveDefines = (): string[] => [`#define PAVE_REACH ${PAVE_REACH.toFixed(3)}`, `#define YARD_BASE ${YARD_BASE.toFixed(1)}`, `#define YARD_ALL ${YARD_ALL.toFixed(1)}`]
 // a building's paving as the shader takes it (≤ 16 buildings): a, its centre and its turn (x, z, cos yaw, sin yaw); b,
 // a box's half width, its reach behind (+z) and in front (−z) of the centre, its corners' radius, m, or for a circle
 // (−radius, 0, 0, 0)
@@ -69,6 +72,18 @@ export function paveDist(x: number, z: number, far = 30): number {
   let d = Infinity
   for (const y of theYards()) if (Math.hypot(x - y.b.x, z - y.b.z) <= y.reach + far) d = Math.min(d, Math.max(0, paveSdf(y.b, x, z)))
   return d
+}
+// the nearest paving to (x, z): its distance (0 on it) and its building's index (Infinity and −1 past far m of every
+// yard's reach), and how many yards lie within near m of it
+export function paveNearest(x: number, z: number, far = 30, near = 0): { d: number; i: number; n: number } {
+  let d = Infinity, i = -1, n = 0
+  theYards().forEach((y, k) => {
+    if (Math.hypot(x - y.b.x, z - y.b.z) > y.reach + Math.max(far, near)) return
+    const e = Math.max(0, paveSdf(y.b, x, z))
+    if (e <= near) n++
+    if (e < d) { d = e; i = k }
+  })
+  return { d, i, n }
 }
 // whether (x, z) lies on a building's paving grown by pad m
 export const onPaving = (x: number, z: number, pad = 0): boolean => paveDist(x, z, pad) <= pad

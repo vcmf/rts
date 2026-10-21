@@ -121,5 +121,15 @@ things get runtime light); the colour by palette roles with the texture's value 
   with the paving on the triangles near a yard alone (0.7 % of the tile; the roads alone 7.2 %, neither 92.1 %), and
   the loop gated by a yard marker in the cover (`YARD_MARK` in B on the yards' texels, under the reach the paving
   paints). To measure again.
+- Ablation at the village's closest (2026-10-21, Metal, three rounds, medians, 48ae609 with temporary switches): the
+  whole 7.80 ms; the paving returning at once 7.10 (its own work about 0.7 ms); the cobbles' texture read off 7.72
+  (about 0.1: not the texture); the yards' pixels skipping the road search after the paving 7.53 (about 0.3); main
+  6.58. So the cost was the paving's arithmetic (its loop over every building's shape and four noises) and the yards
+  running the road search (their texels worn 0, as on a line, passed the roads' gate). The fix, the same pixels (golden
+  against 48ae609: at most 12 pixels of 1/255 a view; the village, the windmill and the winter village identical): a
+  yard's texel names its building (`YARD_BASE` plus its index: one shape a pixel; `YARD_ALL`, every shape, where two
+  yards are within reach of a texel: none on today's map); the edge's two noises only near the edge (the yard's inside
+  is whole: exactly); a yard's texels worn by their distance to the lines, the paving before the roads' gate, so a yard
+  far from a road skips the road search. To measure again.
 - To do: the owner's look; the bench against main; the guard and the checks.
 

@@ -23,7 +23,7 @@ import { D } from './spec.ts'
 import type { Grid } from './heightfield.ts'
 import type { SpanGrid } from './world/data.ts'
 import { COVER, WEAR_STEP, type CoverGrid } from './world/cover.ts'
-import { YARD_MARK, paveDefines } from './world/buildings.ts'
+import { YARD_ALL, paveDefines } from './world/buildings.ts'
 import { spanTexture } from './span-texture.ts'
 import TER_VS from './shaders/terrain.vert?raw'
 import TER_FS from './shaders/terrain.frag?raw'
@@ -133,7 +133,7 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
 
 // The tile's triangles by what can paint them (docs/plans/done/headroom.md: a shader's size costs every pixel it draws,
 // so each feature's code only where it can show): by its grid cell's cover texels and 1 m round them (read nearest:
-// a texel of slack), a cell with a yard's texel (YARD_MARK, src/look/world/cover.ts: under it the paving can paint)
+// a texel of slack), a cell with a yard's texel (YARD_ALL and up in B, src/look/world/cover.ts: under it the paving can paint)
 // takes the live roads with the paving (submesh 0, terrainMat); else a cell within the road gate of a line by the
 // cover's wear distance (roadPaint's first test, shore.glsl: D.roadGate) the live roads alone (1, terrainRoadsMat); the
 // rest the material without either (2: there roadPaint returns its colour unchanged). The same pixels as the live
@@ -150,7 +150,7 @@ export function splitGround(t: Terrain, cover: CoverGrid): { material: MultiMate
     // (a village texel's field id is 0: its B is the yard's mark or 0; the first yard texel settles the cell)
     scan: for (let j = at((z0 - M - C.z0) / C.cell); j <= at((z0 + w + M - C.z0) / C.cell); j++) for (let i = at((x0 - M - C.x0) / C.cell); i <= at((x0 + w + M - C.x0) / C.cell); i++) {
       const o = (j * C.n + i) * 4
-      if (C.tex[o] === COVER.village && C.tex[o + 2] === YARD_MARK) { kind[cz * n + cx] = 0; break scan }
+      if (C.tex[o] === COVER.village && C.tex[o + 2] >= YARD_ALL) { kind[cz * n + cx] = 0; break scan }
       if (C.tex[o + 3] <= lim) kind[cz * n + cx] = 1
     }
   }
