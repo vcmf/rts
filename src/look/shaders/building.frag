@@ -1,3 +1,4 @@
+#extension GL_OES_standard_derivatives : enable
 precision highp float;varying vec3 vW,vN;varying vec2 vUV;varying float vRole,vH;varying vec2 vRoot;
 // the buildings (docs/plans/done/buildings.md): each region a palette colour by its role (tools/building-to-js.py:
 // 0 wall, 1 roof, 2 timber, 3 opening, 4 accent), per model (src/look/buildings.ts), never the model's own colours
@@ -24,11 +25,13 @@ void main(){
   vec3 N=normalize(vN);
   #ifdef BLD_BAKED
   // (its mip level from the light UVs' footprint in the atlas's texels, no coarser than BLD_MAXLOD: past it a read would
-  // reach a neighbour's tile, building-light.ts)
+  // reach a neighbouring island's light, building-light.ts)
   vec2 lx=dFdx(vLUV)*BLD_SIZE,ly=dFdy(vLUV)*BLD_SIZE;
   vec4 bk=textureLod(uBldLight,vLUV,clamp(0.5*log2(max(dot(lx,lx),dot(ly,ly))),0.0,BLD_MAXLOD));
   vec4 lm=vec4((bk.a*255.0-1.0)/254.0,bk.g,bk.b,1.0);float sh=bk.r*uShadowsOn;
+  #ifdef BOUNCE
   pBounce=texelFetch(uBldBounce,ivec2(int(vTileI+0.5),0),0).rgb*(1.0-smoothstep(0.0,8.0,vH));   // (bounceAt's fade)
+  #endif
   #else
   vec4 lm=LM(vW);
   // the sun's shadow looked up 15 cm off the surface along its normal (a wall or a roof near the light's grazing angle

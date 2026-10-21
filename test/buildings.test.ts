@@ -81,3 +81,22 @@ describe('the yard\'s distance', () => {
   })
 })
 
+
+// the light atlas (src/look/building-light.ts): every instance's tile in a cell of its own, INSET texels from the cell's
+// edge (one block of the coarsest level read: no read reaches a neighbour's), the cells on those blocks
+describe('the light atlas', () => {
+  it('gives each instance a tile of its own, inset from its cell', async () => {
+    const { atlasLayout, tileOf, COLS, INSET, MAX_LOD, TILE } = await import('../src/look/building-light.ts')
+    expect(TILE % (1 << MAX_LOD)).toBe(0)
+    expect(INSET).toBeGreaterThanOrEqual(1 << MAX_LOD)
+    for (const n of [1, 4, 5, BUILDINGS.length, 13]) {
+      const { width, height, rows } = atlasLayout(n)
+      expect(rows * COLS).toBeGreaterThanOrEqual(n)
+      for (let i = 0; i < n; i++) {
+        const [x, y, w, h] = tileOf(i, n), cx = (i % COLS) * TILE, cy = Math.floor(i / COLS) * TILE
+        expect(x * width).toBeCloseTo(cx + INSET); expect(y * height).toBeCloseTo(cy + INSET)
+        expect((x + w) * width).toBeCloseTo(cx + TILE - INSET); expect((y + h) * height).toBeCloseTo(cy + TILE - INSET)
+      }
+    }
+  })
+})

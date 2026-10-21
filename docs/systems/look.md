@@ -398,17 +398,23 @@ self-test made specks). Static: their shadows go into the sun's bake with the sc
 the light map's occlusion as a blob at their foot (the trees' contact).
 
 The buildings' static light is baked once (`src/look/building-light.ts`, `docs/plans/active/building-light.md`): an
-atlas of one 256² tile an instance (1024 × 512 RGBA8, the raw bake and its dilation, about 4 MB), each building
-drawn in its light UVs (`aUV2`, a second layer the import makes: Blender's smart project) with the sun's visibility
-(`shadowAtRaw`, the panel's switch applied at runtime), the light map's sky occlusion, mist mask and sun; four texels
-filled round every island (twice four), then mipmapped and read no coarser than level 3: a tile's 256 texels divide
-into level-3 blocks and its islands keep 8 texels from its edge, so no read reaches a neighbour's tile (without mips
-the minified reads at the default zoom cost 1.1 ms more than the runtime's taps, measured). Rebaked with the light map (after the sun's shadow map: a season's release, the leaves'
-drop, a new grain). `building.frag` reads it once (`BLD_BAKED`) in place of `shadowAt`, `LM` and `bounceAt`; the
-ground's bounce at each building's root is baked into a texel an instance (rebaked with the ground's bounce map) and
-faded with the height at runtime, and now lights the walls (`BOUNCE`: it was computed and never added before).
-`?bldlm=0` restores the runtime path; `?bldbounce=0` drops the bounce. The bake took about 0.5 s on Metal on load
-(loaded machine; 62-71 ms before the second dilation and the mips).
+atlas of one 256² tile an instance (1024 × 512 RGBA8: the raw bake 2 MB and the atlas the buildings read with its mips
+2.7 MB, about 4.7 MB), each building drawn in its light UVs (`aUV2`, a second layer the import makes: Blender's smart
+project; about 17 cm a texel on a house, its 550 islands at least 5 texels apart, measured) with the sun's visibility
+(`shadowAtRaw`, the panel's switch applied at runtime), the light map's sky occlusion, mist mask and sun; one pass
+fills four texels round every island from the nearest written one and every texel past them a neutral light (sunlit,
+open sky, no mist), then the engine builds the mips as the pass unbinds the atlas. Read no coarser than level 1
+(`MAX_LOD`): a level-1 read reaches 2 texels past an island, inside its half of the gap, so no neighbouring island's
+light comes in (level 2 would need islands 12 apart); at the widest zoom 93-98 % of a building's pixels want a level
+under 2 (720p, measured). A tile's islands keep 2 texels (`INSET`) from its edge, so no read reaches a neighbour's tile
+(without mips the minified reads at the default zoom cost 1.1 ms more than the runtime's taps, measured). Rebaked with
+the light map (after the sun's shadow map: a season's release, the leaves' drop, a new grain), once the buildings are
+drawn again if they are hidden (`__look.terrainOnly`). `building.frag` reads it once (`BLD_BAKED`) in place of
+`shadowAt`, `LM` and `bounceAt`; the ground's bounce at each building's root is baked into a texel an instance
+(rebaked with the ground's bounce map) and faded with the height at runtime, and now lights the walls (`BOUNCE`: it was
+computed and never added before). `?bldlm=0` restores the runtime path, as WebGL1 always takes it (the bake's reads
+are GLSL ES 3's); `?bldbounce=0` drops the bounce (no target, no read). The bake's time is read back on the bench
+only (it waits for the GPU); about 0.5 s on Metal on load (loaded machine; 62-71 ms with one dilation and no mips).
 
 ### The shadows' look
 

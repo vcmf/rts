@@ -47,7 +47,7 @@ MODELS = {
 # 'up': per role the range of a face's normal's upward component it may take (a roof faces up, a wall stands): the
 # colours alone do not split a shaded wall from a slate or a lit beam from a wall stone; 'zr': the range of a face's
 # height, as a share of the model's, a role may take (the house's terracotta chimney pots: its frames are timber)
-LIGHT_MARGIN = 0.012   # the light UVs' islands apart, a share of the square (3 texels of a 256² tile)
+LIGHT_MARGIN = 0.012   # the light UVs' islands apart, a share of the square (at least 5 texels of a tile's 252, measured: building-light.ts's MAX_LOD reads on it)
 SMEAR_MAX = 0.02   # the share of the surface the cut may smear (smear) before the export fails
 BASE_BAND = 0.06   # the base band the model is centred on, a share of its height
 DISSOLVE_DEG = 4   # the planar dissolve's angle: faces flatter than this to each other merge (within a role)
@@ -237,7 +237,6 @@ def light_uvs(obj):
     me.uv_layers.active = me.uv_layers[0]
     l2 = me.uv_layers['light'].data; u = np.array([l2[i].uv[:] for i in range(len(l2))])
     if u.min() < -1e-4 or u.max() > 1 + 1e-4: raise SystemExit(f'the light UVs leave the square ({u.min()}, {u.max()})')
-    return me.uv_layers['light'].data
 
 def smear(obj):
     # the share of the surface whose texel density (UV area over area) strays more than 4x from the model's median: a

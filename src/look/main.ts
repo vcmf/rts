@@ -201,13 +201,15 @@ water.finish(scene)
 const bldlmParam = params.get('bldlm'), bldbounceParam = params.get('bldbounce')
 if (bldlmParam !== null && bldlmParam !== '0') throw new Error(`?bldlm must be 0, not ${bldlmParam}`)
 if (bldbounceParam !== null && bldbounceParam !== '0') throw new Error(`?bldbounce must be 0, not ${bldbounceParam}`)
-// ?bldlm=0: the buildings' light by the runtime's taps (the A/B of their bake: docs/plans/active/building-light.md);
-// ?bldbounce=0: without the ground's bounce on their walls
-const buildings = buildBuildings(scene, mats, nature.canopy, { baked: bldlmParam === null, bounce: bldbounceParam === null })
+// ?bldlm=0: the buildings' light by the runtime's taps (the A/B of their bake: docs/plans/active/building-light.md;
+// WebGL1's always: the bake's reads are GLSL ES 3's); ?bldbounce=0: without the ground's bounce on their walls
+const bldBaked = bldlmParam === null && !mats.webgl1
+const buildings = buildBuildings(scene, mats, nature.canopy, { baked: bldBaked, bounce: bldbounceParam === null })
 const bakes = buildBakes(scene, mats, waterData, terrain.tileGround, nature.canopy, nature.cardCasters, soft, nature.trunks, nature.farCull)
 // the buildings' static light, baked after the light map (src/look/building-light.ts)
-const bldLight = bldlmParam === null && buildings.meshes.length ? buildBuildingLight(scene, mats, bakes, buildings.meshes, buildings.instances) : null
-if (bldLight) for (const m of buildings.meshes) { const mt = m.material as ShaderMaterial; mt.setTexture('uBldLight', bldLight.atlas); mt.setTexture('uBldBounce', bldLight.bounce) }
+// (each bake timed, by reading it back, on the bench only)
+const bldLight = bldBaked && buildings.meshes.length ? buildBuildingLight(scene, mats, bakes, buildings.meshes, buildings.instances, { bounce: bldbounceParam === null, timed: params.has('bench') }) : null
+if (bldLight) for (const m of buildings.meshes) { const mt = m.material as ShaderMaterial; mt.setTexture('uBldLight', bldLight.atlas); if (bldLight.bounce) mt.setTexture('uBldBounce', bldLight.bounce) }
 // ?far=off: no far tree, nor its shadows (built before the bakes: the far woods' whole cost; the A/B)
 if (params.has('far')) {
   if (params.get('far') !== 'off') throw new Error(`?far must be off, not ${params.get('far')}`)
@@ -542,7 +544,7 @@ let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | n
 const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   splitShare: () => groundShare,   // the tile's triangles paved, by the roads, neither (terrain.ts, splitGround)
-  bldLight: bldLight ? { ms: bldLight.ms, bytes: bldLight.bytes } : null,   // the buildings' light bake: its time once baked, its memory
+  bldLight: bldLight ? { atlas: bldLight.atlas, ms: bldLight.ms, bytes: bldLight.bytes } : null,   // the buildings' light bake: its atlas (the checks), its time once baked (on the bench), its memory
   lab, mats, passes, post, setDetail,
   dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
   dofPaint: DOF_PAINT,   // the blur's painted look (the same)
