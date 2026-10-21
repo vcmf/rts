@@ -3,10 +3,11 @@
 // floodplain, nothing but meadow in the formation zones) and holds every class the macro colour paints.
 import { describe, expect, it } from 'vitest'
 import { SPEC } from '../src/look/spec.ts'
-import { COVER, authorCover, coverAt, inFormationZone, isField, onFloodplain, packCover, unpackCover } from '../src/look/world/cover.ts'
+import { COVER, LINES, WEAR_STEP, authorCover, coverAt, inFormationZone, isField, onFloodplain, packCover, unpackCover } from '../src/look/world/cover.ts'
 import { buildLookData } from '../tools/build-look-data.ts'
 import { decodeLook } from '../src/look/world/data.ts'
 import { BUILDINGS, PAVE_REACH, YARD_ALL, YARD_BASE, paveSdf, pavePoly } from '../src/look/world/buildings.ts'
+import { segD } from '../src/look/world/geom.ts'
 
 const look = () => { const b = buildLookData(); return decodeLook(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer) }
 
@@ -68,6 +69,21 @@ describe('the authored cover', () => {
     })
     expect(seen).toBeGreaterThan(1000)
     expect(all / seen).toBeLessThan(0.05)   // (every shape only between close yards)
+  })
+  // the roads' gate (shore.glsl, roadPaint: A over ROAD_GATE, no road paint) is sound on a yard's texel only if its A is
+  // no more than its true distance to a line (its centre's, as the cover measures everywhere), to the byte's rounding
+  it('wears a yard\'s texel no more than its distance to the nearest line', () => {
+    let n = 0
+    for (let j = 0; j < g.n; j++) for (let i = 0; i < g.n; i++) {
+      const o = (j * g.n + i) * 4
+      if (g.tex[o] !== COVER.village || g.tex[o + 2] < YARD_ALL) continue
+      const x = g.x0 + (i + 0.5) * g.cell, z = g.z0 + (j + 0.5) * g.cell
+      let d = Infinity
+      for (const l of LINES) for (let k = 0; k < l.pts.length - 1; k++) d = Math.min(d, segD(x, z, l.pts[k], l.pts[k + 1]) - l.w / 2)
+      expect(g.tex[o + 3] * WEAR_STEP, `the yard's texel at ${x}, ${z}`).toBeLessThanOrEqual(Math.min(Math.max(0, d), 25.5) + WEAR_STEP / 2 + 1e-9)
+      n++
+    }
+    expect(n).toBeGreaterThan(500)
   })
   it('wears a yard far from a road by its distance to the lines, not as the village', () => {
     let far = 0

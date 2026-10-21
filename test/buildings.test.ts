@@ -4,7 +4,8 @@
 // toWorld matches its Matrix, toLocal undoes it, and a house's yard lies before its door at every quarter turn
 import { describe, expect, it } from 'vitest'
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
-import { BUILDINGS, FOOT, PAVE, PAVE_GAP, paveSdf, pavePoly, polyGap, toLocal, toWorld, type Building } from '../src/look/world/buildings.ts'
+import fs from 'node:fs'
+import { BUILDINGS, FOOT, PAVE, PAVE_EDGE, PAVE_GAP, PAVE_INNER, PAVE_REACH, PAVE_WOB, PAVE_WOBBLE, paveSdf, pavePoly, polyGap, toLocal, toWorld, type Building } from '../src/look/world/buildings.ts'
 
 const box = (x: number, z: number, hx: number, hz: number): [number, number][] => [[x - hx, z - hz], [x + hx, z - hz], [x + hx, z + hz], [x - hx, z + hz]]
 
@@ -18,6 +19,26 @@ describe('the yards', () => {
   it('keeps the authored yards apart', () => {
     const p = BUILDINGS.map(pavePoly)
     for (let i = 0; i < p.length; i++) for (let j = i + 1; j < p.length; j++) expect(polyGap(p[i], p[j])).toBeGreaterThanOrEqual(PAVE_GAP)
+  })
+})
+
+// the paving's edge (shore.glsl, pavePaint): k = 1 − smoothstep(PAVE_EDGE, d + wobble), the wobble within ± half the
+// sum of PAVE_WOB. Whole (k exactly 1, the noises skipped) inside PAVE_INNER; gone (k 0) past PAVE_WOBBLE; the cover's
+// marker reaches PAVE_REACH (test/cover.test.ts). A retuned edge must keep these, or a seam opens
+describe('the paving\'s edge', () => {
+  const amp = (PAVE_WOB[0] + PAVE_WOB[1]) / 2
+  it('is whole inside PAVE_INNER and gone past PAVE_WOBBLE, within PAVE_REACH', () => {
+    expect(PAVE_INNER + amp).toBeLessThanOrEqual(PAVE_EDGE[0])
+    expect(PAVE_EDGE[1] + amp).toBeLessThanOrEqual(PAVE_WOBBLE)
+    expect(PAVE_WOBBLE).toBeLessThanOrEqual(PAVE_REACH)
+  })
+  it('is the shader\'s: its constants as defines, not numbers of its own', () => {
+    const src = fs.readFileSync('src/look/shaders/shore.glsl', 'utf8'), fn = src.slice(src.indexOf('vec3 pavePaint('), src.indexOf('vec3 roadPaint('))
+    expect(fn).toContain('if(d>PAVE_INNER)')
+    expect(fn).toContain('*PAVE_WOB.x')
+    expect(fn).toContain('*PAVE_WOB.y')
+    expect(fn).toContain('smoothstep(PAVE_EDGE.x,PAVE_EDGE.y,')
+    expect(fn).toContain('if(d>PAVE_REACH)return c;')
   })
 })
 

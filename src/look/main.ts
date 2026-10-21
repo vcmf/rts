@@ -36,7 +36,8 @@ import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
 import ROAD_GRIT_URL from '../../data/road-grit-v2.png?url'
-import { BUILDINGS, paveShape } from './world/buildings.ts'
+import { BUILDINGS, YARD_ALL, YARD_BASE, paveShape } from './world/buildings.ts'
+import { COVER } from './world/cover.ts'
 import { sstep } from './noise.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
@@ -143,6 +144,15 @@ if (!mats.webgl1) {   // (float textures: the roads' shader is WebGL2's)
   // material that paints the roads; the cobbles ride in the grit (its G and B), their mean until it has loaded
   const shapes = BUILDINGS.map(paveShape)
   if (shapes.length > 16) throw new Error(`buildings: ${shapes.length} paved yards, the shader takes 16 (shore.glsl, pavePaint)`)
+  // the cover names each yard's building (its texels' B: src/look/world/cover.ts): look data built before the buildings
+  // changed would paint one building's shape under another's yard, silently. Each building's centre texel names it
+  {
+    const C = look.cover
+    BUILDINGS.forEach((b, bi) => {
+      const i = Math.floor((b.x - C.x0) / C.cell), j = Math.floor((b.z - C.z0) / C.cell), o = (j * C.n + i) * 4, m = C.tex[o + 2]
+      if (C.tex[o] !== COVER.village || (m !== YARD_BASE + bi && m !== YARD_ALL)) throw new Error(`buildings: the look data's cover does not name the ${b.model} at ${b.x}, ${b.z} (its yard reads ${m}, not ${YARD_BASE + bi}): rebuild the look data (node tools/build-look-data.ts)`)
+    })
+  }
   const pave = { a: shapes.flatMap(s => s.a), b: shapes.flatMap(s => s.b), n: shapes.length }
   mats.bindAll(m => { m.setArray4('uPaveA', pave.a); m.setArray4('uPaveB', pave.b); m.setFloat('uPaveN', pave.n) })
   roadTex = { segs, grid, grit, n: sn, pave }
@@ -231,7 +241,8 @@ if (roadTex) {
   const live = terrain.terrainMat, roads = terrain.terrainRoadsMat, baked = terrain.terrainBakedMat, ground = terrain.tileGround
   // near too, the live shader only on the triangles near a road, and the paving's only near a yard (terrain.ts,
   // splitGround: the same pixels to a step of rounding; the road split about 1.1 ms a frame less at the default and
-  // closest zooms; the paving's split: measured, see docs/plans/active/buildings.md); ?split=0 (above): the live shader
+  // closest zooms; with the paving's split and its gate the buildings cost about 0.35 ms at the village's closest, from
+  // 1.25: docs/plans/active/buildings.md); ?split=0 (above): the live shader
   // with the paving on the whole tile, the A/B (its share all paved)
   const sg = splitParam === '0' ? null : splitGround(terrain, look.cover)
   const split = sg?.material ?? live

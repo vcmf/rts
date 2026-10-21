@@ -192,14 +192,15 @@ float paveD(int i,vec2 xz){
 // of that texel can show (src/look/world/cover.ts); i below 0 (YARD_ALL, between close yards) every shape, the nearest
 vec3 pavePaint(vec3 c,vec2 xz,int i){
   float d=1e9;
-  if(i>=0)d=paveD(i,xz);
+  // (an index past the buildings, stale data, which main.ts stops at load: every shape)
+  if(i>=0&&float(i)<uPaveN)d=paveD(i,xz);
   else for(int k=0;k<16;k++){if(float(k)>=uPaveN)break;d=min(d,paveD(k,xz));}
-  // (the edge's wobble within ±0.775 m, its blend 0.35 m: exactly 0 past 1.125 m out, PAVE_WOBBLE; PAVE_REACH a little
-  // past it: src/look/world/buildings.ts, whose test pins the cover's marker over it. And exactly whole within 1.075 m
-  // in: there the wobble's two noises are not read)
+  // (the edge's wobble, PAVE_WOB, and its blend, PAVE_EDGE: exactly 0 past PAVE_WOBBLE out, PAVE_REACH a little past it,
+  // whose test pins the cover's marker over it; exactly whole within PAVE_INNER in, where the wobble's two noises are
+  // not read: src/look/world/buildings.ts, test/buildings.test.ts)
   if(d>PAVE_REACH)return c;
   float k=1.0;
-  if(d>-1.08){float wob=(mValue(xz/2.3+3.1)-0.5)*1.1+(mValue(xz/0.7+8.7)-0.5)*0.45;k=1.0-smoothstep(-0.3,0.35,d+wob);}
+  if(d>PAVE_INNER){float wob=(mValue(xz/2.3+3.1)-0.5)*PAVE_WOB.x+(mValue(xz/0.7+8.7)-0.5)*PAVE_WOB.y;k=1.0-smoothstep(PAVE_EDGE.x,PAVE_EDGE.y,d+wob);}
   if(k<=0.0)return c;
   // the level of detail (as the roads' tracks and grit): the cobbles while a pixel spans under half a stone (7 cm),
   // gone by 22 cm; past them their mean in a soft blotch over a few metres, no texture read; under them the same

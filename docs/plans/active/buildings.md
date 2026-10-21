@@ -131,5 +131,20 @@ things get runtime light); the colour by palette roles with the texture's value 
   yards are within reach of a texel: none on today's map); the edge's two noises only near the edge (the yard's inside
   is whole: exactly); a yard's texels worn by their distance to the lines, the paving before the roads' gate, so a yard
   far from a road skips the road search. To measure again.
-- To do: the owner's look; the bench against main; the guard and the checks.
+- Measured after the fix (cccf70a, Metal, three rounds): the village's closest main 6.55 ms, with the buildings 6.92
+  (48ae609: 7.77): +1.25 down to +0.35 ms; the village's default +0.15; the windmill's view cheaper than main (0.65 ms at
+  the closest, 0.2 at the default: the buildings hide ground and grass). Review (2026-10-21): the encoded index guarded
+  in the shader and checked against BUILDINGS at load (a stale look data stops the page: rebuild it); the edge's
+  constants (PAVE_WOB, PAVE_EDGE, PAVE_INNER) the shader's defines from world/buildings.ts, pinned by a test; a yard's
+  texel turned back to meadow keeps the ring's wear; a test that a yard's A is no more than its distance to a line.
+- To do: the owner's look; the guard and the checks.
+
+## Next
+
+- The ring round each yard (its trodden falloff: the meadow's texels within YARD_PAD and the wear's reach) still
+  passes the roads' gate: there A carries its distance to the yard, the meadow's wear, so a pixel runs the road search
+  (coverWarp, roadAt) for nothing. The fix separates the cover's distance to a line (the roads' gate) from its wear (the
+  trodden look): a format change, its own channel or a second texture, for a follow-up. Its share of the remaining
+  +0.35 ms is an estimate only, perhaps a third (the ring's pixels against the yards' at the village's closest), until
+  measured.
 

@@ -36,6 +36,12 @@ export const PAVE_GAP = 4   // the least ground between two buildings' paved yar
 // ground by the shader (shore.glsl, pavePaint: up to PAVE_WOBBLE m past it)
 export const PAVE: Record<Building['model'], { side: number; front: number }> = { windmill: { side: 3, front: 3 }, house: { side: 2.5, front: 6 } }
 export const PAVE_WOBBLE = 1.15
+// the paving's ragged edge (shore.glsl, pavePaint): a wobble of two noises of PAVE_WOB amplitudes (each noise 0..1
+// about 0.5) on the distance, blended over PAVE_EDGE (a smoothstep's edges, m past the yard). Whole within PAVE_INNER
+// of the yard's inside (the wobble's whole reach and the blend's start: the noises not read there), gone past
+// PAVE_WOBBLE out (its reach and the blend's end); test/buildings.test.ts pins both against these
+export const PAVE_WOB: readonly [number, number] = [1.1, 0.45], PAVE_EDGE: readonly [number, number] = [-0.3, 0.35]
+export const PAVE_INNER = PAVE_EDGE[0] - (PAVE_WOB[0] + PAVE_WOB[1]) / 2 - 0.005
 // the paving's reach past its yard: the shader paints nothing past it (pavePaint's first test), the cover marks every
 // texel a pixel within it can read (YARD_BASE, cover.ts), the road split gives those the paving's material (terrain.ts)
 export const PAVE_REACH = PAVE_WOBBLE + 0.05
@@ -46,7 +52,8 @@ export const PAVE_REACH = PAVE_WOBBLE + 0.05
 // on these (shore.glsl, roadPaint, pavePaint)
 export const YARD_BASE = 240, YARD_ALL = 239
 // the paving's constants as the shader's defines (the materials that paint it: terrain.ts, macro.ts)
-export const paveDefines = (): string[] => [`#define PAVE_REACH ${PAVE_REACH.toFixed(3)}`, `#define YARD_BASE ${YARD_BASE.toFixed(1)}`, `#define YARD_ALL ${YARD_ALL.toFixed(1)}`]
+export const paveDefines = (): string[] => [`#define PAVE_REACH ${PAVE_REACH.toFixed(3)}`, `#define YARD_BASE ${YARD_BASE.toFixed(1)}`, `#define YARD_ALL ${YARD_ALL.toFixed(1)}`,
+  `#define PAVE_INNER ${PAVE_INNER.toFixed(3)}`, `#define PAVE_WOB vec2(${PAVE_WOB.map(v => v.toFixed(3)).join(',')})`, `#define PAVE_EDGE vec2(${PAVE_EDGE.map(v => v.toFixed(3)).join(',')})`]
 // a building's paving as the shader takes it (≤ 16 buildings): a, its centre and its turn (x, z, cos yaw, sin yaw); b,
 // a box's half width, its reach behind (+z) and in front (−z) of the centre, its corners' radius, m, or for a circle
 // (−radius, 0, 0, 0)
@@ -68,11 +75,7 @@ export function paveSdf(b: Building, x: number, z: number): number {
 let yards: { b: Building; reach: number }[] | null = null
 const theYards = () => yards ??= BUILDINGS.map(b => { const q = paveShape(b).b; return { b, reach: q[0] < 0 ? -q[0] : Math.hypot(q[0], Math.max(q[1], q[2])) } })
 // the distance from (x, z) to the nearest paving, m (0 on it); Infinity past far m of every yard's reach
-export function paveDist(x: number, z: number, far = 30): number {
-  let d = Infinity
-  for (const y of theYards()) if (Math.hypot(x - y.b.x, z - y.b.z) <= y.reach + far) d = Math.min(d, Math.max(0, paveSdf(y.b, x, z)))
-  return d
-}
+export const paveDist = (x: number, z: number, far = 30): number => paveNearest(x, z, far).d
 // the nearest paving to (x, z): its distance (0 on it) and its building's index (Infinity and −1 past far m of every
 // yard's reach), and how many yards lie within near m of it
 export function paveNearest(x: number, z: number, far = 30, near = 0): { d: number; i: number; n: number } {
