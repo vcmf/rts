@@ -3,6 +3,11 @@ precision highp float;varying vec3 vW,vN,vCol;varying vec2 vRoot;varying float v
 // the guard's masks (tools/guard.mjs --figures, Units.setMask): off below 0, else flat uMask, or (2) white where the
 // coat shows (uCoatRole), black elsewhere
 uniform float uMask,uCoatRole;
+#ifdef FAR
+// the far figure's lift (?farpal=1), as it shrinks (vFar, units.vert): the trees' and hills' shadow on it halved, and
+// a warm rim of the sun on what faces up (the shoulders, the headgear), before the air (the units' light holds)
+varying float vFar;
+#endif
 #include<painter>
 #include<shore>
 
@@ -14,6 +19,12 @@ void main(){
   if(uMask>-0.5){float v=uMask>1.5?step(abs(vRole-uCoatRole),0.5):uMask;gl_FragColor=lensOut(vec3(v),vW);return;}
   vec3 N=normalize(vN);vec4 lm=LM(vW);
   float sh=(1.0-lm.r)*uShadowsOn;
+  #ifdef FAR
+  sh*=1.0-0.5*vFar;
+  #endif
   pBounce=bounceAt(vRoot,vW.y,0.0,1.0);
   vec3 c=paint(vCol,N,vW,1.0,0.12,0.3,sh);
+  #ifdef FAR
+  c+=vCol*uSunCol*(0.22*vFar*smoothstep(0.35,0.95,N.y)*(1.0-0.5*sh));
+  #endif
   gl_FragColor=lensOut(airOf(c,vW,lm,0.9),vW);}

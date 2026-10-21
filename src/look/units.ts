@@ -25,7 +25,7 @@ import DEPTH_FS from './shaders/depth.frag?raw'
 import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
 import type { UnitData } from './units-data.ts'
-import { CYCLE, SIDES, manAt, phaseAt, slots, type Battalion, type Drill, type ManState, type Phase } from './world/armies.ts'
+import { CYCLE, SIDES, farPalette, manAt, phaseAt, slots, type Battalion, type Drill, type ManState, type Phase } from './world/armies.ts'
 
 const ROLES = ['halt', 'march', 'run', 'fire'] as const
 
@@ -53,6 +53,7 @@ export class Units {
   private hosts: Host[] = []
   private lods: Mesh[] = []
   private readonly mats: ShaderMaterial[] = []   // one a side: its palette
+  private readonly farMats: ShaderMaterial[] = []   // one a side for the far LOD, the far palette (?farpal=1)
   private depthMat: ShaderMaterial
   private sun: FreeCamera
   private shadowRT: RenderTargetTexture
@@ -74,6 +75,7 @@ export class Units {
    *  by default none, each pixel reads it) */
   rootReceivers: ShaderMaterial[] = []
   readonly meshes: Mesh[] = []
+  private farK = new Vector2()
   private smStep = -1                       // the step the map was last drawn at
   private smVP = new Float32Array(16)       // the sun's view-projection it was drawn with
   private smList: Mesh[] = []               // and its casters
@@ -102,6 +104,16 @@ export class Units {
       m.setColor3Array('uPal', data.palette.map(r => { const hex = side.palette[r]; if (!hex) throw new Error(`units: ${side.name} has no colour for the role ${r}`); return Color3.FromHexString(hex) }))
       m.setFloat('uMask', -1); m.setFloat('uCoatRole', data.palette.indexOf('coat'))
       this.mats.push(m)
+    }
+    // the far LOD's (FAR): its palette and its lift crossfaded in below the LOD switch (units.vert, units.frag)
+    for (const side of SIDES) {
+      const m = mats.make(`units_${side.name}_far`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uPalFar', 'uFarK', 'uMask', 'uCoatRole'], samplers: ['uVAT'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', '#define FAR', `#define PAL_N ${n}`] })
+      m.setTexture('uVAT', vat)
+      const far = farPalette(side.palette)
+      m.setColor3Array('uPal', data.palette.map(r => Color3.FromHexString(side.palette[r])))
+      m.setColor3Array('uPalFar', data.palette.map(r => Color3.FromHexString(far[r])))
+      m.setFloat('uMask', -1); m.setFloat('uCoatRole', data.palette.indexOf('coat'))
+      this.farMats.push(m)
     }
     // the shadow pass: the same skinning, depth only, from an orthographic camera along the sun
     this.depthMat = new ShaderMaterial('unitsDepth', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATTime'], samplers: ['uVAT'], defines: ['#define DEPTH'] })
@@ -184,10 +196,12 @@ export class Units {
   private frame(): void {
     const T = this.clock(), step = Math.floor(T * this.data.fps)
     for (const m of this.mats) m.setFloat('uVATTime', T)
+    for (const m of this.farMats) m.setFloat('uVATTime', T)
     this.depthMat.setFloat('uVATTime', T)
     const cam = this.camera, engine = this.scene.getEngine()
     // pixels per metre at unit distance, from the projection itself
     const pxPerM = cam.getProjectionMatrix().m[5] * engine.getRenderHeight() / 2, camPos = cam.globalPosition
+    for (const m of this.farMats) m.setVector2('uFarK', this.farK.set(FIGURE * pxPerM, this.lodPx))
     let moved = step !== this.smStep   // (the map changes with the poses' step, the men's places, the casters' LOD)
     for (const h of this.hosts) {
       if (!h.lod[0].isEnabled()) continue
@@ -302,7 +316,12 @@ export class Units {
   /** the guard's masks (tools/guard.mjs --figures): 'off' painted; 'white', 'black' every figure flat; 'side' the
    *  first side white, the other black; 'coat' white where a coat shows */
   setMask(mode: 'off' | 'white' | 'black' | 'side' | 'coat'): void {
-    this.mats.forEach((m, i) => m.setFloat('uMask', mode === 'off' ? -1 : mode === 'white' ? 1 : mode === 'black' ? 0 : mode === 'coat' ? 2 : i === 0 ? 1 : 0))
+    const v = (side: number) => mode === 'off' ? -1 : mode === 'white' ? 1 : mode === 'black' ? 0 : mode === 'coat' ? 2 : side === 0 ? 1 : 0
+    this.mats.forEach((m, i) => m.setFloat('uMask', v(i))); this.farMats.forEach((m, i) => m.setFloat('uMask', v(i)))
+  }
+  /** the far LOD painted with the far palette and its lift (?farpal=1), or as the near one */
+  setFarPalette(on: boolean): void {
+    for (const h of this.hosts) h.lod[1].material = (on ? this.farMats : this.mats)[h.b.side]
   }
   /** the figures shown or not (the guard's ground alone), their shadows with them */
   show(on: boolean): void {

@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-19
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs]
 decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows]
 ---
 
@@ -586,8 +586,20 @@ them. WebGL2 only (decision 0046).
   in white, a stand-in). The figures are painted as the army blocks (`KEEP_HUE`, `BOUNCE`, `NOSNOW`) and blur by
   their depth (decision 0040). A battalion's instances are written when it moves (once a 1/12 s step) or changes
   phase; its LOD by the figure's height in pixels (48, ±10 %).
-- **Their shadows** (decision 0047): a figures-only sun map, 2048², fitted to the view each frame; the ground and
-  the meadow read it (`UNIT_SHADOWS`). `?unitshadow=0` turns it off.
+- **Their shadows** (decision 0047): a figures-only sun map, 2048², fitted to the view; the ground and the meadow read
+  it (`UNIT_SHADOWS`). `?unitshadow=0` turns it off. It is drawn again only when it would change (the poses' 12 fps
+  step, a battalion's men, the casters, the sun's box), and the box is held while it covers the view with 6 m to spare
+  and is at most 1.3 times the size needed (`?ushadowrate=0`: drawn every frame; pixel-identical in the captures). The
+  casters are the far LOD, shown to the map alone where the view draws a battalion near (`?ushadowlod=1`: the LOD the
+  view draws). `?ushadowvs=1` (off until judged): the meadow reads it once a blade at its root (`UNIT_SHADOWS_VS`,
+  `meadow.vert`) instead of at every pixel. (The first build fitted the box before the view's first frame: a NaN
+  stayed on the sun and no figure cast a shadow.)
+- **The far palette** (`?farpal=1`, off until judged): from above, a far figure shows its headgear, pack and leather
+  more than its coat. The far LOD then has a material of its own (`FAR`): those roles take the side's coat a value
+  step down (`farPalette`, `FAR_ROLES`), crossfaded in as the figure shrinks below the LOD switch (no pop), with the
+  trees' and hills' shadow on it halved and a warm rim on what faces up.
+- **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at
+  their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
 - **The script** (`src/look/world/armies.ts`, deterministic, the sim's stand-in): each battalion marches 36 m in
   column of companies, halts 4 s, deploys into line at the run, pauses 3 s, then fires by ranks (1.4 s apart) until
   its 110 s cycle starts again; battalions are 9.7 s apart in the cycle. The layout takes open ground behind each

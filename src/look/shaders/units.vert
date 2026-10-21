@@ -12,6 +12,12 @@ varying float vD;
 #else
 // a side's colours by role (the bake's palette, src/look/world/armies.ts): a palette swap recolours the side
 uniform vec3 uPal[PAL_N];
+#ifdef FAR
+// the far LOD's palette (?farpal=1: farPalette, src/look/world/armies.ts), crossfaded in as the figure shrinks below
+// the LOD switch, so the switch does not pop: uFarK.x, a figure's height in pixels at 1 m; uFarK.y, the switch's
+uniform vec3 uPalFar[PAL_N];uniform vec2 uFarK;uniform vec3 uCamPos;
+varying float vFar;
+#endif
 varying vec3 vW,vN,vCol;varying vec2 vRoot;varying float vRole;
 #endif
 mat4 boneAt(float b,int f){int x=int(b)*4;
@@ -31,5 +37,10 @@ void main(){
   #else
   vN=normalize(mat3(finalWorld)*(mat3(sk)*normal));vW=w.xyz;vRoot=finalWorld[3].xz;
   vCol=uPal[int(aRole+0.5)];vRole=aRole;
+  #ifdef FAR
+  float px=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz));
+  vFar=1.0-smoothstep(uFarK.y*0.35,uFarK.y*0.9,px);
+  vCol=mix(vCol,uPalFar[int(aRole+0.5)],vFar);
+  #endif
   #endif
   gl_Position=p;}

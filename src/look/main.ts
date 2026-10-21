@@ -298,7 +298,7 @@ const armiesParam = params.get('armies'), unitShadowParam = params.get('unitshad
 // ?ushadowvs=1: the meadow reads it once a blade, at its root (else at every pixel: the default until the owner judges
 // the blade-sized edges)
 const bit = (k: string) => { const v = params.get(k); if (v !== null && v !== '0' && v !== '1') throw new Error(`?${k} must be 0 or 1, not ${v}`); return v === null ? null : v === '1' }
-const uShadowRate = bit('ushadowrate'), uShadowLod = bit('ushadowlod'), uShadowVs = bit('ushadowvs')
+const uShadowRate = bit('ushadowrate'), uShadowLod = bit('ushadowlod'), uShadowVs = bit('ushadowvs'), farPal = bit('farpal')
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 20)) throw new Error(`?armies must be 1 to 20 battalions a side (the demo map holds 20), not ${armiesParam}`)
 if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '1') throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
 let units: Units | null = null, armiesFocus: [number, number] | null = null   // (the fight's middle: the bench's focus)
@@ -323,6 +323,7 @@ if (armiesParam !== null) {
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false
   if (uShadowVs ?? false) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
+  units.setFarPalette(farPal ?? false)   // (?farpal=1: the far LOD in its coat's colour, off until the owner judges it)
   armiesFocus = facingAt(units.battalions)
   Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus } })
 }

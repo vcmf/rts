@@ -22,6 +22,20 @@ export const SIDES: readonly Side[] = [
   { name: 'austria', palette: { coat: '#E9E3D3', facings: '#8E2F3A', white: '#DCD6C8', ...NEUTRAL, dark: '#26272B' } },
 ]
 
+/** the far palette (?farpal=1, docs/plans/active/armies-demo.md): from above, a far figure shows mostly its headgear,
+ *  pack and leather, not its coat, and a battalion reads dark. Those roles take the side's coat at a value step down
+ *  (the factor), so the battalion reads in its coat's colour from far off; the rest keep the side's */
+export const FAR_ROLES: Readonly<Record<string, number>> = { dark: 0.78, pack: 0.86, leather: 0.86 }
+export function farPalette(p: Palette): Palette {
+  const out: Palette = { ...p }, c = p.coat
+  if (!c) throw new Error('armies: a side without a coat colour has no far palette')
+  for (const [r, k] of Object.entries(FAR_ROLES)) {
+    const v = [1, 3, 5].map(i => Math.round(parseInt(c.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0'))
+    out[r] = `#${v.join('').toUpperCase()}`
+  }
+  return out
+}
+
 /** the script's phases a battalion goes through, in order, each cycle (the roles its men are given) */
 export type Phase = 'column' | 'halt' | 'deploy' | 'fire'
 export interface Battalion { side: number; x: number; z: number; heading: number; offset: number }

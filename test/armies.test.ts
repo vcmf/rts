@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { APPROACH, CYCLE, SIDES, extents, facingAt, layout, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
+import { APPROACH, CYCLE, FAR_ROLES, SIDES, extents, facingAt, farPalette, layout, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
 import { decodeUnits } from '../src/look/units-data.ts'
 
 const g = napoleonic.types.infantry.geometry
@@ -69,6 +69,16 @@ describe('armies: the layout', () => {
   it('has a colour for every role of the figure, for every side', () => {
     const d = decodeUnits(new Uint8Array(readFileSync(new URL('../data/figures/fr-line-infantry.unitdata', import.meta.url))).buffer)
     for (const s of SIDES) for (const r of d.palette) expect(s.palette[r], `${s.name}.${r}`).toMatch(/^#[0-9A-F]{6}$/i)
+  })
+})
+
+describe('armies: the far palette', () => {
+  it('paints the far roles in the coat a value step down, the rest as the side', () => {
+    for (const side of SIDES) {
+      const f = farPalette(side.palette), ch = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16)
+      for (const [r, k] of Object.entries(FAR_ROLES)) for (let i = 0; i < 3; i++) expect(ch(f[r], i)).toBe(Math.round(ch(side.palette.coat, i) * k))
+      for (const r of Object.keys(side.palette)) if (!(r in FAR_ROLES)) expect(f[r]).toBe(side.palette[r])
+    }
   })
 })
 

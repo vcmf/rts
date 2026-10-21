@@ -51,6 +51,19 @@ smoke, sound, casualties, other arms.
 - The bench URLs handed to the owner (the frame cost is measured on the preview build: `?bench&armies=5|10|20`, each
   with `&unitshadow=0`).
 
+## Batch A (2026-10-21: the coordinator's bench and research)
+
+Measured on Metal at 1080p (the coordinator's, the view at `?benchat=162.5,-2.5`; main: widest 6.65, default 9.45,
+close 8.83 ms): 16,560 figures +2.0 / +0.8 / +0.9 ms without their shadows, +5.4 / +4.3 / +4.6 with. Those runs
+predate the NaN fix: the shadow pass drew its vertices but no shadow. Each change behind its own switch:
+
+1. The map drawn only when it would change, its box held (`?ushadowrate=0` off): pixel-identical, on.
+2. The casters at the far LOD (`?ushadowlod=1` off): identical at the default and widest zooms, up close the edges
+   differ; on, as asked.
+3. The meadow's read at the blade's root (`?ushadowvs=1` on): its edges are the blade's; off until judged.
+4. `tools/guard.mjs --figures`: the baseline and the far palette's numbers.
+5. The far palette (`?farpal=1` on): off until judged.
+
 ## Open questions
 
 - The cost on the laptop at 16,000 men, with and without the figures' shadows (the bench, the owner's run).
