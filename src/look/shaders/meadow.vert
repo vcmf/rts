@@ -10,6 +10,20 @@ uniform vec3 uCamPos,uFocus;   // (the zoom: how far the camera stands from the 
 varying vec3 vFlow;   // the combed meadow: the clump hue (a hash), the growth at its root, how far it is from winter (1 to 0)
 #endif
 #include<meadow>
+#ifdef UNIT_SHADOWS_VS
+// the figures' cast shadow (decision 0047) read once a blade, at its root on the ground, for the whole blade: the
+// fragment's own read (painter.glsl, unitShadowAt) is six fetches a pixel over many layers of blades. The same 2x2
+// taps and border fade, without the grain's jitter (the blade is the unit: its edge is the blade's)
+uniform sampler2D uUnitSM;uniform mat4 uUnitVP;uniform vec2 uUnitTexel;uniform float uUnitBias;uniform float uShadowsOn;
+varying float vUSh;
+float unitShadowRoot(vec3 wp){
+  vec4 lp=uUnitVP*vec4(wp,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
+  if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;
+  float d=q.z*0.5+0.5-uUnitBias,s=0.0;
+  for(int x=0;x<2;x++)for(int y=0;y<2;y++)s+=step(texture2D(uUnitSM,uv+(vec2(float(x),float(y))-0.5)*uUnitTexel).r,d);
+  vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,8.0*uUnitTexel.x,e.x)*smoothstep(0.0,8.0*uUnitTexel.y,e.y);
+  return s/4.0*uShadowsOn*fade;}
+#endif
 // the meadow map at a point: one bilinear read (half floats filter), its growing area shrunk a texel on the CPU so
 // the blend never crosses a rule (src/look/meadow.ts)
 vec4 meadowAt(vec2 xz){return texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);}
@@ -112,4 +126,7 @@ void main(){
   #endif
   vN=n;vW=w;vV=aV;vShade=c;   // the clump field (the ground colour under it, groundArm, already holds the brush pattern)
   vH=p.y;vRoot=root;vIsCrop=crop?1.0:0.0;vCrop=cr.yzw;
+  #ifdef UNIT_SHADOWS_VS
+  vUSh=unitShadowRoot(vec3(root.x,m.r,root.y));
+  #endif
   gl_Position=viewProjection*vec4(w,1.0);}

@@ -70,6 +70,9 @@ export class Units {
   lazyShadows = true
   /** the casters at the LOD the camera sees (?ushadowlod=1), else always at the far LOD (its shadow is a few texels) */
   casterNear = false
+  /** the receivers that read the figures' shadow once a blade at its root (the meadow's: UNIT_SHADOWS_VS, ?ushadowvs=1;
+   *  by default none, each pixel reads it) */
+  rootReceivers: ShaderMaterial[] = []
   readonly meshes: Mesh[] = []
   private smStep = -1                       // the step the map was last drawn at
   private smVP = new Float32Array(16)       // the sun's view-projection it was drawn with
@@ -292,6 +295,7 @@ export class Units {
     this.shadowRT.refreshRate = this.lazyShadows ? 0 : 1
     if (on) { this.smBox.set = false; this.smStep = -1 }   // (fitted by the next frame)
     for (const m of this.receivers) m.setDefine('#define UNIT_SHADOWS', on)
+    for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', on)
   }
 
   /** figures drawn last frame, by LOD: battalions shown at that LOD and in the camera's view */

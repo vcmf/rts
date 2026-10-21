@@ -294,9 +294,11 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat])   // the d
 // default: the goldens and the look checks never see them
 const armiesParam = params.get('armies'), unitShadowParam = params.get('unitshadow')
 // the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every
-// frame (else only when it would change); ?ushadowlod=1 casts from the LOD the view draws (else the far LOD always)
+// frame (else only when it would change); ?ushadowlod=1 casts from the LOD the view draws (else the far LOD always);
+// ?ushadowvs=1: the meadow reads it once a blade, at its root (else at every pixel: the default until the owner judges
+// the blade-sized edges)
 const bit = (k: string) => { const v = params.get(k); if (v !== null && v !== '0' && v !== '1') throw new Error(`?${k} must be 0 or 1, not ${v}`); return v === null ? null : v === '1' }
-const uShadowRate = bit('ushadowrate'), uShadowLod = bit('ushadowlod')
+const uShadowRate = bit('ushadowrate'), uShadowLod = bit('ushadowlod'), uShadowVs = bit('ushadowvs')
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 20)) throw new Error(`?armies must be 1 to 20 battalions a side (the demo map holds 20), not ${armiesParam}`)
 if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '1') throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
 let units: Units | null = null, armiesFocus: [number, number] | null = null   // (the fight's middle: the bench's focus)
@@ -319,6 +321,7 @@ if (armiesParam !== null) {
   // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
   units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked), () => S.t)
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false
+  if (uShadowVs ?? false) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
   armiesFocus = facingAt(units.battalions)
   Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus } })

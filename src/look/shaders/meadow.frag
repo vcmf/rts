@@ -3,6 +3,9 @@ precision highp float;varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCro
 #ifdef GRASS_FLOW
 varying vec3 vFlow;
 #endif
+#ifdef UNIT_SHADOWS_VS
+varying float vUSh;   // (the figures' shadow at the blade's root, meadow.vert)
+#endif
 #include<painter>
 uniform vec3 uTipTint;uniform float uTipWarm;   // the warm autumn's tip colour and tint weight, once a frame (src/look/main.ts)
 #include<shore>
@@ -10,7 +13,9 @@ uniform vec3 uTipTint;uniform float uTipWarm;   // the warm autumn's tip colour 
 void main(){
   vec3 N=normalize(mix(normalize(vN),vec3(0.0,1.0,0.0),0.75));  // grass shades like the ground it grows from (a crop too: less, its stalks' shadow sides went blue-grey)
   vec4 lm=LM(vW);float sh=(1.0-lm.r)*uShadowsOn;
-  #ifdef UNIT_SHADOWS
+  #ifdef UNIT_SHADOWS_VS
+  sh=max(sh,vUSh);
+  #elif defined(UNIT_SHADOWS)
   sh=max(sh,unitShadowAt(vW));
   #endif
   vec3 alb;
