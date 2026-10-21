@@ -45,6 +45,8 @@ const SM_STEP = 16     // m: the map's half-size is a multiple of this, so its t
 const SM_BIAS = 0.02   // m along the sun: no receiver is drawn into the map, so it only absorbs float rounding
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1]   // the view's corners in clip space
 const FIGURE = 1.8     // m: a figure's height, for the LOD's pixel test
+const SM_HOLD = 6      // m: lazy, the held sun box must cover the view by this much
+const SM_COARSE = 1.3  // and be at most this many times the size the view needs (its texels no coarser)
 
 export class Units {
   readonly data: UnitData
@@ -63,7 +65,18 @@ export class Units {
   private readonly man: ManState = { x: 0, z: 0, face: 0, role: 'halt', since: 0, moving: false }
   /** the figure height in pixels below which a battalion draws its far LOD (±10%, so it does not flicker) */
   lodPx = 48
+  /** the shadow map redrawn only when it would change (?ushadowrate=0: every frame): the poses step at the bake's fps,
+   *  so a frame between two steps, with the sun's box and the men where they were, would draw the same map */
+  lazyShadows = true
+  /** the casters at the LOD the camera sees (?ushadowlod=1), else always at the far LOD (its shadow is a few texels) */
+  casterNear = true
   readonly meshes: Mesh[] = []
+  private smStep = -1                       // the step the map was last drawn at
+  private smVP = new Float32Array(16)       // the sun's view-projection it was drawn with
+  private smList: Mesh[] = []               // and its casters
+  private smBox = { ex: 0, ey: 0, V: new Matrix(), c: new Vector3(), set: false }   // the sun's box held while it covers the view (lazy only)
+  /** the shadow map's draws so far (the captures count them: a still frame draws none) */
+  smDraws = 0
 
   /** receivers: the painted materials the figures' shadows fall on (the ground and the grass); the page's clock */
   private readonly scene: Scene; private readonly camera: ArcRotateCamera; private readonly receivers: ShaderMaterial[]
@@ -93,6 +106,10 @@ export class Units {
     this.shadowRT = new RenderTargetTexture('unitSM', { width: SM_SIZE, height: SM_SIZE }, scene, false, true, Constants.TEXTURETYPE_FLOAT, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, true, false, false, Constants.TEXTUREFORMAT_R)
     this.shadowRT.activeCamera = this.sun; this.shadowRT.clearColor = new Color4(1, 1, 1, 1)
     this.shadowRT.renderList = this.meshes; this.shadowRT.getCustomRenderList = () => this.culled
+    // a far LOD caster of a battalion drawn near is hidden from the view: shown to the map alone, while it draws
+    const shown: Mesh[] = []
+    this.shadowRT.onBeforeRenderObservable.add(() => { this.smDraws++; for (const m of this.culled) if (!m.isVisible) { m.isVisible = true; shown.push(m) } })
+    this.shadowRT.onAfterRenderObservable.add(() => { for (const m of shown) m.isVisible = false; shown.length = 0 })
     for (const m of receivers) {
       m.setTexture('uUnitSM', this.shadowRT); m.setVector2('uUnitTexel', new Vector2(1 / SM_SIZE, 1 / SM_SIZE))
       m.setFloat('uUnitBias', SM_BIAS / (this.sun.maxZ - this.sun.minZ)); m.setMatrix('uUnitVP', Matrix.Identity())
@@ -167,28 +184,38 @@ export class Units {
     const cam = this.camera, engine = this.scene.getEngine()
     // pixels per metre at unit distance, from the projection itself
     const pxPerM = cam.getProjectionMatrix().m[5] * engine.getRenderHeight() / 2, camPos = cam.globalPosition
+    let moved = step !== this.smStep   // (the map changes with the poses' step, the men's places, the casters' LOD)
     for (const h of this.hosts) {
       if (!h.lod[0].isEnabled()) continue
       const t = T - h.b.offset, cycle = Math.floor(t / CYCLE), local = t - cycle * CYCLE, cycleStart = T - local
       const p = phaseAt(this.drill, local, this.speed.march, this.speed.run).phase
       // a battalion's men are written when they move (a marching or deploying one once a step), else once a phase
       const moving = p === 'column' || p === 'deploy'
-      if (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step)) { this.place(h, local, cycleStart); h.step = step; h.phase = p; h.cycle = cycle }
+      if (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step)) { this.place(h, local, cycleStart); h.step = step; h.phase = p; h.cycle = cycle; moved = true }
       const px = FIGURE * pxPerM / Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
-      h.near = h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1
-      h.lod[0].isVisible = h.near; h.lod[1].isVisible = !h.near
-      const k = h.near ? 0 : 1
-      if (h.stale[k]) { h.lod[k].thinInstanceBufferUpdated('matrix'); h.stale[k] = false }   // the hidden LOD: when drawn again
-      if (h.staleSet[k]) { h.lod[k].thinInstanceBufferUpdated('aVAT'); h.staleSet[k] = false }
+      const near = h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1
+      if (near !== h.near && this.casterNear) moved = true
+      h.near = near; h.lod[0].isVisible = near; h.lod[1].isVisible = !near
+      // the LOD drawn, and the far LOD when it casts for a battalion drawn near; the hidden one is updated when drawn again
+      for (let k = 0; k < 2; k++) {
+        if (k !== (near ? 0 : 1) && !(k === 1 && this.shadows && !this.casterNear)) continue
+        if (h.stale[k]) { h.lod[k].thinInstanceBufferUpdated('matrix'); h.stale[k] = false }
+        if (h.staleSet[k]) { h.lod[k].thinInstanceBufferUpdated('aVAT'); h.staleSet[k] = false }
+      }
     }
-    if (this.shadows) this.fitSun()
+    if (!this.shadows) return
+    const refit = this.fitSun()
+    if (!this.lazyShadows) return
+    if (moved || refit) { this.shadowRT.resetRefreshCounter(); this.smStep = step }
   }
 
   // The sun's orthographic box around the ground in view: where the view's corner rays meet the lowest and the
   // highest ground (cut at SM_REACH), padded for a figure's height, so the map's texels go where the camera looks.
   // Its centre snaps to whole texels along the sun's fixed view axes and its size moves in SM_STEP steps, so the
-  // texel grid stays put under still figures while the view pans or zooms (the crowd bench's L1b)
-  private fitSun(): void {
+  // texel grid stays put under still figures while the view pans or zooms (the crowd bench's L1b). Lazy (lazyShadows),
+  // the box is held while it still covers the view with SM_HOLD m to spare and is at most SM_COARSE times the size the
+  // view needs, so a small move of the camera draws no new map. Returns whether the map's view or casters changed
+  private fitSun(): boolean {
     const cam = this.camera, k = this.scratch, inv = k.inv, g = D.spec.ground
     cam.getTransformationMatrix().invertToRef(inv)
     let n = 0
@@ -205,7 +232,7 @@ export class Units {
     k.c.setAll(0); for (let i = 0; i < n; i++) k.c.addInPlace(k.pts[i]); k.c.scaleInPlace(1 / n)
     // before the view's first frame its matrix does not invert: a NaN set on the sun stayed there for good (the map
     // drew nothing: the first armies' build cast no shadow). Fitted from the next frame instead
-    if (!(Number.isFinite(k.c.x) && Number.isFinite(k.c.y) && Number.isFinite(k.c.z))) return
+    if (!(Number.isFinite(k.c.x) && Number.isFinite(k.c.y) && Number.isFinite(k.c.z))) return false
     this.sun.position.copyFrom(k.c).addInPlace(SUN.scale(500)); this.sun.setTarget(k.c); this.sun.computeWorldMatrix()
     let V = this.sun.getViewMatrix(true), ex = 0, ey = 0
     for (let i = 0; i < n; i++) for (let e = 0; e < 2; e++) {
@@ -213,6 +240,12 @@ export class Units {
       ex = Math.max(ex, Math.abs(k.v.x)); ey = Math.max(ey, Math.abs(k.v.y))
     }
     ex = Math.ceil((ex + 4) / SM_STEP) * SM_STEP; ey = Math.ceil((ey + 4) / SM_STEP) * SM_STEP
+    const box = this.smBox
+    if (this.lazyShadows && box.set && box.ex <= ex * SM_COARSE && box.ey <= ey * SM_COARSE && this.covers(n)) {
+      // held: the sun back on the held box's centre (it was moved to the view's above), the map's view unchanged
+      this.sun.position.copyFrom(box.c).addInPlace(SUN.scale(500)); this.sun.setTarget(box.c); this.sun.computeWorldMatrix()
+      return this.cull()
+    }
     const m = V.m, tx = 2 * ex / SM_SIZE, ty = 2 * ey / SM_SIZE
     const px = k.c.x * m[0] + k.c.y * m[4] + k.c.z * m[8], py = k.c.x * m[1] + k.c.y * m[5] + k.c.z * m[9]
     const sx = Math.round(px / tx) * tx - px, sy = Math.round(py / ty) * ty - py
@@ -220,12 +253,32 @@ export class Units {
     this.sun.position.copyFrom(k.c).addInPlace(SUN.scale(500)); this.sun.setTarget(k.c); this.sun.computeWorldMatrix()
     V = this.sun.getViewMatrix(true)
     this.sun.orthoLeft = -ex; this.sun.orthoRight = ex; this.sun.orthoTop = ey; this.sun.orthoBottom = -ey
+    box.ex = ex; box.ey = ey; box.V.copyFrom(V); box.c.copyFrom(k.c); box.set = true
     const vp = k.vp; V.multiplyToRef(this.sun.getProjectionMatrix(true), vp)
     for (const r of this.receivers) r.setMatrix('uUnitVP', vp)
-    // only the battalions inside the sun's box are drawn into the map (a render target does not cull its list)
     Frustum.GetPlanesToRef(vp, this.planes)
+    let changed = false
+    for (let i = 0; i < 16; i++) if (vp.m[i] !== this.smVP[i]) { changed = true; this.smVP[i] = vp.m[i] }
+    return this.cull() || changed
+  }
+
+  // the held box covers the view's points (fitSun's, the figures' height above them) with SM_HOLD m to spare
+  private covers(n: number): boolean {
+    const k = this.scratch, b = this.smBox
+    for (let i = 0; i < n; i++) for (let e = 0; e < 2; e++) {
+      k.v.copyFrom(k.pts[i]); k.v.y += e ? 3 : -2; Vector3.TransformCoordinatesToRef(k.v, b.V, k.v)
+      if (Math.abs(k.v.x) > b.ex - SM_HOLD || Math.abs(k.v.y) > b.ey - SM_HOLD) return false
+    }
+    return true
+  }
+
+  // only the battalions inside the sun's box are drawn into the map (a render target does not cull its list), each at
+  // the caster's LOD; whether the list changed
+  private cull(): boolean {
+    const was = this.smList; was.length = 0; for (const m of this.culled) was.push(m)
     this.culled.length = 0
-    for (const h of this.hosts) { const l = h.lod[h.near ? 0 : 1]; if (l.isEnabled() && l.isInFrustum(this.planes)) this.culled.push(l) }
+    for (const h of this.hosts) { const l = h.lod[this.casterNear && h.near ? 0 : 1]; if (h.lod[0].isEnabled() && l.isInFrustum(this.planes)) this.culled.push(l) }
+    return was.length !== this.culled.length || was.some((m, i) => m !== this.culled[i])
   }
 
   /** the figures' cast shadows on or off: off, the receivers compile without them (the bench's baseline arm) */
@@ -235,7 +288,9 @@ export class Units {
     const list = this.scene.customRenderTargets, i = list.indexOf(this.shadowRT)
     if (on && i < 0) list.push(this.shadowRT)
     if (!on && i >= 0) list.splice(i, 1)
-    // (fitted by the next frame)
+    // lazy: drawn once, then again only when frame() resets it (a still view between two steps draws nothing)
+    this.shadowRT.refreshRate = this.lazyShadows ? 0 : 1
+    if (on) { this.smBox.set = false; this.smStep = -1 }   // (fitted by the next frame)
     for (const m of this.receivers) m.setDefine('#define UNIT_SHADOWS', on)
   }
 
