@@ -201,7 +201,7 @@ water.finish(scene)
 const bldlmParam = params.get('bldlm'), bldbounceParam = params.get('bldbounce')
 if (bldlmParam !== null && bldlmParam !== '0') throw new Error(`?bldlm must be 0, not ${bldlmParam}`)
 if (bldbounceParam !== null && bldbounceParam !== '0') throw new Error(`?bldbounce must be 0, not ${bldbounceParam}`)
-// ?bldlm=0: the buildings' light by the runtime's taps (the A/B of their bake: docs/plans/active/building-light.md;
+// ?bldlm=0: the buildings' light by the runtime's taps (the A/B of their bake: docs/plans/done/building-light.md;
 // WebGL1's always: the bake's reads are GLSL ES 3's); ?bldbounce=0: without the ground's bounce on their walls
 const bldBaked = bldlmParam === null && !mats.webgl1
 // (the runtime path without the bounce, as main had it: it computed the bounce and never added it)

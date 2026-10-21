@@ -1,4 +1,4 @@
-// The buildings' static light, baked once (docs/plans/active/building-light.md): what building.frag read per pixel and
+// The buildings' static light, baked once (docs/plans/done/building-light.md): what building.frag read per pixel and
 // does not change with the view or the clock, at each texel of an atlas of one TILE² tile an instance, in the models'
 // light UVs (aUV2, tools/building-to-js.py): R the sun's cast shadow on the surface (shadowAtRaw: 0 lit, 1 shadowed),
 // G the light map's sky occlusion, B its mist mask, A its sun (shaders/building-bake.frag). Each face covers a texel

@@ -397,7 +397,7 @@ surface and break their band edges with a third of the ground's grain (on flat f
 self-test made specks). Static: their shadows go into the sun's bake with the scene's meshes, the sky they hide into
 the light map's occlusion as a blob at their foot (the trees' contact).
 
-The buildings' static light is baked once (`src/look/building-light.ts`, `docs/plans/active/building-light.md`): an
+The buildings' static light is baked once (`src/look/building-light.ts`, `docs/plans/done/building-light.md`): an
 atlas of one 256² tile an instance, square-ish (⌈√n⌉ tiles a row: seven in 768 × 768 RGBA8, within the GPU's largest
 texture or a clear error; the raw bake 2.4 MB and the atlas the buildings read with its mips 3.1 MB, about 5.5 MB), each building drawn in its light UVs (`aUV2`, a second layer the import makes: Blender's smart
 project; about 20 cm a texel on a house, 27 on the windmill, measured) with the sun's cast shadow (`shadowAtRaw`, 0
