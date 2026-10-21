@@ -96,10 +96,11 @@ export class Units {
     vat.name = 'figureVAT'
     const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVAT'], n = data.palette.length
     for (const side of SIDES) {
-      const m = mats.make(`units_${side.name}`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal'], samplers: ['uVAT'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
+      const m = mats.make(`units_${side.name}`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uMask', 'uCoatRole'], samplers: ['uVAT'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
       m.setTexture('uVAT', vat)
       // the side's colour for each of the bake's roles (a role the side does not name: a loud failure)
       m.setColor3Array('uPal', data.palette.map(r => { const hex = side.palette[r]; if (!hex) throw new Error(`units: ${side.name} has no colour for the role ${r}`); return Color3.FromHexString(hex) }))
+      m.setFloat('uMask', -1); m.setFloat('uCoatRole', data.palette.indexOf('coat'))
       this.mats.push(m)
     }
     // the shadow pass: the same skinning, depth only, from an orthographic camera along the sun
@@ -296,6 +297,17 @@ export class Units {
     if (on) { this.smBox.set = false; this.smStep = -1 }   // (fitted by the next frame)
     for (const m of this.receivers) m.setDefine('#define UNIT_SHADOWS', on)
     for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', on)
+  }
+
+  /** the guard's masks (tools/guard.mjs --figures): 'off' painted; 'white', 'black' every figure flat; 'side' the
+   *  first side white, the other black; 'coat' white where a coat shows */
+  setMask(mode: 'off' | 'white' | 'black' | 'side' | 'coat'): void {
+    this.mats.forEach((m, i) => m.setFloat('uMask', mode === 'off' ? -1 : mode === 'white' ? 1 : mode === 'black' ? 0 : mode === 'coat' ? 2 : i === 0 ? 1 : 0))
+  }
+  /** the figures shown or not (the guard's ground alone), their shadows with them */
+  show(on: boolean): void {
+    for (const h of this.hosts) for (const m of h.lod) m.setEnabled(on)
+    this.smStep = -1
   }
 
   /** figures drawn last frame, by LOD: battalions shown at that LOD and in the camera's view */
