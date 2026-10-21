@@ -203,6 +203,9 @@ export class Units {
       }
     }
     k.c.setAll(0); for (let i = 0; i < n; i++) k.c.addInPlace(k.pts[i]); k.c.scaleInPlace(1 / n)
+    // before the view's first frame its matrix does not invert: a NaN set on the sun stayed there for good (the map
+    // drew nothing: the first armies' build cast no shadow). Fitted from the next frame instead
+    if (!(Number.isFinite(k.c.x) && Number.isFinite(k.c.y) && Number.isFinite(k.c.z))) return
     this.sun.position.copyFrom(k.c).addInPlace(SUN.scale(500)); this.sun.setTarget(k.c); this.sun.computeWorldMatrix()
     let V = this.sun.getViewMatrix(true), ex = 0, ey = 0
     for (let i = 0; i < n; i++) for (let e = 0; e < 2; e++) {
@@ -232,7 +235,7 @@ export class Units {
     const list = this.scene.customRenderTargets, i = list.indexOf(this.shadowRT)
     if (on && i < 0) list.push(this.shadowRT)
     if (!on && i >= 0) list.splice(i, 1)
-    if (on) this.fitSun()
+    // (fitted by the next frame)
     for (const m of this.receivers) m.setDefine('#define UNIT_SHADOWS', on)
   }
 
