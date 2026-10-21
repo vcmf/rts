@@ -30,10 +30,14 @@ import { axisX, baseH } from './world/author.ts'
 import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS } from './world/data.ts'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
-import { buildTerrain, splitByRoad } from './terrain.ts'
+import { buildTerrain, splitGround } from './terrain.ts'
+import { buildBuildings } from './buildings.ts'
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
-import ROAD_GRIT_URL from '../../data/road-grit-v1.png?url'
+// (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
+import ROAD_GRIT_URL from '../../data/road-grit-v2.png?url'
+import { BUILDINGS, YARD_ALL, YARD_BASE, paveShape } from './world/buildings.ts'
+import { COVER } from './world/cover.ts'
 import { sstep } from './noise.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
 import { Lab } from './lab.ts'
@@ -136,7 +140,22 @@ if (!mats.webgl1) {   // (float textures: the roads' shader is WebGL2's)
   const grit = new Texture(ROAD_GRIT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => mats.bindAll(m => m.setFloat('uRoadOn', 1)), (msg?: string) => console.error(`the road grit (${ROAD_GRIT_URL}) did not load: ${msg ?? 'unknown error'}`))
   grit.wrapU = grit.wrapV = Texture.WRAP_ADDRESSMODE; grit.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uRoadSegs', segs); m.setTexture('uRoadGrid', grid); m.setFloat('uRoadSegN', sn); m.setTexture('uRoadGrit', grit) })
-  roadTex = { segs, grid, grit, n: sn }
+  // the buildings' paving (docs/plans/done/buildings.md; shore.glsl, pavePaint): the buildings' shapes, on every
+  // material that paints the roads; the cobbles ride in the grit (its G and B), their mean until it has loaded
+  const shapes = BUILDINGS.map(paveShape)
+  if (shapes.length > 16) throw new Error(`buildings: ${shapes.length} paved yards, the shader takes 16 (shore.glsl, pavePaint)`)
+  // the cover names each yard's building (its texels' B: src/look/world/cover.ts): look data built before the buildings
+  // changed would paint one building's shape under another's yard, silently. Each building's centre texel names it
+  {
+    const C = look.cover
+    BUILDINGS.forEach((b, bi) => {
+      const i = Math.floor((b.x - C.x0) / C.cell), j = Math.floor((b.z - C.z0) / C.cell), o = (j * C.n + i) * 4, m = C.tex[o + 2]
+      if (C.tex[o] !== COVER.village || (m !== YARD_BASE + bi && m !== YARD_ALL)) throw new Error(`buildings: the look data's cover does not name the ${b.model} at ${b.x}, ${b.z} (its yard reads ${m}, not ${YARD_BASE + bi}): rebuild the look data (node tools/build-look-data.ts)`)
+    })
+  }
+  const pave = { a: shapes.flatMap(s => s.a), b: shapes.flatMap(s => s.b), n: shapes.length }
+  mats.bindAll(m => { m.setArray4('uPaveA', pave.a); m.setArray4('uPaveB', pave.b); m.setFloat('uPaveN', pave.n) })
+  roadTex = { segs, grid, grit, n: sn, pave }
 }
 // ?trees=one: every tree one model (L5b's judging, docs/plans/active/l5-macro.md); with ?trees=one,cards, drawn as
 // leaf cards
@@ -176,6 +195,9 @@ const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { l
 { const a = new Array(D.spec.water.stones * 4).fill(0); nature.stones.forEach((st, k) => a.splice(k * 4, 4, ...st))
   for (const m of [...terrain.tileMats, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
+// the buildings (docs/plans/done/buildings.md), before the bakes: their shadows and the sky they hide are baked with
+// the trees'
+buildBuildings(scene, mats, nature.canopy)
 const bakes = buildBakes(scene, mats, waterData, terrain.tileGround, nature.canopy, nature.cardCasters, soft, nature.trunks, nature.farCull)
 // ?far=off: no far tree, nor its shadows (built before the bakes: the far woods' whole cost; the A/B)
 if (params.has('far')) {
@@ -209,27 +231,35 @@ const camera = buildCamera(scene, canvas)
 // the roads' live shader only from mid zoom in (docs/plans/done/roads.md, decision 0039): farther out the macro bake
 // holds them and the tile's ground takes its material without them (the shader's size alone cost every ground pixel).
 // Nearing ROAD_LIVE_R the live roads fade to the baked look (uRoadFar: the wheel tracks to their dusting, the grit out),
-// so at the swap only the edge's sharpness changes (the bake's 0.5 m texels). Both materials are compiled before the first frame, and the swap waits until the one it
+// so at the swap only the edge's sharpness changes (the bake's 0.5 m texels). The materials are compiled before the first frame, and the swap waits until the one it
 // goes to is ready (a material not ready is not drawn). The shader arm has no bake to hold them: live at every zoom
 const ROAD_LIVE_R = 170, ROAD_HOLD = 4, ROAD_FADE = 50
 const splitParam = params.get('split')
+let groundShare: [number, number, number] = [1, 0, 0]   // (no roads' textures: the one material)
 if (splitParam !== null && splitParam !== '0') throw new Error(`?split must be 0, not ${splitParam}`)
 if (roadTex) {
-  const live = terrain.terrainMat, baked = terrain.terrainBakedMat, ground = terrain.tileGround
-  // near too, the live shader only on the triangles near a road (terrain.ts, splitByRoad: the same pixels to a step of
-  // rounding, about 1.1 ms a frame less at the default and closest zooms); ?split=0 (above): the live shader on the whole tile, the A/B
-  const split = splitParam === '0' ? live : splitByRoad(terrain, look.cover)
-  await Promise.all([live, baked].map(m => m.forceCompilationAsync(ground)))
+  const live = terrain.terrainMat, roads = terrain.terrainRoadsMat, baked = terrain.terrainBakedMat, ground = terrain.tileGround
+  // near too, the live shader only on the triangles near a road, and the paving's only near a yard (terrain.ts,
+  // splitGround: the same pixels to a step of rounding; the road split about 1.1 ms a frame less at the default and
+  // closest zooms; with the paving's split and its gate the buildings cost about 0.35 ms at the village's closest, from
+  // 1.25: docs/plans/done/buildings.md); ?split=0 (above): the live shader
+  // with the paving on the whole tile, the A/B (its share all paved)
+  const sg = splitParam === '0' ? null : splitGround(terrain, look.cover)
+  const split = sg?.material ?? live
+  groundShare = sg?.share ?? [1, 0, 0]
+  // (the materials the ground draws with: all three split, the live and the baked unsplit)
+  const parts = split === live ? [...new Set([live, baked])] : [...new Set([live, roads, baked])]
+  await Promise.all(parts.map(m => m.forceCompilationAsync(ground)))
   let far = false
   scene.onBeforeRenderObservable.add(() => {
     const r = camera.radius
     const fade = sstep(ROAD_LIVE_R - ROAD_HOLD - ROAD_FADE, ROAD_LIVE_R - ROAD_HOLD, r)
-    for (const m of [live, water.waterMat, water.groundMat]) m.setFloat('uRoadFar', fade)
+    for (const m of [live, roads, water.waterMat, water.groundMat]) m.setFloat('uRoadFar', fade)
     if (ground.material !== live && ground.material !== split && ground.material !== baked) return   // (the debug views' water ground)
     far = isBakedArm(macro.arm()) && (far ? r > ROAD_LIVE_R - ROAD_HOLD : r > ROAD_LIVE_R + ROAD_HOLD)
     const want = far ? baked : split
-    // (a MultiMaterial is always ready: the split waits on its two materials)
-    if (ground.material !== want && (want === split ? live.isReady(ground) && baked.isReady(ground) : want.isReady(ground))) ground.material = want
+    // (a MultiMaterial is always ready: the split waits on its materials)
+    if (ground.material !== want && (want === split ? parts.every(m => m.isReady(ground)) : want.isReady(ground))) ground.material = want
   })
 }
 // ?dof=0|1: the gameplay depth of field, on by default (decision 0024); the look tools load the page with it off
@@ -424,6 +454,7 @@ let fi = 0, lastT = 0, shown = 0
 engine.runRenderLoop(() => {
   const t0 = performance.now()
   scene.render()
+  mats.failSamplers()   // (a material over Metal's texture units: the page stops here, on any GPU)
   const t1 = performance.now()
   if (lastT) { iv[fi % FRAMES] = t0 - lastT; cpu[fi % FRAMES] = t1 - t0; fi++ }
   lastT = t0
@@ -501,6 +532,7 @@ const paintGrain = mats.grain, paintMean = mats.grainMean
 let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | null = null
 const hidden: Mesh[] = []
 Object.assign(window, { __look: {
+  splitShare: () => groundShare,   // the tile's triangles paved, by the roads, neither (terrain.ts, splitGround)
   lab, mats, passes, post, setDetail,
   dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
   dofPaint: DOF_PAINT,   // the blur's painted look (the same)

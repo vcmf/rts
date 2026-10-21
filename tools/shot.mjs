@@ -22,6 +22,12 @@ if (!fs.existsSync(CHROME)) { console.error(`Chrome not found at ${CHROME} (set 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-'))
 let chrome, ws, pageErrors = 0
+// a shader Babylon cannot compile and has no fallback for never makes its material ready: the page waits forever (the
+// bench waited its whole hour on Metal). Babylon logs 'Unable to compile effect:', the details, 'Error: …', then
+// 'Trying next fallback.' when it has one (that effect may still recover): a run stops when no fallback follows the
+// error within FALLBACK_MS. FATAL_EXC: a page exception that ends a run at once (the materials' texture-unit guard,
+// src/look/materials.ts)
+const FALLBACK_MS = 1500, FATAL_EXC = ['fragment textures']
 // close the socket, stop Chrome, wait for it to exit (it flushes the profile on the way out), then remove the profile
 async function cleanup() {
   try { ws?.close() } catch {}
@@ -57,12 +63,24 @@ try {
   const pend = {}
   // a dropped socket (Chrome crash) fails every pending call instead of hanging forever
   ws.onclose = () => { for (const k in pend) { pend[k]({ error: { message: 'DevTools socket closed (Chrome exited?)' } }); delete pend[k] } }
+  let compiling = false, fallbackWait
+  let dead = false
+  const fatal = text => { if (dead) return; dead = true; console.error('shot.mjs: the page logged a fatal error, stopping:', text.slice(0, 300)); cleanup().then(() => process.exit(1)) }
   ws.onmessage = e => {
     const m = JSON.parse(e.data)
     if (m.id && pend[m.id]) { pend[m.id](m); delete pend[m.id] }
     if (m.method === 'Page.loadEventFired') loaded = true
-    if (m.method === 'Runtime.exceptionThrown') { pageErrors++; console.log('EXC', JSON.stringify(m.params.exceptionDetails).slice(0, 600)) }
-    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') { pageErrors++; console.log('ERR', JSON.stringify(m.params.args.map(a => a.value)).slice(0, 400)) }
+    if (m.method === 'Runtime.exceptionThrown') {
+      pageErrors++; const text = JSON.stringify(m.params.exceptionDetails); console.log('EXC', text.slice(0, 600))
+      if (FATAL_EXC.some(f => text.includes(f))) { fatal(text); return }
+    }
+    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') {
+      pageErrors++; const text = JSON.stringify(m.params.args.map(a => a.value)); console.log('ERR', text.slice(0, 400))
+      // (a compile error: armed; its final 'Error:' line starts the wait for a fallback; a fallback disarms it)
+      if (text.includes('Unable to compile effect')) compiling = true
+      else if (text.includes('Trying next fallback')) { compiling = false; clearTimeout(fallbackWait) }
+      else if (compiling && text.includes('Error: ')) { compiling = false; const t = text; fallbackWait = setTimeout(() => fatal(t), FALLBACK_MS) }
+    }
   }
   const TIMEOUT = +(process.env.SHOT_TIMEOUT_S || 60) * 1000   // per DevTools call; long evals (formation-measure.js) raise it
   const send = (method, params = {}) => new Promise((res, rej) => {

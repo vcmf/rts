@@ -49,6 +49,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/terrain.ts` | Tile (1.79 m), far ring (14.3 m) and the apron that stitches them; the far ring's painted river mask; the bank normals' texture (W2, `docs/systems/river.md`; both it and the water data's, W3, from `src/look/span-texture.ts`). Their materials define `DETAIL` (the detail layer, below; on WebGL1 the material factory adds `DETAIL_L0`); the tile's also `BANKN` and `WATERDATA` (the shore band, W4), as do the water's |
 | `src/look/water.ts` | The water ribbon, its materials (the painted water, W4, `docs/systems/river.md`; and the same shader on the tile's ground, for the seam check) and the tree-reflection mask |
 | `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule (and, since L5a, the cover's: what grows on which class) |
+| `src/look/buildings.ts`, `src/look/world/buildings.ts`, `tools/building-to-js.py` | The buildings (`docs/plans/done/buildings.md`): the owner's Tripo models (a windmill, a stone house) to `prototypes/buildings.data.js` with a role per face, painted by role from the palette with the texture's value as detail; placed (authored) in the wheat field and the village; their footprints the village's ground in the cover; in the shadow bake and the light map's occlusion |
 | `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
 | `src/look/meadow.ts` | The meadow near the camera (L5c, L5d, below): the meadow map (ground height, the grass's and the crops' growth), three rings of static grass and crop instances around the focus |
 | `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (the default with the generated trees; `?trees=cards` on the pack's; L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
@@ -152,7 +153,7 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   dirt in each road's frame (the nearest road segment, found in the shader from the look data's grid of them: the
   distance across and along, the half width, a junction weight), wheel tracks of pale dust cut into pieces, ragged edges, the owner's grit photo (`roadPaint` in
   `shore.glsl`, `docs/plans/done/roads.md`). Far out the macro bake holds them (tracks a dusting, no grit) and the
-  tile's ground takes its material without the live roads beyond 170 m; nearer they fade in (decision 0039). Nearer too, only the tile's triangles within reach of a road (the cover's distance to a line under the road gate: `ROAD_NEAR`, the cover's warp and slack, `src/look/spec.ts`) take the live roads' material; the rest take the one without, by one `MultiMaterial` made with the terrain's (its place in the opaque draws; `splitByRoad` in `terrain.ts`): the same pixels but for a step of rounding on a few (the two programs), about 1.1 ms a frame less at the default and closest zooms (`docs/plans/done/headroom.md`; `?split=0` draws the whole tile live). Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
+  tile's ground takes its material without the live roads beyond 170 m; nearer they fade in (decision 0039). Nearer too, the tile's ground is three materials by triangle (`splitGround` in `terrain.ts`, one `MultiMaterial` made with the terrain's: its place in the opaque draws): within reach of a building's yard (a yard's cover texel, below) the live roads with the paving (`terrain`); else within reach of a road (the cover's distance to a line under the road gate: `ROAD_NEAR`, the cover's warp and slack, `src/look/spec.ts`) the live roads alone (`terrainRoads`); the rest the material without either (`terrainBaked`): about 0.7 %, 7.2 % and 92.1 % of the tile's triangles. The same pixels but for a step of rounding on a few (the programs differ), each feature's shader only where it can show: the road split about 1.1 ms a frame less at the default and closest zooms (`docs/plans/done/headroom.md`), with the paving's split and its gate the buildings cost about 0.35 ms at the village's closest (main 6.55 ms, 6.92 with them; 7.77 before the split), 0.15 at its default zoom, and the windmill's view comes out cheaper than main (0.65 ms at the closest, 0.2 at the default: the buildings hide ground and grass) (Metal, three rounds: `docs/plans/done/buildings.md`; `?split=0` draws the whole tile live, with the paving). Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
   The class `bare` (10): trodden or dry earth, no grass, no crops, no stripes, not
   a field (`isField`).
 - **The dirt surface** (`dirtOn` in `macro.glsl`, at the terrain's fragment: `docs/plans/done/ground-surface.md`):
@@ -349,6 +350,52 @@ crowns as cards.
 - **The season on this page:** what is baked follows the season the page opens in (`?season`): the shadows, and the
   sky each crown hides and its contact core (lighter as a crown loses its leaves). Releasing the season slider re-bakes
   the shadows when what casts them changed since the last bake (`shadowState`); the sky's occlusion stays the one baked on load.
+
+### The buildings
+
+The owner's Tripo models (`assets/buildings`, git-ignored; art bible §10) go through `tools/building-to-js.py`
+(Blender headless; its header has the commands) to `prototypes/buildings.data.js`: metres, normals sharp past 30°, UV0
+and a role per face (0 wall, 1 roof, 2 timber, 3 opening, 4 accent). The import cuts each model to about 2,300 triangles (the
+flat regions dissolved within a role and a UV island, then collapsed); the windmill's lattice sails made again as four
+solid canvas blades on timber stocks (the accent role). The role is the median colour of the texels
+under the face, nearest in Lab to the model's reference colours, with priors on the face's orientation (a roof faces
+up, a wall and an opening stand) and height (the house's terracotta chimney pots). Pack colours are never used: the
+page paints each role from its palette (`src/look/buildings.ts`, `PALETTE`, muted against the armies), and the texture
+keeps only its value over its local mean (a box of texels round each: `data/buildings/<model>-detail.png`, 128 = 1;
+the faces the export makes, the windmill's sails, a UV below 0 and no detail), a third of it showing
+(`DETAIL_AMT`) under the paint's grain (`shaders/building.frag`: the painter's ramp, the cast shadow, the sky's
+occlusion, the ground's bounce, the snow on what faces up, the air). One instanced mesh a model. Placed in
+`src/look/world/buildings.ts` (authored: the windmill in the large wheat field; six houses in an irregular cluster in
+the village, each turned a quarter turn of its own and a little more: doors to the road, a gable to it, side-on, a back
+to it), each on its footprint's lowest ground, sunk 0.2 m. The turn is Babylon's instance yaw, verified against its
+Matrix (`test/buildings.test.ts`) and on the page: a local point (x, z) goes to (x cos + z sin, −x sin + z cos)
+(`toWorld`, `toLocal`: the one rule the footprints, the yards, the ground's samples and `pavePaint`'s frame use); the
+models' fronts face −z before it, so a yaw of π/2 faces west. Each stands in a paved yard (`pavePaint` in `shore.glsl`,
+in `roadPaint`'s path, under `PAVING` on the yards' ground material only, `terrain` above, `PAVING_FAR`, the far look
+without a texture, on the macro bake; only on a yard's cover texel, which names its building in B, the furrows'
+direction, read only where a field's id is (`YARD_BASE` plus the index of the one yard within reach of the texel, so a
+pixel evaluates that shape alone; `YARD_ALL`, every shape, where two yards are that near: `src/look/world/cover.ts`), and
+before the roads' gate: a yard's texels are worn by their distance to the lines (the village's own ground by 0), so a
+yard far from a road skips the road search as the rest of the map does; the yard's edge noise read only near its edge; the cobbles ride in the road grit's G and B, `data/road-grit-v2.png`, made by
+`tools/paving-pack.py` from the grit and `data/paving-v1.png`: their colour along its two principal axes about its mean,
+so the paving binds no texture unit of its own. Metal allows 16 a fragment shader (SwiftShader more: a 17th, the paving's
+own texture on the water, compiled in the checks and kept the page from ever getting ready on the owner's GPU):
+`Materials.make` counts each compiled program's fragment-stage samplers (`MAX_SAMPLERS`; the counts at
+`window.__look.mats.samplers`), logs a material over them and stops the page at its next frame; `tools/shot.mjs` stops a
+run on a shader Babylon cannot compile and has no fallback for): the owner's cobbles (4.5 m a repeat) over its footprint grown by a margin
+(the house's by 2.5 m and by 6 m before its door; the windmill's a 3 m ring), the exact shapes as uniform arrays
+(`paveShape`, ≤ 16), the edge ragged by a noise-wobbled distance (up to `PAVE_WOBBLE`, 1.15 m, past it). The cover
+paints each yard and a margin round it (`PAVE_WOBBLE` + 0.71 of a cover cell + 0.3 m) as the village's ground worn to
+nothing, so no grass, crop, tree or stone grows on it and only the road split's live material reads it (its roads and
+tracks keep their class); past that margin the yard's distance feeds the wear as the village's ring does, so the
+trodden edge fades. The cover's authoring fails if a yard comes within that margin of a road or a track, reaches a
+formation zone or the floodplain (a point every metre over it), or lies within `PAVE_GAP` (4 m) of another yard. The
+paving's level of detail is the roads': the cobbles fade out from a 7 cm to a 22 cm pixel footprint into their mean in
+a soft blotch over a few metres (no texture read past it), which the macro bake paints too. The detail texture is the
+texture's value over its local mean (box-averaged to 512²); the buildings look the sun's shadow up 15 cm off their
+surface and break their band edges with a third of the ground's grain (on flat faces the full grain and the shadow's
+self-test made specks). Static: their shadows go into the sun's bake with the scene's meshes, the sky they hide into
+the light map's occlusion as a blob at their foot (the trees' contact).
 
 ### The shadows' look
 

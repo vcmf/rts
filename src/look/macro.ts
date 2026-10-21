@@ -21,6 +21,7 @@ import type { FlowTextures } from './flow.ts'
 import DIRT_URL from '../../data/ground-dirt-v1.png?url'
 import EARTH_URL from '../../data/ground-earth-v1.png?url'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
+import { paveDefines } from './world/buildings.ts'
 
 // the arms (macro.glsl): flat, shader, bake, and L5b's experiments, strokes (arm 4) and kuwahara (arm 5): bakes of
 // their own, read as the bake is
@@ -89,7 +90,9 @@ export interface Macro {
 // meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
 // the roads' textures (src/look/main.ts): the bake paints them in (BAKE_FS, roadPaint as far out: uRoadFar 1), so far out the ground's
 // bake holds the roads and the terrain's live road shader runs only nearer (docs/plans/done/roads.md)
-export interface RoadTextures { segs: BaseTexture; grid: BaseTexture; grit: BaseTexture; n: number }
+// pave: the buildings' paved yards (shore.glsl, pavePaint): their shapes (src/look/world/buildings.ts, paveShape); the
+// bake paints their far look (PAVING_FAR: no texture read; at its texels the cobbles average to their mean)
+export interface RoadTextures { segs: BaseTexture; grid: BaseTexture; grit: BaseTexture; n: number; pave: { a: number[]; b: number[]; n: number } }
 // flow: the meadow's pattern combed (GRASS_FLOW, ?grass=flow): the materials' defines it shares (src/look/main.ts);
 // flowTex: the flow's textures (src/look/flow.ts), which the bake reads too; meadowMap: the meadow map
 // (src/look/meadow.ts), which the combed meadow's bake reads (the default pattern where no grass grows); near: the near
@@ -128,7 +131,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   earth.wrapU = earth.wrapV = Texture.WRAP_ADDRESSMODE; earth.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); m.setTexture('uEarth', earth); if (brush) m.setTexture('uMeadowBrush', brush) })
 
-  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit', 'uFlow', 'uComb', 'uMeadow'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : []), ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []), ...(roads ? ['#define ROADS'] : [])]
+  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit', 'uFlow', 'uComb', 'uMeadow'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : []), ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []), ...(roads ? ['#define ROADS', '#define PAVING_FAR', ...paveDefines()] : [])]
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })
   // arm 5's filter, compiled on its first bake
   let kuwaharaW: EffectWrapper | null = null
@@ -169,7 +172,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
         e.setFloat4('uRect', x0 + i / n * world, x0 + j / n * world, x0 + (i + w) / n * world, x0 + (j + h) / n * world)
         e.setFloat('uTexel', world / n); e.setFloat('uSeason', 0); e.setTexture('uGrain', mats.grain); e.setTexture('uCover', coverTex); if (brush) e.setTexture('uMeadowBrush', brush); if (flowTex) { e.setTexture('uFlow', flowTex.flow); e.setTexture('uComb', flowTex.comb) } if (meadowMap) e.setTexture('uMeadow', meadowMap)
         // the roads, without the grit (its marks are finer than a texel)
-        if (roads) { e.setTexture('uRoadSegs', roads.segs); e.setTexture('uRoadGrid', roads.grid); e.setTexture('uRoadGrit', roads.grit); e.setFloat('uRoadSegN', roads.n); e.setFloat('uRoadOn', 0); e.setFloat('uRoadFar', 1) }
+        if (roads) { e.setTexture('uRoadSegs', roads.segs); e.setTexture('uRoadGrid', roads.grid); e.setTexture('uRoadGrit', roads.grit); e.setFloat('uRoadSegN', roads.n); e.setFloat('uRoadOn', 0); e.setArray4('uPaveA', roads.pave.a); e.setArray4('uPaveB', roads.pave.b); e.setFloat('uPaveN', roads.pave.n); e.setFloat('uRoadFar', 1) }
       })
       if (src !== t) draws += pass(t, n, kuwahara(), (e, i, j, w, h) => {
         e.setTexture('uSrc', src); e.setFloat('uN', n); e.setFloat4('uPx', i, j, i + w, j + h)

@@ -17,7 +17,8 @@ float lieOf(float a){float d=a-LIE0;return abs(d)<0.003?0.0:d*1.2;}
 uniform sampler2D uMacro,uMacroFar;   // the bakes: the tile at SPEC.macro.texel, the far ring at SPEC.macro.far
 #endif
 // the cover cell at a world point: class (0..9), field id (0 off fields, else a hash in 1..255), furrow direction
-// (rad), wear distance (m, to the nearest road, track or village ground; 25.5 at or past its reach)
+// (rad; on a building's yard, B the building it shows: src/look/world/cover.ts), wear distance (m, to the nearest road,
+// track or village ground; on a yard to the nearest road or track alone; 25.5 at or past its reach)
 // (nearest, no mips: on WebGL2 read with zero derivatives, so a read in a branch the pixels of a quad take differently
 // is defined, as arm 4's strokes do)
 #ifdef WEBGL2

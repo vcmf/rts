@@ -6,11 +6,16 @@
 // The grid: cells of SPEC.macro.cover m (2) over the far ring, 4 bytes a cell:
 //   R the class (COVER below);
 //   G the field's id, a byte hashed from the field (0 off fields): its stripes' phase and its colour's variation;
-//   B the furrow direction, 0..255 for 0..π (the angle from +x toward +z), on fields;
-//   A the distance to the nearest road, track or village ground, in WEAR_STEP m (0 on them, 255 at or past the reach).
+//   B the furrow direction, 0..255 for 0..π (the angle from +x toward +z), on fields (G above 0); on a building's paved
+//     yard and its reach (the village's class, G 0) the building it shows: YARD_BASE plus its index, or YARD_ALL where
+//     two yards are that near (world/buildings.ts); else 0;
+//   A the distance to the nearest road, track or village ground, in WEAR_STEP m (0 on them, 255 at or past the reach);
+//     on a yard's texels its distance to the nearest road or track alone (the roads' gate passes a yard far from one).
 import { hash, sstep, vn } from '../noise.ts'
 import { axisX } from './author.ts'
 import { RIVER } from '../river.ts'
+import { BUILDINGS, PAVE_GAP, PAVE_REACH, PAVE_WOBBLE, YARD_ALL, YARD_BASE, onPaving, paveNearest, pavePoly, polyGap, polyLineGap } from './buildings.ts'
+import { segD } from './geom.ts'
 
 export const COVER = { meadow: 0, pasture: 1, wood: 2, road: 3, track: 4, village: 5, wheat: 6, green: 7, stubble: 8, ploughed: 9, bare: 10 } as const
 export type CoverClass = typeof COVER[keyof typeof COVER]
@@ -120,10 +125,7 @@ const inPoly = (p: readonly Pt[], x: number, z: number): boolean => {
   for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > z) !== (p[j][1] > z) && x < (p[j][0] - p[i][0]) * (z - p[i][1]) / (p[j][1] - p[i][1]) + p[i][0]) inside = !inside
   return inside
 }
-export const segD = (x: number, z: number, a: Pt, b: Pt): number => {
-  const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz)))
-  return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz)
-}
+export { segD }
 const lineD = (p: readonly Pt[], x: number, z: number): number => { let d = Infinity; for (let i = 0; i < p.length - 1; i++) d = Math.min(d, segD(x, z, p[i], p[i + 1])); return d }
 // a line's bounding box: a point farther from it than `reach` is farther from the line (a quick skip)
 const boxOf = (p: readonly Pt[]) => { let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity; for (const [x, z] of p) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z) } return { x0, x1, z0, z1 } }
@@ -142,6 +144,29 @@ export function authorCover(far: number, cell: number): CoverGrid {
   const n = Math.round(far / cell), x0 = -far / 2, z0 = -far / 2, tex = new Uint8Array(n * n * 4)
   for (const f of FIELDS) for (const [x, z] of f.poly) if (onFloodplain(x, z)) throw new Error(`cover: field corner ${x.toFixed(0)},${z.toFixed(0)} on the floodplain`)
   for (const [x, z] of VILLAGE) if (inFormationZone(x, z) || onFloodplain(x, z)) throw new Error('cover: the village is in a formation zone or on the floodplain')
+  // the buildings (world/buildings.ts): their paved yards at least PAVE_GAP apart; none in a formation zone, on the
+  // floodplain, or on a road or a track
+  const yards = BUILDINGS.map(pavePoly)
+  if (BUILDINGS.length > 256 - YARD_BASE) throw new Error(`cover: ${BUILDINGS.length} buildings, the yard's mark holds ${256 - YARD_BASE}`)
+  // (a pixel the paving paints lies within PAVE_REACH of its yard, its texel's centre within that and a half diagonal,
+  // and a little slack: the texel's building, or YARD_ALL where two yards are that near)
+  const YARD_NEAR = PAVE_REACH + cell * Math.SQRT1_2 + 0.05
+  for (let i = 0; i < yards.length; i++) for (let j = i + 1; j < yards.length; j++) {
+    const g = polyGap(yards[i], yards[j])
+    if (g < PAVE_GAP) throw new Error(`cover: the yards of the buildings at ${BUILDINGS[i].x}, ${BUILDINGS[i].z} and ${BUILDINGS[j].x}, ${BUILDINGS[j].z} are ${g.toFixed(1)} m apart (at least ${PAVE_GAP})`)
+  }
+  // (the yard's ground in the cover reaches YARD_PAD past its paving, below: the road's edge kept clear of that; the whole
+  // yard, by a point every metre over it, out of the zones and off the floodplain)
+  const YARD_PAD = PAVE_WOBBLE + cell * 0.71 + 0.3
+  BUILDINGS.forEach((b, k) => {
+    const road = LINES.find(l => polyLineGap(yards[k], l.pts) < l.w / 2 + YARD_PAD)
+    if (road) throw new Error(`cover: the ${b.model}'s yard at ${b.x}, ${b.z} reaches a ${road.cls === COVER.road ? 'road' : 'track'}`)
+    const xs = yards[k].map(p => p[0]), zs = yards[k].map(p => p[1])
+    // (the yard's ground in the cover, YARD_PAD past its paving: a zone's or the floodplain's meadow inside that would cut
+    // the cobbles' ragged edge straight)
+    for (let x = Math.min(...xs) - YARD_PAD; x <= Math.max(...xs) + YARD_PAD; x += 1) for (let z = Math.min(...zs) - YARD_PAD; z <= Math.max(...zs) + YARD_PAD; z += 1)
+      if (onPaving(x, z, YARD_PAD) && (inFormationZone(x, z) || onFloodplain(x, z))) throw new Error(`cover: the ${b.model}'s yard at ${b.x}, ${b.z} reaches a formation zone or the floodplain (at ${x.toFixed(0)}, ${z.toFixed(0)})`)
+  })
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const x = x0 + (i + 0.5) * cell, z = z0 + (j + 0.5) * cell, o = (j * n + i) * 4
     let cls: number = COVER.meadow, id = 0, dir = 0
@@ -150,10 +175,32 @@ export function authorCover(far: number, cell: number): CoverGrid {
     FIELDS.forEach((f, k) => { if (inPoly(f.poly, x, z)) { cls = f.cls; id = isField(f.cls) ? idByte(1000 + k) : 0; dir = f.dir } })   // bare earth: no id
     let wear = Infinity
     LINES.forEach((l, li) => { if (boxD(lineBoxes[li], x, z) > WEAR_REACH + l.w) return; const d = lineD(l.pts, x, z) - l.w / 2; if (d < 0) { cls = l.cls; id = 0 } wear = Math.min(wear, Math.max(0, d)) })
+    const lineWear = wear   // (a yard's own: below)
     if (inPoly(VILLAGE, x, z) || inPoly(SQUARE, x, z)) { cls = COVER.village; id = 0; wear = 0 } else wear = Math.min(wear, ringD(VILLAGE, x, z), ringD(SQUARE, x, z))
+    // under a building, its paved yard and a margin round it (the paving's ragged edge, a cover texel's half diagonal,
+    // slack) the village's trodden ground, whatever the class (nothing grows through a floor or the paving: the scatter,
+    // the meadow and the crops keep off the village), worn by its distance to the lines alone (below; the village's own
+    // ground is worn 0)
+    // (a road or a track keeps its class: the check above keeps them clear; and past it the yard's ground fades worn as
+    // the village's does, by its distance: YARD_PAD in, the ring's, so its edge does not step on the grid)
+    // A yard's texels carry its building in B (the furrows' direction, read only where a field's id is: a village's is
+    // 0): YARD_BASE plus the index of the one yard within YARD_NEAR (its nearest if none is: no pixel of it is painted),
+    // or YARD_ALL where two are (the thin ground between close yards: every shape there). The paving's gate (shore.glsl,
+    // roadPaint) runs that building's shape alone, the road split's paved triangles (terrain.ts, splitGround) read the
+    // mark, so the rest of the village's ground pays nothing for the yards. A pixel the paving paints is within
+    // PAVE_REACH of its yard (pavePaint), its texel's centre within YARD_NEAR of it, under YARD_PAD (test/cover.test.ts
+    // samples every yard's reach against its mark). Their wear their distance to the lines alone (not
+    // the village's 0): far from a road the road paint's gate passes them by, as the rest of the map (its paint reads
+    // the lines, not the village)
+    const yn = paveNearest(x, z, WEAR_REACH + YARD_PAD, YARD_NEAR), yd = yn.d
+    let yard = -1
+    if (yd <= YARD_PAD && cls !== COVER.road && cls !== COVER.track) { cls = COVER.village; id = 0; wear = lineWear; yard = yn.n > 1 ? YARD_ALL : YARD_BASE + yn.i }
+    else wear = Math.min(wear, Math.max(0, yd - YARD_PAD))
     // the floodplain and the formation zones keep their meadow (the zones clip the fields that touch them)
-    if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village || cls === COVER.bare)) { cls = COVER.meadow; id = 0 }
-    tex[o] = cls; tex[o + 1] = id; tex[o + 2] = id ? Math.round(((dir % Math.PI + Math.PI) % Math.PI) / Math.PI * 255) % 256 : 0
+    // (a yard's texel turned back to meadow keeps the trodden ring's wear, 0 as the yard's ground had, not its distance
+    // to the lines: the ring round the yard stays whole. The authoring check above keeps the yards off both)
+    if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village || cls === COVER.bare)) { cls = COVER.meadow; id = 0; if (yard >= 0) wear = 0; yard = -1 }
+    tex[o] = cls; tex[o + 1] = id; tex[o + 2] = id ? Math.round(((dir % Math.PI + Math.PI) % Math.PI) / Math.PI * 255) % 256 : yard >= 0 ? yard : 0
     tex[o + 3] = Math.min(255, Math.round(Math.min(wear, WEAR_REACH) / WEAR_STEP))
   }
   return { n, cell, x0, z0, tex }
