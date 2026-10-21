@@ -21,6 +21,7 @@ import type { FlowTextures } from './flow.ts'
 import DIRT_URL from '../../data/ground-dirt-v1.png?url'
 import EARTH_URL from '../../data/ground-earth-v1.png?url'
 import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
+import { paveDefines } from './world/buildings.ts'
 
 // the arms (macro.glsl): flat, shader, bake, and L5b's experiments, strokes (arm 4) and kuwahara (arm 5): bakes of
 // their own, read as the bake is
@@ -130,7 +131,7 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   earth.wrapU = earth.wrapV = Texture.WRAP_ADDRESSMODE; earth.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); m.setTexture('uEarth', earth); if (brush) m.setTexture('uMeadowBrush', brush) })
 
-  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit', 'uFlow', 'uComb', 'uMeadow'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : []), ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []), ...(roads ? ['#define ROADS', '#define PAVING_FAR'] : [])]
+  const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit', 'uFlow', 'uComb', 'uMeadow'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : []), ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []), ...(roads ? ['#define ROADS', '#define PAVING_FAR', ...paveDefines()] : [])]
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })
   // arm 5's filter, compiled on its first bake
   let kuwaharaW: EffectWrapper | null = null

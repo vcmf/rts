@@ -22,7 +22,8 @@ import { sstep } from './noise.ts'
 import { D } from './spec.ts'
 import type { Grid } from './heightfield.ts'
 import type { SpanGrid } from './world/data.ts'
-import { COVER, WEAR_STEP, YARD_MARK, type CoverGrid } from './world/cover.ts'
+import { COVER, WEAR_STEP, type CoverGrid } from './world/cover.ts'
+import { YARD_MARK, paveDefines } from './world/buildings.ts'
 import { spanTexture } from './span-texture.ts'
 import TER_VS from './shaders/terrain.vert?raw'
 import TER_FS from './shaders/terrain.frag?raw'
@@ -42,13 +43,14 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   // the shore band the tile paints near the water as the water does (docs/plans/done/w4-water-surface.md)
   // two: with the live roads (ROADS, WebGL2) and without, where the macro bake holds them far out (src/look/main.ts swaps
   // them by zoom: docs/plans/done/roads.md). On WebGL1 one, without
-  const make = (name: string, roads: boolean, paving = false) => mats.make(name, TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones', 'uUnder', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN'], samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE', '#define MEADOW_UNDER', ...(roads ? ['#define ROADS'] : []), ...(paving ? ['#define PAVING'] : [])] })
-  // three: the live roads and the buildings' paving (terrainMat: the whole tile under ?split=0, the debug views), the live
-  // roads alone (terrainRoadsMat), and without either (the baked, far out and on the ground far from both)
+  const make = (name: string, roads: boolean, paving = false) => mats.make(name, TER_VS, TER_FS, { attributes: ['position', 'normal', 'aRiver'], uniforms: ['uWaterView', 'uStones', 'uUnder', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN'], samplers: ['uBankN', 'uWater', 'uGB', 'uMeadow', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit'], defines: ['#define DETAIL', '#define BANKN', '#define WATERDATA', '#define GROUND_BOUNCE', '#define MEADOW_UNDER', ...(roads ? ['#define ROADS'] : []), ...(paving ? ['#define PAVING', ...paveDefines()] : [])] })
+  // three tile materials: the live roads and the buildings' paving (terrainMat: on the yards' ground; the whole tile under
+  // ?split=0, the debug views), the live roads alone (terrainRoadsMat: on the ground near a road), and neither (the
+  // baked: far out, and the rest of the ground near). splitGround gives each its triangles. On WebGL1 one, without
   const terrainMat = make('terrain', !mats.webgl1, !mats.webgl1), terrainRoadsMat = mats.webgl1 ? terrainMat : make('terrainRoads', true)
   const terrainBakedMat = mats.webgl1 ? terrainMat : make('terrainBaked', false)
   const tileMats = [...new Set([terrainMat, terrainRoadsMat, terrainBakedMat])]
-  // the tile ground's three materials by triangle (splitByRoad: the paving only near a yard, the live roads only near a
+  // the tile ground's three materials by triangle (splitGround: the paving only near a yard, the live roads only near a
   // road), made here so the ground keeps its place in the opaque draws (Babylon sorts them by the mesh's material's
   // creation: after the trees the ground cost more, docs/plans/done/trees-perf-trunks.md)
   const terrainSplitMat = new MultiMaterial('terrainSplit', scene); terrainSplitMat.subMaterials = [terrainMat, terrainRoadsMat, terrainBakedMat]
@@ -136,18 +138,20 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
 // cover's wear distance (roadPaint's first test, shore.glsl: D.roadGate) the live roads alone (1, terrainRoadsMat); the
 // rest the material without either (2: there roadPaint returns its colour unchanged). The same pixels as the live
 // material everywhere but for a step of rounding between the programs. Each triangle takes its cell's answer (by its
-// centroid: it lies inside it). Returns the tile ground's material for it
-export function splitByRoad(t: Terrain, cover: CoverGrid): MultiMaterial {
+// centroid: it lies inside it). Returns the tile ground's material for it, and the share of the tile's triangles each of
+// the three takes (paved, roads, neither)
+export function splitGround(t: Terrain, cover: CoverGrid): { material: MultiMaterial; share: [number, number, number] } {
   const g = t.tileGround, P = g.getVerticesData(VertexBuffer.PositionKind)!, ix = g.getIndices()!, C = cover, M = 1
   const n = TILE_SUB, w = TILE_W / n, h = TILE_W / 2, lim = Math.ceil(D.roadGate / WEAR_STEP) + 1
   const at = (v: number) => Math.min(C.n - 1, Math.max(0, Math.floor(v))), cellOf = (v: number) => Math.min(n - 1, Math.max(0, Math.floor((v + h) / w)))
   const kind = new Uint8Array(n * n).fill(2)
   for (let cz = 0; cz < n; cz++) for (let cx = 0; cx < n; cx++) {
     const x0 = cx * w - h, z0 = cz * w - h
-    for (let j = at((z0 - M - C.z0) / C.cell); j <= at((z0 + w + M - C.z0) / C.cell); j++) for (let i = at((x0 - M - C.x0) / C.cell); i <= at((x0 + w + M - C.x0) / C.cell); i++) {
+    // (a village texel's field id is 0: its B is the yard's mark or 0; the first yard texel settles the cell)
+    scan: for (let j = at((z0 - M - C.z0) / C.cell); j <= at((z0 + w + M - C.z0) / C.cell); j++) for (let i = at((x0 - M - C.x0) / C.cell); i <= at((x0 + w + M - C.x0) / C.cell); i++) {
       const o = (j * C.n + i) * 4
-      if (C.tex[o] === COVER.village && C.tex[o + 1] === 0 && C.tex[o + 2] === YARD_MARK) kind[cz * n + cx] = 0
-      else if (C.tex[o + 3] <= lim && kind[cz * n + cx] > 1) kind[cz * n + cx] = 1
+      if (C.tex[o] === COVER.village && C.tex[o + 2] === YARD_MARK) { kind[cz * n + cx] = 0; break scan }
+      if (C.tex[o + 3] <= lim) kind[cz * n + cx] = 1
     }
   }
   // each triangle by its centroid's cell, once; then by kind, the paved first
@@ -160,8 +164,5 @@ export function splitByRoad(t: Terrain, cover: CoverGrid): MultiMaterial {
   for (let k = 0; k < tk.length; k++) { const o = at3[tk[k]]; out[o] = ix[k * 3]; out[o + 1] = ix[k * 3 + 1]; out[o + 2] = ix[k * 3 + 2]; at3[tk[k]] += 3 }
   g.setIndices(out); g.subMeshes = []
   const nv = P.length / 3; new SubMesh(0, 0, nv, 0, count[0], g); new SubMesh(1, 0, nv, count[0], count[1], g); new SubMesh(2, 0, nv, count[0] + count[1], count[2], g)
-  splitShare = count.map(c => c / ix.length)
-  return t.terrainSplitMat
+  return { material: t.terrainSplitMat, share: [count[0] / ix.length, count[1] / ix.length, count[2] / ix.length] }
 }
-// the share of the tile's triangles in each of the three (paved, roads, neither): the bench's notes and the docs
-export let splitShare = [0, 0, 0]

@@ -36,6 +36,14 @@ export const PAVE_GAP = 4   // the least ground between two buildings' paved yar
 // ground by the shader (shore.glsl, pavePaint: up to PAVE_WOBBLE m past it)
 export const PAVE: Record<Building['model'], { side: number; front: number }> = { windmill: { side: 3, front: 3 }, house: { side: 2.5, front: 6 } }
 export const PAVE_WOBBLE = 1.15
+// the paving's reach past its yard: the shader paints nothing past it (pavePaint's first test), the cover marks every
+// texel a pixel within it can read (YARD_MARK, cover.ts), the road split gives those the paving's material (terrain.ts)
+export const PAVE_REACH = PAVE_WOBBLE + 0.05
+// a yard's cover texel: its B byte (the furrows' direction, read only where a field's id is: a village texel's is 0);
+// the paving runs only there (shore.glsl, roadPaint)
+export const YARD_MARK = 255
+// the paving's constants as the shader's defines (the materials that paint it: terrain.ts, macro.ts)
+export const paveDefines = (): string[] => [`#define PAVE_REACH ${PAVE_REACH.toFixed(3)}`, `#define YARD_MARK ${YARD_MARK.toFixed(1)}`]
 // a building's paving as the shader takes it (≤ 16 buildings): a, its centre and its turn (x, z, cos yaw, sin yaw); b,
 // a box's half width, its reach behind (+z) and in front (−z) of the centre, its corners' radius, m, or for a circle
 // (−radius, 0, 0, 0)

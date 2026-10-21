@@ -167,10 +167,10 @@ vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT)
 // material's at 15). The buildings' shapes
 // (src/look/world/buildings.ts, paveShape: uPaveN of them): a, the centre and the turn (x, z, cos, sin); b, a box's half
 // width, its reach behind and in front of the centre and its corners' radius, or a circle (−radius); l, the point in
-// the building's frame (world/buildings.ts, toLocal: Babylon's instance yaw undone). Only where the
-// cover paints the village's ground worn to nothing (a building's footprint and its yard are: cover.ts), so the live
-// roads' material alone carries it (the road split, terrain.ts) and the rest of the village pays a loop of a few
-// buildings. Its colours kept near their mean (PAVE_KEEP) so it reads as ground; the season, the snow and the light are
+// the building's frame (world/buildings.ts, toLocal: Babylon's instance yaw undone). PAVING only on the yards' ground
+// material (terrainMat, the triangles near a yard: terrain.ts, splitGround), and there the shapes' loop only on a yard's
+// cover texel (the village's ground worn to nothing with YARD_MARK in B: cover.ts, under every point within PAVE_REACH of
+// a yard); the rest of the village's ground, without the mark, skips it. Its colours kept near their mean (PAVE_KEEP) so it reads as ground; the season, the snow and the light are
 // the ground's (it is painted before them). uRoadOn 0 (the grit not loaded) or PAVING_FAR (the macro bake): the far
 // look (below)
 // PAVING: the cobbles and their far look (the tile terrain's live material: src/look/terrain.ts); PAVING_FAR: the far
@@ -192,8 +192,9 @@ vec3 pavePaint(vec3 c,vec2 xz){
     else{float zc=(b.y-b.z)*0.5;vec2 q=abs(vec2(l.x,l.y-zc))-vec2(b.x,(b.y+b.z)*0.5)+b.w;e=length(max(q,0.0))+min(max(q.x,q.y),0.0)-b.w;}
     d=min(d,e);
   }
-  // (the edge's wobble within ±0.78 m, its blend 0.35 m: exactly 0 past 1.15 m out, PAVE_WOBBLE)
-  if(d>1.2)return c;
+  // (the edge's wobble within ±0.78 m, its blend 0.35 m: exactly 0 past 1.15 m out, PAVE_WOBBLE; PAVE_REACH a little
+  // past it: src/look/world/buildings.ts, whose test pins the cover's marker over it)
+  if(d>PAVE_REACH)return c;
   float wob=(mValue(xz/2.3+3.1)-0.5)*1.1+(mValue(xz/0.7+8.7)-0.5)*0.45,k=1.0-smoothstep(-0.3,0.35,d+wob);
   if(k<=0.0)return c;
   // the level of detail (as the roads' tracks and grit): the cobbles while a pixel spans under half a stone (7 cm),
@@ -216,9 +217,9 @@ vec3 roadPaint(vec3 c,vec2 xz){
   vec4 cv0=coverAt(xz);
   if(cv0.w>ROAD_GATE)return c;   // (most of the tile, before the warp: ROAD_NEAR and the warp's reach, src/look/spec.ts)
   #if defined(PAVING)||defined(PAVING_FAR)
-  // (a yard's texel: the village's class, worn to nothing, YARD_MARK in B, which coverAt reads as π: cover.ts. The rest
-  // of the village's ground skips the shapes' loop)
-  if(cv0.x>4.5&&cv0.x<5.5&&cv0.w<0.05&&cv0.z>3.0)c=pavePaint(c,xz);
+  // (a yard's texel: the village's class, worn to nothing, its B byte YARD_MARK (coverAt gives B as an angle: back to
+  // the byte here; src/look/world/cover.ts). The rest of the village's ground skips the shapes' loop)
+  if(cv0.x>4.5&&cv0.x<5.5&&cv0.w<0.05&&cv0.z*(255.0/3.14159265)>YARD_MARK-0.5)c=pavePaint(c,xz);
   #endif
   float jn,dist,past,ot;vec4 r=roadAt(coverWarp(xz),jn,dist,past,ot);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
   // the patterns laid along the road (by s) give way at a junction, where s jumps from one line to the other, to the
