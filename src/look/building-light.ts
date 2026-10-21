@@ -32,29 +32,34 @@ import BAKE_FS from './shaders/building-bake.frag?raw'
 import BOUNCE_VS from './shaders/building-bounce.vert?raw'
 import BOUNCE_FS from './shaders/building-bounce.frag?raw'
 
-// a tile's side, texels (the light UVs' islands cover about a fifth of it: about 17 cm a texel on a house, 21 on the
-// windmill, measured, the sun's shadow map's on the ground about 20), the atlas's columns. Mipmapped (minified without
+// a tile's side, texels (the light UVs' islands cover a fifth to a ninth of it: about 20 cm a texel on a house, 27 on
+// the windmill, measured, the sun's shadow map's on the ground about 20). Mipmapped (minified without
 // mips, at the default zoom, its reads missed the texture cache: 1.1 ms over the runtime's taps, measured), read no
 // coarser than MAX_LOD: a read at level L reaches REACH texels past the texel it is in, and the islands' texels are at
 // least MIN_GAP apart (the export fails otherwise: tools/building-to-js.py), so the dilation's nearest-island fill
 // never brings a neighbour's light in (level 2 would need 9: the islands, 550 to 760 a model, cannot keep that apart).
 // At the widest zoom, 720p, 93 to 98 % of a building's pixels want a level under 2, 65 to 89 % level 0 (measured): the
-// clamp under-filters the rest. (A clamp in the shader, not the texture's TEXTURE_MAX_LEVEL: Babylon sets that only on
-// cube maps, and set by hand on its texture it would be lost on a context's restore.) A tile's side divides by its
+// clamp under-filters the rest. (A clamp in the shader, not the texture's TEXTURE_MAX_LEVEL, and the whole chain of
+// levels: Babylon sets that only on cube maps, and set by hand on its texture it would be lost on a context's restore.) A tile's side divides by its
 // level-MAX_LOD blocks and its islands keep INSET texels (one block) from its edge, so no read reaches a neighbour's
 // tile; DILATE covers the reach, and past it every texel is a neutral light (sunlit, open sky, no mist), so nothing
 // unwritten ever darkens an edge
-export const TILE = 256, COLS = 4, MAX_LOD = 1, INSET = 1 << MAX_LOD, DILATE = 4
+export const TILE = 256, MAX_LOD = 1, INSET = 1 << MAX_LOD, DILATE = 4
 export const REACH = 1 << MAX_LOD, MIN_GAP = 2 * REACH + 1
 // the neutral light (R no cast shadow, G open sky, B no mist, A full sun)
 const NEUTRAL = new Color4(0, 1, 0, 1)
-// the atlas for n instances: COLS tiles a row; inner: a tile's islands' square, in the atlas's UVs (BLD_TILE)
-export function atlasLayout(n: number): { cols: number; rows: number; width: number; height: number; inner: [number, number] } {
-  const rows = Math.ceil(n / COLS), width = COLS * TILE, height = rows * TILE
-  return { cols: COLS, rows, width, height, inner: [(TILE - 2 * INSET) / width, (TILE - 2 * INSET) / height] }
+// the atlas for n instances: square-ish, ⌈√n⌉ tiles a row (seven: 3 × 3, 768²); inner: a tile's islands' square, in
+// the atlas's UVs (BLD_TILE). Within the GPU's largest texture (max: the engine's caps), or a clear error
+export function atlasLayout(n: number, max = Infinity): { cols: number; rows: number; width: number; height: number; inner: [number, number] } {
+  const cols = Math.max(1, Math.ceil(Math.sqrt(n))), rows = Math.ceil(n / cols), width = cols * TILE, height = rows * TILE
+  if (Math.max(width, height) > max) throw new Error(`too many buildings for the light atlas: ${n}, ${width} × ${height} over the GPU's ${max}`)
+  return { cols, rows, width, height, inner: [(TILE - 2 * INSET) / width, (TILE - 2 * INSET) / height] }
 }
-// the bounce's layer: only its own camera sees its quads; the bake's outlines': no camera sees them
-const BOUNCE_LAYER = 0x10000000, OUTLINE_LAYER = 0x20000000
+// the bounce's layer: only its own camera sees its quads; the bake's outlines': no camera sees them (bits no other
+// layer uses: the game camera's are 0x0fffffff, the light map's trunks 0x10000000, bakes.ts)
+const BOUNCE_LAYER = 0x40000000, OUTLINE_LAYER = 0x20000000
+// the dilation's occupancy blocks, texels a side (a block marks any written texel within DILATE of it)
+const OCC = 8
 
 // each instance: the mesh it is a thin instance of, its root (x, y, z); its place in the list its tile (tileOf) and its
 // bounce texel (the mesh's thin instances in the list's order)
@@ -63,7 +68,7 @@ export interface BuildingLight { atlas: RenderTargetTexture; raw: RenderTargetTe
 
 // the tile of instance i in the atlas, as the shaders take it (aTile: offset x, y and size x, y, in the atlas's UVs)
 export function tileOf(i: number, n: number): [number, number, number, number] {
-  const { width: w, height: h } = atlasLayout(n), cx = i % COLS, cy = Math.floor(i / COLS)
+  const { width: w, height: h, cols } = atlasLayout(n), cx = i % cols, cy = Math.floor(i / cols)
   return [(cx * TILE + INSET) / w, (cy * TILE + INSET) / h, (TILE - 2 * INSET) / w, (TILE - 2 * INSET) / h]
 }
 
@@ -74,15 +79,11 @@ function clearTo(scene: Scene, t: RenderTargetTexture, c: Color4): void {
   engine.bindFramebuffer(rt); engine.clear(c, true, false, false); engine.unBindFramebuffer(rt)
 }
 
-// a bake run by hand: armed by what it reads, run before a frame once that held for a frame (no new arming: a chain of
-// bakes makes one) and what it draws is on and ready; first drawn (on its first run) by joining the scene's targets
-function scheduled(scene: Scene, t: RenderTargetTexture, ready: () => boolean): { arm: () => void } {
+// a bake run by hand: armed by what it reads (and a context's restore), run before a frame once that held for a frame
+// (no new arming: a chain of bakes makes one); run: false if it could not (what it draws hidden or not ready): due again
+function scheduled(scene: Scene, run: () => boolean): { arm: () => void } {
   let due = 0
-  scene.onBeforeRenderObservable.add(() => {
-    if (!due || --due) return
-    if (!ready()) { due = 1; return }
-    if (scene.customRenderTargets.includes(t)) t.resetRefreshCounter(); else scene.customRenderTargets.push(t)
-  })
+  scene.onBeforeRenderObservable.add(() => { if (due && !--due && !run()) due = 1 })
   return { arm: () => { due = 2 } }
 }
 
@@ -107,17 +108,18 @@ function bakeOutlines(scene: Scene, m: Mesh, tiles: Float32Array, mats: { points
 // back (it waits for the GPU: the bench and the checks only)
 export function buildBuildingLight(scene: Scene, mats: Materials, bakes: Bakes, meshes: Mesh[], instances: LitInstance[], { bounce: withBounce = true, timed = false } = {}): BuildingLight {
   if (mats.webgl1) throw new Error('the buildings\' light bake needs WebGL2 (main.ts takes the runtime\'s taps on WebGL1)')
-  const engine = scene.getEngine(), n = instances.length, lay = atlasLayout(n), { width, height } = lay
+  const engine = scene.getEngine(), n = instances.length, max = engine.getCaps().maxTextureSize, lay = atlasLayout(n, max), { width, height } = lay
+  if (n > max) throw new Error(`too many buildings for the bounce's target: ${n}, over the GPU's ${max}`)
   // the atlas: its texels as baked (nearest: the dilation reads them whole), and the dilated one the buildings read,
   // mipmapped (its chain made as the dilation's pass unbinds it: the engine's, for a target made with mips), a neutral
-  // light until the first bake
+  // light until the first bake; the occupancy of its OCC² blocks (the dilation's shortcut)
   const opts = { generateMipMaps: false, generateDepthBuffer: false, generateStencilBuffer: false, type: Constants.TEXTURETYPE_UNSIGNED_BYTE, samplingMode: Texture.NEAREST_SAMPLINGMODE }
   const size = { width, height }
-  const raw = new RenderTargetTexture('bldLightRaw', size, scene, opts)
+  const raw = new RenderTargetTexture('bldLightRaw', size, scene, opts), occ = new RenderTargetTexture('bldLightOcc', { width: width / OCC, height: height / OCC }, scene, opts)
   const atlas = new RenderTargetTexture('bldLight', size, scene, { ...opts, generateMipMaps: true, samplingMode: Texture.TRILINEAR_SAMPLINGMODE })
-  for (const t of [raw, atlas]) t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
+  for (const t of [raw, occ, atlas]) t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
   clearTo(scene, atlas, NEUTRAL)
-  raw.clearColor = new Color4(0, 0, 0, 0); raw.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE
+  raw.clearColor = new Color4(0, 0, 0, 0)
   const tileDef = `#define BLD_TILE vec2(${lay.inner[0].toFixed(8)},${lay.inner[1].toFixed(8)})`
   const bakeMat = (name: string, fillMode: number) => {
     const b = mats.make(name, BAKE_VS, BAKE_FS, { attributes: ['position', 'normal', 'aUV2', 'aTile'], defines: [tileDef] })
@@ -133,29 +135,48 @@ export function buildBuildingLight(scene: Scene, mats: Materials, bakes: Bakes, 
   raw.renderList = [...outlines, ...meshes]
   const order = new Map(raw.renderList.map((m, i) => [m, i]))
   raw.setRenderingOrder(0, (a, b) => (order.get(a.getMesh() as Mesh) ?? 0) - (order.get(b.getMesh() as Mesh) ?? 0))
-  // the dilation: each unwritten texel (A 0) the nearest written one within DILATE texels, or the neutral light
-  const dilate = new EffectWrapper({ engine, name: 'bldLightDilate', fragmentShader: `precision highp float;varying vec2 vUV;uniform sampler2D uSrc;uniform vec2 uTexel;
+  // (a mesh Babylon finds not ready it leaves out of the bake: such a bake is not used, and due again)
+  let skipped = false
+  raw.customIsReadyFunction = m => { const ok = m.isReady(true) && (!meshes.includes(m as Mesh) || bake.isReady(m, true)); if (!ok) skipped = true; return ok }
+  // the occupancy: each block 1 if a texel within DILATE of it is written; the dilation: each unwritten texel (A 0)
+  // the nearest written one within DILATE texels (rings out from it, until no nearer can be), or the neutral light
+  // (at once in an empty block: most of a tile)
+  const occE = new EffectWrapper({ engine, name: 'bldLightOcc', fragmentShader: `precision highp float;varying vec2 vUV;uniform sampler2D uSrc;uniform vec2 uTexel;
+void main(){vec2 b=floor(vUV/(uTexel*${OCC.toFixed(1)}))*${OCC.toFixed(1)};float o=0.0;
+  for(int y=-${DILATE};y<${OCC + DILATE};y++)for(int x=-${DILATE};x<${OCC + DILATE};x++)o=max(o,step(0.5/255.0,texture2D(uSrc,(b+vec2(float(x),float(y))+0.5)*uTexel).a));
+  gl_FragColor=vec4(o);}`, uniformNames: ['uTexel'], samplerNames: ['uSrc'] })
+  const neutral = `vec4(${NEUTRAL.r.toFixed(1)},${NEUTRAL.g.toFixed(1)},${NEUTRAL.b.toFixed(1)},${NEUTRAL.a.toFixed(1)})`
+  const dilate = new EffectWrapper({ engine, name: 'bldLightDilate', fragmentShader: `precision highp float;varying vec2 vUV;uniform sampler2D uSrc,uOcc;uniform vec2 uTexel;
+void tap(vec2 o,inout vec4 best,inout float bd){vec4 t=texture2D(uSrc,vUV+o*uTexel);float d=dot(o,o);if(t.a>0.0&&d<bd){bd=d;best=t;}}
 void main(){vec4 c=texture2D(uSrc,vUV);if(c.a>0.0){gl_FragColor=c;return;}
-  vec4 best=vec4(${NEUTRAL.r.toFixed(1)},${NEUTRAL.g.toFixed(1)},${NEUTRAL.b.toFixed(1)},${NEUTRAL.a.toFixed(1)});float bd=1e9;
-  for(int y=-${DILATE};y<=${DILATE};y++)for(int x=-${DILATE};x<=${DILATE};x++){vec4 t=texture2D(uSrc,vUV+vec2(float(x),float(y))*uTexel);float d=float(x*x+y*y);if(t.a>0.0&&d<bd){bd=d;best=t;}}
-  gl_FragColor=best;}`, uniformNames: ['uTexel'], samplerNames: ['uSrc'] })
+  vec4 best=${neutral};if(texture2D(uOcc,vUV).r<0.5){gl_FragColor=best;return;}
+  float bd=1e9;
+  for(int r=1;r<=${DILATE};r++){if(float(r*r)>=bd)break;
+    for(int k=-${DILATE};k<=${DILATE};k++){if(k<-r||k>r)continue;float fk=float(k),fr=float(r);
+      tap(vec2(fk,-fr),best,bd);tap(vec2(fk,fr),best,bd);tap(vec2(-fr,fk),best,bd);tap(vec2(fr,fk),best,bd);}}
+  gl_FragColor=best;}`, uniformNames: ['uTexel'], samplerNames: ['uSrc', 'uOcc'] })
   const renderer = new EffectRenderer(engine)
-  dilate.onApplyObservable.add(() => { dilate.effect.setTexture('uSrc', raw); dilate.effect.setFloat2('uTexel', 1 / width, 1 / height) })
-  let t0 = 0, ms: number | null = null, grain = mats.grain.uniqueId, count = 0
+  occE.onApplyObservable.add(() => { occE.effect.setTexture('uSrc', raw); occE.effect.setFloat2('uTexel', 1 / width, 1 / height) })
+  dilate.onApplyObservable.add(() => { dilate.effect.setTexture('uSrc', raw); dilate.effect.setTexture('uOcc', occ); dilate.effect.setFloat2('uTexel', 1 / width, 1 / height) })
+  let ms: number | null = null, count = 0
   const drawn = [...meshes, ...outlines]
-  const light = scheduled(scene, raw, () => drawn.every(m => m.isEnabled() && m.isReady(true)) && meshes.every(m => bake.isReady(m, true)) && dilate.effect.isReady())
-  raw.onBeforeRenderObservable.add(() => { t0 = performance.now(); grain = mats.grain.uniqueId })
-  raw.onAfterRenderObservable.add(() => {
-    renderer.render(dilate, atlas); count++
-    if (!timed) return
-    // (a texel read back waits for the GPU: the bake's time includes its work)
-    const gl = (engine as unknown as { _gl: WebGL2RenderingContext })._gl; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4))
-    ms = performance.now() - t0
+  const light = scheduled(scene, () => {
+    if (!drawn.every(m => m.isEnabled()) || !occE.effect.isReady() || !dilate.effect.isReady()) return false
+    const t0 = performance.now(); skipped = false; raw.render()
+    if (skipped) return false
+    renderer.render(occE, occ); renderer.render(dilate, atlas); count++
+    if (timed) {
+      // (a texel read back waits for the GPU: the bake's time includes its work)
+      const gl = (engine as unknown as { _gl: WebGL2RenderingContext })._gl; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4))
+      ms = performance.now() - t0
+    }
+    return true
   })
   bakes.lightMap.onAfterRenderObservable.add(light.arm)
-  // (the grain jitters the shadow's taps: a new one, a new bake)
-  scene.onBeforeRenderObservable.add(() => { if (mats.grain.uniqueId !== grain) { grain = mats.grain.uniqueId; light.arm() } })
-  const bytes = Math.round(width * height * 4 * (1 + 4 / 3))   // (raw, the atlas with its mips)
+  mats.onGrain(light.arm)   // (the grain jitters the shadow's taps: a new one, a new bake)
+  const bytes = Math.round(width * height * 4 * (1 + 4 / 3 + 1 / OCC / OCC))   // (raw, the atlas with its mips, the occupancy)
+  // (a lost context loses the targets' texels: the atlas neutral again, and baked again once all is compiled)
+  engine.onContextRestoredObservable.add(() => { clearTo(scene, atlas, NEUTRAL); light.arm() })
   if (!withBounce) return { atlas, raw, bounce: null, ms: () => ms, baked: () => count, bytes }
   // the bounce: a quad an instance on its texel, seen only by its own camera; none until the ground's is baked
   const bounce = new RenderTargetTexture('bldBounce', { width: n, height: 1 }, scene, { ...opts, type: Constants.TEXTURETYPE_HALF_FLOAT })
@@ -167,7 +188,11 @@ void main(){vec4 c=texture2D(uSrc,vUV);if(c.a>0.0){gl_FragColor=c;return;}
   const bm = mats.make('bldBounce', BOUNCE_VS, BOUNCE_FS, { attributes: ['position', 'aRoot'], uniforms: ['uN'] }); bm.backFaceCulling = false; bm.setFloat('uN', n)
   quad.material = bm
   const cam = new FreeCamera('bldBounceCam', new Vector3(0, 10, 0), scene); cam.layerMask = BOUNCE_LAYER; cam.mode = Camera.ORTHOGRAPHIC_CAMERA
-  bounce.activeCamera = cam; bounce.renderList = [quad]; bounce.clearColor = new Color4(0, 0, 0, 1); bounce.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE
-  bakes.groundBounce.onAfterRenderObservable.add(scheduled(scene, bounce, () => quad.isEnabled() && quad.isReady(true)).arm)
+  bounce.activeCamera = cam; bounce.renderList = [quad]; bounce.clearColor = new Color4(0, 0, 0, 1)
+  let bSkipped = false
+  bounce.customIsReadyFunction = m => { const ok = m.isReady(true); if (!ok) bSkipped = true; return ok }
+  const bounced = scheduled(scene, () => { if (!quad.isEnabled()) return false; bSkipped = false; bounce.render(); return !bSkipped })
+  bakes.groundBounce.onAfterRenderObservable.add(bounced.arm)
+  engine.onContextRestoredObservable.add(() => { clearTo(scene, bounce, new Color4(0, 0, 0, 1)); bounced.arm() })
   return { atlas, raw, bounce, ms: () => ms, baked: () => count, bytes: bytes + n * 8 }   // (and the bounce)
 }

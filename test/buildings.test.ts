@@ -88,17 +88,19 @@ describe('the yard\'s distance', () => {
 // export's check (tools/building-to-js.py, light_gap) on the runtime's numbers
 describe('the light atlas', () => {
   it('gives each instance a tile of its own, inset from its cell', async () => {
-    const { atlasLayout, tileOf, COLS, INSET, TILE } = await import('../src/look/building-light.ts')
+    const { atlasLayout, tileOf, INSET, TILE } = await import('../src/look/building-light.ts')
     for (const n of [1, 4, 5, BUILDINGS.length, 13]) {
-      const { width, height, rows, inner } = atlasLayout(n)
-      expect(rows * COLS).toBeGreaterThanOrEqual(n)
+      const { width, height, rows, cols, inner } = atlasLayout(n)
+      expect(rows * cols).toBeGreaterThanOrEqual(n); expect(Math.abs(rows - cols)).toBeLessThanOrEqual(1)   // (square-ish)
       for (let i = 0; i < n; i++) {
-        const [x, y, w, h] = tileOf(i, n), cx = (i % COLS) * TILE, cy = Math.floor(i / COLS) * TILE
+        const [x, y, w, h] = tileOf(i, n), cx = (i % cols) * TILE, cy = Math.floor(i / cols) * TILE
         expect(x * width).toBeCloseTo(cx + INSET); expect(y * height).toBeCloseTo(cy + INSET)
         expect((x + w) * width).toBeCloseTo(cx + TILE - INSET); expect((y + h) * height).toBeCloseTo(cy + TILE - INSET)
         expect([w, h]).toEqual(inner)
       }
     }
+    expect(() => atlasLayout(200, 4096)).not.toThrow()   // (15 × 14 tiles: 3840 × 3584, within; 300 is 18 × 17: 4608)
+    expect(() => atlasLayout(300, 4096)).toThrow(/too many buildings/)
   })
   it('keeps the light UVs\' islands apart, as the export checks', async () => {
     const { DILATE, INSET, MIN_GAP, REACH, TILE } = await import('../src/look/building-light.ts')
@@ -127,8 +129,8 @@ function lightGap(d: { pos: number[]; uv2: number[]; idx: number[] }, n: number,
   const img = new Int32Array(n * n).fill(-1)
   for (let f = 0; f < d.idx.length; f += 3) {
     const P = [0, 1, 2].map(k => [d.uv2[d.idx[f + k]! * 2]! * n, d.uv2[d.idx[f + k]! * 2 + 1]! * n] as [number, number]), lab = find(d.idx[f]!)
-    const cl = (v: number) => Math.min(n - 1, Math.max(0, Math.floor(v)))
-    const x0 = cl(Math.min(...P.map(p => p[0]))), x1 = cl(Math.max(...P.map(p => p[0]))), y0 = cl(Math.min(...P.map(p => p[1]))), y1 = cl(Math.max(...P.map(p => p[1])))
+    const cl = (v: number) => Math.min(n - 1, Math.max(0, v))   // (a corner on a texel's edge touches both texels)
+    const x0 = cl(Math.ceil(Math.min(...P.map(p => p[0]))) - 1), x1 = cl(Math.floor(Math.max(...P.map(p => p[0])))), y0 = cl(Math.ceil(Math.min(...P.map(p => p[1]))) - 1), y1 = cl(Math.floor(Math.max(...P.map(p => p[1]))))
     const area = (P[1]![0] - P[0]![0]) * (P[2]![1] - P[0]![1]) - (P[2]![0] - P[0]![0]) * (P[1]![1] - P[0]![1])
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
       let hit = true

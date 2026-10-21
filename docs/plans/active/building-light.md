@@ -18,7 +18,8 @@ once (static light is baked once per map: AGENTS.md).
 - **A second UV set** (`tools/building-to-js.py`): Blender's smart UV project on the cut mesh into a new layer, its
   islands apart by a margin, exported as `uv2` (the page's `aUV2`).
 - **The light atlas** (`src/look/building-light.ts`): one 256² tile per building instance (seven: six houses and the
-  windmill) in a 1024 × 512 RGBA8 atlas: the raw bake 2 MB, the atlas read with its mips 2.7 MB, about 4.7 MB as
+  windmill) in a square-ish atlas (⌈√n⌉ tiles a row: 768 × 768 RGBA8, within the GPU's largest texture or a clear
+  error): the raw bake 2.4 MB, the atlas read with its mips 3.1 MB, the dilation's occupancy 37 kB, about 5.5 MB as
   built. The islands cover a fifth to a ninth of a tile (550 on a house, 760 on the windmill, the margins between them
   kept at least 5 texels: `LIGHT_MARGIN` 0.018, from 0.012): about 20 cm a texel on a house, 27 on the windmill
   (measured; 17 and 21 at the old margin), the sun's shadow map's on the ground about 20 cm; 512² would quadruple the
@@ -41,7 +42,7 @@ once (static light is baked once per map: AGENTS.md).
 - **The bounce, fixed**: the material gains `#define BOUNCE`, so the ground's bounce the header promised lights the
   walls from below (a look change: shown to the owner, `?bldbounce=0` to compare). Its colour is a function of the
   building's root (`bounceAt(vRoot, …)`: the ground's class, its season and snow, the light map's sun there), so it is
-  baked once per instance into a 8 × 1 target (rebaked with the ground's bounce map: the season, the shadows, the
+  baked once per instance into an n × 1 target (7 × 1, half floats) (rebaked with the ground's bounce map: the season, the shadows, the
   grain); only its fade with height stays per pixel.
 - **The runtime** (`building.frag`, `BLD_BAKED`, on by default): one read of the atlas (and one texel of the bounce) in
   place of `shadowAt`, `LM` and `bounceAt`; the cloud (it moves), the rim, the grain, the air and the mist's shafts
@@ -59,8 +60,8 @@ once (static light is baked once per map: AGENTS.md).
 
 ## Status (2026-10-20)
 
-- Built: the light UVs (the import's second layer), the atlas (seven instances in 1024 × 512, 256² a tile: about
-  4 MB with its dilated copy), the bake (after the light map; again with it), the bounce per instance (8 × 1, half
+- Built: the light UVs (the import's second layer), the atlas (seven instances in 768 × 768, 256² a tile: about
+  5.5 MB as built, round 3), the bake (after the light map; again with it), the bounce per instance (n × 1, half
   floats; again with the ground's bounce map), `BLD_BAKED` and `BOUNCE` on the building material, `?bldlm=0` and
   `?bldbounce=0`.
 - The bake's time on load: 61.5-71 ms on Metal, 3.2 s in SwiftShader (the dilation's 81 reads a texel, in software).
@@ -88,7 +89,7 @@ once (static light is baked once per map: AGENTS.md).
   engine's (the explicit call dropped; levels 1 and 3 read back, their means the atlas's); the bake waits while the
   buildings are hidden (a terrain-only rebake left the atlas blank before: read back, now kept); its time read back on
   the bench only; `?bldbounce=0` builds no bounce; one `atlasLayout` for the targets, the tiles and the defines (a
-  test). The memory 4.7 MB (no scratch). The A/B against the runtime (SwiftShader, 720p): 0.74 / 0.42 / 0.17 / 0.20 %
+  test). The memory then 4.7 MB (no scratch; 5.5 MB in the square atlas of round 3). The A/B against the runtime (SwiftShader, 720p): 0.74 / 0.42 / 0.17 / 0.20 %
   of the pixels differ at the close, default, widest and widest-low zoom, 0.16 / 0.08 / 0.04 / 0.04 % by more than 12
   levels (the cast shadows' edges on the roofs), no dark edge or leak at the widest.
   The bake 85 ms on Metal on load (one load). To the owner: the main checkout's
@@ -107,5 +108,17 @@ once (static light is baked once per map: AGENTS.md).
   tower); with the bounce on the baked side 4.6 % differ at the close (the bounce's lift), the same 0.14 % by more than
   12. The bake 28 ms on Metal on load (one load); texture units: the building 5, the bake 3, the bounce 3, the water 16.
   To the owner: the main checkout's output/buildings-review/10-light-bake-review2.png.
+- Review round 3 (the last): the bakes run by hand (out of the scene's targets: Babylon's restore no longer redraws
+  them by itself), counted only when the dilation drew and no mesh was left out (Babylon's readiness per mesh, through
+  the target's `customIsReadyFunction`: a bake missing one is due again); on a context's restore the atlas neutral and
+  both bakes due (tested with `WEBGL_lose_context`: neutral just after, baked again once compiled; the page's light map
+  itself comes back different, 16 % of its texels, outside this work); the atlas square-ish and checked against
+  `MAX_TEXTURE_SIZE` (and the bounce's n); the LOD's log2 floored; the islands' gap counts a corner on a texel's edge in
+  both texels (still 5: the data unchanged); the grain through `mats.onGrain`; the dilation rings out and stops, and
+  skips an empty 8² block (an occupancy pass): a rebake 0.64-0.93 s in SwiftShader against 1.71-2.41 s (the first
+  bake 0.25-0.27 s against 0.21-0.29 s); the whole mip chain kept (Babylon sets no `TEXTURE_MAX_LEVEL` on a 2D
+  target); the bounce's layer 0x40000000 (the light map's trunks have 0x10000000). The A/B as round 2's (the same
+  counts to 0.003 %); one bake on load; every face a written texel; the bake 108 ms on Metal on load (one load, a
+  machine at load 10; 28 ms the round before), texture units as before.
 - To do: the bench again (the coordinator), the owner's look at the bounce.
 

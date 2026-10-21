@@ -264,7 +264,8 @@ def light_gap(uv, pos, idx, n=LIGHT_TEXELS, most=LIGHT_MIN_GAP + 3):
     lab = np.array([find(i) for i in range(len(uv))])
     img = -np.ones((n, n), np.int64); gap = most
     for t in idx:
-        P = uv[t] * n; x0, y0 = np.clip(np.floor(P.min(0)).astype(int), 0, n - 1); x1, y1 = np.clip(np.floor(P.max(0)).astype(int), 0, n - 1)
+        # (a corner on a texel's edge touches both texels: the first texel is the one ending at or past its least corner)
+        P = uv[t] * n; x0, y0 = np.clip(np.ceil(P.min(0)).astype(int) - 1, 0, n - 1); x1, y1 = np.clip(np.floor(P.max(0)).astype(int), 0, n - 1)
         X, Y = np.meshgrid(np.arange(x0, x1 + 1), np.arange(y0, y1 + 1)); hit = np.ones(X.shape, bool)
         # (a texel [X, X+1] × [Y, Y+1] touches the triangle unless an edge's line has all its corners outside: with the
         # bounding box, the separating axes of a box and a triangle)
