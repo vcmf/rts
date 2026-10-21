@@ -47,7 +47,11 @@ MODELS = {
 # 'up': per role the range of a face's normal's upward component it may take (a roof faces up, a wall stands): the
 # colours alone do not split a shaded wall from a slate or a lit beam from a wall stone; 'zr': the range of a face's
 # height, as a share of the model's, a role may take (the house's terracotta chimney pots: its frames are timber)
-LIGHT_MARGIN = 0.012   # the light UVs' islands apart, a share of the square (at least 5 texels of a tile's 252, measured: building-light.ts's MAX_LOD reads on it)
+LIGHT_MARGIN = 0.018   # the light UVs' islands apart, a share of the square (smart project's margin)
+# the light atlas's tile as the bake fills it (src/look/building-light.ts: TILE - 2 INSET texels a side) and the least
+# gap between two islands' texels there (its MIN_GAP: a read at its MAX_LOD stays in its island's half of the gap):
+# the export fails under it (the texels any part of a face touches, as the bake's points and lines draw them)
+LIGHT_TEXELS = 252; LIGHT_MIN_GAP = 5
 SMEAR_MAX = 0.02   # the share of the surface the cut may smear (smear) before the export fails
 BASE_BAND = 0.06   # the base band the model is centred on, a share of its height
 DISSOLVE_DEG = 4   # the planar dissolve's angle: faces flatter than this to each other merge (within a role)
@@ -174,6 +178,9 @@ def main():
     b1 = p3[p3[:, 1] < 1.0]; bc = ((b1[:, 0].min() + b1[:, 0].max()) / 2, (b1[:, 2].min() + b1[:, 2].max()) / 2)
     print(name, 'base (under 1 m) centred at', np.round(bc, 3))
     if max(abs(bc[0]), abs(bc[1])) > 0.02: raise SystemExit(f'{name}: the base is centred at {bc}, not on the origin')
+    gap = light_gap(np.array(uv2s).reshape(-1, 2), p3, np.array(idx).reshape(-1, 3))
+    print(name, 'light UVs: the least gap between two islands', gap, 'texels')
+    if gap < LIGHT_MIN_GAP: raise SystemExit(f'{name}: two light-UV islands {gap} texels apart (under {LIGHT_MIN_GAP}: raise LIGHT_MARGIN)')
     data = {'pos': pos, 'nrm': nrm, 'uv': uvs, 'uv2': uv2s, 'role': rol, 'idx': idx, 'min': p3.min(0).round(3).tolist(), 'max': p3.max(0).round(3).tolist()}
     print(name, 'verts', len(rol), 'tris', len(idx) // 3, 'size m', (p3.max(0) - p3.min(0)).round(2).tolist())
     # the detail: the texture's value over its local mean (a box of DETAIL_BOX texels round it), so only the fine
@@ -237,6 +244,48 @@ def light_uvs(obj):
     me.uv_layers.active = me.uv_layers[0]
     l2 = me.uv_layers['light'].data; u = np.array([l2[i].uv[:] for i in range(len(l2))])
     if u.min() < -1e-4 or u.max() > 1 + 1e-4: raise SystemExit(f'the light UVs leave the square ({u.min()}, {u.max()})')
+
+def light_gap(uv, pos, idx, n=LIGHT_TEXELS, most=LIGHT_MIN_GAP + 3):
+    # the least Chebyshev distance, in texels of an n² tile, between texels of two light-UV islands (the faces joined by
+    # a shared corner: the same position and light UV), each face's texels all those its triangle touches; most if none
+    # nearer (test/buildings.test.ts measures the same)
+    par = np.arange(len(uv))
+    def find(a):
+        while par[a] != a: par[a] = par[par[a]]; a = par[a]
+        return a
+    def join(a, b):
+        a, b = find(a), find(b)
+        if a != b: par[a] = b
+    for a, b, c in idx: join(a, b); join(b, c)
+    first = {}
+    for i, k in enumerate(map(tuple, np.round(np.hstack([uv * 1e4, pos * 1e4])).astype(np.int64))):
+        if k in first: join(i, first[k])
+        else: first[k] = i
+    lab = np.array([find(i) for i in range(len(uv))])
+    img = -np.ones((n, n), np.int64); gap = most
+    for t in idx:
+        P = uv[t] * n; x0, y0 = np.clip(np.floor(P.min(0)).astype(int), 0, n - 1); x1, y1 = np.clip(np.floor(P.max(0)).astype(int), 0, n - 1)
+        X, Y = np.meshgrid(np.arange(x0, x1 + 1), np.arange(y0, y1 + 1)); hit = np.ones(X.shape, bool)
+        # (a texel [X, X+1] × [Y, Y+1] touches the triangle unless an edge's line has all its corners outside: with the
+        # bounding box, the separating axes of a box and a triangle)
+        area = (P[1, 0] - P[0, 0]) * (P[2, 1] - P[0, 1]) - (P[2, 0] - P[0, 0]) * (P[1, 1] - P[0, 1])
+        if area != 0:
+            for k in range(3):
+                A, B = P[k], P[(k + 1) % 3]
+                out = np.ones(X.shape, bool)
+                for cx, cy in ((0, 0), (1, 0), (0, 1), (1, 1)):
+                    out &= ((B[0] - A[0]) * (Y + cy - A[1]) - (B[1] - A[1]) * (X + cx - A[0])) * np.sign(area) < 0
+                hit &= ~out
+        ys, xs = Y[hit], X[hit]; old = img[ys, xs]
+        if ((old >= 0) & (old != lab[t[0]])).any(): return 0
+        img[ys, xs] = lab[t[0]]
+    for dy in range(-most + 1, most):
+        for dx in range(-most + 1, most):
+            d = max(abs(dx), abs(dy))
+            if d == 0 or d >= gap: continue
+            a = img[max(0, dy):n + min(0, dy), max(0, dx):n + min(0, dx)]; b = img[max(0, -dy):n + min(0, -dy), max(0, -dx):n + min(0, -dx)]
+            if ((a >= 0) & (b >= 0) & (a != b)).any(): gap = d
+    return gap
 
 def smear(obj):
     # the share of the surface whose texel density (UV area over area) strays more than 4x from the model's median: a

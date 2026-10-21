@@ -8,7 +8,7 @@ precision highp float;varying vec3 vW,vN;varying vec2 vUV;varying float vRole,vH
 // ramp, the cast shadow, the sky's occlusion from the light map, the ground's bounce, the snow on what faces up, the air
 uniform vec3 uWall,uRoof,uTimber,uOpening,uAccent;uniform float uDetailAmt;uniform sampler2D uDetail;
 #ifdef BLD_BAKED
-// the static light baked (src/look/building-light.ts): R the sun's visibility, G the sky's occlusion, B the mist's
+// the static light baked (src/look/building-light.ts): R the sun's cast shadow, G the sky's occlusion, B the mist's
 // mask, A the light map's sun (stored from 1/255); the bounce at the instance's root (uBldBounce, a texel an instance)
 uniform sampler2D uBldLight,uBldBounce;varying vec2 vLUV;varying float vTileI;
 #endif
@@ -37,7 +37,9 @@ void main(){
   // the sun's shadow looked up 15 cm off the surface along its normal (a wall or a roof near the light's grazing angle
   // shadowed itself in specks: the tower, the slates)
   float sh=shadowAt(vW+N*0.15,N);
+  #ifdef BOUNCE
   pBounce=bounceAt(vRoot,vW.y-vH,vH,0.0);
+  #endif
   #endif
   // (a face the export made, the windmill's sails, has no texel of its own: its UV below 0, its detail 1. The read
   // made anyway, at a clamped UV, so its derivatives hold in every quad)

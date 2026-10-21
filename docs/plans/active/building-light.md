@@ -19,18 +19,22 @@ once (static light is baked once per map: AGENTS.md).
   islands apart by a margin, exported as `uv2` (the page's `aUV2`).
 - **The light atlas** (`src/look/building-light.ts`): one 256² tile per building instance (seven: six houses and the
   windmill) in a 1024 × 512 RGBA8 atlas: the raw bake 2 MB, the atlas read with its mips 2.7 MB, about 4.7 MB as
-  built. The islands cover about a fifth of a tile (550 on a house, 760 on the windmill, the margins between them):
-  about 17 cm a texel on a house, 21 on the windmill (measured), the sun's shadow map's on the ground about 20 cm (the
-  baked shadow's edge is the map's, not the atlas's); 512² would quadruple the memory.
+  built. The islands cover a fifth to a ninth of a tile (550 on a house, 760 on the windmill, the margins between them
+  kept at least 5 texels: `LIGHT_MARGIN` 0.018, from 0.012): about 20 cm a texel on a house, 27 on the windmill
+  (measured; 17 and 21 at the old margin), the sun's shadow map's on the ground about 20 cm; 512² would quadruple the
+  memory.
   Baked by a render target over the building meshes in their `uv2` space (each instance's tile by a per-instance
   `aTile`), each texel its world position and normal, evaluating the runtime's static terms exactly: R the sun's
-  visibility `shadowAtRaw(vW + N·0.15, N)` (without the panel's switch, which the runtime multiplies back), G the light
+  cast shadow `shadowAtRaw(vW + N·0.15, N)`, 0 lit to 1 shadowed (without the panel's switch, which the runtime
+  multiplies back), G the light
   map's sky occlusion, B its mist mask, A its sun (the mist's air: `airOf`); A stored at 1/255 and up, so an unwritten
-  texel (0) can be told apart: a dilation pass then fills four texels round every island from its nearest written
+  texel (0) can be told apart. Each face's corners and edges are drawn first as points and lines (a face thinner than a
+  texel holds no texel's centre: 45 % of them, the timber, the frames, the sails' sides). A dilation pass then fills four texels round every island from its nearest written
   texel (no seam where the bilinear read straddles an island's edge) and every texel past them a neutral light (sunlit,
-  open sky, no mist: nothing unwritten darkens an edge in a mip). Mipmapped (the engine's chain, as the pass unbinds
-  the atlas) and read no coarser than level 1: a level-1 read reaches 2 texels past an island's edge, inside its half
-  of the gap to the next (at least 5 texels, measured); a tile's islands 2 texels (`INSET`) from its edge. Baked after the light map and again whenever it
+  open sky, no mist, R 0: nothing unwritten darkens an edge in a mip; the atlas cleared to it until the first bake). Mipmapped (the engine's chain, as the pass unbinds
+  the atlas) and read no coarser than level 1: a level-1 read reaches 2 texels past its own, inside its half of the gap
+  to the next island (at least 5 texels between any two islands' touched texels: the export fails under it, a test
+  checks the data); a tile's islands 2 texels (`INSET`) from its edge. Baked after the light map and again whenever it
   is (the light map rebakes after the sun's shadow map: a season's release, the leaves' drop, a new grain), once the
   buildings are drawn (hidden, `__look.terrainOnly`, the bake waits for them). WebGL2 only (`textureLod`,
   `texelFetch`): WebGL1 takes the runtime path.
@@ -66,7 +70,9 @@ once (static light is baked once per map: AGENTS.md).
   0.15-0.22 % by more than 12 levels (the shadow's edges at the bake's texels); the bounce on against off: 1.6-8.1 %
   differ, most in winter (the snow's bounce lifts the walls' feet), by 4 levels on average. To the owner:
   the main checkout's output/buildings-review/7-light-bake.png.
-- Measured (the coordinator, Metal): close 7.63/8.03 ms baked against 8.18/8.42 runtime (0.4 ms saved); but at the
+- Measured (the coordinator, Metal): close 7.63/8.03 ms baked against 8.18/8.42 runtime (0.4 ms saved, against a
+  runtime that then computed the bounce: the runtime path is main's again, without it, so the saving against main is
+  to be benched again); but at the
   default zoom 1.1 ms slower than the runtime: the atlas had no mips (minified, its reads missed the cache). Now
   mipmapped (trilinear, its chain made after the dilation) and read no coarser than level 3 (`MAX_LOD`): a tile's side
   divides into level-3 blocks, its islands 8 texels (`INSET`, one level-3 block) from its edge, the dilation two passes
@@ -87,5 +93,19 @@ once (static light is baked once per map: AGENTS.md).
   levels (the cast shadows' edges on the roofs), no dark edge or leak at the widest.
   The bake 85 ms on Metal on load (one load). To the owner: the main checkout's
   output/buildings-review/9-light-bake-review1.png.
+- Review round 2: R is the cast shadow (1 shadowed), so the neutral light is R 0 (the fill had it 1: shadowed); each
+  face's corners and edges drawn as points and lines under its faces (55 % of the faces held a texel's centre, now
+  every face has a written texel, read back); the islands' gap measured on the touched texels at export (4 at the old
+  margin: `LIGHT_MARGIN` 0.018 makes 5; the texels about 20 / 27 cm, from 17 / 21) and by a test on the data; the bakes
+  run by hand once their source held for a frame and what they draw is on and ready (one bake on load, counted; the
+  not-ready retry through the same gate), again on a new grain; the atlas neutral until the first bake; the runtime
+  path without `BOUNCE` (main's); the clamp kept in the shader (Babylon sets `TEXTURE_MAX_LEVEL` on cube maps only); the
+  bounce's texel an instance attribute (`aTile`'s third). The A/B against the runtime (SwiftShader, 720p, both
+  without the bounce): 0.51 / 0.43 / 0.57 / 0.36 / 0.14 / 0.15 % of the pixels differ at the village close, the windmill
+  close, a house's frames, the default and the widest two, 0.13 / 0.17 / 0.13 / 0.07 / 0.03 / 0.03 % by more than 12
+  levels (the cast shadows' edges, coarser at the bake's texels: the windmill's gallery and sails' shadows on its
+  tower); with the bounce on the baked side 4.6 % differ at the close (the bounce's lift), the same 0.14 % by more than
+  12. The bake 28 ms on Metal on load (one load); texture units: the building 5, the bake 3, the bounce 3, the water 16.
+  To the owner: the main checkout's output/buildings-review/10-light-bake-review2.png.
 - To do: the bench again (the coordinator), the owner's look at the bounce.
 

@@ -204,7 +204,8 @@ if (bldbounceParam !== null && bldbounceParam !== '0') throw new Error(`?bldboun
 // ?bldlm=0: the buildings' light by the runtime's taps (the A/B of their bake: docs/plans/active/building-light.md;
 // WebGL1's always: the bake's reads are GLSL ES 3's); ?bldbounce=0: without the ground's bounce on their walls
 const bldBaked = bldlmParam === null && !mats.webgl1
-const buildings = buildBuildings(scene, mats, nature.canopy, { baked: bldBaked, bounce: bldbounceParam === null })
+// (the runtime path without the bounce, as main had it: it computed the bounce and never added it)
+const buildings = buildBuildings(scene, mats, nature.canopy, { baked: bldBaked, bounce: bldBaked && bldbounceParam === null })
 const bakes = buildBakes(scene, mats, waterData, terrain.tileGround, nature.canopy, nature.cardCasters, soft, nature.trunks, nature.farCull)
 // the buildings' static light, baked after the light map (src/look/building-light.ts)
 // (each bake timed, by reading it back, on the bench only)
@@ -544,7 +545,7 @@ let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | n
 const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   splitShare: () => groundShare,   // the tile's triangles paved, by the roads, neither (terrain.ts, splitGround)
-  bldLight: bldLight ? { atlas: bldLight.atlas, ms: bldLight.ms, bytes: bldLight.bytes } : null,   // the buildings' light bake: its atlas (the checks), its time once baked (on the bench), its memory
+  bldLight: bldLight ? { atlas: bldLight.atlas, raw: bldLight.raw, ms: bldLight.ms, baked: bldLight.baked, bytes: bldLight.bytes } : null,   // the buildings' light bake: its atlas and raw bake (the checks), its time once baked (on the bench), its bakes so far, its memory
   lab, mats, passes, post, setDetail,
   dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
   dofPaint: DOF_PAINT,   // the blur's painted look (the same)

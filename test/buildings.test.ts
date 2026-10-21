@@ -83,20 +83,71 @@ describe('the yard\'s distance', () => {
 
 
 // the light atlas (src/look/building-light.ts): every instance's tile in a cell of its own, INSET texels from the cell's
-// edge (one block of the coarsest level read: no read reaches a neighbour's), the cells on those blocks
+// edge; the exported light UVs' islands at least MIN_GAP texels apart in a tile, every texel any part of a face touches
+// counted (the bake draws a face's corners and edges too), so no read at MAX_LOD brings a neighbour's light in; the
+// export's check (tools/building-to-js.py, light_gap) on the runtime's numbers
 describe('the light atlas', () => {
   it('gives each instance a tile of its own, inset from its cell', async () => {
-    const { atlasLayout, tileOf, COLS, INSET, MAX_LOD, TILE } = await import('../src/look/building-light.ts')
-    expect(TILE % (1 << MAX_LOD)).toBe(0)
-    expect(INSET).toBeGreaterThanOrEqual(1 << MAX_LOD)
+    const { atlasLayout, tileOf, COLS, INSET, TILE } = await import('../src/look/building-light.ts')
     for (const n of [1, 4, 5, BUILDINGS.length, 13]) {
-      const { width, height, rows } = atlasLayout(n)
+      const { width, height, rows, inner } = atlasLayout(n)
       expect(rows * COLS).toBeGreaterThanOrEqual(n)
       for (let i = 0; i < n; i++) {
         const [x, y, w, h] = tileOf(i, n), cx = (i % COLS) * TILE, cy = Math.floor(i / COLS) * TILE
         expect(x * width).toBeCloseTo(cx + INSET); expect(y * height).toBeCloseTo(cy + INSET)
         expect((x + w) * width).toBeCloseTo(cx + TILE - INSET); expect((y + h) * height).toBeCloseTo(cy + TILE - INSET)
+        expect([w, h]).toEqual(inner)
       }
     }
   })
+  it('keeps the light UVs\' islands apart, as the export checks', async () => {
+    const { DILATE, INSET, MIN_GAP, REACH, TILE } = await import('../src/look/building-light.ts')
+    const n = TILE - 2 * INSET, tool = fs.readFileSync(new URL('../tools/building-to-js.py', import.meta.url), 'utf8')
+    expect(Number(/^LIGHT_TEXELS = (\d+)/m.exec(tool)?.[1])).toBe(n)
+    expect(Number(/LIGHT_MIN_GAP = (\d+)/.exec(tool)?.[1])).toBe(MIN_GAP)
+    expect(DILATE).toBeGreaterThanOrEqual(REACH)   // (the fill reaches as far as a read)
+    const t = fs.readFileSync(new URL('../prototypes/buildings.data.js', import.meta.url), 'utf8')
+    const data = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)) as Record<string, { pos: number[]; uv2: number[]; idx: number[] }>
+    for (const [name, d] of Object.entries(data)) expect(lightGap(d, n, MIN_GAP), name).toBe(MIN_GAP)   // (MIN_GAP: none nearer)
+  })
 })
+
+// the least Chebyshev distance in texels of an n² tile between two islands' touched texels (most if none nearer):
+// tools/building-to-js.py's light_gap
+function lightGap(d: { pos: number[]; uv2: number[]; idx: number[] }, n: number, most: number): number {
+  const nv = d.uv2.length / 2, par = Array.from({ length: nv }, (_, i) => i)
+  const find = (a: number): number => { while (par[a] !== a) { par[a] = par[par[a]!]!; a = par[a]! } return a }
+  const join = (a: number, b: number) => { a = find(a); b = find(b); if (a !== b) par[a] = b }
+  for (let f = 0; f < d.idx.length; f += 3) { join(d.idx[f]!, d.idx[f + 1]!); join(d.idx[f + 1]!, d.idx[f + 2]!) }
+  const first = new Map<string, number>()
+  for (let i = 0; i < nv; i++) {
+    const k = [d.uv2[i * 2]!, d.uv2[i * 2 + 1]!, d.pos[i * 3]!, d.pos[i * 3 + 1]!, d.pos[i * 3 + 2]!].map(v => Math.round(v * 1e4)).join()
+    const j = first.get(k); if (j === undefined) first.set(k, i); else join(i, j)
+  }
+  const img = new Int32Array(n * n).fill(-1)
+  for (let f = 0; f < d.idx.length; f += 3) {
+    const P = [0, 1, 2].map(k => [d.uv2[d.idx[f + k]! * 2]! * n, d.uv2[d.idx[f + k]! * 2 + 1]! * n] as [number, number]), lab = find(d.idx[f]!)
+    const cl = (v: number) => Math.min(n - 1, Math.max(0, Math.floor(v)))
+    const x0 = cl(Math.min(...P.map(p => p[0]))), x1 = cl(Math.max(...P.map(p => p[0]))), y0 = cl(Math.min(...P.map(p => p[1]))), y1 = cl(Math.max(...P.map(p => p[1])))
+    const area = (P[1]![0] - P[0]![0]) * (P[2]![1] - P[0]![1]) - (P[2]![0] - P[0]![0]) * (P[1]![1] - P[0]![1])
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      let hit = true
+      if (area !== 0) for (let k = 0; k < 3 && hit; k++) {
+        const A = P[k]!, B = P[(k + 1) % 3]!
+        if ([[0, 0], [1, 0], [0, 1], [1, 1]].every(([cx, cy]) => ((B[0] - A[0]) * (y + cy! - A[1]) - (B[1] - A[1]) * (x + cx! - A[0])) * Math.sign(area) < 0)) hit = false
+      }
+      if (!hit) continue
+      const old = img[y * n + x]!; if (old >= 0 && old !== lab) return 0
+      img[y * n + x] = lab
+    }
+  }
+  let gap = most
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const a = img[y * n + x]!; if (a < 0) continue
+    for (let dy = -gap + 1; dy < gap; dy++) for (let dx = -gap + 1; dx < gap; dx++) {
+      const yy = y + dy, xx = x + dx; if (yy < 0 || yy >= n || xx < 0 || xx >= n) continue
+      const b = img[yy * n + xx]!; if (b >= 0 && b !== a) gap = Math.max(Math.abs(dx), Math.abs(dy))
+    }
+  }
+  return gap
+}
