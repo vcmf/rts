@@ -102,6 +102,9 @@ export class Units {
       mesh.setVerticesData('position', m.positions, false, 3); mesh.setVerticesData('normal', m.normals, false, 3)
       mesh.setVerticesData('aRole', Float32Array.from(m.roles), false, 1)
       mesh.setVerticesData('aBones', Float32Array.from(m.boneIndices), false, 4); mesh.setVerticesData('aWeights', m.boneWeights, false, 4)
+      // (the battalions' hosts are its clones; it is never drawn, but a mesh without a material makes Babylon reach for
+      // its default StandardMaterial, which the page does not import: the readiness of the bench and the tools threw)
+      mesh.material = this.mats[0]
       mesh.setIndices(m.indices); mesh.setEnabled(false); this.lods.push(mesh)
     }
     for (const b of battalions) this.add(b)
