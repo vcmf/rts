@@ -69,7 +69,7 @@ export class Units {
    *  so a frame between two steps, with the sun's box and the men where they were, would draw the same map */
   lazyShadows = true
   /** the casters at the LOD the camera sees (?ushadowlod=1), else always at the far LOD (its shadow is a few texels) */
-  casterNear = true
+  casterNear = false
   readonly meshes: Mesh[] = []
   private smStep = -1                       // the step the map was last drawn at
   private smVP = new Float32Array(16)       // the sun's view-projection it was drawn with
