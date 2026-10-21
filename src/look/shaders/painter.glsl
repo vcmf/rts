@@ -83,6 +83,21 @@ float shadowAtRaw(vec3 wp,vec3 n){
   vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,uSMFade.x,e.x)*smoothstep(0.0,uSMFade.y,e.y);   // soft edge: far foliage past the box fades to lit
   return s/4.0*fade;}
 float shadowAt(vec3 wp,vec3 n){return shadowAtRaw(wp,n)*uShadowsOn;}
+#ifdef UNIT_SHADOWS
+// THE FIGURES' CAST SHADOWS (decision 0047; src/look/units.ts): their own depth map from the sun, fitted each frame
+// to the ground in view (the figures move: only moving things get runtime light), taps jittered by the grain as
+// shadowAt's, fading out at the map's border. Only the materials they fall on get UNIT_SHADOWS, only with armies
+uniform sampler2D uUnitSM;uniform mat4 uUnitVP;uniform vec2 uUnitTexel;uniform float uUnitBias;
+float unitShadowAt(vec3 wp){
+  vec4 lp=uUnitVP*vec4(wp,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
+  if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;
+  float d=q.z*0.5+0.5-uUnitBias;
+  vec2 j=(vec2(texture2D(uGrain,wp.xz*1.7).r,texture2D(uGrain,wp.zx*1.7+0.3).r)-0.5)*1.5;
+  float s=0.0;
+  for(int x=0;x<2;x++)for(int y=0;y<2;y++)s+=step(texture2D(uUnitSM,uv+((vec2(float(x),float(y))*2.0-1.0)*0.5+j)*uUnitTexel).r,d);
+  vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,8.0*uUnitTexel.x,e.x)*smoothstep(0.0,8.0*uUnitTexel.y,e.y);
+  return s/4.0*uShadowsOn*fade;}
+#endif
 // BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask, A the contact under trees (outside the
 // map: 1, no contact). groundOcc: the occlusion of the ground and what grows flat on it, contact included
 uniform sampler2D uLM;uniform mat4 uLMVP;uniform float uAO,uMist,uShafts,uBack;

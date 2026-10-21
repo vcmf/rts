@@ -33,11 +33,13 @@ import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { buildTerrain, splitGround } from './terrain.ts'
 import { buildBuildings } from './buildings.ts'
 import { buildBuildingLight } from './building-light.ts'
+import type { Units } from './units.ts'
+import FIGURE_URL from '../../data/figures/fr-line-infantry.unitdata?url'
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
 import ROAD_GRIT_URL from '../../data/road-grit-v2.png?url'
-import { BUILDINGS, YARD_ALL, YARD_BASE, paveShape } from './world/buildings.ts'
+import { BUILDINGS, YARD_ALL, YARD_BASE, onPaving, paveShape } from './world/buildings.ts'
 import { COVER } from './world/cover.ts'
 import { sstep } from './noise.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
@@ -286,6 +288,36 @@ if (params.get('dofnear') === '0') DOF_NEAR.px = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach) : null
 meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat])   // the dark ground under its clumps (shore.glsl)
+// ?armies=<battalions a side>: the demo's two armies (docs/plans/active/armies-demo.md): battalions of the ruleset's
+// infantry (about 400 a battalion, decision 0018) that march up in column, deploy and fire on a scripted loop, drawn
+// as figures (src/look/units.ts); ?unitshadow=0: without their cast shadows (decision 0047's A/B). Not on the page by
+// default: the goldens and the look checks never see them
+const armiesParam = params.get('armies'), unitShadowParam = params.get('unitshadow')
+if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 20)) throw new Error(`?armies must be 1 to 20 battalions a side (the demo map holds 20), not ${armiesParam}`)
+if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '1') throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
+let units: Units | null = null, armiesFocus: [number, number] | null = null   // (the fight's middle: the bench's focus)
+if (armiesParam !== null) {
+  if (mats.webgl1) throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
+  const [{ Units: UnitsC }, { decodeUnits }, { layout, facingAt }, { napoleonic }] = await Promise.all([import('./units.ts'), import('./units-data.ts'), import('./world/armies.ts'), import('../rulesets/napoleonic.ts')])
+  const g = napoleonic.types.infantry.geometry, drill = { companies: g.companies, files: g.files, ranks: g.ranks, fileSpacing: g.fileSpacing, rankSpacing: g.rankSpacing }
+  const r = await fetch(FIGURE_URL); if (!r.ok) throw new Error(`unit data: ${r.status} ${r.statusText} for ${FIGURE_URL}`)
+  // the ground a battalion keeps clear of: the river and its banks, the trees (a 10 m grid of them), the buildings'
+  // yards, the tile's last 30 m
+  const CELL = 10, trees = new Map<number, number[]>(), key = (i: number, j: number) => i * 4096 + j
+  // (the trees alone, their trunk and low crown: half the crown's reach; a battalion walks through the bushes)
+  for (const t of nature.canopy) { if (!t[4]) continue; const i = Math.floor(t[0] / CELL), j = Math.floor(t[1] / CELL), k = key(i, j), r = t[2] * 0.5; const l = trees.get(k); if (l) l.push(t[0], t[1], r); else trees.set(k, [t[0], t[1], r]) }
+  const nearTree = (x: number, z: number) => {
+    const i0 = Math.floor(x / CELL), j0 = Math.floor(z / CELL)
+    for (let i = i0 - 1; i <= i0 + 1; i++) for (let j = j0 - 1; j <= j0 + 1; j++) { const l = trees.get(key(i, j)); if (l) for (let k = 0; k < l.length; k += 3) if (Math.hypot(l[k] - x, l[k + 1] - z) < l[k + 2] + 1) return true }
+    return false
+  }
+  const blocked = (x: number, z: number) => { if (Math.max(Math.abs(x), Math.abs(z)) > D.spec.tile / 2 - 30) return true; const q = riverQuery(x, z); return (q !== null && q.dist < 20) || onPaving(x, z, 3) || nearTree(x, z) }
+  // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
+  units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked), () => S.t)
+  units.setShadows(unitShadowParam !== '0')
+  armiesFocus = facingAt(units.battalions)
+  Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus } })
+}
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false
 if (flag('nanmark')) { DEBUG.nanmark = true; MSAA.byte = false }   // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
@@ -654,6 +686,11 @@ if (params.has('bench')) {
   const at = params.get('benchat')?.split(',').map(p => p.trim() === '' ? NaN : Number(p))
   if (at && (at.length !== 2 || !at.every(v => Number.isFinite(v) && Math.abs(v) <= D.spec.play)))
     throw new Error(`?benchat must be <x>,<z> in metres within ±${D.spec.play}, not ${params.get('benchat')}`)
-  void runBench(scene, camera, passes, arms, hold, at ? { x: at[0], z: at[1] } : undefined).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
+  // with ?armies and no ?benchat, between the two sides' battalions facing each other (armies.ts, facing), clamped to
+  // the play area: the bench's cameras on the fight
+  const mid = armiesFocus
+  const clampPlay = (v: number) => Math.max(-D.spec.play, Math.min(D.spec.play, v))
+  const focus = at ? { x: at[0], z: at[1] } : mid ? { x: clampPlay(mid[0]), z: clampPlay(mid[1]) } : undefined
+  void runBench(scene, camera, passes, arms, hold, focus).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
     (e: unknown) => { Object.assign(window, { __bench: { error: String(e) } }); console.error('bench failed:', e) })
 }

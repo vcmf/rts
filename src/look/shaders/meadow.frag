@@ -10,6 +10,9 @@ uniform vec3 uTipTint;uniform float uTipWarm;   // the warm autumn's tip colour 
 void main(){
   vec3 N=normalize(mix(normalize(vN),vec3(0.0,1.0,0.0),0.75));  // grass shades like the ground it grows from (a crop too: less, its stalks' shadow sides went blue-grey)
   vec4 lm=LM(vW);float sh=(1.0-lm.r)*uShadowsOn;
+  #ifdef UNIT_SHADOWS
+  sh=max(sh,unitShadowAt(vW));
+  #endif
   vec3 alb;
   if(vIsCrop>0.5){
     // a crop: lime at the foot to its season colour at the tip (meadow.vert), each clump a shade apart, no read of the
