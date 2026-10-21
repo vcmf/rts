@@ -1,5 +1,5 @@
 # Export a building (a Tripo FBX with one baked colour texture, art bible §10) to the look page's data
-# (docs/plans/active/buildings.md): positions in metres, normals (sharp past 30°), UV0 and a per-vertex role, into
+# (docs/plans/done/buildings.md): positions in metres, normals (sharp past 30°), UV0 and a per-vertex role, into
 # prototypes/buildings.data.js (window.BUILDINGS, one key a model), and the texture's value as fine detail into
 # data/buildings/<model>-detail.png. Pack colours are never used (AGENTS.md): each face takes a role (wall, roof,
 # timber, opening, accent) by the median colour of the texels under it, nearest in Lab to the model's reference colours

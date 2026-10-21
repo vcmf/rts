@@ -1,4 +1,4 @@
-// The buildings (docs/plans/active/buildings.md): the models of prototypes/buildings.data.js (tools/building-to-js.py),
+// The buildings (docs/plans/done/buildings.md): the models of prototypes/buildings.data.js (tools/building-to-js.py),
 // one instanced mesh a model, where src/look/world/buildings.ts places them; painted by role from the palette
 // (shaders/building.frag), static: their shadows go into the sun's bake with the scene's other meshes
 // (src/look/bakes.ts), the sky they hide into the light map's occlusion as a blob at their foot (canopy)

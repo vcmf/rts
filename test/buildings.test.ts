@@ -1,4 +1,4 @@
-// The buildings' placement (docs/plans/active/buildings.md): the gap between two paved yards (convex polygons) is 0
+// The buildings' placement (docs/plans/done/buildings.md): the gap between two paved yards (convex polygons) is 0
 // where they overlap or cross and the edges' least distance otherwise, and the authored buildings' yards keep at least
 // PAVE_GAP apart (the cover's authoring fails otherwise: src/look/world/cover.ts). The turn is Babylon's instance yaw:
 // toWorld matches its Matrix, toLocal undoes it, and a house's yard lies before its door at every quarter turn

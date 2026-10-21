@@ -1,5 +1,5 @@
 precision highp float;varying vec3 vW,vN;varying vec2 vUV;varying float vRole,vH;varying vec2 vRoot;
-// the buildings (docs/plans/active/buildings.md): each region a palette colour by its role (tools/building-to-js.py:
+// the buildings (docs/plans/done/buildings.md): each region a palette colour by its role (tools/building-to-js.py:
 // 0 wall, 1 roof, 2 timber, 3 opening, 4 accent), per model (src/look/buildings.ts), never the model's own colours
 // (AGENTS.md); the model's texture only as its value over its local mean (a box of texels round it: the tool's
 // DETAIL_BOX; uDetail, 128 = 1), uDetailAmt of it,

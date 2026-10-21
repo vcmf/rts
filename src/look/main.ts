@@ -140,7 +140,7 @@ if (!mats.webgl1) {   // (float textures: the roads' shader is WebGL2's)
   const grit = new Texture(ROAD_GRIT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => mats.bindAll(m => m.setFloat('uRoadOn', 1)), (msg?: string) => console.error(`the road grit (${ROAD_GRIT_URL}) did not load: ${msg ?? 'unknown error'}`))
   grit.wrapU = grit.wrapV = Texture.WRAP_ADDRESSMODE; grit.anisotropicFilteringLevel = 4
   mats.bindAll(m => { m.setTexture('uRoadSegs', segs); m.setTexture('uRoadGrid', grid); m.setFloat('uRoadSegN', sn); m.setTexture('uRoadGrit', grit) })
-  // the buildings' paving (docs/plans/active/buildings.md; shore.glsl, pavePaint): the buildings' shapes, on every
+  // the buildings' paving (docs/plans/done/buildings.md; shore.glsl, pavePaint): the buildings' shapes, on every
   // material that paints the roads; the cobbles ride in the grit (its G and B), their mean until it has loaded
   const shapes = BUILDINGS.map(paveShape)
   if (shapes.length > 16) throw new Error(`buildings: ${shapes.length} paved yards, the shader takes 16 (shore.glsl, pavePaint)`)
@@ -195,7 +195,7 @@ const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { l
 { const a = new Array(D.spec.water.stones * 4).fill(0); nature.stones.forEach((st, k) => a.splice(k * 4, 4, ...st))
   for (const m of [...terrain.tileMats, water.waterMat, water.groundMat]) m.setArray4('uStones', a) }
 water.finish(scene)
-// the buildings (docs/plans/active/buildings.md), before the bakes: their shadows and the sky they hide are baked with
+// the buildings (docs/plans/done/buildings.md), before the bakes: their shadows and the sky they hide are baked with
 // the trees'
 buildBuildings(scene, mats, nature.canopy)
 const bakes = buildBakes(scene, mats, waterData, terrain.tileGround, nature.canopy, nature.cardCasters, soft, nature.trunks, nature.farCull)
@@ -242,7 +242,7 @@ if (roadTex) {
   // near too, the live shader only on the triangles near a road, and the paving's only near a yard (terrain.ts,
   // splitGround: the same pixels to a step of rounding; the road split about 1.1 ms a frame less at the default and
   // closest zooms; with the paving's split and its gate the buildings cost about 0.35 ms at the village's closest, from
-  // 1.25: docs/plans/active/buildings.md); ?split=0 (above): the live shader
+  // 1.25: docs/plans/done/buildings.md); ?split=0 (above): the live shader
   // with the paving on the whole tile, the A/B (its share all paved)
   const sg = splitParam === '0' ? null : splitGround(terrain, look.cover)
   const split = sg?.material ?? live

@@ -1,4 +1,4 @@
-// The demo map's buildings (docs/plans/active/buildings.md): authored, deterministic. Each a model of
+// The demo map's buildings (docs/plans/done/buildings.md): authored, deterministic. Each a model of
 // prototypes/buildings.data.js (tools/building-to-js.py: metres, its base at 0, centred on its footprint), where it
 // stands (x, z), its turn (yaw, rad) and its scale. The turn is Babylon's instance yaw (Quaternion.RotationYawPitchRoll
 // in Matrix.Compose, src/look/buildings.ts), which takes a local point (x, z) to (x cos + z sin, −x sin + z cos): toWorld
@@ -31,7 +31,7 @@ export const BUILDINGS: readonly Building[] = [
 ]
 export const PAVE_GAP = 4   // the least ground between two buildings' paved yards, m
 
-// the paved yard round each building (the owner, 2026-10-20: docs/plans/active/buildings.md): its footprint grown by
+// the paved yard round each building (the owner, 2026-10-20: docs/plans/done/buildings.md): its footprint grown by
 // side m all round, the house's by front m at its door (its local −z: a yard before its door); its edge ragged into the
 // ground by the shader (shore.glsl, pavePaint: up to PAVE_WOBBLE m past it)
 export const PAVE: Record<Building['model'], { side: number; front: number }> = { windmill: { side: 3, front: 3 }, house: { side: 2.5, front: 6 } }

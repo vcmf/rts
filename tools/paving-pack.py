@@ -1,4 +1,4 @@
-# The paving's colour packed into the road grit's texture (docs/plans/active/buildings.md): the terrain's live material
+# The paving's colour packed into the road grit's texture (docs/plans/done/buildings.md): the terrain's live material
 # binds 16 texture units on Metal without it, its limit (src/look/materials.ts), so the cobbles (data/paving-v1.png, the
 # owner's) ride in the grit texture's spare channels. R: the grit, as data/road-grit-v1.png (roadPaint reads .r only: the
 # roads unchanged, texel for texel). G and B: the paving's colour along its two principal axes (its colours' covariance

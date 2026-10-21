@@ -160,7 +160,7 @@ vec4 roadAt(vec2 xz,out float jn,out float dist,out float past,out float otherT)
         r=vec4(side,s1.x+len*clamp(d0/max(d0+d1,1e-3),0.0,1.0)+s1.z*10000.0,s1.y,mod(floor(s1.w/4.0),2.0));}}}
   jn=1.0-smoothstep(ROAD_PAINT,ROAD_JUNCTION,other);
   return r;}
-// THE PAVING (docs/plans/active/buildings.md): a paved yard round each building, the owner's cobbles (data/paving-v1.png,
+// THE PAVING (docs/plans/done/buildings.md): a paved yard round each building, the owner's cobbles (data/paving-v1.png,
 // about PAVE_M m a repeat) on the ground under it, its edge ragged into the ground. The cobbles ride in the road grit's
 // G and B (data/road-grit-v2.png, tools/paving-pack.py: their colour along its two principal axes, PAVE_U and PAVE_V
 // about PAVE_MEAN, 99.7 % of its variance), so the paving binds no texture unit of its own (16 on Metal: the live
