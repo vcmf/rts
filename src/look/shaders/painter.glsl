@@ -72,7 +72,8 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
 // REAL sun shadow from the depth pass; PCF taps jittered by the paint grain,
 // so shadow edges come out brushy instead of pixel-sharp.
 uniform sampler2D uShadowMap;uniform mat4 uLightVP;uniform vec2 uSMTexel,uSMFade;uniform float uShadowsOn;
-float shadowAt(vec3 wp,vec3 n){
+// (shadowAtRaw: without the panel's switch, uShadowsOn: the buildings' light bake stores it, src/look/building-light.ts)
+float shadowAtRaw(vec3 wp,vec3 n){
   vec4 lp=uLightVP*vec4(wp+n*0.6,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
   if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;   // outside the sun's view (incl. beyond its far plane) = lit
   float d=q.z*0.5+0.5-SBIAS;
@@ -80,7 +81,8 @@ float shadowAt(vec3 wp,vec3 n){
   float s=0.0;
   for(int x=0;x<2;x++)for(int y=0;y<2;y++)s+=step(texture2D(uShadowMap,uv+(vec2(float(x),float(y))*2.0-1.0+j)*uSMTexel).r,d);
   vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,uSMFade.x,e.x)*smoothstep(0.0,uSMFade.y,e.y);   // soft edge: far foliage past the box fades to lit
-  return s/4.0*uShadowsOn*fade;}
+  return s/4.0*fade;}
+float shadowAt(vec3 wp,vec3 n){return shadowAtRaw(wp,n)*uShadowsOn;}
 // BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask, A the contact under trees (outside the
 // map: 1, no contact). groundOcc: the occlusion of the ground and what grows flat on it, contact included
 uniform sampler2D uLM;uniform mat4 uLMVP;uniform float uAO,uMist,uShafts,uBack;

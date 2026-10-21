@@ -32,6 +32,7 @@ import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { buildTerrain, splitGround } from './terrain.ts'
 import { buildBuildings } from './buildings.ts'
+import { buildBuildingLight } from './building-light.ts'
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
@@ -197,8 +198,19 @@ const nature = buildNature(scene, mats, water.reflAdd, look.cover, leafTex ? { l
 water.finish(scene)
 // the buildings (docs/plans/done/buildings.md), before the bakes: their shadows and the sky they hide are baked with
 // the trees'
-buildBuildings(scene, mats, nature.canopy)
+const bldlmParam = params.get('bldlm'), bldbounceParam = params.get('bldbounce')
+if (bldlmParam !== null && bldlmParam !== '0') throw new Error(`?bldlm must be 0, not ${bldlmParam}`)
+if (bldbounceParam !== null && bldbounceParam !== '0') throw new Error(`?bldbounce must be 0, not ${bldbounceParam}`)
+// ?bldlm=0: the buildings' light by the runtime's taps (the A/B of their bake: docs/plans/done/building-light.md;
+// WebGL1's always: the bake's reads are GLSL ES 3's); ?bldbounce=0: without the ground's bounce on their walls
+const bldBaked = bldlmParam === null && !mats.webgl1
+// (the runtime path without the bounce, as main had it: it computed the bounce and never added it)
+const buildings = buildBuildings(scene, mats, nature.canopy, { baked: bldBaked, bounce: bldBaked && bldbounceParam === null })
 const bakes = buildBakes(scene, mats, waterData, terrain.tileGround, nature.canopy, nature.cardCasters, soft, nature.trunks, nature.farCull)
+// the buildings' static light, baked after the light map (src/look/building-light.ts)
+// (each bake timed, by reading it back, on the bench only)
+const bldLight = bldBaked && buildings.meshes.length ? buildBuildingLight(scene, mats, bakes, buildings.meshes, buildings.instances, { bounce: bldbounceParam === null, timed: params.has('bench') }) : null
+if (bldLight) for (const m of buildings.meshes) { const mt = m.material as ShaderMaterial; mt.setTexture('uBldLight', bldLight.atlas); if (bldLight.bounce) mt.setTexture('uBldBounce', bldLight.bounce) }
 // ?far=off: no far tree, nor its shadows (built before the bakes: the far woods' whole cost; the A/B)
 if (params.has('far')) {
   if (params.get('far') !== 'off') throw new Error(`?far must be off, not ${params.get('far')}`)
@@ -533,6 +545,7 @@ let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | n
 const hidden: Mesh[] = []
 Object.assign(window, { __look: {
   splitShare: () => groundShare,   // the tile's triangles paved, by the roads, neither (terrain.ts, splitGround)
+  bldLight: bldLight ? { atlas: bldLight.atlas, raw: bldLight.raw, ms: bldLight.ms, baked: bldLight.baked, bytes: bldLight.bytes } : null,   // the buildings' light bake: its atlas and raw bake (the checks), its time once baked (on the bench), its bakes so far, its memory
   lab, mats, passes, post, setDetail,
   dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
   dofPaint: DOF_PAINT,   // the blur's painted look (the same)

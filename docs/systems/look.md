@@ -397,6 +397,35 @@ surface and break their band edges with a third of the ground's grain (on flat f
 self-test made specks). Static: their shadows go into the sun's bake with the scene's meshes, the sky they hide into
 the light map's occlusion as a blob at their foot (the trees' contact).
 
+The buildings' static light is baked once (`src/look/building-light.ts`, `docs/plans/done/building-light.md`): an
+atlas of one 256² tile an instance, square-ish (⌈√n⌉ tiles a row: seven in 768 × 768 RGBA8, within the GPU's largest
+texture or a clear error; the raw bake 2.4 MB and the atlas the buildings read with its mips 3.1 MB, about 5.5 MB), each building drawn in its light UVs (`aUV2`, a second layer the import makes: Blender's smart
+project; about 20 cm a texel on a house, 27 on the windmill, measured) with the sun's cast shadow (`shadowAtRaw`, 0
+lit to 1 shadowed, the panel's switch applied at runtime), the light map's sky occlusion, mist mask and sun. Each face
+covers a texel however thin: its corners drawn as points and its edges as lines before its faces (only 55 % of the
+faces hold a texel's centre: the timber, the frames, the sails' sides; with the outlines every face has a written texel,
+read back). One pass fills four texels round every island from the nearest written one (rings out from the texel, until
+no nearer can be; at once in an 8² block with no written texel within four, most of a tile: an occupancy pass first)
+and every texel past them a
+neutral light (no cast shadow, open sky, no mist), then the engine builds the mips as the pass unbinds the atlas; the
+atlas is that neutral light until the first bake. Read no coarser than level 1 (`MAX_LOD`): a level-1 read reaches 2
+texels (`REACH`) past the texel it is in, and the islands' texels (all a face touches) are at least 5 apart
+(`MIN_GAP`: the export fails otherwise, and a test checks the data), so no neighbouring island's light comes in (level 2
+would need 9 apart); at the widest zoom 93-98 % of a building's pixels want a level under 2 (720p, measured with the
+finer texels before). A clamp in the shader, not the texture's `TEXTURE_MAX_LEVEL`: Babylon sets that on cube maps
+only, and set by hand it would be lost on a context's restore. A tile's islands keep 2 texels (`INSET`) from its edge,
+so no read reaches a neighbour's tile (without mips the minified reads at the default zoom cost 1.1 ms more than the
+runtime's taps, measured). Rebaked with the light map (after the sun's shadow map: a season's release, the leaves'
+drop), with a new grain and on a context's restore (the atlas neutral until then), once the light map has held for a
+frame (the start's chain of bakes makes one bake) and the buildings are drawn and ready (`__look.terrainOnly` hides
+them; a bake Babylon would draw without a mesh not ready is not used). `building.frag` reads it once (`BLD_BAKED`) in place of
+`shadowAt`, `LM` and `bounceAt`; the ground's bounce at each building's root is baked into a texel an instance
+(rebaked with the ground's bounce map, the same way) and faded with the height at runtime, and now lights the walls
+(`BOUNCE`, the baked path only: the runtime path keeps main's, without it). `?bldlm=0` restores the runtime path, as
+WebGL1 always takes it (the bake's reads are GLSL ES 3's); `?bldbounce=0` drops the bounce (no target, no read). The
+bake's time is read back on the bench only (it waits for the GPU): 28-108 ms on Metal on load (two loads, a busy
+machine), 0.6-0.9 s a rebake in SwiftShader (1.7-2.4 s with the full dilation).
+
 ### The shadows' look
 
 The plan: `docs/plans/done/shadow-look.md`.
