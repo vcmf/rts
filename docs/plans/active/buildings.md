@@ -112,5 +112,14 @@ things get runtime light); the colour by palette roles with the texture's value 
   atlas full: a neutral block in a corner overwrote both models' detail); the yards' zone and floodplain check over the
   yard's cover margin; `tools/shot.mjs` stops only on a compile error no fallback follows; `segD` shared
   (`world/geom.ts`).
+- The cost at the village's closest (2026-10-21, Metal, interleaved, three rounds): main about 6.6-7.1 ms; the buildings
+  with the paving about 7.9; the buildings hidden, the paving kept, about 7.6; the buildings drawn flat about 7.6; the
+  paving off, the buildings kept, about 7.0. So the paving was most of the +1.2 ms: its code in the live roads'
+  material, which drew every triangle near any road (the road split's lesson: a shader's size costs every pixel it
+  draws), and its shapes' loop run on the whole village's ground, not its yards. The fix, the same pixels (golden
+  against f630fe7: at most 9 pixels of 1/255 a view, the frame readout aside): a third tile material, the live roads
+  with the paving on the triangles near a yard alone (0.7 % of the tile; the roads alone 7.2 %, neither 92.1 %), and
+  the loop gated by a yard marker in the cover (`YARD_MARK` in B on the yards' texels, under the reach the paving
+  paints). To measure again.
 - To do: the owner's look; the bench against main; the guard and the checks.
 

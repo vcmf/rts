@@ -30,7 +30,7 @@ import { axisX, baseH } from './world/author.ts'
 import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS } from './world/data.ts'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
-import { buildTerrain, splitByRoad } from './terrain.ts'
+import { buildTerrain, splitByRoad, splitShare } from './terrain.ts'
 import { buildBuildings } from './buildings.ts'
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
@@ -221,27 +221,30 @@ const camera = buildCamera(scene, canvas)
 // the roads' live shader only from mid zoom in (docs/plans/done/roads.md, decision 0039): farther out the macro bake
 // holds them and the tile's ground takes its material without them (the shader's size alone cost every ground pixel).
 // Nearing ROAD_LIVE_R the live roads fade to the baked look (uRoadFar: the wheel tracks to their dusting, the grit out),
-// so at the swap only the edge's sharpness changes (the bake's 0.5 m texels). Both materials are compiled before the first frame, and the swap waits until the one it
+// so at the swap only the edge's sharpness changes (the bake's 0.5 m texels). The materials are compiled before the first frame, and the swap waits until the one it
 // goes to is ready (a material not ready is not drawn). The shader arm has no bake to hold them: live at every zoom
 const ROAD_LIVE_R = 170, ROAD_HOLD = 4, ROAD_FADE = 50
 const splitParam = params.get('split')
 if (splitParam !== null && splitParam !== '0') throw new Error(`?split must be 0, not ${splitParam}`)
 if (roadTex) {
-  const live = terrain.terrainMat, baked = terrain.terrainBakedMat, ground = terrain.tileGround
-  // near too, the live shader only on the triangles near a road (terrain.ts, splitByRoad: the same pixels to a step of
-  // rounding, about 1.1 ms a frame less at the default and closest zooms); ?split=0 (above): the live shader on the whole tile, the A/B
+  const live = terrain.terrainMat, roads = terrain.terrainRoadsMat, baked = terrain.terrainBakedMat, ground = terrain.tileGround
+  // near too, the live shader only on the triangles near a road, and the paving's only near a yard (terrain.ts,
+  // splitByRoad: the same pixels to a step of rounding; the road split about 1.1 ms a frame less at the default and
+  // closest zooms, the paving's about 0.9 at the village's closest: docs/plans/active/buildings.md); ?split=0 (above):
+  // the live shader with the paving on the whole tile, the A/B
   const split = splitParam === '0' ? live : splitByRoad(terrain, look.cover)
-  await Promise.all([live, baked].map(m => m.forceCompilationAsync(ground)))
+  const parts = [...new Set([live, roads, baked])]
+  await Promise.all(parts.map(m => m.forceCompilationAsync(ground)))
   let far = false
   scene.onBeforeRenderObservable.add(() => {
     const r = camera.radius
     const fade = sstep(ROAD_LIVE_R - ROAD_HOLD - ROAD_FADE, ROAD_LIVE_R - ROAD_HOLD, r)
-    for (const m of [live, water.waterMat, water.groundMat]) m.setFloat('uRoadFar', fade)
+    for (const m of [live, roads, water.waterMat, water.groundMat]) m.setFloat('uRoadFar', fade)
     if (ground.material !== live && ground.material !== split && ground.material !== baked) return   // (the debug views' water ground)
     far = isBakedArm(macro.arm()) && (far ? r > ROAD_LIVE_R - ROAD_HOLD : r > ROAD_LIVE_R + ROAD_HOLD)
     const want = far ? baked : split
-    // (a MultiMaterial is always ready: the split waits on its two materials)
-    if (ground.material !== want && (want === split ? live.isReady(ground) && baked.isReady(ground) : want.isReady(ground))) ground.material = want
+    // (a MultiMaterial is always ready: the split waits on its materials)
+    if (ground.material !== want && (want === split ? parts.every(m => m.isReady(ground)) : want.isReady(ground))) ground.material = want
   })
 }
 // ?dof=0|1: the gameplay depth of field, on by default (decision 0024); the look tools load the page with it off
@@ -514,6 +517,7 @@ const paintGrain = mats.grain, paintMean = mats.grainMean
 let smooth: { tex: DynamicTexture; mean: [number, number]; maxStep: number } | null = null
 const hidden: Mesh[] = []
 Object.assign(window, { __look: {
+  splitShare: () => splitShare,   // the tile's triangles paved, by the roads, neither (terrain.ts, splitByRoad)
   lab, mats, passes, post, setDetail,
   dof: DOF,   // the depth of field's constants, read every frame: tuned live from the console
   dofPaint: DOF_PAINT,   // the blur's painted look (the same)

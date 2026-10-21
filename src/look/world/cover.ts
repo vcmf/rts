@@ -17,6 +17,8 @@ import { segD } from './geom.ts'
 export const COVER = { meadow: 0, pasture: 1, wood: 2, road: 3, track: 4, village: 5, wheat: 6, green: 7, stubble: 8, ploughed: 9, bare: 10 } as const
 export type CoverClass = typeof COVER[keyof typeof COVER]
 export const WEAR_STEP = 0.1
+// a yard's texel (B, where no field's id is: authorCover): the paving runs only there (shore.glsl reads B as π)
+export const YARD_MARK = 255
 // bare earth (docs/plans/done/ground-surface.md) is not a field: no id, no stripes, no crops
 export const isField = (c: number): boolean => c >= COVER.wheat && c <= COVER.ploughed
 
@@ -174,12 +176,17 @@ export function authorCover(far: number, cell: number): CoverGrid {
     // the meadow and the crops keep off the village), worn as the village is (the road split's live ground: pavePaint)
     // (a road or a track keeps its class: the check above keeps them clear; and past it the yard's ground fades worn as
     // the village's does, by its distance: YARD_PAD in, the ring's, so its edge does not step on the grid)
+    // A yard's texels also carry YARD_MARK in B (the furrows' direction, read only where a field's id is: a village's is
+    // 0): the paving's gate (shore.glsl, roadPaint) and the road split's paved triangles (terrain.ts, splitByRoad) read
+    // it, so the rest of the village's ground pays nothing for the yards. A pixel the paving paints is within 1.2 m of
+    // its yard (pavePaint), its texel's centre within that and a half diagonal, under YARD_PAD
     const yd = paveDist(x, z, WEAR_REACH + YARD_PAD)
-    if (yd <= YARD_PAD && cls !== COVER.road && cls !== COVER.track) { cls = COVER.village; id = 0; wear = 0 }
+    let yard = false
+    if (yd <= YARD_PAD && cls !== COVER.road && cls !== COVER.track) { cls = COVER.village; id = 0; wear = 0; yard = true }
     else wear = Math.min(wear, Math.max(0, yd - YARD_PAD))
     // the floodplain and the formation zones keep their meadow (the zones clip the fields that touch them)
-    if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village || cls === COVER.bare)) { cls = COVER.meadow; id = 0 }
-    tex[o] = cls; tex[o + 1] = id; tex[o + 2] = id ? Math.round(((dir % Math.PI + Math.PI) % Math.PI) / Math.PI * 255) % 256 : 0
+    if ((onFloodplain(x, z) || inFormationZone(x, z)) && (isField(cls) || cls === COVER.village || cls === COVER.bare)) { cls = COVER.meadow; id = 0; yard = false }
+    tex[o] = cls; tex[o + 1] = id; tex[o + 2] = id ? Math.round(((dir % Math.PI + Math.PI) % Math.PI) / Math.PI * 255) % 256 : yard ? YARD_MARK : 0
     tex[o + 3] = Math.min(255, Math.round(Math.min(wear, WEAR_REACH) / WEAR_STEP))
   }
   return { n, cell, x0, z0, tex }

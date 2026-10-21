@@ -216,7 +216,9 @@ vec3 roadPaint(vec3 c,vec2 xz){
   vec4 cv0=coverAt(xz);
   if(cv0.w>ROAD_GATE)return c;   // (most of the tile, before the warp: ROAD_NEAR and the warp's reach, src/look/spec.ts)
   #if defined(PAVING)||defined(PAVING_FAR)
-  if(cv0.x>4.5&&cv0.x<5.5&&cv0.w<0.05)c=pavePaint(c,xz);   // (the village's ground worn to nothing: the buildings')
+  // (a yard's texel: the village's class, worn to nothing, YARD_MARK in B, which coverAt reads as π: cover.ts. The rest
+  // of the village's ground skips the shapes' loop)
+  if(cv0.x>4.5&&cv0.x<5.5&&cv0.w<0.05&&cv0.z>3.0)c=pavePaint(c,xz);
   #endif
   float jn,dist,past,ot;vec4 r=roadAt(coverWarp(xz),jn,dist,past,ot);float hw=r.z,a=r.x,s=r.y;if(hw<0.2)return c;
   // the patterns laid along the road (by s) give way at a junction, where s jumps from one line to the other, to the
