@@ -88,6 +88,23 @@ art, other arms.
   yet measured: a camera framing every battalion is the stress case still to bench. The traced pan's `cpuMs` at 40 is
   still to run. Main's default here is 8.75, not the 9.55 of the earlier round (a cooler machine: the protocol's three
   rounds per arm are what compare).
+- **The stress point** (measured 2026-10-23): no allowed camera frames the whole army. Probing the widest camera
+  (rMax, betaMax) on a 5 × 5 grid of focus points, the most figures drawn is **24,012 of 33,120** at (62.5, −102.5)
+  (13,248 at the fight's middle). Three rounds there, all exit 0 (p50 / p95, ms):
+
+  | Run | Wide | Default | Close |
+  |---|---|---|---|
+  | main, still | 6.85 / 7.50 | 8.40 / 8.80 | 8.30 / 8.75 |
+  | 40 a side, still | 12.60 / 23.75 | 10.45 / 11.55 | 8.65 / 10.05 |
+  | 40 a side, pan | 12.75 / 14.15 | 10.05 / 11.50 | 9.10 / 10.10 |
+
+  24,012 far figures in view cost **+5.8 ms at wide**, with spikes (p95 23.75 still). This is the goal's hard case;
+  the bars of steps 1 and 3 are judged here as well as at the fight's middle (`benchat=62.5,-102.5`).
+- **The trace at 40** (pan, fight's middle): `cpuMs` is about the whole frame (8–10 ms a frame), the frame waits on
+  JavaScript and GL submission. The frames that place men and upload their buffers (`placed`, `tiUploads`, 12 a
+  second) run 1.4 ms slower at wide (9.48 against 8.07) and 0.6 at close; the frames that redraw the shadow map
+  (`sm`) 1.0 ms slower at wide and 0.4–0.7 at default. So step 1 (placement and uploads) and the shadow redraws
+  (step 2) are where the trace points.
 
 ## Step 1: GPU-placed soldiers
 
