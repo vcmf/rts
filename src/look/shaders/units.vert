@@ -6,8 +6,8 @@ precision highp float;attribute vec3 position;attribute vec3 normal;attribute fl
 // in steps), round his range's loop
 uniform mat4 viewProjection;uniform sampler2D uVAT;uniform float uVATStep;
 #ifdef INSTANCES
-// first step, steps in the loop, phase in steps, steps a second
-attribute vec4 aVAT;
+// a man's clip: its first step, its steps in the loop, his phase in steps
+attribute vec3 aVAT;
 #endif
 #ifdef VAT_POS
 // the far LOD and the shadow pass (batch B, ?uvat): each vertex posed at every step at load (posedVertices,
@@ -40,7 +40,7 @@ mat4 boneAt(float b,int f){int x=int(b)*4;
   return mat4(texelFetch(uVAT,ivec2(x,f),0),texelFetch(uVAT,ivec2(x+1,f),0),texelFetch(uVAT,ivec2(x+2,f),0),texelFetch(uVAT,ivec2(x+3,f),0));}
 void main(){
   #include<instancesVertex>
-  vec4 r=vec4(0.0,1.0,0.0,12.0);
+  vec3 r=vec3(0.0,1.0,0.0);
   #ifdef INSTANCES
   r=aVAT;
   #endif

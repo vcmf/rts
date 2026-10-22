@@ -592,7 +592,8 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   depth (decision 0040). A battalion's instances are written when it moves (once a 1/12 s step) or changes phase; its
   LOD by the figure's height in pixels (48, ±10 %). The pose's step is counted on the CPU (`uVATStep`, the clock's
   floor in double precision), so the figures and their shadows never disagree on a step; a battalion's bounds are
-  padded by the tallest figure (2.6 m, as tall as the far figures grow). The view's corner rays are cast once a frame
+  padded by the tallest figure (2.6 m, as tall as the far figures grow) and the farthest reach of the baked poses (as
+  wide as they grow). The view's corner rays are cast once a frame
   (`castView`) for the sun's box and the trodden mask's.
 - **Their shadows** (decision 0047; `?unitshadow=0`: none): a 2048² depth-only map (24 bits, a comparison sampler), the
   sun's box fitted to the ground in view's own heights and centred on what it holds, its near and far fitted along the
@@ -618,10 +619,10 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   switch to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here) and 1.15 tall; render only.
 - **Trodden ground** (`?trample=0`: none): a 256² mask over a box round the ground in view (64 to 1,024 m), drawn on
   the CPU (each man where he stands and up to 3.8 m behind him) when the box moves or at most every 0.25 s while men
-  move (the refit held by the wall's clock, at once when the page's clock is held: `?frozen`), about 1.1 to 1.6 ms a draw
-  at 16,560 figures (this Mac); the ground and the meadow read it in their vertex shaders (`TRAMPLE`; none outside the
-  mask's box): the grass shorter, splayed and drier, the ground toward a dusty earth in summer and a grey-brown
-  slush in winter, broken by the grain.
+  move (a view that leaves the box refits it at once; a box grown over twice the view refits by the wall's clock),
+  about 1.1 to 1.6 ms a draw at 16,560 figures (this Mac); the ground and the meadow read it in their vertex shaders
+  (`TRAMPLE`; none outside the mask's box): the grass shorter, splayed and drier, the ground toward a dusty earth in
+  summer and a grey-brown slush in winter, broken by the grain.
 - **Flags** (`?flags=0`: none): one a battalion, its uniform's flag on a 3 m staff with the colour bearer (the line's
   centre file, second rank), the cloth downwind and waving at 12 fps, never under 12 px tall (up to 5 times its size);
   one thin-instanced mesh, hidden with the figures (`show`).

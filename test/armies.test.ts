@@ -1,11 +1,12 @@
 // The demo map's armies (src/look/world/armies.ts) and their figure (data/figures/fr-line-infantry.unitdata, written by
 // tools/bake-figure.py; src/look/units-data.ts): the battalion's slots by the ruleset's drill, the script's phases in
 // order, the layout clear of the blocked ground and failing loudly where there is no room, and the baked figure whole
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { APPROACH, CYCLE, FAR_COAT_BELOW, FAR_ROLES, extents, facingAt, farPalette, farRule, layout, luminance, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
 import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
+import { RULESETS } from '../src/rulesets/index.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
 import { decodeUnits, fromHalf, posedMesh, posedVertices, shadowProxy } from '../src/look/units-data.ts'
 
@@ -49,6 +50,16 @@ describe('armies: the script', () => {
     const s = slots(drill), out = {} as ManState, p = phaseAt(drill, CYCLE - 1, MARCH, RUN)
     const since = (i: number) => manAt(drill, s, i, CYCLE - 1, p, RUN, MARCH, 0, out).since
     expect(p.phase).toBe('fire'); expect(since(g.files)).toBeGreaterThan(since(0)); expect(since(2 * g.files)).toBeGreaterThan(since(g.files))
+  })
+})
+
+describe('armies: the scenario', () => {
+  it('resolves as the page resolves it: its ruleset, unit type, figure file and every side\'s uniform', () => {
+    const era = RULESETS[ARMIES_DEMO.ruleset]; expect(era, ARMIES_DEMO.ruleset).toBeDefined()
+    const type = era.ruleset.types[ARMIES_DEMO.unitType]; expect(type, ARMIES_DEMO.unitType).toBeDefined()
+    expect(type.geometry.companies * type.geometry.files * type.geometry.ranks).toBeGreaterThan(0)
+    expect(existsSync(new URL(`../data/figures/${ARMIES_DEMO.figure}.unitdata`, import.meta.url))).toBe(true)
+    for (const id of ARMIES_DEMO.sides) expect(era.uniforms[id], id).toBeDefined()
   })
 })
 

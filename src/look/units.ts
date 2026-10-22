@@ -42,6 +42,7 @@ interface Host {
   stale: boolean[]        // per LOD: its GPU copy of the matrices is older than the matrices
   staleSet: boolean[]     // per LOD: its GPU copy of the men's clip settings is older
   cycle: number           // the cycle its settings were written in (each cycle's clips start afresh)
+  index: number           // its place in hosts (its flag's instance)
 }
 
 const SM_SIZE = 2048   // the figures' shadow map, fitted to the ground in view each frame
@@ -89,13 +90,15 @@ export class Units {
   /** the shadow map redrawn only when it would change (?ushadowrate=0: every frame): the poses step at the bake's fps,
    *  so a frame between two steps, with the sun's box and the men where they were, would draw the same map */
   lazyShadows = true
-  /** the casters at the LOD the camera sees (?ushadowlod=1), else always at the far LOD (its shadow is a few texels) */
+  /** the casters at the near LOD where the camera draws it (?ushadowlod=1), else as casterOf says (the shadow proxy
+   *  by default, main.ts) */
   casterNear = false
-  /** the receivers that read the figures' shadow once a blade at its root (the meadow's: UNIT_SHADOWS_VS, ?ushadowvs=1;
-   *  by default none, each pixel reads it) */
+  /** the receivers that read the figures' shadow once a blade at its root (UNIT_SHADOWS_VS): main.ts gives the meadow's
+   *  by default (?ushadowvs=0: none, each pixel reads it) */
   rootReceivers: ShaderMaterial[] = []
   readonly meshes: Mesh[] = []
   private farK = new Vector2()
+  private sidePad = 2   // m: a battalion's bounds beyond its men's roots (the constructor's, from the baked poses)
   /** the shadow proxy's size (the report's, the tests') */
   proxyStats = { vertices: 0, triangles: 0 }
   private flag: Mesh | null = null
@@ -150,7 +153,14 @@ export class Units {
     // LOD's shoulders, measured between 1.2 and 1.5 m up), and FAR_SCALE_Y tall
     const fm = data.mesh[data.lods[1].name]; let x0 = Infinity, x1 = -Infinity
     for (let v = 0; v < fm.positions.length / 3; v++) { const y = fm.positions[v * 3 + 1]; if (y > 1.2 && y < 1.5) { x0 = Math.min(x0, fm.positions[v * 3]); x1 = Math.max(x1, fm.positions[v * 3]) } }
-    const farScale = new Vector2(Math.min(FAR_SCALE_XZ, 0.95 * drill.fileSpacing / (x1 - x0)), FAR_SCALE_Y)
+    // (no vertex in that band, a figure of another shape: not widened)
+    const farScale = new Vector2(x1 > x0 ? Math.min(FAR_SCALE_XZ, 0.95 * drill.fileSpacing / (x1 - x0)) : 1, FAR_SCALE_Y)
+    // 1: the battalions' bounds' side pad, from the baked poses: the far LOD's farthest reach from a man's root across
+    // every step (his musket at the present), as wide as the far figures grow, a little to spare
+    const pv = posedVertices(data, data.lods[1].name)
+    let reach = 0
+    for (let i = 0; i < pv.data.length; i += 8) reach = Math.max(reach, Math.hypot(pv.data[i], pv.data[i + 2]))
+    this.sidePad = reach * farScale.x + 0.2
     for (const id of new Set(battalions.map(b => b.uniform))) {
       const u = uniforms[id]; if (!u) throw new Error(`units: no uniform ${id} (a battalion names it)`)
       // its colour for each of the bake's roles (a role the uniform does not name: a loud failure)
@@ -170,7 +180,7 @@ export class Units {
     this.depthMat = new ShaderMaterial('unitsDepth', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep'], samplers: ['uVAT'], defines: ['#define DEPTH'] })
     this.depthMat.setTexture('uVAT', vat)
     // the far LOD posed at every step (batch B, ?uvat): its materials and its shadow casters read it under VAT_POS
-    const posed = posedVertices(data, data.lods[1].name)
+    const posed = pv
     const vatp = RawTexture.CreateRGBATexture(posed.data, posed.width, posed.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
     vatp.name = 'figurePosed'
     for (const m of this.farMats.values()) m.setTexture('uVATP', vatp)
@@ -225,9 +235,9 @@ export class Units {
     })
     const rnd = mulberry(1 + this.hosts.length * 7919), jitter = new Float32Array(men * 4)   // ±3 cm, ±4°, a man's own lag: no two alike
     for (let i = 0; i < men; i++) { jitter[i * 4] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 1] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 2] = (rnd() - 0.5) * 0.14; jitter[i * 4 + 3] = rnd() * 2 - 1 }
-    const matrices = new Float32Array(men * 16), settings = new Float32Array(men * 4)
-    for (const m of lod) { m.thinInstanceSetBuffer('matrix', matrices, 16, false); m.thinInstanceSetBuffer('aVAT', settings, 4, false) }
-    this.hosts.push({ b, lod, near: false, matrices, settings, jitter, cx: b.x, cz: b.z, lo: new Vector3(), hi: new Vector3(), step: -1, phase: null, stale: [true, true, true], staleSet: [true, true, true], cycle: -1 })
+    const matrices = new Float32Array(men * 16), settings = new Float32Array(men * 3)
+    for (const m of lod) { m.thinInstanceSetBuffer('matrix', matrices, 16, false); m.thinInstanceSetBuffer('aVAT', settings, 3, false) }
+    this.hosts.push({ b, lod, near: false, matrices, settings, jitter, cx: b.x, cz: b.z, lo: new Vector3(), hi: new Vector3(), step: -1, phase: null, stale: [true, true, true], staleSet: [true, true, true], cycle: -1, index: this.hosts.length })
   }
 
   // every man's matrix and clip at the battalion's local time: his place and facing from the script, set on the ground;
@@ -249,14 +259,15 @@ export class Units {
       if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; if (z < minZ) minZ = z; if (z > maxZ) maxZ = z
       // the clip: the role's range; its phase in steps puts its first step at his start (global time)
       const r = this.data.ranges[man.role], steps = r.end - r.start, start = cycleStart + man.since
-      const ph = ((-Math.floor(start * fps)) % steps + steps) % steps, k = i * 4
-      if (settings[k] !== r.start || settings[k + 1] !== steps || settings[k + 2] !== ph) { settings[k] = r.start; settings[k + 1] = steps; settings[k + 2] = ph; settings[k + 3] = fps; changed = true }
+      const ph = ((-Math.floor(start * fps)) % steps + steps) % steps, k = i * 3
+      if (settings[k] !== r.start || settings[k + 1] !== steps || settings[k + 2] !== ph) { settings[k] = r.start; settings[k + 1] = steps; settings[k + 2] = ph; changed = true }
     }
     h.cx = (minX + maxX) / 2; h.cz = (minZ + maxZ) / 2
     // thin-instance bounds do not follow the animation: padded by a figure's height (his bayonet up, SHADOW_H, as tall as
-    // the far figures grow, FAR_SCALE_Y) and a musket's reach, a little to spare; cull() stretches the same box
+    // the far figures grow, FAR_SCALE_Y) and his reach (sidePad: from the baked poses); cull() stretches the same box
     const top = SHADOW_H * FAR_SCALE_Y + 0.2
-    h.lo.set(minX - 1.4, minY - 0.3, minZ - 1.4); h.hi.set(maxX + 1.4, maxY + top, maxZ + 1.4)
+    const pad = this.sidePad
+    h.lo.set(minX - pad, minY - 0.3, minZ - pad); h.hi.set(maxX + pad, maxY + top, maxZ + pad)
     for (const m of h.lod) m.getBoundingInfo().reConstruct(h.lo, h.hi)
     h.stale[0] = h.stale[1] = h.stale[2] = true
     this.placeFlag(h)
@@ -278,7 +289,7 @@ export class Units {
   }
   private frameBody(): void {
     const T = this.clock(), step = Math.floor(T * this.data.fps)
-    this.castView()
+    if (this.shadows || this.trampleOn) this.castView()   // (only the sun's box and the trodden mask read it)
     // the clock's step, counted here in double precision (the same floor the men's phases and the shadow map's redraws
     // use), not by the shader from a float32 time: the figures and their shadows never disagree on a step
     for (const m of this.mats.values()) m.setFloat('uVATStep', step)
@@ -536,12 +547,13 @@ export class Units {
     for (let j = 0; j < 4; j++) { x0 = Math.min(x0, q[j * 2]); x1 = Math.max(x1, q[j * 2]); z0 = Math.min(z0, q[j * 2 + 1]); z1 = Math.max(z1, q[j * 2 + 1]) }
     if (!Number.isFinite(x0 + x1 + z0 + z1)) return
     const need = Math.max(x1 - x0, z1 - z0) + 20
-    const fits = b.set && x0 > b.x0 + 5 && z0 > b.z0 + 5 && x1 < b.x0 + b.size - 5 && z1 < b.z0 + b.size - 5 && b.size < 2 * need
-    // (refit at most every TR_EVERY s of the wall's clock too, a pan's included: the shadow fix; the view's edge may
-    // wait that long. Not the page's clock: held (?frozen, the guard's renders) a view that left the box refits at once)
-    const wall = performance.now()
-    if (!fits && b.set && this.holdShare && T !== this.trAt && wall - this.trWall < TR_EVERY * 1000) return
-    if (!fits) {
+    // a view that leaves the box refits it at once (whatever the clocks: a held one, ?frozen, the guard's renders, get
+    // a current box); a box over twice the size the view needs refits at most every TR_EVERY s of the wall's clock
+    // (a pan out from a close view: the shadow fix; ?smhold=fixed, at once), the old box drawn till then
+    const contains = b.set && x0 > b.x0 + 5 && z0 > b.z0 + 5 && x1 < b.x0 + b.size - 5 && z1 < b.z0 + b.size - 5
+    const fits = contains && b.size < 2 * need, wall = performance.now()
+    const refit = !contains || (!fits && !(this.holdShare && wall - this.trWall < TR_EVERY * 1000))
+    if (refit) {
       const size = Math.min(1024, Math.max(64, 2 ** Math.ceil(Math.log2(need)))), tx = size / TR_N
       b.size = size; b.x0 = Math.floor(((x0 + x1) / 2 - size / 2) / tx) * tx; b.z0 = Math.floor(((z0 + z1) / 2 - size / 2) / tx) * tx; b.set = true
       this.trV.set(b.x0, b.z0, 1 / size, 0)
@@ -612,8 +624,9 @@ export class Units {
   // the flag at its bearer: his place, the cloth turned to fly downwind (FLAG_WIND, rad from +x toward +z)
   private placeFlag(h: Host): void {
     if (!this.flagM) return
-    const k = this.hosts.indexOf(h), o = k * 16, mo = this.bearer * 16, c = Math.cos(FLAG_WIND), s = Math.sin(FLAG_WIND), m = this.flagM
-    m.set([c, 0, s, 0, 0, 1, 0, 0, -s, 0, c, 0, h.matrices[mo + 12], h.matrices[mo + 13], h.matrices[mo + 14], 1], o)
+    const o = h.index * 16, mo = this.bearer * 16, c = Math.cos(FLAG_WIND), s = Math.sin(FLAG_WIND), m = this.flagM
+    m[o] = c; m[o + 1] = 0; m[o + 2] = s; m[o + 3] = 0; m[o + 4] = 0; m[o + 5] = 1; m[o + 6] = 0; m[o + 7] = 0
+    m[o + 8] = -s; m[o + 9] = 0; m[o + 10] = c; m[o + 11] = 0; m[o + 12] = h.matrices[mo + 12]; m[o + 13] = h.matrices[mo + 13]; m[o + 14] = h.matrices[mo + 14]; m[o + 15] = 1
     this.flagStale = true
   }
 
