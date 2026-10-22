@@ -570,8 +570,8 @@ cameras orbit that point instead of the camera's start, and the JSON records it 
 
 ### The armies (`?armies=<n>`, scripted; `docs/plans/active/armies-demo.md`)
 
-`?armies=<1..20>` puts n battalions a side on the demo map (414 men each, the ruleset's drill: 5 about 4,000
-figures, 10 about 8,000, 20 about 16,500); not on the page by default, so the goldens and the look checks never see
+`?armies=<1..40>` puts n battalions a side on the demo map (414 men each, the ruleset's drill: 5 about 4,000
+figures, 10 about 8,000, 20 about 16,500, 40 about 33,000: `docs/plans/active/armies-32k.md`); not on the page by default, so the goldens and the look checks never see
 them. WebGL2 only (decision 0046). Each switch below names the A/B it restores; the defaults are the measured best.
 The page names no era (decision 0015): the demo's scenario (`src/scenarios/armies-demo.ts`) names its ruleset, unit
 type, figure and uniforms, resolved through `src/rulesets/index.ts` (`RULESETS`: a ruleset and its uniforms by name)
@@ -633,7 +633,10 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   (110 m apart), the front row and the middle first, each with its approach behind it clear; the rest are reserves in
   column of companies at least 40 m behind the front, clear of the lines' footprints, the nearest first (5 m grid).
   Water, trees (bushes are walked through), the buildings' yards are kept clear, and it throws when a side has no room.
-  On the demo map 20 a side is 4 and 3 battalions in line, the rest in column.
+  On the demo map 20 a side is 4 and 3 battalions in line, the rest in column. When the reserves leave a side short
+  (40 a side; never at 20 or fewer on the demo map, whose layout is unchanged: a test hashes it), **close reserves**
+  fill in: more columns on a 2.5 m grid, 6 m apart men to men, taking each line's footprint as its T (its ranks' full
+  width, its approach only as wide as its column), so they may stand behind a line's flanks, never ahead of a line.
 - **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at
   their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
 - **The bench**: `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions in

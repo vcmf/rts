@@ -1,7 +1,9 @@
 // The demo map's armies (src/look/world/armies.ts) and their figure (data/figures/fr-line-infantry.unitdata, written by
 // tools/bake-figure.py; src/look/units-data.ts): the battalion's slots by the ruleset's drill, the script's phases in
 // order, the layout clear of the blocked ground and failing loudly where there is no room, and the baked figure whole
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
+import { gunzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { APPROACH, CYCLE, FAR_COAT_BELOW, FAR_ROLES, extents, facingAt, farPalette, farRule, layout, luminance, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
@@ -78,6 +80,37 @@ describe('armies: the layout', () => {
     const box = (b: typeof bs[0]) => ({ w: b.reserve ? e.columnHalf : e.halfFront, f: back(b), d: b.reserve ? e.columnDepth : APPROACH + e.columnDepth })
     for (const a of bs) for (const b of bs) if (a !== b && a.side === b.side) { const p = box(a), q = box(b); expect(Math.abs(a.x - b.x) >= p.w + q.w || p.f + p.d <= q.f || q.f + q.d <= p.f).toBe(true) }
     const [fx, fz] = facingAt(bs); expect(Math.hypot(fx, fz)).toBeLessThan(60)
+  })
+  // the demo map's blocked ground (the page's __armies.blocked sampled every 0.5 m over ±240 m, a bit a sample, row by
+  // row from (−240, −240); read conservatively: blocked when any of the four samples round a point is)
+  const bits = gunzipSync(readFileSync(new URL('./fixtures/demo-map-blocked.bin.gz', import.meta.url))), N = 961, R = 240, S = 0.5
+  const bit = (i: number, j: number) => i < 0 || j < 0 || i >= N || j >= N || ((bits[(j * N + i) >> 3] >> ((j * N + i) & 7)) & 1) === 1
+  const demo = (x: number, z: number) => { const i = Math.floor((x + R) / S), j = Math.floor((z + R) / S); return bit(i, j) || bit(i + 1, j) || bit(i, j + 1) || bit(i + 1, j + 1) }
+  it('lays out 20 a side and fewer exactly as before the close reserves (hashes of the layouts at 084d6e0)', () => {
+    const want = JSON.parse(readFileSync(new URL('./fixtures/armies-layout-20.json', import.meta.url), 'utf8')) as Record<string, string[]>
+    const masks: Record<string, (x: number, z: number) => boolean> = { open, wood: (x, z) => open(x, z) || (Math.abs(x) < 60 && Math.abs(z) < 200), demo }
+    for (const [k, b] of Object.entries(masks)) for (let n = 1; n <= 20; n++) {
+      expect(createHash('sha256').update(JSON.stringify(layout(n, drill, b, ARMIES_DEMO.sides))).digest('hex').slice(0, 16), `${k} ${n}`).toBe(want[k][n - 1])
+    }
+  })
+  it('fields 40 a side on the demo map: the close reserves behind, never ahead of a line, clear of every other box', () => {
+    const bs = layout(40, drill, demo, ARMIES_DEMO.sides), e = extents(drill)
+    for (const s of [0, 1]) expect(bs.filter(b => b.side === s).length).toBe(40)
+    const back = (b: typeof bs[0]) => Math.abs(b.z), lines = bs.filter(b => !b.reserve)
+    for (const b of bs) {
+      expect(Math.abs(b.x) + (b.reserve ? e.columnHalf : e.halfFront)).toBeLessThanOrEqual(235)
+      expect(Math.abs(b.z) + (b.reserve ? e.columnDepth : APPROACH + e.columnDepth)).toBeLessThanOrEqual(235)
+    }
+    // the men's own ground: a line's ranks (its full width) and its approach (its column's width); a column's
+    const parts = (b: typeof bs[0]) => b.reserve ? [{ w: e.columnHalf, f: back(b), d: e.columnDepth }]
+      : [{ w: e.halfFront, f: back(b), d: e.lineDepth }, { w: e.columnHalf, f: back(b), d: APPROACH + e.columnDepth }]
+    for (const a of bs) for (const b of bs) if (a !== b && a.side === b.side) for (const p of parts(a)) for (const q of parts(b)) {
+      expect(Math.abs(a.x - b.x) >= p.w + q.w || p.f + p.d <= q.f || q.f + q.d <= p.f, `${a.x},${a.z} / ${b.x},${b.z}`).toBe(true)
+    }
+    for (const r of bs.filter(b => b.reserve)) for (const l of lines) if (l.side === r.side && Math.abs(l.x - r.x) < e.halfFront + e.columnHalf) expect(back(r)).toBeGreaterThan(back(l))
+    // every man of a reserve on open ground
+    const sl = slots(drill)
+    for (const b of bs) if (b.reserve) for (const [px, pz] of sl.column) { const c = Math.cos(b.heading); expect(demo(b.x + c * px, b.z + c * pz)).toBe(false) }
   })
   it('keeps off the blocked ground', () => {
     const wood = (x: number, z: number) => open(x, z) || (Math.abs(x) < 60 && Math.abs(z) < 200)
