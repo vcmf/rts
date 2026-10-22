@@ -24,8 +24,9 @@ const ANGLE = process.env.SHOT_ANGLE || 'swiftshader'
 const RENDERER = { swiftshader: /SwiftShader/i, d3d11: /Direct3D11/, d3d9: /Direct3D9/, metal: /Metal/, gl: /OpenGL/, vulkan: /Vulkan/ }
 // software renderers that also name a backend (SwiftShader says Vulkan, WARP Direct3D11): never a GPU
 const SOFTWARE = /SwiftShader|Basic Render Driver|llvmpipe/i
-// the one restart that gives an attached browser everything this run asks for
-const RESTART = () => `tools/win-chrome.sh stop, then start -- ${[`--use-angle=${ANGLE}`, ...(process.env.SHOT_CHROME_ARGS || '').split(' ').filter(Boolean)].join(' ')}`
+const EXTRA = (process.env.SHOT_CHROME_ARGS || '').split(' ').filter(Boolean)
+// the one restart that gives an attached browser everything this run asks for (headless, as a launched run always is)
+const RESTART = `tools/win-chrome.sh stop, then start --headless -- ${[`--use-angle=${ANGLE}`, ...EXTRA].join(' ')}`
 const steps = JSON.parse(script)
 const KNOWN = new Set(['wait', 'eval', 'shot', 'tap'])
 for (const [op] of steps) if (!KNOWN.has(op)) { console.error(`unknown step "${op}"`); process.exit(2) }
@@ -72,26 +73,26 @@ process.on('SIGINT', async () => { await cleanup(); process.exit(130) })
 
 try {
   fs.mkdirSync(outDir, { recursive: true })
-  const extra = (process.env.SHOT_CHROME_ARGS || '').split(' ').filter(Boolean)
   let pageWs
   if (CDP) {
     let version
     try { version = await (await fetch(`${CDP}/json/version`)).json() } catch { throw new Error(`no browser at ${CDP} (SHOT_CDP; tools/win-chrome.sh start?)`) }
     bws = new WebSocket(version.webSocketDebuggerUrl)
     await new Promise((res, rej) => { bws.onopen = res; bws.onerror = () => rej(new Error('DevTools browser socket failed')) })
+    if (!/HeadlessChrome/.test(version['User-Agent'] ?? '')) throw new Error(`the browser at ${CDP} is not headless: a visible window can be throttled or covered (${RESTART})`)
     if (!RENDERER[ANGLE]) throw new Error(`cannot check the backend "${ANGLE}" on an attached browser (known: ${Object.keys(RENDERER).join(', ')})`)
     // what the caller asks of the browser's launch must be there: a missing vsync flag would change what is measured
     // without a word (the backend is checked on the page, below)
-    if (extra.length) {
+    if (EXTRA.length) {
       let argv
-      try { argv = (await bsend('Browser.getBrowserCommandLine')).arguments } catch (e) { throw new Error(`cannot read the browser's flags to check ${extra.join(' ')} (${e.message})`) }
-      const missing = extra.filter(f => !argv.includes(f))
-      if (missing.length) throw new Error(`the browser at ${CDP} was not started with ${missing.join(' ')} (${RESTART()})`)
+      try { argv = (await bsend('Browser.getBrowserCommandLine')).arguments } catch (e) { throw new Error(`cannot read the browser's flags to check ${EXTRA.join(' ')} (${e.message})`) }
+      const missing = EXTRA.filter(f => !argv.includes(f))
+      if (missing.length) throw new Error(`the browser at ${CDP} was not started with ${missing.join(' ')} (${RESTART})`)
     }
     // a Windows browser reads a WSL file through its UNC path (file://wsl.localhost/<distro>/…); the query and hash
     // (?frozen, ?dof: tools/look-page.mjs) stay
     if (url.startsWith('file:') && process.env.WSL_DISTRO_NAME && /Windows NT/.test(version['User-Agent'] ?? '')) {
-      const u = new URL(url), file = fileURLToPath(new URL(u.pathname, 'file:'))
+      const u = new URL(url), file = fileURLToPath(u)   // the path alone: the query and hash are put back below
       const win = pathToFileURL(execFileSync('wslpath', ['-w', file], { encoding: 'utf8' }).trim(), { windows: true })
       win.search = u.search; win.hash = u.hash; url = win.href
     }
@@ -102,7 +103,7 @@ try {
     // --remote-debugging-port=0 lets Chrome pick a free port and write it to DevToolsActivePort
     // SHOT_ANGLE: the GL backend, swiftshader (software, deterministic: the default) or the machine's own (e.g. metal)
     chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--use-angle=${ANGLE}`, ...(ANGLE === 'swiftshader' ? ['--enable-unsafe-swiftshader'] : []),
-      '--ignore-gpu-blocklist', ...extra, `--window-size=${w},${h}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' })
+      '--ignore-gpu-blocklist', ...EXTRA, `--window-size=${w},${h}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' })
     const portFile = path.join(profile, 'DevToolsActivePort')
     let port
     for (let i = 0; i < 60 && !port; i++) { await sleep(250); if (fs.existsSync(portFile)) port = fs.readFileSync(portFile, 'utf8').split('\n')[0] }
@@ -117,7 +118,9 @@ try {
   }
   ws = new WebSocket(pageWs)
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('DevTools socket failed')) })
-  let id = 0, loaded = false
+  // the load that counts is the one of the document Page.navigate commits (its loaderId): a fresh attached page's own
+  // about:blank load may arrive late
+  let id = 0, committed, loadedLoader
   const pend = {}
   // a dropped socket (Chrome crash) fails every pending call instead of hanging forever
   ws.onclose = () => { for (const k in pend) { pend[k]({ error: { message: 'DevTools socket closed (Chrome exited?)' } }); delete pend[k] } }
@@ -127,7 +130,8 @@ try {
   ws.onmessage = e => {
     const m = JSON.parse(e.data)
     if (m.id && pend[m.id]) { pend[m.id](m); delete pend[m.id] }
-    if (m.method === 'Page.loadEventFired') loaded = true
+    if (m.method === 'Page.frameNavigated' && !m.params.frame.parentId) committed = m.params.frame.loaderId
+    if (m.method === 'Page.loadEventFired') loadedLoader = committed
     if (m.method === 'Runtime.exceptionThrown') {
       pageErrors++; const text = JSON.stringify(m.params.exceptionDetails); console.log('EXC', text.slice(0, 600))
       if (FATAL_EXC.some(f => text.includes(f))) { fatal(text); return }
@@ -153,16 +157,15 @@ try {
       const e = g.getExtension('WEBGL_debug_renderer_info'); return g.getParameter(e ? e.UNMASKED_RENDERER_WEBGL : g.RENDERER) })()` })
     const renderer = r.result?.value ?? 'unknown'
     if (!RENDERER[ANGLE].test(renderer) || (ANGLE !== 'swiftshader' && SOFTWARE.test(renderer)))
-      throw new Error(`the browser at ${CDP} renders with ${renderer}, not ${ANGLE} (SHOT_ANGLE; ${RESTART()})`)
+      throw new Error(`the browser at ${CDP} renders with ${renderer}, not ${ANGLE} (SHOT_ANGLE; ${RESTART})`)
   }
   await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +h, deviceScaleFactor: 1, mobile: false })
-  // an attached browser's fresh page may report its own about:blank load after Page.enable: only the next one counts
-  loaded = false
   const nav = await send('Page.navigate', { url })
   if (nav.errorText) throw new Error(`could not open ${url}: ${nav.errorText}`)
   const LOAD = +(process.env.SHOT_LOAD_S || 60)                // seconds; a busy machine or a slow page raises it
-  for (let i = 0; i < LOAD * 4 && !loaded; i++) await sleep(250)   // the page's own script (scene build) runs before the load event
-  if (!loaded) throw new Error(`page did not finish loading in ${LOAD}s`)
+  const loaded = () => loadedLoader === nav.loaderId
+  for (let i = 0; i < LOAD * 4 && !loaded(); i++) await sleep(250)   // the page's own script (scene build) runs before the load event
+  if (!loaded()) throw new Error(`page did not finish loading in ${LOAD}s`)
   for (const [op, a, b] of steps) {
     if (op === 'wait') await sleep(a)
     else if (op === 'eval') {

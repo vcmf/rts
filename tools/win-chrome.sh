@@ -34,6 +34,7 @@ profile() { echo "$(powershell.exe -NoProfile -Command '[Environment]::GetFolder
 # the PIDs of the Chrome on exactly this profile. Get-Process has no command line in Windows PowerShell 5.1, so CIM; the
 # profile is matched as the whole --user-data-dir value, quoted or not, so another profile's name never matches
 pids() {
+  set -- "${1//\'/\'\'}"   # a ' in the path doubled, for PowerShell's single quotes
   powershell.exe -NoProfile -Command "\$p = [regex]::Escape('$1'); Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" -ErrorAction Stop |
     Where-Object { \$_.CommandLine -match ('--user-data-dir=\"?' + \$p + '\"?(\s|\$)') } | ForEach-Object { \$_.ProcessId }" | tr -d '\r'
 }
@@ -56,7 +57,7 @@ case "$cmd" in
       --enable-automation --ignore-gpu-blocklist --enable-unsafe-swiftshader --disable-backgrounding-occluded-windows \
       --disable-renderer-backgrounding --disable-background-timer-throttling $headless "${flags[@]}" about:blank \
       >/dev/null 2>&1 < /dev/null &
-    for _ in $(seq 20); do up >/dev/null && { echo "Chrome on http://127.0.0.1:$PORT"; exit 0; }; sleep 0.5; done
+    for _ in $(seq 60); do up >/dev/null && { echo "Chrome on http://127.0.0.1:$PORT"; exit 0; }; sleep 0.5; done
     echo "Chrome started but port $PORT did not open (is networkingMode=mirrored set?)" >&2; exit 1 ;;
   stop)
     need_windows; P=$(profile); running=$(pids "$P")
