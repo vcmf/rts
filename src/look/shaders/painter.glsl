@@ -103,6 +103,30 @@ float unitShadowAt(vec3 wp){
   vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,8.0*uUnitTexel.x,e.x)*smoothstep(0.0,8.0*uUnitTexel.y,e.y);
   return s*uShadowsOn*fade;}
 #endif
+#ifdef UNIT_SHADOW_MASK
+// THE SIMPLE SHADOWS (decision 0049; src/look/units.ts): past close zoom, one baked shape a man splatted every frame into
+// a top-down mask over uUnitMaskBox (its world corner and 1 / its size), read once, fading out at the box's border
+uniform sampler2D uUnitMask;uniform vec4 uUnitMaskBox;
+float unitMaskAt(vec3 wp){
+  vec2 uv=(wp.xz-uUnitMaskBox.xy)*uUnitMaskBox.z;
+  if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0)return 0.0;
+  vec2 e=min(uv,1.0-uv);
+  return texture2D(uUnitMask,uv).r*uShadowsOn*smoothstep(0.0,0.01,min(e.x,e.y));}
+#endif
+#if defined(UNIT_SHADOWS)||defined(UNIT_SHADOW_MASK)
+// the figures' shadow at a point: the map's up close, the simple shadows' beyond, cross-faded over a band of zoom
+// (uUnitFar: 0 the map alone, 1 the mask alone; each read only where it counts)
+uniform float uUnitFar;
+float unitShadowMix(vec3 wp){
+  float s=0.0;
+  #ifdef UNIT_SHADOWS
+  if(uUnitFar<1.0)s=unitShadowAt(wp)*(1.0-uUnitFar);
+  #endif
+  #ifdef UNIT_SHADOW_MASK
+  if(uUnitFar>0.0)s+=unitMaskAt(wp)*uUnitFar;
+  #endif
+  return s;}
+#endif
 // BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask, A the contact under trees (outside the
 // map: 1, no contact). groundOcc: the occlusion of the ground and what grows flat on it, contact included
 uniform sampler2D uLM;uniform mat4 uLMVP;uniform float uAO,uMist,uShafts,uBack;

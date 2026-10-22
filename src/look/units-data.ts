@@ -132,3 +132,97 @@ export function shadowProxy(d: UnitData, lod: string, minVerts = 8, minLen = 0.1
   for (let v = 0; v < n; v++) { bi[v * 4] = bones[v]; bw[v * 4] = 1 }
   return { positions: Float32Array.from(pos), normals: Float32Array.from(nor), boneIndices: bi, boneWeights: bw, indices: Uint16Array.from(idx) }
 }
+
+/** the simple shadow's shape (decision 0049): an atlas, a cell a facing (columns) and a role (rows), R8 */
+export interface ShadowShape {
+  width: number; height: number; data: Uint8Array
+  facings: number; roles: string[]
+  cellW: number; cellH: number; margin: number   // a cell's texels across and along the shadow, its empty border (texels)
+  texel: number                                  // m a texel
+  across: [number, number]; along: [number, number]   // m: what a cell holds, from the man's root (the shadow's frame)
+  dir: [number, number]                          // the shadow's direction on the ground (x, z): away from the sun
+}
+
+/** The simple shadow's shape (decision 0049, docs/plans/active/simple-soldier-shadows.md), baked at load from the figure:
+ *  a LOD posed at each step of a role's clip (up to maxSteps of them, evenly), turned to each of `facings` facings (the
+ *  figure's own turn, as units.ts writes it), its triangles projected along the sun (sun: toward it, y > 0) onto the
+ *  ground at its root and rasterised in the shadow's frame (along it, away from the sun; across it), averaged over the
+ *  steps (a marching man's legs are one soft wedge) and blurred (blur: its sigma, m). Every soldier of a figure casts
+ *  it: no era names, the roles are the bake's (decision 0015). posed: the LOD's posedVertices, if already made */
+export function shadowShape(d: UnitData, lod: string, sun: readonly [number, number, number], roles: readonly string[], { facings = 16, texel = 0.05, blur = 0.06, maxSteps = 12, posed = null as ReturnType<typeof posedVertices> | null } = {}): ShadowShape {
+  if (!(sun[1] > 0.05)) throw new Error(`shadowShape: the sun must be above the horizon (y ${sun[1]})`)
+  const m = d.mesh[lod]; if (!m) throw new Error(`shadowShape: no LOD ${lod}`)
+  const pv = posed ?? posedVertices(d, lod), nv = m.positions.length / 3, idx = m.indices
+  const l = Math.hypot(sun[0], sun[2]) || 1, A = [-sun[0] / l, -sun[2] / l], C = [-A[1], A[0]]
+  const kx = sun[0] / sun[1], kz = sun[2] / sun[1]
+  const stepsOf = (r: string) => {
+    const rg = d.ranges[r]; if (!rg) throw new Error(`shadowShape: the figure has no clips for the role ${r}`)
+    const n = rg.end - rg.start, k = Math.min(n, maxSteps)
+    return Array.from({ length: k }, (_, i) => rg.start + Math.floor(i * n / k))
+  }
+  const steps = roles.map(stepsOf)
+  // the projections: [role][facing][step] → (across, along) a vertex, and the bounds over all of them
+  const proj = (f: number, a: number, out: Float64Array) => {
+    const ca = Math.cos(a), sa = Math.sin(a)
+    for (let v = 0; v < nv; v++) {
+      const o = (f * nv * 2 + v * 2) * 4, x = pv.data[o], y = pv.data[o + 1], z = pv.data[o + 2]
+      const wx = ca * x + sa * z - kx * y, wz = -sa * x + ca * z - kz * y
+      out[v * 2] = wx * C[0] + wz * C[1]; out[v * 2 + 1] = wx * A[0] + wz * A[1]
+    }
+  }
+  const buf = new Float64Array(nv * 2)
+  let c0 = Infinity, c1 = -Infinity, a0 = Infinity, a1 = -Infinity
+  for (const ss of steps) for (const f of ss) for (let k = 0; k < facings; k++) {
+    proj(f, 2 * Math.PI * k / facings, buf)
+    for (let v = 0; v < nv; v++) { c0 = Math.min(c0, buf[v * 2]); c1 = Math.max(c1, buf[v * 2]); a0 = Math.min(a0, buf[v * 2 + 1]); a1 = Math.max(a1, buf[v * 2 + 1]) }
+  }
+  // the blur's reach to spare either way, and an empty border so the bilinear reads never cross into a neighbour
+  const pad = 3 * blur, margin = 2
+  c0 -= pad; c1 += pad; a0 -= pad; a1 += pad
+  const iw = Math.ceil((c1 - c0) / texel), ih = Math.ceil((a1 - a0) / texel), cellW = iw + 2 * margin, cellH = ih + 2 * margin
+  const W = cellW * facings, H = cellH * roles.length, out = new Uint8Array(W * H)
+  const SS = 1, sw = iw * SS, sh = ih * SS, cov = new Uint8Array(sw * sh), sp = new Float64Array(nv * 2), acc = new Float32Array(iw * ih), tmp = new Float32Array(iw * ih)
+  // the blur's kernel (separable)
+  const sg = blur / texel, R = Math.max(1, Math.ceil(3 * sg)), ker = Array.from({ length: 2 * R + 1 }, (_, i) => Math.exp(-((i - R) ** 2) / (2 * sg * sg)))
+  const ks = ker.reduce((a, b) => a + b, 0); for (let i = 0; i < ker.length; i++) ker[i] /= ks
+  roles.forEach((_, r) => {
+    for (let k = 0; k < facings; k++) {
+      acc.fill(0)
+      for (const f of steps[r]) {
+        proj(f, 2 * Math.PI * k / facings, buf); cov.fill(0)
+        // each triangle's projection, its covered sub-texels' centres by the edge functions (either winding)
+        for (let v = 0; v < nv; v++) { sp[v * 2] = (buf[v * 2] - c0) / texel * SS; sp[v * 2 + 1] = (buf[v * 2 + 1] - a0) / texel * SS }
+        for (let t = 0; t < idx.length; t += 3) {
+          const i0 = idx[t] * 2, i1 = idx[t + 1] * 2, i2 = idx[t + 2] * 2
+          const ax = sp[i0], ay = sp[i0 + 1], bx = sp[i1], by = sp[i1 + 1], cx = sp[i2], cy = sp[i2 + 1]
+          // (a convex triangle: each texel row's centre line meets its edges in one span)
+          const y0 = Math.max(0, Math.ceil(Math.min(ay, by, cy) - 0.5)), y1 = Math.min(sh - 1, Math.floor(Math.max(ay, by, cy) - 0.5))
+          for (let y = y0; y <= y1; y++) {
+            const py = y + 0.5
+            let lo = Infinity, hi = -Infinity
+            for (let e = 0; e < 3; e++) {
+              const px0 = e === 0 ? ax : e === 1 ? bx : cx, py0 = e === 0 ? ay : e === 1 ? by : cy
+              const px1 = e === 0 ? bx : e === 1 ? cx : ax, py1 = e === 0 ? by : e === 1 ? cy : ay
+              if ((py0 <= py && py1 >= py) || (py1 <= py && py0 >= py)) {
+                const x = py1 === py0 ? Math.min(px0, px1) : px0 + (px1 - px0) * (py - py0) / (py1 - py0)
+                const x2 = py1 === py0 ? Math.max(px0, px1) : x
+                lo = Math.min(lo, x); hi = Math.max(hi, x2)
+              }
+            }
+            const x0 = Math.max(0, Math.ceil(lo - 0.5)), x1 = Math.min(sw - 1, Math.floor(hi - 0.5))
+            for (let x = x0; x <= x1; x++) cov[y * sw + x] = 1
+          }
+        }
+        for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) if (cov[y * sw + x]) acc[Math.floor(y / SS) * iw + Math.floor(x / SS)] += 1 / (SS * SS)
+      }
+      for (let i = 0; i < acc.length; i++) acc[i] /= steps[r].length
+      // blurred across, then along
+      for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) { let s = 0; for (let j = -R; j <= R; j++) { const xx = x + j; if (xx >= 0 && xx < iw) s += acc[y * iw + xx] * ker[j + R] } tmp[y * iw + x] = s }
+      for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) {
+        let s = 0; for (let j = -R; j <= R; j++) { const yy = y + j; if (yy >= 0 && yy < ih) s += tmp[yy * iw + x] * ker[j + R] }
+        out[(r * cellH + margin + y) * W + k * cellW + margin + x] = Math.round(255 * Math.min(1, s))
+      }
+    }
+  })
+  return { width: W, height: H, data: out, facings, roles: [...roles], cellW, cellH, margin, texel, across: [c0, c0 + iw * texel], along: [a0, a0 + ih * texel], dir: [A[0], A[1]] }
+}

@@ -18,16 +18,28 @@ uniform sampler2D uTrample;uniform vec4 uTrampleBox;varying float vTrample;
 #ifdef UNIT_SHADOWS_VS
 // the figures' cast shadow (decision 0047) read once a blade, at its root on the ground, for the whole blade: the
 // fragment's own read (painter.glsl, unitShadowAt) is two comparisons and the grain a pixel over many layers of blades.
-// One bilinear comparison (the depth map's comparison sampler) and the border fade, no jitter (its edge is the blade's)
+// One bilinear comparison (the depth map's comparison sampler) and the border fade, no jitter (its edge is the blade's).
+// Past close zoom the simple shadows' mask (decision 0049, UNIT_SHADOW_MASK), cross-faded by uUnitFar as the ground's
 uniform highp sampler2DShadow uUnitSM;
-uniform mat4 uUnitVP;uniform vec2 uUnitTexel;uniform float uUnitBias;uniform float uShadowsOn;
+uniform mat4 uUnitVP;uniform vec2 uUnitTexel;uniform float uUnitBias;uniform float uShadowsOn,uUnitFar;
+#ifdef UNIT_SHADOW_MASK
+uniform sampler2D uUnitMask;uniform vec4 uUnitMaskBox;
+#endif
 varying float vUSh;
 float unitShadowRoot(vec3 wp){
-  vec4 lp=uUnitVP*vec4(wp,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
-  if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;
-  float d=q.z*0.5+0.5-uUnitBias,s=4.0-4.0*texture(uUnitSM,vec3(uv,d));
-  vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,8.0*uUnitTexel.x,e.x)*smoothstep(0.0,8.0*uUnitTexel.y,e.y);
-  return s/4.0*uShadowsOn*fade;}
+  float s=0.0;
+  if(uUnitFar<1.0){
+    vec4 lp=uUnitVP*vec4(wp,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
+    if(uv.x>=0.0&&uv.y>=0.0&&uv.x<=1.0&&uv.y<=1.0&&q.z<=1.0){
+      float d=q.z*0.5+0.5-uUnitBias;
+      vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,8.0*uUnitTexel.x,e.x)*smoothstep(0.0,8.0*uUnitTexel.y,e.y);
+      s=(1.0-texture(uUnitSM,vec3(uv,d)))*fade*(1.0-uUnitFar);}}
+  #ifdef UNIT_SHADOW_MASK
+  if(uUnitFar>0.0){
+    vec2 uv=(wp.xz-uUnitMaskBox.xy)*uUnitMaskBox.z;
+    if(uv.x>=0.0&&uv.y>=0.0&&uv.x<=1.0&&uv.y<=1.0){vec2 e=min(uv,1.0-uv);s+=textureLod(uUnitMask,uv,0.0).r*smoothstep(0.0,0.01,min(e.x,e.y))*uUnitFar;}}
+  #endif
+  return s*uShadowsOn;}
 #endif
 // the meadow map at a point: one bilinear read (half floats filter), its growing area shrunk a texel on the CPU so
 // the blend never crosses a rule (src/look/meadow.ts)

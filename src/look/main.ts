@@ -307,6 +307,13 @@ if (smHold !== null && smHold !== 'fixed') throw new Error(`?smhold must be fixe
 if (shadowLod !== null && shadowLod !== 'far') throw new Error(`?shadowlod must be far, not ${shadowLod}`)
 // batch C: ?farscale=0, the far figures at their own size
 const farScale = bit('farscale'), trample = bit('trample'), flags = bit('flags')   // ?trample=0: no trodden ground; ?flags=0: no colours
+// the simple shadows (decision 0049, docs/plans/active/simple-soldier-shadows.md): ?ushadowfar=map, the map at every zoom
+// (the A/B; else simple: the map up close, a baked shape a man beyond); ?ushadowswitch=<r0>,<r1>, the cross-fade's band
+// (m from the focus); ?smoothmove=0, the figures' places at the 12 fps steps (else every frame; the poses stay stepped)
+const uShadowFar = params.get('ushadowfar'), uShadowSwitch = params.get('ushadowswitch'), smoothMove = bit('smoothmove')
+if (uShadowFar !== null && uShadowFar !== 'map' && uShadowFar !== 'simple') throw new Error(`?ushadowfar must be map or simple, not ${uShadowFar}`)
+const shadowBand = uShadowSwitch === null ? null : uShadowSwitch.split(',').map(Number)
+if (shadowBand && !(shadowBand.length === 2 && shadowBand.every(Number.isFinite) && shadowBand[0] >= 0 && shadowBand[1] > shadowBand[0])) throw new Error(`?ushadowswitch must be <r0>,<r1> m with r0 < r1, not ${uShadowSwitch}`)
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 20)) throw new Error(`?armies must be 1 to 20 battalions a side (the demo map holds 20), not ${armiesParam}`)
 if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '1') throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
 let units: Units | null = null, armiesFocus: [number, number] | null = null   // (the fight's middle: the bench's focus)
@@ -334,11 +341,13 @@ if (armiesParam !== null) {
   units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides), era.uniforms, () => S.t)
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.tightCull = uCull ?? true
   units.holdShare = smHold !== 'fixed'; units.proxyCasters = shadowLod !== 'far'
+  units.simpleFar = uShadowFar !== 'map'; if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
   if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)
   units.setFarScale(farScale ?? true); units.setTrample(trample ?? true); units.setFlags(flags ?? true)
   units.setFarRule(farPal)   // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
+  units.setSmooth(smoothMove ?? true)   // (on: measured free, docs/plans/active/simple-soldier-shadows.md; the owner's call open)
   armiesFocus = facingAt(units.battalions)
   Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
 }
