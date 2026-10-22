@@ -4,7 +4,7 @@
 # in %USERPROFILE%\.wslconfig), so the DevTools port and the dev server share localhost; the port listens on
 # 127.0.0.1 only. The page tools attach with SHOT_CDP=http://127.0.0.1:9222 (tools/shot.mjs), the chrome-devtools MCP
 # with `--browserUrl http://127.0.0.1:9222` (AGENTS.md, Commands; decision 0047).
-# Usage: tools/win-chrome.sh [start|stop|status] [--headless] [-- <Chrome flags>]   (PORT=9222 by default)
+# Usage: tools/win-chrome.sh [start|stop|status] [--headless] [-- <Chrome flags>]   (PORT=9222, WIN_CHROME by default)
 # Chrome renders on the GPU through Direct3D 11 by default. tools/shot.mjs checks the backend a run asks for against
 # the renderer the browser reports, and SwiftShader is its default (the goldens' and checks'): those want
 # `start -- --use-angle=swiftshader`; SHOT_ANGLE=d3d11 runs on the GPU as started. Flags a run asks for (SHOT_CHROME_ARGS)
@@ -12,7 +12,7 @@
 # --disable-frame-rate-limit` and `--gpu d3d11`. Flags change only with a stop and a start.
 set -euo pipefail
 PORT=${PORT:-9222}
-CHROME="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
+CHROME=${WIN_CHROME:-"/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"}   # WIN_CHROME: another install
 usage() { echo "usage: tools/win-chrome.sh [start|stop|status] [--headless] [-- <Chrome flags>]" >&2; exit 2; }
 
 cmd=start headless= flags=()

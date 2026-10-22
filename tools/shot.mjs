@@ -22,6 +22,10 @@ let url = /^[a-z]+:\/\//.test(target) ? target : pathToFileURL(path.resolve(targ
 const ANGLE = process.env.SHOT_ANGLE || 'swiftshader'
 // how each backend names itself in the WebGL renderer string (ANGLE (<vendor>, <device> <backend>…))
 const RENDERER = { swiftshader: /SwiftShader/i, d3d11: /Direct3D11/, d3d9: /Direct3D9/, metal: /Metal/, gl: /OpenGL/, vulkan: /Vulkan/ }
+// software renderers that also name a backend (SwiftShader says Vulkan, WARP Direct3D11): never a GPU
+const SOFTWARE = /SwiftShader|Basic Render Driver|llvmpipe/i
+// the one restart that gives an attached browser everything this run asks for
+const RESTART = () => `tools/win-chrome.sh stop, then start -- ${[`--use-angle=${ANGLE}`, ...(process.env.SHOT_CHROME_ARGS || '').split(' ').filter(Boolean)].join(' ')}`
 const steps = JSON.parse(script)
 const KNOWN = new Set(['wait', 'eval', 'shot', 'tap'])
 for (const [op] of steps) if (!KNOWN.has(op)) { console.error(`unknown step "${op}"`); process.exit(2) }
@@ -62,7 +66,7 @@ async function doCleanup() {
     chrome.kill()
     await Promise.race([exited, sleep(5000)])
   }
-  try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }) } catch (e) { console.warn('shot.mjs: could not remove profile', e.message) }
+  if (profile) try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }) } catch (e) { console.warn('shot.mjs: could not remove profile', e.message) }
 }
 process.on('SIGINT', async () => { await cleanup(); process.exit(130) })
 
@@ -82,12 +86,14 @@ try {
       let argv
       try { argv = (await bsend('Browser.getBrowserCommandLine')).arguments } catch (e) { throw new Error(`cannot read the browser's flags to check ${extra.join(' ')} (${e.message})`) }
       const missing = extra.filter(f => !argv.includes(f))
-      if (missing.length) throw new Error(`the browser at ${CDP} was not started with ${missing.join(' ')} (tools/win-chrome.sh stop, then start -- ${extra.join(' ')})`)
+      if (missing.length) throw new Error(`the browser at ${CDP} was not started with ${missing.join(' ')} (${RESTART()})`)
     }
-    // a Windows browser reads a WSL file through its UNC path (file://wsl.localhost/<distro>/…)
+    // a Windows browser reads a WSL file through its UNC path (file://wsl.localhost/<distro>/…); the query and hash
+    // (?frozen, ?dof: tools/look-page.mjs) stay
     if (url.startsWith('file:') && process.env.WSL_DISTRO_NAME && /Windows NT/.test(version['User-Agent'] ?? '')) {
-      const win = execFileSync('wslpath', ['-w', fileURLToPath(url)], { encoding: 'utf8' }).trim()
-      url = pathToFileURL(win, { windows: true }).href
+      const u = new URL(url), file = fileURLToPath(new URL(u.pathname, 'file:'))
+      const win = pathToFileURL(execFileSync('wslpath', ['-w', file], { encoding: 'utf8' }).trim(), { windows: true })
+      win.search = u.search; win.hash = u.hash; url = win.href
     }
     context = (await bsend('Target.createBrowserContext', { disposeOnDetach: true })).browserContextId
     const { targetId } = await bsend('Target.createTarget', { url: 'about:blank', browserContextId: context })
@@ -146,10 +152,14 @@ try {
     const r = await send('Runtime.evaluate', { returnByValue: true, expression: `(() => { const g = document.createElement('canvas').getContext('webgl2'); if (!g) return 'no WebGL2'
       const e = g.getExtension('WEBGL_debug_renderer_info'); return g.getParameter(e ? e.UNMASKED_RENDERER_WEBGL : g.RENDERER) })()` })
     const renderer = r.result?.value ?? 'unknown'
-    if (!RENDERER[ANGLE].test(renderer)) throw new Error(`the browser at ${CDP} renders with ${renderer}, not ${ANGLE} (SHOT_ANGLE; tools/win-chrome.sh stop, then start -- --use-angle=${ANGLE})`)
+    if (!RENDERER[ANGLE].test(renderer) || (ANGLE !== 'swiftshader' && SOFTWARE.test(renderer)))
+      throw new Error(`the browser at ${CDP} renders with ${renderer}, not ${ANGLE} (SHOT_ANGLE; ${RESTART()})`)
   }
   await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +h, deviceScaleFactor: 1, mobile: false })
-  await send('Page.navigate', { url })
+  // an attached browser's fresh page may report its own about:blank load after Page.enable: only the next one counts
+  loaded = false
+  const nav = await send('Page.navigate', { url })
+  if (nav.errorText) throw new Error(`could not open ${url}: ${nav.errorText}`)
   const LOAD = +(process.env.SHOT_LOAD_S || 60)                // seconds; a busy machine or a slow page raises it
   for (let i = 0; i < LOAD * 4 && !loaded; i++) await sleep(250)   // the page's own script (scene build) runs before the load event
   if (!loaded) throw new Error(`page did not finish loading in ${LOAD}s`)
