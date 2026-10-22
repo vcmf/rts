@@ -295,8 +295,7 @@ meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat])   // the d
 const armiesParam = params.get('armies'), unitShadowParam = params.get('unitshadow')
 // the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every
 // frame (else only when it would change); ?ushadowlod=1 casts from the LOD the view draws (else the far LOD always);
-// ?ushadowvs=1: the meadow reads it once a blade, at its root (else at every pixel: the default until the owner judges
-// the blade-sized edges)
+// ?ushadowvs=0: the meadow reads it at every pixel (else once a blade, at its root: the owner's choice, 2026-10-22)
 const bit = (k: string) => { const v = params.get(k); if (v !== null && v !== '0' && v !== '1') throw new Error(`?${k} must be 0 or 1, not ${v}`); return v === null ? null : v === '1' }
 const uShadowRate = bit('ushadowrate'), uShadowLod = bit('ushadowlod'), uShadowVs = bit('ushadowvs'), farPal = bit('farpal')
 // batch B: ?ushadowq=0, batch A's shadow (the box over the tile's heights, the hard taps)
@@ -325,7 +324,7 @@ if (armiesParam !== null) {
   // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
   units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides), UNIFORMS, () => S.t)
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.fineShadows = uShadowQ ?? true; units.depthCompare = uDepth ?? true; units.tightCull = uCull ?? true
-  if (uShadowVs ?? false) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
+  if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)
   units.setFarRule(farPal)   // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
