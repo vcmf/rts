@@ -106,7 +106,9 @@ void main(){
     #endif
   }
   #ifdef TRAMPLE
-  float trod=smoothstep(0.1,0.7,texture2D(uTrample,(root-uTrampleBox.xy)*uTrampleBox.z).r);
+  // (outside the box: none, not its clamped edge smeared outward)
+  vec2 tu=(root-uTrampleBox.xy)*uTrampleBox.z;
+  float trod=tu.x>=0.0&&tu.y>=0.0&&tu.x<=1.0&&tu.y<=1.0?smoothstep(0.1,0.7,texture2D(uTrample,tu).r):0.0;
   hgt*=1.0-0.8*trod;vTrample=trod;
   #endif
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
@@ -116,7 +118,8 @@ void main(){
   // axis as it rises (the grass clump fans out), and barely any lean
   if(crop)p.xz*=CROP_WIDE/(1.0+CROP_FAN*aV);
   #ifdef TRAMPLE
-  p.xz*=1.0+1.2*trod*aV;   // (pressed: the trodden blades splay out flat)
+  // (pressed: the trodden blades splay out flat)
+  p.xz*=1.0+1.2*trod*aV;
   #endif   // the grass clump's spread grows about 1 + CROP_FAN aV up its blades (measured): undone, the stalks parallel, CROP_WIDE times the root's spread
   #ifdef GRASS_FLOW
   // combed (docs/plans/done/grass-flow.md): the clump leans with the flow, bending more toward its tips (the

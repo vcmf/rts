@@ -99,6 +99,7 @@ export class Units {
   /** the shadow proxy's size (the report's, the tests') */
   proxyStats = { vertices: 0, triangles: 0 }
   private flag: Mesh | null = null
+  private flagsOn = false; private shown = true
   private flagK = new Vector2()   // (its own: a material keeps the vector it is given)
   private flagMat: ShaderMaterial | null = null
   private flagM: Float32Array | null = null
@@ -112,7 +113,9 @@ export class Units {
   private readonly trBox = { x0: 0, z0: 0, size: 64, set: false }
   private readonly trV = new Vector4()
   private trAt = -1   // the clock when the mask was last drawn
-  private quad = new Float64Array(8)
+  private trWall = -Infinity   // the wall's clock (ms) when its box was last fitted
+  private quad = new Float64Array(8)   // castView: the corner rays' ground points at the focus's height (x, z)
+  private rays = new Float64Array(24)  // and the rays (origin, direction)
   /** the held sun box's slack in proportion to it (?smhold=fixed: batch B's, none) */
   holdShare = true
   /** the casters: the shadow proxy (shadowProxy, src/look/units-data.ts; ?shadowlod=far: the far LOD) */
@@ -152,26 +155,26 @@ export class Units {
       const u = uniforms[id]; if (!u) throw new Error(`units: no uniform ${id} (a battalion names it)`)
       // its colour for each of the bake's roles (a role the uniform does not name: a loud failure)
       const pal = data.palette.map(r => { const hex = u.colours[r]; if (!hex) throw new Error(`units: the uniform ${id} has no colour for the role ${r}`); return Color3.FromHexString(hex) })
-      const m = mats.make(`units_${id}`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uMask', 'uCoatRole'], samplers: ['uVAT'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
+      const m = mats.make(`units_${id}`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATStep', 'uPal', 'uMask', 'uCoatRole'], samplers: ['uVAT'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
       m.setTexture('uVAT', vat); m.setColor3Array('uPal', pal); m.setFloat('uMask', -1); m.setFloat('uCoatRole', data.palette.indexOf('coat'))
       this.mats.set(id, m)
       // the far LOD's: its far palette and its lift crossfaded in below the LOD switch under its far rule (FAR, setFarRule;
       // units.vert, units.frag), its vertices posed (VAT_POS, setPosed)
-      const f = mats.make(`units_${id}_far`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole'], samplers: ['uVAT', 'uVATP'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
+      const f = mats.make(`units_${id}_far`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATStep', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole'], samplers: ['uVAT', 'uVATP'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
       const far = farPalette(u.colours)
       f.setTexture('uVAT', vat); f.setColor3Array('uPal', pal); f.setColor3Array('uPalFar', data.palette.map(r => Color3.FromHexString(far[r])))
       f.setFloat('uMask', -1); f.setFloat('uCoatRole', data.palette.indexOf('coat')); f.setVector2('uFarScale', farScale)
       this.farMats.set(id, f)
     }
     // the shadow pass: the same skinning, depth only, from an orthographic camera along the sun
-    this.depthMat = new ShaderMaterial('unitsDepth', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATTime'], samplers: ['uVAT'], defines: ['#define DEPTH'] })
+    this.depthMat = new ShaderMaterial('unitsDepth', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep'], samplers: ['uVAT'], defines: ['#define DEPTH'] })
     this.depthMat.setTexture('uVAT', vat)
     // the far LOD posed at every step (batch B, ?uvat): its materials and its shadow casters read it under VAT_POS
     const posed = posedVertices(data, data.lods[1].name)
     const vatp = RawTexture.CreateRGBATexture(posed.data, posed.width, posed.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
     vatp.name = 'figurePosed'
     for (const m of this.farMats.values()) m.setTexture('uVATP', vatp)
-    this.depthVatMat = new ShaderMaterial('unitsDepthPosed', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATTime'], samplers: ['uVAT', 'uVATP'], defines: ['#define DEPTH', '#define VAT_POS'] })
+    this.depthVatMat = new ShaderMaterial('unitsDepthPosed', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep'], samplers: ['uVAT', 'uVATP'], defines: ['#define DEPTH', '#define VAT_POS'] })
     this.depthVatMat.setTexture('uVAT', vat); this.depthVatMat.setTexture('uVATP', vatp)
     this.sun = new FreeCamera('unitSun', SUN.scale(500), scene); this.sun.mode = Camera.ORTHOGRAPHIC_CAMERA; this.sun.minZ = 1; this.sun.maxZ = 1200
     this.shadowRT = this.makeRT()
@@ -195,7 +198,7 @@ export class Units {
     const px = shadowProxy(data, data.lods[1].name), pp = posedMesh(data, px), pn = px.positions.length / 3
     const vatx = RawTexture.CreateRGBATexture(pp.data, pp.width, pp.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
     vatx.name = 'figureShadowPosed'
-    this.depthProxyMat = new ShaderMaterial('unitsDepthProxy', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATTime'], samplers: ['uVAT', 'uVATP'], defines: ['#define DEPTH', '#define VAT_POS'] })
+    this.depthProxyMat = new ShaderMaterial('unitsDepthProxy', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep'], samplers: ['uVAT', 'uVATP'], defines: ['#define DEPTH', '#define VAT_POS'] })
     this.depthProxyMat.setTexture('uVAT', vat); this.depthProxyMat.setTexture('uVATP', vatx); this.depthProxyMat.backFaceCulling = false
     const pm = new Mesh('figure_shadow', scene)
     pm.setVerticesData('position', px.positions, false, 3); pm.setVerticesData('normal', px.normals, false, 3)
@@ -250,13 +253,19 @@ export class Units {
       if (settings[k] !== r.start || settings[k + 1] !== steps || settings[k + 2] !== ph) { settings[k] = r.start; settings[k + 1] = steps; settings[k + 2] = ph; settings[k + 3] = fps; changed = true }
     }
     h.cx = (minX + maxX) / 2; h.cz = (minZ + maxZ) / 2
-    // thin-instance bounds do not follow the animation: padded by a figure's height and a musket's reach
-    h.lo.set(minX - 1.2, minY - 0.3, minZ - 1.2); h.hi.set(maxX + 1.2, maxY + 2.4, maxZ + 1.2)
+    // thin-instance bounds do not follow the animation: padded by a figure's height (his bayonet up, SHADOW_H, as tall as
+    // the far figures grow, FAR_SCALE_Y) and a musket's reach, a little to spare; cull() stretches the same box
+    const top = SHADOW_H * FAR_SCALE_Y + 0.2
+    h.lo.set(minX - 1.4, minY - 0.3, minZ - 1.4); h.hi.set(maxX + 1.4, maxY + top, maxZ + 1.4)
     for (const m of h.lod) m.getBoundingInfo().reConstruct(h.lo, h.hi)
     h.stale[0] = h.stale[1] = h.stale[2] = true
     this.placeFlag(h)
     if (changed) h.staleSet[0] = h.staleSet[1] = h.staleSet[2] = true
   }
+
+  // the mesh a battalion casts its shadow with (its index in h.lod): the near LOD where drawn near if casterNear
+  // (?ushadowlod=1), else the shadow proxy (proxyCasters), else the far LOD (?shadowlod=far)
+  private casterOf(h: Host): number { return this.casterNear && h.near ? 0 : this.proxyCasters ? 2 : 1 }
 
   // a thin-instance buffer sent to the GPU (n floats), counted for the bench's trace
   private upload(m: Mesh, kind: string, n: number): void {
@@ -269,9 +278,12 @@ export class Units {
   }
   private frameBody(): void {
     const T = this.clock(), step = Math.floor(T * this.data.fps)
-    for (const m of this.mats.values()) m.setFloat('uVATTime', T)
-    for (const m of this.farMats.values()) m.setFloat('uVATTime', T)
-    this.depthMat.setFloat('uVATTime', T); this.depthVatMat.setFloat('uVATTime', T); this.depthProxyMat.setFloat('uVATTime', T)
+    this.castView()
+    // the clock's step, counted here in double precision (the same floor the men's phases and the shadow map's redraws
+    // use), not by the shader from a float32 time: the figures and their shadows never disagree on a step
+    for (const m of this.mats.values()) m.setFloat('uVATStep', step)
+    for (const m of this.farMats.values()) m.setFloat('uVATStep', step)
+    this.depthMat.setFloat('uVATStep', step); this.depthVatMat.setFloat('uVATStep', step); this.depthProxyMat.setFloat('uVATStep', step)
     const cam = this.camera, engine = this.scene.getEngine()
     // pixels per metre at unit distance, from the projection itself
     const pxPerM = cam.getProjectionMatrix().m[5] * engine.getRenderHeight() / 2, camPos = cam.globalPosition
@@ -293,7 +305,7 @@ export class Units {
       if (near !== h.near && this.casterNear) moved = true
       h.near = near; h.lod[0].isVisible = near; h.lod[1].isVisible = !near
       // the LOD drawn, and the far LOD when it casts for a battalion drawn near; the hidden one is updated when drawn again
-      const kc = this.casterNear && near ? 0 : this.proxyCasters ? 2 : 1   // the caster's mesh
+      const kc = this.casterOf(h)
       for (let k = 0; k < 3; k++) {
         if (k !== (near ? 0 : 1) && !(this.shadows && k === kc)) continue
         if (h.stale[k]) { this.upload(h.lod[k], 'matrix', h.matrices.length); h.stale[k] = false }
@@ -303,7 +315,7 @@ export class Units {
     if (this.trampleOn) this.trample(T, anyMoved)
     if (this.flag?.isEnabled()) {
       this.flagMat?.setFloat('uFlagT', T); this.flagMat?.setVector2('uFlagK', this.flagK.set(pxPerM, FLAG_MIN_PX))
-      if (this.flagStale) { this.upload(this.flag, 'matrix', this.flagM?.length ?? 0); this.flag.thinInstanceRefreshBoundingInfo(); this.flagStale = false; tr(TR.flag) }
+      if (this.flagStale) { this.upload(this.flag, 'matrix', this.flagM?.length ?? 0); this.flagStale = false; tr(TR.flag) }
     }
     if (!this.shadows) return
     const refit = this.fitSun()
@@ -342,17 +354,14 @@ export class Units {
   // it is at most SM_COARSE times the size the view needs, so a pan draws no new map until it leaves it. Returns whether
   // the map's view or casters changed
   private fitSun(): boolean {
-    const cam = this.camera, k = this.scratch, inv = k.inv, g = this.viewGround()
-    cam.getTransformationMatrix().invertToRef(inv)
+    const cam = this.camera, k = this.scratch, g = this.viewGround(), R = this.rays
     let n = 0
     k.pts[n++].copyFrom(cam.target)
     for (let j = 0; j < 4; j++) {
-      const x = CORNERS[j * 2], y = CORNERS[j * 2 + 1]
-      Vector3.TransformCoordinatesFromFloatsToRef(x, y, 0, inv, k.a); Vector3.TransformCoordinatesFromFloatsToRef(x, y, 1, inv, k.b)
-      k.b.subtractToRef(k.a, k.d).normalize()
+      const o = j * 6
       for (let e = 0; e < 2; e++) {
-        const gy = e ? g.hi : g.lo, r = k.d.y < -1e-3 ? Math.min((gy - k.a.y) / k.d.y, SM_REACH) : SM_REACH
-        k.a.addToRef(k.d.scaleToRef(r, k.v), k.pts[n++])
+        const gy = e ? g.hi : g.lo, r = R[o + 4] < -1e-3 ? Math.min((gy - R[o + 1]) / R[o + 4], SM_REACH) : SM_REACH
+        k.pts[n++].set(R[o] + R[o + 3] * r, R[o + 1] + R[o + 4] * r, R[o + 2] + R[o + 5] * r)
       }
     }
     k.c.setAll(0); for (let i = 0; i < n; i++) k.c.addInPlace(k.pts[i]); k.c.scaleInPlace(1 / n)
@@ -404,17 +413,24 @@ export class Units {
     return this.cull() || changed
   }
 
-  // the ground's range of heights in view: sampled on a 5 x 5 grid over where the corner rays meet the ground at the
-  // focus's height, a metre to spare (the casters' own height is padded in fitSun)
-  private viewGround(): { lo: number; hi: number } {
-    const cam = this.camera, k = this.scratch, inv = k.inv, y0 = groundAt(cam.target.x, cam.target.z), q = this.quad
+  // The view's corner rays (origin and direction, rays) and where they meet the ground at the focus's height (quad):
+  // once a frame, shared by the sun's box (fitSun, viewGround) and the trodden mask's (trample)
+  private castView(): void {
+    const cam = this.camera, k = this.scratch, inv = k.inv, y0 = groundAt(cam.target.x, cam.target.z), R = this.rays, q = this.quad
     cam.getTransformationMatrix().invertToRef(inv)
     for (let j = 0; j < 4; j++) {
       Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 0, inv, k.a); Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 1, inv, k.b)
       k.b.subtractToRef(k.a, k.d).normalize()
-      const r = k.d.y < -1e-3 ? Math.min((y0 - k.a.y) / k.d.y, SM_REACH) : SM_REACH
+      const o = j * 6, r = k.d.y < -1e-3 ? Math.min((y0 - k.a.y) / k.d.y, SM_REACH) : SM_REACH
+      R[o] = k.a.x; R[o + 1] = k.a.y; R[o + 2] = k.a.z; R[o + 3] = k.d.x; R[o + 4] = k.d.y; R[o + 5] = k.d.z
       q[j * 2] = k.a.x + k.d.x * r; q[j * 2 + 1] = k.a.z + k.d.z * r
     }
+  }
+
+  // the ground's range of heights in view: sampled on a 5 x 5 grid over where the corner rays meet the ground at the
+  // focus's height (castView's quad), a metre to spare (the casters' own height is padded in fitSun)
+  private viewGround(): { lo: number; hi: number } {
+    const q = this.quad
     let lo = Infinity, hi = -Infinity
     for (let u = 0; u <= 4; u++) for (let v = 0; v <= 4; v++) {
       const a = u / 4, b = v / 4, w0 = (1 - a) * (1 - b), w1 = a * (1 - b), w2 = a * b, w3 = (1 - a) * b
@@ -444,7 +460,7 @@ export class Units {
     if (this.tightCull) Frustum.GetPlanesToRef(this.camera.getTransformationMatrix(), this.camPlanes)
     const sx = -SUN.x / SUN.y * SHADOW_H, sz = -SUN.z / SUN.y * SHADOW_H   // the shadow's reach from a figure's top
     for (const h of this.hosts) {
-      const l = h.lod[this.casterNear && h.near ? 0 : this.proxyCasters ? 2 : 1]
+      const l = h.lod[this.casterOf(h)]
       if (!h.lod[0].isEnabled() || !l.isInFrustum(this.planes)) continue
       if (this.tightCull) {
         const lo = h.lo, hi = h.hi, x0 = Math.min(lo.x, lo.x + sx), x1 = Math.max(hi.x, hi.x + sx), z0 = Math.min(lo.z, lo.z + sz), z1 = Math.max(hi.z, hi.z + sz), y0 = lo.y - SHADOW_H
@@ -515,25 +531,22 @@ export class Units {
   // each man splats where he stands and, fainter, up to five steps behind him (the ground just behind the ranks),
   // normalised by how many men a texel holds in a formation, then blurred once (no texel edge on the ground)
   private trample(T: number, moved: boolean): void {
-    const cam = this.camera, k = this.scratch, inv = k.inv, y0 = groundAt(cam.target.x, cam.target.z), b = this.trBox
-    cam.getTransformationMatrix().invertToRef(inv)
+    const b = this.trBox, q = this.quad
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity
-    for (let j = 0; j < 4; j++) {
-      Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 0, inv, k.a); Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 1, inv, k.b)
-      k.b.subtractToRef(k.a, k.d).normalize()
-      const r = k.d.y < -1e-3 ? Math.min((y0 - k.a.y) / k.d.y, SM_REACH) : SM_REACH, x = k.a.x + k.d.x * r, z = k.a.z + k.d.z * r
-      x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z)
-    }
+    for (let j = 0; j < 4; j++) { x0 = Math.min(x0, q[j * 2]); x1 = Math.max(x1, q[j * 2]); z0 = Math.min(z0, q[j * 2 + 1]); z1 = Math.max(z1, q[j * 2 + 1]) }
     if (!Number.isFinite(x0 + x1 + z0 + z1)) return
     const need = Math.max(x1 - x0, z1 - z0) + 20
     const fits = b.set && x0 > b.x0 + 5 && z0 > b.z0 + 5 && x1 < b.x0 + b.size - 5 && z1 < b.z0 + b.size - 5 && b.size < 2 * need
-    // (refit at most every TR_EVERY s too, a pan's included: the shadow fix; the view's edge may wait that long)
-    if (!fits && b.set && this.trAt >= 0 && T - this.trAt < TR_EVERY && this.holdShare) return
+    // (refit at most every TR_EVERY s of the wall's clock too, a pan's included: the shadow fix; the view's edge may
+    // wait that long. Not the page's clock: held (?frozen, the guard's renders) a view that left the box refits at once)
+    const wall = performance.now()
+    if (!fits && b.set && this.holdShare && T !== this.trAt && wall - this.trWall < TR_EVERY * 1000) return
     if (!fits) {
       const size = Math.min(1024, Math.max(64, 2 ** Math.ceil(Math.log2(need)))), tx = size / TR_N
       b.size = size; b.x0 = Math.floor(((x0 + x1) / 2 - size / 2) / tx) * tx; b.z0 = Math.floor(((z0 + z1) / 2 - size / 2) / tx) * tx; b.set = true
       this.trV.set(b.x0, b.z0, 1 / size, 0)
       for (const m of this.receivers) m.setVector4('uTrampleBox', this.trV)
+      this.trWall = wall
     } else if (!(moved && T - this.trAt >= TR_EVERY) && this.trAt >= 0) return
     this.trAt = T
     const t0 = trNow()
@@ -565,8 +578,9 @@ export class Units {
   /** the battalions' colours (?flags=0: none): one flag a battalion, in its uniform's flag colours, carried by the man
    *  at the line's centre in its second rank (the colour party), its cloth flying downwind; a thin instance each */
   setFlags(on: boolean): void {
+    this.flagsOn = on
     if (on && !this.flag) this.makeFlags()
-    this.flag?.setEnabled(on)
+    this.flag?.setEnabled(on && this.shown)
   }
   private makeFlags(): void {
     const W = FLAG_W, H = FLAG_H, NX = 8, NY = 4, pos: number[] = [], part: number[] = [], idx: number[] = []
@@ -606,6 +620,7 @@ export class Units {
   /** the figures shown or not (the guard's ground alone), their shadows with them */
   show(on: boolean): void {
     for (const h of this.hosts) for (const m of h.lod) m.setEnabled(on)
+    this.shown = on; this.flag?.setEnabled(on && this.flagsOn)   // (the flags with them)
     this.smStep = -1
   }
 

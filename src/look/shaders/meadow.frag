@@ -4,10 +4,12 @@ precision highp float;varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCro
 varying vec3 vFlow;
 #endif
 #ifdef TRAMPLE
-varying float vTrample;   // (the trodden grass, meadow.vert: a drier, dustier colour)
+// (the trodden grass, meadow.vert: a drier, dustier colour)
+varying float vTrample;
 #endif
 #ifdef UNIT_SHADOWS_VS
-varying float vUSh;   // (the figures' shadow at the blade's root, meadow.vert)
+// (the figures' shadow at the blade's root, meadow.vert)
+varying float vUSh;
 #endif
 #include<painter>
 uniform vec3 uTipTint;uniform float uTipWarm;   // the warm autumn's tip colour and tint weight, once a frame (src/look/main.ts)

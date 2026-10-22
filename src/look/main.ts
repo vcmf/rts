@@ -34,7 +34,8 @@ import { buildTerrain, splitGround } from './terrain.ts'
 import { buildBuildings } from './buildings.ts'
 import { buildBuildingLight } from './building-light.ts'
 import type { Units } from './units.ts'
-import FIGURE_URL from '../../data/figures/fr-line-infantry.unitdata?url'
+// the figures' unit data by file (data/figures/<figure>.unitdata): a scenario names its figure, the page finds it here
+const FIGURES = import.meta.glob<string>('../../data/figures/*.unitdata', { query: '?url', import: 'default', eager: true })
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
@@ -311,9 +312,13 @@ if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '
 let units: Units | null = null, armiesFocus: [number, number] | null = null   // (the fight's middle: the bench's focus)
 if (armiesParam !== null) {
   if (mats.webgl1) throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
-  const [{ Units: UnitsC }, { decodeUnits }, { layout, facingAt }, { napoleonic }, { UNIFORMS }, { ARMIES_DEMO }] = await Promise.all([import('./units.ts'), import('./units-data.ts'), import('./world/armies.ts'), import('../rulesets/napoleonic.ts'), import('../rulesets/napoleonic-uniforms.ts'), import('../scenarios/armies-demo.ts')])
-  const g = napoleonic.types.infantry.geometry, drill = { companies: g.companies, files: g.files, ranks: g.ranks, fileSpacing: g.fileSpacing, rankSpacing: g.rankSpacing }
-  const r = await fetch(FIGURE_URL); if (!r.ok) throw new Error(`unit data: ${r.status} ${r.statusText} for ${FIGURE_URL}`)
+  const [{ Units: UnitsC }, { decodeUnits }, { layout, facingAt }, { RULESETS }, { ARMIES_DEMO }] = await Promise.all([import('./units.ts'), import('./units-data.ts'), import('./world/armies.ts'), import('../rulesets/index.ts'), import('../scenarios/armies-demo.ts')])
+  // the scenario's era, unit type and figure, resolved by name (decision 0015: the page names none of them)
+  const era = RULESETS[ARMIES_DEMO.ruleset]; if (!era) throw new Error(`armies: no ruleset ${ARMIES_DEMO.ruleset} (src/rulesets/index.ts)`)
+  const type = era.ruleset.types[ARMIES_DEMO.unitType]; if (!type) throw new Error(`armies: the ruleset ${ARMIES_DEMO.ruleset} has no unit type ${ARMIES_DEMO.unitType}`)
+  const figureUrl = FIGURES[`../../data/figures/${ARMIES_DEMO.figure}.unitdata`]; if (!figureUrl) throw new Error(`armies: no figure ${ARMIES_DEMO.figure} in data/figures/`)
+  const g = type.geometry, drill = { companies: g.companies, files: g.files, ranks: g.ranks, fileSpacing: g.fileSpacing, rankSpacing: g.rankSpacing }
+  const r = await fetch(figureUrl); if (!r.ok) throw new Error(`unit data: ${r.status} ${r.statusText} for ${figureUrl}`)
   // the ground a battalion keeps clear of: the river and its banks, the trees (a 10 m grid of them), the buildings'
   // yards, the tile's last 30 m
   const CELL = 10, trees = new Map<number, number[]>(), key = (i: number, j: number) => i * 4096 + j
@@ -326,7 +331,7 @@ if (armiesParam !== null) {
   }
   const blocked = (x: number, z: number) => { if (Math.max(Math.abs(x), Math.abs(z)) > D.spec.tile / 2 - 30) return true; const q = riverQuery(x, z); return (q !== null && q.dist < 20) || onPaving(x, z, 3) || nearTree(x, z) }
   // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
-  units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides), UNIFORMS, () => S.t)
+  units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides), era.uniforms, () => S.t)
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.tightCull = uCull ?? true
   units.holdShare = smHold !== 'fixed'; units.proxyCasters = shadowLod !== 'far'
   if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []

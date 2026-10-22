@@ -7,6 +7,8 @@ uniform sampler2D uTrample;uniform vec4 uTrampleBox;varying float vTrample;
 #endif
 void main(){vec4 w=world*vec4(position,1.0);vW=w.xyz;vN=normalize(mat3(world)*normal);vRiver=aRiver;
   #ifdef TRAMPLE
-  vTrample=texture2D(uTrample,(w.xz-uTrampleBox.xy)*uTrampleBox.z).r;
+  // (outside the box: none, not its clamped edge smeared outward)
+  vec2 tu=(w.xz-uTrampleBox.xy)*uTrampleBox.z;
+  vTrample=tu.x>=0.0&&tu.y>=0.0&&tu.x<=1.0&&tu.y<=1.0?texture2D(uTrample,tu).r:0.0;
   #endif
   gl_Position=viewProjection*w;}

@@ -2,10 +2,12 @@ precision highp float;attribute vec3 position;attribute vec3 normal;attribute fl
 #include<instancesDeclaration>
 // the figures' skinning from the baked animation (src/look/units.ts, tools/bake-figure.py): one row per 1/12 s step,
 // four texels per bone (a skinning matrix, column by column), four influences per vertex. A man's step: his range's
-// first row, plus the clock's steps since his role's clip began, round his range's loop
-uniform mat4 viewProjection;uniform sampler2D uVAT;uniform float uVATTime;
+// first row, plus the clock's steps since his role's clip began (uVATStep: the clock's step, from the CPU; his phase
+// in steps), round his range's loop
+uniform mat4 viewProjection;uniform sampler2D uVAT;uniform float uVATStep;
 #ifdef INSTANCES
-attribute vec4 aVAT;   // first step, steps in the loop, phase in steps, steps a second
+// first step, steps in the loop, phase in steps, steps a second
+attribute vec4 aVAT;
 #endif
 #ifdef VAT_POS
 // the far LOD and the shadow pass (batch B, ?uvat): each vertex posed at every step at load (posedVertices,
@@ -42,7 +44,7 @@ void main(){
   #ifdef INSTANCES
   r=aVAT;
   #endif
-  int f=int(r.x+mod(floor(uVATTime*r.w+r.z),r.y));
+  int f=int(r.x+mod(uVATStep+r.z,r.y));
   #ifdef VAT_POS
   int vi=int(aVid+0.5)*2;vec3 lp=texelFetch(uVATP,ivec2(vi,f),0).xyz,ln=texelFetch(uVATP,ivec2(vi+1,f),0).xyz;
   #else
