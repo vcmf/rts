@@ -603,6 +603,12 @@ them. WebGL2 only (decision 0046).
   float colour and manual taps), the sun's near and far fitted to the box along the sun. A battalion casts only if its
   bounds stretched away from the sun by the longest shadow cross the view (`?ucull=0`: all in the box). The merged
   mass under a battalion is the low sun's: 3.6 m shadows over ranks 0.85 m apart.
+- **The shadow fix** (2026-10-22, after the bench's trace found the widest zoom's slow frames on the map's draws):
+  the held box carries a slack of 10 % of the view's half-size (6 m at least), so a pan draws no new map until it
+  leaves it (`?smhold=fixed`: batch B's box, which a pan refit nearly every frame; the trodden mask's refit is held to
+  0.25 s with it); the casters are a shadow proxy built at load from the far LOD (`shadowProxy`,
+  `src/look/units-data.ts`: two crossed quads along each part a bone carries, 112 vertices, 56 triangles, posed as the
+  far LOD), drawn in the map alone (`?shadowlod=far`: the far LOD casts); a map with no casters is drawn once and kept.
 - **The far LOD posed** (`?uvat=0`: skinned): at load every far-LOD vertex is skinned at every baked step
   (`posedVertices`, `src/look/units-data.ts`), a place and a normal in two float texels; the far LOD and the shadow
   casters read them (`VAT_POS`), the near LOD stays skinned.

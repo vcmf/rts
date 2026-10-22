@@ -97,6 +97,11 @@ A hypothesis (the lazy shadow map drawing every caster in one frame at a pose st
 the cause found before a fix. `?benchtrace=1` (above) records what each frame did, so the slow frames can be matched
 to their events.
 
+The coordinator's traced Metal run found it: at the widest zoom the frames with the map's draw are 11.5 % of all and
+47.7 % of the slowest tenth, 12.5 against 9.15 ms; panning drew it on every frame (the hold never held). Fixed by
+the slack in proportion to the view (`?smhold`), the 56-triangle shadow proxy (`?shadowlod`) and no draw of an empty
+map.
+
 ## Open questions
 
 - The cost on the laptop at 16,000 men, with and without the figures' shadows (the bench, the owner's run).

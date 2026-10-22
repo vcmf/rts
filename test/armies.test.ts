@@ -7,7 +7,7 @@ import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { APPROACH, CYCLE, FAR_COAT_BELOW, FAR_ROLES, extents, facingAt, farPalette, farRule, layout, luminance, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
 import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
-import { decodeUnits, fromHalf, posedVertices } from '../src/look/units-data.ts'
+import { decodeUnits, fromHalf, posedMesh, posedVertices, shadowProxy } from '../src/look/units-data.ts'
 
 const g = napoleonic.types.infantry.geometry
 const drill: Drill = { companies: g.companies, files: g.files, ranks: g.ranks, fileSpacing: g.fileSpacing, rankSpacing: g.rankSpacing }
@@ -118,6 +118,16 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
       expect(lo).toBeGreaterThan(-0.1); expect(hi - lo).toBeGreaterThan(1.6); expect(hi - lo).toBeLessThan(2.8)   // m: a man, his bayonet up
     }
     expect([fromHalf(0x3c00), fromHalf(0xc000), fromHalf(0x0001)]).toEqual([1, -2, 2 ** -24])
+  })
+  it('has a shadow proxy of crossed quads, each corner wholly on one bone, a figure tall when posed', () => {
+    const p = shadowProxy(d, d.lods[1].name), n = p.positions.length / 3
+    expect(p.indices.length / 3).toBeLessThanOrEqual(64); expect(p.indices.length / 3).toBeGreaterThanOrEqual(40)
+    expect(n * 6 / 4).toBe(p.indices.length)   // four corners, two triangles a quad
+    for (let v = 0; v < n; v++) { expect(p.boneWeights[v * 4]).toBe(1); expect(p.boneIndices[v * 4]).toBeLessThan(d.bones.length) }
+    const q = posedMesh(d, p), f = d.ranges.halt.start
+    let lo = Infinity, hi = -Infinity
+    for (let v = 0; v < n; v++) { const y = q.data[(f * n * 2 + v * 2) * 4 + 1]; lo = Math.min(lo, y); hi = Math.max(hi, y) }
+    expect(hi - lo).toBeGreaterThan(1.4); expect(lo).toBeLessThan(0.3)
   })
   it('has two LODs, the far one lighter', () => {
     expect(d.lods.length).toBe(2); expect(d.lods[1].triangles).toBeLessThan(d.lods[0].triangles)
