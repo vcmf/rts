@@ -1,7 +1,8 @@
 // The bench (docs/plans/active/l2-detail.md, L2a; the track plan's "Measuring on the min-spec laptop"): the look page
 // with ?bench runs fixed cameras, records frame times, GPU time per pass, draw calls, triangles and texture memory,
 // and offers the result as JSON. The owner runs it on the laptop; tools/bench-look.mjs runs it headless here.
-//   ?bench            the default run; ?hold=<s> seconds measured per camera and arm (default 3)
+//   ?bench            the default run; ?hold=<s> seconds measured per camera and arm (default 3); ?benchpan=1 each
+//                     camera panning as it is measured (below)
 // GPU time per pass is only as good as the browser's timer queries: passesOverFrame (the passes' medians over the
 // frame's) far above 1 means the backend inflates them (ANGLE on Metal does), and only the frame time stands.
 // Arms are variants of the page measured in the same session, interleaved A B B A per camera so that heat and clock
@@ -65,6 +66,12 @@ function rendererName(engine: AbstractEngine): string {
 const passesParam = new URLSearchParams(location.search).get('passes')
 if (passesParam !== null && passesParam !== '0') throw new Error(`?passes must be 0, not ${passesParam}`)
 const WHOLE_ONLY = passesParam === '0'
+// ?benchpan=1: each camera pans while it is measured, its focus sliding along the view's right and back, PAN_A m
+// either side at PAN_V m/s (a player scrolling: the figures' shadow map is drawn again as the view moves,
+// docs/plans/active/armies-demo.md batch B), from the warm-up frames through the hold
+const panParam = new URLSearchParams(location.search).get('benchpan')
+if (panParam !== null && panParam !== '0' && panParam !== '1') throw new Error(`?benchpan must be 0 or 1, not ${panParam}`)
+const PAN = panParam === '1', PAN_A = 20, PAN_V = 8
 export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: BenchPasses, arms: Arm[], holdS: number, focus: { x: number; z: number } = { x: START.x, z: START.z }): Promise<object> {
   const engine = scene.getEngine(), gl = (engine as unknown as { _gl: WebGL2RenderingContext })._gl
   const timer = new GpuTimer(gl), inst = new SceneInstrumentation(scene)
@@ -131,6 +138,13 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
     await seconds(2)   // shaders compiled, first frames out of the way
     for (const cam of cams) {
       camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; camera.target.set(focus.x, D.spec.camera.focusY, focus.z)
+      // (panning: a triangle wave along the view's right, the arc camera's alpha + π/2 on the ground)
+      const ra = cam.alpha + Math.PI / 2, rx = Math.cos(ra), rz = Math.sin(ra), pt0 = performance.now()
+      const pan = PAN ? scene.onBeforeRenderObservable.add(() => {
+        const u = ((performance.now() - pt0) / 1000 * PAN_V / (4 * PAN_A)) % 1, o = PAN_A * (u < 0.25 ? 4 * u : u < 0.75 ? 2 - 4 * u : 4 * u - 4)
+        camera.target.set(focus.x + rx * o, D.spec.camera.focusY, focus.z + rz * o)
+      }) : null
+      if (pan) undo.push(() => scene.onBeforeRenderObservable.remove(pan))
       for (const arm of [...arms, ...[...arms].reverse()]) {
         await arm.apply(); await scene.whenReadyAsync()
         for (let tries = 0; ; tries++) {
@@ -151,16 +165,17 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
         // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
         const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
         const passesFit = gpuMs.frame && !WHOLE_ONLY ? +(sum / gpuMs.frame.p50).toFixed(2) : null
-        runs.push({ cam: cam.name, arm: arm.name, size: sceneSize(), frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
+        runs.push({ cam: cam.name + (PAN ? '+pan' : ''), arm: arm.name, size: sceneSize(), frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
       }
+      if (pan) scene.onBeforeRenderObservable.remove(pan)
     }
   } finally { timing = false; seg(null); for (const u of undo) u(); inst.dispose() }
   const r = engine.getRenderingCanvas()
   return {
-    tool: 'look-bench', version: 6,   // 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
+    tool: 'look-bench', version: 7,   // 7: pan (?benchpan=1: each camera pans as it is measured); 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
     build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
     canvas: { w: canvas0[0], h: canvas0[1], cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
-    gpuTimer: timer.available, wholeOnly: WHOLE_ONLY, holdS, focus, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
+    gpuTimer: timer.available, wholeOnly: WHOLE_ONLY, holdS, focus, pan: PAN ? { metres: PAN_A, mPerS: PAN_V } : null, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
     note: WHOLE_ONLY ? 'whole frames only (?passes=0): the pass fields are null by design' : timer.available ? 'GPU times from EXT_disjoint_timer_query_webgl2' : 'no GPU timer on this browser: GPU fields are null', runs,
   }
 }
