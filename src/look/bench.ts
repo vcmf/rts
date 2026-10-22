@@ -14,7 +14,10 @@ import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstr
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import type { PostProcess } from '@babylonjs/core/PostProcesses/postProcess.js'
 import type { Scene } from '@babylonjs/core/scene.js'
+import { EffectRenderer, type EffectWrapper } from '@babylonjs/core/Materials/effectRenderer.js'
+import { RenderTargetTexture } from '@babylonjs/core/Materials/Textures/renderTargetTexture.js'
 import { GpuTimer } from './gputimer.ts'
+import { TRACE, TRACE_FIELDS, tr } from './trace.ts'
 import { START } from './post.ts'
 import { D } from './spec.ts'
 
@@ -26,6 +29,47 @@ interface Cam { name: string; alpha: number; beta: number; radius: number }
 export interface RunStats {
   cam: string; arm: string; size: [number, number]; frames: number   // size: the frame drawn (the render scale: Auto lowers it at the widest zoom)
   frameMs: Stat; gpuMs: Record<string, Stat | null>; passesOverFrame: number | null; drawCalls: number; triangles: number; segments: Record<string, number>
+  trace?: RunTrace
+}
+/** a run's frames (?benchtrace=1): each frame's interval (ms), each trace field's value, the render targets drawn
+ *  (a bit each, traceRT's order); lost: frames past TRACE_MAX, not kept */
+interface RunTrace { ms: number[]; fields: Record<string, number[]>; rt: number[]; lost: number }
+function traceOf(ms: Float64Array, c: Float64Array, rt: Int32Array, n: number, lost: number): RunTrace {
+  const r2 = (v: number) => Math.round(v * 100) / 100, fields: Record<string, number[]> = {}
+  TRACE_FIELDS.forEach((f, i) => { fields[f] = Array.from({ length: n }, (_, k) => r2(c[k * NF + i])) })
+  return { ms: Array.from(ms.subarray(0, n), r2), fields, rt: Array.from(rt.subarray(0, n)), lost }
+}
+/** the enrichment table: by zoom (the cameras' close, default, wide) and arm, the frames over their own run's 90th
+ *  percentile ("slow"); for each event (a trace field over 0, a render target drawn), the share of slow frames with
+ *  it against the share of all frames with it, their ratio (over 1: the event comes with the slow frames), and the
+ *  mean interval of the frames with it and without */
+function traceSummary(runs: RunStats[], rtNames: string[]): object[] {
+  const out: object[] = [], groups = new Map<string, RunStats[]>()
+  for (const r of runs) { if (!r.trace) continue; const k = `${r.cam.split('.')[0]}|${r.arm}`; groups.set(k, [...(groups.get(k) ?? []), r]) }
+  const events: [string, (t: RunTrace, k: number) => boolean][] = [
+    ...TRACE_FIELDS.filter(f => f !== 'activeMeshes' && f !== 'draws' && !f.endsWith('Ms') && f !== 'tiKB' && f !== 'smTris' && f !== 'smCasters')
+      .map(f => [f, (t: RunTrace, k: number) => t.fields[f][k] > 0] as [string, (t: RunTrace, k: number) => boolean]),
+    ...rtNames.map((n, b) => [`rt:${n}`, (t: RunTrace, k: number) => (t.rt[k] & (1 << b)) !== 0] as [string, (t: RunTrace, k: number) => boolean]),
+  ]
+  for (const [g, rs] of groups) {
+    let all = 0, slow = 0
+    const cnt = new Map<string, { all: number; slow: number; msWith: number; msWithout: number }>()
+    for (const [e] of events) cnt.set(e, { all: 0, slow: 0, msWith: 0, msWithout: 0 })
+    for (const r of rs) {
+      const t = r.trace!, p90 = q(t.ms, 0.9)
+      for (let k = 0; k < t.ms.length; k++) {
+        const isSlow = t.ms[k] > p90; all++; if (isSlow) slow++
+        for (const [e, has] of events) { const c = cnt.get(e)!; if (has(t, k)) { c.all++; c.msWith += t.ms[k]; if (isSlow) c.slow++ } else c.msWithout += t.ms[k] }
+      }
+    }
+    const [zoom, arm] = g.split('|')
+    for (const [e, c] of cnt) {
+      if (!c.all) continue
+      const sa = c.all / all, ss = slow ? c.slow / slow : 0
+      out.push({ zoom, arm, event: e, frames: all, slowFrames: slow, shareAll: +sa.toFixed(3), shareSlow: +ss.toFixed(3), enrichment: +(ss / sa).toFixed(2), msWith: +(c.msWith / c.all).toFixed(2), msWithout: all > c.all ? +(c.msWithout / (all - c.all)).toFixed(2) : null })
+    }
+  }
+  return out
 }
 interface Stat { p50: number; p95: number; max: number; n: number }
 
@@ -72,6 +116,13 @@ const WHOLE_ONLY = passesParam === '0'
 const panParam = new URLSearchParams(location.search).get('benchpan')
 if (panParam !== null && panParam !== '0' && panParam !== '1') throw new Error(`?benchpan must be 0 or 1, not ${panParam}`)
 const PAN = panParam === '1', PAN_A = 20, PAN_V = 8
+// ?benchtrace=1: a record of every measured frame (its interval and the trace's counters, src/look/trace.ts: what was
+// drawn, written, uploaded, compiled in it) in each run, and a summary over the runs: for the frames over their run's
+// 90th percentile, the share with each event against its share of all frames (traceSummary). Off: nothing installed
+const traceParam = new URLSearchParams(location.search).get('benchtrace')
+if (traceParam !== null && traceParam !== '0' && traceParam !== '1') throw new Error(`?benchtrace must be 0 or 1, not ${traceParam}`)
+const TRACING = traceParam === '1', TRACE_MAX = 4096   // frames recorded a run at most (the rest counted, not kept)
+const NF = TRACE_FIELDS.length
 export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: BenchPasses, arms: Arm[], holdS: number, focus: { x: number; z: number } = { x: START.x, z: START.z }): Promise<object> {
   const engine = scene.getEngine(), gl = (engine as unknown as { _gl: WebGL2RenderingContext })._gl
   const timer = new GpuTimer(gl), inst = new SceneInstrumentation(scene)
@@ -84,6 +135,47 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   // open until the next draw of another pass: GPU work between draws (a clear, a target switch) is charged to it
   let open: string | null = null
   const undo: (() => void)[] = []   // every observer the bench adds, removed when it ends
+  // the trace: hooks on what Babylon does in a frame (the render targets by name, the shader compiles, the
+  // thin-instance uploads), the records preallocated a run (no allocation a frame: the hooks pass their arguments on
+  // as they are, each render target's name gets its bit once)
+  const rtNames: string[] = [], rtBit = new Map<string, number>()
+  const recMs = new Float64Array(TRACE_MAX), recC = new Float64Array(TRACE_MAX * NF), recRt = new Int32Array(TRACE_MAX)
+  let recN = 0, recLost = 0
+  const AM = TRACE_FIELDS.indexOf('activeMeshes'), DR = TRACE_FIELDS.indexOf('draws')
+  if (TRACING) {
+    TRACE.on = true; undo.push(() => { TRACE.on = false })
+    const proto = RenderTargetTexture.prototype, render = proto.render
+    const mark = (name: string) => {
+      let bit = rtBit.get(name)
+      if (bit === undefined && rtNames.length < 31) { bit = rtNames.length; rtBit.set(name, bit); rtNames.push(name) }
+      if (bit !== undefined) TRACE.rtMask |= 1 << bit
+    }
+    proto.render = function (this: RenderTargetTexture, a?: boolean, b?: boolean) {
+      const t = performance.now(); mark(this.name); render.call(this, a, b); tr('rt'); tr('rtMs', performance.now() - t)
+    }
+    undo.push(() => { proto.render = render })
+    // the bakes drawn by an effect renderer, not a render target (the macro colour's near bake, combNear; the buildings'
+    // light): marked 'fx:<the effect's name>' at each draw (the name its last applyEffectWrapper set; its time is the
+    // draw's alone)
+    const ep = EffectRenderer.prototype, apply = ep.applyEffectWrapper, draw = ep.draw, fxName = new Map<EffectWrapper, string>()
+    let fx = ''
+    ep.applyEffectWrapper = function (this: EffectRenderer, w: EffectWrapper, d?: boolean, st?: boolean) {
+      let n = fxName.get(w); if (n === undefined) { n = `fx:${w.name}`; fxName.set(w, n) }
+      fx = n; apply.call(this, w, d, st)
+    }
+    ep.draw = function (this: EffectRenderer) { const t = performance.now(); mark(fx); draw.call(this); tr('rt'); tr('rtMs', performance.now() - t) }
+    undo.push(() => { ep.applyEffectWrapper = apply; ep.draw = draw })
+    const eng = engine as unknown as { _createShaderProgram: (...a: unknown[]) => unknown }, compile = eng._createShaderProgram
+    eng._createShaderProgram = function (this: unknown, a: unknown, b: unknown, c: unknown, d: unknown, e: unknown) { tr('compiles'); return compile.call(this, a, b, c, d, e) }
+    undo.push(() => { eng._createShaderProgram = compile })
+    const mp = Mesh.prototype as unknown as { thinInstanceBufferUpdated: (kind: string) => void }, upd = mp.thinInstanceBufferUpdated
+    mp.thinInstanceBufferUpdated = function (this: Mesh & { _userThinInstanceBuffersStorage?: { strides: Record<string, number> } }, kind: string) {
+      const t = performance.now(); upd.call(this, kind)
+      const stride = kind === 'matrix' ? 16 : this._userThinInstanceBuffersStorage?.strides[kind] ?? 0
+      tr('tiUploads'); tr('tiKB', this.thinInstanceCount * stride * 4 / 1024); tr('tiMs', performance.now() - t)
+    }
+    undo.push(() => { mp.thinInstanceBufferUpdated = upd })
+  }
   const seg = (label: string | null) => {
     if (open === label) return
     if (open) timer.end(open)
@@ -111,7 +203,15 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   // alternate frames: the passes on one, the whole frame on the next (queries cannot nest). Frame times come from the
   // whole-frame frames only: the pass frames carry more queries, which cost time on some backends
   const begin = engine.onBeginFrameObservable.add(() => {
-    const t = performance.now(); if (timing && lastT && !passFrame) frameMs.push(t - lastT); lastT = t   // passFrame: the frame that just ended
+    const t = performance.now(); if (timing && lastT && !passFrame) frameMs.push(t - lastT)   // passFrame: the frame that just ended
+    // (the trace: the counters of the frame that just ended, recorded with its interval, then cleared)
+    if (TRACING) {
+      if (timing && lastT && !passFrame) {
+        if (recN < TRACE_MAX) { recMs[recN] = t - lastT; recC.set(TRACE.c, recN * NF); recRt[recN] = TRACE.rtMask; recN++ } else recLost++
+      }
+      TRACE.c.fill(0); TRACE.rtMask = 0
+    }
+    lastT = t
     timer.poll(); timer.newFrame(); frameNo++; hookPosts()
     passFrame = timer.available && frameNo % 2 === 0 && !WHOLE_ONLY   // without a timer every frame is a whole frame
     if (timing && !passFrame) timer.begin('frame')
@@ -121,6 +221,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
     seg(null)
     if (timing && !passFrame) timer.end('frame')
     if (timing) { draws.push(inst.drawCallsCounter.current); tris.push(scene.getActiveIndices() / 3) }
+    if (TRACING) { TRACE.c[AM] = scene.getActiveMeshes().length; TRACE.c[DR] = inst.drawCallsCounter.current }
   })
   undo.push(() => { engine.onBeginFrameObservable.remove(begin); engine.onEndFrameObservable.remove(end) })
   // a hidden tab stops rendering: a run across it would hold a frame of several seconds, so that run is measured again
@@ -149,7 +250,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
         await arm.apply(); await scene.whenReadyAsync()
         for (let tries = 0; ; tries++) {
           await frames(10)
-          timer.reset(); frameMs.length = draws.length = tris.length = 0; timed.clear(); lastT = 0; passFrames = 0; hidden = document.hidden
+          timer.reset(); frameMs.length = draws.length = tris.length = 0; recN = recLost = 0; timed.clear(); lastT = 0; passFrames = 0; hidden = document.hidden
           // the hold, and at least MIN_FRAMES frames (a software renderer takes seconds a frame)
           const t0 = performance.now(); timing = true
           while (performance.now() - t0 < holdS * 1000 || frameMs.length < MIN_FRAMES) await frames(1)
@@ -165,16 +266,18 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
         // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
         const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
         const passesFit = gpuMs.frame && !WHOLE_ONLY ? +(sum / gpuMs.frame.p50).toFixed(2) : null
-        runs.push({ cam: cam.name + (PAN ? '+pan' : ''), arm: arm.name, size: sceneSize(), frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
+        const trace = TRACING ? traceOf(recMs, recC, recRt, recN, recLost) : undefined
+        runs.push({ trace, cam: cam.name + (PAN ? '+pan' : ''), arm: arm.name, size: sceneSize(), frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
       }
       if (pan) scene.onBeforeRenderObservable.remove(pan)
     }
   } finally { timing = false; seg(null); for (const u of undo) u(); inst.dispose() }
   const r = engine.getRenderingCanvas()
   return {
-    tool: 'look-bench', version: 7,   // 7: pan (?benchpan=1: each camera pans as it is measured); 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
+    tool: 'look-bench', version: 8,   // 8: trace (?benchtrace=1: each run's frames, traceSummary); 7: pan (?benchpan=1: each camera pans as it is measured); 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
     build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
     canvas: { w: canvas0[0], h: canvas0[1], cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
+    ...(TRACING ? { traceFields: TRACE_FIELDS, traceRT: rtNames, traceSummary: traceSummary(runs, rtNames) } : {}),
     gpuTimer: timer.available, wholeOnly: WHOLE_ONLY, holdS, focus, pan: PAN ? { metres: PAN_A, mPerS: PAN_V } : null, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
     note: WHOLE_ONLY ? 'whole frames only (?passes=0): the pass fields are null by design' : timer.available ? 'GPU times from EXT_disjoint_timer_query_webgl2' : 'no GPU timer on this browser: GPU fields are null', runs,
   }

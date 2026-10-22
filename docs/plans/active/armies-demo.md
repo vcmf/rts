@@ -90,6 +90,13 @@ focus draw near (to about 57 m from the camera); at 720p it is 45 px there and t
 the closest zoom: at 720p the near LOD all but never draws. Proposed: the switch by the frame's height (48 × height /
 1080 px), so it falls at the same distance at every resolution.
 
+## The wide p95 (2026-10-22)
+
+The coordinator's bench of batch C (20 a side): the widest zoom's p95 13.9 ms against main's 8.3, its median +2.4 ms.
+A hypothesis (the lazy shadow map drawing every caster in one frame at a pose step) is not confirmed; the owner wants
+the cause found before a fix. `?benchtrace=1` (above) records what each frame did, so the slow frames can be matched
+to their events.
+
 ## Open questions
 
 - The cost on the laptop at 16,000 men, with and without the figures' shadows (the bench, the owner's run).

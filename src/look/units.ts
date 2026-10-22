@@ -27,6 +27,7 @@ import FLAG_FS from './shaders/flag.frag?raw'
 import DEPTH_FS from './shaders/depth.frag?raw'
 import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
+import { TRACE, tr, trNow } from './trace.ts'
 import { posedVertices, type UnitData } from './units-data.ts'
 import { CYCLE, farPalette, farRule, manAt, phaseAt, slots, type Battalion, type Drill, type ManState, type Phase, type Uniform } from './world/armies.ts'
 
@@ -240,6 +241,9 @@ export class Units {
   }
 
   private frame(): void {
+    const t0 = trNow(); this.frameBody(); if (TRACE.on) tr('unitsMs', performance.now() - t0)
+  }
+  private frameBody(): void {
     const T = this.clock(), step = Math.floor(T * this.data.fps)
     for (const m of this.mats.values()) m.setFloat('uVATTime', T)
     for (const m of this.farMats.values()) m.setFloat('uVATTime', T)
@@ -256,7 +260,10 @@ export class Units {
       const p = h.b.reserve ? RESERVE.phase : phaseAt(this.drill, local, this.speed.march, this.speed.run).phase
       // a battalion's men are written when they move (a marching or deploying one once a step), else once a phase
       const moving = p === 'column' || p === 'deploy'
-      if (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step)) { this.place(h, local, cycleStart); h.step = step; h.phase = p; h.cycle = cycle; moved = true; anyMoved = true }
+      if (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step)) {
+        const tp = trNow(); this.place(h, local, cycleStart); h.step = step; h.phase = p; h.cycle = cycle; moved = true; anyMoved = true
+        if (TRACE.on) { tr('placed'); tr('placeMs', performance.now() - tp) }
+      }
       const px = FIGURE * pxPerM / Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
       const near = h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1
       if (near !== h.near && this.casterNear) moved = true
@@ -271,10 +278,11 @@ export class Units {
     if (this.trampleOn) this.trample(T, anyMoved)
     if (this.flag?.isEnabled()) {
       this.flagMat?.setFloat('uFlagT', T); this.flagMat?.setVector2('uFlagK', this.flagK.set(pxPerM, FLAG_MIN_PX))
-      if (this.flagStale) { this.flag.thinInstanceBufferUpdated('matrix'); this.flag.thinInstanceRefreshBoundingInfo(); this.flagStale = false }
+      if (this.flagStale) { this.flag.thinInstanceBufferUpdated('matrix'); this.flag.thinInstanceRefreshBoundingInfo(); this.flagStale = false; tr('flag') }
     }
     if (!this.shadows) return
     const refit = this.fitSun()
+    if (refit) tr('sunRefit')
     if (!this.lazyShadows) return
     if (moved || refit) { this.shadowRT.resetRefreshCounter(); this.smStep = step }
   }
@@ -299,7 +307,10 @@ export class Units {
     rt.renderList = this.meshes; rt.getCustomRenderList = () => this.culled
     // a far LOD caster of a battalion drawn near is hidden from the view: shown to the map alone, while it draws
     const shown: Mesh[] = []
-    rt.onBeforeRenderObservable.add(() => { this.smDraws++; for (const m of this.culled) if (!m.isVisible) { m.isVisible = true; shown.push(m) } })
+    rt.onBeforeRenderObservable.add(() => {
+      this.smDraws++; for (const m of this.culled) if (!m.isVisible) { m.isVisible = true; shown.push(m) }
+      if (TRACE.on) { tr('sm'); tr('smCasters', this.culled.length); for (const m of this.culled) tr('smTris', m.thinInstanceCount * m.getTotalIndices() / 3) }
+    })
     rt.onAfterRenderObservable.add(() => { for (const m of shown) m.isVisible = false; shown.length = 0 })
     for (const h of this.hosts) h.lod.forEach((l, li) => rt.setMaterialForRendering(l, li === 1 && this.posed ? this.depthVatMat : this.depthMat))
     return rt
@@ -510,6 +521,7 @@ export class Units {
       for (const m of this.receivers) m.setVector4('uTrampleBox', this.trV)
     } else if (!(moved && T - this.trAt >= TR_EVERY) && this.trAt >= 0) return
     this.trAt = T
+    const t0 = trNow()
     const acc = this.trAcc, out = this.trBuf, tx = b.size / TR_N
     acc.fill(0)
     const splat = (x: number, z: number, w: number) => {
@@ -532,6 +544,7 @@ export class Units {
       out[j * TR_N + i] = Math.round(255 * s / n)
     }
     this.trTex?.update(out)
+    if (TRACE.on) { tr('trample'); tr('trampleMs', performance.now() - t0) }
   }
 
   /** the battalions' colours (?flags=0: none): one flag a battalion, in its uniform's flag colours, carried by the man

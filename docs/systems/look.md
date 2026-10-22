@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-19
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
 decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows]
 ---
 
@@ -634,7 +634,13 @@ them. WebGL2 only (decision 0046).
   column of companies at least 40 m behind the front, clear of the lines' footprints, the nearest first (5 m grid).
   Water, trees (bushes are walked through), the buildings' yards are kept clear, and it throws when a side has no room.
   On the demo map 20 a side is 4 and 3 battalions in line, the rest in column.
-- **The bench**: `?benchpan=1` pans each camera as it is measured (20 m either side at 8 m/s). `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions,
+- **The bench**: `?benchpan=1` pans each camera as it is measured (20 m either side at 8 m/s). `?benchtrace=1` records
+  every measured frame (version 8): its interval and what happened in it (`src/look/trace.ts`: the figures' shadow map
+  drawn and its casters and triangles, the sun's box refit, the trodden mask drawn and its CPU ms, battalions placed
+  and place()'s and frame()'s CPU ms, thin-instance uploads and their KB and ms, the flags' update, every render target
+  drawn by name and every effect-renderer bake as `fx:<name>`, shader compiles, active meshes, draw calls), and
+  `traceSummary`: per zoom and arm, each event's share of the frames over their run's 90th percentile against its share
+  of all frames (the enrichment), printed by `tools/bench-look.mjs`. Off, nothing is hooked. `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions,
   `facingAt`). Hooks: `__units` (`drawn()`, `figures`, `battalions`), `__armies` (`blocked`, `focus`).
 
 ### The readability guard (L2a)
