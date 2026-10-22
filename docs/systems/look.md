@@ -573,6 +573,9 @@ cameras orbit that point instead of the camera's start, and the JSON records it 
 `?armies=<1..20>` puts n battalions a side on the demo map (414 men each, the ruleset's drill: 5 about 4,000
 figures, 10 about 8,000, 20 about 16,500); not on the page by default, so the goldens and the look checks never see
 them. WebGL2 only (decision 0046). Each switch below names the A/B it restores; the defaults are the measured best.
+The page names no era (decision 0015): the demo's scenario (`src/scenarios/armies-demo.ts`) names its ruleset, unit
+type, figure and uniforms, resolved through `src/rulesets/index.ts` (`RULESETS`: a ruleset and its uniforms by name)
+and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glob in `src/look/main.ts`).
 
 - **The figure**: `tools/bake-figure.py` (Blender, `-- <published figure dir>`) bakes the published GLBs into
   `data/figures/<figure>.unitdata` (`src/look/units-data.ts` reads and checks it): both LODs (1,197 and 243
@@ -587,7 +590,10 @@ them. WebGL2 only (decision 0046). Each switch below names the A/B it restores; 
   `?uvat=0`: the far LOD skinned); a man's step from his clip's first row, its length and his phase. Materials are
   per uniform and LOD. The figures are painted as the army blocks (`KEEP_HUE`, `BOUNCE`, `NOSNOW`) and blur by their
   depth (decision 0040). A battalion's instances are written when it moves (once a 1/12 s step) or changes phase; its
-  LOD by the figure's height in pixels (48, ±10 %).
+  LOD by the figure's height in pixels (48, ±10 %). The pose's step is counted on the CPU (`uVATStep`, the clock's
+  floor in double precision), so the figures and their shadows never disagree on a step; a battalion's bounds are
+  padded by the tallest figure (2.6 m, as tall as the far figures grow). The view's corner rays are cast once a frame
+  (`castView`) for the sun's box and the trodden mask's.
 - **Their shadows** (decision 0047; `?unitshadow=0`: none): a 2048² depth-only map (24 bits, a comparison sampler), the
   sun's box fitted to the ground in view's own heights and centred on what it holds, its near and far fitted along the
   sun. Drawn only when it would change (the poses' step, a battalion's men, the casters, the box; `?ushadowrate=0`:
@@ -612,12 +618,13 @@ them. WebGL2 only (decision 0046). Each switch below names the A/B it restores; 
   switch to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here) and 1.15 tall; render only.
 - **Trodden ground** (`?trample=0`: none): a 256² mask over a box round the ground in view (64 to 1,024 m), drawn on
   the CPU (each man where he stands and up to 3.8 m behind him) when the box moves or at most every 0.25 s while men
-  move, about 1.1 to 1.6 ms a draw at 16,560 figures (this Mac); the ground and the meadow read it in their vertex
-  shaders (`TRAMPLE`): the grass shorter, splayed and drier, the ground toward a dusty earth in summer and a grey-brown
+  move (the refit held by the wall's clock, at once when the page's clock is held: `?frozen`), about 1.1 to 1.6 ms a draw
+  at 16,560 figures (this Mac); the ground and the meadow read it in their vertex shaders (`TRAMPLE`; none outside the
+  mask's box): the grass shorter, splayed and drier, the ground toward a dusty earth in summer and a grey-brown
   slush in winter, broken by the grain.
 - **Flags** (`?flags=0`: none): one a battalion, its uniform's flag on a 3 m staff with the colour bearer (the line's
   centre file, second rank), the cloth downwind and waving at 12 fps, never under 12 px tall (up to 5 times its size);
-  one thin-instanced mesh.
+  one thin-instanced mesh, hidden with the figures (`show`).
 - **The script** (`src/look/world/armies.ts`, deterministic, the sim's stand-in): each battalion in line marches 36 m
   in column of companies, halts 4 s, deploys into line at the run, pauses 3 s, then fires by ranks (1.4 s apart) until
   its 110 s cycle starts again; battalions are 9.7 s apart in the cycle. **The layout** keeps every battalion's whole

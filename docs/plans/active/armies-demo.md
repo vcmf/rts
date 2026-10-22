@@ -92,6 +92,15 @@ on for every uniform; `?farscale=0` the far figures at their size; `?trample=0` 
 flags; `?bench`, `?benchat=<x>,<z>`, `?benchpan=1`, `?benchtrace=1`. Dropped (one-off comparisons, judged):
 `?ushadowq=0` (batch A's hard, coarse shadow) and `?udepth=0` (the float colour map), with their code.
 
+## Review round 1 (2026-10-22)
+
+The era-generic invariant: the page named the era's unit type and figure; the scenario now names its ruleset, unit
+type and figure, resolved by name (`src/rulesets/index.ts`, the figures by file). Fixed too: the trodden mask's
+clamped edge smeared over the ground outside its box (read as none there); its refit throttled by the page's clock
+(held under `?frozen`: by the wall's now); the bounds' top pad (2.4 m, under a 2.6 m figure grown 1.15); the flags left
+shown by `show(false)`; the pose's step from a float32 time in the shader (the CPU's step now); the caster rule written
+twice (`casterOf`); the flags' bounds refresh (always active); the view's corner rays cast three times a frame (once).
+
 ## Next
 
 - A third LOD for figures under ~12 px (the far LOD's 243 triangles where a few would do).
@@ -100,6 +109,9 @@ flags; `?bench`, `?benchat=<x>,<z>`, `?benchpan=1`, `?benchtrace=1`. Dropped (on
 - The near LOD posed from a baked VAT as the far one is.
 - The per-frame allocations left (the profiler's list).
 - The reserves' cycles staggered when they move (now they stand).
+- The trodden ground read per terrain vertex (about 1.8 m) against 0.25–0.5 m texels up close: it aliases and jumps
+  when the mask refits; read it in the fragment stage once a sampler is free, or filter the mask to the vertex
+  spacing.
 - The LOD switch scaled by the frame's height (48 × height / 1080 px): at 720p the near LOD all but never draws, at
   1080p battalions within about 57 m do.
 
@@ -107,5 +119,6 @@ flags; `?bench`, `?benchat=<x>,<z>`, `?benchpan=1`, `?benchtrace=1`. Dropped (on
 
 - The cost on the laptop (the min-spec) at 16,000 men.
 - The near meadow hides the men's legs at the closest zoom.
+- The trodden ground aliases up close (read per terrain vertex, about 1.8 m): see Next.
 - Winter: white coats on snow (the Austrians' greatcoats are grey in winter: the enemy's own figure).
 - The second line: the demo map's village, river and trees leave room for 4 and 3 battalions in line at 20 a side.
