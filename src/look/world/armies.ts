@@ -43,7 +43,8 @@ export const farRule = (u: Uniform): 'coat' | 'keep' => u.far ?? (luminance(u.co
 
 /** the script's phases a battalion goes through, in order, each cycle (the roles its men are given) */
 export type Phase = 'column' | 'halt' | 'deploy' | 'fire'
-export interface Battalion { side: number; uniform: string; x: number; z: number; heading: number; offset: number }
+/** reserve: it stands in column of companies, out of the script (layout's reserves) */
+export interface Battalion { side: number; uniform: string; x: number; z: number; heading: number; offset: number; reserve?: boolean }
 
 // the script, s: the column's approach (APPROACH m at its march speed), a halt, the companies' deployment at the run,
 // a pause in line, then fire by ranks until the cycle ends and it starts again (a jump back: the stand-in's loop)
@@ -77,36 +78,64 @@ export function extents(d: Drill): { halfFront: number; lineDepth: number; colum
 /** the ground a site must keep clear: water, trees, buildings, the tile's edge (true: blocked) */
 export type Blocked = (x: number, z: number) => boolean
 
-/** each side's battalions on the open ground: candidate places on a 5 m grid behind each side's front line, nearest
- *  its middle first; a place is taken if its whole line, its column's approach and a margin round them are clear and
- *  its box keeps clear of the battalions already placed. Fails loudly if a side cannot field `perSide` battalions.
- *  uniforms: each side's battalions' uniform; centre: between the two fronts; gap: between them, m (about a volley's
- *  range) */
-export function layout(perSide: number, d: Drill, blocked: Blocked, uniforms: readonly string[], centre: readonly [number, number] = [0, 0], gap = 110): Battalion[] {
+/** each side's battalions on the open ground, all of each within the camera's play area (±play m: the player can
+ *  reach every one), in two kinds (batch C, docs/plans/active/armies-demo.md):
+ *  - the lines: up to LINE_ROWS rows behind the side's front, each battalion running the script (its column's approach,
+ *    its deployment, its fire), its whole footprint (the line, the approach behind it, a margin) clear and within
+ *    play, its box clear of the others'; candidates on a 5 m grid, the front row and the middle first;
+ *  - the reserves, the rest: standing in column of companies at least RESERVE_BACK m behind the front (a column's box
+ *    and a margin, clear of the lines' footprints), the nearest the front and the middle first.
+ *  Fails loudly if a side cannot field `perSide` battalions. uniforms: each side's battalions' uniform; centre:
+ *  between the two fronts; gap: between them, m (about a volley's range) */
+export const LINE_ROWS = 2, RESERVE_BACK = 40
+export function layout(perSide: number, d: Drill, blocked: Blocked, uniforms: readonly string[], centre: readonly [number, number] = [0, 0], gap = 110, play = 235): Battalion[] {
   const e = extents(d), out: Battalion[] = [], step = 2.5, margin = 3, G = 5
-  const width = 2 * e.halfFront + 2 * margin + 6, depth = APPROACH + e.columnDepth + 2 * margin + 6
+  const lineW = 2 * e.halfFront + 2 * margin + 6, lineD = APPROACH + e.columnDepth + 2 * margin + 6
+  const resW = 2 * e.columnHalf + 2 * margin + 4, resD = e.columnDepth + 2 * margin + 4
   for (let s = 0; s < 2; s++) {
     // the side faces the other across the centre: side 0 northward (+z), side 1 southward
     const h = s === 0 ? 0 : Math.PI, fs = Math.sin(h), fc = Math.cos(h)
     const fx = centre[0] - fs * gap / 2, fz = centre[1] - fc * gap / 2
-    const cands: [number, number, number, number][] = []   // across, behind, score
-    for (let bi = 0; bi <= 108; bi++) for (let ai = -108; ai <= 108; ai++) cands.push([ai * G, bi * G, Math.abs(ai * G) + 3 * bi * G, 0])   // (the front row filled first)
-    cands.sort((p, q) => p[2] - q[2] || p[0] - q[0] || p[1] - q[1])
-    const mine: [number, number][] = []   // the placed battalions' across and behind
-    for (const [ac, bh] of cands) {
-      if (mine.length >= perSide) break
-      if (mine.some(([a2, b2]) => Math.abs(a2 - ac) < width && Math.abs(b2 - bh) < depth)) continue
-      const x = fx + fc * ac - fs * bh, z = fz - fs * ac - fc * bh
-      // the line, the column's approach behind it, and a margin, sampled every `step` m in the battalion's frame
-      let ok = true
-      for (let a = -(APPROACH + e.columnDepth + margin); ok && a <= margin; a += step) {
-        const wide = a > -(e.lineDepth + margin) ? e.halfFront + margin : e.columnHalf + margin
-        for (let b = -wide; b <= wide; b += step) if (blocked(x + fc * b + fs * a, z - fs * b + fc * a)) { ok = false; break }
+    const at = (ac: number, bh: number): [number, number] => [fx + fc * ac - fs * bh, fz - fs * ac - fc * bh]
+    // a footprint in the battalion's frame (b across, a ahead: from a0 to a1, half-width wide(a)) clear and in play
+    const clear = (x: number, z: number, a0: number, a1: number, wide: (a: number) => number) => {
+      for (let a = a0; a <= a1; a += step) {
+        const w = wide(a)
+        for (let b = -w; b <= w; b += step) {
+          const px = x + fc * b + fs * a, pz = z - fs * b + fc * a
+          if (Math.abs(px) > play || Math.abs(pz) > play || blocked(px, pz)) return false
+        }
       }
-      if (!ok) continue
-      mine.push([ac, bh]); out.push({ side: s, uniform: uniforms[s], x, z, heading: h, offset: ((mine.length - 1) * 9.7) % CYCLE })
+      return true
     }
-    if (mine.length < perSide) throw new Error(`armies: room for only ${mine.length} of ${perSide} battalions for side ${s} (src/look/world/armies.ts, layout)`)
+    const boxes: { ac: number; bh: number; w: number; d: number }[] = []   // placed: across, behind (their front), width, depth
+    const free = (ac: number, bh: number, w: number, dd: number) => boxes.every(o => Math.abs(o.ac - ac) >= (o.w + w) / 2 || bh + dd <= o.bh || o.bh + o.d <= bh)
+    const cands: [number, number][] = []
+    for (let bi = 0; bi * G <= 2 * play; bi++) for (let ai = -Math.floor(play / G); ai * G <= play; ai++) cands.push([ai * G, bi * G])
+    let lines = 0
+    // the lines: within LINE_ROWS footprints' depth (and 15 m) of the front, the front row and the middle first
+    cands.sort((p, q) => Math.abs(p[0]) + 3 * p[1] - (Math.abs(q[0]) + 3 * q[1]) || p[0] - q[0] || p[1] - q[1])
+    for (const [ac, bh] of cands) {
+      if (lines >= perSide) break
+      if (bh > (LINE_ROWS - 1) * lineD + 15 || !free(ac, bh, lineW, lineD)) continue
+      const [x, z] = at(ac, bh)
+      if (!clear(x, z, -(APPROACH + e.columnDepth + margin), margin, a => a > -(e.lineDepth + margin) ? e.halfFront + margin : e.columnHalf + margin)) continue
+      boxes.push({ ac, bh, w: lineW, d: lineD }); lines++
+      out.push({ side: s, uniform: uniforms[s], x, z, heading: h, offset: ((lines - 1) * 9.7) % CYCLE })
+    }
+    // the reserves: in column behind the front row (never in it: RESERVE_BACK m back at least), clear of the lines'
+    // footprints, the nearest the front and the middle first
+    cands.sort((p, q) => 0.5 * Math.abs(p[0]) + p[1] - (0.5 * Math.abs(q[0]) + q[1]) || p[0] - q[0] || p[1] - q[1])
+    let placed = lines
+    for (const [ac, bh] of cands) {
+      if (placed >= perSide) break
+      if (bh < RESERVE_BACK || !free(ac, bh, resW, resD)) continue
+      const [x, z] = at(ac, bh)
+      if (!clear(x, z, -(e.columnDepth + margin), margin, () => e.columnHalf + margin)) continue
+      boxes.push({ ac, bh, w: resW, d: resD }); placed++
+      out.push({ side: s, uniform: uniforms[s], x, z, heading: h, offset: 0, reserve: true })
+    }
+    if (placed < perSide) throw new Error(`armies: room for only ${placed} of ${perSide} battalions for side ${s} within ±${play} m (${lines} in line; src/look/world/armies.ts, layout)`)
   }
   return out
 }
@@ -115,7 +144,8 @@ export function layout(perSide: number, d: Drill, blocked: Blocked, uniforms: re
  *  cameras' focus: the bench's, the review's; the camera's focus stays near the middle, spec.ts play) */
 export function facingAt(bs: readonly Battalion[]): [number, number] {
   let best = Infinity, at: [number, number] | null = null
-  for (const a of bs) if (a.side === 0) for (const o of bs) if (o.side === 1) {
+  const lines = bs.some(b => !b.reserve && b.side === 0) && bs.some(b => !b.reserve && b.side === 1) ? bs.filter(b => !b.reserve) : bs   // (the lines: the reserves stand back)
+  for (const a of lines) if (a.side === 0) for (const o of lines) if (o.side === 1) {
     const d = Math.hypot(a.x - o.x, a.z - o.z) + 0.5 * Math.hypot(a.x + o.x, a.z + o.z) / 2
     if (d < best) { best = d; at = [(a.x + o.x) / 2, (a.z + o.z) / 2] }
   }

@@ -31,6 +31,7 @@ import { posedVertices, type UnitData } from './units-data.ts'
 import { CYCLE, farPalette, farRule, manAt, phaseAt, slots, type Battalion, type Drill, type ManState, type Phase, type Uniform } from './world/armies.ts'
 
 const ROLES = ['halt', 'march', 'run', 'fire'] as const
+const RESERVE = { phase: 'halt', start: 0, deployEnd: 0 } as const   // a reserve's phase: halted in column, always
 
 interface Host {
   b: Battalion; lod: Mesh[]; near: boolean; matrices: Float32Array; settings: Float32Array; jitter: Float32Array
@@ -212,7 +213,7 @@ export class Units {
   private place(h: Host, local: number, cycleStart: number): void {
     const { b, matrices, settings, jitter } = h, c = Math.cos(b.heading), s = Math.sin(b.heading), fps = this.data.fps, man = this.man
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity, changed = false
-    const p = phaseAt(this.drill, local, this.speed.march, this.speed.run)
+    const p = h.b.reserve ? RESERVE : phaseAt(this.drill, local, this.speed.march, this.speed.run)   // (a reserve stands in column)
     for (let i = 0; i < this.slot.line.length; i++) {
       manAt(this.drill, this.slot, i, local, p, this.speed.run, this.speed.march, jitter[i * 4 + 3], man)
       const lx = man.x + jitter[i * 4], lz = man.z + jitter[i * 4 + 1]
@@ -252,7 +253,7 @@ export class Units {
     for (const h of this.hosts) {
       if (!h.lod[0].isEnabled()) continue
       const t = T - h.b.offset, cycle = Math.floor(t / CYCLE), local = t - cycle * CYCLE, cycleStart = T - local
-      const p = phaseAt(this.drill, local, this.speed.march, this.speed.run).phase
+      const p = h.b.reserve ? RESERVE.phase : phaseAt(this.drill, local, this.speed.march, this.speed.run).phase
       // a battalion's men are written when they move (a marching or deploying one once a step), else once a phase
       const moving = p === 'column' || p === 'deploy'
       if (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step)) { this.place(h, local, cycleStart); h.step = step; h.phase = p; h.cycle = cycle; moved = true; anyMoved = true }

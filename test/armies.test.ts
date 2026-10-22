@@ -54,11 +54,18 @@ describe('armies: the script', () => {
 
 describe('armies: the layout', () => {
   const open = (x: number, z: number) => Math.max(Math.abs(x), Math.abs(z)) > 370
-  it('fields both sides on open ground, facing each other, clear of one another', () => {
-    const bs = layout(10, drill, open, ARMIES_DEMO.sides), e = extents(drill)
-    expect(bs.filter(b => b.side === 0).length).toBe(10); expect(bs.filter(b => b.side === 1).length).toBe(10)
+  it('fields 20 a side within the play area: lines in front, the rest in column behind, clear of one another', () => {
+    const bs = layout(20, drill, open, ARMIES_DEMO.sides), e = extents(drill)
+    expect(bs.filter(b => b.side === 0).length).toBe(20); expect(bs.filter(b => b.side === 1).length).toBe(20)
     for (const b of bs) expect(b.side === 0 ? b.z < 0 && b.heading === 0 : b.z > 0 && b.heading === Math.PI).toBe(true)
-    for (const a of bs) for (const b of bs) if (a !== b && a.side === b.side) expect(Math.abs(a.x - b.x) >= 2 * e.halfFront || Math.abs(a.z - b.z) >= APPROACH + e.columnDepth).toBe(true)
+    // the whole footprint within ±235: a line's front and its approach behind, a column's depth
+    for (const b of bs) { expect(Math.abs(b.x) + (b.reserve ? e.columnHalf : e.halfFront)).toBeLessThanOrEqual(235); expect(Math.abs(b.z) + (b.reserve ? e.columnDepth : APPROACH + e.columnDepth)).toBeLessThanOrEqual(235) }
+    const lines = bs.filter(b => !b.reserve), back = (b: typeof bs[0]) => Math.abs(b.z)
+    expect(lines.length).toBeGreaterThanOrEqual(8)
+    for (const s of [0, 1]) expect(Math.min(...bs.filter(b => b.side === s && b.reserve).map(back))).toBeGreaterThan(Math.min(...lines.filter(b => b.side === s).map(back)))
+    // no two boxes overlap: a line's (its front, its approach) or a column's
+    const box = (b: typeof bs[0]) => ({ w: b.reserve ? e.columnHalf : e.halfFront, f: back(b), d: b.reserve ? e.columnDepth : APPROACH + e.columnDepth })
+    for (const a of bs) for (const b of bs) if (a !== b && a.side === b.side) { const p = box(a), q = box(b); expect(Math.abs(a.x - b.x) >= p.w + q.w || p.f + p.d <= q.f || q.f + q.d <= p.f).toBe(true) }
     const [fx, fz] = facingAt(bs); expect(Math.hypot(fx, fz)).toBeLessThan(60)
   })
   it('keeps off the blocked ground', () => {
