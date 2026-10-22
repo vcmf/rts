@@ -70,6 +70,24 @@ art, other arms.
 - **Expectation** (est.): from 5 → 10 → 20 a side the older code grew about +0.8, then +1.85 ms at wide; at 40 about
   +2 to +4 ms more at wide over 20, so about 11 to 13 ms wide. If the trace's `cpuMs` grows with the count, the CPU's
   per-man work dominates (step 1); if it stays and the frame grows, the GPU's triangles do (step 3).
+- **Measured** (2026-10-22, Metal, production builds, `benchat=162.5,-2.5`, three interleaved rounds, all 18 runs exit
+  0; medians of p50 / p95, ms):
+
+  | Run | Wide | Default | Close |
+  |---|---|---|---|
+  | main, still | 6.05 / 7.50 | 8.75 / 10.00 | 8.50 / 9.80 |
+  | main, pan | 6.05 / 7.45 | 8.80 / 10.10 | 8.50 / 9.85 |
+  | 20 a side, still | 8.85 / 10.40 | 10.15 / 11.50 | 9.80 / 10.95 |
+  | 20 a side, pan | 8.85 / 10.10 | 10.25 / 11.60 | 9.70 / 10.35 |
+  | 40 a side, still | 9.75 / 11.45 | 11.00 / 11.65 | 9.75 / 10.80 |
+  | 40 a side, pan | 9.70 / 11.55 | 10.20 / 11.60 | 9.70 / 10.25 |
+
+  The expectation was wrong: 40 a side costs only about +0.9 ms over 20 at wide, +0.85 / 0 at default (still / pan)
+  and nothing at close. Over main, 40 a side costs +3.7 wide, +1.4 to 2.25 default, +1.2 close. The bench's wide camera
+  at this point draws 13,248 of the 33,120 figures (the rest are culled), so the cost of the whole army in view is not
+  yet measured: a camera framing every battalion is the stress case still to bench. The traced pan's `cpuMs` at 40 is
+  still to run. Main's default here is 8.75, not the 9.55 of the earlier round (a cooler machine: the protocol's three
+  rounds per arm are what compare).
 
 ## Step 1: GPU-placed soldiers
 
