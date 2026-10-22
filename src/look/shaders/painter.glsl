@@ -87,13 +87,23 @@ float shadowAt(vec3 wp,vec3 n){return shadowAtRaw(wp,n)*uShadowsOn;}
 // THE FIGURES' CAST SHADOWS (decision 0047; src/look/units.ts): their own depth map from the sun, fitted each frame
 // to the ground in view (the figures move: only moving things get runtime light), taps jittered by the grain as
 // shadowAt's, fading out at the map's border. Only the materials they fall on get UNIT_SHADOWS, only with armies
-uniform sampler2D uUnitSM;uniform mat4 uUnitVP;uniform vec2 uUnitTexel;uniform float uUnitBias;
-// a bilinear comparison at t (in texels): the four texels round it, each lit or not, blended by where t falls
+#ifdef UNIT_SM_DEPTH
+uniform highp sampler2DShadow uUnitSM;
+#else
+uniform sampler2D uUnitSM;
+#endif
+uniform mat4 uUnitVP;uniform vec2 uUnitTexel;uniform float uUnitBias;
+// a bilinear comparison at t (in texels): the four texels round it, each in shadow or not, blended by where t falls
+// (depth only, UNIT_SM_DEPTH: the hardware's comparison, one read)
+#ifdef UNIT_SM_DEPTH
+float unitPCF(vec2 t,float d){return 1.0-texture(uUnitSM,vec3(t*uUnitTexel,d));}
+#else
 float unitPCF(vec2 t,float d){
   t-=0.5;vec2 f=fract(t),b=(floor(t)+0.5)*uUnitTexel;
   float s00=step(texture2D(uUnitSM,b).r,d),s10=step(texture2D(uUnitSM,b+vec2(uUnitTexel.x,0.0)).r,d);
   float s01=step(texture2D(uUnitSM,b+vec2(0.0,uUnitTexel.y)).r,d),s11=step(texture2D(uUnitSM,b+uUnitTexel).r,d);
   return mix(mix(s00,s10,f.x),mix(s01,s11,f.x),f.y);}
+#endif
 float unitShadowAt(vec3 wp){
   vec4 lp=uUnitVP*vec4(wp,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
   if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;

@@ -8,6 +8,7 @@ import type { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
+import { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
 import { RenderTargetTexture } from '@babylonjs/core/Materials/Textures/renderTargetTexture.js'
 import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
@@ -57,6 +58,10 @@ export class Units {
   private readonly farMats: ShaderMaterial[] = []   // one a side for the far LOD, the far palette (?farpal=1)
   private depthMat: ShaderMaterial
   private depthVatMat: ShaderMaterial   // the far LOD's casters, posed (VAT_POS)
+  private posed = false
+  private depthRT = false               // the shadow map is the depth-only target
+  /** the shadow map as depth only, read by the hardware's comparison (?udepth=0: the float colour, manual taps) */
+  depthCompare = true
   private sun: FreeCamera
   private shadowRT: RenderTargetTexture
   private shadows = false
@@ -131,13 +136,7 @@ export class Units {
     this.depthVatMat = new ShaderMaterial('unitsDepthPosed', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATTime'], samplers: ['uVAT', 'uVATP'], defines: ['#define DEPTH', '#define VAT_POS'] })
     this.depthVatMat.setTexture('uVAT', vat); this.depthVatMat.setTexture('uVATP', vatp)
     this.sun = new FreeCamera('unitSun', SUN.scale(500), scene); this.sun.mode = Camera.ORTHOGRAPHIC_CAMERA; this.sun.minZ = 1; this.sun.maxZ = 1200
-    this.shadowRT = new RenderTargetTexture('unitSM', { width: SM_SIZE, height: SM_SIZE }, scene, false, true, Constants.TEXTURETYPE_FLOAT, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, true, false, false, Constants.TEXTUREFORMAT_R)
-    this.shadowRT.activeCamera = this.sun; this.shadowRT.clearColor = new Color4(1, 1, 1, 1)
-    this.shadowRT.renderList = this.meshes; this.shadowRT.getCustomRenderList = () => this.culled
-    // a far LOD caster of a battalion drawn near is hidden from the view: shown to the map alone, while it draws
-    const shown: Mesh[] = []
-    this.shadowRT.onBeforeRenderObservable.add(() => { this.smDraws++; for (const m of this.culled) if (!m.isVisible) { m.isVisible = true; shown.push(m) } })
-    this.shadowRT.onAfterRenderObservable.add(() => { for (const m of shown) m.isVisible = false; shown.length = 0 })
+    this.shadowRT = this.makeRT(false)
     for (const m of receivers) {
       m.setTexture('uUnitSM', this.shadowRT); m.setVector2('uUnitTexel', new Vector2(1 / SM_SIZE, 1 / SM_SIZE))
       m.setFloat('uUnitBias', SM_BIAS / (this.sun.maxZ - this.sun.minZ)); m.setMatrix('uUnitVP', Matrix.Identity())
@@ -248,6 +247,23 @@ export class Units {
   // Fine (fineShadows, batch B): the corner rays meet the ground in view's own range of heights, not the tile's
   // (25 m of height seen along a low sun stretched the box), the box is centred on what it must hold and its size moves
   // in finer steps
+  // the shadow map's target: a float colour (the casters' depth written as a colour, read by manual taps), or depth
+  // only (batch B, ?udepth): a 24-bit depth texture with a comparison sampler, read by the hardware's bilinear compare
+  private makeRT(depth: boolean): RenderTargetTexture {
+    const rt = depth
+      ? new RenderTargetTexture('unitSMDepth', { width: SM_SIZE, height: SM_SIZE }, this.scene, { generateMipMaps: false, generateDepthBuffer: true, noColorAttachment: true })
+      : new RenderTargetTexture('unitSM', { width: SM_SIZE, height: SM_SIZE }, this.scene, false, true, Constants.TEXTURETYPE_FLOAT, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, true, false, false, Constants.TEXTUREFORMAT_R)
+    if (depth) rt.createDepthStencilTexture(Constants.LEQUAL, true, false, 1, Constants.TEXTUREFORMAT_DEPTH24)
+    rt.activeCamera = this.sun; rt.clearColor = new Color4(1, 1, 1, 1)
+    rt.renderList = this.meshes; rt.getCustomRenderList = () => this.culled
+    // a far LOD caster of a battalion drawn near is hidden from the view: shown to the map alone, while it draws
+    const shown: Mesh[] = []
+    rt.onBeforeRenderObservable.add(() => { this.smDraws++; for (const m of this.culled) if (!m.isVisible) { m.isVisible = true; shown.push(m) } })
+    rt.onAfterRenderObservable.add(() => { for (const m of shown) m.isVisible = false; shown.length = 0 })
+    for (const h of this.hosts) h.lod.forEach((l, li) => rt.setMaterialForRendering(l, li === 1 && this.posed ? this.depthVatMat : this.depthMat))
+    return rt
+  }
+
   private fitSun(): boolean {
     const cam = this.camera, k = this.scratch, inv = k.inv, g = this.fineShadows ? this.viewGround() : D.spec.ground
     cam.getTransformationMatrix().invertToRef(inv)
@@ -297,6 +313,14 @@ export class Units {
     V = this.sun.getViewMatrix(true)
     this.sun.orthoLeft = -ex; this.sun.orthoRight = ex; this.sun.orthoTop = ey; this.sun.orthoBottom = -ey
     box.ex = ex; box.ey = ey; box.V.copyFrom(V); box.c.copyFrom(k.c); box.set = true
+    if (this.depthRT) {
+      // depth only: the sun's near and far planes fitted along the sun to what the box holds (24 bits over tens of
+      // metres, not 1,200), a figure and some to spare either way
+      let z0 = Infinity, z1 = -Infinity
+      for (let i = 0; i < n; i++) for (let e = 0; e < 2; e++) { k.v.copyFrom(k.pts[i]); k.v.y += e ? 3 : -2; Vector3.TransformCoordinatesToRef(k.v, V, k.v); z0 = Math.min(z0, k.v.z); z1 = Math.max(z1, k.v.z) }
+      this.sun.minZ = Math.max(0.5, Math.floor(z0 - 12)); this.sun.maxZ = Math.ceil(z1 + 12)
+      for (const r of this.receivers) r.setFloat('uUnitBias', SM_BIAS / (this.sun.maxZ - this.sun.minZ))
+    }
     const vp = k.vp; V.multiplyToRef(this.sun.getProjectionMatrix(true), vp)
     for (const r of this.receivers) r.setMatrix('uUnitVP', vp)
     Frustum.GetPlanesToRef(vp, this.planes)
@@ -348,6 +372,16 @@ export class Units {
   setShadows(on: boolean): void {
     if (on === this.shadows) return
     this.shadows = on
+    // depth only (?udepth, with the soft lookup only): the colour target swapped for the depth one, once
+    const depth = on && this.depthCompare && this.fineShadows
+    if (depth && !this.depthRT) {
+      const was = this.shadowRT, i = this.scene.customRenderTargets.indexOf(was)
+      if (i >= 0) this.scene.customRenderTargets.splice(i, 1)
+      this.shadowRT = this.makeRT(true); was.dispose(); this.depthRT = true
+      const tex = new BaseTexture(this.scene, this.shadowRT.depthStencilTexture); tex.name = 'unitSMDepthTex'
+      for (const m of this.receivers) m.setTexture('uUnitSM', tex)
+    }
+    for (const m of this.receivers) m.setDefine('#define UNIT_SM_DEPTH', this.depthRT)
     const list = this.scene.customRenderTargets, i = list.indexOf(this.shadowRT)
     if (on && i < 0) list.push(this.shadowRT)
     if (!on && i >= 0) list.splice(i, 1)
@@ -370,6 +404,7 @@ export class Units {
   }
   /** the far LOD and its shadow casters posed from the posed vertices (?uvat, VAT_POS), or skinned */
   setPosed(on: boolean): void {
+    this.posed = on
     for (const m of this.farMats) m.setDefine('#define VAT_POS', on)
     for (const h of this.hosts) this.shadowRT.setMaterialForRendering(h.lod[1], on ? this.depthVatMat : this.depthMat)
     this.smStep = -1
