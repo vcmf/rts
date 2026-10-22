@@ -282,7 +282,7 @@ The round count restarts after this redesign. Round 3's other findings are taken
   - houses prune by box;
   - `pinnedParentsOf` is shared and validate uses `kindMatches`;
   - one `pending` set;
-  - the ordering rules are a decision record (0027).
+  - the ordering rules are a decision record (0049).
 
 **After the redesign, round 3** (2 severe): **stop and redesign** (more than three rounds of the same class of fault).
 - **Severe:** a `within` by kind, read softly, behaved as a keep-clear inside a group: a scatter that should stay
@@ -303,7 +303,7 @@ Every fault of the redesign's three rounds lived inside a group of generators th
   against the catalogue (kind, area shape, attributes in `set`, radii); `count` and the clump fields move into the
   entries.
 - `maps/generated.map.json`: the copses and fields scatters become one scatter, `groves`.
-- Decision 0028 supersedes 0027.
+- Decision 0028 supersedes 0049.
 
 The round count restarts.
 

@@ -3,7 +3,7 @@ status: superseded by 0028
 date: 2026-10-12
 ---
 
-# 0027 Generators expand by dependency, over finished features, with hard and soft reads
+# 0049 Generators expand by dependency, over finished features, with hard and soft reads
 
 ## Context
 
