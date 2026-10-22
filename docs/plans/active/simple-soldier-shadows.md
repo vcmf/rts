@@ -63,8 +63,50 @@ facing, by design); the sim's hookup.
 
 ## Measured
 
-(Filled in as built.)
+**Cost** (this machine's Metal, 1080p, 20 a side, `?benchat=162.5,-2.5`, a production build; three interleaved
+rounds, the medians of the yaws' and rounds' p50 / p95 ms; `main` is the build before this work, `map` this build with
+`?ushadowfar=map`, `simple` the defaults with `?smoothmove=0`, `smooth` the defaults):
+
+| | wide | default | close |
+|---|---|---|---|
+| still, main | 6.05 / 7.50 | 8.80 / 10.05 | 8.50 / 9.90 |
+| still, map | 9.15 / 10.30 | 10.25 / 11.50 | 9.80 / 11.10 |
+| still, simple | 8.80 / 10.40 | 10.10 / 11.40 | 9.80 / 11.05 |
+| still, smooth | 8.85 / 10.50 | 10.10 / 11.40 | 9.80 / 11.05 |
+| pan, main | 6.05 / 7.45 | 8.75 / 10.10 | 8.50 / 9.80 |
+| pan, map | 8.80 / 10.20 | 10.45 / 11.60 | 9.80 / 10.35 |
+| pan, simple | 9.00 / 9.90 | 10.20 / 11.60 | 9.80 / 10.40 |
+| pan, smooth | 9.00 / 10.00 | 10.30 / 11.50 | 9.70 / 10.40 |
+
+The simple shadows cost what the map costs, within the runs' noise (about ±0.2 ms): still −0.35 / +0.1 wide, −0.15 /
+−0.1 default; panning +0.2 / −0.3 wide, −0.25 / 0 default; close the same (the map alone there). Moving the figures
+every frame (`smooth` against `simple`) costs at most 0.1 ms anywhere. The shape takes about 85 ms at load
+(SwiftShader's page, `__units.shapeMs`).
+
+**The flicker** (SwiftShader, `?frozen`, a marching battalion at the default zoom, 12 frames 1/60 s apart, the mean
+absolute change of a frame's luma from the one before on the shadow's fringe beside the battalion, 0 to 255): the map
+0, 0, 0, 0, **6.5**, 0, 0, 0, 0, **5.0**, 0 (still for four frames, then a jump at each 12 fps step); the simple shadows
+0.3 to 0.4 every frame, 0.9 to 1.0 at a step (the figures' own step beside it); with `?smoothmove=1` 0.5 to 0.7 every
+frame, no jump. Over the battalion itself (figures and shadows) the stepped figures jump 12 to 14 at each step with
+either shadow; moved every frame they change 4 to 5.6 every frame and never jump.
+
+**Close zoom**: the defaults and `?ushadowfar=map` pixel for pixel equal at the closest zoom (SwiftShader, frozen); the
+ground with no armies pixel for pixel equal before and after the textures' packing. **Textures**: the terrain's fragment
+stage 16 (15 with `?ushadowfar=map`, 14 without shadows), the water's 15, the meadow's 11.
+
+**The mask's box** at the bench's views: 168 m at the default zoom (8 cm texels), 376 m at the widest (18 cm), 56 to
+96 m in the band.
+
+Review images: `output/armies-review/7-simple-shadows/` in the main checkout (not committed).
 
 ## Open questions
 
-(Filled in as built.)
+- **`?smoothmove` is on by default** (measured free above): the figures' places move every frame, their poses stay at
+  12 fps. The owner's call: keep it, or go back to places stepped with the poses (`?smoothmove=0`), where the simple
+  shadows glide while their figures step (at most a step's move apart: 11 cm marching, 30 cm running).
+- The band (60 to 85 m) is a first guess near the LOD switch; the owner may want it nearer or farther
+  (`?ushadowswitch=<r0>,<r1>`).
+- The simple shadow is one averaged shape a role: a firing line's muskets show as a faint stroke, a marching man's legs
+  as a soft wedge. Per-pose shapes (an atlas a step) would cost texture, not time, if the owner wants them.
+- The far figures are drawn up to 1.15 times taller when small (`?farscale`); their simple shadows are not lengthened
+  with them.

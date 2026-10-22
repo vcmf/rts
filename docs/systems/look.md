@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-19
+last_reviewed: 2026-10-22
 code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
-decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows]
+decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom]
 ---
 
 # The look page (Track E, L0)
@@ -593,9 +593,9 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   LOD by the figure's height in pixels (48, ±10 %). The pose's step is counted on the CPU (`uVATStep`, the clock's
   floor in double precision), so the figures and their shadows never disagree on a step; a battalion's bounds are
   padded by the tallest figure (2.6 m, as tall as the far figures grow) and the farthest reach of the baked poses (as
-  wide as they grow). The view's corner rays are cast once a frame
-  (`castView`) for the sun's box and the trodden mask's.
-- **Their shadows** (decision 0047; `?unitshadow=0`: none): a 2048² depth-only map (24 bits, a comparison sampler), the
+  wide as they grow), and by the next step's places. The view's corner rays are cast once a frame
+  (`castView`) for the sun's box, the simple shadows' mask and the trodden mask's.
+- **Their shadows up close** (decision 0047, kept at close zoom by 0049; `?unitshadow=0`: none): a 2048² depth-only map (24 bits, a comparison sampler), the
   sun's box fitted to the ground in view's own heights and centred on what it holds, its near and far fitted along the
   sun. Drawn only when it would change (the poses' step, a battalion's men, the casters, the box; `?ushadowrate=0`:
   every frame), the box held while the view stays inside its slack of 10 % of the view's half-size, 6 m at least
@@ -607,6 +607,28 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   (`UNIT_SHADOWS_VS`, `meadow.vert`; `?ushadowvs=0`: every pixel). The texel at r45 / r125 / r260: 3.9 × 2.5,
   9.2 × 5.5, 18.4 × 10.4 cm in the sun's view (× 2.2 along the sun on the ground), the slack's 10 % on top while held.
   The merged mass under a battalion is the low sun's: 3.6 m shadows over ranks 0.85 m apart.
+- **Their shadows beyond: the simple shadows** (decision 0049, `docs/plans/active/simple-soldier-shadows.md`;
+  `?ushadowfar=map`: the map at every zoom). Every soldier of a figure looks alike, so one shape: `shadowShape`
+  (`src/look/units-data.ts`, at load, about 80 ms) projects the far LOD, posed at up to 12 steps of each role's clip and
+  turned to 16 facings, along the sun onto the ground, averages the steps (a marching man's legs one soft wedge) and
+  blurs it; an R8 atlas, a cell a facing and a role. A fourth mesh a battalion lays a quad a man from his feet along the
+  shadow (`unitmask.vert`, `unitmask.frag`: his facing picks two cells, blended; his clip's first step his role's row)
+  into a 2048² top-down mask (R8, blend MAX: overlapping shadows do not darken twice) over an axis-aligned box round the
+  battalions whose shadow can reach the view, cut to the ground in view, its size in 8 m steps (`fitMask`). Drawn every
+  frame it shows, never lazily, and each man's place moves every frame (`aNext`: his move to his next step's place,
+  written with his place; `uStepFrac`, the share of the step gone, from the CPU's clock): the shadows never step. The
+  ground reads the mask once a pixel (`unitMaskAt`, `painter.glsl`), the meadow once a blade at its root, as the map:
+  the grass stands over the ground, so a decal on the ground would be hidden under the blades. **The cross-fade**: by
+  the camera's distance to its focus, from the map alone at 60 m to the mask alone at 85 m (`SHADOW_SWITCH`,
+  `?ushadowswitch=<r0>,<r1>`; the LOD switch, 48 px at 1080 lines, is at 63 m), `uUnitFar` the mask's share
+  (`unitShadowMix`); each target is drawn only while its share is over 0, and the map is fitted afresh when it comes
+  back. The ground's fragment stage holds both at 16 textures: the dirt's and the earth's textures are packed in one
+  (`uSurf`, R and G, `src/look/macro.ts`).
+- **Smooth places** (on by default, measured free: `docs/plans/active/simple-soldier-shadows.md`; `?smoothmove=0`: off):
+  the figures, their flags and the map's casters move by `aNext` × `uStepFrac` too (`SMOOTH`, `units.vert`,
+  `flag.vert`), the poses still stepped at 12 fps; the map is then drawn every frame while a caster's men move. Off,
+  the figures move at the steps while their simple shadows glide (at most a step's move apart: 11 cm marching, 30 cm
+  running).
 - **Uniforms** (the owner's call 2026-10-22): a battalion wears a uniform by id, whatever its side; a uniform
   (`Uniform`, `src/sim/ruleset.ts`; the era's in `src/rulesets/napoleonic-uniforms.ts`; the demo's sides' in
   `src/scenarios/armies-demo.ts`) is its colours by the figure's roles, its flag's, and its **far rule**: from above, a

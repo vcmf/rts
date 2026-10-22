@@ -54,3 +54,4 @@ recorded here on 2026-10-08.
 | [0045](0045-render-scale-easu.md) | The render scale 0.9 from the closest zoom, upscaled by EASU | accepted |
 | [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | accepted |
 | [0047](0047-figures-cast-runtime-shadows.md) | The figures cast runtime shadows from a map of their own | proposed |
+| [0049](0049-simple-shadows-beyond-close-zoom.md) | The figures' shadow map only up close; one simple shadow a soldier beyond | proposed |
