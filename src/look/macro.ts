@@ -128,13 +128,16 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   // reads them), and the ground then has none of its marks
   let earthDone = () => {}; const earthLoaded = new Promise<void>(r => { earthDone = r })
   let surf: BaseTexture = RawTexture.CreateRGBATexture(new Uint8Array(4), 1, 1, scene, false, false, Texture.NEAREST_SAMPLINGMODE)
-  void packSurfaces(scene, [DIRT_URL, EARTH_URL]).then(({ tex, ok }) => {
+  // the scene is not ready until they are packed (or have failed), as it waited for each texture's own load: the tools'
+  // captures (whenReadyAsync) never see the ground without its surfaces
+  const pending = { surfaces: true }; scene.addPendingData(pending)
+  packSurfaces(scene, [DIRT_URL, EARTH_URL]).then(({ tex, ok }) => {
     surf = tex
     for (const m of mats.all) m.setTexture('uSurf', tex)
     if (ok[0]) mats.bindAll(m => m.setFloat('uDirtOn', 1))
     if (ok[1]) mats.bindAll(m => m.setFloat('uEarthOn', 1))
-    earthDone()
-  })
+  }).catch((e: unknown) => console.error(`the ground's surface textures could not be packed: ${(e as Error).message} (the ground has none of their marks)`))
+    .finally(() => { scene.removePendingData(pending); earthDone() })
   mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uSurf', surf); if (brush) m.setTexture('uMeadowBrush', brush) })
 
   const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit', 'uFlow', 'uComb', 'uMeadow'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : []), ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []), ...(roads ? ['#define ROADS', '#define PAVING_FAR', ...paveDefines()] : [])]
@@ -294,11 +297,11 @@ async function packSurfaces(scene: Scene, urls: string[]): Promise<{ tex: RawTex
   for (const [k, i] of imgs.entries()) if (i && (i.w !== w || i.h !== h)) throw new Error(`the ground's surface textures differ in size: ${urls[k]} is ${i.w}×${i.h}, not ${w}×${h}`)
   const out = new Uint8Array(w * h * 4)
   // rows flipped: as the image loaded with invertY (the texture's first row is the image's last)
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const o = ((h - 1 - y) * w + x) * 4, s = (y * w + x) * 4
-    for (const [k, i] of imgs.entries()) if (i) out[o + k] = i.px[s]
-    out[o + 3] = 255
+  for (let k = 0; k < imgs.length; k++) {
+    const px = imgs[k]?.px; if (!px) continue
+    for (let y = 0; y < h; y++) for (let x = 0, o = (h - 1 - y) * w * 4 + k, s = y * w * 4; x < w; x++, o += 4, s += 4) out[o] = px[s]
   }
+  for (let o = 3; o < out.length; o += 4) out[o] = 255
   const tex = new RawTexture(out, w, h, Constants.TEXTUREFORMAT_RGBA, scene, true, false, Texture.TRILINEAR_SAMPLINGMODE)
   tex.name = 'groundSurfaces'; tex.wrapU = tex.wrapV = Texture.WRAP_ADDRESSMODE; tex.anisotropicFilteringLevel = 4
   return { tex, ok: imgs.map(i => i !== null) }

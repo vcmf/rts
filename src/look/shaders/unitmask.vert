@@ -10,10 +10,20 @@ precision highp float;attribute vec3 position;
 attribute vec3 aVAT;attribute vec3 aNext;
 uniform vec4 uMaskBox,uRoleStart,uShapeBox,uShapeCell;uniform vec2 uShDir,uShapeTexel;uniform float uStepFrac;
 varying vec2 vUV0,vUV1;varying float vT;
+#ifdef FAR_SCALE
+// the far figure drawn larger as it shrinks on screen (units.vert's FAR_SCALE, the same rule): its shadow with it, across
+// by uFarScale.x and along by uFarScale.y (a taller man's shadow is longer)
+uniform vec2 uFarK,uFarScale;uniform vec3 uCamPos;
+#endif
 void main(){
   #include<instancesVertex>
   vec3 p=finalWorld[3].xyz+aNext*uStepFrac;
-  vec2 l=uShapeBox.xy+position.xz*uShapeBox.zw,C=vec2(-uShDir.y,uShDir.x),w=p.xz+C*l.x+uShDir*l.y;
+  vec2 l=uShapeBox.xy+position.xz*uShapeBox.zw;
+  #ifdef FAR_SCALE
+  float fpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz)),fg=clamp((0.9*uFarK.y-fpx)/(0.65*uFarK.y),0.0,1.0);
+  l*=vec2(mix(1.0,uFarScale.x,fg),mix(1.0,uFarScale.y,fg));
+  #endif
+  vec2 C=vec2(-uShDir.y,uShDir.x),w=p.xz+C*l.x+uShDir*l.y;
   gl_Position=vec4((w-uMaskBox.xy)*uMaskBox.z*2.0-1.0,0.0,1.0);
   float a=atan(-finalWorld[0].z,finalWorld[0].x),fk=fract(a/6.2831853)*FACINGS,k0=floor(fk),k1=mod(k0+1.0,FACINGS);
   vT=fk-k0;

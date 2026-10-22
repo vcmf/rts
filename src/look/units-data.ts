@@ -177,11 +177,13 @@ export function shadowShape(d: UnitData, lod: string, sun: readonly [number, num
     for (let v = 0; v < nv; v++) { c0 = Math.min(c0, buf[v * 2]); c1 = Math.max(c1, buf[v * 2]); a0 = Math.min(a0, buf[v * 2 + 1]); a1 = Math.max(a1, buf[v * 2 + 1]) }
   }
   // the blur's reach to spare either way, and an empty border so the bilinear reads never cross into a neighbour
-  const pad = 3 * blur, margin = 2
+  // (its mips are read too, the mask's texels coarser than its own: a cell's border and size whole texels of the fourth
+  // mip, so no mip up to it bleeds into a neighbour)
+  const pad = 3 * blur, margin = 8
   c0 -= pad; c1 += pad; a0 -= pad; a1 += pad
-  const iw = Math.ceil((c1 - c0) / texel), ih = Math.ceil((a1 - a0) / texel), cellW = iw + 2 * margin, cellH = ih + 2 * margin
+  const iw = Math.ceil((c1 - c0) / texel / 8) * 8, ih = Math.ceil((a1 - a0) / texel / 8) * 8, cellW = iw + 2 * margin, cellH = ih + 2 * margin
   const W = cellW * facings, H = cellH * roles.length, out = new Uint8Array(W * H)
-  const SS = 1, sw = iw * SS, sh = ih * SS, cov = new Uint8Array(sw * sh), sp = new Float64Array(nv * 2), acc = new Float32Array(iw * ih), tmp = new Float32Array(iw * ih)
+  const sw = iw, sh = ih, cov = new Uint8Array(sw * sh), sp = new Float64Array(nv * 2), acc = new Float32Array(iw * ih), tmp = new Float32Array(iw * ih)
   // the blur's kernel (separable)
   const sg = blur / texel, R = Math.max(1, Math.ceil(3 * sg)), ker = Array.from({ length: 2 * R + 1 }, (_, i) => Math.exp(-((i - R) ** 2) / (2 * sg * sg)))
   const ks = ker.reduce((a, b) => a + b, 0); for (let i = 0; i < ker.length; i++) ker[i] /= ks
@@ -190,8 +192,8 @@ export function shadowShape(d: UnitData, lod: string, sun: readonly [number, num
       acc.fill(0)
       for (const f of steps[r]) {
         proj(f, 2 * Math.PI * k / facings, buf); cov.fill(0)
-        // each triangle's projection, its covered sub-texels' centres by the edge functions (either winding)
-        for (let v = 0; v < nv; v++) { sp[v * 2] = (buf[v * 2] - c0) / texel * SS; sp[v * 2 + 1] = (buf[v * 2 + 1] - a0) / texel * SS }
+        // each triangle's projection, the texels whose centres it covers
+        for (let v = 0; v < nv; v++) { sp[v * 2] = (buf[v * 2] - c0) / texel; sp[v * 2 + 1] = (buf[v * 2 + 1] - a0) / texel }
         for (let t = 0; t < idx.length; t += 3) {
           const i0 = idx[t] * 2, i1 = idx[t + 1] * 2, i2 = idx[t + 2] * 2
           const ax = sp[i0], ay = sp[i0 + 1], bx = sp[i1], by = sp[i1 + 1], cx = sp[i2], cy = sp[i2 + 1]
@@ -213,7 +215,7 @@ export function shadowShape(d: UnitData, lod: string, sun: readonly [number, num
             for (let x = x0; x <= x1; x++) cov[y * sw + x] = 1
           }
         }
-        for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) if (cov[y * sw + x]) acc[Math.floor(y / SS) * iw + Math.floor(x / SS)] += 1 / (SS * SS)
+        for (let i = 0; i < cov.length; i++) acc[i] += cov[i]
       }
       for (let i = 0; i < acc.length; i++) acc[i] /= steps[r].length
       // blurred across, then along
