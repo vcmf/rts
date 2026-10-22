@@ -111,10 +111,10 @@ export interface UnitType {
 }
 /** how a unit looks (docs/plans/active/armies-demo.md): its colours by the figure's colour roles (tools/bake-figure.py:
  *  coat, facings, white, dark, skin, leather, pack, wood, metal), its flag's (vertical bands from the staff out), and
- *  what its figure shows from above when far: 'coat' (the headgear, pack and leather in the coat's colour) or 'keep'
+ *  what its figure shows from above when far: 'coat' (the headgear, pack and leather in the coat's colour) or 'own'
  *  (its own); unset, by the coat's value (src/look/world/armies.ts, farRule). Era data names uniforms by id
  *  (src/rulesets/<era>-uniforms.ts); a battalion wears one by id, whatever its side. Not read by the simulation */
-export interface Uniform { id: string; colours: Record<string, string>; flag: readonly string[]; far?: 'coat' | 'keep' }
+export interface Uniform { id: string; colours: Record<string, string>; flag: readonly string[]; far?: 'coat' | 'own' }
 
 export interface Ruleset {
   name: string

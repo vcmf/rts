@@ -78,6 +78,18 @@ the armies 9.20 / 10.43 / 10.12, without their shadows 8.55 / 9.87 / 9.45, the m
 4. The casters culled to the view (`?ucull=0` off): the same frames.
 5. The panning bench (`?benchpan=1`).
 
+## Batch C (2026-10-22)
+
+The coordinator's bench of batch B (deltas against main, 16k figures): +1.8 wide / +1.2 default / +1.4 close ms;
+all batch B defaults kept. The owner's decisions: the far palette by uniform, not by army; the grass's shadow per
+blade by default. Then, each behind its switch: far figures larger (`?farscale`), trodden ground (`?trample`), flags
+(`?flags`), the layout within the play area (lines and reserves in column).
+
+The near LOD (48 px, ±10 %): at 1080p a figure at r45 is about 67 px tall at the focus, so the battalions near the
+focus draw near (to about 57 m from the camera); at 720p it is 45 px there and the switch needs 38 m, nearer than
+the closest zoom: at 720p the near LOD all but never draws. Proposed: the switch by the frame's height (48 × height /
+1080 px), so it falls at the same distance at every resolution.
+
 ## Open questions
 
 - The cost on the laptop at 16,000 men, with and without the figures' shadows (the bench, the owner's run).

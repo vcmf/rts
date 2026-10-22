@@ -95,8 +95,8 @@ describe('armies: the far palette', () => {
   })
   it('takes the coat from far off for a dark coat, keeps a light one, and an explicit rule wins', () => {
     expect([luminance('#000000'), luminance('#FFFFFF')]).toEqual([0, 1]); expect(luminance('#767676')).toBeCloseTo(FAR_COAT_BELOW, 2)
-    const u = (coat: string, far?: 'coat' | 'keep') => ({ id: 'x', colours: { coat }, flag: [], far })
-    expect([farRule(u('#2C4FA8')), farRule(u('#E9E3D3')), farRule(u('#E9E3D3', 'coat')), farRule(u('#2C4FA8', 'keep'))]).toEqual(['coat', 'keep', 'coat', 'keep'])
+    const u = (coat: string, far?: 'coat' | 'own') => ({ id: 'x', colours: { coat }, flag: [], far })
+    expect([farRule(u('#2C4FA8')), farRule(u('#E9E3D3')), farRule(u('#E9E3D3', 'coat')), farRule(u('#2C4FA8', 'own'))]).toEqual(['coat', 'own', 'coat', 'own'])
   })
 })
 

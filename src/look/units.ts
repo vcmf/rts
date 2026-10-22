@@ -453,7 +453,7 @@ export class Units {
     const v = (id: string) => mode === 'off' ? -1 : mode === 'white' ? 1 : mode === 'black' ? 0 : mode === 'coat' ? 2 : first.has(id) ? 1 : 0
     for (const map of [this.mats, this.farMats]) for (const [id, m] of map) m.setFloat('uMask', v(id))
   }
-  /** each uniform's far LOD under its far rule (farRule: 'coat', the far palette and its lift; 'keep', as near), or
+  /** each uniform's far LOD under its far rule (farRule: 'coat', the far palette and its lift; 'own', as near), or
    *  every uniform's forced (?farpal=0|1: the A/B) */
   setFarRule(force: boolean | null): void {
     for (const [id, m] of this.farMats) m.setDefine('#define FAR', force ?? farRule(this.uniforms[id]) === 'coat')

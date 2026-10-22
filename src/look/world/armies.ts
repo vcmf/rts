@@ -39,7 +39,7 @@ export function luminance(hex: string): number {
 /** the coat's luminance under which a uniform's far figure takes its coat's colour (the 'coat' rule): 0.18, a mid
  *  grey (sRGB about #767676). The French blue is 0.09, the Austrian white 0.76 */
 export const FAR_COAT_BELOW = 0.18
-export const farRule = (u: Uniform): 'coat' | 'keep' => u.far ?? (luminance(u.colours.coat) < FAR_COAT_BELOW ? 'coat' : 'keep')
+export const farRule = (u: Uniform): 'coat' | 'own' => u.far ?? (luminance(u.colours.coat) < FAR_COAT_BELOW ? 'coat' : 'own')
 
 /** the script's phases a battalion goes through, in order, each cycle (the roles its men are given) */
 export type Phase = 'column' | 'halt' | 'deploy' | 'fire'

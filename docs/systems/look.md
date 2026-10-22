@@ -606,17 +606,34 @@ them. WebGL2 only (decision 0046).
 - **The far LOD posed** (`?uvat=0`: skinned): at load every far-LOD vertex is skinned at every baked step
   (`posedVertices`, `src/look/units-data.ts`), a place and a normal in two float texels; the far LOD and the shadow
   casters read them (`VAT_POS`), the near LOD stays skinned.
-- **The far palette** (`?farpal=1`, off until judged): from above, a far figure shows its headgear, pack and leather
-  more than its coat. The far LOD then has a material of its own (`FAR`): those roles take the side's coat a value
-  step down (`farPalette`, `FAR_ROLES`), crossfaded in as the figure shrinks below the LOD switch (no pop), with the
-  trees' and hills' shadow on it halved and a warm rim on what faces up.
+- **Uniforms** (batch C, the owner's call 2026-10-22): a battalion wears a uniform by id, whatever its side; a uniform
+  (`Uniform`, `src/sim/ruleset.ts`; the era's in `src/rulesets/napoleonic-uniforms.ts`; the demo's sides' in
+  `src/scenarios/armies-demo.ts`) is its colours by the figure's roles, its flag's, and its **far rule**: from above, a
+  far figure shows its headgear, pack and leather more than its coat; under 'coat' those roles take the coat a value
+  step down (`farPalette`, `FAR_ROLES`), crossfaded in as the figure shrinks below the LOD switch, with the trees' and
+  hills' shadow on it halved and a warm rim on what faces up (`FAR`); under 'keep' the far figure keeps its own. Unset,
+  a coat under luminance 0.18 (Rec. 709 on linear sRGB, a mid grey: `FAR_COAT_BELOW`) takes 'coat'. Materials are per
+  uniform and LOD. `?farpal=0|1` forces the rule off or on for every uniform (the A/B).
+- **Far figures larger** (`?farscale=0`: their own size): the far LOD grows as the figure falls from 90 % of the LOD
+  switch to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here) and 1.15 tall; render only.
+- **Trodden ground** (`?trample=0`: none): a 256² mask over a box round the ground in view (64 to 1,024 m), drawn on
+  the CPU (each man where he stands and up to 3.8 m behind him) when the box moves or at most every 0.25 s while men
+  move, about 1.1 to 1.6 ms a draw at 16,560 figures (this Mac); the ground and the meadow read it in their vertex
+  shaders (`TRAMPLE`): the grass shorter, splayed and drier, the ground toward a dusty earth in summer and a grey-brown
+  slush in winter, broken by the grain.
+- **Flags** (`?flags=0`: none): one a battalion, its uniform's flag on a 3 m staff with the colour bearer (the line's
+  centre file, second rank), the cloth downwind and waving at 12 fps, never under 12 px tall (up to 5 times its size);
+  one thin-instanced mesh.
 - **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at
   their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
-- **The script** (`src/look/world/armies.ts`, deterministic, the sim's stand-in): each battalion marches 36 m in
-  column of companies, halts 4 s, deploys into line at the run, pauses 3 s, then fires by ranks (1.4 s apart) until
-  its 110 s cycle starts again; battalions are 9.7 s apart in the cycle. The layout takes open ground behind each
-  side's front (110 m apart), the middle first, on a 5 m grid; water, trees (bushes are walked through), the
-  buildings' yards and the tile's last 30 m are kept clear, and it throws when a side has no room.
+- **The script** (`src/look/world/armies.ts`, deterministic, the sim's stand-in): each battalion in line marches 36 m
+  in column of companies, halts 4 s, deploys into line at the run, pauses 3 s, then fires by ranks (1.4 s apart) until
+  its 110 s cycle starts again; battalions are 9.7 s apart in the cycle. **The layout** keeps every battalion's whole
+  footprint within the camera's play area (±235 m): the lines, up to two footprints deep behind each side's front
+  (110 m apart), the front row and the middle first, each with its approach behind it clear; the rest are reserves in
+  column of companies at least 40 m behind the front, clear of the lines' footprints, the nearest first (5 m grid).
+  Water, trees (bushes are walked through), the buildings' yards are kept clear, and it throws when a side has no room.
+  On the demo map 20 a side is 4 and 3 battalions in line, the rest in column.
 - **The bench**: `?benchpan=1` pans each camera as it is measured (20 m either side at 8 m/s). `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions,
   `facingAt`). Hooks: `__units` (`drawn()`, `figures`, `battalions`), `__armies` (`blocked`, `focus`).
 
