@@ -17,24 +17,15 @@ uniform sampler2D uTrample;uniform vec4 uTrampleBox;varying float vTrample;
 #endif
 #ifdef UNIT_SHADOWS_VS
 // the figures' cast shadow (decision 0047) read once a blade, at its root on the ground, for the whole blade: the
-// fragment's own read (painter.glsl, unitShadowAt) is six fetches a pixel over many layers of blades. The same 2x2
-// taps and border fade, without the grain's jitter (the blade is the unit: its edge is the blade's)
-#ifdef UNIT_SM_DEPTH
+// fragment's own read (painter.glsl, unitShadowAt) is two comparisons and the grain a pixel over many layers of blades.
+// One bilinear comparison (the depth map's comparison sampler) and the border fade, no jitter (its edge is the blade's)
 uniform highp sampler2DShadow uUnitSM;
-#else
-uniform sampler2D uUnitSM;
-#endif
 uniform mat4 uUnitVP;uniform vec2 uUnitTexel;uniform float uUnitBias;uniform float uShadowsOn;
 varying float vUSh;
 float unitShadowRoot(vec3 wp){
   vec4 lp=uUnitVP*vec4(wp,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
   if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;
-  float d=q.z*0.5+0.5-uUnitBias,s=0.0;
-  #ifdef UNIT_SM_DEPTH
-  s=4.0-4.0*texture(uUnitSM,vec3(uv,d));
-  #else
-  for(int x=0;x<2;x++)for(int y=0;y<2;y++)s+=step(texture2D(uUnitSM,uv+(vec2(float(x),float(y))-0.5)*uUnitTexel).r,d);
-  #endif
+  float d=q.z*0.5+0.5-uUnitBias,s=4.0-4.0*texture(uUnitSM,vec3(uv,d));
   vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,8.0*uUnitTexel.x,e.x)*smoothstep(0.0,8.0*uUnitTexel.y,e.y);
   return s/4.0*uShadowsOn*fade;}
 #endif

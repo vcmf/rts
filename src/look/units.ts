@@ -19,7 +19,6 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { SUN, type Materials } from './materials.ts'
-import { D } from './spec.ts'
 import UNITS_VS from './shaders/units.vert?raw'
 import UNITS_FS from './shaders/units.frag?raw'
 import FLAG_VS from './shaders/flag.vert?raw'
@@ -27,7 +26,7 @@ import FLAG_FS from './shaders/flag.frag?raw'
 import DEPTH_FS from './shaders/depth.frag?raw'
 import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
-import { TRACE, tr, trNow } from './trace.ts'
+import { TR, TRACE, tr, trNow } from './trace.ts'
 import { posedMesh, posedVertices, shadowProxy, type UnitData } from './units-data.ts'
 import { CYCLE, farPalette, farRule, manAt, phaseAt, slots, type Battalion, type Drill, type ManState, type Phase, type Uniform } from './world/armies.ts'
 
@@ -47,7 +46,6 @@ interface Host {
 
 const SM_SIZE = 2048   // the figures' shadow map, fitted to the ground in view each frame
 const SM_REACH = 900   // m: a view ray that meets no ground is cut here (the widest zoom looks far)
-const SM_STEP = 16     // m: the map's half-size is a multiple of this, so its texel size changes only in steps
 const SM_BIAS = 0.02   // m along the sun: no receiver is drawn into the map, so it only absorbs float rounding
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1]   // the view's corners in clip space
 const FIGURE = 1.8     // m: a figure's height, for the LOD's pixel test
@@ -58,7 +56,7 @@ const TR_TRAIL = [[0.8, 0.9], [1.6, 0.8], [2.6, 0.6], [3.8, 0.4]] as const   // 
 const TR_WEIGHT = 1 + TR_TRAIL.reduce((a, [, w]) => a + w, 0)
 const FAR_SCALE_XZ = 1.35, FAR_SCALE_Y = 1.15   // the far figure's growth at a quarter of the LOD switch's height
 const SHADOW_H = 2.6    // m: the highest point of a figure (his bayonet up), whose shadow reaches farthest
-const SM_STEP_FINE = 2  // m: fine, the box's half-size steps
+const SM_STEP_FINE = 2  // m: the box's half-size steps
 const SM_HOLD_SHARE = 0.1   // the held box's slack, a share of the view's half-size (the shadow fix: SM_HOLD at least)
 const SM_COARSE = 1.3  // and be at most this many times the size the view needs (its texels no coarser)
 
@@ -74,9 +72,6 @@ export class Units {
   private depthVatMat: ShaderMaterial   // the far LOD's casters, posed (VAT_POS)
   private depthProxyMat!: ShaderMaterial   // the shadow proxy's, posed
   private posed = false
-  private depthRT = false               // the shadow map is the depth-only target
-  /** the shadow map as depth only, read by the hardware's comparison (?udepth=0: the float colour, manual taps) */
-  depthCompare = true
   /** the casters culled to those whose shadow can reach the view (?ucull=0: all in the sun's box) */
   tightCull = true
   private camPlanes = Frustum.GetPlanes(Matrix.Identity())
@@ -118,8 +113,6 @@ export class Units {
   private readonly trV = new Vector4()
   private trAt = -1   // the clock when the mask was last drawn
   private quad = new Float64Array(8)
-  /** the shadow's quality (?ushadowq=0: batch A's): the box fitted to the ground in view, the soft lookup */
-  fineShadows = true
   /** the held sun box's slack in proportion to it (?smhold=fixed: batch B's, none) */
   holdShare = true
   /** the casters: the shadow proxy (shadowProxy, src/look/units-data.ts; ?shadowlod=far: the far LOD) */
@@ -181,9 +174,10 @@ export class Units {
     this.depthVatMat = new ShaderMaterial('unitsDepthPosed', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATTime'], samplers: ['uVAT', 'uVATP'], defines: ['#define DEPTH', '#define VAT_POS'] })
     this.depthVatMat.setTexture('uVAT', vat); this.depthVatMat.setTexture('uVATP', vatp)
     this.sun = new FreeCamera('unitSun', SUN.scale(500), scene); this.sun.mode = Camera.ORTHOGRAPHIC_CAMERA; this.sun.minZ = 1; this.sun.maxZ = 1200
-    this.shadowRT = this.makeRT(false)
+    this.shadowRT = this.makeRT()
+    const smTex = new BaseTexture(scene, this.shadowRT.depthStencilTexture); smTex.name = 'unitSMDepthTex'
     for (const m of receivers) {
-      m.setTexture('uUnitSM', this.shadowRT); m.setVector2('uUnitTexel', new Vector2(1 / SM_SIZE, 1 / SM_SIZE))
+      m.setTexture('uUnitSM', smTex); m.setVector2('uUnitTexel', new Vector2(1 / SM_SIZE, 1 / SM_SIZE))
       m.setFloat('uUnitBias', SM_BIAS / (this.sun.maxZ - this.sun.minZ)); m.setMatrix('uUnitVP', Matrix.Identity())
     }
     for (const l of data.lods) {
@@ -264,8 +258,14 @@ export class Units {
     if (changed) h.staleSet[0] = h.staleSet[1] = h.staleSet[2] = true
   }
 
+  // a thin-instance buffer sent to the GPU (n floats), counted for the bench's trace
+  private upload(m: Mesh, kind: string, n: number): void {
+    if (!TRACE.on) { m.thinInstanceBufferUpdated(kind); return }
+    const t = performance.now(); m.thinInstanceBufferUpdated(kind)
+    TRACE.c[TR.tiUploads]++; TRACE.c[TR.tiKB] += n * 4 / 1024; TRACE.c[TR.tiMs] += performance.now() - t
+  }
   private frame(): void {
-    const t0 = trNow(); this.frameBody(); if (TRACE.on) tr('unitsMs', performance.now() - t0)
+    const t0 = trNow(); this.frameBody(); if (TRACE.on) tr(TR.unitsMs, performance.now() - t0)
   }
   private frameBody(): void {
     const T = this.clock(), step = Math.floor(T * this.data.fps)
@@ -286,7 +286,7 @@ export class Units {
       const moving = p === 'column' || p === 'deploy'
       if (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step)) {
         const tp = trNow(); this.place(h, local, cycleStart); h.step = step; h.phase = p; h.cycle = cycle; moved = true; anyMoved = true
-        if (TRACE.on) { tr('placed'); tr('placeMs', performance.now() - tp) }
+        if (TRACE.on) { tr(TR.placed); tr(TR.placeMs, performance.now() - tp) }
       }
       const px = FIGURE * pxPerM / Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
       const near = h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1
@@ -296,18 +296,18 @@ export class Units {
       const kc = this.casterNear && near ? 0 : this.proxyCasters ? 2 : 1   // the caster's mesh
       for (let k = 0; k < 3; k++) {
         if (k !== (near ? 0 : 1) && !(this.shadows && k === kc)) continue
-        if (h.stale[k]) { h.lod[k].thinInstanceBufferUpdated('matrix'); h.stale[k] = false }
-        if (h.staleSet[k]) { h.lod[k].thinInstanceBufferUpdated('aVAT'); h.staleSet[k] = false }
+        if (h.stale[k]) { this.upload(h.lod[k], 'matrix', h.matrices.length); h.stale[k] = false }
+        if (h.staleSet[k]) { this.upload(h.lod[k], 'aVAT', h.settings.length); h.staleSet[k] = false }
       }
     }
     if (this.trampleOn) this.trample(T, anyMoved)
     if (this.flag?.isEnabled()) {
       this.flagMat?.setFloat('uFlagT', T); this.flagMat?.setVector2('uFlagK', this.flagK.set(pxPerM, FLAG_MIN_PX))
-      if (this.flagStale) { this.flag.thinInstanceBufferUpdated('matrix'); this.flag.thinInstanceRefreshBoundingInfo(); this.flagStale = false; tr('flag') }
+      if (this.flagStale) { this.upload(this.flag, 'matrix', this.flagM?.length ?? 0); this.flag.thinInstanceRefreshBoundingInfo(); this.flagStale = false; tr(TR.flag) }
     }
     if (!this.shadows) return
     const refit = this.fitSun()
-    if (refit) tr('sunRefit')
+    if (refit) tr(TR.sunRefit)
     if (!this.lazyShadows) return
     // (no casters: an empty map is clear for any box; drawn once, then kept until a caster comes into it)
     if (moved || refit) {
@@ -316,37 +316,33 @@ export class Units {
     }
   }
 
-  // The sun's orthographic box around the ground in view: where the view's corner rays meet the lowest and the
-  // highest ground (cut at SM_REACH), padded for a figure's height, so the map's texels go where the camera looks.
-  // Its centre snaps to whole texels along the sun's fixed view axes and its size moves in SM_STEP steps, so the
-  // texel grid stays put under still figures while the view pans or zooms (the crowd bench's L1b). Lazy (lazyShadows),
-  // the box is held while it still covers the view with SM_HOLD m to spare and is at most SM_COARSE times the size the
-  // view needs, so a small move of the camera draws no new map. Returns whether the map's view or casters changed
-  // Fine (fineShadows, batch B): the corner rays meet the ground in view's own range of heights, not the tile's
-  // (25 m of height seen along a low sun stretched the box), the box is centred on what it must hold and its size moves
-  // in finer steps
-  // the shadow map's target: a float colour (the casters' depth written as a colour, read by manual taps), or depth
-  // only (batch B, ?udepth): a 24-bit depth texture with a comparison sampler, read by the hardware's bilinear compare
-  private makeRT(depth: boolean): RenderTargetTexture {
-    const rt = depth
-      ? new RenderTargetTexture('unitSMDepth', { width: SM_SIZE, height: SM_SIZE }, this.scene, { generateMipMaps: false, generateDepthBuffer: true, noColorAttachment: true })
-      : new RenderTargetTexture('unitSM', { width: SM_SIZE, height: SM_SIZE }, this.scene, false, true, Constants.TEXTURETYPE_FLOAT, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, true, false, false, Constants.TEXTUREFORMAT_R)
-    if (depth) rt.createDepthStencilTexture(Constants.LEQUAL, true, false, 1, Constants.TEXTUREFORMAT_DEPTH24)
+  // the shadow map's target: depth only, a 24-bit depth texture with a comparison sampler, read by the hardware's
+  // bilinear compare (batch B)
+  private makeRT(): RenderTargetTexture {
+    const rt = new RenderTargetTexture('unitSMDepth', { width: SM_SIZE, height: SM_SIZE }, this.scene, { generateMipMaps: false, generateDepthBuffer: true, noColorAttachment: true })
+    rt.createDepthStencilTexture(Constants.LEQUAL, true, false, 1, Constants.TEXTUREFORMAT_DEPTH24)
     rt.activeCamera = this.sun; rt.clearColor = new Color4(1, 1, 1, 1)
     rt.renderList = this.meshes; rt.getCustomRenderList = () => this.culled
     // a far LOD caster of a battalion drawn near is hidden from the view: shown to the map alone, while it draws
     const shown: Mesh[] = []
     rt.onBeforeRenderObservable.add(() => {
       this.smDraws++; for (const m of this.culled) if (!m.isVisible) { m.isVisible = true; shown.push(m) }
-      if (TRACE.on) { tr('sm'); tr('smCasters', this.culled.length); for (const m of this.culled) tr('smTris', m.thinInstanceCount * m.getTotalIndices() / 3) }
+      if (TRACE.on) { tr(TR.sm); tr(TR.smCasters, this.culled.length); for (const m of this.culled) tr(TR.smTris, m.thinInstanceCount * m.getTotalIndices() / 3) }
     })
     rt.onAfterRenderObservable.add(() => { for (const m of shown) m.isVisible = false; shown.length = 0 })
     for (const h of this.hosts) h.lod.forEach((l, li) => rt.setMaterialForRendering(l, li === 2 ? this.depthProxyMat : li === 1 && this.posed ? this.depthVatMat : this.depthMat))
     return rt
   }
 
+  // The sun's orthographic box around the ground in view: where the view's corner rays meet the ground in view's own
+  // range of heights (viewGround: the tile's 25 m seen along a low sun stretched it), padded for a figure's height and
+  // centred on what it holds, so the map's texels go where the camera looks. Its centre snaps to whole texels along the
+  // sun's fixed view axes and its size moves in SM_STEP_FINE steps, so the texel grid stays put under still figures.
+  // Lazy (lazyShadows), it is held while the view stays inside it (its slack: SM_HOLD_SHARE of its size, holdShare) and
+  // it is at most SM_COARSE times the size the view needs, so a pan draws no new map until it leaves it. Returns whether
+  // the map's view or casters changed
   private fitSun(): boolean {
-    const cam = this.camera, k = this.scratch, inv = k.inv, g = this.fineShadows ? this.viewGround() : D.spec.ground
+    const cam = this.camera, k = this.scratch, inv = k.inv, g = this.viewGround()
     cam.getTransformationMatrix().invertToRef(inv)
     let n = 0
     k.pts[n++].copyFrom(cam.target)
@@ -364,28 +360,22 @@ export class Units {
     // drew nothing: the first armies' build cast no shadow). Fitted from the next frame instead
     if (!(Number.isFinite(k.c.x) && Number.isFinite(k.c.y) && Number.isFinite(k.c.z))) return false
     this.sun.position.copyFrom(k.c).addInPlace(SUN.scale(500)); this.sun.setTarget(k.c); this.sun.computeWorldMatrix()
-    let V = this.sun.getViewMatrix(true), ex = 0, ey = 0, x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+    let V = this.sun.getViewMatrix(true), x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
     for (let i = 0; i < n; i++) for (let e = 0; e < 2; e++) {
       k.v.copyFrom(k.pts[i]); k.v.y += e ? 3 : -2; Vector3.TransformCoordinatesToRef(k.v, V, k.v)
       x0 = Math.min(x0, k.v.x); x1 = Math.max(x1, k.v.x); y0 = Math.min(y0, k.v.y); y1 = Math.max(y1, k.v.y)
     }
-    if (this.fineShadows) {
-      // the centre moved to the middle of what the box holds (along the sun's view axes: the texel grid's snap follows)
-      const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, m = V.m
-      k.c.x += m[0] * mx + m[1] * my; k.c.y += m[4] * mx + m[5] * my; k.c.z += m[8] * mx + m[9] * my
-      this.sun.position.copyFrom(k.c).addInPlace(SUN.scale(500)); this.sun.setTarget(k.c); this.sun.computeWorldMatrix()
-      V = this.sun.getViewMatrix(true)
-      // the slack the box is held by (holdShare, the shadow fix): a share of its size, so a pan at the widest zoom refits
-      // every SM_HOLD_SHARE of the view, not every frame; fixed (?smhold=fixed): none, held only within SM_HOLD of a
-      // box fitted 2 m round the view (the batch B box, which a pan refit at nearly every frame)
-      const slack = this.holdShare ? Math.max(SM_HOLD, SM_HOLD_SHARE * Math.max(x1 - x0, y1 - y0) / 2) : 0
-      ex = Math.ceil(((x1 - x0) / 2 + 2 + slack) / SM_STEP_FINE) * SM_STEP_FINE; ey = Math.ceil(((y1 - y0) / 2 + 2 + slack) / SM_STEP_FINE) * SM_STEP_FINE
-      this.smBox.margin = this.holdShare ? 1 : SM_HOLD
-    } else {
-      this.smBox.margin = SM_HOLD
-      ex = Math.max(-x0, x1); ey = Math.max(-y0, y1)
-      ex = Math.ceil((ex + 4) / SM_STEP) * SM_STEP; ey = Math.ceil((ey + 4) / SM_STEP) * SM_STEP
-    }
+    // the centre moved to the middle of what the box holds (along the sun's view axes: the texel grid's snap follows)
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, vm = V.m
+    k.c.x += vm[0] * mx + vm[1] * my; k.c.y += vm[4] * mx + vm[5] * my; k.c.z += vm[8] * mx + vm[9] * my
+    this.sun.position.copyFrom(k.c).addInPlace(SUN.scale(500)); this.sun.setTarget(k.c); this.sun.computeWorldMatrix()
+    V = this.sun.getViewMatrix(true)
+    // the slack the box is held by (holdShare, the shadow fix): a share of its size, so a pan at the widest zoom refits
+    // every SM_HOLD_SHARE of the view, not every frame; fixed (?smhold=fixed): none, held only within SM_HOLD of a
+    // box fitted 2 m round the view (the batch B box, which a pan refit at nearly every frame)
+    const slack = this.holdShare ? Math.max(SM_HOLD, SM_HOLD_SHARE * Math.max(x1 - x0, y1 - y0) / 2) : 0
+    const ex = Math.ceil(((x1 - x0) / 2 + 2 + slack) / SM_STEP_FINE) * SM_STEP_FINE, ey = Math.ceil(((y1 - y0) / 2 + 2 + slack) / SM_STEP_FINE) * SM_STEP_FINE
+    this.smBox.margin = this.holdShare ? 1 : SM_HOLD
     const box = this.smBox
     if (this.lazyShadows && box.set && box.ex <= ex * SM_COARSE && box.ey <= ey * SM_COARSE && this.covers(n)) {
       // held: the sun back on the held box's centre (it was moved to the view's above), the map's view unchanged
@@ -400,14 +390,12 @@ export class Units {
     V = this.sun.getViewMatrix(true)
     this.sun.orthoLeft = -ex; this.sun.orthoRight = ex; this.sun.orthoTop = ey; this.sun.orthoBottom = -ey
     box.ex = ex; box.ey = ey; box.V.copyFrom(V); box.c.copyFrom(k.c); box.set = true
-    if (this.depthRT) {
-      // depth only: the sun's near and far planes fitted along the sun to what the box holds (24 bits over tens of
-      // metres, not 1,200), a figure and some to spare either way
-      let z0 = Infinity, z1 = -Infinity
-      for (let i = 0; i < n; i++) for (let e = 0; e < 2; e++) { k.v.copyFrom(k.pts[i]); k.v.y += e ? 3 : -2; Vector3.TransformCoordinatesToRef(k.v, V, k.v); z0 = Math.min(z0, k.v.z); z1 = Math.max(z1, k.v.z) }
-      this.sun.minZ = Math.max(0.5, Math.floor(z0 - 12)); this.sun.maxZ = Math.ceil(z1 + 12)
-      for (const r of this.receivers) r.setFloat('uUnitBias', SM_BIAS / (this.sun.maxZ - this.sun.minZ))
-    }
+    // the sun's near and far planes fitted along the sun to what the box holds (24 bits over tens of metres, not
+    // 1,200), a figure and some to spare either way
+    let z0 = Infinity, z1 = -Infinity
+    for (let i = 0; i < n; i++) for (let e = 0; e < 2; e++) { k.v.copyFrom(k.pts[i]); k.v.y += e ? 3 : -2; Vector3.TransformCoordinatesToRef(k.v, V, k.v); z0 = Math.min(z0, k.v.z); z1 = Math.max(z1, k.v.z) }
+    this.sun.minZ = Math.max(0.5, Math.floor(z0 - 12)); this.sun.maxZ = Math.ceil(z1 + 12)
+    for (const r of this.receivers) r.setFloat('uUnitBias', SM_BIAS / (this.sun.maxZ - this.sun.minZ))
     const vp = k.vp; V.multiplyToRef(this.sun.getProjectionMatrix(true), vp)
     for (const r of this.receivers) r.setMatrix('uUnitVP', vp)
     Frustum.GetPlanesToRef(vp, this.planes)
@@ -472,23 +460,13 @@ export class Units {
   setShadows(on: boolean): void {
     if (on === this.shadows) return
     this.shadows = on
-    // depth only (?udepth, with the soft lookup only): the colour target swapped for the depth one, once
-    const depth = on && this.depthCompare && this.fineShadows
-    if (depth && !this.depthRT) {
-      const was = this.shadowRT, i = this.scene.customRenderTargets.indexOf(was)
-      if (i >= 0) this.scene.customRenderTargets.splice(i, 1)
-      this.shadowRT = this.makeRT(true); was.dispose(); this.depthRT = true
-      const tex = new BaseTexture(this.scene, this.shadowRT.depthStencilTexture); tex.name = 'unitSMDepthTex'
-      for (const m of this.receivers) m.setTexture('uUnitSM', tex)
-    }
-    for (const m of this.receivers) m.setDefine('#define UNIT_SM_DEPTH', this.depthRT)
     const list = this.scene.customRenderTargets, i = list.indexOf(this.shadowRT)
     if (on && i < 0) list.push(this.shadowRT)
     if (!on && i >= 0) list.splice(i, 1)
     // lazy: drawn once, then again only when frame() resets it (a still view between two steps draws nothing)
     this.shadowRT.refreshRate = this.lazyShadows ? 0 : 1
     if (on) { this.smBox.set = false; this.smStep = -1; this.smEmpty = false }   // (fitted by the next frame)
-    for (const m of this.receivers) { m.setDefine('#define UNIT_SHADOWS', on); m.setDefine('#define UNIT_SHADOW_SOFT', on && this.fineShadows) }
+    for (const m of this.receivers) m.setDefine('#define UNIT_SHADOWS', on)
     for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', on)
   }
 
@@ -581,7 +559,7 @@ export class Units {
       out[j * TR_N + i] = Math.round(255 * s / n)
     }
     this.trTex?.update(out)
-    if (TRACE.on) { tr('trample'); tr('trampleMs', performance.now() - t0) }
+    if (TRACE.on) { tr(TR.trample); tr(TR.trampleMs, performance.now() - t0) }
   }
 
   /** the battalions' colours (?flags=0: none): one flag a battalion, in its uniform's flag colours, carried by the man

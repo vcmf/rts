@@ -2,7 +2,8 @@
 // with ?bench runs fixed cameras, records frame times, GPU time per pass, draw calls, triangles and texture memory,
 // and offers the result as JSON. The owner runs it on the laptop; tools/bench-look.mjs runs it headless here.
 //   ?bench            the default run; ?hold=<s> seconds measured per camera and arm (default 3); ?benchpan=1 each
-//                     camera panning as it is measured (below)
+//                     camera panning as it is measured; ?benchtrace=1 a record of each frame (below: timings come
+//                     from untraced runs, the trace explains them)
 // GPU time per pass is only as good as the browser's timer queries: passesOverFrame (the passes' medians over the
 // frame's) far above 1 means the backend inflates them (ANGLE on Metal does), and only the frame time stands.
 // Arms are variants of the page measured in the same session, interleaved A B B A per camera so that heat and clock
@@ -17,7 +18,7 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import { EffectRenderer, type EffectWrapper } from '@babylonjs/core/Materials/effectRenderer.js'
 import { RenderTargetTexture } from '@babylonjs/core/Materials/Textures/renderTargetTexture.js'
 import { GpuTimer } from './gputimer.ts'
-import { TRACE, TRACE_FIELDS, tr } from './trace.ts'
+import { TR, TRACE, TRACE_FIELDS } from './trace.ts'
 import { START } from './post.ts'
 import { D } from './spec.ts'
 
@@ -118,7 +119,9 @@ if (panParam !== null && panParam !== '0' && panParam !== '1') throw new Error(`
 const PAN = panParam === '1', PAN_A = 20, PAN_V = 8
 // ?benchtrace=1: a record of every measured frame (its interval and the trace's counters, src/look/trace.ts: what was
 // drawn, written, uploaded, compiled in it) in each run, and a summary over the runs: for the frames over their run's
-// 90th percentile, the share with each event against its share of all frames (traceSummary). Off: nothing installed
+// 90th percentile, the share with each event against its share of all frames (traceSummary). Off: nothing installed.
+// Take the timings from untraced runs: the trace explains them (what the slow frames did, cpuMs a frame's JavaScript),
+// it is not where they are measured
 const traceParam = new URLSearchParams(location.search).get('benchtrace')
 if (traceParam !== null && traceParam !== '0' && traceParam !== '1') throw new Error(`?benchtrace must be 0 or 1, not ${traceParam}`)
 const TRACING = traceParam === '1', TRACE_MAX = 4096   // frames recorded a run at most (the rest counted, not kept)
@@ -135,46 +138,42 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   // open until the next draw of another pass: GPU work between draws (a clear, a target switch) is charged to it
   let open: string | null = null
   const undo: (() => void)[] = []   // every observer the bench adds, removed when it ends
-  // the trace: hooks on what Babylon does in a frame (the render targets by name, the shader compiles, the
-  // thin-instance uploads), the records preallocated a run (no allocation a frame: the hooks pass their arguments on
-  // as they are, each render target's name gets its bit once)
-  const rtNames: string[] = [], rtBit = new Map<string, number>()
+  // the trace: hooks on what Babylon does in a frame (the render targets by name, the effect-renderer bakes, the shader
+  // compiles), the records preallocated a run. Cheap by construction: no prototype of a class the render loop calls
+  // per mesh is patched (the thin-instance uploads are counted where src/look/units.ts makes them), each render target
+  // and effect keeps its bit on itself once named (no lookup a draw), the counters are indexed by number (trace.ts)
+  const rtNames: string[] = []
   const recMs = new Float64Array(TRACE_MAX), recC = new Float64Array(TRACE_MAX * NF), recRt = new Int32Array(TRACE_MAX)
-  let recN = 0, recLost = 0
-  const AM = TRACE_FIELDS.indexOf('activeMeshes'), DR = TRACE_FIELDS.indexOf('draws')
+  let recN = 0, recLost = 0, cpu0 = 0
+  type Marked = { __trBit?: number }
+  const bitOf = (o: Marked, name: string): number => {
+    if (o.__trBit === undefined) { o.__trBit = rtNames.length < 31 ? rtNames.length : -1; if (o.__trBit >= 0) rtNames.push(name) }
+    return o.__trBit
+  }
   if (TRACING) {
     TRACE.on = true; undo.push(() => { TRACE.on = false })
     const proto = RenderTargetTexture.prototype, render = proto.render
-    const mark = (name: string) => {
-      let bit = rtBit.get(name)
-      if (bit === undefined && rtNames.length < 31) { bit = rtNames.length; rtBit.set(name, bit); rtNames.push(name) }
-      if (bit !== undefined) TRACE.rtMask |= 1 << bit
-    }
-    proto.render = function (this: RenderTargetTexture, a?: boolean, b?: boolean) {
-      const t = performance.now(); mark(this.name); render.call(this, a, b); tr('rt'); tr('rtMs', performance.now() - t)
+    proto.render = function (this: RenderTargetTexture & Marked, a?: boolean, b?: boolean) {
+      const t = performance.now(), bit = this.__trBit ?? bitOf(this, this.name)
+      if (bit >= 0) TRACE.rtMask |= 1 << bit
+      render.call(this, a, b); TRACE.c[TR.rt]++; TRACE.c[TR.rtMs] += performance.now() - t
     }
     undo.push(() => { proto.render = render })
     // the bakes drawn by an effect renderer, not a render target (the macro colour's near bake, combNear; the buildings'
-    // light): marked 'fx:<the effect's name>' at each draw (the name its last applyEffectWrapper set; its time is the
-    // draw's alone)
-    const ep = EffectRenderer.prototype, apply = ep.applyEffectWrapper, draw = ep.draw, fxName = new Map<EffectWrapper, string>()
-    let fx = ''
-    ep.applyEffectWrapper = function (this: EffectRenderer, w: EffectWrapper, d?: boolean, st?: boolean) {
-      let n = fxName.get(w); if (n === undefined) { n = `fx:${w.name}`; fxName.set(w, n) }
-      fx = n; apply.call(this, w, d, st)
+    // light): marked 'fx:<the effect's name>' at each draw (the bit its last applyEffectWrapper set; the draw's time)
+    const ep = EffectRenderer.prototype, apply = ep.applyEffectWrapper, draw = ep.draw
+    let fxBit = -1
+    ep.applyEffectWrapper = function (this: EffectRenderer, w: EffectWrapper & Marked, d?: boolean, st?: boolean) {
+      fxBit = w.__trBit ?? bitOf(w, `fx:${w.name}`); apply.call(this, w, d, st)
     }
-    ep.draw = function (this: EffectRenderer) { const t = performance.now(); mark(fx); draw.call(this); tr('rt'); tr('rtMs', performance.now() - t) }
+    ep.draw = function (this: EffectRenderer) {
+      const t = performance.now(); if (fxBit >= 0) TRACE.rtMask |= 1 << fxBit
+      draw.call(this); TRACE.c[TR.rt]++; TRACE.c[TR.rtMs] += performance.now() - t
+    }
     undo.push(() => { ep.applyEffectWrapper = apply; ep.draw = draw })
     const eng = engine as unknown as { _createShaderProgram: (...a: unknown[]) => unknown }, compile = eng._createShaderProgram
-    eng._createShaderProgram = function (this: unknown, a: unknown, b: unknown, c: unknown, d: unknown, e: unknown) { tr('compiles'); return compile.call(this, a, b, c, d, e) }
+    eng._createShaderProgram = function (this: unknown, a: unknown, b: unknown, c: unknown, d: unknown, e: unknown) { TRACE.c[TR.compiles]++; return compile.call(this, a, b, c, d, e) }
     undo.push(() => { eng._createShaderProgram = compile })
-    const mp = Mesh.prototype as unknown as { thinInstanceBufferUpdated: (kind: string) => void }, upd = mp.thinInstanceBufferUpdated
-    mp.thinInstanceBufferUpdated = function (this: Mesh & { _userThinInstanceBuffersStorage?: { strides: Record<string, number> } }, kind: string) {
-      const t = performance.now(); upd.call(this, kind)
-      const stride = kind === 'matrix' ? 16 : this._userThinInstanceBuffersStorage?.strides[kind] ?? 0
-      tr('tiUploads'); tr('tiKB', this.thinInstanceCount * stride * 4 / 1024); tr('tiMs', performance.now() - t)
-    }
-    undo.push(() => { mp.thinInstanceBufferUpdated = upd })
   }
   const seg = (label: string | null) => {
     if (open === label) return
@@ -209,7 +208,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
       if (timing && lastT && !passFrame) {
         if (recN < TRACE_MAX) { recMs[recN] = t - lastT; recC.set(TRACE.c, recN * NF); recRt[recN] = TRACE.rtMask; recN++ } else recLost++
       }
-      TRACE.c.fill(0); TRACE.rtMask = 0
+      TRACE.c.fill(0); TRACE.rtMask = 0; cpu0 = performance.now()
     }
     lastT = t
     timer.poll(); timer.newFrame(); frameNo++; hookPosts()
@@ -221,7 +220,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
     seg(null)
     if (timing && !passFrame) timer.end('frame')
     if (timing) { draws.push(inst.drawCallsCounter.current); tris.push(scene.getActiveIndices() / 3) }
-    if (TRACING) { TRACE.c[AM] = scene.getActiveMeshes().length; TRACE.c[DR] = inst.drawCallsCounter.current }
+    if (TRACING) { TRACE.c[TR.activeMeshes] = scene.getActiveMeshes().length; TRACE.c[TR.draws] = inst.drawCallsCounter.current; TRACE.c[TR.cpuMs] = performance.now() - cpu0 }
   })
   undo.push(() => { engine.onBeginFrameObservable.remove(begin); engine.onEndFrameObservable.remove(end) })
   // a hidden tab stops rendering: a run across it would hold a frame of several seconds, so that run is measured again
