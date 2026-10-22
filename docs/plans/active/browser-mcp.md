@@ -46,3 +46,10 @@ the plan records what they are and how they are accepted.
 - `node tools/check-docs.mjs` passes; `npm test` as before (the cost tests are measured locally against Mac budgets).
 
 ## Review rounds
+
+- **Round 1** (`/code-review high`): no severe issue, ten moderate or light. Fixed in `tools/win-chrome.sh`: Windows
+  is needed only by `start` and `stop`; strict arguments; `start` refuses a port held by another browser and a profile
+  already open without the port; the profile matched as the whole `--user-data-dir` value; `stop` waits until the
+  processes and the port are gone and fails otherwise; Chrome detached from the shell. `AGENTS.md` points at
+  `.mcp.json` for the version instead of repeating it. Left: the plan written after the code (said above); the project
+  server in WSL without the override (`AGENTS.md` says what to do). No severe issue, so the review stops.
