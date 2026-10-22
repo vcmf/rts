@@ -53,3 +53,4 @@ recorded here on 2026-10-08.
 | [0044](0044-epic-shimmer-limits.md) | The water's shimmer limits re-baselined for the epic mood | accepted |
 | [0045](0045-render-scale-easu.md) | The render scale 0.9 from the closest zoom, upscaled by EASU | accepted |
 | [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | accepted |
+| [0048](0048-battle-in-a-worker.md) | The battle runs in a worker, its soldiers at a fixed step, drawn by interpolation | proposed |

@@ -43,6 +43,7 @@ designs written before building (frozen once built, their lasting content moves 
 
 - [`proposals/engine-design.md`](proposals/engine-design.md): world spec, heightfield, camera, bakes, scale, known issues, order of engine work. *(accepted)*
 - [`proposals/sim-design.md`](proposals/sim-design.md): the battle simulation (battalions, drill, fire, morale, determinism, phases). *(draft)*
+- [`proposals/battle-threads.md`](proposals/battle-threads.md): the battle in a worker, its soldiers at a fixed step, drawn by interpolation (decision 0048, experimental). *(draft)*
 - [`proposals/staff-map/design.md`](proposals/staff-map/design.md): the far-zoom staff map, art direction. *(accepted)*
 - [`proposals/staff-map/implementation.md`](proposals/staff-map/implementation.md): how the staff map is built. *(draft)*
 - [`proposals/prepainted-terrain.md`](proposals/prepainted-terrain.md): a painted macro colour bake for the ground; strokes stay at runtime. *(draft)*
@@ -53,6 +54,7 @@ designs written before building (frozen once built, their lasting content moves 
 ## Plans
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
+  [`plans/active/battle-threads.md`](plans/active/battle-threads.md) (the battle's threads: worker, fixed soldier step, interpolation),
   [`plans/active/flow-default.md`](plans/active/flow-default.md) (the combed meadow as the default grass),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
   [`plans/active/s1c-fire-morale.md`](plans/active/s1c-fire-morale.md) (S1c),
