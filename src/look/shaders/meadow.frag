@@ -1,0 +1,75 @@
+#extension GL_OES_standard_derivatives : enable
+precision highp float;varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCrop;varying vec2 vRoot;uniform float uCell;
+#ifdef GRASS_FLOW
+varying vec3 vFlow;
+#endif
+#include<painter>
+uniform vec3 uTipTint;uniform float uTipWarm;   // the warm autumn's tip colour and tint weight, once a frame (src/look/main.ts)
+#include<shore>
+
+void main(){
+  vec3 N=normalize(mix(normalize(vN),vec3(0.0,1.0,0.0),0.75));  // grass shades like the ground it grows from (a crop too: less, its stalks' shadow sides went blue-grey)
+  vec4 lm=LM(vW);float sh=(1.0-lm.r)*uShadowsOn;
+  vec3 alb;
+  if(vIsCrop>0.5){
+    // a crop: lime at the foot to its season colour at the tip (meadow.vert), each clump a shade apart, no read of the
+    // ground under it
+    alb=mix(vec3(0.38,0.48,0.18),vCrop,smoothstep(0.0,0.35,vV))*mix(0.9,1.12,vV)*mix(0.92,1.08,vShade);
+    // in winter toward the snowed ground under it, as the grass is (the ground read only then)
+    #ifdef MACRO_BAKE
+    if(uSeason>2.0){pMdx=vec2(uCell,0.0);pMdy=vec2(0.0,uCell);alb=mix(alb,groundSeason(groundAt(vRoot,uCell))*mix(0.95,1.3,vV),0.7*smoothstep(2.0,3.0,uSeason));}
+    #else
+    if(uSeason>2.0)alb=mix(alb,groundSeason(groundBounce(vRoot))*mix(0.95,1.3,vV),0.7*smoothstep(2.0,3.0,uSeason));
+    #endif
+  }else{
+    // grass: the ground colour under the root, darker at the root and lighter, a little warmer, at the tip (the pack
+    // Grass.png is that gradient), each clump a shade apart. The painted ground under the root: the macro bake (one
+    // read), or, on the other arms (whose ground costs a whole macro colour a pixel, too much for many blades deep),
+    // the flat class colour
+    #if defined(MACRO_BAKE)&&defined(GRASS_FLOW)
+    pMdx=vec2(uCell,0.0);pMdy=vec2(0.0,uCell);   // the bake read at the ring cell footprint, as the ground under it is filtered
+    pFlowGrow=smoothstep(0.15,0.7,vFlow.y);   // (the growth at its root, as the ground under it: groundAt)
+    vec3 g=groundSeason(bakeOnce(vRoot).rgb);   // the bake alone: no grass grows where the ground's comb or short grass would change it
+    #elif defined(MACRO_BAKE)
+    pMdx=vec2(uCell,0.0);pMdy=vec2(0.0,uCell);   // the bake read at the ring cell footprint, as the ground under it is filtered
+    vec3 g=groundSeason(groundAt(vRoot,uCell));
+    #else
+    vec3 g=groundSeason(groundBounce(vRoot));
+    #endif
+    alb=g*mix(0.95,1.55,vV)*mix(0.92,1.10,vShade);
+    #ifdef AUTUMN_ON
+    alb=mix(alb,alb*uTipTint,vV*0.5);   // (the tips: lime, warmed in the warm autumn: uTipTint, src/look/main.ts)
+    #else
+    alb=mix(alb,alb*vec3(1.04,1.08,0.80),vV*0.5);
+    #endif
+    #if defined(GRASS_FLOW)&&!defined(GRASS_NO_HUE)
+    // each clump its own hue, as the references' tufts (the owner, 2026-10-17): from a deeper blue-green to a warm
+    // yellow-lime, by a hash of its cell (vHue, meadow.vert: the same on every vertex, so no speckle), stronger toward
+    // the tips
+    float hr=vFlow.x;
+    vec3 tint=hr<0.5?mix(vec3(0.78,0.98,0.90),vec3(1.0),hr*2.0):mix(vec3(1.0),vec3(1.22,1.10,0.66),(hr-0.5)*2.0);
+    #ifdef AUTUMN_ON
+    tint=mix(tint,max(tint,vec3(1.0,0.96,0.86)),uTipWarm);   // (its blue-green side warmed through the warm autumn: uTipWarm, src/look/main.ts)
+    #endif
+    alb*=mix(vec3(1.0),tint,(0.6+0.4*vV)*vFlow.z);   // (none under the snow of winter, as the default)
+    #endif
+  }
+  alb=earthOf(alb);
+  float lo=groundOcc(lm),occ=mix(0.8,1.0,vV)*mix(1.0,lo,uAO*0.6);
+  // paint(), lean: the ramp, the cool shadow band (deeper where the sky is hidden), the clouds, no grain, rim nor
+  // snow (a blade is a few pixels: they would not show, and the blades are many layers deep)
+  float l=dot(N,uSunDir)-sh*1.25-(1.0-occ)*0.55;   // the cloud as a shade below, as on the ground under it
+  float t=smoothstep(-0.12,0.0,l)*0.55+smoothstep(0.28,0.40,l)*0.45;   // the ground's band edges (its minimum width, 0.12)
+  vec3 shc=shadowOf(alb);
+  #ifdef SKY_IN_SHADOW
+  shc*=mix(0.62,1.0,smoothstep(0.35,0.8,mix(1.0,lm.g,uAO)));
+  #endif
+  vec3 mid=alb*mix(uMidCool,uSunCol,0.30),lt=alb*uSunCol*1.16+uLitLift;
+  vec3 c=t<0.55?mix(shc,mid,t/0.55):mix(mid,lt,(t-0.55)/0.45);
+  float rs=snowAt(vec3(0.0,1.0,0.0),vec3(vRoot.x,vW.y,vRoot.y));
+  #ifdef GROUND_BOUNCE
+  pGround=groundBounceAt(vec3(vRoot.x,vW.y,vRoot.y));   // the fill of the ground's cast shadows (LC5), at the root as the ground under it
+  #endif
+  c+=groundFill(alb,sh,t,occ,rs);
+  c=cloudShade(c,cloud(vW),rs);   // the shade of the ground under the root, snowed or not
+  gl_FragColor=lensOut(airOf(c,vW,lm,vH),vW);}

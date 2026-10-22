@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-13
 ---
 
 # Art Direction: "The Painted Campaign"
@@ -18,7 +18,8 @@ assets, surfaces, lighting and effects authored to look painted, explicitly
 The reference images and what each is for are in §0.
 
 > Revision, Oct 2026: replaces the earlier "tin-soldier diorama" direction
-> (tilt-shift blur, figure bases, sky and horizon shots), which is retired.
+> (figure bases, sky and horizon shots), which is retired. A mild miniature-field
+> depth of field came back on 13 Oct 2026 as a player option (decision 0024).
 
 ---
 
@@ -42,7 +43,7 @@ or a decision, the rule wins, and the image's row says what to ignore.
 | Image | Take | Ignore |
 |---|---|---|
 | `design/refs/style-painterly.png` | **Brushwork and colour:** tapered grass flicks, flower dabs, broken edges, teal hue-shifted shadows, cloud-shadow patches | Its sky, horizon and ground-level camera |
-| `design/refs/north-star.png` | Composition only (superseded by the painted version) | Toy bases, tilt-shift, sky glow, glossy figurine finish |
+| `design/refs/north-star.png` | Composition only (superseded by the painted version) | Toy bases, its heavy tilt-shift (ours is mild, §1.6), sky glow, glossy figurine finish |
 | `design/refs/mood-wide.png` | Warm light temperature, gold-lit valley mist | Everything else: sky, mountains, cypresses, crowding, toy figures |
 | `design/refs/austerlitz-cavalry-v2.png` (v1 superseded) | Grey winter palette, hollow squares, a cavalry mass read as one shape, dust | Even texture density everywhere (noise) |
 | `design/refs/austerlitz-goldbach-v2.png` (v1 kept for close zoom) | Mid zoom: partly frozen meander, field-strip patchwork, tree lines along the stream | Crowding, little negative space |
@@ -53,6 +54,7 @@ or a decision, the rule wins, and the image's row says what to ignore.
 | `design/refs/eylau-cemetery-v1.png` | Snow on roofs and buildings, walled enclosures, hedges and fences as structure | Dense fallen; brown and grey roofs with no accent |
 | `design/refs/wagram-russbach-v1.png` | Escarpments and banks, bridges as crossings, wheat patches | Poplars that read as cypresses; a canal-straight stream (§6c) |
 | `design/refs/french-infantry-v1.png`, `-v1-rear` | Tripo input: silhouette, kit proportions, slender adult build, colour regions | Fine face, button and brass detail (§8); slight baked shading (§5); the shako is 1806 and later, so Austerlitz needs a bicorne variant |
+| `design/refs/tiny-glade-img-2.jpg`, `design/refs/tiny-glade-forest.jpg` (screenshots of *Tiny Glade*) | **Texture and design:** crowns built of painted leaf clumps with one soft, ball-like light and warm-to-cool shading; soft cool-tinted shadows and contact darkening; real grass blades and tufts at edges; dark mirror water with long reflections; a miniature-field depth of field over which the brushwork still reads | The palette (fairy tale, pastel pinks and teals: ours is epic and wargame, §4); the close camera; the cosy tone |
 | `design/refs/french-barracks-u-v2-front.png`, `-u-v2-rear` (v1 pair superseded) | Tripo input: a U footprint that reads from above, clear wall, roof and window regions | Baked directional light (§5); stone texture too fine; check the dormer and chimney counts match between views |
 
 ### What the set gets wrong (fix in the next generation, and never copy)
@@ -82,11 +84,12 @@ These are decisions, not preferences. Don't propose against them.
 3. **Tone:** epic, not cozy, not dark. Not Total War's realistic, dingy look.
 4. **The painterly look lives in the assets and materials,** not in a
    full-screen filter. Any post-processing is a light finishing pass at most.
-6. **No optical blur during gameplay.** Depth comes from *painting*: haze and
+6. **Blur is the player's choice.** Depth comes from *painting* first: haze and
    cooling toward the top of the screen, looser brushwork toward the edges,
-   valley mist and backlight. Depth of field is allowed only in **presentation
-   modes** (photo mode, replays, the opening fly-in, victory screen) and in
-   **video exports**. (Decided Oct 2026; see §6b.)
+   valley mist and backlight. A miniature-field depth of field sits on top as a
+   gameplay setting, **on by default**, mild enough that the brushwork and the
+   formations at the edges still read. Presentation modes and video exports use
+   stronger settings. (Decision 0024, Oct 2026, superseding 0003; see §6b.)
 5. **Readable first.** A player must read every formation, its side and its
    state in under a second.
 
@@ -100,6 +103,8 @@ These are decisions, not preferences. Don't propose against them.
    broken edges, chosen colours rather than computed ones.
 3. **Light as colour.** Light is expressed through temperature: warm where
    the sun hits, cool and saturated in shadow. Darkness alone is not light.
+   Units are the exception on their lit side: white-balanced, they take the
+   light's value and only part of its hue (decision 0027).
 4. **Sophisticated simplicity.** Shapes are simple, but the paint is rich.
    The production designer's line: simplification "couldn't be for a lack of
    sophistication."
@@ -113,7 +118,7 @@ These are decisions, not preferences. Don't propose against them.
 | "A painterly, irregular edge to any 3D object" (their biggest new tool) | **Edge breakup:** silhouettes dissolve into brush-dab shapes, using a world-space grain texture threshold at grazing angles |
 | "Stamp map": brushstroke images projected onto surfaces | **Brush library** (§7) projected in world space, never in screen space, so strokes never slide when the camera moves |
 | Rim light used liberally for a "graphic edge" | **Graphic warm rim** on units and foliage tops, hard-edged with grain breakup |
-| Detail at the focus, "looser, more impressionistic" toward the frame edges | Strokes grow larger and simpler away from the camera focus. **No optical blur during gameplay** (§1.6). |
+| Detail at the focus, "looser, more impressionistic" toward the frame edges | Strokes grow larger and simpler away from the camera focus. Gameplay depth of field is mild and optional (§1.6). |
 | Non-naturalistic colour (naturalistic felt "dingy") | **Hue-shifted shading ramp** (§4) |
 | Volumetric effects sculpted into graphic shapes, hand-drawn lines | **Illustrated effects:** smoke as shaped puffs with hard and soft edges, volleys as graphic flashes (§9) |
 | Animation stepped "on 2s and 4s" for action | **Units animated at 12 fps,** with the camera always smooth |
@@ -127,17 +132,34 @@ Every surface is painted with **three value bands**, not a smooth gradient:
 
 | Band | Colour rule |
 |---|---|
-| **Light** | Base colour × warm sun (`#FFD699`-ish). Slightly lifted and warmer. |
+| **Light** | Base colour × the mood's sun (temperate: a pale warm `#FFEDD1`-ish). Slightly lifted and warmer. |
 | **Mid-tone** | Base colour, slightly warm |
 | **Shadow** | **Hue-shifted cool:** toward teal, blue or violet, *more* saturated than the base, never just darker |
 
-The edges between bands are **broken by the grain texture**, so they read as
-brush edges rather than computed lines.
+The edges between bands are **broken by the grain texture** on forms (crowns,
+buildings, armies), so they read as brush edges rather than computed lines. On
+the **ground** the band follows the light alone, and the grain paints the
+value inside it: chosen by the grain, the ground broke into hard dark islands
+near every band edge (`docs/plans/done/ground-light.md`).
+
+**One exception, foliage crowns** (decision 0022, accepted 2026-10-13; built in
+the leaf-card arm, `?trees=cards`): the same three colours, the shadow still
+cool, blended over a wide range of light instead of three steps, so a crown
+reads as a round mass of leaves. Its light wraps round the crown, it is darker
+inside, and single leaves catch the sun. Every other surface (ground, water,
+buildings, armies) keeps the three bands.
 
 ### Palette
-- **80% calm field:** muted olive and yellow-greens, dry golds, teal-green
-  hollows. Never neon green.
-- **20% accents, deliberately complementary:** orange flowers against teal
+The colour theme is **epic, not a normal camera's**: the landscape carries
+little colour and its **values** make the image; the armies and the flags are
+the only strong colour (the owner's review, `docs/research/colour-and-light-review.md`).
+The world's colours pass through the mood's **earth** (decision 0033): the
+default, `temperate`, keeps 60 % of their chroma, turned slightly warm-grey.
+
+- **80% calm field:** muted olive and grey-greens, pale straw, cool teal-green
+  hollows. Never neon green, never a saturated yellow-orange.
+- **20% accents, deliberately complementary** (muted by the earth as the field is, so they stay accents, never
+  rivals of the coats): orange flowers against teal
   shadow, red roofs, army colours.
 - **Armies are always the most saturated objects on screen.** Terrain never
   matches their saturation.
@@ -149,16 +171,38 @@ brush edges rather than computed lines.
 | Austria | `#E9E3D3` | grey-blue `#9FB0C4` |
 | Britain | `#B3302A` | white, black |
 
+**Crops stand under a soldier's chest** (decision 0026; `WHEAT_HEIGHT_MAX`): a
+standing field is drawn lower than history's, so a formation in it reads.
+
 ### Light setup
 - **Sun:** 20–35° elevation, from the side or behind relative to the default
   camera, so shadows are long and readable.
 - **Shadows are painted shapes** in the cool shadow colour, with grain-broken
   edges. They are not dark grey overlays.
-- **Time-of-day presets** are just ramp colours: golden morning (default), high
-  afternoon, winter (pale gold sun, blue shadows), dusk.
+- **Moods** are data (`src/look/mood.ts`): every colour of the light, the grade,
+  the earth and how much of it units take. **The default is `temperate`**
+  (decision 0033, the owner's pick of LC2's candidates judged blind): a paler,
+  less warm sun than the old golden morning, a bluer air and shadow, the world
+  at 60 % of its chroma, "a bit cooler, less colourful, but not grey". `golden`
+  (the warm golden morning, the look up to LC3) stays as `?mood=golden`; a map
+  may set its own mood (a dusk, a winter battle).
+- **Cloud shadows are soft shades,** not drops into a darker band: the ground,
+  crowns, roofs and armies under a cloud darken and cool together, more toward
+  its middle; snow takes a deeper blue, a coat only its share of the cool (as
+  of the sun's hue). A coat reads by its colour and the shadow at its feet, not
+  by a darker band (the owner, 2026-10-14).
 - **Shadows are physically computed, then painted.** A real sun shadow pass
   plus ambient occlusion (Babylon) decides *where* shadow falls. Our shader
   decides *how it looks*: the cool shadow band, with edges broken by the grain.
+- **Two kinds of shadow, as built** (`docs/systems/look.md`):
+  - *The sun's:* crisp where a caster meets the ground and softer the farther
+    the shadow falls from it, as under a real sun, exaggerated. A trunk's foot
+    is sharp; a crown's outline is soft.
+  - *The sky's:* woods, hollows and the ground round each crown see less sky,
+    so they are darker. On a wood's floor the shadow colour itself deepens, so
+    a wood reads as one mass, darker inside than a lone tree's shadow.
+- **The valley mist thins over cast shadow**, so shadows still read in the
+  hollows. Over snow it breaks §4b's rule today (a known fault: #62).
 
 ---
 
@@ -172,9 +216,9 @@ material reads it:
 | Value | Season | Trees | Ground | Light |
 |---|---|---|---|---|
 | 0 | Summer | Muted olive and yellow-greens | Meadow greens, dry gold patches | Warm gold sun |
-| 1 | Early autumn | **Mixed colours** (below) | Greens turning golden | Warm gold sun |
-| 2 | Late autumn | Duller, browner, fewer bright crowns | Ochre and brown | Lower, warmer sun |
-| 3 | Winter | Bare-looking dark crowns with snow caps | Snow, painted blue in shadow | **Pale gold sun** |
+| 1 | Early autumn | **Mixed colours** (below) | The meadow straw and olive; bare earth (tracks, ploughed land) keeps its brown | Warm gold sun |
+| 2 | Late autumn | Duller, browner, fewer bright crowns; **the crowns thin and the limbs show** | Ochre and brown | Lower, warmer sun |
+| 3 | Winter | **Bare branches**, a few brown tufts clinging, snow on the limbs (generated trees: bare limbs and twigs; the pack's, `?trees=pack`: dark crowns with snow caps) | Snow, painted blue in shadow | **Pale gold sun** |
 
 ### Tree colour variety
 - **The pack's own colours are never used.** Every model's materials map to
@@ -193,6 +237,14 @@ material reads it:
 - Every season's colours pass through the same painted lighting (warm lit,
   cool hue-shifted shadow, grain), so a red maple or a purple beech still
   belongs to the same painting.
+
+### Leaf fall (generated trees, decision 0031)
+- **Deciduous crowns lose their leaves with the season:** from late autumn the leaf cards drop one by one (never by
+  screen pixels: no dissolve noise) and shrink, until a few small tufts cling to bare branches in winter, as in the
+  Austerlitz reference (`design/refs/austerlitz-pratzen-v2.png`). The twigs show from late autumn.
+- **Conifers keep their crowns** and only cool in winter.
+- **The shadows follow:** a thinning crown casts a thinning shadow, a bare tree its limbs' shadow (twigs thinner than
+  a shadow texel cast none).
 
 ### Snow
 - **Snow is a shader effect, not separate models:** it settles on any surface
@@ -214,6 +266,7 @@ The paint comes from our shaders, so models must be **simple and clean**.
 | Rule | Why |
 |---|---|
 | **Big, readable masses.** A tree is 3–6 crown clumps, not leaves; a house is walls, roof and a few openings. | The paint adds the detail. Modelled detail fights it. |
+| **Each crown clump is lit as its own volume** (generated trees: decision 0031, `docs/research/procedural-trees.md`): a lit top, a dark core, light through its edge, as Tiny Glade's crowns read as several puffs (`design/refs/tiny-glade-img-2.jpg`) | A crown lit as one ball loses the clumps the model has |
 | **No baked lighting or shadows in textures.** Flat, evenly lit base colours only. | Our lighting ramp must own light and shadow. Baked shading doubles it and breaks under the game's sun. |
 | **Separate colour regions** (crown / trunk; wall / roof / door), either as separate materials or clean texture areas | The shader maps each region to a palette role |
 | **About 2–8k triangles** for a hero asset; fewer for scatter | Thousands of instances |
@@ -238,26 +291,40 @@ language never matches. **Assets are generated for this style** (§10).
 
 ## 6b. Depth & the cinematic layer
 
-**Why no blur in gameplay** (decision record):
-1. An RTS player reads the whole screen. Flanks and incoming threats live at
-   the edges, exactly where tilt-shift blurs.
-2. The camera pans constantly. Focus "pumps" as things scroll in and out of
-   the sharp band, which is tiring and stops feeling magical.
-3. Blur erases the painted grain and edges that carry the style.
-4. *The Last Wish* "illustrates" depth with looser brushwork, not lens blur.
-5. It is **not** a performance decision (depth of field ≈ 0.5–1 ms), so it can
-   be revisited cheaply.
+**Depth of field in gameplay** (decision 0024, superseding 0003). *Tiny Glade*
+(`design/refs/tiny-glade-img-2.jpg`, `design/refs/tiny-glade-forest.jpg`) shows that a tilt-shift blur over painted
+leaves, grass and water makes the field read as a miniature while the
+brushwork survives where the blur is mild. So:
+1. It is a player setting, **on by default**, focused on the ground at the
+   screen's centre. Only what lies well beyond the focus blurs: a soft band at
+   the top of the screen. Nothing nearer than the focus blurs. Its strength
+   follows the zoom.
+2. It stays mild in the band the player reads: formations at the screen's edges
+   must still pass the readability guard with it on.
+3. Painting carries depth first; blur adds to it. The look checks measure the
+   paint with blur off.
+4. Cost: about 0.7–0.8 ms at the default zoom (measured on the Metal proxy,
+   `docs/plans/done/gameplay-dof.md`), charged to the post budget.
 
-**Where depth of field IS used:** video exports (directed camera, focus
-follows the action) and in-game presentation modes. Gameplay depth of field
-exists only as an off-by-default setting. If playtests show the field feels
-flat, the fallback is a *very subtle* depth of field at the closest zoom only.
+The concerns that made 0003 (threats at the edges, focus pumping as the camera
+pans, blur erasing grain) are what the tuning and the toggle answer.
+
+**Where stronger depth of field is used:** video exports (directed camera, focus
+follows the action) and in-game presentation modes.
+
+**Reopened, then answered (owner, 2026-10-13):** after Tiny Glade, whose
+tilt-shift is much of its miniature charm, gameplay depth of field was an open
+question again. Decision 0024 answers it, with the measurement (Track E's owner
+question 3).
 
 **The cheap cinematic stack** (from `docs/research/cheap-painterly-postfx.md`):
 - **Bake what doesn't move:** terrain ambient occlusion, canopy contact
-  shading and (later) sun shadow, baked once per map. No live SSAO.
-- **One merged finishing pass:** warm amber grade with split toning, soft
-  highlight roll-off, cool vignette, paper texture, dithering.
+  shading, the sun shadow and the sky's occlusion by crowns, baked once per
+  map. No live SSAO.
+- **The grade in the materials:** warm amber with split toning, the last
+  step of every painted material, so units can take less of it (decision
+  0027). **One merged finishing pass:** soft highlight roll-off,
+  cool vignette, paper texture, dithering.
 - **Valley mist and height fog in the materials:** warm where sunlit, cool
   in shadow. Light shafts form where tree shadows cross the mist.
 - **Golden backlight glow** on foliage, plus the graphic rim.
@@ -448,5 +515,5 @@ patches, a winding blue-teal stream. No sky, no horizon. 16:9, no text.
 - [ ] Brush library v1: grain first, then grass and foliage fills.
 - [ ] Do Tripo textures carry useful painted detail, or should we use geometry only plus our brush library?
 - [ ] The visual vocabulary for unit state (routing, fatigue) without bases.
-- [x] Winter preset concept → §4b (shader snow, pale sun). Still to decide: frozen water, and bare-branch models for deep winter.
+- [x] Winter preset concept → §4b (shader snow, pale sun). Still to decide: frozen water. Bare-branch models for deep winter: the generated trees (§4b leaf fall, decision 0031).
 - [ ] How strong the "looser away from the focus" effect should be at max zoom-out.

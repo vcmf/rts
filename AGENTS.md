@@ -43,20 +43,29 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
   the painted water's `node tools/water-look-check.mjs <url> --selftest`; see their headers.
 - Maps (Track M): `node tools/map.ts check|expand|resolve|draft <map.json>` against `maps/kinds.json`; the draft page
   `app/map.html` (`npm run dev`), checked headless by `node tools/map-page-check.mjs` (`docs/systems/map.md`).
+- Browsers (decision 0047): checks are the scripts above, over CDP. In WSL, where Chrome would render in software,
+  start Windows Chrome with `tools/win-chrome.sh start --headless -- --use-angle=swiftshader` (the checks' software GL;
+  without the flag, `SHOT_ANGLE=d3d11` runs them on the GPU; mirrored networking, see its header) and give the tools
+  `SHOT_CDP=http://127.0.0.1:9222`. For exploring (playing the page, a trace), the `chrome-devtools` MCP server
+  (`.mcp.json`, pinned) opens its own Chrome; in WSL, override it for yourself at the version `.mcp.json` pins:
+  `claude mcp add -s local chrome-devtools -- npx -y chrome-devtools-mcp@<version> --browserUrl http://127.0.0.1:9222`.
 - Docs check: `node tools/check-docs.mjs` (every doc path resolves, front matter, decision numbers).
 - CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint,
   typecheck, `check:data`, `check:docs`, Vitest, build. On PRs into `epic/**` and on all those pushes, Vitest
   with coverage, uploaded to Codecov (informational only). Coverage makes the suite about six times slower, so
-  that run skips the tests marked `longIt` (they run in the check job). The cost tests skip when `CI` is set:
+  that run skips the tests marked `longIt` (they run in the check job) and gives each test a longer budget. The cost tests skip when `CI` is set:
   run them locally. `npm run coverage` gives the same report locally (`coverage/`).
 - Regenerate model data: `node tools/obj-to-js.mjs`; `tools/blend-to-js.py` with Blender (see its header).
 
 ## Workflow (every PR)
 
+By kind of PR (decision 0025): **code** follows all four steps; a **docs-only** PR gets at most one review round;
+a **research note** (`docs/research/`) needs no plan and no `/code-review` (check each claim against its source).
+
 1. **Plan**: a plan in `docs/plans/active/` (scope, approach, acceptance) before code.
 2. **Implement**. Update the system doc in `docs/systems/` and add a decision record for any new
    decision; move the plan to `docs/plans/done/` when merged.
-3. **Review**: run `/code-review high`.
+3. **Review**: run `/code-review high` (code; a docs-only PR: one round at most, then stop).
    - A round with **at least one severe issue**: fix and run another round.
    - Only moderate or light issues: fix what is worth fixing and **stop**.
    - **More than 3 rounds = stop and redesign** (the design is wrong, not the code). The round count
@@ -76,7 +85,8 @@ commits or PRs.
 ## Invariants
 
 - **Camera is always the top-down RTS view; there is no sky, ever.** Far zoom is the staff map.
-- **No optical blur during gameplay.** Depth of field only in presentation modes and video export.
+- **Blur is the player's choice** (decision 0024): gameplay depth of field is a setting, on by default and mild
+  enough that formations at the edges read; depth comes from painting first.
 - **The painterly look lives in assets and materials**, not in a heavy full-screen filter.
 - **Readable first**: armies are the most saturated objects on screen; never hide a formation.
 - **Pack colours are never used**: materials map to roles and our palette paints them.

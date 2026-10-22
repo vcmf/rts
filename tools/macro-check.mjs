@@ -14,13 +14,14 @@
 //   class change, each with a 5×5 window of its own class (far enough apart that the colours compared are the two
 //   regions', not a soft edge's blend: the bake blends its edges over about 2 m, 20 px at the closest views). The CIE ΔE 2000 between the frame's two windows (their
 //   mean colour, sRGB D65): its median per kind of edge, at least FIELD_DE where a field meets grass (meadow or
-//   pasture), ROAD_DE where a road or track meets grass. Sabotage: every class painted the meadow's colour
+//   pasture), ROAD_DE where a road meets grass, TRACK_DE where a track does. Sabotage: every class painted the meadow's colour
 //   (MACRO_SAB_ONECLASS).
 // - shimmer (as tools/detail-check.mjs's, on the fields): the terrain alone, a ploughed field at the closest zoom and
 //   the far fields at the widest, summer and winter (the furrows hold the snow), the image shifted a quarter pixel a
 //   frame; on the fields' pixels (the class view), a pixel shimmers when its luma differs by over 8/255 from the
 //   previous frame resampled a quarter pixel along. Under SHIMMER_MAX per pair at the closest zoom and SHIMMER_WIDE
-//   at the widest (the water check's limits, tools/water-look-check.mjs). In winter snow against bare ground makes
+//   at the widest (the water check's limits as they were at L5a, 1 % and 3.5 %: kept here, the water check's
+//   widest re-baselined since for the temperate mood, docs/plans/done/temperate-fixes.md). In winter snow against bare ground makes
 //   every edge pop (main's own ground, on the same pixels: 1.24% at the closest zoom, 1.74% at the widest; L5's
 //   plan): there the closest zoom's limit is main's, rounded up (SHIMMER_WINTER), and the widest's stays SHIMMER_WIDE. Sabotage: hard
 //   stripes never faded with the footprint (MACRO_SAB_STEP).
@@ -37,11 +38,11 @@ import { prepSteps, shoot, viewStep } from './look-page.mjs'
 import { SPEC } from '../src/look/spec.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const W = 1280, H = 720, CAM = SPEC.camera, BOUNDARY = 24, FIELD_DE = 8, ROAD_DE = 8, MIN_EDGES = 200
+const W = 1280, H = 720, CAM = SPEC.camera, BOUNDARY = 24, FIELD_DE = 8, ROAD_DE = 8, TRACK_DE = 8, MIN_EDGES = 200   // road and track gated apart (#88: pooled, one hid the other)
 const SHIFTS = 8, STEP = 0.25, ERR = 8, SHIMMER_MAX = 0.01, SHIMMER_WIDE = 0.035, SHIMMER_WINTER = 0.013, FULL = 3600
 const [, A0] = CAMS.find(c => c[0] === 'start')
 // the cover's classes (src/look/world/cover.ts): grass 0–1, wood 2, road 3, track 4, village 5, fields 6–9
-const GRASS = c => c <= 1, ROAD = c => c === 3 || c === 4, FIELD = c => c >= 6 && c <= 9
+const GRASS = c => c <= 1, ROAD = c => c === 3, TRACK = c => c === 4, FIELD = c => c >= 6 && c <= 10   // 10: bare earth (docs/plans/done/ground-surface.md)
 const CLASS_VIEWS = [['far-fields', A0 + 0.35, 0.70, 260, [-100, 8, 150], 0], ['near-fields', A0, 0.70, 110, [90, 8, -40], 0], ['road', A0, 0.65, 110, [195, 8, -10], 0]]
 const SHIMMER_VIEWS = [['closest', A0, CAM.betaMin, CAM.rMin, [78, 8, -38], 0, SHIMMER_MAX], ['widest', A0, CAM.betaMax, CAM.rMax, [120, 8, 200], 0, SHIMMER_WIDE],
   ['closest-winter', A0, CAM.betaMin, CAM.rMin, [78, 8, -38], 3, SHIMMER_WINTER], ['widest-winter', A0, CAM.betaMax, CAM.rMax, [120, 8, 200], 3, SHIMMER_WIDE]]
@@ -88,21 +89,21 @@ function classes(url, dir, sab) {
   const steps = [...prepSteps()]
   for (const v of CLASS_VIEWS) steps.push(...classSteps(v, v[0]), checkStep(sab), render('frame'), ['shot', `${v[0]}.frame`], checkStep([]))
   shoot(url, dir, steps, W, H)
-  const de = { 'field|grass': [], 'road|grass': [] }, lines = []
+  const de = { 'field|grass': [], 'road|grass': [], 'track|grass': [] }, lines = []
   for (const [n] of CLASS_VIEWS) {
     const cls = load(dir, `${n}.cls`), img = load(dir, `${n}.frame`), d = img.data, r = 2
     const win = (x, y, c) => { let L = [0, 0, 0]; for (let yy = y - r; yy <= y + r; yy++) for (let xx = x - r; xx <= x + r; xx++) { const i = yy * W + xx; if (classOf(cls, i) !== c) return null; L = L.map((v, k) => v + d[i * 4 + k]) } return L.map(v => v / 25) }
     let here = 0
     for (let y = r; y < H - r - BOUNDARY; y += 3) for (let x = r; x < W - r - BOUNDARY; x += 3) for (const [dx, dy] of [[BOUNDARY, 0], [0, BOUNDARY]]) {
       const a = classOf(cls, y * W + x), b = classOf(cls, (y + dy) * W + x + dx); if (a === b) continue
-      const kind = (FIELD(a) && GRASS(b)) || (FIELD(b) && GRASS(a)) ? 'field|grass' : (ROAD(a) && GRASS(b)) || (ROAD(b) && GRASS(a)) ? 'road|grass' : null; if (!kind) continue
+      const kind = (FIELD(a) && GRASS(b)) || (FIELD(b) && GRASS(a)) ? 'field|grass' : (ROAD(a) && GRASS(b)) || (ROAD(b) && GRASS(a)) ? 'road|grass' : (TRACK(a) && GRASS(b)) || (TRACK(b) && GRASS(a)) ? 'track|grass' : null; if (!kind) continue
       const p = win(x, y, a), q = win(x + dx, y + dy, b); if (!p || !q) continue
       de[kind].push(de2000(lab(...p), lab(...q))); here++
     }
     lines.push(`  ${n}: ${here} class edges sampled`)
   }
   let ok = true
-  for (const [k, lim] of [['field|grass', FIELD_DE], ['road|grass', ROAD_DE]]) {
+  for (const [k, lim] of [['field|grass', FIELD_DE], ['road|grass', ROAD_DE], ['track|grass', TRACK_DE]]) {
     const m = median(de[k]), good = de[k].length >= MIN_EDGES && m >= lim; if (!good) ok = false
     lines.push(`  ${k}: ${de[k].length} edges, median ΔE2000 ${m.toFixed(1)} (≥ ${lim}, from ≥ ${MIN_EDGES} edges)${good ? '' : '  FAIL'}`)
   }

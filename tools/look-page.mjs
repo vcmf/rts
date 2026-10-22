@@ -13,7 +13,8 @@ export const prepSteps = () => [
   ['wait', 1000],
   ['eval', '(async () => { for (let i = 0; i < 1200 && !window.__proto; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__proto) throw new Error("the page never set window.__proto (120 s)"); return "page built" })()'],
   ['wait', 2000],
-  ['eval', 'for (const id of ["panel", "fps", "drop"]) { const e = document.getElementById(id); if (e) e.style.display = "none" } __proto.scene.getEngine().stopRenderLoop(); "ui hidden, loop stopped"'],
+  // the render scale pinned to 1 (the page's Auto lowers it at the widest zoom: docs/plans/done/dynamic-scale.md)
+  ['eval', 'for (const id of ["panel", "fps", "drop"]) { const e = document.getElementById(id); if (e) e.style.display = "none" } __proto.scene.getEngine().stopRenderLoop(); __proto.S.res = 1; "ui hidden, loop stopped, scale 1"'],
   ['eval', '__proto.scene.render(); __proto.scene.render(); if (__proto.S.t !== 0) throw new Error("the page ignores ?frozen (S.t = " + __proto.S.t + ")"); "frozen"'],
 ]
 
@@ -29,10 +30,11 @@ export const viewStep = ([name, a, b, r, t, season]) => ['eval', `(async () => {
   for (let i = 0; i < 3; i++) __proto.scene.render()
   return "${name}" })()`]
 
-// runs tools/shot.mjs on the page (with ?frozen unless frozen is false); env adds to the environment and wins over
-// it; returns its stdout; throws with the full output on a failure
+// runs tools/shot.mjs on the page (with ?frozen unless frozen is false, and with ?dof=0 unless the URL sets ?dof: the
+// checks measure the paint, decision 0024); env adds to the environment and wins over it; returns its stdout; throws
+// with the full output on a failure
 export function shoot(url, dir, steps, w, h, { frozen = true, env = {} } = {}) {
-  const u = new URL(url); if (frozen) u.searchParams.set('frozen', '')
+  const u = new URL(url); if (frozen) u.searchParams.set('frozen', ''); if (!u.searchParams.has('dof')) u.searchParams.set('dof', '0')
   const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), u.href, dir, String(w), String(h), JSON.stringify(steps)],
     { encoding: 'utf8', maxBuffer: 64 * 2 ** 20, env: { SHOT_TIMEOUT_S: '300', SHOT_LOAD_S: '300', ...process.env, ...env } })
   if (r.status !== 0) throw new Error(`rendering ${url} failed (shot.mjs exit ${r.status}), full output:\n${r.stdout}${r.stderr}`)

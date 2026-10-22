@@ -1,6 +1,6 @@
 ---
 status: active
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-14
 ---
 
 # Plan: Track E, the painterly look
@@ -22,7 +22,7 @@ The style is designed in these documents; this plan schedules them and does not 
 | `docs/proposals/engine-design.md` | Scale and min-spec (§2), camera (§5), bakes and their memory limits (§6), units on the render side (§7), verification and frame budgets (§8), the order of work this plan extends (§10) |
 | `docs/plans/active/prototype-plan.md` | Prototype exit criteria (§1); the water workstream W2–W6 (§4) |
 | `docs/research/painterly-2d-on-3d.md` | Brush masks inside the ramp (not over it); which coordinates keep paint attached per surface (world for terrain, object-local for rigid props, authored UVs for skinned soldiers); the one-hill, one-tree, one-soldier validation scene |
-| Decisions | 0001 (look in assets and materials, not filters), 0002 (top-down, no sky), 0003 (no blur in gameplay), 0007 (battalions of about 100, one figure each), 0010 (locked camera and staff map), 0011 (scale and min-spec), 0012 (heightfield authority) |
+| Decisions | 0001 (look in assets and materials, not filters), 0002 (top-down, no sky), 0024 (gameplay depth of field is a player option, superseding 0003), 0007 (battalions of about 100, one figure each), 0010 (locked camera and staff map), 0011 (scale and min-spec), 0012 (heightfield authority) |
 | `docs/art-bible.md` §0 (reference images) | The targets the look is judged against, each with what to take from it and what to ignore |
 | The soldier animation trial (below, LA) | The first real figure: a Tripo French line infantryman, rigged, with authored clips |
 
@@ -68,7 +68,7 @@ in two stages:
 
 | Stage | Phases | Notes |
 |---|---|---|
-| **1. The painted world (now)** | L0, L2, water W2–W5, L5, LA2, L7, L9w | L9w is L9's look match for ground, water, trees and buildings only (below) |
+| **1. The painted world (now)** | L0, L2, water W2–W5, L5, LA2, L7, LC, L9w | L9w is L9's look match for ground, water, trees and buildings only (below); LC (colour and light) was added by the owner's review of 2026-10-13 |
 | **2. Units (deferred)** | LA0, LA1, L1, L3, L4, L6, L8, the rest of L9 | Kept as written, so the plan is ready when units come back |
 
 What changes while units wait:
@@ -125,8 +125,9 @@ clip graph, LA0). Started when `volleyTick` changes, it fires visibly late. The 
 retry timer, and a company keeps a target it cannot fire at (`docs/systems/fire-morale.md`). The ask
 is an accessor the logic track defines, such as the tick a company will fire if nothing changes.
 Until it lands, the renderer starts at the volley and accepts the lag; it never predicts the sim's
-decisions on its own. The sim's reload is longer than the reload clip, so figures hold the ready
-pose for the rest; the clip is never stretched to fit.
+decisions on its own. Decision 0037 (2026-10-17) answers the ask: scheduled phases with their own field,
+and clips fitted to them by bindings (anchored, stretched within limits, a capped hold loop),
+`docs/proposals/figure-animation.md`.
 
 ### Rules
 
@@ -177,6 +178,7 @@ Some acceptance tests need people, not scripts. The owner arranges them:
 - **The readability test (L4):** at least 5 people, blind, 2 s exposures.
 - **The terrain ablation (L5):** at least 3 judges, blind, a fixed checklist.
 - **Anti-aliasing (L8):** a majority of reviewers.
+- **The mood (LC2):** the owner, blind, between three candidates.
 - **The look sign-offs (L9w in stage 1, L9 in stage 2):** the owner, against the target images.
 
 The style agent prepares the material (image sets, randomised order, answer sheets in
@@ -423,6 +425,10 @@ for the smoke-on arm.
 Cavalry and artillery figures are needed for the "arm" question. Placeholders of L1's budget are enough: a
 horse-and-rider mass, and a gun with crew.
 
+**Also (from L7, 2026-10-13):** #63, a dark coat losing its separation in a crown's deep shade (the guard's
+`wheat.France` with the leaf cards): to fix on the army side (a value lift or a rim for coats in shade), with the
+real figures; the investigation is on the issue.
+
 **Depends on:** L2, L3. **Estimate:** 2–3 days plus the test session.
 
 ## L5. Macro colour bake and ablation (`docs/proposals/prepainted-terrain.md`)
@@ -495,32 +501,41 @@ checked again with two battalions and smoke.
 **Goal:** painted crowns and silhouettes that hold at every zoom within the foliage budget. The bare
 winter trees the target images depend on, and the building material.
 
-**Build:**
-- spherized crown normals;
-- stroke-shaped alpha masks on crown cards (or object-space hashed alpha, so swaying trees do not slide
-  through the grain);
-- alpha-to-coverage on 4× MSAA, toggled around foliage draws, with coverage-preserving mips baked
-  offline;
-- a depth pre-pass if overdraw at the worst zoom passes 2–3×;
-- Edge Breakup on environment layers only (units masked out);
-- **the building material** (research §c buildings 1, 3, 5): biplanar or object-local grain with
-  oriented strokes feeding the normal before the ramp, painted-opacity skirts on silhouettes, and
-  painting LOD by zoom; first on LA2's barracks. Its marks stay attached over the game camera's range
-  (yaw −45° to +45°, every zoom, a pan; decision 0010);
-- far woods switched to painted terrain colour;
-- **a first attempt at bare winter trees:** thin branches clamped to at least 1 px with alpha-to-coverage,
-  painted-opacity skirts for the twig mass. The research has no evidence here (§c foliage 6), so this is
-  a design spike with screenshots for the owner. In stage 1 it is a gate: bare trees good enough for
-  L9w's winter target, judged by the owner.
+**Status (2026-10-16): in progress.** The crowns are done and are the default; what is left is their cost and their
+edges at the widest zoom, the bushes, the winter far woods and the building material. L7 closes when every row of
+the table below is done and the acceptance is measured.
 
-**Acceptance** (research P5):
+| Part | Status | Where |
+|---|---|---|
+| **L7a, leaf-card crowns:** each crown as camera-facing cards cut by a greyscale clump atlas our palette paints, casting leafy shadows (owner: "it's the way") | **Done** (#58) | `docs/plans/done/l7a-canopy-cards.md` |
+| **L7b, the crowns as volumes:** a normal per pixel from the crown's ellipsoid, the light through it, a soft ramp (decision 0022), a darker core, a tilt per leaf (owner: "it's beautiful now the trees") | **Done** (#61) | `docs/plans/done/l7b-crown-volume.md` |
+| **Generated trees** (the other track's generator, decision 0031): species, one volume per clump, leaf fall, twigs | **Done** (#84) | `docs/plans/done/tree-generator.md` |
+| **Cards and generated trees as the default** (`?trees=gen,cards`; `?trees=pack` for the pack's) | **Done** (#95) | `docs/plans/done/gen-trees-default.md` |
+| **Far woods** as low-detail generated crowns | **Done** (#99), but the camera reaches about 400 of them (the play area's edge is 235 m, the far ring starts at 190 m) and up close they read as plain blobs: the ones within reach to become full carded trees | `docs/plans/done/far-woods-gen.md` |
+| **Bare winter trees:** a first attempt is the generator's leaf fall and twigs; in stage 1 a gate, judged by the owner for L9w's winter target | **To judge** | |
+| **The cost at the widest zoom:** the cards cost most where a forest fills the frame (`docs/plans/done/forest-bench.md`); fewer, larger cards for far crowns, plain meshes beyond a distance, or a depth pre-pass if overdraw passes 2–3× | **Owed** (with the frame-rate targets: 60 fps hard, 120 fps soft, owner 2026-10-16) | |
+| **The edges:** the crowns' outline aliases at the widest zoom: alpha-to-coverage on 4× MSAA, toggled around foliage draws, with coverage-preserving mips baked offline (L8's A/B) | **Owed** | |
+| **Bushes:** still the pack's meshes | **Owed** | |
+| **Winter far woods:** their broadleaves keep their crowns while the near ones go bare | **Owed** (#98) | |
+| **The building material** (research §c buildings 1, 3, 5): biplanar or object-local grain with oriented strokes feeding the normal before the ramp, painted-opacity skirts on silhouettes, painting LOD by zoom; its marks stay attached over the game camera's range (yaw −45° to +45°, every zoom, a pan; decision 0010) | **Owed**, first on LA2's barracks (waits on LA2) | |
+| **Edge Breakup** on environment layers only (units masked out) | **Not started** | |
+| **Stroke-shaped alpha masks** on the cards (or object-space hashed alpha, so swaying trees do not slide through the grain) | **Not started** (the clump atlas stands in) | |
+| **Spherized crown normals** | **Done** by L7b (the ellipsoid's normal) | |
+| **Maps from data** (the owner, 2026-10-16: the work must serve every map, not only the demo): (1) where trees stand comes from the map (tree places and species from the map editor, `~/workspace/rts-map-editor`), not from the look page's scatter in `src/look/nature.ts`, which codes the demo's far ring, woods, orchard and lone trees; (2) the far trees' culling and level of detail (`farCuller`) moves out of the scatter into its own module taking any instance list; (3) the near and far split follows the map (today the far ring's 190 m and the play area's 235 m are the demo's constants; the 220 m cards distance is the camera's and stays) | **Owed**, with the map track (what a map hands the renderer) | `docs/plans/done/trees-perf-trunks.md` |
+
+**Acceptance** (research P5), measured on the cards, in a battlefield forest and on the min-spec laptop (the dev
+Mac's numbers are a proxy: `docs/plans/active/track-e-results/shadows-foliage.md`):
 - average foliage overdraw ≤ 2–3× at the worst zoom;
 - crown coverage within ±10% from the nearest to the farthest zoom;
-- no heat ripple behind units (in stage 1, behind the army-colour blocks; L4 re-checks with units);
+- no heat ripple behind units (in stage 1, behind the army-colour blocks; L4 re-checks with units; alpha-tested
+  cards make it likelier);
 - foliage ≤ 3 ms GPU.
 
+None of these is measured yet. #63 (a dark coat in a crown's deep shade) moved to L4 (the army side's to fix); the
+guard's values with the cards: `docs/plans/done/wheat-height.md`.
+
 **Depends on:** L2, LA2 (the first building); in stage 1 it measures its own budget rather than
-L1's. **Estimate:** 4–6 days, 2–3 PRs.
+L1's.
 
 ## L8. Anti-aliasing (research P6)
 
@@ -541,19 +556,52 @@ Babylon VAT writes no velocity, and the 12 fps steps reset its history.
 
 **Depends on:** L3, L7. **Estimate:** 2–3 days.
 
+## LC. Colour and light (the owner's review, 2026-10-13)
+
+**Why:** the owner's reference review (`docs/research/colour-and-light-review.md`): the colour theme must become
+"more epic and beautiful, not colourful in the sense of a normal camera" (low chroma, the values making the image,
+the armies the only strong colour), the landscape needs more variants (trees first), and the light tints everything
+orange. Measured: the coats lose their colour to three warm tints stacked (the sun's colour, the valley mist, the
+grade): the French blue from a saturation of 0.58 to 0.08 on the valley floor, the Russian green from hue 133 to
+93, the Austrian white yellow. That breaks art bible pillar 1.
+
+**Order (the owner):** colour first, then bounced light, then trees. One PR a row; each code PR brings its own plan
+in `docs/plans/active/`.
+
+| PR | What | Acceptance | Depends on |
+|---|---|---|---|
+| LC1 | **Moods as data, coats keep their colour.** The light's colours (sun, shadow, haze, mist, the grade, the backlight, the bloom's tint) move from shader constants into one mood table; today's look is its first mood. Unit materials take the light's value but little of its hue (the eye's white balance), in the shared painter's unit path (`KEEP_HUE`), so the figures of L3 and L4 inherit it; the mist over them is capped. The grade moves into each material, where units take a share of it (the post pass cannot tell a Russian coat, hue 93 to 102, from the meadow by hue, and its alpha carries the depth of field's depth: decision 0027). A decision record (0027, accepted): units take the light's value, not its hue, an exception to art bible pillar 3. | The ground's goldens unchanged at today's mood. The coat measure, new in the guard: each coat's lit top face at the two spots of the research note, everything on, within the bounds of `tools/coat-check.mjs` (LC1b: 10° of its painted hue, 70 % of its saturation; LC1c, the owner judging by eye that units take some of the air: 20° and 45 %; the Austrian white no more saturated than painted). The readability guard no worse. | L5 |
+| LC2 | **Three mood candidates** (judged on a throwaway page, the four moods blind on the full map; not merged: `docs/plans/done/lc3-temperate.md`) behind `?mood=`, each with an earth-tone terrain to match: the film's overcast (*Napoleon*, 2023), dusty warm (the ochre battle stills), autumn earth (the farm). A blind judging page, as L5b's. | The owner picks blind (Human gates); every candidate passes the guard and the coat measure. | LC1 |
+| LC3 | **The chosen mood becomes the default.** Done with LC2 in one PR (`docs/plans/done/lc3-temperate.md`): the owner picked `temperate`, decision 0033. | A decision record (it replaces the art bible's "golden morning (default)"); art bible §4 (palette, light) rewritten; goldens re-baselined. | LC2 |
+| LC4 | **Done** (`docs/plans/done/lc4-bounce.md`; its frame cost to measure: #94). **The ground's bounce on units and crowns:** light from below in the colour of the ground under the point (its class, through the season and the earth, white where snow lies), lit by the sun's colour and the ground's light map, on faces looking down or sideways in the shadow and mid bands, fading with height. It replaces the trees' 15 % ground tint. The sky's part is the shadow band's colour already | The coat measure holds; pairs; the frame's cost measured. | LC1 |
+| LC5 | **Done** (`docs/plans/done/lc5-ground-bounce.md`, #100; the owner: "bounce is okay"). **Bounced light on the ground:** its own coarse RGB texture (the light map's four channels are taken; at about 2 m it costs a few MB), baked on load from the mood's light and the ground's class colour (LC4's `bounceAt`, not the macro colour), and again when the season, the shadows' switch or the grain change. This is light, not colour: the macro bake stays colour only (`docs/proposals/prepainted-terrain.md`), so a mood or a season costs a rebake of this texture alone. | Pairs; the bake's time (a season change included) and memory measured. | LC1, L5 |
+| LC6 | **Superseded** by the generated trees (decision 0031, the other track's tree generator). **Tree species as data:** oak and beech (tall and large; dark brown and smooth grey trunks), birch (white), Lombardy poplar (columnar, along the roads), willow (low and wide, by the water), fruit trees (low, round, by the villages), Scots pine, spruce (narrow dark cones); each species its trunk colour, shape range and where it grows. The shape range also scales the pack crowns (non-uniformly), so the world L9w signs off has the species' shapes. | Pairs; the forest bench (`?wood=big`) within 0.3 ms of main; the guard. | LC3, L7 |
+| LC7 | **Superseded** by the generated trees (decision 0031). **The crowns' shapes per species** on the leaf-card crowns (their ellipsoid per species, a random shape within its range). | Pairs; the forest bench. Behind `?trees=cards` while the cards are not the default (#63 is L4's, stage 2). | LC6 |
+
+**Units in stage 1:** units otherwise stay as they are (Current focus). LC1 and LC4 change only how the light's
+colour reaches a coat, in the shared painter, which the figures inherit. #63 (a dark coat in a crown's deep shade)
+stays L4's: LC does not lift coats in shade.
+
+**Docs:** the art bible changes when the owner decides (LC3: the palette and the light; LC6–LC7: §4b's tree
+variety), not before, except LC1's decision record on pillar 3; `docs/systems/look.md` in every PR.
+
+**Feeds:** L9w (its palette, light and haze sign-off is judged in the chosen mood). **Estimate:** 6–10 days, with
+the owner's pick between LC2 and LC3.
+
 ## L9. Look match and prototype exit (research P7)
 
 **Goal:** the look locked against the targets, every budget still met, and the prototype phase closed
 (`docs/plans/active/prototype-plan.md` §1).
 
 **Build** (art bible §4, §6, §6b):
+- in the chosen mood's colours (LC3), so warm only as the mood is warm:
 - the warm saturated terminator;
 - the warm rim;
 - a cool shadow-tint volume;
 - a warm depth wash;
 - snow and ground brushwork in the albedo;
-- periphery simplification (lower grain and band contrast toward the far and frame edges; no blur, decision 0003);
-- a tilt-shift variant for A/B only;
+- periphery simplification (lower grain and band contrast toward the far and frame edges; depth of field is the player's, decision 0024);
+- the gameplay depth of field's default strength, tuned with the owner (decision 0024);
 - the video-tier frame (`docs/proposals/engine-design.md` §10 item 10): depth of field, mist, shafts, from a
   presentation camera.
 
@@ -572,7 +620,7 @@ terminator on ground and buildings, the rim on foliage tops only, shadow-tint vo
 simplification), signed off as described under Current focus. The units' items, the video-tier
 frame and the full prototype exit wait for stage 2. **Acceptance:** the owner's sign-off, and every
 stage-1 budget (terrain, foliage, buildings, water, post) still holding on the laptop with L9w's
-passes on. **Depends on:** L2, water W2–W5, L5, L7.
+passes on. **Depends on:** L2, water W2–W5, L5, L7, LC3 (the mood it is judged in).
 
 ---
 
@@ -585,6 +633,7 @@ L0 ──► L2 ──┬──► water W2–W5 ─────────┐
   │         ├──► L5 ──────────────────┤
   │         └──► L7 (after LA2) ──────┴──► L9w
   └──► LA2 ──────┘
+                      LC (colour and light: LC1–LC5 after L5, LC6–LC7 after L7; before L9w)
 ```
 
 Stage 2, units (deferred):
@@ -596,7 +645,7 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
                           L6 ─────────────┴──► L9 (full sign-off)
 ```
 
-- **Stage 1's critical path is L0, L2, L7, L9w.** L2 is the base every ground, water and building
+- **Stage 1's critical path is L0, L2, L7, LC, L9w** (L9w is judged in LC3's mood). L2 is the base every ground, water and building
   surface reuses.
 - **The order was risk-first** (L0, L1, L3, L4: performance and readability before most of the look).
   Deferring units moves those two risks later; the readability guard and the reserved unit budget
@@ -613,7 +662,13 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
    machine stands in, and do its numbers gate?
 2. **The judges** for L4 and L5: who, and how many? The research's bars assume at least 5 and at least 3.
 3. **Tilt-shift:** A/B it in L9, or rule it out now (decision 0003 forbids blur in gameplay; tilt-shift
-   is blur)?
+   is blur)? **Owner (2026-10-13):** open, after Tiny Glade ("simply astonishing and beautiful"): it may come
+   back if a measurement shows it is good. Decision 0003 stands until a new record replaces it; an experiment
+   (frame cost, formations at the frame's edges through the guard) decides. PR #64 (open) proposes it as a
+   player option, on by default, in a decision numbered 0020, the number Track M's PR #49 (open) also uses:
+   whichever merges second renumbers.
+   **Answered (2026-10-13):** a player option, on by default (decision 0024, renumbered from 0020 to clear
+   PR #49's numbers); the blur is a band at the top of the screen.
 4. **Stepped animation comfort:** ship 12 fps steps as a setting that can be turned off (Insomniac did),
    or fixed?
 5. **Soldier grain:** any at gameplay zoom, or only at the closest zoom (research open question)?
@@ -629,6 +684,18 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
 
 ## Changes to this plan
 
+- **2026-10-13, colour and light.** Added LC (colour, bounced light, tree species), from the owner's reference
+  review (`docs/research/colour-and-light-review.md`), before L9w.
+
+- **2026-10-13, #63 and the crops.** #63 moved from L7 to L4 (the army side's to fix); standing crops capped under a
+  soldier's chest (decision 0026).
+
+- **2026-10-16, L7's status.** L7's section rewritten as a status table (done, owed, not started): its text still
+  read as if the cards were an experiment behind `?trees=cards`, though they are the default since #95.
+- **2026-10-13, the shadows and the crowns.** Recorded the shadow work (Results) and L7's progress (L7a, L7b,
+  what L7 still owes); the owner's answer on tilt-shift (question 3); decision 0022 (proposed); known issues #62
+  and #63.
+
 - **2026-10-10, focus.** The owner put units on hold: stage 1 paints the landscape and buildings
   (L0, L2, water, L5, LA2, L7, L9w), with a readability guard standing in for L4; the unit phases
   move to stage 2 unchanged.
@@ -643,3 +710,13 @@ L0 ──► L1 ────┴──► L3 ──► L4 ──► L6
 
 Each phase adds its results here (measurements, the JSON files in `track-e-results/`, the judges'
 tallies, and what changed from this plan).
+
+- **The shadows (2026-10-12/13, between L5 and L7; not a phase of this plan).** The owner: "the shadow work of our
+  trees in the whole map looks weak". The shadow look (#59, `docs/plans/done/shadow-look.md`): the valley mist no
+  longer erases cast shadows, a cooler shadow band at the same value, crisper edges, a contact core under each
+  tree. Its targets were missed (the valley narrowly, the slope by more): **slope shadows are still the weaker
+  ones**, open for L9w. The soft shadows (#60, `docs/plans/done/soft-shadows.md`): the penumbra grows with the
+  distance to the caster, each crown hides its share of the sky, the shadow deepens on a wood's floor; baked on
+  load, nothing per frame. The guard's one regressed block was waived by the owner. The cost, and links to every
+  other number: `track-e-results/shadows-foliage.md`.
+- **L7a, L7b and the generated trees:** under L7's status table, above.

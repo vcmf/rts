@@ -9,7 +9,12 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const arg = process.argv[2] || 'prototypes/painted-cinematic.html', isUrl = /^https?:\/\//.test(arg)
-const page = isUrl ? arg : path.resolve(ROOT, arg)
+// a URL loads with the blur off unless it sets ?dof (decision 0024: the pixel checks measure the paint)
+const page = isUrl ? (u => { if (!u.searchParams.has('dof')) u.searchParams.set('dof', '0'); return u.href })(new URL(arg)) : path.resolve(ROOT, arg)
+// the render check's river points on the look page, the pack's trees unless the URL names a set: the generated woods
+// (the default, docs/plans/done/gen-trees-default.md) overhang the river there (78 % of its points seen at the mid view,
+// against 80 %); the river and look checks run on the default
+const renderPage = isUrl ? (u => { if (/look\.html$/.test(u.pathname) && !u.searchParams.has('trees')) u.searchParams.set('trees', 'pack'); return u.href })(new URL(page)) : page
 if (!isUrl && !fs.existsSync(page)) { console.error(`check-negatives: no page at ${page}`); process.exit(2) }
 const src = f => fs.readFileSync(path.join(ROOT, 'tools', f), 'utf8')
 const CHECKS = { render: src('render-check.js'), river: src('river-check.js'), look: src('look-check.js') }
@@ -22,9 +27,9 @@ const CASES = [
   ['render', 'shadow box shrunk', 'lightCam.orthoLeft *= 0.6; lightCam.orthoRight *= 0.6', 'shadow box:'],
   ['render', 'panning in the view plane', 'camera.mapPanning = false', 'left the bounds'],
   ['river', 'real scene', null, null],
-  ['river', 'a tree in the river', 'groups.CommonTree_1.push([RIVER.px[RIVER.n >> 1], RIVER.pz[RIVER.n >> 1], 4, 0, 0.5])', 'instancesOverWater'],
+  ['river', 'a tree in the river', 'groups[Object.keys(groups).find(k => /^(CommonTree_1|Gen_oak_)/.test(k))].push([RIVER.px[RIVER.n >> 1], RIVER.pz[RIVER.n >> 1], 4, 0, 0.5])', 'instancesOverWater'],
   ['river', 'a bush in a formation zone', '(groups.Bush_1 ||= []).push([-5, -20, 2, 0, 0.5])', 'instancesInZones'],
-  ['river', 'wheat on the floodplain', '{ const z = 40; groups.Wheat.push([RIVER.axisX(z) + 30, z, 1.5, 0, 0.5]) }', 'wheatOnFloodplain'],
+  ['river', 'wheat on the floodplain', '{ const z = 40; (groups.Wheat ||= []).push([RIVER.axisX(z) + 30, z, 1.0, 0, 0.5]) }', 'wheatOnFloodplain'],
 ]
 // the look page's own checks (tools/look-check.js): only where the page has them (the prototype has no SPEC)
 const LOOK_CASES = [
@@ -33,6 +38,9 @@ const LOOK_CASES = [
   ['river', 'cut banks on the inner side', 'for (let i = 0; i < RIVER.n; i++) RIVER.A[i] = -RIVER.A[i]', 'cutBankVsBar'],
   // W5a: a reed out on the meadow, far from the water
   ['river', 'a reed far from the water', '(groups.Reed ||= []).push([RIVER.px[RIVER.n >> 1] + 30, RIVER.pz[RIVER.n >> 1], 1.6, 0, 0.5])', 'reedsAwayFromWater'],
+  // L5d: the meadow's crops grown everywhere (docs/plans/done/l5d-crops.md)
+  ['river', 'crops everywhere', '__look.meadow.cropAt = () => 1', 'cropsOnFloodplain'],
+  ['river', 'no crops', '__look.meadow.cropAt = () => 0', 'cropsInSceneField'],
   ['look', 'real scene', null, null],
   ['look', 'tile drawn 0.5 m high', 'tileGround.position.y = 0.5; tileGround.computeWorldMatrix(true)', 'tileHeights'],
   ['look', 'far ring at the old -0.9 m', 'farGround.position.y = -0.9; farGround.computeWorldMatrix(true)', 'farHeights'],
@@ -49,10 +57,11 @@ let bad = 0, hasSpec = false   // the look cases run when the page has a SPEC (r
 const queue = [...CASES]
 for (let q = 0; q < queue.length; q++) {
   const [check, name, sabotage, expect] = queue[q]
-  const steps = [['wait', 1000], ['eval', '(async () => { for (let i = 0; i < 1200 && !window.__proto; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__proto) throw new Error("the page never set window.__proto (120 s)"); return "page built" })()'], ['wait', 1000], ['eval', CAPTURE],
+  const steps = [['wait', 1000], ['eval', '(async () => { for (let i = 0; i < 1200 && !window.__proto; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__proto) throw new Error("the page never set window.__proto (120 s)"); return "page built" })()'], ['wait', 1000], ['eval', '__proto.S.res = 1; "scale 1"'], ['eval', CAPTURE],
     ...(sabotage ? [['eval', sabotage + '; "SABOTAGED"']] : []),
     ['eval', CHECKS[check] + '; "CHECK RAN"'], ['eval', REPORT]]
-  const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), isUrl ? page : pathToFileURL(page).href, path.join(ROOT, 'scratch/check-negatives'), '1280', '720', JSON.stringify(steps)],
+  const pg = check === 'render' ? renderPage : page
+  const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), isUrl ? pg : pathToFileURL(pg).href, path.join(ROOT, 'scratch/check-negatives'), '1280', '720', JSON.stringify(steps)],
     { encoding: 'utf8', env: { SHOT_TIMEOUT_S: '300', SHOT_LOAD_S: '300', ...process.env } })
   const out = r.stdout + r.stderr
   const applied = !sabotage || out.includes('EVAL "SABOTAGED"'), ran = out.includes('EVAL "CHECK RAN"')

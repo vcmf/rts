@@ -10,7 +10,7 @@ uniform sampler2D uRiverMask;
 // the ground's colour: its cover's (groundAt, the macro colour's arm: macro.glsl, shared with the shore band), stony
 // where steep, the banks, the seasons. wt: the water data here (WATERDATA)
 vec3 albedo(vec3 wp,vec3 n,vec4 wt){
-  vec3 m=groundAt(wp.xz,pxMacro()),c=groundSteep(m,n.y);
+  vec3 m=roadPaint(earthOn(dirtOn(groundAt(wp.xz,pxMacro()),wp.xz,pxMacro()),wp.xz,pxMacro()),wp.xz),c=groundSteep(m,n.y);
   // stream banks: on the tile from the water data (W5, bankPaint in src/look/shaders/shore.glsl); within BANK_EDGE of
   // the tile's edge, and on the apron and the far ring, from aRiver, as before W5 (the bands over the ground, then the
   // stony steep ground over them), which the far ring's painted line continues
@@ -46,7 +46,7 @@ void main(){
   #ifdef DETAIL_DEBUG_N
   gl_FragColor=vec4(N*0.5+0.5,1.0);return;   // the bank check's view: the shading normal
   #endif
-  float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,lm.g,uAO);
+  float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,groundOcc(lm),uAO);pSky=mix(1.0,lm.g,uAO);
   #ifdef WATERDATA
   vec4 wt=waterTexel(vW.xz);   // the water data here: the banks (albedo) and the shore band (below)
   #else
@@ -56,9 +56,15 @@ void main(){
   #ifdef FARRING
   float rm=texture2D(uRiverMask,vW.xz/FAR_W+0.5).r;                   // painted river line on the far ring
   alb=mix(alb,alb*vec3(0.72,0.78,0.70),smoothstep(0.0,0.15,rm));
-  alb=mix(alb,vec3(0.40,0.55,0.58),smoothstep(0.3,0.6,rm));   // the water mid tone after its sky tint, so the line matches the river at the tile edge
+  alb=mix(alb,uFarRiver,smoothstep(0.3,0.6,rm));   // the water mid tone after its sky tint, so the line matches the river at the tile edge
+  #endif
+  #if defined(MEADOW)&&defined(MEADOW_UNDER)   // (guarded: the hill compiles no shore section, where meadowUnder lives)
+  alb=meadowUnder(alb,vW.xz);   // the dark ground under the near grass and crops (shore.glsl, the tile only)
   #endif
   pSnowLie=snowLie(vW.xz,pxMacro());   // the fields' furrows hold the snow (macro.glsl)
+  #ifdef GROUND_BOUNCE
+  pGround=groundBounceAt(vW);   // the bounce map (LC5)
+  #endif
   vec3 c=paint(alb,N,vW,occ,0.12,1.0,sh);
   #ifdef DETAIL_DEBUG_INC
   // the checks' incidence view: |cos| in red; the biplanar major plane's weight in green; in blue, where the bank
@@ -84,4 +90,4 @@ void main(){
   if(ws>-WATER_BAND-0.4-1.5*fws&&ws<WATER_BAND+1.5*fws){vec2 ia=iceAt(vW.xz,length(waterFlow(wt)),max(waterDepth(wt),0.0));   // the ice, once (shore.glsl)
     c=mix(c,withStones(shore(vW,wt,occ,sh,fws,ia),vW,ws,sh,ia.x),smoothstep(-WATER_BAND-0.4,-WATER_BAND,ws)*step(ws,WATER_BAND));}
   #endif
-  gl_FragColor=vec4(atmos(mist(c,vW,lm,0.0),vW),depthA(vW));}
+  gl_FragColor=lensOut(airOf(c,vW,lm,0.0),vW);}

@@ -19,16 +19,17 @@ import { D } from './spec.ts'
 
 declare const __BUILD__: string
 
-export interface Arm { name: string; apply: () => void }
+export interface Arm { name: string; apply: () => unknown }   // apply may return a promise (a rebake): it is awaited
 export interface BenchPasses { terrain: Mesh[]; scatter: Mesh[]; water: Mesh[]; post: () => PostProcess[] }
 interface Cam { name: string; alpha: number; beta: number; radius: number }
 export interface RunStats {
-  cam: string; arm: string; frames: number
+  cam: string; arm: string; size: [number, number]; frames: number   // size: the frame drawn (the render scale: Auto lowers it at the widest zoom)
   frameMs: Stat; gpuMs: Record<string, Stat | null>; passesOverFrame: number | null; drawCalls: number; triangles: number; segments: Record<string, number>
 }
 interface Stat { p50: number; p95: number; max: number; n: number }
 
-const q = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : NaN }
+// a quantile (the bench's and the page's frame readout, src/look/main.ts)
+export const q = (a: ArrayLike<number>, p: number): number => { const s = Array.from(a).sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : NaN }
 const MIN_FRAMES = 20
 const stat = (a: number[]): Stat => ({ p50: +q(a, 0.5).toFixed(3), p95: +q(a, 0.95).toFixed(3), max: +Math.max(...a).toFixed(3), n: a.length })
 
@@ -58,7 +59,13 @@ function rendererName(engine: AbstractEngine): string {
   return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER))
 }
 
-export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: BenchPasses, arms: Arm[], holdS: number): Promise<object> {
+// focus: the point the cameras orbit (the camera's start by default; the forest bench's ?benchat)
+// ?passes=0: whole frames only, no pass timers (their queries split the Metal render pass; the frames between were
+// measured the same with them and without, 2026-10-20: docs/plans/done/headroom.md)
+const passesParam = new URLSearchParams(location.search).get('passes')
+if (passesParam !== null && passesParam !== '0') throw new Error(`?passes must be 0, not ${passesParam}`)
+const WHOLE_ONLY = passesParam === '0'
+export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: BenchPasses, arms: Arm[], holdS: number, focus: { x: number; z: number } = { x: START.x, z: START.z }): Promise<object> {
   const engine = scene.getEngine(), gl = (engine as unknown as { _gl: WebGL2RenderingContext })._gl
   const timer = new GpuTimer(gl), inst = new SceneInstrumentation(scene)
   let timing = false, passFrame = false, frameNo = 0, lastT = 0, passFrames = 0
@@ -99,7 +106,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   const begin = engine.onBeginFrameObservable.add(() => {
     const t = performance.now(); if (timing && lastT && !passFrame) frameMs.push(t - lastT); lastT = t   // passFrame: the frame that just ended
     timer.poll(); timer.newFrame(); frameNo++; hookPosts()
-    passFrame = timer.available && frameNo % 2 === 0   // without a timer every frame is a whole frame
+    passFrame = timer.available && frameNo % 2 === 0 && !WHOLE_ONLY   // without a timer every frame is a whole frame
     if (timing && !passFrame) timer.begin('frame')
     if (timing && passFrame) passFrames++
   })
@@ -116,13 +123,16 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   const frames = (n: number) => new Promise<void>(r => { let k = 0; const o = engine.onEndFrameObservable.add(() => { if (++k >= n) { engine.onEndFrameObservable.remove(o); r() } }) })
   const seconds = (s: number) => new Promise<void>(r => setTimeout(r, s * 1000))
 
+  // the scene's frame: the finishing chain's first target (under the upscale smaller than the canvas), or the canvas
+  const sceneSize = (): [number, number] => { const p = passes.post()[0]; return p ? [p.width, p.height] : [engine.getRenderWidth(true), engine.getRenderHeight(true)] }
+  const canvas0 = [engine.getRenderWidth(true), engine.getRenderHeight(true)]   // the page's frame before any camera (a wide one draws smaller at Auto)
   const runs: RunStats[] = [], cams = cameras()
   try {
     await seconds(2)   // shaders compiled, first frames out of the way
     for (const cam of cams) {
-      camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; camera.target.set(START.x, D.spec.camera.focusY, START.z)
+      camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; camera.target.set(focus.x, D.spec.camera.focusY, focus.z)
       for (const arm of [...arms, ...[...arms].reverse()]) {
-        arm.apply(); await scene.whenReadyAsync()
+        await arm.apply(); await scene.whenReadyAsync()
         for (let tries = 0; ; tries++) {
           await frames(10)
           timer.reset(); frameMs.length = draws.length = tris.length = 0; timed.clear(); lastT = 0; passFrames = 0; hidden = document.hidden
@@ -140,17 +150,18 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
         for (const [k, v] of timed) segments[k] = +(v / nPass).toFixed(1)
         // the passes' medians should fit in the frame's: when they do not, the backend's queries are not trustworthy
         const sum = ['terrain', 'scatter', 'water', 'other', 'post'].reduce((a, k) => a + (gpuMs[k]?.p50 ?? 0), 0)
-        const passesFit = gpuMs.frame ? +(sum / gpuMs.frame.p50).toFixed(2) : null
-        runs.push({ cam: cam.name, arm: arm.name, frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
+        const passesFit = gpuMs.frame && !WHOLE_ONLY ? +(sum / gpuMs.frame.p50).toFixed(2) : null
+        runs.push({ cam: cam.name, arm: arm.name, size: sceneSize(), frames: frameMs.length, frameMs: stat(frameMs), gpuMs, passesOverFrame: passesFit, drawCalls: Math.round(q(draws, 0.5)), triangles: Math.round(q(tris, 0.5)), segments })
       }
     }
   } finally { timing = false; seg(null); for (const u of undo) u(); inst.dispose() }
   const r = engine.getRenderingCanvas()
   return {
-    tool: 'look-bench', version: 2, build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
-    canvas: { w: engine.getRenderWidth(), h: engine.getRenderHeight(), cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
-    gpuTimer: timer.available, holdS, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
-    note: timer.available ? 'GPU times from EXT_disjoint_timer_query_webgl2' : 'no GPU timer on this browser: GPU fields are null', runs,
+    tool: 'look-bench', version: 6,   // 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
+    build: __BUILD__, date: new Date().toISOString(), userAgent: navigator.userAgent, renderer: rendererName(engine),
+    canvas: { w: canvas0[0], h: canvas0[1], cssW: r?.clientWidth, cssH: r?.clientHeight, dpr: devicePixelRatio },
+    gpuTimer: timer.available, wholeOnly: WHOLE_ONLY, holdS, focus, arms: arms.map(a => a.name), textureMB: textureMB(engine), queriesRefused: timer.refused, disjoint: timer.disjoint,
+    note: WHOLE_ONLY ? 'whole frames only (?passes=0): the pass fields are null by design' : timer.available ? 'GPU times from EXT_disjoint_timer_query_webgl2' : 'no GPU timer on this browser: GPU fields are null', runs,
   }
 }
 

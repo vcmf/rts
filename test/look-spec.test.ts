@@ -38,9 +38,13 @@ describe('world spec', () => {
     ['no shore band', s => { s.water.band = 0 }, /water: the shore band/],
     ['bank colours past the bank normals', s => { s.bank.paint = 13 }, /bank: the banks' colours/],
     ['too many stones for the foam loop', s => { s.water.stones = 100 }, /water: the stones/],
+    ['road grid listing less than the junction weight reads', s => { s.road.reach = 5 }, /road: the paint/],
+    ['road search narrower than the paint', s => { s.road.near = 2.4 }, /road: near/],
+    ['road paint short of the warp and the edge', s => { s.road.paint = 3.0 }, /road: paint short/],
     ['macro texels not dividing the tile', s => { s.macro.texel = 0.3 }, /macro: the tile/],
     ['a macro bake over the min-spec texture size', s => { s.macro.far = 0.25 }, /bake: macro far ring/],
     ['a macro bake draw out of range', s => { s.macro.bakeTile = 16 }, /macro: a bake draw/],
+    ['a Kuwahara radius past its loop', s => { s.macro.kuwahara = 3 }, /macro: the Kuwahara radius/],
   ]
   for (const [name, f, msg] of cases) it(`throws: ${name}`, () => { expect(() => derive(with_(f))).toThrow(msg) })
   it('sizes the shadow map at the texel target on the ground, and refuses one over min-spec', () => {
