@@ -3,6 +3,9 @@ precision highp float;varying vec3 vW,vN,vCrop;varying float vV,vShade,vH,vIsCro
 #ifdef GRASS_FLOW
 varying vec3 vFlow;
 #endif
+#ifdef TRAMPLE
+varying float vTrample;   // (the trodden grass, meadow.vert: a drier, dustier colour)
+#endif
 #ifdef UNIT_SHADOWS_VS
 varying float vUSh;   // (the figures' shadow at the blade's root, meadow.vert)
 #endif
@@ -62,6 +65,9 @@ void main(){
     alb*=mix(vec3(1.0),tint,(0.6+0.4*vV)*vFlow.z);   // (none under the snow of winter, as the default)
     #endif
   }
+  #ifdef TRAMPLE
+  alb=mix(alb,vec3(0.50,0.46,0.33)*mix(0.9,1.1,vV),vTrample*0.6);
+  #endif
   alb=earthOf(alb);
   float lo=groundOcc(lm),occ=mix(0.8,1.0,vV)*mix(1.0,lo,uAO*0.6);
   // paint(), lean: the ramp, the cool shadow band (deeper where the sky is hidden), the clouds, no grain, rim nor

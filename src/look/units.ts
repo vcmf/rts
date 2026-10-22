@@ -14,7 +14,7 @@ import { RenderTargetTexture } from '@babylonjs/core/Materials/Textures/renderTa
 import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Frustum } from '@babylonjs/core/Maths/math.frustum.js'
-import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
+import { Matrix, Vector2, Vector3, Vector4 } from '@babylonjs/core/Maths/math.vector.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
 import type { Scene } from '@babylonjs/core/scene.js'
@@ -47,6 +47,9 @@ const SM_BIAS = 0.02   // m along the sun: no receiver is drawn into the map, so
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1]   // the view's corners in clip space
 const FIGURE = 1.8     // m: a figure's height, for the LOD's pixel test
 const SM_HOLD = 6      // m: lazy, the held sun box must cover the view by this much
+const TR_N = 256, TR_EVERY = 0.25   // the trodden ground's mask: texels a side; s between its redraws while men move
+const TR_TRAIL = [[0.8, 0.9], [1.6, 0.8], [2.6, 0.6], [3.8, 0.4]] as const   // m behind a man, weight
+const TR_WEIGHT = 1 + TR_TRAIL.reduce((a, [, w]) => a + w, 0)
 const FAR_SCALE_XZ = 1.35, FAR_SCALE_Y = 1.15   // the far figure's growth at a quarter of the LOD switch's height
 const SHADOW_H = 2.6    // m: the highest point of a figure (his bayonet up), whose shadow reaches farthest
 const SM_STEP_FINE = 2  // m: fine, the box's half-size steps
@@ -90,6 +93,13 @@ export class Units {
   rootReceivers: ShaderMaterial[] = []
   readonly meshes: Mesh[] = []
   private farK = new Vector2()
+  private trampleOn = false
+  private trTex: RawTexture | null = null
+  private readonly trBuf = new Uint8Array(TR_N * TR_N)
+  private readonly trAcc = new Float32Array(TR_N * TR_N)
+  private readonly trBox = { x0: 0, z0: 0, size: 64, set: false }
+  private readonly trV = new Vector4()
+  private trAt = -1   // the clock when the mask was last drawn
   private quad = new Float64Array(8)
   /** the shadow's quality (?ushadowq=0: batch A's): the box fitted to the ground in view, the soft lookup */
   fineShadows = true
@@ -224,13 +234,14 @@ export class Units {
     const pxPerM = cam.getProjectionMatrix().m[5] * engine.getRenderHeight() / 2, camPos = cam.globalPosition
     for (const m of this.farMats.values()) m.setVector2('uFarK', this.farK.set(FIGURE * pxPerM, this.lodPx))
     let moved = step !== this.smStep   // (the map changes with the poses' step, the men's places, the casters' LOD)
+    let anyMoved = false   // (a battalion's men written this frame: the trodden ground follows)
     for (const h of this.hosts) {
       if (!h.lod[0].isEnabled()) continue
       const t = T - h.b.offset, cycle = Math.floor(t / CYCLE), local = t - cycle * CYCLE, cycleStart = T - local
       const p = phaseAt(this.drill, local, this.speed.march, this.speed.run).phase
       // a battalion's men are written when they move (a marching or deploying one once a step), else once a phase
       const moving = p === 'column' || p === 'deploy'
-      if (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step)) { this.place(h, local, cycleStart); h.step = step; h.phase = p; h.cycle = cycle; moved = true }
+      if (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step)) { this.place(h, local, cycleStart); h.step = step; h.phase = p; h.cycle = cycle; moved = true; anyMoved = true }
       const px = FIGURE * pxPerM / Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
       const near = h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1
       if (near !== h.near && this.casterNear) moved = true
@@ -242,6 +253,7 @@ export class Units {
         if (h.staleSet[k]) { h.lod[k].thinInstanceBufferUpdated('aVAT'); h.staleSet[k] = false }
       }
     }
+    if (this.trampleOn) this.trample(T, anyMoved)
     if (!this.shadows) return
     const refit = this.fitSun()
     if (!this.lazyShadows) return
@@ -442,6 +454,67 @@ export class Units {
     for (const h of this.hosts) this.shadowRT.setMaterialForRendering(h.lod[1], on ? this.depthVatMat : this.depthMat)
     this.smStep = -1
   }
+  /** the ground trodden under the formations (?trample=0: none): the ground and the grass read a mask of where the men
+   *  stand and just behind them (TRAMPLE) */
+  setTrample(on: boolean): void {
+    this.trampleOn = on
+    if (on && !this.trTex) {
+      this.trTex = new RawTexture(this.trBuf, TR_N, TR_N, Constants.TEXTUREFORMAT_R, this.scene, false, false, Constants.TEXTURE_BILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_UNSIGNED_BYTE)
+      this.trTex.name = 'trampleMask'; this.trTex.wrapU = this.trTex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
+    }
+    for (const m of this.receivers) { m.setDefine('#define TRAMPLE', on); if (this.trTex) m.setTexture('uTrample', this.trTex) }
+    this.trBox.set = false
+  }
+
+  // The trodden ground's mask: TR_N² over an axis-aligned world box round the ground in view (where its corner rays
+  // meet the ground at the focus's height), a power of two metres wide (64 to 1,024), held while it covers the view and
+  // is under twice the size the view needs. Drawn again when the box moves, or at most TR_EVERY s apart while men move:
+  // each man splats where he stands and, fainter, up to five steps behind him (the ground just behind the ranks),
+  // normalised by how many men a texel holds in a formation, then blurred once (no texel edge on the ground)
+  private trample(T: number, moved: boolean): void {
+    const cam = this.camera, k = this.scratch, inv = k.inv, y0 = groundAt(cam.target.x, cam.target.z), b = this.trBox
+    cam.getTransformationMatrix().invertToRef(inv)
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity
+    for (let j = 0; j < 4; j++) {
+      Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 0, inv, k.a); Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 1, inv, k.b)
+      k.b.subtractToRef(k.a, k.d).normalize()
+      const r = k.d.y < -1e-3 ? Math.min((y0 - k.a.y) / k.d.y, SM_REACH) : SM_REACH, x = k.a.x + k.d.x * r, z = k.a.z + k.d.z * r
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z)
+    }
+    if (!Number.isFinite(x0 + x1 + z0 + z1)) return
+    const need = Math.max(x1 - x0, z1 - z0) + 20
+    const fits = b.set && x0 > b.x0 + 5 && z0 > b.z0 + 5 && x1 < b.x0 + b.size - 5 && z1 < b.z0 + b.size - 5 && b.size < 2 * need
+    if (!fits) {
+      const size = Math.min(1024, Math.max(64, 2 ** Math.ceil(Math.log2(need)))), tx = size / TR_N
+      b.size = size; b.x0 = Math.floor(((x0 + x1) / 2 - size / 2) / tx) * tx; b.z0 = Math.floor(((z0 + z1) / 2 - size / 2) / tx) * tx; b.set = true
+      this.trV.set(b.x0, b.z0, 1 / size, 0)
+      for (const m of this.receivers) m.setVector4('uTrampleBox', this.trV)
+    } else if (!(moved && T - this.trAt >= TR_EVERY) && this.trAt >= 0) return
+    this.trAt = T
+    const acc = this.trAcc, out = this.trBuf, tx = b.size / TR_N
+    acc.fill(0)
+    const splat = (x: number, z: number, w: number) => {
+      const i = Math.floor((x - b.x0) / tx), j = Math.floor((z - b.z0) / tx)
+      if (i >= 0 && j >= 0 && i < TR_N && j < TR_N) acc[j * TR_N + i] += w
+    }
+    for (const h of this.hosts) {
+      if (!h.lod[0].isEnabled() || h.hi.x < b.x0 || h.lo.x > b.x0 + b.size || h.hi.z < b.z0 || h.lo.z > b.z0 + b.size) continue
+      const m = h.matrices
+      for (let o = 0; o < m.length; o += 16) {
+        const x = m[o + 12], z = m[o + 14], bx = m[o + 8], bz = m[o + 10]   // (+z in the figure's frame: behind him)
+        splat(x, z, 1); for (const [d, w] of TR_TRAIL) splat(x + bx * d, z + bz * d, w)
+      }
+    }
+    // a formation's density: a man to 0.55 m² (0.65 m files, 0.85 m ranks), his splats' weight
+    const full = Math.max(1, tx * tx / 0.55 * TR_WEIGHT * 0.6)
+    for (let j = 0; j < TR_N; j++) for (let i = 0; i < TR_N; i++) {
+      let s = 0, n = 0
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const a = i + di, c = j + dj; if (a >= 0 && c >= 0 && a < TR_N && c < TR_N) { s += Math.min(1, acc[c * TR_N + a] / full) * (di || dj ? 1 : 2); n += di || dj ? 1 : 2 } }
+      out[j * TR_N + i] = Math.round(255 * s / n)
+    }
+    this.trTex?.update(out)
+  }
+
   /** the figures shown or not (the guard's ground alone), their shadows with them */
   show(on: boolean): void {
     for (const h of this.hosts) for (const m of h.lod) m.setEnabled(on)

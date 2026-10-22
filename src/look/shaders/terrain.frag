@@ -30,6 +30,17 @@ vec3 albedo(vec3 wp,vec3 n,vec4 wt){
   #endif
   return groundSeason(c);
 }
+#ifdef TRAMPLE
+varying float vTrample;
+// trodden ground: the mask broken by the grain's blotches (no edge a decal would have), the ground toward a pale dusty
+// earth in summer, a grey-brown slush where the snow is trodden away in winter (its snow held off: pSnowK)
+// (read only where the mask is over 0: the grain costs nothing elsewhere)
+vec3 trodAlb(vec3 alb,vec3 N,out float t){
+  t=0.0;if(vTrample<0.01)return alb;
+  vec3 g=grainW(vW,N,3.0);t=smoothstep(0.12,0.8,vTrample+(g.g-0.5)*0.35);
+  vec3 dust=mix(vec3(0.60,0.53,0.41),vec3(0.36,0.32,0.28),smoothstep(2.0,3.0,uSeason));
+  return mix(alb,dust*mix(0.92,1.06,g.r),t*0.75);}
+#endif
 void main(){
   macroDerivs(vW.xz);   // before any branch (shore.glsl)
   #ifdef WATER_DEBUG
@@ -65,6 +76,9 @@ void main(){
   alb=meadowUnder(alb,vW.xz);   // the dark ground under the near grass and crops (shore.glsl, the tile only)
   #endif
   pSnowLie=snowLie(vW.xz,pxMacro());   // the fields' furrows hold the snow (macro.glsl)
+  #ifdef TRAMPLE
+  float trod;alb=trodAlb(alb,N,trod);pSnowK*=1.0-0.85*trod;
+  #endif
   #ifdef GROUND_BOUNCE
   pGround=groundBounceAt(vW);   // the bounce map (LC5)
   #endif

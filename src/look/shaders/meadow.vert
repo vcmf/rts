@@ -10,6 +10,11 @@ uniform vec3 uCamPos,uFocus;   // (the zoom: how far the camera stands from the 
 varying vec3 vFlow;   // the combed meadow: the clump hue (a hash), the growth at its root, how far it is from winter (1 to 0)
 #endif
 #include<meadow>
+#ifdef TRAMPLE
+// the grass trodden under the formations (batch C, src/look/units.ts trample): shorter and pressed where they stand and
+// just behind; uTrampleBox: the mask's world corner and 1 / its size
+uniform sampler2D uTrample;uniform vec4 uTrampleBox;varying float vTrample;
+#endif
 #ifdef UNIT_SHADOWS_VS
 // the figures' cast shadow (decision 0047) read once a blade, at its root on the ground, for the whole blade: the
 // fragment's own read (painter.glsl, unitShadowAt) is six fetches a pixel over many layers of blades. The same 2x2
@@ -109,12 +114,19 @@ void main(){
     hgt=min(hgt*mix(1.0,GRASS_TALL,nearK),HEIGHT_MAX);fp*=mix(1.0,GRASS_WIDE,nearK);   // larger blades (the owner): wider clumps, a little taller, never over HEIGHT_MAX
     #endif
   }
+  #ifdef TRAMPLE
+  float trod=smoothstep(0.1,0.7,texture2D(uTrample,(root-uTrampleBox.xy)*uTrampleBox.z).r);
+  hgt*=1.0-0.8*trod;vTrample=trod;
+  #endif
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
   float a=h4*6.2832,ca=cos(a),sa=sin(a);
   vec3 p=vec3(position.x*fp,position.y*hgt,position.z*fp);p.xz=vec2(ca*p.x-sa*p.z,sa*p.x+ca*p.z);
   // a crop's stalks stand straight (docs/plans/done/crop-depth.md): a blade's spread drawn in toward its root's
   // axis as it rises (the grass clump fans out), and barely any lean
-  if(crop)p.xz*=CROP_WIDE/(1.0+CROP_FAN*aV);   // the grass clump's spread grows about 1 + CROP_FAN aV up its blades (measured): undone, the stalks parallel, CROP_WIDE times the root's spread
+  if(crop)p.xz*=CROP_WIDE/(1.0+CROP_FAN*aV);
+  #ifdef TRAMPLE
+  p.xz*=1.0+1.2*trod*aV;   // (pressed: the trodden blades splay out flat)
+  #endif   // the grass clump's spread grows about 1 + CROP_FAN aV up its blades (measured): undone, the stalks parallel, CROP_WIDE times the root's spread
   #ifdef GRASS_FLOW
   // combed (docs/plans/done/grass-flow.md): the clump leans with the flow, bending more toward its tips (the
   // offset grows with the height squared), as far as the flow lies it over, the hash a small jitter; not crops
