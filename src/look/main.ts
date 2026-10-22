@@ -302,6 +302,8 @@ const uShadowRate = bit('ushadowrate'), uShadowLod = bit('ushadowlod'), uShadowV
 // ?uvat=0: the far LOD and its casters skinned, not posed; ?udepth=0: the colour target, manual taps; ?ucull=0: every
 // caster in the sun's box
 const uShadowQ = bit('ushadowq'), uVat = bit('uvat'), uDepth = bit('udepth'), uCull = bit('ucull')
+// batch C: ?farscale=0, the far figures at their own size
+const farScale = bit('farscale')
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 20)) throw new Error(`?armies must be 1 to 20 battalions a side (the demo map holds 20), not ${armiesParam}`)
 if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '1') throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
 let units: Units | null = null, armiesFocus: [number, number] | null = null   // (the fight's middle: the bench's focus)
@@ -327,6 +329,7 @@ if (armiesParam !== null) {
   if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)
+  units.setFarScale(farScale ?? true)
   units.setFarRule(farPal)   // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
   armiesFocus = facingAt(units.battalions)
   Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })

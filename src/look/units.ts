@@ -47,6 +47,7 @@ const SM_BIAS = 0.02   // m along the sun: no receiver is drawn into the map, so
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1]   // the view's corners in clip space
 const FIGURE = 1.8     // m: a figure's height, for the LOD's pixel test
 const SM_HOLD = 6      // m: lazy, the held sun box must cover the view by this much
+const FAR_SCALE_XZ = 1.35, FAR_SCALE_Y = 1.15   // the far figure's growth at a quarter of the LOD switch's height
 const SHADOW_H = 2.6    // m: the highest point of a figure (his bayonet up), whose shadow reaches farthest
 const SM_STEP_FINE = 2  // m: fine, the box's half-size steps
 const SM_COARSE = 1.3  // and be at most this many times the size the view needs (its texels no coarser)
@@ -114,6 +115,11 @@ export class Units {
     const vat = RawTexture.CreateRGBATexture(data.vat.data, data.vat.width, data.vat.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_HALF_FLOAT)
     vat.name = 'figureVAT'
     const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVAT', 'aVid'], n = data.palette.length
+    // the far figure's growth (setFarScale): across up to FAR_SCALE_XZ, but never wider than 95 % of a file (the far
+    // LOD's shoulders, measured between 1.2 and 1.5 m up), and FAR_SCALE_Y tall
+    const fm = data.mesh[data.lods[1].name]; let x0 = Infinity, x1 = -Infinity
+    for (let v = 0; v < fm.positions.length / 3; v++) { const y = fm.positions[v * 3 + 1]; if (y > 1.2 && y < 1.5) { x0 = Math.min(x0, fm.positions[v * 3]); x1 = Math.max(x1, fm.positions[v * 3]) } }
+    const farScale = new Vector2(Math.min(FAR_SCALE_XZ, 0.95 * drill.fileSpacing / (x1 - x0)), FAR_SCALE_Y)
     for (const id of new Set(battalions.map(b => b.uniform))) {
       const u = uniforms[id]; if (!u) throw new Error(`units: no uniform ${id} (a battalion names it)`)
       // its colour for each of the bake's roles (a role the uniform does not name: a loud failure)
@@ -123,10 +129,10 @@ export class Units {
       this.mats.set(id, m)
       // the far LOD's: its far palette and its lift crossfaded in below the LOD switch under its far rule (FAR, setFarRule;
       // units.vert, units.frag), its vertices posed (VAT_POS, setPosed)
-      const f = mats.make(`units_${id}_far`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uPalFar', 'uFarK', 'uMask', 'uCoatRole'], samplers: ['uVAT', 'uVATP'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
+      const f = mats.make(`units_${id}_far`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole'], samplers: ['uVAT', 'uVATP'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
       const far = farPalette(u.colours)
       f.setTexture('uVAT', vat); f.setColor3Array('uPal', pal); f.setColor3Array('uPalFar', data.palette.map(r => Color3.FromHexString(far[r])))
-      f.setFloat('uMask', -1); f.setFloat('uCoatRole', data.palette.indexOf('coat'))
+      f.setFloat('uMask', -1); f.setFloat('uCoatRole', data.palette.indexOf('coat')); f.setVector2('uFarScale', farScale)
       this.farMats.set(id, f)
     }
     // the shadow pass: the same skinning, depth only, from an orthographic camera along the sun
@@ -420,6 +426,10 @@ export class Units {
    *  every uniform's forced (?farpal=0|1: the A/B) */
   setFarRule(force: boolean | null): void {
     for (const [id, m] of this.farMats) m.setDefine('#define FAR', force ?? farRule(this.uniforms[id]) === 'coat')
+  }
+  /** the far figures drawn larger as they shrink on screen (?farscale=0: their own size) */
+  setFarScale(on: boolean): void {
+    for (const m of this.farMats.values()) m.setDefine('#define FAR_SCALE', on)
   }
   /** each side's uniforms' coat colours (the guard's ΔE to the coat) */
   coats(): string[][] {

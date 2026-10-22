@@ -17,11 +17,20 @@ varying float vD;
 #else
 // a side's colours by role (the bake's palette, src/look/world/armies.ts): a palette swap recolours the side
 uniform vec3 uPal[PAL_N];
+#if defined(FAR)||defined(FAR_SCALE)
+// the far figure's size on screen: uFarK.x, a figure's height in pixels at 1 m; uFarK.y, the LOD switch's
+uniform vec2 uFarK;uniform vec3 uCamPos;
+#endif
 #ifdef FAR
-// the far LOD's palette (?farpal=1: farPalette, src/look/world/armies.ts), crossfaded in as the figure shrinks below
-// the LOD switch, so the switch does not pop: uFarK.x, a figure's height in pixels at 1 m; uFarK.y, the switch's
-uniform vec3 uPalFar[PAL_N];uniform vec2 uFarK;uniform vec3 uCamPos;
+// the far LOD's palette (its uniform's far rule: farPalette, src/look/world/armies.ts), crossfaded in as the figure
+// shrinks below the LOD switch, so the switch does not pop
+uniform vec3 uPalFar[PAL_N];
 varying float vFar;
+#endif
+#ifdef FAR_SCALE
+// the far figure drawn larger as it shrinks on screen (batch C, ?farscale): from the LOD switch down to a quarter of
+// it, across and along up to uFarScale.x (capped so the files never touch), up to uFarScale.y tall
+uniform vec2 uFarScale;
 #endif
 varying vec3 vW,vN,vCol;varying vec2 vRoot;varying float vRole;
 #endif
@@ -39,6 +48,10 @@ void main(){
   #else
   mat4 sk=boneAt(aBones.x,f)*aWeights.x+boneAt(aBones.y,f)*aWeights.y+boneAt(aBones.z,f)*aWeights.z+boneAt(aBones.w,f)*aWeights.w;
   vec3 lp=(sk*vec4(position,1.0)).xyz,ln=mat3(sk)*normal;
+  #endif
+  #ifdef FAR_SCALE
+  float fpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz)),fk=clamp((0.9*uFarK.y-fpx)/(0.65*uFarK.y),0.0,1.0);
+  lp*=vec3(mix(1.0,uFarScale.x,fk),mix(1.0,uFarScale.y,fk),mix(1.0,uFarScale.x,fk));
   #endif
   vec4 w=finalWorld*vec4(lp,1.0);
   vec4 p=viewProjection*w;
