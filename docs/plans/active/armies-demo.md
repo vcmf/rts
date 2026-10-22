@@ -64,6 +64,20 @@ predate the NaN fix: the shadow pass drew its vertices but no shadow. Each chang
 4. `tools/guard.mjs --figures`: the baseline and the far palette's numbers.
 5. The far palette (`?farpal=1` on): off until judged.
 
+## Batch B (2026-10-22)
+
+The coordinator's bench of batch A (Metal, 1080p, 16,560 figures; wide / default / close ms): main 6.67 / 9.53 / 8.80,
+the armies 9.20 / 10.43 / 10.12, without their shadows 8.55 / 9.87 / 9.45, the map drawn every frame 11.25 / 11.28 /
+10.60. The owner then saw the shadows: stair-stepped edges, one dark mass up close. Each change behind its switch:
+
+1. Finer, softer shadows (`?ushadowq=0` off): the box fitted to the ground in view, a soft lookup. Cascades not
+   needed (3.9 × 5.5 cm on the ground at r45).
+2. The far LOD and the casters posed at load (`?uvat=0` off): the same frames up to rounding. Posed from the bake's
+   matrices at load, not in the bake, so the data file is unchanged.
+3. The depth-only map with the hardware's comparison (`?udepth=0` off).
+4. The casters culled to the view (`?ucull=0` off): the same frames.
+5. The panning bench (`?benchpan=1`).
+
 ## Open questions
 
 - The cost on the laptop at 16,000 men, with and without the figures' shadows (the bench, the owner's run).

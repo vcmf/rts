@@ -594,6 +594,18 @@ them. WebGL2 only (decision 0046).
   view draws). `?ushadowvs=1` (off until judged): the meadow reads it once a blade at its root (`UNIT_SHADOWS_VS`,
   `meadow.vert`) instead of at every pixel. (The first build fitted the box before the view's first frame: a NaN
   stayed on the sun and no figure cast a shadow.)
+- **Their shadows' quality** (batch B, `?ushadowq=0`: batch A's): the sun's box meets the ground in view's own range of
+  heights (not the tile's 0 to 25 m, which a 27° sun stretched), is centred on what it holds and sized in 2 m steps.
+  The texel at r45 / r125 / r260: 3.9 × 2.5, 9.2 × 5.5, 18.4 × 10.4 cm in the sun's view (× 2.2 along the sun on the
+  ground; batch A's 6.3 × 4.7, 12.5 × 7.8, 23.4 × 14.1). The receivers read it by two bilinear comparisons a texel
+  either side of the point, turned by the grain (`unitPCF`): a brush edge, not texel steps. The map is a 24-bit depth
+  texture with no colour, read by the hardware's comparison (one read a comparison; `UNIT_SM_DEPTH`, `?udepth=0`: the
+  float colour and manual taps), the sun's near and far fitted to the box along the sun. A battalion casts only if its
+  bounds stretched away from the sun by the longest shadow cross the view (`?ucull=0`: all in the box). The merged
+  mass under a battalion is the low sun's: 3.6 m shadows over ranks 0.85 m apart.
+- **The far LOD posed** (`?uvat=0`: skinned): at load every far-LOD vertex is skinned at every baked step
+  (`posedVertices`, `src/look/units-data.ts`), a place and a normal in two float texels; the far LOD and the shadow
+  casters read them (`VAT_POS`), the near LOD stays skinned.
 - **The far palette** (`?farpal=1`, off until judged): from above, a far figure shows its headgear, pack and leather
   more than its coat. The far LOD then has a material of its own (`FAR`): those roles take the side's coat a value
   step down (`farPalette`, `FAR_ROLES`), crossfaded in as the figure shrinks below the LOD switch (no pop), with the
@@ -605,7 +617,7 @@ them. WebGL2 only (decision 0046).
   its 110 s cycle starts again; battalions are 9.7 s apart in the cycle. The layout takes open ground behind each
   side's front (110 m apart), the middle first, on a 5 m grid; water, trees (bushes are walked through), the
   buildings' yards and the tile's last 30 m are kept clear, and it throws when a side has no room.
-- **The bench**: `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions,
+- **The bench**: `?benchpan=1` pans each camera as it is measured (20 m either side at 8 m/s). `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions,
   `facingAt`). Hooks: `__units` (`drawn()`, `figures`, `battalions`), `__armies` (`blocked`, `focus`).
 
 ### The readability guard (L2a)
