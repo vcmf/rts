@@ -300,7 +300,9 @@ const armiesParam = params.get('armies'), unitShadowParam = params.get('unitshad
 const bit = (k: string) => { const v = params.get(k); if (v !== null && v !== '0' && v !== '1') throw new Error(`?${k} must be 0 or 1, not ${v}`); return v === null ? null : v === '1' }
 const uShadowRate = bit('ushadowrate'), uShadowLod = bit('ushadowlod'), uShadowVs = bit('ushadowvs'), farPal = bit('farpal')
 // batch B: ?ushadowq=0, batch A's shadow (the box over the tile's heights, the hard taps)
-const uShadowQ = bit('ushadowq'), uVat = bit('uvat'), uDepth = bit('udepth')   // ?uvat=0: the far LOD and its casters skinned, not posed; ?udepth=0: the colour target
+// ?uvat=0: the far LOD and its casters skinned, not posed; ?udepth=0: the colour target, manual taps; ?ucull=0: every
+// caster in the sun's box
+const uShadowQ = bit('ushadowq'), uVat = bit('uvat'), uDepth = bit('udepth'), uCull = bit('ucull')
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 20)) throw new Error(`?armies must be 1 to 20 battalions a side (the demo map holds 20), not ${armiesParam}`)
 if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '1') throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
 let units: Units | null = null, armiesFocus: [number, number] | null = null   // (the fight's middle: the bench's focus)
@@ -322,7 +324,7 @@ if (armiesParam !== null) {
   const blocked = (x: number, z: number) => { if (Math.max(Math.abs(x), Math.abs(z)) > D.spec.tile / 2 - 30) return true; const q = riverQuery(x, z); return (q !== null && q.dist < 20) || onPaving(x, z, 3) || nearTree(x, z) }
   // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
   units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked), () => S.t)
-  units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.fineShadows = uShadowQ ?? true; units.depthCompare = uDepth ?? true
+  units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.fineShadows = uShadowQ ?? true; units.depthCompare = uDepth ?? true; units.tightCull = uCull ?? true
   if (uShadowVs ?? false) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)

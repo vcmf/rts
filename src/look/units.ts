@@ -47,6 +47,7 @@ const SM_BIAS = 0.02   // m along the sun: no receiver is drawn into the map, so
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1]   // the view's corners in clip space
 const FIGURE = 1.8     // m: a figure's height, for the LOD's pixel test
 const SM_HOLD = 6      // m: lazy, the held sun box must cover the view by this much
+const SHADOW_H = 2.6    // m: the highest point of a figure (his bayonet up), whose shadow reaches farthest
 const SM_STEP_FINE = 2  // m: fine, the box's half-size steps
 const SM_COARSE = 1.3  // and be at most this many times the size the view needs (its texels no coarser)
 
@@ -62,6 +63,9 @@ export class Units {
   private depthRT = false               // the shadow map is the depth-only target
   /** the shadow map as depth only, read by the hardware's comparison (?udepth=0: the float colour, manual taps) */
   depthCompare = true
+  /** the casters culled to those whose shadow can reach the view (?ucull=0: all in the sun's box) */
+  tightCull = true
+  private camPlanes = Frustum.GetPlanes(Matrix.Identity())
   private sun: FreeCamera
   private shadowRT: RenderTargetTexture
   private shadows = false
@@ -360,11 +364,24 @@ export class Units {
   }
 
   // only the battalions inside the sun's box are drawn into the map (a render target does not cull its list), each at
-  // the caster's LOD; whether the list changed
+  // the caster's LOD; tight (?ucull), only those whose shadow can reach the view: their bounds stretched away from the
+  // sun by the longest shadow (a figure's height down to the ground) must cross the camera's frustum. Whether the list
+  // changed
   private cull(): boolean {
     const was = this.smList; was.length = 0; for (const m of this.culled) was.push(m)
     this.culled.length = 0
-    for (const h of this.hosts) { const l = h.lod[this.casterNear && h.near ? 0 : 1]; if (h.lod[0].isEnabled() && l.isInFrustum(this.planes)) this.culled.push(l) }
+    if (this.tightCull) Frustum.GetPlanesToRef(this.camera.getTransformationMatrix(), this.camPlanes)
+    const sx = -SUN.x / SUN.y * SHADOW_H, sz = -SUN.z / SUN.y * SHADOW_H   // the shadow's reach from a figure's top
+    for (const h of this.hosts) {
+      const l = h.lod[this.casterNear && h.near ? 0 : 1]
+      if (!h.lod[0].isEnabled() || !l.isInFrustum(this.planes)) continue
+      if (this.tightCull) {
+        const lo = h.lo, hi = h.hi, x0 = Math.min(lo.x, lo.x + sx), x1 = Math.max(hi.x, hi.x + sx), z0 = Math.min(lo.z, lo.z + sz), z1 = Math.max(hi.z, hi.z + sz), y0 = lo.y - SHADOW_H
+        // outside a plane: the box's corner most along the plane's normal is behind it
+        if (this.camPlanes.some(p => p.normal.x * (p.normal.x > 0 ? x1 : x0) + p.normal.y * (p.normal.y > 0 ? hi.y : y0) + p.normal.z * (p.normal.z > 0 ? z1 : z0) + p.d < 0)) continue
+      }
+      this.culled.push(l)
+    }
     return was.length !== this.culled.length || was.some((m, i) => m !== this.culled[i])
   }
 
