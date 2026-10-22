@@ -609,14 +609,20 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   The merged mass under a battalion is the low sun's: 3.6 m shadows over ranks 0.85 m apart.
 - **Their shadows beyond: the simple shadows** (decision 0049, `docs/plans/active/simple-soldier-shadows.md`;
   `?ushadowfar=map`: the map at every zoom). Every soldier of a figure looks alike, so one shape: `shadowShape`
-  (`src/look/units-data.ts`, at load, about 80 ms) projects the far LOD, posed at up to 12 steps of each role's clip and
+  (`src/look/units-data.ts`, at load, about 85 ms) projects the far LOD, posed at up to 12 steps of each role's clip and
   turned to 16 facings, along the sun onto the ground, averages the steps (a marching man's legs one soft wedge) and
-  blurs it; an R8 atlas, a cell a facing and a role. A fourth mesh a battalion lays a quad a man from his feet along the
-  shadow (`unitmask.vert`, `unitmask.frag`: his facing picks two cells, blended; his clip's first step his role's row)
-  into a 2048² top-down mask (R8, blend MAX: overlapping shadows do not darken twice) over an axis-aligned box round the
-  battalions whose shadow can reach the view, cut to the ground in view, its size in 8 m steps (`fitMask`). Drawn every
-  frame it shows, never lazily, and each man's place moves every frame (`aNext`: his move to his next step's place,
-  written with his place; `uStepFrac`, the share of the step gone, from the CPU's clock): the shadows never step. The
+  blurs it; an R8 atlas, mipmapped, a cell a facing and a role. A fourth mesh a battalion lays a quad a man from his
+  feet along the shadow (`unitmask.vert`, `unitmask.frag`: his facing picks two cells, blended; his clip's first step
+  his role's row; grown with the far figures, `FAR_SCALE`) into a 2048² top-down mask (R8, blend MAX: overlapping
+  shadows do not darken twice) over an axis-aligned box round the battalions whose shadow can reach the view, cut to the
+  ground in view and to 512 m round the focus (`fitMask`). Its texel is fixed by level (3.1, 6.25, 12.5 or 25 cm, the
+  level held until what it holds fits well inside the finer one) and its corner on that level's whole texels, held while
+  it covers what it must: the texel grid stays put in the world through a pan or a zoom. Where its texel is coarser than
+  the shape's (5 cm) the shape is read through its mips, so a man's shadow is a soft footprint, never aliased on the
+  grid. Drawn lazily, as the map: when it is shown, its box or its battalions change, one of them is placed, the clock
+  moves while their men move, or the camera moves while the far figures grow (`maskStale`). Each man's place moves
+  every frame with smooth places (below: `aNext`, his move to his next step's place, written with his place;
+  `uStepFrac`, the share of the step gone, from the CPU's clock), else at the steps with his figure. The
   ground reads the mask once a pixel (`unitMaskAt`, `painter.glsl`), the meadow once a blade at its root, as the map:
   the grass stands over the ground, so a decal on the ground would be hidden under the blades. **The cross-fade**: by
   the camera's distance to its focus, from the map alone at 60 m to the mask alone at 85 m (`SHADOW_SWITCH`,
@@ -626,9 +632,8 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   (`uSurf`, R and G, `src/look/macro.ts`).
 - **Smooth places** (on by default, measured free: `docs/plans/active/simple-soldier-shadows.md`; `?smoothmove=0`: off):
   the figures, their flags and the map's casters move by `aNext` × `uStepFrac` too (`SMOOTH`, `units.vert`,
-  `flag.vert`), the poses still stepped at 12 fps; the map is then drawn every frame while a caster's men move. Off,
-  the figures move at the steps while their simple shadows glide (at most a step's move apart: 11 cm marching, 30 cm
-  running).
+  `flag.vert`), and the simple shadows with them, the poses still stepped at 12 fps; the map is then drawn every frame
+  the clock moves while a caster's men move. Off, the figures and their simple shadows move at the steps.
 - **Uniforms** (the owner's call 2026-10-22): a battalion wears a uniform by id, whatever its side; a uniform
   (`Uniform`, `src/sim/ruleset.ts`; the era's in `src/rulesets/napoleonic-uniforms.ts`; the demo's sides' in
   `src/scenarios/armies-demo.ts`) is its colours by the figure's roles, its flag's, and its **far rule**: from above, a

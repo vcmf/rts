@@ -37,11 +37,12 @@ facing, by design); the sim's hookup.
 - **The splat** (`src/look/units.ts`, `shaders/unitmask.*`): a fourth mesh a battalion, one quad a man (thin instances
   on the battalion's own matrices), laid along the sun's ground direction from his feet, its facing and role picking
   the atlas cells (two facings blended); drawn into an R8 render target over an axis-aligned world box round the
-  ground in view and the battalions there (blend MAX: overlapping shadows do not double). Drawn every frame while it
-  shows, not lazily (it is cheap), so it never steps.
+  ground in view and the battalions there (blend MAX: overlapping shadows do not double), its texel grid fixed in the
+  world by level (review round 1). Drawn when the men in it move.
 - **Every frame**: each man's next step's place is written with his place (`aNext`), and the splat moves him by the
-  share of the step gone (`uStepFrac`, from the CPU's clock in double precision). `?smoothmove=1` does the same for the
-  figures, their flags and the map's casters (the map is then redrawn every frame while men in it move).
+  share of the step gone (`uStepFrac`, from the CPU's clock in double precision), and so do the figures, their flags
+  and the map's casters (`?smoothmove=1`, the default after the measurement; the map is then redrawn while the clock
+  moves and men in it move). `?smoothmove=0`: figures and simple shadows move together at the steps.
 - **The receivers**: the ground's fragment (`unitMaskAt`, `painter.glsl`) and the meadow's blade root
   (`meadow.vert`, as the map's): the map's shadow × (1 − f) + the mask's × f, f the band's share. Grass stands over
   the ground, so a decal quad on the ground would be hidden by the blades: the mask is what the blades read too.
@@ -94,8 +95,16 @@ either shadow; moved every frame they change 4 to 5.6 every frame and never jump
 ground with no armies pixel for pixel equal before and after the textures' packing. **Textures**: the terrain's fragment
 stage 16 (15 with `?ushadowfar=map`, 14 without shadows), the water's 15, the meadow's 11.
 
-**The mask's box** at the bench's views: 168 m at the default zoom (8 cm texels), 376 m at the widest (18 cm), 56 to
-96 m in the band.
+**The mask's box** at the bench's views: 256 m at the default zoom (12.5 cm texels), 512 m at the widest (25 cm)
+(round 0: 168 and 376 m, sized to what it held; 56 to 96 m in the band).
+
+**The mask's grid** (review round 1: the box had been sized in 8 m steps, so its texel changed as the view did). A
+frozen clock, the mask read back and sampled at fixed world points over a battalion (160² points 0.2 m apart), the
+change from the first frame as a share of the shadow's mass: before, a pan at the default zoom (2.3 m a frame) 0, 0, 3.2,
+3.2, 3.2, 3.2 % and a zoom (1.7 m a frame) 0, 3.2, 3.2, 3.2, 3.2, 3.3 % (each time its texel changed: 10.2, 9.8,
+10.5, 10.9 cm); now 0 % through both, at the default zoom (12.5 cm texels) and the widest (25 cm). The marching
+sequences above measure the same after the fix (the fringe 0.5 to 0.7 every frame, no jump). The ground with no armies:
+`tools/golden.mjs` against main's build, every camera 0.000 %.
 
 Review images: `output/armies-review/7-simple-shadows/` in the main checkout (not committed).
 
