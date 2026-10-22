@@ -58,6 +58,7 @@ const TR_WEIGHT = 1 + TR_TRAIL.reduce((a, [, w]) => a + w, 0)
 const FAR_SCALE_XZ = 1.35, FAR_SCALE_Y = 1.15   // the far figure's growth at a quarter of the LOD switch's height
 const SHADOW_H = 2.6    // m: the highest point of a figure (his bayonet up), whose shadow reaches farthest
 const SM_STEP_FINE = 2  // m: fine, the box's half-size steps
+const SM_HOLD_SHARE = 0.1   // the held box's slack, a share of the view's half-size (the shadow fix: SM_HOLD at least)
 const SM_COARSE = 1.3  // and be at most this many times the size the view needs (its texels no coarser)
 
 export class Units {
@@ -115,10 +116,14 @@ export class Units {
   private quad = new Float64Array(8)
   /** the shadow's quality (?ushadowq=0: batch A's): the box fitted to the ground in view, the soft lookup */
   fineShadows = true
+  /** the held sun box's slack in proportion to it (?smhold=fixed: batch B's, none) */
+  holdShare = true
+  /** the casters: the shadow proxy (shadowProxy, src/look/units-data.ts; ?shadowlod=far: the far LOD) */
+  proxyCasters = true
   private smStep = -1                       // the step the map was last drawn at
   private smVP = new Float32Array(16)       // the sun's view-projection it was drawn with
   private smList: Mesh[] = []               // and its casters
-  private smBox = { ex: 0, ey: 0, V: new Matrix(), c: new Vector3(), set: false }   // the sun's box held while it covers the view (lazy only)
+  private smBox = { ex: 0, ey: 0, V: new Matrix(), c: new Vector3(), set: false, margin: SM_HOLD }   // the sun's box held while it covers the view (lazy only)
   /** the shadow map's draws so far (the captures count them: a still frame draws none) */
   smDraws = 0
 
@@ -346,8 +351,14 @@ export class Units {
       k.c.x += m[0] * mx + m[1] * my; k.c.y += m[4] * mx + m[5] * my; k.c.z += m[8] * mx + m[9] * my
       this.sun.position.copyFrom(k.c).addInPlace(SUN.scale(500)); this.sun.setTarget(k.c); this.sun.computeWorldMatrix()
       V = this.sun.getViewMatrix(true)
-      ex = Math.ceil(((x1 - x0) / 2 + 2) / SM_STEP_FINE) * SM_STEP_FINE; ey = Math.ceil(((y1 - y0) / 2 + 2) / SM_STEP_FINE) * SM_STEP_FINE
+      // the slack the box is held by (holdShare, the shadow fix): a share of its size, so a pan at the widest zoom refits
+      // every SM_HOLD_SHARE of the view, not every frame; fixed (?smhold=fixed): none, held only within SM_HOLD of a
+      // box fitted 2 m round the view (the batch B box, which a pan refit at nearly every frame)
+      const slack = this.holdShare ? Math.max(SM_HOLD, SM_HOLD_SHARE * Math.max(x1 - x0, y1 - y0) / 2) : 0
+      ex = Math.ceil(((x1 - x0) / 2 + 2 + slack) / SM_STEP_FINE) * SM_STEP_FINE; ey = Math.ceil(((y1 - y0) / 2 + 2 + slack) / SM_STEP_FINE) * SM_STEP_FINE
+      this.smBox.margin = this.holdShare ? 1 : SM_HOLD
     } else {
+      this.smBox.margin = SM_HOLD
       ex = Math.max(-x0, x1); ey = Math.max(-y0, y1)
       ex = Math.ceil((ex + 4) / SM_STEP) * SM_STEP; ey = Math.ceil((ey + 4) / SM_STEP) * SM_STEP
     }
@@ -401,12 +412,12 @@ export class Units {
     return { lo: lo - 1, hi: hi + 1 }
   }
 
-  // the held box covers the view's points (fitSun's, the figures' height above them) with SM_HOLD m to spare
+  // the held box covers the view's points (fitSun's, the figures' height above them) with its margin to spare
   private covers(n: number): boolean {
     const k = this.scratch, b = this.smBox
     for (let i = 0; i < n; i++) for (let e = 0; e < 2; e++) {
       k.v.copyFrom(k.pts[i]); k.v.y += e ? 3 : -2; Vector3.TransformCoordinatesToRef(k.v, b.V, k.v)
-      if (Math.abs(k.v.x) > b.ex - SM_HOLD || Math.abs(k.v.y) > b.ey - SM_HOLD) return false
+      if (Math.abs(k.v.x) > b.ex - b.margin || Math.abs(k.v.y) > b.ey - b.margin) return false
     }
     return true
   }
@@ -514,6 +525,8 @@ export class Units {
     if (!Number.isFinite(x0 + x1 + z0 + z1)) return
     const need = Math.max(x1 - x0, z1 - z0) + 20
     const fits = b.set && x0 > b.x0 + 5 && z0 > b.z0 + 5 && x1 < b.x0 + b.size - 5 && z1 < b.z0 + b.size - 5 && b.size < 2 * need
+    // (refit at most every TR_EVERY s too, a pan's included: the shadow fix; the view's edge may wait that long)
+    if (!fits && b.set && this.trAt >= 0 && T - this.trAt < TR_EVERY && this.holdShare) return
     if (!fits) {
       const size = Math.min(1024, Math.max(64, 2 ** Math.ceil(Math.log2(need)))), tx = size / TR_N
       b.size = size; b.x0 = Math.floor(((x0 + x1) / 2 - size / 2) / tx) * tx; b.z0 = Math.floor(((z0 + z1) / 2 - size / 2) / tx) * tx; b.set = true

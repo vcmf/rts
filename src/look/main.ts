@@ -302,6 +302,10 @@ const uShadowRate = bit('ushadowrate'), uShadowLod = bit('ushadowlod'), uShadowV
 // ?uvat=0: the far LOD and its casters skinned, not posed; ?udepth=0: the colour target, manual taps; ?ucull=0: every
 // caster in the sun's box
 const uShadowQ = bit('ushadowq'), uVat = bit('uvat'), uDepth = bit('udepth'), uCull = bit('ucull')
+// the shadow fix: ?smhold=fixed, the held sun box (and the trodden mask's) as batch B's; ?shadowlod=far, the far LOD casts
+const smHold = params.get('smhold'), shadowLod = params.get('shadowlod')
+if (smHold !== null && smHold !== 'fixed') throw new Error(`?smhold must be fixed, not ${smHold}`)
+if (shadowLod !== null && shadowLod !== 'far') throw new Error(`?shadowlod must be far, not ${shadowLod}`)
 // batch C: ?farscale=0, the far figures at their own size
 const farScale = bit('farscale'), trample = bit('trample'), flags = bit('flags')   // ?trample=0: no trodden ground; ?flags=0: no colours
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 20)) throw new Error(`?armies must be 1 to 20 battalions a side (the demo map holds 20), not ${armiesParam}`)
@@ -326,6 +330,7 @@ if (armiesParam !== null) {
   // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
   units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides), UNIFORMS, () => S.t)
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.fineShadows = uShadowQ ?? true; units.depthCompare = uDepth ?? true; units.tightCull = uCull ?? true
+  units.holdShare = smHold !== 'fixed'; units.proxyCasters = shadowLod !== 'far'
   if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)
