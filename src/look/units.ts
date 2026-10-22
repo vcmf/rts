@@ -125,6 +125,7 @@ export class Units {
   /** the casters: the shadow proxy (shadowProxy, src/look/units-data.ts; ?shadowlod=far: the far LOD) */
   proxyCasters = true
   private smStep = -1                       // the step the map was last drawn at
+  private smEmpty = false                   // it was last drawn with no casters (clear)
   private smVP = new Float32Array(16)       // the sun's view-projection it was drawn with
   private smList: Mesh[] = []               // and its casters
   private smBox = { ex: 0, ey: 0, V: new Matrix(), c: new Vector3(), set: false, margin: SM_HOLD }   // the sun's box held while it covers the view (lazy only)
@@ -308,7 +309,11 @@ export class Units {
     const refit = this.fitSun()
     if (refit) tr('sunRefit')
     if (!this.lazyShadows) return
-    if (moved || refit) { this.shadowRT.resetRefreshCounter(); this.smStep = step }
+    // (no casters: an empty map is clear for any box; drawn once, then kept until a caster comes into it)
+    if (moved || refit) {
+      if (!(this.culled.length === 0 && this.smEmpty)) { this.shadowRT.resetRefreshCounter(); this.smEmpty = this.culled.length === 0 }
+      this.smStep = step
+    }
   }
 
   // The sun's orthographic box around the ground in view: where the view's corner rays meet the lowest and the
@@ -482,7 +487,7 @@ export class Units {
     if (!on && i >= 0) list.splice(i, 1)
     // lazy: drawn once, then again only when frame() resets it (a still view between two steps draws nothing)
     this.shadowRT.refreshRate = this.lazyShadows ? 0 : 1
-    if (on) { this.smBox.set = false; this.smStep = -1 }   // (fitted by the next frame)
+    if (on) { this.smBox.set = false; this.smStep = -1; this.smEmpty = false }   // (fitted by the next frame)
     for (const m of this.receivers) { m.setDefine('#define UNIT_SHADOWS', on); m.setDefine('#define UNIT_SHADOW_SOFT', on && this.fineShadows) }
     for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', on)
   }
