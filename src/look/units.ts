@@ -46,6 +46,7 @@ const SM_BIAS = 0.02   // m along the sun: no receiver is drawn into the map, so
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1]   // the view's corners in clip space
 const FIGURE = 1.8     // m: a figure's height, for the LOD's pixel test
 const SM_HOLD = 6      // m: lazy, the held sun box must cover the view by this much
+const SM_STEP_FINE = 2  // m: fine, the box's half-size steps
 const SM_COARSE = 1.3  // and be at most this many times the size the view needs (its texels no coarser)
 
 export class Units {
@@ -76,6 +77,9 @@ export class Units {
   rootReceivers: ShaderMaterial[] = []
   readonly meshes: Mesh[] = []
   private farK = new Vector2()
+  private quad = new Float64Array(8)
+  /** the shadow's quality (?ushadowq=0: batch A's): the box fitted to the ground in view, the soft lookup */
+  fineShadows = true
   private smStep = -1                       // the step the map was last drawn at
   private smVP = new Float32Array(16)       // the sun's view-projection it was drawn with
   private smList: Mesh[] = []               // and its casters
@@ -233,8 +237,11 @@ export class Units {
   // texel grid stays put under still figures while the view pans or zooms (the crowd bench's L1b). Lazy (lazyShadows),
   // the box is held while it still covers the view with SM_HOLD m to spare and is at most SM_COARSE times the size the
   // view needs, so a small move of the camera draws no new map. Returns whether the map's view or casters changed
+  // Fine (fineShadows, batch B): the corner rays meet the ground in view's own range of heights, not the tile's
+  // (25 m of height seen along a low sun stretched the box), the box is centred on what it must hold and its size moves
+  // in finer steps
   private fitSun(): boolean {
-    const cam = this.camera, k = this.scratch, inv = k.inv, g = D.spec.ground
+    const cam = this.camera, k = this.scratch, inv = k.inv, g = this.fineShadows ? this.viewGround() : D.spec.ground
     cam.getTransformationMatrix().invertToRef(inv)
     let n = 0
     k.pts[n++].copyFrom(cam.target)
@@ -252,12 +259,22 @@ export class Units {
     // drew nothing: the first armies' build cast no shadow). Fitted from the next frame instead
     if (!(Number.isFinite(k.c.x) && Number.isFinite(k.c.y) && Number.isFinite(k.c.z))) return false
     this.sun.position.copyFrom(k.c).addInPlace(SUN.scale(500)); this.sun.setTarget(k.c); this.sun.computeWorldMatrix()
-    let V = this.sun.getViewMatrix(true), ex = 0, ey = 0
+    let V = this.sun.getViewMatrix(true), ex = 0, ey = 0, x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
     for (let i = 0; i < n; i++) for (let e = 0; e < 2; e++) {
       k.v.copyFrom(k.pts[i]); k.v.y += e ? 3 : -2; Vector3.TransformCoordinatesToRef(k.v, V, k.v)
-      ex = Math.max(ex, Math.abs(k.v.x)); ey = Math.max(ey, Math.abs(k.v.y))
+      x0 = Math.min(x0, k.v.x); x1 = Math.max(x1, k.v.x); y0 = Math.min(y0, k.v.y); y1 = Math.max(y1, k.v.y)
     }
-    ex = Math.ceil((ex + 4) / SM_STEP) * SM_STEP; ey = Math.ceil((ey + 4) / SM_STEP) * SM_STEP
+    if (this.fineShadows) {
+      // the centre moved to the middle of what the box holds (along the sun's view axes: the texel grid's snap follows)
+      const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, m = V.m
+      k.c.x += m[0] * mx + m[1] * my; k.c.y += m[4] * mx + m[5] * my; k.c.z += m[8] * mx + m[9] * my
+      this.sun.position.copyFrom(k.c).addInPlace(SUN.scale(500)); this.sun.setTarget(k.c); this.sun.computeWorldMatrix()
+      V = this.sun.getViewMatrix(true)
+      ex = Math.ceil(((x1 - x0) / 2 + 2) / SM_STEP_FINE) * SM_STEP_FINE; ey = Math.ceil(((y1 - y0) / 2 + 2) / SM_STEP_FINE) * SM_STEP_FINE
+    } else {
+      ex = Math.max(-x0, x1); ey = Math.max(-y0, y1)
+      ex = Math.ceil((ex + 4) / SM_STEP) * SM_STEP; ey = Math.ceil((ey + 4) / SM_STEP) * SM_STEP
+    }
     const box = this.smBox
     if (this.lazyShadows && box.set && box.ex <= ex * SM_COARSE && box.ey <= ey * SM_COARSE && this.covers(n)) {
       // held: the sun back on the held box's centre (it was moved to the view's above), the map's view unchanged
@@ -278,6 +295,26 @@ export class Units {
     let changed = false
     for (let i = 0; i < 16; i++) if (vp.m[i] !== this.smVP[i]) { changed = true; this.smVP[i] = vp.m[i] }
     return this.cull() || changed
+  }
+
+  // the ground's range of heights in view: sampled on a 5 x 5 grid over where the corner rays meet the ground at the
+  // focus's height, a metre to spare (the casters' own height is padded in fitSun)
+  private viewGround(): { lo: number; hi: number } {
+    const cam = this.camera, k = this.scratch, inv = k.inv, y0 = groundAt(cam.target.x, cam.target.z), q = this.quad
+    cam.getTransformationMatrix().invertToRef(inv)
+    for (let j = 0; j < 4; j++) {
+      Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 0, inv, k.a); Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 1, inv, k.b)
+      k.b.subtractToRef(k.a, k.d).normalize()
+      const r = k.d.y < -1e-3 ? Math.min((y0 - k.a.y) / k.d.y, SM_REACH) : SM_REACH
+      q[j * 2] = k.a.x + k.d.x * r; q[j * 2 + 1] = k.a.z + k.d.z * r
+    }
+    let lo = Infinity, hi = -Infinity
+    for (let u = 0; u <= 4; u++) for (let v = 0; v <= 4; v++) {
+      const a = u / 4, b = v / 4, w0 = (1 - a) * (1 - b), w1 = a * (1 - b), w2 = a * b, w3 = (1 - a) * b
+      const h = groundAt(w0 * q[0] + w1 * q[2] + w2 * q[4] + w3 * q[6], w0 * q[1] + w1 * q[3] + w2 * q[5] + w3 * q[7])
+      lo = Math.min(lo, h); hi = Math.max(hi, h)
+    }
+    return { lo: lo - 1, hi: hi + 1 }
   }
 
   // the held box covers the view's points (fitSun's, the figures' height above them) with SM_HOLD m to spare
@@ -309,7 +346,7 @@ export class Units {
     // lazy: drawn once, then again only when frame() resets it (a still view between two steps draws nothing)
     this.shadowRT.refreshRate = this.lazyShadows ? 0 : 1
     if (on) { this.smBox.set = false; this.smStep = -1 }   // (fitted by the next frame)
-    for (const m of this.receivers) m.setDefine('#define UNIT_SHADOWS', on)
+    for (const m of this.receivers) { m.setDefine('#define UNIT_SHADOWS', on); m.setDefine('#define UNIT_SHADOW_SOFT', on && this.fineShadows) }
     for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', on)
   }
 

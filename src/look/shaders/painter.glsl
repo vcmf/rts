@@ -88,13 +88,26 @@ float shadowAt(vec3 wp,vec3 n){return shadowAtRaw(wp,n)*uShadowsOn;}
 // to the ground in view (the figures move: only moving things get runtime light), taps jittered by the grain as
 // shadowAt's, fading out at the map's border. Only the materials they fall on get UNIT_SHADOWS, only with armies
 uniform sampler2D uUnitSM;uniform mat4 uUnitVP;uniform vec2 uUnitTexel;uniform float uUnitBias;
+// a bilinear comparison at t (in texels): the four texels round it, each lit or not, blended by where t falls
+float unitPCF(vec2 t,float d){
+  t-=0.5;vec2 f=fract(t),b=(floor(t)+0.5)*uUnitTexel;
+  float s00=step(texture2D(uUnitSM,b).r,d),s10=step(texture2D(uUnitSM,b+vec2(uUnitTexel.x,0.0)).r,d);
+  float s01=step(texture2D(uUnitSM,b+vec2(0.0,uUnitTexel.y)).r,d),s11=step(texture2D(uUnitSM,b+uUnitTexel).r,d);
+  return mix(mix(s00,s10,f.x),mix(s01,s11,f.x),f.y);}
 float unitShadowAt(vec3 wp){
   vec4 lp=uUnitVP*vec4(wp,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
   if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;
   float d=q.z*0.5+0.5-uUnitBias;
   vec2 j=(vec2(texture2D(uGrain,wp.xz*1.7).r,texture2D(uGrain,wp.zx*1.7+0.3).r)-0.5)*1.5;
   float s=0.0;
+  #ifdef UNIT_SHADOW_SOFT
+  // soft (batch B): two bilinear comparisons (unitPCF) a texel either side of the point along a direction the grain
+  // turns, so a texel's step becomes a ramp two texels wide, broken by the grain into a brush edge
+  vec2 o=vec2(cos(j.x*4.0),sin(j.x*4.0))*0.75+j*0.5;
+  s=(unitPCF(uv/uUnitTexel+o,d)+unitPCF(uv/uUnitTexel-o,d))*2.0;
+  #else
   for(int x=0;x<2;x++)for(int y=0;y<2;y++)s+=step(texture2D(uUnitSM,uv+((vec2(float(x),float(y))*2.0-1.0)*0.5+j)*uUnitTexel).r,d);
+  #endif
   vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,8.0*uUnitTexel.x,e.x)*smoothstep(0.0,8.0*uUnitTexel.y,e.y);
   return s/4.0*uShadowsOn*fade;}
 #endif
