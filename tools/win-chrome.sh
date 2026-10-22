@@ -2,22 +2,28 @@
 # Windows Chrome for browser checks from WSL: it renders on the machine's GPU through Direct3D, as a player's Chrome
 # does, where Chrome inside WSL falls back to software GL. Needs WSL's mirrored networking (`networkingMode=mirrored`
 # in %USERPROFILE%\.wslconfig), so the DevTools port and the dev server share localhost; the port listens on
-# 127.0.0.1 only. The chrome-devtools MCP attaches with `--browserUrl http://127.0.0.1:9222` (AGENTS.md, Commands).
-# Usage: tools/win-chrome.sh [start|stop|status] [--headless]   (PORT=9222 by default)
+# 127.0.0.1 only. The page tools attach with SHOT_CDP=http://127.0.0.1:9222 (tools/shot.mjs), the chrome-devtools MCP
+# with `--browserUrl http://127.0.0.1:9222` (AGENTS.md, Commands; decision 0047).
+# Usage: tools/win-chrome.sh [start|stop|status] [--headless] [-- <Chrome flags>]   (PORT=9222 by default)
+# A tool that asks for launch flags (SHOT_ANGLE, SHOT_CHROME_ARGS) checks them on the running browser and fails without
+# them: the look bench on the GPU wants `start --headless -- --use-angle=d3d11 --disable-gpu-vsync
+# --disable-frame-rate-limit` and `--gpu d3d11`. Flags change only with a stop and a start.
 set -euo pipefail
 PORT=${PORT:-9222}
 CHROME="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
-usage() { echo "usage: tools/win-chrome.sh [start|stop|status] [--headless]" >&2; exit 2; }
+usage() { echo "usage: tools/win-chrome.sh [start|stop|status] [--headless] [-- <Chrome flags>]" >&2; exit 2; }
 
-cmd=start headless=
-for a in "$@"; do
-  case "$a" in
-    start|stop|status) cmd=$a ;;
+cmd=start headless= flags=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    start|stop|status) cmd=$1 ;;
     --headless) headless=--headless=new ;;
+    --) shift; flags=("$@"); break ;;
     *) usage ;;
   esac
+  shift
 done
-[ -n "$headless" ] && [ "$cmd" != start ] && usage
+{ [ -n "$headless" ] || [ ${#flags[@]} -gt 0 ]; } && [ "$cmd" != start ] && usage
 
 up() { curl -s -m 2 "http://127.0.0.1:$PORT/json/version"; }
 need_windows() { command -v powershell.exe >/dev/null && [ -x "$CHROME" ] || { echo "needs WSL with Windows interop and Chrome at $CHROME" >&2; exit 2; }; }
@@ -35,13 +41,16 @@ case "$cmd" in
     need_windows; P=$(profile); running=$(pids "$P")
     if v=$(up); then
       [ -n "$running" ] && echo "$v" | grep -q 'Windows NT' || { echo "port $PORT is taken by another browser or tool" >&2; exit 1; }
+      # its flags are those of its launch: asking for others would silently get these
+      { [ -z "$headless" ] && [ ${#flags[@]} -eq 0 ]; } || { echo "Chrome already on port $PORT with its own flags: tools/win-chrome.sh stop first" >&2; exit 1; }
       echo "Chrome already on http://127.0.0.1:$PORT"; exit 0
     fi
     # Chrome hands a second launch on an open profile to the running one, which keeps its own flags: no port would open
     [ -z "$running" ] || { echo "rts-chrome is open without port $PORT: run tools/win-chrome.sh stop first" >&2; exit 1; }
-    # detached, so closing the shell that started it does not take the interop process (and Chrome's lifetime) with it
+    # detached, so closing the shell that started it does not take the interop process (and Chrome's lifetime) with it;
+    # --enable-automation lets a tool read the flags back (Browser.getBrowserCommandLine)
     setsid nohup "$CHROME" --remote-debugging-port="$PORT" --user-data-dir="$P" --no-first-run --no-default-browser-check \
-      $headless about:blank >/dev/null 2>&1 < /dev/null &
+      --enable-automation $headless "${flags[@]}" about:blank >/dev/null 2>&1 < /dev/null &
     for _ in $(seq 20); do up >/dev/null && { echo "Chrome on http://127.0.0.1:$PORT"; exit 0; }; sleep 0.5; done
     echo "Chrome started but port $PORT did not open (is networkingMode=mirrored set?)" >&2; exit 1 ;;
   stop)
