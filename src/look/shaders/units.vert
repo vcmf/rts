@@ -7,6 +7,11 @@ uniform mat4 viewProjection;uniform sampler2D uVAT;uniform float uVATTime;
 #ifdef INSTANCES
 attribute vec4 aVAT;   // first step, steps in the loop, phase in steps, steps a second
 #endif
+#ifdef VAT_POS
+// the far LOD and the shadow pass (batch B, ?uvat): each vertex posed at every step at load (posedVertices,
+// src/look/units-data.ts), its place and normal two texels of uVATP: no bone matrices to blend
+uniform sampler2D uVATP;attribute float aVid;
+#endif
 #ifdef DEPTH
 varying float vD;
 #else
@@ -29,13 +34,18 @@ void main(){
   r=aVAT;
   #endif
   int f=int(r.x+mod(floor(uVATTime*r.w+r.z),r.y));
+  #ifdef VAT_POS
+  int vi=int(aVid+0.5)*2;vec3 lp=texelFetch(uVATP,ivec2(vi,f),0).xyz,ln=texelFetch(uVATP,ivec2(vi+1,f),0).xyz;
+  #else
   mat4 sk=boneAt(aBones.x,f)*aWeights.x+boneAt(aBones.y,f)*aWeights.y+boneAt(aBones.z,f)*aWeights.z+boneAt(aBones.w,f)*aWeights.w;
-  vec4 w=finalWorld*(sk*vec4(position,1.0));
+  vec3 lp=(sk*vec4(position,1.0)).xyz,ln=mat3(sk)*normal;
+  #endif
+  vec4 w=finalWorld*vec4(lp,1.0);
   vec4 p=viewProjection*w;
   #ifdef DEPTH
   vD=p.z/p.w*0.5+0.5;
   #else
-  vN=normalize(mat3(finalWorld)*(mat3(sk)*normal));vW=w.xyz;vRoot=finalWorld[3].xz;
+  vN=normalize(mat3(finalWorld)*ln);vW=w.xyz;vRoot=finalWorld[3].xz;
   vCol=uPal[int(aRole+0.5)];vRole=aRole;
   #ifdef FAR
   float px=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz));

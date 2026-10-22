@@ -24,7 +24,7 @@ import UNITS_FS from './shaders/units.frag?raw'
 import DEPTH_FS from './shaders/depth.frag?raw'
 import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
-import type { UnitData } from './units-data.ts'
+import { posedVertices, type UnitData } from './units-data.ts'
 import { CYCLE, SIDES, farPalette, manAt, phaseAt, slots, type Battalion, type Drill, type ManState, type Phase } from './world/armies.ts'
 
 const ROLES = ['halt', 'march', 'run', 'fire'] as const
@@ -56,6 +56,7 @@ export class Units {
   private readonly mats: ShaderMaterial[] = []   // one a side: its palette
   private readonly farMats: ShaderMaterial[] = []   // one a side for the far LOD, the far palette (?farpal=1)
   private depthMat: ShaderMaterial
+  private depthVatMat: ShaderMaterial   // the far LOD's casters, posed (VAT_POS)
   private sun: FreeCamera
   private shadowRT: RenderTargetTexture
   private shadows = false
@@ -100,7 +101,7 @@ export class Units {
     if (!(this.speed.march > 0 && this.speed.run > 0)) throw new Error('units: the march and run roles have no root speed')
     const vat = RawTexture.CreateRGBATexture(data.vat.data, data.vat.width, data.vat.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_HALF_FLOAT)
     vat.name = 'figureVAT'
-    const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVAT'], n = data.palette.length
+    const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVAT', 'aVid'], n = data.palette.length
     for (const side of SIDES) {
       const m = mats.make(`units_${side.name}`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uMask', 'uCoatRole'], samplers: ['uVAT'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
       m.setTexture('uVAT', vat)
@@ -111,7 +112,7 @@ export class Units {
     }
     // the far LOD's (FAR): its palette and its lift crossfaded in below the LOD switch (units.vert, units.frag)
     for (const side of SIDES) {
-      const m = mats.make(`units_${side.name}_far`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uPalFar', 'uFarK', 'uMask', 'uCoatRole'], samplers: ['uVAT'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', '#define FAR', `#define PAL_N ${n}`] })
+      const m = mats.make(`units_${side.name}_far`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uPalFar', 'uFarK', 'uMask', 'uCoatRole'], samplers: ['uVAT', 'uVATP'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
       m.setTexture('uVAT', vat)
       const far = farPalette(side.palette)
       m.setColor3Array('uPal', data.palette.map(r => Color3.FromHexString(side.palette[r])))
@@ -122,6 +123,13 @@ export class Units {
     // the shadow pass: the same skinning, depth only, from an orthographic camera along the sun
     this.depthMat = new ShaderMaterial('unitsDepth', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATTime'], samplers: ['uVAT'], defines: ['#define DEPTH'] })
     this.depthMat.setTexture('uVAT', vat)
+    // the far LOD posed at every step (batch B, ?uvat): its materials and its shadow casters read it under VAT_POS
+    const posed = posedVertices(data, data.lods[1].name)
+    const vatp = RawTexture.CreateRGBATexture(posed.data, posed.width, posed.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
+    vatp.name = 'figurePosed'
+    for (const m of this.farMats) m.setTexture('uVATP', vatp)
+    this.depthVatMat = new ShaderMaterial('unitsDepthPosed', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATTime'], samplers: ['uVAT', 'uVATP'], defines: ['#define DEPTH', '#define VAT_POS'] })
+    this.depthVatMat.setTexture('uVAT', vat); this.depthVatMat.setTexture('uVATP', vatp)
     this.sun = new FreeCamera('unitSun', SUN.scale(500), scene); this.sun.mode = Camera.ORTHOGRAPHIC_CAMERA; this.sun.minZ = 1; this.sun.maxZ = 1200
     this.shadowRT = new RenderTargetTexture('unitSM', { width: SM_SIZE, height: SM_SIZE }, scene, false, true, Constants.TEXTURETYPE_FLOAT, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, true, false, false, Constants.TEXTUREFORMAT_R)
     this.shadowRT.activeCamera = this.sun; this.shadowRT.clearColor = new Color4(1, 1, 1, 1)
@@ -137,7 +145,7 @@ export class Units {
     for (const l of data.lods) {
       const m = data.mesh[l.name], mesh = new Mesh(`figure_${l.name}`, scene)
       mesh.setVerticesData('position', m.positions, false, 3); mesh.setVerticesData('normal', m.normals, false, 3)
-      mesh.setVerticesData('aRole', Float32Array.from(m.roles), false, 1)
+      mesh.setVerticesData('aRole', Float32Array.from(m.roles), false, 1); mesh.setVerticesData('aVid', Float32Array.from(m.roles, (_, i) => i), false, 1)
       mesh.setVerticesData('aBones', Float32Array.from(m.boneIndices), false, 4); mesh.setVerticesData('aWeights', m.boneWeights, false, 4)
       // (the battalions' hosts are its clones; it is never drawn, but a mesh without a material makes Babylon reach for
       // its default StandardMaterial, which the page does not import: the readiness of the bench and the tools threw)
@@ -150,14 +158,14 @@ export class Units {
 
   private add(b: Battalion): void {
     const men = this.slot.line.length
-    const lod = this.lods.map(src => {
+    const lod = this.lods.map((src, li) => {
       const host = src.clone(`${src.name}_${this.hosts.length}`)
       // thin-instance matrices are vertex buffers on the geometry, and clones share it: without its own geometry
       // every battalion would draw with the last one's men
       host.makeGeometryUnique()
-      host.material = this.mats[b.side]
+      host.material = (li === 1 ? this.farMats : this.mats)[b.side]   // (the far LOD's own: the far palette, posed)
       host.isPickable = false; host.setEnabled(true); host.alwaysSelectAsActiveMesh = false; this.meshes.push(host)
-      this.shadowRT.setMaterialForRendering(host, this.depthMat)
+      this.shadowRT.setMaterialForRendering(host, this.depthMat)   // (the far LOD's: setPosed)
       return host
     })
     const rnd = mulberry(1 + this.hosts.length * 7919), jitter = new Float32Array(men * 4)   // ±3 cm, ±4°, a man's own lag: no two alike
@@ -201,7 +209,7 @@ export class Units {
     const T = this.clock(), step = Math.floor(T * this.data.fps)
     for (const m of this.mats) m.setFloat('uVATTime', T)
     for (const m of this.farMats) m.setFloat('uVATTime', T)
-    this.depthMat.setFloat('uVATTime', T)
+    this.depthMat.setFloat('uVATTime', T); this.depthVatMat.setFloat('uVATTime', T)
     const cam = this.camera, engine = this.scene.getEngine()
     // pixels per metre at unit distance, from the projection itself
     const pxPerM = cam.getProjectionMatrix().m[5] * engine.getRenderHeight() / 2, camPos = cam.globalPosition
@@ -358,7 +366,13 @@ export class Units {
   }
   /** the far LOD painted with the far palette and its lift (?farpal=1), or as the near one */
   setFarPalette(on: boolean): void {
-    for (const h of this.hosts) h.lod[1].material = (on ? this.farMats : this.mats)[h.b.side]
+    for (const m of this.farMats) m.setDefine('#define FAR', on)
+  }
+  /** the far LOD and its shadow casters posed from the posed vertices (?uvat, VAT_POS), or skinned */
+  setPosed(on: boolean): void {
+    for (const m of this.farMats) m.setDefine('#define VAT_POS', on)
+    for (const h of this.hosts) this.shadowRT.setMaterialForRendering(h.lod[1], on ? this.depthVatMat : this.depthMat)
+    this.smStep = -1
   }
   /** the figures shown or not (the guard's ground alone), their shadows with them */
   show(on: boolean): void {

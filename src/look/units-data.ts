@@ -58,3 +58,34 @@ export function checkUnits(d: UnitData): void {
   for (const [k, r] of Object.entries(d.ranges)) if (!(r.start >= 0 && r.end > r.start && r.end < d.vat.height)) bad.push(`range ${k} [${r.start}, ${r.end}] outside the ${d.vat.height} baked steps`)
   if (bad.length) throw new Error('unit data:\n  ' + bad.join('\n  '))
 }
+
+// a half float (IEEE 754 binary16, as the bake writes the animation) as a number
+export function fromHalf(h: number): number {
+  const s = h & 0x8000 ? -1 : 1, e = (h >> 10) & 0x1f, m = h & 0x3ff
+  return e === 0 ? s * m * 2 ** -24 : e === 31 ? (m ? NaN : s * Infinity) : s * (1 + m / 1024) * 2 ** (e - 15)
+}
+
+/** a LOD's every vertex posed at every baked step (batch B, ?uvat): skinned here once, at load, from the baked bone
+ *  matrices exactly as units.vert skins them, so the far LOD and the shadow pass read a vertex's place and normal (two
+ *  texels) instead of four bone matrices (sixteen). RGBA float32, width 2 × vertices (place, then normal), one row a
+ *  step; the place and the normal in the figure's own frame, as the skinned ones */
+export function posedVertices(d: UnitData, lod: string): { width: number; height: number; data: Float32Array } {
+  const m = d.mesh[lod], nv = m.positions.length / 3, rows = d.vat.height, W = d.vat.width, src = d.vat.data
+  const out = new Float32Array(nv * 2 * rows * 4), sk = new Float64Array(16)
+  for (let f = 0; f < rows; f++) for (let v = 0; v < nv; v++) {
+    sk.fill(0)
+    for (let i = 0; i < 4; i++) {
+      const w = m.boneWeights[v * 4 + i]; if (w === 0) continue
+      const o = (f * W + m.boneIndices[v * 4 + i] * 4) * 4   // the bone's four texels: its matrix, column by column
+      for (let c = 0; c < 16; c++) sk[c] += fromHalf(src[o + c]) * w
+    }
+    const x = m.positions[v * 3], y = m.positions[v * 3 + 1], z = m.positions[v * 3 + 2]
+    const nx = m.normals[v * 3], ny = m.normals[v * 3 + 1], nz = m.normals[v * 3 + 2], o = (f * nv * 2 + v * 2) * 4
+    for (let r = 0; r < 3; r++) {
+      out[o + r] = sk[r] * x + sk[4 + r] * y + sk[8 + r] * z + sk[12 + r]
+      out[o + 4 + r] = sk[r] * nx + sk[4 + r] * ny + sk[8 + r] * nz
+    }
+    out[o + 3] = 1
+  }
+  return { width: nv * 2, height: rows, data: out }
+}

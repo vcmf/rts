@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { APPROACH, CYCLE, FAR_ROLES, SIDES, extents, facingAt, farPalette, layout, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
-import { decodeUnits } from '../src/look/units-data.ts'
+import { decodeUnits, fromHalf, posedVertices } from '../src/look/units-data.ts'
 
 const g = napoleonic.types.infantry.geometry
 const drill: Drill = { companies: g.companies, files: g.files, ranks: g.ranks, fileSpacing: g.fileSpacing, rankSpacing: g.rankSpacing }
@@ -87,6 +87,19 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
   it('decodes whole, with a clip range for every role the script gives', () => {
     for (const r of ['halt', 'march', 'run', 'fire']) expect(d.ranges[r], r).toBeDefined()
     expect(d.ranges.march.speed).toBeGreaterThan(0.5); expect(d.ranges.run.speed).toBeGreaterThan(d.ranges.march.speed)
+  })
+  it('poses the far LOD at every step: on its feet, a figure tall, its normals not degenerate', () => {
+    const l = d.lods[1], p = posedVertices(d, l.name), nv = l.vertices
+    expect([p.width, p.height]).toEqual([nv * 2, d.vat.height])
+    for (const f of [0, d.ranges.march.start + 3, d.ranges.fire.end - 1]) {
+      let lo = Infinity, hi = -Infinity
+      for (let v = 0; v < nv; v++) {
+        const o = (f * nv * 2 + v * 2) * 4; lo = Math.min(lo, p.data[o + 1]); hi = Math.max(hi, p.data[o + 1])
+        expect(Math.hypot(p.data[o + 4], p.data[o + 5], p.data[o + 6])).toBeGreaterThan(0.5)   // (blended: shorter, units.vert normalizes)
+      }
+      expect(lo).toBeGreaterThan(-0.1); expect(hi - lo).toBeGreaterThan(1.6); expect(hi - lo).toBeLessThan(2.8)   // m: a man, his bayonet up
+    }
+    expect([fromHalf(0x3c00), fromHalf(0xc000), fromHalf(0x0001)]).toEqual([1, -2, 2 ** -24])
   })
   it('has two LODs, the far one lighter', () => {
     expect(d.lods.length).toBe(2); expect(d.lods[1].triangles).toBeLessThan(d.lods[0].triangles)
