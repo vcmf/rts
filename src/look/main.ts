@@ -308,7 +308,7 @@ if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '
 let units: Units | null = null, armiesFocus: [number, number] | null = null   // (the fight's middle: the bench's focus)
 if (armiesParam !== null) {
   if (mats.webgl1) throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
-  const [{ Units: UnitsC }, { decodeUnits }, { layout, facingAt }, { napoleonic }] = await Promise.all([import('./units.ts'), import('./units-data.ts'), import('./world/armies.ts'), import('../rulesets/napoleonic.ts')])
+  const [{ Units: UnitsC }, { decodeUnits }, { layout, facingAt }, { napoleonic }, { UNIFORMS }, { ARMIES_DEMO }] = await Promise.all([import('./units.ts'), import('./units-data.ts'), import('./world/armies.ts'), import('../rulesets/napoleonic.ts'), import('../rulesets/napoleonic-uniforms.ts'), import('../scenarios/armies-demo.ts')])
   const g = napoleonic.types.infantry.geometry, drill = { companies: g.companies, files: g.files, ranks: g.ranks, fileSpacing: g.fileSpacing, rankSpacing: g.rankSpacing }
   const r = await fetch(FIGURE_URL); if (!r.ok) throw new Error(`unit data: ${r.status} ${r.statusText} for ${FIGURE_URL}`)
   // the ground a battalion keeps clear of: the river and its banks, the trees (a 10 m grid of them), the buildings'
@@ -323,14 +323,14 @@ if (armiesParam !== null) {
   }
   const blocked = (x: number, z: number) => { if (Math.max(Math.abs(x), Math.abs(z)) > D.spec.tile / 2 - 30) return true; const q = riverQuery(x, z); return (q !== null && q.dist < 20) || onPaving(x, z, 3) || nearTree(x, z) }
   // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
-  units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked), () => S.t)
+  units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides), UNIFORMS, () => S.t)
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.fineShadows = uShadowQ ?? true; units.depthCompare = uDepth ?? true; units.tightCull = uCull ?? true
   if (uShadowVs ?? false) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)
-  units.setFarPalette(farPal ?? false)   // (?farpal=1: the far LOD in its coat's colour, off until the owner judges it)
+  units.setFarRule(farPal)   // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
   armiesFocus = facingAt(units.battalions)
-  Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus } })
+  Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
 }
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false

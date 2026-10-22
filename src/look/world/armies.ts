@@ -8,37 +8,42 @@
 // Frames: a battalion at (x, z) with heading h faces fwd = (sin h, cos h); its own frame has x across (right =
 // (cos h, −sin h)) and z ahead, as the figures' instance matrices turn them (src/look/units.ts)
 
+import type { Uniform } from '../../sim/ruleset.ts'
+export type { Uniform }   // (the type is the rulesets': src/sim/ruleset.ts)
+
 /** the battalion's shape, from the ruleset's infantry geometry */
 export interface Drill { companies: number; files: number; ranks: number; fileSpacing: number; rankSpacing: number }
-/** a man's colour roles (the bake's palette, tools/bake-figure.py) painted by a side's colours */
+/** a man's colours by the figure's colour roles (the bake's palette, tools/bake-figure.py: coat, facings, white, dark,
+ *  skin, leather, pack, wood, metal) */
 export type Palette = Record<string, string>
-export interface Side { name: string; palette: Palette }
 
-// the sides: France, and Austria's white as the other (the French figure recoloured: a stand-in until its own
-// figures exist). The roles the art bible gives no colour for keep the French figure's neutral stand-ins
-const NEUTRAL = { dark: '#2A2B31', skin: '#C89474', leather: '#7A5C3E', pack: '#8C7152', wood: '#5E3F26', metal: '#A3A6AB' }
-export const SIDES: readonly Side[] = [
-  { name: 'france', palette: { coat: '#2C4FA8', facings: '#B8322A', white: '#EDE6D6', ...NEUTRAL } },
-  { name: 'austria', palette: { coat: '#E9E3D3', facings: '#8E2F3A', white: '#DCD6C8', ...NEUTRAL, dark: '#26272B' } },
-]
-
-/** the far palette (?farpal=1, docs/plans/active/armies-demo.md): from above, a far figure shows mostly its headgear,
- *  pack and leather, not its coat, and a battalion reads dark. Those roles take the side's coat at a value step down
- *  (the factor), so the battalion reads in its coat's colour from far off; the rest keep the side's */
+/** the far palette (docs/plans/active/armies-demo.md): from above, a far figure shows mostly its headgear, pack and
+ *  leather, not its coat, and a dark-coated battalion reads as a dark band. Under the 'coat' rule those roles take the
+ *  coat at a value step down (the factor), so the battalion reads in its coat's colour from far off; the rest keep
+ *  the uniform's. A light coat keeps its own: its details are what separate it from light ground and snow */
 export const FAR_ROLES: Readonly<Record<string, number>> = { dark: 0.78, pack: 0.86, leather: 0.86 }
 export function farPalette(p: Palette): Palette {
   const out: Palette = { ...p }, c = p.coat
-  if (!c) throw new Error('armies: a side without a coat colour has no far palette')
+  if (!c) throw new Error('armies: a uniform without a coat colour has no far palette')
   for (const [r, k] of Object.entries(FAR_ROLES)) {
     const v = [1, 3, 5].map(i => Math.round(parseInt(c.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0'))
     out[r] = `#${v.join('').toUpperCase()}`
   }
   return out
 }
+/** a colour's relative luminance (Rec. 709 primaries, on linear sRGB: 0 black to 1 white) */
+export function luminance(hex: string): number {
+  const lin = (i: number) => { const v = parseInt(hex.slice(i, i + 2), 16) / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }
+  return 0.2126 * lin(1) + 0.7152 * lin(3) + 0.0722 * lin(5)
+}
+/** the coat's luminance under which a uniform's far figure takes its coat's colour (the 'coat' rule): 0.18, a mid
+ *  grey (sRGB about #767676). The French blue is 0.09, the Austrian white 0.76 */
+export const FAR_COAT_BELOW = 0.18
+export const farRule = (u: Uniform): 'coat' | 'keep' => u.far ?? (luminance(u.colours.coat) < FAR_COAT_BELOW ? 'coat' : 'keep')
 
 /** the script's phases a battalion goes through, in order, each cycle (the roles its men are given) */
 export type Phase = 'column' | 'halt' | 'deploy' | 'fire'
-export interface Battalion { side: number; x: number; z: number; heading: number; offset: number }
+export interface Battalion { side: number; uniform: string; x: number; z: number; heading: number; offset: number }
 
 // the script, s: the column's approach (APPROACH m at its march speed), a halt, the companies' deployment at the run,
 // a pause in line, then fire by ranks until the cycle ends and it starts again (a jump back: the stand-in's loop)
@@ -75,8 +80,9 @@ export type Blocked = (x: number, z: number) => boolean
 /** each side's battalions on the open ground: candidate places on a 5 m grid behind each side's front line, nearest
  *  its middle first; a place is taken if its whole line, its column's approach and a margin round them are clear and
  *  its box keeps clear of the battalions already placed. Fails loudly if a side cannot field `perSide` battalions.
- *  centre: between the two fronts; gap: between them, m (about a volley's range) */
-export function layout(perSide: number, d: Drill, blocked: Blocked, centre: readonly [number, number] = [0, 0], gap = 110): Battalion[] {
+ *  uniforms: each side's battalions' uniform; centre: between the two fronts; gap: between them, m (about a volley's
+ *  range) */
+export function layout(perSide: number, d: Drill, blocked: Blocked, uniforms: readonly string[], centre: readonly [number, number] = [0, 0], gap = 110): Battalion[] {
   const e = extents(d), out: Battalion[] = [], step = 2.5, margin = 3, G = 5
   const width = 2 * e.halfFront + 2 * margin + 6, depth = APPROACH + e.columnDepth + 2 * margin + 6
   for (let s = 0; s < 2; s++) {
@@ -98,9 +104,9 @@ export function layout(perSide: number, d: Drill, blocked: Blocked, centre: read
         for (let b = -wide; b <= wide; b += step) if (blocked(x + fc * b + fs * a, z - fs * b + fc * a)) { ok = false; break }
       }
       if (!ok) continue
-      mine.push([ac, bh]); out.push({ side: s, x, z, heading: h, offset: ((mine.length - 1) * 9.7) % CYCLE })
+      mine.push([ac, bh]); out.push({ side: s, uniform: uniforms[s], x, z, heading: h, offset: ((mine.length - 1) * 9.7) % CYCLE })
     }
-    if (mine.length < perSide) throw new Error(`armies: room for only ${mine.length} of ${perSide} battalions for ${SIDES[s].name} (src/look/world/armies.ts, layout)`)
+    if (mine.length < perSide) throw new Error(`armies: room for only ${mine.length} of ${perSide} battalions for side ${s} (src/look/world/armies.ts, layout)`)
   }
   return out
 }

@@ -4,7 +4,9 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { APPROACH, CYCLE, FAR_ROLES, SIDES, extents, facingAt, farPalette, layout, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
+import { APPROACH, CYCLE, FAR_COAT_BELOW, FAR_ROLES, extents, facingAt, farPalette, farRule, layout, luminance, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
+import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
+import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
 import { decodeUnits, fromHalf, posedVertices } from '../src/look/units-data.ts'
 
 const g = napoleonic.types.infantry.geometry
@@ -53,7 +55,7 @@ describe('armies: the script', () => {
 describe('armies: the layout', () => {
   const open = (x: number, z: number) => Math.max(Math.abs(x), Math.abs(z)) > 370
   it('fields both sides on open ground, facing each other, clear of one another', () => {
-    const bs = layout(10, drill, open), e = extents(drill)
+    const bs = layout(10, drill, open, ARMIES_DEMO.sides), e = extents(drill)
     expect(bs.filter(b => b.side === 0).length).toBe(10); expect(bs.filter(b => b.side === 1).length).toBe(10)
     for (const b of bs) expect(b.side === 0 ? b.z < 0 && b.heading === 0 : b.z > 0 && b.heading === Math.PI).toBe(true)
     for (const a of bs) for (const b of bs) if (a !== b && a.side === b.side) expect(Math.abs(a.x - b.x) >= 2 * e.halfFront || Math.abs(a.z - b.z) >= APPROACH + e.columnDepth).toBe(true)
@@ -61,24 +63,33 @@ describe('armies: the layout', () => {
   })
   it('keeps off the blocked ground', () => {
     const wood = (x: number, z: number) => open(x, z) || (Math.abs(x) < 60 && Math.abs(z) < 200)
-    for (const b of layout(4, drill, wood)) expect(Math.abs(b.x)).toBeGreaterThan(60)
+    for (const b of layout(4, drill, wood, ARMIES_DEMO.sides)) expect(Math.abs(b.x)).toBeGreaterThan(60)
   })
   it('fails loudly when a side has no room', () => {
-    expect(() => layout(2, drill, (_x, z) => z > 0)).toThrow(/room for only 0 of 2 battalions for austria/)
+    expect(() => layout(2, drill, (_x, z) => z > 0, ARMIES_DEMO.sides)).toThrow(/room for only 0 of 2 battalions for side 1/)
   })
-  it('has a colour for every role of the figure, for every side', () => {
+  it('has a colour for every role of the figure, for every uniform, and a flag', () => {
     const d = decodeUnits(new Uint8Array(readFileSync(new URL('../data/figures/fr-line-infantry.unitdata', import.meta.url))).buffer)
-    for (const s of SIDES) for (const r of d.palette) expect(s.palette[r], `${s.name}.${r}`).toMatch(/^#[0-9A-F]{6}$/i)
+    for (const u of Object.values(UNIFORMS)) {
+      for (const r of d.palette) expect(u.colours[r], `${u.id}.${r}`).toMatch(/^#[0-9A-F]{6}$/i)
+      expect(u.flag.length).toBeGreaterThan(0); for (const c of u.flag) expect(c).toMatch(/^#[0-9A-F]{6}$/i)
+    }
+    for (const id of ARMIES_DEMO.sides) expect(UNIFORMS[id], id).toBeDefined()
   })
 })
 
 describe('armies: the far palette', () => {
-  it('paints the far roles in the coat a value step down, the rest as the side', () => {
-    for (const side of SIDES) {
-      const f = farPalette(side.palette), ch = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16)
-      for (const [r, k] of Object.entries(FAR_ROLES)) for (let i = 0; i < 3; i++) expect(ch(f[r], i)).toBe(Math.round(ch(side.palette.coat, i) * k))
-      for (const r of Object.keys(side.palette)) if (!(r in FAR_ROLES)) expect(f[r]).toBe(side.palette[r])
+  it('paints the far roles in the coat a value step down, the rest as the uniform', () => {
+    for (const u of Object.values(UNIFORMS)) {
+      const f = farPalette(u.colours), ch = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16)
+      for (const [r, k] of Object.entries(FAR_ROLES)) for (let i = 0; i < 3; i++) expect(ch(f[r], i)).toBe(Math.round(ch(u.colours.coat, i) * k))
+      for (const r of Object.keys(u.colours)) if (!(r in FAR_ROLES)) expect(f[r]).toBe(u.colours[r])
     }
+  })
+  it('takes the coat from far off for a dark coat, keeps a light one, and an explicit rule wins', () => {
+    expect([luminance('#000000'), luminance('#FFFFFF')]).toEqual([0, 1]); expect(luminance('#767676')).toBeCloseTo(FAR_COAT_BELOW, 2)
+    const u = (coat: string, far?: 'coat' | 'keep') => ({ id: 'x', colours: { coat }, flag: [], far })
+    expect([farRule(u('#2C4FA8')), farRule(u('#E9E3D3')), farRule(u('#E9E3D3', 'coat')), farRule(u('#2C4FA8', 'keep'))]).toEqual(['coat', 'keep', 'coat', 'keep'])
   })
 })
 

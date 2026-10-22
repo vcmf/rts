@@ -26,7 +26,7 @@
 // from two mask renders as the blocks' (all figures flat white, then flat black), each side's from a third (the first
 // side white), the coat's from a fourth (white where the coat role shows). Per side: the figures' luma against the
 // ground's at the same pixels (the frame with the figures hidden, their shadows with them), the coat's share of the
-// figures' pixels, and the share within ΔE 25 (CIE76) of the side's coat colour as painted (the art bible's hex).
+// figures' pixels, and the share within ΔE 25 (CIE76) of the side's uniform's coat colour (the page's __armies.coats).
 // Measured and printed, not gated (exit 0): a baseline for the far palette's A/B (?farpal).
 import fs from 'node:fs'
 import path from 'node:path'
@@ -184,7 +184,7 @@ export function figures(url, outDir) {
   if (!new URL(url).searchParams.has('armies')) throw new Error('--figures needs a page URL with ?armies=<n>')
   fs.mkdirSync(outDir, { recursive: true })
   const steps = prepSteps(), r3 = 'for (let i = 0; i < 3; i++) __proto.scene.render()'
-  steps.push(['eval', `(async () => { for (let i = 0; i < 1200 && !window.__units; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__units) throw new Error("no __units: the page has no armies"); __proto.S.t = ${FIG_T}; return "focus " + __armies.focus })()`])
+  steps.push(['eval', `(async () => { for (let i = 0; i < 1200 && !window.__units; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__units) throw new Error("no __units: the page has no armies"); __proto.S.t = ${FIG_T}; return "COATS " + JSON.stringify(__armies.coats) })()`])
   for (const [season, sv] of SEASONS) for (const [name, a, b, r] of FIG_VIEWS) {
     const tag = `${season}.${name}`
     steps.push(viewStep([tag, a, b, r, '__armies.focus[0], 8, __armies.focus[1]', sv]))
@@ -192,9 +192,11 @@ export function figures(url, outDir) {
     for (const m of ['white', 'black', 'side', 'coat']) steps.push(['eval', `__units.setMask("${m}"); ${r3}; "mask ${m}"`], ['shot', `${tag}.${m}`])
     steps.push(['eval', '__units.setMask("off"); "painted"'])
   }
-  shoot(url, outDir, steps, W, H)
+  const said = shoot(url, outDir, steps, W, H), cm = /^EVAL "COATS (.*)"$/m.exec(said)
+  if (!cm) throw new Error('the page did not report its uniforms\' coats (__armies.coats)')
+  const sideCoats = JSON.parse(JSON.parse(`"${cm[1]}"`)).map(c => c[0])   // each side's (first) uniform's coat
   const img = n => png.read(fs.readFileSync(path.join(outDir, `${n}.png`))), out = []
-  const coats = [ARMY_HEX.France, ARMY_HEX.Austria].map(h => lab(...[1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16))))
+  const coats = sideCoats.map(h => lab(...[1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16))))
   for (const [season] of SEASONS) for (const [name] of FIG_VIEWS) {
     const tag = `${season}.${name}`, g = img(`${tag}.ground`), f = img(`${tag}.figs`), w = img(`${tag}.white`), k = img(`${tag}.black`), sd = img(`${tag}.side`), ct = img(`${tag}.coat`)
     const acc = [0, 1].map(() => ({ n: 0, yf: 0, yg: 0, coat: 0, near: 0 }))
@@ -205,7 +207,7 @@ export function figures(url, outDir) {
       const [L, A, B] = lab(f.data[i], f.data[i + 1], f.data[i + 2]), c = coats[s]
       if (Math.hypot(L - c[0], A - c[1], B - c[2]) < DE) a.near++
     }
-    for (const [s, a] of acc.entries()) out.push({ season, view: name, side: s === 0 ? 'france' : 'austria', n: a.n, yf: a.yf / a.n, yg: a.yg / a.n, sep: Math.abs(a.yf - a.yg) / a.n, coat: a.coat / a.n, near: a.near / a.n })
+    for (const [s, a] of acc.entries()) out.push({ season, view: name, side: `side ${s}`, n: a.n, yf: a.yf / a.n, yg: a.yg / a.n, sep: Math.abs(a.yf - a.yg) / a.n, coat: a.coat / a.n, near: a.near / a.n })
   }
   return out
 }

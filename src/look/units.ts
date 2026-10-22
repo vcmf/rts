@@ -26,7 +26,7 @@ import DEPTH_FS from './shaders/depth.frag?raw'
 import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
 import { posedVertices, type UnitData } from './units-data.ts'
-import { CYCLE, SIDES, farPalette, manAt, phaseAt, slots, type Battalion, type Drill, type ManState, type Phase } from './world/armies.ts'
+import { CYCLE, farPalette, farRule, manAt, phaseAt, slots, type Battalion, type Drill, type ManState, type Phase, type Uniform } from './world/armies.ts'
 
 const ROLES = ['halt', 'march', 'run', 'fire'] as const
 
@@ -55,8 +55,10 @@ export class Units {
   readonly data: UnitData
   private hosts: Host[] = []
   private lods: Mesh[] = []
-  private readonly mats: ShaderMaterial[] = []   // one a side: its palette
-  private readonly farMats: ShaderMaterial[] = []   // one a side for the far LOD, the far palette (?farpal=1)
+  // one material a uniform the battalions wear (shared by its battalions), and one for its far LOD (the far rule)
+  private readonly mats = new Map<string, ShaderMaterial>()
+  private readonly farMats = new Map<string, ShaderMaterial>()
+  private readonly uniforms: Readonly<Record<string, Uniform>>
   private depthMat: ShaderMaterial
   private depthVatMat: ShaderMaterial   // the far LOD's casters, posed (VAT_POS)
   private posed = false
@@ -100,8 +102,9 @@ export class Units {
   /** receivers: the painted materials the figures' shadows fall on (the ground and the grass); the page's clock */
   private readonly scene: Scene; private readonly camera: ArcRotateCamera; private readonly receivers: ShaderMaterial[]
   private readonly drill: Drill; private readonly clock: () => number
-  constructor(scene: Scene, camera: ArcRotateCamera, mats: Materials, receivers: ShaderMaterial[], data: UnitData, drill: Drill, battalions: Battalion[], clock: () => number) {
-    this.scene = scene; this.camera = camera; this.receivers = receivers; this.drill = drill; this.clock = clock
+  /** uniforms: the era's, by id (each battalion names one) */
+  constructor(scene: Scene, camera: ArcRotateCamera, mats: Materials, receivers: ShaderMaterial[], data: UnitData, drill: Drill, battalions: Battalion[], uniforms: Readonly<Record<string, Uniform>>, clock: () => number) {
+    this.scene = scene; this.camera = camera; this.receivers = receivers; this.drill = drill; this.clock = clock; this.uniforms = uniforms
     this.data = data
     if (data.lods.length !== 2) throw new Error(`units: drawn with two LODs, the data has ${data.lods.length}`)
     for (const r of ROLES) if (!data.ranges[r]) throw new Error(`units: the figure has no clips for the role ${r} (tools/bake-figure.py)`)
@@ -111,23 +114,20 @@ export class Units {
     const vat = RawTexture.CreateRGBATexture(data.vat.data, data.vat.width, data.vat.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_HALF_FLOAT)
     vat.name = 'figureVAT'
     const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVAT', 'aVid'], n = data.palette.length
-    for (const side of SIDES) {
-      const m = mats.make(`units_${side.name}`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uMask', 'uCoatRole'], samplers: ['uVAT'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
-      m.setTexture('uVAT', vat)
-      // the side's colour for each of the bake's roles (a role the side does not name: a loud failure)
-      m.setColor3Array('uPal', data.palette.map(r => { const hex = side.palette[r]; if (!hex) throw new Error(`units: ${side.name} has no colour for the role ${r}`); return Color3.FromHexString(hex) }))
-      m.setFloat('uMask', -1); m.setFloat('uCoatRole', data.palette.indexOf('coat'))
-      this.mats.push(m)
-    }
-    // the far LOD's (FAR): its palette and its lift crossfaded in below the LOD switch (units.vert, units.frag)
-    for (const side of SIDES) {
-      const m = mats.make(`units_${side.name}_far`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uPalFar', 'uFarK', 'uMask', 'uCoatRole'], samplers: ['uVAT', 'uVATP'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
-      m.setTexture('uVAT', vat)
-      const far = farPalette(side.palette)
-      m.setColor3Array('uPal', data.palette.map(r => Color3.FromHexString(side.palette[r])))
-      m.setColor3Array('uPalFar', data.palette.map(r => Color3.FromHexString(far[r])))
-      m.setFloat('uMask', -1); m.setFloat('uCoatRole', data.palette.indexOf('coat'))
-      this.farMats.push(m)
+    for (const id of new Set(battalions.map(b => b.uniform))) {
+      const u = uniforms[id]; if (!u) throw new Error(`units: no uniform ${id} (a battalion names it)`)
+      // its colour for each of the bake's roles (a role the uniform does not name: a loud failure)
+      const pal = data.palette.map(r => { const hex = u.colours[r]; if (!hex) throw new Error(`units: the uniform ${id} has no colour for the role ${r}`); return Color3.FromHexString(hex) })
+      const m = mats.make(`units_${id}`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uMask', 'uCoatRole'], samplers: ['uVAT'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
+      m.setTexture('uVAT', vat); m.setColor3Array('uPal', pal); m.setFloat('uMask', -1); m.setFloat('uCoatRole', data.palette.indexOf('coat'))
+      this.mats.set(id, m)
+      // the far LOD's: its far palette and its lift crossfaded in below the LOD switch under its far rule (FAR, setFarRule;
+      // units.vert, units.frag), its vertices posed (VAT_POS, setPosed)
+      const f = mats.make(`units_${id}_far`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATTime', 'uPal', 'uPalFar', 'uFarK', 'uMask', 'uCoatRole'], samplers: ['uVAT', 'uVATP'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
+      const far = farPalette(u.colours)
+      f.setTexture('uVAT', vat); f.setColor3Array('uPal', pal); f.setColor3Array('uPalFar', data.palette.map(r => Color3.FromHexString(far[r])))
+      f.setFloat('uMask', -1); f.setFloat('uCoatRole', data.palette.indexOf('coat'))
+      this.farMats.set(id, f)
     }
     // the shadow pass: the same skinning, depth only, from an orthographic camera along the sun
     this.depthMat = new ShaderMaterial('unitsDepth', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATTime'], samplers: ['uVAT'], defines: ['#define DEPTH'] })
@@ -136,7 +136,7 @@ export class Units {
     const posed = posedVertices(data, data.lods[1].name)
     const vatp = RawTexture.CreateRGBATexture(posed.data, posed.width, posed.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
     vatp.name = 'figurePosed'
-    for (const m of this.farMats) m.setTexture('uVATP', vatp)
+    for (const m of this.farMats.values()) m.setTexture('uVATP', vatp)
     this.depthVatMat = new ShaderMaterial('unitsDepthPosed', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATTime'], samplers: ['uVAT', 'uVATP'], defines: ['#define DEPTH', '#define VAT_POS'] })
     this.depthVatMat.setTexture('uVAT', vat); this.depthVatMat.setTexture('uVATP', vatp)
     this.sun = new FreeCamera('unitSun', SUN.scale(500), scene); this.sun.mode = Camera.ORTHOGRAPHIC_CAMERA; this.sun.minZ = 1; this.sun.maxZ = 1200
@@ -152,7 +152,7 @@ export class Units {
       mesh.setVerticesData('aBones', Float32Array.from(m.boneIndices), false, 4); mesh.setVerticesData('aWeights', m.boneWeights, false, 4)
       // (the battalions' hosts are its clones; it is never drawn, but a mesh without a material makes Babylon reach for
       // its default StandardMaterial, which the page does not import: the readiness of the bench and the tools threw)
-      mesh.material = this.mats[0]
+      mesh.material = this.mats.values().next().value ?? null
       mesh.setIndices(m.indices); mesh.setEnabled(false); this.lods.push(mesh)
     }
     for (const b of battalions) this.add(b)
@@ -166,7 +166,7 @@ export class Units {
       // thin-instance matrices are vertex buffers on the geometry, and clones share it: without its own geometry
       // every battalion would draw with the last one's men
       host.makeGeometryUnique()
-      host.material = (li === 1 ? this.farMats : this.mats)[b.side]   // (the far LOD's own: the far palette, posed)
+      host.material = (li === 1 ? this.farMats : this.mats).get(b.uniform) ?? null   // (the far LOD's own: the far palette, posed)
       host.isPickable = false; host.setEnabled(true); host.alwaysSelectAsActiveMesh = false; this.meshes.push(host)
       this.shadowRT.setMaterialForRendering(host, this.depthMat)   // (the far LOD's: setPosed)
       return host
@@ -210,13 +210,13 @@ export class Units {
 
   private frame(): void {
     const T = this.clock(), step = Math.floor(T * this.data.fps)
-    for (const m of this.mats) m.setFloat('uVATTime', T)
-    for (const m of this.farMats) m.setFloat('uVATTime', T)
+    for (const m of this.mats.values()) m.setFloat('uVATTime', T)
+    for (const m of this.farMats.values()) m.setFloat('uVATTime', T)
     this.depthMat.setFloat('uVATTime', T); this.depthVatMat.setFloat('uVATTime', T)
     const cam = this.camera, engine = this.scene.getEngine()
     // pixels per metre at unit distance, from the projection itself
     const pxPerM = cam.getProjectionMatrix().m[5] * engine.getRenderHeight() / 2, camPos = cam.globalPosition
-    for (const m of this.farMats) m.setVector2('uFarK', this.farK.set(FIGURE * pxPerM, this.lodPx))
+    for (const m of this.farMats.values()) m.setVector2('uFarK', this.farK.set(FIGURE * pxPerM, this.lodPx))
     let moved = step !== this.smStep   // (the map changes with the poses' step, the men's places, the casters' LOD)
     for (const h of this.hosts) {
       if (!h.lod[0].isEnabled()) continue
@@ -410,19 +410,25 @@ export class Units {
   }
 
   /** the guard's masks (tools/guard.mjs --figures): 'off' painted; 'white', 'black' every figure flat; 'side' the
-   *  first side white, the other black; 'coat' white where a coat shows */
+   *  uniforms side 0's battalions wear white, the others black; 'coat' white where a coat shows */
   setMask(mode: 'off' | 'white' | 'black' | 'side' | 'coat'): void {
-    const v = (side: number) => mode === 'off' ? -1 : mode === 'white' ? 1 : mode === 'black' ? 0 : mode === 'coat' ? 2 : side === 0 ? 1 : 0
-    this.mats.forEach((m, i) => m.setFloat('uMask', v(i))); this.farMats.forEach((m, i) => m.setFloat('uMask', v(i)))
+    const first = new Set(this.hosts.filter(h => h.b.side === 0).map(h => h.b.uniform))
+    const v = (id: string) => mode === 'off' ? -1 : mode === 'white' ? 1 : mode === 'black' ? 0 : mode === 'coat' ? 2 : first.has(id) ? 1 : 0
+    for (const map of [this.mats, this.farMats]) for (const [id, m] of map) m.setFloat('uMask', v(id))
   }
-  /** the far LOD painted with the far palette and its lift (?farpal=1), or as the near one */
-  setFarPalette(on: boolean): void {
-    for (const m of this.farMats) m.setDefine('#define FAR', on)
+  /** each uniform's far LOD under its far rule (farRule: 'coat', the far palette and its lift; 'keep', as near), or
+   *  every uniform's forced (?farpal=0|1: the A/B) */
+  setFarRule(force: boolean | null): void {
+    for (const [id, m] of this.farMats) m.setDefine('#define FAR', force ?? farRule(this.uniforms[id]) === 'coat')
+  }
+  /** each side's uniforms' coat colours (the guard's ΔE to the coat) */
+  coats(): string[][] {
+    return [0, 1].map(s => [...new Set(this.hosts.filter(h => h.b.side === s).map(h => this.uniforms[h.b.uniform].colours.coat))])
   }
   /** the far LOD and its shadow casters posed from the posed vertices (?uvat, VAT_POS), or skinned */
   setPosed(on: boolean): void {
     this.posed = on
-    for (const m of this.farMats) m.setDefine('#define VAT_POS', on)
+    for (const m of this.farMats.values()) m.setDefine('#define VAT_POS', on)
     for (const h of this.hosts) this.shadowRT.setMaterialForRendering(h.lod[1], on ? this.depthVatMat : this.depthMat)
     this.smStep = -1
   }
