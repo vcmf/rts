@@ -22,6 +22,8 @@ import { SUN, type Materials } from './materials.ts'
 import { D } from './spec.ts'
 import UNITS_VS from './shaders/units.vert?raw'
 import UNITS_FS from './shaders/units.frag?raw'
+import FLAG_VS from './shaders/flag.vert?raw'
+import FLAG_FS from './shaders/flag.frag?raw'
 import DEPTH_FS from './shaders/depth.frag?raw'
 import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
@@ -47,6 +49,7 @@ const SM_BIAS = 0.02   // m along the sun: no receiver is drawn into the map, so
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1]   // the view's corners in clip space
 const FIGURE = 1.8     // m: a figure's height, for the LOD's pixel test
 const SM_HOLD = 6      // m: lazy, the held sun box must cover the view by this much
+const FLAG_W = 1.4, FLAG_H = 1.1, FLAG_TOP = 3.0, FLAG_WIND = 0.6, FLAG_MIN_PX = 12  // m; rad; the cloth's least height on screen
 const TR_N = 256, TR_EVERY = 0.25   // the trodden ground's mask: texels a side; s between its redraws while men move
 const TR_TRAIL = [[0.8, 0.9], [1.6, 0.8], [2.6, 0.6], [3.8, 0.4]] as const   // m behind a man, weight
 const TR_WEIGHT = 1 + TR_TRAIL.reduce((a, [, w]) => a + w, 0)
@@ -93,6 +96,13 @@ export class Units {
   rootReceivers: ShaderMaterial[] = []
   readonly meshes: Mesh[] = []
   private farK = new Vector2()
+  private flag: Mesh | null = null
+  private flagK = new Vector2()   // (its own: a material keeps the vector it is given)
+  private flagMat: ShaderMaterial | null = null
+  private flagM: Float32Array | null = null
+  private flagStale = false
+  private readonly bearer: number    // the colour bearer: the line's centre file, second rank
+  private readonly mats0: Materials
   private trampleOn = false
   private trTex: RawTexture | null = null
   private readonly trBuf = new Uint8Array(TR_N * TR_N)
@@ -119,7 +129,10 @@ export class Units {
     this.data = data
     if (data.lods.length !== 2) throw new Error(`units: drawn with two LODs, the data has ${data.lods.length}`)
     for (const r of ROLES) if (!data.ranges[r]) throw new Error(`units: the figure has no clips for the role ${r} (tools/bake-figure.py)`)
-    this.slot = slots(drill)
+    this.slot = slots(drill); this.mats0 = mats
+    let best = Infinity, bi = 0
+    this.slot.line.forEach(([x, z], i) => { const d = Math.hypot(x, z + drill.rankSpacing); if (d < best) { best = d; bi = i } })
+    this.bearer = bi
     this.speed = { march: data.ranges.march.speed, run: data.ranges.run.speed }
     if (!(this.speed.march > 0 && this.speed.run > 0)) throw new Error('units: the march and run roles have no root speed')
     const vat = RawTexture.CreateRGBATexture(data.vat.data, data.vat.width, data.vat.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_HALF_FLOAT)
@@ -221,6 +234,7 @@ export class Units {
     h.lo.set(minX - 1.2, minY - 0.3, minZ - 1.2); h.hi.set(maxX + 1.2, maxY + 2.4, maxZ + 1.2)
     for (const m of h.lod) m.getBoundingInfo().reConstruct(h.lo, h.hi)
     h.stale[0] = h.stale[1] = true
+    this.placeFlag(h)
     if (changed) h.staleSet[0] = h.staleSet[1] = true
   }
 
@@ -254,6 +268,10 @@ export class Units {
       }
     }
     if (this.trampleOn) this.trample(T, anyMoved)
+    if (this.flag?.isEnabled()) {
+      this.flagMat?.setFloat('uFlagT', T); this.flagMat?.setVector2('uFlagK', this.flagK.set(pxPerM, FLAG_MIN_PX))
+      if (this.flagStale) { this.flag.thinInstanceBufferUpdated('matrix'); this.flag.thinInstanceRefreshBoundingInfo(); this.flagStale = false }
+    }
     if (!this.shadows) return
     const refit = this.fitSun()
     if (!this.lazyShadows) return
@@ -513,6 +531,47 @@ export class Units {
       out[j * TR_N + i] = Math.round(255 * s / n)
     }
     this.trTex?.update(out)
+  }
+
+  /** the battalions' colours (?flags=0: none): one flag a battalion, in its uniform's flag colours, carried by the man
+   *  at the line's centre in its second rank (the colour party), its cloth flying downwind; a thin instance each */
+  setFlags(on: boolean): void {
+    if (on && !this.flag) this.makeFlags()
+    this.flag?.setEnabled(on)
+  }
+  private makeFlags(): void {
+    const W = FLAG_W, H = FLAG_H, NX = 8, NY = 4, pos: number[] = [], part: number[] = [], idx: number[] = []
+    // the cloth: a grid from the staff out, its foot FLAG_TOP - H up the staff
+    for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) { pos.push(i / NX * W, FLAG_TOP - H + j / NY * H, 0); part.push(0) }
+    for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const a = j * (NX + 1) + i; idx.push(a, a + 1, a + NX + 1, a + 1, a + NX + 2, a + NX + 1) }
+    // the staff: two crossed strips from the ground to its top
+    for (const [dx, dz] of [[0.03, 0], [0, 0.03]]) {
+      const b = pos.length / 3
+      pos.push(-dx, 0, -dz, dx, 0, dz, dx, FLAG_TOP + 0.15, dz, -dx, FLAG_TOP + 0.15, -dz); part.push(1, 1, 1, 1)
+      idx.push(b, b + 1, b + 2, b, b + 2, b + 3)
+    }
+    const mesh = new Mesh('flags', this.scene)
+    mesh.setVerticesData('position', pos, false, 3); mesh.setVerticesData('aPart', part, false, 1); mesh.setIndices(idx)
+    const m = this.mats0.make('flags', FLAG_VS, FLAG_FS, { attributes: ['position', 'aPart', 'aC0', 'aC1', 'aC2', 'aPh'], uniforms: ['uFlagT', 'uFlagK'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define FLAG_W ${W.toFixed(2)}`, `#define FLAG_H ${H.toFixed(2)}`] })
+    m.backFaceCulling = false; mesh.material = m; mesh.isPickable = false; mesh.alwaysSelectAsActiveMesh = true
+    const n = this.hosts.length, cols = [new Float32Array(n * 3), new Float32Array(n * 3), new Float32Array(n * 3)], ph = new Float32Array(n)
+    this.hosts.forEach((h, k) => {
+      const f = this.uniforms[h.b.uniform].flag, c = (i: number) => Color3.FromHexString(f[Math.min(f.length - 1, Math.floor(i * f.length / 3))])
+      for (let i = 0; i < 3; i++) c(i).toArray(cols[i], k * 3)
+      ph[k] = (k * 0.618) % 1 * 3
+    })
+    this.flagM = new Float32Array(n * 16)
+    mesh.thinInstanceSetBuffer('matrix', this.flagM, 16, false)
+    cols.forEach((a, i) => mesh.thinInstanceSetBuffer(`aC${i}`, a, 3, true)); mesh.thinInstanceSetBuffer('aPh', ph, 1, true)
+    this.flag = mesh; this.flagMat = m
+    for (const h of this.hosts) this.placeFlag(h)
+  }
+  // the flag at its bearer: his place, the cloth turned to fly downwind (FLAG_WIND, rad from +x toward +z)
+  private placeFlag(h: Host): void {
+    if (!this.flagM) return
+    const k = this.hosts.indexOf(h), o = k * 16, mo = this.bearer * 16, c = Math.cos(FLAG_WIND), s = Math.sin(FLAG_WIND), m = this.flagM
+    m.set([c, 0, s, 0, 0, 1, 0, 0, -s, 0, c, 0, h.matrices[mo + 12], h.matrices[mo + 13], h.matrices[mo + 14], 1], o)
+    this.flagStale = true
   }
 
   /** the figures shown or not (the guard's ground alone), their shadows with them */
