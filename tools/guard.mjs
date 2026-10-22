@@ -18,6 +18,16 @@
 // then measured on, so it checks the masks, the renders and the measure end to end, not a different comparison.
 // Also reported, not gated: whether a block is more saturated than the 99th percentile of the ground's saturation.
 // Exit 1 on a failure. The page: the look page, built (`npm run build`, `npx vite preview`).
+//
+//   node tools/guard.mjs <look page URL?armies=n> --figures [--seasons …] [outDir]   the armies' real figures, measured
+//
+// --figures (docs/plans/active/armies-demo.md): the battalions themselves, not blocks, at the fight's middle
+// (__armies.focus) at the default zoom and the widest, the script's clock held in the fire phase. The figures' pixels
+// from two mask renders as the blocks' (all figures flat white, then flat black), each side's from a third (the first
+// side white), the coat's from a fourth (white where the coat role shows). Per side: the figures' luma against the
+// ground's at the same pixels (the frame with the figures hidden, their shadows with them), the coat's share of the
+// figures' pixels, and the share within ΔE 25 (CIE76) of the side's uniform's coat colour (the page's __armies.coats).
+// Measured and printed, not gated (exit 0): a baseline for the far palette's A/B (?farpal).
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -160,6 +170,48 @@ export function guard(url, outDir, baseUrl = null) {
   return ok
 }
 
+// the figures' views: [name, alpha, beta, radius] about the fight's middle (the default zoom between the goldens'
+// start, r 125, and the bench's, r 170; the widest, 260)
+const FIG_VIEWS = [['default', START[0], 0.7, 150], ['widest', START[0], 0.6, 260]]
+const FIG_T = 80, DE = 25   // s: the clock (the battalions in line, firing); ΔE: the coat share's threshold
+const lab = (r, g, b) => {   // sRGB 0–255 to CIE Lab (D65)
+  const f = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }, [R, G, B] = [f(r), f(g), f(b)]
+  const x = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047, y = 0.2126 * R + 0.7152 * G + 0.0722 * B, z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883
+  const h = t => t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116, [fx, fy, fz] = [h(x), h(y), h(z)]
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)]
+}
+export function figures(url, outDir) {
+  if (!new URL(url).searchParams.has('armies')) throw new Error('--figures needs a page URL with ?armies=<n>')
+  fs.mkdirSync(outDir, { recursive: true })
+  const steps = prepSteps(), r3 = 'for (let i = 0; i < 3; i++) __proto.scene.render()'
+  steps.push(['eval', `(async () => { for (let i = 0; i < 1200 && !window.__units; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__units) throw new Error("no __units: the page has no armies"); __proto.S.t = ${FIG_T}; return "COATS " + JSON.stringify(__armies.coats) })()`])
+  for (const [season, sv] of SEASONS) for (const [name, a, b, r] of FIG_VIEWS) {
+    const tag = `${season}.${name}`
+    steps.push(viewStep([tag, a, b, r, '__armies.focus[0], 8, __armies.focus[1]', sv]))
+    steps.push(['eval', `__units.show(false); ${r3}; "hidden"`], ['shot', `${tag}.ground`], ['eval', `__units.show(true); ${r3}; "shown"`], ['shot', `${tag}.figs`])
+    for (const m of ['white', 'black', 'side', 'coat']) steps.push(['eval', `__units.setMask("${m}"); ${r3}; "mask ${m}"`], ['shot', `${tag}.${m}`])
+    steps.push(['eval', '__units.setMask("off"); "painted"'])
+  }
+  const said = shoot(url, outDir, steps, W, H), cm = /^EVAL "COATS (.*)"$/m.exec(said)
+  if (!cm) throw new Error('the page did not report its uniforms\' coats (__armies.coats)')
+  const sideCoats = JSON.parse(JSON.parse(`"${cm[1]}"`)).map(c => c[0])   // each side's (first) uniform's coat
+  const img = n => png.read(fs.readFileSync(path.join(outDir, `${n}.png`))), out = []
+  const coats = sideCoats.map(h => lab(...[1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16))))
+  for (const [season] of SEASONS) for (const [name] of FIG_VIEWS) {
+    const tag = `${season}.${name}`, g = img(`${tag}.ground`), f = img(`${tag}.figs`), w = img(`${tag}.white`), k = img(`${tag}.black`), sd = img(`${tag}.side`), ct = img(`${tag}.coat`)
+    const acc = [0, 1].map(() => ({ n: 0, yf: 0, yg: 0, coat: 0, near: 0 }))
+    for (let i = 0; i < f.data.length; i += 4) {
+      if (Math.max(w.data[i] - k.data[i], w.data[i + 1] - k.data[i + 1], w.data[i + 2] - k.data[i + 2]) <= MASKED) continue
+      const s = sd.data[i + 1] > 127 ? 0 : 1, a = acc[s]
+      a.n++; a.yf += luma(f.data, i); a.yg += luma(g.data, i); if (ct.data[i + 1] > 127) a.coat++
+      const [L, A, B] = lab(f.data[i], f.data[i + 1], f.data[i + 2]), c = coats[s]
+      if (Math.hypot(L - c[0], A - c[1], B - c[2]) < DE) a.near++
+    }
+    for (const [s, a] of acc.entries()) out.push({ season, view: name, side: `side ${s}`, n: a.n, yf: a.yf / a.n, yg: a.yg / a.n, sep: Math.abs(a.yf - a.yg) / a.n, coat: a.coat / a.n, near: a.near / a.n })
+  }
+  return out
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2), bi = args.indexOf('--base'), baseUrl = bi >= 0 ? args.splice(bi, 2)[1] : null
   const vi = args.indexOf('--view'), view = vi >= 0 ? args.splice(vi, 2)[1] : 'start'
@@ -170,9 +222,18 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (!names.includes('summer') || names.some(n => !Object.hasOwn(SEASON_VALUES, n)) || new Set(names).size !== names.length) { console.error(`--seasons: names from ${Object.keys(SEASON_VALUES).join(', ')}, summer among them (the negative), each once`); process.exit(2) }
     SEASONS = names.map(n => [n, SEASON_VALUES[n], n === 'summer'])
   }
+  const fi = args.indexOf('--figures'); if (fi >= 0) args.splice(fi, 1)
   const stray = args.find(a => a.startsWith('-'))   // a flag left unparsed (e.g. '--view cover' passed as one argument) would become the out dir
   if (stray) { console.error(`guard.mjs: unknown argument ${JSON.stringify(stray)}`); process.exit(2) }
   const [url, out = path.join(ROOT, 'scratch/guard')] = args
   if (!url || (bi >= 0 && !baseUrl)) { console.error('usage: node tools/guard.mjs <look page URL> [--base <URL>] [--view start|cover|crops] [--seasons summer,…] [outDir]'); process.exit(2) }
+  if (fi >= 0) {
+    try {
+      const rows = figures(url, out)
+      console.log(`figures: season  view      side       px     figs  ground  sep    coat role  within ΔE ${DE} of the coat`)
+      for (const r of rows) console.log(`figures: ${r.season.padEnd(8)}${r.view.padEnd(10)}${r.side.padEnd(9)}${String(r.n).padStart(7)}  ${r.yf.toFixed(3)}  ${r.yg.toFixed(3)}   ${r.sep.toFixed(3)}  ${(100 * r.coat).toFixed(1).padStart(6)} %   ${(100 * r.near).toFixed(1).padStart(6)} %`)
+      console.log('figures: measured, not gated'); process.exit(0)
+    } catch (e) { console.error('guard.mjs:', e.message); process.exit(1) }
+  }
   try { const ok = guard(url, out, baseUrl); console.log(ok ? 'guard: ok' : 'guard: FAILED'); process.exit(ok ? 0 : 1) } catch (e) { console.error('guard.mjs:', e.message); process.exit(1) }
 }
