@@ -84,7 +84,9 @@ with the nearest LOD side by side.
   - the depth of field: unchanged from 45 m (its ease reckoned from there); the near band softens the bottom of the
     frame by design (decision 0040), the units with it;
   - the render scale: Auto keeps 0.9 (EASU) at the closest zooms, its edges where they were (217 and 234 m).
-- **Checks**: `npm test` (lint, typecheck, 302 tests), `check:data`, `check-docs` pass.
+- **Checks**: `npm test` (lint, typecheck, 302 tests), `check:data`, `check-docs` pass. `tools/macro-check.mjs
+  --only shimmer` fails its closest view at 15 m (1.86 % of the field pixels against the 1.0 % gate; 0.37 % at 45 m):
+  #139; the water's and the detail checks at the closest zoom not run yet (#139).
 
 ## Open questions
 
