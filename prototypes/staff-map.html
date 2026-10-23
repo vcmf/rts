@@ -1146,14 +1146,12 @@ function addPoly(path, pts) {
  *              by salt as its index
  */
 function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
-  const total = Math.round(clamp((1 - u.str) / 0.7, 0, 1) * 10);
+  const total = wearCount(u, 10);
   const n = Math.floor(total / bars) + (salt < total % bars ? 1 : 0);   // dealt out over the bars: the same total as a block
   const weights = bars > 1 ? BITE_EDGE_W_BAR : BITE_EDGE_W;
   if (!n) return;
 
-  // a small Lehmer generator, seeded from the unit's own hash
-  let seed = 1 + Math.floor(((u.rand + salt * 0.618034) % 1) * 2147483645);
-  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const rnd = unitRng(u, salt);
 
   // clip to the block (and keep a square's hole open); the bites go in their own path, so the caller's is untouched
   const clip = new Path2D(), bites = new Path2D();
@@ -1250,25 +1248,34 @@ function gunPx(u) {
   return clamp(lengthM / MPP * 0.9, 18, 44);
 }
 
+/** How many wear bites a unit shows, up to max: none at full strength, max by 30 % (when it is about to go). */
+const wearCount = (u, max) => Math.round(clamp((1 - u.str) / 0.7, 0, 1) * max);
+
+/** A unit's own random sequence (a Lehmer generator seeded from its hash): the same every frame, so wear stays put. */
+function unitRng(u, salt = 0) {
+  let seed = 1 + Math.floor(((u.rand + salt * 0.618034) % 1) * 2147483645);
+  return () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+}
+
 /**
- * Losses on a battery: ragged bites cut out of the gun icon, as the blocks wear (damage()), more as its strength falls
- * (up to six: the icon is small). Cut, not painted dark: the paper shows through, which reads on any army's colour,
- * where a dark bite vanished on a dark gun. Drawn in the icon's own 15 x 15 space, clipped to the gun (so nothing else
- * on the ink is cut), seeded by the unit so they stay put; they come in from the icon's top or bottom edge.
+ * Losses on a battery: gaps chipped into the gun icon, as the blocks wear (damage()), more as its strength falls (up
+ * to six: the icon is small). Painted in a light paper tone, not dark (a dark bite vanished on a dark gun) and not cut
+ * out (cutting the shared ink canvas would erase whatever lies under the gun: a block, an arrow, a name). Drawn after
+ * the outline, so a gap breaks it; in the icon's own 15 x 15 space, clipped to the gun. The gaps go where the gun is:
+ * across the barrel from above, through the wheel and the trail from below.
  */
 function gunWear(u) {
-  const n = Math.round(clamp((1 - u.str) / 0.7, 0, 1) * 6);
+  const n = wearCount(u, 6);
   if (!n) return;
-  let seed = 1 + Math.floor(u.rand * 2147483645);
-  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const bites = new Path2D();
+  const rnd = unitRng(u);
+  const gaps = new Path2D();
   for (let k = 0; k < n; k++) {
-    const x = 2.5 + 11 * rnd();              // along the gun
     const fromTop = rnd() < 0.5;
-    const y0 = fromTop ? 2.5 : 12;           // just outside the icon's top or bottom
-    const depth = (2.2 + 3.0 * rnd()) * (fromTop ? 1 : -1);
-    const hw = 0.7 + 0.8 * rnd();
-    addPoly(bites, [
+    const x = fromTop ? 5 + 8.5 * rnd() : 1.5 + 7 * rnd();   // the barrel; the wheel and the trail
+    const y0 = fromTop ? 2.8 : 12;                           // just outside the icon's top or bottom
+    const depth = fromTop ? 1.8 + 1.2 * rnd() : -(2.5 + 2.5 * rnd());
+    const hw = 0.45 + 0.45 * rnd();
+    addPoly(gaps, [
       [x - hw, y0],
       [x - hw * 0.4, y0 + depth * (0.5 + 0.3 * rnd())],
       [x + hw * 0.1, y0 + depth],
@@ -1278,12 +1285,12 @@ function gunWear(u) {
   }
   ink.save();
   ink.clip(GUN);
-  ink.globalCompositeOperation = 'destination-out';
-  ink.fill(bites);
+  ink.fillStyle = 'rgb(238,229,204)';
+  ink.fill(gaps);
   ink.restore();
 }
 
-function drawGun(C,s,shadowOnly,S,u=null){
+function drawGun(C,s,shadowOnly,S,u){
   const m=C.reduce((t,p)=>[t[0]+p[0]/C.length,t[1]+p[1]/C.length],[0,0]),fr=[(C[0][0]+C[1][0])/2,(C[0][1]+C[1][1])/2],bk=[(C[2][0]+C[3][0])/2,(C[2][1]+C[3][1])/2];
   const a=Math.atan2(fr[1]-bk[1],fr[0]-bk[0]),k=S/15,[sx,sy]=raiseOf(SHADOW_PX*0.6);
   ink.save();ink.translate(m[0],m[1]);ink.rotate(a);if(Math.cos(a)<0)ink.scale(1,-1);ink.rotate(-GUN_ANG);ink.scale(k,k);ink.translate(-7.5,-7.5);
@@ -1291,8 +1298,9 @@ function drawGun(C,s,shadowOnly,S,u=null){
     const P=new Path2D();P.rect(-60,-60,135,135);P.addPath(GUN);ink.clip(P,'evenodd');ink.shadowColor='rgba(52,38,18,0.45)';ink.shadowBlur=4*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;
     ink.fillStyle=css(s.f);ink.fill(GUN);ink.restore();return null;}
   ink.fillStyle=css(s.f);ink.fill(GUN);
-  if(u)gunWear(u);
-  ink.lineWidth=0.9/k;ink.strokeStyle=s.e?css(s.e):'rgba(30,22,12,0.55)';ink.stroke(GUN);ink.restore();
+  ink.lineWidth=0.9/k;ink.strokeStyle=s.e?css(s.e):'rgba(30,22,12,0.55)';ink.stroke(GUN);
+  gunWear(u);   // last: a gap breaks the outline too
+  ink.restore();
   return{m,r:S*0.6};
 }
 // the lit style's houses: raised like the blocks, lit by the same light (the map's ink blocks, baked, are left out)
@@ -1300,7 +1308,7 @@ const HOUSE_COL=[0.36,0.29,0.23],CHURCH_COL=[0.27,0.22,0.19];
 // the colour a block's sides take: its top's, as drawBlock fills it
 function blockCol(u,now){const s=pal(u);if(u.state==='rout')return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));return s.f;}
 function drawUnder(u,alpha,now){const B=blockCorners(u),{C}=B;if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);
-  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true,gunPx(u));else for(const P of parts(u,B))raised(P,blockCol(u,now));}ink.globalAlpha=1;}
+  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true,gunPx(u),u);else for(const P of parts(u,B))raised(P,blockCol(u,now));}ink.globalAlpha=1;}
 function drawBlock(u,alpha,now){
   u.gun=null;   // drawn this frame or not at all: a stale circle would keep a stale click area
   const s=pal(u),{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;

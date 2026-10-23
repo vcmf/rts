@@ -83,5 +83,9 @@ Out of scope: brigade counts per army, divisions as a level, battalions acting a
   with heading); the old sizing fallback in `drawGun` removed; the design doc's column size and the lit plan's arrow
   spine brought up to date; the symbols' comment says the column is a little heavier. Open, for the owner: a
   battery's losses no longer show (its icon no longer shrinks, and guns get no wear).
-- **Guns wear** (the owner: yes, a battery's losses should show): ragged bites cut out of the gun icon as strength
-  falls (up to six), so the paper shows through; dark bites vanished on a dark gun.
+- **Guns wear** (the owner: yes, a battery's losses should show): gaps chipped into the gun icon as strength falls (up
+  to six), in a light paper tone (dark bites vanished on a dark gun).
+  - **Round 1** (`/code-review high`): severe: the first version cut the gaps out of the shared ink canvas, which
+    erased whatever lay under the gun (a block, an arrow, a name). Fixed (painted light, not cut), with: the gaps after
+    the outline, so they break it; placed on the barrel, the wheel and the trail (a third had cut empty space); the
+    wear count and the unit's seed shared with the blocks' wear (`wearCount`, `unitRng`); both passes given the unit.
