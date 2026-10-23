@@ -37,7 +37,7 @@ const ROLES = ['halt', 'march', 'run', 'fire'] as const
 const RESERVE = { phase: 'halt', start: 0, deployEnd: 0 } as const   // a reserve's phase: halted in column, always
 
 interface Host {
-  b: Battalion; lod: Mesh[]; near: boolean;   // lod: the near LOD, the far LOD, the shadow proxy (casts only), the simple shadow's two passes (depth, colour)
+  b: Battalion; lod: Mesh[]; near: boolean;   // lod: the near LOD, the far LOD, the shadow proxy (casts only), the simple shadow (drawn on the ground)
   matrices: Float32Array; settings: Float32Array; jitter: Float32Array
   next: Float32Array      // each man's move to his next step's place (x, y, z): the places between two steps (aNext)
   moving: boolean         // re-placed at every step (its phase moves its men)
@@ -67,7 +67,9 @@ const SM_STEP_FINE = 2  // m: the box's half-size steps
 const SM_HOLD_SHARE = 0.1   // the held box's slack, a share of the view's half-size (the shadow fix: SM_HOLD at least)
 const SM_COARSE = 1.3  // and be at most this many times the size the view needs (its texels no coarser)
 const DECAL_ALONG = 6, DECAL_ACROSS = 2   // the simple shadow's grid (cells along and across it): it lies on the ground
-const DECAL_BIAS = 0.15   // m: the darkest shadow drawn this much nearer at most (the darkest-wins depth, unitdecal.frag)
+const LIFT_RAMP = 1.5   // m along the shadow from his feet over which its lift grows (unitdecal.vert: not over his own shins)
+const GL_ZERO = 0, GL_ONE = 1, GL_SRC_COLOR = 0x0300   // (the blend's factors, WebGL's own: no Babylon mode is dst · src with the alpha kept)
+const SHAPE_MIPS = 3    // the shape's mips read at most: a cell's 8-texel border holds to the fourth (unitdecal.frag)
 const SHAPE_FACINGS = 16   // the simple shadow's facings (shadowShape)
 /** the cross-fade's band (decision 0049): the camera's distance to its focus (m) where the map gives way to the simple
  *  shadows, from the map alone to the simple shadows alone (?ushadowswitch=<r0>,<r1>); near the LOD switch (48 px at 1080 lines: 63 m) */
@@ -153,12 +155,17 @@ export class Units {
   smooth = true
   /** the map's share given to the simple shadows this frame (0: the map alone; 1: the simple shadows alone) */
   far = 0
-  /** m: how high over the ground the simple shadows cover in depth (the grass, his legs: ?udecallift=<m>) */
-  decalLift = 0.6
-  /** the receivers' ground height from the meadow map (main.ts: when there is one), else the man's root's */
+  private lift = 0.6
+  /** m: how high over the ground the simple shadows cover in depth (the grass, the legs of the men in them:
+   *  ?udecallift=<m>) */
+  get decalLift(): number { return this.lift }
+  set decalLift(v: number) { this.lift = v; this.decal?.setFloat('uDecalLift', v) }
+  /** the simple shadows' ground height from the meadow map (main.ts: when there is one), else the man's root's; read
+   *  when they are made (setShadows): a define */
   groundMap = false
-  private decalDepth: ShaderMaterial | null = null   // the simple shadows' passes (useDecals)
-  private decalColour: ShaderMaterial | null = null
+  /** the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): main.ts, before setShadows */
+  shade: BaseTexture | null = null
+  private decal: ShaderMaterial | null = null   // the simple shadows' (useDecals)
   private mapOn = false   // the map drawn this frame
   private stepFrac = 0
   private culledMoving = false   // a caster in the map has its men moving (cull)
@@ -255,16 +262,13 @@ export class Units {
     pm.material = this.depthProxyMat; pm.setIndices(px.indices); pm.setEnabled(false); this.lods.push(pm)
     this.proxyStats = { vertices: pn, triangles: px.indices.length / 3 }
     // the simple shadow (decision 0049): a grid a man (0 to 1 across and along the shadow's frame), each vertex set on the
-    // ground; twice, its depth pass and its colour pass (unitdecal.frag); their materials and shape made when first
-    // asked for (useDecals)
+    // ground (unitdecal.vert); its material and shape made when first asked for (useDecals)
     const gp: number[] = [], gi: number[] = []
     for (let j = 0; j <= DECAL_ALONG; j++) for (let i = 0; i <= DECAL_ACROSS; i++) gp.push(i / DECAL_ACROSS, 0, j / DECAL_ALONG)
     for (let j = 0; j < DECAL_ALONG; j++) for (let i = 0; i < DECAL_ACROSS; i++) { const a = j * (DECAL_ACROSS + 1) + i, b = a + DECAL_ACROSS + 1; gi.push(a, a + 1, b + 1, a, b + 1, b) }
-    for (const name of ['figure_shadowDepth', 'figure_shadowColour']) {
-      const qm = new Mesh(name, scene)
-      qm.setVerticesData('position', gp, false, 3); qm.setIndices(gi)
-      qm.material = this.depthProxyMat; qm.setEnabled(false); this.lods.push(qm)
-    }
+    const qm = new Mesh('figure_shadow2D', scene)
+    qm.setVerticesData('position', gp, false, 3); qm.setIndices(gi)
+    qm.material = this.depthProxyMat; qm.setEnabled(false); this.lods.push(qm)
     this.posedFar = pv
     for (const b of battalions) this.add(b)
     scene.onBeforeRenderObservable.add(() => this.frame())
@@ -277,9 +281,9 @@ export class Units {
       // thin-instance matrices are vertex buffers on the geometry, and clones share it: without its own geometry
       // every battalion would draw with the last one's men
       host.makeGeometryUnique()
-      host.material = li === 3 ? this.decalDepth ?? this.depthProxyMat : li === 4 ? this.decalColour ?? this.depthProxyMat : li === 2 ? this.depthProxyMat : (li === 1 ? this.farMats : this.mats).get(b.uniform) ?? null   // (the far LOD's own: the far palette, posed)
+      host.material = li === 3 ? this.decal ?? this.depthProxyMat : li === 2 ? this.depthProxyMat : (li === 1 ? this.farMats : this.mats).get(b.uniform) ?? null   // (the far LOD's own: the far palette, posed)
       if (li >= 2) host.isVisible = false   // (the proxy: shown to the map alone; the simple shadows: shown by frame())
-      if (li >= 3) host.alphaIndex = 1000 + li - 3   // (after everything else, the depth pass before the colour pass)
+      if (li === 3) host.alphaIndex = 1000   // (after everything else)
       host.isPickable = false; host.setEnabled(true); host.alwaysSelectAsActiveMesh = false; this.meshes.push(host)
       this.shadowRT.setMaterialForRendering(host, li === 2 ? this.depthProxyMat : this.depthMat)   // (the far LOD's: setPosed)
       return host
@@ -337,10 +341,8 @@ export class Units {
     const pad = this.sidePad
     h.lo.set(minX - pad, minY - 0.3, minZ - pad); h.hi.set(maxX + pad, maxY + top, maxZ + pad)
     for (const m of h.lod) m.getBoundingInfo().reConstruct(h.lo, h.hi)
-    // (the simple shadows' bounds: stretched away from the sun by the longest shadow, as tall as the far figures grow)
-    const sx = -SUN.x / SUN.y * top, sz = -SUN.z / SUN.y * top, k = this.scratch
-    k.a.set(Math.min(h.lo.x, h.lo.x + sx), h.lo.y, Math.min(h.lo.z, h.lo.z + sz)); k.b.set(Math.max(h.hi.x, h.hi.x + sx), h.hi.y, Math.max(h.hi.z, h.hi.z + sz))
-    for (const m of h.lod.slice(3)) m.getBoundingInfo().reConstruct(k.a, k.b)
+    // (the simple shadow's bounds: stretched away from the sun by the longest shadow, as tall as the far figures grow)
+    const k = this.scratch; shadowBox(h, top, k.a, k.b); h.lod[3].getBoundingInfo().reConstruct(k.a, k.b)
     h.stale.fill(true); h.staleNext.fill(true)
     this.placeFlag(h)
     if (changed) h.staleSet.fill(true)
@@ -367,7 +369,7 @@ export class Units {
     const [r0, r1] = this.band, u = Math.min(1, Math.max(0, (this.camera.radius - r0) / Math.max(1e-6, r1 - r0)))
     const f = this.shadows && this.simpleFar ? u * u * (3 - 2 * u) : 0
     if (f !== this.far) { this.far = f; for (const m of this.receivers) m.setFloat('uUnitFar', f) }
-    const mapOn = this.shadows && f < 1, decalOn = this.shadows && this.simpleFar && f > 0
+    const mapOn = this.shadows && f < 1, decalOn = this.shadows && this.simpleFar && f > 0 && this.decal !== null
     if (mapOn && !this.mapOn) { this.smBox.set = false; this.smStep = -1; this.smEmpty = false }   // (back from the simple shadows alone: fitted and drawn afresh)
     this.target(this.shadowRT, mapOn); this.mapOn = mapOn
     if (this.shadows || this.trampleOn) this.castView()   // (only the sun's box and the trodden mask read it)
@@ -376,7 +378,7 @@ export class Units {
     for (const m of this.mats.values()) m.setFloat('uVATStep', step)
     for (const m of this.farMats.values()) m.setFloat('uVATStep', step)
     this.depthMat.setFloat('uVATStep', step); this.depthVatMat.setFloat('uVATStep', step); this.depthProxyMat.setFloat('uVATStep', step)
-    for (const m of [this.decalDepth, this.decalColour]) if (m && decalOn) { m.setFloat('uStepFrac', this.smooth ? this.stepFrac : 0); m.setFloat('uUnitFar', f) }   // (stepped with the figures under ?smoothmove=0)
+    if (decalOn) { this.decal?.setFloat('uStepFrac', this.smooth ? this.stepFrac : 0); this.decal?.setFloat('uUnitFar', f) }   // (stepped with the figures under ?smoothmove=0)
     if (this.smooth) {
       for (const m of [...this.mats.values(), ...this.farMats.values(), this.depthMat, this.depthVatMat, this.depthProxyMat]) m.setFloat('uStepFrac', this.stepFrac)
       this.flagMat?.setFloat('uStepFrac', this.stepFrac)
@@ -401,15 +403,15 @@ export class Units {
       const px = FIGURE * pxPerM / Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
       const near = h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1
       if (near !== h.near && this.casterNear) moved = true
-      h.near = near; h.lod[0].isVisible = near; h.lod[1].isVisible = !near; h.lod[3].isVisible = h.lod[4].isVisible = decalOn
+      h.near = near; h.lod[0].isVisible = near; h.lod[1].isVisible = !near; h.lod[3].isVisible = decalOn
       // the LOD drawn, the far LOD when it casts for a battalion drawn near, the simple shadows while they show;
       // the hidden one is updated when drawn again
       const kc = this.casterOf(h)
       for (let k = 0; k < h.lod.length; k++) {
-        if (k !== (near ? 0 : 1) && !(mapOn && k === kc) && !(decalOn && k >= 3)) continue
+        if (k !== (near ? 0 : 1) && !(mapOn && k === kc) && !(decalOn && k === 3)) continue
         if (h.stale[k]) { this.upload(h.lod[k], 'matrix', h.matrices.length); h.stale[k] = false }
         if (h.staleSet[k]) { this.upload(h.lod[k], 'aVAT', h.settings.length); h.staleSet[k] = false }
-        if (h.staleNext[k] && (k >= 3 || this.smooth)) { this.upload(h.lod[k], 'aNext', h.next.length); h.staleNext[k] = false }
+        if (h.staleNext[k] && (k === 3 || this.smooth)) { this.upload(h.lod[k], 'aNext', h.next.length); h.staleNext[k] = false }
       }
     }
     if (this.trampleOn) this.trample(T, anyMoved)
@@ -421,7 +423,7 @@ export class Units {
         this.flagStale = false; tr(TR.flag)
       }
     }
-    if (decalOn) for (const m of [this.decalDepth, this.decalColour]) m?.setVector2('uFarK', this.farK)
+    if (decalOn) this.decal?.setVector2('uFarK', this.farK)
     if (!mapOn) return
     const refit = this.fitSun()
     if (refit) tr(TR.sunRefit)
@@ -582,38 +584,43 @@ export class Units {
 
   // whether a battalion's shadow can reach the view: its bounds stretched away from the sun by the longest shadow (a
   // figure's height, top, down to the ground) cross the camera's frustum (camPlanes, set by the caller)
-  private shadowInView(h: Host, top = SHADOW_H): boolean {
-    const sx = -SUN.x / SUN.y * top, sz = -SUN.z / SUN.y * top   // the shadow's reach from a figure's top
-    const lo = h.lo, hi = h.hi, x0 = Math.min(lo.x, lo.x + sx), x1 = Math.max(hi.x, hi.x + sx), z0 = Math.min(lo.z, lo.z + sz), z1 = Math.max(hi.z, hi.z + sz), y0 = lo.y - top
+  private shadowInView(h: Host): boolean {
+    const k = this.scratch; shadowBox(h, SHADOW_H, k.a, k.b); const lo = k.a, hi = k.b
     // outside a plane: the box's corner most along the plane's normal is behind it
-    return !this.camPlanes.some(p => p.normal.x * (p.normal.x > 0 ? x1 : x0) + p.normal.y * (p.normal.y > 0 ? hi.y : y0) + p.normal.z * (p.normal.z > 0 ? z1 : z0) + p.d < 0)
+    return !this.camPlanes.some(p => p.normal.x * (p.normal.x > 0 ? hi.x : lo.x) + p.normal.y * (p.normal.y > 0 ? hi.y : lo.y) + p.normal.z * (p.normal.z > 0 ? hi.z : lo.z) + p.d < 0)
   }
 
-  // the simple shadows' shape and their two passes' materials, made once when first asked for (decision 0049): the
-  // depth pass writes depth alone, the colour pass darkens where its depth is the nearest (unitdecal.frag)
+  // the simple shadows' shape and material, made once when first asked for (decision 0049; unitdecal.*). Each covered
+  // sample is darkened once whatever overlaps it: alpha to coverage gives the shape's soft edge as samples, the stencil
+  // lets only the first shadow at a sample through (it marks it), and the blend is dst · src with the alpha kept (the
+  // lens codes): (ZERO, SRC_COLOR) and (ZERO, ONE), set at each bind over the mode it is drawn with, then put back
   private useDecals(): void {
-    if (this.decalDepth) return
+    if (this.decal) return
+    if (!this.shade) throw new Error('units: the simple shadows need the ground\'s shade (Units.shade, src/look/bakes.ts unitShade)')
     const t0 = performance.now(), d = this.data
     const shape = shadowShape(d, d.lods[1].name, [SUN.x, SUN.y, SUN.z], ROLES, { facings: SHAPE_FACINGS, posed: this.posedFar })
     this.shapeMs = performance.now() - t0
     const tex = new RawTexture(shape.data, shape.width, shape.height, Constants.TEXTUREFORMAT_R, this.scene, true, false, Constants.TEXTURE_TRILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_UNSIGNED_BYTE)
     tex.name = 'figureShadowShape'; tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
-    const make = (pass: 'Depth' | 'Colour') => {
-      const m = this.mats0.make(`unitShadow${pass}`, DECAL_VS, DECAL_FS, { attributes: ['position', 'aVAT', 'aNext'], uniforms: ['uRoleStart', 'uShapeBox', 'uShapeCell', 'uShapeTexel', 'uShDir', 'uStepFrac', 'uFarK', 'uFarScale', 'uDecalLift', 'uDecalBias'], samplers: ['uShapeTex'], alpha: true,
-        defines: [`#define FACINGS ${SHAPE_FACINGS.toFixed(1)}`, ...(pass === 'Depth' ? ['#define DECAL_DEPTH'] : []), ...(this.farScaleOn ? ['#define FAR_SCALE'] : []), ...(this.groundMap ? ['#define GROUND_MAP'] : [])] })
-      m.backFaceCulling = false; m.setTexture('uShapeTex', tex)
-      m.setVector4('uRoleStart', new Vector4(...ROLES.map(r => d.ranges[r].start)))
-      m.setVector4('uShapeBox', new Vector4(shape.across[0], shape.along[0], shape.across[1] - shape.across[0], shape.along[1] - shape.along[0]))
-      m.setVector4('uShapeCell', new Vector4(shape.cellW, shape.cellH, 1 / shape.width, 1 / shape.height))
-      m.setVector2('uShapeTexel', new Vector2(1 / shape.texel, shape.margin)); m.setVector2('uShDir', new Vector2(...shape.dir))
-      m.setFloat('uStepFrac', 0); m.setVector2('uFarScale', this.farScaleV); m.setFloat('uDecalLift', this.decalLift); m.setFloat('uDecalBias', DECAL_BIAS)
-      if (pass === 'Depth') { m.disableColorWrite = true; m.forceDepthWrite = true }
-      // dst · (1 − src), the alpha kept (src alpha 0): the colour pass's darkening, where its depth is the darkest's
-      else { m.alphaMode = Constants.ALPHA_SUBTRACT; m.disableDepthWrite = true; m.depthFunction = Constants.LEQUAL }
-      return m
-    }
-    this.decalDepth = make('Depth'); this.decalColour = make('Colour')
-    for (const h of this.hosts) { h.lod[3].material = this.decalDepth; h.lod[4].material = this.decalColour }
+    const m = this.mats0.make('unitShadow2D', DECAL_VS, DECAL_FS, { attributes: ['position', 'aVAT', 'aNext'], uniforms: ['uRoleStart', 'uShapeBox', 'uShapeCell', 'uShapeTexel', 'uShapeSize', 'uShDir', 'uStepFrac', 'uFarK', 'uFarScale', 'uDecalLift'], samplers: ['uShapeTex', 'uUnitShade'], alpha: true,
+      defines: [`#define FACINGS ${SHAPE_FACINGS.toFixed(1)}`, `#define LIFT_RAMP ${LIFT_RAMP.toFixed(2)}`, `#define SHAPE_MIPS ${SHAPE_MIPS.toFixed(1)}`, ...(this.farScaleOn ? ['#define FAR_SCALE'] : []), ...(this.groundMap ? ['#define GROUND_MAP'] : [])] })
+    m.backFaceCulling = false; m.disableDepthWrite = true; m.setTexture('uShapeTex', tex); m.setTexture('uUnitShade', this.shade)
+    m.setVector4('uRoleStart', new Vector4(...ROLES.map(r => d.ranges[r].start)))
+    m.setVector4('uShapeBox', new Vector4(shape.across[0], shape.along[0], shape.across[1] - shape.across[0], shape.along[1] - shape.along[0]))
+    m.setVector4('uShapeCell', new Vector4(shape.cellW, shape.cellH, 1 / shape.width, 1 / shape.height)); m.setVector2('uShapeSize', new Vector2(shape.width, shape.height))
+    m.setVector2('uShapeTexel', new Vector2(1 / shape.texel, shape.margin)); m.setVector2('uShDir', new Vector2(...shape.dir))
+    m.setFloat('uStepFrac', 0); m.setVector2('uFarScale', this.farScaleV); m.setFloat('uDecalLift', this.lift)
+    m.alphaMode = Constants.ALPHA_EXCLUSION   // (a mode nothing else draws with: its blend is replaced at each bind, below)
+    const st = m.stencil; st.enabled = true; st.func = Constants.NOTEQUAL; st.funcRef = 1; st.funcMask = 0xff; st.mask = 0xff
+    st.opStencilFail = Constants.KEEP; st.opDepthFail = Constants.KEEP; st.opStencilDepthPass = Constants.REPLACE
+    const engine = this.scene.getEngine() as unknown as { _gl?: WebGL2RenderingContext; _alphaState?: { setAlphaBlendFunctionParameters(a: number, b: number, c: number, e: number, t: number): void } }
+    m.onBindObservable.add(() => {
+      engine._alphaState?.setAlphaBlendFunctionParameters(GL_ZERO, GL_SRC_COLOR, GL_ZERO, GL_ONE, 0)
+      engine._gl?.enable(engine._gl.SAMPLE_ALPHA_TO_COVERAGE)
+    })
+    m.onUnBindObservable.add(() => engine._gl?.disable(engine._gl.SAMPLE_ALPHA_TO_COVERAGE))
+    this.decal = m
+    for (const h of this.hosts) h.lod[3].material = m
   }
 
   /** the figures' cast shadows on or off: off, the receivers compile without them (the bench's baseline arm). On, the
@@ -657,7 +664,7 @@ export class Units {
   setFarScale(on: boolean): void {
     this.farScaleOn = on
     for (const m of this.farMats.values()) m.setDefine('#define FAR_SCALE', on)
-    for (const m of [this.decalDepth, this.decalColour]) m?.setDefine('#define FAR_SCALE', on)   // (their simple shadows with them)
+    this.decal?.setDefine('#define FAR_SCALE', on)   // (their simple shadows with them)
   }
   /** each side's uniforms' coat colours (the guard's ΔE to the coat) */
   coats(): string[][] {
@@ -795,4 +802,10 @@ export class Units {
   get figures(): number { return this.hosts.length * this.slot.line.length }
   /** the battalions as placed (the tools aim their cameras at them) */
   get battalions(): Battalion[] { return this.hosts.map(h => h.b) }
+}
+
+// a battalion's bounds stretched away from the sun by the shadow of a figure top m tall, and down by it (into lo, hi)
+function shadowBox(h: Host, top: number, lo: Vector3, hi: Vector3): void {
+  const sx = -SUN.x / SUN.y * top, sz = -SUN.z / SUN.y * top
+  lo.set(Math.min(h.lo.x, h.lo.x + sx), h.lo.y - top, Math.min(h.lo.z, h.lo.z + sz)); hi.set(Math.max(h.hi.x, h.hi.x + sx), h.hi.y, Math.max(h.hi.z, h.hi.z + sz))
 }

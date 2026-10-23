@@ -27,6 +27,7 @@ import DEPTH_VS from './shaders/depth.vert?raw'
 import DEPTH_FS from './shaders/depth.frag?raw'
 import BAKE_FS from './shaders/bake.frag?raw'
 import GB_FS from './shaders/gbounce.frag?raw'
+import SHADE_FS from './shaders/unitshade.frag?raw'
 import TRUNK_VS from './shaders/trunkshadow.vert?raw'
 import TRUNK_FS from './shaders/trunkshadow.frag?raw'
 import CARD_DEPTH_VS from './shaders/canopy-depth.vert?raw'
@@ -35,7 +36,8 @@ import { withCards } from './canopy.ts'
 
 // sky: the sky's occlusion's time on load and the occlusion's range after it (null with the soft shadows off)
 // groundBounce: the bounce map (LC5), rebaked after the light map and when the season is released (src/look/main.ts)
-export interface Bakes { lightCam: FreeCamera; shadowRT: RenderTargetTexture; lightMap: RenderTargetTexture; groundBounce: RenderTargetTexture; bakeMat: ShaderMaterial; lightVP: Matrix; smTexel: Vector2; sky: SkyBake | null }
+// unitShade: the simple shadows' shade (decision 0049), made when first asked for (the armies), rebaked after the bounce map
+export interface Bakes { lightCam: FreeCamera; shadowRT: RenderTargetTexture; lightMap: RenderTargetTexture; groundBounce: RenderTargetTexture; bakeMat: ShaderMaterial; lightVP: Matrix; smTexel: Vector2; sky: SkyBake | null; unitShade(): RenderTargetTexture }
 export interface SkyBake { ms: number; min: number; mean: number }
 
 const TILE_W = D.spec.tile, AO_N = D.spec.sizes.aoTex, LM_N = D.spec.sizes.lightMap, LZ0 = D.spec.depth.near, LZ1 = D.spec.depth.far, SM_FADE_M = D.spec.shadowFade
@@ -168,7 +170,22 @@ export function buildBakes(scene: Scene, mats: Materials, water: BaseTexture, ti
   groundBounce.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE; scene.customRenderTargets.push(groundBounce)
   lightMap.onAfterRenderObservable.add(() => groundBounce.resetRefreshCounter())
   mats.bindAll(m => m.setTexture('uGB', groundBounce))   // read where GROUND_BOUNCE is defined (the ground, the water's shore band, the meadow)
-  return { lightCam, shadowRT, lightMap, groundBounce, bakeMat, lightVP, smTexel, sky }
+
+  /* ---------- the simple shadows' shade (decision 0049, shaders/unitshade.frag): the ratio of the ground painted in a
+     full cast shadow to it painted as it is, top-down over the tile with the light map's camera, after the bounce map
+     (it reads it); made only when the armies ask for it ---------- */
+  let shade: RenderTargetTexture | null = null
+  const unitShade = () => {
+    if (shade) return shade
+    const m = mats.make('unitShade', TER_VS, SHADE_FS, { attributes: ['position', 'normal', 'aRiver'], defines: ['#define GROUND_BOUNCE'] })
+    const t = shade = new RenderTargetTexture('unitShade', GB_N, scene, false, true, Constants.TEXTURETYPE_UNSIGNED_BYTE, false, Texture.BILINEAR_SAMPLINGMODE)
+    t.activeCamera = lmCam; t.clearColor = new Color4(1, 1, 1, 1); t.renderList = [terrains[0]]; t.setMaterialForRendering(terrains[0], m)
+    t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
+    t.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE; scene.customRenderTargets.push(t)
+    groundBounce.onAfterRenderObservable.add(() => t.resetRefreshCounter())
+    return t
+  }
+  return { lightCam, shadowRT, lightMap, groundBounce, bakeMat, lightVP, smTexel, sky, unitShade }
 }
 
 // The sky's occlusion (docs/plans/done/soft-shadows.md, B): the ground at each texel of the occlusion texture sees

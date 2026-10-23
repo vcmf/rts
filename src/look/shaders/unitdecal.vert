@@ -7,12 +7,15 @@ precision highp float;attribute vec3 position;
 // first step (aVAT.x) his role's row (uRoleStart). uShapeBox: what a cell holds (m from his feet: across, along, then
 // their spans); uShapeCell: a cell's texels across and along, 1 / the atlas's size; uShapeTexel: 1 / the shape's texel
 // (m), a cell's border (texels). Each vertex sits on the ground (the meadow map's height, GROUND_MAP; else his root's),
-// then is drawn toward the camera along its own view ray by uDecalLift / the ray's steepness (no shift on screen: in
-// depth it stands over the grass and his legs up to uDecalLift high, so they darken with the ground under them). vZ:
-// the clip depth here and uDecalBias m nearer, for the darkest-wins depth (unitdecal.frag)
-uniform mat4 viewProjection;uniform vec3 uCamPos;
+// then is drawn toward the camera along its own view ray by uDecalLift / the ray's steepness: no shift on screen, and in
+// depth it stands over the grass and the legs of the men in it. Not where his own feet stand (the lift grows from his
+// feet over LIFT_RAMP m along the shadow): with the sun behind the camera the ground behind him lies under his shins on
+// screen, and a lifted shadow there would darken them. vK: the ground's shade there (the ratio of its painted cast
+// shadow to its light, uUnitShade: src/look/shaders/unitshade.frag), once a vertex (it varies over metres)
+uniform mat4 viewProjection;uniform vec3 uCamPos;uniform sampler2D uUnitShade;
 attribute vec3 aVAT;attribute vec3 aNext;
-uniform vec4 uRoleStart,uShapeBox,uShapeCell;uniform vec2 uShDir,uShapeTexel;uniform float uStepFrac,uDecalLift,uDecalBias;
+uniform vec4 uRoleStart,uShapeBox,uShapeCell;uniform vec2 uShDir,uShapeTexel;uniform float uStepFrac,uDecalLift;
+uniform mat4 uLMVP;
 #ifdef GROUND_MAP
 uniform sampler2D uMeadow;
 #endif
@@ -22,7 +25,7 @@ uniform sampler2D uMeadow;
 // height throws along the sun, past his feet) by y
 uniform vec2 uFarK,uFarScale;
 #endif
-varying vec2 vUV0,vUV1;varying float vT;varying vec3 vW;varying vec4 vZ;
+varying vec2 vUV0,vUV1;varying float vT;varying vec3 vK;
 void main(){
   #include<instancesVertex>
   vec3 p=finalWorld[3].xyz+aNext*uStepFrac;
@@ -37,9 +40,10 @@ void main(){
   #else
   float gy=p.y;
   #endif
-  vec3 g=vec3(xz.x,gy,xz.y),toCam=normalize(uCamPos-g),q=g+toCam*(uDecalLift/max(0.2,toCam.y));
-  vec4 c0=viewProjection*vec4(q,1.0),c1=viewProjection*vec4(q+toCam*uDecalBias,1.0);
-  gl_Position=c0;vZ=vec4(c0.zw,c1.zw);vW=g;
+  vec3 g=vec3(xz.x,gy,xz.y),toCam=normalize(uCamPos-g);
+  float lift=uDecalLift*smoothstep(0.0,LIFT_RAMP,l.y);
+  gl_Position=viewProjection*vec4(g+toCam*(lift/max(0.2,toCam.y)),1.0);
+  vec4 lp=uLMVP*vec4(g,1.0);vK=textureLod(uUnitShade,lp.xy/lp.w*0.5+0.5,0.0).rgb;
   float a=atan(-finalWorld[0].z,finalWorld[0].x),fk=fract(a/6.2831853)*FACINGS,k0=floor(fk),k1=mod(k0+1.0,FACINGS);
   vT=fk-k0;
   float row=abs(aVAT.x-uRoleStart.y)<0.5?1.0:abs(aVAT.x-uRoleStart.z)<0.5?2.0:abs(aVAT.x-uRoleStart.w)<0.5?3.0:0.0;

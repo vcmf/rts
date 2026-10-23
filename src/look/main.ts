@@ -67,7 +67,8 @@ setRiver(look.river); setHeightfield(look.hf, look.far, D.spec.tile / 2)
   checkGround(D.spec, lo, hi, farLo)
 }
 const canvas = document.getElementById('c') as HTMLCanvasElement
-const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false }, false)
+// (a stencil: the soldiers' simple shadows darken each sample once, src/look/units.ts; the scene's target takes it too)
+const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: true }, false)
 engine.setHardwareScalingLevel(1)
 // the scene's own lines (the finishing chain's: under the upscale, its first target's; called only from the frames,
 // after the chain is made below)
@@ -345,6 +346,7 @@ if (armiesParam !== null) {
   units.holdShare = smHold !== 'fixed'; units.proxyCasters = shadowLod !== 'far'
   units.simpleFar = uShadowFar !== 'map'; if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
   units.groundMap = meadow !== null; if (decalLift !== null) units.decalLift = +decalLift
+  if (units.simpleFar) units.shade = bakes.unitShade()
   if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)
