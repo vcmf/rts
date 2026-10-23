@@ -301,9 +301,6 @@ const bit = (k: string) => { const v = params.get(k); if (v !== null && v !== '0
 const uShadowRate = bit('ushadowrate'), uShadowLod = bit('ushadowlod'), uShadowVs = bit('ushadowvs'), farPal = bit('farpal')
 // ?uvat=0: the far LOD and its casters skinned, not posed; ?ucull=0: every caster in the sun's box
 const uVat = bit('uvat'), uCull = bit('ucull')
-// ?tinylod=0: no tiny LOD (docs/plans/active/armies-32k.md, step 3); ?tinypx=<px>: its switch, the figure's height
-const tinyLod = bit('tinylod'), tinyPxParam = params.get('tinypx')
-if (tinyPxParam !== null && !(/^\d+(\.\d+)?$/.test(tinyPxParam) && +tinyPxParam > 0 && +tinyPxParam < 48)) throw new Error(`?tinypx must be a number of pixels over 0 and under 48 (the far LOD's switch), not ${tinyPxParam}`)
 // the shadow fix: ?smhold=fixed, the held sun box (and the trodden mask's) as batch B's; ?shadowlod=far, the far LOD casts
 const smHold = params.get('smhold'), shadowLod = params.get('shadowlod')
 if (smHold !== null && smHold !== 'fixed') throw new Error(`?smhold must be fixed, not ${smHold}`)
@@ -335,7 +332,6 @@ if (armiesParam !== null) {
   const blocked = (x: number, z: number) => { if (Math.max(Math.abs(x), Math.abs(z)) > D.spec.tile / 2 - 30) return true; const q = riverQuery(x, z); return (q !== null && q.dist < 20) || onPaving(x, z, 3) || nearTree(x, z) }
   // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
   units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides), era.uniforms, () => S.t)
-  units.tinyPx = tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : units.tinyPx
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.tightCull = uCull ?? true
   units.holdShare = smHold !== 'fixed'; units.proxyCasters = shadowLod !== 'far'
   if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
