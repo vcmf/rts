@@ -62,6 +62,12 @@ Out of scope: lit relief, woods as canopy, roofs (decision 0051's bake, a later 
   ground under a route reads and the blocks stay the strongest marks, one fill for a block's sides. Left: the corners
   projected twice per unit (74 units).
 
+- **After the owner's test** (2026-10-23): a group order's arrow could start in empty ground, away from every block.
+  It started at the group's average progress along one route laid from its centre, which a spread group or one whose
+  battalions dropped out does not stand on (the ink style does the same, faintly). In the lit style the arrow's tail now
+  starts at the centre of the battalions still on the order, where they stand, and joins the route where it passes
+  nearest them.
+
 ## Results
 
 - Lit screenshots (1600×900, Windows Chrome over CDP, SwiftShader): the map in summer, mid zoom in summer and winter

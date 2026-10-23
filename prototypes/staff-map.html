@@ -915,10 +915,15 @@ function cleanFootprints(now){const dt=clamp((now-(FOOT_NOW||now))/1000,0,0.1);F
     if(o.removed&&GT-f.pts[f.pts.length-1][2]>FOOT_FADE)FOOTS.delete(o);}
 }
 // the lit style's command arrow: one tapered outline along the smoothed path, the head part of it, a notched tail
-function arrowLit(o,col,alpha,band,s0,s1,withHead){
+// where along a world path a point lies nearest: metres from the path's start
+function nearestS(P,x,z){let best=Infinity,bs=0,acc=0;for(let i=1;i<P.length;i++){const a=P[i-1],b=P[i],dx=b[0]-a[0],dz=b[1]-a[1],l2=dx*dx+dz*dz||1,
+  t=clamp(((x-a[0])*dx+(z-a[1])*dz)/l2,0,1),d=Math.hypot(a[0]+dx*t-x,a[1]+dz*t-z),l=Math.sqrt(l2);if(d<best){best=d;bs=acc+t*l;}acc+=l;}return bs;}
+// from: the centre of the battalions still on the order, where they stand: the arrow's tail starts at the blocks
+function arrowLit(o,col,alpha,band,s0,s1,withHead,from){
   if(s1<=s0+0.5)return;   // the reveal has not reached the troops yet: nothing ahead of them to draw
   const n=Math.min(160,Math.max(8,Math.ceil((s1-s0)/(MPP*6)))),pts=[];   // about 6 px apart, at most 160 a frame
   for(let i=0;i<=n;i++){const p=P2(...along(o.P,s0+(s1-s0)*i/n));if(!behind(p))pts.push(p);}
+  if(from){const f=P2(from[0],from[1]);if(!behind(f))pts.unshift(f);}
   if(pts.length<2)return;
   for(let it=0;it<3;it++)for(let i=1;i<pts.length-1;i++)pts[i]=[(pts[i-1][0]+2*pts[i][0]+pts[i+1][0])/4,(pts[i-1][1]+2*pts[i][1]+pts[i+1][1])/4];
   const cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
@@ -958,7 +963,9 @@ function drawOrders(now,alpha){
     const s=SIDES[o.side],band=clamp((o.group?36:24)/MPP,o.group?8:6,o.group?20:14),left=o.len-o.prog,headM=Math.min(band*1.7*MPP,left*0.6),headW=band*2.3*Math.min(1,headM/(band*1.7*MPP));
     if(left<4)continue;
     const reveal=easeIO(clamp((now-o.t0)/550,0,1))*o.len,end=Math.min(reveal,o.len),bandEnd=Math.max(o.prog,end-headM);
-    if(LIT){arrowLit(o,s.c,alpha,band,o.prog,end,end>=o.len-1);continue;}
+    if(LIT){const us=o.units.map(i=>UNITS[i]).filter(u=>u.order===o&&!u.gone);if(!us.length)continue;
+      const cx=us.reduce((t,u)=>t+u.x,0)/us.length,cz=us.reduce((t,u)=>t+u.z,0)/us.length,from=nearestS(o.P,cx,cz);
+      arrowLit(o,s.c,alpha,band,Math.max(from,o.prog),end,end>=o.len-1,[cx,cz]);continue;}
     ink.globalAlpha=alpha*0.36;ink.strokeStyle=css(s.c);ink.lineCap='butt';ink.lineWidth=band;if(bandEnd>o.prog)strokePath(o.P,o.prog,bandEnd);
     if(end<o.len-1)continue;
     const tip=P2(...along(o.P,o.len)),base=P2(...along(o.P,Math.max(0,o.len-headM)));if(behind(tip)||behind(base))continue;
