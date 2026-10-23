@@ -68,6 +68,9 @@ sheet's own drop shadow, water as cut-outs (the research's further suggestions).
   lighter ink too (recorded in `docs/plans/active/map-view-lit-v1.md`). The darkest strip's bound (0.63) is for the
   shadow strips; the hair-thin ink on a shadowed edge reaches about 0.55 of the paper over a pixel's width.
 
+- **The aged band** (the owner: it read as a brown stain): from a brown band 17 % of the sheet deep, to 0.8 × the
+  paper at its darkest, to a thin worn border, 2 % deep and half as dark.
+
 ## Review rounds
 
 - **Round 1** (`/code-review high`): severe: at map zoom the 25 m shadow, the hillshade and the band tint stacked to
