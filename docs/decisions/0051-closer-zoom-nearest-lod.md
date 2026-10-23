@@ -40,7 +40,10 @@ triangles) existed, but a battalion of 414 men drawn with it would be 3.8 M tria
   in the review views). Measured (Metal, 1080p, 20 battalions a side, p50): today's zooms cost the same as main
   (wide 8.7–8.8 against 8.75–9.1 ms, default 10.1 against 10.05–10.65, close 9.75–10.05 against 9.8–10.05); at 15 m
   the nearest LOD costs about nothing (7.3–8.3 ms with it, 7.3–8.2 without): `docs/plans/active/close-zoom.md`.
-- The figure's data grows from 0.76 MB to 1.43 MB (0.47 MB gzipped).
+- The figure's data grows from 0.76 MB to 1.43 MB (0.47 MB gzipped). Its colour roles were corrected with it (the
+  faces' skin, the coat's shade: `docs/plans/active/close-zoom.md`), the far LOD's too (its coat 17.5 → 23.3 % of the
+  figure): the far figures' look and the guard's figure numbers move, and the 32k branch's tiny-LOD calibration was
+  made on the old data.
 - The checks that view the closest zoom (`tools/macro-check.mjs`, `tools/water-look-check.mjs`,
   `tools/detail-check.mjs`, `tools/water-check.mjs`, the ablation kit) now view it at 15 m.
 - The cinematic camera without the RTS limits (for the history videos) remains a separate mode.

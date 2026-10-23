@@ -20,7 +20,7 @@ export interface Spec {
     horizonMargin: number                     // no frame corner comes nearer the horizon than this, rad (decision 0002)
     focusY: number                            // the focus height, m
     clearance: number                         // the eye never comes nearer the ground under it than this, m: the zoom
-                                              // is held out where it would (src/look/post.ts, holdClear)
+                                              // is held out where it would (clearRadius, ZoomHold; src/look/post.ts)
   }
   ground: { lo: number; hi: number }          // lo: the lowest ground anywhere; hi: the highest on the tile, m (checked against the data)
   texel: { shadow: number; light: number; ao: number }   // the largest texel each bake may have, m
@@ -201,14 +201,36 @@ export function shadowMapSize(d: Derived, boxW: number, boxH: number, sunSinElev
   return { w, h }
 }
 
+// m: the closest zoom the look was tuned at (decision 0051 keeps what was tuned there: the depth of field's zoom ease,
+// the render scale's Auto edges, the bench's close camera)
+export const TUNED_R = 45
+
 // The radius that keeps the eye `clearance` above the ground under it (the closest zoom over high ground: reachOf
-// assumes it): the radius asked for, or more, at most rMax. The orbit camera's eye: the focus plus r (cos a sin b,
-// cos b, sin a sin b); a few fixed-point steps, the ground under the eye moving with the radius
+// assumes it): the radius asked for if the eye clears there, else the first one out that does (0.5 m steps, then
+// bisected to a millimetre; the ground under the eye moves with the radius, so no fixed point is assumed), at most
+// rMax. The orbit camera's eye: the focus plus r (cos a sin b, cos b, sin a sin b)
 export function clearRadius(c: Spec['camera'], r: number, alpha: number, beta: number, tx: number, ty: number, tz: number, ground: (x: number, z: number) => number): number {
   const ca = Math.cos(alpha), sa = Math.sin(alpha), sb = Math.sin(beta), cb = Math.cos(beta)
-  let out = r
-  for (let i = 0; i < 3; i++) out = Math.min(c.rMax, Math.max(r, (ground(tx + out * ca * sb, tz + out * sa * sb) + c.clearance - ty) / cb))
-  return out
+  const clears = (q: number) => q * cb + ty - ground(tx + q * ca * sb, tz + q * sa * sb) >= c.clearance
+  if (clears(r)) return r
+  let lo = r, hi = Math.min(c.rMax, r + 0.5)
+  while (!clears(hi)) { if (hi >= c.rMax) return c.rMax; lo = hi; hi = Math.min(c.rMax, hi + 0.5) }
+  while (hi - lo > 1e-3) { const m = (lo + hi) / 2; if (clears(m)) hi = m; else lo = m }
+  return hi
+}
+
+/** The player's zoom kept apart from the held one: the camera shows the wanted radius, or more where the hold says
+ *  (clearRadius over high ground), and comes back in when the ground falls away. A radius set from outside (the
+ *  player's zoom, a tool's view) is the new wanted one */
+export class ZoomHold {
+  wanted = NaN
+  private shown = NaN
+  /** the radius to show, given the camera's now and the hold */
+  step(current: number, hold: (r: number) => number): number {
+    if (current !== this.shown) this.wanted = current
+    this.shown = hold(this.wanted)
+    return this.shown
+  }
 }
 
 // the drawn ground must stay inside the spec's range, which the camera's reach assumes: the tile within lo..hi,

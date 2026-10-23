@@ -3,7 +3,7 @@
 // look data is what the authoring step builds now.
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { SPEC, checkGround, clearRadius, derive, shadowMapSize, type Spec } from '../src/look/spec.ts'
+import { SPEC, TUNED_R, ZoomHold, checkGround, clearRadius, derive, shadowMapSize, type Spec } from '../src/look/spec.ts'
 import { heightAt, setHeightfield, type Heightfield } from '../src/look/heightfield.ts'
 import { checkLookData, decodeLook, encodeLook } from '../src/look/world/data.ts'
 import { LOOK_FILE, buildLookData } from '../tools/build-look-data.ts'
@@ -57,12 +57,34 @@ describe('world spec', () => {
   })
   it('holds the closest zoom out over high ground, never from 45 m out (decision 0051)', () => {
     const c = SPEC.camera, flat = () => 0, hill = () => 18
-    expect(clearRadius(c, c.rMin, -2, c.betaMax, 0, c.focusY, 0, flat)).toBe(c.rMin)   // flat ground: the eye 19 m up
+    expect(clearRadius(c, c.rMin, -2, c.betaMax, 0, c.focusY, 0, flat)).toBe(c.rMin)   // flat ground: the eye 16.4 m up
     const r = clearRadius(c, c.rMin, -2, c.betaMax, 0, c.focusY, 0, hill)
-    expect(r * Math.cos(c.betaMax) + c.focusY - 18).toBeCloseTo(c.clearance, 9)
+    expect(r * Math.cos(c.betaMax) + c.focusY - 18).toBeGreaterThanOrEqual(c.clearance)
+    expect(r * Math.cos(c.betaMax) + c.focusY - 18 - c.clearance).toBeLessThan(1e-3 * Math.cos(c.betaMax) + 1e-9)
     expect(clearRadius(c, c.rMin, -2, c.betaMax, 0, c.focusY, 0, () => 400)).toBe(c.rMax)
     // (src/look/post.ts holds it only below this radius: today's zooms, 45 m out, never read the ground)
-    expect((SPEC.ground.hi + c.clearance - c.focusY) / Math.cos(c.betaMax)).toBeLessThan(45)
+    expect((SPEC.ground.hi + c.clearance - c.focusY) / Math.cos(c.betaMax)).toBeLessThan(TUNED_R)
+  })
+  it('finds the held radius on a steep slope rising under the eye (0.5 m a metre), the least radius that clears', () => {
+    const c = SPEC.camera, a = -2, b = c.betaMax, ca = Math.cos(a), sa = Math.sin(a)
+    // the ground rises 0.5 m a metre away from the focus toward the eye, from 6 m at the focus
+    const slope = (x: number, z: number) => 6 + 0.5 * (x * ca + z * sa)
+    const clear = (q: number) => q * Math.cos(b) + c.focusY - slope(q * ca * Math.sin(b), q * sa * Math.sin(b)) - c.clearance
+    const r = clearRadius(c, c.rMin, a, b, 0, c.focusY, 0, slope)
+    expect(clear(r)).toBeGreaterThanOrEqual(0); expect(clear(r - 2e-3)).toBeLessThan(0)   // the least radius that clears, to 1 mm
+    expect(r).toBeGreaterThan(c.rMin); expect(r).toBeLessThan(c.rMax)
+  })
+  it('keeps the player\'s zoom apart from the held one: it comes back in on lower ground (ZoomHold)', () => {
+    const z = new ZoomHold()
+    let ground = 0, cam = 15
+    const hold = (w: number) => Math.max(w, 10 + ground)   // a stand-in hold: held out over ground, as clearRadius
+    cam = z.step(cam, hold); expect(cam).toBe(15)
+    ground = 13; cam = z.step(cam, hold); expect(cam).toBe(23)   // over a hill: held out
+    cam = z.step(cam, hold); expect(cam).toBe(23); expect(z.wanted).toBe(15)   // (the shown radius is not taken as wanted)
+    ground = 0; cam = z.step(cam, hold); expect(cam).toBe(15)   // past it: back in to the wanted zoom
+    cam = z.step(40, hold); expect(cam).toBe(40); expect(z.wanted).toBe(40)   // the player zooms out: the new wanted one
+    ground = 35; cam = z.step(cam, hold); expect(cam).toBe(45)
+    cam = z.step(30, hold); expect(z.wanted).toBe(30); expect(cam).toBe(45)   // zooming in while held: wanted moves, still held
   })
   it('refuses ground outside its range', () => {
     expect(() => checkGround(SPEC, 0.4, 20.3, 2.2)).not.toThrow()

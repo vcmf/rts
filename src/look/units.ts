@@ -102,7 +102,6 @@ export class Units {
   private readonly next: number
   private readonly proxy: number
   private readonly hasNearest: boolean
-  private manPlanes = Frustum.GetPlanes(Matrix.Identity())
   /** the shadow map redrawn only when it would change (?ushadowrate=0: every frame): the poses step at the bake's fps,
    *  so a frame between two steps, with the sun's box and the men where they were, would draw the same map */
   lazyShadows = true
@@ -254,8 +253,9 @@ export class Units {
     const rnd = mulberry(1 + this.hosts.length * 7919), jitter = new Float32Array(men * 4)   // ±3 cm, ±4°, a man's own lag: no two alike
     for (let i = 0; i < men; i++) { jitter[i * 4] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 1] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 2] = (rnd() - 0.5) * 0.14; jitter[i * 4 + 3] = rnd() * 2 - 1 }
     const matrices = new Float32Array(men * 16), settings = new Float32Array(men * 3)
-    // (the nearest LOD's buffers its own; the next LOD's swapped to restM, restS while split: setSplit)
-    const n = this.hasNearest ? men : 0, nearM = new Float32Array(n * 16), nearS = new Float32Array(n * 3)
+    // (the nearest LOD's buffers its own, a man's placeholder until the battalion first splits; the next LOD's swapped
+    // to restM, restS while split: setSplit)
+    const nearM = new Float32Array(this.hasNearest ? 16 : 0), nearS = new Float32Array(this.hasNearest ? 3 : 0)
     lod.forEach((m, li) => {
       const own = this.hasNearest && li === 0
       m.thinInstanceSetBuffer('matrix', own ? nearM : matrices, 16, false); m.thinInstanceSetBuffer('aVAT', own ? nearS : settings, 3, false)
@@ -263,7 +263,7 @@ export class Units {
     })
     const k = lod.length
     this.hosts.push({ b, lod, near: false, matrices, settings, jitter, cx: b.x, cz: b.z, lo: new Vector3(), hi: new Vector3(), step: -1, phase: null, stale: Array<boolean>(k).fill(true), staleSet: Array<boolean>(k).fill(true), cycle: -1, index: this.hosts.length,
-      split: false, sel: new Uint8Array(n), nearM, nearS, restM: new Float32Array(n * 16), restS: new Float32Array(n * 3), resplit: true })
+      split: false, sel: new Uint8Array(0), nearM, nearS, restM: new Float32Array(0), restS: new Float32Array(0), resplit: true })
   }
 
   // every man's matrix and clip at the battalion's local time: his place and facing from the script, set on the ground;
@@ -309,6 +309,11 @@ export class Units {
   // buffers swapped to the rest's lists (share writes them) or back to the battalion's own
   private setSplit(h: Host, on: boolean): void {
     h.split = on
+    const men = h.settings.length / 3
+    if (on && h.sel.length !== men) {   // (the lists made at the battalion's first split: no memory for one never split)
+      h.sel = new Uint8Array(men); h.nearM = new Float32Array(men * 16); h.nearS = new Float32Array(men * 3); h.restM = new Float32Array(men * 16); h.restS = new Float32Array(men * 3)
+      h.lod[0].thinInstanceSetBuffer('matrix', h.nearM, 16, false); h.lod[0].thinInstanceSetBuffer('aVAT', h.nearS, 3, false)
+    }
     const l = h.lod[this.next]
     l.thinInstanceSetBuffer('matrix', on ? h.restM : h.matrices, 16, false); l.thinInstanceSetBuffer('aVAT', on ? h.restS : h.settings, 3, false)
     h.lod[0].setEnabled(on && this.shown)
@@ -325,7 +330,7 @@ export class Units {
     for (let i = 0; i < sel.length; i++) {
       const o = i * 16, x = m[o + 12], y = m[o + 13] + FIGURE / 2, z = m[o + 14]
       let want = k / Math.max(1, Math.hypot(cam.x - x, cam.y - y, cam.z - z)) >= (sel[i] ? off : on) ? 1 : 0
-      if (want) for (const p of this.manPlanes) if (p.normal.x * x + p.normal.y * y + p.normal.z * z + p.d <= -MAN_R) { want = 0; break }
+      if (want) for (const p of this.camPlanes) if (p.normal.x * x + p.normal.y * y + p.normal.z * z + p.d <= -MAN_R) { want = 0; break }
       if (want !== sel[i]) { sel[i] = want; changed = true }
     }
     if (!changed && !h.resplit) return false
@@ -363,7 +368,8 @@ export class Units {
     for (const m of this.farMats.values()) m.setVector2('uFarK', this.farK.set(FIGURE * pxPerM, this.lodPx))
     let moved = step !== this.smStep   // (the map changes with the poses' step, the men's places, the casters' LOD)
     let anyMoved = false   // (a battalion's men written this frame: the trodden ground follows)
-    let viewPlanes = false   // (the camera's planes, for the nearest LOD's men: once a frame, when a battalion is split)
+    // the camera's planes, once a frame: the nearest LOD's tests and the shadow casters' cull (cull) read them
+    if ((this.hasNearest && this.nearestPx > 0) || (this.shadows && this.tightCull)) Frustum.GetPlanesToRef(cam.getTransformationMatrix(), this.camPlanes)
     for (const h of this.hosts) {
       if (!this.shown) continue
       const t = T - h.b.offset, cycle = Math.floor(t / CYCLE), local = t - cycle * CYCLE, cycleStart = T - local
@@ -382,9 +388,8 @@ export class Units {
         const lo = h.lo, hi = h.hi, dx = Math.max(lo.x - camPos.x, 0, camPos.x - hi.x), dy = Math.max(lo.y - camPos.y, 0, camPos.y - hi.y), dz = Math.max(lo.z - camPos.z, 0, camPos.z - hi.z)
         split = FIGURE * pxPerM / Math.max(1, Math.hypot(dx, dy, dz)) >= this.nearestPx * (h.split ? 0.8 : 0.9)
         if (split) {
-          if (!viewPlanes) { Frustum.GetPlanesToRef(cam.getTransformationMatrix(), this.manPlanes); viewPlanes = true }
           // (outside a plane: the box's corner most along its normal is behind it)
-          split = !this.manPlanes.some(p => p.normal.x * (p.normal.x > 0 ? hi.x : lo.x) + p.normal.y * (p.normal.y > 0 ? hi.y : lo.y) + p.normal.z * (p.normal.z > 0 ? hi.z : lo.z) + p.d < 0)
+          split = !this.camPlanes.some(p => p.normal.x * (p.normal.x > 0 ? hi.x : lo.x) + p.normal.y * (p.normal.y > 0 ? hi.y : lo.y) + p.normal.z * (p.normal.z > 0 ? hi.z : lo.z) + p.d < 0)
         }
       }
       const near = split || (h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1)
@@ -450,7 +455,8 @@ export class Units {
     for (let j = 0; j < 4; j++) {
       const o = j * 6
       for (let e = 0; e < 2; e++) {
-        const gy = e ? g.hi : g.lo, r = R[o + 4] < -1e-3 ? Math.min((gy - R[o + 1]) / R[o + 4], SM_REACH) : SM_REACH
+        // (a plane above the eye, the closest zooms over a hill: the ray never meets it ahead, so the eye's own point)
+        const gy = e ? g.hi : g.lo, r = R[o + 4] < -1e-3 ? Math.max(0, Math.min((gy - R[o + 1]) / R[o + 4], SM_REACH)) : SM_REACH
         k.pts[n++].set(R[o] + R[o + 3] * r, R[o + 1] + R[o + 4] * r, R[o + 2] + R[o + 5] * r)
       }
     }
@@ -511,7 +517,8 @@ export class Units {
     for (let j = 0; j < 4; j++) {
       Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 0, inv, k.a); Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 1, inv, k.b)
       k.b.subtractToRef(k.a, k.d).normalize()
-      const o = j * 6, r = k.d.y < -1e-3 ? Math.min((y0 - k.a.y) / k.d.y, SM_REACH) : SM_REACH
+      // (the focus's ground above the eye, looking up a slope at the closest zooms: the eye's own point, not one behind it)
+      const o = j * 6, r = k.d.y < -1e-3 ? Math.max(0, Math.min((y0 - k.a.y) / k.d.y, SM_REACH)) : SM_REACH
       R[o] = k.a.x; R[o + 1] = k.a.y; R[o + 2] = k.a.z; R[o + 3] = k.d.x; R[o + 4] = k.d.y; R[o + 5] = k.d.z
       q[j * 2] = k.a.x + k.d.x * r; q[j * 2 + 1] = k.a.z + k.d.z * r
     }
@@ -547,7 +554,7 @@ export class Units {
   private cull(): boolean {
     const was = this.smList; was.length = 0; for (const m of this.culled) was.push(m)
     this.culled.length = 0
-    if (this.tightCull) Frustum.GetPlanesToRef(this.camera.getTransformationMatrix(), this.camPlanes)
+    // (the camera's planes: frameBody's, this frame's)
     const sx = -SUN.x / SUN.y * SHADOW_H, sz = -SUN.z / SUN.y * SHADOW_H   // the shadow's reach from a figure's top
     for (const h of this.hosts) {
       const l = h.lod[this.casterOf(h)]

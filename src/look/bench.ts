@@ -20,7 +20,7 @@ import { RenderTargetTexture } from '@babylonjs/core/Materials/Textures/renderTa
 import { GpuTimer } from './gputimer.ts'
 import { TR, TRACE, TRACE_FIELDS } from './trace.ts'
 import { START } from './post.ts'
-import { D } from './spec.ts'
+import { D, TUNED_R } from './spec.ts'
 
 declare const __BUILD__: string
 
@@ -80,12 +80,12 @@ const MIN_FRAMES = 20
 const stat = (a: number[]): Stat => ({ p50: +q(a, 0.5).toFixed(3), p95: +q(a, 0.95).toFixed(3), max: +Math.max(...a).toFixed(3), n: a.length })
 
 // the close, default and widest zoom (the widest at the steepest pitch, which shows the most world), each at the
-// yaw limits and the default yaw (decision 0010); close at 45 m, the closest zoom the bench's history measured (the
+// yaw limits and the default yaw (decision 0010); close at TUNED_R (45 m), the closest zoom the bench's history measured (the
 // closer zoom, decision 0051: ?benchclosest=1 adds the closest, rMin)
 const closestParam = new URLSearchParams(location.search).get('benchclosest')
 if (closestParam !== null && closestParam !== '0' && closestParam !== '1') throw new Error(`?benchclosest must be 0 or 1, not ${closestParam}`)
 function cameras(): Cam[] {
-  const c = D.spec.camera, out: Cam[] = [], zooms: [string, number, number][] = [['close', START.beta, 45], ['default', START.beta, START.radius], ['wide', c.betaMax, c.rMax]]
+  const c = D.spec.camera, out: Cam[] = [], zooms: [string, number, number][] = [['close', START.beta, TUNED_R], ['default', START.beta, START.radius], ['wide', c.betaMax, c.rMax]]
   if (closestParam === '1') zooms.unshift(['closest', START.beta, c.rMin])
   for (const [z, beta, radius] of zooms)
     for (const [y, da] of [['yaw-45', -c.yawRange], ['yaw0', 0], ['yaw+45', c.yawRange]] as const) out.push({ name: `${z}.${y}`, alpha: c.yaw0 + da, beta, radius })

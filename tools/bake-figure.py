@@ -74,6 +74,12 @@ def texture(mesh):
 def texel(px, W, H, uv):
     return px[min(H - 1, max(0, int(uv[1] * H))), min(W - 1, max(0, int(uv[0] * W)))]
 
+def hsv(rgb):
+    """hue in degrees, saturation, value"""
+    r, g, b = rgb
+    mx, mn = max(r, g, b), min(r, g, b); d = mx - mn or 1e-9
+    return (((g - b) / d) % 6 if mx == r else (b - r) / d + 2 if mx == g else (r - g) / d + 4) * 60, 0 if mx == 0 else (mx - mn) / mx, mx
+
 def texel_role(rgb):
     # the crowd bench's colour test, retuned to the published figure's texture (measured over its 512² texels: its navy
     # runs to a saturation of 0.12, below the trial's cut): the navy before the dark (a coat in shadow is still the coat),
@@ -81,9 +87,7 @@ def texel_role(rgb):
     # docs/plans/active/close-zoom.md); the skin at hue 14..26, saturation 0.38..0.55, value 0.6..0.85: a red cut at hue
     # 24 (the earlier test) took nine tenths of the hands and the faces (#133, the red faces). Hue 12..24 is red only
     # when deeply saturated
-    r, g, b = rgb
-    mx, mn = max(r, g, b), min(r, g, b); v = mx; s = 0 if mx == 0 else (mx - mn) / mx; d = mx - mn or 1e-9
-    hue = (((g - b) / d) % 6 if mx == r else (b - r) / d + 2 if mx == g else (r - g) / d + 4) * 60
+    hue, s, v = hsv(rgb)
     if 195 < hue < 275 and s > .12 and v > .05: return 'coat'
     if ((hue < 12 or hue > 335) and s > .4 or hue < 24 and s > .6) and v > .22: return 'facings'
     if ((s < .3 and 28 < hue < 75) or s < .12) and v > .5: return 'white'
@@ -106,11 +110,16 @@ def tri_role(me, groups, vi, co, rgb):
     # black (a white coat showed them as black blotches); the black there (the cartridge box, the scabbard) is warm or
     # greyer
     if role == 'dark' and .3 < co.z < .78:
-        r, g_, b_ = rgb; mx, mn = max(rgb), min(rgb); d = mx - mn or 1e-9; s = 0 if mx == 0 else d / mx
-        hue = (((g_ - b_) / d) % 6 if mx == r else (b_ - r) / d + 2 if mx == g_ else (r - g_) / d + 4) * 60
+        hue, s, _ = hsv(rgb)
         if 180 < hue < 345 and s > .08: return 'coat'
-    # below the brim, on the head's bone: the face, its shaded side (value under 0.5) still skin, not leather (#133)
-    if role == 'leather' and max(w, key=w.get, default='').endswith('Head'): return 'skin'
+    # the face's shaded side (value under 0.5) is skin, not leather (#133): on the head's bone, its front half (y under
+    # 0.02) within the cheeks (|x| under 0.06), not the visor (the brim's last 2 cm jutting forward: z over 0.865 with
+    # y under -0.06), skin-like shades only (hue 5 to 40, saturation 0.15 to 0.65, value from 0.2); the hair behind,
+    # the visor and the chinscales keep theirs (measured per triangle, docs/plans/active/close-zoom.md)
+    visor = co.z > .865 and co.y < -.06
+    if role == 'leather' and max(w, key=w.get, default='').endswith('Head') and co.y < .02 and abs(co.x) < .06 and not visor:
+        hue, s, v = hsv(rgb)
+        if 5 <= hue <= 40 and .15 <= s <= .65 and v >= .2: return 'skin'
     return role
 
 # ---- the skeleton and the animation, from ANIM's scene (the other LODs' are checked to be the same)
@@ -166,6 +175,9 @@ for lod in LODS:
     if lod != ANIM:
         scene, rig2, mesh = load(lod)
         assert [b.name for b in rig2.data.bones if b.use_deform] == bones, f'{lod}: not the same skeleton as {ANIM}'
+        # its vertices are skinned with ANIM's inverse binds (the bones' texture): the rest poses must agree too
+        gap = max(abs(x - y) for n, ib in zip(bones, inv_bind) for r0, r1 in zip(rig2.data.bones[n].matrix_local, ib.inverted()) for x, y in zip(r0, r1))
+        assert gap < 1e-4, f'{lod}: its rest pose differs from {ANIM}\'s by {gap} (model units)'
     else: scene, rig, mesh = load(lod)
     px, W, H = texture(mesh)
     me = mesh.data.copy(); me.calc_loop_triangles()

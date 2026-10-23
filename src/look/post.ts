@@ -16,7 +16,7 @@ import '@babylonjs/core/Shaders/postprocess.vertex.js'
 import '@babylonjs/core/Shaders/fsr1Upscale.fragment.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { LookState } from './materials.ts'
-import { D, clearRadius } from './spec.ts'
+import { D, TUNED_R, ZoomHold, clearRadius } from './spec.ts'
 import DOFCOC from './shaders/dofcoc.glsl?raw'
 import DOF_FS from './shaders/dof.frag?raw'
 import DOFDOWN_FS from './shaders/dofdown.frag?raw'
@@ -48,9 +48,6 @@ const FOCUS_S = 0.25
 // m: from here out the eye clears the SPEC's highest ground (ground.hi, at the steepest pitch's cos) by its clearance:
 // no ground to read (checked in test/look-spec.test.ts)
 export const CLEAR_BELOW = (D.spec.ground.hi + D.spec.camera.clearance - D.spec.camera.focusY) / Math.cos(D.spec.camera.betaMax)
-// the depth of field's zoom ease from the closest zoom it had (45 m, decision 0040's look) out: nearer, it holds at its
-// closest (the closer zoom, decision 0051, adds no blur)
-export const DOF_R0 = 45
 const TAPS = [16, 24, 32, 48, 64]
 
 // the top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit. ground: the
@@ -64,11 +61,14 @@ export function buildCamera(scene: Scene, canvas: HTMLCanvasElement, ground: (x:
   camera.lowerRadiusLimit = c.rMin
   rtsControls(scene, camera, canvas)
   // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the play area
-  // the closest zoom held out over high ground (clearRadius, src/look/spec.ts: decision 0051): from today's closest
-  // (45 m) out the eye is always higher than the clearance over the tile's highest ground, so it never holds there
+  // the closest zoom held out over high ground (clearRadius, ZoomHold, src/look/spec.ts: decision 0051), the player's
+  // wanted zoom kept apart so it comes back in on lower ground; from CLEAR_BELOW out the eye always clears the tile's
+  // highest ground, so the ground is not read there. The depth of field's zoom ease is reckoned from TUNED_R out
+  const zoom = new ZoomHold()
   camera.mapPanning = true; scene.onBeforeRenderObservable.add(() => {
     const t = camera.target; t.x = Math.max(-PLAY, Math.min(PLAY, t.x)); t.z = Math.max(-PLAY, Math.min(PLAY, t.z))
-    if (camera.radius < CLEAR_BELOW) { const r = clearRadius(c, camera.radius, camera.alpha, camera.beta, t.x, t.y, t.z, ground); if (r !== camera.radius) camera.radius = r }
+    const r = zoom.step(camera.radius, w => w < CLEAR_BELOW ? clearRadius(c, w, camera.alpha, camera.beta, t.x, t.y, t.z, ground) : w)
+    if (r !== camera.radius) camera.radius = r
   })
   camera.upperRadiusLimit = c.rMax; camera.lowerBetaLimit = c.betaMin; camera.upperBetaLimit = c.betaMax
   camera.panningSensibility = 30; camera.minZ = 0.5; camera.maxZ = 5000; camera.fov = c.fov; camera.inertia = 0.88
@@ -288,7 +288,7 @@ export class Post {
       // the blurs by the zoom (strongest at the closest zoom, DOF.wide of it at the widest) and the frame's lines, each
       // frame before the first pass
       d.onApply = e => {
-        const z = Math.min(1, Math.max(0, (camera.radius - DOF_R0) / (c.rMax - DOF_R0))), ease = S.dofAmt * d.height / 1080 * (1 + (DOF.wide - 1) * z)
+        const z = Math.min(1, Math.max(0, (camera.radius - TUNED_R) / (c.rMax - TUNED_R))), ease = S.dofAmt * d.height / 1080 * (1 + (DOF.wide - 1) * z)
         px = DOF.px * ease; npx = DOF_NEAR.px * ease
         e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uOut', p.width, p.height); lensUniforms(e)
       }

@@ -25,7 +25,7 @@ import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn } fr
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
-import { D, checkGround } from './spec.ts'
+import { D, TUNED_R, checkGround } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
 import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS } from './world/data.ts'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
@@ -113,7 +113,7 @@ const sunXZ = new Vector2(SUN.x, SUN.z).normalize()
 const GRASS_PARTS = ['strokes', 'dense', 'big', 'hue'], grassOff = params.get('grassoff')?.split(',') ?? []
 if (grassOff.some(k => !GRASS_PARTS.includes(k)) || (grassOff.length && grassMode !== 'flow')) throw new Error(`?grassoff takes ${GRASS_PARTS.join(', ')}, with the combed meadow (not ?grass=brush)`)
 // the camera's distance from the focus over which the combed clumps go from larger and denser to the default's (the
-// closest zoom is 45 m, the default view 125)
+// closest zoom is 15 m, decision 0051; the default view 125)
 const CLOSE_ZOOM: [number, number] = [70, 110]
 // the strokes' largest footprint, m a pixel (strokeK, macro.glsl: whole under about half of it, gone past it); the near
 // bake reads it too (below)
@@ -363,12 +363,11 @@ const input = (id: string) => byId<HTMLInputElement>(id)
 input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
 // the render scale (decision 0045, after 0036): a fixed one from the panel, or Auto (S.res 0, the default): by zoom,
 // from the camera's radius, a level of AUTO (each change resizes the frame's targets: two over the whole range; the
-// edges at 80 and 88 % of the SPEC's zoom range, 0.75 at the widest), changed only once the radius is AUTO_HOLD m
-// past the level's edge (no flicker at an edge).
+// edges at 80 and 88 % of the zoom range it was tuned on, TUNED_R to rMax: 217 and 234 m; 0.75 at the widest),
+// changed only once the radius is AUTO_HOLD m past the level's edge (no flicker at an edge). The closer zoom (decision
+// 0051) keeps the edges where they were: 0.9 from the closest zoom to the first.
 // The interface is HTML over the canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
-// the edges as shares of the zoom range as it was tuned (45 to 260 m: the closer zoom, decision 0051, keeps them where
-// they were, 0.9 below the first)
-const { rMax } = D.spec.camera, at = (f: number) => 45 + f * (rMax - 45)
+const { rMax } = D.spec.camera, at = (f: number) => TUNED_R + f * (rMax - TUNED_R)
 // From the closest zoom 0.9 (the owner, 2026-10-20: docs/plans/done/render-scale.md). With the upscale (above) the
 // canvas stays at the page's pixels and the finishing chain draws at the scale, resized in place (post.scale: no pass
 // made again), its last pass drawing the screen: EASU at 0.9, bilinear at the wide zooms' scales (EASU cost more than
