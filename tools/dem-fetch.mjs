@@ -1,8 +1,10 @@
 // Fetches a real terrain crop for the staff map prototype's ?dem= mode (docs/plans/active/real-terrain-proto.md): ČÚZK's
 // DMR 4G, the Czech Republic's 5 m bare-ground terrain model (© ČÚZK, open data under CC BY 4.0: attribute "ČÚZK,
-// <year>"), from its image service in one request, resampled onto the prototype's 10 m grid (±2700 × ±1900 m), the
+// <year>"), from its image service in one request at its native 5 m, averaged onto the prototype's 10 m grid
+// (±2700 × ±1900 m; a mean, so ditches and banks narrower than a cell do not alias into bumps), the
 // real ground squeezed by `scale` so a battlefield fits the prototype's frame. Writes a generated .js defining
-// window.DEM = { nx, nz, h, scale, source, credit } (h in centimetres, the south row first), git-ignored under scratch/;
+// window.DEM = { nx, nz, cell, tx, tz, h, scale, source, credit } (h in centimetres, the south row first), git-ignored
+// under scratch/;
 // never commit the data.
 // Usage: node tools/dem-fetch.mjs [lat lon scale out]   (default: Austerlitz, 49.118 16.737 2.5 scratch/dem-austerlitz.js)
 // Open: prototypes/staff-map.html?style=lit&dem= followed by this file's path relative to the page (also from file://)
@@ -16,14 +18,17 @@ const TX = 2700, TZ = 1900, CELL = 10   // the prototype's terrain (prototypes/s
 const GX = Math.round(2 * TX / CELL) + 1, GZ = Math.round(2 * TZ / CELL) + 1
 const R = 6378137, mLon = 111320 * Math.cos(lat0 * Math.PI / 180), mLat = 111200
 const mx = l => R * l * Math.PI / 180, my = l => R * Math.log(Math.tan(Math.PI / 4 + l * Math.PI / 360))   // Web Mercator
-const ex = (TX + CELL / 2) * scale, ez = (TZ + CELL / 2) * scale   // pixels are areas: their centres on the page's -TX + i·CELL nodes
+const K = Math.max(1, Math.round(scale * CELL / 5))   // source pixels (5 m) a page cell's side holds: averaged K × K
+const ex = (TX + CELL / 2) * scale, ez = (TZ + CELL / 2) * scale   // cells are areas: their centres on the page's -TX + i·CELL nodes
 const bbox = [mx(lon0 - ex / mLon), my(lat0 - ez / mLat), mx(lon0 + ex / mLon), my(lat0 + ez / mLat)]
 const url = 'https://ags.cuzk.gov.cz/arcgis/rest/services/3D/dmr4g_wm/ImageServer/exportImage?' + new URLSearchParams({
-  bbox: bbox.map(v => v.toFixed(2)).join(','), bboxSR: '3857', imageSR: '3857', size: `${GX},${GZ}`, format: 'tiff',
+  bbox: bbox.map(v => v.toFixed(2)).join(','), bboxSR: '3857', imageSR: '3857', size: `${GX * K},${GZ * K}`, format: 'tiff',
   pixelType: 'F32', compression: 'None', interpolation: 'RSP_BilinearInterpolation', f: 'image' })
 const res = await fetch(url)
 if (!res.ok) throw new Error(`ČÚZK answered ${res.status}`)
 const b = Buffer.from(await res.arrayBuffer())
+const magic = b.toString('latin1', 0, 2)   // the service answers errors as JSON, even with status 200
+if (!((magic === 'II' && b.readUInt16LE(2) === 42) || (magic === 'MM' && b.readUInt16BE(2) === 42))) throw new Error(`not a TIFF: ${b.toString('utf8', 0, 300)}`)
 
 // a minimal reader for the uncompressed float32 TIFF the service returns (strips or tiles)
 const le = b.toString('latin1', 0, 2) === 'II'
@@ -36,7 +41,7 @@ for (let i = 0; i < u16(ifd); i++) {
   T[tag] = Array.from({ length: cnt }, (_, k) => type === 3 ? u16(at + k * 2) : u32(at + k * 4))
 }
 const W = T[256][0], H = T[257][0]
-if (W !== GX || H !== GZ || T[259]?.[0] !== 1 || T[258]?.[0] !== 32 || T[339]?.[0] !== 3 || (T[277]?.[0] ?? 1) !== 1)
+if (W !== GX * K || H !== GZ * K || T[259]?.[0] !== 1 || T[258]?.[0] !== 32 || T[339]?.[0] !== 3 || (T[277]?.[0] ?? 1) !== 1)
   throw new Error(`unexpected TIFF: ${W}×${H}, compression ${T[259]}, bits ${T[258]}, sample format ${T[339]}, samples ${T[277]} (want uncompressed float32, one band)`)
 const f = new Float32Array(W * H), rd = o => le ? b.readFloatLE(o) : b.readFloatBE(o)
 if (T[322]) {   // tiles
@@ -48,12 +53,23 @@ if (T[322]) {   // tiles
   T[273].forEach((o, s) => { for (let y = 0; y < rps && s * rps + y < H; y++) for (let x = 0; x < W; x++) f[(s * rps + y) * W + x] = rd(o + (y * W + x) * 4) })
 }
 const ok = v => Number.isFinite(v) && v > -100 && v < 3000   // outside the country the service returns no data
-let lo = Infinity, hi = -Infinity, bad = 0
-for (const v of f) { if (!ok(v)) { bad++; continue } lo = Math.min(lo, v); hi = Math.max(hi, v) }
-if (lo === Infinity) throw new Error('no height in the crop (outside the Czech Republic?)')
-const h = new Int32Array(W * H)
-for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const v = f[(H - 1 - j) * W + i]; h[j * W + i] = Math.round((ok(v) ? v : lo) * 100) }   // south row first
+let bad = 0, lo = Infinity, hi = -Infinity
+for (let q = 0; q < f.length; q++) if (!ok(f[q])) { f[q] = NaN; bad++ } else { lo = Math.min(lo, f[q]); hi = Math.max(hi, f[q]) }
+if (bad > f.length * 0.05) throw new Error(`${bad} of ${f.length} source pixels without data (outside the Czech Republic?)`)
+// holes filled from their valid neighbours, pass by pass (a lowest-height fill would cut craters)
+for (let pass = 0, left = bad; left > 0 && pass < 64; pass++) {
+  const next = f.slice(); left = 0
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const q = y * W + x; if (!Number.isNaN(f[q])) continue
+    let s0 = 0, n0 = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const v = f[(y + dy) * W + x + dx]
+      if (x + dx >= 0 && x + dx < W && y + dy >= 0 && y + dy < H && !Number.isNaN(v)) { s0 += v; n0++ } }
+    if (n0) next[q] = s0 / n0; else left++ }
+  f.set(next)
+}
+const h = new Int32Array(GX * GZ)
+for (let j = 0; j < GZ; j++) for (let i = 0; i < GX; i++) {   // the K x K mean; rows: the page's south first, the TIFF's north first
+  let s0 = 0; for (let y = 0; y < K; y++) for (let x = 0; x < K; x++) s0 += f[((GZ - 1 - j) * K + y) * W + i * K + x]
+  h[j * GX + i] = Math.round(s0 / (K * K) * 100) }
 fs.mkdirSync(path.dirname(out), { recursive: true })
 const year = new Date().getFullYear()
-fs.writeFileSync(out, `// ČÚZK DMR 4G (© ČÚZK, ${year}, CC BY 4.0), resampled by tools/dem-fetch.mjs; generated, never committed\nwindow.DEM={nx:${W},nz:${H},scale:${scale},source:'ČÚZK DMR 4G, ${lat0} N ${lon0} E, squeezed ${scale}×',credit:'© ČÚZK, ${year} (DMR 4G, CC BY 4.0)',h:[${h.join(',')}]};\n`)
-console.log(`${out}: ${W}×${H}, heights ${lo.toFixed(1)}–${hi.toFixed(1)} m, ${bad} without data`)
+fs.writeFileSync(out, `// ČÚZK DMR 4G (© ČÚZK, ${year}, CC BY 4.0), resampled by tools/dem-fetch.mjs; generated, never committed\nwindow.DEM={nx:${GX},nz:${GZ},cell:${CELL},tx:${TX},tz:${TZ},scale:${scale},source:'ČÚZK DMR 4G, ${lat0} N ${lon0} E, squeezed ${scale}×',credit:'© ČÚZK, ${year} (DMR 4G, CC BY 4.0)',h:[${h.join(',')}]};\n`)
+console.log(`${out}: ${GX}×${GZ} from ${W}×${H} at 5 m, heights ${lo.toFixed(1)}–${hi.toFixed(1)} m, ${bad} source pixels without data (filled)`)

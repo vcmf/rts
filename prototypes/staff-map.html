@@ -215,17 +215,7 @@ const FL=(()=>{const n=Math.round((2*TZ)/CELL)+1,a=new Float32Array(n);
   for(let j=n-2;j>=0;j--)a[j]=Math.min(a[j],a[j+1]);return a;})();
 const floorAt=z=>{const t=clamp((z+TZ)/CELL,0,FL.length-1.001),j=Math.floor(t);return lerp(FL[j],FL[j+1],t-j);};
 const PONDLV=floorAt(STREAM_Z0)-0.4;
-// real heights (?dem=): metres above the crop's lowest point, on the prototype's own 10 m grid (the export is resampled
-// to it); none of the made-up carving, the real valleys are in the data
-// the grid must be the page's (the tool writes it for TX, TZ, CELL); heights scale with the squeezed ground by default
-// (true slopes), ?demz=1 keeps them in metres (an exaggeration by the squeeze)
-const DEM_OK=!!window.DEM&&window.DEM.nx===Math.round(2*TX/CELL)+1&&window.DEM.nz===Math.round(2*TZ/CELL)+1;
-if(new URLSearchParams(location.search).has('dem')&&!DEM_OK)console.warn(window.DEM?'?dem= grid does not match the page (TX, TZ, CELL): made-up terrain':'?dem= file did not load: made-up terrain');
-const DEM=DEM_OK?window.DEM:null,DEM_LO=DEM?DEM.h.reduce((a,v)=>Math.min(a,v),Infinity):0,DEM_Z=DEM?(Q.get('demz')==='1'?1:1/(DEM.scale||1)):1;
-function demAt(x,z){const fx=clamp((x+TX)/CELL,0,DEM.nx-1.001),fz=clamp((z+TZ)/CELL,0,DEM.nz-1.001),i=Math.floor(fx),j=Math.floor(fz),u=fx-i,v=fz-j,k=j*DEM.nx+i,
-  at=q=>(DEM.h[q]-DEM_LO)/100*DEM_Z;return lerp(lerp(at(k),at(k+1),u),lerp(at(k+DEM.nx),at(k+DEM.nx+1),u),v);}
 function H(x,z){
-  if(DEM)return demAt(x,z);
   let h=H0(x,z);
   if(z>STREAM_Z0-60){
     const d=Math.abs(x-xs(z)),fl=floorAt(Math.max(z,STREAM_Z0)),w=1-sstep(140,330,d);
@@ -237,8 +227,14 @@ function H(x,z){
 }
 // height grid (10 m), bilinear sampler used by everything after load
 const GX=Math.round(2*TX/CELL)+1,GZ=Math.round(2*TZ/CELL)+1,HG=new Float32Array(GX*GZ);
+// real heights (?dem=, tools/dem-fetch.mjs): a grid made for this page's (the file says its cell and extent), above
+// its lowest point; they scale with the squeezed ground by default (true slopes), ?demz=1 keeps metres (an exaggeration
+// by the squeeze); none of the made-up carving, the real valleys are in the data
+const W0=window.DEM,DEM=W0&&W0.cell===CELL&&W0.tx===TX&&W0.tz===TZ&&W0.nx===GX&&W0.nz===GZ?W0:null;
+if(Q.has('dem')&&!DEM)console.warn(W0?'?dem= file made for another grid (cell, extent): made-up terrain':'?dem= file did not load: made-up terrain');
+const DEM_LO=DEM?DEM.h.reduce((a,v)=>Math.min(a,v),Infinity):0,DEM_Z=DEM?(Q.get('demz')==='1'?1:1/(DEM.scale||1)):1;
 let HMIN=Infinity,HMAX=-Infinity;
-for(let j=0;j<GZ;j++)for(let i=0;i<GX;i++){const h=H(-TX+i*CELL,-TZ+j*CELL);HG[j*GX+i]=h;if(Math.abs(-TX+i*CELL)<=MX&&Math.abs(-TZ+j*CELL)<=MZ){HMIN=Math.min(HMIN,h);HMAX=Math.max(HMAX,h);}}
+for(let j=0;j<GZ;j++)for(let i=0;i<GX;i++){const h=DEM?(DEM.h[j*GX+i]-DEM_LO)/100*DEM_Z:H(-TX+i*CELL,-TZ+j*CELL);HG[j*GX+i]=h;if(Math.abs(-TX+i*CELL)<=MX&&Math.abs(-TZ+j*CELL)<=MZ){HMIN=Math.min(HMIN,h);HMAX=Math.max(HMAX,h);}}
 function Hs(x,z){const fx=clamp((x+TX)/CELL,0,GX-1.001),fz=clamp((z+TZ)/CELL,0,GZ-1.001),i=Math.floor(fx),j=Math.floor(fz),u=fx-i,v=fz-j,k=j*GX+i;
   return lerp(lerp(HG[k],HG[k+1],u),lerp(HG[k+GX],HG[k+GX+1],u),v);}
 const inPond=(x,z,m=1)=>PONDS.some(p=>pondE(p,x,z)<m);
@@ -1385,7 +1381,7 @@ setTimeout(()=>{
   if(Q.has('speed'))setSpeed(+Q.get('speed'));
   if(Q.has('follow')){const us=byCorps(Q.get('follow'));if(us.length){const u=us[+(Q.get('i')||0)%us.length];CAMS.T.x=CUR.x=u.x;CAMS.T.z=CUR.z=u.z;}}
   if(Q.has('sel')){const u=UNITS.find(u=>u.corps===Q.get('sel'));if(u){byCorps(u.corps).forEach(v=>v.sel=true);updateCard();}}
-  window.__buildMs=Math.round(performance.now()-T0);window.__proto={UNITS,ORDERS,CAMS,CUR,issue,byCorps,zoomTo,setSpeed,simStep};
+  window.__buildMs=Math.round(performance.now()-T0);window.__readyMs=Math.round(performance.now());   // ready: from navigation start, a ?dem= file's load includedwindow.__proto={UNITS,ORDERS,CAMS,CUR,issue,byCorps,zoomTo,setSpeed,simStep};
   $('load').style.display='none';requestAnimationFrame(frame);
 },30);
 </script>
