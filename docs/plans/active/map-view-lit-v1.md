@@ -206,3 +206,10 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
   Russian green on the summer olive has less contrast than French blue; the relief's light and shade (decision
   0051's bake) under the contours; height labels on the index contours; the summer wash's blocky noise, already in
   the ink style, shows more under the ageing.
+- **Wear, squares, beige Austria: round 1**: severe: the bites replaced the canvas path, so the strokes after them
+  (an Austrian block's edge, a wavering block's outline) went round the bites and the block lost its edge. Fixed (the
+  bites in their own path), with: bites clipped to a square's ring, so its hole stays open; the wear kept while a
+  block routs; all-round fire and four-face smoke only once the square has formed, the smoke at the true footprint and
+  the drawn heading (it followed the zoom's symbol size); Austria's coat back to the art bible's (the 3D figures
+  share it), only the blocks' fill beige; the guards' legend swatches from the palette, with the rust stripe; the
+  staff map design doc updated. Left: the bites rebuilt each frame (not measured; a cache if a battle late shows it).
