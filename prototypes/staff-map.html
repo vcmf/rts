@@ -158,6 +158,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
    ========================================================================= */
 const B=BABYLON,V3=B.Vector3,C3=B.Color3;
 const Q=new URLSearchParams(location.search);
+// ?style=lit: the lit map view's first pass (docs/plans/active/map-view-lit-v1.md, decision 0051); without it, the ink style
+const LIT=Q.get('style')==='lit';
 const T0=performance.now();
 
 /* ---------- small helpers ---------- */
@@ -416,6 +418,7 @@ const SEAS={
   crown:   ['#7c8d43','#c08a32','#8e5a33','#5a4e47'],
   conifer: ['#3c5a3b','#3c5a3b','#3b5640','#3a4f47'],
 };
+if(LIT)SEAS.paper=['#e3d1a2','#e1cb98','#d9c18f','#e4d9bf'];   // aged parchment, yellow-brown
 const NAMES=['summer','early autumn','late autumn','winter'];
 function seasonCol(key,s){const a=SEAS[key],i=Math.min(2,Math.floor(s)),t=s-i;const v0=a[i],v1=a[i+1];return typeof v0==='number'?lerp(v0,v1,t):mix3(hex(v0),hex(v1),t);}
 
@@ -443,6 +446,11 @@ void main(){
   float woodA=step(0.12,A.g),woodMark=smoothstep(0.45,0.85,A.g),water=A.b;
   /* the paper and its wash */
   vec3 paper=uPaper*(0.965+(g1-0.5)*0.12+(g2-0.5)*0.07+(g3-0.5)*0.035);
+#ifdef LIT
+  float fine=texture2D(uPaperT,vW.xz/21.0+0.13).r;
+  paper=uPaper*(0.93+(g1-0.5)*0.22+(g2-0.5)*0.12+(g3-0.5)*0.07);
+  paper*=mix(vec3(1.0),vec3(0.80,0.69,0.50),(1.0-smoothstep(0.0,0.17,edge))*inside);
+#endif
   float washK=uWashA*(0.35+0.75*low)*smoothstep(0.25,0.6,wn+low*0.35)*inside;
   vec3 mapC=mix(paper,paper*uWashC*1.12,clamp(washK,0.0,1.0)*inside);
   mapC=mix(mapC,mapC*uWoodW*1.15,uWoodWA*woodA*(0.75+0.25*wn));
@@ -467,6 +475,9 @@ void main(){
   col=mix(col,uWoodInk,woodMark*0.9*k);
   col=mix(col,uHach,clamp(A.r*1.05,0.0,1.0)*k*uHachK);
   col=mix(col,uLine,clamp(Bm.r,0.0,1.0)*k);
+#ifdef LIT
+  col*=0.93+(g1-0.5)*0.16+(fine-0.5)*0.12;
+#endif
   gl_FragColor=vec4(col,1.0);
 }`;
 function terrainMesh(){
@@ -811,6 +822,26 @@ function blockCorners(u,extra=0){
 }
 function pathPoly(C){ink.beginPath();ink.moveTo(C[0][0],C[0][1]);for(let i=1;i<C.length;i++)ink.lineTo(C[i][0],C[i][1]);ink.closePath();}
 const PULSE_WHITE=hex('#fbfaf6'),PULSE_MS=1100;   // the legend swatch (.blink) pulses at the same period, not in phase
+// the lit style: blocks stand off the ground and arrows cast a shadow, lit from the north-west (screen space)
+const LIGHT=[-0.6,-0.8],RAISE=[1.4,2.8];   // toward the light; the side face's depth, px
+const shade=(c,k)=>css(c.map(v=>k<1?v*k:v+(1-v)*(k-1)));   // k below 1 darker, above 1 toward white
+function raised(C,col,alpha){
+  // the shadow on the ground, then the side faces as a prism down and right, so the top face sits above them
+  ink.save();ink.shadowColor=`rgba(52,38,18,${0.42*alpha})`;ink.shadowBlur=5;ink.shadowOffsetX=3.5;ink.shadowOffsetY=4.5;
+  pathPoly(C.map(p=>[p[0]+RAISE[0],p[1]+RAISE[1]]));ink.fillStyle=shade(col,0.55);ink.fill();ink.restore();
+  ink.fillStyle=shade(col,0.62);
+  for(let i=0;i<C.length;i++){const a=C[i],b=C[(i+1)%C.length];ink.beginPath();ink.moveTo(a[0],a[1]);ink.lineTo(b[0],b[1]);
+    ink.lineTo(b[0]+RAISE[0],b[1]+RAISE[1]);ink.lineTo(a[0]+RAISE[0],a[1]+RAISE[1]);ink.closePath();ink.fill();}
+}
+function litEdges(C){
+  // a thin dark outline, then each edge inset a little: lighter facing the light, darker facing away
+  ink.strokeStyle='rgba(30,22,12,0.6)';ink.lineWidth=0.8;pathPoly(C);ink.stroke();
+  const cx=C.reduce((t,p)=>t+p[0],0)/C.length,cy=C.reduce((t,p)=>t+p[1],0)/C.length;ink.lineWidth=1.1;
+  for(let i=0;i<C.length;i++){const a=C[i],b=C[(i+1)%C.length];let nx=b[1]-a[1],ny=a[0]-b[0];const l=Math.hypot(nx,ny)||1;nx/=l;ny/=l;
+    if(nx*((a[0]+b[0])/2-cx)+ny*((a[1]+b[1])/2-cy)<0){nx=-nx;ny=-ny;}
+    const d=nx*LIGHT[0]+ny*LIGHT[1];if(Math.abs(d)<0.2)continue;
+    ink.strokeStyle=d>0?'rgba(255,250,236,0.65)':'rgba(20,16,10,0.3)';ink.beginPath();ink.moveTo(a[0]-nx*0.9,a[1]-ny*0.9);ink.lineTo(b[0]-nx*0.9,b[1]-ny*0.9);ink.stroke();}
+}
 function drawBlock(u,alpha,now){
   const s=SIDES[u.sideI],{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
   const lvl=u.mor>0.6?-1:u.mor>0.45?0:u.mor>0.3?1:2;
@@ -818,22 +849,25 @@ function drawBlock(u,alpha,now){
     // routing: pulses between the army colour and white, the colour of surrender
     // a soft pulse on the frame clock passed in, so an exporter controls the phase
     const pk=sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI));
-    pathPoly(C);ink.fillStyle=css(mix3(s.e||s.c,PULSE_WHITE,pk));ink.fill();
+    if(LIT)raised(C,mix3(s.e||s.c,PULSE_WHITE,pk),ink.globalAlpha);
+    pathPoly(C);ink.fillStyle=css(mix3(s.e||s.c,PULSE_WHITE,pk));ink.fill();if(LIT)litEdges(C);
     ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);}
   else if(u.type==='art'){
     // bar + gun dot on the facing side
-    pathPoly(C);ink.fillStyle=css(s.f);ink.fill();if(s.e){ink.strokeStyle=css(s.e);ink.lineWidth=1.4;ink.stroke();}
+    if(LIT)raised(C,s.f,ink.globalAlpha);
+    pathPoly(C);ink.fillStyle=css(s.f);ink.fill();if(LIT)litEdges(C);if(s.e){ink.strokeStyle=css(s.e);ink.lineWidth=1.4;ink.stroke();}
     const fr=[(C[0][0]+C[1][0])/2,(C[0][1]+C[1][1])/2],bk=[(C[2][0]+C[3][0])/2,(C[2][1]+C[3][1])/2],dl=Math.hypot(fr[0]-bk[0],fr[1]-bk[1])||1;
     ink.beginPath();ink.arc(fr[0]+(fr[0]-bk[0])/dl*5,fr[1]+(fr[1]-bk[1])/dl*5,3,0,6.2832);ink.fillStyle=css(s.f);ink.fill();if(s.e)ink.stroke();
   }
   else{
+    if(LIT)raised(C,s.f,ink.globalAlpha);
     pathPoly(C);
     if(u.form==='square'&&u.morph>0.5){
       // hollow square: the inner hole
       const k=Math.min(Math.max(lerp(SQ_RING[0]*SYMZ*Math.sqrt(lossK(u)),SQ_RING[1],SYMK),2.2*MPP),fw*0.35,fd*0.35),hw=fw/2-k,I=[[-hw,-k],[hw,-k],[hw,-fd+k],[-hw,-fd+k]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
       ink.moveTo(I[0][0],I[0][1]);for(let i=3;i>=0;i--)ink.lineTo(I[i][0],I[i][1]);ink.closePath();
     }
-    ink.fillStyle=lvl<0?css(s.f):hatch(u.sideI,lvl);ink.fill('evenodd');
+    ink.fillStyle=lvl<0?css(s.f):hatch(u.sideI,lvl);ink.fill('evenodd');if(LIT)litEdges(C);
     if(lvl>=0){ink.strokeStyle=css(s.e||s.c);ink.lineWidth=0.9;ink.stroke();}
     if(s.e){ink.strokeStyle=css(s.e);ink.lineWidth=1.5;ink.stroke();}
     if(u.type==='cav'){ink.strokeStyle=s.e?css(s.e):'rgba(243,239,230,0.95)';ink.lineWidth=1.3;ink.beginPath();ink.moveTo(C[3][0],C[3][1]);ink.lineTo(C[1][0],C[1][1]);ink.stroke();}
@@ -869,6 +903,28 @@ function cleanFootprints(now){const dt=clamp((now-(FOOT_NOW||now))/1000,0,0.1);F
     f.vis+=((f.led?1:0)-f.vis)*Math.min(1,dt*4);
     if(o.removed&&GT-f.pts[f.pts.length-1][2]>FOOT_FADE)FOOTS.delete(o);}
 }
+// the lit style's command arrow: one tapered outline along the smoothed path, the head part of it, a notched tail
+function arrowLit(o,col,alpha,band,s0,s1,withHead){
+  const n=Math.max(8,Math.ceil((s1-s0)/(MPP*6))),pts=[];
+  for(let i=0;i<=n;i++){const p=P2(...along(o.P,s0+(s1-s0)*i/n));if(behind(p))return;pts.push(p);}
+  for(let it=0;it<3;it++)for(let i=1;i<pts.length-1;i++)pts[i]=[(pts[i-1][0]+2*pts[i][0]+pts[i+1][0])/4,(pts[i-1][1]+2*pts[i][1]+pts[i+1][1])/4];
+  const cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
+  const L=cum[cum.length-1];if(L<band)return;
+  const headL=withHead?Math.min(band*1.9,L*0.45):0,bodyL=L-headL,tail=band,neck=band*0.6,headW=band*1.15;
+  const tan=i=>{const a=pts[Math.max(0,i-1)],b=pts[Math.min(pts.length-1,i+1)],dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy)||1;return[dx/l,dy/l];};
+  const left=[],right=[];let k=0;
+  for(;k<pts.length&&cum[k]<=bodyL;k++){const[tx,ty]=tan(k),w=lerp(tail,neck,cum[k]/(bodyL||1))/2;left.push([pts[k][0]-ty*w,pts[k][1]+tx*w]);right.push([pts[k][0]+ty*w,pts[k][1]-tx*w]);}
+  const out=[...left];
+  if(withHead){const kb=Math.max(0,k-1),[tx,ty]=tan(kb),b=pts[kb],tip=pts[pts.length-1];
+    out.push([b[0]-ty*headW,b[1]+tx*headW],tip,[b[0]+ty*headW,b[1]-tx*headW]);}
+  for(let i=right.length-1;i>=0;i--)out.push(right[i]);
+  const[t0x,t0y]=tan(0);out.push([pts[0][0]+t0x*band*0.45,pts[0][1]+t0y*band*0.45]);   // the notch, inside the tail
+  ink.save();ink.globalAlpha=alpha;ink.shadowColor='rgba(52,38,18,0.35)';ink.shadowBlur=6;ink.shadowOffsetX=3;ink.shadowOffsetY=4;
+  pathPoly(out);ink.fillStyle=css(col);ink.globalAlpha=alpha*0.85;ink.fill();ink.restore();
+  ink.save();ink.globalAlpha=alpha;pathPoly(out);ink.strokeStyle=shade(col,0.55);ink.lineWidth=1;ink.stroke();
+  ink.beginPath();for(let i=0;i<k;i++)i?ink.lineTo(pts[i][0],pts[i][1]):ink.moveTo(pts[i][0],pts[i][1]);   // a light spine along the body
+  ink.strokeStyle='rgba(255,250,236,0.4)';ink.lineWidth=Math.max(1,band*0.12);ink.lineCap='round';ink.stroke();ink.restore();
+}
 function drawOrders(now,alpha){
   ink.lineJoin='round';
   // footprints: dotted, batched into a few age buckets, older steps fading out
@@ -887,6 +943,7 @@ function drawOrders(now,alpha){
     const s=SIDES[o.side],band=clamp((o.group?36:24)/MPP,o.group?8:6,o.group?20:14),left=o.len-o.prog,headM=Math.min(band*1.7*MPP,left*0.6),headW=band*2.3*Math.min(1,headM/(band*1.7*MPP));
     if(left<4)continue;
     const reveal=easeIO(clamp((now-o.t0)/550,0,1))*o.len,end=Math.min(reveal,o.len),bandEnd=Math.max(o.prog,end-headM);
+    if(LIT){arrowLit(o,s.c,alpha,band,o.prog,end,end>=o.len-1);continue;}
     ink.globalAlpha=alpha*0.36;ink.strokeStyle=css(s.c);ink.lineCap='butt';ink.lineWidth=band;if(bandEnd>o.prog)strokePath(o.P,o.prog,bandEnd);
     if(end<o.len-1)continue;
     const tip=P2(...along(o.P,o.len)),base=P2(...along(o.P,Math.max(0,o.len-headM)));if(behind(tip)||behind(base))continue;
@@ -985,7 +1042,7 @@ function build(){
   window.__bake={hachures:nh,ms:Math.round(bakeMs),trees:TREES.length,houses:HOUSES.length};
   const COMMONU=['uSun','uSeason','uMist','uGSh'];
   terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal'],
-    uniforms:['world','viewProjection','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT']});
+    uniforms:['world','viewProjection','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT'],defines:LIT?['#define LIT']:[]});
   terrMat.backFaceCulling=false;terrMat.setTexture('uMapA',texA);terrMat.setTexture('uMapB',texB);paperT.wrapU=paperT.wrapV=noiseT.wrapU=noiseT.wrapV=B.Texture.WRAP_ADDRESSMODE;terrMat.setTexture('uPaperT',paperT);terrMat.setTexture('uNoiseT',noiseT);terrMat.setFloat('uHmin',HMIN);terrMat.setFloat('uHmax',HMAX);
   terrainMesh().material=terrMat;
   {const O=30000,y=HMIN-1,P=[-TX,y,-TZ,TX,y,-TZ,TX,y,TZ,-TX,y,TZ,-O,y,-O,O,y,-O,O,y,O,-O,y,O],I=[0,4,1,1,4,5,1,5,2,2,5,6,2,6,3,3,6,7,3,7,0,0,7,4],
