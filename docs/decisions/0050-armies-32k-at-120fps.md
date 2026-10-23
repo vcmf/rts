@@ -39,7 +39,10 @@ before it is built:
    faster, its p95 spikes gone, default and close within ±0.3 ms; but the readability guard fails (the white side
    −17 % luma, its coat share 27 → 11 %). The owner decides between keeping it with a new look, reverting it, or the
    plan's next route: the far LOD itself with one vertex set (about 180 to 260 vertices, est.), same look. It confirms
-   the wide view is vertex-bound.
+   the wide view is vertex-bound. **The owner's direction** (2026-10-23): reverted on its look (the formation read as a
+   uniform carpet), then kept, with per-man variety added (each figure's colours, roles' mix, shape and boxes' light
+   varied from his own jitter, render only); the far LOD with shared vertices (371, measured) waits as the next option.
+   Every later LOD step keeps the per-man variety, by the owner's check of a wide crop, not only the guard's numbers.
 4. **The ground-colour cache** for the landscape (est. 2 to 2.7 ms at default and close, not measured).
 
 A step is kept only if its bar holds (Metal, the production build, three interleaved rounds against main); else it is

@@ -300,6 +300,35 @@ art, other arms.
   bring it to about **180 to 260 vertices (−58 to −71 %, est.)** and **one posed fetch a vertex instead of two**, with
   the same triangles and colours. From step 3's measurement (−82 % vertices: −1.4 to −2.35 ms) that is worth about 1
   to 2 ms at wide (est.), with no change to the look; the tiny LOD could then stay off or switch lower.
+- **The owner's direction** (2026-10-23): first judged on its look and reverted (`2ae17a2`: the per-man randomness
+  is lost, the formation reads as a uniform carpet), then **kept** for its saving (`ade0abb`), with per-man variety
+  added so the formation reads as varied men. Every later LOD step's bar also **keeps the per-man variety (the owner's
+  check of a wide crop), not only the guard's colour numbers**.
+- **The per-man variety** (`tinySeeds`, `units.vert`; `?tinyrand=0`: the boxes alike): each tiny figure carries his
+  own jitter (`aJit`, the four numbers his place and turn already jitter by, a static thin-instance buffer written
+  once), and hashes of it vary, by `uTinyRand`: each role's value (±3.5 %) and his own (±7 %) and a warm or cool cast;
+  his and each corner's mix of the roles (each role's weight scaled by up to ±108 %, at least 0, renormalised), from
+  which **each corner of each man draws one role** (pure colours at their shares, as the far LOD's pixels are: the
+  mean of the weights was one blended colour for every man, the carpet); his height (±4 %), width (±2.4 %) and lean (up to about 3°); each box's brightness (±8 %). Sines and
+  multiply-adds only, no vertex and no texture read added.
+- **The variety, checked** (SwiftShader, 1280 × 720, 80 s, widest; `output/armies-review/12-tiny-random/`: far LOD |
+  boxes before | boxes with variety, the stress point's blue and white battalions and the middle's, the full frames,
+  the guard's logs). A first try varied only the mean of each man's weights (one blended colour a man): still a carpet,
+  the guard unchanged. Drawing one role a corner brings the speckle back, man by man. The guard, widest, summer
+  (far / boxes / boxes with variety): side 0 (blue) luma 0.281 / 0.300 / 0.305, separation 0.243 / 0.224 / 0.219,
+  within ΔE 25 of the coat 19.3 / 13.4 / **20.3 %**; side 1 (white) luma 0.502 / 0.415 / 0.422, separation 0.120 /
+  0.207 / 0.200, coat share 27.1 / 11.1 / 10.5 %, within ΔE 25 23.7 / 4.6 / **11.3 %**. The white side stays
+  about 16 % darker than the far LOD: the colours are calibrated on the rest pose at 50° (`tinyMesh`), the wide view
+  sees men firing from higher; a calibration on the poses and the view the wide camera has is the next tuning, if the
+  owner wants the white side lighter. The owner judges the crops.
+- **Next, paused: the far LOD with shared vertices (step 3b)**, designed and measured on this figure, its code kept
+  aside (not committed): the bake's 616 vertices are **371** when merged where equal bit for bit (place, normal, role,
+  bones, weights: the same triangles drawn the same), 307 with the colour role carried flat in a way that holds for
+  either provoking-vertex convention, 248 with GL's last-vertex convention alone (not checked on ANGLE-Metal); and the
+  posed place and normal in **one texel** (the normal octahedral, 12 bits an axis, as an exact integer in the w),
+  one fetch a vertex instead of two. `?farshared=0` for its A/B; bar: wide p50 −0.5 ms or better still and panning at
+  both points, default no worse, a contact sheet pixel-close to today and the owner's variety check. Est. about
+  0.7 to 1.1 ms at wide (scaled from step 3's 616 → 112 vertices for 1.4 to 2.35 ms), not measured.
 - **Checks before the bench** (as planned): `npm test` (the tiny mesh: under a quarter of the far LOD's vertices, each corner on one
   bone, a role each, wound outward, a figure tall posed); a SwiftShader contact sheet at wide (`?tinylod=0` against
   the default, the fight's middle and the stress point, a marching and a firing moment); the readability guard
