@@ -86,6 +86,10 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
   `tools/golden.mjs` knows only the look page's cameras, so it does not apply here.
 - No console errors in either mode (`tools/shot.mjs` exit 0).
 
+- **Guards** (the owner, in the paper layers' PR #141): the Garde Impériale and the Russian Imperial Guard in their
+  army's colour, darker and a little warm, with a rust edge and a rust cavalry stripe (never white), a legend row; a
+  first try mixing the coat with rust read purple-black, too close to the ink.
+
 ## Review rounds
 
 - **Round 1** (`/code-review high`): severe: the outline strokes after `litEdges` drew one stray segment (the canvas's
