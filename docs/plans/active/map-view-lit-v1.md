@@ -162,6 +162,13 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
   as the ink style); with the houses drawn live at map zoom it was 19–22 ms, 8.3 ms with them removed (measured in the
   running page), hence the bake. Build about 1.8 s.
 
+- **v3, round 1**: severe: the shader divided the baked houses' colour by their alpha, but the bytes are straight
+  (unpremultiplied), so shadows came out a light tan. Fixed (the colour as is), with: houses drawn under the names;
+  culled to the screen; only those in the map's frame, as the bake; a crossfade that never thins (each side at full
+  strength mid-fade) with the bake's side and shadow lengths in metres; no contours across baked roofs; one corner
+  function for the bake and the live houses; stale comments. Kept on purpose: the map shows about 4 in 10 of a wood's
+  trees while the painted world grows them all (the owner asked for sparser marks).
+
 ## Results
 
 - Lit screenshots (1600×900, Windows Chrome over CDP, SwiftShader): the map in summer, mid zoom in summer and winter
