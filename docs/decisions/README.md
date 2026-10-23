@@ -69,5 +69,6 @@ is #134's).
 | [0044](0044-epic-shimmer-limits.md) | The water's shimmer limits re-baselined for the epic mood | accepted |
 | [0045](0045-render-scale-easu.md) | The render scale 0.9 from the closest zoom, upscaled by EASU | accepted |
 | [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | accepted |
-| [0047](0047-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
+| [0047](0047-figures-cast-runtime-shadows.md) | The figures cast runtime shadows from a map of their own | proposed |
+| [0052](0052-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
 | [0053](0053-generators-expand-by-dependency.md) | Generators expand by dependency, over finished features, with hard and soft reads | superseded by 0028 |

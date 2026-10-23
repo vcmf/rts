@@ -70,6 +70,7 @@ designs written before building (frozen once built, their lasting content moves 
   [`plans/active/m-decision-numbers.md`](plans/active/m-decision-numbers.md) (Track M: the epic's decisions renumbered 0027–0030, beside main's),
   [`plans/active/l2-detail.md`](plans/active/l2-detail.md) (Track E L2: the bench, the readability guard, the terrain detail layer),
   [`plans/active/l5-macro.md`](plans/active/l5-macro.md) (Track E L5: the ground's cover and macro colour, baked and in the shader, and the ablation),
+  [`plans/active/armies-demo.md`](plans/active/armies-demo.md) (the first armies on the demo map, scripted),
   [`plans/active/cavalry-pistol.md`](plans/active/cavalry-pistol.md) (the cavalryman's pistol),
   [`plans/active/figure-pipeline.md`](plans/active/figure-pipeline.md) (the figure pipeline in the repository),
   [`plans/active/track-e-look.md`](plans/active/track-e-look.md) (Track E: the painterly look, L0–L9 and LA assets; results in [`plans/active/track-e-results/README.md`](plans/active/track-e-results/README.md), the L2a baselines in [`plans/active/track-e-results/l2a-baseline.md`](plans/active/track-e-results/l2a-baseline.md), the L2b results in [`plans/active/track-e-results/l2b-detail.md`](plans/active/track-e-results/l2b-detail.md), the shadows' and the crowns' in [`plans/active/track-e-results/shadows-foliage.md`](plans/active/track-e-results/shadows-foliage.md)).
