@@ -129,8 +129,9 @@ steps 4, 5 and 8); the real renderer reading the map language (after the owner a
   canopy baked as pre-lit crown sprites, north to south, clumped, gaps at the edge, soft gradient shadows, the shade
   under it following the crowns' cover blurred over about 10 m (baked) (no rim, no drawn outline); fields as stand-in patches whose strips
   fade at the borders; a smooth computed mottle (the old noise texture was blocky, in the fields and in the valley
-  mist); contours at far zoom only. Measured on the owner's RTX 3080 (D3D11): 8.3–11 ms a frame; the page builds in
-  about 2.6 s (no hachures to bake).
+  mist); contours at far zoom only. Measured on the owner's RTX 3080 (D3D11): 8.3–11 ms a frame. Build (`window.__buildMs`,
+  three alternating runs each): main 2.19–2.22 s, the lit style 2.19–2.25 s, the ink style 2.18–2.34 s: no
+  measurable difference (the lit style skips the hachure bake).
 
 - **v2, round 1**: severe: the shadow march kept the last occluder rather than the strongest, so cast shadows broke
   into blotches. Fixed, with: one sun (25°) for the shading and the shadows; heights sampled past the map's border
@@ -138,6 +139,13 @@ steps 4, 5 and 8); the real renderer reading the map language (after the owner a
   about 10 m and baked, not a screen-space blur (it left a halo at map zoom); the aged band over the land again; smooth
   breaks along the strips; the existing value noise reused. Open for the owner: the map's light is north-west (the
   cartographic convention), the painted world's sun east-south-east, so light and shade swap sides on the handover.
+
+- **v2, round 2**: moderate and light only, so the review stops. Fixed: a patch's tint none at its border; the
+  canopy and its blurred cover drawn with high-quality smoothing (the low default skipped texels); the trees the map
+  leaves out at a wood's edge left out of the painted world too; the crown sprite lit by the relief's 25° sun; the
+  shadows straight onto the canopy (no second 45 MB canvas); the light march stopping once the ray is above every
+  height; `bakeMap` merging the blurred cover (no hidden order between the bakes); the dead aged band; a stray comment;
+  the build time measured in pairs. Left: the woods' crown sizes still differ from the painted world's trees.
 
 ## Results
 
