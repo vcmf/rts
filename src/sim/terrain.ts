@@ -10,17 +10,21 @@ export interface Terrain {
   cell: number
   x0: number
   z0: number
+  // class index (into the ruleset's table), metres
   cls: Uint8Array
-  depth: Float64Array // class index (into the ruleset's table), metres
+  depth: Float64Array
+  // slope, rise over run
   gx: Float64Array
-  gz: Float64Array // slope, rise over run
+  gz: Float64Array
   classG: Float64Array // [class·K + kind]
   classQ: Float64Array // [class·P + pace]
   road: Uint8Array
+  // per kind
   imp: Uint8Array[]
-  impd: Float64Array[] // per kind
+  impd: Float64Array[]
+  // per kind: deeper is impassable
   waterCurve: [number, number][]
-  waterLimit: Float64Array // per kind: deeper is impassable
+  waterLimit: Float64Array
   slope: Float64Array
   K: number
   P: number

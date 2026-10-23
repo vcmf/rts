@@ -87,7 +87,8 @@ export function occupied(w: World, i: number, c: number, r: number, f: number): 
     const nf = Math.min(H, Math.ceil(m / R))
     const cr = Math.max(0, Math.min(nf, m - r * nf))
     const fi = (c - h * (C / 2)) * F + f
-    const pos = h === 0 ? H - 1 - fi : fi // distance from the colours, in files
+    // distance from the colours, in files
+    const pos = h === 0 ? H - 1 - fi : fi
     return pos < cr
   }
   // when the files or the last rank cannot centre exactly, they lean one way; Face about flips the lean, so
@@ -287,7 +288,8 @@ function takeMan(w: World, i: number, c: number, first?: ArrayLike<number>, near
         }
         if (takeIfDry(w, i, q, ctx)) return q
         const [lo, hi] = repackSpan(w, i, q)
-        for (let r = lo; r < hi; r++) tried |= 1 << r // its span fails alike
+        // its span fails alike
+        for (let r = lo; r < hi; r++) tried |= 1 << r
       }
     }
   }
@@ -937,9 +939,10 @@ function sampleBins(w: World, i: number, pace: number, V0: number): void {
   let road = true
   const Fl = filledSlots(w, i)
   const a = i * (w.cr.maxC + 1)
+  // a straight shape's men share their direction of travel: sin and cos once
   let dir = NaN
   let dx = 0
-  let dz = 0 // a straight shape's men share their direction of travel: sin and cos once
+  let dz = 0
   for (let k = Fl.at[a], e = Fl.at[a + g.companies]; k < e; k++) {
     const s = Fl.s[k]
     const j = U.slotC[s] * g.bins + L.of[s]
@@ -951,9 +954,10 @@ function sampleBins(w: World, i: number, pace: number, V0: number): void {
       dx = sin(dir)
       dz = cos(dir)
     }
+    // groundG, onRoad, groundQ from one cell lookup
     const T = w.terrain
     const cell = cellK(T, px, pz)
-    const gg = groundGAt(T, cell, kind, dx, dz) // groundG, onRoad, groundQ from one cell lookup
+    const gg = groundGAt(T, cell, kind, dx, dz)
     if (gg <= 0 || impAt(T, imp, px + dx * look, pz + dz * look)) blkTmp[j]++
     else {
       gTmp[j] += 1 / gg
@@ -1307,10 +1311,11 @@ export function startChange(w: World, i: number, shape: number, optional = false
     f.tFrom.set(keep.from, i * CS * 4)
     f.tTo.set(keep.to, i * CS * 4)
     f.tK.set(keep.k, i * CS * 2)
+    // (an optional one, the standing behaviour's own, says nothing)
     if (!optional) {
       clearOrders(w, i)
       f.status[i] = ST_CANNOT_FORM
-    } // (an optional one, the standing behaviour's own, says nothing)
+    }
     return false
   }
   f.vx[i] = 0
@@ -1573,12 +1578,13 @@ function formationStep(w: World, i: number): void {
     f.vx[i] = 0
     f.vz[i] = 0
     const n = f.ordHead[i]
+    // (no new shape in contact)
     if (n >= 0 && o.type[n] === O_FORM && !shelter && !f.foe[i]) {
       const s = o.shape[n]
       shiftOrder(w, i)
       startChange(w, i, s)
       return
-    } // (no new shape in contact)
+    }
     if (t >= f.tStart[i] + f.tDelay[i * CS + C - 1] + f.tDur[i]) {
       finishChange(w, i, f.tShape[i])
     }
@@ -1605,26 +1611,28 @@ function formationStep(w: World, i: number): void {
   const halfW = halfWidth(w, i)
   if (type === O_MOVE || type === O_CHARGE) {
     if (type === O_CHARGE) {
+      // its target is gone (the melee step ends the charge)
       if (!chargeAim(w, i, n)) {
         shiftOrder(w, i)
         f.vx[i] = 0
         f.vz[i] = 0
         return
       }
-    } // its target is gone (the melee step ends the charge)
-    else if (!o.resolved[n]) {
+    } else if (!o.resolved[n]) {
+      // a distance ahead (Retire)
       setOnMap(w, n, f.x[i] + sin(f.heading[i]) * o.a[n], f.z[i] + cos(f.heading[i]) * o.a[n])
       o.resolved[n] = 1
-    } // a distance ahead (Retire)
+    }
     const dx = o.x[n] - f.x[i]
     const dz = o.z[n] - f.z[i]
     const dist = hyp(dx, dz)
+    // a charge waits for the melee step
     if (dist < ARRIVE) {
       if (type === O_MOVE) shiftOrder(w, i)
       f.vx[i] = 0
       f.vz[i] = 0
       return
-    } // a charge waits for the melee step
+    }
     const dh = wrapAngle(atan2(dx, dz) - f.heading[i])
     const wmax = ((1.2 * V0) / halfW) * DT // the outer flank may not outrun the quick step
     const snake = snakes(w, i)
@@ -1732,12 +1740,13 @@ function formationStep(w: World, i: number): void {
       return
     }
     lagSettle(w, i)
+    // (its pivot: set again after a change of shape; done counts on)
     if (o.left[n] < 0) {
       o.left[n] = o.a[n] > 0 ? 1 : 0
       const piv = rot2(o.left[n] ? -halfW : halfW, 0, -f.heading[i])
       o.px[n] = f.x[i] + piv[0]
       o.pz[n] = f.z[i] + piv[1]
-    } // (its pivot: set again after a change of shape; done counts on)
+    }
     // the outer flank at marching pace
     const wq = Math.min(Math.abs(o.a[n]) - o.done[n], ((1.0 * V0) / (2 * halfW)) * DT)
     const sgn = o.a[n] > 0 ? -1 : 1

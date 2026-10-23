@@ -6,18 +6,21 @@ import { cos, sin, PI, exp } from './num.ts'
 import { fnv1a } from './hash.ts'
 import { DT } from './time.ts'
 
+// a company in the battalion frame
 export interface Placement {
   x: number
   z: number
   rot: number
   face: number
-} // a company in the battalion frame
+}
 export interface Geometry {
+  // a company is a block of files × ranks
   companies: number
   files: number
-  ranks: number // a company is a block of files × ranks
+  ranks: number
+  // metres
   fileSpacing: number
-  rankSpacing: number // metres
+  rankSpacing: number
   minSpacing: number // closest two men may stand (turn radius of a trail shape)
   accordionGap: number // closest a file may come to the file ahead of it
   bins: number // lateral bins per company (the lag model's sample points)
@@ -50,8 +53,9 @@ export interface FireDef {
   arc: number // half-angle about a company's facing, radians
   maxRange: number // metres, company centre to company centre
   pRange: [number, number][] // hit chance per round by range (metres), linear between points, 0 past the last
+  // seconds per volley, and its spread (a share, drawn per volley)
   reload: number
-  reloadJitter: number // seconds per volley, and its spread (a share, drawn per volley)
+  reloadJitter: number
   firingRanks: number // the front ranks that fire
   misfire: number // share of rounds that do not go off
   depth: Record<string, number> // how easy a target is to hit, by its kind
@@ -63,12 +67,14 @@ export interface FireDef {
 // loss-driven morale: morale relaxes toward quality less losses; the states follow it with hysteresis
 export interface MoraleDef {
   quality: number // a battalion's quality when the scenario gives none (0..1)
+  // weights of the share of men lost, and of men lost recently
   losses: number
-  recent: number // weights of the share of men lost, and of men lost recently
+  recent: number
   recentTime: number // seconds over which recent losses decay (e-folding)
   relaxTime: number // seconds for morale to close 63% of the gap to its target
+  // [enter below, leave at or above]
   shaken: [number, number]
-  wavering: [number, number] // [enter below, leave at or above]
+  wavering: [number, number]
   rout: number // routs below this
   routPace: number // a router's pace, times its shape's
   // S1c-2 (docs/plans/active/s1c2-morale-machine.md)
@@ -131,21 +137,24 @@ export interface RayDef {
   muzzle: number // the muzzle's height above the ground, metres
   speed: number // m/s (sets the drop per metre of the flat trajectory)
   energy: number // metres of travel the ball has, spent by flight, grazes and men struck
+  // energy lost at a graze; the share of its drop it keeps as rise
   graze: number
-  restitution: number // energy lost at a graze; the share of its drop it keeps as rise
+  restitution: number
   bury: number // a graze into ground rising steeper than this (rise over run) stops it
   height: number // the ball strikes men while this low over the ground, metres
   width: number // the lane it cuts through a block, metres
   perMan: number // metres of energy a man struck absorbs
   kill: number // share of the men in its lane who fall
+  // keyed dispersion: across (radians, ±) and in range (a share, ±)
   spread: number
-  short: number // keyed dispersion: across (radians, ±) and in range (a share, ±)
+  short: number
 }
+// inside range; half-angle; men struck per shot by range
 export interface ConeDef {
   range: number
   half: number
   hits: [number, number][]
-} // inside range; half-angle; men struck per shot by range
+}
 // shapes it fires from; a piece's arc (half-angle, radians); reload seconds and spread; full crew per piece, and
 // the most a short crew may slow the reload (a factor); how far ahead of its detachment's front rank the piece stands
 export interface ArtilleryDef {
@@ -163,8 +172,9 @@ export interface ArtilleryDef {
 export interface UnitType {
   geometry: Geometry
   formations: Record<string, FormationDef>
+  // seconds, keyed 'from>to'
   changeTime: Record<string, number>
-  defaultChangeTime: number // seconds, keyed 'from>to'
+  defaultChangeTime: number
   start: string // the shape a spawn takes when it names none
   fires: boolean // fires by company (S1c's musketry)
   // how its men are drawn: on foot, on horseback, or serving pieces (the renderer's; no rule reads it)
@@ -212,17 +222,20 @@ export interface ShapeLayout {
   kind: number
   place: Placement[]
   of: Int32Array // [c][r][f] → bin within the company (0..bins − 1)
+  // [c][r][f] → place in the straight layout (heading 0)
   posX: Float64Array
-  posZ: Float64Array // [c][r][f] → place in the straight layout (heading 0)
+  posZ: Float64Array
   pairs: number[][] // accordion: [bin ahead, bin behind, room]
   half: number // half-width across travel
   // half-turn: slot map (c·R·F + r·F + f), bin map, whether files reverse
   turn: { cx: number; cz: number; m: Int32Array; bin: Int32Array; flipsFiles: boolean } | null
+  // indices into paces, −1 none
   pace: number
-  roadPace: number // indices into paces, −1 none
+  roadPace: number
   fileStep: number // metres between files in its places (the block's, or a trail shape's step)
+  // its places' spacing of files and of ranks over the block's (1 but for a step)
   kx: number
-  kz: number // its places' spacing of files and of ranks over the block's (1 but for a step)
+  kz: number
   spread: number // the larger of kx, kz and 1: how much farther than the block a company's places reach
   // a trail shape's trail length: its depth, two company frontages and 12 m, and at least 24 m past its farthest place
   trailLimit: number
@@ -235,13 +248,15 @@ export interface TypeTable {
   name: string
   def: UnitType
   geo: Geometry
+  // companies, bins and slots of a formation of this type
   C: number
   NB: number
-  slots: number // companies, bins and slots of a formation of this type
+  slots: number
   qMax: number // the largest hurry factor of its shapes' paces (how far a man may step in a tick)
   slotC: Int32Array // each slot's company
+  // each slot's place in its company block (blockLocal)
   slotLX: Float64Array
-  slotLZ: Float64Array // each slot's place in its company block (blockLocal)
+  slotLZ: Float64Array
   slotReach: number // the farthest place in a company block from its origin
   shapes: ShapeLayout[]
   shapeIndex(name: string): number

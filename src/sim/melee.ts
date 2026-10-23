@@ -53,12 +53,13 @@ import { sin, cos } from './num.ts'
 import { TICK_HZ, DT } from './time.ts'
 
 const sqrt = Math.sqrt
+// keyed draws: purpose tags
 const K_TEST = 11
 const K_REFUSE = 12
 const K_BREACH = 13
 const K_IMPACT = 14
 const K_RECOIL = 15
-const K_MELEE = 16 // keyed draws: purpose tags
+const K_MELEE = 16
 export const Q_FRONT = 0
 export const Q_FLANK = 1
 export const Q_REAR = 2 // the side a charge comes from, in the target's frame
@@ -340,9 +341,10 @@ function chargeStep(w: World, G: FireGeo, S: Melee, i: number, tick: number): vo
     endCharge(w, i, tick, f.chRun[i] > 0 || f.chPhase[i] === CH_PURSUIT)
     return
   }
+  // the gallop's metres
   if (f.chPhase[i] === CH_PURSUIT || f.chGap[i] <= ch.gallopAt) {
     f.chRun[i] += sqrt(f.vx[i] * f.vx[i] + f.vz[i] * f.vz[i]) * DT
-  } // the gallop's metres
+  }
   const gap = gapOf(w, G, i, j)
   f.chGap[i] = gap
   if (f.chPhase[i] === CH_PURSUIT) {
@@ -509,13 +511,15 @@ export function standingStep(w: World): void {
       if (!f.alertAt[i] || tick - f.alertAt[i] > hold) f.refugeOff[i] = 0 // a new spell of threat
       f.alertAt[i] = tick
     } else if (f.alertAt[i] && tick - f.alertAt[i] > hold && !nearby(w, i, n)) {
+      // the spell is over (alertSince: the form-back's next try, now)
       f.alertAt[i] = 0
       f.alertSince[i] = 0
-      f.refugeOff[i] = 0 // the spell is over (alertSince: the form-back's next try, now)
+      f.refugeOff[i] = 0
     }
     const into = targetShape(w, i)
     if (f.alertAt[i]) {
       // in a spell: form square once the threat has run react seconds unbroken, unless a player's order stood it down
+      // threatened now, unbroken for react
       if (
         f.alertAt[i] !== tick ||
         f.refugeOff[i] ||
@@ -524,12 +528,13 @@ export function standingStep(w: World): void {
         (tick - f.alertSince[i] - react) % REFUGE_RETRY
       ) {
         continue
-      } // threatened now, unbroken for react
+      }
+      // the shape it is in, or going to, now
       if (startChange(w, i, U.refuge, true)) {
         f.autoFrom[i] = into + 1
         f.status[i] = 0
         f.blockedFor[i] = 0
-      } // the shape it is in, or going to, now
+      }
     } else if (f.autoFrom[i]) {
       // the spell is over: back into the shape it formed square from, as soon as the square stands formed (out of a
       // spell, alertSince holds the tick of the next try: 0 at once, REFUGE_RETRY after one that could not be made).

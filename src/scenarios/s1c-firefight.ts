@@ -87,8 +87,9 @@ export function runFirefight(
   firefight(range, qa, qb).setup(w)
   for (let t = 0; t < maxTicks; t++) {
     advanceTick(w)
+    // a break: routing, or shattered at once
     const a = outOfFight(w.f.mstate[0])
-    const b = outOfFight(w.f.mstate[1]) // a break: routing, or shattered at once
+    const b = outOfFight(w.f.mstate[1])
     if (a || b) {
       const i = a ? 0 : 1
       const M = cr.rs.morale

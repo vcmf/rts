@@ -52,12 +52,14 @@ export interface Formations {
   drill: Float64Array
   lean: Uint8Array // which way a company's files centre when it cannot be exact (Face about flips it)
   faces: Int32Array // Face abouts done (the renderer relabels its men through the half-turn)
+  // the anchor: front centre; heading 0 = +z, clockwise toward +x
   x: Float64Array
   z: Float64Array
-  heading: Float64Array // the anchor: front centre; heading 0 = +z, clockwise toward +x
+  heading: Float64Array
+  // last tick's anchor (for the renderer's interpolation)
   px: Float64Array
   pz: Float64Array
-  ph: Float64Array // last tick's anchor (for the renderer's interpolation)
+  ph: Float64Array
   vx: Float64Array
   vz: Float64Array
   omega: Float64Array
@@ -70,18 +72,21 @@ export interface Formations {
   tStart: Float64Array
   tDur: Float64Array
   tDelay: Float64Array // [i·C + c]
+  // [(i·C + c)·4 + x|z|rot|face]
   tFrom: Float64Array
-  tTo: Float64Array // [(i·C + c)·4 + x|z|rot|face]
+  tTo: Float64Array
   tK: Float64Array // [(i·C + c)·2 + kx|kz]: the spacing of its places as the change began
   // the lag model, per bin
+  // [i·NB + j], NB = cr.maxNB
   lags: Float64Array
   lagRate: Float64Array
   binG: Float64Array
   binQ: Float64Array
-  binN: Int32Array // [i·NB + j], NB = cr.maxNB
+  binN: Int32Array
   // the march trail: a ring of points, oldest first
+  // [i·T + k], T = cr.trail
   trailX: Float64Array
-  trailZ: Float64Array // [i·T + k], T = cr.trail
+  trailZ: Float64Array
   trailStart: Int32Array
   trailCount: Int32Array
   trailVer: Int32Array
@@ -215,10 +220,12 @@ export interface World {
   // a scenario's plan for the side it scripts (S1e-2, plan.ts): attached like the terrain, not state (the steps are
   // the scenario's, and which have run follows from the tick); its hash is state (M_PLAN), so a save loaded without
   // the plan it was made with fails at once
+  // plan: its steps sorted by the tick they fall due on (planDue)
   plan: PlanStep[]
   planHash: number
-  planDue: number[] // plan: its steps sorted by the tick they fall due on (planDue)
+  planDue: number[]
   debug: boolean
+  // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
   scratch: {
     places?: Places
     arc?: Arc
@@ -234,7 +241,7 @@ export interface World {
     menNow?: Int32Array
     melee?: Melee
     fireGeoTick?: number
-  } // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
+  }
 }
 
 export function makeWorld(data: SimData, cr: Compiled, seed: number, debug = true, terrain?: Terrain): World {

@@ -49,6 +49,7 @@ export type Command =
   | { type: 'halt'; id: Handle }
   | { type: 'style'; id: Handle; preset: string }
   | {
+      // unit: the unit type (the ruleset's first when left out); shape: the type's start when left out
       type: 'debug-spawn'
       side: number
       x: number
@@ -59,7 +60,7 @@ export type Command =
       quality?: number
       fire?: string
       unit?: string
-    } // unit: the unit type (the ruleset's first when left out); shape: the type's start when left out
+    }
   | { type: 'fire'; id: Handle; mode: string; target?: Handle }
   | { type: 'side'; side: number; x: number; z: number }
   | { type: 'debug-kill'; id: Handle; men: number }

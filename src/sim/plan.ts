@@ -28,11 +28,12 @@ import { TICK_HZ } from './time.ts'
 
 // a step's command: any command for one formation, its `id` (and any `target`) given as unit numbers
 export type PlanCommand = Command extends infer C ? (C extends { id: number } ? Omit<C, 'id'> : never) : never
+// at: seconds from the start
 export interface PlanStep {
   at: number
   unit: number
   cmd: PlanCommand
-} // at: seconds from the start
+}
 // what a world needs of its scenario beyond its setup: the plan and the time limit
 export interface ScenarioRules {
   plan?: PlanStep[]
@@ -82,13 +83,14 @@ export function checkPlan(w: World): void {
 export function planStep(w: World, dropped: Dropped[]): void {
   const t = w.meta[M_TICK] + 1
   const D = w.planDue
+  // the first due at t or later
   let lo = 0
   let hi = D.length
   while (lo < hi) {
     const m = (lo + hi) >> 1
     if (D[m] < t) lo = m + 1
     else hi = m
-  } // the first due at t or later
+  }
   for (let k = lo; k < D.length && D[k] === t; k++) {
     const s = w.plan[k]
     const c = { ...s.cmd, id: unitHandle(s.unit) } as Command & { target?: number }

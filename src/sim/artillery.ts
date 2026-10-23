@@ -44,9 +44,10 @@ import { sin, cos } from './num.ts'
 import { DT } from './time.ts'
 
 const sqrt = Math.sqrt
+// keyed draws: purpose tags
 const K_RELOAD = 21
 const K_RAY = 22
-const K_CONE = 23 // keyed draws: purpose tags
+const K_CONE = 23
 const ks = new Uint32Array(4)
 
 // a battery may fire: of a type with artillery, in a shape it fires from, halted (no order at its head but a
@@ -111,8 +112,9 @@ export function artilleryStep(w: World): void {
         f.reload[k] = RETARGET_TICKS * DT
         continue
       }
+      // the muzzle
       const mx = G.ox[k] + G.fx[k] * A.ahead
-      const mz = G.oz[k] + G.fz[k] * A.ahead // the muzzle
+      const mz = G.oz[k] + G.fz[k] * A.ahead
       const d = sqrt((G.cx[m] - mx) * (G.cx[m] - mx) + (G.cz[m] - mz) * (G.cz[m] - mz))
       if (d <= A.cone.range) cone(w, G, i, k, j, mx, mz, G.cx[m], G.cz[m], d, keyedStream(ks, seed, tick, h, c, K_CONE))
       else ray(w, G, i, k, mx, mz, G.cx[m], G.cz[m], keyedStream(ks, seed, tick, h, c, K_RAY))
@@ -237,10 +239,11 @@ function crossing(
   const sa = G.sa[m]
   const ax = x0 - G.ox[m]
   const az = z0 - G.oz[m]
+  // the line in the block frame
   const lx = ax * ca + az * sa
   const lz = -ax * sa + az * ca
   const dx = ux * ca + uz * sa
-  const dz = -ux * sa + uz * ca // the line in the block frame
+  const dz = -ux * sa + uz * ca
   let t0 = 0
   let t1 = L
   for (let n = 0; n < 2; n++) {

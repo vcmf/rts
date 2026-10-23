@@ -51,7 +51,8 @@ export function gunFight(kind: GunCase): Scenario {
 export function ridged(d: SimData): SimData {
   const H = d.height
   const h = new Float64Array(H.h.length)
-  const s0 = Math.SQRT2 * (LONG - 50 / Math.SQRT2) // the ridge line, along the diagonal
+  // the ridge line, along the diagonal
+  const s0 = Math.SQRT2 * (LONG - 50 / Math.SQRT2)
   for (let j = 0; j < H.nz; j++) {
     for (let i = 0; i < H.nx; i++) {
       const x = H.x0 + i * H.cell

@@ -70,8 +70,9 @@ export function moraleStep(w: World, i: number, lost: number): void {
   const base = Math.max(1, f.baseMen[i])
   const start = Math.max(1, f.startMen[i])
   f.recent[i] = f.recent[i] * w.cr.recentDecay + lost
+  // the melee step's shocks (a charge's threat and impact): taken with contagion
   const owedShock = f.shockIn[i]
-  f.shockIn[i] = 0 // the melee step's shocks (a charge's threat and impact): taken with contagion
+  f.shockIn[i] = 0
   const s = f.mstate[i]
   const men = w.scratch.menNow ? w.scratch.menNow[i] : menOf(w, i)
   // shattered, or routing mid-run: it only runs, and nothing it would read of the others is used
@@ -254,9 +255,10 @@ function run(w: World, i: number): void {
   setOnMap(w, n, f.x[i] + dx * RUN, f.z[i] + dz * RUN)
   w.ord.resolved[n] = 1
   if (ordersFree(w) > 0 && layoutOf(w, i).turn && !f.trans[i] && dx * sin(f.heading[i]) + dz * cos(f.heading[i]) < 0) {
+    // optional: if it fails, the run goes on
     const k = allocOrder(w, O_FACE)
     w.ord.optional[k] = 1
-    appendOrder(w, i, k) // optional: if it fails, the run goes on
+    appendOrder(w, i, k)
   }
   appendOrder(w, i, n)
 }

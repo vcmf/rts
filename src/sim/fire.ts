@@ -25,9 +25,10 @@ import { DT } from './time.ts'
 
 const sqrt = Math.sqrt
 export const RETARGET_TICKS = 10 // targets are chosen every 0.5 s, staggered by slot (one tick in ten each)
+// keyed draws: purpose tags
 const K_HITS = 1
 const K_RELOAD = 2
-const K_SPAWN = 3 // keyed draws: purpose tags
+const K_SPAWN = 3
 const SIGHT_STEP = 2 // metres between samples along a sight line
 
 // per-company geometry for this step (scratch, not state): centre, facing and the block's origin and rotation,
@@ -110,8 +111,9 @@ export function blockGeometry(w: World): FireGeo {
     G.reach[i] = 0
     for (let c = 0; c < U.C; c++) {
       const k = i * CS + c
+      // the block's centre: (0, back) in the block frame
       G.cx[k] = G.ox[k] - back * G.sa[k]
-      G.cz[k] = G.oz[k] + back * G.ca[k] // the block's centre: (0, back) in the block frame
+      G.cz[k] = G.oz[k] + back * G.ca[k]
       G.reach[i] = Math.max(
         G.reach[i],
         sqrt((G.cx[k] - f.x[i]) * (G.cx[k] - f.x[i]) + (G.cz[k] - f.z[i]) * (G.cz[k] - f.z[i])) + half,
@@ -251,9 +253,10 @@ export function sees(w: World, G: FireGeo, k: number, m: number): boolean {
   const n = MAX_FORMATIONS * w.cr.maxC
   const s = w.scratch
   const epoch = s.fireEpoch ?? 0
+  // the upper triangle (k ≠ m)
   const a0 = k < m ? k : m
   const b0 = k < m ? m : k
-  const key = (a0 * (2 * n - a0 - 1)) / 2 + (b0 - a0 - 1) // the upper triangle (k ≠ m)
+  const key = (a0 * (2 * n - a0 - 1)) / 2 + (b0 - a0 - 1)
   const cache = s.fireSight ?? (s.fireSight = new Int32Array((n * (n - 1)) / 2))
   const v = cache[key]
   if (v >> 1 === epoch) return (v & 1) === 1
@@ -341,7 +344,8 @@ export function fireStep(w: World): void {
   }
   if (!any) return
   const G = blockGeometry(w)
-  const rev = w.scratch.reverse === true // a test visits battalions in reverse: results must not change
+  // a test visits battalions in reverse: results must not change
+  const rev = w.scratch.reverse === true
   const R: Reach = { range: F.maxRange, cos: w.cr.cosArc }
   w.scratch.fireGeoTick = tick // built for this tick's positions after movement: the melee step reuses it
   for (let n = 0; n < MAX_FORMATIONS; n++) {
@@ -415,8 +419,9 @@ export function chooseTarget(w: World, G: FireGeo, i: number, c: number, R: Reac
       if (f.men[m] > 0 && inArc(G, k, G.cx[m], G.cz[m], R)) b = Math.min(b, sqDist(G, k, m))
     }
     if (b === Infinity) continue
+    // insertion by (bound, handle)
     const h = handleOf(w, j)
-    let p = nc++ // insertion by (bound, handle)
+    let p = nc++
     while (p > 0 && (candD[p - 1] > b || (candD[p - 1] === b && candH[p - 1] > h))) {
       candD[p] = candD[p - 1]
       candH[p] = candH[p - 1]
@@ -504,8 +509,9 @@ export function oweByMen(w: World, j: number, mask: ArrayLike<number>, n: number
 // would put a man on impassable ground falls on another company, those owed hits first). Hits owed to a
 // company beyond the men it has are lost: they were aimed at men who are already down, and passing them on
 // could strike a company the shooters cannot see. Returns the men battalion i lost.
+// per company
 const owedAtStart = new Int32Array(MAX_COMPANIES)
-const takeNow = new Int32Array(MAX_COMPANIES) // per company
+const takeNow = new Int32Array(MAX_COMPANIES)
 export function casualtiesStep(w: World, i: number): number {
   const f = w.f
   const C = typeOf(w, i).C
