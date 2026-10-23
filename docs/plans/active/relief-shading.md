@@ -80,3 +80,23 @@ Out of scope:
 - The light's height and the shading exaggeration: tuned by eye with the owner.
 - Fine-grid size against the generated file's size: about 1.3 million heights at 4 m. To be measured; if too
   big, store it as a binary file next to the `.js`.
+
+## Results
+
+- Built as planned. The fine grid is 1351 × 951 at 4 m, sampled bilinearly from the 5 m source. The generated file is
+  8.9 MB, git-ignored.
+- **Cast shadows in one pass.** Walking from the light's side, each point carries the highest shadow line that
+  reaches it. That is exact for hard shadows and costs O(n), so no rays are marched. The shadow's soft edge is a fixed
+  few metres. **Exposure** comes from two box means: about 24 m, and about 80 m, from summed-area tables.
+- **Measured** (Windows Chrome over CDP, D3D11, RTX 3080, real terrain, true slopes):
+  - **Bake:** `window.__reliefMs` 149 to 161 ms.
+  - **Load:** `window.__buildMs` 1287 and 1326 ms, against 1141 and 1231 ms for `relief=layers` (two runs each).
+  - **Frame at map zoom:** vsync and the frame cap off, 7.8 and 8.0 ms against 6.9 and 7.2 ms.
+- **Look.**
+  - At true slopes, with the defaults (sun 30°, light exaggeration ×2), the Pratzen plateau, its flanks and the
+    valleys read as in the references, in the paper's hues.
+  - With `&demz=1`, the mesh's ×2.5 stacked on the light's ×2 gives long, heavy shadows and too much yellow. The
+    lit tint was toned down after the first screenshots.
+  - `?sun=` and `?rz=` set the light's height and the exaggeration, for tuning by eye.
+- **Seen:** long straight shadow bars at close zoom, likely modern embankments in today's terrain. They belong to the
+  1805 cleanup in the next plan.
