@@ -55,3 +55,4 @@ recorded here on 2026-10-08.
 | [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | accepted |
 | [0047](0047-figures-cast-runtime-shadows.md) | The figures cast runtime shadows from a map of their own | proposed |
 | [0049](0049-simple-shadows-beyond-close-zoom.md) | The figures' shadow map only up close; one simple shadow a soldier beyond | proposed |
+| [0052](0052-code-style.md) | Code style: Prettier formats, ESLint keeps lines short and one statement each | proposed |
