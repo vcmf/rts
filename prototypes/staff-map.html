@@ -615,9 +615,9 @@ void main(){
   float minorC=(1.0-smoothstep(0.5,1.3,dc))*(1.0-smoothstep(0.22,0.5,fwc));
   float indexC=(1.0-smoothstep(0.9,1.9,dx))*(1.0-smoothstep(0.3,0.7,fwx));
 #ifdef LAYERS
-  minorC*=uWash;indexC*=0.7;   /* the 5 m ink only where the sheets have faded (toward ground zoom) */
+  minorC*=mix(0.7,1.0,uWash);indexC*=0.85;   /* the contours with the sheets, the 5 m ones lighter while the sheet edges show */
 #endif
-  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.4,indexC*0.7)*k*inside*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
+  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.25,indexC*0.45)*k*inside*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
 #else
   col=mix(col,uHach,clamp(A.r*1.05,0.0,1.0)*k*uHachK);
 #endif

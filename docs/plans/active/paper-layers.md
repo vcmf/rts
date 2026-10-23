@@ -23,7 +23,8 @@ or the real terrain (`?dem=`, #140):
    the sheet below where it faces away, clamped under half a band, never black.
 3. **Octaves:** 5 m sheets where their edges are far enough apart on screen, 25 m sheets where they would crowd.
 4. **A faint continuous hillshade** from the smoothed slope underneath, so gentle ground keeps its form.
-5. **Index contours** (25 m) stay as thin ink; the 5 m ink lines go (the sheet edges replace them).
+5. **Contours drawn on the sheets** (the owner's choice after the first screenshots: raised sheets and contour lines
+   together), in a lighter ink than the contour-only style so the map does not feel heavy.
 6. The whole effect fades toward ground zoom, with the paper's wash.
 
 Out of scope: a baked cast-shadow hillshade, hypsometric colours beyond the band tint, plan-oblique tilt, the map
@@ -59,6 +60,11 @@ sheet's own drop shadow, water as cut-outs (the research's further suggestions).
 - Up close the sheets read as a layered paper model (soft shadow strips under each 5 m edge, thin lit edges); at mid
   zoom the Pratzen's east flank reads as a stair of sheets; at map zoom mostly the soft underlying hillshade and the
   25 m sheets.
+
+- **Sheets and contours together** (the owner, after seeing the layers alone): the 5 m ink stays with the sheets, at
+  70 % while the sheet edges show, full where they fade; the lit style's contour ink lighter overall (5 m 0.4 → 0.25,
+  25 m 0.7 → 0.45 of the ink colour; the 25 m ink at 0.85 of that over the sheets). The plain lit style gets the
+  lighter ink too.
 
 ## Review rounds
 
