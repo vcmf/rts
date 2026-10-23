@@ -91,6 +91,12 @@ with the nearest LOD side by side.
   - the depth of field: unchanged from 45 m (its ease reckoned from there); the near band softens the bottom of the
     frame by design (decision 0040), the units with it;
   - the render scale: Auto keeps 0.9 (EASU) at the closest zooms, its edges where they were (217 and 234 m).
+- **The bench** (the coordinator's, Metal, 1080p, `?armies=20&benchat=162.5,-2.5`, still; p50 ms; raw runs in the
+  session's scratchpad, `closezoom/bench/`): today's zooms cost nothing extra. Main (084d6e0) in three rounds against
+  this branch in four: wide 9.10 / 8.85 / 8.75 against 8.80 / 8.70 / 8.75 / 8.80; default 10.65 / 10.05 / 10.10
+  against 10.10 four times; close (45 m) 9.80 to 10.05 on both. At the 15 m camera (`?benchclosest=1`, three yaws a
+  round) the nearest LOD costs about nothing: 7.30 to 8.30 with it (one round's middle yaw 9.10) against 7.30 to 8.20
+  with `?nearestpx=0`. (Benched on the build before the coat's shade fix, which changes colour roles only.)
 - **Checks**: `npm test` (lint, typecheck, 302 tests), `check:data`, `check-docs` pass. `tools/macro-check.mjs
   --only shimmer` fails its closest view at 15 m (1.86 % of the field pixels against the 1.0 % gate; 0.37 % at 45 m):
   #139; the water's and the detail checks at the closest zoom not run yet (#139).

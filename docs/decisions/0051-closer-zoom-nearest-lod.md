@@ -37,7 +37,9 @@ triangles) existed, but a battalion of 414 men drawn with it would be 3.8 M tria
 - At the zooms the page had, nothing is drawn differently: the hold does not run, no man is drawn at the nearest LOD
   (the nearest in view at 45 m stand under 90 px).
 - At 15 m about a hundred men are drawn at the full figure (those in the view and close; 91 to 108 of a battalion
-  in the review views); the cost is measured in `docs/plans/active/close-zoom.md`.
+  in the review views). Measured (Metal, 1080p, 20 battalions a side, p50): today's zooms cost the same as main
+  (wide 8.7–8.8 against 8.75–9.1 ms, default 10.1 against 10.05–10.65, close 9.75–10.05 against 9.8–10.05); at 15 m
+  the nearest LOD costs about nothing (7.3–8.3 ms with it, 7.3–8.2 without): `docs/plans/active/close-zoom.md`.
 - The figure's data grows from 0.76 MB to 1.43 MB (0.47 MB gzipped).
 - The checks that view the closest zoom (`tools/macro-check.mjs`, `tools/water-look-check.mjs`,
   `tools/detail-check.mjs`, `tools/water-check.mjs`, the ablation kit) now view it at 15 m.
