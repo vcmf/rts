@@ -10,7 +10,8 @@ last_reviewed: 2026-10-08
 - Conventional Commits: `type(scope): subject`. Scope mandatory and specific (`water`, `terrain`,
   `foliage`, `postfx`, `sim`, `camera`, `docs`, `tools`, …); subject imperative, lowercase, no
   trailing period; breaking → `!` or `BREAKING CHANGE:`. One logical change per commit. No emoji.
-- PR titles in the same format; PRs are squash-merged, so the title becomes the commit.
+- PR titles in the same format; PRs are squash-merged, so the title becomes the commit. The exception: an
+  epic branch merges into main with a merge commit, keeping each squashed PR as one commit (decision 0020).
 - No AI attribution lines in commits or PRs.
 
 ## Units and numbers

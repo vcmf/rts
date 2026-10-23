@@ -5,6 +5,31 @@ import tseslint from 'typescript-eslint'
 const banned = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh',
   'exp', 'expm1', 'log', 'log1p', 'log2', 'log10', 'pow', 'hypot', 'cbrt', 'fround', 'random']
 
+// the exact-number rules (decision 0006), shared by every folder whose results must match across JS engines: the
+// sim and its rulesets, and the map engine (docs/proposals/map-engine.md §4)
+const exactProperties = [
+  ...banned.map(property => ({ object: 'Math', property, message: 'Not exact across JS engines: use src/sim/num.ts (decision 0006).' })),
+  { object: 'Date', property: 'now', message: 'No wall-clock time in exact code.' },
+  { property: 'setFloat32', message: 'Exact data is float64.' }, { property: 'getFloat32', message: 'Exact data is float64.' }]
+const exactGlobals = [
+  { name: 'Date', message: 'No wall-clock time in exact code.' },
+  { name: 'performance', message: 'No wall-clock time in exact code: metering is injected.' },
+  { name: 'Float32Array', message: 'Exact data is float64: Float32Array rounds silently on store.' },
+  { name: 'Float16Array', message: 'Exact data is float64.' },
+  { name: 'globalThis', message: 'Exact code reaches nothing global but its allowed builtins.' },
+  { name: 'Reflect', message: 'No indirect access to builtins in exact code.' },
+  { name: 'crypto', message: 'Randomness comes from seeded generators (src/sim/rng.ts).' },
+  { name: 'WeakRef', message: 'Collection timing is not deterministic.' },
+  { name: 'FinalizationRegistry', message: 'Collection timing is not deterministic.' }]
+const exactSyntax = [
+  { selector: "BinaryExpression[operator='**']", message: 'Not exact across JS engines: multiply, or use src/sim/num.ts.' },
+  { selector: "AssignmentExpression[operator='**=']", message: 'Not exact across JS engines: multiply, or use src/sim/num.ts.' },
+  { selector: "MemberExpression[object.name='Math'][computed=true]", message: 'No computed access to Math in exact code.' },
+  { selector: "VariableDeclarator[init.type='Identifier'][init.name='Math']", message: 'No aliasing Math in exact code.' },
+  { selector: "AssignmentExpression[right.type='Identifier'][right.name='Math']", message: 'No aliasing Math in exact code.' },
+  { selector: "CallExpression > Identifier.arguments[name='Math']", message: 'No passing Math around in exact code.' },
+  { selector: 'ImportExpression', message: 'No dynamic imports in exact code.' }]
+
 export default tseslint.config(
   { ignores: ['node_modules/', 'dist/', 'scratch/', 'data/', 'prototypes/', 'tools/*.js', 'tools/*.mjs', 'tools/*.py', 'eslint.config.js'] },
   ...tseslint.configs.recommended,
@@ -14,35 +39,32 @@ export default tseslint.config(
   {
     files: ['src/sim/**/*.ts', 'src/rulesets/**/*.ts'],
     rules: {
-      'no-restricted-properties': ['error',
-        ...banned.map(property => ({ object: 'Math', property, message: 'Not exact across JS engines: use src/sim/num.ts (decision 0006).' })),
-        { object: 'Date', property: 'now', message: 'The sim clock is the tick.' },
-        { property: 'setFloat32', message: 'State is float64.' }, { property: 'getFloat32', message: 'State is float64.' }],
-      'no-restricted-globals': ['error',
-        { name: 'Date', message: 'No wall-clock time in the sim.' },
-        { name: 'performance', message: 'No wall-clock time in the sim: metering is injected.' },
-        { name: 'Float32Array', message: 'State is float64: Float32Array rounds silently on store.' },
-        { name: 'Float16Array', message: 'State is float64.' },
-        { name: 'globalThis', message: 'The sim reaches nothing global but its allowed builtins.' },
-        { name: 'Reflect', message: 'No indirect access to builtins in the sim.' },
-        { name: 'crypto', message: 'Randomness comes from src/sim/rng.ts.' },
+      'no-restricted-properties': ['error', ...exactProperties],
+      'no-restricted-globals': ['error', ...exactGlobals,
         { name: 'process', message: 'The sim runs without Node.' },
-        { name: 'WeakRef', message: 'Collection timing is not deterministic.' },
-        { name: 'FinalizationRegistry', message: 'Collection timing is not deterministic.' },
         { name: 'Map', message: 'Use index-ordered typed arrays in the sim.' },
         { name: 'Set', message: 'Use index-ordered typed arrays in the sim.' },
         { name: 'window', message: 'The sim runs without a browser.' },
         { name: 'document', message: 'The sim runs without a browser.' }],
-      'no-restricted-syntax': ['error',
-        { selector: "BinaryExpression[operator='**']", message: 'Not exact across JS engines: multiply, or use src/sim/num.ts.' },
-        { selector: "AssignmentExpression[operator='**=']", message: 'Not exact across JS engines: multiply, or use src/sim/num.ts.' },
-        { selector: "MemberExpression[object.name='Math'][computed=true]", message: 'No computed access to Math in the sim.' },
-        { selector: "VariableDeclarator[init.type='Identifier'][init.name='Math']", message: 'No aliasing Math in the sim.' },
-        { selector: "AssignmentExpression[right.type='Identifier'][right.name='Math']", message: 'No aliasing Math in the sim.' },
-        { selector: "CallExpression > Identifier.arguments[name='Math']", message: 'No passing Math around in the sim.' },
-        { selector: 'ImportExpression', message: 'No dynamic imports in the sim.' }],
+      'no-restricted-syntax': ['error', ...exactSyntax],
       'no-restricted-imports': ['error', { patterns: [
         { regex: '^(?!\\./)', message: 'src/sim/ imports only from src/sim/ (decision 0005).' }] }],
+    },
+  },
+  // the map engine (docs/proposals/map-engine.md §4): its compilers run in Node and in browsers and must give the
+  // same bytes, so the exact-number rules apply (Map and Set are allowed: their order is insertion order); it
+  // imports only itself (no path that climbs out) and the sim's exact maths
+  {
+    files: ['src/map/**/*.ts'],
+    rules: {
+      'no-restricted-properties': ['error', ...exactProperties],
+      'no-restricted-globals': ['error', ...exactGlobals,
+        { name: 'process', message: 'The map engine runs without Node: the CLI passes it what it needs.' },
+        { name: 'window', message: 'The map engine runs without a browser.' },
+        { name: 'document', message: 'The map engine runs without a browser.' }],
+      'no-restricted-syntax': ['error', ...exactSyntax],
+      'no-restricted-imports': ['error', { patterns: [
+        { regex: '^(?!\\./(?!.*\\.\\.)|\\.\\./sim/num\\.ts$)', message: 'src/map/ imports only from src/map/ and src/sim/num.ts.' }] }],
     },
   },
   // a ruleset is data for the sim: the same rules, and it may import the sim's types and maths

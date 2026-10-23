@@ -20,6 +20,7 @@ coverage/
 
 # Local renders and scratch
 renders/
+*.draft.png
 scratch/
 *.mp4
 
