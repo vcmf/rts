@@ -612,16 +612,21 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   (`src/look/units-data.ts`, at load, about 85 ms) projects the far LOD, posed at up to 12 steps of each role's clip and
   turned to 16 facings, along the sun onto the ground, averages the steps (a marching man's legs one soft wedge) and
   blurs it; an R8 atlas, mipmapped, a cell a facing and a role. Each soldier draws it himself, in the main pass after
-  everything else (`unitdecal.vert`, `unitdecal.frag`): two more meshes a battalion on its own instance buffers, a
-  2 × 6 grid a man from his feet along the shadow, each vertex on the ground (the meadow map's height) and drawn toward
-  the camera along its view ray by `?udecallift` (0.6 m: over the grass and the men's legs in depth, no shift on
-  screen); his facing picks two cells, blended, his clip's first step his role's row, and it grows with the far figures
-  (`FAR_SCALE`). Twice: a depth pass, each pixel nearer by its darkness (up to 15 cm), so the darkest shadow at a pixel
-  wins, then a colour pass where its depth is that one's, darkening what is there by the ratio of the ground's painted
-  shadow to its painted light there (its macro colour painted both ways, through the air), blended dst · (1 − src),
-  the alpha (the lens codes) kept: overlapping shadows in a formation darken once, as the map's. No render target and
-  no reads in the receivers. Each man's shadow moves every frame with smooth places (below: `aNext`, his move to his
-  next step's place, written with his place; `uStepFrac`, the share of the step gone, from the CPU's clock), else at
+  everything else (`unitdecal.vert`, `unitdecal.frag`): one more mesh a battalion on its own instance buffers, a 2 × 6
+  grid a man from his feet along the shadow, each vertex on the ground (the meadow map's height) and drawn toward the
+  camera along its view ray by `?udecallift` (0.6 m, growing from 0 at his feet over 1.5 m so it never covers his own
+  shins: over the grass and the legs of the men in it in depth, no shift on screen); his facing picks two cells,
+  blended, read through the atlas's mips up to the third (a cell's border holds no further), his clip's first step his
+  role's row, and it grows with the far figures (`FAR_SCALE`). The fragment is one atlas read: its value is the
+  pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first shadow at a sample
+  through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the ground's shade there, read once a
+  vertex: so a formation's overlapping shadows darken each sample once, at every distance. **The shade**
+  (`src/look/bakes.ts` `unitShade`, `shaders/unitshade.frag`): the ratio of the ground painted in a full cast shadow
+  to it painted as it is (the baked shadows, the occlusion, the bounce, the season), top-down over the tile, rebaked
+  after the bounce map; so the darkening is the map's on the same ground (the air on top is not in the ratio). The
+  engine has a stencil for it (`src/look/main.ts`). No render target and no reads in the receivers. Each man's shadow
+  moves every frame with smooth places (below: `aNext`, his move to his next step's place, written with his place;
+  `uStepFrac`, the share of the step gone, from the CPU's clock), else at
   the steps with his figure. **The cross-fade**: by the camera's distance to its focus, from the map alone at 60 m to
   the simple shadows alone at 85 m (`SHADOW_SWITCH`, `?ushadowswitch=<r0>,<r1>`; the LOD switch, 48 px at 1080 lines,
   is at 63 m), `uUnitFar` their share: the receivers take 1 − it of the map (`unitShadowMix`), the decals it of their

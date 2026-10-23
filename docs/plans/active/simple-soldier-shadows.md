@@ -35,16 +35,17 @@ facing, by design); the sim's hookup.
   each of 16 facings, its triangles projected along the sun onto the ground and rasterised in the shadow's frame (along
   the shadow, across it), averaged over the clip's steps (a marching man's legs become one soft wedge) and blurred: an
   atlas of 16 facings × the four roles, R8. No unit is named: the roles are the bake's (decision 0015).
-- **The decal** (the rework; `src/look/units.ts`, `shaders/unitdecal.*`): two more meshes a battalion on its own
-  instance buffers (so they move with the men every frame), a 2 × 6 grid a man lying from his feet along the sun's
+- **The decal** (the rework; `src/look/units.ts`, `shaders/unitdecal.*`): one more mesh a battalion on its own
+  instance buffers (so it moves with the men every frame), a 2 × 6 grid a man lying from his feet along the sun's
   ground direction, each vertex set on the ground (the meadow map's height) and drawn toward the camera along its view
-  ray by a lift (0.6 m by default, `?udecallift`: over the grass and the men's legs in depth, no shift on screen). The
-  shape's facing and role pick its atlas cells (two facings blended, read through the atlas's mips). Drawn in the main
-  pass after everything else, twice: a depth pass, each pixel nearer by its darkness (up to 15 cm), so the darkest
-  shadow at a pixel wins; then a colour pass where its depth is that one's, darkening what is there by the ratio of the
-  ground's painted shadow to its painted light at that point (its macro colour painted both ways, through the air),
-  blended dst · (1 − src) with the alpha (the lens codes) kept. Overlapping shadows in a formation darken once, as the
-  map's do. No render target, no receiver reads: the terrain and the meadow keep the map's read alone, its share 1 − f.
+  ray by a lift (0.6 m by default, `?udecallift`, growing from his feet over 1.5 m: over the grass and the legs of the
+  men in it in depth, never his own shins, no shift on screen). The shape's facing and role pick its atlas cells (two
+  facings blended, read through the atlas's mips up to the third). One atlas read a pixel: its value the pixel's
+  coverage (alpha to coverage), the stencil passing only the first shadow at each sample, the blend dst · src (the
+  alpha kept) to the ground's shade read once a vertex: the ratio of the ground painted in a full shadow to its light,
+  baked top-down over the tile after the bounce map (`unitShade`, `shaders/unitshade.frag`), so it darkens as the map
+  does. Overlapping shadows in a formation darken each sample once, at every distance. No render target, no receiver
+  reads: the terrain and the meadow keep the map's read alone, its share 1 − f.
 - **Every frame**: each man's next step's place is written with his place (`aNext`), and his shadow moves by the
   share of the step gone (`uStepFrac`, from the CPU's clock in double precision), and so do the figures, their flags
   and the map's casters (`?smoothmove=1`, the default after the measurement; the map is then redrawn while the clock
@@ -152,14 +153,16 @@ Review images (the mask): `output/armies-review/7-simple-shadows/` in the main c
 
 ## Measured: the decal
 
-**Look** (SwiftShader, `?frozen`, 20 a side, the same marching battalion as above): at the default and the widest zoom
+**Look, the decal before review round 1** (to be measured again; SwiftShader, `?frozen`, 20 a side, the same marching
+battalion as above): at the default and the widest zoom
 each soldier's shadow reads on its own past the formation's edge, and the formation darkens once, about as the map's;
 across the band (55 to 88 m) no pop and no double darkening; at the closest zoom the frame pixel for pixel today's.
 **Flicker** (the same 12 frames 1/60 s apart): the shadow's fringe changes 1.0 to 1.1 every frame (the mask's 0.5 to
 0.7, the map's 0 then 6.5 and 5.0 at the steps); over the battalion 4.1 to 6.0 every frame, never a jump (the map's 14
 at each step). Review images: `output/armies-review/8-decal-shadows/`.
 
-**Cost**: (filled in after the rework's bench, 20 and 40 a side.)
+**Cost**: an estimate until the rework's bench (20 and 40 a side) lands: a few dozen triangles a man and one atlas
+read a pixel, each covered sample written once.
 
 ## Open questions
 
@@ -175,5 +178,11 @@ at each step). Review images: `output/armies-review/8-decal-shadows/`.
   (one groundAt a man a step instead of two). (The other, `fitMask` fitting and holding its box in one function, went
   with the mask.)
 - The decal's lift (0.6 m) darkens the grass and the men's legs within it over the ground in its shadow; a man
-  standing in his front rank's shadow gets it on his legs (the map shadows no figure). Taller crops (the wheat, 1.2 m)
-  hide the part of a shadow under them, as they hide the ground.
+  standing in his front rank's shadow gets it on his legs (the map shadows no figure), never his own (the lift grows
+  from his feet). Taller crops (the wheat, 1.2 m) hide the part of a shadow under them, as they hide the ground.
+- Review round 1 of the decal (fixed): the darkest-wins depth pass darkened ties twice and lost its bias at the widest
+  zoom (now a stencil); the darkening missed the bounce (now the baked shade); the fragment ran the painter twice over
+  four or five overlaps (now one atlas read, the shade once a vertex); the atlas bled between cells past its fourth mip
+  (now clamped); the decal was shown before its material existed.
+- The ground's shade leaves out the air: under strong haze, at the widest zoom far off, a decal shadow is a little
+  darker than the map's would be. The trodden ground's dust is not in it either.
