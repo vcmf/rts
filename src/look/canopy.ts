@@ -186,8 +186,8 @@ export function cardMesh(
 // the card material: the default crowns' palette, rim and backlight, the leaf atlas's value and coverage
 // volume: the crown lit as a volume (L7b: a normal per pixel from its ellipsoid, the light through it, the soft ramp)
 // thins: the crown thins with the season, card by card (src/look/shaders/cards.glsl; generated deciduous trees)
-// fade: a far tree's cards (src/look/nature.ts, farCuller), cut by a dither as the instance's aFade gives way to its
-// crown mesh
+// fade: a far tree's cards (src/look/nature.ts, farCuller), cut by a dither as the instance's
+// aFade gives way to its crown mesh
 export function cardMaterial(
   mats: Materials,
   name: string,

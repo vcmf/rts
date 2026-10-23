@@ -203,16 +203,16 @@ const waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData')
 const waterTexMs = performance.now() - waterT0
 const terrain = buildTerrain(scene, mats, look.far, look.bank, waterData)
 // the page's options (?watersab, ?detail, ?water, ?bench: below)
-// ?watersab=nodive: the band check's sabotage (tools/water-look-check.mjs), the ribbon's columns never dive under the
-// banks
+// ?watersab=nodive: the band check's sabotage (tools/water-look-check.mjs), the ribbon's
+// columns never dive under the banks
 const waterSabParam = params.get('watersab')
 if (waterSabParam !== null && waterSabParam !== 'nodive') {
   throw new Error(`?watersab must be nodive, not ${waterSabParam}`)
 }
 const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }, waterSabParam !== 'nodive')
 // the roads (docs/plans/done/roads.md): their segments and grid, and the owner's grit photo (its marks only once
-// loaded: uRoadOn), on the tile's terrain (live from mid zoom in: below) and the water's land side, and in the macro
-// bake
+// loaded: uRoadOn), on the tile's terrain (live from mid zoom in: below) and the water's
+// land side, and in the macro bake
 let roadTex: RoadTextures | undefined
 if (!mats.webgl1) {
   // (float textures: the roads' shader is WebGL2's)
@@ -291,8 +291,8 @@ if (!mats.webgl1) {
   })
   roadTex = { segs, grid, grit, n: sn, pave }
 }
-// ?trees=one: every tree one model (L5b's judging, docs/plans/active/l5-macro.md); with ?trees=one,cards, drawn as
-// leaf cards
+// ?trees=one: every tree one model (L5b's judging, docs/plans/active/l5-macro.md); with
+// ?trees=one,cards, drawn as leaf cards
 // ?trees=cards: the crowns as leaf cards (docs/plans/done/l7a-canopy-cards.md); ?leaves=procedural draws the atlas
 // instead of reading the oak picture; ?cardsize, ?cardcover, ?cardsink tune the cards (src/look/canopy.ts); ?volume=off
 // puts back L7a's light, card by card (docs/plans/done/l7b-crown-volume.md); ?trees=gen,cards (the default): generated
@@ -307,8 +307,8 @@ if (trees !== 'pack' && [...treeSet].some(k => k !== 'one' && k !== 'cards' && k
   throw new Error(`?trees must be pack, or one, cards and gen in a comma list, not ${treesParam}`)
 }
 if (treeSet.has('one') && treeSet.has('gen')) throw new Error('?trees takes one or gen, not both')
-// ?clumpvol=off (with gen): the generated crowns lit as one volume each, not one per clump (the A/B of the clumps'
-// light)
+// ?clumpvol=off (with gen): the generated crowns lit as one volume each, not one per clump
+// (the A/B of the clumps' light)
 if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has('gen'))) {
   throw new Error('?clumpvol takes off, with ?trees=gen')
 }
@@ -367,8 +367,8 @@ const nature = buildNature(
   for (const m of [...terrain.tileMats, water.waterMat, water.groundMat]) m.setArray4('uStones', a)
 }
 water.finish(scene)
-// the buildings (docs/plans/done/buildings.md), before the bakes: their shadows and the sky they hide are baked with
-// the trees'
+// the buildings (docs/plans/done/buildings.md), before the bakes: their shadows and the sky they
+// hide are baked with the trees'
 const bldlmParam = params.get('bldlm')
 const bldbounceParam = params.get('bldbounce')
 if (bldlmParam !== null && bldlmParam !== '0') throw new Error(`?bldlm must be 0, not ${bldlmParam}`)
@@ -533,8 +533,8 @@ const tinyPxParam = params.get('tinypx')
 if (tinyPxParam !== null && !(/^\d+(\.\d+)?$/.test(tinyPxParam) && +tinyPxParam > 0)) {
   throw new Error(`?tinypx must be a positive number of pixels, not ${tinyPxParam}`)
 }
-// the shadow fix: ?smhold=fixed, the held sun box (and the trodden mask's) as batch B's; ?shadowlod=far, the far LOD
-// casts
+// the shadow fix: ?smhold=fixed, the held sun box (and the trodden mask's) as batch B's;
+// ?shadowlod=far, the far LOD casts
 const smHold = params.get('smhold')
 const shadowLod = params.get('shadowlod')
 if (smHold !== null && smHold !== 'fixed') throw new Error(`?smhold must be fixed, not ${smHold}`)
@@ -1008,8 +1008,8 @@ scene.onBeforeRenderObservable.add(() => {
       : Math.tan(camera.fov / 2) / engine.getAspectRatio(camera)
   pixA = (2 * tv) / D.spec.detail.lines
   if (!FROZEN) S.t += Math.min(engine.getDeltaTime() / 1000, 0.05)
-  // the depth of field's focus and the view axis, which every material encodes its lens term against (painter.glsl
-  // depthA)
+  // the depth of field's focus and the view axis, which every material encodes its lens
+  // term against (painter.glsl depthA)
   const focusZ = post.updateFocus(engine.getDeltaTime() / 1000, S.dof > 0 || grassMode === 'flow')
   focusDist = post.focusRaw
   camFwd.copyFrom(camera.target).subtractInPlace(camera.position).normalize()
@@ -1087,8 +1087,8 @@ Object.assign(window, {
   // zoom: the wanted radius (ZoomHold: read wanted, set(r))
   __proto: { S, scene, camera, zoom: zoomOf(camera), buildPost: () => post.build(), play: D.spec.play },
   B: { Vector3, Matrix, DynamicTexture, VertexBuffer },
-  // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring formulas the river check compares
-  // with
+  // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring
+  // formulas the river check compares with
   scene,
   engine,
   camera,
@@ -1201,8 +1201,8 @@ const waterSab = (on: string[]) => {
 const groundAs = (kind: 'terrain' | 'water') => {
   terrain.tileGround.material = kind === 'water' ? water.groundMat : terrain.terrainMat
 }
-// the water data at a point, read bilinearly as the GPU reads it (the band check measures the drawn surfaces against
-// it)
+// the water data at a point, read bilinearly as the GPU reads it (the band check measures
+// the drawn surfaces against it)
 let waterBytes: Uint8Array | null = null
 const waterAt = (x: number, z: number) => {
   waterBytes ??= unpackSpans(look.water, WATER_FILL)
@@ -1385,8 +1385,8 @@ if (params.has('bench')) {
   // ?trees=cards&bench=trees: the crowns' two arms, cards and the pack's (docs/plans/done/l7a-canopy-cards.md),
   // for the frame's cost only (read the frame interval): the shadow map is baked once, with the cards, so the pack arm
   // keeps the cards' shadows
-  // ?bench=meadow: the meadow's grass and crops against none (the ground's pattern is in the macro bake: nothing a
-  // frame)
+  // ?bench=meadow: the meadow's grass and crops against none (the ground's pattern is in
+  // the macro bake: nothing a frame)
   if (params.get('bench') === 'meadow' && !meadow) throw new Error('?bench=meadow needs the meadow on (no ?meadow=off)')
   // ?trees=cards&bench=volume: the crowns lit as volumes against L7a's light (docs/plans/done/l7b-crown-volume.md)
   if ((params.get('bench') === 'trees' || params.get('bench') === 'volume') && !nature.showCards) {

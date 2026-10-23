@@ -557,13 +557,14 @@ export class StaffMap {
       let x = 0
       let z = 0
       let n = 0
+      // the front rank
       for (const m of men) {
         if (m.alive && Math.floor(m.s / RF) === c && Math.floor((m.s % RF) / g0.files) === 0) {
           x += m.x
           z += m.z
           n++
         }
-      } // the front rank
+      }
       if (!n) continue
       const p = placeWorld(w, i, c, ax, az, ah, t, 0, pose)
       const fx = Math.sin(p.face)
@@ -607,13 +608,14 @@ export class StaffMap {
       let x = 0
       let z = 0
       let n = 0
+      // the front rank
       for (const m of men) {
         if (m.alive && Math.floor(m.s / RF) === c && Math.floor((m.s % RF) / g0.files) === 0) {
           x += m.x
           z += m.z
           n++
         }
-      } // the front rank
+      }
       if (!n) continue
       const [sx, sy] = toS(v, x / n, z / n)
       const a = 1 - age / life

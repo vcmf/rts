@@ -335,8 +335,8 @@ export function buildMacro(
     return draws
   }
   // one bake over the world square centred on 0 of side `world` m: the macro colour, then on arm 5 (kuw) its filter.
-  // mb: the target with its mips, and arm 5's scratch beside it (`temp`: a scratch freed after the bake, the full-size
-  // run's)
+  // mb: the target with its mips, and arm 5's scratch beside it (`temp`: a scratch freed after
+  // the bake, the full-size run's)
   const draw = async (
     t: RenderTargetTexture,
     n: number,

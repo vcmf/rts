@@ -169,9 +169,9 @@ export function shoreSegments(
       }
       // a saddle (opposite corners alike): the cell's centre decides which corners the water joins
       if ((centreWet(i, j) ? 1 : 0) === w10) {
+        // corners 00 and 11 cut off
         seg.push(...p[0]!, ...p[3]!, ...p[1]!, ...p[2]!)
-      } // corners 00 and 11 cut off
-      else seg.push(...p[0]!, ...p[1]!, ...p[2]!, ...p[3]!) // corners 10 and 01 cut off
+      } else seg.push(...p[0]!, ...p[1]!, ...p[2]!, ...p[3]!) // corners 10 and 01 cut off
     }
   }
   return Float64Array.from(seg)

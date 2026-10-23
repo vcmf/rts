@@ -75,9 +75,8 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
       ],
     })
   // three tile materials: the live roads and the buildings' paving (terrainMat: on the yards' ground; the whole tile
-  // under
-  // ?split=0, the debug views), the live roads alone (terrainRoadsMat: on the ground near a road), and neither (the
-  // baked: far out, and the rest of the ground near). splitGround gives each its triangles. On WebGL1 one, without
+  // under ?split=0, the debug views), the live roads alone (terrainRoadsMat: on the ground near a road), and neither
+  // (the baked: far out, and the rest of the ground near). splitGround gives each its triangles. On WebGL1 one, without
   const terrainMat = make('terrain', !mats.webgl1, !mats.webgl1)
   const terrainRoadsMat = mats.webgl1 ? terrainMat : make('terrainRoads', true)
   const terrainBakedMat = mats.webgl1 ? terrainMat : make('terrainBaked', false)
@@ -107,8 +106,8 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   // far ring: the river painted from a mask (the samples stroked at their widths), since 15 m vertices can't hold it
   const riverMaskCanvas = document.createElement('canvas')
   riverMaskCanvas.width = riverMaskCanvas.height = MASK_N
-  // one path per run of equal (half-pixel) width: a canvas filter or a stroke per sample loses the GL context in
-  // SwiftShader
+  // one path per run of equal (half-pixel) width: a canvas filter or a stroke per sample
+  // loses the GL context in SwiftShader
   {
     const g = riverMaskCanvas.getContext('2d')!
     const C = RIVER

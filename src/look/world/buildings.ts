@@ -1,12 +1,12 @@
 // The demo map's buildings (docs/plans/done/buildings.md): authored, deterministic. Each a model of
 // prototypes/buildings.data.js (tools/building-to-js.py: metres, its base at 0, centred on its footprint), where it
-// stands (x, z), its turn (yaw, rad) and its scale. The turn is Babylon's instance yaw (Quaternion.RotationYawPitchRoll
-// in Matrix.Compose, src/look/buildings.ts), which takes a local point (x, z) to (x cos + z sin, −x sin + z cos):
-// toWorld and toLocal below, the one rule the footprints, the yards, the ground's samples and the shader's frame
-// (shore.glsl, pavePaint) all use (test/buildings.test.ts pins it against Babylon's Matrix; measured on the page too: a
-// house at a yaw of −π/2 + 0.14 has its door, local (0, −3.35), 3.32 m east of its centre). The models' fronts (the
-// house's door) face −z before the turn: a yaw of 0 faces −z (south), π/2 −x (west, the road), −π/2 +x (east), π +z
-// (north)
+// stands (x, z), its turn (yaw, rad) and its scale. The turn is Babylon's instance yaw
+// (Quaternion.RotationYawPitchRoll in Matrix.Compose, src/look/buildings.ts), which takes a local point (x, z) to
+// (x cos + z sin, −x sin + z cos): toWorld and toLocal below, the one rule the footprints, the yards, the ground's
+// samples and the shader's frame (shore.glsl, pavePaint) all use (test/buildings.test.ts pins it against Babylon's
+// Matrix; measured on the page too: a house at a yaw of −π/2 + 0.14 has its door, local (0, −3.35), 3.32 m east of
+// its centre). The models' fronts (the house's door) face −z before the turn: a yaw of 0 faces −z (south), π/2 −x
+// (west, the road), −π/2 +x (east), π +z (north)
 import { segD } from './geom.ts'
 export interface Building {
   model: 'windmill' | 'house'

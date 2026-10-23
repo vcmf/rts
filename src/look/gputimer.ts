@@ -78,8 +78,8 @@ export class GpuTimer {
     for (const p of ready) {
       const ns = gl.getQueryParameter(p.q, gl.QUERY_RESULT) as number
       gl.deleteQuery(p.q)
-      // a frame from before the last reset
       const f = this.frames.get(p.frame)
+      // a frame from before the last reset
       if (!f) continue
       f.sums.set(p.label, (f.sums.get(p.label) ?? 0) + ns / 1e6)
       f.left--

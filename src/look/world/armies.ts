@@ -231,10 +231,10 @@ export function layout(
       out.push({ side: s, uniform: uniforms[s], x, z, heading: h, offset: 0, reserve: true })
     }
     if (placed < perSide) {
-      // the close reserves: the lines' boxes as their T (head: the ranks and a margin; stem: the column's approach) and
-      // the ground the companies cross as they deploy, from their column to the line (a trapezoid behind the head, as
-      // wide as the line at the ranks' depth and as the column at its rear: DEPLOY_SLICES boxes, each as wide as its
-      // front)
+      // the close reserves: the lines' boxes as their T (head: the ranks and a margin; stem: the column's
+      // approach) and the ground the companies cross as they deploy, from their column to the line (a trapezoid
+      // behind the head, as wide as the line at the ranks' depth and as the column at its rear: DEPLOY_SLICES
+      // boxes, each as wide as its front)
       const m = CLOSE.margin
       const w = 2 * e.columnHalf + 2 * m + CLOSE.pad
       const dd = e.columnDepth + 2 * m + CLOSE.pad

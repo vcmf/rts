@@ -602,8 +602,8 @@ export class Units {
     qm.setEnabled(false)
     this.lods.push(qm)
     if (tinyPx) {
-      // the tiny LOD (tinyMesh, src/look/units-data.ts): the far LOD's parts as boxes, posed at every step as the far
-      // LOD
+      // the tiny LOD (tinyMesh, src/look/units-data.ts): the far LOD's parts as boxes,
+      // posed at every step as the far LOD
       const tm = tinyMesh(data, data.lods[this.farLod].name)
       const tp = posedMesh(data, tm)
       const tn = tm.positions.length / 3
@@ -844,9 +844,9 @@ export class Units {
     }
     h.cx = (minX + maxX) / 2
     h.cz = (minZ + maxZ) / 2
-    // thin-instance bounds do not follow the animation: padded by a figure's height (his bayonet up, SHADOW_H, as tall
-    // as the far figures grow, FAR_SCALE_Y) and his reach (sidePad: from the baked poses); cull() stretches the same
-    // box
+    // thin-instance bounds do not follow the animation: padded by a figure's height (his bayonet up,
+    // SHADOW_H, as tall as the far figures grow, FAR_SCALE_Y) and his reach (sidePad: from the baked
+    // poses); cull() stretches the same box
     const top = SHADOW_H * FAR_SCALE_Y + 0.2
     const pad = this.sidePad
     h.lo.set(minX - pad, minY - 0.3, minZ - pad)
@@ -1414,9 +1414,9 @@ export class Units {
     return true
   }
 
-  // only the battalions inside the sun's box are drawn into the map (a render target does not cull its list), each at
-  // the caster's LOD; tight (?ucull), only those whose shadow can reach the view (shadowInView). Whether the list
-  // changed
+  // only the battalions inside the sun's box are drawn into the map (a render target does not cull its
+  // list), each at the caster's LOD; tight (?ucull), only those whose shadow can reach the view
+  // (shadowInView). Whether the list changed
   private cull(): boolean {
     const was = this.smList
     was.length = 0

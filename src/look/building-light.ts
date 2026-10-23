@@ -1,17 +1,16 @@
 // The buildings' static light, baked once (docs/plans/done/building-light.md): what building.frag read per pixel and
 // does not change with the view or the clock, at each texel of an atlas of one TILE² tile an instance, in the models'
-// light UVs (aUV2, tools/building-to-js.py): R the sun's cast shadow on the surface (shadowAtRaw: 0 lit, 1 shadowed),
-// G the light map's sky occlusion, B its mist mask, A its sun (shaders/building-bake.frag). Each face covers a texel
+// light UVs (aUV2, tools/building-to-js.py): R the sun's cast shadow on the surface (shadowAtRaw: 0 lit, 1 shadowed), G
+// the light map's sky occlusion, B its mist mask, A its sun (shaders/building-bake.frag). Each face covers a texel
 // however thin (its corners drawn as points and its edges as lines under it: the timber, the frames, the sails' sides
-// are thinner than a texel), then DILATE texels round every island filled from the nearest written one (no seam where
-// a read straddles an island's edge) and every texel left a neutral light. Baked after the light map, and again
-// whenever it is (it rebakes after the sun's shadow map: a season's release, the leaves' drop) or the grain changes,
-// once the light map holds for a frame (the start's chain of bakes makes one) and the buildings are drawn
-// (__look.terrainOnly hides them: a bake then would be empty). And the light the ground bounces onto each building, at
-// its root (bounceAt: the ground's class, its season and snow, the light map's sun there): one texel an instance of an
-// N × 1 target, rebaked with the ground's bounce map (the season, the shadows, the grain); the runtime fades it with
-// the height. WebGL2 only (the reads are GLSL ES 3's: textureLod, texelFetch): WebGL1 takes the runtime's taps
-// (main.ts)
+// are thinner than a texel), then DILATE texels round every island filled from the nearest written one (no seam where a
+// read straddles an island's edge) and every texel left a neutral light. Baked after the light map, and again whenever
+// it is (it rebakes after the sun's shadow map: a season's release, the leaves' drop) or the grain changes, once the
+// light map holds for a frame (the start's chain of bakes makes one) and the buildings are drawn (__look.terrainOnly
+// hides them: a bake then would be empty). And the light the ground bounces onto each building, at its root (bounceAt:
+// the ground's class, its season and snow, the light map's sun there): one texel an instance of an N × 1 target,
+// rebaked with the ground's bounce map (the season, the shadows, the grain); the runtime fades it with the height.
+// WebGL2 only (the reads are GLSL ES 3's: textureLod, texelFetch): WebGL1 takes the runtime's taps (main.ts)
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
@@ -108,9 +107,9 @@ function clearTo(scene: Scene, t: RenderTargetTexture, c: Color4): void {
   engine.unBindFramebuffer(rt)
 }
 
-// a bake run by hand: armed by what it reads (and a context's restore), run before a frame once that held for a frame
-// (no new arming: a chain of bakes makes one); run: false if it could not (what it draws hidden or not ready): due
-// again
+// a bake run by hand: armed by what it reads (and a context's restore), run before a frame once that held
+// for a frame (no new arming: a chain of bakes makes one); run: false if it could not (what it draws
+// hidden or not ready): due again
 function scheduled(scene: Scene, run: () => boolean): { arm: () => void } {
   let due = 0
   scene.onBeforeRenderObservable.add(() => {

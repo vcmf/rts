@@ -40,9 +40,9 @@ export const DOF_NEAR = { band: 0.04, k: 4, px: 8, screen: 0.3 }
 // size, the near layer darker and cooler by its coverage (uber.frag)
 export const DOF_PAINT = { far: 0.5, near: 0.7 }
 // the scene's MSAA samples (4; ?msaa=1 for the frame-rate A/Bs, src/look/main.ts)
-// byte: the scene's MSAA target 8 bits a channel, not half floats (docs/plans/done/wide-perf.md: the same frame, 0.4 to
-// 0.8 ms less at the widest zoom); not under the depth of field, whose distance in alpha needs the half floats; ?rt16
-// for the A/B
+// byte: the scene's MSAA target 8 bits a channel, not half floats (docs/plans/done/wide-perf.md: the same
+// frame, 0.4 to 0.8 ms less at the widest zoom); not under the depth of field, whose distance in alpha needs
+// the half floats; ?rt16 for the A/B
 // stencil: a stencil on the scene's target alone (the soldiers' simple shadows darken each sample once:
 // src/look/units.ts), not on the canvas and every other target as the engine's own option gives (?stencil=all: that,
 // the A/B; 0: none)
@@ -90,8 +90,8 @@ export function buildCamera(
   const zoom = new ZoomHold()
   HOLDS.set(camera, zoom)
   rtsControls(scene, camera, canvas, zoom)
-  // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the
-  // play area
+  // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target);
+  // the focus stays in the play area
   // the closest zoom held out over high ground (clearRadius, ZoomHold, src/look/spec.ts: decision 0051), the player's
   // wanted zoom kept apart so it comes back in on lower ground; from CLEAR_BELOW out the eye always clears the tile's
   // highest ground, so the ground is not read there. The depth of field's zoom ease is reckoned from TUNED_R out
@@ -192,8 +192,8 @@ function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasEl
         const hi = camera.upperRadiusLimit ?? 1e4
         // a pinch's steps are small (a few pixels); a wheel's notch, with or without Ctrl, a hundred (or a few lines)
         const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY
-        // (the wanted radius scaled, not the one shown: held out over a hill, a zoom in must not raise it, decision
-        // 0051)
+        // (the wanted radius scaled, not the one shown: held out over a hill, a zoom in
+        // must not raise it, decision 0051)
         const w = Number.isNaN(zoom.wanted) ? camera.radius : zoom.wanted
         zoom.set(Math.min(hi, Math.max(lo, w * Math.exp(dy * (e.ctrlKey && Math.abs(dy) < 50 ? PINCH : WHEEL)))))
       } else {

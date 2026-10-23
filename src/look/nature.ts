@@ -10,8 +10,8 @@ import { Frustum } from '@babylonjs/core/Maths/math.frustum.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
-// the instancing includes nature.vert and depth.vert use: the CDN build registers every include, the modules only what
-// is imported
+// the instancing includes nature.vert and depth.vert use: the CDN build registers every include,
+// the modules only what is imported
 import '@babylonjs/core/Shaders/ShadersInclude/instancesDeclaration.js'
 import '@babylonjs/core/Shaders/ShadersInclude/instancesVertex.js'
 import type { Scene } from '@babylonjs/core/scene.js'
@@ -310,8 +310,8 @@ export function buildNature(
   function placeable(x: number, z: number, r = 0, kind = ''): boolean {
     if (touchesZone(x, z, r)) return false
     const q = riverQuery(x, z)
-    // stones: wholly on dry land, or on riffles; the W5a pass's stones at the foot of a cut bank (docs/art-bible.md
-    // §6c)
+    // stones: wholly on dry land, or on riffles; the W5a pass's stones at the foot of a
+    // cut bank (docs/art-bible.md §6c)
     if (kind === 'stone') return !q || q.dist >= wetEdgeAt(q) + r || lerpA(RIVER.riffle, q) > 0.6
     if (kind === 'cutstone') return !!q && atCutBank(q) && r <= 1.2 // at a cut bank's foot, reaching at most 1.2 m
     if (kind === 'reed') return !q || q.dist >= wetEdgeAt(q) + r // reeds: at the water's edge, wholly on land
@@ -370,8 +370,8 @@ export function buildNature(
   // reflected as the model drawn
   const tree = (model: string, x = 0, z = 0) =>
     oneTree ? 'CommonTree_1' : genModels ? genModels.pick(model, x, z) : model
-  // a broadleaf or birch tree, and its crown for the occlusion (the crown's centre at 0.62 of the height), drawn as
-  // tree(mdl)
+  // a broadleaf or birch tree, and its crown for the occlusion (the crown's centre at 0.62 of
+  // the height), drawn as tree(mdl)
   const placeTree = (mdl: string, x: number, z: number, s: number, yaw: number, t: number): Placed => {
     const r = addPlaced(mdl, [x, z, s, yaw, t], '', tree(mdl, x, z))
     if (r !== 'drawn') return r
@@ -634,14 +634,14 @@ export function buildNature(
     let n: number
     let kind: string
     if (C.riffle[i] > 0.62) {
+      // mid-channel in a riffle
       n = (rs() - 0.5) * 0.9 * hw
       kind = 'stone'
-    } // mid-channel in a riffle
-    else if (Math.abs(A) > 0.55) {
+    } else if (Math.abs(A) > 0.55) {
+      // against the cut bank
       n = A >= 0 ? ep - 0.25 : -(en - 0.25)
       kind = 'cutstone'
-    } // against the cut bank
-    else continue
+    } else continue
     const x = C.px[i] - C.tz[i] * n
     const z = C.pz[i] + C.tx[i] * n
     const mdl = rs() < 0.5 ? 'Rock_' + (1 + Math.floor(rs() * 2)) : 'Rock_Moss_' + (3 + Math.floor(rs() * 2))
@@ -914,8 +914,8 @@ export function buildNature(
       ? 1
       : 0
   }
-  // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the outer ring's footprint and
-  // lean)
+  // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the
+  // outer ring's footprint and lean)
   const growthAllowed = (x: number, z: number, reach = CLUMP_REACH) =>
     !touchesZone(x, z, reach) && offBanks(riverQuery(x, z), reach)
   // the trunks (their shadows, baked into the light map): per model its trunk's radius and its crown's

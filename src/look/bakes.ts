@@ -36,8 +36,8 @@ import { withCards } from './canopy.ts'
 
 // sky: the sky's occlusion's time on load and the occlusion's range after it (null with the soft shadows off)
 // groundBounce: the bounce map (LC5), rebaked after the light map and when the season is released (src/look/main.ts)
-// unitShade: the simple shadows' shade (decision 0049), made when first asked for (the armies), rebaked after the
-// bounce map
+// unitShade: the simple shadows' shade (decision 0049), made when first asked for (the
+// armies), rebaked after the bounce map
 export interface Bakes {
   lightCam: FreeCamera
   shadowRT: RenderTargetTexture
@@ -62,9 +62,9 @@ const LZ0 = D.spec.depth.near
 const LZ1 = D.spec.depth.far
 const SM_FADE_M = D.spec.shadowFade
 
-// soft shadows (docs/plans/done/soft-shadows.md): on, the sun's penumbra grows with the distance to the caster
-// (penumbra: metres of edge radius per metre, an exaggerated sun) and the sky's occlusion comes from each crown's
-// sphere
+// soft shadows (docs/plans/done/soft-shadows.md): on, the sun's penumbra grows with the distance to
+// the caster (penumbra: metres of edge radius per metre, an exaggerated sun) and the sky's occlusion
+// comes from each crown's sphere
 export interface SoftOptions {
   on: boolean
   penumbra: number
@@ -103,8 +103,8 @@ export function buildBakes(
   let smFade: Vector2
   let sm: { w: number; h: number }
   let smGround: Vector2
-  // fit the ortho box to the tile: project its corners (lowest ground to 60 m above the highest, above any caster) into
-  // light space
+  // fit the ortho box to the tile: project its corners (lowest ground to 60 m above the highest,
+  // above any caster) into light space
   {
     const tp = tileGround.getVerticesData(VertexBuffer.PositionKind)!
     let lo = Infinity
@@ -179,8 +179,8 @@ export function buildBakes(
   shadowRT.activeCamera = lightCam
   shadowRT.clearColor = new Color4(1, 1, 1, 1)
   const terrains = scene.meshes.filter(m => m.name === 't')
-  // terrain is NOT a shadow caster: it self-shadowed into diagonal 'acne' stripes; slopes facing away are already dark
-  // via N·L
+  // terrain is NOT a shadow caster: it self-shadowed into diagonal 'acne' stripes; slopes
+  // facing away are already dark via N·L
   // small plants don't cast either: thousands of tuft shadows streaked the ground along the sun direction.
   // Under cards (docs/plans/done/l7a-canopy-cards.md) the carded pack models cast nothing; their
   // trunk meshes cast with the rest, and the crowns cast through their cards, turned to face the sun and cut by the

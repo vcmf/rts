@@ -46,17 +46,19 @@ export const withPainter = (src: string): string => {
   if (!src.includes(MARK)) throw new Error(`a painted shader without ${MARK}`)
   // the mood's warm autumn as a constant (AUTUMN_WARM: the mood is fixed for the page), so the compiler folds it away;
   // the switches defined only when on (Babylon's preprocessor reads `#if X` as `defined X`: tested with #ifdef)
-  // the meadow's clump field before the macro colour, whose groundAt reads it (MEADOW)
-  return src
-    .replace(
-      MARK,
-      () =>
-        `#define AUTUMN_WARM ${MOOD.autumn.toFixed(3)}\n${MOOD.autumn > 0 ? '#define AUTUMN_ON\n' : ''}${MOOD.grade.greenHue > 0 ? '#define MOOD_GRADE\n' : ''}` +
-        PAINTER,
-    )
-    .replace('#include<waterdata>', () => WATERDATA)
-    .replace('#include<shore>', () => SHORE)
-    .replace('#include<macro>', () => MEADOW + MACRO)
+  return (
+    src
+      .replace(
+        MARK,
+        () =>
+          `#define AUTUMN_WARM ${MOOD.autumn.toFixed(3)}\n${MOOD.autumn > 0 ? '#define AUTUMN_ON\n' : ''}${MOOD.grade.greenHue > 0 ? '#define MOOD_GRADE\n' : ''}` +
+          PAINTER,
+      )
+      .replace('#include<waterdata>', () => WATERDATA)
+      .replace('#include<shore>', () => SHORE)
+      // the meadow's clump field before the macro colour, whose groundAt reads it (MEADOW)
+      .replace('#include<macro>', () => MEADOW + MACRO)
+  )
 }
 
 // the ground's macro colour (src/look/shaders/macro.glsl): the cover grid and the bakes, on every painted material

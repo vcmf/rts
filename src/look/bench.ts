@@ -320,9 +320,9 @@ export async function runBench(
     undo.push(() => {
       proto.render = render
     })
-    // the bakes drawn by an effect renderer, not a render target (the macro colour's near bake, combNear; the
-    // buildings' light): marked 'fx:<the effect's name>' at each draw (the bit its last applyEffectWrapper set; the
-    // draw's time)
+    // the bakes drawn by an effect renderer, not a render target (the macro colour's near bake, combNear;
+    // the buildings' light): marked 'fx:<the effect's name>' at each draw (the bit its last
+    // applyEffectWrapper set; the draw's time)
     const ep = EffectRenderer.prototype
     const apply = ep.applyEffectWrapper
     const draw = ep.draw
@@ -376,8 +376,8 @@ export async function runBench(
     if (m instanceof Mesh) hook(m)
   })
   undo.push(() => scene.onNewMeshAddedObservable.remove(added))
-  // the finishing passes are rebuilt by Post.build (an arm may toggle depth of field): hooked again whenever they
-  // change
+  // the finishing passes are rebuilt by Post.build (an arm may toggle depth of field):
+  // hooked again whenever they change
   const hookedPosts = new Set<PostProcess>()
   const hookPosts = () => {
     for (const p of passes.post()) {
@@ -399,8 +399,8 @@ export async function runBench(
   // alternate frames: the passes on one, the whole frame on the next (queries cannot nest). Frame times come from the
   // whole-frame frames only: the pass frames carry more queries, which cost time on some backends
   const begin = engine.onBeginFrameObservable.add(() => {
-    // passFrame: the frame that just ended
     const t = performance.now()
+    // passFrame: the frame that just ended
     if (timing && lastT && !passFrame) frameMs.push(t - lastT)
     // (the trace: the counters of the frame that just ended, recorded with its interval, then cleared)
     if (TRACING) {
@@ -496,8 +496,8 @@ export async function runBench(
         await scene.whenReadyAsync()
         for (let tries = 0; ; tries++) {
           await frames(10)
-          // (the closest zooms are held out over high ground, decision 0051: a camera there would measure another
-          // radius)
+          // (the closest zooms are held out over high ground, decision 0051: a camera
+          // there would measure another radius)
           if (Math.abs(camera.radius - cam.radius) > 1e-6) {
             throw new Error(
               `bench camera ${cam.name}: the zoom is held out to ${camera.radius.toFixed(2)} m over high ground, not ${cam.radius} m (decision 0051): choose another ?benchat`,
@@ -563,8 +563,8 @@ export async function runBench(
     // 8: trace (?benchtrace=1: each run's frames, traceSummary); 7: pan (?benchpan=1: each camera pans as it is
     // measured); 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under
     // the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render
-    // scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the
-    // start
+    // scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a
+    // version-2 file orbits the start
     version: 8,
     build: __BUILD__,
     date: new Date().toISOString(),

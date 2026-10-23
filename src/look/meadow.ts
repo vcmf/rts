@@ -38,10 +38,9 @@ const TILE_W = D.spec.tile
 // the meadow map: 1 m texels over the tile
 const MAP_N = Math.round(TILE_W)
 
-// a ring: its cell (m), its slots a side (of the square it is cut from), the clumps' spread (their footprint grows
-// with the cell, their height does not: a clump is never taller than HEIGHT_MAX), its band of distance from the focus
-// (m: in from band[0] to band[1], out from band[2] to band[3]; the next ring fades in where this one fades out), and
-// its clump
+// a ring: its cell (m), its slots a side (of the square it is cut from), the clumps' spread (their footprint grows with
+// the cell, their height does not: a clump is never taller than HEIGHT_MAX), its band of distance from the focus (m: in
+// from band[0] to band[1], out from band[2] to band[3]; the next ring fades in where this one fades out), and its clump
 // the camera's radius over which the inner rings give way to the outer one (m): the default view is 125, the widest 260
 const WIDE: [number, number] = [150, 200] // (buildMeadow's wide: false, ?nowide, keeps the rings as before: the A/B)
 // a crop's clump (docs/plans/done/crop-depth.md): CROP_WIDE times the grass clump's spread at the root, its fan undone:
@@ -130,8 +129,8 @@ function cullRing(
 // two lists of chunks the same
 const sameList = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i])
 
-// the meadow map (buildMeadowMap): R the ground's height, G the grass's growth, B its height factor, A the crops'
-// growth
+// the meadow map (buildMeadowMap): R the ground's height, G the grass's growth, B its
+// height factor, A the crops' growth
 export interface MeadowMap {
   map: RawTexture
   growingCells: number
@@ -327,8 +326,8 @@ export function buildMeadowMap(
   }
 }
 
-// mm: the meadow map (buildMeadowMap); reach: the grass clumps' (CLUMP_REACH, or the combed meadow's), for the chunks'
-// cull
+// mm: the meadow map (buildMeadowMap); reach: the grass clumps' (CLUMP_REACH, or the combed
+// meadow's), for the chunks' cull
 export function buildMeadow(
   scene: Scene,
   mats: Materials,
@@ -507,8 +506,8 @@ export function buildMeadow(
     RINGS.forEach((r, ri) => {
       if (!meshes[ri].isVisible) return
       cullRing(r, chunks[ri], origins[ri], centre, focusY, bands[ri], vp, holes, reach, keep)
-      // (none in view: not drawn, a forced count of 0 would draw one clump without instances, in another shader
-      // variant)
+      // (none in view: not drawn, a forced count of 0 would draw one clump without
+      // instances, in another shader variant)
       meshes[ri].isVisible = keep.length > 0
       if (sameList(keep, drawn[ri])) return
       drawn[ri] = keep.slice()
