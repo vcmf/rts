@@ -36,22 +36,23 @@ Mean frame and p95 at map, mid and close zoom, idle and in a fight, against the 
 
 ## Results
 
-Windows Chrome over CDP, D3D11, RTX 3080, 1920×1080, vsync and the frame cap off. Gap between frames, 5–6 s per run.
+Windows Chrome over CDP, D3D11, RTX 3080, 1920×1080, vsync and the frame cap off. Gap between frames, 5–6 s per run. The after
+column is the page after review round 1.
 
 | View | Before: mean / p95 | After: mean / p95 |
 |---|---|---|
 | map, paused | 8.2 / 41 ms | 0.6 / 1 ms |
 | mid, paused | 7.5 / 49 ms | 0.4 / 0.9 ms |
 | close, paused | 5.4 / 8 ms | 0.4 / 0.9 ms |
-| map, 30× (normal play) | — | 4.9 / 23 ms |
+| map, 30× (normal play) | — | 4.95 / 23 ms |
 | mid, 30× | — | 5.8 / 40 ms |
-| map, 90× fight | 13.0 / 31 ms | 7.6 / 16 ms |
-| mid, 90× fight | 13.1 / 36 ms | 9.1 / 19 ms |
+| map, 90× fight | 13.0 / 31 ms | 8.0 / 16 ms |
+| mid, 90× fight | 13.1 / 36 ms | 9.6 / 21 ms |
 | close, 90× fight | 6.7 / 11 ms | 5.1 / 6 ms |
 
 - **Met:** a mean of 150 fps or better in normal play and whenever paused.
 - **Not met:**
-  - a heavy fight at 90× at map and mid zoom (110 to 130 fps);
+  - a heavy fight at 90× at map and mid zoom (105 to 125 fps);
   - the spikes: about one frame in 20 over 20 ms while the battle runs.
 
   Both come from the volume of shapes Chrome draws on the ink canvas. The next step would move the blocks and the
@@ -76,3 +77,16 @@ Windows Chrome over CDP, D3D11, RTX 3080, 1920×1080, vsync and the frame cap of
   - the doc comments for `slabSides` and `signedArea` put back on their functions.
 
   Measured again: 30×, map 4.95 / mid 5.8 ms mean; 90×, map 8.0 / mid 9.6 ms.
+- **Round 2**: severe. With the smoke full, a new volley showed nothing: no flash, no cloud.
+
+  Fixed: each puff ends on its own life (`smokeLife`), and when the smoke is still full the puff nearest the end of its
+  fade gives way, so new fire always shows.
+
+  With:
+  - wear bites placed between the edge and the opposite edge at the same point; they had assumed a parallelogram, so
+    they stuck out under perspective;
+  - the ink redrawn after any resize, since a resize clears it;
+  - only animations on screen keep the ink redrawing;
+  - late fonts caught on `loadingdone`;
+  - `clipOut`'s doc comment back on it;
+  - the table above corrected to the final measurement.

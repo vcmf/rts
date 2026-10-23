@@ -1185,6 +1185,13 @@ let scriptI=0;
 /* ---------- the tick ---------- */
 let GT=0;                                                     // game seconds since 07:30
 const SMOKE=[],SMOKE_MAX=220;   // live puffs at most (500 cost about 3.7 ms a frame in a big fight)
+const smokeLife=p=>p.big?6000:4200;   // ms: a cannon cloud lasts longer than a volley's
+/** Makes room for one puff: drops the spent ones, and when still full the one nearest the end of its fade. */
+function smokeRoom(now){
+  for(let i=SMOKE.length-1;i>=0;i--)if(now-SMOKE[i].t0>smokeLife(SMOKE[i]))SMOKE.splice(i,1);
+  if(SMOKE.length<SMOKE_MAX)return;
+  let worst=0,wk=-1;for(let i=0;i<SMOKE.length;i++){const k=(now-SMOKE[i].t0)/smokeLife(SMOKE[i]);if(k>wk){wk=k;worst=i;}}
+  SMOKE.splice(worst,1);}
 const isEnemy=(u,e)=>!e.gone&&(e.sideI>0)!==(u.sideI>0);
 function nearestEnemy(u,maxD,filter){let b=null,bd=maxD;for(const e of UNITS){if(!isEnemy(u,e))continue;if(filter&&!filter(e))continue;const d=Math.hypot(e.x-u.x,e.z-u.z);if(d<bd){bd=d;b=e;}}return b?{e:b,d:bd}:null;}
 // away from the enemies in reach, closer ones pushing harder
@@ -1276,8 +1283,7 @@ function finishOrder(u){const o=u.order;if(!o)return;o.prog=Math.max(o.prog,u.pr
   u.order=null;o.units=o.units.filter(id=>id!==u.id);if(!o.units.length)closeOrder(o);}
 function clampIn(u){u.x=clamp(u.x,-MX+60,MX-60);u.z=clamp(u.z,-MZ+60,MZ-60);if(inPond(u.x,u.z,1.1)){const p=PONDS.find(p=>pondE(p,u.x,u.z)<1.1);const a=Math.atan2((u.z-p.z)/p.rz,(u.x-p.x)/p.rx);u.x=p.x+Math.cos(a)*p.rx*1.12;u.z=p.z+Math.sin(a)*p.rz*1.12;}}
 function puff(u){
-  const now=performance.now();while(SMOKE.length&&now-SMOKE[0].t0>6000)SMOKE.shift();   // spent puffs (6 s is the longest life)
-  if(SMOKE.length>=SMOKE_MAX)return;   // full: no new puff, so none vanishes halfway through its fade
+  const now=performance.now();   // new fire always shows: room is made from the most faded puff
   if (formedSq(u)) {
     // A formed square fires from all four faces. Each puff keeps a snapshot of the square where it fired (not the
     // live unit, which may move or break) and is placed on the block as drawn (sqFace). x/z are its true ground
@@ -1293,6 +1299,7 @@ function puff(u){
       const o = 0.1 + 0.8 * Math.random();   // how far along the face
       const d = faces[j];
       const along = (o - 0.5) * side[0];
+      smokeRoom(now);
       SMOKE.push({
         sq: snap, j, o,
         x: cx + d[0] * (half + 6) - d[1] * along,
@@ -1303,7 +1310,7 @@ function puff(u){
     return;
   }
   const fw=dims(u,u.form,alive(u))[0],o=(Math.random()-0.5)*fw*0.9,fo=u.type==='art'?14:8;
-  SMOKE.push({x:u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo,z:u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo,t0:performance.now(),big:u.type==='art',face:u.face,rot:Math.random()*6.28});}
+  smokeRoom(now);SMOKE.push({x:u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo,z:u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo,t0:now,big:u.type==='art',face:u.face,rot:Math.random()*6.28});}
 
 /* =========================================================================
    THE INK OVERLAY: blocks, orders, trails, smoke, names, neatline
@@ -1376,7 +1383,7 @@ function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
     // which edge
     let w = rnd(), e = 0;
     while (e < 3 && w > weights[e]) { w -= weights[e]; e++; }
-    const a = C[e], b = C[(e + 1) % 4], next = C[(e + 2) % 4];
+    const a = C[e], b = C[(e + 1) % 4], next = C[(e + 2) % 4], prev = C[(e + 3) % 4];
     const edgeLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
 
     // where along it, how wide (a fraction of the edge, at least 1.8 px), how deep (a fraction of the way across)
@@ -1388,8 +1395,13 @@ function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
     const depth = Math.min(ring * (rnd() < 0.3 ? 1.2 : 0.45 + 0.45 * rnd()), I ? ring : 0.97);
 
     // inward: from this edge toward the opposite one, the full way across the block
-    const vx = next[0] - b[0], vy = next[1] - b[1];
-    const at = (s0, d) => [a[0] + (b[0] - a[0]) * s0 + vx * d, a[1] + (b[1] - a[1]) * s0 + vy * d];
+    // a point s0 along this edge, d of the way across to the opposite edge, in the block as drawn (a trapezoid in
+    // perspective): between the two edges at the same s0, so no bite leaves the block
+    const at = (s0, d) => {
+      const n = [a[0] + (b[0] - a[0]) * s0, a[1] + (b[1] - a[1]) * s0];
+      const f = [prev[0] + (next[0] - prev[0]) * s0, prev[1] + (next[1] - prev[1]) * s0];
+      return [n[0] + (f[0] - n[0]) * d, n[1] + (f[1] - n[1]) * d];
+    };
 
     // a ragged notch: in at one side, down to the deepest point, back out at the other
     addPoly(bites, [
@@ -1573,10 +1585,6 @@ function gunGaps(u) {
   return polys;
 }
 
-/**
- * Clips the ink to everything outside a shape (a Path2D or a polygon), in the current transform. Clips add up, so a
- * call per shape cuts them all, overlaps included.
- */
 /** The screen bounding box of points, grown by pad pixels, as [x, y, w, h] (for clipOut). */
 function padBox(P, pad) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -1587,6 +1595,10 @@ function padBox(P, pad) {
   return [x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad];
 }
 
+/**
+ * Clips the ink to everything outside a shape (a Path2D or a polygon), in the current transform. Clips add up, so a
+ * call per shape cuts them all, overlaps included.
+ */
 function clipOut(shape, box) {   // box: [x, y, w, h], the area worth keeping (a smaller clip is cheaper to draw)
   const keep = new Path2D();
   if (box) keep.rect(box[0], box[1], box[2], box[3]); else keep.rect(-1e4, -1e4, 2e4, 2e4);
@@ -1773,7 +1785,7 @@ function sqFace(p) {
   return [m[0] + (m[0] - cx) / d * 5, m[1] + (m[1] - cy) / d * 5, Math.min(a[2], b[2])];
 }
 function drawSmoke(now,mapA,worldA){
-  for(const p of SMOKE){const age=(now-p.t0)/1000,life=p.big?6:4.2;if(age>life)continue;const k=age/life,c=p.sq?sqFace(p):P2(p.x,p.z);if(behind(c))continue;
+  for(const p of SMOKE){const age=(now-p.t0)/1000,life=smokeLife(p)/1000;if(age>life)continue;const k=age/life,c=p.sq?sqFace(p):P2(p.x,p.z);if(behind(c))continue;
     const off=c[0]<-90||c[0]>SW+90||c[1]<-90||c[1]>SH+90;   // a cloud reaches about 60 px from its puff
     if(LIT&&mapA>0.01){if(!off)smokeLit(p,c,age,k,mapA);}
     else if(mapA>0.01){ink.globalAlpha=mapA*(1-k)*0.8;ink.strokeStyle='#8a847a';ink.lineWidth=0.8;ink.beginPath();const r0=(p.big?3:2)+k*(p.big?7:5);
@@ -1842,15 +1854,19 @@ let HOVER=null,SHOW_TRAILS=true,SHOW_NAMES=true,DRAW=null;
 // something animating on the frame clock (smoke, a routing pulse, a turning block, an arrow's reveal, a fading trail).
 // Drawing it cost most of the frame (docs/plans/active/perf-150.md).
 let INK_KEY = '', INK_T0 = 0;
-document.fonts?.ready.then(() => { INK_KEY = ''; });   // late web fonts: draw the names again
+// late web fonts (the canvas asks for some only when it first draws with them): draw the names again
+document.fonts?.ready.then(() => { INK_KEY = ''; });
+document.fonts?.addEventListener('loadingdone', () => { INK_KEY = ''; });
+/** Whether a projected point lies on screen, within pad pixels of it, and in front of the camera. */
+const onScreen = (p, pad) => !behind(p) && p[0] > -pad && p[0] < SW + pad && p[1] > -pad && p[1] < SH + pad;
 function inkDirty(now) {
   if (!INK_T0) INK_T0 = now;
   if (now - INK_T0 < 3000) return true;   // the fonts load and the first frames settle
-  if (SMOKE.length && now - SMOKE[SMOKE.length - 1].t0 < 6000) return true;
+  for (const p of SMOKE) if (now - p.t0 < smokeLife(p) && onScreen(P2(p.x, p.z), 120)) return true;
   for (const u of UNITS) {
     if (u.gone >= 1) continue;
     // the routing pulse runs on the frame clock; a turn eases on it (morph and fades follow the game clock, in the key)
-    if (u.state === 'rout' || Math.abs(angTo(u.dface, u.face)) > 1e-4) return true;
+    if ((u.state === 'rout' || Math.abs(angTo(u.dface, u.face)) > 1e-4) && onScreen(P2(u.x, u.z), 150)) return true;
   }
   for (const o of ORDERS) if (now - o.t0 < 600) return true;
   for (const f of FOOTS.values()) if (Math.abs(f.vis - (f.led ? 1 : 0)) > 1e-3) return true;
@@ -2024,7 +2040,7 @@ function updateCard(){const s=sel();const c=$('card');if(!s.length){c.style.disp
 let last=performance.now(),acc=0,ft=[],fps=0;
 const fmtClock=s=>{const m=Math.floor(7*60+30+s/60);return`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;};
 const FIT={R:7000,z:0};
-function resize(){SW=innerWidth;SH=innerHeight;inkC.width=Math.round(SW*DPR);inkC.height=Math.round(SH*DPR);engine.resize();
+function resize(){SW=innerWidth;SH=innerHeight;INK_KEY='';inkC.width=Math.round(SW*DPR);inkC.height=Math.round(SH*DPR);engine.resize();
   // theatre: the whole neatline between the side panels, above the status bar
   const side=SW>1100?300:24,mpp=Math.max((2*MZ+160)/Math.max(200,SH-190),(2*MX+160)/Math.max(200,SW-2*side));FIT.R=mpp*SH/(2*tanH);FIT.z=-35*mpp;}
 addEventListener('resize',resize);
