@@ -50,3 +50,27 @@ Out of scope: lit relief, woods as canopy, roofs (decision 0051's bake, a later 
 - No console errors in either mode (`tools/shot.mjs` exit 0).
 
 ## Review rounds
+
+- **Round 1** (`/code-review high`): severe: the outline strokes after `litEdges` drew one stray segment (the canvas's
+  current path), the dark slab under every block filled the morale hatching and the hollow square's hole, an arrow
+  could be drawn backwards while its reveal trailed the troops. Fixed, with the moderate ones: shadows and side faces in
+  a pass of their own before every top face, clipped out under it; one light, the world's north-west on screen each
+  frame; arrow sampling capped, a short arrow keeps its head; one paper term per style in the shader.
+- **Round 2**: moderate and light only, so the review stops. Fixed: shadow offsets and blur in device pixels (canvas
+  shadows ignore the transform), the ageing a band inside the frame (no seam at the border), the interface's paper,
+  the light set before the arrows, the arrowhead continuous and on its base-to-tip axis, the arrows at 0.6 so the
+  ground under a route reads and the blocks stay the strongest marks, one fill for a block's sides. Left: the corners
+  projected twice per unit (74 units).
+
+## Results
+
+- Lit screenshots (1600×900, Windows Chrome over CDP, SwiftShader): the map in summer, mid zoom in summer and winter
+  with French orders, close zoom with a wavering, a routing, a square and a selected block. Shown to the owner.
+- The default page against main at `?season=0&speed=0` (1280×720, the status bar masked): 456 differing channel
+  values, the same as main against itself (456) and the branch against itself (456): the page's own run-to-run noise
+  (an animated swatch and readouts in the lower part), so no change shows. Not a strict proof: the page has no
+  `?frozen`.
+- Not settled for v2: the notched tail reads as a fishtail; the blocks' depth is fixed in pixels (thin up close);
+  Russian green on the summer olive has less contrast than French blue; the relief is still hachured (the lit relief
+  of decision 0051 is the next step); the summer wash's blocky noise, already in the ink style, shows more under the
+  ageing.
