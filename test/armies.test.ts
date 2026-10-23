@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
-import { APPROACH, CYCLE, FAR_COAT_BELOW, FAR_ROLES, clipBase, clipPhase, extents, facingAt, farPalette, farRule, layout, luminance, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
+import { APPROACH, CYCLE, FAR_COAT_BELOW, FAR_ROLES, extents, facingAt, farPalette, farRule, layout, luminance, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
 import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { RULESETS } from '../src/rulesets/index.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
@@ -52,30 +52,6 @@ describe('armies: the script', () => {
     const s = slots(drill), out = {} as ManState, p = phaseAt(drill, CYCLE - 1, MARCH, RUN)
     const since = (i: number) => manAt(drill, s, i, CYCLE - 1, p, RUN, MARCH, 0, out).since
     expect(p.phase).toBe('fire'); expect(since(g.files)).toBeGreaterThan(since(0)); expect(since(2 * g.files)).toBeGreaterThan(since(g.files))
-  })
-})
-
-describe('armies: the GPU\'s clip phases (docs/plans/active/armies-32k.md, step 1)', () => {
-  // the CPU's phase (src/look/units.ts place) against the record's offsets and the shader's small sum: equal in double
-  // precision, and with the shader's float32 (the fraction and since · fps rounded) off only within 1e-4 of a step's edge
-  const cpu = (start: number, fps: number, n: number) => ((-Math.floor(start * fps)) % n + n) % n
-  it('reproduces the CPU\'s phase for every role, cycle start and since', () => {
-    let rnd = 7, edge = 0, checked = 0
-    const r = () => (rnd = (rnd * 16807) % 2147483647) / 2147483647
-    for (let k = 0; k < 4000; k++) {
-      const cs = (r() - 0.2) * 20000, since = r() * 120, fps = 12, steps = [8 + Math.floor(r() * 40), 12, 17, 61]
-      const b = clipBase(cs, fps, steps)
-      steps.forEach((n, i) => {
-        expect(b.ofs[i]).toBeGreaterThanOrEqual(0); expect(b.ofs[i]).toBeLessThan(n)
-        const want = cpu(cs + since, fps, n), s = (cs + since) * fps
-        if (Math.abs(s - Math.round(s)) < 1e-6) return   // (on an edge: either side is the CPU's own rounding)
-        expect(clipPhase(b.ofs[i], b.frac, since * fps, n)).toBe(want)
-        const f32 = clipPhase(b.ofs[i], Math.fround(b.frac), Math.fround(Math.fround(since) * fps), n)
-        if (f32 !== want) { edge++; expect(Math.abs(s - Math.round(s))).toBeLessThan(1e-3) }
-        checked++
-      })
-    }
-    expect(edge / checked).toBeLessThan(1e-3)
   })
 })
 

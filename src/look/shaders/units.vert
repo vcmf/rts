@@ -6,44 +6,8 @@ precision highp float;attribute vec3 position;attribute vec3 normal;attribute fl
 // in steps), round his range's loop
 uniform mat4 viewProjection;uniform sampler2D uVAT;uniform float uVATStep;
 #ifdef INSTANCES
-#ifndef GPU_PLACE
 // a man's clip: its first step, its steps in the loop, his phase in steps
 attribute vec3 aVAT;
-#endif
-#endif
-#ifdef GPU_PLACE
-// each man placed here (docs/plans/active/armies-32k.md, step 1; ?gpuplace=0: by the CPU, src/look/units.ts place):
-// his instance's four columns are his static record, written once (world0: his slot in line, x z, and in column, x z;
-// world1: his jitter across and ahead, his turn, his fire lag; world2.x: his battalion), and his battalion's record is
-// four texels of uBat a column (its place and its heading's sine and cosine; its phase, the phase's start, its local
-// time and its heading; each role's clip offset in steps; the cycle start's fraction of a step). The arithmetic is
-// manAt's (src/look/world/armies.ts) in float32, render only; his ground is the heightfield's own triangles (uHgt,
-// its nodes; uHF: its corner, its cell, its nodes a side: src/look/heightfield.ts sample). uClipS, uClipN: each role's
-// clip's first step and steps (halt, march, run, fire); uMove: the march and run speeds, the approach, the fps
-uniform sampler2D uBat;uniform highp sampler2D uHgt;uniform vec4 uHF,uClipS,uClipN,uMove;
-float hfAt(ivec2 k){return texelFetch(uHgt,k,0).r;}
-float groundAt(vec2 p){
-  float n=uHF.w;vec2 u=clamp((p-uHF.xy)/uHF.z,0.0,n-1.0),ij=min(floor(u),vec2(n-2.0)),f=u-ij;ivec2 k=ivec2(ij);
-  float h00=hfAt(k),h10=hfAt(k+ivec2(1,0)),h01=hfAt(k+ivec2(0,1)),h11=hfAt(k+ivec2(1,1));
-  return f.x+f.y<=1.0?h00+(h10-h00)*f.x+(h01-h00)*f.y:h11+(h01-h11)*(1.0-f.x)+(h10-h11)*(1.0-f.y);}
-// his place and turn as his instance matrix, and his clip (its first step, its steps, his phase in steps: aVAT's)
-mat4 placeMan(vec4 s0,vec4 s1,vec4 s2,out vec3 clip){
-  int b=int(s2.x+0.5);
-  vec4 B0=texelFetch(uBat,ivec2(b,0),0),B1=texelFetch(uBat,ivec2(b,1),0),B2=texelFetch(uBat,ivec2(b,2),0);
-  float fa=texelFetch(uBat,ivec2(b,3),0).x;
-  vec2 at=s0.zw;float face=0.0,since=B1.y;int role=0;
-  if(B1.x<0.5){at.y+=B1.z*uMove.x-uMove.z;role=1;since=0.0;}
-  else if(B1.x>2.5){at=s0.xy;role=3;since=B1.y+s1.w;}
-  else if(B1.x>1.5){
-    vec2 d=s0.xy-s0.zw;float dist=length(d),run=B1.z-B1.y,arrive=dist/uMove.y;
-    if(dist<0.05||run>=arrive){at=s0.xy;since=B1.y+arrive;}
-    else{at=s0.zw+d*(run/arrive);face=atan(d.x,d.y);role=2;}
-  }
-  vec2 l=at+s1.xy,xz=B0.xy+vec2(B0.w*l.x+B0.z*l.y,B0.w*l.y-B0.z*l.x);
-  float a=B1.w+face+3.14159265+s1.z,ca=cos(a),sa=sin(a);
-  int n=int(uClipN[role]+0.5),k=int(B2[role]+0.5)-int(floor(fa+since*uMove.w))+n*4096;
-  clip=vec3(uClipS[role],float(n),float(k%n));
-  return mat4(ca,0.0,-sa,0.0,0.0,1.0,0.0,0.0,sa,0.0,ca,0.0,xz.x,groundAt(xz),xz.y,1.0);}
 #endif
 #ifdef VAT_POS
 // the far LOD and the shadow pass (batch B, ?uvat): each vertex posed at every step at load (posedVertices,
@@ -78,11 +42,7 @@ void main(){
   #include<instancesVertex>
   vec3 r=vec3(0.0,1.0,0.0);
   #ifdef INSTANCES
-  #ifdef GPU_PLACE
-  finalWorld=placeMan(world0,world1,world2,r);
-  #else
   r=aVAT;
-  #endif
   #endif
   int f=int(r.x+mod(uVATStep+r.z,r.y));
   #ifdef VAT_POS
