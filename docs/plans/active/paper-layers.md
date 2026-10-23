@@ -15,7 +15,8 @@ north-west, computed per pixel in the terrain shader. No library offers this as 
 
 ## Scope
 
-In `prototypes/staff-map.html`, behind `?style=lit&relief=layers` (without it the page is unchanged), on the made-up
+In `prototypes/staff-map.html`, behind `?style=lit&relief=layers` (without it the page is unchanged, but for the lighter contour ink the owner asked
+for in both: see Results), on the made-up
 or the real terrain (`?dem=`, #140):
 1. **Sheets** every 5 m, cut from a smoothed height (a Gaussian of about 25 m, baked once on the CPU, so small wiggles
    do not become islands), each a little lighter going up, in the paper's hue.
@@ -44,7 +45,7 @@ sheet's own drop shadow, water as cut-outs (the research's further suggestions).
 - `?style=lit&relief=layers` on the made-up and the real terrain: screenshots at map, mid and close zoom against
   `?style=lit` (contours), shown to the owner.
 - No aliasing at far zoom (the octaves); no confetti islands (the smoothed height).
-- Without `relief=layers`, the page draws as before (within a sub-pixel: see round 2).
+- Without `relief=layers`, the page draws as before (within a sub-pixel: see round 2), with the lighter contour ink.
 - Frame time measured against the contours (Windows Chrome, the owner's GPU).
 
 
@@ -64,7 +65,8 @@ sheet's own drop shadow, water as cut-outs (the research's further suggestions).
 - **Sheets and contours together** (the owner, after seeing the layers alone): the 5 m ink stays with the sheets, at
   70 % while the sheet edges show, full where they fade; the lit style's contour ink lighter overall (5 m 0.4 → 0.25,
   25 m 0.7 → 0.45 of the ink colour; the 25 m ink at 0.85 of that over the sheets). The plain lit style gets the
-  lighter ink too.
+  lighter ink too (recorded in `docs/plans/active/map-view-lit-v1.md`). The darkest strip's bound (0.63) is for the
+  shadow strips; the hair-thin ink on a shadowed edge reaches about 0.55 of the paper over a pixel's width.
 
 ## Review rounds
 
@@ -82,3 +84,7 @@ sheet's own drop shadow, water as cut-outs (the research's further suggestions).
   ink on the smoothed height too (it disagreed with the 25 m ink); `setLight` from `NW`; no apostrophes in shader
   comments; the skirt given the layers' vertex data. The plain lit page shifts by a sub-pixel from the shared light
   constant (tree shadows 0.55 r either way; houses' away vector 0.7071 against 0.707): acceptable, stated here.
+- **Round 3** (the sheets with contours): moderate and light only, so the review stops. Fixed: the ink kept off the
+  lit edges (it dimmed the highlight); the 5 m ink lighter only where the 5 m sheets actually show (not where the
+  25 m ones have replaced them); the 25 m ink back to full as the sheets fade, as the 5 m ink; the lighter ink in
+  the plain lit style written into its plan and this plan's scope; the ink's darkest line stated next to the bound.

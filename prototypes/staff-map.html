@@ -553,6 +553,7 @@ void main(){
   float mott=0.5+0.18*(sin(vW.x/310.0+sin(vW.z/230.0)*1.7)+sin(vW.z/270.0+sin(vW.x/190.0)*1.9))+0.08*sin(vW.x/97.0+vW.z/131.0);   /* smooth, slow */
 #endif
 #ifdef LAYERS
+  float lyLt=0.0,lyW5=1.0;   /* the lit edge and the 5 m octave, for the contour ink below */
   {float pxPerM=2.0/max(length(dFdx(vW.xz))+length(dFdy(vW.xz)),1e-5),gl=length(vGB),lay=(1.0-uWash)*inside;   /* px per m, both screen axes */
    /* a faint continuous hillshade underneath, so gentle ground keeps its form */
    vec3 Lk=normalize(vec3(uLightXZ.x,1.0,uLightXZ.y));   /* the same light, 45 degrees up */
@@ -563,7 +564,7 @@ void main(){
    /* 5 m sheets where their edges are far enough apart on screen, 25 m sheets where they would crowd */
    float w5=smoothstep(4.0,9.0,5.0/max(gl,1e-4)*pxPerM),l5,s5,l25,s25;   /* 5 m sheets where their edges are 4 to 9 px apart or more */
    sheets(5.0,vHB,vGB,pxPerM,l5,s5);sheets(25.0,vHB,vGB,pxPerM,l25,s25);
-   float lt=mix(l25,l5,w5),sd=mix(s25*1.8,s5,w5);
+   float lt=mix(l25,l5,w5),sd=mix(s25*1.8,s5,w5);lyLt=lt*lay;lyW5=w5;
    mapC*=1.0-min(0.24*sd,0.3)*lay*(1.0-0.7*woodA)*vec3(0.95,1.0,1.1);   /* a warm shadow, never black: with the hillshade and the tint, the darkest strip about 0.63 of the paper */
    mapC=mix(mapC,min(mapC*1.14+0.02,vec3(1.0)),0.8*lt*lay*(1.0-0.7*woodA));}
 #endif
@@ -615,7 +616,8 @@ void main(){
   float minorC=(1.0-smoothstep(0.5,1.3,dc))*(1.0-smoothstep(0.22,0.5,fwc));
   float indexC=(1.0-smoothstep(0.9,1.9,dx))*(1.0-smoothstep(0.3,0.7,fwx));
 #ifdef LAYERS
-  minorC*=mix(0.7,1.0,uWash);indexC*=0.85;   /* the contours with the sheets, the 5 m ones lighter while the sheet edges show */
+  /* lighter while the sheet edges show, and off the lit edge so the highlight stays */
+  minorC*=mix(0.7,1.0,max(uWash,1.0-lyW5))*(1.0-0.6*lyLt);indexC*=mix(0.85,1.0,uWash)*(1.0-0.6*lyLt);
 #endif
   col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.25,indexC*0.45)*k*inside*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
 #else

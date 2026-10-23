@@ -28,7 +28,9 @@ comparison). In the lit mode:
 
 5. **Relief as contours** (the owner's choice, 2026-10-23, over the hachures): minor contours every 5 m and index
    contours every 25 m, drawn in the terrain shader from the height, about a pixel wide at any zoom, each set fading
-   where its lines crowd, and fading with the rest of the ink toward the painted world.
+   where its lines crowd, and fading with the rest of the ink toward the painted world. A light ink (5 m at 0.25,
+   25 m at 0.45 of the ink colour; lightened from 0.4 and 0.7 at the owner's request, in the paper layers' PR #141) so
+   the map does not feel heavy.
 
 Out of scope: lit relief (shading), woods as canopy, roofs (decision 0051's bake, a later step); the game's staff map
 (`src/render/map.ts`); the map engine's draft page; season tuning beyond keeping each season readable.
