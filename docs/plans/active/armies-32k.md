@@ -267,6 +267,39 @@ art, other arms.
     coat share 11.0 / 9.1 % and 11.1 / 27.1 %; within ΔE 25 of the coat 13.4 / 19.3 % and 4.6 / 23.7 % (a mixed
     colour is rarely near a pure one). **The guard's 10 % bar is not met** for side 1 and for the coat measures; the
     bench says whether the step is worth more work on the look.
+- **Measured** (2026-10-23, Metal, the production build, 1080p, 40 a side, three interleaved rounds, all 28 runs exit 0;
+  medians of p50 / p95, ms; `tl0` the far LOD, `tl1` the tiny LOD):
+
+  | Run | Wide | Default | Close |
+  |---|---|---|---|
+  | middle, still, tl0 | 9.85 / 11.45 | 11.00 / 11.60 | 9.75 / 10.65 |
+  | middle, still, tl1 | 8.45 / 9.70 | 10.85 / 11.75 | 9.80 / 10.65 |
+  | middle, pan, tl0 | 10.10 / 11.90 | 10.25 / 11.65 | 9.70 / 10.25 |
+  | middle, pan, tl1 | 8.30 / 9.85 | 10.55 / 11.80 | 9.40 / 10.45 |
+  | stress, still, tl0 | 12.95 / 22.75 | 10.40 / 11.60 | 9.00 / 10.00 |
+  | stress, still, tl1 | 10.95 / 13.60 | 10.45 / 11.70 | 8.95 / 10.00 |
+  | stress, pan, tl0 | 12.75 / 14.00 | 10.10 / 11.55 | 8.95 / 10.10 |
+  | stress, pan, tl1 | 10.40 / 12.75 | 10.10 / 11.60 | 9.15 / 10.10 |
+
+  Traced pans: `cpuMs` p50 at wide 9.5 → 8.1 (middle), 12.1 → 11.7 (stress); place() and uploads unchanged (≤ 0.08 ms
+  a frame). One traced run (stress, `tl1`, close) was slow throughout (p50 15 to 21 ms, with upload frames stalling 20
+  to 38 ms) while the untraced runs at that point measure 9.15: a disturbed run, not extra uploads (the code uploads only
+  the LOD drawn and the caster; its uploads a frame are higher only because its frames are longer).
+- **Verdict** (the owner decides: keep with a new look, revert, or the route below): **the frame-time bar passes** at
+  wide, −1.40 / −1.80 ms at the middle (still / pan) and −2.00 / −2.35 at the stress point, its p95 spikes gone
+  (22.75 → 13.60 still); default within ±0.3 (the middle's pan +0.30, at the bar's edge); close within ±0.3. **The look
+  bar fails**: the readability guard's white side −17 % luma, its coat share 27 → 11 %, browner at 100 %. The code
+  stays on the branch until the owner decides.
+- **The finding**: a strong confirmation that the wide view is **vertex-bound**: 616 → 112 vertices a figure saved 1.4
+  to 2.35 ms at wide (and step 1's added vertex work cost 1.15 to 1.45).
+- **Next** (the route that keeps the look, est.): make the **far LOD itself cheaper**. It is 243 triangles but 616
+  vertices because the bake splits vertices by colour role (and normal seams); measured on this figure, its vertices
+  stand on **179 distinct places** (with their skinning), 221 with distinct normals. One vertex set with the role
+  carried flat (a `flat` varying, each triangle's role on its provoking vertex, duplicating only where a vertex is the
+  last of triangles of two roles) and the normal taken from the screen derivatives (or kept where it is shared) would
+  bring it to about **180 to 260 vertices (−58 to −71 %, est.)** and **one posed fetch a vertex instead of two**, with
+  the same triangles and colours. From step 3's measurement (−82 % vertices: −1.4 to −2.35 ms) that is worth about 1
+  to 2 ms at wide (est.), with no change to the look; the tiny LOD could then stay off or switch lower.
 - **Checks before the bench** (as planned): `npm test` (the tiny mesh: under a quarter of the far LOD's vertices, each corner on one
   bone, a role each, wound outward, a figure tall posed); a SwiftShader contact sheet at wide (`?tinylod=0` against
   the default, the fight's middle and the stress point, a marching and a firing moment); the readability guard
