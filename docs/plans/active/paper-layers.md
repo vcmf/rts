@@ -34,8 +34,9 @@ sheet's own drop shadow, water as cut-outs (the research's further suggestions).
 - The smoothed height and its gradient go to the GPU as per-vertex data on the existing terrain mesh (10 m grid), so
   the shader reads no texture for them.
 - One light: the world's north-west, as the rest of the lit style.
-- Readability: the relief only touches the ground's colour (blocks, arrows and labels are drawn on top), within about
-  ±25 % in value, in the paper's hue.
+- Readability: the relief only touches the ground's colour (blocks, arrows and labels are drawn on top), in the
+  paper's hue, the darkest strip (shadow, hillshade and tint together) about 0.63 of the paper's value, warm, never
+  black; the blocks keep their outlines and shadows over it.
 
 ## Acceptance
 
@@ -51,8 +52,20 @@ sheet's own drop shadow, water as cut-outs (the research's further suggestions).
 
 - Built as planned; the first pass was too faint next to the references, so the step shadow went to 24 % (from 16 %)
   and 22 m (from 15 m), and the 25 m sheets' shadow to 1.8× so the map zoom shows them.
-- Measured (Windows Chrome over CDP, D3D11, RTX 3080): 8.3 ms a frame at map, mid and close zoom, with or without the
-  layers, on the made-up and the real terrain (#140).
+- Measured (Windows Chrome over CDP, D3D11, RTX 3080, vsync and the frame cap off, real terrain, two runs each;
+  the frame includes the canvas ink on the CPU, so it is noisy): map zoom contours 6.7–7.7 ms, layers 6.3–8.4 ms (no
+  difference beyond the noise); mid 4.2–4.8 against 5.3–5.8 ms (about +1 ms); close 2.4–2.5 against 2.4–3.7 ms. Build
+  (`window.__buildMs`, three paired runs): 1.05–1.09 s against 1.03–1.03 s (the smoothing bake costs nothing
+  measurable). A first figure of 8.3 ms "with or without" was the 120 Hz refresh, not the cost.
 - Up close the sheets read as a layered paper model (soft shadow strips under each 5 m edge, thin lit edges); at mid
   zoom the Pratzen's east flank reads as a stair of sheets; at map zoom mostly the soft underlying hillshade and the
   25 m sheets.
+
+- **Round 1** (`/code-review high`): severe: at map zoom the 25 m shadow, the hillshade and the band tint stacked to
+  about 51 % darker than the paper, a strip to compete with the army blocks. Fixed: the shadow capped at 30 %, the
+  hillshade within ±7 % and 1 on flat ground (it divided by the wrong constant, darkening all flat ground 8 %), the
+  tint ±3 %: the darkest strip about 0.63 of the paper. With: the 25 m ink on the smoothed height, on the sheet edges
+  (it doubled them); the 5 m ink fading in as the sheets fade out toward ground zoom (a band had no 5 m relief); the
+  frame measured without vsync (the first figure was the refresh cap) and the build in pairs; the 5 m edges' screen
+  spacing computed once for the crossfade, the clamp and both octaves; one static light, `NW`, passed to the shader
+  as `uLightXZ` and used by the canopy and house bakes.

@@ -170,6 +170,9 @@ const Q=new URLSearchParams(location.search);
 const LIT=Q.get('style')==='lit';
 // &relief=layers (with the lit style): the relief as stacked paper sheets (docs/plans/active/paper-layers.md)
 const LAYERS=LIT&&Q.get('relief')==='layers';
+// the lit style's static light: a world xz vector toward it (x east, z north), the north-west; every bake and shader term
+// that is lit takes it from here (the screen LIGHT of the blocks is this one, seen through the camera, setLight)
+const NW=[-Math.SQRT1_2,Math.SQRT1_2];
 const T0=performance.now();
 
 /* ---------- small helpers ---------- */
@@ -355,7 +358,7 @@ function bakeCanopy(){
     if(t.wood&&hash(t.x*0.37,t.z*0.37)>0.4)continue;   // sparse: about 4 in 10 of a wood's trees, the same ones every load
     ts.push({x:t.x,z:t.z,r:(t.wood?4.2:3.2)*t.s*(0.85+0.3*cl)});}
   ts.sort((a,b)=>b.z-a.z);   // north first: a southern crown overlaps the one behind it
-  for(const t of ts){const r=t.r*PX*1.05;g.drawImage(shade,tx(t.x)+t.r*PX*0.55-r,ty(t.z)+t.r*PX*0.55-r,2*r,2*r);}   // the shadows first, away from the north-west light
+  for(const t of ts){const r=t.r*PX*1.05;g.drawImage(shade,tx(t.x)-NW[0]*t.r*PX*0.78-r,ty(t.z)+NW[1]*t.r*PX*0.78-r,2*r,2*r);}   // the shadows first, away from the north-west light
   for(const t of ts){const r=t.r*PX;g.drawImage(crown,tx(t.x)-r,ty(t.z)-r,2*r,2*r);}
   return c;
 }
@@ -368,7 +371,7 @@ const inFrame=h=>Math.abs(h.x)<=MX&&Math.abs(h.z)<=MZ;
 const HOUSE_SIDE=1.86,HOUSE_SHADOW=4.3;   // m, away from the light
 function bakeHouses(){
   const[c,g]=newCanvas(TW,TH);g.clearRect(0,0,TW,TH);g.globalCompositeOperation='source-over';
-  const away=[0.707,-0.707],side=[away[0]*HOUSE_SIDE,away[1]*HOUSE_SIDE],shad=[away[0]*HOUSE_SHADOW,away[1]*HOUSE_SHADOW];   // world m: the static light from the north-west, so away is east and south
+  const away=[-NW[0],-NW[1]],side=[away[0]*HOUSE_SIDE,away[1]*HOUSE_SIDE],shad=[away[0]*HOUSE_SHADOW,away[1]*HOUSE_SHADOW];   // world m: the static light from the north-west, so away is east and south
   const tops=HOUSES.filter(inFrame).map(h=>({col:h.church?CHURCH_COL:HOUSE_COL,C:houseCorners(h).map(([dx,dz])=>[h.x+dx,h.z+dz])}));   // world m: poly maps them
   const fill=(P,col)=>{poly(g,P);g.fillStyle=col;g.fill();};
   g.beginPath();for(const t of tops){const H=hull([...t.C.map(p=>[p[0]+side[0],p[1]+side[1]]),...t.C.map(p=>[p[0]+shad[0],p[1]+shad[1]])]);H.forEach((p,i)=>i?g.lineTo(tx(p[0]),ty(p[1])):g.moveTo(tx(p[0]),ty(p[1])));g.closePath();}
@@ -503,13 +506,14 @@ uniform sampler2D uMapA,uMapB,uPaperT,uNoiseT;
 #ifdef LIT
 uniform sampler2D uCanopyT,uHouseT;
 #ifdef LAYERS
-varying float vHB;varying vec2 vGB;
+uniform vec2 uLightXZ;varying float vHB;varying vec2 vGB;
 /* paper layers: one octave of sheets every D metres; out: lit edge (0..1), cast shadow (0..1) */
-void sheets(float D,float hB,vec2 g,float pxPerM,out float lit,out float shad){
-  vec2 L=vec2(-0.7071,0.7071);                       /* toward the light, xz: the north-west */
-  float hc=hB/D,f=fract(hc),gl=length(g);
+/* gpx: this octave's contour units per screen pixel (from the 5 m one: the 25 m one is a fifth of it) */
+void sheets(float D,float hB,vec2 g,float pxPerM,float gpx,out float lit,out float shad){
+  vec2 L=uLightXZ;                                   /* toward the light, xz (NW in the JS) */
+  float f=fract(hB/D),gl=length(g);
   float cU=dot(g/max(gl,1e-5),L);                    /* above 0: the ground rises toward the light */
-  float gpx=max(length(vec2(dFdx(hc),dFdy(hc))),1e-6),dDn=f/gpx,dUp=(1.0-f)/gpx,spacing=1.0/gpx;
+  float dDn=f/gpx,dUp=(1.0-f)/gpx,spacing=1.0/gpx;
   float S=min(22.0*pxPerM*max(cU,0.0),0.45*spacing);  /* the shadow strip, px: world length, under half a band */
   shad=(1.0-smoothstep(0.55*S,S+0.75,dUp))*step(0.0,cU)*step(0.5,S);
   float wl=0.6+1.2*max(-cU,0.0);
@@ -550,15 +554,16 @@ void main(){
 #ifdef LAYERS
   {float pxPerM=1.0/max(length(vec2(dFdx(vW.x),dFdy(vW.x))),1e-5),gl=length(vGB),lay=(1.0-uWash)*inside;
    /* a faint continuous hillshade underneath, so gentle ground keeps its form */
-   vec3 n=normalize(vec3(-vGB.x,1.0,-vGB.y));float lam=dot(n,normalize(vec3(-0.6,0.62,0.6)))/0.718;
-   mapC*=mix(1.0,clamp(1.0+0.45*(lam-1.0),0.9,1.08),lay);
+   vec3 Lk=normalize(vec3(uLightXZ.x,1.0,uLightXZ.y));   /* the same light, 45 degrees up */
+   vec3 n=normalize(vec3(-vGB.x,1.0,-vGB.y));float lam=dot(n,Lk)/Lk.y;   /* 1 on flat ground */
+   mapC*=mix(1.0,clamp(1.0+0.45*(lam-1.0),0.93,1.07),lay);
    /* each sheet a little lighter going up, in the paper hue */
-   float tb=clamp((floor(vHB/5.0)*5.0-uHmin)/max(uHmax-uHmin,1.0),0.0,1.0);mapC*=mix(1.0,0.95+0.1*tb,lay);
+   float tb=clamp((floor(vHB/5.0)*5.0-uHmin)/max(uHmax-uHmin,1.0),0.0,1.0);mapC*=mix(1.0,0.97+0.06*tb,lay);
    /* 5 m sheets where their edges are far enough apart on screen, 25 m sheets where they would crowd */
-   float w5=smoothstep(4.0,9.0,5.0/max(gl,1e-4)*pxPerM),l5,s5,l25,s25;
-   sheets(5.0,vHB,vGB,pxPerM,l5,s5);sheets(25.0,vHB,vGB,pxPerM,l25,s25);
+   float g5=max(length(vec2(dFdx(vHB/5.0),dFdy(vHB/5.0))),1e-6),w5=smoothstep(4.0,9.0,1.0/g5),l5,s5,l25,s25;   /* 5 m edges' spacing, px */
+   sheets(5.0,vHB,vGB,pxPerM,g5,l5,s5);sheets(25.0,vHB,vGB,pxPerM,g5*0.2,l25,s25);
    float lt=mix(l25,l5,w5),sd=mix(s25*1.8,s5,w5);
-   mapC*=1.0-0.24*sd*lay*(1.0-0.7*woodA)*vec3(0.95,1.0,1.15);   /* a warm shadow, never black */
+   mapC*=1.0-min(0.24*sd,0.3)*lay*(1.0-0.7*woodA)*vec3(0.95,1.0,1.1);   /* a warm shadow, never black: with the hillshade and the tint, the darkest strip about 0.63 of the paper */
    mapC=mix(mapC,min(mapC*1.14+0.02,vec3(1.0)),0.8*lt*lay*(1.0-0.7*woodA));}
 #endif
   mapC=mix(mapC,mix(uWaterW,uWaterW*0.92,g2),water);
@@ -595,11 +600,16 @@ void main(){
 #ifdef LIT
   /* contours for relief: minor every 5 m, index every 25 m, about a pixel wide at any zoom, each set fading where it crowds */
   float hc=vH/5.0,fwc=max(fwidth(hc),1e-4),dc=abs(fract(hc-0.5)-0.5)/fwc;
-  float hx=vH/25.0,fwx=max(fwidth(hx),1e-4),dx=abs(fract(hx-0.5)-0.5)/fwx;
+#ifdef LAYERS
+  float hx=vHB/25.0;   /* on the sheet edges */
+#else
+  float hx=vH/25.0;
+#endif
+  float fwx=max(fwidth(hx),1e-4),dx=abs(fract(hx-0.5)-0.5)/fwx;
   float minorC=(1.0-smoothstep(0.5,1.3,dc))*(1.0-smoothstep(0.22,0.5,fwc));
   float indexC=(1.0-smoothstep(0.9,1.9,dx))*(1.0-smoothstep(0.3,0.7,fwx));
 #ifdef LAYERS
-  minorC=0.0;indexC*=0.7;
+  minorC*=uWash;indexC*=0.7;   /* the 5 m ink only where the sheets have faded (toward ground zoom) */
 #endif
   col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.4,indexC*0.7)*k*inside*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
 #else
@@ -1258,9 +1268,10 @@ function build(){
   window.__bake={hachures:nh,ms:Math.round(bakeMs),trees:TREES.length,houses:HOUSES.length,terrain:DEM?`real (${DEM.source}), heights ×${DEM_Z.toFixed(2)}`:'made-up'};
   const COMMONU=['uSun','uSeason','uMist','uGSh'];
   terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal',...(LAYERS?['aHB','aGB']:[])],
-    uniforms:['world','viewProjection','uCrown','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[])]:[]});
+    uniforms:['world','viewProjection','uCrown','uLightXZ','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[])]:[]});
   terrMat.backFaceCulling=false;terrMat.setTexture('uMapA',texA);terrMat.setTexture('uMapB',texB);paperT.wrapU=paperT.wrapV=noiseT.wrapU=noiseT.wrapV=B.Texture.WRAP_ADDRESSMODE;terrMat.setTexture('uPaperT',paperT);terrMat.setTexture('uNoiseT',noiseT);terrMat.setFloat('uHmin',HMIN);terrMat.setFloat('uHmax',HMAX);
   if(LIT){for(const[n,c]of[['uCanopyT',cCanopy],['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
+  if(LAYERS)terrMat.setVector2('uLightXZ',new B.Vector2(NW[0],NW[1]));
   terrainMesh().material=terrMat;
   {const O=30000,y=HMIN-1,P=[-TX,y,-TZ,TX,y,-TZ,TX,y,TZ,-TX,y,TZ,-O,y,-O,O,y,-O,O,y,O,-O,y,O],I=[0,4,1,1,4,5,1,5,2,2,5,6,2,6,3,3,6,7,3,7,0,0,7,4],
     m=new B.Mesh('skirt',scene),vd=new B.VertexData();vd.positions=P;vd.indices=I;vd.normals=[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0];vd.applyToMesh(m);m.material=terrMat;m.isPickable=false;m.alwaysSelectAsActiveMesh=true;}
