@@ -193,14 +193,44 @@ art, other arms.
 - **Today**: the far LOD is 243 triangles; at the widest zoom nearly every figure is a few pixels tall (the LOD switch
   is at 48 px). At 40 a side about 33,000 × 243 ≈ 8 million triangles a frame at wide (est.), plus the proxy's 56 a
   caster in the shadow map.
-- **The change**: a third LOD for figures under about 12 px tall (the switch's value to be tuned by eye): 20 to 40
-  triangles (a few boxes on the bones, posed from the baked animation as the far LOD is) or a camera-facing card from
-  an impostor atlas; its colours by role so the far palette and the flags still read.
+- **What costs** (step 1's finding): the wide view is GPU vertex-bound. The far LOD is 243 triangles but **616
+  vertices** (split by colour role), each posed by two texel fetches (`VAT_POS`) and grown and crossfaded (`FAR_SCALE`,
+  `FAR`): at the stress point about 24,000 × 616 ≈ 14.8 million vertices a frame. The vertex count is the lever, not
+  the triangle count.
+- **The options weighed**:
+  - **(a) a posed mesh of boxes** on the figure's parts: the parts the shadow proxy already finds (`boneParts`: a bone
+    carrying enough vertices over 14 cm long; 10 to 16 on this figure), each a box of 8 shared corners (12
+    triangles), each corner wholly on its bone and posed at every step like the far LOD (`posedMesh`, two fetches a
+    vertex, the same shader path). About 112 vertices (−82 %) and 168 triangles (−31 %). Built at load from the far
+    LOD, no bake; the same materials and switches (the far palette, its lift, `FAR_SCALE`, the masks, the flags
+    untouched), so readability and the A/B are cheap to keep. From above it keeps the figure's mass and its shoulders,
+    pack and headgear where they are.
+  - **(b) a camera-facing card** from an impostor atlas (facings × the 242 baked steps, a role and a normal a texel so
+    the uniform's colours, the far palette and the light still apply): 4 vertices a figure, the least vertex work, but
+    an atlas baked at load from the far LOD (a render-target pass over about 2,000 cells), a fragment fetch and an
+    alpha test a pixel, one camera elevation per cell while the view looks down at 30° to 60° across the screen, and a
+    new look (no parallax, a card's silhouette): the "no visible change at 100 %" bar is the hardest for it, and its
+    risk and size are a step of their own.
+  - **(c) both**, the card only under about 6 px: worth it only if (a) passes and the trace still shows the tiny
+    figures' vertices dominating.
+- **Chosen: (a)**, smallest step that attacks the vertex count with no new look; (b) and (c) wait on its measurement.
+- **The change** (`tinyMesh`, `src/look/units-data.ts`; `src/look/units.ts`): a fourth host a battalion (after the
+  near LOD, the far LOD, the proxy), drawn instead of the far LOD when its figure falls under **12 px** tall (`tinyPx`,
+  ±10 % like the LOD switch; `?tinypx=<px>` to tune by eye, `?tinylod=0` for the A/B), with its own material per
+  uniform (the far LOD's, reading the tiny mesh's posed vertices: no new texture unit, the vertex stage reads two).
+  Each corner's colour role is the role of the part's vertex nearest it, so the coat, the pack and the headgear show
+  where they are; its normals are smooth from the box's centre (a figure a few pixels tall shows no facet). The
+  shadows are unchanged: the proxy casts (the simple shadows of #131 decide beyond close zoom; the tiny LOD never
+  casts). `drawn()` reports it as `tiny`.
 - **Bar**: **kept if**, at 40 a side, the wide camera's p50 falls by **≥ 0.5 ms** still and panning, the default's is
   no worse, the readability guard's figures' contrast and coat share at the widest zoom stay within 10 %, and the
   contact sheet at wide shows no visible change at 100 %. **Else reverted.** Step 1's bench showed the wide view
   GPU vertex-bound (more vertex work made it 1.15 to 1.45 ms slower), so this is now the main lever at wide; the
   measurement decides.
+- **Checks before the bench**: `npm test` (the tiny mesh: under a quarter of the far LOD's vertices, each corner on one
+  bone, a role each, wound outward, a figure tall posed); a SwiftShader contact sheet at wide (`?tinylod=0` against
+  the default, the fight's middle and the stress point, a marching and a firing moment); the readability guard
+  (`node tools/guard.mjs <url?armies=40> --figures`) at the widest zoom within 10 % of `?tinylod=0`.
 
 ## Step 4: the ground-colour cache
 
