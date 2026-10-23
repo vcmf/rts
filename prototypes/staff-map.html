@@ -325,18 +325,18 @@ const LW=1024,LH=Math.round(LW*MZ/MX);   // the light at about 4 m: the relief i
 function bakeLight(){
   const cw=2*MX/LW,hg=new Float32Array(LW*LH);
   for(let j=0;j<LH;j++)for(let i=0;i<LW;i++)hg[j*LW+i]=Hs(-MX+(i+0.5)*cw,MZ-(j+0.5)*cw);
-  const at=(i,j)=>hg[clamp(j,0,LH-1)*LW+clamp(i,0,LW-1)];
+  const at=(i,j)=>i>=0&&j>=0&&i<LW&&j<LH?hg[j*LW+i]:Hs(-MX+(i+0.5)*cw,MZ-(j+0.5)*cw);   // past the border, the heights themselves
   const az=a=>[Math.cos(a),Math.sin(a)];   // a from +x toward north (+z, up the texture)
-  const key=[-0.579,0.574,0.579],fills=[200,240,280,320].map(d=>{const[cx,cz]=az(d*Math.PI/180);return[cx*0.866,0.5,cz*0.866];});
-  const[c,g]=newCanvas(LW,LH),im=g.getImageData(0,0,LW,LH),D=im.data,tanS=Math.tan(18*Math.PI/180),step=12/cw;
+  const SUN_EL=25*Math.PI/180,key=[-Math.cos(SUN_EL)*0.707,Math.sin(SUN_EL),Math.cos(SUN_EL)*0.707],fills=[200,240,280,320].map(d=>{const[cx,cz]=az(d*Math.PI/180);return[cx*0.866,0.5,cz*0.866];});
+  const[c,g]=newCanvas(LW,LH),im=g.getImageData(0,0,LW,LH),D=im.data,tanS=Math.tan(SUN_EL),step=12/cw;
   for(let j=0;j<LH;j++)for(let i=0;i<LW;i++){
     const dx=(at(i+1,j)-at(i-1,j))/(2*cw),dz=(at(i,j-1)-at(i,j+1))/(2*cw),l=Math.hypot(dx,1,dz),n=[-dx/l,1/l,-dz/l];
     const dot=v=>Math.max(0,n[0]*v[0]+n[1]*v[1]+n[2]*v[2]);
-    const lam=dot(key)/0.574,fill=fills.reduce((t,v)=>t+dot(v),0)/fills.length/0.5;
+    const lam=dot(key)/key[1],fill=fills.reduce((t,v)=>t+dot(v),0)/fills.length/0.5;
     let sh=0;const h0=at(i,j);   // the shadow: march toward the sun (north-west, low), a few steps of 12 m
-    for(let k=1;k<=30;k++){const si=Math.round(i-k*step*0.707),sj=Math.round(j-k*step*0.707);if(si<0||sj<0)break;
-      const over=at(si,sj)-(h0+k*12*tanS);if(over>0){sh=Math.min(1,over/3);if(sh>=1)break;}}
-    const v=clamp(0.52+0.48*(0.75*lam+0.25*fill-1)-0.34*sh,0,1),o=(j*LW+i)*4;D[o]=v*255;D[o+1]=sh*255;D[o+2]=0;D[o+3]=255;}
+    for(let k=1;k<=30;k++){const si=Math.round(i-k*step*0.707),sj=Math.round(j-k*step*0.707);
+      const over=at(si,sj)-(h0+k*12*tanS);if(over>0){sh=Math.max(sh,Math.min(1,over/3));if(sh>=1)break;}}   // the strongest occluder
+    const v=clamp(0.52+0.48*(0.75*lam+0.25*fill-1)-0.34*sh,0,1),o=(j*LW+i)*4;D[o]=v*255;D[o+1]=0;D[o+2]=0;D[o+3]=255;}   // G: the canopy's blurred cover, written by bakeCanopy
   g.putImageData(im,0,0);return c;
 }
 // a crown sprite: a dome lit from the north-west, darker toward its rim; a soft shadow sprite
@@ -347,9 +347,8 @@ function crownSprite(){const N=64,[c,g]=newCanvas(N,N),im=g.createImageData(N,N)
   g.putImageData(im,0,0);return c;}
 function shadowSprite(){const N=64,[c,g]=newCanvas(N,N),gr=g.createRadialGradient(N/2,N/2,0,N/2,N/2,N/2);g.clearRect(0,0,N,N);g.globalCompositeOperation='source-over';
   gr.addColorStop(0,'rgba(255,0,0,0.85)');gr.addColorStop(0.6,'rgba(255,0,0,0.55)');gr.addColorStop(1,'rgba(255,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,N,N);return c;}
-// a slow noise for clumps (value noise on a 60 m lattice)
-const clumpN=(x,z)=>{const fx=x/60,fz=z/60,i=Math.floor(fx),j=Math.floor(fz),u=sstep(0,1,fx-i),v=sstep(0,1,fz-j);
-  return lerp(lerp(hash(i,j),hash(i+1,j),u),lerp(hash(i,j+1),hash(i+1,j+1),u),v);};
+// a slow noise for clumps: the value noise on a 60 m lattice
+const clumpN=(x,z)=>vn(x/60,z/60);
 function bakeCanopy(){
   const[c,g]=newCanvas(TW,TH),[cs,gs]=newCanvas(TW,TH),crown=crownSprite(),shade=shadowSprite();gs.clearRect(0,0,TW,TH);
   g.globalCompositeOperation=gs.globalCompositeOperation='source-over';   // newCanvas sets lighter (additive): crowns must cover, not add
@@ -361,11 +360,15 @@ function bakeCanopy(){
   for(const t of ts){const r=t.r*PX*1.15;gs.drawImage(shade,tx(t.x)+t.r*PX*0.75-r,ty(t.z)+t.r*PX*0.75-r,2*r,2*r);}
   g.drawImage(cs,0,0);cs.width=0;
   for(const t of ts){const r=t.r*PX;g.drawImage(crown,tx(t.x)-r,ty(t.z)-r,2*r,2*r);}
+  // the cover blurred over about 10 m of ground, at the light's 4 m: the shade under the crowns follows it, no rim at any zoom
+  const[cb,gb]=newCanvas(LW,LH);gb.globalCompositeOperation='source-over';gb.filter='blur(1.5px)';gb.drawImage(c,0,0,LW,LH);
+  const lg=cLight.getContext('2d'),li=lg.getImageData(0,0,LW,LH),bi=gb.getImageData(0,0,LW,LH).data;
+  for(let q=0;q<LW*LH;q++)li.data[q*4+1]=bi[q*4+2];lg.putImageData(li,0,0);cb.width=0;
   return c;
 }
 function bakeMap(){
   const nh=LIT?0:bakeHachures();
-  if(LIT){cLight=bakeLight();cCanopy=bakeCanopy();}   // the lit style draws contours, not hachures
+  if(LIT){cLight=bakeLight();cCanopy=bakeCanopy();}   // the canopy writes its blurred cover into the light texture   // the lit style draws contours, not hachures
   // woods: area wash, edge line, one ring per tree (the same trees the 3D world grows)
   for(const w of WOODS){const P=[];for(let k=0;k<=140;k++){const th=k/140*6.2832,r=w.r(th);P.push([w.x+Math.cos(th)*r,w.z+Math.sin(th)*r]);}
     poly(gA,P);gA.fillStyle='rgb(0,70,0)';gA.fill();if(!LIT){poly(gB,P);gB.strokeStyle='rgba(255,0,0,0.75)';gB.lineWidth=1.1;gB.stroke();}}
@@ -491,7 +494,7 @@ vec3 fieldK(vec2 p,float mott){
   for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 c=i+vec2(float(x),float(y)),o=c+h22(c);float d=length(q-o);if(d<f1){f2=f1;f1=d;id=c;}else if(d<f2)f2=d;}
   float border=smoothstep(0.02,0.16,f2-f1),h=h12(id),a=h12(id+3.1)*3.1416;vec2 dir=vec2(cos(a),sin(a)),perp=vec2(-dir.y,dir.x);
   float t=dot(p,dir)/5.5+0.35*sin(dot(p,perp)/41.0),fw=fwidth(t);
-  float dash=smoothstep(0.25,0.7,fract(sin(dot(floor(vec2(dot(p,perp)/19.0,t)),vec2(12.9,78.2)))*437.5));
+  float dash=smoothstep(-0.3,0.6,sin(dot(p,perp)/19.0+2.1*sin(t*0.37))*sin(dot(p,perp)/7.3+t*0.11));   /* smooth breaks along the strips */
   float ridge=sin(6.2832*t)*(0.35+0.65*abs(dot(dir,normalize(vec2(-1.0,1.0)))));
   float amp=0.07*border*step(0.28,h)*(1.0-smoothstep(0.3,0.6,fw))*(0.55+0.45*dash);
   float tint=(h-0.5)*0.08*mix(0.4,1.0,border);
@@ -529,6 +532,7 @@ void main(){
   vec3 ground=Lt.r<0.5?mix(uGSh,uGMid,Lt.r*2.0):mix(uGMid,uGLit,Lt.r*2.0-1.0);
   float mott=0.5+0.18*(sin(vW.x/310.0+sin(vW.z/230.0)*1.7)+sin(vW.z/270.0+sin(vW.x/190.0)*1.9))+0.08*sin(vW.x/97.0+vW.z/131.0);   /* smooth, slow */
   mapC=mix(mapC,ground*fieldK(vW.xz,mott),inside);
+  mapC*=mix(vec3(1.0),vec3(0.86,0.78,0.62),smoothstep(0.0,0.035,edge)*(1.0-smoothstep(0.035,0.17,edge))*inside);   /* the aged band inside the frame, over the land too */
 #endif
   mapC=mix(mapC,mix(uWaterW,uWaterW*0.92,g2),water);
 #ifdef LIT
@@ -560,7 +564,7 @@ void main(){
   /* woods: the baked canopy, its shadow on the ground first, then the crowns lit by their own baked light */
   vec4 Cn=texture2D(uCanopyT,clamp(uv,0.0,1.0))*inside;
   col=mix(col,col*vec3(0.5,0.54,0.52),Cn.r*0.6*k);
-  float dense=smoothstep(0.25,0.6,texture2D(uCanopyT,clamp(uv,0.0,1.0),3.0).b);   /* the crowns blurred: shade follows them, no rim */
+  float dense=smoothstep(0.12,0.45,Lt.g);   /* the crowns blurred over about 10 m (baked): shade follows them, no rim */
   col=mix(col,uCrown*0.22,dense*0.85*k*inside);   /* deep shade between the crowns */
   float lum=Cn.g/max(Cn.b,0.004);
   col=mix(col,mix(uCrown*0.34,min(uCrown*1.08,vec3(1.0)),lum)*(0.92+mott*0.16),Cn.b*k);

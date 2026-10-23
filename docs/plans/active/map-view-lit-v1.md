@@ -44,7 +44,7 @@ built in the prototype first, with stand-in fields (the prototype has no field p
    about 4 m, painted through the painted world's own ground colours (`gLit`, `gMid`, `gSh`), so the map and the world
    agree at the handover; a slow large mottle; no paper grain on the land at play zoom.
 2. **Canopy, baked once:** pre-lit crown sprites from the tree list, drawn north to south, sizes varying in clumps,
-   gaps near the edge so the field shows through, one blurred pass of their shadows on the ground; green from the
+   gaps near the edge so the field shows through, soft gradient shadow sprites on the ground; green from the
    season's crown colour, not brown.
 3. **Fields (stand-in):** patches with no hard edge: the strips fade out toward a patch's border, are soft ridges lit
    from one side, broken and about 5.5 m apart; some patches are plain meadow; tints stay within one hue family.
@@ -126,11 +126,18 @@ steps 4, 5 and 8); the real renderer reading the map language (after the owner a
   wood edges, the canopy computed outside woods, a duplicated hash.
 
 - **v2 built** (scope above): the light baked at about 4 m (key, fill, shadow march) through `gSh`/`gMid`/`gLit`; the
-  canopy baked as pre-lit crown sprites, north to south, clumped, gaps at the edge, one pass of soft shadows, the shade
-  under it following the crowns' blurred coverage (no rim, no drawn outline); fields as stand-in patches whose strips
+  canopy baked as pre-lit crown sprites, north to south, clumped, gaps at the edge, soft gradient shadows, the shade
+  under it following the crowns' cover blurred over about 10 m (baked) (no rim, no drawn outline); fields as stand-in patches whose strips
   fade at the borders; a smooth computed mottle (the old noise texture was blocky, in the fields and in the valley
   mist); contours at far zoom only. Measured on the owner's RTX 3080 (D3D11): 8.3–11 ms a frame; the page builds in
   about 2.6 s (no hachures to bake).
+
+- **v2, round 1**: severe: the shadow march kept the last occluder rather than the strongest, so cast shadows broke
+  into blotches. Fixed, with: one sun (25°) for the shading and the shadows; heights sampled past the map's border
+  (full shading at the frame, shadows from higher ground outside it); the woods' shade from their cover blurred over
+  about 10 m and baked, not a screen-space blur (it left a halo at map zoom); the aged band over the land again; smooth
+  breaks along the strips; the existing value noise reused. Open for the owner: the map's light is north-west (the
+  cartographic convention), the painted world's sun east-south-east, so light and shade swap sides on the handover.
 
 ## Results
 
