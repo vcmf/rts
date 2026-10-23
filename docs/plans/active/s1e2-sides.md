@@ -49,7 +49,7 @@ interface PlanStep { at: number; unit: number; cmd: PlanCommand }   // seconds; 
 
 ### The end (step 13 of the tick)
 
-- **A side is broken** when the men it has in the fight fall to `end.broken` (data, 0.5) of the men it spawned.
+- **A side is broken** when the men it has in the fight fall to `end.broken` (data, 0.5; 0.65 since S1e-3, `docs/plans/active/s1e3-playtest.md`) of the men it spawned.
   Out of the fight means gone, routing, rallying, shattered or left the field.
 - **The battle ends** when a side is broken. Its enemy wins; if both break on the same tick, it is a draw.
   - The scenario may give a time limit (`Scenario.minutes`). At the limit the side with the larger share in the

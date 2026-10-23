@@ -11,5 +11,7 @@ import { s1eBattle } from './s1e-battle.ts'
 
 export const PAGE_SCENARIOS: Record<string, Scenario> = { 's1c-firefight': s1cFirefight, 's1c-brigade': s1cBrigade, 's1d-arms': s1dArms, 's1d-charge': s1dCharge, 's1d-guns': s1dGuns, 's1e-battle': s1eBattle, ...S1B_SCENARIOS }
 export const DEFAULT_SCENARIO = 's1c-firefight'
+// the seed the page plays every scenario at (tools/battle-report.ts runs a scenario with no orders at it too)
+export const PAGE_SEED = 20261009
 // where the page opens on each: centre x, z and pixels per metre
 export const PAGE_VIEWS: Record<string, [number, number, number]> = { 's1c-firefight': [-100, 120, 3], 's1c-brigade': [-125, -10, 2], 's1d-arms': [-60, 10, 1.9], 's1d-charge': [-85, 40, 1.9], 's1d-guns': [25, 50, 1.6], 's1e-battle': [0, 0, 0.6] }
