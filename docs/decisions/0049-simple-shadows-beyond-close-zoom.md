@@ -46,8 +46,10 @@ each soldier now draws his own (below; the mask under the alternatives).
   averaged shape a role and facing, not each man's pose (a marching man's legs are one soft wedge, a firing line's
   muskets a faint stroke). At close zoom, where the poses read, the map's own.
 - No shadow map is drawn past 85 m: each soldier's shadow is two dozen triangles over a few pixels, one atlas read a
-  pixel, nothing to redraw when he stands still; a stencil buffer on the scene. Its cost: the plan (an estimate until
-  measured).
+  pixel, nothing to redraw when he stands still; a stencil on the scene's target only while they are on. Measured (the
+  plan, 40 a side, the widest zoom): cheaper than the map at the fight's middle (still 10.25 against 10.60 p50, 11.70
+  against 12.70 p95) and at the stress point still (12.95 / 14.40 against 13.25 / 18.75); dearer only panning there
+  (14.45 against 13.00, before its grid was made coarser).
 - The lift darkens the grass and the men's legs within it over the ground in a shadow (a man standing in his front
   rank's shadow takes it on his legs; the map shadows no figure); crops taller than it hide the shadow under them.
 - The shape is made once at load (about 85 ms).

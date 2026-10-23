@@ -612,19 +612,24 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   (`src/look/units-data.ts`, at load, about 85 ms) projects the far LOD, posed at up to 12 steps of each role's clip and
   turned to 16 facings, along the sun onto the ground, averages the steps (a marching man's legs one soft wedge) and
   blurs it; an R8 atlas, mipmapped, a cell a facing and a role. Each soldier draws it himself, in the main pass after
-  everything else (`unitdecal.vert`, `unitdecal.frag`): one more mesh a battalion on its own instance buffers, a 2 × 6
-  grid a man from his feet along the shadow, each vertex on the ground (the meadow map's height) and drawn toward the
-  camera along its view ray by `?udecallift` (0.6 m, growing from 0 at his feet over 1.5 m so it never covers his own
-  shins: over the grass and the legs of the men in it in depth, no shift on screen); his facing picks two cells,
+  everything else (`unitdecal.vert`, `unitdecal.frag`): one more mesh a battalion on its own instance buffers, a 1 × 3
+  grid a man (2 m a cell: the widest view is bound by its vertices) from his feet along the shadow, each vertex on the
+  ground (the meadow map's height, or without one the heightfield's, sampled into a texture at load) and drawn toward
+  the camera along its view ray by `?udecallift` (0.6 m, growing from 0 at his feet over 1.5 m so it never covers his
+  own shins: over the grass and the legs of the men in it in depth, no shift on screen); his facing picks two cells,
   blended, read through the atlas's mips up to the third (a cell's border holds no further), his clip's first step his
-  role's row, and it grows with the far figures (`FAR_SCALE`). The fragment is one atlas read: its value is the
-  pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first shadow at a sample
-  through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the ground's shade there, read once a
-  vertex: so a formation's overlapping shadows darken each sample once, at every distance. **The shade**
-  (`src/look/bakes.ts` `unitShade`, `shaders/unitshade.frag`): the ratio of the ground painted in a full cast shadow
-  to it painted as it is (the baked shadows, the occlusion, the bounce, the season), top-down over the tile, rebaked
-  after the bounce map; so the darkening is the map's on the same ground (the air on top is not in the ratio). The
-  engine has a stencil for it (`src/look/main.ts`). No render target and no reads in the receivers. Each man's shadow
+  role's row, and it grows with the far figures (`FAR_SCALE`). The fragment reads the atlas and the ground's shade:
+  the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
+  shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so
+  a formation's overlapping shadows darken each sample once, at every distance (with fewer samples, `?msaa=1|2`, the
+  value scales the darkening and the first shadow at a pixel wins). **The shade** (`src/look/bakes.ts` `unitShade`,
+  `shaders/unitshade.frag`): the ratio of the ground painted in a full cast shadow to it painted as it is (the baked
+  shadows, the occlusion, the bounce, the season), top-down over the tile at the light map's texels, rebaked after the
+  bounce map and when the occlusion's switch changes; so the darkening is the map's on the same ground (the air on top
+  is not in the ratio). **The stencil**: only on the scene's target (the first finishing pass's, `MSAA.stencil` in
+  `src/look/post.ts`) and only when the simple shadows are on: its depth is DEPTH24_STENCIL8 then, else DEPTH32F as
+  before; the canvas has none (`?stencil=all`: the engine's own on every target, the A/B; `0`: none). No render target
+  and no reads in the receivers. Each man's shadow
   moves every frame with smooth places (below: `aNext`, his move to his next step's place, written with his place;
   `uStepFrac`, the share of the step gone, from the CPU's clock), else at
   the steps with his figure. **The cross-fade**: by the camera's distance to its focus, from the map alone at 60 m to

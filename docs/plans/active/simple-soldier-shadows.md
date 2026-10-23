@@ -171,8 +171,27 @@ the stress point still 12.65 / 23.8 against 17.15 to 17.20 / 18.65 (+4.5), panni
 (+5.7); the default zoom +0.3 to 1.3; close unchanged (the raw files
 not kept). The fragment is now one atlas read and a blend.
 
-**Cost**: an estimate until the rework's bench (20 and 40 a side) lands: a few dozen triangles a man and one atlas
-read a pixel, each covered sample written once.
+**Cost, the fixed decal** (review round 1's fixes; the coordinator's Metal bench, 40 a side, three rounds, 24 runs,
+p50 / p95 ms; the default zoom's p50 after the bar; close about equal):
+
+| | map | decal |
+|---|---|---|
+| fight's middle, still, wide | 10.60 / 12.70 · 11.25 | 10.25 / 11.70 · 10.40 |
+| fight's middle, pan, wide | 10.25 / 12.10 · 10.70 | 9.60 / 11.05 · 10.40 |
+| stress point, still, wide | 13.25 / 18.75 · 11.25 | 12.95 / 14.40 · 10.25 |
+| stress point, pan, wide | 13.00 / 14.35 · 11.20 | 14.45 / 15.70 · 10.30 |
+
+The decal is cheaper everywhere but panning at the stress point's widest zoom (+1.45 ms). Both arms ran on that build's
+engine-wide stencil (decision below), which took the map arm from 9.80 to 10.60 at the fight's middle (wide, still)
+against the earlier rounds on the same tree: the scene's depth turned from DEPTH32F into DEPTH24_STENCIL8 for every
+draw, and the canvas took a stencil. Now the stencil is on the scene's target alone and only with the simple shadows
+(checked in the page: DEPTH32F with no armies, `?ushadowfar=map` and `?unitshadow=0`; DEPTH24_STENCIL8 with the simple
+shadows; the canvas none). The stress point's pan: not pinned down by code reading (the decal's triangles and draws
+are the same panning as still: 7.65 M against 7.50 M, 245 against 242); the widest view is vertex-bound (the 32k plan),
+so its grid is now 1 × 3 (8 vertices a man, was 21) and its two texture reads a vertex down to one (the shade is read by
+the fragment); a traced bench of that point is in the next bench's script. **Darkening after the fixes** (as above):
+default 45.6 against the map's 45.6, a firing line 46.4 against 45.8, the widest 37.7 against 42.8; with `?msaa=1` (no
+coverage) the decal is about a fifth darker than the map there.
 
 ## Open questions
 
@@ -194,5 +213,10 @@ read a pixel, each covered sample written once.
   zoom (now a stencil); the darkening missed the bounce (now the baked shade); the fragment ran the painter twice over
   four or five overlaps (now one atlas read, the shade once a vertex); the atlas bled between cells past its fourth mip
   (now clamped); the decal was shown before its material existed.
+- Not done (review round 2): a host's LOD meshes share one set of instance data on the CPU but each keeps its own GPU
+  buffer and upload (Babylon's thin instances own their buffers per mesh); sharing them needs its vertex buffers by
+  hand, for an upload a step a battalion.
+- Without the scene's finishing passes (a page with none) the scene draws to the canvas, which has no stencil: there
+  overlapping decals would darken twice (the look page always has them).
 - The ground's shade leaves out the air: under strong haze, at the widest zoom far off, a decal shadow is a little
   darker than the map's would be. The trodden ground's dust is not in it either.
