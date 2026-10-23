@@ -242,7 +242,7 @@ if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS
 // (a baked arm other than the bake's own bakes as it is set)
 const armBake = await macro.setArm(macroArm)
 const macroBake = armBake.texels ? armBake : await macro.bake()
-const camera = buildCamera(scene, canvas)
+const camera = buildCamera(scene, canvas, groundAt)
 // the roads' live shader only from mid zoom in (docs/plans/done/roads.md, decision 0039): farther out the macro bake
 // holds them and the tile's ground takes its material without them (the shader's size alone cost every ground pixel).
 // Nearing ROAD_LIVE_R the live roads fade to the baked look (uRoadFar: the wheel tracks to their dusting, the grit out),
@@ -307,6 +307,10 @@ if (smHold !== null && smHold !== 'fixed') throw new Error(`?smhold must be fixe
 if (shadowLod !== null && shadowLod !== 'far') throw new Error(`?shadowlod must be far, not ${shadowLod}`)
 // batch C: ?farscale=0, the far figures at their own size
 const farScale = bit('farscale'), trample = bit('trample'), flags = bit('flags')   // ?trample=0: no trodden ground; ?flags=0: no colours
+// the close zoom (docs/plans/active/close-zoom.md): ?nearestpx=<px>, the figure's height on screen from which a man is
+// drawn at the figure's nearest LOD (when it has one); 0: never
+const nearestPx = params.get('nearestpx')
+if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) throw new Error(`?nearestpx must be a whole number of pixels, 0 to 2000, not ${nearestPx}`)
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 20)) throw new Error(`?armies must be 1 to 20 battalions a side (the demo map holds 20), not ${armiesParam}`)
 if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '1') throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
 let units: Units | null = null, armiesFocus: [number, number] | null = null   // (the fight's middle: the bench's focus)
@@ -334,6 +338,7 @@ if (armiesParam !== null) {
   units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides), era.uniforms, () => S.t)
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.tightCull = uCull ?? true
   units.holdShare = smHold !== 'fixed'; units.proxyCasters = shadowLod !== 'far'
+  if (nearestPx !== null) units.nearestPx = +nearestPx
   if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)
@@ -361,7 +366,9 @@ input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
 // edges at 80 and 88 % of the SPEC's zoom range, 0.75 at the widest), changed only once the radius is AUTO_HOLD m
 // past the level's edge (no flicker at an edge).
 // The interface is HTML over the canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
-const { rMin, rMax } = D.spec.camera, at = (f: number) => rMin + f * (rMax - rMin)   // the edges as shares of the zoom range
+// the edges as shares of the zoom range as it was tuned (45 to 260 m: the closer zoom, decision 0051, keeps them where
+// they were, 0.9 below the first)
+const { rMax } = D.spec.camera, at = (f: number) => 45 + f * (rMax - 45)
 // From the closest zoom 0.9 (the owner, 2026-10-20: docs/plans/done/render-scale.md). With the upscale (above) the
 // canvas stays at the page's pixels and the finishing chain draws at the scale, resized in place (post.scale: no pass
 // made again), its last pass drawing the screen: EASU at 0.9, bilinear at the wide zooms' scales (EASU cost more than

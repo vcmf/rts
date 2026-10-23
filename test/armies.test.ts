@@ -8,7 +8,7 @@ import { APPROACH, CYCLE, FAR_COAT_BELOW, FAR_ROLES, extents, facingAt, farPalet
 import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { RULESETS } from '../src/rulesets/index.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
-import { decodeUnits, fromHalf, posedMesh, posedVertices, shadowProxy } from '../src/look/units-data.ts'
+import { checkUnits, decodeUnits, fromHalf, posedMesh, posedVertices, shadowProxy } from '../src/look/units-data.ts'
 
 const g = napoleonic.types.infantry.geometry
 const drill: Drill = { companies: g.companies, files: g.files, ranks: g.ranks, fileSpacing: g.fileSpacing, rankSpacing: g.rankSpacing }
@@ -118,7 +118,7 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     expect(d.ranges.march.speed).toBeGreaterThan(0.5); expect(d.ranges.run.speed).toBeGreaterThan(d.ranges.march.speed)
   })
   it('poses the far LOD at every step: on its feet, a figure tall, its normals not degenerate', () => {
-    const l = d.lods[1], p = posedVertices(d, l.name), nv = l.vertices
+    const l = d.lods[d.lods.length - 1], p = posedVertices(d, l.name), nv = l.vertices
     expect([p.width, p.height]).toEqual([nv * 2, d.vat.height])
     for (const f of [0, d.ranges.march.start + 3, d.ranges.fire.end - 1]) {
       let lo = Infinity, hi = -Infinity
@@ -131,7 +131,7 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     expect([fromHalf(0x3c00), fromHalf(0xc000), fromHalf(0x0001)]).toEqual([1, -2, 2 ** -24])
   })
   it('has a shadow proxy of crossed quads, each corner wholly on one bone, a figure tall when posed', () => {
-    const p = shadowProxy(d, d.lods[1].name), n = p.positions.length / 3
+    const p = shadowProxy(d, d.lods[d.lods.length - 1].name), n = p.positions.length / 3
     expect(p.indices.length / 3).toBeLessThanOrEqual(64); expect(p.indices.length / 3).toBeGreaterThanOrEqual(40)
     expect(n * 6 / 4).toBe(p.indices.length)   // four corners, two triangles a quad
     for (let v = 0; v < n; v++) { expect(p.boneWeights[v * 4]).toBe(1); expect(p.boneIndices[v * 4]).toBeLessThan(d.bones.length) }
@@ -140,7 +140,10 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     for (let v = 0; v < n; v++) { const y = q.data[(f * n * 2 + v * 2) * 4 + 1]; lo = Math.min(lo, y); hi = Math.max(hi, y) }
     expect(hi - lo).toBeGreaterThan(1.4); expect(lo).toBeLessThan(0.3)
   })
-  it('has two LODs, the far one lighter', () => {
-    expect(d.lods.length).toBe(2); expect(d.lods[1].triangles).toBeLessThan(d.lods[0].triangles)
+  it('has three LODs nearest first, each lighter: the full figure nearest', () => {
+    expect(d.lods.map(l => l.name)).toEqual(['lod0', 'lod1', 'lod2'])
+    expect(d.lods[0].triangles).toBeGreaterThan(9000); expect(d.lods[1].triangles).toBeLessThan(d.lods[0].triangles); expect(d.lods[2].triangles).toBeLessThan(d.lods[1].triangles)
+    const bad = { ...d, lods: [d.lods[1], d.lods[0], d.lods[2]] }
+    expect(() => checkUnits(bad)).toThrow(/not lighter/)
   })
 })

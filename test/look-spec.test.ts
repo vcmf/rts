@@ -3,7 +3,7 @@
 // look data is what the authoring step builds now.
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { SPEC, checkGround, derive, shadowMapSize, type Spec } from '../src/look/spec.ts'
+import { SPEC, checkGround, clearRadius, derive, shadowMapSize, type Spec } from '../src/look/spec.ts'
 import { heightAt, setHeightfield, type Heightfield } from '../src/look/heightfield.ts'
 import { checkLookData, decodeLook, encodeLook } from '../src/look/world/data.ts'
 import { LOOK_FILE, buildLookData } from '../tools/build-look-data.ts'
@@ -29,7 +29,8 @@ describe('world spec', () => {
     ['occlusion cell as wide as the narrowest channel', s => { s.texel.ao = 10; s.sizes.aoCell = 4 }, /narrowest channel/],
     ['a far cell spanning an odd number of tile cells', s => { s.tileSub = 392 }, /odd number of tile cells/],
     ['the frame below the focus past the margin', s => { s.camera.rMax = 320 }, /beside the play edge/],
-    ['the closest camera below the highest ground', s => { s.ground.hi = 40 }, /horizon|inside/],
+    ['a camera held inside the highest ground even at the widest zoom', s => { s.ground.hi = 160 }, /horizon|inside/],
+    ['no clearance over the ground', s => { s.camera.clearance = 0 }, /clearance/],
     ['the occlusion ring past the heightfield margin', s => { s.aoRing = 60 }, /occlusion ring/],
     ['a bake over the min-spec texture size', s => { s.sizes.reflMask = 16384 }, /min-spec/],
     ['sun depth range out of order', s => { s.depth.near = 2000 }, /depth range/],
@@ -53,6 +54,15 @@ describe('world spec', () => {
     expect(730.1 / sm.h / sin).toBeLessThanOrEqual(SPEC.texel.shadow)   // light-space y, stretched on the ground by 1/sin(elevation)
     expect(() => shadowMapSize(d, 4000, 700, sin)).toThrow(/shadow map .*min-spec/)
     expect(() => shadowMapSize(derive(with_(s => { s.minSpec.bakeMB = 100 })), 1203.3, 730.1, sin)).toThrow(/MB of bakes/)
+  })
+  it('holds the closest zoom out over high ground, never from 45 m out (decision 0051)', () => {
+    const c = SPEC.camera, flat = () => 0, hill = () => 18
+    expect(clearRadius(c, c.rMin, -2, c.betaMax, 0, c.focusY, 0, flat)).toBe(c.rMin)   // flat ground: the eye 19 m up
+    const r = clearRadius(c, c.rMin, -2, c.betaMax, 0, c.focusY, 0, hill)
+    expect(r * Math.cos(c.betaMax) + c.focusY - 18).toBeCloseTo(c.clearance, 9)
+    expect(clearRadius(c, c.rMin, -2, c.betaMax, 0, c.focusY, 0, () => 400)).toBe(c.rMax)
+    // (src/look/post.ts holds it only below this radius: today's zooms, 45 m out, never read the ground)
+    expect((SPEC.ground.hi + c.clearance - c.focusY) / Math.cos(c.betaMax)).toBeLessThan(45)
   })
   it('refuses ground outside its range', () => {
     expect(() => checkGround(SPEC, 0.4, 20.3, 2.2)).not.toThrow()
