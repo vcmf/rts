@@ -34,15 +34,13 @@ before it is built:
    view is GPU vertex-bound, so the extra fetches and trigonometry a vertex cost more than they saved. The override
    buffer stays a design note for decision 0048 (the plan's step 1).
 2. **Simple shadows beyond close zoom** (issue #131, its own decision): measured here at 40 a side.
-3. **A third, tiny LOD** (20 to 40 triangles or a card) for figures a few pixels tall. **Measured, undecided**
-   (2026-10-23, built as boxes on the figure's parts, 112 vertices against the far LOD's 616): wide 1.4 to 2.35 ms
-   faster, its p95 spikes gone, default and close within ±0.3 ms; but the readability guard fails (the white side
-   −17 % luma, its coat share 27 → 11 %). The owner decides between keeping it with a new look, reverting it, or the
-   plan's next route: the far LOD itself with one vertex set (about 180 to 260 vertices, est.), same look. It confirms
-   the wide view is vertex-bound. **The owner's direction** (2026-10-23): reverted on its look (the formation read as a
-   uniform carpet), then kept, with per-man variety added (each figure's colours, roles' mix, shape and boxes' light
-   varied from his own jitter, render only); the far LOD with shared vertices (371, measured) waits as the next option.
-   Every later LOD step keeps the per-man variety, by the owner's check of a wide crop, not only the guard's numbers.
+3. **A third, tiny LOD** (20 to 40 triangles or a card) for figures a few pixels tall. **Kept by the owner's
+   judgement** (2026-10-23): built as boxes on the figure's parts (112 vertices against the far LOD's 616), wide 1.4 to
+   2.35 ms faster and its p95 spikes gone, default and close within ±0.3 ms; the readability guard's 10 % bar is not
+   met (the white side −17 % luma, its coat share 27 → 11 %), and the owner judged the look acceptable ("more neat",
+   the formations will not stay in perfect shape). Per-man variety was tried and dropped (the plan's step 3). It
+   confirms the wide view is vertex-bound; the far LOD with shared vertices (371, measured) waits as the next option.
+   Later LOD steps add the owner's check of the look at a wide crop to their bars.
 4. **The ground-colour cache** for the landscape (est. 2 to 2.7 ms at default and close, not measured).
 
 A step is kept only if its bar holds (Metal, the production build, three interleaved rounds against main); else it is

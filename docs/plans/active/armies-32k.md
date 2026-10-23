@@ -285,11 +285,11 @@ art, other arms.
   a frame). One traced run (stress, `tl1`, close) was slow throughout (p50 15 to 21 ms, with upload frames stalling 20
   to 38 ms) while the untraced runs at that point measure 9.15: a disturbed run, not extra uploads (the code uploads only
   the LOD drawn and the caster; its uploads a frame are higher only because its frames are longer).
-- **Verdict** (the owner decides: keep with a new look, revert, or the route below): **the frame-time bar passes** at
-  wide, −1.40 / −1.80 ms at the middle (still / pan) and −2.00 / −2.35 at the stress point, its p95 spikes gone
-  (22.75 → 13.60 still); default within ±0.3 (the middle's pan +0.30, at the bar's edge); close within ±0.3. **The look
-  bar fails**: the readability guard's white side −17 % luma, its coat share 27 → 11 %, browner at 100 %. The code
-  stays on the branch until the owner decides.
+- **Verdict: kept, by the owner's judgement** (2026-10-23), with the plain boxes. The frame-time bar passes at wide,
+  −1.40 / −1.80 ms at the middle (still / pan) and −2.00 / −2.35 at the stress point, its p95 spikes gone (22.75 →
+  13.60 still); default within ±0.3 (the middle's pan +0.30, at the bar's edge); close within ±0.3. The guard's 10 % bar
+  is not met (the white side −17 % luma, its coat share 27 → 11 %, browner at 100 %): the owner judged the look itself,
+  "more neat, but acceptable; later, with the formation in no perfect shape, it will be okay".
 - **The finding**: a strong confirmation that the wide view is **vertex-bound**: 616 → 112 vertices a figure saved 1.4
   to 2.35 ms at wide (and step 1's added vertex work cost 1.15 to 1.45).
 - **Next** (the route that keeps the look, est.): make the **far LOD itself cheaper**. It is 243 triangles but 616
@@ -300,34 +300,22 @@ art, other arms.
   bring it to about **180 to 260 vertices (−58 to −71 %, est.)** and **one posed fetch a vertex instead of two**, with
   the same triangles and colours. From step 3's measurement (−82 % vertices: −1.4 to −2.35 ms) that is worth about 1
   to 2 ms at wide (est.), with no change to the look; the tiny LOD could then stay off or switch lower.
-- **The owner's direction** (2026-10-23): first judged on its look and reverted (`2ae17a2`: the per-man randomness
-  is lost, the formation reads as a uniform carpet), then **kept** for its saving (`ade0abb`), with per-man variety
-  added so the formation reads as varied men. Every later LOD step's bar also **keeps the per-man variety (the owner's
-  check of a wide crop), not only the guard's colour numbers**.
-- **The per-man variety** (`tinySeeds`, `units.vert`; `?tinyrand=0`: the boxes alike): each tiny figure carries his
-  own jitter (`aJit`, the four numbers his place and turn already jitter by, a static thin-instance buffer written
-  once), and hashes of it vary, by `uTinyRand`: each role's value (±3.5 %) and his own (±7 %) and a warm or cool cast;
-  his and each corner's mix of the roles (each role's weight scaled by up to ±108 %, at least 0, renormalised), from
-  which **each corner of each man draws one role** (pure colours at their shares, as the far LOD's pixels are: the
-  mean of the weights was one blended colour for every man, the carpet); his height (±4 %), width (±2.4 %) and lean (up to about 3°); each box's brightness (±8 %). Sines and
-  multiply-adds only, no vertex and no texture read added.
-- **The variety, checked** (SwiftShader, 1280 × 720, 80 s, widest; `output/armies-review/12-tiny-random/`: far LOD |
-  boxes before | boxes with variety, the stress point's blue and white battalions and the middle's, the full frames,
-  the guard's logs). A first try varied only the mean of each man's weights (one blended colour a man): still a carpet,
-  the guard unchanged. Drawing one role a corner brings the speckle back, man by man. The guard, widest, summer
-  (far / boxes / boxes with variety): side 0 (blue) luma 0.281 / 0.300 / 0.305, separation 0.243 / 0.224 / 0.219,
-  within ΔE 25 of the coat 19.3 / 13.4 / **20.3 %**; side 1 (white) luma 0.502 / 0.415 / 0.422, separation 0.120 /
-  0.207 / 0.200, coat share 27.1 / 11.1 / 10.5 %, within ΔE 25 23.7 / 4.6 / **11.3 %**. The white side stays
-  about 16 % darker than the far LOD: the colours are calibrated on the rest pose at 50° (`tinyMesh`), the wide view
-  sees men firing from higher; a calibration on the poses and the view the wide camera has is the next tuning, if the
-  owner wants the white side lighter. The owner judges the crops.
+- **The owner's path to it** (2026-10-23): first reverted on its look (`2ae17a2`: the per-man randomness lost, the
+  formation a uniform carpet), then restored for its saving (`ade0abb`) with **per-man variety** tried (`6476cbf`,
+  reverted by `c1cf06b`): each tiny figure's own jitter as a static attribute, hashed in the vertex shader into each
+  role's value and cast, his role mix with each corner drawing one role (the far LOD's speckle), his height, width and
+  lean, each box's light. Checked (SwiftShader, widest; far / plain boxes / with variety; crops, full frames and guard
+  logs in `output/armies-review/12-tiny-random/`, not committed): the speckle came back (the blue side's share within
+  ΔE 25 of the coat 19.3 / 13.4 / 20.3 %, the white side's 23.7 / 4.6 / 11.3 %), the white side as dark as before
+  (luma 0.502 / 0.415 / 0.422). The owner kept the **plain boxes**: neater, acceptable. Every later LOD step's bar adds:
+  **the owner checks the look at a wide crop**.
 - **Next, paused: the far LOD with shared vertices (step 3b)**, designed and measured on this figure, its code kept
   aside (not committed): the bake's 616 vertices are **371** when merged where equal bit for bit (place, normal, role,
   bones, weights: the same triangles drawn the same), 307 with the colour role carried flat in a way that holds for
   either provoking-vertex convention, 248 with GL's last-vertex convention alone (not checked on ANGLE-Metal); and the
   posed place and normal in **one texel** (the normal octahedral, 12 bits an axis, as an exact integer in the w),
   one fetch a vertex instead of two. `?farshared=0` for its A/B; bar: wide p50 −0.5 ms or better still and panning at
-  both points, default no worse, a contact sheet pixel-close to today and the owner's variety check. Est. about
+  both points, default no worse, a contact sheet pixel-close to today and the owner's check at a wide crop. Est. about
   0.7 to 1.1 ms at wide (scaled from step 3's 616 → 112 vertices for 1.4 to 2.35 ms), not measured.
 - **Checks before the bench** (as planned): `npm test` (the tiny mesh: under a quarter of the far LOD's vertices, each corner on one
   bone, a role each, wound outward, a figure tall posed); a SwiftShader contact sheet at wide (`?tinylod=0` against
@@ -365,5 +353,8 @@ art, other arms.
 
 ## Open questions
 
+- The tiny LOD's colours are calibrated on today's figure data (`tinyMesh`); the close-zoom branch (#133) rebakes the
+  figure with corrected colour roles (the far LOD's coat share 17.5 → 23.3 %): the boxes' calibration and the guard's
+  numbers above need redoing once it merges.
 - The close reserves stand 6 m apart: closer than the reserves at 20 a side (10 m); the owner's eye on the wide view.
 - The near meadow and the trees' crowns over the reserves (bushes are walked through, as at 20 a side).
