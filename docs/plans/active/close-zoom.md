@@ -102,9 +102,13 @@ with the nearest LOD side by side.
   against 10.10 four times; close (45 m) 9.80 to 10.05 on both. At the 15 m camera (`?benchclosest=1`, three yaws a
   round) the nearest LOD costs about nothing: 7.30 to 8.30 with it (one round's middle yaw 9.10) against 7.30 to 8.20
   with `?nearestpx=0`. (Benched on the build before the coat's shade fix, which changes colour roles only.)
-- **Checks**: `npm test` (lint, typecheck, 302 tests), `check:data`, `check-docs` pass. `tools/macro-check.mjs
-  --only shimmer` fails its closest view at 15 m (1.86 % of the field pixels against the 1.0 % gate; 0.37 % at 45 m):
-  #139; the water's and the detail checks at the closest zoom not run yet (#139).
+- **Checks** (the full batch once, after review round 2; SwiftShader; against main 084d6e0's build): `npm test`,
+  `check:data`, `check-docs`, the build pass (Vitest's sim cost test went over its 12 ms budget under the machine's
+  load and passes alone); golden matches main on every view; `guard --base` and `guard ?armies=10 --figures` pass;
+  `detail-check --selftest` and `water-check --selftest` pass once their banks and page views went back to 45 m (at
+  15 m too few of the bend's points are on screen: 130 of 200, 215 of 300); `water-look-check --selftest` fails only
+  as main does (#118's gravel bar, #120's winter ice at 76.6 %); `macro-check --only shimmer` fails its 15 m view
+  (1.86 % against 1.0 %): #139.
 
 ## Open questions
 
