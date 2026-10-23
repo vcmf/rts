@@ -45,6 +45,7 @@ const MARK = '#include<painter>'
 export const withPainter = (src: string): string => {
   if (!src.includes(MARK)) throw new Error(`a painted shader without ${MARK}`)
   // the mood's warm autumn as a constant (AUTUMN_WARM: the mood is fixed for the page), so the compiler folds it away; the switches defined only when on (Babylon's preprocessor reads `#if X` as `defined X`: tested with #ifdef)
+  // the meadow's clump field before the macro colour, whose groundAt reads it (MEADOW)
   return src
     .replace(
       MARK,
@@ -54,10 +55,13 @@ export const withPainter = (src: string): string => {
     )
     .replace('#include<waterdata>', () => WATERDATA)
     .replace('#include<shore>', () => SHORE)
-    .replace('#include<macro>', () => MEADOW + MACRO) // the meadow's clump field before the macro colour, whose groundAt reads it (MEADOW)
+    .replace('#include<macro>', () => MEADOW + MACRO)
 }
 
 // the ground's macro colour (src/look/shaders/macro.glsl): the cover grid and the bakes, on every painted material
+// uMeadowBrush: the meadow's brush tile (MEADOW, src/look/meadow.ts); uSurf: the dirt and the earth, packed
+// (src/look/macro.ts); uMeadow: the meadow map (the ground under the grass, the combed meadow); uFlow, uComb: the
+// flow's textures (src/look/flow.ts)
 const MACRO_SAMPLERS = [
   'uCover',
   'uMacro',
@@ -68,7 +72,7 @@ const MACRO_SAMPLERS = [
   'uFlow',
   'uComb',
   'uCombNear',
-] // uMeadowBrush: the meadow's brush tile (MEADOW, src/look/meadow.ts); uSurf: the dirt and the earth, packed (src/look/macro.ts); uMeadow: the meadow map (the ground under the grass, the combed meadow); uFlow, uComb: the flow's textures (src/look/flow.ts)
+]
 // the mood's colours each material takes (src/look/mood.ts), by uniform: one table gives both the uniform names and
 // their values, so none is left unset (an unset vec3 reads black). The shadow band's colour and turn follow the season:
 // SEASON_UNIFORMS below
@@ -189,7 +193,8 @@ export class Materials {
   private readonly scene: Scene
   private readonly binders: ((m: ShaderMaterial) => void)[] = []
   grain: BaseTexture
-  grainMean: [number, number] // the means of its R and G channels
+  // the means of its R and G channels
+  grainMean: [number, number]
   readonly webgl1: boolean // the detail layer's materials keep the L0 grain (DETAIL_L0) whatever is asked
   private readonly defines: string[] // on every painted material (the page's switches: SKY_IN_SHADOW)
   constructor(scene: Scene, grain: BaseTexture, grainMean: [number, number], defines: string[] = []) {

@@ -198,7 +198,8 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   const rv: number[] = []
   const idx: number[] = []
   const E2 = TILE_W / 2
-  const R = Math.round((TILE_SUB * FAR_CELL) / TILE_W) // 8 tile cells per far cell
+  // 8 tile cells per far cell
+  const R = Math.round((TILE_SUB * FAR_CELL) / TILE_W)
   // each apron vertex is a copy of a tile or far vertex (position, normal, bank value), so the seams are exact
   const add = (src: ArrayLike<number>, sn: ArrayLike<number>, k: number, r: number, x: number, z: number) => {
     if (Math.abs(src[k * 3] - x) > 1e-3 || Math.abs(src[k * 3 + 2] - z) > 1e-3) {

@@ -3,13 +3,14 @@
 // heightAt interpolates it on the mesh's own triangles, so the ground drawn and the ground used are equal by
 // construction. It extends beyond the tile (SPEC.aoMargin) for the occlusion bake.
 
+// node (i, j) at x0 + i·cell, z0 + j·cell
 export interface Grid {
   n: number
   cell: number
   x0: number
   z0: number
   h: Float32Array
-} // node (i, j) at x0 + i·cell, z0 + j·cell
+}
 export interface Heightfield extends Grid {
   min: number
   max: number

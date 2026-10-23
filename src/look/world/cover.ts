@@ -47,13 +47,14 @@ export const WEAR_STEP = 0.1
 // bare earth (docs/plans/done/ground-surface.md) is not a field: no id, no stripes, no crops
 export const isField = (c: number): boolean => c >= COVER.wheat && c <= COVER.ploughed
 
+// tex: n² cells × 4 bytes, row j at z0 + (j + ½)·cell
 export interface CoverGrid {
   n: number
   cell: number
   x0: number
   z0: number
   tex: Uint8Array
-} // tex: n² cells × 4 bytes, row j at z0 + (j + ½)·cell
+}
 
 // the formation zones (the scatter's KEEP_CLEAR, src/look/nature.ts, reads this one): no field or village there
 export const inFormationZone = (x: number, z: number): boolean =>
@@ -157,12 +158,13 @@ const VILLAGE: Pt[] = [
   [238, 34],
   [198, 26],
 ]
+// the trampled square where the roads meet the village
 const SQUARE: Pt[] = [
   [168, -82],
   [204, -84],
   [206, -46],
   [170, -44],
-] // the trampled square where the roads meet the village
+]
 // the roads and tracks (a line, its width, its class): also the roads' segments (tools/build-look-data.ts, roadGrid)
 // a line made a country road's: its corners rounded (Chaikin's corner cutting, four times) and a meander laid across it,
 // a slow wave a few metres either side (k: its seed), fading to nothing within FADE_M of its ends and of the joins
@@ -213,12 +215,13 @@ function resample(p: readonly Pt[], step: number): Pt[] {
     }
     carry = len - (t - step)
   }
+  // (no end segment under half a step)
   if (
     out.length > 1 &&
     Math.hypot(...([0, 1].map(k => p[p.length - 1][k] - out[out.length - 1][k]) as [number, number])) < step / 2
   ) {
     out.pop()
-  } // (no end segment under half a step)
+  }
   out.push(p[p.length - 1])
   return out
 }
@@ -394,13 +397,14 @@ export function authorCover(far: number, cell: number): CoverGrid {
           dir = FAR_DIR
         }
       }
+      // bare earth: no id
       FIELDS.forEach((f, k) => {
         if (inPoly(f.poly, x, z)) {
           cls = f.cls
           id = isField(f.cls) ? idByte(1000 + k) : 0
           dir = f.dir
         }
-      }) // bare earth: no id
+      })
       let wear = Infinity
       LINES.forEach((l, li) => {
         if (boxD(lineBoxes[li], x, z) > WEAR_REACH + l.w) return

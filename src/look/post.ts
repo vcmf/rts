@@ -285,9 +285,10 @@ export class Post {
   get scale(): number {
     return this.k
   }
+  // (the sizes at the next resize: main.ts, after the hardware scale)
   set scale(k: number) {
     this.k = k
-  } // (the sizes at the next resize: main.ts, after the hardware scale)
+  }
   // the passes' sizes from the canvas's and the scale (each frame: the canvas may change too)
   resize(): void {
     const w = this.engine.getRenderWidth(true)
@@ -552,9 +553,10 @@ export class Post {
       // materials: src/look/materials.ts)
       e.setColor3('uVignette', MOOD.grade.vignette)
       e.setColor3('uSplitHi', MOOD.grade.splitHi)
+      // (uGradeSat: the season's, as the materials')
       e.setFloat('uGradeSat', SEASON.sat)
       e.setFloat('uTopAmt', MOOD.grade.topAmt)
-      e.setFloat('uGrade', S.grade) // (uGradeSat: the season's, as the materials')
+      e.setFloat('uGrade', S.grade)
       if (d && p) {
         lensUniforms(e)
         e.setFloat2('uHalfUV', d.width / 2 / p.width, d.height / 2 / p.height)

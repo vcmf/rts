@@ -273,10 +273,11 @@ export function layout(
 export function facingAt(bs: readonly Battalion[]): [number, number] {
   let best = Infinity
   let at: [number, number] | null = null
+  // (the lines: the reserves stand back)
   const lines =
     bs.some(b => !b.reserve && b.side === 0) && bs.some(b => !b.reserve && b.side === 1)
       ? bs.filter(b => !b.reserve)
-      : bs // (the lines: the reserves stand back)
+      : bs
   for (const a of lines) {
     if (a.side === 0) {
       for (const o of lines) {

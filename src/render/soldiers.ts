@@ -107,13 +107,14 @@ export class SoldierLayer {
     this.ctxA = mkPlaces(w)
     this.ctx0 = mkPlaces(w)
     this.poseNow = new Float64Array(8 + 2 * w.cr.maxNB)
+    // a charging type's gallop too
     const top = w.cr.types.map(U =>
       Math.max(
         ...[...U.shapes.flatMap(L => [L.pace, L.roadPace]), ...(U.charge ? [U.charge.pace] : [])]
           .filter(p => p >= 0)
           .map(p => w.cr.paceSpeed[p]),
       ),
-    ) // a charging type's gallop too
+    )
     this.walkOf = Float64Array.from(top, v => Math.max(WALK, 1.2 * v))
     this.runOf = Float64Array.from(top, v => Math.max(RUN, 1.2 * w.cr.rs.morale.routPace * v))
     this.treesByClass = Uint8Array.from(Object.keys(w.cr.rs.terrain), name =>
@@ -480,10 +481,11 @@ export class SoldierLayer {
           m.vz = 0
           continue
         }
+        // never frozen mid-step
         const gs = Math.max(
           0.15,
           dist > 1e-6 ? groundGAt(t, here, kind, dx / dist, dz / dist) : groundGAt(t, here, kind, 0, 0),
-        ) // never frozen mid-step
+        )
         const top = (dist > 2.5 ? RUNu : WALKu) * gs
         const want = dist < 0.08 ? 0 : Math.min(top, dist / 0.7)
         let wx = dist > 1e-6 ? (dx / dist) * want : 0
@@ -532,11 +534,12 @@ export class SoldierLayer {
         const kk = Math.min(1, dt * 5)
         m.vx += (wx - m.vx) * kk
         m.vz += (wz - m.vz) * kk
+        // arrived: come to rest
         if (dist < 0.08) {
           const damp = Math.max(0, 1 - dt * 8)
           m.vx *= damp
           m.vz *= damp
-        } // arrived: come to rest
+        }
         const sp2 = m.vx * m.vx + m.vz * m.vz
         const cap = RUNu * gs
         if (sp2 > cap * cap) {
@@ -546,28 +549,31 @@ export class SoldierLayer {
         }
         const nx = m.x + m.vx * dt
         const nz = m.z + m.vz * dt
+        // never onto impassable ground, nor off the map
         if (impAt(t, imp, nx, nz) && !imp[here]) {
           m.vx = 0
           m.vz = 0
         } else {
           m.x = nx
           m.z = nz
-        } // never onto impassable ground, nor off the map
+        }
         tc = this.treeCell(m.x, m.z)
         if (tc >= 0) {
           for (let k = TA[tc], e = TA[tc + 1]; k < e; k++) {
+            // never inside a trunk
             const ex = m.x - TX[k]
             const ez = m.z - TZ[k]
             const d = Math.sqrt(ex * ex + ez * ez)
-            const R = TR[k] + 0.3 // never inside a trunk
+            const R = TR[k] + 0.3
             if (d < R && d > 1e-6) {
               m.x = TX[k] + (ex / d) * R
               m.z = TZ[k] + (ez / d) * R
             }
           }
         }
+        // a trunk's push never takes him off the map
         m.x = Math.min(xMax, Math.max(t.x0, m.x))
-        m.z = Math.min(zMax, Math.max(t.z0, m.z)) // a trunk's push never takes him off the map
+        m.z = Math.min(zMax, Math.max(t.z0, m.z))
       }
     }
   }

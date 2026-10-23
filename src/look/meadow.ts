@@ -35,7 +35,8 @@ import MEADOW_FS from './shaders/meadow.frag?raw'
 import MEADOW_GLSL from './shaders/meadow.glsl?raw'
 
 const TILE_W = D.spec.tile
-const MAP_N = Math.round(TILE_W) // the meadow map: 1 m texels over the tile
+// the meadow map: 1 m texels over the tile
+const MAP_N = Math.round(TILE_W)
 
 // a ring: its cell (m), its slots a side (of the square it is cut from), the clumps' spread (their footprint grows
 // with the cell, their height does not: a clump is never taller than HEIGHT_MAX), its band of distance from the focus
@@ -514,8 +515,9 @@ export function buildMeadow(
         buf.set(part, n)
         n += part.length
       }
+      // (the whole buffer: Babylon keeps what it is given to rebuild a lost context)
       slotVBs[ri].updateDirectly(buf, 0)
-      meshes[ri].forcedInstanceCount = n / 2 // (the whole buffer: Babylon keeps what it is given to rebuild a lost context)
+      meshes[ri].forcedInstanceCount = n / 2
     })
   })
   // the under-layer's reach: the outer ring's band; its strength: the inner rings' (k, set with them below: zoomed out,

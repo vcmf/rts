@@ -37,6 +37,7 @@ export interface RoadGrid {
   z0: number
   ids: Float32Array
 }
+// far: the far ring's nodes
 export interface LookData {
   hf: Heightfield
   far: Grid
@@ -45,7 +46,7 @@ export interface LookData {
   water: SpanGrid
   roads: RoadGrid
   cover: CoverGrid
-} // far: the far ring's nodes
+}
 
 const SPAN_GRIDS = ['bank', 'water'] as const
 type GridMeta = { n: number; cell: number; x0: number; z0: number; ch: number }
@@ -102,7 +103,8 @@ export function encodeLook(d: LookData): Uint8Array {
   dv.setUint32(4, LOOK_VERSION, true)
   dv.setUint32(8, json.length + pad, true)
   out.set(json, 12)
-  out.fill(32, 12 + json.length, head) // padded with spaces, still valid JSON
+  // padded with spaces, still valid JSON
+  out.fill(32, 12 + json.length, head)
   let o = head
   for (const [, a] of arrays) {
     if (a instanceof Float32Array) for (let i = 0; i < a.length; i++, o += 4) dv.setFloat32(o, a[i], true)

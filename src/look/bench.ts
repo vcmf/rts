@@ -24,10 +24,11 @@ import { D, TUNED_R } from './spec.ts'
 
 declare const __BUILD__: string
 
+// apply may return a promise (a rebake): it is awaited
 export interface Arm {
   name: string
   apply: () => unknown
-} // apply may return a promise (a rebake): it is awaited
+}
 export interface BenchPasses {
   terrain: Mesh[]
   scatter: Mesh[]
@@ -43,8 +44,9 @@ interface Cam {
 export interface RunStats {
   cam: string
   arm: string
+  // size: the frame drawn (the render scale: Auto lowers it at the widest zoom)
   size: [number, number]
-  frames: number // size: the frame drawn (the render scale: Auto lowers it at the widest zoom)
+  frames: number
   frameMs: Stat
   gpuMs: Record<string, Stat | null>
   passesOverFrame: number | null
@@ -250,7 +252,8 @@ if (traceParam !== null && traceParam !== '0' && traceParam !== '1') {
   throw new Error(`?benchtrace must be 0 or 1, not ${traceParam}`)
 }
 const TRACING = traceParam === '1'
-const TRACE_MAX = 4096 // frames recorded a run at most (the rest counted, not kept)
+// frames recorded a run at most (the rest counted, not kept)
+const TRACE_MAX = 4096
 const NF = TRACE_FIELDS.length
 export async function runBench(
   scene: Scene,
@@ -394,8 +397,9 @@ export async function runBench(
   // alternate frames: the passes on one, the whole frame on the next (queries cannot nest). Frame times come from the
   // whole-frame frames only: the pass frames carry more queries, which cost time on some backends
   const begin = engine.onBeginFrameObservable.add(() => {
+    // passFrame: the frame that just ended
     const t = performance.now()
-    if (timing && lastT && !passFrame) frameMs.push(t - lastT) // passFrame: the frame that just ended
+    if (timing && lastT && !passFrame) frameMs.push(t - lastT)
     // (the trace: the counters of the frame that just ended, recorded with its interval, then cleared)
     if (TRACING) {
       if (timing && lastT && !passFrame) {
@@ -552,7 +556,12 @@ export async function runBench(
   const r = engine.getRenderingCanvas()
   return {
     tool: 'look-bench',
-    version: 8, // 8: trace (?benchtrace=1: each run's frames, traceSummary); 7: pan (?benchpan=1: each camera pans as it is measured); 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the start
+    // 8: trace (?benchtrace=1: each run's frames, traceSummary); 7: pan (?benchpan=1: each camera pans as it is
+    // measured); 6: each run's size is the scene's (the finishing chain's first target: smaller than the canvas under
+    // the upscale, decision 0045); 5: wholeOnly (?passes=0: no pass timers); 4: each run's frame size (the render
+    // scale: Auto lowers it at the widest zoom); 3: the cameras' focus recorded (?benchat); a version-2 file orbits the
+    // start
+    version: 8,
     build: __BUILD__,
     date: new Date().toISOString(),
     userAgent: navigator.userAgent,

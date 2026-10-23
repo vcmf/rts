@@ -126,14 +126,17 @@ export function buildBakes(
         }
       }
     }
+    // SBIAS is derived from LZ0/LZ1
     if (z0 < LZ0 + 5 || z1 > LZ1 - 5) {
       throw Error(`shadow depth range ${LZ0}..${LZ1} misses the tile (${z0.toFixed(0)}..${z1.toFixed(0)})`)
-    } // SBIAS is derived from LZ0/LZ1
+    }
+    // the fade band (shadowAt) lies outside the tile
     ex += SM_FADE_M + 8
-    ey += SM_FADE_M + 8 // the fade band (shadowAt) lies outside the tile
+    ey += SM_FADE_M + 8
     sm = shadowMapSize(D, 2 * ex, 2 * ey, SUN.y) // the spec's texel target, on the ground (docs/proposals/engine-design.md §6)
     smTexel = new Vector2(1 / sm.w, 1 / sm.h)
-    smGround = new Vector2((2 * ex) / sm.w, (2 * ey) / (sm.h * SUN.y)) // a shadow texel on the ground, m (about square)
+    // a shadow texel on the ground, m (about square)
+    smGround = new Vector2((2 * ex) / sm.w, (2 * ey) / (sm.h * SUN.y))
     smFade = new Vector2(SM_FADE_M / (2 * ex), SM_FADE_M / (2 * ey))
     Object.assign(lightCam, {
       mode: Camera.ORTHOGRAPHIC_CAMERA,
@@ -151,8 +154,9 @@ export function buildBakes(
     { vertexSource: DEPTH_VS, fragmentSource: DEPTH_FS },
     { attributes: ['position'], uniforms: ['world', 'viewProjection'] },
   )
+  // render BACK faces into the depth map: kills self-shadow acne on lit faces
   depthMat.backFaceCulling = true
-  depthMat.sideOrientation = Material.CounterClockWiseSideOrientation // render BACK faces into the depth map: kills self-shadow acne on lit faces
+  depthMat.sideOrientation = Material.CounterClockWiseSideOrientation
   const shadowRT = new RenderTargetTexture(
     'shadowRT',
     { width: sm.w, height: sm.h },
@@ -212,11 +216,12 @@ export function buildBakes(
           },
         )
       : null
+    // stored on the material: thin instances draw with an effect of their own
     if (lossDepth) {
       lossDepth.backFaceCulling = false
       lossDepth.setTexture('uLeaf', cardCasters.leaf)
       shadowRT.onBeforeRenderObservable.add(() => lossDepth.setFloat('uSeason', cardCasters.season()))
-    } // stored on the material: thin instances draw with an effect of their own
+    }
     for (const cards of cardCasters.cards) {
       shadowRT.renderList.push(cards)
       shadowRT.setMaterialForRendering(
@@ -245,8 +250,9 @@ export function buildBakes(
   aoCanvas.width = aoCanvas.height = AO_N
   const aog = aoCanvas.getContext('2d')!
   {
+    // ~2.7 m cells: finer than the narrowest (4 m) channel
     const N = Math.round(TILE_W / D.spec.sizes.aoCell)
-    const tmp = document.createElement('canvas') // ~2.7 m cells: finer than the narrowest (4 m) channel
+    const tmp = document.createElement('canvas')
     tmp.width = tmp.height = N
     const tg = tmp.getContext('2d')!
     const img = tg.createImageData(N, N)
@@ -307,6 +313,7 @@ export function buildBakes(
   aoTex.update(false)
 
   /* ---------- light-map bake: a top-down ortho render of the terrain, once ---------- */
+  // never bind uLM (its own target) or update it per frame
   const bakeMat = mats.make('bake', TER_VS, BAKE_FS, {
     attributes: ['position', 'normal', 'aRiver'],
     uniforms: ['uPenumbra', 'uSMGround'],
@@ -318,7 +325,7 @@ export function buildBakes(
         ? ['#define SOFT', `#define DEPTH_M ${(LZ1 - LZ0).toFixed(1)}`, `#define FAR_MAX ${FAR_MAX.toFixed(1)}`]
         : []),
     ],
-  }) // never bind uLM (its own target) or update it per frame
+  })
   bakeMat.setFloat('uPenumbra', soft.penumbra)
   bakeMat.setVector2('uSMGround', smGround)
   bakeMat.setTexture('uAOTex', aoTex)
@@ -375,7 +382,8 @@ export function buildBakes(
     tm.backFaceCulling = false
     trunkMesh.material = tm
     trunkMesh.renderingGroupId = 1
-    trunkMesh.layerMask = LM_ONLY // hidden from the game camera; the light map draws its render list whatever the mask
+    // hidden from the game camera; the light map draws its render list whatever the mask
+    trunkMesh.layerMask = LM_ONLY
     lightMap.renderList.push(trunkMesh)
   }
   // the bake must see a COMPLETE shadow map: re-bake every time the shadow pass actually renders

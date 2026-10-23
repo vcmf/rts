@@ -12,12 +12,15 @@ export interface Spec {
   aoMargin: number // the heightfield extends this far beyond the tile, so the occlusion bake reads real ground at the edge
   aoRing: number // the occlusion bake's widest ring radius, m (it must fit in aoMargin)
   camera: {
+    // yaw = yaw0 ± yawRange (decision 0010: ±45°)
     yaw0: number
-    yawRange: number // yaw = yaw0 ± yawRange (decision 0010: ±45°)
+    yawRange: number
+    // pitch from vertical, rad
     betaMin: number
-    betaMax: number // pitch from vertical, rad
+    betaMax: number
+    // zoom, m
     rMin: number
-    rMax: number // zoom, m
+    rMax: number
     fov: number // vertical field of view, rad
     aspectMax: number // the widest frame checked; wider screens keep this horizontal field of view (src/look/post.ts)
     horizonMargin: number // no frame corner comes nearer the horizon than this, rad (decision 0002)
@@ -104,8 +107,9 @@ export interface Derived {
   bankN: number // the bank normal map's texels per side
   roadGate: number // a pixel looks for a road only where the cover's distance to a line is under it, m (spec road)
   roadN: number // the roads' grid cells per side
+  // the macro bakes' texels per side: the tile's, the far ring's
   macroN: number
-  macroFarN: number // the macro bakes' texels per side: the tile's, the far ring's
+  macroFarN: number
   waterN: number // the water data's texels per side
   sbias: string // the shadow bias, 0.96 m in the sun camera's depth, as shader text
   defines: string[] // the numbers the shaders read as macros
@@ -142,9 +146,10 @@ function reachOf(s: Spec, pts: number[][], planes: number[]): number {
           const dz = fz + sy * tv * uz
           const len = Math.hypot(dx, dy, dz)
           if (-dy / len < Math.sin(c.horizonMargin)) return Infinity
+          // camera above that ground, behind the focus
           const camY = r * Math.cos(beta) + drop
           const camZ = -r * Math.sin(beta)
-          const t = camY / -dy // camera above that ground, behind the focus
+          const t = camY / -dy
           R = Math.max(R, Math.hypot(dx * t, camZ + dz * t))
         }
       }

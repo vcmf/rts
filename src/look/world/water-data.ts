@@ -13,7 +13,8 @@ import type { SpanGrid } from './data.ts'
 
 export const WATER_CH = 4
 const W = D.spec.water
-const SLACK = 1.5 // the flow eases from 0 at the shore to full over SLACK m of water
+// the flow eases from 0 at the shore to full over SLACK m of water
+const SLACK = 1.5
 // the uncovered texels: dry (the lowest depth), the farthest from the shore, no flow
 export const WATER_FILL: [number, number, number, number] = [0, 0, 128, 128]
 // one step of the depth's encoding, m
@@ -248,10 +249,11 @@ export function bakeWater(H: (x: number, z: number) => number, sab?: WaterSabota
       for (let i = 0; i < n; i++) {
         const k = j * n + i
         const bound = Math.sqrt(wet[k] ? toDry[k] : toWet[k])
+        // beyond the stored range (or no shore)
         if (!(bound - 0.5 < lim + 1)) {
           sdf[k] = wet[k] ? W.sdf : -W.sdf
           continue
-        } // beyond the stored range (or no shore)
+        }
         let best = bound * bound
         const r = Math.ceil(bound / B)
         const ci = Math.floor(i / B)

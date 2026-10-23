@@ -7,8 +7,9 @@ export interface UnitRange {
   loop: boolean
   clips: string[]
   seconds: number
+  // speed: m/s the root moves at for the feet to stay planted
   speed: number
-} // speed: m/s the root moves at for the feet to stay planted
+}
 export interface UnitLod {
   name: string
   vertices: number
@@ -348,8 +349,9 @@ function rasterSeen(
     const az = ((k + 0.5) / views) * 2 * Math.PI
     const ce = Math.cos(elev)
     const se = Math.sin(elev)
+    // the view, its right
     const f = [-ce * Math.sin(az), -se, -ce * Math.cos(az)]
-    const r = [Math.cos(az), 0, -Math.sin(az)] // the view, its right
+    const r = [Math.cos(az), 0, -Math.sin(az)]
     const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]] // and its up
     for (let v = 0; v < nv; v++) {
       const x = pos[v * 3]
@@ -517,9 +519,10 @@ export function tinyMesh(
   const P32 = Float32Array.from(pos)
   const I16 = Uint16Array.from(idx)
   const want = new Float64Array(NR)
+  // (the far LOD's seen pixels by role)
   seen.forEach((px, t) => {
     want[m.roles[m.indices[t * 3]]] += px
-  }) // (the far LOD's seen pixels by role)
+  })
   // (a share of the figure's whole seen colour in every corner first: a box of one role, the musket's, could not move)
   const sw0 = want.reduce((x, y) => x + y, 0)
   for (let v = 0; v < W.length / TINY_ROLES; v++) {
@@ -565,12 +568,14 @@ export interface ShadowShape {
   data: Uint8Array
   facings: number
   roles: string[]
+  // a cell's texels across and along the shadow, its empty border (texels)
   cellW: number
   cellH: number
-  margin: number // a cell's texels across and along the shadow, its empty border (texels)
+  margin: number
   texel: number // m a texel
+  // m: what a cell holds, from the man's root (the shadow's frame)
   across: [number, number]
-  along: [number, number] // m: what a cell holds, from the man's root (the shadow's frame)
+  along: [number, number]
   dir: [number, number] // the shadow's direction on the ground (x, z): away from the sun
 }
 

@@ -56,9 +56,10 @@ export function setRiver(samples: RiverSamples): River {
   let Wmax = 0
   for (let i = 0; i < n; i++) Wmax = Math.max(Wmax, C.W[i])
   const CELL = 16
+  // widest caller: reflAdd (hw+20)
   const REACH = Math.ceil(Wmax / 2 + 22)
   const grid = new Map<number, number[]>()
-  const key = (cx: number, cz: number) => cx * 65536 + cz // widest caller: reflAdd (hw+20)
+  const key = (cx: number, cz: number) => cx * 65536 + cz
   for (let i = 0; i < n - 1; i++) {
     const x0 = Math.min(C.px[i], C.px[i + 1]) - REACH
     const x1 = Math.max(C.px[i], C.px[i + 1]) + REACH
@@ -134,7 +135,8 @@ export function riverQuery(x: number, z: number, wantLevel = false): RiverQuery 
 // The shape's parameters, in one place for section(), wetEdges() and bankReach()
 function shape(hw: number, A: number) {
   const a = Math.min(1, Math.abs(A))
-  const tw = 0.35 * a * hw // the deepest line's shift toward the outer bank
+  // the deepest line's shift toward the outer bank
+  const tw = 0.35 * a * hw
   return {
     a,
     tw,
@@ -147,7 +149,8 @@ function shape(hw: number, A: number) {
 }
 export function section(n: number, hw: number, A: number, D: number, bankH: number): number {
   const { a, tw, e, wet, outerBank, innerBank, barExp } = shape(hw, A)
-  const m = A >= 0 ? n : -n // m > 0: toward the outer bank
+  // m > 0: toward the outer bank
+  const m = A >= 0 ? n : -n
   if (m >= tw) {
     // outer half: the cut bank
     const t = (m - tw) / (hw - tw)

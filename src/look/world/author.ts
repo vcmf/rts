@@ -75,8 +75,9 @@ export function generateRiver(): { samples: RiverSamples; trough: Trough } {
     const th0 = Math.min(1.85, P.theta0 * (0.65 + 0.7 * nA(bend))) // ±35% amplitude per bend; >π/2 makes bends turn back, ≤1.85 keeps loops from touching
     const lam = (11 * P.W0 * (0.65 + 0.7 * nL(bend))) / J0(th0) // valley wavelength ≈ 11 W (±35%) × sinuosity
     let th = th0 * Math.sin(ph) + th0 ** 3 * (P.Js * Math.cos(3 * ph) - P.Jf * Math.sin(3 * ph))
+    // cubic restoring term: free in the middle, firm at the belt edge
     const vb = v / (P.beltW / 2)
-    th -= 1.2 * vb * vb * vb // cubic restoring term: free in the middle, firm at the belt edge
+    th -= 1.2 * vb * vb * vb
     u += Math.cos(th) * ds
     v += Math.sin(th) * ds
     ph += (2 * Math.PI * ds) / lam
@@ -243,8 +244,9 @@ export function generateRiver(): { samples: RiverSamples; trough: Trough } {
 // trough over half a half-width (a hard cut would step where the trough's floodplain sits above the section's).
 // q = riverQuery(x,z), passed in so callers query once
 export function carve(trough: Trough, x: number, z: number, q: RiverQuery | null): number {
+  // valley trough only lowers, never raises hills
   const h = trough(x, z, baseH(x, z), q)
-  if (!q) return h // valley trough only lowers, never raises hills
+  if (!q) return h
   const hw = lerpA(RIVER.W, q) / 2
   const reach = bankReachAt(q)
   const blend = 0.5 * hw

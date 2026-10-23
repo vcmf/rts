@@ -129,10 +129,11 @@ if (params.has('bounce')) {
   const b = params.get('bounce') ?? ''
   setBounce(/^\d+(\.\d+)?$/.test(b) ? Number(b) : NaN)
 }
+// LC5
 if (params.has('gbounce')) {
   const b = params.get('gbounce') ?? ''
   setGroundBounce(/^\d+(\.\d+)?$/.test(b) ? Number(b) : NaN)
-} // LC5
+}
 // the clear colour, graded as the materials are at the frame's top (it shows only there), following the grade's switch
 const CLEAR_GRADED = gradeColour(MOOD.hazeCool, MOOD, 1)
 scene.clearColor = new Color4(CLEAR_GRADED.r, CLEAR_GRADED.g, CLEAR_GRADED.b, 1)
@@ -422,8 +423,9 @@ if (flowTex) {
 // grows and the combed one where it does (the combed clumps reach farther: their roots keep farther from the zones and the
 // banks; the crops keep the default's rule)
 const grassReach = grassMode === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
+// (the same rule as the crops' on the default: one pass)
 const grassAllowed =
-  grassReach === CLUMP_REACH ? nature.growthAllowed : (x: number, z: number) => nature.growthAllowed(x, z, grassReach) // (the same rule as the crops' on the default: one pass)
+  grassReach === CLUMP_REACH ? nature.growthAllowed : (x: number, z: number) => nature.growthAllowed(x, z, grassReach)
 const meadowMap = meadowOn
   ? buildMeadowMap(scene, mats, nature.growth, grassAllowed, nature.crop, nature.growthAllowed)
   : null
@@ -532,8 +534,9 @@ if (smHold !== null && smHold !== 'fixed') throw new Error(`?smhold must be fixe
 if (shadowLod !== null && shadowLod !== 'far') throw new Error(`?shadowlod must be far, not ${shadowLod}`)
 // batch C: ?farscale=0, the far figures at their own size
 const farScale = bit('farscale')
+// ?trample=0: no trodden ground; ?flags=0: no colours
 const trample = bit('trample')
-const flags = bit('flags') // ?trample=0: no trodden ground; ?flags=0: no colours
+const flags = bit('flags')
 // the close zoom (docs/plans/active/close-zoom.md): ?nearestpx=<px>, the figure's height on screen from which a man is
 // drawn at the figure's nearest LOD (when it has one); 0: never
 const nearestPx = params.get('nearestpx')
@@ -570,7 +573,8 @@ if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '
   throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
 }
 let units: Units | null = null
-let armiesFocus: [number, number] | null = null // (the fight's middle: the bench's focus)
+// (the fight's middle: the bench's focus)
+let armiesFocus: [number, number] | null = null
 if (armiesParam !== null) {
   if (mats.webgl1) {
     throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
@@ -686,10 +690,11 @@ if (params.has('msaa')) {
   MSAA.samples = n
 }
 if (flag('rt16')) MSAA.byte = false
+// half floats: an 8-bit target stores a NaN as 0, which nothing can mark
 if (flag('nanmark')) {
   DEBUG.nanmark = true
   MSAA.byte = false
-} // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
+}
 // ?upscale=bilinear: the canvas drawn smaller and stretched by the browser at every scale, as before decision 0045
 // (the A/B); WebGL1 the same (the chain's last pass reads texels by index: GLSL ES 3)
 const upscaleParam = params.get('upscale')
@@ -828,9 +833,10 @@ const SEASONS = ['Summer', 'Early autumn', 'Late autumn', 'Winter']
   input('season').addEventListener('change', () => {
     held = false
   })
+  // released without a change too
   window.addEventListener('pointerup', () => {
     held = false
-  }) // released without a change too
+  })
   bakes.groundBounce.onAfterRenderObservable.add(() => {
     baked = key()
   })
@@ -894,9 +900,10 @@ if (nature.setSeason && nature.shadowState) {
   zoomEl.addEventListener('change', () => {
     dragging = false
   })
+  // (the wanted zoom: ZoomHold)
   zoomEl.oninput = () => {
     zoomOf(camera).set(Math.exp(lo + (hi - lo) * +zoomEl.value))
-  } // (the wanted zoom: ZoomHold)
+  }
   let shown = NaN
   scene.onBeforeRenderObservable.add(() => {
     if (!dragging && camera.radius !== shown) {
@@ -938,8 +945,9 @@ addEventListener('drop', e => {
       tex.getContext().clearRect(0, 0, atlas.width, atlas.height)
       tex.getContext().drawImage(atlas, 0, 0)
       tex.update(false)
+      // the shadows are baked with the cards shown
       nature.showCards?.(true)
-      bakes.shadowRT.resetRefreshCounter() // the shadows are baked with the cards shown
+      bakes.shadowRT.resetRefreshCounter()
     }
     img.src = url
     return
@@ -968,8 +976,9 @@ scene.onBeforeRenderObservable.add(() => {
   seasonAt = S.season
   seasonLight(MOOD, S.season, SEASON)
   clearGraded = gradeColour(MOOD.hazeCool, MOOD, 1, SEASON.sat)
+  // (one copy shared by the per-frame materials)
   const snap = seasonSnapshot()
-  for (const m of mats.all) setSeasonUniforms(m, snap) // (one copy shared by the per-frame materials)
+  for (const m of mats.all) setSeasonUniforms(m, snap)
 })
 scene.onBeforeRenderObservable.add(() => {
   const w = Math.max(0, Math.min(1, S.season - 2))
@@ -1175,9 +1184,10 @@ const waterSab = (on: string[]) => {
   for (const d of on) if (!WATER_SABS.includes(d)) throw new Error(`unknown water sabotage ${d}`)
   for (const m of dataMats) for (const d of WATER_SABS) m.setDefine(`#define ${d}`, on.includes(d))
 }
+// (the roads' swap then picks the zoom's)
 const groundAs = (kind: 'terrain' | 'water') => {
   terrain.tileGround.material = kind === 'water' ? water.groundMat : terrain.terrainMat
-} // (the roads' swap then picks the zoom's)
+}
 // the water data at a point, read bilinearly as the GPU reads it (the band check measures the drawn surfaces against it)
 let waterBytes: Uint8Array | null = null
 const waterAt = (x: number, z: number) => {
@@ -1192,9 +1202,11 @@ const hidden: Mesh[] = []
 Object.assign(window, {
   __look: {
     splitShare: () => groundShare, // the tile's triangles paved, by the roads, neither (terrain.ts, splitGround)
+    // the buildings' light bake: its atlas and raw bake (the checks), its time once baked (on the bench), its bakes so
+    // far, its memory
     bldLight: bldLight
       ? { atlas: bldLight.atlas, raw: bldLight.raw, ms: bldLight.ms, baked: bldLight.baked, bytes: bldLight.bytes }
-      : null, // the buildings' light bake: its atlas and raw bake (the checks), its time once baked (on the bench), its bakes so far, its memory
+      : null,
     lab,
     mats,
     passes,
@@ -1203,9 +1215,11 @@ Object.assign(window, {
     dof: DOF, // the depth of field's constants, read every frame: tuned live from the console
     dofPaint: DOF_PAINT, // the blur's painted look (the same)
     dofNear: DOF_NEAR, // the near blur's (docs/plans/done/dof-v2.md), the same
+    // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
     sky: bakes.sky,
     meadowBakeMs: meadow?.bakeMs ?? null,
-    flowBuildMs: flowTex?.ms ?? null, // (the combed meadow's flow textures, on load)
+    // (the combed meadow's flow textures, on load)
+    flowBuildMs: flowTex?.ms ?? null,
     meadow: meadow
       ? {
           reach: meadow.reach,
@@ -1215,13 +1229,14 @@ Object.assign(window, {
           cropAt: meadow.cropAt,
           croppingCells: meadow.croppingCells,
         }
-      : null, // the sky's occlusion's time on load and range, null with ?soft=off (docs/plans/done/soft-shadows.md)
+      : null,
     hill: (x: number, z: number) => lab.addHill(x, z, terrain.hillMat),
     // the bounce map (LC5): its target, and the time of one bake: the median of n frames with it and of n without,
     // each waited on by reading the map back (ms; gl.finish does not wait under ANGLE's Metal)
     groundBounce: bakes.groundBounce,
+    // the trunks' baked shadows (their check)
     trunks: nature.trunks,
-    lightMap: bakes.lightMap, // the trunks' baked shadows (their check)
+    lightMap: bakes.lightMap,
     gbBakeMs: async (n = 11) => {
       const t: Record<'bake' | 'none', number[]> = { bake: [], none: [] }
       const gb = bakes.groundBounce

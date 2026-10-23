@@ -22,13 +22,14 @@ import type { Scene } from './scene.ts'
 import type { SoldierLayer } from './soldiers.ts'
 import { CLASS_STYLE, INK, SIDE_INK, FIRE_INK, MORALE_INK } from './style.ts'
 
+// k: pixels per metre; north up
 export interface View {
   cx: number
   cz: number
   k: number
   W: number
   H: number
-} // k: pixels per metre; north up
+}
 export const toS = (v: View, x: number, z: number): [number, number] => [
   v.W / 2 + (x - v.cx) * v.k,
   v.H / 2 - (z - v.cz) * v.k,
@@ -436,7 +437,8 @@ export class StaffMap {
       g.lineWidth = sel ? 1.8 : k > 4 ? 1.1 : 0.9
       g.beginPath()
       const mounted = u.figure === 'mounted'
-      const [fx, fz, fh] = layer.anchor(u.i, layer.alphaNow, 0) // interpolated, as the men are
+      // interpolated, as the men are
+      const [fx, fz, fh] = layer.anchor(u.i, layer.alphaNow, 0)
       if (mounted) layer.frame(u.i, layer.alphaNow)
       for (const m of u.men) {
         if (m.alive) {

@@ -327,8 +327,9 @@ export function buildMacro(
     // gl.readPixels of one texel waits for the GPU: the bake's time includes its work, not only its submission
     const px = new Uint8Array(4)
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px)
+    // makes the mips, on a mipmapped target
     engine.unBindFramebuffer(rt, false)
-    renderer.restoreStates() // makes the mips, on a mipmapped target
+    renderer.restoreStates()
     return draws
   }
   // one bake over the world square centred on 0 of side `world` m: the macro colour, then on arm 5 (kuw) its filter.
@@ -527,8 +528,9 @@ export function buildMacro(
       const z0 = Math.round((f.z - NEAR_W / 2) / t) * t
       nearRenderer.saveStates()
       engine.bindFramebuffer(nearRT.renderTarget!, undefined, undefined, undefined, true)
+      // (in texels, as the bake's pass)
       engine.setViewport(new Viewport(0, 0, NEAR_N, NEAR_N), 1, 1)
-      nearRenderer.applyEffectWrapper(nearW) // (in texels, as the bake's pass)
+      nearRenderer.applyEffectWrapper(nearW)
       const e = nearW.effect
       e.setFloat4('uRect', x0, z0, x0 + NEAR_W, z0 + NEAR_W)
       e.setFloat('uTexel', t)

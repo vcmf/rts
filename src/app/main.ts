@@ -206,8 +206,9 @@ async function main(): Promise<void> {
     halt: id => ({ type: 'halt', id }),
     fireAtWill: id => ({ type: 'fire', id, mode: 'at will' }),
     holdFire: id => ({ type: 'fire', id, mode: 'hold' }),
+    // headings are compass bearings: + turns right
     wheelL: id => ({ type: 'wheel', id, angle: -Math.PI / 4 }),
-    wheelR: id => ({ type: 'wheel', id, angle: Math.PI / 4 }), // headings are compass bearings: + turns right
+    wheelR: id => ({ type: 'wheel', id, angle: Math.PI / 4 }),
   }
   document.querySelectorAll<HTMLElement>('[data-cmd]').forEach(el => {
     el.onclick = () => forSelection(orders[el.dataset.cmd!])
@@ -283,9 +284,10 @@ async function main(): Promise<void> {
     }
     cx /= selected.size
     cz /= selected.size
+    // keep their relative places
     for (const i of selected) {
       external({ type: 'move', id: formationHandle(w, i), points: [[x + w.f.x[i] - cx, z + w.f.z[i] - cz]], append })
-    } // keep their relative places
+    }
   }
   let drag: { x: number; y: number; cx: number; cz: number; button: number; moved: boolean; shift: boolean } | null =
     null
@@ -349,11 +351,12 @@ async function main(): Promise<void> {
       return
     }
     const hit = pick(e.clientX, e.clientY)
+    // C, then a click on the enemy
     if (charging) {
       charging = false
       if (hit >= 0) charge(hit)
       return
-    } // C, then a click on the enemy
+    }
     if (hit >= 0 && !mine(hit)) return // an enemy: nothing (C then a click charges it)
     if (hit >= 0) {
       if (d.shift) {
@@ -442,8 +445,9 @@ async function main(): Promise<void> {
         )
       }
     }
+    // yours: the plan's refusals are not shown
     let d: Dropped | undefined
-    for (let k = dropped.length - 1; k >= 0 && !d; k--) if (dropped[k].seq >= 0) d = dropped[k] // yours: the plan's refusals are not shown
+    for (let k = dropped.length - 1; k >= 0 && !d; k--) if (dropped[k].seq >= 0) d = dropped[k]
     if (note && performance.now() - noteT < 3000) lines.push(note)
     // the battle (S1e-2): each side's men in the fight, as a share of those it spawned, and the result once decided
     const shares = fightShares(w)

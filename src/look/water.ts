@@ -104,10 +104,11 @@ export function buildWater(
   reflG.fillStyle = '#000'
   reflG.fillRect(0, 0, REFL_N, REFL_N)
   const reflTrees: [number, number, number][] = []
+  // crowns within 20 m of the water
   const reflAdd = (x: number, z: number, r: number) => {
     const q = riverQuery(x, z)
     if (q && q.dist < lerpA(RIVER.W, q) / 2 + 20) reflTrees.push([x, z, r])
-  } // crowns within 20 m of the water
+  }
 
   // samples whose ribbon (1.35 half-widths) reaches the tile; vertices clamped onto it
   const pos: number[] = []
@@ -122,24 +123,27 @@ export function buildWater(
   const lim = TILE_W / 2 + (1.35 * RIVER.WMAX) / 2 + 0.5
   let k = 0
   for (let i = 0, join = false; i < C.n; i++) {
+    // the water lives in the detailed tile only; a re-entry starts a new strip
     if (Math.abs(C.px[i]) > lim || Math.abs(C.pz[i]) > lim) {
       join = false
       continue
-    } // the water lives in the detailed tile only; a re-entry starts a new strip
+    }
     const hw = C.W[i] / 2
+    // left normal of the flow; water is flat at zw
     const nx = -C.tz[i]
     const nz = C.tx[i]
     const y = C.zw[i]
-    const [ep, en] = wetEdges(hw, C.A[i]) // left normal of the flow; water is flat at zw
+    const [ep, en] = wetEdges(hw, C.A[i])
     for (let c = 0; c <= COLS; c++) {
       const a = ((c / COLS) * 2 - 1) * hw * 1.35
       let x = C.px[i] + nx * a
       let zz = C.pz[i] + nz * a
+      // the ribbon ends exactly on the tile edge, where the painted line starts
       const cx = Math.max(-E2, Math.min(E2, x))
       const cz = Math.max(-E2, Math.min(E2, zz))
       const moved = cx !== x || cz !== zz
       x = cx
-      zz = cz // the ribbon ends exactly on the tile edge, where the painted line starts
+      zz = cz
       // columns past this side's water's edge dive under the bank (W2: the inner bar is dry sooner); a column the clamp
       // moved decides from where it landed (it may now be mid-channel)
       let under = a >= 0 ? a > ep : -a > en
@@ -179,6 +183,7 @@ export function buildWater(
   mesh.setVerticesData('aV', new Float32Array(vel), false, 1)
   // DETAIL: the same paint() (and grain) as the terrain's, so the shore band is one function on both; WATER_SURFACE:
   // the debug views' surface view shows the water white
+  // (the ford's shore band paints the roads live at every zoom, as the shore band's ground is one: a few pixels)
   const opts = {
     uniforms: ['uWaterView', 'uStones', 'uUnder', 'uRoadOn', 'uRoadSegN', 'uRoadFar'],
     samplers: ['uRefl', 'uWater', 'uBankN', 'uGB', 'uMeadow', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit'],
@@ -191,7 +196,7 @@ export function buildWater(
       '#define MEADOW_UNDER',
       ...(mats.webgl1 ? [] : ['#define ROADS']),
     ],
-  } // (the ford's shore band paints the roads live at every zoom, as the shore band's ground is one: a few pixels)
+  }
   const waterMat = mats.make('water', WAT_VS, WAT_FS, {
     ...opts,
     attributes: ['position', 'aAcross', 'aTau', 'aRiffle', 'aV'],

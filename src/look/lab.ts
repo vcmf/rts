@@ -19,13 +19,14 @@ import BLOCK_FS from './shaders/block.frag?raw'
 export const BLOCK = { w: 20, d: 3, h: 1.8 }
 export const HILL = { seg: 4, top: 6, sink: 2, round: 3 } // m: each face's length along the profile, the flat top's radius, the foot's depth below the lowest ground under it, the length a corner turns over
 
+// color: '#rrggbb'
 export interface BlockSpec {
   name: string
   x: number
   z: number
   yaw: number
   color: string
-} // color: '#rrggbb'
+}
 // the screen box of a block, in render pixels (y down), for the camera at the time of the call
 export interface BlockBox {
   name: string

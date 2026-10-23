@@ -446,13 +446,14 @@ export function buildNature(
     const yaw = rr() * 6.28
     const tint = 0.2 + rr() * 0.5
     let ok: Placed = false
+    // (stepping past a road too)
     for (let t = 0; t < 6 && !ok; t++) {
       const o = off + t * 1.5
       x = C.px[i] - C.tz[i] * side * o
       z = C.pz[i] + C.tx[i] * side * o
       if (onLines(x, z)) continue
       ok = addPlaced(mdl, [x, z, s, yaw, tint], '', tree(mdl, x, z))
-    } // (stepping past a road too)
+    }
     if (!ok) continue
     if (ok === 'hidden') continue
     const M = NATURE[tree(mdl, x, z)]
@@ -533,9 +534,10 @@ export function buildNature(
     if (!(meadow && mdl === 'Grass_Short')) addPlaced(mdl, item) // under the meadow (src/look/meadow.ts) its grass replaces these tufts; the stream is unchanged
   }
   // a wheat field on the valley side between the floodplain and the formation zones (docs/art-bible.md §6c: fields above the floodplain)
+  // under the meadow its crops replace this lattice (src/look/meadow.ts); the stream is unchanged
   const addWheat = (item: Item) => {
     if (!meadow) addPlaced('Wheat', item)
-  } // under the meadow its crops replace this lattice (src/look/meadow.ts); the stream is unchanged
+  }
   for (let u = 0; u < 30; u += 1.25) {
     for (let v = 0; v < 22; v += 1.3) {
       const x = -60 + u * 0.95 + v * 0.25 + (rr() - 0.5) * 0.5
@@ -566,8 +568,9 @@ export function buildNature(
       const fs = 3.6 + hash(k, t * 3) * 2.0
       if (r < 190 || r > 640 || hash(k * 7, Math.floor(t / 60)) < 0.35 || !placeable(x, z, footprint('Bush_1', fs))) {
         continue
-      } // under the generated trees the hedgerow's odd oak stands HEDGE_OAK times the thorns' size where it fits (its item
-      // scaled, so the far list's footprint stays what is drawn)
+      }
+      // under the generated trees the hedgerow's odd oak stands HEDGE_OAK times the thorns' size where it fits (its
+      // item scaled, so the far list's footprint stays what is drawn)
       const oak = genModels && hash(t * 3, k) >= 0.8 && placeable(x, z, footprint('Bush_1', fs * HEDGE_OAK))
       far.push([x, z, oak ? fs * HEDGE_OAK : fs, hash(t, k) * 6.28, hash(k, t)])
       farSp.push(oak ? 'oak' : 'hawthorn')
@@ -910,7 +913,8 @@ export function buildNature(
   // the trunks (their shadows, baked into the light map): per model its trunk's radius and its crown's
   // lowest point, times each instance's scale
   const trunks: Nature['trunks'] = []
-  const TRUNK = /^(CommonTree|BirchTree|PineTree|Willow|Gen)_/ // trees, not stumps
+  // trees, not stumps
+  const TRUNK = /^(CommonTree|BirchTree|PineTree|Willow|Gen)_/
   // (the far trees' only where the light map reaches: the tile)
   const onTile = ([x, z]: Item) => Math.max(Math.abs(x), Math.abs(z)) < D.spec.tile / 2
   for (const [k, items] of [
@@ -1158,7 +1162,8 @@ const SPHERE_K = 1.6
 const SPHERE_PAD = 3
 const CARDS_M = 220
 const FADE_M = 30
-const WARM_MAX = 600 // frames
+// frames
+const WARM_MAX = 600
 // a mesh whose material reads the fade (the far cards and crown meshes)
 const fades = (m: Mesh) => !!(m.material as ShaderMaterial | null)?.options.attributes.includes('aFade')
 // an instance i of a group, its fade f, at slot n of a side's buffers

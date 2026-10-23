@@ -63,9 +63,11 @@ const RESERVE = { phase: 'halt', start: 0, deployEnd: 0 } as const // a reserve'
 
 interface Host {
   b: Battalion
+  // lod: the figure's LODs nearest first (the data's), the shadow proxy (casts only), the simple shadow (drawn on the
+  // ground), the tiny LOD (when on)
   lod: Mesh[]
   near: boolean
-  tiny: boolean // lod: the figure's LODs nearest first (the data's), the shadow proxy (casts only), the simple shadow (drawn on the ground), the tiny LOD (when on)
+  tiny: boolean
   matrices: Float32Array
   settings: Float32Array
   jitter: Float32Array
@@ -104,32 +106,39 @@ const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1] // the view's corners in clip space
 const FIGURE = 1.8 // m: a figure's height, for the LOD's pixel test
 const MAN_R = 1.6 // m: a man's bounding sphere round his middle (his musket at the present), for the nearest LOD's view test
 const SM_HOLD = 6 // m: lazy, the held sun box must cover the view by this much
+// m; rad; the cloth's least height on screen
 const FLAG_W = 1.4
 const FLAG_H = 1.1
 const FLAG_TOP = 3.0
 const FLAG_WIND = 0.6
-const FLAG_MIN_PX = 12 // m; rad; the cloth's least height on screen
+const FLAG_MIN_PX = 12
+// the trodden ground's mask: texels a side; s between its redraws while men move
 const TR_N = 256
-const TR_EVERY = 0.25 // the trodden ground's mask: texels a side; s between its redraws while men move
+const TR_EVERY = 0.25
+// m behind a man, weight
 const TR_TRAIL = [
   [0.8, 0.9],
   [1.6, 0.8],
   [2.6, 0.6],
   [3.8, 0.4],
-] as const // m behind a man, weight
+] as const
 const TR_WEIGHT = 1 + TR_TRAIL.reduce((a, [, w]) => a + w, 0)
+// the far figure's growth at a quarter of the LOD switch's height
 const FAR_SCALE_XZ = 1.35
-const FAR_SCALE_Y = 1.15 // the far figure's growth at a quarter of the LOD switch's height
+const FAR_SCALE_Y = 1.15
 const SHADOW_H = 2.6 // m: the highest point of a figure (his bayonet up), whose shadow reaches farthest
 const SM_STEP_FINE = 2 // m: the box's half-size steps
 const SM_HOLD_SHARE = 0.1 // the held box's slack, a share of the view's half-size (the shadow fix: SM_HOLD at least)
 const SM_COARSE = 1.3 // and be at most this many times the size the view needs (its texels no coarser)
+// the simple shadow's grid (cells along and across it): it lies on the ground, 2 m a cell (8 vertices: the widest view
+// is bound by its vertices)
 const DECAL_ALONG = 3
-const DECAL_ACROSS = 1 // the simple shadow's grid (cells along and across it): it lies on the ground, 2 m a cell (8 vertices: the widest view is bound by its vertices)
+const DECAL_ACROSS = 1
 const LIFT_RAMP = 1.5 // m along the shadow from his feet over which its lift grows (unitdecal.vert: not over his own shins)
+// (the blend's factors, WebGL's own: no Babylon mode is dst · src with the alpha kept)
 const GL_ZERO = 0
 const GL_ONE = 1
-const GL_SRC_COLOR = 0x0300 // (the blend's factors, WebGL's own: no Babylon mode is dst · src with the alpha kept)
+const GL_SRC_COLOR = 0x0300
 const GROUND_N = 512 // the simple shadows' own ground heights without the meadow map: texels a side over the tile
 const SHAPE_MIPS = 3 // the shape's mips read at most: a cell's 8-texel border holds to the fourth (unitdecal.frag)
 const SHAPE_FACINGS = 16 // the simple shadow's facings (shadowShape)
@@ -641,13 +650,14 @@ export class Units {
     const src = this.lods[li]
     const host = src.clone(`${src.name}_${index}`)
     host.makeGeometryUnique()
+    // (the far LOD's own: the far palette, posed)
     host.material =
       li === this.decalLod
         ? (this.decal ?? this.depthProxyMat)
         : li === this.proxyLod
           ? this.depthProxyMat
           : ((li === this.tinyLod ? this.tinyMats : li === this.farLod ? this.farMats : this.mats).get(b.uniform) ??
-            null) // (the far LOD's own: the far palette, posed)
+            null)
     if (li >= this.proxyLod) host.isVisible = false // (the proxy: shown to the map alone; the simple shadows and the tiny LOD: shown by frame())
     if (li === this.decalLod) host.alphaIndex = 1000 // (after everything else)
     // (a clone of a disabled source is disabled: enabled while the figures show; the nearest LOD's by setSplit)
@@ -670,7 +680,8 @@ export class Units {
       this.hasNearest && li === 0 ? src : this.hostMesh(li, b, this.hosts.length),
     )
     const rnd = mulberry(1 + this.hosts.length * 7919)
-    const jitter = new Float32Array(men * 4) // ±3 cm, ±4°, a man's own lag: no two alike
+    // ±3 cm, ±4°, a man's own lag: no two alike
+    const jitter = new Float32Array(men * 4)
     for (let i = 0; i < men; i++) {
       jitter[i * 4] = (rnd() - 0.5) * 0.06
       jitter[i * 4 + 1] = (rnd() - 0.5) * 0.06
@@ -979,11 +990,12 @@ export class Units {
     }
     const mapOn = this.shadows && f < 1
     const decalOn = this.shadows && this.simpleFar && f > 0 && this.decal !== null
+    // (back from the simple shadows alone: fitted and drawn afresh)
     if (mapOn && !this.mapOn) {
       this.smBox.set = false
       this.smStep = -1
       this.smEmpty = false
-    } // (back from the simple shadows alone: fitted and drawn afresh)
+    }
     this.target(this.shadowRT, mapOn)
     this.mapOn = mapOn
     if (this.shadows || this.trampleOn) this.castView() // (only the sun's box and the trodden mask read it)
@@ -995,10 +1007,11 @@ export class Units {
     this.depthMat.setFloat('uVATStep', step)
     this.depthVatMat.setFloat('uVATStep', step)
     this.depthProxyMat.setFloat('uVATStep', step)
+    // (stepped with the figures under ?smoothmove=0)
     if (decalOn) {
       this.decal?.setFloat('uStepFrac', this.smooth ? this.stepFrac : 0)
       this.decal?.setFloat('uUnitFar', f)
-    } // (stepped with the figures under ?smoothmove=0)
+    }
     if (this.smooth) {
       for (const m of [
         ...this.mats.values(),
@@ -1547,11 +1560,12 @@ export class Units {
     }
     // lazy: drawn once, then again only when frame() resets it (a still view between two steps draws nothing)
     this.shadowRT.refreshRate = this.lazyShadows ? 0 : 1
+    // (fitted by the next frame)
     if (on) {
       this.smBox.set = false
       this.smStep = -1
       this.smEmpty = false
-    } // (fitted by the next frame)
+    }
     if (on && this.simpleFar) this.useDecals()
     this.far = 0
     for (const m of this.receivers) {
@@ -1698,8 +1712,9 @@ export class Units {
       for (let o = 0; o < m.length; o += 16) {
         const x = m[o + 12]
         const z = m[o + 14]
+        // (+z in the figure's frame: behind him)
         const bx = m[o + 8]
-        const bz = m[o + 10] // (+z in the figure's frame: behind him)
+        const bz = m[o + 10]
         splat(x, z, 1)
         for (const [d, w] of TR_TRAIL) splat(x + bx * d, z + bz * d, w)
       }
