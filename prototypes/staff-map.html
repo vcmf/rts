@@ -1327,9 +1327,9 @@ function proj(x,y,z){const m=VP;const cx=x*m[0]+y*m[4]+z*m[8]+m[12],cy=x*m[1]+y*
 const RISE=()=>stage(0.15,0.7);
 const STAGE={wash:[0.1,0.6],sprout:[0.3,0.8],stand:[0.5,0.88],blocks:[0.55,0.88],ink:[0.35,0.85],names:[0.35,0.7],corps:[0.4,0.75]};
 const st=k=>stage(STAGE[k][0],STAGE[k][1]);
-function P2(x,z){const p=proj(x,Hs(x,z)*RISE()+0.3,z);return[p[0],p[1],p[2]];}
-/** A ground point raised by up metres, projected: the top of a slab. */
+/** A ground point raised by up metres, projected (the top of a slab); P2 is the ground itself. */
 function P3(x,z,up){const p=proj(x,Hs(x,z)*RISE()+0.3+up,z);return[p[0],p[1],p[2]];}
+function P2(x,z){return P3(x,z,0);}
 const behind=p=>p[2]<=cam.minZ;
 const offView=C=>C.some(behind);
 let MPP=1;                                                   // metres per CSS pixel at the camera target
@@ -1342,7 +1342,7 @@ function blockCorners(u,extra=0,up=0){   // up: the corners raised by up metres 
   const n=alive(u),a=shown(u,u.prev,n),b=shown(u,u.form,n),e=easeIO(u.morph);let fw=lerp(a[0],b[0],e),fd=lerp(a[1],b[1],e);
   fd=Math.max(fd,5*MPP);
   const f=[Math.sin(u.dface),Math.cos(u.dface)],r=[Math.cos(u.dface),-Math.sin(u.dface)],hw=fw/2+extra*MPP,front=extra*MPP,back=-fd-extra*MPP;
-  const C=[[-hw,front],[hw,front],[hw,back],[-hw,back]].map(([sx,sz])=>up>0?P3(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz,up):P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
+  const C=[[-hw,front],[hw,front],[hw,back],[-hw,back]].map(([sx,sz])=>P3(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz,up));
   return{C,fw,fd,f,r};
 }
 // Edge weights for picking where a bite goes: front, right, back, left. Fixed (not the drawn lengths), so a bite
@@ -1425,9 +1425,8 @@ function pathPoly(C) {
   addPoly(ink, C);
 }
 const PULSE_WHITE=hex('#fbfaf6'),PULSE_MS=1100;   // the legend swatch (.blink) pulses at the same period, not in phase
-// the lit style: blocks stand off the ground and arrows cast a shadow, lit from the world's north-west. LIGHT points
-// toward the light on screen (setLight, each frame, so it turns with the camera); the side face and the shadows fall
-// away from it
+// the lit style's light on screen, from the world's north-west: LIGHT points toward it (setLight, each frame, so it
+// turns with the camera); the guns, arrows and clouds use it. The slabs take the world vector NW directly
 let LIGHT=[-0.6,-0.8];
 const raiseOf=k=>[-LIGHT[0]*k,-LIGHT[1]*k],SHADOW_PX=5.7;
 function setLight(){const h=Hs(CUR.x,CUR.z)*RISE()+0.3,a=[...proj(CUR.x,h,CUR.z)],b=[...proj(CUR.x+NW[0]*141,h,CUR.z+NW[1]*141)];   // copies: proj returns one shared array   // one height: the relief must not swing the light
@@ -1447,16 +1446,16 @@ const slabHeight = () => (LIT ? lerp(SLAB[0] * SYMZ, SLAB[1], SYMK) : 0);
  * A block's quad (its own metres, from parts()) as a slab on screen: G the footprint on the ground, T the top, raised
  * by h metres, and W the footprint's world points (for the cast shadow). With h 0 (the ink style) T is G.
  */
-function slabFaces(u, B, Q, h) {
-  const W = Q.map(([sx, sz]) => [u.x + B.r[0] * sx + B.f[0] * sz, u.z + B.r[1] * sx + B.f[1] * sz]);
-  const G = W.map(([x, z]) => P2(x, z));
+function slabFaces(u, B, quad, h) {
+  const W = quad.map(([sx, sz]) => [u.x + B.r[0] * sx + B.f[0] * sz, u.z + B.r[1] * sx + B.f[1] * sz]);
+  const G = W.map(([x, z]) => P3(x, z, 0));
   const T = h > 0 ? W.map(([x, z]) => P3(x, z, h)) : G;
   return { G, T, W };
 }
 
 /**
- * A slab's sides, between its footprint G and its top T, clipped outside the top: what is left are the sides the
- * camera sees (a convex box), and no two of them overlap, so a fading slab composites once. Each side is lit by the map's one light by the way it faces: the edges
+ * A slab's sides, between its footprint G and its top T: only those facing the camera (the others are hidden behind
+ * them), clipped outside the top, so no two overlap and a fading slab composites once. Each side is lit by the map's one light by the way it faces: the edges
  * run front, right, back, left, so their outward normals are f, r, -f, -r.
  */
 function slabSides(G, T, B, col) {
@@ -1468,10 +1467,11 @@ function slabSides(G, T, B, col) {
   const sides = [0, 1, 2, 3].map(e => {
     const a = e, b = (e + 1) % 4;
     const facing = Math.max(0, normals[e][0] * NW[0] + normals[e][1] * NW[1]);
-    return { quad: [G[a], G[b], T[b], T[a]], depth: (G[a][2] + G[b][2]) / 2, k: 0.58 + 0.3 * facing };
+    const seen = normals[e][0] * camF[0] + normals[e][1] * camF[2] < 0;   // facing back toward the camera
+    return { quad: [G[a], G[b], T[b], T[a]], seen, k: 0.58 + 0.3 * facing };
   });
-  sides.sort((p, q) => q.depth - p.depth);
   for (const sd of sides) {
+    if (!sd.seen) continue;
     pathPoly(sd.quad);
     ink.fillStyle = shade(col, sd.k);
     ink.fill();
@@ -1479,34 +1479,37 @@ function slabSides(G, T, B, col) {
   ink.restore();
 }
 
-/**
- * A slab's shadow on the ground: its footprint swept away from the light by its height (a sun about 40 degrees up),
- * clipped outside the footprint G, so a hollow square's hole stays clear and the slab's own sides cover the rest.
- */
 /** A unit's slabs (from parts()) projected, the far one first, each with its index in parts() (for its wear's seed). */
 function slabsFarToNear(u, B, PS, h) {
-  const out = PS.map((Q, pi) => ({ S: slabFaces(u, B, Q, h), pi }));
+  const out = PS.map((quad, pi) => ({ S: slabFaces(u, B, quad, h), pi }));
   const depth = o => o.S.G.reduce((t, p) => t + p[2], 0) / o.S.G.length;
   return out.sort((a, b) => depth(b) - depth(a));
 }
 
-function slabShadow(W, G, h) {
-  ink.save();
-  const foot = new Path2D();
-  addPoly(foot, G);
-  clipOut(foot);
+/**
+ * The slabs' shadows on the ground, gathered for one frame and filled once (where two overlap, they darken once):
+ * each footprint swept away from the light by its height (a sun about 40 degrees up). Filled clipped outside every
+ * footprint, so a hollow square's hole stays clear and the slabs' own sides cover the rest.
+ */
+const SHADOWS = { hulls: null, feet: null };
+function beginSlabShadows() {
+  SHADOWS.hulls = new Path2D();
+  SHADOWS.feet = new Path2D();
+}
+function addSlabShadow(W, G, h) {
   const len = h * 1.2;
   const away = [-NW[0] * len, -NW[1] * len];
   const pts = [...W, ...W.map(([x, z]) => [x + away[0], z + away[1]])].map(([x, z]) => P2(x, z));
-  pathPoly(hull(pts));
-  ink.fillStyle = 'rgba(52,38,18,0.3)';
-  ink.fill();
-  ink.restore();
+  addPoly(SHADOWS.hulls, hull(pts));
+  addPoly(SHADOWS.feet, G);
 }
-
-/** A block's quad (its own metres) as world points on the ground, for the shadow pass. */
-function quadWorld(u, B, Q) {
-  return Q.map(([sx, sz]) => [u.x + B.r[0] * sx + B.f[0] * sz, u.z + B.r[1] * sx + B.f[1] * sz]);
+function fillSlabShadows(alpha) {
+  ink.save();
+  ink.globalAlpha = alpha;
+  clipOut(SHADOWS.feet);
+  ink.fillStyle = 'rgba(52,38,18,0.3)';
+  ink.fill(SHADOWS.hulls, 'nonzero');
+  ink.restore();
 }
 
 // a block's top: a thin dark outline, then each edge inset a little, lighter facing the light, darker facing away;
@@ -1603,7 +1606,7 @@ const HOUSE_COL=[0.36,0.29,0.23],CHURCH_COL=[0.27,0.22,0.19];
 // a block's top colour (and its slab sides'): the routing pulse, or the army's fill; hatched (wavering) sides take the coat
 function blockCol(u,now){const s=pal(u);if(u.state==='rout')return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));return u.mor>0.6?s.f:s.c;}
 function drawUnder(u,alpha,now){const B=blockCorners(u),{C}=B;if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);
-  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true,gunPx(u),u);else{const h=slabHeight();for(const Q of parts(u,B)){const W=quadWorld(u,B,Q);slabShadow(W,W.map(([x,z])=>P2(x,z)),h);}}}ink.globalAlpha=1;}
+  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true,gunPx(u),u);else{const h=slabHeight();for(const quad of parts(u,B)){const S=slabFaces(u,B,quad,0);addSlabShadow(S.W,S.G,h);}}}ink.globalAlpha=1;}
 function drawBlock(u,alpha,now){
   u.gun=null;   // drawn this frame or not at all: a stale circle would keep a stale click area
   const s=pal(u),{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
@@ -1830,7 +1833,7 @@ function drawInk(now){
   const inkA=1-st('ink'),blockA=1-st('blocks'),nameA=1-st('names');
   drawNeatline(inkA);if(LIT)setLight();drawNames(nameA);
   drawOrders(now,Math.max(0.35,1-stage(0.7,1)));
-  if(LIT){for(const u of UNITS)if(!u.gone||u.gone<1)drawUnder(u,blockA,now);}
+  if(LIT){beginSlabShadows();for(const u of UNITS)if(!u.gone||u.gone<1)drawUnder(u,blockA,now);fillSlabShadows(blockA);}
   // far to near, so a nearer slab covers a farther one (in the lit style; the ink style keeps its order)
   // by each block's centre (u.x/z is its front), the gone ones left out
   const centreDepth=u=>{const d=shown(u,u.form,alive(u))[1]/2;return P2(u.x-Math.sin(u.dface)*d,u.z-Math.cos(u.dface)*d)[2];};

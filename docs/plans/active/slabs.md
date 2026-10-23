@@ -75,3 +75,17 @@ Out of scope:
   - the shadow pass projecting only what it uses;
   - the dead `SIDE_PX` and stale comments removed;
   - decision 0055 for the tilt and the slabs.
+- **Round 2**: moderate and light only, so the review stops. Fixed:
+  - only the sides facing the camera are drawn; hidden ones could double a band on a fading slab at a steep tilt;
+  - all the slabs' shadows go in one path, filled once, so where two overlap they darken once;
+  - one projection (`P2` is `P3` at 0);
+  - the shadow pass uses `slabFaces`, and `quadWorld` is dropped;
+  - the doc comments sit on the right functions;
+  - a parameter that hid the URL settings is renamed;
+  - the screen light's comment is corrected.
+
+  Left:
+  - picking uses the slab's top only, not its sides;
+  - box select still tests the ground point;
+  - units are sorted by the centre of their target formation;
+  - each slab is projected in two passes.
