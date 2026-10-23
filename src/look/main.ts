@@ -21,7 +21,7 @@ import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
-import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn } from './post.ts'
+import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn, zoomOf } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
@@ -454,7 +454,7 @@ if (nature.setSeason && nature.shadowState) {
   let dragging = false
   zoomEl.addEventListener('pointerdown', () => { dragging = true })
   for (const ev of ['pointerup', 'pointercancel', 'blur']) addEventListener(ev, () => { dragging = false }); zoomEl.addEventListener('change', () => { dragging = false })
-  zoomEl.oninput = () => { camera.radius = Math.exp(lo + (hi - lo) * +zoomEl.value) }
+  zoomEl.oninput = () => { zoomOf(camera).set(Math.exp(lo + (hi - lo) * +zoomEl.value)) }   // (the wanted zoom: ZoomHold)
   let shown = NaN
   scene.onBeforeRenderObservable.add(() => { if (!dragging && camera.radius !== shown) { shown = camera.radius; zoomEl.value = String((Math.log(shown) - lo) / (hi - lo)) } })
 }
@@ -549,7 +549,7 @@ if (new URLSearchParams(location.search).get('river') === 'debug') {   // centre
 // the page contract of tools/golden.mjs, and the names tools/render-check.js and tools/river-check.js read (they were
 // written against the prototype's globals; SMW and MASKN are the prototype's names for TILE_W and MASK_N)
 Object.assign(window, {
-  __proto: { S, scene, camera, buildPost: () => post.build(), play: D.spec.play },
+  __proto: { S, scene, camera, zoom: zoomOf(camera), buildPost: () => post.build(), play: D.spec.play },   // zoom: the wanted radius (ZoomHold: read wanted, set(r))
   B: { Vector3, Matrix, DynamicTexture, VertexBuffer },
   // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring formulas the river check compares with
   scene, engine, camera, apron: terrain.apron, __waterTexMs: waterTexMs, RIVER: { ...RIVER, axisX }, H: groundAt, baseH, riverQuery, lerpA, wetEdges, wetEdgeAt, bankReachAt, atCutBank, BAND: D.band, PLAY: D.spec.play, SMW: D.spec.tile, TSUB: D.spec.tileSub, MASKN: D.spec.sizes.riverMask, SM_FADE_M: D.spec.shadowFade, SPEC: D.spec,

@@ -19,7 +19,7 @@ import { EffectRenderer, type EffectWrapper } from '@babylonjs/core/Materials/ef
 import { RenderTargetTexture } from '@babylonjs/core/Materials/Textures/renderTargetTexture.js'
 import { GpuTimer } from './gputimer.ts'
 import { TR, TRACE, TRACE_FIELDS } from './trace.ts'
-import { START } from './post.ts'
+import { START, zoomOf } from './post.ts'
 import { D, TUNED_R } from './spec.ts'
 
 declare const __BUILD__: string
@@ -241,7 +241,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   try {
     await seconds(2)   // shaders compiled, first frames out of the way
     for (const cam of cams) {
-      camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; camera.target.set(focus.x, D.spec.camera.focusY, focus.z)
+      camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; zoomOf(camera).set(cam.radius); camera.target.set(focus.x, D.spec.camera.focusY, focus.z)
       // (panning: a triangle wave along the view's right, the arc camera's alpha + π/2 on the ground)
       const ra = cam.alpha + Math.PI / 2, rx = Math.cos(ra), rz = Math.sin(ra), pt0 = performance.now()
       const pan = PAN ? scene.onBeforeRenderObservable.add(() => {
@@ -253,6 +253,8 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
         await arm.apply(); await scene.whenReadyAsync()
         for (let tries = 0; ; tries++) {
           await frames(10)
+          // (the closest zooms are held out over high ground, decision 0051: a camera there would measure another radius)
+          if (Math.abs(camera.radius - cam.radius) > 1e-6) throw new Error(`bench camera ${cam.name}: the zoom is held out to ${camera.radius.toFixed(2)} m over high ground, not ${cam.radius} m (decision 0051): choose another ?benchat`)
           timer.reset(); frameMs.length = draws.length = tris.length = 0; recN = recLost = 0; timed.clear(); lastT = 0; passFrames = 0; hidden = document.hidden
           // the hold, and at least MIN_FRAMES frames (a software renderer takes seconds a frame)
           const t0 = performance.now(); timing = true

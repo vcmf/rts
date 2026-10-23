@@ -15,6 +15,7 @@ import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Frustum } from '@babylonjs/core/Maths/math.frustum.js'
 import { Matrix, Vector2, Vector3, Vector4 } from '@babylonjs/core/Maths/math.vector.js'
+import type { Plane } from '@babylonjs/core/Maths/math.plane.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
 import type { Scene } from '@babylonjs/core/scene.js'
@@ -25,6 +26,7 @@ import FLAG_VS from './shaders/flag.vert?raw'
 import FLAG_FS from './shaders/flag.frag?raw'
 import DEPTH_FS from './shaders/depth.frag?raw'
 import { groundAt } from './heightfield.ts'
+import { D } from './spec.ts'
 import { mulberry } from './noise.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
 import { posedMesh, posedVertices, shadowProxy, type UnitData } from './units-data.ts'
@@ -66,6 +68,11 @@ const SHADOW_H = 2.6    // m: the highest point of a figure (his bayonet up), wh
 const SM_STEP_FINE = 2  // m: the box's half-size steps
 const SM_HOLD_SHARE = 0.1   // the held box's slack, a share of the view's half-size (the shadow fix: SM_HOLD at least)
 const SM_COARSE = 1.3  // and be at most this many times the size the view needs (its texels no coarser)
+
+// an axis-aligned box wholly outside one of the planes (its corner most along the plane's normal behind it)
+function boxOutside(planes: Plane[], x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): boolean {
+  return planes.some(p => p.normal.x * (p.normal.x > 0 ? x1 : x0) + p.normal.y * (p.normal.y > 0 ? y1 : y0) + p.normal.z * (p.normal.z > 0 ? z1 : z0) + p.d < 0)
+}
 
 export class Units {
   readonly data: UnitData
@@ -236,34 +243,37 @@ export class Units {
     scene.onBeforeRenderObservable.add(() => this.frame())
   }
 
+  // a battalion's mesh for a LOD (li: its place in h.lod): a clone of the LOD's, its own geometry (thin-instance
+  // matrices are vertex buffers on the geometry, and clones share it: without its own every battalion would draw with
+  // the last one's men), its material, drawn into the shadow map with the depth material
+  private hostMesh(li: number, b: Battalion, index: number): Mesh {
+    const src = this.lods[li], host = src.clone(`${src.name}_${index}`)
+    host.makeGeometryUnique()
+    host.material = li === this.proxy ? this.depthProxyMat : (li === this.far ? this.farMats : this.mats).get(b.uniform) ?? null   // (the far LOD's own: the far palette, posed)
+    if (li === this.proxy) host.isVisible = false   // (the proxy: shown to the shadow map alone)
+    host.isPickable = false; host.alwaysSelectAsActiveMesh = false; this.meshes.push(host)
+    this.shadowRT.setMaterialForRendering(host, li === this.proxy ? this.depthProxyMat : li === this.far && this.posed ? this.depthVatMat : this.depthMat)
+    return host
+  }
+
   private add(b: Battalion): void {
     const men = this.slot.line.length
-    const lod = this.lods.map((src, li) => {
-      const host = src.clone(`${src.name}_${this.hosts.length}`)
-      // thin-instance matrices are vertex buffers on the geometry, and clones share it: without its own geometry
-      // every battalion would draw with the last one's men
-      host.makeGeometryUnique()
-      host.material = li === this.proxy ? this.depthProxyMat : (li === this.far ? this.farMats : this.mats).get(b.uniform) ?? null   // (the far LOD's own: the far palette, posed)
-      if (li === this.proxy) host.isVisible = false   // (the proxy: shown to the shadow map alone)
-      // (the nearest LOD enabled only while its battalion is split: setSplit; disabled, the scene never looks at it)
-      host.isPickable = false; host.setEnabled(!(this.hasNearest && li === 0)); host.alwaysSelectAsActiveMesh = false; this.meshes.push(host)
-      this.shadowRT.setMaterialForRendering(host, li === this.proxy ? this.depthProxyMat : this.depthMat)   // (the far LOD's: setPosed)
-      return host
-    })
+    // the nearest LOD's mesh is made at the battalion's first split (setSplit): until then its place holds the LOD's
+    // own mesh, disabled and never drawn (a battalion never split costs no copy of the full figure: about 1 MB each)
+    const lod = this.lods.map((src, li) => this.hasNearest && li === 0 ? src : this.hostMesh(li, b, this.hosts.length))
     const rnd = mulberry(1 + this.hosts.length * 7919), jitter = new Float32Array(men * 4)   // ±3 cm, ±4°, a man's own lag: no two alike
     for (let i = 0; i < men; i++) { jitter[i * 4] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 1] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 2] = (rnd() - 0.5) * 0.14; jitter[i * 4 + 3] = rnd() * 2 - 1 }
     const matrices = new Float32Array(men * 16), settings = new Float32Array(men * 3)
-    // (the nearest LOD's buffers its own, a man's placeholder until the battalion first splits; the next LOD's swapped
-    // to restM, restS while split: setSplit)
-    const nearM = new Float32Array(this.hasNearest ? 16 : 0), nearS = new Float32Array(this.hasNearest ? 3 : 0)
+    // (the nearest LOD's buffers its own, made at the first split; the next LOD's swapped to restM, restS while split:
+    // setSplit)
     lod.forEach((m, li) => {
-      const own = this.hasNearest && li === 0
-      m.thinInstanceSetBuffer('matrix', own ? nearM : matrices, 16, false); m.thinInstanceSetBuffer('aVAT', own ? nearS : settings, 3, false)
+      if (this.hasNearest && li === 0) return
+      m.thinInstanceSetBuffer('matrix', matrices, 16, false); m.thinInstanceSetBuffer('aVAT', settings, 3, false)
       m.doNotSyncBoundingInfo = true   // (its bounds are place()'s: a buffer swapped in must not refit them)
     })
     const k = lod.length
     this.hosts.push({ b, lod, near: false, matrices, settings, jitter, cx: b.x, cz: b.z, lo: new Vector3(), hi: new Vector3(), step: -1, phase: null, stale: Array<boolean>(k).fill(true), staleSet: Array<boolean>(k).fill(true), cycle: -1, index: this.hosts.length,
-      split: false, sel: new Uint8Array(0), nearM, nearS, restM: new Float32Array(0), restS: new Float32Array(0), resplit: true })
+      split: false, sel: new Uint8Array(0), nearM: new Float32Array(0), nearS: new Float32Array(0), restM: new Float32Array(0), restS: new Float32Array(0), resplit: true })
   }
 
   // every man's matrix and clip at the battalion's local time: his place and facing from the script, set on the ground;
@@ -310,9 +320,12 @@ export class Units {
   private setSplit(h: Host, on: boolean): void {
     h.split = on
     const men = h.settings.length / 3
-    if (on && h.sel.length !== men) {   // (the lists made at the battalion's first split: no memory for one never split)
+    if (on && h.sel.length !== men) {   // (the mesh and the lists made at the battalion's first split: no memory for one never split)
       h.sel = new Uint8Array(men); h.nearM = new Float32Array(men * 16); h.nearS = new Float32Array(men * 3); h.restM = new Float32Array(men * 16); h.restS = new Float32Array(men * 3)
-      h.lod[0].thinInstanceSetBuffer('matrix', h.nearM, 16, false); h.lod[0].thinInstanceSetBuffer('aVAT', h.nearS, 3, false)
+      const m = this.hostMesh(0, h.b, h.index)
+      m.thinInstanceSetBuffer('matrix', h.nearM, 16, false); m.thinInstanceSetBuffer('aVAT', h.nearS, 3, false)
+      m.doNotSyncBoundingInfo = true; m.getBoundingInfo().reConstruct(h.lo, h.hi)
+      h.lod[0] = m
     }
     const l = h.lod[this.next]
     l.thinInstanceSetBuffer('matrix', on ? h.restM : h.matrices, 16, false); l.thinInstanceSetBuffer('aVAT', on ? h.restS : h.settings, 3, false)
@@ -387,17 +400,14 @@ export class Units {
       if (this.hasNearest && this.nearestPx > 0) {
         const lo = h.lo, hi = h.hi, dx = Math.max(lo.x - camPos.x, 0, camPos.x - hi.x), dy = Math.max(lo.y - camPos.y, 0, camPos.y - hi.y), dz = Math.max(lo.z - camPos.z, 0, camPos.z - hi.z)
         split = FIGURE * pxPerM / Math.max(1, Math.hypot(dx, dy, dz)) >= this.nearestPx * (h.split ? 0.8 : 0.9)
-        if (split) {
-          // (outside a plane: the box's corner most along its normal is behind it)
-          split = !this.camPlanes.some(p => p.normal.x * (p.normal.x > 0 ? hi.x : lo.x) + p.normal.y * (p.normal.y > 0 ? hi.y : lo.y) + p.normal.z * (p.normal.z > 0 ? hi.z : lo.z) + p.d < 0)
-        }
+        if (split) split = !boxOutside(this.camPlanes, lo.x, lo.y, lo.z, hi.x, hi.y, hi.z)
       }
       const near = split || (h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1)
       if (near !== h.near && this.casterNear) moved = true
       if (split !== h.split) { this.setSplit(h, split); if (this.casterNear) moved = true }
       if (split && this.share(h, camPos, pxPerM) && this.casterNear) moved = true
       h.near = near; h.lod[this.next].isVisible = near && (!split || h.lod[this.next].thinInstanceCount > 0); h.lod[this.far].isVisible = !near
-      if (this.hasNearest) h.lod[0].isVisible = split && h.lod[0].thinInstanceCount > 0
+      if (h.sel.length) h.lod[0].isVisible = split && h.lod[0].thinInstanceCount > 0   // (made at the first split)
       // the LODs drawn, and the one that casts for the battalion; a hidden one is updated when drawn again
       const kc = this.casterOf(h)
       for (let k = 0; k < this.proxy + 1; k++) {
@@ -517,8 +527,10 @@ export class Units {
     for (let j = 0; j < 4; j++) {
       Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 0, inv, k.a); Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 1, inv, k.b)
       k.b.subtractToRef(k.a, k.d).normalize()
-      // (the focus's ground above the eye, looking up a slope at the closest zooms: the eye's own point, not one behind it)
-      const o = j * 6, r = k.d.y < -1e-3 ? Math.max(0, Math.min((y0 - k.a.y) / k.d.y, SM_REACH)) : SM_REACH
+      // (the focus's ground above the eye, looking up a slope at the closest zooms: a plane the clearance under the eye
+      // instead, so the quad stays ahead of the camera, not collapsed to it or behind it)
+      const yp = Math.min(y0, k.a.y - D.spec.camera.clearance)
+      const o = j * 6, r = k.d.y < -1e-3 ? Math.max(0, Math.min((yp - k.a.y) / k.d.y, SM_REACH)) : SM_REACH
       R[o] = k.a.x; R[o + 1] = k.a.y; R[o + 2] = k.a.z; R[o + 3] = k.d.x; R[o + 4] = k.d.y; R[o + 5] = k.d.z
       q[j * 2] = k.a.x + k.d.x * r; q[j * 2 + 1] = k.a.z + k.d.z * r
     }
@@ -561,8 +573,7 @@ export class Units {
       if (!this.shown || !l.isInFrustum(this.planes)) continue
       if (this.tightCull) {
         const lo = h.lo, hi = h.hi, x0 = Math.min(lo.x, lo.x + sx), x1 = Math.max(hi.x, hi.x + sx), z0 = Math.min(lo.z, lo.z + sz), z1 = Math.max(hi.z, hi.z + sz), y0 = lo.y - SHADOW_H
-        // outside a plane: the box's corner most along the plane's normal is behind it
-        if (this.camPlanes.some(p => p.normal.x * (p.normal.x > 0 ? x1 : x0) + p.normal.y * (p.normal.y > 0 ? hi.y : y0) + p.normal.z * (p.normal.z > 0 ? z1 : z0) + p.d < 0)) continue
+        if (boxOutside(this.camPlanes, x0, y0, z0, x1, hi.y, z1)) continue
       }
       // (a split battalion's lists may be empty: a mesh of no instances would draw its one figure at the origin)
       if (l.thinInstanceCount > 0) this.culled.push(l)

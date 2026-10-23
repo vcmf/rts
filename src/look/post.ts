@@ -50,6 +50,10 @@ const FOCUS_S = 0.25
 export const CLEAR_BELOW = (D.spec.ground.hi + D.spec.camera.clearance - D.spec.camera.focusY) / Math.cos(D.spec.camera.betaMax)
 const TAPS = [16, 24, 32, 48, 64]
 
+// each camera's zoom hold (buildCamera's): the page's zoom inputs and the tools set the wanted radius through it
+const HOLDS = new WeakMap<ArcRotateCamera, ZoomHold>()
+export const zoomOf = (camera: ArcRotateCamera): ZoomHold => { const z = HOLDS.get(camera); if (!z) throw new Error('zoomOf: not a camera buildCamera made'); return z }
+
 // the top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit. ground: the
 // drawn ground's height (the zoom is held out where the eye would come within the SPEC's clearance of it)
 export function buildCamera(scene: Scene, canvas: HTMLCanvasElement, ground: (x: number, z: number) => number): ArcRotateCamera {
@@ -59,12 +63,12 @@ export function buildCamera(scene: Scene, canvas: HTMLCanvasElement, ground: (x:
   // locked down (decision 0010): yaw ± the spec's range around the default, pitch and zoom inside the checked limits
   camera.lowerAlphaLimit = c.yaw0 - c.yawRange; camera.upperAlphaLimit = c.yaw0 + c.yawRange
   camera.lowerRadiusLimit = c.rMin
-  rtsControls(scene, camera, canvas)
+  const zoom = new ZoomHold(); HOLDS.set(camera, zoom)
+  rtsControls(scene, camera, canvas, zoom)
   // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the play area
   // the closest zoom held out over high ground (clearRadius, ZoomHold, src/look/spec.ts: decision 0051), the player's
   // wanted zoom kept apart so it comes back in on lower ground; from CLEAR_BELOW out the eye always clears the tile's
   // highest ground, so the ground is not read there. The depth of field's zoom ease is reckoned from TUNED_R out
-  const zoom = new ZoomHold()
   camera.mapPanning = true; scene.onBeforeRenderObservable.add(() => {
     const t = camera.target; t.x = Math.max(-PLAY, Math.min(PLAY, t.x)); t.z = Math.max(-PLAY, Math.min(PLAY, t.z))
     const r = zoom.step(camera.radius, w => w < CLEAR_BELOW ? clearRadius(c, w, camera.alpha, camera.beta, t.x, t.y, t.z, ground) : w)
@@ -91,7 +95,7 @@ export const typingIn = (t: EventTarget | null): boolean => t instanceof HTMLTex
 // trackpad's two-finger swipe pans (the ground follows the fingers) and its pinch zooms; a mouse wheel zooms. They
 // replace Babylon's keyboard (which turned the camera) and wheel (which only zoomed); dragging still turns and pans
 const PAN_PER_S = 0.9, TURN_PER_S = 1.2, SWIPE = 0.0016, PINCH = 0.01, WHEEL = 0.0012
-function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasElement): void {
+function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasElement, zoom: ZoomHold): void {
   camera.inputs.removeByType('ArcRotateCameraKeyboardMoveInput'); camera.inputs.removeByType('ArcRotateCameraMouseWheelInput')
   // the ground's forward (away from the camera) and right, from the camera's yaw
   const pan = (right: number, fwd: number) => {
@@ -123,7 +127,9 @@ function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasEl
       const lo = camera.lowerRadiusLimit ?? 1, hi = camera.upperRadiusLimit ?? 1e4
       // a pinch's steps are small (a few pixels); a wheel's notch, with or without Ctrl, a hundred (or a few lines)
       const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY
-      camera.radius = Math.min(hi, Math.max(lo, camera.radius * Math.exp(dy * (e.ctrlKey && Math.abs(dy) < 50 ? PINCH : WHEEL))))
+      // (the wanted radius scaled, not the one shown: held out over a hill, a zoom in must not raise it, decision 0051)
+      const w = Number.isNaN(zoom.wanted) ? camera.radius : zoom.wanted
+      zoom.set(Math.min(hi, Math.max(lo, w * Math.exp(dy * (e.ctrlKey && Math.abs(dy) < 50 ? PINCH : WHEEL)))))
     } else { const k = camera.radius * SWIPE; pan(e.deltaX * k, -e.deltaY * k) }
   }, { passive: false })
 }

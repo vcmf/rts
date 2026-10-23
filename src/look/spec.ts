@@ -220,14 +220,19 @@ export function clearRadius(c: Spec['camera'], r: number, alpha: number, beta: n
 }
 
 /** The player's zoom kept apart from the held one: the camera shows the wanted radius, or more where the hold says
- *  (clearRadius over high ground), and comes back in when the ground falls away. A radius set from outside (the
- *  player's zoom, a tool's view) is the new wanted one */
+ *  (clearRadius over high ground), and comes back in when the ground falls away. The page's zoom inputs and the tools
+ *  set the wanted radius (set: the wheel, the pinch and the slider scale it, not the radius shown); a radius another
+ *  input gives the camera itself (Babylon's own pointers) is taken as the new wanted one */
 export class ZoomHold {
   wanted = NaN
   private shown = NaN
+  private explicit = false
+  /** the wanted radius, as the player or a tool asks for it */
+  set(r: number): void { this.wanted = r; this.explicit = true }
   /** the radius to show, given the camera's now and the hold */
   step(current: number, hold: (r: number) => number): number {
-    if (current !== this.shown) this.wanted = current
+    if (this.explicit) this.explicit = false
+    else if (current !== this.shown) this.wanted = current
     this.shown = hold(this.wanted)
     return this.shown
   }

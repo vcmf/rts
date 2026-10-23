@@ -260,7 +260,7 @@ function banks(url, dir, defs) {
       pts.push([x, z, ...authoredNormal(H, x, z, e)])
     }
   }
-  const zooms = [CAM.rMin, 90]
+  const zooms = [R_NEAR, 90]   // (R_NEAR, as the sweep and the seams: their closest zoom, not the 15 m one)
   const steps = [...prepSteps(), detail([...defs, 'DETAIL_DEBUG_N'], true)]
   for (const r of zooms) {
     steps.push(viewStep([`bank-r${r}`, A0, BETA0, r, `${target}`, 0]), ['shot', `banks.r${r}`])

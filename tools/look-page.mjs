@@ -27,7 +27,7 @@ export const viewStep = ([name, a, b, r, t, season]) => ['eval', `(async () => {
   if (!lim(${a}, c.lowerAlphaLimit, c.upperAlphaLimit) || !lim(${b}, c.lowerBetaLimit, c.upperBetaLimit) || !lim(${r}, c.lowerRadiusLimit, c.upperRadiusLimit)
     || typeof P !== "number" || Math.abs(t[0]) > P || Math.abs(t[2]) > P)
     throw new Error("camera ${name} is outside the page's camera limits or play area")
-  c.alpha = ${a}; c.beta = ${b}; c.radius = ${r}; c.target.set(...t); __proto.S.season = ${season}
+  c.alpha = ${a}; c.beta = ${b}; c.radius = ${r}; __proto.zoom?.set(${r}); c.target.set(...t); __proto.S.season = ${season}
   await Promise.race([__proto.scene.whenReadyAsync(true), new Promise((_, no) => setTimeout(() => no(new Error("scene never ready at camera ${name} (120 s)")), 120000))])
   for (let i = 0; i < 3; i++) __proto.scene.render()
   if (Math.abs(c.radius - ${r}) > 1e-6) throw new Error("camera ${name}: the zoom was held out to " + c.radius.toFixed(2) + " m over high ground, not ${r} m (decision 0051): move its target")
