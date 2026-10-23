@@ -381,6 +381,44 @@ function bakeHouses(){
   for(const t of tops){fill(t.C,css(t.col));g.strokeStyle='rgba(255,250,236,0.35)';g.lineWidth=0.8;g.stroke();}
   return c;
 }
+/**
+ * The lit style's water depth: the water shapes, blurred, added into texture A's red channel (unused in this style,
+ * which has no hachures). Inside the water it rises from about one half at the shore toward one in the middle of a
+ * pond; just outside it fades to zero. The terrain shader reads it as distance from the bank and takes its slope as
+ * the bank's direction, for the paler middle and the sunken shading.
+ */
+/** A pond's shore as world points: where pondE reaches s (1 is the shore, below 1 inside), found along 160 rays. */
+function pondShore(p, s) {
+  const P = [];
+  for (let k = 0; k <= 160; k++) {
+    const th = k / 160 * 6.2832;
+    let lo = 0, hi = 2;
+    for (let it = 0; it < 18; it++) {
+      const m = (lo + hi) / 2;
+      if (pondE(p, p.x + Math.cos(th) * p.rx * m, p.z + Math.sin(th) * p.rz * m) < s) lo = m; else hi = m;
+    }
+    P.push([p.x + Math.cos(th) * p.rx * lo, p.z + Math.sin(th) * p.rz * lo]);
+  }
+  return P;
+}
+
+function bakeWaterDepth() {
+  const [c, g] = newCanvas(TW, TH);
+  g.filter = `blur(${(9 * PX).toFixed(1)}px)`;   // about 9 m
+  g.fillStyle = g.strokeStyle = 'rgb(255,0,0)';
+  poly(g, STREAM);
+  g.lineWidth = 11 * PX;
+  g.lineJoin = 'round';
+  g.stroke();
+  for (const p of PONDS) {
+    poly(g, pondShore(p, 1));
+    g.fill();
+  }
+  gA.globalCompositeOperation = 'lighter';
+  gA.drawImage(c, 0, 0);
+  gA.globalCompositeOperation = 'source-over';
+}
+
 function bakeMap(){
   const nh=LIT?0:bakeHachures();   // the lit style draws contours, not hachures
   if(LIT){cCanopy=bakeCanopy();cHouse=bakeHouses();}
@@ -392,10 +430,11 @@ function bakeMap(){
   // water: stream fill + double bank line; ponds with water lining (concentric lines inside the shore)
   poly(gA,STREAM);gA.strokeStyle='rgb(0,0,255)';gA.lineWidth=11*PX;gA.lineJoin='round';gA.stroke();
   gB.lineWidth=1.15;gB.strokeStyle='rgba(255,0,0,0.9)';for(const o of[-6,6]){poly(gB,offsetLine(STREAM,o));gB.stroke();}
-  for(const p of PONDS){const shore=s=>{const P=[];for(let k=0;k<=160;k++){const th=k/160*6.2832;let lo=0,hi=2;for(let it=0;it<18;it++){const m=(lo+hi)/2;pondE(p,p.x+Math.cos(th)*p.rx*m,p.z+Math.sin(th)*p.rz*m)<s?lo=m:hi=m;}P.push([p.x+Math.cos(th)*p.rx*lo,p.z+Math.sin(th)*p.rz*lo]);}return P;};
+  for(const p of PONDS){const shore=k=>pondShore(p,k);
     poly(gA,shore(1));gA.fillStyle='rgb(0,0,255)';gA.fill();
     poly(gB,shore(1));gB.strokeStyle='rgba(255,0,0,0.95)';gB.lineWidth=1.3;gB.stroke();
     [[0.93,0.5],[0.85,0.32],[0.76,0.2],[0.66,0.12]].forEach(([s,a])=>{poly(gB,shore(s));gB.strokeStyle=`rgba(255,0,0,${a})`;gB.lineWidth=0.8;gB.stroke();});}
+  if (LIT) bakeWaterDepth();
   // roads: double hairline, area mask in G
   for(const r of ROADS){poly(gB,r.pts);gB.strokeStyle='rgb(0,255,0)';gB.lineWidth=5*PX;gB.lineCap='round';gB.stroke();
     gB.lineWidth=0.75;gB.strokeStyle='rgba(255,0,0,0.85)';for(const o of[-3.4,3.4]){poly(gB,offsetLine(r.pts,o));gB.stroke();}}
@@ -555,6 +594,7 @@ void main(){
 #endif
 #ifdef LAYERS
   float lyLt=0.0,lyW5=1.0;   /* the lit edge and the 5 m octave, for the contour ink below */
+  vec3 flatPaper=mapC;   /* the paper before the relief: water lies flat, no sheets under it */
   {float pxPerM=2.0/max(length(dFdx(vW.xz))+length(dFdy(vW.xz)),1e-5),gl=length(vGB),lay=(1.0-uWash)*inside;   /* px per m, both screen axes */
    /* a faint continuous hillshade underneath, so gentle ground keeps its form */
    vec3 Lk=normalize(vec3(uLightXZ.x,1.0,uLightXZ.y));   /* the same light, 45 degrees up */
@@ -569,7 +609,34 @@ void main(){
    mapC*=1.0-min(0.24*sd,0.3)*lay*(1.0-0.7*woodA)*vec3(0.95,1.0,1.1);   /* a warm shadow, never black: with the hillshade and the tint, the darkest strip about 0.63 of the paper */
    mapC=mix(mapC,min(mapC*1.14+0.02,vec3(1.0)),0.8*lt*lay*(1.0-0.7*woodA));}
 #endif
+#ifdef LIT
+  {
+    /* water as a wash on the paper: the grain shows through, stronger at the banks, paler in the middle */
+    float D = A.r;
+    vec2 du = vec2(2.0 / ${TW}.0, 0.0), dv = vec2(0.0, 2.0 / ${TH}.0);
+    vec2 cuv = clamp(uv, 0.0, 1.0);
+    /* the slope of the depth, in world x and z (uv y runs against z); it points from the bank into the water */
+    vec2 gW = vec2(texture2D(uMapA, cuv + du).r - texture2D(uMapA, cuv - du).r,
+                   texture2D(uMapA, cuv - dv).r - texture2D(uMapA, cuv + dv).r);
+    vec2 n = gW / max(length(gW), 1e-4);
+    float slope = smoothstep(0.002, 0.02, length(gW));
+    float mid = smoothstep(0.55, 0.9, D);
+#ifdef LAYERS
+    vec3 under = flatPaper;
+#else
+    vec3 under = mapC;
+#endif
+    vec3 wash = mix(under, uWaterW * 0.96, mix(0.62, 0.34, mid));
+    /* sunk below the land: the bank toward the light shades the water under it, the far bank catches the light */
+    float shade = clamp(dot(n, -uLightXZ), 0.0, 1.0) * slope * (1.0 - mid);
+    wash *= 1.0 - 0.38 * shade * vec3(1.0, 0.97, 0.92);
+    float lit = clamp(dot(n, uLightXZ), 0.0, 1.0) * slope * smoothstep(0.18, 0.4, D) * (1.0 - water);
+    mapC = mix(mapC, min(mapC * 1.1 + 0.02, vec3(1.0)), 0.6 * lit * inside);
+    mapC = mix(mapC, wash, water);
+  }
+#else
   mapC=mix(mapC,mix(uWaterW,uWaterW*0.92,g2),water);
+#endif
   mapC=mix(mapC,mix(mapC,vec3(0.97,0.96,0.94),0.55),Bm.b*0.25*(1.0-uSeason/3.0));
 #ifdef LIT
   mapC=mix(mapC,vec3(0.96,0.95,0.93),uMist*low*low*0.45*smoothstep(0.2,0.7,mott)*inside);   /* the smooth mottle, not the blocky noise */
@@ -620,7 +687,7 @@ void main(){
   /* lighter while the sheet edges show, and off the lit edge so the highlight stays */
   minorC*=mix(0.7,1.0,max(uWash,1.0-lyW5))*(1.0-0.6*lyLt);indexC*=mix(0.85,1.0,uWash)*(1.0-0.6*lyLt);
 #endif
-  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.25,indexC*0.45)*k*inside*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
+  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.25,indexC*0.45)*k*inside*(1.0-water)*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
 #else
   col=mix(col,uHach,clamp(A.r*1.05,0.0,1.0)*k*uHachK);
 #endif
