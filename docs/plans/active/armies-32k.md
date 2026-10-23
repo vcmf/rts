@@ -227,7 +227,27 @@ art, other arms.
   contact sheet at wide shows no visible change at 100 %. **Else reverted.** Step 1's bench showed the wide view
   GPU vertex-bound (more vertex work made it 1.15 to 1.45 ms slower), so this is now the main lever at wide; the
   measurement decides.
-- **Checks before the bench**: `npm test` (the tiny mesh: under a quarter of the far LOD's vertices, each corner on one
+- **Built** (2026-10-23; `tinyMesh`, `seenArea`, `src/look/units-data.ts`; `TINY` in `units.vert` / `units.frag`):
+  14 boxes, **112 vertices, 168 triangles** (the far LOD: 616, 243). Colour: a corner's colour is a **mix of the
+  roles** (three vec4 attributes, the shader sums `uPal[i] · w`, a few multiply-adds a vertex, no fetch): its eighth
+  of the part's seen colour, a quarter of the part's, then 35 % of the whole figure's, then **calibrated** so the
+  boxes' seen pixels hold each role in the far LOD's share (both meshes rasterised on the CPU at load from 8 sides at
+  50° above the horizon, 96² each: 34 ms at load on this Mac, measured in Node). The single-role tries read wrong
+  (each box one role: a white-coated battalion went brown under its packs; each corner its octant's role: red
+  speckle of facings). Normals smooth from each box's centre. The guard's coat mask is dithered by the coat's weight.
+  - A bug found on the way (fixed): `place()` marked only LODs 0 to 2 stale, so a fourth host drew its first
+    frame's men for ever.
+- **Checks** (SwiftShader, 1280 × 720; `output/armies-review/10-tiny-lod/`, not committed):
+  - Contact sheet, wide, `?tinylod=0` against the default, the fight's middle and the stress point, 12 and 80 s: the
+    same places and counts (at 720p nearly every wide figure is under 12 px: 23,598 of 24,012 at the stress point);
+    11.8 % of pixels differ by over 8 / 255 at the stress point, 4.6 % at the middle. By eye at 100 %: the blue
+    battalions read the same; the white-coated ones read browner, with less of the far LOD's white speckle.
+  - Readability guard (`--figures`, summer; tiny / far): widest, side 0 (blue) luma 0.300 / 0.281 (+7 %), separation
+    0.224 / 0.243 (−8 %); side 1 (white) luma 0.415 / 0.502 (−17 %), separation 0.207 / 0.120 (it stands out more);
+    coat share 11.0 / 9.1 % and 11.1 / 27.1 %; within ΔE 25 of the coat 13.4 / 19.3 % and 4.6 / 23.7 % (a mixed
+    colour is rarely near a pure one). **The guard's 10 % bar is not met** for side 1 and for the coat measures; the
+    bench says whether the step is worth more work on the look.
+- **Checks before the bench** (as planned): `npm test` (the tiny mesh: under a quarter of the far LOD's vertices, each corner on one
   bone, a role each, wound outward, a figure tall posed); a SwiftShader contact sheet at wide (`?tinylod=0` against
   the default, the fight's middle and the stress point, a marching and a firing moment); the readability guard
   (`node tools/guard.mjs <url?armies=40> --figures`) at the widest zoom within 10 % of `?tinylod=0`.
