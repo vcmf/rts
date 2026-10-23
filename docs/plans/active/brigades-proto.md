@@ -89,3 +89,9 @@ Out of scope: brigade counts per army, divisions as a level, battalions acting a
     erased whatever lay under the gun (a block, an arrow, a name). Fixed (painted light, not cut), with: the gaps after
     the outline, so they break it; placed on the barrel, the wheel and the trail (a third had cut empty space); the
     wear count and the unit's seed shared with the blocks' wear (`wearCount`, `unitRng`); both passes given the unit.
+  - **Round 2**: severe: the light gaps vanished on Austria's light beige guns (a hand-picked tint fails on light or
+    dark fills). Redone as real holes: the gun and its outline are drawn around the gaps (clipped out one at a time),
+    so the map shows through on any army's colour and nothing under the gun is erased; the outline breaks fully. With:
+    the gaps from above starting just over the barrel (most of their depth had been empty space); the gaps cached on
+    the unit per loss step; a routing battery's bites counted as on its gun (6, not the blocks' 10). The soft shadow
+    stays whole (noted).
