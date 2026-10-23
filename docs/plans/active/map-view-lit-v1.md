@@ -220,3 +220,10 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
   as its ring, not its side (it fell apart at 80 %); the bites drawn after the outline, so they break it; a square's
   four-face smoke placed on the block as drawn (at far zoom it sat inside the symbol); one formed-square test; the
   legend's guard swatches equal, each with its stripe. The per-frame bite build stays (unmeasured; noted).
+- **Wear: round 3**: moderate and light only, so the review stops (the third round). Fixed: a square's smoke keeps
+  where it fired (a snapshot of the square, not the live unit, which carried it off as the square broke); its
+  painted-world puff sized at its own ground point (it was sized from the square's centre: tiny on one face, double on
+  the other); the face puffs culled behind the camera; the bites' edges by fixed weights (front and back most), so
+  zoom and losses no longer move a bite to another edge; a square's bite depth from each edge's own across length;
+  the bites seeded from the unit's hash; an Austrian guard (none yet) keeps the Austrian edge. Left: the bites and the
+  face puffs rebuilt each frame (unmeasured), and a bite breaking only the inner half of an outline.

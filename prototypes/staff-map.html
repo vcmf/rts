@@ -772,7 +772,7 @@ function gunGeo(){const G=geo();addBox(G,0.28,0.28,2.2,0,0.95,0.3,5);addBox(G,0.
 const SIDES=[{key:'FR',name:'France',coat:'#2C4FA8',acc:'#EDE6D6',ink:'#1f3a80'},{key:'RU',name:'Russia',coat:'#2F6B3C',acc:'#EDE6D6',ink:'#22502d'},{key:'AU',name:'Austria',coat:'#E9E3D3',acc:'#9FB0C4',ink:'#4f6279',edge:'#4f6279',fill:'#fbfaf6'}];
 SIDES.forEach(s=>{s.c=hex(s.coat);s.a=hex(s.acc);s.i=hex(s.ink);s.f=hex(s.fill||s.coat);if(s.edge)s.e=hex(s.edge);});
 // the guards: their army's colour, darker and a little warm, a rust cavalry stripe (never white), so a side still reads at a glance
-const RUST=hex('#7a3418');SIDES.forEach(s=>{const c=mix3(s.c,RUST,0.18).map(v=>v*0.72);s.guard={...s,c,f:c,i:c.map(v=>v*0.8),e:undefined,stripe:hex('#a65a32')};});
+const RUST=hex('#7a3418');SIDES.forEach(s=>{const c=mix3(s.c,RUST,0.18).map(v=>v*0.72);s.guard={...s,c,f:c,i:c.map(v=>v*0.8),e:s.key==='AU'?s.e:undefined,stripe:hex('#a65a32')};});
 const GUARDS=new Set(['GRD','RGD']);
 if(LIT)SIDES[2].f=hex('#F4EDDC');   // the lit style: a light stone beige, not white, still lighter than every season's paper
 const formedSq=u=>u.type==='inf'&&u.form==='square'&&u.morph>0.5;   // fires all round, smokes from four faces, drawn hollow
@@ -962,7 +962,9 @@ function finishOrder(u){const o=u.order;if(!o)return;o.prog=Math.max(o.prog,u.pr
 function clampIn(u){u.x=clamp(u.x,-MX+60,MX-60);u.z=clamp(u.z,-MZ+60,MZ-60);if(inPond(u.x,u.z,1.1)){const p=PONDS.find(p=>pondE(p,u.x,u.z)<1.1);const a=Math.atan2((u.z-p.z)/p.rz,(u.x-p.x)/p.rx);u.x=p.x+Math.cos(a)*p.rx*1.12;u.z=p.z+Math.sin(a)*p.rz*1.12;}}
 function puff(u){
   if(formedSq(u)){   // all four faces, placed on the block as drawn (its size follows the zoom), x/z for the painted world
-    for(let j=0;j<4;j++)SMOKE.push({sq:u,j,o:0.1+0.8*Math.random(),x:u.x,z:u.z,t0:performance.now(),big:false,face:u.face,rot:Math.random()*6.28});
+    const snap={...u,gone:0},S=dims(u,'square',alive(u)),h=S[1]/2,f=[Math.sin(u.dface),Math.cos(u.dface)],r=[Math.cos(u.dface),-Math.sin(u.dface)],D=[f,r,[-f[0],-f[1]],[-r[0],-r[1]]];   // where it fired, not where it goes
+    for(let j=0;j<4;j++){const o=0.1+0.8*Math.random(),d=D[j],q=(o-0.5)*S[0];
+      SMOKE.push({sq:snap,j,o,x:u.x-f[0]*h+d[0]*(h+6)-d[1]*q,z:u.z-f[1]*h+d[1]*(h+6)+d[0]*q,t0:performance.now(),big:false,face:u.face,rot:Math.random()*6.28});}
     while(SMOKE.length>500)SMOKE.shift();return;}
   const fw=dims(u,u.form,alive(u))[0],o=(Math.random()-0.5)*fw*0.9,fo=u.type==='art'?14:8;
   SMOKE.push({x:u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo,z:u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo,t0:performance.now(),big:u.type==='art',face:u.face,rot:Math.random()*6.28});if(SMOKE.length>500)SMOKE.shift();}
@@ -995,12 +997,12 @@ function blockCorners(u,extra=0){
 }
 // losses: ragged bites out of a block's edges, more as its strength falls; the same bites every frame (seeded by the
 // unit), so a block wears down rather than flickers
-function damage(u,C,I,fw,fd,ring){const n=Math.round(clamp((1-u.str)/0.7,0,1)*10);if(!n)return;
-  let sd=u.id*7919+13;const rnd=()=>(sd=(sd*16807)%2147483647)/2147483647,W=[fw,fd,fw,fd],tot=2*(fw+fd);
+function damage(u,C,I,fw,fd,ringM){const n=Math.round(clamp((1-u.str)/0.7,0,1)*10);if(!n)return;
+  let sd=1+Math.floor(u.rand*2147483645);const rnd=()=>(sd=(sd*16807)%2147483647)/2147483647,W=[0.35,0.15,0.35,0.15],tot=1;   // front and back most; fixed, so a bite keeps its edge at any zoom or strength
   const clipP=new Path2D(),B=new Path2D(),poly=(Q,X)=>{Q.moveTo(X[0][0],X[0][1]);for(let i=1;i<X.length;i++)Q.lineTo(X[i][0],X[i][1]);Q.closePath();};
   poly(clipP,C);if(I)poly(clipP,I);ink.save();ink.clip(clipP,'evenodd');   /* a square keeps its hole; the caller path is untouched */
   for(let k=0;k<n;k++){let w=rnd()*tot,e=0;while(e<3&&w>W[e]){w-=W[e];e++;}   // an edge, by its length on the ground: the same edge at any view
-    const a=C[e],b=C[(e+1)%4],q=C[(e+2)%4],L=Math.hypot(b[0]-a[0],b[1]-a[1])||1,t=0.08+0.84*rnd(),hw=Math.max(1.8/L,0.04+0.07*rnd()),dep=ring*(rnd()<0.3?1.2:0.45+0.45*rnd());   /* some cut right through */
+    const a=C[e],b=C[(e+1)%4],q=C[(e+2)%4],L=Math.hypot(b[0]-a[0],b[1]-a[1])||1,t=0.08+0.84*rnd(),hw=Math.max(1.8/L,0.04+0.07*rnd()),ring=ringM?Math.min(1,ringM/(e%2?fw:fd)):1,dep=ring*(rnd()<0.3?1.2:0.45+0.45*rnd());   /* some cut right through */
     const vx=q[0]-b[0],vy=q[1]-b[1],vl=Math.hypot(vx,vy)||1,o=2/vl;   // inward, across the block
     const at=(s0,d)=>[a[0]+(b[0]-a[0])*s0+vx*d,a[1]+(b[1]-a[1])*s0+vy*d],P=[at(t-hw,-o),at(t-hw*0.6,dep*(0.4+0.3*rnd())),at(t-hw*0.1,dep),at(t+hw*0.4,dep*(0.5+0.4*rnd())),at(t+hw,-o)];
     poly(B,P);}
@@ -1072,7 +1074,7 @@ function drawBlock(u,alpha,now){
     // routing: pulses between the army colour and white, the colour of surrender
     // a soft pulse on the frame clock passed in, so an exporter controls the phase
     pathPoly(C);ink.fillStyle=css(blockCol(u,now));ink.fill();if(LIT)litEdges(C);
-    ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);if(LIT)damage(u,C,null,fw,fd,1);}
+    ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);if(LIT)damage(u,C,null,fw,fd,0);}
   else if(u.type==='art'&&LIT)u.gun=drawGun(C,s);
   else if(u.type==='art'){
     // bar + gun dot on the facing side
@@ -1091,7 +1093,7 @@ function drawBlock(u,alpha,now){
     if(lvl>=0){ink.strokeStyle=css(s.e||s.c);ink.lineWidth=0.9;ink.stroke();}
     if(s.e){ink.strokeStyle=css(s.e);ink.lineWidth=1.5;ink.stroke();}
     if(u.type==='cav'){ink.strokeStyle=s.e?css(s.e):s.stripe?css(s.stripe):'rgba(243,239,230,0.95)';ink.lineWidth=1.3;ink.beginPath();ink.moveTo(C[3][0],C[3][1]);ink.lineTo(C[1][0],C[1][1]);ink.stroke();}
-    if(LIT)damage(u,C,I,fw,fd,I?sqK/Math.min(fw,fd):1);   // last: a bite breaks the outline too
+    if(LIT)damage(u,C,I,fw,fd,I?sqK:0);   // last: a bite breaks the outline too
   }
   if(LIT&&u.type==='art'&&u.gun&&(u.sel||u===HOVER)){const{m,r:R}=u.gun;ink.strokeStyle=u.sel?'#211f1c':'rgba(33,31,28,0.5)';ink.lineWidth=0.9;ink.beginPath();ink.arc(m[0],m[1],R+2,0,6.2832);ink.stroke();if(u.sel){ink.lineWidth=0.6;ink.beginPath();ink.arc(m[0],m[1],R+4.5,0,6.2832);ink.stroke();}}   // the ring around the icon, what the eye sees
   else if(u.sel){const D=blockCorners(u,4).C,D2=blockCorners(u,6.5).C;ink.strokeStyle='#211f1c';ink.lineWidth=0.9;pathPoly(D);ink.stroke();ink.lineWidth=0.6;pathPoly(D2);ink.stroke();}
@@ -1210,13 +1212,13 @@ function smokeLit(p,c,age,k,mapA){
 }
 // a square's puff: on face j of the block as drawn, a fraction o along it, a few pixels out
 function sqFace(p){const{C}=blockCorners(p.sq),a=C[p.j],b=C[(p.j+1)%4],m=[a[0]+(b[0]-a[0])*p.o,a[1]+(b[1]-a[1])*p.o],cx=(C[0][0]+C[2][0])/2,cy=(C[0][1]+C[2][1])/2,d=Math.hypot(m[0]-cx,m[1]-cy)||1;
-  return[m[0]+(m[0]-cx)/d*5,m[1]+(m[1]-cy)/d*5];}
+  return[m[0]+(m[0]-cx)/d*5,m[1]+(m[1]-cy)/d*5,Math.min(a[2],b[2])];}   // with its depth, for the behind test
 function drawSmoke(now,mapA,worldA){
   for(const p of SMOKE){const age=(now-p.t0)/1000,life=p.big?6:4.2;if(age>life)continue;const k=age/life,c=p.sq?sqFace(p):P2(p.x,p.z);if(behind(c))continue;
     if(LIT&&mapA>0.01)smokeLit(p,c,age,k,mapA);
     else if(mapA>0.01){ink.globalAlpha=mapA*(1-k)*0.8;ink.strokeStyle='#8a847a';ink.lineWidth=0.8;ink.beginPath();const r0=(p.big?3:2)+k*(p.big?7:5);
       for(let a=0;a<=8.5;a+=0.35){const rr=r0*(0.35+a/8.5*0.65),x=c[0]+Math.cos(a+p.rot)*rr,y=c[1]+Math.sin(a+p.rot)*rr*0.8-k*6;a?ink.lineTo(x,y):ink.moveTo(x,y);}ink.stroke();}
-    if(worldA>0.01){const rw=(p.big?9:5)+k*(p.big?16:10),e=P2(p.x+rw,p.z),r=Math.max(1,Math.hypot(e[0]-c[0],e[1]-c[1]));
+    if(worldA>0.01){const c=P2(p.x,p.z),rw=(p.big?9:5)+k*(p.big?16:10),e=P2(p.x+rw,p.z),r=Math.max(1,Math.hypot(e[0]-c[0],e[1]-c[1]));   // the painted world: the puff at its own ground point
       ink.globalAlpha=worldA*(1-k)*(1-k)*0.55;ink.fillStyle='#f2efe8';ink.beginPath();ink.arc(c[0],c[1]-r*0.6*k,r,0,6.2832);ink.fill();
       ink.globalAlpha*=0.5;ink.fillStyle='#c9c9cc';ink.beginPath();ink.arc(c[0]+r*0.25,c[1]-r*0.6*k+r*0.3,r*0.75,0,6.2832);ink.fill();}}
   ink.globalAlpha=1;
