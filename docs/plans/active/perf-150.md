@@ -90,3 +90,6 @@ column is the page after review round 1.
   - late fonts caught on `loadingdone`;
   - `clipOut`'s doc comment back on it;
   - the table above corrected to the final measurement.
+  - Found in testing after round 2: the redraw test missed unit changes made while paused (an order, a change of
+    formation, a strength set by hand), so the ink stayed stale. Fixed: a cheap checksum of every unit's drawn state, plus
+    the number of orders, joins the key. Paused map still 0.52 ms, map 30× 4.87 ms.
