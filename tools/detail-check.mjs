@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url'
 import * as png from './png.mjs'
 import { CAMS } from './golden.mjs'
 import { prepSteps, shoot, viewStep } from './look-page.mjs'
-import { SPEC } from '../src/look/spec.ts'
+import { SPEC, TUNED_R } from '../src/look/spec.ts'
 import { authorWorld, authoredNormal } from '../src/look/world/author.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -260,7 +260,9 @@ function banks(url, dir, defs) {
       pts.push([x, z, ...authoredNormal(H, x, z, e)])
     }
   }
-  const zooms = [R_NEAR, 90]   // (R_NEAR, as the sweep and the seams: their closest zoom, not the 15 m one)
+  // (45 m, the closest zoom it was made for: the bend's river ground is never held, but at 25 m too few of the bank's
+  // points are on screen, 130 of the 200 it needs)
+  const zooms = [TUNED_R, 90]
   const steps = [...prepSteps(), detail([...defs, 'DETAIL_DEBUG_N'], true)]
   for (const r of zooms) {
     steps.push(viewStep([`bank-r${r}`, A0, BETA0, r, `${target}`, 0]), ['shot', `banks.r${r}`])
