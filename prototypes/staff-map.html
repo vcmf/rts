@@ -1360,8 +1360,7 @@ function arrowLit(o,col,alpha,band,s0,s1,withHead,from){
   ink.globalAlpha=alpha;ink.shadowColor='rgba(52,38,18,0.25)';ink.shadowBlur=6*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;pathPoly(out);ink.fillStyle=css(col);ink.fill();ink.restore();
   ink.save();pathPoly(out);ink.fillStyle=css(col);ink.globalAlpha=alpha*0.6;ink.fill();ink.restore();
   ink.save();ink.globalAlpha=alpha;pathPoly(out);ink.strokeStyle=shade(col,0.55);ink.lineWidth=1;ink.stroke();
-  ink.beginPath();let sp=false;for(let i=0;i<k;i++){if(cum[i]<band*0.5)continue;sp?ink.lineTo(pts[i][0],pts[i][1]):ink.moveTo(pts[i][0],pts[i][1]);sp=true;}   // a light spine along the body, from past the notch
-  ink.strokeStyle='rgba(255,250,236,0.4)';ink.lineWidth=Math.max(1,band*0.12);ink.lineCap='round';ink.stroke();ink.restore();
+  ink.restore();
 }
 function drawOrders(now,alpha){
   ink.lineJoin='round';

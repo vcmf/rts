@@ -76,3 +76,5 @@ Out of scope: brigade counts per army, divisions as a level, battalions acting a
   62 × 64, each bar its share of that), and a battery's gun icon sized by one fixed length on the ground at the
   battery (a line battery's symbol frontage far, 30 m close), so every gun is the same size at a zoom, in line or
   column, whatever its guns or losses (it followed the drawn block, narrow in column).
+- **Arrows** (the owner: the white line down the middle looked odd): the order arrow's light spine removed; the body is
+  a plain fill with its outline.
