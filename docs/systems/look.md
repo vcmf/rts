@@ -620,7 +620,9 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `src/look/units-data.ts`: the shadow proxy's parts, `boneParts`, 8 shared corners each, 112 vertices), a corner's
   colour a mix of the roles (`TINY`: three vec4 weights) calibrated at load so the boxes show each role in the far
   LOD's seen share (`seenArea`: both rasterised from 8 sides), posed as the far LOD and painted by its material (far
-  palette, lift, growth); the coat mask dithered by the coat's weight; it never casts.
+  palette, lift, growth); each man varied from his own jitter (`aJit`, `tinySeeds`; `?tinyrand=0`: alike): his and
+  each role's value and cast, his roles' mix, from which each corner draws one role (the far LOD's speckle), his height,
+  width and lean, each box's light; the coat mask the drawn role; it never casts.
 - **Far figures larger** (`?farscale=0`: their own size): the far LOD grows as the figure falls from 90 % of the LOD
   switch to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here) and 1.15 tall; render only.
 - **Trodden ground** (`?trample=0`: none): a 256² mask over a box round the ground in view (64 to 1,024 m), drawn on

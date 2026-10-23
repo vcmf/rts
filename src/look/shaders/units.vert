@@ -39,9 +39,47 @@ varying vec3 vW,vN,vCol;varying vec2 vRoot;varying float vRole;
 // the tiny LOD (docs/plans/active/armies-32k.md, step 3; tinyMesh, src/look/units-data.ts): a corner's colour is a mix
 // of the roles, its weights a role each (up to 12), the mean colour of what its box stands for seen from above
 attribute vec4 aRW0,aRW1,aRW2;uniform float uCoatRole;varying float vCoatW;
+// each man his own (the owner's direction, 2026-10-23: the far LOD's per-man variety): hashes of his jitter (aJit, his
+// own, static) scale, by uTinyRand (x: each role's value and a warm or cool cast; y: his and each corner's mix of the
+// roles, renormalised, so the facings, belts, pack and skin show unevenly; z: his height, width and lean; w: each box's
+// brightness). Multiply-adds and sines only: no vertex, no texture read
+#ifdef INSTANCES
+attribute vec4 aJit;
+#endif
+#ifndef VAT_POS
+attribute float aVid;
+#endif
+uniform vec4 uTinyRand;
+vec4 h4(vec4 q){return fract(sin(q)*43758.5453)*2.0-1.0;}
+vec4 tHm,tHc,tHb;float tW[PAL_N];void tinyPick();
+void tinySeeds(){
+  vec4 s=vec4(0.0);
+  #ifdef INSTANCES
+  s=aJit*vec4(33.3,33.3,14.3,1.0);
+  #endif
+  tHm=h4(vec4(dot(s,vec4(12.99,78.23,37.72,11.13)),dot(s,vec4(39.35,11.17,83.15,27.93)),dot(s,vec4(73.15,52.23,17.31,91.37)),dot(s,vec4(27.17,61.79,45.13,13.37))));
+  float bx=floor((aVid+0.5)/8.0);
+  tHc=h4(tHm*vec4(17.1,31.7,47.3,59.9)+aVid*vec4(0.731,1.37,2.11,0.537));
+  tHb=h4(tHm.yzwx*vec4(23.3,41.9,13.7,67.1)+bx*vec4(2.17,3.11,1.71,4.43));
+  float sum=0.0;
+  for(int i=0;i<PAL_N;i++){
+    float w=i<4?aRW0[i]:i<8?aRW1[i-4]:aRW2[i-8];
+    float r=0.6*tHm[i-4*(i/4)]+0.6*tHc[(i+1)-4*((i+1)/4)]*(i-2*(i/2)==0?1.0:-1.0);
+    tW[i]=w*max(0.0,1.0+uTinyRand.y*r);sum+=tW[i];}
+  for(int i=0;i<PAL_N;i++)tW[i]/=max(sum,1e-4);
+  tinyPick();}
+// with the variety on, each corner of each man takes one role drawn from his weights (tPick): pure colours at their
+// shares, the far LOD's speckle, where the mean of the weights would be one blended colour for every man
+int tPick;
+void tinyPick(){
+  float u=0.5+0.5*tHc.w,acc=0.0;tPick=0;
+  for(int i=0;i<PAL_N;i++){acc+=tW[i];if(u>acc)tPick=i+1;}
+  tPick=min(tPick,PAL_N-1);}
 vec3 palMix(vec3 p[PAL_N]){vec3 c=vec3(0.0);
-  for(int i=0;i<PAL_N;i++){float w=i<4?aRW0[i]:i<8?aRW1[i-4]:aRW2[i-8];c+=p[i]*w;}
-  return c;}
+  if(uTinyRand.y>0.0){c=p[tPick]*(1.0+0.5*uTinyRand.x*tHc[(tPick+2)-4*((tPick+2)/4)]+uTinyRand.x*tHm.w);}
+  else{for(int i=0;i<PAL_N;i++)c+=p[i]*tW[i];}
+  float t=0.5*uTinyRand.x*tHm.z;
+  return c*vec3(1.0+t,1.0,1.0-t)*(1.0+uTinyRand.w*tHb.x);}
 #endif
 #endif
 mat4 boneAt(float b,int f){int x=int(b)*4;
@@ -59,6 +97,11 @@ void main(){
   mat4 sk=boneAt(aBones.x,f)*aWeights.x+boneAt(aBones.y,f)*aWeights.y+boneAt(aBones.z,f)*aWeights.z+boneAt(aBones.w,f)*aWeights.w;
   vec3 lp=(sk*vec4(position,1.0)).xyz,ln=mat3(sk)*normal;
   #endif
+  #ifdef TINY
+  tinySeeds();
+  lp*=vec3(1.0+0.6*uTinyRand.z*tHm.x,1.0+uTinyRand.z*tHm.y,1.0+0.6*uTinyRand.z*tHm.x);
+  lp.xz+=1.2*uTinyRand.z*tHm.zw*lp.y;
+  #endif
   #ifdef FAR_SCALE
   float fpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz)),fk=clamp((0.9*uFarK.y-fpx)/(0.65*uFarK.y),0.0,1.0);
   lp*=vec3(mix(1.0,uFarScale.x,fk),mix(1.0,uFarScale.y,fk),mix(1.0,uFarScale.x,fk));
@@ -72,7 +115,7 @@ void main(){
   vCol=uPal[int(aRole+0.5)];vRole=aRole;
   #ifdef TINY
   vCol=palMix(uPal);
-  int ci=int(uCoatRole+0.5);vCoatW=ci<4?aRW0[ci]:ci<8?aRW1[ci-4]:aRW2[ci-8];
+  vCoatW=uTinyRand.y>0.0?(tPick==int(uCoatRole+0.5)?1.0:0.0):tW[int(uCoatRole+0.5)];
   #endif
   #ifdef FAR
   float px=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz));
