@@ -501,9 +501,11 @@ const RELIEF_SUN = Number(Q.get('sun')) || 30;
 const RELIEF_Z = Number(Q.get('rz')) || 2;
 const RELIEF_SOFT = 4;
 // the shadow walk below steps to the grid's diagonal neighbour toward the light: it is written for a north-west light
-console.assert(Math.abs(NW[0] + Math.SQRT1_2) < 1e-9 && Math.abs(NW[1] - Math.SQRT1_2) < 1e-9, 'bakeRelief walks the north-west diagonal');
+if (!(Math.abs(NW[0] + Math.SQRT1_2) < 1e-9 && Math.abs(NW[1] - Math.SQRT1_2) < 1e-9)) throw new Error('bakeRelief walks the north-west diagonal: NW changed');
 // the slope light is stored over LAMBERT_RANGE (1 on flat ground in the middle), for fine steps on gentle slopes
 const LAMBERT_RANGE = [0.6, 1.4];
+// the relief's tone on the paper: no darker than SHADE_FLOOR (with its warm hue, 0.62 of the paper), no lighter than SHADE_TOP
+const SHADE_FLOOR = 0.72, SHADE_TOP = 1.15;
 function bakeRelief() {
   const { step, nx, nz, h: h0 } = fineHeights();
   const h = new Float32Array(h0.length);   // exaggerated for the light (the slope and the shadows)
@@ -744,7 +746,7 @@ void main(){
   vec3 flatPaper = mapC;   /* the paper before the relief: water lies flat */
   {
     /* shaded relief: the light on the slope, the cast shadow and the exposure, baked once from the heights, on the
-       paper in its own hues: warm grey-brown in the shade, a touch of ochre on the lit slopes, never below 0.62 */
+       paper in its own hues: warm grey-brown in the shade, a touch of ochre on the lit slopes */
     /* grid node i sits at the centre of texel i: (i + 0.5) / n */
     vec2 node = vec2((vW.x + ${TX}.0) / ${2 * TX}.0, (${TZ}.0 - vW.z) / ${2 * TZ}.0) * (uReliefN - 1.0);
     vec3 R = texture2D(uReliefT, (node + 0.5) / uReliefN).rgb;
@@ -752,10 +754,11 @@ void main(){
     float sunlit = R.g;
     float exposed = R.b * 2.0 - 1.0;     /* below 0 in hollows, above on crests */
     float v = slopeLight * mix(0.72, 1.0, sunlit) * (1.0 + 0.3 * exposed);
-    v = clamp(v, 0.62, 1.15);
-    vec3 hue = v < 1.0 ? mix(vec3(0.93, 0.90, 0.86), vec3(1.0), (v - 0.62) / 0.38)
-                       : mix(vec3(1.0), vec3(1.0, 0.98, 0.90), (v - 1.0) / 0.15);
-    vec3 shadeK = max(v * hue, vec3(0.62));   /* the bound after the hue */
+    v = clamp(v, ${SHADE_FLOOR}, ${SHADE_TOP});
+    /* the warm hue at its deepest keeps v times hue at 0.62 of the paper or above, with the shading graded all the way */
+    vec3 hue = v < 1.0 ? mix(vec3(0.93, 0.90, 0.86), vec3(1.0), (v - ${SHADE_FLOOR}) / ${(1 - SHADE_FLOOR).toFixed(2)})
+                       : mix(vec3(1.0), vec3(1.0, 0.98, 0.90), (v - 1.0) / ${(SHADE_TOP - 1).toFixed(2)});
+    vec3 shadeK = v * hue;
     float relief = (1.0 - uWash) * inside * (1.0 - 0.5 * woodA);   /* lighter under the woods, which shade their own ground */
     mapC = mix(mapC, min(mapC * shadeK, vec3(1.0)), relief);
   }
@@ -1795,7 +1798,7 @@ function build(){
   if(LIT){for(const[n,c]of[['uCanopyT',cCanopy],['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
   if(LIT)terrMat.setVector2('uLightXZ',new B.Vector2(NW[0],NW[1]));
   if(SHADED){const t0=performance.now(),R=bakeRelief();window.__reliefMs=Math.round(performance.now()-t0);   // the bake's own cost, for the plan
-    const t=B.RawTexture.CreateRGBATexture(R.data,R.nx,R.nz,scene,true,false,B.Texture.TRILINEAR_SAMPLINGMODE);t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture('uReliefT',t);terrMat.setVector2('uReliefN',new B.Vector2(R.nx,R.nz));}
+    const t=B.RawTexture.CreateRGBATexture(R.data,R.nx,R.nz,scene,true,false,B.Texture.TRILINEAR_SAMPLINGMODE);t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture('uReliefT',t);terrMat.setVector2('uReliefN',new B.Vector2(R.nx,R.nz));t.anisotropicFilteringLevel=8;if(DEM)delete DEM.fine;}   // the fine heights are only for the bake
   terrainMesh().material=terrMat;
   {const O=30000,y=HMIN-1,P=[-TX,y,-TZ,TX,y,-TZ,TX,y,TZ,-TX,y,TZ,-O,y,-O,O,y,-O,O,y,O,-O,y,O],I=[0,4,1,1,4,5,1,5,2,2,5,6,2,6,3,3,6,7,3,7,0,0,7,4],
     m=new B.Mesh('skirt',scene),vd=new B.VertexData();vd.positions=P;vd.indices=I;vd.normals=[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0];vd.applyToMesh(m);

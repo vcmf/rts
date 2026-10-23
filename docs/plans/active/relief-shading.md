@@ -45,25 +45,22 @@ Out of scope:
 - the "relief from a raster" kind in the map language (an owner decision, decision 0050);
 - a GPU bake, unless the CPU bake is too slow.
 
-## Approach
+## Approach (as built)
 
-- **Data.** The tool already fetches the crop at its native 5 m before averaging it onto the 10 m grid. It
-  writes a second array at the finer step in the same generated `.js` (git-ignored, never committed, with the
-  ČÚZK credit). Without `?dem=`, the made-up height function is sampled at the same step.
+- **Data.** The tool already fetches the crop at its native 5 m. It writes a second grid at 4 m into the same
+  generated `.js` (git-ignored, never committed, with the ČÚZK credit): each node is the mean of its area, from four
+  bilinear samples. Without that grid, the shading samples the mesh's own height grid at the same step.
 - **Bake.** Plain JavaScript at load, over the fine grid:
-  - **shadows:** march a few rays toward the light and keep the highest horizon angle met; the light is lit
-    to the extent the sun stands above that horizon;
-  - **occlusion:** the mean horizon angle in eight directions over a short radius.
+  - **cast shadow** in one pass: walking from the light's side, each point carries the highest shadow line that
+    reaches it; soft over a few metres of depth below the line;
+  - **exposure:** how far a point stands above or below its surroundings, near (about 24 m) and wide (about 80 m),
+    from summed-area means of the true heights;
+  - **slope light:** Lambert from the exaggerated slope.
 
-  Results go into one texture (shadow in R, occlusion in G), sampled by the terrain shader in world
-  coordinates. Cost is to be measured with paired `window.__buildMs` runs; if it is over about half a second,
-  move it to a worker or to the GPU.
-- **Shader.** In the lit style, before the water and the ink:
-  - a hillshade term from the fine heights, so slopes read even without shadows;
-  - shadow and occlusion from the texture;
-  - mapped to the warm tints;
-  - kept above the darkness bound;
-  - faded by the paper's wash.
+  The bake writes R slope light (over `LAMBERT_RANGE`), G cast shadow, B exposure, read at texel centres.
+- **Shader.** Before the water and the ink, the three are combined into one tone, clamped between `SHADE_FLOOR` and
+  `SHADE_TOP`, and given a warm hue: grey-brown in the shade, ochre on the lit slopes. It is lighter under woods and
+  faded by the paper's wash. The contours are drawn as in the plain lit style.
 
 ## Acceptance
 
@@ -120,3 +117,19 @@ Out of scope:
 - **An experiment, `?tilt=`** (the owner: a more angled view): tilts the map view off straight down, by 0° to 45°. The
   staff-map design (§9) has the map straight down and tilting only as you zoom in. Decision 0002 allows any RTS angle
   that stays short of the horizon. Whether the map view tilts is the owner's decision, open.
+- **Round 2**: moderate and light only, so the review stops. Fixed:
+  - the fine grid is a mean of each node's area; it had point-sampled every other source pixel, aliasing ditches and
+    banks into broken bars;
+  - the tone's floor is applied before the warm hue, chosen so the hue never takes it below 0.62 of the paper; the
+    darkest shadows had flattened to one neutral grey;
+  - the walk's direction is a thrown error if `NW` changes, not a logged assert;
+  - the fine heights are freed after the bake;
+  - the texture is filtered anisotropically, like the other map textures;
+  - the floor and top are constants;
+  - this plan's approach is described as built.
+
+  Left:
+  - the shadow's soft edge is measured in depth, so it is wider on slopes that face the sun;
+  - two summed-area tables, where one would do;
+  - the paper grain and the season wash can still take a deep hollow a little below 0.62. The paper layers have the
+    same issue.

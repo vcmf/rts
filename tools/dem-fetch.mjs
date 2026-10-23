@@ -70,8 +70,8 @@ const h = new Int32Array(GX * GZ)
 for (let j = 0; j < GZ; j++) for (let i = 0; i < GX; i++) {   // the K x K mean; rows: the page's south first, the TIFF's north first
   let s0 = 0; for (let y = 0; y < K; y++) for (let x = 0; x < K; x++) s0 += f[((GZ - 1 - j) * K + y) * W + i * K + x]
   h[j * GX + i] = Math.round(s0 / (K * K) * 100) }
-// a finer grid for the relief shading (docs/plans/active/relief-shading.md): every FINE metres of the page, sampled
-// bilinearly from the 5 m source (one source pixel is CELL / K page metres; its centre sits half a pixel in)
+// a finer grid for the relief shading (docs/plans/active/relief-shading.md): every FINE metres of the page, from the
+// 5 m source (one source pixel is CELL / K page metres; its centre sits half a pixel in)
 const FINE = 4
 const FX = Math.round(2 * TX / FINE) + 1, FZ = Math.round(2 * TZ / FINE) + 1
 const px = CELL / K
@@ -82,8 +82,14 @@ const sample = (x, z) => {
   const at = (xx, yy) => f[yy * W + xx]
   return (at(x0, y0) * (1 - ax) + at(x0 + 1, y0) * ax) * (1 - ay) + (at(x0, y0 + 1) * (1 - ax) + at(x0 + 1, y0 + 1) * ax) * ay
 }
+// the mean of the area a fine node stands for (FINE page metres square), from four bilinear samples a quarter cell
+// apart: a ditch or bank narrower than a node is averaged in, not kept or dropped by where the nodes fall
+const q = FINE / 4
 const fine = new Int32Array(FX * FZ)
-for (let j = 0; j < FZ; j++) for (let i = 0; i < FX; i++) fine[j * FX + i] = Math.round(sample(-TX + i * FINE, -TZ + j * FINE) * 100)   // the page's south first
+for (let j = 0; j < FZ; j++) for (let i = 0; i < FX; i++) {   // the page's south first
+  const x = -TX + i * FINE, z = -TZ + j * FINE
+  fine[j * FX + i] = Math.round((sample(x - q, z - q) + sample(x + q, z - q) + sample(x - q, z + q) + sample(x + q, z + q)) / 4 * 100)
+}
 fs.mkdirSync(path.dirname(out), { recursive: true })
 const year = new Date().getFullYear()
 fs.writeFileSync(out, `// ČÚZK DMR 4G (© ČÚZK, ${year}, CC BY 4.0), resampled by tools/dem-fetch.mjs; generated, never committed\nwindow.DEM={nx:${GX},nz:${GZ},cell:${CELL},tx:${TX},tz:${TZ},scale:${scale},source:'ČÚZK DMR 4G, ${lat0} N ${lon0} E, squeezed ${scale}×',credit:'© ČÚZK, ${year} (DMR 4G, CC BY 4.0)',h:[${h.join(',')}],fine:{step:${FINE},nx:${FX},nz:${FZ},h:[${fine.join(',')}]}};\n`)
