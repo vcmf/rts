@@ -59,9 +59,9 @@ The owner found v2's ground still unappealing and chose not to follow the refere
 parchment, its season wash and grain, the aged band, thin ink roads; contours at every zoom), with simple marks on it:
 1. **Trees** as flat filled circles with a soft shadow, about 4 in 10 of a wood's trees (chosen by place, stable),
    baked once.
-2. **Buildings** as raised rectangles with a side face and a shadow, lit like the army blocks: baked once with the
-   static light for the far and map zooms (all 221 are on screen there; drawn live they cost about 11 ms a frame,
-   measured), drawn live up close where few are, with a crossfade by zoom.
+2. **Buildings** as raised rectangles with a side face and a shadow, lit like the army blocks, baked once with the
+   static light (drawn live, all 221 cost about 11 ms a frame at map zoom, measured; up close the painted world's own
+   houses take over).
 v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
 
 ## Approach
@@ -175,6 +175,13 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
   shadow the bake's length; the live houses in batches (all shadows one path, then the sides, then the roofs) and culled
   by their centre first; contours stopping at roofs only; the baked houses at full ink up to the frame, as the live ones.
   Left: the houses' bake uses a full-size canvas (about 45 MB) for 221 houses.
+
+- **v3, round 3**: moderate and light only, so the review stops. Most findings came from the crossfade between baked
+  and live houses (stacked shadows, muddy roofs while fading, grain and edges flipping at the handover), so the live
+  houses are gone: baked only, at every zoom. With: the bake's shadows as one path (overlaps darken once); houses laid
+  after the ink lines and the contours (roofs cover them, no mask needed); no paper grain on roofs; a battery's shadow
+  pass with the icon clipped out (a fading gun composites once); dead lines and doubled comments. Measured: 8.3 ms a
+  frame at map, mid, crossfade and close zoom; build about 1.8–1.9 s.
 
 ## Results
 
