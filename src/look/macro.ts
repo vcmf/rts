@@ -52,12 +52,14 @@ precision highp float;varying vec2 vUV;uniform vec4 uRect;uniform float uTexel;
 #include<painter>
 #include<shore>
 void main(){vec2 xz=mix(uRect.xy,uRect.zw,vUV);macroDerivs(xz);gl_FragColor=vec4(combDv(xz,uTexel),0.0,0.0,1.0);}`
+// the roads at the tile's texel (ROADS), as far out: their wheel tracks a dusting; not on the far ring's 4 m texels
+// (they would alias)
 const BAKE_FS = `#extension GL_OES_standard_derivatives : enable
 precision highp float;varying vec2 vUV;uniform vec4 uRect;uniform float uTexel;
 #include<painter>
 #include<shore>
 void main(){vec2 xz=mix(uRect.xy,uRect.zw,vUV);macroDerivs(xz);gl_FragColor=bakeTexel(xz,uTexel);
-  if(uTexel<1.0)gl_FragColor.rgb=roadPaint(gl_FragColor.rgb,xz);}` // the roads at the tile's texel (ROADS), as far out: their wheel tracks a dusting; not on the far ring's 4 m texels (they would alias)
+  if(uTexel<1.0)gl_FragColor.rgb=roadPaint(gl_FragColor.rgb,xz);}`
 // Arm 5's pass (L5b): a four-quadrant Kuwahara filter over a finished bake (uSrc, nearest, uN² texels) into the
 // bake's target, uR texels a side (at most KUWAHARA_MAX). Each texel takes the mean colour of the quadrant whose
 // colours vary least; the alpha (the snow's lie) stays its own, so off the fields the lie stays exactly 0 (macro.glsl).
@@ -104,8 +106,8 @@ export interface Macro {
 }
 
 // meadow: the meadow pattern in the macro colour (MEADOW, docs/plans/done/l5c-meadow.md), from the brush tile
-// the roads' textures (src/look/main.ts): the bake paints them in (BAKE_FS, roadPaint as far out: uRoadFar 1), so far out the ground's
-// bake holds the roads and the terrain's live road shader runs only nearer (docs/plans/done/roads.md)
+// the roads' textures (src/look/main.ts): the bake paints them in (BAKE_FS, roadPaint as far out: uRoadFar 1), so far
+// out the ground's bake holds the roads and the terrain's live road shader runs only nearer (docs/plans/done/roads.md)
 // pave: the buildings' paved yards (shore.glsl, pavePaint): their shapes (src/look/world/buildings.ts, paveShape); the
 // bake paints their far look (PAVING_FAR: no texture read; at its texels the cobbles average to their mean)
 export interface RoadTextures {
@@ -187,12 +189,12 @@ export function buildMacro(
       })
     : null
   if (brush) brush.wrapU = brush.wrapV = Texture.WRAP_ADDRESSMODE
-  // the dirt surface on bare ground (dirtOn in macro.glsl, docs/plans/done/ground-surface.md): the owner's dirt texture,
-  // and the bare earth's surface (earthOn in macro.glsl, docs/plans/done/bare-earth.md): the owner's cracked earth. Both
-  // one channel, packed at load into one texture's R and G (uSurf: one texture unit for the two, the ground's fragment
-  // stage is full, decision 0049). Each one's marks only once it has loaded (uDirtOn, uEarthOn, 0 until then: the empty
-  // texture reads 0 and would darken bare ground by a third); a failed load is reported, not a bake's error (no bake
-  // reads them), and the ground then has none of its marks
+  // the dirt surface on bare ground (dirtOn in macro.glsl, docs/plans/done/ground-surface.md): the owner's dirt
+  // texture, and the bare earth's surface (earthOn in macro.glsl, docs/plans/done/bare-earth.md): the owner's cracked
+  // earth. Both one channel, packed at load into one texture's R and G (uSurf: one texture unit for the two, the
+  // ground's fragment stage is full, decision 0049). Each one's marks only once it has loaded (uDirtOn, uEarthOn, 0
+  // until then: the empty texture reads 0 and would darken bare ground by a third); a failed load is reported, not a
+  // bake's error (no bake reads them), and the ground then has none of its marks
   let earthDone = () => {}
   const earthLoaded = new Promise<void>(r => {
     earthDone = r
@@ -478,8 +480,9 @@ export function buildMacro(
   // the combed meadow's near bake (?grass=flow, docs/plans/done/grass-flow.md): the strokes value (combDv in
   // macro.glsl) over a square round the camera's focus that holds the strokes' ring however far the focus has moved
   // since (NEAR_W m: the reach and NEAR_STEP either side), at NEAR_N texels a side, rendered again when the focus has
-  // moved NEAR_STEP m, on a baked arm (the only ground that reads it) at a zoom where the strokes show; the ground reads it with one fetch (nearComb). The strokes in the ground's own shader cost
-  // about 1 ms a frame on every terrain pixel, the branch not taken too (measured: the plan)
+  // moved NEAR_STEP m, on a baked arm (the only ground that reads it) at a zoom where the strokes show; the ground
+  // reads it with one fetch (nearComb). The strokes in the ground's own shader cost about 1 ms a frame on every terrain
+  // pixel, the branch not taken too (measured: the plan)
   if (flowTex && meadow) {
     const NEAR_STEP = 6
     const NEAR_W = 2 * (Math.ceil(near.reach) + NEAR_STEP + 1)
@@ -585,9 +588,9 @@ export function buildMacro(
 }
 
 // greyscale images packed into one texture, the first's value in R, the second's in G (wrapped, mipmapped, trilinear,
-// anisotropic 4, as each was alone): the same texels the two textures held, read by one texture unit. An image that does
-// not load is reported and reads 0 (ok: which loaded); one of another size than the first that loaded is resampled to
-// it (reported). The main thread's share (drawing, reading back, packing, the upload) is measured as the performance
+// anisotropic 4, as each was alone): the same texels the two textures held, read by one texture unit. An image that
+// does not load is reported and reads 0 (ok: which loaded); one of another size than the first that loaded is resampled
+// to it (reported). The main thread's share (drawing, reading back, packing, the upload) is measured as the performance
 // entry 'groundSurfacesPack' (docs/plans/active/simple-soldier-shadows.md)
 async function packSurfaces(scene: Scene, urls: string[]): Promise<{ tex: RawTexture; ok: boolean[] }> {
   const bmps = await Promise.all(

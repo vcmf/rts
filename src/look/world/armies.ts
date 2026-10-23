@@ -134,7 +134,8 @@ export type Blocked = (x: number, z: number) => boolean
  *  between the two fronts; gap: between them, m (about a volley's range) */
 export const LINE_ROWS = 2
 export const RESERVE_BACK = 40
-const CLOSE = { grid: 2.5, margin: 2, pad: 2 } // the close reserves: m (their boxes CLOSE.margin a side and CLOSE.pad apart)
+// the close reserves: m (their boxes CLOSE.margin a side and CLOSE.pad apart)
+const CLOSE = { grid: 2.5, margin: 2, pad: 2 }
 const DEPLOY_SLICES = 4 // the close reserves keep off a deploying line's trapezoid in this many boxes
 // the close reserves' candidates on their CLOSE.grid, the nearest the front and the middle first: the same for either
 // side, built once a play area
@@ -190,7 +191,8 @@ export function layout(
       }
       return true
     }
-    const boxes: { ac: number; bh: number; w: number; d: number }[] = [] // placed: across, behind (their front), width, depth
+    // placed: across, behind (their front), width, depth
+    const boxes: { ac: number; bh: number; w: number; d: number }[] = []
     const free = (ac: number, bh: number, w: number, dd: number) =>
       boxes.every(o => Math.abs(o.ac - ac) >= (o.w + w) / 2 || bh + dd <= o.bh || o.bh + o.d <= bh)
     const cands: [number, number][] = []
@@ -250,7 +252,8 @@ export function layout(
       const parts = [...ls.flatMap(o => [{ ...o, d: headD }, { ...o, w: stemW }, ...deploy(o)]), ...boxes.slice(lines)]
       for (const [ac, bh] of fineGrid(play)) {
         if (placed >= perSide) break
-        if (bh < RESERVE_BACK || ls.some(o => Math.abs(o.ac - ac) < (o.w + w) / 2 && bh < o.bh)) continue // (never ahead of a line)
+        // (never ahead of a line)
+        if (bh < RESERVE_BACK || ls.some(o => Math.abs(o.ac - ac) < (o.w + w) / 2 && bh < o.bh)) continue
         if (!parts.every(o => Math.abs(o.ac - ac) >= (o.w + w) / 2 || bh + dd <= o.bh || o.bh + o.d <= bh)) continue
         const [x, z] = at(ac, bh)
         if (!clear(x, z, -(e.columnDepth + m), m, () => e.columnHalf + m)) continue
@@ -336,7 +339,8 @@ function deployTime(d: Drill, runSpeed: number): number {
 
 /** man i of a battalion at its local time t: in column he marches up (the column's front from APPROACH m back to the
  *  line's front), halted he stands, deploying he runs from his column place to his line place (facing his way) and
- *  stands there, in line the ranks fire by turn (each rank RANK_LAG s after the one in front, a man's own lag ±0.3 s) */
+ *  stands there, in line the ranks fire by turn (each rank RANK_LAG s after the one in front, a man's own lag ±0.3 s)
+ */
 export const RANK_LAG = 1.4
 // (written into out: the page calls it for every man once a step, so nothing is allocated; p: phaseAt's at t)
 export function manAt(

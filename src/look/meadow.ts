@@ -1,10 +1,10 @@
 // The meadow near the camera (docs/plans/done/l5c-meadow.md): clumps of the owner's pack grass (Grass_Large and
 // Grass_Small, data/meadow-grass.json) on three round rings around the camera's focus, cells of 0.5, 1 and 2 m. Each
-// ring is an instanced mesh with one static slot attribute (forcedInstanceCount: no matrices); the vertex shader (shaders/meadow.vert) snaps the
-// ring to its cell, places a clump from its world cell's hash, reads the meadow map (the ground's height and the
-// growth, baked here once) and the clump field (shaders/meadow.glsl), and fades each clump out across its ring's
-// band of distance, so the rings hand over without an edge. Where nothing grows, or beyond the outer ring, the
-// ground's own pattern (groundAt, MEADOW) carries the meadow.
+// ring is an instanced mesh with one static slot attribute (forcedInstanceCount: no matrices); the vertex shader
+// (shaders/meadow.vert) snaps the ring to its cell, places a clump from its world cell's hash, reads the meadow map
+// (the ground's height and the growth, baked here once) and the clump field (shaders/meadow.glsl), and fades each clump
+// out across its ring's band of distance, so the rings hand over without an edge. Where nothing grows, or beyond the
+// outer ring, the ground's own pattern (groundAt, MEADOW) carries the meadow.
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
 import { FromHalfFloat, ToHalfFloat } from '@babylonjs/core/Misc/textureTools.js'
 import type { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
@@ -130,7 +130,8 @@ function cullRing(
 // two lists of chunks the same
 const sameList = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i])
 
-// the meadow map (buildMeadowMap): R the ground's height, G the grass's growth, B its height factor, A the crops' growth
+// the meadow map (buildMeadowMap): R the ground's height, G the grass's growth, B its height factor, A the crops'
+// growth
 export interface MeadowMap {
   map: RawTexture
   growingCells: number
@@ -151,7 +152,8 @@ export interface Meadow {
   reach: number // how far a grass clump reaches from its root, m (the checks: tools/river-check.js)
   growingCells: number // texels of the meadow map where grass grows
   growthAt(x: number, z: number): number // the growth at a point as the GPU reads it (the checks: tools/river-check.js)
-  groundAt(x: number, z: number): number // the ground's height the grass stands on, as the GPU reads it (tools/look-check.js)
+  // the ground's height the grass stands on, as the GPU reads it (tools/look-check.js)
+  groundAt(x: number, z: number): number
   cropAt(x: number, z: number): number // the crops' growth at a point as the GPU reads it (the checks)
   croppingCells: number // texels where a crop grows
 }
@@ -295,8 +297,8 @@ export function buildMeadowMap(
     Constants.TEXTURETYPE_HALF_FLOAT,
   )
   map.wrapU = map.wrapV = Texture.CLAMP_ADDRESSMODE
-  // every painted material reads it under ?grass=flow (groundAt, src/look/shaders/macro.glsl): the comb only where grass
-  // grows (the ground's under-layer, below, binds it to the terrain and the water too)
+  // every painted material reads it under ?grass=flow (groundAt, src/look/shaders/macro.glsl): the comb only where
+  // grass grows (the ground's under-layer, below, binds it to the terrain and the water too)
   mats.bindAll(m => m.setTexture('uMeadow', map))
   // the growth as the GPU reads it (bilinear over the texel centres), for the checks: anything it gives above 0 is
   // grass, or a crop, the shader may grow
@@ -325,7 +327,8 @@ export function buildMeadowMap(
   }
 }
 
-// mm: the meadow map (buildMeadowMap); reach: the grass clumps' (CLUMP_REACH, or the combed meadow's), for the chunks' cull
+// mm: the meadow map (buildMeadowMap); reach: the grass clumps' (CLUMP_REACH, or the combed meadow's), for the chunks'
+// cull
 export function buildMeadow(
   scene: Scene,
   mats: Materials,
@@ -402,7 +405,8 @@ export function buildMeadow(
     // the footprint by the ring (its spread, against the clump's own proportions), the height the same on every ring
     m.setFloat('uSpread', (r.spread * c.top) / HEIGHT)
     m.setFloat('uHeight', HEIGHT)
-    const mesh = new Mesh(`meadowGrass${ri}`, scene) // the name keeps it out of the sun's shadow pass (src/look/bakes.ts)
+    // the name keeps it out of the sun's shadow pass (src/look/bakes.ts)
+    const mesh = new Mesh(`meadowGrass${ri}`, scene)
     mesh.setVerticesData(VertexBuffer.PositionKind, c.pos)
     mesh.setVerticesData(VertexBuffer.NormalKind, c.nrm)
     mesh.setVerticesData('aV', c.vv, false, 1)
@@ -503,7 +507,8 @@ export function buildMeadow(
     RINGS.forEach((r, ri) => {
       if (!meshes[ri].isVisible) return
       cullRing(r, chunks[ri], origins[ri], centre, focusY, bands[ri], vp, holes, reach, keep)
-      // (none in view: not drawn, a forced count of 0 would draw one clump without instances, in another shader variant)
+      // (none in view: not drawn, a forced count of 0 would draw one clump without instances, in another shader
+      // variant)
       meshes[ri].isVisible = keep.length > 0
       if (sameList(keep, drawn[ri])) return
       drawn[ri] = keep.slice()

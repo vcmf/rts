@@ -86,8 +86,9 @@ setHeightfield(look.hf, look.far, D.spec.tile / 2)
   checkGround(D.spec, lo, hi, farLo)
 }
 const canvas = document.getElementById('c') as HTMLCanvasElement
-// ?stencil=scene (the default): a stencil on the scene's target alone, for the soldiers' simple shadows (src/look/units.ts,
-// MSAA.stencil in src/look/post.ts); all: the engine's own (the canvas and its targets too: the A/B); 0: none
+// ?stencil=scene (the default): a stencil on the scene's target alone, for the soldiers' simple shadows
+// (src/look/units.ts, MSAA.stencil in src/look/post.ts); all: the engine's own (the canvas and its targets too: the
+// A/B); 0: none
 const stencilParam = new URLSearchParams(location.search).get('stencil') ?? 'scene'
 if (!['scene', 'all', '0'].includes(stencilParam)) {
   throw new Error(`?stencil must be scene, all or 0, not ${stencilParam}`)
@@ -202,19 +203,21 @@ const waterData = spanTexture(scene, look.water, WATER_FILL, 'waterData')
 const waterTexMs = performance.now() - waterT0
 const terrain = buildTerrain(scene, mats, look.far, look.bank, waterData)
 // the page's options (?watersab, ?detail, ?water, ?bench: below)
-// ?watersab=nodive: the band check's sabotage (tools/water-look-check.mjs), the ribbon's columns never dive under the banks
+// ?watersab=nodive: the band check's sabotage (tools/water-look-check.mjs), the ribbon's columns never dive under the
+// banks
 const waterSabParam = params.get('watersab')
 if (waterSabParam !== null && waterSabParam !== 'nodive') {
   throw new Error(`?watersab must be nodive, not ${waterSabParam}`)
 }
 const water = buildWater(scene, mats, { water: waterData, bankN: terrain.bankN }, waterSabParam !== 'nodive')
 // the roads (docs/plans/done/roads.md): their segments and grid, and the owner's grit photo (its marks only once
-// loaded: uRoadOn), on the tile's terrain (live from mid zoom in: below) and the water's land side, and in the macro bake
+// loaded: uRoadOn), on the tile's terrain (live from mid zoom in: below) and the water's land side, and in the macro
+// bake
 let roadTex: RoadTextures | undefined
 if (!mats.webgl1) {
   // (float textures: the roads' shader is WebGL2's)
-  // the segments (three RGBA floats each, in a row) and the grid of their indices (ROAD_SLOTS / 4 texels a cell, in a row),
-  // read texel by texel (nearest): the shader finds the nearest segment exactly
+  // the segments (three RGBA floats each, in a row) and the grid of their indices (ROAD_SLOTS / 4 texels a cell, in a
+  // row), read texel by texel (nearest): the shader finds the nearest segment exactly
   const R = look.roads
   const sn = R.segs.length / ROAD_SEG
   const segs = RawTexture.CreateRGBATexture(
@@ -292,9 +295,9 @@ if (!mats.webgl1) {
 // leaf cards
 // ?trees=cards: the crowns as leaf cards (docs/plans/done/l7a-canopy-cards.md); ?leaves=procedural draws the atlas
 // instead of reading the oak picture; ?cardsize, ?cardcover, ?cardsink tune the cards (src/look/canopy.ts); ?volume=off
-// puts back L7a's light, card by card (docs/plans/done/l7b-crown-volume.md); ?trees=gen,cards (the default): generated trees
-// (prototypes/tree-core.js, docs/plans/done/tree-generator.md) where the pack's stand, and an orchard, a hedgerow and a
-// row of poplars
+// puts back L7a's light, card by card (docs/plans/done/l7b-crown-volume.md); ?trees=gen,cards (the default): generated
+// trees (prototypes/tree-core.js, docs/plans/done/tree-generator.md) where the pack's stand, and an orchard, a hedgerow
+// and a row of poplars
 // the generated trees with leaf-card crowns by default (docs/plans/done/gen-trees-default.md, decision 0031);
 // ?trees=pack draws the pack's trees
 const treesParam = params.get('trees')
@@ -304,7 +307,8 @@ if (trees !== 'pack' && [...treeSet].some(k => k !== 'one' && k !== 'cards' && k
   throw new Error(`?trees must be pack, or one, cards and gen in a comma list, not ${treesParam}`)
 }
 if (treeSet.has('one') && treeSet.has('gen')) throw new Error('?trees takes one or gen, not both')
-// ?clumpvol=off (with gen): the generated crowns lit as one volume each, not one per clump (the A/B of the clumps' light)
+// ?clumpvol=off (with gen): the generated crowns lit as one volume each, not one per clump (the A/B of the clumps'
+// light)
 if (params.has('clumpvol') && (params.get('clumpvol') !== 'off' || !treeSet.has('gen'))) {
   throw new Error('?clumpvol takes off, with ?trees=gen')
 }
@@ -409,8 +413,8 @@ if (params.has('far')) {
   if (params.get('far') !== 'off') throw new Error(`?far must be off, not ${params.get('far')}`)
   nature.farCull?.off()
 }
-// the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm (bake by default),
-// set once every material is made; the bake runs before the first frame
+// the ground's macro colour (docs/plans/active/l5-macro.md): ?macro=flat|shader|bake|strokes|kuwahara picks the arm
+// (bake by default), set once every material is made; the bake runs before the first frame
 // the flow's textures (?grass=flow, src/look/flow.ts), on every painted material and the bake
 const flowTex = grassMode === 'flow' ? buildFlow(scene) : null
 if (flowTex) {
@@ -419,9 +423,9 @@ if (flowTex) {
     m.setTexture('uComb', flowTex.comb)
   })
 }
-// the meadow map (src/look/meadow.ts), before the ground's bake: the combed meadow bakes the default pattern where no grass
-// grows and the combed one where it does (the combed clumps reach farther: their roots keep farther from the zones and the
-// banks; the crops keep the default's rule)
+// the meadow map (src/look/meadow.ts), before the ground's bake: the combed meadow bakes the default pattern where no
+// grass grows and the combed one where it does (the combed clumps reach farther: their roots keep farther from the
+// zones and the banks; the crops keep the default's rule)
 const grassReach = grassMode === 'flow' ? CLUMP_REACH_FLOW : CLUMP_REACH
 // (the same rule as the crops' on the default: one pass)
 const grassAllowed =
@@ -449,9 +453,10 @@ const macroBake = armBake.texels ? armBake : await macro.bake()
 const camera = buildCamera(scene, canvas, groundAt)
 // the roads' live shader only from mid zoom in (docs/plans/done/roads.md, decision 0039): farther out the macro bake
 // holds them and the tile's ground takes its material without them (the shader's size alone cost every ground pixel).
-// Nearing ROAD_LIVE_R the live roads fade to the baked look (uRoadFar: the wheel tracks to their dusting, the grit out),
-// so at the swap only the edge's sharpness changes (the bake's 0.5 m texels). The materials are compiled before the first frame, and the swap waits until the one it
-// goes to is ready (a material not ready is not drawn). The shader arm has no bake to hold them: live at every zoom
+// Nearing ROAD_LIVE_R the live roads fade to the baked look (uRoadFar: the wheel tracks to their dusting, the grit
+// out), so at the swap only the edge's sharpness changes (the bake's 0.5 m texels). The materials are compiled before
+// the first frame, and the swap waits until the one it goes to is ready (a material not ready is not drawn). The shader
+// arm has no bake to hold them: live at every zoom
 const ROAD_LIVE_R = 170
 const ROAD_HOLD = 4
 const ROAD_FADE = 50
@@ -479,7 +484,8 @@ if (roadTex) {
     const r = camera.radius
     const fade = sstep(ROAD_LIVE_R - ROAD_HOLD - ROAD_FADE, ROAD_LIVE_R - ROAD_HOLD, r)
     for (const m of [live, roads, water.waterMat, water.groundMat]) m.setFloat('uRoadFar', fade)
-    if (ground.material !== live && ground.material !== split && ground.material !== baked) return // (the debug views' water ground)
+    // (the debug views' water ground)
+    if (ground.material !== live && ground.material !== split && ground.material !== baked) return
     far = isBakedArm(macro.arm()) && (far ? r > ROAD_LIVE_R - ROAD_HOLD : r > ROAD_LIVE_R + ROAD_HOLD)
     const want = far ? baked : split
     // (a MultiMaterial is always ready: the split waits on its materials)
@@ -527,7 +533,8 @@ const tinyPxParam = params.get('tinypx')
 if (tinyPxParam !== null && !(/^\d+(\.\d+)?$/.test(tinyPxParam) && +tinyPxParam > 0)) {
   throw new Error(`?tinypx must be a positive number of pixels, not ${tinyPxParam}`)
 }
-// the shadow fix: ?smhold=fixed, the held sun box (and the trodden mask's) as batch B's; ?shadowlod=far, the far LOD casts
+// the shadow fix: ?smhold=fixed, the held sun box (and the trodden mask's) as batch B's; ?shadowlod=far, the far LOD
+// casts
 const smHold = params.get('smhold')
 const shadowLod = params.get('shadowlod')
 if (smHold !== null && smHold !== 'fixed') throw new Error(`?smhold must be fixed, not ${smHold}`)
@@ -543,9 +550,10 @@ const nearestPx = params.get('nearestpx')
 if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
   throw new Error(`?nearestpx must be a whole number of pixels, 0 to 2000, not ${nearestPx}`)
 }
-// the simple shadows (decision 0049, docs/plans/active/simple-soldier-shadows.md): ?ushadowfar=map, the map at every zoom
-// (the A/B; else simple: the map up close, a baked shape a man drawn on the ground beyond); ?ushadowswitch=<r0>,<r1>, the cross-fade's band
-// (m from the focus); ?smoothmove=0, the figures' places at the 12 fps steps (else every frame; the poses stay stepped);
+// the simple shadows (decision 0049, docs/plans/active/simple-soldier-shadows.md): ?ushadowfar=map, the map at every
+// zoom (the A/B; else simple: the map up close, a baked shape a man drawn on the ground beyond);
+// ?ushadowswitch=<r0>,<r1>, the cross-fade's band (m from the focus); ?smoothmove=0, the figures' places at the 12 fps
+// steps (else every frame; the poses stay stepped);
 // ?udecallift=<m>, how high over the ground the simple shadows cover the grass and the men's legs
 const uShadowFar = params.get('ushadowfar')
 const uShadowSwitch = params.get('ushadowswitch')
@@ -680,7 +688,8 @@ if (armiesParam !== null) {
   units.setTrample(trample ?? true)
   units.setFlags(flags ?? true)
   units.setFarRule(farPal) // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
-  units.setSmooth(smoothMove ?? true) // (on: measured free, docs/plans/active/simple-soldier-shadows.md; the owner's call open)
+  // (on: measured free, docs/plans/active/simple-soldier-shadows.md; the owner's call open)
+  units.setSmooth(smoothMove ?? true)
   armiesFocus = facingAt(units.battalions)
   Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
 }
@@ -964,7 +973,8 @@ addEventListener('drop', e => {
 
 /* ---------- loop ---------- */
 const fpsEl = byId('fps')
-const FROZEN = new URLSearchParams(location.search).has('frozen') // golden screenshots (tools/golden.mjs): the clock stays at 0
+// golden screenshots (tools/golden.mjs): the clock stays at 0
+const FROZEN = new URLSearchParams(location.search).has('frozen')
 // sun colour follows the season: warm gold in summer and autumn, pale gold in winter (keeps snow white, not yellow)
 const SUNCOL = MOOD.sun.clone()
 // the mood's light by the season (seasonLight, src/look/mood.ts), recomputed only when the season moves; the clear
@@ -998,7 +1008,8 @@ scene.onBeforeRenderObservable.add(() => {
       : Math.tan(camera.fov / 2) / engine.getAspectRatio(camera)
   pixA = (2 * tv) / D.spec.detail.lines
   if (!FROZEN) S.t += Math.min(engine.getDeltaTime() / 1000, 0.05)
-  // the depth of field's focus and the view axis, which every material encodes its lens term against (painter.glsl depthA)
+  // the depth of field's focus and the view axis, which every material encodes its lens term against (painter.glsl
+  // depthA)
   const focusZ = post.updateFocus(engine.getDeltaTime() / 1000, S.dof > 0 || grassMode === 'flow')
   focusDist = post.focusRaw
   camFwd.copyFrom(camera.target).subtractInPlace(camera.position).normalize()
@@ -1073,9 +1084,11 @@ if (new URLSearchParams(location.search).get('river') === 'debug') {
 // the page contract of tools/golden.mjs, and the names tools/render-check.js and tools/river-check.js read (they were
 // written against the prototype's globals; SMW and MASKN are the prototype's names for TILE_W and MASK_N)
 Object.assign(window, {
-  __proto: { S, scene, camera, zoom: zoomOf(camera), buildPost: () => post.build(), play: D.spec.play }, // zoom: the wanted radius (ZoomHold: read wanted, set(r))
+  // zoom: the wanted radius (ZoomHold: read wanted, set(r))
+  __proto: { S, scene, camera, zoom: zoomOf(camera), buildPost: () => post.build(), play: D.spec.play },
   B: { Vector3, Matrix, DynamicTexture, VertexBuffer },
-  // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring formulas the river check compares with
+  // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring formulas the river check compares
+  // with
   scene,
   engine,
   camera,
@@ -1188,7 +1201,8 @@ const waterSab = (on: string[]) => {
 const groundAs = (kind: 'terrain' | 'water') => {
   terrain.tileGround.material = kind === 'water' ? water.groundMat : terrain.terrainMat
 }
-// the water data at a point, read bilinearly as the GPU reads it (the band check measures the drawn surfaces against it)
+// the water data at a point, read bilinearly as the GPU reads it (the band check measures the drawn surfaces against
+// it)
 let waterBytes: Uint8Array | null = null
 const waterAt = (x: number, z: number) => {
   waterBytes ??= unpackSpans(look.water, WATER_FILL)
@@ -1302,8 +1316,8 @@ Object.assign(window, {
     waterSab,
     groundAs,
     waterAt,
-    // the macro colour (docs/plans/active/l5-macro.md): the arm, the checks' variants (rebaked), the bakes' hashes, a rebake,
-    // and the last rebake no one awaited (a new grain's), settled
+    // the macro colour (docs/plans/active/l5-macro.md): the arm, the checks' variants (rebaked), the bakes' hashes, a
+    // rebake, and the last rebake no one awaited (a new grain's), settled
     macro: {
       setArm: (a: MacroArm) => macro.setArm(a),
       setCheck: (on: string[]) => macro.setCheck(on),
@@ -1369,15 +1383,17 @@ if (params.has('bench')) {
     }
   }
   // ?trees=cards&bench=trees: the crowns' two arms, cards and the pack's (docs/plans/done/l7a-canopy-cards.md),
-  // for the frame's cost only (read the frame interval): the shadow map is baked once, with the cards, so the pack arm keeps the cards' shadows
-  // ?bench=meadow: the meadow's grass and crops against none (the ground's pattern is in the macro bake: nothing a frame)
+  // for the frame's cost only (read the frame interval): the shadow map is baked once, with the cards, so the pack arm
+  // keeps the cards' shadows
+  // ?bench=meadow: the meadow's grass and crops against none (the ground's pattern is in the macro bake: nothing a
+  // frame)
   if (params.get('bench') === 'meadow' && !meadow) throw new Error('?bench=meadow needs the meadow on (no ?meadow=off)')
   // ?trees=cards&bench=volume: the crowns lit as volumes against L7a's light (docs/plans/done/l7b-crown-volume.md)
   if ((params.get('bench') === 'trees' || params.get('bench') === 'volume') && !nature.showCards) {
     throw new Error(`?bench=${params.get('bench')} needs the leaf-card crowns`)
   }
-  // ?bench=trees compares the pack's crowns as cards against the pack's trees (L7a): under gen the other arm would be the
-  // generated meshes, so it asks for ?trees=cards explicitly
+  // ?bench=trees compares the pack's crowns as cards against the pack's trees (L7a): under gen the other arm would be
+  // the generated meshes, so it asks for ?trees=cards explicitly
   if (params.get('bench') === 'trees' && treeSet.has('gen')) {
     throw new Error('?bench=trees compares the pack as cards and as meshes: add ?trees=cards')
   }
@@ -1394,9 +1410,9 @@ if (params.has('bench')) {
   }
   // ?grass=flow&bench=grass: the combed meadow on and off in one page (GRASS_FLOW on every painted material and the
   // clumps), so its cost is a paired difference (docs/plans/done/dof-v2.md: two page loads differ by up to 0.9 ms)
-  // ?grass=flow&bench=grassparts: the same, one part off at a time (the ablation's switches, GRASS_NO_*; a part ?grassoff
-  // turns off stays off). The arms switch the materials only: the macro tile keeps its combed bake and the near bake runs
-  // in every arm, so 'none' measures the materials' share of the combed meadow, not all of it
+  // ?grass=flow&bench=grassparts: the same, one part off at a time (the ablation's switches, GRASS_NO_*; a part
+  // ?grassoff turns off stays off). The arms switch the materials only: the macro tile keeps its combed bake and the
+  // near bake runs in every arm, so 'none' measures the materials' share of the combed meadow, not all of it
   const grassArm =
     (on: boolean, off: string[] = []) =>
     () => {
@@ -1460,8 +1476,9 @@ if (params.has('bench')) {
                         { name: 'l2', apply: () => setDetail([]) },
                         { name: 'l0', apply: () => setDetail(['DETAIL_L0']) },
                       ]
-  // ?benchat=<x>,<z>: the cameras orbit that point instead of the start (the forest bench: docs/plans/done/forest-bench.md)
-  // inside the play area: the camera's focus is clamped to it every frame (src/look/post.ts)
+  // ?benchat=<x>,<z>: the cameras orbit that point instead of the start (the forest bench:
+  // docs/plans/done/forest-bench.md) inside the play area: the camera's focus is clamped to it every frame
+  // (src/look/post.ts)
   const at = params
     .get('benchat')
     ?.split(',')

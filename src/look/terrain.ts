@@ -57,8 +57,8 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   // DETAIL: the detail layer (src/look/shaders/painter.glsl), on the terrain and the water. BANKN: the tile shades the
   // river's banks with the fine bank normals (docs/plans/done/w2-river-banks.md). WATERDATA: the water data (W3), for
   // the shore band the tile paints near the water as the water does (docs/plans/done/w4-water-surface.md)
-  // two: with the live roads (ROADS, WebGL2) and without, where the macro bake holds them far out (src/look/main.ts swaps
-  // them by zoom: docs/plans/done/roads.md). On WebGL1 one, without
+  // two: with the live roads (ROADS, WebGL2) and without, where the macro bake holds them far out (src/look/main.ts
+  // swaps them by zoom: docs/plans/done/roads.md). On WebGL1 one, without
   const make = (name: string, roads: boolean, paving = false) =>
     mats.make(name, TER_VS, TER_FS, {
       attributes: ['position', 'normal', 'aRiver'],
@@ -74,7 +74,8 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
         ...(paving ? ['#define PAVING', ...paveDefines()] : []),
       ],
     })
-  // three tile materials: the live roads and the buildings' paving (terrainMat: on the yards' ground; the whole tile under
+  // three tile materials: the live roads and the buildings' paving (terrainMat: on the yards' ground; the whole tile
+  // under
   // ?split=0, the debug views), the live roads alone (terrainRoadsMat: on the ground near a road), and neither (the
   // baked: far out, and the rest of the ground near). splitGround gives each its triangles. On WebGL1 one, without
   const terrainMat = make('terrain', !mats.webgl1, !mats.webgl1)
@@ -106,7 +107,8 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
   // far ring: the river painted from a mask (the samples stroked at their widths), since 15 m vertices can't hold it
   const riverMaskCanvas = document.createElement('canvas')
   riverMaskCanvas.width = riverMaskCanvas.height = MASK_N
-  // one path per run of equal (half-pixel) width: a canvas filter or a stroke per sample loses the GL context in SwiftShader
+  // one path per run of equal (half-pixel) width: a canvas filter or a stroke per sample loses the GL context in
+  // SwiftShader
   {
     const g = riverMaskCanvas.getContext('2d')!
     const C = RIVER
@@ -286,13 +288,13 @@ export function buildTerrain(scene: Scene, mats: Materials, far: Grid, bank: Spa
 
 // The tile's triangles by what can paint them (docs/plans/done/headroom.md: a shader's size costs every pixel it draws,
 // so each feature's code only where it can show): by its grid cell's cover texels and 1 m round them (read nearest:
-// a texel of slack), a cell with a yard's texel (YARD_ALL and up in B, src/look/world/cover.ts: under it the paving can paint)
-// takes the live roads with the paving (submesh 0, terrainMat); else a cell within the road gate of a line by the
-// cover's wear distance (roadPaint's first test, shore.glsl: D.roadGate) the live roads alone (1, terrainRoadsMat); the
-// rest the material without either (2: there roadPaint returns its colour unchanged). The same pixels as the live
+// a texel of slack), a cell with a yard's texel (YARD_ALL and up in B, src/look/world/cover.ts: under it the paving can
+// paint) takes the live roads with the paving (submesh 0, terrainMat); else a cell within the road gate of a line by
+// the cover's wear distance (roadPaint's first test, shore.glsl: D.roadGate) the live roads alone (1, terrainRoadsMat);
+// the rest the material without either (2: there roadPaint returns its colour unchanged). The same pixels as the live
 // material everywhere but for a step of rounding between the programs. Each triangle takes its cell's answer (by its
-// centroid: it lies inside it). Returns the tile ground's material for it, and the share of the tile's triangles each of
-// the three takes (paved, roads, neither)
+// centroid: it lies inside it). Returns the tile ground's material for it, and the share of the tile's triangles each
+// of the three takes (paved, roads, neither)
 export function splitGround(
   t: Terrain,
   cover: CoverGrid,

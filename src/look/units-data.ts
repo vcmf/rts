@@ -1,6 +1,7 @@
-// The unit data files (data/figures/<figure>.unitdata, written by tools/bake-figure.py; docs/plans/active/armies-demo.md):
-// their decoder and their checks. No Babylon: the tests read it in Node. A figure's clips are named by ROLE (halt,
-// march, run, fire: decision 0015, the page never names a clip), each a range of the baked animation's 12 fps steps
+// The unit data files (data/figures/<figure>.unitdata, written by tools/bake-figure.py;
+// docs/plans/active/armies-demo.md): their decoder and their checks. No Babylon: the tests read it in Node. A figure's
+// clips are named by ROLE (halt, march, run, fire: decision 0015, the page never names a clip), each a range of the
+// baked animation's 12 fps steps
 export interface UnitRange {
   start: number
   end: number
@@ -19,7 +20,9 @@ export interface UnitData {
   fps: number
   mPerUnit: number
   bones: string[]
-  lods: UnitLod[] // nearest first, each lighter than the one before (the page draws the last far, the one before it near, a first of three nearest)
+  // nearest first, each lighter than the one before (the page draws the last far, the one before it near, a first of
+  // three nearest)
+  lods: UnitLod[]
   ranges: Record<string, UnitRange>
   palette: string[] // the colour roles, in order: a vertex's role is an index into it (an army's colours paint it)
   vat: { width: number; height: number; data: Uint16Array }
@@ -513,8 +516,8 @@ export function tinyMesh(
       idx.push(base + q[0], base + q[1], base + q[2], base + q[0], base + q[2], base + q[3])
     }
   })
-  // calibrated: each role's weights scaled by its share of the far LOD's pixels over its share of the boxes' (the boxes'
-  // silhouettes are not the parts': a musket's box shows more wood than the musket), each corner's renormalised
+  // calibrated: each role's weights scaled by its share of the far LOD's pixels over its share of the boxes' (the
+  // boxes' silhouettes are not the parts': a musket's box shows more wood than the musket), each corner's renormalised
   const W = Float32Array.from(weights)
   const P32 = Float32Array.from(pos)
   const I16 = Uint16Array.from(idx)
@@ -579,12 +582,13 @@ export interface ShadowShape {
   dir: [number, number] // the shadow's direction on the ground (x, z): away from the sun
 }
 
-/** The simple shadow's shape (decision 0049, docs/plans/active/simple-soldier-shadows.md), baked at load from the figure:
- *  a LOD posed at each step of a role's clip (up to maxSteps of them, evenly), turned to each of `facings` facings (the
- *  figure's own turn, as units.ts writes it), its triangles projected along the sun (sun: toward it, y > 0) onto the
- *  ground at its root and rasterised in the shadow's frame (along it, away from the sun; across it), averaged over the
- *  steps (a marching man's legs are one soft wedge) and blurred (blur: its sigma, m). Every soldier of a figure casts
- *  it: no era names, the roles are the bake's (decision 0015). posed: the LOD's posedVertices, if already made */
+/** The simple shadow's shape (decision 0049, docs/plans/active/simple-soldier-shadows.md), baked at load from the
+ *  figure: a LOD posed at each step of a role's clip (up to maxSteps of them, evenly), turned to each of `facings`
+ *  facings (the figure's own turn, as units.ts writes it), its triangles projected along the sun (sun: toward it,
+ *  y > 0) onto the ground at its root and rasterised in the shadow's frame (along it, away from the sun; across it),
+ *  averaged over the steps (a marching man's legs are one soft wedge) and blurred (blur: its sigma, m). Every soldier
+ *  of a figure casts it: no era names, the roles are the bake's (decision 0015). posed: the LOD's posedVertices, if
+ *  already made */
 export function shadowShape(
   d: UnitData,
   lod: string,

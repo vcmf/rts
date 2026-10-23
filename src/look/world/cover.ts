@@ -105,8 +105,8 @@ function rect(cx: number, cz: number, ha: number, hc: number, a: number): Pt[] {
     [-1, 1],
   ].map(([s, t]) => [cx + s * ha * ux + t * hc * vx, cz + s * ha * uz + t * hc * vz] as Pt)
 }
-// the road (8 m) along the east of the valley, the track (3 m) from it toward the hill, the village ground beside the road;
-// and (docs/plans/done/roads.md) a road across the valley south of the formation zones, fording the river, to the
+// the road (8 m) along the east of the valley, the track (3 m) from it toward the hill, the village ground beside the
+// road; and (docs/plans/done/roads.md) a road across the valley south of the formation zones, fording the river, to the
 // village, a lane north from it past the large wheat field, and the village's trampled square where they meet
 const ROAD: Pt[] = [
   [198, -1300],
@@ -166,8 +166,8 @@ const SQUARE: Pt[] = [
   [170, -44],
 ]
 // the roads and tracks (a line, its width, its class): also the roads' segments (tools/build-look-data.ts, roadGrid)
-// a line made a country road's: its corners rounded (Chaikin's corner cutting, four times) and a meander laid across it,
-// a slow wave a few metres either side (k: its seed), fading to nothing within FADE_M of its ends and of the joins
+// a line made a country road's: its corners rounded (Chaikin's corner cutting, four times) and a meander laid across
+// it, a slow wave a few metres either side (k: its seed), fading to nothing within FADE_M of its ends and of the joins
 // (JOINS: where a line meets another, which must stay put)
 const JOINS: Pt[] = [[184, -60], [184, -62], [108, -71], FORD]
 const FADE_M = 45
@@ -201,7 +201,8 @@ function curvy(p: readonly Pt[], amp: number, k: number): Pt[] {
     return [pt[0] - (dz / l) * m, pt[1] + (dx / l) * m] as Pt
   })
 }
-// a line resampled every `step` m along it (its ends kept): the roads' segments, few enough a cell (src/look/world/data.ts)
+// a line resampled every `step` m along it (its ends kept): the roads' segments, few enough a cell
+// (src/look/world/data.ts)
 function resample(p: readonly Pt[], step: number): Pt[] {
   const out: Pt[] = [p[0]]
   let carry = 0
@@ -235,7 +236,8 @@ export const LINES: { pts: readonly Pt[]; w: number; cls: CoverClass }[] = [
 const WEAR_REACH = 25.5 // the distance channel's reach, m (255 · WEAR_STEP)
 
 // the far strip fields: in a frame turned 0.6435 rad (the far hedgerows' frame, src/look/nature.ts), bands 70 m wide
-// across f.x (the hedgerows lie on their edges), split along f.y into strips 18–45 m wide (a fifth of them grass: pasture or fallow meadow), ploughed along f.x
+// across f.x (the hedgerows lie on their edges), split along f.y into strips 18–45 m wide (a fifth of them grass:
+// pasture or fallow meadow), ploughed along f.x
 const FAR_DIR = Math.atan2(0.6, 0.8)
 const BAND_W = 70
 const farClass = (k: number, s: number): CoverClass => {
@@ -357,8 +359,8 @@ export function authorCover(far: number, cell: number): CoverGrid {
       }
     }
   }
-  // (the yard's ground in the cover reaches YARD_PAD past its paving, below: the road's edge kept clear of that; the whole
-  // yard, by a point every metre over it, out of the zones and off the floodplain)
+  // (the yard's ground in the cover reaches YARD_PAD past its paving, below: the road's edge kept clear of that; the
+  // whole yard, by a point every metre over it, out of the zones and off the floodplain)
   const YARD_PAD = PAVE_WOBBLE + cell * 0.71 + 0.3
   BUILDINGS.forEach((b, k) => {
     const road = LINES.find(l => polyLineGap(yards[k], l.pts) < l.w / 2 + YARD_PAD)
@@ -369,8 +371,8 @@ export function authorCover(far: number, cell: number): CoverGrid {
     }
     const xs = yards[k].map(p => p[0])
     const zs = yards[k].map(p => p[1])
-    // (the yard's ground in the cover, YARD_PAD past its paving: a zone's or the floodplain's meadow inside that would cut
-    // the cobbles' ragged edge straight)
+    // (the yard's ground in the cover, YARD_PAD past its paving: a zone's or the floodplain's meadow inside that would
+    // cut the cobbles' ragged edge straight)
     for (let x = Math.min(...xs) - YARD_PAD; x <= Math.max(...xs) + YARD_PAD; x += 1) {
       for (let z = Math.min(...zs) - YARD_PAD; z <= Math.max(...zs) + YARD_PAD; z += 1) {
         if (onPaving(x, z, YARD_PAD) && (inFormationZone(x, z) || onFloodplain(x, z))) {
@@ -421,21 +423,21 @@ export function authorCover(far: number, cell: number): CoverGrid {
         id = 0
         wear = 0
       } else wear = Math.min(wear, ringD(VILLAGE, x, z), ringD(SQUARE, x, z))
-      // under a building, its paved yard and a margin round it (the paving's ragged edge, a cover texel's half diagonal,
-      // slack) the village's trodden ground, whatever the class (nothing grows through a floor or the paving: the scatter,
-      // the meadow and the crops keep off the village), worn by its distance to the lines alone (below; the village's own
-      // ground is worn 0)
-      // (a road or a track keeps its class: the check above keeps them clear; and past it the yard's ground fades worn as
-      // the village's does, by its distance: YARD_PAD in, the ring's, so its edge does not step on the grid)
-      // A yard's texels carry its building in B (the furrows' direction, read only where a field's id is: a village's is
-      // 0): YARD_BASE plus the index of the one yard within YARD_NEAR (its nearest if none is: no pixel of it is painted),
-      // or YARD_ALL where two are (the thin ground between close yards: every shape there). The paving's gate (shore.glsl,
-      // roadPaint) runs that building's shape alone, the road split's paved triangles (terrain.ts, splitGround) read the
-      // mark, so the rest of the village's ground pays nothing for the yards. A pixel the paving paints is within
-      // PAVE_REACH of its yard (pavePaint), its texel's centre within YARD_NEAR of it, under YARD_PAD (test/cover.test.ts
-      // samples every yard's reach against its mark). Their wear their distance to the lines alone (not
-      // the village's 0): far from a road the road paint's gate passes them by, as the rest of the map (its paint reads
-      // the lines, not the village)
+      // under a building, its paved yard and a margin round it (the paving's ragged edge, a cover texel's half
+      // diagonal, slack) the village's trodden ground, whatever the class (nothing grows through a floor or the paving:
+      // the scatter, the meadow and the crops keep off the village), worn by its distance to the lines alone (below;
+      // the village's own ground is worn 0)
+      // (a road or a track keeps its class: the check above keeps them clear; and past it the yard's ground fades worn
+      // as the village's does, by its distance: YARD_PAD in, the ring's, so its edge does not step on the grid)
+      // A yard's texels carry its building in B (the furrows' direction, read only where a field's id is: a village's
+      // is 0): YARD_BASE plus the index of the one yard within YARD_NEAR (its nearest if none is: no pixel of it is
+      // painted), or YARD_ALL where two are (the thin ground between close yards: every shape there). The paving's gate
+      // (shore.glsl, roadPaint) runs that building's shape alone, the road split's paved triangles (terrain.ts,
+      // splitGround) read the mark, so the rest of the village's ground pays nothing for the yards. A pixel the paving
+      // paints is within PAVE_REACH of its yard (pavePaint), its texel's centre within YARD_NEAR of it, under YARD_PAD
+      // (test/cover.test.ts samples every yard's reach against its mark). Their wear their distance to the lines alone
+      // (not the village's 0): far from a road the road paint's gate passes them by, as the rest of the map (its paint
+      // reads the lines, not the village)
       const yn = paveNearest(x, z, WEAR_REACH + YARD_PAD, YARD_NEAR)
       const yd = yn.d
       let yard = -1
@@ -446,8 +448,8 @@ export function authorCover(far: number, cell: number): CoverGrid {
         yard = yn.n > 1 ? YARD_ALL : YARD_BASE + yn.i
       } else wear = Math.min(wear, Math.max(0, yd - YARD_PAD))
       // the floodplain and the formation zones keep their meadow (the zones clip the fields that touch them)
-      // (a yard's texel turned back to meadow keeps the trodden ring's wear, 0 as the yard's ground had, not its distance
-      // to the lines: the ring round the yard stays whole. The authoring check above keeps the yards off both)
+      // (a yard's texel turned back to meadow keeps the trodden ring's wear, 0 as the yard's ground had, not its
+      // distance to the lines: the ring round the yard stays whole. The authoring check above keeps the yards off both)
       if (
         (onFloodplain(x, z) || inFormationZone(x, z)) &&
         (isField(cls) || cls === COVER.village || cls === COVER.bare)

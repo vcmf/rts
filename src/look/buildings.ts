@@ -63,7 +63,8 @@ const PALETTE: Record<
 const DETAIL_AMT = 0.35 // how much of the texture's value shows (the paint's grain is on top)
 
 // baked: the static light read from the bake (src/look/building-light.ts; ?bldlm=0, the runtime's taps, the A/B);
-// bounce: the ground's bounce on the walls (paint's BOUNCE: computed before and never added; the baked path's only: main.ts)
+// bounce: the ground's bounce on the walls (paint's BOUNCE: computed before and never added; the baked path's only:
+// main.ts)
 export function buildBuildings(
   scene: Scene,
   mats: Materials,
@@ -126,7 +127,8 @@ export function buildBuildings(
     m.setIndices(d.idx)
     m.material = mat
     m.alwaysSelectAsActiveMesh = true
-    // each on its footprint's lowest ground (its corners and its centre, or round its circle), sunk 0.2 m so no gap shows
+    // each on its footprint's lowest ground (its corners and its centre, or round its circle), sunk 0.2 m so no gap
+    // shows
     const buf = new Float32Array(items.length * 16)
     const tile = new Float32Array(items.length * 3)
     items.forEach((b, i) => {

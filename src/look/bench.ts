@@ -165,8 +165,8 @@ const stat = (a: number[]): Stat => ({
 })
 
 // the close, default and widest zoom (the widest at the steepest pitch, which shows the most world), each at the
-// yaw limits and the default yaw (decision 0010); close at TUNED_R (45 m), the closest zoom the bench's history measured (the
-// closer zoom, decision 0051: ?benchclosest=1 adds the closest, rMin)
+// yaw limits and the default yaw (decision 0010); close at TUNED_R (45 m), the closest zoom the bench's history
+// measured (the closer zoom, decision 0051: ?benchclosest=1 adds the closest, rMin)
 const closestParam = new URLSearchParams(location.search).get('benchclosest')
 if (closestParam !== null && closestParam !== '0' && closestParam !== '1') {
   throw new Error(`?benchclosest must be 0 or 1, not ${closestParam}`)
@@ -320,8 +320,9 @@ export async function runBench(
     undo.push(() => {
       proto.render = render
     })
-    // the bakes drawn by an effect renderer, not a render target (the macro colour's near bake, combNear; the buildings'
-    // light): marked 'fx:<the effect's name>' at each draw (the bit its last applyEffectWrapper set; the draw's time)
+    // the bakes drawn by an effect renderer, not a render target (the macro colour's near bake, combNear; the
+    // buildings' light): marked 'fx:<the effect's name>' at each draw (the bit its last applyEffectWrapper set; the
+    // draw's time)
     const ep = EffectRenderer.prototype
     const apply = ep.applyEffectWrapper
     const draw = ep.draw
@@ -375,7 +376,8 @@ export async function runBench(
     if (m instanceof Mesh) hook(m)
   })
   undo.push(() => scene.onNewMeshAddedObservable.remove(added))
-  // the finishing passes are rebuilt by Post.build (an arm may toggle depth of field): hooked again whenever they change
+  // the finishing passes are rebuilt by Post.build (an arm may toggle depth of field): hooked again whenever they
+  // change
   const hookedPosts = new Set<PostProcess>()
   const hookPosts = () => {
     for (const p of passes.post()) {
@@ -464,7 +466,8 @@ export async function runBench(
     const p = passes.post()[0]
     return p ? [p.width, p.height] : [engine.getRenderWidth(true), engine.getRenderHeight(true)]
   }
-  const canvas0 = [engine.getRenderWidth(true), engine.getRenderHeight(true)] // the page's frame before any camera (a wide one draws smaller at Auto)
+  // the page's frame before any camera (a wide one draws smaller at Auto)
+  const canvas0 = [engine.getRenderWidth(true), engine.getRenderHeight(true)]
   const runs: RunStats[] = []
   const cams = cameras()
   try {
@@ -493,7 +496,8 @@ export async function runBench(
         await scene.whenReadyAsync()
         for (let tries = 0; ; tries++) {
           await frames(10)
-          // (the closest zooms are held out over high ground, decision 0051: a camera there would measure another radius)
+          // (the closest zooms are held out over high ground, decision 0051: a camera there would measure another
+          // radius)
           if (Math.abs(camera.radius - cam.radius) > 1e-6) {
             throw new Error(
               `bench camera ${cam.name}: the zoom is held out to ${camera.radius.toFixed(2)} m over high ground, not ${cam.radius} m (decision 0051): choose another ?benchat`,

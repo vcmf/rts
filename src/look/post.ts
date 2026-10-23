@@ -1,5 +1,7 @@
 // The camera and the finishing passes (prototypes/painted-cinematic.html, docs/research/cheap-painterly-postfx.md):
-// [the depth of field, a player option per decision 0024: the scene at half resolution, its blur] → one fused pass (its composite, bloom, vignette, paper, dither; the grade is the materials': gradeOf, src/look/shaders/painter.glsl). Materials write view distance into alpha, so depth of field needs no second scene render.
+// [the depth of field, a player option per decision 0024: the scene at half resolution, its blur] → one fused pass (its
+// composite, bloom, vignette, paper, dither; the grade is the materials': gradeOf, src/look/shaders/painter.glsl).
+// Materials write view distance into alpha, so depth of field needs no second scene render.
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
@@ -41,8 +43,9 @@ export const DOF_PAINT = { far: 0.5, near: 0.7 }
 // byte: the scene's MSAA target 8 bits a channel, not half floats (docs/plans/done/wide-perf.md: the same frame, 0.4 to
 // 0.8 ms less at the widest zoom); not under the depth of field, whose distance in alpha needs the half floats; ?rt16
 // for the A/B
-// stencil: a stencil on the scene's target alone (the soldiers' simple shadows darken each sample once: src/look/units.ts),
-// not on the canvas and every other target as the engine's own option gives (?stencil=all: that, the A/B; 0: none)
+// stencil: a stencil on the scene's target alone (the soldiers' simple shadows darken each sample once:
+// src/look/units.ts), not on the canvas and every other target as the engine's own option gives (?stencil=all: that,
+// the A/B; 0: none)
 export const MSAA = { samples: 4, byte: true, stencil: true }
 // ?nanmark: a pixel that is not a number shows magenta instead of its neighbours' mean (docs/plans/done/nan-guard.md)
 export const DEBUG = { nanmark: false }
@@ -87,7 +90,8 @@ export function buildCamera(
   const zoom = new ZoomHold()
   HOLDS.set(camera, zoom)
   rtsControls(scene, camera, canvas, zoom)
-  // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the play area
+  // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the
+  // play area
   // the closest zoom held out over high ground (clearRadius, ZoomHold, src/look/spec.ts: decision 0051), the player's
   // wanted zoom kept apart so it comes back in on lower ground; from CLEAR_BELOW out the eye always clears the tile's
   // highest ground, so the ground is not read there. The depth of field's zoom ease is reckoned from TUNED_R out
@@ -188,7 +192,8 @@ function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasEl
         const hi = camera.upperRadiusLimit ?? 1e4
         // a pinch's steps are small (a few pixels); a wheel's notch, with or without Ctrl, a hundred (or a few lines)
         const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY
-        // (the wanted radius scaled, not the one shown: held out over a hill, a zoom in must not raise it, decision 0051)
+        // (the wanted radius scaled, not the one shown: held out over a hill, a zoom in must not raise it, decision
+        // 0051)
         const w = Number.isNaN(zoom.wanted) ? camera.radius : zoom.wanted
         zoom.set(Math.min(hi, Math.max(lo, w * Math.exp(dy * (e.ctrlKey && Math.abs(dy) < 50 ? PINCH : WHEEL)))))
       } else {
@@ -229,8 +234,8 @@ const EASU_MAIN = (easu: boolean) => `void main(){
   gl_FragColor=vec4(c,1.0);}`
 let EASU_OK = false
 let EASU_WHY = ''
-// FSR 1's FsrEasuCon (ffx_fsr1.h), as Babylon's ThinFSR1UpscalePostProcess.updateConstants: the input's viewport vw x vh
-// in its texture iw x ih, drawn to ow x oh
+// FSR 1's FsrEasuCon (ffx_fsr1.h), as Babylon's ThinFSR1UpscalePostProcess.updateConstants: the input's viewport vw x
+// vh in its texture iw x ih, drawn to ow x oh
 const FSR1_CONSTANTS = (e: Effect, vw: number, vh: number, iw: number, ih: number, ow: number, oh: number): void => {
   e.setFloat4('con0', vw / ow, vh / oh, (0.5 * vw) / ow - 0.5, (0.5 * vh) / oh - 0.5)
   e.setFloat4('con1', 1 / iw, 1 / ih, 1 / iw, -1 / ih)
@@ -333,8 +338,8 @@ export class Post {
     this.posts = []
     this.sizes = []
   }
-  // the lines of the target the scene draws into: the first pass's (with the upscale its size, as set: in the frame of a
-  // change too), or the canvas's
+  // the lines of the target the scene draws into: the first pass's (with the upscale its size, as set: in the frame of
+  // a change too), or the canvas's
   sceneLines(): number {
     return this.sizes[0]?.size.height ?? this.engine.getRenderHeight(true)
   }
@@ -453,8 +458,8 @@ export class Post {
       if (size && (p as unknown as { _options: unknown })._options !== size) throw new KeptSize()
       if (!this.posts.length) {
         p.samples = MSAA.samples
-        // (Babylon gives the first pass's target a stencil only when the engine has one: so the engine's is lent while it
-        // makes it, MSAA.stencil)
+        // (Babylon gives the first pass's target a stencil only when the engine has one: so the engine's is lent while
+        // it makes it, MSAA.stencil)
         if (MSAA.stencil && !engine.isStencilEnable) {
           const resize = p.resize.bind(p)
           const e = engine as unknown as { _isStencilEnable: boolean }
@@ -473,10 +478,10 @@ export class Post {
     }
     // the miniature field (decisions 0024, 0040): focused on the ground at the screen's centre (updateFocus); a sharp
     // band beyond it (DOF.band) and one nearer (DOF_NEAR.band, in the bottom DOF_NEAR.screen of the frame only); the
-    // largest blurs DOF.px and DOF_NEAR.px at 1080 lines, strongest at the closest zoom and DOF.wide of it at the widest.
-    // The scene at half resolution (each four pixels' colour averaged, one lens term: dofdown.frag), its blur at half
-    // resolution, and the finishing pass puts the sharp scene (the first pass's input) back where the blur is under a
-    // pixel and no near layer covers it
+    // largest blurs DOF.px and DOF_NEAR.px at 1080 lines, strongest at the closest zoom and DOF.wide of it at the
+    // widest. The scene at half resolution (each four pixels' colour averaged, one lens term: dofdown.frag), its blur
+    // at half resolution, and the finishing pass puts the sharp scene (the first pass's input) back where the blur is
+    // under a pixel and no near layer covers it
     const lens = ['uBand', 'uK', 'uMaxPx', 'uNBand', 'uNK', 'uNMaxPx', 'uNScreen']
     const c = D.spec.camera
     // the chain: the scene at half resolution (dofdown), the blur at half resolution (dof: far and near), the finishing
@@ -547,7 +552,8 @@ export class Post {
       e.setFloat('uGrainOn', S.grain)
       e.setFloat('uBloom', S.bloom)
       e.setTexture('uGrain', this.grain())
-      e.setFloat('uRenderScale', S.res ? 1 : 1 / engine.getHardwareScalingLevel()) // Auto: the paper in screen pixels (the fixed scales as before)
+      // Auto: the paper in screen pixels (the fixed scales as before)
+      e.setFloat('uRenderScale', S.res ? 1 : 1 / engine.getHardwareScalingLevel())
       e.setFloat('uGrainHere', this.upscale && this.mode() > 0 ? 0 : 1) // (upscaled, the last pass lays the paper)
       // the mood's vignette, and the grade's parts the bloom takes off and puts back (its grade is in the painted
       // materials: src/look/materials.ts)

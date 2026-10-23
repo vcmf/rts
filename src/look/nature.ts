@@ -10,7 +10,8 @@ import { Frustum } from '@babylonjs/core/Maths/math.frustum.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
-// the instancing includes nature.vert and depth.vert use: the CDN build registers every include, the modules only what is imported
+// the instancing includes nature.vert and depth.vert use: the CDN build registers every include, the modules only what
+// is imported
 import '@babylonjs/core/Shaders/ShadersInclude/instancesDeclaration.js'
 import '@babylonjs/core/Shaders/ShadersInclude/instancesVertex.js'
 import type { Scene } from '@babylonjs/core/scene.js'
@@ -68,7 +69,8 @@ export interface Nature {
   touchesZone(x: number, z: number, r: number): boolean
   placeable(x: number, z: number, r?: number, kind?: string): boolean
   footprint(model: string, s: number): number
-  stones: [number, number, number, number][] // the stones in the water (W5a): x, z, radius, the flow's direction (rad), for their foam
+  // the stones in the water (W5a): x, z, radius, the flow's direction (rad), for their foam
+  stones: [number, number, number, number][]
   showCards?: (on: boolean) => void // under cards: the crowns as cards, or the pack's (the bench's arms)
   // under gen: the season's twigs (shown from TWIGS_FROM) and the crowns' loss; shadowState names what that makes cast
   // shadows (the twigs on or off, the loss), for the bake to compare with the state it last baked
@@ -90,8 +92,8 @@ export interface Nature {
 
 // what may grow on each class of the cover (docs/plans/active/l5-macro.md): grass, flowers, plants, bushes, stumps
 // and logs on grass (meadow, pasture, a copse's floor); wheat on wheat; stones anywhere but roads, tracks and the
-// village; trees and the far hedgerows' bushes too, but hidden on fields and bare earth (addPlaced). Anything on a road,
-// a track or the village is placed but hidden (addPlaced): rejected, it would draw a new candidate and shift the
+// village; trees and the far hedgerows' bushes too, but hidden on fields and bare earth (addPlaced). Anything on a
+// road, a track or the village is placed but hidden (addPlaced): rejected, it would draw a new candidate and shift the
 // scatter's stream after it, so a new road would move every tree (docs/plans/done/roads.md)
 const GRASSY_COVER: readonly number[] = [COVER.meadow, COVER.pasture, COVER.wood]
 const LINE_COVER: readonly number[] = [COVER.road, COVER.track, COVER.village]
@@ -117,7 +119,8 @@ function coverAllows(cover: CoverGrid, model: string, x: number, z: number): boo
   return AROUND.every(([dx, dz]) => ok(coverAt(cover, x + dx * EDGE, z + dz * EDGE)))
 }
 
-// cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md, ?trees=cards);
+// cards: the broadleaf, birch and willow crowns drawn as leaf cards (docs/plans/done/l7a-canopy-cards.md,
+// ?trees=cards);
 // meadow: the meadow's grass and wheat replace the tufts and the wheat lattice (docs/plans/done/l5c-meadow.md);
 // oneTree: every tree drawn as one broadleaf model, where and as large as it stands (L5b's judging: ?trees=one)
 // gen: generated trees where the pack's stand (?trees=gen, docs/plans/done/tree-generator.md): the season the page
@@ -281,7 +284,8 @@ export function buildNature(
   const KEEP_CLEAR = inFormationZone // formations (src/look/world/cover.ts: the cover keeps them meadow)
   // THE placement rule (docs/art-bible.md §6c): nothing in the water or on the wet bank except stones,
   // nothing in the formation zones. r = the object's footprint/crown radius. Every scatter loop uses it.
-  const REACH_OF: Record<string, number> = {} // largest distance of any vertex from the model pivot in plan: the true footprint under any yaw
+  // largest distance of any vertex from the model pivot in plan: the true footprint under any yaw
+  const REACH_OF: Record<string, number> = {}
   const footprint = (model: string, s: number) => {
     let r = REACH_OF[model]
     if (r === undefined) {
@@ -306,7 +310,8 @@ export function buildNature(
   function placeable(x: number, z: number, r = 0, kind = ''): boolean {
     if (touchesZone(x, z, r)) return false
     const q = riverQuery(x, z)
-    // stones: wholly on dry land, or on riffles; the W5a pass's stones at the foot of a cut bank (docs/art-bible.md §6c)
+    // stones: wholly on dry land, or on riffles; the W5a pass's stones at the foot of a cut bank (docs/art-bible.md
+    // §6c)
     if (kind === 'stone') return !q || q.dist >= wetEdgeAt(q) + r || lerpA(RIVER.riffle, q) > 0.6
     if (kind === 'cutstone') return !!q && atCutBank(q) && r <= 1.2 // at a cut bank's foot, reaching at most 1.2 m
     if (kind === 'reed') return !q || q.dist >= wetEdgeAt(q) + r // reeds: at the water's edge, wholly on land
@@ -531,9 +536,11 @@ export function buildNature(
     const k = rr()
     const mdl = flowery && k < 0.5 ? 'Flowers' : k < 0.88 ? 'Grass_Short' : 'Plant_1'
     const item: Item = [x, z, mdl === 'Plant_1' ? 1.3 : mdl === 'Flowers' ? 1.4 : 1.6 + rr() * 0.8, rr() * 6.28, rr()]
-    if (!(meadow && mdl === 'Grass_Short')) addPlaced(mdl, item) // under the meadow (src/look/meadow.ts) its grass replaces these tufts; the stream is unchanged
+    // under the meadow (src/look/meadow.ts) its grass replaces these tufts; the stream is unchanged
+    if (!(meadow && mdl === 'Grass_Short')) addPlaced(mdl, item)
   }
-  // a wheat field on the valley side between the floodplain and the formation zones (docs/art-bible.md §6c: fields above the floodplain)
+  // a wheat field on the valley side between the floodplain and the formation zones (docs/art-bible.md §6c: fields
+  // above the floodplain)
   // under the meadow its crops replace this lattice (src/look/meadow.ts); the stream is unchanged
   const addWheat = (item: Item) => {
     if (!meadow) addPlaced('Wheat', item)
@@ -907,7 +914,8 @@ export function buildNature(
       ? 1
       : 0
   }
-  // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the outer ring's footprint and lean)
+  // a root keeps the widest clump's reach from them (src/look/meadow.ts, CLUMP_REACH: the outer ring's footprint and
+  // lean)
   const growthAllowed = (x: number, z: number, reach = CLUMP_REACH) =>
     !touchesZone(x, z, reach) && offBanks(riverQuery(x, z), reach)
   // the trunks (their shadows, baked into the light map): per model its trunk's radius and its crown's
@@ -1146,10 +1154,11 @@ function addGenerated(NATURE: Record<string, NatureModel>) {
 // tested against the view's frustum (a sphere at its crown, SPHERE_K of its size and SPHERE_PAD m its radius: it
 // holds the crown and its cards); those in view nearer than CARDS_M go to the cards' meshes, the farther ones to the
 // crown mesh (no alpha test; lit as the cards are), and over FADE_M either side of it to both, the cards giving way to
-// the crown mesh pixel by pixel (a dither, aFade: no pop as a tree crosses it); each packed to the front of its buffers, whose count is set to them, a mesh with none hidden (a count of 0
-// is drawn as one model at the origin). Without cards the crown mesh takes every distance; a deciduous model past
-// BARE_FROM's leaf loss keeps its cards at every distance (cardsAll). all(true) draws every one with its cards (the
-// shadow pass, which can also call it from a readiness check that never draws: the game camera's next draw undoes it)
+// the crown mesh pixel by pixel (a dither, aFade: no pop as a tree crosses it); each packed to the front of its
+// buffers, whose count is set to them, a mesh with none hidden (a count of 0 is drawn as one model at the origin).
+// Without cards the crown mesh takes every distance; a deciduous model past BARE_FROM's leaf loss keeps its cards at
+// every distance (cardsAll). all(true) draws every one with its cards (the shadow pass, which can also call it from a
+// readiness check that never draws: the game camera's next draw undoes it)
 interface FarGroup {
   meshes: Mesh[]
   buf: Float32Array
@@ -1223,7 +1232,8 @@ function farCuller(
     )
     return { g, near, far, c, carded }
   })
-  for (const w of work) w.g.meshes[0].setEnabled(true) // the crown mesh: no cards' swap for the far trees (drawGroup's far)
+  // the crown mesh: no cards' swap for the far trees (drawGroup's far)
+  for (const w of work) w.g.meshes[0].setEnabled(true)
   // warm: until every far mesh's material is ready, each draws all its instances (both sides, the crown unfaded over
   // the cards: the page is loading), so each compiles in its own draw; culled after. Otherwise a material would first
   // compile when a tree reaches its side of the band, the tree missing for those frames

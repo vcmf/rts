@@ -17,7 +17,9 @@ import BLOCK_VS from './shaders/block.vert?raw'
 import BLOCK_FS from './shaders/block.frag?raw'
 
 export const BLOCK = { w: 20, d: 3, h: 1.8 }
-export const HILL = { seg: 4, top: 6, sink: 2, round: 3 } // m: each face's length along the profile, the flat top's radius, the foot's depth below the lowest ground under it, the length a corner turns over
+// m: each face's length along the profile, the flat top's radius, the foot's depth below the lowest ground under it,
+// the length a corner turns over
+export const HILL = { seg: 4, top: 6, sink: 2, round: 3 }
 
 // color: '#rrggbb'
 export interface BlockSpec {

@@ -42,7 +42,8 @@ export interface Mood {
     tint: number // of the sun's hue, 0..1 (its value always): the eye's white balance
     mist: number // the valley mist's most over them (0..0.42, the ground's most)
     grade: number // of the grade, 0..1
-    bounce: number // of the ground's bounce (LC4), 0..1: less than the trees, so a coat keeps its value against its ground
+    // of the ground's bounce (LC4), 0..1: less than the trees, so a coat keeps its value against its ground
+    bounce: number
   }
   grade: {
     // the grade (gradeOf in src/look/shaders/painter.glsl, the last step of every painted material)
@@ -261,8 +262,10 @@ export const newSeasonLight = (): SeasonLight => ({
 })
 const TIP_LIME = new Color3(1.04, 1.08, 0.8)
 const TIP_WARM = new Color3(1.06, 1.0, 0.86)
-export const lumaW = (c: Color3): number => 0.3 * c.r + 0.59 * c.g + 0.11 * c.b // (the painter's luma weights: shadowOf)
-const normTurns = new WeakMap<Mood, [Color3, Color3, Color3]>() // the shadow turns divided by their luma (shadowOf works on hue at the same value)
+// (the painter's luma weights: shadowOf)
+export const lumaW = (c: Color3): number => 0.3 * c.r + 0.59 * c.g + 0.11 * c.b
+// the shadow turns divided by their luma (shadowOf works on hue at the same value)
+const normTurns = new WeakMap<Mood, [Color3, Color3, Color3]>()
 const smooth = (a: number, b: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
   return t * t * (3 - 2 * t)

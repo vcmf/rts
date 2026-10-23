@@ -10,7 +10,8 @@
 // (__look.terrainOnly hides them: a bake then would be empty). And the light the ground bounces onto each building, at
 // its root (bounceAt: the ground's class, its season and snow, the light map's sun there): one texel an instance of an
 // N × 1 target, rebaked with the ground's bounce map (the season, the shadows, the grain); the runtime fades it with
-// the height. WebGL2 only (the reads are GLSL ES 3's: textureLod, texelFetch): WebGL1 takes the runtime's taps (main.ts)
+// the height. WebGL2 only (the reads are GLSL ES 3's: textureLod, texelFetch): WebGL1 takes the runtime's taps
+// (main.ts)
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera.js'
 import { Constants } from '@babylonjs/core/Engines/constants.js'
@@ -40,10 +41,10 @@ import BOUNCE_FS from './shaders/building-bounce.frag?raw'
 // never brings a neighbour's light in (level 2 would need 9: the islands, 550 to 760 a model, cannot keep that apart).
 // At the widest zoom, 720p, 93 to 98 % of a building's pixels want a level under 2, 65 to 89 % level 0 (measured): the
 // clamp under-filters the rest. (A clamp in the shader, not the texture's TEXTURE_MAX_LEVEL, and the whole chain of
-// levels: Babylon sets that only on cube maps, and set by hand on its texture it would be lost on a context's restore.) A tile's side divides by its
-// level-MAX_LOD blocks and its islands keep INSET texels (one block) from its edge, so no read reaches a neighbour's
-// tile; DILATE covers the reach, and past it every texel is a neutral light (sunlit, open sky, no mist), so nothing
-// unwritten ever darkens an edge
+// levels: Babylon sets that only on cube maps, and set by hand on its texture it would be lost on a context's restore.)
+// A tile's side divides by its level-MAX_LOD blocks and its islands keep INSET texels (one block) from its edge, so no
+// read reaches a neighbour's tile; DILATE covers the reach, and past it every texel is a neutral light (sunlit, open
+// sky, no mist), so nothing unwritten ever darkens an edge
 export const TILE = 256
 export const MAX_LOD = 1
 export const INSET = 1 << MAX_LOD
@@ -108,7 +109,8 @@ function clearTo(scene: Scene, t: RenderTargetTexture, c: Color4): void {
 }
 
 // a bake run by hand: armed by what it reads (and a context's restore), run before a frame once that held for a frame
-// (no new arming: a chain of bakes makes one); run: false if it could not (what it draws hidden or not ready): due again
+// (no new arming: a chain of bakes makes one); run: false if it could not (what it draws hidden or not ready): due
+// again
 function scheduled(scene: Scene, run: () => boolean): { arm: () => void } {
   let due = 0
   scene.onBeforeRenderObservable.add(() => {
@@ -304,7 +306,8 @@ void main(){vec4 c=texture2D(uSrc,vUV);if(c.a>0.0){gl_FragColor=c;return;}
   })
   bakes.lightMap.onAfterRenderObservable.add(light.arm)
   mats.onGrain(light.arm) // (the grain jitters the shadow's taps: a new one, a new bake)
-  const bytes = Math.round(width * height * 4 * (1 + 4 / 3 + 1 / OCC / OCC)) // (raw, the atlas with its mips, the occupancy)
+  // (raw, the atlas with its mips, the occupancy)
+  const bytes = Math.round(width * height * 4 * (1 + 4 / 3 + 1 / OCC / OCC))
   // (a lost context loses the targets' texels: the atlas neutral again, and baked again once all is compiled)
   engine.onContextRestoredObservable.add(() => {
     clearTo(scene, atlas, NEUTRAL)

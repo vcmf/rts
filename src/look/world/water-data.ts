@@ -216,7 +216,8 @@ export function bakeWater(H: (x: number, z: number) => number, sab?: WaterSabota
       fz[k] = (tz / tl) * sp * (sab === 'upstream' ? -1 : 1)
       const w = waterAt(H, x, z, q)
       wet[k] = w.wet ? 1 : 0
-      depth[k] = Math.max(W.depth[0], w.wet ? w.depth : Math.min(w.depth, -DEPTH_STEP)) // ground below the water beyond the carve: dry
+      // ground below the water beyond the carve: dry
+      depth[k] = Math.max(W.depth[0], w.wet ? w.depth : Math.min(w.depth, -DEPTH_STEP))
       if (w.wet && w.depth > W.depth[1]) {
         throw new Error(
           `water data: ${w.depth.toFixed(2)} m of water at (${x}, ${z}), deeper than SPEC.water.depth's ${W.depth[1]} m`,

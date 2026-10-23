@@ -8,8 +8,10 @@ export interface Spec {
   far: number // the far ring's side, m: the backdrop out to the edge of any view
   farSub: number // far grid cells per side
   play: number // the camera focus stays within ±play in x and z
-  margin: number // detail ⊇ play ⊕ margin: views near the play edge see the far ring only toward the top (checked against the camera)
-  aoMargin: number // the heightfield extends this far beyond the tile, so the occlusion bake reads real ground at the edge
+  // detail ⊇ play ⊕ margin: views near the play edge see the far ring only toward the top (checked against the camera)
+  margin: number
+  // the heightfield extends this far beyond the tile, so the occlusion bake reads real ground at the edge
+  aoMargin: number
   aoRing: number // the occlusion bake's widest ring radius, m (it must fit in aoMargin)
   camera: {
     // yaw = yaw0 ± yawRange (decision 0010: ±45°)
@@ -28,9 +30,11 @@ export interface Spec {
     clearance: number // the eye never comes nearer the ground under it than this, m: the zoom
     // is held out where it would (clearRadius, ZoomHold; src/look/post.ts)
   }
-  ground: { lo: number; hi: number } // lo: the lowest ground anywhere; hi: the highest on the tile, m (checked against the data)
+  // lo: the lowest ground anywhere; hi: the highest on the tile, m (checked against the data)
+  ground: { lo: number; hi: number }
   texel: { shadow: number; light: number; ao: number } // the largest texel each bake may have, m
-  sizes: { lightMap: number; aoCell: number; riverMask: number; reflMask: number; aoTex: number; grain: number } // texels per side; aoCell in m
+  // texels per side; aoCell in m
+  sizes: { lightMap: number; aoCell: number; riverMask: number; reflMask: number; aoTex: number; grain: number }
   minSpec: { maxTexture: number; bakeMB: number } // decision 0011: RTX 3060 laptop
   depth: { near: number; far: number } // the sun camera's depth range, m
   shadowFade: number // shadows fade out over the shadow box's outer metres
@@ -41,7 +45,8 @@ export interface Spec {
   // the fine bank normals (docs/plans/done/w2-river-banks.md): texels of `texel` m over the tile, covering the
   // river's corridor out to `reach` m from its centre line, faded out over the last `fade` m, and over the last
   // `edge` m before the tile's edge (where the apron and the far ring shade with their vertex normals)
-  bank: { texel: number; reach: number; fade: number; edge: number; paint: number } // paint: the banks' colours reach this far from the water, m (W5a)
+  // paint: the banks' colours reach this far from the water, m (W5a)
+  bank: { texel: number; reach: number; fade: number; edge: number; paint: number }
   // the roads (docs/plans/done/roads.md): a grid of `cell` m cells over the tile, each listing the road segments within
   // their half width and `reach` m of it; their paint reaches `paint` m past a side (the cover's warp and wobble), the
   // junction weight is full within it of another line's side and gone by `junction` m; a pixel looks for a road only
@@ -54,7 +59,8 @@ export interface Spec {
   // minus the ground, signed) stored over depth[0]..depth[1] m, the shore distance over ±sdf m. The shore band
   // (docs/plans/done/w4-water-surface.md): within `band` m of the shoreline, on either side, the terrain and the
   // water paint the same colour (the drawn surfaces disagree on the shore by less: tools/water-look-check.mjs)
-  water: { texel: number; depth: [number, number]; sdf: number; band: number; stones: number } // stones: the most stones in the water whose foam the water paints (W5a)
+  // stones: the most stones in the water whose foam the water paints (W5a)
+  water: { texel: number; depth: [number, number]; sdf: number; band: number; stones: number }
   // the ground's macro colour (docs/plans/active/l5-macro.md, L5a): baked at `texel` m over the tile and `far` m over
   // the far ring, `bakeTile` texels square a draw; the cover grid (src/look/world/cover.ts) has `cover` m cells; arm 5
   // (L5b) filters the bake over `kuwahara` m (on the far ring, a texel); the cover is read at a point swayed by up to
@@ -135,7 +141,8 @@ function reachOf(s: Spec, pts: number[][], planes: number[]): number {
         for (const [sx, sy] of pts) {
           const drop = c.focusY - groundY
           const r = Math.max(r0, (c.clearance - drop) / Math.cos(beta))
-          if (r > c.rMax + 1e-9 || r * Math.cos(beta) + drop <= 0) return Infinity // the camera would be inside the ground
+          // the camera would be inside the ground
+          if (r > c.rMax + 1e-9 || r * Math.cos(beta) + drop <= 0) return Infinity
           // camera frame: forward tilted beta from straight down; up in the image is away from the camera on the ground
           const fy = -Math.cos(beta)
           const fz = Math.sin(beta)

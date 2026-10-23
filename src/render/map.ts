@@ -212,7 +212,8 @@ export class StaffMap {
         let best = 0
         for (let c = 1; c < wsum.length; c++) if (wsum[c] > wsum[best]) best = c
         let col = rgb[best]
-        if (best === wid && t.depth[j * t.n + i] <= this.w.cr.rs.water.limit) col = shallow // a ford: wadeable water, lighter
+        // a ford: wadeable water, lighter
+        if (best === wid && t.depth[j * t.n + i] <= this.w.cr.rs.water.limit) col = shallow
         const o = (py * n + px) * 4
         im.data[o] = col[0]
         im.data[o + 1] = col[1]

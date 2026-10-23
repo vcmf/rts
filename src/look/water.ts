@@ -53,8 +53,9 @@ export function blurMask(
   const d = img.data
   const a = new Float32Array(W * Hh)
   const b = new Float32Array(W * Hh)
-  // edge pixels repeat at the mask's border; the canvas filter it replaces read transparent there and blurred each crown
-  // before compositing, so reflections near the tile edge and where crowns overlap differ slightly (an intended change)
+  // edge pixels repeat at the mask's border; the canvas filter it replaces read transparent there and blurred each
+  // crown before compositing, so reflections near the tile edge and where crowns overlap differ slightly (an intended
+  // change)
   const at = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
   for (let i = 0; i < W * Hh; i++) a[i] = d[i * 4]
   for (let y = 0; y < Hh; y++) {
@@ -89,8 +90,10 @@ export function blurMask(
 const GROUND_VS =
   'precision highp float;attribute vec3 position;uniform mat4 world,viewProjection;varying vec3 vW;varying float vAcross,vTau,vRiffle,vV;void main(){vec4 w=world*vec4(position,1.0);vW=w.xyz;vAcross=0.0;vTau=0.0;vRiffle=0.0;vV=0.0;gl_Position=viewProjection*w;}'
 
-// tex: the water data (docs/plans/done/w3-water-data.md) and the bank normals (the shore band lights the edge with them);
-// dive: false keeps every column at the water's level, the band check's sabotage (the ribbon then shows over dry ground)
+// tex: the water data (docs/plans/done/w3-water-data.md) and the bank normals (the shore band lights the edge with
+// them);
+// dive: false keeps every column at the water's level, the band check's sabotage (the ribbon then shows over dry
+// ground)
 export function buildWater(
   scene: Scene,
   mats: Materials,

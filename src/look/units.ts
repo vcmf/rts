@@ -104,7 +104,8 @@ const SM_REACH = 900 // m: a view ray that meets no ground is cut here (the wide
 const SM_BIAS = 0.02 // m along the sun: no receiver is drawn into the map, so it only absorbs float rounding
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1] // the view's corners in clip space
 const FIGURE = 1.8 // m: a figure's height, for the LOD's pixel test
-const MAN_R = 1.6 // m: a man's bounding sphere round his middle (his musket at the present), for the nearest LOD's view test
+// m: a man's bounding sphere round his middle (his musket at the present), for the nearest LOD's view test
+const MAN_R = 1.6
 const SM_HOLD = 6 // m: lazy, the held sun box must cover the view by this much
 // m; rad; the cloth's least height on screen
 const FLAG_W = 1.4
@@ -134,7 +135,8 @@ const SM_COARSE = 1.3 // and be at most this many times the size the view needs 
 // is bound by its vertices)
 const DECAL_ALONG = 3
 const DECAL_ACROSS = 1
-const LIFT_RAMP = 1.5 // m along the shadow from his feet over which its lift grows (unitdecal.vert: not over his own shins)
+// m along the shadow from his feet over which its lift grows (unitdecal.vert: not over his own shins)
+const LIFT_RAMP = 1.5
 // (the blend's factors, WebGL's own: no Babylon mode is dst · src with the alpha kept)
 const GL_ZERO = 0
 const GL_ONE = 1
@@ -143,7 +145,8 @@ const GROUND_N = 512 // the simple shadows' own ground heights without the meado
 const SHAPE_MIPS = 3 // the shape's mips read at most: a cell's 8-texel border holds to the fourth (unitdecal.frag)
 const SHAPE_FACINGS = 16 // the simple shadow's facings (shadowShape)
 /** the cross-fade's band (decision 0049): the camera's distance to its focus (m) where the map gives way to the simple
- *  shadows, from the map alone to the simple shadows alone (?ushadowswitch=<r0>,<r1>); near the LOD switch (48 px at 1080 lines: 63 m) */
+ *  shadows, from the map alone to the simple shadows alone (?ushadowswitch=<r0>,<r1>); near the LOD switch (48 px at
+ *  1080 lines: 63 m) */
 export const SHADOW_SWITCH: readonly [number, number] = [60, 85]
 
 // an axis-aligned box wholly outside one of the planes (its corner most along the plane's normal behind it)
@@ -170,7 +173,8 @@ export class Units {
   private depthMat: ShaderMaterial
   private depthVatMat: ShaderMaterial // the far LOD's casters, posed (VAT_POS)
   private depthProxyMat!: ShaderMaterial // the shadow proxy's, posed
-  private posedFar: ReturnType<typeof posedVertices> | null = null // the far LOD posed (the simple shadow's shape is made from it)
+  // the far LOD posed (the simple shadow's shape is made from it)
+  private posedFar: ReturnType<typeof posedVertices> | null = null
   private posed = false
   /** the casters culled to those whose shadow can reach the view (?ucull=0: all in the sun's box) */
   tightCull = true
@@ -197,13 +201,14 @@ export class Units {
   static readonly LOD_PX = 48
   /** the figure height in pixels below which a battalion draws its far LOD (±10%, so it does not flicker) */
   lodPx = Units.LOD_PX
-  /** the figure height in pixels below which a battalion far off draws the tiny LOD (±10 %; docs/plans/active/armies-32k.md,
-   *  step 3; the constructor's opts.tinyPx); 0 (?tinylod=0): none built */
+  /** the figure height in pixels below which a battalion far off draws the tiny LOD (±10 %;
+   *  docs/plans/active/armies-32k.md, step 3; the constructor's opts.tinyPx); 0 (?tinylod=0): none built */
   readonly tinyPx: number
   /** the tiny LOD's size (the report's, the tests') */
   tinyStats = { vertices: 0, triangles: 0 }
   /** the figure height in pixels from which a man is drawn at the nearest LOD, when the figure has one (±10 %; the
-   *  battalions whose bounds are out of the view or whose nearest point is under 90 % of it never look: ?nearestpx=<px>, 0 for none) */
+   *  battalions whose bounds are out of the view or whose nearest point is under 90 % of it never look:
+   *  ?nearestpx=<px>, 0 for none) */
   nearestPx = 100
   // the LODs' places in a host's meshes: the far LOD (the data's last), the near one before it, then the shadow proxy
   // and the simple shadow; the nearest LOD is the first when the figure has three (the data says which it has)
@@ -255,7 +260,8 @@ export class Units {
   private smEmpty = false // it was last drawn with no casters (clear)
   private smVP = new Float32Array(16) // the sun's view-projection it was drawn with
   private smList: Mesh[] = [] // and its casters
-  private smBox = { ex: 0, ey: 0, V: new Matrix(), c: new Vector3(), set: false, margin: SM_HOLD } // the sun's box held while it covers the view (lazy only)
+  // the sun's box held while it covers the view (lazy only)
+  private smBox = { ex: 0, ey: 0, V: new Matrix(), c: new Vector3(), set: false, margin: SM_HOLD }
   /** the shadow map's draws so far (the captures count them: a still frame draws none) */
   smDraws = 0
   /** the simple shadows past close zoom (decision 0049; ?ushadowfar=map: the map at every zoom, false) */
@@ -416,8 +422,8 @@ export class Units {
       m.setFloat('uMask', -1)
       m.setFloat('uCoatRole', data.palette.indexOf('coat'))
       this.mats.set(id, m)
-      // the far LOD's: its far palette and its lift crossfaded in below the LOD switch under its far rule (FAR, setFarRule;
-      // units.vert, units.frag), its vertices posed (VAT_POS, setPosed)
+      // the far LOD's: its far palette and its lift crossfaded in below the LOD switch under its far rule (FAR,
+      // setFarRule; units.vert, units.frag), its vertices posed (VAT_POS, setPosed)
       const f = mats.make(`units_${id}_far`, UNITS_VS, UNITS_FS, {
         attributes,
         uniforms: ['uVATStep', 'uStepFrac', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole'],
@@ -528,8 +534,8 @@ export class Units {
       mesh.setEnabled(false)
       this.lods.push(mesh)
     }
-    // the shadow proxy (shadowProxy, src/look/units-data.ts): a third mesh a battalion, never drawn in the view, cast from
-    // its posed vertices (VAT_POS), both sides of its quads
+    // the shadow proxy (shadowProxy, src/look/units-data.ts): a third mesh a battalion, never drawn in the view, cast
+    // from its posed vertices (VAT_POS), both sides of its quads
     const px = shadowProxy(data, data.lods[this.farLod].name)
     const pp = posedMesh(data, px)
     const pn = px.positions.length / 3
@@ -575,8 +581,8 @@ export class Units {
     pm.setEnabled(false)
     this.lods.push(pm)
     this.proxyStats = { vertices: pn, triangles: px.indices.length / 3 }
-    // the simple shadow (decision 0049): a grid a man (0 to 1 across and along the shadow's frame), each vertex set on the
-    // ground (unitdecal.vert); its material and shape made when first asked for (useDecals)
+    // the simple shadow (decision 0049): a grid a man (0 to 1 across and along the shadow's frame), each vertex set on
+    // the ground (unitdecal.vert); its material and shape made when first asked for (useDecals)
     const gp: number[] = []
     const gi: number[] = []
     for (let j = 0; j <= DECAL_ALONG; j++) {
@@ -596,7 +602,8 @@ export class Units {
     qm.setEnabled(false)
     this.lods.push(qm)
     if (tinyPx) {
-      // the tiny LOD (tinyMesh, src/look/units-data.ts): the far LOD's parts as boxes, posed at every step as the far LOD
+      // the tiny LOD (tinyMesh, src/look/units-data.ts): the far LOD's parts as boxes, posed at every step as the far
+      // LOD
       const tm = tinyMesh(data, data.lods[this.farLod].name)
       const tp = posedMesh(data, tm)
       const tn = tm.positions.length / 3
@@ -658,7 +665,8 @@ export class Units {
           ? this.depthProxyMat
           : ((li === this.tinyLod ? this.tinyMats : li === this.farLod ? this.farMats : this.mats).get(b.uniform) ??
             null)
-    if (li >= this.proxyLod) host.isVisible = false // (the proxy: shown to the map alone; the simple shadows and the tiny LOD: shown by frame())
+    // (the proxy: shown to the map alone; the simple shadows and the tiny LOD: shown by frame())
+    if (li >= this.proxyLod) host.isVisible = false
     if (li === this.decalLod) host.alphaIndex = 1000 // (after everything else)
     // (a clone of a disabled source is disabled: enabled while the figures show; the nearest LOD's by setSplit)
     host.isPickable = false
@@ -755,7 +763,8 @@ export class Units {
     let changed = false
     const ls = moving ? Math.max(0, local - back) : local
     const ln = ls + 1 / fps
-    const p = h.b.reserve ? RESERVE : phaseAt(this.drill, ls, this.speed.march, this.speed.run) // (a reserve stands in column)
+    // (a reserve stands in column)
+    const p = h.b.reserve ? RESERVE : phaseAt(this.drill, ls, this.speed.march, this.speed.run)
     // (the next step's phase; none past the cycle's end, where the script starts afresh)
     const pn = moving && !h.b.reserve && ln < CYCLE ? phaseAt(this.drill, ln, this.speed.march, this.speed.run) : null
     for (let i = 0; i < this.slot.line.length; i++) {
@@ -835,8 +844,9 @@ export class Units {
     }
     h.cx = (minX + maxX) / 2
     h.cz = (minZ + maxZ) / 2
-    // thin-instance bounds do not follow the animation: padded by a figure's height (his bayonet up, SHADOW_H, as tall as
-    // the far figures grow, FAR_SCALE_Y) and his reach (sidePad: from the baked poses); cull() stretches the same box
+    // thin-instance bounds do not follow the animation: padded by a figure's height (his bayonet up, SHADOW_H, as tall
+    // as the far figures grow, FAR_SCALE_Y) and his reach (sidePad: from the baked poses); cull() stretches the same
+    // box
     const top = SHADOW_H * FAR_SCALE_Y + 0.2
     const pad = this.sidePad
     h.lo.set(minX - pad, minY - 0.3, minZ - pad)
@@ -1071,8 +1081,8 @@ export class Units {
       h.moving = moving
       const px =
         (FIGURE * pxPerM) / Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
-      // the nearest LOD: looked at only when the battalion's nearest point (its bounds) is within 90 % of its switch and
-      // its bounds are in the view
+      // the nearest LOD: looked at only when the battalion's nearest point (its bounds) is within 90 % of its switch
+      // and its bounds are in the view
       let split = false
       if (this.hasNearest && this.nearestPx > 0) {
         const lo = h.lo
@@ -1099,8 +1109,8 @@ export class Units {
       h.lod[this.decalLod].isVisible = decalOn
       if (this.tinyLod >= 0) h.lod[this.tinyLod].isVisible = tiny
       if (h.sel.length) h.lod[0].isVisible = split && h.lod[0].thinInstanceCount > 0 // (made at the first split)
-      // the LODs drawn, the one that casts for the battalion, the simple shadows while they show; a hidden one is updated
-      // when drawn again
+      // the LODs drawn, the one that casts for the battalion, the simple shadows while they show; a hidden one is
+      // updated when drawn again
       const kc = this.casterOf(h)
       for (let k = 0; k < h.lod.length; k++) {
         const drawn = near ? k === this.nextLod || (split && k === 0) : k === (tiny ? this.tinyLod : this.farLod)
@@ -1215,8 +1225,8 @@ export class Units {
   // centred on what it holds, so the map's texels go where the camera looks. Its centre snaps to whole texels along the
   // sun's fixed view axes and its size moves in SM_STEP_FINE steps, so the texel grid stays put under still figures.
   // Lazy (lazyShadows), it is held while the view stays inside it (its slack: SM_HOLD_SHARE of its size, holdShare) and
-  // it is at most SM_COARSE times the size the view needs, so a pan draws no new map until it leaves it. Returns whether
-  // the map's view or casters changed
+  // it is at most SM_COARSE times the size the view needs, so a pan draws no new map until it leaves it. Returns
+  // whether the map's view or casters changed
   private fitSun(): boolean {
     const cam = this.camera
     const k = this.scratch
@@ -1527,7 +1537,8 @@ export class Units {
     m.setFloat('uStepFrac', 0)
     m.setVector2('uFarScale', this.farScaleV)
     m.setFloat('uDecalLift', this.lift)
-    m.alphaMode = Constants.ALPHA_EXCLUSION // (a mode nothing else draws with: its blend is replaced at each bind, below)
+    // (a mode nothing else draws with: its blend is replaced at each bind, below)
+    m.alphaMode = Constants.ALPHA_EXCLUSION
     const st = m.stencil
     st.enabled = true
     st.func = Constants.NOTEQUAL
@@ -1549,8 +1560,8 @@ export class Units {
   }
 
   /** the figures' cast shadows on or off: off, the receivers compile without them (the bench's baseline arm). On, the
-   *  map up close and, unless simpleFar is off (?ushadowfar=map), the simple shadows beyond (frame() draws each while it
-   *  shows) */
+   *  map up close and, unless simpleFar is off (?ushadowfar=map), the simple shadows beyond (frame() draws each while
+   *  it shows) */
   setShadows(on: boolean): void {
     if (on === this.shadows) return
     this.shadows = on
@@ -1858,7 +1869,8 @@ export class Units {
     this.smStep = -1
   }
 
-  /** figures drawn last frame, by LOD (the data's names, and tiny): battalions shown at that LOD and in the camera's view */
+  /** figures drawn last frame, by LOD (the data's names, and tiny): battalions shown at that LOD and in the camera's
+   *  view */
   drawn(): Record<string, number> {
     const out: Record<string, number> = {}
     const planes = this.scene.frustumPlanes

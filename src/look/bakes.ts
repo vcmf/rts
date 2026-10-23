@@ -1,7 +1,7 @@
 // Static light, baked once (docs/art-bible.md §6b, docs/proposals/engine-design.md §6), ported from
 // prototypes/painted-cinematic.html: a sun shadow depth pass, a CPU occlusion and valley-mist mask, and a top-down
-// light map (R sun visibility, G occlusion, B valley mask, A the contact under trees) the materials read. Trees keep a small runtime lookup
-// of the shadow map for self-shadowing.
+// light map (R sun visibility, G occlusion, B valley mask, A the contact under trees) the materials read. Trees keep a
+// small runtime lookup of the shadow map for self-shadowing.
 import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera.js'
 import { Camera } from '@babylonjs/core/Cameras/camera.js'
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js'
@@ -36,7 +36,8 @@ import { withCards } from './canopy.ts'
 
 // sky: the sky's occlusion's time on load and the occlusion's range after it (null with the soft shadows off)
 // groundBounce: the bounce map (LC5), rebaked after the light map and when the season is released (src/look/main.ts)
-// unitShade: the simple shadows' shade (decision 0049), made when first asked for (the armies), rebaked after the bounce map
+// unitShade: the simple shadows' shade (decision 0049), made when first asked for (the armies), rebaked after the
+// bounce map
 export interface Bakes {
   lightCam: FreeCamera
   shadowRT: RenderTargetTexture
@@ -62,7 +63,8 @@ const LZ1 = D.spec.depth.far
 const SM_FADE_M = D.spec.shadowFade
 
 // soft shadows (docs/plans/done/soft-shadows.md): on, the sun's penumbra grows with the distance to the caster
-// (penumbra: metres of edge radius per metre, an exaggerated sun) and the sky's occlusion comes from each crown's sphere
+// (penumbra: metres of edge radius per metre, an exaggerated sun) and the sky's occlusion comes from each crown's
+// sphere
 export interface SoftOptions {
   on: boolean
   penumbra: number
@@ -80,7 +82,8 @@ const GB_SIGMA = 4.5
 // the trunks' baked shadows: how dark at full strength (times the sun), and a layer no camera of the game sees
 const TRUNK_DARK = 0.85
 const LM_ONLY = 0x10000000
-const FAR_MAX = 40 // m along the light: the farthest caster the penumbra search reaches (a 18 m crown top at the sun's 27°)
+// m along the light: the farthest caster the penumbra search reaches (a 18 m crown top at the sun's 27°)
+const FAR_MAX = 40
 
 export function buildBakes(
   scene: Scene,
@@ -100,7 +103,8 @@ export function buildBakes(
   let smFade: Vector2
   let sm: { w: number; h: number }
   let smGround: Vector2
-  // fit the ortho box to the tile: project its corners (lowest ground to 60 m above the highest, above any caster) into light space
+  // fit the ortho box to the tile: project its corners (lowest ground to 60 m above the highest, above any caster) into
+  // light space
   {
     const tp = tileGround.getVerticesData(VertexBuffer.PositionKind)!
     let lo = Infinity
@@ -133,7 +137,8 @@ export function buildBakes(
     // the fade band (shadowAt) lies outside the tile
     ex += SM_FADE_M + 8
     ey += SM_FADE_M + 8
-    sm = shadowMapSize(D, 2 * ex, 2 * ey, SUN.y) // the spec's texel target, on the ground (docs/proposals/engine-design.md §6)
+    // the spec's texel target, on the ground (docs/proposals/engine-design.md §6)
+    sm = shadowMapSize(D, 2 * ex, 2 * ey, SUN.y)
     smTexel = new Vector2(1 / sm.w, 1 / sm.h)
     // a shadow texel on the ground, m (about square)
     smGround = new Vector2((2 * ex) / sm.w, (2 * ey) / (sm.h * SUN.y))
@@ -174,7 +179,8 @@ export function buildBakes(
   shadowRT.activeCamera = lightCam
   shadowRT.clearColor = new Color4(1, 1, 1, 1)
   const terrains = scene.meshes.filter(m => m.name === 't')
-  // terrain is NOT a shadow caster: it self-shadowed into diagonal 'acne' stripes; slopes facing away are already dark via N·L
+  // terrain is NOT a shadow caster: it self-shadowed into diagonal 'acne' stripes; slopes facing away are already dark
+  // via N·L
   // small plants don't cast either: thousands of tuft shadows streaked the ground along the sun direction.
   // Under cards (docs/plans/done/l7a-canopy-cards.md) the carded pack models cast nothing; their
   // trunk meshes cast with the rest, and the crowns cast through their cards, turned to face the sun and cut by the
@@ -302,7 +308,8 @@ export function buildBakes(
       aog.fill()
     }
     for (const [x, z, r, a, tree] of canopy) {
-      if (!soft.on) disc(x, z, r, `rgb(255,${Math.round(255 * (1 - a))},255)`) // soft: the sky's occlusion below instead
+      // soft: the sky's occlusion below instead
+      if (!soft.on) disc(x, z, r, `rgb(255,${Math.round(255 * (1 - a))},255)`)
       // the core as strong as the crown is whole (a/0.42: 1 for every tree but a generated one losing its leaves)
       if (tree) disc(x, z, r * 0.45, `rgb(${Math.round(255 - 89 * Math.min(1, a / 0.42))},255,255)`)
     }
@@ -419,7 +426,8 @@ export function buildBakes(
   groundBounce.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE
   scene.customRenderTargets.push(groundBounce)
   lightMap.onAfterRenderObservable.add(() => groundBounce.resetRefreshCounter())
-  mats.bindAll(m => m.setTexture('uGB', groundBounce)) // read where GROUND_BOUNCE is defined (the ground, the water's shore band, the meadow)
+  // read where GROUND_BOUNCE is defined (the ground, the water's shore band, the meadow)
+  mats.bindAll(m => m.setTexture('uGB', groundBounce))
 
   /* ---------- the simple shadows' shade (decision 0049, shaders/unitshade.frag): the ratio of the ground painted in a
      full cast shadow to it painted as it is, top-down over the tile with the light map's camera, after the bounce map

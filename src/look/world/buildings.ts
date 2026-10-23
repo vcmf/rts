@@ -1,11 +1,12 @@
 // The demo map's buildings (docs/plans/done/buildings.md): authored, deterministic. Each a model of
 // prototypes/buildings.data.js (tools/building-to-js.py: metres, its base at 0, centred on its footprint), where it
 // stands (x, z), its turn (yaw, rad) and its scale. The turn is Babylon's instance yaw (Quaternion.RotationYawPitchRoll
-// in Matrix.Compose, src/look/buildings.ts), which takes a local point (x, z) to (x cos + z sin, −x sin + z cos): toWorld
-// and toLocal below, the one rule the footprints, the yards, the ground's samples and the shader's frame (shore.glsl,
-// pavePaint) all use (test/buildings.test.ts pins it against Babylon's Matrix; measured on the page too: a house at a
-// yaw of −π/2 + 0.14 has its door, local (0, −3.35), 3.32 m east of its centre). The models' fronts (the house's door)
-// face −z before the turn: a yaw of 0 faces −z (south), π/2 −x (west, the road), −π/2 +x (east), π +z (north)
+// in Matrix.Compose, src/look/buildings.ts), which takes a local point (x, z) to (x cos + z sin, −x sin + z cos):
+// toWorld and toLocal below, the one rule the footprints, the yards, the ground's samples and the shader's frame
+// (shore.glsl, pavePaint) all use (test/buildings.test.ts pins it against Babylon's Matrix; measured on the page too: a
+// house at a yaw of −π/2 + 0.14 has its door, local (0, −3.35), 3.32 m east of its centre). The models' fronts (the
+// house's door) face −z before the turn: a yaw of 0 faces −z (south), π/2 −x (west, the road), −π/2 +x (east), π +z
+// (north)
 import { segD } from './geom.ts'
 export interface Building {
   model: 'windmill' | 'house'
@@ -36,9 +37,9 @@ export const BUILDINGS: readonly Building[] = [
   // the windmill in the large wheat field's north-east part (cover.ts: rect(50, 48, 45, 28, 0.1)), its sails to the
   // south-west, toward the start view
   { model: 'windmill', x: 78, z: 66, yaw: 0.6, scale: 1 },
-  // the village (cover.ts, VILLAGE): an irregular cluster east of the road, the houses turned each a quarter turn of its
-  // own (two doors to the road, one gable to it, two side-on, one back to it) and a little more, their paved yards at
-  // least PAVE_GAP apart (cover.ts checks it); six fit the village ground with their yards
+  // the village (cover.ts, VILLAGE): an irregular cluster east of the road, the houses turned each a quarter turn of
+  // its own (two doors to the road, one gable to it, two side-on, one back to it) and a little more, their paved yards
+  // at least PAVE_GAP apart (cover.ts checks it); six fit the village ground with their yards
   { model: 'house', x: 208, z: -30, yaw: Q + 0.14, scale: 1.0 },
   { model: 'house', x: 232, z: -38, yaw: -0.12, scale: 0.95 },
   { model: 'house', x: 214, z: -6, yaw: 2 * Q + 0.1, scale: 1.04 },

@@ -9,7 +9,8 @@ import { ROAD_SLOTS, type Derived } from '../spec.ts'
 import { SAMPLE_KEYS, type RiverParams, type RiverSamples } from '../river.ts'
 import { packCover, unpackCover, type CoverGrid } from './cover.ts'
 
-export const LOOK_VERSION = 8 // 8: the roads as segments (with mitre tangents) and a grid of them (docs/plans/done/roads.md)
+// 8: the roads as segments (with mitre tangents) and a grid of them (docs/plans/done/roads.md)
+export const LOOK_VERSION = 8
 
 // A grid of n² texels of `cell` metres from (x0, z0) with ch bytes a texel, stored only where covered: spans are (row,
 // first column, count) triples, tex holds ch bytes per covered texel in span order. The rest take the user's fill.
@@ -25,8 +26,9 @@ export interface SpanGrid {
   tex: Uint8Array
 }
 // the roads (docs/plans/done/roads.md): their segments (12 floats each: ax, az, bx, bz, the distance along their line
-// at a, the line's half width, its index, its flags (1 its start is a free end, 2 its end, 4 a track's earth), and its mitre tangents at a and b) and a grid over the tile of `cell` m cells, ROAD_SLOTS segment indices a
-// cell (−1: none), every segment that reaches within its half width and SPEC.road.reach m of the cell
+// at a, the line's half width, its index, its flags (1 its start is a free end, 2 its end, 4 a track's earth), and its
+// mitre tangents at a and b) and a grid over the tile of `cell` m cells, ROAD_SLOTS segment indices a cell (−1: none),
+// every segment that reaches within its half width and SPEC.road.reach m of the cell
 export { ROAD_SLOTS }
 export const ROAD_SEG = 12 // floats a segment (three RGBA texels)
 export interface RoadGrid {
@@ -215,7 +217,8 @@ export function unpackSpans(g: SpanGrid, fill: [number, number, number, number])
   const n = g.n
   const ch = g.ch
   const data = new Uint8Array(n * n * 4)
-  new Uint32Array(data.buffer).fill((fill[0] | (fill[1] << 8) | (fill[2] << 16) | (fill[3] << 24)) >>> 0) // bytes in little-endian order: every browser
+  // bytes in little-endian order: every browser
+  new Uint32Array(data.buffer).fill((fill[0] | (fill[1] << 8) | (fill[2] << 16) | (fill[3] << 24)) >>> 0)
   let t = 0
   for (let s = 0; s < g.spans.length; s += 3) {
     const j = g.spans[s]

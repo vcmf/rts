@@ -44,7 +44,8 @@ const MARK = '#include<painter>'
 // #include<macro>); a replacer function keeps `$` in the GLSL
 export const withPainter = (src: string): string => {
   if (!src.includes(MARK)) throw new Error(`a painted shader without ${MARK}`)
-  // the mood's warm autumn as a constant (AUTUMN_WARM: the mood is fixed for the page), so the compiler folds it away; the switches defined only when on (Babylon's preprocessor reads `#if X` as `defined X`: tested with #ifdef)
+  // the mood's warm autumn as a constant (AUTUMN_WARM: the mood is fixed for the page), so the compiler folds it away;
+  // the switches defined only when on (Babylon's preprocessor reads `#if X` as `defined X`: tested with #ifdef)
   // the meadow's clump field before the macro colour, whose groundAt reads it (MEADOW)
   return src
     .replace(

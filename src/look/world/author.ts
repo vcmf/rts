@@ -72,7 +72,8 @@ export function generateRiver(): { samples: RiverSamples; trough: Trough } {
   const nL = (k: number) => vn(k * 1.1 + P.seed, 7.7)
   while (u < P.z1 - P.z0) {
     const bend = ph / Math.PI
-    const th0 = Math.min(1.85, P.theta0 * (0.65 + 0.7 * nA(bend))) // ±35% amplitude per bend; >π/2 makes bends turn back, ≤1.85 keeps loops from touching
+    // ±35% amplitude per bend; >π/2 makes bends turn back, ≤1.85 keeps loops from touching
+    const th0 = Math.min(1.85, P.theta0 * (0.65 + 0.7 * nA(bend)))
     const lam = (11 * P.W0 * (0.65 + 0.7 * nL(bend))) / J0(th0) // valley wavelength ≈ 11 W (±35%) × sinuosity
     let th = th0 * Math.sin(ph) + th0 ** 3 * (P.Js * Math.cos(3 * ph) - P.Jf * Math.sin(3 * ph))
     // cubic restoring term: free in the middle, firm at the belt edge
@@ -166,8 +167,8 @@ export function generateRiver(): { samples: RiverSamples; trough: Trough } {
     const bendness = Math.min(1, Math.abs(k) * P.W0 * 2.3)
     if (i) rph += (2 * Math.PI * (C.s[i] - C.s[i - 1])) / (6 * C.W[i - 1]) // riffles about 6 local widths apart
     const straight = 0.5 + 0.5 * Math.cos(rph)
-    // docs/art-bible.md §6c: 4–11 m. Each stretch of 2–3 bends has its own width (slow noise), bends narrow, straight riffles widen.
-    // Soft limits: the narrowest bends ease into 4 m instead of sitting flat on it
+    // docs/art-bible.md §6c: 4–11 m. Each stretch of 2–3 bends has its own width (slow noise), bends narrow, straight
+    // riffles widen. Soft limits: the narrowest bends ease into 4 m instead of sitting flat on it
     const reach = 0.55 + 0.9 * vn(C.s[i] / (28 * P.W0), 5.3)
     const W = softClamp(
       P.W0 * Math.sqrt(Q) * reach * (1.2 - 0.45 * bendness) * (1 + 0.35 * straight * (1 - bendness)),

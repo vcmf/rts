@@ -76,7 +76,8 @@ export class SoldierLayer {
   scene: Scene
   units = new Map<number, Unit>()
   fallen: Man[] = [] // men of battalions that are gone
-  private leaving = new Map<number, number>() // formations that left the field (handle → the men they took), until their units go
+  // formations that left the field (handle → the men they took), until their units go
+  private leaving = new Map<number, number>()
   private ctxA: Places
   private ctx0: Places
   private rnd = cosmeticRng(7)
@@ -419,7 +420,8 @@ export class SoldierLayer {
       const i = u.i
       this.frame(i, alpha)
       const busy = !!(f.trans[i] || f.ordHead[i] >= 0)
-      u.sway += ((busy ? 1 : 0) - u.sway) * Math.min(1, dt * 0.8) // sway eases out at the halt, so the ranks come to rest
+      // sway eases out at the halt, so the ranks come to rest
+      u.sway += ((busy ? 1 : 0) - u.sway) * Math.min(1, dt * 0.8)
       // still: halted, and every place framed as last frame, so a settled man's place has not moved
       const pose = this.poseNow
       const np = this.poseOf(i, pose)
@@ -516,7 +518,8 @@ export class SoldierLayer {
             }
           }
         }
-        const walking = Math.min(1, Math.sqrt(m.vx * m.vx + m.vz * m.vz) / 0.5) // while walking, steer round the trunks just ahead
+        // while walking, steer round the trunks just ahead
+        const walking = Math.min(1, Math.sqrt(m.vx * m.vx + m.vz * m.vz) / 0.5)
         tc = this.treeCell(m.x, m.z)
         if (walking > 0 && tc >= 0) {
           for (let k = TA[tc], e = TA[tc + 1]; k < e; k++) {
