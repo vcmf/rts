@@ -106,6 +106,10 @@ change from the first frame as a share of the shadow's mass: before, a pan at th
 sequences above measure the same after the fix (the fringe 0.5 to 0.7 every frame, no jump). The ground with no armies:
 `tools/golden.mjs` against main's build, every camera 0.000 %.
 
+**The packing's main-thread time** (the dirt and the earth into one texture: drawing, reading back, packing, the
+upload; the performance entry `groundSurfacesPack`; SwiftShader's headless page, three loads): 10.9, 9.7 and 16.1 ms
+(the images' fetch and decode are off the main thread).
+
 Review images: `output/armies-review/7-simple-shadows/` in the main checkout (not committed).
 
 ## Open questions
@@ -117,5 +121,7 @@ Review images: `output/armies-review/7-simple-shadows/` in the main checkout (no
   (`?ushadowswitch=<r0>,<r1>`).
 - The simple shadow is one averaged shape a role: a firing line's muskets show as a faint stroke, a marching man's legs
   as a soft wedge. Per-pose shapes (an atlas a step) would cost texture, not time, if the owner wants them.
-- The far figures are drawn up to 1.15 times taller when small (`?farscale`); their simple shadows are not lengthened
-  with them.
+- Left from review round 2 (not defects): a battalion re-placed at the next step reuses its men's ground height plus
+  their move (`place`, `reuse`), which can differ from the ground under the new place by about a centimetre on a slope
+  (one groundAt a man a step instead of two); `fitMask` fits and holds the box in one function, which a later change
+  could split into a fit and a hold as `fitSun` does.

@@ -42,8 +42,8 @@ the shape and only use the good shadow like today at close zoom."
 - No shadow map is drawn past 85 m; the mask is drawn there instead, while men in it move (a quad a man into a 2048² R8
   target).
   Measured (the plan): the same frame time as the map, within noise, at every zoom, still and panning.
-- The shape is made once at load (about 85 ms); the mask's texel is 3.1 to 25 cm by what it must hold (at most 512 m
-  round the focus; past it, at the widest zoom, no simple shadow).
+- The shape is made once at load (about 85 ms); the mask's texel is 3.1 to 25 cm by what it must hold (at most a 410 m
+  window round the ground in view; past it, at the widest zoom, no simple shadow).
 - The figures still do not shadow one another, nor the water.
 - The ground's fragment stage is at 16 textures again with both readers: the next texture it needs must free one.
 

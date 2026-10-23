@@ -615,7 +615,8 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   feet along the shadow (`unitmask.vert`, `unitmask.frag`: his facing picks two cells, blended; his clip's first step
   his role's row; grown with the far figures, `FAR_SCALE`) into a 2048² top-down mask (R8, blend MAX: overlapping
   shadows do not darken twice) over an axis-aligned box round the battalions whose shadow can reach the view, cut to the
-  ground in view and to 512 m round the focus (`fitMask`). Its texel is fixed by level (3.1, 6.25, 12.5 or 25 cm, the
+  ground in view (at its own range of heights, as the sun's box) and, past 410 m, to a 410 m window round the middle of
+  that ground (the rest of the coarsest 512 m level its slack, so a pan holds it; `fitMask`). Its texel is fixed by level (3.1, 6.25, 12.5 or 25 cm, the
   level held until what it holds fits well inside the finer one) and its corner on that level's whole texels, held while
   it covers what it must: the texel grid stays put in the world through a pan or a zoom. Where its texel is coarser than
   the shape's (5 cm) the shape is read through its mips, so a man's shadow is a soft footprint, never aliased on the
