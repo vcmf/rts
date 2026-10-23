@@ -428,7 +428,10 @@ function seasonCol(key,s){const a=SEAS[key],i=Math.min(2,Math.floor(s)),t=s-i;co
 const TER_VS=`precision highp float;attribute vec3 position;attribute vec3 normal;uniform mat4 world,viewProjection;uniform float uRise;
 varying vec3 vW;varying vec3 vN;varying float vH;
 void main(){vec3 p=position;vH=p.y;p.y*=uRise;vec4 w=world*vec4(p,1.0);vW=w.xyz;vN=normal;gl_Position=viewProjection*w;}`;
-const TER_FS=`precision highp float;varying vec3 vW;varying vec3 vN;varying float vH;
+const TER_FS=`#ifdef LIT
+#extension GL_OES_standard_derivatives : enable
+#endif
+precision highp float;varying vec3 vW;varying vec3 vN;varying float vH;
 uniform sampler2D uMapA,uMapB,uPaperT,uNoiseT;uniform float uHachK,uRise,uWash,uInk,uMist,uHmin,uHmax,uSunK;uniform vec3 uSun;
 uniform vec3 uPaper,uWashC,uWoodW,uWoodInk,uHach,uLine,uWaterW,uGLit,uGMid,uGSh,uRoad,uWater;uniform float uWashA,uWoodWA,uSeason;
 float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
@@ -474,7 +477,16 @@ void main(){
   /* ink: lifts last */
   float k=uInk*thin;
   col=mix(col,uWoodInk,woodMark*0.9*k);
+#ifdef LIT
+  /* contours for relief: minor every 5 m, index every 25 m, about a pixel wide at any zoom, each set fading where it crowds */
+  float hc=vH/5.0,fwc=max(fwidth(hc),1e-4),dc=abs(fract(hc-0.5)-0.5)/fwc;
+  float hx=vH/25.0,fwx=max(fwidth(hx),1e-4),dx=abs(fract(hx-0.5)-0.5)/fwx;
+  float minorC=(1.0-smoothstep(0.5,1.3,dc))*(1.0-smoothstep(0.22,0.5,fwc));
+  float indexC=(1.0-smoothstep(0.9,1.9,dx))*(1.0-smoothstep(0.3,0.7,fwx));
+  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.4,indexC*0.7)*k*inside);
+#else
   col=mix(col,uHach,clamp(A.r*1.05,0.0,1.0)*k*uHachK);
+#endif
   col=mix(col,uLine,clamp(Bm.r,0.0,1.0)*k);
 #ifdef LIT
   col*=0.93+(g1-0.5)*0.16+(fine-0.5)*0.12;

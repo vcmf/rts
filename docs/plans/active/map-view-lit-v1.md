@@ -26,7 +26,11 @@ comparison). In the lit mode:
    and the routing pulse stay on the top face (the shadow and the sides are clipped out under it); selection and
    hover rings stay around the top face, the block's footprint.
 
-Out of scope: lit relief, woods as canopy, roofs (decision 0051's bake, a later step); the game's staff map
+5. **Relief as contours** (the owner's choice, 2026-10-23, over the hachures): minor contours every 5 m and index
+   contours every 25 m, drawn in the terrain shader from the height, about a pixel wide at any zoom, each set fading
+   where its lines crowd, and fading with the rest of the ink toward the painted world.
+
+Out of scope: lit relief (shading), woods as canopy, roofs (decision 0051's bake, a later step); the game's staff map
 (`src/render/map.ts`); the map engine's draft page; season tuning beyond keeping each season readable.
 
 ## Approach
@@ -77,6 +81,6 @@ Out of scope: lit relief, woods as canopy, roofs (decision 0051's bake, a later 
   (an animated swatch and readouts in the lower part), so no change shows. Not a strict proof: the page has no
   `?frozen`.
 - Not settled for v2: the notched tail reads as a fishtail; the blocks' depth is fixed in pixels (thin up close);
-  Russian green on the summer olive has less contrast than French blue; the relief is still hachured (the lit relief
-  of decision 0051 is the next step); the summer wash's blocky noise, already in the ink style, shows more under the
-  ageing.
+  Russian green on the summer olive has less contrast than French blue; the relief's light and shade (decision
+  0051's bake) under the contours; height labels on the index contours; the summer wash's blocky noise, already in
+  the ink style, shows more under the ageing.
