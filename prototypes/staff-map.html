@@ -79,8 +79,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
 <script src="https://cdn.jsdelivr.net/npm/babylonjs@9.29.0/babylon.js"></script>
 <script>
 // ?dem=<path.js>: real heights for the terrain (docs/plans/active/real-terrain-proto.md), a generated file defining
-// window.DEM; loaded before the main script, which builds the height grid as it loads. A plain relative .js path only
-(()=>{const d=new URLSearchParams(location.search).get('dem');if(d&&/^[\w\-/.]+\.js$/.test(d)&&!d.includes('..'))document.write('<script src="'+d+'"><\/script>');})();
+// window.DEM; loaded before the main script, which builds the height grid as it loads. Only a .js file of this page's
+// own origin and protocol (the generated file in scratch/, given relative to this page: from file:// too): never a script from another host
+(()=>{const d=new URLSearchParams(location.search).get('dem');if(!d)return;let u;try{u=new URL(d,location.href);}catch(e){return;}
+  if(u.protocol===location.protocol&&u.host===location.host&&u.pathname.endsWith('.js')&&!/["<>]/.test(u.href))document.write('<script src="'+u.href+'"><\/script>');
+  else console.warn('?dem= ignored: not a .js file of this page\'s origin');})();
 </script>
 </head>
 <body>
@@ -92,7 +95,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
   <div class="t">Austerlitz</div>
   <div class="m"><span id="date">2 déc 1805</span> · <span id="clock">07:30</span> · <span id="temp">−4 °C</span><br><span id="phase">fog in the Goldbach valley</span></div>
   <div class="rule"></div>
-  <div class="n">staff map · feel prototype<br>geography after the 1805 field, approximate</div>
+  <div class="n">staff map · feel prototype<br>geography after the 1805 field, approximate<span id="demcredit"></span></div>
 </div>
 
 <div id="north"><svg width="12" height="18" viewBox="0 0 12 18"><path d="M6 1 L10 16 L6 12.5 L2 16 Z" fill="none" stroke="#211f1c" stroke-width="1"/><path d="M6 1 L6 12.5 L2 16 Z" fill="#211f1c"/></svg>N</div>
@@ -214,9 +217,13 @@ const floorAt=z=>{const t=clamp((z+TZ)/CELL,0,FL.length-1.001),j=Math.floor(t);r
 const PONDLV=floorAt(STREAM_Z0)-0.4;
 // real heights (?dem=): metres above the crop's lowest point, on the prototype's own 10 m grid (the export is resampled
 // to it); none of the made-up carving, the real valleys are in the data
-const DEM=window.DEM||null,DEM_LO=DEM?DEM.h.reduce((a,v)=>Math.min(a,v),Infinity):0;
+// the grid must be the page's (the tool writes it for TX, TZ, CELL); heights scale with the squeezed ground by default
+// (true slopes), ?demz=1 keeps them in metres (an exaggeration by the squeeze)
+const DEM_OK=!!window.DEM&&window.DEM.nx===Math.round(2*TX/CELL)+1&&window.DEM.nz===Math.round(2*TZ/CELL)+1;
+if(new URLSearchParams(location.search).has('dem')&&!DEM_OK)console.warn(window.DEM?'?dem= grid does not match the page (TX, TZ, CELL): made-up terrain':'?dem= file did not load: made-up terrain');
+const DEM=DEM_OK?window.DEM:null,DEM_LO=DEM?DEM.h.reduce((a,v)=>Math.min(a,v),Infinity):0,DEM_Z=DEM?(Q.get('demz')==='1'?1:1/(DEM.scale||1)):1;
 function demAt(x,z){const fx=clamp((x+TX)/CELL,0,DEM.nx-1.001),fz=clamp((z+TZ)/CELL,0,DEM.nz-1.001),i=Math.floor(fx),j=Math.floor(fz),u=fx-i,v=fz-j,k=j*DEM.nx+i,
-  at=q=>(DEM.h[q]-DEM_LO)/100;return lerp(lerp(at(k),at(k+1),u),lerp(at(k+DEM.nx),at(k+DEM.nx+1),u),v);}
+  at=q=>(DEM.h[q]-DEM_LO)/100*DEM_Z;return lerp(lerp(at(k),at(k+1),u),lerp(at(k+DEM.nx),at(k+DEM.nx+1),u),v);}
 function H(x,z){
   if(DEM)return demAt(x,z);
   let h=H0(x,z);
@@ -1203,7 +1210,8 @@ function rawTex(c,mip=true,premul=false){const g=c.getContext('2d'),d=g.getImage
 function build(){
   const tb=performance.now(),nh=bakeMap(),bakeMs=performance.now()-tb;
   const texA=rawTex(cA),texB=rawTex(cB),paperT=rawTex(paperCanvas()),noiseT=rawTex(noiseCanvas());cA.width=cB.width=0;texA.wrapU=texA.wrapV=texB.wrapU=texB.wrapV=B.Texture.CLAMP_ADDRESSMODE;
-  window.__bake={hachures:nh,ms:Math.round(bakeMs),trees:TREES.length,houses:HOUSES.length};
+  if(DEM)$('demcredit').textContent=` · terrain: ${DEM.credit}`;   // CC BY 4.0: the credit shown with the data
+  window.__bake={hachures:nh,ms:Math.round(bakeMs),trees:TREES.length,houses:HOUSES.length,terrain:DEM?`real (${DEM.source}), heights ×${DEM_Z.toFixed(2)}`:'made-up'};
   const COMMONU=['uSun','uSeason','uMist','uGSh'];
   terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal'],
     uniforms:['world','viewProjection','uCrown','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[])],defines:LIT?['#define LIT']:[]});
