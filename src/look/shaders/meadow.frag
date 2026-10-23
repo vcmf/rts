@@ -21,7 +21,7 @@ void main(){
   #ifdef UNIT_SHADOWS_VS
   sh=max(sh,vUSh);
   #elif defined(UNIT_SHADOWS)
-  sh=max(sh,unitShadowAt(vW));
+  sh=max(sh,unitShadowMix(vW));
   #endif
   vec3 alb;
   if(vIsCrop>0.5){
