@@ -169,6 +169,13 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
   function for the bake and the live houses; stale comments. Kept on purpose: the map shows about 4 in 10 of a wood's
   trees while the painted world grows them all (the owner asked for sparser marks).
 
+- **v3, round 2**: severe: the house texture, straight alpha with mipmaps, filtered each house's colour against the
+  transparent black around it (dark blobs at map zoom, dark rims up close). Fixed: premultiplied on upload, blended to
+  match. With: one light for the bake, the live houses and the tree shadows (the world's north-west, 45°); the live
+  shadow the bake's length; the live houses in batches (all shadows one path, then the sides, then the roofs) and culled
+  by their centre first; contours stopping at roofs only; the baked houses at full ink up to the frame, as the live ones.
+  Left: the houses' bake uses a full-size canvas (about 45 MB) for 221 houses.
+
 ## Results
 
 - Lit screenshots (1600×900, Windows Chrome over CDP, SwiftShader): the map in summer, mid zoom in summer and winter
