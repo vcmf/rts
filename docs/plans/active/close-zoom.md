@@ -110,6 +110,11 @@ with the nearest LOD side by side.
   as main does (#118's gravel bar, #120's winter ice at 76.6 %); `macro-check --only shimmer` fails its 15 m view
   (1.86 % against 1.0 %): #139.
 
+- **With the simple shadows** (decision 0049, merged from main): the cross-fade band (60–85 m from the focus) lies
+  past the closest zooms, so from 15 m to 60 m the figures' shadows are the map's (its texel 2.9 × 2.1 cm at 15 m),
+  the men at the nearest LOD cast through the shadow proxy like the rest; the nearest LOD's split lists carry the
+  men's moves between steps (`aNext`) with their matrices and clips.
+
 ## Open questions
 
 - **The camera's eye in a crown**: at 15 m the eye is 13 to 16 m over the battlefield; over a tall tree it may sit in

@@ -67,7 +67,13 @@ setRiver(look.river); setHeightfield(look.hf, look.far, D.spec.tile / 2)
   checkGround(D.spec, lo, hi, farLo)
 }
 const canvas = document.getElementById('c') as HTMLCanvasElement
-const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false }, false)
+// ?stencil=scene (the default): a stencil on the scene's target alone, for the soldiers' simple shadows (src/look/units.ts,
+// MSAA.stencil in src/look/post.ts); all: the engine's own (the canvas and its targets too: the A/B); 0: none
+const stencilParam = new URLSearchParams(location.search).get('stencil') ?? 'scene'
+if (!['scene', 'all', '0'].includes(stencilParam)) throw new Error(`?stencil must be scene, all or 0, not ${stencilParam}`)
+// (only with the simple shadows, which are the stencil's only use: without them the scene's depth stays DEPTH32_FLOAT)
+{ const q = new URLSearchParams(location.search); MSAA.stencil = stencilParam === 'scene' && q.get('armies') !== null && q.get('unitshadow') !== '0' && q.get('ushadowfar') !== 'map' }
+const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: stencilParam === 'all' }, false)
 engine.setHardwareScalingLevel(1)
 // the scene's own lines (the finishing chain's: under the upscale, its first target's; called only from the frames,
 // after the chain is made below)
@@ -311,6 +317,15 @@ const farScale = bit('farscale'), trample = bit('trample'), flags = bit('flags')
 // drawn at the figure's nearest LOD (when it has one); 0: never
 const nearestPx = params.get('nearestpx')
 if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) throw new Error(`?nearestpx must be a whole number of pixels, 0 to 2000, not ${nearestPx}`)
+// the simple shadows (decision 0049, docs/plans/active/simple-soldier-shadows.md): ?ushadowfar=map, the map at every zoom
+// (the A/B; else simple: the map up close, a baked shape a man drawn on the ground beyond); ?ushadowswitch=<r0>,<r1>, the cross-fade's band
+// (m from the focus); ?smoothmove=0, the figures' places at the 12 fps steps (else every frame; the poses stay stepped);
+// ?udecallift=<m>, how high over the ground the simple shadows cover the grass and the men's legs
+const uShadowFar = params.get('ushadowfar'), uShadowSwitch = params.get('ushadowswitch'), smoothMove = bit('smoothmove'), decalLift = params.get('udecallift')
+if (decalLift !== null && !(Number.isFinite(+decalLift) && +decalLift >= 0 && +decalLift <= 3)) throw new Error(`?udecallift must be 0 to 3 m, not ${decalLift}`)
+if (uShadowFar !== null && uShadowFar !== 'map' && uShadowFar !== 'simple') throw new Error(`?ushadowfar must be map or simple, not ${uShadowFar}`)
+const shadowBand = uShadowSwitch === null ? null : uShadowSwitch.split(',').map(Number)
+if (shadowBand && !(shadowBand.length === 2 && shadowBand.every(Number.isFinite) && shadowBand[0] >= 0 && shadowBand[1] > shadowBand[0])) throw new Error(`?ushadowswitch must be <r0>,<r1> m with r0 < r1, not ${uShadowSwitch}`)
 if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 20)) throw new Error(`?armies must be 1 to 20 battalions a side (the demo map holds 20), not ${armiesParam}`)
 if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '1') throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
 let units: Units | null = null, armiesFocus: [number, number] | null = null   // (the fight's middle: the bench's focus)
@@ -339,11 +354,20 @@ if (armiesParam !== null) {
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.tightCull = uCull ?? true
   units.holdShare = smHold !== 'fixed'; units.proxyCasters = shadowLod !== 'far'
   if (nearestPx !== null) units.nearestPx = +nearestPx
+  units.simpleFar = uShadowFar !== 'map'; if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
+  units.groundMap = meadow !== null; if (decalLift !== null) units.decalLift = +decalLift
+  // the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): made only with them, baked again
+  // after the bounce map (the season, the shadows' switch, the grain) and when the occlusion's switch changes
+  if (units.simpleFar && unitShadowParam !== '0') {
+    const shade = units.shade = bakes.unitShade(); let ao = S.ao
+    scene.onBeforeRenderObservable.add(() => { if (S.ao !== ao) { ao = S.ao; shade.resetRefreshCounter() } })
+  }
   if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)
   units.setFarScale(farScale ?? true); units.setTrample(trample ?? true); units.setFlags(flags ?? true)
   units.setFarRule(farPal)   // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
+  units.setSmooth(smoothMove ?? true)   // (on: measured free, docs/plans/active/simple-soldier-shadows.md; the owner's call open)
   armiesFocus = facingAt(units.battalions)
   Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
 }

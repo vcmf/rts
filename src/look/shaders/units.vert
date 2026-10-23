@@ -9,6 +9,11 @@ uniform mat4 viewProjection;uniform sampler2D uVAT;uniform float uVATStep;
 // a man's clip: its first step, its steps in the loop, his phase in steps
 attribute vec3 aVAT;
 #endif
+#if defined(SMOOTH)&&defined(INSTANCES)
+// the men's places moved every frame (?smoothmove=1, decision 0049): the step's place and the share of the next step's
+// move gone (src/look/units.ts); the poses stay stepped
+attribute vec3 aNext;uniform float uStepFrac;
+#endif
 #ifdef VAT_POS
 // the far LOD and the shadow pass (batch B, ?uvat): each vertex posed at every step at load (posedVertices,
 // src/look/units-data.ts), its place and normal two texels of uVATP: no bone matrices to blend
@@ -40,6 +45,9 @@ mat4 boneAt(float b,int f){int x=int(b)*4;
   return mat4(texelFetch(uVAT,ivec2(x,f),0),texelFetch(uVAT,ivec2(x+1,f),0),texelFetch(uVAT,ivec2(x+2,f),0),texelFetch(uVAT,ivec2(x+3,f),0));}
 void main(){
   #include<instancesVertex>
+  #if defined(SMOOTH)&&defined(INSTANCES)
+  finalWorld[3].xyz+=aNext*uStepFrac;
+  #endif
   vec3 r=vec3(0.0,1.0,0.0);
   #ifdef INSTANCES
   r=aVAT;

@@ -8,7 +8,7 @@ import { APPROACH, CYCLE, FAR_COAT_BELOW, FAR_ROLES, extents, facingAt, farPalet
 import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { RULESETS } from '../src/rulesets/index.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
-import { checkUnits, decodeUnits, fromHalf, posedMesh, posedVertices, shadowProxy } from '../src/look/units-data.ts'
+import { checkUnits, decodeUnits, fromHalf, posedMesh, posedVertices, shadowProxy, shadowShape } from '../src/look/units-data.ts'
 
 const g = napoleonic.types.infantry.geometry
 const drill: Drill = { companies: g.companies, files: g.files, ranks: g.ranks, fileSpacing: g.fileSpacing, rankSpacing: g.rankSpacing }
@@ -145,5 +145,26 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     expect(d.lods[0].triangles).toBeGreaterThan(9000); expect(d.lods[1].triangles).toBeLessThan(d.lods[0].triangles); expect(d.lods[2].triangles).toBeLessThan(d.lods[1].triangles)
     const bad = { ...d, lods: [d.lods[1], d.lods[0], d.lods[2]] }
     expect(() => checkUnits(bad)).toThrow(/not lighter/)
+  })
+  it('casts one simple shadow a role and a facing: from his feet away from the sun, a man\'s shadow long, soft (decision 0049)', () => {
+    const l = Math.hypot(-0.7, 0.45, 0.55), sun = [-0.7 / l, 0.45 / l, 0.55 / l] as const, roles = ['halt', 'march', 'run', 'fire']
+    const s = shadowShape(d, d.lods[d.lods.length - 1].name, sun, roles, { facings: 8 })
+    expect([s.width, s.height]).toEqual([s.cellW * 8, s.cellH * 4]); expect(s.data.length).toBe(s.width * s.height)
+    expect(Math.hypot(...s.dir)).toBeCloseTo(1, 6); expect(s.dir[0] * sun[0] + s.dir[1] * sun[2]).toBeLessThan(0)   // away from the sun
+    const tanE = sun[1] / Math.hypot(sun[0], sun[2])
+    for (let r = 0; r < 4; r++) for (let k = 0; k < 8; k++) {
+      let mass = 0, far = -Infinity, soft = 0
+      for (let j = 0; j < s.cellH; j++) for (let i = 0; i < s.cellW; i++) {
+        const v = s.data[(r * s.cellH + j) * s.width + k * s.cellW + i]
+        if (i < s.margin || j < s.margin || i >= s.cellW - s.margin || j >= s.cellH - s.margin) { expect(v).toBe(0); continue }   // (the border: no bleed between cells)
+        mass += v / 255; if (v > 0 && v < 200) soft++
+        if (v > 128) far = Math.max(far, s.along[0] + (j - s.margin + 0.5) * s.texel)
+      }
+      // a man's shadow: about his height over the sun's tangent (1.8 m at 27°: 3.5 m), its area some tenths of a m²
+      expect(far, `${roles[r]} ${k}`).toBeGreaterThan(1.4 / tanE); expect(far).toBeLessThan(2.9 / tanE)
+      expect(mass * s.texel ** 2).toBeGreaterThan(0.25); expect(mass * s.texel ** 2).toBeLessThan(2)
+      expect(soft).toBeGreaterThan(0)
+    }
+    expect(() => shadowShape(d, d.lods[d.lods.length - 1].name, [1, 0, 0], roles)).toThrow(/horizon/)
   })
 })
