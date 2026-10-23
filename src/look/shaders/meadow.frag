@@ -20,7 +20,7 @@ void main(){
   vec4 lm=LM(vW);float sh=(1.0-lm.r)*uShadowsOn;
   #ifdef UNIT_SHADOWS_VS
   sh=max(sh,vUSh);
-  #elif defined(UNIT_SHADOWS)||defined(UNIT_SHADOW_MASK)
+  #elif defined(UNIT_SHADOWS)
   sh=max(sh,unitShadowMix(vW));
   #endif
   vec3 alb;

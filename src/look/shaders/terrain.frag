@@ -58,7 +58,7 @@ void main(){
   gl_FragColor=vec4(N*0.5+0.5,1.0);return;   // the bank check's view: the shading normal
   #endif
   float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,groundOcc(lm),uAO);pSky=mix(1.0,lm.g,uAO);
-  #if defined(UNIT_SHADOWS)||defined(UNIT_SHADOW_MASK)
+  #ifdef UNIT_SHADOWS
   sh=max(sh,unitShadowMix(vW));
   #endif
   #ifdef WATERDATA

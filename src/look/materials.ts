@@ -58,8 +58,8 @@ const SEASON_UNIFORMS: Record<string, (m: ShaderMaterial, s: SeasonLight) => voi
 // a copy of SEASON (a material keeps the objects it is given: Babylon stores colours and matrices by reference)
 export const seasonSnapshot = (): SeasonLight => ({ ...SEASON, shadow: SEASON.shadow.clone(), turn: SEASON.turn.clone(), greenRot: SEASON.greenRot.slice(), tip: SEASON.tip.clone() })
 export function setSeasonUniforms(m: ShaderMaterial, s: SeasonLight = seasonSnapshot()): void { for (const f of Object.values(SEASON_UNIFORMS)) f(m, s) }
-// (uUnit*: the figures' cast shadows on the materials they fall on, UNIT_SHADOWS and UNIT_SHADOW_MASK: src/look/units.ts)
-const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uUnitVP', 'uUnitTexel', 'uUnitBias', 'uUnitMaskBox', 'uUnitFar', 'uTrampleBox', 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA', 'uDirtOn', ...Object.keys(SEASON_UNIFORMS), 'uEarthOn', 'uCombNearRect', 'uFocusZ', 'uCamFwd']
+// (uUnit*: the figures' cast shadows on the materials they fall on, UNIT_SHADOWS: src/look/units.ts)
+const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uUnitVP', 'uUnitTexel', 'uUnitBias', 'uUnitFar', 'uTrampleBox', 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA', 'uDirtOn', ...Object.keys(SEASON_UNIFORMS), 'uEarthOn', 'uCombNearRect', 'uFocusZ', 'uCamFwd']
 
 // perFrame: false keeps a material out of `all` (no per-frame uniforms, no light map: the light-map bake draws into it)
 export interface MatOptions { attributes?: string[]; uniforms?: string[]; samplers?: string[]; alpha?: boolean; defines?: string[]; perFrame?: boolean }
@@ -79,7 +79,7 @@ export class Materials {
     // the detail layer needs GLSL ES 3.00 (textureGrad): on WebGL1 its materials keep the L0 grain
     if (defines.includes('#define DETAIL') && this.webgl1) defines = [...defines, '#define DETAIL_L0']
     const m = new ShaderMaterial(name, this.scene, { vertexSource: vs, fragmentSource: withPainter(fs) },
-      { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', 'uUnitSM', 'uUnitMask', 'uTrample', ...MACRO_SAMPLERS, ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM' && x !== 'uUnitSM' && x !== 'uUnitMask' && x !== 'uTrample' && !MACRO_SAMPLERS.includes(x))], needAlphaBlending: alpha, defines: [...D.defines, ...this.defines, ...defines] })
+      { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', 'uUnitSM', 'uTrample', ...MACRO_SAMPLERS, ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM' && x !== 'uUnitSM' && x !== 'uTrample' && !MACRO_SAMPLERS.includes(x))], needAlphaBlending: alpha, defines: [...D.defines, ...this.defines, ...defines] })
     for (const [u, f] of Object.entries(MOOD_COLOURS)) m.setColor3(u, f(MOOD))   // the light's colours (src/look/mood.ts)
     for (const [u, f] of Object.entries(MOOD_FLOATS)) m.setFloat(u, f(MOOD))
     // the season's light as it is when made (src/look/main.ts sets it again on every per-frame material as the season

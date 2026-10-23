@@ -308,9 +308,11 @@ if (shadowLod !== null && shadowLod !== 'far') throw new Error(`?shadowlod must 
 // batch C: ?farscale=0, the far figures at their own size
 const farScale = bit('farscale'), trample = bit('trample'), flags = bit('flags')   // ?trample=0: no trodden ground; ?flags=0: no colours
 // the simple shadows (decision 0049, docs/plans/active/simple-soldier-shadows.md): ?ushadowfar=map, the map at every zoom
-// (the A/B; else simple: the map up close, a baked shape a man beyond); ?ushadowswitch=<r0>,<r1>, the cross-fade's band
-// (m from the focus); ?smoothmove=0, the figures' places at the 12 fps steps (else every frame; the poses stay stepped)
-const uShadowFar = params.get('ushadowfar'), uShadowSwitch = params.get('ushadowswitch'), smoothMove = bit('smoothmove')
+// (the A/B; else simple: the map up close, a baked shape a man drawn on the ground beyond); ?ushadowswitch=<r0>,<r1>, the cross-fade's band
+// (m from the focus); ?smoothmove=0, the figures' places at the 12 fps steps (else every frame; the poses stay stepped);
+// ?udecallift=<m>, how high over the ground the simple shadows cover the grass and the men's legs
+const uShadowFar = params.get('ushadowfar'), uShadowSwitch = params.get('ushadowswitch'), smoothMove = bit('smoothmove'), decalLift = params.get('udecallift')
+if (decalLift !== null && !(Number.isFinite(+decalLift) && +decalLift >= 0 && +decalLift <= 3)) throw new Error(`?udecallift must be 0 to 3 m, not ${decalLift}`)
 if (uShadowFar !== null && uShadowFar !== 'map' && uShadowFar !== 'simple') throw new Error(`?ushadowfar must be map or simple, not ${uShadowFar}`)
 const shadowBand = uShadowSwitch === null ? null : uShadowSwitch.split(',').map(Number)
 if (shadowBand && !(shadowBand.length === 2 && shadowBand.every(Number.isFinite) && shadowBand[0] >= 0 && shadowBand[1] > shadowBand[0])) throw new Error(`?ushadowswitch must be <r0>,<r1> m with r0 < r1, not ${uShadowSwitch}`)
@@ -342,6 +344,7 @@ if (armiesParam !== null) {
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.tightCull = uCull ?? true
   units.holdShare = smHold !== 'fixed'; units.proxyCasters = shadowLod !== 'far'
   units.simpleFar = uShadowFar !== 'map'; if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
+  units.groundMap = meadow !== null; if (decalLift !== null) units.decalLift = +decalLift
   if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)
