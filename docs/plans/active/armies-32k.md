@@ -321,6 +321,27 @@ art, other arms.
   stays the gap, as before the rebake (the guard sees the firing poses from the wide camera; the calibration, the rest
   pose at 50°). Crops (far | boxes, the stress point) in `output/armies-review/13-tiny-recal/`, not committed. With
   main's simple shadows (decision 0049) each tiny man keeps his simple shadow, as the far LOD's do.
+- **Measured again on main's code** (2026-10-23, after the merge of the simple shadows, #134, and the closer zoom with
+  the rebaked figure, #145: the final step-3 numbers; Metal, the production build, 1080p, 40 a side, three interleaved
+  rounds, all 28 runs exit 0; medians of p50 / p95, ms; `tl0` the far LOD, `tl1` the tiny LOD):
+
+  | Run | Wide | Default | Close |
+  |---|---|---|---|
+  | middle, still, tl0 | 10.25 / 11.60 | 10.10 / 11.45 | 9.80 / 10.95 |
+  | middle, still, tl1 | 9.00 / 10.35 | 10.10 / 11.45 | 9.80 / 10.95 |
+  | middle, pan, tl0 | 9.15 / 10.60 | 10.20 / 11.60 | 9.65 / 10.50 |
+  | middle, pan, tl1 | 7.85 / 9.60 | 10.20 / 11.55 | 9.70 / 10.60 |
+  | stress, still, tl0 | 12.50 / 13.50 | 9.95 / 11.40 | 8.75 / 10.10 |
+  | stress, still, tl1 | 10.40 / 11.80 | 10.00 / 11.40 | 8.75 / 10.10 |
+  | stress, pan, tl0 | 13.40 / 14.75 | 10.00 / 11.45 | 9.50 / 10.35 |
+  | stress, pan, tl1 | 11.80 / 12.40 | 10.05 / 11.45 | 9.50 / 10.35 |
+
+  The saving holds: wide −1.25 / −1.30 ms at the middle (still / pan) and −2.10 / −1.60 at the stress point, its p95
+  1.0 to 2.35 ms lower; default and close equal (within 0.05). Traced pans (per-frame means, wide / default / close):
+  `cpuMs` p50 9.5 / 10.0 / 9.5 → 8.0 / 10.0 / 9.4 at the middle and 13.0 / 9.9 / 8.8 → 11.4 / 9.9 / 9.0 at the stress
+  point; place() and the uploads at most 0.28 ms a frame (0.2 to 0.25 ms of uploads at close: main's per-frame moves,
+  in both arms); the units' frame() 0.07 to 0.40 ms. The middle's pan at wide is the first measured run of the plan
+  under 8.33 ms p50 at 40 a side (7.85).
 - **Next, paused: the far LOD with shared vertices (step 3b)**, designed and measured on this figure, its code kept
   aside (not committed): the bake's 616 vertices are **371** when merged where equal bit for bit (place, normal, role,
   bones, weights: the same triangles drawn the same), 307 with the colour role carried flat in a way that holds for

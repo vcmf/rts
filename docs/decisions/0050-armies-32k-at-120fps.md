@@ -42,7 +42,9 @@ before it is built:
    confirms the wide view is vertex-bound; the far LOD with shared vertices (371, measured) waits as the next option.
    Later LOD steps add the owner's check of the look at a wide crop to their bars. Recalibrated by itself on the
    rebaked figure (decision 0051's close-zoom PR, 2026-10-23): the guard's white side −19 % luma at the widest zoom,
-   the blue side within 10 %; with decision 0049's simple shadows each tiny man keeps his own.
+   the blue side within 10 %; with decision 0049's simple shadows each tiny man keeps his own. Measured again on main's
+   code after that merge (the final step-3 numbers, the plan's step 3): wide 1.25 to 2.10 ms faster at p50 (the
+   fight's middle panning 9.15 → 7.85, the stress point 13.40 → 11.80), default and close equal.
 4. **The ground-colour cache** for the landscape (est. 2 to 2.7 ms at default and close, not measured; corrected
    2026-10-23 to about 2.3 at default and 1.1 at close at most, after the road split took 1.1 of the same work: the
    plan's step 4, designed, not built).
