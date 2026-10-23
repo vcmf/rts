@@ -778,19 +778,19 @@ if(LIT)SIDES[2].f=hex('#F4EDDC');   // the lit style: a light stone beige, not w
 const formedSq=u=>u.type==='inf'&&u.form==='square'&&u.morph>0.5;   // fires all round, smokes from four faces, drawn hollow
 const pal=u=>u.guard?SIDES[u.sideI].guard:SIDES[u.sideI];
 [0,1].forEach(i=>document.getElementById('lgG'+i)?.setAttribute('fill',css(SIDES[i].guard.c)));document.getElementById('lgGs')?.setAttribute('stroke',css(SIDES[1].guard.stripe));document.getElementById('lgAU')?.setAttribute('fill',css(SIDES[2].f));   // the legend from the palette
-const TYPE={inf:{n:240,speed:1.3,range:170},cav:{n:72,speed:3.4,range:40},art:{n:6,speed:1.1,range:900}};
+const TYPE={inf:{n:480,speed:1.3,range:170},cav:{n:72,speed:3.4,range:40},art:{n:6,speed:1.1,range:900}};
 const UNITS=[],CORPS={};
 const FR_N=['4e Ligne','10e Léger','24e Léger','28e Ligne','46e Ligne','57e Ligne','14e Ligne','36e Ligne','43e Ligne','55e Ligne','26e Léger','3e Ligne','18e Ligne','75e Ligne','48e Ligne','111e Ligne','17e Ligne','30e Ligne','Grenadiers à pied','Chasseurs à pied','40e Ligne','88e Ligne','64e Ligne','27e Léger'];
 const RU_N=['Novgorod','Apsheron','Kursk','Podolsk','Narva','Smolensk','Little Russia','Butyrsk','Galicia','Vyborg','Perm','Kexholm','Moscow','Azov','Vladimir','Kiev Grenadiers','Preobrazhensky','Semenovsky','Izmailovsky','Arkhangelogorod','Old Ingermanland','Yaroslavl','Briansk','Viatka'];
 const AU_N=['IR 23 Salzburg','IR 24 Auersperg','IR 20 Kaunitz','IR 49 Kerpen','IR 29 Lindenau','IR 58 Beaulieu'];
 let nameI={FR:0,RU:0,AU:0};
 function corps(key,side,title,leader,list,cx,cz,face){
-  // list: [type,count]; laid out in two lines 110 m apart, 125 m between battalions
-  CORPS[key]={key,side,title,leader,guard:GUARDS.has(key)};const all=[];list.forEach(([t,c])=>{for(let i=0;i<c;i++)all.push(t);});
-  const per=Math.ceil(all.length/2),f=[Math.sin(face),Math.cos(face)],r=[Math.cos(face),-Math.sin(face)];
+  // list: [type,count] (infantry in battalions, made brigades of two); up to four units in one row, more in two rows 130 m apart
+  CORPS[key]={key,side,title,leader,guard:GUARDS.has(key)};const all=[];list.forEach(([t,c])=>{for(let i=0;i<(t==='inf'?Math.ceil(c/2):c);i++)all.push(t);});   // infantry: brigades of two battalions
+  const per=all.length<=4?all.length:Math.ceil(all.length/2),f=[Math.sin(face),Math.cos(face)],r=[Math.cos(face),-Math.sin(face)];
   all.forEach((t,i)=>{const row=Math.floor(i/per),col=i%per,cnt=row?all.length-per:per,sx=(col-(cnt-1)/2)*(t==='cav'?115:125),sz=-row*130;
     const nl=side==='FR'?FR_N:side==='RU'?RU_N:AU_N,nm=t==='inf'?nl[nameI[side]++%nl.length]:t==='cav'?(side==='FR'?['5e Hussards','Cuirassiers','Chasseurs à cheval','Dragons'][i%4]:['Chevalier Guard','Uhlans','Hussars','Cuirassiers'][i%4]):'Foot battery';
-    UNITS.push(mkUnit(side,t,key,nm+(t==='inf'?(i%2?' · 2e bat':' · 1er bat'):''),cx+r[0]*sx+f[0]*sz,cz+r[1]*sx+f[1]*sz,face));});
+    UNITS.push(mkUnit(side,t,key,nm,cx+r[0]*sx+f[0]*sz,cz+r[1]*sx+f[1]*sz,face));});
 }
 let UID=0;
 function mkUnit(side,type,corps,name,x,z,face){const N=TYPE[type].n;
@@ -819,13 +819,46 @@ corps('RGD','RU','Imperial Guard','Constantine',[['inf',2],['cav',1]],1350,330,W
 const HQ=[{side:0,name:'NAPOLÉON',x:-1150,z:400},{side:1,name:'KUTUZOV',x:900,z:300}];
 
 /* ---------- formations: slots, footprint (frontage × depth) ---------- */
+// Metres between a brigade's two battalions, by formation.
+const BR_GAP = { line: 30, column: 15 };
+
+/**
+ * The share of a brigade's drawn depth that one battalion's bar takes.
+ * Far out it is a fixed symbol proportion; close in, the true one (one battalion's depth over the brigade's,
+ * gap included), blended by the zoom's SYMK as the block sizes are.
+ */
+function barFrac(u) {
+  const n = alive(u);
+  const total = dims(u, u.form, n)[1];
+  const half = Math.ceil(n / 2);
+  const bar = u.form === 'line'
+    ? 3.3
+    : Math.ceil(half / Math.min(26, Math.ceil(half / 10))) * 1.1;
+  return lerp(0.36, bar / total, SYMK);
+}
+
+/**
+ * What a unit draws as, given its screen corners C (front-left, front-right, back-right, back-left).
+ * A brigade in line or column: two bars, its first battalion in front, the second behind.
+ * Anything else (cavalry, guns, a formed square): one block.
+ */
+function parts(u, C) {
+  if (u.type !== 'inf' || formedSq(u)) return [C];
+  const q = barFrac(u);
+  const at = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const front = [C[0], C[1], at(C[1], C[2], q), at(C[0], C[3], q)];
+  const back = [at(C[0], C[3], 1 - q), at(C[1], C[2], 1 - q), C[2], C[3]];
+  return [front, back];
+}
+
 function dims(u,form,n){
-  if(u.type==='inf'){if(form==='line'){const f=Math.ceil(n/3);return[f*0.9,3.3];}if(form==='column'){const f=Math.min(26,Math.ceil(n/10));return[f*0.9,Math.ceil(n/f)*1.1];}const k=Math.ceil(n/12);return[k*0.9+6.6,k*0.9+6.6];}
+  if(u.type==='inf'){const h=Math.ceil(n/2);   // a brigade: two battalions, one behind the other; one square of both
+    if(form==='line'){const f=Math.ceil(h/3);return[f*0.9,3.3*2+BR_GAP.line];}if(form==='column'){const f=Math.min(26,Math.ceil(h/10)),d=Math.ceil(h/f)*1.1;return[f*0.9,d*2+BR_GAP.column];}const k=Math.ceil(n/12);return[k*0.9+6.6,k*0.9+6.6];}
   if(u.type==='cav'){if(form==='line'){const f=Math.ceil(n/2);return[f*1.7,6.4];}const f=6;return[f*1.7,Math.ceil(n/f)*3.2];}
   if(form==='line')return[n*14,12];return[3,n*13];
 }
 // map symbols (metres): readable at the far zoom, equal visual weight across formations
-const SYM={inf:{line:[104,32],column:[62,56],square:[72,72]},cav:{line:[96,30],column:[50,60]},art:{line:[86,20],column:[24,62]}};
+const SYM={inf:{line:[104,44],column:[62,64],square:[72,72]},cav:{line:[96,30],column:[50,60]},art:{line:[86,20],column:[24,62]}};
 const SQ_RING=[18,3.3];                                   // square ring thickness: symbol, true
 let SYMK=0,SYMZ=1;                                        // per frame: 0 symbol .. 1 true footprint; symbol zoom scale
 // symbols keep a steady on-screen size: they shrink in world terms as the camera closes in
@@ -834,8 +867,8 @@ function shown(u,form,n){const t=dims(u,form,n),sy=(SYM[u.type][form]||SYM[u.typ
   return[lerp(sy[0]*SYMZ*(form==='square'?sq:loss),t[0],SYMK),lerp(sy[1]*SYMZ*sq,t[1],SYMK)];}
 function slot(u,form,i,n,out){
   if(u.type==='inf'){
-    if(form==='line'){const f=Math.ceil(n/3);out[0]=(i%f-(f-1)/2)*0.9;out[1]=-Math.floor(i/f)*1.1-0.5;out[2]=0;return;}
-    if(form==='column'){const f=Math.min(26,Math.ceil(n/10));out[0]=(i%f-(f-1)/2)*0.9;out[1]=-Math.floor(i/f)*1.1-0.5;out[2]=0;return;}
+    if(form!=='square'){const h=Math.ceil(n/2),b=i<h?0:1,j=i-b*h,f=form==='line'?Math.ceil(h/3):Math.min(26,Math.ceil(h/10)),d=form==='line'?3.3:Math.ceil(h/f)*1.1;   // two battalions, one behind the other
+      out[0]=(j%f-(f-1)/2)*0.9;out[1]=-Math.floor(j/f)*1.1-0.5-b*(d+BR_GAP[form]);out[2]=0;return;}
     const k=Math.ceil(n/12),side=i%4,j=Math.floor(i/4),rank=j%3,f=Math.floor(j/3),L=k*0.9+6.6,a=side*Math.PI/2;
     const lx=(f-(k-1)/2)*0.9,lz=L/2-0.5-rank*1.1,c=Math.cos(a),s=Math.sin(a);out[0]=lx*c+lz*s;out[1]=-lx*s+lz*c-L/2;out[2]=a;return;}
   if(u.type==='cav'){if(form==='line'){const f=Math.ceil(n/2);out[0]=(i%f-(f-1)/2)*1.7;out[1]=-Math.floor(i/f)*3.2-1;out[2]=0;return;}
@@ -961,11 +994,31 @@ function finishOrder(u){const o=u.order;if(!o)return;o.prog=Math.max(o.prog,u.pr
   u.order=null;o.units=o.units.filter(id=>id!==u.id);if(!o.units.length)closeOrder(o);}
 function clampIn(u){u.x=clamp(u.x,-MX+60,MX-60);u.z=clamp(u.z,-MZ+60,MZ-60);if(inPond(u.x,u.z,1.1)){const p=PONDS.find(p=>pondE(p,u.x,u.z)<1.1);const a=Math.atan2((u.z-p.z)/p.rz,(u.x-p.x)/p.rx);u.x=p.x+Math.cos(a)*p.rx*1.12;u.z=p.z+Math.sin(a)*p.rz*1.12;}}
 function puff(u){
-  if(formedSq(u)){   // all four faces, placed on the block as drawn (its size follows the zoom), x/z for the painted world
-    const snap={...u,gone:0},S=dims(u,'square',alive(u)),h=S[1]/2,f=[Math.sin(u.dface),Math.cos(u.dface)],r=[Math.cos(u.dface),-Math.sin(u.dface)],D=[f,r,[-f[0],-f[1]],[-r[0],-r[1]]];   // where it fired, not where it goes
-    for(let j=0;j<4;j++){const o=0.1+0.8*Math.random(),d=D[j],q=(o-0.5)*S[0];
-      SMOKE.push({sq:snap,j,o,x:u.x-f[0]*h+d[0]*(h+6)-d[1]*q,z:u.z-f[1]*h+d[1]*(h+6)+d[0]*q,t0:performance.now(),big:false,face:u.face,rot:Math.random()*6.28});}
-    while(SMOKE.length>500)SMOKE.shift();return;}
+  if (formedSq(u)) {
+    // A formed square fires from all four faces. Each puff keeps a snapshot of the square where it fired (not the
+    // live unit, which may move or break) and is placed on the block as drawn (sqFace). x/z are its true ground
+    // point, for the painted world.
+    const snap = { ...u, gone: 0 };
+    const side = dims(u, 'square', alive(u));
+    const half = side[1] / 2;
+    const fwd = [Math.sin(u.dface), Math.cos(u.dface)];
+    const right = [Math.cos(u.dface), -Math.sin(u.dface)];
+    const faces = [fwd, right, [-fwd[0], -fwd[1]], [-right[0], -right[1]]];
+    const cx = u.x - fwd[0] * half, cz = u.z - fwd[1] * half;   // the square's centre (u.x/z is its front)
+    for (let j = 0; j < 4; j++) {
+      const o = 0.1 + 0.8 * Math.random();   // how far along the face
+      const d = faces[j];
+      const along = (o - 0.5) * side[0];
+      SMOKE.push({
+        sq: snap, j, o,
+        x: cx + d[0] * (half + 6) - d[1] * along,
+        z: cz + d[1] * (half + 6) + d[0] * along,
+        t0: performance.now(), big: false, face: u.face, rot: Math.random() * 6.28,
+      });
+    }
+    while (SMOKE.length > 500) SMOKE.shift();
+    return;
+  }
   const fw=dims(u,u.form,alive(u))[0],o=(Math.random()-0.5)*fw*0.9,fo=u.type==='art'?14:8;
   SMOKE.push({x:u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo,z:u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo,t0:performance.now(),big:u.type==='art',face:u.face,rot:Math.random()*6.28});if(SMOKE.length>500)SMOKE.shift();}
 
@@ -995,18 +1048,76 @@ function blockCorners(u,extra=0){
   const C=[[-hw,front],[hw,front],[hw,back],[-hw,back]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
   return{C,fw,fd,f,r};
 }
-// losses: ragged bites out of a block's edges, more as its strength falls; the same bites every frame (seeded by the
-// unit), so a block wears down rather than flickers
-function damage(u,C,I,fw,fd,ringM){const n=Math.round(clamp((1-u.str)/0.7,0,1)*10);if(!n)return;
-  let sd=1+Math.floor(u.rand*2147483645);const rnd=()=>(sd=(sd*16807)%2147483647)/2147483647,W=[0.35,0.15,0.35,0.15],tot=1;   // front and back most; fixed, so a bite keeps its edge at any zoom or strength
-  const clipP=new Path2D(),B=new Path2D(),poly=(Q,X)=>{Q.moveTo(X[0][0],X[0][1]);for(let i=1;i<X.length;i++)Q.lineTo(X[i][0],X[i][1]);Q.closePath();};
-  poly(clipP,C);if(I)poly(clipP,I);ink.save();ink.clip(clipP,'evenodd');   /* a square keeps its hole; the caller path is untouched */
-  for(let k=0;k<n;k++){let w=rnd()*tot,e=0;while(e<3&&w>W[e]){w-=W[e];e++;}   // an edge, by its length on the ground: the same edge at any view
-    const a=C[e],b=C[(e+1)%4],q=C[(e+2)%4],L=Math.hypot(b[0]-a[0],b[1]-a[1])||1,t=0.08+0.84*rnd(),hw=Math.max(1.8/L,0.04+0.07*rnd()),ring=ringM?Math.min(1,ringM/(e%2?fw:fd)):1,dep=ring*(rnd()<0.3?1.2:0.45+0.45*rnd());   /* some cut right through */
-    const vx=q[0]-b[0],vy=q[1]-b[1],vl=Math.hypot(vx,vy)||1,o=2/vl;   // inward, across the block
-    const at=(s0,d)=>[a[0]+(b[0]-a[0])*s0+vx*d,a[1]+(b[1]-a[1])*s0+vy*d],P=[at(t-hw,-o),at(t-hw*0.6,dep*(0.4+0.3*rnd())),at(t-hw*0.1,dep),at(t+hw*0.4,dep*(0.5+0.4*rnd())),at(t+hw,-o)];
-    poly(B,P);}
-  ink.fillStyle='rgba(46,34,18,0.78)';ink.fill(B);ink.restore();}
+// Edge weights for picking where a bite goes: front, right, back, left. Fixed (not the drawn lengths), so a bite
+// stays on its edge at any zoom or strength.
+const BITE_EDGE_W = [0.35, 0.15, 0.35, 0.15];
+
+/** Adds a closed polygon (screen points) to a Path2D. */
+function addPoly(path, pts) {
+  path.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) path.lineTo(pts[i][0], pts[i][1]);
+  path.closePath();
+}
+
+/**
+ * Losses as wear: ragged dark bites out of a block's edges, more as its strength falls (none at full strength, ten
+ * near the end), some cutting right through. Seeded by the unit, so the same bites come back every frame and a
+ * block wears down rather than flickers.
+ *
+ * @param u     the unit
+ * @param C     the block's screen corners (front-left, front-right, back-right, back-left)
+ * @param I     a square's inner hole corners, or null; the bites never fill the hole
+ * @param fw,fd the block's drawn frontage and depth (m)
+ * @param ringM a square's ring thickness (m), so bites go no deeper than the ring; 0 for a solid block
+ * @param salt  0, 1, ...: a different set of bites for each bar of a brigade
+ */
+function damage(u, C, I, fw, fd, ringM, salt = 0) {
+  const n = Math.round(clamp((1 - u.str) / 0.7, 0, 1) * 10);
+  if (!n) return;
+
+  // a small Lehmer generator, seeded from the unit's own hash
+  let seed = 1 + Math.floor(((u.rand + salt * 0.618034) % 1) * 2147483645);
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  // clip to the block (and keep a square's hole open); the bites go in their own path, so the caller's is untouched
+  const clip = new Path2D(), bites = new Path2D();
+  addPoly(clip, C);
+  if (I) addPoly(clip, I);
+  ink.save();
+  ink.clip(clip, 'evenodd');
+
+  for (let k = 0; k < n; k++) {
+    // which edge
+    let w = rnd(), e = 0;
+    while (e < 3 && w > BITE_EDGE_W[e]) { w -= BITE_EDGE_W[e]; e++; }
+    const a = C[e], b = C[(e + 1) % 4], next = C[(e + 2) % 4];
+    const edgeLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+
+    // where along it, how wide (a fraction of the edge, at least 1.8 px), how deep (a fraction of the way across)
+    const t = 0.08 + 0.84 * rnd();
+    const hw = Math.max(1.8 / edgeLen, 0.04 + 0.07 * rnd());
+    const ring = ringM ? Math.min(1, ringM / (e % 2 ? fw : fd)) : 1;
+    const depth = ring * (rnd() < 0.3 ? 1.2 : 0.45 + 0.45 * rnd());   // about a third cut right through
+
+    // inward: from this edge toward the opposite one, the full way across the block
+    const vx = next[0] - b[0], vy = next[1] - b[1];
+    const out = 2 / (Math.hypot(vx, vy) || 1);   // start 2 px outside the edge
+    const at = (s0, d) => [a[0] + (b[0] - a[0]) * s0 + vx * d, a[1] + (b[1] - a[1]) * s0 + vy * d];
+
+    // a ragged notch: in at one side, down to the deepest point, back out at the other
+    addPoly(bites, [
+      at(t - hw, -out),
+      at(t - hw * 0.6, depth * (0.4 + 0.3 * rnd())),
+      at(t - hw * 0.1, depth),
+      at(t + hw * 0.4, depth * (0.5 + 0.4 * rnd())),
+      at(t + hw, -out),
+    ]);
+  }
+
+  ink.fillStyle = 'rgba(46,34,18,0.78)';
+  ink.fill(bites);
+  ink.restore();
+}
 function pathPoly(C){ink.beginPath();ink.moveTo(C[0][0],C[0][1]);for(let i=1;i<C.length;i++)ink.lineTo(C[i][0],C[i][1]);ink.closePath();}
 const PULSE_WHITE=hex('#fbfaf6'),PULSE_MS=1100;   // the legend swatch (.blink) pulses at the same period, not in phase
 // the lit style: blocks stand off the ground and arrows cast a shadow, lit from the world's north-west. LIGHT points
@@ -1065,7 +1176,7 @@ const HOUSE_COL=[0.36,0.29,0.23],CHURCH_COL=[0.27,0.22,0.19];
 // the colour a block's sides take: its top's, as drawBlock fills it
 function blockCol(u,now){const s=pal(u);if(u.state==='rout')return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));return s.f;}
 function drawUnder(u,alpha,now){const{C}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);
-  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true);else raised(C,blockCol(u,now));}ink.globalAlpha=1;}
+  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true);else for(const P of parts(u,C))raised(P,blockCol(u,now));}ink.globalAlpha=1;}
 function drawBlock(u,alpha,now){
   u.gun=null;   // drawn this frame or not at all: a stale circle would keep a stale click area
   const s=pal(u),{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
@@ -1073,8 +1184,8 @@ function drawBlock(u,alpha,now){
   if(u.state==='rout'){
     // routing: pulses between the army colour and white, the colour of surrender
     // a soft pulse on the frame clock passed in, so an exporter controls the phase
-    pathPoly(C);ink.fillStyle=css(blockCol(u,now));ink.fill();if(LIT)litEdges(C);
-    ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);if(LIT)damage(u,C,null,fw,fd,0);}
+    parts(u,C).forEach((P,pi)=>{pathPoly(P);ink.fillStyle=css(blockCol(u,now));ink.fill();if(LIT)litEdges(P);
+    ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);if(LIT)damage(u,P,null,fw,fd,0,pi);});}
   else if(u.type==='art'&&LIT)u.gun=drawGun(C,s);
   else if(u.type==='art'){
     // bar + gun dot on the facing side
@@ -1082,19 +1193,19 @@ function drawBlock(u,alpha,now){
     const fr=[(C[0][0]+C[1][0])/2,(C[0][1]+C[1][1])/2],bk=[(C[2][0]+C[3][0])/2,(C[2][1]+C[3][1])/2],dl=Math.hypot(fr[0]-bk[0],fr[1]-bk[1])||1;
     ink.beginPath();ink.arc(fr[0]+(fr[0]-bk[0])/dl*5,fr[1]+(fr[1]-bk[1])/dl*5,3,0,6.2832);ink.fillStyle=css(s.f);ink.fill();if(s.e)ink.stroke();
   }
-  else{
-    pathPoly(C);let I=null,sqK=0;
+  else parts(u,C).forEach((P,pi)=>{   // a brigade's two bars, or one block
+    pathPoly(P);let I=null,sqK=0;
     if(formedSq(u)){
       // hollow square: the inner hole
       const k=Math.min(Math.max(lerp(SQ_RING[0]*SYMZ*Math.sqrt(lossK(u)),SQ_RING[1],SYMK),2.2*MPP),fw*0.35,fd*0.35),hw=fw/2-k;sqK=k;I=[[-hw,-k],[hw,-k],[hw,-fd+k],[-hw,-fd+k]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
       ink.moveTo(I[0][0],I[0][1]);for(let i=3;i>=0;i--)ink.lineTo(I[i][0],I[i][1]);ink.closePath();
     }
-    ink.fillStyle=lvl<0?css(s.f):hatch(u.sideI,lvl);ink.fill('evenodd');if(LIT)litEdges(C);
+    ink.fillStyle=lvl<0?css(s.f):hatch(u.sideI,lvl);ink.fill('evenodd');if(LIT)litEdges(P);
     if(lvl>=0){ink.strokeStyle=css(s.e||s.c);ink.lineWidth=0.9;ink.stroke();}
     if(s.e){ink.strokeStyle=css(s.e);ink.lineWidth=1.5;ink.stroke();}
-    if(u.type==='cav'){ink.strokeStyle=s.e?css(s.e):s.stripe?css(s.stripe):'rgba(243,239,230,0.95)';ink.lineWidth=1.3;ink.beginPath();ink.moveTo(C[3][0],C[3][1]);ink.lineTo(C[1][0],C[1][1]);ink.stroke();}
-    if(LIT)damage(u,C,I,fw,fd,I?sqK:0);   // last: a bite breaks the outline too
-  }
+    if(u.type==='cav'){ink.strokeStyle=s.e?css(s.e):s.stripe?css(s.stripe):'rgba(243,239,230,0.95)';ink.lineWidth=1.3;ink.beginPath();ink.moveTo(P[3][0],P[3][1]);ink.lineTo(P[1][0],P[1][1]);ink.stroke();}
+    if(LIT)damage(u,P,I,fw,fd,I?sqK:0,pi);   // last: a bite breaks the outline too
+  });
   if(LIT&&u.type==='art'&&u.gun&&(u.sel||u===HOVER)){const{m,r:R}=u.gun;ink.strokeStyle=u.sel?'#211f1c':'rgba(33,31,28,0.5)';ink.lineWidth=0.9;ink.beginPath();ink.arc(m[0],m[1],R+2,0,6.2832);ink.stroke();if(u.sel){ink.lineWidth=0.6;ink.beginPath();ink.arc(m[0],m[1],R+4.5,0,6.2832);ink.stroke();}}   // the ring around the icon, what the eye sees
   else if(u.sel){const D=blockCorners(u,4).C,D2=blockCorners(u,6.5).C;ink.strokeStyle='#211f1c';ink.lineWidth=0.9;pathPoly(D);ink.stroke();ink.lineWidth=0.6;pathPoly(D2);ink.stroke();}
   else if(u===HOVER){const D=blockCorners(u,4).C;ink.strokeStyle='rgba(33,31,28,0.5)';ink.lineWidth=0.8;pathPoly(D);ink.stroke();}
@@ -1210,9 +1321,18 @@ function smokeLit(p,c,age,k,mapA){
   const list=[];for(let i=0;i<3;i++){const s=(5+i*8)*(0.6+k*1.2),rr=(4.8+i*2.6)*(0.7+k*1.1);list.push([cloudPath(c[0]+dx*s,c[1]+dy*s-k*5,rr,p.rot+i),mapA*(1-k)*(0.95-i*0.18)]);}
   clouds(list);
 }
-// a square's puff: on face j of the block as drawn, a fraction o along it, a few pixels out
-function sqFace(p){const{C}=blockCorners(p.sq),a=C[p.j],b=C[(p.j+1)%4],m=[a[0]+(b[0]-a[0])*p.o,a[1]+(b[1]-a[1])*p.o],cx=(C[0][0]+C[2][0])/2,cy=(C[0][1]+C[2][1])/2,d=Math.hypot(m[0]-cx,m[1]-cy)||1;
-  return[m[0]+(m[0]-cx)/d*5,m[1]+(m[1]-cy)/d*5,Math.min(a[2],b[2])];}   // with its depth, for the behind test
+/**
+ * Where a square's puff p is drawn: on face p.j of the square as drawn now (its size follows the zoom), a fraction
+ * p.o along that face, 5 px outward. Returns [x, y, depth]; the depth is for the behind-the-camera test.
+ */
+function sqFace(p) {
+  const { C } = blockCorners(p.sq);
+  const a = C[p.j], b = C[(p.j + 1) % 4];
+  const m = [a[0] + (b[0] - a[0]) * p.o, a[1] + (b[1] - a[1]) * p.o];
+  const cx = (C[0][0] + C[2][0]) / 2, cy = (C[0][1] + C[2][1]) / 2;
+  const d = Math.hypot(m[0] - cx, m[1] - cy) || 1;
+  return [m[0] + (m[0] - cx) / d * 5, m[1] + (m[1] - cy) / d * 5, Math.min(a[2], b[2])];
+}
 function drawSmoke(now,mapA,worldA){
   for(const p of SMOKE){const age=(now-p.t0)/1000,life=p.big?6:4.2;if(age>life)continue;const k=age/life,c=p.sq?sqFace(p):P2(p.x,p.z);if(behind(c))continue;
     if(LIT&&mapA>0.01)smokeLit(p,c,age,k,mapA);
@@ -1407,7 +1527,7 @@ function updateCard(){const s=sel();const c=$('card');if(!s.length){c.style.disp
   const u=s[0],side=SIDES[u.sideI],cp=CORPS[u.corps];
   $('cname').textContent=s.length>1?`${s.length} units`:u.name;$('csub').textContent=`${cp.title} · ${cp.leader}`+(s.length>1?'':` · ${u.type==='inf'?'infantry':u.type==='cav'?'cavalry':'artillery'}`);
   $('cside').textContent=side.name;$('cside').style.color=side.ink;
-  const str=s.reduce((a,v)=>a+v.str,0)/s.length,mor=s.reduce((a,v)=>a+v.mor,0)/s.length,men=s.reduce((a,v)=>a+Math.round(v.str*(v.type==='inf'?600:v.type==='cav'?420:120)),0);
+  const str=s.reduce((a,v)=>a+v.str,0)/s.length,mor=s.reduce((a,v)=>a+v.mor,0)/s.length,men=s.reduce((a,v)=>a+Math.round(v.str*(v.type==='inf'?1200:v.type==='cav'?420:120)),0);
   $('cstr').textContent=`${men} men`;$('cstrb').style.width=(str*100)+'%';$('cmor').textContent=u.state==='rout'?'routing':mor>0.6?'steady':mor>0.3?'wavering':'shaken';$('cmorb').style.width=(mor*100)+'%';
   $('cform').textContent=s.length>1?'—':(u.state==='move'?'marching, ':'')+u.form;
   $('chint').textContent=u.sideI===0?'right-drag to draw an order · double-click selects the corps':'enemy unit · orders only for France';}
