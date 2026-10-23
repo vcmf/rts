@@ -448,19 +448,22 @@ function addShore(g, P) {
 
 /**
  * The heights for the relief shading, on a finer grid than the mesh (docs/plans/active/relief-shading.md): the real
- * ones from the ?dem= file's fine grid when it has one, else the made-up height function sampled at the same step.
+ * ones from the ?dem= file's fine grid when it has one that spans the page, else the mesh's own height grid (real or
+ * made-up) sampled bilinearly at the same step, so the shading always matches the ground drawn (and costs little).
  * Returns { step, nx, nz, h } with h in page metres (the mesh's scale), the south row first.
  */
 function fineHeights() {
   const F = DEM && DEM.fine;
-  if (F) {
+  const spans = F && F.nx === Math.round(2 * TX / F.step) + 1 && F.nz === Math.round(2 * TZ / F.step) + 1 && F.h.length === F.nx * F.nz;
+  if (F && !spans) console.warn('?dem= fine grid does not span the page: relief shaded from the mesh grid');
+  if (spans) {
     const h = new Float32Array(F.nx * F.nz);
     for (let k = 0; k < h.length; k++) h[k] = (F.h[k] - DEM_LO) / 100 * DEM_Z;
     return { step: F.step, nx: F.nx, nz: F.nz, h };
   }
   const step = 4, nx = Math.round(2 * TX / step) + 1, nz = Math.round(2 * TZ / step) + 1;
   const h = new Float32Array(nx * nz);
-  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) h[j * nx + i] = H(-TX + i * step, -TZ + j * step);
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) h[j * nx + i] = Hs(-TX + i * step, -TZ + j * step);
   return { step, nx, nz, h };
 }
 
@@ -484,8 +487,8 @@ function boxMean(h, nx, nz, r) {
 }
 
 /**
- * The shaded relief, baked once at load into a canvas the size of the fine grid (the north row first, as the map
- * bake): R the slope's light (Lambert, 0.5 on flat ground), G the cast shadow (1 lit, 0 in shadow), B the exposure
+ * The shaded relief, baked once at load into RGBA bytes the size of the fine grid (the north row first, as the map
+ * bake): R the slope's light (Lambert over LAMBERT_RANGE, 0.5 on flat ground), G the cast shadow (1 lit, 0 in shadow), B the exposure
  * (0.5 even, lower in hollows, higher on crests). The light is the map's one, from the north-west, RELIEF_SUN degrees
  * up; heights are exaggerated by RELIEF_Z for the light only, as shaded-relief prints do.
  *
@@ -497,9 +500,14 @@ function boxMean(h, nx, nz, r) {
 const RELIEF_SUN = Number(Q.get('sun')) || 30;
 const RELIEF_Z = Number(Q.get('rz')) || 2;
 const RELIEF_SOFT = 4;
+// the shadow walk below steps to the grid's diagonal neighbour toward the light: it is written for a north-west light
+console.assert(Math.abs(NW[0] + Math.SQRT1_2) < 1e-9 && Math.abs(NW[1] - Math.SQRT1_2) < 1e-9, 'bakeRelief walks the north-west diagonal');
+// the slope light is stored over LAMBERT_RANGE (1 on flat ground in the middle), for fine steps on gentle slopes
+const LAMBERT_RANGE = [0.6, 1.4];
 function bakeRelief() {
   const { step, nx, nz, h: h0 } = fineHeights();
-  const h = h0.map(v => v * RELIEF_Z);
+  const h = new Float32Array(h0.length);   // exaggerated for the light (the slope and the shadows)
+  for (let k = 0; k < h.length; k++) h[k] = h0[k] * RELIEF_Z;
   const el = RELIEF_SUN * Math.PI / 180;
   const diag = step * Math.SQRT2, drop = diag * Math.tan(el);
   const L = [NW[0] * Math.cos(el), Math.sin(el), NW[1] * Math.cos(el)];
@@ -510,38 +518,28 @@ function bakeRelief() {
     const k = j * nx + i;
     const fromLight = i > 0 && j < nz - 1 ? line[(j + 1) * nx + i - 1] - drop : -Infinity;
     line[k] = Math.max(h[k], fromLight);
-    lit[k] = 1 - smoothstep01((fromLight - h[k]) / (RELIEF_SOFT * RELIEF_Z));
+    lit[k] = 1 - sstep(0, 1, (fromLight - h[k]) / (RELIEF_SOFT * RELIEF_Z));
   }
 
-  // exposure: how far a point stands above or below its surroundings, near (about 24 m) and wider (about 80 m)
-  const near = boxMean(h, nx, nz, 6), wide = boxMean(h, nx, nz, 20);
+  // exposure: how far a point stands above or below its surroundings, near (about 24 m) and wider (about 80 m), from
+  // the true heights (the light's exaggeration leaves it alone)
+  const near = boxMean(h0, nx, nz, 6), wide = boxMean(h0, nx, nz, 20);
 
-  const c = document.createElement('canvas');
-  c.width = nx;
-  c.height = nz;
-  const ctx = c.getContext('2d');
-  const img = ctx.createImageData(nx, nz), d = img.data;
+  const d = new Uint8Array(nx * nz * 4);
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
     const k = j * nx + i;
     const gx = (h[j * nx + Math.min(nx - 1, i + 1)] - h[j * nx + Math.max(0, i - 1)]) / (2 * step);
     const gz = (h[Math.min(nz - 1, j + 1) * nx + i] - h[Math.max(0, j - 1) * nx + i]) / (2 * step);
     const nl = Math.hypot(gx, 1, gz);
     const lambert = Math.max(0, (-gx * L[0] + L[1] - gz * L[2]) / nl) / L[1];   // 1 on flat ground
-    const exposed = 0.5 - ((near[k] - h[k]) * 0.05 + (wide[k] - h[k]) * 0.015);
+    const exposed = 0.5 - ((near[k] - h0[k]) * 0.1 + (wide[k] - h0[k]) * 0.03);
     const o = ((nz - 1 - j) * nx + i) * 4;   // the north row first
-    d[o] = Math.round(clamp(lambert / 2, 0, 1) * 255);
+    d[o] = Math.round(clamp((lambert - LAMBERT_RANGE[0]) / (LAMBERT_RANGE[1] - LAMBERT_RANGE[0]), 0, 1) * 255);
     d[o + 1] = Math.round(lit[k] * 255);
     d[o + 2] = Math.round(clamp(exposed, 0, 1) * 255);
     d[o + 3] = 255;
   }
-  ctx.putImageData(img, 0, 0);
-  return c;
-}
-
-/** Smoothstep on 0..1 (clamped), for the shadow's soft edge. */
-function smoothstep01(t) {
-  const x = clamp(t, 0, 1);
-  return x * x * (3 - 2 * x);
+  return { data: d, nx, nz };
 }
 
 function bakeMap(){
@@ -672,6 +670,7 @@ uniform sampler2D uMapA,uMapB,uPaperT,uNoiseT;
 uniform sampler2D uCanopyT,uHouseT;
 #ifdef SHADED
 uniform sampler2D uReliefT;   /* the baked relief: R light on the slope, G cast shadow (1 lit), B exposure (0.5 even) */
+uniform vec2 uReliefN;        /* its grid nodes, x and z */
 #endif
 uniform vec2 uLightXZ;   /* toward the one static light, xz: the relief and the water use it */
 #ifdef LAYERS
@@ -741,18 +740,21 @@ void main(){
 #ifdef SHADED
   vec3 flatPaper = mapC;   /* the paper before the relief: water lies flat */
   {
-    /* shaded relief: the slope's light, the cast shadow and the exposure, baked once from the heights, on the paper in
-       its own hues: warm grey-brown in the shade, a touch of ochre on the lit slopes, never darker than 0.62 */
-    vec3 R = texture2D(uReliefT, vec2((vW.x + ${TX}.0) / ${2 * TX}.0, (${TZ}.0 - vW.z) / ${2 * TZ}.0)).rgb;
-    float slopeLight = R.r * 2.0;        /* 1 on flat ground */
+    /* shaded relief: the light on the slope, the cast shadow and the exposure, baked once from the heights, on the
+       paper in its own hues: warm grey-brown in the shade, a touch of ochre on the lit slopes, never below 0.62 */
+    /* grid node i sits at the centre of texel i: (i + 0.5) / n */
+    vec2 node = vec2((vW.x + ${TX}.0) / ${2 * TX}.0, (${TZ}.0 - vW.z) / ${2 * TZ}.0) * (uReliefN - 1.0);
+    vec3 R = texture2D(uReliefT, (node + 0.5) / uReliefN).rgb;
+    float slopeLight = mix(${LAMBERT_RANGE[0]}, ${LAMBERT_RANGE[1]}, R.r);   /* 1 on flat ground */
     float sunlit = R.g;
     float exposed = R.b * 2.0 - 1.0;     /* below 0 in hollows, above on crests */
     float v = slopeLight * mix(0.72, 1.0, sunlit) * (1.0 + 0.3 * exposed);
     v = clamp(v, 0.62, 1.15);
     vec3 hue = v < 1.0 ? mix(vec3(0.93, 0.90, 0.86), vec3(1.0), (v - 0.62) / 0.38)
                        : mix(vec3(1.0), vec3(1.0, 0.98, 0.90), (v - 1.0) / 0.15);
-    float relief = (1.0 - uWash) * inside;
-    mapC = mix(mapC, min(mapC * v * hue, vec3(1.0)), relief);
+    vec3 shadeK = max(v * hue, vec3(0.62));   /* the bound after the hue */
+    float relief = (1.0 - uWash) * inside * (1.0 - 0.5 * woodA);   /* lighter under the woods, which shade their own ground */
+    mapC = mix(mapC, min(mapC * shadeK, vec3(1.0)), relief);
   }
 #endif
 #ifdef LIT
@@ -1785,12 +1787,12 @@ function build(){
   window.__bake={hachures:nh,ms:Math.round(bakeMs),trees:TREES.length,houses:HOUSES.length,terrain:DEM?`real (${DEM.source}), heights ×${DEM_Z.toFixed(2)}`:'made-up'};
   const COMMONU=['uSun','uSeason','uMist','uGSh'];
   terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal',...(LAYERS?['aHB','aGB']:[])],
-    uniforms:['world','viewProjection','uCrown','uLightXZ','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[]),...(SHADED?['uReliefT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[]),...(SHADED?['#define SHADED']:[])]:[]});
+    uniforms:['world','viewProjection','uCrown','uLightXZ','uReliefN','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[]),...(SHADED?['uReliefT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[]),...(SHADED?['#define SHADED']:[])]:[]});
   terrMat.backFaceCulling=false;terrMat.setTexture('uMapA',texA);terrMat.setTexture('uMapB',texB);paperT.wrapU=paperT.wrapV=noiseT.wrapU=noiseT.wrapV=B.Texture.WRAP_ADDRESSMODE;terrMat.setTexture('uPaperT',paperT);terrMat.setTexture('uNoiseT',noiseT);terrMat.setFloat('uHmin',HMIN);terrMat.setFloat('uHmax',HMAX);
   if(LIT){for(const[n,c]of[['uCanopyT',cCanopy],['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
   if(LIT)terrMat.setVector2('uLightXZ',new B.Vector2(NW[0],NW[1]));
-  if(SHADED){const t0=performance.now(),c=bakeRelief();window.__reliefMs=Math.round(performance.now()-t0);   // the bake's own cost, for the plan
-    const t=rawTex(c,true);t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture('uReliefT',t);c.width=0;}
+  if(SHADED){const t0=performance.now(),R=bakeRelief();window.__reliefMs=Math.round(performance.now()-t0);   // the bake's own cost, for the plan
+    const t=B.RawTexture.CreateRGBATexture(R.data,R.nx,R.nz,scene,true,false,B.Texture.TRILINEAR_SAMPLINGMODE);t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture('uReliefT',t);terrMat.setVector2('uReliefN',new B.Vector2(R.nx,R.nz));}
   terrainMesh().material=terrMat;
   {const O=30000,y=HMIN-1,P=[-TX,y,-TZ,TX,y,-TZ,TX,y,TZ,-TX,y,TZ,-O,y,-O,O,y,-O,O,y,O,-O,y,O],I=[0,4,1,1,4,5,1,5,2,2,5,6,2,6,3,3,6,7,3,7,0,0,7,4],
     m=new B.Mesh('skirt',scene),vd=new B.VertexData();vd.positions=P;vd.indices=I;vd.normals=[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0];vd.applyToMesh(m);

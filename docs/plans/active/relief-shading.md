@@ -100,3 +100,20 @@ Out of scope:
   - `?sun=` and `?rz=` set the light's height and the exaggeration, for tuning by eye.
 - **Seen:** long straight shadow bars at close zoom, likely modern embankments in today's terrain. They belong to the
   1805 cleanup in the next plan.
+
+## Review rounds
+
+- **Round 1** (`/code-review high`): severe. Two problems:
+  - a `?dem=` file without the fine grid was shaded from the made-up height function under the real mesh;
+  - the made-up terrain evaluated that function on the 4 m grid, about 3.8 s in Node.
+
+  Fixed: without a fine grid that spans the page, the shading samples the mesh's own height grid, about 150 ms.
+  With:
+  - the texture read at texel centres; it had drifted up to about 2 m off the contours toward the edges;
+  - the slope light stored over 0.6 to 1.4 instead of 0 to 2, so gentle slopes no longer step;
+  - the 0.62 bound applied after the hue, and the relief lighter under woods;
+  - exposure from the true heights, so `?rz=` changes the light only;
+  - the texture made straight from the bytes, with no canvas round trip;
+  - an assert that the shadow walk's diagonal is the north-west light;
+  - `sstep` reused;
+  - no apostrophe in the shader comments.
