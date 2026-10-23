@@ -33,6 +33,26 @@ comparison). In the lit mode:
 Out of scope: lit relief (shading), woods as canopy, roofs (decision 0051's bake, a later step); the game's staff map
 (`src/render/map.ts`); the map engine's draft page; season tuning beyond keeping each season readable.
 
+## Scope, v2 (2026-10-23)
+
+The owner found the v1 ground (striped Voronoi patches, a mat of identical brown domes) ugly next to the references.
+Research (kept outside the repository) measured why: the references put their contrast in large soft masses (relief
+light and shade, mottling, dark clumped woods) in one warm yellow-olive family and have no hard edge in the ground;
+v1 put it in small hard regular marks. v2, in the same `?style=lit` mode, owner's choices: contours at far zoom only;
+built in the prototype first, with stand-in fields (the prototype has no field polygons).
+1. **Lit relief, baked once:** a north-west key light, a soft fill and a cast-shadow march over the heights, at
+   about 4 m, painted through the painted world's own ground colours (`gLit`, `gMid`, `gSh`), so the map and the world
+   agree at the handover; a slow large mottle; no paper grain on the land at play zoom.
+2. **Canopy, baked once:** pre-lit crown sprites from the tree list, drawn north to south, sizes varying in clumps,
+   gaps near the edge so the field shows through, one blurred pass of their shadows on the ground; green from the
+   season's crown colour, not brown.
+3. **Fields (stand-in):** patches with no hard edge: the strips fade out toward a patch's border, are soft ridges lit
+   from one side, broken and about 5.5 m apart; some patches are plain meadow; tints stay within one hue family.
+4. **Contours** shown only at far zoom.
+
+Out of scope for v2: hedgerows, roads from a distance field, a crown atlas from the generated trees (the research's
+steps 4, 5 and 8); the real renderer reading the map language (after the owner approves the look).
+
 ## Approach
 
 - One `LIT` flag from the URL; every change branches on it, so the default page draws exactly as before.
@@ -104,6 +124,13 @@ Out of scope: lit relief (shading), woods as canopy, roofs (decision 0051's bake
   orders draw an arrow) and its claim removed. Left, as the woods and fields are to be redone after research
   (research in progress on how clean battle maps are made: the owner found them unclean next to the reference): crowns cut on two
   wood edges, the canopy computed outside woods, a duplicated hash.
+
+- **v2 built** (scope above): the light baked at about 4 m (key, fill, shadow march) through `gSh`/`gMid`/`gLit`; the
+  canopy baked as pre-lit crown sprites, north to south, clumped, gaps at the edge, one pass of soft shadows, the shade
+  under it following the crowns' blurred coverage (no rim, no drawn outline); fields as stand-in patches whose strips
+  fade at the borders; a smooth computed mottle (the old noise texture was blocky, in the fields and in the valley
+  mist); contours at far zoom only. Measured on the owner's RTX 3080 (D3D11): 8.3–11 ms a frame; the page builds in
+  about 2.6 s (no hachures to bake).
 
 ## Results
 
