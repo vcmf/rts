@@ -59,7 +59,7 @@ void main(){
   #endif
   float sh=(1.0-lm.r)*uShadowsOn,occ=mix(1.0,groundOcc(lm),uAO);pSky=mix(1.0,lm.g,uAO);
   #ifdef UNIT_SHADOWS
-  sh=max(sh,unitShadowAt(vW));
+  sh=max(sh,unitShadowMix(vW));
   #endif
   #ifdef WATERDATA
   vec4 wt=waterTexel(vW.xz);   // the water data here: the banks (albedo) and the shore band (below)

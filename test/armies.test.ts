@@ -12,7 +12,7 @@ import { APPROACH, CYCLE, FAR_COAT_BELOW, FAR_ROLES, extents, facingAt, farPalet
 import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { RULESETS } from '../src/rulesets/index.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
-import { TINY_ROLES, decodeUnits, fromHalf, posedMesh, posedVertices, shadowProxy, tinyMesh } from '../src/look/units-data.ts'
+import { TINY_ROLES, checkUnits, decodeUnits, fromHalf, posedMesh, posedVertices, shadowProxy, shadowShape, tinyMesh } from '../src/look/units-data.ts'
 
 const g = napoleonic.types.infantry.geometry
 const drill: Drill = { companies: g.companies, files: g.files, ranks: g.ranks, fileSpacing: g.fileSpacing, rankSpacing: g.rankSpacing }
@@ -163,7 +163,7 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     expect(d.ranges.march.speed).toBeGreaterThan(0.5); expect(d.ranges.run.speed).toBeGreaterThan(d.ranges.march.speed)
   })
   it('poses the far LOD at every step: on its feet, a figure tall, its normals not degenerate', () => {
-    const l = d.lods[1], p = posedVertices(d, l.name), nv = l.vertices
+    const l = d.lods[d.lods.length - 1], p = posedVertices(d, l.name), nv = l.vertices
     expect([p.width, p.height]).toEqual([nv * 2, d.vat.height])
     for (const f of [0, d.ranges.march.start + 3, d.ranges.fire.end - 1]) {
       let lo = Infinity, hi = -Infinity
@@ -176,9 +176,9 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     expect([fromHalf(0x3c00), fromHalf(0xc000), fromHalf(0x0001)]).toEqual([1, -2, 2 ** -24])
   })
   it('has a tiny LOD of boxes on its parts: under a quarter of the far LOD\'s vertices, each corner on one bone, a mix of roles, outward, a figure tall', () => {
-    const t = tinyMesh(d, d.lods[1].name), n = t.positions.length / 3
+    const t = tinyMesh(d, d.lods[d.lods.length - 1].name), n = t.positions.length / 3
     expect(n % 8).toBe(0); expect(t.indices.length).toBe(n / 8 * 36)   // eight corners, twelve triangles a box
-    expect(n).toBeLessThan(d.lods[1].vertices / 4)
+    expect(n).toBeLessThan(d.lods[d.lods.length - 1].vertices / 4)
     for (let v = 0; v < n; v++) {
       expect(t.boneWeights[v * 4]).toBe(1); expect(t.roles[v]).toBeLessThan(d.palette.length)
       let sum = 0; for (let i = 0; i < TINY_ROLES; i++) { const w = t.weights[v * TINY_ROLES + i]; expect(w).toBeGreaterThanOrEqual(0); if (i >= d.palette.length) expect(w).toBe(0); sum += w }
@@ -199,7 +199,7 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     expect(hi - lo).toBeGreaterThan(1.4); expect(lo).toBeLessThan(0.3)
   })
   it('has a shadow proxy of crossed quads, each corner wholly on one bone, a figure tall when posed', () => {
-    const p = shadowProxy(d, d.lods[1].name), n = p.positions.length / 3
+    const p = shadowProxy(d, d.lods[d.lods.length - 1].name), n = p.positions.length / 3
     expect(p.indices.length / 3).toBeLessThanOrEqual(64); expect(p.indices.length / 3).toBeGreaterThanOrEqual(40)
     expect(n * 6 / 4).toBe(p.indices.length)   // four corners, two triangles a quad
     for (let v = 0; v < n; v++) { expect(p.boneWeights[v * 4]).toBe(1); expect(p.boneIndices[v * 4]).toBeLessThan(d.bones.length) }
@@ -208,7 +208,31 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     for (let v = 0; v < n; v++) { const y = q.data[(f * n * 2 + v * 2) * 4 + 1]; lo = Math.min(lo, y); hi = Math.max(hi, y) }
     expect(hi - lo).toBeGreaterThan(1.4); expect(lo).toBeLessThan(0.3)
   })
-  it('has two LODs, the far one lighter', () => {
-    expect(d.lods.length).toBe(2); expect(d.lods[1].triangles).toBeLessThan(d.lods[0].triangles)
+  it('has three LODs nearest first, each lighter: the full figure nearest', () => {
+    expect(d.lods.map(l => l.name)).toEqual(['lod0', 'lod1', 'lod2'])
+    expect(d.lods[0].triangles).toBeGreaterThan(9000); expect(d.lods[1].triangles).toBeLessThan(d.lods[0].triangles); expect(d.lods[2].triangles).toBeLessThan(d.lods[1].triangles)
+    const bad = { ...d, lods: [d.lods[1], d.lods[0], d.lods[2]] }
+    expect(() => checkUnits(bad)).toThrow(/not lighter/)
+  })
+  it('casts one simple shadow a role and a facing: from his feet away from the sun, a man\'s shadow long, soft (decision 0049)', () => {
+    const l = Math.hypot(-0.7, 0.45, 0.55), sun = [-0.7 / l, 0.45 / l, 0.55 / l] as const, roles = ['halt', 'march', 'run', 'fire']
+    const s = shadowShape(d, d.lods[d.lods.length - 1].name, sun, roles, { facings: 8 })
+    expect([s.width, s.height]).toEqual([s.cellW * 8, s.cellH * 4]); expect(s.data.length).toBe(s.width * s.height)
+    expect(Math.hypot(...s.dir)).toBeCloseTo(1, 6); expect(s.dir[0] * sun[0] + s.dir[1] * sun[2]).toBeLessThan(0)   // away from the sun
+    const tanE = sun[1] / Math.hypot(sun[0], sun[2])
+    for (let r = 0; r < 4; r++) for (let k = 0; k < 8; k++) {
+      let mass = 0, far = -Infinity, soft = 0
+      for (let j = 0; j < s.cellH; j++) for (let i = 0; i < s.cellW; i++) {
+        const v = s.data[(r * s.cellH + j) * s.width + k * s.cellW + i]
+        if (i < s.margin || j < s.margin || i >= s.cellW - s.margin || j >= s.cellH - s.margin) { expect(v).toBe(0); continue }   // (the border: no bleed between cells)
+        mass += v / 255; if (v > 0 && v < 200) soft++
+        if (v > 128) far = Math.max(far, s.along[0] + (j - s.margin + 0.5) * s.texel)
+      }
+      // a man's shadow: about his height over the sun's tangent (1.8 m at 27°: 3.5 m), its area some tenths of a m²
+      expect(far, `${roles[r]} ${k}`).toBeGreaterThan(1.4 / tanE); expect(far).toBeLessThan(2.9 / tanE)
+      expect(mass * s.texel ** 2).toBeGreaterThan(0.25); expect(mass * s.texel ** 2).toBeLessThan(2)
+      expect(soft).toBeGreaterThan(0)
+    }
+    expect(() => shadowShape(d, d.lods[d.lods.length - 1].name, [1, 0, 0], roles)).toThrow(/horizon/)
   })
 })
