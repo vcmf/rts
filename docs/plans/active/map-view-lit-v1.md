@@ -53,6 +53,17 @@ built in the prototype first, with stand-in fields (the prototype has no field p
 Out of scope for v2: hedgerows, roads from a distance field, a crown atlas from the generated trees (the research's
 steps 4, 5 and 8); the real renderer reading the map language (after the owner approves the look).
 
+## Scope, v3 (2026-10-23, the owner's direction)
+
+The owner found v2's ground still unappealing and chose not to follow the references' look: back to v1's paper (the
+parchment, its season wash and grain, the aged band, thin ink roads; contours at every zoom), with simple marks on it:
+1. **Trees** as flat filled circles with a soft shadow, about 4 in 10 of a wood's trees (chosen by place, stable),
+   baked once.
+2. **Buildings** as raised rectangles with a side face and a shadow, lit like the army blocks: baked once with the
+   static light for the far and map zooms (all 221 are on screen there; drawn live they cost about 11 ms a frame,
+   measured), drawn live up close where few are, with a crossfade by zoom.
+v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
+
 ## Approach
 
 - One `LIT` flag from the URL; every change branches on it, so the default page draws exactly as before.
@@ -146,6 +157,10 @@ steps 4, 5 and 8); the real renderer reading the map language (after the owner a
   shadows straight onto the canopy (no second 45 MB canvas); the light march stopping once the ray is above every
   height; `bakeMap` merging the blurred cover (no hidden order between the bakes); the dead aged band; a stray comment;
   the build time measured in pairs. Left: the woods' crown sizes still differ from the painted world's trees.
+
+- **v3 built**: measured on the owner's RTX 3080 (D3D11): 8.2–8.3 ms a frame at map, mid and close zoom (the same
+  as the ink style); with the houses drawn live at map zoom it was 19–22 ms, 8.3 ms with them removed (measured in the
+  running page), hence the bake. Build about 1.8 s.
 
 ## Results
 
