@@ -51,6 +51,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
 .hr{height:1px;background:var(--rule);margin:10px 0}
 /* legend */
 #legend{left:24px;bottom:98px;width:236px}
+#fpsbox{top:24px;left:50%;transform:translateX(-50%);padding:6px 12px;font:500 11px 'JetBrains Mono',monospace;letter-spacing:0.06em;white-space:nowrap}
+#fpsbox b{font-size:15px}#fpsbox #fpsd{opacity:0.6;margin-left:10px}
 #legend .li{display:flex;align-items:center;gap:10px;font:400 10.5px/1.3 var(--mono);color:var(--ink-2);margin:6px 0}
 #legend svg{flex:none}
 @keyframes blink{0%,17%{fill:#2C4FA8}33%,67%{fill:#fbfaf6}83%,100%{fill:#2C4FA8}}
@@ -111,7 +113,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
   <div class="row"><span>trails</span><button class="tg on" id="trails">on</button></div>
   <div class="row"><span>legend</span><button class="tg on" id="legendtg">on</button></div>
   <div class="row"><span>place names</span><button class="tg on" id="namestg">on</button></div>
+  <div class="row"><span>fps</span><button class="tg on" id="fpstg">on</button></div>
 </div>
+<div id="fpsbox" class="fig"><b id="fpsn">–</b> fps<span id="fpsd"></span></div>
 
 <div id="legend" class="fig"><span class="cx"></span>
   <div class="cap"><span>fig 2 · <b>legend</b></span></div>
@@ -1940,6 +1944,22 @@ let SEASON=+(Q.get('season')??3);$('season').value=SEASON;$('season').oninput=e=
 const RMIN=70,r2s=R=>Math.log(R/RMIN)/Math.log(FIT.R*1.15/RMIN);
 $('scrub').oninput=e=>{CAMS.tw=null;CAMS.R=RMIN*Math.pow(FIT.R*1.15/RMIN,+e.target.value);};
 $('trails').onclick=e=>{SHOW_TRAILS=!SHOW_TRAILS;e.target.classList.toggle('on',SHOW_TRAILS);e.target.textContent=SHOW_TRAILS?'on':'off';};
+// the frame rate on the map (the owner); off with the toggle or ?fps=0, remembered in this browser
+{
+  let show = Q.get('fps') !== '0';
+  try { if (!Q.has('fps') && localStorage.getItem('staffmap.fps') === '0') show = false; } catch {}
+  const apply = () => {
+    $('fpsbox').style.display = show ? '' : 'none';
+    $('fpstg').classList.toggle('on', show);
+    $('fpstg').textContent = show ? 'on' : 'off';
+  };
+  $('fpstg').onclick = () => {
+    show = !show;
+    try { localStorage.setItem('staffmap.fps', show ? '1' : '0'); } catch {}
+    apply();
+  };
+  apply();
+}
 $('legendtg').onclick=e=>{const on=$('legend').style.display==='none';$('legend').style.display=on?'':'none';e.target.classList.toggle('on',on);e.target.textContent=on?'on':'off';};
 $('namestg').onclick=e=>{SHOW_NAMES=!SHOW_NAMES;e.target.classList.toggle('on',SHOW_NAMES);e.target.textContent=SHOW_NAMES?'on':'off';};
 function updateCard(){const s=sel();const c=$('card');if(!s.length){c.style.display='none';return;}c.style.display='block';
@@ -1998,6 +2018,7 @@ function frame(){
     if(document.activeElement!==$('scrub'))$('scrub').value=r2s(CUR.R);
     const eng=UNITS.filter(u=>!u.gone&&GT-u.hit<20).length;$('sengaged').textContent=`${eng} engaged · ${UNITS.filter(u=>u.state==='rout').length} routing`;
     const avg=ft.reduce((a,b)=>a+b,0)/ft.length;$('sfps').textContent=`${avg.toFixed(1)} ms · ${Math.round(1000/avg)} fps`;
+    if($('fpsbox').style.display!=='none'){const worst=Math.max(...ft);$('fpsn').textContent=Math.round(1000/avg);$('fpsd').textContent=`${avg.toFixed(1)} ms · worst ${worst.toFixed(1)} ms`;}
     // scale bar: a round length near 120 px
     const want=MPP*120,nice=[25,50,100,250,500,1000,2000].find(v=>v>=want*0.6)||2000,px=nice/MPP;
     document.querySelector('#scale .bars').style.width=px+'px';$('scmid').textContent=nice>=1000?nice/2000+' km':nice/2+' m';$('scend').textContent=nice>=1000?nice/1000+' km':nice+' m';
