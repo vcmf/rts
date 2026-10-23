@@ -615,6 +615,12 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   hills' shadow on it halved and a warm rim on what faces up (`FAR`); under 'own' the far figure keeps its own. Unset,
   a coat under luminance 0.18 (Rec. 709 on linear sRGB, a mid grey: `FAR_COAT_BELOW`) takes 'coat'. `?farpal=0|1`
   forces the rule off or on for every uniform.
+- **The tiny LOD** (`docs/plans/active/armies-32k.md`, step 3, experimental; `?tinylod=0`: none, `?tinypx=<px>`: its
+  switch): a battalion whose figure falls under 12 px tall (±10 %) draws the far LOD's parts as boxes instead (`tinyMesh`,
+  `src/look/units-data.ts`: the shadow proxy's parts, `boneParts`, 8 shared corners each, 112 vertices), a corner's
+  colour a mix of the roles (`TINY`: three vec4 weights) calibrated at load so the boxes show each role in the far
+  LOD's seen share (`seenArea`: both rasterised from 8 sides), posed as the far LOD and painted by its material (far
+  palette, lift, growth); the coat mask dithered by the coat's weight; it never casts.
 - **Far figures larger** (`?farscale=0`: their own size): the far LOD grows as the figure falls from 90 % of the LOD
   switch to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here) and 1.15 tall; render only.
 - **Trodden ground** (`?trample=0`: none): a 256² mask over a box round the ground in view (64 to 1,024 m), drawn on

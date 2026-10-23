@@ -27,14 +27,14 @@ import DEPTH_FS from './shaders/depth.frag?raw'
 import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
-import { posedMesh, posedVertices, shadowProxy, type UnitData } from './units-data.ts'
+import { TINY_ROLES, posedMesh, posedVertices, shadowProxy, tinyMesh, type UnitData } from './units-data.ts'
 import { CYCLE, farPalette, farRule, manAt, phaseAt, slots, type Battalion, type Drill, type ManState, type Phase, type Uniform } from './world/armies.ts'
 
 const ROLES = ['halt', 'march', 'run', 'fire'] as const
 const RESERVE = { phase: 'halt', start: 0, deployEnd: 0 } as const   // a reserve's phase: halted in column, always
 
 interface Host {
-  b: Battalion; lod: Mesh[]; near: boolean;   // lod: the near LOD, the far LOD, the shadow proxy (casts only)
+  b: Battalion; lod: Mesh[]; near: boolean; tiny: boolean   // lod: the near LOD, the far LOD, the shadow proxy (casts only), the tiny LOD
   matrices: Float32Array; settings: Float32Array; jitter: Float32Array
   cx: number; cz: number; lo: Vector3; hi: Vector3
   step: number            // the 1/fps step its matrices were written for (a moving battalion moves once a step)
@@ -68,6 +68,7 @@ export class Units {
   // one material a uniform the battalions wear (shared by its battalions), and one for its far LOD (the far rule)
   private readonly mats = new Map<string, ShaderMaterial>()
   private readonly farMats = new Map<string, ShaderMaterial>()
+  private readonly tinyMats = new Map<string, ShaderMaterial>()   // the tiny LOD's: the far LOD's own, on its mesh
   private readonly uniforms: Readonly<Record<string, Uniform>>
   private depthMat: ShaderMaterial
   private depthVatMat: ShaderMaterial   // the far LOD's casters, posed (VAT_POS)
@@ -87,6 +88,9 @@ export class Units {
   private readonly man: ManState = { x: 0, z: 0, face: 0, role: 'halt', since: 0, moving: false }
   /** the figure height in pixels below which a battalion draws its far LOD (±10%, so it does not flicker) */
   lodPx = 48
+  /** the figure height in pixels below which a battalion far off draws the tiny LOD (±10 %; docs/plans/active/armies-32k.md,
+   *  step 3); 0 (?tinylod=0): never */
+  tinyPx = 12
   /** the shadow map redrawn only when it would change (?ushadowrate=0: every frame): the poses step at the bake's fps,
    *  so a frame between two steps, with the sun's box and the men where they were, would draw the same map */
   lazyShadows = true
@@ -101,6 +105,8 @@ export class Units {
   private sidePad = 2   // m: a battalion's bounds beyond its men's roots (the constructor's, from the baked poses)
   /** the shadow proxy's size (the report's, the tests') */
   proxyStats = { vertices: 0, triangles: 0 }
+  /** the tiny LOD's size (the report's, the tests') */
+  tinyStats = { vertices: 0, triangles: 0 }
   private flag: Mesh | null = null
   private flagsOn = false; private shown = true
   private flagK = new Vector2()   // (its own: a material keeps the vector it is given)
@@ -175,6 +181,11 @@ export class Units {
       f.setTexture('uVAT', vat); f.setColor3Array('uPal', pal); f.setColor3Array('uPalFar', data.palette.map(r => Color3.FromHexString(far[r])))
       f.setFloat('uMask', -1); f.setFloat('uCoatRole', data.palette.indexOf('coat')); f.setVector2('uFarScale', farScale)
       this.farMats.set(id, f)
+      // the tiny LOD's: the far LOD's material on the tiny mesh (its own posed vertices: uVATP below)
+      const t = mats.make(`units_${id}_tiny`, UNITS_VS, UNITS_FS, { attributes: [...attributes, 'aRW0', 'aRW1', 'aRW2'], uniforms: ['uVATStep', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole'], samplers: ['uVAT', 'uVATP'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, '#define TINY'] })
+      t.setTexture('uVAT', vat); t.setColor3Array('uPal', pal); t.setColor3Array('uPalFar', data.palette.map(r => Color3.FromHexString(far[r])))
+      t.setFloat('uMask', -1); t.setFloat('uCoatRole', data.palette.indexOf('coat')); t.setVector2('uFarScale', farScale)
+      this.tinyMats.set(id, t)
     }
     // the shadow pass: the same skinning, depth only, from an orthographic camera along the sun
     this.depthMat = new ShaderMaterial('unitsDepth', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep'], samplers: ['uVAT'], defines: ['#define DEPTH'] })
@@ -184,6 +195,11 @@ export class Units {
     const vatp = RawTexture.CreateRGBATexture(posed.data, posed.width, posed.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
     vatp.name = 'figurePosed'
     for (const m of this.farMats.values()) m.setTexture('uVATP', vatp)
+    // the tiny LOD (tinyMesh, src/look/units-data.ts): the far LOD's parts as boxes, posed at every step as the far LOD
+    const tm = tinyMesh(data, data.lods[1].name), tp = posedMesh(data, tm), tn = tm.positions.length / 3
+    const vatt = RawTexture.CreateRGBATexture(tp.data, tp.width, tp.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
+    vatt.name = 'figureTinyPosed'
+    for (const m of this.tinyMats.values()) m.setTexture('uVATP', vatt)
     this.depthVatMat = new ShaderMaterial('unitsDepthPosed', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep'], samplers: ['uVAT', 'uVATP'], defines: ['#define DEPTH', '#define VAT_POS'] })
     this.depthVatMat.setTexture('uVAT', vat); this.depthVatMat.setTexture('uVATP', vatp)
     this.sun = new FreeCamera('unitSun', SUN.scale(500), scene); this.sun.mode = Camera.ORTHOGRAPHIC_CAMERA; this.sun.minZ = 1; this.sun.maxZ = 1200
@@ -215,6 +231,13 @@ export class Units {
     pm.setVerticesData('aRole', new Float32Array(pn), false, 1); pm.setVerticesData('aVid', Float32Array.from({ length: pn }, (_, i) => i), false, 1)
     pm.setVerticesData('aBones', Float32Array.from(px.boneIndices), false, 4); pm.setVerticesData('aWeights', px.boneWeights, false, 4)
     pm.material = this.depthProxyMat; pm.setIndices(px.indices); pm.setEnabled(false); this.lods.push(pm)
+    const tmesh = new Mesh('figure_tiny', scene)
+    tmesh.setVerticesData('position', tm.positions, false, 3); tmesh.setVerticesData('normal', tm.normals, false, 3)
+    tmesh.setVerticesData('aRole', Float32Array.from(tm.roles), false, 1); tmesh.setVerticesData('aVid', Float32Array.from({ length: tn }, (_, i) => i), false, 1)
+    tmesh.setVerticesData('aBones', Float32Array.from(tm.boneIndices), false, 4); tmesh.setVerticesData('aWeights', tm.boneWeights, false, 4)
+    for (let a = 0; a < 3; a++) tmesh.setVerticesData(`aRW${a}`, Float32Array.from({ length: tn * 4 }, (_, i) => tm.weights[Math.floor(i / 4) * TINY_ROLES + a * 4 + (i % 4)]), false, 4)
+    tmesh.material = this.tinyMats.values().next().value ?? null; tmesh.setIndices(tm.indices); tmesh.setEnabled(false); this.lods.push(tmesh)
+    this.tinyStats = { vertices: tn, triangles: tm.indices.length / 3 }
     this.proxyStats = { vertices: pn, triangles: px.indices.length / 3 }
     for (const b of battalions) this.add(b)
     scene.onBeforeRenderObservable.add(() => this.frame())
@@ -227,8 +250,8 @@ export class Units {
       // thin-instance matrices are vertex buffers on the geometry, and clones share it: without its own geometry
       // every battalion would draw with the last one's men
       host.makeGeometryUnique()
-      host.material = li === 2 ? this.depthProxyMat : (li === 1 ? this.farMats : this.mats).get(b.uniform) ?? null   // (the far LOD's own: the far palette, posed)
-      if (li === 2) host.isVisible = false   // (the proxy: shown to the shadow map alone)
+      host.material = li === 2 ? this.depthProxyMat : (li === 3 ? this.tinyMats : li === 1 ? this.farMats : this.mats).get(b.uniform) ?? null   // (the far LOD's own: the far palette, posed)
+      if (li >= 2) host.isVisible = false   // (the proxy: shown to the shadow map alone; the tiny LOD: shown when chosen)
       host.isPickable = false; host.setEnabled(true); host.alwaysSelectAsActiveMesh = false; this.meshes.push(host)
       this.shadowRT.setMaterialForRendering(host, li === 2 ? this.depthProxyMat : this.depthMat)   // (the far LOD's: setPosed)
       return host
@@ -237,7 +260,7 @@ export class Units {
     for (let i = 0; i < men; i++) { jitter[i * 4] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 1] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 2] = (rnd() - 0.5) * 0.14; jitter[i * 4 + 3] = rnd() * 2 - 1 }
     const matrices = new Float32Array(men * 16), settings = new Float32Array(men * 3)
     for (const m of lod) { m.thinInstanceSetBuffer('matrix', matrices, 16, false); m.thinInstanceSetBuffer('aVAT', settings, 3, false) }
-    this.hosts.push({ b, lod, near: false, matrices, settings, jitter, cx: b.x, cz: b.z, lo: new Vector3(), hi: new Vector3(), step: -1, phase: null, stale: [true, true, true], staleSet: [true, true, true], cycle: -1, index: this.hosts.length })
+    this.hosts.push({ b, lod, near: false, tiny: false, matrices, settings, jitter, cx: b.x, cz: b.z, lo: new Vector3(), hi: new Vector3(), step: -1, phase: null, stale: [true, true, true, true], staleSet: [true, true, true, true], cycle: -1, index: this.hosts.length })
   }
 
   // every man's matrix and clip at the battalion's local time: his place and facing from the script, set on the ground;
@@ -269,9 +292,9 @@ export class Units {
     const pad = this.sidePad
     h.lo.set(minX - pad, minY - 0.3, minZ - pad); h.hi.set(maxX + pad, maxY + top, maxZ + pad)
     for (const m of h.lod) m.getBoundingInfo().reConstruct(h.lo, h.hi)
-    h.stale[0] = h.stale[1] = h.stale[2] = true
+    h.stale.fill(true)
     this.placeFlag(h)
-    if (changed) h.staleSet[0] = h.staleSet[1] = h.staleSet[2] = true
+    if (changed) h.staleSet.fill(true)
   }
 
   // the mesh a battalion casts its shadow with (its index in h.lod): the near LOD where drawn near if casterNear
@@ -294,11 +317,14 @@ export class Units {
     // use), not by the shader from a float32 time: the figures and their shadows never disagree on a step
     for (const m of this.mats.values()) m.setFloat('uVATStep', step)
     for (const m of this.farMats.values()) m.setFloat('uVATStep', step)
+    for (const m of this.tinyMats.values()) m.setFloat('uVATStep', step)
     this.depthMat.setFloat('uVATStep', step); this.depthVatMat.setFloat('uVATStep', step); this.depthProxyMat.setFloat('uVATStep', step)
     const cam = this.camera, engine = this.scene.getEngine()
     // pixels per metre at unit distance, from the projection itself
     const pxPerM = cam.getProjectionMatrix().m[5] * engine.getRenderHeight() / 2, camPos = cam.globalPosition
-    for (const m of this.farMats.values()) m.setVector2('uFarK', this.farK.set(FIGURE * pxPerM, this.lodPx))
+    this.farK.set(FIGURE * pxPerM, this.lodPx)
+    for (const m of this.farMats.values()) m.setVector2('uFarK', this.farK)
+    for (const m of this.tinyMats.values()) m.setVector2('uFarK', this.farK)
     let moved = step !== this.smStep   // (the map changes with the poses' step, the men's places, the casters' LOD)
     let anyMoved = false   // (a battalion's men written this frame: the trodden ground follows)
     for (const h of this.hosts) {
@@ -314,11 +340,13 @@ export class Units {
       const px = FIGURE * pxPerM / Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
       const near = h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1
       if (near !== h.near && this.casterNear) moved = true
-      h.near = near; h.lod[0].isVisible = near; h.lod[1].isVisible = !near
+      // the tiny LOD below tinyPx (±10 %, as the near one), never where the near LOD is drawn
+      const tiny = !near && this.tinyPx > 0 && (h.tiny ? px < this.tinyPx * 1.1 : px < this.tinyPx * 0.9)
+      h.near = near; h.tiny = tiny; h.lod[0].isVisible = near; h.lod[1].isVisible = !near && !tiny; h.lod[3].isVisible = tiny
       // the LOD drawn, and the far LOD when it casts for a battalion drawn near; the hidden one is updated when drawn again
-      const kc = this.casterOf(h)
-      for (let k = 0; k < 3; k++) {
-        if (k !== (near ? 0 : 1) && !(this.shadows && k === kc)) continue
+      const kc = this.casterOf(h), drawn = near ? 0 : tiny ? 3 : 1
+      for (let k = 0; k < 4; k++) {
+        if (k !== drawn && !(this.shadows && k === kc)) continue
         if (h.stale[k]) { this.upload(h.lod[k], 'matrix', h.matrices.length); h.stale[k] = false }
         if (h.staleSet[k]) { this.upload(h.lod[k], 'aVAT', h.settings.length); h.staleSet[k] = false }
       }
@@ -502,16 +530,16 @@ export class Units {
   setMask(mode: 'off' | 'white' | 'black' | 'side' | 'coat'): void {
     const first = new Set(this.hosts.filter(h => h.b.side === 0).map(h => h.b.uniform))
     const v = (id: string) => mode === 'off' ? -1 : mode === 'white' ? 1 : mode === 'black' ? 0 : mode === 'coat' ? 2 : first.has(id) ? 1 : 0
-    for (const map of [this.mats, this.farMats]) for (const [id, m] of map) m.setFloat('uMask', v(id))
+    for (const map of [this.mats, this.farMats, this.tinyMats]) for (const [id, m] of map) m.setFloat('uMask', v(id))
   }
   /** each uniform's far LOD under its far rule (farRule: 'coat', the far palette and its lift; 'own', as near), or
    *  every uniform's forced (?farpal=0|1: the A/B) */
   setFarRule(force: boolean | null): void {
-    for (const [id, m] of this.farMats) m.setDefine('#define FAR', force ?? farRule(this.uniforms[id]) === 'coat')
+    for (const map of [this.farMats, this.tinyMats]) for (const [id, m] of map) m.setDefine('#define FAR', force ?? farRule(this.uniforms[id]) === 'coat')
   }
   /** the far figures drawn larger as they shrink on screen (?farscale=0: their own size) */
   setFarScale(on: boolean): void {
-    for (const m of this.farMats.values()) m.setDefine('#define FAR_SCALE', on)
+    for (const m of [...this.farMats.values(), ...this.tinyMats.values()]) m.setDefine('#define FAR_SCALE', on)
   }
   /** each side's uniforms' coat colours (the guard's ΔE to the coat) */
   coats(): string[][] {
@@ -520,7 +548,7 @@ export class Units {
   /** the far LOD and its shadow casters posed from the posed vertices (?uvat, VAT_POS), or skinned */
   setPosed(on: boolean): void {
     this.posed = on
-    for (const m of this.farMats.values()) m.setDefine('#define VAT_POS', on)
+    for (const m of [...this.farMats.values(), ...this.tinyMats.values()]) m.setDefine('#define VAT_POS', on)
     for (const h of this.hosts) this.shadowRT.setMaterialForRendering(h.lod[1], on ? this.depthVatMat : this.depthMat)
     this.smStep = -1
   }
@@ -637,12 +665,13 @@ export class Units {
     this.smStep = -1
   }
 
-  /** figures drawn last frame, by LOD: battalions shown at that LOD and in the camera's view */
+  /** figures drawn last frame, by LOD (the data's names, and tiny): battalions shown at that LOD and in the camera's view */
   drawn(): Record<string, number> {
     const out: Record<string, number> = {}, planes = this.scene.frustumPlanes
     this.data.lods.forEach((l, j) => {
       out[l.name] = this.hosts.reduce((a, h) => { const m = h.lod[j]; return a + (m.isEnabled() && m.isVisible && m.isInFrustum(planes) ? m.thinInstanceCount : 0) }, 0)
     })
+    out.tiny = this.hosts.reduce((a, h) => { const m = h.lod[3]; return a + (m.isEnabled() && m.isVisible && m.isInFrustum(planes) ? m.thinInstanceCount : 0) }, 0)
     return out
   }
   get figures(): number { return this.hosts.length * this.slot.line.length }
