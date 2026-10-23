@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-23
 ---
 
 # Conventions
@@ -24,7 +24,7 @@ last_reviewed: 2026-10-08
 
 ## Code
 
-- One short comment on non-obvious code: the why, not the how.
+- Readable code: the rules are in `AGENTS.md`, Code quality (decision 0054).
 - Reference docs by repo path in comments (`docs/art-bible.md` §6c), never by bare file name.
 - Prototype-only rules: `prototypes/AGENTS.md`.
 
