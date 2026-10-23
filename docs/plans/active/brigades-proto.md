@@ -51,3 +51,13 @@ brigade fires as one unit, as a battalion did).
   its old layout; the bars' share blended as lengths, as the block is, so they match the figures while zooming; a
   brigade's bites dealt out over its bars (the same total as a block); each battalion's volleys smoke; one constant
   for the brigade's battalions. Left: the bars computed twice a frame (drawUnder and drawBlock; small, unmeasured).
+- **Round 3**: severe again: a brigade leaving a square was drawn as a square while the cavalry already met it as an
+  open target (and one forming square was protected while still drawn as bars); an interrupted change of formation
+  jumped (its progress thrown away). Three rounds, so **redesign**: the drawing and the fighting answered "is it in
+  square?" separately. Now one test, `formedSq` (from halfway through forming until it starts to leave), decides the
+  hollow drawing, the all-round fire, the smoke and the cavalry's charge and melee; leaving a square, the bars start
+  touching and open. A change back to the formation a unit was leaving runs back from where it was. With: the bars cut
+  in world metres and projected (they sat off the figures under perspective); the guards named for their own
+  regiments; the men per unit in one place (`TYPE.men`); the brigade size asserted at two, the geometry being for two.
+  Left: proximity measured to the brigade's front centre (37 to 44 m deep now), the bars computed twice a frame.
+  The round count restarts.
