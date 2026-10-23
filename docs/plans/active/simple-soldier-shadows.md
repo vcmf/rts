@@ -153,13 +153,23 @@ Review images (the mask): `output/armies-review/7-simple-shadows/` in the main c
 
 ## Measured: the decal
 
-**Look, the decal before review round 1** (to be measured again; SwiftShader, `?frozen`, 20 a side, the same marching
-battalion as above): at the default and the widest zoom
-each soldier's shadow reads on its own past the formation's edge, and the formation darkens once, about as the map's;
-across the band (55 to 88 m) no pop and no double darkening; at the closest zoom the frame pixel for pixel today's.
-**Flicker** (the same 12 frames 1/60 s apart): the shadow's fringe changes 1.0 to 1.1 every frame (the mask's 0.5 to
-0.7, the map's 0 then 6.5 and 5.0 at the steps); over the battalion 4.1 to 6.0 every frame, never a jump (the map's 14
-at each step). Review images: `output/armies-review/8-decal-shadows/`.
+**The darkening against the map** (SwiftShader, `?frozen`, 20 a side; each pixel's luma under the shadows against the
+same frame with none, `?unitshadow=0`; pixels darkened by more than 4 of 255): at the default zoom the map darkens
+11,266 pixels by 42.0 on average, the decal 10,894 by 42.8, and where both darken, 45.6 against 45.5; a firing line
+45.8 against 46.2; in the band (74 m, both drawn, their shares) 45.3 against 46.4: no double darkening; at the widest
+zoom 42.9 against 37.6 (the shadows' coverage there a few samples). At the closest zoom the frame is today's, pixel for
+pixel. At both ends of the yaw (−2.70 and −1.14 rad) the men's shins look as under the map (the lift grows from each
+man's feet). **Flicker** (the same 12 frames 1/60 s apart): the shadow's fringe changes 0.5 to 0.7 every frame (the
+map's 0, then 6.5 and 5.0 at the steps); over the battalion 4.1 to 5.8 every frame, never a jump (the map's 14 at each
+step). Review images: `output/armies-review/8-decal-shadows/` (the first decal's).
+
+**The first decal's cost** (before review round 1: its fragment ran `groundAt`, the painter twice and the air, wrote
+its depth, over four or five overlapping shadows a pixel; the coordinator's Metal bench, the widest zoom's p50 / p95
+ms, one or two rounds, stopped early): 20 a side about the map's (the stress point still 12.20 / 13.35); 40 a side, the
+fight's middle still, the map 9.80 to 9.90 against 11.55 to 11.65 (+1.8), panning 9.55 to 9.75 against 13.05 (+3.4);
+the stress point still 12.65 / 23.8 against 17.15 to 17.20 / 18.65 (+4.5), panning 12.75 / 14.1 against 18.50 / 19.5
+(+5.7); the default zoom +0.3 to 1.3; close unchanged (the raw files
+not kept). The fragment is now one atlas read and a blend.
 
 **Cost**: an estimate until the rework's bench (20 and 40 a side) lands: a few dozen triangles a man and one atlas
 read a pixel, each covered sample written once.
