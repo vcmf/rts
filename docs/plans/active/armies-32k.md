@@ -1,6 +1,6 @@
 ---
 status: active
-last_reviewed: 2026-10-22
+last_reviewed: 2026-10-23
 ---
 
 # Plan: 32,000 soldiers at 120 fps
@@ -130,6 +130,53 @@ art, other arms.
   by ≥ 0.5 ms, no camera's p95 is worse by more than 0.2 ms, the traced `place()` and upload time falls by ≥ 70 %, and
   the contact sheet shows no visible change. **Else reverted.** (The saving is est.: the CPU writing and uploading
   about 2 MB a step, 12 times a second, against a few KB.)
+
+- **Built** (2026-10-23, `src/look/units.ts`, `src/look/shaders/units.vert` `placeMan`, `?gpuplace=0` restores the
+  CPU's path; `docs/systems/look.md`, "The men placed on the GPU"):
+  - **Per man, static** (written and uploaded once, his instance's 16 floats, so the thin instances' count and
+    buffers stay Babylon's): `world0` his slot in line (x, z) and in column (x, z); `world1` his jitter across and
+    ahead, his turn's jitter, his fire lag (rank × 1.4 s + his own ±0.3 s); `world2.x` his battalion's index.
+  - **Per battalion** (`battalions`: RGBA32F, one column a battalion, four rows; the whole texture, 1.3 KB at 80
+    battalions, sent once a frame when any record changed): row 0 its place and heading's sine and cosine; row 1 its
+    phase, the phase's start, its local time, its heading; row 2 each role's clip offset in steps (the cycle start's
+    whole steps reduced per role in double precision, `clipBase`, `src/look/world/armies.ts`); row 3 the cycle start's
+    fraction of a step. A record is rewritten exactly when `place()` ran before (a moving battalion once a step, a
+    halted one once a phase).
+  - **The ground**: `unitGround`, an R32F texture of the heightfield's nodes (495² here), read texel by texel on its
+    own triangles (`heightfield.ts`'s `sample`), so the shader's ground is the CPU's to float32. The page throws if a
+    battalion reaches off the tile (the far ring's nodes are not in it).
+  - **The CPU keeps**: the bounds (the slots' extents in the phase, the men between their places while they deploy;
+    heights from the heightfield's nodes under them), the LOD's centre, the colour bearer (`manAt`
+    for one man), and the trodden mask's men (`menAt`: `manAt` for every man of a battalion whose record changed, only
+    when the mask redraws, at most every 0.25 s).
+  - **Texture units**: the vertex stage reads at most 4 (the near LOD: the bones, the record, the ground; the far LOD
+    and the casters: the posed vertices instead of the bones), of Metal's 16 a stage; the fragment stage is unchanged.
+  - **Its cost moved to the GPU**: every vertex places its man again (four record and four ground fetches, a sine and
+    a cosine): about 24,000 far figures at the stress point's wide view. The frame was measured CPU-bound (step 0), so
+    the bench says whether it shows.
+- **What the step-0 trace already says** (`?benchtrace=1`, 40 a side, the fight's middle, pan; per-frame means):
+  place() 0.004 / 0.035 / 0.024 ms and its uploads 0.001 / 0.003 / 0.011 ms (4 / 38 / 30 KB) at wide / default /
+  close. At 40 a side only the 7 battalions in line move (the 73 reserves are written once a phase), so the per-man
+  work is small; the slow frames that place men are the frames that redraw the shadow map, which this step does not
+  change. **Expected** (est.): the trace's place + upload falls by over 70 %, but the frame's p50 by far less than the
+  1.0 ms bar; the bench decides.
+- **The override buffer** (designed, not built; for when the sim drives men off their slots): a second per-man
+  attribute buffer a host, `aOver` (two vec4 a man: his place x, z, his turn, a flag; his role and the time his clip
+  began), zero by default (the flag off: the man is placed from his battalion's record). The sim's frame (decision
+  0048) publishes only the men off their slots (battalion, man, place, turn, role, since); the renderer writes them
+  into their hosts' buffers and sends the changed ranges alone (`thinInstancePartialBufferUpdate`, one
+  `bufferSubData` a run of neighbouring men; a man back on his slot is one more write, his flag off). The shader reads
+  the override first. The battalion's bounds widen by its overridden men's extents (kept on the CPU as they are
+  written), and `menAt` reads the override for those men. Cost: in proportion to the men off their slots, 32 B each.
+- **No visible change** (SwiftShader, 1280 × 720, `?frozen&dof=0`, the clock held at 12, 35 and 80 s; wide, default
+  and close at the fight's middle and the stress point, default and close on the first and last battalions in line;
+  `?gpuplace=0` against the default; `output/armies-review/9-gpu-placed/`, not committed): the same poses, the same
+  figures drawn in all but one view, and at most 0.17 % of pixels differing by more than 8 / 255 (0.05 % up close), single
+  pixels on the figures' edges (float32 placement against float64: sub-millimetre), none a whole figure. One view (80 s,
+  wide, the fight's middle) draws one more battalion (414 figures, all off screen): a deploying battalion's bounds
+  are the box round both its column and its line (est.: a few such battalions at once).
+- **Measured** (to run: Metal, three interleaved rounds, `?gpuplace=0` against the default, still and panning, at
+  both points; a traced pan each).
 
 ## Step 2: the simple shadows beyond close zoom (issue #131)
 
