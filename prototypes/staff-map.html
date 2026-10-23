@@ -1184,7 +1184,7 @@ let scriptI=0;
 
 /* ---------- the tick ---------- */
 let GT=0;                                                     // game seconds since 07:30
-const SMOKE=[];
+const SMOKE=[],SMOKE_MAX=220;   // live puffs: past this the oldest go (500 cost about 3.7 ms a frame in a big fight)
 const isEnemy=(u,e)=>!e.gone&&(e.sideI>0)!==(u.sideI>0);
 function nearestEnemy(u,maxD,filter){let b=null,bd=maxD;for(const e of UNITS){if(!isEnemy(u,e))continue;if(filter&&!filter(e))continue;const d=Math.hypot(e.x-u.x,e.z-u.z);if(d<bd){bd=d;b=e;}}return b?{e:b,d:bd}:null;}
 // away from the enemies in reach, closer ones pushing harder
@@ -1298,11 +1298,11 @@ function puff(u){
         t0: performance.now(), big: false, face: u.face, rot: Math.random() * 6.28,
       });
     }
-    while (SMOKE.length > 500) SMOKE.shift();
+    while (SMOKE.length > SMOKE_MAX) SMOKE.shift();
     return;
   }
   const fw=dims(u,u.form,alive(u))[0],o=(Math.random()-0.5)*fw*0.9,fo=u.type==='art'?14:8;
-  SMOKE.push({x:u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo,z:u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo,t0:performance.now(),big:u.type==='art',face:u.face,rot:Math.random()*6.28});if(SMOKE.length>500)SMOKE.shift();}
+  SMOKE.push({x:u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo,z:u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo,t0:performance.now(),big:u.type==='art',face:u.face,rot:Math.random()*6.28});if(SMOKE.length>SMOKE_MAX)SMOKE.shift();}
 
 /* =========================================================================
    THE INK OVERLAY: blocks, orders, trails, smoke, names, neatline
@@ -1369,10 +1369,7 @@ function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
 
   // clip to the block (and keep a square's hole open); the bites go in their own path, so the caller's is untouched
   const clip = new Path2D(), bites = new Path2D();
-  addPoly(clip, C);
-  if (I) addPoly(clip, I);
   ink.save();
-  ink.clip(clip, 'evenodd');
 
   for (let k = 0; k < n; k++) {
     // which edge
@@ -1385,20 +1382,21 @@ function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
     const t = 0.08 + 0.84 * rnd();
     const hw = Math.max(1.8 / edgeLen, 0.04 + 0.07 * rnd());
     const ring = ringM ? Math.min(1, ringM / (e % 2 ? fw : fd)) : 1;
-    const depth = ring * (rnd() < 0.3 ? 1.2 : 0.45 + 0.45 * rnd());   // about a third cut right through
+    // about a third cut right through; with no clip (it cost a full-screen clip per block), never past the far edge or
+    // into a square's hole
+    const depth = Math.min(ring * (rnd() < 0.3 ? 1.2 : 0.45 + 0.45 * rnd()), I ? ring : 1);
 
     // inward: from this edge toward the opposite one, the full way across the block
     const vx = next[0] - b[0], vy = next[1] - b[1];
-    const out = 2 / (Math.hypot(vx, vy) || 1);   // start 2 px outside the edge
     const at = (s0, d) => [a[0] + (b[0] - a[0]) * s0 + vx * d, a[1] + (b[1] - a[1]) * s0 + vy * d];
 
     // a ragged notch: in at one side, down to the deepest point, back out at the other
     addPoly(bites, [
-      at(t - hw, -out),
+      at(t - hw, 0),
       at(t - hw * 0.6, depth * (0.4 + 0.3 * rnd())),
       at(t - hw * 0.1, depth),
       at(t + hw * 0.4, depth * (0.5 + 0.4 * rnd())),
-      at(t + hw, -out),
+      at(t + hw, 0),
     ]);
   }
 
@@ -1445,17 +1443,25 @@ function slabFaces(u, B, quad, h) {
  * them), clipped outside the top, so no two overlap and a fading slab composites once. Each side is lit by the map's one light by the way it faces: the edges
  * run front, right, back, left, so their outward normals are f, r, -f, -r.
  */
+/** Twice the signed area of a screen polygon: its sign gives the polygon's winding on screen. */
+function signedArea(P) {
+  let a = 0;
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i], q = P[(i + 1) % P.length];
+    a += p[0] * q[1] - q[0] * p[1];
+  }
+  return a;
+}
+
 function slabSides(G, T, B, col) {
-  ink.save();
-  const top = new Path2D();
-  addPoly(top, T);
-  clipOut(top);   // never where the top is: a hatched or fading top shows no side through it, in any order
+  const topA = signedArea(T);
   const normals = [B.f, B.r, [-B.f[0], -B.f[1]], [-B.r[0], -B.r[1]]];
   const sides = [0, 1, 2, 3].map(e => {
     const a = e, b = (e + 1) % 4;
     const facing = Math.max(0, normals[e][0] * NW[0] + normals[e][1] * NW[1]);
-    const seen = normals[e][0] * camF[0] + normals[e][1] * camF[2] < 0;   // facing back toward the camera
-    return { quad: [G[a], G[b], T[b], T[a]], seen, k: 0.58 + 0.3 * facing };
+    const quad = [G[a], G[b], T[b], T[a]];
+    // seen: wound on screen the same way as the top; the seen sides never overlap the top, so no clip is needed
+    return { quad, seen: signedArea(quad) * topA > 1e-3, k: 0.58 + 0.3 * facing };
   });
   for (const sd of sides) {
     if (!sd.seen) continue;
@@ -1463,7 +1469,6 @@ function slabSides(G, T, B, col) {
     ink.fillStyle = shade(col, sd.k);
     ink.fill();
   }
-  ink.restore();
 }
 
 /** A unit's slabs (from parts()) projected, the far one first, each with its index in parts() (for its wear's seed). */
@@ -1567,9 +1572,9 @@ function gunGaps(u) {
  * Clips the ink to everything outside a shape (a Path2D or a polygon), in the current transform. Clips add up, so a
  * call per shape cuts them all, overlaps included.
  */
-function clipOut(shape) {
+function clipOut(shape, box) {   // box: [x, y, w, h], the area worth keeping (a smaller clip is cheaper to draw)
   const keep = new Path2D();
-  keep.rect(-1e4, -1e4, 2e4, 2e4);
+  if (box) keep.rect(box[0], box[1], box[2], box[3]); else keep.rect(-1e4, -1e4, 2e4, 2e4);
   if (shape instanceof Path2D) keep.addPath(shape);
   else addPoly(keep, shape);
   ink.clip(keep, 'evenodd');
@@ -1580,9 +1585,9 @@ function drawGun(C,s,shadowOnly,S,u){
   const a=Math.atan2(fr[1]-bk[1],fr[0]-bk[0]),k=S/15,[sx,sy]=raiseOf(SHADOW_PX*0.6);
   ink.save();ink.translate(m[0],m[1]);ink.rotate(a);if(Math.cos(a)<0)ink.scale(1,-1);ink.rotate(-GUN_ANG);ink.scale(k,k);ink.translate(-7.5,-7.5);
   if(shadowOnly){   // in the shadow pass, before any top face: the shadow alone, the icon clipped out (the top pass draws it)
-    clipOut(GUN);ink.shadowColor='rgba(52,38,18,0.45)';ink.shadowBlur=4*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;
+    clipOut(GUN,[-15,-15,45,45]);ink.shadowColor='rgba(52,38,18,0.45)';ink.shadowBlur=4*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;
     ink.fillStyle=css(s.f);ink.fill(GUN);ink.restore();return null;}
-  for (const gap of gunGaps(u)) clipOut(gap);   // losses: the gun and its outline drawn around the gaps (its soft shadow stays whole)
+  for (const gap of gunGaps(u)) clipOut(gap,[-3,-3,21,21]);   // losses: the gun and its outline drawn around the gaps (its soft shadow stays whole)
   ink.fillStyle=css(s.f);ink.fill(GUN);
   ink.lineWidth=0.9/k;ink.strokeStyle=s.e?css(s.e):'rgba(30,22,12,0.55)';ink.stroke(GUN);
   ink.restore();
@@ -1683,7 +1688,8 @@ function arrowLit(o,col,alpha,band,s0,s1,withHead,from){
   const[t0x,t0y]=tan(0);out.push([pts[0][0]+t0x*band*0.45,pts[0][1]+t0y*band*0.45]);   // the notch, inside the tail
   const[sx,sy]=raiseOf(SHADOW_PX*0.9);
   // the shadow from an opaque copy, clipped outside the arrow, so it never shows through the translucent body
-  ink.save();ink.beginPath();ink.rect(-1e4,-1e4,3e4,3e4);ink.moveTo(out[0][0],out[0][1]);for(let i=out.length-1;i>0;i--)ink.lineTo(out[i][0],out[i][1]);ink.closePath();ink.clip('evenodd');
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const p of out){x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1]);}
+  ink.save();ink.beginPath();ink.rect(x0-30,y0-30,x1-x0+60,y1-y0+60);ink.moveTo(out[0][0],out[0][1]);for(let i=out.length-1;i>0;i--)ink.lineTo(out[i][0],out[i][1]);ink.closePath();ink.clip('evenodd');
   ink.globalAlpha=alpha;ink.shadowColor='rgba(52,38,18,0.25)';ink.shadowBlur=6*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;pathPoly(out);ink.fillStyle=css(col);ink.fill();ink.restore();
   ink.save();pathPoly(out);ink.fillStyle=css(col);ink.globalAlpha=alpha*0.6;ink.fill();ink.restore();
   ink.save();ink.globalAlpha=alpha;pathPoly(out);ink.strokeStyle=shade(col,0.55);ink.lineWidth=1;ink.stroke();
@@ -1724,18 +1730,20 @@ function drawOrders(now,alpha){
 // the lit style's smoke: a volley is a small white cloud along the front; a gun flashes at the muzzle and throws its
 // cloud forward, the way it faces. A faint shadow under each cloud keeps it readable on pale paper
 // a cloud's puffs as one path, filled once (no seams where puffs overlap); its shadow is the same path, shifted
-function cloudPath(x,y,r,rot){const P=new Path2D();for(let i=0;i<4;i++){const t=rot+i*1.7,d=r*0.45*(i?1:0),cx=x+Math.cos(t)*d,cy=y+Math.sin(t)*d*0.7,rr=r*(i?0.62:0.8);P.moveTo(cx+rr,cy);P.arc(cx,cy,rr,0,6.2832);}return P;}
+function cloudUnit(rot){const P=new Path2D();for(let i=0;i<4;i++){const t=rot+i*1.7,d=0.45*(i?1:0),cx=Math.cos(t)*d,cy=Math.sin(t)*d*0.7,rr=(i?0.62:0.8);P.moveTo(cx+rr,cy);P.arc(cx,cy,rr,0,6.2832);}return P;}
+function cloudPath(x,y,r,rot,p,i=0){const U=p.cu||(p.cu=[]);return[U[i]||(U[i]=cloudUnit(rot)),x,y,r];}
 function clouds(list){const L=raiseOf(1.5);   // every shadow first, then every white, so no shadow lands on a cloud
-  ink.save();ink.translate(L[0],L[1]);ink.fillStyle='#3a2e1c';for(const[P,a]of list){ink.globalAlpha=a*0.22;ink.fill(P);}ink.restore();
-  ink.fillStyle='#fbfaf6';for(const[P,a]of list){ink.globalAlpha=a;ink.fill(P);}}
+  ink.fillStyle='#3a2e1c';for(const[[P,x,y,r],a]of list){ink.setTransform(DPR*r,0,0,DPR*r,DPR*(x+L[0]),DPR*(y+L[1]));ink.globalAlpha=a*0.22;ink.fill(P);}
+  ink.fillStyle='#fbfaf6';for(const[[P,x,y,r],a]of list){ink.setTransform(DPR*r,0,0,DPR*r,DPR*x,DPR*y);ink.globalAlpha=a;ink.fill(P);}
+  ink.setTransform(DPR,0,0,DPR,0,0);}
 function smokeLit(p,c,age,k,mapA){
-  if(!p.big){clouds([[cloudPath(c[0],c[1]-k*4,2.6+k*5,p.rot),mapA*(1-k)*0.9]]);return;}
+  if(!p.big){clouds([[cloudPath(c[0],c[1]-k*4,2.6+k*5,p.rot,p),mapA*(1-k)*0.9]]);return;}
   const f=P2(p.x+Math.sin(p.face)*20,p.z+Math.cos(p.face)*20);if(behind(f))return;
   let dx=f[0]-c[0],dy=f[1]-c[1];const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
   if(age<0.2){ink.globalAlpha=mapA*(1-age/0.2);ink.fillStyle='#ffc94a';ink.beginPath();ink.arc(c[0]+dx*2,c[1]+dy*2,3.5,0,6.2832);ink.fill();
     ink.fillStyle='#fff3c4';ink.beginPath();ink.arc(c[0]+dx*2,c[1]+dy*2,1.8,0,6.2832);ink.fill();}
   // a cannon's cloud, larger than a volley's
-  const list=[];for(let i=0;i<3;i++){const s=(5+i*8)*(0.6+k*1.2),rr=(4.8+i*2.6)*(0.7+k*1.1);list.push([cloudPath(c[0]+dx*s,c[1]+dy*s-k*5,rr,p.rot+i),mapA*(1-k)*(0.95-i*0.18)]);}
+  const list=[];for(let i=0;i<3;i++){const s=(5+i*8)*(0.6+k*1.2),rr=(4.8+i*2.6)*(0.7+k*1.1);list.push([cloudPath(c[0]+dx*s,c[1]+dy*s-k*5,rr,p.rot+i,p,i),mapA*(1-k)*(0.95-i*0.18)]);}
   clouds(list);
 }
 /**
@@ -1752,7 +1760,8 @@ function sqFace(p) {
 }
 function drawSmoke(now,mapA,worldA){
   for(const p of SMOKE){const age=(now-p.t0)/1000,life=p.big?6:4.2;if(age>life)continue;const k=age/life,c=p.sq?sqFace(p):P2(p.x,p.z);if(behind(c))continue;
-    if(LIT&&mapA>0.01)smokeLit(p,c,age,k,mapA);
+    const off=c[0]<-90||c[0]>SW+90||c[1]<-90||c[1]>SH+90;   // a cloud reaches about 60 px from its puff
+    if(LIT&&mapA>0.01){if(!off)smokeLit(p,c,age,k,mapA);}
     else if(mapA>0.01){ink.globalAlpha=mapA*(1-k)*0.8;ink.strokeStyle='#8a847a';ink.lineWidth=0.8;ink.beginPath();const r0=(p.big?3:2)+k*(p.big?7:5);
       for(let a=0;a<=8.5;a+=0.35){const rr=r0*(0.35+a/8.5*0.65),x=c[0]+Math.cos(a+p.rot)*rr,y=c[1]+Math.sin(a+p.rot)*rr*0.8-k*6;a?ink.lineTo(x,y):ink.moveTo(x,y);}ink.stroke();}
     if(worldA>0.01){const c=P2(p.x,p.z),rw=(p.big?9:5)+k*(p.big?16:10),e=P2(p.x+rw,p.z),r=Math.max(1,Math.hypot(e[0]-c[0],e[1]-c[1]));   // the painted world: the puff at its own ground point
@@ -1815,6 +1824,28 @@ function drawNeatline(a){
   ink.globalAlpha=1;
 }
 let HOVER=null,SHOW_TRAILS=true,SHOW_NAMES=true,DRAW=null;
+// The ink is redrawn only when what it shows can have changed: the camera, the game clock, the pointer, a selection, or
+// something animating on the frame clock (smoke, a routing pulse, a turning block, an arrow's reveal, a fading trail).
+// Drawing it cost most of the frame (docs/plans/active/perf-150.md).
+let INK_KEY = '', INK_T0 = 0;
+function inkDirty(now) {
+  if (!INK_T0) INK_T0 = now;
+  if (now - INK_T0 < 3000) return true;   // the fonts load and the first frames settle
+  if (SMOKE.length && now - SMOKE[SMOKE.length - 1].t0 < 6000) return true;
+  for (const u of UNITS) {
+    if (u.gone) continue;
+    if (u.state === 'rout' || Math.abs(angTo(u.dface, u.face)) > 1e-4) return true;   // morph and fades follow the game clock
+  }
+  for (const o of ORDERS) if (now - o.t0 < 600) return true;
+  for (const f of FOOTS.values()) if (Math.abs(f.vis - (f.led ? 1 : 0)) > 1e-3) return true;
+  let key = [SW, SH, GT, HOVER ? HOVER.id : -1, DRAW ? DRAW.pts.length : 0, BOX ? BOX.x1 + ':' + BOX.y1 : '',
+    SHOW_TRAILS, SHOW_NAMES, TT].join(',');
+  for (let i = 0; i < 16; i++) key += ',' + VP[i].toFixed(6);
+  for (const u of UNITS) if (u.sel) key += ',' + u.id;
+  if (key === INK_KEY) return false;
+  INK_KEY = key;
+  return true;
+}
 function drawInk(now){
   ink.setTransform(DPR,0,0,DPR,0,0);ink.clearRect(0,0,SW,SH);
   const inkA=1-st('ink'),blockA=1-st('blocks'),nameA=1-st('names');
@@ -2007,7 +2038,7 @@ function frame(){
   scene.render();
   VP=scene.getTransformMatrix().m;
   MPP=2*CUR.R*tanH/SH;
-  cleanFootprints(now);drawInk(now);
+  cleanFootprints(now);if(inkDirty(now))drawInk(now);
   // DOM (cheap, every few frames)
   if((frameN++&7)===0){
     const ck=fmtClock(GT);$('clock').textContent=ck;$('sclock').textContent=ck;
