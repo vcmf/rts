@@ -110,6 +110,30 @@ sequences above measure the same after the fix (the fringe 0.5 to 0.7 every fram
 upload; the performance entry `groundSurfacesPack`; SwiftShader's headless page, three loads): 10.9, 9.7 and 16.1 ms
 (the images' fetch and decode are off the main thread).
 
+**The final bench** (code final after review round 2; Metal, production builds, 20 a side, three interleaved rounds,
+all 36 runs exit 0; medians of p50 / p95, ms; "map" is `?ushadowfar=map&smoothmove=0`, today's behaviour; "simple" is
+`?smoothmove=0`; "defaults" is simple shadows with smooth movement):
+
+| Run | Wide | Default | Close |
+|---|---|---|---|
+| main, still (fight's middle) | 6.05 / 7.50 | 8.80 / 10.05 | 8.50 / 9.80 |
+| map, still | 9.25 / 10.65 | 10.15 / 11.50 | 9.80 / 11.00 |
+| simple, still | 9.25 / 10.50 | 10.05 / 11.40 | 9.80 / 11.05 |
+| defaults, still | 9.70 / 10.40 | 10.15 / 11.45 | 9.80 / 11.10 |
+| map, pan | 8.85 / 10.15 | 10.55 / 11.60 | 9.70 / 10.30 |
+| simple, pan | 9.00 / 10.20 | 10.30 / 11.65 | 9.75 / 10.25 |
+| defaults, pan | 9.00 / 10.15 | 10.35 / 11.60 | 9.70 / 10.40 |
+| map, still, stress point (`62.5,-102.5`) | 10.95 / 12.30 | 9.80 / 11.20 | 8.70 / 10.00 |
+| defaults, still, stress point | 10.05 / 11.45 | 9.85 / 11.25 | 8.70 / 10.00 |
+| map, pan, stress point | 11.00 / 11.85 | 9.90 / 11.20 | 8.85 / 10.10 |
+| defaults, pan, stress point | 10.00 / 10.90 | 9.90 / 11.00 | 9.30 / 10.20 |
+
+At the fight's middle the simple shadow costs the same as the map (within ±0.25 ms), and default and close are
+unchanged. At the stress point (more battalions in view) it saves **0.9 to 1.0 ms p50 at wide** and 0.85 to 0.95 ms
+p95. Smooth movement measured +0.45 ms p50 at wide, still, at the fight's middle (9.70 against simple's 9.25) and
+nothing panning or at the stress point: within this round's spread it is small, but not the ≤ 0.1 ms of the first
+bench; it stays on (the owner's call, below).
+
 Review images: `output/armies-review/7-simple-shadows/` in the main checkout (not committed).
 
 ## Open questions
