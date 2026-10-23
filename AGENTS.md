@@ -41,7 +41,7 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
   (`?bench` in a browser), `node tools/guard.mjs <url> [--base <url>]`, the terrain detail checks
   `node tools/detail-check.mjs <url> --selftest`, the water data's `node tools/water-check.mjs [<url>] --selftest`,
   the painted water's `node tools/water-look-check.mjs <url> --selftest`; see their headers.
-- Browsers (decision 0047): checks are the scripts above, over CDP. In WSL, where Chrome would render in software,
+- Browsers (decision 0052): checks are the scripts above, over CDP. In WSL, where Chrome would render in software,
   start Windows Chrome with `tools/win-chrome.sh start --headless -- --use-angle=swiftshader` (the checks' software GL;
   without the flag, `SHOT_ANGLE=d3d11` runs them on the GPU; mirrored networking, see its header) and give the tools
   `SHOT_CDP=http://127.0.0.1:9222`. For exploring (playing the page, a trace), the `chrome-devtools` MCP server

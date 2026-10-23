@@ -3,7 +3,7 @@
 # does, where Chrome inside WSL falls back to software GL. Needs WSL's mirrored networking (`networkingMode=mirrored`
 # in %USERPROFILE%\.wslconfig), so the DevTools port and the dev server share localhost; the port listens on
 # 127.0.0.1 only. The page tools attach with SHOT_CDP=http://127.0.0.1:9222 (tools/shot.mjs), the chrome-devtools MCP
-# with `--browserUrl http://127.0.0.1:9222` (AGENTS.md, Commands; decision 0047).
+# with `--browserUrl http://127.0.0.1:9222` (AGENTS.md, Commands; decision 0052).
 # Usage: tools/win-chrome.sh [start|stop|status] [--headless] [-- <Chrome flags>]   (PORT=9222, WIN_CHROME by default)
 # Chrome renders on the GPU through Direct3D 11 by default. tools/shot.mjs checks the backend a run asks for against
 # the renderer the browser reports, and SwiftShader is its default (the goldens' and checks'): those want

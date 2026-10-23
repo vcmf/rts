@@ -5,7 +5,7 @@
 // Software GL (SwiftShader) by default: good for correctness, NOT for timing GPU frame cost. SHOT_ANGLE=metal (or
 // another ANGLE backend) uses the machine's GPU instead. SHOT_CHROME_ARGS: more Chrome flags, space-separated.
 // SHOT_CDP=<http://host:port>: attach to a running Chrome instead of launching one (Windows Chrome from WSL,
-// tools/win-chrome.sh; decision 0047). Each run takes a fresh browser context and disposes it; the browser stays up.
+// tools/win-chrome.sh; decision 0052). Each run takes a fresh browser context and disposes it; the browser stays up.
 // Its flags were fixed at its launch, so the run checks what it would have set: the GL backend by the renderer a WebGL2
 // context reports (SHOT_ANGLE, SwiftShader when unset, as launched), SHOT_CHROME_ARGS on its command line (read through
 // --enable-automation); a mismatch fails the run. A Windows browser attached from WSL gets local files through wslpath.
