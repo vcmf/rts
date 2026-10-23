@@ -785,10 +785,14 @@ const RU_N=['Novgorod','Apsheron','Kursk','Podolsk','Narva','Smolensk','Little R
 const AU_N=['IR 23 Salzburg','IR 24 Auersperg','IR 20 Kaunitz','IR 49 Kerpen','IR 29 Lindenau','IR 58 Beaulieu'];
 let nameI={FR:0,RU:0,AU:0};
 function corps(key,side,title,leader,list,cx,cz,face){
-  // list: [type,count] (infantry in battalions, made brigades of two); up to four units in one row, more in two rows 130 m apart
+  // list: [type,count], infantry in battalions (made brigades of two). Up to four infantry or cavalry units stand in
+  // one row with the guns 130 m behind; a larger corps splits its units over two rows, as before
   CORPS[key]={key,side,title,leader,guard:GUARDS.has(key)};const all=[];list.forEach(([t,c])=>{for(let i=0;i<(t==='inf'?Math.ceil(c/2):c);i++)all.push(t);});   // infantry: brigades of two battalions
-  const per=all.length<=4?all.length:Math.ceil(all.length/2),f=[Math.sin(face),Math.cos(face)],r=[Math.cos(face),-Math.sin(face)];
-  all.forEach((t,i)=>{const row=Math.floor(i/per),col=i%per,cnt=row?all.length-per:per,sx=(col-(cnt-1)/2)*(t==='cav'?115:125),sz=-row*130;
+  const f=[Math.sin(face),Math.cos(face)],r=[Math.cos(face),-Math.sin(face)];
+  const fighting=all.filter(t=>t!=='art').length,oneRow=fighting<=4;
+  const per=oneRow?fighting:Math.ceil(all.length/2);
+  all.forEach((t,i)=>{const row=oneRow?(t==='art'?1:0):Math.floor(i/per),col=oneRow?(t==='art'?i-fighting:i):i%per;
+    const cnt=oneRow?(t==='art'?all.length-fighting:fighting):(row?all.length-per:per),sx=(col-(cnt-1)/2)*(t==='cav'?115:125),sz=-row*130;
     const nl=side==='FR'?FR_N:side==='RU'?RU_N:AU_N,nm=t==='inf'?nl[nameI[side]++%nl.length]:t==='cav'?(side==='FR'?['5e Hussards','Cuirassiers','Chasseurs à cheval','Dragons'][i%4]:['Chevalier Guard','Uhlans','Hussars','Cuirassiers'][i%4]):'Foot battery';
     UNITS.push(mkUnit(side,t,key,nm,cx+r[0]*sx+f[0]*sz,cz+r[1]*sx+f[1]*sz,face));});
 }
@@ -822,38 +826,60 @@ const HQ=[{side:0,name:'NAPOLÉON',x:-1150,z:400},{side:1,name:'KUTUZOV',x:900,z
 // Metres between a brigade's two battalions, by formation.
 const BR_GAP = { line: 30, column: 15 };
 
+/** How many battalions' worth of men a unit is: two for a brigade, one otherwise (fire and losses scale by it). */
+const bats = u => (u.type === 'inf' ? 2 : 1);
+
 /**
- * The share of a brigade's drawn depth that one battalion's bar takes.
- * Far out it is a fixed symbol proportion; close in, the true one (one battalion's depth over the brigade's,
- * gap included), blended by the zoom's SYMK as the block sizes are.
+ * One battalion of a brigade, in line or column: [frontage, depth] in metres, and its files (men abreast).
+ * The single source for the brigade's footprint (dims), its figures (slot) and its two bars (barShare).
+ *
+ * @param form 'line' or 'column'
+ * @param men  the battalion's men (half the brigade)
  */
-function barFrac(u) {
-  const n = alive(u);
-  const total = dims(u, u.form, n)[1];
-  const half = Math.ceil(n / 2);
-  const bar = u.form === 'line'
-    ? 3.3
-    : Math.ceil(half / Math.min(26, Math.ceil(half / 10))) * 1.1;
-  return lerp(0.36, bar / total, SYMK);
+function battalionSize(form, men) {
+  const files = form === 'line' ? Math.ceil(men / 3) : Math.min(26, Math.ceil(men / 10));
+  const depth = form === 'line' ? 3.3 : Math.ceil(men / files) * 1.1;
+  return { frontage: files * 0.9, depth, files };
+}
+
+/**
+ * The share of a brigade's drawn depth that one battalion's bar takes, in one formation.
+ * Far out it is a fixed symbol proportion; close in, the true one (one battalion's depth over the brigade's,
+ * gap included), blended by the zoom's SYMK as the block sizes are. Toward a square it is one half: the gap
+ * closes and the two bars meet, so the brigade merges into its square.
+ */
+function barShare(u, form, n) {
+  if (form === 'square') return 0.5;
+  const bat = battalionSize(form, Math.ceil(n / 2));
+  const total = dims(u, form, n)[1];
+  return lerp(0.36, bat.depth / total, SYMK);
 }
 
 /**
  * What a unit draws as, given its screen corners C (front-left, front-right, back-right, back-left).
- * A brigade in line or column: two bars, its first battalion in front, the second behind.
- * Anything else (cavalry, guns, a formed square): one block.
+ * A brigade in line or column: two bars, its first battalion in front, the second behind; their share of the
+ * depth eases with the formation change, as the outline does. Anything else (cavalry, guns, a formed square):
+ * one block.
  */
 function parts(u, C) {
   if (u.type !== 'inf' || formedSq(u)) return [C];
-  const q = barFrac(u);
-  const at = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-  const front = [C[0], C[1], at(C[1], C[2], q), at(C[0], C[3], q)];
-  const back = [at(C[0], C[3], 1 - q), at(C[1], C[2], 1 - q), C[2], C[3]];
+  const n = alive(u);
+  const q = lerp(barShare(u, u.prev, n), barShare(u, u.form, n), easeIO(u.morph));
+  const front = [C[0], C[1], mix3(C[1], C[2], q), mix3(C[0], C[3], q)];
+  const back = [mix3(C[0], C[3], 1 - q), mix3(C[1], C[2], 1 - q), C[2], C[3]];
   return [front, back];
 }
 
 function dims(u,form,n){
-  if(u.type==='inf'){const h=Math.ceil(n/2);   // a brigade: two battalions, one behind the other; one square of both
-    if(form==='line'){const f=Math.ceil(h/3);return[f*0.9,3.3*2+BR_GAP.line];}if(form==='column'){const f=Math.min(26,Math.ceil(h/10)),d=Math.ceil(h/f)*1.1;return[f*0.9,d*2+BR_GAP.column];}const k=Math.ceil(n/12);return[k*0.9+6.6,k*0.9+6.6];}
+  if (u.type === 'inf') {
+    // a brigade: two battalions, one behind the other; in square, one square of both
+    if (form !== 'square') {
+      const bat = battalionSize(form, Math.ceil(n / 2));
+      return [bat.frontage, bat.depth * 2 + BR_GAP[form]];
+    }
+    const k = Math.ceil(n / 12);
+    return [k * 0.9 + 6.6, k * 0.9 + 6.6];
+  }
   if(u.type==='cav'){if(form==='line'){const f=Math.ceil(n/2);return[f*1.7,6.4];}const f=6;return[f*1.7,Math.ceil(n/f)*3.2];}
   if(form==='line')return[n*14,12];return[3,n*13];
 }
@@ -867,8 +893,17 @@ function shown(u,form,n){const t=dims(u,form,n),sy=(SYM[u.type][form]||SYM[u.typ
   return[lerp(sy[0]*SYMZ*(form==='square'?sq:loss),t[0],SYMK),lerp(sy[1]*SYMZ*sq,t[1],SYMK)];}
 function slot(u,form,i,n,out){
   if(u.type==='inf'){
-    if(form!=='square'){const h=Math.ceil(n/2),b=i<h?0:1,j=i-b*h,f=form==='line'?Math.ceil(h/3):Math.min(26,Math.ceil(h/10)),d=form==='line'?3.3:Math.ceil(h/f)*1.1;   // two battalions, one behind the other
-      out[0]=(j%f-(f-1)/2)*0.9;out[1]=-Math.floor(j/f)*1.1-0.5-b*(d+BR_GAP[form]);out[2]=0;return;}
+    if (form !== 'square') {
+      // two battalions, one behind the other: man i belongs to the first or the second
+      const half = Math.ceil(n / 2);
+      const which = i < half ? 0 : 1;
+      const j = i - which * half;
+      const bat = battalionSize(form, half);
+      out[0] = (j % bat.files - (bat.files - 1) / 2) * 0.9;
+      out[1] = -Math.floor(j / bat.files) * 1.1 - 0.5 - which * (bat.depth + BR_GAP[form]);
+      out[2] = 0;
+      return;
+    }
     const k=Math.ceil(n/12),side=i%4,j=Math.floor(i/4),rank=j%3,f=Math.floor(j/3),L=k*0.9+6.6,a=side*Math.PI/2;
     const lx=(f-(k-1)/2)*0.9,lz=L/2-0.5-rank*1.1,c=Math.cos(a),s=Math.sin(a);out[0]=lx*c+lz*s;out[1]=-lx*s+lz*c-L/2;out[2]=a;return;}
   if(u.type==='cav'){if(form==='line'){const f=Math.ceil(n/2);out[0]=(i%f-(f-1)/2)*1.7;out[1]=-Math.floor(i/f)*3.2-1;out[2]=0;return;}
@@ -970,13 +1005,14 @@ function simStep(dt){
       if(ne&&(formedSq(u)||Math.abs(angTo(u.face,Math.atan2(ne.e.x-u.x,ne.e.z-u.z)))<1.2)){   // a square faces every way
         const e=ne.e,ff=u.type==='art'?(ne.d<300?1.8:1)*0.00055:(u.form==='line'?1:u.form==='square'?0.55:0.3)*0.0011*(ne.d<80?1.5:1);
         const tf=e.form==='column'?1.4:e.form==='square'&&u.type==='art'?1.6:1;
-        e.str=Math.max(0,e.str-ff*u.str*tf*dt);e.mor-=ff*u.str*tf*dt*2.6*(e.sideI===0?0.85:1);e.hit=GT;u.firing=3;
+        const hit=ff*u.str*tf*dt*bats(u)/bats(e);   // a brigade fires with two battalions and takes losses over two
+        e.str=Math.max(0,e.str-hit);e.mor-=hit*2.6*(e.sideI===0?0.85:1);e.hit=GT;u.firing=3;
         if(Math.random()<dt*(u.type==='art'?0.25:0.5))puff(u);
       }
     }
     // melee: cavalry on contact
     if(u.type==='cav'&&u.state!=='rout'){const ne=nearestEnemy(u,45);if(ne){const e=ne.e;
-      if(e.form==='square'){u.mor-=0.012*dt;u.str-=0.002*dt;}else{e.mor-=0.03*dt*u.str;e.str-=0.004*dt*u.str;u.str-=0.001*dt;e.hit=GT;}u.hit=GT;}}
+      if(e.form==='square'){u.mor-=0.012*dt;u.str-=0.002*dt;}else{e.mor-=0.03*dt*u.str/bats(e);e.str-=0.004*dt*u.str/bats(e);u.str-=0.001*dt;e.hit=GT;}u.hit=GT;}}
     // morale
     if(GT-u.hit>25)u.mor=Math.min(1,u.mor+dt*0.004);
     if(u.mor<0.2&&u.state!=='rout'){u.state='rout';finishOrder(u);u.path=null;setForm(u,'column');u.face=fleeHeading(u);}   // turns its back once, as it breaks
@@ -1051,8 +1087,10 @@ function blockCorners(u,extra=0){
 // Edge weights for picking where a bite goes: front, right, back, left. Fixed (not the drawn lengths), so a bite
 // stays on its edge at any zoom or strength.
 const BITE_EDGE_W = [0.35, 0.15, 0.35, 0.15];
+// a brigade's bar: its short ends are too small to bite, so only its front and back
+const BITE_EDGE_W_BAR = [0.5, 0, 0.5, 0];
 
-/** Adds a closed polygon (screen points) to a Path2D. */
+/** Adds a closed polygon (screen points) to a path: a Path2D, or the ink context itself. */
 function addPoly(path, pts) {
   path.moveTo(pts[0][0], pts[0][1]);
   for (let i = 1; i < pts.length; i++) path.lineTo(pts[i][0], pts[i][1]);
@@ -1070,9 +1108,11 @@ function addPoly(path, pts) {
  * @param fw,fd the block's drawn frontage and depth (m)
  * @param ringM a square's ring thickness (m), so bites go no deeper than the ring; 0 for a solid block
  * @param salt  0, 1, ...: a different set of bites for each bar of a brigade
+ * @param bars  how many bars share the unit's bites (2 for a brigade in line or column): each gets its part
  */
-function damage(u, C, I, fw, fd, ringM, salt = 0) {
-  const n = Math.round(clamp((1 - u.str) / 0.7, 0, 1) * 10);
+function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
+  const n = Math.round(clamp((1 - u.str) / 0.7, 0, 1) * 10 / bars);
+  const weights = bars > 1 ? BITE_EDGE_W_BAR : BITE_EDGE_W;
   if (!n) return;
 
   // a small Lehmer generator, seeded from the unit's own hash
@@ -1089,7 +1129,7 @@ function damage(u, C, I, fw, fd, ringM, salt = 0) {
   for (let k = 0; k < n; k++) {
     // which edge
     let w = rnd(), e = 0;
-    while (e < 3 && w > BITE_EDGE_W[e]) { w -= BITE_EDGE_W[e]; e++; }
+    while (e < 3 && w > weights[e]) { w -= weights[e]; e++; }
     const a = C[e], b = C[(e + 1) % 4], next = C[(e + 2) % 4];
     const edgeLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
 
@@ -1118,7 +1158,11 @@ function damage(u, C, I, fw, fd, ringM, salt = 0) {
   ink.fill(bites);
   ink.restore();
 }
-function pathPoly(C){ink.beginPath();ink.moveTo(C[0][0],C[0][1]);for(let i=1;i<C.length;i++)ink.lineTo(C[i][0],C[i][1]);ink.closePath();}
+/** Starts a new canvas path on ink: the closed polygon C. */
+function pathPoly(C) {
+  ink.beginPath();
+  addPoly(ink, C);
+}
 const PULSE_WHITE=hex('#fbfaf6'),PULSE_MS=1100;   // the legend swatch (.blink) pulses at the same period, not in phase
 // the lit style: blocks stand off the ground and arrows cast a shadow, lit from the world's north-west. LIGHT points
 // toward the light on screen (setLight, each frame, so it turns with the camera); the side face and the shadows fall
@@ -1184,8 +1228,8 @@ function drawBlock(u,alpha,now){
   if(u.state==='rout'){
     // routing: pulses between the army colour and white, the colour of surrender
     // a soft pulse on the frame clock passed in, so an exporter controls the phase
-    parts(u,C).forEach((P,pi)=>{pathPoly(P);ink.fillStyle=css(blockCol(u,now));ink.fill();if(LIT)litEdges(P);
-    ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);if(LIT)damage(u,P,null,fw,fd,0,pi);});}
+    const PS=parts(u,C);PS.forEach((P,pi)=>{pathPoly(P);ink.fillStyle=css(blockCol(u,now));ink.fill();if(LIT)litEdges(P);
+    ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);if(LIT)damage(u,P,null,fw,fd,0,pi,PS.length);});}
   else if(u.type==='art'&&LIT)u.gun=drawGun(C,s);
   else if(u.type==='art'){
     // bar + gun dot on the facing side
@@ -1193,7 +1237,7 @@ function drawBlock(u,alpha,now){
     const fr=[(C[0][0]+C[1][0])/2,(C[0][1]+C[1][1])/2],bk=[(C[2][0]+C[3][0])/2,(C[2][1]+C[3][1])/2],dl=Math.hypot(fr[0]-bk[0],fr[1]-bk[1])||1;
     ink.beginPath();ink.arc(fr[0]+(fr[0]-bk[0])/dl*5,fr[1]+(fr[1]-bk[1])/dl*5,3,0,6.2832);ink.fillStyle=css(s.f);ink.fill();if(s.e)ink.stroke();
   }
-  else parts(u,C).forEach((P,pi)=>{   // a brigade's two bars, or one block
+  else{const PS=parts(u,C);PS.forEach((P,pi)=>{   // a brigade's two bars, or one block
     pathPoly(P);let I=null,sqK=0;
     if(formedSq(u)){
       // hollow square: the inner hole
@@ -1204,8 +1248,8 @@ function drawBlock(u,alpha,now){
     if(lvl>=0){ink.strokeStyle=css(s.e||s.c);ink.lineWidth=0.9;ink.stroke();}
     if(s.e){ink.strokeStyle=css(s.e);ink.lineWidth=1.5;ink.stroke();}
     if(u.type==='cav'){ink.strokeStyle=s.e?css(s.e):s.stripe?css(s.stripe):'rgba(243,239,230,0.95)';ink.lineWidth=1.3;ink.beginPath();ink.moveTo(P[3][0],P[3][1]);ink.lineTo(P[1][0],P[1][1]);ink.stroke();}
-    if(LIT)damage(u,P,I,fw,fd,I?sqK:0,pi);   // last: a bite breaks the outline too
-  });
+    if(LIT)damage(u,P,I,fw,fd,I?sqK:0,pi,PS.length);   // last: a bite breaks the outline too
+  });}
   if(LIT&&u.type==='art'&&u.gun&&(u.sel||u===HOVER)){const{m,r:R}=u.gun;ink.strokeStyle=u.sel?'#211f1c':'rgba(33,31,28,0.5)';ink.lineWidth=0.9;ink.beginPath();ink.arc(m[0],m[1],R+2,0,6.2832);ink.stroke();if(u.sel){ink.lineWidth=0.6;ink.beginPath();ink.arc(m[0],m[1],R+4.5,0,6.2832);ink.stroke();}}   // the ring around the icon, what the eye sees
   else if(u.sel){const D=blockCorners(u,4).C,D2=blockCorners(u,6.5).C;ink.strokeStyle='#211f1c';ink.lineWidth=0.9;pathPoly(D);ink.stroke();ink.lineWidth=0.6;pathPoly(D2);ink.stroke();}
   else if(u===HOVER){const D=blockCorners(u,4).C;ink.strokeStyle='rgba(33,31,28,0.5)';ink.lineWidth=0.8;pathPoly(D);ink.stroke();}

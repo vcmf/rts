@@ -32,3 +32,15 @@ brigade fires as one unit, as a battalion did).
 - Screenshots at map, mid and close zoom: brigades as two bars, a formed square merged, the painted world's figures
   in two bodies.
 - The game runs (orders, fire, squares against cavalry, routs) without errors.
+
+## Review rounds
+
+- **Round 1** (`/code-review high`): severe: the bars' share of the depth followed only the new formation, so they
+  jumped as a brigade changed formation while its outline eased; and the wear bites on the thin bars became dark slabs
+  (a side bite covered a bar's whole depth). Fixed: the share eased from the old formation to the new, and one half
+  toward a square, so the two bars close up and merge into it; the bites on a bar only along its front and back, the
+  unit's count split between its bars. With: fire and losses scaled by battalions (a brigade fires with two and takes
+  its losses over two; cavalry and guns killed twice the men before); one battalion-size helper for the footprint,
+  the figures and the bars; the guns behind a one-row corps; `pathPoly` on the shared polygon helper, `mix3` for the
+  corners. Not taken: "the doc comments break the one-short-comment rule": that rule is replaced by decision 0054
+  (PR #142), at the owner's request.
