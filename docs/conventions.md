@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-23
 ---
 
 # Conventions
@@ -24,8 +24,7 @@ last_reviewed: 2026-10-08
 
 ## Code
 
-- Readable code first: small functions, one statement per line, a doc comment on each function that is not
-  trivial; comments say why, not how. The full rules: `AGENTS.md`, Code quality.
+- Readable code: the rules are in `AGENTS.md`, Code quality (decision 0054).
 - Reference docs by repo path in comments (`docs/art-bible.md` §6c), never by bare file name.
 - Prototype-only rules: `prototypes/AGENTS.md`.
 

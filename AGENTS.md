@@ -70,8 +70,8 @@ a **research note** (`docs/research/`) needs no plan and no `/code-review` (chec
 
 ## Code quality
 
-Code is read far more often than it is written: write it to be easy to read and maintain, for the owner and for the
-next agent. This holds everywhere, prototypes included, even where older code does otherwise.
+Decision 0054. Code is read far more often than it is written: write it to be easy to read and maintain, for the
+owner and for the next agent. This holds in every file, prototypes included, whatever the older code around it does.
 
 - **Functions:** small, one job each, named for what they do or return. When a function needs comments to explain
   its parts, split it into named functions instead.
@@ -79,15 +79,16 @@ next agent. This holds everywhere, prototypes included, even where older code do
   long nested expressions. No packed one-liners, even in a file that is full of them.
 - **Doc comments:** every function that is exported or not trivial gets a `/** */` comment: what it does, its
   parameters (with units) and what it returns when not obvious. Inline comments say why, not how.
-- **TypeScript** for game code (`src/`) and the tools the game depends on, strict (`npm run typecheck`). Prototypes stay
-  plain JavaScript in one HTML file, since they must run from `file://` without a build (`prototypes/AGENTS.md`);
-  logic that outgrows a prototype moves into `src/` as TypeScript, with tests.
-- **Tests:** a change to game code comes with Vitest tests of its behaviour; a bug fix comes with a test that fails
-  without it. Prototypes are checked with screenshots and the page checks (`tools/`), not unit tests.
-- **Lint:** `npm test` (ESLint, typecheck, Vitest) passes before review. ESLint covers `src/`, `maps/`, `test/` and
-  `tools/*.ts`; prototypes and the older `.js`/`.mjs` tools are not linted yet, so the rules above are checked by
-  review there.
-- **Reformatting** old code goes in its own commit, never mixed with a change of behaviour.
+- **Old packed code:** before changing behaviour inside a function written as packed one-liners, reformat that
+  function in its own commit (no change of behaviour), then make the change in the next.
+- **TypeScript:** game code (`src/`) is strict TypeScript (decision 0016), and so are new Node tools. The existing
+  `.js`/`.mjs` tools, the generated `*.data.js` files and Blender's Python stay as they are until rewritten.
+  Prototypes are plain JavaScript (single HTML files, with their shared scripts: `prototypes/AGENTS.md`), since they
+  run from `file://` without a build.
+- **Tests:** behaviour that Vitest can test comes with tests, and a bug fix with a test that fails without it.
+  Rendering and the look are checked with the page checks and screenshots (`tools/`), prototypes the same way.
+- **Lint:** ESLint covers every `.ts` file; the prototypes and the `.js`/`.mjs` tools are not linted, so review checks
+  the rules above there. `npm test` (lint, typecheck, Vitest) is part of the check runs (Workflow, step 4).
 
 ## Commits and PRs
 
