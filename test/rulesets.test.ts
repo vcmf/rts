@@ -202,7 +202,7 @@ describe('the ruleset hash', () => {
   })
 })
 
-// what the compiler does not check, checked on the data each era ships: a name that points at nothing would be
+// what the compiler does not check (#156), checked on the data each era ships: a name that points at nothing would be
 // read as "none" (an index of −1) or "not given" (undefined) and turn into a NaN or a default far from the check
 describe('the shipped rulesets hold together', () => {
   for (const [era, rs] of Object.entries({

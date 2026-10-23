@@ -144,21 +144,25 @@ The tests this PR adds (`test/`, 103 tests in about 7 s on the dev Mac in parall
 
 ## Findings (not fixed: for the owner to decide)
 
-Tests written for this PR found these. None is fixed here; none of the tests added asserts the wrong behaviour.
+Tests written for this PR, and its review, found these. Each is a GitHub issue labelled `known-issue`; none is fixed
+here, and no test added asserts the wrong behaviour (#158's is an expected failure, `it.fails`).
 
-1. **A save with an unknown command pending cannot be loaded.** `issue` accepts any command and `applyCommands` drops
+1. **A save with an unknown command pending cannot be loaded** (#155). `issue` accepts any command and `applyCommands` drops
    one of an unknown type with a reason, but a save taken while it is pending writes its type and no fields
    (`FIELDS` has none), and `deserialize` throws `unknown command type … in save`. A malformed external command and a
    save in the same tick make an unloadable save. Fix options: drop unknown types at `issue`, or write them with no
    fields and read them back as unknown.
-2. **A shape whose pace is not a pace compiles.** `layout` takes `paces.indexOf(def.pace)` = −1; the world then fails
+2. **A shape whose pace is not a pace compiles** (#156). `layout` takes `paces.indexOf(def.pace)` = −1; the world then fails
    at its first move with `NonFiniteState` in debug, and silently runs NaN without it. The same for a `roadPace`
    (read as "no road pace").
-3. **A terrain class that gives a kind no speed compiles.** `buildTerrain` reads `t.g[kind]` as undefined: NaN in
+3. **A terrain class that gives a kind no speed compiles** (#156). `buildTerrain` reads `t.g[kind]` as undefined: NaN in
    `classG`. Kinds come from the first class's keys only.
-4. **A change time naming a shape the type has not is ignored**: a typo falls back to `defaultChangeTime`.
-5. **`atan2(−0, x > 0)` returns −0**, against its comment ("zero results are +0") and `docs/systems/sim-spine.md`
-   ("no −0"). It is deterministic (IEEE), but a −0 stored in state serializes to other bytes than +0.
+4. **A change time naming a shape the type has not is ignored** (#156): a typo falls back to `defaultChangeTime`.
+5. **`atan2(−0, x > 0)` returns −0** (#157), against its comment ("zero results are +0") and `docs/systems/sim-spine.md`
+   ("no −0"). It is deterministic (IEEE), but a −0 stored in state serializes to other bytes than +0. `quantise`
+   (`Math.round`) gives −0 too, for −0.005: whether the sim should store −0 at all is the same question.
+6. **`sampleCount(NaN)` draws 12 uniforms and returns NaN** (#158), where λ ≤ 0 returns 0 without a draw. Found in
+   review; `test/primitives.test.ts` holds it as an expected failure.
 
 Findings 2–4 are now checked on the shipped data (`test/rulesets.test.ts`, "the shipped rulesets hold together"),
 so a ruleset that ships with one fails a test; the compiler still accepts them.
@@ -183,4 +187,3 @@ so a ruleset that ships with one fails a test; the compiler still accepts them.
 ## Open questions
 
 - Should CI's coverage include `maps/`? Its code runs at build time; `check:data` already compares its output.
-- Findings 1–5: fix in the sim (a `fix(sim)` PR each, or one), or accept and document.

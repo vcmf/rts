@@ -14,6 +14,7 @@ import {
   KIND_FORMATION,
   MAX_FORMATIONS,
   M_FREE,
+  M_SEQ,
   PI,
   type Command,
   type World,
@@ -37,15 +38,19 @@ function twoSides(): { w: World; a: number; b: number } {
   advanceTick(w)
   return { w, a: formationHandle(w, 0), b: formationHandle(w, 1) }
 }
-// the reasons the commands are dropped for, applied in one tick. A refused command changes nothing: every section of
-// the world but meta (the sequence number moves on) is as in a copy that ran the tick without them
+// the reasons the commands are dropped for, applied in one tick. A refused command changes nothing: the world is as a
+// copy that ran the tick without them, every section and every meta word but the sequence number (it moves on)
 function refusals(w: World, cmds: Command[], changes = false): string[] {
   const copy = deserialize(serialize(w), data, cr)
   for (const c of cmds) issue(w, c)
   const r = advanceTick(w)
   advanceTick(copy)
   const rest = (x: World) => sectionHashes(x).filter(([name]) => name !== 'meta')
-  if (!changes) expect(rest(w)).toEqual(rest(copy))
+  const meta = (x: World) => [...x.meta].map((v, k) => (k === M_SEQ ? 0 : v))
+  if (!changes) {
+    expect(rest(w)).toEqual(rest(copy))
+    expect(meta(w)).toEqual(meta(copy))
+  }
   return r.dropped.map(d => d.reason)
 }
 
@@ -106,18 +111,29 @@ describe('commands: refusals', () => {
     expect(why).toEqual(['no waypoints', 'no such wheel', 'no such wheel', 'no such retreat', 'no such retreat'])
     expect(w.f.ordHead[0]).toBe(-1)
   })
-  it('a fire command with an unknown mode, at a friend, or at a formation gone', () => {
+  it('a fire command with an unknown mode, at a friend, or at a slot never filled', () => {
     const { w, a, b } = twoSides()
-    const gone = makeHandle(KIND_FORMATION, 5, 0)
+    const empty = makeHandle(KIND_FORMATION, 5, 0)
     const why = refusals(w, [
       { type: 'fire', id: a, mode: 'volley' },
       { type: 'fire', id: a, mode: 'at will', target: a },
-      { type: 'fire', id: a, mode: 'at will', target: gone },
+      { type: 'fire', id: a, mode: 'at will', target: empty },
     ])
     expect(why).toEqual(['no such fire mode', 'no such target', 'no such target'])
     expect(w.f.prefer[0]).toBe(0)
     expect(refusals(w, [{ type: 'fire', id: a, mode: 'hold', target: b }], true)).toEqual([])
     expect([w.f.fireMode[0], w.f.prefer[0]]).toEqual([1, b])
+  })
+  it('a fire command at a stale handle: the enemy killed and its slot filled again by another', () => {
+    const { w, a, b } = twoSides()
+    refusals(w, [{ type: 'debug-kill', id: b, men: 50 }], true)
+    refusals(w, [spawn(1, -60, 150)], true)
+    expect(w.f.alive[1]).toBe(1)
+    const fresh = formationHandle(w, 1)
+    expect(fresh).not.toBe(b)
+    expect(refusals(w, [{ type: 'fire', id: a, mode: 'at will', target: b }])).toEqual(['no such target'])
+    expect(refusals(w, [{ type: 'fire', id: a, mode: 'at will', target: fresh }], true)).toEqual([])
+    expect(w.f.prefer[0]).toBe(fresh)
   })
   it('a debug kill of no men, and a debug morale outside 0..1', () => {
     const { w, a } = twoSides()

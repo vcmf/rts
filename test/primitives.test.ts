@@ -80,14 +80,15 @@ describe('rng: the draws', () => {
     }
     expect(seen.size).toBe(7)
   })
-  it('nextUnit is never 1, even for the largest output', () => {
-    // a state whose next output is 2^32 − 1 is hard to reach: check the bound by the formula
-    expect(0xffffffff / 4294967296).toBeLessThan(1)
-    const s = new Uint32Array(4)
-    seedRng(s, 11)
-    for (let k = 0; k < 10000; k++) expect(nextUnit(s)).toBeLessThan(1)
+  it('nextUnit is below 1 at the largest output, 2^32 − 1', () => {
+    // the output is rotl(s1 · 5, 7) · 9: s1 = 0x831c71c7 makes it 0xffffffff (solved with the inverses of 9 and 5)
+    const s = new Uint32Array([1, 0x831c71c7, 2, 3])
+    expect(nextU32(new Uint32Array(s))).toBe(0xffffffff)
+    const u = nextUnit(s)
+    expect(u).toBeLessThan(1)
+    expect(u).toBe(0xffffffff / 4294967296)
   })
-  it('sampleCount: nothing for λ ≤ 0 or NaN, without a draw; never negative', () => {
+  it('sampleCount: nothing for λ ≤ 0, without a draw; never negative', () => {
     const s = new Uint32Array(4)
     seedRng(s, 5)
     const before = [...s]
@@ -95,8 +96,17 @@ describe('rng: the draws', () => {
     expect([...s]).toEqual(before)
     for (let k = 0; k < 2000; k++) expect(sampleCount(s, 1.2)).toBeGreaterThanOrEqual(0)
   })
-  it('seeds whose splitmix words would all be zero still give a live stream', () => {
-    // seedRng guards the all-zero state, a fixed point of xoshiro: whatever the seed, the stream moves
+  // #158: sampleCount(NaN) draws 12 uniforms and returns NaN. Expected to fail until it is fixed
+  it.fails('sampleCount: nothing for a NaN λ, without a draw (#158)', () => {
+    const s = new Uint32Array(4)
+    seedRng(s, 5)
+    const before = [...s]
+    expect(sampleCount(s, NaN)).toBe(0)
+    expect([...s]).toEqual(before)
+  })
+  it('edge seeds (0, −1, 2^31 − 1, 2^32 − 1, 2^32) give a nonzero state and a moving stream', () => {
+    // (seedRng's guard against the all-zero state, xoshiro's fixed point, needs a seed whose four splitmix words are
+    // all zero: none is known, so the guard itself is not reached here)
     for (const seed of [0, -1, 0x7fffffff, 0xffffffff, 2 ** 32]) {
       const s = new Uint32Array(4)
       seedRng(s, seed)
@@ -156,7 +166,7 @@ describe('bit sets', () => {
 })
 
 describe('num at its boundaries', () => {
-  // (atan2(−0, x > 0) gives −0, against num.ts's "zero results are +0": reported in docs/plans/active/test-gaps.md)
+  // (#157: atan2(−0, x > 0) gives −0, against num.ts's "zero results are +0"; not asserted either way here)
   it('atan2: +0 at the origin, +π on the negative x axis whatever the sign of zero', () => {
     expect(Object.is(atan2(0, 1), 0)).toBe(true)
     expect(Object.is(atan2(0, 0), 0)).toBe(true)
@@ -194,7 +204,8 @@ describe('num at its boundaries', () => {
   })
   it('quantise rounds half a centimetre up, toward +∞, the same on both sides of zero', () => {
     expect(quantise(0.005)).toBe(0.01)
-    expect(quantise(-0.005)).toBe(-0)
+    // equal to zero (Math.round gives −0 here: whether the sim should store −0 is #157's question, not pinned)
+    expect(quantise(-0.005) === 0).toBe(true)
     expect(quantise(1.004)).toBe(1)
     expect(quantise(-2.0049)).toBe(-2)
   })

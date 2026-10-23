@@ -14,6 +14,7 @@ import {
   KIND_FORMATION,
   COMMAND_TYPES,
   M_TICK,
+  MS_ROUTING,
   type Command,
   type World,
 } from '../src/sim/index.ts'
@@ -70,6 +71,7 @@ function chargeAt(n: number): World {
 const load = (w: World): World => deserialize(serialize(w), OPEN_DATA, cr, true, openBattlefield())
 
 describe('saves: what crosses', () => {
+  // (a command of an unknown type pending makes a save that cannot be loaded: #155)
   it('a pending command of every type crosses a save with every field', () => {
     const w = makeWorld(data, cr, 1)
     for (const t of COMMAND_TYPES) issue(w, ONE_OF_EACH[t])
@@ -96,9 +98,11 @@ describe('saves: a loaded world goes on exactly', () => {
     // one battle, a copy loaded from a save at each point and run beside it for 200 ticks
     const w = chargeAt(0)
     const phases: string[] = []
+    const routing: boolean[] = []
     for (const at of [1, 400, 800, 1000, 1200]) {
       while (w.meta[M_TICK] < at) advanceTick(w)
       phases.push(`${w.f.chPhase[0]}${w.f.chPhase[1]}${w.f.foe[0] ? ' melee' : ''}`)
+      routing.push(w.f.mstate[0] === MS_ROUTING || w.f.mstate[1] === MS_ROUTING)
       const c = load(w)
       for (let k = 0; k < 200; k++) {
         const a = advanceTick(w)
@@ -112,6 +116,7 @@ describe('saves: a loaded world goes on exactly', () => {
     expect(phases[0]).toBe('11')
     expect(phases.some(p => p.endsWith(' melee'))).toBe(true)
     expect(phases.some(p => p.includes('3'))).toBe(true)
+    expect(routing.at(-1)).toBe(true)
   })
 })
 
@@ -126,8 +131,9 @@ describe('saves: refusals', () => {
     expect(() => deserialize(later, OPEN_DATA, cr)).toThrow(/not a save of this format/)
   })
   it('refuses a truncated save and one with trailing bytes', () => {
-    expect(() => deserialize(good.slice(0, good.length - 3), OPEN_DATA, cr)).toThrow()
-    expect(() => deserialize(good.slice(0, 200), OPEN_DATA, cr)).toThrow()
+    // cut in the last word (the pending commands' count) the reader runs off its view; cut in a table, the copy refuses
+    expect(() => deserialize(good.slice(0, good.length - 3), OPEN_DATA, cr)).toThrow(RangeError)
+    expect(() => deserialize(good.slice(0, 200), OPEN_DATA, cr)).toThrow(/save is truncated/)
     const longer = new Uint8Array(good.length + 1)
     longer.set(good)
     expect(() => deserialize(longer, OPEN_DATA, cr)).toThrow(/trailing bytes/)

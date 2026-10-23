@@ -10,6 +10,7 @@ import {
   unitHandle,
   formationHandle,
   M_LIMIT,
+  M_TICK,
   M_PLAN,
   M_END,
   M_WINNER,
@@ -65,17 +66,18 @@ describe('attaching a plan', () => {
 
 describe('running a plan', () => {
   it('steps given out of order run at their ticks; on one tick, in the order the plan lists them', () => {
-    // at 0.5 s unit 0 is told to form column and then to halt (the halt clears the order: no change starts);
+    // at 0.5 s unit 0 is given the preset keep and then push: the later one stands (in the other order, keep would);
     // listed first but due later, at 1 s, unit 1 forms column
     const w = withPlan([
       { at: 1, unit: 1, cmd: { type: 'form', shape: 'column' } },
-      { at: 0.5, unit: 0, cmd: { type: 'form', shape: 'column' } },
-      { at: 0.5, unit: 0, cmd: { type: 'halt' } },
+      { at: 0.5, unit: 0, cmd: { type: 'style', preset: 'keep' } },
+      { at: 0.5, unit: 0, cmd: { type: 'style', preset: 'push' } },
     ])
     expect(w.planDue).toEqual([10, 10, 20])
-    while (w.meta[0] < 12) advanceTick(w)
-    expect([w.f.trans[0], w.f.trans[1], w.f.ordHead[0]]).toEqual([0, 0, -1])
-    while (w.meta[0] < 22) advanceTick(w)
+    while (w.meta[M_TICK] < 12) advanceTick(w)
+    expect(w.f.style[0]).toBe(cr.presetIndex('push'))
+    expect(w.f.trans[1]).toBe(0)
+    while (w.meta[M_TICK] < 22) advanceTick(w)
     expect(w.f.trans[1]).toBe(1)
   })
   it('a fire step with a negative target, or none, prefers no target; a unit number names the target', () => {
@@ -85,19 +87,19 @@ describe('running a plan', () => {
       { at: 1.5, unit: 1, cmd: { type: 'fire', mode: 'hold', target: 0 } },
       { at: 2, unit: 1, cmd: { type: 'fire', mode: 'at will' } },
     ])
-    while (w.meta[0] < 10) advanceTick(w)
+    while (w.meta[M_TICK] < 10) advanceTick(w)
     expect(w.f.prefer[0]).toBe(unitHandle(1))
     expect(unitHandle(1)).toBe(formationHandle(w, 1))
-    while (w.meta[0] < 20) advanceTick(w)
+    while (w.meta[M_TICK] < 20) advanceTick(w)
     expect(w.f.prefer[0]).toBe(0)
-    while (w.meta[0] < 30) advanceTick(w)
+    while (w.meta[M_TICK] < 30) advanceTick(w)
     expect(w.f.prefer[1]).toBe(unitHandle(0))
-    while (w.meta[0] < 40) advanceTick(w)
+    while (w.meta[M_TICK] < 40) advanceTick(w)
     expect(w.f.prefer[1]).toBe(0)
   })
   it('at the time limit with both sides whole the battle is a draw, decided once', () => {
     const w = withPlan([], 0.05) // 60 ticks
-    while (w.meta[0] < 59) advanceTick(w)
+    while (w.meta[M_TICK] < 59) advanceTick(w)
     expect(w.meta[M_END]).toBe(0)
     advanceTick(w)
     expect([w.meta[M_END], w.meta[M_WINNER]]).toEqual([60, END_DRAW])
