@@ -16,20 +16,24 @@ twice that along the sun on the ground) are a few across a leg or a musket, so a
 step. The owner (#131): "it looks good static, but simplify: every soldier looks more or less the same, so simplify
 the shape and only use the good shadow like today at close zoom."
 
+Revised 2026-10-23: the first build splatted the shapes into a top-down mask the ground read; the owner's intent was
+"one simple identical shadow per soldier, cheap, redrawn much less", and at 40 a side the mask measured fill-bound, so
+each soldier now draws his own (below; the mask under the alternatives).
+
 ## Decision
 
 - **Up close** (the camera within 60 m of its focus) the figures' shadow map as 0047 built it, unchanged.
 - **Beyond** (from 85 m) **no shadow map**: one shadow shape a figure, baked at load from the figure data (its far LOD
   posed through each role's clip, projected along the sun onto the ground at 16 facings, averaged over the clip and
-  blurred), laid as a quad a man from his feet along the sun into a top-down world mask whose texel grid is fixed in the
-  world (a few texel sizes by zoom, the corner on whole texels, the box held), the shape read through its mips where the
-  mask's texels are coarser (a soft footprint, no aliasing), drawn when the men in it move, with each man's place
-  moved every frame (his step's place and his move to the next). The ground reads the mask once a pixel
-  and the meadow once a blade at its root, as both read the map; a decal on the ground would be hidden under the grass.
-- **Between**, a cross-fade of the two by the camera's distance (tunable, `?ushadowswitch`), so nothing pops; each is
-  drawn only while it shows.
-- **A texture unit** for it: the ground's fragment stage was full (16, 0047's consequence); the dirt's and the earth's
-  one-channel textures are packed into one, the ground pixel for pixel as before.
+  blurred), drawn by each soldier himself in the main pass: a small grid on the ground from his feet along the sun, on
+  his battalion's own instances (it moves with him every frame), lifted toward the camera in depth so the grass does
+  not hide it, darkening what is under it toward the ground's painted shadow; where shadows overlap the darkest wins
+  (a depth pass, then a colour pass), so a formation's shadow darkens once. No render target, no redraw, nothing read
+  by the receivers.
+- **Between**, a cross-fade of the two by the camera's distance (tunable, `?ushadowswitch`), so nothing pops: the
+  receivers take the map's share, the decals theirs, never more than one full shadow together.
+- **A texture unit**: the dirt's and the earth's one-channel textures are packed into one (built when the first design
+  needed the ground's unit; kept, being free: the ground pixel for pixel as before).
 - **The figures' places** move every frame, and their simple shadows with them (`?smoothmove=0`: both at the 12 fps
   steps); their poses stay stepped at 12 fps (the art bible). Measured free; open for the owner (the plan's open questions).
 - `?ushadowfar=map` keeps 0047's map at every zoom (the A/B).
@@ -39,18 +43,21 @@ the shape and only use the good shadow like today at close zoom."
 - The shadows beyond close zoom move every frame and keep their shape (no texel steps, no 12 fps steps); they are one
   averaged shape a role and facing, not each man's pose (a marching man's legs are one soft wedge, a firing line's
   muskets a faint stroke). At close zoom, where the poses read, the map's own.
-- No shadow map is drawn past 85 m; the mask is drawn there instead, while men in it move (a quad a man into a 2048² R8
-  target).
-  Measured (the plan): the same frame time as the map, within noise, at every zoom, still and panning.
-- The shape is made once at load (about 85 ms); the mask's texel is 3.1 to 25 cm by what it must hold (at most a 410 m
-  window round the ground in view; past it, at the widest zoom, no simple shadow).
-- The figures still do not shadow one another, nor the water.
-- The ground's fragment stage is at 16 textures again with both readers: the next texture it needs must free one.
+- No shadow map is drawn past 85 m: each soldier's shadow is a few dozen triangles drawn twice over a few pixels,
+  nothing to redraw when he stands still. Measured: the plan.
+- The lift darkens the grass and the men's legs within it over the ground in a shadow (a man standing in his front
+  rank's shadow takes it on his legs; the map shadows no figure); crops taller than it hide the shadow under them.
+- The shape is made once at load (about 85 ms).
+- The figures still do not shadow one another's upper bodies, nor the water.
 
 ## Alternatives considered
 
 The map redrawn every frame with the men moved every frame (0047's batch A: 2 ms more at the widest, and still texel
 steps on thin parts); the map cast by one sun-facing card a man (simpler casters, the same map's texels and box);
-contact blobs (no figure-shaped shadow at the low sun the look depends on); decal quads on the ground (hidden under the
-grass, and the ground's painted shadow colour not theirs); the mask in the trodden mask's texture read in the vertex
-stage (the ground's vertices are 1.79 m apart, a soldier's shadow 0.4 m wide); a hard switch at one zoom (a pop).
+contact blobs (no figure-shaped shadow at the low sun the look depends on); **a top-down mask** the ground and the
+meadow read, each man's shape splatted into it (built first, with its texel grid fixed in the world and drawn lazily:
+at 40 a side it cost 0.3 to 0.8 ms more than the map at the widest zoom, fill-bound, about 24,000 blended quads into a
+2048² target each time the men moved; replaced by the decal); decals multiplied into what is there (a formation's
+overlapping shadows darkened four or five times over: the darkest-wins depth pass instead); the mask in the trodden
+mask's texture read in the vertex stage (the ground's vertices are 1.79 m apart, a soldier's shadow 0.4 m wide); a
+hard switch at one zoom (a pop).

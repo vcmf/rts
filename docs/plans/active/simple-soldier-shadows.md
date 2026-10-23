@@ -1,6 +1,6 @@
 ---
 status: active
-last_reviewed: 2026-10-22
+last_reviewed: 2026-10-23
 ---
 
 # Plan: the map only up close, a simple shadow per soldier beyond (#131)
@@ -17,8 +17,9 @@ In:
 - **Close zoom keeps today's map** (the lazy depth map, its held box, the proxy casters, the ground's and the meadow's
   reads), unchanged.
 - **Default and wide zoom: a simple shadow per soldier**, no shadow map: one shadow shape, baked once at load from the
-  figure data (the figure's silhouette projected on the ground along the sun, `SUN`, soft-edged), splatted every frame
-  into a top-down world mask at each man's place, read by the ground and the meadow as their shadow term.
+  figure data (the figure's silhouette projected on the ground along the sun, `SUN`, soft-edged), drawn by each soldier
+  on the ground in the main pass, moving with him every frame. (First built as a top-down mask the receivers read; the
+  rework below replaced it: the owner's intent was one identical shadow a soldier, cheap, redrawn much less.)
 - **A cross-fade** between the two over a band of the camera's distance to its focus (tunable), no pop.
 - **Smooth positions** (`?smoothmove=0|1`): the poses stay stepped at 12 fps (the art bible), the men's places move
   every frame. Measured; the default stays what it was unless the cost is negligible (then an open question for the owner).
@@ -34,21 +35,27 @@ facing, by design); the sim's hookup.
   each of 16 facings, its triangles projected along the sun onto the ground and rasterised in the shadow's frame (along
   the shadow, across it), averaged over the clip's steps (a marching man's legs become one soft wedge) and blurred: an
   atlas of 16 facings × the four roles, R8. No unit is named: the roles are the bake's (decision 0015).
-- **The splat** (`src/look/units.ts`, `shaders/unitmask.*`): a fourth mesh a battalion, one quad a man (thin instances
-  on the battalion's own matrices), laid along the sun's ground direction from his feet, its facing and role picking
-  the atlas cells (two facings blended); drawn into an R8 render target over an axis-aligned world box round the
-  ground in view and the battalions there (blend MAX: overlapping shadows do not double), its texel grid fixed in the
-  world by level (review round 1). Drawn when the men in it move.
-- **Every frame**: each man's next step's place is written with his place (`aNext`), and the splat moves him by the
+- **The decal** (the rework; `src/look/units.ts`, `shaders/unitdecal.*`): two more meshes a battalion on its own
+  instance buffers (so they move with the men every frame), a 2 × 6 grid a man lying from his feet along the sun's
+  ground direction, each vertex set on the ground (the meadow map's height) and drawn toward the camera along its view
+  ray by a lift (0.6 m by default, `?udecallift`: over the grass and the men's legs in depth, no shift on screen). The
+  shape's facing and role pick its atlas cells (two facings blended, read through the atlas's mips). Drawn in the main
+  pass after everything else, twice: a depth pass, each pixel nearer by its darkness (up to 15 cm), so the darkest
+  shadow at a pixel wins; then a colour pass where its depth is that one's, darkening what is there by the ratio of the
+  ground's painted shadow to its painted light at that point (its macro colour painted both ways, through the air),
+  blended dst · (1 − src) with the alpha (the lens codes) kept. Overlapping shadows in a formation darken once, as the
+  map's do. No render target, no receiver reads: the terrain and the meadow keep the map's read alone, its share 1 − f.
+- **Every frame**: each man's next step's place is written with his place (`aNext`), and his shadow moves by the
   share of the step gone (`uStepFrac`, from the CPU's clock in double precision), and so do the figures, their flags
   and the map's casters (`?smoothmove=1`, the default after the measurement; the map is then redrawn while the clock
   moves and men in it move). `?smoothmove=0`: figures and simple shadows move together at the steps.
-- **The receivers**: the ground's fragment (`unitMaskAt`, `painter.glsl`) and the meadow's blade root
-  (`meadow.vert`, as the map's): the map's shadow × (1 − f) + the mask's × f, f the band's share. Grass stands over
-  the ground, so a decal quad on the ground would be hidden by the blades: the mask is what the blades read too.
-- **The ground's sampler**: the terrain's fragment stage is at 16 textures with the map (decision 0047); the cross-fade
-  reads both. The dirt's and the earth's greyscale textures (1024², both one channel) are packed into one texture's R
-  and G at load (`src/look/macro.ts`), which frees one; the ground's look must not change (a frozen frame compared).
+- **The cross-fade**: the map's receivers take 1 − f of it, the decals f of their darkening; at the band's middle the
+  two together stay under one full shadow (the decal's ratio is taken against the light the ground had before it).
+- **The ground's sampler** (built for the mask): the terrain's fragment stage was at 16 textures with the map
+  (decision 0047) and the mask's cross-fade read both, so the dirt's and the earth's greyscale textures (1024², both
+  one channel) were packed into one texture's R and G at load (`src/look/macro.ts`). The decal reads nothing there, so
+  the unit is spare now; the packing stays because it is free (the ground pixel for pixel equal to main's, golden) and
+  leaves the ground a unit of headroom.
 
 ## Acceptance
 
@@ -62,7 +69,7 @@ facing, by design); the sim's hookup.
   slower than `?ushadowfar=map` at default and wide (p50 and p95), close within noise of it.
 - `npm test`, `node tools/check-docs.mjs`; a clean SwiftShader load with the defaults and each new switch.
 
-## Measured
+## Measured: the first build, the mask (replaced by the decal)
 
 **Cost** (this machine's Metal, 1080p, 20 a side, `?benchat=162.5,-2.5`, a production build; three interleaved
 rounds, the medians of the yaws' and rounds' p50 / p95 ms; `main` is the build before this work, `map` this build with
@@ -134,7 +141,25 @@ p95. Smooth movement measured +0.45 ms p50 at wide, still, at the fight's middle
 nothing panning or at the stress point: within this round's spread it is small, but not the ≤ 0.1 ms of the first
 bench; it stays on (the owner's call, below).
 
-Review images: `output/armies-review/7-simple-shadows/` in the main checkout (not committed).
+**Why it was replaced** (the coordinator's bench, 40 a side, the 32k branch merged with this one): the mask cost +0.3
+to 0.8 ms p50 at wide against today's lazy map (the fight's middle, still, 9.85 against 10.25; the stress point still
+12.60 against 13.45, panning 12.80 against 13.15), though it removed the stress point's p95 spikes (23.65 against
+14.45). With smooth movement it is drawn every frame: about 24,000 blended quads of 100 to 200 texels each into a 2048²
+target, fill-bound, growing with the soldiers; stepped (`?smoothmove=0`) it was still slower than the map, so each
+redraw's fill counts too.
+
+Review images (the mask): `output/armies-review/7-simple-shadows/` in the main checkout (not committed).
+
+## Measured: the decal
+
+**Look** (SwiftShader, `?frozen`, 20 a side, the same marching battalion as above): at the default and the widest zoom
+each soldier's shadow reads on its own past the formation's edge, and the formation darkens once, about as the map's;
+across the band (55 to 88 m) no pop and no double darkening; at the closest zoom the frame pixel for pixel today's.
+**Flicker** (the same 12 frames 1/60 s apart): the shadow's fringe changes 1.0 to 1.1 every frame (the mask's 0.5 to
+0.7, the map's 0 then 6.5 and 5.0 at the steps); over the battalion 4.1 to 6.0 every frame, never a jump (the map's 14
+at each step). Review images: `output/armies-review/8-decal-shadows/`.
+
+**Cost**: (filled in after the rework's bench, 20 and 40 a side.)
 
 ## Open questions
 
@@ -147,5 +172,8 @@ Review images: `output/armies-review/7-simple-shadows/` in the main checkout (no
   as a soft wedge. Per-pose shapes (an atlas a step) would cost texture, not time, if the owner wants them.
 - Left from review round 2 (not defects): a battalion re-placed at the next step reuses its men's ground height plus
   their move (`place`, `reuse`), which can differ from the ground under the new place by about a centimetre on a slope
-  (one groundAt a man a step instead of two); `fitMask` fits and holds the box in one function, which a later change
-  could split into a fit and a hold as `fitSun` does.
+  (one groundAt a man a step instead of two). (The other, `fitMask` fitting and holding its box in one function, went
+  with the mask.)
+- The decal's lift (0.6 m) darkens the grass and the men's legs within it over the ground in its shadow; a man
+  standing in his front rank's shadow gets it on his legs (the map shadows no figure). Taller crops (the wheat, 1.2 m)
+  hide the part of a shadow under them, as they hide the ground.

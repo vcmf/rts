@@ -611,26 +611,23 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `?ushadowfar=map`: the map at every zoom). Every soldier of a figure looks alike, so one shape: `shadowShape`
   (`src/look/units-data.ts`, at load, about 85 ms) projects the far LOD, posed at up to 12 steps of each role's clip and
   turned to 16 facings, along the sun onto the ground, averages the steps (a marching man's legs one soft wedge) and
-  blurs it; an R8 atlas, mipmapped, a cell a facing and a role. A fourth mesh a battalion lays a quad a man from his
-  feet along the shadow (`unitmask.vert`, `unitmask.frag`: his facing picks two cells, blended; his clip's first step
-  his role's row; grown with the far figures, `FAR_SCALE`) into a 2048² top-down mask (R8, blend MAX: overlapping
-  shadows do not darken twice) over an axis-aligned box round the battalions whose shadow can reach the view, cut to the
-  ground in view (at its own range of heights, as the sun's box) and, past 410 m, to a 410 m window round the middle of
-  that ground (the rest of the coarsest 512 m level its slack, so a pan holds it; `fitMask`). Its texel is fixed by level (3.1, 6.25, 12.5 or 25 cm, the
-  level held until what it holds fits well inside the finer one) and its corner on that level's whole texels, held while
-  it covers what it must: the texel grid stays put in the world through a pan or a zoom. Where its texel is coarser than
-  the shape's (5 cm) the shape is read through its mips, so a man's shadow is a soft footprint, never aliased on the
-  grid. Drawn lazily, as the map: when it is shown, its box or its battalions change, one of them is placed, the clock
-  moves while their men move, or the camera moves while the far figures grow (`maskStale`). Each man's place moves
-  every frame with smooth places (below: `aNext`, his move to his next step's place, written with his place;
-  `uStepFrac`, the share of the step gone, from the CPU's clock), else at the steps with his figure. The
-  ground reads the mask once a pixel (`unitMaskAt`, `painter.glsl`), the meadow once a blade at its root, as the map:
-  the grass stands over the ground, so a decal on the ground would be hidden under the blades. **The cross-fade**: by
-  the camera's distance to its focus, from the map alone at 60 m to the mask alone at 85 m (`SHADOW_SWITCH`,
-  `?ushadowswitch=<r0>,<r1>`; the LOD switch, 48 px at 1080 lines, is at 63 m), `uUnitFar` the mask's share
-  (`unitShadowMix`); each target is drawn only while its share is over 0, and the map is fitted afresh when it comes
-  back. The ground's fragment stage holds both at 16 textures: the dirt's and the earth's textures are packed in one
-  (`uSurf`, R and G, `src/look/macro.ts`).
+  blurs it; an R8 atlas, mipmapped, a cell a facing and a role. Each soldier draws it himself, in the main pass after
+  everything else (`unitdecal.vert`, `unitdecal.frag`): two more meshes a battalion on its own instance buffers, a
+  2 × 6 grid a man from his feet along the shadow, each vertex on the ground (the meadow map's height) and drawn toward
+  the camera along its view ray by `?udecallift` (0.6 m: over the grass and the men's legs in depth, no shift on
+  screen); his facing picks two cells, blended, his clip's first step his role's row, and it grows with the far figures
+  (`FAR_SCALE`). Twice: a depth pass, each pixel nearer by its darkness (up to 15 cm), so the darkest shadow at a pixel
+  wins, then a colour pass where its depth is that one's, darkening what is there by the ratio of the ground's painted
+  shadow to its painted light there (its macro colour painted both ways, through the air), blended dst · (1 − src),
+  the alpha (the lens codes) kept: overlapping shadows in a formation darken once, as the map's. No render target and
+  no reads in the receivers. Each man's shadow moves every frame with smooth places (below: `aNext`, his move to his
+  next step's place, written with his place; `uStepFrac`, the share of the step gone, from the CPU's clock), else at
+  the steps with his figure. **The cross-fade**: by the camera's distance to its focus, from the map alone at 60 m to
+  the simple shadows alone at 85 m (`SHADOW_SWITCH`, `?ushadowswitch=<r0>,<r1>`; the LOD switch, 48 px at 1080 lines,
+  is at 63 m), `uUnitFar` their share: the receivers take 1 − it of the map (`unitShadowMix`), the decals it of their
+  darkening; the map is drawn only while its share is over 0, and fitted afresh when it comes back. (First built as a
+  top-down mask the receivers read; replaced: fill-bound at 40 a side, the plan.) The dirt's and the earth's textures
+  are packed in one (`uSurf`, R and G, `src/look/macro.ts`), built for the mask's texture unit, kept as headroom.
 - **Smooth places** (on by default, measured free: `docs/plans/active/simple-soldier-shadows.md`; `?smoothmove=0`: off):
   the figures, their flags and the map's casters move by `aNext` × `uStepFrac` too (`SMOOTH`, `units.vert`,
   `flag.vert`), and the simple shadows with them, the poses still stepped at 12 fps; the map is then drawn every frame
