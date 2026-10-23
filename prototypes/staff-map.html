@@ -508,15 +508,16 @@ uniform sampler2D uCanopyT,uHouseT;
 #ifdef LAYERS
 uniform vec2 uLightXZ;varying float vHB;varying vec2 vGB;
 /* paper layers: one octave of sheets every D metres; out: lit edge (0..1), cast shadow (0..1) */
-/* gpx: this octave's contour units per screen pixel (from the 5 m one: the 25 m one is a fifth of it) */
-void sheets(float D,float hB,vec2 g,float pxPerM,float gpx,out float lit,out float shad){
+/* one octave of sheets every D metres, measured in world metres from the smooth per-vertex slope g (no facets at the
+   mesh triangles, no dependence on the camera heading); out: lit edge (0..1), cast shadow (0..1) */
+void sheets(float D,float hB,vec2 g,float pxPerM,out float lit,out float shad){
   vec2 L=uLightXZ;                                   /* toward the light, xz (NW in the JS) */
-  float f=fract(hB/D),gl=length(g);
-  float cU=dot(g/max(gl,1e-5),L);                    /* above 0: the ground rises toward the light */
-  float dDn=f/gpx,dUp=(1.0-f)/gpx,spacing=1.0/gpx;
-  float S=min(22.0*pxPerM*max(cU,0.0),0.45*spacing);  /* the shadow strip, px: world length, under half a band */
-  shad=(1.0-smoothstep(0.55*S,S+0.75,dUp))*step(0.0,cU)*step(0.5,S);
-  float wl=0.6+1.2*max(-cU,0.0);
+  float gl=max(length(g),1e-5),f=fract(hB/D);
+  float cU=dot(g/gl,L);                              /* above 0: the ground rises toward the light */
+  float dDn=f*D/gl,dUp=(1.0-f)*D/gl,band=D/gl;      /* metres to this sheet edges, the band width */
+  float S=min(22.0*max(cU,0.0),0.45*band);           /* the shadow strip, m: under half a band */
+  shad=(1.0-smoothstep(0.55*S,S+0.75/pxPerM,dUp))*step(0.0,cU)*smoothstep(0.25,0.75,S*pxPerM);   /* fades out under a pixel */
+  float wl=(0.6+1.2*max(-cU,0.0))/pxPerM;            /* the lit line, about a pixel and a half wide */
   lit=(1.0-smoothstep(0.0,wl,dDn))*max(-cU,0.0);
 }
 #endif
@@ -552,7 +553,7 @@ void main(){
   float mott=0.5+0.18*(sin(vW.x/310.0+sin(vW.z/230.0)*1.7)+sin(vW.z/270.0+sin(vW.x/190.0)*1.9))+0.08*sin(vW.x/97.0+vW.z/131.0);   /* smooth, slow */
 #endif
 #ifdef LAYERS
-  {float pxPerM=1.0/max(length(vec2(dFdx(vW.x),dFdy(vW.x))),1e-5),gl=length(vGB),lay=(1.0-uWash)*inside;
+  {float pxPerM=2.0/max(length(dFdx(vW.xz))+length(dFdy(vW.xz)),1e-5),gl=length(vGB),lay=(1.0-uWash)*inside;   /* px per m, both screen axes */
    /* a faint continuous hillshade underneath, so gentle ground keeps its form */
    vec3 Lk=normalize(vec3(uLightXZ.x,1.0,uLightXZ.y));   /* the same light, 45 degrees up */
    vec3 n=normalize(vec3(-vGB.x,1.0,-vGB.y));float lam=dot(n,Lk)/Lk.y;   /* 1 on flat ground */
@@ -560,8 +561,8 @@ void main(){
    /* each sheet a little lighter going up, in the paper hue */
    float tb=clamp((floor(vHB/5.0)*5.0-uHmin)/max(uHmax-uHmin,1.0),0.0,1.0);mapC*=mix(1.0,0.97+0.06*tb,lay);
    /* 5 m sheets where their edges are far enough apart on screen, 25 m sheets where they would crowd */
-   float g5=max(length(vec2(dFdx(vHB/5.0),dFdy(vHB/5.0))),1e-6),w5=smoothstep(4.0,9.0,1.0/g5),l5,s5,l25,s25;   /* 5 m edges' spacing, px */
-   sheets(5.0,vHB,vGB,pxPerM,g5,l5,s5);sheets(25.0,vHB,vGB,pxPerM,g5*0.2,l25,s25);
+   float w5=smoothstep(4.0,9.0,5.0/max(gl,1e-4)*pxPerM),l5,s5,l25,s25;   /* 5 m sheets where their edges are 4 to 9 px apart or more */
+   sheets(5.0,vHB,vGB,pxPerM,l5,s5);sheets(25.0,vHB,vGB,pxPerM,l25,s25);
    float lt=mix(l25,l5,w5),sd=mix(s25*1.8,s5,w5);
    mapC*=1.0-min(0.24*sd,0.3)*lay*(1.0-0.7*woodA)*vec3(0.95,1.0,1.1);   /* a warm shadow, never black: with the hillshade and the tint, the darkest strip about 0.63 of the paper */
    mapC=mix(mapC,min(mapC*1.14+0.02,vec3(1.0)),0.8*lt*lay*(1.0-0.7*woodA));}
@@ -599,7 +600,12 @@ void main(){
 #endif
 #ifdef LIT
   /* contours for relief: minor every 5 m, index every 25 m, about a pixel wide at any zoom, each set fading where it crowds */
-  float hc=vH/5.0,fwc=max(fwidth(hc),1e-4),dc=abs(fract(hc-0.5)-0.5)/fwc;
+#ifdef LAYERS
+  float hc=vHB/5.0;   /* the minor ink on the sheets too */
+#else
+  float hc=vH/5.0;
+#endif
+  float fwc=max(fwidth(hc),1e-4),dc=abs(fract(hc-0.5)-0.5)/fwc;
 #ifdef LAYERS
   float hx=vHB/25.0;   /* on the sheet edges */
 #else
@@ -980,7 +986,7 @@ const PULSE_WHITE=hex('#fbfaf6'),PULSE_MS=1100;   // the legend swatch (.blink) 
 // away from it
 let LIGHT=[-0.6,-0.8];
 const raiseOf=k=>[-LIGHT[0]*k,-LIGHT[1]*k],SIDE_PX=3.1,SHADOW_PX=5.7;
-function setLight(){const h=Hs(CUR.x,CUR.z)*RISE()+0.3,a=[...proj(CUR.x,h,CUR.z)],b=[...proj(CUR.x-100,h,CUR.z+100)];   // copies: proj returns one shared array   // one height: the relief must not swing the light
+function setLight(){const h=Hs(CUR.x,CUR.z)*RISE()+0.3,a=[...proj(CUR.x,h,CUR.z)],b=[...proj(CUR.x+NW[0]*141,h,CUR.z+NW[1]*141)];   // copies: proj returns one shared array   // one height: the relief must not swing the light
   if(behind(a)||behind(b))return;
   const dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy);if(l>1e-3)LIGHT=[dx/l,dy/l];}
 const shade=(c,k)=>css(c.map(v=>k<1?v*k:v+(1-v)*(k-1)));   // k below 1 darker, above 1 toward white
@@ -1274,7 +1280,9 @@ function build(){
   if(LAYERS)terrMat.setVector2('uLightXZ',new B.Vector2(NW[0],NW[1]));
   terrainMesh().material=terrMat;
   {const O=30000,y=HMIN-1,P=[-TX,y,-TZ,TX,y,-TZ,TX,y,TZ,-TX,y,TZ,-O,y,-O,O,y,-O,O,y,O,-O,y,O],I=[0,4,1,1,4,5,1,5,2,2,5,6,2,6,3,3,6,7,3,7,0,0,7,4],
-    m=new B.Mesh('skirt',scene),vd=new B.VertexData();vd.positions=P;vd.indices=I;vd.normals=[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0];vd.applyToMesh(m);m.material=terrMat;m.isPickable=false;m.alwaysSelectAsActiveMesh=true;}
+    m=new B.Mesh('skirt',scene),vd=new B.VertexData();vd.positions=P;vd.indices=I;vd.normals=[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0];vd.applyToMesh(m);
+    if(LAYERS){const n=P.length/3;m.setVerticesData('aHB',Float32Array.from({length:n},(_,k)=>P[k*3+1]),false,1);m.setVerticesData('aGB',new Float32Array(n*2),false,2);}   // the layers shader reads them
+    m.material=terrMat;m.isPickable=false;m.alwaysSelectAsActiveMesh=true;}
   propMat=new B.ShaderMaterial('prop',scene,{vertexSource:PROP_VS,fragmentSource:PROP_FS},{attributes:['position','normal','aPart','aInst'],uniforms:['world','viewProjection','uRise','uSprout','uCrown','uConifer',...COMMONU]});
   const M=new B.Matrix(),Qn=new B.Quaternion(),Sc=new V3(),Tr=new V3();
   const place=(name,G,items,fn)=>{const m=toMesh(name,G,propMat),buf=new Float32Array(items.length*16),inst=new Float32Array(items.length*4);

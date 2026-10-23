@@ -43,10 +43,9 @@ sheet's own drop shadow, water as cut-outs (the research's further suggestions).
 - `?style=lit&relief=layers` on the made-up and the real terrain: screenshots at map, mid and close zoom against
   `?style=lit` (contours), shown to the owner.
 - No aliasing at far zoom (the octaves); no confetti islands (the smoothed height).
-- Without `relief=layers`, the page draws as before.
+- Without `relief=layers`, the page draws as before (within a sub-pixel: see round 2).
 - Frame time measured against the contours (Windows Chrome, the owner's GPU).
 
-## Review rounds
 
 ## Results
 
@@ -61,6 +60,8 @@ sheet's own drop shadow, water as cut-outs (the research's further suggestions).
   zoom the Pratzen's east flank reads as a stair of sheets; at map zoom mostly the soft underlying hillshade and the
   25 m sheets.
 
+## Review rounds
+
 - **Round 1** (`/code-review high`): severe: at map zoom the 25 m shadow, the hillshade and the band tint stacked to
   about 51 % darker than the paper, a strip to compete with the army blocks. Fixed: the shadow capped at 30 %, the
   hillshade within ±7 % and 1 on flat ground (it divided by the wrong constant, darkening all flat ground 8 %), the
@@ -69,3 +70,9 @@ sheet's own drop shadow, water as cut-outs (the research's further suggestions).
   frame measured without vsync (the first figure was the refresh cap) and the build in pairs; the 5 m edges' screen
   spacing computed once for the crossfade, the clamp and both octaves; one static light, `NW`, passed to the shader
   as `uLightXZ` and used by the canopy and house bakes.
+- **Round 2**: moderate and light only, so the review stops. Fixed: the sheets measured in world metres from the smooth
+  per-vertex slope (screen derivatives of the interpolated height stepped at the mesh's triangles, and metres per pixel
+  from screen x alone made shadows depend on the camera's heading); the shadow fading under a pixel, not cut; the 5 m
+  ink on the smoothed height too (it disagreed with the 25 m ink); `setLight` from `NW`; no apostrophes in shader
+  comments; the skirt given the layers' vertex data. The plain lit page shifts by a sub-pixel from the shared light
+  constant (tree shadows 0.55 r either way; houses' away vector 0.7071 against 0.707): acceptable, stated here.
