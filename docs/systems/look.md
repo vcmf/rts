@@ -642,7 +642,9 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   On the demo map 20 a side is 4 and 3 battalions in line, the rest in column. When the reserves leave a side short
   (40 a side; never at 20 or fewer on the demo map, whose layout is unchanged: a test hashes it), **close reserves**
   fill in: more columns on a 2.5 m grid, 6 m apart men to men, taking each line's footprint as its T (its ranks' full
-  width, its approach only as wide as its column), so they may stand behind a line's flanks, never ahead of a line.
+  width, its approach only as wide as its column) and the trapezoid its companies cross as they deploy (as wide as
+  the line at the ranks' depth, as the column at its rear: four boxes), so they may stand behind a line's flanks,
+  never ahead of a line nor in a deploying company's way (the test checks every man's path at 40 a side).
 - **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at
   their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
 - **The bench**: `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions in

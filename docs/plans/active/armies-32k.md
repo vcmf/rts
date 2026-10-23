@@ -59,7 +59,9 @@ art, other arms.
   side on the demo map. Today's lines and reserves could not: room for 33 of 40 on the south side (the river and the
   south-west wood). When the reserves leave a side short, **close reserves** fill in: more columns of companies on a
   2.5 m grid, 6 m apart men to men, a line's footprint taken as its shape (a T: its ranks' full width, its approach only
-  as wide as its column), so they stand behind a line's flanks, never ahead of a line they overlap across; still at
+  as wide as its column; since the review, 2026-10-23, also the trapezoid its companies cross as they deploy, which
+  moved 11 of the 80 close reserves by a few metres after steps 1 and 3 were benched), so they stand behind a line's
+  flanks, never ahead of a line they overlap across nor in a deploying company's way; still at
   least 40 m behind the front and within the play area (±235 m). At 20 a side and fewer the layout is unchanged (the
   close reserves never run there: `test/armies.test.ts` hashes the layouts for 1 to 20 on three grounds, the demo
   map's among them, against the code before this plan). Measured on the page (SwiftShader): 40 a side lay out, 4 and 3
@@ -264,7 +266,8 @@ art, other arms.
     battalions read the same; the white-coated ones read browner, with less of the far LOD's white speckle.
   - Readability guard (`--figures`, summer; tiny / far): widest, side 0 (blue) luma 0.300 / 0.281 (+7 %), separation
     0.224 / 0.243 (−8 %); side 1 (white) luma 0.415 / 0.502 (−17 %), separation 0.207 / 0.120 (it stands out more);
-    coat share 11.0 / 9.1 % and 11.1 / 27.1 %; within ΔE 25 of the coat 13.4 / 19.3 % and 4.6 / 23.7 % (a mixed
+    coat share 11.0 / 9.1 % and 11.1 / 27.1 % (12.4 % on the white side after the review's ordered dither of the
+    coat mask, 2026-10-23: the first, a sine hash of the pixel, under-counted it); within ΔE 25 of the coat 13.4 / 19.3 % and 4.6 / 23.7 % (a mixed
     colour is rarely near a pure one). **The guard's 10 % bar is not met** for side 1 and for the coat measures; the
     bench says whether the step is worth more work on the look.
 - **Measured** (2026-10-23, Metal, the production build, 1080p, 40 a side, three interleaved rounds, all 28 runs exit 0;
