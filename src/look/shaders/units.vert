@@ -72,7 +72,7 @@ void main(){
   vCol=uPal[int(aRole+0.5)];vRole=aRole;
   #ifdef TINY
   vCol=palMix(uPal);
-  int ci=int(uCoatRole+0.5);vCoatW=ci<4?aRW0[ci]:ci<8?aRW1[ci-4]:aRW2[ci-8];
+  int ci=int(uCoatRole+0.5);vCoatW=uCoatRole<-0.5?0.0:ci<4?aRW0[ci]:ci<8?aRW1[ci-4]:aRW2[ci-8];
   #endif
   #ifdef FAR
   float px=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz));

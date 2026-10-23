@@ -187,17 +187,15 @@ export function seenArea(d: UnitData, lod: string, elev = 0.87): Float64Array {
 /** the tiny LOD's colour weights a vertex: one a colour role, up to this many roles (three vec4 attributes) */
 export const TINY_ROLES = 12
 /** the tiny LOD (docs/plans/active/armies-32k.md, step 3): a LOD's parts (boneParts) as boxes, eight corners each
- *  shared by its faces, each corner skinned wholly to the part's bone, outward-wound, as wide as the part grown by
- *  `grow` (the boxes' 85th percentile is narrower than the figure's silhouette). A corner's colour is a mix of the
- *  roles (`weights`, TINY_ROLES a vertex, summing to 1): their shares of its eighth of the part as a camera `elev`
- *  above the horizon sees it from round the figure (seenArea: what the figure hides counts for nothing), with `own` of
- *  the whole part's
- *  shares, so a box reads as the mean colour of what it stands for (a single role spread over a box's face reads louder
- *  than on the figure), then `figure` of the whole figure's seen colour mixed in and calibrated (`calibrate` rounds) so the boxes' seen pixels hold each role in the far LOD's
- *  share; `roles` is the corner's largest (the masks' coat role). Its normal leans up by `lift` (seen from
- *  above, a figure shows its top faces). About a fifth of the far LOD's vertices: the wide view pays a vertex's posing
- *  for every vertex of every figure */
-export function tinyMesh(d: UnitData, lod: string, minVerts = 8, minLen = 0.14, grow = 1, elev = 0.87, lift = 0, own = 0.25, figure = 0.35, calibrate = 4): SkinnedMesh & { roles: Uint8Array; weights: Float32Array } {
+ *  shared by its faces (their normals from the box's centre), each corner skinned wholly to the part's bone,
+ *  outward-wound. A corner's colour is a mix of the roles (`weights`, TINY_ROLES a vertex, summing to 1): their shares
+ *  of its eighth of the part as a camera `elev` above the horizon sees it from round the figure (seenArea: what the
+ *  figure hides counts for nothing), with `own` of the whole part's shares, so a box reads as the mean colour of what
+ *  it stands for (a single role spread over a box's face reads louder than on the figure); then `figure` of the whole
+ *  figure's seen colour mixed in, and calibrated (`calibrate` rounds) so the boxes' seen pixels hold each role in the
+ *  far LOD's share. `roles` is the corner's largest (the masks' coat role). About a fifth of the far LOD's vertices:
+ *  the wide view pays a vertex's posing for every vertex of every figure */
+export function tinyMesh(d: UnitData, lod: string, minVerts = 8, minLen = 0.14, elev = 0.87, own = 0.25, figure = 0.35, calibrate = 4): SkinnedMesh & { roles: Uint8Array; weights: Float32Array } {
   const NR = d.palette.length
   if (NR > TINY_ROLES) throw new Error(`unit data: ${NR} colour roles, the tiny LOD mixes at most ${TINY_ROLES}`)
   const m = d.mesh[lod], pos: number[] = [], nor: number[] = [], bones: number[] = [], idx: number[] = [], roles: number[] = [], weights: number[] = []
@@ -216,14 +214,13 @@ export function tinyMesh(d: UnitData, lod: string, minVerts = 8, minLen = 0.14, 
   const shares = (a: Float64Array, o: number) => { let all = 0; for (let i = 0; i < NR; i++) all += a[o * NR + i]; return Array.from({ length: NR }, (_, i) => all > 0 ? a[o * NR + i] / all : 0) }
   // the faces by corner (corner k: bit 0 the axis's end, bit 1 u's side, bit 2 w's side)
   const FACES = [[0, 2, 6, 4], [1, 5, 7, 3], [0, 4, 5, 1], [2, 3, 7, 6], [0, 1, 3, 2], [4, 6, 7, 5]]
-  parts.forEach(({ bone: b, c, ax, u, w, t0, t1, hu: hu0, hw: hw0 }, pi) => {
-    const base = pos.length / 3, mid = (t0 + t1) / 2, cs: number[][] = [], hu = hu0 * grow, hw = hw0 * grow, whole = shares(area[pi], 8)
+  parts.forEach(({ bone: b, c, ax, u, w, t0, t1, hu, hw }, pi) => {
+    const base = pos.length / 3, mid = (t0 + t1) / 2, cs: number[][] = [], whole = shares(area[pi], 8)
     for (let k = 0; k < 8; k++) {
       const tt = k & 1 ? t1 : t0, su = k & 2 ? hu : -hu, sw = k & 4 ? hw : -hw
       const p = [0, 1, 2].map(i => c[i] + ax[i] * tt + u[i] * su + w[i] * sw), o = [0, 1, 2].map(i => ax[i] * (tt - mid) + u[i] * su + w[i] * sw), l = Math.hypot(...o) || 1
-      const nn = o.map((x, i) => x / l + (i === 1 ? lift : 0)), ln = Math.hypot(...nn) || 1
       const oc = shares(area[pi], k), has = oc.some(x => x > 0), mix = whole.map((x, i) => has ? (1 - own) * oc[i] + own * x : x)
-      cs.push(p); pos.push(...p); nor.push(...nn.map(x => x / ln)); bones.push(b)
+      cs.push(p); pos.push(...p); nor.push(...o.map(x => x / l)); bones.push(b)
       roles.push(mix.indexOf(Math.max(...mix))); for (let i = 0; i < TINY_ROLES; i++) weights.push(mix[i] ?? 0)
     }
     const centre = [0, 1, 2].map(i => c[i] + ax[i] * mid)
@@ -239,7 +236,7 @@ export function tinyMesh(d: UnitData, lod: string, minVerts = 8, minLen = 0.14, 
   // calibrated: each role's weights scaled by its share of the far LOD's pixels over its share of the boxes' (the boxes'
   // silhouettes are not the parts': a musket's box shows more wood than the musket), each corner's renormalised
   const W = Float32Array.from(weights), P32 = Float32Array.from(pos), I16 = Uint16Array.from(idx), want = new Float64Array(NR)
-  rasterSeen(m.positions, m.indices, t => { want[m.roles[m.indices[t * 3]]]++ }, elev)
+  seen.forEach((px, t) => { want[m.roles[m.indices[t * 3]]] += px })   // (the far LOD's seen pixels by role)
   // (a share of the figure's whole seen colour in every corner first: a box of one role, the musket's, could not move)
   const sw0 = want.reduce((x, y) => x + y, 0)
   for (let v = 0; v < W.length / TINY_ROLES; v++) for (let i = 0; i < NR; i++) W[v * TINY_ROLES + i] = (1 - figure) * W[v * TINY_ROLES + i] + figure * want[i] / sw0

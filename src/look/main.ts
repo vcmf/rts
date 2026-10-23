@@ -303,7 +303,7 @@ const uShadowRate = bit('ushadowrate'), uShadowLod = bit('ushadowlod'), uShadowV
 const uVat = bit('uvat'), uCull = bit('ucull')
 // ?tinylod=0: no tiny LOD (docs/plans/active/armies-32k.md, step 3); ?tinypx=<px>: its switch, the figure's height
 const tinyLod = bit('tinylod'), tinyPxParam = params.get('tinypx')
-if (tinyPxParam !== null && !(/^\d+(\.\d+)?$/.test(tinyPxParam) && +tinyPxParam > 0 && +tinyPxParam < 48)) throw new Error(`?tinypx must be a number of pixels over 0 and under 48 (the far LOD's switch), not ${tinyPxParam}`)
+if (tinyPxParam !== null && !(/^\d+(\.\d+)?$/.test(tinyPxParam) && +tinyPxParam > 0)) throw new Error(`?tinypx must be a positive number of pixels, not ${tinyPxParam}`)
 // the shadow fix: ?smhold=fixed, the held sun box (and the trodden mask's) as batch B's; ?shadowlod=far, the far LOD casts
 const smHold = params.get('smhold'), shadowLod = params.get('shadowlod')
 if (smHold !== null && smHold !== 'fixed') throw new Error(`?smhold must be fixed, not ${smHold}`)
@@ -316,6 +316,7 @@ let units: Units | null = null, armiesFocus: [number, number] | null = null   //
 if (armiesParam !== null) {
   if (mats.webgl1) throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
   const [{ Units: UnitsC }, { decodeUnits }, { layout, facingAt }, { RULESETS }, { ARMIES_DEMO }] = await Promise.all([import('./units.ts'), import('./units-data.ts'), import('./world/armies.ts'), import('../rulesets/index.ts'), import('../scenarios/armies-demo.ts')])
+  if (tinyPxParam !== null && +tinyPxParam >= UnitsC.LOD_PX) throw new Error(`?tinypx must be under the far LOD's switch (${UnitsC.LOD_PX} px), not ${tinyPxParam}`)
   // the scenario's era, unit type and figure, resolved by name (decision 0015: the page names none of them)
   const era = RULESETS[ARMIES_DEMO.ruleset]; if (!era) throw new Error(`armies: no ruleset ${ARMIES_DEMO.ruleset} (src/rulesets/index.ts)`)
   const type = era.ruleset.types[ARMIES_DEMO.unitType]; if (!type) throw new Error(`armies: the ruleset ${ARMIES_DEMO.ruleset} has no unit type ${ARMIES_DEMO.unitType}`)
@@ -334,8 +335,7 @@ if (armiesParam !== null) {
   }
   const blocked = (x: number, z: number) => { if (Math.max(Math.abs(x), Math.abs(z)) > D.spec.tile / 2 - 30) return true; const q = riverQuery(x, z); return (q !== null && q.dist < 20) || onPaving(x, z, 3) || nearTree(x, z) }
   // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
-  units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides), era.uniforms, () => S.t)
-  units.tinyPx = tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : units.tinyPx
+  units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides), era.uniforms, () => S.t, { tinyPx: tinyLod === false ? 0 : tinyPxParam !== null ? +tinyPxParam : undefined })
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.tightCull = uCull ?? true
   units.holdShare = smHold !== 'fixed'; units.proxyCasters = shadowLod !== 'far'
   if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []

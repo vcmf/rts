@@ -6,6 +6,8 @@ uniform float uMask,uCoatRole;
 #ifdef TINY
 // the tiny LOD's coat weight (units.vert): the coat mask dithered by it, so the guard's coat share means the same
 varying float vCoatW;
+// an ordered dither (4 × 4 Bayer): the mask's share of the coat's weight exact over each 4 × 4 block, at any resolution
+const int BAYER4[16]=int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
 #endif
 #ifdef FAR
 // the far figure's lift (?farpal=1), as it shrinks (vFar, units.vert): the trees' and hills' shadow on it halved, and
@@ -23,7 +25,7 @@ void main(){
   if(uMask>-0.5){
     float v=uMask>1.5?step(abs(vRole-uCoatRole),0.5):uMask;
     #ifdef TINY
-    if(uMask>1.5)v=step(fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453),vCoatW);
+    if(uMask>1.5){ivec2 q=ivec2(gl_FragCoord.xy)&3;v=step((float(BAYER4[q.y*4+q.x])+0.5)/16.0,vCoatW);}
     #endif
     gl_FragColor=lensOut(vec3(v),vW);return;}
   vec3 N=normalize(vN);vec4 lm=LM(vW);
