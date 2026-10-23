@@ -54,3 +54,4 @@ recorded here on 2026-10-08.
 | [0045](0045-render-scale-easu.md) | The render scale 0.9 from the closest zoom, upscaled by EASU | accepted |
 | [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | accepted |
 | [0047](0047-figures-cast-runtime-shadows.md) | The figures cast runtime shadows from a map of their own | proposed |
+| [0055](0055-lit-map-view-tilts.md) | The lit map view leans a little off straight down, with armies as low slabs | accepted |

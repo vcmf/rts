@@ -53,3 +53,25 @@ Out of scope:
 - **Measured.** Windows Chrome over CDP, D3D11, RTX 3080, vsync and the frame cap off, real terrain, shaded relief,
   map zoom, paired runs: frame 5.4 and 5.7 ms with slabs, against 7.3 and 7.5 ms with the flat blocks of #149. The
   blurred canvas shadow had cost more than the slabs' sides do.
+
+## Review rounds
+
+- **Round 1** (`/code-review high`): severe. Four drawing faults:
+  - a brigade's bars were drawn in a fixed order, so facing the camera the back bar painted over the front one;
+  - a hatched (wavering) top showed its sides through;
+  - a square's shadow darkened its hole;
+  - a fading slab composited face over face.
+
+  Fixed:
+  - the sides are drawn clipped outside the top, so no two overlap and order does not matter, and a fading slab
+    composites once;
+  - the shadow is clipped outside the footprint;
+  - a unit's slabs are drawn far to near.
+
+  With:
+  - picking, the selection and hover rings and a square's smoke on the raised top;
+  - units sorted by their centres, gone ones left out;
+  - one colour for a slab's top and sides (`blockCol`);
+  - the shadow pass projecting only what it uses;
+  - the dead `SIDE_PX` and stale comments removed;
+  - decision 0055 for the tilt and the slabs.

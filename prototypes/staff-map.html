@@ -1338,11 +1338,11 @@ function hatch(side,level){const k=side+':'+level;if(PATS[k])return PATS[k];cons
   const g=c.getContext('2d');g.scale(DPR,DPR);g.strokeStyle=css(SIDES[side].e||SIDES[side].c);g.lineWidth=1.25;g.beginPath();for(let o=-s*2;o<s*4;o+=s){g.moveTo(o,0);g.lineTo(o+s*2,s*2);}g.stroke();
   const p=ink.createPattern(c,'repeat');p.setTransform(new DOMMatrix().scale(1/DPR));return PATS[k]=p;}
 // world-space corners of a unit footprint (exaggerated depth), projected
-function blockCorners(u,extra=0){
+function blockCorners(u,extra=0,up=0){   // up: the corners raised by up metres (a slab's top), for picking and rings
   const n=alive(u),a=shown(u,u.prev,n),b=shown(u,u.form,n),e=easeIO(u.morph);let fw=lerp(a[0],b[0],e),fd=lerp(a[1],b[1],e);
   fd=Math.max(fd,5*MPP);
   const f=[Math.sin(u.dface),Math.cos(u.dface)],r=[Math.cos(u.dface),-Math.sin(u.dface)],hw=fw/2+extra*MPP,front=extra*MPP,back=-fd-extra*MPP;
-  const C=[[-hw,front],[hw,front],[hw,back],[-hw,back]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
+  const C=[[-hw,front],[hw,front],[hw,back],[-hw,back]].map(([sx,sz])=>up>0?P3(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz,up):P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
   return{C,fw,fd,f,r};
 }
 // Edge weights for picking where a bite goes: front, right, back, left. Fixed (not the drawn lengths), so a bite
@@ -1429,13 +1429,11 @@ const PULSE_WHITE=hex('#fbfaf6'),PULSE_MS=1100;   // the legend swatch (.blink) 
 // toward the light on screen (setLight, each frame, so it turns with the camera); the side face and the shadows fall
 // away from it
 let LIGHT=[-0.6,-0.8];
-const raiseOf=k=>[-LIGHT[0]*k,-LIGHT[1]*k],SIDE_PX=3.1,SHADOW_PX=5.7;
+const raiseOf=k=>[-LIGHT[0]*k,-LIGHT[1]*k],SHADOW_PX=5.7;
 function setLight(){const h=Hs(CUR.x,CUR.z)*RISE()+0.3,a=[...proj(CUR.x,h,CUR.z)],b=[...proj(CUR.x+NW[0]*141,h,CUR.z+NW[1]*141)];   // copies: proj returns one shared array   // one height: the relief must not swing the light
   if(behind(a)||behind(b))return;
   const dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy);if(l>1e-3)LIGHT=[dx/l,dy/l];}
 const shade=(c,k)=>css(c.map(v=>k<1?v*k:v+(1-v)*(k-1)));   // k below 1 darker, above 1 toward white
-// under a block: its shadow on the ground and its side faces, with the top face clipped out so a hatched or hollow
-// top stays see-through; drawn for every block before any top face, so no shadow falls on a neighbour's top
 // the convex hull of screen points (Andrew's monotone chain)
 function hull(P){P=[...P].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const x=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]),lo=[],up=[];
   for(const p of P){while(lo.length>1&&x(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p);}
@@ -1457,11 +1455,15 @@ function slabFaces(u, B, Q, h) {
 }
 
 /**
- * A slab's sides, between its footprint G and its top T, far ones first (a convex box: the near sides and the top
- * then cover them; no winding to get right). Each side is lit by the map's one light by the way it faces: the edges
+ * A slab's sides, between its footprint G and its top T, clipped outside the top: what is left are the sides the
+ * camera sees (a convex box), and no two of them overlap, so a fading slab composites once. Each side is lit by the map's one light by the way it faces: the edges
  * run front, right, back, left, so their outward normals are f, r, -f, -r.
  */
 function slabSides(G, T, B, col) {
+  ink.save();
+  const top = new Path2D();
+  addPoly(top, T);
+  clipOut(top);   // never where the top is: a hatched or fading top shows no side through it, in any order
   const normals = [B.f, B.r, [-B.f[0], -B.f[1]], [-B.r[0], -B.r[1]]];
   const sides = [0, 1, 2, 3].map(e => {
     const a = e, b = (e + 1) % 4;
@@ -1474,16 +1476,37 @@ function slabSides(G, T, B, col) {
     ink.fillStyle = shade(col, sd.k);
     ink.fill();
   }
+  ink.restore();
 }
 
-/** A slab's shadow on the ground: its footprint swept away from the light by its height (a sun about 40 degrees up). */
-function slabShadow(W, h) {
+/**
+ * A slab's shadow on the ground: its footprint swept away from the light by its height (a sun about 40 degrees up),
+ * clipped outside the footprint G, so a hollow square's hole stays clear and the slab's own sides cover the rest.
+ */
+/** A unit's slabs (from parts()) projected, the far one first, each with its index in parts() (for its wear's seed). */
+function slabsFarToNear(u, B, PS, h) {
+  const out = PS.map((Q, pi) => ({ S: slabFaces(u, B, Q, h), pi }));
+  const depth = o => o.S.G.reduce((t, p) => t + p[2], 0) / o.S.G.length;
+  return out.sort((a, b) => depth(b) - depth(a));
+}
+
+function slabShadow(W, G, h) {
+  ink.save();
+  const foot = new Path2D();
+  addPoly(foot, G);
+  clipOut(foot);
   const len = h * 1.2;
   const away = [-NW[0] * len, -NW[1] * len];
   const pts = [...W, ...W.map(([x, z]) => [x + away[0], z + away[1]])].map(([x, z]) => P2(x, z));
   pathPoly(hull(pts));
   ink.fillStyle = 'rgba(52,38,18,0.3)';
   ink.fill();
+  ink.restore();
+}
+
+/** A block's quad (its own metres) as world points on the ground, for the shadow pass. */
+function quadWorld(u, B, Q) {
+  return Q.map(([sx, sz]) => [u.x + B.r[0] * sx + B.f[0] * sz, u.z + B.r[1] * sx + B.f[1] * sz]);
 }
 
 // a block's top: a thin dark outline, then each edge inset a little, lighter facing the light, darker facing away;
@@ -1577,10 +1600,10 @@ function drawGun(C,s,shadowOnly,S,u){
 }
 // the lit style's houses: raised like the blocks, lit by the same light (the map's ink blocks, baked, are left out)
 const HOUSE_COL=[0.36,0.29,0.23],CHURCH_COL=[0.27,0.22,0.19];
-// the colour a block's sides take: its top's, as drawBlock fills it
-function blockCol(u,now){const s=pal(u);if(u.state==='rout')return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));return s.f;}
+// a block's top colour (and its slab sides'): the routing pulse, or the army's fill; hatched (wavering) sides take the coat
+function blockCol(u,now){const s=pal(u);if(u.state==='rout')return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));return u.mor>0.6?s.f:s.c;}
 function drawUnder(u,alpha,now){const B=blockCorners(u),{C}=B;if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);
-  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true,gunPx(u),u);else if(LIT){const h=slabHeight();for(const Q of parts(u,B))slabShadow(slabFaces(u,B,Q,h).W,h);}}ink.globalAlpha=1;}
+  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true,gunPx(u),u);else{const h=slabHeight();for(const Q of parts(u,B)){const W=quadWorld(u,B,Q);slabShadow(W,W.map(([x,z])=>P2(x,z)),h);}}}ink.globalAlpha=1;}
 function drawBlock(u,alpha,now){
   u.gun=null;   // drawn this frame or not at all: a stale circle would keep a stale click area
   const s=pal(u),{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
@@ -1588,7 +1611,7 @@ function drawBlock(u,alpha,now){
   if(u.state==='rout'){
     // routing: pulses between the army colour and white, the colour of surrender
     // a soft pulse on the frame clock passed in, so an exporter controls the phase
-    const B={C,fw,fd,f,r},h=slabHeight(),PS=parts(u,B);PS.forEach((Q,pi)=>{const S=slabFaces(u,B,Q,h),P=S.T;if(h>0)slabSides(S.G,S.T,B,blockCol(u,now));pathPoly(P);ink.fillStyle=css(blockCol(u,now));ink.fill();if(LIT)litEdges(P);
+    const B={C,fw,fd,f,r},h=slabHeight(),PS=parts(u,B),col=blockCol(u,now);slabsFarToNear(u,B,PS,h).forEach(({S,pi})=>{const P=S.T;if(h>0)slabSides(S.G,S.T,B,col);pathPoly(P);ink.fillStyle=css(col);ink.fill();if(LIT)litEdges(P);
     ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);if(LIT)damage(u,P,null,fw,fd,0,pi,PS.length);});}
   else if(u.type==='art'&&LIT)u.gun=drawGun(C,s,false,gunPx(u),u);
   else if(u.type==='art'){
@@ -1597,8 +1620,8 @@ function drawBlock(u,alpha,now){
     const fr=[(C[0][0]+C[1][0])/2,(C[0][1]+C[1][1])/2],bk=[(C[2][0]+C[3][0])/2,(C[2][1]+C[3][1])/2],dl=Math.hypot(fr[0]-bk[0],fr[1]-bk[1])||1;
     ink.beginPath();ink.arc(fr[0]+(fr[0]-bk[0])/dl*5,fr[1]+(fr[1]-bk[1])/dl*5,3,0,6.2832);ink.fillStyle=css(s.f);ink.fill();if(s.e)ink.stroke();
   }
-  else{const B={C,fw,fd,f,r},h=slabHeight(),PS=parts(u,B);PS.forEach((Q,pi)=>{   // a brigade's two bars, or one block, each a slab
-    const S=slabFaces(u,B,Q,h),P=S.T;if(h>0)slabSides(S.G,S.T,B,lvl<0?s.f:s.c);
+  else{const B={C,fw,fd,f,r},h=slabHeight(),PS=parts(u,B);slabsFarToNear(u,B,PS,h).forEach(({S,pi})=>{   // a brigade's two bars, or one block, each a slab
+    const P=S.T;if(h>0)slabSides(S.G,S.T,B,blockCol(u,now));
     pathPoly(P);let I=null,sqK=0;
     if(formedSq(u)){
       // hollow square: the inner hole
@@ -1612,8 +1635,8 @@ function drawBlock(u,alpha,now){
     if(LIT)damage(u,P,I,fw,fd,I?sqK:0,pi,PS.length);   // last: a bite breaks the outline too
   });}
   if(LIT&&u.type==='art'&&u.gun&&(u.sel||u===HOVER)){const{m,r:R}=u.gun;ink.strokeStyle=u.sel?'#211f1c':'rgba(33,31,28,0.5)';ink.lineWidth=0.9;ink.beginPath();ink.arc(m[0],m[1],R+2,0,6.2832);ink.stroke();if(u.sel){ink.lineWidth=0.6;ink.beginPath();ink.arc(m[0],m[1],R+4.5,0,6.2832);ink.stroke();}}   // the ring around the icon, what the eye sees
-  else if(u.sel){const D=blockCorners(u,4).C,D2=blockCorners(u,6.5).C;ink.strokeStyle='#211f1c';ink.lineWidth=0.9;pathPoly(D);ink.stroke();ink.lineWidth=0.6;pathPoly(D2);ink.stroke();}
-  else if(u===HOVER){const D=blockCorners(u,4).C;ink.strokeStyle='rgba(33,31,28,0.5)';ink.lineWidth=0.8;pathPoly(D);ink.stroke();}
+  else if(u.sel){const D=blockCorners(u,4,slabHeight()).C,D2=blockCorners(u,6.5,slabHeight()).C;ink.strokeStyle='#211f1c';ink.lineWidth=0.9;pathPoly(D);ink.stroke();ink.lineWidth=0.6;pathPoly(D2);ink.stroke();}
+  else if(u===HOVER){const D=blockCorners(u,4,slabHeight()).C;ink.strokeStyle='rgba(33,31,28,0.5)';ink.lineWidth=0.8;pathPoly(D);ink.stroke();}
   ink.globalAlpha=1;
 }
 // stroke a world path partially: from s0 to s1 metres along it
@@ -1730,7 +1753,7 @@ function smokeLit(p,c,age,k,mapA){
  * p.o along that face, 5 px outward. Returns [x, y, depth]; the depth is for the behind-the-camera test.
  */
 function sqFace(p) {
-  const { C } = blockCorners(p.sq);
+  const { C } = blockCorners(p.sq, 0, slabHeight());   // on the slab's top
   const a = C[p.j], b = C[(p.j + 1) % 4];
   const m = [a[0] + (b[0] - a[0]) * p.o, a[1] + (b[1] - a[1]) * p.o];
   const cx = (C[0][0] + C[2][0]) / 2, cy = (C[0][1] + C[2][1]) / 2;
@@ -1809,11 +1832,13 @@ function drawInk(now){
   drawOrders(now,Math.max(0.35,1-stage(0.7,1)));
   if(LIT){for(const u of UNITS)if(!u.gone||u.gone<1)drawUnder(u,blockA,now);}
   // far to near, so a nearer slab covers a farther one (in the lit style; the ink style keeps its order)
-  const order=LIT?UNITS.map(u=>[u,P2(u.x,u.z)[2]]).sort((a,b)=>b[1]-a[1]).map(e=>e[0]):UNITS;
+  // by each block's centre (u.x/z is its front), the gone ones left out
+  const centreDepth=u=>{const d=shown(u,u.form,alive(u))[1]/2;return P2(u.x-Math.sin(u.dface)*d,u.z-Math.cos(u.dface)*d)[2];};
+  const order=LIT?UNITS.filter(u=>!u.gone||u.gone<1).map(u=>[u,centreDepth(u)]).sort((a,b)=>b[1]-a[1]).map(e=>e[0]):UNITS;
   for(const u of order)if(!u.gone||u.gone<1)drawBlock(u,blockA,now);
   drawSmoke(now,blockA,1-blockA);
   drawCorpsLabels(1-st('corps'));
-  if(TT>0.5){for(const u of UNITS){if(!u.sel||u.gone)continue;const D=blockCorners(u,5).C;if(offView(D))continue;ink.globalAlpha=st('blocks');ink.strokeStyle='rgba(33,31,28,0.7)';ink.lineWidth=1;ink.setLineDash([4,3]);pathPoly(D);ink.stroke();ink.setLineDash([]);ink.globalAlpha=1;}}
+  if(TT>0.5){for(const u of UNITS){if(!u.sel||u.gone)continue;const D=blockCorners(u,5,slabHeight()).C;if(offView(D))continue;ink.globalAlpha=st('blocks');ink.strokeStyle='rgba(33,31,28,0.7)';ink.lineWidth=1;ink.setLineDash([4,3]);pathPoly(D);ink.stroke();ink.setLineDash([]);ink.globalAlpha=1;}}
   if(DRAW&&DRAW.pts.length>1){ink.strokeStyle='rgba(110,104,96,0.9)';ink.lineWidth=1.3;ink.beginPath();DRAW.pts.forEach((p,i)=>{const q=P2(p[0],p[1]);i?ink.lineTo(q[0],q[1]):ink.moveTo(q[0],q[1]);});ink.stroke();}
   if(BOX){ink.strokeStyle='rgba(33,31,28,0.7)';ink.lineWidth=0.8;ink.setLineDash([3,3]);ink.strokeRect(BOX.x0,BOX.y0,BOX.x1-BOX.x0,BOX.y1-BOX.y0);ink.setLineDash([]);}
 }
@@ -1883,7 +1908,7 @@ function updateFigures(force){
    ========================================================================= */
 let SPEED=30,BOX=null;
 const sel=()=>UNITS.filter(u=>u.sel&&!u.gone);
-function hitUnit(sx,sy){let best=null,bd=1e9,near=null,nd=9;for(const u of UNITS){if(u.gone)continue;const{C}=blockCorners(u,3);if(offView(C))continue;
+function hitUnit(sx,sy){let best=null,bd=1e9,near=null,nd=9;for(const u of UNITS){if(u.gone)continue;const{C}=blockCorners(u,3,slabHeight());if(offView(C))continue;
   let inside=false;for(let i=0,j=3;i<4;j=i++){const a=C[i],b=C[j];if(((a[1]>sy)!==(b[1]>sy))&&(sx<(b[0]-a[0])*(sy-a[1])/(b[1]-a[1]+1e-9)+a[0]))inside=!inside;}
   const cx=(C[0][0]+C[2][0])/2,cy=(C[0][1]+C[2][1])/2,d=Math.hypot(cx-sx,cy-sy);
   if(LIT&&u.type==='art'&&u.state!=='rout'&&u.gun)inside=Math.hypot(u.gun.m[0]-sx,u.gun.m[1]-sy)<=u.gun.r;   // the icon, as drawn
