@@ -775,10 +775,21 @@ SIDES.forEach(s=>{s.c=hex(s.coat);s.a=hex(s.acc);s.i=hex(s.ink);s.f=hex(s.fill||
 const RUST=hex('#7a3418');SIDES.forEach(s=>{const c=mix3(s.c,RUST,0.18).map(v=>v*0.72);s.guard={...s,c,f:c,i:c.map(v=>v*0.8),e:s.key==='AU'?s.e:undefined,stripe:hex('#a65a32')};});
 const GUARDS=new Set(['GRD','RGD']);
 if(LIT)SIDES[2].f=hex('#F4EDDC');   // the lit style: a light stone beige, not white, still lighter than every season's paper
-const formedSq=u=>u.type==='inf'&&u.form==='square'&&u.morph>0.5;   // fires all round, smokes from four faces, drawn hollow
+// Battalions in an infantry brigade (the owner's choice for the prototype; era data later, decision 0015). The
+// drawing shows them as two bars, front and back, so it is written for two.
+const BRIGADE_BATS = 2;
+
+/** A square that has formed: it fires all round and smokes from four faces. */
+const formedSq = u => u.type === 'inf' && u.form === 'square' && u.morph > 0.5;
+
+/**
+ * Whether a unit is drawn as a hollow square: once its square has formed, and still while it is leaving one,
+ * until halfway, so the square opens into two bars rather than popping into them.
+ */
+const drawnSq = u => u.type === 'inf' && (u.form === 'square' ? u.morph > 0.5 : u.prev === 'square' && u.morph < 0.5);
 const pal=u=>u.guard?SIDES[u.sideI].guard:SIDES[u.sideI];
 [0,1].forEach(i=>document.getElementById('lgG'+i)?.setAttribute('fill',css(SIDES[i].guard.c)));document.getElementById('lgGs')?.setAttribute('stroke',css(SIDES[1].guard.stripe));document.getElementById('lgAU')?.setAttribute('fill',css(SIDES[2].f));   // the legend from the palette
-const TYPE={inf:{n:480,speed:1.3,range:170},cav:{n:72,speed:3.4,range:40},art:{n:6,speed:1.1,range:900}};
+const TYPE={inf:{n:240*BRIGADE_BATS,speed:1.3,range:170},cav:{n:72,speed:3.4,range:40},art:{n:6,speed:1.1,range:900}};
 const UNITS=[],CORPS={};
 const FR_N=['4e Ligne','10e Léger','24e Léger','28e Ligne','46e Ligne','57e Ligne','14e Ligne','36e Ligne','43e Ligne','55e Ligne','26e Léger','3e Ligne','18e Ligne','75e Ligne','48e Ligne','111e Ligne','17e Ligne','30e Ligne','Grenadiers à pied','Chasseurs à pied','40e Ligne','88e Ligne','64e Ligne','27e Léger'];
 const RU_N=['Novgorod','Apsheron','Kursk','Podolsk','Narva','Smolensk','Little Russia','Butyrsk','Galicia','Vyborg','Perm','Kexholm','Moscow','Azov','Vladimir','Kiev Grenadiers','Preobrazhensky','Semenovsky','Izmailovsky','Arkhangelogorod','Old Ingermanland','Yaroslavl','Briansk','Viatka'];
@@ -787,11 +798,11 @@ let nameI={FR:0,RU:0,AU:0};
 function corps(key,side,title,leader,list,cx,cz,face){
   // list: [type,count], infantry in battalions (made brigades of two). Up to four infantry or cavalry units stand in
   // one row with the guns 130 m behind; a larger corps splits its units over two rows, as before
-  CORPS[key]={key,side,title,leader,guard:GUARDS.has(key)};const all=[];list.forEach(([t,c])=>{for(let i=0;i<(t==='inf'?Math.ceil(c/2):c);i++)all.push(t);});   // infantry: brigades of two battalions
+  CORPS[key]={key,side,title,leader,guard:GUARDS.has(key)};const all=[];list.forEach(([t,c])=>{for(let i=0;i<(t==='inf'?Math.ceil(c/BRIGADE_BATS):c);i++)all.push(t);});   // infantry: brigades of two battalions
   const f=[Math.sin(face),Math.cos(face)],r=[Math.cos(face),-Math.sin(face)];
-  const fighting=all.filter(t=>t!=='art').length,oneRow=fighting<=4;
-  const per=oneRow?fighting:Math.ceil(all.length/2);
-  all.forEach((t,i)=>{const row=oneRow?(t==='art'?1:0):Math.floor(i/per),col=oneRow?(t==='art'?i-fighting:i):i%per;
+  const fighting=all.filter(t=>t!=='art').length,oneRow=fighting>0&&fighting<=4;   // a corps of guns alone keeps the two-row layout
+  const per=oneRow?fighting:Math.ceil(all.length/2),seen={art:0,front:0};
+  all.forEach((t,i)=>{const row=oneRow?(t==='art'?1:0):Math.floor(i/per),col=oneRow?(t==='art'?seen.art++:seen.front++):i%per;
     const cnt=oneRow?(t==='art'?all.length-fighting:fighting):(row?all.length-per:per),sx=(col-(cnt-1)/2)*(t==='cav'?115:125),sz=-row*130;
     const nl=side==='FR'?FR_N:side==='RU'?RU_N:AU_N,nm=t==='inf'?nl[nameI[side]++%nl.length]:t==='cav'?(side==='FR'?['5e Hussards','Cuirassiers','Chasseurs à cheval','Dragons'][i%4]:['Chevalier Guard','Uhlans','Hussars','Cuirassiers'][i%4]):'Foot battery';
     UNITS.push(mkUnit(side,t,key,nm,cx+r[0]*sx+f[0]*sz,cz+r[1]*sx+f[1]*sz,face));});
@@ -827,7 +838,7 @@ const HQ=[{side:0,name:'NAPOLÉON',x:-1150,z:400},{side:1,name:'KUTUZOV',x:900,z
 const BR_GAP = { line: 30, column: 15 };
 
 /** How many battalions' worth of men a unit is: two for a brigade, one otherwise (fire and losses scale by it). */
-const bats = u => (u.type === 'inf' ? 2 : 1);
+const bats = u => (u.type === 'inf' ? BRIGADE_BATS : 1);
 
 /**
  * One battalion of a brigade, in line or column: [frontage, depth] in metres, and its files (men abreast).
@@ -843,28 +854,32 @@ function battalionSize(form, men) {
 }
 
 /**
- * The share of a brigade's drawn depth that one battalion's bar takes, in one formation.
- * Far out it is a fixed symbol proportion; close in, the true one (one battalion's depth over the brigade's,
- * gap included), blended by the zoom's SYMK as the block sizes are. Toward a square it is one half: the gap
- * closes and the two bars meet, so the brigade merges into its square.
+ * The share of a brigade's drawn depth that one battalion's bar takes, in one formation. The bar and the whole are
+ * blended by the zoom's SYMK as lengths, the way shown() blends the block (a symbol proportion far, the true
+ * metres close), so the bars match the block and the figures at every zoom. A square is one half: no gap.
  */
 function barShare(u, form, n) {
   if (form === 'square') return 0.5;
-  const bat = battalionSize(form, Math.ceil(n / 2));
+  const symDepth = SYM.inf[form][1] * SYMZ;
+  const bat = battalionSize(form, Math.ceil(n / BRIGADE_BATS));
   const total = dims(u, form, n)[1];
-  return lerp(0.36, bat.depth / total, SYMK);
+  return lerp(0.36 * symDepth, bat.depth, SYMK) / lerp(symDepth, total, SYMK);
 }
 
 /**
  * What a unit draws as, given its screen corners C (front-left, front-right, back-right, back-left).
- * A brigade in line or column: two bars, its first battalion in front, the second behind; their share of the
- * depth eases with the formation change, as the outline does. Anything else (cavalry, guns, a formed square):
- * one block.
+ * A brigade in line or column: two bars, its first battalion in front, the second behind. Into a square, the bars
+ * close up by halfway, where the hollow square takes over; out of one, they open from halfway. Between two other
+ * formations their share eases with the outline. Anything else (cavalry, guns, a square): one block.
  */
 function parts(u, C) {
-  if (u.type !== 'inf' || formedSq(u)) return [C];
+  if (u.type !== 'inf' || drawnSq(u)) return [C];
   const n = alive(u);
-  const q = lerp(barShare(u, u.prev, n), barShare(u, u.form, n), easeIO(u.morph));
+  const e = easeIO(u.morph);
+  let q;
+  if (u.form === 'square') q = lerp(barShare(u, u.prev, n), 0.5, Math.min(1, u.morph / 0.5));
+  else if (u.prev === 'square') q = lerp(0.5, barShare(u, u.form, n), (u.morph - 0.5) / 0.5);
+  else q = lerp(barShare(u, u.prev, n), barShare(u, u.form, n), e);
   const front = [C[0], C[1], mix3(C[1], C[2], q), mix3(C[0], C[3], q)];
   const back = [mix3(C[0], C[3], 1 - q), mix3(C[1], C[2], 1 - q), C[2], C[3]];
   return [front, back];
@@ -874,7 +889,7 @@ function dims(u,form,n){
   if (u.type === 'inf') {
     // a brigade: two battalions, one behind the other; in square, one square of both
     if (form !== 'square') {
-      const bat = battalionSize(form, Math.ceil(n / 2));
+      const bat = battalionSize(form, Math.ceil(n / BRIGADE_BATS));
       return [bat.frontage, bat.depth * 2 + BR_GAP[form]];
     }
     const k = Math.ceil(n / 12);
@@ -895,7 +910,7 @@ function slot(u,form,i,n,out){
   if(u.type==='inf'){
     if (form !== 'square') {
       // two battalions, one behind the other: man i belongs to the first or the second
-      const half = Math.ceil(n / 2);
+      const half = Math.ceil(n / BRIGADE_BATS);
       const which = i < half ? 0 : 1;
       const j = i - which * half;
       const bat = battalionSize(form, half);
@@ -1005,14 +1020,14 @@ function simStep(dt){
       if(ne&&(formedSq(u)||Math.abs(angTo(u.face,Math.atan2(ne.e.x-u.x,ne.e.z-u.z)))<1.2)){   // a square faces every way
         const e=ne.e,ff=u.type==='art'?(ne.d<300?1.8:1)*0.00055:(u.form==='line'?1:u.form==='square'?0.55:0.3)*0.0011*(ne.d<80?1.5:1);
         const tf=e.form==='column'?1.4:e.form==='square'&&u.type==='art'?1.6:1;
-        const hit=ff*u.str*tf*dt*bats(u)/bats(e);   // a brigade fires with two battalions and takes losses over two
-        e.str=Math.max(0,e.str-hit);e.mor-=hit*2.6*(e.sideI===0?0.85:1);e.hit=GT;u.firing=3;
-        if(Math.random()<dt*(u.type==='art'?0.25:0.5))puff(u);
+        const base=ff*u.str*tf*dt,men=base*bats(u)/bats(e);   // men: a brigade fires with its battalions and takes losses over them; morale as one battalion on another
+        e.str=Math.max(0,e.str-men);e.mor-=base*2.6*(e.sideI===0?0.85:1);e.hit=GT;u.firing=3;
+        if(Math.random()<dt*(u.type==='art'?0.25:0.5*bats(u)))puff(u);   // each battalion's volleys
       }
     }
     // melee: cavalry on contact
     if(u.type==='cav'&&u.state!=='rout'){const ne=nearestEnemy(u,45);if(ne){const e=ne.e;
-      if(e.form==='square'){u.mor-=0.012*dt;u.str-=0.002*dt;}else{e.mor-=0.03*dt*u.str/bats(e);e.str-=0.004*dt*u.str/bats(e);u.str-=0.001*dt;e.hit=GT;}u.hit=GT;}}
+      if(e.form==='square'){u.mor-=0.012*dt;u.str-=0.002*dt;}else{e.mor-=0.03*dt*u.str;e.str-=0.004*dt*u.str/bats(e);u.str-=0.001*dt;e.hit=GT;}u.hit=GT;}}
     // morale
     if(GT-u.hit>25)u.mor=Math.min(1,u.mor+dt*0.004);
     if(u.mor<0.2&&u.state!=='rout'){u.state='rout';finishOrder(u);u.path=null;setForm(u,'column');u.face=fleeHeading(u);}   // turns its back once, as it breaks
@@ -1108,10 +1123,12 @@ function addPoly(path, pts) {
  * @param fw,fd the block's drawn frontage and depth (m)
  * @param ringM a square's ring thickness (m), so bites go no deeper than the ring; 0 for a solid block
  * @param salt  0, 1, ...: a different set of bites for each bar of a brigade
- * @param bars  how many bars share the unit's bites (2 for a brigade in line or column): each gets its part
+ * @param bars  how many bars share the unit's bites (2 for a brigade in line or column): each gets its part,
+ *              by salt as its index
  */
 function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
-  const n = Math.round(clamp((1 - u.str) / 0.7, 0, 1) * 10 / bars);
+  const total = Math.round(clamp((1 - u.str) / 0.7, 0, 1) * 10);
+  const n = Math.floor(total / bars) + (salt < total % bars ? 1 : 0);   // dealt out over the bars: the same total as a block
   const weights = bars > 1 ? BITE_EDGE_W_BAR : BITE_EDGE_W;
   if (!n) return;
 
@@ -1239,7 +1256,7 @@ function drawBlock(u,alpha,now){
   }
   else{const PS=parts(u,C);PS.forEach((P,pi)=>{   // a brigade's two bars, or one block
     pathPoly(P);let I=null,sqK=0;
-    if(formedSq(u)){
+    if(drawnSq(u)){
       // hollow square: the inner hole
       const k=Math.min(Math.max(lerp(SQ_RING[0]*SYMZ*Math.sqrt(lossK(u)),SQ_RING[1],SYMK),2.2*MPP),fw*0.35,fd*0.35),hw=fw/2-k;sqK=k;I=[[-hw,-k],[hw,-k],[hw,-fd+k],[-hw,-fd+k]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
       ink.moveTo(I[0][0],I[0][1]);for(let i=3;i>=0;i--)ink.lineTo(I[i][0],I[i][1]);ink.closePath();
@@ -1571,7 +1588,7 @@ function updateCard(){const s=sel();const c=$('card');if(!s.length){c.style.disp
   const u=s[0],side=SIDES[u.sideI],cp=CORPS[u.corps];
   $('cname').textContent=s.length>1?`${s.length} units`:u.name;$('csub').textContent=`${cp.title} · ${cp.leader}`+(s.length>1?'':` · ${u.type==='inf'?'infantry':u.type==='cav'?'cavalry':'artillery'}`);
   $('cside').textContent=side.name;$('cside').style.color=side.ink;
-  const str=s.reduce((a,v)=>a+v.str,0)/s.length,mor=s.reduce((a,v)=>a+v.mor,0)/s.length,men=s.reduce((a,v)=>a+Math.round(v.str*(v.type==='inf'?1200:v.type==='cav'?420:120)),0);
+  const str=s.reduce((a,v)=>a+v.str,0)/s.length,mor=s.reduce((a,v)=>a+v.mor,0)/s.length,men=s.reduce((a,v)=>a+Math.round(v.str*(v.type==='inf'?600*BRIGADE_BATS:v.type==='cav'?420:120)),0);
   $('cstr').textContent=`${men} men`;$('cstrb').style.width=(str*100)+'%';$('cmor').textContent=u.state==='rout'?'routing':mor>0.6?'steady':mor>0.3?'wavering':'shaken';$('cmorb').style.width=(mor*100)+'%';
   $('cform').textContent=s.length>1?'—':(u.state==='move'?'marching, ':'')+u.form;
   $('chint').textContent=u.sideI===0?'right-drag to draw an order · double-click selects the corps':'enemy unit · orders only for France';}

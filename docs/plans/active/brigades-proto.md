@@ -42,5 +42,12 @@ brigade fires as one unit, as a battalion did).
   unit's count split between its bars. With: fire and losses scaled by battalions (a brigade fires with two and takes
   its losses over two; cavalry and guns killed twice the men before); one battalion-size helper for the footprint,
   the figures and the bars; the guns behind a one-row corps; `pathPoly` on the shared polygon helper, `mix3` for the
-  corners. Not taken: "the doc comments break the one-short-comment rule": that rule is replaced by decision 0054
-  (PR #142), at the owner's request.
+  corners. Not taken: "the doc comments break the one-short-comment rule": the owner asked for doc comments; PR
+  #142 replaces that rule (its decision 0054), so this PR merges after #142.
+- **Round 2**: severe: the merge still jumped: the bars had closed only halfway when the hollow square took over at
+  halfway, and leaving a square it split at once into two touching bars. Fixed: into a square the bars close up by
+  halfway; out of one the hollow square holds to halfway, then opens into the bars. With: morale as one battalion on
+  another (only the men scale by battalions; morale had halved against guns and cavalry); a corps of guns alone keeps
+  its old layout; the bars' share blended as lengths, as the block is, so they match the figures while zooming; a
+  brigade's bites dealt out over its bars (the same total as a block); each battalion's volleys smoke; one constant
+  for the brigade's battalions. Left: the bars computed twice a frame (drawUnder and drawBlock; small, unmeasured).
