@@ -68,6 +68,27 @@ a **research note** (`docs/research/`) needs no plan and no `/code-review` (chec
      Open questions (judgement calls, not defects) stay in the system doc's or plan's Open questions.
 4. Check runs print their **full output and exit code**; never judge a run by grepping for "FAILED".
 
+## Code quality
+
+Code is read far more often than it is written: write it to be easy to read and maintain, for the owner and for the
+next agent. This holds everywhere, prototypes included, even where older code does otherwise.
+
+- **Functions:** small, one job each, named for what they do or return. When a function needs comments to explain
+  its parts, split it into named functions instead.
+- **Layout:** one statement per line; spaces around operators and after commas; named intermediate values rather than
+  long nested expressions. No packed one-liners, even in a file that is full of them.
+- **Doc comments:** every function that is exported or not trivial gets a `/** */` comment: what it does, its
+  parameters (with units) and what it returns when not obvious. Inline comments say why, not how.
+- **TypeScript** for game code (`src/`) and the tools the game depends on, strict (`npm run typecheck`). Prototypes stay
+  plain JavaScript in one HTML file, since they must run from `file://` without a build (`prototypes/AGENTS.md`);
+  logic that outgrows a prototype moves into `src/` as TypeScript, with tests.
+- **Tests:** a change to game code comes with Vitest tests of its behaviour; a bug fix comes with a test that fails
+  without it. Prototypes are checked with screenshots and the page checks (`tools/`), not unit tests.
+- **Lint:** `npm test` (ESLint, typecheck, Vitest) passes before review. ESLint covers `src/`, `maps/`, `test/` and
+  `tools/*.ts`; prototypes and the older `.js`/`.mjs` tools are not linted yet, so the rules above are checked by
+  review there.
+- **Reformatting** old code goes in its own commit, never mixed with a change of behaviour.
+
 ## Commits and PRs
 
 Conventional Commits with a mandatory scope; PR titles in the same format (squash-merged). The full

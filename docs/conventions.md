@@ -24,7 +24,8 @@ last_reviewed: 2026-10-08
 
 ## Code
 
-- One short comment on non-obvious code: the why, not the how.
+- Readable code first: small functions, one statement per line, a doc comment on each function that is not
+  trivial; comments say why, not how. The full rules: `AGENTS.md`, Code quality.
 - Reference docs by repo path in comments (`docs/art-bible.md` §6c), never by bare file name.
 - Prototype-only rules: `prototypes/AGENTS.md`.
 
