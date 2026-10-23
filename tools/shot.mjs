@@ -4,62 +4,123 @@
 // Exits non-zero on page exceptions/console errors or tool failure, and always cleans up Chrome.
 // Software GL (SwiftShader) by default: good for correctness, NOT for timing GPU frame cost. SHOT_ANGLE=metal (or
 // another ANGLE backend) uses the machine's GPU instead. SHOT_CHROME_ARGS: more Chrome flags, space-separated.
-import { spawn } from 'node:child_process'
+// SHOT_CDP=<http://host:port>: attach to a running Chrome instead of launching one (Windows Chrome from WSL,
+// tools/win-chrome.sh; decision 0052). Each run takes a fresh browser context and disposes it; the browser stays up.
+// Its flags were fixed at its launch, so the run checks what it would have set: the GL backend by the renderer a WebGL2
+// context reports (SHOT_ANGLE, SwiftShader when unset, as launched), SHOT_CHROME_ARGS on its command line (read through
+// --enable-automation); a mismatch fails the run. A Windows browser attached from WSL gets local files through wslpath.
+import { execFileSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const [target, outDir, w = '1600', h = '900', script = '[]'] = process.argv.slice(2)
 if (!target || !outDir) { console.error('usage: node tools/shot.mjs <page> <outDir> [w] [h] [steps]'); process.exit(2) }
-const url = /^[a-z]+:\/\//.test(target) ? target : pathToFileURL(path.resolve(target)).href
+const CDP = process.env.SHOT_CDP?.replace(/\/+$/, '')
+let url = /^[a-z]+:\/\//.test(target) ? target : pathToFileURL(path.resolve(target)).href
+const ANGLE = process.env.SHOT_ANGLE || 'swiftshader'
+// how each backend names itself in the WebGL renderer string (ANGLE (<vendor>, <device> <backend>…))
+const RENDERER = { swiftshader: /SwiftShader/i, d3d11: /Direct3D11/, d3d9: /Direct3D9/, metal: /Metal/, gl: /OpenGL/, vulkan: /Vulkan/ }
+// software renderers that also name a backend (SwiftShader says Vulkan, WARP Direct3D11): never a GPU
+const SOFTWARE = /SwiftShader|Basic Render Driver|llvmpipe/i
+const EXTRA = (process.env.SHOT_CHROME_ARGS || '').split(' ').filter(Boolean)
+// the one restart that gives an attached browser everything this run asks for (headless, as a launched run always is)
+const RESTART = `tools/win-chrome.sh stop, then start --headless -- ${[`--use-angle=${ANGLE}`, ...EXTRA].join(' ')}`
 const steps = JSON.parse(script)
 const KNOWN = new Set(['wait', 'eval', 'shot', 'tap'])
 for (const [op] of steps) if (!KNOWN.has(op)) { console.error(`unknown step "${op}"`); process.exit(2) }
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-if (!fs.existsSync(CHROME)) { console.error(`Chrome not found at ${CHROME} (set CHROME=...)`); process.exit(2) }
+if (!CDP && !fs.existsSync(CHROME)) { console.error(`Chrome not found at ${CHROME} (set CHROME=... or SHOT_CDP=...)`); process.exit(2) }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
-const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-'))
+const profile = CDP ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'shot-'))
 let chrome, ws, pageErrors = 0
+let bws, context   // attached: the browser's socket and this run's context
 // a shader Babylon cannot compile and has no fallback for never makes its material ready: the page waits forever (the
 // bench waited its whole hour on Metal). Babylon logs 'Unable to compile effect:', the details, 'Error: …', then
 // 'Trying next fallback.' when it has one (that effect may still recover): a run stops when no fallback follows the
 // error within FALLBACK_MS. FATAL_EXC: a page exception that ends a run at once (the materials' texture-unit guard,
 // src/look/materials.ts)
 const FALLBACK_MS = 1500, FATAL_EXC = ['fragment textures']
-// close the socket, stop Chrome, wait for it to exit (it flushes the profile on the way out), then remove the profile
-async function cleanup() {
+// one call on the browser's socket (attached), with its own timeout
+let bid = 0
+const bsend = (method, params = {}) => new Promise((res, rej) => {
+  const i = ++bid, t = setTimeout(() => rej(new Error(`${method}: no reply`)), 10000)
+  const on = e => { const m = JSON.parse(e.data); if (m.id !== i) return; clearTimeout(t); bws.removeEventListener('message', on); m.error ? rej(new Error(`${method}: ${m.error.message}`)) : res(m.result) }
+  bws.addEventListener('message', on); bws.send(JSON.stringify({ id: i, method, params }))
+})
+// close the socket, stop Chrome, wait for it to exit (it flushes the profile on the way out), then remove the profile;
+// attached: dispose this run's context (its pages close with it) and leave the browser running. Once: a fatal page
+// error and the main path's failure can both ask
+let cleaning
+const cleanup = () => (cleaning ??= doCleanup())
+async function doCleanup() {
   try { ws?.close() } catch {}
+  if (bws) {
+    if (context) { try { await bsend('Target.disposeBrowserContext', { browserContextId: context }) } catch (e) { console.warn('shot.mjs: could not dispose the context', e.message) } }
+    try { bws.close() } catch {}
+    return
+  }
   if (chrome && chrome.exitCode === null && chrome.signalCode === null) {   // already dead from a signal: 'exit' has fired
     const exited = new Promise(r => chrome.once('exit', r))
     chrome.kill()
     await Promise.race([exited, sleep(5000)])
   }
-  try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }) } catch (e) { console.warn('shot.mjs: could not remove profile', e.message) }
+  if (profile) try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }) } catch (e) { console.warn('shot.mjs: could not remove profile', e.message) }
 }
 process.on('SIGINT', async () => { await cleanup(); process.exit(130) })
 
 try {
   fs.mkdirSync(outDir, { recursive: true })
-  // --remote-debugging-port=0 lets Chrome pick a free port and write it to DevToolsActivePort
-  // SHOT_ANGLE: the GL backend, swiftshader (software, deterministic: the default) or the machine's own (e.g. metal)
-  const angle = process.env.SHOT_ANGLE || 'swiftshader'
-  chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--use-angle=${angle}`, ...(angle === 'swiftshader' ? ['--enable-unsafe-swiftshader'] : []),
-    '--ignore-gpu-blocklist', ...(process.env.SHOT_CHROME_ARGS || '').split(' ').filter(Boolean), `--window-size=${w},${h}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' })
-  const portFile = path.join(profile, 'DevToolsActivePort')
-  let port
-  for (let i = 0; i < 60 && !port; i++) { await sleep(250); if (fs.existsSync(portFile)) port = fs.readFileSync(portFile, 'utf8').split('\n')[0] }
-  if (!port) throw new Error('Chrome did not open a DevTools port')
-  let page
-  for (let i = 0; i < 40 && !page; i++) {
-    try { page = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find(t => t.type === 'page') } catch {}
-    if (!page) await sleep(250)
+  let pageWs
+  if (CDP) {
+    let version
+    try { version = await (await fetch(`${CDP}/json/version`)).json() } catch { throw new Error(`no browser at ${CDP} (SHOT_CDP; tools/win-chrome.sh start?)`) }
+    bws = new WebSocket(version.webSocketDebuggerUrl)
+    await new Promise((res, rej) => { bws.onopen = res; bws.onerror = () => rej(new Error('DevTools browser socket failed')) })
+    if (!/HeadlessChrome/.test(version['User-Agent'] ?? '')) throw new Error(`the browser at ${CDP} is not headless: a visible window can be throttled or covered (${RESTART})`)
+    if (!RENDERER[ANGLE]) throw new Error(`cannot check the backend "${ANGLE}" on an attached browser (known: ${Object.keys(RENDERER).join(', ')})`)
+    // what the caller asks of the browser's launch must be there: a missing vsync flag would change what is measured
+    // without a word (the backend is checked on the page, below)
+    if (EXTRA.length) {
+      let argv
+      try { argv = (await bsend('Browser.getBrowserCommandLine')).arguments } catch (e) { throw new Error(`cannot read the browser's flags to check ${EXTRA.join(' ')} (${e.message})`) }
+      const missing = EXTRA.filter(f => !argv.includes(f))
+      if (missing.length) throw new Error(`the browser at ${CDP} was not started with ${missing.join(' ')} (${RESTART})`)
+    }
+    // a Windows browser reads a WSL file through its UNC path (file://wsl.localhost/<distro>/…); the query and hash
+    // (?frozen, ?dof: tools/look-page.mjs) stay
+    if (url.startsWith('file:') && process.env.WSL_DISTRO_NAME && /Windows NT/.test(version['User-Agent'] ?? '')) {
+      const u = new URL(url), file = fileURLToPath(u)   // the path alone: the query and hash are put back below
+      const win = pathToFileURL(execFileSync('wslpath', ['-w', file], { encoding: 'utf8' }).trim(), { windows: true })
+      win.search = u.search; win.hash = u.hash; url = win.href
+    }
+    context = (await bsend('Target.createBrowserContext', { disposeOnDetach: true })).browserContextId
+    const { targetId } = await bsend('Target.createTarget', { url: 'about:blank', browserContextId: context })
+    pageWs = version.webSocketDebuggerUrl.replace(/\/devtools\/browser\/.*/, `/devtools/page/${targetId}`)
+  } else {
+    // --remote-debugging-port=0 lets Chrome pick a free port and write it to DevToolsActivePort
+    // SHOT_ANGLE: the GL backend, swiftshader (software, deterministic: the default) or the machine's own (e.g. metal)
+    chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--use-angle=${ANGLE}`, ...(ANGLE === 'swiftshader' ? ['--enable-unsafe-swiftshader'] : []),
+      '--ignore-gpu-blocklist', ...EXTRA, `--window-size=${w},${h}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' })
+    const portFile = path.join(profile, 'DevToolsActivePort')
+    let port
+    for (let i = 0; i < 60 && !port; i++) { await sleep(250); if (fs.existsSync(portFile)) port = fs.readFileSync(portFile, 'utf8').split('\n')[0] }
+    if (!port) throw new Error('Chrome did not open a DevTools port')
+    let page
+    for (let i = 0; i < 40 && !page; i++) {
+      try { page = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find(t => t.type === 'page') } catch {}
+      if (!page) await sleep(250)
+    }
+    if (!page) throw new Error('no page target')
+    pageWs = page.webSocketDebuggerUrl
   }
-  if (!page) throw new Error('no page target')
-  ws = new WebSocket(page.webSocketDebuggerUrl)
+  ws = new WebSocket(pageWs)
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('DevTools socket failed')) })
-  let id = 0, loaded = false
+  // the load that counts is the one of the document Page.navigate commits (its loaderId): a fresh attached page's own
+  // about:blank load may arrive late
+  let id = 0, committed, loadedLoader
   const pend = {}
   // a dropped socket (Chrome crash) fails every pending call instead of hanging forever
   ws.onclose = () => { for (const k in pend) { pend[k]({ error: { message: 'DevTools socket closed (Chrome exited?)' } }); delete pend[k] } }
@@ -69,7 +130,8 @@ try {
   ws.onmessage = e => {
     const m = JSON.parse(e.data)
     if (m.id && pend[m.id]) { pend[m.id](m); delete pend[m.id] }
-    if (m.method === 'Page.loadEventFired') loaded = true
+    if (m.method === 'Page.frameNavigated' && !m.params.frame.parentId) committed = m.params.frame.loaderId
+    if (m.method === 'Page.loadEventFired') loadedLoader = committed
     if (m.method === 'Runtime.exceptionThrown') {
       pageErrors++; const text = JSON.stringify(m.params.exceptionDetails); console.log('EXC', text.slice(0, 600))
       if (FATAL_EXC.some(f => text.includes(f))) { fatal(text); return }
@@ -90,11 +152,20 @@ try {
     ws.send(JSON.stringify({ id: i, method, params }))
   })
   await send('Runtime.enable'); await send('Page.enable')
+  if (CDP) {   // the backend the attached browser really renders with, a fallback to software included
+    const r = await send('Runtime.evaluate', { returnByValue: true, expression: `(() => { const g = document.createElement('canvas').getContext('webgl2'); if (!g) return 'no WebGL2'
+      const e = g.getExtension('WEBGL_debug_renderer_info'); return g.getParameter(e ? e.UNMASKED_RENDERER_WEBGL : g.RENDERER) })()` })
+    const renderer = r.result?.value ?? 'unknown'
+    if (!RENDERER[ANGLE].test(renderer) || (ANGLE !== 'swiftshader' && SOFTWARE.test(renderer)))
+      throw new Error(`the browser at ${CDP} renders with ${renderer}, not ${ANGLE} (SHOT_ANGLE; ${RESTART})`)
+  }
   await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +h, deviceScaleFactor: 1, mobile: false })
-  await send('Page.navigate', { url })
+  const nav = await send('Page.navigate', { url })
+  if (nav.errorText) throw new Error(`could not open ${url}: ${nav.errorText}`)
   const LOAD = +(process.env.SHOT_LOAD_S || 60)                // seconds; a busy machine or a slow page raises it
-  for (let i = 0; i < LOAD * 4 && !loaded; i++) await sleep(250)   // the page's own script (scene build) runs before the load event
-  if (!loaded) throw new Error(`page did not finish loading in ${LOAD}s`)
+  const loaded = () => loadedLoader === nav.loaderId
+  for (let i = 0; i < LOAD * 4 && !loaded(); i++) await sleep(250)   // the page's own script (scene build) runs before the load event
+  if (!loaded()) throw new Error(`page did not finish loading in ${LOAD}s`)
   for (const [op, a, b] of steps) {
     if (op === 'wait') await sleep(a)
     else if (op === 'eval') {
