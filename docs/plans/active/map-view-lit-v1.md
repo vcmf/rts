@@ -86,7 +86,7 @@ Out of scope: lit relief (shading), woods as canopy, roofs (decision 0051's bake
 
 - **Round 1 after the redesign**: severe: `setLight` read both points from `proj`, which returns one shared array, so
   the light never turned (a regression of round 3's fix). Fixed (copies), with: a routing battery keeps its shadow and
-  loses its stale ring; Austria's arrow in its edge colour (its coat is the paper's colour); a lit battery is clicked
+  loses its stale ring; a lit battery is clicked
   by its icon; dead code. Measured on the owner's RTX 3080 (Windows Chrome, D3D11, mid-battle, two runs each): the ink
   style 8.3 ms a frame, the lit style 11–12 ms with the tree icons, 8.3–10 ms with the canopy below.
 - **The owner's direction** (2026-10-23), after the reference frames of Epic History TV: woods as a texture of crowns,
@@ -96,6 +96,14 @@ Out of scope: lit relief (shading), woods as canopy, roofs (decision 0051's bake
   across with their own strip direction (10 m) and tint from the season's wash; roads as brown dirt, darker at the edge;
   contours faint under the woods. Smoke: a volley is a small white cloud along the front, a gun flashes at the muzzle
   and throws a larger cloud forward, the way it faces.
+
+- **Round 2 after the redesign**: moderate and light only, so the review stops. Fixed: a lit battery's click circle
+  only from the frame that drew it; a cannon's cloud shadows all drawn before its white; the gun's shadow in the
+  shadow pass; the arrow's tail at the battalion nearest the route (an average of places can be empty ground); no
+  apostrophe in a shader comment; no hachures baked in the lit style; the dead Austria-arrow line (only France's
+  orders draw an arrow) and its claim removed. Left, as the woods and fields are to be redone after research
+  (research in progress on how clean battle maps are made: the owner found them unclean next to the reference): crowns cut on two
+  wood edges, the canopy computed outside woods, a duplicated hash.
 
 ## Results
 
