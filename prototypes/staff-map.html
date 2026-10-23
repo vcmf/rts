@@ -77,6 +77,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
 #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font:400 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);background:#e8e1d3;z-index:9}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/babylonjs@9.29.0/babylon.js"></script>
+<script>
+// ?dem=<path.js>: real heights for the terrain (docs/plans/active/real-terrain-proto.md), a generated file defining
+// window.DEM; loaded before the main script, which builds the height grid as it loads. A plain relative .js path only
+(()=>{const d=new URLSearchParams(location.search).get('dem');if(d&&/^[\w\-/.]+\.js$/.test(d)&&!d.includes('..'))document.write('<script src="'+d+'"><\/script>');})();
+</script>
 </head>
 <body>
 <canvas id="c"></canvas>
@@ -207,7 +212,13 @@ const FL=(()=>{const n=Math.round((2*TZ)/CELL)+1,a=new Float32Array(n);
   for(let j=n-2;j>=0;j--)a[j]=Math.min(a[j],a[j+1]);return a;})();
 const floorAt=z=>{const t=clamp((z+TZ)/CELL,0,FL.length-1.001),j=Math.floor(t);return lerp(FL[j],FL[j+1],t-j);};
 const PONDLV=floorAt(STREAM_Z0)-0.4;
+// real heights (?dem=): metres above the crop's lowest point, on the prototype's own 10 m grid (the export is resampled
+// to it); none of the made-up carving, the real valleys are in the data
+const DEM=window.DEM||null,DEM_LO=DEM?DEM.h.reduce((a,v)=>Math.min(a,v),Infinity):0;
+function demAt(x,z){const fx=clamp((x+TX)/CELL,0,DEM.nx-1.001),fz=clamp((z+TZ)/CELL,0,DEM.nz-1.001),i=Math.floor(fx),j=Math.floor(fz),u=fx-i,v=fz-j,k=j*DEM.nx+i,
+  at=q=>(DEM.h[q]-DEM_LO)/100;return lerp(lerp(at(k),at(k+1),u),lerp(at(k+DEM.nx),at(k+DEM.nx+1),u),v);}
 function H(x,z){
+  if(DEM)return demAt(x,z);
   let h=H0(x,z);
   if(z>STREAM_Z0-60){
     const d=Math.abs(x-xs(z)),fl=floorAt(Math.max(z,STREAM_Z0)),w=1-sstep(140,330,d);
