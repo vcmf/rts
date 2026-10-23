@@ -87,8 +87,13 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
 - No console errors in either mode (`tools/shot.mjs` exit 0).
 
 - **Guards** (the owner, in the paper layers' PR #141): the Garde Impériale and the Russian Imperial Guard in their
-  army's colour, darker and a little warm, with a rust edge and a rust cavalry stripe (never white), a legend row; a
-  first try mixing the coat with rust read purple-black, too close to the ink.
+  army's colour, darker and a little warm, with a rust cavalry stripe (never white), a legend row; a first try mixing
+  the coat with rust read purple-black, too close to the ink, and a rust edge was dropped at the owner's request.
+- **Austria in beige**, not white (`#ECE0C2`, its blue-grey edge kept so it stays apart from the paper).
+- **Losses as wear**: a block loses ragged bites from its edges as its strength falls (up to ten, some through the
+  block), seeded by the unit so they stay put; on top of the shorter frontage it already had.
+- **Squares fire all round**: a square fires at an enemy in any direction, and its smoke rises from all four faces.
+- The page's `window.__proto` hook, swallowed by a comment in the real-terrain PR (#140), restored.
 
 ## Review rounds
 
