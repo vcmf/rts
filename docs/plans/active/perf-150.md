@@ -56,3 +56,23 @@ Windows Chrome over CDP, D3D11, RTX 3080, 1920×1080, vsync and the frame cap of
 
   Both come from the volume of shapes Chrome draws on the ink canvas. The next step would move the blocks and the
   smoke into WebGL.
+
+## Review rounds
+
+- **Round 1** (`/code-review high`): severe.
+  - Paused, a routing unit that was fading out stopped pulsing: the redraw test skipped units already going.
+  - Without the clip, wear bites could stick past a block's corners.
+  - Capping the smoke removed live puffs halfway through their fade.
+
+  Fixed:
+  - the redraw test takes fading units, and redraws once the web fonts arrive;
+  - bites stay inside their edge's ends and short of the far edge;
+  - when the smoke is full, a new puff is not added, and spent puffs are dropped first, so none vanishes mid-fade.
+
+  With:
+  - the slab shadows' clip bounded to the shadows (the last full-screen clip);
+  - the arrow's clip through `clipOut`;
+  - the dead clip in `damage` removed;
+  - the doc comments for `slabSides` and `signedArea` put back on their functions.
+
+  Measured again: 30×, map 4.95 / mid 5.8 ms mean; 90×, map 8.0 / mid 9.6 ms.
