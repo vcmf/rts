@@ -168,6 +168,8 @@ const B=BABYLON,V3=B.Vector3,C3=B.Color3;
 const Q=new URLSearchParams(location.search);
 // ?style=lit: the lit map view's first pass (docs/plans/active/map-view-lit-v1.md); without it, the ink style
 const LIT=Q.get('style')==='lit';
+// &relief=layers (with the lit style): the relief as stacked paper sheets (docs/plans/active/paper-layers.md)
+const LAYERS=LIT&&Q.get('relief')==='layers';
 const T0=performance.now();
 
 /* ---------- small helpers ---------- */
@@ -485,7 +487,14 @@ function seasonCol(key,s){const a=SEAS[key],i=Math.min(2,Math.floor(s)),t=s-i;co
    ========================================================================= */
 const TER_VS=`precision highp float;attribute vec3 position;attribute vec3 normal;uniform mat4 world,viewProjection;uniform float uRise;
 varying vec3 vW;varying vec3 vN;varying float vH;
-void main(){vec3 p=position;vH=p.y;p.y*=uRise;vec4 w=world*vec4(p,1.0);vW=w.xyz;vN=normal;gl_Position=viewProjection*w;}`;
+#ifdef LAYERS
+attribute float aHB;attribute vec2 aGB;varying float vHB;varying vec2 vGB;
+#endif
+void main(){vec3 p=position;vH=p.y;p.y*=uRise;vec4 w=world*vec4(p,1.0);vW=w.xyz;vN=normal;gl_Position=viewProjection*w;
+#ifdef LAYERS
+  vHB=aHB;vGB=aGB;
+#endif
+}`;
 const TER_FS=`#ifdef LIT
 #extension GL_OES_standard_derivatives : enable
 #endif
@@ -493,6 +502,20 @@ precision highp float;varying vec3 vW;varying vec3 vN;varying float vH;
 uniform sampler2D uMapA,uMapB,uPaperT,uNoiseT;
 #ifdef LIT
 uniform sampler2D uCanopyT,uHouseT;
+#ifdef LAYERS
+varying float vHB;varying vec2 vGB;
+/* paper layers: one octave of sheets every D metres; out: lit edge (0..1), cast shadow (0..1) */
+void sheets(float D,float hB,vec2 g,float pxPerM,out float lit,out float shad){
+  vec2 L=vec2(-0.7071,0.7071);                       /* toward the light, xz: the north-west */
+  float hc=hB/D,f=fract(hc),gl=length(g);
+  float cU=dot(g/max(gl,1e-5),L);                    /* above 0: the ground rises toward the light */
+  float gpx=max(length(vec2(dFdx(hc),dFdy(hc))),1e-6),dDn=f/gpx,dUp=(1.0-f)/gpx,spacing=1.0/gpx;
+  float S=min(22.0*pxPerM*max(cU,0.0),0.45*spacing);  /* the shadow strip, px: world length, under half a band */
+  shad=(1.0-smoothstep(0.55*S,S+0.75,dUp))*step(0.0,cU)*step(0.5,S);
+  float wl=0.6+1.2*max(-cU,0.0);
+  lit=(1.0-smoothstep(0.0,wl,dDn))*max(-cU,0.0);
+}
+#endif
 /* the lit style (docs/plans/active/map-view-lit-v1.md): paper, a baked canopy of flat circles */
 #endif
 uniform float uHachK,uRise,uWash,uInk,uMist,uHmin,uHmax,uSunK;uniform vec3 uSun;
@@ -523,6 +546,20 @@ void main(){
   mapC=mix(mapC,mapC*uWoodW*1.15,uWoodWA*woodA*(0.75+0.25*wn));
 #ifdef LIT
   float mott=0.5+0.18*(sin(vW.x/310.0+sin(vW.z/230.0)*1.7)+sin(vW.z/270.0+sin(vW.x/190.0)*1.9))+0.08*sin(vW.x/97.0+vW.z/131.0);   /* smooth, slow */
+#endif
+#ifdef LAYERS
+  {float pxPerM=1.0/max(length(vec2(dFdx(vW.x),dFdy(vW.x))),1e-5),gl=length(vGB),lay=(1.0-uWash)*inside;
+   /* a faint continuous hillshade underneath, so gentle ground keeps its form */
+   vec3 n=normalize(vec3(-vGB.x,1.0,-vGB.y));float lam=dot(n,normalize(vec3(-0.6,0.62,0.6)))/0.718;
+   mapC*=mix(1.0,clamp(1.0+0.45*(lam-1.0),0.9,1.08),lay);
+   /* each sheet a little lighter going up, in the paper hue */
+   float tb=clamp((floor(vHB/5.0)*5.0-uHmin)/max(uHmax-uHmin,1.0),0.0,1.0);mapC*=mix(1.0,0.95+0.1*tb,lay);
+   /* 5 m sheets where their edges are far enough apart on screen, 25 m sheets where they would crowd */
+   float w5=smoothstep(4.0,9.0,5.0/max(gl,1e-4)*pxPerM),l5,s5,l25,s25;
+   sheets(5.0,vHB,vGB,pxPerM,l5,s5);sheets(25.0,vHB,vGB,pxPerM,l25,s25);
+   float lt=mix(l25,l5,w5),sd=mix(s25*1.8,s5,w5);
+   mapC*=1.0-0.24*sd*lay*(1.0-0.7*woodA)*vec3(0.95,1.0,1.15);   /* a warm shadow, never black */
+   mapC=mix(mapC,min(mapC*1.14+0.02,vec3(1.0)),0.8*lt*lay*(1.0-0.7*woodA));}
 #endif
   mapC=mix(mapC,mix(uWaterW,uWaterW*0.92,g2),water);
   mapC=mix(mapC,mix(mapC,vec3(0.97,0.96,0.94),0.55),Bm.b*0.25*(1.0-uSeason/3.0));
@@ -561,6 +598,9 @@ void main(){
   float hx=vH/25.0,fwx=max(fwidth(hx),1e-4),dx=abs(fract(hx-0.5)-0.5)/fwx;
   float minorC=(1.0-smoothstep(0.5,1.3,dc))*(1.0-smoothstep(0.22,0.5,fwc));
   float indexC=(1.0-smoothstep(0.9,1.9,dx))*(1.0-smoothstep(0.3,0.7,fwx));
+#ifdef LAYERS
+  minorC=0.0;indexC*=0.7;
+#endif
   col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.4,indexC*0.7)*k*inside*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
 #else
   col=mix(col,uHach,clamp(A.r*1.05,0.0,1.0)*k*uHachK);
@@ -582,6 +622,14 @@ function terrainMesh(){
     const nx=-(hr-hl)/(2*CELL),nz=-(hu-hd)/(2*CELL),l=Math.hypot(nx,1,nz);nor[k*3]=nx/l;nor[k*3+1]=1/l;nor[k*3+2]=nz/l;}
   let q=0;for(let j=0;j<GZ-1;j++)for(let i=0;i<GX-1;i++){const a=j*GX+i,b=a+1,c=a+GX,d=c+1;idx[q++]=a;idx[q++]=c;idx[q++]=b;idx[q++]=b;idx[q++]=c;idx[q++]=d;}
   const m=new B.Mesh('terrain',scene),vd=new B.VertexData();vd.positions=pos;vd.normals=nor;vd.indices=idx;vd.applyToMesh(m,false);
+  if(LAYERS){   // the sheets are cut from a smoothed height (a Gaussian of about 25 m): small wiggles must not become islands
+    const sig=2.5,R=7,w=[];for(let k=-R;k<=R;k++)w.push(Math.exp(-k*k/(2*sig*sig)));const ws=w.reduce((a,b)=>a+b,0);
+    const t=new Float32Array(GX*GZ),hb=new Float32Array(GX*GZ),gb=new Float32Array(GX*GZ*2);
+    for(let j=0;j<GZ;j++)for(let i=0;i<GX;i++){let a=0;for(let k=-R;k<=R;k++)a+=w[k+R]*HG[j*GX+clamp(i+k,0,GX-1)];t[j*GX+i]=a/ws;}
+    for(let j=0;j<GZ;j++)for(let i=0;i<GX;i++){let a=0;for(let k=-R;k<=R;k++)a+=w[k+R]*t[clamp(j+k,0,GZ-1)*GX+i];hb[j*GX+i]=a/ws;}
+    for(let j=0;j<GZ;j++)for(let i=0;i<GX;i++){const k=j*GX+i;
+      gb[k*2]=(hb[j*GX+Math.min(GX-1,i+1)]-hb[j*GX+Math.max(0,i-1)])/(2*CELL);gb[k*2+1]=(hb[Math.min(GZ-1,j+1)*GX+i]-hb[Math.max(0,j-1)*GX+i])/(2*CELL);}
+    m.setVerticesData('aHB',hb,false,1);m.setVerticesData('aGB',gb,false,2);}
   m.alwaysSelectAsActiveMesh=true;m.isPickable=false;return m;
 }
 
@@ -1209,8 +1257,8 @@ function build(){
   if(DEM)$('demcredit').textContent=` · terrain: ${DEM.credit}`;   // CC BY 4.0: the credit shown with the data
   window.__bake={hachures:nh,ms:Math.round(bakeMs),trees:TREES.length,houses:HOUSES.length,terrain:DEM?`real (${DEM.source}), heights ×${DEM_Z.toFixed(2)}`:'made-up'};
   const COMMONU=['uSun','uSeason','uMist','uGSh'];
-  terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal'],
-    uniforms:['world','viewProjection','uCrown','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[])],defines:LIT?['#define LIT']:[]});
+  terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal',...(LAYERS?['aHB','aGB']:[])],
+    uniforms:['world','viewProjection','uCrown','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[])]:[]});
   terrMat.backFaceCulling=false;terrMat.setTexture('uMapA',texA);terrMat.setTexture('uMapB',texB);paperT.wrapU=paperT.wrapV=noiseT.wrapU=noiseT.wrapV=B.Texture.WRAP_ADDRESSMODE;terrMat.setTexture('uPaperT',paperT);terrMat.setTexture('uNoiseT',noiseT);terrMat.setFloat('uHmin',HMIN);terrMat.setFloat('uHmax',HMAX);
   if(LIT){for(const[n,c]of[['uCanopyT',cCanopy],['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
   terrainMesh().material=terrMat;
