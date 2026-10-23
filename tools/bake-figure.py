@@ -101,6 +101,14 @@ def tri_role(me, groups, vi, co, rgb):
     if co.y > .075 and co.z > .55: return 'pack'   # the pack and blanket roll on the back
     role = texel_role(rgb)
     if role in ('skin', 'leather') and co.z > .885: return 'dark'   # above the brim: the shako, black
+    # between the gaiters' tops and the collar, the navy in deep shade drifts to violet and grey (hue to 345, saturation
+    # down to 0.08, measured per triangle: the chest's and the back's 'dark' triangles, #133's review): the coat, not
+    # black (a white coat showed them as black blotches); the black there (the cartridge box, the scabbard) is warm or
+    # greyer
+    if role == 'dark' and .3 < co.z < .78:
+        r, g_, b_ = rgb; mx, mn = max(rgb), min(rgb); d = mx - mn or 1e-9; s = 0 if mx == 0 else d / mx
+        hue = (((g_ - b_) / d) % 6 if mx == r else (b_ - r) / d + 2 if mx == g_ else (r - g_) / d + 4) * 60
+        if 180 < hue < 345 and s > .08: return 'coat'
     # below the brim, on the head's bone: the face, its shaded side (value under 0.5) still skin, not leather (#133)
     if role == 'leather' and max(w, key=w.get, default='').endswith('Head'): return 'skin'
     return role

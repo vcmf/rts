@@ -70,9 +70,16 @@ with the nearest LOD side by side.
   over 0.6), skin from 12°, saturation up to 0.6, and leather on the head's bone below the shako's brim taken as skin.
   The hands are 96 / 94 / 78 % skin on LOD0 / LOD1 / LOD2 (were 2 / 8 / 35 %), the head's skin share 25 % (was 7).
   The root was the bake, not the shader's lookup or the uniforms (`#C89474` is what the skin role paints).
+- **The dark blotches on the white coats** (the coordinator's review of `faces-before-after.png`): the navy coat in
+  deep shade drifts to violet and grey (hue 280–345°, saturation 0.12–0.35, value 0.13–0.29), outside the coat test's
+  hue 195–275° and saturation over 0.12, so those triangles took the dark role: black on a white coat. Measured on the
+  chest and the back (|x| < 0.13, z 0.45–0.8 model units) LOD1's dark was 11.8 % of the front and 7.4 % of the back.
+  Now between the gaiters' tops and the collar (z 0.3–0.78) a dark texel of hue 180–345° and saturation over 0.08 is
+  the coat: 7.4 % and 3.9 % left (the scabbard on the left hip, the cartridge box: black in the uniform); the gaiters
+  keep their black. The coat's share of the figure: 21.3 → 25.0 % on LOD1, 17.5 → 23.3 % on LOD2.
 - **The nearest LOD**: three LODs nearest first, LOD0 9,274 triangles and 13,739 vertices (each triangle's role is
   flat, so vertices are split where roles meet), the animation unchanged (read from LOD1's scene). The unit data is
-  1,429,200 bytes (was 755,276; 0.47 MB gzipped). In the review views at 15 m, 91 to 108 of the nearest battalion's 414
+  1,426,272 bytes (was 755,276; 0.47 MB gzipped). In the review views at 15 m, 91 to 108 of the nearest battalion's 414
   men are drawn at LOD0; at 45 m none.
 - **The closest zoom, 15 m**, what it shows:
   - the figures: LOD0's faces, hands, crossbelts and turnbacks read; LOD1 next to it shows its facets and darker faces;

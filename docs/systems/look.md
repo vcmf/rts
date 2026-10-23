@@ -579,7 +579,7 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
 
 - **The figure**: `tools/bake-figure.py` (Blender, `-- <published figure dir>`) bakes the published GLBs into
   `data/figures/<figure>.unitdata` (`src/look/units-data.ts` reads and checks it): its LODs nearest first (here
-  three: the full figure, 9,274 triangles, then 1,197 and 243; the page reads two or three), each vertex's colour role (the reds told from the skin by hue, the face's shaded side kept skin: #133's red faces, `texel_role`) (coat, facings, white, dark, skin, leather, pack, wood, metal: from the
+  three: the full figure, 9,274 triangles, then 1,197 and 243; the page reads two or three), each vertex's colour role (the reds told from the skin by hue, the face's shaded side kept skin, the coat's violet shade kept coat: #133's review, `texel_role`, `tri_role`) (coat, facings, white, dark, skin, leather, pack, wood, metal: from the
   texture's colour, the musket by its bone, the pack by its place), and the bones' matrices at 12 fps for the clips
   each **role** uses (halt: Stand; march: Walking; run: Running; fire: Present, Aim, Fire, Reload), with the root
   speeds that keep the feet planted. The page names roles, never clips (decision 0015). At load: the far LOD posed at
