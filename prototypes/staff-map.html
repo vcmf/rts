@@ -319,11 +319,56 @@ function bakeHachures(){
   paths.forEach((p,b)=>{const w=(b+0.5)/BINS*0.85;gA.lineWidth=Math.max(0.45,w*SP*PX);gA.strokeStyle=`rgba(255,0,0,${clamp(0.35+w,0,1)})`;gA.stroke(p);});
   return n;
 }
+// the lit style's bakes (docs/plans/active/map-view-lit-v1.md, v2), once per map: the relief's light, and the canopy
+let cLight=null,cCanopy=null;
+const LW=1024,LH=Math.round(LW*MZ/MX);   // the light at about 4 m: the relief is smooth
+function bakeLight(){
+  const cw=2*MX/LW,hg=new Float32Array(LW*LH);
+  for(let j=0;j<LH;j++)for(let i=0;i<LW;i++)hg[j*LW+i]=Hs(-MX+(i+0.5)*cw,MZ-(j+0.5)*cw);
+  const at=(i,j)=>hg[clamp(j,0,LH-1)*LW+clamp(i,0,LW-1)];
+  const az=a=>[Math.cos(a),Math.sin(a)];   // a from +x toward north (+z, up the texture)
+  const key=[-0.579,0.574,0.579],fills=[200,240,280,320].map(d=>{const[cx,cz]=az(d*Math.PI/180);return[cx*0.866,0.5,cz*0.866];});
+  const[c,g]=newCanvas(LW,LH),im=g.getImageData(0,0,LW,LH),D=im.data,tanS=Math.tan(18*Math.PI/180),step=12/cw;
+  for(let j=0;j<LH;j++)for(let i=0;i<LW;i++){
+    const dx=(at(i+1,j)-at(i-1,j))/(2*cw),dz=(at(i,j-1)-at(i,j+1))/(2*cw),l=Math.hypot(dx,1,dz),n=[-dx/l,1/l,-dz/l];
+    const dot=v=>Math.max(0,n[0]*v[0]+n[1]*v[1]+n[2]*v[2]);
+    const lam=dot(key)/0.574,fill=fills.reduce((t,v)=>t+dot(v),0)/fills.length/0.5;
+    let sh=0;const h0=at(i,j);   // the shadow: march toward the sun (north-west, low), a few steps of 12 m
+    for(let k=1;k<=30;k++){const si=Math.round(i-k*step*0.707),sj=Math.round(j-k*step*0.707);if(si<0||sj<0)break;
+      const over=at(si,sj)-(h0+k*12*tanS);if(over>0){sh=Math.min(1,over/3);if(sh>=1)break;}}
+    const v=clamp(0.52+0.48*(0.75*lam+0.25*fill-1)-0.34*sh,0,1),o=(j*LW+i)*4;D[o]=v*255;D[o+1]=sh*255;D[o+2]=0;D[o+3]=255;}
+  g.putImageData(im,0,0);return c;
+}
+// a crown sprite: a dome lit from the north-west, darker toward its rim; a soft shadow sprite
+function crownSprite(){const N=64,[c,g]=newCanvas(N,N),im=g.createImageData(N,N),D=im.data,L=[-0.55,-0.55,0.63];
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){const dx=(x+0.5-N/2)/(N/2),dy=(y+0.5-N/2)/(N/2),dd=dx*dx+dy*dy,o=(y*N+x)*4;if(dd>=1){D[o+3]=0;continue;}
+    const z=Math.sqrt(1-dd),lum=clamp((0.3+0.7*Math.max(0,dx*L[0]+dy*L[1]+z*L[2]))*(0.62+0.38*z),0,1);
+    D[o]=0;D[o+1]=lum*255;D[o+2]=255;D[o+3]=255*(1-sstep(0.82,1,Math.sqrt(dd)));}
+  g.putImageData(im,0,0);return c;}
+function shadowSprite(){const N=64,[c,g]=newCanvas(N,N),gr=g.createRadialGradient(N/2,N/2,0,N/2,N/2,N/2);g.clearRect(0,0,N,N);g.globalCompositeOperation='source-over';
+  gr.addColorStop(0,'rgba(255,0,0,0.85)');gr.addColorStop(0.6,'rgba(255,0,0,0.55)');gr.addColorStop(1,'rgba(255,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,N,N);return c;}
+// a slow noise for clumps (value noise on a 60 m lattice)
+const clumpN=(x,z)=>{const fx=x/60,fz=z/60,i=Math.floor(fx),j=Math.floor(fz),u=sstep(0,1,fx-i),v=sstep(0,1,fz-j);
+  return lerp(lerp(hash(i,j),hash(i+1,j),u),lerp(hash(i,j+1),hash(i+1,j+1),u),v);};
+function bakeCanopy(){
+  const[c,g]=newCanvas(TW,TH),[cs,gs]=newCanvas(TW,TH),crown=crownSprite(),shade=shadowSprite();gs.clearRect(0,0,TW,TH);
+  g.globalCompositeOperation=gs.globalCompositeOperation='source-over';   // newCanvas sets lighter (additive): crowns must cover, not add
+  const R=mulberry(23),ts=[];
+  for(const t of TREES){if(Math.abs(t.x)>MX||Math.abs(t.z)>MZ)continue;const cl=clumpN(t.x,t.z);
+    const edge=t.wood&&!WOODS.some(w=>inWood(w,t.x,t.z,7));if(edge&&R()<0.35)continue;   // gaps near the edge: the field shows through
+    ts.push({x:t.x,z:t.z,r:(t.wood?4.6:3.4)*t.s*(0.8+0.5*cl)*(edge?0.8:1)});}
+  ts.sort((a,b)=>b.z-a.z);   // north first: a southern crown overlaps the one behind it
+  for(const t of ts){const r=t.r*PX*1.15;gs.drawImage(shade,tx(t.x)+t.r*PX*0.75-r,ty(t.z)+t.r*PX*0.75-r,2*r,2*r);}
+  g.drawImage(cs,0,0);cs.width=0;
+  for(const t of ts){const r=t.r*PX;g.drawImage(crown,tx(t.x)-r,ty(t.z)-r,2*r,2*r);}
+  return c;
+}
 function bakeMap(){
-  const nh=LIT?0:bakeHachures();   // the lit style draws contours, not hachures
+  const nh=LIT?0:bakeHachures();
+  if(LIT){cLight=bakeLight();cCanopy=bakeCanopy();}   // the lit style draws contours, not hachures
   // woods: area wash, edge line, one ring per tree (the same trees the 3D world grows)
   for(const w of WOODS){const P=[];for(let k=0;k<=140;k++){const th=k/140*6.2832,r=w.r(th);P.push([w.x+Math.cos(th)*r,w.z+Math.sin(th)*r]);}
-    poly(gA,P);gA.fillStyle='rgb(0,70,0)';gA.fill();poly(gB,P);gB.strokeStyle='rgba(255,0,0,0.75)';gB.lineWidth=1.1;gB.stroke();}
+    poly(gA,P);gA.fillStyle='rgb(0,70,0)';gA.fill();if(!LIT){poly(gB,P);gB.strokeStyle='rgba(255,0,0,0.75)';gB.lineWidth=1.1;gB.stroke();}}
   gA.strokeStyle='rgba(0,185,0,1)';gA.lineWidth=1.05;
   if(!LIT)for(const t of TREES){if(Math.abs(t.x)>MX||Math.abs(t.z)>MZ)continue;gA.beginPath();if(t.con){const s=3.4*PX*t.s;gA.moveTo(tx(t.x)-s,ty(t.z)+s*0.8);gA.lineTo(tx(t.x),ty(t.z)-s);gA.lineTo(tx(t.x)+s,ty(t.z)+s*0.8);}else gA.arc(tx(t.x),ty(t.z),3.1*PX*t.s,0,6.2832);gA.stroke();}
   // water: stream fill + double bank line; ponds with water lining (concentric lines inside the shore)
@@ -435,28 +480,22 @@ const TER_FS=`#ifdef LIT
 precision highp float;varying vec3 vW;varying vec3 vN;varying float vH;
 uniform sampler2D uMapA,uMapB,uPaperT,uNoiseT;
 #ifdef LIT
-/* the lit style: crowns, fields, roads made in the shader (docs/plans/active/map-view-lit-v1.md) */
+uniform sampler2D uLightT,uCanopyT;uniform float uContour;
+/* the lit style v2 (docs/plans/active/map-view-lit-v1.md): light and canopy are baked; fields are stand-ins */
 float h12(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 vec2 h22(vec2 p){return fract(sin(vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))))*43758.5453);}
-/* a canopy of crowns on a jittered 8 m grid, each a dome lit from the north-west, deep shade between them; a returns
-   whether the point is covered (a crown, or the shade between crowns inside the wood: at its edge only crowns) */
-vec4 canopy(vec2 p,vec3 base,float inner,float clump){
-  vec2 q=p/8.0,i=floor(q);float best=-1.0;vec2 bn=vec2(0.0);float tint=0.0;
-  for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 c=i+vec2(float(x),float(y)),h=h22(c),o=c+0.15+h*0.7;float rr=0.6+0.3*h12(c+7.0);
-    vec2 d=(q-o)/rr;float dd=dot(d,d);if(dd<1.0){float z=sqrt(1.0-dd)+h.x*0.35;if(z>best){best=z;bn=d;tint=h.y;}}}
-  float lit=clamp(dot(bn,normalize(vec2(-1.0,1.0)))*0.5+0.5,0.0,1.0);
-  vec3 cr=best<0.0?base*0.3:base*(0.45+0.85*lit)*mix(0.65,1.0,sqrt(max(0.0,1.0-dot(bn,bn))))*(0.88+tint*0.24);
-  cr*=clump;float cov=best<0.0?inner:1.0;
-  float fw=fwidth(q.x);return mix(vec4(cr,cov),vec4(base*0.72*clump,inner),smoothstep(0.25,0.7,fw));   /* crowns under a pixel: their average */
-}
-/* fields in patches about 180 m across, each with its own strip direction and tint, from the season wash */
-vec3 fields(vec2 p,vec3 wash){
-  vec2 q=p/180.0,i=floor(q);float bd=9.0;vec2 id=i;
-  for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 c=i+vec2(float(x),float(y)),o=c+h22(c);float d=length(q-o);if(d<bd){bd=d;id=c;}}
-  float h=h12(id),a=h12(id+3.1)*3.1416;vec2 dir=vec2(cos(a),sin(a));
-  vec3 col=mix(wash*vec3(0.86,0.96,0.78),wash*vec3(1.08,1.04,0.84),h);
-  float t=dot(p,dir)/10.0,st=abs(fract(t)-0.5)*2.0,fwt=fwidth(t);
-  return col*(1.0-0.14*(1.0-smoothstep(0.25,0.65,st))*(1.0-smoothstep(0.3,0.6,fwt)));
+/* stand-in fields with no hard edge: patches about 170 m across; strips as soft ridges about 5.5 m apart, broken, lit
+   from one side, fading out toward a patch border; a few patches plain meadow; a small tint within one hue family */
+vec3 fieldK(vec2 p,float mott){
+  vec2 q=p/170.0,i=floor(q);float f1=9.0,f2=9.0;vec2 id=i;
+  for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 c=i+vec2(float(x),float(y)),o=c+h22(c);float d=length(q-o);if(d<f1){f2=f1;f1=d;id=c;}else if(d<f2)f2=d;}
+  float border=smoothstep(0.02,0.16,f2-f1),h=h12(id),a=h12(id+3.1)*3.1416;vec2 dir=vec2(cos(a),sin(a)),perp=vec2(-dir.y,dir.x);
+  float t=dot(p,dir)/5.5+0.35*sin(dot(p,perp)/41.0),fw=fwidth(t);
+  float dash=smoothstep(0.25,0.7,fract(sin(dot(floor(vec2(dot(p,perp)/19.0,t)),vec2(12.9,78.2)))*437.5));
+  float ridge=sin(6.2832*t)*(0.35+0.65*abs(dot(dir,normalize(vec2(-1.0,1.0)))));
+  float amp=0.07*border*step(0.28,h)*(1.0-smoothstep(0.3,0.6,fw))*(0.55+0.45*dash);
+  float tint=(h-0.5)*0.08*mix(0.4,1.0,border);
+  return vec3(1.0+amp*ridge+tint,1.0+amp*ridge+tint*0.6,1.0+amp*ridge-tint*0.3)*(0.93+mott*0.14);
 }
 #endif
 uniform float uHachK,uRise,uWash,uInk,uMist,uHmin,uHmax,uSunK;uniform vec3 uSun;
@@ -486,7 +525,10 @@ void main(){
   vec3 mapC=mix(paper,paper*uWashC*1.12,clamp(washK,0.0,1.0)*inside);
   mapC=mix(mapC,mapC*uWoodW*1.15,uWoodWA*woodA*(0.75+0.25*wn));
 #ifdef LIT
-  mapC=mix(mapC,fields(vW.xz,uWashC)*(0.92+(g1-0.5)*0.18),0.82*inside);
+  vec4 Lt=texture2D(uLightT,clamp(uv,0.0,1.0));
+  vec3 ground=Lt.r<0.5?mix(uGSh,uGMid,Lt.r*2.0):mix(uGMid,uGLit,Lt.r*2.0-1.0);
+  float mott=0.5+0.18*(sin(vW.x/310.0+sin(vW.z/230.0)*1.7)+sin(vW.z/270.0+sin(vW.x/190.0)*1.9))+0.08*sin(vW.x/97.0+vW.z/131.0);   /* smooth, slow */
+  mapC=mix(mapC,ground*fieldK(vW.xz,mott),inside);
 #endif
   mapC=mix(mapC,mix(uWaterW,uWaterW*0.92,g2),water);
 #ifdef LIT
@@ -494,7 +536,11 @@ void main(){
   mapC=mix(mapC,vec3(0.5,0.38,0.25)*(0.85+fine*0.3)*mix(0.8,1.0,smoothstep(0.55,0.9,Bm.g)),rd*0.9*inside);   /* dirt, darker at its edges */
 #endif
   mapC=mix(mapC,mix(mapC,vec3(0.97,0.96,0.94),0.55),Bm.b*0.25*(1.0-uSeason/3.0));
+#ifdef LIT
+  mapC=mix(mapC,vec3(0.96,0.95,0.93),uMist*low*low*0.45*smoothstep(0.2,0.7,mott)*inside);   /* the smooth mottle, not the blocky noise */
+#else
   mapC=mix(mapC,vec3(0.96,0.95,0.93),uMist*low*low*0.45*smoothstep(0.2,0.7,wn)*inside);
+#endif
   /* the painted world (stand-in): three value bands, cool hue-shifted shadow */
   vec3 n=normalize(mix(vec3(0.0,1.0,0.0),normalize(vN),uRise));
   float br=nz2.g*0.55+nz2.b*0.45;
@@ -511,17 +557,13 @@ void main(){
   /* ink: lifts last */
   float k=uInk*thin;
 #ifdef LIT
-  /* woods: a canopy of crowns, and a shadow on the ground to the south-east (the mask 6 m toward the light) */
-  /* inner: the wood seen 7 m around, so near its edge only whole crowns draw and the edge comes out ragged */
-  vec2 du=vec2(7.0/${2*MX}.0,7.0/${2*MZ}.0);
-  float wood=smoothstep(0.1,0.3,A.g);
-  float inner=step(0.12,texture2D(uMapA,clamp(uv+du*vec2(1.0,0.0),0.0,1.0)).g)*step(0.12,texture2D(uMapA,clamp(uv-du*vec2(1.0,0.0),0.0,1.0)).g)
-    *step(0.12,texture2D(uMapA,clamp(uv+du*vec2(0.0,1.0),0.0,1.0)).g)*step(0.12,texture2D(uMapA,clamp(uv-du*vec2(0.0,1.0),0.0,1.0)).g);
-  float near=step(0.12,texture2D(uMapA,clamp(uv+du,0.0,1.0)).g)+step(0.12,texture2D(uMapA,clamp(uv-du,0.0,1.0)).g)+wood;   /* a crown may reach a little past the edge */
-  float shL=step(0.12,texture2D(uMapA,clamp(uv+vec2(-6.0/${2*MX}.0,-6.0/${2*MZ}.0),0.0,1.0)).g)*(1.0-wood);
-  col=mix(col,col*vec3(0.52,0.56,0.55),shL*0.6*k*inside);
-  vec4 cn=canopy(vW.xz,uCrown*0.85,inner,0.8+nz.r*0.4);
-  col=mix(col,cn.rgb,cn.a*step(0.5,near)*k*inside);
+  /* woods: the baked canopy, its shadow on the ground first, then the crowns lit by their own baked light */
+  vec4 Cn=texture2D(uCanopyT,clamp(uv,0.0,1.0))*inside;
+  col=mix(col,col*vec3(0.5,0.54,0.52),Cn.r*0.6*k);
+  float dense=smoothstep(0.25,0.6,texture2D(uCanopyT,clamp(uv,0.0,1.0),3.0).b);   /* the crowns blurred: shade follows them, no rim */
+  col=mix(col,uCrown*0.22,dense*0.85*k*inside);   /* deep shade between the crowns */
+  float lum=Cn.g/max(Cn.b,0.004);
+  col=mix(col,mix(uCrown*0.34,min(uCrown*1.08,vec3(1.0)),lum)*(0.92+mott*0.16),Cn.b*k);
 #else
   col=mix(col,uWoodInk,woodMark*0.9*k);
 #endif
@@ -531,13 +573,13 @@ void main(){
   float hx=vH/25.0,fwx=max(fwidth(hx),1e-4),dx=abs(fract(hx-0.5)-0.5)/fwx;
   float minorC=(1.0-smoothstep(0.5,1.3,dc))*(1.0-smoothstep(0.22,0.5,fwc));
   float indexC=(1.0-smoothstep(0.9,1.9,dx))*(1.0-smoothstep(0.3,0.7,fwx));
-  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.4,indexC*0.7)*k*inside*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
+  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.4,indexC*0.7)*k*inside*uContour*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* far zoom only, faint under the woods */
 #else
   col=mix(col,uHach,clamp(A.r*1.05,0.0,1.0)*k*uHachK);
 #endif
   col=mix(col,uLine,clamp(Bm.r,0.0,1.0)*k);
 #ifdef LIT
-  col*=mix(0.93+(g1-0.5)*0.16+(fine-0.5)*0.12,1.0,uWash);   /* the paper only: the painted world takes none */
+  col*=mix(mix(0.93+(g1-0.5)*0.16+(fine-0.5)*0.12,1.0,0.8*inside),1.0,uWash);   /* the paper around the map, barely the land, never the painted world */
 #endif
   gl_FragColor=vec4(col,1.0);
 }`;
@@ -1173,8 +1215,9 @@ function build(){
   window.__bake={hachures:nh,ms:Math.round(bakeMs),trees:TREES.length,houses:HOUSES.length};
   const COMMONU=['uSun','uSeason','uMist','uGSh'];
   terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal'],
-    uniforms:['world','viewProjection','uCrown','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT'],defines:LIT?['#define LIT']:[]});
+    uniforms:['world','viewProjection','uCrown','uContour','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uLightT','uCanopyT']:[])],defines:LIT?['#define LIT']:[]});
   terrMat.backFaceCulling=false;terrMat.setTexture('uMapA',texA);terrMat.setTexture('uMapB',texB);paperT.wrapU=paperT.wrapV=noiseT.wrapU=noiseT.wrapV=B.Texture.WRAP_ADDRESSMODE;terrMat.setTexture('uPaperT',paperT);terrMat.setTexture('uNoiseT',noiseT);terrMat.setFloat('uHmin',HMIN);terrMat.setFloat('uHmax',HMAX);
+  if(LIT){for(const[n,c]of[['uLightT',cLight],['uCanopyT',cCanopy]]){const t=rawTex(c);t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
   terrainMesh().material=terrMat;
   {const O=30000,y=HMIN-1,P=[-TX,y,-TZ,TX,y,-TZ,TX,y,TZ,-TX,y,TZ,-O,y,-O,O,y,-O,O,y,O,-O,y,O],I=[0,4,1,1,4,5,1,5,2,2,5,6,2,6,3,3,6,7,3,7,0,0,7,4],
     m=new B.Mesh('skirt',scene),vd=new B.VertexData();vd.positions=P;vd.indices=I;vd.normals=[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0];vd.applyToMesh(m);m.material=terrMat;m.isPickable=false;m.alwaysSelectAsActiveMesh=true;}
@@ -1300,7 +1343,8 @@ function frame(){
   const s=SEASON,mist=1-sstep(1800,4500,GT),sunK=sstep(1500,3600,GT);
   const set3=(m,n,v)=>{const k=m.name+n,c=COLS[k]||(COLS[k]=new C3());c.set(v[0],v[1],v[2]);m.setColor3(n,c);};   // setColor3 keeps the reference
   for(const m of[terrMat,propMat,figMat]){m.setVector3('uSun',SUN);m.setFloat('uSeason',s);m.setFloat('uMist',mist);set3(m,'uGSh',seasonCol('gSh',s));}
-  terrMat.setFloat('uRise',RISE());terrMat.setFloat('uHachK',1-0.5*(1-sstep(Math.log(900),Math.log(2400),Math.log(CUR.R))));terrMat.setFloat('uWash',st('wash'));terrMat.setFloat('uInk',1-st('ink'));terrMat.setFloat('uSunK',sunK);
+  terrMat.setFloat('uRise',RISE());if(LIT)terrMat.setFloat('uContour',sstep(Math.log(2600),Math.log(4500),Math.log(CUR.R)));   // contours at far zoom only (the owner, 2026-10-23)
+  terrMat.setFloat('uHachK',1-0.5*(1-sstep(Math.log(900),Math.log(2400),Math.log(CUR.R))));terrMat.setFloat('uWash',st('wash'));terrMat.setFloat('uInk',1-st('ink'));terrMat.setFloat('uSunK',sunK);
   for(const k in TER_COLS)set3(terrMat,TER_COLS[k],seasonCol(k,s));
   terrMat.setFloat('uWashA',seasonCol('washA',s));terrMat.setFloat('uWoodWA',seasonCol('woodWA',s));
   propMat.setFloat('uRise',RISE());propMat.setFloat('uSprout',st('sprout'));set3(propMat,'uCrown',seasonCol('crown',s));set3(propMat,'uConifer',seasonCol('conifer',s));
