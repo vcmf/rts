@@ -89,7 +89,8 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
 - **Guards** (the owner, in the paper layers' PR #141): the Garde Impériale and the Russian Imperial Guard in their
   army's colour, darker and a little warm, with a rust cavalry stripe (never white), a legend row; a first try mixing
   the coat with rust read purple-black, too close to the ink, and a rust edge was dropped at the owner's request.
-- **Austria in beige**, not white (`#ECE0C2`, its blue-grey edge kept so it stays apart from the paper).
+- **Austria in beige**, not white: a light stone beige (`#F4EDDC`, lighter than every season's paper) in the lit style
+  only, its blue-grey edge kept; the ink style keeps its white.
 - **Losses as wear**: a block loses ragged bites from its edges as its strength falls (up to ten, some through the
   block), seeded by the unit so they stay put; on top of the shorter frontage it already had.
 - **Squares fire all round**: a square fires at an enemy in any direction, and its smoke rises from all four faces.
@@ -213,3 +214,9 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
   the drawn heading (it followed the zoom's symbol size); Austria's coat back to the art bible's (the 3D figures
   share it), only the blocks' fill beige; the guards' legend swatches from the palette, with the rust stripe; the
   staff map design doc updated. Left: the bites rebuilt each frame (not measured; a cache if a battle late shows it).
+- **Wear: round 2**: severe: the first beige (`#ECE0C2`) was the winter paper's value, an Austrian block's fill gone
+  into it. Fixed (a lighter stone beige, lit style only, as the design doc says), with: the bites chosen by the
+  block's edges on the ground, not on screen, so they stay on their edge as the camera turns; a square's bites as deep
+  as its ring, not its side (it fell apart at 80 %); the bites drawn after the outline, so they break it; a square's
+  four-face smoke placed on the block as drawn (at far zoom it sat inside the symbol); one formed-square test; the
+  legend's guard swatches equal, each with its stripe. The per-frame bite build stays (unmeasured; noted).

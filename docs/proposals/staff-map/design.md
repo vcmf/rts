@@ -159,7 +159,7 @@ Blocks are flat, sharp-cornered, with no shadow, bevel or outline glow.
 ### Colours
 From `docs/art-bible.md` §4: France `#2C4FA8`, Russia `#2F6B3C`, Britain `#B3302A`.
 **Austria** (`#E9E3D3`) would vanish on winter paper, so Austrian blocks are filled a brighter
-white (`#fbfaf6`; a light beige `#ECE0C2` in the lit style, at the owner's request) and always carry a bold grey-blue edge (`#4f6279`); a routing Austrian block
+white (`#fbfaf6`; a light stone beige `#F4EDDC` in the lit style, at the owner's request) and always carry a bold grey-blue edge (`#4f6279`); a routing Austrian block
 blinks between that grey-blue and white. Every army colour is checked against every
 season's paper. In the lit style a **guard** (the Garde Impériale, the Russian Imperial Guard) is its army's
 colour, darker and a little warm, with a rust cavalry stripe, never white; no edge.
