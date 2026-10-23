@@ -95,3 +95,8 @@ Out of scope: brigade counts per army, divisions as a level, battalions acting a
     the gaps from above starting just over the barrel (most of their depth had been empty space); the gaps cached on
     the unit per loss step; a routing battery's bites counted as on its gun (6, not the blocks' 10). The soft shadow
     stays whole (noted).
+  - **Round 3**: moderate and light only, so the review stops. Fixed: the gaps from above cut through the barrel (a
+    shallow one had shown under a pixel at the smallest icon); one `WEAR_MAX` for the gun and a routing battery; the
+    gap cache dropped (render state on the sim's unit, for nothing measurable); one `clipOut` helper for the gun's
+    shadow pass and its gaps; the design doc and comments current. Left: the gun's soft shadow has no gaps; a battery
+    that routs shows its wear as block bites at new places (the count kept).

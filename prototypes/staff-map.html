@@ -1132,8 +1132,8 @@ function addPoly(path, pts) {
 }
 
 /**
- * Losses as wear: ragged dark bites out of a block's edges, more as its strength falls (none at full strength, ten
- * near the end), some cutting right through. Seeded by the unit, so the same bites come back every frame and a
+ * Losses as wear: ragged dark bites out of a block's edges, more as its strength falls (none at full strength,
+ * WEAR_MAX near the end: ten, six for a routing battery as on its gun), some cutting right through. Seeded by the unit, so the same bites come back every frame and a
  * block wears down rather than flickers.
  *
  * @param u     the unit
@@ -1146,7 +1146,7 @@ function addPoly(path, pts) {
  *              by salt as its index
  */
 function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
-  const total = wearCount(u, u.type === 'art' ? 6 : 10);   // a battery as on its gun, so routing keeps its count
+  const total = wearCount(u, WEAR_MAX[u.type] ?? WEAR_MAX.block);
   const n = Math.floor(total / bars) + (salt < total % bars ? 1 : 0);   // dealt out over the bars: the same total as a block
   const weights = bars > 1 ? BITE_EDGE_W_BAR : BITE_EDGE_W;
   if (!n) return;
@@ -1248,6 +1248,9 @@ function gunPx(u) {
   return clamp(lengthM / MPP * 0.9, 18, 44);
 }
 
+// The most wear marks a unit shows: a battery's small gun icon takes fewer (its gaps, and its bites if it routs).
+const WEAR_MAX = { art: 6, block: 10 };
+
 /** How many wear bites a unit shows, up to max: none at full strength, max by 30 % (when it is about to go). */
 const wearCount = (u, max) => Math.round(clamp((1 - u.str) / 0.7, 0, 1) * max);
 
@@ -1259,21 +1262,20 @@ function unitRng(u, salt = 0) {
 
 /**
  * Losses on a battery: the gaps worn into its gun icon, as the blocks wear (damage()), more as its strength falls (up
- * to six: the icon is small). Returns the gaps as polygons in the icon's own 15 x 15 space, placed where the gun is:
- * across the barrel from above, through the wheel and the trail from below. Cached on the unit for its current count,
- * since they only change when the count does. drawGun leaves them out of the gun, so they are real holes.
+ * to WEAR_MAX.art: the icon is small). Returns the gaps as polygons in the icon's own 15 x 15 space, placed where the
+ * gun is: across the barrel from above, through the wheel and the trail from below. Recomputed each frame (six small
+ * polygons from the unit's seed: cheaper than keeping them). drawGun leaves them out of the gun, so they are holes.
  */
 function gunGaps(u) {
-  const n = wearCount(u, 6);
-  if (u.gunGaps && u.gunGaps.n === n) return u.gunGaps.polys;
+  const n = wearCount(u, WEAR_MAX.art);
   const rnd = unitRng(u);
   const polys = [];
   for (let k = 0; k < n; k++) {
     const fromTop = rnd() < 0.5;
     const x = fromTop ? 5 + 8.5 * rnd() : 1.5 + 7 * rnd();   // the barrel; the wheel and the trail
     const y0 = fromTop ? 3.4 : 12;                           // just above the barrel; below the icon
-    const depth = fromTop ? 1.4 + 1.0 * rnd() : -(2.5 + 2.5 * rnd());
-    const hw = 0.45 + 0.45 * rnd();
+    const depth = fromTop ? 2.0 + 0.8 * rnd() : -(2.5 + 2.5 * rnd());   // from above: through the barrel (y 4.1 to 4.3)
+    const hw = 0.5 + 0.45 * rnd();
     polys.push([
       [x - hw, y0],
       [x - hw * 0.4, y0 + depth * (0.5 + 0.3 * rnd())],
@@ -1282,22 +1284,19 @@ function gunGaps(u) {
       [x + hw, y0],
     ]);
   }
-  u.gunGaps = { n, polys };
   return polys;
 }
 
 /**
- * Clips the ink to everything but the gaps (in the current transform), one gap at a time: each clip keeps what lies
- * outside that gap, so together they cut every gap, overlaps included. Nothing is erased; the gun is just drawn around
- * them.
+ * Clips the ink to everything outside a shape (a Path2D or a polygon), in the current transform. Clips add up, so a
+ * call per shape cuts them all, overlaps included.
  */
-function clipOutGaps(polys) {
-  for (const P of polys) {
-    const keep = new Path2D();
-    keep.rect(-100, -100, 215, 215);
-    addPoly(keep, P);
-    ink.clip(keep, 'evenodd');
-  }
+function clipOut(shape) {
+  const keep = new Path2D();
+  keep.rect(-1e4, -1e4, 2e4, 2e4);
+  if (shape instanceof Path2D) keep.addPath(shape);
+  else addPoly(keep, shape);
+  ink.clip(keep, 'evenodd');
 }
 
 function drawGun(C,s,shadowOnly,S,u){
@@ -1305,9 +1304,9 @@ function drawGun(C,s,shadowOnly,S,u){
   const a=Math.atan2(fr[1]-bk[1],fr[0]-bk[0]),k=S/15,[sx,sy]=raiseOf(SHADOW_PX*0.6);
   ink.save();ink.translate(m[0],m[1]);ink.rotate(a);if(Math.cos(a)<0)ink.scale(1,-1);ink.rotate(-GUN_ANG);ink.scale(k,k);ink.translate(-7.5,-7.5);
   if(shadowOnly){   // in the shadow pass, before any top face: the shadow alone, the icon clipped out (the top pass draws it)
-    const P=new Path2D();P.rect(-60,-60,135,135);P.addPath(GUN);ink.clip(P,'evenodd');ink.shadowColor='rgba(52,38,18,0.45)';ink.shadowBlur=4*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;
+    clipOut(GUN);ink.shadowColor='rgba(52,38,18,0.45)';ink.shadowBlur=4*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;
     ink.fillStyle=css(s.f);ink.fill(GUN);ink.restore();return null;}
-  clipOutGaps(gunGaps(u));   // losses: the gun and its outline drawn around the gaps (its soft shadow stays whole)
+  for (const gap of gunGaps(u)) clipOut(gap);   // losses: the gun and its outline drawn around the gaps (its soft shadow stays whole)
   ink.fillStyle=css(s.f);ink.fill(GUN);
   ink.lineWidth=0.9/k;ink.strokeStyle=s.e?css(s.e):'rgba(30,22,12,0.55)';ink.stroke(GUN);
   ink.restore();
