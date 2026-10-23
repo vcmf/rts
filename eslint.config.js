@@ -6,6 +6,22 @@ import tseslint from 'typescript-eslint'
 const banned = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh',
   'exp', 'expm1', 'log', 'log1p', 'log2', 'log10', 'pow', 'hypot', 'cbrt', 'fround', 'random']
 
+// decision 0052: the areas Prettier formats so far, and the style rules below cover. .prettierignore lists the rest;
+// test/format-scope.test.ts checks the two agree. Later PRs add areas here and take them out of .prettierignore.
+export const formatted = ['src/sim/', 'src/rulesets/', 'src/scenarios/', 'maps/']
+
+// max-len skips a line that holds a string, and with it a comment at its end: this checks every comment on its own
+const commentWidth = {
+  meta: { type: 'layout', schema: [] },
+  create: context => ({
+    Program() {
+      for (const c of context.sourceCode.getAllComments()) {
+        if (c.loc.end.column > 120) context.report({ loc: c.loc, message: `This comment ends at column ${c.loc.end.column}. Maximum allowed is 120.` })
+      }
+    },
+  }),
+}
+
 export default tseslint.config(
   { ignores: ['node_modules/', 'dist/', 'scratch/', 'data/', 'prototypes/', 'tools/*.js', 'tools/*.mjs', 'tools/*.py', 'eslint.config.js'] },
   ...tseslint.configs.recommended,
@@ -49,15 +65,15 @@ export default tseslint.config(
   // a ruleset is data for the sim: the same rules, and it may import the sim's types and maths
   { files: ['src/rulesets/**/*.ts'], rules: { 'no-restricted-imports': ['error', { patterns: [
     { regex: '^(?!\\.\\./sim/[\\w-]+\\.ts$|\\./)', message: 'A ruleset imports only from src/sim/ and src/rulesets/.' }] }] } },
-  // decision 0052: lines within 120 columns, comments included (Prettier lays out the code, not the comments);
-  // one statement per line, one name per declaration, braces on a body that does not fit on the line. Only the
-  // areas Prettier formats so far (.prettierignore); later PRs widen the list.
+  // decision 0052: lines within 120 columns (Prettier lays out the code, not the comments); one statement per line,
+  // one name per declaration, braces on a body that does not fit on the line
   {
-    files: ['src/sim/**/*.ts', 'src/rulesets/**/*.ts', 'src/scenarios/**/*.ts', 'maps/**/*.ts'],
-    plugins: { '@stylistic': stylistic },
+    files: formatted.map(dir => `${dir}**/*.ts`),
+    plugins: { '@stylistic': stylistic, local: { rules: { 'comment-width': commentWidth } } },
     rules: {
       '@stylistic/max-len': ['error', {
         code: 120, ignoreUrls: true, ignoreStrings: true, ignoreTemplateLiterals: true, ignoreRegExpLiterals: true }],
+      'local/comment-width': 'error',
       '@stylistic/max-statements-per-line': ['error', { max: 1 }],
       'one-var': ['error', 'never'],
       curly: ['error', 'multi-line'],

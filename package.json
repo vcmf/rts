@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write . --log-level warn && eslint --fix . && prettier --write . --log-level warn",
+    "format": "prettier --write . --log-level warn && (eslint --fix .; s=$?; prettier --write . --log-level warn && exit $s)",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "build:data": "node tools/build-sim-data.ts && node tools/build-look-data.ts",
