@@ -293,7 +293,7 @@ for(let z=1500;z>STREAM_Z0;z-=17){if(RND()<0.45)continue;const side=RND()<0.5?-1
 
 /* =========================================================================
    THE MAP BAKE (docs/proposals/staff-map/implementation.md §3)
-   tex A: R hachures · G woods (area 70, marks 255) · B water
+   tex A: R hachures (ink style) or the water depth (lit style, bakeWaterDepth) · G woods (area 70, marks 255) · B water
    tex B: R line ink (banks, roads, wood edges, houses) · G roads · B village yards
    ========================================================================= */
 const TW=4096,TH=Math.round(TW*MZ/MX),PX=TW/(2*MX);          // texels per metre ≈ 0.975
@@ -381,15 +381,16 @@ function bakeHouses(){
   for(const t of tops){fill(t.C,css(t.col));g.strokeStyle='rgba(255,250,236,0.35)';g.lineWidth=0.8;g.stroke();}
   return c;
 }
-const SHORES = new Map();
+const SHORES = new Map();   // pond -> (level -> shore)
 
 /**
  * A pond's shore as world points: where pondE reaches s (1 is the shore, below 1 inside), found along 160 rays.
  * Memoised, since the map bake and the water depth both trace it.
  */
 function pondShore(p, s) {
-  const key = p.name + ':' + s;
-  if (SHORES.has(key)) return SHORES.get(key);
+  if (!SHORES.has(p)) SHORES.set(p, new Map());
+  const levels = SHORES.get(p);
+  if (levels.has(s)) return levels.get(s);
   const P = [];
   for (let k = 0; k <= 160; k++) {
     const th = k / 160 * 6.2832;
@@ -400,7 +401,7 @@ function pondShore(p, s) {
     }
     P.push([p.x + Math.cos(th) * p.rx * lo, p.z + Math.sin(th) * p.rz * lo]);
   }
-  SHORES.set(key, P);
+  levels.set(s, P);
   return P;
 }
 
@@ -412,20 +413,36 @@ function pondShore(p, s) {
  * whose bake mode adds the channels.
  */
 function bakeWaterDepth() {
-  gA.fillStyle = gA.strokeStyle = 'rgb(255,0,0)';
+  // blurred anyway, so baked at a quarter of the map's texels on a GPU canvas (fast), then scaled up into gA
+  const K = 4;
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(TW / K);
+  c.height = Math.ceil(TH / K);
+  const g = c.getContext('2d');
+  g.scale(1 / K, 1 / K);   // draw in the map's texels
+  g.fillStyle = g.strokeStyle = 'rgb(255,0,0)';
   // the stream is 11 m wide: a 3 m blur still reaches near one on its centre line
-  gA.filter = `blur(${(3 * PX).toFixed(1)}px)`;
-  poly(gA, STREAM);
-  gA.lineWidth = 11 * PX;
-  gA.lineJoin = 'round';
-  gA.stroke();
-  // the ponds: a wider blur, a broad band of shallows along the shore
-  gA.filter = `blur(${(9 * PX).toFixed(1)}px)`;
-  for (const p of PONDS) {
-    poly(gA, pondShore(p, 1));
-    gA.fill();
-  }
-  gA.filter = 'none';
+  g.filter = `blur(${(3 * PX / K).toFixed(2)}px)`;
+  poly(g, STREAM);
+  g.lineWidth = 11 * PX;
+  g.lineJoin = 'round';
+  g.stroke();
+  // the ponds: a wider blur, a broad band of shallows along the shore; one path, one blur for them all
+  g.filter = `blur(${(9 * PX / K).toFixed(2)}px)`;
+  g.beginPath();
+  for (const p of PONDS) addShore(g, pondShore(p, 1));
+  g.fill();
+  gA.save();
+  gA.imageSmoothingQuality = 'high';
+  gA.drawImage(c, 0, 0, TW, TH);   // added into the red channel (the bake's mode is additive)
+  gA.restore();
+}
+
+/** Adds a closed shore (world points) to a canvas path, in the bake's texels. */
+function addShore(g, P) {
+  g.moveTo(tx(P[0][0]), ty(P[0][1]));
+  for (let i = 1; i < P.length; i++) g.lineTo(tx(P[i][0]), ty(P[i][1]));
+  g.closePath();
 }
 
 function bakeMap(){
@@ -622,27 +639,33 @@ void main(){
 #ifdef LIT
   {
     /* water as a wash on the paper: the grain shows through, stronger at the banks, paler in the middle */
-    float D = A.r;
-    vec2 du = vec2(4.0 / ${TW}.0, 0.0), dv = vec2(0.0, 4.0 / ${TH}.0);   /* 4 texels: the 8-bit depth does not band */
+    /* the depth read at full resolution (bias -8: no mip), so the effect holds at every zoom */
     vec2 cuv = clamp(uv, 0.0, 1.0);
-    /* the slope of the depth, in world x and z (uv y runs against z); it points from the bank into the water */
-    vec2 gW = vec2(texture2D(uMapA, cuv + du).r - texture2D(uMapA, cuv - du).r,
-                   texture2D(uMapA, cuv - dv).r - texture2D(uMapA, cuv + dv).r);
-    vec2 n = gW / max(length(gW), 1e-4);
-    float slope = smoothstep(0.006, 0.04, length(gW));
-    float mid = smoothstep(0.55, 0.9, D);
+    float D = texture2D(uMapA, cuv, -8.0).r * inside;
+    if (D > 0.004) {   /* only near water: the slope costs four more samples */
+      vec2 du = vec2(4.0 / ${TW}.0, 0.0), dv = vec2(0.0, 4.0 / ${TH}.0);   /* 4 texels: the 8-bit depth does not band */
+      /* the slope of the depth, in world x and z (uv y runs against z); it points from the bank into the water */
+      vec2 gW = vec2(texture2D(uMapA, cuv + du, -8.0).r - texture2D(uMapA, cuv - du, -8.0).r,
+                     texture2D(uMapA, cuv - dv, -8.0).r - texture2D(uMapA, cuv + dv, -8.0).r);
+      vec2 n = gW / max(length(gW), 1e-4);
+      /* no bank at the map's edge, where the water runs on beyond the bake */
+      float slope = smoothstep(0.006, 0.04, length(gW)) * smoothstep(0.0, 0.006, edge);
+      float mid = smoothstep(0.55, 0.9, D);
 #ifdef LAYERS
-    vec3 under = flatPaper;
+      vec3 under = flatPaper;
 #else
-    vec3 under = mapC;
+      vec3 under = mapC;
 #endif
-    vec3 wash = mix(under, uWaterW * 0.96, mix(0.62, 0.34, mid));
-    /* sunk below the land: the bank toward the light shades the water under it, the far bank catches the light */
-    float shade = clamp(dot(n, -uLightXZ), 0.0, 1.0) * slope * (1.0 - mid);
-    wash *= 1.0 - 0.38 * shade * vec3(1.0, 0.97, 0.92);
-    float lit = clamp(dot(n, uLightXZ), 0.0, 1.0) * slope * smoothstep(0.18, 0.4, D) * (1.0 - water);
-    mapC = mix(mapC, min(mapC * 1.1 + 0.02, vec3(1.0)), 0.6 * lit * inside);
-    mapC = mix(mapC, wash, water);
+      vec3 wash = mix(under, uWaterW * 0.96, mix(0.62, 0.34, mid));
+      /* sunk below the land: the bank toward the light shades the water under it, the far bank catches the light */
+      float shade = clamp(dot(n, -uLightXZ), 0.0, 1.0) * slope * (1.0 - mid);
+      wash *= 1.0 - 0.38 * shade * vec3(1.0, 0.97, 0.92);
+      float lit = clamp(dot(n, uLightXZ), 0.0, 1.0) * slope * smoothstep(0.18, 0.4, D) * (1.0 - water);
+      mapC = mix(mapC, min(mapC * 1.1 + 0.02, vec3(1.0)), 0.6 * lit);
+      mapC = mix(mapC, wash, water);
+    } else {
+      mapC = mix(mapC, uWaterW, water);   /* not reached in practice: water always has depth */
+    }
   }
 #else
   mapC=mix(mapC,mix(uWaterW,uWaterW*0.92,g2),water);
