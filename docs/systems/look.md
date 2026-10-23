@@ -1,8 +1,8 @@
 ---
 status: current
 last_reviewed: 2026-10-19
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts]
-decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
+decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows]
 ---
 
 # The look page (Track E, L0)
@@ -567,6 +567,86 @@ cameras orbit that point instead of the camera's start, and the JSON records it 
   browser the frame time is held at the display's refresh (16.7 ms at 60 Hz) whenever the frame is cheaper.
 - `node tools/bench-look.mjs <url> [out.json] [--hold s] [--gpu metal]` runs it headless (SwiftShader by
   default: slow, and its timer times software rendering), with vsync and the frame-rate limit off. The laptop run is the owner's (`docs/plans/active/track-e-look.md`, "Measuring").
+
+### The armies (`?armies=<n>`, scripted; `docs/plans/active/armies-demo.md`)
+
+`?armies=<1..20>` puts n battalions a side on the demo map (414 men each, the ruleset's drill: 5 about 4,000
+figures, 10 about 8,000, 20 about 16,500); not on the page by default, so the goldens and the look checks never see
+them. WebGL2 only (decision 0046). Each switch below names the A/B it restores; the defaults are the measured best.
+The page names no era (decision 0015): the demo's scenario (`src/scenarios/armies-demo.ts`) names its ruleset, unit
+type, figure and uniforms, resolved through `src/rulesets/index.ts` (`RULESETS`: a ruleset and its uniforms by name)
+and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glob in `src/look/main.ts`).
+
+- **The figure**: `tools/bake-figure.py` (Blender, `-- <published figure dir>`) bakes the published GLBs into
+  `data/figures/<figure>.unitdata` (`src/look/units-data.ts` reads and checks it): both LODs (1,197 and 243
+  triangles), each vertex's colour role (coat, facings, white, dark, skin, leather, pack, wood, metal: from the
+  texture's colour, the musket by its bone, the pack by its place), and the bones' matrices at 12 fps for the clips
+  each **role** uses (halt: Stand; march: Walking; run: Running; fire: Present, Aim, Fire, Reload), with the root
+  speeds that keep the feet planted. The page names roles, never clips (decision 0015). At load: the far LOD posed at
+  every step (`posedVertices`: a place and a normal, two float texels a vertex) and the **shadow proxy** built from it
+  and posed (`shadowProxy`, `posedMesh`: two crossed quads along each part a bone carries, 112 vertices, 56 triangles).
+- **The renderer** (`src/look/units.ts`): a thin-instanced host a battalion for each of the near LOD, the far LOD and
+  the proxy; the near LOD skinned from the bones' texture (`texelFetch`), the far LOD and the proxy posed (`VAT_POS`;
+  `?uvat=0`: the far LOD skinned); a man's step from his clip's first row, its length and his phase. Materials are
+  per uniform and LOD. The figures are painted as the army blocks (`KEEP_HUE`, `BOUNCE`, `NOSNOW`) and blur by their
+  depth (decision 0040). A battalion's instances are written when it moves (once a 1/12 s step) or changes phase; its
+  LOD by the figure's height in pixels (48, ±10 %). The pose's step is counted on the CPU (`uVATStep`, the clock's
+  floor in double precision), so the figures and their shadows never disagree on a step; a battalion's bounds are
+  padded by the tallest figure (2.6 m, as tall as the far figures grow) and the farthest reach of the baked poses (as
+  wide as they grow). The view's corner rays are cast once a frame
+  (`castView`) for the sun's box and the trodden mask's.
+- **Their shadows** (decision 0047; `?unitshadow=0`: none): a 2048² depth-only map (24 bits, a comparison sampler), the
+  sun's box fitted to the ground in view's own heights and centred on what it holds, its near and far fitted along the
+  sun. Drawn only when it would change (the poses' step, a battalion's men, the casters, the box; `?ushadowrate=0`:
+  every frame), the box held while the view stays inside its slack of 10 % of the view's half-size, 6 m at least
+  (`?smhold=fixed`: batch B's box 2 m round the view, which a pan refit nearly every frame; the trodden mask's refit
+  goes with it); an empty map is drawn once and kept. Cast by the proxy (`?shadowlod=far`: the far LOD; `?ushadowlod=1`:
+  the near LOD where drawn), shown to the map alone, from the battalions whose bounds stretched away from the sun by the
+  longest shadow cross the view (`?ucull=0`: all in the box). The ground reads it by two hardware comparisons a texel
+  either side of the point, turned by the grain (`unitShadowAt`: a brush edge); the meadow once a blade at its root
+  (`UNIT_SHADOWS_VS`, `meadow.vert`; `?ushadowvs=0`: every pixel). The texel at r45 / r125 / r260: 3.9 × 2.5,
+  9.2 × 5.5, 18.4 × 10.4 cm in the sun's view (× 2.2 along the sun on the ground), the slack's 10 % on top while held.
+  The merged mass under a battalion is the low sun's: 3.6 m shadows over ranks 0.85 m apart.
+- **Uniforms** (the owner's call 2026-10-22): a battalion wears a uniform by id, whatever its side; a uniform
+  (`Uniform`, `src/sim/ruleset.ts`; the era's in `src/rulesets/napoleonic-uniforms.ts`; the demo's sides' in
+  `src/scenarios/armies-demo.ts`) is its colours by the figure's roles, its flag's, and its **far rule**: from above, a
+  far figure shows its headgear, pack and leather more than its coat; under 'coat' those roles take the coat a value
+  step down (`farPalette`, `FAR_ROLES`), crossfaded in as the figure shrinks below the LOD switch, with the trees' and
+  hills' shadow on it halved and a warm rim on what faces up (`FAR`); under 'own' the far figure keeps its own. Unset,
+  a coat under luminance 0.18 (Rec. 709 on linear sRGB, a mid grey: `FAR_COAT_BELOW`) takes 'coat'. `?farpal=0|1`
+  forces the rule off or on for every uniform.
+- **Far figures larger** (`?farscale=0`: their own size): the far LOD grows as the figure falls from 90 % of the LOD
+  switch to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here) and 1.15 tall; render only.
+- **Trodden ground** (`?trample=0`: none): a 256² mask over a box round the ground in view (64 to 1,024 m), drawn on
+  the CPU (each man where he stands and up to 3.8 m behind him) when the box moves or at most every 0.25 s while men
+  move (a view that leaves the box refits it at once; a box grown over twice the view refits by the wall's clock),
+  about 1.1 to 1.6 ms a draw at 16,560 figures (this Mac); the ground and the meadow read it in their vertex shaders
+  (`TRAMPLE`; none outside the mask's box): the grass shorter, splayed and drier, the ground toward a dusty earth in
+  summer and a grey-brown slush in winter, broken by the grain.
+- **Flags** (`?flags=0`: none): one a battalion, its uniform's flag on a 3 m staff with the colour bearer (the line's
+  centre file, second rank), the cloth downwind and waving at 12 fps, never under 12 px tall (up to 5 times its size);
+  one thin-instanced mesh, hidden with the figures (`show`).
+- **The script** (`src/look/world/armies.ts`, deterministic, the sim's stand-in): each battalion in line marches 36 m
+  in column of companies, halts 4 s, deploys into line at the run, pauses 3 s, then fires by ranks (1.4 s apart) until
+  its 110 s cycle starts again; battalions are 9.7 s apart in the cycle. **The layout** keeps every battalion's whole
+  footprint within the camera's play area (±235 m): the lines, up to two footprints deep behind each side's front
+  (110 m apart), the front row and the middle first, each with its approach behind it clear; the rest are reserves in
+  column of companies at least 40 m behind the front, clear of the lines' footprints, the nearest first (5 m grid).
+  Water, trees (bushes are walked through), the buildings' yards are kept clear, and it throws when a side has no room.
+  On the demo map 20 a side is 4 and 3 battalions in line, the rest in column.
+- **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at
+  their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
+- **The bench**: `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions in
+  line, `facingAt`). `?benchpan=1` pans each camera as it is measured (20 m either side at 8 m/s). `?benchtrace=1`
+  records every measured frame (version 8): its interval and what happened in it (`src/look/trace.ts`: the figures'
+  shadow map drawn and its casters and triangles, the sun's box refit, the trodden mask drawn and its CPU ms,
+  battalions placed and place()'s and frame()'s CPU ms, thin-instance uploads and their KB and ms, the flags' update,
+  every render target drawn by name and every effect-renderer bake as `fx:<name>`, shader compiles, active meshes, draw
+  calls, the frame's JavaScript ms), and `traceSummary`: per zoom and arm, each event's share of the frames over their
+  run's 90th percentile against its share of all frames (the enrichment), printed by `tools/bench-look.mjs` (and
+  `--print <json>` for a saved run). Timings come from untraced runs; the trace explains them. Off, nothing is hooked;
+  on, it patches no prototype the render loop calls per mesh and looks nothing up by name a draw. Hooks: `__units`
+  (`drawn()`, `figures`, `battalions`, `setMask`, `show`), `__armies` (`blocked`, `focus`, `coats`).
 
 ### The readability guard (L2a)
 
