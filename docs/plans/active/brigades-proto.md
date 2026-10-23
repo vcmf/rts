@@ -72,3 +72,6 @@ Out of scope: brigade counts per army, divisions as a level, battalions acting a
   battalions and the odd counts rounded up; a dead branch. Left: the bars lead the figures slightly while a square
   forms (they close by halfway, the figures by the end); the bars computed twice a frame and the corner projection
   written three times (small, unmeasured); proximity to the brigade's front centre.
+- **Sizes in column** (the owner: a column and its gun looked small): the infantry column symbol 80 × 84 m (from
+  62 × 64, each bar its share of that), and a battery's gun icon sized by the battery's longer side (in column its
+  front is narrow, so the icon had shrunk to its minimum).
