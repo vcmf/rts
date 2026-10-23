@@ -339,23 +339,24 @@ function bakeCanopy(){
     if(t.wood&&hash(t.x*0.37,t.z*0.37)>0.4)continue;   // sparse: about 4 in 10 of a wood's trees, the same ones every load
     ts.push({x:t.x,z:t.z,r:(t.wood?4.2:3.2)*t.s*(0.85+0.3*cl)});}
   ts.sort((a,b)=>b.z-a.z);   // north first: a southern crown overlaps the one behind it
-  for(const t of ts){const r=t.r*PX*1.05;g.drawImage(shade,tx(t.x)+t.r*PX*0.55-r,ty(t.z)+t.r*PX*0.55-r,2*r,2*r);}   // away from the north-west light, 45°   // the shadows first, under every crown
+  for(const t of ts){const r=t.r*PX*1.05;g.drawImage(shade,tx(t.x)+t.r*PX*0.55-r,ty(t.z)+t.r*PX*0.55-r,2*r,2*r);}   // the shadows first, away from the north-west light
   for(const t of ts){const r=t.r*PX;g.drawImage(crown,tx(t.x)-r,ty(t.z)-r,2*r,2*r);}
   return c;
 }
-// the houses, baked with the static light (north-west) for the far and map zooms, where all of them are on screen
-// (drawn live, they cost about 11 ms a frame); up close, where few are, drawHouses draws them live and sharp
+// the houses, baked once with the static light (north-west): drawn live, all 221 cost about 11 ms a frame at map zoom,
+// and up close the painted world's own houses take over
 let cHouse=null;
-// a house's corners as world offsets in metres (its turn: the bake's, y toward the south); the bake and drawHouses share it
+// a house's corners as world offsets in metres (its turn, as the painted world's houses: y toward the south)
 const houseCorners=h=>{const c0=Math.cos(h.yaw),s0=Math.sin(h.yaw);return[[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>{const lx=a*h.w/2,ly=b*h.d/2;return[lx*c0-ly*s0,-(lx*s0+ly*c0)];});};
 const inFrame=h=>Math.abs(h.x)<=MX&&Math.abs(h.z)<=MZ;
-const HOUSE_SIDE=1.86,HOUSE_SHADOW=4.3;   // m, away from the light: the same in the bake and live
+const HOUSE_SIDE=1.86,HOUSE_SHADOW=4.3;   // m, away from the light
 function bakeHouses(){
   const[c,g]=newCanvas(TW,TH);g.clearRect(0,0,TW,TH);g.globalCompositeOperation='source-over';
   const away=[0.707,-0.707],side=[away[0]*HOUSE_SIDE,away[1]*HOUSE_SIDE],shad=[away[0]*HOUSE_SHADOW,away[1]*HOUSE_SHADOW];   // world m: the static light from the north-west, so away is east and south
   const tops=HOUSES.filter(inFrame).map(h=>({col:h.church?CHURCH_COL:HOUSE_COL,C:houseCorners(h).map(([dx,dz])=>[h.x+dx,h.z+dz])}));   // world m: poly maps them
   const fill=(P,col)=>{poly(g,P);g.fillStyle=col;g.fill();};
-  for(const t of tops)fill(hull([...t.C.map(p=>[p[0]+side[0],p[1]+side[1]]),...t.C.map(p=>[p[0]+shad[0],p[1]+shad[1]])]),'rgba(52,38,18,0.32)');
+  g.beginPath();for(const t of tops){const H=hull([...t.C.map(p=>[p[0]+side[0],p[1]+side[1]]),...t.C.map(p=>[p[0]+shad[0],p[1]+shad[1]])]);H.forEach((p,i)=>i?g.lineTo(tx(p[0]),ty(p[1])):g.moveTo(tx(p[0]),ty(p[1])));g.closePath();}
+  g.fillStyle='rgba(52,38,18,0.32)';g.fill('nonzero');   // every shadow one path: where two overlap, it darkens once
   for(const t of tops)fill(hull([...t.C,...t.C.map(p=>[p[0]+side[0],p[1]+side[1]])]),css(t.col.map(x=>x*0.62)));
   for(const t of tops){fill(t.C,css(t.col));g.strokeStyle='rgba(255,250,236,0.35)';g.lineWidth=0.8;g.stroke();}
   return c;
@@ -477,7 +478,7 @@ const TER_FS=`#ifdef LIT
 precision highp float;varying vec3 vW;varying vec3 vN;varying float vH;
 uniform sampler2D uMapA,uMapB,uPaperT,uNoiseT;
 #ifdef LIT
-uniform sampler2D uCanopyT,uHouseT;uniform float uHouseK;
+uniform sampler2D uCanopyT,uHouseT;
 /* the lit style (docs/plans/active/map-view-lit-v1.md): paper, a baked canopy of flat circles */
 #endif
 uniform float uHachK,uRise,uWash,uInk,uMist,uHmin,uHmax,uSunK;uniform vec3 uSun;
@@ -537,8 +538,6 @@ void main(){
   col=mix(col,col*vec3(0.55,0.56,0.52),Cn.r*0.55*k);
   float lum=Cn.g/max(Cn.b,0.004);
   col=mix(col,uCrown*0.95*lum*(0.94+mott*0.12),Cn.b*k);
-  vec4 Hs4=texture2D(uHouseT,clamp(uv,0.0,1.0))*inside;   /* the baked houses, at far and map zoom */
-  col=col*(1.0-Hs4.a*uHouseK*uInk)+Hs4.rgb*uHouseK*uInk;   /* premultiplied on upload; at full ink up to the frame, as the live houses */
 #else
   col=mix(col,uWoodInk,woodMark*0.9*k);
 #endif
@@ -548,13 +547,17 @@ void main(){
   float hx=vH/25.0,fwx=max(fwidth(hx),1e-4),dx=abs(fract(hx-0.5)-0.5)/fwx;
   float minorC=(1.0-smoothstep(0.5,1.3,dc))*(1.0-smoothstep(0.22,0.5,fwc));
   float indexC=(1.0-smoothstep(0.9,1.9,dx))*(1.0-smoothstep(0.3,0.7,fwx));
-  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.4,indexC*0.7)*k*inside*(1.0-0.85*smoothstep(0.1,0.3,A.g))*(1.0-smoothstep(0.6,0.9,Hs4.a)*uHouseK));   /* faint under the woods, none on roofs */
+  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.4,indexC*0.7)*k*inside*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
 #else
   col=mix(col,uHach,clamp(A.r*1.05,0.0,1.0)*k*uHachK);
 #endif
   col=mix(col,uLine,clamp(Bm.r,0.0,1.0)*k);
 #ifdef LIT
-  col*=mix(0.93+(g1-0.5)*0.16+(fine-0.5)*0.12,1.0,uWash);   /* the paper only: the painted world takes none */
+  vec4 Hs4=texture2D(uHouseT,clamp(uv,0.0,1.0))*inside;   /* the baked houses over the ink: roofs cover roads and contours */
+  col=col*(1.0-Hs4.a*uInk)+Hs4.rgb*uInk;   /* premultiplied on upload */
+#endif
+#ifdef LIT
+  col*=mix(0.93+(g1-0.5)*0.16+(fine-0.5)*0.12,1.0,max(uWash,Hs4.a*uInk));   /* the paper only: neither the painted world nor the roofs */
 #endif
   gl_FragColor=vec4(col,1.0);
 }`;
@@ -944,8 +947,8 @@ function drawGun(C,s,shadowOnly=false){
   const m=C.reduce((t,p)=>[t[0]+p[0]/C.length,t[1]+p[1]/C.length],[0,0]),fr=[(C[0][0]+C[1][0])/2,(C[0][1]+C[1][1])/2],bk=[(C[2][0]+C[3][0])/2,(C[2][1]+C[3][1])/2];
   const a=Math.atan2(fr[1]-bk[1],fr[0]-bk[0]),S=clamp(Math.hypot(C[1][0]-C[0][0],C[1][1]-C[0][1])*0.9,18,44),k=S/15,[sx,sy]=raiseOf(SHADOW_PX*0.6);
   ink.save();ink.translate(m[0],m[1]);ink.rotate(a);if(Math.cos(a)<0)ink.scale(1,-1);ink.rotate(-GUN_ANG);ink.scale(k,k);ink.translate(-7.5,-7.5);
-  if(shadowOnly){   // in the shadow pass, before any top face: the icon with its shadow; the top pass draws the icon again over it
-    ink.shadowColor='rgba(52,38,18,0.45)';ink.shadowBlur=4*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;
+  if(shadowOnly){   // in the shadow pass, before any top face: the shadow alone, the icon clipped out (the top pass draws it)
+    const P=new Path2D();P.rect(-60,-60,135,135);P.addPath(GUN);ink.clip(P,'evenodd');ink.shadowColor='rgba(52,38,18,0.45)';ink.shadowBlur=4*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;
     ink.fillStyle=css(s.f);ink.fill(GUN);ink.restore();return null;}
   ink.fillStyle=css(s.f);ink.fill(GUN);
   ink.lineWidth=0.9/k;ink.strokeStyle=s.e?css(s.e):'rgba(30,22,12,0.55)';ink.stroke(GUN);ink.restore();
@@ -953,24 +956,10 @@ function drawGun(C,s,shadowOnly=false){
 }
 // the lit style's houses: raised like the blocks, lit by the same light (the map's ink blocks, baked, are left out)
 const HOUSE_COL=[0.36,0.29,0.23],CHURCH_COL=[0.27,0.22,0.19];
-const HOUSE_K=()=>sstep(Math.log(1100),Math.log(1600),Math.log(CUR.R));   // 1: the baked houses (far), 0: drawn live (close)
-// both at full strength mid-fade, so the houses never thin out: the bake goes from K 0.5 down, the live ones from 0.5 up
-const BAKED_W=()=>clamp(HOUSE_K()*2,0,1),LIVE_W=()=>clamp((1-HOUSE_K())*2,0,1);
-function drawHouses(alpha){alpha*=LIVE_W();if(alpha<=0.01)return;
-  const W=innerWidth,Hh=innerHeight,[ox,oy]=raiseOf(HOUSE_SIDE/MPP),[sx,sy]=raiseOf(HOUSE_SHADOW/MPP),shadow=new Path2D(),sides=new Map(),roofs=[];
-  const add=(P2d,P)=>{P2d.moveTo(P[0][0],P[0][1]);for(let i=1;i<P.length;i++)P2d.lineTo(P[i][0],P[i][1]);P2d.closePath();};
-  for(const h of HOUSES){if(!inFrame(h))continue;const m=P2(h.x,h.z);if(behind(m)||m[0]<-60||m[1]<-60||m[0]>W+60||m[1]>Hh+60)continue;   // the centre first: cheap
-    const C=houseCorners(h).map(([dx,dz])=>P2(h.x+dx,h.z+dz));if(C.some(behind))continue;const col=h.church?CHURCH_COL:HOUSE_COL;
-    add(shadow,hull([...C.map(p=>[p[0]+ox,p[1]+oy]),...C.map(p=>[p[0]+sx,p[1]+sy])]));
-    if(!sides.has(col))sides.set(col,new Path2D());add(sides.get(col),hull([...C,...C.map(p=>[p[0]+ox,p[1]+oy])]));roofs.push([C,col]);}
-  ink.globalAlpha=alpha;ink.fillStyle='rgba(52,38,18,0.32)';ink.fill(shadow,'nonzero');   // every shadow as one path: overlaps darken once, as in the bake
-  for(const[col,P]of sides){ink.fillStyle=css(col.map(x=>x*0.62));ink.fill(P,'nonzero');}
-  for(const[C,col]of roofs){pathPoly(C);ink.fillStyle=css(col);ink.fill();litEdges(C);}
-  ink.globalAlpha=1;}
 // the colour a block's sides take: its top's, as drawBlock fills it
 function blockCol(u,now){const s=SIDES[u.sideI];if(u.state==='rout')return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));return s.f;}
-function drawUnder(u,alpha,now){const{C}=blockCorners(u);if(offView(C))return;
-  if(u.type==='art'&&u.state!=='rout'){ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha>0.01)drawGun(C,SIDES[u.sideI],true);ink.globalAlpha=1;return;}ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;raised(C,blockCol(u,now));ink.globalAlpha=1;}
+function drawUnder(u,alpha,now){const{C}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);
+  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,SIDES[u.sideI],true);else raised(C,blockCol(u,now));}ink.globalAlpha=1;}
 function drawBlock(u,alpha,now){
   u.gun=null;   // drawn this frame or not at all: a stale circle would keep a stale click area
   const s=SIDES[u.sideI],{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
@@ -978,7 +967,7 @@ function drawBlock(u,alpha,now){
   if(u.state==='rout'){
     // routing: pulses between the army colour and white, the colour of surrender
     // a soft pulse on the frame clock passed in, so an exporter controls the phase
-    u.gun=null;pathPoly(C);ink.fillStyle=css(blockCol(u,now));ink.fill();if(LIT)litEdges(C);
+    pathPoly(C);ink.fillStyle=css(blockCol(u,now));ink.fill();if(LIT)litEdges(C);
     ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);}
   else if(u.type==='art'&&LIT)u.gun=drawGun(C,s);
   else if(u.type==='art'){
@@ -1086,8 +1075,8 @@ function drawOrders(now,alpha){
     if(LIT){const us=o.units.map(i=>UNITS[i]).filter(u=>u.order===o&&!u.gone);if(!us.length)continue;
       // the tail at the battalion standing nearest the route where the order stands: always on a block, even when the
       // group is spread or split (an average of their places can be empty ground)
-      const at=along(o.P,o.prog),lead=us.reduce((b,u)=>Math.hypot(u.x-at[0],u.z-at[1])<Math.hypot(b.x-at[0],b.z-at[1])?u:b),cx=lead.x,cz=lead.z,from=nearestS(o.P,cx,cz,Math.max(0,o.prog-150),o.prog+150);
-      arrowLit(o,s.c,alpha,band,Math.max(from,o.prog),end,end>=o.len-1,[cx,cz]);continue;}
+      const at=along(o.P,o.prog),lead=us.reduce((b,u)=>Math.hypot(u.x-at[0],u.z-at[1])<Math.hypot(b.x-at[0],b.z-at[1])?u:b),cx=lead.x,cz=lead.z,from=nearestS(o.P,cx,cz,o.prog,o.prog+150);
+      arrowLit(o,s.c,alpha,band,from,end,end>=o.len-1,[cx,cz]);continue;}
     ink.globalAlpha=alpha*0.36;ink.strokeStyle=css(s.c);ink.lineCap='butt';ink.lineWidth=band;if(bandEnd>o.prog)strokePath(o.P,o.prog,bandEnd);
     if(end<o.len-1)continue;
     const tip=P2(...along(o.P,o.len)),base=P2(...along(o.P,Math.max(0,o.len-headM)));if(behind(tip)||behind(base))continue;
@@ -1182,7 +1171,7 @@ let HOVER=null,SHOW_TRAILS=true,SHOW_NAMES=true,DRAW=null;
 function drawInk(now){
   ink.setTransform(DPR,0,0,DPR,0,0);ink.clearRect(0,0,SW,SH);
   const inkA=1-st('ink'),blockA=1-st('blocks'),nameA=1-st('names');
-  drawNeatline(inkA);if(LIT){setLight();drawHouses(inkA);}drawNames(nameA);
+  drawNeatline(inkA);if(LIT)setLight();drawNames(nameA);
   drawOrders(now,Math.max(0.35,1-stage(0.7,1)));
   if(LIT){for(const u of UNITS)if(!u.gone||u.gone<1)drawUnder(u,blockA,now);}
   for(const u of UNITS)if(!u.gone||u.gone<1)drawBlock(u,blockA,now);
@@ -1206,7 +1195,7 @@ function build(){
   window.__bake={hachures:nh,ms:Math.round(bakeMs),trees:TREES.length,houses:HOUSES.length};
   const COMMONU=['uSun','uSeason','uMist','uGSh'];
   terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal'],
-    uniforms:['world','viewProjection','uCrown','uHouseK','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[])],defines:LIT?['#define LIT']:[]});
+    uniforms:['world','viewProjection','uCrown','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[])],defines:LIT?['#define LIT']:[]});
   terrMat.backFaceCulling=false;terrMat.setTexture('uMapA',texA);terrMat.setTexture('uMapB',texB);paperT.wrapU=paperT.wrapV=noiseT.wrapU=noiseT.wrapV=B.Texture.WRAP_ADDRESSMODE;terrMat.setTexture('uPaperT',paperT);terrMat.setTexture('uNoiseT',noiseT);terrMat.setFloat('uHmin',HMIN);terrMat.setFloat('uHmax',HMAX);
   if(LIT){for(const[n,c]of[['uCanopyT',cCanopy],['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
   terrainMesh().material=terrMat;
@@ -1334,7 +1323,7 @@ function frame(){
   const s=SEASON,mist=1-sstep(1800,4500,GT),sunK=sstep(1500,3600,GT);
   const set3=(m,n,v)=>{const k=m.name+n,c=COLS[k]||(COLS[k]=new C3());c.set(v[0],v[1],v[2]);m.setColor3(n,c);};   // setColor3 keeps the reference
   for(const m of[terrMat,propMat,figMat]){m.setVector3('uSun',SUN);m.setFloat('uSeason',s);m.setFloat('uMist',mist);set3(m,'uGSh',seasonCol('gSh',s));}
-  terrMat.setFloat('uRise',RISE());if(LIT)terrMat.setFloat('uHouseK',BAKED_W());terrMat.setFloat('uHachK',1-0.5*(1-sstep(Math.log(900),Math.log(2400),Math.log(CUR.R))));terrMat.setFloat('uWash',st('wash'));terrMat.setFloat('uInk',1-st('ink'));terrMat.setFloat('uSunK',sunK);
+  terrMat.setFloat('uRise',RISE());terrMat.setFloat('uHachK',1-0.5*(1-sstep(Math.log(900),Math.log(2400),Math.log(CUR.R))));terrMat.setFloat('uWash',st('wash'));terrMat.setFloat('uInk',1-st('ink'));terrMat.setFloat('uSunK',sunK);
   for(const k in TER_COLS)set3(terrMat,TER_COLS[k],seasonCol(k,s));
   terrMat.setFloat('uWashA',seasonCol('washA',s));terrMat.setFloat('uWoodWA',seasonCol('woodWA',s));
   propMat.setFloat('uRise',RISE());propMat.setFloat('uSprout',st('sprout'));set3(propMat,'uCrown',seasonCol('crown',s));set3(propMat,'uConifer',seasonCol('conifer',s));
