@@ -858,10 +858,10 @@ function battalionSize(form, men) {
 /**
  * The share of a brigade's drawn depth that one battalion's bar takes, in one formation. The bar and the whole are
  * blended by the zoom's SYMK as lengths, the way shown() blends the block (a symbol proportion far, the true
- * metres close), so the bars match the block and the figures at every zoom. A square is one half: no gap.
+ * metres close), so the bars match the block and the figures at every zoom. Not for a square (parts() closes the
+ * bars toward one half there).
  */
 function barShare(u, form, n) {
-  if (form === 'square') return 0.5;
   const symDepth = SYM.inf[form][1] * SYMZ;
   const bat = battalionSize(form, Math.ceil(n / BRIGADE_BATS));
   const total = dims(u, form, n)[1];
@@ -872,7 +872,7 @@ function barShare(u, form, n) {
  * What a unit draws as, given its blockCorners() result B: a list of screen polygons (front-left, front-right,
  * back-right, back-left). The bars are cut in world metres, then projected, so they sit where the figures stand.
  * A brigade in line or column: two bars, its first battalion in front, the second behind. Into a square, the bars
- * close up by halfway, where it forms (formedSq); out of one, they start touching and open. Between two other
+ * close up by halfway, where it forms (formedSq); out of one, they stay touching to halfway and then open. Between two other
  * formations their share eases with the outline. Anything else (cavalry, guns, a formed square): one block.
  */
 function parts(u, B) {
@@ -880,8 +880,10 @@ function parts(u, B) {
   const n = alive(u);
   const e = easeIO(u.morph);
   let q;
-  if (u.form === 'square') q = lerp(barShare(u, u.prev, n), 0.5, Math.min(1, u.morph / 0.5));
-  else if (u.prev === 'square') q = lerp(0.5, barShare(u, u.form, n), e);
+  // one eased curve, split at halfway: into a square the bars close over its first half, out of one they open over
+  // its second; mirror images, so a change that runs back (setForm) picks up exactly where it was
+  if (u.form === 'square') q = lerp(barShare(u, u.prev, n), 0.5, 2 * e);
+  else if (u.prev === 'square') q = lerp(0.5, barShare(u, u.form, n), Math.max(0, 2 * e - 1));
   else q = lerp(barShare(u, u.prev, n), barShare(u, u.form, n), e);
   // a rectangle across the block, from depth z0 to z1 behind its front (metres), projected
   const hw = B.fw / 2;
@@ -914,10 +916,11 @@ function shown(u,form,n){const t=dims(u,form,n),sy=(SYM[u.type][form]||SYM[u.typ
 function slot(u,form,i,n,out){
   if(u.type==='inf'){
     if (form !== 'square') {
-      // two battalions, one behind the other: man i belongs to the first or the second
+      // two battalions, one behind the other; men dealt alternately, so losses (which take the last indices)
+      // thin both evenly and no figure crosses the gap
       const half = Math.ceil(n / BRIGADE_BATS);
-      const which = i < half ? 0 : 1;
-      const j = i - which * half;
+      const which = i % 2;
+      const j = Math.floor(i / 2);
       const bat = battalionSize(form, half);
       out[0] = (j % bat.files - (bat.files - 1) / 2) * 0.9;
       out[1] = -Math.floor(j / bat.files) * 1.1 - 0.5 - which * (bat.depth + BR_GAP[form]);
@@ -1033,7 +1036,7 @@ function simStep(dt){
     if(u.type!=='cav'&&!(u.state==='move'&&u.form==='column'&&u.type==='inf')){
       const ne=nearestEnemy(u,T.range);
       if(ne&&(formedSq(u)||Math.abs(angTo(u.face,Math.atan2(ne.e.x-u.x,ne.e.z-u.z)))<1.2)){   // a square faces every way
-        const e=ne.e,ff=u.type==='art'?(ne.d<300?1.8:1)*0.00055:(u.form==='line'?1:u.form==='square'?0.55:0.3)*0.0011*(ne.d<80?1.5:1);
+        const e=ne.e,ff=u.type==='art'?(ne.d<300?1.8:1)*0.00055:(u.form==='line'?1:formedSq(u)?0.55:0.3)*0.0011*(ne.d<80?1.5:1);
         const tf=e.form==='column'?1.4:formedSq(e)&&u.type==='art'?1.6:1;
         const base=ff*u.str*tf*dt,men=base*bats(u)/bats(e);   // men: a brigade fires with its battalions and takes losses over them; morale as one battalion on another
         e.str=Math.max(0,e.str-men);e.mor-=base*2.6*(e.sideI===0?0.85:1);e.hit=GT;u.firing=3;

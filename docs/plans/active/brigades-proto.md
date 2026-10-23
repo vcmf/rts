@@ -24,8 +24,12 @@ In `prototypes/staff-map.html` (both styles):
 4. Losses, morale hatching, routing, the wear bites and selection apply to the brigade; each bar gets its own bites.
 5. A corps of up to four units in one row (each brigade already two lines deep); more in two rows, as now.
 
-Out of scope: brigade counts per army, divisions as a level, battalions acting alone, fire and melee by battalion (the
-brigade fires as one unit, as a battalion did).
+6. **Fire and losses by battalions**: a brigade fires with its two battalions and takes its men's losses over two
+   (morale as one battalion on another), so the battle's balance in men stays as it was.
+
+An odd number of battalions in a corps rounds up to whole brigades (I, II and IV columns each gain one).
+
+Out of scope: brigade counts per army, divisions as a level, battalions acting alone.
 
 ## Acceptance
 
@@ -61,3 +65,10 @@ brigade fires as one unit, as a battalion did).
   regiments; the men per unit in one place (`TYPE.men`); the brigade size asserted at two, the geometry being for two.
   Left: proximity measured to the brigade's front centre (37 to 44 m deep now), the bars computed twice a frame.
   The round count restarts.
+- **Round 1 after the redesign**: moderate and light only, so the review stops. Fixed: the bars' share on one eased
+  curve both ways (into a square they close over its first half, out of one they open over its second), so a change
+  that runs back no longer jumps; the fire rate by the one in-square test; the figures dealt alternately to the two
+  battalions, so losses no longer move figures across the gap; the plan's scope stating the fire and losses by
+  battalions and the odd counts rounded up; a dead branch. Left: the bars lead the figures slightly while a square
+  forms (they close by halfway, the figures by the end); the bars computed twice a frame and the corner projection
+  written three times (small, unmeasured); proximity to the brigade's front centre.
