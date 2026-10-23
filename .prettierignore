@@ -14,12 +14,8 @@ test/fixtures/
 *.yaml
 *.css
 
-# Not formatted yet: the look (PR 2), the tools, tests and root configs (PR 3). eslint.config.js's `formatted` lists
-# the areas that are; test/format-scope.test.ts checks the two agree.
-app/
-src/look/
-src/render/
-src/app/
+# Not formatted yet: the tools, tests and root configs (PR 3). eslint.config.js's `formatted` lists the areas that
+# are; test/format-scope.test.ts checks the two agree.
 tools/
 test/
 eslint.config.js
