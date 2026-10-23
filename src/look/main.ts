@@ -33,11 +33,14 @@ import { Constants } from '@babylonjs/core/Engines/constants.js'
 import { buildTerrain, splitGround } from './terrain.ts'
 import { buildBuildings } from './buildings.ts'
 import { buildBuildingLight } from './building-light.ts'
+import type { Units } from './units.ts'
+// the figures' unit data by file (data/figures/<figure>.unitdata): a scenario names its figure, the page finds it here
+const FIGURES = import.meta.glob<string>('../../data/figures/*.unitdata', { query: '?url', import: 'default', eager: true })
 import { buildWater } from './water.ts'
 import { spanTexture } from './span-texture.ts'
 // (the grit in R, the buildings' paving in G and B: tools/paving-pack.py)
 import ROAD_GRIT_URL from '../../data/road-grit-v2.png?url'
-import { BUILDINGS, YARD_ALL, YARD_BASE, paveShape } from './world/buildings.ts'
+import { BUILDINGS, YARD_ALL, YARD_BASE, onPaving, paveShape } from './world/buildings.ts'
 import { COVER } from './world/cover.ts'
 import { sstep } from './noise.ts'
 import { WATER_FILL, decodeWater, sampleRGBA } from './world/water-data.ts'
@@ -286,6 +289,59 @@ if (params.get('dofnear') === '0') DOF_NEAR.px = 0
 // the meadow near the camera (docs/plans/done/l5c-meadow.md), after the bakes and the macro colour it reads
 const meadow = meadowMap ? buildMeadow(scene, mats, camera, meadowMap, !flag('nowide'), grassReach) : null
 meadow?.under([...terrain.tileMats, water.waterMat, water.groundMat])   // the dark ground under its clumps (shore.glsl)
+// ?armies=<battalions a side>: the demo's two armies (docs/plans/active/armies-demo.md): battalions of the ruleset's
+// infantry (about 400 a battalion, decision 0018) that march up in column, deploy and fire on a scripted loop, drawn
+// as figures (src/look/units.ts); ?unitshadow=0: without their cast shadows (decision 0047's A/B). Not on the page by
+// default: the goldens and the look checks never see them
+const armiesParam = params.get('armies'), unitShadowParam = params.get('unitshadow')
+// the figures' shadow map's A/B switches (docs/plans/active/armies-demo.md, batch A): ?ushadowrate=0 redraws it every
+// frame (else only when it would change); ?ushadowlod=1 casts from the LOD the view draws (else the far LOD always);
+// ?ushadowvs=0: the meadow reads it at every pixel (else once a blade, at its root: the owner's choice, 2026-10-22)
+const bit = (k: string) => { const v = params.get(k); if (v !== null && v !== '0' && v !== '1') throw new Error(`?${k} must be 0 or 1, not ${v}`); return v === null ? null : v === '1' }
+const uShadowRate = bit('ushadowrate'), uShadowLod = bit('ushadowlod'), uShadowVs = bit('ushadowvs'), farPal = bit('farpal')
+// ?uvat=0: the far LOD and its casters skinned, not posed; ?ucull=0: every caster in the sun's box
+const uVat = bit('uvat'), uCull = bit('ucull')
+// the shadow fix: ?smhold=fixed, the held sun box (and the trodden mask's) as batch B's; ?shadowlod=far, the far LOD casts
+const smHold = params.get('smhold'), shadowLod = params.get('shadowlod')
+if (smHold !== null && smHold !== 'fixed') throw new Error(`?smhold must be fixed, not ${smHold}`)
+if (shadowLod !== null && shadowLod !== 'far') throw new Error(`?shadowlod must be far, not ${shadowLod}`)
+// batch C: ?farscale=0, the far figures at their own size
+const farScale = bit('farscale'), trample = bit('trample'), flags = bit('flags')   // ?trample=0: no trodden ground; ?flags=0: no colours
+if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && +armiesParam <= 20)) throw new Error(`?armies must be 1 to 20 battalions a side (the demo map holds 20), not ${armiesParam}`)
+if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '1') throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
+let units: Units | null = null, armiesFocus: [number, number] | null = null   // (the fight's middle: the bench's focus)
+if (armiesParam !== null) {
+  if (mats.webgl1) throw new Error('?armies needs WebGL2 (the figures read their animation with texelFetch: decision 0046)')
+  const [{ Units: UnitsC }, { decodeUnits }, { layout, facingAt }, { RULESETS }, { ARMIES_DEMO }] = await Promise.all([import('./units.ts'), import('./units-data.ts'), import('./world/armies.ts'), import('../rulesets/index.ts'), import('../scenarios/armies-demo.ts')])
+  // the scenario's era, unit type and figure, resolved by name (decision 0015: the page names none of them)
+  const era = RULESETS[ARMIES_DEMO.ruleset]; if (!era) throw new Error(`armies: no ruleset ${ARMIES_DEMO.ruleset} (src/rulesets/index.ts)`)
+  const type = era.ruleset.types[ARMIES_DEMO.unitType]; if (!type) throw new Error(`armies: the ruleset ${ARMIES_DEMO.ruleset} has no unit type ${ARMIES_DEMO.unitType}`)
+  const figureUrl = FIGURES[`../../data/figures/${ARMIES_DEMO.figure}.unitdata`]; if (!figureUrl) throw new Error(`armies: no figure ${ARMIES_DEMO.figure} in data/figures/`)
+  const g = type.geometry, drill = { companies: g.companies, files: g.files, ranks: g.ranks, fileSpacing: g.fileSpacing, rankSpacing: g.rankSpacing }
+  const r = await fetch(figureUrl); if (!r.ok) throw new Error(`unit data: ${r.status} ${r.statusText} for ${figureUrl}`)
+  // the ground a battalion keeps clear of: the river and its banks, the trees (a 10 m grid of them), the buildings'
+  // yards, the tile's last 30 m
+  const CELL = 10, trees = new Map<number, number[]>(), key = (i: number, j: number) => i * 4096 + j
+  // (the trees alone, their trunk and low crown: half the crown's reach; a battalion walks through the bushes)
+  for (const t of nature.canopy) { if (!t[4]) continue; const i = Math.floor(t[0] / CELL), j = Math.floor(t[1] / CELL), k = key(i, j), r = t[2] * 0.5; const l = trees.get(k); if (l) l.push(t[0], t[1], r); else trees.set(k, [t[0], t[1], r]) }
+  const nearTree = (x: number, z: number) => {
+    const i0 = Math.floor(x / CELL), j0 = Math.floor(z / CELL)
+    for (let i = i0 - 1; i <= i0 + 1; i++) for (let j = j0 - 1; j <= j0 + 1; j++) { const l = trees.get(key(i, j)); if (l) for (let k = 0; k < l.length; k += 3) if (Math.hypot(l[k] - x, l[k + 1] - z) < l[k + 2] + 1) return true }
+    return false
+  }
+  const blocked = (x: number, z: number) => { if (Math.max(Math.abs(x), Math.abs(z)) > D.spec.tile / 2 - 30) return true; const q = riverQuery(x, z); return (q !== null && q.dist < 20) || onPaving(x, z, 3) || nearTree(x, z) }
+  // the figures' shadows fall on the tile's ground and its grass (painter.glsl, unitShadowAt)
+  units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides), era.uniforms, () => S.t)
+  units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.tightCull = uCull ?? true
+  units.holdShare = smHold !== 'fixed'; units.proxyCasters = shadowLod !== 'far'
+  if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
+  units.setShadows(unitShadowParam !== '0')
+  units.setPosed(uVat ?? true)
+  units.setFarScale(farScale ?? true); units.setTrample(trample ?? true); units.setFlags(flags ?? true)
+  units.setFarRule(farPal)   // (each uniform's far rule; ?farpal=0|1 forces it off or on for every uniform: the A/B)
+  armiesFocus = facingAt(units.battalions)
+  Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
+}
 if (params.has('msaa')) { const n = Number(params.get('msaa')); if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`); MSAA.samples = n }
 if (flag('rt16')) MSAA.byte = false
 if (flag('nanmark')) { DEBUG.nanmark = true; MSAA.byte = false }   // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
@@ -654,6 +710,11 @@ if (params.has('bench')) {
   const at = params.get('benchat')?.split(',').map(p => p.trim() === '' ? NaN : Number(p))
   if (at && (at.length !== 2 || !at.every(v => Number.isFinite(v) && Math.abs(v) <= D.spec.play)))
     throw new Error(`?benchat must be <x>,<z> in metres within ±${D.spec.play}, not ${params.get('benchat')}`)
-  void runBench(scene, camera, passes, arms, hold, at ? { x: at[0], z: at[1] } : undefined).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
+  // with ?armies and no ?benchat, between the two sides' battalions facing each other (armies.ts, facing), clamped to
+  // the play area: the bench's cameras on the fight
+  const mid = armiesFocus
+  const clampPlay = (v: number) => Math.max(-D.spec.play, Math.min(D.spec.play, v))
+  const focus = at ? { x: at[0], z: at[1] } : mid ? { x: clampPlay(mid[0]), z: clampPlay(mid[1]) } : undefined
+  void runBench(scene, camera, passes, arms, hold, focus).then(r => { Object.assign(window, { __bench: r }); showBench(r) },
     (e: unknown) => { Object.assign(window, { __bench: { error: String(e) } }); console.error('bench failed:', e) })
 }
