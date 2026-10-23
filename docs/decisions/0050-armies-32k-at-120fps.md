@@ -40,7 +40,9 @@ before it is built:
    met (the white side −17 % luma, its coat share 27 → 11 %), and the owner judged the look acceptable ("more neat",
    the formations will not stay in perfect shape). Per-man variety was tried and dropped (the plan's step 3). It
    confirms the wide view is vertex-bound; the far LOD with shared vertices (371, measured) waits as the next option.
-   Later LOD steps add the owner's check of the look at a wide crop to their bars.
+   Later LOD steps add the owner's check of the look at a wide crop to their bars. Recalibrated by itself on the
+   rebaked figure (decision 0051's close-zoom PR, 2026-10-23): the guard's white side −19 % luma at the widest zoom,
+   the blue side within 10 %; with decision 0049's simple shadows each tiny man keeps his own.
 4. **The ground-colour cache** for the landscape (est. 2 to 2.7 ms at default and close, not measured; corrected
    2026-10-23 to about 2.3 at default and 1.1 at close at most, after the road split took 1.1 of the same work: the
    plan's step 4, designed, not built).

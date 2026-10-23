@@ -312,6 +312,15 @@ art, other arms.
   ΔE 25 of the coat 19.3 / 13.4 / 20.3 %, the white side's 23.7 / 4.6 / 11.3 %), the white side as dark as before
   (luma 0.502 / 0.415 / 0.422). The owner kept the **plain boxes**: neater, acceptable. Every later LOD step's bar adds:
   **the owner checks the look at a wide crop**.
+- **Recalibrated on the rebaked figure** (2026-10-23, after main's close-zoom merge, #145: corrected colour roles, the
+  far LOD's coat share 17.5 → 23.3 %, 602 vertices). The boxes calibrate at load, so they followed by themselves: their
+  seen coat share 21.3 % against the far LOD's 22.3 % (the CPU's raster, 8 views at 50°). The readability guard at
+  40 a side, widest, summer (far LOD / boxes): side 0 (blue) luma 0.289 / 0.307 (+6 %), separation 0.238 / 0.220
+  (−8 %), coat share 14.8 / 16.9 %, within ΔE 25 of the coat 21.6 / 15.0 %; side 1 (white) luma 0.552 / 0.446
+  (−19 %), separation 0.073 / 0.180, coat share 38.6 / 18.7 %, within ΔE 25 of the coat 33.0 / 9.7 %. The white side
+  stays the gap, as before the rebake (the guard sees the firing poses from the wide camera; the calibration, the rest
+  pose at 50°). Crops (far | boxes, the stress point) in `output/armies-review/13-tiny-recal/`, not committed. With
+  main's simple shadows (decision 0049) each tiny man keeps his simple shadow, as the far LOD's do.
 - **Next, paused: the far LOD with shared vertices (step 3b)**, designed and measured on this figure, its code kept
   aside (not committed): the bake's 616 vertices are **371** when merged where equal bit for bit (place, normal, role,
   bones, weights: the same triangles drawn the same), 307 with the colour role carried flat in a way that holds for
@@ -396,8 +405,7 @@ art, other arms.
 
 ## Open questions
 
-- The tiny LOD's colours are calibrated on today's figure data (`tinyMesh`); the close-zoom branch (#133) rebakes the
-  figure with corrected colour roles (the far LOD's coat share 17.5 → 23.3 %): the boxes' calibration and the guard's
-  numbers above need redoing once it merges.
+- The white side's tiny figures read darker than its far LOD (luma −19 % at the widest zoom, after the rebake): a
+  calibration on the poses and the view the wide camera has, if the owner wants them lighter.
 - The close reserves stand 6 m apart: closer than the reserves at 20 a side (10 m); the owner's eye on the wide view.
 - The near meadow and the trees' crowns over the reserves (bushes are walked through, as at 20 a side).
