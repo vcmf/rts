@@ -322,22 +322,62 @@ art, other arms.
   the default, the fight's middle and the stress point, a marching and a firing moment); the readability guard
   (`node tools/guard.mjs <url?armies=40> --figures`) at the widest zoom within 10 % of `?tinylod=0`.
 
-## Step 4: the ground-colour cache
+## Step 4: the ground-colour cache (designed, not built)
 
-- **Why**: main alone is 9.55 / 8.70 ms at default / close (measured, above): the landscape needs at least 1.2 ms off
-  at default for 120 fps even with free soldiers.
-- **The change**: the ground's painted colour (its many texture reads in `painter.glsl`) cached in a texture around the
-  view and refreshed as the view moves, the ground's fragment stage reading it instead. **Est. 2 to 2.7 ms** at default
-  and close (an earlier estimate, not measured). It gets its own plan when started.
-- **Bar**: **kept if** main (no soldiers) falls by **≥ 1.5 ms** p50 at default and close, still and panning, with the
-  goldens (`tools/golden.mjs`) and the look checks passing or re-baselined by a decision. **Else reverted.**
+- **Why**: main alone is over 8.33 ms at default and close (9.55 / 8.70 in the first rounds, 8.75 / 8.50 and 8.40 /
+  8.30 later, measured above), and the soldiers' steps do not touch the landscape. Steps 1 and 3 showed the wide view
+  vertex-bound; default and close are where the landscape's own pixels cost.
+- **Where the estimate comes from** (`docs/plans/done/headroom.md`, measured 2026-10-19/20 on the production build,
+  Metal, 1080p): the terrain's colour detail cost **3.4 ms at default, 1.6 widest, 2.2 closest** by its absence
+  (`?macro=flat`); the roads 1.9 ms of it at default. The road split then took about 1.1 ms off at default and closest
+  (measured). What is left of the colour detail is about **2.3 ms at default, about 1.1 closest (est.: the ablation
+  less the split)**; headroom's "2 to 2.7 ms" was the whole cache, before the split. The light, the shadows and the
+  air stay live, so the cache saves the colour's work, not the ground's.
+- **What is cached**: `albedo()` in `src/look/shaders/terrain.frag` is a function of the world position, the ground's
+  normal (fixed) and the season alone: the cover's macro colour (already baked: `MACRO_BAKE`, `src/look/macro.ts`), the
+  dirt, the earth and its cracks, the roads (`roadPaint`), the steep ground, the banks (`bankPaint`), the season
+  (`groundSeason`); with it the meadow's dark under-layer (`meadowUnder`) and where the snow lies (`snowLie`). Live
+  after the read: the trodden mask (it moves), the light map, the sun's and the figures' shadows, the clouds, the
+  bounce, the grain and the detail layer, `paint()`, the shore band and the ice (they move), the air and the lens.
+- **The cache**: a clipmap of world-aligned levels centred under the camera's focus, each `N`² texels (est. N = 1024
+  to 2048), each level twice the texel of the one inside it, from about the closest zoom's pixel on the ground (est.
+  4 to 5 cm) out to where the far ring's bake takes over; RGBA8, the albedo in RGB (sRGB-encoded, as the colour is
+  stored today) and the snow's lie in A, a texture array (one sampler for every level). The ground's fragment picks its
+  level from its own footprint (the derivatives `pxMacro` already takes) and blends two levels across a band, so
+  there is no seam. Est. memory: 4 levels of 2048² RGBA8 = 64 MB (or 16 MB at 1024²).
+- **Filled** by the same functions run in a fill pass (the macro bake's tiled pattern: `bakeTile`² texels a draw,
+  `src/look/macro.ts`), each texel's footprint its level's texel (so the shader's own filtering still applies): a
+  level redrawn wholly when the season, the mood's ground colours or the grain change; as the focus moves, only the
+  band that came into a level (toroidal addressing, as a virtual texture's), at most one band a level a frame, so a pan
+  costs a strip of the old shader's work (est. 2048 × 64 texels: about 6 % of a 1080p frame's ground pixels, at one
+  level a frame).
+- **Exactness**: not identical up close (the owner's call in headroom): the cache samples the colour at its texels and
+  filters bilinearly where the live shader filtered by the pixel; a level's texel at or under the pixel keeps it
+  within the grain's own scale (est.). The goldens move and are re-baselined by a decision; the look checks
+  (`tools/detail-check.mjs`, `tools/macro-check.mjs`, the road and water checks) pass on the cached arm or are adapted
+  by the same decision.
+- **Texture units**: the terrain's fragment stage loses the samplers the cached terms read (the cover, the dirt, the
+  earth, the roads' segments, grid and grit, the bank normals' paint) and gains one (the array); the count is checked
+  by `src/look/materials.ts` (Metal's 16).
+- **Switch**: `?groundcache=0` for the A/B (the live albedo, as today).
+- **Bar**: **kept if** main (no soldiers) falls by **≥ 1.0 ms** p50 at default and **≥ 0.5 ms** at close, still and
+  panning, at the fight's middle and at headroom's river-and-wood view (`?benchat=-60,-20`), no camera's p95 worse by
+  over 0.2 ms, the panning p95 included (the fill's cost shows there); the look checks passing or re-baselined by a
+  decision; **the owner checks the look** at a close and a default crop. **Else reverted.** (The earlier ≥ 1.5 ms bar
+  predates the road split, which took 1.1 ms of the same work.)
+- **Risks**: the fill's cost while panning (bounded by a band a frame; the trace's `rt` counts it); a level's edge
+  seen at the widest zoom (the far ring's bake beyond); the season slider's full refill (once, a frame's hitch is
+  accepted); the meadow, which reads the ground's colour under its roots (`docs/plans/done/headroom.md`: about 0 ms),
+  could read the cache too, not needed.
+- **Its own plan when started**, with this design as its starting point.
 
 ## The goal and how close it is
 
 - **The goal**: at 40 a side, every camera's **p50 ≤ 8.33 ms** still and panning (it averages 120 fps); a **p95
   ≤ 8.33 ms** holds it.
-- **The arithmetic** (est., to be replaced by the measurements): at default main is 9.55; step 4 takes off 2 to 2.7
-  (6.9 to 7.6 left), leaving 0.7 to 1.4 ms for 33,000 soldiers. At 20 a side they cost 0.75 ms still at default today
+- **The arithmetic** (est., to be replaced by the measurements): at default main is 9.55 (8.4 to 8.75 in later
+  rounds); step 4 takes off about 2.3 at most (the colour's work left after the road split: its section), so about
+  6.1 to 7.3 left, leaving 1.0 to 2.2 ms for 33,000 soldiers. At 20 a side they cost 0.75 ms still at default today
   (10.30 against 9.55); at 40 about twice that before steps 1 to 3 (est.). So the goal needs step 4 and most of steps 1
   to 3; wide has the most room (main 6.05) and default the least.
 - If, after every step that holds its bar, the goal is not met, the plan says by how much per camera and stops; the

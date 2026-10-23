@@ -41,7 +41,9 @@ before it is built:
    the formations will not stay in perfect shape). Per-man variety was tried and dropped (the plan's step 3). It
    confirms the wide view is vertex-bound; the far LOD with shared vertices (371, measured) waits as the next option.
    Later LOD steps add the owner's check of the look at a wide crop to their bars.
-4. **The ground-colour cache** for the landscape (est. 2 to 2.7 ms at default and close, not measured).
+4. **The ground-colour cache** for the landscape (est. 2 to 2.7 ms at default and close, not measured; corrected
+   2026-10-23 to about 2.3 at default and 1.1 at close at most, after the road split took 1.1 of the same work: the
+   plan's step 4, designed, not built).
 
 A step is kept only if its bar holds (Metal, the production build, three interleaved rounds against main); else it is
 reverted and this record lists it as reverted with its numbers. No step changes the simulation (decisions 0005,
