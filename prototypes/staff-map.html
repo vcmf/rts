@@ -329,18 +329,19 @@ function bakeLight(){
   const az=a=>[Math.cos(a),Math.sin(a)];   // a from +x toward north (+z, up the texture)
   const SUN_EL=25*Math.PI/180,key=[-Math.cos(SUN_EL)*0.707,Math.sin(SUN_EL),Math.cos(SUN_EL)*0.707],fills=[200,240,280,320].map(d=>{const[cx,cz]=az(d*Math.PI/180);return[cx*0.866,0.5,cz*0.866];});
   const[c,g]=newCanvas(LW,LH),im=g.getImageData(0,0,LW,LH),D=im.data,tanS=Math.tan(SUN_EL),step=12/cw;
+  let top=-Infinity;for(const h of hg)top=Math.max(top,h);for(let i=-40;i<LW;i++)top=Math.max(top,at(i,-40),at(-40,Math.max(0,i)));   // the ray past this is in the open
   for(let j=0;j<LH;j++)for(let i=0;i<LW;i++){
     const dx=(at(i+1,j)-at(i-1,j))/(2*cw),dz=(at(i,j-1)-at(i,j+1))/(2*cw),l=Math.hypot(dx,1,dz),n=[-dx/l,1/l,-dz/l];
     const dot=v=>Math.max(0,n[0]*v[0]+n[1]*v[1]+n[2]*v[2]);
     const lam=dot(key)/key[1],fill=fills.reduce((t,v)=>t+dot(v),0)/fills.length/0.5;
     let sh=0;const h0=at(i,j);   // the shadow: march toward the sun (north-west, low), a few steps of 12 m
     for(let k=1;k<=30;k++){const si=Math.round(i-k*step*0.707),sj=Math.round(j-k*step*0.707);
-      const over=at(si,sj)-(h0+k*12*tanS);if(over>0){sh=Math.max(sh,Math.min(1,over/3));if(sh>=1)break;}}   // the strongest occluder
+      const rh=h0+k*12*tanS;if(rh>top)break;const over=at(si,sj)-rh;if(over>0){sh=Math.max(sh,Math.min(1,over/3));if(sh>=1)break;}}   // the strongest occluder
     const v=clamp(0.52+0.48*(0.75*lam+0.25*fill-1)-0.34*sh,0,1),o=(j*LW+i)*4;D[o]=v*255;D[o+1]=0;D[o+2]=0;D[o+3]=255;}   // G: the canopy's blurred cover, written by bakeCanopy
   g.putImageData(im,0,0);return c;
 }
 // a crown sprite: a dome lit from the north-west, darker toward its rim; a soft shadow sprite
-function crownSprite(){const N=64,[c,g]=newCanvas(N,N),im=g.createImageData(N,N),D=im.data,L=[-0.55,-0.55,0.63];
+function crownSprite(){const N=64,[c,g]=newCanvas(N,N),im=g.createImageData(N,N),D=im.data,e=25*Math.PI/180,L=[-Math.cos(e)*0.707,-Math.cos(e)*0.707,Math.sin(e)];   // the relief's sun
   for(let y=0;y<N;y++)for(let x=0;x<N;x++){const dx=(x+0.5-N/2)/(N/2),dy=(y+0.5-N/2)/(N/2),dd=dx*dx+dy*dy,o=(y*N+x)*4;if(dd>=1){D[o+3]=0;continue;}
     const z=Math.sqrt(1-dd),lum=clamp((0.3+0.7*Math.max(0,dx*L[0]+dy*L[1]+z*L[2]))*(0.62+0.38*z),0,1);
     D[o]=0;D[o+1]=lum*255;D[o+2]=255;D[o+3]=255*(1-sstep(0.82,1,Math.sqrt(dd)));}
@@ -350,25 +351,28 @@ function shadowSprite(){const N=64,[c,g]=newCanvas(N,N),gr=g.createRadialGradien
 // a slow noise for clumps: the value noise on a 60 m lattice
 const clumpN=(x,z)=>vn(x/60,z/60);
 function bakeCanopy(){
-  const[c,g]=newCanvas(TW,TH),[cs,gs]=newCanvas(TW,TH),crown=crownSprite(),shade=shadowSprite();gs.clearRect(0,0,TW,TH);
-  g.globalCompositeOperation=gs.globalCompositeOperation='source-over';   // newCanvas sets lighter (additive): crowns must cover, not add
+  const[c,g]=newCanvas(TW,TH),crown=crownSprite(),shade=shadowSprite();
+  g.globalCompositeOperation='source-over';g.imageSmoothingQuality='high';   // newCanvas sets lighter (additive): crowns must cover, not add
   const R=mulberry(23),ts=[];
   for(const t of TREES){if(Math.abs(t.x)>MX||Math.abs(t.z)>MZ)continue;const cl=clumpN(t.x,t.z);
-    const edge=t.wood&&!WOODS.some(w=>inWood(w,t.x,t.z,7));if(edge&&R()<0.35)continue;   // gaps near the edge: the field shows through
+    // gaps near the edge, the field showing through; flagged, so the painted world leaves them out too
+    const edge=t.wood&&!WOODS.some(w=>inWood(w,t.x,t.z,7));if(edge&&R()<0.35){t.gap=true;continue;}
     ts.push({x:t.x,z:t.z,r:(t.wood?4.6:3.4)*t.s*(0.8+0.5*cl)*(edge?0.8:1)});}
   ts.sort((a,b)=>b.z-a.z);   // north first: a southern crown overlaps the one behind it
-  for(const t of ts){const r=t.r*PX*1.15;gs.drawImage(shade,tx(t.x)+t.r*PX*0.75-r,ty(t.z)+t.r*PX*0.75-r,2*r,2*r);}
-  g.drawImage(cs,0,0);cs.width=0;
+  for(const t of ts){const r=t.r*PX*1.15;g.drawImage(shade,tx(t.x)+t.r*PX*0.75-r,ty(t.z)+t.r*PX*0.75-r,2*r,2*r);}   // the shadows first, under every crown
   for(const t of ts){const r=t.r*PX;g.drawImage(crown,tx(t.x)-r,ty(t.z)-r,2*r,2*r);}
-  // the cover blurred over about 10 m of ground, at the light's 4 m: the shade under the crowns follows it, no rim at any zoom
-  const[cb,gb]=newCanvas(LW,LH);gb.globalCompositeOperation='source-over';gb.filter='blur(1.5px)';gb.drawImage(c,0,0,LW,LH);
-  const lg=cLight.getContext('2d'),li=lg.getImageData(0,0,LW,LH),bi=gb.getImageData(0,0,LW,LH).data;
-  for(let q=0;q<LW*LH;q++)li.data[q*4+1]=bi[q*4+2];lg.putImageData(li,0,0);cb.width=0;
   return c;
 }
+// the canopy's cover blurred over about 10 m of ground, into the light texture's G (the light is at 4 m): the shade under
+// the crowns follows it, no rim at any zoom
+function mergeCover(light,canopy){
+  const[cb,gb]=newCanvas(LW,LH);gb.globalCompositeOperation='source-over';gb.imageSmoothingQuality='high';gb.filter='blur(1.5px)';gb.drawImage(canopy,0,0,LW,LH);
+  const lg=light.getContext('2d'),li=lg.getImageData(0,0,LW,LH),bi=gb.getImageData(0,0,LW,LH).data;
+  for(let q=0;q<LW*LH;q++)li.data[q*4+1]=bi[q*4+2];lg.putImageData(li,0,0);cb.width=0;
+}
 function bakeMap(){
-  const nh=LIT?0:bakeHachures();
-  if(LIT){cLight=bakeLight();cCanopy=bakeCanopy();}   // the canopy writes its blurred cover into the light texture   // the lit style draws contours, not hachures
+  const nh=LIT?0:bakeHachures();   // the lit style draws contours, not hachures
+  if(LIT){cLight=bakeLight();cCanopy=bakeCanopy();mergeCover(cLight,cCanopy);}
   // woods: area wash, edge line, one ring per tree (the same trees the 3D world grows)
   for(const w of WOODS){const P=[];for(let k=0;k<=140;k++){const th=k/140*6.2832,r=w.r(th);P.push([w.x+Math.cos(th)*r,w.z+Math.sin(th)*r]);}
     poly(gA,P);gA.fillStyle='rgb(0,70,0)';gA.fill();if(!LIT){poly(gB,P);gB.strokeStyle='rgba(255,0,0,0.75)';gB.lineWidth=1.1;gB.stroke();}}
@@ -497,7 +501,7 @@ vec3 fieldK(vec2 p,float mott){
   float dash=smoothstep(-0.3,0.6,sin(dot(p,perp)/19.0+2.1*sin(t*0.37))*sin(dot(p,perp)/7.3+t*0.11));   /* smooth breaks along the strips */
   float ridge=sin(6.2832*t)*(0.35+0.65*abs(dot(dir,normalize(vec2(-1.0,1.0)))));
   float amp=0.07*border*step(0.28,h)*(1.0-smoothstep(0.3,0.6,fw))*(0.55+0.45*dash);
-  float tint=(h-0.5)*0.08*mix(0.4,1.0,border);
+  float tint=(h-0.5)*0.08*border;   /* none at the border: two patches meet without a step */
   return vec3(1.0+amp*ridge+tint,1.0+amp*ridge+tint*0.6,1.0+amp*ridge-tint*0.3)*(0.93+mott*0.14);
 }
 #endif
@@ -520,7 +524,6 @@ void main(){
 #ifdef LIT
   float fine=texture2D(uPaperT,mat2(0.8,-0.6,0.6,0.8)*vW.xz/21.3+0.13).r;   /* rotated: its 21 m period never lines up */
   vec3 paper=uPaper*(0.93+(g1-0.5)*0.22+(g2-0.5)*0.12+(g3-0.5)*0.07);
-  paper*=mix(vec3(1.0),vec3(0.80,0.69,0.50),smoothstep(0.0,0.035,edge)*(1.0-smoothstep(0.035,0.17,edge))*inside);
 #else
   vec3 paper=uPaper*(0.965+(g1-0.5)*0.12+(g2-0.5)*0.07+(g3-0.5)*0.035);
 #endif
@@ -1230,7 +1233,7 @@ function build(){
   const place=(name,G,items,fn)=>{const m=toMesh(name,G,propMat),buf=new Float32Array(items.length*16),inst=new Float32Array(items.length*4);
     items.forEach((it,i)=>{const[x,z,sx,sy,sz,yaw,h,delay,tint]=fn(it);Tr.set(x,0,z);B.Quaternion.RotationYawPitchRollToRef(yaw,0,0,Qn);Sc.set(sx,sy,sz);B.Matrix.ComposeToRef(Sc,Qn,Tr,M);M.copyToArray(buf,i*16);inst.set([h,delay,tint,0],i*4);});
     m.thinInstanceSetBuffer('matrix',buf,16,true);m.thinInstanceSetBuffer('aInst',inst,4,true);return m;};
-  const dec=TREES.filter(t=>!t.con),con=TREES.filter(t=>t.con);
+  const dec=TREES.filter(t=>!t.con&&!t.gap),con=TREES.filter(t=>t.con&&!t.gap);   // gap: left out of the lit map, so out of the world too
   const tfn=t=>{const r=hash(t.x,t.z);return[t.x,t.z,t.s,t.s*(0.9+r*0.25),t.s,r*6.28,Hs(t.x,t.z),hash(t.z,t.x)*0.8+(t.wood?0:0.1),r];};
   PROPS.push(place('dec',treeGeo(false),dec,tfn),place('con',treeGeo(true),con,tfn));
   PROPS.push(place('house',houseGeo(),HOUSES,h=>[h.x,h.z,h.w,h.h,h.d,h.yaw,Hs(h.x,h.z)-0.3,0.2+hash(h.x,h.z)*0.6,0]));
