@@ -85,6 +85,10 @@ describe('world spec', () => {
     cam = z.step(40, hold); expect(cam).toBe(40); expect(z.wanted).toBe(40)   // the player zooms out: the new wanted one
     ground = 35; cam = z.step(cam, hold); expect(cam).toBe(45)
     cam = z.step(30, hold); expect(z.wanted).toBe(30); expect(cam).toBe(45)   // zooming in while held: wanted moves, still held
+    // the page's inputs and the tools set it explicitly: a set equal to the radius shown still lands
+    ground = 13; z.set(15); cam = z.step(cam, hold); expect(cam).toBe(23)
+    z.set(23); cam = z.step(cam, hold); expect(z.wanted).toBe(23); expect(cam).toBe(23)
+    ground = 0; cam = z.step(cam, hold); expect(cam).toBe(23)   // (23 was asked for: no coming back in to 15)
   })
   it('refuses ground outside its range', () => {
     expect(() => checkGround(SPEC, 0.4, 20.3, 2.2)).not.toThrow()
