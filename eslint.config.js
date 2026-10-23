@@ -1,5 +1,6 @@
 // ESLint (flat config). TypeScript everywhere; in src/sim/ the determinism rules of decision 0006
 // (docs/proposals/sim-design.md §2) and the layer rule of decision 0005, enforced instead of remembered.
+import stylistic from '@stylistic/eslint-plugin'
 import tseslint from 'typescript-eslint'
 
 const banned = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh',
@@ -48,4 +49,18 @@ export default tseslint.config(
   // a ruleset is data for the sim: the same rules, and it may import the sim's types and maths
   { files: ['src/rulesets/**/*.ts'], rules: { 'no-restricted-imports': ['error', { patterns: [
     { regex: '^(?!\\.\\./sim/[\\w-]+\\.ts$|\\./)', message: 'A ruleset imports only from src/sim/ and src/rulesets/.' }] }] } },
+  // decision 0052: lines within 120 columns, comments included (Prettier lays out the code, not the comments);
+  // one statement per line, one name per declaration, braces on a body that does not fit on the line. Only the
+  // areas Prettier formats so far (.prettierignore); later PRs widen the list.
+  {
+    files: ['src/sim/**/*.ts', 'src/rulesets/**/*.ts', 'src/scenarios/**/*.ts', 'maps/**/*.ts'],
+    plugins: { '@stylistic': stylistic },
+    rules: {
+      '@stylistic/max-len': ['error', {
+        code: 120, ignoreUrls: true, ignoreStrings: true, ignoreTemplateLiterals: true, ignoreRegExpLiterals: true }],
+      '@stylistic/max-statements-per-line': ['error', { max: 1 }],
+      'one-var': ['error', 'never'],
+      curly: ['error', 'multi-line'],
+    },
+  },
 )
