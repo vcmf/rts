@@ -344,24 +344,55 @@ function bakeHachures(){
 // shadow, a sparse share of them
 let cCanopy=null;
 // a crown sprite: a flat disc, its rim a little darker; a soft shadow sprite
-function crownSprite(){const N=64,[c,g]=newCanvas(N,N),im=g.createImageData(N,N),D=im.data;   // a flat disc, its rim a little darker
-  for(let y=0;y<N;y++)for(let x=0;x<N;x++){const d=Math.hypot(x+0.5-N/2,y+0.5-N/2)/(N/2),o=(y*N+x)*4;if(d>=1){D[o+3]=0;continue;}
-    D[o]=0;D[o+1]=255*(1-0.18*sstep(0.7,0.95,d));D[o+2]=255;D[o+3]=255*(1-sstep(0.88,1,d));}
-  g.putImageData(im,0,0);return c;}
-function shadowSprite(){const N=64,[c,g]=newCanvas(N,N),gr=g.createRadialGradient(N/2,N/2,0,N/2,N/2,N/2);g.clearRect(0,0,N,N);g.globalCompositeOperation='source-over';
-  gr.addColorStop(0,'rgba(255,0,0,0.85)');gr.addColorStop(0.6,'rgba(255,0,0,0.55)');gr.addColorStop(1,'rgba(255,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,N,N);return c;}
 // a slow noise for clumps: the value noise on a 60 m lattice
 const clumpN=(x,z)=>vn(x/60,z/60);
-function bakeCanopy(){
-  const[c,g]=newCanvas(TW,TH),crown=crownSprite(),shade=shadowSprite();
-  g.globalCompositeOperation='source-over';g.imageSmoothingQuality='high';   // newCanvas sets lighter (additive): crowns must cover, not add
-  const ts=[];
-  for(const t of TREES){if(Math.abs(t.x)>MX||Math.abs(t.z)>MZ)continue;const cl=clumpN(t.x,t.z);
-    if(t.wood&&hash(t.x*0.37,t.z*0.37)>0.4)continue;   // sparse: about 4 in 10 of a wood's trees, the same ones every load
-    ts.push({x:t.x,z:t.z,r:(t.wood?4.2:3.2)*t.s*(0.85+0.3*cl)});}
-  ts.sort((a,b)=>b.z-a.z);   // north first: a southern crown overlaps the one behind it
-  for(const t of ts){const r=t.r*PX*1.05;g.drawImage(shade,tx(t.x)-NW[0]*t.r*PX*0.78-r,ty(t.z)+NW[1]*t.r*PX*0.78-r,2*r,2*r);}   // the shadows first, away from the north-west light
-  for(const t of ts){const r=t.r*PX;g.drawImage(crown,tx(t.x)-r,ty(t.z)-r,2*r,2*r);}
+/** A soft round bump (a crown's height), white at its centre to nothing at its rim, for the canopy bake. */
+function bumpSprite() {
+  const N = 32, c = document.createElement('canvas');
+  c.width = c.height = N;
+  const g = c.getContext('2d'), im = g.createImageData(N, N), D = im.data;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const d = Math.hypot(x + 0.5 - N / 2, y + 0.5 - N / 2) / (N / 2);
+    const v = d < 1 ? 0.5 + 0.5 * Math.cos(Math.PI * d) : 0;   // a smooth dome
+    const o = (y * N + x) * 4;
+    D[o] = 255;
+    D[o + 3] = Math.round(v * 255);
+  }
+  g.putImageData(im, 0, 0);
+  return c;
+}
+
+/**
+ * The lit style's woods as a canopy (the owner: green, a feeling of blossom, not dots): a crown about every
+ * CROWN_STEP metres inside each wood, jittered, its size varying slowly across the wood so crowns gather into clumps,
+ * plus the lone trees outside the woods, drawn as soft bumps that add up into a canopy height in the red channel. The terrain shader lights its bumps by the one light, colours it green and casts
+ * its shadow on the paper.
+ */
+const CROWN_STEP = 9;
+function bakeCanopy() {
+  const [c, g] = newCanvas(TW, TH);   // additive: overlapping crowns build up the canopy
+  const bump = bumpSprite();
+  const crown = (x, z, rM) => {
+    const rp = rM * PX;
+    g.drawImage(bump, tx(x) - rp, ty(z) - rp, 2 * rp, 2 * rp);
+  };
+  g.globalAlpha = 0.34;
+  for (const w of WOODS) {
+    const R = w.R * 1.7;
+    for (let z = w.z - R; z <= w.z + R; z += CROWN_STEP) for (let x = w.x - R; x <= w.x + R; x += CROWN_STEP) {
+      const jx = x + (hash(x * 0.13, z * 0.17) - 0.5) * CROWN_STEP * 0.9;
+      const jz = z + (hash(x * 0.19, z * 0.11) - 0.5) * CROWN_STEP * 0.9;
+      if (Math.abs(jx) > MX || Math.abs(jz) > MZ || !inWood(w, jx, jz)) continue;
+      const clump = vn(jx / 45 + w.x, jz / 45);   // slow: whole clumps of bigger or smaller crowns
+      crown(jx, jz, (6.5 + 5 * clump) * (0.85 + 0.3 * hash(jx * 0.07, jz * 0.09)));
+    }
+  }
+  g.globalAlpha = 0.75;   // a lone tree: one crown, standing out on its own
+  for (const t of TREES) {
+    if (t.wood || Math.abs(t.x) > MX || Math.abs(t.z) > MZ) continue;
+    crown(t.x, t.z, 4.5 * t.s);
+  }
+  g.globalAlpha = 1;
   return c;
 }
 // the houses, baked once with the static light (north-west): drawn live, all 221 cost about 11 ms a frame at map zoom,
@@ -819,11 +850,27 @@ void main(){
   /* ink: lifts last */
   float k=uInk*thin;
 #ifdef LIT
-  /* woods: the baked circles, their shadows on the ground first */
-  vec4 Cn=texture2D(uCanopyT,clamp(uv,0.0,1.0))*inside;
-  col=mix(col,col*vec3(0.55,0.56,0.52),Cn.r*0.55*k);
-  float lum=Cn.g/max(Cn.b,0.004);
-  col=mix(col,uCrown*0.95*lum*(0.94+mott*0.12),Cn.b*k);
+  {
+    /* woods: a canopy of crowns (its height baked in R), lit by the one light, green, with its shadow on the paper */
+    vec2 cuv = clamp(uv, 0.0, 1.0);
+    vec2 du = vec2(2.5 / ${TW}.0, 0.0), dv = vec2(0.0, 2.5 / ${TH}.0);
+    float Hc = texture2D(uCanopyT, cuv).r * inside;
+    float hx = texture2D(uCanopyT, cuv + du).r - texture2D(uCanopyT, cuv - du).r;
+    float hz = texture2D(uCanopyT, cuv - dv).r - texture2D(uCanopyT, cuv + dv).r;   /* uv y runs against z */
+    vec3 cn = normalize(vec3(-hx * 3.0, 1.0, -hz * 3.0));
+    vec3 Lc = normalize(vec3(uLightXZ.x, 1.0, uLightXZ.y));
+    float lamC = clamp(dot(cn, Lc) / Lc.y, 0.0, 1.4);   /* 1 on a flat top */
+    float canopy = max(smoothstep(0.1, 0.32, Hc), woodA);   /* the wood filled under its crowns: no paper between them */
+    /* its shadow: the canopy a few metres toward the light, where there is none here */
+    vec2 toLight = vec2(uLightXZ.x / ${2 * MX}.0, -uLightXZ.y / ${2 * MZ}.0) * 9.0;
+    float shadowC = smoothstep(0.1, 0.32, texture2D(uCanopyT, cuv + toLight).r) * (1.0 - canopy) * inside;
+    col = mix(col, col * vec3(0.72, 0.72, 0.66), shadowC * 0.6 * k);
+    /* the green: the season crown colour taken toward the paper, so it sits in its palette */
+    vec3 green = mix(uCrown, uPaper, 0.38) * vec3(0.93, 1.02, 0.97);   /* a little cooler: sage, not olive */
+    vec3 leaf = green * (0.74 + 0.3 * lamC) * (0.95 + 0.1 * mott) * mix(0.8, 1.0, smoothstep(0.05, 0.45, Hc));   /* hollows between the crowns in shade */
+    leaf = mix(leaf, min(leaf * 1.12 + vec3(0.03, 0.04, 0.0), vec3(1.0)), smoothstep(0.55, 0.9, Hc) * smoothstep(1.0, 1.3, lamC));   /* blossom: the tops of the domes catch the light */
+    col = mix(col, leaf, canopy * k);
+  }
 #else
   col=mix(col,uWoodInk,woodMark*0.9*k);
 #endif
