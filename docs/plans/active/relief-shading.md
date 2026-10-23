@@ -117,3 +117,6 @@ Out of scope:
   - an assert that the shadow walk's diagonal is the north-west light;
   - `sstep` reused;
   - no apostrophe in the shader comments.
+- **An experiment, `?tilt=`** (the owner: a more angled view): tilts the map view off straight down, by 0° to 45°. The
+  staff-map design (§9) has the map straight down and tilting only as you zoom in. Decision 0002 allows any RTS angle
+  that stays short of the horizon. Whether the map view tilts is the owner's decision, open.

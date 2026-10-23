@@ -602,12 +602,15 @@ let MAPN=1,TT=0;                                             // mapness and t = 
 const NEAR3D=380,FARMAP=1700;
 const stage=(a,b)=>sstep(a,b,TT);
 let camF=[0,-1,0],camRt=[1,0,0],camUp=[0,0,1],camPos=[0,6000,0],tanH=Math.tan(0.26);
+// an experiment (the owner): ?tilt=degrees tilts the map view off straight down, toward the RTS angle; capped well short
+// of the horizon (decision 0002)
+const MAP_PITCH=Math.PI/2-clamp(Number(Q.get('tilt'))||0,0,45)*Math.PI/180;
 function updateCamera(dt){
   if(CAMS.tw){const k=clamp((performance.now()-CAMS.tw.t0)/CAMS.tw.dur,0,1),e=easeIO(k);CAMS.R=Math.exp(lerp(Math.log(CAMS.tw.from),Math.log(CAMS.tw.to),e));CUR.R=CAMS.R;if(k>=1)CAMS.tw=null;}
   const a=1-Math.exp(-dt*11);
   CUR.R=Math.exp(lerp(Math.log(CUR.R),Math.log(CAMS.R),a));CUR.x=lerp(CUR.x,CAMS.T.x,a);CUR.z=lerp(CUR.z,CAMS.T.z,a);CUR.yaw=lerp(CUR.yaw,CAMS.yaw,a);
   MAPN=sstep(Math.log(NEAR3D),Math.log(FARMAP),Math.log(CUR.R));TT=1-MAPN;
-  const p=lerp(Math.PI/2,0.93,easeIO(stage(0,1))),yaw=CUR.yaw*stage(0.2,0.9);
+  const p=lerp(MAP_PITCH,Math.min(0.93,MAP_PITCH),easeIO(stage(0,1))),yaw=CUR.yaw*stage(0.2,0.9);
   camF=[Math.sin(yaw)*Math.cos(p),-Math.sin(p),Math.cos(yaw)*Math.cos(p)];camRt=[Math.cos(yaw),0,-Math.sin(yaw)];
   camUp=[camF[1]*camRt[2]-camF[2]*camRt[1],camF[2]*camRt[0]-camF[0]*camRt[2],camF[0]*camRt[1]-camF[1]*camRt[0]];
   const ty0=Hs(CUR.x,CUR.z)*stage(0.15,0.7);
