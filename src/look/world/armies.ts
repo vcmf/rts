@@ -84,10 +84,30 @@ export type Blocked = (x: number, z: number) => boolean
  *    its deployment, its fire), its whole footprint (the line, the approach behind it, a margin) clear and within
  *    play, its box clear of the others'; candidates on a 5 m grid, the front row and the middle first;
  *  - the reserves, the rest: standing in column of companies at least RESERVE_BACK m behind the front (a column's box
- *    and a margin, clear of the lines' footprints), the nearest the front and the middle first.
+ *    and a margin, clear of the lines' footprints), the nearest the front and the middle first;
+ *  - the close reserves, only when the reserves leave a side short (docs/plans/active/armies-32k.md: 40 a side; never
+ *    at 20 or fewer on the demo map, whose layout stays as it was): more columns in column of companies, CLOSE m apart
+ *    (men to men) on a finer grid, a line's footprint taken as its shape (a T: the line's full width only as deep as
+ *    its ranks, its approach only as wide as its column), so they may stand behind a line's flanks, never ahead of a
+ *    line they overlap across.
  *  Fails loudly if a side cannot field `perSide` battalions. uniforms: each side's battalions' uniform; centre:
  *  between the two fronts; gap: between them, m (about a volley's range) */
 export const LINE_ROWS = 2, RESERVE_BACK = 40
+const CLOSE = { grid: 2.5, margin: 2, pad: 2 }   // the close reserves: m (their boxes CLOSE.margin a side and CLOSE.pad apart)
+const DEPLOY_SLICES = 4   // the close reserves keep off a deploying line's trapezoid in this many boxes
+// the close reserves' candidates on their CLOSE.grid, the nearest the front and the middle first: the same for either
+// side, built once a play area
+const fineGrids = new Map<number, [number, number][]>()
+function fineGrid(play: number): [number, number][] {
+  let fine = fineGrids.get(play)
+  if (!fine) {
+    fine = []; const g = CLOSE.grid
+    for (let bi = 0; bi * g <= 2 * play; bi++) for (let ai = -Math.floor(play / g); ai * g <= play; ai++) fine.push([ai * g, bi * g])
+    fine.sort((p, q) => 0.5 * Math.abs(p[0]) + p[1] - (0.5 * Math.abs(q[0]) + q[1]) || p[0] - q[0] || p[1] - q[1])
+    fineGrids.set(play, fine)
+  }
+  return fine
+}
 export function layout(perSide: number, d: Drill, blocked: Blocked, uniforms: readonly string[], centre: readonly [number, number] = [0, 0], gap = 110, play = 235): Battalion[] {
   const e = extents(d), out: Battalion[] = [], step = 2.5, margin = 3, G = 5
   const lineW = 2 * e.halfFront + 2 * margin + 6, lineD = APPROACH + e.columnDepth + 2 * margin + 6
@@ -134,6 +154,29 @@ export function layout(perSide: number, d: Drill, blocked: Blocked, uniforms: re
       if (!clear(x, z, -(e.columnDepth + margin), margin, () => e.columnHalf + margin)) continue
       boxes.push({ ac, bh, w: resW, d: resD }); placed++
       out.push({ side: s, uniform: uniforms[s], x, z, heading: h, offset: 0, reserve: true })
+    }
+    if (placed < perSide) {
+      // the close reserves: the lines' boxes as their T (head: the ranks and a margin; stem: the column's approach) and
+      // the ground the companies cross as they deploy, from their column to the line (a trapezoid behind the head, as
+      // wide as the line at the ranks' depth and as the column at its rear: DEPLOY_SLICES boxes, each as wide as its
+      // front)
+      const m = CLOSE.margin, w = 2 * e.columnHalf + 2 * m + CLOSE.pad, dd = e.columnDepth + 2 * m + CLOSE.pad
+      const headD = e.lineDepth + 2 * margin + 6, stemW = 2 * e.columnHalf + 2 * margin + 6, ls = boxes.slice(0, lines)
+      const span = Math.max(0, e.columnDepth - e.lineDepth), half = (dep: number) => e.columnHalf + (e.halfFront - e.columnHalf) * (span > 0 ? (e.columnDepth - dep) / span : 0)
+      const deploy = (o: typeof boxes[0]) => Array.from({ length: span > 0 ? DEPLOY_SLICES : 0 }, (_, k) => {
+        const d0 = e.lineDepth + span * k / DEPLOY_SLICES
+        return { ac: o.ac, bh: o.bh + d0, w: 2 * half(d0) + 2 * margin + 6, d: span / DEPLOY_SLICES + margin }
+      })
+      const parts = [...ls.flatMap(o => [{ ...o, d: headD }, { ...o, w: stemW }, ...deploy(o)]), ...boxes.slice(lines)]
+      for (const [ac, bh] of fineGrid(play)) {
+        if (placed >= perSide) break
+        if (bh < RESERVE_BACK || ls.some(o => Math.abs(o.ac - ac) < (o.w + w) / 2 && bh < o.bh)) continue   // (never ahead of a line)
+        if (!parts.every(o => Math.abs(o.ac - ac) >= (o.w + w) / 2 || bh + dd <= o.bh || o.bh + o.d <= bh)) continue
+        const [x, z] = at(ac, bh)
+        if (!clear(x, z, -(e.columnDepth + m), m, () => e.columnHalf + m)) continue
+        parts.push({ ac, bh, w, d: dd }); placed++
+        out.push({ side: s, uniform: uniforms[s], x, z, heading: h, offset: 0, reserve: true })
+      }
     }
     if (placed < perSide) throw new Error(`armies: room for only ${placed} of ${perSide} battalions for side ${s} within ±${play} m (${lines} in line; src/look/world/armies.ts, layout)`)
   }

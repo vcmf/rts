@@ -570,8 +570,8 @@ cameras orbit that point instead of the camera's start, and the JSON records it 
 
 ### The armies (`?armies=<n>`, scripted; `docs/plans/active/armies-demo.md`)
 
-`?armies=<1..20>` puts n battalions a side on the demo map (414 men each, the ruleset's drill: 5 about 4,000
-figures, 10 about 8,000, 20 about 16,500); not on the page by default, so the goldens and the look checks never see
+`?armies=<1..40>` puts n battalions a side on the demo map (414 men each, the ruleset's drill: 5 about 4,000
+figures, 10 about 8,000, 20 about 16,500, 40 about 33,000: `docs/plans/active/armies-32k.md`); not on the page by default, so the goldens and the look checks never see
 them. WebGL2 only (decision 0046). Each switch below names the A/B it restores; the defaults are the measured best.
 The page names no era (decision 0015): the demo's scenario (`src/scenarios/armies-demo.ts`) names its ruleset, unit
 type, figure and uniforms, resolved through `src/rulesets/index.ts` (`RULESETS`: a ruleset and its uniforms by name)
@@ -655,6 +655,14 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   hills' shadow on it halved and a warm rim on what faces up (`FAR`); under 'own' the far figure keeps its own. Unset,
   a coat under luminance 0.18 (Rec. 709 on linear sRGB, a mid grey: `FAR_COAT_BELOW`) takes 'coat'. `?farpal=0|1`
   forces the rule off or on for every uniform.
+- **The tiny LOD** (`docs/plans/active/armies-32k.md`, step 3, experimental; `?tinylod=0`: none, `?tinypx=<px>`: its
+  switch): a battalion whose figure falls under 12 px tall (±10 %) draws the far LOD's parts as boxes instead (`tinyMesh`,
+  `src/look/units-data.ts`: the shadow proxy's parts, `boneParts`, 8 shared corners each, 112 vertices), a corner's
+  colour a mix of the roles (`TINY`: three vec4 weights) calibrated at load so the boxes show each role in the far
+  LOD's seen share (`seenArea`: both rasterised from 8 sides), posed as the far LOD and painted by its material (far
+  palette, lift, growth, the smooth moves between steps); the coat mask dithered by the coat's weight (a 4 × 4 ordered
+  dither); it never casts into the map, and its men keep their simple shadows (decision 0049) as the far LOD's do. A
+  host's LODs: the figure's nearest first, the shadow proxy, the simple shadow, then the tiny LOD (built only when on).
 - **Far figures larger** (`?farscale=0`: their own size): the far LOD grows as the figure falls from 90 % of the LOD
   switch to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here) and 1.15 tall; render only.
 - **Trodden ground** (`?trample=0`: none): a 256² mask over a box round the ground in view (64 to 1,024 m), drawn on
@@ -673,7 +681,12 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   (110 m apart), the front row and the middle first, each with its approach behind it clear; the rest are reserves in
   column of companies at least 40 m behind the front, clear of the lines' footprints, the nearest first (5 m grid).
   Water, trees (bushes are walked through), the buildings' yards are kept clear, and it throws when a side has no room.
-  On the demo map 20 a side is 4 and 3 battalions in line, the rest in column.
+  On the demo map 20 a side is 4 and 3 battalions in line, the rest in column. When the reserves leave a side short
+  (40 a side; never at 20 or fewer on the demo map, whose layout is unchanged: a test hashes it), **close reserves**
+  fill in: more columns on a 2.5 m grid, 6 m apart men to men, taking each line's footprint as its T (its ranks' full
+  width, its approach only as wide as its column) and the trapezoid its companies cross as they deploy (as wide as
+  the line at the ranks' depth, as the column at its rear: four boxes), so they may stand behind a line's flanks,
+  never ahead of a line nor in a deploying company's way (the test checks every man's path at 40 a side).
 - **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at
   their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
 - **The bench**: `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions in

@@ -40,6 +40,14 @@ varying float vFar;
 uniform vec2 uFarScale;
 #endif
 varying vec3 vW,vN,vCol;varying vec2 vRoot;varying float vRole;
+#ifdef TINY
+// the tiny LOD (docs/plans/active/armies-32k.md, step 3; tinyMesh, src/look/units-data.ts): a corner's colour is a mix
+// of the roles, its weights a role each (up to 12), the mean colour of what its box stands for seen from above
+attribute vec4 aRW0,aRW1,aRW2;uniform float uCoatRole;varying float vCoatW;
+vec3 palMix(vec3 p[PAL_N]){vec3 c=vec3(0.0);
+  for(int i=0;i<PAL_N;i++){float w=i<4?aRW0[i]:i<8?aRW1[i-4]:aRW2[i-8];c+=p[i]*w;}
+  return c;}
+#endif
 #endif
 mat4 boneAt(float b,int f){int x=int(b)*4;
   return mat4(texelFetch(uVAT,ivec2(x,f),0),texelFetch(uVAT,ivec2(x+1,f),0),texelFetch(uVAT,ivec2(x+2,f),0),texelFetch(uVAT,ivec2(x+3,f),0));}
@@ -70,10 +78,18 @@ void main(){
   #else
   vN=normalize(mat3(finalWorld)*ln);vW=w.xyz;vRoot=finalWorld[3].xz;
   vCol=uPal[int(aRole+0.5)];vRole=aRole;
+  #ifdef TINY
+  vCol=palMix(uPal);
+  int ci=int(uCoatRole+0.5);vCoatW=uCoatRole<-0.5?0.0:ci<4?aRW0[ci]:ci<8?aRW1[ci-4]:aRW2[ci-8];
+  #endif
   #ifdef FAR
   float px=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz));
   vFar=1.0-smoothstep(uFarK.y*0.35,uFarK.y*0.9,px);
-  vCol=mix(vCol,uPalFar[int(aRole+0.5)],vFar);
+  vec3 cf=uPalFar[int(aRole+0.5)];
+  #ifdef TINY
+  cf=palMix(uPalFar);
+  #endif
+  vCol=mix(vCol,cf,vFar);
   #endif
   #endif
   gl_Position=p;}
