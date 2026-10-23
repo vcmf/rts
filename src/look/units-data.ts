@@ -4,7 +4,9 @@
 export interface UnitRange { start: number; end: number; loop: boolean; clips: string[]; seconds: number; speed: number }   // speed: m/s the root moves at for the feet to stay planted
 export interface UnitLod { name: string; vertices: number; triangles: number }
 export interface UnitData {
-  fps: number; mPerUnit: number; bones: string[]; lods: UnitLod[]; ranges: Record<string, UnitRange>
+  fps: number; mPerUnit: number; bones: string[]
+  lods: UnitLod[]   // nearest first, each lighter than the one before (the page draws the last far, the one before it near, a first of three nearest)
+  ranges: Record<string, UnitRange>
   palette: string[]   // the colour roles, in order: a vertex's role is an index into it (an army's colours paint it)
   vat: { width: number; height: number; data: Uint16Array }
   mesh: Record<string, { positions: Float32Array; normals: Float32Array; roles: Uint8Array; boneIndices: Uint8Array; boneWeights: Float32Array; indices: Uint16Array }>
@@ -49,6 +51,7 @@ export function checkUnits(d: UnitData): void {
   const bad: string[] = [], nb = d.bones.length
   if (d.vat.width !== (nb + 1) * 4) bad.push(`vat width ${d.vat.width} is not (bones + 1) × 4 = ${(nb + 1) * 4}`)
   if (d.vat.data.length !== d.vat.width * d.vat.height * 4) bad.push(`vat holds ${d.vat.data.length} values, not width × height × 4`)
+  d.lods.forEach((l, i) => { if (i > 0 && !(l.triangles < d.lods[i - 1].triangles)) bad.push(`${l.name}: not lighter than ${d.lods[i - 1].name} (the LODs nearest first)`) })
   for (const l of d.lods) {
     const m = d.mesh[l.name], n = l.vertices
     if (m.positions.length !== n * 3 || m.normals.length !== n * 3 || m.roles.length !== n || m.boneIndices.length !== n * 4 || m.boneWeights.length !== n * 4) bad.push(`${l.name}: a vertex buffer is not ${n} vertices long`)

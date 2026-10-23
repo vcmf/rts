@@ -16,7 +16,7 @@ import '@babylonjs/core/Shaders/postprocess.vertex.js'
 import '@babylonjs/core/Shaders/fsr1Upscale.fragment.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import type { LookState } from './materials.ts'
-import { D } from './spec.ts'
+import { D, TUNED_R, ZoomHold, clearRadius } from './spec.ts'
 import DOFCOC from './shaders/dofcoc.glsl?raw'
 import DOF_FS from './shaders/dof.frag?raw'
 import DOFDOWN_FS from './shaders/dofdown.frag?raw'
@@ -47,19 +47,35 @@ export const MSAA = { samples: 4, byte: true, stencil: true }
 // ?nanmark: a pixel that is not a number shows magenta instead of its neighbours' mean (docs/plans/done/nan-guard.md)
 export const DEBUG = { nanmark: false }
 const FOCUS_S = 0.25
+// m: from here out the eye clears the SPEC's highest ground (ground.hi, at the steepest pitch's cos) by its clearance:
+// no ground to read (checked in test/look-spec.test.ts)
+export const CLEAR_BELOW = (D.spec.ground.hi + D.spec.camera.clearance - D.spec.camera.focusY) / Math.cos(D.spec.camera.betaMax)
 const TAPS = [16, 24, 32, 48, 64]
 
-// the top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit
-export function buildCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateCamera {
+// each camera's zoom hold (buildCamera's): the page's zoom inputs and the tools set the wanted radius through it
+const HOLDS = new WeakMap<ArcRotateCamera, ZoomHold>()
+export const zoomOf = (camera: ArcRotateCamera): ZoomHold => { const z = HOLDS.get(camera); if (!z) throw new Error('zoomOf: not a camera buildCamera made'); return z }
+
+// the top-down RTS view only (decision 0002); our own controller replaces Babylon's at prototype exit. ground: the
+// drawn ground's height (the zoom is held out where the eye would come within the SPEC's clearance of it)
+export function buildCamera(scene: Scene, canvas: HTMLCanvasElement, ground: (x: number, z: number) => number): ArcRotateCamera {
   const c = D.spec.camera, PLAY = D.spec.play
   const camera = new ArcRotateCamera('cam', c.yaw0, START.beta, START.radius, new Vector3(START.x, c.focusY, START.z), scene)
   scene.activeCamera = camera; camera.attachControl(canvas, true)
   // locked down (decision 0010): yaw ± the spec's range around the default, pitch and zoom inside the checked limits
   camera.lowerAlphaLimit = c.yaw0 - c.yawRange; camera.upperAlphaLimit = c.yaw0 + c.yawRange
   camera.lowerRadiusLimit = c.rMin
-  rtsControls(scene, camera, canvas)
+  const zoom = new ZoomHold(); HOLDS.set(camera, zoom)
+  rtsControls(scene, camera, canvas, zoom)
   // pan in the ground plane (Babylon pans in the view plane by default, which lifts the target); the focus stays in the play area
-  camera.mapPanning = true; scene.onBeforeRenderObservable.add(() => { const t = camera.target; t.x = Math.max(-PLAY, Math.min(PLAY, t.x)); t.z = Math.max(-PLAY, Math.min(PLAY, t.z)) })
+  // the closest zoom held out over high ground (clearRadius, ZoomHold, src/look/spec.ts: decision 0051), the player's
+  // wanted zoom kept apart so it comes back in on lower ground; from CLEAR_BELOW out the eye always clears the tile's
+  // highest ground, so the ground is not read there. The depth of field's zoom ease is reckoned from TUNED_R out
+  camera.mapPanning = true; scene.onBeforeRenderObservable.add(() => {
+    const t = camera.target; t.x = Math.max(-PLAY, Math.min(PLAY, t.x)); t.z = Math.max(-PLAY, Math.min(PLAY, t.z))
+    const r = zoom.step(camera.radius, w => w < CLEAR_BELOW ? clearRadius(c, w, camera.alpha, camera.beta, t.x, t.y, t.z, ground) : w)
+    if (r !== camera.radius) camera.radius = r
+  })
   camera.upperRadiusLimit = c.rMax; camera.lowerBetaLimit = c.betaMin; camera.upperBetaLimit = c.betaMax
   camera.panningSensibility = 30; camera.minZ = 0.5; camera.maxZ = 5000; camera.fov = c.fov; camera.inertia = 0.88
   // the SPEC checked frames up to aspectMax: a wider screen keeps that frame's horizontal field of view and sees
@@ -81,7 +97,7 @@ export const typingIn = (t: EventTarget | null): boolean => t instanceof HTMLTex
 // trackpad's two-finger swipe pans (the ground follows the fingers) and its pinch zooms; a mouse wheel zooms. They
 // replace Babylon's keyboard (which turned the camera) and wheel (which only zoomed); dragging still turns and pans
 const PAN_PER_S = 0.9, TURN_PER_S = 1.2, SWIPE = 0.0016, PINCH = 0.01, WHEEL = 0.0012
-function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasElement): void {
+function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasElement, zoom: ZoomHold): void {
   camera.inputs.removeByType('ArcRotateCameraKeyboardMoveInput'); camera.inputs.removeByType('ArcRotateCameraMouseWheelInput')
   // the ground's forward (away from the camera) and right, from the camera's yaw
   const pan = (right: number, fwd: number) => {
@@ -113,7 +129,9 @@ function rtsControls(scene: Scene, camera: ArcRotateCamera, canvas: HTMLCanvasEl
       const lo = camera.lowerRadiusLimit ?? 1, hi = camera.upperRadiusLimit ?? 1e4
       // a pinch's steps are small (a few pixels); a wheel's notch, with or without Ctrl, a hundred (or a few lines)
       const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY
-      camera.radius = Math.min(hi, Math.max(lo, camera.radius * Math.exp(dy * (e.ctrlKey && Math.abs(dy) < 50 ? PINCH : WHEEL))))
+      // (the wanted radius scaled, not the one shown: held out over a hill, a zoom in must not raise it, decision 0051)
+      const w = Number.isNaN(zoom.wanted) ? camera.radius : zoom.wanted
+      zoom.set(Math.min(hi, Math.max(lo, w * Math.exp(dy * (e.ctrlKey && Math.abs(dy) < 50 ? PINCH : WHEEL)))))
     } else { const k = camera.radius * SWIPE; pan(e.deltaX * k, -e.deltaY * k) }
   }, { passive: false })
 }
@@ -286,7 +304,7 @@ export class Post {
       // the blurs by the zoom (strongest at the closest zoom, DOF.wide of it at the widest) and the frame's lines, each
       // frame before the first pass
       d.onApply = e => {
-        const z = Math.min(1, Math.max(0, (camera.radius - c.rMin) / (c.rMax - c.rMin))), ease = S.dofAmt * d.height / 1080 * (1 + (DOF.wide - 1) * z)
+        const z = Math.min(1, Math.max(0, (camera.radius - TUNED_R) / (c.rMax - TUNED_R))), ease = S.dofAmt * d.height / 1080 * (1 + (DOF.wide - 1) * z)
         px = DOF.px * ease; npx = DOF_NEAR.px * ease
         e.setFloat2('uTexel', 1 / d.width, 1 / d.height); e.setFloat2('uOut', p.width, p.height); lensUniforms(e)
       }

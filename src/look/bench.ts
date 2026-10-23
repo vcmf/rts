@@ -19,8 +19,8 @@ import { EffectRenderer, type EffectWrapper } from '@babylonjs/core/Materials/ef
 import { RenderTargetTexture } from '@babylonjs/core/Materials/Textures/renderTargetTexture.js'
 import { GpuTimer } from './gputimer.ts'
 import { TR, TRACE, TRACE_FIELDS } from './trace.ts'
-import { START } from './post.ts'
-import { D } from './spec.ts'
+import { START, zoomOf } from './post.ts'
+import { D, TUNED_R } from './spec.ts'
 
 declare const __BUILD__: string
 
@@ -79,11 +79,15 @@ export const q = (a: ArrayLike<number>, p: number): number => { const s = Array.
 const MIN_FRAMES = 20
 const stat = (a: number[]): Stat => ({ p50: +q(a, 0.5).toFixed(3), p95: +q(a, 0.95).toFixed(3), max: +Math.max(...a).toFixed(3), n: a.length })
 
-// the closest, default and widest zoom (the widest at the steepest pitch, which shows the most world), each at the
-// yaw limits and the default yaw (decision 0010)
+// the close, default and widest zoom (the widest at the steepest pitch, which shows the most world), each at the
+// yaw limits and the default yaw (decision 0010); close at TUNED_R (45 m), the closest zoom the bench's history measured (the
+// closer zoom, decision 0051: ?benchclosest=1 adds the closest, rMin)
+const closestParam = new URLSearchParams(location.search).get('benchclosest')
+if (closestParam !== null && closestParam !== '0' && closestParam !== '1') throw new Error(`?benchclosest must be 0 or 1, not ${closestParam}`)
 function cameras(): Cam[] {
-  const c = D.spec.camera, out: Cam[] = []
-  for (const [z, beta, radius] of [['close', START.beta, c.rMin], ['default', START.beta, START.radius], ['wide', c.betaMax, c.rMax]] as const)
+  const c = D.spec.camera, out: Cam[] = [], zooms: [string, number, number][] = [['close', START.beta, TUNED_R], ['default', START.beta, START.radius], ['wide', c.betaMax, c.rMax]]
+  if (closestParam === '1') zooms.unshift(['closest', START.beta, c.rMin])
+  for (const [z, beta, radius] of zooms)
     for (const [y, da] of [['yaw-45', -c.yawRange], ['yaw0', 0], ['yaw+45', c.yawRange]] as const) out.push({ name: `${z}.${y}`, alpha: c.yaw0 + da, beta, radius })
   return out
 }
@@ -237,7 +241,7 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
   try {
     await seconds(2)   // shaders compiled, first frames out of the way
     for (const cam of cams) {
-      camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; camera.target.set(focus.x, D.spec.camera.focusY, focus.z)
+      camera.alpha = cam.alpha; camera.beta = cam.beta; camera.radius = cam.radius; zoomOf(camera).set(cam.radius); camera.target.set(focus.x, D.spec.camera.focusY, focus.z)
       // (panning: a triangle wave along the view's right, the arc camera's alpha + π/2 on the ground)
       const ra = cam.alpha + Math.PI / 2, rx = Math.cos(ra), rz = Math.sin(ra), pt0 = performance.now()
       const pan = PAN ? scene.onBeforeRenderObservable.add(() => {
@@ -249,6 +253,8 @@ export async function runBench(scene: Scene, camera: ArcRotateCamera, passes: Be
         await arm.apply(); await scene.whenReadyAsync()
         for (let tries = 0; ; tries++) {
           await frames(10)
+          // (the closest zooms are held out over high ground, decision 0051: a camera there would measure another radius)
+          if (Math.abs(camera.radius - cam.radius) > 1e-6) throw new Error(`bench camera ${cam.name}: the zoom is held out to ${camera.radius.toFixed(2)} m over high ground, not ${cam.radius} m (decision 0051): choose another ?benchat`)
           timer.reset(); frameMs.length = draws.length = tris.length = 0; recN = recLost = 0; timed.clear(); lastT = 0; passFrames = 0; hidden = document.hidden
           // the hold, and at least MIN_FRAMES frames (a software renderer takes seconds a frame)
           const t0 = performance.now(); timing = true

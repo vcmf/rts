@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url'
 import * as png from './png.mjs'
 import { CAMS } from './golden.mjs'
 import { prepSteps, shoot, viewStep } from './look-page.mjs'
-import { SPEC } from '../src/look/spec.ts'
+import { SPEC, TUNED_R } from '../src/look/spec.ts'
 import { authorWorld, authoredNormal } from '../src/look/world/author.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -72,7 +72,10 @@ function halfLag(v, w, x0, y0, n, dx, dy, maxLag = 40) {
 }
 
 // ---------- scale ----------
-const SWEEP = Array.from({ length: 8 }, (_, i) => CAM.rMin * (CAM.rMax / CAM.rMin) ** (i / 7))
+// the sweep's and the seams' closest zoom: the start focus sits on the map's hill, where the closest zoom (15 m) is held
+// out to up to 24.3 m (the eye's clearance, decision 0051) and the views must measure the radius they ask for
+const R_NEAR = 25
+const SWEEP = Array.from({ length: 8 }, (_, i) => R_NEAR * (CAM.rMax / R_NEAR) ** (i / 7))
 const PITCHES = [BETA0, CAM.betaMax]
 const WIN = 192, WINDOWS = [['far', 32], ['centre', H / 2 - WIN / 2], ['near', H - 32 - WIN]]
 function scale(url, dir, defs) {
@@ -99,7 +102,7 @@ function scale(url, dir, defs) {
 }
 
 // ---------- seams ----------
-const SEAM_ZOOMS = [CAM.rMin, R0, CAM.rMax]
+const SEAM_ZOOMS = [R_NEAR, R0, CAM.rMax]
 // The largest step between neighbouring pixels a smooth texture can draw, in the debug view's red units (0–255):
 // its steepest texel step × the most texels a pixel can span (octave A spans at least half a tile; the incidence
 // stretches it by up to 1/√cos, the cos no less than EDGE_ON: edge-on faces are skipped) × the largest renormalisation (√8: two planes, two octaves,
@@ -257,7 +260,9 @@ function banks(url, dir, defs) {
       pts.push([x, z, ...authoredNormal(H, x, z, e)])
     }
   }
-  const zooms = [CAM.rMin, 90]
+  // (45 m, the closest zoom it was made for: the bend's river ground is never held, but at 25 m too few of the bank's
+  // points are on screen, 130 of the 200 it needs)
+  const zooms = [TUNED_R, 90]
   const steps = [...prepSteps(), detail([...defs, 'DETAIL_DEBUG_N'], true)]
   for (const r of zooms) {
     steps.push(viewStep([`bank-r${r}`, A0, BETA0, r, `${target}`, 0]), ['shot', `banks.r${r}`])

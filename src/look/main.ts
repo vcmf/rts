@@ -21,11 +21,11 @@ import { CLUMP_REACH, CLUMP_REACH_FLOW } from './meadow-spec.ts'
 import { gradeColour, MOOD, SEASON, seasonLight, setBounce, setGroundBounce, setMood } from './mood.ts'
 import { buildNature } from './nature.ts'
 import { buildMeadow, buildMeadowMap, RINGS } from './meadow.ts'
-import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn } from './post.ts'
+import { DEBUG, DOF, DOF_NEAR, DOF_PAINT, MSAA, Post, buildCamera, typingIn, zoomOf } from './post.ts'
 import LOOK_URL from '../../data/painted-world.lookdata?url'
 import { groundAt, setHeightfield } from './heightfield.ts'
 import { RIVER, atCutBank, bankReachAt, lerpA, riverQuery, setRiver, wetEdgeAt, wetEdges } from './river.ts'
-import { D, checkGround } from './spec.ts'
+import { D, TUNED_R, checkGround } from './spec.ts'
 import { axisX, baseH } from './world/author.ts'
 import { checkLookData, decodeLook, unpackSpans, ROAD_SEG, ROAD_SLOTS } from './world/data.ts'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js'
@@ -119,7 +119,7 @@ const sunXZ = new Vector2(SUN.x, SUN.z).normalize()
 const GRASS_PARTS = ['strokes', 'dense', 'big', 'hue'], grassOff = params.get('grassoff')?.split(',') ?? []
 if (grassOff.some(k => !GRASS_PARTS.includes(k)) || (grassOff.length && grassMode !== 'flow')) throw new Error(`?grassoff takes ${GRASS_PARTS.join(', ')}, with the combed meadow (not ?grass=brush)`)
 // the camera's distance from the focus over which the combed clumps go from larger and denser to the default's (the
-// closest zoom is 45 m, the default view 125)
+// closest zoom is 15 m, decision 0051; the default view 125)
 const CLOSE_ZOOM: [number, number] = [70, 110]
 // the strokes' largest footprint, m a pixel (strokeK, macro.glsl: whole under about half of it, gone past it); the near
 // bake reads it too (below)
@@ -248,7 +248,7 @@ if (!MACRO_ARMS.includes(macroArm)) throw new Error(`?macro must be ${MACRO_ARMS
 // (a baked arm other than the bake's own bakes as it is set)
 const armBake = await macro.setArm(macroArm)
 const macroBake = armBake.texels ? armBake : await macro.bake()
-const camera = buildCamera(scene, canvas)
+const camera = buildCamera(scene, canvas, groundAt)
 // the roads' live shader only from mid zoom in (docs/plans/done/roads.md, decision 0039): farther out the macro bake
 // holds them and the tile's ground takes its material without them (the shader's size alone cost every ground pixel).
 // Nearing ROAD_LIVE_R the live roads fade to the baked look (uRoadFar: the wheel tracks to their dusting, the grit out),
@@ -313,6 +313,10 @@ if (smHold !== null && smHold !== 'fixed') throw new Error(`?smhold must be fixe
 if (shadowLod !== null && shadowLod !== 'far') throw new Error(`?shadowlod must be far, not ${shadowLod}`)
 // batch C: ?farscale=0, the far figures at their own size
 const farScale = bit('farscale'), trample = bit('trample'), flags = bit('flags')   // ?trample=0: no trodden ground; ?flags=0: no colours
+// the close zoom (docs/plans/active/close-zoom.md): ?nearestpx=<px>, the figure's height on screen from which a man is
+// drawn at the figure's nearest LOD (when it has one); 0: never
+const nearestPx = params.get('nearestpx')
+if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) throw new Error(`?nearestpx must be a whole number of pixels, 0 to 2000, not ${nearestPx}`)
 // the simple shadows (decision 0049, docs/plans/active/simple-soldier-shadows.md): ?ushadowfar=map, the map at every zoom
 // (the A/B; else simple: the map up close, a baked shape a man drawn on the ground beyond); ?ushadowswitch=<r0>,<r1>, the cross-fade's band
 // (m from the focus); ?smoothmove=0, the figures' places at the 12 fps steps (else every frame; the poses stay stepped);
@@ -349,6 +353,7 @@ if (armiesParam !== null) {
   units = new UnitsC(scene, camera, mats, [...terrain.tileMats, ...(meadow?.meshes.map(m => m.material as ShaderMaterial) ?? [])], decodeUnits(await r.arrayBuffer()), drill, layout(+armiesParam, drill, blocked, ARMIES_DEMO.sides), era.uniforms, () => S.t)
   units.lazyShadows = uShadowRate ?? true; units.casterNear = uShadowLod ?? false; units.tightCull = uCull ?? true
   units.holdShare = smHold !== 'fixed'; units.proxyCasters = shadowLod !== 'far'
+  if (nearestPx !== null) units.nearestPx = +nearestPx
   units.simpleFar = uShadowFar !== 'map'; if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
   units.groundMap = meadow !== null; if (decalLift !== null) units.decalLift = +decalLift
   // the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): made only with them, baked again
@@ -382,10 +387,11 @@ const input = (id: string) => byId<HTMLInputElement>(id)
 input('dofamt').oninput = () => { S.dofAmt = +input('dofamt').value }
 // the render scale (decision 0045, after 0036): a fixed one from the panel, or Auto (S.res 0, the default): by zoom,
 // from the camera's radius, a level of AUTO (each change resizes the frame's targets: two over the whole range; the
-// edges at 80 and 88 % of the SPEC's zoom range, 0.75 at the widest), changed only once the radius is AUTO_HOLD m
-// past the level's edge (no flicker at an edge).
+// edges at 80 and 88 % of the zoom range it was tuned on, TUNED_R to rMax: 217 and 234 m; 0.75 at the widest),
+// changed only once the radius is AUTO_HOLD m past the level's edge (no flicker at an edge). The closer zoom (decision
+// 0051) keeps the edges where they were: 0.9 from the closest zoom to the first.
 // The interface is HTML over the canvas: it stays sharp. The check tools pin it to 1 (tools/look-page.mjs)
-const { rMin, rMax } = D.spec.camera, at = (f: number) => rMin + f * (rMax - rMin)   // the edges as shares of the zoom range
+const { rMax } = D.spec.camera, at = (f: number) => TUNED_R + f * (rMax - TUNED_R)
 // From the closest zoom 0.9 (the owner, 2026-10-20: docs/plans/done/render-scale.md). With the upscale (above) the
 // canvas stays at the page's pixels and the finishing chain draws at the scale, resized in place (post.scale: no pass
 // made again), its last pass drawing the screen: EASU at 0.9, bilinear at the wide zooms' scales (EASU cost more than
@@ -472,7 +478,7 @@ if (nature.setSeason && nature.shadowState) {
   let dragging = false
   zoomEl.addEventListener('pointerdown', () => { dragging = true })
   for (const ev of ['pointerup', 'pointercancel', 'blur']) addEventListener(ev, () => { dragging = false }); zoomEl.addEventListener('change', () => { dragging = false })
-  zoomEl.oninput = () => { camera.radius = Math.exp(lo + (hi - lo) * +zoomEl.value) }
+  zoomEl.oninput = () => { zoomOf(camera).set(Math.exp(lo + (hi - lo) * +zoomEl.value)) }   // (the wanted zoom: ZoomHold)
   let shown = NaN
   scene.onBeforeRenderObservable.add(() => { if (!dragging && camera.radius !== shown) { shown = camera.radius; zoomEl.value = String((Math.log(shown) - lo) / (hi - lo)) } })
 }
@@ -567,7 +573,7 @@ if (new URLSearchParams(location.search).get('river') === 'debug') {   // centre
 // the page contract of tools/golden.mjs, and the names tools/render-check.js and tools/river-check.js read (they were
 // written against the prototype's globals; SMW and MASKN are the prototype's names for TILE_W and MASK_N)
 Object.assign(window, {
-  __proto: { S, scene, camera, buildPost: () => post.build(), play: D.spec.play },
+  __proto: { S, scene, camera, zoom: zoomOf(camera), buildPost: () => post.build(), play: D.spec.play },   // zoom: the wanted radius (ZoomHold: read wanted, set(r))
   B: { Vector3, Matrix, DynamicTexture, VertexBuffer },
   // H is the drawn ground (the heightfield); baseH and RIVER.axisX are the authoring formulas the river check compares with
   scene, engine, camera, apron: terrain.apron, __waterTexMs: waterTexMs, RIVER: { ...RIVER, axisX }, H: groundAt, baseH, riverQuery, lerpA, wetEdges, wetEdgeAt, bankReachAt, atCutBank, BAND: D.band, PLAY: D.spec.play, SMW: D.spec.tile, TSUB: D.spec.tileSub, MASKN: D.spec.sizes.riverMask, SM_FADE_M: D.spec.shadowFade, SPEC: D.spec,

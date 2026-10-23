@@ -8,8 +8,9 @@ git-ignored, the owner's checkout):
 e.g. blender -b --python-exit-code 1 -P tools/bake-figure.py -- ../rts/output/figures/fr-line-infantry
 
 Deterministic: the same GLBs give the same bytes. Adapted from the crowd bench's bake (the branch look/l1a-crowd-bench,
-its soldier bake), which read the trial's .blend: here the published soldier-lod1.glb and soldier-lod2.glb (the
-same skeleton and clips in both, checked), the clips by ROLE (decision 0015: the page names roles, this file maps
+its soldier bake), which read the trial's .blend: here the published soldier-lod0.glb, soldier-lod1.glb and
+soldier-lod2.glb (the same skeleton and clips in all three, checked; LOD0 is the nearest, drawn only for the men tall on
+screen at the closest zoom: docs/plans/active/close-zoom.md), the clips by ROLE (decision 0015: the page names roles, this file maps
 them to the figure's clips; decision 0037's bindings come with the sim).
 
 What it writes (little-endian): b'UNIT', u32 version (2), u32 header length, the header (JSON, UTF-8, padded to 4),
@@ -38,7 +39,8 @@ FPS = 12                       # the art bible's stepped animation
 CLIPS = json.loads((SRC / 'clips.json').read_text())
 SOURCE_FPS = CLIPS['fps']
 M_PER_UNIT = CLIPS['m_per_unit']
-LODS = ['lod1', 'lod2']        # LOD0 (9,274 triangles) is for stills: a battalion of 400 at LOD1 is already 480 k
+LODS = ['lod0', 'lod1', 'lod2']   # nearest first: the page draws LOD0 (9,274 triangles) only for the men tall on screen
+ANIM = 'lod1'                  # the skeleton and the animation are read from LOD1's scene (the others checked against it)
 # the roles a formation's men can be given -> (the figure's clips played in order, loop). A chain's clips join on a
 # shared pose (clips.json's starts/ends), kept once; a loop's last pose is its first. The root's speed comes from the
 # first clip's root_speed (the page moves a marching man at it, so his planted feet stay put)
@@ -72,18 +74,25 @@ def texture(mesh):
 def texel(px, W, H, uv):
     return px[min(H - 1, max(0, int(uv[1] * H))), min(W - 1, max(0, int(uv[0] * W)))]
 
-def texel_role(rgb):
-    # the crowd bench's colour test, retuned to the published figure's texture (measured over its 512² texels: its red
-    # runs to hue 25 and its navy to a saturation of 0.12, both below the trial's cuts): the navy before the dark (a
-    # coat in shadow is still the coat), the reds before the skin (the skin lighter and less saturated)
+def hsv(rgb):
+    """hue in degrees, saturation, value"""
     r, g, b = rgb
-    mx, mn = max(r, g, b), min(r, g, b); v = mx; s = 0 if mx == 0 else (mx - mn) / mx; d = mx - mn or 1e-9
-    hue = (((g - b) / d) % 6 if mx == r else (b - r) / d + 2 if mx == g else (r - g) / d + 4) * 60
+    mx, mn = max(r, g, b), min(r, g, b); d = mx - mn or 1e-9
+    return (((g - b) / d) % 6 if mx == r else (b - r) / d + 2 if mx == g else (r - g) / d + 4) * 60, 0 if mx == 0 else (mx - mn) / mx, mx
+
+def texel_role(rgb):
+    # the crowd bench's colour test, retuned to the published figure's texture (measured over its 512² texels: its navy
+    # runs to a saturation of 0.12, below the trial's cut): the navy before the dark (a coat in shadow is still the coat),
+    # the reds before the skin. The red facings sit at hue 342..8 (measured per triangle on all three LODs,
+    # docs/plans/active/close-zoom.md); the skin at hue 14..26, saturation 0.38..0.55, value 0.6..0.85: a red cut at hue
+    # 24 (the earlier test) took nine tenths of the hands and the faces (#133, the red faces). Hue 12..24 is red only
+    # when deeply saturated
+    hue, s, v = hsv(rgb)
     if 195 < hue < 275 and s > .12 and v > .05: return 'coat'
-    if (hue < 24 or hue > 335) and s > .4 and v > .22: return 'facings'
+    if ((hue < 12 or hue > 335) and s > .4 or hue < 24 and s > .6) and v > .22: return 'facings'
     if ((s < .3 and 28 < hue < 75) or s < .12) and v > .5: return 'white'
     if v < .3 and s < .4: return 'dark'
-    if 14 < hue < 42 and .18 < s < .55 and v > .5: return 'skin'
+    if 12 <= hue < 42 and .18 < s < .6 and v > .5: return 'skin'
     return 'leather'
 
 def tri_role(me, groups, vi, co, rgb):
@@ -95,10 +104,26 @@ def tri_role(me, groups, vi, co, rgb):
         return 'metal' if mx > .45 and (mx - mn) / max(mx, 1e-9) < .25 else 'wood'
     if co.y > .075 and co.z > .55: return 'pack'   # the pack and blanket roll on the back
     role = texel_role(rgb)
-    return 'dark' if role in ('skin', 'leather') and co.z > .885 else role   # above the brim: the shako, black
+    if role in ('skin', 'leather') and co.z > .885: return 'dark'   # above the brim: the shako, black
+    # between the gaiters' tops and the collar, the navy in deep shade drifts to violet and grey (hue to 345, saturation
+    # down to 0.08, measured per triangle: the chest's and the back's 'dark' triangles, #133's review): the coat, not
+    # black (a white coat showed them as black blotches); the black there (the cartridge box, the scabbard) is warm or
+    # greyer
+    if role == 'dark' and .3 < co.z < .78:
+        hue, s, _ = hsv(rgb)
+        if 180 < hue < 345 and s > .08: return 'coat'
+    # the face's shaded side (value under 0.5) is skin, not leather (#133): on the head's bone, its front half (y under
+    # 0.02) within the cheeks (|x| under 0.06), not the visor (the brim's last 2 cm jutting forward: z over 0.865 with
+    # y under -0.06), skin-like shades only (hue 5 to 40, saturation 0.15 to 0.65, value from 0.2); the hair behind,
+    # the visor and the chinscales keep theirs (measured per triangle, docs/plans/active/close-zoom.md)
+    visor = co.z > .865 and co.y < -.06
+    if role == 'leather' and max(w, key=w.get, default='').endswith('Head') and co.y < .02 and abs(co.x) < .06 and not visor:
+        hue, s, v = hsv(rgb)
+        if 5 <= hue <= 40 and .15 <= s <= .65 and v >= .2: return 'skin'
+    return role
 
-# ---- the skeleton and the animation, from LOD1's scene (LOD2's is checked to be the same)
-scene, rig, mesh = load(LODS[0])
+# ---- the skeleton and the animation, from ANIM's scene (the other LODs' are checked to be the same)
+scene, rig, mesh = load(ANIM)
 assert scene.render.fps == SOURCE_FPS and scene.render.fps_base == 1, f'the scene runs at {scene.render.fps} fps, not {SOURCE_FPS}'
 bones = [b.name for b in rig.data.bones if b.use_deform]
 assert len(bones) < 255, 'bone indices are stored as bytes'
@@ -147,9 +172,13 @@ print('BAKE vat', len(rows), 'steps x', len(bones) + 1, 'matrices')
 # ---- the LOD meshes
 lods, blobs = [], []
 for lod in LODS:
-    if lod != LODS[0]:
+    if lod != ANIM:
         scene, rig2, mesh = load(lod)
-        assert [b.name for b in rig2.data.bones if b.use_deform] == bones, f'{lod}: not the same skeleton as {LODS[0]}'
+        assert [b.name for b in rig2.data.bones if b.use_deform] == bones, f'{lod}: not the same skeleton as {ANIM}'
+        # its vertices are skinned with ANIM's inverse binds (the bones' texture): the rest poses must agree too
+        gap = max(abs(x - y) for n, ib in zip(bones, inv_bind) for r0, r1 in zip(rig2.data.bones[n].matrix_local, ib.inverted()) for x, y in zip(r0, r1))
+        assert gap < 1e-4, f'{lod}: its rest pose differs from {ANIM}\'s by {gap} (model units)'
+    else: scene, rig, mesh = load(lod)
     px, W, H = texture(mesh)
     me = mesh.data.copy(); me.calc_loop_triangles()
     groups = {g.index: g.name for g in mesh.vertex_groups}

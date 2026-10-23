@@ -19,6 +19,8 @@ export interface Spec {
     aspectMax: number                         // the widest frame checked; wider screens keep this horizontal field of view (src/look/post.ts)
     horizonMargin: number                     // no frame corner comes nearer the horizon than this, rad (decision 0002)
     focusY: number                            // the focus height, m
+    clearance: number                         // the eye never comes nearer the ground under it than this, m: the zoom
+                                              // is held out where it would (clearRadius, ZoomHold; src/look/post.ts)
   }
   ground: { lo: number; hi: number }          // lo: the lowest ground anywhere; hi: the highest on the tile, m (checked against the data)
   texel: { shadow: number; light: number; ao: number }   // the largest texel each bake may have, m
@@ -56,7 +58,7 @@ export interface Spec {
 
 export const SPEC: Spec = {
   tile: 800, tileSub: 448, far: 2600, farSub: 182, play: 235, margin: 165, aoMargin: 40, aoRing: 40,
-  camera: { yaw0: -Math.PI / 2 - 0.35, yawRange: Math.PI / 4, betaMin: 0.3, betaMax: 0.98, rMin: 45, rMax: 260, fov: 0.62, aspectMax: 16 / 9, horizonMargin: 0.1, focusY: 8 },
+  camera: { yaw0: -Math.PI / 2 - 0.35, yawRange: Math.PI / 4, betaMin: 0.3, betaMax: 0.98, rMin: 15, rMax: 260, fov: 0.62, aspectMax: 16 / 9, horizonMargin: 0.1, focusY: 8, clearance: 6 },
   ground: { lo: 0, hi: 25 },   // the tile spans 0.4..20.3 m, the far ring 2.2..27.5 m; checked at load
   texel: { shadow: 0.33, light: 0.5, ao: 4 },
   sizes: { lightMap: 3072, aoCell: 3, riverMask: 2048, reflMask: 1536, aoTex: 768, grain: 512 },
@@ -91,13 +93,15 @@ const isInt = (x: number) => near(x, Math.round(x))
 // Points of the frame (image x, y in −1..1, y up), cast onto ground planes at the given heights (a ray's hit is
 // convex in the plane's height, so the range's two ends bound it) for every allowed zoom and pitch:
 // the largest distance from the focus, or Infinity when a ray comes within `horizonMargin` of the horizon (it
-// would show the sky, decision 0002). Yaw turns the footprint without changing its distances.
+// would show the sky, decision 0002). Yaw turns the footprint without changing its distances. Over ground that high
+// the closest zoom is held out until the eye is `clearance` above it (src/look/post.ts): the reach is affine in the
+// radius, so the held radius and rMax bound it; held past rMax, the camera would be inside the ground.
 function reachOf(s: Spec, pts: number[][], planes: number[]): number {
   const c = s.camera, tv = Math.tan(c.fov / 2), th = tv * c.aspectMax
   let R = 0
-  for (const groundY of planes) for (const beta of [c.betaMin, c.betaMax]) for (const r of [c.rMin, c.rMax]) for (const [sx, sy] of pts) {
-    const drop = c.focusY - groundY
-    if (r * Math.cos(beta) + drop <= 0) return Infinity   // the camera would be inside the ground
+  for (const groundY of planes) for (const beta of [c.betaMin, c.betaMax]) for (const r0 of [c.rMin, c.rMax]) for (const [sx, sy] of pts) {
+    const drop = c.focusY - groundY, r = Math.max(r0, (c.clearance - drop) / Math.cos(beta))
+    if (r > c.rMax + 1e-9 || r * Math.cos(beta) + drop <= 0) return Infinity   // the camera would be inside the ground
     // camera frame: forward tilted beta from straight down; up in the image is away from the camera on the ground
     const fy = -Math.cos(beta), fz = Math.sin(beta), uy = Math.sin(beta), uz = Math.cos(beta)
     const dx = sx * th, dy = fy + sy * tv * uy, dz = fz + sy * tv * uz, len = Math.hypot(dx, dy, dz)
@@ -128,7 +132,8 @@ export function derive(s: Spec = SPEC): Derived {
   // coverage: the detailed tile holds the play area and its margin; the far ring holds every view
   if (s.tile / 2 < s.play + s.margin) bad.push(`coverage: tile/2 = ${s.tile / 2} m < play + margin = ${s.play + s.margin} m`)
   const nearReach = nearReachOf(s)
-  if (!isFinite(nearReach)) bad.push('camera: the closest view sits at or below the highest tile ground, or sees the horizon below the focus row')
+  if (!(c.clearance > 0)) bad.push('camera: the eye\'s clearance over the ground must be positive')
+  if (!isFinite(nearReach)) bad.push('camera: a view would sit inside the highest tile ground (held out to its clearance past rMax), or sees the horizon below the focus row')
   else if (nearReach > s.margin) bad.push(`coverage: the frame below the focus reaches ${nearReach.toFixed(0)} m > margin ${s.margin} m (the far ring would show beside the play edge)`)
   if (s.aoMargin < s.aoRing) bad.push(`bake: the heightfield's margin ${s.aoMargin} m < the occlusion ring ${s.aoRing} m`)
   const footprint = footprintOf(s)
@@ -194,6 +199,43 @@ export function shadowMapSize(d: Derived, boxW: number, boxH: number, sunSinElev
     + (bakeMB(d.macroN, d.macroN) + bakeMB(d.macroFarN, d.macroFarN)) * 4 / 3 + bakeMB(s.far / s.macro.cover, s.far / s.macro.cover)   // the macro colour (mipmapped) and the cover grid
   if (mb > s.minSpec.bakeMB) throw new Error(`world spec: bake: ${mb.toFixed(0)} MB of bakes > ${s.minSpec.bakeMB} MB (min-spec)`)
   return { w, h }
+}
+
+// m: the closest zoom the look was tuned at (decision 0051 keeps what was tuned there: the depth of field's zoom ease,
+// the render scale's Auto edges, the bench's close camera)
+export const TUNED_R = 45
+
+// The radius that keeps the eye `clearance` above the ground under it (the closest zoom over high ground: reachOf
+// assumes it): the radius asked for if the eye clears there, else the first one out that does (0.5 m steps, then
+// bisected to a millimetre; the ground under the eye moves with the radius, so no fixed point is assumed), at most
+// rMax. The orbit camera's eye: the focus plus r (cos a sin b, cos b, sin a sin b)
+export function clearRadius(c: Spec['camera'], r: number, alpha: number, beta: number, tx: number, ty: number, tz: number, ground: (x: number, z: number) => number): number {
+  const ca = Math.cos(alpha), sa = Math.sin(alpha), sb = Math.sin(beta), cb = Math.cos(beta)
+  const clears = (q: number) => q * cb + ty - ground(tx + q * ca * sb, tz + q * sa * sb) >= c.clearance
+  if (clears(r)) return r
+  let lo = r, hi = Math.min(c.rMax, r + 0.5)
+  while (!clears(hi)) { if (hi >= c.rMax) return c.rMax; lo = hi; hi = Math.min(c.rMax, hi + 0.5) }
+  while (hi - lo > 1e-3) { const m = (lo + hi) / 2; if (clears(m)) hi = m; else lo = m }
+  return hi
+}
+
+/** The player's zoom kept apart from the held one: the camera shows the wanted radius, or more where the hold says
+ *  (clearRadius over high ground), and comes back in when the ground falls away. The page's zoom inputs and the tools
+ *  set the wanted radius (set: the wheel, the pinch and the slider scale it, not the radius shown); a radius another
+ *  input gives the camera itself (Babylon's own pointers) is taken as the new wanted one */
+export class ZoomHold {
+  wanted = NaN
+  private shown = NaN
+  private explicit = false
+  /** the wanted radius, as the player or a tool asks for it */
+  set(r: number): void { this.wanted = r; this.explicit = true }
+  /** the radius to show, given the camera's now and the hold */
+  step(current: number, hold: (r: number) => number): number {
+    if (this.explicit) this.explicit = false
+    else if (current !== this.shown) this.wanted = current
+    this.shown = hold(this.wanted)
+    return this.shown
+  }
 }
 
 // the drawn ground must stay inside the spec's range, which the camera's reach assumes: the tile within lo..hi,

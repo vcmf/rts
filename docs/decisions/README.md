@@ -56,4 +56,5 @@ recorded here on 2026-10-08.
 | [0047](0047-figures-cast-runtime-shadows.md) | The figures cast runtime shadows from a map of their own | proposed |
 | [0048](0048-battle-in-a-worker.md) | The battle runs in a worker, its soldiers stepped at 12 fps | proposed |
 | [0049](0049-simple-shadows-beyond-close-zoom.md) | The figures' shadow map only up close; one simple shadow a soldier beyond | proposed |
+| [0051](0051-closer-zoom-nearest-lod.md) | The closest zoom at 15 m, held over high ground, with the full figure for the men nearest | proposed |
 | [0052](0052-code-style.md) | Code style: Prettier formats, ESLint keeps lines short and one statement each | proposed |

@@ -16,6 +16,7 @@ import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Frustum } from '@babylonjs/core/Maths/math.frustum.js'
 import { Matrix, Vector2, Vector3, Vector4 } from '@babylonjs/core/Maths/math.vector.js'
+import type { Plane } from '@babylonjs/core/Maths/math.plane.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
 import '@babylonjs/core/Engines/Extensions/engine.alphaToCoverage.js'
@@ -41,8 +42,13 @@ const ROLES = ['halt', 'march', 'run', 'fire'] as const
 const RESERVE = { phase: 'halt', start: 0, deployEnd: 0 } as const   // a reserve's phase: halted in column, always
 
 interface Host {
-  b: Battalion; lod: Mesh[]; near: boolean;   // lod: the near LOD, the far LOD, the shadow proxy (casts only), the simple shadow (drawn on the ground)
+  b: Battalion; lod: Mesh[]; near: boolean;   // lod: the figure's LODs nearest first (the data's), the shadow proxy (casts only), the simple shadow (drawn on the ground)
   matrices: Float32Array; settings: Float32Array; jitter: Float32Array
+  // the nearest LOD (a figure with three LODs, its men tall on screen: setSplit, share): each man drawn at the nearest
+  // LOD or the next by his own size on screen. split: the battalion's men are shared out; sel: a man at the nearest
+  // (1); nearM/nearS/nearN its men's matrices, clips and moves, restM/restS/restN the others' (the next LOD's buffers
+  // while split); resplit: the lists are older than the matrices
+  split: boolean; sel: Uint8Array; nearM: Float32Array; nearS: Float32Array; nearN: Float32Array; restM: Float32Array; restS: Float32Array; restN: Float32Array; resplit: boolean
   next: Float32Array      // each man's move to his next step's place (x, y, z): the places between two steps (aNext)
   moving: boolean         // re-placed at every step (its phase moves its men)
   cx: number; cz: number; lo: Vector3; hi: Vector3
@@ -60,6 +66,7 @@ const SM_REACH = 900   // m: a view ray that meets no ground is cut here (the wi
 const SM_BIAS = 0.02   // m along the sun: no receiver is drawn into the map, so it only absorbs float rounding
 const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1]   // the view's corners in clip space
 const FIGURE = 1.8     // m: a figure's height, for the LOD's pixel test
+const MAN_R = 1.6      // m: a man's bounding sphere round his middle (his musket at the present), for the nearest LOD's view test
 const SM_HOLD = 6      // m: lazy, the held sun box must cover the view by this much
 const FLAG_W = 1.4, FLAG_H = 1.1, FLAG_TOP = 3.0, FLAG_WIND = 0.6, FLAG_MIN_PX = 12  // m; rad; the cloth's least height on screen
 const TR_N = 256, TR_EVERY = 0.25   // the trodden ground's mask: texels a side; s between its redraws while men move
@@ -79,6 +86,11 @@ const SHAPE_FACINGS = 16   // the simple shadow's facings (shadowShape)
 /** the cross-fade's band (decision 0049): the camera's distance to its focus (m) where the map gives way to the simple
  *  shadows, from the map alone to the simple shadows alone (?ushadowswitch=<r0>,<r1>); near the LOD switch (48 px at 1080 lines: 63 m) */
 export const SHADOW_SWITCH: readonly [number, number] = [60, 85]
+
+// an axis-aligned box wholly outside one of the planes (its corner most along the plane's normal behind it)
+function boxOutside(planes: Plane[], x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): boolean {
+  return planes.some(p => p.normal.x * (p.normal.x > 0 ? x1 : x0) + p.normal.y * (p.normal.y > 0 ? y1 : y0) + p.normal.z * (p.normal.z > 0 ? z1 : z0) + p.d < 0)
+}
 
 export class Units {
   readonly data: UnitData
@@ -107,6 +119,16 @@ export class Units {
   private readonly man: ManState = { x: 0, z: 0, face: 0, role: 'halt', since: 0, moving: false }
   /** the figure height in pixels below which a battalion draws its far LOD (±10%, so it does not flicker) */
   lodPx = 48
+  /** the figure height in pixels from which a man is drawn at the nearest LOD, when the figure has one (±10 %; the
+   *  battalions whose bounds are out of the view or whose nearest point is under 90 % of it never look: ?nearestpx=<px>, 0 for none) */
+  nearestPx = 100
+  // the LODs' places in a host's meshes: the far LOD (the data's last), the near one before it, then the shadow proxy
+  // and the simple shadow; the nearest LOD is the first when the figure has three (the data says which it has)
+  private readonly farLod: number
+  private readonly nextLod: number
+  private readonly proxyLod: number
+  private readonly decalLod: number
+  private readonly hasNearest: boolean
   /** the shadow map redrawn only when it would change (?ushadowrate=0: every frame): the poses step at the bake's fps,
    *  so a frame between two steps, with the sun's box and the men where they were, would draw the same map */
   lazyShadows = true
@@ -190,7 +212,8 @@ export class Units {
   constructor(scene: Scene, camera: ArcRotateCamera, mats: Materials, receivers: ShaderMaterial[], data: UnitData, drill: Drill, battalions: Battalion[], uniforms: Readonly<Record<string, Uniform>>, clock: () => number) {
     this.scene = scene; this.camera = camera; this.receivers = receivers; this.drill = drill; this.clock = clock; this.uniforms = uniforms
     this.data = data
-    if (data.lods.length !== 2) throw new Error(`units: drawn with two LODs, the data has ${data.lods.length}`)
+    if (data.lods.length !== 2 && data.lods.length !== 3) throw new Error(`units: drawn with two or three LODs, the data has ${data.lods.length}`)
+    this.farLod = data.lods.length - 1; this.nextLod = this.farLod - 1; this.proxyLod = this.farLod + 1; this.decalLod = this.farLod + 2; this.hasNearest = data.lods.length > 2
     for (const r of ROLES) if (!data.ranges[r]) throw new Error(`units: the figure has no clips for the role ${r} (tools/bake-figure.py)`)
     this.slot = slots(drill); this.mats0 = mats
     let best = Infinity, bi = 0
@@ -203,14 +226,14 @@ export class Units {
     const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVAT', 'aVid', 'aNext'], n = data.palette.length
     // the far figure's growth (setFarScale): across up to FAR_SCALE_XZ, but never wider than 95 % of a file (the far
     // LOD's shoulders, measured between 1.2 and 1.5 m up), and FAR_SCALE_Y tall
-    const fm = data.mesh[data.lods[1].name]; let x0 = Infinity, x1 = -Infinity
+    const fm = data.mesh[data.lods[this.farLod].name]; let x0 = Infinity, x1 = -Infinity
     for (let v = 0; v < fm.positions.length / 3; v++) { const y = fm.positions[v * 3 + 1]; if (y > 1.2 && y < 1.5) { x0 = Math.min(x0, fm.positions[v * 3]); x1 = Math.max(x1, fm.positions[v * 3]) } }
     // (no vertex in that band, a figure of another shape: not widened)
     const farScale = new Vector2(x1 > x0 ? Math.min(FAR_SCALE_XZ, 0.95 * drill.fileSpacing / (x1 - x0)) : 1, FAR_SCALE_Y)
     this.farScaleV = farScale
     // 1: the battalions' bounds' side pad, from the baked poses: the far LOD's farthest reach from a man's root across
     // every step (his musket at the present), as wide as the far figures grow, a little to spare
-    const pv = posedVertices(data, data.lods[1].name)
+    const pv = posedVertices(data, data.lods[this.farLod].name)
     let reach = 0
     for (let i = 0; i < pv.data.length; i += 8) reach = Math.max(reach, Math.hypot(pv.data[i], pv.data[i + 2]))
     this.sidePad = reach * farScale.x + 0.2
@@ -258,7 +281,7 @@ export class Units {
     }
     // the shadow proxy (shadowProxy, src/look/units-data.ts): a third mesh a battalion, never drawn in the view, cast from
     // its posed vertices (VAT_POS), both sides of its quads
-    const px = shadowProxy(data, data.lods[1].name), pp = posedMesh(data, px), pn = px.positions.length / 3
+    const px = shadowProxy(data, data.lods[this.farLod].name), pp = posedMesh(data, px), pn = px.positions.length / 3
     const vatx = RawTexture.CreateRGBATexture(pp.data, pp.width, pp.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
     vatx.name = 'figureShadowPosed'
     this.depthProxyMat = new ShaderMaterial('unitsDepthProxy', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep', 'uStepFrac'], samplers: ['uVAT', 'uVATP'], defines: ['#define DEPTH', '#define VAT_POS'] })
@@ -282,26 +305,38 @@ export class Units {
     scene.onBeforeRenderObservable.add(() => this.frame())
   }
 
+  // a battalion's mesh for a LOD (li: its place in h.lod): a clone of the LOD's, its own geometry (thin-instance
+  // matrices are vertex buffers on the geometry, and clones share it: without its own every battalion would draw with
+  // the last one's men), its material, drawn into the shadow map with the depth material
+  private hostMesh(li: number, b: Battalion, index: number): Mesh {
+    const src = this.lods[li], host = src.clone(`${src.name}_${index}`)
+    host.makeGeometryUnique()
+    host.material = li === this.decalLod ? this.decal ?? this.depthProxyMat : li === this.proxyLod ? this.depthProxyMat : (li === this.farLod ? this.farMats : this.mats).get(b.uniform) ?? null   // (the far LOD's own: the far palette, posed)
+    if (li >= this.proxyLod) host.isVisible = false   // (the proxy: shown to the map alone; the simple shadows: shown by frame())
+    if (li === this.decalLod) host.alphaIndex = 1000   // (after everything else)
+    // (a clone of a disabled source is disabled: enabled while the figures show; the nearest LOD's by setSplit)
+    host.isPickable = false; host.alwaysSelectAsActiveMesh = false; host.setEnabled(this.shown && (li !== 0 || !this.hasNearest)); this.meshes.push(host)
+    this.shadowRT.setMaterialForRendering(host, li === this.proxyLod ? this.depthProxyMat : li === this.farLod && this.posed ? this.depthVatMat : this.depthMat)
+    return host
+  }
+
   private add(b: Battalion): void {
     const men = this.slot.line.length
-    const lod = this.lods.map((src, li) => {
-      const host = src.clone(`${src.name}_${this.hosts.length}`)
-      // thin-instance matrices are vertex buffers on the geometry, and clones share it: without its own geometry
-      // every battalion would draw with the last one's men
-      host.makeGeometryUnique()
-      host.material = li === 3 ? this.decal ?? this.depthProxyMat : li === 2 ? this.depthProxyMat : (li === 1 ? this.farMats : this.mats).get(b.uniform) ?? null   // (the far LOD's own: the far palette, posed)
-      if (li >= 2) host.isVisible = false   // (the proxy: shown to the map alone; the simple shadows: shown by frame())
-      if (li === 3) host.alphaIndex = 1000   // (after everything else)
-      host.isPickable = false; host.setEnabled(true); host.alwaysSelectAsActiveMesh = false; this.meshes.push(host)
-      this.shadowRT.setMaterialForRendering(host, li === 2 ? this.depthProxyMat : this.depthMat)   // (the far LOD's: setPosed)
-      return host
-    })
+    // the nearest LOD's mesh is made at the battalion's first split (setSplit): until then its place holds the LOD's
+    // own mesh, disabled and never drawn (a battalion never split costs no copy of the full figure: about 1 MB each)
+    const lod = this.lods.map((src, li) => this.hasNearest && li === 0 ? src : this.hostMesh(li, b, this.hosts.length))
     const rnd = mulberry(1 + this.hosts.length * 7919), jitter = new Float32Array(men * 4)   // ±3 cm, ±4°, a man's own lag: no two alike
     for (let i = 0; i < men; i++) { jitter[i * 4] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 1] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 2] = (rnd() - 0.5) * 0.14; jitter[i * 4 + 3] = rnd() * 2 - 1 }
     const matrices = new Float32Array(men * 16), settings = new Float32Array(men * 3), next = new Float32Array(men * 3)
-    for (const m of lod) { m.thinInstanceSetBuffer('matrix', matrices, 16, false); m.thinInstanceSetBuffer('aVAT', settings, 3, false); m.thinInstanceSetBuffer('aNext', next, 3, false) }
-    const all = () => lod.map(() => true)
-    this.hosts.push({ b, lod, near: false, matrices, settings, jitter, next, moving: false, cx: b.x, cz: b.z, lo: new Vector3(), hi: new Vector3(), step: -1, phase: null, stale: all(), staleSet: all(), staleNext: all(), cycle: -1, index: this.hosts.length })
+    // (the nearest LOD's buffers its own, made at the first split; the next LOD's swapped to the rest's while split)
+    lod.forEach((m, li) => {
+      if (this.hasNearest && li === 0) return
+      m.thinInstanceSetBuffer('matrix', matrices, 16, false); m.thinInstanceSetBuffer('aVAT', settings, 3, false); m.thinInstanceSetBuffer('aNext', next, 3, false)
+      m.doNotSyncBoundingInfo = true   // (its bounds are place()'s: a buffer swapped in must not refit them)
+    })
+    const all = () => lod.map(() => true), none = () => new Float32Array(0)
+    this.hosts.push({ b, lod, near: false, matrices, settings, jitter, next, moving: false, cx: b.x, cz: b.z, lo: new Vector3(), hi: new Vector3(), step: -1, phase: null, stale: all(), staleSet: all(), staleNext: all(), cycle: -1, index: this.hosts.length,
+      split: false, sel: new Uint8Array(0), nearM: none(), nearS: none(), nearN: none(), restM: none(), restS: none(), restN: none(), resplit: true })
   }
 
   // every man's matrix and clip at the battalion's local time: his place and facing from the script, set on the ground;
@@ -350,15 +385,60 @@ export class Units {
     h.lo.set(minX - pad, minY - 0.3, minZ - pad); h.hi.set(maxX + pad, maxY + top, maxZ + pad)
     for (const m of h.lod) m.getBoundingInfo().reConstruct(h.lo, h.hi)
     // (the simple shadow's bounds: stretched away from the sun by the longest shadow, as tall as the far figures grow)
-    const k = this.scratch; shadowBox(h, top, k.a, k.b); h.lod[3].getBoundingInfo().reConstruct(k.a, k.b)
-    h.stale.fill(true); h.staleNext.fill(true)
+    const k = this.scratch; shadowBox(h, top, k.a, k.b); h.lod[this.decalLod].getBoundingInfo().reConstruct(k.a, k.b)
+    h.stale.fill(true); h.staleNext.fill(true); h.resplit = true
     this.placeFlag(h)
     if (changed) h.staleSet.fill(true)
   }
 
   // the mesh a battalion casts its shadow with (its index in h.lod): the near LOD where drawn near if casterNear
-  // (?ushadowlod=1), else the shadow proxy (proxyCasters), else the far LOD (?shadowlod=far)
-  private casterOf(h: Host): number { return this.casterNear && h.near ? 0 : this.proxyCasters ? 2 : 1 }
+  // (?ushadowlod=1; split, its men at the nearest LOD cast with it too: cull), else the shadow proxy (proxyCasters),
+  // else the far LOD (?shadowlod=far)
+  private casterOf(h: Host): number { return this.casterNear && h.near ? this.nextLod : this.proxyCasters ? this.proxyLod : this.farLod }
+
+  // a battalion's men shared out between the nearest LOD and the next (on), or all at the next (off): the next LOD's
+  // buffers swapped to the rest's lists (share writes them) or back to the battalion's own
+  private setSplit(h: Host, on: boolean): void {
+    h.split = on
+    const men = h.settings.length / 3
+    if (on && h.sel.length !== men) {   // (the mesh and the lists made at the battalion's first split: no memory for one never split)
+      h.sel = new Uint8Array(men); h.nearM = new Float32Array(men * 16); h.nearS = new Float32Array(men * 3); h.nearN = new Float32Array(men * 3)
+      h.restM = new Float32Array(men * 16); h.restS = new Float32Array(men * 3); h.restN = new Float32Array(men * 3)
+      const m = this.hostMesh(0, h.b, h.index)
+      m.thinInstanceSetBuffer('matrix', h.nearM, 16, false); m.thinInstanceSetBuffer('aVAT', h.nearS, 3, false); m.thinInstanceSetBuffer('aNext', h.nearN, 3, false)
+      m.doNotSyncBoundingInfo = true; m.getBoundingInfo().reConstruct(h.lo, h.hi)
+      h.lod[0] = m
+    }
+    const l = h.lod[this.nextLod]
+    l.thinInstanceSetBuffer('matrix', on ? h.restM : h.matrices, 16, false); l.thinInstanceSetBuffer('aVAT', on ? h.restS : h.settings, 3, false); l.thinInstanceSetBuffer('aNext', on ? h.restN : h.next, 3, false)
+    h.lod[0].setEnabled(on && this.shown)
+    if (on) { h.sel.fill(0); h.resplit = true }
+    h.stale[this.nextLod] = h.staleSet[this.nextLod] = h.staleNext[this.nextLod] = true
+  }
+
+  // Each man of a split battalion at the nearest LOD while he is in the view (his sphere inside the camera's planes)
+  // and tall on screen (nearestPx, ±10 %: a man at the switch does not flicker), else at the next; the two lists
+  // written again when a man changes LOD or the men were placed. Whether a man changed LOD
+  private share(h: Host, cam: Vector3, pxPerM: number): boolean {
+    const m = h.matrices, s = h.settings, n = h.next, sel = h.sel, on = this.nearestPx * 1.1, off = this.nearestPx * 0.9, k = FIGURE * pxPerM
+    let changed = false
+    for (let i = 0; i < sel.length; i++) {
+      const o = i * 16, x = m[o + 12], y = m[o + 13] + FIGURE / 2, z = m[o + 14]
+      let want = k / Math.max(1, Math.hypot(cam.x - x, cam.y - y, cam.z - z)) >= (sel[i] ? off : on) ? 1 : 0
+      if (want) for (const p of this.camPlanes) if (p.normal.x * x + p.normal.y * y + p.normal.z * z + p.d <= -MAN_R) { want = 0; break }
+      if (want !== sel[i]) { sel[i] = want; changed = true }
+    }
+    if (!changed && !h.resplit) return false
+    h.resplit = false
+    let a = 0, b = 0
+    for (let i = 0; i < sel.length; i++) {
+      const mi = m.subarray(i * 16, i * 16 + 16), si = s.subarray(i * 3, i * 3 + 3), ni = n.subarray(i * 3, i * 3 + 3)
+      if (sel[i]) { h.nearM.set(mi, a * 16); h.nearS.set(si, a * 3); h.nearN.set(ni, a * 3); a++ } else { h.restM.set(mi, b * 16); h.restS.set(si, b * 3); h.restN.set(ni, b * 3); b++ }
+    }
+    h.lod[0].thinInstanceCount = a; h.lod[this.nextLod].thinInstanceCount = b
+    h.stale[0] = h.staleSet[0] = h.staleNext[0] = h.stale[this.nextLod] = h.staleSet[this.nextLod] = h.staleNext[this.nextLod] = true
+    return changed
+  }
 
   // a thin-instance buffer sent to the GPU (n floats), counted for the bench's trace
   private upload(m: Mesh, kind: string, n: number): void {
@@ -397,8 +477,10 @@ export class Units {
     for (const m of this.farMats.values()) m.setVector2('uFarK', this.farK.set(FIGURE * pxPerM, this.lodPx))
     let moved = step !== this.smStep   // (the map changes with the poses' step, the men's places, the casters' LOD)
     let anyMoved = false   // (a battalion's men written this frame: the trodden ground follows)
+    // the camera's planes, once a frame: the nearest LOD's tests and the shadow casters' cull (cull) read them
+    if ((this.hasNearest && this.nearestPx > 0) || (mapOn && this.tightCull)) Frustum.GetPlanesToRef(cam.getTransformationMatrix(), this.camPlanes)
     for (const h of this.hosts) {
-      if (!h.lod[0].isEnabled()) continue
+      if (!this.shown) continue
       const t = T - h.b.offset, cycle = Math.floor(t / CYCLE), local = t - cycle * CYCLE, cycleStart = T - local
       const p = h.b.reserve ? RESERVE.phase : phaseAt(this.drill, local, this.speed.march, this.speed.run).phase
       // a battalion's men are written when they move (a marching or deploying one once a step), else once a phase
@@ -409,17 +491,29 @@ export class Units {
       }
       h.moving = moving
       const px = FIGURE * pxPerM / Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
-      const near = h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1
+      // the nearest LOD: looked at only when the battalion's nearest point (its bounds) is within 90 % of its switch and
+      // its bounds are in the view
+      let split = false
+      if (this.hasNearest && this.nearestPx > 0) {
+        const lo = h.lo, hi = h.hi, dx = Math.max(lo.x - camPos.x, 0, camPos.x - hi.x), dy = Math.max(lo.y - camPos.y, 0, camPos.y - hi.y), dz = Math.max(lo.z - camPos.z, 0, camPos.z - hi.z)
+        split = FIGURE * pxPerM / Math.max(1, Math.hypot(dx, dy, dz)) >= this.nearestPx * (h.split ? 0.8 : 0.9)
+        if (split) split = !boxOutside(this.camPlanes, lo.x, lo.y, lo.z, hi.x, hi.y, hi.z)
+      }
+      const near = split || (h.near ? px >= this.lodPx * 0.9 : px >= this.lodPx * 1.1)
       if (near !== h.near && this.casterNear) moved = true
-      h.near = near; h.lod[0].isVisible = near; h.lod[1].isVisible = !near; h.lod[3].isVisible = decalOn
-      // the LOD drawn, the far LOD when it casts for a battalion drawn near, the simple shadows while they show;
-      // the hidden one is updated when drawn again
+      if (split !== h.split) { this.setSplit(h, split); if (this.casterNear) moved = true }
+      if (split && this.share(h, camPos, pxPerM) && this.casterNear) moved = true
+      h.near = near; h.lod[this.nextLod].isVisible = near && (!split || h.lod[this.nextLod].thinInstanceCount > 0); h.lod[this.farLod].isVisible = !near; h.lod[this.decalLod].isVisible = decalOn
+      if (h.sel.length) h.lod[0].isVisible = split && h.lod[0].thinInstanceCount > 0   // (made at the first split)
+      // the LODs drawn, the one that casts for the battalion, the simple shadows while they show; a hidden one is updated
+      // when drawn again
       const kc = this.casterOf(h)
       for (let k = 0; k < h.lod.length; k++) {
-        if (k !== (near ? 0 : 1) && !(mapOn && k === kc) && !(decalOn && k === 3)) continue
+        const drawn = near ? k === this.nextLod || (split && k === 0) : k === this.farLod
+        if (!drawn && !(mapOn && (k === kc || (split && k === 0 && kc === this.nextLod))) && !(decalOn && k === this.decalLod)) continue
         if (h.stale[k]) { this.upload(h.lod[k], 'matrix', h.matrices.length); h.stale[k] = false }
         if (h.staleSet[k]) { this.upload(h.lod[k], 'aVAT', h.settings.length); h.staleSet[k] = false }
-        if (h.staleNext[k] && (k === 3 || this.smooth)) { this.upload(h.lod[k], 'aNext', h.next.length); h.staleNext[k] = false }
+        if (h.staleNext[k] && (k === this.decalLod || this.smooth)) { this.upload(h.lod[k], 'aNext', h.next.length); h.staleNext[k] = false }
       }
     }
     if (this.trampleOn) this.trample(T, anyMoved)
@@ -466,7 +560,7 @@ export class Units {
       if (TRACE.on) { tr(TR.sm); tr(TR.smCasters, this.culled.length); for (const m of this.culled) tr(TR.smTris, m.thinInstanceCount * m.getTotalIndices() / 3) }
     })
     rt.onAfterRenderObservable.add(() => { for (const m of shown) m.isVisible = false; shown.length = 0 })
-    for (const h of this.hosts) h.lod.forEach((l, li) => rt.setMaterialForRendering(l, li === 2 ? this.depthProxyMat : li === 1 && this.posed ? this.depthVatMat : this.depthMat))
+    for (const h of this.hosts) h.lod.forEach((l, li) => rt.setMaterialForRendering(l, li === this.proxyLod ? this.depthProxyMat : li === this.farLod && this.posed ? this.depthVatMat : this.depthMat))
     return rt
   }
 
@@ -484,7 +578,8 @@ export class Units {
     for (let j = 0; j < 4; j++) {
       const o = j * 6
       for (let e = 0; e < 2; e++) {
-        const gy = e ? g.hi : g.lo, r = R[o + 4] < -1e-3 ? Math.min((gy - R[o + 1]) / R[o + 4], SM_REACH) : SM_REACH
+        // (a plane above the eye, the closest zooms over a hill: the ray never meets it ahead, so the eye's own point)
+        const gy = e ? g.hi : g.lo, r = R[o + 4] < -1e-3 ? Math.max(0, Math.min((gy - R[o + 1]) / R[o + 4], SM_REACH)) : SM_REACH
         k.pts[n++].set(R[o] + R[o + 3] * r, R[o + 1] + R[o + 4] * r, R[o + 2] + R[o + 5] * r)
       }
     }
@@ -545,7 +640,10 @@ export class Units {
     for (let j = 0; j < 4; j++) {
       Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 0, inv, k.a); Vector3.TransformCoordinatesFromFloatsToRef(CORNERS[j * 2], CORNERS[j * 2 + 1], 1, inv, k.b)
       k.b.subtractToRef(k.a, k.d).normalize()
-      const o = j * 6, r = k.d.y < -1e-3 ? Math.min((y0 - k.a.y) / k.d.y, SM_REACH) : SM_REACH
+      // (the focus's ground above the eye, looking up a slope at the closest zooms: a plane the clearance under the eye
+      // instead, so the quad stays ahead of the camera, not collapsed to it or behind it)
+      const yp = Math.min(y0, k.a.y - D.spec.camera.clearance)
+      const o = j * 6, r = k.d.y < -1e-3 ? Math.max(0, Math.min((yp - k.a.y) / k.d.y, SM_REACH)) : SM_REACH
       R[o] = k.a.x; R[o + 1] = k.a.y; R[o + 2] = k.a.z; R[o + 3] = k.d.x; R[o + 4] = k.d.y; R[o + 5] = k.d.z
       q[j * 2] = k.a.x + k.d.x * r; q[j * 2 + 1] = k.a.z + k.d.z * r
     }
@@ -580,12 +678,15 @@ export class Units {
   private cull(): boolean {
     const was = this.smList; was.length = 0; for (const m of this.culled) was.push(m)
     this.culled.length = 0; this.culledMoving = false
-    if (this.tightCull) Frustum.GetPlanesToRef(this.camera.getTransformationMatrix(), this.camPlanes)
+    // (the camera's planes: frameBody's, this frame's)
     for (const h of this.hosts) {
       const l = h.lod[this.casterOf(h)]
-      if (!h.lod[0].isEnabled() || !l.isInFrustum(this.planes)) continue
+      if (!this.shown || !l.isInFrustum(this.planes)) continue
       if (this.tightCull && !this.shadowInView(h)) continue
-      this.culled.push(l); if (h.moving) this.culledMoving = true
+      // (a split battalion's lists may be empty: a mesh of no instances would draw its one figure at the origin)
+      if (l.thinInstanceCount > 0) this.culled.push(l)
+      if (h.split && l === h.lod[this.nextLod] && h.lod[0].thinInstanceCount > 0) this.culled.push(h.lod[0])
+      if (h.moving) this.culledMoving = true
     }
     return was.length !== this.culled.length || was.some((m, i) => m !== this.culled[i])
   }
@@ -593,9 +694,8 @@ export class Units {
   // whether a battalion's shadow can reach the view: its bounds stretched away from the sun by the longest shadow (a
   // figure's height, top, down to the ground) cross the camera's frustum (camPlanes, set by the caller)
   private shadowInView(h: Host): boolean {
-    const k = this.scratch; shadowBox(h, SHADOW_H, k.a, k.b); const lo = k.a, hi = k.b
-    // outside a plane: the box's corner most along the plane's normal is behind it
-    return !this.camPlanes.some(p => p.normal.x * (p.normal.x > 0 ? hi.x : lo.x) + p.normal.y * (p.normal.y > 0 ? hi.y : lo.y) + p.normal.z * (p.normal.z > 0 ? hi.z : lo.z) + p.d < 0)
+    const k = this.scratch; shadowBox(h, SHADOW_H, k.a, k.b)
+    return !boxOutside(this.camPlanes, k.a.x, k.a.y, k.a.z, k.b.x, k.b.y, k.b.z)
   }
 
   // the simple shadows' shape and material, made once when first asked for (decision 0049; unitdecal.*). Each covered
@@ -606,7 +706,7 @@ export class Units {
     if (this.decal) return
     if (!this.shade) throw new Error('units: the simple shadows need the ground\'s shade (Units.shade, src/look/bakes.ts unitShade)')
     const t0 = performance.now(), d = this.data
-    const shape = shadowShape(d, d.lods[1].name, [SUN.x, SUN.y, SUN.z], ROLES, { facings: SHAPE_FACINGS, posed: this.posedFar })
+    const shape = shadowShape(d, d.lods[this.farLod].name, [SUN.x, SUN.y, SUN.z], ROLES, { facings: SHAPE_FACINGS, posed: this.posedFar })
     this.shapeMs = performance.now() - t0
     const tex = new RawTexture(shape.data, shape.width, shape.height, Constants.TEXTUREFORMAT_R, this.scene, true, false, Constants.TEXTURE_TRILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_UNSIGNED_BYTE)
     tex.name = 'figureShadowShape'; tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
@@ -636,7 +736,7 @@ export class Units {
     })
     if (a2c) m.onUnBindObservable.add(() => engine.setAlphaToCoverage(false))
     this.decal = m
-    for (const h of this.hosts) h.lod[3].material = m
+    for (const h of this.hosts) h.lod[this.decalLod].material = m
   }
 
   /** the figures' cast shadows on or off: off, the receivers compile without them (the bench's baseline arm). On, the
@@ -690,7 +790,7 @@ export class Units {
   setPosed(on: boolean): void {
     this.posed = on
     for (const m of this.farMats.values()) m.setDefine('#define VAT_POS', on)
-    for (const h of this.hosts) this.shadowRT.setMaterialForRendering(h.lod[1], on ? this.depthVatMat : this.depthMat)
+    for (const h of this.hosts) this.shadowRT.setMaterialForRendering(h.lod[this.farLod], on ? this.depthVatMat : this.depthMat)
     this.smStep = -1
   }
   /** the ground trodden under the formations (?trample=0: none): the ground and the grass read a mask of where the men
@@ -738,7 +838,7 @@ export class Units {
       if (i >= 0 && j >= 0 && i < TR_N && j < TR_N) acc[j * TR_N + i] += w
     }
     for (const h of this.hosts) {
-      if (!h.lod[0].isEnabled() || h.hi.x < b.x0 || h.lo.x > b.x0 + b.size || h.hi.z < b.z0 || h.lo.z > b.z0 + b.size) continue
+      if (!this.shown || h.hi.x < b.x0 || h.lo.x > b.x0 + b.size || h.hi.z < b.z0 || h.lo.z > b.z0 + b.size) continue
       const m = h.matrices
       for (let o = 0; o < m.length; o += 16) {
         const x = m[o + 12], z = m[o + 14], bx = m[o + 8], bz = m[o + 10]   // (+z in the figure's frame: behind him)
@@ -802,8 +902,9 @@ export class Units {
 
   /** the figures shown or not (the guard's ground alone), their shadows with them */
   show(on: boolean): void {
-    for (const h of this.hosts) for (const m of h.lod) m.setEnabled(on)
-    this.shown = on; this.flag?.setEnabled(on && this.flagsOn)   // (the flags with them)
+    this.shown = on
+    for (const h of this.hosts) h.lod.forEach((m, li) => m.setEnabled(on && (!this.hasNearest || li !== 0 || h.split)))
+    this.flag?.setEnabled(on && this.flagsOn)   // (the flags with them)
     this.smStep = -1
   }
 
