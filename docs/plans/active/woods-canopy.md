@@ -3,7 +3,7 @@ status: active
 last_reviewed: 2026-10-23
 ---
 
-# Plan: woods as a green canopy (staff map prototype)
+# Plan: woods in green (staff map prototype)
 
 ## Problem
 
@@ -41,3 +41,12 @@ Out of scope: the ink style, the painted world's trees (close zoom), and real wo
 - **What changed while tuning.** The first pass, with 4 to 7 m crowns, looked like sandpaper at mid zoom; bigger,
   clumped crowns fixed it. The paper showing between the crowns read as brown worms; filling the wood and shading
   the hollows fixed it.
+
+## Owner's verdict and the change
+
+- The canopy was "ugly and super laggy", so it was **removed**. Woods are a plain green ("just green for now"): the
+  season's crown colour taken toward the paper.
+- The green is **painted on the paper, under the relief**, its shadows and the contour lines (the owner: "it must be
+  under the line under the shadow"). The relief is no longer lightened under woods, and the contours are no longer
+  faded there.
+- The canopy bake, its sampler and the dot sprites are gone. The map bake is now about 60 to 70 ms.

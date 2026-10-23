@@ -342,59 +342,9 @@ function bakeHachures(){
 }
 // the lit style's bake (docs/plans/active/map-view-lit-v1.md), once per map: the trees as flat circles with a soft
 // shadow, a sparse share of them
-let cCanopy=null;
 // a crown sprite: a flat disc, its rim a little darker; a soft shadow sprite
 // a slow noise for clumps: the value noise on a 60 m lattice
 const clumpN=(x,z)=>vn(x/60,z/60);
-/** A soft round bump (a crown's height), white at its centre to nothing at its rim, for the canopy bake. */
-function bumpSprite() {
-  const N = 32, c = document.createElement('canvas');
-  c.width = c.height = N;
-  const g = c.getContext('2d'), im = g.createImageData(N, N), D = im.data;
-  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-    const d = Math.hypot(x + 0.5 - N / 2, y + 0.5 - N / 2) / (N / 2);
-    const v = d < 1 ? 0.5 + 0.5 * Math.cos(Math.PI * d) : 0;   // a smooth dome
-    const o = (y * N + x) * 4;
-    D[o] = 255;
-    D[o + 3] = Math.round(v * 255);
-  }
-  g.putImageData(im, 0, 0);
-  return c;
-}
-
-/**
- * The lit style's woods as a canopy (the owner: green, a feeling of blossom, not dots): a crown about every
- * CROWN_STEP metres inside each wood, jittered, its size varying slowly across the wood so crowns gather into clumps,
- * plus the lone trees outside the woods, drawn as soft bumps that add up into a canopy height in the red channel. The terrain shader lights its bumps by the one light, colours it green and casts
- * its shadow on the paper.
- */
-const CROWN_STEP = 9;
-function bakeCanopy() {
-  const [c, g] = newCanvas(TW, TH);   // additive: overlapping crowns build up the canopy
-  const bump = bumpSprite();
-  const crown = (x, z, rM) => {
-    const rp = rM * PX;
-    g.drawImage(bump, tx(x) - rp, ty(z) - rp, 2 * rp, 2 * rp);
-  };
-  g.globalAlpha = 0.34;
-  for (const w of WOODS) {
-    const R = w.R * 1.7;
-    for (let z = w.z - R; z <= w.z + R; z += CROWN_STEP) for (let x = w.x - R; x <= w.x + R; x += CROWN_STEP) {
-      const jx = x + (hash(x * 0.13, z * 0.17) - 0.5) * CROWN_STEP * 0.9;
-      const jz = z + (hash(x * 0.19, z * 0.11) - 0.5) * CROWN_STEP * 0.9;
-      if (Math.abs(jx) > MX || Math.abs(jz) > MZ || !inWood(w, jx, jz)) continue;
-      const clump = vn(jx / 45 + w.x, jz / 45);   // slow: whole clumps of bigger or smaller crowns
-      crown(jx, jz, (6.5 + 5 * clump) * (0.85 + 0.3 * hash(jx * 0.07, jz * 0.09)));
-    }
-  }
-  g.globalAlpha = 0.75;   // a lone tree: one crown, standing out on its own
-  for (const t of TREES) {
-    if (t.wood || Math.abs(t.x) > MX || Math.abs(t.z) > MZ) continue;
-    crown(t.x, t.z, 4.5 * t.s);
-  }
-  g.globalAlpha = 1;
-  return c;
-}
 // the houses, baked once with the static light (north-west): drawn live, all 221 cost about 11 ms a frame at map zoom,
 // and up close the painted world's own houses take over
 let cHouse=null;
@@ -577,7 +527,7 @@ function bakeRelief() {
 
 function bakeMap(){
   const nh=LIT?0:bakeHachures();   // the lit style draws contours, not hachures
-  if(LIT){cCanopy=bakeCanopy();cHouse=bakeHouses();}
+  if(LIT)cHouse=bakeHouses();
   // woods: area wash, edge line, one ring per tree (the same trees the 3D world grows)
   for(const w of WOODS){const P=[];for(let k=0;k<=140;k++){const th=k/140*6.2832,r=w.r(th);P.push([w.x+Math.cos(th)*r,w.z+Math.sin(th)*r]);}
     poly(gA,P);gA.fillStyle='rgb(0,70,0)';gA.fill();if(!LIT){poly(gB,P);gB.strokeStyle='rgba(255,0,0,0.75)';gB.lineWidth=1.1;gB.stroke();}}
@@ -703,7 +653,7 @@ const TER_FS=`#ifdef LIT
 precision highp float;varying vec3 vW;varying vec3 vN;varying float vH;
 uniform sampler2D uMapA,uMapB,uPaperT,uNoiseT;
 #ifdef LIT
-uniform sampler2D uCanopyT,uHouseT;
+uniform sampler2D uHouseT;
 #ifdef SHADED
 uniform sampler2D uReliefT;   /* the baked relief: R light on the slope, G cast shadow (1 lit), B exposure (0.5 even) */
 uniform vec2 uReliefN;        /* its grid nodes, x and z */
@@ -752,7 +702,13 @@ void main(){
 #endif
   float washK=uWashA*(0.35+0.75*low)*smoothstep(0.25,0.6,wn+low*0.35)*inside;
   vec3 mapC=mix(paper,paper*uWashC*1.12,clamp(washK,0.0,1.0)*inside);
+#ifdef LIT
+  /* woods: a plain green on the paper, under the relief, its shadows and the ink (the owner); the season crown colour
+     taken toward the paper so it sits in its palette */
+  mapC = mix(mapC, mix(uCrown, uPaper, 0.38) * vec3(0.93, 1.02, 0.97), smoothstep(0.08, 0.2, A.g) * 0.85 * inside);
+#else
   mapC=mix(mapC,mapC*uWoodW*1.15,uWoodWA*woodA*(0.75+0.25*wn));
+#endif
 #ifdef LIT
   float mott=0.5+0.18*(sin(vW.x/310.0+sin(vW.z/230.0)*1.7)+sin(vW.z/270.0+sin(vW.x/190.0)*1.9))+0.08*sin(vW.x/97.0+vW.z/131.0);   /* smooth, slow */
 #endif
@@ -790,7 +746,7 @@ void main(){
     vec3 hue = v < 1.0 ? mix(vec3(0.93, 0.90, 0.86), vec3(1.0), (v - ${SHADE_FLOOR}) / ${(1 - SHADE_FLOOR).toFixed(2)})
                        : mix(vec3(1.0), vec3(1.0, 0.98, 0.90), (v - 1.0) / ${(SHADE_TOP - 1).toFixed(2)});
     vec3 shadeK = v * hue;
-    float relief = (1.0 - uWash) * inside * (1.0 - 0.5 * woodA);   /* lighter under the woods, which shade their own ground */
+    float relief = (1.0 - uWash) * inside;
     mapC = mix(mapC, min(mapC * shadeK, vec3(1.0)), relief);
   }
 #endif
@@ -850,27 +806,7 @@ void main(){
   /* ink: lifts last */
   float k=uInk*thin;
 #ifdef LIT
-  {
-    /* woods: a canopy of crowns (its height baked in R), lit by the one light, green, with its shadow on the paper */
-    vec2 cuv = clamp(uv, 0.0, 1.0);
-    vec2 du = vec2(2.5 / ${TW}.0, 0.0), dv = vec2(0.0, 2.5 / ${TH}.0);
-    float Hc = texture2D(uCanopyT, cuv).r * inside;
-    float hx = texture2D(uCanopyT, cuv + du).r - texture2D(uCanopyT, cuv - du).r;
-    float hz = texture2D(uCanopyT, cuv - dv).r - texture2D(uCanopyT, cuv + dv).r;   /* uv y runs against z */
-    vec3 cn = normalize(vec3(-hx * 3.0, 1.0, -hz * 3.0));
-    vec3 Lc = normalize(vec3(uLightXZ.x, 1.0, uLightXZ.y));
-    float lamC = clamp(dot(cn, Lc) / Lc.y, 0.0, 1.4);   /* 1 on a flat top */
-    float canopy = max(smoothstep(0.1, 0.32, Hc), woodA);   /* the wood filled under its crowns: no paper between them */
-    /* its shadow: the canopy a few metres toward the light, where there is none here */
-    vec2 toLight = vec2(uLightXZ.x / ${2 * MX}.0, -uLightXZ.y / ${2 * MZ}.0) * 9.0;
-    float shadowC = smoothstep(0.1, 0.32, texture2D(uCanopyT, cuv + toLight).r) * (1.0 - canopy) * inside;
-    col = mix(col, col * vec3(0.72, 0.72, 0.66), shadowC * 0.6 * k);
-    /* the green: the season crown colour taken toward the paper, so it sits in its palette */
-    vec3 green = mix(uCrown, uPaper, 0.38) * vec3(0.93, 1.02, 0.97);   /* a little cooler: sage, not olive */
-    vec3 leaf = green * (0.74 + 0.3 * lamC) * (0.95 + 0.1 * mott) * mix(0.8, 1.0, smoothstep(0.05, 0.45, Hc));   /* hollows between the crowns in shade */
-    leaf = mix(leaf, min(leaf * 1.12 + vec3(0.03, 0.04, 0.0), vec3(1.0)), smoothstep(0.55, 0.9, Hc) * smoothstep(1.0, 1.3, lamC));   /* blossom: the tops of the domes catch the light */
-    col = mix(col, leaf, canopy * k);
-  }
+
 #else
   col=mix(col,uWoodInk,woodMark*0.9*k);
 #endif
@@ -894,7 +830,7 @@ void main(){
   /* lighter while the sheet edges show, and off the lit edge so the highlight stays */
   minorC*=mix(0.7,1.0,max(uWash,1.0-lyW5))*(1.0-0.6*lyLt);indexC*=mix(0.85,1.0,uWash)*(1.0-0.6*lyLt);
 #endif
-  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.25,indexC*0.45)*k*inside*(1.0-water)*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
+  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.25,indexC*0.45)*k*inside*(1.0-water));   /* over the woods too: they lie under the ink */
 #else
   col=mix(col,uHach,clamp(A.r*1.05,0.0,1.0)*k*uHachK);
 #endif
@@ -1907,9 +1843,9 @@ function build(){
   window.__bake={hachures:nh,ms:Math.round(bakeMs),trees:TREES.length,houses:HOUSES.length,terrain:DEM?`real (${DEM.source}), heights ×${DEM_Z.toFixed(2)}`:'made-up'};
   const COMMONU=['uSun','uSeason','uMist','uGSh'];
   terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal',...(LAYERS?['aHB','aGB']:[])],
-    uniforms:['world','viewProjection','uCrown','uLightXZ','uReliefN','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[]),...(SHADED?['uReliefT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[]),...(SHADED?['#define SHADED']:[])]:[]});
+    uniforms:['world','viewProjection','uCrown','uLightXZ','uReliefN','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uHouseT']:[]),...(SHADED?['uReliefT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[]),...(SHADED?['#define SHADED']:[])]:[]});
   terrMat.backFaceCulling=false;terrMat.setTexture('uMapA',texA);terrMat.setTexture('uMapB',texB);paperT.wrapU=paperT.wrapV=noiseT.wrapU=noiseT.wrapV=B.Texture.WRAP_ADDRESSMODE;terrMat.setTexture('uPaperT',paperT);terrMat.setTexture('uNoiseT',noiseT);terrMat.setFloat('uHmin',HMIN);terrMat.setFloat('uHmax',HMAX);
-  if(LIT){for(const[n,c]of[['uCanopyT',cCanopy],['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
+  if(LIT){for(const[n,c]of[['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
   if(LIT)terrMat.setVector2('uLightXZ',new B.Vector2(NW[0],NW[1]));
   if(SHADED){const t0=performance.now(),R=bakeRelief();window.__reliefMs=Math.round(performance.now()-t0);   // the bake's own cost, for the plan
     const t=B.RawTexture.CreateRGBATexture(R.data,R.nx,R.nz,scene,true,false,B.Texture.TRILINEAR_SAMPLINGMODE);t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture('uReliefT',t);terrMat.setVector2('uReliefN',new B.Vector2(R.nx,R.nz));t.anisotropicFilteringLevel=8;if(DEM)delete DEM.fine;}   // the fine heights are only for the bake
