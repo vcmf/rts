@@ -381,14 +381,15 @@ function bakeHouses(){
   for(const t of tops){fill(t.C,css(t.col));g.strokeStyle='rgba(255,250,236,0.35)';g.lineWidth=0.8;g.stroke();}
   return c;
 }
+const SHORES = new Map();
+
 /**
- * The lit style's water depth: the water shapes, blurred, added into texture A's red channel (unused in this style,
- * which has no hachures). Inside the water it rises from about one half at the shore toward one in the middle of a
- * pond; just outside it fades to zero. The terrain shader reads it as distance from the bank and takes its slope as
- * the bank's direction, for the paler middle and the sunken shading.
+ * A pond's shore as world points: where pondE reaches s (1 is the shore, below 1 inside), found along 160 rays.
+ * Memoised, since the map bake and the water depth both trace it.
  */
-/** A pond's shore as world points: where pondE reaches s (1 is the shore, below 1 inside), found along 160 rays. */
 function pondShore(p, s) {
+  const key = p.name + ':' + s;
+  if (SHORES.has(key)) return SHORES.get(key);
   const P = [];
   for (let k = 0; k <= 160; k++) {
     const th = k / 160 * 6.2832;
@@ -399,24 +400,32 @@ function pondShore(p, s) {
     }
     P.push([p.x + Math.cos(th) * p.rx * lo, p.z + Math.sin(th) * p.rz * lo]);
   }
+  SHORES.set(key, P);
   return P;
 }
 
+/**
+ * The lit style's water depth: the water shapes, blurred, added into texture A's red channel (unused in this style,
+ * which has no hachures). It is about one half at the bank, rising toward one away from it (the middle of a pond,
+ * the stream's centre line) and fading to zero just outside. The terrain shader reads it as distance from the bank,
+ * and its slope as the bank's direction, for the paler middle and the sunken shading. Drawn straight into gA,
+ * whose bake mode adds the channels.
+ */
 function bakeWaterDepth() {
-  const [c, g] = newCanvas(TW, TH);
-  g.filter = `blur(${(9 * PX).toFixed(1)}px)`;   // about 9 m
-  g.fillStyle = g.strokeStyle = 'rgb(255,0,0)';
-  poly(g, STREAM);
-  g.lineWidth = 11 * PX;
-  g.lineJoin = 'round';
-  g.stroke();
+  gA.fillStyle = gA.strokeStyle = 'rgb(255,0,0)';
+  // the stream is 11 m wide: a 3 m blur still reaches near one on its centre line
+  gA.filter = `blur(${(3 * PX).toFixed(1)}px)`;
+  poly(gA, STREAM);
+  gA.lineWidth = 11 * PX;
+  gA.lineJoin = 'round';
+  gA.stroke();
+  // the ponds: a wider blur, a broad band of shallows along the shore
+  gA.filter = `blur(${(9 * PX).toFixed(1)}px)`;
   for (const p of PONDS) {
-    poly(g, pondShore(p, 1));
-    g.fill();
+    poly(gA, pondShore(p, 1));
+    gA.fill();
   }
-  gA.globalCompositeOperation = 'lighter';
-  gA.drawImage(c, 0, 0);
-  gA.globalCompositeOperation = 'source-over';
+  gA.filter = 'none';
 }
 
 function bakeMap(){
@@ -545,8 +554,9 @@ precision highp float;varying vec3 vW;varying vec3 vN;varying float vH;
 uniform sampler2D uMapA,uMapB,uPaperT,uNoiseT;
 #ifdef LIT
 uniform sampler2D uCanopyT,uHouseT;
+uniform vec2 uLightXZ;   /* toward the one static light, xz: the relief and the water use it */
 #ifdef LAYERS
-uniform vec2 uLightXZ;varying float vHB;varying vec2 vGB;
+varying float vHB;varying vec2 vGB;
 /* paper layers: one octave of sheets every D metres; out: lit edge (0..1), cast shadow (0..1) */
 /* one octave of sheets every D metres, measured in world metres from the smooth per-vertex slope g (no facets at the
    mesh triangles, no dependence on the camera heading); out: lit edge (0..1), cast shadow (0..1) */
@@ -613,13 +623,13 @@ void main(){
   {
     /* water as a wash on the paper: the grain shows through, stronger at the banks, paler in the middle */
     float D = A.r;
-    vec2 du = vec2(2.0 / ${TW}.0, 0.0), dv = vec2(0.0, 2.0 / ${TH}.0);
+    vec2 du = vec2(4.0 / ${TW}.0, 0.0), dv = vec2(0.0, 4.0 / ${TH}.0);   /* 4 texels: the 8-bit depth does not band */
     vec2 cuv = clamp(uv, 0.0, 1.0);
     /* the slope of the depth, in world x and z (uv y runs against z); it points from the bank into the water */
     vec2 gW = vec2(texture2D(uMapA, cuv + du).r - texture2D(uMapA, cuv - du).r,
                    texture2D(uMapA, cuv - dv).r - texture2D(uMapA, cuv + dv).r);
     vec2 n = gW / max(length(gW), 1e-4);
-    float slope = smoothstep(0.002, 0.02, length(gW));
+    float slope = smoothstep(0.006, 0.04, length(gW));
     float mid = smoothstep(0.55, 0.9, D);
 #ifdef LAYERS
     vec3 under = flatPaper;
@@ -1636,7 +1646,7 @@ function build(){
     uniforms:['world','viewProjection','uCrown','uLightXZ','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[])]:[]});
   terrMat.backFaceCulling=false;terrMat.setTexture('uMapA',texA);terrMat.setTexture('uMapB',texB);paperT.wrapU=paperT.wrapV=noiseT.wrapU=noiseT.wrapV=B.Texture.WRAP_ADDRESSMODE;terrMat.setTexture('uPaperT',paperT);terrMat.setTexture('uNoiseT',noiseT);terrMat.setFloat('uHmin',HMIN);terrMat.setFloat('uHmax',HMAX);
   if(LIT){for(const[n,c]of[['uCanopyT',cCanopy],['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
-  if(LAYERS)terrMat.setVector2('uLightXZ',new B.Vector2(NW[0],NW[1]));
+  if(LIT)terrMat.setVector2('uLightXZ',new B.Vector2(NW[0],NW[1]));
   terrainMesh().material=terrMat;
   {const O=30000,y=HMIN-1,P=[-TX,y,-TZ,TX,y,-TZ,TX,y,TZ,-TX,y,TZ,-O,y,-O,O,y,-O,O,y,O,-O,y,O],I=[0,4,1,1,4,5,1,5,2,2,5,6,2,6,3,3,6,7,3,7,0,0,7,4],
     m=new B.Mesh('skirt',scene),vd=new B.VertexData();vd.positions=P;vd.indices=I;vd.normals=[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0];vd.applyToMesh(m);
