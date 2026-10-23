@@ -604,9 +604,9 @@ let MAPN=1,TT=0;                                             // mapness and t = 
 const NEAR3D=380,FARMAP=1700;
 const stage=(a,b)=>sstep(a,b,TT);
 let camF=[0,-1,0],camRt=[1,0,0],camUp=[0,0,1],camPos=[0,6000,0],tanH=Math.tan(0.26);
-// an experiment (the owner): ?tilt=degrees tilts the map view off straight down, toward the RTS angle; capped well short
-// of the horizon (decision 0002)
-const MAP_PITCH=Math.PI/2-clamp(Number(Q.get('tilt'))||0,0,45)*Math.PI/180;
+// the map view leans a little off straight down in the lit style (the owner: "just tilt a bit"; docs/plans/active/slabs.md),
+// ?tilt=degrees to try others; capped well short of the horizon (decision 0002)
+const MAP_PITCH=Math.PI/2-clamp(Q.has('tilt')?Number(Q.get('tilt'))||0:(LIT?20:0),0,45)*Math.PI/180;
 function updateCamera(dt){
   if(CAMS.tw){const k=clamp((performance.now()-CAMS.tw.t0)/CAMS.tw.dur,0,1),e=easeIO(k);CAMS.R=Math.exp(lerp(Math.log(CAMS.tw.from),Math.log(CAMS.tw.to),e));CUR.R=CAMS.R;if(k>=1)CAMS.tw=null;}
   const a=1-Math.exp(-dt*11);
@@ -1096,14 +1096,16 @@ function barShare(u, form, n) {
 }
 
 /**
- * What a unit draws as, given its blockCorners() result B: a list of screen polygons (front-left, front-right,
- * back-right, back-left). The bars are cut in world metres, then projected, so they sit where the figures stand.
+ * What a unit draws as, given its blockCorners() result B: a list of quads in the block's own metres, [across, along]
+ * with 0 at its front and negative behind (front-left, front-right, back-right, back-left); slabFaces() projects them.
  * A brigade in line or column: two bars, its first battalion in front, the second behind. Into a square, the bars
  * close up by halfway, where it forms (formedSq); out of one, they stay touching to halfway and then open. Between two other
  * formations their share eases with the outline. Anything else (cavalry, guns, a formed square): one block.
  */
 function parts(u, B) {
-  if (u.type !== 'inf' || formedSq(u)) return [B.C];
+  const hw = B.fw / 2;
+  const band = (z0, z1) => [[-hw, -z0], [hw, -z0], [hw, -z1], [-hw, -z1]];
+  if (u.type !== 'inf' || formedSq(u)) return [band(0, B.fd)];
   const n = alive(u);
   const e = easeIO(u.morph);
   let q;
@@ -1112,10 +1114,6 @@ function parts(u, B) {
   if (u.form === 'square') q = lerp(barShare(u, u.prev, n), 0.5, 2 * e);
   else if (u.prev === 'square') q = lerp(0.5, barShare(u, u.form, n), Math.max(0, 2 * e - 1));
   else q = lerp(barShare(u, u.prev, n), barShare(u, u.form, n), e);
-  // a rectangle across the block, from depth z0 to z1 behind its front (metres), projected
-  const hw = B.fw / 2;
-  const band = (z0, z1) => [[-hw, -z0], [hw, -z0], [hw, -z1], [-hw, -z1]]
-    .map(([sx, sz]) => P2(u.x + B.r[0] * sx + B.f[0] * sz, u.z + B.r[1] * sx + B.f[1] * sz));
   return [band(0, B.fd * q), band(B.fd * (1 - q), B.fd)];
 }
 
@@ -1330,6 +1328,8 @@ const RISE=()=>stage(0.15,0.7);
 const STAGE={wash:[0.1,0.6],sprout:[0.3,0.8],stand:[0.5,0.88],blocks:[0.55,0.88],ink:[0.35,0.85],names:[0.35,0.7],corps:[0.4,0.75]};
 const st=k=>stage(STAGE[k][0],STAGE[k][1]);
 function P2(x,z){const p=proj(x,Hs(x,z)*RISE()+0.3,z);return[p[0],p[1],p[2]];}
+/** A ground point raised by up metres, projected: the top of a slab. */
+function P3(x,z,up){const p=proj(x,Hs(x,z)*RISE()+0.3+up,z);return[p[0],p[1],p[2]];}
 const behind=p=>p[2]<=cam.minZ;
 const offView=C=>C.some(behind);
 let MPP=1;                                                   // metres per CSS pixel at the camera target
@@ -1441,15 +1441,51 @@ function hull(P){P=[...P].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const x=(o,a,b)=>(a[
   for(const p of P){while(lo.length>1&&x(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p);}
   for(let i=P.length-1;i>=0;i--){const p=P[i];while(up.length>1&&x(up[up.length-2],up[up.length-1],p)<=0)up.pop();up.push(p);}
   return lo.slice(0,-1).concat(up.slice(0,-1));}
-function raised(C,col){
-  const[ox,oy]=raiseOf(SIDE_PX),[sx,sy]=raiseOf(SHADOW_PX);
-  ink.save();ink.beginPath();ink.rect(-1e4,-1e4,3e4,3e4);ink.moveTo(C[0][0],C[0][1]);for(let i=C.length-1;i>0;i--)ink.lineTo(C[i][0],C[i][1]);ink.closePath();ink.clip('evenodd');
-  // canvas shadows ignore the transform: offsets and blur in device pixels
-  ink.shadowColor='rgba(52,38,18,0.42)';ink.shadowBlur=5*DPR;ink.shadowOffsetX=(sx-ox)*DPR;ink.shadowOffsetY=(sy-oy)*DPR;
-  // the block as a prism: the convex hull of its top and the top shifted away from the light, one convex polygon (no
-  // winding to get wrong), the top clipped out above; one fill, so a fading block composites once
-  pathPoly(hull([...C,...C.map(p=>[p[0]+ox,p[1]+oy])]));ink.fillStyle=shade(col,0.62);ink.fill();ink.restore();
+// a slab's height in metres: low at the symbol scale far out, about man-height close (docs/plans/active/slabs.md)
+const SLAB = [7, 1.8];
+const slabHeight = () => (LIT ? lerp(SLAB[0] * SYMZ, SLAB[1], SYMK) : 0);
+
+/**
+ * A block's quad (its own metres, from parts()) as a slab on screen: G the footprint on the ground, T the top, raised
+ * by h metres, and W the footprint's world points (for the cast shadow). With h 0 (the ink style) T is G.
+ */
+function slabFaces(u, B, Q, h) {
+  const W = Q.map(([sx, sz]) => [u.x + B.r[0] * sx + B.f[0] * sz, u.z + B.r[1] * sx + B.f[1] * sz]);
+  const G = W.map(([x, z]) => P2(x, z));
+  const T = h > 0 ? W.map(([x, z]) => P3(x, z, h)) : G;
+  return { G, T, W };
 }
+
+/**
+ * A slab's sides, between its footprint G and its top T, far ones first (a convex box: the near sides and the top
+ * then cover them; no winding to get right). Each side is lit by the map's one light by the way it faces: the edges
+ * run front, right, back, left, so their outward normals are f, r, -f, -r.
+ */
+function slabSides(G, T, B, col) {
+  const normals = [B.f, B.r, [-B.f[0], -B.f[1]], [-B.r[0], -B.r[1]]];
+  const sides = [0, 1, 2, 3].map(e => {
+    const a = e, b = (e + 1) % 4;
+    const facing = Math.max(0, normals[e][0] * NW[0] + normals[e][1] * NW[1]);
+    return { quad: [G[a], G[b], T[b], T[a]], depth: (G[a][2] + G[b][2]) / 2, k: 0.58 + 0.3 * facing };
+  });
+  sides.sort((p, q) => q.depth - p.depth);
+  for (const sd of sides) {
+    pathPoly(sd.quad);
+    ink.fillStyle = shade(col, sd.k);
+    ink.fill();
+  }
+}
+
+/** A slab's shadow on the ground: its footprint swept away from the light by its height (a sun about 40 degrees up). */
+function slabShadow(W, h) {
+  const len = h * 1.2;
+  const away = [-NW[0] * len, -NW[1] * len];
+  const pts = [...W, ...W.map(([x, z]) => [x + away[0], z + away[1]])].map(([x, z]) => P2(x, z));
+  pathPoly(hull(pts));
+  ink.fillStyle = 'rgba(52,38,18,0.3)';
+  ink.fill();
+}
+
 // a block's top: a thin dark outline, then each edge inset a little, lighter facing the light, darker facing away;
 // through its own paths, so the caller's current path (outline, hole) is untouched
 function litEdges(C){
@@ -1544,7 +1580,7 @@ const HOUSE_COL=[0.36,0.29,0.23],CHURCH_COL=[0.27,0.22,0.19];
 // the colour a block's sides take: its top's, as drawBlock fills it
 function blockCol(u,now){const s=pal(u);if(u.state==='rout')return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));return s.f;}
 function drawUnder(u,alpha,now){const B=blockCorners(u),{C}=B;if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);
-  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true,gunPx(u),u);else for(const P of parts(u,B))raised(P,blockCol(u,now));}ink.globalAlpha=1;}
+  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true,gunPx(u),u);else if(LIT){const h=slabHeight();for(const Q of parts(u,B))slabShadow(slabFaces(u,B,Q,h).W,h);}}ink.globalAlpha=1;}
 function drawBlock(u,alpha,now){
   u.gun=null;   // drawn this frame or not at all: a stale circle would keep a stale click area
   const s=pal(u),{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
@@ -1552,7 +1588,7 @@ function drawBlock(u,alpha,now){
   if(u.state==='rout'){
     // routing: pulses between the army colour and white, the colour of surrender
     // a soft pulse on the frame clock passed in, so an exporter controls the phase
-    const PS=parts(u,{C,fw,fd,f,r});PS.forEach((P,pi)=>{pathPoly(P);ink.fillStyle=css(blockCol(u,now));ink.fill();if(LIT)litEdges(P);
+    const B={C,fw,fd,f,r},h=slabHeight(),PS=parts(u,B);PS.forEach((Q,pi)=>{const S=slabFaces(u,B,Q,h),P=S.T;if(h>0)slabSides(S.G,S.T,B,blockCol(u,now));pathPoly(P);ink.fillStyle=css(blockCol(u,now));ink.fill();if(LIT)litEdges(P);
     ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);if(LIT)damage(u,P,null,fw,fd,0,pi,PS.length);});}
   else if(u.type==='art'&&LIT)u.gun=drawGun(C,s,false,gunPx(u),u);
   else if(u.type==='art'){
@@ -1561,11 +1597,12 @@ function drawBlock(u,alpha,now){
     const fr=[(C[0][0]+C[1][0])/2,(C[0][1]+C[1][1])/2],bk=[(C[2][0]+C[3][0])/2,(C[2][1]+C[3][1])/2],dl=Math.hypot(fr[0]-bk[0],fr[1]-bk[1])||1;
     ink.beginPath();ink.arc(fr[0]+(fr[0]-bk[0])/dl*5,fr[1]+(fr[1]-bk[1])/dl*5,3,0,6.2832);ink.fillStyle=css(s.f);ink.fill();if(s.e)ink.stroke();
   }
-  else{const PS=parts(u,{C,fw,fd,f,r});PS.forEach((P,pi)=>{   // a brigade's two bars, or one block
+  else{const B={C,fw,fd,f,r},h=slabHeight(),PS=parts(u,B);PS.forEach((Q,pi)=>{   // a brigade's two bars, or one block, each a slab
+    const S=slabFaces(u,B,Q,h),P=S.T;if(h>0)slabSides(S.G,S.T,B,lvl<0?s.f:s.c);
     pathPoly(P);let I=null,sqK=0;
     if(formedSq(u)){
       // hollow square: the inner hole
-      const k=Math.min(Math.max(lerp(SQ_RING[0]*SYMZ*Math.sqrt(lossK(u)),SQ_RING[1],SYMK),2.2*MPP),fw*0.35,fd*0.35),hw=fw/2-k;sqK=k;I=[[-hw,-k],[hw,-k],[hw,-fd+k],[-hw,-fd+k]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
+      const k=Math.min(Math.max(lerp(SQ_RING[0]*SYMZ*Math.sqrt(lossK(u)),SQ_RING[1],SYMK),2.2*MPP),fw*0.35,fd*0.35),hw=fw/2-k;sqK=k;I=[[-hw,-k],[hw,-k],[hw,-fd+k],[-hw,-fd+k]].map(([sx,sz])=>P3(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz,h));
       ink.moveTo(I[0][0],I[0][1]);for(let i=3;i>=0;i--)ink.lineTo(I[i][0],I[i][1]);ink.closePath();
     }
     ink.fillStyle=lvl<0?css(s.f):hatch(u.sideI,lvl);ink.fill('evenodd');if(LIT)litEdges(P);
@@ -1771,7 +1808,9 @@ function drawInk(now){
   drawNeatline(inkA);if(LIT)setLight();drawNames(nameA);
   drawOrders(now,Math.max(0.35,1-stage(0.7,1)));
   if(LIT){for(const u of UNITS)if(!u.gone||u.gone<1)drawUnder(u,blockA,now);}
-  for(const u of UNITS)if(!u.gone||u.gone<1)drawBlock(u,blockA,now);
+  // far to near, so a nearer slab covers a farther one (in the lit style; the ink style keeps its order)
+  const order=LIT?UNITS.map(u=>[u,P2(u.x,u.z)[2]]).sort((a,b)=>b[1]-a[1]).map(e=>e[0]):UNITS;
+  for(const u of order)if(!u.gone||u.gone<1)drawBlock(u,blockA,now);
   drawSmoke(now,blockA,1-blockA);
   drawCorpsLabels(1-st('corps'));
   if(TT>0.5){for(const u of UNITS){if(!u.sel||u.gone)continue;const D=blockCorners(u,5).C;if(offView(D))continue;ink.globalAlpha=st('blocks');ink.strokeStyle='rgba(33,31,28,0.7)';ink.lineWidth=1;ink.setLineDash([4,3]);pathPoly(D);ink.stroke();ink.setLineDash([]);ink.globalAlpha=1;}}

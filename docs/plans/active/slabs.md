@@ -43,3 +43,13 @@ Out of scope:
   hollow square as a slab, worn blocks, a routing block. Armies stay readable over the shaded relief.
 - No change in the ink style.
 - Frame time measured against the flat blocks.
+
+## Results
+
+- **Built as planned.** The map view leans 20° by default in the lit style. The slab is 7 m at the symbol scale
+  (times the zoom's symbol factor) and 1.8 m close. Side faces are drawn far to near, toned by how they face the
+  north-west light. The cast shadow is the footprint swept 1.2 × the slab's height away from the light. `raised()`,
+  the old screen-space fake prism with a blurred canvas shadow, is gone.
+- **Measured.** Windows Chrome over CDP, D3D11, RTX 3080, vsync and the frame cap off, real terrain, shaded relief,
+  map zoom, paired runs: frame 5.4 and 5.7 ms with slabs, against 7.3 and 7.5 ms with the flat blocks of #149. The
+  blurred canvas shadow had cost more than the slabs' sides do.
