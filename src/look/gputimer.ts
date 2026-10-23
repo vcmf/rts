@@ -6,8 +6,15 @@
 // Babylon's own time queries (engine.startTimeQuery) keep one TIME_ELAPSED token at a time and hand it back to a second
 // caller, which cannot label segments; hence this small class.
 
-interface TimerExt { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number }
-interface Open { frame: number; label: string; q: WebGLQuery }
+interface TimerExt {
+  TIME_ELAPSED_EXT: number
+  GPU_DISJOINT_EXT: number
+}
+interface Open {
+  frame: number
+  label: string
+  q: WebGLQuery
+}
 
 export class GpuTimer {
   readonly available: boolean
@@ -18,7 +25,8 @@ export class GpuTimer {
   private frames = new Map<number, { left: number; bad: boolean; sums: Map<string, number> }>()
   // per label, one value per complete frame (ms)
   readonly results = new Map<string, number[]>()
-  refused = 0; disjoint = 0
+  refused = 0
+  disjoint = 0
   private frame = 0
 
   constructor(gl: WebGL2RenderingContext) {
@@ -28,39 +36,61 @@ export class GpuTimer {
   }
 
   // frame boundaries: call newFrame before the frame's first begin
-  newFrame(): void { this.frame++ }
+  newFrame(): void {
+    this.frame++
+  }
 
   begin(label: string): void {
     if (!this.ext) return
-    if (this.open) { this.refused++; return }
-    const q = this.gl.createQuery(); if (!q) return
+    if (this.open) {
+      this.refused++
+      return
+    }
+    const q = this.gl.createQuery()
+    if (!q) return
     this.gl.beginQuery(this.ext.TIME_ELAPSED_EXT, q)
     this.open = { frame: this.frame, label, q }
     const f = this.frames.get(this.frame) ?? { left: 0, bad: false, sums: new Map() }
-    f.left++; this.frames.set(this.frame, f)
+    f.left++
+    this.frames.set(this.frame, f)
   }
 
   end(label: string): void {
     if (!this.ext || !this.open || this.open.label !== label) return
     this.gl.endQuery(this.ext.TIME_ELAPSED_EXT)
-    this.pending.push(this.open); this.open = null
+    this.pending.push(this.open)
+    this.open = null
   }
 
   // collect what has resolved; call once a frame, outside any query. The order is the extension's: which queries are
   // available first, then the disjoint flag (which covers them), then their results
   poll(): void {
     if (!this.ext) return
-    const gl = this.gl, ready: Open[] = [], still: Open[] = []
+    const gl = this.gl
+    const ready: Open[] = []
+    const still: Open[] = []
     for (const p of this.pending) (gl.getQueryParameter(p.q, gl.QUERY_RESULT_AVAILABLE) ? ready : still).push(p)
     // a disjoint event spoils every query in flight, resolved or not (reading the flag clears it)
-    if (gl.getParameter(this.ext.GPU_DISJOINT_EXT)) { this.disjoint++; for (const f of this.frames.values()) f.bad = true }
+    if (gl.getParameter(this.ext.GPU_DISJOINT_EXT)) {
+      this.disjoint++
+      for (const f of this.frames.values()) f.bad = true
+    }
     for (const p of ready) {
-      const ns = gl.getQueryParameter(p.q, gl.QUERY_RESULT) as number; gl.deleteQuery(p.q)
-      const f = this.frames.get(p.frame); if (!f) continue   // a frame from before the last reset
-      f.sums.set(p.label, (f.sums.get(p.label) ?? 0) + ns / 1e6); f.left--
+      const ns = gl.getQueryParameter(p.q, gl.QUERY_RESULT) as number
+      gl.deleteQuery(p.q)
+      const f = this.frames.get(p.frame)
+      if (!f) continue // a frame from before the last reset
+      f.sums.set(p.label, (f.sums.get(p.label) ?? 0) + ns / 1e6)
+      f.left--
       if (f.left === 0) {
         this.frames.delete(p.frame)
-        if (!f.bad) for (const [k, v] of f.sums) { const a = this.results.get(k) ?? []; a.push(v); this.results.set(k, a) }
+        if (!f.bad) {
+          for (const [k, v] of f.sums) {
+            const a = this.results.get(k) ?? []
+            a.push(v)
+            this.results.set(k, a)
+          }
+        }
       }
     }
     this.pending = still
@@ -68,5 +98,8 @@ export class GpuTimer {
 
   // a new measurement: the results start again, and queries still in flight from before are dropped when they
   // resolve; refused and disjoint stay totals for the whole session
-  reset(): void { this.results.clear(); this.frames.clear() }
+  reset(): void {
+    this.results.clear()
+    this.frames.clear()
+  }
 }
