@@ -7,7 +7,7 @@ last_reviewed: 2026-10-23
 
 Asked by the owner on 2026-10-23: "TypeScript, beautiful code easy to read and maintain: normal spacing and line
 breaks, good linting, good tests." The choices, their measurements and the alternatives are in decision 0052
-(`docs/decisions/0052-code-style.md`, proposed); this plan is the work.
+(`docs/decisions/0052-code-style.md`, accepted); this plan is the work.
 
 ## Problem
 
@@ -32,15 +32,17 @@ This PR is docs only: decision 0052 (proposed), this plan, the line in `docs/con
 PRs, each a code PR (decision 0025), opened **after** the open PRs merge (#134 shadows, `look/close-zoom`,
 `look/armies-32k`, #128 docs), so none of them has to rebase across a formatting commit:
 
-1. **PR 1, config and the sim** (`style(sim): …`): `prettier`, `@stylistic/eslint-plugin` and `globals` pinned in
-   `package.json`; `.prettierrc.json`, `.prettierignore`; the scripts; `format:check` in `npm test` and as a step of
-   CI's check job; the four ESLint rules in a block whose `files` lists the formatted areas. Then `npm run format` on
-   `src/sim/`, `src/rulesets/`, `src/scenarios/`, `maps/` (the formatting commit, alone), the comments over 120 by hand
-   (a second commit: 31 in the measurement), `.git-blame-ignore-revs` with the formatting commit's hash (a third).
+1. **PR 1, config and the sim** (`style(sim): …`): `prettier` and `@stylistic/eslint-plugin` pinned in
+   `package.json` (`globals` waits for PR 3, the first to need it); `.prettierrc.json`, `.prettierignore`; the
+   scripts; `format:check` in `npm test` and as a step of CI's check job; the ESLint rules in a block whose `files`
+   come from `formatted` in `eslint.config.js`, and `test/format-scope.test.ts`, which checks `.prettierignore`
+   leaves exactly those areas formatted. Then `npm run format` on `src/sim/`, `src/rulesets/`, `src/scenarios/`,
+   `maps/` (the formatting commit, alone), the comments over 120 by hand (a second commit: 31 in the measurement),
+   `.git-blame-ignore-revs` with the formatting commit's hash (a third).
 2. **PR 2, the look** (`style(look): …`): `src/look/`, `src/render/`, `src/app/` join the globs; the same three
    commits (about 130 comments).
 3. **PR 3, tools and tests** (`style(tools): …`): `tools/`, `test/` and the root configs (`eslint.config.js` stops
-   ignoring itself) join; `tools/*.mjs` and `tools/*.js` linted (the decision's globals; 4 findings to fix); the same
+   ignoring itself) join; `tools/*.mjs` and `tools/*.js` linted (`globals` pinned; 4 findings to fix); the same
    three commits (about 60 comments).
 
 The formatting commit's hash changes when the PR is squash-merged: `.git-blame-ignore-revs` gets the squashed

@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-23
 ---
 
@@ -78,14 +78,18 @@ Prettier, pinned exactly (decision 0016), in `.prettierrc.json`:
 - **Prose comments are not rewrapped**: Prettier moves a comment with its code and re-indents it, nothing more.
   Comments follow `docs/conventions.md` and fit in 120 columns (the `max-len` rule below checks them).
 - Scripts: `npm run format` (`prettier --write`, then `eslint --fix`, then `prettier --write` again: `curly`'s fix
-  adds braces Prettier then lays out; one pass converged in the measurement) and `npm run format:check`
-  (`prettier --check`), which joins `npm test` and CI's check job.
+  adds braces Prettier then lays out; one pass converged in the measurement; the last pass runs even when ESLint
+  reports what it cannot fix, and the script still fails then) and `npm run format:check` (`prettier --check`),
+  which joins `npm test` and CI's check job.
 
 ### ESLint additions
 
 - **`@stylistic/max-len`**, 120, comments included; ignoring URLs, strings, template literals and regular
   expressions (an error message or a GLSL line is not broken to fit). ESLint's own `max-len` is deprecated and goes in
   ESLint 11, so it comes from `@stylistic/eslint-plugin`, pinned. After Prettier it reports only comments.
+- **`local/comment-width`**, a rule of a few lines in `eslint.config.js`: every comment ends within 120 columns.
+  `max-len`'s `ignoreStrings` skips a whole line that holds a string, the comment at its end included; this rule
+  checks the comments on their own.
 - **`@stylistic/max-statements-per-line`**, 1: Prettier already puts each statement on its own line (0 left in the
   measurement); the rule keeps it so where formatting is skipped (`// prettier-ignore`).
 - **`one-var`: `never`**: one declaration per `const` or `let` statement, except a `for` loop's (which it allows).
@@ -115,11 +119,12 @@ One formatting PR per area, each a code PR (decision 0025), **after the open PRs
 3. **Tools and tests**: `tools/`, `test/`, the root configs, and linting `tools/*.mjs` and `tools/*.js`. Proof: each
    tool's `--selftest`, `node tools/check-negatives.mjs`, Vitest.
 
-Each area's `files` glob joins `format:check` and the new rules in its own PR, so main is green between them. The
-formatting PR changes layout only, plus the comments `max-len` asks to shorten (a separate commit); the commit that
-lands on main goes in `.git-blame-ignore-revs` (GitHub's blame reads it; locally
-`git config blame.ignoreRevsFile .git-blame-ignore-revs`), after a squash merge in a one-line follow-up
-(`docs/plans/active/code-style.md`).
+Each area joins in its own PR, so main is green between them: it is added to `formatted` in `eslint.config.js` (the
+style rules' `files`) and taken out of `.prettierignore`'s list of areas not formatted yet;
+`test/format-scope.test.ts` checks that the formatter and the rules cover the same files. The formatting PR changes
+layout only, plus the comments `max-len` asks to shorten (a separate commit); the commit that lands on main goes in
+`.git-blame-ignore-revs` (GitHub's blame reads it; locally `git config blame.ignoreRevsFile .git-blame-ignore-revs`),
+after a squash merge in a one-line follow-up (`docs/plans/active/code-style.md`).
 
 **A branch in flight** when an area is formatted: merge main up to the commit before the formatting, then merge the
 formatting commit keeping the branch's side of every conflict (`git merge -X ours <commit>`; with a rebase,
