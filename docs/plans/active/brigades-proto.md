@@ -78,3 +78,8 @@ Out of scope: brigade counts per army, divisions as a level, battalions acting a
   column, whatever its guns or losses (it followed the drawn block, narrow in column).
 - **Arrows** (the owner: the white line down the middle looked odd): the order arrow's light spine removed; the body is
   a plain fill with its outline.
+- **Review of the late commits** (the column and gun sizes, the arrows): moderate and light only. Fixed: the gun icon
+  sized from the zoom's metres per pixel, not measured on screen along the battery (the camera's tilt made it vary
+  with heading); the old sizing fallback in `drawGun` removed; the design doc's column size and the lit plan's arrow
+  spine brought up to date; the symbols' comment says the column is a little heavier. Open, for the owner: a
+  battery's losses no longer show (its icon no longer shrinks, and guns get no wear).

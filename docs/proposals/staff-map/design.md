@@ -119,7 +119,7 @@ Blocks are flat, sharp-cornered, with no shadow, bevel or outline glow.
   | Formation | Symbol (at the theatre zoom) |
   |---|---|
   | Infantry line | 104 × 32 m bar |
-  | Infantry column | 62 × 56 m block |
+  | Infantry column | 80 × 84 m block (a brigade: two bars) |
   | Infantry square | 72 m hollow square, 18 m ring |
   | Cavalry line / column | 96 × 30 m / 50 × 60 m, with the diagonal |
   | Artillery deployed / limbered | 86 × 20 m bar / 24 × 62 m, with the gun dot |
