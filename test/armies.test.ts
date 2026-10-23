@@ -1,6 +1,8 @@
 // The demo map's armies (src/look/world/armies.ts) and their figure (data/figures/fr-line-infantry.unitdata, written by
 // tools/bake-figure.py; src/look/units-data.ts): the battalion's slots by the ruleset's drill, the script's phases in
-// order, the layout clear of the blocked ground and failing loudly where there is no room, and the baked figure whole
+// order, the layout clear of the blocked ground and failing loudly where there is no room, and the baked figure whole.
+// The demo map's blocked ground is a fixture (test/fixtures/demo-map-blocked.bin.gz), sampled from the page by
+// tools/sample-blocked.mjs (rerun it when the map, its trees, river or buildings change)
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
@@ -82,7 +84,8 @@ describe('armies: the layout', () => {
     const [fx, fz] = facingAt(bs); expect(Math.hypot(fx, fz)).toBeLessThan(60)
   })
   // the demo map's blocked ground (the page's __armies.blocked sampled every 0.5 m over ±240 m, a bit a sample, row by
-  // row from (−240, −240); read conservatively: blocked when any of the four samples round a point is)
+  // row from (−240, −240), by tools/sample-blocked.mjs; read conservatively: blocked when any of the four samples round a
+  // point is)
   const bits = gunzipSync(readFileSync(new URL('./fixtures/demo-map-blocked.bin.gz', import.meta.url))), N = 961, R = 240, S = 0.5
   const bit = (i: number, j: number) => i < 0 || j < 0 || i >= N || j >= N || ((bits[(j * N + i) >> 3] >> ((j * N + i) & 7)) & 1) === 1
   const demo = (x: number, z: number) => { const i = Math.floor((x + R) / S), j = Math.floor((z + R) / S); return bit(i, j) || bit(i + 1, j) || bit(i, j + 1) || bit(i + 1, j + 1) }
@@ -111,6 +114,15 @@ describe('armies: the layout', () => {
     // every man of a reserve on open ground
     const sl = slots(drill)
     for (const b of bs) if (b.reserve) for (const [px, pz] of sl.column) { const c = Math.cos(b.heading); expect(demo(b.x + c * px, b.z + c * pz)).toBe(false) }
+    // and no deploying man's path (his column place to his line place) within a metre of a reserve's column
+    for (const l of lines) for (let i = 0; i < sl.line.length; i++) for (let k = 0; k <= 10; k++) {
+      const c = Math.cos(l.heading), lx = sl.column[i][0] + (sl.line[i][0] - sl.column[i][0]) * k / 10, lz = sl.column[i][1] + (sl.line[i][1] - sl.column[i][1]) * k / 10
+      const x = l.x + c * lx, z = l.z + c * lz
+      for (const r of bs) if (r.reserve && r.side === l.side) {
+        const rc = Math.cos(r.heading), ax = rc * (x - r.x), az = rc * (z - r.z)
+        expect(Math.abs(ax) > e.columnHalf + 1 || az > 1 || az < -e.columnDepth - 1, `${l.x},${l.z} man ${i} / ${r.x},${r.z}`).toBe(true)
+      }
+    }
   })
   it('keeps off the blocked ground', () => {
     const wood = (x: number, z: number) => open(x, z) || (Math.abs(x) < 60 && Math.abs(z) < 200)

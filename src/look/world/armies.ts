@@ -94,6 +94,20 @@ export type Blocked = (x: number, z: number) => boolean
  *  between the two fronts; gap: between them, m (about a volley's range) */
 export const LINE_ROWS = 2, RESERVE_BACK = 40
 const CLOSE = { grid: 2.5, margin: 2, pad: 2 }   // the close reserves: m (their boxes CLOSE.margin a side and CLOSE.pad apart)
+const DEPLOY_SLICES = 4   // the close reserves keep off a deploying line's trapezoid in this many boxes
+// the close reserves' candidates on their CLOSE.grid, the nearest the front and the middle first: the same for either
+// side, built once a play area
+const fineGrids = new Map<number, [number, number][]>()
+function fineGrid(play: number): [number, number][] {
+  let fine = fineGrids.get(play)
+  if (!fine) {
+    fine = []; const g = CLOSE.grid
+    for (let bi = 0; bi * g <= 2 * play; bi++) for (let ai = -Math.floor(play / g); ai * g <= play; ai++) fine.push([ai * g, bi * g])
+    fine.sort((p, q) => 0.5 * Math.abs(p[0]) + p[1] - (0.5 * Math.abs(q[0]) + q[1]) || p[0] - q[0] || p[1] - q[1])
+    fineGrids.set(play, fine)
+  }
+  return fine
+}
 export function layout(perSide: number, d: Drill, blocked: Blocked, uniforms: readonly string[], centre: readonly [number, number] = [0, 0], gap = 110, play = 235): Battalion[] {
   const e = extents(d), out: Battalion[] = [], step = 2.5, margin = 3, G = 5
   const lineW = 2 * e.halfFront + 2 * margin + 6, lineD = APPROACH + e.columnDepth + 2 * margin + 6
@@ -142,14 +156,19 @@ export function layout(perSide: number, d: Drill, blocked: Blocked, uniforms: re
       out.push({ side: s, uniform: uniforms[s], x, z, heading: h, offset: 0, reserve: true })
     }
     if (placed < perSide) {
-      // the close reserves: the lines' boxes as their T (head: the ranks and a margin; stem: the column's approach)
+      // the close reserves: the lines' boxes as their T (head: the ranks and a margin; stem: the column's approach) and
+      // the ground the companies cross as they deploy, from their column to the line (a trapezoid behind the head, as
+      // wide as the line at the ranks' depth and as the column at its rear: DEPLOY_SLICES boxes, each as wide as its
+      // front)
       const m = CLOSE.margin, w = 2 * e.columnHalf + 2 * m + CLOSE.pad, dd = e.columnDepth + 2 * m + CLOSE.pad
       const headD = e.lineDepth + 2 * margin + 6, stemW = 2 * e.columnHalf + 2 * margin + 6, ls = boxes.slice(0, lines)
-      const parts = [...ls.flatMap(o => [{ ...o, d: headD }, { ...o, w: stemW }]), ...boxes.slice(lines)]
-      const fine: [number, number][] = [], g = CLOSE.grid
-      for (let bi = 0; bi * g <= 2 * play; bi++) for (let ai = -Math.floor(play / g); ai * g <= play; ai++) fine.push([ai * g, bi * g])
-      fine.sort((p, q) => 0.5 * Math.abs(p[0]) + p[1] - (0.5 * Math.abs(q[0]) + q[1]) || p[0] - q[0] || p[1] - q[1])
-      for (const [ac, bh] of fine) {
+      const span = Math.max(0, e.columnDepth - e.lineDepth), half = (dep: number) => e.columnHalf + (e.halfFront - e.columnHalf) * (span > 0 ? (e.columnDepth - dep) / span : 0)
+      const deploy = (o: typeof boxes[0]) => Array.from({ length: span > 0 ? DEPLOY_SLICES : 0 }, (_, k) => {
+        const d0 = e.lineDepth + span * k / DEPLOY_SLICES
+        return { ac: o.ac, bh: o.bh + d0, w: 2 * half(d0) + 2 * margin + 6, d: span / DEPLOY_SLICES + margin }
+      })
+      const parts = [...ls.flatMap(o => [{ ...o, d: headD }, { ...o, w: stemW }, ...deploy(o)]), ...boxes.slice(lines)]
+      for (const [ac, bh] of fineGrid(play)) {
         if (placed >= perSide) break
         if (bh < RESERVE_BACK || ls.some(o => Math.abs(o.ac - ac) < (o.w + w) / 2 && bh < o.bh)) continue   // (never ahead of a line)
         if (!parts.every(o => Math.abs(o.ac - ac) >= (o.w + w) / 2 || bh + dd <= o.bh || o.bh + o.d <= bh)) continue
