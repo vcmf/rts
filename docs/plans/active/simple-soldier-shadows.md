@@ -193,7 +193,37 @@ the fragment); a traced bench of that point is in the next bench's script. **Dar
 default 45.6 against the map's 45.6, a firing line 46.4 against 45.8, the widest 37.7 against 42.8; with `?msaa=1` (no
 coverage) the decal is about a fifth darker than the map there.
 
+**The final bench** (code final after review round 2: the stencil on the scene's target alone, the 1 × 3 grid; Metal,
+40 a side, `rts-shadows-40` at af4791f against `rts-32k-s2` without the stencil; three interleaved rounds, all 32 runs
+exit 0; p50 / p95 ms):
+
+| | wide: map | wide: decal | default: map | default: decal | close: map / decal |
+|---|---|---|---|---|---|
+| fight's middle, still | 10.05 / 11.85 | 10.05 / 11.50 | 11.15 | 10.25 | 9.80 / 9.85 |
+| fight's middle, pan | 9.85 / 11.65 | 9.40 / 10.50 | 10.55 | 10.25 | 9.70 / 9.65 |
+| stress point, still | 13.05 / 21.35 | 12.90 / 13.90 | 11.10 | 10.45 | 8.70 / 8.75 |
+| stress point, pan | 12.85 / 14.10 | 13.50 / 14.75 | 10.95 | 10.20 | 9.15 / 9.15 |
+
+No figure shadows at all (`?unitshadow=0`, fight's middle, still), this build against the stencil-free one: wide 9.90
+against 9.95, default 10.20 against 10.05, close 9.55 against 9.05. So the stencil's cost is gone at wide and default;
+close's 0.5 ms with no shadows on either path is not explained (the map and the decal arms are equal there), recorded
+as an open question below. Against no shadows the decal costs +0.15 wide and +0.05 default at the fight's middle; the
+map +0.15 and +0.95.
+
+So the decal is **cheaper than the map at default zoom by 0.3 to 0.9 ms**, equal or 0.45 ms cheaper at wide, and takes
+away the map's spikes (stress point, still, p95 21.35 → 13.90). The one place it costs more is panning at the stress
+point's widest zoom, **+0.65 ms** (was +1.45 before the 1 × 3 grid). The traced pans: the map's slow wide frames are
+its redraws (60 % of panned frames redraw the map); the decal's frames are uniformly about 13.1 ms with no event
+behind them, a steady cost of about 24,000 shadows' vertices and pixels rather than a redraw.
+
 ## Open questions
+
+- **Close zoom with no figure shadows** measured 9.55 ms on this build against 9.05 on the stencil-free 32k tree
+  (`?armies=40&unitshadow=0`, three rounds); with shadows the map and decal arms are equal at close. Not explained yet:
+  bisect between the trees (the ground surfaces' packing, the decal's meshes with no material) before calling it
+  noise.
+- **The stress point's widest pan** costs 0.65 ms more than the map (a steady cost, not a redraw). Next if it matters:
+  no per-man decals for battalions under a few pixels a man (one shadow per company or battalion there).
 
 - **`?smoothmove` is on by default** (measured free above): the figures' places move every frame, their poses stay at
   12 fps. The owner's call: keep it, or go back to places stepped with the poses (`?smoothmove=0`), where the simple
