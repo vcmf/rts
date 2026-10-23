@@ -72,6 +72,18 @@ Out of scope: lit relief (shading), woods as canopy, roofs (decision 0051's bake
   starts at the centre of the battalions still on the order, where they stand, and joins the route where it passes
   nearest them.
 
+- **The owner's gun icon** (2026-10-23): in the lit style a battery is the owner's 15×15 gun icon, in the army's colour,
+  turned to its facing (mirrored when it faces left, so the wheel stays under the barrel), with the blocks' shadow;
+  the legend's swatch too; its selection ring circles the icon.
+- **Round 3**: severe: the side faces never filled (the quads on the far side wound against the shifted top, so the
+  visible strip summed to zero under the nonzero rule). The fourth round the rule would need is a redesign instead.
+  Also fixed: the arrow's shadow clipped outside its translucent body; the grain on the paper only, not on the painted
+  world at close zoom (a full-screen filter otherwise); its fine octave rotated off the texture's period; the light
+  from two points at one height (relief swung it); the troops' place on the route searched near their progress only;
+  the light spine from past the notch; the battery's ring; no decision cited by number from this branch.
+- **Redesign** (the round count restarts): a block's sides are one convex polygon, the hull of its top and the top
+  shifted away from the light, the top clipped out above it. No winding to get wrong.
+
 ## Results
 
 - Lit screenshots (1600×900, Windows Chrome over CDP, SwiftShader): the map in summer, mid zoom in summer and winter
