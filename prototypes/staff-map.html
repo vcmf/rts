@@ -418,7 +418,7 @@ const SEAS={
   crown:   ['#7c8d43','#c08a32','#8e5a33','#5a4e47'],
   conifer: ['#3c5a3b','#3c5a3b','#3b5640','#3a4f47'],
 };
-if(LIT)SEAS.paper=['#e3d1a2','#e1cb98','#d9c18f','#e4d9bf'];   // aged parchment, yellow-brown
+if(LIT){SEAS.paper=['#e3d1a2','#e1cb98','#d9c18f','#e4d9bf'];document.documentElement.style.setProperty('--paper','#e9dab3');}   // aged parchment, yellow-brown
 const NAMES=['summer','early autumn','late autumn','winter'];
 function seasonCol(key,s){const a=SEAS[key],i=Math.min(2,Math.floor(s)),t=s-i;const v0=a[i],v1=a[i+1];return typeof v0==='number'?lerp(v0,v1,t):mix3(hex(v0),hex(v1),t);}
 
@@ -448,7 +448,7 @@ void main(){
 #ifdef LIT
   float fine=texture2D(uPaperT,vW.xz/21.0+0.13).r;
   vec3 paper=uPaper*(0.93+(g1-0.5)*0.22+(g2-0.5)*0.12+(g3-0.5)*0.07);
-  paper*=mix(vec3(1.0),vec3(0.80,0.69,0.50),(1.0-smoothstep(0.0,0.17,edge))*inside);
+  paper*=mix(vec3(1.0),vec3(0.80,0.69,0.50),smoothstep(0.0,0.035,edge)*(1.0-smoothstep(0.035,0.17,edge))*inside);
 #else
   vec3 paper=uPaper*(0.965+(g1-0.5)*0.12+(g2-0.5)*0.07+(g3-0.5)*0.035);
 #endif
@@ -836,11 +836,11 @@ const shade=(c,k)=>css(c.map(v=>k<1?v*k:v+(1-v)*(k-1)));   // k below 1 darker, 
 function raised(C,col){
   const[ox,oy]=raiseOf(SIDE_PX),[sx,sy]=raiseOf(SHADOW_PX);
   ink.save();ink.beginPath();ink.rect(-1e4,-1e4,3e4,3e4);ink.moveTo(C[0][0],C[0][1]);for(let i=C.length-1;i>0;i--)ink.lineTo(C[i][0],C[i][1]);ink.closePath();ink.clip('evenodd');
-  ink.shadowColor='rgba(52,38,18,0.42)';ink.shadowBlur=5;ink.shadowOffsetX=sx-ox;ink.shadowOffsetY=sy-oy;
-  pathPoly(C.map(p=>[p[0]+ox,p[1]+oy]));ink.fillStyle=shade(col,0.55);ink.fill();ink.shadowColor='transparent';
-  const sides=new Path2D();
+  // canvas shadows ignore the transform: offsets and blur in device pixels
+  ink.shadowColor='rgba(52,38,18,0.42)';ink.shadowBlur=5*DPR;ink.shadowOffsetX=(sx-ox)*DPR;ink.shadowOffsetY=(sy-oy)*DPR;
+  const sides=new Path2D();sides.moveTo(C[0][0]+ox,C[0][1]+oy);for(let i=1;i<C.length;i++)sides.lineTo(C[i][0]+ox,C[i][1]+oy);sides.closePath();
   for(let i=0;i<C.length;i++){const a=C[i],b=C[(i+1)%C.length];sides.moveTo(a[0],a[1]);sides.lineTo(b[0],b[1]);sides.lineTo(b[0]+ox,b[1]+oy);sides.lineTo(a[0]+ox,a[1]+oy);sides.closePath();}
-  ink.fillStyle=shade(col,0.62);ink.fill(sides,'nonzero');ink.restore();
+  ink.fillStyle=shade(col,0.62);ink.fill(sides,'nonzero');ink.restore();   // one fill, so a fading block composites once
 }
 // a block's top: a thin dark outline, then each edge inset a little, lighter facing the light, darker facing away;
 // through its own paths, so the caller's current path (outline, hole) is untouched
@@ -863,8 +863,7 @@ function drawBlock(u,alpha,now){
   if(u.state==='rout'){
     // routing: pulses between the army colour and white, the colour of surrender
     // a soft pulse on the frame clock passed in, so an exporter controls the phase
-    const pk=sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI));
-    pathPoly(C);ink.fillStyle=css(mix3(s.e||s.c,PULSE_WHITE,pk));ink.fill();if(LIT)litEdges(C);
+    pathPoly(C);ink.fillStyle=css(blockCol(u,now));ink.fill();if(LIT)litEdges(C);
     ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);}
   else if(u.type==='art'){
     // bar + gun dot on the facing side
@@ -925,18 +924,18 @@ function arrowLit(o,col,alpha,band,s0,s1,withHead){
   const cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
   const L=cum[cum.length-1];if(L<1)return;
   // a short way left: the head alone, so an order about to finish keeps its arrow, as the ink style does
-  const headL=withHead?Math.min(band*1.9,L*(L<band*1.5?1:0.45)):0,bodyL=L-headL,tail=band,neck=band*0.6,headW=band*1.15;
+  const headL=withHead?Math.min(band*1.9,L*0.6):0,bodyL=L-headL,tail=band,neck=band*0.6,headW=band*1.15*Math.min(1,headL/(band*1.9)||0);
   const tan=i=>{const a=pts[Math.max(0,i-1)],b=pts[Math.min(pts.length-1,i+1)],dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy)||1;return[dx/l,dy/l];};
   const left=[],right=[];let k=0;
   for(;k<pts.length&&cum[k]<=bodyL;k++){const[tx,ty]=tan(k),w=lerp(tail,neck,cum[k]/(bodyL||1))/2;left.push([pts[k][0]-ty*w,pts[k][1]+tx*w]);right.push([pts[k][0]+ty*w,pts[k][1]-tx*w]);}
   const out=[...left];
-  if(withHead){const kb=Math.max(0,k-1),[tx,ty]=tan(kb),b=pts[kb],tip=pts[pts.length-1];
+  if(withHead){const b=pts[Math.max(0,k-1)],tip=pts[pts.length-1],dl=Math.hypot(tip[0]-b[0],tip[1]-b[1])||1,tx=(tip[0]-b[0])/dl,ty=(tip[1]-b[1])/dl;   // wings across base to tip
     out.push([b[0]-ty*headW,b[1]+tx*headW],tip,[b[0]+ty*headW,b[1]-tx*headW]);}
   for(let i=right.length-1;i>=0;i--)out.push(right[i]);
   const[t0x,t0y]=tan(0);out.push([pts[0][0]+t0x*band*0.45,pts[0][1]+t0y*band*0.45]);   // the notch, inside the tail
   const[sx,sy]=raiseOf(SHADOW_PX*0.9);
-  ink.save();ink.globalAlpha=alpha;ink.shadowColor='rgba(52,38,18,0.35)';ink.shadowBlur=6;ink.shadowOffsetX=sx;ink.shadowOffsetY=sy;
-  pathPoly(out);ink.fillStyle=css(col);ink.globalAlpha=alpha*0.85;ink.fill();ink.restore();
+  ink.save();ink.globalAlpha=alpha;ink.shadowColor='rgba(52,38,18,0.25)';ink.shadowBlur=6*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;
+  pathPoly(out);ink.fillStyle=css(col);ink.globalAlpha=alpha*0.6;ink.fill();ink.restore();
   ink.save();ink.globalAlpha=alpha;pathPoly(out);ink.strokeStyle=shade(col,0.55);ink.lineWidth=1;ink.stroke();
   ink.beginPath();for(let i=0;i<k;i++)i?ink.lineTo(pts[i][0],pts[i][1]):ink.moveTo(pts[i][0],pts[i][1]);   // a light spine along the body
   ink.strokeStyle='rgba(255,250,236,0.4)';ink.lineWidth=Math.max(1,band*0.12);ink.lineCap='round';ink.stroke();ink.restore();
@@ -1037,8 +1036,9 @@ function drawInk(now){
   ink.setTransform(DPR,0,0,DPR,0,0);ink.clearRect(0,0,SW,SH);
   const inkA=1-st('ink'),blockA=1-st('blocks'),nameA=1-st('names');
   drawNeatline(inkA);drawNames(nameA);
+  if(LIT)setLight();
   drawOrders(now,Math.max(0.35,1-stage(0.7,1)));
-  if(LIT){setLight();for(const u of UNITS)if(!u.gone||u.gone<1)drawUnder(u,blockA,now);}
+  if(LIT){for(const u of UNITS)if(!u.gone||u.gone<1)drawUnder(u,blockA,now);}
   for(const u of UNITS)if(!u.gone||u.gone<1)drawBlock(u,blockA,now);
   drawSmoke(now,blockA,1-blockA);
   drawCorpsLabels(1-st('corps'));
