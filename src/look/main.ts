@@ -67,8 +67,13 @@ setRiver(look.river); setHeightfield(look.hf, look.far, D.spec.tile / 2)
   checkGround(D.spec, lo, hi, farLo)
 }
 const canvas = document.getElementById('c') as HTMLCanvasElement
-// (a stencil: the soldiers' simple shadows darken each sample once, src/look/units.ts; the scene's target takes it too)
-const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: true }, false)
+// ?stencil=scene (the default): a stencil on the scene's target alone, for the soldiers' simple shadows (src/look/units.ts,
+// MSAA.stencil in src/look/post.ts); all: the engine's own (the canvas and its targets too: the A/B); 0: none
+const stencilParam = new URLSearchParams(location.search).get('stencil') ?? 'scene'
+if (!['scene', 'all', '0'].includes(stencilParam)) throw new Error(`?stencil must be scene, all or 0, not ${stencilParam}`)
+// (only with the simple shadows, which are the stencil's only use: without them the scene's depth stays DEPTH32_FLOAT)
+{ const q = new URLSearchParams(location.search); MSAA.stencil = stencilParam === 'scene' && q.get('armies') !== null && q.get('unitshadow') !== '0' && q.get('ushadowfar') !== 'map' }
+const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: stencilParam === 'all' }, false)
 engine.setHardwareScalingLevel(1)
 // the scene's own lines (the finishing chain's: under the upscale, its first target's; called only from the frames,
 // after the chain is made below)
@@ -346,7 +351,12 @@ if (armiesParam !== null) {
   units.holdShare = smHold !== 'fixed'; units.proxyCasters = shadowLod !== 'far'
   units.simpleFar = uShadowFar !== 'map'; if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
   units.groundMap = meadow !== null; if (decalLift !== null) units.decalLift = +decalLift
-  if (units.simpleFar) units.shade = bakes.unitShade()
+  // the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): made only with them, baked again
+  // after the bounce map (the season, the shadows' switch, the grain) and when the occlusion's switch changes
+  if (units.simpleFar && unitShadowParam !== '0') {
+    const shade = units.shade = bakes.unitShade(); let ao = S.ao
+    scene.onBeforeRenderObservable.add(() => { if (S.ao !== ao) { ao = S.ao; shade.resetRefreshCounter() } })
+  }
   if (uShadowVs ?? true) units.rootReceivers = meadow?.meshes.map(m => m.material as ShaderMaterial) ?? []
   units.setShadows(unitShadowParam !== '0')
   units.setPosed(uVat ?? true)

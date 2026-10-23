@@ -18,6 +18,10 @@ import { Frustum } from '@babylonjs/core/Maths/math.frustum.js'
 import { Matrix, Vector2, Vector3, Vector4 } from '@babylonjs/core/Maths/math.vector.js'
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import '@babylonjs/core/Meshes/thinInstanceMesh.js'
+import '@babylonjs/core/Engines/Extensions/engine.alphaToCoverage.js'
+import { MSAA } from './post.ts'
+import type { ThinEngine } from '@babylonjs/core/Engines/thinEngine.js'
+import { D } from './spec.ts'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { SUN, type Materials } from './materials.ts'
 import UNITS_VS from './shaders/units.vert?raw'
@@ -66,9 +70,10 @@ const SHADOW_H = 2.6    // m: the highest point of a figure (his bayonet up), wh
 const SM_STEP_FINE = 2  // m: the box's half-size steps
 const SM_HOLD_SHARE = 0.1   // the held box's slack, a share of the view's half-size (the shadow fix: SM_HOLD at least)
 const SM_COARSE = 1.3  // and be at most this many times the size the view needs (its texels no coarser)
-const DECAL_ALONG = 6, DECAL_ACROSS = 2   // the simple shadow's grid (cells along and across it): it lies on the ground
+const DECAL_ALONG = 3, DECAL_ACROSS = 1   // the simple shadow's grid (cells along and across it): it lies on the ground, 2 m a cell (8 vertices: the widest view is bound by its vertices)
 const LIFT_RAMP = 1.5   // m along the shadow from his feet over which its lift grows (unitdecal.vert: not over his own shins)
 const GL_ZERO = 0, GL_ONE = 1, GL_SRC_COLOR = 0x0300   // (the blend's factors, WebGL's own: no Babylon mode is dst · src with the alpha kept)
+const GROUND_N = 512    // the simple shadows' own ground heights without the meadow map: texels a side over the tile
 const SHAPE_MIPS = 3    // the shape's mips read at most: a cell's 8-texel border holds to the fourth (unitdecal.frag)
 const SHAPE_FACINGS = 16   // the simple shadow's facings (shadowShape)
 /** the cross-fade's band (decision 0049): the camera's distance to its focus (m) where the map gives way to the simple
@@ -160,12 +165,15 @@ export class Units {
    *  ?udecallift=<m>) */
   get decalLift(): number { return this.lift }
   set decalLift(v: number) { this.lift = v; this.decal?.setFloat('uDecalLift', v) }
-  /** the simple shadows' ground height from the meadow map (main.ts: when there is one), else the man's root's; read
-   *  when they are made (setShadows): a define */
+  /** the simple shadows' ground height from the meadow map (main.ts: when there is one), else from the heightfield,
+   *  sampled when they are made (setShadows): load-time only */
   groundMap = false
   /** the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): main.ts, before setShadows */
   shade: BaseTexture | null = null
   private decal: ShaderMaterial | null = null   // the simple shadows' (useDecals)
+  /** their soft edge as the samples they cover (alpha to coverage), with the scene's 4 samples; with fewer (?msaa=1|2)
+   *  their value darkens the pixel instead (the stencil still darkens it once: the first shadow there wins) */
+  private get coverage(): boolean { return MSAA.samples >= 4 }
   private mapOn = false   // the map drawn this frame
   private stepFrac = 0
   private culledMoving = false   // a caster in the map has its men moving (cull)
@@ -367,7 +375,7 @@ export class Units {
     this.stepFrac = T * fps - step
     // the band (decision 0049): the map's share given to the simple shadows by the camera's distance to its focus
     const [r0, r1] = this.band, u = Math.min(1, Math.max(0, (this.camera.radius - r0) / Math.max(1e-6, r1 - r0)))
-    const f = this.shadows && this.simpleFar ? u * u * (3 - 2 * u) : 0
+    const f = this.shadows && this.simpleFar && this.decal !== null ? u * u * (3 - 2 * u) : 0
     if (f !== this.far) { this.far = f; for (const m of this.receivers) m.setFloat('uUnitFar', f) }
     const mapOn = this.shadows && f < 1, decalOn = this.shadows && this.simpleFar && f > 0 && this.decal !== null
     if (mapOn && !this.mapOn) { this.smBox.set = false; this.smStep = -1; this.smEmpty = false }   // (back from the simple shadows alone: fitted and drawn afresh)
@@ -603,8 +611,16 @@ export class Units {
     const tex = new RawTexture(shape.data, shape.width, shape.height, Constants.TEXTUREFORMAT_R, this.scene, true, false, Constants.TEXTURE_TRILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_UNSIGNED_BYTE)
     tex.name = 'figureShadowShape'; tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
     const m = this.mats0.make('unitShadow2D', DECAL_VS, DECAL_FS, { attributes: ['position', 'aVAT', 'aNext'], uniforms: ['uRoleStart', 'uShapeBox', 'uShapeCell', 'uShapeTexel', 'uShapeSize', 'uShDir', 'uStepFrac', 'uFarK', 'uFarScale', 'uDecalLift'], samplers: ['uShapeTex', 'uUnitShade'], alpha: true,
-      defines: [`#define FACINGS ${SHAPE_FACINGS.toFixed(1)}`, `#define LIFT_RAMP ${LIFT_RAMP.toFixed(2)}`, `#define SHAPE_MIPS ${SHAPE_MIPS.toFixed(1)}`, ...(this.farScaleOn ? ['#define FAR_SCALE'] : []), ...(this.groundMap ? ['#define GROUND_MAP'] : [])] })
+      defines: [`#define FACINGS ${SHAPE_FACINGS.toFixed(1)}`, `#define LIFT_RAMP ${LIFT_RAMP.toFixed(2)}`, `#define SHAPE_MIPS ${SHAPE_MIPS.toFixed(1)}`, ...(this.coverage ? ['#define COVERAGE'] : []), ...(this.farScaleOn ? ['#define FAR_SCALE'] : [])] })
     m.backFaceCulling = false; m.disableDepthWrite = true; m.setTexture('uShapeTex', tex); m.setTexture('uUnitShade', this.shade)
+    // the ground's height under each vertex: the meadow map's (bound to every painted material, src/look/meadow.ts), or
+    // without one the heightfield's, sampled here over the tile (GROUND_N² texels)
+    if (!this.groundMap) {
+      const n = GROUND_N, w = D.spec.tile, hd = new Float32Array(n * n)
+      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) hd[j * n + i] = groundAt((i + 0.5) / n * w - w / 2, (j + 0.5) / n * w - w / 2)
+      const ht = new RawTexture(hd, n, n, Constants.TEXTUREFORMAT_R, this.scene, false, false, Constants.TEXTURE_BILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
+      ht.name = 'figureShadowGround'; ht.wrapU = ht.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE; m.setTexture('uMeadow', ht)
+    }
     m.setVector4('uRoleStart', new Vector4(...ROLES.map(r => d.ranges[r].start)))
     m.setVector4('uShapeBox', new Vector4(shape.across[0], shape.along[0], shape.across[1] - shape.across[0], shape.along[1] - shape.along[0]))
     m.setVector4('uShapeCell', new Vector4(shape.cellW, shape.cellH, 1 / shape.width, 1 / shape.height)); m.setVector2('uShapeSize', new Vector2(shape.width, shape.height))
@@ -613,12 +629,12 @@ export class Units {
     m.alphaMode = Constants.ALPHA_EXCLUSION   // (a mode nothing else draws with: its blend is replaced at each bind, below)
     const st = m.stencil; st.enabled = true; st.func = Constants.NOTEQUAL; st.funcRef = 1; st.funcMask = 0xff; st.mask = 0xff
     st.opStencilFail = Constants.KEEP; st.opDepthFail = Constants.KEEP; st.opStencilDepthPass = Constants.REPLACE
-    const engine = this.scene.getEngine() as unknown as { _gl?: WebGL2RenderingContext; _alphaState?: { setAlphaBlendFunctionParameters(a: number, b: number, c: number, e: number, t: number): void } }
+    const engine = this.scene.getEngine() as ThinEngine, a2c = this.coverage
     m.onBindObservable.add(() => {
-      engine._alphaState?.setAlphaBlendFunctionParameters(GL_ZERO, GL_SRC_COLOR, GL_ZERO, GL_ONE, 0)
-      engine._gl?.enable(engine._gl.SAMPLE_ALPHA_TO_COVERAGE)
+      engine.alphaState.setAlphaBlendFunctionParameters(GL_ZERO, GL_SRC_COLOR, GL_ZERO, GL_ONE, 0)
+      if (a2c) engine.setAlphaToCoverage(true)
     })
-    m.onUnBindObservable.add(() => engine._gl?.disable(engine._gl.SAMPLE_ALPHA_TO_COVERAGE))
+    if (a2c) m.onUnBindObservable.add(() => engine.setAlphaToCoverage(false))
     this.decal = m
     for (const h of this.hosts) h.lod[3].material = m
   }

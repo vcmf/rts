@@ -178,7 +178,7 @@ export function buildBakes(scene: Scene, mats: Materials, water: BaseTexture, ti
   const unitShade = () => {
     if (shade) return shade
     const m = mats.make('unitShade', TER_VS, SHADE_FS, { attributes: ['position', 'normal', 'aRiver'], defines: ['#define GROUND_BOUNCE'] })
-    const t = shade = new RenderTargetTexture('unitShade', GB_N, scene, false, true, Constants.TEXTURETYPE_UNSIGNED_BYTE, false, Texture.BILINEAR_SAMPLINGMODE)
+    const t = shade = new RenderTargetTexture('unitShade', LM_N, scene, false, true, Constants.TEXTURETYPE_UNSIGNED_BYTE, false, Texture.BILINEAR_SAMPLINGMODE)
     t.activeCamera = lmCam; t.clearColor = new Color4(1, 1, 1, 1); t.renderList = [terrains[0]]; t.setMaterialForRendering(terrains[0], m)
     t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
     t.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE; scene.customRenderTargets.push(t)
