@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-19
+last_reviewed: 2026-10-23
 code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
 decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows]
 ---
@@ -595,6 +595,19 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   padded by the tallest figure (2.6 m, as tall as the far figures grow) and the farthest reach of the baked poses (as
   wide as they grow). The view's corner rays are cast once a frame
   (`castView`) for the sun's box and the trodden mask's.
+- **The men placed on the GPU** (`docs/plans/active/armies-32k.md`, step 1; `?gpuplace=0`: by the CPU, a matrix and
+  clip settings a man uploaded at each step): a man's instance matrix is his **static record**, written and uploaded
+  once (his slot in line and in column, his jitter across, ahead and in his turn, his fire lag, his battalion), and
+  each battalion's **record** is four float texels of one small texture (`battalions`: its place, heading, phase, the
+  phase's start, its local time, its clips' offsets in steps and the cycle start's fraction of a step: `clipBase`,
+  `src/look/world/armies.ts`), sent once a frame when any battalion's changed (a few KB). The vertex shader (`placeMan`,
+  `units.vert`, under `GPU_PLACE`) does `manAt`'s arithmetic in float32 and reads his ground from the heightfield's
+  own nodes on its own triangles (`unitGround`, an R32F texture of `HF`, read texel by texel), so the figures, their
+  casters and the proxy are placed alike. A battalion's bounds come from its slots' extents in its phase and the
+  heightfield's nodes under them; its colour bearer (the flag) and the trodden mask's men (once a record, when
+  the mask redraws) from `manAt` on the CPU. The vertex stage reads at most four textures (the bones or the posed
+  vertices, the record, the ground), the fragment stage's are unchanged. The page throws if a battalion reaches off
+  the tile (the GPU's ground is the tile's alone).
 - **Their shadows** (decision 0047; `?unitshadow=0`: none): a 2048² depth-only map (24 bits, a comparison sampler), the
   sun's box fitted to the ground in view's own heights and centred on what it holds, its near and far fitted along the
   sun. Drawn only when it would change (the poses' step, a battalion's men, the casters, the box; `?ushadowrate=0`:

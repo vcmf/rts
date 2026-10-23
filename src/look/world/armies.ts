@@ -215,3 +215,17 @@ export function manAt(d: Drill, s: ReturnType<typeof slots>, i: number, t: numbe
   }
   return set(lx, lz, 0, 'fire', p.start + s.rank[i] * RANK_LAG + jitter * 0.3, false)
 }
+
+/** a battalion's clip offsets for the GPU's placement (docs/plans/active/armies-32k.md, step 1; src/look/units.ts): a
+ *  man's clip phase is ((−floor((cycleStart + since) · fps)) mod steps), the CPU's (units.ts place); with a =
+ *  cycleStart · fps, A = floor(a), it is ((−A mod steps) − floor((a − A) + since · fps)) mod steps, so the large part is
+ *  reduced here in double precision, once a cycle and role, and the shader adds only the small one in float32 */
+export function clipBase(cycleStart: number, fps: number, steps: readonly number[]): { ofs: number[]; frac: number } {
+  const a = cycleStart * fps, A = Math.floor(a)
+  return { ofs: steps.map(n => ((-A % n) + n) % n), frac: a - A }
+}
+/** the phase in steps from clipBase's offset and fraction: what units.vert's placeMan computes (in float32 there) */
+export function clipPhase(ofs: number, frac: number, sinceSteps: number, steps: number): number {
+  const k = ofs - Math.floor(frac + sinceSteps) + steps * 4096
+  return k % steps
+}

@@ -24,17 +24,21 @@ import UNITS_FS from './shaders/units.frag?raw'
 import FLAG_VS from './shaders/flag.vert?raw'
 import FLAG_FS from './shaders/flag.frag?raw'
 import DEPTH_FS from './shaders/depth.frag?raw'
-import { groundAt } from './heightfield.ts'
+import { HF, groundAt, onTile } from './heightfield.ts'
 import { mulberry } from './noise.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
 import { posedMesh, posedVertices, shadowProxy, type UnitData } from './units-data.ts'
-import { CYCLE, farPalette, farRule, manAt, phaseAt, slots, type Battalion, type Drill, type ManState, type Phase, type Uniform } from './world/armies.ts'
+import { APPROACH, CYCLE, RANK_LAG, clipBase, farPalette, farRule, manAt, phaseAt, slots, type Battalion, type Drill, type ManState, type Phase, type Uniform } from './world/armies.ts'
 
 const ROLES = ['halt', 'march', 'run', 'fire'] as const
 const RESERVE = { phase: 'halt', start: 0, deployEnd: 0 } as const   // a reserve's phase: halted in column, always
+const PHASE_ID: Readonly<Record<Phase, number>> = { column: 0, halt: 1, deploy: 2, fire: 3 }   // (units.vert, placeMan)
+const JIT = 0.03   // m: a man's jitter either way, across and ahead (add's ±0.03)
 
 interface Host {
   b: Battalion; lod: Mesh[]; near: boolean;   // lod: the near LOD, the far LOD, the shadow proxy (casts only)
+  // the CPU's placement: each man's matrix and clip settings; the GPU's (gpuPlace): matrices holds each man's static
+  // record (units.vert, placeMan) and settings is empty
   matrices: Float32Array; settings: Float32Array; jitter: Float32Array
   cx: number; cz: number; lo: Vector3; hi: Vector3
   step: number            // the 1/fps step its matrices were written for (a moving battalion moves once a step)
@@ -42,7 +46,11 @@ interface Host {
   stale: boolean[]        // per LOD: its GPU copy of the matrices is older than the matrices
   staleSet: boolean[]     // per LOD: its GPU copy of the men's clip settings is older
   cycle: number           // the cycle its settings were written in (each cycle's clips start afresh)
-  index: number           // its place in hosts (its flag's instance)
+  index: number           // its place in hosts (its flag's instance; its column of the battalions' record, gpuPlace)
+  bear: Float64Array      // its colour bearer's place (x, y, z: its flag's)
+  // the GPU's placement: the local time and phase its record was written at, and its men's places for the trodden
+  // mask (x, z and the way behind him, written from the record when the mask needs them: tpStale)
+  local: number; p: ReturnType<typeof phaseAt>; tp: Float32Array | null; tpStale: boolean
 }
 
 const SM_SIZE = 2048   // the figures' shadow map, fitted to the ground in view each frame
@@ -131,13 +139,22 @@ export class Units {
   /** the shadow map's draws so far (the captures count them: a still frame draws none) */
   smDraws = 0
 
+  /** each man placed by the vertex shader from his static record and his battalion's (docs/plans/active/armies-32k.md,
+   *  step 1); false (?gpuplace=0): by the CPU, a matrix and clip settings a man uploaded at each step (place) */
+  readonly gpuPlace: boolean
+  private rec = new Float32Array(0)      // the battalions' records (gpuPlace): 4 RGBA texels a battalion, a column each
+  private recTex: RawTexture | null = null
+  private recStale = false
+  private readonly box: { line: number[]; column: number[] }   // the slots' extents in the battalion's frame (x0, x1, z0, z1)
+  private readonly roleSteps: number[]   // each role's clip steps (ROLES' order)
+
   /** receivers: the painted materials the figures' shadows fall on (the ground and the grass); the page's clock */
   private readonly scene: Scene; private readonly camera: ArcRotateCamera; private readonly receivers: ShaderMaterial[]
   private readonly drill: Drill; private readonly clock: () => number
   /** uniforms: the era's, by id (each battalion names one) */
-  constructor(scene: Scene, camera: ArcRotateCamera, mats: Materials, receivers: ShaderMaterial[], data: UnitData, drill: Drill, battalions: Battalion[], uniforms: Readonly<Record<string, Uniform>>, clock: () => number) {
+  constructor(scene: Scene, camera: ArcRotateCamera, mats: Materials, receivers: ShaderMaterial[], data: UnitData, drill: Drill, battalions: Battalion[], uniforms: Readonly<Record<string, Uniform>>, clock: () => number, opts: { gpuPlace?: boolean } = {}) {
     this.scene = scene; this.camera = camera; this.receivers = receivers; this.drill = drill; this.clock = clock; this.uniforms = uniforms
-    this.data = data
+    this.data = data; this.gpuPlace = opts.gpuPlace ?? true
     if (data.lods.length !== 2) throw new Error(`units: drawn with two LODs, the data has ${data.lods.length}`)
     for (const r of ROLES) if (!data.ranges[r]) throw new Error(`units: the figure has no clips for the role ${r} (tools/bake-figure.py)`)
     this.slot = slots(drill); this.mats0 = mats
@@ -146,9 +163,27 @@ export class Units {
     this.bearer = bi
     this.speed = { march: data.ranges.march.speed, run: data.ranges.run.speed }
     if (!(this.speed.march > 0 && this.speed.run > 0)) throw new Error('units: the march and run roles have no root speed')
+    const ext = (a: [number, number][]) => [Math.min(...a.map(p => p[0])), Math.max(...a.map(p => p[0])), Math.min(...a.map(p => p[1])), Math.max(...a.map(p => p[1]))]
+    this.box = { line: ext(this.slot.line), column: ext(this.slot.column) }
+    this.roleSteps = ROLES.map(r => data.ranges[r].end - data.ranges[r].start)
     const vat = RawTexture.CreateRGBATexture(data.vat.data, data.vat.width, data.vat.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_HALF_FLOAT)
     vat.name = 'figureVAT'
-    const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVAT', 'aVid'], n = data.palette.length
+    const attributes = ['position', 'normal', 'aRole', 'aBones', 'aWeights', 'aVid', ...this.gpuPlace ? [] : ['aVAT']], n = data.palette.length
+    // the GPU's placement (gpuPlace): every figure material's and caster's extra uniforms, samplers and define, and its
+    // values (placeMan, units.vert): the battalions' record, the heightfield's nodes (float32, read texel by texel)
+    const G = this.gpuPlace, gU = G ? ['uHF', 'uClipS', 'uClipN', 'uMove'] : [], gS = G ? ['uBat', 'uHgt'] : [], gD = G ? ['#define GPU_PLACE'] : []
+    let gpu: (m: ShaderMaterial) => void = () => {}
+    if (G) {
+      for (const b of battalions) for (const [x, z] of this.footprint(b)) if (!onTile(x, z)) throw new Error(`units: a battalion at (${b.x}, ${b.z}) reaches off the tile, where the GPU's placement has no ground (?gpuplace=0)`)
+      this.rec = new Float32Array(battalions.length * 4 * 4)
+      this.recTex = RawTexture.CreateRGBATexture(this.rec, battalions.length, 4, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
+      this.recTex.name = 'battalions'
+      const hgt = new RawTexture(HF.h, HF.n, HF.n, Constants.TEXTUREFORMAT_R, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
+      hgt.name = 'unitGround'
+      const hf = new Vector4(HF.x0, HF.z0, HF.cell, HF.n), cs = new Vector4(...ROLES.map(r => data.ranges[r].start)), cn = new Vector4(...this.roleSteps)
+      const mv = new Vector4(this.speed.march, this.speed.run, APPROACH, data.fps), recTex = this.recTex
+      gpu = m => { m.setTexture('uBat', recTex); m.setTexture('uHgt', hgt); m.setVector4('uHF', hf); m.setVector4('uClipS', cs); m.setVector4('uClipN', cn); m.setVector4('uMove', mv) }
+    }
     // the far figure's growth (setFarScale): across up to FAR_SCALE_XZ, but never wider than 95 % of a file (the far
     // LOD's shoulders, measured between 1.2 and 1.5 m up), and FAR_SCALE_Y tall
     const fm = data.mesh[data.lods[1].name]; let x0 = Infinity, x1 = -Infinity
@@ -165,27 +200,27 @@ export class Units {
       const u = uniforms[id]; if (!u) throw new Error(`units: no uniform ${id} (a battalion names it)`)
       // its colour for each of the bake's roles (a role the uniform does not name: a loud failure)
       const pal = data.palette.map(r => { const hex = u.colours[r]; if (!hex) throw new Error(`units: the uniform ${id} has no colour for the role ${r}`); return Color3.FromHexString(hex) })
-      const m = mats.make(`units_${id}`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATStep', 'uPal', 'uMask', 'uCoatRole'], samplers: ['uVAT'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
-      m.setTexture('uVAT', vat); m.setColor3Array('uPal', pal); m.setFloat('uMask', -1); m.setFloat('uCoatRole', data.palette.indexOf('coat'))
+      const m = mats.make(`units_${id}`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATStep', 'uPal', 'uMask', 'uCoatRole', ...gU], samplers: ['uVAT', ...gS], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, ...gD] })
+      gpu(m); m.setTexture('uVAT', vat); m.setColor3Array('uPal', pal); m.setFloat('uMask', -1); m.setFloat('uCoatRole', data.palette.indexOf('coat'))
       this.mats.set(id, m)
       // the far LOD's: its far palette and its lift crossfaded in below the LOD switch under its far rule (FAR, setFarRule;
       // units.vert, units.frag), its vertices posed (VAT_POS, setPosed)
-      const f = mats.make(`units_${id}_far`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATStep', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole'], samplers: ['uVAT', 'uVATP'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`] })
-      const far = farPalette(u.colours)
+      const f = mats.make(`units_${id}_far`, UNITS_VS, UNITS_FS, { attributes, uniforms: ['uVATStep', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole', ...gU], samplers: ['uVAT', 'uVATP', ...gS], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, ...gD] })
+      const far = farPalette(u.colours); gpu(f)
       f.setTexture('uVAT', vat); f.setColor3Array('uPal', pal); f.setColor3Array('uPalFar', data.palette.map(r => Color3.FromHexString(far[r])))
       f.setFloat('uMask', -1); f.setFloat('uCoatRole', data.palette.indexOf('coat')); f.setVector2('uFarScale', farScale)
       this.farMats.set(id, f)
     }
     // the shadow pass: the same skinning, depth only, from an orthographic camera along the sun
-    this.depthMat = new ShaderMaterial('unitsDepth', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep'], samplers: ['uVAT'], defines: ['#define DEPTH'] })
-    this.depthMat.setTexture('uVAT', vat)
+    this.depthMat = new ShaderMaterial('unitsDepth', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep', ...gU], samplers: ['uVAT', ...gS], defines: ['#define DEPTH', ...gD] })
+    this.depthMat.setTexture('uVAT', vat); gpu(this.depthMat)
     // the far LOD posed at every step (batch B, ?uvat): its materials and its shadow casters read it under VAT_POS
     const posed = pv
     const vatp = RawTexture.CreateRGBATexture(posed.data, posed.width, posed.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
     vatp.name = 'figurePosed'
     for (const m of this.farMats.values()) m.setTexture('uVATP', vatp)
-    this.depthVatMat = new ShaderMaterial('unitsDepthPosed', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep'], samplers: ['uVAT', 'uVATP'], defines: ['#define DEPTH', '#define VAT_POS'] })
-    this.depthVatMat.setTexture('uVAT', vat); this.depthVatMat.setTexture('uVATP', vatp)
+    this.depthVatMat = new ShaderMaterial('unitsDepthPosed', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep', ...gU], samplers: ['uVAT', 'uVATP', ...gS], defines: ['#define DEPTH', '#define VAT_POS', ...gD] })
+    this.depthVatMat.setTexture('uVAT', vat); this.depthVatMat.setTexture('uVATP', vatp); gpu(this.depthVatMat)
     this.sun = new FreeCamera('unitSun', SUN.scale(500), scene); this.sun.mode = Camera.ORTHOGRAPHIC_CAMERA; this.sun.minZ = 1; this.sun.maxZ = 1200
     this.shadowRT = this.makeRT()
     const smTex = new BaseTexture(scene, this.shadowRT.depthStencilTexture); smTex.name = 'unitSMDepthTex'
@@ -208,8 +243,8 @@ export class Units {
     const px = shadowProxy(data, data.lods[1].name), pp = posedMesh(data, px), pn = px.positions.length / 3
     const vatx = RawTexture.CreateRGBATexture(pp.data, pp.width, pp.height, scene, false, false, Constants.TEXTURE_NEAREST_SAMPLINGMODE, Constants.TEXTURETYPE_FLOAT)
     vatx.name = 'figureShadowPosed'
-    this.depthProxyMat = new ShaderMaterial('unitsDepthProxy', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep'], samplers: ['uVAT', 'uVATP'], defines: ['#define DEPTH', '#define VAT_POS'] })
-    this.depthProxyMat.setTexture('uVAT', vat); this.depthProxyMat.setTexture('uVATP', vatx); this.depthProxyMat.backFaceCulling = false
+    this.depthProxyMat = new ShaderMaterial('unitsDepthProxy', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep', ...gU], samplers: ['uVAT', 'uVATP', ...gS], defines: ['#define DEPTH', '#define VAT_POS', ...gD] })
+    this.depthProxyMat.setTexture('uVAT', vat); this.depthProxyMat.setTexture('uVATP', vatx); this.depthProxyMat.backFaceCulling = false; gpu(this.depthProxyMat)
     const pm = new Mesh('figure_shadow', scene)
     pm.setVerticesData('position', px.positions, false, 3); pm.setVerticesData('normal', px.normals, false, 3)
     pm.setVerticesData('aRole', new Float32Array(pn), false, 1); pm.setVerticesData('aVid', Float32Array.from({ length: pn }, (_, i) => i), false, 1)
@@ -235,9 +270,81 @@ export class Units {
     })
     const rnd = mulberry(1 + this.hosts.length * 7919), jitter = new Float32Array(men * 4)   // ±3 cm, ±4°, a man's own lag: no two alike
     for (let i = 0; i < men; i++) { jitter[i * 4] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 1] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 2] = (rnd() - 0.5) * 0.14; jitter[i * 4 + 3] = rnd() * 2 - 1 }
+    const index = this.hosts.length
+    if (this.gpuPlace) {
+      // each man's static record, his instance's matrix (units.vert, placeMan), written and uploaded once
+      const st = new Float32Array(men * 16), { line, column, rank } = this.slot
+      for (let i = 0, o = 0; i < men; i++, o += 16) {
+        st[o] = line[i][0]; st[o + 1] = line[i][1]; st[o + 2] = column[i][0]; st[o + 3] = column[i][1]
+        st[o + 4] = jitter[i * 4]; st[o + 5] = jitter[i * 4 + 1]; st[o + 6] = jitter[i * 4 + 2]; st[o + 7] = rank[i] * RANK_LAG + jitter[i * 4 + 3] * 0.3
+        st[o + 8] = index; st[o + 15] = 1
+      }
+      for (const m of lod) m.thinInstanceSetBuffer('matrix', st, 16, true)
+      this.hosts.push({ b, lod, near: false, matrices: st, settings: new Float32Array(0), jitter, cx: b.x, cz: b.z, lo: new Vector3(), hi: new Vector3(), step: -1, phase: null, stale: [false, false, false], staleSet: [false, false, false], cycle: -1, index, bear: new Float64Array(3), local: 0, p: RESERVE, tp: null, tpStale: true })
+      return
+    }
     const matrices = new Float32Array(men * 16), settings = new Float32Array(men * 3)
     for (const m of lod) { m.thinInstanceSetBuffer('matrix', matrices, 16, false); m.thinInstanceSetBuffer('aVAT', settings, 3, false) }
-    this.hosts.push({ b, lod, near: false, matrices, settings, jitter, cx: b.x, cz: b.z, lo: new Vector3(), hi: new Vector3(), step: -1, phase: null, stale: [true, true, true], staleSet: [true, true, true], cycle: -1, index: this.hosts.length })
+    this.hosts.push({ b, lod, near: false, matrices, settings, jitter, cx: b.x, cz: b.z, lo: new Vector3(), hi: new Vector3(), step: -1, phase: null, stale: [true, true, true], staleSet: [true, true, true], cycle: -1, index, bear: new Float64Array(3), local: 0, p: RESERVE, tp: null, tpStale: true })
+  }
+
+  // the corners on the ground of everywhere a battalion's men stand in its cycle (a reserve: its column; a line: its
+  // column's approach, its column, its line), jitter included
+  private footprint(b: Battalion): [number, number][] {
+    const L = this.box.line, C = this.box.column
+    const x0 = b.reserve ? C[0] : Math.min(L[0], C[0]), x1 = b.reserve ? C[1] : Math.max(L[1], C[1])
+    const z0 = b.reserve ? C[2] : Math.min(L[2], C[2] - APPROACH), z1 = b.reserve ? C[3] : Math.max(L[3], C[3])
+    return corners(b, x0 - JIT, x1 + JIT, z0 - JIT, z1 + JIT)
+  }
+
+  // the battalion's record for the GPU's placement (gpuPlace; units.vert, placeMan) at its local time: its place and
+  // heading, its phase, the phase's start, the time, and its clips' offsets (clipBase); its bounds from its slots'
+  // extents in the phase (the men between their column and line places while they deploy) and the ground's range
+  // under them, its colour bearer from
+  // manAt. Its men's places are not written here: the trodden mask asks for them (menAt)
+  private placeRecord(h: Host, local: number, cycleStart: number): void {
+    const { b } = h, c = Math.cos(b.heading), s = Math.sin(b.heading), R = this.rec, W = R.length / 16, o = h.index * 4
+    const p = b.reserve ? RESERVE : phaseAt(this.drill, local, this.speed.march, this.speed.run)
+    const cb = clipBase(cycleStart, this.data.fps, this.roleSteps)
+    R[o] = b.x; R[o + 1] = b.z; R[o + 2] = s; R[o + 3] = c
+    const o1 = o + W * 4; R[o1] = PHASE_ID[p.phase]; R[o1 + 1] = p.start; R[o1 + 2] = local; R[o1 + 3] = b.heading
+    const o2 = o + W * 8; for (let k = 0; k < 4; k++) R[o2 + k] = cb.ofs[k]
+    R[o + W * 12] = cb.frac
+    this.recStale = true; h.local = local; h.p = p; h.tpStale = true
+    // the men's extents in the battalion's frame
+    const L = this.box.line, C = this.box.column
+    let x0 = C[0], x1 = C[1], z0 = C[2], z1 = C[3]
+    if (p.phase === 'column') { const dz = local * this.speed.march - APPROACH; z0 += dz; z1 += dz }
+    else if (p.phase === 'fire') { x0 = L[0]; x1 = L[1]; z0 = L[2]; z1 = L[3] }
+    else if (p.phase === 'deploy') { x0 = Math.min(x0, L[0]); x1 = Math.max(x1, L[1]); z0 = Math.min(z0, L[2]); z1 = Math.max(z1, L[3]) }
+    let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity
+    const q = corners(b, x0 - JIT, x1 + JIT, z0 - JIT, z1 + JIT), [yLo, yHi] = groundRange(q)
+    for (const [x, z] of q) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z) }
+    h.cx = (minX + maxX) / 2; h.cz = (minZ + maxZ) / 2
+    const top = SHADOW_H * FAR_SCALE_Y + 0.2, pad = this.sidePad
+    h.lo.set(minX - pad, yLo - 0.3, minZ - pad); h.hi.set(maxX + pad, yHi + top, maxZ + pad)
+    for (const m of h.lod) m.getBoundingInfo().reConstruct(h.lo, h.hi)
+    // the colour bearer, as the CPU's place() puts him
+    const man = this.man, i = this.bearer, j = h.jitter
+    manAt(this.drill, this.slot, i, local, p, this.speed.run, this.speed.march, j[i * 4 + 3], man)
+    const lx = man.x + j[i * 4], lz = man.z + j[i * 4 + 1], x = b.x + c * lx + s * lz, z = b.z - s * lx + c * lz
+    h.bear[0] = x; h.bear[1] = groundAt(x, z); h.bear[2] = z
+    this.placeFlag(h)
+  }
+
+  // the men's places for the trodden mask (gpuPlace): from the battalion's last record, as placeMan puts them (x, z, and
+  // the figure's +z, behind him: his matrix's third column), in double precision; written only when the record changed
+  private menAt(h: Host): Float32Array {
+    const n = this.slot.line.length, tp = h.tp ??= new Float32Array(n * 4)
+    if (!h.tpStale) return tp
+    const { b, jitter } = h, c = Math.cos(b.heading), s = Math.sin(b.heading), man = this.man
+    for (let i = 0; i < n; i++) {
+      manAt(this.drill, this.slot, i, h.local, h.p, this.speed.run, this.speed.march, jitter[i * 4 + 3], man)
+      const lx = man.x + jitter[i * 4], lz = man.z + jitter[i * 4 + 1], a = b.heading + man.face + Math.PI + jitter[i * 4 + 2]
+      tp[i * 4] = b.x + c * lx + s * lz; tp[i * 4 + 1] = b.z - s * lx + c * lz; tp[i * 4 + 2] = Math.sin(a); tp[i * 4 + 3] = Math.cos(a)
+    }
+    h.tpStale = false
+    return tp
   }
 
   // every man's matrix and clip at the battalion's local time: his place and facing from the script, set on the ground;
@@ -270,6 +377,7 @@ export class Units {
     h.lo.set(minX - pad, minY - 0.3, minZ - pad); h.hi.set(maxX + pad, maxY + top, maxZ + pad)
     for (const m of h.lod) m.getBoundingInfo().reConstruct(h.lo, h.hi)
     h.stale[0] = h.stale[1] = h.stale[2] = true
+    const mo = this.bearer * 16; h.bear[0] = matrices[mo + 12]; h.bear[1] = matrices[mo + 13]; h.bear[2] = matrices[mo + 14]
     this.placeFlag(h)
     if (changed) h.staleSet[0] = h.staleSet[1] = h.staleSet[2] = true
   }
@@ -308,7 +416,8 @@ export class Units {
       // a battalion's men are written when they move (a marching or deploying one once a step), else once a phase
       const moving = p === 'column' || p === 'deploy'
       if (h.step < 0 || h.cycle !== cycle || h.phase !== p || (moving && step !== h.step)) {
-        const tp = trNow(); this.place(h, local, cycleStart); h.step = step; h.phase = p; h.cycle = cycle; moved = true; anyMoved = true
+        const tp = trNow(); if (this.gpuPlace) this.placeRecord(h, local, cycleStart); else this.place(h, local, cycleStart)
+        h.step = step; h.phase = p; h.cycle = cycle; moved = true; anyMoved = true
         if (TRACE.on) { tr(TR.placed); tr(TR.placeMs, performance.now() - tp) }
       }
       const px = FIGURE * pxPerM / Math.max(1, Math.hypot(camPos.x - h.cx, camPos.y - groundAt(h.cx, h.cz), camPos.z - h.cz))
@@ -322,6 +431,11 @@ export class Units {
         if (h.stale[k]) { this.upload(h.lod[k], 'matrix', h.matrices.length); h.stale[k] = false }
         if (h.staleSet[k]) { this.upload(h.lod[k], 'aVAT', h.settings.length); h.staleSet[k] = false }
       }
+    }
+    // the battalions' records sent at once (gpuPlace): a few KB, however many moved
+    if (this.recStale && this.recTex) {
+      const t = trNow(); this.recTex.update(this.rec); this.recStale = false
+      if (TRACE.on) { TRACE.c[TR.tiUploads]++; TRACE.c[TR.tiKB] += this.rec.length * 4 / 1024; TRACE.c[TR.tiMs] += performance.now() - t }
     }
     if (this.trampleOn) this.trample(T, anyMoved)
     if (this.flag?.isEnabled()) {
@@ -570,9 +684,10 @@ export class Units {
     }
     for (const h of this.hosts) {
       if (!h.lod[0].isEnabled() || h.hi.x < b.x0 || h.lo.x > b.x0 + b.size || h.hi.z < b.z0 || h.lo.z > b.z0 + b.size) continue
-      const m = h.matrices
-      for (let o = 0; o < m.length; o += 16) {
-        const x = m[o + 12], z = m[o + 14], bx = m[o + 8], bz = m[o + 10]   // (+z in the figure's frame: behind him)
+      // each man's place and the way behind him (+z in the figure's frame): his matrix's, or the record's (menAt)
+      const [m, st, ox, oz, obx, obz] = this.gpuPlace ? [this.menAt(h), 4, 0, 1, 2, 3] : [h.matrices, 16, 12, 14, 8, 10]
+      for (let o = 0; o < m.length; o += st) {
+        const x = m[o + ox], z = m[o + oz], bx = m[o + obx], bz = m[o + obz]
         splat(x, z, 1); for (const [d, w] of TR_TRAIL) splat(x + bx * d, z + bz * d, w)
       }
     }
@@ -624,9 +739,9 @@ export class Units {
   // the flag at its bearer: his place, the cloth turned to fly downwind (FLAG_WIND, rad from +x toward +z)
   private placeFlag(h: Host): void {
     if (!this.flagM) return
-    const o = h.index * 16, mo = this.bearer * 16, c = Math.cos(FLAG_WIND), s = Math.sin(FLAG_WIND), m = this.flagM
+    const o = h.index * 16, c = Math.cos(FLAG_WIND), s = Math.sin(FLAG_WIND), m = this.flagM
     m[o] = c; m[o + 1] = 0; m[o + 2] = s; m[o + 3] = 0; m[o + 4] = 0; m[o + 5] = 1; m[o + 6] = 0; m[o + 7] = 0
-    m[o + 8] = -s; m[o + 9] = 0; m[o + 10] = c; m[o + 11] = 0; m[o + 12] = h.matrices[mo + 12]; m[o + 13] = h.matrices[mo + 13]; m[o + 14] = h.matrices[mo + 14]; m[o + 15] = 1
+    m[o + 8] = -s; m[o + 9] = 0; m[o + 10] = c; m[o + 11] = 0; m[o + 12] = h.bear[0]; m[o + 13] = h.bear[1]; m[o + 14] = h.bear[2]; m[o + 15] = 1
     this.flagStale = true
   }
 
@@ -648,4 +763,20 @@ export class Units {
   get figures(): number { return this.hosts.length * this.slot.line.length }
   /** the battalions as placed (the tools aim their cameras at them) */
   get battalions(): Battalion[] { return this.hosts.map(h => h.b) }
+}
+
+// a box in a battalion's frame (x across, z ahead) as its four corners on the ground
+function corners(b: Battalion, x0: number, x1: number, z0: number, z1: number): [number, number][] {
+  const c = Math.cos(b.heading), s = Math.sin(b.heading)
+  return [[x0, z0], [x1, z0], [x1, z1], [x0, z1]].map(([lx, lz]) => [b.x + c * lx + s * lz, b.z - s * lx + c * lz])
+}
+// the ground's lowest and highest under a quad's bounding box: its heightfield nodes (the ground between them is
+// their triangles, so none lies outside their range), a cell to spare
+function groundRange(q: [number, number][]): [number, number] {
+  const xs = q.map(p => p[0]), zs = q.map(p => p[1]), cl = (v: number) => Math.min(HF.n - 1, Math.max(0, v))
+  const i0 = cl(Math.floor((Math.min(...xs) - HF.x0) / HF.cell) - 1), i1 = cl(Math.ceil((Math.max(...xs) - HF.x0) / HF.cell) + 1)
+  const j0 = cl(Math.floor((Math.min(...zs) - HF.z0) / HF.cell) - 1), j1 = cl(Math.ceil((Math.max(...zs) - HF.z0) / HF.cell) + 1)
+  let lo = Infinity, hi = -Infinity
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const v = HF.h[j * HF.n + i]; if (v < lo) lo = v; if (v > hi) hi = v }
+  return [lo, hi]
 }

@@ -28,5 +28,9 @@ export const heightAt = (x: number, z: number): number => sample(HF, x, z)
 // them on the same split; only the 14 m apron between the two is approximated by the far grid)
 export const groundAt = (x: number, z: number): number => Math.abs(x) <= TILE_HALF && Math.abs(z) <= TILE_HALF ? sample(HF, x, z) : sample(FAR, x, z)
 
+// on the tile: where groundAt reads the heightfield itself (the GPU's placement of the figures reads only it:
+// src/look/units.ts)
+export const onTile = (x: number, z: number): boolean => Math.abs(x) <= TILE_HALF && Math.abs(z) <= TILE_HALF
+
 // the prototype's name: every caller that asked H(x, z) reads the drawn ground
 export const H = groundAt
