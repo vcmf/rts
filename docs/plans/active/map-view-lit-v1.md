@@ -24,7 +24,7 @@ comparison). In the lit mode:
 4. **Blocks:** a top face lit from the north-west (a lighter NW edge, a darker SE edge), a side face 3–4 px deep in a
    darker shade of the army colour, and a short soft shadow on the ground toward the south-east. Hatching for morale
    and the routing pulse stay on the top face (the shadow and the sides are clipped out under it); selection and
-   hover rings stay around the top face, the block's footprint.
+   hover rings stay around the top face, the block's footprint (a lit battery's ring circles its icon, see below).
 
 5. **Relief as contours** (the owner's choice, 2026-10-23, over the hachures): minor contours every 5 m and index
    contours every 25 m, drawn in the terrain shader from the height, about a pixel wide at any zoom, each set fading
@@ -83,6 +83,19 @@ Out of scope: lit relief (shading), woods as canopy, roofs (decision 0051's bake
   the light spine from past the notch; the battery's ring; no decision cited by number from this branch.
 - **Redesign** (the round count restarts): a block's sides are one convex polygon, the hull of its top and the top
   shifted away from the light, the top clipped out above it. No winding to get wrong.
+
+- **Round 1 after the redesign**: severe: `setLight` read both points from `proj`, which returns one shared array, so
+  the light never turned (a regression of round 3's fix). Fixed (copies), with: a routing battery keeps its shadow and
+  loses its stale ring; Austria's arrow in its edge colour (its coat is the paper's colour); a lit battery is clicked
+  by its icon; dead code. Measured on the owner's RTX 3080 (Windows Chrome, D3D11, mid-battle, two runs each): the ink
+  style 8.3 ms a frame, the lit style 11–12 ms with the tree icons, 8.3–10 ms with the canopy below.
+- **The owner's direction** (2026-10-23), after the reference frames of Epic History TV: woods as a texture of crowns,
+  not one icon per tree; fields and roads as in the frames. Made in the terrain shader, not copied: a canopy of crowns
+  on a jittered 8 m grid, each lit from the north-west, deep shade between them, clumped brightness, a ragged edge
+  (only whole crowns near it) and the wood's shadow on the ground to the south-east; fields as patches about 180 m
+  across with their own strip direction (10 m) and tint from the season's wash; roads as brown dirt, darker at the edge;
+  contours faint under the woods. Smoke: a volley is a small white cloud along the front, a gun flashes at the muzzle
+  and throws a larger cloud forward, the way it faces.
 
 ## Results
 
