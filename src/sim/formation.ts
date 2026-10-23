@@ -259,7 +259,8 @@ function repackSpan(w: World, i: number, q: number): [number, number] {
 // the caller already knows. Returns the company that lost the man, or −1 if the battalion has none left.
 export function removeMan(w: World, i: number, c: number, first?: ArrayLike<number>, near?: boolean): number {
   const q = takeMan(w, i, c, first, near)
-  if (q >= 0) w.f.lastLoss[i] = w.meta[M_TICK] + 1 // every loss, whatever removed the man (a router losing men does not rally)
+  // every loss, whatever removed the man (a router losing men does not rally)
+  if (q >= 0) w.f.lastLoss[i] = w.meta[M_TICK] + 1
   return q
 }
 function takeMan(w: World, i: number, c: number, first?: ArrayLike<number>, near?: boolean): number {
@@ -812,7 +813,8 @@ function clearOfImpassable(w: World, i: number): boolean {
   let lmax = 0
   for (let j = 0; j < U.NB; j++) lmax = Math.max(lmax, f.lags[i * w.cr.maxNB + j])
   const kind = kindOf(w, i)
-  return w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(U) * spread + lmax + 2 // a company's places lie within a frontage of its origin, times its spacing
+  // a company's places lie within a frontage of its origin, times its spacing
+  return w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(U) * spread + lmax + 2
 }
 // the bins with a man's place on impassable ground, for the pose as it is now, into out (a set of NB bits)
 export function wetBins(w: World, i: number, out: Bits): Bits {
@@ -1227,7 +1229,8 @@ function changeWet(w: World, i: number): boolean {
     const k = (i * CS + c) * 4
     reach = Math.max(reach, hyp(f.tFrom[k], f.tFrom[k + 1]), hyp(f.tTo[k], f.tTo[k + 1]))
   }
-  const spread = Math.max(layoutOf(w, i).spread, targetLayout(w, i).spread) // a company's places reach farther with a step
+  // a company's places reach farther with a step
+  const spread = Math.max(layoutOf(w, i).spread, targetLayout(w, i).spread)
   let lmax = 0
   for (let j = 0; j < U.NB; j++) lmax = Math.max(lmax, f.lags[i * w.cr.maxNB + j])
   if (w.terrain.impd[kind][cellK(w.terrain, f.x[i], f.z[i])] > reach + BW(U) * spread + lmax + 2) return false
@@ -1565,7 +1568,8 @@ function formationStep(w: World, i: number): void {
   f.omega[i] = 0
   const shelter = sheltering(w, i)
   if (f.trans[i]) {
-    // no marching while the companies change places; a new shape order interrupts the change (a battalion that breaks cuts it short: cutChange)
+    // no marching while the companies change places; a new shape order interrupts the change (a battalion that breaks
+    // cuts it short: cutChange)
     f.vx[i] = 0
     f.vz[i] = 0
     const n = f.ordHead[i]
@@ -1734,7 +1738,8 @@ function formationStep(w: World, i: number): void {
       o.px[n] = f.x[i] + piv[0]
       o.pz[n] = f.z[i] + piv[1]
     } // (its pivot: set again after a change of shape; done counts on)
-    const wq = Math.min(Math.abs(o.a[n]) - o.done[n], ((1.0 * V0) / (2 * halfW)) * DT) // the outer flank at marching pace
+    // the outer flank at marching pace
+    const wq = Math.min(Math.abs(o.a[n]) - o.done[n], ((1.0 * V0) / (2 * halfW)) * DT)
     const sgn = o.a[n] > 0 ? -1 : 1
     const x0 = f.x[i]
     const z0 = f.z[i]

@@ -30,7 +30,9 @@ export const M_END = 6
 export const M_WINNER = 7
 export const M_LIMIT = 8
 export const M_PLAN = 9
-export const M_LEN = 10 // M_SEED: keys the keyed draws (rng.ts); S1e-2: M_END the tick the battle ended (0: not yet), M_WINNER END_*, M_LIMIT the tick it ends at (0: none), M_PLAN the hash of the plan attached (plan.ts)
+// M_SEED: keys the keyed draws (rng.ts); S1e-2: M_END the tick the battle ended (0: not yet), M_WINNER END_*, M_LIMIT
+// the tick it ends at (0: none), M_PLAN the hash of the plan attached (plan.ts)
+export const M_LEN = 10
 export const END_NONE = 0
 export const END_SIDE0 = 1
 export const END_SIDE1 = 2
@@ -41,7 +43,8 @@ export interface Formations {
   alive: Uint8Array
   gen: Int32Array
   side: Uint8Array
-  type: Uint8Array // the unit type (cr.types); the per-company and per-bin rows below are strided by the most of any type
+  // the unit type (cr.types); the per-company and per-bin rows below are strided by the most of any type
+  type: Uint8Array
   shape: Int32Array
   style: Int32Array
   status: Int32Array

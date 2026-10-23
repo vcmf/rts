@@ -30,7 +30,8 @@ function square(g: Geometry): Placement[] {
   if (C < 4 || C % 2) throw new Error(`square: ${C} companies; it needs an even number, at least 4`)
   const base = Math.floor(C / 4)
   const extra = C % 4
-  const counts = [0, 1, 2, 3].map(face => base + ([0, 2, 1, 3].indexOf(face) < extra ? 1 : 0)) // the extras go front and rear
+  // the extras go front and rear
+  const counts = [0, 1, 2, 3].map(face => base + ([0, 2, 1, 3].indexOf(face) < extra ? 1 : 0))
   const s = ((g.ranks - 1) * g.rankSpacing) / 2 + 0.3
   const len = (k: number) => k * BW(g) + (k - 1) * g.fileSpacing
   const out: Placement[] = []
@@ -287,7 +288,8 @@ export const napoleonic: Ruleset = {
     marsh: { g: { line: 0.6, column: 0.65, skirmish: 0.75, horse: 0.35, guns: 0 }, q: 'hard' },
     hedge: { g: { line: 0.2, column: 0.25, skirmish: 0.5, horse: 0.15, guns: 0 }, q: 'hard' },
     bridge: { g: { line: 1.0, column: 1.0, skirmish: 1.0, horse: 1.0, guns: 1.0 }, q: 'open', level: true },
-    water: { g: { line: 1.0, column: 1.0, skirmish: 1.0, horse: 1.0, guns: 1.0 }, q: 'hard' }, // times the depth curve below
+    // times the depth curve below
+    water: { g: { line: 1.0, column: 1.0, skirmish: 1.0, horse: 1.0, guns: 1.0 }, q: 'hard' },
   },
   // wading: g by water depth (m), linear between points; deeper than the limit is impassable (horses wade
   // deeper, guns less deep)
@@ -333,7 +335,8 @@ export const napoleonic: Ruleset = {
     reloadJitter: 0.2,
     firingRanks: 2,
     misfire: 0.15,
-    depth: { line: 1.0, column: 1.6, skirmish: 0.5, horse: 1.3, guns: 0.4 }, // a horseman is a large target; a detachment stands spread round its piece
+    // a horseman is a large target; a detachment stands spread round its piece
+    depth: { line: 1.0, column: 1.6, skirmish: 0.5, horse: 1.3, guns: 0.4 },
     state: { steady: 1.0, shaken: 0.85, wavering: 0.6 },
     cohesion: 0.5,
     eye: 1.6,

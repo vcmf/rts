@@ -72,12 +72,18 @@ export interface MoraleDef {
   rout: number // routs below this
   routPace: number // a router's pace, times its shape's
   // S1c-2 (docs/plans/active/s1c2-morale-machine.md)
-  contagion: { shock: number; front: number; back: number } // a friend's break: the morale lost at 0 m, falling to 0 at front (ahead of the side's front) or back metres
-  support: { bonus: number; reach: number; arc: number } // per secured flank: target bonus; a friend within reach metres and arc radians of the left or right axis
-  fallback: { metres: number; after: number; rate: number } // a wavering battalion without orders Retires `metres` once its morale has fallen by more than `rate` a second for `after` seconds
-  rally: { safe: number; calm: number; time: number; cost: number; max: number } // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; quality lost; rallies allowed
+  // a friend's break: the morale lost at 0 m, falling to 0 at front (ahead of the side's front) or back metres
+  contagion: { shock: number; front: number; back: number }
+  // per secured flank: target bonus; a friend within reach metres and arc radians of the left or right axis
+  support: { bonus: number; reach: number; arc: number }
+  // a wavering battalion without orders Retires `metres` once its morale has fallen by more than `rate` a second for
+  // `after` seconds
+  fallback: { metres: number; after: number; rate: number }
+  // no enemy in the fight within safe metres, no loss for calm s; re-forms for time s; quality lost; rallies allowed
+  rally: { safe: number; calm: number; time: number; cost: number; max: number }
   shatter: number // a router below this share of its spawn strength shatters
-  leave: number // a shattered formation with any corner of a company block this near the map's edge (metres) leaves the field
+  // a shattered formation with any corner of a company block this near the map's edge (metres) leaves the field
+  leave: number
 }
 // a type that charges (S1d-2, docs/systems/melee.md): the shapes it charges from, its paces (the approach
 // until gallopAt metres from the target, then the gallop), the metres of gallop for full momentum, the gap at
@@ -114,7 +120,8 @@ export interface MeleeDef {
   cohesion: number
   refuse: number
   breach: number
-  refuge: { alert: number; closing: number; react: number; hold: number } // forming the refuge shape against a charging enemy: metres, m/s, seconds, seconds
+  // forming the refuge shape against a charging enemy: metres, m/s, seconds, seconds
+  refuge: { alert: number; closing: number; react: number; hold: number }
 }
 // a type that fires shot (S1d-3, docs/systems/artillery.md): a ball walked over the heightfield (the ray) and
 // a short-range cone. The shapes it fires from, a piece's arc, its reload and the crew that keeps it
@@ -160,7 +167,8 @@ export interface UnitType {
   defaultChangeTime: number // seconds, keyed 'from>to'
   start: string // the shape a spawn takes when it names none
   fires: boolean // fires by company (S1c's musketry)
-  figure: 'foot' | 'mounted' | 'crewed' // how its men are drawn: on foot, on horseback, or serving pieces (the renderer's; no rule reads it)
+  // how its men are drawn: on foot, on horseback, or serving pieces (the renderer's; no rule reads it)
+  figure: 'foot' | 'mounted' | 'crewed'
   charge?: ChargeDef // it charges (S1d-2)
   refuge?: string // the shape it forms against a charging enemy (S1d-2, the standing behaviour)
   artillery?: ArtilleryDef // it fires shot (S1d-3)
@@ -185,7 +193,8 @@ export interface Ruleset {
   start: { orders: string }
   slopeK: number
   terrain: Record<string, TerrainDef>
-  water: { curve: [number, number][]; limit: number; limitByKind?: Record<string, number> } // limit: metres, deeper is impassable (per kind where named)
+  // limit: metres, deeper is impassable (per kind where named)
+  water: { curve: [number, number][]; limit: number; limitByKind?: Record<string, number> }
   orders: Record<string, OrdersPreset>
   disorder: { Lok: number; kLag: number; kBow: number; kRec: number; scale: Record<string, number> }
   faceTime: number
@@ -193,7 +202,8 @@ export interface Ruleset {
   fire: FireDef
   morale: MoraleDef
   melee: MeleeDef
-  end: { broken: number; margin: number } // S1e-2: a side is broken at this share of its spawned men in the fight; at a time limit, shares within margin draw
+  // S1e-2: a side is broken at this share of its spawned men in the fight; at a time limit, shares within margin draw
+  end: { broken: number; margin: number }
 }
 
 export interface ShapeLayout {
@@ -206,16 +216,19 @@ export interface ShapeLayout {
   posZ: Float64Array // [c][r][f] → place in the straight layout (heading 0)
   pairs: number[][] // accordion: [bin ahead, bin behind, room]
   half: number // half-width across travel
-  turn: { cx: number; cz: number; m: Int32Array; bin: Int32Array; flipsFiles: boolean } | null // half-turn: slot map (c·R·F + r·F + f), bin map, whether files reverse
+  // half-turn: slot map (c·R·F + r·F + f), bin map, whether files reverse
+  turn: { cx: number; cz: number; m: Int32Array; bin: Int32Array; flipsFiles: boolean } | null
   pace: number
   roadPace: number // indices into paces, −1 none
   fileStep: number // metres between files in its places (the block's, or a trail shape's step)
   kx: number
   kz: number // its places' spacing of files and of ranks over the block's (1 but for a step)
   spread: number // the larger of kx, kz and 1: how much farther than the block a company's places reach
-  trailLimit: number // a trail shape's trail length: its depth, two company frontages and 12 m, and at least 24 m past its farthest place
+  // a trail shape's trail length: its depth, two company frontages and 12 m, and at least 24 m past its farthest place
+  trailLimit: number
   depth: number // how far the layout reaches behind the anchor
-  extent: Float64Array // [c·3 + 0..2]: company c's nearest and farthest place behind the anchor (−posZ), its widest |posX|
+  // [c·3 + 0..2]: company c's nearest and farthest place behind the anchor (−posZ), its widest |posX|
+  extent: Float64Array
 }
 // a unit type compiled: what one block needs (its slots, bins and shapes)
 export interface TypeTable {
@@ -234,9 +247,11 @@ export interface TypeTable {
   shapeIndex(name: string): number
   changeTime: Float64Array // [from·S + to]
   start: number // the spawn's shape
-  charge: { from: Uint8Array; approach: number; pace: number } | null // the shapes it charges from (1 by shape) and its paces' indices; null: it does not charge
+  // the shapes it charges from (1 by shape) and its paces' indices; null: it does not charge
+  charge: { from: Uint8Array; approach: number; pace: number } | null
   refuge: number // the shape it forms against cavalry, −1 none
-  artillery: { from: Uint8Array; cosArc: number; drop: number } | null // the shapes it fires from (1 by shape), cos of its arc, the ray's drop per metre per metre
+  // the shapes it fires from (1 by shape), cos of its arc, the ray's drop per metre per metre
+  artillery: { from: Uint8Array; cosArc: number; drop: number } | null
 }
 export interface Compiled {
   rs: Ruleset
@@ -582,7 +597,8 @@ function layout(
   if (def.step && !def.trail) {
     throw new Error(`shape ${name}: a step needs a trail shape (a straight shape's places are the block's)`)
   }
-  const gs: Geometry = def.step ? { ...g, fileSpacing: def.step.file, rankSpacing: def.step.rank } : g // the spacing of its places
+  // the spacing of its places
+  const gs: Geometry = def.step ? { ...g, fileSpacing: def.step.file, rankSpacing: def.step.rank } : g
   if (place.length !== C) throw new Error(`shape ${name}: ${place.length} placements for ${C} companies`)
   const n = C * R * F
   const of = new Int32Array(n)

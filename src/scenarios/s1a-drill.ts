@@ -49,5 +49,6 @@ export function s1aOrders(w: World, external: (c: Command) => void): void {
   if (t === 5100) external({ type: 'style', id: B, preset: 'keep' })
   if (t === 5101) external({ type: 'wheel', id: B, angle: 0.6 })
   if (t === 5500) external({ type: 'form', id: A, shape: 'line' })
-  if (t === 5900) external({ type: 'move', id: makeHandle(KIND_FORMATION, 2, 0), points: [[0, 0]], append: false }) // no such battalion: dropped
+  // no such battalion: dropped
+  if (t === 5900) external({ type: 'move', id: makeHandle(KIND_FORMATION, 2, 0), points: [[0, 0]], append: false })
 }

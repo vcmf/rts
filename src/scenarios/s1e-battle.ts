@@ -1,10 +1,10 @@
-// The S1e scenario (docs/plans/active/s1e1-battlefield.md, docs/plans/active/s1e2-sides.md) on the battlefield (maps/battlefield.ts): on
-// each side six battalions in two lines of three on its ridge, a cavalry regiment on one flank and a battery on the
-// other, firing at will. Side 0 holds the southern ridge facing north and is yours; side 1 the northern, facing
-// south, and follows its plan. The stream runs between them: men and horses wade it but in its pools out on the
-// flanks; guns cross only at the fords (x −260 and 330) and the bridge on the road near x 62. Each side's rear is
-// set, so routers run behind it. A side with half its men out of the fight is broken; the battle is decided at 40
-// minutes otherwise.
+// The S1e scenario (docs/plans/active/s1e1-battlefield.md, docs/plans/active/s1e2-sides.md) on the battlefield
+// (maps/battlefield.ts): on each side six battalions in two lines of three on its ridge, a cavalry regiment on one
+// flank and a battery on the other, firing at will. Side 0 holds the southern ridge facing north and is yours; side 1
+// the northern, facing south, and follows its plan. The stream runs between them: men and horses wade it but in its
+// pools out on the flanks; guns cross only at the fords (x −260 and 330) and the bridge on the road near x 62. Each
+// side's rear is set, so routers run behind it. A side with half its men out of the fight is broken; the battle is
+// decided at 40 minutes otherwise.
 import type { World, Scenario, PlanStep } from '../sim/index.ts'
 import { issue, PI } from '../sim/index.ts'
 
@@ -19,7 +19,8 @@ const SOUTH: [string, string, number, number, number][] = [
   ['infantry', 'column', 400, -20, -330],
   ['infantry', 'column', 400, 100, -330],
   ['cavalry', 'line', 256, 260, -310], // the eastern flank, behind the ploughed field
-  ['battery', 'unlimbered', 96, -330, -350], // the western flank, south of the wood (and clear of the eastern one, mirrored)
+  // the western flank, south of the wood (and clear of the eastern one, mirrored)
+  ['battery', 'unlimbered', 96, -330, -350],
 ]
 const S1 = 8 // side 1's first unit
 // side 1's plan: its first line comes down to the stream's north bank, wades it and closes on your first line to

@@ -3,9 +3,9 @@
 // here: the output is data, and the committed file is the authority), with the sim's exact-operation trigonometry
 // so the bytes are the same on every machine. Two low ridges face each other across a
 // valley about 560 m apart; a stream meanders along the valley, wadeable by men and horses but in its pools, by guns
-// only at two fords, with a bridge where the road crosses and a marsh in one bend; a wood on each side's flank, fields with hedges, rough ground
-// on the steeper slopes. x is east, z north; side 0 holds the southern ridge, side 1 the northern.
-// The class names are the Napoleonic ruleset's terrain classes; the map names no rule. When the map format
+// only at two fords, with a bridge where the road crosses and a marsh in one bend; a wood on each side's flank, fields
+// with hedges, rough ground on the steeper slopes. x is east, z north; side 0 holds the southern ridge, side 1 the
+// northern. The class names are the Napoleonic ruleset's terrain classes; the map names no rule. When the map format
 // (docs/proposals/map-format.md) lands, this map becomes its first file.
 import type { MapDef } from './formation-field.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
@@ -93,7 +93,8 @@ function classAt(x: number, z: number): number {
 }
 // water depth in metres, shallower to the banks: 0.8 in most of the channel (men and horses wade it, slowly; guns
 // cannot), 1.4 in its pools (no kind wades them), 0.5 at the fords (every kind)
-export const pool = (x: number): boolean => Math.abs(x) > 420 && sin(x / 30) > 0 // out on the flanks, clear of the lines' advance
+// out on the flanks, clear of the lines' advance
+export const pool = (x: number): boolean => Math.abs(x) > 420 && sin(x / 30) > 0
 function depthAt(x: number, z: number): number {
   const ds = Math.abs(z - streamZ(x))
   if (ds > STREAM_HALF || Math.abs(x - roadX(z)) <= ROAD_HALF) return 0

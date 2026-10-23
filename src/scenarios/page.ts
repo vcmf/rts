@@ -1,6 +1,6 @@
-// The scenarios the page offers (?scenario=), each on its map (src/scenarios/maps.ts; the formation field unless it names another): the S1b drill
-// and bench, the S1c firefight (the default), the S1c-2 brigade fight, the S1d-1 arms (the unit types) and the
-// S1d-2 charge, the S1d-3 guns, and the S1e battle on the 1.2 km battlefield.
+// The scenarios the page offers (?scenario=), each on its map (src/scenarios/maps.ts; the formation field unless it
+// names another): the S1b drill and bench, the S1c firefight (the default), the S1c-2 brigade fight, the S1d-1 arms
+// (the unit types) and the S1d-2 charge, the S1d-3 guns, and the S1e battle on the 1.2 km battlefield.
 import type { Scenario } from '../sim/index.ts'
 import { S1B_SCENARIOS } from './s1b-field.ts'
 import { s1cFirefight, s1cBrigade } from './s1c-firefight.ts'

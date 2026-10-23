@@ -102,7 +102,8 @@ export function blockGeometry(w: World): FireGeo {
     const fs = g.fileSpacing * kx
     const rs = g.rankSpacing * kz
     const back = (-(g.ranks - 1) * rs) / 2
-    const half = sqrt(((g.files * fs) / 2) * ((g.files * fs) / 2) + ((g.ranks * rs) / 2) * ((g.ranks * rs) / 2)) // a block's half-diagonal
+    // a block's half-diagonal
+    const half = sqrt(((g.files * fs) / 2) * ((g.files * fs) / 2) + ((g.ranks * rs) / 2) * ((g.ranks * rs) / 2))
     G.bx[i] = (g.files * fs) / 2
     G.bz0[i] = -(g.ranks - 1) * rs - rs / 2
     G.bz1[i] = rs / 2
@@ -333,7 +334,10 @@ export function fireStep(w: World): void {
       if (f.reload[i * CS + c] > 0) f.reload[i * CS + c] = Math.max(0, f.reload[i * CS + c] - DT)
     }
     if (mayFire(w, i)) any = true
-    else if (!typeOf(w, i).artillery) for (let c = 0; c < C; c++) f.target[i * CS + c] = 0 // a battery's pieces: artillery.ts
+    else if (!typeOf(w, i).artillery) {
+      // a battery's pieces: artillery.ts
+      for (let c = 0; c < C; c++) f.target[i * CS + c] = 0
+    }
   }
   if (!any) return
   const G = blockGeometry(w)

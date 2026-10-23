@@ -1,8 +1,8 @@
 // The tick (docs/proposals/sim-design.md §16, the determinism contract). Every loop runs in slot order.
 // S1a fills steps 1, 5–6 (orders → formation state and movement, one call per formation) and 14; S1c fills
 // 8 (fire), 11 (casualties) and 12 (morale; the rout and the wavering fall-back are its standing behaviours);
-// S1d-2 fills 4 (the square against cavalry) and 10 (charges and melee); S1d-3 fills 9 (artillery). The others are named and empty until
-// later parts of S1.
+// S1d-2 fills 4 (the square against cavalry) and 10 (charges and melee); S1d-3 fills 9 (artillery). The others are
+// named and empty until later parts of S1.
 import { type World, M_TICK, MAX_FORMATIONS, MS_SHATTERED, typeOf, formationHandle } from './world.ts'
 import { placeWorld, type Pose } from './formation.ts'
 import { DT } from './time.ts'
@@ -103,7 +103,8 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     const before = w.scratch.mstateBefore ?? (w.scratch.mstateBefore = new Uint8Array(MAX_FORMATIONS))
     before.set(w.f.mstate)
     const men = w.scratch.menNow ?? (w.scratch.menNow = new Int32Array(MAX_FORMATIONS))
-    for (let i = 0; i < MAX_FORMATIONS; i++) men[i] = w.f.alive[i] ? menOf(w, i) : 0 // final for the tick: the morale pass reads them
+    // final for the tick: the morale pass reads them
+    for (let i = 0; i < MAX_FORMATIONS; i++) men[i] = w.f.alive[i] ? menOf(w, i) : 0
     // a test switch visits them in reverse: contagion and support read only state fixed before the step
     const rev = w.scratch.reverse === true
     for (let k = 0; k < MAX_FORMATIONS; k++) {

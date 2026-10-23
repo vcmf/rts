@@ -1,8 +1,8 @@
 // A scenario's plan (docs/systems/sides.md; docs/plans/active/s1e2-sides.md; docs/proposals/sim-design.md §12:
-// "the enemy's plan is scripted per scenario"): timed commands for the formations of the side it scripts, step 3 of the tick. A plan is
-// attached to a world like its terrain (`attachScenario`): the steps are the scenario's, and which have run follows
-// from the tick, so saves and replays need nothing more. Its commands pass the same validation as a player's, are
-// applied directly and are not logged: a replay re-derives them (docs/proposals/sim-design.md §4).
+// "the enemy's plan is scripted per scenario"): timed commands for the formations of the side it scripts, step 3 of
+// the tick. A plan is attached to a world like its terrain (`attachScenario`): the steps are the scenario's, and which
+// have run follows from the tick, so saves and replays need nothing more. Its commands pass the same validation as a
+// player's, are applied directly and are not logged: a replay re-derives them (docs/proposals/sim-design.md §4).
 //
 // A step names its formation by the order the scenario spawned it in (`unit`): a fresh world hands out slots in
 // order at generation 0, so the handle is fixed. A target (a charge's, a preferred fire target) names an enemy
