@@ -24,7 +24,7 @@ p50 / p95 ms):
 | close | 8.70 / 9.40 | 9.10 / 10.40 | 10.10 / 11.50 |
 
 - A traced pan (`?benchtrace=1`) records the frame's JavaScript at p50 9.10 ms, p95 11.50 ms: JavaScript and GL
-  submission take about the whole frame. **The frame is CPU- and submit-bound**, not GPU-bound.
+  submission take about the whole frame. ~~The frame is CPU- and submit-bound~~ (corrected by step 1: the CPU waits on GL and the GPU; the wide view is GPU vertex-bound).
 - Earlier scaling (older code, before the shadow fix; p50 wide / default / close ms): main 6.65 / 9.33 / 8.80; 5 a side
   8.68 / 10.82 / 10.87, 10 a side 9.48 / 11.30 / 11.30, 20 a side 11.33 / 12.63 / 12.53; without the figures' shadows
   7.47 / 9.73 / 9.35, 7.78 / 9.73 / 9.32, 8.47 / 9.87 / 9.43. So the shadows cost the most and grew with the count;
@@ -100,13 +100,17 @@ art, other arms.
 
   24,012 far figures in view cost **+5.8 ms at wide**, with spikes (p95 23.75 still). This is the goal's hard case;
   the bars of steps 1 and 3 are judged here as well as at the fight's middle (`benchat=62.5,-102.5`).
-- **The trace at 40** (pan, fight's middle): `cpuMs` is about the whole frame (8–10 ms a frame), the frame waits on
-  JavaScript and GL submission. The frames that place men and upload their buffers (`placed`, `tiUploads`, 12 a
-  second) run 1.4 ms slower at wide (9.48 against 8.07) and 0.6 at close; the frames that redraw the shadow map
-  (`sm`) 1.0 ms slower at wide and 0.4–0.7 at default. So step 1 (placement and uploads) and the shadow redraws
-  (step 2) are where the trace points.
+- **The trace at 40** (pan, fight's middle): `cpuMs` is about the whole frame (8–10 ms a frame). The frames that place
+  men and upload their buffers (`placed`, `tiUploads`, 12 a second) run 1.4 ms slower at wide (9.48 against 8.07)
+  and 0.6 at close, but placement is not their cost: place() and its uploads take 0.004 / 0.035 / 0.024 ms and 0.001 /
+  0.003 / 0.011 ms a frame (wide / default / close), and the placing frames are the frames that redraw the shadow map
+  (`sm`, 1.0 ms slower at wide and 0.4–0.7 at default: the map is redrawn when men move). Corrected after step 1's
+  bench: `cpuMs` near the frame time is the main thread waiting on GL and the GPU, not JavaScript work (the units' own
+  `frame()` is about 0.1 ms a frame); the wide view is bound by the GPU's vertex work.
 
 ## Step 1: GPU-placed soldiers
+
+(The design as planned; the outcome, reverted, is below.)
 
 - **Today**: for every man of a moving battalion the CPU computes his place (`manAt`) and writes a 16-float matrix and
   his clip's settings, once a 1/12 s step, then uploads every LOD's buffers (`src/look/units.ts`, `place()`): at
@@ -131,52 +135,48 @@ art, other arms.
   the contact sheet shows no visible change. **Else reverted.** (The saving is est.: the CPU writing and uploading
   about 2 MB a step, 12 times a second, against a few KB.)
 
-- **Built** (2026-10-23, `src/look/units.ts`, `src/look/shaders/units.vert` `placeMan`, `?gpuplace=0` restores the
-  CPU's path; `docs/systems/look.md`, "The men placed on the GPU"):
-  - **Per man, static** (written and uploaded once, his instance's 16 floats, so the thin instances' count and
-    buffers stay Babylon's): `world0` his slot in line (x, z) and in column (x, z); `world1` his jitter across and
-    ahead, his turn's jitter, his fire lag (rank × 1.4 s + his own ±0.3 s); `world2.x` his battalion's index.
-  - **Per battalion** (`battalions`: RGBA32F, one column a battalion, four rows; the whole texture, 1.3 KB at 80
-    battalions, sent once a frame when any record changed): row 0 its place and heading's sine and cosine; row 1 its
-    phase, the phase's start, its local time, its heading; row 2 each role's clip offset in steps (the cycle start's
-    whole steps reduced per role in double precision, `clipBase`, `src/look/world/armies.ts`); row 3 the cycle start's
-    fraction of a step. A record is rewritten exactly when `place()` ran before (a moving battalion once a step, a
-    halted one once a phase).
-  - **The ground**: `unitGround`, an R32F texture of the heightfield's nodes (495² here), read texel by texel on its
-    own triangles (`heightfield.ts`'s `sample`), so the shader's ground is the CPU's to float32. The page throws if a
-    battalion reaches off the tile (the far ring's nodes are not in it).
-  - **The CPU keeps**: the bounds (the slots' extents in the phase, the men between their places while they deploy;
-    heights from the heightfield's nodes under them), the LOD's centre, the colour bearer (`manAt`
-    for one man), and the trodden mask's men (`menAt`: `manAt` for every man of a battalion whose record changed, only
-    when the mask redraws, at most every 0.25 s).
-  - **Texture units**: the vertex stage reads at most 4 (the near LOD: the bones, the record, the ground; the far LOD
-    and the casters: the posed vertices instead of the bones), of Metal's 16 a stage; the fragment stage is unchanged.
-  - **Its cost moved to the GPU**: every vertex places its man again (four record and four ground fetches, a sine and
-    a cosine): about 24,000 far figures at the stress point's wide view. The frame was measured CPU-bound (step 0), so
-    the bench says whether it shows.
-- **What the step-0 trace already says** (`?benchtrace=1`, 40 a side, the fight's middle, pan; per-frame means):
-  place() 0.004 / 0.035 / 0.024 ms and its uploads 0.001 / 0.003 / 0.011 ms (4 / 38 / 30 KB) at wide / default /
-  close. At 40 a side only the 7 battalions in line move (the 73 reserves are written once a phase), so the per-man
-  work is small; the slow frames that place men are the frames that redraw the shadow map, which this step does not
-  change. **Expected** (est.): the trace's place + upload falls by over 70 %, but the frame's p50 by far less than the
-  1.0 ms bar; the bench decides.
-- **The override buffer** (designed, not built; for when the sim drives men off their slots): a second per-man
-  attribute buffer a host, `aOver` (two vec4 a man: his place x, z, his turn, a flag; his role and the time his clip
-  began), zero by default (the flag off: the man is placed from his battalion's record). The sim's frame (decision
-  0048) publishes only the men off their slots (battalion, man, place, turn, role, since); the renderer writes them
-  into their hosts' buffers and sends the changed ranges alone (`thinInstancePartialBufferUpdate`, one
-  `bufferSubData` a run of neighbouring men; a man back on his slot is one more write, his flag off). The shader reads
-  the override first. The battalion's bounds widen by its overridden men's extents (kept on the CPU as they are
-  written), and `menAt` reads the override for those men. Cost: in proportion to the men off their slots, 32 B each.
-- **No visible change** (SwiftShader, 1280 × 720, `?frozen&dof=0`, the clock held at 12, 35 and 80 s; wide, default
-  and close at the fight's middle and the stress point, default and close on the first and last battalions in line;
-  `?gpuplace=0` against the default; `output/armies-review/9-gpu-placed/`, not committed): the same poses, the same
-  figures drawn in all but one view, and at most 0.17 % of pixels differing by more than 8 / 255 (0.05 % up close), single
-  pixels on the figures' edges (float32 placement against float64: sub-millimetre), none a whole figure. One view (80 s,
-  wide, the fight's middle) draws one more battalion (414 figures, all off screen): a deploying battalion's bounds
-  are the box round both its column and its line (est.: a few such battalions at once).
-- **Measured** (to run: Metal, three interleaved rounds, `?gpuplace=0` against the default, still and panning, at
-  both points; a traced pan each).
+- **Built** (2026-10-23, commit `ae86faf`, reverted by `d11da23`): each man's instance matrix held his static record
+  (his slots in line and column, his jitter, his fire lag, his battalion), each battalion a record of four RGBA32F
+  texels in one texture (place, heading, phase, the phase's start, local time, each role's clip offset reduced in double
+  precision, the cycle start's fraction of a step), the ground an R32F texture of the heightfield's nodes; the vertex
+  shader did `manAt`'s arithmetic in float32 for the figures, the casters and the proxy (4 vertex textures at most).
+  The CPU kept the bounds, the LOD's centre, the flag's bearer and the trodden mask's men. `?gpuplace=0` restored the
+  CPU's path.
+- **No visible change** (SwiftShader contact sheet, 12, 35 and 80 s, wide / default / close at both points and close
+  on two battalions in line; `output/armies-review/9-gpu-placed/`, not committed): the same poses, at most 0.17 % of
+  pixels over 8 / 255, single edge pixels (float32 against float64 placement).
+- **Measured** (2026-10-23, Metal, the production build, 40 a side, three interleaved rounds, all 28 runs exit 0;
+  medians of p50 / p95, ms; `gp0` the CPU's placement, `gp1` the GPU's):
+
+  | Run | Wide | Default | Close |
+  |---|---|---|---|
+  | middle, gp0, pan | 9.55 / 11.45 | 10.20 / 11.65 | 9.70 / 10.20 |
+  | middle, gp1, pan | 10.70 / 12.80 | 10.65 / 11.70 | 9.80 / 10.30 |
+  | middle, gp0, still | 9.85 / 11.40 | 10.90 / 11.70 | 9.75 / 10.90 |
+  | middle, gp1, still | 10.65 / 12.15 | 11.10 / 11.75 | 9.70 / 10.60 |
+  | stress, gp0, pan | 12.65 / 14.40 | 10.05 / 11.55 | 8.95 / 10.10 |
+  | stress, gp1, pan | 14.10 / 17.85 | 10.30 / 11.60 | 9.20 / 10.10 |
+  | stress, gp0, still | 12.60 / 24.15 | 10.45 / 11.50 | 8.60 / 10.00 |
+  | stress, gp1, still | 15.20 / 16.85 | 10.90 / 11.65 | 8.65 / 10.00 |
+
+  Traced pans (per-frame means, wide / default / close): place() + uploads 0.004 / 0.041 / 0.031 → 0.002 / 0.009 /
+  0.007 ms at the middle (−50 to −78 %), uploads 4.5 / 29.9 / 28.0 → 0.4 / 1.2 / 1.0 KB; the units' `frame()` about
+  0.10–0.14 ms in both; `cpuMs` p50 9.6 / 10.0 / 9.5 → 10.1 / 10.4 / 9.5 at the middle, 12.1 / 9.8 / 8.6 → 13.65 /
+  10.7 / 8.9 at the stress point.
+- **Verdict: reverted, failed its bar.** Panning, wide got slower by 1.15 ms at the middle and 1.45 at the stress
+  point (the bar asked for 1.0 faster), default 0.45 and 0.25 slower, close 0.1 and 0.25 slower; wide's p95 worse by
+  1.35 and 3.45 ms. Only the trace's cut held, and not by 70 % everywhere.
+- **The finding**: the per-man JavaScript and uploads were never the cost (≤ 0.04 ms a frame: only the 7 battalions in
+  line move; the 73 reserves are written once a phase). `cpuMs` ≈ the frame time is the CPU waiting on GL and the GPU,
+  not JavaScript; the wide view is **GPU vertex-bound**, which is why eight more texture fetches and a sine and cosine
+  a vertex (about 24,000 far figures at the stress point, each vertex placing its man again) made it slower. So the
+  step's premise ("CPU-bound", above) was wrong, and **step 3** (fewer vertices for small figures) is now the main
+  lever at wide.
+- **The override buffer** (a design note for decision 0048, not built): if men are ever placed on the GPU from a
+  battalion record, the men off their slots go in a second per-man buffer a host (two vec4: place, turn, a flag; role
+  and the clip's start), zero by default, written only for those men and sent as changed ranges
+  (`thinInstancePartialBufferUpdate`); the shader reads it first, the bounds widen by those men, 32 B a man off his
+  slot. Given the finding, placing men on the GPU only pays when the CPU's share is measured to matter.
 
 ## Step 2: the simple shadows beyond close zoom (issue #131)
 
@@ -198,8 +198,9 @@ art, other arms.
   an impostor atlas; its colours by role so the far palette and the flags still read.
 - **Bar**: **kept if**, at 40 a side, the wide camera's p50 falls by **≥ 0.5 ms** still and panning, the default's is
   no worse, the readability guard's figures' contrast and coat share at the widest zoom stay within 10 %, and the
-  contact sheet at wide shows no visible change at 100 %. **Else reverted.** The frame is submit-bound, so a triangle
-  cut may save little: the measurement decides.
+  contact sheet at wide shows no visible change at 100 %. **Else reverted.** Step 1's bench showed the wide view
+  GPU vertex-bound (more vertex work made it 1.15 to 1.45 ms slower), so this is now the main lever at wide; the
+  measurement decides.
 
 ## Step 4: the ground-colour cache
 
@@ -232,7 +233,5 @@ art, other arms.
 
 ## Open questions
 
-- Whether 2 MB a step of thin-instance uploads (est.) or the per-man JavaScript is the larger CPU share at 40 a side:
-  the trace at 40 answers it, and step 1's bar uses it.
 - The close reserves stand 6 m apart: closer than the reserves at 20 a side (10 m); the owner's eye on the wide view.
 - The near meadow and the trees' crowns over the reserves (bushes are walked through, as at 20 a side).
