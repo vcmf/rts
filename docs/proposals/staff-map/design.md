@@ -150,7 +150,7 @@ Blocks are flat, sharp-cornered, with no shadow, bevel or outline glow.
 ### State
 | State | Reading |
 |---|---|
-| **Losses** | The block shortens as the frontage shrinks; in the lit style it also wears: ragged dark bites out of its edges, more as strength falls (up to ten, some through the block), fixed per unit, kept while it routs |
+| **Losses** | The block shortens as the frontage shrinks; in the lit style it also wears: ragged dark bites out of its edges, more as strength falls (up to ten, some through the block), fixed per unit, kept while it routs; a battery's gun icon has bites cut out of it |
 | **Morale** | Solid fill above 60%; below it the fill **drains into hatching** that gets sparser as morale falls |
 | **Routing** | **Pulses between the army colour and white** (the colour of surrender, as in Total War; a soft ~1.1 s cycle, never a hard flicker), with a **dashed edge** so its white phase never reads as an Austrian block. It turns its back as it breaks, then flees away from the enemies in reach (closer ones push harder; when pinched, toward its own rear), running along the map edge rather than into it; its escape direction and the drawn block both turn smoothly |
 | Firing | Small pencil smoke curls in front of the block, fading in a few seconds (white clouds in the lit style); a formed square fires all round, its smoke from all four faces |
