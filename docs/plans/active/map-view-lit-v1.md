@@ -23,7 +23,8 @@ comparison). In the lit mode:
    the same outline), a notched tail, a thin dark edge, a lighter inner line and a soft cast shadow.
 4. **Blocks:** a top face lit from the north-west (a lighter NW edge, a darker SE edge), a side face 3–4 px deep in a
    darker shade of the army colour, and a short soft shadow on the ground toward the south-east. Hatching for morale
-   and the routing pulse stay on the top face; selection and hover rings follow the raised block.
+   and the routing pulse stay on the top face (the shadow and the sides are clipped out under it); selection and
+   hover rings stay around the top face, the block's footprint.
 
 Out of scope: lit relief, woods as canopy, roofs (decision 0051's bake, a later step); the game's staff map
 (`src/render/map.ts`); the map engine's draft page; season tuning beyond keeping each season readable.
@@ -31,9 +32,11 @@ Out of scope: lit relief, woods as canopy, roofs (decision 0051's bake, a later 
 ## Approach
 
 - One `LIT` flag from the URL; every change branches on it, so the default page draws exactly as before.
-- Paper and grain in the terrain shader's paper term and `paperCanvas()`; the lit palette as its own season table.
-- Arrows and blocks on the 2D ink canvas (`drawOrders`, `drawBlock`): the shadow first (a blurred offset copy), then
-  the side face, the top face, the edges. The light direction is one constant shared by blocks and arrows.
+- Paper and grain in the terrain shader's paper term (the paper texture is the default's, sampled at a finer scale too);
+  the lit palette as its own season table.
+- Arrows and blocks on the 2D ink canvas (`drawOrders`, `drawBlock`): every block's shadow and side faces first, then
+  every top face and its edges, so no shadow falls on a neighbour's top. One light, the world's north-west seen on
+  screen each frame (it turns with the camera), sets the side faces and every shadow.
 - Readability (art bible §4, decision 0051's guards): the army colours stay the most saturated marks; the paper and
   grain stay below them in chroma; every block keeps an outline.
 
