@@ -3,6 +3,10 @@ precision highp float;varying vec3 vW,vN,vCol;varying vec2 vRoot;varying float v
 // the guard's masks (tools/guard.mjs --figures, Units.setMask): off below 0, else flat uMask, or (2) white where the
 // coat shows (uCoatRole), black elsewhere
 uniform float uMask,uCoatRole;
+#ifdef TINY
+// the tiny LOD's coat weight (units.vert): the coat mask dithered by it, so the guard's coat share means the same
+varying float vCoatW;
+#endif
 #ifdef FAR
 // the far figure's lift (?farpal=1), as it shrinks (vFar, units.vert): the trees' and hills' shadow on it halved, and
 // a warm rim of the sun on what faces up (the shoulders, the headgear), before the air (the units' light holds)
@@ -16,7 +20,12 @@ varying float vFar;
 // (his root's ground), the units' light (KEEP_HUE: the mood's units tint, mist and grade, decisions 0027, 0035), the
 // air over him, and his lens term (a unit blurs by its depth as everything does, decision 0040)
 void main(){
-  if(uMask>-0.5){float v=uMask>1.5?step(abs(vRole-uCoatRole),0.5):uMask;gl_FragColor=lensOut(vec3(v),vW);return;}
+  if(uMask>-0.5){
+    float v=uMask>1.5?step(abs(vRole-uCoatRole),0.5):uMask;
+    #ifdef TINY
+    if(uMask>1.5)v=step(fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453),vCoatW);
+    #endif
+    gl_FragColor=lensOut(vec3(v),vW);return;}
   vec3 N=normalize(vN);vec4 lm=LM(vW);
   float sh=(1.0-lm.r)*uShadowsOn;
   #ifdef FAR

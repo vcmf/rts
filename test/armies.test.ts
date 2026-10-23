@@ -10,7 +10,7 @@ import { APPROACH, CYCLE, FAR_COAT_BELOW, FAR_ROLES, extents, facingAt, farPalet
 import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { RULESETS } from '../src/rulesets/index.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
-import { decodeUnits, fromHalf, posedMesh, posedVertices, shadowProxy } from '../src/look/units-data.ts'
+import { TINY_ROLES, decodeUnits, fromHalf, posedMesh, posedVertices, shadowProxy, tinyMesh } from '../src/look/units-data.ts'
 
 const g = napoleonic.types.infantry.geometry
 const drill: Drill = { companies: g.companies, files: g.files, ranks: g.ranks, fileSpacing: g.fileSpacing, rankSpacing: g.rankSpacing }
@@ -162,6 +162,29 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
       expect(lo).toBeGreaterThan(-0.1); expect(hi - lo).toBeGreaterThan(1.6); expect(hi - lo).toBeLessThan(2.8)   // m: a man, his bayonet up
     }
     expect([fromHalf(0x3c00), fromHalf(0xc000), fromHalf(0x0001)]).toEqual([1, -2, 2 ** -24])
+  })
+  it('has a tiny LOD of boxes on its parts: under a quarter of the far LOD\'s vertices, each corner on one bone, a mix of roles, outward, a figure tall', () => {
+    const t = tinyMesh(d, d.lods[1].name), n = t.positions.length / 3
+    expect(n % 8).toBe(0); expect(t.indices.length).toBe(n / 8 * 36)   // eight corners, twelve triangles a box
+    expect(n).toBeLessThan(d.lods[1].vertices / 4)
+    for (let v = 0; v < n; v++) {
+      expect(t.boneWeights[v * 4]).toBe(1); expect(t.roles[v]).toBeLessThan(d.palette.length)
+      let sum = 0; for (let i = 0; i < TINY_ROLES; i++) { const w = t.weights[v * TINY_ROLES + i]; expect(w).toBeGreaterThanOrEqual(0); if (i >= d.palette.length) expect(w).toBe(0); sum += w }
+      expect(sum).toBeCloseTo(1, 5)   // (a mix of the roles: its box's mean colour from above)
+    }
+    expect(new Set(t.roles).size).toBeGreaterThanOrEqual(4)   // (the roles that read from far off show on it)
+    // every triangle faces away from its box's centre
+    for (let k = 0; k < t.indices.length; k += 3) {
+      const box = Math.floor(t.indices[k] / 8), P = (i: number) => [0, 1, 2].map(j => t.positions[i * 3 + j])
+      const c = [0, 1, 2].map(j => { let a = 0; for (let i = 0; i < 8; i++) a += t.positions[(box * 8 + i) * 3 + j]; return a / 8 })
+      const [a, b, e] = [P(t.indices[k]), P(t.indices[k + 1]), P(t.indices[k + 2])], u = [0, 1, 2].map(j => b[j] - a[j]), w = [0, 1, 2].map(j => e[j] - a[j])
+      const nn = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]
+      expect(nn[0] * (a[0] - c[0]) + nn[1] * (a[1] - c[1]) + nn[2] * (a[2] - c[2])).toBeGreaterThan(0)
+    }
+    const q = posedMesh(d, t), f = d.ranges.halt.start
+    let lo = Infinity, hi = -Infinity
+    for (let v = 0; v < n; v++) { const y = q.data[(f * n * 2 + v * 2) * 4 + 1]; lo = Math.min(lo, y); hi = Math.max(hi, y) }
+    expect(hi - lo).toBeGreaterThan(1.4); expect(lo).toBeLessThan(0.3)
   })
   it('has a shadow proxy of crossed quads, each corner wholly on one bone, a figure tall when posed', () => {
     const p = shadowProxy(d, d.lods[1].name), n = p.positions.length / 3
