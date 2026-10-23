@@ -93,3 +93,19 @@ column is the page after review round 1.
   - Found in testing after round 2: the redraw test missed unit changes made while paused (an order, a change of
     formation, a strength set by hand), so the ink stayed stale. Fixed: a cheap checksum of every unit's drawn state, plus
     the number of orders, joins the key. Paused map still 0.52 ms, map 30× 4.87 ms.
+- **Round 3**: moderate and light only, so the review stops (three rounds). Fixed:
+  - **Animation flags.** The draw code now marks what is still moving on the frame clock: the routing pulse, a turning
+    block, an arrow's reveal, a fading trail and a live puff on screen. The redraw test checks that flag. It replaces a
+    hand-kept list that could drift from the draw code (square smoke at its drawn face, unseen orders and trails).
+  - **Key stored every frame,** so a return to an earlier state, such as the pointer leaving a unit, is still seen.
+  - **Unit state hashed, not summed,** so two changes cannot cancel out. It includes the previous formation.
+  - **Wear bites:** they start 2 px outside the edge again, so they break the outline, and some cut right through, as
+    before the change.
+
+  Left:
+  - a square's bite depth is measured across the drawn ring, which can differ slightly from the hole under
+    perspective;
+  - the redraw key is a string built each frame.
+
+  Measured again: 30× map 4.86 / mid 5.83 ms mean; 90× map 7.56 / mid 8.28 ms; paused 0.4–0.55 ms. The first run after
+  an edit reads high, at about 4.9 ms paused, while the caches warm up; repeats give 0.53 ms.

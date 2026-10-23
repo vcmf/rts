@@ -1304,7 +1304,7 @@ function puff(u){
         sq: snap, j, o,
         x: cx + d[0] * (half + 6) - d[1] * along,
         z: cz + d[1] * (half + 6) + d[0] * along,
-        t0: performance.now(), big: false, face: u.face, rot: Math.random() * 6.28,
+        t0: now, big: false, face: u.face, rot: Math.random() * 6.28,
       });
     }
     return;
@@ -1392,11 +1392,13 @@ function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
     const ring = ringM ? Math.min(1, ringM / (e % 2 ? fw : fd)) : 1;
     // about a third cut right through; with no clip (it cost a full-screen clip per block), never past the far edge or
     // into a square's hole
-    const depth = Math.min(ring * (rnd() < 0.3 ? 1.2 : 0.45 + 0.45 * rnd()), I ? ring : 0.97);
+    const depth = Math.min(ring * (rnd() < 0.3 ? 1.2 : 0.45 + 0.45 * rnd()), I ? ring : 1);   // through, at most
 
     // inward: from this edge toward the opposite one, the full way across the block
     // a point s0 along this edge, d of the way across to the opposite edge, in the block as drawn (a trapezoid in
     // perspective): between the two edges at the same s0, so no bite leaves the block
+    const across = Math.hypot(prev[0] - a[0], prev[1] - a[1]) || 1;
+    const out = 2 / across;   // 2 px past each edge it crosses, so a bite breaks the outline there
     const at = (s0, d) => {
       const n = [a[0] + (b[0] - a[0]) * s0, a[1] + (b[1] - a[1]) * s0];
       const f = [prev[0] + (next[0] - prev[0]) * s0, prev[1] + (next[1] - prev[1]) * s0];
@@ -1405,11 +1407,11 @@ function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
 
     // a ragged notch: in at one side, down to the deepest point, back out at the other
     addPoly(bites, [
-      at(t - hw, 0),
+      at(t - hw, -out),
       at(t - hw * 0.6, depth * (0.4 + 0.3 * rnd())),
-      at(t - hw * 0.1, depth),
+      at(t - hw * 0.1, depth >= 1 ? 1 + out : depth),
       at(t + hw * 0.4, depth * (0.5 + 0.4 * rnd())),
-      at(t + hw, 0),
+      at(t + hw, -out),
     ]);
   }
 
@@ -1623,10 +1625,11 @@ function drawGun(C,s,shadowOnly,S,u){
 // the lit style's houses: raised like the blocks, lit by the same light (the map's ink blocks, baked, are left out)
 const HOUSE_COL=[0.36,0.29,0.23],CHURCH_COL=[0.27,0.22,0.19];
 // a block's top colour (and its slab sides'): the routing pulse, or the army's fill; hatched (wavering) sides take the coat
-function blockCol(u,now){const s=pal(u);if(u.state==='rout')return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));return u.mor>0.6?s.f:s.c;}
+function blockCol(u,now){const s=pal(u);if(u.state==='rout'){INK_ANIM=true;return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));}return u.mor>0.6?s.f:s.c;}
 function drawUnder(u,alpha,now){const B=blockCorners(u),{C}=B;if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);
   if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true,gunPx(u),u);else{const h=slabHeight();for(const quad of parts(u,B)){const S=slabFaces(u,B,quad,0);addSlabShadow(S.W,S.G,h);}}}ink.globalAlpha=1;}
 function drawBlock(u,alpha,now){
+  if(Math.abs(angTo(u.dface,u.face))>1e-4)INK_ANIM=true;   // its drawn facing eases on the frame clock
   u.gun=null;   // drawn this frame or not at all: a stale circle would keep a stale click area
   const s=pal(u),{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
   const lvl=u.mor>0.6?-1:u.mor>0.45?0:u.mor>0.3?1:2;
@@ -1725,7 +1728,7 @@ function drawOrders(now,alpha){
   ink.lineJoin='round';
   // footprints: dotted, batched into a few age buckets, older steps fading out
   if(SHOW_TRAILS){ink.lineCap='round';ink.setLineDash([0.1,5.5]);ink.lineWidth=2;const NB=6;
-    for(const f of FOOTS.values()){if(f.pts.length-f.first<2||f.vis<0.01)continue;const col=css(SIDES[f.side].i),S=[],paths=Array.from({length:NB},()=>new Path2D());
+    for(const f of FOOTS.values()){if(Math.abs(f.vis-(f.led?1:0))>1e-3)INK_ANIM=true;if(f.pts.length-f.first<2||f.vis<0.01)continue;const col=css(SIDES[f.side].i),S=[],paths=Array.from({length:NB},()=>new Path2D());
       for(let i=f.first;i<f.pts.length;i++)S[i]=P2(f.pts[i][0],f.pts[i][1]);
       let pb=-1,pi=-1;
       for(let i=f.first+1;i<f.pts.length;i++){const age=GT-f.pts[i][2];if(age>FOOT_FADE||behind(S[i-1])||behind(S[i]))continue;
@@ -1738,6 +1741,7 @@ function drawOrders(now,alpha){
     if(o.quiet||o.done||o.side>0)continue;
     const s=SIDES[o.side],band=clamp((o.group?36:24)/MPP,o.group?8:6,o.group?20:14),left=o.len-o.prog,headM=Math.min(band*1.7*MPP,left*0.6),headW=band*2.3*Math.min(1,headM/(band*1.7*MPP));
     if(left<4)continue;
+    if(now-o.t0<550)INK_ANIM=true;
     const reveal=easeIO(clamp((now-o.t0)/550,0,1))*o.len,end=Math.min(reveal,o.len),bandEnd=Math.max(o.prog,end-headM);
     if(LIT){const us=o.units.map(i=>UNITS[i]).filter(u=>u.order===o&&!u.gone);if(!us.length)continue;
       // the tail at the battalion standing nearest the route where the order stands: always on a block, even when the
@@ -1787,6 +1791,7 @@ function sqFace(p) {
 function drawSmoke(now,mapA,worldA){
   for(const p of SMOKE){const age=(now-p.t0)/1000,life=smokeLife(p)/1000;if(age>life)continue;const k=age/life,c=p.sq?sqFace(p):P2(p.x,p.z);if(behind(c))continue;
     const off=c[0]<-90||c[0]>SW+90||c[1]<-90||c[1]>SH+90;   // a cloud reaches about 60 px from its puff
+    if(!off)INK_ANIM=true;   // a live puff on screen: it fades on the frame clock
     if(LIT&&mapA>0.01){if(!off)smokeLit(p,c,age,k,mapA);}
     else if(mapA>0.01){ink.globalAlpha=mapA*(1-k)*0.8;ink.strokeStyle='#8a847a';ink.lineWidth=0.8;ink.beginPath();const r0=(p.big?3:2)+k*(p.big?7:5);
       for(let a=0;a<=8.5;a+=0.35){const rr=r0*(0.35+a/8.5*0.65),x=c[0]+Math.cos(a+p.rot)*rr,y=c[1]+Math.sin(a+p.rot)*rr*0.8-k*6;a?ink.lineTo(x,y):ink.moveTo(x,y);}ink.stroke();}
@@ -1853,16 +1858,18 @@ let HOVER=null,SHOW_TRAILS=true,SHOW_NAMES=true,DRAW=null;
 // The ink is redrawn only when what it shows can have changed: the camera, the game clock, the pointer, a selection, or
 // something animating on the frame clock (smoke, a routing pulse, a turning block, an arrow's reveal, a fading trail).
 // Drawing it cost most of the frame (docs/plans/active/perf-150.md).
-let INK_KEY = '', INK_T0 = 0;
+let INK_KEY = '', INK_T0 = 0, INK_ANIM = true;
 const FORMS = { line: 1, column: 2, square: 3 };
-/** A cheap sum over every unit's drawn state: it changes whenever any unit moves, turns, wears, wavers or re-forms. */
+/** A cheap hash of every unit's drawn state: it changes whenever any unit moves, turns, wears, wavers or re-forms. */
 function unitsChecksum() {
-  let c = 0;
+  // a hash, not a sum: two changes cannot cancel out
+  let c = 2166136261;
+  const mix = v => { c = Math.imul(c ^ (Math.round(v * 1000) | 0), 16777619); };
   for (const u of UNITS) {
-    c += (u.x * 1.3 + u.z * 1.7 + u.dface * 11 + u.str * 101 + u.mor * 307 + u.morph * 503 + (u.gone || 0) * 701
-      + (FORMS[u.form] || 0) * 907 + (u.state === 'rout' ? 1109 : u.state === 'move' ? 1301 : 0)) * (u.id + 1);
+    mix(u.x); mix(u.z); mix(u.dface); mix(u.str); mix(u.mor); mix(u.morph); mix(u.gone || 0);
+    mix(FORMS[u.form] || 0); mix(FORMS[u.prev] || 0); mix(u.state === 'rout' ? 1 : u.state === 'move' ? 2 : 0);
   }
-  return c.toFixed(4);
+  return c >>> 0;
 }
 // late web fonts (the canvas asks for some only when it first draws with them): draw the names again
 document.fonts?.ready.then(() => { INK_KEY = ''; });
@@ -1871,25 +1878,18 @@ document.fonts?.addEventListener('loadingdone', () => { INK_KEY = ''; });
 const onScreen = (p, pad) => !behind(p) && p[0] > -pad && p[0] < SW + pad && p[1] > -pad && p[1] < SH + pad;
 function inkDirty(now) {
   if (!INK_T0) INK_T0 = now;
-  if (now - INK_T0 < 3000) return true;   // the fonts load and the first frames settle
-  for (const p of SMOKE) if (now - p.t0 < smokeLife(p) && onScreen(P2(p.x, p.z), 120)) return true;
-  for (const u of UNITS) {
-    if (u.gone >= 1) continue;
-    // the routing pulse runs on the frame clock; a turn eases on it (morph and fades follow the game clock, in the key)
-    if ((u.state === 'rout' || Math.abs(angTo(u.dface, u.face)) > 1e-4) && onScreen(P2(u.x, u.z), 150)) return true;
-  }
-  for (const o of ORDERS) if (now - o.t0 < 600) return true;
-  for (const f of FOOTS.values()) if (Math.abs(f.vis - (f.led ? 1 : 0)) > 1e-3) return true;
   let key = [SW, SH, GT, HOVER ? HOVER.id : -1, DRAW ? DRAW.pts.length : 0, BOX ? BOX.x1 + ':' + BOX.y1 : '',
     SHOW_TRAILS, SHOW_NAMES, TT].join(',');
   for (let i = 0; i < 16; i++) key += ',' + VP[i].toFixed(6);
   for (const u of UNITS) if (u.sel) key += ',' + u.id;
   key += ',' + unitsChecksum() + ',' + ORDERS.length;   // orders and changes while paused (the clock still)
-  if (key === INK_KEY) return false;
-  INK_KEY = key;
-  return true;
+  const changed = key !== INK_KEY;
+  INK_KEY = key;   // stored every frame, so a return to an earlier state is still seen as a change
+  // INK_ANIM: the last draw drew something still moving on the frame clock (each draw sets it where it reads the clock)
+  return changed || INK_ANIM || now - INK_T0 < 3000;   // the fonts load and the first frames settle
 }
 function drawInk(now){
+  INK_ANIM=false;   // set again by whatever this draw finds still moving on the frame clock
   ink.setTransform(DPR,0,0,DPR,0,0);ink.clearRect(0,0,SW,SH);
   const inkA=1-st('ink'),blockA=1-st('blocks'),nameA=1-st('names');
   drawNeatline(inkA);if(LIT)setLight();drawNames(nameA);
