@@ -32,7 +32,7 @@ export const withPainter = (src: string): string => {
 }
 
 // the ground's macro colour (src/look/shaders/macro.glsl): the cover grid and the bakes, on every painted material
-const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush', 'uDirt', 'uEarth', 'uMeadow', 'uFlow', 'uComb', 'uCombNear']   // uMeadowBrush: the meadow's brush tile (MEADOW, src/look/meadow.ts); uMeadow: the meadow map (the ground under the grass, the combed meadow); uFlow, uComb: the flow's textures (src/look/flow.ts)
+const MACRO_SAMPLERS = ['uCover', 'uMacro', 'uMacroFar', 'uMeadowBrush', 'uSurf', 'uMeadow', 'uFlow', 'uComb', 'uCombNear']   // uMeadowBrush: the meadow's brush tile (MEADOW, src/look/meadow.ts); uSurf: the dirt and the earth, packed (src/look/macro.ts); uMeadow: the meadow map (the ground under the grass, the combed meadow); uFlow, uComb: the flow's textures (src/look/flow.ts)
 // the mood's colours each material takes (src/look/mood.ts), by uniform: one table gives both the uniform names and
 // their values, so none is left unset (an unset vec3 reads black). The shadow band's colour and turn follow the season:
 // SEASON_UNIFORMS below
@@ -58,7 +58,8 @@ const SEASON_UNIFORMS: Record<string, (m: ShaderMaterial, s: SeasonLight) => voi
 // a copy of SEASON (a material keeps the objects it is given: Babylon stores colours and matrices by reference)
 export const seasonSnapshot = (): SeasonLight => ({ ...SEASON, shadow: SEASON.shadow.clone(), turn: SEASON.turn.clone(), greenRot: SEASON.greenRot.slice(), tip: SEASON.tip.clone() })
 export function setSeasonUniforms(m: ShaderMaterial, s: SeasonLight = seasonSnapshot()): void { for (const f of Object.values(SEASON_UNIFORMS)) f(m, s) }
-const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA', 'uDirtOn', ...Object.keys(SEASON_UNIFORMS), 'uEarthOn', 'uCombNearRect', 'uFocusZ', 'uCamFwd']
+// (uUnit*: the figures' cast shadows on the materials they fall on, UNIT_SHADOWS: src/look/units.ts)
+const COMMON = [...Object.keys(MOOD_COLOURS), ...Object.keys(MOOD_FLOATS), 'uUnitVP', 'uUnitTexel', 'uUnitBias', 'uUnitFar', 'uTrampleBox', 'uGrade', 'uViewH', 'uLMVP', 'uAO', 'uMist', 'uShafts', 'uBack', 'uSeason', 'uLightVP', 'uSMTexel', 'uSMFade', 'uShadowsOn', 'uSunDir', 'uCamPos', 'uFocus', 'uTime', 'uGrainAmt', 'uEdges', 'uClouds', 'uGrainMean', 'uPixA', 'uDirtOn', ...Object.keys(SEASON_UNIFORMS), 'uEarthOn', 'uCombNearRect', 'uFocusZ', 'uCamFwd']
 
 // perFrame: false keeps a material out of `all` (no per-frame uniforms, no light map: the light-map bake draws into it)
 export interface MatOptions { attributes?: string[]; uniforms?: string[]; samplers?: string[]; alpha?: boolean; defines?: string[]; perFrame?: boolean }
@@ -78,7 +79,7 @@ export class Materials {
     // the detail layer needs GLSL ES 3.00 (textureGrad): on WebGL1 its materials keep the L0 grain
     if (defines.includes('#define DETAIL') && this.webgl1) defines = [...defines, '#define DETAIL_L0']
     const m = new ShaderMaterial(name, this.scene, { vertexSource: vs, fragmentSource: withPainter(fs) },
-      { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', ...MACRO_SAMPLERS, ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM' && !MACRO_SAMPLERS.includes(x))], needAlphaBlending: alpha, defines: [...D.defines, ...this.defines, ...defines] })
+      { attributes, uniforms: ['world', 'viewProjection', ...COMMON, ...uniforms], samplers: ['uGrain', 'uShadowMap', 'uLM', 'uUnitSM', 'uTrample', ...MACRO_SAMPLERS, ...samplers.filter(x => x !== 'uShadowMap' && x !== 'uLM' && x !== 'uUnitSM' && x !== 'uTrample' && !MACRO_SAMPLERS.includes(x))], needAlphaBlending: alpha, defines: [...D.defines, ...this.defines, ...defines] })
     for (const [u, f] of Object.entries(MOOD_COLOURS)) m.setColor3(u, f(MOOD))   // the light's colours (src/look/mood.ts)
     for (const [u, f] of Object.entries(MOOD_FLOATS)) m.setFloat(u, f(MOOD))
     // the season's light as it is when made (src/look/main.ts sets it again on every per-frame material as the season

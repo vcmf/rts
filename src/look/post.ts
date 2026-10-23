@@ -41,7 +41,9 @@ export const DOF_PAINT = { far: 0.5, near: 0.7 }
 // byte: the scene's MSAA target 8 bits a channel, not half floats (docs/plans/done/wide-perf.md: the same frame, 0.4 to
 // 0.8 ms less at the widest zoom); not under the depth of field, whose distance in alpha needs the half floats; ?rt16
 // for the A/B
-export const MSAA = { samples: 4, byte: true }
+// stencil: a stencil on the scene's target alone (the soldiers' simple shadows darken each sample once: src/look/units.ts),
+// not on the canvas and every other target as the engine's own option gives (?stencil=all: that, the A/B; 0: none)
+export const MSAA = { samples: 4, byte: true, stencil: true }
 // ?nanmark: a pixel that is not a number shows magenta instead of its neighbours' mean (docs/plans/done/nan-guard.md)
 export const DEBUG = { nanmark: false }
 const FOCUS_S = 0.25
@@ -254,7 +256,15 @@ export class Post {
       // (the options' form: Babylon keeps its size object, the positional form copies it)
       const p = new PostProcess(name, name, { uniforms: uni, samplers: smp, size: size ?? ratio, camera, samplingMode: Texture.BILINEAR_SAMPLINGMODE, engine, reusable: false, defines, textureType: type })
       if (size && (p as unknown as { _options: unknown })._options !== size) throw new KeptSize()
-      if (!this.posts.length) { p.samples = MSAA.samples }
+      if (!this.posts.length) {
+        p.samples = MSAA.samples
+        // (Babylon gives the first pass's target a stencil only when the engine has one: so the engine's is lent while it
+        // makes it, MSAA.stencil)
+        if (MSAA.stencil && !engine.isStencilEnable) {
+          const resize = p.resize.bind(p), e = engine as unknown as { _isStencilEnable: boolean }
+          p.resize = (...a: Parameters<typeof resize>) => { e._isStencilEnable = true; try { resize(...a) } finally { e._isStencilEnable = false } }
+        }
+      }
       this.posts.push(p); return p
     }
     // the miniature field (decisions 0024, 0040): focused on the ground at the screen's centre (updateFocus); a sharp

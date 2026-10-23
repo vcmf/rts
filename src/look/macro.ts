@@ -120,16 +120,26 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
   let brushError: string | null = null
   const brush = meadow ? new Texture(BRUSH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, null, (msg?: string) => { brushError = `the meadow's brush tile (${BRUSH_URL}) did not load: ${msg ?? 'unknown error'}` }) : null
   if (brush) brush.wrapU = brush.wrapV = Texture.WRAP_ADDRESSMODE
-  // the dirt surface on bare ground (dirtOn in macro.glsl, docs/plans/done/ground-surface.md): the owner's dirt texture
-  // the marks only once it has loaded (uDirtOn, 0 until then: the empty texture reads 0 and would darken bare ground by
-  // a third); a failed load is reported, not a bake's error (no bake reads it), and bare ground then has no marks
-  const dirt = new Texture(DIRT_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => mats.bindAll(m => m.setFloat('uDirtOn', 1)), (msg?: string) => console.error(`the dirt texture (${DIRT_URL}) did not load: ${msg ?? 'unknown error'}`))
-  dirt.wrapU = dirt.wrapV = Texture.WRAP_ADDRESSMODE; dirt.anisotropicFilteringLevel = 4
-  // the bare earth's surface (earthOn in macro.glsl, docs/plans/done/bare-earth.md): the owner's cracked earth, as the dirt
+  // the dirt surface on bare ground (dirtOn in macro.glsl, docs/plans/done/ground-surface.md): the owner's dirt texture,
+  // and the bare earth's surface (earthOn in macro.glsl, docs/plans/done/bare-earth.md): the owner's cracked earth. Both
+  // one channel, packed at load into one texture's R and G (uSurf: one texture unit for the two, the ground's fragment
+  // stage is full, decision 0049). Each one's marks only once it has loaded (uDirtOn, uEarthOn, 0 until then: the empty
+  // texture reads 0 and would darken bare ground by a third); a failed load is reported, not a bake's error (no bake
+  // reads them), and the ground then has none of its marks
   let earthDone = () => {}; const earthLoaded = new Promise<void>(r => { earthDone = r })
-  const earth = new Texture(EARTH_URL, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => { mats.bindAll(m => m.setFloat('uEarthOn', 1)); earthDone() }, (msg?: string) => { console.error(`the earth texture (${EARTH_URL}) did not load: ${msg ?? 'unknown error'}`); earthDone() })
-  earth.wrapU = earth.wrapV = Texture.WRAP_ADDRESSMODE; earth.anisotropicFilteringLevel = 4
-  mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uDirt', dirt); m.setTexture('uEarth', earth); if (brush) m.setTexture('uMeadowBrush', brush) })
+  let surf: BaseTexture = RawTexture.CreateRGBATexture(new Uint8Array(4), 1, 1, scene, false, false, Texture.NEAREST_SAMPLINGMODE)
+  // the scene is not ready until they are packed (or have failed), as it waited for each texture's own load: the tools'
+  // captures (whenReadyAsync) never see the ground without its surfaces
+  const pending = { surfaces: true }; scene.addPendingData(pending)
+  packSurfaces(scene, [DIRT_URL, EARTH_URL]).then(({ tex, ok }) => {
+    const placeholder = surf; surf = tex
+    for (const m of mats.all) m.setTexture('uSurf', tex)
+    if (ok[0]) mats.bindAll(m => m.setFloat('uDirtOn', 1))
+    if (ok[1]) mats.bindAll(m => m.setFloat('uEarthOn', 1))
+    placeholder.dispose()
+  }).catch((e: unknown) => console.error(`the ground's surface textures could not be packed: ${(e as Error).message} (the ground has none of their marks)`))
+    .finally(() => { scene.removePendingData(pending); earthDone() })
+  mats.bindAll(m => { m.setTexture('uCover', coverTex); m.setTexture('uMacro', tile); m.setTexture('uMacroFar', far); m.setTexture('uSurf', surf); if (brush) m.setTexture('uMeadowBrush', brush) })
 
   const UNIFORMS = ['uRect', 'uTexel', 'uSeason', 'uRoadOn', 'uRoadSegN', 'uRoadFar', 'uPaveA', 'uPaveB', 'uPaveN'], SAMPLERS = ['uGrain', 'uCover', 'uMeadowBrush', 'uRoadSegs', 'uRoadGrid', 'uRoadGrit', 'uFlow', 'uComb', 'uMeadow'], DEFINES = [...D.defines, ...(meadow ? ['#define MEADOW', ...flow] : []), ...(meadow && meadowMap ? ['#define MEADOW_MAP'] : []), ...(roads ? ['#define ROADS', '#define PAVING_FAR', ...paveDefines()] : [])]
   const wrapper = new EffectWrapper({ engine, name: 'macroBake', vertexShader: BAKE_VS, fragmentShader: withPainter(BAKE_FS), attributeNames: ['position'], uniformNames: UNIFORMS, samplerNames: SAMPLERS, defines: DEFINES })
@@ -268,4 +278,37 @@ export function buildMacro(scene: Scene, mats: Materials, cover: CoverGrid, mead
       return (h >>> 0).toString(16).padStart(8, '0')
     },
   }
+}
+
+// greyscale images packed into one texture, the first's value in R, the second's in G (wrapped, mipmapped, trilinear,
+// anisotropic 4, as each was alone): the same texels the two textures held, read by one texture unit. An image that does
+// not load is reported and reads 0 (ok: which loaded); one of another size than the first that loaded is resampled to
+// it (reported). The main thread's share (drawing, reading back, packing, the upload) is measured as the performance
+// entry 'groundSurfacesPack' (docs/plans/active/simple-soldier-shadows.md)
+async function packSurfaces(scene: Scene, urls: string[]): Promise<{ tex: RawTexture; ok: boolean[] }> {
+  const bmps = await Promise.all(urls.map(async u => {
+    try {
+      const r = await fetch(u); if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return await createImageBitmap(await r.blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
+    } catch (e) { console.error(`the ground's surface texture (${u}) did not load: ${(e as Error).message}`); return null }
+  }))
+  const t0 = performance.now()
+  const first = bmps.find(b => b !== null), w = first?.width ?? 1, h = first?.height ?? 1
+  const c = new OffscreenCanvas(w, h), g = c.getContext('2d', { willReadFrequently: true })
+  if (!g) throw new Error('no 2D context to pack the ground\'s surface textures')
+  const out = new Uint8Array(w * h * 4)
+  for (let k = 0; k < bmps.length; k++) {
+    const b = bmps[k]; if (!b) continue
+    if (b.width !== w || b.height !== h) console.warn(`the ground's surface texture ${urls[k]} is ${b.width}×${b.height}, resampled to ${w}×${h}`)
+    g.clearRect(0, 0, w, h); g.drawImage(b, 0, 0, w, h)
+    const px = g.getImageData(0, 0, w, h).data
+    // rows flipped: as the image loaded with invertY (the texture's first row is the image's last)
+    for (let y = 0; y < h; y++) for (let x = 0, o = (h - 1 - y) * w * 4 + k, s = y * w * 4; x < w; x++, o += 4, s += 4) out[o] = px[s]
+    b.close()
+  }
+  for (let o = 3; o < out.length; o += 4) out[o] = 255
+  const tex = new RawTexture(out, w, h, Constants.TEXTUREFORMAT_RGBA, scene, true, false, Texture.TRILINEAR_SAMPLINGMODE)
+  tex.name = 'groundSurfaces'; tex.wrapU = tex.wrapV = Texture.WRAP_ADDRESSMODE; tex.anisotropicFilteringLevel = 4
+  performance.measure('groundSurfacesPack', { start: t0, end: performance.now() })
+  return { tex, ok: bmps.map(b => b !== null) }
 }
