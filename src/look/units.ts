@@ -30,7 +30,7 @@ import MASK_FS from './shaders/unitmask.frag?raw'
 import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
-import { posedMesh, posedVertices, shadowProxy, shadowShape, type ShadowShape, type UnitData } from './units-data.ts'
+import { posedMesh, posedVertices, shadowProxy, shadowShape, type UnitData } from './units-data.ts'
 import { CYCLE, farPalette, farRule, manAt, phaseAt, slots, type Battalion, type Drill, type ManState, type Phase, type Uniform } from './world/armies.ts'
 
 const ROLES = ['halt', 'march', 'run', 'fire'] as const
@@ -71,6 +71,7 @@ const MASK_N = 2048     // the simple shadows' mask (decision 0049): texels a si
 const MASK_T0 = 1 / 32  // m: its finest texel; its texel is this times a power of two (a level), MASK_LEVELS of them
 const MASK_LEVELS = 4   // (the coarsest: 25 cm texels over 512 m; the shape's mips keep a man's shadow from aliasing)
 const MASK_DOWN = 0.4   // a level is held until what it must hold is under this share of its span (then the finer one)
+const MASK_WINDOW = 0.8 // past the coarsest level, the share of its span the mask holds (the rest: a pan's slack)
 const SHAPE_FACINGS = 16   // the simple shadow's facings (shadowShape)
 /** the cross-fade's band (decision 0049): the camera's distance to its focus (m) where the map gives way to the simple
  *  shadows, from all map to all mask (?ushadowswitch=<r0>,<r1>); near the LOD switch (48 px at 1080 lines: 63 m) */
@@ -159,12 +160,11 @@ export class Units {
   /** the simple shadows' mask's draws so far, and its box (m: x0, z0, size) */
   maskDraws = 0
   readonly maskBox = { x0: 0, z0: 0, size: 0 }
-  private shape: ShadowShape | null = null
   private maskRT: RenderTargetTexture | null = null
   private maskMat: ShaderMaterial | null = null
   private maskList: Mesh[] = []
   private readonly maskV = new Vector4()
-  private mapOn = false; private maskOn = false   // each drawn this frame
+  private mapOn = false   // the map drawn this frame
   private stepFrac = 0
   private culledMoving = false   // a caster in the map has its men moving (cull)
   private smT = NaN              // the clock when the map was last drawn (a frozen clock draws it no more)
@@ -172,6 +172,7 @@ export class Units {
   private maskT = NaN            // the clock, the camera and the list the mask was last drawn with (drawn again only when they change)
   private maskWas = false
   private readonly maskCam = new Vector3(NaN, NaN, NaN)
+  private readonly maskFarK = new Vector2(NaN, NaN)
   private maskPrev: Mesh[] = []
   private farScaleOn = false
   private farScaleV = new Vector2(1, 1)
@@ -368,7 +369,7 @@ export class Units {
     if (f !== this.far) { this.far = f; for (const m of this.receivers) m.setFloat('uUnitFar', f) }
     const mapOn = this.shadows && f < 1, maskOn = this.shadows && this.simpleFar && f > 0
     if (mapOn && !this.mapOn) { this.smBox.set = false; this.smStep = -1; this.smEmpty = false }   // (back from the mask alone: fitted and drawn afresh)
-    this.target(this.shadowRT, mapOn); this.mapOn = mapOn; this.maskOn = maskOn
+    this.target(this.shadowRT, mapOn); this.mapOn = mapOn
     if (this.shadows || this.trampleOn) this.castView()   // (only the sun's box, the mask's and the trodden mask read it)
     // the clock's step, counted here in double precision (the same floor the men's phases and the shadow map's redraws
     // use), not by the shader from a float32 time: the figures and their shadows never disagree on a step
@@ -589,32 +590,38 @@ export class Units {
   }
 
   // whether a battalion's shadow can reach the view: its bounds stretched away from the sun by the longest shadow (a
-  // figure's height down to the ground) cross the camera's frustum (camPlanes, set by the caller)
-  private shadowInView(h: Host): boolean {
-    const sx = -SUN.x / SUN.y * SHADOW_H, sz = -SUN.z / SUN.y * SHADOW_H   // the shadow's reach from a figure's top
-    const lo = h.lo, hi = h.hi, x0 = Math.min(lo.x, lo.x + sx), x1 = Math.max(hi.x, hi.x + sx), z0 = Math.min(lo.z, lo.z + sz), z1 = Math.max(hi.z, hi.z + sz), y0 = lo.y - SHADOW_H
+  // figure's height, top, down to the ground) cross the camera's frustum (camPlanes, set by the caller)
+  private shadowInView(h: Host, top = SHADOW_H): boolean {
+    const sx = -SUN.x / SUN.y * top, sz = -SUN.z / SUN.y * top   // the shadow's reach from a figure's top
+    const lo = h.lo, hi = h.hi, x0 = Math.min(lo.x, lo.x + sx), x1 = Math.max(hi.x, hi.x + sx), z0 = Math.min(lo.z, lo.z + sz), z1 = Math.max(hi.z, hi.z + sz), y0 = lo.y - top
     // outside a plane: the box's corner most along the plane's normal is behind it
     return !this.camPlanes.some(p => p.normal.x * (p.normal.x > 0 ? x1 : x0) + p.normal.y * (p.normal.y > 0 ? hi.y : y0) + p.normal.z * (p.normal.z > 0 ? z1 : z0) + p.d < 0)
   }
 
   // The simple shadows' mask (decision 0049): MASK_N² over an axis-aligned world box round the battalions whose shadow
-  // can reach the view, cut to the ground in view (castView's quad, its corner rays at the focus's height, a shadow's
-  // length to spare) and to the coarsest level's span round the focus. Its texel is fixed by level (MASK_T0 · 2^k, the
-  // level held until what it holds fits the finer one well inside, MASK_DOWN) and its corner on that level's whole
-  // texels, held while it covers what it must: the texel grid stays put in the world through a pan or a zoom, so a
-  // man's shadow never crawls over it. Whether it has anything to draw (else the receivers are given a box nowhere, and
-  // read none), and whether its box changed
+  // can reach the view, cut to the ground in view (the view's corner rays where they meet the ground's own range of
+  // heights in view, viewGround, as the sun's box: a battalion well below or above the focus keeps its shadows, with a
+  // shadow's length to spare) and, where that is wider than MASK_WINDOW of the coarsest level's span, to that window round
+  // the middle of the ground in view (the rest of the span its slack: a pan holds it). Its texel is fixed by level
+  // (MASK_T0 · 2^k, the level held until what it holds fits the finer one well inside, MASK_DOWN) and its corner on that
+  // level's whole texels, held while it covers what it must: the texel grid stays put in the world through a pan or a
+  // zoom, so a man's shadow never crawls over it. Whether it has anything to draw (else the receivers are given a box
+  // nowhere, and read none), and whether its box changed
   private fitMask(): { any: boolean; changed: boolean } {
-    const q = this.quad, list = this.maskList, mb = this.maskBox
+    const R = this.rays, list = this.maskList, mb = this.maskBox, g = this.viewGround()
     list.length = 0
-    let vx0 = Infinity, vx1 = -Infinity, vz0 = Infinity, vz1 = -Infinity
-    for (let j = 0; j < 4; j++) { vx0 = Math.min(vx0, q[j * 2]); vx1 = Math.max(vx1, q[j * 2]); vz0 = Math.min(vz0, q[j * 2 + 1]); vz1 = Math.max(vz1, q[j * 2 + 1]) }
+    let vx0 = Infinity, vx1 = -Infinity, vz0 = Infinity, vz1 = -Infinity, cx = 0, cz = 0
+    for (let j = 0; j < 4; j++) for (let e = 0; e < 2; e++) {
+      const o = j * 6, gy = e ? g.hi : g.lo, r = R[o + 4] < -1e-3 ? Math.min((gy - R[o + 1]) / R[o + 4], SM_REACH) : SM_REACH
+      const x = R[o] + R[o + 3] * r, z = R[o + 2] + R[o + 5] * r
+      vx0 = Math.min(vx0, x); vx1 = Math.max(vx1, x); vz0 = Math.min(vz0, z); vz1 = Math.max(vz1, z); cx += x / 8; cz += z / 8
+    }
     let bx0 = Infinity, bx1 = -Infinity, bz0 = Infinity, bz1 = -Infinity
     if (Number.isFinite(vx0 + vx1 + vz0 + vz1)) {
       Frustum.GetPlanesToRef(this.camera.getTransformationMatrix(), this.camPlanes)
-      const sx = -SUN.x / SUN.y * SHADOW_H * FAR_SCALE_Y, sz = -SUN.z / SUN.y * SHADOW_H * FAR_SCALE_Y
+      const top = SHADOW_H * (this.farScaleOn ? FAR_SCALE_Y : 1), sx = -SUN.x / SUN.y * top, sz = -SUN.z / SUN.y * top
       for (const h of this.hosts) {
-        if (!h.lod[0].isEnabled() || !this.shadowInView(h)) continue
+        if (!h.lod[0].isEnabled() || !this.shadowInView(h, top)) continue
         list.push(h.lod[3])
         bx0 = Math.min(bx0, h.lo.x, h.lo.x + sx); bx1 = Math.max(bx1, h.hi.x, h.hi.x + sx); bz0 = Math.min(bz0, h.lo.z, h.lo.z + sz); bz1 = Math.max(bz1, h.hi.z, h.hi.z + sz)
       }
@@ -626,16 +633,15 @@ export class Units {
       if (changed) { mb.size = 0; this.maskLevel = -1; this.maskV.set(1e7, 1e7, 1e-3, 0); for (const m of this.receivers) m.setVector4('uUnitMaskBox', this.maskV) }
       return { any: false, changed }
     }
-    // (past the coarsest level's span: what lies round the focus)
-    const top = span(MASK_LEVELS - 1) - 2, fx = this.camera.target.x, fz = this.camera.target.z
-    if (x1 - x0 > top) { x0 = Math.max(x0, Math.min(fx, x1 - top / 2) - top / 2); x1 = x0 + top }
-    if (z1 - z0 > top) { z0 = Math.max(z0, Math.min(fz, z1 - top / 2) - top / 2); z1 = z0 + top }
+    // (wider than the window: the window round the middle of the ground in view, inside what must be held)
+    const win = MASK_WINDOW * span(MASK_LEVELS - 1)
+    if (x1 - x0 > win) { x0 = Math.min(Math.max(cx - win / 2, x0), x1 - win); x1 = x0 + win }
+    if (z1 - z0 > win) { z0 = Math.min(Math.max(cz - win / 2, z0), z1 - win); z1 = z0 + win }
     const need = Math.max(x1 - x0, z1 - z0) + 2
     let k = this.maskLevel
     if (k < 0 || need > span(k) || (k > 0 && need < MASK_DOWN * span(k))) { k = 0; while (k < MASK_LEVELS - 1 && span(k) < need) k++ }
-    const size = span(k), tx = size / MASK_N, m = tx   // (a texel's margin inside the held box)
-    const holds = k === this.maskLevel && mb.size === size && x0 >= mb.x0 + m && z0 >= mb.z0 + m && x1 <= mb.x0 + size - m && z1 <= mb.z0 + size - m
-    if (holds) return { any: true, changed: false }
+    const size = span(k), tx = size / MASK_N   // (a texel's margin inside the held box)
+    if (k === this.maskLevel && x0 >= mb.x0 + tx && z0 >= mb.z0 + tx && x1 <= mb.x0 + size - tx && z1 <= mb.z0 + size - tx) return { any: true, changed: false }
     this.maskLevel = k; mb.size = size
     mb.x0 = Math.round(((x0 + x1) / 2 - size / 2) / tx) * tx; mb.z0 = Math.round(((z0 + z1) / 2 - size / 2) / tx) * tx
     this.maskV.set(mb.x0, mb.z0, 1 / size, 0)
@@ -646,13 +652,14 @@ export class Units {
 
   // whether the mask must be drawn again (lazily, as the map): just shown, its box or its list changed, a battalion in
   // it placed this frame, the clock moved with men in it moving (their places between two steps, smooth), or the camera
-  // moved while the far figures' shadows grow with their distance (FAR_SCALE)
+  // or the far figures' rule (uFarK: the render's height, the lens, the LOD switch) moved while their shadows grow with
+  // them (FAR_SCALE)
   private maskStale(T: number, boxChanged: boolean, cam: Vector3): boolean {
     const list = this.maskList, prev = this.maskPrev
     let stale = !this.maskWas || boxChanged || list.length !== prev.length || list.some((q, i) => q !== prev[i])
     if (!stale) for (const h of this.hosts) if (h.fresh || (this.smooth && h.moving && T !== this.maskT)) { if (list.includes(h.lod[3])) { stale = true; break } }
-    if (!stale && this.farScaleOn && !cam.equals(this.maskCam)) stale = true
-    if (stale) { this.maskT = T; this.maskCam.copyFrom(cam); prev.length = 0; for (const q of list) prev.push(q) }
+    if (!stale && this.farScaleOn && (!cam.equals(this.maskCam) || !this.farK.equals(this.maskFarK))) stale = true
+    if (stale) { this.maskT = T; this.maskCam.copyFrom(cam); this.maskFarK.copyFrom(this.farK); prev.length = 0; for (const q of list) prev.push(q) }
     return stale
   }
 
@@ -661,7 +668,7 @@ export class Units {
     if (this.maskRT) return
     const t0 = performance.now(), d = this.data
     const shape = shadowShape(d, d.lods[1].name, [SUN.x, SUN.y, SUN.z], ROLES, { facings: SHAPE_FACINGS, posed: this.posedFar })
-    this.shape = shape; this.shapeMs = performance.now() - t0
+    this.shapeMs = performance.now() - t0
     const tex = new RawTexture(shape.data, shape.width, shape.height, Constants.TEXTUREFORMAT_R, this.scene, true, false, Constants.TEXTURE_TRILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_UNSIGNED_BYTE)
     tex.name = 'figureShadowShape'; tex.wrapU = tex.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE
     const m = new ShaderMaterial('unitsMask', this.scene, { vertexSource: MASK_VS, fragmentSource: MASK_FS }, { attributes: ['position', 'aVAT', 'aNext'], uniforms: ['world', 'viewProjection', 'uMaskBox', 'uRoleStart', 'uShapeBox', 'uShapeCell', 'uShapeTexel', 'uShDir', 'uStepFrac', 'uFarK', 'uFarScale', 'uCamPos'], samplers: ['uShapeTex'], defines: [`#define FACINGS ${SHAPE_FACINGS.toFixed(1)}`, ...(this.farScaleOn ? ['#define FAR_SCALE'] : [])], needAlphaBlending: true })
@@ -691,7 +698,7 @@ export class Units {
   setShadows(on: boolean): void {
     if (on === this.shadows) return
     this.shadows = on
-    if (!on) { this.target(this.shadowRT, false); if (this.maskRT) this.target(this.maskRT, false); this.mapOn = this.maskOn = false }
+    if (!on) { this.target(this.shadowRT, false); if (this.maskRT) this.target(this.maskRT, false); this.mapOn = false }
     // lazy: drawn once, then again only when frame() resets it (a still view between two steps draws nothing)
     this.shadowRT.refreshRate = this.lazyShadows ? 0 : 1
     if (on) { this.smBox.set = false; this.smStep = -1; this.smEmpty = false }   // (fitted by the next frame)

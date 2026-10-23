@@ -11,8 +11,9 @@ attribute vec3 aVAT;attribute vec3 aNext;
 uniform vec4 uMaskBox,uRoleStart,uShapeBox,uShapeCell;uniform vec2 uShDir,uShapeTexel;uniform float uStepFrac;
 varying vec2 vUV0,vUV1;varying float vT;
 #ifdef FAR_SCALE
-// the far figure drawn larger as it shrinks on screen (units.vert's FAR_SCALE, the same rule): its shadow with it, across
-// by uFarScale.x and along by uFarScale.y (a taller man's shadow is longer)
+// the far figure drawn larger as it shrinks on screen (units.vert's FAR_SCALE, the same rule: uFarScale.x across and
+// along the ground, uFarScale.y up): its shadow with it, its footprint about his feet by x, its cast length (what his
+// height throws along the sun, past his feet) by y
 uniform vec2 uFarK,uFarScale;uniform vec3 uCamPos;
 #endif
 void main(){
@@ -21,7 +22,7 @@ void main(){
   vec2 l=uShapeBox.xy+position.xz*uShapeBox.zw;
   #ifdef FAR_SCALE
   float fpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz)),fg=clamp((0.9*uFarK.y-fpx)/(0.65*uFarK.y),0.0,1.0);
-  l*=vec2(mix(1.0,uFarScale.x,fg),mix(1.0,uFarScale.y,fg));
+  l*=vec2(mix(1.0,uFarScale.x,fg),mix(1.0,l.y>0.0?uFarScale.y:uFarScale.x,fg));
   #endif
   vec2 C=vec2(-uShDir.y,uShDir.x),w=p.xz+C*l.x+uShDir*l.y;
   gl_Position=vec4((w-uMaskBox.xy)*uMaskBox.z*2.0-1.0,0.0,1.0);
