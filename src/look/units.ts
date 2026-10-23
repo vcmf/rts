@@ -91,13 +91,6 @@ export class Units {
   /** the figure height in pixels below which a battalion far off draws the tiny LOD (±10 %; docs/plans/active/armies-32k.md,
    *  step 3); 0 (?tinylod=0): never */
   tinyPx = 12
-  /** the tiny figures' per-man variety (each role's value and cast, each corner's role drawn from his own mix, the shape, each box's brightness:
-   *  units.vert, tinySeeds; the owner's direction 2026-10-23); setTinyRand(false) (?tinyrand=0): none */
-  private readonly tinyRand = new Vector4(0.07, 0.9, 0.04, 0.08)
-  setTinyRand(on: boolean): void {
-    if (on) this.tinyRand.set(0.07, 0.9, 0.04, 0.08); else this.tinyRand.set(0, 0, 0, 0)
-    for (const m of this.tinyMats.values()) m.setVector4('uTinyRand', this.tinyRand)
-  }
   /** the shadow map redrawn only when it would change (?ushadowrate=0: every frame): the poses step at the bake's fps,
    *  so a frame between two steps, with the sun's box and the men where they were, would draw the same map */
   lazyShadows = true
@@ -189,10 +182,10 @@ export class Units {
       f.setFloat('uMask', -1); f.setFloat('uCoatRole', data.palette.indexOf('coat')); f.setVector2('uFarScale', farScale)
       this.farMats.set(id, f)
       // the tiny LOD's: the far LOD's material on the tiny mesh (its own posed vertices: uVATP below)
-      const t = mats.make(`units_${id}_tiny`, UNITS_VS, UNITS_FS, { attributes: [...attributes, 'aRW0', 'aRW1', 'aRW2', 'aJit'], uniforms: ['uVATStep', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole', 'uTinyRand'], samplers: ['uVAT', 'uVATP'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, '#define TINY'] })
+      const t = mats.make(`units_${id}_tiny`, UNITS_VS, UNITS_FS, { attributes: [...attributes, 'aRW0', 'aRW1', 'aRW2'], uniforms: ['uVATStep', 'uPal', 'uPalFar', 'uFarK', 'uFarScale', 'uMask', 'uCoatRole'], samplers: ['uVAT', 'uVATP'], defines: ['#define NOSNOW', '#define KEEP_HUE', '#define BOUNCE', `#define PAL_N ${n}`, '#define TINY'] })
       t.setTexture('uVAT', vat); t.setColor3Array('uPal', pal); t.setColor3Array('uPalFar', data.palette.map(r => Color3.FromHexString(far[r])))
       t.setFloat('uMask', -1); t.setFloat('uCoatRole', data.palette.indexOf('coat')); t.setVector2('uFarScale', farScale)
-      t.setVector4('uTinyRand', this.tinyRand); this.tinyMats.set(id, t)
+      this.tinyMats.set(id, t)
     }
     // the shadow pass: the same skinning, depth only, from an orthographic camera along the sun
     this.depthMat = new ShaderMaterial('unitsDepth', scene, { vertexSource: UNITS_VS, fragmentSource: DEPTH_FS }, { attributes, uniforms: ['world', 'viewProjection', 'uVATStep'], samplers: ['uVAT'], defines: ['#define DEPTH'] })
@@ -267,7 +260,6 @@ export class Units {
     for (let i = 0; i < men; i++) { jitter[i * 4] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 1] = (rnd() - 0.5) * 0.06; jitter[i * 4 + 2] = (rnd() - 0.5) * 0.14; jitter[i * 4 + 3] = rnd() * 2 - 1 }
     const matrices = new Float32Array(men * 16), settings = new Float32Array(men * 3)
     for (const m of lod) { m.thinInstanceSetBuffer('matrix', matrices, 16, false); m.thinInstanceSetBuffer('aVAT', settings, 3, false) }
-    lod[3].thinInstanceSetBuffer('aJit', jitter, 4, true)   // (the tiny figures' variety: his own jitter, written once)
     this.hosts.push({ b, lod, near: false, tiny: false, matrices, settings, jitter, cx: b.x, cz: b.z, lo: new Vector3(), hi: new Vector3(), step: -1, phase: null, stale: [true, true, true, true], staleSet: [true, true, true, true], cycle: -1, index: this.hosts.length })
   }
 
