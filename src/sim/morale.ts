@@ -18,15 +18,45 @@
 // step began, so no outcome depends on the order battalions are visited in. One thing does: routs and
 // fall-backs take orders from the shared pool in visiting order, so two in the same tick get different
 // pool entries (and the lower slot is served first when the pool runs short), as tick.ts says.
-import { type World, MAX_FORMATIONS, MS_STEADY, MS_SHAKEN, MS_WAVERING, MS_ROUTING, MS_RALLYING, MS_SHATTERED, O_FACE, O_MOVE, M_TICK, RP_NONE, RP_RUNNING, RP_HALTED, RP_FLED, outOfFight } from './world.ts'
-import { allocOrder, appendOrder, clearOrders, layoutOf, menOf, ordersFree, setOnMap, ST_HALTED, RETIRE, fillRetire, cutChange } from './formation.ts'
+import {
+  type World,
+  MAX_FORMATIONS,
+  MS_STEADY,
+  MS_SHAKEN,
+  MS_WAVERING,
+  MS_ROUTING,
+  MS_RALLYING,
+  MS_SHATTERED,
+  O_FACE,
+  O_MOVE,
+  M_TICK,
+  RP_NONE,
+  RP_RUNNING,
+  RP_HALTED,
+  RP_FLED,
+  outOfFight,
+} from './world.ts'
+import {
+  allocOrder,
+  appendOrder,
+  clearOrders,
+  layoutOf,
+  menOf,
+  ordersFree,
+  setOnMap,
+  ST_HALTED,
+  RETIRE,
+  fillRetire,
+  cutChange,
+} from './formation.ts'
 import { sin, cos, PI } from './num.ts'
 import { TICK_HZ, DT } from './time.ts'
 
-const RUN = 800   // how far a router is sent, metres (kept on the map)
+const RUN = 800 // how far a router is sent, metres (kept on the map)
 // the runs: the stored direction first, then turned from it by these angles, one every RETRY ticks while the
 // router is halted; after the last it stays where it is (pinned)
-const FAN = [0, PI / 3, -PI / 3, 2 * PI / 3, -2 * PI / 3], RETRY = 100
+const FAN = [0, PI / 3, -PI / 3, (2 * PI) / 3, (-2 * PI) / 3]
+const RETRY = 100
 
 // what a battalion reads of the others this step (scratch): the contagion shock, its secured flanks, and the
 // nearest enemy in the fight (its distance, and the unit vector from it to the battalion)
@@ -34,21 +64,32 @@ const near = { shock: 0, left: 0, right: 0, enemy: Infinity, ax: 0, az: 0 }
 
 // step 12 for battalion i, after its casualties (`lost`, step 11)
 export function moraleStep(w: World, i: number, lost: number): void {
-  const f = w.f, M = w.cr.rs.morale, now = w.meta[M_TICK] + 1, base = Math.max(1, f.baseMen[i]), start = Math.max(1, f.startMen[i])
+  const f = w.f
+  const M = w.cr.rs.morale
+  const now = w.meta[M_TICK] + 1
+  const base = Math.max(1, f.baseMen[i])
+  const start = Math.max(1, f.startMen[i])
   f.recent[i] = f.recent[i] * w.cr.recentDecay + lost
-  const owedShock = f.shockIn[i]; f.shockIn[i] = 0   // the melee step's shocks (a charge's threat and impact): taken with contagion
-  const s = f.mstate[i], men = w.scratch.menNow ? w.scratch.menNow[i] : menOf(w, i)
+  const owedShock = f.shockIn[i]
+  f.shockIn[i] = 0 // the melee step's shocks (a charge's threat and impact): taken with contagion
+  const s = f.mstate[i]
+  const men = w.scratch.menNow ? w.scratch.menNow[i] : menOf(w, i)
   // shattered, or routing mid-run: it only runs, and nothing it would read of the others is used
   if (s === MS_SHATTERED || (s === MS_ROUTING && f.routPhase[i] === RP_RUNNING)) {
     if (s === MS_ROUTING && men < M.shatter * f.startMen[i]) f.mstate[i] = MS_SHATTERED
-    routStep(w, i); return
+    routStep(w, i)
+    return
   }
   survey(w, i, now)
   // the losses term counts from baseMen (written off at a rally); recent losses are a share of the spawn strength
-  const target = f.quality[i] - M.losses * (base - men) / base - M.recent * f.recent[i] / start + M.support.bonus * (near.left + near.right)
+  const target =
+    f.quality[i] -
+    (M.losses * (base - men)) / base -
+    (M.recent * f.recent[i]) / start +
+    M.support.bonus * (near.left + near.right)
   const was = f.morale[i]
   f.morale[i] += (target - f.morale[i]) * w.cr.relax
-  if (s !== MS_ROUTING) f.morale[i] -= near.shock + owedShock   // routing and shattered (returned above) are not shocked
+  if (s !== MS_ROUTING) f.morale[i] -= near.shock + owedShock // routing and shattered (returned above) are not shocked
   // falling: down by more than fallback.rate a second (the relax's slow crawl toward a fixed target is not)
   f.falling[i] = was - f.morale[i] > M.fallback.rate * DT ? f.falling[i] + 1 : 0
   const m = f.morale[i]
@@ -56,12 +97,27 @@ export function moraleStep(w: World, i: number, lost: number): void {
     if (men < M.shatter * f.startMen[i]) f.mstate[i] = MS_SHATTERED
     // its run has ended (a run was made, and it is not running: a full order pool can leave a router
     // unmoved where it broke, which is not the end of a run)
-    else if (f.runs[i] > 0 && f.routPhase[i] !== RP_RUNNING && f.quality[i] - M.rally.cost >= M.wavering[0] && now - f.lastLoss[i] >= M.rally.calm * TICK_HZ && near.enemy > M.rally.safe) { rally(w, i, now, men); return }
-    routStep(w, i); return
+    else if (
+      f.runs[i] > 0 &&
+      f.routPhase[i] !== RP_RUNNING &&
+      f.quality[i] - M.rally.cost >= M.wavering[0] &&
+      now - f.lastLoss[i] >= M.rally.calm * TICK_HZ &&
+      near.enemy > M.rally.safe
+    ) {
+      rally(w, i, now, men)
+      return
+    }
+    routStep(w, i)
+    return
   }
-  if (m < M.rout) { rout(w, i, now, men); return }
+  if (m < M.rout) {
+    rout(w, i, now, men)
+    return
+  }
   if (s === MS_RALLYING) {
-    if (now - f.since[i] >= M.rally.time * TICK_HZ) f.mstate[i] = m < M.wavering[0] ? MS_WAVERING : m < M.shaken[0] ? MS_SHAKEN : MS_STEADY
+    if (now - f.since[i] >= M.rally.time * TICK_HZ) {
+      f.mstate[i] = m < M.wavering[0] ? MS_WAVERING : m < M.shaken[0] ? MS_SHAKEN : MS_STEADY
+    }
     return
   }
   // down as far as the morale says, up one step at a time past each threshold's way back
@@ -72,7 +128,16 @@ export function moraleStep(w: World, i: number, lost: number): void {
   if (next === s && s === MS_SHAKEN && m >= M.shaken[1]) next = MS_STEADY
   f.mstate[i] = next
   if (next !== MS_WAVERING) f.fellBack[i] = 0
-  else if (!f.fellBack[i] && f.ordHead[i] < 0 && !f.trans[i] && !f.foe[i] && f.falling[i] >= M.fallback.after * TICK_HZ && enemyAhead(w, i)) fallBack(w, i)
+  else if (
+    !f.fellBack[i] &&
+    f.ordHead[i] < 0 &&
+    !f.trans[i] &&
+    !f.foe[i] &&
+    f.falling[i] >= M.fallback.after * TICK_HZ &&
+    enemyAhead(w, i)
+  ) {
+    fallBack(w, i)
+  }
 }
 // the nearest enemy in the fight is within fire range and in front of the battalion (within 90° of its
 // heading): a Retire, back from its own facing, then takes it away from that enemy, not toward it
@@ -83,24 +148,47 @@ function enemyAhead(w: World, i: number): boolean {
 // what battalion i reads of the others, all from before this step's morale: the contagion shock of friends
 // that broke last tick, its secured flanks, and the distance to the nearest enemy in the fight
 function survey(w: World, i: number, now: number): void {
-  const f = w.f, M = w.cr.rs.morale, side = f.side[i], before = w.scratch.mstateBefore ?? f.mstate, men = w.scratch.menNow
-  const hx = sin(f.heading[i]), hz = cos(f.heading[i])
+  const f = w.f
+  const M = w.cr.rs.morale
+  const side = f.side[i]
+  const before = w.scratch.mstateBefore ?? f.mstate
+  const men = w.scratch.menNow
+  const hx = sin(f.heading[i])
+  const hz = cos(f.heading[i])
   // the side's front: away from its rear when a scenario set one, else the way the battalion faces
-  let fx = -w.sides.rearX[side], fz = -w.sides.rearZ[side]
-  if (fx === 0 && fz === 0) { fx = hx; fz = hz }
-  near.shock = 0; near.left = 0; near.right = 0; near.enemy = Infinity; near.ax = 0; near.az = 0
+  let fx = -w.sides.rearX[side]
+  let fz = -w.sides.rearZ[side]
+  if (fx === 0 && fz === 0) {
+    fx = hx
+    fz = hz
+  }
+  near.shock = 0
+  near.left = 0
+  near.right = 0
+  near.enemy = Infinity
+  near.ax = 0
+  near.az = 0
   for (let j = 0; j < MAX_FORMATIONS; j++) {
     if (j === i || !f.alive[j] || (men ? men[j] : menOf(w, j)) === 0) continue
-    const dx = f.x[j] - f.x[i], dz = f.z[j] - f.z[i], d = Math.sqrt(dx * dx + dz * dz)
+    const dx = f.x[j] - f.x[i]
+    const dz = f.z[j] - f.z[i]
+    const d = Math.sqrt(dx * dx + dz * dz)
     // an enemy: in the fight (as it stood before this step's morale); the lower slot wins a tie
-    if (f.side[j] !== side) { if (!outOfFight(before[j]) && d > 1e-6 && d < near.enemy) { near.enemy = d; near.ax = -dx / d; near.az = -dz / d } continue }
+    if (f.side[j] !== side) {
+      if (!outOfFight(before[j]) && d > 1e-6 && d < near.enemy) {
+        near.enemy = d
+        near.ax = -dx / d
+        near.az = -dz / d
+      }
+      continue
+    }
     if (f.brokeTick[j] === now - 1) {
       const R = dx * fx + dz * fz > 0 ? M.contagion.front : M.contagion.back
       if (d < R) near.shock += M.contagion.shock * (1 - d / R)
     }
     // a flank: a friend in the fight within reach, within the support arc of the battalion's left or right
     if (!outOfFight(before[j]) && d <= M.support.reach && d > 1e-6) {
-      const across = dx * hz - dz * hx   // + to the right (heading 0 = +z, clockwise toward +x)
+      const across = dx * hz - dz * hx // + to the right (heading 0 = +z, clockwise toward +x)
       if (across >= d * w.cr.supportCos) near.right = 1
       else if (-across >= d * w.cr.supportCos) near.left = 1
     }
@@ -111,38 +199,64 @@ function survey(w: World, i: number, now: number): void {
 // since its heading may be turned away already, by a Retire; else straight back), its orders dropped, and
 // the first run made. Breaking more often than it may rally, or below half strength, it shatters
 function rout(w: World, i: number, now: number, men: number): void {
-  const f = w.f, side = f.side[i], M = w.cr.rs.morale
-  let rx = w.sides.rearX[side], rz = w.sides.rearZ[side]
+  const f = w.f
+  const side = f.side[i]
+  const M = w.cr.rs.morale
+  let rx = w.sides.rearX[side]
+  let rz = w.sides.rearZ[side]
   if (rx === 0 && rz === 0) {
     // away from the nearest enemy in the fight, as this step's survey found it
-    if (near.enemy < Infinity) { rx = near.ax; rz = near.az } else { rx = -sin(f.heading[i]); rz = -cos(f.heading[i]) }
+    if (near.enemy < Infinity) {
+      rx = near.ax
+      rz = near.az
+    } else {
+      rx = -sin(f.heading[i])
+      rz = -cos(f.heading[i])
+    }
   }
-  f.routs[i] = Math.min(255, f.routs[i] + 1); f.brokeTick[i] = now; f.fellBack[i] = 0
+  f.routs[i] = Math.min(255, f.routs[i] + 1)
+  f.brokeTick[i] = now
+  f.fellBack[i] = 0
   f.mstate[i] = f.routs[i] > M.rally.max || men < M.shatter * f.startMen[i] ? MS_SHATTERED : MS_ROUTING
-  f.routX[i] = rx; f.routZ[i] = rz; f.runs[i] = 0; f.routPhase[i] = RP_HALTED
+  f.routX[i] = rx
+  f.routZ[i] = rz
+  f.runs[i] = 0
+  f.routPhase[i] = RP_HALTED
   clearOrders(w, i)
-  if (f.trans[i]) cutChange(w, i)   // it breaks its ranks: no change finished under fire (#39)
+  if (f.trans[i]) cutChange(w, i) // it breaks its ranks: no change finished under fire (#39)
   run(w, i)
 }
 // a router: a run ends when its orders do. Halted at impassable ground, it tries the fan's next direction
 // every RETRY ticks; otherwise it got where it was going (or as near as it could) and has fled
 function routStep(w: World, i: number): void {
   const f = w.f
-  if (f.routPhase[i] === RP_RUNNING && f.ordHead[i] < 0) f.routPhase[i] = f.status[i] === ST_HALTED ? RP_HALTED : RP_FLED
+  if (f.routPhase[i] === RP_RUNNING && f.ordHead[i] < 0) {
+    f.routPhase[i] = f.status[i] === ST_HALTED ? RP_HALTED : RP_FLED
+  }
   if (f.routPhase[i] === RP_HALTED && f.runs[i] < FAN.length && (w.meta[M_TICK] + 1 + i) % RETRY === 0) run(w, i)
 }
 // the next run: the stored direction turned by the fan's angle, at the rout pace, with a Face about first
 // where the shape allows and the way is behind it. The run's order is made first; if the pool has none,
 // nothing changes (the same direction is tried at the next retry)
 function run(w: World, i: number): void {
-  const f = w.f, a = FAN[f.runs[i]], ca = cos(a), sa = sin(a)
-  const dx = f.routX[i] * ca + f.routZ[i] * sa, dz = -f.routX[i] * sa + f.routZ[i] * ca
+  const f = w.f
+  const a = FAN[f.runs[i]]
+  const ca = cos(a)
+  const sa = sin(a)
+  const dx = f.routX[i] * ca + f.routZ[i] * sa
+  const dz = -f.routX[i] * sa + f.routZ[i] * ca
   const n = allocOrder(w, O_MOVE)
   if (n < 0) return
-  f.runs[i]++; f.routPhase[i] = RP_RUNNING; f.status[i] = 0; f.blockedFor[i] = 0
-  setOnMap(w, n, f.x[i] + dx * RUN, f.z[i] + dz * RUN); w.ord.resolved[n] = 1
+  f.runs[i]++
+  f.routPhase[i] = RP_RUNNING
+  f.status[i] = 0
+  f.blockedFor[i] = 0
+  setOnMap(w, n, f.x[i] + dx * RUN, f.z[i] + dz * RUN)
+  w.ord.resolved[n] = 1
   if (ordersFree(w) > 0 && layoutOf(w, i).turn && !f.trans[i] && dx * sin(f.heading[i]) + dz * cos(f.heading[i]) < 0) {
-    const k = allocOrder(w, O_FACE); w.ord.optional[k] = 1; appendOrder(w, i, k)   // optional: if it fails, the run goes on
+    const k = allocOrder(w, O_FACE)
+    w.ord.optional[k] = 1
+    appendOrder(w, i, k) // optional: if it fails, the run goes on
   }
   appendOrder(w, i, n)
 }
@@ -151,24 +265,49 @@ function run(w: World, i: number): void {
 // orders again. Only a battalion whose quality, less the cost, is still wavering or better may rally: one
 // below would break again at once
 function rally(w: World, i: number, now: number, men: number): void {
-  const f = w.f, M = w.cr.rs.morale
+  const f = w.f
+  const M = w.cr.rs.morale
   clearOrders(w, i)
-  f.status[i] = 0; f.blockedFor[i] = 0; f.routPhase[i] = RP_NONE; f.fellBack[i] = 0
-  f.quality[i] = Math.max(0, f.quality[i] - M.rally.cost); f.baseMen[i] = men; f.recent[i] = 0; f.morale[i] = f.quality[i]
-  f.mstate[i] = MS_RALLYING; f.since[i] = now
+  f.status[i] = 0
+  f.blockedFor[i] = 0
+  f.routPhase[i] = RP_NONE
+  f.fellBack[i] = 0
+  f.quality[i] = Math.max(0, f.quality[i] - M.rally.cost)
+  f.baseMen[i] = men
+  f.recent[i] = 0
+  f.morale[i] = f.quality[i]
+  f.mstate[i] = MS_RALLYING
+  f.since[i] = now
 }
 // the wavering fall-back: the Retire drill (formation.ts), made only when the pool has room for all of it.
 // It falls back from an enemy in front of it (enemyAhead); with none, a break mid-Retire would run 'straight
 // back' from the turned heading
 function fallBack(w: World, i: number): void {
   if (ordersFree(w) < RETIRE.length) return
-  for (let k = 0; k < RETIRE.length; k++) { const n = allocOrder(w, RETIRE[k]); fillRetire(w, n, k, w.cr.rs.morale.fallback.metres); appendOrder(w, i, n) }
-  w.f.status[i] = 0; w.f.blockedFor[i] = 0; w.f.fellBack[i] = 1
+  for (let k = 0; k < RETIRE.length; k++) {
+    const n = allocOrder(w, RETIRE[k])
+    fillRetire(w, n, k, w.cr.rs.morale.fallback.metres)
+    appendOrder(w, i, n)
+  }
+  w.f.status[i] = 0
+  w.f.blockedFor[i] = 0
+  w.f.fellBack[i] = 1
 }
 
 // a new battalion: morale at its quality, steady
 export function spawnMorale(w: World, i: number, quality: number): void {
-  const f = w.f, men = menOf(w, i)
-  f.quality[i] = quality; f.morale[i] = quality; f.mstate[i] = MS_STEADY; f.startMen[i] = men; f.baseMen[i] = men; f.recent[i] = 0
-  f.brokeTick[i] = -1; f.lastLoss[i] = 0; f.since[i] = 0; f.falling[i] = 0; f.fellBack[i] = 0; f.routs[i] = 0
+  const f = w.f
+  const men = menOf(w, i)
+  f.quality[i] = quality
+  f.morale[i] = quality
+  f.mstate[i] = MS_STEADY
+  f.startMen[i] = men
+  f.baseMen[i] = men
+  f.recent[i] = 0
+  f.brokeTick[i] = -1
+  f.lastLoss[i] = 0
+  f.since[i] = 0
+  f.falling[i] = 0
+  f.fellBack[i] = 0
+  f.routs[i] = 0
 }
