@@ -187,6 +187,26 @@ art, other arms.
   1.3 ms).
 - **Bar** (here): **kept at 40 a side if** it saves ≥ 0.5 ms p50 at wide and default, panning, with no visible change
   beyond what #131's own review accepts. Else #131's own outcome stands and this plan says so.
+- **Measured, the mask version** (PR #134 at 21782f2 merged into this branch at 7c437f1, worktree `rts-32k-s2`;
+  2026-10-23, Metal, 40 a side, three rounds; 35 of 36 runs exit 0: one stress pan run lost Chrome mid-run, so that row
+  has two rounds; medians of p50 / p95, ms; "map" = `?ushadowfar=map&smoothmove=0`, "simple" = `?smoothmove=0`,
+  "smooth" = the defaults):
+
+  | Run | Wide | Default | Close |
+  |---|---|---|---|
+  | middle, still: map / simple / smooth | 9.80 / 10.15 / 10.25 | 11.10 / 10.60 / 10.95 | 9.80 / 9.80 / 9.80 |
+  | middle, pan: map / simple / smooth | 9.60 / 10.45 / 10.50 | 10.40 / 10.75 / 10.55 | 9.75 / 9.80 / 9.70 |
+  | stress, still: map / simple / smooth | 12.75 / 13.20 / 13.40 | 10.55 / 10.55 / 10.65 | 8.75 / 8.75 / 8.70 |
+  | stress, pan: map / simple / smooth | 12.80 / 13.13 / 13.15 | 10.10 / 11.20 / 11.20 | 9.10 / 9.43 / 9.40 |
+  | stress, still, p95: map / smooth | 23.65 / 14.45 | 11.55 / 11.80 | 10.05 / 10.15 |
+
+  **Fails its bar** at 40 a side: 0.3 to 0.9 ms *slower* at wide, up to 1.1 ms slower at default panning at the stress
+  point. It removes the map's wide spikes (stress p95 23.65 → 14.45). Why (reasoned from the code, not timed per pass):
+  the mask is a 2048² target redrawn every frame (positions move every frame) and again whenever a 12 fps step lands
+  with smooth movement off, each man's shadow a blended quad of about 100–200 texels: fill that grows with the men in
+  view, where the lazy map redraws at step rate from 56-triangle depth-only casters. The owner's reading: a simple shadow
+  should be cheaper and redrawn less, not more. So #134 is reworked (2026-10-23) to a shadow quad drawn by each soldier
+  in the main pass (4 vertices a man, multiply-blended, no target, no redraw); this step is re-measured with it.
 
 ## Step 3: a third, tiny LOD
 
