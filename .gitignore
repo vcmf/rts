@@ -18,6 +18,9 @@ dist/
 coverage/
 *.log
 
+# Third-party reference frames: kept locally, never committed (their .source.txt is)
+design/refs/staff-map-epic-history-waterloo.png
+
 # Local renders and scratch
 renders/
 scratch/

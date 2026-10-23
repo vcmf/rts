@@ -53,3 +53,5 @@ recorded here on 2026-10-08.
 | [0044](0044-epic-shimmer-limits.md) | The water's shimmer limits re-baselined for the epic mood | accepted |
 | [0045](0045-render-scale-easu.md) | The render scale 0.9 from the closest zoom, upscaled by EASU | accepted |
 | [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | accepted |
+| [0050](0050-one-language-for-the-battlefield.md) | One language for the battlefield and one for the armies; every system reads them | accepted |
+| [0051](0051-one-map-view-lit.md) | One map view: the editor's draft and the game's staff map, lit with a 3D feel | proposed |
