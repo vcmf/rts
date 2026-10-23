@@ -1,9 +1,8 @@
 # Commits that only change layout (decision 0052, docs/decisions/0052-code-style.md): git blame skips them.
 # GitHub reads this file; locally: git config blame.ignoreRevsFile .git-blame-ignore-revs
 #
-# The hash below is the formatting commit on its branch. A squash merge gives main a different commit: after
-# the merge, the squashed commit's hash must replace it (a one-line follow-up), unless the PR is merged with a
-# merge commit that keeps this one (the owner's choice, docs/plans/active/code-style.md, Open questions).
+# The formatting PRs are squash-merged (the owner's choice), so each entry is the squashed commit on main. It also
+# carries that PR's config, scripts and comment moves, which blame skips with it.
 
-# style(sim): format src/sim, src/rulesets, src/scenarios and maps
-b4dd80f10a331a8fad9fddb69341293c8c18a1cb
+# style(sim): Prettier and readability lint rules, the sim formatted (#148)
+8abc1cf77ee38c5471589293a0835d29cb767aac
