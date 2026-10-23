@@ -1,14 +1,18 @@
 // The demo map's armies (src/look/world/armies.ts) and their figure (data/figures/fr-line-infantry.unitdata, written by
 // tools/bake-figure.py; src/look/units-data.ts): the battalion's slots by the ruleset's drill, the script's phases in
-// order, the layout clear of the blocked ground and failing loudly where there is no room, and the baked figure whole
+// order, the layout clear of the blocked ground and failing loudly where there is no room, and the baked figure whole.
+// The demo map's blocked ground is a fixture (test/fixtures/demo-map-blocked.bin.gz), sampled from the page by
+// tools/sample-blocked.mjs (rerun it when the map, its trees, river or buildings change)
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
+import { gunzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { APPROACH, CYCLE, FAR_COAT_BELOW, FAR_ROLES, extents, facingAt, farPalette, farRule, layout, luminance, manAt, phaseAt, slots, type Drill, type ManState } from '../src/look/world/armies.ts'
 import { UNIFORMS } from '../src/rulesets/napoleonic-uniforms.ts'
 import { RULESETS } from '../src/rulesets/index.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
-import { checkUnits, decodeUnits, fromHalf, posedMesh, posedVertices, shadowProxy, shadowShape } from '../src/look/units-data.ts'
+import { TINY_ROLES, checkUnits, decodeUnits, fromHalf, posedMesh, posedVertices, shadowProxy, shadowShape, tinyMesh } from '../src/look/units-data.ts'
 
 const g = napoleonic.types.infantry.geometry
 const drill: Drill = { companies: g.companies, files: g.files, ranks: g.ranks, fileSpacing: g.fileSpacing, rankSpacing: g.rankSpacing }
@@ -79,6 +83,47 @@ describe('armies: the layout', () => {
     for (const a of bs) for (const b of bs) if (a !== b && a.side === b.side) { const p = box(a), q = box(b); expect(Math.abs(a.x - b.x) >= p.w + q.w || p.f + p.d <= q.f || q.f + q.d <= p.f).toBe(true) }
     const [fx, fz] = facingAt(bs); expect(Math.hypot(fx, fz)).toBeLessThan(60)
   })
+  // the demo map's blocked ground (the page's __armies.blocked sampled every 0.5 m over ±240 m, a bit a sample, row by
+  // row from (−240, −240), by tools/sample-blocked.mjs; read conservatively: blocked when any of the four samples round a
+  // point is)
+  const bits = gunzipSync(readFileSync(new URL('./fixtures/demo-map-blocked.bin.gz', import.meta.url))), N = 961, R = 240, S = 0.5
+  const bit = (i: number, j: number) => i < 0 || j < 0 || i >= N || j >= N || ((bits[(j * N + i) >> 3] >> ((j * N + i) & 7)) & 1) === 1
+  const demo = (x: number, z: number) => { const i = Math.floor((x + R) / S), j = Math.floor((z + R) / S); return bit(i, j) || bit(i + 1, j) || bit(i, j + 1) || bit(i + 1, j + 1) }
+  it('lays out 20 a side and fewer exactly as before the close reserves (hashes of the layouts at 084d6e0)', () => {
+    const want = JSON.parse(readFileSync(new URL('./fixtures/armies-layout-20.json', import.meta.url), 'utf8')) as Record<string, string[]>
+    const masks: Record<string, (x: number, z: number) => boolean> = { open, wood: (x, z) => open(x, z) || (Math.abs(x) < 60 && Math.abs(z) < 200), demo }
+    for (const [k, b] of Object.entries(masks)) for (let n = 1; n <= 20; n++) {
+      expect(createHash('sha256').update(JSON.stringify(layout(n, drill, b, ARMIES_DEMO.sides))).digest('hex').slice(0, 16), `${k} ${n}`).toBe(want[k][n - 1])
+    }
+  })
+  it('fields 40 a side on the demo map: the close reserves behind, never ahead of a line, clear of every other box', () => {
+    const bs = layout(40, drill, demo, ARMIES_DEMO.sides), e = extents(drill)
+    for (const s of [0, 1]) expect(bs.filter(b => b.side === s).length).toBe(40)
+    const back = (b: typeof bs[0]) => Math.abs(b.z), lines = bs.filter(b => !b.reserve)
+    for (const b of bs) {
+      expect(Math.abs(b.x) + (b.reserve ? e.columnHalf : e.halfFront)).toBeLessThanOrEqual(235)
+      expect(Math.abs(b.z) + (b.reserve ? e.columnDepth : APPROACH + e.columnDepth)).toBeLessThanOrEqual(235)
+    }
+    // the men's own ground: a line's ranks (its full width) and its approach (its column's width); a column's
+    const parts = (b: typeof bs[0]) => b.reserve ? [{ w: e.columnHalf, f: back(b), d: e.columnDepth }]
+      : [{ w: e.halfFront, f: back(b), d: e.lineDepth }, { w: e.columnHalf, f: back(b), d: APPROACH + e.columnDepth }]
+    for (const a of bs) for (const b of bs) if (a !== b && a.side === b.side) for (const p of parts(a)) for (const q of parts(b)) {
+      expect(Math.abs(a.x - b.x) >= p.w + q.w || p.f + p.d <= q.f || q.f + q.d <= p.f, `${a.x},${a.z} / ${b.x},${b.z}`).toBe(true)
+    }
+    for (const r of bs.filter(b => b.reserve)) for (const l of lines) if (l.side === r.side && Math.abs(l.x - r.x) < e.halfFront + e.columnHalf) expect(back(r)).toBeGreaterThan(back(l))
+    // every man of a reserve on open ground
+    const sl = slots(drill)
+    for (const b of bs) if (b.reserve) for (const [px, pz] of sl.column) { const c = Math.cos(b.heading); expect(demo(b.x + c * px, b.z + c * pz)).toBe(false) }
+    // and no deploying man's path (his column place to his line place) within a metre of a reserve's column
+    for (const l of lines) for (let i = 0; i < sl.line.length; i++) for (let k = 0; k <= 10; k++) {
+      const c = Math.cos(l.heading), lx = sl.column[i][0] + (sl.line[i][0] - sl.column[i][0]) * k / 10, lz = sl.column[i][1] + (sl.line[i][1] - sl.column[i][1]) * k / 10
+      const x = l.x + c * lx, z = l.z + c * lz
+      for (const r of bs) if (r.reserve && r.side === l.side) {
+        const rc = Math.cos(r.heading), ax = rc * (x - r.x), az = rc * (z - r.z)
+        expect(Math.abs(ax) > e.columnHalf + 1 || az > 1 || az < -e.columnDepth - 1, `${l.x},${l.z} man ${i} / ${r.x},${r.z}`).toBe(true)
+      }
+    }
+  })
   it('keeps off the blocked ground', () => {
     const wood = (x: number, z: number) => open(x, z) || (Math.abs(x) < 60 && Math.abs(z) < 200)
     for (const b of layout(4, drill, wood, ARMIES_DEMO.sides)) expect(Math.abs(b.x)).toBeGreaterThan(60)
@@ -129,6 +174,29 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
       expect(lo).toBeGreaterThan(-0.1); expect(hi - lo).toBeGreaterThan(1.6); expect(hi - lo).toBeLessThan(2.8)   // m: a man, his bayonet up
     }
     expect([fromHalf(0x3c00), fromHalf(0xc000), fromHalf(0x0001)]).toEqual([1, -2, 2 ** -24])
+  })
+  it('has a tiny LOD of boxes on its parts: under a quarter of the far LOD\'s vertices, each corner on one bone, a mix of roles, outward, a figure tall', () => {
+    const t = tinyMesh(d, d.lods[d.lods.length - 1].name), n = t.positions.length / 3
+    expect(n % 8).toBe(0); expect(t.indices.length).toBe(n / 8 * 36)   // eight corners, twelve triangles a box
+    expect(n).toBeLessThan(d.lods[d.lods.length - 1].vertices / 4)
+    for (let v = 0; v < n; v++) {
+      expect(t.boneWeights[v * 4]).toBe(1); expect(t.roles[v]).toBeLessThan(d.palette.length)
+      let sum = 0; for (let i = 0; i < TINY_ROLES; i++) { const w = t.weights[v * TINY_ROLES + i]; expect(w).toBeGreaterThanOrEqual(0); if (i >= d.palette.length) expect(w).toBe(0); sum += w }
+      expect(sum).toBeCloseTo(1, 5)   // (a mix of the roles: its box's mean colour from above)
+    }
+    expect(new Set(t.roles).size).toBeGreaterThanOrEqual(4)   // (the roles that read from far off show on it)
+    // every triangle faces away from its box's centre
+    for (let k = 0; k < t.indices.length; k += 3) {
+      const box = Math.floor(t.indices[k] / 8), P = (i: number) => [0, 1, 2].map(j => t.positions[i * 3 + j])
+      const c = [0, 1, 2].map(j => { let a = 0; for (let i = 0; i < 8; i++) a += t.positions[(box * 8 + i) * 3 + j]; return a / 8 })
+      const [a, b, e] = [P(t.indices[k]), P(t.indices[k + 1]), P(t.indices[k + 2])], u = [0, 1, 2].map(j => b[j] - a[j]), w = [0, 1, 2].map(j => e[j] - a[j])
+      const nn = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]
+      expect(nn[0] * (a[0] - c[0]) + nn[1] * (a[1] - c[1]) + nn[2] * (a[2] - c[2])).toBeGreaterThan(0)
+    }
+    const q = posedMesh(d, t), f = d.ranges.halt.start
+    let lo = Infinity, hi = -Infinity
+    for (let v = 0; v < n; v++) { const y = q.data[(f * n * 2 + v * 2) * 4 + 1]; lo = Math.min(lo, y); hi = Math.max(hi, y) }
+    expect(hi - lo).toBeGreaterThan(1.4); expect(lo).toBeLessThan(0.3)
   })
   it('has a shadow proxy of crossed quads, each corner wholly on one bone, a figure tall when posed', () => {
     const p = shadowProxy(d, d.lods[d.lods.length - 1].name), n = p.positions.length / 3
