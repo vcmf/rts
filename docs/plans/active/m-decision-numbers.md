@@ -19,7 +19,7 @@ are still under `docs/plans/active/`.
 ## Approach
 
 - The epic's records move to the next free numbers after main's: 0022 → 0027, 0023 → 0028, 0024 → 0029,
-  0025 → 0030. Their files, their titles, the supersession between them (0028 supersedes 0027; 0027 is now 0049, see `docs/decisions/README.md`), the decisions
+  0025 → 0030. Their files, their titles, the supersession between them (0028 supersedes 0027; 0027 is now 0053, see `docs/decisions/README.md`), the decisions
   table, the system doc's front matter and every citation in docs, code comments, tests and the example maps
   follow. The records' content is otherwise unchanged: this is a number, not a decision, so it is not an edit
   of an accepted record in the sense of the README's rule. The README notes the old numbers, since merged PRs

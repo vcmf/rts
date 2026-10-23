@@ -11,15 +11,16 @@ edited after acceptance: to change a decision, write a new record and mark the o
 records are open until the owner accepts or rejects them (then their status changes once). Decisions taken earlier in October 2026 were
 recorded here on 2026-10-08.
 
-Track M's records 0049 and 0028–0030 were written on `epic/map-engine` as 0022–0025 and renumbered on 2026-10-13, before
+Track M's records 0053 and 0028–0030 were written on `epic/map-engine` as 0022–0025 and renumbered on 2026-10-13, before
 the epic reached main, because main had taken 0022, 0024 and 0025 (`docs/plans/active/m-decision-numbers.md`). A
 renumber of records that have not reached main yet, to keep numbers unique, is the one change allowed to an accepted
 record: its number, its title's number and the citations, nothing else. Merged pull requests #66–#72 and the epic's
-tracking PR #49 cite the old numbers: 0022 is 0027 (now 0049, below), 0023 is 0028, 0024 is 0029, 0025 is 0030. **0023 is retired**:
+tracking PR #49 cite the old numbers: 0022 is 0027 (now 0053, below), 0023 is 0028, 0024 is 0029, 0025 is 0030. **0023 is retired**:
 it is never given to another record, so that an old citation of it cannot resolve to an unrelated one.
-The first of them, 0027, moved again on 2026-10-22, to **0049**: main had given 0027 to another record on
-2026-10-14 (units take the light's value). Track M's pull requests and commits up to then (#66–#79, PR #49) cite it as 0027;
-that citation means 0049, and main's 0027 is the units' record.
+The first of them, 0027, moved again on 2026-10-22, to 0049 (main had given 0027 to another record on 2026-10-14:
+units take the light's value), and on 2026-10-23 to **0053** (#134 took 0049). Track M's pull requests and commits up to
+then (#66–#79, PR #49) cite it as 0027 or 0049; either citation means 0053 (main's 0027 is the units' record, and 0049
+is #134's).
 
 | # | Decision | Status |
 |---|---|---|
@@ -69,4 +70,4 @@ that citation means 0049, and main's 0027 is the units' record.
 | [0045](0045-render-scale-easu.md) | The render scale 0.9 from the closest zoom, upscaled by EASU | accepted |
 | [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | accepted |
 | [0047](0047-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
-| [0049](0049-generators-expand-by-dependency.md) | Generators expand by dependency, over finished features, with hard and soft reads | superseded by 0028 |
+| [0053](0053-generators-expand-by-dependency.md) | Generators expand by dependency, over finished features, with hard and soft reads | superseded by 0028 |
