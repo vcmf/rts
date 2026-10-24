@@ -352,7 +352,8 @@ describe('types side by side', () => {
         expect(menOf(s.w, j)).toBe(brute(j).length)
         checks++
       }
-      for (let c = U.C; c < crN.maxC; c++) expect(s.w.f.men[i * crN.maxC + c]).toBe(0) // a smaller type leaves the rest of its row empty
+      // a smaller type leaves the rest of its row empty
+      for (let c = U.C; c < crN.maxC; c++) expect(s.w.f.men[i * crN.maxC + c]).toBe(0)
     }
     expect(checks).toBe(27)
     expect(hs.map(h => s.men(h))).toEqual([400 - 21, 250 - 21, 96 - 21])

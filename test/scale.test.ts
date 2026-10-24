@@ -22,7 +22,8 @@ const companies = (n: number): Ruleset =>
 describe('the blocks', () => {
   it('every shape, for 4, 6 and 8 companies and the ceiling: no two places closer than the minimum spacing; the square turns about', () => {
     const worst: Record<string, number> = {}
-    for (const n of [2, 3, 5, 7]) expect(() => new Sim(1, companies(n))).toThrow(/square/) // an open or overlapping square
+    // an open or overlapping square
+    for (const n of [2, 3, 5, 7]) expect(() => new Sim(1, companies(n))).toThrow(/square/)
     for (const rs of [companies(4), napoleonic, companies(8), ceiling]) {
       for (const shape of Object.keys(rs.types.infantry.formations)) {
         const s = new Sim(1, rs)

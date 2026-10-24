@@ -2,7 +2,8 @@
 // JSON. On this machine the numbers are a proxy and pass no gate; the laptop's run (the owner's) is the measurement.
 //
 //   node tools/bench-look.mjs <look page URL> [out.json] [--hold <s>] [--gpu <angle backend>] [--timeout <min>]
-//   A ?bench=<value> in the URL is kept (?bench=macro: the macro colour's arms; ?bench=dof: the depth of field off and on; src/look/main.ts).
+//   A ?bench=<value> in the URL is kept (?bench=macro: the macro colour's arms; ?bench=dof: the depth of field off
+//   and on; src/look/main.ts).
 //   With ?benchtrace=1 in the URL each measured frame is recorded and the trace's enrichment table printed (below).
 //     --hold     seconds measured per camera and arm (default 3; each run also takes at least 20 frames)
 //     --gpu      use the machine's GPU through that ANGLE backend (e.g. metal); default $SHOT_ANGLE, else SwiftShader

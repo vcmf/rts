@@ -1,6 +1,7 @@
-// Builds the look world's data (decision 0012, docs/plans/done/l0-spine.md L0a): the heightfield over the tile
-// plus its margin, the far ring's heights, the river's samples, the fine bank normals, the water data and the cover, from the
-// authoring formulas in src/look/world/author.ts, once, in Node. The page reads the file and never evaluates the formulas.
+// Builds the look world's data (decision 0012, docs/plans/done/l0-spine.md L0a): the heightfield over the
+// tile plus its margin, the far ring's heights, the river's samples, the fine bank normals, the water data
+// and the cover, from the authoring formulas in src/look/world/author.ts, once, in Node. The page reads the
+// file and never evaluates the formulas.
 //   node tools/build-look-data.ts           writes data/painted-world.lookdata
 //   node tools/build-look-data.ts --check   rebuilds in memory and fails if it differs from the committed file
 // Each node's x and z use the same expression as Babylon's CreateGround vertices, so the authored heights land on
@@ -57,8 +58,8 @@ function bankNormals(H: (x: number, z: number) => number): SpanGrid {
 type Pt = readonly [number, number]
 
 // The roads (docs/plans/done/roads.md): every segment of every line, and a grid over the tile listing, per cell, the
-// segments that reach within their half width and SPEC.road.reach m of it (the shader finds the nearest exactly, with no
-// filtering: no ghost where two lines or two sides meet). Throws if a cell needs more than ROAD_SLOTS
+// segments that reach within their half width and SPEC.road.reach m of it (the shader finds the nearest exactly, with
+// no filtering: no ghost where two lines or two sides meet). Throws if a cell needs more than ROAD_SLOTS
 export function roadGrid(): RoadGrid {
   const g = D.spec.road
   const n = D.roadN
@@ -66,8 +67,8 @@ export function roadGrid(): RoadGrid {
   const x0 = -D.spec.tile / 2
   const z0 = x0
   const segs: number[] = []
-  // the mitre tangents (the mean of the two segments' directions at a bend, the segment's own at a free end): the shader
-  // reads the distance along between them, so it is continuous round a bend (no step at the bisector)
+  // the mitre tangents (the mean of the two segments' directions at a bend, the segment's own at a free end): the
+  // shader reads the distance along between them, so it is continuous round a bend (no step at the bisector)
   LINES.forEach((l, li) => {
     const p = l.pts
     const last = p.length - 2

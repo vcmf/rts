@@ -4,7 +4,8 @@
 // src/look/main.ts), in the page's arm (?macro=flat|shader|bake in the URL; bake by default).
 //
 //   node tools/macro-check.mjs <look page URL> [outDir] [--only classes,shimmer,determinism,bake]
-//   node tools/macro-check.mjs <look page URL> [outDir] --selftest     each gated check passes, and fails on its sabotage
+//   node tools/macro-check.mjs <look page URL> [outDir] --selftest
+//     each gated check passes, and fails on its sabotage
 //     (the stripes' sabotage shows in the shader arm only: the bake's texture filtering smooths even hard stripes, and
 //     the flat arm has none; run the self-test with ?macro=shader)
 //
@@ -12,19 +13,19 @@
 //   views over the cover (the far fields, the near fields and the track, the road and the village). The class view
 //   (MACRO_DEBUG: the class the arm paints, unlit) finds where two classes meet: pixels BOUNDARY px apart across a
 //   class change, each with a 5×5 window of its own class (far enough apart that the colours compared are the two
-//   regions', not a soft edge's blend: the bake blends its edges over about 2 m, 20 px at the closest views). The CIE ΔE 2000 between the frame's two windows (their
-//   mean colour, sRGB D65): its median per kind of edge, at least FIELD_DE where a field meets grass (meadow or
-//   pasture), ROAD_DE where a road meets grass, TRACK_DE where a track does. Sabotage: every class painted the meadow's colour
-//   (MACRO_SAB_ONECLASS).
+//   regions', not a soft edge's blend: the bake blends its edges over about 2 m, 20 px at the closest views). The CIE
+//   ΔE 2000 between the frame's two windows (their mean colour, sRGB D65): its median per kind of edge, at least
+//   FIELD_DE where a field meets grass (meadow or pasture), ROAD_DE where a road meets grass, TRACK_DE where a track
+//   does. Sabotage: every class painted the meadow's colour (MACRO_SAB_ONECLASS).
 // - shimmer (as tools/detail-check.mjs's, on the fields): the terrain alone, a ploughed field at the closest zoom and
 //   the far fields at the widest, summer and winter (the furrows hold the snow), the image shifted a quarter pixel a
 //   frame; on the fields' pixels (the class view), a pixel shimmers when its luma differs by over 8/255 from the
 //   previous frame resampled a quarter pixel along. Under SHIMMER_MAX per pair at the closest zoom and SHIMMER_WIDE
 //   at the widest (the water check's limits as they were at L5a, 1 % and 3.5 %: kept here, the water check's
-//   widest re-baselined since for the temperate mood, docs/plans/done/temperate-fixes.md). In winter snow against bare ground makes
-//   every edge pop (main's own ground, on the same pixels: 1.24% at the closest zoom, 1.74% at the widest; L5's
-//   plan): there the closest zoom's limit is main's, rounded up (SHIMMER_WINTER), and the widest's stays SHIMMER_WIDE. Sabotage: hard
-//   stripes never faded with the footprint (MACRO_SAB_STEP).
+//   widest re-baselined since for the temperate mood, docs/plans/done/temperate-fixes.md). In winter snow against bare
+//   ground makes every edge pop (main's own ground, on the same pixels: 1.24% at the closest zoom, 1.74% at the widest;
+//   L5's plan): there the closest zoom's limit is main's, rounded up (SHIMMER_WINTER), and the widest's stays
+//   SHIMMER_WIDE. Sabotage: hard stripes never faded with the footprint (MACRO_SAB_STEP).
 // - determinism: the bakes' hashes after the load, after a rebake, and after a second load: all equal.
 // - bake: the bake's time at the page's sizes, and the full-size run (?macroBench=FULL: FULL² texels, the proposal's
 //   1.8 km at 0.5 m); neither loses the context. Times are reported, not gated (SwiftShader is not a GPU).

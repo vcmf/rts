@@ -41,7 +41,8 @@ const W = 1280
 const H = 720
 const SEP = 0.1
 const MASKED = 96 // a block's pixel: its white and black mask renders differ by more than MASKED/255
-const START = CAMS.find(c => c[0] === 'start').slice(1, 5) // the default view (the goldens' start): alpha, beta, radius, target
+// the default view (the goldens' start): alpha, beta, radius, target
+const START = CAMS.find(c => c[0] === 'start').slice(1, 5)
 const GREYS = [0.3, 0.7] // the negative's two greys, from which each block's matched grey is interpolated
 const SEASON_VALUES = { summer: 0, autumn: 1, late: 2, winter: 3 }
 // name, season value, run the negative
@@ -108,7 +109,8 @@ function render(url, dir, matched = null) {
       ),
       ['shot', `${season}.coats`],
     )
-    // a block's own pixels: drawn flat white, then flat black; the ground and whatever hides a block are the same in both
+    // a block's own pixels: drawn flat white, then flat black; the ground and whatever
+    // hides a block are the same in both
     for (const v of [1, 0]) {
       steps.push(
         ['eval', `__look.lab.setMask(${v}); for (let i = 0; i < 3; i++) __proto.scene.render(); "mask ${v}"`],
@@ -431,7 +433,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   const fi = args.indexOf('--figures')
   if (fi >= 0) args.splice(fi, 1)
-  const stray = args.find(a => a.startsWith('-')) // a flag left unparsed (e.g. '--view cover' passed as one argument) would become the out dir
+  // a flag left unparsed (e.g. '--view cover' passed as one argument) would become the out dir
+  const stray = args.find(a => a.startsWith('-'))
   if (stray) {
     console.error(`guard.mjs: unknown argument ${JSON.stringify(stray)}`)
     process.exit(2)

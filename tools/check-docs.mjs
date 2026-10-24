@@ -34,7 +34,8 @@ const ROOT_PATH = /(?<![\w./@-])((?:docs|prototypes|tools|design)\/[\w./-]*[\w/]
 const REL_PATH = /(?<![\w./-])((?:\.\.\/)+[\w./-]*\.(?:md|html|js|mjs|py))(?![\w])/g
 const MD_NAME = /(?<![\w./-])([\w-]+(?:\/[\w.-]+)*\.md)(?![\w])/g
 const CODE_NAME = /(?<![\w./<-])([\w]+(?:-[\w]+)+(?:\/[\w.-]+)*\.(?:js|mjs|py)|[\w-]+(?:\/[\w.-]+)*\.html)(?![\w])/g
-const TICKED = /`@?([\w./-]+\.(?:md|html|js|mjs|py)|(?:staff-map|plans|research)\/)`/g // folders: only the old top-level ones
+// folders: only the old top-level ones
+const TICKED = /`@?([\w./-]+\.(?:md|html|js|mjs|py)|(?:staff-map|plans|research)\/)`/g
 const MD_LINK = /\]\(<?([^)\s#>]+)>?(#[^)\s]*)?(?:\s+"[^"]*")?\)/g
 const REF_DEF = /^\s*\[[^\]]+\]:\s*<?([^\s>]+)>?/gm
 const AT_IMPORT = /^@([\w./-]+)$/gm

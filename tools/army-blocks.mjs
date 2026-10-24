@@ -1,10 +1,11 @@
 // The army-colour blocks on the look page (src/look/lab.ts, __look.lab.addBlocks): the coats, and the cover's spots,
 // shared by the readability guard (tools/guard.mjs) and L5b's judging kit (tools/ablation-kit.mjs).
-export const ARMY_HEX = { France: '#2C4FA8', Russia: '#2F6B3C', Austria: '#E9E3D3', Britain: '#B3302A' } // docs/art-bible.md §4
+// docs/art-bible.md §4
+export const ARMY_HEX = { France: '#2C4FA8', Russia: '#2F6B3C', Austria: '#E9E3D3', Britain: '#B3302A' }
 export const COATS = Object.keys(ARMY_HEX)
-// the cover's spots (docs/plans/active/l5-macro.md): east of the hill, the coats on each class of the ground's cover that
-// a 20 m line fits on, every block wholly on it: on the ploughed field (18 m across) lines along it, 4.5 m apart; on
-// the road a column of march, the lines end to end along it; on the village ground as on the default view. (The 3 m
+// the cover's spots (docs/plans/active/l5-macro.md): east of the hill, the coats on each class of the ground's cover
+// that a 20 m line fits on, every block wholly on it: on the ploughed field (18 m across) lines along it, 4.5 m apart;
+// on the road a column of march, the lines end to end along it; on the village ground as on the default view. (The 3 m
 // track holds no line; the class check measures it.) Spots: name, x, z, the blocks' yaw (Babylon's: +yaw turns +x
 // toward −z), the column's direction (rad from +x toward +z; +z by default) and the spacing (7 m by default)
 // --view crops (docs/plans/done/stubble-height.md): the coats on a stubble field, its crops grown. The field's

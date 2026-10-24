@@ -176,7 +176,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       const REPLACE = 'c*=1.0+gr*0.58;'
       const src = fs.readFileSync(page, 'utf8')
       if (!src.includes(FIND)) throw new Error(`selftest: "${FIND}" not found in ${page}`)
-      const broken = path.join(path.dirname(page), `.golden-selftest-${process.pid}.html`) // beside the page, so its relative scripts load
+      // beside the page, so its relative scripts load
+      const broken = path.join(path.dirname(page), `.golden-selftest-${process.pid}.html`)
       fs.writeFileSync(broken, src.replace(FIND, REPLACE))
       const gone = () => fs.rmSync(broken, { force: true }) // an interrupted run can leave the copy: it is git-ignored
       const out = path.join(ROOT, 'scratch/golden-selftest')

@@ -165,8 +165,8 @@ describe('armies: the layout', () => {
     expect(Math.hypot(fx, fz)).toBeLessThan(60)
   })
   // the demo map's blocked ground (the page's __armies.blocked sampled every 0.5 m over ±240 m, a bit a sample, row by
-  // row from (−240, −240), by tools/sample-blocked.mjs; read conservatively: blocked when any of the four samples round a
-  // point is)
+  // row from (−240, −240), by tools/sample-blocked.mjs; read conservatively: blocked when any of the
+  // four samples round a point is)
   const bits = gunzipSync(readFileSync(new URL('./fixtures/demo-map-blocked.bin.gz', import.meta.url)))
   const N = 961
   const R = 240
@@ -339,7 +339,8 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
         const o = (f * nv * 2 + v * 2) * 4
         lo = Math.min(lo, p.data[o + 1])
         hi = Math.max(hi, p.data[o + 1])
-        expect(Math.hypot(p.data[o + 4], p.data[o + 5], p.data[o + 6])).toBeGreaterThan(0.5) // (blended: shorter, units.vert normalizes)
+        // (blended: shorter, units.vert normalizes)
+        expect(Math.hypot(p.data[o + 4], p.data[o + 5], p.data[o + 6])).toBeGreaterThan(0.5)
       }
       // m: a man, his bayonet up
       expect(lo).toBeGreaterThan(-0.1)

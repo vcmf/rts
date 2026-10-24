@@ -39,7 +39,8 @@
     { name: 'mid', alpha: -Math.PI / 2 - 0.35, beta: 0.8, radius: 125, t: [-70, 8, 0] },
     { name: 'close', alpha: -Math.PI / 2 - 0.2, beta: 0.6, radius: 80, t: [-95, 8, -60] },
     { name: 'wide', alpha: -Math.PI / 2, beta: 0.7, radius: 260, t: [-100, 8, 150] },
-    { name: 'far', alpha: -Math.PI / 2 - 0.35, beta: 0.98, radius: 260, t: [-110, 8, 230] }, // looks out past the tile edge (+z) at the default yaw; at the camera limits
+    // looks out past the tile edge (+z) at the default yaw; at the camera limits
+    { name: 'far', alpha: -Math.PI / 2 - 0.35, beta: 0.98, radius: 260, t: [-110, 8, 230] },
   ]
   const half = SMW / 2
   const zoom = __proto.zoom
@@ -50,7 +51,8 @@
     radius: zoom ? zoom.wanted : cam.radius,
     target: cam.target.clone(),
   }
-  // views must be ones the player can reach: the camera clamps beta/radius on render, which would silently move the view
+  // views must be ones the player can reach: the camera clamps beta/radius on render,
+  // which would silently move the view
   const yawOk = a =>
     (cam.lowerAlphaLimit == null || a >= cam.lowerAlphaLimit) &&
     (cam.upperAlphaLimit == null || a <= cam.upperAlphaLimit)
@@ -94,7 +96,8 @@
         }
       }
       for (let i = 0; i < C.n; i += 3) {
-        const inTile = Math.abs(C.px[i]) < half - 1 && Math.abs(C.pz[i]) < half - 1 // up to the edge: the exits are where the meshes meet
+        // up to the edge: the exits are where the meshes meet
+        const inTile = Math.abs(C.px[i]) < half - 1 && Math.abs(C.pz[i]) < half - 1
         const farOut = Math.abs(C.px[i]) > half + 20 || Math.abs(C.pz[i]) > half + 20
         if (inTile) {
           add('water', delta(new B.Vector3(C.px[i], C.zw[i], C.pz[i])))
@@ -103,7 +106,8 @@
             const x = C.px[i] - C.tz[i] * side * o
             const z = C.pz[i] + C.tx[i] * side * o
             const q = riverQuery(x, z)
-            if ((q && q.dist < (C.W[i] / 2) * 1.7 + 6) || Math.abs(x) > half || Math.abs(z) > half) continue // another pass of a doubled-back bend, or off the tile
+            // another pass of a doubled-back bend, or off the tile
+            if ((q && q.dist < (C.W[i] / 2) * 1.7 + 6) || Math.abs(x) > half || Math.abs(z) > half) continue
             add('bank', delta(new B.Vector3(x, H(x, z), z)))
           }
         } else if (farOut) {
@@ -178,8 +182,8 @@
     }
   }
   cam.target.copyFrom(t0)
-  // shadow box: every real caster on the tile (each instance's transformed bounding box) lies inside the light camera's box,
-  // clear of the 32 m fade band, and inside its depth range
+  // shadow box: every real caster on the tile (each instance's transformed bounding box) lies inside the light camera's
+  // box, clear of the 32 m fade band, and inside its depth range
   {
     const V = lightCam.getViewMatrix(true)
     const h = SMW / 2

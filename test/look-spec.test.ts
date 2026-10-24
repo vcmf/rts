@@ -247,7 +247,8 @@ describe('world spec', () => {
     const sin = 0.45
     const sm = shadowMapSize(d, 1203.3, 730.1, sin)
     expect(1203.3 / sm.w).toBeLessThanOrEqual(SPEC.texel.shadow)
-    expect(730.1 / sm.h / sin).toBeLessThanOrEqual(SPEC.texel.shadow) // light-space y, stretched on the ground by 1/sin(elevation)
+    // light-space y, stretched on the ground by 1/sin(elevation)
+    expect(730.1 / sm.h / sin).toBeLessThanOrEqual(SPEC.texel.shadow)
     expect(() => shadowMapSize(d, 4000, 700, sin)).toThrow(/shadow map .*min-spec/)
     expect(() =>
       shadowMapSize(

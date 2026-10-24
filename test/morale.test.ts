@@ -485,7 +485,8 @@ describe('determinism', () => {
     s.set(fb, 0.51)
     s.breakNow(r2)
     until(() => s.w.f.fellBack[s.i(fb)] === 1 && s.w.f.ordHead[s.i(fb)] >= 0)
-    expect([s.state(r1), s.state(r2), s.state(fb)]).toEqual([MS_RALLYING, MS_ROUTING, MS_WAVERING]) // the rally lasts 30 s: the fall-back must come first
+    // the rally lasts 30 s: the fall-back must come first
+    expect([s.state(r1), s.state(r2), s.state(fb)]).toEqual([MS_RALLYING, MS_ROUTING, MS_WAVERING])
     const w2 = deserialize(serialize(s.w), lev, cr, true, levTerrain)
     for (let n = 0; n < 1200; n++) {
       advanceTick(s.w)

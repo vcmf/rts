@@ -1,6 +1,7 @@
 // Headless Chrome driver for prototype verification: load a page, run steps, save screenshots.
 // Usage: node tools/shot.mjs <page.html|url> <outDir> [width] [height] ['<steps JSON>']
-// Steps: ["wait",ms] · ["eval","js"] (prints the result; a promise is awaited) · ["shot","name"] · ["tap","KeyD",holdMs]
+// Steps: ["wait",ms] · ["eval","js"] (prints the result; a promise is awaited)
+//   · ["shot","name"] · ["tap","KeyD",holdMs]
 // Exits non-zero on page exceptions/console errors or tool failure, and always cleans up Chrome.
 // Software GL (SwiftShader) by default: good for correctness, NOT for timing GPU frame cost. SHOT_ANGLE=metal (or
 // another ANGLE backend) uses the machine's GPU instead. SHOT_CHROME_ARGS: more Chrome flags, space-separated.
@@ -155,7 +156,8 @@ try {
       }
     }
   }
-  const TIMEOUT = +(process.env.SHOT_TIMEOUT_S || 60) * 1000 // per DevTools call; long evals (formation-measure.js) raise it
+  // per DevTools call; long evals (formation-measure.js) raise it
+  const TIMEOUT = +(process.env.SHOT_TIMEOUT_S || 60) * 1000
   const send = (method, params = {}) =>
     new Promise((res, rej) => {
       const i = ++id
@@ -175,12 +177,14 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +h, deviceScaleFactor: 1, mobile: false })
   await send('Page.navigate', { url })
   const LOAD = +(process.env.SHOT_LOAD_S || 60) // seconds; a busy machine or a slow page raises it
-  for (let i = 0; i < LOAD * 4 && !loaded; i++) await sleep(250) // the page's own script (scene build) runs before the load event
+  // the page's own script (scene build) runs before the load event
+  for (let i = 0; i < LOAD * 4 && !loaded; i++) await sleep(250)
   if (!loaded) throw new Error(`page did not finish loading in ${LOAD}s`)
   for (const [op, a, b] of steps) {
     if (op === 'wait') await sleep(a)
     else if (op === 'eval') {
-      const r = await send('Runtime.evaluate', { expression: a, returnByValue: true, awaitPromise: true }) // a promise is awaited
+      // a promise is awaited
+      const r = await send('Runtime.evaluate', { expression: a, returnByValue: true, awaitPromise: true })
       if (r.exceptionDetails) {
         pageErrors++
         console.log('EVAL-EXC', r.exceptionDetails.exception?.description?.slice(0, 300))

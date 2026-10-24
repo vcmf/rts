@@ -12,10 +12,11 @@
 //   private/shots/                   the shots, named by arm, and private/key.json: which arm each screen's x and y
 //                                    is, the seed and each id. KEEP BOTH FROM THE JUDGES: never publish private/
 //   publish/                         what the judging artifact publishes, and nothing else: the judging page
-//                                    (tools/ablation-judge.html, as judge), publish/screens.json (per screen, side x and side
-//                                    y's ids, no arm names) and publish/media/<id>.jpg and .mp4 (opaque ids)
+//                                    (tools/ablation-judge.html, as judge), publish/screens.json (per screen, side x
+//                                    and side y's ids, no arm names) and publish/media/<id>.jpg and .mp4 (opaque ids)
 // Publish the page in publish/ with root publish/ and its files, as a private artifact with the capabilities
-//   {db: {rules: [{path: 'answers', read: 'owner', write: 'owner'}, {path: 'answers/{self}', read: 'interact', write: 'interact'}]}, user: {}}
+//   {db: {rules: [{path: 'answers', read: 'owner', write: 'owner'},
+//     {path: 'answers/{self}', read: 'interact', write: 'interact'}]}, user: {}}
 // so each judge reads and writes their own answers (answers/<their id>) and the owner reads all of them; without the
 // rules every viewer would read and overwrite every judge's. Judges need Contributor access to save.
 // The page then shuffles the screens and swaps the sides per judge. Needs ffmpeg, and the machine's GPU
@@ -69,8 +70,8 @@ const YAW_RANGE = CAM.yawRange
 const ZOOMS = { close: [START_BETA, CAM.rMin], default: [START_BETA, START_RADIUS], wide: [CAM.betaMax, CAM.rMax] }
 const YAWS = { 'yaw-45': -YAW_RANGE, yaw0: 0, 'yaw+45': YAW_RANGE }
 const SEASONS = { summer: 0, winter: 3 }
-// the pans: FRAMES at 24 fps (3 s), the target moving along the screen's right by PAN of the zoom's distance (at the default
-// zoom about 1.7 px a frame)
+// the pans: FRAMES at 24 fps (3 s), the target moving along the screen's right by PAN of the zoom's distance (at the
+// default zoom about 1.7 px a frame)
 const FRAMES = 72
 const PAN = 0.1
 const W = 1280

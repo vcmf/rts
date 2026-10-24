@@ -134,10 +134,10 @@ describe("the yard's distance", () => {
   })
 })
 
-// the light atlas (src/look/building-light.ts): every instance's tile in a cell of its own, INSET texels from the cell's
-// edge; the exported light UVs' islands at least MIN_GAP texels apart in a tile, every texel any part of a face touches
-// counted (the bake draws a face's corners and edges too), so no read at MAX_LOD brings a neighbour's light in; the
-// export's check (tools/building-to-js.py, light_gap) on the runtime's numbers
+// the light atlas (src/look/building-light.ts): every instance's tile in a cell of its own, INSET texels from the
+// cell's edge; the exported light UVs' islands at least MIN_GAP texels apart in a tile, every texel any part of a face
+// touches counted (the bake draws a face's corners and edges too), so no read at MAX_LOD brings a neighbour's light in;
+// the export's check (tools/building-to-js.py, light_gap) on the runtime's numbers
 describe('the light atlas', () => {
   it('gives each instance a tile of its own, inset from its cell', async () => {
     const { atlasLayout, tileOf, INSET, TILE } = await import('../src/look/building-light.ts')
@@ -172,7 +172,8 @@ describe('the light atlas', () => {
       string,
       { pos: number[]; uv2: number[]; idx: number[] }
     >
-    for (const [name, d] of Object.entries(data)) expect(lightGap(d, n, MIN_GAP), name).toBe(MIN_GAP) // (MIN_GAP: none nearer)
+    // (MIN_GAP: none nearer)
+    for (const [name, d] of Object.entries(data)) expect(lightGap(d, n, MIN_GAP), name).toBe(MIN_GAP)
   })
 })
 

@@ -18,8 +18,8 @@ const page = isUrl
     })(new URL(arg))
   : path.resolve(ROOT, arg)
 // the render check's river points on the look page, the pack's trees unless the URL names a set: the generated woods
-// (the default, docs/plans/done/gen-trees-default.md) overhang the river there (78 % of its points seen at the mid view,
-// against 80 %); the river and look checks run on the default
+// (the default, docs/plans/done/gen-trees-default.md) overhang the river there (78 % of its points seen at the mid
+// view, against 80 %); the river and look checks run on the default
 const renderPage = isUrl
   ? (u => {
       if (/look\.html$/.test(u.pathname) && !u.searchParams.has('trees')) u.searchParams.set('trees', 'pack')
@@ -142,7 +142,8 @@ for (let q = 0; q < queue.length; q++) {
   // the look cases run when the page has a SPEC (read from the first case's report)
   if (q === 0 && rep?.hasSpec) queue.push(...LOOK_CASES)
   const failLine = rep?.failed.find(l => l.startsWith(`${check}-check FAILED: `)) || ''
-  if (rep && /^(EXC|EVAL-EXC) /m.test(out)) rep.other.push('an uncaught page exception') // thrown errors are not console.error calls
+  // thrown errors are not console.error calls
+  if (rep && /^(EXC|EVAL-EXC) /m.test(out)) rep.other.push('an uncaught page exception')
   let ok
   let why
   if (!applied || !ran || !rep) {

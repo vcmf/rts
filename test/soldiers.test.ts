@@ -119,7 +119,8 @@ describe('the soldier layer follows the sim', () => {
     expect(walk.change.max).toBeLessThan(4)
     expect(trot.change.max).toBeLessThan(12)
     expect(walk.change.mean + trot.change.mean).toBeLessThan(3)
-    for (const e of [walk.after, trot.after, guns.after]) expect(e.max).toBeLessThan(1) // the battery's gunners, behind their pieces in the change (known-issues), have fallen in
+    // the battery's gunners, behind their pieces in the change (known-issues), have fallen in
+    for (const e of [walk.after, trot.after, guns.after]) expect(e.max).toBeLessThan(1)
   })
   longIt('halted in the wood, no man moves more than 0.05 m in 10 s (six halt points)', () => {
     for (const [ox, oz] of [
@@ -289,8 +290,8 @@ describe('at 8× (0.2 s soldier steps)', () => {
 // MARCH_BUDGET, so it cannot grow unnoticed. vitest runs this code about 40% slower than plain Node (the
 // page's numbers: tools/bench-cost.ts)
 const FRAME_BUDGET = 4
-// 12: S1e-1's tighter grid (every shape on the field) measures 9.2–9.9 ms on main; the old grid's 10 kept the same
-// margin over about 8
+// 12: S1e-1's tighter grid (every shape on the field) measures 9.2–9.9 ms on main;
+// the old grid's 10 kept the same margin over about 8
 const MARCH_BUDGET = 12
 describe.skipIf(process.env.CI)('cost', () => {
   const shipped = () => new Sim(1, napoleonic)

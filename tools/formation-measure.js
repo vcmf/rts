@@ -186,7 +186,8 @@
       .filter(s => s.r === 0)
       .map(s => s.x)
       .sort((a, b) => a - b)
-    if (n > 0) FCm.paintTerrain(files[0] - 0.3, z + 15, files[n * 3 - 1] + 0.3, z + 24, 'woods') // cells z+15..z+24: 10 m
+    // cells z+15..z+24: 10 m
+    if (n > 0) FCm.paintTerrain(files[0] - 0.3, z + 15, files[n * 3 - 1] + 0.3, z + 24, 'woods')
     F.order('move', { x, z: z + 60 })
     const P = R.orders[style]
     let t = 0

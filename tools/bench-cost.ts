@@ -27,7 +27,8 @@ const warm = Number(process.argv[5] ?? 1)
 const data = loadSimData(new Uint8Array(fs.readFileSync(new URL('../data/formation-field.simdata', import.meta.url))))
 const shippedCr = compileRuleset(napoleonic)
 const rs = men > shippedCr.types[0].slots ? ceiling : napoleonic
-const w: World = makeWorld(data, rs === napoleonic ? shippedCr : compileRuleset(rs), 1, process.env.DEBUG === '1') // a release world, as the page runs (DEBUG=1: the tests' debug world)
+// a release world, as the page runs (DEBUG=1: the tests' debug world)
+const w: World = makeWorld(data, rs === napoleonic ? shippedCr : compileRuleset(rs), 1, process.env.DEBUG === '1')
 const cmd = (c: Command) => issue(w, c)
 const slots: number[] = []
 const spawn = (x: number, z: number, heading: number, side = 0) => {

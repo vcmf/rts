@@ -60,7 +60,8 @@ describe('the edge (#37)', () => {
       ['cavalry', 'line', 256],
       ['battery', 'unlimbered', 96],
     ] as const) {
-      // facing north-east into the corner: its anchor's goal is on the map, its south-eastern flank would cross the edge
+      // facing north-east into the corner: its anchor's goal is on the map, its
+      // south-eastern flank would cross the edge
       const s = sim()
       const h = s.spawn(420, 420, Math.PI / 4, shape, men, 0, unit)
       s.order({ type: 'move', id: h, points: [[598, 598]], append: false })

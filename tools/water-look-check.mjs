@@ -4,8 +4,10 @@
 // (window.__look in src/look/main.ts).
 //
 //   node tools/water-look-check.mjs <look page URL> [outDir] [--only band,seam,pools,shimmer,banks,foam,winter,leaves]
-//   node tools/water-look-check.mjs <look page URL> [outDir] --selftest     each check passes, and fails on its sabotage
-//   SHIMMER_ONLY=closest-winter,widest-winter node tools/water-look-check.mjs <url> --only shimmer     those views only
+//   node tools/water-look-check.mjs <look page URL> [outDir] --selftest
+//     each check passes, and fails on its sabotage
+//   SHIMMER_ONLY=closest-winter,widest-winter node tools/water-look-check.mjs <url> --only shimmer
+//     those views only
 //
 // - band: the ribbon as built (its triangles, rasterised at 0.25 m) against the drawn ground (the tile mesh's own
 //   triangles) and the water data (read as the GPU reads it). The water shows over dry ground only within the band
@@ -16,10 +18,11 @@
 //   groundMat): same geometry, so the same pixels and world points. At the ground's pixels within the band (from the
 //   raw data view), the two frames' largest channel difference: 95th percentile within SEAM_P95, largest within
 //   SEAM_MAX (out of 255). (W4 allowed 0.1% over: isolated shoreline pixels then differed by up to 12, which W5a found
-//   to be undefined derivatives, the shoreline's branches reaching too little past its blend; now exact.) With the band check, equal colours in the band leave no seam where the two surfaces meet
-//   (they intersect there, so they share the world point). What follows each surface's own screen derivatives (the
-//   detail grain's blur, the edges' anti-aliasing) one geometry cannot show; comparing neighbours across the real
-//   boundary cannot tell it from the painted shoreline there (tried: the sabotage and the page measured alike).
+//   to be undefined derivatives, the shoreline's branches reaching too little past its blend; now exact.) With the band
+//   check, equal colours in the band leave no seam where the two surfaces meet (they intersect there, so they share the
+//   world point). What follows each surface's own screen derivatives (the detail grain's blur, the edges'
+//   anti-aliasing) one geometry cannot show; comparing neighbours across the real boundary cannot tell it from the
+//   painted shoreline there (tried: the sabotage and the page measured alike).
 //   Terrain alone, no finishing passes; the sharpest bend at the closest zoom, and two default views, one of them in
 //   winter too (the ice is in the band, W5b). Sabotages: the
 //   water painting itself in the band (WATER_SAB_OWN), the terrain without the band (WATER_SAB_TERRAIN).
@@ -29,29 +32,31 @@
 //   share of bright pixels (over the water's median by BRIGHT) at least FOAM_RATIO times the pools' and FOAM_MIN.
 //   Sabotage: the riffle ignored (WATER_SAB_FLAT).
 // - shimmer (as tools/detail-check.mjs's, on the water): the sharpest bend at the closest and the widest zoom
-//   (the data's textures have no mips), in summer, and in autumn (the leaves) and winter (the ice's edges, W5b), everything drawn, the image shifted a quarter pixel a frame; within 6 px of the water's pixels, a pixel shimmers when its luma
-//   differs by over 8/255 from the previous frame resampled a quarter pixel along. Under SHIMMER_MAX per pair at the
-//   closest zoom; at the widest, where the river's outline (the painted shoreline, the banks hiding the water) is a
-//   large share of the mask, under SHIMMER_WIDE (main measured 6.3% there at W4, the same mask and view: W4's plan; re-baselined since, below). In
-//   winter, bright snow and ice make every painted edge and the grain's clusters pop more (main measures 3.3% at the
-//   closest zoom and 10.9% at the widest, the same views and mask, with W4's even ice; and on the water's own pixels,
-//   the surface eroded 2 px, 3.1% and 11.3%: W5b's plan), so there the limits are main's, rounded down: the mask
-//   under SHIMMER_WINTER and SHIMMER_WINTER_WIDE, the water's own pixels (the ice, its edges and rime, the open
-//   riffles) under SHIMMER_ICE and SHIMMER_ICE_WIDE: W5b's water had to shimmer less than main's (since decision 0042: the dark water's own measurements, below).
+//   (the data's textures have no mips), in summer, and in autumn (the leaves) and winter (the ice's edges, W5b),
+//   everything drawn, the image shifted a quarter pixel a frame; within 6 px of the water's pixels, a pixel shimmers
+//   when its luma differs by over 8/255 from the previous frame resampled a quarter pixel along. Under SHIMMER_MAX per
+//   pair at the closest zoom; at the widest, where the river's outline (the painted shoreline, the banks hiding the
+//   water) is a large share of the mask, under SHIMMER_WIDE (main measured 6.3% there at W4, the same mask and view:
+//   W4's plan; re-baselined since, below). In winter, bright snow and ice make every painted edge and the grain's
+//   clusters pop more (main measures 3.3% at the closest zoom and 10.9% at the widest, the same views and mask, with
+//   W4's even ice; and on the water's own pixels, the surface eroded 2 px, 3.1% and 11.3%: W5b's plan), so there the
+//   limits are main's, rounded down: the mask under SHIMMER_WINTER and SHIMMER_WINTER_WIDE, the water's own pixels (the
+//   ice, its edges and rime, the open riffles) under SHIMMER_ICE and SHIMMER_ICE_WIDE: W5b's water had to shimmer less
+//   than main's (since decision 0042: the dark water's own measurements, below).
 //   The widest limits re-baselined for the temperate mood (decision 0034, the owner's call,
-//   docs/plans/done/temperate-fixes.md), so no longer main's rounded down: its frame is about 7 % more contrasty (half the rise), the
-//   rest spread over the grain, the painted edges and the bloom. Main measured 3.68 to 3.84 % in summer, 4.11 % in
-//   autumn (after the ground's straw turn) and 11.03 to 11.4 % in winter; the limits sit a run's spread above them:
-//   4.0, 4.4 and 11.8 %.
+//   docs/plans/done/temperate-fixes.md), so no longer main's rounded down: its frame is about 7 % more contrasty (half
+//   the rise), the rest spread over the grain, the painted edges and the bloom. Main measured 3.68 to 3.84 % in
+//   summer, 4.11 % in autumn (after the ground's straw turn) and 11.03 to 11.4 % in winter; the limits sit a run's
+//   spread above them: 4.0, 4.4 and 11.8 %.
 //   Re-baselined for the dark water (decision 0042, the owner's call, docs/plans/done/dark-water.md): dark water
 //   against pale banks and light foam makes every painted edge more contrasty, so more of its pixels pass 8/255 under
 //   the same quarter-pixel move. It measured, worst of a run: 1.17 % closest (1.19 % in autumn), 5.57 % widest
 //   (5.99 % in autumn), winter 3.20 % and 12.52 %, the water's own 2.97 % and 14.51 %; the limits sit a run's spread
 //   above them: 1.3, 6.0, 6.5, 3.5, 13.5, 3.2 and 15.5 %.
 //   Re-baselined again for the epic mood, the default (decision 0044, the owner's call): its thinner mist and air make
-//   the river's edges more contrasty. Measured, worst of a run: 1.15 % closest (1.22 % in autumn), 6.83 % widest (6.82 %
-//   in autumn), winter 3.83 % and 13.90 %, the water's own 3.51 % and 15.73 %; the limits a run's spread above them:
-//   1.3, 7.2, 7.2, 4.0, 14.5, 3.7 and 16.5 %.
+//   the river's edges more contrasty. Measured, worst of a run: 1.15 % closest (1.22 % in autumn), 6.83 % widest
+//   (6.82 % in autumn), winter 3.83 % and 13.90 %, the water's own 3.51 % and 15.73 %; the limits a run's spread above
+//   them: 1.3, 7.2, 7.2, 4.0, 14.5, 3.7 and 16.5 %.
 //   Sabotage: aliased hard edges (WATER_SAB_STEP).
 // Frames are 1280×720. Exit 1 on a failure.
 import fs from 'node:fs'
@@ -452,9 +457,10 @@ function shimmer(url, dir, sab) {
 // ---------- banks (W5a) ----------
 // the default view at the three reaches and the sharpest bend at the closest zoom, the terrain alone (the ribbon and
 // the scatter hidden), finished as drawn. Pixels classed from the raw data view: the wet line (0.05–0.3 m from the
-// water), the cut bank's scarp (0.3–1.2 m from it, 0.3–1 m above it: a cut bank rises that fast), the bar (1–2.5 m, under 0.45 m above it), the meadow
-// (8–12 m). Against the meadow's medians: the wet line darker by BANK_WET; the cut bank warmer (red over green) by
-// BANK_EARTH and no lighter; the bar lighter by BANK_BAR and greyer (chroma) by BANK_GREY.
+// water), the cut bank's scarp (0.3–1.2 m from it, 0.3–1 m above it: a cut bank rises that fast), the bar
+// (1–2.5 m, under 0.45 m above it), the meadow (8–12 m). Against the meadow's medians: the wet line darker by
+// BANK_WET; the cut bank warmer (red over green) by BANK_EARTH and no lighter; the bar lighter by BANK_BAR
+// and greyer (chroma) by BANK_GREY.
 const BANK_WET = 0.05
 const BANK_EARTH = 0.03
 const BANK_BAR = 0.04

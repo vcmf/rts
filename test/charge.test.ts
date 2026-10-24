@@ -126,7 +126,8 @@ describe('the charge', () => {
     const g = napoleonic.types.infantry.geometry
     const ia = s.slot(a)
     const ib = s.slot(b)
-    expect(gapBetween(s.w, ia, ib)).toBeCloseTo(20 - g.rankSpacing, 2) // each block reaches half a rank ahead of its front (the heading is kept to 0.1 mrad)
+    // each block reaches half a rank ahead of its front (the heading is kept to 0.1 mrad)
+    expect(gapBetween(s.w, ia, ib)).toBeCloseTo(20 - g.rankSpacing, 2)
     expect(gapBetween(s.w, ib, ia)).toBeCloseTo(gapBetween(s.w, ia, ib), 9)
     const t = new S()
     const c = t.inf(0, 0, 0, 0)
@@ -501,6 +502,7 @@ describe('determinism', () => {
       advanceTick(w)
       if (w.f.alive[1] && w.f.mstate[1] >= MS_ROUTING) broke = true
     }
-    expect([broke, w.f.alive[2] === 1 && !outOfFight(w.f.mstate[2])]).toEqual([true, true]) // the square is there, in the fight
+    // the square is there, in the fight
+    expect([broke, w.f.alive[2] === 1 && !outOfFight(w.f.mstate[2])]).toEqual([true, true])
   })
 })

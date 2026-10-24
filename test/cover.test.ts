@@ -108,8 +108,9 @@ describe('the authored cover', () => {
     expect(seen).toBeGreaterThan(1000)
     expect(all / seen).toBeLessThan(0.05) // (every shape only between close yards)
   })
-  // the roads' gate (shore.glsl, roadPaint: A over ROAD_GATE, no road paint) is sound on a yard's texel only if its A is
-  // no more than its true distance to a line (its centre's, as the cover measures everywhere), to the byte's rounding
+  // the roads' gate (shore.glsl, roadPaint: A over ROAD_GATE, no road paint) is sound on a yard's texel
+  // only if its A is no more than its true distance to a line (its centre's, as the cover measures
+  // everywhere), to the byte's rounding
   it("wears a yard's texel no more than its distance to the nearest line", () => {
     let n = 0
     for (let j = 0; j < g.n; j++) {

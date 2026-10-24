@@ -83,7 +83,8 @@ export const small: Ruleset = {
     support: { ...napoleonic.morale.support, reach: 100 },
   },
 }
-export { ceiling } from '../src/rulesets/napoleonic.ts' // the ceiling (decision 0018): companies of 45 files, 810 places
+// the ceiling (decision 0018): companies of 45 files, 810 places
+export { ceiling } from '../src/rulesets/napoleonic.ts'
 export const cr: Compiled = compileRuleset(small)
 export const shipped: Compiled = compileRuleset(napoleonic) // the scenarios' ruleset
 const baseTerrain: Terrain = buildTerrain(data, cr)

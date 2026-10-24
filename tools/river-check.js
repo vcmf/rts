@@ -117,8 +117,9 @@
     pop,
   )
   // the meadow follows the placement rule too: its growth as the GPU reads it is 0 in the formation zones and over the
-  // water and its banks (the crops too, and none on the floodplain), at every half metre of a grid over the near field; and it grows over a real share of the tile (between a
-  // fifth and four fifths of its texels), so a growth that failed everywhere, or nowhere, is caught
+  // water and its banks (the crops too, and none on the floodplain), at every half metre of a grid over the near field;
+  // and it grows over a real share of the tile (between a fifth and four fifths of its texels), so a growth that failed
+  // everywhere, or nowhere, is caught
   if (meadow) {
     // a clump's blades reach the page's grass reach (__look.meadow.reach: CLUMP_REACH, 1.45 m, or the combed meadow's
     // CLUMP_REACH_FLOW) from its root, a crop's CLUMP_REACH: a growing point fails if its root, or any of eight
@@ -212,8 +213,8 @@
     }
   }
   check('widthRange', wmin >= 3.99 && wmax <= 11.01, [+wmin.toFixed(2), +wmax.toFixed(2)])
-  // stretches differ (the owner's complaint): width averaged over one bend wavelength (~11 W0, ±22 samples), widest stretch
-  // vs narrowest in the tile. Pointwise percentiles would pass on the bend/straight alternation alone.
+  // stretches differ (the owner's complaint): width averaged over one bend wavelength (~11 W0, ±22 samples), widest
+  // stretch vs narrowest in the tile. Pointwise percentiles would pass on the bend/straight alternation alone.
   const inTileIdx = []
   for (let i = 0; i < C.n; i++) if (Math.abs(C.px[i]) < SMW / 2 && Math.abs(C.pz[i]) < SMW / 2) inTileIdx.push(i)
   const avgs = []
@@ -366,7 +367,8 @@
       const z = C.pz[i] + C.tx[i] * a
       const q = riverQuery(x, z)
       if (!detailed(x, z)) continue
-      const reach = q && (W2 ? bankReachAt(q) + lerpA(C.W, q) / 4 + SMW / TSUB : (lerpA(C.W, q) / 2) * 1.05) // the bank, the carve's hand-over to the trough, a cell
+      // the bank, the carve's hand-over to the trough, a cell
+      const reach = q && (W2 ? bankReachAt(q) + lerpA(C.W, q) / 4 + SMW / TSUB : (lerpA(C.W, q) / 2) * 1.05)
       const bank = q && q.dist < reach
       for (const [dx, dz] of [
         [1, 0],

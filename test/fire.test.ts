@@ -154,7 +154,8 @@ describe('who may fire at whom', () => {
     const s = new W()
     const a = s.spawn(0, -100, Z, E)
     s.spawn(1, 0, Z, -E)
-    // a friendly line 20 m ahead, shifted north so it covers A's northern half (companies 2 and 3 face north of the axis)
+    // a friendly line 20 m ahead, shifted north so it covers A's northern half (companies
+    // 2 and 3 face north of the axis)
     s.spawn(0, -80, Z + 15, E, { men: 100 })
     s.run(40)
     const shares = [0, 1, 2, 3].map(c => aimOf(s.w, s.i(a), c).share)
@@ -196,7 +197,8 @@ describe('Face about', () => {
     const i = s.i(a)
     // the stride of the per-company rows (the S1a block has 4 companies)
     const C = s.w.cr.maxC
-    for (let c = 0; c < 4; c++) s.w.f.men[i * C + c] = 20 + c // distinct strengths, so each company's men can be told apart
+    // distinct strengths, so each company's men can be told apart
+    for (let c = 0; c < 4; c++) s.w.f.men[i * C + c] = 20 + c
     const pairs = (dt: number) =>
       [0, 1, 2, 3]
         .map(
@@ -488,7 +490,8 @@ describe('morale', () => {
     expect(s.w.f.runs[s.i(h)]).toBe(1)
     let n = s.w.f.ordHead[s.i(h)]
     while (n >= 0 && s.w.ord.type[n] !== O_MOVE) n = s.w.ord.next[n]
-    expect(n >= 0 && s.w.ord.x[n] > s.w.f.x[s.i(h)] + 100).toBe(true) // the first run is still the rear (east), not the fan's next
+    // the first run is still the rear (east), not the fan's next
+    expect(n >= 0 && s.w.ord.x[n] > s.w.f.x[s.i(h)] + 100).toBe(true)
   })
   it('the opening volleys at 50 m do not break a fresh line in its first minute', () => {
     for (let seed = 1; seed <= 5; seed++) {

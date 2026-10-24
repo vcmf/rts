@@ -105,7 +105,8 @@ describe('the plan', () => {
     s.until(() => s.shape(line) !== 'square', 150)
     const zq = s.z(line)
     s.advance(60)
-    expect([s.shape(line), s.orders(line) > 0, s.z(line)]).toEqual(['square', true, zq]) // in square, holding, its march kept
+    // in square, holding, its march kept
+    expect([s.shape(line), s.orders(line) > 0, s.z(line)]).toEqual(['square', true, zq])
     s.order({ type: 'move', id: unitHandle(0), points: [[0, -500]], append: false }) // the regiment rides away
     s.until(() => s.z(unitHandle(0)) > -400, 400)
     s.advance(napoleonic.melee.refuge.hold + 120)
@@ -197,7 +198,8 @@ describe('the plan', () => {
   })
   it('a battalion struck in melee stands, keeping its plan march, and goes on with it once the melee is over', () => {
     const plan: PlanStep[] = [{ at: 1, unit: 1, cmd: { type: 'move', points: [[300, 100]], append: false } }]
-    const rs = { ...napoleonic, melee: { ...napoleonic.melee, refuge: { ...napoleonic.melee.refuge, alert: 0 } } } // no square: the melee alone
+    // no square: the melee alone
+    const rs = { ...napoleonic, melee: { ...napoleonic.melee, refuge: { ...napoleonic.melee.refuge, alert: 0 } } }
     const s = new Sim(1, rs, openBattlefield(rs), OPEN_DATA)
     attachScenario(s.w, { plan })
     s.cmd({
@@ -383,7 +385,8 @@ describe('routers break ranks (#39)', () => {
     const s = battle({}, [[0, 0, -200, 0]])
     const h = unitHandle(0)
     s.order({ type: 'form', id: h, shape: 'square' })
-    s.until(() => s.layout(h).name === 'line' && s.w.f.trans[0] === 1 && bracedOf(s.w, 0) < at, 200) // its progress into the square
+    // its progress into the square
+    s.until(() => s.layout(h).name === 'line' && s.w.f.trans[0] === 1 && bracedOf(s.w, 0) < at, 200)
     s.w.f.morale[0] = 0.1
     s.tick()
     return { state: s.w.f.mstate[0], shape: s.shape(h) }

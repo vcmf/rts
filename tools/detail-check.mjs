@@ -3,7 +3,8 @@
 // page's hooks (window.__look in src/look/main.ts).
 //
 //   node tools/detail-check.mjs <look page URL> [outDir] [--only scale,seams,shimmer,tiling,banks]
-//   node tools/detail-check.mjs <look page URL> [outDir] --defines DETAIL_L0     the checks on a variant (e.g. the L0 arm)
+//   node tools/detail-check.mjs <look page URL> [outDir] --defines DETAIL_L0
+//     the checks on a variant (e.g. the L0 arm)
 //   node tools/detail-check.mjs <look page URL> --selftest [outDir]
 //     each check passes on the page and fails on its sabotage (a variant of the terrain's shader, by define)
 //
@@ -111,8 +112,8 @@ function halfLag(v, w, x0, y0, n, dx, dy, maxLag = 40) {
 }
 
 // ---------- scale ----------
-// the sweep's and the seams' closest zoom: the start focus sits on the map's hill, where the closest zoom (15 m) is held
-// out to up to 24.3 m (the eye's clearance, decision 0051) and the views must measure the radius they ask for
+// the sweep's and the seams' closest zoom: the start focus sits on the map's hill, where the closest zoom (15 m) is
+// held out to up to 24.3 m (the eye's clearance, decision 0051) and the views must measure the radius they ask for
 const R_NEAR = 25
 const SWEEP = Array.from({ length: 8 }, (_, i) => R_NEAR * (CAM.rMax / R_NEAR) ** (i / 7))
 const PITCHES = [BETA0, CAM.betaMax]
@@ -163,8 +164,9 @@ function scale(url, dir, defs) {
 const SEAM_ZOOMS = [R_NEAR, R0, CAM.rMax]
 // The largest step between neighbouring pixels a smooth texture can draw, in the debug view's red units (0–255):
 // its steepest texel step × the most texels a pixel can span (octave A spans at least half a tile; the incidence
-// stretches it by up to 1/√cos, the cos no less than EDGE_ON: edge-on faces are skipped) × the largest renormalisation (√8: two planes, two octaves,
-// two variants) × the strength × the debug view's ½ × 255; plus 2 for rounding both pixels.
+// stretches it by up to 1/√cos, the cos no less than EDGE_ON: edge-on faces are skipped) × the largest
+// renormalisation (√8: two planes, two octaves, two variants) × the strength × the debug view's ½ × 255;
+// plus 2 for rounding both pixels.
 const seamLimit = maxStep =>
   ((maxStep * (SPEC.sizes.grain / (TILE_PX / 2))) / Math.sqrt(Math.max(DET.minCos, EDGE_ON))) *
     Math.sqrt(8) *
@@ -173,7 +175,9 @@ const seamLimit = maxStep =>
     255 +
   2
 const EDGE_ON = 0.17 // the incidence's cosine below which a face is edge-on (about 10° from it)
-const KEEPS = 0.8 // and at twice the resolution (four quarter frames) a step there is still this fraction of it (a step is a step at any resolution; a transition under a pixel wide shrinks, if not to half)
+// and at twice the resolution (four quarter frames) a step there is still this fraction of it (a step is a step at any
+// resolution; a transition under a pixel wide shrinks, if not to half)
+const KEEPS = 0.8
 const ISOLATED = 3 // and a seam step is this many times larger than both steps beside it (a smooth slope's are alike)
 // The river's banks (where the bank normals turn the shading normal by over about 2.5°, from the incidence view) are
 // left out: a cut bank turns it by tens of degrees within a pixel at the wider zooms, a real crease the grain follows;
