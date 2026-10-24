@@ -63,10 +63,12 @@ These are owner decisions and merges, not code:
 
   None is from 1805. The cadastre is the most accurate of the three. A survey shows roads, villages and woods more
   completely. Period battle maps of 1805 serve as checks.
-- **The scale: decided, decision 0061.** Maps are square, 3, 4 or 6 km a side, at true scale. Austerlitz is a 6 km crop
-  around the Pratzen and the Goldbach, fought by 32,000 soldiers. The prototype's 2.5× squeeze of the whole field is
-  dropped. So:
-  - the importer writes true-scale heights;
+- **The scale: decided, decision 0061.** Maps are square, 2 to 6 km a side in whole kilometres, 3 km by default,
+  designed for play. Features keep believable sizes and slopes, and the empty distances between them are shortened.
+  Austerlitz is a 6 km map after the real field, for the 32,000-soldier extreme. The prototype's uniform 2.5× squeeze
+  is dropped. So:
+  - the importer writes the real heights at true local scale; the editor then places and arranges the pieces of
+    terrain the map is built from (step 4);
   - the sim's 2 m grids take the map engine's compact format, tiled or compressed (about 90 MB at 6 km, an estimate;
     today's format would be about 200 MB): item S-data below;
   - the 3D world streams in tiles around the camera, with bakes per tile: item E-tiles below, before step 5;
@@ -135,10 +137,11 @@ edit, and validates.
 
 ### 4. Draw Austerlitz 1805
 
-Real authoring work, on the editor, from the chosen period map, inside the 6 km crop (decision 0061). Its exact
-extent is chosen first, around the Pratzen and the Goldbach: the whole field is about 13 km north to south, so the
-Brünn–Olmütz highway and the Satschan and Menitz ponds may fall outside it, and enter only as edges or reinforcement
-routes.
+Real authoring work, on the editor, from the real terrain and the chosen period map, as a 6 km designed map
+(decision 0061). The whole field is about 13 km north to south, so the map keeps its landmarks at their real sizes
+and moves them closer: the Pratzen plateau, the Goldbach valley, the villages along it, the ponds, the highway on the
+northern edge. How the relief is rearranged (cutting and placing pieces of the real heightfield, or a relief drawn
+over them with relief edits) is settled at the start of this step.
 - **Ways:** the period roads and tracks in the crop.
 - **Water:** the Goldbach and its brooks, and whatever of the ponds lies in the crop, as in 1805.
 - **Villages:** those in the crop (Pratzen, Sokolnitz, Telnitz, Kobelnitz, Puntowitz and others), as street villages
@@ -200,8 +203,8 @@ track, Track S). Each gets its own plan in its track; this plan only records tha
 
 ## Open questions for the owner
 
-1. **The scale.** Decided 2026-10-24, decision 0061: square maps of 3, 4 or 6 km a side at true scale; Austerlitz a
-   6 km crop (this replaces an earlier answer, the prototype's 2.5× squeeze).
+1. **The scale.** Decided 2026-10-24, decision 0061: square maps of 2 to 6 km a side, 3 km by default, designed for
+   play at true local scale; Austerlitz a 6 km map after the real field.
 2. **The real heights.** Decided 2026-10-24: the derived heightfield is committed, with ČÚZK's credit (CC BY 4.0).
 3. **The period map** to trace, and whether its licence allows tracing.
 4. **The draft page:** the plan makes the map engine's flat draft page a debug overlay of the lit view, not a view of its
