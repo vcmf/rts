@@ -585,7 +585,8 @@ const canvas=document.getElementById('c'),inkC=document.getElementById('ink'),in
 const GL_DPR=Math.min(2,window.devicePixelRatio||1);
 let SHARP_INK=Q.get('sharp')==='1';
 try{if(!Q.has('sharp')&&localStorage.getItem('staffmap.sharp')==='1')SHARP_INK=true;}catch{}
-let DPR=SHARP_INK?GL_DPR:1;   // the ink canvas
+const inkRatio=()=>SHARP_INK?Math.max(1,Math.round(GL_DPR)):1;   // whole: the hatch tiles are a whole number of pixels
+let DPR=inkRatio();   // the ink canvas
 const engine=new B.Engine(canvas,true,{preserveDrawingBuffer:true,stencil:false},false);
 engine.setHardwareScalingLevel(1/GL_DPR);
 const scene=new B.Scene(engine);scene.skipPointerMovePicking=true;scene.clearColor=new B.Color4(0.91,0.88,0.83,1);
@@ -1962,41 +1963,49 @@ let figKey='';
 /**
  * One unit's figures, cached on the unit: built only when what places them changes (position, facing, formation,
  * losses, the zoom's rise), so a still unit costs a copy, not a rebuild of every man (docs/plans/active/perf-150.md).
- * Returns { kinds: { inf, cav, gun }, each { mat, info, n } }.
+ * Returns its fields and kinds: { inf, cav, gun }, each { mat, info, n }.
  */
 function unitFigures(u, rise) {
   const n = alive(u);
-  const key = [u.x, u.z, u.dface, u.form, u.prev, u.morph, n, u.state === 'idle' ? 0 : 1, rise].join(':');
-  if (u.figs && u.figs.key === key) return u.figs;
-  const per = u.type === 'art' ? { gun: n, inf: n * 4 } : { [u.type]: n };
-  const kinds = {};
-  for (const k in per) kinds[k] = { mat: new Float32Array(per[k] * 16), info: new Float32Array(per[k] * 4), n: 0 };
+  const dq = Math.round(u.dface * 1000);   // a turn still easing by less than a thousandth is finished, for the figures
+  const moving = u.state === 'idle' ? 0 : 1;
+  const c = u.figs;
+  if (c && c.x === u.x && c.z === u.z && c.dq === dq && c.form === u.form && c.prev === u.prev && c.morph === u.morph
+    && c.n === n && c.moving === moving && c.rise === rise) return c;
+  // the buffers sized once for the full unit (its men only fall) and refilled in place
+  const per = u.type === 'art' ? { gun: u.N, inf: u.N * 4 } : { [u.type]: u.N };
+  const kinds = c ? c.kinds : {};
+  for (const k in per) {
+    if (!kinds[k]) kinds[k] = { mat: new Float32Array(per[k] * 16), info: new Float32Array(per[k] * 4), n: 0 };
+    kinds[k].n = 0;
+  }
   const f = [Math.sin(u.dface), Math.cos(u.dface)], r = [Math.cos(u.dface), -Math.sin(u.dface)];
-  const e = easeIO(u.morph), mv = u.state !== 'idle' ? 1 : 0, e3 = [0, 0, 0], e4 = [0, 0, 0];
+  const e = easeIO(u.morph), e3 = [0, 0, 0], e4 = [0, 0, 0];
   const put = (F, i, ox = 0, oz = 0) => {
     slot(u, u.prev, i, n, e3);
     slot(u, u.form, i, n, e4);
     const sx = lerp(e3[0], e4[0], e) + ox, sz = lerp(e3[1], e4[1], e) + oz, ya = lerp(e3[2], e4[2], e);
     const x = u.x + r[0] * sx + f[0] * sz, z = u.z + r[1] * sx + f[1] * sz;
-    putFig(F, x, Hs(x, z) * rise, z, u.dface + ya, hash(u.id, i), mv, u.sideI);
+    putFig(F, x, Hs(x, z) * rise, z, u.dface + ya, hash(u.id, i), moving, u.sideI);
   };
   for (let i = 0; i < n; i++) {
     if (u.type === 'art') {
       put(kinds.gun, i);
-      for (let c = 0; c < 4; c++) put(kinds.inf, i, c % 2 ? 1.4 : -1.4, -2.4 - Math.floor(c / 2) * 1.3);   // the crew
+      for (let k = 0; k < 4; k++) put(kinds.inf, i, k % 2 ? 1.4 : -1.4, -2.4 - Math.floor(k / 2) * 1.3);   // the crew
     } else put(kinds[u.type], i);
   }
-  u.figs = { key, kinds };
+  u.figs = { x: u.x, z: u.z, dq, form: u.form, prev: u.prev, morph: u.morph, n, moving, rise, kinds };
   return u.figs;
 }
 
 function updateFigures(force){
   const easing=UNITS.some(u=>!u.gone&&Math.abs(angTo(u.dface,u.face))>1e-3);
-  const key=GT+':'+RISE().toFixed(4)+':'+st('stand').toFixed(3)+':'+(VP?VP.join(','):'');if(!force&&!easing&&key===figKey)return;figKey=key;
+  // the units in view: a unit counts while any of its ground (its extent around its front point) can be on screen
+  const shown=UNITS.filter(u=>{if(u.gone)return false;if(!VP)return true;const d=dims(u,u.form,alive(u)),ext=Math.hypot(d[0],d[1])+20;return onScreen(P2(u.x,u.z),60+ext/MPP);});
+  const key=GT+':'+RISE().toFixed(4)+':'+st('stand').toFixed(3)+':'+shown.map(u=>u.id).join(',');if(!force&&!easing&&key===figKey)return;figKey=key;
   for(const k in FIGS)FIGS[k].n=0;
   if(st('stand')>0){const rise=RISE();
-    for(const u of UNITS){if(u.gone)continue;
-      if(VP&&!onScreen(P2(u.x,u.z),400))continue;   // off screen: neither built nor drawn (all, before the first frame)
+    for(const u of shown){
       const{kinds}=unitFigures(u,rise);
       for(const k in kinds){const src=kinds[k],F=FIGS[k];F.mat.set(src.mat.subarray(0,src.n*16),F.n*16);F.info.set(src.info.subarray(0,src.n*4),F.n*4);F.n+=src.n;}
     }}
@@ -2078,7 +2087,7 @@ $('trails').onclick=e=>{SHOW_TRAILS=!SHOW_TRAILS;e.target.classList.toggle('on',
   };
   $('sharptg').onclick = () => {
     SHARP_INK = !SHARP_INK;
-    DPR = SHARP_INK ? GL_DPR : 1;
+    DPR = inkRatio();
     try { localStorage.setItem('staffmap.sharp', SHARP_INK ? '1' : '0'); } catch {}
     for (const k in PATS) delete PATS[k];   // the hatch patterns are made at the ink ratio
     resize();

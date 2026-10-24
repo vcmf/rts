@@ -28,11 +28,18 @@ In `prototypes/staff-map.html`:
 5. **The ink redrawn only when it can have changed:** the camera, the game clock, the pointer, a selection, or anything
    still animating.
 
+6. **The ink at a pixel ratio of 1** on high-density screens, with WebGL at the screen's ratio. A **sharp ink** toggle (or
+   `?sharp=1`) brings back the full ratio, rounded to a whole number. This is a visible change on HiDPI screens: the
+   marks are a touch softer. It is the default because of the cost measured on the 4K test machine.
+7. **The figures** of each unit built only when the unit changes, into buffers sized once, and skipped when none of the
+   unit's ground can be on screen.
+
 Out of scope, for a next step if the spikes matter: drawing the blocks and the smoke in WebGL (instanced quads).
 
 ## Acceptance
 
-Mean frame and p95 at map, mid and close zoom, idle and in a fight, against the page before; the look unchanged.
+Mean frame and p95 at map, mid and close zoom, idle and in a fight, against the page before, naming the test machine.
+The look is unchanged, except for the softer ink on HiDPI screens (item 6), which can be switched off.
 
 ## Results
 
@@ -146,3 +153,17 @@ of 2, 30×.
   | R700 | 10.5–23 ms | 6.7 ms (`updateFigures` 2.4) |
   | R400 | — | 1.4 ms |
   | R200 | — | 1.3 ms |
+- **Round 1 of the 4K changes**: severe. Soldiers vanished when a unit's front point was off screen but its wing or rear
+  battalion was still in view; the cull tested only that point. Fixed: a unit is culled only when its whole extent is
+  off screen.
+
+  With:
+  - the figures' key built from the units in view, not the camera matrix, so panning no longer recopies every soldier;
+  - each unit's buffers sized once and refilled in place;
+  - the facing compared to a thousandth, so a finished turn stops rebuilding;
+  - the sharp-ink ratio rounded to a whole number, so the hatching has no seams;
+  - one `inkRatio` rule;
+  - this plan's scope.
+
+  Measured again on machine A's GPU, ratio 2: mid 1.0 ms paused / 6.0 ms at 30×; R700 1.4 / 6.0 ms; R400 1.5 / 1.2 ms.
+  The culling uses the previous frame's camera, one frame late at the edges; the extent margin covers it.
