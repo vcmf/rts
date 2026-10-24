@@ -103,6 +103,12 @@ float unitShadowAt(vec3 wp){
   vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,8.0*uUnitTexel.x,e.x)*smoothstep(0.0,8.0*uUnitTexel.y,e.y);
   return s*uShadowsOn*fade;}
 #endif
+#ifdef UNIT_SHADOWS
+// the figures' shadow at a point: the map's, its share of the zoom's cross-fade (uUnitFar: the simple shadows' share,
+// decision 0049; they are drawn over the receivers, src/look/shaders/unitdecal.frag), read only where it counts
+uniform float uUnitFar;
+float unitShadowMix(vec3 wp){return uUnitFar<1.0?unitShadowAt(wp)*(1.0-uUnitFar):0.0;}
+#endif
 // BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask, A the contact under trees (outside the
 // map: 1, no contact). groundOcc: the occlusion of the ground and what grows flat on it, contact included
 uniform sampler2D uLM;uniform mat4 uLMVP;uniform float uAO,uMist,uShafts,uBack;

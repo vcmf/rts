@@ -29,7 +29,8 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
 
 ## Commands
 
-- Game code: `npm install`, then `npm test` (lint, typecheck, Vitest; Node ≥ 22.18). Sim data:
+- Game code: `npm install`, then `npm test` (lint, `format:check`, typecheck, Vitest; Node ≥ 22.18). Layout:
+  `npm run format` (Prettier and ESLint's fixes, decision 0052) before committing. Sim data:
   `node tools/build-sim-data.ts` (`--check` compares with the committed file). Look data:
   `node tools/build-look-data.ts` (same `--check`); `npm run build:data` and `npm run check:data` run both.
 - Open a prototype: `prototypes/painted-cinematic.html` in Chrome (works from `file://`).
@@ -42,11 +43,11 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
   `node tools/detail-check.mjs <url> --selftest`, the water data's `node tools/water-check.mjs [<url>] --selftest`,
   the painted water's `node tools/water-look-check.mjs <url> --selftest`; see their headers.
 - Docs check: `node tools/check-docs.mjs` (every doc path resolves, front matter, decision numbers).
-- CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint,
-  typecheck, `check:data`, `check:docs`, Vitest, build. On PRs into `epic/**` and on all those pushes, Vitest
-  with coverage, uploaded to Codecov (informational only). Coverage makes the suite about six times slower, so
-  that run skips the tests marked `longIt` (they run in the check job) and gives each test a longer budget. The cost tests skip when `CI` is set:
-  run them locally. `npm run coverage` gives the same report locally (`coverage/`).
+- CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint, `format:check`,
+  typecheck, `check:data`, `check:docs`, Vitest, build. On PRs into `epic/**` and on all those pushes, Vitest with
+  coverage, uploaded to Codecov (informational only). Coverage makes the suite about six times slower, so that run skips
+  the tests marked `longIt` (they run in the check job) and gives each test a longer budget. The cost tests skip when
+  `CI` is set: run them locally. `npm run coverage` gives the same report locally (`coverage/`).
 - Regenerate model data: `node tools/obj-to-js.mjs`; `tools/blend-to-js.py` with Blender (see its header).
 
 ## Workflow (every PR)

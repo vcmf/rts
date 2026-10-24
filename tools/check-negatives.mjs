@@ -8,14 +8,28 @@ import path from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const arg = process.argv[2] || 'prototypes/painted-cinematic.html', isUrl = /^https?:\/\//.test(arg)
+const arg = process.argv[2] || 'prototypes/painted-cinematic.html'
+const isUrl = /^https?:\/\//.test(arg)
 // a URL loads with the blur off unless it sets ?dof (decision 0024: the pixel checks measure the paint)
-const page = isUrl ? (u => { if (!u.searchParams.has('dof')) u.searchParams.set('dof', '0'); return u.href })(new URL(arg)) : path.resolve(ROOT, arg)
+const page = isUrl
+  ? (u => {
+      if (!u.searchParams.has('dof')) u.searchParams.set('dof', '0')
+      return u.href
+    })(new URL(arg))
+  : path.resolve(ROOT, arg)
 // the render check's river points on the look page, the pack's trees unless the URL names a set: the generated woods
-// (the default, docs/plans/done/gen-trees-default.md) overhang the river there (78 % of its points seen at the mid view,
-// against 80 %); the river and look checks run on the default
-const renderPage = isUrl ? (u => { if (/look\.html$/.test(u.pathname) && !u.searchParams.has('trees')) u.searchParams.set('trees', 'pack'); return u.href })(new URL(page)) : page
-if (!isUrl && !fs.existsSync(page)) { console.error(`check-negatives: no page at ${page}`); process.exit(2) }
+// (the default, docs/plans/done/gen-trees-default.md) overhang the river there (78 % of its points seen at the mid
+// view, against 80 %); the river and look checks run on the default
+const renderPage = isUrl
+  ? (u => {
+      if (/look\.html$/.test(u.pathname) && !u.searchParams.has('trees')) u.searchParams.set('trees', 'pack')
+      return u.href
+    })(new URL(page))
+  : page
+if (!isUrl && !fs.existsSync(page)) {
+  console.error(`check-negatives: no page at ${page}`)
+  process.exit(2)
+}
 const src = f => fs.readFileSync(path.join(ROOT, 'tools', f), 'utf8')
 const CHECKS = { render: src('render-check.js'), river: src('river-check.js'), look: src('look-check.js') }
 
@@ -23,60 +37,137 @@ const CHECKS = { render: src('render-check.js'), river: src('river-check.js'), l
 const CASES = [
   ['render', 'real scene', null, null],
   ['render', 'water sunk under the bed', 'scene.getMeshByName("water").position.y = -40', '.water='],
-  ['render', 'far-ring river line blanked', '{ const g = riverMaskCanvas.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, MASKN, MASKN); riverMask.update(false) }', '.farLine='],
+  [
+    'render',
+    'far-ring river line blanked',
+    '{ const g = riverMaskCanvas.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, MASKN, MASKN); riverMask.update(false) }',
+    '.farLine=',
+  ],
   ['render', 'shadow box shrunk', 'lightCam.orthoLeft *= 0.6; lightCam.orthoRight *= 0.6', 'shadow box:'],
   ['render', 'panning in the view plane', 'camera.mapPanning = false', 'left the bounds'],
   ['river', 'real scene', null, null],
-  ['river', 'a tree in the river', 'groups[Object.keys(groups).find(k => /^(CommonTree_1|Gen_oak_)/.test(k))].push([RIVER.px[RIVER.n >> 1], RIVER.pz[RIVER.n >> 1], 4, 0, 0.5])', 'instancesOverWater'],
+  [
+    'river',
+    'a tree in the river',
+    'groups[Object.keys(groups).find(k => /^(CommonTree_1|Gen_oak_)/.test(k))].push([RIVER.px[RIVER.n >> 1], RIVER.pz[RIVER.n >> 1], 4, 0, 0.5])',
+    'instancesOverWater',
+  ],
   ['river', 'a bush in a formation zone', '(groups.Bush_1 ||= []).push([-5, -20, 2, 0, 0.5])', 'instancesInZones'],
-  ['river', 'wheat on the floodplain', '{ const z = 40; (groups.Wheat ||= []).push([RIVER.axisX(z) + 30, z, 1.0, 0, 0.5]) }', 'wheatOnFloodplain'],
+  [
+    'river',
+    'wheat on the floodplain',
+    '{ const z = 40; (groups.Wheat ||= []).push([RIVER.axisX(z) + 30, z, 1.0, 0, 0.5]) }',
+    'wheatOnFloodplain',
+  ],
 ]
 // the look page's own checks (tools/look-check.js): only where the page has them (the prototype has no SPEC)
 const LOOK_CASES = [
   // the river's W2 banks, on the look page only: every bend's cut bank on the wrong side, so the check measures the
   // bar as the cut bank
-  ['river', 'cut banks on the inner side', 'for (let i = 0; i < RIVER.n; i++) RIVER.A[i] = -RIVER.A[i]', 'cutBankVsBar'],
+  [
+    'river',
+    'cut banks on the inner side',
+    'for (let i = 0; i < RIVER.n; i++) RIVER.A[i] = -RIVER.A[i]',
+    'cutBankVsBar',
+  ],
   // W5a: a reed out on the meadow, far from the water
-  ['river', 'a reed far from the water', '(groups.Reed ||= []).push([RIVER.px[RIVER.n >> 1] + 30, RIVER.pz[RIVER.n >> 1], 1.6, 0, 0.5])', 'reedsAwayFromWater'],
+  [
+    'river',
+    'a reed far from the water',
+    '(groups.Reed ||= []).push([RIVER.px[RIVER.n >> 1] + 30, RIVER.pz[RIVER.n >> 1], 1.6, 0, 0.5])',
+    'reedsAwayFromWater',
+  ],
   // L5d: the meadow's crops grown everywhere (docs/plans/done/l5d-crops.md)
   ['river', 'crops everywhere', '__look.meadow.cropAt = () => 1', 'cropsOnFloodplain'],
   ['river', 'no crops', '__look.meadow.cropAt = () => 0', 'cropsInSceneField'],
   ['look', 'real scene', null, null],
   ['look', 'tile drawn 0.5 m high', 'tileGround.position.y = 0.5; tileGround.computeWorldMatrix(true)', 'tileHeights'],
-  ['look', 'far ring at the old -0.9 m', 'farGround.position.y = -0.9; farGround.computeWorldMatrix(true)', 'farHeights'],
+  [
+    'look',
+    'far ring at the old -0.9 m',
+    'farGround.position.y = -0.9; farGround.computeWorldMatrix(true)',
+    'farHeights',
+  ],
   ['look', 'yaw unlocked', 'camera.lowerAlphaLimit = camera.upperAlphaLimit = null', 'yaw:'],
-  ['look', 'an instance lifted 1 m', '{ const m = scene.meshes.find(x => x.thinInstanceCount > 10), M = m.thinInstanceGetWorldMatrices()[0].clone(); M.addTranslationFromFloats(0, 1, 0); m.thinInstanceSetMatrixAt(0, M) }', 'instancesFloating'],
+  [
+    'look',
+    'an instance lifted 1 m',
+    '{ const m = scene.meshes.find(x => x.thinInstanceCount > 10), M = m.thinInstanceGetWorldMatrices()[0].clone(); M.addTranslationFromFloats(0, 1, 0); m.thinInstanceSetMatrixAt(0, M) }',
+    'instancesFloating',
+  ],
 ]
 
 // The page records every console.error, so the check's own "<check>-check FAILED: …" line is read back whole
 // (shot.mjs cuts console output at 400 characters). A case is judged only on that line, never on other output.
-const CAPTURE = 'window.__errs = []; { const ce = console.error.bind(console); console.error = (...a) => { __errs.push(a.join(" ")); ce(...a) } } "capturing"'
-const REPORT = 'JSON.stringify({ failed: __errs.filter(l => /^\\w+-check FAILED: /.test(l)), other: __errs.filter(l => !/^\\w+-check FAILED: /.test(l)), hasSpec: typeof SPEC !== "undefined" })'
+const CAPTURE =
+  'window.__errs = []; { const ce = console.error.bind(console); console.error = (...a) => { __errs.push(a.join(" ")); ce(...a) } } "capturing"'
+const REPORT =
+  'JSON.stringify({ failed: __errs.filter(l => /^\\w+-check FAILED: /.test(l)), other: __errs.filter(l => !/^\\w+-check FAILED: /.test(l)), hasSpec: typeof SPEC !== "undefined" })'
 
-let bad = 0, hasSpec = false   // the look cases run when the page has a SPEC (read from the first case's report)
+let bad = 0
 const queue = [...CASES]
 for (let q = 0; q < queue.length; q++) {
   const [check, name, sabotage, expect] = queue[q]
-  const steps = [['wait', 1000], ['eval', '(async () => { for (let i = 0; i < 1200 && !window.__proto; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__proto) throw new Error("the page never set window.__proto (120 s)"); return "page built" })()'], ['wait', 1000], ['eval', '__proto.S.res = 1; "scale 1"'], ['eval', CAPTURE],
+  const steps = [
+    ['wait', 1000],
+    [
+      'eval',
+      '(async () => { for (let i = 0; i < 1200 && !window.__proto; i++) await new Promise(r => setTimeout(r, 100)); if (!window.__proto) throw new Error("the page never set window.__proto (120 s)"); return "page built" })()',
+    ],
+    ['wait', 1000],
+    ['eval', '__proto.S.res = 1; "scale 1"'],
+    ['eval', CAPTURE],
     ...(sabotage ? [['eval', sabotage + '; "SABOTAGED"']] : []),
-    ['eval', CHECKS[check] + '; "CHECK RAN"'], ['eval', REPORT]]
+    ['eval', CHECKS[check] + '; "CHECK RAN"'],
+    ['eval', REPORT],
+  ]
   const pg = check === 'render' ? renderPage : page
-  const r = spawnSync('node', [path.join(ROOT, 'tools/shot.mjs'), isUrl ? pg : pathToFileURL(pg).href, path.join(ROOT, 'scratch/check-negatives'), '1280', '720', JSON.stringify(steps)],
-    { encoding: 'utf8', env: { SHOT_TIMEOUT_S: '300', SHOT_LOAD_S: '300', ...process.env } })
+  const r = spawnSync(
+    'node',
+    [
+      path.join(ROOT, 'tools/shot.mjs'),
+      isUrl ? pg : pathToFileURL(pg).href,
+      path.join(ROOT, 'scratch/check-negatives'),
+      '1280',
+      '720',
+      JSON.stringify(steps),
+    ],
+    { encoding: 'utf8', env: { SHOT_TIMEOUT_S: '300', SHOT_LOAD_S: '300', ...process.env } },
+  )
   const out = r.stdout + r.stderr
-  const applied = !sabotage || out.includes('EVAL "SABOTAGED"'), ran = out.includes('EVAL "CHECK RAN"')
+  const applied = !sabotage || out.includes('EVAL "SABOTAGED"')
+  const ran = out.includes('EVAL "CHECK RAN"')
   const line = out.split('\n').find(l => l.startsWith('EVAL "{\\"failed\\"'))
   const rep = line ? JSON.parse(JSON.parse(line.slice(5))) : null
-  if (q === 0 && rep?.hasSpec) { hasSpec = true; queue.push(...LOOK_CASES) }
+  // the look cases run when the page has a SPEC (read from the first case's report)
+  if (q === 0 && rep?.hasSpec) queue.push(...LOOK_CASES)
   const failLine = rep?.failed.find(l => l.startsWith(`${check}-check FAILED: `)) || ''
-  if (rep && /^(EXC|EVAL-EXC) /m.test(out)) rep.other.push('an uncaught page exception')   // thrown errors are not console.error calls
-  let ok, why
-  if (!applied || !ran || !rep) { ok = false; why = !applied ? 'the sabotage did not apply' : !ran ? 'the check did not run' : 'no report' }
-  else if (sabotage) { ok = failLine.includes(expect) && !rep.other.length; why = failLine ? (failLine.includes(expect) ? `fails on ${expect}` : `fails, but not on ${expect}`) : 'PASSES (the check missed it)'; if (rep.other.length) why += '; other page errors' }
-  else { ok = !failLine && !rep.other.length && r.status === 0; why = ok ? 'passes' : 'FAILS' }
+  // thrown errors are not console.error calls
+  if (rep && /^(EXC|EVAL-EXC) /m.test(out)) rep.other.push('an uncaught page exception')
+  let ok
+  let why
+  if (!applied || !ran || !rep) {
+    ok = false
+    why = !applied ? 'the sabotage did not apply' : !ran ? 'the check did not run' : 'no report'
+  } else if (sabotage) {
+    ok = failLine.includes(expect) && !rep.other.length
+    why = failLine
+      ? failLine.includes(expect)
+        ? `fails on ${expect}`
+        : `fails, but not on ${expect}`
+      : 'PASSES (the check missed it)'
+    if (rep.other.length) why += '; other page errors'
+  } else {
+    ok = !failLine && !rep.other.length && r.status === 0
+    why = ok ? 'passes' : 'FAILS'
+  }
   if (!ok) bad++
   console.log(`${ok ? 'ok  ' : 'BAD '} ${check.padEnd(7)}${name.padEnd(30)}${why}`)
   if (!ok) console.log(`--- shot.mjs exit ${r.status}, full output:\n${out}\n---`)
 }
-console.log(bad ? `check-negatives: ${bad} case(s) misbehaved` : 'check-negatives: every check passes the scene and catches its sabotage')
+console.log(
+  bad
+    ? `check-negatives: ${bad} case(s) misbehaved`
+    : 'check-negatives: every check passes the scene and catches its sabotage',
+)
 process.exit(bad ? 1 : 0)

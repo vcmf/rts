@@ -81,6 +81,14 @@ The Napoleonic types (`docs/plans/active/s1d1-unit-types.md`):
 - the accordion pairs;
 - the half-turn symmetry for Face about.
 
+It refuses, with a message naming what is wrong, a ruleset the world could not run (`test/rulesets.test.ts`), among
+them a name that points at nothing (#156): a shape's `pace` or `roadPace` that is not a pace, a change time that does
+not name two of the type's shapes, and a terrain class that gives some kind no speed; and values out of their range:
+a pace not > 0, a change time not ≥ 0, a q table for no pace or with a factor not > 0, a pace's q table leaving out
+the ground of some class (it would read as 1), and `fire.sight`, `fire.depth` or `disorder.scale` naming no class or
+kind or giving a value not a finite number ≥ 0. That terrain only slows (a factor ≤ 1) is a convention of the
+shipped data, checked there, not a rule of the engine.
+
 The ruleset's hash is recorded in the world, the replays and the saves.
 
 **Types in the world.** A formation stores its type (`f.type`), and `f.shape` indexes its type's shapes. The

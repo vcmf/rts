@@ -24,7 +24,11 @@ last_reviewed: 2026-10-23
 
 ## Code
 
-- Readable code: the rules are in `AGENTS.md`, Code quality (decision 0054).
+- **Code style** (decision 0052, `docs/decisions/0052-code-style.md`): Prettier lays code out (120 columns, no
+  semicolons, single quotes; `npm run format`); ESLint keeps every line within 120 columns, comments included, and
+  one statement and one declaration per line. Rolled out by area (`formatted` in `eslint.config.js`). GLSL keeps its
+  own rules.
+- One short comment on non-obvious code: the why, not the how.
 - Reference docs by repo path in comments (`docs/art-bible.md` §6c), never by bare file name.
 - Prototype-only rules: `prototypes/AGENTS.md`.
 
