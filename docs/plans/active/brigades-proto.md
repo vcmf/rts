@@ -47,7 +47,7 @@ Out of scope: brigade counts per army, divisions as a level, battalions acting a
   its losses over two; cavalry and guns killed twice the men before); one battalion-size helper for the footprint,
   the figures and the bars; the guns behind a one-row corps; `pathPoly` on the shared polygon helper, `mix3` for the
   corners. Not taken: "the doc comments break the one-short-comment rule": the owner asked for doc comments; PR
-  #142 replaces that rule (its decision 0054), so this PR merges after #142.
+  #142 replaces that rule (its decision 0054, on the code; see also main's 0052), so this PR merges after #142.
 - **Round 2**: severe: the merge still jumped: the bars had closed only halfway when the hollow square took over at
   halfway, and leaving a square it split at once into two touching bars. Fixed: into a square the bars close up by
   halfway; out of one the hollow square holds to halfway, then opens into the bars. With: morale as one battalion on

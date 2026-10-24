@@ -8,7 +8,7 @@ last_reviewed: 2026-10-23
 ## Problem
 
 The owner asked whether real elevation data, rendered in our paper style, reads better than the prototype's
-hand-made hills, how hard it is and what it costs. Decision 0050 (proposed in PR #135, not yet on main) makes the map
+hand-made hills, how hard it is and what it costs. Decision 0057 (proposed in PR #135, not yet on main) makes the map
 language the one description of the ground; a real-data importer was always planned (the map engine's proposal, "later"). Before designing it, one
 experiment: real heights in the staff map prototype.
 

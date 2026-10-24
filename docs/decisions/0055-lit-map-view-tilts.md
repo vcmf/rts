@@ -14,7 +14,7 @@ the owner asked to see the map at a slight angle, with the unit blocks as real b
 
 ## Decision
 
-In the lit map view (decision 0051, proposed), the camera leans about 20° off straight down at full-map zoom, and
+In the lit map view (decision 0058, proposed), the camera leans about 20° off straight down at full-map zoom, and
 still tilts further as you zoom in. The armies are drawn as low slabs: boxes on the ground, their sides lit by the map's
 one light, their shadows cast on the ground. Decision 0002 still holds: the view stays far short of the horizon, and
 there is no sky.

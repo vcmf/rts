@@ -7,7 +7,7 @@ date: 2026-10-24
 
 ## Context
 
-The lit map view (decision 0051, proposed) draws its marks on a 2D canvas over the WebGL world: blocks, slabs, arrows,
+The lit map view (decision 0058, proposed) draws its marks on a 2D canvas over the WebGL world: blocks, slabs, arrows,
 labels and smoke. Chrome rasterises those shapes on every redraw. On a 4K test machine (an RTX 3080 at a device pixel
 ratio of 2), drawing them at the full ratio cost 14 to 23 ms a frame, and the 150 fps target allows 6.7 ms. WebGL at
 the full ratio costs about 1 ms (`docs/plans/active/perf-150.md`).
