@@ -146,7 +146,9 @@ The tests this PR adds (`test/`, 103 tests in about 7 s on the dev Mac in parall
 
 Tests written for this PR, and its review, found these. Each was a GitHub issue labelled `known-issue`, not fixed in
 the test PR. All six are fixed by the follow-up PR #162 (`fix/sim-test-findings`, "fix(sim): the four bugs the new tests
-found", #155–#158), each with a test; no golden replay hash moved, and `SIM_VERSION` is `s1e.3`.
+found", #155–#158), each with a test. No state moved: every golden passed unchanged before `SAVE_FORMAT` went to 12 (a pending
+command may be `refused`); that bump changes only the save's 4-byte header, which the hash covers, so the goldens
+were then regenerated. `SIM_VERSION` is `s1e.3`.
 
 1. **A save with an unknown command pending cannot be loaded** (#155). `issue` accepts any command and `applyCommands` drops
    one of an unknown type with a reason, but a save taken while it is pending writes its type and no fields

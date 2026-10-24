@@ -106,7 +106,8 @@ advanceTick: 1 commands · 3 the plan · 4 standing behaviour · 5–6 formation
   `normaliseCommand` (one that is not canonical, written by hand or by an older sim, is refused, not applied).
 - **Replays** (`replay.ts`): `SIM_VERSION` is `s1e.3` (from `s1e.2` with #155–#158: a zero that was −0 is +0,
   other bytes in some states, and a malformed command is stamped as `refused`), so `play` refuses an older replay
-  cleanly rather than reporting a mismatch.
+  cleanly rather than reporting a mismatch. `SAVE_FORMAT` is 12 (a pending command may be `refused`); the bump
+  changes only the save's header, which `hashWorld` covers, so the goldens were regenerated with no state changed.
   - `record` runs a scenario (`{ name, setup }`) with external commands and keeps the log and the
     hashes.
   - `play` checks the ruleset, the scenario name and that the log is in tick order within the replay, re-issues it
