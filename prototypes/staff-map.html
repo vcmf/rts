@@ -293,7 +293,7 @@ for(let z=1500;z>STREAM_Z0;z-=17){if(RND()<0.45)continue;const side=RND()<0.5?-1
 
 /* =========================================================================
    THE MAP BAKE (docs/proposals/staff-map/implementation.md §3)
-   tex A: R hachures · G woods (area 70, marks 255) · B water
+   tex A: R hachures (ink style) or the water depth (lit style, bakeWaterDepth) · G woods (area 70, marks 255) · B water
    tex B: R line ink (banks, roads, wood edges, houses) · G roads · B village yards
    ========================================================================= */
 const TW=4096,TH=Math.round(TW*MZ/MX),PX=TW/(2*MX);          // texels per metre ≈ 0.975
@@ -381,6 +381,70 @@ function bakeHouses(){
   for(const t of tops){fill(t.C,css(t.col));g.strokeStyle='rgba(255,250,236,0.35)';g.lineWidth=0.8;g.stroke();}
   return c;
 }
+const SHORES = new Map();   // pond -> (level -> shore)
+
+/**
+ * A pond's shore as world points: where pondE reaches s (1 is the shore, below 1 inside), found along 160 rays.
+ * Memoised, since the map bake and the water depth both trace it.
+ */
+function pondShore(p, s) {
+  if (!SHORES.has(p)) SHORES.set(p, new Map());
+  const levels = SHORES.get(p);
+  if (levels.has(s)) return levels.get(s);
+  const P = [];
+  for (let k = 0; k <= 160; k++) {
+    const th = k / 160 * 6.2832;
+    let lo = 0, hi = 2;
+    for (let it = 0; it < 18; it++) {
+      const m = (lo + hi) / 2;
+      if (pondE(p, p.x + Math.cos(th) * p.rx * m, p.z + Math.sin(th) * p.rz * m) < s) lo = m; else hi = m;
+    }
+    P.push([p.x + Math.cos(th) * p.rx * lo, p.z + Math.sin(th) * p.rz * lo]);
+  }
+  levels.set(s, P);
+  return P;
+}
+
+/**
+ * The lit style's water depth: the water shapes, blurred, added into texture A's red channel (unused in this style,
+ * which has no hachures). It is about one half at the bank, rising toward one away from it (the middle of a pond,
+ * the stream's centre line) and fading to zero just outside. The terrain shader reads it as distance from the bank,
+ * and its slope as the bank's direction, for the paler middle and the sunken shading. Drawn straight into gA,
+ * whose bake mode adds the channels.
+ */
+function bakeWaterDepth() {
+  // blurred anyway, so baked at a quarter of the map's texels on a GPU canvas (fast), then scaled up into gA
+  const K = 4;
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(TW / K);
+  c.height = Math.ceil(TH / K);
+  const g = c.getContext('2d');
+  g.scale(1 / K, 1 / K);   // draw in the map's texels
+  g.fillStyle = g.strokeStyle = 'rgb(255,0,0)';
+  // the stream is 11 m wide: a 3 m blur still reaches near one on its centre line
+  g.filter = `blur(${(3 * PX / K).toFixed(2)}px)`;
+  poly(g, STREAM);
+  g.lineWidth = 11 * PX;
+  g.lineJoin = 'round';
+  g.stroke();
+  // the ponds: a wider blur, a broad band of shallows along the shore; one path, one blur for them all
+  g.filter = `blur(${(9 * PX / K).toFixed(2)}px)`;
+  g.beginPath();
+  for (const p of PONDS) addShore(g, pondShore(p, 1));
+  g.fill();
+  gA.save();
+  gA.imageSmoothingQuality = 'high';
+  gA.drawImage(c, 0, 0, TW, TH);   // added into the red channel (the bake's mode is additive)
+  gA.restore();
+}
+
+/** Adds a closed shore (world points) to a canvas path, in the bake's texels. */
+function addShore(g, P) {
+  g.moveTo(tx(P[0][0]), ty(P[0][1]));
+  for (let i = 1; i < P.length; i++) g.lineTo(tx(P[i][0]), ty(P[i][1]));
+  g.closePath();
+}
+
 function bakeMap(){
   const nh=LIT?0:bakeHachures();   // the lit style draws contours, not hachures
   if(LIT){cCanopy=bakeCanopy();cHouse=bakeHouses();}
@@ -392,10 +456,11 @@ function bakeMap(){
   // water: stream fill + double bank line; ponds with water lining (concentric lines inside the shore)
   poly(gA,STREAM);gA.strokeStyle='rgb(0,0,255)';gA.lineWidth=11*PX;gA.lineJoin='round';gA.stroke();
   gB.lineWidth=1.15;gB.strokeStyle='rgba(255,0,0,0.9)';for(const o of[-6,6]){poly(gB,offsetLine(STREAM,o));gB.stroke();}
-  for(const p of PONDS){const shore=s=>{const P=[];for(let k=0;k<=160;k++){const th=k/160*6.2832;let lo=0,hi=2;for(let it=0;it<18;it++){const m=(lo+hi)/2;pondE(p,p.x+Math.cos(th)*p.rx*m,p.z+Math.sin(th)*p.rz*m)<s?lo=m:hi=m;}P.push([p.x+Math.cos(th)*p.rx*lo,p.z+Math.sin(th)*p.rz*lo]);}return P;};
+  for(const p of PONDS){const shore=k=>pondShore(p,k);
     poly(gA,shore(1));gA.fillStyle='rgb(0,0,255)';gA.fill();
     poly(gB,shore(1));gB.strokeStyle='rgba(255,0,0,0.95)';gB.lineWidth=1.3;gB.stroke();
     [[0.93,0.5],[0.85,0.32],[0.76,0.2],[0.66,0.12]].forEach(([s,a])=>{poly(gB,shore(s));gB.strokeStyle=`rgba(255,0,0,${a})`;gB.lineWidth=0.8;gB.stroke();});}
+  if (LIT) bakeWaterDepth();
   // roads: double hairline, area mask in G
   for(const r of ROADS){poly(gB,r.pts);gB.strokeStyle='rgb(0,255,0)';gB.lineWidth=5*PX;gB.lineCap='round';gB.stroke();
     gB.lineWidth=0.75;gB.strokeStyle='rgba(255,0,0,0.85)';for(const o of[-3.4,3.4]){poly(gB,offsetLine(r.pts,o));gB.stroke();}}
@@ -506,8 +571,9 @@ precision highp float;varying vec3 vW;varying vec3 vN;varying float vH;
 uniform sampler2D uMapA,uMapB,uPaperT,uNoiseT;
 #ifdef LIT
 uniform sampler2D uCanopyT,uHouseT;
+uniform vec2 uLightXZ;   /* toward the one static light, xz: the relief and the water use it */
 #ifdef LAYERS
-uniform vec2 uLightXZ;varying float vHB;varying vec2 vGB;
+varying float vHB;varying vec2 vGB;
 /* paper layers: one octave of sheets every D metres; out: lit edge (0..1), cast shadow (0..1) */
 /* one octave of sheets every D metres, measured in world metres from the smooth per-vertex slope g (no facets at the
    mesh triangles, no dependence on the camera heading); out: lit edge (0..1), cast shadow (0..1) */
@@ -555,6 +621,7 @@ void main(){
 #endif
 #ifdef LAYERS
   float lyLt=0.0,lyW5=1.0;   /* the lit edge and the 5 m octave, for the contour ink below */
+  vec3 flatPaper=mapC;   /* the paper before the relief: water lies flat, no sheets under it */
   {float pxPerM=2.0/max(length(dFdx(vW.xz))+length(dFdy(vW.xz)),1e-5),gl=length(vGB),lay=(1.0-uWash)*inside;   /* px per m, both screen axes */
    /* a faint continuous hillshade underneath, so gentle ground keeps its form */
    vec3 Lk=normalize(vec3(uLightXZ.x,1.0,uLightXZ.y));   /* the same light, 45 degrees up */
@@ -569,7 +636,40 @@ void main(){
    mapC*=1.0-min(0.24*sd,0.3)*lay*(1.0-0.7*woodA)*vec3(0.95,1.0,1.1);   /* a warm shadow, never black: with the hillshade and the tint, the darkest strip about 0.63 of the paper */
    mapC=mix(mapC,min(mapC*1.14+0.02,vec3(1.0)),0.8*lt*lay*(1.0-0.7*woodA));}
 #endif
+#ifdef LIT
+  {
+    /* water as a wash on the paper: the grain shows through, stronger at the banks, paler in the middle */
+    /* the depth read at full resolution (bias -8: no mip), so the effect holds at every zoom */
+    vec2 cuv = clamp(uv, 0.0, 1.0);
+    float D = texture2D(uMapA, cuv, -8.0).r * inside;
+    if (D > 0.004) {   /* only near water: the slope costs four more samples */
+      vec2 du = vec2(4.0 / ${TW}.0, 0.0), dv = vec2(0.0, 4.0 / ${TH}.0);   /* 4 texels: the 8-bit depth does not band */
+      /* the slope of the depth, in world x and z (uv y runs against z); it points from the bank into the water */
+      vec2 gW = vec2(texture2D(uMapA, cuv + du, -8.0).r - texture2D(uMapA, cuv - du, -8.0).r,
+                     texture2D(uMapA, cuv - dv, -8.0).r - texture2D(uMapA, cuv + dv, -8.0).r);
+      vec2 n = gW / max(length(gW), 1e-4);
+      /* no bank at the map's edge, where the water runs on beyond the bake */
+      float slope = smoothstep(0.006, 0.04, length(gW)) * smoothstep(0.0, 0.006, edge);
+      float mid = smoothstep(0.55, 0.9, D);
+#ifdef LAYERS
+      vec3 under = flatPaper;
+#else
+      vec3 under = mapC;
+#endif
+      vec3 wash = mix(under, uWaterW * 0.96, mix(0.62, 0.34, mid));
+      /* sunk below the land: the bank toward the light shades the water under it, the far bank catches the light */
+      float shade = clamp(dot(n, -uLightXZ), 0.0, 1.0) * slope * (1.0 - mid);
+      wash *= 1.0 - 0.38 * shade * vec3(1.0, 0.97, 0.92);
+      float lit = clamp(dot(n, uLightXZ), 0.0, 1.0) * slope * smoothstep(0.18, 0.4, D) * (1.0 - water);
+      mapC = mix(mapC, min(mapC * 1.1 + 0.02, vec3(1.0)), 0.6 * lit);
+      mapC = mix(mapC, wash, water);
+    } else {
+      mapC = mix(mapC, uWaterW, water);   /* not reached in practice: water always has depth */
+    }
+  }
+#else
   mapC=mix(mapC,mix(uWaterW,uWaterW*0.92,g2),water);
+#endif
   mapC=mix(mapC,mix(mapC,vec3(0.97,0.96,0.94),0.55),Bm.b*0.25*(1.0-uSeason/3.0));
 #ifdef LIT
   mapC=mix(mapC,vec3(0.96,0.95,0.93),uMist*low*low*0.45*smoothstep(0.2,0.7,mott)*inside);   /* the smooth mottle, not the blocky noise */
@@ -620,7 +720,7 @@ void main(){
   /* lighter while the sheet edges show, and off the lit edge so the highlight stays */
   minorC*=mix(0.7,1.0,max(uWash,1.0-lyW5))*(1.0-0.6*lyLt);indexC*=mix(0.85,1.0,uWash)*(1.0-0.6*lyLt);
 #endif
-  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.25,indexC*0.45)*k*inside*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
+  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.25,indexC*0.45)*k*inside*(1.0-water)*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
 #else
   col=mix(col,uHach,clamp(A.r*1.05,0.0,1.0)*k*uHachK);
 #endif
@@ -1569,7 +1669,7 @@ function build(){
     uniforms:['world','viewProjection','uCrown','uLightXZ','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[])]:[]});
   terrMat.backFaceCulling=false;terrMat.setTexture('uMapA',texA);terrMat.setTexture('uMapB',texB);paperT.wrapU=paperT.wrapV=noiseT.wrapU=noiseT.wrapV=B.Texture.WRAP_ADDRESSMODE;terrMat.setTexture('uPaperT',paperT);terrMat.setTexture('uNoiseT',noiseT);terrMat.setFloat('uHmin',HMIN);terrMat.setFloat('uHmax',HMAX);
   if(LIT){for(const[n,c]of[['uCanopyT',cCanopy],['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
-  if(LAYERS)terrMat.setVector2('uLightXZ',new B.Vector2(NW[0],NW[1]));
+  if(LIT)terrMat.setVector2('uLightXZ',new B.Vector2(NW[0],NW[1]));
   terrainMesh().material=terrMat;
   {const O=30000,y=HMIN-1,P=[-TX,y,-TZ,TX,y,-TZ,TX,y,TZ,-TX,y,TZ,-O,y,-O,O,y,-O,O,y,O,-O,y,O],I=[0,4,1,1,4,5,1,5,2,2,5,6,2,6,3,3,6,7,3,7,0,0,7,4],
     m=new B.Mesh('skirt',scene),vd=new B.VertexData();vd.positions=P;vd.indices=I;vd.normals=[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0];vd.applyToMesh(m);
