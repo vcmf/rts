@@ -1,6 +1,6 @@
 // Rulesets at their edges (decision 0015; src/sim/ruleset.ts): every check compileRuleset makes refuses a ruleset
 // that breaks it, with a message naming what is wrong; the ruleset hash moves with the rules; and the shipped
-// ruleset's own data holds together where the compiler does not check it (names that point at nothing).
+// ruleset's own data holds together (names that point at nothing).
 import { describe, it, expect } from 'vitest'
 import { compileRuleset, buildTerrain, MAX_COMPANIES, type Ruleset, type UnitType } from '../src/sim/index.ts'
 import { napoleonic, ceiling } from '../src/rulesets/napoleonic.ts'
@@ -14,6 +14,7 @@ const withType = (name: string, u: UnitType): Ruleset => ({ ...N, types: { ...T,
 const inf = T.infantry
 const cav = T.cavalry
 const bat = T.battery
+const withoutHorse = (g: Record<string, number>) => Object.fromEntries(Object.entries(g).filter(([k]) => k !== 'horse'))
 
 describe('compileRuleset refuses', () => {
   const cases: [string, Ruleset, RegExp][] = [
@@ -151,6 +152,95 @@ describe('compileRuleset refuses', () => {
       /melee.strength names camel/,
     ],
     [
+      'a shape whose pace is not a pace (#156)',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, pace: 'canter' } },
+      }),
+      /shape line's pace canter is not one of the paces/,
+    ],
+    [
+      'a shape whose road pace is not a pace (#156)',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, roadPace: 'canter' } },
+      }),
+      /shape line's roadPace canter is not one of the paces/,
+    ],
+    [
+      'a change time naming a shape the type has not (#156)',
+      withType('infantry', { ...inf, changeTime: { ...inf.changeTime, 'line>wedge': 30 } }),
+      /change time line>wedge does not name two of its shapes/,
+    ],
+    [
+      'a terrain class giving a kind no speed (#156)',
+      { ...N, terrain: { ...N.terrain, woods: { ...N.terrain.woods, g: withoutHorse(N.terrain.woods.g) } } },
+      /terrain class woods gives kind horse \(named by class \w+\) no speed/,
+    ],
+    [
+      'a terrain class giving a kind the other classes give no speed (#156)',
+      { ...N, terrain: { ...N.terrain, woods: { ...N.terrain.woods, g: { ...N.terrain.woods.g, camel: 0.5 } } } },
+      /terrain class \w+ gives kind camel \(named by class woods\) no speed/,
+    ],
+    ['a pace that is not a speed', { ...N, pace: { ...N.pace, ordinary: 0 } }, /pace ordinary is 0, not > 0/],
+    [
+      'a change time that is not a time',
+      withType('infantry', { ...inf, changeTime: { ...inf.changeTime, 'line>column': NaN } }),
+      /change time line>column is NaN/,
+    ],
+    [
+      'a default change time below 0',
+      withType('infantry', { ...inf, defaultChangeTime: -1 }),
+      /defaultChangeTime is -1/,
+    ],
+    ['a q table for a pace there is not', { ...N, q: { ...N.q, canter: { hard: 1 } } }, /q names canter, not a pace/],
+    [
+      'a terrain class on a ground the q tables do not name',
+      { ...N, terrain: { ...N.terrain, woods: { ...N.terrain.woods, q: 'ice' } } },
+      /q.ordinary gives ground ice \(terrain class woods\) no factor/,
+    ],
+    [
+      "a terrain class on a ground named like an object's own property",
+      { ...N, terrain: { ...N.terrain, woods: { ...N.terrain.woods, q: 'constructor' } } },
+      /q.ordinary gives ground constructor \(terrain class woods\) no factor/,
+    ],
+    [
+      "one pace's q table leaving out a ground a class stands on",
+      { ...N, q: { ...N.q, trot: { open: 1.15, light: 1.0 } } },
+      /q.trot gives ground hard \(terrain class \w+\) no factor/,
+    ],
+    ['a q factor of 0', { ...N, q: { ...N.q, walk: { ...N.q.walk, open: 0 } } }, /q.walk.open is 0, not > 0/],
+    [
+      'a sight limit below 0',
+      { ...N, fire: { ...N.fire, sight: { ...N.fire.sight, woods: -1 } } },
+      /fire.sight.woods is -1/,
+    ],
+    [
+      'a target depth that is not a number',
+      { ...N, fire: { ...N.fire, depth: { ...N.fire.depth, line: NaN } } },
+      /fire.depth.line is NaN/,
+    ],
+    [
+      'a disorder scale below 0',
+      { ...N, disorder: { ...N.disorder, scale: { ...N.disorder.scale, line: -0.5 } } },
+      /disorder.scale.line is -0.5/,
+    ],
+    [
+      'a sight limit for a terrain class there is not',
+      { ...N, fire: { ...N.fire, sight: { ...N.fire.sight, jungle: 5 } } },
+      /fire.sight names jungle/,
+    ],
+    [
+      'a target depth for a kind the terrain table has not',
+      { ...N, fire: { ...N.fire, depth: { ...N.fire.depth, camel: 1 } } },
+      /fire.depth names camel/,
+    ],
+    [
+      'a disorder scale for a kind the terrain table has not',
+      { ...N, disorder: { ...N.disorder, scale: { ...N.disorder.scale, camel: 1 } } },
+      /disorder.scale names camel/,
+    ],
+    [
       'a column of route too deep for the trail ring',
       withType('infantry', { ...inf, geometry: { ...inf.geometry, companies: MAX_COMPANIES, files: 60, bins: 8 } }),
       /trail of \d+ points does not fit/,
@@ -166,8 +256,11 @@ describe('compileRuleset refuses', () => {
 describe('the terrain refuses', () => {
   it('a map whose terrain class the ruleset has not', () => {
     const { woods: _, ...terrain } = N.terrain
+    const { woods: __, ...sight } = N.fire.sight
     void _
-    expect(() => buildTerrain(data, compileRuleset({ ...N, terrain }))).toThrow(/terrain class woods not in ruleset/)
+    void __
+    const rs = { ...N, terrain, fire: { ...N.fire, sight } }
+    expect(() => buildTerrain(data, compileRuleset(rs))).toThrow(/terrain class woods not in ruleset/)
   })
 })
 
@@ -202,42 +295,18 @@ describe('the ruleset hash', () => {
   })
 })
 
-// what the compiler does not check (#156), checked on the data each era ships: a name that points at nothing would be
-// read as "none" (an index of −1) or "not given" (undefined) and turn into a NaN or a default far from the check
+// the shipped data: every era compiles (the compiler refuses a name that points at nothing, #156), and holds to what
+// the compiler leaves to the data: terrain only slows (a factor ≤ 1, a convention, not a rule of the engine)
 describe('the shipped rulesets hold together', () => {
   for (const [era, rs] of Object.entries({
     ...Object.fromEntries(Object.entries(RULESETS).map(([k, v]) => [k, v.ruleset])),
     ceiling,
   })) {
-    it(`${era}: every shape's pace is a pace, every change time names two of the type's shapes`, () => {
-      const paces = Object.keys(rs.pace)
-      const bad: string[] = []
-      for (const [t, u] of Object.entries(rs.types)) {
-        const shapes = Object.keys(u.formations)
-        for (const [n, d] of Object.entries(u.formations)) {
-          if (!paces.includes(d.pace)) bad.push(`${t}.${n}: pace ${d.pace}`)
-          if (d.roadPace !== undefined && !paces.includes(d.roadPace)) bad.push(`${t}.${n}: road pace ${d.roadPace}`)
-        }
-        for (const k of Object.keys(u.changeTime)) {
-          const [a, b] = k.split('>')
-          if (!shapes.includes(a) || !shapes.includes(b)) bad.push(`${t}: change time ${k}`)
-        }
-      }
-      expect(bad).toEqual([])
-    })
-    it(`${era}: every terrain class gives every kind a speed, and names a ground class the paces know`, () => {
-      const kinds = Object.keys(Object.values(rs.terrain)[0].g)
-      const grounds = new Set(Object.values(rs.q).flatMap(q => Object.keys(q)))
+    it(`${era}: every terrain factor is at most 1`, () => {
       const bad: string[] = []
       for (const [c, d] of Object.entries(rs.terrain)) {
-        for (const k of kinds) if (!(typeof d.g[k] === 'number' && d.g[k] >= 0 && d.g[k] <= 1)) bad.push(`${c}.g.${k}`)
-        if (Object.keys(d.g).length !== kinds.length) bad.push(`${c}: kinds ${Object.keys(d.g)}`)
-        if (!grounds.has(d.q)) bad.push(`${c}: ground ${d.q}`)
+        for (const [k, v] of Object.entries(d.g)) if (v > 1) bad.push(`${c}.g.${k}`)
       }
-      for (const p of Object.keys(rs.q)) if (!(p in rs.pace)) bad.push(`q.${p}: not a pace`)
-      for (const s of Object.keys(rs.fire.sight ?? {})) if (!(s in rs.terrain)) bad.push(`fire.sight.${s}`)
-      for (const k of Object.keys(rs.fire.depth)) if (!kinds.includes(k)) bad.push(`fire.depth.${k}`)
-      for (const k of Object.keys(rs.disorder.scale)) if (!kinds.includes(k)) bad.push(`disorder.scale.${k}`)
       expect(bad).toEqual([])
     })
     it(`${era}: its start orders are a preset; it compiles, and its terrain builds on the formation field`, () => {

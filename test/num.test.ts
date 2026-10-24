@@ -31,6 +31,6 @@ describe('num: exact-ops trigonometry', () => {
   })
   it('wrapAngle lands in (−π, π] and quantise rounds to centimetres', () => {
     for (const a of [-7, -PI, PI, 3 * PI, 100.5]) { const w = wrapAngle(a); expect(w).toBeGreaterThan(-PI); expect(w).toBeLessThanOrEqual(PI); expect(Math.abs(Math.sin(w) - Math.sin(a))).toBeLessThan(1e-9) }
-    expect(quantise(12.3456)).toBe(12.35); expect(quantise(-0.004)).toBe(-0)
+    expect(quantise(12.3456)).toBe(12.35); expect(quantise(-0.004)).toBe(0) // +0 (#157)
   })
 })

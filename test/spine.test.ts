@@ -119,6 +119,11 @@ describe('commands and handles', () => {
       'too many waypoints', 'no such shape', 'no such order preset', 'no such wheel', 'no such retreat', 'unknown command', 'stale tick'])
     expect(w.f.ordHead[0]).toBe(-1); expect(w.pending.length).toBe(0)
   })
+  it('an unknown command pushed straight into the queue is dropped, not applied', () => {
+    const w = makeWorld(data, cr, 4)
+    w.pending.push({ tick: 1, seq: 0, cmd: { type: 'nonsense' } as unknown as Command })
+    expect(advanceTick(w).dropped.map(d => d.reason)).toEqual(['unknown command'])
+  })
   it('a pending command crosses a save unchanged', () => {
     const w = makeWorld(data, cr, 12); issue(w, { type: 'debug-spawn', side: 256, x: 0, z: 0, heading: 0, shape: 'line', men: 10 })
     const c = deserialize(serialize(w), data, cr)
