@@ -63,14 +63,17 @@ These are owner decisions and merges, not code:
 
   None is from 1805. The cadastre is the most accurate of the three. A survey shows roads, villages and woods more
   completely. Period battle maps of 1805 serve as checks.
-- **The scale.** The real field is about 13 × 9 km. Decision 0011's play area is 1–1.5 km, and the sim's 2 m grid over
-  the whole field is about 30 million cells. Choose one of:
-  - the whole field, squeezed into the play area, as the prototype does (2.5×, so slopes and distances are untrue);
-  - a true-scale crop of the decisive sector, the Pratzen and the Goldbach, about 2.5 × 2 km;
-  - the whole field at true scale, with the play area as a window on it and coarser cells outside it.
-
-  The relief kind's transform and every later step follow from this choice, so it comes first. Decided: the whole
-  field squeezed 2.5×, as the prototype (see the open questions).
+- **The scale: decided, decision 0061.** Maps are square, 2 to 6 km a side in whole kilometres, 3 km by default,
+  designed for play. Features keep believable sizes and slopes, and the empty distances between them are shortened.
+  Austerlitz is a 6 km map after the real field, for the 32,000-soldier extreme. The prototype's uniform 2.5× squeeze
+  is dropped. So:
+  - the importer writes the real heights at true local scale; the editor then places and arranges the pieces of
+    terrain the map is built from (step 4);
+  - the sim's 2 m grids take the map engine's compact format, tiled or compressed (about 90 MB at 6 km, an estimate;
+    today's format would be about 200 MB): item S-data below;
+  - the 3D world streams in tiles around the camera, with bakes per tile: item E-tiles below, before step 5;
+  - vision becomes a core rule: units hidden outside sight, a faded last-seen marker, sight blocked by relief, woods
+    and villages: item S-vision below.
 - **The existing importer plan.** This plan takes over W6, the OSM and Terrarium importer for Austerlitz in
   `docs/plans/active/prototype-plan.md`, and the importer that SM2 shares. Step 1 is W6's relief, with ČÚZK's DMR 4G
   as the source instead of Terrarium. Step 4 traces the 1805 features, using OSM's ways and water as a guide where the
@@ -84,8 +87,8 @@ These are owner decisions and merges, not code:
   entry of kind `dem` with its licence and credit (the format proposal's `relief` row, `dem`).
 - An importer, from the prototype's `tools/dem-fetch.mjs` (PR #136), writing the heightfield the map references. It
   resamples the 5 m source onto the map's cell (decision 0021, 2 m, or the look's cell): a mean where the cell holds
-  several source pixels (as at the prototype's squeeze); a smooth interpolation (bicubic, not bilinear, so the 5 m
-  grid does not show as facets) where the cell is finer than the source, as at true scale.
+  several source pixels; a smooth interpolation (bicubic, not bilinear, so the 5 m grid does not show as facets) where
+  the cell is finer than the source, as at true scale on the 2 m cell.
 - The existing relief edits (`relief.level`, `relief.lower`, `relief.cut`) apply on top. This is how modern
   embankments and quarries are taken back to 1805.
 - One compiled heightfield (decision 0012) that the draft view, the sim and the look all read.
@@ -134,11 +137,15 @@ edit, and validates.
 
 ### 4. Draw Austerlitz 1805
 
-Real authoring work, on the editor, from the chosen period map:
-- **Ways:** the Brünn–Olmütz highway and the period roads and tracks.
-- **Water:** the Goldbach and its brooks, the Satschan and Menitz ponds as they were in 1805.
-- **Villages:** Pratzen, Sokolnitz, Telnitz, Kobelnitz, Puntowitz, Blasowitz and the others, as street villages along
-  their roads, or pinned houses.
+Real authoring work, on the editor, from the real terrain and the chosen period map, as a 6 km designed map
+(decision 0061). The whole field is about 13 km north to south, so the map keeps its landmarks at their real sizes
+and moves them closer: the Pratzen plateau, the Goldbach valley, the villages along it, the ponds, the highway on the
+northern edge. How the relief is rearranged (cutting and placing pieces of the real heightfield, or a relief drawn
+over them with relief edits) is settled at the start of this step.
+- **Ways:** the period roads and tracks in the crop.
+- **Water:** the Goldbach and its brooks, and whatever of the ponds lies in the crop, as in 1805.
+- **Villages:** those in the crop (Pratzen, Sokolnitz, Telnitz, Kobelnitz, Puntowitz and others), as street villages
+  along their roads, or pinned houses.
 - **Woods, fields, marsh and vineyards.**
 - **Zones** for the scenario.
 - **Corrections:** the period map's distortion corrected against the relief, so a stream follows its valley and a road
@@ -162,7 +169,7 @@ Real authoring work, on the editor, from the chosen period map:
 - **The demo world:** the hand-written world on `main` is retired, or kept as a second map file.
 
 **Acceptance:**
-- zooming from the whole field down to 15 m shows one place throughout;
+- zooming from the whole 6 km map down to 15 m shows one place throughout, with the 3D world streamed in tiles;
 - the armies stand on the same ground throughout;
 - the frame budget: the map's 150 fps on test machine A (step 2) at far zoom, and the look's own bars for the figures
   close (decision 0050's) on its machines, both at once across the blend.
@@ -184,14 +191,20 @@ Real authoring work, on the editor, from the chosen period map:
 | 1 relief from DEM | #49 on `main` | 2, 3 |
 | 2 lit map view in `src/` | #136, 0058, #49's compiled layers; step 1 for the Austerlitz comparison | 1 |
 | 3 editor | #49, 2 (it is built on the lit view) | 1, 4's tracing prep |
-| 4 draw Austerlitz | 1, 3, period map chosen | 5's compiler work |
-| 5 look compiler and handover | 1, 2; 4 for the real content | 4 |
-| 6 sim on Austerlitz | 4 for the sim; 5 for the look page's armies | — |
+| 4 draw Austerlitz | 1, 3, period map chosen, the crop's extent | 5's compiler work |
+| E-tiles: the 3D world streamed in tiles, bakes per tile at build time (Track E; decision 0061) | — | 1–4 |
+| 5 look compiler and handover | 1, 2, E-tiles; 4 for the real content | 4 |
+| S-data: the sim's compact 2 m grids, tiled or compressed, so a 6 km map fits (decision 0061) | #49 | 1–5 |
+| S-vision: vision as a core rule: units hidden outside sight, the faded last-seen marker, sight blocked by relief, woods and villages (decision 0061; ahead of S2) | the sim track | 1–5 |
+| 6 sim on Austerlitz | 4 and S-data for the sim; S-vision for fog of war; 5 for the look page's armies | — |
+
+Three work items come from decision 0061 and belong to other tracks: E-tiles (Track E), S-data and S-vision (the sim
+track, Track S). Each gets its own plan in its track; this plan only records that its steps wait on them.
 
 ## Open questions for the owner
 
-1. **The scale.** Decided 2026-10-24: the prototype's choice, the whole field squeezed 2.5× into the play area
-   (owner: "for the map choose whatever u already use").
+1. **The scale.** Decided 2026-10-24, decision 0061: square maps of 2 to 6 km a side, 3 km by default, designed for
+   play at true local scale; Austerlitz a 6 km map after the real field.
 2. **The real heights.** Decided 2026-10-24: the derived heightfield is committed, with ČÚZK's credit (CC BY 4.0).
 3. **The period map** to trace, and whether its licence allows tracing.
 4. **The draft page:** the plan makes the map engine's flat draft page a debug overlay of the lit view, not a view of its

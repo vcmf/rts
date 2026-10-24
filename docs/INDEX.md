@@ -92,6 +92,8 @@ designs written before building (frozen once built, their lasting content moves 
 
 ## Research (background)
 
+- [`research/map-size-battle-density.md`](research/map-size-battle-density.md): how much ground armies occupied, 1700–1815 and antiquity: frontages, battle densities, approach distances, vision; for sizing the maps.
+- [`research/map-size-rts-map-sizes.md`](research/map-size-rts-map-sizes.md): battle map size against soldier count in large-scale RTS and wargames (Total War, Scourge of War, Grand Tactician, HistWar, Graviteam and others).
 - [`research/colour-and-light-review.md`](research/colour-and-light-review.md): the owner's colour and light references, and the coats' colour lost to the warm light, measured.
 - [`research/grass-and-fields.md`](research/grass-and-fields.md): grass and fields at an RTS camera: Tiny Glade, Total War, the techniques (ground pattern, blades, cards, shells) and their pitfalls.
 - [`research/painterly-grass.md`](research/painterly-grass.md): Tiny Glade's grass, the techniques that read as painted, what fits the RTS camera and the budget.
