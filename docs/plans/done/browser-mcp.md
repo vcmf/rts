@@ -60,3 +60,9 @@ Out of scope: the Linux libraries for Chrome inside WSL; changing `.nvmrc`.
   removed; fixed too: the plan restored here; the load wait on a page that navigates itself; Windows hints only in
   WSL; `tools/win-chrome.sh` headless and SwiftShader by default, `--angle`, the per-user Chrome; the MCP server
   opt-in instead of `.mcp.json`.
+- **Round 1 of the new count** (`/code-review high`, after that round): no severe issue; the Mac's default path
+  unchanged. Fixed: a page that sends itself to a URL Chrome cannot open fails, naming it; an attached run's window
+  takes the run's size; the Chrome tests skip under `CI`; `tools/win-chrome.sh` starts Chrome with
+  `tools/attach.ts`'s flags (one list with the hint), its `stop` checks the port closed and PowerShell failures are
+  named; the WSL hint keeps the port and says when `tools/win-chrome.sh` has no such backend; the headless and backend
+  checks run before any socket opens; one DevTools client for both sockets. No further round.

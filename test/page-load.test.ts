@@ -1,6 +1,6 @@
 // When tools/shot.mjs counts a page as loaded (tools/page-load.ts), and the tool itself on two small pages: one that
 // navigates itself before its load event must load (exit 0), a missing one must fail at once with the error named.
-// The runs need the Mac's Chrome (or CHROME=…): they skip where there is none, as on CI.
+// The runs launch the Mac's Chrome (or CHROME=…): they skip where there is none, and when CI is set.
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import http from 'node:http'
@@ -8,35 +8,49 @@ import type { AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { navigationLoaded, type LoadEvent } from '../tools/page-load.ts'
+import { loadState, type LoadEvent } from '../tools/page-load.ts'
 
-const commit = (loaderId: string): LoadEvent => ({ kind: 'commit', loaderId })
+const commit = (loaderId: string, unreachableUrl?: string): LoadEvent => ({ kind: 'commit', loaderId, unreachableUrl })
 const load: LoadEvent = { kind: 'load' }
+const loaded = (events: LoadEvent[], loaderId: string) => loadState(events, loaderId).loaded
 
-describe('navigationLoaded', () => {
+describe('loadState', () => {
   it('counts the load after the navigation commits', () => {
-    expect(navigationLoaded([commit('A'), load], 'A')).toBe(true)
+    expect(loaded([commit('A'), load], 'A')).toBe(true)
   })
   it('waits while the navigation has committed but not loaded', () => {
-    expect(navigationLoaded([commit('A')], 'A')).toBe(false)
+    expect(loaded([commit('A')], 'A')).toBe(false)
   })
   it('never counts a load before the commit (a fresh page’s own about:blank)', () => {
-    expect(navigationLoaded([commit('blank'), load, commit('A')], 'A')).toBe(false)
+    expect(loaded([commit('blank'), load, commit('A')], 'A')).toBe(false)
   })
   it('counts the load of a document the page navigated to before its own load', () => {
-    expect(navigationLoaded([commit('A'), commit('B'), load], 'A')).toBe(true)
+    expect(loaded([commit('A'), commit('B'), load], 'A')).toBe(true)
   })
   it('waits while the navigation has not committed', () => {
-    expect(navigationLoaded([commit('blank'), load], 'A')).toBe(false)
+    expect(loaded([commit('blank'), load], 'A')).toBe(false)
+  })
+  it('names the URL when the page sent itself to one Chrome could not open', () => {
+    const events = [commit('A'), commit('B', 'http://127.0.0.1:1/missing'), load]
+    expect(loadState(events, 'A')).toEqual({ loaded: true, unreachableUrl: 'http://127.0.0.1:1/missing' })
+  })
+  it('names no URL when the document loaded opened', () => {
+    expect(loadState([commit('A'), load], 'A')).toEqual({ loaded: true })
   })
 })
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const SHOT = path.join(import.meta.dirname, '../tools/shot.mjs')
 
+// waits up to 10 s for the page to be on /target.html (Chrome may fire the redirecting document's load first), then
+// prints where it is
+const ON_TARGET =
+  '(async () => { for (let i = 0; i < 100 && location.pathname !== "/target.html"; i++) ' +
+  'await new Promise(r => setTimeout(r, 100)); return location.pathname })()'
+
 /** Runs tools/shot.mjs on `url` with one eval step; its exit code and its whole output. */
 function shot(url: string, out: string): Promise<{ code: number; output: string }> {
-  const steps = JSON.stringify([['eval', 'location.pathname']])
+  const steps = JSON.stringify([['eval', ON_TARGET]])
   // launched, never attached: a SHOT_CDP in the caller's environment would test another browser
   const env = {
     ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'SHOT_CDP')),
@@ -65,7 +79,8 @@ async function serve(): Promise<{ base: string; close: () => void }> {
   return { base: `http://127.0.0.1:${port}`, close: () => server.close() }
 }
 
-describe.skipIf(!fs.existsSync(CHROME))('tools/shot.mjs', () => {
+// launching Chrome: local only, as the cost tests (CI's runner has no Chrome at that path, and should not try)
+describe.skipIf(!!process.env.CI || !fs.existsSync(CHROME))('tools/shot.mjs', () => {
   it('loads a page that navigates itself before its load event, and exits 0', async () => {
     const { base, close } = await serve()
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-test-'))

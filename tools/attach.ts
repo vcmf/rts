@@ -3,6 +3,7 @@
 // (tools/win-chrome.sh). Everything about Windows sits behind inWsl(): a run anywhere else never takes those paths
 // and its messages never mention Windows.
 import { execFileSync } from 'node:child_process'
+import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 type Env = Record<string, string | undefined>
@@ -24,21 +25,45 @@ export function renderFlags(angle: string, extra: readonly string[]): string[] {
 }
 
 /**
+ * The flags of a browser started for runs to attach to (tools/win-chrome.sh, and the hint outside WSL): the run's
+ * render flags, then those a long-lived browser needs that a launched run does not: --enable-automation, which lets a
+ * run read the flags back (Browser.getBrowserCommandLine), and no backgrounding or timer throttling, since a headed
+ * window can be covered. One list for both, so the script and the hint never drift; `node tools/attach.ts flags
+ * <angle>` prints it for tools/win-chrome.sh, one flag a line.
+ * @param angle the ANGLE backend
+ * @param extra the run's extra flags
+ */
+export function attachFlags(angle: string, extra: readonly string[] = []): string[] {
+  return [
+    ...renderFlags(angle, extra),
+    '--enable-automation',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+    '--disable-background-timer-throttling',
+  ]
+}
+
+/** The ANGLE backends tools/win-chrome.sh can start Windows Chrome with (its --angle). */
+export const WIN_ANGLES = ['swiftshader', 'd3d11']
+
+/**
  * How to start (or restart) a browser that gives a run what it asks for, for an error message. In WSL:
- * tools/win-chrome.sh (headless by default). Elsewhere: the flags themselves, with the DevTools port of `cdp` and
- * --enable-automation, which lets a run read the flags back (Browser.getBrowserCommandLine).
+ * tools/win-chrome.sh on the port of `cdp` (headless by default), or the flags when the backend is not one it starts.
+ * Elsewhere: the flags themselves, with the DevTools port of `cdp`.
  * @param cdp the browser's DevTools URL (SHOT_CDP), e.g. http://127.0.0.1:9222
  * @param angle the ANGLE backend the run asks for
  * @param extra the run's extra flags
  */
 export function startHint(cdp: string, angle: string, extra: readonly string[], env: Env = process.env): string {
-  if (inWsl(env)) {
-    const rest = extra.length ? ` -- ${extra.join(' ')}` : ''
-    return `tools/win-chrome.sh stop, then start --angle ${angle}${rest}`
-  }
   const port = URL.parse(cdp)?.port || '9222'
-  const flags = [`--remote-debugging-port=${port}`, '--enable-automation', ...renderFlags(angle, extra)]
-  return `start Chrome with its own --user-data-dir and ${flags.join(' ')}`
+  const flags = [`--remote-debugging-port=${port}`, ...attachFlags(angle, extra)].join(' ')
+  if (!inWsl(env)) return `start Chrome with its own --user-data-dir and ${flags}`
+  if (!WIN_ANGLES.includes(angle)) {
+    const known = WIN_ANGLES.join(' or ')
+    return `tools/win-chrome.sh has no --angle ${angle} (only ${known}): start Windows Chrome yourself with ${flags}`
+  }
+  const rest = extra.length ? ` -- ${extra.join(' ')}` : ''
+  return `PORT=${port} tools/win-chrome.sh stop, then PORT=${port} tools/win-chrome.sh start --angle ${angle}${rest}`
 }
 
 /**
@@ -66,4 +91,14 @@ export function attachedUrl(
 /** A WSL path's Windows path, through wslpath. */
 function wslpathW(file: string): string {
   return execFileSync('wslpath', ['-w', file], { encoding: 'utf8' }).trim()
+}
+
+// `node tools/attach.ts flags <angle>`: attachFlags, one a line, for tools/win-chrome.sh
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const [cmd, angle] = process.argv.slice(2)
+  if (cmd !== 'flags' || !angle) {
+    console.error('usage: node tools/attach.ts flags <angle>')
+    process.exit(2)
+  }
+  console.log(attachFlags(angle).join('\n'))
 }

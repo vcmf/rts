@@ -13,6 +13,7 @@
 # checks the backend a run asks for against the renderer the browser reports, and the flags it asks for
 # (SHOT_CHROME_ARGS) against the command line: the look bench on the GPU wants `start --angle d3d11 --
 # --disable-gpu-vsync --disable-frame-rate-limit` and `--gpu d3d11`. Flags change only with a stop and a start.
+# Its flags are tools/attach.ts's attachFlags (shot.mjs's render flags, automation, no backgrounding), read with node.
 # One Chrome for everyone attached to it: several agents running checks on it at once skew each other's benches.
 set -euo pipefail
 PORT=${PORT:-9222}
@@ -59,15 +60,25 @@ need_chrome() {
 profile() { echo "$(localappdata)\\rts-chrome"; }
 # the PIDs of the Chrome on exactly this profile. Get-Process has no command line in Windows PowerShell 5.1, so CIM; the
 # profile is matched as the whole --user-data-dir value, quoted or not, so another profile's name never matches
-pids() {
+pids_raw() {
   set -- "${1//\'/\'\'}"   # a ' in the path doubled, for PowerShell's single quotes
   powershell.exe -NoProfile -Command "\$p = [regex]::Escape('$1'); Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" -ErrorAction Stop |
     Where-Object { \$_.CommandLine -match ('--user-data-dir=\"?' + \$p + '\"?(\s|\$)') } | ForEach-Object { \$_.ProcessId }" | tr -d '\r'
 }
+# the same, or a message and a failure when PowerShell cannot list the processes (callers exit on it)
+pids() { pids_raw "$1" || { echo "could not list Chrome's processes (PowerShell's Get-CimInstance failed)" >&2; return 1; }; }
+# the flags Chrome starts with: tools/attach.ts's attachFlags for the backend (the same list tools/shot.mjs's hint
+# names), without --headless=new for a window
+launch_flags() {
+  node "$(dirname "$0")/attach.ts" flags "$angle" | { if [ -n "$headless" ]; then cat; else grep -vx -- --headless=new; fi; }
+}
 
 case "$cmd" in
   start)
-    need_interop; need_chrome; P=$(profile); running=$(pids "$P")
+    need_interop; need_chrome; P=$(profile); running=$(pids "$P") || exit 1
+    command -v node >/dev/null || { echo "needs node in WSL (the flags come from tools/attach.ts)" >&2; exit 2; }
+    chrome_flags=(); while IFS= read -r f; do chrome_flags+=("$f"); done < <(launch_flags)
+    [ ${#chrome_flags[@]} -gt 0 ] || { echo "could not read the flags from tools/attach.ts" >&2; exit 1; }
     if v=$(up); then
       [ -n "$running" ] && echo "$v" | grep -q 'Windows NT' || { echo "port $PORT is taken by another browser or tool" >&2; exit 1; }
       # its flags are those of its launch: asking for others would silently get these
@@ -77,25 +88,29 @@ case "$cmd" in
     # Chrome hands a second launch on an open profile to the running one, which keeps its own flags: no port would open
     [ -z "$running" ] || { echo "rts-chrome is open without port $PORT: run tools/win-chrome.sh stop first" >&2; exit 1; }
     # detached, so closing the shell that started it does not take the interop process (and Chrome's lifetime) with it;
-    # --enable-automation lets a tool read the flags back (Browser.getBrowserCommandLine); the GPU and SwiftShader flags
-    # are the ones tools/shot.mjs launches with; a window behind others (headed) keeps rendering at full rate
+    # the render flags are tools/shot.mjs's own (tools/attach.ts), with what a long-lived browser needs besides
     setsid nohup "$CHROME" --remote-debugging-port="$PORT" --user-data-dir="$P" --no-first-run --no-default-browser-check \
-      --enable-automation --use-angle="$angle" --ignore-gpu-blocklist --enable-unsafe-swiftshader \
-      --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling \
-      $headless "${flags[@]}" about:blank \
+      "${chrome_flags[@]}" "${flags[@]}" about:blank \
       >/dev/null 2>&1 < /dev/null &
     for _ in $(seq 60); do up >/dev/null && { echo "Chrome on http://127.0.0.1:$PORT"; exit 0; }; sleep 0.5; done
     echo "Chrome started but port $PORT did not open (is networkingMode=mirrored set?)" >&2; exit 1 ;;
   stop)
-    need_interop; P=$(profile); running=$(pids "$P")
+    need_interop; P=$(profile); running=$(pids "$P") || exit 1
     if [ -n "$running" ]; then
       powershell.exe -NoProfile -Command "$(echo $running | sed 's/ /,/g') | ForEach-Object { Stop-Process -Id \$_ -Force -ErrorAction SilentlyContinue }"
     fi
-    for _ in $(seq 20); do [ -z "$(pids "$P")" ] && { echo "stopped ($(echo $running | wc -w) processes)"; exit 0; }; sleep 0.5; done
-    echo "rts-chrome still running" >&2; exit 1 ;;
+    gone=
+    for _ in $(seq 20); do left=$(pids "$P") || exit 1; [ -z "$left" ] && { gone=1; break; }; sleep 0.5; done
+    [ -n "$gone" ] || { echo "rts-chrome still running" >&2; exit 1; }
+    # the port closes with Chrome; if it still answers, another browser or tool holds it
+    for _ in $(seq 10); do up >/dev/null || { echo "stopped ($(echo $running | wc -w) processes), port $PORT closed"; exit 0; }; sleep 0.5; done
+    echo "rts-chrome stopped, but port $PORT still answers: another browser or tool holds it" >&2; exit 1 ;;
   status)
     v=$(up) || { echo "not running"; exit 1; }
     echo "$v" | grep -E '"Browser"'
     # another browser or tool may hold the port (the MCP's own Chrome): say so
-    if command -v powershell.exe >/dev/null && [ -z "$(pids "$(profile)")" ]; then echo "(not rts-chrome)"; exit 1; fi ;;
+    if command -v powershell.exe >/dev/null; then
+      ours=$(pids "$(profile)") || exit 1
+      [ -n "$ours" ] || { echo "(not rts-chrome)"; exit 1; }
+    fi ;;
 esac

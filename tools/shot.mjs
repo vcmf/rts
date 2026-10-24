@@ -19,7 +19,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { attachedUrl, renderFlags, startHint } from './attach.ts'
-import { navigationLoaded } from './page-load.ts'
+import { loadState } from './page-load.ts'
 
 const [target, outDir, w = '1600', h = '900', script = '[]'] = process.argv.slice(2)
 if (!target || !outDir) {
@@ -71,23 +71,47 @@ let context // attached: the browser's socket and this run's context
 // src/look/materials.ts)
 const FALLBACK_MS = 1500
 const FATAL_EXC = ['fragment textures']
-let bid = 0
-/** One call on the browser's socket (attached), with its own 10 s timeout; resolves to the call's result. */
-const bsend = (method, params = {}) =>
-  new Promise((res, rej) => {
-    const i = ++bid
-    const t = setTimeout(() => rej(new Error(`${method}: no reply`)), 10000)
-    const on = e => {
-      const m = JSON.parse(e.data)
-      if (m.id !== i) return
-      clearTimeout(t)
-      bws.removeEventListener('message', on)
-      if (m.error) rej(new Error(`${method}: ${m.error.message}`))
-      else res(m.result)
-    }
-    bws.addEventListener('message', on)
-    bws.send(JSON.stringify({ id: i, method, params }))
+// per DevTools call; long evals (formation-measure.js) raise it
+const TIMEOUT = +(process.env.SHOT_TIMEOUT_S || 60) * 1000
+let bsend // attached: calls on the browser's socket
+
+/**
+ * A DevTools client on a socket: returns send(method, params), which resolves to the call's result and rejects on an
+ * error reply, on no reply within timeoutMs, or when the socket closes (a Chrome crash fails every pending call
+ * instead of hanging). Every message that is not a reply goes to onEvent.
+ * @param socket the page's or the browser's WebSocket
+ * @param timeoutMs the time a call waits for its reply, in milliseconds
+ * @param onEvent receives each event message (parsed)
+ */
+function cdpClient(socket, timeoutMs, onEvent = () => {}) {
+  let id = 0
+  const pend = new Map()
+  socket.addEventListener('message', e => {
+    const m = JSON.parse(e.data)
+    const reply = m.id && pend.get(m.id)
+    if (!reply) return onEvent(m)
+    pend.delete(m.id)
+    reply(m)
   })
+  socket.addEventListener('close', () => {
+    for (const reply of pend.values()) reply({ error: { message: 'DevTools socket closed (Chrome exited?)' } })
+    pend.clear()
+  })
+  return (method, params = {}) =>
+    new Promise((res, rej) => {
+      const i = ++id
+      const t = setTimeout(() => {
+        pend.delete(i)
+        rej(new Error(`${method}: no reply in ${timeoutMs / 1000}s`))
+      }, timeoutMs)
+      pend.set(i, m => {
+        clearTimeout(t)
+        if (m.error) rej(new Error(`${method}: ${m.error.message}`))
+        else res(m.result)
+      })
+      socket.send(JSON.stringify({ id: i, method, params }))
+    })
+}
 let cleaning
 /** Cleans up once: a fatal page error and the main path's failure can both ask (doCleanup). */
 const cleanup = () => (cleaning ??= doCleanup())
@@ -142,11 +166,7 @@ try {
     } catch {
       throw new Error(`no browser at ${CDP} (SHOT_CDP; ${RESTART})`)
     }
-    bws = new WebSocket(version.webSocketDebuggerUrl)
-    await new Promise((res, rej) => {
-      bws.onopen = res
-      bws.onerror = () => rej(new Error('DevTools browser socket failed'))
-    })
+    // what /json/version and the environment tell, before any socket opens
     if (!/HeadlessChrome/.test(version['User-Agent'] ?? '')) {
       throw new Error(
         `the browser at ${CDP} is not headless: a visible window can be throttled or covered (${RESTART})`,
@@ -157,6 +177,12 @@ try {
         `cannot check the backend "${ANGLE}" on an attached browser (known: ${Object.keys(RENDERER).join(', ')})`,
       )
     }
+    bws = new WebSocket(version.webSocketDebuggerUrl)
+    await new Promise((res, rej) => {
+      bws.onopen = res
+      bws.onerror = () => rej(new Error('DevTools browser socket failed'))
+    })
+    bsend = cdpClient(bws, TIMEOUT)
     // what the caller asks of the browser's launch must be there: a missing vsync flag would change what is measured
     // without a word (the backend is checked on the page, below)
     if (EXTRA.length) {
@@ -173,7 +199,9 @@ try {
     }
     url = attachedUrl(url, version['User-Agent'] ?? '')
     context = (await bsend('Target.createBrowserContext', { disposeOnDetach: true })).browserContextId
-    const { targetId } = await bsend('Target.createTarget', { url: 'about:blank', browserContextId: context })
+    // the size a launched run's --window-size gives its window
+    const target = { url: 'about:blank', browserContextId: context, width: +w, height: +h }
+    const { targetId } = await bsend('Target.createTarget', target)
     pageWs = version.webSocketDebuggerUrl.replace(/\/devtools\/browser\/.*/, `/devtools/page/${targetId}`)
   } else {
     // --remote-debugging-port=0 lets Chrome pick a free port and write it to DevToolsActivePort
@@ -213,16 +241,7 @@ try {
   })
   // the top frame's commits and loads, in order: the load that counts follows the commit of the document
   // Page.navigate opens, or of one it navigates to itself (tools/page-load.ts)
-  let id = 0
   const loadEvents = []
-  const pend = {}
-  // a dropped socket (Chrome crash) fails every pending call instead of hanging forever
-  ws.onclose = () => {
-    for (const k in pend) {
-      pend[k]({ error: { message: 'DevTools socket closed (Chrome exited?)' } })
-      delete pend[k]
-    }
-  }
   let compiling = false
   let fallbackWait
   let dead = false
@@ -232,14 +251,11 @@ try {
     console.error('shot.mjs: the page logged a fatal error, stopping:', text.slice(0, 300))
     cleanup().then(() => process.exit(1))
   }
-  ws.onmessage = e => {
-    const m = JSON.parse(e.data)
-    if (m.id && pend[m.id]) {
-      pend[m.id](m)
-      delete pend[m.id]
-    }
+  /** The page's events: the top frame's commits and loads, its exceptions and console errors. */
+  const onPageEvent = m => {
     if (m.method === 'Page.frameNavigated' && !m.params.frame.parentId) {
-      loadEvents.push({ kind: 'commit', loaderId: m.params.frame.loaderId })
+      const { loaderId, unreachableUrl } = m.params.frame
+      loadEvents.push({ kind: 'commit', loaderId, unreachableUrl })
     }
     if (m.method === 'Page.loadEventFired') loadEvents.push({ kind: 'load' })
     if (m.method === 'Runtime.exceptionThrown') {
@@ -267,22 +283,7 @@ try {
       }
     }
   }
-  // per DevTools call; long evals (formation-measure.js) raise it
-  const TIMEOUT = +(process.env.SHOT_TIMEOUT_S || 60) * 1000
-  const send = (method, params = {}) =>
-    new Promise((res, rej) => {
-      const i = ++id
-      const t = setTimeout(() => {
-        delete pend[i]
-        rej(new Error(`${method}: no reply in ${TIMEOUT / 1000}s`))
-      }, TIMEOUT)
-      pend[i] = m => {
-        clearTimeout(t)
-        if (m.error) rej(new Error(`${method}: ${m.error.message}`))
-        else res(m.result)
-      }
-      ws.send(JSON.stringify({ id: i, method, params }))
-    })
+  const send = cdpClient(ws, TIMEOUT, onPageEvent)
   await send('Runtime.enable')
   await send('Page.enable')
   if (CDP) {
@@ -301,10 +302,13 @@ try {
   const nav = await send('Page.navigate', { url })
   if (nav.errorText) throw new Error(`could not open ${url}: ${nav.errorText}`)
   const LOAD = +(process.env.SHOT_LOAD_S || 60) // seconds; a busy machine or a slow page raises it
-  const loaded = () => navigationLoaded(loadEvents, nav.loaderId)
+  const loaded = () => loadState(loadEvents, nav.loaderId).loaded
   // the page's own script (scene build) runs before the load event
   for (let i = 0; i < LOAD * 4 && !loaded(); i++) await sleep(250)
-  if (!loaded()) throw new Error(`page did not finish loading in ${LOAD}s`)
+  const state = loadState(loadEvents, nav.loaderId)
+  if (!state.loaded) throw new Error(`page did not finish loading in ${LOAD}s`)
+  // the page sent itself somewhere Chrome could not open: its error page loaded
+  if (state.unreachableUrl) throw new Error(`the page navigated to ${state.unreachableUrl}, which could not be opened`)
   for (const [op, a, b] of steps) {
     if (op === 'wait') await sleep(a)
     else if (op === 'eval') {
