@@ -7,8 +7,8 @@ last_reviewed: 2026-10-24
 
 ## Problem
 
-The owner asked for a steady 150 fps on their RTX 3080, that is a mean frame of 6.7 ms or less at every zoom, after
-seeing lag on the map. Two investigations measured where the frame goes.
+The owner asked for a steady 150 fps on an RTX 3080 test machine, that is a mean frame of 6.7 ms or less at every zoom,
+after seeing lag on the map. Two investigations measured where the frame goes.
 
 - **WebGL is cheap:** the terrain, relief and world take about 1 ms of GPU time at map zoom, and under 1 ms at 4K.
 - **The 2D ink canvas is the cost.** Its JavaScript is only about 2 ms, but Chrome then has to rasterise its shapes,
@@ -57,6 +57,14 @@ column is the page after review round 1.
 
   Both come from the volume of shapes Chrome draws on the ink canvas. The next step would move the blocks and the
   smoke into WebGL.
+
+## Test machines
+
+Every result names the machine it was measured on. Add a row when a new configuration is tested.
+
+| Machine | GPU | Screen | Browser | Notes |
+|---|---|---|---|---|
+| A | RTX 3080 | 4K, device pixel ratio 2 (about 45 fps mid, 90 fps close before the 4K fixes) | Chrome, Windows | The headless runs above are on A's GPU, emulating 1920×1080 at ratio 1, or at ratio 2 for the 4K checks. |
 
 ## Review rounds
 
@@ -110,10 +118,11 @@ column is the page after review round 1.
   Measured again: 30× map 4.86 / mid 5.83 ms mean; 90× map 7.56 / mid 8.28 ms; paused 0.4–0.55 ms. The first run after
   an edit reads high, at about 4.9 ms paused, while the caches warm up; repeats give 0.53 ms.
 
-## On the owner's 4K screen
+## On a 4K test machine
 
-The owner measured about 45 fps at mid zoom and 90 fps close, on a 4K screen. The measurements above were taken at 1920×1080
-with a device pixel ratio of 1. The checks below emulate the owner's screen: 1920×1080 CSS pixels at a ratio of 2, 30×.
+A test run on **machine A** (see below) measured about 45 fps at mid zoom and 90 fps close. The measurements above were
+taken at 1920×1080 with a device pixel ratio of 1. The checks below emulate that screen: 1920×1080 CSS pixels at a ratio
+of 2, 30×.
 
 - **The ink at the full pixel ratio:** at 4 times the pixels, Chrome's rasterising of the ink took 14 to 23 ms a frame
   at close and mid zoom, while the JavaScript stayed at 2.9 ms.
