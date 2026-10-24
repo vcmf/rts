@@ -51,6 +51,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
 .hr{height:1px;background:var(--rule);margin:10px 0}
 /* legend */
 #legend{left:24px;bottom:98px;width:236px}
+#fpsbox{top:24px;left:50%;transform:translateX(-50%);padding:6px 12px;font:500 11px 'JetBrains Mono',monospace;letter-spacing:0.06em;white-space:nowrap}
+#fpsbox b{font-size:15px}#fpsbox #fpsd{opacity:0.6;margin-left:10px}
 #legend .li{display:flex;align-items:center;gap:10px;font:400 10.5px/1.3 var(--mono);color:var(--ink-2);margin:6px 0}
 #legend svg{flex:none}
 @keyframes blink{0%,17%{fill:#2C4FA8}33%,67%{fill:#fbfaf6}83%,100%{fill:#2C4FA8}}
@@ -111,7 +113,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
   <div class="row"><span>trails</span><button class="tg on" id="trails">on</button></div>
   <div class="row"><span>legend</span><button class="tg on" id="legendtg">on</button></div>
   <div class="row"><span>place names</span><button class="tg on" id="namestg">on</button></div>
+  <div class="row"><span>fps</span><button class="tg on" id="fpstg">on</button></div>
 </div>
+<div id="fpsbox" class="fig"><b id="fpsn">–</b> fps<span id="fpsd"></span></div>
 
 <div id="legend" class="fig"><span class="cx"></span>
   <div class="cap"><span>fig 2 · <b>legend</b></span></div>
@@ -342,28 +346,9 @@ function bakeHachures(){
 }
 // the lit style's bake (docs/plans/active/map-view-lit-v1.md), once per map: the trees as flat circles with a soft
 // shadow, a sparse share of them
-let cCanopy=null;
 // a crown sprite: a flat disc, its rim a little darker; a soft shadow sprite
-function crownSprite(){const N=64,[c,g]=newCanvas(N,N),im=g.createImageData(N,N),D=im.data;   // a flat disc, its rim a little darker
-  for(let y=0;y<N;y++)for(let x=0;x<N;x++){const d=Math.hypot(x+0.5-N/2,y+0.5-N/2)/(N/2),o=(y*N+x)*4;if(d>=1){D[o+3]=0;continue;}
-    D[o]=0;D[o+1]=255*(1-0.18*sstep(0.7,0.95,d));D[o+2]=255;D[o+3]=255*(1-sstep(0.88,1,d));}
-  g.putImageData(im,0,0);return c;}
-function shadowSprite(){const N=64,[c,g]=newCanvas(N,N),gr=g.createRadialGradient(N/2,N/2,0,N/2,N/2,N/2);g.clearRect(0,0,N,N);g.globalCompositeOperation='source-over';
-  gr.addColorStop(0,'rgba(255,0,0,0.85)');gr.addColorStop(0.6,'rgba(255,0,0,0.55)');gr.addColorStop(1,'rgba(255,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,N,N);return c;}
 // a slow noise for clumps: the value noise on a 60 m lattice
 const clumpN=(x,z)=>vn(x/60,z/60);
-function bakeCanopy(){
-  const[c,g]=newCanvas(TW,TH),crown=crownSprite(),shade=shadowSprite();
-  g.globalCompositeOperation='source-over';g.imageSmoothingQuality='high';   // newCanvas sets lighter (additive): crowns must cover, not add
-  const ts=[];
-  for(const t of TREES){if(Math.abs(t.x)>MX||Math.abs(t.z)>MZ)continue;const cl=clumpN(t.x,t.z);
-    if(t.wood&&hash(t.x*0.37,t.z*0.37)>0.4)continue;   // sparse: about 4 in 10 of a wood's trees, the same ones every load
-    ts.push({x:t.x,z:t.z,r:(t.wood?4.2:3.2)*t.s*(0.85+0.3*cl)});}
-  ts.sort((a,b)=>b.z-a.z);   // north first: a southern crown overlaps the one behind it
-  for(const t of ts){const r=t.r*PX*1.05;g.drawImage(shade,tx(t.x)-NW[0]*t.r*PX*0.78-r,ty(t.z)+NW[1]*t.r*PX*0.78-r,2*r,2*r);}   // the shadows first, away from the north-west light
-  for(const t of ts){const r=t.r*PX;g.drawImage(crown,tx(t.x)-r,ty(t.z)-r,2*r,2*r);}
-  return c;
-}
 // the houses, baked once with the static light (north-west): drawn live, all 221 cost about 11 ms a frame at map zoom,
 // and up close the painted world's own houses take over
 let cHouse=null;
@@ -546,7 +531,7 @@ function bakeRelief() {
 
 function bakeMap(){
   const nh=LIT?0:bakeHachures();   // the lit style draws contours, not hachures
-  if(LIT){cCanopy=bakeCanopy();cHouse=bakeHouses();}
+  if(LIT)cHouse=bakeHouses();
   // woods: area wash, edge line, one ring per tree (the same trees the 3D world grows)
   for(const w of WOODS){const P=[];for(let k=0;k<=140;k++){const th=k/140*6.2832,r=w.r(th);P.push([w.x+Math.cos(th)*r,w.z+Math.sin(th)*r]);}
     poly(gA,P);gA.fillStyle='rgb(0,70,0)';gA.fill();if(!LIT){poly(gB,P);gB.strokeStyle='rgba(255,0,0,0.75)';gB.lineWidth=1.1;gB.stroke();}}
@@ -672,7 +657,7 @@ const TER_FS=`#ifdef LIT
 precision highp float;varying vec3 vW;varying vec3 vN;varying float vH;
 uniform sampler2D uMapA,uMapB,uPaperT,uNoiseT;
 #ifdef LIT
-uniform sampler2D uCanopyT,uHouseT;
+uniform sampler2D uHouseT;
 #ifdef SHADED
 uniform sampler2D uReliefT;   /* the baked relief: R light on the slope, G cast shadow (1 lit), B exposure (0.5 even) */
 uniform vec2 uReliefN;        /* its grid nodes, x and z */
@@ -721,7 +706,13 @@ void main(){
 #endif
   float washK=uWashA*(0.35+0.75*low)*smoothstep(0.25,0.6,wn+low*0.35)*inside;
   vec3 mapC=mix(paper,paper*uWashC*1.12,clamp(washK,0.0,1.0)*inside);
+#ifdef LIT
+  /* woods: a plain green on the paper, under the relief, its shadows and the ink (the owner); the season crown colour
+     taken toward the paper so it sits in its palette */
+  mapC = mix(mapC, mix(uCrown, uPaper, 0.38) * vec3(0.93, 1.02, 0.97), smoothstep(0.08, 0.2, A.g) * 0.85 * inside);
+#else
   mapC=mix(mapC,mapC*uWoodW*1.15,uWoodWA*woodA*(0.75+0.25*wn));
+#endif
 #ifdef LIT
   float mott=0.5+0.18*(sin(vW.x/310.0+sin(vW.z/230.0)*1.7)+sin(vW.z/270.0+sin(vW.x/190.0)*1.9))+0.08*sin(vW.x/97.0+vW.z/131.0);   /* smooth, slow */
 #endif
@@ -759,7 +750,7 @@ void main(){
     vec3 hue = v < 1.0 ? mix(vec3(0.93, 0.90, 0.86), vec3(1.0), (v - ${SHADE_FLOOR}) / ${(1 - SHADE_FLOOR).toFixed(2)})
                        : mix(vec3(1.0), vec3(1.0, 0.98, 0.90), (v - 1.0) / ${(SHADE_TOP - 1).toFixed(2)});
     vec3 shadeK = v * hue;
-    float relief = (1.0 - uWash) * inside * (1.0 - 0.5 * woodA);   /* lighter under the woods, which shade their own ground */
+    float relief = (1.0 - uWash) * inside;
     mapC = mix(mapC, min(mapC * shadeK, vec3(1.0)), relief);
   }
 #endif
@@ -819,11 +810,7 @@ void main(){
   /* ink: lifts last */
   float k=uInk*thin;
 #ifdef LIT
-  /* woods: the baked circles, their shadows on the ground first */
-  vec4 Cn=texture2D(uCanopyT,clamp(uv,0.0,1.0))*inside;
-  col=mix(col,col*vec3(0.55,0.56,0.52),Cn.r*0.55*k);
-  float lum=Cn.g/max(Cn.b,0.004);
-  col=mix(col,uCrown*0.95*lum*(0.94+mott*0.12),Cn.b*k);
+
 #else
   col=mix(col,uWoodInk,woodMark*0.9*k);
 #endif
@@ -847,7 +834,7 @@ void main(){
   /* lighter while the sheet edges show, and off the lit edge so the highlight stays */
   minorC*=mix(0.7,1.0,max(uWash,1.0-lyW5))*(1.0-0.6*lyLt);indexC*=mix(0.85,1.0,uWash)*(1.0-0.6*lyLt);
 #endif
-  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.25,indexC*0.45)*k*inside*(1.0-water)*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
+  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.25,indexC*0.45)*k*inside*(1.0-water));   /* over the woods too: they lie under the ink */
 #else
   col=mix(col,uHach,clamp(A.r*1.05,0.0,1.0)*k*uHachK);
 #endif
@@ -1860,9 +1847,9 @@ function build(){
   window.__bake={hachures:nh,ms:Math.round(bakeMs),trees:TREES.length,houses:HOUSES.length,terrain:DEM?`real (${DEM.source}), heights ×${DEM_Z.toFixed(2)}`:'made-up'};
   const COMMONU=['uSun','uSeason','uMist','uGSh'];
   terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal',...(LAYERS?['aHB','aGB']:[])],
-    uniforms:['world','viewProjection','uCrown','uLightXZ','uReliefN','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[]),...(SHADED?['uReliefT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[]),...(SHADED?['#define SHADED']:[])]:[]});
+    uniforms:['world','viewProjection','uCrown','uLightXZ','uReliefN','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uHouseT']:[]),...(SHADED?['uReliefT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[]),...(SHADED?['#define SHADED']:[])]:[]});
   terrMat.backFaceCulling=false;terrMat.setTexture('uMapA',texA);terrMat.setTexture('uMapB',texB);paperT.wrapU=paperT.wrapV=noiseT.wrapU=noiseT.wrapV=B.Texture.WRAP_ADDRESSMODE;terrMat.setTexture('uPaperT',paperT);terrMat.setTexture('uNoiseT',noiseT);terrMat.setFloat('uHmin',HMIN);terrMat.setFloat('uHmax',HMAX);
-  if(LIT){for(const[n,c]of[['uCanopyT',cCanopy],['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
+  if(LIT){for(const[n,c]of[['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
   if(LIT)terrMat.setVector2('uLightXZ',new B.Vector2(NW[0],NW[1]));
   if(SHADED){const t0=performance.now(),R=bakeRelief();window.__reliefMs=Math.round(performance.now()-t0);   // the bake's own cost, for the plan
     const t=B.RawTexture.CreateRGBATexture(R.data,R.nx,R.nz,scene,true,false,B.Texture.TRILINEAR_SAMPLINGMODE);t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture('uReliefT',t);terrMat.setVector2('uReliefN',new B.Vector2(R.nx,R.nz));t.anisotropicFilteringLevel=8;if(DEM)delete DEM.fine;}   // the fine heights are only for the bake
@@ -1957,6 +1944,22 @@ let SEASON=+(Q.get('season')??3);$('season').value=SEASON;$('season').oninput=e=
 const RMIN=70,r2s=R=>Math.log(R/RMIN)/Math.log(FIT.R*1.15/RMIN);
 $('scrub').oninput=e=>{CAMS.tw=null;CAMS.R=RMIN*Math.pow(FIT.R*1.15/RMIN,+e.target.value);};
 $('trails').onclick=e=>{SHOW_TRAILS=!SHOW_TRAILS;e.target.classList.toggle('on',SHOW_TRAILS);e.target.textContent=SHOW_TRAILS?'on':'off';};
+// the frame rate on the map (the owner); off with the toggle or ?fps=0, remembered in this browser
+{
+  let show = Q.get('fps') !== '0';
+  try { if (!Q.has('fps') && localStorage.getItem('staffmap.fps') === '0') show = false; } catch {}
+  const apply = () => {
+    $('fpsbox').style.display = show ? '' : 'none';
+    $('fpstg').classList.toggle('on', show);
+    $('fpstg').textContent = show ? 'on' : 'off';
+  };
+  $('fpstg').onclick = () => {
+    show = !show;
+    try { localStorage.setItem('staffmap.fps', show ? '1' : '0'); } catch {}
+    apply();
+  };
+  apply();
+}
 $('legendtg').onclick=e=>{const on=$('legend').style.display==='none';$('legend').style.display=on?'':'none';e.target.classList.toggle('on',on);e.target.textContent=on?'on':'off';};
 $('namestg').onclick=e=>{SHOW_NAMES=!SHOW_NAMES;e.target.classList.toggle('on',SHOW_NAMES);e.target.textContent=SHOW_NAMES?'on':'off';};
 function updateCard(){const s=sel();const c=$('card');if(!s.length){c.style.display='none';return;}c.style.display='block';
@@ -2015,6 +2018,7 @@ function frame(){
     if(document.activeElement!==$('scrub'))$('scrub').value=r2s(CUR.R);
     const eng=UNITS.filter(u=>!u.gone&&GT-u.hit<20).length;$('sengaged').textContent=`${eng} engaged · ${UNITS.filter(u=>u.state==='rout').length} routing`;
     const avg=ft.reduce((a,b)=>a+b,0)/ft.length;$('sfps').textContent=`${avg.toFixed(1)} ms · ${Math.round(1000/avg)} fps`;
+    if($('fpsbox').style.display!=='none'){const worst=Math.max(...ft);$('fpsn').textContent=Math.round(1000/avg);$('fpsd').textContent=`${avg.toFixed(1)} ms · worst ${worst.toFixed(1)} ms`;}
     // scale bar: a round length near 120 px
     const want=MPP*120,nice=[25,50,100,250,500,1000,2000].find(v=>v>=want*0.6)||2000,px=nice/MPP;
     document.querySelector('#scale .bars').style.width=px+'px';$('scmid').textContent=nice>=1000?nice/2000+' km':nice/2+' m';$('scend').textContent=nice>=1000?nice/1000+' km':nice+' m';
