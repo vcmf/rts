@@ -131,7 +131,7 @@ Every result names the machine it was measured on. Add a row when a new configur
 
 ## On a 4K test machine
 
-A test run on **machine A** (see below) measured about 45 fps at mid zoom and 90 fps close. The measurements above were
+A test run on **machine A** (see Test machines, above) measured about 45 fps at mid zoom and 90 fps close. The measurements above were
 taken at 1920×1080 with a device pixel ratio of 1. The checks below emulate that screen: 1920×1080 CSS pixels at a ratio
 of 2, 30×.
 
@@ -171,3 +171,19 @@ of 2, 30×.
 
   Measured again on machine A's GPU, ratio 2: mid 1.0 ms paused / 6.0 ms at 30×; R700 1.4 / 6.0 ms; R400 1.5 / 1.2 ms.
   The culling uses the previous frame's camera, one frame late at the edges; the extent margin covers it.
+- **Round 2 of the 4K changes**: severe. Soldiers could still vanish while part of their unit showed: during a change of
+  formation the cull used only the new formation's size, and units near the camera in the tilted view were sized at
+  the target's scale.
+
+  Fixed: a unit is culled only when the four corners of the square holding both its formations all project off the
+  same side of the screen.
+
+  With:
+  - the turning-block redraw flag set only for blocks actually drawn;
+  - no figure work while the figures are hidden;
+  - the zoom's rise taken in steps of 1/50, so zooming does not rebuild every soldier each frame;
+  - the figures' key carrying the units' state, so a change made while paused updates them;
+  - sharp ink rounded up, never below the screen's ratio;
+  - the bite comments corrected;
+  - decision 0056 for the softer default ink;
+  - the 4K rounds moved under this heading.

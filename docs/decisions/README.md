@@ -55,3 +55,4 @@ recorded here on 2026-10-08.
 | [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | accepted |
 | [0047](0047-figures-cast-runtime-shadows.md) | The figures cast runtime shadows from a map of their own | proposed |
 | [0055](0055-lit-map-view-tilts.md) | The lit map view leans a little off straight down, with armies as low slabs | accepted |
+| [0056](0056-map-ink-at-ratio-one.md) | The map's ink renders at a pixel ratio of 1 by default; sharp ink is a setting | accepted |

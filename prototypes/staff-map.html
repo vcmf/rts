@@ -585,7 +585,7 @@ const canvas=document.getElementById('c'),inkC=document.getElementById('ink'),in
 const GL_DPR=Math.min(2,window.devicePixelRatio||1);
 let SHARP_INK=Q.get('sharp')==='1';
 try{if(!Q.has('sharp')&&localStorage.getItem('staffmap.sharp')==='1')SHARP_INK=true;}catch{}
-const inkRatio=()=>SHARP_INK?Math.max(1,Math.round(GL_DPR)):1;   // whole: the hatch tiles are a whole number of pixels
+const inkRatio=()=>SHARP_INK?Math.max(1,Math.ceil(GL_DPR)):1;   // whole (the hatch tiles are whole pixels), never below the screen
 let DPR=inkRatio();   // the ink canvas
 const engine=new B.Engine(canvas,true,{preserveDrawingBuffer:true,stencil:false},false);
 engine.setHardwareScalingLevel(1/GL_DPR);
@@ -1384,7 +1384,7 @@ function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
   const rnd = unitRng(u, salt);
 
   // the bites go in their own path, so the caller's is untouched; without a clip (it cost a full-screen clip per block)
-  // each bite stays within its edge's ends and short of the far edge or a square's hole
+  // each bite stays within its edge's ends, and reaches 2 px past the edges it crosses (so it breaks their outline)
   const bites = new Path2D();
 
   for (let k = 0; k < n; k++) {
@@ -1398,8 +1398,7 @@ function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
     const hw = Math.min(0.45, Math.max(1.8 / edgeLen, 0.04 + 0.07 * rnd()));
     const t = hw + (1 - 2 * hw) * rnd();   // the bite inside the edge's ends
     const ring = ringM ? Math.min(1, ringM / (e % 2 ? fw : fd)) : 1;
-    // about a third cut right through; with no clip (it cost a full-screen clip per block), never past the far edge or
-    // into a square's hole
+    // about a third cut right through (to just past the far edge); in a square, no deeper than its ring
     const depth = Math.min(ring * (rnd() < 0.3 ? 1.2 : 0.45 + 0.45 * rnd()), I ? ring : 1);   // through, at most
 
     // inward: from this edge toward the opposite one, the full way across the block
@@ -1637,9 +1636,9 @@ function blockCol(u,now){const s=pal(u);if(u.state==='rout'){INK_ANIM=true;retur
 function drawUnder(u,alpha,now){const B=blockCorners(u),{C}=B;if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);
   if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true,gunPx(u),u);else{const h=slabHeight();for(const quad of parts(u,B)){const S=slabFaces(u,B,quad,0);addSlabShadow(S.W,S.G,h);}}}ink.globalAlpha=1;}
 function drawBlock(u,alpha,now){
-  if(Math.abs(angTo(u.dface,u.face))>1e-4)INK_ANIM=true;   // its drawn facing eases on the frame clock
   u.gun=null;   // drawn this frame or not at all: a stale circle would keep a stale click area
   const s=pal(u),{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
+  if(Math.abs(angTo(u.dface,u.face))>1e-4)INK_ANIM=true;   // drawn, and its facing still easing on the frame clock
   const lvl=u.mor>0.6?-1:u.mor>0.45?0:u.mor>0.3?1:2;
   if(u.state==='rout'){
     // routing: pulses between the army colour and white, the colour of surrender
@@ -1998,14 +1997,30 @@ function unitFigures(u, rise) {
   return u.figs;
 }
 
-function updateFigures(force){
+/**
+ * Whether any of a unit's ground can be on screen: the square around its front point that holds both its old and its
+ * new formation (and its rear battalion), each corner projected; culled only when all four lie off the same side.
+ */
+function unitInView(u) {
+  if (!VP) return true;
+  const n = alive(u), a = dims(u, u.prev, n), b = dims(u, u.form, n);
+  const R = Math.max(a[0], a[1], b[0], b[1]) + 20;
+  const C = [[-R, -R], [R, -R], [R, R], [-R, R]].map(([dx, dz]) => P2(u.x + dx, u.z + dz));
+  if (C.some(behind)) return true;   // straddles the camera plane: keep it
+  return !(C.every(p => p[0] < 0) || C.every(p => p[0] > SW) || C.every(p => p[1] < 0) || C.every(p => p[1] > SH));
+}
+
+function updateFigures(){
+  if(!(st('stand')>0)){   // the figures hidden: nothing to place
+    if(figKey!=='hidden'){figKey='hidden';for(const k in FIGS){FIGS[k].n=0;FIGS[k].m.thinInstanceCount=0;FIGS[k].m.isVisible=false;}}
+    return;}
   const easing=UNITS.some(u=>!u.gone&&Math.abs(angTo(u.dface,u.face))>1e-3);
-  // the units in view: a unit counts while any of its ground (its extent around its front point) can be on screen
-  const shown=UNITS.filter(u=>{if(u.gone)return false;if(!VP)return true;const d=dims(u,u.form,alive(u)),ext=Math.hypot(d[0],d[1])+20;return onScreen(P2(u.x,u.z),60+ext/MPP);});
-  const key=GT+':'+RISE().toFixed(4)+':'+st('stand').toFixed(3)+':'+shown.map(u=>u.id).join(',');if(!force&&!easing&&key===figKey)return;figKey=key;
+  const inView=UNITS.filter(u=>!u.gone&&unitInView(u));
+  const rise=Math.round(RISE()*50)/50;   // in steps: zooming rebuilds the figures about 50 times across the rise, not every frame
+  const key=GT+':'+rise+':'+inView.map(u=>u.id).join(',')+':'+unitsChecksum();if(!easing&&key===figKey)return;figKey=key;
   for(const k in FIGS)FIGS[k].n=0;
-  if(st('stand')>0){const rise=RISE();
-    for(const u of shown){
+  {
+    for(const u of inView){
       const{kinds}=unitFigures(u,rise);
       for(const k in kinds){const src=kinds[k],F=FIGS[k];F.mat.set(src.mat.subarray(0,src.n*16),F.n*16);F.info.set(src.info.subarray(0,src.n*4),F.n*4);F.n+=src.n;}
     }}
