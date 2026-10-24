@@ -23,7 +23,8 @@ crisper marks to frame rate.
 Good: the ink costs the same on a 4K screen as on a 1080p one (4.5 to 6 ms a frame at 30× on the test machine), and the
 terrain stays crisp. Bad: on high-density screens the marks and labels are a touch softer than the terrain. The armies
 still read first (the invariant), but less crisply than they could. A later move of the blocks and the smoke into WebGL
-would make sharp ink cheap again.
+would make sharp ink cheap again. The ink is upscaled by FSR 1's EASU, as the look page (decision 0045), not by the browser's
+bilinear stretch: crisper edges at no measurable cost (`docs/plans/active/perf-150.md`).
 
 ## Alternatives considered
 

@@ -204,3 +204,25 @@ of 2, 30×.
   | Map | 1.3 ms (first run after an edit 4.9) | 5.05 ms |
   | Mid | 1.0 ms | 6.1 ms |
   | R700 | 1.5 ms | 2.9 ms |
+
+## The ink upscaled by EASU
+
+The owner asked for the real map's upscaler on the draft map, for a crisper picture on 4K. That upscaler is FSR 1's
+EASU, decision 0045, the source Babylon ships as `fsr1UpscalePixelShader`.
+
+On a high-density screen the ink, drawn at a ratio of 1 (decision 0056), is now uploaded as a texture each time it is
+redrawn. A last pass draws it over the scene through EASU at the screen's pixels: colour, and a copy of the pass on the
+alpha so the marks' edges are upscaled too, composited premultiplied. The pass is on only when the ink is smaller than
+the screen; `?upscale=bilinear` keeps the browser's stretch, for comparison. If the pass cannot compile, the canvas
+shows as before.
+
+Measured on machine A's GPU at ratio 2 (crops compared with Chrome's decoder; frame times at 30×):
+
+| Ink | Mean difference from sharp ink | Map / mid frame |
+|---|---|---|
+| EASU | 0.27 | 4.8 / 5.8 ms |
+| Bilinear stretch | 0.33 | 4.8 / 5.7 ms |
+| Sharp (ratio 2) | — | 12.8 / 18–20 ms |
+
+So EASU is about 20 % closer to sharp ink, at no measurable cost. The gain is modest: EASU sharpens edges, but it cannot
+restore detail drawn at half the pixels.

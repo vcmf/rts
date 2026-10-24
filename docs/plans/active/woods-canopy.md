@@ -52,3 +52,5 @@ Out of scope: the ink style, the painted world's trees (close zoom), and real wo
 - The canopy bake, its sampler and the dot sprites are gone. The map bake is now about 60 to 70 ms.
 - **FPS on the map** (the owner): a badge at the top shows fps, the mean frame time and the worst of the last 60 frames.
   It can be turned off in the controls (remembered in this browser) or with `?fps=0`.
+- **Woods in warm grey** (the owner, 2026-10-24): the paper itself darkened (×0.6, 0.57, 0.52), not green, so the woods
+  sit in the paper's palette; still under the relief, its shadows and the contours.

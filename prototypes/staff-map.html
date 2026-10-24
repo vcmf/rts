@@ -715,9 +715,9 @@ void main(){
   float washK=uWashA*(0.35+0.75*low)*smoothstep(0.25,0.6,wn+low*0.35)*inside;
   vec3 mapC=mix(paper,paper*uWashC*1.12,clamp(washK,0.0,1.0)*inside);
 #ifdef LIT
-  /* woods: a plain green on the paper, under the relief, its shadows and the ink (the owner); the season crown colour
-     taken toward the paper so it sits in its palette */
-  mapC = mix(mapC, mix(uCrown, uPaper, 0.38) * vec3(0.93, 1.02, 0.97), smoothstep(0.08, 0.2, A.g) * 0.85 * inside);
+  /* woods: a dark warm grey on the paper (the owner), the paper itself darkened, so it sits in its palette; under the
+     relief, its shadows and the ink */
+  mapC = mix(mapC, uPaper * vec3(0.6, 0.57, 0.52), smoothstep(0.08, 0.2, A.g) * 0.85 * inside);
 #else
   mapC=mix(mapC,mapC*uWoodW*1.15,uWoodWA*woodA*(0.75+0.25*wn));
 #endif
@@ -1900,6 +1900,75 @@ function inkDirty(now) {
   // INK_ANIM: the last draw drew something still moving on the frame clock (each draw sets it where it reads the clock)
   return changed || INK_ANIM || now - INK_T0 < 3000;   // the fonts load and the first frames settle
 }
+/* ---------- the ink upscaled by FSR 1's EASU (decision 0045's upscale, as the look page uses it) ----------
+   On a high-density screen the ink is drawn at a ratio of 1 (decision 0056) and was stretched by the browser
+   (bilinear, soft). Instead it is uploaded as a texture when it is redrawn, and every frame a last pass draws it over the
+   scene through EASU at the screen's pixels: edges come out crisp at the cost of one full-screen pass. EASU works on
+   colour; a copy of it on the ink's alpha keeps the edges of the marks crisp too. Only when the ink is smaller than the
+   screen; else, or if the pass cannot compile, the canvas shows as before. */
+const INK_EASU = { on: false, tex: null, fx: null, fr: null };
+
+/** Babylon's EASU source (fsr1UpscalePixelShader), on uInk, with a copy on the alpha, compositing premultiplied. */
+function inkEasuSource() {
+  const src = B.ShaderStore.ShadersStore.fsr1UpscalePixelShader;
+  if (!src) return null;
+  let s = src.replace('uniform sampler2D textureSampler;', 'uniform sampler2D uInk;').replace(/textureSampler/g, 'uInk');
+  const rf0 = s.indexOf('vec4 FsrEasuRF('), gf0 = s.indexOf('vec4 FsrEasuGF('), f0 = s.indexOf('vec3 FsrEasuF('), m0 = s.indexOf('void main()');
+  if (rf0 < 0 || gf0 < 0 || f0 < 0 || m0 < 0) return null;
+  const alphaGather = s.slice(rf0, gf0).replace('FsrEasuRF(', 'FsrEasuAF(').replace(/\.r\b/g, '.a');
+  const alphaEasu = s.slice(f0, m0).replace('FsrEasuF(', 'FsrEasuFA(').replace(/FsrEasu[RGB]F\(/g, 'FsrEasuAF(');
+  return s.slice(0, m0) + alphaGather + alphaEasu + `
+void main(){
+  ivec2 ip = ivec2(gl_FragCoord.xy);
+  float a = clamp(FsrEasuFA(ip, con0, con1, con2, con3).r, 0.0, 1.0);
+  vec3 c = clamp(FsrEasuF(ip, con0, con1, con2, con3), vec3(0.0), vec3(a));   /* premultiplied: never brighter than its cover */
+  gl_FragColor = vec4(c, a);
+}`;
+}
+
+/** (Re)makes the ink texture at the ink canvas's size; turns the pass on only when the ink is smaller than the screen. */
+function inkEasuSetup() {
+  if (INK_EASU.tex) { INK_EASU.tex.dispose(); INK_EASU.tex = null; }
+  const upscaled = inkC.width < engine.getRenderWidth() - 1;
+  if (!upscaled || Q.get('upscale') === 'bilinear') return inkEasuOff();
+  if (!INK_EASU.fx) {
+    const src = engine.webGLVersion >= 2 ? inkEasuSource() : null;
+    if (!src) return inkEasuOff();
+    INK_EASU.fr = new B.EffectRenderer(engine);
+    INK_EASU.fx = new B.EffectWrapper({ engine, name: 'inkEasu', fragmentShader: src,
+      uniformNames: ['con0', 'con1', 'con2', 'con3'], samplerNames: ['uInk'] });
+    INK_EASU.fx.onApplyObservable.add(() => {
+      const e = INK_EASU.fx.effect, iw = inkC.width, ih = inkC.height, ow = engine.getRenderWidth(), oh = engine.getRenderHeight();
+      e.setTexture('uInk', INK_EASU.tex);
+      // FsrEasuCon (ffx_fsr1.h), as the look page's FSR1_CONSTANTS: the whole ink texture drawn to the whole screen
+      e.setFloat4('con0', iw / ow, ih / oh, 0.5 * iw / ow - 0.5, 0.5 * ih / oh - 0.5);
+      e.setFloat4('con1', 1 / iw, 1 / ih, 1 / iw, -1 / ih);
+      e.setFloat4('con2', -1 / iw, 2 / ih, 1 / iw, 2 / ih);
+      e.setFloat4('con3', 0, 4 / ih, 0, 0);
+    });
+  }
+  INK_EASU.tex = new B.DynamicTexture('ink', inkC, scene, false, B.Texture.NEAREST_SAMPLINGMODE);
+  INK_EASU.tex.wrapU = INK_EASU.tex.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+  INK_EASU.on = true;
+  inkC.style.visibility = 'hidden';   // still drawn into, shown through the pass
+  INK_KEY = '';
+}
+function inkEasuOff() {
+  INK_EASU.on = false;
+  inkC.style.visibility = '';
+}
+
+/** After the scene: the ink over it through EASU (uploaded only when it was redrawn). */
+function inkEasuDraw(redrawn) {
+  if (!INK_EASU.on) return;
+  if (!INK_EASU.fx.effect.isReady()) { inkC.style.visibility = ''; return; }   // until it compiles, the canvas shows
+  inkC.style.visibility = 'hidden';
+  if (redrawn) INK_EASU.tex.update(true, true);   // flipped to the GL's rows, premultiplied
+  engine.setAlphaMode(B.Constants.ALPHA_PREMULTIPLIED);
+  INK_EASU.fr.render(INK_EASU.fx);
+  engine.setAlphaMode(B.Constants.ALPHA_DISABLE);
+}
+
 function drawInk(now){
   INK_ANIM=false;   // set again by whatever this draw finds still moving on the frame clock
   ink.setTransform(DPR,0,0,DPR,0,0);ink.clearRect(0,0,SW,SH);
@@ -2132,7 +2201,7 @@ function updateCard(){const s=sel();const c=$('card');if(!s.length){c.style.disp
 let last=performance.now(),acc=0,ft=[],fps=0,FRAME_N=0;
 const fmtClock=s=>{const m=Math.floor(7*60+30+s/60);return`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;};
 const FIT={R:7000,z:0};
-function resize(){SW=innerWidth;SH=innerHeight;INK_KEY='';inkC.width=Math.round(SW*DPR);inkC.height=Math.round(SH*DPR);engine.resize();
+function resize(){SW=innerWidth;SH=innerHeight;INK_KEY='';inkC.width=Math.round(SW*DPR);inkC.height=Math.round(SH*DPR);engine.resize();if(LIT)inkEasuSetup();
   // theatre: the whole neatline between the side panels, above the status bar
   const side=SW>1100?300:24,mpp=Math.max((2*MZ+160)/Math.max(200,SH-190),(2*MX+160)/Math.max(200,SW-2*side));FIT.R=mpp*SH/(2*tanH);FIT.z=-35*mpp;}
 addEventListener('resize',resize);
@@ -2163,7 +2232,9 @@ function frame(){
   scene.render();
   VP=scene.getTransformMatrix().m;
   MPP=2*CUR.R*tanH/SH;
-  cleanFootprints(now);if(inkDirty(now))drawInk(now);
+  cleanFootprints(now);
+  const inkRedrawn=inkDirty(now);if(inkRedrawn)drawInk(now);
+  inkEasuDraw(inkRedrawn);
   // DOM (cheap, every few frames)
   if((frameN++&7)===0){
     const ck=fmtClock(GT);$('clock').textContent=ck;$('sclock').textContent=ck;
