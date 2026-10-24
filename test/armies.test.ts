@@ -30,6 +30,7 @@ import { RULESETS } from '../src/rulesets/index.ts'
 import { ARMIES_DEMO } from '../src/scenarios/armies-demo.ts'
 import {
   TINY_ROLES,
+  boneParts,
   checkUnits,
   decodeUnits,
   fromHalf,
@@ -38,6 +39,8 @@ import {
   shadowProxy,
   shadowShape,
   tinyMesh,
+  type Part,
+  type UnitData,
 } from '../src/look/units-data.ts'
 
 const g = napoleonic.types.infantry.geometry
@@ -318,6 +321,130 @@ describe('armies: the far palette', () => {
   })
 })
 
+// a mesh's signed volume by the right hand, Σ p0 · (p1 × p2) / 6: negative when its fronts are Babylon's
+function signedVolume(pos: Float32Array, idx: Uint16Array): number {
+  let s = 0
+  for (let t = 0; t < idx.length; t += 3) {
+    const [a, b, c] = [idx[t] * 3, idx[t + 1] * 3, idx[t + 2] * 3]
+    const cx = pos[b + 1] * pos[c + 2] - pos[b + 2] * pos[c + 1]
+    const cy = pos[b + 2] * pos[c] - pos[b] * pos[c + 2]
+    const cz = pos[b] * pos[c + 1] - pos[b + 1] * pos[c]
+    s += pos[a] * cx + pos[a + 1] * cy + pos[a + 2] * cz
+  }
+  return s / 6
+}
+const cross3 = (p: number[], q: number[]) => [
+  p[1] * q[2] - p[2] * q[1],
+  p[2] * q[0] - p[0] * q[2],
+  p[0] * q[1] - p[1] * q[0],
+]
+// the share of a LOD's head (its bone named …Head) that is skin, seen orthographically along f (from the eye into the
+// figure, its rest pose) with the back faces culled as Babylon culls them (drawn when the right-hand normal points
+// away from the eye): a 128² depth buffer over a 0.5 m square round the head's height
+function headSkinSeen(d: UnitData, lod: string, f: number[]): number {
+  const m = d.mesh[lod]
+  const head = d.bones.findIndex(b => /Head$/.test(b))
+  const skin = d.palette.indexOf('skin')
+  const r = [f[2], 0, -f[0]]
+  const u = cross3(r, f)
+  const res = 128
+  const depth = new Float64Array(res * res).fill(Infinity)
+  const id = new Int32Array(res * res).fill(-1)
+  const nv = m.positions.length / 3
+  const px = new Float64Array(nv * 3)
+  for (let v = 0; v < nv; v++) {
+    const p = [m.positions[v * 3], m.positions[v * 3 + 1] - 1.62, m.positions[v * 3 + 2]]
+    const dot = (a: number[]) => p[0] * a[0] + p[1] * a[1] + p[2] * a[2]
+    px[v * 3] = (dot(r) / 0.5 + 0.5) * res
+    px[v * 3 + 1] = (dot(u) / 0.5 + 0.5) * res
+    px[v * 3 + 2] = dot(f)
+  }
+  for (let t = 0; t < m.indices.length / 3; t++) {
+    const [a, b, c] = [0, 1, 2].map(k => m.indices[t * 3 + k] * 3)
+    const Q = (i: number) => [0, 1, 2].map(k => m.positions[i + k])
+    const [pa, pb, pc] = [Q(a), Q(b), Q(c)]
+    const n = cross3(
+      pb.map((x, k) => x - pa[k]),
+      pc.map((x, k) => x - pa[k]),
+    )
+    if (n[0] * f[0] + n[1] * f[1] + n[2] * f[2] <= 0) continue // a back face
+    const ar = (px[b] - px[a]) * (px[c + 1] - px[a + 1]) - (px[c] - px[a]) * (px[b + 1] - px[a + 1])
+    if (Math.abs(ar) < 1e-12) continue
+    const y0 = Math.max(0, Math.floor(Math.min(px[a + 1], px[b + 1], px[c + 1])))
+    const y1 = Math.min(res - 1, Math.ceil(Math.max(px[a + 1], px[b + 1], px[c + 1])))
+    const x0 = Math.max(0, Math.floor(Math.min(px[a], px[b], px[c])))
+    const x1 = Math.min(res - 1, Math.ceil(Math.max(px[a], px[b], px[c])))
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const qx = x + 0.5
+        const qy = y + 0.5
+        const w0 = ((px[b] - qx) * (px[c + 1] - qy) - (px[c] - qx) * (px[b + 1] - qy)) / ar
+        const w1 = ((px[c] - qx) * (px[a + 1] - qy) - (px[a] - qx) * (px[c + 1] - qy)) / ar
+        if (w0 < 0 || w1 < 0 || w0 + w1 > 1) continue
+        const z = w0 * px[a + 2] + w1 * px[b + 2] + (1 - w0 - w1) * px[c + 2]
+        if (z < depth[y * res + x]) {
+          depth[y * res + x] = z
+          id[y * res + x] = t
+        }
+      }
+    }
+  }
+  let all = 0
+  let sk = 0
+  for (const t of id) {
+    if (t < 0) continue
+    const v = m.indices[t * 3]
+    let bi = 0
+    for (let i = 1; i < 4; i++) if (m.boneWeights[v * 4 + i] > m.boneWeights[v * 4 + bi]) bi = i
+    if (m.boneIndices[v * 4 + bi] !== head) continue
+    all++
+    if (m.roles[v] === skin) sk++
+  }
+  return sk / all
+}
+
+describe('the figure parts at the ground (boneParts, #165)', () => {
+  // a made-up figure: a torso (0.6 to 1.4 m), a shin under it (0.15 to 0.55 m), a foot under the shin on the ground,
+  // and a hem hung from the torso down to the ground beside it; the foot and the hem too small to be parts
+  const bones = ['Torso', 'Shin', 'Foot', 'Hem']
+  const parents = [-1, 0, 1, 0]
+  const pos: number[] = []
+  const bone: number[] = []
+  const add = (b: number, x: number, y: number, z: number) => {
+    pos.push(x, y, z)
+    bone.push(b)
+  }
+  for (let i = 0; i < 12; i++) add(0, (i % 2) * 0.3 - 0.15, 0.6 + (i / 11) * 0.8, (i % 3) * 0.1 - 0.1)
+  for (let i = 0; i < 10; i++) add(1, 0.1 + (i % 2) * 0.05, 0.15 + (i / 9) * 0.4, (i % 3) * 0.04)
+  for (let i = 0; i < 4; i++) add(2, 0.1 + (i % 2) * 0.05, 0.02, 0.05 + i * 0.03)
+  for (let i = 0; i < 4; i++) add(3, -0.25, 0.05 + i * 0.1, 0.1)
+  const n = bone.length
+  const bi = new Uint8Array(n * 4)
+  const bw = new Float32Array(n * 4)
+  bone.forEach((b, v) => {
+    bi[v * 4] = b
+    bw[v * 4] = 1
+  })
+  const fig = {
+    bones,
+    parents,
+    mesh: { body: { positions: Float32Array.from(pos), boneIndices: bi, boneWeights: bw } },
+  } as unknown as UnitData
+  const lowestOf = (p: Part) => {
+    const ends = [p.t0, p.t1].map(t => p.c[1] + p.ax[1] * t)
+    return Math.min(...ends)
+  }
+  it('runs the shin down to the foot on the ground, and not the torso down to the hem', () => {
+    const parts = boneParts(fig, 'body')
+    expect(parts.map(p => bones[p.bone])).toEqual(['Torso', 'Shin'])
+    const [torso, shin] = parts
+    expect(lowestOf(shin)).toBeLessThan(0.05)
+    expect(shin.lent.length).toBe(4)
+    expect(lowestOf(torso)).toBeGreaterThan(0.55)
+    expect(torso.lent.length).toBe(0)
+  })
+})
+
 describe('the figure (fr-line-infantry.unitdata)', () => {
   const d = decodeUnits(
     new Uint8Array(readFileSync(new URL('../data/figures/fr-line-infantry.unitdata', import.meta.url))).buffer,
@@ -349,7 +476,7 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     }
     expect([fromHalf(0x3c00), fromHalf(0xc000), fromHalf(0x0001)]).toEqual([1, -2, 2 ** -24])
   })
-  it("has a tiny LOD of boxes on its parts: under a quarter of the far LOD's vertices, each corner on one bone, a mix of roles, outward, a figure tall", () => {
+  it("has a tiny LOD of boxes on its parts: under a quarter of the far LOD's vertices, each corner on one bone, a mix of roles, fronts out, a figure tall", () => {
     const t = tinyMesh(d, d.lods[d.lods.length - 1].name)
     const n = t.positions.length / 3
     // eight corners, twelve triangles a box
@@ -369,7 +496,7 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
       expect(sum).toBeCloseTo(1, 5) // (a mix of the roles: its box's mean colour from above)
     }
     expect(new Set(t.roles).size).toBeGreaterThanOrEqual(4) // (the roles that read from far off show on it)
-    // every triangle faces away from its box's centre
+    // every triangle's front faces out of its box: Babylon's clockwise fronts, the right-hand normal in (#164)
     for (let k = 0; k < t.indices.length; k += 3) {
       const box = Math.floor(t.indices[k] / 8)
       const P = (i: number) => [0, 1, 2].map(j => t.positions[i * 3 + j])
@@ -382,7 +509,7 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
       const u = [0, 1, 2].map(j => b[j] - a[j])
       const w = [0, 1, 2].map(j => e[j] - a[j])
       const nn = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]
-      expect(nn[0] * (a[0] - c[0]) + nn[1] * (a[1] - c[1]) + nn[2] * (a[2] - c[2])).toBeGreaterThan(0)
+      expect(nn[0] * (a[0] - c[0]) + nn[1] * (a[1] - c[1]) + nn[2] * (a[2] - c[2])).toBeLessThan(0)
     }
     const q = posedMesh(d, t)
     const f = d.ranges.halt.start
@@ -417,6 +544,47 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     }
     expect(hi - lo).toBeGreaterThan(1.4)
     expect(lo).toBeLessThan(0.3)
+  })
+  it('is wound for Babylon: each LOD a negative signed volume by the right hand, so no man is inside out (#164)', () => {
+    // Babylon (left-handed) draws clockwise fronts: a front triangle's right-hand normal points into the figure, so
+    // Σ p0 · (p1 × p2) over the mesh is negative (the bake reversed them once: every man inside out, a face on the
+    // back of his head)
+    for (const l of d.lods) {
+      expect(signedVolume(d.mesh[l.name].positions, d.mesh[l.name].indices), l.name).toBeLessThan(0)
+    }
+  })
+  it('shows its face from the front and not from behind, drawn as Babylon culls (#164)', () => {
+    // the LODs whose head has a face to show (the far LOD's head is 20 triangles); the back at +z
+    for (const l of d.lods.filter(x => x.triangles > 1000)) {
+      const behind = headSkinSeen(d, l.name, [0, -0.3, -1])
+      const front = headSkinSeen(d, l.name, [0, -0.3, 1])
+      expect(behind, `${l.name} from behind`).toBeLessThan(0.15)
+      expect(front, `${l.name} from the front`).toBeGreaterThan(2 * behind)
+    }
+  })
+  it('casts its shadow from the soles: the proxy reaches the ground in every baked step (#165)', () => {
+    // the proxy's lowest point against each LOD's soles, at every step of every role: no more than 4 cm above (it
+    // stood at the ankles, 13 cm up: the shadows started 26 cm off the feet at a 27° sun), nor deep under the ground
+    const p = shadowProxy(d, d.lods[d.lods.length - 1].name)
+    const q = posedMesh(d, p)
+    const n = p.positions.length / 3
+    for (const l of d.lods) {
+      const pv = posedVertices(d, l.name)
+      const nv = l.vertices
+      for (const [role, r] of Object.entries(d.ranges)) {
+        for (let f = r.start; f <= r.end; f++) {
+          let lo = Infinity
+          let plo = Infinity
+          for (let v = 0; v < nv; v++) lo = Math.min(lo, pv.data[(f * nv * 2 + v * 2) * 4 + 1])
+          for (let v = 0; v < n; v++) plo = Math.min(plo, q.data[(f * n * 2 + v * 2) * 4 + 1])
+          expect(plo - lo, `${l.name} ${role} step ${f}`).toBeLessThan(0.04)
+          expect(plo - lo).toBeGreaterThan(-0.1)
+        }
+      }
+    }
+  })
+  it('refuses the inside-out version 2 data, telling to rebake (#164)', () => {
+    expect(() => checkUnits({ ...d, version: 2 })).toThrow(/version 2.*inside out.*rebake/)
   })
   it('has three LODs nearest first, each lighter: the full figure nearest', () => {
     expect(d.lods.map(l => l.name)).toEqual(['lod0', 'lod1', 'lod2'])

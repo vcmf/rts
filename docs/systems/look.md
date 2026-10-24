@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-23
+last_reviewed: 2026-10-24
 code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
 decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod]
 ---
@@ -580,11 +580,17 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
 - **The figure**: `tools/bake-figure.py` (Blender, `-- <published figure dir>`) bakes the published GLBs into
   `data/figures/<figure>.unitdata` (`src/look/units-data.ts` reads and checks it): its LODs nearest first (here
   three: the full figure, 9,274 triangles, then 1,197 and 243; the page reads two or three), each vertex's colour role (the reds told from the skin by hue, the face's shaded side kept skin, the coat's violet shade kept coat: #133's review, `texel_role`, `tri_role`) (coat, facings, white, dark, skin, leather, pack, wood, metal: from the
-  texture's colour, the musket by its bone, the pack by its place), and the bones' matrices at 12 fps for the clips
+  texture's colour, the musket by its bone, the pack by its place), its triangles in the glTF's order (the reflection
+  into Babylon's left-handed space makes them the clockwise fronts Babylon draws: reversed, every man was drawn inside
+  out, a face on the back of his head, #164; the bake asserts a negative signed volume, `test/armies.test.ts` too;
+  format version 3, the decoder refuses 2), each bone's parent, and the bones' matrices at 12 fps for the clips
   each **role** uses (halt: Stand; march: Walking; run: Running; fire: Present, Aim, Fire, Reload), with the root
   speeds that keep the feet planted. The page names roles, never clips (decision 0015). At load: the far LOD posed at
   every step (`posedVertices`: a place and a normal, two float texels a vertex) and the **shadow proxy** built from it
-  and posed (`shadowProxy`, `posedMesh`: two crossed quads along each part a bone carries, 112 vertices, 56 triangles).
+  and posed (`shadowProxy`, `posedMesh`: two crossed quads along each part a bone carries, 112 vertices, 56 triangles;
+  a bone too small to be a part near the ground, a foot, lends its vertices to the first part up its chain of parents,
+  the shin, whose quads then run down to the soles by at most 25 cm, so the shadow starts at the feet: `boneParts`,
+  #165).
 - **The renderer** (`src/look/units.ts`): a thin-instanced host a battalion for each of the near LOD, the far LOD and
   the proxy; the near LOD skinned from the bones' texture (`texelFetch`), the far LOD and the proxy posed (`VAT_POS`;
   `?uvat=0`: the far LOD skinned); a man's step from his clip's first row, its length and his phase. Materials are
@@ -657,7 +663,8 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   forces the rule off or on for every uniform.
 - **The tiny LOD** (`docs/plans/active/armies-32k.md`, step 3, experimental; `?tinylod=0`: none, `?tinypx=<px>`: its
   switch): a battalion whose figure falls under 12 px tall (±10 %) draws the far LOD's parts as boxes instead (`tinyMesh`,
-  `src/look/units-data.ts`: the shadow proxy's parts, `boneParts`, 8 shared corners each, 112 vertices), a corner's
+  `src/look/units-data.ts`: the shadow proxy's parts, `boneParts`, 8 shared corners each, 112 vertices, wound with
+  their fronts out as the figure's, #164), a corner's
   colour a mix of the roles (`TINY`: three vec4 weights) calibrated at load so the boxes show each role in the far
   LOD's seen share (`seenArea`: both rasterised from 8 sides), posed as the far LOD and painted by its material (far
   palette, lift, growth, the smooth moves between steps); the coat mask dithered by the coat's weight (a 4 × 4 ordered
