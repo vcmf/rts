@@ -14,8 +14,9 @@ import { battlefield } from '../maps/battlefield.ts'
 import { fnv1a } from '../src/sim/hash.ts'
 import { DATA_MAGIC, DATA_FORMAT, hex } from '../src/sim/data.ts'
 
+// decision 0012; sim-design §7
 export const HEIGHT_CELL = 1.79
-export const COST_CELL = 4 * HEIGHT_CELL // decision 0012; sim-design §7
+export const COST_CELL = 4 * HEIGHT_CELL
 const SUB = 8 // ground samples per cost cell side
 
 export function buildSimData(map: MapDef): Uint8Array {
