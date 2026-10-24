@@ -85,6 +85,7 @@ designs, kept true as they change (nothing is frozen; what is built is described
 
 ## Research (background)
 
+- [`research/map-view-style.md`](research/map-view-style.md): a light map view with a 3D feel: shaded relief, cast shadows and sky occlusion baked on the GPU, woods, roofs and lines, raised army blocks; what games document; costs measured and estimated.
 - [`research/colour-and-light-review.md`](research/colour-and-light-review.md): the owner's colour and light references, and the coats' colour lost to the warm light, measured.
 - [`research/grass-and-fields.md`](research/grass-and-fields.md): grass and fields at an RTS camera: Tiny Glade, Total War, the techniques (ground pattern, blades, cards, shells) and their pitfalls.
 - [`research/painterly-grass.md`](research/painterly-grass.md): Tiny Glade's grass, the techniques that read as painted, what fits the RTS camera and the budget.
