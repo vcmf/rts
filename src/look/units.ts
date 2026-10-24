@@ -35,6 +35,17 @@ import DECAL_VS from './shaders/unitdecal.vert?raw'
 import DECAL_FS from './shaders/unitdecal.frag?raw'
 import { groundAt } from './heightfield.ts'
 import { mulberry } from './noise.ts'
+import {
+  SHADOW_LOOK,
+  SHADOW_LOOK_BAND,
+  decalStrip,
+  farShare,
+  footUniform,
+  isPlain,
+  lookBetween,
+  type ShadowLook,
+  type ShapeBox,
+} from './shadow-look.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
 import {
   TINY_ROLES,
@@ -134,7 +145,7 @@ const SM_HOLD_SHARE = 0.1 // the held box's slack, a share of the view's half-si
 const SM_COARSE = 1.3 // and be at most this many times the size the view needs (its texels no coarser)
 // the simple shadow's grid (cells along and across it): it lies on the ground, 2 m a cell (8 vertices: the widest view
 // is bound by its vertices)
-const DECAL_ALONG = 3
+const DECAL_ALONG = 3 // (four rows, placed by decalStrip, src/look/shadow-look.ts: it must stay 3)
 const DECAL_ACROSS = 1
 // m along the shadow from his feet over which its lift grows (unitdecal.vert: not over his own shins)
 const LIFT_RAMP = 1.5
@@ -149,29 +160,9 @@ const SHAPE_FACINGS = 16 // the simple shadow's facings (shadowShape)
  *  shadows, from the map alone to the simple shadows alone (?ushadowswitch=<r0>,<r1>); near the LOD switch (48 px at
  *  1080 lines: 63 m) */
 export const SHADOW_SWITCH: readonly [number, number] = [60, 85]
-/** the simple shadows' look a zoom (decision 0062), along each shadow from a contact at the soles to its tip (a real
- *  shadow's contact hardening): soft, the share of the soft bake at the tip (0: the shape's own blur, 1: the soft one,
- *  SOFT_BLUR; at the soles the shape's own); dark, the share of the ground's full shadow it darkens to at the tip;
- *  foot, the share at the soles and over the contact's core (core, m from the soles), from where it turns to soft and
- *  dark toward the tip; len, its length along the sun from the soles (1: the shape's) */
-export interface ShadowLook {
-  soft: number
-  dark: number
-  foot: number
-  core: number
-  len: number
-}
-/** up close (the owner, 2026-10-24: smaller, lighter, fuzzier, then darker and solid at the feet, lighter and softer
- *  away from them; ?ushsoft, ?ushdark, ?ushfoot, ?ushlen) and far (decision 0049's, as before: one value end to end) */
-export const SHADOW_LOOK: { readonly close: ShadowLook; readonly far: ShadowLook } = {
-  close: { soft: 0.75, dark: 0.55, foot: 1.05, core: 0.4, len: 0.7 },
-  far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1 },
-}
 /** m: a man's shadow from his soles to its tip at the shape's length (his height over the sun's tangent), where the
  *  look's gradient ends */
 const SHADOW_TIP = (FIGURE * Math.hypot(SUN.x, SUN.z)) / SUN.y
-/** the band of the camera's distance to its focus (m) over which the close look turns into the far one (?ushband) */
-export const SHADOW_LOOK_BAND: readonly [number, number] = [45, 85]
 const SOFT_BLUR = 0.12 // m: the soft bake's sigma (shadowShape's soft)
 
 // an axis-aligned box wholly outside one of the planes (its corner most along the plane's normal behind it)
@@ -298,8 +289,12 @@ export class Units {
    *  only with simpleClose (else the far look at every zoom, as before) */
   look: { close: ShadowLook; far: ShadowLook } = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
   lookBand: [number, number] = [...SHADOW_LOOK_BAND]
-  /** the look this frame (the captures read it) */
-  lookNow: ShadowLook = { ...SHADOW_LOOK.far }
+  // the look this frame (lookAt), given to the decal's material (setDecalLook)
+  private readonly lookNow: ShadowLook = { ...SHADOW_LOOK.far }
+  // the shape's boxes (useDecals): what the shape alone fills, and with the soft bake's reach (decalStrip)
+  private shapeBoxes: { base: ShapeBox; full: ShapeBox } | null = null
+  private readonly stripV = new Vector4()
+  private readonly rowsV = new Vector4()
   /** the cross-fade's band, m (SHADOW_SWITCH) */
   band: [number, number] = [...SHADOW_SWITCH]
   /** the figures, their flags and the map's casters moved every frame between two steps (?smoothmove=1), not at the
@@ -1013,7 +1008,7 @@ export class Units {
    *  without them), kept in far and given to the map's receivers: 1 at every zoom by default (decision 0062), else by
    *  the camera's distance to its focus over band (decision 0049's cross-fade) */
   private decalShare(decals: boolean): number {
-    const f = decals ? (this.simpleClose ? 1 : bandShare(this.camera.radius, this.band)) : 0
+    const f = decals ? (this.simpleClose ? 1 : farShare(this.camera.radius, this.band)) : 0
     if (f !== this.far) {
       this.far = f
       if (this.shadowRT) for (const m of this.receivers) m.setFloat('uUnitFar', f)
@@ -1024,16 +1019,8 @@ export class Units {
    *  into the far one over lookBand by the camera's distance to its focus; the far one alone with the map
    *  (?ushadowclose=map, ?ushadowfar=map) */
   private lookAt(): ShadowLook {
-    const t = this.simpleClose && this.simpleFar ? bandShare(this.camera.radius, this.lookBand) : 1
-    const c = this.look.close
-    const f = this.look.far
-    const l = this.lookNow
-    l.soft = c.soft + (f.soft - c.soft) * t
-    l.dark = c.dark + (f.dark - c.dark) * t
-    l.len = c.len + (f.len - c.len) * t
-    l.foot = c.foot + (f.foot - c.foot) * t
-    l.core = c.core + (f.core - c.core) * t
-    return l
+    const t = this.simpleClose && this.simpleFar ? farShare(this.camera.radius, this.lookBand) : 1
+    return lookBetween(this.look.close, this.look.far, t, this.lookNow)
   }
   private frameBody(): void {
     const T = this.clock()
@@ -1054,7 +1041,7 @@ export class Units {
     }
     if (this.shadowRT) this.target(this.shadowRT, mapOn)
     this.mapOn = mapOn
-    if (this.shadows || this.trampleOn) this.castView() // (only the sun's box and the trodden mask read it)
+    if (mapOn || this.trampleOn) this.castView() // (only the sun's box and the trodden mask read it)
     // the clock's step, counted here in double precision (the same floor the men's phases and the shadow map's redraws
     // use), not by the shader from a float32 time: the figures and their shadows never disagree on a step
     for (const m of this.mats.values()) m.setFloat('uVATStep', step)
@@ -1538,6 +1525,8 @@ export class Units {
         'uShSoft',
         'uShLen',
         'uShFoot',
+        'uStrip',
+        'uRows',
       ],
       samplers: ['uShapeTex', 'uUnitShade'],
       alpha: true,
@@ -1591,6 +1580,7 @@ export class Units {
     m.setVector2('uFarScale', this.farScaleV)
     m.setFloat('uDecalLift', this.lift)
     this.decal = m
+    this.shapeBoxes = { base: shape.base, full: { across: shape.across, along: shape.along } }
     this.setDecalLook(this.lookNow)
     // (a mode nothing else draws with: its blend is replaced at each bind, below)
     m.alphaMode = Constants.ALPHA_EXCLUSION
@@ -1641,15 +1631,18 @@ export class Units {
     for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', map)
   }
   /** The simple shadows' look (decision 0062) given to their material: the soft bake's share at the tip, the length,
-   *  and the gradient from the soles (uShFoot: the darkness at the soles and at the tip, the contact's core and the
-   *  tip, m from the soles, the tip shortened with the shadow and kept past the core) */
+   *  the gradient from the soles (uShFoot, footUniform) and the strip they lie on (uStrip, uRows: decalStrip, the
+   *  far look's as decision 0049's) */
   private setDecalLook(l: ShadowLook): void {
     const m = this.decal
-    if (!m) return
-    const tip = SHADOW_TIP * l.len
+    const b = this.shapeBoxes
+    if (!m || !b) return
     m.setFloat('uShSoft', l.soft)
     m.setFloat('uShLen', l.len)
-    m.setVector4('uShFoot', this.footV.set(l.foot, l.dark, Math.min(l.core, tip * 0.9), tip))
+    m.setVector4('uShFoot', this.footV.set(...footUniform(l, SHADOW_TIP)))
+    const strip = decalStrip(b.base, b.full, isPlain(l))
+    m.setVector4('uStrip', this.stripV.set(...strip.box))
+    m.setVector4('uRows', this.rowsV.set(...strip.rows))
   }
   /** The figures' shadow map (decision 0047), made when a switch first asks for it (decision 0062): its target, lazy
    *  unless lazyShadows is off, and the receivers' bindings of it */
@@ -1977,12 +1970,6 @@ export class Units {
   get battalions(): Battalion[] {
     return this.hosts.map(h => h.b)
   }
-}
-
-/** A smoothstep of r (m) across the band [r0, r1]: 0 at r0 and nearer, 1 at r1 and beyond */
-function bandShare(r: number, [r0, r1]: readonly [number, number]): number {
-  const u = Math.min(1, Math.max(0, (r - r0) / Math.max(1e-6, r1 - r0)))
-  return u * u * (3 - 2 * u)
 }
 
 // a battalion's bounds stretched away from the sun by the shadow of a figure top m tall, and down by it (into lo, hi)

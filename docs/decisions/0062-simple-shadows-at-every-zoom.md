@@ -28,8 +28,9 @@ shadow at every zoom, its look set per zoom.
 - **Its look a zoom, along each shadow** (the owner, after the first images: "darker and more solid near the
   soldier's feet, getting lighter and softer further away, like a real shadow"): from the soles over a contact core the
   shape itself at a contact darkness (a little over the full shadow), then toward the tip softer and lighter, to the
-  look's softness and darkness at the tip; fragment arithmetic on the distance along the shadow, no more reads, the
-  stencil still darkening each sample once (where shadows overlap, the first drawn at a sample sets its value).
+  look's softness and darkness at the tip; fragment arithmetic on the distance along the shadow, no more reads. The
+  darkness is coverage, not colour: every shadow darkens what it covers alike, lighter parts covering fewer samples,
+  so where shadows overlap the darkest wins whatever the draw order, and the stencil still darkens each sample once.
   The owner chose softness 0.75 with the foot gradient, 2026-10-24, from sheet 7 (the review images, the plan).
   The settings: softness (a share of a softer bake of the shape: the atlas's second channel, blurred wider and
   brought back to the shape's darkest value, so softer is not lighter), darkness (the share of the ground's full

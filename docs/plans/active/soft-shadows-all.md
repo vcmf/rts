@@ -127,12 +127,31 @@ contact): along each shadow from the soles (`vAlong`, m, the vertex shader's dis
 fragment takes `g`, a smoothstep from the contact's core (0.4 m) to the tip (a man's 1.8 m over the sun's tangent,
 times the length: 2.5 m up close); the shape is the sharp bake at the soles and `soft × g` of the soft one toward the
 tip, and the darkness runs from the soles' (`foot`, 1.05 of the full shadow) to the tip's (`dark`, 0.55). Up close only:
-far `foot` = `dark` = 1 and `soft` = 0, so the far frames are as before (125 m against the previous commit: every pixel
-equal but the fps readout). No more texture reads or vertices: one varying and a few ALU ops. `?ushfoot=<dark>,<core
+far `foot` = `dark` = 1 and `soft` = 0 (at 125 m every pixel as the previous commit's but the fps readout; that
+commit's strip differed from main's far off, fixed in review round 1 below). No more texture reads or vertices: one varying and a few ALU ops. `?ushfoot=<dark>,<core
 m>[,<far dark>,<far core m>]`; `?ushdark` is now the tip's. The overlaps still darken each sample once; which shadow
 sets a sample's value is the draw order's (a man's tip over the feet of the man behind him: one or the other, steady
 from frame to frame). Sheet 7 in the review folder: main, the previous default and the gradient at softness 0.4 and 0.75,
 the owner's road view at 15, 30 and 55 m. The owner chose 0.75 with the foot gradient, 2026-10-24, from sheet 7.
+
+**Review round 1** (`/code-review high`): severe, the gradient made overlaps depend on the draw order (the stencil let
+the first shadow at a sample through, and with the darkness a colour, a man's light tip drawn first took the next
+man's dark contact; across battalions Babylon sorts the decals by distance, so a pan flipped it). Fixed by making the
+darkness coverage: every shadow darkens what it covers alike (the look's darkest), the lighter parts covering fewer
+samples (alpha to coverage; with `?msaa=1|2` a screen-space dither), so the darkest wins at a sample whatever the
+order, in the same single pass (no extra pass, reads or vertices: a divide and a max more a pixel). Checked by two
+reserve battalions pushed 7 m into each other and their decals' order forced each way (sheet 8): pixels over 6 of 255
+apart between the two orders, before → after, 6,024 → 0 at 15 m, 2,993 → 0 at 30 m, with `?msaa=1` 6,954 → 0 and
+7,916 → 0 (the largest left: 4 and 2 of 255); a pan of six frames across them at 30 m, each frame
+against both forced orders: before, each frame differs from one order by 2,207 to 2,976 pixels (what a flip of the
+sort pops), after, from both by none. The chosen look kept (sheet 9). Moderate: the non-coverage path's fringe stenciled whole pixels at a fraction of
+their darkening (now in or out by the dither: no speckled holes); the soft bake's padding moved R's texels by a part of
+one (now whole blocks of 8, the strip far off decision 0049's: the default at 125 m against main, 6 pixels differ, by
+at most 3 of 255, where the previous commits differed on 29,889, by up to 62; `?ushadowclose=map` against main at 15,
+55 and 125 m: 0, 0 and 6 pixels, by at most 3); the sun's corner rays cast only for the map or the trodden mask; the
+gradient's tip followed the far figures' growth (now on the shape's own size); the looks, the gradient's uniform, the
+strip and the switches pure and tested (`src/look/shadow-look.ts`, `test/shadow-look.test.ts`), the switches' empty
+fields refused.
 
 ## Open questions
 

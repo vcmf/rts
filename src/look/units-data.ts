@@ -628,6 +628,8 @@ export interface ShadowShape {
   // m: what a cell holds, from the man's root (the shadow's frame)
   across: [number, number]
   along: [number, number]
+  // m: the box the shape alone fills (its own blur's reach), inside across and along (the soft bake's on top)
+  base: { across: [number, number]; along: [number, number] }
   dir: [number, number] // the shadow's direction on the ground (x, z): away from the sun
 }
 
@@ -710,14 +712,22 @@ export function shadowShape(
   // the blur's reach to spare either way, and an empty border so the bilinear reads never cross into a neighbour
   // (its mips are read too, the mask's texels coarser than its own: a cell's border and size whole texels of the fourth
   // mip, so no mip up to it bleeds into a neighbour)
-  const pad = 3 * Math.max(blur, soft)
+  // (the soft bake's wider reach on top, in whole blocks of 8 texels: the shape's texels and its mips' then fall where
+  // they fall without it, base the box it fills alone, so the far zooms' strip draws as before)
+  const pad = 3 * blur
   const margin = 8
+  const ex = soft > 0 ? Math.ceil(Math.max(0, 3 * soft - pad) / texel / 8) * 8 : 0
   c0 -= pad
   c1 += pad
   a0 -= pad
   a1 += pad
-  const iw = Math.ceil((c1 - c0) / texel / 8) * 8
-  const ih = Math.ceil((a1 - a0) / texel / 8) * 8
+  const bw = Math.ceil((c1 - c0) / texel / 8) * 8
+  const bh = Math.ceil((a1 - a0) / texel / 8) * 8
+  const base = { across: [c0, c0 + bw * texel] as [number, number], along: [a0, a0 + bh * texel] as [number, number] }
+  c0 -= ex * texel
+  a0 -= ex * texel
+  const iw = bw + 2 * ex
+  const ih = bh + 2 * ex
   const cellW = iw + 2 * margin
   const cellH = ih + 2 * margin
   const W = cellW * facings
@@ -838,6 +848,7 @@ export function shadowShape(
     texel,
     across: [c0, c0 + iw * texel],
     along: [a0, a0 + ih * texel],
+    base,
     dir: [A[0], A[1]],
   }
 }

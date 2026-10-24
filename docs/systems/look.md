@@ -1,7 +1,7 @@
 ---
 status: current
 last_reviewed: 2026-10-24
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
 decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom]
 ---
 
@@ -625,7 +625,9 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   soldier of a figure looks alike, so one shape: `shadowShape` (`src/look/units-data.ts`, at load) projects the far LOD,
   posed at up to 12 steps of each role's clip and turned to 16 facings, along the sun onto the ground, averages the
   steps (a marching man's legs one soft wedge) and blurs it; an RG8 atlas, mipmapped, a cell a facing and a role: R the
-  shape, G the same blurred wider (`SOFT_BLUR`) and brought back to R's darkest value in its cell. Each soldier draws it himself, in the main pass after
+  shape, G the same blurred wider (`SOFT_BLUR`) and brought back to R's darkest value in its cell; the soft bake's
+  reach is padded on in whole blocks of 8 texels, so R's texels and mips are where they are without it (`base`, the
+  box R fills). Each soldier draws it himself, in the main pass after
   everything else (`unitdecal.vert`, `unitdecal.frag`): one more mesh a battalion on its own instance buffers, a 1 × 3
   grid a man (2 m a cell: the widest view is bound by its vertices) from his feet along the shadow, each vertex on the
   ground (the meadow map's height, or without one the heightfield's, sampled into a texture at load) and drawn toward
@@ -638,7 +640,14 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   along each shadow from the soles like a real one's (contact hardening): over a core (`core`, m) the shape itself at
   the soles' darkness (`foot`), then to the tip (a man's height over the sun's tangent, times the length) up to
   `soft` of the blurred bake and down to the tip's darkness (`dark`), fragment arithmetic on the distance along it
-  (`vAlong`), no more reads; up close softer, lighter at the tip, shorter, dark and solid at the feet; far 0049's look
+  (`vAlong`, at the shape's own size: the far figures' growth leaves it), no more reads. **The darkness is coverage**:
+  every shadow darkens a sample it covers by the same amount (the look's darkest), covering a share of the samples
+  (darkness ÷ darkest × the shape's value), so overlaps take the darkest whatever the draw order (the stencil still
+  darkens each sample once; review round 1: as a colour, a light tip drawn first bit into the next man's contact, and
+  the battalions' sorted order flipped while panning); with fewer samples (`?msaa=1|2`) a pixel is in or out by a
+  screen-space dither of that share. **The strip** (`decalStrip`, `src/look/shadow-look.ts`, given as `uStrip` and
+  `uRows`): far off decision 0049's (the base box, rows evenly spaced: the far zooms as main's), with any close look
+  the full box with its second row at the soles; up close softer, lighter at the tip, shorter, dark and solid at the feet; far 0049's look
   (one value end to end), turned from one to the other by a smoothstep of the camera's
   distance to its focus over `SHADOW_LOOK_BAND` (45 to 85 m; with `?ushadowclose=map` the far look everywhere).
   `?ushsoft`, `?ushdark`, `?ushlen` (`<close>[,<far>]`), `?ushfoot=<dark>,<core>[,<far dark>,<far core>]` and

@@ -54,6 +54,7 @@ import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
 import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
+import { SHADOW_LOOK, applyLookParams, shadowModes } from './shadow-look.ts'
 
 declare global {
   interface Window {
@@ -560,53 +561,15 @@ if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
 // share at the tip), ?ushdark=<0..1> (the full shadow's share at the tip), ?ushlen=<0.3..1.5> (their length), each
 // <close>[,<far>] (far: decision 0049's unless given); ?ushband=<r0>,<r1>, the band (m from the focus) the close look
 // turns into the far one
-const uShadowFar = params.get('ushadowfar')
-const uShadowClose = params.get('ushadowclose')
-if (uShadowClose !== null && uShadowClose !== 'map' && uShadowClose !== 'simple') {
-  throw new Error(`?ushadowclose must be map or simple, not ${uShadowClose}`)
-}
-/** ?<k>=<close>[,<far>], each within [lo, hi]: [close, far or null], or null when absent */
-const lookPair = (k: string, lo: number, hi: number): [number, number | null] | null => {
-  const v = params.get(k)
-  if (v === null) return null
-  const n = v.split(',').map(Number)
-  if (!(n.length <= 2 && n.every(x => Number.isFinite(x) && x >= lo && x <= hi))) {
-    throw new Error(`?${k} must be <close>[,<far>], each ${lo} to ${hi}, not ${v}`)
-  }
-  return [n[0], n.length > 1 ? n[1] : null]
-}
-const ushSoft = lookPair('ushsoft', 0, 1)
-const ushDark = lookPair('ushdark', 0, 1)
-const ushLen = lookPair('ushlen', 0.3, 1.5)
-// ?ushfoot=<dark>,<core m>[,<far dark>,<far core m>]: the contact at the soles (decision 0062), its darkness (a share
-// of the full shadow; ?ushdark is the tip's) and the core it holds over before it turns to the tip's look
-const ushFootP = params.get('ushfoot')
-const ushFoot = ushFootP === null ? null : ushFootP.split(',').map(Number)
-if (
-  ushFoot &&
-  !(
-    (ushFoot.length === 2 || ushFoot.length === 4) &&
-    ushFoot.every((v, i) => Number.isFinite(v) && v >= 0 && v <= (i % 2 ? 3 : 1.5))
-  )
-) {
-  throw new Error(`?ushfoot must be <dark 0..1.5>,<core 0..3 m>[,<far dark>,<far core>], not ${ushFootP}`)
-}
-const ushBandP = params.get('ushband')
-const ushBand = ushBandP === null ? null : ushBandP.split(',').map(Number)
-if (
-  ushBand &&
-  !(ushBand.length === 2 && ushBand.every(Number.isFinite) && ushBand[0] >= 0 && ushBand[1] > ushBand[0])
-) {
-  throw new Error(`?ushband must be <r0>,<r1> m with r0 < r1, not ${ushBandP}`)
-}
+// (src/look/shadow-look.ts parses them, a bad value an error at load)
+const shadowMode = shadowModes(params)
+const shadowLook = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
+const ushBand = applyLookParams(params, shadowLook.close, shadowLook.far).band
 const uShadowSwitch = params.get('ushadowswitch')
 const smoothMove = bit('smoothmove')
 const decalLift = params.get('udecallift')
 if (decalLift !== null && !(Number.isFinite(+decalLift) && +decalLift >= 0 && +decalLift <= 3)) {
   throw new Error(`?udecallift must be 0 to 3 m, not ${decalLift}`)
-}
-if (uShadowFar !== null && uShadowFar !== 'map' && uShadowFar !== 'simple') {
-  throw new Error(`?ushadowfar must be map or simple, not ${uShadowFar}`)
 }
 const shadowBand = uShadowSwitch === null ? null : uShadowSwitch.split(',').map(Number)
 if (
@@ -708,22 +671,10 @@ if (armiesParam !== null) {
   units.holdShare = smHold !== 'fixed'
   units.proxyCasters = shadowLod !== 'far'
   if (nearestPx !== null) units.nearestPx = +nearestPx
-  units.simpleFar = uShadowFar !== 'map'
-  units.simpleClose = uShadowClose !== 'map'
-  for (const [k, p] of [
-    ['soft', ushSoft],
-    ['dark', ushDark],
-    ['len', ushLen],
-  ] as const) {
-    if (!p) continue
-    units.look.close[k] = p[0]
-    if (p[1] !== null) units.look.far[k] = p[1]
-  }
-  if (ushBand) units.lookBand = [ushBand[0], ushBand[1]]
-  if (ushFoot) {
-    Object.assign(units.look.close, { foot: ushFoot[0], core: ushFoot[1] })
-    if (ushFoot.length === 4) Object.assign(units.look.far, { foot: ushFoot[2], core: ushFoot[3] })
-  }
+  units.simpleFar = shadowMode.simpleFar
+  units.simpleClose = shadowMode.simpleClose
+  units.look = shadowLook
+  if (ushBand) units.lookBand = ushBand
   if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
   units.groundMap = meadow !== null
   if (decalLift !== null) units.decalLift = +decalLift
