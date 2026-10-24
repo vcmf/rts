@@ -76,15 +76,17 @@ advanceTick: 1 commands · 3 the plan · 4 standing behaviour · 5–6 formation
     not thrown.
 
   `issue` stamps `tick + 1` and a sequence number, and quantises positions to 1 cm and angles to 0.1 mrad.
-  It never throws. `normaliseCommand` checks each command once against its type's fields (a handle, a count, a
-  finite number, a string, a flag, 1..64 `[x, z]` pairs of finite numbers, optional fields with their defaults),
-  reading each field once, and quantises it: the result is canonical (normalising it again changes nothing) or
-  `{ type: 'refused', reason }` (#155), with `unknown command` (no command, an unknown type, a `refused` with a
-  reason that is not one of these), `malformed command` (a field of the wrong kind: a number given as a string, NaN
-  or ∞, or a read that throws), `malformed waypoints`, `no waypoints` or `too many waypoints`. Strings are made
-  well-formed (a lone surrogate becomes U+FFFD). So every queued and logged command, `refused` included, is one a save
-  writes and reads back as it was and a JSON log holds, and a replay re-issuing it gets the same command, sequence
-  number and drop.
+  It never throws. One table per command type (`command-fields.ts`: its fields in save order and the kind of
+  each) drives `normaliseCommand`, `quantiseCommand` and the save. `normaliseCommand` checks each command once
+  against it (a handle or a count: an int32; a number: finite, |v| ≤ 1e9, so quantising stays exact and
+  idempotent; a string; a flag; 1..64 `[x, z]` pairs of such numbers, read by index, the list's length a whole
+  number; optional fields with their defaults), reading each field once, and quantises it: the result is canonical
+  (normalising it again changes nothing) or `{ type: 'refused', reason }` (#155), with `unknown command` (no
+  command, an unknown type, a `refused` with a reason that is not one of these), `malformed command` (a field of the
+  wrong kind or out of bounds: a number given as a string, NaN or ∞, 2.9 men, or a read that throws), `malformed
+  waypoints`, `no waypoints` or `too many waypoints`. Strings are made well-formed (a lone surrogate becomes U+FFFD).
+  So every queued and logged command, `refused` included, is one a save writes and reads back as it was and a JSON
+  log holds, and a replay re-issuing it gets the same command, sequence number and drop.
   `applyCommands` validates at the start of that tick and drops an invalid command with a reason
   (returned by `advanceTick`), never throwing and changing nothing. It trusts the queue's shapes and checks the
   rules: a `refused` command (its reason), an unknown type (a guard for a command pushed straight into `pending`), a stale
@@ -100,7 +102,8 @@ advanceTick: 1 commands · 3 the plan · 4 standing behaviour · 5–6 formation
   A typed array is copied as its own bytes on a little-endian machine (every target), the same bytes as
   number by number (S1c-5: 0.5 ms for the 1.5 MB world of 40 battalions of 400; the hash itself, 2 ms, is
   FNV-1a's byte loop, kept so the hashes stay).
-  `deserialize` refuses a save made with other data or another ruleset.
+  `deserialize` refuses a save made with other data or another ruleset, and checks each pending command again with
+  `normaliseCommand` (one that is not canonical, written by hand or by an older sim, is refused, not applied).
 - **Replays** (`replay.ts`): `SIM_VERSION` is `s1e.3` (from `s1e.2` with #155–#158: a zero that was −0 is +0,
   other bytes in some states, and a malformed command is stamped as `refused`), so `play` refuses an older replay
   cleanly rather than reporting a mismatch.

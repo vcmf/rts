@@ -103,6 +103,18 @@ const JUNK: unknown[] = [
   { type: 'move', id: h(1), points: Array.from({ length: 65 }, (_, k) => [k, 0]), append: false },
   { type: 'move', id: h(1), points: trap, append: false },
   { type: 'form', id: h(1), shape: '\udc00' },
+  ...[NaN, -1, 'x', 1.5].map(length => ({
+    type: 'move',
+    id: h(1),
+    points: new Proxy([[1, 2]], { get: (t, k) => (k === 'length' ? length : Reflect.get(t, k)) }),
+    append: false,
+  })),
+  { ...ONE_OF_EACH['debug-kill'], men: 4294967301 },
+  { ...ONE_OF_EACH.side, side: 2 ** 32 },
+  { ...ONE_OF_EACH.halt, id: 2.9 },
+  { ...ONE_OF_EACH.wheel, angle: 1e305 },
+  { ...ONE_OF_EACH['debug-spawn'], x: 1e307 },
+  { ...ONE_OF_EACH.move, points: [[1e305, 0]] },
 ]
 for (const t of COMMAND_TYPES) {
   for (const k of Object.keys(ONE_OF_EACH[t]).filter(k => k !== 'type')) {
@@ -149,6 +161,23 @@ describe('saves: what crosses', () => {
     }
     const spawn = normaliseCommand({ type: 'debug-spawn', side: 0, x: 1, z: 2, heading: 0, men: 10 })
     expect(spawn).toMatchObject({ quality: -1, shape: '', fire: 'at will', unit: '' })
+  })
+  it('a save with a command that is not canonical refuses it when loaded, as issue would', () => {
+    const w = makeWorld(data, cr, 1)
+    w.pending.push({ tick: 1, seq: 0, cmd: { type: 'wheel', id: h(1), angle: NaN } })
+    expect(deserialize(serialize(w), data, cr).pending[0].cmd).toEqual({ type: 'refused', reason: 'malformed command' })
+  })
+  it('a number past the bound, a count or a handle that is not an int32, is malformed', () => {
+    const bad = [
+      { ...ONE_OF_EACH['debug-kill'], men: 4294967301 },
+      { ...ONE_OF_EACH.side, side: 2 ** 32 },
+      { ...ONE_OF_EACH.halt, id: 2.9 },
+      { ...ONE_OF_EACH.wheel, angle: 1e305 },
+      { ...ONE_OF_EACH['debug-spawn'], x: 1e307 },
+    ]
+    for (const c of bad) expect(normaliseCommand(c)).toEqual({ type: 'refused', reason: 'malformed command' })
+    const far = normaliseCommand({ ...ONE_OF_EACH.move, points: [[1e305, 0]] })
+    expect(far).toEqual({ type: 'refused', reason: 'malformed waypoints' })
   })
   it('a string with a lone surrogate is queued as the save holds it', () => {
     const w = makeWorld(data, cr, 1)

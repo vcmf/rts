@@ -525,7 +525,7 @@ export function compileRuleset(rs: Ruleset): Compiled {
   const classes = Object.keys(rs.terrain)
   const allKinds = unique(classes.flatMap(c => Object.keys(rs.terrain[c].g)))
   for (const k of allKinds) {
-    const by = classes.find(c => k in rs.terrain[c].g)
+    const by = classes.find(c => Object.hasOwn(rs.terrain[c].g, k))
     for (const c of classes) {
       const v = rs.terrain[c].g[k]
       if (!(typeof v === 'number' && nonNegative(v))) {
@@ -541,7 +541,7 @@ export function compileRuleset(rs: Ruleset): Compiled {
       if (!(v > 0 && v < Infinity)) throw new Error(`${at}: q.${p}.${g} is ${v}, not > 0`)
     }
     for (const c of classes) {
-      if (!(rs.terrain[c].q in table)) {
+      if (!Object.hasOwn(table, rs.terrain[c].q)) {
         throw new Error(`${at}: q.${p} gives ground ${rs.terrain[c].q} (terrain class ${c}) no factor`)
       }
     }

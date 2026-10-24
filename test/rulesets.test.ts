@@ -200,6 +200,11 @@ describe('compileRuleset refuses', () => {
       /q.ordinary gives ground ice \(terrain class woods\) no factor/,
     ],
     [
+      "a terrain class on a ground named like an object's own property",
+      { ...N, terrain: { ...N.terrain, woods: { ...N.terrain.woods, q: 'constructor' } } },
+      /q.ordinary gives ground constructor \(terrain class woods\) no factor/,
+    ],
+    [
       "one pace's q table leaving out a ground a class stands on",
       { ...N, q: { ...N.q, trot: { open: 1.15, light: 1.0 } } },
       /q.trot gives ground hard \(terrain class \w+\) no factor/,

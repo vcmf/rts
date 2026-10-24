@@ -4,7 +4,8 @@
 // Only external commands (player, scripts) go into the replay log. Shapes and order presets are named by
 // the ruleset (decision 0015).
 import type { Handle } from './handle.ts'
-import { quantise, PI } from './num.ts'
+import { PI } from './num.ts'
+import { FIRE_MODES, isCommandType, normaliseCommand } from './command-fields.ts'
 import {
   type World,
   M_TICK,
@@ -80,208 +81,26 @@ export interface Dropped {
   reason: string
 }
 
-export const MAX_POINTS = 64
-export const COMMAND_TYPES = [
-  'move',
-  'form',
-  'wheel',
-  'face',
-  'retire',
-  'halt',
-  'style',
-  'fire',
-  'side',
-  'debug-spawn',
-  'debug-kill',
-  'debug-morale',
-  'charge',
-] as const
-export const FIRE_MODES = ['at will', 'hold'] // index = FIRE_AT_WILL, FIRE_HOLD
-
-// a type the sim knows (`COMMAND_TYPES`; not `refused`, which only `issue` makes)
-export const isCommandType = (t: unknown): boolean => (COMMAND_TYPES as readonly unknown[]).includes(t)
-// why `issue` refuses a command: a `refused` command carries one of these and nothing else
-export const REFUSALS = [
-  'unknown command',
-  'malformed command',
-  'malformed waypoints',
-  'no waypoints',
-  'too many waypoints',
-] as const
-
-// each type's fields and what each must be (a field marked ? may be left out; quantiseCommand gives its default):
-// id: a handle; int: a count or a side; num: a number (its range is the rules', checked when applied); str: a
-// string; bool: a flag; pts: 1..MAX_POINTS [x, z] number pairs. Every number finite, so a queued command is also
-// what a JSON replay log holds (no NaN or ∞ turned into null)
-type Kind = 'id' | 'int' | 'num' | 'str' | 'bool' | 'pts'
-const SCHEMA: Record<string, string[]> = {
-  move: ['id:id', 'points:pts', 'append?:bool'],
-  form: ['id:id', 'shape:str'],
-  wheel: ['id:id', 'angle:num'],
-  face: ['id:id'],
-  retire: ['id:id', 'metres:num'],
-  halt: ['id:id'],
-  style: ['id:id', 'preset:str'],
-  'debug-spawn': [
-    'side:int',
-    'x:num',
-    'z:num',
-    'heading:num',
-    'shape?:str',
-    'men:int',
-    'quality?:num',
-    'fire?:str',
-    'unit?:str',
-  ],
-  fire: ['id:id', 'mode:str', 'target?:id'],
-  side: ['side:int', 'x:num', 'z:num'],
-  'debug-kill': ['id:id', 'men:int'],
-  'debug-morale': ['id:id', 'quality:num'],
-  charge: ['id:id', 'target:id'],
-}
+export {
+  COMMAND_TYPES,
+  FIRE_MODES,
+  REFUSALS,
+  MAX_POINTS,
+  isCommandType,
+  normaliseCommand,
+  quantiseCommand,
+} from './command-fields.ts'
 
 // stamps a command for the next tick; `log` receives it when the command is external. It never throws: a command
-// that is not one, of an unknown type, with a field of the wrong kind or waypoints that are not 1..64 [x, z] number
-// pairs, is stamped as `refused` with the reason it is dropped for (#155). So every queued and logged command is
-// canonical: a save writes it and reads it back as it was, and a replay re-issuing it gets the same command, the
-// same sequence number and the same drop.
+// that is not one (`normaliseCommand`: an unknown type, a field of the wrong kind, waypoints that are not 1..64
+// [x, z] number pairs) is stamped as `refused` with the reason it is dropped for (#155). So every queued and logged
+// command is canonical: a save writes it and reads it back as it was, and a replay re-issuing it gets the same
+// command, the same sequence number and the same drop.
 export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
   const s: Stamped = { tick: w.meta[M_TICK] + 1, seq: w.meta[M_SEQ]++, cmd: normaliseCommand(cmd) }
   w.pending.push(s)
   if (log) log.push(s)
   return s
-}
-const finiteNumber = (v: unknown): v is number => typeof v === 'number' && v === v && v !== Infinity && v !== -Infinity
-const refused = (reason: (typeof REFUSALS)[number]): Command => ({ type: 'refused', reason })
-// a command checked once against its type's fields, then quantised: canonical, or `refused` with why. Total (each
-// field of what it is given is read once, and a getter or a Proxy that throws makes it a malformed command) and
-// idempotent: a canonical command comes back equal
-export function normaliseCommand(cmd: unknown): Command {
-  try {
-    if (typeof cmd !== 'object' || cmd === null) return refused('unknown command')
-    const c = cmd as Record<string, unknown>
-    const type = c.type
-    if (type === 'refused') {
-      const r = c.reason // a replay's refused command comes back as it was; any other reason is not one
-      return typeof r === 'string' && (REFUSALS as readonly string[]).includes(r)
-        ? { type: 'refused', reason: r }
-        : refused('unknown command')
-    }
-    if (typeof type !== 'string' || !isCommandType(type)) return refused('unknown command')
-    const out: Record<string, unknown> = { type }
-    for (const spec of SCHEMA[type]) {
-      const [name, kind] = spec.split(':') as [string, Kind]
-      const optional = name.endsWith('?')
-      const k = optional ? name.slice(0, -1) : name
-      const v = c[k]
-      if (v === undefined && optional) continue
-      if (kind === 'pts') {
-        const p = waypoints(v)
-        if (typeof p === 'string') return refused(p)
-        out[k] = p
-      } else if (kind === 'str') {
-        if (typeof v !== 'string') return refused('malformed command')
-        out[k] = wellFormedString(v)
-      } else if (kind === 'bool') {
-        if (typeof v !== 'boolean') return refused('malformed command')
-        out[k] = v
-      } else {
-        if (!finiteNumber(v)) return refused('malformed command')
-        out[k] = v
-      }
-    }
-    return quantiseCommand(out as unknown as Command)
-  } catch {
-    return refused('malformed command') // a field whose read threw (a getter, a Proxy)
-  }
-}
-// waypoints as given, checked with a plain index loop (a hole in a sparse array is no pair): a fresh array of
-// [x, z] number pairs, or why not
-function waypoints(v: unknown): [number, number][] | (typeof REFUSALS)[number] {
-  if (!Array.isArray(v)) return 'malformed waypoints'
-  const n: number = v.length
-  if (n === 0) return 'no waypoints'
-  if (n > MAX_POINTS) return 'too many waypoints'
-  const out: [number, number][] = []
-  for (let i = 0; i < n; i++) {
-    const p: unknown = v[i]
-    if (!Array.isArray(p) || p.length !== 2) return 'malformed waypoints'
-    const x: unknown = p[0]
-    const z: unknown = p[1]
-    if (!finiteNumber(x) || !finiteNumber(z)) return 'malformed waypoints'
-    out.push([x, z])
-  }
-  return out
-}
-// a string with each lone surrogate replaced by U+FFFD (String.prototype.toWellFormed), so the queued string is the
-// one a save's UTF-8 holds
-function wellFormedString(s: string): string {
-  let out = ''
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i)
-    if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) {
-      const d = s.charCodeAt(i + 1)
-      if (d >= 0xdc00 && d <= 0xdfff) {
-        out += s[i] + s[i + 1]
-        i++
-        continue
-      }
-    }
-    out += c >= 0xd800 && c <= 0xdfff ? '\ufffd' : s[i]
-  }
-  return out
-}
-// quantises a command already checked (normaliseCommand): positions to 1 cm, angles to 0.1 mrad, ids and counts to
-// integers, and the defaults of the fields left out. A spawn's quality: −1 marks none given (the ruleset's), any
-// other negative becomes −2 (refused when applied); so quantising a quantised command changes nothing
-export function quantiseCommand(c: Command): Command {
-  const qa = (a: number) => Math.round(a * 10000) / 10000 + 0 // + 0: a value rounding to zero is +0 (#157)
-  switch (c.type) {
-    case 'move':
-      return {
-        type: 'move',
-        id: c.id | 0,
-        points: c.points.map(([x, z]) => [quantise(x), quantise(z)]),
-        append: !!c.append,
-      }
-    case 'form':
-      return { type: 'form', id: c.id | 0, shape: c.shape }
-    case 'wheel':
-      return { type: 'wheel', id: c.id | 0, angle: qa(c.angle) }
-    case 'face':
-      return { type: 'face', id: c.id | 0 }
-    case 'retire':
-      return { type: 'retire', id: c.id | 0, metres: quantise(c.metres) }
-    case 'halt':
-      return { type: 'halt', id: c.id | 0 }
-    case 'style':
-      return { type: 'style', id: c.id | 0, preset: c.preset }
-    case 'debug-spawn':
-      return {
-        type: 'debug-spawn',
-        side: c.side | 0,
-        x: quantise(c.x),
-        z: quantise(c.z),
-        heading: qa(c.heading),
-        shape: c.shape ?? '',
-        men: c.men | 0,
-        quality: c.quality === undefined || c.quality === -1 ? -1 : c.quality < 0 ? -2 : qa(c.quality),
-        fire: c.fire ?? FIRE_MODES[FIRE_AT_WILL],
-        unit: c.unit ?? '',
-      }
-    case 'fire':
-      return { type: 'fire', id: c.id | 0, mode: c.mode, target: (c.target ?? 0) | 0 }
-    case 'side':
-      return { type: 'side', side: c.side | 0, x: qa(c.x), z: qa(c.z) }
-    case 'debug-kill':
-      return { type: 'debug-kill', id: c.id | 0, men: c.men | 0 }
-    case 'debug-morale':
-      return { type: 'debug-morale', id: c.id | 0, quality: qa(c.quality) }
-    case 'charge':
-      return { type: 'charge', id: c.id | 0, target: c.target | 0 }
-    default:
-      return c
-  }
 }
 
 const inside = (w: World, x: number, z: number): boolean => {
@@ -289,7 +108,6 @@ const inside = (w: World, x: number, z: number): boolean => {
   const e = (t.n - 1) * t.cell
   return x >= t.x0 && z >= t.z0 && x <= t.x0 + e && z <= t.z0 + e
 }
-const finite = (v: number): boolean => v === v && v !== Infinity && v !== -Infinity
 
 // applies the commands stamped for tick t, in sequence order; returns the dropped ones
 export function applyCommands(w: World, t: number): Dropped[] {
@@ -394,7 +212,7 @@ function apply(w: World, c: Command, player = true): string {
     // the direction of a side's rear, where its routers run
     if (c.side < 0 || c.side >= SIDES) return 'no such side'
     const l = Math.sqrt(c.x * c.x + c.z * c.z)
-    if (!finite(l) || l < 1e-6) return 'no such direction'
+    if (l < 1e-6) return 'no such direction' // x and z are finite and bounded (normaliseCommand)
     w.sides.rearX[c.side] = c.x / l
     w.sides.rearZ[c.side] = c.z / l
     return ''

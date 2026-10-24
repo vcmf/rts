@@ -6,6 +6,7 @@ import { type World, makeWorld, MAX_FORMATIONS, M_DATA, M_RULES } from './world.
 import type { Compiled } from './ruleset.ts'
 import { columnsOf, type Column } from './columns.ts'
 import type { Stamped, Command } from './commands.ts'
+import { COMMAND_FIELDS, normaliseCommand, type FieldKind } from './command-fields.ts'
 import { DataVersionMismatch, type SimData, hex } from './data.ts'
 import { fnv1a } from './hash.ts'
 
@@ -150,24 +151,22 @@ const readArr = (r: Reader, a: Arr) => {
   else for (let i = 0; i < a.length; i++) a[i] = r.i32()
 }
 
-// commands are written field by field, in a fixed order per type: numbers as float64, handles and
+// commands are written field by field, in their table's order (command-fields.ts): numbers as float64, handles and
 // counts as int32, strings with their length, points with their count
-const FIELDS: Record<string, string[]> = {
-  move: ['id:i', 'append:b', 'points:p'],
-  form: ['id:i', 'shape:s'],
-  wheel: ['id:i', 'angle:f'],
-  face: ['id:i'],
-  retire: ['id:i', 'metres:f'],
-  halt: ['id:i'],
-  style: ['id:i', 'preset:s'],
-  'debug-spawn': ['side:i', 'x:f', 'z:f', 'heading:f', 'shape:s', 'men:i', 'quality:f', 'fire:s', 'unit:s'],
-  'debug-kill': ['id:i', 'men:i'],
-  'debug-morale': ['id:i', 'quality:f'],
-  fire: ['id:i', 'mode:s', 'target:i'],
-  side: ['side:i', 'x:f', 'z:f'],
-  charge: ['id:i', 'target:i'],
-  refused: ['reason:s'], // what `issue` stamps for a command it cannot take (#155)
+const CODE: Record<FieldKind, string> = {
+  id: 'i',
+  int: 'i',
+  cm: 'f',
+  ang: 'f',
+  quality: 'f',
+  str: 's',
+  reason: 's',
+  bool: 'b',
+  pts: 'p',
 }
+const FIELDS: Record<string, string[]> = Object.fromEntries(
+  Object.entries(COMMAND_FIELDS).map(([t, fs]) => [t, fs.map(f => `${f.name}:${CODE[f.kind]}`)]),
+)
 function writeCommand(w: Writer, s: Stamped) {
   w.i32(s.tick)
   w.i32(s.seq)
@@ -285,7 +284,12 @@ export function deserialize(
   readArr(r, w.free)
   for (const a of columns(w.ord)) readArr(r, a)
   const n = r.u32()
-  for (let k = 0; k < n; k++) w.pending.push(readCommand(r))
+  // each command checked again as `issue` checks it: a save written by hand or by an older sim can hold one that is
+  // not canonical (a NaN field), and it is refused, not applied
+  for (let k = 0; k < n; k++) {
+    const s = readCommand(r)
+    w.pending.push({ ...s, cmd: normaliseCommand(s.cmd) })
+  }
   if (r.o !== bytes.length) throw new Error('save has trailing bytes')
   if (f.alive.length !== MAX_FORMATIONS) throw new Error('save does not match this sim version')
   return w

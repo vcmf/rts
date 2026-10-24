@@ -156,7 +156,8 @@ found", #155–#158), each with a test; no golden replay hash moved, and `SIM_VE
    throws; `normaliseCommand` checks each command once against its type's fields and gives a canonical command
    (idempotent) or `refused` with its reason, so every queued and logged command saves, loads and replays as it was
    (`test/saves.test.ts`: every field of every type given junk, sparse arrays, throwing getters and Proxies, lone
-   surrogates; idempotence; a recorded run with them plays back).
+   surrogates; idempotence; a recorded run with them plays back). One table per type (`src/sim/command-fields.ts`)
+   drives the check, the quantising and the save, and a loaded save's commands are checked again.
 2. **A shape whose pace is not a pace compiles** (#156). `layout` takes `paces.indexOf(def.pace)` = −1; the world then fails
    at its first move with `NonFiniteState` in debug, and silently runs NaN without it. The same for a `roadPace`
    (read as "no road pace"). **Fixed:** the compiler refuses it, and with it a pace that is not > 0, a change time
