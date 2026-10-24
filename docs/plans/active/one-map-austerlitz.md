@@ -82,7 +82,7 @@ These are owner decisions and merges, not code:
 
 - A relief kind `relief.dem`: a heightfield file, its transform onto the map's extent, and its datum. Also a `sources`
   entry of kind `dem` with its licence and credit (the format proposal's `relief` row, `dem`).
-- An importer, from the prototype's `dem-fetch` tool (PR #136), writing the heightfield the map references. It
+- An importer, from the prototype's `tools/dem-fetch.mjs` (PR #136), writing the heightfield the map references. It
   resamples the 5 m source onto the map's cell (decision 0021, 2 m, or the look's cell): a mean where the cell holds
   several source pixels (as at the prototype's squeeze); a smooth interpolation (bicubic, not bilinear, so the 5 m
   grid does not show as facets) where the cell is finer than the source, as at true scale.
@@ -102,7 +102,7 @@ the source grid; the sim compiler builds it.
   - the ways, the buildings and the contours.
 - It replaces the art of today's S1b staff map, so there is one map view.
 - The armies drawn as slabs from the sim's snapshots.
-- The perf rules of the prototype's 150 fps plan (PR #136) come with it:
+- The perf rules of `docs/plans/active/perf-150.md` come with it:
   - no full-screen clips;
   - redraw only on change;
   - the ink at a pixel ratio of 1 (decision 0056).
