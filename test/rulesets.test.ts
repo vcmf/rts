@@ -1,6 +1,6 @@
 // Rulesets at their edges (decision 0015; src/sim/ruleset.ts): every check compileRuleset makes refuses a ruleset
 // that breaks it, with a message naming what is wrong; the ruleset hash moves with the rules; and the shipped
-// ruleset's own data holds together where the compiler does not check it (names that point at nothing).
+// ruleset's own data holds together (names that point at nothing).
 import { describe, it, expect } from 'vitest'
 import { compileRuleset, buildTerrain, MAX_COMPANIES, type Ruleset, type UnitType } from '../src/sim/index.ts'
 import { napoleonic, ceiling } from '../src/rulesets/napoleonic.ts'
@@ -14,6 +14,7 @@ const withType = (name: string, u: UnitType): Ruleset => ({ ...N, types: { ...T,
 const inf = T.infantry
 const cav = T.cavalry
 const bat = T.battery
+const withoutHorse = (g: Record<string, number>) => Object.fromEntries(Object.entries(g).filter(([k]) => k !== 'horse'))
 
 describe('compileRuleset refuses', () => {
   const cases: [string, Ruleset, RegExp][] = [
@@ -151,6 +152,37 @@ describe('compileRuleset refuses', () => {
       /melee.strength names camel/,
     ],
     [
+      'a shape whose pace is not a pace (#156)',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, pace: 'canter' } },
+      }),
+      /shape line's pace canter is not one of the paces/,
+    ],
+    [
+      'a shape whose road pace is not a pace (#156)',
+      withType('infantry', {
+        ...inf,
+        formations: { ...inf.formations, line: { ...inf.formations.line, roadPace: 'canter' } },
+      }),
+      /shape line's roadPace canter is not one of the paces/,
+    ],
+    [
+      'a change time naming a shape the type has not (#156)',
+      withType('infantry', { ...inf, changeTime: { ...inf.changeTime, 'line>wedge': 30 } }),
+      /change time line>wedge does not name two of its shapes/,
+    ],
+    [
+      'a terrain class giving a kind no speed (#156)',
+      { ...N, terrain: { ...N.terrain, woods: { ...N.terrain.woods, g: withoutHorse(N.terrain.woods.g) } } },
+      /terrain class woods gives kind horse no speed/,
+    ],
+    [
+      'a terrain class giving a kind the other classes give no speed (#156)',
+      { ...N, terrain: { ...N.terrain, woods: { ...N.terrain.woods, g: { ...N.terrain.woods.g, camel: 0.5 } } } },
+      /terrain class \w+ gives kind camel no speed/,
+    ],
+    [
       'a column of route too deep for the trail ring',
       withType('infantry', { ...inf, geometry: { ...inf.geometry, companies: MAX_COMPANIES, files: 60, bins: 8 } }),
       /trail of \d+ points does not fit/,
@@ -202,8 +234,8 @@ describe('the ruleset hash', () => {
   })
 })
 
-// what the compiler does not check (#156), checked on the data each era ships: a name that points at nothing would be
-// read as "none" (an index of −1) or "not given" (undefined) and turn into a NaN or a default far from the check
+// the shipped data checked directly (the compiler refuses these too since #156): a name that points at nothing would
+// be read as "none" (an index of −1) or "not given" (undefined) and turn into a NaN or a default far from the check
 describe('the shipped rulesets hold together', () => {
   for (const [era, rs] of Object.entries({
     ...Object.fromEntries(Object.entries(RULESETS).map(([k, v]) => [k, v.ruleset])),

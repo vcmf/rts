@@ -45,7 +45,8 @@ advanceTick: 1 commands · 3 the plan · 4 standing behaviour · 5–6 formation
 
   `sin`, `cos` and `atan2` are polynomials of exact operations (`num.ts`), within 1e-12 of `Math`.
   `sin` and `cos` are exact for |x| ≤ 1e5 and throw beyond that (a bug: headings stay in (−π, π]).
-  `atan2` returns values in (−π, π] with no −0. Decision 0006 names tables; `docs/proposals/sim-design.md`
+  `atan2` returns values in (−π, π] with no −0 (a zero `y` with `x ≥ 0` gives +0, #157); `quantise` gives +0 for
+  what rounds to zero, as does the command angles' 0.1 mrad rounding. Decision 0006 names tables; `docs/proposals/sim-design.md`
   §2 allows tables or polynomials, and polynomials need no data file.
 - **Order:** every loop runs in slot order.
 - **Budget:** `docs/proposals/sim-design.md` §16 targets ≤ 2 ms per tick. Measured in `test/formations.test.ts`:
@@ -74,13 +75,17 @@ advanceTick: 1 commands · 3 the plan · 4 standing behaviour · 5–6 formation
     not thrown.
 
   `issue` stamps `tick + 1` and a sequence number, and quantises positions to 1 cm and angles to 0.1 mrad.
+  It throws on a command of a type the sim does not know, before stamping it (#155): a save writes a pending
+  command's fields from its type's table, so one of an unknown type would make a save that cannot be read back.
   `applyCommands` validates at the start of that tick and drops an invalid command with a reason
-  (returned by `advanceTick`), never throwing and changing nothing. It checks: an unknown type, a stale
+  (returned by `advanceTick`), never throwing and changing nothing. It checks: an unknown type (a guard: `issue`
+  refuses them), a stale
   tick, an alive handle, the side, the shape and preset names, the men, inside the map, at most 64
   waypoints, and order-pool room (checked before a replacing order frees the old ones). Reaping clears
   every column of a formation's row and moves its generation on.
 - **RNG** (`rng.ts`): `xoshiro128**` with `Math.imul`, seeded by splitmix32; `sampleCount` draws an
-  integer around an expected value from 12 uniforms (no `log` or `cos`).
+  integer around an expected value from 12 uniforms (no `log` or `cos`); an expected value that is not a positive
+  finite number (≤ 0, NaN, ∞) gives 0 without a draw (#158).
 - **Serializer** (`serialize.ts`): named sections (meta, RNG, formations, free list, order pool, pending
   commands), little-endian; commands are written field by field from a table per type. A table's columns are written in name order (`columns`), so a new
   column is saved and hashed with no list to update. `hashWorld` is FNV-1a over all of it; `sectionHashes` per section.
@@ -125,7 +130,8 @@ the cell sizes in `tools/build-sim-data.ts`.
   next hash point, a log out of order or past its end, another scenario, another ruleset;
 - save in the middle of a shape change with a logged order pending, load, continue: the same hashes;
 - the hash covers every typed array in the world (found by walking it) and the pending commands;
-- bad commands are dropped with a reason and change nothing; a pending command crosses a save unchanged;
+- bad commands are dropped with a reason and change nothing; one of an unknown type is refused by `issue`; a pending
+  command crosses a save unchanged;
 - lint: `src/sim/` clean, and every construct in `test/fixtures/banned-in-sim.ts` reported on its line;
 - data version: another map gives another version, refused by saves, replays and `loadSimData`;
 - era genericity: `src/sim/` names no shape, pace, preset or class of the Napoleonic ruleset, and a

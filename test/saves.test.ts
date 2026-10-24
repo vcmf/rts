@@ -14,8 +14,10 @@ import {
   KIND_FORMATION,
   COMMAND_TYPES,
   M_TICK,
+  M_SEQ,
   MS_ROUTING,
   type Command,
+  type Stamped,
   type World,
 } from '../src/sim/index.ts'
 import { chargeFight } from '../src/scenarios/s1d-charge.ts'
@@ -71,7 +73,17 @@ function chargeAt(n: number): World {
 const load = (w: World): World => deserialize(serialize(w), OPEN_DATA, cr, true, openBattlefield())
 
 describe('saves: what crosses', () => {
-  // (a command of an unknown type pending makes a save that cannot be loaded: #155)
+  it('a command of an unknown type is refused when issued, so no save holds one (#155)', () => {
+    const w = makeWorld(data, cr, 1)
+    issue(w, ONE_OF_EACH.halt)
+    const log: Stamped[] = []
+    const seq = w.meta[M_SEQ]
+    expect(() => issue(w, { type: 'nonsense', id: 0 } as unknown as Command, log)).toThrow(
+      /unknown command type nonsense/,
+    )
+    expect([w.meta[M_SEQ], w.pending.length, log.length]).toEqual([seq, 1, 0])
+    expect(deserialize(serialize(w), data, cr).pending).toEqual(w.pending)
+  })
   it('a pending command of every type crosses a save with every field', () => {
     const w = makeWorld(data, cr, 1)
     for (const t of COMMAND_TYPES) issue(w, ONE_OF_EACH[t])

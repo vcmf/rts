@@ -36,9 +36,10 @@ export const nextUnit = (s: RngState): number => nextU32(s) / 4294967296
 export const nextInt = (s: RngState, n: number): number => Math.floor(nextUnit(s) * n)
 
 // an integer count around an expected value λ ≥ 0 (casualties): a normal approximation from the sum of
-// 12 uniforms (Irwin–Hall), so no log or cos; small λ uses a Bernoulli draw on the fraction
+// 12 uniforms (Irwin–Hall), so no log or cos; small λ uses a Bernoulli draw on the fraction. A λ that is not a
+// positive finite number (≤ 0, NaN, ∞) gives 0 without a draw (#158)
 export function sampleCount(s: RngState, lambda: number): number {
-  if (lambda <= 0) return 0
+  if (!(lambda > 0 && lambda < Infinity)) return 0
   if (lambda < 1) return nextUnit(s) < lambda ? 1 : 0
   let u = 0
   for (let i = 0; i < 12; i++) u += nextUnit(s)

@@ -95,8 +95,13 @@ export const COMMAND_TYPES = [
 ] as const
 export const FIRE_MODES = ['at will', 'hold'] // index = FIRE_AT_WILL, FIRE_HOLD
 
-// stamps a command for the next tick; `log` receives it when the command is external
+// stamps a command for the next tick; `log` receives it when the command is external. A command of a type the sim
+// does not know is refused here, before it takes a sequence number (#155): it would be dropped when applied, but a
+// save taken while it waited could not be read back (a save writes a command's fields from its type's table)
 export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
+  if (!(COMMAND_TYPES as readonly string[]).includes(cmd.type)) {
+    throw new Error(`unknown command type ${String(cmd.type)}: not issued`)
+  }
   const q = quantiseCommand(cmd)
   const s: Stamped = { tick: w.meta[M_TICK] + 1, seq: w.meta[M_SEQ]++, cmd: q }
   w.pending.push(s)
@@ -104,10 +109,10 @@ export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
   return s
 }
 // a spawn's quality: −1 marks none given (the ruleset's), any negative given becomes −2 (refused);
-// positions to 1 cm, angles to 0.1 mrad; an unknown type or a move with too many points is kept as it is
-// and dropped when applied
+// positions to 1 cm, angles to 0.1 mrad; an unknown type (which `issue` refuses) or a move with too many points is
+// kept as it is and dropped when applied
 export function quantiseCommand(c: Command): Command {
-  const qa = (a: number) => Math.round(a * 10000) / 10000
+  const qa = (a: number) => Math.round(a * 10000) / 10000 + 0 // + 0: a value rounding to zero is +0 (#157)
   switch (c.type) {
     case 'move':
       return {

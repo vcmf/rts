@@ -110,13 +110,12 @@ describe('commands and handles', () => {
       { type: 'style', id: h, preset: 'reckless' },
       { type: 'wheel', id: h, angle: 0 },
       { type: 'retire', id: h, metres: -5 },
-      { type: 'nonsense', id: h } as unknown as Command,
     ]
     for (const c of bad) issue(w, c)
     const stale = issue(w, { type: 'halt', id: h }); stale.tick = 0
     const r = advanceTick(w)
     expect(r.dropped.map(d => d.reason)).toEqual(['no such side', 'no such shape', 'outside the map', 'no room for those men', 'waypoint outside the map',
-      'too many waypoints', 'no such shape', 'no such order preset', 'no such wheel', 'no such retreat', 'unknown command', 'stale tick'])
+      'too many waypoints', 'no such shape', 'no such order preset', 'no such wheel', 'no such retreat', 'stale tick'])
     expect(w.f.ordHead[0]).toBe(-1); expect(w.pending.length).toBe(0)
   })
   it('a pending command crosses a save unchanged', () => {

@@ -80,7 +80,7 @@ function atanPos(t: number): number {
 // the angle of (x, y) from the +x axis, like Math.atan2(y, x), in (−π, π]: unlike Math, a negative zero y
 // on the negative x axis gives +π, and zero results are +0 (the sim has no use for signed zeros)
 export function atan2(y: number, x: number): number {
-  if (x === 0 && y === 0) return 0
+  if (y === 0 && x >= 0) return 0 // a zero y on the positive x axis or at the origin: +0, whatever its sign (#157)
   const ax = x < 0 ? -x : x
   const ay = y < 0 ? -y : y
   let a = ay <= ax ? atanPos(ay / ax) : HALF_PI - atanPos(ax / ay)
@@ -115,8 +115,9 @@ export function exp(x: number): number {
   return s
 }
 
-// command positions are quantised to 1 cm when the sim stamps them
-export const quantise = (v: number): number => Math.round(v * 100) / 100
+// command positions are quantised to 1 cm when the sim stamps them; a value that rounds to zero is +0 (#157:
+// Math.round gives −0 for −0.005, and a −0 stored in state would save as other bytes than +0)
+export const quantise = (v: number): number => Math.round(v * 100) / 100 + 0
 
 export class NonFiniteState extends Error {}
 export function assertFinite(name: string, a: Float64Array): void {
