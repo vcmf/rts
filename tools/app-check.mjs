@@ -166,10 +166,11 @@ const battle = [
     'APP.select([3]); APP.form("march"); APP.advance(25); APP.march(-260, -40, false); APP.march(-260, 60, true); APP.select([]); APP.advance(180); "marching"',
   ],
   ['eval', 'APP.advance(180); "marching"'],
+  // about 480 s from the ridge at the ordinary pace
   [
     'eval',
     `APP.advance(180); APP.view(-260, 0, 1.5); \`FORD column at z \${APP.w.f.z[3].toFixed(0)} on map \${${ONMAP}}\``,
-  ], // about 480 s from the ridge at the ordinary pace
+  ],
   ['shot', 'battle-1-ford'],
   // S1e-2: you command side 0 only; side 1 follows its plan (its first line has come down from its ridge at z 230)
   [

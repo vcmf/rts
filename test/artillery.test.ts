@@ -177,8 +177,9 @@ describe('who fires', () => {
     s.spawn(1, 60, 60, SW, 'line')
     s.run(60)
     expect(s.men(friend)).toBe(400)
+    // the middle pieces, whose line the friend stands across, are silent
     const C = s.w.cr.maxC
-    const i = s.i(b) // the middle pieces, whose line the friend stands across, are silent
+    const i = s.i(b)
     expect([3, 4].map(c => s.w.f.volleyTick[i * C + c])).toEqual([0, 0])
   })
   it('reloads slower with its crew thinned: half the men, twice the time', () => {
@@ -204,7 +205,8 @@ describe('the ball', () => {
     const [x, z] = shootRay(s.w, s.i(b), 3, ...diag(-100))
     const d = Math.hypot(x + 150, z + 150)
     expect(d).toBeGreaterThan(70)
-    expect(d).toBeLessThan(250 - 50) // its energy, less flight and its grazes
+    // its energy, less flight and its grazes
+    expect(d).toBeLessThan(250 - 50)
   })
   it('buries in a steep rise; carries over a gentle crest and the hollow behind it', () => {
     const shot = (slope: number, men: boolean) => {

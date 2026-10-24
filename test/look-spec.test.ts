@@ -285,8 +285,9 @@ describe('world spec', () => {
     const clear = (q: number) =>
       q * Math.cos(b) + c.focusY - slope(q * ca * Math.sin(b), q * sa * Math.sin(b)) - c.clearance
     const r = clearRadius(c, c.rMin, a, b, 0, c.focusY, 0, slope)
+    // the least radius that clears, to 1 mm
     expect(clear(r)).toBeGreaterThanOrEqual(0)
-    expect(clear(r - 2e-3)).toBeLessThan(0) // the least radius that clears, to 1 mm
+    expect(clear(r - 2e-3)).toBeLessThan(0)
     expect(r).toBeGreaterThan(c.rMin)
     expect(r).toBeLessThan(c.rMax)
   })
@@ -297,18 +298,21 @@ describe('world spec', () => {
     const hold = (w: number) => Math.max(w, 10 + ground) // a stand-in hold: held out over ground, as clearRadius
     cam = z.step(cam, hold)
     expect(cam).toBe(15)
+    // over a hill: held out
     ground = 13
     cam = z.step(cam, hold)
-    expect(cam).toBe(23) // over a hill: held out
+    expect(cam).toBe(23)
     cam = z.step(cam, hold)
     expect(cam).toBe(23)
     expect(z.wanted).toBe(15) // (the shown radius is not taken as wanted)
+    // past it: back in to the wanted zoom
     ground = 0
     cam = z.step(cam, hold)
-    expect(cam).toBe(15) // past it: back in to the wanted zoom
+    expect(cam).toBe(15)
+    // the player zooms out: the new wanted one
     cam = z.step(40, hold)
     expect(cam).toBe(40)
-    expect(z.wanted).toBe(40) // the player zooms out: the new wanted one
+    expect(z.wanted).toBe(40)
     ground = 35
     cam = z.step(cam, hold)
     expect(cam).toBe(45)

@@ -43,9 +43,10 @@ const H = 720
 const CAM = SPEC.camera
 const BOUNDARY = 24
 const FIELD_DE = 8
+// road and track gated apart (#88: pooled, one hid the other)
 const ROAD_DE = 8
 const TRACK_DE = 8
-const MIN_EDGES = 200 // road and track gated apart (#88: pooled, one hid the other)
+const MIN_EDGES = 200
 const SHIFTS = 8
 const STEP = 0.25
 const ERR = 8
@@ -58,7 +59,8 @@ const [, A0] = CAMS.find(c => c[0] === 'start')
 const GRASS = c => c <= 1
 const ROAD = c => c === 3
 const TRACK = c => c === 4
-const FIELD = c => c >= 6 && c <= 10 // 10: bare earth (docs/plans/done/ground-surface.md)
+// 10: bare earth (docs/plans/done/ground-surface.md)
+const FIELD = c => c >= 6 && c <= 10
 const CLASS_VIEWS = [
   ['far-fields', A0 + 0.35, 0.7, 260, [-100, 8, 150], 0],
   ['near-fields', A0, 0.7, 110, [90, 8, -40], 0],

@@ -79,8 +79,9 @@ describe('the types compile', () => {
 describe('spawning', () => {
   it("takes the type's start shape when none is given, its slots as the most men; refuses an unknown type", () => {
     const s = sim()
+    // '': no shape named
     const c = s.spawn(-100, -100, 0, '', 250, 0, 'cavalry')
-    const b = s.spawn(-100, 0, 0, '', 96, 0, 'battery') // '': no shape named
+    const b = s.spawn(-100, 0, 0, '', 96, 0, 'battery')
     expect([s.shape(c), s.men(c), s.shape(b), s.men(b)]).toEqual(['line', 250, 'limbered', 96])
     s.cmd({ type: 'debug-spawn', side: 0, x: 0, z: 0, heading: 0, men: 97, unit: 'battery' })
     s.cmd({ type: 'debug-spawn', side: 0, x: 0, z: 0, heading: 0, men: 10, unit: 'dragoons' })
@@ -259,7 +260,8 @@ describe('paces and ground', () => {
     s2.order({ type: 'form', id: h2, shape: 'march' })
     s2.until(() => s2.busy(h2), 100)
     expect(s2.shape(h2)).toBe('march')
-    expect(150 - Math.min(...s2.places(h2).map(p => p[1]))).toBeGreaterThan(185) // 189: 250 men leave a squadron's last file empty
+    // 189: 250 men leave a squadron's last file empty
+    expect(150 - Math.min(...s2.places(h2).map(p => p[1]))).toBeGreaterThan(185)
   })
 })
 
@@ -290,8 +292,9 @@ describe('under fire', () => {
       const inf = s.spawn(-90, -165, N, 'line', 100, 0)
       const them = s.spawn(-10, -165, -N, shape, men, 1, unit)
       const j = s.slot(them)
+      // the battery holds its shot (S1d-3): this is about taking fire
       void inf
-      s.order({ type: 'fire', id: them, mode: 'hold' }) // the battery holds its shot (S1d-3): this is about taking fire
+      s.order({ type: 'fire', id: them, mode: 'hold' })
       let fired = false
       let t0 = -1
       for (let k = 0; k < 20 * 180 && t0 < 0; k++) {

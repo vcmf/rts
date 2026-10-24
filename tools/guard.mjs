@@ -44,10 +44,11 @@ const MASKED = 96 // a block's pixel: its white and black mask renders differ by
 const START = CAMS.find(c => c[0] === 'start').slice(1, 5) // the default view (the goldens' start): alpha, beta, radius, target
 const GREYS = [0.3, 0.7] // the negative's two greys, from which each block's matched grey is interpolated
 const SEASON_VALUES = { summer: 0, autumn: 1, late: 2, winter: 3 }
+// name, season value, run the negative
 let SEASONS = [
   ['summer', 0, true],
   ['winter', 3, false],
-] // name, season value, run the negative
+]
 // cluster centres on the default view (world x, z, yaw), chosen to put the coats on each band of the ground: four
 // blocks in a column, 7 m apart
 const START_SPOTS = [
@@ -65,7 +66,8 @@ const COVER = [START[0], 0.8, 150, [150, 8, -25]]
 const CROPS = [START[0], 0.7, 60, [118, 8, 132]]
 let VIEW = START
 let SPOTS = START_SPOTS
-let MIN_NEG = 12 // MIN_NEG: blocks the negative must measure (the crops view's one field holds 8)
+// MIN_NEG: blocks the negative must measure (the crops view's one field holds 8)
+let MIN_NEG = 12
 const blocks = (color = null) => blocksAt(SPOTS, color)
 
 const hex = g =>
@@ -304,8 +306,9 @@ const FIG_VIEWS = [
   ['default', START[0], 0.7, 150],
   ['widest', START[0], 0.6, 260],
 ]
+// s: the clock (the battalions in line, firing); ΔE: the coat share's threshold
 const FIG_T = 80
-const DE = 25 // s: the clock (the battalions in line, firing); ΔE: the coat share's threshold
+const DE = 25
 const lab = (r, g, b) => {
   // sRGB 0–255 to CIE Lab (D65)
   const f = v => {

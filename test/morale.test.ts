@@ -167,7 +167,8 @@ describe('rally', () => {
     const [near, a] = routed(40) // the edge is about 220 m from an enemy at x = 40
     near.run(240)
     expect(near.state(a)).toBe(MS_ROUTING)
-    expect(near.w.f.routPhase[near.i(a)]).not.toBe(RP_RUNNING) // its run has ended
+    // its run has ended
+    expect(near.w.f.routPhase[near.i(a)]).not.toBe(RP_RUNNING)
     const [hit, b] = routed(170, 10)
     for (let k = 0; k < 24; k++) {
       hit.run(10)
@@ -178,8 +179,9 @@ describe('rally', () => {
   it('a router whose first run could not be made (the order pool full) does not rally where it broke', () => {
     const s = new W()
     SIDES_SET(s)
+    // 270 m: safe where it stands
     const h = s.spawn(0, -100, -35)
-    s.spawn(1, 170, -35) // 270 m: safe where it stands
+    s.spawn(1, 170, -35)
     const held: number[] = []
     for (let n = allocOrder(s.w, O_MOVE); n >= 0; n = allocOrder(s.w, O_MOVE)) held.push(n)
     s.breakNow(h)
@@ -219,8 +221,9 @@ describe('shattered', () => {
       s.tick()
     }
     expect([...states]).toEqual([MS_SHATTERED]) // never rallies
+    // it ran west to the edge and left the field (S1e-1)
     expect(on()).toBe(false)
-    expect(s.w.sides.left[0]).toBe(49) // it ran west to the edge and left the field (S1e-1)
+    expect(s.w.sides.left[0]).toBe(49)
   })
   it('a break beyond the rally allowance shatters at once', () => {
     const s = new W()
@@ -266,8 +269,9 @@ describe('contagion', () => {
   })
   it('a wavering neighbour breaks with it; a steady one at default quality does not', () => {
     const [s, [a, b, c]] = three()
+    // wavering, and staying there
     s.w.f.quality[s.i(a)] = 0.45
-    s.set(a, 0.45) // wavering, and staying there
+    s.set(a, 0.45)
     s.breakNow(b)
     s.tick()
     expect(s.state(a)).toBe(MS_ROUTING)
@@ -358,9 +362,10 @@ describe('flank support', () => {
     const f = s.spawn(0, -60, 5)
     s.run(1)
     expect(s.target(h) - base).toBeCloseTo(M.support.bonus, 9)
+    // routing, standing where it is
     const j = s.i(f)
     s.w.f.mstate[j] = MS_ROUTING
-    s.w.f.routPhase[j] = RP_FLED // routing, standing where it is
+    s.w.f.routPhase[j] = RP_FLED
     expect(s.target(h)).toBeCloseTo(base, 9)
   })
 })
@@ -443,10 +448,11 @@ describe('the wavering fall-back', () => {
     const i = s.i(h)
     s.w.f.quality[i] = M.quality
     s.set(h, 0.48)
+    // the flag clears once it recovers
     let fell = false
     s.run(30, () => {
       fell ||= s.w.f.fellBack[i] === 1 || s.w.f.ordHead[i] >= 0
-    }) // the flag clears once it recovers
+    })
     expect(fell).toBe(false)
   })
 })

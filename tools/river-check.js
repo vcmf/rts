@@ -20,19 +20,21 @@
   const node = k => Math.fround((k * SMW) / TSUB - SMW / 2)
   const k0 = Math.floor(((SMW / 2 - 60) * TSUB) / SMW)
   const k1 = Math.ceil(((SMW / 2 + 50) * TSUB) / SMW)
+  // covers all three zones
   for (let i = k0; i <= k1; i++) {
     for (let j = k0; j <= k1; j++) {
       const x = node(i)
       const z = node(j)
       if (KEEP_CLEAR(x, z) && baseH(x, z) - H(x, z) > 0.01) lowered++
     }
-  } // covers all three zones
+  }
   check('keepClearLowered', lowered === 0, lowered)
   const snap = v => node(Math.round(((v + SMW / 2) * TSUB) / SMW))
+  // grid nodes nearest the hill top
   const hill = [
     [snap(0), snap(6)],
     [snap(-15), snap(6)],
-  ] // grid nodes nearest the hill top
+  ]
   const hillDrop = Math.max(...hill.map(([x, z]) => baseH(x, z) - H(x, z)))
   check('hillDrop', hillDrop < 0.05, +hillDrop.toFixed(2))
 
@@ -126,7 +128,8 @@
     const ringOf = R =>
       Array.from({ length: 8 }, (_, k) => [Math.cos((k * Math.PI) / 4) * R, Math.sin((k * Math.PI) / 4) * R])
     const ring = ringOf(1.4)
-    const grassRing = ringOf((meadow.reach ?? 1.45) - 0.05) // (a little inside the reach: the growth's own margin)
+    // (a little inside the reach: the growth's own margin)
+    const grassRing = ringOf((meadow.reach ?? 1.45) - 0.05)
     let inZones = 0
     let onBanks = 0
     let sampled = 0
@@ -284,10 +287,11 @@
   for (let k = 0; k < wp.length; k += 3) {
     const col = (k / 3) % 13
     const q = riverQuery(wp[k], wp[k + 2])
+    // clamped rows at the tile edge can put the centre on the bank (dived: not surface)
     if (col === 6 && wetIn(q, 0.3)) {
       if (prev !== null && wp[k + 1] > prev + 0.001) rises++
       prev = wp[k + 1]
-    } // clamped rows at the tile edge can put the centre on the bank (dived: not surface)
+    }
     if (wetIn(q, W2 ? SMW / TSUB : 0.3) && wp[k + 1] < H(wp[k], wp[k + 2]) - 0.01) underBed++
   }
   check('uphillSteps', rises === 0, rises)

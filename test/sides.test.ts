@@ -109,8 +109,9 @@ describe('the plan', () => {
     s.order({ type: 'move', id: unitHandle(0), points: [[0, -500]], append: false }) // the regiment rides away
     s.until(() => s.z(unitHandle(0)) > -400, 400)
     s.advance(napoleonic.melee.refuge.hold + 120)
+    // formed back, and on its way
     expect(s.shape(line)).toBe('line')
-    expect(s.z(line)).toBeGreaterThan(z0 + 20) // formed back, and on its way
+    expect(s.z(line)).toBeGreaterThan(z0 + 20)
   })
   it("a battalion that breaks in the square it formed by itself runs: the square's hold goes with its orders", () => {
     const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA)
@@ -135,8 +136,9 @@ describe('the plan', () => {
     s.w.f.morale[1] = 0.1
     s.tick()
     expect(s.w.f.mstate[1]).toBe(MS_ROUTING)
+    // it ran north, to its rear
     s.advance(30)
-    expect(s.z(line)).toBeGreaterThan(z0 + 20) // it ran north, to its rear
+    expect(s.z(line)).toBeGreaterThan(z0 + 20)
   })
   it('a plan order that comes after the square has formed is kept too, and the order pool does not grow', () => {
     const plan: PlanStep[] = [{ at: 60, unit: 1, cmd: { type: 'move', points: [[0, 300]], append: false } }]
@@ -183,8 +185,9 @@ describe('the plan', () => {
       fire: 'hold',
     })
     s.cmd({ type: 'debug-spawn', side: 1, x: 0, z: 100, heading: 0, shape: 'line', men: 400, fire: 'at will' })
+    // infantry 100 m off its rear face
     s.cmd({ type: 'debug-spawn', side: 0, x: 0, z: 200, heading: PI, shape: 'line', men: 400, fire: 'hold' })
-    s.tick() // infantry 100 m off its rear face
+    s.tick()
     s.until(() => s.shape(unitHandle(1)) !== 'square', 150)
     const C = s.w.cr.maxC
     const v0 = Math.max(...s.w.f.volleyTick.slice(C, 2 * C))
@@ -225,12 +228,14 @@ describe('the plan', () => {
     s.order({ type: 'charge', id: unitHandle(0), target: unitHandle(1) })
     s.until(() => !s.w.f.foe[1], 120)
     expect(s.w.f.foe[1]).not.toBe(0)
+    // stands, its march kept
     const x = s.x(unitHandle(1))
     s.advance(2)
-    expect([s.orders(unitHandle(1)), s.x(unitHandle(1))]).toEqual([1, x]) // stands, its march kept
+    expect([s.orders(unitHandle(1)), s.x(unitHandle(1))]).toEqual([1, x])
+    // the regiment broke: on it goes
     s.until(() => s.w.f.foe[1] !== 0, 300)
     s.advance(20)
-    expect(s.x(unitHandle(1))).toBeGreaterThan(x + 5) // the regiment broke: on it goes
+    expect(s.x(unitHandle(1))).toBeGreaterThan(x + 5)
   })
   it("a player's order in the same spell stands the square down", () => {
     const s = new Sim(1, napoleonic, openBattlefield(), OPEN_DATA)
@@ -313,14 +318,16 @@ describe('the end', () => {
     s.order({ type: 'debug-morale', id: unitHandle(2), quality: 0 })
     s.until(() => !s.w.meta[M_END], 30)
     expect([s.w.f.mstate[2], s.w.meta[M_WINNER]]).toEqual([MS_ROUTING, END_SIDE0])
+    // decided once
     const at = s.w.meta[M_END]
     s.advance(5)
-    expect(s.w.meta[M_END]).toBe(at) // decided once
+    expect(s.w.meta[M_END]).toBe(at)
   })
   it('both broken on one tick is a draw', () => {
+    // both break in the same morale step
     const s = two()
     for (const u of [0, 2]) s.w.f.morale[u] = 0.1
-    s.tick() // both break in the same morale step
+    s.tick()
     expect([s.w.f.mstate[0], s.w.f.mstate[2], s.w.meta[M_WINNER]]).toEqual([MS_ROUTING, MS_ROUTING, END_DRAW])
   })
   it('at the time limit the larger share in the fight wins; within the margin, a draw', () => {
@@ -350,8 +357,9 @@ describe('the end', () => {
     expect(s.w.f.mstate[1]).toBe(MS_ROUTING)
     expect(fightShares(s.w)[1]).toBeCloseTo(2 / 3, 9)
     s.until(() => s.w.f.mstate[1] >= MS_ROUTING, 300)
+    // rallied: all its men back
     expect(s.w.f.mstate[1]).toBeLessThan(MS_ROUTING)
-    expect(fightShares(s.w)[1]).toBe(1) // rallied: all its men back
+    expect(fightShares(s.w)[1]).toBe(1)
   })
   it('a side is not broken while more than half its men are in the fight', () => {
     const s = battle({}, [
@@ -360,8 +368,9 @@ describe('the end', () => {
       [1, 0, 200, PI],
       [1, 150, 200, PI],
     ])
+    // one of side 1's three: two thirds still in the fight
     s.w.f.morale[1] = 0.1
-    s.tick() // one of side 1's three: two thirds still in the fight
+    s.tick()
     expect([s.w.f.mstate[1], s.w.meta[M_END]]).toEqual([MS_ROUTING, 0])
     s.w.f.morale[2] = 0.1
     s.tick()

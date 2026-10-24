@@ -27,8 +27,9 @@ interface Case {
   n: number
 }
 const cases: Case[] = JSON.parse(fs.readFileSync(path.join(root, 'test', 'fixtures', 'repack-events.json'), 'utf8'))
+// the S1a block's companies; the stride of the per-company rows
 const C = cr.types[0].C
-const CS = cr.maxC // the S1a block's companies; the stride of the per-company rows
+const CS = cr.maxC
 
 describe('the re-packing gate', () => {
   it(`at each of the ${cases.length} places the probe found, the ungated loss wets a bin and the gated one does not`, () => {

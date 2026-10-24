@@ -289,7 +289,9 @@ describe('at 8× (0.2 s soldier steps)', () => {
 // MARCH_BUDGET, so it cannot grow unnoticed. vitest runs this code about 40% slower than plain Node (the
 // page's numbers: tools/bench-cost.ts)
 const FRAME_BUDGET = 4
-const MARCH_BUDGET = 12 // 12: S1e-1's tighter grid (every shape on the field) measures 9.2–9.9 ms on main; the old grid's 10 kept the same margin over about 8
+// 12: S1e-1's tighter grid (every shape on the field) measures 9.2–9.9 ms on main; the old grid's 10 kept the same
+// margin over about 8
+const MARCH_BUDGET = 12
 describe.skipIf(process.env.CI)('cost', () => {
   const shipped = () => new Sim(1, napoleonic)
   it('40 battalions of 400 firing (20 a side in column, fronts 100 m apart): sim and soldier layer per frame; the fire step per tick reported', () => {

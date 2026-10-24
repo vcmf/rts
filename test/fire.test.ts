@@ -189,11 +189,13 @@ describe('who may fire at whom', () => {
 
 describe('Face about', () => {
   it("carries each company's fire state with its men (reload, last volley, target)", () => {
+    // A's companies have fired, reloads differ
     const [s, a] = pair(100, {}, undefined)
     s.do({ type: 'fire', id: pairB(s), mode: 'hold' })
-    s.run(40) // A's companies have fired, reloads differ
+    s.run(40)
     const i = s.i(a)
-    const C = s.w.cr.maxC // the stride of the per-company rows (the S1a block has 4 companies)
+    // the stride of the per-company rows (the S1a block has 4 companies)
+    const C = s.w.cr.maxC
     for (let c = 0; c < 4; c++) s.w.f.men[i * C + c] = 20 + c // distinct strengths, so each company's men can be told apart
     const pairs = (dt: number) =>
       [0, 1, 2, 3]
@@ -256,8 +258,9 @@ describe('a target partly hidden', () => {
     const a2 = w2.spawn(0, FIGHT_X - 50, Z, E, { fire: 'hold' })
     const b2 = w2.spawn(1, FIGHT_X + 50, Z, -E, { quality: 1, fire: 'hold' })
     const C = w2.w.cr.maxC
+    // B's southern company
     const south = [0, 1, 2, 3].reduce((m, c) => (companyZ(w2, b2, c) < companyZ(w2, b2, m) ? c : m), 0)
-    const zs = companyZ(w2, b2, south) // B's southern company
+    const zs = companyZ(w2, b2, south)
     for (let z = Math.floor(zs - 8); z <= Math.ceil(zs + 8); z++) {
       for (let x = FIGHT_X + 10; x <= FIGHT_X + 56; x++) t.cls[cellK(t, x, z)] = dense
     }
@@ -290,8 +293,9 @@ describe('morale', () => {
       },
       0.42,
     )
+    // 0.42: wavering by quality
     s.run(1200)
-    expect([s.state(a), s.state(b), s.men(a), s.men(b)]).toEqual([MS_STEADY, MS_WAVERING, 100, 100]) // 0.42: wavering by quality
+    expect([s.state(a), s.state(b), s.men(a), s.men(b)]).toEqual([MS_STEADY, MS_WAVERING, 100, 100])
   })
   longIt('the states follow the morale with hysteresis (steady → shaken → wavering → shaken → steady)', () => {
     const s = new W()
@@ -349,7 +353,8 @@ describe('morale', () => {
       expect(s.state(h)).toBe(MS_ROUTING)
       expect(STATUS[s.w.f.status[s.i(h)]]).toBe('cannot face about: impassable ground')
       const n = s.w.f.ordHead[s.i(h)]
-      expect(n >= 0 && s.w.ord.type[n] === O_MOVE).toBe(true) // the run is still its order
+      // the run is still its order
+      expect(n >= 0 && s.w.ord.type[n] === O_MOVE).toBe(true)
     }
     expect(found).toBe(true)
   })
@@ -438,12 +443,14 @@ describe('morale', () => {
     const s = new W()
     const h = s.spawn(0, -100, -65, E, { fire: 'hold' })
     s.spawn(1, -20, -65, -E, { fire: 'hold' })
+    // faced about: heading west, its back to the enemy
     s.do({ type: 'retire', id: h, metres: 30 })
-    s.run(4) // faced about: heading west, its back to the enemy
+    s.run(4)
     expect(Math.cos(s.w.f.heading[s.i(h)] - -E)).toBeGreaterThan(0.99)
+    // breaks now, mid-Retire
     s.w.f.quality[s.i(h)] = 0.1
     s.w.f.morale[s.i(h)] = 0.1
-    s.tick() // breaks now, mid-Retire
+    s.tick()
     expect(s.state(h)).toBe(MS_ROUTING)
     expect(s.w.f.routX[s.i(h)]).toBeLessThan(-0.99) // away from the enemy (west)
     const x0 = s.w.f.x[s.i(h)]
@@ -475,8 +482,9 @@ describe('morale', () => {
     expect(s.state(h)).toBe(MS_ROUTING)
     s.run(10)
     expect([s.state(h), s.w.f.runs[s.i(h)], s.w.f.ordHead[s.i(h)]]).toEqual([MS_ROUTING, 0, -1])
+    // the next retry (every 5 s) finds room
     clearOrders(s.w, s.i(filler))
-    s.run(6) // the next retry (every 5 s) finds room
+    s.run(6)
     expect(s.w.f.runs[s.i(h)]).toBe(1)
     let n = s.w.f.ordHead[s.i(h)]
     while (n >= 0 && s.w.ord.type[n] !== O_MOVE) n = s.w.ord.next[n]

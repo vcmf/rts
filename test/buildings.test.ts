@@ -80,8 +80,9 @@ describe('the turn', () => {
       ]) {
         const v = Vector3.TransformCoordinates(new Vector3(x, 0, z), m)
         const [wx, wz] = toWorld(yaw, x, z)
+        // (Babylon's matrices are float32)
         expect(wx).toBeCloseTo(v.x, 6)
-        expect(wz).toBeCloseTo(v.z, 6) // (Babylon's matrices are float32)
+        expect(wz).toBeCloseTo(v.z, 6)
         const [lx, lz] = toLocal(yaw, wx, wz)
         expect(lx).toBeCloseTo(x, 9)
         expect(lz).toBeCloseTo(z, 9)
@@ -143,7 +144,8 @@ describe('the light atlas', () => {
     for (const n of [1, 4, 5, BUILDINGS.length, 13]) {
       const { width, height, rows, cols, inner } = atlasLayout(n)
       expect(rows * cols).toBeGreaterThanOrEqual(n)
-      expect(Math.abs(rows - cols)).toBeLessThanOrEqual(1) // (square-ish)
+      // (square-ish)
+      expect(Math.abs(rows - cols)).toBeLessThanOrEqual(1)
       for (let i = 0; i < n; i++) {
         const [x, y, w, h] = tileOf(i, n)
         const cx = (i % cols) * TILE

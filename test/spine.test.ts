@@ -77,8 +77,9 @@ describe('S1a acceptance: golden hashes, replays, saves', () => {
     const log = run.replay.log.map(s => (s.cmd.type === 'debug-kill' ? { ...s, cmd: { ...s.cmd, men: 14 } } : s))
     const bad = play({ ...run.replay, log }, data, cr, s1aDrill, run.hashes)
     const t = run.replay.log.find(s => s.cmd.type === 'debug-kill')!.tick
+    // one more draw: the RNG section differs first
     expect(bad?.tick).toBe(Math.ceil(t / 20) * 20)
-    expect(bad?.section).toBe('rng') // one more draw: the RNG section differs first
+    expect(bad?.section).toBe('rng')
   })
   it('save in the middle of a change with an order pending, load, continue: the same hashes', () => {
     const w = makeWorld(data, cr, run.replay.seed)
@@ -93,9 +94,10 @@ describe('S1a acceptance: golden hashes, replays, saves', () => {
       due(w)
       advanceTick(w)
     }
+    // column forming, square pending
     due(w)
     expect(w.pending.length).toBe(1)
-    expect(w.f.trans[0]).toBe(1) // column forming, square pending
+    expect(w.f.trans[0]).toBe(1)
     const loaded = deserialize(serialize(w), data, cr)
     expect(hashWorld(loaded)).toBe(hashWorld(w))
     const after: number[] = []
@@ -187,6 +189,7 @@ describe('commands and handles', () => {
       men: 10,
     })
     expect([s.tick, s.seq]).toEqual([1, 0])
+    // -1: the ruleset's quality; '': the first unit type
     expect(s.cmd).toEqual({
       type: 'debug-spawn',
       side: 0,
@@ -198,7 +201,7 @@ describe('commands and handles', () => {
       quality: -1,
       fire: 'at will',
       unit: '',
-    }) // -1: the ruleset's quality; '': the first unit type
+    })
     const h = makeHandle(KIND_FORMATION, 0, 0)
     const bad: Command[] = [
       { type: 'debug-spawn', side: 2, x: 0, z: 0, heading: 0, shape: 'line', men: 10 },

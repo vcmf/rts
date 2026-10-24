@@ -22,8 +22,9 @@ import {
 // the 1v1 at three ranges; the 100 m row again without the wavering fall-back (S1c-2: its share of the
 // result); and a 3v3 brigade at 100 m (reported, no target), watched for 3 minutes after its first break
 const RANGES = [50, 100, 200]
+// 20 minutes; 3 minutes, in ticks
 const MAX = 20 * 60 * 20
-const WINDOW = 20 * 180 // 20 minutes; 3 minutes, in ticks
+const WINDOW = 20 * 180
 interface Job {
   range: number
   seed: number
@@ -91,7 +92,8 @@ if (!isMainThread) {
     const none = rs.filter(r => r.first < 0)
     const broke = rs.filter(r => r.first >= 0)
     const t = weak.map(r => r.tick)
-    const l = weak.map(r => (r.lossB * 100) / MEN) // percent of the line
+    // percent of the line
+    const l = weak.map(r => (r.lossB * 100) / MEN)
     const avg = (a: number[]) => (a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(2) : '-')
     console.log(
       `${label} | ${weak.length} | ${strong.length} | ${none.length} | ${min(q(t, 0.1))} / ${min(q(t, 0.5))} / ${min(q(t, 0.9))} | ${q(l, 0.1)} / ${q(l, 0.5)} / ${q(l, 0.9)}% | ${avg(broke.map(r => r.termLosses))} / ${avg(broke.map(r => r.termRecent))}`,

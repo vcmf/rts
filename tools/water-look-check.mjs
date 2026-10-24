@@ -240,7 +240,8 @@ function seam(url, dir, sab) {
     for (let i = 0; i < W * H; i++) {
       if (!white(surf, i)) continue
       const s = ((raw.data[i * 4 + 1] / 255) * 2 - 1) * SDF
-      if (Math.abs(s) >= BAND - 0.125) continue // the raw view's step: 0.125 m
+      // the raw view's step: 0.125 m
+      if (Math.abs(s) >= BAND - 0.125) continue
       let e = 0
       for (let k = 0; k < 3; k++) e = Math.max(e, Math.abs(ter.data[i * 4 + k] - wat.data[i * 4 + k]))
       d.push(e)
@@ -376,13 +377,14 @@ function shimmer(url, dir, sab) {
     const rows = new Uint8Array(W * H)
     const mask = new Uint8Array(W * H)
     const R = 6
+    // dilated along rows, then columns
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         if (white(surf, y * W + x)) {
           for (let xx = Math.max(0, x - R); xx <= Math.min(W - 1, x + R); xx++) rows[y * W + xx] = 1
         }
       }
-    } // dilated along rows, then columns
+    }
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         if (rows[y * W + x]) for (let yy = Math.max(0, y - R); yy <= Math.min(H - 1, y + R); yy++) mask[yy * W + x] = 1

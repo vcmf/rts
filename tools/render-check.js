@@ -15,15 +15,18 @@
   const gl = engine._gl
   const out = {}
   const fail = []
+  // the render scale pinned to 1 (Auto would resize the frame at the wide views), put back at the end
   const res0 = __proto.S.res
   __proto.S.res = 1
-  scene.render() // the render scale pinned to 1 (Auto would resize the frame at the wide views), put back at the end
+  scene.render()
+  // true: the screen, not the last bound render target
   const W = engine.getRenderWidth(true)
-  const Hh = engine.getRenderHeight(true) // true: the screen, not the last bound render target
+  const Hh = engine.getRenderHeight(true)
   const water = scene.getMeshByName('water')
   const blank = new B.DynamicTexture('blankMask', 4, scene, false)
+  // black: no river line
   blank.getContext().fillRect(0, 0, 4, 4)
-  blank.update(false) // black: no river line
+  blank.update(false)
   const frame = hide => {
     water.isVisible = !hide
     farTerrainMat.setTexture('uRiverMask', hide ? blank : riverMask)
@@ -43,9 +46,10 @@
   const saved = {
     alpha: cam.alpha,
     beta: cam.beta,
+    // (zoom: the wanted radius, decision 0051)
     radius: zoom ? zoom.wanted : cam.radius,
     target: cam.target.clone(),
-  } // (zoom: the wanted radius, decision 0051)
+  }
   // views must be ones the player can reach: the camera clamps beta/radius on render, which would silently move the view
   const yawOk = a =>
     (cam.lowerAlphaLimit == null || a >= cam.lowerAlphaLimit) &&
@@ -103,8 +107,9 @@
             add('bank', delta(new B.Vector3(x, H(x, z), z)))
           }
         } else if (farOut) {
+          // the drawn far surface
           add('farLine', delta(new B.Vector3(C.px[i], farGround.getHeightAtCoordinates(C.px[i], C.pz[i]), C.pz[i])))
-        } // the drawn far surface
+        }
       }
       const frac = ([a, n]) => (n ? +(a / n).toFixed(2) : null)
       out[v.name] = {
@@ -166,9 +171,10 @@
       cam.target.set(sx * PLAY, FOCUS_Y, sz * PLAY)
       pan(d, 40)
       const t = cam.target
+      // x/z are clamped by the page; y is the real test (mapPanning)
       if (Math.abs(t.x) > PLAY + 1e-6 || Math.abs(t.z) > PLAY + 1e-6 || Math.abs(t.y - FOCUS_Y) > 1e-3) {
         fail.push(`pan from ${sx},${sz} by ${d} left the bounds: ${[t.x, t.y, t.z].map(v => v.toFixed(1))}`)
-      } // x/z are clamped by the page; y is the real test (mapPanning)
+      }
     }
   }
   cam.target.copyFrom(t0)
@@ -209,7 +215,8 @@
       const worlds = m.thinInstanceCount > 0 ? m.thinInstanceGetWorldMatrices() : [m.computeWorldMatrix(true)]
       for (const W of worlds) {
         const o = W.getTranslation()
-        if (m.thinInstanceCount > 0 && (Math.abs(o.x) > h || Math.abs(o.z) > h)) continue // far-ring foliage fades out
+        // far-ring foliage fades out
+        if (m.thinInstanceCount > 0 && (Math.abs(o.x) > h || Math.abs(o.z) > h)) continue
         tested++
         if (!corners.every(c => inBox(B.Vector3.TransformCoordinates(c, W)))) outside++
       }

@@ -104,7 +104,8 @@ describe.each(both)('battalions of %s', (_, { rs, men }) => {
   })
   it('a line marching into the stream halts, every man dry', () => {
     const s = new Sim(1, rs)
-    const h = s.spawn(20, 10, Math.PI / 2, 'line', Math.min(men, 400)) // 400: the ceiling's full line overruns the field
+    // 400: the ceiling's full line overruns the field
+    const h = s.spawn(20, 10, Math.PI / 2, 'line', Math.min(men, 400))
     s.order({ type: 'move', id: h, points: [[100, 10]], append: false })
     s.until(() => s.busy(h), 300)
     expect(s.status(h)).toBe('halted: impassable ground')

@@ -311,7 +311,8 @@ describe('impassable ground: deep water', () => {
   })
   it('a Retire toward the map edge stops on the map', () => {
     const s = new Sim()
-    const h = s.spawn(-150, 100, Math.PI / 2) // facing east: the retreat goes west, toward the edge
+    // facing east: the retreat goes west, toward the edge
+    const h = s.spawn(-150, 100, Math.PI / 2)
     s.order({ type: 'retire', id: h, metres: 1000 })
     s.until(() => s.busy(h), 400)
     expect(s.x(h)).toBeGreaterThanOrEqual(-180)

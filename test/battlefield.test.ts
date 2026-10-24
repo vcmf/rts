@@ -64,14 +64,16 @@ describe('the edge (#37)', () => {
       const s = sim()
       const h = s.spawn(420, 420, Math.PI / 4, shape, men, 0, unit)
       s.order({ type: 'move', id: h, points: [[598, 598]], append: false })
-      s.until(() => s.busy(h), 900) // a battery's pieces go by hand, 0.3 m/s
+      // a battery's pieces go by hand, 0.3 m/s
+      s.until(() => s.busy(h), 900)
       expect(s.status(h)).toBe('halted: impassable ground')
       expect(s.places(h).every(([x, z]) => Math.abs(x) <= 600 && Math.abs(z) <= 600)).toBe(true)
     }
   })
   it('a change of shape that would put places off the map is refused', () => {
     const s = sim()
-    const h = s.spawn(0, -590, 0, 'line', 400) // a column of route reaches about 96 m back: off the map
+    // a column of route reaches about 96 m back: off the map
+    const h = s.spawn(0, -590, 0, 'line', 400)
     s.order({ type: 'form', id: h, shape: 'march' })
     expect(s.status(h)).toBe('cannot form: impassable ground')
     expect(s.shape(h)).toBe('line')
@@ -114,7 +116,8 @@ describe('the S1e scenario', () => {
       }
       s.tick()
       expect(s.dropped).toEqual([])
-      expect(live.filter(i => !w.f.trans[i])).toEqual([]) // every change has begun
+      // every change has begun
+      expect(live.filter(i => !w.f.trans[i])).toEqual([])
       for (let n = 0; n < 20 * 150 && live.some(i => w.f.trans[i]); n++) advanceTick(w)
       expect(live.filter(i => w.f.trans[i])).toEqual([])
       expect(onMap()).toBe(true)
@@ -141,7 +144,8 @@ describe('along the edge', () => {
       off += s.places(h).filter(([x, z]) => Math.abs(x) > 600 || Math.abs(z) > 600).length
     }
     expect(off).toBe(0)
-    expect(s.x(h)).toBeLessThan(560) // it got round the corner
+    // it got round the corner
+    expect(s.x(h)).toBeLessThan(560)
   })
   it('a shattered formation leaves when any company reaches the edge, not only its anchor', () => {
     // a column of route facing north with its tail at the southern edge: its anchor stands about 90 m in

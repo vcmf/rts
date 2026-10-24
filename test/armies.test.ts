@@ -341,17 +341,19 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
         hi = Math.max(hi, p.data[o + 1])
         expect(Math.hypot(p.data[o + 4], p.data[o + 5], p.data[o + 6])).toBeGreaterThan(0.5) // (blended: shorter, units.vert normalizes)
       }
+      // m: a man, his bayonet up
       expect(lo).toBeGreaterThan(-0.1)
       expect(hi - lo).toBeGreaterThan(1.6)
-      expect(hi - lo).toBeLessThan(2.8) // m: a man, his bayonet up
+      expect(hi - lo).toBeLessThan(2.8)
     }
     expect([fromHalf(0x3c00), fromHalf(0xc000), fromHalf(0x0001)]).toEqual([1, -2, 2 ** -24])
   })
   it("has a tiny LOD of boxes on its parts: under a quarter of the far LOD's vertices, each corner on one bone, a mix of roles, outward, a figure tall", () => {
     const t = tinyMesh(d, d.lods[d.lods.length - 1].name)
     const n = t.positions.length / 3
+    // eight corners, twelve triangles a box
     expect(n % 8).toBe(0)
-    expect(t.indices.length).toBe((n / 8) * 36) // eight corners, twelve triangles a box
+    expect(t.indices.length).toBe((n / 8) * 36)
     expect(n).toBeLessThan(d.lods[d.lods.length - 1].vertices / 4)
     for (let v = 0; v < n; v++) {
       expect(t.boneWeights[v * 4]).toBe(1)
@@ -431,7 +433,8 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     expect([s.width, s.height]).toEqual([s.cellW * 8, s.cellH * 4])
     expect(s.data.length).toBe(s.width * s.height)
     expect(Math.hypot(...s.dir)).toBeCloseTo(1, 6)
-    expect(s.dir[0] * sun[0] + s.dir[1] * sun[2]).toBeLessThan(0) // away from the sun
+    // away from the sun
+    expect(s.dir[0] * sun[0] + s.dir[1] * sun[2]).toBeLessThan(0)
     const tanE = sun[1] / Math.hypot(sun[0], sun[2])
     for (let r = 0; r < 4; r++) {
       for (let k = 0; k < 8; k++) {
@@ -441,10 +444,11 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
         for (let j = 0; j < s.cellH; j++) {
           for (let i = 0; i < s.cellW; i++) {
             const v = s.data[(r * s.cellH + j) * s.width + k * s.cellW + i]
+            // (the border: no bleed between cells)
             if (i < s.margin || j < s.margin || i >= s.cellW - s.margin || j >= s.cellH - s.margin) {
               expect(v).toBe(0)
               continue
-            } // (the border: no bleed between cells)
+            }
             mass += v / 255
             if (v > 0 && v < 200) soft++
             if (v > 128) far = Math.max(far, s.along[0] + (j - s.margin + 0.5) * s.texel)

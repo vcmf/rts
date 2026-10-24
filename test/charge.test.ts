@@ -137,7 +137,8 @@ describe('the charge', () => {
     const k = u.inf(0, 40, PI - 0.5, 1)
     const ga = gapBetween(u.w, u.slot(e), u.slot(k))
     expect(ga).toBeGreaterThan(0)
-    expect(ga).toBeLessThan(40 - 20) // its near end swings 22 m closer
+    // its near end swings 22 m closer
+    expect(ga).toBeLessThan(40 - 20)
   })
   it('the side struck: front, flank and rear; a battalion changing shape has no front', () => {
     const s = new S()
@@ -407,11 +408,13 @@ describe('the square against cavalry (standing behaviour)', () => {
     const A = napoleonic.melee.refuge.alert
     s.order({ type: 'move', id: cav, points: [[0, 0]], append: false })
     s.until(() => s.shape(ln) !== 'square', 150)
+    // the regiment stands 60 m off
     s.advance(20)
-    expect(s.shape(ln)).toBe('square') // the regiment stands 60 m off
+    expect(s.shape(ln)).toBe('square')
     s.order({ type: 'move', id: cav, points: [[0, -170]], append: false })
+    // riding away
     s.until(() => s.f(cav, 'vz') > -napoleonic.melee.refuge.closing, 300)
-    const away = s.t // riding away
+    const away = s.t
     const dist = () => Math.hypot(s.x(ln) - s.x(cav), s.z(ln) - s.z(cav))
     s.until(() => dist() <= A, 300)
     const out = s.t
@@ -431,7 +434,8 @@ describe('the square against cavalry (standing behaviour)', () => {
     s.order({ type: 'form', id: ln, shape: 'line' })
     s.advance(40)
     expect(s.shape(ln)).toBe('line')
-    expect(s.orders(ln)).toBe(0) // the square's orders went with the player's
+    // the square's orders went with the player's
+    expect(s.orders(ln)).toBe(0)
   })
 })
 

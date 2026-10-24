@@ -37,8 +37,9 @@ const res = saved ? JSON.parse(fs.readFileSync(saved, 'utf8')) : run()
 
 function run() {
   const u = new URL(url)
+  // keeps ?bench=macro (the macro arms)
   u.searchParams.set('bench', u.searchParams.get('bench') ?? '')
-  u.searchParams.set('hold', hold) // keeps ?bench=macro (the macro arms)
+  u.searchParams.set('hold', hold)
   const steps = [
     ['wait', 1000],
     [

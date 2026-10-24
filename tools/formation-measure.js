@@ -44,7 +44,8 @@
 
   reload()
   F.advance(5)
-  out.atRest = run(5) // settled men hold within 0.25 m of their place
+  // settled men hold within 0.25 m of their place
+  out.atRest = run(5)
   reload()
   F.order('square')
   out.lineToSquare = run(110)
@@ -180,10 +181,11 @@
     FCm.place(x, z, 0)
     F.follow(false)
     F.order('style', style)
+    // front-rank x, west to east
     const files = FCm.main.soldiers
       .filter(s => s.r === 0)
       .map(s => s.x)
-      .sort((a, b) => a - b) // front-rank x, west to east
+      .sort((a, b) => a - b)
     if (n > 0) FCm.paintTerrain(files[0] - 0.3, z + 15, files[n * 3 - 1] + 0.3, z + 24, 'woods') // cells z+15..z+24: 10 m
     F.order('move', { x, z: z + 60 })
     const P = R.orders[style]
@@ -265,10 +267,11 @@
     F.follow(false)
     F.order('move', { x: tx, z: tz })
     let worst = 0
+    // every 0.5 s on the way
     for (let n = 0; n < 180; n++) {
       F.advance(0.5)
       worst = Math.max(worst, placesInDeep(FCm.main))
-    } // every 0.5 s on the way
+    }
     const r = {
       start: [+x.toFixed(1), z],
       status: FCm.main.status,
@@ -718,14 +721,16 @@
   // a march column beside the stream turning toward it, 8 to 10 m from its edge
   out.columnTurnAtBank = []
   for (const d of [8, 9, 10]) {
+    // away from the bridge (z -60)
     let e = 30
-    while (!deep(e, -110) && e < 150) e += 0.25 // away from the bridge (z -60)
+    while (!deep(e, -110) && e < 150) e += 0.25
+    // formed on dry ground, then beside the stream
     FCm.place(e - d - 15, -140, 0)
     F.follow(false)
     F.order('march')
     F.advance(25)
     F.order('move', { x: e - d, z: -110 })
-    F.advance(25) // formed on dry ground, then beside the stream
+    F.advance(25)
     F.order('move', { x: e + 30, z: FCm.main.z })
     const worst = watch(60)
     out.columnTurnAtBank.push({
@@ -790,8 +795,9 @@
     F.follow(false)
     F.order('column')
     F.advance(40)
+    // the column's front rank on the hedge line
     F.order('move', { x: -47, z: -22.5 })
-    F.advance(60) // the column's front rank on the hedge line
+    F.advance(60)
     const onHedge = places(FCm.main).filter(
       p => FCm.TERR[FCm.cellK(p[0], p[1])] === FCm.CLASSES.indexOf('hedge'),
     ).length
@@ -833,10 +839,11 @@
     }
   }
   // the bridge deck is level ground for a column; crossing: narrow, cross, deploy beyond
+  // the whole deck, eastward
   let deck = 1
   for (let x = FCm.BRIDGE.x0 + 0.5; x < FCm.BRIDGE.x1; x += 0.5) {
     deck = Math.min(deck, FCm.groundG(x, FCm.BRIDGE.z, 'column', 1, 0))
-  } // the whole deck, eastward
+  }
   FCm.place(0, FCm.BRIDGE.z, Math.PI / 2)
   F.follow(false)
   F.order('bridge')
