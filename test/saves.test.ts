@@ -15,11 +15,16 @@ import {
   COMMAND_TYPES,
   M_TICK,
   MS_ROUTING,
+  normaliseCommand,
+  record,
+  play,
+  REFUSALS,
   type Command,
   type Stamped,
   type World,
 } from '../src/sim/index.ts'
 import { chargeFight } from '../src/scenarios/s1d-charge.ts'
+import { s1aDrill } from '../src/scenarios/s1a-drill.ts'
 import { data, shipped as cr, OPEN_DATA, openBattlefield } from './fx.ts'
 
 const h = (slot: number) => makeHandle(KIND_FORMATION, slot, 0)
@@ -60,6 +65,54 @@ const ONE_OF_EACH: Record<(typeof COMMAND_TYPES)[number], Command> = {
   charge: { type: 'charge', id: h(7), target: h(8) },
 }
 
+// commands that are not what they claim: each field of each type given, in turn, something it is not (a number as a
+// string, a sparse array, a getter that throws, a Proxy that throws), and things that are no command at all
+const throwing = Object.defineProperty({}, 'x', {
+  get() {
+    throw new Error('read')
+  },
+}) as { x: unknown }
+const trap = new Proxy([[1, 2]], {
+  get(t, k) {
+    if (k === '0') throw new Error('trap')
+    return Reflect.get(t, k)
+  },
+})
+const JUNK: unknown[] = [
+  { type: 'nonsense', id: h(1) },
+  null,
+  7,
+  { type: 'refused', reason: 'because' },
+  { type: 'refused', reason: 'malformed waypoints' },
+  Object.defineProperty({}, 'type', {
+    get() {
+      throw new Error('read')
+    },
+  }),
+  new Proxy(
+    { type: 'halt', id: h(1) },
+    {
+      get() {
+        throw new Error('trap')
+      },
+    },
+  ),
+  { type: 'move', id: h(1), points: [[1, 2], , [3, 4]], append: false },
+  { type: 'move', id: h(1), points: new Array(3), append: false },
+  { type: 'move', id: h(1), points: [], append: false },
+  { type: 'move', id: h(1), points: Array.from({ length: 65 }, (_, k) => [k, 0]), append: false },
+  { type: 'move', id: h(1), points: trap, append: false },
+  { type: 'form', id: h(1), shape: '\udc00' },
+]
+for (const t of COMMAND_TYPES) {
+  for (const k of Object.keys(ONE_OF_EACH[t]).filter(k => k !== 'type')) {
+    for (const v of [null, '5', 'x', NaN, -Infinity, {}, [[1, 'x']], [[1]], BigInt(1), throwing]) {
+      const c = { ...ONE_OF_EACH[t], [k]: v }
+      JUNK.push(v === throwing ? Object.defineProperty(c, k, { get: () => throwing.x }) : c)
+    }
+  }
+}
+
 // two regiments charging each other on open, level ground (seed 5): they close until about tick 760, fight in melee
 // until about 1000, one pursues, both rout. A world of it run to tick n
 const charge = chargeFight('cavalry')
@@ -73,17 +126,9 @@ const load = (w: World): World => deserialize(serialize(w), OPEN_DATA, cr, true,
 
 describe('saves: what crosses', () => {
   it('a malformed command is stamped as refused: every queued one saves, loads and drops the same (#155)', () => {
-    // each field of each type, in turn, given as something it is not; then an unknown type, no command at all
-    const junk: unknown[] = [null, undefined, 'x', NaN, -Infinity, {}, [[1, 'x']], [[1]], BigInt(1)]
-    const bad: unknown[] = [{ type: 'nonsense', id: h(1) }, null, 7, { type: 'refused' }]
-    for (const t of COMMAND_TYPES) {
-      for (const k of Object.keys(ONE_OF_EACH[t]).filter(k => k !== 'type')) {
-        for (const v of junk) bad.push({ ...ONE_OF_EACH[t], [k]: v })
-      }
-    }
     const w = chargeAt(100)
     const log: Stamped[] = []
-    for (const c of bad) issue(w, c as Command, log)
+    for (const c of JUNK) issue(w, c as Command, log)
     expect(log).toEqual(w.pending)
     const bytes = serialize(w)
     const loaded = load(w)
@@ -93,8 +138,30 @@ describe('saves: what crosses', () => {
     const [a, b] = [advanceTick(w), advanceTick(loaded)]
     expect(b.dropped).toEqual(a.dropped)
     expect(hashWorld(loaded)).toBe(hashWorld(w))
-    expect(a.dropped.filter(d => d.reason === 'unknown command').length).toBe(3)
-    expect(a.dropped.filter(d => d.reason === 'malformed waypoints').length).toBeGreaterThan(0)
+    const reasons = new Set(a.dropped.map(d => d.reason))
+    for (const r of REFUSALS) expect(reasons).toContain(r)
+  })
+  it('a queued command is canonical: normalised again it is the same, and re-issued it is the same (#155)', () => {
+    for (const c of [...Object.values(ONE_OF_EACH), ...JUNK, { type: 'debug-spawn', side: 0, x: 0, z: 0 }]) {
+      const n = normaliseCommand(c)
+      expect(normaliseCommand(n)).toEqual(n)
+      expect(normaliseCommand(structuredClone(n))).toEqual(n)
+    }
+    const spawn = normaliseCommand({ type: 'debug-spawn', side: 0, x: 1, z: 2, heading: 0, men: 10 })
+    expect(spawn).toMatchObject({ quality: -1, shape: '', fire: 'at will', unit: '' })
+  })
+  it('a string with a lone surrogate is queued as the save holds it', () => {
+    const w = makeWorld(data, cr, 1)
+    issue(w, { type: 'form', id: h(1), shape: 'col\ud800umn' })
+    expect(w.pending[0].cmd).toEqual({ type: 'form', id: h(1), shape: 'col\ufffdumn' })
+    expect(deserialize(serialize(w), data, cr).pending).toEqual(w.pending)
+  })
+  it('a recorded run with malformed commands plays back with no mismatch', () => {
+    const run = record(data, cr, s1aDrill, 3, 60, (w, external) => {
+      if (w.meta[M_TICK] === 10) for (const c of JUNK) external(c as Command)
+    })
+    const back = JSON.parse(JSON.stringify(run)) as typeof run
+    expect(play(back.replay, data, cr, s1aDrill, back.hashes)).toBeNull()
   })
   it('a pending command of every type crosses a save with every field', () => {
     const w = makeWorld(data, cr, 1)

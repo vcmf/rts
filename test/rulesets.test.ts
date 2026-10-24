@@ -197,7 +197,28 @@ describe('compileRuleset refuses', () => {
     [
       'a terrain class on a ground the q tables do not name',
       { ...N, terrain: { ...N.terrain, woods: { ...N.terrain.woods, q: 'ice' } } },
-      /terrain class woods's ground ice is not one/,
+      /q.ordinary gives ground ice \(terrain class woods\) no factor/,
+    ],
+    [
+      "one pace's q table leaving out a ground a class stands on",
+      { ...N, q: { ...N.q, trot: { open: 1.15, light: 1.0 } } },
+      /q.trot gives ground hard \(terrain class \w+\) no factor/,
+    ],
+    ['a q factor of 0', { ...N, q: { ...N.q, walk: { ...N.q.walk, open: 0 } } }, /q.walk.open is 0, not > 0/],
+    [
+      'a sight limit below 0',
+      { ...N, fire: { ...N.fire, sight: { ...N.fire.sight, woods: -1 } } },
+      /fire.sight.woods is -1/,
+    ],
+    [
+      'a target depth that is not a number',
+      { ...N, fire: { ...N.fire, depth: { ...N.fire.depth, line: NaN } } },
+      /fire.depth.line is NaN/,
+    ],
+    [
+      'a disorder scale below 0',
+      { ...N, disorder: { ...N.disorder, scale: { ...N.disorder.scale, line: -0.5 } } },
+      /disorder.scale.line is -0.5/,
     ],
     [
       'a sight limit for a terrain class there is not',

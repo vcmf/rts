@@ -76,16 +76,19 @@ advanceTick: 1 commands · 3 the plan · 4 standing behaviour · 5–6 formation
     not thrown.
 
   `issue` stamps `tick + 1` and a sequence number, and quantises positions to 1 cm and angles to 0.1 mrad.
-  It never throws. A command it cannot take, of an unknown type (or none at all), with waypoints that are not
-  `[x, z]` number pairs, or with a field that cannot be read as a number, is stamped and logged as
-  `{ type: 'refused', reason }` (#155): `unknown command`, `malformed waypoints`, `malformed command`. A save writes
-  a pending command's fields from its type's table, so every queued command, `refused` included, is one a save
-  writes and reads back as it was, and a replay re-issuing it gets the same sequence number and the same drop.
+  It never throws. `normaliseCommand` checks each command once against its type's fields (a handle, a count, a
+  finite number, a string, a flag, 1..64 `[x, z]` pairs of finite numbers, optional fields with their defaults),
+  reading each field once, and quantises it: the result is canonical (normalising it again changes nothing) or
+  `{ type: 'refused', reason }` (#155), with `unknown command` (no command, an unknown type, a `refused` with a
+  reason that is not one of these), `malformed command` (a field of the wrong kind: a number given as a string, NaN
+  or ∞, or a read that throws), `malformed waypoints`, `no waypoints` or `too many waypoints`. Strings are made
+  well-formed (a lone surrogate becomes U+FFFD). So every queued and logged command, `refused` included, is one a save
+  writes and reads back as it was and a JSON log holds, and a replay re-issuing it gets the same command, sequence
+  number and drop.
   `applyCommands` validates at the start of that tick and drops an invalid command with a reason
-  (returned by `advanceTick`), never throwing and changing nothing. It checks: a `refused` command (its reason),
-  an unknown type (a guard for a command pushed straight into `pending`), a stale
-  tick, an alive handle, the side, the shape and preset names, the men, inside the map, at most 64
-  waypoints, and order-pool room (checked before a replacing order frees the old ones). Reaping clears
+  (returned by `advanceTick`), never throwing and changing nothing. It trusts the queue's shapes and checks the
+  rules: a `refused` command (its reason), an unknown type (a guard for a command pushed straight into `pending`), a stale
+  tick, an alive handle, the side, the shape and preset names, the men, inside the map, and order-pool room (checked before a replacing order frees the old ones). Reaping clears
   every column of a formation's row and moves its generation on.
 - **RNG** (`rng.ts`): `xoshiro128**` with `Math.imul`, seeded by splitmix32; `sampleCount` draws an
   integer around an expected value from 12 uniforms (no `log` or `cos`); an expected value ≤ 0 gives 0 and a NaN or

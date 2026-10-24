@@ -533,23 +533,29 @@ export function compileRuleset(rs: Ruleset): Compiled {
       }
     }
   }
-  // the q tables: by pace, a factor by ground; a class's ground must be one they name (else it reads as 1)
-  const grounds = unique(Object.values(rs.q).flatMap(q => Object.keys(q)))
-  for (const p of Object.keys(rs.q)) if (!paces.includes(p)) throw new Error(`${at}: q names ${p}, not a pace`)
-  for (const c of classes) {
-    if (grounds.length && !grounds.includes(rs.terrain[c].q)) {
-      throw new Error(`${at}: terrain class ${c}'s ground ${rs.terrain[c].q} is not one the q tables name`)
+  // the q tables: by pace, a factor (> 0) by ground; a pace with one must give every class's ground a factor (one
+  // left out would read as 1 in silence: a typo in one pace's table)
+  for (const [p, table] of Object.entries(rs.q)) {
+    if (!paces.includes(p)) throw new Error(`${at}: q names ${p}, not a pace`)
+    for (const [g, v] of Object.entries(table)) {
+      if (!(v > 0 && v < Infinity)) throw new Error(`${at}: q.${p}.${g} is ${v}, not > 0`)
+    }
+    for (const c of classes) {
+      if (!(rs.terrain[c].q in table)) {
+        throw new Error(`${at}: q.${p} gives ground ${rs.terrain[c].q} (terrain class ${c}) no factor`)
+      }
     }
   }
-  for (const c of Object.keys(rs.fire.sight)) {
-    if (!classes.includes(c)) throw new Error(`${at}: fire.sight names ${c}, not a terrain class`)
+  // by class or by kind, each a finite number ≥ 0 naming one there is
+  const byName = (what: string, table: Record<string, number>, names: string[], of: string) => {
+    for (const [k, v] of Object.entries(table)) {
+      if (!names.includes(k)) throw new Error(`${at}: ${what} names ${k}, not ${of}`)
+      if (!nonNegative(v)) throw new Error(`${at}: ${what}.${k} is ${v}, not a finite number ≥ 0`)
+    }
   }
-  for (const k of Object.keys(rs.fire.depth)) {
-    if (!kinds.includes(k)) throw new Error(`${at}: fire.depth names ${k}, not a kind of the terrain table`)
-  }
-  for (const k of Object.keys(rs.disorder.scale)) {
-    if (!kinds.includes(k)) throw new Error(`${at}: disorder.scale names ${k}, not a kind of the terrain table`)
-  }
+  byName('fire.sight', rs.fire.sight, classes, 'a terrain class')
+  byName('fire.depth', rs.fire.depth, kinds, 'a kind of the terrain table')
+  byName('disorder.scale', rs.disorder.scale, kinds, 'a kind of the terrain table')
   const paceSpeed = new Float64Array(paces.map(p => rs.pace[p]))
   const typeNames = Object.keys(rs.types)
   if (!typeNames.length) throw new Error(`ruleset ${rs.name}: no unit types`)

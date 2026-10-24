@@ -100,33 +100,140 @@ export const FIRE_MODES = ['at will', 'hold'] // index = FIRE_AT_WILL, FIRE_HOLD
 
 // a type the sim knows (`COMMAND_TYPES`; not `refused`, which only `issue` makes)
 export const isCommandType = (t: unknown): boolean => (COMMAND_TYPES as readonly unknown[]).includes(t)
+// why `issue` refuses a command: a `refused` command carries one of these and nothing else
+export const REFUSALS = [
+  'unknown command',
+  'malformed command',
+  'malformed waypoints',
+  'no waypoints',
+  'too many waypoints',
+] as const
 
-// stamps a command for the next tick; `log` receives it when the command is external. It never throws: a command it
-// cannot take, of an unknown type or with waypoints that are not [x, z] number pairs, is stamped as `refused` with
-// the reason it is dropped for (#155). So every queued and logged command is one a save writes and reads back as it
-// was, and a replay re-issuing it gets the same sequence number and the same drop.
+// each type's fields and what each must be (a field marked ? may be left out; quantiseCommand gives its default):
+// id: a handle; int: a count or a side; num: a number (its range is the rules', checked when applied); str: a
+// string; bool: a flag; pts: 1..MAX_POINTS [x, z] number pairs. Every number finite, so a queued command is also
+// what a JSON replay log holds (no NaN or ∞ turned into null)
+type Kind = 'id' | 'int' | 'num' | 'str' | 'bool' | 'pts'
+const SCHEMA: Record<string, string[]> = {
+  move: ['id:id', 'points:pts', 'append?:bool'],
+  form: ['id:id', 'shape:str'],
+  wheel: ['id:id', 'angle:num'],
+  face: ['id:id'],
+  retire: ['id:id', 'metres:num'],
+  halt: ['id:id'],
+  style: ['id:id', 'preset:str'],
+  'debug-spawn': [
+    'side:int',
+    'x:num',
+    'z:num',
+    'heading:num',
+    'shape?:str',
+    'men:int',
+    'quality?:num',
+    'fire?:str',
+    'unit?:str',
+  ],
+  fire: ['id:id', 'mode:str', 'target?:id'],
+  side: ['side:int', 'x:num', 'z:num'],
+  'debug-kill': ['id:id', 'men:int'],
+  'debug-morale': ['id:id', 'quality:num'],
+  charge: ['id:id', 'target:id'],
+}
+
+// stamps a command for the next tick; `log` receives it when the command is external. It never throws: a command
+// that is not one, of an unknown type, with a field of the wrong kind or waypoints that are not 1..64 [x, z] number
+// pairs, is stamped as `refused` with the reason it is dropped for (#155). So every queued and logged command is
+// canonical: a save writes it and reads it back as it was, and a replay re-issuing it gets the same command, the
+// same sequence number and the same drop.
 export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
-  const s: Stamped = { tick: w.meta[M_TICK] + 1, seq: w.meta[M_SEQ]++, cmd: normalise(cmd) }
+  const s: Stamped = { tick: w.meta[M_TICK] + 1, seq: w.meta[M_SEQ]++, cmd: normaliseCommand(cmd) }
   w.pending.push(s)
   if (log) log.push(s)
   return s
 }
-function normalise(cmd: Command): Command {
-  const t: unknown = typeof cmd === 'object' && cmd !== null ? cmd.type : undefined
-  if (t === 'refused') return { type: 'refused', reason: String((cmd as { reason?: unknown }).reason) }
-  if (!isCommandType(t)) return { type: 'refused', reason: 'unknown command' }
-  let q: Command
+const finiteNumber = (v: unknown): v is number => typeof v === 'number' && v === v && v !== Infinity && v !== -Infinity
+const refused = (reason: (typeof REFUSALS)[number]): Command => ({ type: 'refused', reason })
+// a command checked once against its type's fields, then quantised: canonical, or `refused` with why. Total (each
+// field of what it is given is read once, and a getter or a Proxy that throws makes it a malformed command) and
+// idempotent: a canonical command comes back equal
+export function normaliseCommand(cmd: unknown): Command {
   try {
-    q = quantiseCommand(cmd)
+    if (typeof cmd !== 'object' || cmd === null) return refused('unknown command')
+    const c = cmd as Record<string, unknown>
+    const type = c.type
+    if (type === 'refused') {
+      const r = c.reason // a replay's refused command comes back as it was; any other reason is not one
+      return typeof r === 'string' && (REFUSALS as readonly string[]).includes(r)
+        ? { type: 'refused', reason: r }
+        : refused('unknown command')
+    }
+    if (typeof type !== 'string' || !isCommandType(type)) return refused('unknown command')
+    const out: Record<string, unknown> = { type }
+    for (const spec of SCHEMA[type]) {
+      const [name, kind] = spec.split(':') as [string, Kind]
+      const optional = name.endsWith('?')
+      const k = optional ? name.slice(0, -1) : name
+      const v = c[k]
+      if (v === undefined && optional) continue
+      if (kind === 'pts') {
+        const p = waypoints(v)
+        if (typeof p === 'string') return refused(p)
+        out[k] = p
+      } else if (kind === 'str') {
+        if (typeof v !== 'string') return refused('malformed command')
+        out[k] = wellFormedString(v)
+      } else if (kind === 'bool') {
+        if (typeof v !== 'boolean') return refused('malformed command')
+        out[k] = v
+      } else {
+        if (!finiteNumber(v)) return refused('malformed command')
+        out[k] = v
+      }
+    }
+    return quantiseCommand(out as unknown as Command)
   } catch {
-    return { type: 'refused', reason: 'malformed command' } // a field that cannot be read as a number or a string
+    return refused('malformed command') // a field whose read threw (a getter, a Proxy)
   }
-  if (q.type === 'move' && !wellFormed(q.points)) return { type: 'refused', reason: 'malformed waypoints' }
-  return q
 }
-// a spawn's quality: −1 marks none given (the ruleset's), any negative given becomes −2 (refused);
-// positions to 1 cm, angles to 0.1 mrad; an unknown type or a move with too many points or malformed ones is
-// kept as it is (`issue` refuses the unknown type and the malformed waypoints) and dropped when applied
+// waypoints as given, checked with a plain index loop (a hole in a sparse array is no pair): a fresh array of
+// [x, z] number pairs, or why not
+function waypoints(v: unknown): [number, number][] | (typeof REFUSALS)[number] {
+  if (!Array.isArray(v)) return 'malformed waypoints'
+  const n: number = v.length
+  if (n === 0) return 'no waypoints'
+  if (n > MAX_POINTS) return 'too many waypoints'
+  const out: [number, number][] = []
+  for (let i = 0; i < n; i++) {
+    const p: unknown = v[i]
+    if (!Array.isArray(p) || p.length !== 2) return 'malformed waypoints'
+    const x: unknown = p[0]
+    const z: unknown = p[1]
+    if (!finiteNumber(x) || !finiteNumber(z)) return 'malformed waypoints'
+    out.push([x, z])
+  }
+  return out
+}
+// a string with each lone surrogate replaced by U+FFFD (String.prototype.toWellFormed), so the queued string is the
+// one a save's UTF-8 holds
+function wellFormedString(s: string): string {
+  let out = ''
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i)
+    if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) {
+      const d = s.charCodeAt(i + 1)
+      if (d >= 0xdc00 && d <= 0xdfff) {
+        out += s[i] + s[i + 1]
+        i++
+        continue
+      }
+    }
+    out += c >= 0xd800 && c <= 0xdfff ? '\ufffd' : s[i]
+  }
+  return out
+}
+// quantises a command already checked (normaliseCommand): positions to 1 cm, angles to 0.1 mrad, ids and counts to
+// integers, and the defaults of the fields left out. A spawn's quality: −1 marks none given (the ruleset's), any
+// other negative becomes −2 (refused when applied); so quantising a quantised command changes nothing
 export function quantiseCommand(c: Command): Command {
   const qa = (a: number) => Math.round(a * 10000) / 10000 + 0 // + 0: a value rounding to zero is +0 (#157)
   switch (c.type) {
@@ -134,14 +241,11 @@ export function quantiseCommand(c: Command): Command {
       return {
         type: 'move',
         id: c.id | 0,
-        points:
-          !wellFormed(c.points) || c.points.length > MAX_POINTS
-            ? c.points
-            : c.points.map(([x, z]) => [quantise(x), quantise(z)]),
+        points: c.points.map(([x, z]) => [quantise(x), quantise(z)]),
         append: !!c.append,
       }
     case 'form':
-      return { type: 'form', id: c.id | 0, shape: String(c.shape) }
+      return { type: 'form', id: c.id | 0, shape: c.shape }
     case 'wheel':
       return { type: 'wheel', id: c.id | 0, angle: qa(c.angle) }
     case 'face':
@@ -151,7 +255,7 @@ export function quantiseCommand(c: Command): Command {
     case 'halt':
       return { type: 'halt', id: c.id | 0 }
     case 'style':
-      return { type: 'style', id: c.id | 0, preset: String(c.preset) }
+      return { type: 'style', id: c.id | 0, preset: c.preset }
     case 'debug-spawn':
       return {
         type: 'debug-spawn',
@@ -159,14 +263,14 @@ export function quantiseCommand(c: Command): Command {
         x: quantise(c.x),
         z: quantise(c.z),
         heading: qa(c.heading),
-        shape: c.shape === undefined ? '' : String(c.shape),
+        shape: c.shape ?? '',
         men: c.men | 0,
-        quality: c.quality === undefined ? -1 : c.quality < 0 ? -2 : qa(c.quality),
-        fire: c.fire === undefined ? FIRE_MODES[FIRE_AT_WILL] : String(c.fire),
-        unit: c.unit === undefined ? '' : String(c.unit),
+        quality: c.quality === undefined || c.quality === -1 ? -1 : c.quality < 0 ? -2 : qa(c.quality),
+        fire: c.fire ?? FIRE_MODES[FIRE_AT_WILL],
+        unit: c.unit ?? '',
       }
     case 'fire':
-      return { type: 'fire', id: c.id | 0, mode: String(c.mode), target: (c.target ?? 0) | 0 }
+      return { type: 'fire', id: c.id | 0, mode: c.mode, target: (c.target ?? 0) | 0 }
     case 'side':
       return { type: 'side', side: c.side | 0, x: qa(c.x), z: qa(c.z) }
     case 'debug-kill':
@@ -178,14 +282,6 @@ export function quantiseCommand(c: Command): Command {
     default:
       return c
   }
-}
-
-// waypoints as given: an array of [x, z] number pairs
-function wellFormed(p: unknown): p is [number, number][] {
-  return (
-    Array.isArray(p) &&
-    p.every(q => Array.isArray(q) && q.length === 2 && typeof q[0] === 'number' && typeof q[1] === 'number')
-  )
 }
 
 const inside = (w: World, x: number, z: number): boolean => {
@@ -251,7 +347,7 @@ function playerOrdered(w: World, i: number): void {
 
 // applies a command now, as the tick applies a stamped one (plan.ts: a scenario's plan); '' or why it was dropped
 // (not as the player's: it does not stand the square against cavalry down)
-export const applyNow = (w: World, c: Command): string => apply(w, normalise(c), false)
+export const applyNow = (w: World, c: Command): string => apply(w, normaliseCommand(c), false)
 function apply(w: World, c: Command, player = true): string {
   if (c.type === 'refused') return c.reason
   const f = w.f
@@ -265,10 +361,10 @@ function apply(w: World, c: Command, player = true): string {
     const shape = c.shape ? U.shapeIndex(c.shape) : U.start
     if (shape < 0) return 'no such shape'
     if (c.men <= 0 || c.men > U.slots) return 'no room for those men'
-    if (!finite(c.x) || !finite(c.z) || !finite(c.heading) || !inside(w, c.x, c.z)) return 'outside the map'
+    if (!inside(w, c.x, c.z)) return 'outside the map'
     if (Math.abs(c.heading) > 4 * PI) return 'heading out of range'
     const q = c.quality === undefined || c.quality === -1 ? cr.rs.morale.quality : c.quality // −1: the ruleset's
-    if (!finite(q) || q < 0 || q > 1) return 'no such quality'
+    if (q < 0 || q > 1) return 'no such quality'
     const mode = FIRE_MODES.indexOf(c.fire ?? FIRE_MODES[FIRE_AT_WILL])
     if (mode < 0) return 'no such fire mode'
     if (w.meta[M_FREE] === 0) return 'no free formation slot'
@@ -314,10 +410,7 @@ function apply(w: World, c: Command, player = true): string {
   }
   switch (c.type) {
     case 'move': {
-      if (!wellFormed(c.points)) return 'malformed waypoints'
-      if (c.points.length === 0) return 'no waypoints'
-      if (c.points.length > MAX_POINTS) return 'too many waypoints'
-      for (const [x, z] of c.points) if (!finite(x) || !finite(z) || !inside(w, x, z)) return 'waypoint outside the map'
+      for (const [x, z] of c.points) if (!inside(w, x, z)) return 'waypoint outside the map'
       return giveOrders(
         w,
         i,
@@ -346,7 +439,7 @@ function apply(w: World, c: Command, player = true): string {
       )
     }
     case 'wheel':
-      if (!finite(c.angle) || c.angle === 0 || Math.abs(c.angle) > 2 * PI) return 'no such wheel'
+      if (c.angle === 0 || Math.abs(c.angle) > 2 * PI) return 'no such wheel'
       return giveOrders(
         w,
         i,
@@ -360,7 +453,7 @@ function apply(w: World, c: Command, player = true): string {
     case 'face':
       return giveOrders(w, i, [O_FACE], false, () => {}, player)
     case 'retire': // the Retire drill (formation.ts)
-      if (!finite(c.metres) || c.metres <= 0 || c.metres > 1000) return 'no such retreat'
+      if (c.metres <= 0 || c.metres > 1000) return 'no such retreat'
       return giveOrders(w, i, RETIRE, false, (n, k) => fillRetire(w, n, k, c.metres), player)
     case 'halt':
       clearOrders(w, i)
@@ -394,7 +487,7 @@ function apply(w: World, c: Command, player = true): string {
       return ''
     }
     case 'debug-morale': // the quality its morale relaxes toward (scripted morale tests)
-      if (!finite(c.quality) || c.quality < 0 || c.quality > 1) return 'no such quality'
+      if (c.quality < 0 || c.quality > 1) return 'no such quality'
       f.quality[i] = c.quality
       return ''
     case 'fire': {

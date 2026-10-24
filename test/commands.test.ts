@@ -9,6 +9,7 @@ import {
   deserialize,
   sectionHashes,
   quantiseCommand,
+  normaliseCommand,
   makeHandle,
   formationHandle,
   KIND_FORMATION,
@@ -91,7 +92,7 @@ describe('commands: refusals', () => {
       { type: 'side', side: 0, x: 0, z: 0 },
       { type: 'side', side: 1, x: NaN, z: 1 },
     ])
-    expect(why).toEqual(['no such side', 'no such direction', 'no such direction'])
+    expect(why).toEqual(['no such side', 'no such direction', 'malformed command']) // NaN: refused when issued
     expect([...w.sides.rearX, ...w.sides.rearZ]).toEqual(rear)
   })
   it('a side command sets a unit direction', () => {
@@ -108,7 +109,8 @@ describe('commands: refusals', () => {
       { type: 'retire', id: a, metres: 1000.5 },
       { type: 'retire', id: a, metres: 0 },
     ])
-    expect(why).toEqual(['no waypoints', 'no such wheel', 'no such wheel', 'no such retreat', 'no such retreat'])
+    // (no waypoints and a NaN angle are refused when issued)
+    expect(why).toEqual(['no waypoints', 'no such wheel', 'malformed command', 'no such retreat', 'no such retreat'])
     expect(w.f.ordHead[0]).toBe(-1)
   })
   it('a fire command with an unknown mode, at a friend, or at a slot never filled', () => {
@@ -198,9 +200,14 @@ describe('commands: quantised when stamped', () => {
     advanceTick(w)
     expect(w.f.quality[0]).toBe(cr.rs.morale.quality)
   })
-  it('a move with too many or malformed waypoints is kept as given, to be dropped when applied', () => {
+  it('a move with no, too many or malformed waypoints is refused when issued, with why', () => {
     const many = Array.from({ length: 65 }, (_, k): [number, number] => [k + 0.001, 0])
-    const q = quantiseCommand({ type: 'move', id: 1, points: many, append: false })
-    expect(q.type === 'move' && q.points).toBe(many)
+    const move = (points: unknown) => normaliseCommand({ type: 'move', id: 1, points, append: false })
+    expect([move([]), move(many), move([[1, 2], , [3, 4]]), move([[1, '2']])]).toEqual(
+      ['no waypoints', 'too many waypoints', 'malformed waypoints', 'malformed waypoints'].map(reason => ({
+        type: 'refused',
+        reason,
+      })),
+    )
   })
 })

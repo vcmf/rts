@@ -151,15 +151,17 @@ found", #155–#158), each with a test; no golden replay hash moved, and `SIM_VE
 1. **A save with an unknown command pending cannot be loaded** (#155). `issue` accepts any command and `applyCommands` drops
    one of an unknown type with a reason, but a save taken while it is pending writes its type and no fields
    (`FIELDS` has none), and `deserialize` throws `unknown command type … in save`. A malformed external command and a
-   save in the same tick make an unloadable save; a known type with malformed waypoints (`points: null`) crashed the
-   save writer. **Fixed:** `issue` never throws and stamps a command it cannot take as `refused` with its reason, so
-   every queued and logged command saves and loads as it was (`test/saves.test.ts`, every field of every type given
-   junk).
+   save in the same tick make an unloadable save; a known type with malformed waypoints (`points: null`, a sparse
+   array) crashed the save writer, and a spawn without a quality was refused on replay. **Fixed:** `issue` never
+   throws; `normaliseCommand` checks each command once against its type's fields and gives a canonical command
+   (idempotent) or `refused` with its reason, so every queued and logged command saves, loads and replays as it was
+   (`test/saves.test.ts`: every field of every type given junk, sparse arrays, throwing getters and Proxies, lone
+   surrogates; idempotence; a recorded run with them plays back).
 2. **A shape whose pace is not a pace compiles** (#156). `layout` takes `paces.indexOf(def.pace)` = −1; the world then fails
    at its first move with `NonFiniteState` in debug, and silently runs NaN without it. The same for a `roadPace`
    (read as "no road pace"). **Fixed:** the compiler refuses it, and with it a pace that is not > 0, a change time
-   not ≥ 0, a q table for no pace, a class's ground no q table names, and a fire or disorder entry naming no class or
-   kind (`test/rulesets.test.ts`).
+   not ≥ 0, a q factor not > 0 or a pace's q table leaving out a class's ground, and a fire or disorder entry naming
+   no class or kind or out of range (`test/rulesets.test.ts`).
 3. **A terrain class that gives a kind no speed compiles** (#156). `buildTerrain` reads `t.g[kind]` as undefined: NaN in
    `classG`. Kinds come from the first class's keys only. **Fixed:** the compiler refuses a class missing a speed for
    any kind some class names.
