@@ -22,7 +22,9 @@ describe('code style: one scope for the formatter and the style rules', () => {
       const formats = !(await prettier.getFileInfo(abs, { ignorePath })).ignored
       const config = (await eslint.isPathIgnored(abs)) ? undefined : await eslint.calculateConfigForFile(abs)
       const styled = config?.rules?.['@stylistic/max-len'] !== undefined
-      if (formats !== styled) odd.push(`${f}: ${formats ? 'formatted, not style-checked' : 'style-checked, not formatted'}`)
+      if (formats !== styled) {
+        odd.push(`${f}: ${formats ? 'formatted, not style-checked' : 'style-checked, not formatted'}`)
+      }
     }
     expect(odd).toEqual([])
     expect(files.length).toBeGreaterThan(100)

@@ -5,10 +5,32 @@ import { describe, expect, it } from 'vitest'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import type { UnitType } from '../src/sim/ruleset.ts'
 
-type Clip = { frames: number, loop: boolean, events: Record<string, number[]>, root_speed?: number, next?: string[], starts?: string, ends?: string }
-type Figure = { kind: UnitType['figure'], pipeline: string, sources: string[], fps: number, m_per_unit: number, files: string[], clips: Record<string, Clip> }
-const index = JSON.parse(readFileSync(new URL('../data/figures/index.json', import.meta.url), 'utf8')) as { version: number, figures: Record<string, Figure> }
-const sources = JSON.parse(readFileSync(new URL('../tools/unitpipe/sources.json', import.meta.url), 'utf8')) as Record<string, unknown>
+type Clip = {
+  frames: number
+  loop: boolean
+  events: Record<string, number[]>
+  root_speed?: number
+  next?: string[]
+  starts?: string
+  ends?: string
+}
+type Figure = {
+  kind: UnitType['figure']
+  pipeline: string
+  sources: string[]
+  fps: number
+  m_per_unit: number
+  files: string[]
+  clips: Record<string, Clip>
+}
+const index = JSON.parse(readFileSync(new URL('../data/figures/index.json', import.meta.url), 'utf8')) as {
+  version: number
+  figures: Record<string, Figure>
+}
+const sources = JSON.parse(readFileSync(new URL('../tools/unitpipe/sources.json', import.meta.url), 'utf8')) as Record<
+  string,
+  unknown
+>
 const figures = Object.entries(index.figures)
 // the kinds of figure the rulesets draw (UnitType.figure)
 const kinds = Object.values(napoleonic.types).map(t => t.figure)
@@ -28,22 +50,31 @@ describe('figure registry', () => {
     for (const [, f] of figures) for (const s of f.sources) expect(Object.keys(sources)).toContain(s)
   })
   it('gives every clip a length, a loop flag and events inside the clip', () => {
-    for (const [id, f] of figures) for (const [name, c] of Object.entries(f.clips)) {
-      const where = `${id} ${name}`
-      expect(Number.isInteger(c.frames) && c.frames >= 2, where).toBe(true)
-      expect(typeof c.loop, where).toBe('boolean')
-      for (const [ev, at] of Object.entries(c.events)) for (const fr of at)
-        expect(Number.isInteger(fr) && fr >= 1 && fr <= c.frames, `${where} ${ev} ${fr}`).toBe(true)
-      if (c.root_speed !== undefined) expect(c.root_speed, where).toBeGreaterThan(0)
+    for (const [id, f] of figures) {
+      for (const [name, c] of Object.entries(f.clips)) {
+        const where = `${id} ${name}`
+        expect(Number.isInteger(c.frames) && c.frames >= 2, where).toBe(true)
+        expect(typeof c.loop, where).toBe('boolean')
+        for (const [ev, at] of Object.entries(c.events)) {
+          for (const fr of at) {
+            expect(Number.isInteger(fr) && fr >= 1 && fr <= c.frames, `${where} ${ev} ${fr}`).toBe(true)
+          }
+        }
+        if (c.root_speed !== undefined) expect(c.root_speed, where).toBeGreaterThan(0)
+      }
     }
   })
   it('chains only to clips of the same figure', () => {
-    for (const [id, f] of figures) for (const [name, c] of Object.entries(f.clips)) {
-      for (const n of c.next ?? []) expect(f.clips, `${id} ${name} -> ${n}`).toHaveProperty(n)
-      // the infantryman's chains: "Clip@frame" alternatives, or "still"
-      for (const ref of [c.starts, c.ends].filter((r): r is string => !!r)) for (const alt of ref.split('|')) {
-        const clip = alt.split('@')[0]
-        if (clip !== 'still') expect(f.clips, `${id} ${name}: ${alt}`).toHaveProperty(clip)
+    for (const [id, f] of figures) {
+      for (const [name, c] of Object.entries(f.clips)) {
+        for (const n of c.next ?? []) expect(f.clips, `${id} ${name} -> ${n}`).toHaveProperty(n)
+        // the infantryman's chains: "Clip@frame" alternatives, or "still"
+        for (const ref of [c.starts, c.ends].filter((r): r is string => !!r)) {
+          for (const alt of ref.split('|')) {
+            const clip = alt.split('@')[0]
+            if (clip !== 'still') expect(f.clips, `${id} ${name}: ${alt}`).toHaveProperty(clip)
+          }
+        }
       }
     }
   })
