@@ -11,6 +11,19 @@ edited after acceptance: to change a decision, write a new record and mark the o
 records are open until the owner accepts or rejects them (then their status changes once). Decisions taken earlier in October 2026 were
 recorded here on 2026-10-08.
 
+Track M's records 0053 and 0028–0030 were written on `epic/map-engine` as 0022–0025 and renumbered on 2026-10-13, before
+the epic reached main, because main had taken 0022, 0024 and 0025 (`docs/plans/active/m-decision-numbers.md`). A
+renumber of records that have not reached main yet, to keep numbers unique, is the one change allowed to an accepted
+record: its number, its title's number and the citations, nothing else. Merged pull requests #66–#72 and the epic's
+tracking PR #49 cite the old numbers: 0022 is 0027 (now 0053, below), 0023 is 0028, 0024 is 0029, 0025 is 0030. **0023 is retired**:
+it is never given to another record, so that an old citation of it cannot resolve to an unrelated one.
+The first of them, 0027, moved again on 2026-10-22, to 0049 (main had given 0027 to another record on 2026-10-14:
+units take the light's value), and on 2026-10-23 to **0053** (#134 took 0049). Track M's pull requests and commits up to
+then (#66–#79, PR #49) cite it as 0027 or 0049; either citation means 0053 (main's 0027 is the units' record, and 0049
+is #134's).
+The browser-checks record, written as 0047 and then 0052 on its branch (#129) and cited as 0052 on this epic, is **0060**:
+`main` took 0052 for the code style (2026-10-24).
+
 | # | Decision | Status |
 |---|---|---|
 | [0001](0001-painterly-look-in-materials.md) | The painterly look lives in assets and materials | accepted |
@@ -32,11 +45,16 @@ recorded here on 2026-10-08.
 | [0017](0017-paint-on-units-by-screen-size.md) | Paint on units follows their size on screen | proposed |
 | [0018](0018-battalion-of-400.md) | Battalions of about 400 soldiers, one figure each; the engine reaches 800 | accepted |
 | [0019](0019-shading-data-from-authored-surface.md) | Shading data finer than the heightfield comes from the authored surface | proposed |
+| [0020](0020-track-m-on-an-epic-branch.md) | The map engine is Track M, built on an epic branch | accepted |
+| [0021](0021-two-metre-map-cell.md) | Every map grid is built on one 2 m cell | accepted |
 | [0022](0022-soft-ramp-for-foliage.md) | Foliage crowns are painted with a soft ramp | accepted |
 | [0024](0024-blur-as-player-option.md) | Depth of field in gameplay is a player option, on by default | accepted |
 | [0025](0025-review-by-kind-of-pr.md) | Review rounds by kind of PR: code as before, docs one round at most, research none | accepted |
 | [0026](0026-crops-under-a-soldiers-chest.md) | Standing crops are drawn under a soldier's chest | accepted |
 | [0027](0027-units-take-the-lights-value.md) | Units take the light's value, not its hue | accepted |
+| [0028](0028-generators-form-a-chain.md) | Generators form a chain; kinds that keep apart share one scatter's mix | accepted |
+| [0029](0029-free-standing-trees.md) | Free-standing trees stand on the cells, as a list | accepted |
+| [0030](0030-shared-edges-are-the-line.md) | A shared edge is the line itself; the area keeps off the line's cells | accepted |
 | [0031](0031-generated-trees.md) | Trees are generated from species data | accepted |
 | [0032](0032-units-under-clouds-and-whites.md) | A near-white coat takes less of the sun's hue (open until the figures) | proposed |
 | [0033](0033-temperate-is-the-default-mood.md) | The temperate mood is the default | superseded by 0043 |
@@ -59,7 +77,12 @@ recorded here on 2026-10-08.
 | [0050](0050-armies-32k-at-120fps.md) | 32,000 soldiers at 120 fps: four steps, each kept only if measured (experimental) | proposed |
 | [0051](0051-closer-zoom-nearest-lod.md) | The closest zoom at 15 m, held over high ground, with the full figure for the men nearest | proposed |
 | [0052](0052-code-style.md) | Code style: Prettier formats, ESLint keeps lines short and one statement each | accepted |
+| [0053](0053-generators-expand-by-dependency.md) | Generators expand by dependency, over finished features, with hard and soft reads | superseded by 0028 |
+| [0054](0054-readable-code.md) | Readable code: small functions, doc comments in new code, a test for every bug fix | accepted |
 | [0055](0055-lit-map-view-tilts.md) | The lit map view leans a little off straight down, with armies as low slabs | accepted |
 | [0056](0056-map-ink-at-ratio-one.md) | The map's ink renders at a pixel ratio of 1 by default; sharp ink is a setting | accepted |
+| [0057](0057-one-language-for-the-battlefield.md) | One language for the battlefield and one for the armies; every system reads them | accepted |
+| [0058](0058-one-map-view-lit.md) | One map view: the editor's draft and the game's staff map, lit with a 3D feel | accepted |
 | [0059](0059-map-ink-upscaled-by-easu.md) | The map's ink is upscaled by FSR 1's EASU, on its alpha | accepted |
+| [0060](0060-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
 | [0061](0061-square-designed-maps-2-to-6-km.md) | Square maps of 2 to 6 km a side, designed for play, at true local scale | accepted |

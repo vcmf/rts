@@ -36,12 +36,15 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
 - Open a prototype: `prototypes/painted-cinematic.html` in Chrome (works from `file://`).
 - Headless screenshots and checks: `node tools/shot.mjs <page> <outDir> [w] [h] '<steps JSON>'`;
   river and render checks: see the headers of `tools/river-check.js` and `tools/render-check.js`.
-- Golden screenshots: `node tools/golden.mjs <base> <cand>` (a page, a URL or `<ref>:<page>`; `--selftest`);
-  negative tests of the page checks: `node tools/check-negatives.mjs`.
+- Golden screenshots: `node tools/golden.mjs <base> <cand>` (`--selftest`); negatives: `tools/check-negatives.mjs`.
 - Look page bench and readability guard (built page, `npx vite preview`): `node tools/bench-look.mjs <url>`
   (`?bench` in a browser), `node tools/guard.mjs <url> [--base <url>]`, the terrain detail checks
   `node tools/detail-check.mjs <url> --selftest`, the water data's `node tools/water-check.mjs [<url>] --selftest`,
   the painted water's `node tools/water-look-check.mjs <url> --selftest`; see their headers.
+- Maps (Track M): `node tools/map.ts check|expand|resolve|draft`, the page `app/map.html`: see `docs/systems/map.md`.
+- Browsers (decision 0060): checks are the scripts above; `SHOT_CDP=http://127.0.0.1:9222` attaches them to a running
+  Chrome (from WSL, Windows Chrome: `tools/win-chrome.sh`, see its header). To explore (play the page, a trace), opt in:
+  `claude mcp add chrome-devtools -- npx -y chrome-devtools-mcp@1.10.1 --isolated`.
 - Docs check: `node tools/check-docs.mjs` (every doc path resolves, front matter, decision numbers).
 - CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint, `format:check`,
   typecheck, `check:data`, `check:docs`, Vitest, build. On PRs into `epic/**` and on all those pushes, Vitest with
@@ -68,6 +71,11 @@ a **research note** (`docs/research/`) needs no plan and no `/code-review` (chec
      Cite it as `#N` in the plan and at the code it is about; the PR that fixes it says `Fixes #N`.
      Open questions (judgement calls, not defects) stay in the system doc's or plan's Open questions.
 4. Check runs print their **full output and exit code**; never judge a run by grepping for "FAILED".
+
+## Code quality
+
+Decisions 0052 and 0054; the rules are in `docs/conventions.md`, Code. Prettier lays code out (`npm run format`);
+small functions, doc comments and tests are on you and on review, in every file, prototypes included.
 
 ## Commits and PRs
 

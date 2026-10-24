@@ -20,7 +20,7 @@ Today the ground exists four times, in four forms:
 | The map engine (`epic/map-engine`, PR #49) | The language: a catalogue of kinds, a validator, generators, a flat draft page, a sim compiler | Example maps in `maps/*.map.json`; Austerlitz is not one of them |
 | The staff map prototype (`prototypes/staff-map.html`, PR #136) | The look of the draft-map mode, settled by eye: lit paper, real relief, a slight tilt, slabs, green woods | Real heights from a DEM (`?dem=`), the rest invented in the page |
 
-Decision 0057 (one language for the battlefield; proposed in PR #135 as 0050, renumbered after `main` took 0050) says
+Decision 0057 (one language for the battlefield, PR #135) says
 these must become one. This plan is how.
 
 ## The model: one map, two modes of one view
@@ -31,9 +31,10 @@ these must become one. This plan is how.
   - the sim's data (exists);
   - the look's data (M4, not built);
   - the draft layers (exist).
-- **One world, one zoom.** Far out, the world is drawn as the **draft-map mode**: the lit map view (decision 0058, the
-  old 0051 of #135), from the compiled layers. Closer, the same world shows as the **real map**: the look page's
-  painted world, compiled from the same file. Between them there is no switch and no crossfade. The staff map's staged
+- **One world, one zoom.** Far out, the world is drawn as the **draft-map mode**: the lit map view (decision 0058), from
+  the compiled layers. Closer, the same world shows as the **real map**: the look page's
+  painted world, compiled from the same file. Between them the player sees no switch and no crossfade;
+  a developer setting holds one mode at every zoom, for building and testing. The staff map's staged
   blend driven by `mapness` (`docs/proposals/staff-map/design.md` §9, "one world, not two modes") turns one into the
   other.
 - **The editor** is the draft-map mode with editing overlays, not a second renderer.
@@ -48,10 +49,9 @@ after them says what can run in parallel.
 ### 0. Settle what the rest builds on
 
 These are owner decisions and merges, not code:
-- **#136.** Merge the lit map view prototype, rebased on `main`.
-- **#135.** Accept decisions 0057 and 0058, renumbered from 0050 and 0051 because `main` took those numbers.
-- **The map engine.** Bring PR #49 to `main`. Its base is the browser-checks branch (#129, whose decision 0052 also
-  needs a new number).
+- **#135 and #136, done.** Decisions 0057 and 0058 accepted and the lit map view prototype merged, both into
+  `epic/map-engine`, so they reach `main` with the track.
+- **The map engine.** Bring PR #49 to `main` when the track is ready.
 - **Real data in the repository.** ČÚZK's DMR 4G is CC BY 4.0, so it may be redistributed with its credit. The
   prototype never committed it, as a precaution. Decide whether a derived heightfield is committed, or fetched by a
   tool at build time.
