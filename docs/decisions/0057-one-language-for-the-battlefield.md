@@ -51,8 +51,8 @@ copy of its own:
   disagree about where a road or a bank is.
 - Good: new game logic (pathfinding, sight, the AI's influence maps) builds on one data model, already validated.
 - Good: a battle is two reviewable files, a map and a scenario.
-- Bad: the look compiler (M4) becomes a prerequisite of further look work on the world's content; the hand-made world
-  is frozen in the meantime, and porting it changes its pixels (goldens re-baselined, as decision 0034 did).
+- Bad: the look compiler (M4) becomes a prerequisite of further look work on the world's content; new content for the
+  hand-made world waits for its port, and porting it changes its pixels (goldens re-baselined, as decision 0034 did).
 - Bad: the legacy maps (the formation field, S1e's battlefield) and their goldens have to move, with the data version.
 - Bad: the language must grow to carry what the look needs (models, species, field strips), each an owner's choice in
   M4's plan.

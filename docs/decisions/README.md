@@ -80,5 +80,5 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0053](0053-generators-expand-by-dependency.md) | Generators expand by dependency, over finished features, with hard and soft reads | superseded by 0028 |
 | [0054](0054-readable-code.md) | Readable code: small functions, doc comments in new code, a test for every bug fix | accepted |
 | [0057](0057-one-language-for-the-battlefield.md) | One language for the battlefield and one for the armies; every system reads them | accepted |
-| [0058](0058-one-map-view-lit.md) | One map view: the editor's draft and the game's staff map, lit with a 3D feel | proposed |
+| [0058](0058-one-map-view-lit.md) | One map view: the editor's draft and the game's staff map, lit with a 3D feel | accepted |
 | [0060](0060-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |

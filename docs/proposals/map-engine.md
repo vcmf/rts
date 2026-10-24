@@ -5,9 +5,10 @@ last_reviewed: 2026-10-24
 
 # Proposal: the map engine, a language for battlefields and its generator
 
-> Built through M3 (`docs/systems/map.md`). **Revised 2026-10-24** (the owner; decisions 0057, 0058 and 0061, on
-> `main`'s side in PRs #135 and #136): one lit map view for the editor and the game, zoomed into the painted world
-> with no toggle (§7); the editor and real relief in scope; square maps of 2 to 6 km (§13); the phases M4–M9 (§10).
+> Built through M3 (`docs/systems/map.md`). **Revised 2026-10-24** (the owner; decisions 0057, 0058 and 0061, in
+> PRs #135 and #136): one lit map view for the editor and the game, zoomed into the painted world with no toggle for
+> the player and a switch for the developer (§7); the editor and real relief in scope; square maps of 2 to 6 km
+> (§13); the phases M4–M9 (§10).
 
 A map is a short JSON file written in a precise, closed language. A deterministic **generator** expands it into
 exact features, and **compilers** turn those into the grids that the simulation, the 3D world and the draft view
@@ -346,7 +347,7 @@ these attributes. The class names stay as labels for tuning and tests.
 
 ## 7. Draft and rendered views
 
-One compiled map, one view of it, one world (revised 2026-10-24, decision 0058, proposed):
+One compiled map, one view of it, one world (revised 2026-10-24, decision 0058):
 - **The map view** is the lit map: shaded relief from the heights, paper, woods, water, raised houses, the armies as
   slabs, settled by eye in the staff map prototype (`prototypes/staff-map.html?style=lit`, PR #136). The editor and the
   game's staff map are this one view; the editor adds its tools on top (M6, M7).
@@ -356,7 +357,8 @@ One compiled map, one view of it, one world (revised 2026-10-24, decision 0058, 
   view, not a view of their own.
 - **The painted world** is the 3D world from the look compiler's output, with the game's camera rules (decision 0002:
   no sky). The map view and the painted world are one world on one camera, joined by the staff map's staged zoom
-  (`docs/proposals/staff-map/design.md` §9): no toggle, no crossfade.
+  (`docs/proposals/staff-map/design.md` §9): the player sees no toggle and no crossfade. While building and testing, a
+  developer setting holds one view at every zoom (the map view, the flat debug colours or the painted world).
 
 The page (`app/map.html`) watches the map file. On save it recompiles in a worker and redraws. The editor (M7) adds
 direct manipulation, writing the same JSON.
@@ -424,7 +426,7 @@ M1 and M2 are tested with hand-written exact maps, before any randomness exists.
 **Order (revised 2026-10-24).** M4–M9 come from the one-map plan (one-map-austerlitz, in PR #136); each phase gets
 its own plan when it starts.
 - M4 and M5 can run in parallel, and so can M5 and M6 (M6 starts on the example maps).
-- M6 needs decision 0058 accepted (it is proposed, in PR #135) and M5 for real heights.
+- M6 needs decision 0058 (accepted, PR #135) and M5 for real heights.
 - M7 waits for M6, M8 for M5 and M7, M9 for M4, M6 and M8.
 - Outside Track M:
   - the 3D world in tiles (Track E) before M4 serves a map larger than one tile, and before M9;

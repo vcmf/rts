@@ -2,7 +2,8 @@ Source: a frame of Epic History TV's Waterloo video (the 17:00 map), a screensho
 Third-party, for reference only: not an asset, never shipped or traced. The frame itself
 (staff-map-epic-history-waterloo.png) stays out of git (.gitignore); ask the owner for it, or take it from the video.
 
-Reference for the draft map and the staff map: a 2D map with a 3D feel. Hill shading under one light (ridges
+Reference for the map view (decision 0058, which governs where they differ; its canopy and field strips were tried
+and rejected): a 2D map with a 3D feel. Hill shading under one light (ridges
 and valleys read at a glance), woods as massed dark-green canopy texture, villages and farms as small red-roofed
 clusters, roads and field strips drawn thin, rivers in pale blue. Armies as small coloured blocks with a slight
 raised edge and drop shadow, flags and portraits on staffs as labels, place names in small caps serif. Smoke,

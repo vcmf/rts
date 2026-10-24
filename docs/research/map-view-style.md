@@ -5,9 +5,11 @@ last_reviewed: 2026-10-22
 
 # A light map view with a 3D feel
 
-Decided since: decision 0057 (one language for the battlefield) and decision 0058 (one map view, lit, proposed), which
-take this note's recommendation for both the editor's draft and the game's staff map. Every external claim below was
-checked against its source on 2026-10-22.
+Decided since: decision 0057 (one language for the battlefield) and decision 0058 (one map view, lit), which take this
+note's recommendation of one lit view for both the editor's draft and the game's staff map. Not taken, after the staff
+map prototype (PR #136): the woods as canopy domes with a crown texture (§4.1; the owner chose a plain tone) and plan
+oblique relief (§5.4; decision 0055 tilts the camera about 20° instead). Every external claim below was checked
+against its source on 2026-10-22.
 
 Research note for a "3D feel" style of the flat battle map: today's draft view (`src/map/draft.ts`, `src/app/map/` on
 `origin/epic/map-engine`) and, perhaps, the game's far zoom. Labels used below: **[fact]** comes from a source and has
