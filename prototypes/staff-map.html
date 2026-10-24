@@ -114,6 +114,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
   <div class="row"><span>legend</span><button class="tg on" id="legendtg">on</button></div>
   <div class="row"><span>place names</span><button class="tg on" id="namestg">on</button></div>
   <div class="row"><span>fps</span><button class="tg on" id="fpstg">on</button></div>
+  <div class="row"><span>sharp ink</span><button class="tg" id="sharptg">off</button></div>
 </div>
 <div id="fpsbox" class="fig"><b id="fpsn">–</b> fps<span id="fpsd"></span></div>
 
@@ -166,7 +167,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
      WebGL, redrawn every frame from the little sim below.
    - One value, mapness, follows the camera distance; every stage of the
      zoom (tilt, wash, relief, sprout, soldiers, ink) is a window on it.
-   - The 3D side is a stand-in for painted-cinematic.html: simple banded
+   - The 3D side is a placeholder (the game world is the demo map on main, src/look/): simple banded
      painted shading, no shadows. The sim is NOT the real sim/.
    ========================================================================= */
 const B=BABYLON,V3=B.Vector3,C3=B.Color3;
@@ -578,9 +579,16 @@ function paperCanvas(){
    ENGINE, CAMERA
    ========================================================================= */
 const canvas=document.getElementById('c'),inkC=document.getElementById('ink'),ink=inkC.getContext('2d');
-const DPR=Math.min(2,window.devicePixelRatio||1);
+// the pixel ratios: WebGL renders at the screen's (up to 2; cheap: about 1 ms at 4K). The 2D ink, whose shapes Chrome
+// rasterises every redraw, renders at 1 unless "sharp ink" is on: on a 4K screen the full ratio cost 3 to 4 times the
+// frame (docs/plans/active/perf-150.md)
+const GL_DPR=Math.min(2,window.devicePixelRatio||1);
+let SHARP_INK=Q.get('sharp')==='1';   // ?sharp=1 to start sharp; a choice made with the toggle is remembered and wins
+try{const v=localStorage.getItem('staffmap.sharp');if(v!==null)SHARP_INK=v==='1';}catch{}
+const inkRatio=()=>SHARP_INK?Math.max(1,Math.ceil(GL_DPR)):1;   // whole (the hatch tiles are whole pixels), never below the screen
+let DPR=inkRatio();   // the ink canvas
 const engine=new B.Engine(canvas,true,{preserveDrawingBuffer:true,stencil:false},false);
-engine.setHardwareScalingLevel(1/DPR);
+engine.setHardwareScalingLevel(1/GL_DPR);
 const scene=new B.Scene(engine);scene.skipPointerMovePicking=true;scene.clearColor=new B.Color4(0.91,0.88,0.83,1);
 const cam=new B.FreeCamera('cam',new V3(0,6000,0),scene);cam.inputs.clear();cam.fov=0.52;
 const CAMS={T:{x:0,z:0},R:7000,yaw:0,tw:null};               // targets (smoothed toward)
@@ -1184,7 +1192,14 @@ let scriptI=0;
 
 /* ---------- the tick ---------- */
 let GT=0;                                                     // game seconds since 07:30
-const SMOKE=[];
+const SMOKE=[],SMOKE_MAX=220;   // live puffs at most (500 cost about 3.7 ms a frame in a big fight)
+const smokeLife=p=>p.big?6000:4200;   // ms: a cannon cloud lasts longer than a volley's
+/** Makes room for one puff: drops the spent ones, and when still full the one nearest the end of its fade. */
+function smokeRoom(now){
+  for(let i=SMOKE.length-1;i>=0;i--)if(now-SMOKE[i].t0>smokeLife(SMOKE[i]))SMOKE.splice(i,1);
+  if(SMOKE.length<SMOKE_MAX)return;
+  let worst=0,wk=-1;for(let i=0;i<SMOKE.length;i++){const k=(now-SMOKE[i].t0)/smokeLife(SMOKE[i]);if(k>wk){wk=k;worst=i;}}
+  SMOKE.splice(worst,1);}
 const isEnemy=(u,e)=>!e.gone&&(e.sideI>0)!==(u.sideI>0);
 function nearestEnemy(u,maxD,filter){let b=null,bd=maxD;for(const e of UNITS){if(!isEnemy(u,e))continue;if(filter&&!filter(e))continue;const d=Math.hypot(e.x-u.x,e.z-u.z);if(d<bd){bd=d;b=e;}}return b?{e:b,d:bd}:null;}
 // away from the enemies in reach, closer ones pushing harder
@@ -1276,6 +1291,7 @@ function finishOrder(u){const o=u.order;if(!o)return;o.prog=Math.max(o.prog,u.pr
   u.order=null;o.units=o.units.filter(id=>id!==u.id);if(!o.units.length)closeOrder(o);}
 function clampIn(u){u.x=clamp(u.x,-MX+60,MX-60);u.z=clamp(u.z,-MZ+60,MZ-60);if(inPond(u.x,u.z,1.1)){const p=PONDS.find(p=>pondE(p,u.x,u.z)<1.1);const a=Math.atan2((u.z-p.z)/p.rz,(u.x-p.x)/p.rx);u.x=p.x+Math.cos(a)*p.rx*1.12;u.z=p.z+Math.sin(a)*p.rz*1.12;}}
 function puff(u){
+  const now=performance.now();   // new fire always shows: room is made from the most faded puff
   if (formedSq(u)) {
     // A formed square fires from all four faces. Each puff keeps a snapshot of the square where it fired (not the
     // live unit, which may move or break) and is placed on the block as drawn (sqFace). x/z are its true ground
@@ -1291,18 +1307,18 @@ function puff(u){
       const o = 0.1 + 0.8 * Math.random();   // how far along the face
       const d = faces[j];
       const along = (o - 0.5) * side[0];
+      smokeRoom(now);
       SMOKE.push({
         sq: snap, j, o,
         x: cx + d[0] * (half + 6) - d[1] * along,
         z: cz + d[1] * (half + 6) + d[0] * along,
-        t0: performance.now(), big: false, face: u.face, rot: Math.random() * 6.28,
+        t0: now, big: false, face: u.face, rot: Math.random() * 6.28,
       });
     }
-    while (SMOKE.length > 500) SMOKE.shift();
     return;
   }
   const fw=dims(u,u.form,alive(u))[0],o=(Math.random()-0.5)*fw*0.9,fo=u.type==='art'?14:8;
-  SMOKE.push({x:u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo,z:u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo,t0:performance.now(),big:u.type==='art',face:u.face,rot:Math.random()*6.28});if(SMOKE.length>500)SMOKE.shift();}
+  smokeRoom(now);SMOKE.push({x:u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo,z:u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo,t0:now,big:u.type==='art',face:u.face,rot:Math.random()*6.28});}
 
 /* =========================================================================
    THE INK OVERLAY: blocks, orders, trails, smoke, names, neatline
@@ -1367,36 +1383,40 @@ function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
 
   const rnd = unitRng(u, salt);
 
-  // clip to the block (and keep a square's hole open); the bites go in their own path, so the caller's is untouched
-  const clip = new Path2D(), bites = new Path2D();
-  addPoly(clip, C);
-  if (I) addPoly(clip, I);
-  ink.save();
-  ink.clip(clip, 'evenodd');
+  // the bites go in their own path, so the caller's is untouched; without a clip (it cost a full-screen clip per block)
+  // each bite stays within its edge's ends, and reaches 2 px past the edges it crosses (so it breaks their outline)
+  const bites = new Path2D();
 
   for (let k = 0; k < n; k++) {
     // which edge
     let w = rnd(), e = 0;
     while (e < 3 && w > weights[e]) { w -= weights[e]; e++; }
-    const a = C[e], b = C[(e + 1) % 4], next = C[(e + 2) % 4];
+    const a = C[e], b = C[(e + 1) % 4], next = C[(e + 2) % 4], prev = C[(e + 3) % 4];
     const edgeLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
 
     // where along it, how wide (a fraction of the edge, at least 1.8 px), how deep (a fraction of the way across)
-    const t = 0.08 + 0.84 * rnd();
-    const hw = Math.max(1.8 / edgeLen, 0.04 + 0.07 * rnd());
+    const hw = Math.min(0.45, Math.max(1.8 / edgeLen, 0.04 + 0.07 * rnd()));
+    const t = hw + (1 - 2 * hw) * rnd();   // the bite inside the edge's ends
     const ring = ringM ? Math.min(1, ringM / (e % 2 ? fw : fd)) : 1;
-    const depth = ring * (rnd() < 0.3 ? 1.2 : 0.45 + 0.45 * rnd());   // about a third cut right through
+    // about a third cut right through (to just past the far edge); in a square, no deeper than its ring
+    const depth = Math.min(ring * (rnd() < 0.3 ? 1.2 : 0.45 + 0.45 * rnd()), I ? ring : 1);   // through, at most
 
     // inward: from this edge toward the opposite one, the full way across the block
-    const vx = next[0] - b[0], vy = next[1] - b[1];
-    const out = 2 / (Math.hypot(vx, vy) || 1);   // start 2 px outside the edge
-    const at = (s0, d) => [a[0] + (b[0] - a[0]) * s0 + vx * d, a[1] + (b[1] - a[1]) * s0 + vy * d];
+    // a point s0 along this edge, d of the way across to the opposite edge, in the block as drawn (a trapezoid in
+    // perspective): between the two edges at the same s0, so no bite leaves the block
+    const across = Math.hypot(prev[0] - a[0], prev[1] - a[1]) || 1;
+    const out = 2 / across;   // 2 px past each edge it crosses, so a bite breaks the outline there
+    const at = (s0, d) => {
+      const n = [a[0] + (b[0] - a[0]) * s0, a[1] + (b[1] - a[1]) * s0];
+      const f = [prev[0] + (next[0] - prev[0]) * s0, prev[1] + (next[1] - prev[1]) * s0];
+      return [n[0] + (f[0] - n[0]) * d, n[1] + (f[1] - n[1]) * d];
+    };
 
     // a ragged notch: in at one side, down to the deepest point, back out at the other
     addPoly(bites, [
       at(t - hw, -out),
       at(t - hw * 0.6, depth * (0.4 + 0.3 * rnd())),
-      at(t - hw * 0.1, depth),
+      at(t - hw * 0.1, depth >= (I ? ring : 1) ? depth + out : depth),   // a bite through breaks the far outline (a square's inner one)
       at(t + hw * 0.4, depth * (0.5 + 0.4 * rnd())),
       at(t + hw, -out),
     ]);
@@ -1404,7 +1424,6 @@ function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
 
   ink.fillStyle = 'rgba(46,34,18,0.78)';
   ink.fill(bites);
-  ink.restore();
 }
 /** Starts a new canvas path on ink: the closed polygon C. */
 function pathPoly(C) {
@@ -1440,22 +1459,31 @@ function slabFaces(u, B, quad, h) {
   return { G, T, W };
 }
 
+/** Twice the signed area of a screen polygon: its sign gives the polygon's winding on screen. */
+function signedArea(P) {
+  let a = 0;
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i], q = P[(i + 1) % P.length];
+    a += p[0] * q[1] - q[0] * p[1];
+  }
+  return a;
+}
+
 /**
- * A slab's sides, between its footprint G and its top T: only those facing the camera (the others are hidden behind
- * them), clipped outside the top, so no two overlap and a fading slab composites once. Each side is lit by the map's one light by the way it faces: the edges
- * run front, right, back, left, so their outward normals are f, r, -f, -r.
+ * A slab's sides, between its footprint G and its top T: only those wound on screen as the top is, which are the ones
+ * the camera sees; they never overlap the top or each other, so no clip is needed and a fading slab composites once.
+ * Each side is lit by the map's one light by the way it faces: the edges run front, right, back, left, so their
+ * outward normals are f, r, -f, -r.
  */
 function slabSides(G, T, B, col) {
-  ink.save();
-  const top = new Path2D();
-  addPoly(top, T);
-  clipOut(top);   // never where the top is: a hatched or fading top shows no side through it, in any order
+  const topA = signedArea(T);
   const normals = [B.f, B.r, [-B.f[0], -B.f[1]], [-B.r[0], -B.r[1]]];
   const sides = [0, 1, 2, 3].map(e => {
     const a = e, b = (e + 1) % 4;
     const facing = Math.max(0, normals[e][0] * NW[0] + normals[e][1] * NW[1]);
-    const seen = normals[e][0] * camF[0] + normals[e][1] * camF[2] < 0;   // facing back toward the camera
-    return { quad: [G[a], G[b], T[b], T[a]], seen, k: 0.58 + 0.3 * facing };
+    const quad = [G[a], G[b], T[b], T[a]];
+    // seen: wound on screen the same way as the top; the seen sides never overlap the top, so no clip is needed
+    return { quad, seen: signedArea(quad) * topA > 1e-3, k: 0.58 + 0.3 * facing };
   });
   for (const sd of sides) {
     if (!sd.seen) continue;
@@ -1463,7 +1491,6 @@ function slabSides(G, T, B, col) {
     ink.fillStyle = shade(col, sd.k);
     ink.fill();
   }
-  ink.restore();
 }
 
 /** A unit's slabs (from parts()) projected, the far one first, each with its index in parts() (for its wear's seed). */
@@ -1478,22 +1505,26 @@ function slabsFarToNear(u, B, PS, h) {
  * each footprint swept away from the light by its height (a sun about 40 degrees up). Filled clipped outside every
  * footprint, so a hollow square's hole stays clear and the slabs' own sides cover the rest.
  */
-const SHADOWS = { hulls: null, feet: null };
+const SHADOWS = { hulls: null, feet: null, pts: [] };
 function beginSlabShadows() {
   SHADOWS.hulls = new Path2D();
   SHADOWS.feet = new Path2D();
+  SHADOWS.pts = [];
 }
 function addSlabShadow(W, G, h) {
   const len = h * 1.2;
   const away = [-NW[0] * len, -NW[1] * len];
   const pts = [...W, ...W.map(([x, z]) => [x + away[0], z + away[1]])].map(([x, z]) => P2(x, z));
-  addPoly(SHADOWS.hulls, hull(pts));
+  const H = hull(pts);
+  addPoly(SHADOWS.hulls, H);
+  for (const p of H) SHADOWS.pts.push(p);
   addPoly(SHADOWS.feet, G);
 }
 function fillSlabShadows(alpha) {
   ink.save();
   ink.globalAlpha = alpha;
-  clipOut(SHADOWS.feet);
+  if (!SHADOWS.pts.length) return void ink.restore();
+  clipOut(SHADOWS.feet, padBox(SHADOWS.pts, 4));
   ink.fillStyle = 'rgba(52,38,18,0.3)';
   ink.fill(SHADOWS.hulls, 'nonzero');
   ink.restore();
@@ -1563,13 +1594,23 @@ function gunGaps(u) {
   return polys;
 }
 
+/** The screen bounding box of points, grown by pad pixels, as [x, y, w, h] (for clipOut). */
+function padBox(P, pad) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of P) {
+    x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]);
+    x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]);
+  }
+  return [x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad];
+}
+
 /**
  * Clips the ink to everything outside a shape (a Path2D or a polygon), in the current transform. Clips add up, so a
  * call per shape cuts them all, overlaps included.
  */
-function clipOut(shape) {
+function clipOut(shape, box) {   // box: [x, y, w, h], the area worth keeping (a smaller clip is cheaper to draw)
   const keep = new Path2D();
-  keep.rect(-1e4, -1e4, 2e4, 2e4);
+  if (box) keep.rect(box[0], box[1], box[2], box[3]); else keep.rect(-1e4, -1e4, 2e4, 2e4);
   if (shape instanceof Path2D) keep.addPath(shape);
   else addPoly(keep, shape);
   ink.clip(keep, 'evenodd');
@@ -1580,9 +1621,9 @@ function drawGun(C,s,shadowOnly,S,u){
   const a=Math.atan2(fr[1]-bk[1],fr[0]-bk[0]),k=S/15,[sx,sy]=raiseOf(SHADOW_PX*0.6);
   ink.save();ink.translate(m[0],m[1]);ink.rotate(a);if(Math.cos(a)<0)ink.scale(1,-1);ink.rotate(-GUN_ANG);ink.scale(k,k);ink.translate(-7.5,-7.5);
   if(shadowOnly){   // in the shadow pass, before any top face: the shadow alone, the icon clipped out (the top pass draws it)
-    clipOut(GUN);ink.shadowColor='rgba(52,38,18,0.45)';ink.shadowBlur=4*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;
+    clipOut(GUN,[-15,-15,45,45]);ink.shadowColor='rgba(52,38,18,0.45)';ink.shadowBlur=4*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;
     ink.fillStyle=css(s.f);ink.fill(GUN);ink.restore();return null;}
-  for (const gap of gunGaps(u)) clipOut(gap);   // losses: the gun and its outline drawn around the gaps (its soft shadow stays whole)
+  for (const gap of gunGaps(u)) clipOut(gap,[-3,-3,21,21]);   // losses: the gun and its outline drawn around the gaps (its soft shadow stays whole)
   ink.fillStyle=css(s.f);ink.fill(GUN);
   ink.lineWidth=0.9/k;ink.strokeStyle=s.e?css(s.e):'rgba(30,22,12,0.55)';ink.stroke(GUN);
   ink.restore();
@@ -1591,12 +1632,14 @@ function drawGun(C,s,shadowOnly,S,u){
 // the lit style's houses: raised like the blocks, lit by the same light (the map's ink blocks, baked, are left out)
 const HOUSE_COL=[0.36,0.29,0.23],CHURCH_COL=[0.27,0.22,0.19];
 // a block's top colour (and its slab sides'): the routing pulse, or the army's fill; hatched (wavering) sides take the coat
-function blockCol(u,now){const s=pal(u);if(u.state==='rout')return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));return u.mor>0.6?s.f:s.c;}
+function blockCol(u,now){const s=pal(u);if(u.state==='rout'){return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));}return u.mor>0.6?s.f:s.c;}
 function drawUnder(u,alpha,now){const B=blockCorners(u),{C}=B;if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);
   if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true,gunPx(u),u);else{const h=slabHeight();for(const quad of parts(u,B)){const S=slabFaces(u,B,quad,0);addSlabShadow(S.W,S.G,h);}}}ink.globalAlpha=1;}
 function drawBlock(u,alpha,now){
   u.gun=null;   // drawn this frame or not at all: a stale circle would keep a stale click area
   const s=pal(u),{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
+  // on screen and still moving on the frame clock (its routing pulse, or its facing easing): the ink stays live
+  if((u.state==='rout'||Math.abs(angTo(u.dface,u.face))>1e-4)&&C.some(p=>onScreen(p,40)))INK_ANIM=true;
   const lvl=u.mor>0.6?-1:u.mor>0.45?0:u.mor>0.3?1:2;
   if(u.state==='rout'){
     // routing: pulses between the army colour and white, the colour of surrender
@@ -1683,7 +1726,7 @@ function arrowLit(o,col,alpha,band,s0,s1,withHead,from){
   const[t0x,t0y]=tan(0);out.push([pts[0][0]+t0x*band*0.45,pts[0][1]+t0y*band*0.45]);   // the notch, inside the tail
   const[sx,sy]=raiseOf(SHADOW_PX*0.9);
   // the shadow from an opaque copy, clipped outside the arrow, so it never shows through the translucent body
-  ink.save();ink.beginPath();ink.rect(-1e4,-1e4,3e4,3e4);ink.moveTo(out[0][0],out[0][1]);for(let i=out.length-1;i>0;i--)ink.lineTo(out[i][0],out[i][1]);ink.closePath();ink.clip('evenodd');
+  ink.save();clipOut(out,padBox(out,30));
   ink.globalAlpha=alpha;ink.shadowColor='rgba(52,38,18,0.25)';ink.shadowBlur=6*DPR;ink.shadowOffsetX=sx*DPR;ink.shadowOffsetY=sy*DPR;pathPoly(out);ink.fillStyle=css(col);ink.fill();ink.restore();
   ink.save();pathPoly(out);ink.fillStyle=css(col);ink.globalAlpha=alpha*0.6;ink.fill();ink.restore();
   ink.save();ink.globalAlpha=alpha;pathPoly(out);ink.strokeStyle=shade(col,0.55);ink.lineWidth=1;ink.stroke();
@@ -1693,7 +1736,7 @@ function drawOrders(now,alpha){
   ink.lineJoin='round';
   // footprints: dotted, batched into a few age buckets, older steps fading out
   if(SHOW_TRAILS){ink.lineCap='round';ink.setLineDash([0.1,5.5]);ink.lineWidth=2;const NB=6;
-    for(const f of FOOTS.values()){if(f.pts.length-f.first<2||f.vis<0.01)continue;const col=css(SIDES[f.side].i),S=[],paths=Array.from({length:NB},()=>new Path2D());
+    for(const f of FOOTS.values()){if(Math.abs(f.vis-(f.led?1:0))>1e-3)INK_ANIM=true;if(f.pts.length-f.first<2||f.vis<0.01)continue;const col=css(SIDES[f.side].i),S=[],paths=Array.from({length:NB},()=>new Path2D());
       for(let i=f.first;i<f.pts.length;i++)S[i]=P2(f.pts[i][0],f.pts[i][1]);
       let pb=-1,pi=-1;
       for(let i=f.first+1;i<f.pts.length;i++){const age=GT-f.pts[i][2];if(age>FOOT_FADE||behind(S[i-1])||behind(S[i]))continue;
@@ -1706,6 +1749,7 @@ function drawOrders(now,alpha){
     if(o.quiet||o.done||o.side>0)continue;
     const s=SIDES[o.side],band=clamp((o.group?36:24)/MPP,o.group?8:6,o.group?20:14),left=o.len-o.prog,headM=Math.min(band*1.7*MPP,left*0.6),headW=band*2.3*Math.min(1,headM/(band*1.7*MPP));
     if(left<4)continue;
+    if(now-o.t0<550)INK_ANIM=true;
     const reveal=easeIO(clamp((now-o.t0)/550,0,1))*o.len,end=Math.min(reveal,o.len),bandEnd=Math.max(o.prog,end-headM);
     if(LIT){const us=o.units.map(i=>UNITS[i]).filter(u=>u.order===o&&!u.gone);if(!us.length)continue;
       // the tail at the battalion standing nearest the route where the order stands: always on a block, even when the
@@ -1724,18 +1768,20 @@ function drawOrders(now,alpha){
 // the lit style's smoke: a volley is a small white cloud along the front; a gun flashes at the muzzle and throws its
 // cloud forward, the way it faces. A faint shadow under each cloud keeps it readable on pale paper
 // a cloud's puffs as one path, filled once (no seams where puffs overlap); its shadow is the same path, shifted
-function cloudPath(x,y,r,rot){const P=new Path2D();for(let i=0;i<4;i++){const t=rot+i*1.7,d=r*0.45*(i?1:0),cx=x+Math.cos(t)*d,cy=y+Math.sin(t)*d*0.7,rr=r*(i?0.62:0.8);P.moveTo(cx+rr,cy);P.arc(cx,cy,rr,0,6.2832);}return P;}
+function cloudUnit(rot){const P=new Path2D();for(let i=0;i<4;i++){const t=rot+i*1.7,d=0.45*(i?1:0),cx=Math.cos(t)*d,cy=Math.sin(t)*d*0.7,rr=(i?0.62:0.8);P.moveTo(cx+rr,cy);P.arc(cx,cy,rr,0,6.2832);}return P;}
+function cloudPath(x,y,r,rot,p,i=0){const U=p.cu||(p.cu=[]);return[U[i]||(U[i]=cloudUnit(rot)),x,y,r];}
 function clouds(list){const L=raiseOf(1.5);   // every shadow first, then every white, so no shadow lands on a cloud
-  ink.save();ink.translate(L[0],L[1]);ink.fillStyle='#3a2e1c';for(const[P,a]of list){ink.globalAlpha=a*0.22;ink.fill(P);}ink.restore();
-  ink.fillStyle='#fbfaf6';for(const[P,a]of list){ink.globalAlpha=a;ink.fill(P);}}
+  ink.fillStyle='#3a2e1c';for(const[[P,x,y,r],a]of list){ink.setTransform(DPR*r,0,0,DPR*r,DPR*(x+L[0]),DPR*(y+L[1]));ink.globalAlpha=a*0.22;ink.fill(P);}
+  ink.fillStyle='#fbfaf6';for(const[[P,x,y,r],a]of list){ink.setTransform(DPR*r,0,0,DPR*r,DPR*x,DPR*y);ink.globalAlpha=a;ink.fill(P);}
+  ink.setTransform(DPR,0,0,DPR,0,0);}
 function smokeLit(p,c,age,k,mapA){
-  if(!p.big){clouds([[cloudPath(c[0],c[1]-k*4,2.6+k*5,p.rot),mapA*(1-k)*0.9]]);return;}
+  if(!p.big){clouds([[cloudPath(c[0],c[1]-k*4,2.6+k*5,p.rot,p),mapA*(1-k)*0.9]]);return;}
   const f=P2(p.x+Math.sin(p.face)*20,p.z+Math.cos(p.face)*20);if(behind(f))return;
   let dx=f[0]-c[0],dy=f[1]-c[1];const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
   if(age<0.2){ink.globalAlpha=mapA*(1-age/0.2);ink.fillStyle='#ffc94a';ink.beginPath();ink.arc(c[0]+dx*2,c[1]+dy*2,3.5,0,6.2832);ink.fill();
     ink.fillStyle='#fff3c4';ink.beginPath();ink.arc(c[0]+dx*2,c[1]+dy*2,1.8,0,6.2832);ink.fill();}
   // a cannon's cloud, larger than a volley's
-  const list=[];for(let i=0;i<3;i++){const s=(5+i*8)*(0.6+k*1.2),rr=(4.8+i*2.6)*(0.7+k*1.1);list.push([cloudPath(c[0]+dx*s,c[1]+dy*s-k*5,rr,p.rot+i),mapA*(1-k)*(0.95-i*0.18)]);}
+  const list=[];for(let i=0;i<3;i++){const s=(5+i*8)*(0.6+k*1.2),rr=(4.8+i*2.6)*(0.7+k*1.1);list.push([cloudPath(c[0]+dx*s,c[1]+dy*s-k*5,rr,p.rot+i,p,i),mapA*(1-k)*(0.95-i*0.18)]);}
   clouds(list);
 }
 /**
@@ -1751,8 +1797,10 @@ function sqFace(p) {
   return [m[0] + (m[0] - cx) / d * 5, m[1] + (m[1] - cy) / d * 5, Math.min(a[2], b[2])];
 }
 function drawSmoke(now,mapA,worldA){
-  for(const p of SMOKE){const age=(now-p.t0)/1000,life=p.big?6:4.2;if(age>life)continue;const k=age/life,c=p.sq?sqFace(p):P2(p.x,p.z);if(behind(c))continue;
-    if(LIT&&mapA>0.01)smokeLit(p,c,age,k,mapA);
+  for(const p of SMOKE){const age=(now-p.t0)/1000,life=smokeLife(p)/1000;if(age>life)continue;const k=age/life,c=p.sq?sqFace(p):P2(p.x,p.z);if(behind(c))continue;
+    const off=c[0]<-90||c[0]>SW+90||c[1]<-90||c[1]>SH+90;   // a cloud reaches about 60 px from its puff
+    if(!off)INK_ANIM=true;   // a live puff on screen: it fades on the frame clock
+    if(LIT&&mapA>0.01){if(!off)smokeLit(p,c,age,k,mapA);}
     else if(mapA>0.01){ink.globalAlpha=mapA*(1-k)*0.8;ink.strokeStyle='#8a847a';ink.lineWidth=0.8;ink.beginPath();const r0=(p.big?3:2)+k*(p.big?7:5);
       for(let a=0;a<=8.5;a+=0.35){const rr=r0*(0.35+a/8.5*0.65),x=c[0]+Math.cos(a+p.rot)*rr,y=c[1]+Math.sin(a+p.rot)*rr*0.8-k*6;a?ink.lineTo(x,y):ink.moveTo(x,y);}ink.stroke();}
     if(worldA>0.01){const c=P2(p.x,p.z),rw=(p.big?9:5)+k*(p.big?16:10),e=P2(p.x+rw,p.z),r=Math.max(1,Math.hypot(e[0]-c[0],e[1]-c[1]));   // the painted world: the puff at its own ground point
@@ -1815,7 +1863,45 @@ function drawNeatline(a){
   ink.globalAlpha=1;
 }
 let HOVER=null,SHOW_TRAILS=true,SHOW_NAMES=true,DRAW=null;
+// The ink is redrawn only when what it shows can have changed: the camera, the game clock, the pointer, a selection, or
+// something animating on the frame clock (smoke, a routing pulse, a turning block, an arrow's reveal, a fading trail).
+// Drawing it cost most of the frame (docs/plans/active/perf-150.md).
+let INK_KEY = '', INK_T0 = 0, INK_ANIM = true;
+const FORMS = { line: 1, column: 2, square: 3 };
+/** A cheap hash of every unit's drawn state: it changes whenever any unit moves, turns, wears, wavers or re-forms. */
+let CHECK_T = -1, CHECK_V = 0;
+function unitsChecksum() {
+  if (CHECK_T === FRAME_N) return CHECK_V;   // once a frame: the figures and the ink both ask
+  // a hash, not a sum: two changes cannot cancel out
+  let c = 2166136261;
+  const mix = v => { c = Math.imul(c ^ (Math.round(v * 1000) | 0), 16777619); };
+  for (const u of UNITS) {
+    mix(u.x); mix(u.z); mix(u.dface); mix(u.str); mix(u.mor); mix(u.morph); mix(u.gone || 0);
+    mix(FORMS[u.form] || 0); mix(FORMS[u.prev] || 0); mix(u.state === 'rout' ? 1 : u.state === 'move' ? 2 : 0);
+  }
+  CHECK_T = FRAME_N;
+  CHECK_V = c >>> 0;
+  return CHECK_V;
+}
+// late web fonts (the canvas asks for some only when it first draws with them): draw the names again
+document.fonts?.ready.then(() => { INK_KEY = ''; });
+document.fonts?.addEventListener('loadingdone', () => { INK_KEY = ''; });
+/** Whether a projected point lies on screen, within pad pixels of it, and in front of the camera. */
+const onScreen = (p, pad) => !behind(p) && p[0] > -pad && p[0] < SW + pad && p[1] > -pad && p[1] < SH + pad;
+function inkDirty(now) {
+  if (!INK_T0) INK_T0 = now;
+  let key = [SW, SH, GT, HOVER ? HOVER.id : -1, DRAW ? DRAW.pts.length : 0, BOX ? BOX.x1 + ':' + BOX.y1 : '',
+    SHOW_TRAILS, SHOW_NAMES, TT].join(',');
+  for (let i = 0; i < 16; i++) key += ',' + VP[i].toFixed(6);
+  for (const u of UNITS) if (u.sel) key += ',' + u.id;
+  key += ',' + unitsChecksum() + ',' + ORDERS.length;   // orders and changes while paused (the clock still)
+  const changed = key !== INK_KEY;
+  INK_KEY = key;   // stored every frame, so a return to an earlier state is still seen as a change
+  // INK_ANIM: the last draw drew something still moving on the frame clock (each draw sets it where it reads the clock)
+  return changed || INK_ANIM || now - INK_T0 < 3000;   // the fonts load and the first frames settle
+}
 function drawInk(now){
+  INK_ANIM=false;   // set again by whatever this draw finds still moving on the frame clock
   ink.setTransform(DPR,0,0,DPR,0,0);ink.clearRect(0,0,SW,SH);
   const inkA=1-st('ink'),blockA=1-st('blocks'),nameA=1-st('names');
   drawNeatline(inkA);if(LIT)setLight();drawNames(nameA);
@@ -1878,17 +1964,70 @@ function putFig(F,x,y,z,yaw,rand,moving,side){const k=F.n++,o=k*16,c=Math.cos(ya
   m[o]=c;m[o+1]=0;m[o+2]=-s;m[o+3]=0;m[o+4]=0;m[o+5]=1;m[o+6]=0;m[o+7]=0;m[o+8]=s;m[o+9]=0;m[o+10]=c;m[o+11]=0;m[o+12]=x;m[o+13]=y;m[o+14]=z;m[o+15]=1;
   F.info[k*4]=rand;F.info[k*4+1]=moving;F.info[k*4+2]=side;}
 let figKey='';
-function updateFigures(force){
-  const easing=UNITS.some(u=>!u.gone&&Math.abs(angTo(u.dface,u.face))>1e-3);
-  const key=GT+':'+RISE().toFixed(4)+':'+st('stand').toFixed(3);if(!force&&!easing&&key===figKey)return;figKey=key;
-  const on=st('stand')>0;for(const k in FIGS){FIGS[k].n=0;}
-  if(on){const rise=RISE(),e3=[0,0,0],e4=[0,0,0];
-    for(const u of UNITS){if(u.gone)continue;const n=alive(u),f=[Math.sin(u.dface),Math.cos(u.dface)],r=[Math.cos(u.dface),-Math.sin(u.dface)],e=easeIO(u.morph),mv=u.state!=='idle'?1:0;
-      const put=(F,i,nn,ox=0,oz=0,yawAdd=0)=>{slot(u,u.prev,i,nn,e3);slot(u,u.form,i,nn,e4);const sx=lerp(e3[0],e4[0],e)+ox,sz=lerp(e3[1],e4[1],e)+oz,ya=lerp(e3[2],e4[2],e)+yawAdd;
-        const x=u.x+r[0]*sx+f[0]*sz,z=u.z+r[1]*sx+f[1]*sz;putFig(F,x,Hs(x,z)*rise,z,u.dface+ya,hash(u.id,i),mv,u.sideI);};
-      if(u.type==='inf')for(let i=0;i<n;i++)put(FIGS.inf,i,n);
-      else if(u.type==='cav')for(let i=0;i<n;i++)put(FIGS.cav,i,n);
-      else for(let i=0;i<n;i++){put(FIGS.gun,i,n);for(let c=0;c<4;c++)put(FIGS.inf,i,n,(c%2?1.4:-1.4),-2.4-Math.floor(c/2)*1.3);}
+/**
+ * One unit's figures, cached on the unit: built only when what places them changes (position, facing, formation,
+ * losses, the zoom's rise), so a still unit costs a copy, not a rebuild of every man (docs/plans/active/perf-150.md).
+ * Returns its fields and kinds: { inf, cav, gun }, each { mat, info, n }.
+ */
+function unitFigures(u, rise) {
+  const n = alive(u);
+  const dq = Math.round(u.dface * 1000);   // a turn still easing by less than a thousandth is finished, for the figures
+  const moving = u.state === 'idle' ? 0 : 1;
+  const c = u.figs;
+  if (c && c.x === u.x && c.z === u.z && c.dq === dq && c.form === u.form && c.prev === u.prev && c.morph === u.morph
+    && c.n === n && c.moving === moving && c.rise === rise) return c;
+  // the buffers sized once for the full unit (its men only fall) and refilled in place
+  const per = u.type === 'art' ? { gun: u.N, inf: u.N * 4 } : { [u.type]: u.N };
+  const kinds = c ? c.kinds : {};
+  for (const k in per) {
+    if (!kinds[k]) kinds[k] = { mat: new Float32Array(per[k] * 16), info: new Float32Array(per[k] * 4), n: 0 };
+    kinds[k].n = 0;
+  }
+  const f = [Math.sin(u.dface), Math.cos(u.dface)], r = [Math.cos(u.dface), -Math.sin(u.dface)];
+  const e = easeIO(u.morph), e3 = [0, 0, 0], e4 = [0, 0, 0];
+  const put = (F, i, ox = 0, oz = 0) => {
+    slot(u, u.prev, i, n, e3);
+    slot(u, u.form, i, n, e4);
+    const sx = lerp(e3[0], e4[0], e) + ox, sz = lerp(e3[1], e4[1], e) + oz, ya = lerp(e3[2], e4[2], e);
+    const x = u.x + r[0] * sx + f[0] * sz, z = u.z + r[1] * sx + f[1] * sz;
+    putFig(F, x, Hs(x, z) * rise, z, u.dface + ya, hash(u.id, i), moving, u.sideI);
+  };
+  for (let i = 0; i < n; i++) {
+    if (u.type === 'art') {
+      put(kinds.gun, i);
+      for (let k = 0; k < 4; k++) put(kinds.inf, i, k % 2 ? 1.4 : -1.4, -2.4 - Math.floor(k / 2) * 1.3);   // the crew
+    } else put(kinds[u.type], i);
+  }
+  u.figs = { x: u.x, z: u.z, dq, form: u.form, prev: u.prev, morph: u.morph, n, moving, rise, kinds };
+  return u.figs;
+}
+
+/**
+ * Whether any of a unit's ground can be on screen: the square around its front point that holds both its old and its
+ * new formation (and its rear battalion), each corner projected; culled only when all four lie off the same side.
+ */
+function unitInView(u) {
+  if (!VP) return true;
+  const n = alive(u), a = dims(u, u.prev, n), b = dims(u, u.form, n);
+  const R = Math.max(a[0], a[1], b[0], b[1]) + 20;
+  const C = [[-R, -R], [R, -R], [R, R], [-R, R]].map(([dx, dz]) => P2(u.x + dx, u.z + dz));
+  if (C.some(behind)) return true;   // straddles the camera plane: keep it
+  return !(C.every(p => p[0] < 0) || C.every(p => p[0] > SW) || C.every(p => p[1] < 0) || C.every(p => p[1] > SH));
+}
+
+function updateFigures(){
+  if(!(st('stand')>0)){   // the figures hidden: nothing to place
+    if(figKey!=='hidden'){figKey='hidden';for(const k in FIGS){FIGS[k].n=0;FIGS[k].m.thinInstanceCount=0;FIGS[k].m.isVisible=false;}}
+    return;}
+  const inView=UNITS.filter(u=>!u.gone&&unitInView(u));
+  const rise=Math.round(RISE()*200)/200;   // in steps (under 0.25 m off the ground on the highest hills): zooming rebuilds
+  // the figures about 200 times across the rise, not every frame
+  const key=GT+':'+rise+':'+inView.map(u=>u.id).join(',')+':'+unitsChecksum();if(key===figKey)return;figKey=key;
+  for(const k in FIGS)FIGS[k].n=0;
+  {
+    for(const u of inView){
+      const{kinds}=unitFigures(u,rise);
+      for(const k in kinds){const src=kinds[k],F=FIGS[k];F.mat.set(src.mat.subarray(0,src.n*16),F.n*16);F.info.set(src.info.subarray(0,src.n*4),F.n*4);F.n+=src.n;}
     }}
   for(const k in FIGS){const F=FIGS[k];F.m.thinInstanceCount=F.n;F.m.isVisible=F.n>0;if(F.n){F.m.thinInstanceBufferUpdated('matrix');F.m.thinInstanceBufferUpdated('aInfo');}}
 }
@@ -1960,6 +2099,22 @@ $('trails').onclick=e=>{SHOW_TRAILS=!SHOW_TRAILS;e.target.classList.toggle('on',
   };
   apply();
 }
+// sharp ink: the map marks at the screen's full pixel ratio (crisper on 4K, slower)
+{
+  const apply = () => {
+    $('sharptg').classList.toggle('on', SHARP_INK);
+    $('sharptg').textContent = SHARP_INK ? 'on' : 'off';
+  };
+  $('sharptg').onclick = () => {
+    SHARP_INK = !SHARP_INK;
+    DPR = inkRatio();
+    try { localStorage.setItem('staffmap.sharp', SHARP_INK ? '1' : '0'); } catch {}
+    for (const k in PATS) delete PATS[k];   // the hatch patterns are made at the ink ratio
+    resize();
+    apply();
+  };
+  apply();
+}
 $('legendtg').onclick=e=>{const on=$('legend').style.display==='none';$('legend').style.display=on?'':'none';e.target.classList.toggle('on',on);e.target.textContent=on?'on':'off';};
 $('namestg').onclick=e=>{SHOW_NAMES=!SHOW_NAMES;e.target.classList.toggle('on',SHOW_NAMES);e.target.textContent=SHOW_NAMES?'on':'off';};
 function updateCard(){const s=sel();const c=$('card');if(!s.length){c.style.display='none';return;}c.style.display='block';
@@ -1974,14 +2129,15 @@ function updateCard(){const s=sel();const c=$('card');if(!s.length){c.style.disp
 /* =========================================================================
    FRAME
    ========================================================================= */
-let last=performance.now(),acc=0,ft=[],fps=0;
+let last=performance.now(),acc=0,ft=[],fps=0,FRAME_N=0;
 const fmtClock=s=>{const m=Math.floor(7*60+30+s/60);return`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;};
 const FIT={R:7000,z:0};
-function resize(){SW=innerWidth;SH=innerHeight;inkC.width=Math.round(SW*DPR);inkC.height=Math.round(SH*DPR);engine.resize();
+function resize(){SW=innerWidth;SH=innerHeight;INK_KEY='';inkC.width=Math.round(SW*DPR);inkC.height=Math.round(SH*DPR);engine.resize();
   // theatre: the whole neatline between the side panels, above the status bar
   const side=SW>1100?300:24,mpp=Math.max((2*MZ+160)/Math.max(200,SH-190),(2*MX+160)/Math.max(200,SW-2*side));FIT.R=mpp*SH/(2*tanH);FIT.z=-35*mpp;}
 addEventListener('resize',resize);
 function frame(){
+  FRAME_N++;
   const now=performance.now(),dt=Math.min(0.1,(now-last)/1000);last=now;
   ft.push(dt*1000);if(ft.length>60)ft.shift();
   // keys pan / rotate
@@ -2007,7 +2163,7 @@ function frame(){
   scene.render();
   VP=scene.getTransformMatrix().m;
   MPP=2*CUR.R*tanH/SH;
-  cleanFootprints(now);drawInk(now);
+  cleanFootprints(now);if(inkDirty(now))drawInk(now);
   // DOM (cheap, every few frames)
   if((frameN++&7)===0){
     const ck=fmtClock(GT);$('clock').textContent=ck;$('sclock').textContent=ck;
