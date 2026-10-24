@@ -22,7 +22,10 @@ then the buffers the header lists, each at a 4-byte aligned offset:
   (pose x inverse bind) column by column, as half floats; the last matrix of a row is the identity.
 Space: the importer's Blender scene (Z up, -Y forward, model units) to Babylon metres (Y up, left-handed): p' = K p,
 K the swap of y and z (a reflection, which also turns right-handed into left-handed) times the figure scale, so each
-skinning matrix becomes K A K^-1; the triangles' winding is reversed to keep their outside out.
+skinning matrix becomes K A K^-1; the triangles keep the glTF's order: the reflection turns its counter-clockwise
+fronts into the clockwise ones Babylon draws by default (left-handed: a front triangle's right-hand normal points into the
+figure; #164, where reversing them drew every figure inside out: a face on the back of the head, the pack seen through
+the chest).
 Steps: 12 a second (the art bible's stepped animation), every other frame of the 24 fps clips along a role's chain.
 """
 import bpy, json, struct, sys
@@ -207,7 +210,11 @@ for lod in LODS:
         inf = sorted(((g.weight, bone_of[groups[g.group]]) for g in v.groups if groups[g.group] in bone_of and g.weight > 1e-4), reverse=True)[:4]
         tot = sum(w for w, _ in inf); assert tot > 0, f'{lod}: vertex {vi} has no deform weight'
         for k_, (w, b) in enumerate(inf): bi[j, k_] = b; bw[j, k_] = w / tot
-    tris = np.array(idx, np.uint16).reshape(-1, 3)[:, ::-1].copy()   # the reflection reverses the winding: back
+    tris = np.array(idx, np.uint16).reshape(-1, 3)   # the glTF's order: after the reflection, Babylon's front (#164)
+    # its fronts face out: a triangle's right-hand normal (in Babylon space) against its vertex normals, for nearly all
+    gn = np.cross(pos[tris[:, 1]] - pos[tris[:, 0]], pos[tris[:, 2]] - pos[tris[:, 0]])
+    inward = float(((gn * nor[tris].sum(1)).sum(1) < 0).mean())
+    assert inward > .9, f'{lod}: only {inward:.0%} of the triangles wound for Babylon (clockwise from outside)'
     h = float(pos[:, 1].max() - pos[:, 1].min())
     assert 1.6 < h < 2.6, f'{lod}: the figure is {h:.2f} m tall (with its musket), not a man'
     tot_a = sum(area.values()); share = {r: round(a / tot_a, 3) for r, a in sorted(area.items(), key=lambda x: -x[1])}

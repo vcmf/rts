@@ -175,7 +175,7 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     }
     expect([fromHalf(0x3c00), fromHalf(0xc000), fromHalf(0x0001)]).toEqual([1, -2, 2 ** -24])
   })
-  it('has a tiny LOD of boxes on its parts: under a quarter of the far LOD\'s vertices, each corner on one bone, a mix of roles, outward, a figure tall', () => {
+  it('has a tiny LOD of boxes on its parts: under a quarter of the far LOD\'s vertices, each corner on one bone, a mix of roles, fronts out, a figure tall', () => {
     const t = tinyMesh(d, d.lods[d.lods.length - 1].name), n = t.positions.length / 3
     expect(n % 8).toBe(0); expect(t.indices.length).toBe(n / 8 * 36)   // eight corners, twelve triangles a box
     expect(n).toBeLessThan(d.lods[d.lods.length - 1].vertices / 4)
@@ -185,13 +185,13 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
       expect(sum).toBeCloseTo(1, 5)   // (a mix of the roles: its box's mean colour from above)
     }
     expect(new Set(t.roles).size).toBeGreaterThanOrEqual(4)   // (the roles that read from far off show on it)
-    // every triangle faces away from its box's centre
+    // every triangle's front faces away from its box's centre: Babylon's clockwise fronts, its right-hand normal inward (#164)
     for (let k = 0; k < t.indices.length; k += 3) {
       const box = Math.floor(t.indices[k] / 8), P = (i: number) => [0, 1, 2].map(j => t.positions[i * 3 + j])
       const c = [0, 1, 2].map(j => { let a = 0; for (let i = 0; i < 8; i++) a += t.positions[(box * 8 + i) * 3 + j]; return a / 8 })
       const [a, b, e] = [P(t.indices[k]), P(t.indices[k + 1]), P(t.indices[k + 2])], u = [0, 1, 2].map(j => b[j] - a[j]), w = [0, 1, 2].map(j => e[j] - a[j])
       const nn = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]
-      expect(nn[0] * (a[0] - c[0]) + nn[1] * (a[1] - c[1]) + nn[2] * (a[2] - c[2])).toBeGreaterThan(0)
+      expect(nn[0] * (a[0] - c[0]) + nn[1] * (a[1] - c[1]) + nn[2] * (a[2] - c[2])).toBeLessThan(0)
     }
     const q = posedMesh(d, t), f = d.ranges.halt.start
     let lo = Infinity, hi = -Infinity
@@ -207,6 +207,82 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
     let lo = Infinity, hi = -Infinity
     for (let v = 0; v < n; v++) { const y = q.data[(f * n * 2 + v * 2) * 4 + 1]; lo = Math.min(lo, y); hi = Math.max(hi, y) }
     expect(hi - lo).toBeGreaterThan(1.4); expect(lo).toBeLessThan(0.3)
+  })
+  it('is wound for Babylon: each LOD\'s fronts clockwise from outside, so no man is drawn inside out (#164)', () => {
+    // Babylon is left-handed and draws clockwise fronts: a front triangle's right-hand normal points into the figure,
+    // against its vertices' normals (the bake reversed them once: every man inside out, a face on the back of his head)
+    for (const l of d.lods) {
+      const m = d.mesh[l.name], P = (i: number, k: number) => m.positions[m.indices[i] * 3 + k], N = (i: number, k: number) => m.normals[m.indices[i] * 3 + k]
+      let inward = 0
+      for (let t = 0; t < m.indices.length; t += 3) {
+        const e1 = [0, 1, 2].map(k => P(t + 1, k) - P(t, k)), e2 = [0, 1, 2].map(k => P(t + 2, k) - P(t, k))
+        const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]
+        if ([0, 1, 2].reduce((a, k) => a + n[k] * (N(t, k) + N(t + 1, k) + N(t + 2, k)), 0) < 0) inward++
+      }
+      expect(inward / (m.indices.length / 3), l.name).toBeGreaterThan(0.9)
+    }
+  })
+  it('shows its face from the front and not from behind, drawn as Babylon culls (#164)', () => {
+    // the head's pixels seen from 17° above, from behind and from the front, the back faces culled as the page culls
+    // them (a triangle drawn when its right-hand normal points away from the eye): the share that is skin. The LODs whose
+    // head has a face to show (a hundred triangles and more; the far LOD's head is 20)
+    const head = d.bones.findIndex(b => /Head$/.test(b)), skin = d.palette.indexOf('skin')
+    const skinSeen = (m: (typeof d.mesh)[string], f: number[]) => {
+      const r = [f[2], 0, -f[0]], u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]]
+      const res = 128, depth = new Float64Array(res * res).fill(Infinity), id = new Int32Array(res * res).fill(-1)
+      const nv = m.positions.length / 3, px = new Float64Array(nv * 3)
+      for (let v = 0; v < nv; v++) {   // (a 0.5 m square round the head's height)
+        const p = [m.positions[v * 3], m.positions[v * 3 + 1] - 1.62, m.positions[v * 3 + 2]], dot = (a: number[]) => p[0] * a[0] + p[1] * a[1] + p[2] * a[2]
+        px[v * 3] = (dot(r) / 0.5 + 0.5) * res; px[v * 3 + 1] = (dot(u) / 0.5 + 0.5) * res; px[v * 3 + 2] = dot(f)
+      }
+      for (let t = 0; t < m.indices.length / 3; t++) {
+        const [a, b, c] = [0, 1, 2].map(k => m.indices[t * 3 + k] * 3), Q = (i: number) => [0, 1, 2].map(k => m.positions[i + k])
+        const [pa, pb, pc] = [Q(a), Q(b), Q(c)], e1 = pb.map((x, k) => x - pa[k]), e2 = pc.map((x, k) => x - pa[k])
+        const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]
+        if (n[0] * f[0] + n[1] * f[1] + n[2] * f[2] <= 0) continue   // a back face
+        const ar = (px[b] - px[a]) * (px[c + 1] - px[a + 1]) - (px[c] - px[a]) * (px[b + 1] - px[a + 1])
+        if (Math.abs(ar) < 1e-12) continue
+        for (let y = Math.max(0, Math.floor(Math.min(px[a + 1], px[b + 1], px[c + 1]))); y <= Math.min(res - 1, Math.ceil(Math.max(px[a + 1], px[b + 1], px[c + 1]))); y++) {
+          for (let x = Math.max(0, Math.floor(Math.min(px[a], px[b], px[c]))); x <= Math.min(res - 1, Math.ceil(Math.max(px[a], px[b], px[c]))); x++) {
+            const w0 = ((px[b] - x - 0.5) * (px[c + 1] - y - 0.5) - (px[c] - x - 0.5) * (px[b + 1] - y - 0.5)) / ar
+            const w1 = ((px[c] - x - 0.5) * (px[a + 1] - y - 0.5) - (px[a] - x - 0.5) * (px[c + 1] - y - 0.5)) / ar
+            if (w0 < 0 || w1 < 0 || w0 + w1 > 1) continue
+            const z = w0 * px[a + 2] + w1 * px[b + 2] + (1 - w0 - w1) * px[c + 2]
+            if (z < depth[y * res + x]) { depth[y * res + x] = z; id[y * res + x] = t }
+          }
+        }
+      }
+      let all = 0, sk = 0
+      for (const t of id) {
+        if (t < 0) continue
+        const v = m.indices[t * 3]; let bi = 0
+        for (let i = 1; i < 4; i++) if (m.boneWeights[v * 4 + i] > m.boneWeights[v * 4 + bi]) bi = i
+        if (m.boneIndices[v * 4 + bi] !== head) continue
+        all++; if (m.roles[v] === skin) sk++
+      }
+      return sk / all
+    }
+    for (const l of d.lods.filter(l => l.triangles > 1000)) {
+      const behind = skinSeen(d.mesh[l.name], [0, -0.3, -1]), front = skinSeen(d.mesh[l.name], [0, -0.3, 1])   // (the back at +z)
+      expect(behind, `${l.name} from behind`).toBeLessThan(0.15); expect(front, `${l.name} from the front`).toBeGreaterThan(2 * behind)
+    }
+  })
+  it('casts its shadow from the soles: the proxy reaches the ground in every baked step (#165)', () => {
+    // the proxy's lowest point against the figure's (the far LOD it is built from, and the near LOD), at every step of
+    // every role: no more than 4 cm above (it stood at the ankles, 13 cm up: the shadows started 26 cm off the feet at
+    // a 27° sun), nor deep under the ground
+    const p = shadowProxy(d, d.lods[d.lods.length - 1].name), q = posedMesh(d, p), n = p.positions.length / 3
+    for (const l of d.lods.slice(1)) {
+      const pv = posedVertices(d, l.name), nv = l.vertices
+      for (const [role, r] of Object.entries(d.ranges)) {
+        for (let f = r.start; f <= r.end; f++) {
+          let lo = Infinity, plo = Infinity
+          for (let v = 0; v < nv; v++) lo = Math.min(lo, pv.data[(f * nv * 2 + v * 2) * 4 + 1])
+          for (let v = 0; v < n; v++) plo = Math.min(plo, q.data[(f * n * 2 + v * 2) * 4 + 1])
+          expect(plo - lo, `${l.name} ${role} step ${f}`).toBeLessThan(0.04); expect(plo - lo).toBeGreaterThan(-0.1)
+        }
+      }
+    }
   })
   it('has three LODs nearest first, each lighter: the full figure nearest', () => {
     expect(d.lods.map(l => l.name)).toEqual(['lod0', 'lod1', 'lod2'])

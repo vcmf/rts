@@ -221,7 +221,12 @@ export function posedMesh(d: UnitData, m: SkinnedMesh): { width: number; height:
 /** a figure's parts (the shadow proxy's and the tiny LOD's): each bone that carries at least minVerts of a LOD's
  *  vertices (by their heaviest weight) over minLen m long, along the part's long axis (its vertices' principal axis,
  *  end to end, t0 to t1 from its centre c) and as wide as most of it (the 85th percentile of their distance from the
- *  axis, along u and along w). No era names: the parts are wherever the figure's own weights put them */
+ *  axis, along u and along w). No era names: the parts are wherever the figure's own weights put them.
+ *  The figure's contact with the ground (#165): a bone too small to be a part (a foot, its toes) whose vertices come
+ *  within `contact` m of the figure's lowest point lends them to the part it shares skin weights with (its neighbour
+ *  in the skeleton, followed through other small bones: the toes to the foot to the shin), whose axis then runs on to
+ *  them (t0, t1; not its width nor its vertices): the parts reach the ground where the figure stands, so the shadow
+ *  proxy's shadow starts at the soles, not at the ankles 13 cm up */
 export interface Part {
   bone: number
   vs: number[]
@@ -234,7 +239,7 @@ export interface Part {
   hu: number
   hw: number
 }
-export function boneParts(d: UnitData, lod: string, minVerts = 8, minLen = 0.14): Part[] {
+export function boneParts(d: UnitData, lod: string, minVerts = 8, minLen = 0.14, contact = 0.15): Part[] {
   const m = d.mesh[lod]
   const nv = m.positions.length / 3
   const groups = new Map<number, number[]>()
@@ -280,6 +285,45 @@ export function boneParts(d: UnitData, lod: string, minVerts = 8, minLen = 0.14)
       return Math.max(0.02, q[Math.floor(0.85 * (q.length - 1))])
     }
     out.push({ bone: b, vs, c, ax, u, w, t0, t1, hu: half(u), hw: half(w) })
+  }
+  // the ground contact: each left-out bone with a vertex within `contact` of the lowest, lent to its part (#165)
+  let lowest = Infinity
+  for (let v = 0; v < nv; v++) lowest = Math.min(lowest, P(v, 1))
+  const partOf = new Map(out.map(p => [p.bone, p]))
+  // two bones are neighbours where a vertex carries weight on both; how many such vertices
+  const shared = new Map<number, Map<number, number>>()
+  for (let v = 0; v < nv; v++) {
+    for (let i = 0; i < 4; i++) {
+      for (let k = 0; k < 4; k++) {
+        if (i === k || m.boneWeights[v * 4 + i] <= 0 || m.boneWeights[v * 4 + k] <= 0) continue
+        const a = m.boneIndices[v * 4 + i]
+        const b = m.boneIndices[v * 4 + k]
+        const row = shared.get(a) ?? shared.set(a, new Map()).get(a)!
+        row.set(b, (row.get(b) ?? 0) + 1)
+      }
+    }
+  }
+  // a left-out bone's part: its most shared neighbour that is a part, else through its most shared left-out one
+  const lentTo = (b: number, seen: Set<number>): Part | undefined => {
+    seen.add(b)
+    const ns = [...(shared.get(b) ?? [])].filter(([n]) => !seen.has(n)).sort((x, y) => y[1] - x[1] || x[0] - y[0])
+    const direct = ns.find(([n]) => partOf.has(n))
+    if (direct) return partOf.get(direct[0])
+    for (const [n] of ns) {
+      const p = lentTo(n, seen)
+      if (p) return p
+    }
+    return undefined
+  }
+  for (const [b, vs] of groups) {
+    if (partOf.has(b) || !vs.some(v => P(v, 1) < lowest + contact)) continue
+    const p = lentTo(b, new Set())
+    if (!p) continue
+    for (const v of vs) {
+      const t = (P(v, 0) - p.c[0]) * p.ax[0] + (P(v, 1) - p.c[1]) * p.ax[1] + (P(v, 2) - p.c[2]) * p.ax[2]
+      p.t0 = Math.min(p.t0, t)
+      p.t1 = Math.max(p.t1, t)
+    }
   }
   return out
 }
@@ -420,7 +464,8 @@ export function seenArea(d: UnitData, lod: string, elev = 0.87): Float64Array {
 export const TINY_ROLES = 12
 /** the tiny LOD (docs/plans/active/armies-32k.md, step 3): a LOD's parts (boneParts) as boxes, eight corners each
  *  shared by its faces (their normals from the box's centre), each corner skinned wholly to the part's bone,
- *  outward-wound. A corner's colour is a mix of the roles (`weights`, TINY_ROLES a vertex, summing to 1): their shares
+ *  wound with their fronts out (Babylon's clockwise: a front's right-hand normal into the box, as the bake's figure,
+ *  #164). A corner's colour is a mix of the roles (`weights`, TINY_ROLES a vertex, summing to 1): their shares
  *  of its eighth of the part as a camera `elev` above the horizon sees it from round the figure (seenArea: what the
  *  figure hides counts for nothing), with `own` of the whole part's shares, so a box reads as the mean colour of what
  *  it stands for (a single role spread over a box's face reads louder than on the figure); then `figure` of the whole
@@ -506,13 +551,14 @@ export function tinyMesh(
     }
     const centre = [0, 1, 2].map(i => c[i] + ax[i] * mid)
     for (const f of FACES) {
-      // wound outward: the face's normal (by the right hand) away from the box's centre, else turned
+      // its front outward, for Babylon (left-handed, clockwise fronts): the face's right-hand normal toward the box's
+      // centre, else turned
       const [a, bb, cc] = f.map(k => cs[k])
       const e1 = [0, 1, 2].map(i => bb[i] - a[i])
       const e2 = [0, 1, 2].map(i => cc[i] - a[i])
       const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]
       const out = n[0] * (a[0] - centre[0]) + n[1] * (a[1] - centre[1]) + n[2] * (a[2] - centre[2]) > 0
-      const q = out ? f : [f[0], f[3], f[2], f[1]]
+      const q = out ? [f[0], f[3], f[2], f[1]] : f
       idx.push(base + q[0], base + q[1], base + q[2], base + q[0], base + q[2], base + q[3])
     }
   })
