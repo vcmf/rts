@@ -42,7 +42,7 @@ Out of scope:
 - the 1805 features from a period map, with the source's licence (the next plan);
 - the painted world (close zoom);
 - other battlefields;
-- the "relief from a raster" kind in the map language (an owner decision, decision 0050);
+- the "relief from a raster" kind in the map language (an owner decision, decision 0057);
 - a GPU bake, unless the CPU bake is too slow.
 
 ## Approach (as built)

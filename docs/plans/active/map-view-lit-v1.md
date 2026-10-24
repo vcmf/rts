@@ -7,8 +7,8 @@ last_reviewed: 2026-10-23
 
 ## Problem
 
-Decision 0051 (proposed) wants one map view with a 3D feel for the editor and the game; the owner's reference is a
-frame of Epic History TV's Waterloo (its source note arrives with PR #135, beside decision 0051). Before building the
+Decision 0058 (proposed) wants one map view with a 3D feel for the editor and the game; the owner's reference is a
+frame of Epic History TV's Waterloo (its source note arrives with PR #135, beside decision 0058). Before building the
 renderer, the owner wants to see a first pass of the feel: a warmer paper, grain, better order arrows and army blocks
 that stand off the ground. The one place that already has paper, terrain, blocks and arrows together is the staff map
 prototype (`prototypes/staff-map.html`), in the ink style of `docs/proposals/staff-map/design.md`.
@@ -32,7 +32,7 @@ comparison). In the lit mode:
    25 m at 0.45 of the ink colour; lightened from 0.4 and 0.7 at the owner's request, in the paper layers' PR #141) so
    the map does not feel heavy.
 
-Out of scope: lit relief (shading), woods as canopy, roofs (decision 0051's bake, a later step); the game's staff map
+Out of scope: lit relief (shading), woods as canopy, roofs (decision 0058's bake, a later step); the game's staff map
 (`src/render/map.ts`); the map engine's draft page; season tuning beyond keeping each season readable.
 
 ## Scope, v2 (2026-10-23)
@@ -74,7 +74,7 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
 - Arrows and blocks on the 2D ink canvas (`drawOrders`, `drawBlock`): every block's shadow and side faces first, then
   every top face and its edges, so no shadow falls on a neighbour's top. One light, the world's north-west seen on
   screen each frame (it turns with the camera), sets the side faces and every shadow.
-- Readability (art bible §4, decision 0051's guards): the army colours stay the most saturated marks; the paper and
+- Readability (art bible §4, decision 0058's guards): the army colours stay the most saturated marks; the paper and
   grain stay below them in chroma; every block keeps an outline.
 
 ## Acceptance
@@ -205,7 +205,7 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
   `?frozen`.
 - Not settled for v2: the notched tail reads as a fishtail; the blocks' depth is fixed in pixels (thin up close);
   Russian green on the summer olive has less contrast than French blue; the relief's light and shade (decision
-  0051's bake) under the contours; height labels on the index contours; the summer wash's blocky noise, already in
+  0058's bake) under the contours; height labels on the index contours; the summer wash's blocky noise, already in
   the ink style, shows more under the ageing.
 - **Wear, squares, beige Austria: round 1**: severe: the bites replaced the canvas path, so the strokes after them
   (an Austrian block's edge, a wavering block's outline) went round the bites and the block lost its edge. Fixed (the
