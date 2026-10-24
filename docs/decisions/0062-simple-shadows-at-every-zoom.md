@@ -44,7 +44,9 @@ shadow at every zoom, its look set per zoom.
   close; the figures themselves show it.
 - The ground's and the meadow's shaders lose the map's sampler and reads (one texture unit freed on the terrain's
   fragment stage, the meadow's vertex stage's read gone); the 2048² depth target (16 MB) is not allocated.
-- The atlas is RG8 (twice R8's bytes, about 2.6 MB with its mips) and its bake takes a second blur at load.
+- The atlas is RG8 (1664 × 608, about 2.7 MB with its mips) and its bake a second blur at load (144 ms against 84,
+  SwiftShader).
+- At 15 m the shadows' own change from frame to frame while a battalion marches is a third of the map's (the plan).
 - The lift (0049) still darkens the grass and the legs of the men standing in another's shadow.
 
 ## Alternatives considered
