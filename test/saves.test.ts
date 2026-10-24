@@ -14,7 +14,6 @@ import {
   KIND_FORMATION,
   COMMAND_TYPES,
   M_TICK,
-  M_SEQ,
   MS_ROUTING,
   type Command,
   type Stamped,
@@ -73,16 +72,29 @@ function chargeAt(n: number): World {
 const load = (w: World): World => deserialize(serialize(w), OPEN_DATA, cr, true, openBattlefield())
 
 describe('saves: what crosses', () => {
-  it('a command of an unknown type is refused when issued, so no save holds one (#155)', () => {
-    const w = makeWorld(data, cr, 1)
-    issue(w, ONE_OF_EACH.halt)
+  it('a malformed command is stamped as refused: every queued one saves, loads and drops the same (#155)', () => {
+    // each field of each type, in turn, given as something it is not; then an unknown type, no command at all
+    const junk: unknown[] = [null, undefined, 'x', NaN, -Infinity, {}, [[1, 'x']], [[1]], BigInt(1)]
+    const bad: unknown[] = [{ type: 'nonsense', id: h(1) }, null, 7, { type: 'refused' }]
+    for (const t of COMMAND_TYPES) {
+      for (const k of Object.keys(ONE_OF_EACH[t]).filter(k => k !== 'type')) {
+        for (const v of junk) bad.push({ ...ONE_OF_EACH[t], [k]: v })
+      }
+    }
+    const w = chargeAt(100)
     const log: Stamped[] = []
-    const seq = w.meta[M_SEQ]
-    expect(() => issue(w, { type: 'nonsense', id: 0 } as unknown as Command, log)).toThrow(
-      /unknown command type nonsense/,
-    )
-    expect([w.meta[M_SEQ], w.pending.length, log.length]).toEqual([seq, 1, 0])
-    expect(deserialize(serialize(w), data, cr).pending).toEqual(w.pending)
+    for (const c of bad) issue(w, c as Command, log)
+    expect(log).toEqual(w.pending)
+    const bytes = serialize(w)
+    const loaded = load(w)
+    expect(loaded.pending).toEqual(w.pending)
+    expect(serialize(loaded)).toEqual(bytes)
+    expect(hashWorld(loaded)).toBe(hashWorld(w))
+    const [a, b] = [advanceTick(w), advanceTick(loaded)]
+    expect(b.dropped).toEqual(a.dropped)
+    expect(hashWorld(loaded)).toBe(hashWorld(w))
+    expect(a.dropped.filter(d => d.reason === 'unknown command').length).toBe(3)
+    expect(a.dropped.filter(d => d.reason === 'malformed waypoints').length).toBeGreaterThan(0)
   })
   it('a pending command of every type crosses a save with every field', () => {
     const w = makeWorld(data, cr, 1)

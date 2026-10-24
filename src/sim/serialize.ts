@@ -166,6 +166,7 @@ const FIELDS: Record<string, string[]> = {
   fire: ['id:i', 'mode:s', 'target:i'],
   side: ['side:i', 'x:f', 'z:f'],
   charge: ['id:i', 'target:i'],
+  refused: ['reason:s'], // what `issue` stamps for a command it cannot take (#155)
 }
 function writeCommand(w: Writer, s: Stamped) {
   w.i32(s.tick)

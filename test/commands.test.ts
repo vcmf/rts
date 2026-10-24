@@ -173,6 +173,19 @@ describe('commands: quantised when stamped', () => {
       z: 0.7071,
     })
   })
+  it('an angle or a position that rounds to zero is +0, not −0 (#157)', () => {
+    const wheel = quantiseCommand({ type: 'wheel', id: 1, angle: -0.00001 }) as { angle: number }
+    const side = quantiseCommand({ type: 'side', side: 1, x: -0.00001, z: -0 }) as { x: number; z: number }
+    const spawn = quantiseCommand({
+      type: 'debug-spawn',
+      side: 0,
+      x: -0.004,
+      z: 1,
+      heading: -0.00001,
+      men: 10,
+    }) as { x: number; heading: number }
+    for (const v of [wheel.angle, side.x, side.z, spawn.x, spawn.heading]) expect(Object.is(v, 0)).toBe(true)
+  })
   it("a fire command without a target targets none; a spawn without a quality takes the ruleset's", () => {
     expect(quantiseCommand({ type: 'fire', id: 1, mode: 'hold' })).toEqual({
       type: 'fire',

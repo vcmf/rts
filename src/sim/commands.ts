@@ -66,6 +66,9 @@ export type Command =
   | { type: 'debug-kill'; id: Handle; men: number }
   | { type: 'debug-morale'; id: Handle; quality: number }
   | { type: 'charge'; id: Handle; target: Handle }
+  // what `issue` stamps in place of a command it cannot take (an unknown type, malformed waypoints): dropped with
+  // its reason when applied, and saved and replayed like any other (#155)
+  | { type: 'refused'; reason: string }
 export interface Stamped {
   tick: number
   seq: number
@@ -95,22 +98,35 @@ export const COMMAND_TYPES = [
 ] as const
 export const FIRE_MODES = ['at will', 'hold'] // index = FIRE_AT_WILL, FIRE_HOLD
 
-// stamps a command for the next tick; `log` receives it when the command is external. A command of a type the sim
-// does not know is refused here, before it takes a sequence number (#155): it would be dropped when applied, but a
-// save taken while it waited could not be read back (a save writes a command's fields from its type's table)
+// a type the sim knows (`COMMAND_TYPES`; not `refused`, which only `issue` makes)
+export const isCommandType = (t: unknown): boolean => (COMMAND_TYPES as readonly unknown[]).includes(t)
+
+// stamps a command for the next tick; `log` receives it when the command is external. It never throws: a command it
+// cannot take, of an unknown type or with waypoints that are not [x, z] number pairs, is stamped as `refused` with
+// the reason it is dropped for (#155). So every queued and logged command is one a save writes and reads back as it
+// was, and a replay re-issuing it gets the same sequence number and the same drop.
 export function issue(w: World, cmd: Command, log?: Stamped[]): Stamped {
-  if (!(COMMAND_TYPES as readonly string[]).includes(cmd.type)) {
-    throw new Error(`unknown command type ${String(cmd.type)}: not issued`)
-  }
-  const q = quantiseCommand(cmd)
-  const s: Stamped = { tick: w.meta[M_TICK] + 1, seq: w.meta[M_SEQ]++, cmd: q }
+  const s: Stamped = { tick: w.meta[M_TICK] + 1, seq: w.meta[M_SEQ]++, cmd: normalise(cmd) }
   w.pending.push(s)
   if (log) log.push(s)
   return s
 }
+function normalise(cmd: Command): Command {
+  const t: unknown = typeof cmd === 'object' && cmd !== null ? cmd.type : undefined
+  if (t === 'refused') return { type: 'refused', reason: String((cmd as { reason?: unknown }).reason) }
+  if (!isCommandType(t)) return { type: 'refused', reason: 'unknown command' }
+  let q: Command
+  try {
+    q = quantiseCommand(cmd)
+  } catch {
+    return { type: 'refused', reason: 'malformed command' } // a field that cannot be read as a number or a string
+  }
+  if (q.type === 'move' && !wellFormed(q.points)) return { type: 'refused', reason: 'malformed waypoints' }
+  return q
+}
 // a spawn's quality: −1 marks none given (the ruleset's), any negative given becomes −2 (refused);
-// positions to 1 cm, angles to 0.1 mrad; an unknown type (which `issue` refuses) or a move with too many points is
-// kept as it is and dropped when applied
+// positions to 1 cm, angles to 0.1 mrad; an unknown type or a move with too many points or malformed ones is
+// kept as it is (`issue` refuses the unknown type and the malformed waypoints) and dropped when applied
 export function quantiseCommand(c: Command): Command {
   const qa = (a: number) => Math.round(a * 10000) / 10000 + 0 // + 0: a value rounding to zero is +0 (#157)
   switch (c.type) {
@@ -191,9 +207,11 @@ export function applyCommands(w: World, t: number): Dropped[] {
     const why =
       s.tick < t
         ? 'stale tick'
-        : !(COMMAND_TYPES as readonly string[]).includes(s.cmd.type)
-          ? 'unknown command'
-          : apply(w, s.cmd)
+        : s.cmd.type === 'refused'
+          ? s.cmd.reason
+          : !isCommandType(s.cmd.type) // a guard: `issue` stamps none, but `pending` is an open array
+            ? 'unknown command'
+            : apply(w, s.cmd)
     if (why) dropped.push({ tick: t, seq: s.seq, reason: why })
   }
   w.pending = keep
@@ -233,8 +251,9 @@ function playerOrdered(w: World, i: number): void {
 
 // applies a command now, as the tick applies a stamped one (plan.ts: a scenario's plan); '' or why it was dropped
 // (not as the player's: it does not stand the square against cavalry down)
-export const applyNow = (w: World, c: Command): string => apply(w, quantiseCommand(c), false)
+export const applyNow = (w: World, c: Command): string => apply(w, normalise(c), false)
 function apply(w: World, c: Command, player = true): string {
+  if (c.type === 'refused') return c.reason
   const f = w.f
   const o = w.ord
   const cr = w.cr

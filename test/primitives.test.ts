@@ -96,11 +96,11 @@ describe('rng: the draws', () => {
     expect([...s]).toEqual(before)
     for (let k = 0; k < 2000; k++) expect(sampleCount(s, 1.2)).toBeGreaterThanOrEqual(0)
   })
-  it('sampleCount: nothing for a NaN or infinite λ, without a draw (#158)', () => {
+  it('sampleCount: a NaN or infinite λ passes through as NaN, without a draw (#158)', () => {
     const s = new Uint32Array(4)
     seedRng(s, 5)
     const before = [...s]
-    expect([sampleCount(s, NaN), sampleCount(s, Infinity), sampleCount(s, -Infinity)]).toEqual([0, 0, 0])
+    expect([sampleCount(s, NaN), sampleCount(s, Infinity), sampleCount(s, -Infinity)]).toEqual([NaN, NaN, NaN])
     expect([...s]).toEqual(before)
   })
   it('edge seeds (0, −1, 2^31 − 1, 2^32 − 1, 2^32) give a nonzero state and a moving stream', () => {
@@ -170,6 +170,7 @@ describe('num at its boundaries', () => {
     expect(Object.is(atan2(-0, 1), 0)).toBe(true) // #157
     expect(Object.is(atan2(-0, 0), 0)).toBe(true)
     expect(atan2(0, NaN)).toBeNaN()
+    expect(Object.is(atan2(-5e-324, 2), 0)).toBe(true) // the ratio underflows to −0
     expect(Object.is(atan2(0, 0), 0)).toBe(true)
     expect(Object.is(atan2(-0, -0), 0)).toBe(true)
     expect(atan2(0, -1)).toBe(PI)

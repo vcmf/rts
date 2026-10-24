@@ -47,6 +47,16 @@ describe('play: what it reports', () => {
     ])
     expect(run.hashes.map(h => h.tick)).toEqual(Array.from({ length: TICKS / 20 }, (_, k) => (k + 1) * 20))
   })
+  it('a malformed command records and plays back; in place of a real one it is a mismatch, not a throw', () => {
+    const junk = { type: 'nonsense', id: A } as unknown as Command
+    const bad = record(data, cr, s1aDrill, 7, 60, (w, external) => {
+      if (w.meta[M_TICK] === 10) external(junk)
+    })
+    expect(bad.replay.log.map(s => s.cmd)).toEqual([{ type: 'refused', reason: 'unknown command' }])
+    expect(play(bad.replay, data, cr, s1aDrill, bad.hashes)).toBeNull()
+    const log = run.replay.log.map((s, k) => (k === 0 ? { ...s, cmd: junk } : s))
+    expect(play({ ...run.replay, log }, data, cr, s1aDrill, run.hashes)).toMatchObject({ tick: 40 })
+  })
   it('refuses a replay from another sim version', () => {
     expect(() => play({ ...run.replay, simVersion: SIM_VERSION + 'x' }, data, cr, s1aDrill, run.hashes)).toThrow(
       /replay from sim/,

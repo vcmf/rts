@@ -146,16 +146,20 @@ The tests this PR adds (`test/`, 103 tests in about 7 s on the dev Mac in parall
 
 Tests written for this PR, and its review, found these. Each was a GitHub issue labelled `known-issue`, not fixed in
 the test PR. All six are fixed by the follow-up PR #162 (`fix/sim-test-findings`, "fix(sim): the four bugs the new tests
-found", #155–#158), each with a test; no golden replay hash moved.
+found", #155–#158), each with a test; no golden replay hash moved, and `SIM_VERSION` is `s1e.3`.
 
 1. **A save with an unknown command pending cannot be loaded** (#155). `issue` accepts any command and `applyCommands` drops
    one of an unknown type with a reason, but a save taken while it is pending writes its type and no fields
    (`FIELDS` has none), and `deserialize` throws `unknown command type … in save`. A malformed external command and a
-   save in the same tick make an unloadable save. **Fixed:** `issue` throws on an unknown type before stamping it,
-   so none enters the queue, the log or a save (`test/saves.test.ts`).
+   save in the same tick make an unloadable save; a known type with malformed waypoints (`points: null`) crashed the
+   save writer. **Fixed:** `issue` never throws and stamps a command it cannot take as `refused` with its reason, so
+   every queued and logged command saves and loads as it was (`test/saves.test.ts`, every field of every type given
+   junk).
 2. **A shape whose pace is not a pace compiles** (#156). `layout` takes `paces.indexOf(def.pace)` = −1; the world then fails
    at its first move with `NonFiniteState` in debug, and silently runs NaN without it. The same for a `roadPace`
-   (read as "no road pace"). **Fixed:** the compiler refuses it (`test/rulesets.test.ts`).
+   (read as "no road pace"). **Fixed:** the compiler refuses it, and with it a pace that is not > 0, a change time
+   not ≥ 0, a q table for no pace, a class's ground no q table names, and a fire or disorder entry naming no class or
+   kind (`test/rulesets.test.ts`).
 3. **A terrain class that gives a kind no speed compiles** (#156). `buildTerrain` reads `t.g[kind]` as undefined: NaN in
    `classG`. Kinds come from the first class's keys only. **Fixed:** the compiler refuses a class missing a speed for
    any kind some class names.
@@ -164,15 +168,15 @@ found", #155–#158), each with a test; no golden replay hash moved.
 5. **`atan2(−0, x > 0)` returns −0** (#157), against its comment ("zero results are +0") and `docs/systems/sim-spine.md`
    ("no −0"). It is deterministic (IEEE), but a −0 stored in state serializes to other bytes than +0. `quantise`
    (`Math.round`) gives −0 too, for −0.005: whether the sim should store −0 at all is the same question. **Fixed** to
-   match the doc: `atan2` returns +0 for a zero `y` with `x ≥ 0`, and `quantise` and the command angles' rounding
+   match the doc: `atan2` makes a zero result +0 at its return, and `quantise` and the command angles' rounding
    give +0 for what rounds to zero (`test/primitives.test.ts`, `test/num.test.ts`); the golden replays' hashes are
    unchanged.
 6. **`sampleCount(NaN)` draws 12 uniforms and returns NaN** (#158), where λ ≤ 0 returns 0 without a draw. Found in
-   review. **Fixed:** a λ that is not a positive finite number gives 0 without a draw; the expected failure in
-   `test/primitives.test.ts` is now a plain test.
+   review. **Fixed:** a NaN or infinite λ gives NaN without a draw (not hidden as 0: the debug finite-state check
+   catches it where it lands); the expected failure in `test/primitives.test.ts` is now a plain test.
 
-Findings 2–4 are now checked on the shipped data (`test/rulesets.test.ts`, "the shipped rulesets hold together"),
-so a ruleset that ships with one fails a test; the compiler now refuses them too.
+Findings 2–4 are refused by the compiler, so every shipped ruleset, compiled by `test/rulesets.test.ts`, is checked
+for them.
 
 ## The test PRs, in order
 

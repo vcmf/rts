@@ -396,11 +396,15 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     }
   }
   // a change time naming a shape it has not would be ignored, and the default taken in silence (#156)
-  for (const k of Object.keys(u.changeTime)) {
+  for (const [k, v] of Object.entries(u.changeTime)) {
     const ab = k.split('>')
     if (ab.length !== 2 || !names.includes(ab[0]) || !names.includes(ab[1])) {
       throw new Error(`${at}: change time ${k} does not name two of its shapes (from>to)`)
     }
+    if (!nonNegative(v)) throw new Error(`${at}: change time ${k} is ${v}, not a finite number ≥ 0`)
+  }
+  if (!nonNegative(u.defaultChangeTime)) {
+    throw new Error(`${at}: defaultChangeTime is ${u.defaultChangeTime}, not a finite number ≥ 0`)
   }
   const shapes: ShapeLayout[] = names.map(n => layout(g, u.formations, n, kinds, paces))
   const S = names.length
@@ -512,17 +516,40 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
 
 export function compileRuleset(rs: Ruleset): Compiled {
   const kinds = Object.keys(Object.values(rs.terrain)[0].g)
-  // every terrain class gives every kind (of any class) a speed: a missing one would be NaN in classG (#156)
-  const allKinds = Object.values(rs.terrain).flatMap(t => Object.keys(t.g))
-  for (const [c, t] of Object.entries(rs.terrain)) {
-    for (const k of allKinds) {
-      const v = t.g[k]
-      if (!(typeof v === 'number' && v >= 0 && v < Infinity)) {
-        throw new Error(`ruleset ${rs.name}: terrain class ${c} gives kind ${k} no speed`)
+  const at = `ruleset ${rs.name}`
+  const paces = Object.keys(rs.pace)
+  for (const p of paces) {
+    if (!(rs.pace[p] > 0 && rs.pace[p] < Infinity)) throw new Error(`${at}: pace ${p} is ${rs.pace[p]}, not > 0`)
+  }
+  // every terrain class gives every kind any class names a speed: a missing one would be NaN in classG (#156)
+  const classes = Object.keys(rs.terrain)
+  const allKinds = unique(classes.flatMap(c => Object.keys(rs.terrain[c].g)))
+  for (const k of allKinds) {
+    const by = classes.find(c => k in rs.terrain[c].g)
+    for (const c of classes) {
+      const v = rs.terrain[c].g[k]
+      if (!(typeof v === 'number' && nonNegative(v))) {
+        throw new Error(`${at}: terrain class ${c} gives kind ${k} (named by class ${by}) no speed`)
       }
     }
   }
-  const paces = Object.keys(rs.pace)
+  // the q tables: by pace, a factor by ground; a class's ground must be one they name (else it reads as 1)
+  const grounds = unique(Object.values(rs.q).flatMap(q => Object.keys(q)))
+  for (const p of Object.keys(rs.q)) if (!paces.includes(p)) throw new Error(`${at}: q names ${p}, not a pace`)
+  for (const c of classes) {
+    if (grounds.length && !grounds.includes(rs.terrain[c].q)) {
+      throw new Error(`${at}: terrain class ${c}'s ground ${rs.terrain[c].q} is not one the q tables name`)
+    }
+  }
+  for (const c of Object.keys(rs.fire.sight)) {
+    if (!classes.includes(c)) throw new Error(`${at}: fire.sight names ${c}, not a terrain class`)
+  }
+  for (const k of Object.keys(rs.fire.depth)) {
+    if (!kinds.includes(k)) throw new Error(`${at}: fire.depth names ${k}, not a kind of the terrain table`)
+  }
+  for (const k of Object.keys(rs.disorder.scale)) {
+    if (!kinds.includes(k)) throw new Error(`${at}: disorder.scale names ${k}, not a kind of the terrain table`)
+  }
   const paceSpeed = new Float64Array(paces.map(p => rs.pace[p]))
   const typeNames = Object.keys(rs.types)
   if (!typeNames.length) throw new Error(`ruleset ${rs.name}: no unit types`)
@@ -602,6 +629,9 @@ export function compileRuleset(rs: Ruleset): Compiled {
   }
 }
 const expNeg = (x: number): number => exp(-x)
+const nonNegative = (v: number): boolean => v >= 0 && v < Infinity
+// the names in first-seen order, each once (the sim keeps no Set: index-ordered arrays only)
+const unique = (a: string[]): string[] => a.filter((v, i) => a.indexOf(v) === i)
 // a trail shape's trail, and the one Face about rebuilds, must fit the ring (0.25 m points): the ring is
 // the smallest multiple of 64 points that holds the deepest, at least TRAIL_MIN; one size for every slot, so the
 // hash and saves carry the deepest type's ring for all (issue #38)

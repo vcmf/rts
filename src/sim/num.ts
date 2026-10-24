@@ -80,12 +80,12 @@ function atanPos(t: number): number {
 // the angle of (x, y) from the +x axis, like Math.atan2(y, x), in (−π, π]: unlike Math, a negative zero y
 // on the negative x axis gives +π, and zero results are +0 (the sim has no use for signed zeros)
 export function atan2(y: number, x: number): number {
-  if (y === 0 && x >= 0) return 0 // a zero y on the positive x axis or at the origin: +0, whatever its sign (#157)
+  if (x === 0 && y === 0) return 0
   const ax = x < 0 ? -x : x
   const ay = y < 0 ? -y : y
   let a = ay <= ax ? atanPos(ay / ax) : HALF_PI - atanPos(ax / ay)
   if (x < 0) a = PI - a
-  return y < 0 ? -a : a
+  return (y < 0 ? -a : a) + 0 // + 0: a zero result is +0, whatever the sign of y or an underflowed ratio (#157)
 }
 // an angle in (−π, π]
 export function wrapAngle(a: number): number {
