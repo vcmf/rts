@@ -109,3 +109,31 @@ column is the page after review round 1.
 
   Measured again: 30× map 4.86 / mid 5.83 ms mean; 90× map 7.56 / mid 8.28 ms; paused 0.4–0.55 ms. The first run after
   an edit reads high, at about 4.9 ms paused, while the caches warm up; repeats give 0.53 ms.
+
+## On the owner's 4K screen
+
+The owner measured about 45 fps at mid zoom and 90 fps close, on a 4K screen. The measurements above were taken at 1920×1080
+with a device pixel ratio of 1. The checks below emulate the owner's screen: 1920×1080 CSS pixels at a ratio of 2, 30×.
+
+- **The ink at the full pixel ratio:** at 4 times the pixels, Chrome's rasterising of the ink took 14 to 23 ms a frame
+  at close and mid zoom, while the JavaScript stayed at 2.9 ms.
+
+  Fixed: the ink renders at a ratio of 1. A **sharp ink** toggle in the controls (remembered, or `?sharp=1`) brings
+  back the full ratio. WebGL stays at the screen's ratio (`GL_DPR`), since it costs about 1 ms at 4K; so the terrain
+  stays crisp and only the marks are a touch softer.
+
+  | View | Ink at ratio 2 | Ink at ratio 1 |
+  |---|---|---|
+  | close | 14–23 ms | 4.5–4.9 ms |
+  | mid | 14–23 ms | 5.6–5.9 ms |
+  | map | 13–14 ms | 4.6–4.9 ms |
+
+- **The figures:** each unit's soldiers are now built only when the unit changes (`unitFigures`, cached on the unit),
+  copied each frame, and skipped off screen. Before, every soldier of every unit was rebuilt every frame of game time:
+  `updateFigures` took 5.5 ms of JavaScript at R700 to R200.
+
+  | Zoom | Before | After |
+  |---|---|---|
+  | R700 | 10.5–23 ms | 6.7 ms (`updateFigures` 2.4) |
+  | R400 | — | 1.4 ms |
+  | R200 | — | 1.3 ms |
