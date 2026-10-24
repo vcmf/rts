@@ -7,7 +7,7 @@ last_reviewed: 2026-10-08
 
 One line per document. **Types:** *vision* and *conventions* frame everything; *system* docs describe
 what is built **now** and are kept true; *decisions*: accepted records are binding until superseded, proposed ones are open; *proposals* are
-designs written before building (frozen once built, their lasting content moves into system docs);
+designs, kept true as they change (nothing is frozen; what is built is described in the system docs);
 *plans* are per-PR or per-workstream; *research* is background, not authoritative.
 
 ## Frame
@@ -56,7 +56,6 @@ designs written before building (frozen once built, their lasting content moves 
 ## Plans
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
-  [`plans/active/track-m-next.md`](plans/active/track-m-next.md) (Track M after M3: the phases M4 to M9, one lit map view, real relief, the editor, Austerlitz),
   [`plans/active/battle-threads.md`](plans/active/battle-threads.md) (the battle's threads: a worker, soldiers stepped at 12 fps),
   [`plans/active/flow-default.md`](plans/active/flow-default.md) (the combed meadow as the default grass),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
