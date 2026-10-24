@@ -36,6 +36,10 @@ In `prototypes/staff-map.html`:
 
 Out of scope, for a next step if the spikes matter: drawing the blocks and the smoke in WebGL (instanced quads).
 
+The prototype's ground end (its painted stand-in world and figures) is a **placeholder**. The game's world is the demo
+map on `main` (the look page, `src/look/`, with real terrain and armies), and the map view is to hand over to it. The
+figure work here only keeps the prototype usable; it is not the world's renderer.
+
 ## Acceptance
 
 Mean frame and p95 at map, mid and close zoom, idle and in a fight, against the page before, naming the test machine.
