@@ -58,7 +58,7 @@ included, whatever the older code around it does.
 ## Docs
 
 - **Types** (see `docs/INDEX.md`): vision, conventions, system (current, kept true), decision
-  (accepted: binding; proposed: open; append-only), proposal (before building, frozen after), plan (active/done), research
+  (accepted: binding; proposed: open; append-only), proposal (the design, kept true as it changes: nothing is frozen), plan (active/done), research
   (background).
 - **Front matter** on every doc under `docs/`: `status` and `last_reviewed` (YYYY-MM-DD); decision
   records use `date` instead of `last_reviewed`. System docs also list `code:` paths and `decisions:`.

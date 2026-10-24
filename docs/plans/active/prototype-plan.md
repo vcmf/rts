@@ -100,7 +100,7 @@ Source: `docs/research/stylized-water.md` (§1.4 order of work, §2 implementati
 | **W3** | `feat(water)`: water-data bake (depth, SDF, flow, foam) bound to terrain and water | §2.6 | Debug view shows correct depth, SDF and flow arrows; no per-frame cost added | 1 d |
 | **W4** | `feat(water)`: ribbon mesh per channel + pond polygons, opaque bed-painting shader, all layers | §2.7–2.8 | No shoreline seam or flicker; pools read dark and calm, riffles light and foamy; 60 fps holds | 1.5–2 d |
 | **W5** | `feat(water)`: banks painting, rocks, weirs, fords, reeds; seasons (ice, autumn leaves) | §2.9, §4.4, §4.10 | Banks read wet/bare/gravel; foam around rocks; winter freezes ponds cleanly | 1–1.5 d |
-| **W6** | `feat(terrain)`: OSM + Terrarium importer for a historical battlefield (Austerlitz), writing the map format (`docs/proposals/map-format.md`) | §3.6 | Real Goldbach and (1805) Satschan pond on real elevation | 2–3 d |
+| **W6** | Superseded by Track M's M5 and M8 (`docs/proposals/map-engine.md` §10). `feat(terrain)`: OSM + Terrarium importer for a historical battlefield (Austerlitz), writing the map format (`docs/proposals/map-format.md`) | §3.6 | Real Goldbach and (1805) Satschan pond on real elevation | 2–3 d |
 
 W1–W4 are the core: the scarf goes away in W1, the land fits in W2, and W3–W4 deliver the painted
 water. W5 and W6 can be reordered after a look review.

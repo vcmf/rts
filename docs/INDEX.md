@@ -7,7 +7,7 @@ last_reviewed: 2026-10-08
 
 One line per document. **Types:** *vision* and *conventions* frame everything; *system* docs describe
 what is built **now** and are kept true; *decisions*: accepted records are binding until superseded, proposed ones are open; *proposals* are
-designs written before building (frozen once built, their lasting content moves into system docs);
+designs, kept true as they change (nothing is frozen; what is built is described in the system docs);
 *plans* are per-PR or per-workstream; *research* is background, not authoritative.
 
 ## Frame

@@ -1,14 +1,18 @@
 ---
 status: draft
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-24
 ---
 
 # Proposal: the map engine, a language for battlefields and its generator
 
+> Built through M3 (`docs/systems/map.md`). **Revised 2026-10-24** (the owner; decisions 0057, 0058 and 0061, on
+> `main`'s side in PRs #135 and #136): one lit map view for the editor and the game, zoomed into the painted world
+> with no toggle (§7); the editor and real relief in scope; square maps of 2 to 6 km (§13); the phases M4–M9 (§10).
+
 A map is a short JSON file written in a precise, closed language. A deterministic **generator** expands it into
 exact features, and **compilers** turn those into the grids that the simulation, the 3D world and the draft view
-read. The same compiled map can be viewed as a **draft** (2D, instant) or **rendered** (the painted 3D world),
-with a toggle between them.
+read. The compiled map is seen through **one map view** (the lit map, 2D with a 3D feel, the editor's and the game's)
+that zooms, without a switch, into the **painted 3D world**.
 
 This builds on `docs/proposals/map-format.md` and keeps most of it: features in metres, stable ids, per-feature
 seeds, pinned detail, compilers as pure functions, and the ruleset owning what ground means. It changes four
@@ -34,12 +38,15 @@ Recoil, terrain research), `docs/research/map-grids.md` (grid, square or hex, ce
   another (seeds per feature id, never per position in the file).
 - **Easy to test:** a 20-line map is a test case. Each stage's output (the expanded map, the grids) can be diffed
   and is golden-tested.
-- **Draft and rendered views of the same map,** toggled on one page, reloading on save.
+- **One view of the map:** the lit map view, which the editor works on and the game plays on, reloading on save and
+  zooming into the painted world (§7).
 - **Era-generic** (decision 0015): the map records what the ground is. What it costs and what it hides is ruleset
   data.
 
-**Non-goals for now:** a visual editor (later, writing the same JSON); the importer from real data (later, also
-writing the same JSON); scenarios (orders of battle, objectives); streaming map data at runtime.
+- **An editor and real relief:** maps are drawn in a visual editor on the map view, writing the same JSON (M7), on real
+  heights brought in as a kind of the language (M5).
+
+**Non-goals for now:** scenarios (orders of battle, objectives: the armies language, decision 0057).
 
 ## 2. The model in one picture
 
@@ -265,7 +272,8 @@ validate ──► relief ──► expand (generators) ──► apply (layers,
   - The **sim compiler** writes `.simdata` in today's format 2 (`src/sim/data.ts`), which stores each grid's
     cell: heights at 2 m, cost at 8 m, and each 2 m cell's terrain class (the ruleset's reading of its layers)
     and water depth, over the play area (M2; the fine nodes at the cells' centres). The sim reads classes, not layers, so format 2 holds everything it
-    uses; a compact format (16-bit heights, §5) waits for a measured need.
+    uses. Maps over about 2 km need the compact format (16-bit heights and indexes, §5): format 2 is about 22 MB for
+    2 × 2 km and about 200 MB for 6 × 6 km (decision 0061).
   - The **look compiler** writes `.lookdata` (`src/look/world/data.ts`: heightfield, far ring, river samples,
     cover grid).
   - The **draft compiler** writes nothing to disk: the draft view draws the grids directly.
@@ -308,12 +316,14 @@ The grids at 2 m:
 
 | Layer | Cell | Stored as | 1.5 km square |
 |---|---|---|---|
-| heights (sim and renderer: decision 0012) | `c` | float64 in today's format 2 (M2); u16 in 1 cm steps above the file's lowest point when a compact format is needed (655 m of range) | 1.1 MB as u16 |
+| heights (sim and renderer: decision 0012) | `c` | float64 in today's format 2 (M2); u16 in 1 cm steps above the file's lowest point in the compact format, needed over about 2 km (655 m of range) | 1.1 MB as u16 |
 | ground and veg, water depth | `c` | u16 index into the map's attribute table (one row per feature, resolved for the season and state), u8 density for ramps, u16 depth in mm | 1.1 + 0.56 + 1.1 MB |
 | slope | derived at load; read over 2 or more cells for the impassable test | n/a | n/a |
 | movement cost, per kind of unit | `4c` (8 m) | u8 speed factor | 35 KB per kind |
 | clearance, per kind of unit | `c` for the footprint gate, `4c` for planning | u8, 0.5 m steps | 0.56 MB per kind |
 | barriers | cells on the `c` grid, at least 2 thick, 8 directions (§3.6) | u16 index into the attribute table (height, porosity, crossing per feature) | 1.1 MB |
+
+A 3 km map, the default, is 4× these sizes; a 6 km map, 16× (decision 0061).
 
 Runtime arrays stay quantized: today's `buildTerrain` expands the fine grid into float64 arrays (about 108 MB at
 1 m over 1.5 km). Pathfinding is A* on the cost grid followed by path smoothing; there is no navmesh or hierarchy
@@ -336,17 +346,20 @@ these attributes. The class names stay as labels for tuning and tests.
 
 ## 7. Draft and rendered views
 
-One new page (app/map.html, to be built), one compiled map, a toggle between two views:
-- **Draft:** a 2D top-down view: hill shading and contours, layers in flat category colours, feature outlines with
-  their ids, and the expanded generators' output. Overlays show derived data: passability per kind of unit, water
-  depth, slope, and sight from a clicked point. Hovering a point shows its five layers and the feature that wrote
-  each. It redraws in milliseconds.
-- **Rendered:** the painted 3D world from the look compiler's output, with the same camera rules as the game
-  (decision 0002: no sky).
+One compiled map, one view of it, one world (revised 2026-10-24, decision 0058, proposed):
+- **The map view** is the lit map: shaded relief from the heights, paper, woods, water, raised houses, the armies as
+  slabs, settled by eye in the staff map prototype (`prototypes/staff-map.html?style=lit`, PR #136). The editor and the
+  game's staff map are this one view; the editor adds its tools on top (M6, M7).
+- **The debug overlays** are the first draft view's tools, kept: layers in flat category colours, feature outlines with
+  their ids, passability per kind of unit, water depth, slope, sight from a clicked point, hovering a cell to see its
+  five layers and the feature that wrote each, and the validator's errors in place. They are overlays on the map
+  view, not a view of their own.
+- **The painted world** is the 3D world from the look compiler's output, with the game's camera rules (decision 0002:
+  no sky). The map view and the painted world are one world on one camera, joined by the staff map's staged zoom
+  (`docs/proposals/staff-map/design.md` §9): no toggle, no crossfade.
 
-The page watches the map file. On save it recompiles in a worker and redraws, and the draft view shows the
-validator's errors in place. Later, the editor adds direct manipulation (dragging points, painting areas) on the
-draft view, writing the same JSON.
+The page (`app/map.html`) watches the map file. On save it recompiles in a worker and redraws. The editor (M7) adds
+direct manipulation, writing the same JSON.
 
 ## 8. Testing
 
@@ -399,12 +412,27 @@ Track M works on an epic branch (decision 0020). The phases follow the pipeline,
 | **M1: the language and the draft view** | The TypeScript schema and validator; the catalogue of essential kinds in **every** category; features with exact shapes (no `gen` yet); compiling into the draft view page, which redraws on save; the map CLI | §9's example, written with exact shapes, validates and draws; a save redraws in under a second; one negative test per rule |
 | **M2: the sim compiler** | Water in apply: stream levels from the banks, falling downstream; channels carved, pools by a depth ramp, fords, ponds; a depth per cell. The ruleset's reading of a cell's attributes as its terrain classes; map-engine maps compiled to format 2 on 2 m grids; the S1e layout as `maps/valley.map.json`, with the S1e battle on it beside the original | The battle plays on the compiled valley; its golden is committed; every existing golden unchanged |
 | **M3: the generators** | the base ground's noise, `meander`, `clump`, `street-village`, `scatter`, on the exact maths; seasons and ice; golden expansions | §9's example as written (with `gen`) expands and plays; five seeds give five distinct, valid maps |
-| **M4: the rendered view** | The look compiler and the toggle between draft and 3D (with Track E: the look page loads any map's look data at 2 m) | The same map drafted and painted |
+| **M4: the look compiler** | A map's look data (heights, ground and cover classes, water, buildings) for the painted world, which the look page loads instead of its hand-written world | The same map painted; needs the 3D world in tiles (Track E) for maps larger than one tile |
+| **M5: real relief** | A `relief.dem` kind, a `dem` source with its credit, the `.rdem` heightfield file, an importer from ČÚZK's 5 m model. Replaces W6's Terrarium source | A map with real relief validates, draws without facets of the source grid, and compiles for the sim |
+| **M6: the lit map view** | The prototype's lit view ported to `src/render/`, drawn from the compiled layers, with §7's debug overlays; 150 fps on test machine A | The same look as the prototype for the same heights |
+| **M7: the editor** | On the map view, in `app/map.html`: pick a kind, draw and edit shapes, attributes, sources, live validation and generators, a tracing overlay, undo, a stable save | A map drawn from scratch round-trips with no diff but the edit, and validates |
+| **M8: Austerlitz** | A 6 km designed map after Austerlitz 1805, drawn in the editor from the real relief and a period map (decision 0061) | The map validates and reads as the field, checked by the owner |
+| **M9: the zoom and the sim** | The staged zoom from the map view to the painted world, on one page and one camera; the sim and an order of battle on the map | Zooming from the whole map to 15 m shows one place; the battle runs on it |
 
 M1 and M2 are tested with hand-written exact maps, before any randomness exists.
 
-Later: the editor (direct manipulation on the draft view), the importer (W6, writing the same JSON), and the staff
-map reading map features (SM2).
+**Order (revised 2026-10-24).** M4–M9 come from the one-map plan (one-map-austerlitz, in PR #136); each phase gets
+its own plan when it starts.
+- M4 and M5 can run in parallel, and so can M5 and M6 (M6 starts on the example maps).
+- M6 needs decision 0058 accepted (it is proposed, in PR #135) and M5 for real heights.
+- M7 waits for M6, M8 for M5 and M7, M9 for M4, M6 and M8.
+- Outside Track M:
+  - the 3D world in tiles (Track E) before M4 serves a map larger than one tile, and before M9;
+  - the sim's compact 2 m grids (§4, §5) before M9's sim on maps over about 2 km;
+  - vision as a core rule (the sim track) before M9's fog of war.
+
+The importer W6 (`docs/plans/active/prototype-plan.md`) is replaced by M5's source and M8's tracing; the staff map's
+SM2 (`docs/plans/active/staff-map.md`) reads map features through M6.
 
 ## 11. Alternatives considered
 
@@ -440,8 +468,8 @@ map reading map features (SM2).
    back, and the editor will rewrite the file: comments would not survive those round trips, and `note` does.
    Strict JSON also needs no parser dependency and gets editor checking from the generated JSON Schema. (The
    annotated snippets in this document use comments for explanation only.)
-4. **Map size:** a 1.5 km play area, a detailed area of about 1.8 km around it (the camera's margin), and a
-   backdrop out to about 2.4 km (the world spec sets the exact size from the camera's footprint).
+4. **Map size** (revised 2026-10-24, decision 0061): square maps of 2 to 6 km a side, 3 km by default, designed for
+   play at true local scale. It replaces the first choice, a 1.5 km play area inside a backdrop of about 2.4 km.
 5. **Track M** works in its own worktree on an epic branch; PRs go into the epic, and the epic merges into main
    when the track is done (decision 0020).
 6. **Barriers on the grid:** hedges, walls and fences are runs of cells, at least 2 thick, in 8
