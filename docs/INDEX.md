@@ -72,6 +72,7 @@ designs written before building (frozen once built, their lasting content moves 
   [`plans/active/armies-demo.md`](plans/active/armies-demo.md) (the first armies on the demo map, scripted),
   [`plans/active/armies-32k.md`](plans/active/armies-32k.md) (32,000 soldiers at 120 fps: the 40-a-side baseline and four measured steps, decision 0050, experimental),
   [`plans/active/close-zoom.md`](plans/active/close-zoom.md) (a closer zoom to show the soldiers, the full figure nearest, #133),
+  [`plans/active/close-figures.md`](plans/active/close-figures.md) (the close-zoom figures: drawn inside out, a face on the back of the head, #164; shadows off the feet, #165),
   [`plans/active/simple-soldier-shadows.md`](plans/active/simple-soldier-shadows.md) (the shadow map only up close, a simple shadow per soldier beyond, #131),
   [`plans/active/cavalry-pistol.md`](plans/active/cavalry-pistol.md) (the cavalryman's pistol),
   [`plans/active/code-style.md`](plans/active/code-style.md) (code style: Prettier and readability lint rules, rolled out by area; decision 0052),
