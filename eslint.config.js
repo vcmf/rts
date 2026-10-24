@@ -48,6 +48,9 @@ export const formatted = [
   'vitest.config.ts',
 ]
 
+// the code files Prettier formats; test/format-scope.test.ts lists the same extensions
+const CODE = '{ts,mts,cts,tsx,js,mjs,cjs,jsx}'
+
 // max-len skips a line that holds a string, and with it a comment at its end: this checks every comment on its own
 const commentWidth = {
   meta: { type: 'layout', schema: [] },
@@ -68,14 +71,15 @@ const commentWidth = {
 export default tseslint.config(
   { ignores: ['node_modules/', 'dist/', 'scratch/', 'data/', 'prototypes/'] },
   ...tseslint.configs.recommended,
-  // the tools: Node scripts, where no-undef catches a mistyped name in untyped JavaScript; and the checks evaluated
-  // inside a page (tools/render-check.js, …), which read the page's own globals: a script, without no-undef
+  // the tools: ES modules run by Node, where no-undef catches a mistyped name in untyped JavaScript (Node's builtins
+  // only: require, module and __dirname do not exist in a module); and the checks evaluated inside a page
+  // (tools/render-check.js, …), which read the page's own globals: scripts, without no-undef
   {
-    files: ['tools/*.mjs', 'eslint.config.js'],
-    languageOptions: { globals: globals.node },
+    files: ['tools/**/*.mjs', 'eslint.config.js'],
+    languageOptions: { globals: globals.nodeBuiltin },
     rules: { 'no-undef': 'error' },
   },
-  { files: ['tools/*.js'], languageOptions: { sourceType: 'script', globals: globals.browser } },
+  { files: ['tools/**/*.js'], languageOptions: { sourceType: 'script' } },
   // a type-only import written `import { type X }` still loads its module and can create an import cycle
   // (it once left formation.ts reading TRAIL before world.ts had set it): type-only imports are `import type`
   {
@@ -170,7 +174,7 @@ export default tseslint.config(
   // decision 0052: lines within 120 columns (Prettier lays out the code, not the comments); one statement per line,
   // one name per declaration, braces on a body that does not fit on the line
   {
-    files: formatted.flatMap(f => (f.endsWith('/') ? [`${f}**/*.ts`, `${f}**/*.mjs`, `${f}**/*.js`] : [f])),
+    files: formatted.map(f => (f.endsWith('/') ? `${f}**/*.${CODE}` : f)),
     ignores: ['test/fixtures/**'],
     plugins: { '@stylistic': stylistic, local: { rules: { 'comment-width': commentWidth } } },
     rules: {
