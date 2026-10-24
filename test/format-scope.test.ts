@@ -11,7 +11,8 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 // style rules cover (eslint.config.js's `formatted`) must be the same set
 describe('code style: one scope for the formatter and the style rules', () => {
   it('every code file is either formatted and style-checked, or neither', async () => {
-    const files = execFileSync('git', ['ls-files', '*.ts', '*.mjs', '*.js'], { cwd: root, encoding: 'utf8' })
+    const exts = ['ts', 'mts', 'cts', 'tsx', 'js', 'mjs', 'cjs', 'jsx']
+    const files = execFileSync('git', ['ls-files', ...exts.map(e => `*.${e}`)], { cwd: root, encoding: 'utf8' })
       .split('\n')
       .filter(Boolean)
     const eslint = new ESLint({ cwd: root })
@@ -28,5 +29,17 @@ describe('code style: one scope for the formatter and the style rules', () => {
     }
     expect(odd).toEqual([])
     expect(files.length).toBeGreaterThan(100)
+  })
+  // decision 0052: the Node tools are modules checked for undefined names; the checks evaluated inside a page are
+  // scripts that read the page's globals, so no-undef stays off there
+  it('lints the Node tools with no-undef and the in-page checks as scripts', async () => {
+    const eslint = new ESLint({ cwd: root })
+    const node = await eslint.calculateConfigForFile(path.join(root, 'tools', 'shot.mjs'))
+    const page = await eslint.calculateConfigForFile(path.join(root, 'tools', 'render-check.js'))
+    expect(node.rules['no-undef']?.[0]).toBe(2)
+    expect(node.languageOptions.globals.process).toBeDefined()
+    expect(node.languageOptions.globals.require).toBeUndefined()
+    expect(page.languageOptions.sourceType).toBe('script')
+    expect(page.rules['no-undef']).toBeUndefined()
   })
 })
