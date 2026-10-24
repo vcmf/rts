@@ -3,7 +3,8 @@
 // <year>"), from its image service in one request at its native 5 m, averaged onto the prototype's 10 m grid
 // (±2700 × ±1900 m; a mean, so ditches and banks narrower than a cell do not alias into bumps), the
 // real ground squeezed by `scale` so a battlefield fits the prototype's frame. Writes a generated .js defining
-// window.DEM = { nx, nz, cell, tx, tz, h, scale, source, credit } (h in centimetres, the south row first), git-ignored
+// window.DEM = { nx, nz, cell, tx, tz, h, scale, source, credit, fine: { step, nx, nz, h } } (h in centimetres, the
+// south row first; fine: a finer grid for the relief shading), git-ignored
 // under scratch/;
 // never commit the data.
 // Usage: node tools/dem-fetch.mjs [lat lon scale out]   (default: Austerlitz, 49.118 16.737 2.5 scratch/dem-austerlitz.js)
@@ -69,7 +70,27 @@ const h = new Int32Array(GX * GZ)
 for (let j = 0; j < GZ; j++) for (let i = 0; i < GX; i++) {   // the K x K mean; rows: the page's south first, the TIFF's north first
   let s0 = 0; for (let y = 0; y < K; y++) for (let x = 0; x < K; x++) s0 += f[((GZ - 1 - j) * K + y) * W + i * K + x]
   h[j * GX + i] = Math.round(s0 / (K * K) * 100) }
+// a finer grid for the relief shading (docs/plans/active/relief-shading.md): every FINE metres of the page, from the
+// 5 m source (one source pixel is CELL / K page metres; its centre sits half a pixel in)
+const FINE = 4
+const FX = Math.round(2 * TX / FINE) + 1, FZ = Math.round(2 * TZ / FINE) + 1
+const px = CELL / K
+const sample = (x, z) => {
+  const fx = Math.min(W - 1.001, Math.max(0, (x + TX + CELL / 2) / px - 0.5))
+  const fy = Math.min(H - 1.001, Math.max(0, (TZ + CELL / 2 - z) / px - 0.5))   // the TIFF's rows run north first
+  const x0 = Math.floor(fx), y0 = Math.floor(fy), ax = fx - x0, ay = fy - y0
+  const at = (xx, yy) => f[yy * W + xx]
+  return (at(x0, y0) * (1 - ax) + at(x0 + 1, y0) * ax) * (1 - ay) + (at(x0, y0 + 1) * (1 - ax) + at(x0 + 1, y0 + 1) * ax) * ay
+}
+// the mean of the area a fine node stands for (FINE page metres square), from four bilinear samples a quarter cell
+// apart: a ditch or bank narrower than a node is averaged in, not kept or dropped by where the nodes fall
+const q = FINE / 4
+const fine = new Int32Array(FX * FZ)
+for (let j = 0; j < FZ; j++) for (let i = 0; i < FX; i++) {   // the page's south first
+  const x = -TX + i * FINE, z = -TZ + j * FINE
+  fine[j * FX + i] = Math.round((sample(x - q, z - q) + sample(x + q, z - q) + sample(x - q, z + q) + sample(x + q, z + q)) / 4 * 100)
+}
 fs.mkdirSync(path.dirname(out), { recursive: true })
 const year = new Date().getFullYear()
-fs.writeFileSync(out, `// ČÚZK DMR 4G (© ČÚZK, ${year}, CC BY 4.0), resampled by tools/dem-fetch.mjs; generated, never committed\nwindow.DEM={nx:${GX},nz:${GZ},cell:${CELL},tx:${TX},tz:${TZ},scale:${scale},source:'ČÚZK DMR 4G, ${lat0} N ${lon0} E, squeezed ${scale}×',credit:'© ČÚZK, ${year} (DMR 4G, CC BY 4.0)',h:[${h.join(',')}]};\n`)
-console.log(`${out}: ${GX}×${GZ} from ${W}×${H} at 5 m, heights ${lo.toFixed(1)}–${hi.toFixed(1)} m, ${bad} source pixels without data (filled)`)
+fs.writeFileSync(out, `// ČÚZK DMR 4G (© ČÚZK, ${year}, CC BY 4.0), resampled by tools/dem-fetch.mjs; generated, never committed\nwindow.DEM={nx:${GX},nz:${GZ},cell:${CELL},tx:${TX},tz:${TZ},scale:${scale},source:'ČÚZK DMR 4G, ${lat0} N ${lon0} E, squeezed ${scale}×',credit:'© ČÚZK, ${year} (DMR 4G, CC BY 4.0)',h:[${h.join(',')}],fine:{step:${FINE},nx:${FX},nz:${FZ},h:[${fine.join(',')}]}};\n`)
+console.log(`${out}: ${GX}×${GZ} and a ${FINE} m grid ${FX}×${FZ}, from ${W}×${H} at 5 m, heights ${lo.toFixed(1)}–${hi.toFixed(1)} m, ${bad} source pixels without data (filled)`)
