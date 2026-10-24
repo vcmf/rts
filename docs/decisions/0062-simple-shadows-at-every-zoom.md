@@ -25,7 +25,12 @@ shadow at every zoom, its look set per zoom.
   the main pass, one atlas read a facing, alpha to coverage, the stencil darkening each sample once, the ground's
   shade, the lift). No figure shadow map: no target made, no casters drawn, no map reads compiled into the ground or
   the meadow.
-- **Its look a zoom**: softness (a share of a softer bake of the shape: the atlas's second channel, blurred wider and
+- **Its look a zoom, along each shadow** (the owner, after the first images: "darker and more solid near the
+  soldier's feet, getting lighter and softer further away, like a real shadow"): from the soles over a contact core the
+  shape itself at a contact darkness (a little over the full shadow), then toward the tip softer and lighter, to the
+  look's softness and darkness at the tip; fragment arithmetic on the distance along the shadow, no more reads, the
+  stencil still darkening each sample once (where shadows overlap, the first drawn at a sample sets its value).
+  The settings: softness (a share of a softer bake of the shape: the atlas's second channel, blurred wider and
   brought back to the shape's darkest value, so softer is not lighter), darkness (the share of the ground's full
   shadow) and length (along the sun from the soles, the feet kept where they are: the grid's second row lies at the
   soles). Up close softer, lighter and shorter; far (beyond the band) 0049's look as it was. The close look turns into

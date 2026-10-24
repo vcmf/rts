@@ -69,8 +69,8 @@ removing the map's code (later, when the owner says).
 
 ## Measured
 
-**The defaults up close** (`SHADOW_LOOK.close`): softness 0.75 (the soft bake's sigma `SOFT_BLUR`, 0.12 m), darkness
-0.7, length 0.7; far 0, 1, 1 (decision 0049's look). Chosen by eye from sweeps at 15 and 30 m on the owner's view (a
+**The defaults up close** (`SHADOW_LOOK.close`; before the foot gradient below, which made darkness the tip's, 0.55):
+softness 0.75 (the soft bake's sigma `SOFT_BLUR`, 0.12 m), darkness 0.7, length 0.7; far 0, 1, 1 (decision 0049's look). Chosen by eye from sweeps at 15 and 30 m on the owner's view (a
 white-coated line on the road, the shadows toward the camera; softness 0.5 and 1, darkness 0.6, 0.7 and 0.8, length
 0.65 and 0.8): at darkness 0.6 the shadows nearly vanish at 30 m against the road and the white coats (the formation
 no longer reads grounded), at 0.8 they read as heavy as before; 0.7 is "a bit less dark". Length 0.65 tucks most of a
@@ -121,6 +121,18 @@ fight's middle and the stress point, still and panning, with `?benchclosest=1`, 
 Review images: the main checkout's `output/armies-review/15-soft-shadows/` (not committed): 1 to 4 main against this
 branch at 15, 30, 55, 125 and 260 m (a line halted on the road, a column marching by the road, a column marching on
 grass, a reserve halted on grass), 5 the owner's view up close, 6 the softness variants at 15 m.
+
+**The foot gradient** (the owner on sheet 6: darker and solid at the feet, lighter and softer away, a real shadow's
+contact): along each shadow from the soles (`vAlong`, m, the vertex shader's distance along it after the length), the
+fragment takes `g`, a smoothstep from the contact's core (0.4 m) to the tip (a man's 1.8 m over the sun's tangent,
+times the length: 2.5 m up close); the shape is the sharp bake at the soles and `soft × g` of the soft one toward the
+tip, and the darkness runs from the soles' (`foot`, 1.05 of the full shadow) to the tip's (`dark`, 0.55). Up close only:
+far `foot` = `dark` = 1 and `soft` = 0, so the far frames are as before (125 m against the previous commit: every pixel
+equal but the fps readout). No more texture reads or vertices: one varying and a few ALU ops. `?ushfoot=<dark>,<core
+m>[,<far dark>,<far core m>]`; `?ushdark` is now the tip's. The overlaps still darken each sample once; which shadow
+sets a sample's value is the draw order's (a man's tip over the feet of the man behind him: one or the other, steady
+from frame to frame). Sheet 7 in the review folder: main, the previous default and the gradient at softness 0.4 and 0.75,
+the owner's road view at 15, 30 and 55 m.
 
 ## Open questions
 

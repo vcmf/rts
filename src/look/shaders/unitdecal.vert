@@ -14,7 +14,8 @@ precision highp float;attribute vec3 position;
 // screen, and a lifted shadow there would darken them. vLM: where it lies in the tile's top-down maps (the ground's
 // shade, read by the fragment). Its rows (position.z): the first at the cell's start, the second at his soles, the
 // others spread to its end, so each triangle lies on one side of his soles; past them it is drawn uShLen as long (the
-// zoom's look, decision 0062: the shape's own texels stretched or shortened, his feet where they were)
+// zoom's look, decision 0062: the shape's own texels stretched or shortened, his feet where they were); vAlong: m
+// along it from his soles, for the fragment's gradient
 uniform mat4 viewProjection;uniform vec3 uCamPos;
 attribute vec3 aVAT;attribute vec3 aNext;
 uniform vec4 uRoleStart,uShapeBox,uShapeCell;uniform vec2 uShDir,uShapeTexel;uniform float uStepFrac,uDecalLift,uShLen;
@@ -26,7 +27,7 @@ uniform sampler2D uMeadow;
 // height throws along the sun, past his feet) by y
 uniform vec2 uFarK,uFarScale;
 #endif
-varying vec2 vUV0,vUV1,vLM;varying float vT;
+varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
 void main(){
   #include<instancesVertex>
   vec3 p=finalWorld[3].xyz+aNext*uStepFrac;
@@ -38,6 +39,7 @@ void main(){
   l*=vec2(mix(1.0,uFarScale.x,fg),mix(1.0,l.y>0.0?uFarScale.y:uFarScale.x,fg));
   #endif
   l.y*=l.y>0.0?uShLen:1.0;
+  vAlong=l.y;
   vec2 C=vec2(-uShDir.y,uShDir.x),xz=p.xz+C*l.x+uShDir*l.y;
   float gy=textureLod(uMeadow,(xz+TILE_HALF)/TILE_W,0.0).r;
   vec3 g=vec3(xz.x,gy,xz.y),toCam=normalize(uCamPos-g);

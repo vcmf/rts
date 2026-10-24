@@ -149,20 +149,27 @@ const SHAPE_FACINGS = 16 // the simple shadow's facings (shadowShape)
  *  shadows, from the map alone to the simple shadows alone (?ushadowswitch=<r0>,<r1>); near the LOD switch (48 px at
  *  1080 lines: 63 m) */
 export const SHADOW_SWITCH: readonly [number, number] = [60, 85]
-/** the simple shadows' look a zoom (decision 0062): soft, the share of the soft bake (0: the shape's own blur, 1: the
- *  soft one, SOFT_BLUR); dark, the share of the ground's full shadow they darken to; len, their length along the sun
- *  from the soles (1: the shape's) */
+/** the simple shadows' look a zoom (decision 0062), along each shadow from a contact at the soles to its tip (a real
+ *  shadow's contact hardening): soft, the share of the soft bake at the tip (0: the shape's own blur, 1: the soft one,
+ *  SOFT_BLUR; at the soles the shape's own); dark, the share of the ground's full shadow it darkens to at the tip;
+ *  foot, the share at the soles and over the contact's core (core, m from the soles), from where it turns to soft and
+ *  dark toward the tip; len, its length along the sun from the soles (1: the shape's) */
 export interface ShadowLook {
   soft: number
   dark: number
+  foot: number
+  core: number
   len: number
 }
-/** up close (the owner, 2026-10-24: smaller, lighter, fuzzier; ?ushsoft, ?ushdark, ?ushlen) and far (decision 0049's,
- *  as before) */
+/** up close (the owner, 2026-10-24: smaller, lighter, fuzzier, then darker and solid at the feet, lighter and softer
+ *  away from them; ?ushsoft, ?ushdark, ?ushfoot, ?ushlen) and far (decision 0049's, as before: one value end to end) */
 export const SHADOW_LOOK: { readonly close: ShadowLook; readonly far: ShadowLook } = {
-  close: { soft: 0.75, dark: 0.7, len: 0.7 },
-  far: { soft: 0, dark: 1, len: 1 },
+  close: { soft: 0.75, dark: 0.55, foot: 1.05, core: 0.4, len: 0.7 },
+  far: { soft: 0, dark: 1, foot: 1, core: 0, len: 1 },
 }
+/** m: a man's shadow from his soles to its tip at the shape's length (his height over the sun's tangent), where the
+ *  look's gradient ends */
+const SHADOW_TIP = (FIGURE * Math.hypot(SUN.x, SUN.z)) / SUN.y
 /** the band of the camera's distance to its focus (m) over which the close look turns into the far one (?ushband) */
 export const SHADOW_LOOK_BAND: readonly [number, number] = [45, 85]
 const SOFT_BLUR = 0.12 // m: the soft bake's sigma (shadowShape's soft)
@@ -247,6 +254,7 @@ export class Units {
   rootReceivers: ShaderMaterial[] = []
   readonly meshes: Mesh[] = []
   private farK = new Vector2()
+  private footV = new Vector4() // the decal's gradient (setDecalLook; its own: a material keeps the vector it is given)
   private sidePad = 2 // m: a battalion's bounds beyond its men's roots (the constructor's, from the baked poses)
   /** the shadow proxy's size (the report's, the tests') */
   proxyStats = { vertices: 0, triangles: 0 }
@@ -1023,6 +1031,8 @@ export class Units {
     l.soft = c.soft + (f.soft - c.soft) * t
     l.dark = c.dark + (f.dark - c.dark) * t
     l.len = c.len + (f.len - c.len) * t
+    l.foot = c.foot + (f.foot - c.foot) * t
+    l.core = c.core + (f.core - c.core) * t
     return l
   }
   private frameBody(): void {
@@ -1056,9 +1066,8 @@ export class Units {
     // (stepped with the figures under ?smoothmove=0)
     if (decalOn) {
       this.decal?.setFloat('uStepFrac', this.smooth ? this.stepFrac : 0)
-      this.decal?.setFloat('uUnitFar', f * ln.dark)
-      this.decal?.setFloat('uShSoft', ln.soft)
-      this.decal?.setFloat('uShLen', ln.len)
+      this.decal?.setFloat('uUnitFar', f)
+      this.setDecalLook(ln)
     }
     if (this.smooth) {
       for (const m of [
@@ -1528,6 +1537,7 @@ export class Units {
         'uDecalLift',
         'uShSoft',
         'uShLen',
+        'uShFoot',
       ],
       samplers: ['uShapeTex', 'uUnitShade'],
       alpha: true,
@@ -1580,8 +1590,8 @@ export class Units {
     m.setFloat('uStepFrac', 0)
     m.setVector2('uFarScale', this.farScaleV)
     m.setFloat('uDecalLift', this.lift)
-    m.setFloat('uShSoft', this.lookNow.soft)
-    m.setFloat('uShLen', this.lookNow.len)
+    this.decal = m
+    this.setDecalLook(this.lookNow)
     // (a mode nothing else draws with: its blend is replaced at each bind, below)
     m.alphaMode = Constants.ALPHA_EXCLUSION
     const st = m.stencil
@@ -1600,7 +1610,6 @@ export class Units {
       if (a2c) engine.setAlphaToCoverage(true)
     })
     if (a2c) m.onUnBindObservable.add(() => engine.setAlphaToCoverage(false))
-    this.decal = m
     for (const h of this.hosts) h.lod[this.decalLod].material = m
   }
 
@@ -1630,6 +1639,17 @@ export class Units {
       if (this.shadowRT) m.setFloat('uUnitFar', 0)
     }
     for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', map)
+  }
+  /** The simple shadows' look (decision 0062) given to their material: the soft bake's share at the tip, the length,
+   *  and the gradient from the soles (uShFoot: the darkness at the soles and at the tip, the contact's core and the
+   *  tip, m from the soles, the tip shortened with the shadow and kept past the core) */
+  private setDecalLook(l: ShadowLook): void {
+    const m = this.decal
+    if (!m) return
+    const tip = SHADOW_TIP * l.len
+    m.setFloat('uShSoft', l.soft)
+    m.setFloat('uShLen', l.len)
+    m.setVector4('uShFoot', this.footV.set(l.foot, l.dark, Math.min(l.core, tip * 0.9), tip))
   }
   /** The figures' shadow map (decision 0047), made when a switch first asks for it (decision 0062): its target, lazy
    *  unless lazyShadows is off, and the receivers' bindings of it */

@@ -635,9 +635,14 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   role's row, and it grows with the far figures (`FAR_SCALE`). **Its look a zoom** (decision 0062, `SHADOW_LOOK`):
   softness (the share of G against R), darkness (the share of the ground's full shadow) and length (along the sun past
   the soles: the grid's second row lies at the soles, so each triangle lies on one side of them and the feet stay put);
-  up close softer, lighter, shorter, far 0049's look, turned from one to the other by a smoothstep of the camera's
+  along each shadow from the soles like a real one's (contact hardening): over a core (`core`, m) the shape itself at
+  the soles' darkness (`foot`), then to the tip (a man's height over the sun's tangent, times the length) up to
+  `soft` of the blurred bake and down to the tip's darkness (`dark`), fragment arithmetic on the distance along it
+  (`vAlong`), no more reads; up close softer, lighter at the tip, shorter, dark and solid at the feet; far 0049's look
+  (one value end to end), turned from one to the other by a smoothstep of the camera's
   distance to its focus over `SHADOW_LOOK_BAND` (45 to 85 m; with `?ushadowclose=map` the far look everywhere).
-  `?ushsoft`, `?ushdark`, `?ushlen` (`<close>[,<far>]`) and `?ushband=<r0>,<r1>` tune it live; `Units.lookNow` is
+  `?ushsoft`, `?ushdark`, `?ushlen` (`<close>[,<far>]`), `?ushfoot=<dark>,<core>[,<far dark>,<far core>]` and
+  `?ushband=<r0>,<r1>` tune it live; `Units.lookNow` is
   this frame's. The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
   shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so

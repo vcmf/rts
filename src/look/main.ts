@@ -557,8 +557,9 @@ if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
 // ?udecallift=<m>, how high over the ground the simple shadows cover the grass and the men's legs
 // decision 0062 (docs/plans/active/soft-shadows-all.md): the simple shadows at every zoom; ?ushadowclose=map, the map
 // up close as before (cross-faded to them over ?ushadowswitch); their look up close, ?ushsoft=<0..1> (the soft bake's
-// share), ?ushdark=<0..1> (the full shadow's share), ?ushlen=<0.3..1.5> (their length), each <close>[,<far>] (far:
-// decision 0049's unless given); ?ushband=<r0>,<r1>, the band (m from the focus) the close look turns into the far one
+// share at the tip), ?ushdark=<0..1> (the full shadow's share at the tip), ?ushlen=<0.3..1.5> (their length), each
+// <close>[,<far>] (far: decision 0049's unless given); ?ushband=<r0>,<r1>, the band (m from the focus) the close look
+// turns into the far one
 const uShadowFar = params.get('ushadowfar')
 const uShadowClose = params.get('ushadowclose')
 if (uShadowClose !== null && uShadowClose !== 'map' && uShadowClose !== 'simple') {
@@ -577,6 +578,19 @@ const lookPair = (k: string, lo: number, hi: number): [number, number | null] | 
 const ushSoft = lookPair('ushsoft', 0, 1)
 const ushDark = lookPair('ushdark', 0, 1)
 const ushLen = lookPair('ushlen', 0.3, 1.5)
+// ?ushfoot=<dark>,<core m>[,<far dark>,<far core m>]: the contact at the soles (decision 0062), its darkness (a share
+// of the full shadow; ?ushdark is the tip's) and the core it holds over before it turns to the tip's look
+const ushFootP = params.get('ushfoot')
+const ushFoot = ushFootP === null ? null : ushFootP.split(',').map(Number)
+if (
+  ushFoot &&
+  !(
+    (ushFoot.length === 2 || ushFoot.length === 4) &&
+    ushFoot.every((v, i) => Number.isFinite(v) && v >= 0 && v <= (i % 2 ? 3 : 1.5))
+  )
+) {
+  throw new Error(`?ushfoot must be <dark 0..1.5>,<core 0..3 m>[,<far dark>,<far core>], not ${ushFootP}`)
+}
 const ushBandP = params.get('ushband')
 const ushBand = ushBandP === null ? null : ushBandP.split(',').map(Number)
 if (
@@ -706,6 +720,10 @@ if (armiesParam !== null) {
     if (p[1] !== null) units.look.far[k] = p[1]
   }
   if (ushBand) units.lookBand = [ushBand[0], ushBand[1]]
+  if (ushFoot) {
+    Object.assign(units.look.close, { foot: ushFoot[0], core: ushFoot[1] })
+    if (ushFoot.length === 4) Object.assign(units.look.far, { foot: ushFoot[2], core: ushFoot[3] })
+  }
   if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
   units.groundMap = meadow !== null
   if (decalLift !== null) units.decalLift = +decalLift
