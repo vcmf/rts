@@ -53,7 +53,7 @@ The same settings in three formatters (width 120, no semicolons, single quotes, 
 - The sim's area formatted (`src/sim/`, `src/rulesets/`, `src/scenarios/`; 33 files): lint, typecheck and
   `node tools/build-sim-data.ts --check` pass, the data hashes unchanged; Vitest 299 of 300, the golden replay hashes
   among them, the one failure a cost test's time budget under load that passes alone (details in
-  `docs/plans/active/code-style.md`).
+  `docs/plans/done/code-style.md`).
 
 ## Decision
 
@@ -125,7 +125,7 @@ style rules' `files`) and taken out of `.prettierignore`'s list of areas not for
 `test/format-scope.test.ts` checks that the formatter and the rules cover the same files. The formatting PR changes
 layout only, plus the comments `max-len` asks to shorten (a separate commit); the commit that lands on main goes in
 `.git-blame-ignore-revs` (GitHub's blame reads it; locally `git config blame.ignoreRevsFile .git-blame-ignore-revs`),
-after a squash merge in a one-line follow-up (`docs/plans/active/code-style.md`).
+after a squash merge in a one-line follow-up (`docs/plans/done/code-style.md`).
 
 **A branch in flight** when an area is formatted: merge main up to the commit before the formatting, then merge the
 formatting commit keeping the branch's side of every conflict (`git merge -X ours <commit>`; with a rebase,
