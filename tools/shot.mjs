@@ -9,12 +9,17 @@
 // tools/win-chrome.sh; decision 0060). Each run takes a fresh browser context and disposes it; the browser stays up.
 // Its flags were fixed at its launch, so the run checks what it would have set: the GL backend by the renderer a WebGL2
 // context reports (SHOT_ANGLE, SwiftShader when unset, as launched), SHOT_CHROME_ARGS on its command line (read through
-// --enable-automation); a mismatch fails the run. A Windows browser attached from WSL gets local files through wslpath.
-import { execFileSync, spawn } from 'node:child_process'
+// --enable-automation); a mismatch fails the run. A Windows browser attached from WSL gets local files through wslpath
+// (tools/attach.ts). Set SHOT_CDP per run, not exported: an exported SHOT_CDP makes every tool built on this one (the
+// goldens, the guard, the look bench, the page checks) attach to that browser, and several agents sharing one browser
+// skew each other's timings.
+import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
+import { attachedUrl, renderFlags, startHint } from './attach.ts'
+import { navigationLoaded } from './page-load.ts'
 
 const [target, outDir, w = '1600', h = '900', script = '[]'] = process.argv.slice(2)
 if (!target || !outDir) {
@@ -22,7 +27,7 @@ if (!target || !outDir) {
   process.exit(2)
 }
 const CDP = process.env.SHOT_CDP?.replace(/\/+$/, '')
-let url = /^[a-z]+:\/\//.test(target) ? target : pathToFileURL(path.resolve(target)).href
+const pageUrl = /^[a-z]+:\/\//.test(target) ? target : pathToFileURL(path.resolve(target)).href
 const ANGLE = process.env.SHOT_ANGLE || 'swiftshader'
 // how each backend names itself in the WebGL renderer string (ANGLE (<vendor>, <device> <backend>…))
 const RENDERER = {
@@ -36,8 +41,8 @@ const RENDERER = {
 // software renderers that also name a backend (SwiftShader says Vulkan, WARP Direct3D11): never a GPU
 const SOFTWARE = /SwiftShader|Basic Render Driver|llvmpipe/i
 const EXTRA = (process.env.SHOT_CHROME_ARGS || '').split(' ').filter(Boolean)
-// the one restart that gives an attached browser everything this run asks for (headless, as a launched run always is)
-const RESTART = `tools/win-chrome.sh stop, then start --headless -- ${[`--use-angle=${ANGLE}`, ...EXTRA].join(' ')}`
+// how to (re)start an attached browser with everything this run asks for (headless, as a launched run always is)
+const RESTART = CDP ? startHint(CDP, ANGLE, EXTRA) : ''
 const steps = JSON.parse(script)
 const KNOWN = new Set(['wait', 'eval', 'shot', 'tap'])
 for (const [op] of steps) {
@@ -66,8 +71,8 @@ let context // attached: the browser's socket and this run's context
 // src/look/materials.ts)
 const FALLBACK_MS = 1500
 const FATAL_EXC = ['fragment textures']
-// one call on the browser's socket (attached), with its own timeout
 let bid = 0
+/** One call on the browser's socket (attached), with its own 10 s timeout; resolves to the call's result. */
 const bsend = (method, params = {}) =>
   new Promise((res, rej) => {
     const i = ++bid
@@ -83,11 +88,13 @@ const bsend = (method, params = {}) =>
     bws.addEventListener('message', on)
     bws.send(JSON.stringify({ id: i, method, params }))
   })
-// close the socket, stop Chrome, wait for it to exit (it flushes the profile on the way out), then remove the profile;
-// attached: dispose this run's context (its pages close with it) and leave the browser running. Once: a fatal page
-// error and the main path's failure can both ask
 let cleaning
+/** Cleans up once: a fatal page error and the main path's failure can both ask (doCleanup). */
 const cleanup = () => (cleaning ??= doCleanup())
+/**
+ * Closes the socket, stops Chrome, waits for it to exit (it flushes the profile on the way out), then removes the
+ * profile. Attached: disposes this run's context (its pages close with it) and leaves the browser running.
+ */
 async function doCleanup() {
   try {
     ws?.close()
@@ -127,12 +134,13 @@ process.on('SIGINT', async () => {
 try {
   fs.mkdirSync(outDir, { recursive: true })
   let pageWs
+  let url = pageUrl
   if (CDP) {
     let version
     try {
       version = await (await fetch(`${CDP}/json/version`)).json()
     } catch {
-      throw new Error(`no browser at ${CDP} (SHOT_CDP; tools/win-chrome.sh start?)`)
+      throw new Error(`no browser at ${CDP} (SHOT_CDP; ${RESTART})`)
     }
     bws = new WebSocket(version.webSocketDebuggerUrl)
     await new Promise((res, rej) => {
@@ -163,16 +171,7 @@ try {
         throw new Error(`the browser at ${CDP} was not started with ${missing.join(' ')} (${RESTART})`)
       }
     }
-    // a Windows browser reads a WSL file through its UNC path (file://wsl.localhost/<distro>/…); the query and hash
-    // (?frozen, ?dof: tools/look-page.mjs) stay
-    if (url.startsWith('file:') && process.env.WSL_DISTRO_NAME && /Windows NT/.test(version['User-Agent'] ?? '')) {
-      const u = new URL(url)
-      const file = fileURLToPath(u) // the path alone: the query and hash are put back below
-      const win = pathToFileURL(execFileSync('wslpath', ['-w', file], { encoding: 'utf8' }).trim(), { windows: true })
-      win.search = u.search
-      win.hash = u.hash
-      url = win.href
-    }
+    url = attachedUrl(url, version['User-Agent'] ?? '')
     context = (await bsend('Target.createBrowserContext', { disposeOnDetach: true })).browserContextId
     const { targetId } = await bsend('Target.createTarget', { url: 'about:blank', browserContextId: context })
     pageWs = version.webSocketDebuggerUrl.replace(/\/devtools\/browser\/.*/, `/devtools/page/${targetId}`)
@@ -182,12 +181,8 @@ try {
     chrome = spawn(
       CHROME,
       [
-        '--headless=new',
         '--remote-debugging-port=0',
-        `--use-angle=${ANGLE}`,
-        ...(ANGLE === 'swiftshader' ? ['--enable-unsafe-swiftshader'] : []),
-        '--ignore-gpu-blocklist',
-        ...EXTRA,
+        ...renderFlags(ANGLE, EXTRA),
         `--window-size=${w},${h}`,
         `--user-data-dir=${profile}`,
         'about:blank',
@@ -216,11 +211,10 @@ try {
     ws.onopen = res
     ws.onerror = () => rej(new Error('DevTools socket failed'))
   })
-  // the load that counts is the one of the document Page.navigate commits (its loaderId): a fresh attached page's own
-  // about:blank load may arrive late
+  // the top frame's commits and loads, in order: the load that counts follows the commit of the document
+  // Page.navigate opens, or of one it navigates to itself (tools/page-load.ts)
   let id = 0
-  let committed
-  let loadedLoader
+  const loadEvents = []
   const pend = {}
   // a dropped socket (Chrome crash) fails every pending call instead of hanging forever
   ws.onclose = () => {
@@ -244,8 +238,10 @@ try {
       pend[m.id](m)
       delete pend[m.id]
     }
-    if (m.method === 'Page.frameNavigated' && !m.params.frame.parentId) committed = m.params.frame.loaderId
-    if (m.method === 'Page.loadEventFired') loadedLoader = committed
+    if (m.method === 'Page.frameNavigated' && !m.params.frame.parentId) {
+      loadEvents.push({ kind: 'commit', loaderId: m.params.frame.loaderId })
+    }
+    if (m.method === 'Page.loadEventFired') loadEvents.push({ kind: 'load' })
     if (m.method === 'Runtime.exceptionThrown') {
       pageErrors++
       const text = JSON.stringify(m.params.exceptionDetails)
@@ -305,7 +301,7 @@ try {
   const nav = await send('Page.navigate', { url })
   if (nav.errorText) throw new Error(`could not open ${url}: ${nav.errorText}`)
   const LOAD = +(process.env.SHOT_LOAD_S || 60) // seconds; a busy machine or a slow page raises it
-  const loaded = () => loadedLoader === nav.loaderId
+  const loaded = () => navigationLoaded(loadEvents, nav.loaderId)
   // the page's own script (scene build) runs before the load event
   for (let i = 0; i < LOAD * 4 && !loaded(); i++) await sleep(250)
   if (!loaded()) throw new Error(`page did not finish loading in ${LOAD}s`)
