@@ -57,6 +57,16 @@ designs, kept true as they change (nothing is frozen; what is built is described
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
   [`plans/active/battle-threads.md`](plans/active/battle-threads.md) (the battle's threads: a worker, soldiers stepped at 12 fps),
+  [`plans/active/paper-layers.md`](plans/active/paper-layers.md) (paper layers: the relief as stacked lit sheets in the staff map prototype),
+  [`plans/active/brigades-proto.md`](plans/active/brigades-proto.md) (brigades of two battalions in the staff map prototype),
+  [`plans/active/water-paper.md`](plans/active/water-paper.md) (water as a paper wash, sunk below the land, in the staff map prototype),
+  [`plans/active/relief-shading.md`](plans/active/relief-shading.md) (shaded relief from real heights: cast shadows and occlusion, baked once, in the staff map prototype),
+  [`plans/active/slabs.md`](plans/active/slabs.md) (a slightly tilted map view, armies as low slabs, in the staff map prototype),
+  [`plans/active/woods-canopy.md`](plans/active/woods-canopy.md) (woods in warm grey, in the staff map prototype),
+  [`plans/active/perf-150.md`](plans/active/perf-150.md) (150 fps in the staff map prototype: the ink canvas made cheap),
+  [`plans/active/real-terrain-proto.md`](plans/active/real-terrain-proto.md) (real terrain in the staff map prototype: ČÚZK's DMR 4G at Austerlitz, an experiment),
+  [`plans/active/map-view-lit-v1.md`](plans/active/map-view-lit-v1.md) (a first lit map view in the staff map prototype: paper, grain, arrows, raised blocks),
+  [`plans/active/one-map-austerlitz.md`](plans/active/one-map-austerlitz.md) (one map in the language, drawn with the map editor: Austerlitz 1805, its draft-map mode and the real map),
   [`plans/active/flow-default.md`](plans/active/flow-default.md) (the combed meadow as the default grass),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
   [`plans/active/s1c-fire-morale.md`](plans/active/s1c-fire-morale.md) (S1c),
@@ -85,6 +95,8 @@ designs, kept true as they change (nothing is frozen; what is built is described
 
 ## Research (background)
 
+- [`research/map-size-battle-density.md`](research/map-size-battle-density.md): how much ground armies occupied, 1700–1815 and antiquity: frontages, battle densities, approach distances, vision; for sizing the maps.
+- [`research/map-size-rts-map-sizes.md`](research/map-size-rts-map-sizes.md): battle map size against soldier count in large-scale RTS and wargames (Total War, Scourge of War, Grand Tactician, HistWar, Graviteam and others).
 - [`research/map-view-style.md`](research/map-view-style.md): a light map view with a 3D feel: shaded relief, cast shadows and sky occlusion baked on the GPU, woods, roofs and lines, raised army blocks; what games document; costs measured and estimated.
 - [`research/colour-and-light-review.md`](research/colour-and-light-review.md): the owner's colour and light references, and the coats' colour lost to the warm light, measured.
 - [`research/grass-and-fields.md`](research/grass-and-fields.md): grass and fields at an RTS camera: Tiny Glade, Total War, the techniques (ground pattern, blades, cards, shells) and their pitfalls.

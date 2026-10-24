@@ -27,7 +27,8 @@ renderer produces cinematic history videos.
 ## Scale
 
 - About 40 battalions per battle, 20 a side, about 400 soldiers each, one figure per soldier (decision 0018).
-- Play area 1–1.5 km; a battle takes 30–45 minutes of real time.
+- Square maps of 2 to 6 km a side, designed for play, 3 km by default (decision 0061); a battle takes 30–45 minutes of
+  real time.
 - Min-spec a gaming laptop with an RTX 3060. Single-player first, built so multiplayer can be added later (decision 0013).
 
 ## Non-goals

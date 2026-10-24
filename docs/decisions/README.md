@@ -36,7 +36,7 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0008](0008-no-couriers.md) | No couriers: orders apply immediately | accepted |
 | [0009](0009-battle-length.md) | A battle takes 30–45 minutes of real time | accepted |
 | [0010](0010-locked-camera-staff-map.md) | A locked camera with a short zoom; the far zoom is the staff map | accepted |
-| [0011](0011-scale-and-min-spec.md) | Play area 1–1.5 km; min-spec an RTX 3060 laptop | accepted |
+| [0011](0011-scale-and-min-spec.md) | Play area 1–1.5 km; min-spec an RTX 3060 laptop | superseded by 0061 |
 | [0012](0012-heightfield-authority.md) | One heightfield is the authority for height, built offline | accepted |
 | [0013](0013-single-player-first.md) | Single-player first, multiplayer-capable | accepted |
 | [0014](0014-review-workflow.md) | Plan, implement, review in rounds, redesign after three | superseded by 0025 |
@@ -79,6 +79,10 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0052](0052-code-style.md) | Code style: Prettier formats, ESLint keeps lines short and one statement each | accepted |
 | [0053](0053-generators-expand-by-dependency.md) | Generators expand by dependency, over finished features, with hard and soft reads | superseded by 0028 |
 | [0054](0054-readable-code.md) | Readable code: small functions, doc comments in new code, a test for every bug fix | accepted |
+| [0055](0055-lit-map-view-tilts.md) | The lit map view leans a little off straight down, with armies as low slabs | accepted |
+| [0056](0056-map-ink-at-ratio-one.md) | The map's ink renders at a pixel ratio of 1 by default; sharp ink is a setting | accepted |
 | [0057](0057-one-language-for-the-battlefield.md) | One language for the battlefield and one for the armies; every system reads them | accepted |
 | [0058](0058-one-map-view-lit.md) | One map view: the editor's draft and the game's staff map, lit with a 3D feel | accepted |
+| [0059](0059-map-ink-upscaled-by-easu.md) | The map's ink is upscaled by FSR 1's EASU, on its alpha | accepted |
 | [0060](0060-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
+| [0061](0061-square-designed-maps-2-to-6-km.md) | Square maps of 2 to 6 km a side, designed for play, at true local scale | accepted |
