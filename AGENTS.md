@@ -75,6 +75,11 @@ a **research note** (`docs/research/`) needs no plan and no `/code-review` (chec
      Open questions (judgement calls, not defects) stay in the system doc's or plan's Open questions.
 4. Check runs print their **full output and exit code**; never judge a run by grepping for "FAILED".
 
+## Code quality
+
+Decisions 0052 and 0054; the rules are in `docs/conventions.md`, Code. Prettier lays code out (`npm run format`);
+small functions, doc comments and tests are on you and on review, in every file, prototypes included.
+
 ## Commits and PRs
 
 Conventional Commits with a mandatory scope; PR titles in the same format (squash-merged). The full

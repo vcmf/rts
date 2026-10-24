@@ -59,4 +59,5 @@ recorded here on 2026-10-08.
 | [0050](0050-armies-32k-at-120fps.md) | 32,000 soldiers at 120 fps: four steps, each kept only if measured (experimental) | proposed |
 | [0051](0051-closer-zoom-nearest-lod.md) | The closest zoom at 15 m, held over high ground, with the full figure for the men nearest | proposed |
 | [0052](0052-code-style.md) | Code style: Prettier formats, ESLint keeps lines short and one statement each | accepted |
+| [0054](0054-readable-code.md) | Readable code: small functions, doc comments in new code, a test for every bug fix | accepted |
 | [0060](0060-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
