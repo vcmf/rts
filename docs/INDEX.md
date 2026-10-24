@@ -64,6 +64,7 @@ designs written before building (frozen once built, their lasting content moves 
   [`plans/active/perf-150.md`](plans/active/perf-150.md) (150 fps in the staff map prototype: the ink canvas made cheap),
   [`plans/active/real-terrain-proto.md`](plans/active/real-terrain-proto.md) (real terrain in the staff map prototype: ČÚZK's DMR 4G at Austerlitz, an experiment),
   [`plans/active/map-view-lit-v1.md`](plans/active/map-view-lit-v1.md) (a first lit map view in the staff map prototype: paper, grain, arrows, raised blocks),
+  [`plans/active/one-map-austerlitz.md`](plans/active/one-map-austerlitz.md) (one map in the language, drawn with the map editor: Austerlitz 1805, its draft-map mode and the real map),
   [`plans/active/flow-default.md`](plans/active/flow-default.md) (the combed meadow as the default grass),
   [`plans/active/staff-map.md`](plans/active/staff-map.md),
   [`plans/active/s1c-fire-morale.md`](plans/active/s1c-fire-morale.md) (S1c),
