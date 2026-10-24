@@ -124,7 +124,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
   <div class="li"><svg width="44" height="10"><rect class="blink" x="2.5" y="2.5" width="39" height="5" stroke="#2C4FA8" stroke-width="1.2"/></svg>routing</div>
   <div class="li"><svg width="44" height="16"><path d="M2 8 L28 8" stroke="#2C4FA8" stroke-opacity=".36" stroke-width="7"/><path d="M42 8 L28 0 L28 16 Z" fill="#2C4FA8" fill-opacity=".55" stroke="#fbfaf6" stroke-width="1"/></svg>command</div>
   <div class="li"><svg width="44" height="10"><path d="M2 5 L42 5" stroke="#1f3a80" stroke-width="2" stroke-linecap="round" stroke-dasharray="0.1 5.5"/></svg>footprints (fade)</div>
-  <div class="li"><svg width="44" height="10"><rect x="4" y="2" width="9" height="6" fill="#2C4FA8"/><rect x="18" y="2" width="9" height="6" fill="#2F6B3C"/><rect x="32" y="2" width="9" height="6" fill="#fbfaf6" stroke="#4f6279" stroke-width="1.4"/></svg>France · Russia · Austria</div>
+  <div class="li"><svg width="44" height="10"><rect x="4" y="2" width="9" height="6" fill="#2C4FA8"/><rect x="18" y="2" width="9" height="6" fill="#2F6B3C"/><rect id="lgAU" x="32" y="2" width="9" height="6" fill="#fbfaf6" stroke="#4f6279" stroke-width="1.4"/></svg>France · Russia · Austria</div>
+  <div class="li"><svg width="44" height="10"><rect id="lgG0" x="4" y="2" width="9" height="6" fill="#2a3566"/><rect id="lgG1" x="18" y="2" width="9" height="6" fill="#2c4627"/><path id="lgGs" d="M4.5 7.5 L12.5 2.5 M18.5 7.5 L26.5 2.5" stroke="#a65a32" stroke-width="1.3"/></svg>guards</div>
 </div>
 
 <div id="card" class="fig"><span class="cx"></span>
@@ -168,6 +169,11 @@ const B=BABYLON,V3=B.Vector3,C3=B.Color3;
 const Q=new URLSearchParams(location.search);
 // ?style=lit: the lit map view's first pass (docs/plans/active/map-view-lit-v1.md); without it, the ink style
 const LIT=Q.get('style')==='lit';
+// &relief=layers (with the lit style): the relief as stacked paper sheets (docs/plans/active/paper-layers.md)
+const LAYERS=LIT&&Q.get('relief')==='layers';
+// the lit style's static light: a world xz vector toward it (x east, z north), the north-west; every bake and shader term
+// that is lit takes it from here (the screen LIGHT of the blocks is this one, seen through the camera, setLight)
+const NW=[-Math.SQRT1_2,Math.SQRT1_2];
 const T0=performance.now();
 
 /* ---------- small helpers ---------- */
@@ -353,7 +359,7 @@ function bakeCanopy(){
     if(t.wood&&hash(t.x*0.37,t.z*0.37)>0.4)continue;   // sparse: about 4 in 10 of a wood's trees, the same ones every load
     ts.push({x:t.x,z:t.z,r:(t.wood?4.2:3.2)*t.s*(0.85+0.3*cl)});}
   ts.sort((a,b)=>b.z-a.z);   // north first: a southern crown overlaps the one behind it
-  for(const t of ts){const r=t.r*PX*1.05;g.drawImage(shade,tx(t.x)+t.r*PX*0.55-r,ty(t.z)+t.r*PX*0.55-r,2*r,2*r);}   // the shadows first, away from the north-west light
+  for(const t of ts){const r=t.r*PX*1.05;g.drawImage(shade,tx(t.x)-NW[0]*t.r*PX*0.78-r,ty(t.z)+NW[1]*t.r*PX*0.78-r,2*r,2*r);}   // the shadows first, away from the north-west light
   for(const t of ts){const r=t.r*PX;g.drawImage(crown,tx(t.x)-r,ty(t.z)-r,2*r,2*r);}
   return c;
 }
@@ -366,7 +372,7 @@ const inFrame=h=>Math.abs(h.x)<=MX&&Math.abs(h.z)<=MZ;
 const HOUSE_SIDE=1.86,HOUSE_SHADOW=4.3;   // m, away from the light
 function bakeHouses(){
   const[c,g]=newCanvas(TW,TH);g.clearRect(0,0,TW,TH);g.globalCompositeOperation='source-over';
-  const away=[0.707,-0.707],side=[away[0]*HOUSE_SIDE,away[1]*HOUSE_SIDE],shad=[away[0]*HOUSE_SHADOW,away[1]*HOUSE_SHADOW];   // world m: the static light from the north-west, so away is east and south
+  const away=[-NW[0],-NW[1]],side=[away[0]*HOUSE_SIDE,away[1]*HOUSE_SIDE],shad=[away[0]*HOUSE_SHADOW,away[1]*HOUSE_SHADOW];   // world m: the static light from the north-west, so away is east and south
   const tops=HOUSES.filter(inFrame).map(h=>({col:h.church?CHURCH_COL:HOUSE_COL,C:houseCorners(h).map(([dx,dz])=>[h.x+dx,h.z+dz])}));   // world m: poly maps them
   const fill=(P,col)=>{poly(g,P);g.fillStyle=col;g.fill();};
   g.beginPath();for(const t of tops){const H=hull([...t.C.map(p=>[p[0]+side[0],p[1]+side[1]]),...t.C.map(p=>[p[0]+shad[0],p[1]+shad[1]])]);H.forEach((p,i)=>i?g.lineTo(tx(p[0]),ty(p[1])):g.moveTo(tx(p[0]),ty(p[1])));g.closePath();}
@@ -485,7 +491,14 @@ function seasonCol(key,s){const a=SEAS[key],i=Math.min(2,Math.floor(s)),t=s-i;co
    ========================================================================= */
 const TER_VS=`precision highp float;attribute vec3 position;attribute vec3 normal;uniform mat4 world,viewProjection;uniform float uRise;
 varying vec3 vW;varying vec3 vN;varying float vH;
-void main(){vec3 p=position;vH=p.y;p.y*=uRise;vec4 w=world*vec4(p,1.0);vW=w.xyz;vN=normal;gl_Position=viewProjection*w;}`;
+#ifdef LAYERS
+attribute float aHB;attribute vec2 aGB;varying float vHB;varying vec2 vGB;
+#endif
+void main(){vec3 p=position;vH=p.y;p.y*=uRise;vec4 w=world*vec4(p,1.0);vW=w.xyz;vN=normal;gl_Position=viewProjection*w;
+#ifdef LAYERS
+  vHB=aHB;vGB=aGB;
+#endif
+}`;
 const TER_FS=`#ifdef LIT
 #extension GL_OES_standard_derivatives : enable
 #endif
@@ -493,6 +506,22 @@ precision highp float;varying vec3 vW;varying vec3 vN;varying float vH;
 uniform sampler2D uMapA,uMapB,uPaperT,uNoiseT;
 #ifdef LIT
 uniform sampler2D uCanopyT,uHouseT;
+#ifdef LAYERS
+uniform vec2 uLightXZ;varying float vHB;varying vec2 vGB;
+/* paper layers: one octave of sheets every D metres; out: lit edge (0..1), cast shadow (0..1) */
+/* one octave of sheets every D metres, measured in world metres from the smooth per-vertex slope g (no facets at the
+   mesh triangles, no dependence on the camera heading); out: lit edge (0..1), cast shadow (0..1) */
+void sheets(float D,float hB,vec2 g,float pxPerM,out float lit,out float shad){
+  vec2 L=uLightXZ;                                   /* toward the light, xz (NW in the JS) */
+  float gl=max(length(g),1e-5),f=fract(hB/D);
+  float cU=dot(g/gl,L);                              /* above 0: the ground rises toward the light */
+  float dDn=f*D/gl,dUp=(1.0-f)*D/gl,band=D/gl;      /* metres to this sheet edges, the band width */
+  float S=min(22.0*max(cU,0.0),0.45*band);           /* the shadow strip, m: under half a band */
+  shad=(1.0-smoothstep(0.55*S,S+0.75/pxPerM,dUp))*step(0.0,cU)*smoothstep(0.25,0.75,S*pxPerM);   /* fades out under a pixel */
+  float wl=(0.6+1.2*max(-cU,0.0))/pxPerM;            /* the lit line, about a pixel and a half wide */
+  lit=(1.0-smoothstep(0.0,wl,dDn))*max(-cU,0.0);
+}
+#endif
 /* the lit style (docs/plans/active/map-view-lit-v1.md): paper, a baked canopy of flat circles */
 #endif
 uniform float uHachK,uRise,uWash,uInk,uMist,uHmin,uHmax,uSunK;uniform vec3 uSun;
@@ -514,7 +543,7 @@ void main(){
 #ifdef LIT
   float fine=texture2D(uPaperT,mat2(0.8,-0.6,0.6,0.8)*vW.xz/21.3+0.13).r;   /* rotated: its 21 m period never lines up */
   vec3 paper=uPaper*(0.93+(g1-0.5)*0.22+(g2-0.5)*0.12+(g3-0.5)*0.07);
-  paper*=mix(vec3(1.0),vec3(0.80,0.69,0.50),smoothstep(0.0,0.035,edge)*(1.0-smoothstep(0.035,0.17,edge))*inside);
+  paper*=mix(vec3(1.0),vec3(0.90,0.845,0.75),smoothstep(0.0,0.006,edge)*(1.0-smoothstep(0.006,0.02,edge))*inside);   /* a thin worn border, light */
 #else
   vec3 paper=uPaper*(0.965+(g1-0.5)*0.12+(g2-0.5)*0.07+(g3-0.5)*0.035);
 #endif
@@ -523,6 +552,22 @@ void main(){
   mapC=mix(mapC,mapC*uWoodW*1.15,uWoodWA*woodA*(0.75+0.25*wn));
 #ifdef LIT
   float mott=0.5+0.18*(sin(vW.x/310.0+sin(vW.z/230.0)*1.7)+sin(vW.z/270.0+sin(vW.x/190.0)*1.9))+0.08*sin(vW.x/97.0+vW.z/131.0);   /* smooth, slow */
+#endif
+#ifdef LAYERS
+  float lyLt=0.0,lyW5=1.0;   /* the lit edge and the 5 m octave, for the contour ink below */
+  {float pxPerM=2.0/max(length(dFdx(vW.xz))+length(dFdy(vW.xz)),1e-5),gl=length(vGB),lay=(1.0-uWash)*inside;   /* px per m, both screen axes */
+   /* a faint continuous hillshade underneath, so gentle ground keeps its form */
+   vec3 Lk=normalize(vec3(uLightXZ.x,1.0,uLightXZ.y));   /* the same light, 45 degrees up */
+   vec3 n=normalize(vec3(-vGB.x,1.0,-vGB.y));float lam=dot(n,Lk)/Lk.y;   /* 1 on flat ground */
+   mapC*=mix(1.0,clamp(1.0+0.45*(lam-1.0),0.93,1.07),lay);
+   /* each sheet a little lighter going up, in the paper hue */
+   float tb=clamp((floor(vHB/5.0)*5.0-uHmin)/max(uHmax-uHmin,1.0),0.0,1.0);mapC*=mix(1.0,0.97+0.06*tb,lay);
+   /* 5 m sheets where their edges are far enough apart on screen, 25 m sheets where they would crowd */
+   float w5=smoothstep(4.0,9.0,5.0/max(gl,1e-4)*pxPerM),l5,s5,l25,s25;   /* 5 m sheets where their edges are 4 to 9 px apart or more */
+   sheets(5.0,vHB,vGB,pxPerM,l5,s5);sheets(25.0,vHB,vGB,pxPerM,l25,s25);
+   float lt=mix(l25,l5,w5),sd=mix(s25*1.8,s5,w5);lyLt=lt*lay;lyW5=w5;
+   mapC*=1.0-min(0.24*sd,0.3)*lay*(1.0-0.7*woodA)*vec3(0.95,1.0,1.1);   /* a warm shadow, never black: with the hillshade and the tint, the darkest strip about 0.63 of the paper */
+   mapC=mix(mapC,min(mapC*1.14+0.02,vec3(1.0)),0.8*lt*lay*(1.0-0.7*woodA));}
 #endif
   mapC=mix(mapC,mix(uWaterW,uWaterW*0.92,g2),water);
   mapC=mix(mapC,mix(mapC,vec3(0.97,0.96,0.94),0.55),Bm.b*0.25*(1.0-uSeason/3.0));
@@ -557,11 +602,25 @@ void main(){
 #endif
 #ifdef LIT
   /* contours for relief: minor every 5 m, index every 25 m, about a pixel wide at any zoom, each set fading where it crowds */
-  float hc=vH/5.0,fwc=max(fwidth(hc),1e-4),dc=abs(fract(hc-0.5)-0.5)/fwc;
-  float hx=vH/25.0,fwx=max(fwidth(hx),1e-4),dx=abs(fract(hx-0.5)-0.5)/fwx;
+#ifdef LAYERS
+  float hc=vHB/5.0;   /* the minor ink on the sheets too */
+#else
+  float hc=vH/5.0;
+#endif
+  float fwc=max(fwidth(hc),1e-4),dc=abs(fract(hc-0.5)-0.5)/fwc;
+#ifdef LAYERS
+  float hx=vHB/25.0;   /* on the sheet edges */
+#else
+  float hx=vH/25.0;
+#endif
+  float fwx=max(fwidth(hx),1e-4),dx=abs(fract(hx-0.5)-0.5)/fwx;
   float minorC=(1.0-smoothstep(0.5,1.3,dc))*(1.0-smoothstep(0.22,0.5,fwc));
   float indexC=(1.0-smoothstep(0.9,1.9,dx))*(1.0-smoothstep(0.3,0.7,fwx));
-  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.4,indexC*0.7)*k*inside*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
+#ifdef LAYERS
+  /* lighter while the sheet edges show, and off the lit edge so the highlight stays */
+  minorC*=mix(0.7,1.0,max(uWash,1.0-lyW5))*(1.0-0.6*lyLt);indexC*=mix(0.85,1.0,uWash)*(1.0-0.6*lyLt);
+#endif
+  col=mix(col,vec3(0.42,0.30,0.16),max(minorC*0.25,indexC*0.45)*k*inside*(1.0-0.85*smoothstep(0.1,0.3,A.g)));   /* faint under the woods */
 #else
   col=mix(col,uHach,clamp(A.r*1.05,0.0,1.0)*k*uHachK);
 #endif
@@ -582,6 +641,14 @@ function terrainMesh(){
     const nx=-(hr-hl)/(2*CELL),nz=-(hu-hd)/(2*CELL),l=Math.hypot(nx,1,nz);nor[k*3]=nx/l;nor[k*3+1]=1/l;nor[k*3+2]=nz/l;}
   let q=0;for(let j=0;j<GZ-1;j++)for(let i=0;i<GX-1;i++){const a=j*GX+i,b=a+1,c=a+GX,d=c+1;idx[q++]=a;idx[q++]=c;idx[q++]=b;idx[q++]=b;idx[q++]=c;idx[q++]=d;}
   const m=new B.Mesh('terrain',scene),vd=new B.VertexData();vd.positions=pos;vd.normals=nor;vd.indices=idx;vd.applyToMesh(m,false);
+  if(LAYERS){   // the sheets are cut from a smoothed height (a Gaussian of about 25 m): small wiggles must not become islands
+    const sig=2.5,R=7,w=[];for(let k=-R;k<=R;k++)w.push(Math.exp(-k*k/(2*sig*sig)));const ws=w.reduce((a,b)=>a+b,0);
+    const t=new Float32Array(GX*GZ),hb=new Float32Array(GX*GZ),gb=new Float32Array(GX*GZ*2);
+    for(let j=0;j<GZ;j++)for(let i=0;i<GX;i++){let a=0;for(let k=-R;k<=R;k++)a+=w[k+R]*HG[j*GX+clamp(i+k,0,GX-1)];t[j*GX+i]=a/ws;}
+    for(let j=0;j<GZ;j++)for(let i=0;i<GX;i++){let a=0;for(let k=-R;k<=R;k++)a+=w[k+R]*t[clamp(j+k,0,GZ-1)*GX+i];hb[j*GX+i]=a/ws;}
+    for(let j=0;j<GZ;j++)for(let i=0;i<GX;i++){const k=j*GX+i;
+      gb[k*2]=(hb[j*GX+Math.min(GX-1,i+1)]-hb[j*GX+Math.max(0,i-1)])/(2*CELL);gb[k*2+1]=(hb[Math.min(GZ-1,j+1)*GX+i]-hb[Math.max(0,j-1)*GX+i])/(2*CELL);}
+    m.setVerticesData('aHB',hb,false,1);m.setVerticesData('aGB',gb,false,2);}
   m.alwaysSelectAsActiveMesh=true;m.isPickable=false;return m;
 }
 
@@ -704,6 +771,13 @@ function gunGeo(){const G=geo();addBox(G,0.28,0.28,2.2,0,0.95,0.3,5);addBox(G,0.
    ========================================================================= */
 const SIDES=[{key:'FR',name:'France',coat:'#2C4FA8',acc:'#EDE6D6',ink:'#1f3a80'},{key:'RU',name:'Russia',coat:'#2F6B3C',acc:'#EDE6D6',ink:'#22502d'},{key:'AU',name:'Austria',coat:'#E9E3D3',acc:'#9FB0C4',ink:'#4f6279',edge:'#4f6279',fill:'#fbfaf6'}];
 SIDES.forEach(s=>{s.c=hex(s.coat);s.a=hex(s.acc);s.i=hex(s.ink);s.f=hex(s.fill||s.coat);if(s.edge)s.e=hex(s.edge);});
+// the guards: their army's colour, darker and a little warm, a rust cavalry stripe (never white), so a side still reads at a glance
+const RUST=hex('#7a3418');SIDES.forEach(s=>{const c=mix3(s.c,RUST,0.18).map(v=>v*0.72);s.guard={...s,c,f:c,i:c.map(v=>v*0.8),e:s.key==='AU'?s.e:undefined,stripe:hex('#a65a32')};});
+const GUARDS=new Set(['GRD','RGD']);
+if(LIT)SIDES[2].f=hex('#F4EDDC');   // the lit style: a light stone beige, not white, still lighter than every season's paper
+const formedSq=u=>u.type==='inf'&&u.form==='square'&&u.morph>0.5;   // fires all round, smokes from four faces, drawn hollow
+const pal=u=>u.guard?SIDES[u.sideI].guard:SIDES[u.sideI];
+[0,1].forEach(i=>document.getElementById('lgG'+i)?.setAttribute('fill',css(SIDES[i].guard.c)));document.getElementById('lgGs')?.setAttribute('stroke',css(SIDES[1].guard.stripe));document.getElementById('lgAU')?.setAttribute('fill',css(SIDES[2].f));   // the legend from the palette
 const TYPE={inf:{n:240,speed:1.3,range:170},cav:{n:72,speed:3.4,range:40},art:{n:6,speed:1.1,range:900}};
 const UNITS=[],CORPS={};
 const FR_N=['4e Ligne','10e Léger','24e Léger','28e Ligne','46e Ligne','57e Ligne','14e Ligne','36e Ligne','43e Ligne','55e Ligne','26e Léger','3e Ligne','18e Ligne','75e Ligne','48e Ligne','111e Ligne','17e Ligne','30e Ligne','Grenadiers à pied','Chasseurs à pied','40e Ligne','88e Ligne','64e Ligne','27e Léger'];
@@ -712,7 +786,7 @@ const AU_N=['IR 23 Salzburg','IR 24 Auersperg','IR 20 Kaunitz','IR 49 Kerpen','I
 let nameI={FR:0,RU:0,AU:0};
 function corps(key,side,title,leader,list,cx,cz,face){
   // list: [type,count]; laid out in two lines 110 m apart, 125 m between battalions
-  CORPS[key]={key,side,title,leader};const all=[];list.forEach(([t,c])=>{for(let i=0;i<c;i++)all.push(t);});
+  CORPS[key]={key,side,title,leader,guard:GUARDS.has(key)};const all=[];list.forEach(([t,c])=>{for(let i=0;i<c;i++)all.push(t);});
   const per=Math.ceil(all.length/2),f=[Math.sin(face),Math.cos(face)],r=[Math.cos(face),-Math.sin(face)];
   all.forEach((t,i)=>{const row=Math.floor(i/per),col=i%per,cnt=row?all.length-per:per,sx=(col-(cnt-1)/2)*(t==='cav'?115:125),sz=-row*130;
     const nl=side==='FR'?FR_N:side==='RU'?RU_N:AU_N,nm=t==='inf'?nl[nameI[side]++%nl.length]:t==='cav'?(side==='FR'?['5e Hussards','Cuirassiers','Chasseurs à cheval','Dragons'][i%4]:['Chevalier Guard','Uhlans','Hussars','Cuirassiers'][i%4]):'Foot battery';
@@ -721,7 +795,7 @@ function corps(key,side,title,leader,list,cx,cz,face){
 let UID=0;
 function mkUnit(side,type,corps,name,x,z,face){const N=TYPE[type].n;
   return{dface:face,id:UID++,side,sideI:side==='FR'?0:side==='RU'?1:2,type,corps,name,x,z,face,N,str:1,mor:1,form:'line',prev:'line',morph:1,
-    path:null,pi:0,prog:0,order:null,state:'idle',hit:-1e9,firing:0,routT:0,gone:0,fx:null,sel:false,rand:hash(UID,7)};}
+    path:null,pi:0,prog:0,order:null,state:'idle',hit:-1e9,firing:0,routT:0,gone:0,fx:null,sel:false,rand:hash(UID,7),guard:CORPS[corps].guard};}
 const E=Math.PI/2,W=-Math.PI/2;
 // France (player)
 corps('VAN','FR','IV Corps','Vandamme',[['inf',6]],-760,700,E);
@@ -860,7 +934,7 @@ function simStep(dt){
     // fire
     if(u.type!=='cav'&&!(u.state==='move'&&u.form==='column'&&u.type==='inf')){
       const ne=nearestEnemy(u,T.range);
-      if(ne&&Math.abs(angTo(u.face,Math.atan2(ne.e.x-u.x,ne.e.z-u.z)))<1.2){
+      if(ne&&(formedSq(u)||Math.abs(angTo(u.face,Math.atan2(ne.e.x-u.x,ne.e.z-u.z)))<1.2)){   // a square faces every way
         const e=ne.e,ff=u.type==='art'?(ne.d<300?1.8:1)*0.00055:(u.form==='line'?1:u.form==='square'?0.55:0.3)*0.0011*(ne.d<80?1.5:1);
         const tf=e.form==='column'?1.4:e.form==='square'&&u.type==='art'?1.6:1;
         e.str=Math.max(0,e.str-ff*u.str*tf*dt);e.mor-=ff*u.str*tf*dt*2.6*(e.sideI===0?0.85:1);e.hit=GT;u.firing=3;
@@ -886,7 +960,13 @@ function closeOrder(o){o.done=true;o.doneAt=GT;}
 function finishOrder(u){const o=u.order;if(!o)return;o.prog=Math.max(o.prog,u.prog/Math.max(1,u.plen)*o.len);   // the final reach, before the unit leaves
   u.order=null;o.units=o.units.filter(id=>id!==u.id);if(!o.units.length)closeOrder(o);}
 function clampIn(u){u.x=clamp(u.x,-MX+60,MX-60);u.z=clamp(u.z,-MZ+60,MZ-60);if(inPond(u.x,u.z,1.1)){const p=PONDS.find(p=>pondE(p,u.x,u.z)<1.1);const a=Math.atan2((u.z-p.z)/p.rz,(u.x-p.x)/p.rx);u.x=p.x+Math.cos(a)*p.rx*1.12;u.z=p.z+Math.sin(a)*p.rz*1.12;}}
-function puff(u){const fw=dims(u,u.form,alive(u))[0],o=(Math.random()-0.5)*fw*0.9,fo=u.type==='art'?14:8;
+function puff(u){
+  if(formedSq(u)){   // all four faces, placed on the block as drawn (its size follows the zoom), x/z for the painted world
+    const snap={...u,gone:0},S=dims(u,'square',alive(u)),h=S[1]/2,f=[Math.sin(u.dface),Math.cos(u.dface)],r=[Math.cos(u.dface),-Math.sin(u.dface)],D=[f,r,[-f[0],-f[1]],[-r[0],-r[1]]];   // where it fired, not where it goes
+    for(let j=0;j<4;j++){const o=0.1+0.8*Math.random(),d=D[j],q=(o-0.5)*S[0];
+      SMOKE.push({sq:snap,j,o,x:u.x-f[0]*h+d[0]*(h+6)-d[1]*q,z:u.z-f[1]*h+d[1]*(h+6)+d[0]*q,t0:performance.now(),big:false,face:u.face,rot:Math.random()*6.28});}
+    while(SMOKE.length>500)SMOKE.shift();return;}
+  const fw=dims(u,u.form,alive(u))[0],o=(Math.random()-0.5)*fw*0.9,fo=u.type==='art'?14:8;
   SMOKE.push({x:u.x+Math.cos(u.face)*o+Math.sin(u.face)*fo,z:u.z-Math.sin(u.face)*o+Math.cos(u.face)*fo,t0:performance.now(),big:u.type==='art',face:u.face,rot:Math.random()*6.28});if(SMOKE.length>500)SMOKE.shift();}
 
 /* =========================================================================
@@ -915,6 +995,18 @@ function blockCorners(u,extra=0){
   const C=[[-hw,front],[hw,front],[hw,back],[-hw,back]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
   return{C,fw,fd,f,r};
 }
+// losses: ragged bites out of a block's edges, more as its strength falls; the same bites every frame (seeded by the
+// unit), so a block wears down rather than flickers
+function damage(u,C,I,fw,fd,ringM){const n=Math.round(clamp((1-u.str)/0.7,0,1)*10);if(!n)return;
+  let sd=1+Math.floor(u.rand*2147483645);const rnd=()=>(sd=(sd*16807)%2147483647)/2147483647,W=[0.35,0.15,0.35,0.15],tot=1;   // front and back most; fixed, so a bite keeps its edge at any zoom or strength
+  const clipP=new Path2D(),B=new Path2D(),poly=(Q,X)=>{Q.moveTo(X[0][0],X[0][1]);for(let i=1;i<X.length;i++)Q.lineTo(X[i][0],X[i][1]);Q.closePath();};
+  poly(clipP,C);if(I)poly(clipP,I);ink.save();ink.clip(clipP,'evenodd');   /* a square keeps its hole; the caller path is untouched */
+  for(let k=0;k<n;k++){let w=rnd()*tot,e=0;while(e<3&&w>W[e]){w-=W[e];e++;}   // an edge, by its length on the ground: the same edge at any view
+    const a=C[e],b=C[(e+1)%4],q=C[(e+2)%4],L=Math.hypot(b[0]-a[0],b[1]-a[1])||1,t=0.08+0.84*rnd(),hw=Math.max(1.8/L,0.04+0.07*rnd()),ring=ringM?Math.min(1,ringM/(e%2?fw:fd)):1,dep=ring*(rnd()<0.3?1.2:0.45+0.45*rnd());   /* some cut right through */
+    const vx=q[0]-b[0],vy=q[1]-b[1],vl=Math.hypot(vx,vy)||1,o=2/vl;   // inward, across the block
+    const at=(s0,d)=>[a[0]+(b[0]-a[0])*s0+vx*d,a[1]+(b[1]-a[1])*s0+vy*d],P=[at(t-hw,-o),at(t-hw*0.6,dep*(0.4+0.3*rnd())),at(t-hw*0.1,dep),at(t+hw*0.4,dep*(0.5+0.4*rnd())),at(t+hw,-o)];
+    poly(B,P);}
+  ink.fillStyle='rgba(46,34,18,0.78)';ink.fill(B);ink.restore();}
 function pathPoly(C){ink.beginPath();ink.moveTo(C[0][0],C[0][1]);for(let i=1;i<C.length;i++)ink.lineTo(C[i][0],C[i][1]);ink.closePath();}
 const PULSE_WHITE=hex('#fbfaf6'),PULSE_MS=1100;   // the legend swatch (.blink) pulses at the same period, not in phase
 // the lit style: blocks stand off the ground and arrows cast a shadow, lit from the world's north-west. LIGHT points
@@ -922,7 +1014,7 @@ const PULSE_WHITE=hex('#fbfaf6'),PULSE_MS=1100;   // the legend swatch (.blink) 
 // away from it
 let LIGHT=[-0.6,-0.8];
 const raiseOf=k=>[-LIGHT[0]*k,-LIGHT[1]*k],SIDE_PX=3.1,SHADOW_PX=5.7;
-function setLight(){const h=Hs(CUR.x,CUR.z)*RISE()+0.3,a=[...proj(CUR.x,h,CUR.z)],b=[...proj(CUR.x-100,h,CUR.z+100)];   // copies: proj returns one shared array   // one height: the relief must not swing the light
+function setLight(){const h=Hs(CUR.x,CUR.z)*RISE()+0.3,a=[...proj(CUR.x,h,CUR.z)],b=[...proj(CUR.x+NW[0]*141,h,CUR.z+NW[1]*141)];   // copies: proj returns one shared array   // one height: the relief must not swing the light
   if(behind(a)||behind(b))return;
   const dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy);if(l>1e-3)LIGHT=[dx/l,dy/l];}
 const shade=(c,k)=>css(c.map(v=>k<1?v*k:v+(1-v)*(k-1)));   // k below 1 darker, above 1 toward white
@@ -971,18 +1063,18 @@ function drawGun(C,s,shadowOnly=false){
 // the lit style's houses: raised like the blocks, lit by the same light (the map's ink blocks, baked, are left out)
 const HOUSE_COL=[0.36,0.29,0.23],CHURCH_COL=[0.27,0.22,0.19];
 // the colour a block's sides take: its top's, as drawBlock fills it
-function blockCol(u,now){const s=SIDES[u.sideI];if(u.state==='rout')return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));return s.f;}
+function blockCol(u,now){const s=pal(u);if(u.state==='rout')return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));return s.f;}
 function drawUnder(u,alpha,now){const{C}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);
-  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,SIDES[u.sideI],true);else raised(C,blockCol(u,now));}ink.globalAlpha=1;}
+  if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true);else raised(C,blockCol(u,now));}ink.globalAlpha=1;}
 function drawBlock(u,alpha,now){
   u.gun=null;   // drawn this frame or not at all: a stale circle would keep a stale click area
-  const s=SIDES[u.sideI],{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
+  const s=pal(u),{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
   const lvl=u.mor>0.6?-1:u.mor>0.45?0:u.mor>0.3?1:2;
   if(u.state==='rout'){
     // routing: pulses between the army colour and white, the colour of surrender
     // a soft pulse on the frame clock passed in, so an exporter controls the phase
     pathPoly(C);ink.fillStyle=css(blockCol(u,now));ink.fill();if(LIT)litEdges(C);
-    ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);}
+    ink.setLineDash([3,2.5]);ink.strokeStyle=css(s.e||s.c);ink.lineWidth=1.4;ink.stroke();ink.setLineDash([]);if(LIT)damage(u,C,null,fw,fd,0);}
   else if(u.type==='art'&&LIT)u.gun=drawGun(C,s);
   else if(u.type==='art'){
     // bar + gun dot on the facing side
@@ -991,16 +1083,17 @@ function drawBlock(u,alpha,now){
     ink.beginPath();ink.arc(fr[0]+(fr[0]-bk[0])/dl*5,fr[1]+(fr[1]-bk[1])/dl*5,3,0,6.2832);ink.fillStyle=css(s.f);ink.fill();if(s.e)ink.stroke();
   }
   else{
-    pathPoly(C);
-    if(u.form==='square'&&u.morph>0.5){
+    pathPoly(C);let I=null,sqK=0;
+    if(formedSq(u)){
       // hollow square: the inner hole
-      const k=Math.min(Math.max(lerp(SQ_RING[0]*SYMZ*Math.sqrt(lossK(u)),SQ_RING[1],SYMK),2.2*MPP),fw*0.35,fd*0.35),hw=fw/2-k,I=[[-hw,-k],[hw,-k],[hw,-fd+k],[-hw,-fd+k]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
+      const k=Math.min(Math.max(lerp(SQ_RING[0]*SYMZ*Math.sqrt(lossK(u)),SQ_RING[1],SYMK),2.2*MPP),fw*0.35,fd*0.35),hw=fw/2-k;sqK=k;I=[[-hw,-k],[hw,-k],[hw,-fd+k],[-hw,-fd+k]].map(([sx,sz])=>P2(u.x+r[0]*sx+f[0]*sz,u.z+r[1]*sx+f[1]*sz));
       ink.moveTo(I[0][0],I[0][1]);for(let i=3;i>=0;i--)ink.lineTo(I[i][0],I[i][1]);ink.closePath();
     }
     ink.fillStyle=lvl<0?css(s.f):hatch(u.sideI,lvl);ink.fill('evenodd');if(LIT)litEdges(C);
     if(lvl>=0){ink.strokeStyle=css(s.e||s.c);ink.lineWidth=0.9;ink.stroke();}
     if(s.e){ink.strokeStyle=css(s.e);ink.lineWidth=1.5;ink.stroke();}
-    if(u.type==='cav'){ink.strokeStyle=s.e?css(s.e):'rgba(243,239,230,0.95)';ink.lineWidth=1.3;ink.beginPath();ink.moveTo(C[3][0],C[3][1]);ink.lineTo(C[1][0],C[1][1]);ink.stroke();}
+    if(u.type==='cav'){ink.strokeStyle=s.e?css(s.e):s.stripe?css(s.stripe):'rgba(243,239,230,0.95)';ink.lineWidth=1.3;ink.beginPath();ink.moveTo(C[3][0],C[3][1]);ink.lineTo(C[1][0],C[1][1]);ink.stroke();}
+    if(LIT)damage(u,C,I,fw,fd,I?sqK:0);   // last: a bite breaks the outline too
   }
   if(LIT&&u.type==='art'&&u.gun&&(u.sel||u===HOVER)){const{m,r:R}=u.gun;ink.strokeStyle=u.sel?'#211f1c':'rgba(33,31,28,0.5)';ink.lineWidth=0.9;ink.beginPath();ink.arc(m[0],m[1],R+2,0,6.2832);ink.stroke();if(u.sel){ink.lineWidth=0.6;ink.beginPath();ink.arc(m[0],m[1],R+4.5,0,6.2832);ink.stroke();}}   // the ring around the icon, what the eye sees
   else if(u.sel){const D=blockCorners(u,4).C,D2=blockCorners(u,6.5).C;ink.strokeStyle='#211f1c';ink.lineWidth=0.9;pathPoly(D);ink.stroke();ink.lineWidth=0.6;pathPoly(D2);ink.stroke();}
@@ -1117,12 +1210,15 @@ function smokeLit(p,c,age,k,mapA){
   const list=[];for(let i=0;i<3;i++){const s=(5+i*8)*(0.6+k*1.2),rr=(4.8+i*2.6)*(0.7+k*1.1);list.push([cloudPath(c[0]+dx*s,c[1]+dy*s-k*5,rr,p.rot+i),mapA*(1-k)*(0.95-i*0.18)]);}
   clouds(list);
 }
+// a square's puff: on face j of the block as drawn, a fraction o along it, a few pixels out
+function sqFace(p){const{C}=blockCorners(p.sq),a=C[p.j],b=C[(p.j+1)%4],m=[a[0]+(b[0]-a[0])*p.o,a[1]+(b[1]-a[1])*p.o],cx=(C[0][0]+C[2][0])/2,cy=(C[0][1]+C[2][1])/2,d=Math.hypot(m[0]-cx,m[1]-cy)||1;
+  return[m[0]+(m[0]-cx)/d*5,m[1]+(m[1]-cy)/d*5,Math.min(a[2],b[2])];}   // with its depth, for the behind test
 function drawSmoke(now,mapA,worldA){
-  for(const p of SMOKE){const age=(now-p.t0)/1000,life=p.big?6:4.2;if(age>life)continue;const k=age/life,c=P2(p.x,p.z);if(behind(c))continue;
+  for(const p of SMOKE){const age=(now-p.t0)/1000,life=p.big?6:4.2;if(age>life)continue;const k=age/life,c=p.sq?sqFace(p):P2(p.x,p.z);if(behind(c))continue;
     if(LIT&&mapA>0.01)smokeLit(p,c,age,k,mapA);
     else if(mapA>0.01){ink.globalAlpha=mapA*(1-k)*0.8;ink.strokeStyle='#8a847a';ink.lineWidth=0.8;ink.beginPath();const r0=(p.big?3:2)+k*(p.big?7:5);
       for(let a=0;a<=8.5;a+=0.35){const rr=r0*(0.35+a/8.5*0.65),x=c[0]+Math.cos(a+p.rot)*rr,y=c[1]+Math.sin(a+p.rot)*rr*0.8-k*6;a?ink.lineTo(x,y):ink.moveTo(x,y);}ink.stroke();}
-    if(worldA>0.01){const rw=(p.big?9:5)+k*(p.big?16:10),e=P2(p.x+rw,p.z),r=Math.max(1,Math.hypot(e[0]-c[0],e[1]-c[1]));
+    if(worldA>0.01){const c=P2(p.x,p.z),rw=(p.big?9:5)+k*(p.big?16:10),e=P2(p.x+rw,p.z),r=Math.max(1,Math.hypot(e[0]-c[0],e[1]-c[1]));   // the painted world: the puff at its own ground point
       ink.globalAlpha=worldA*(1-k)*(1-k)*0.55;ink.fillStyle='#f2efe8';ink.beginPath();ink.arc(c[0],c[1]-r*0.6*k,r,0,6.2832);ink.fill();
       ink.globalAlpha*=0.5;ink.fillStyle='#c9c9cc';ink.beginPath();ink.arc(c[0]+r*0.25,c[1]-r*0.6*k+r*0.3,r*0.75,0,6.2832);ink.fill();}}
   ink.globalAlpha=1;
@@ -1158,7 +1254,7 @@ function drawCorpsLabels(a){
     let ly=minY-30;for(let tries=0;tries<8;tries++){const hit=placed.some(r=>x0-5<r[2]&&x0+w1+w2+15>r[0]&&ly-8<r[3]&&ly+8>r[1]);if(!hit)break;ly-=18;}
     placed.push([x0-5,ly-8,x0+w1+w2+15,ly+8]);
     ink.fillStyle='rgba(243,239,230,0.82)';ink.fillRect(x0-5,ly-8,w1+w2+20,16);
-    ink.fillStyle=css(SIDES[cp.side==='FR'?0:cp.side==='RU'?1:2].c);ink.fillRect(x0,ly-3.5,7,7);
+    const cs=SIDES[cp.side==='FR'?0:cp.side==='RU'?1:2];ink.fillStyle=css((cp.guard?cs.guard:cs).c);ink.fillRect(x0,ly-3.5,7,7);
     if(cp.side==='AU'){ink.strokeStyle=css(SIDES[2].e);ink.lineWidth=1;ink.strokeRect(x0,ly-3.5,7,7);}
     ink.fillStyle='#211f1c';ink.textBaseline='middle';ink.fillText(t1,x0+11,ly+0.5);ink.fillStyle='#5f5a52';ink.fillText(t2,x0+11+w1,ly+0.5);
     ink.strokeStyle='rgba(33,31,28,0.55)';ink.lineWidth=0.7;ink.beginPath();ink.moveTo(sx,ly+8);ink.lineTo(sx,minY-6);ink.stroke();ink.letterSpacing='0px';}
@@ -1209,13 +1305,16 @@ function build(){
   if(DEM)$('demcredit').textContent=` · terrain: ${DEM.credit}`;   // CC BY 4.0: the credit shown with the data
   window.__bake={hachures:nh,ms:Math.round(bakeMs),trees:TREES.length,houses:HOUSES.length,terrain:DEM?`real (${DEM.source}), heights ×${DEM_Z.toFixed(2)}`:'made-up'};
   const COMMONU=['uSun','uSeason','uMist','uGSh'];
-  terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal'],
-    uniforms:['world','viewProjection','uCrown','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[])],defines:LIT?['#define LIT']:[]});
+  terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal',...(LAYERS?['aHB','aGB']:[])],
+    uniforms:['world','viewProjection','uCrown','uLightXZ','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[])]:[]});
   terrMat.backFaceCulling=false;terrMat.setTexture('uMapA',texA);terrMat.setTexture('uMapB',texB);paperT.wrapU=paperT.wrapV=noiseT.wrapU=noiseT.wrapV=B.Texture.WRAP_ADDRESSMODE;terrMat.setTexture('uPaperT',paperT);terrMat.setTexture('uNoiseT',noiseT);terrMat.setFloat('uHmin',HMIN);terrMat.setFloat('uHmax',HMAX);
   if(LIT){for(const[n,c]of[['uCanopyT',cCanopy],['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
+  if(LAYERS)terrMat.setVector2('uLightXZ',new B.Vector2(NW[0],NW[1]));
   terrainMesh().material=terrMat;
   {const O=30000,y=HMIN-1,P=[-TX,y,-TZ,TX,y,-TZ,TX,y,TZ,-TX,y,TZ,-O,y,-O,O,y,-O,O,y,O,-O,y,O],I=[0,4,1,1,4,5,1,5,2,2,5,6,2,6,3,3,6,7,3,7,0,0,7,4],
-    m=new B.Mesh('skirt',scene),vd=new B.VertexData();vd.positions=P;vd.indices=I;vd.normals=[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0];vd.applyToMesh(m);m.material=terrMat;m.isPickable=false;m.alwaysSelectAsActiveMesh=true;}
+    m=new B.Mesh('skirt',scene),vd=new B.VertexData();vd.positions=P;vd.indices=I;vd.normals=[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0];vd.applyToMesh(m);
+    if(LAYERS){const n=P.length/3;m.setVerticesData('aHB',Float32Array.from({length:n},(_,k)=>P[k*3+1]),false,1);m.setVerticesData('aGB',new Float32Array(n*2),false,2);}   // the layers shader reads them
+    m.material=terrMat;m.isPickable=false;m.alwaysSelectAsActiveMesh=true;}
   propMat=new B.ShaderMaterial('prop',scene,{vertexSource:PROP_VS,fragmentSource:PROP_FS},{attributes:['position','normal','aPart','aInst'],uniforms:['world','viewProjection','uRise','uSprout','uCrown','uConifer',...COMMONU]});
   const M=new B.Matrix(),Qn=new B.Quaternion(),Sc=new V3(),Tr=new V3();
   const place=(name,G,items,fn)=>{const m=toMesh(name,G,propMat),buf=new Float32Array(items.length*16),inst=new Float32Array(items.length*4);
@@ -1381,7 +1480,8 @@ setTimeout(()=>{
   if(Q.has('speed'))setSpeed(+Q.get('speed'));
   if(Q.has('follow')){const us=byCorps(Q.get('follow'));if(us.length){const u=us[+(Q.get('i')||0)%us.length];CAMS.T.x=CUR.x=u.x;CAMS.T.z=CUR.z=u.z;}}
   if(Q.has('sel')){const u=UNITS.find(u=>u.corps===Q.get('sel'));if(u){byCorps(u.corps).forEach(v=>v.sel=true);updateCard();}}
-  window.__buildMs=Math.round(performance.now()-T0);window.__readyMs=Math.round(performance.now());   // ready: from navigation start, a ?dem= file's load includedwindow.__proto={UNITS,ORDERS,CAMS,CUR,issue,byCorps,zoomTo,setSpeed,simStep};
+  window.__buildMs=Math.round(performance.now()-T0);window.__readyMs=Math.round(performance.now());   // ready: from navigation start, a ?dem= file's load included
+  window.__proto={UNITS,ORDERS,CAMS,CUR,issue,byCorps,zoomTo,setSpeed,simStep};
   $('load').style.display='none';requestAnimationFrame(frame);
 },30);
 </script>

@@ -53,6 +53,7 @@ designs written before building (frozen once built, their lasting content moves 
 ## Plans
 
 - Active: [`plans/active/prototype-plan.md`](plans/active/prototype-plan.md) (prototype phases, water W1–W6),
+  [`plans/active/paper-layers.md`](plans/active/paper-layers.md) (paper layers: the relief as stacked lit sheets in the staff map prototype),
   [`plans/active/real-terrain-proto.md`](plans/active/real-terrain-proto.md) (real terrain in the staff map prototype: ČÚZK's DMR 4G at Austerlitz, an experiment),
   [`plans/active/map-view-lit-v1.md`](plans/active/map-view-lit-v1.md) (a first lit map view in the staff map prototype: paper, grain, arrows, raised blocks),
   [`plans/active/flow-default.md`](plans/active/flow-default.md) (the combed meadow as the default grass),
