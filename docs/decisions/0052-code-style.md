@@ -53,7 +53,7 @@ The same settings in three formatters (width 120, no semicolons, single quotes, 
 - The sim's area formatted (`src/sim/`, `src/rulesets/`, `src/scenarios/`; 33 files): lint, typecheck and
   `node tools/build-sim-data.ts --check` pass, the data hashes unchanged; Vitest 299 of 300, the golden replay hashes
   among them, the one failure a cost test's time budget under load that passes alone (details in
-  `docs/plans/active/code-style.md`).
+  `docs/plans/done/code-style.md`).
 
 ## Decision
 
@@ -98,9 +98,10 @@ Prettier, pinned exactly (decision 0016), in `.prettierrc.json`:
 - **`curly`: `multi-line`**: `if (x) return` on one line stays; a body Prettier breaks onto its own line gets braces.
   Autofixed (616 in the measurement).
 - **Lint `tools/*.mjs` and `tools/*.js`**: removed from the ignores, with typescript-eslint's recommended rules as
-  everywhere. `tools/*.mjs` are Node scripts: Node's globals (from the `globals` package, pinned) and `no-undef`, which
-  catches a mistyped name in untyped JavaScript (0 found today). `tools/*.js` are evaluated inside a page
-  (`tools/river-check.js`, …) and read the page's own globals: browser globals, `sourceType: script`, no `no-undef`.
+  everywhere. `tools/*.mjs` are Node's ES modules: Node's builtin globals (from the `globals` package, pinned; not
+  CommonJS's `require` or `__dirname`) and `no-undef`, which catches a mistyped name in untyped JavaScript (0 found
+  today). `tools/*.js` are evaluated inside a page (`tools/river-check.js`, …) and read the page's own globals:
+  `sourceType: script`, no `no-undef` (it would flag every page global they read).
   4 findings to fix (3 unused variables, 1 unused expression).
 - Nothing else: the list stays short. typescript-eslint's recommended set has no formatting rules, so no
   `eslint-config-prettier` is needed.
@@ -124,7 +125,7 @@ style rules' `files`) and taken out of `.prettierignore`'s list of areas not for
 `test/format-scope.test.ts` checks that the formatter and the rules cover the same files. The formatting PR changes
 layout only, plus the comments `max-len` asks to shorten (a separate commit); the commit that lands on main goes in
 `.git-blame-ignore-revs` (GitHub's blame reads it; locally `git config blame.ignoreRevsFile .git-blame-ignore-revs`),
-after a squash merge in a one-line follow-up (`docs/plans/active/code-style.md`).
+after a squash merge in a one-line follow-up (`docs/plans/done/code-style.md`).
 
 **A branch in flight** when an area is formatted: merge main up to the commit before the formatting, then merge the
 formatting commit keeping the branch's side of every conflict (`git merge -X ours <commit>`; with a rebase,
