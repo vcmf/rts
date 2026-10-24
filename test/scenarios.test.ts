@@ -1,7 +1,7 @@
-// The scenarios the page offers (src/scenarios/page.ts), each on its map (src/scenarios/maps.ts): every one sets up
-// with nothing dropped, on the data version it was placed for; a plan names units its scenario spawns, on the right
-// sides; the page's tables agree with each other. A scenario broken by a ruleset or map change fails here, not on
-// the page.
+// The scenarios the page offers (src/scenarios/page.ts), each on its map (src/scenarios/maps.ts): every one
+// sets up with nothing dropped, on the data version it was placed for; a plan names units its scenario
+// spawns, on the right sides; the page's tables agree with each other. A scenario broken by a ruleset or map
+// change fails here, not on the page.
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
