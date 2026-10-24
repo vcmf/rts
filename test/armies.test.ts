@@ -632,5 +632,34 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
       }
     }
     expect(() => shadowShape(d, d.lods[d.lods.length - 1].name, [1, 0, 0], roles)).toThrow(/horizon/)
+    // a soft bake (decision 0062): in G the shape spread wider (more mass) at the same darkest value, the border still
+    // empty
+    const t = shadowShape(d, d.lods[d.lods.length - 1].name, sun, roles, { facings: 8, soft: 0.15 })
+    expect(t.channels).toBe(2)
+    expect(t.data.length).toBe(t.width * t.height * 2)
+    expect(s.channels).toBe(1)
+    for (let r = 0; r < 4; r++) {
+      for (let k = 0; k < 8; k++) {
+        const sum = [0, 0]
+        const peak = [0, 0]
+        for (let j = 0; j < t.cellH; j++) {
+          for (let i = 0; i < t.cellW; i++) {
+            const o = ((r * t.cellH + j) * t.width + k * t.cellW + i) * 2
+            if (i < t.margin || j < t.margin || i >= t.cellW - t.margin || j >= t.cellH - t.margin) {
+              expect(t.data[o] + t.data[o + 1]).toBe(0)
+              continue
+            }
+            for (const c of [0, 1]) {
+              sum[c] += t.data[o + c]
+              peak[c] = Math.max(peak[c], t.data[o + c])
+            }
+          }
+        }
+        expect(sum[1] / sum[0]).toBeGreaterThan(1)
+        expect(sum[1] / sum[0]).toBeLessThan(4)
+        expect(Math.abs(peak[1] - peak[0])).toBeLessThanOrEqual(1)
+      }
+    }
+    expect(() => shadowShape(d, d.lods[d.lods.length - 1].name, sun, roles, { soft: -1 })).toThrow(/soft/)
   })
 })

@@ -551,11 +551,40 @@ if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
   throw new Error(`?nearestpx must be a whole number of pixels, 0 to 2000, not ${nearestPx}`)
 }
 // the simple shadows (decision 0049, docs/plans/active/simple-soldier-shadows.md): ?ushadowfar=map, the map at every
-// zoom (the A/B; else simple: the map up close, a baked shape a man drawn on the ground beyond);
+// zoom (the A/B; else simple: a baked shape a man drawn on the ground, beyond close zoom or at every zoom, below);
 // ?ushadowswitch=<r0>,<r1>, the cross-fade's band (m from the focus); ?smoothmove=0, the figures' places at the 12 fps
 // steps (else every frame; the poses stay stepped);
 // ?udecallift=<m>, how high over the ground the simple shadows cover the grass and the men's legs
+// decision 0062 (docs/plans/active/soft-shadows-all.md): the simple shadows at every zoom; ?ushadowclose=map, the map
+// up close as before (cross-faded to them over ?ushadowswitch); their look up close, ?ushsoft=<0..1> (the soft bake's
+// share), ?ushdark=<0..1> (the full shadow's share), ?ushlen=<0.3..1.5> (their length), each <close>[,<far>] (far:
+// decision 0049's unless given); ?ushband=<r0>,<r1>, the band (m from the focus) the close look turns into the far one
 const uShadowFar = params.get('ushadowfar')
+const uShadowClose = params.get('ushadowclose')
+if (uShadowClose !== null && uShadowClose !== 'map' && uShadowClose !== 'simple') {
+  throw new Error(`?ushadowclose must be map or simple, not ${uShadowClose}`)
+}
+/** ?<k>=<close>[,<far>], each within [lo, hi]: [close, far or null], or null when absent */
+const lookPair = (k: string, lo: number, hi: number): [number, number | null] | null => {
+  const v = params.get(k)
+  if (v === null) return null
+  const n = v.split(',').map(Number)
+  if (!(n.length <= 2 && n.every(x => Number.isFinite(x) && x >= lo && x <= hi))) {
+    throw new Error(`?${k} must be <close>[,<far>], each ${lo} to ${hi}, not ${v}`)
+  }
+  return [n[0], n.length > 1 ? n[1] : null]
+}
+const ushSoft = lookPair('ushsoft', 0, 1)
+const ushDark = lookPair('ushdark', 0, 1)
+const ushLen = lookPair('ushlen', 0.3, 1.5)
+const ushBandP = params.get('ushband')
+const ushBand = ushBandP === null ? null : ushBandP.split(',').map(Number)
+if (
+  ushBand &&
+  !(ushBand.length === 2 && ushBand.every(Number.isFinite) && ushBand[0] >= 0 && ushBand[1] > ushBand[0])
+) {
+  throw new Error(`?ushband must be <r0>,<r1> m with r0 < r1, not ${ushBandP}`)
+}
 const uShadowSwitch = params.get('ushadowswitch')
 const smoothMove = bit('smoothmove')
 const decalLift = params.get('udecallift')
@@ -666,6 +695,17 @@ if (armiesParam !== null) {
   units.proxyCasters = shadowLod !== 'far'
   if (nearestPx !== null) units.nearestPx = +nearestPx
   units.simpleFar = uShadowFar !== 'map'
+  units.simpleClose = uShadowClose !== 'map'
+  for (const [k, p] of [
+    ['soft', ushSoft],
+    ['dark', ushDark],
+    ['len', ushLen],
+  ] as const) {
+    if (!p) continue
+    units.look.close[k] = p[0]
+    if (p[1] !== null) units.look.far[k] = p[1]
+  }
+  if (ushBand) units.lookBand = [ushBand[0], ushBand[1]]
   if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
   units.groundMap = meadow !== null
   if (decalLift !== null) units.decalLift = +decalLift

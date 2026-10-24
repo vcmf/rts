@@ -617,6 +617,7 @@ export interface ShadowShape {
   width: number
   height: number
   data: Uint8Array
+  channels: 1 | 2 // 2 with a soft bake: R the shape, G the same blurred by `soft` (interleaved)
   facings: number
   roles: string[]
   // a cell's texels across and along the shadow, its empty border (texels)
@@ -634,7 +635,9 @@ export interface ShadowShape {
  *  figure: a LOD posed at each step of a role's clip (up to maxSteps of them, evenly), turned to each of `facings`
  *  facings (the figure's own turn, as units.ts writes it), its triangles projected along the sun (sun: toward it,
  *  y > 0) onto the ground at its root and rasterised in the shadow's frame (along it, away from the sun; across it),
- *  averaged over the steps (a marching man's legs are one soft wedge) and blurred (blur: its sigma, m). Every soldier
+ *  averaged over the steps (a marching man's legs are one soft wedge) and blurred (blur: its sigma, m). soft (m,
+ *  0: none): a second channel, the same shape blurred by that sigma instead and brought back to the shape's own darkest
+ *  value in its cell (a softer edge, not a lighter shadow: the close zoom's, decision 0062). Every soldier
  *  of a figure casts it: no era names, the roles are the bake's (decision 0015). posed: the LOD's posedVertices, if
  *  already made */
 export function shadowShape(
@@ -647,9 +650,11 @@ export function shadowShape(
     texel = 0.05,
     blur = 0.06,
     maxSteps = 12,
+    soft = 0,
     posed = null as ReturnType<typeof posedVertices> | null,
   } = {},
 ): ShadowShape {
+  if (!(soft >= 0)) throw new Error(`shadowShape: the soft blur must be 0 or more m, not ${soft}`)
   if (!(sun[1] > 0.05)) throw new Error(`shadowShape: the sun must be above the horizon (y ${sun[1]})`)
   const m = d.mesh[lod]
   if (!m) throw new Error(`shadowShape: no LOD ${lod}`)
@@ -705,7 +710,7 @@ export function shadowShape(
   // the blur's reach to spare either way, and an empty border so the bilinear reads never cross into a neighbour
   // (its mips are read too, the mask's texels coarser than its own: a cell's border and size whole texels of the fourth
   // mip, so no mip up to it bleeds into a neighbour)
-  const pad = 3 * blur
+  const pad = 3 * Math.max(blur, soft)
   const margin = 8
   c0 -= pad
   c1 += pad
@@ -717,19 +722,24 @@ export function shadowShape(
   const cellH = ih + 2 * margin
   const W = cellW * facings
   const H = cellH * roles.length
-  const out = new Uint8Array(W * H)
+  const ch = soft > 0 ? 2 : 1
+  const out = new Uint8Array(W * H * ch)
   const sw = iw
   const sh = ih
   const cov = new Uint8Array(sw * sh)
   const sp = new Float64Array(nv * 2)
   const acc = new Float32Array(iw * ih)
   const tmp = new Float32Array(iw * ih)
-  // the blur's kernel (separable)
-  const sg = blur / texel
-  const R = Math.max(1, Math.ceil(3 * sg))
-  const ker = Array.from({ length: 2 * R + 1 }, (_, i) => Math.exp(-((i - R) ** 2) / (2 * sg * sg)))
-  const ks = ker.reduce((a, b) => a + b, 0)
-  for (let i = 0; i < ker.length; i++) ker[i] /= ks
+  const acc2 = new Float32Array(iw * ih)
+  // the blurs' kernels (separable): the shape's, then the soft one's
+  const kernel = (sigma: number) => {
+    const sg = sigma / texel
+    const R = Math.max(1, Math.ceil(3 * sg))
+    const ker = Array.from({ length: 2 * R + 1 }, (_, i) => Math.exp(-((i - R) ** 2) / (2 * sg * sg)))
+    const ks = ker.reduce((a, b) => a + b, 0)
+    return ker.map(v => v / ks)
+  }
+  const kers = soft > 0 ? [kernel(blur), kernel(soft)] : [kernel(blur)]
   roles.forEach((_, r) => {
     for (let k = 0; k < facings; k++) {
       acc.fill(0)
@@ -778,33 +788,48 @@ export function shadowShape(
         for (let i = 0; i < cov.length; i++) acc[i] += cov[i]
       }
       for (let i = 0; i < acc.length; i++) acc[i] /= steps[r].length
-      // blurred across, then along
-      for (let y = 0; y < ih; y++) {
-        for (let x = 0; x < iw; x++) {
-          let s = 0
-          for (let j = -R; j <= R; j++) {
-            const xx = x + j
-            if (xx >= 0 && xx < iw) s += acc[y * iw + xx] * ker[j + R]
+      // blurred across, then along (each channel by its kernel); the soft one brought to the shape's darkest value
+      let peak = 0
+      kers.forEach((ker, c) => {
+        const R = (ker.length - 1) / 2
+        for (let y = 0; y < ih; y++) {
+          for (let x = 0; x < iw; x++) {
+            let s = 0
+            for (let j = -R; j <= R; j++) {
+              const xx = x + j
+              if (xx >= 0 && xx < iw) s += acc[y * iw + xx] * ker[j + R]
+            }
+            tmp[y * iw + x] = s
           }
-          tmp[y * iw + x] = s
         }
-      }
-      for (let y = 0; y < ih; y++) {
-        for (let x = 0; x < iw; x++) {
-          let s = 0
-          for (let j = -R; j <= R; j++) {
-            const yy = y + j
-            if (yy >= 0 && yy < ih) s += tmp[yy * iw + x] * ker[j + R]
+        let top = 0
+        for (let y = 0; y < ih; y++) {
+          for (let x = 0; x < iw; x++) {
+            let s = 0
+            for (let j = -R; j <= R; j++) {
+              const yy = y + j
+              if (yy >= 0 && yy < ih) s += tmp[yy * iw + x] * ker[j + R]
+            }
+            acc2[y * iw + x] = s
+            top = Math.max(top, s)
           }
-          out[(r * cellH + margin + y) * W + k * cellW + margin + x] = Math.round(255 * Math.min(1, s))
         }
-      }
+        if (c === 0) peak = top
+        const g = c === 0 || top === 0 ? 1 : Math.min(peak, 1) / top
+        for (let y = 0; y < ih; y++) {
+          for (let x = 0; x < iw; x++) {
+            const v = Math.round(255 * Math.min(1, acc2[y * iw + x] * g))
+            out[((r * cellH + margin + y) * W + k * cellW + margin + x) * ch + c] = v
+          }
+        }
+      })
     }
   })
   return {
     width: W,
     height: H,
     data: out,
+    channels: ch,
     facings,
     roles: [...roles],
     cellW,
