@@ -14,8 +14,7 @@ precision highp float;attribute vec3 position;
 // screen, and a lifted shadow there would darken them. vLM: where it lies in the tile's top-down maps (the ground's
 // shade, read by the fragment). The strip (uStrip: across and along start, their spans, m from his feet) and its four
 // rows' places along it (uRows, 0 to 1; position.z picks the row) are the CPU's (decalStrip, src/look/shadow-look.ts):
-// decision 0049's strip far off, up close a wider one with its second row at his soles; past them it is drawn uShLen
-// as long (the zoom's look, decision 0062: the shape's own texels stretched or shortened, his feet where they were).
+// the shape's full box with its second row at his soles, at every zoom; past them it is drawn uShLen as long (the zoom's look, decision 0062: the shape's own texels stretched or shortened, his feet where they were).
 // vAlong: m along it from his soles at the shape's own size times uShLen (the far figures' growth leaves the
 // fragment's gradient where it lies on the shape)
 uniform mat4 viewProjection;uniform vec3 uCamPos;

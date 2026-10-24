@@ -41,10 +41,8 @@ import {
   decalStrip,
   farShare,
   footUniform,
-  isPlain,
   lookBetween,
   type ShadowLook,
-  type ShapeBox,
 } from './shadow-look.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
 import {
@@ -291,10 +289,8 @@ export class Units {
   lookBand: [number, number] = [...SHADOW_LOOK_BAND]
   // the look this frame (lookAt), given to the decal's material (setDecalLook)
   private readonly lookNow: ShadowLook = { ...SHADOW_LOOK.far }
-  // the shape's boxes (useDecals): what the shape alone fills, and with the soft bake's reach (decalStrip)
-  private shapeBoxes: { base: ShapeBox; full: ShapeBox } | null = null
-  private readonly stripV = new Vector4()
-  private readonly rowsV = new Vector4()
+  // the look last given to the decal's material (setDecalLook: only when it changes)
+  private readonly lookSet: ShadowLook = { soft: NaN, dark: NaN, foot: NaN, core: NaN, len: NaN }
   /** the cross-fade's band, m (SHADOW_SWITCH) */
   band: [number, number] = [...SHADOW_SWITCH]
   /** the figures, their flags and the map's casters moved every frame between two steps (?smoothmove=1), not at the
@@ -318,10 +314,12 @@ export class Units {
   /** the ground's shade the simple shadows darken it to (src/look/bakes.ts unitShade): main.ts, before setShadows */
   shade: BaseTexture | null = null
   private decal: ShaderMaterial | null = null // the simple shadows' (useDecals)
-  /** their soft edge as the samples they cover (alpha to coverage), with the scene's 4 samples; with fewer (?msaa=1|2)
-   *  their value darkens the pixel instead (the stencil still darkens it once: the first shadow there wins) */
+  /** their share of the samples (their soft edge and their gradient: decalFragment, src/look/shadow-look.ts) as
+   *  alpha to coverage, with the scene's 2 or 4 samples: order-independent; with one (?msaa=1) their share darkens the
+   *  pixel instead, the first shadow there winning (the stencil), so where they overlap the result depends on their
+   *  order there */
   private get coverage(): boolean {
-    return MSAA.samples >= 4
+    return MSAA.samples >= 2
   }
   private mapOn = false // the map drawn this frame
   private stepFrac = 0
@@ -1580,7 +1578,9 @@ export class Units {
     m.setVector2('uFarScale', this.farScaleV)
     m.setFloat('uDecalLift', this.lift)
     this.decal = m
-    this.shapeBoxes = { base: shape.base, full: { across: shape.across, along: shape.along } }
+    const strip = decalStrip({ across: shape.across, along: shape.along })
+    m.setVector4('uStrip', new Vector4(...strip.box))
+    m.setVector4('uRows', new Vector4(...strip.rows))
     this.setDecalLook(this.lookNow)
     // (a mode nothing else draws with: its blend is replaced at each bind, below)
     m.alphaMode = Constants.ALPHA_EXCLUSION
@@ -1630,19 +1630,18 @@ export class Units {
     }
     for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', map)
   }
-  /** The simple shadows' look (decision 0062) given to their material: the soft bake's share at the tip, the length,
-   *  the gradient from the soles (uShFoot, footUniform) and the strip they lie on (uStrip, uRows: decalStrip, the
-   *  far look's as decision 0049's) */
+  /** The simple shadows' look (decision 0062) given to their material when it changed: the soft bake's share at the
+   *  tip, the length, and the gradient from the soles (uShFoot, footUniform) */
   private setDecalLook(l: ShadowLook): void {
     const m = this.decal
-    const b = this.shapeBoxes
-    if (!m || !b) return
+    const p = this.lookSet
+    if (!m || (l.soft === p.soft && l.dark === p.dark && l.foot === p.foot && l.core === p.core && l.len === p.len)) {
+      return
+    }
+    Object.assign(p, l)
     m.setFloat('uShSoft', l.soft)
     m.setFloat('uShLen', l.len)
     m.setVector4('uShFoot', this.footV.set(...footUniform(l, SHADOW_TIP)))
-    const strip = decalStrip(b.base, b.full, isPlain(l))
-    m.setVector4('uStrip', this.stripV.set(...strip.box))
-    m.setVector4('uRows', this.rowsV.set(...strip.rows))
   }
   /** The figures' shadow map (decision 0047), made when a switch first asks for it (decision 0062): its target, lazy
    *  unless lazyShadows is off, and the receivers' bindings of it */

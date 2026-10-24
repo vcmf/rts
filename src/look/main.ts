@@ -559,8 +559,9 @@ if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
 // decision 0062 (docs/plans/active/soft-shadows-all.md): the simple shadows at every zoom; ?ushadowclose=map, the map
 // up close as before (cross-faded to them over ?ushadowswitch); their look up close, ?ushsoft=<0..1> (the soft bake's
 // share at the tip), ?ushdark=<0..1> (the full shadow's share at the tip), ?ushlen=<0.3..1.5> (their length), each
-// <close>[,<far>] (far: decision 0049's unless given); ?ushband=<r0>,<r1>, the band (m from the focus) the close look
-// turns into the far one
+// <close>[,<far>] (far: decision 0049's unless given); ?ushfoot=<dark>,<core m>[,<far dark>,<far core m>], the contact
+// at the soles (its darkness, a share of the full shadow, and the core it holds over before turning to the tip's);
+// ?ushband=<r0>,<r1>, the band (m from the focus) the close look turns into the far one
 // (src/look/shadow-look.ts parses them, a bad value an error at load)
 const shadowMode = shadowModes(params)
 const shadowLook = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
@@ -585,6 +586,12 @@ if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && 
 }
 if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '1') {
   throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
+}
+// (the scene's samples before the armies: their simple shadows' material is built for them, src/look/units.ts)
+if (params.has('msaa')) {
+  const n = Number(params.get('msaa'))
+  if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`)
+  MSAA.samples = n
 }
 let units: Units | null = null
 // (the fight's middle: the bench's focus)
@@ -701,11 +708,6 @@ if (armiesParam !== null) {
   units.setSmooth(smoothMove ?? true)
   armiesFocus = facingAt(units.battalions)
   Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
-}
-if (params.has('msaa')) {
-  const n = Number(params.get('msaa'))
-  if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`)
-  MSAA.samples = n
 }
 if (flag('rt16')) MSAA.byte = false
 // half floats: an 8-bit target stores a NaN as 0, which nothing can mark

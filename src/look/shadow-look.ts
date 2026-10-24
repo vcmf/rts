@@ -42,12 +42,6 @@ export function lookBetween(close: ShadowLook, far: ShadowLook, t: number, out: 
   return out
 }
 
-/** Whether a look is the far one's plain shadow (no softness, no gradient, the shape's length): then the strip is
- *  decision 0049's own */
-export function isPlain(l: ShadowLook): boolean {
-  return l.soft === 0 && l.len === 1 && l.foot === l.dark && l.core === 0
-}
-
 /** The decal's gradient uniform for a look: [darkness at the soles, at the tip, the core's end, the tip], the last two
  *  in m from the soles; tipBase (m) is the tip at the shape's length, shortened with the look; the core is kept short
  *  of the tip (a smoothstep needs its edges apart) */
@@ -67,17 +61,25 @@ export interface Strip {
   box: [number, number, number, number]
   rows: [number, number, number, number]
 }
-/** The strip for a look: plain, decision 0049's strip over the shape's base box (its rows evenly spaced, so the far
- *  zooms draw as before); else over the full box (the soft bake's wider reach) with its second row at the soles, so
- *  each triangle lies on one side of them and a strip shortened past them keeps the feet where they are */
-export function decalStrip(base: ShapeBox, full: ShapeBox, plain: boolean): Strip {
-  const b = plain ? base : full
+/** The strip a soldier draws his shadow on at every zoom: the shape's full box (the soft bake's reach) with its second
+ *  row at the soles, so each triangle lies on one side of them and a strip shortened past them keeps the feet where
+ *  they are (one strip at every zoom: nothing jumps where the looks meet; far off it draws decision 0049's shadow on
+ *  other rows, a few pixels from main's) */
+export function decalStrip(b: ShapeBox): Strip {
   const span = b.along[1] - b.along[0]
   const box: Strip['box'] = [b.across[0], b.along[0], b.across[1] - b.across[0], span]
-  if (plain) return { box, rows: [0, 1 / 3, 2 / 3, 1] }
   if (!(b.along[0] < 0 && b.along[1] > 0)) throw new Error('decalStrip: the box must hold the soles (along 0)')
   const soles = -b.along[0] / span
   return { box, rows: [0, soles, (soles + 1) / 2, 1] }
+}
+
+/** The decal's rule at a fragment (src/look/shaders/unitdecal.frag, mirrored here for its tests): of the shape's value
+ *  s at g along the gradient (0 at the core, 1 at the tip), the share of the samples it covers and the darkness every
+ *  covered sample takes (the look's darkest, the same for every shadow: so where shadows overlap and the stencil lets
+ *  the first through, the darkest share wins whatever their order) */
+export function decalFragment(s: number, g: number, foot: number, dark: number): { cover: number; dark: number } {
+  const dm = Math.max(foot, dark, 1e-4)
+  return { cover: Math.min(1, (s * (foot + (dark - foot) * g)) / dm), dark: dm }
 }
 
 /** The figures' shadow modes from the page's switches: simpleFar (?ushadowfar=map: the map at every zoom, false),

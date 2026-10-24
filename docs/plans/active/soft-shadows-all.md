@@ -146,12 +146,28 @@ apart between the two orders, before → after, 6,024 → 0 at 15 m, 2,993 → 0
 against both forced orders: before, each frame differs from one order by 2,207 to 2,976 pixels (what a flip of the
 sort pops), after, from both by none. The chosen look kept (sheet 9). Moderate: the non-coverage path's fringe stenciled whole pixels at a fraction of
 their darkening (now in or out by the dither: no speckled holes); the soft bake's padding moved R's texels by a part of
-one (now whole blocks of 8, the strip far off decision 0049's: the default at 125 m against main, 6 pixels differ, by
-at most 3 of 255, where the previous commits differed on 29,889, by up to 62; `?ushadowclose=map` against main at 15,
-55 and 125 m: 0, 0 and 6 pixels, by at most 3); the sun's corner rays cast only for the map or the trodden mask; the
+one (now whole blocks of 8; with the strip far off decision 0049's the default at 125 m was then 6 pixels from main's,
+by at most 3, but review round 2 kept one strip at every zoom, below); the sun's corner rays cast only for the map or the trodden mask; the
 gradient's tip followed the far figures' growth (now on the shape's own size); the looks, the gradient's uniform, the
 strip and the switches pure and tested (`src/look/shadow-look.ts`, `test/shadow-look.test.ts`), the switches' empty
 fields refused.
+
+**Review round 2** (`/code-review high` on d62d830). Two possible issues on the real GPU, checked on Metal (the owner's
+road view and the forced pair, a production build, sheet 10): (a) the gradient as coverage could band (4 samples, 5
+levels): no contour bands at 15 or 30 m, the histogram of the shadow's darkening only a little lumpier than the colour
+gradient's (Metal's alpha to coverage and the resolve smooth it); (b) non-nested coverage masks would make overlaps
+darker than either shadow: of the pixels both shadows darken, at 15 m 0.08 % (38 of 47,753) are more than 10 % darker
+than the darker shadow alone (the colour gradient: 8, and 3.4 % lighter bites), the mean +0.003 of the light, at 30 m
+32 of 26,296. So the coverage approach stays. Fixed: `?msaa` is set before the armies are built (it was set after the
+decal's material, so it never took); 2 samples keep alpha to coverage, 1 falls back to a smooth darkening (order-
+dependent there, documented) instead of a screen-space dither that would crawl; the tip's darkness divides by at least
+1e-4; the strip set once in `useDecals` and the look only when it changes; one strip (the full box, its second row at
+the soles) at every zoom, so nothing jumps where the looks meet, at the cost of decision 0049's far shadow on other rows
+than main's (at 125 m 20,430 pixels differ, 2,591 by more than 6 of 255, up to 62: speckles along the shadows where
+the lift and the ground's height fall at other vertices; at 260 m 7,798, 1,622 and 32); a JS mirror of the fragment's
+rule (`decalFragment`) and a test that two shadows resolve the same in either order, with the colour rule failing it;
+the soft bake's tests in one place. The owner's view on Metal, main against the final build, and `?msaa=2` and `=1`:
+sheet 11.
 
 ## Open questions
 

@@ -30,7 +30,9 @@ shadow at every zoom, its look set per zoom.
   shape itself at a contact darkness (a little over the full shadow), then toward the tip softer and lighter, to the
   look's softness and darkness at the tip; fragment arithmetic on the distance along the shadow, no more reads. The
   darkness is coverage, not colour: every shadow darkens what it covers alike, lighter parts covering fewer samples,
-  so where shadows overlap the darkest wins whatever the draw order, and the stencil still darkens each sample once.
+  so where shadows overlap the darkest wins whatever the draw order, and the stencil still darkens each sample once
+  (alpha to coverage with 2 or 4 samples; checked on Metal: no bands, no darker seams; with one sample, `?msaa=1`, a
+  smooth darkening whose overlaps depend on the order).
   The owner chose softness 0.75 with the foot gradient, 2026-10-24, from sheet 7 (the review images, the plan).
   The settings: softness (a share of a softer bake of the shape: the atlas's second channel, blurred wider and
   brought back to the shape's darkest value, so softer is not lighter), darkness (the share of the ground's full

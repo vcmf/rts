@@ -7,10 +7,10 @@ import {
   SHADOW_LOOK,
   SHADOW_LOOK_BAND,
   applyLookParams,
+  decalFragment,
   decalStrip,
   farShare,
   footUniform,
-  isPlain,
   lookBetween,
   parseNumbers,
   shadowModes,
@@ -36,8 +36,7 @@ describe('the look a zoom', () => {
   it('is darker at the soles than at the tip up close, one value end to end far off (decision 0049 as it was)', () => {
     expect(SHADOW_LOOK.close.foot).toBeGreaterThan(SHADOW_LOOK.close.dark)
     expect(SHADOW_LOOK.close.core).toBeGreaterThan(0)
-    expect(isPlain(SHADOW_LOOK.far)).toBe(true)
-    expect(isPlain(SHADOW_LOOK.close)).toBe(false)
+    expect([SHADOW_LOOK.far.foot, SHADOW_LOOK.far.dark, SHADOW_LOOK.far.soft]).toEqual([1, 1, 0])
   })
   it("packs the gradient: the soles' and the tip's darkness, the core short of the tip, the tip shortened", () => {
     const l = { ...SHADOW_LOOK.close, len: 0.5, core: 3 }
@@ -50,22 +49,46 @@ describe('the look a zoom', () => {
 })
 
 describe('the strip a soldier draws his shadow on', () => {
-  const base = { across: [-1, 1], along: [-0.5, 5] } as const
-  const full = { across: [-1.4, 1.4], along: [-0.9, 5.4] } as const
-  it('far off is decision 0049s: the base box, its rows evenly spaced', () => {
-    const s = decalStrip(base, full, true)
-    expect(s.box).toEqual([-1, -0.5, 2, 5.5])
-    expect(s.rows).toEqual([0, 1 / 3, 2 / 3, 1])
-  })
-  it('up close covers the soft bake and has its second row at the soles (the feet stay put when it is shortened)', () => {
-    const s = decalStrip(base, full, false)
+  it('covers the soft bake and has its second row at the soles at every zoom (the feet stay put when shortened)', () => {
+    const s = decalStrip({ across: [-1.4, 1.4], along: [-0.9, 5.4] })
     expect(s.box.map(v => +v.toFixed(9))).toEqual([-1.4, -0.9, 2.8, 6.3])
     const at = (r: number) => s.box[1] + r * s.box[3]
     expect(at(s.rows[0])).toBeCloseTo(-0.9, 12)
     expect(at(s.rows[1])).toBeCloseTo(0, 12) // the soles
     expect(at(s.rows[3])).toBeCloseTo(5.4, 12)
     expect(s.rows[2]).toBeGreaterThan(s.rows[1])
-    expect(() => decalStrip(base, { across: [-1, 1], along: [0.1, 5] }, false)).toThrow(/soles/)
+    expect(() => decalStrip({ across: [-1, 1], along: [0.1, 5] })).toThrow(/soles/)
+  })
+})
+
+describe('where shadows overlap (the decal at a fragment, decalFragment)', () => {
+  // a pixel's four samples, each covered when a shadow's share is over its threshold (alpha to coverage: the masks of
+  // smaller shares inside those of larger ones), the stencil letting the first shadow at a sample through
+  const thresholds = [0.125, 0.375, 0.625, 0.875]
+  const resolve = (frags: { cover: number; dark: number }[]) =>
+    thresholds.map(t => frags.find(f => f.cover > t)?.dark ?? 0).reduce((a, b) => a + b, 0) / thresholds.length
+  const c = SHADOW_LOOK.close
+  it('takes the darkest whatever the order: a light tip drawn first takes nothing from a dark contact', () => {
+    for (const [s1, g1, s2, g2] of [
+      [1, 1, 1, 0], // a tip over the next man's contact
+      [0.6, 0.3, 0.9, 0.8],
+      [0.2, 0, 1, 1],
+    ]) {
+      const a = decalFragment(s1, g1, c.foot, c.dark)
+      const b = decalFragment(s2, g2, c.foot, c.dark)
+      expect(resolve([a, b])).toBe(resolve([b, a]))
+      expect(resolve([a, b])).toBe(Math.max(resolve([a]), resolve([b])))
+    }
+    // (the darkness as a colour, the first commit's: the tip drawn first wins the sample)
+    const colour = (s: number, g: number) => ({ cover: s, dark: c.foot + (c.dark - c.foot) * g })
+    expect(resolve([colour(1, 1), colour(1, 0)])).not.toBe(resolve([colour(1, 0), colour(1, 1)]))
+  })
+  it("darkens the soles' contact more than the tip, and never divides by nothing", () => {
+    expect(decalFragment(1, 0, c.foot, c.dark).cover).toBe(1)
+    expect(decalFragment(1, 1, c.foot, c.dark).cover).toBeCloseTo(c.dark / c.foot, 12)
+    expect(decalFragment(1, 1, c.foot, c.dark).dark).toBe(c.foot)
+    const z = decalFragment(1, 0.5, 0, 0)
+    expect(Number.isFinite(z.cover) && z.cover === 0).toBe(true)
   })
 })
 
@@ -140,6 +163,33 @@ describe('the shape with its soft bake', () => {
         }
       }
     }
+  })
+  it('bakes in G the shape spread wider at its own darkest value, the border still empty', () => {
+    expect(soft.channels).toBe(2)
+    expect(soft.data.length).toBe(soft.width * soft.height * 2)
+    for (let r = 0; r < roles.length; r++) {
+      for (let k = 0; k < 4; k++) {
+        const sum = [0, 0]
+        const peak = [0, 0]
+        for (let j = 0; j < soft.cellH; j++) {
+          for (let i = 0; i < soft.cellW; i++) {
+            const o = ((r * soft.cellH + j) * soft.width + k * soft.cellW + i) * 2
+            if (i < soft.margin || j < soft.margin || i >= soft.cellW - soft.margin || j >= soft.cellH - soft.margin) {
+              expect(soft.data[o] + soft.data[o + 1]).toBe(0)
+              continue
+            }
+            for (const c of [0, 1]) {
+              sum[c] += soft.data[o + c]
+              peak[c] = Math.max(peak[c], soft.data[o + c])
+            }
+          }
+        }
+        expect(sum[1] / sum[0]).toBeGreaterThan(1)
+        expect(sum[1] / sum[0]).toBeLessThan(4)
+        expect(Math.abs(peak[1] - peak[0])).toBeLessThanOrEqual(1)
+      }
+    }
+    expect(() => shadowShape(d, lod, sun, roles, { soft: -1 })).toThrow(/soft/)
   })
   it('shows no musket plank: past the body, at most a faint stroke (the bayonet) at the close look', () => {
     // along the shadow, the darkest value a row holds at the close look's tip (its soft share of G, its darkness over
