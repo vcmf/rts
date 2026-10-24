@@ -1,9 +1,9 @@
 ---
 status: active
-last_reviewed: 2026-10-23
+last_reviewed: 2026-10-24
 ---
 
-# Plan: woods in green (staff map prototype)
+# Plan: woods in warm grey (staff map prototype)
 
 ## Problem
 

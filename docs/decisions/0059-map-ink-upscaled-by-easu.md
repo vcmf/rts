@@ -26,7 +26,7 @@ redraw. EASU sharpens edges but cannot restore detail drawn at half the pixels; 
 
 ## Alternatives considered
 
-- **EASU on colour and on alpha separately:** six times the reads, and the two runs choose their edges independently,
-  leaving fringes.
+- **EASU on colour and on alpha separately:** the two runs choose their edges independently, leaving fringes, and it
+  reads about twice the texels (an estimate; measured on machine A the frame was the same within noise).
 - **The browser's bilinear stretch:** free, and soft.
 - **Sharp ink by default:** crisp, and 3 to 4 times the frame cost on 4K (decision 0056).

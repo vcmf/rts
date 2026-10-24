@@ -242,3 +242,16 @@ restore detail drawn at half the pixels.
 
   Left: the woods no longer follow the season's crown colour (the owner chose one warm grey). The terrain shader's
   `uCrown` is now unused in the lit style.
+- **The EASU pass: round 2**: moderate and light only, so the review stops. Fixed:
+  - a pixel EASU covers but the bilinear read does not takes the nearest texel's colour, not black;
+  - the green and blue gathers reuse the red one, so the pass reads 16 texels a pixel by itself, not 48 left for the
+    compiler to merge;
+  - the alpha rewrite checks its count (12 in Babylon 9.29) and keeps the canvas if the shader changed;
+  - the EASU constants in one function, `easuConstants` (Babylon's own is not exported by the CDN build, which the
+    review had assumed: using it turned the pass off, caught by the check below);
+  - a failed compile turns the pass off for good, with no uploads;
+  - `drawInk` marks the upload itself;
+  - decision 0059's cost of the rejected alternative is labelled an estimate;
+  - the woods plan's title and index line say grey.
+
+  Left: the terrain's `uCrown` is still sent every frame, though the lit woods no longer read it.
