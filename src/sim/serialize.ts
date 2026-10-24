@@ -6,14 +6,16 @@ import { type World, makeWorld, MAX_FORMATIONS, M_DATA, M_RULES } from './world.
 import type { Compiled } from './ruleset.ts'
 import { columnsOf, type Column } from './columns.ts'
 import type { Stamped, Command } from './commands.ts'
+import { COMMAND_FIELDS, normaliseCommand, type FieldKind } from './command-fields.ts'
 import { DataVersionMismatch, type SimData, hex } from './data.ts'
 import { fnv1a } from './hash.ts'
 
 const SAVE_MAGIC = 0x57535452 // 'RTSW'
 // 3: the formations' faces column (S1b); 4: fire, morale, sides, the seed (S1c); 5: pressed (S1c-3); 6: the rest of the
 // morale machine (S1c-2); 7: unit types (S1d-1); 8: charges, melee and the square (S1d-2); 9: the battery's shots
-// (S1d-3); 10: the men who left the field, per side (S1e-1); 11: the end and the men spawned per side (S1e-2)
-const SAVE_FORMAT = 11
+// (S1d-3); 10: the men who left the field, per side (S1e-1); 11: the end and the men spawned per side (S1e-2);
+// 12: a pending command may be `refused` (#155), which an older sim would not read
+const SAVE_FORMAT = 12
 
 class Writer {
   buf = new Uint8Array(1024)
@@ -150,23 +152,22 @@ const readArr = (r: Reader, a: Arr) => {
   else for (let i = 0; i < a.length; i++) a[i] = r.i32()
 }
 
-// commands are written field by field, in a fixed order per type: numbers as float64, handles and
+// commands are written field by field, in their table's order (command-fields.ts): numbers as float64, handles and
 // counts as int32, strings with their length, points with their count
-const FIELDS: Record<string, string[]> = {
-  move: ['id:i', 'append:b', 'points:p'],
-  form: ['id:i', 'shape:s'],
-  wheel: ['id:i', 'angle:f'],
-  face: ['id:i'],
-  retire: ['id:i', 'metres:f'],
-  halt: ['id:i'],
-  style: ['id:i', 'preset:s'],
-  'debug-spawn': ['side:i', 'x:f', 'z:f', 'heading:f', 'shape:s', 'men:i', 'quality:f', 'fire:s', 'unit:s'],
-  'debug-kill': ['id:i', 'men:i'],
-  'debug-morale': ['id:i', 'quality:f'],
-  fire: ['id:i', 'mode:s', 'target:i'],
-  side: ['side:i', 'x:f', 'z:f'],
-  charge: ['id:i', 'target:i'],
+const CODE: Record<FieldKind, string> = {
+  id: 'i',
+  int: 'i',
+  cm: 'f',
+  ang: 'f',
+  quality: 'f',
+  str: 's',
+  reason: 's',
+  bool: 'b',
+  pts: 'p',
 }
+const FIELDS: Record<string, string[]> = Object.fromEntries(
+  Object.entries(COMMAND_FIELDS).map(([t, fs]) => [t, fs.map(f => `${f.name}:${CODE[f.kind]}`)]),
+)
 function writeCommand(w: Writer, s: Stamped) {
   w.i32(s.tick)
   w.i32(s.seq)
@@ -284,7 +285,12 @@ export function deserialize(
   readArr(r, w.free)
   for (const a of columns(w.ord)) readArr(r, a)
   const n = r.u32()
-  for (let k = 0; k < n; k++) w.pending.push(readCommand(r))
+  // each command checked again as `issue` checks it: a save written by hand or by an older sim can hold one that is
+  // not canonical (a NaN field), and it is refused, not applied
+  for (let k = 0; k < n; k++) {
+    const s = readCommand(r)
+    w.pending.push({ ...s, cmd: normaliseCommand(s.cmd) })
+  }
   if (r.o !== bytes.length) throw new Error('save has trailing bytes')
   if (f.alive.length !== MAX_FORMATIONS) throw new Error('save does not match this sim version')
   return w

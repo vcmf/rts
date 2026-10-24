@@ -61,6 +61,7 @@ describe('num: exact-ops trigonometry', () => {
       expect(Math.abs(Math.sin(w) - Math.sin(a))).toBeLessThan(1e-9)
     }
     expect(quantise(12.3456)).toBe(12.35)
-    expect(quantise(-0.004)).toBe(-0)
+    // +0 (#157)
+    expect(quantise(-0.004)).toBe(0)
   })
 })

@@ -85,7 +85,7 @@ export function atan2(y: number, x: number): number {
   const ay = y < 0 ? -y : y
   let a = ay <= ax ? atanPos(ay / ax) : HALF_PI - atanPos(ax / ay)
   if (x < 0) a = PI - a
-  return y < 0 ? -a : a
+  return (y < 0 ? -a : a) + 0 // + 0: a zero result is +0, whatever the sign of y or an underflowed ratio (#157)
 }
 // an angle in (−π, π]
 export function wrapAngle(a: number): number {
@@ -115,8 +115,9 @@ export function exp(x: number): number {
   return s
 }
 
-// command positions are quantised to 1 cm when the sim stamps them
-export const quantise = (v: number): number => Math.round(v * 100) / 100
+// command positions are quantised to 1 cm when the sim stamps them; a value that rounds to zero is +0 (#157:
+// Math.round gives −0 for −0.005, and a −0 stored in state would save as other bytes than +0)
+export const quantise = (v: number): number => Math.round(v * 100) / 100 + 0
 
 export class NonFiniteState extends Error {}
 export function assertFinite(name: string, a: Float64Array): void {

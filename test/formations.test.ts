@@ -545,6 +545,7 @@ describe('the trail ring', () => {
         infantry: {
           ...inf,
           refuge: undefined,
+          changeTime: {},
           geometry: { ...inf.geometry, ...g },
           formations: {
             line: { ...inf.formations.line, place: wide },

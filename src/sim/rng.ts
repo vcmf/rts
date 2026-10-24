@@ -36,8 +36,11 @@ export const nextUnit = (s: RngState): number => nextU32(s) / 4294967296
 export const nextInt = (s: RngState, n: number): number => Math.floor(nextUnit(s) * n)
 
 // an integer count around an expected value λ ≥ 0 (casualties): a normal approximation from the sum of
-// 12 uniforms (Irwin–Hall), so no log or cos; small λ uses a Bernoulli draw on the fraction
+// 12 uniforms (Irwin–Hall), so no log or cos; small λ uses a Bernoulli draw on the fraction. λ ≤ 0 gives 0 and a
+// NaN or infinite λ gives NaN, both without a draw (#158): a bad λ is not hidden as a count, it passes through as the
+// sim's maths pass a NaN (num.ts), for the debug finite-state check to catch where it lands in state
 export function sampleCount(s: RngState, lambda: number): number {
+  if (!(lambda > -Infinity && lambda < Infinity)) return NaN
   if (lambda <= 0) return 0
   if (lambda < 1) return nextUnit(s) < lambda ? 1 : 0
   let u = 0

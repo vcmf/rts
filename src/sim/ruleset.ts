@@ -387,6 +387,25 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
     throw new Error(`${at}: geometry.bins must be a whole number in 1..files`)
   }
   const names = Object.keys(u.formations)
+  // a pace that is not one would be read as index −1, and the first move would be NaN (#156)
+  for (const n of names) {
+    const d = u.formations[n]
+    if (!paces.includes(d.pace)) throw new Error(`${at}: shape ${n}'s pace ${d.pace} is not one of the paces`)
+    if (d.roadPace && !paces.includes(d.roadPace)) {
+      throw new Error(`${at}: shape ${n}'s roadPace ${d.roadPace} is not one of the paces`)
+    }
+  }
+  // a change time naming a shape it has not would be ignored, and the default taken in silence (#156)
+  for (const [k, v] of Object.entries(u.changeTime)) {
+    const ab = k.split('>')
+    if (ab.length !== 2 || !names.includes(ab[0]) || !names.includes(ab[1])) {
+      throw new Error(`${at}: change time ${k} does not name two of its shapes (from>to)`)
+    }
+    if (!nonNegative(v)) throw new Error(`${at}: change time ${k} is ${v}, not a finite number ≥ 0`)
+  }
+  if (!nonNegative(u.defaultChangeTime)) {
+    throw new Error(`${at}: defaultChangeTime is ${u.defaultChangeTime}, not a finite number ≥ 0`)
+  }
   const shapes: ShapeLayout[] = names.map(n => layout(g, u.formations, n, kinds, paces))
   const S = names.length
   const changeTime = new Float64Array(S * S)
@@ -497,7 +516,46 @@ function compileType(rs: Ruleset, name: string, kinds: string[], paces: string[]
 
 export function compileRuleset(rs: Ruleset): Compiled {
   const kinds = Object.keys(Object.values(rs.terrain)[0].g)
+  const at = `ruleset ${rs.name}`
   const paces = Object.keys(rs.pace)
+  for (const p of paces) {
+    if (!(rs.pace[p] > 0 && rs.pace[p] < Infinity)) throw new Error(`${at}: pace ${p} is ${rs.pace[p]}, not > 0`)
+  }
+  // every terrain class gives every kind any class names a speed: a missing one would be NaN in classG (#156)
+  const classes = Object.keys(rs.terrain)
+  const allKinds = unique(classes.flatMap(c => Object.keys(rs.terrain[c].g)))
+  for (const k of allKinds) {
+    const by = classes.find(c => Object.hasOwn(rs.terrain[c].g, k))
+    for (const c of classes) {
+      const v = rs.terrain[c].g[k]
+      if (!(typeof v === 'number' && nonNegative(v))) {
+        throw new Error(`${at}: terrain class ${c} gives kind ${k} (named by class ${by}) no speed`)
+      }
+    }
+  }
+  // the q tables: by pace, a factor (> 0) by ground; a pace with one must give every class's ground a factor (one
+  // left out would read as 1 in silence: a typo in one pace's table)
+  for (const [p, table] of Object.entries(rs.q)) {
+    if (!paces.includes(p)) throw new Error(`${at}: q names ${p}, not a pace`)
+    for (const [g, v] of Object.entries(table)) {
+      if (!(v > 0 && v < Infinity)) throw new Error(`${at}: q.${p}.${g} is ${v}, not > 0`)
+    }
+    for (const c of classes) {
+      if (!Object.hasOwn(table, rs.terrain[c].q)) {
+        throw new Error(`${at}: q.${p} gives ground ${rs.terrain[c].q} (terrain class ${c}) no factor`)
+      }
+    }
+  }
+  // by class or by kind, each a finite number ≥ 0 naming one there is
+  const byName = (what: string, table: Record<string, number>, names: string[], of: string) => {
+    for (const [k, v] of Object.entries(table)) {
+      if (!names.includes(k)) throw new Error(`${at}: ${what} names ${k}, not ${of}`)
+      if (!nonNegative(v)) throw new Error(`${at}: ${what}.${k} is ${v}, not a finite number ≥ 0`)
+    }
+  }
+  byName('fire.sight', rs.fire.sight, classes, 'a terrain class')
+  byName('fire.depth', rs.fire.depth, kinds, 'a kind of the terrain table')
+  byName('disorder.scale', rs.disorder.scale, kinds, 'a kind of the terrain table')
   const paceSpeed = new Float64Array(paces.map(p => rs.pace[p]))
   const typeNames = Object.keys(rs.types)
   if (!typeNames.length) throw new Error(`ruleset ${rs.name}: no unit types`)
@@ -577,6 +635,9 @@ export function compileRuleset(rs: Ruleset): Compiled {
   }
 }
 const expNeg = (x: number): number => exp(-x)
+const nonNegative = (v: number): boolean => v >= 0 && v < Infinity
+// the names in first-seen order, each once (the sim keeps no Set: index-ordered arrays only)
+const unique = (a: string[]): string[] => a.filter((v, i) => a.indexOf(v) === i)
 // a trail shape's trail, and the one Face about rebuilds, must fit the ring (0.25 m points): the ring is
 // the smallest multiple of 64 points that holds the deepest, at least TRAIL_MIN; one size for every slot, so the
 // hash and saves carry the deepest type's ring for all (issue #38)
