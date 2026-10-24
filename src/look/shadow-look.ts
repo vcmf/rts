@@ -17,7 +17,7 @@ export interface ShadowLook {
   len: number
 }
 /** Up close (the owner, 2026-10-24: smaller, lighter, fuzzier, then darker and solid at the feet, lighter and softer
- *  away from them; softness 0.75 his choice from the review's sheet 7) and far (decision 0049's: one value end to
+ *  away from them; softness 0.75 chosen from the review's sheet 7) and far (decision 0049's: one value end to
  *  end) */
 export const SHADOW_LOOK: { readonly close: ShadowLook; readonly far: ShadowLook } = {
   close: { soft: 0.75, dark: 0.55, foot: 1.05, core: 0.4, len: 0.7 },

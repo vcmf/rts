@@ -13,7 +13,7 @@ shadow a soldier beyond): the map is no longer drawn by default, at any zoom. Th
 
 At close zoom (15 to 55 m) the soldiers' shadows came from 0047's map, cast by a 56-triangle proxy. The owner
 (2026-10-24): "a bit too big and dark and sharp at close... flaky when a unit moves... aim for something a bit
-smaller, a bit less dark and more fuzzy, more blur; that kind of shadow is easier and cheaper". In his reference view
+smaller, a bit less dark and more fuzzy, more blur; that kind of shadow is easier and cheaper". In their reference view
 (a white-coated line on the road, the shadows toward the camera) the proxy's quads show each musket as a plank as wide
 as a leg, and the low sun's long shadows a row of dark bars. Beyond 85 m the simple shadow (0049) was already drawn:
 one baked shape a role and a facing, moving with each man every frame, no map. Agreed with the owner: the same simple
