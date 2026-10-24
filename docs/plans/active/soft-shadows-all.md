@@ -55,7 +55,7 @@ removing the map's code (later, when the owner says).
 
 - Contact sheets main against this branch at 15, 30, 55, 125 and 260 m: a battalion on grass and on the road, marching
   and halted, with the owner's view (a line on the road, shouldered arms, the shadows toward the camera). Far (125,
-  260 m) as main's (the far look is 0049's).
+  260 m) as main's, pixel for pixel or within a few pixels' rounding (the far look and strip are 0049's).
 - The feet's contact after shortening: the shadow starts at the soles (crops at 15 m).
 - No thick musket in the close shape (crops at 15 m; the atlas's cells checked).
 - Flicker: a marching battalion at 15 and 30 m, 12 frames 1/60 s apart: the mean change of the shadows' own luma a
@@ -64,6 +64,7 @@ removing the map's code (later, when the owner says).
   (`window.__look.mats.samplers`), all ≤ 16.
 - `npm test`, `npm run format:check`, `node tools/check-docs.mjs`, `npx vite build`; `tools/golden.mjs` against a build of
   main with no armies equal (no armies, no figure shadows: the receivers compile as before).
+- Overlaps take the darkest whatever the draw order (the 4-sample path; checked on Metal: no bands, no darker seams).
 - A Metal bench script, main against this branch (20 and 40 a side, the fight's middle and the stress point, still and
   panning, the closest zoom too), three rounds: written, run by the coordinator.
 
@@ -168,6 +169,19 @@ the lift and the ground's height fall at other vertices; at 260 m 7,798, 1,622 a
 rule (`decalFragment`) and a test that two shadows resolve the same in either order, with the colour rule failing it;
 the soft bake's tests in one place. The owner's view on Metal, main against the final build, and `?msaa=2` and `=1`:
 sheet 11.
+
+**Review round 3** (no severe findings, the review loop's end). The strip turns with the look: far off the shape's own
+box and evenly spaced rows (decision 0049's, as main), up close the full box with rows at the soles and at the lift
+ramp's end (in round 2 the third row lay 2.7 m from the soles, so the lift, linear between rows, came late: about
+0.22 m of its 0.6 at 1 m from the soles against main's 0.49, and grass tips and legs poked through). Far frames against
+main: at 125 m 3 pixels differ, by at most 3 of 255 (the atlas's coordinates rounded against another atlas size and
+anchor), at 260 m none. The full box is 1.35 times the shape's own (4.8 × 7.2 m against 4.0 × 6.4 m, across and along
+the shadow), so the far zooms draw that many fewer decal fragments again (26 % fewer than round 2). The close look on Metal (sheet 12: the owner's
+road view at 15 and 30 m, a column at 15 m, main, round 2 and final): the same, the grass beside the line now under the
+shadow; no contact cut at the feet on the road's crown, so the strip keeps one column. `?msaa=2` back to the smooth
+darkening (two samples' coverage is one hard step on drivers that do not dither), `?msaa=1|2` discarding the fringe at
+main's 0.02; the atlas's anchor its own uniform (`uShapeAt`), so the strip's blend cannot move the shape's texels; the
+decal's bounds padded by the soft bake's reach (0.4 m), so the outermost men's fringe does not pop at the screen's edge.
 
 ## Open questions
 

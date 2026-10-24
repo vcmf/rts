@@ -61,16 +61,32 @@ export interface Strip {
   box: [number, number, number, number]
   rows: [number, number, number, number]
 }
-/** The strip a soldier draws his shadow on at every zoom: the shape's full box (the soft bake's reach) with its second
- *  row at the soles, so each triangle lies on one side of them and a strip shortened past them keeps the feet where
- *  they are (one strip at every zoom: nothing jumps where the looks meet; far off it draws decision 0049's shadow on
- *  other rows, a few pixels from main's) */
-export function decalStrip(b: ShapeBox): Strip {
-  const span = b.along[1] - b.along[0]
-  const box: Strip['box'] = [b.across[0], b.along[0], b.across[1] - b.across[0], span]
-  if (!(b.along[0] < 0 && b.along[1] > 0)) throw new Error('decalStrip: the box must hold the soles (along 0)')
-  const soles = -b.along[0] / span
-  return { box, rows: [0, soles, (soles + 1) / 2, 1] }
+/** The strip a soldier draws his shadow on, by the look's far share t (0 close, 1 far: the same share as the look's,
+ *  so it moves with the look and nothing jumps). Far, decision 0049's own: the box the shape alone fills (base) with
+ *  its rows evenly spaced, as main draws it. Close: the full box (the soft bake's reach) with its second row at the
+ *  soles (each triangle on one side of them, so a strip shortened past them keeps the feet where they are) and its
+ *  third where the lift's ramp ends (liftRamp m along the drawn shadow, liftRamp / len along the shape), so the lift,
+ *  linear between rows, is whole there and the grass and legs do not poke through near the feet. Between, the rows'
+ *  places (m) and the box blended */
+export function decalStrip(base: ShapeBox, full: ShapeBox, t: number, len: number, liftRamp: number): Strip {
+  const boxOf = (b: ShapeBox): Strip['box'] => [
+    b.across[0],
+    b.along[0],
+    b.across[1] - b.across[0],
+    b.along[1] - b.along[0],
+  ]
+  if (t >= 1) return { box: boxOf(base), rows: [0, 1 / 3, 2 / 3, 1] }
+  if (!(full.along[0] < 0 && full.along[1] > 0)) throw new Error('decalStrip: the box must hold the soles (along 0)')
+  const ramp = Math.min(liftRamp / Math.max(len, 1e-3), full.along[1] * 0.9)
+  const closeRows = [full.along[0], 0, ramp, full.along[1]]
+  const bs = base.along[1] - base.along[0]
+  const farRows = [0, 1 / 3, 2 / 3, 1].map(r => base.along[0] + r * bs)
+  const fb = boxOf(full)
+  const bb = boxOf(base)
+  const mix = (a: number, b: number) => a + (b - a) * Math.max(0, t)
+  const box = fb.map((v, i) => mix(v, bb[i])) as Strip['box']
+  const rows = closeRows.map((v, i) => (mix(v, farRows[i]) - box[1]) / box[3]) as Strip['rows']
+  return { box, rows }
 }
 
 /** The decal's rule at a fragment (src/look/shaders/unitdecal.frag, mirrored here for its tests): of the shape's value

@@ -645,13 +645,15 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   (darkness ÷ darkest × the shape's value), so overlaps take the darkest whatever the draw order (the stencil still
   darkens each sample once; review round 1: as a colour, a light tip drawn first bit into the next man's contact, and
   the battalions' sorted order flipped while panning; `decalFragment` in `src/look/shadow-look.ts` mirrors the rule
-  for its tests). Alpha to coverage with the scene's 2 or 4 samples; with one (`?msaa=1`) the share darkens the pixel,
-  smooth, the first shadow there winning (overlaps order-dependent there; under a quarter left out). Checked on Metal
+  for its tests). Alpha to coverage with the scene's 4 samples; with fewer (`?msaa=1|2`; two samples would make the
+  gradient one hard step where the driver does not dither) the share darkens the pixel, smooth, the first shadow
+  there winning (overlaps order-dependent there; an empty texel marks none). Checked on Metal
   (review round 2): no contour bands along the gradient, overlaps no darker than the darker shadow alone.
-  **The strip** (`decalStrip`, set once as `uStrip` and `uRows`): the shape's full box with its second row at the
-  soles at every zoom, so nothing changes where the looks meet (far off it draws decision 0049's shadow on other rows
-  than main's: at 125 m a speckle of pixels along the shadows differs, the lift's ramp and the ground's height sampled
-  at other vertices); up close softer, lighter at the tip, shorter, dark and solid at the feet; far 0049's look
+  **The strip** (`decalStrip`, `uStrip` and `uRows`, set when the look changes): turned with the look by its far
+  share, from the close one (the full box, the soft bake's reach, with rows at the soles and where the lift's ramp
+  ends, so the lift, linear between rows, is whole there) to decision 0049's (the shape's own box, `base`, rows evenly
+  spaced: the far zooms as main's, a third fewer fragments than the full box); the atlas stays anchored at `uShapeAt`
+  whatever the strip; the decal's bounds padded by the soft bake's reach; up close softer, lighter at the tip, shorter, dark and solid at the feet; far 0049's look
   (one value end to end), turned from one to the other by a smoothstep of the camera's
   distance to its focus over `SHADOW_LOOK_BAND` (45 to 85 m; with `?ushadowclose=map` the far look everywhere).
   `?ushsoft`, `?ushdark`, `?ushlen` (`<close>[,<far>]`), `?ushfoot=<dark>,<core>[,<far dark>,<far core>]` and

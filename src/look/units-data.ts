@@ -628,7 +628,8 @@ export interface ShadowShape {
   // m: what a cell holds, from the man's root (the shadow's frame)
   across: [number, number]
   along: [number, number]
-  // m: the box the shape alone fills (its own blur's reach), inside across and along (the soft bake's on top)
+  // m: the box the shape alone fills (its own blur's reach), inside across and along (the soft bake's reach on top,
+  // whole blocks of 8 texels): the far strip's (decalStrip, src/look/shadow-look.ts), decision 0049's own
   base: { across: [number, number]; along: [number, number] }
   dir: [number, number] // the shadow's direction on the ground (x, z): away from the sun
 }

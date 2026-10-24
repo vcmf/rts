@@ -31,15 +31,17 @@ shadow at every zoom, its look set per zoom.
   look's softness and darkness at the tip; fragment arithmetic on the distance along the shadow, no more reads. The
   darkness is coverage, not colour: every shadow darkens what it covers alike, lighter parts covering fewer samples,
   so where shadows overlap the darkest wins whatever the draw order, and the stencil still darkens each sample once
-  (alpha to coverage with 2 or 4 samples; checked on Metal: no bands, no darker seams; with one sample, `?msaa=1`, a
-  smooth darkening whose overlaps depend on the order).
+  (alpha to coverage with the scene's 4 samples; checked on Metal: no bands, no darker seams; with fewer, `?msaa=1|2`,
+  a smooth darkening whose overlaps depend on the order). Far off (past the band) the look and the strip are decision
+  0049's own, as main draws them: the strip a soldier draws on turns with the look from the close one (the soft bake's
+  reach, rows at the soles and at the lift's full height) to 0049's (the shape's own box, rows evenly spaced).
   The owner chose softness 0.75 with the foot gradient, 2026-10-24, from sheet 7 (the review images, the plan).
   The settings: softness (a share of a softer bake of the shape: the atlas's second channel, blurred wider and
   brought back to the shape's darkest value, so softer is not lighter), darkness (the share of the ground's full
   shadow) and length (along the sun from the soles, the feet kept where they are: the grid's second row lies at the
   soles). Up close softer, lighter and shorter; far (beyond the band) 0049's look as it was. The close look turns into
   the far one over a band of the camera's distance to its focus (45 to 85 m), by a smoothstep, so nothing pops. The
-  values live in `src/look/units.ts` (`SHADOW_LOOK`, `SHADOW_LOOK_BAND`) and are tuned live by `?ushsoft`, `?ushdark`,
+  values live in `src/look/shadow-look.ts` (`SHADOW_LOOK`, `SHADOW_LOOK_BAND`) and are tuned live by `?ushsoft`, `?ushdark`,
   `?ushlen` (`<close>[,<far>]`) and `?ushband`.
 - **The map stays behind switches** until the owner says to remove it: `?ushadowclose=map` (the map up close and the
   cross-fade, 0049's default) and `?ushadowfar=map` (the map at every zoom, 0049's A/B). Only then is it made.

@@ -49,15 +49,32 @@ describe('the look a zoom', () => {
 })
 
 describe('the strip a soldier draws his shadow on', () => {
-  it('covers the soft bake and has its second row at the soles at every zoom (the feet stay put when shortened)', () => {
-    const s = decalStrip({ across: [-1.4, 1.4], along: [-0.9, 5.4] })
+  const base = { across: [-1, 1], along: [-0.5, 5] } as const
+  const full = { across: [-1.4, 1.4], along: [-0.9, 5.4] } as const
+  const at = (s: { box: number[]; rows: number[] }, r: number) => s.box[1] + s.rows[r] * s.box[3]
+  it('far off is decision 0049s own: the base box, its rows evenly spaced, exactly', () => {
+    const s = decalStrip(base, full, 1, 1, 1.5)
+    expect(s.box).toEqual([-1, -0.5, 2, 5.5])
+    expect(s.rows).toEqual([0, 1 / 3, 2 / 3, 1])
+  })
+  it('up close covers the soft bake, a row at the soles and one where the lift ramp ends (along the shape)', () => {
+    const s = decalStrip(base, full, 0, 0.7, 1.5)
     expect(s.box.map(v => +v.toFixed(9))).toEqual([-1.4, -0.9, 2.8, 6.3])
-    const at = (r: number) => s.box[1] + r * s.box[3]
-    expect(at(s.rows[0])).toBeCloseTo(-0.9, 12)
-    expect(at(s.rows[1])).toBeCloseTo(0, 12) // the soles
-    expect(at(s.rows[3])).toBeCloseTo(5.4, 12)
-    expect(s.rows[2]).toBeGreaterThan(s.rows[1])
-    expect(() => decalStrip({ across: [-1, 1], along: [0.1, 5] })).toThrow(/soles/)
+    expect(at(s, 0)).toBeCloseTo(-0.9, 12)
+    expect(at(s, 1)).toBeCloseTo(0, 12) // the soles: the feet stay put when it is shortened
+    expect(at(s, 2)).toBeCloseTo(1.5 / 0.7, 12) // the lift whole there, drawn 1.5 m from the soles
+    expect(at(s, 3)).toBeCloseTo(5.4, 12)
+    expect(() => decalStrip(base, { across: [-1, 1], along: [0.1, 5] }, 0, 1, 1.5)).toThrow(/soles/)
+  })
+  it('turns from one to the other with the look, nothing jumping at either end', () => {
+    for (const r of [0, 1, 2, 3]) {
+      expect(at(decalStrip(base, full, 1 - 1e-9, 1, 1.5), r)).toBeCloseTo(at(decalStrip(base, full, 1, 1, 1.5), r), 6)
+      expect(at(decalStrip(base, full, 1e-9, 0.7, 1.5), r)).toBeCloseTo(at(decalStrip(base, full, 0, 0.7, 1.5), r), 6)
+    }
+    const m = decalStrip(base, full, 0.5, 0.85, 1.5)
+    expect(m.rows[0]).toBe(0)
+    expect(m.rows[3]).toBeCloseTo(1, 12)
+    expect(m.rows[1]).toBeLessThan(m.rows[2])
   })
 })
 

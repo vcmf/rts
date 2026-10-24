@@ -12,9 +12,10 @@ varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
 // value would, so where shadows overlap, the darkest wins whatever their order (the stencil lets only the first
 // through, and they all darken alike: a man's light tip over the next man's dark contact takes nothing from it, and
 // nothing pops when the battalions' draw order changes; decalFragment in src/look/shadow-look.ts mirrors this rule
-// for its tests). With COVERAGE (the scene's 2 or 4 samples) that share is the alpha to coverage; without (?msaa=1)
-// it scales the pixel's darkening, smooth, the first shadow at a pixel winning (the stencil: there overlaps depend on
-// their order) and the faintest fringe (under a quarter) left out, so it marks no pixel it barely darkens. The darkening: to the ground's shade there (uUnitShade, the ratio of its
+// for its tests). With COVERAGE (the scene's 4 samples) that share is the alpha to coverage; without (?msaa=1|2: two
+// samples would turn the gradient into one hard step where the driver does not dither) it scales the pixel's
+// darkening, smooth, the first shadow at a pixel winning (the stencil: there overlaps depend on their order), an
+// empty texel marking none. The darkening: to the ground's shade there (uUnitShade, the ratio of its
 // painted cast shadow to its light, baked at the light map's texels: src/look/shaders/unitshade.frag), by the zoom's
 // cross-fade share (uUnitFar), none with the shadows off (uShadowsOn). The blend is dst · src, the alpha (the lens
 // codes) kept (units.ts sets it). (The painter is included as every painted material's is, src/look/materials.ts; of
@@ -28,7 +29,7 @@ void main(){
   #ifdef COVERAGE
   gl_FragColor=vec4(max(mix(vec3(1.0),k,f),0.0),a);
   #else
-  if(a<0.25)discard;
+  if(s<0.02)discard;
   gl_FragColor=vec4(max(mix(vec3(1.0),k,f*a),0.0),0.0);
   #endif
 }

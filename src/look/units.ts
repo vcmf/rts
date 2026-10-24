@@ -43,6 +43,7 @@ import {
   footUniform,
   lookBetween,
   type ShadowLook,
+  type ShapeBox,
 } from './shadow-look.ts'
 import { TR, TRACE, tr, trNow } from './trace.ts'
 import {
@@ -291,6 +292,13 @@ export class Units {
   private readonly lookNow: ShadowLook = { ...SHADOW_LOOK.far }
   // the look last given to the decal's material (setDecalLook: only when it changes)
   private readonly lookSet: ShadowLook = { soft: NaN, dark: NaN, foot: NaN, core: NaN, len: NaN }
+  private lookT = 1 // the far look's share this frame (lookAt), the strip's too (setDecalLook)
+  private lookTSet = NaN
+  // the shape's boxes (useDecals): what it alone fills (the far strip's), with the soft bake's reach (the close one's)
+  private shapeBoxes: { base: ShapeBox; full: ShapeBox } | null = null
+  private softPad = 0 // m: the soft bake's reach past the shape's own (the decal's bounds)
+  private readonly stripV = new Vector4()
+  private readonly rowsV = new Vector4()
   /** the cross-fade's band, m (SHADOW_SWITCH) */
   band: [number, number] = [...SHADOW_SWITCH]
   /** the figures, their flags and the map's casters moved every frame between two steps (?smoothmove=1), not at the
@@ -315,11 +323,11 @@ export class Units {
   shade: BaseTexture | null = null
   private decal: ShaderMaterial | null = null // the simple shadows' (useDecals)
   /** their share of the samples (their soft edge and their gradient: decalFragment, src/look/shadow-look.ts) as
-   *  alpha to coverage, with the scene's 2 or 4 samples: order-independent; with one (?msaa=1) their share darkens the
-   *  pixel instead, the first shadow there winning (the stencil), so where they overlap the result depends on their
-   *  order there */
+   *  alpha to coverage, with the scene's 4 samples: order-independent; with fewer (?msaa=1|2: two samples would make
+   *  the gradient one hard step on drivers that do not dither it) their share darkens the pixel instead, the first
+   *  shadow there winning (the stencil), so where they overlap the result depends on their order there */
   private get coverage(): boolean {
-    return MSAA.samples >= 2
+    return MSAA.samples >= 4
   }
   private mapOn = false // the map drawn this frame
   private stepFrac = 0
@@ -873,6 +881,11 @@ export class Units {
     // (the simple shadow's bounds: stretched away from the sun by the longest shadow, as tall as the far figures grow)
     const k = this.scratch
     shadowBox(h, top * Math.max(1, this.look.close.len, this.look.far.len), k.a, k.b)
+    // (and the soft bake's reach sideways and behind: the outermost men's fringe)
+    k.a.x -= this.softPad
+    k.a.z -= this.softPad
+    k.b.x += this.softPad
+    k.b.z += this.softPad
     h.lod[this.decalLod].getBoundingInfo().reConstruct(k.a, k.b)
     h.stale.fill(true)
     h.staleNext.fill(true)
@@ -1017,8 +1030,8 @@ export class Units {
    *  into the far one over lookBand by the camera's distance to its focus; the far one alone with the map
    *  (?ushadowclose=map, ?ushadowfar=map) */
   private lookAt(): ShadowLook {
-    const t = this.simpleClose && this.simpleFar ? farShare(this.camera.radius, this.lookBand) : 1
-    return lookBetween(this.look.close, this.look.far, t, this.lookNow)
+    this.lookT = this.simpleClose && this.simpleFar ? farShare(this.camera.radius, this.lookBand) : 1
+    return lookBetween(this.look.close, this.look.far, this.lookT, this.lookNow)
   }
   private frameBody(): void {
     const T = this.clock()
@@ -1511,7 +1524,7 @@ export class Units {
       attributes: ['position', 'aVAT', 'aNext'],
       uniforms: [
         'uRoleStart',
-        'uShapeBox',
+        'uShapeAt',
         'uShapeCell',
         'uShapeTexel',
         'uShapeSize',
@@ -1566,10 +1579,8 @@ export class Units {
       m.setTexture('uMeadow', ht)
     }
     m.setVector4('uRoleStart', new Vector4(...ROLES.map(r => d.ranges[r].start)))
-    m.setVector4(
-      'uShapeBox',
-      new Vector4(shape.across[0], shape.along[0], shape.across[1] - shape.across[0], shape.along[1] - shape.along[0]),
-    )
+    // the atlas's anchor: where a cell's first texel lies from a man's root (m; the strip moves, this does not)
+    m.setVector2('uShapeAt', new Vector2(shape.across[0], shape.along[0]))
     m.setVector4('uShapeCell', new Vector4(shape.cellW, shape.cellH, 1 / shape.width, 1 / shape.height))
     m.setVector2('uShapeSize', new Vector2(shape.width, shape.height))
     m.setVector2('uShapeTexel', new Vector2(1 / shape.texel, shape.margin))
@@ -1578,9 +1589,9 @@ export class Units {
     m.setVector2('uFarScale', this.farScaleV)
     m.setFloat('uDecalLift', this.lift)
     this.decal = m
-    const strip = decalStrip({ across: shape.across, along: shape.along })
-    m.setVector4('uStrip', new Vector4(...strip.box))
-    m.setVector4('uRows', new Vector4(...strip.rows))
+    this.shapeBoxes = { base: shape.base, full: { across: shape.across, along: shape.along } }
+    // (the soft bake's reach past the shape's own, on the decal's bounds: place)
+    this.softPad = shape.base.across[0] - shape.across[0]
     this.setDecalLook(this.lookNow)
     // (a mode nothing else draws with: its blend is replaced at each bind, below)
     m.alphaMode = Constants.ALPHA_EXCLUSION
@@ -1631,17 +1642,22 @@ export class Units {
     for (const m of this.rootReceivers) m.setDefine('#define UNIT_SHADOWS_VS', map)
   }
   /** The simple shadows' look (decision 0062) given to their material when it changed: the soft bake's share at the
-   *  tip, the length, and the gradient from the soles (uShFoot, footUniform) */
+   *  tip, the length, the gradient from the soles (uShFoot, footUniform) and the strip by the far look's share
+   *  (uStrip, uRows: decalStrip) */
   private setDecalLook(l: ShadowLook): void {
     const m = this.decal
+    const b = this.shapeBoxes
     const p = this.lookSet
-    if (!m || (l.soft === p.soft && l.dark === p.dark && l.foot === p.foot && l.core === p.core && l.len === p.len)) {
-      return
-    }
+    const same = l.soft === p.soft && l.dark === p.dark && l.foot === p.foot && l.core === p.core && l.len === p.len
+    if (!m || !b || (same && this.lookT === this.lookTSet)) return
     Object.assign(p, l)
+    this.lookTSet = this.lookT
     m.setFloat('uShSoft', l.soft)
     m.setFloat('uShLen', l.len)
     m.setVector4('uShFoot', this.footV.set(...footUniform(l, SHADOW_TIP)))
+    const strip = decalStrip(b.base, b.full, this.lookT, l.len, LIFT_RAMP)
+    m.setVector4('uStrip', this.stripV.set(...strip.box))
+    m.setVector4('uRows', this.rowsV.set(...strip.rows))
   }
   /** The figures' shadow map (decision 0047), made when a switch first asks for it (decision 0062): its target, lazy
    *  unless lazyShadows is off, and the receivers' bindings of it */

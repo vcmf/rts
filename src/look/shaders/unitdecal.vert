@@ -4,8 +4,8 @@ precision highp float;attribute vec3 position;
 // on the ground from his feet along the sun's shadow (uShDir; position: 0 to 1 across it in x, along it in z), on the
 // battalion's own instances: his place moves with him every frame (the step's place and the share of the next step's
 // move gone: aNext, uStepFrac). His facing (the matrix's turn) picks two of the shape's facings, blended; his clip's
-// first step (aVAT.x) his role's row (uRoleStart). uShapeBox: what a cell holds (m from his feet: across, along, then
-// their spans); uShapeCell: a cell's texels across and along, 1 / the atlas's size; uShapeTexel: 1 / the shape's texel
+// first step (aVAT.x) his role's row (uRoleStart). uShapeAt: the atlas's anchor, where a cell's first texel lies (m
+// from his feet, across and along: the strip moves within it, the shape's texels stay where they are); uShapeCell: a cell's texels across and along, 1 / the atlas's size; uShapeTexel: 1 / the shape's texel
 // (m), a cell's border (texels). Each vertex sits on the ground (uMeadow's R: the meadow map's height, or without one
 // the heightfield's, src/look/units.ts),
 // then is drawn toward the camera along its own view ray by uDecalLift / the ray's steepness: no shift on screen, and in
@@ -14,12 +14,13 @@ precision highp float;attribute vec3 position;
 // screen, and a lifted shadow there would darken them. vLM: where it lies in the tile's top-down maps (the ground's
 // shade, read by the fragment). The strip (uStrip: across and along start, their spans, m from his feet) and its four
 // rows' places along it (uRows, 0 to 1; position.z picks the row) are the CPU's (decalStrip, src/look/shadow-look.ts):
-// the shape's full box with its second row at his soles, at every zoom; past them it is drawn uShLen as long (the zoom's look, decision 0062: the shape's own texels stretched or shortened, his feet where they were).
+// far off decision 0049's strip, up close the full box with rows at his soles and at the lift ramp's end, blended by
+// the look's far share; past the soles it is drawn uShLen as long (the zoom's look, decision 0062: the shape's own texels stretched or shortened, his feet where they were).
 // vAlong: m along it from his soles at the shape's own size times uShLen (the far figures' growth leaves the
 // fragment's gradient where it lies on the shape)
 uniform mat4 viewProjection;uniform vec3 uCamPos;
 attribute vec3 aVAT;attribute vec3 aNext;
-uniform vec4 uRoleStart,uShapeBox,uShapeCell,uStrip,uRows;uniform vec2 uShDir,uShapeTexel;uniform float uStepFrac,uDecalLift,uShLen;
+uniform vec4 uRoleStart,uShapeCell,uStrip,uRows;uniform vec2 uShDir,uShapeTexel,uShapeAt;uniform float uStepFrac,uDecalLift,uShLen;
 uniform mat4 uLMVP;
 uniform sampler2D uMeadow;
 #ifdef FAR_SCALE
@@ -50,5 +51,5 @@ void main(){
   float a=atan(-finalWorld[0].z,finalWorld[0].x),fk=fract(a/6.2831853)*FACINGS,k0=floor(fk),k1=mod(k0+1.0,FACINGS);
   vT=fk-k0;
   float row=abs(aVAT.x-uRoleStart.y)<0.5?1.0:abs(aVAT.x-uRoleStart.z)<0.5?2.0:abs(aVAT.x-uRoleStart.w)<0.5?3.0:0.0;
-  vec2 c=(l0-uShapeBox.xy)*uShapeTexel.x+uShapeTexel.y;
+  vec2 c=(l0-uShapeAt)*uShapeTexel.x+uShapeTexel.y;
   vUV0=(vec2(k0,row)*uShapeCell.xy+c)*uShapeCell.zw;vUV1=(vec2(k1,row)*uShapeCell.xy+c)*uShapeCell.zw;}
