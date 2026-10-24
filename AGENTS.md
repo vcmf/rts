@@ -42,6 +42,9 @@ Prototype-specific rules live in `prototypes/AGENTS.md`. Raw asset packs live in
   (`?bench` in a browser), `node tools/guard.mjs <url> [--base <url>]`, the terrain detail checks
   `node tools/detail-check.mjs <url> --selftest`, the water data's `node tools/water-check.mjs [<url>] --selftest`,
   the painted water's `node tools/water-look-check.mjs <url> --selftest`; see their headers.
+- Browsers (decision 0060): checks are the scripts above; `SHOT_CDP=http://127.0.0.1:9222` attaches them to a running
+  Chrome (from WSL, Windows Chrome: `tools/win-chrome.sh`, see its header). To explore (play the page, a trace), opt in:
+  `claude mcp add chrome-devtools -- npx -y chrome-devtools-mcp@1.10.1 --isolated`.
 - Docs check: `node tools/check-docs.mjs` (every doc path resolves, front matter, decision numbers).
 - CI (`.github/workflows/ci.yml`): on every PR into and push to `main` or an `epic/**` branch, lint, `format:check`,
   typecheck, `check:data`, `check:docs`, Vitest, build. On PRs into `epic/**` and on all those pushes, Vitest with
