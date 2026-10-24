@@ -53,7 +53,7 @@ const LOOK_CASES = [
 const CAPTURE = 'window.__errs = []; { const ce = console.error.bind(console); console.error = (...a) => { __errs.push(a.join(" ")); ce(...a) } } "capturing"'
 const REPORT = 'JSON.stringify({ failed: __errs.filter(l => /^\\w+-check FAILED: /.test(l)), other: __errs.filter(l => !/^\\w+-check FAILED: /.test(l)), hasSpec: typeof SPEC !== "undefined" })'
 
-let bad = 0, hasSpec = false   // the look cases run when the page has a SPEC (read from the first case's report)
+let bad = 0
 const queue = [...CASES]
 for (let q = 0; q < queue.length; q++) {
   const [check, name, sabotage, expect] = queue[q]
@@ -67,7 +67,8 @@ for (let q = 0; q < queue.length; q++) {
   const applied = !sabotage || out.includes('EVAL "SABOTAGED"'), ran = out.includes('EVAL "CHECK RAN"')
   const line = out.split('\n').find(l => l.startsWith('EVAL "{\\"failed\\"'))
   const rep = line ? JSON.parse(JSON.parse(line.slice(5))) : null
-  if (q === 0 && rep?.hasSpec) { hasSpec = true; queue.push(...LOOK_CASES) }
+  // the look cases run when the page has a SPEC (read from the first case's report)
+  if (q === 0 && rep?.hasSpec) queue.push(...LOOK_CASES)
   const failLine = rep?.failed.find(l => l.startsWith(`${check}-check FAILED: `)) || ''
   if (rep && /^(EXC|EVAL-EXC) /m.test(out)) rep.other.push('an uncaught page exception')   // thrown errors are not console.error calls
   let ok, why

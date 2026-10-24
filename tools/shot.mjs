@@ -86,7 +86,7 @@ try {
   const send = (method, params = {}) => new Promise((res, rej) => {
     const i = ++id
     const t = setTimeout(() => { delete pend[i]; rej(new Error(`${method}: no reply in ${TIMEOUT / 1000}s`)) }, TIMEOUT)
-    pend[i] = m => { clearTimeout(t); m.error ? rej(new Error(`${method}: ${m.error.message}`)) : res(m.result) }
+    pend[i] = m => { clearTimeout(t); if (m.error) rej(new Error(`${method}: ${m.error.message}`)); else res(m.result) }
     ws.send(JSON.stringify({ id: i, method, params }))
   })
   await send('Runtime.enable'); await send('Page.enable')

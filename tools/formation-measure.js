@@ -230,7 +230,7 @@
   // empty slots over the water: a thinned line whose emptied files stand over the stream is not let form
   // column (the men spread into those slots); if it may, no place enters the water
   { let x = 35, found = false
-    const thin = () => { const b = FCm.main; b.soldiers.forEach((s, j) => { if (s.c === 3 && s.f >= 7) { s.alive = false; b.grid[s.c][s.r][s.f] = -1 } }) }
+    const thin = () => { const b = FCm.main; b.soldiers.forEach(s => { if (s.c === 3 && s.f >= 7) { s.alive = false; b.grid[s.c][s.r][s.f] = -1 } }) }
     for (; x < 70 && !found; x += 0.25) { FCm.place(x, -30, 0); thin(); const b = FCm.main
       const empties = []; const fr = FCm.companyFrames(b, 0, FCm.alpha); for (const s of b.soldiers) if (!s.alive) empties.push(FCm.soldierPlace(b, fr[s.c], s))
       found = !FCm.wetBins(b) && empties.every(p => deep(p[0], p[1])) }
@@ -273,7 +273,7 @@
     if (!onHedge || out.kindImpassable.lineOnHedge.status !== 'cannot form: impassable ground') fail.push(`line formed on a hedge a line cannot enter: ${JSON.stringify(out.kindImpassable.lineOnHedge)}`) }
   // a company bin emptied by casualties takes no part: a line wholly in woods slows evenly, in order
   { FCm.place(-40, -90, 0); F.follow(false); F.order('style', 'normal'); const b = FCm.main
-    b.soldiers.forEach(s => { if (s.c === 3 && s.f >= 6) s.alive = false }); b.soldiers.forEach((s, j) => { if (!s.alive) b.grid[s.c][s.r][s.f] = -1 })
+    b.soldiers.forEach(s => { if (s.c === 3 && s.f >= 6) s.alive = false }); b.soldiers.forEach(s => { if (!s.alive) b.grid[s.c][s.r][s.f] = -1 })
     FCm.paintTerrain(-80, -100, 0, -20, 'woods'); F.order('move', { x: -40, z: -30 }); F.advance(30)
     out.emptyBin = { lagMax: +Math.max(...live(b)).toFixed(2), disorder: +b.disorder.toFixed(2), emptyBins: [...b.binN].filter(n => !n).length }
     FCm.paintTerrain(-80, -100, 0, -20, null)
