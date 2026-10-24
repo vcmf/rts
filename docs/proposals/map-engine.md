@@ -1,9 +1,14 @@
 ---
 status: draft
-last_reviewed: 2026-10-24
+last_reviewed: 2026-10-12
 ---
 
 # Proposal: the map engine, a language for battlefields and its generator
+
+> **Built through M3** (`docs/systems/map.md`), so frozen. **Superseded in part** on 2026-10-24 by
+> `docs/plans/active/track-m-next.md`: no draft/3D toggle (one lit map view, zoomed into the painted world), the
+> editor and the importer in scope (M5, M7), maps of 2 to 6 km a side instead of §13's 1.5 km. Its phases M4–M9
+> replace §10's M4 and "later".
 
 A map is a short JSON file written in a precise, closed language. A deterministic **generator** expands it into
 exact features, and **compilers** turn those into the grids that the simulation, the 3D world and the draft view
@@ -348,18 +353,6 @@ The page watches the map file. On save it recompiles in a worker and redraws, an
 validator's errors in place. Later, the editor adds direct manipulation (dragging points, painting areas) on the
 draft view, writing the same JSON.
 
-**Revised 2026-10-24** (the owner; decisions 0057, 0058 and 0061, recorded on `main`'s side in PRs #135 and #136):
-- **One map view.** The draft is the lit map view of decision 0058, the look settled in the staff map prototype
-  (`prototypes/staff-map.html?style=lit`, PR #136): shaded relief, paper, woods, water, raised houses, armies as slabs.
-  The editor and the game's staff map are that one view; the editor adds its overlays.
-- **The flat draft becomes overlays.** The flat draft raster above keeps its use as debug overlays on the lit view:
-  layers in category colours, passability, depth, slope, sight, hovering a cell, errors in place. It is not a view of
-  its own.
-- **No toggle.** The draft and the painted world are one world on one camera, joined by the staff map's staged zoom
-  (`docs/proposals/staff-map/design.md` §9): no toggle, no crossfade. A debug toggle at most.
-- **Square maps of 2 to 6 km a side** (decision 0061), designed for play at true local scale. The 3D world streams in
-  tiles; the sim's 2 m grids take the compact format of §5.
-
 ## 8. Testing
 
 - **Validator:** one negative test per rule (an unknown kind, an open ring, a dangling reference, a feature
@@ -411,19 +404,12 @@ Track M works on an epic branch (decision 0020). The phases follow the pipeline,
 | **M1: the language and the draft view** | The TypeScript schema and validator; the catalogue of essential kinds in **every** category; features with exact shapes (no `gen` yet); compiling into the draft view page, which redraws on save; the map CLI | §9's example, written with exact shapes, validates and draws; a save redraws in under a second; one negative test per rule |
 | **M2: the sim compiler** | Water in apply: stream levels from the banks, falling downstream; channels carved, pools by a depth ramp, fords, ponds; a depth per cell. The ruleset's reading of a cell's attributes as its terrain classes; map-engine maps compiled to format 2 on 2 m grids; the S1e layout as `maps/valley.map.json`, with the S1e battle on it beside the original | The battle plays on the compiled valley; its golden is committed; every existing golden unchanged |
 | **M3: the generators** | the base ground's noise, `meander`, `clump`, `street-village`, `scatter`, on the exact maths; seasons and ice; golden expansions | §9's example as written (with `gen`) expands and plays; five seeds give five distinct, valid maps |
-| **M4: the look compiler** | The look compiler: a map's look data at 2 m, in tiles (with Track E: the look page streams them; decision 0061) | The same map drawn as the lit map and painted |
-| **M5: real relief** | A `relief.dem` kind (a heightfield file, its transform and datum, a `dem` source with its licence and credit); an importer from ČÚZK's 5 m model (the prototype's dem-fetch tool, PR #136); relief edits on top; one heightfield. Replaces W6's Terrarium source | A map with real relief validates, draws without the source grid's facets, and compiles for the sim |
-| **M6: the lit map view** | The prototype's lit view ported to `src/render/`, drawn from the compiled layers; the flat draft as its debug overlays; 150 fps on test machine A | The same look as the prototype for the same heights |
-| **M7: the editor** | On the lit view in `app/map.html`: pick a kind, draw and edit shapes, attributes, sources, live validation and generators, a tracing overlay, undo, a stable save | A map drawn from scratch round-trips with no diff but the edit, and validates |
-| **M8: Austerlitz** | A 6 km designed map after Austerlitz 1805, drawn in the editor from the real relief and a period map | The map validates and reads as the field, checked by the owner |
-| **M9: the zoom and the sim** | The staged zoom from the lit map to the painted world on one page and camera; the sim and an order of battle on the map | Zooming from the whole map to 15 m shows one place; the battle runs on it |
+| **M4: the rendered view** | The look compiler and the toggle between draft and 3D (with Track E: the look page loads any map's look data at 2 m) | The same map drafted and painted |
 
 M1 and M2 are tested with hand-written exact maps, before any randomness exists.
 
-M5 to M9 come from the one-map plan (one-map-austerlitz, in PR #136); each gets
-its own plan when it starts. M5 and M6 can run in parallel; M7 builds on M6. Outside Track M they wait on: the 3D
-world in tiles (Track E, before M4 serves a whole map), the sim's compact 2 m grids, and vision as a core rule (the
-sim track, before M9's fog of war).
+Later: the editor (direct manipulation on the draft view), the importer (W6, writing the same JSON), and the staff
+map reading map features (SM2).
 
 ## 11. Alternatives considered
 
