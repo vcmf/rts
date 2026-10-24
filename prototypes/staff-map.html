@@ -715,9 +715,9 @@ void main(){
   float washK=uWashA*(0.35+0.75*low)*smoothstep(0.25,0.6,wn+low*0.35)*inside;
   vec3 mapC=mix(paper,paper*uWashC*1.12,clamp(washK,0.0,1.0)*inside);
 #ifdef LIT
-  /* woods: a plain green on the paper, under the relief, its shadows and the ink (the owner); the season crown colour
-     taken toward the paper so it sits in its palette */
-  mapC = mix(mapC, mix(uCrown, uPaper, 0.38) * vec3(0.93, 1.02, 0.97), smoothstep(0.08, 0.2, A.g) * 0.85 * inside);
+  /* woods: a dark warm grey on the paper (the owner), the paper itself darkened, so it sits in its palette; under the
+     relief, its shadows and the ink */
+  mapC = mix(mapC, paper * vec3(0.6, 0.57, 0.52), smoothstep(0.08, 0.2, A.g) * 0.85 * inside);   /* the grained paper */
 #else
   mapC=mix(mapC,mapC*uWoodW*1.15,uWoodWA*woodA*(0.75+0.25*wn));
 #endif
@@ -1900,7 +1900,100 @@ function inkDirty(now) {
   // INK_ANIM: the last draw drew something still moving on the frame clock (each draw sets it where it reads the clock)
   return changed || INK_ANIM || now - INK_T0 < 3000;   // the fonts load and the first frames settle
 }
+/* ---------- the ink upscaled by FSR 1's EASU (decision 0059; the look page's upscale, decision 0045) ----------
+   On a high-density screen the lit style's ink is drawn at a ratio of 1 (decision 0056). Instead of the browser's
+   bilinear stretch, it is uploaded as a texture whenever it is redrawn, and every frame a last pass draws it over the
+   scene. The marks' edges are in their alpha, so EASU runs once, on the alpha; the colour is read bilinearly,
+   un-premultiplied, and laid under that alpha, so colour and edge can never disagree. On only when the ink is smaller
+   than the screen; `?upscale=bilinear` keeps the stretch; if the pass cannot compile, the canvas shows as before. */
+const INK_EASU = { on: false, shown: true, pending: false, tex: null, fx: null, fr: null };
+
+/** Babylon's EASU (fsr1UpscalePixelShader) made to read the ink's alpha in all three of its channels. */
+function inkEasuSource() {
+  const src = B.ShaderStore.ShadersStore.fsr1UpscalePixelShader;
+  if (!src) return null;
+  const m0 = src.indexOf('void main()');
+  if (m0 < 0 || !/FsrEasuRF\(/.test(src)) return null;
+  // every channel gather reads the alpha: EASU then upscales the alpha alone. Babylon 9.29 has 12 such reads; any other
+  // count means the shader changed, and the canvas is kept rather than guessing
+  let n = 0;
+  let body = src.slice(0, m0).replace(/textureSampler/g, 'uInk').replace(/\.([rgb])\s*(?=[,)])/g, () => { n++; return '.a'; });
+  if (n !== 12) return null;
+  // the green and blue gathers would read the same 4 alphas again: they return the red one, 16 reads a pixel, not 48
+  body = body.replace(/vec4 FsrEasuGF\(vec2 p\) \{[^}]*\}/, 'vec4 FsrEasuGF(vec2 p){return FsrEasuRF(p);}')
+    .replace(/vec4 FsrEasuBF\(vec2 p\) \{[^}]*\}/, 'vec4 FsrEasuBF(vec2 p){return FsrEasuRF(p);}');
+  if ((body.match(/return FsrEasuRF\(p\)/g) || []).length !== 2) return null;
+  return body + `
+void main(){
+  ivec2 ip = ivec2(gl_FragCoord.xy);
+  float a = clamp(FsrEasuF(ip, con0, con1, con2, con3).r, 0.0, 1.0);
+  vec2 uv = gl_FragCoord.xy / vec2(textureSize(uInk, 0)) * con0.xy;   /* the screen pixel in the ink texture */
+  vec4 c = texture2D(uInk, uv);
+  vec4 n = texelFetch(uInk, ivec2(uv * vec2(textureSize(uInk, 0))), 0);   /* where the bilinear read has no cover */
+  vec3 col = c.a > 0.004 ? c.rgb / c.a : (n.a > 0.004 ? n.rgb / n.a : vec3(1.0));   /* un-premultiplied; never a black fringe */
+  gl_FragColor = vec4(col * a, a);   /* premultiplied out */
+}`;
+}
+
+/**
+ * FsrEasuCon (ffx_fsr1.h), as Babylon's ThinFSR1UpscalePostProcess.updateConstants and the look page's FSR1_CONSTANTS
+ * (src/look/post.ts): a whole iw × ih texture drawn to a whole ow × oh target. Written here because the CDN build
+ * does not export Babylon's class.
+ */
+function easuConstants(e, iw, ih, ow, oh) {
+  e.setFloat4('con0', iw / ow, ih / oh, 0.5 * iw / ow - 0.5, 0.5 * ih / oh - 0.5);
+  e.setFloat4('con1', 1 / iw, 1 / ih, 1 / iw, -1 / ih);
+  e.setFloat4('con2', -1 / iw, 2 / ih, 1 / iw, 2 / ih);
+  e.setFloat4('con3', 0, 4 / ih, 0, 0);
+}
+
+/** (Re)makes the ink texture at the ink canvas's size; the pass is on only when the ink is smaller than the screen. */
+function inkEasuSetup() {
+  if (INK_EASU.tex) { INK_EASU.tex.dispose(); INK_EASU.tex = null; }
+  INK_EASU.on = false;
+  const upscaled = inkC.width < engine.getRenderWidth() - 1;
+  if (!upscaled || Q.get('upscale') === 'bilinear' || engine.webGLVersion < 2) return inkEasuShow(true);
+  if (!INK_EASU.fx) {
+    const src = inkEasuSource();
+    if (!src) return inkEasuShow(true);
+    INK_EASU.fr = new B.EffectRenderer(engine);
+    INK_EASU.fx = new B.EffectWrapper({ engine, name: 'inkEasu', fragmentShader: src,
+      uniformNames: ['con0', 'con1', 'con2', 'con3'], samplerNames: ['uInk'] });
+    INK_EASU.fx.onApplyObservable.add(() => {
+      const e = INK_EASU.fx.effect, iw = inkC.width, ih = inkC.height, ow = engine.getRenderWidth(), oh = engine.getRenderHeight();
+      e.setTexture('uInk', INK_EASU.tex);
+      easuConstants(e, iw, ih, ow, oh);
+    });
+  }
+  INK_EASU.tex = new B.DynamicTexture('ink', inkC, scene, false, B.Texture.BILINEAR_SAMPLINGMODE);
+  INK_EASU.on = true;
+  INK_EASU.pending = true;   // the new texture is empty until its first upload
+}
+
+/** Shows or hides the ink canvas, writing the style only when that changes. */
+function inkEasuShow(show) {
+  if (INK_EASU.shown === show) return;
+  INK_EASU.shown = show;
+  inkC.style.visibility = show ? '' : 'hidden';
+}
+
+/** After the scene: the ink over it through EASU. The texture is uploaded whenever the ink was drawn since the last upload. */
+function inkEasuDraw() {
+  if (!INK_EASU.on) return;
+  if (INK_EASU.fx.effect.getCompilationError?.()) { INK_EASU.on = false; return inkEasuShow(true); }   // failed: the canvas, for good
+  if (INK_EASU.pending) {
+    INK_EASU.tex.update(true, true);   // flipped to the GL's rows, premultiplied
+    INK_EASU.pending = false;
+  }
+  if (!INK_EASU.fx.effect.isReady()) return inkEasuShow(true);   // until it compiles, the canvas shows
+  inkEasuShow(false);
+  engine.setAlphaMode(B.Constants.ALPHA_PREMULTIPLIED);
+  INK_EASU.fr.render(INK_EASU.fx);
+  engine.setAlphaMode(B.Constants.ALPHA_DISABLE);
+}
+
 function drawInk(now){
+  INK_EASU.pending=true;   // the canvas changes: the EASU pass uploads it
   INK_ANIM=false;   // set again by whatever this draw finds still moving on the frame clock
   ink.setTransform(DPR,0,0,DPR,0,0);ink.clearRect(0,0,SW,SH);
   const inkA=1-st('ink'),blockA=1-st('blocks'),nameA=1-st('names');
@@ -2132,7 +2225,7 @@ function updateCard(){const s=sel();const c=$('card');if(!s.length){c.style.disp
 let last=performance.now(),acc=0,ft=[],fps=0,FRAME_N=0;
 const fmtClock=s=>{const m=Math.floor(7*60+30+s/60);return`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;};
 const FIT={R:7000,z:0};
-function resize(){SW=innerWidth;SH=innerHeight;INK_KEY='';inkC.width=Math.round(SW*DPR);inkC.height=Math.round(SH*DPR);engine.resize();
+function resize(){SW=innerWidth;SH=innerHeight;INK_KEY='';inkC.width=Math.round(SW*DPR);inkC.height=Math.round(SH*DPR);engine.resize();if(LIT)inkEasuSetup();
   // theatre: the whole neatline between the side panels, above the status bar
   const side=SW>1100?300:24,mpp=Math.max((2*MZ+160)/Math.max(200,SH-190),(2*MX+160)/Math.max(200,SW-2*side));FIT.R=mpp*SH/(2*tanH);FIT.z=-35*mpp;}
 addEventListener('resize',resize);
@@ -2163,7 +2256,9 @@ function frame(){
   scene.render();
   VP=scene.getTransformMatrix().m;
   MPP=2*CUR.R*tanH/SH;
-  cleanFootprints(now);if(inkDirty(now))drawInk(now);
+  cleanFootprints(now);
+  if(inkDirty(now))drawInk(now);
+  inkEasuDraw();
   // DOM (cheap, every few frames)
   if((frameN++&7)===0){
     const ck=fmtClock(GT);$('clock').textContent=ck;$('sclock').textContent=ck;
