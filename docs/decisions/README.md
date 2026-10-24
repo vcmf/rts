@@ -62,3 +62,4 @@ recorded here on 2026-10-08.
 | [0055](0055-lit-map-view-tilts.md) | The lit map view leans a little off straight down, with armies as low slabs | accepted |
 | [0056](0056-map-ink-at-ratio-one.md) | The map's ink renders at a pixel ratio of 1 by default; sharp ink is a setting | accepted |
 | [0059](0059-map-ink-upscaled-by-easu.md) | The map's ink is upscaled by FSR 1's EASU, on its alpha | accepted |
+| [0061](0061-square-maps-3-4-6-km.md) | Square maps of 3, 4 or 6 km a side, at true scale, sized to the armies | accepted |

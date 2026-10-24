@@ -63,14 +63,14 @@ These are owner decisions and merges, not code:
 
   None is from 1805. The cadastre is the most accurate of the three. A survey shows roads, villages and woods more
   completely. Period battle maps of 1805 serve as checks.
-- **The scale.** The real field is about 13 × 9 km. Decision 0011's play area is 1–1.5 km, and the sim's 2 m grid over
-  the whole field is about 30 million cells. Choose one of:
-  - the whole field, squeezed into the play area, as the prototype does (2.5×, so slopes and distances are untrue);
-  - a true-scale crop of the decisive sector, the Pratzen and the Goldbach, about 2.5 × 2 km;
-  - the whole field at true scale, with the play area as a window on it and coarser cells outside it.
-
-  The relief kind's transform and every later step follow from this choice, so it comes first. Decided: the whole
-  field squeezed 2.5×, as the prototype (see the open questions).
+- **The scale: decided, decision 0061.** Maps are square, 3, 4 or 6 km a side, at true scale. Austerlitz is a 6 km crop
+  around the Pratzen and the Goldbach, fought by 32,000 soldiers. The prototype's 2.5× squeeze of the whole field is
+  dropped. So:
+  - the importer writes true-scale heights;
+  - the sim loads the whole map at 2 m, about 70 MB at 6 km (an estimate);
+  - the 3D world streams in tiles around the camera, a new Track E item before step 5;
+  - vision becomes a core rule: units hidden outside sight, a faded last-seen marker, sight blocked by relief, woods
+    and villages.
 - **The existing importer plan.** This plan takes over W6, the OSM and Terrarium importer for Austerlitz in
   `docs/plans/active/prototype-plan.md`, and the importer that SM2 shares. Step 1 is W6's relief, with ČÚZK's DMR 4G
   as the source instead of Terrarium. Step 4 traces the 1805 features, using OSM's ways and water as a guide where the
@@ -190,8 +190,8 @@ Real authoring work, on the editor, from the chosen period map:
 
 ## Open questions for the owner
 
-1. **The scale.** Decided 2026-10-24: the prototype's choice, the whole field squeezed 2.5× into the play area
-   (owner: "for the map choose whatever u already use").
+1. **The scale.** Decided 2026-10-24, decision 0061: square maps of 3, 4 or 6 km a side at true scale; Austerlitz a
+   6 km crop (this replaces an earlier answer, the prototype's 2.5× squeeze).
 2. **The real heights.** Decided 2026-10-24: the derived heightfield is committed, with ČÚZK's credit (CC BY 4.0).
 3. **The period map** to trace, and whether its licence allows tracing.
 4. **The draft page:** the plan makes the map engine's flat draft page a debug overlay of the lit view, not a view of its
