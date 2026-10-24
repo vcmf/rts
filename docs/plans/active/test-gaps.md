@@ -145,7 +145,7 @@ The tests this PR adds (`test/`, 103 tests in about 7 s on the dev Mac in parall
 ## Findings
 
 Tests written for this PR, and its review, found these. Each was a GitHub issue labelled `known-issue`, not fixed in
-the test PR. All six are fixed by the follow-up PR `fix/sim-test-findings` ("fix(sim): the four bugs the new tests
+the test PR. All six are fixed by the follow-up PR #162 (`fix/sim-test-findings`, "fix(sim): the four bugs the new tests
 found", #155–#158), each with a test; no golden replay hash moved.
 
 1. **A save with an unknown command pending cannot be loaded** (#155). `issue` accepts any command and `applyCommands` drops
