@@ -67,8 +67,10 @@ Per PR, every check run with its full output and exit code (`AGENTS.md`):
   byte-identical to main's and `npm run check:app` (every session's replay reproduces the page's hashes) cover it.
   `node tools/guard.mjs --base`, the `--selftest` of `tools/detail-check.mjs`, `tools/water-check.mjs` and
   `tools/water-look-check.mjs` give main's results (a check that fails on main, fails the same).
-- **PR 3**: each tool's `--selftest` passes (`tools/golden.mjs`, `tools/detail-check.mjs`, `tools/water-check.mjs`,
-  `tools/water-look-check.mjs`), `node tools/check-negatives.mjs` passes, `npm run check:data`, Vitest.
+- **PR 3**: the tools, run from the branch against main's build, give main's results (a check that fails on main,
+  fails the same): the `--selftest` of `tools/golden.mjs`, `tools/detail-check.mjs`, `tools/water-check.mjs`,
+  `tools/water-look-check.mjs` and `tools/macro-check.mjs`, `node tools/check-negatives.mjs`, `node tools/guard.mjs
+  --base`; `npm run check:data`, Vitest.
 - After PR 3: no line over 120 columns in the formatted areas except long strings, templates, URLs and regular
   expressions (`max-len` clean); `docs/systems/` docs that quote formatted code still point at the right lines.
 
@@ -97,11 +99,11 @@ exit 0; `water-look-check --selftest` exit 1 on `banks` (#118) and `winter` (#12
 ### Measured for PR 3 (2026-10-24, on main 3a99e40, then merged with e1e8ab7)
 
 `tools/`, `test/` and the root configs join `formatted` (`test/fixtures/` stays out of both); ESLint lints `tools/*.mjs`
-(Node's globals, `no-undef`: 0 hits) and `tools/*.js` (a script, the browser's globals, no `no-undef`). The 4 findings
-of the recommended rules fixed without changing behaviour: `tools/check-negatives.mjs`'s `hasSpec`, written and never
-read; two unused `forEach` indices in `tools/formation-measure.js`; `tools/shot.mjs`'s reply handler, a ternary of two
-calls, now an `if`/`else`. `npm run format`: 58 files, +9,811 −2,774; then 82 hanging comments moved (31 above the one
-item they name), 70 comments over 120 columns shortened (29 at the end of a line moved above it, 41 rewrapped with their
+(Node's builtin globals, `no-undef`: 0 hits) and `tools/*.js` (a script, no `no-undef`). The 4 findings of the
+recommended rules fixed without changing behaviour: `tools/check-negatives.mjs`'s `hasSpec`, written and never read; two
+unused `forEach` indices in `tools/formation-measure.js`; `tools/shot.mjs`'s reply handler, a ternary of two calls, now
+an `if`/`else`. `npm run format`: 58 files, +9,811 −2,774; then 82 hanging comments moved (31 above the one item they
+name), 70 comments over 120 columns shortened (29 at the end of a line moved above it, 41 rewrapped with their
 paragraph; the usage tables put a long row's description on the next line) and 3 paragraphs that ended in a word or two
 rewrapped. Lines over 120: `tools/` 650 → 135, `test/` 456 → 33, root configs 14 → 0 (all strings, templates, URLs or
 regular expressions). Rule hits 2,451 → 0 (`max-statements-per-line` 1,067, `one-var` 673, `max-len` 475,
@@ -115,9 +117,9 @@ tools, run from this branch against main's build (`vite preview`): `golden.mjs -
 `water-check` `--selftest`, `check-negatives` (the prototype, 9 cases; the look page, 18), `guard --base` and a
 `tools/shot.mjs` run exit 0; golden main against this branch: match, 0/16 on all 8 cameras; `water-look-check
 --selftest` exit 1 on `banks` (#118) and `winter` (#120) only, its `--only banks,winter` output identical to main's
-tool's; `macro-check --selftest` exit 1 (`classes`, `shimmer`, the classes' sabotage unseen), its output identical to
-main's tool's but the bake times it reports ungated; `bench-look.mjs --print` on 28 saved bench files prints exactly
-what main's tool prints.
+tool's; `macro-check --selftest` exit 1 (`classes` #118, `shimmer` #139, and the classes' sabotage unseen, #168), its
+output identical to main's tool's but the bake times it reports ungated; `bench-look.mjs --print` on 28 saved bench
+files prints exactly what main's tool prints.
 
 ## Open questions
 

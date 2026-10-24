@@ -98,9 +98,10 @@ Prettier, pinned exactly (decision 0016), in `.prettierrc.json`:
 - **`curly`: `multi-line`**: `if (x) return` on one line stays; a body Prettier breaks onto its own line gets braces.
   Autofixed (616 in the measurement).
 - **Lint `tools/*.mjs` and `tools/*.js`**: removed from the ignores, with typescript-eslint's recommended rules as
-  everywhere. `tools/*.mjs` are Node scripts: Node's globals (from the `globals` package, pinned) and `no-undef`, which
-  catches a mistyped name in untyped JavaScript (0 found today). `tools/*.js` are evaluated inside a page
-  (`tools/river-check.js`, …) and read the page's own globals: browser globals, `sourceType: script`, no `no-undef`.
+  everywhere. `tools/*.mjs` are Node's ES modules: Node's builtin globals (from the `globals` package, pinned; not
+  CommonJS's `require` or `__dirname`) and `no-undef`, which catches a mistyped name in untyped JavaScript (0 found
+  today). `tools/*.js` are evaluated inside a page (`tools/river-check.js`, …) and read the page's own globals:
+  `sourceType: script`, no `no-undef` (it would flag every page global they read).
   4 findings to fix (3 unused variables, 1 unused expression).
 - Nothing else: the list stays short. typescript-eslint's recommended set has no formatting rules, so no
   `eslint-config-prettier` is needed.
