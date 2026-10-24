@@ -7,14 +7,16 @@
 import type { Classify } from './ground.ts'
 
 export const classifyNapoleonic: Classify = cell => {
-  if (cell.nogo) return 'water'                          // the map's overrides first: impassable (the compiler gives it a depth past every limit),
-  if (cell.go) return cell.way ? 'road' : 'open'         // or passable (and dry)
+  // the map's overrides first: impassable (the compiler gives it a depth past every limit), or passable (and dry)
+  if (cell.nogo) return 'water'
+  if (cell.go) return cell.way ? 'road' : 'open'
   if (cell.built?.bridge) return 'bridge'
-  if (cell.water > 0) return 'water'                     // fords included: the depth decides who wades
+  if (cell.water > 0) return 'water' // fords included: the depth decides who wades
   if (cell.way) return 'road'
   if (cell.barrier) return 'hedge'
   if (cell.built?.building) return 'denseWood'
-  const g = cell.ground ?? {}, v = cell.veg
+  const g = cell.ground ?? {}
+  const v = cell.veg
   if (g.material === 'peat' || (g.moisture ?? 0) >= 0.9) return 'marsh'
   if (v?.growth === 'stand') return v.density >= 0.75 || (v.undergrowth ?? 0) >= 0.7 ? 'denseWood' : 'woods'
   if (v?.stage === 'ploughed') return 'ploughed'

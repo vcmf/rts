@@ -4,10 +4,11 @@
 export type Handle = number
 
 export const KIND_FORMATION = 1
-export const MAX_INDEX = 1 << 9   // 512 slots per kind
+export const MAX_INDEX = 1 << 9 // 512 slots per kind
 const GEN_MASK = (1 << 19) - 1
 
-export const makeHandle = (kind: number, index: number, gen: number): Handle => (kind << 28) | (index << 19) | (gen & GEN_MASK)
+export const makeHandle = (kind: number, index: number, gen: number): Handle =>
+  (kind << 28) | (index << 19) | (gen & GEN_MASK)
 export const handleKind = (h: Handle): number => (h >>> 28) & 7
 export const handleIndex = (h: Handle): number => (h >>> 19) & (MAX_INDEX - 1)
 export const handleGen = (h: Handle): number => h & GEN_MASK

@@ -1,7 +1,13 @@
 // How each terrain class looks on the staff map, keyed by class name (render content, not sim data):
 // a fill, an edge drawn where the class meets another, a symbol scattered over it, and how densely
 // trees stand in it. Classes not listed draw as open ground.
-export interface ClassStyle { fill?: string; edge?: string; edgeWidth?: number; symbol?: 'stipple' | 'furrows' | 'reeds' | 'beads'; trees?: number }
+export interface ClassStyle {
+  fill?: string
+  edge?: string
+  edgeWidth?: number
+  symbol?: 'stipple' | 'furrows' | 'reeds' | 'beads'
+  trees?: number
+}
 export const CLASS_STYLE: Record<string, ClassStyle> = {
   open: {},
   road: { fill: '#f3efe6', edge: '#8a6a46', edgeWidth: 1.2 },
@@ -15,8 +21,19 @@ export const CLASS_STYLE: Record<string, ClassStyle> = {
   bridge: { fill: '#f3efe6', edge: '#211f1c', edgeWidth: 1.4 },
   water: { fill: '#cfe0e2', edge: '#3f6f86', edgeWidth: 1 },
 }
-export const INK = { paper: '#f3efe6', offMap: '#ddd5c5', ink: '#211f1c', ink2: '#5f5a52', ink3: '#a19a8f', contour: '#a0714a', contourIx: '#7d5534', grid: 'rgba(40,30,20,.08)',
-  waterInk: '#3f6f86', woodInk: '#55703f', shallow: '#e3edee' }
+export const INK = {
+  paper: '#f3efe6',
+  offMap: '#ddd5c5',
+  ink: '#211f1c',
+  ink2: '#5f5a52',
+  ink3: '#a19a8f',
+  contour: '#a0714a',
+  contourIx: '#7d5534',
+  grid: 'rgba(40,30,20,.08)',
+  waterInk: '#3f6f86',
+  woodInk: '#55703f',
+  shallow: '#e3edee',
+}
 export const SIDE_INK = ['#2c4fa8', '#a8322c']
 // fire, and morale by state (steady, shaken, wavering, routing, rallying, shattered)
 export const FIRE_INK = '#c8641e'
