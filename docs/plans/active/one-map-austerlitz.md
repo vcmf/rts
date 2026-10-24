@@ -69,7 +69,8 @@ These are owner decisions and merges, not code:
   - a true-scale crop of the decisive sector, the Pratzen and the Goldbach, about 2.5 × 2 km;
   - the whole field at true scale, with the play area as a window on it and coarser cells outside it.
 
-  The relief kind's transform and every later step follow from this choice, so it comes first.
+  The relief kind's transform and every later step follow from this choice, so it comes first. Decided: the whole
+  field squeezed 2.5×, as the prototype (see the open questions).
 - **The existing importer plan.** This plan takes over W6, the OSM and Terrarium importer for Austerlitz in
   `docs/plans/active/prototype-plan.md`, and the importer that SM2 shares. Step 1 is W6's relief, with ČÚZK's DMR 4G
   as the source instead of Terrarium. Step 4 traces the 1805 features, using OSM's ways and water as a guide where the
@@ -189,9 +190,9 @@ Real authoring work, on the editor, from the chosen period map:
 
 ## Open questions for the owner
 
-1. **The scale** (step 0): the whole field squeezed, a true-scale crop of the decisive sector, or true scale with a play
-   window?
-2. **The real heights:** commit the derived heightfield (CC BY, with credit), or fetch it at build time?
+1. **The scale.** Decided 2026-10-24: the prototype's choice, the whole field squeezed 2.5× into the play area
+   (owner: "for the map choose whatever u already use").
+2. **The real heights.** Decided 2026-10-24: the derived heightfield is committed, with ČÚZK's credit (CC BY 4.0).
 3. **The period map** to trace, and whether its licence allows tracing.
 4. **The draft page:** the plan makes the map engine's flat draft page a debug overlay of the lit view, not a view of its
    own (one renderer, decision 0057). Confirm, since step 3 builds on it.
