@@ -171,6 +171,7 @@ const Q=new URLSearchParams(location.search);
 const LIT=Q.get('style')==='lit';
 // &relief=layers (with the lit style): the relief as stacked paper sheets (docs/plans/active/paper-layers.md)
 const LAYERS=LIT&&Q.get('relief')==='layers';
+const SHADED=LIT&&Q.get('relief')==='shaded';   // shaded relief from the heights, baked once (docs/plans/active/relief-shading.md)
 // the lit style's static light: a world xz vector toward it (x east, z north), the north-west; every bake and shader term
 // that is lit takes it from here (the screen LIGHT of the blocks is this one, seen through the camera, setLight)
 const NW=[-Math.SQRT1_2,Math.SQRT1_2];
@@ -445,6 +446,104 @@ function addShore(g, P) {
   g.closePath();
 }
 
+/**
+ * The heights for the relief shading, on a finer grid than the mesh (docs/plans/active/relief-shading.md): the real
+ * ones from the ?dem= file's fine grid when it has one that spans the page, else the mesh's own height grid (real or
+ * made-up) sampled bilinearly at the same step, so the shading always matches the ground drawn (and costs little).
+ * Returns { step, nx, nz, h } with h in page metres (the mesh's scale), the south row first.
+ */
+function fineHeights() {
+  const F = DEM && DEM.fine;
+  const spans = F && F.nx === Math.round(2 * TX / F.step) + 1 && F.nz === Math.round(2 * TZ / F.step) + 1 && F.h.length === F.nx * F.nz;
+  if (F && !spans) console.warn('?dem= fine grid does not span the page: relief shaded from the mesh grid');
+  if (spans) {
+    const h = new Float32Array(F.nx * F.nz);
+    for (let k = 0; k < h.length; k++) h[k] = (F.h[k] - DEM_LO) / 100 * DEM_Z;
+    return { step: F.step, nx: F.nx, nz: F.nz, h };
+  }
+  const step = 4, nx = Math.round(2 * TX / step) + 1, nz = Math.round(2 * TZ / step) + 1;
+  const h = new Float32Array(nx * nz);
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) h[j * nx + i] = Hs(-TX + i * step, -TZ + j * step);
+  return { step, nx, nz, h };
+}
+
+/** Box-mean of a grid over a square of half-width r cells, via a summed-area table (edges clamped). */
+function boxMean(h, nx, nz, r) {
+  const S = new Float64Array((nx + 1) * (nz + 1));
+  for (let j = 0; j < nz; j++) {
+    let row = 0;
+    for (let i = 0; i < nx; i++) {
+      row += h[j * nx + i];
+      S[(j + 1) * (nx + 1) + i + 1] = S[j * (nx + 1) + i + 1] + row;
+    }
+  }
+  const out = new Float32Array(nx * nz);
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const i0 = Math.max(0, i - r), i1 = Math.min(nx, i + r + 1), j0 = Math.max(0, j - r), j1 = Math.min(nz, j + r + 1);
+    const sum = S[j1 * (nx + 1) + i1] - S[j0 * (nx + 1) + i1] - S[j1 * (nx + 1) + i0] + S[j0 * (nx + 1) + i0];
+    out[j * nx + i] = sum / ((i1 - i0) * (j1 - j0));
+  }
+  return out;
+}
+
+/**
+ * The shaded relief, baked once at load into RGBA bytes the size of the fine grid (the north row first, as the map
+ * bake): R the slope's light (Lambert over LAMBERT_RANGE, 0.5 on flat ground), G the cast shadow (1 lit, 0 in shadow), B the exposure
+ * (0.5 even, lower in hollows, higher on crests). The light is the map's one, from the north-west, RELIEF_SUN degrees
+ * up; heights are exaggerated by RELIEF_Z for the light only, as shaded-relief prints do.
+ *
+ * Cast shadow, in one pass: walking from the light's side, each point carries the highest shadow line reaching it
+ * (the shadow line of its neighbour toward the light, dropped by the sun's slope over one step, or its own height).
+ * A point under that line is in shadow, softly over the first RELIEF_SOFT metres. On this grid the north-west is the
+ * diagonal neighbour (i - 1, j + 1), so the walk goes north to south, west to east.
+ */
+const RELIEF_SUN = Number(Q.get('sun')) || 30;
+const RELIEF_Z = Number(Q.get('rz')) || 2;
+const RELIEF_SOFT = 4;
+// the shadow walk below steps to the grid's diagonal neighbour toward the light: it is written for a north-west light
+if (!(Math.abs(NW[0] + Math.SQRT1_2) < 1e-9 && Math.abs(NW[1] - Math.SQRT1_2) < 1e-9)) throw new Error('bakeRelief walks the north-west diagonal: NW changed');
+// the slope light is stored over LAMBERT_RANGE (1 on flat ground in the middle), for fine steps on gentle slopes
+const LAMBERT_RANGE = [0.6, 1.4];
+// the relief's tone on the paper: no darker than SHADE_FLOOR (with its warm hue, 0.62 of the paper), no lighter than SHADE_TOP
+const SHADE_FLOOR = 0.72, SHADE_TOP = 1.15;
+function bakeRelief() {
+  const { step, nx, nz, h: h0 } = fineHeights();
+  const h = new Float32Array(h0.length);   // exaggerated for the light (the slope and the shadows)
+  for (let k = 0; k < h.length; k++) h[k] = h0[k] * RELIEF_Z;
+  const el = RELIEF_SUN * Math.PI / 180;
+  const diag = step * Math.SQRT2, drop = diag * Math.tan(el);
+  const L = [NW[0] * Math.cos(el), Math.sin(el), NW[1] * Math.cos(el)];
+
+  // cast shadow: the shadow line, walked from the light's side
+  const line = new Float32Array(nx * nz), lit = new Float32Array(nx * nz);
+  for (let j = nz - 1; j >= 0; j--) for (let i = 0; i < nx; i++) {
+    const k = j * nx + i;
+    const fromLight = i > 0 && j < nz - 1 ? line[(j + 1) * nx + i - 1] - drop : -Infinity;
+    line[k] = Math.max(h[k], fromLight);
+    lit[k] = 1 - sstep(0, 1, (fromLight - h[k]) / (RELIEF_SOFT * RELIEF_Z));
+  }
+
+  // exposure: how far a point stands above or below its surroundings, near (about 24 m) and wider (about 80 m), from
+  // the true heights (the light's exaggeration leaves it alone)
+  const near = boxMean(h0, nx, nz, 6), wide = boxMean(h0, nx, nz, 20);
+
+  const d = new Uint8Array(nx * nz * 4);
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const k = j * nx + i;
+    const gx = (h[j * nx + Math.min(nx - 1, i + 1)] - h[j * nx + Math.max(0, i - 1)]) / (2 * step);
+    const gz = (h[Math.min(nz - 1, j + 1) * nx + i] - h[Math.max(0, j - 1) * nx + i]) / (2 * step);
+    const nl = Math.hypot(gx, 1, gz);
+    const lambert = Math.max(0, (-gx * L[0] + L[1] - gz * L[2]) / nl) / L[1];   // 1 on flat ground
+    const exposed = 0.5 - ((near[k] - h0[k]) * 0.1 + (wide[k] - h0[k]) * 0.03);
+    const o = ((nz - 1 - j) * nx + i) * 4;   // the north row first
+    d[o] = Math.round(clamp((lambert - LAMBERT_RANGE[0]) / (LAMBERT_RANGE[1] - LAMBERT_RANGE[0]), 0, 1) * 255);
+    d[o + 1] = Math.round(lit[k] * 255);
+    d[o + 2] = Math.round(clamp(exposed, 0, 1) * 255);
+    d[o + 3] = 255;
+  }
+  return { data: d, nx, nz };
+}
+
 function bakeMap(){
   const nh=LIT?0:bakeHachures();   // the lit style draws contours, not hachures
   if(LIT){cCanopy=bakeCanopy();cHouse=bakeHouses();}
@@ -505,12 +604,15 @@ let MAPN=1,TT=0;                                             // mapness and t = 
 const NEAR3D=380,FARMAP=1700;
 const stage=(a,b)=>sstep(a,b,TT);
 let camF=[0,-1,0],camRt=[1,0,0],camUp=[0,0,1],camPos=[0,6000,0],tanH=Math.tan(0.26);
+// an experiment (the owner): ?tilt=degrees tilts the map view off straight down, toward the RTS angle; capped well short
+// of the horizon (decision 0002)
+const MAP_PITCH=Math.PI/2-clamp(Number(Q.get('tilt'))||0,0,45)*Math.PI/180;
 function updateCamera(dt){
   if(CAMS.tw){const k=clamp((performance.now()-CAMS.tw.t0)/CAMS.tw.dur,0,1),e=easeIO(k);CAMS.R=Math.exp(lerp(Math.log(CAMS.tw.from),Math.log(CAMS.tw.to),e));CUR.R=CAMS.R;if(k>=1)CAMS.tw=null;}
   const a=1-Math.exp(-dt*11);
   CUR.R=Math.exp(lerp(Math.log(CUR.R),Math.log(CAMS.R),a));CUR.x=lerp(CUR.x,CAMS.T.x,a);CUR.z=lerp(CUR.z,CAMS.T.z,a);CUR.yaw=lerp(CUR.yaw,CAMS.yaw,a);
   MAPN=sstep(Math.log(NEAR3D),Math.log(FARMAP),Math.log(CUR.R));TT=1-MAPN;
-  const p=lerp(Math.PI/2,0.93,easeIO(stage(0,1))),yaw=CUR.yaw*stage(0.2,0.9);
+  const p=lerp(MAP_PITCH,Math.min(0.93,MAP_PITCH),easeIO(stage(0,1))),yaw=CUR.yaw*stage(0.2,0.9);
   camF=[Math.sin(yaw)*Math.cos(p),-Math.sin(p),Math.cos(yaw)*Math.cos(p)];camRt=[Math.cos(yaw),0,-Math.sin(yaw)];
   camUp=[camF[1]*camRt[2]-camF[2]*camRt[1],camF[2]*camRt[0]-camF[0]*camRt[2],camF[0]*camRt[1]-camF[1]*camRt[0]];
   const ty0=Hs(CUR.x,CUR.z)*stage(0.15,0.7);
@@ -571,6 +673,10 @@ precision highp float;varying vec3 vW;varying vec3 vN;varying float vH;
 uniform sampler2D uMapA,uMapB,uPaperT,uNoiseT;
 #ifdef LIT
 uniform sampler2D uCanopyT,uHouseT;
+#ifdef SHADED
+uniform sampler2D uReliefT;   /* the baked relief: R light on the slope, G cast shadow (1 lit), B exposure (0.5 even) */
+uniform vec2 uReliefN;        /* its grid nodes, x and z */
+#endif
 uniform vec2 uLightXZ;   /* toward the one static light, xz: the relief and the water use it */
 #ifdef LAYERS
 varying float vHB;varying vec2 vGB;
@@ -636,6 +742,27 @@ void main(){
    mapC*=1.0-min(0.24*sd,0.3)*lay*(1.0-0.7*woodA)*vec3(0.95,1.0,1.1);   /* a warm shadow, never black: with the hillshade and the tint, the darkest strip about 0.63 of the paper */
    mapC=mix(mapC,min(mapC*1.14+0.02,vec3(1.0)),0.8*lt*lay*(1.0-0.7*woodA));}
 #endif
+#ifdef SHADED
+  vec3 flatPaper = mapC;   /* the paper before the relief: water lies flat */
+  {
+    /* shaded relief: the light on the slope, the cast shadow and the exposure, baked once from the heights, on the
+       paper in its own hues: warm grey-brown in the shade, a touch of ochre on the lit slopes */
+    /* grid node i sits at the centre of texel i: (i + 0.5) / n */
+    vec2 node = vec2((vW.x + ${TX}.0) / ${2 * TX}.0, (${TZ}.0 - vW.z) / ${2 * TZ}.0) * (uReliefN - 1.0);
+    vec3 R = texture2D(uReliefT, (node + 0.5) / uReliefN).rgb;
+    float slopeLight = mix(${LAMBERT_RANGE[0]}, ${LAMBERT_RANGE[1]}, R.r);   /* 1 on flat ground */
+    float sunlit = R.g;
+    float exposed = R.b * 2.0 - 1.0;     /* below 0 in hollows, above on crests */
+    float v = slopeLight * mix(0.72, 1.0, sunlit) * (1.0 + 0.3 * exposed);
+    v = clamp(v, ${SHADE_FLOOR}, ${SHADE_TOP});
+    /* the warm hue at its deepest keeps v times hue at 0.62 of the paper or above, with the shading graded all the way */
+    vec3 hue = v < 1.0 ? mix(vec3(0.93, 0.90, 0.86), vec3(1.0), (v - ${SHADE_FLOOR}) / ${(1 - SHADE_FLOOR).toFixed(2)})
+                       : mix(vec3(1.0), vec3(1.0, 0.98, 0.90), (v - 1.0) / ${(SHADE_TOP - 1).toFixed(2)});
+    vec3 shadeK = v * hue;
+    float relief = (1.0 - uWash) * inside * (1.0 - 0.5 * woodA);   /* lighter under the woods, which shade their own ground */
+    mapC = mix(mapC, min(mapC * shadeK, vec3(1.0)), relief);
+  }
+#endif
 #ifdef LIT
   {
     /* water as a wash on the paper: the grain shows through, stronger at the banks, paler in the middle */
@@ -651,7 +778,7 @@ void main(){
       /* no bank at the map's edge, where the water runs on beyond the bake */
       float slope = smoothstep(0.006, 0.04, length(gW)) * smoothstep(0.0, 0.006, edge);
       float mid = smoothstep(0.55, 0.9, D);
-#ifdef LAYERS
+#if defined(LAYERS) || defined(SHADED)
       vec3 under = flatPaper;
 #else
       vec3 under = mapC;
@@ -1666,10 +1793,12 @@ function build(){
   window.__bake={hachures:nh,ms:Math.round(bakeMs),trees:TREES.length,houses:HOUSES.length,terrain:DEM?`real (${DEM.source}), heights ×${DEM_Z.toFixed(2)}`:'made-up'};
   const COMMONU=['uSun','uSeason','uMist','uGSh'];
   terrMat=new B.ShaderMaterial('terr',scene,{vertexSource:TER_VS,fragmentSource:TER_FS},{attributes:['position','normal',...(LAYERS?['aHB','aGB']:[])],
-    uniforms:['world','viewProjection','uCrown','uLightXZ','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[])]:[]});
+    uniforms:['world','viewProjection','uCrown','uLightXZ','uReliefN','uHachK','uRise','uWash','uInk','uHmin','uHmax','uSunK','uPaper','uWashC','uWoodW','uWoodInk','uHach','uLine','uWaterW','uGLit','uGMid','uGSh','uRoad','uWater','uWashA','uWoodWA',...COMMONU],samplers:['uMapA','uMapB','uPaperT','uNoiseT',...(LIT?['uCanopyT','uHouseT']:[]),...(SHADED?['uReliefT']:[])],defines:LIT?['#define LIT',...(LAYERS?['#define LAYERS']:[]),...(SHADED?['#define SHADED']:[])]:[]});
   terrMat.backFaceCulling=false;terrMat.setTexture('uMapA',texA);terrMat.setTexture('uMapB',texB);paperT.wrapU=paperT.wrapV=noiseT.wrapU=noiseT.wrapV=B.Texture.WRAP_ADDRESSMODE;terrMat.setTexture('uPaperT',paperT);terrMat.setTexture('uNoiseT',noiseT);terrMat.setFloat('uHmin',HMIN);terrMat.setFloat('uHmax',HMAX);
   if(LIT){for(const[n,c]of[['uCanopyT',cCanopy],['uHouseT',cHouse]]){const t=rawTex(c,true,n==='uHouseT');t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture(n,t);c.width=0;}}
   if(LIT)terrMat.setVector2('uLightXZ',new B.Vector2(NW[0],NW[1]));
+  if(SHADED){const t0=performance.now(),R=bakeRelief();window.__reliefMs=Math.round(performance.now()-t0);   // the bake's own cost, for the plan
+    const t=B.RawTexture.CreateRGBATexture(R.data,R.nx,R.nz,scene,true,false,B.Texture.TRILINEAR_SAMPLINGMODE);t.wrapU=t.wrapV=B.Texture.CLAMP_ADDRESSMODE;terrMat.setTexture('uReliefT',t);terrMat.setVector2('uReliefN',new B.Vector2(R.nx,R.nz));t.anisotropicFilteringLevel=8;if(DEM)delete DEM.fine;}   // the fine heights are only for the bake
   terrainMesh().material=terrMat;
   {const O=30000,y=HMIN-1,P=[-TX,y,-TZ,TX,y,-TZ,TX,y,TZ,-TX,y,TZ,-O,y,-O,O,y,-O,O,y,O,-O,y,O],I=[0,4,1,1,4,5,1,5,2,2,5,6,2,6,3,3,6,7,3,7,0,0,7,4],
     m=new B.Mesh('skirt',scene),vd=new B.VertexData();vd.positions=P;vd.indices=I;vd.normals=[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0];vd.applyToMesh(m);
