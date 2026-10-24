@@ -30,6 +30,7 @@ shadow at every zoom, its look set per zoom.
   shape itself at a contact darkness (a little over the full shadow), then toward the tip softer and lighter, to the
   look's softness and darkness at the tip; fragment arithmetic on the distance along the shadow, no more reads, the
   stencil still darkening each sample once (where shadows overlap, the first drawn at a sample sets its value).
+  The owner chose softness 0.75 with the foot gradient, 2026-10-24, from sheet 7 (the review images, the plan).
   The settings: softness (a share of a softer bake of the shape: the atlas's second channel, blurred wider and
   brought back to the shape's darkest value, so softer is not lighter), darkness (the share of the ground's full
   shadow) and length (along the sun from the soles, the feet kept where they are: the grid's second row lies at the

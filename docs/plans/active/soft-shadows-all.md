@@ -132,7 +132,7 @@ equal but the fps readout). No more texture reads or vertices: one varying and a
 m>[,<far dark>,<far core m>]`; `?ushdark` is now the tip's. The overlaps still darken each sample once; which shadow
 sets a sample's value is the draw order's (a man's tip over the feet of the man behind him: one or the other, steady
 from frame to frame). Sheet 7 in the review folder: main, the previous default and the gradient at softness 0.4 and 0.75,
-the owner's road view at 15, 30 and 55 m.
+the owner's road view at 15, 30 and 55 m. The owner chose 0.75 with the foot gradient, 2026-10-24, from sheet 7.
 
 ## Open questions
 
