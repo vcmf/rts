@@ -717,7 +717,7 @@ void main(){
 #ifdef LIT
   /* woods: a dark warm grey on the paper (the owner), the paper itself darkened, so it sits in its palette; under the
      relief, its shadows and the ink */
-  mapC = mix(mapC, uPaper * vec3(0.6, 0.57, 0.52), smoothstep(0.08, 0.2, A.g) * 0.85 * inside);
+  mapC = mix(mapC, paper * vec3(0.6, 0.57, 0.52), smoothstep(0.08, 0.2, A.g) * 0.85 * inside);   /* the grained paper */
 #else
   mapC=mix(mapC,mapC*uWoodW*1.15,uWoodWA*woodA*(0.75+0.25*wn));
 #endif
@@ -1900,40 +1900,42 @@ function inkDirty(now) {
   // INK_ANIM: the last draw drew something still moving on the frame clock (each draw sets it where it reads the clock)
   return changed || INK_ANIM || now - INK_T0 < 3000;   // the fonts load and the first frames settle
 }
-/* ---------- the ink upscaled by FSR 1's EASU (decision 0045's upscale, as the look page uses it) ----------
-   On a high-density screen the ink is drawn at a ratio of 1 (decision 0056) and was stretched by the browser
-   (bilinear, soft). Instead it is uploaded as a texture when it is redrawn, and every frame a last pass draws it over the
-   scene through EASU at the screen's pixels: edges come out crisp at the cost of one full-screen pass. EASU works on
-   colour; a copy of it on the ink's alpha keeps the edges of the marks crisp too. Only when the ink is smaller than the
-   screen; else, or if the pass cannot compile, the canvas shows as before. */
-const INK_EASU = { on: false, tex: null, fx: null, fr: null };
+/* ---------- the ink upscaled by FSR 1's EASU (decision 0059; the look page's upscale, decision 0045) ----------
+   On a high-density screen the lit style's ink is drawn at a ratio of 1 (decision 0056). Instead of the browser's
+   bilinear stretch, it is uploaded as a texture whenever it is redrawn, and every frame a last pass draws it over the
+   scene. The marks' edges are in their alpha, so EASU runs once, on the alpha; the colour is read bilinearly,
+   un-premultiplied, and laid under that alpha, so colour and edge can never disagree. On only when the ink is smaller
+   than the screen; `?upscale=bilinear` keeps the stretch; if the pass cannot compile, the canvas shows as before. */
+const INK_EASU = { on: false, shown: true, pending: false, tex: null, fx: null, fr: null };
 
-/** Babylon's EASU source (fsr1UpscalePixelShader), on uInk, with a copy on the alpha, compositing premultiplied. */
+/** Babylon's EASU (fsr1UpscalePixelShader) made to read the ink's alpha in all three of its channels. */
 function inkEasuSource() {
   const src = B.ShaderStore.ShadersStore.fsr1UpscalePixelShader;
   if (!src) return null;
-  let s = src.replace('uniform sampler2D textureSampler;', 'uniform sampler2D uInk;').replace(/textureSampler/g, 'uInk');
-  const rf0 = s.indexOf('vec4 FsrEasuRF('), gf0 = s.indexOf('vec4 FsrEasuGF('), f0 = s.indexOf('vec3 FsrEasuF('), m0 = s.indexOf('void main()');
-  if (rf0 < 0 || gf0 < 0 || f0 < 0 || m0 < 0) return null;
-  const alphaGather = s.slice(rf0, gf0).replace('FsrEasuRF(', 'FsrEasuAF(').replace(/\.r\b/g, '.a');
-  const alphaEasu = s.slice(f0, m0).replace('FsrEasuF(', 'FsrEasuFA(').replace(/FsrEasu[RGB]F\(/g, 'FsrEasuAF(');
-  return s.slice(0, m0) + alphaGather + alphaEasu + `
+  const m0 = src.indexOf('void main()');
+  if (m0 < 0 || !/FsrEasuRF\(/.test(src)) return null;
+  // every channel gather reads the alpha: EASU then upscales the alpha alone
+  const body = src.slice(0, m0).replace(/textureSampler/g, 'uInk').replace(/\.([rgb])\s*(?=[,)])/g, '.a');
+  return body + `
 void main(){
   ivec2 ip = ivec2(gl_FragCoord.xy);
-  float a = clamp(FsrEasuFA(ip, con0, con1, con2, con3).r, 0.0, 1.0);
-  vec3 c = clamp(FsrEasuF(ip, con0, con1, con2, con3), vec3(0.0), vec3(a));   /* premultiplied: never brighter than its cover */
-  gl_FragColor = vec4(c, a);
+  float a = clamp(FsrEasuF(ip, con0, con1, con2, con3).r, 0.0, 1.0);
+  vec2 uv = gl_FragCoord.xy / vec2(textureSize(uInk, 0)) * con0.xy;   /* the screen pixel in the ink texture */
+  vec4 c = texture2D(uInk, uv);
+  vec3 col = c.a > 0.004 ? c.rgb / c.a : vec3(0.0);   /* un-premultiplied: the mark colour, not darkened by its edge */
+  gl_FragColor = vec4(col * a, a);   /* premultiplied out */
 }`;
 }
 
-/** (Re)makes the ink texture at the ink canvas's size; turns the pass on only when the ink is smaller than the screen. */
+/** (Re)makes the ink texture at the ink canvas's size; the pass is on only when the ink is smaller than the screen. */
 function inkEasuSetup() {
   if (INK_EASU.tex) { INK_EASU.tex.dispose(); INK_EASU.tex = null; }
+  INK_EASU.on = false;
   const upscaled = inkC.width < engine.getRenderWidth() - 1;
-  if (!upscaled || Q.get('upscale') === 'bilinear') return inkEasuOff();
+  if (!upscaled || Q.get('upscale') === 'bilinear' || engine.webGLVersion < 2) return inkEasuShow(true);
   if (!INK_EASU.fx) {
-    const src = engine.webGLVersion >= 2 ? inkEasuSource() : null;
-    if (!src) return inkEasuOff();
+    const src = inkEasuSource();
+    if (!src) return inkEasuShow(true);
     INK_EASU.fr = new B.EffectRenderer(engine);
     INK_EASU.fx = new B.EffectWrapper({ engine, name: 'inkEasu', fragmentShader: src,
       uniformNames: ['con0', 'con1', 'con2', 'con3'], samplerNames: ['uInk'] });
@@ -1947,23 +1949,28 @@ function inkEasuSetup() {
       e.setFloat4('con3', 0, 4 / ih, 0, 0);
     });
   }
-  INK_EASU.tex = new B.DynamicTexture('ink', inkC, scene, false, B.Texture.NEAREST_SAMPLINGMODE);
-  INK_EASU.tex.wrapU = INK_EASU.tex.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+  INK_EASU.tex = new B.DynamicTexture('ink', inkC, scene, false, B.Texture.BILINEAR_SAMPLINGMODE);
   INK_EASU.on = true;
-  inkC.style.visibility = 'hidden';   // still drawn into, shown through the pass
-  INK_KEY = '';
-}
-function inkEasuOff() {
-  INK_EASU.on = false;
-  inkC.style.visibility = '';
+  INK_EASU.pending = true;   // the new texture is empty until its first upload
 }
 
-/** After the scene: the ink over it through EASU (uploaded only when it was redrawn). */
+/** Shows or hides the ink canvas, writing the style only when that changes. */
+function inkEasuShow(show) {
+  if (INK_EASU.shown === show) return;
+  INK_EASU.shown = show;
+  inkC.style.visibility = show ? '' : 'hidden';
+}
+
+/** After the scene: the ink over it through EASU. The texture is uploaded whenever the ink changed since the last upload. */
 function inkEasuDraw(redrawn) {
   if (!INK_EASU.on) return;
-  if (!INK_EASU.fx.effect.isReady()) { inkC.style.visibility = ''; return; }   // until it compiles, the canvas shows
-  inkC.style.visibility = 'hidden';
-  if (redrawn) INK_EASU.tex.update(true, true);   // flipped to the GL's rows, premultiplied
+  if (redrawn) INK_EASU.pending = true;
+  if (INK_EASU.pending) {
+    INK_EASU.tex.update(true, true);   // flipped to the GL's rows, premultiplied
+    INK_EASU.pending = false;
+  }
+  if (!INK_EASU.fx.effect.isReady()) return inkEasuShow(true);   // until it compiles, the canvas shows
+  inkEasuShow(false);
   engine.setAlphaMode(B.Constants.ALPHA_PREMULTIPLIED);
   INK_EASU.fr.render(INK_EASU.fx);
   engine.setAlphaMode(B.Constants.ALPHA_DISABLE);
