@@ -123,7 +123,7 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
   Also fixed: the arrow's shadow clipped outside its translucent body; the grain on the paper only, not on the painted
   world at close zoom (a full-screen filter otherwise); its fine octave rotated off the texture's period; the light
   from two points at one height (relief swung it); the troops' place on the route searched near their progress only;
-  the light spine from past the notch; the battery's ring; no decision cited by number from this branch.
+  the light spine from past the notch (since removed, at the owner's request: #143); the battery's ring; no decision cited by number from this branch.
 - **Redesign** (the round count restarts): a block's sides are one convex polygon, the hull of its top and the top
   shifted away from the light, the top clipped out above it. No winding to get wrong.
 

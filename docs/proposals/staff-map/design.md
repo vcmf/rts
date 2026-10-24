@@ -119,7 +119,7 @@ Blocks are flat, sharp-cornered, with no shadow, bevel or outline glow.
   | Formation | Symbol (at the theatre zoom) |
   |---|---|
   | Infantry line | 104 × 32 m bar |
-  | Infantry column | 62 × 56 m block |
+  | Infantry column | 80 × 84 m block (a brigade: two bars) |
   | Infantry square | 72 m hollow square, 18 m ring |
   | Cavalry line / column | 96 × 30 m / 50 × 60 m, with the diagonal |
   | Artillery deployed / limbered | 86 × 20 m bar / 24 × 62 m, with the gun dot |
@@ -150,7 +150,7 @@ Blocks are flat, sharp-cornered, with no shadow, bevel or outline glow.
 ### State
 | State | Reading |
 |---|---|
-| **Losses** | The block shortens as the frontage shrinks; in the lit style it also wears: ragged dark bites out of its edges, more as strength falls (up to ten, some through the block), fixed per unit, kept while it routs |
+| **Losses** | The block shortens as the frontage shrinks; in the lit style it also wears: ragged dark bites out of its edges, more as strength falls (up to ten, some through the block), fixed per unit, kept while it routs; a battery's gun icon is drawn around worn gaps (up to six, as many bites if it routs) |
 | **Morale** | Solid fill above 60%; below it the fill **drains into hatching** that gets sparser as morale falls |
 | **Routing** | **Pulses between the army colour and white** (the colour of surrender, as in Total War; a soft ~1.1 s cycle, never a hard flicker), with a **dashed edge** so its white phase never reads as an Austrian block. It turns its back as it breaks, then flees away from the enemies in reach (closer ones push harder; when pinched, toward its own rear), running along the map edge rather than into it; its escape direction and the drawn block both turn smoothly |
 | Firing | Small pencil smoke curls in front of the block, fading in a few seconds (white clouds in the lit style); a formed square fires all round, its smoke from all four faces |
