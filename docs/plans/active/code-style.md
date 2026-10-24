@@ -97,7 +97,7 @@ exit 0; `water-look-check --selftest` exit 1 on `banks` (#118) and `winter` (#12
 ## Open questions
 
 - `.git-blame-ignore-revs` and squash-merging: decided (2026-10-23, the owner): squash as usual, and a one-line
-  follow-up after each formatting PR lists its squashed commit (PR 1: 8abc1cf).
+  follow-up after each formatting PR lists its squashed commit (PR 1: 8abc1cf; PR 2: 3da1f26).
 - Format on save in editors: left to each editor; the check in `npm test` and CI is what holds.
 
 ## Review rounds
