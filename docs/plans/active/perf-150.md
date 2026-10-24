@@ -187,3 +187,20 @@ of 2, 30×.
   - the bite comments corrected;
   - decision 0056 for the softer default ink;
   - the 4K rounds moved under this heading.
+- **Round 3 of the 4K changes**: moderate and light only, so the review stops. Fixed:
+  - a routing or turning unit keeps the ink live only while its block is on screen;
+  - the figures' rise is taken in steps of 1/200, under 0.25 m off the ground on the highest hills while zooming;
+  - the redundant easing scan is dropped;
+  - the units' hash is computed once a frame;
+  - a bite through a square breaks its inner outline;
+  - the sharp-ink choice made with the toggle wins over `?sharp=1` on reload.
+
+  Left: the figure cull uses the previous frame's camera, so a fast zoom shows units entering one frame late.
+
+  Machine A's GPU, ratio 2, mean frame:
+
+  | View | Paused | 30× |
+  |---|---|---|
+  | Map | 1.3 ms (first run after an edit 4.9) | 5.05 ms |
+  | Mid | 1.0 ms | 6.1 ms |
+  | R700 | 1.5 ms | 2.9 ms |

@@ -583,8 +583,8 @@ const canvas=document.getElementById('c'),inkC=document.getElementById('ink'),in
 // rasterises every redraw, renders at 1 unless "sharp ink" is on: on a 4K screen the full ratio cost 3 to 4 times the
 // frame (docs/plans/active/perf-150.md)
 const GL_DPR=Math.min(2,window.devicePixelRatio||1);
-let SHARP_INK=Q.get('sharp')==='1';
-try{if(!Q.has('sharp')&&localStorage.getItem('staffmap.sharp')==='1')SHARP_INK=true;}catch{}
+let SHARP_INK=Q.get('sharp')==='1';   // ?sharp=1 to start sharp; a choice made with the toggle is remembered and wins
+try{const v=localStorage.getItem('staffmap.sharp');if(v!==null)SHARP_INK=v==='1';}catch{}
 const inkRatio=()=>SHARP_INK?Math.max(1,Math.ceil(GL_DPR)):1;   // whole (the hatch tiles are whole pixels), never below the screen
 let DPR=inkRatio();   // the ink canvas
 const engine=new B.Engine(canvas,true,{preserveDrawingBuffer:true,stencil:false},false);
@@ -1416,7 +1416,7 @@ function damage(u, C, I, fw, fd, ringM, salt = 0, bars = 1) {
     addPoly(bites, [
       at(t - hw, -out),
       at(t - hw * 0.6, depth * (0.4 + 0.3 * rnd())),
-      at(t - hw * 0.1, depth >= 1 ? 1 + out : depth),
+      at(t - hw * 0.1, depth >= (I ? ring : 1) ? depth + out : depth),   // a bite through breaks the far outline (a square's inner one)
       at(t + hw * 0.4, depth * (0.5 + 0.4 * rnd())),
       at(t + hw, -out),
     ]);
@@ -1632,13 +1632,14 @@ function drawGun(C,s,shadowOnly,S,u){
 // the lit style's houses: raised like the blocks, lit by the same light (the map's ink blocks, baked, are left out)
 const HOUSE_COL=[0.36,0.29,0.23],CHURCH_COL=[0.27,0.22,0.19];
 // a block's top colour (and its slab sides'): the routing pulse, or the army's fill; hatched (wavering) sides take the coat
-function blockCol(u,now){const s=pal(u);if(u.state==='rout'){INK_ANIM=true;return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));}return u.mor>0.6?s.f:s.c;}
+function blockCol(u,now){const s=pal(u);if(u.state==='rout'){return mix3(s.e||s.c,PULSE_WHITE,sstep(0.25,0.75,0.5-0.5*Math.cos(now/PULSE_MS*2*Math.PI)));}return u.mor>0.6?s.f:s.c;}
 function drawUnder(u,alpha,now){const B=blockCorners(u),{C}=B;if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);
   if(ink.globalAlpha>0.01){if(u.type==='art'&&u.state!=='rout')drawGun(C,pal(u),true,gunPx(u),u);else{const h=slabHeight();for(const quad of parts(u,B)){const S=slabFaces(u,B,quad,0);addSlabShadow(S.W,S.G,h);}}}ink.globalAlpha=1;}
 function drawBlock(u,alpha,now){
   u.gun=null;   // drawn this frame or not at all: a stale circle would keep a stale click area
   const s=pal(u),{C,fw,fd,f,r}=blockCorners(u);if(offView(C))return;ink.globalAlpha=alpha*(u.gone?1-u.gone:1);if(ink.globalAlpha<=0.01)return;
-  if(Math.abs(angTo(u.dface,u.face))>1e-4)INK_ANIM=true;   // drawn, and its facing still easing on the frame clock
+  // on screen and still moving on the frame clock (its routing pulse, or its facing easing): the ink stays live
+  if((u.state==='rout'||Math.abs(angTo(u.dface,u.face))>1e-4)&&C.some(p=>onScreen(p,40)))INK_ANIM=true;
   const lvl=u.mor>0.6?-1:u.mor>0.45?0:u.mor>0.3?1:2;
   if(u.state==='rout'){
     // routing: pulses between the army colour and white, the colour of surrender
@@ -1868,7 +1869,9 @@ let HOVER=null,SHOW_TRAILS=true,SHOW_NAMES=true,DRAW=null;
 let INK_KEY = '', INK_T0 = 0, INK_ANIM = true;
 const FORMS = { line: 1, column: 2, square: 3 };
 /** A cheap hash of every unit's drawn state: it changes whenever any unit moves, turns, wears, wavers or re-forms. */
+let CHECK_T = -1, CHECK_V = 0;
 function unitsChecksum() {
+  if (CHECK_T === FRAME_N) return CHECK_V;   // once a frame: the figures and the ink both ask
   // a hash, not a sum: two changes cannot cancel out
   let c = 2166136261;
   const mix = v => { c = Math.imul(c ^ (Math.round(v * 1000) | 0), 16777619); };
@@ -1876,7 +1879,9 @@ function unitsChecksum() {
     mix(u.x); mix(u.z); mix(u.dface); mix(u.str); mix(u.mor); mix(u.morph); mix(u.gone || 0);
     mix(FORMS[u.form] || 0); mix(FORMS[u.prev] || 0); mix(u.state === 'rout' ? 1 : u.state === 'move' ? 2 : 0);
   }
-  return c >>> 0;
+  CHECK_T = FRAME_N;
+  CHECK_V = c >>> 0;
+  return CHECK_V;
 }
 // late web fonts (the canvas asks for some only when it first draws with them): draw the names again
 document.fonts?.ready.then(() => { INK_KEY = ''; });
@@ -2014,10 +2019,10 @@ function updateFigures(){
   if(!(st('stand')>0)){   // the figures hidden: nothing to place
     if(figKey!=='hidden'){figKey='hidden';for(const k in FIGS){FIGS[k].n=0;FIGS[k].m.thinInstanceCount=0;FIGS[k].m.isVisible=false;}}
     return;}
-  const easing=UNITS.some(u=>!u.gone&&Math.abs(angTo(u.dface,u.face))>1e-3);
   const inView=UNITS.filter(u=>!u.gone&&unitInView(u));
-  const rise=Math.round(RISE()*50)/50;   // in steps: zooming rebuilds the figures about 50 times across the rise, not every frame
-  const key=GT+':'+rise+':'+inView.map(u=>u.id).join(',')+':'+unitsChecksum();if(!easing&&key===figKey)return;figKey=key;
+  const rise=Math.round(RISE()*200)/200;   // in steps (under 0.25 m off the ground on the highest hills): zooming rebuilds
+  // the figures about 200 times across the rise, not every frame
+  const key=GT+':'+rise+':'+inView.map(u=>u.id).join(',')+':'+unitsChecksum();if(key===figKey)return;figKey=key;
   for(const k in FIGS)FIGS[k].n=0;
   {
     for(const u of inView){
@@ -2124,7 +2129,7 @@ function updateCard(){const s=sel();const c=$('card');if(!s.length){c.style.disp
 /* =========================================================================
    FRAME
    ========================================================================= */
-let last=performance.now(),acc=0,ft=[],fps=0;
+let last=performance.now(),acc=0,ft=[],fps=0,FRAME_N=0;
 const fmtClock=s=>{const m=Math.floor(7*60+30+s/60);return`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;};
 const FIT={R:7000,z:0};
 function resize(){SW=innerWidth;SH=innerHeight;INK_KEY='';inkC.width=Math.round(SW*DPR);inkC.height=Math.round(SH*DPR);engine.resize();
@@ -2132,6 +2137,7 @@ function resize(){SW=innerWidth;SH=innerHeight;INK_KEY='';inkC.width=Math.round(
   const side=SW>1100?300:24,mpp=Math.max((2*MZ+160)/Math.max(200,SH-190),(2*MX+160)/Math.max(200,SW-2*side));FIT.R=mpp*SH/(2*tanH);FIT.z=-35*mpp;}
 addEventListener('resize',resize);
 function frame(){
+  FRAME_N++;
   const now=performance.now(),dt=Math.min(0.1,(now-last)/1000);last=now;
   ft.push(dt*1000);if(ft.length>60)ft.shift();
   // keys pan / rotate
