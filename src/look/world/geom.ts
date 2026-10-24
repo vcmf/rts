@@ -3,6 +3,8 @@ type Pt = readonly [number, number]
 
 // the distance from (x, z) to the segment a-b (a degenerate segment: to its point)
 export const segD = (x: number, z: number, a: Pt, b: Pt): number => {
-  const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)))
+  const dx = b[0] - a[0]
+  const dz = b[1] - a[1]
+  const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)))
   return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz)
 }

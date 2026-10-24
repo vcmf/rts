@@ -3,7 +3,7 @@ status: accepted
 date: 2026-10-22
 ---
 
-# 0052 Browser checks are scripts over CDP; the DevTools MCP is for exploring
+# 0060 Browser checks are scripts over CDP; the DevTools MCP is for exploring
 
 ## Context
 
