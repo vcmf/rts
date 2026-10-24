@@ -1,0 +1,14 @@
+# Commits that only change layout (decision 0052, docs/decisions/0052-code-style.md): git blame skips them.
+# GitHub reads this file; locally: git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# The formatting PRs are squash-merged (the owner's choice), so each entry is the squashed commit on main. It also
+# carries that PR's config, scripts and comment moves, which blame skips with it.
+
+# style(sim): Prettier and readability lint rules, the sim formatted (#148)
+8abc1cf77ee38c5471589293a0835d29cb767aac
+
+# style(look): the look page formatted (#160)
+3da1f26d857876d370ec4e645dfd3fe8c3d7a03f
+
+# style(tools): the tools and tests formatted, the tools linted (#167)
+bad447314fa22651802a77ef37639b1f82cbc95f

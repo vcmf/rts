@@ -5,9 +5,16 @@ precision highp float;attribute vec3 position;attribute float aPart;
 // under uFlagK.y pixels tall (uFlagK.x: pixels a metre at 1 m), up to 5 times
 uniform mat4 viewProjection;uniform float uFlagT;uniform vec3 uCamPos;uniform vec2 uFlagK;
 attribute vec3 aC0,aC1,aC2;attribute float aPh;
+#ifdef SMOOTH
+// the bearer's place moved every frame (?smoothmove=1, src/look/units.ts)
+attribute vec3 aNext;uniform float uStepFrac;
+#endif
 varying vec3 vW,vN,vC0,vC1,vC2;varying vec2 vRoot;varying float vU,vPart;
 void main(){
   #include<instancesVertex>
+  #ifdef SMOOTH
+  finalWorld[3].xyz+=aNext*uStepFrac;
+  #endif
   vec3 p=position,n=vec3(0.0,0.0,1.0);float u=clamp(p.x/FLAG_W,0.0,1.0);
   if(aPart<0.5){
     float t=floor(uFlagT*12.0)/12.0+aPh,ph=u*5.0-t*7.0,a=0.14*u;

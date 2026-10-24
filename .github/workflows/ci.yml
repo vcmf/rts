@@ -1,5 +1,5 @@
-# check: every PR into main or an epic/** branch, and every push to them. Lint, types, generated data, docs,
-# tests, build.
+# check: every PR into main or an epic/** branch, and every push to them. Lint, format, types, generated data,
+# docs, tests, build.
 # coverage: PRs into an epic/** branch, pushes to main or an epic/** branch, and by hand; not PRs into main.
 # Coverage instrumentation makes the sim's long scenarios about six times slower, so the coverage run skips the
 # tests marked longIt (test/fx.ts; they run in check): 144 s locally instead of 317 s, for 0.6 points of
@@ -28,6 +28,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm run format:check
       - run: npm run typecheck
       - run: npm run check:data
       - run: npm run check:docs

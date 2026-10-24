@@ -5,7 +5,19 @@ import { defineConfig, type Plugin } from 'vite'
 // draft (Track M): app/map.html
 // __BUILD__: the commit a page was built from (the look bench records it), "-dirty" with uncommitted changes to
 // tracked files or new files in src/, app/, tools/
-const build = (() => { try { return execSync('git rev-parse --short HEAD').toString().trim() + (execSync('git status --porcelain --untracked-files=no').toString().trim() || execSync('git status --porcelain -- src app tools').toString().trim() ? '-dirty' : '') } catch { return 'unknown' } })()
+const build = (() => {
+  try {
+    return (
+      execSync('git rev-parse --short HEAD').toString().trim() +
+      (execSync('git status --porcelain --untracked-files=no').toString().trim() ||
+      execSync('git status --porcelain -- src app tools').toString().trim()
+        ? '-dirty'
+        : '')
+    )
+  } catch {
+    return 'unknown'
+  }
+})()
 // the map draft page (app/map.html, docs/plans/done/m1-language.md M1b): a saved map file or the kinds catalogue
 // is sent to the page as `map-changed` (with the time the server saw it), instead of a full reload
 const mapsHot: Plugin = {
@@ -17,4 +29,8 @@ const mapsHot: Plugin = {
     return []
   },
 }
-export default defineConfig({ define: { __BUILD__: JSON.stringify(build) }, plugins: [mapsHot], build: { outDir: 'dist', rollupOptions: { input: ['app/index.html', 'app/look.html', 'app/map.html'] } } })
+export default defineConfig({
+  define: { __BUILD__: JSON.stringify(build) },
+  plugins: [mapsHot],
+  build: { outDir: 'dist', rollupOptions: { input: ['app/index.html', 'app/look.html', 'app/map.html'] } },
+})

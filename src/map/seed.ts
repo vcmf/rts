@@ -5,11 +5,25 @@
 // FNV-1a over each part: a number as its 32-bit integer, a text as its UTF-16 code units
 export function hash32(...parts: (number | string)[]): number {
   let h = 0x811c9dc5
-  const mix = (b: number) => { h ^= b & 0xff; h = Math.imul(h, 0x01000193) }
+  const mix = (b: number) => {
+    h ^= b & 0xff
+    h = Math.imul(h, 0x01000193)
+  }
   for (const p of parts) {
-    if (typeof p === 'number') { const v = p | 0; mix(v); mix(v >>> 8); mix(v >>> 16); mix(v >>> 24) }
-    else for (let i = 0; i < p.length; i++) { const u = p.charCodeAt(i); mix(u); mix(u >>> 8) }
-    mix(0x1f)   // a separator, so ("ab", "c") and ("a", "bc") differ
+    if (typeof p === 'number') {
+      const v = p | 0
+      mix(v)
+      mix(v >>> 8)
+      mix(v >>> 16)
+      mix(v >>> 24)
+    } else {
+      for (let i = 0; i < p.length; i++) {
+        const u = p.charCodeAt(i)
+        mix(u)
+        mix(u >>> 8)
+      }
+    }
+    mix(0x1f) // a separator, so ("ab", "c") and ("a", "bc") differ
   }
   return h >>> 0
 }

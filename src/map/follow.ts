@@ -9,7 +9,13 @@ import { nearLine } from './apply.ts'
 import { lineLength, stretch } from './geometry.ts'
 import { cm, listOf } from './util.ts'
 
-export interface FollowEdge { id: string; offset?: number; from: Pt; to: Pt; at?: number }
+export interface FollowEdge {
+  id: string
+  offset?: number
+  from: Pt
+  to: Pt
+  at?: number
+}
 export const FOLLOW_KEYS = ['id', 'offset', 'from', 'to', 'at']
 export const CLEAR_KEYS = ['id', 'offset']
 // the categories whose areas apply paints cell by cell, honouring `clear`: the only ones that may follow or keep off
@@ -19,15 +25,23 @@ export const followsOf = (f: Feature): FollowEdge[] => listOf<FollowEdge>(f.foll
 // The edge's points: the line's centreline between the points nearest `from` and `to`, in that order. On a closed
 // line (a loop of hedge or road) the shorter way round, across its first point when that is shorter
 export function followEdge(line: Pt[], e: FollowEdge): Pt[] {
-  const a = nearLine(line, e.from[0], e.from[1]).along, b = nearLine(line, e.to[0], e.to[1]).along
-  const lo = Math.min(a, b), hi = Math.max(a, b), len = lineLength(line), last = line[line.length - 1]
+  const a = nearLine(line, e.from[0], e.from[1]).along
+  const b = nearLine(line, e.to[0], e.to[1]).along
+  const lo = Math.min(a, b)
+  const hi = Math.max(a, b)
+  const len = lineLength(line)
+  const last = line[line.length - 1]
   const closed = line.length > 3 && last[0] === line[0][0] && last[1] === line[0][1]
   // from lo to hi along the line; or, across the first point, from hi to the end and on from the start to lo
   const across = closed && len - (hi - lo) < hi - lo
   const raw = a === b ? [] : across ? [...stretch(line, hi, len), ...stretch(line, 0, lo)] : stretch(line, lo, hi)
   // on whole centimetres (the stretch's two ends fall anywhere on the line; its other points are the line's own)
-  const part = raw.map(([x, z]) => [cm(x), cm(z)] as Pt).filter((p, k, ps) => k === 0 || p[0] !== ps[k - 1][0] || p[1] !== ps[k - 1][1])
-  if (part.length < 2) throw new Error(`"from" and "to" meet the same point of "${e.id}": the edge along it has no length`)
+  const part = raw
+    .map(([x, z]) => [cm(x), cm(z)] as Pt)
+    .filter((p, k, ps) => k === 0 || p[0] !== ps[k - 1][0] || p[1] !== ps[k - 1][1])
+  if (part.length < 2) {
+    throw new Error(`"from" and "to" meet the same point of "${e.id}": the edge along it has no length`)
+  }
   // in the order from → to: the plain stretch runs lo → hi, the one across runs hi → lo
-  return (a <= b) !== across ? part : part.reverse()
+  return a <= b !== across ? part : part.reverse()
 }

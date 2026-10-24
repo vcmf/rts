@@ -21,6 +21,8 @@ The first of them, 0027, moved again on 2026-10-22, to 0049 (main had given 0027
 units take the light's value), and on 2026-10-23 to **0053** (#134 took 0049). Track M's pull requests and commits up to
 then (#66–#79, PR #49) cite it as 0027 or 0049; either citation means 0053 (main's 0027 is the units' record, and 0049
 is #134's).
+The browser-checks record, written as 0047 and then 0052 on its branch (#129) and cited as 0052 on this epic, is **0060**:
+`main` took 0052 for the code style (2026-10-24).
 
 | # | Decision | Status |
 |---|---|---|
@@ -70,5 +72,11 @@ is #134's).
 | [0045](0045-render-scale-easu.md) | The render scale 0.9 from the closest zoom, upscaled by EASU | accepted |
 | [0046](0046-webgl2-minimum.md) | WebGL2 is the minimum | accepted |
 | [0047](0047-figures-cast-runtime-shadows.md) | The figures cast runtime shadows from a map of their own | proposed |
-| [0052](0052-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
+| [0048](0048-battle-in-a-worker.md) | The battle runs in a worker, its soldiers stepped at 12 fps | proposed |
+| [0049](0049-simple-shadows-beyond-close-zoom.md) | The figures' shadow map only up close; one simple shadow a soldier beyond | proposed |
+| [0050](0050-armies-32k-at-120fps.md) | 32,000 soldiers at 120 fps: four steps, each kept only if measured (experimental) | proposed |
+| [0051](0051-closer-zoom-nearest-lod.md) | The closest zoom at 15 m, held over high ground, with the full figure for the men nearest | proposed |
+| [0052](0052-code-style.md) | Code style: Prettier formats, ESLint keeps lines short and one statement each | accepted |
 | [0053](0053-generators-expand-by-dependency.md) | Generators expand by dependency, over finished features, with hard and soft reads | superseded by 0028 |
+| [0054](0054-readable-code.md) | Readable code: small functions, doc comments in new code, a test for every bug fix | accepted |
+| [0060](0060-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
