@@ -16,10 +16,15 @@ export interface UnitLod {
   vertices: number
   triangles: number
 }
+/** the unit data format this page reads: 3, the triangles wound for Babylon (clockwise fronts) and the bones' parents;
+ *  2's were wound inside out (#164) */
+export const UNIT_VERSION = 3
 export interface UnitData {
+  version: number
   fps: number
   mPerUnit: number
   bones: string[]
+  parents: number[] // each bone's parent (its nearest deforming ancestor), -1 for a root
   // nearest first, each lighter than the one before (the page draws the last far, the one before it near, a first of
   // three nearest)
   lods: UnitLod[]
@@ -56,11 +61,12 @@ export function decodeUnits(buf: ArrayBuffer): UnitData {
   if (String.fromCharCode(...new Uint8Array(buf, 0, 4)) !== 'UNIT') throw new Error('unit data: not a UNIT file')
   const version = dv.getUint32(4, true)
   const hl = dv.getUint32(8, true)
-  if (version !== 2) throw new Error(`unit data: version ${version}, this page reads 2 (rebake: tools/bake-figure.py)`)
+  if (version !== UNIT_VERSION) throw new Error(versionError(version))
   const h = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 12, hl))) as {
     fps: number
     mPerUnit: number
     bones: string[]
+    parents: number[]
     lods: UnitLod[]
     ranges: Record<string, UnitRange>
     palette: string[]
@@ -94,9 +100,11 @@ export function decodeUnits(buf: ArrayBuffer): UnitData {
     }
   }
   const data: UnitData = {
+    version,
     fps: h.fps,
     mPerUnit: h.mPerUnit,
     bones: h.bones,
+    parents: h.parents,
     lods: h.lods,
     ranges: h.ranges,
     palette: h.palette,
@@ -107,10 +115,19 @@ export function decodeUnits(buf: ArrayBuffer): UnitData {
   return data
 }
 
+const versionError = (v: number) =>
+  `unit data: version ${v}, this page reads ${UNIT_VERSION}` +
+  (v === 2 ? ' (version 2 was wound inside out, #164)' : '') +
+  ': rebake it with tools/bake-figure.py'
+
 // every size the file states agrees with its buffers; every bone index, colour role and range lies inside its table
 export function checkUnits(d: UnitData): void {
+  if (d.version !== UNIT_VERSION) throw new Error(versionError(d.version))
   const bad: string[] = []
   const nb = d.bones.length
+  if (d.parents?.length !== nb || d.parents.some((p, i) => p < -1 || p >= nb || p === i)) {
+    bad.push(`the bones' parents are not ${nb} bone indices (or -1)`)
+  }
   if (d.vat.width !== (nb + 1) * 4) bad.push(`vat width ${d.vat.width} is not (bones + 1) × 4 = ${(nb + 1) * 4}`)
   if (d.vat.data.length !== d.vat.width * d.vat.height * 4) {
     bad.push(`vat holds ${d.vat.data.length} values, not width × height × 4`)
@@ -223,10 +240,10 @@ export function posedMesh(d: UnitData, m: SkinnedMesh): { width: number; height:
  *  end to end, t0 to t1 from its centre c) and as wide as most of it (the 85th percentile of their distance from the
  *  axis, along u and along w). No era names: the parts are wherever the figure's own weights put them.
  *  The figure's contact with the ground (#165): a bone too small to be a part (a foot, its toes) whose vertices come
- *  within `contact` m of the figure's lowest point lends them to the part it shares skin weights with (its neighbour
- *  in the skeleton, followed through other small bones: the toes to the foot to the shin), whose axis then runs on to
- *  them (t0, t1; not its width nor its vertices): the parts reach the ground where the figure stands, so the shadow
- *  proxy's shadow starts at the soles, not at the ankles 13 cm up */
+ *  within `contact` m of the figure's lowest point lends them to the part up its chain of parents (through other
+ *  small bones: the toes to the foot to the shin), whose axis then runs on to them (t0, t1; not its width) by at most
+ *  `reach` m (a hem or a scabbard hung from the hips does not stretch the hips to the ground): the parts reach the
+ *  ground where the figure stands, so the shadow proxy's shadow starts at the soles, not at the ankles 13 cm up */
 export interface Part {
   bone: number
   vs: number[]
@@ -238,8 +255,9 @@ export interface Part {
   t1: number
   hu: number
   hw: number
+  lent: number[] // the small bones' vertices lent to it at the ground (their colour the tiny LOD's too)
 }
-export function boneParts(d: UnitData, lod: string, minVerts = 8, minLen = 0.14, contact = 0.15): Part[] {
+export function boneParts(d: UnitData, lod: string, minVerts = 8, minLen = 0.14, contact = 0.15, reach = 0.25): Part[] {
   const m = d.mesh[lod]
   const nv = m.positions.length / 3
   const groups = new Map<number, number[]>()
@@ -284,46 +302,30 @@ export function boneParts(d: UnitData, lod: string, minVerts = 8, minLen = 0.14,
       const q = vs.map(v => Math.abs(proj(v, a))).sort((x, y) => x - y)
       return Math.max(0.02, q[Math.floor(0.85 * (q.length - 1))])
     }
-    out.push({ bone: b, vs, c, ax, u, w, t0, t1, hu: half(u), hw: half(w) })
+    out.push({ bone: b, vs, c, ax, u, w, t0, t1, hu: half(u), hw: half(w), lent: [] })
   }
   // the ground contact: each left-out bone with a vertex within `contact` of the lowest, lent to its part (#165)
   let lowest = Infinity
   for (let v = 0; v < nv; v++) lowest = Math.min(lowest, P(v, 1))
   const partOf = new Map(out.map(p => [p.bone, p]))
-  // two bones are neighbours where a vertex carries weight on both; how many such vertices
-  const shared = new Map<number, Map<number, number>>()
-  for (let v = 0; v < nv; v++) {
-    for (let i = 0; i < 4; i++) {
-      for (let k = 0; k < 4; k++) {
-        if (i === k || m.boneWeights[v * 4 + i] <= 0 || m.boneWeights[v * 4 + k] <= 0) continue
-        const a = m.boneIndices[v * 4 + i]
-        const b = m.boneIndices[v * 4 + k]
-        const row = shared.get(a) ?? shared.set(a, new Map()).get(a)!
-        row.set(b, (row.get(b) ?? 0) + 1)
-      }
-    }
-  }
-  // a left-out bone's part: its most shared neighbour that is a part, else through its most shared left-out one
-  const lentTo = (b: number, seen: Set<number>): Part | undefined => {
-    seen.add(b)
-    const ns = [...(shared.get(b) ?? [])].filter(([n]) => !seen.has(n)).sort((x, y) => y[1] - x[1] || x[0] - y[0])
-    const direct = ns.find(([n]) => partOf.has(n))
-    if (direct) return partOf.get(direct[0])
-    for (const [n] of ns) {
-      const p = lentTo(n, seen)
-      if (p) return p
-    }
-    return undefined
-  }
   for (const [b, vs] of groups) {
     if (partOf.has(b) || !vs.some(v => P(v, 1) < lowest + contact)) continue
-    const p = lentTo(b, new Set())
-    if (!p) continue
-    for (const v of vs) {
-      const t = (P(v, 0) - p.c[0]) * p.ax[0] + (P(v, 1) - p.c[1]) * p.ax[1] + (P(v, 2) - p.c[2]) * p.ax[2]
-      p.t0 = Math.min(p.t0, t)
-      p.t1 = Math.max(p.t1, t)
+    // up its chain, through other left-out bones, to the first that is a part
+    let a = d.parents[b]
+    while (a >= 0 && !partOf.has(a)) a = d.parents[a]
+    const p = partOf.get(a)
+    if (!p) {
+      console.warn(`unit data: ${d.bones[b]} touches the ground but no part is up its chain; its shadow is left out`)
+      continue
     }
+    const ts = vs.map(v => (P(v, 0) - p.c[0]) * p.ax[0] + (P(v, 1) - p.c[1]) * p.ax[1] + (P(v, 2) - p.c[2]) * p.ax[2])
+    const t0 = Math.min(p.t0, ...ts)
+    const t1 = Math.max(p.t1, ...ts)
+    // a foot under a shin, not a hem or a scabbard hung from the hips: the axis runs on by at most `reach`
+    if (p.t0 - t0 + (t1 - p.t1) > reach) continue
+    p.t0 = t0
+    p.t1 = t1
+    p.lent.push(...vs)
   }
   return out
 }
@@ -494,7 +496,7 @@ export function tinyMesh(
   const parts = boneParts(d, lod, minVerts, minLen)
   const partOf = new Map<number, number>()
   parts.forEach((p, i) => {
-    for (const v of p.vs) partOf.set(v, i)
+    for (const v of [...p.vs, ...p.lent]) partOf.set(v, i) // (the lent feet too: the shin box's foot takes the shoes)
   })
   // each part's area by role and eighth (index 8: the whole part), seen from above: a triangle's role is its first
   // vertex's (the bake splits by role), its eighth its centroid's side of the part's axis, u and w

@@ -13,7 +13,8 @@ soldier-lod2.glb (the same skeleton and clips in all three, checked; LOD0 is the
 screen at the closest zoom: docs/plans/active/close-zoom.md), the clips by ROLE (decision 0015: the page names roles, this file maps
 them to the figure's clips; decision 0037's bindings come with the sim).
 
-What it writes (little-endian): b'UNIT', u32 version (2), u32 header length, the header (JSON, UTF-8, padded to 4),
+What it writes (little-endian): b'UNIT', u32 version (3), u32 header length, the header (JSON, UTF-8, padded to 4:
+the bones and each one's parent, the nearest deforming ancestor or -1, the LODs, the ranges, the palette, the buffers),
 then the buffers the header lists, each at a 4-byte aligned offset:
 - per LOD: positions and normals (f32 x3, metres, Babylon space: x, up, z), the colour role of each vertex (u8: the
   index of a role in the header's `palette`, which the page paints with an army's colours: a palette swap recolours
@@ -37,7 +38,7 @@ args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 if not args: raise SystemExit('usage: blender -b -P tools/bake-figure.py -- <figure dir> [out.unitdata]')
 SRC = Path(args[0]).resolve()
 OUT = Path(args[1]) if len(args) > 1 else Path(__file__).resolve().parent.parent / 'data' / 'figures' / f'{SRC.name}.unitdata'
-VERSION = 2
+VERSION = 3                    # 3: the triangles wound for Babylon (#164; 2's were inside out) and the bones' parents
 FPS = 12                       # the art bible's stepped animation
 CLIPS = json.loads((SRC / 'clips.json').read_text())
 SOURCE_FPS = CLIPS['fps']
@@ -129,6 +130,11 @@ def tri_role(me, groups, vi, co, rgb):
 scene, rig, mesh = load(ANIM)
 assert scene.render.fps == SOURCE_FPS and scene.render.fps_base == 1, f'the scene runs at {scene.render.fps} fps, not {SOURCE_FPS}'
 bones = [b.name for b in rig.data.bones if b.use_deform]
+def deform_parent(b):
+    p = b.parent
+    while p is not None and not p.use_deform: p = p.parent
+    return bones.index(p.name) if p is not None else -1
+parents = [deform_parent(rig.data.bones[n]) for n in bones]   # each bone's nearest deforming ancestor, -1 for a root
 assert len(bones) < 255, 'bone indices are stored as bytes'
 pb = [rig.pose.bones[n] for n in bones]
 inv_bind = [rig.data.bones[n].matrix_local.inverted() for n in bones]
@@ -212,9 +218,11 @@ for lod in LODS:
         for k_, (w, b) in enumerate(inf): bi[j, k_] = b; bw[j, k_] = w / tot
     tris = np.array(idx, np.uint16).reshape(-1, 3)   # the glTF's order: after the reflection, Babylon's front (#164)
     # its fronts face out: a triangle's right-hand normal (in Babylon space) against its vertex normals, for nearly all
-    gn = np.cross(pos[tris[:, 1]] - pos[tris[:, 0]], pos[tris[:, 2]] - pos[tris[:, 0]])
-    inward = float(((gn * nor[tris].sum(1)).sum(1) < 0).mean())
-    assert inward > .9, f'{lod}: only {inward:.0%} of the triangles wound for Babylon (clockwise from outside)'
+    # the mesh's signed volume by the right hand, sum of p0 . (p1 x p2) / 6, in Babylon space: negative when its fronts
+    # are clockwise from outside (Babylon's; inside out, positive)
+    p64 = pos.astype(np.float64)
+    vol = float(np.einsum('ij,ij->i', p64[tris[:, 0]], np.cross(p64[tris[:, 1]], p64[tris[:, 2]])).sum() / 6)
+    assert vol < 0, f'{lod}: signed volume {vol:.4f} m^3 by the right hand: wound inside out for Babylon'
     h = float(pos[:, 1].max() - pos[:, 1].min())
     assert 1.6 < h < 2.6, f'{lod}: the figure is {h:.2f} m tall (with its musket), not a man'
     tot_a = sum(area.values()); share = {r: round(a / tot_a, 3) for r, a in sorted(area.items(), key=lambda x: -x[1])}
@@ -224,7 +232,7 @@ for lod in LODS:
     print('BAKE', lod, n, 'vertices', len(tris), 'triangles', round(h, 3), 'm, surface by role', share)
 
 # ---- write
-header = dict(version=VERSION, fps=FPS, mPerUnit=M_PER_UNIT, bones=bones, lods=lods, ranges=ranges,
+header = dict(version=VERSION, fps=FPS, mPerUnit=M_PER_UNIT, bones=bones, parents=parents, lods=lods, ranges=ranges,
               vat=dict(width=(len(bones) + 1) * 4, height=len(rows), halfFloat=True),
               palette=PALETTE_ROLES, source=SRC.name, buffers=[])
 payload = b''; off = 0

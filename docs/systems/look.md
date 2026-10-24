@@ -582,13 +582,15 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   three: the full figure, 9,274 triangles, then 1,197 and 243; the page reads two or three), each vertex's colour role (the reds told from the skin by hue, the face's shaded side kept skin, the coat's violet shade kept coat: #133's review, `texel_role`, `tri_role`) (coat, facings, white, dark, skin, leather, pack, wood, metal: from the
   texture's colour, the musket by its bone, the pack by its place), its triangles in the glTF's order (the reflection
   into Babylon's left-handed space makes them the clockwise fronts Babylon draws: reversed, every man was drawn inside
-  out, a face on the back of his head, #164; the bake asserts it, `test/armies.test.ts` too), and the bones' matrices at 12 fps for the clips
+  out, a face on the back of his head, #164; the bake asserts a negative signed volume, `test/armies.test.ts` too;
+  format version 3, the decoder refuses 2), each bone's parent, and the bones' matrices at 12 fps for the clips
   each **role** uses (halt: Stand; march: Walking; run: Running; fire: Present, Aim, Fire, Reload), with the root
   speeds that keep the feet planted. The page names roles, never clips (decision 0015). At load: the far LOD posed at
   every step (`posedVertices`: a place and a normal, two float texels a vertex) and the **shadow proxy** built from it
   and posed (`shadowProxy`, `posedMesh`: two crossed quads along each part a bone carries, 112 vertices, 56 triangles;
-  a bone too small to be a part near the ground, a foot, lends its vertices to the part it shares weights with, the
-  shin, whose quads then run down to the soles, so the shadow starts at the feet: `boneParts`, #165).
+  a bone too small to be a part near the ground, a foot, lends its vertices to the first part up its chain of parents,
+  the shin, whose quads then run down to the soles by at most 25 cm, so the shadow starts at the feet: `boneParts`,
+  #165).
 - **The renderer** (`src/look/units.ts`): a thin-instanced host a battalion for each of the near LOD, the far LOD and
   the proxy; the near LOD skinned from the bones' texture (`texelFetch`), the far LOD and the proxy posed (`VAT_POS`;
   `?uvat=0`: the far LOD skinned); a man's step from his clip's first row, its length and his phase. Materials are
