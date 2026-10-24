@@ -94,10 +94,36 @@ match (0/16 regions on all 8 cameras, with and without `?armies=20`); `guard --b
 exit 0; `water-look-check --selftest` exit 1 on `banks` (#118) and `winter` (#120), its output identical to main's;
 `check:app` exit 0.
 
+### Measured for PR 3 (2026-10-24, on main 3a99e40, then merged with e1e8ab7)
+
+`tools/`, `test/` and the root configs join `formatted` (`test/fixtures/` stays out of both); ESLint lints `tools/*.mjs`
+(Node's globals, `no-undef`: 0 hits) and `tools/*.js` (a script, the browser's globals, no `no-undef`). The 4 findings
+of the recommended rules fixed without changing behaviour: `tools/check-negatives.mjs`'s `hasSpec`, written and never
+read; two unused `forEach` indices in `tools/formation-measure.js`; `tools/shot.mjs`'s reply handler, a ternary of two
+calls, now an `if`/`else`. `npm run format`: 58 files, +9,811 −2,774; then 82 hanging comments moved (31 above the one
+item they name), 70 comments over 120 columns shortened (29 at the end of a line moved above it, 41 rewrapped with their
+paragraph; the usage tables put a long row's description on the next line) and 3 paragraphs that ended in a word or two
+rewrapped. Lines over 120: `tools/` 650 → 135, `test/` 456 → 33, root configs 14 → 0 (all strings, templates, URLs or
+regular expressions). Rule hits 2,451 → 0 (`max-statements-per-line` 1,067, `one-var` 673, `max-len` 475,
+`local/comment-width` 133, `curly` 99, the 4 findings). On the merged tree: `npm test` lint, `format:check` and
+typecheck pass, Vitest 439 of 440 with a cost test over its budget under load (the machine at a load of 15), which
+passes alone (twice; the other cost test, alone, too); `check:data` the same hashes, `check-docs` and `build` exit 0;
+`npm run format` idempotent. Against main: the AST of 55 of 59 files identical, the other 4 the config and the 4 fixes;
+0 of 5,541 literal parts differ outside `eslint.config.js`; every file's comment words the same, in the same order,
+outside `eslint.config.js`. The built `dist/` byte-identical to main's but the look chunk's 7-byte build stamp. The
+tools, run from this branch against main's build (`vite preview`): `golden.mjs --selftest`, `detail-check`,
+`water-check` `--selftest`, `check-negatives` (the prototype, 9 cases; the look page, 18), `guard --base` and a
+`tools/shot.mjs` run exit 0; golden main against this branch: match, 0/16 on all 8 cameras; `water-look-check
+--selftest` exit 1 on `banks` (#118) and `winter` (#120) only, its `--only banks,winter` output identical to main's
+tool's; `macro-check --selftest` exit 1 (`classes`, `shimmer`, the classes' sabotage unseen), its output identical to
+main's tool's but the bake times it reports ungated; `bench-look.mjs --print` on 28 saved bench files prints exactly
+what main's tool prints.
+
 ## Open questions
 
 - `.git-blame-ignore-revs` and squash-merging: decided (2026-10-23, the owner): squash as usual, and a one-line
-  follow-up after each formatting PR lists its squashed commit (PR 1: 8abc1cf; PR 2: 3da1f26).
+  follow-up after each formatting PR lists its squashed commit (PR 1: 8abc1cf; PR 2: 3da1f26; PR 3: after
+  its merge).
 - Format on save in editors: left to each editor; the check in `npm test` and CI is what holds.
 
 ## Review rounds
