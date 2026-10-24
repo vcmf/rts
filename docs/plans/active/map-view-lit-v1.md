@@ -28,7 +28,9 @@ comparison). In the lit mode:
 
 5. **Relief as contours** (the owner's choice, 2026-10-23, over the hachures): minor contours every 5 m and index
    contours every 25 m, drawn in the terrain shader from the height, about a pixel wide at any zoom, each set fading
-   where its lines crowd, and fading with the rest of the ink toward the painted world.
+   where its lines crowd, and fading with the rest of the ink toward the painted world. A light ink (5 m at 0.25,
+   25 m at 0.45 of the ink colour; lightened from 0.4 and 0.7 at the owner's request, in the paper layers' PR #141) so
+   the map does not feel heavy.
 
 Out of scope: lit relief (shading), woods as canopy, roofs (decision 0051's bake, a later step); the game's staff map
 (`src/render/map.ts`); the map engine's draft page; season tuning beyond keeping each season readable.
@@ -83,6 +85,16 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
   screenshots from main and from the branch are pixel-identical (`tools/png.mjs`), at the map zoom and at mid zoom.
   `tools/golden.mjs` knows only the look page's cameras, so it does not apply here.
 - No console errors in either mode (`tools/shot.mjs` exit 0).
+
+- **Guards** (the owner, in the paper layers' PR #141): the Garde Impériale and the Russian Imperial Guard in their
+  army's colour, darker and a little warm, with a rust cavalry stripe (never white), a legend row; a first try mixing
+  the coat with rust read purple-black, too close to the ink, and a rust edge was dropped at the owner's request.
+- **Austria in beige**, not white: a light stone beige (`#F4EDDC`, lighter than every season's paper) in the lit style
+  only, its blue-grey edge kept; the ink style keeps its white.
+- **Losses as wear**: a block loses ragged bites from its edges as its strength falls (up to ten, some through the
+  block), seeded by the unit so they stay put; on top of the shorter frontage it already had.
+- **Squares fire all round**: a square fires at an enemy in any direction, and its smoke rises from all four faces.
+- The page's `window.__proto` hook, swallowed by a comment in the real-terrain PR (#140), restored.
 
 ## Review rounds
 
@@ -195,3 +207,23 @@ v2's relief light, stand-in fields, canopy shading and dirt roads are removed.
   Russian green on the summer olive has less contrast than French blue; the relief's light and shade (decision
   0051's bake) under the contours; height labels on the index contours; the summer wash's blocky noise, already in
   the ink style, shows more under the ageing.
+- **Wear, squares, beige Austria: round 1**: severe: the bites replaced the canvas path, so the strokes after them
+  (an Austrian block's edge, a wavering block's outline) went round the bites and the block lost its edge. Fixed (the
+  bites in their own path), with: bites clipped to a square's ring, so its hole stays open; the wear kept while a
+  block routs; all-round fire and four-face smoke only once the square has formed, the smoke at the true footprint and
+  the drawn heading (it followed the zoom's symbol size); Austria's coat back to the art bible's (the 3D figures
+  share it), only the blocks' fill beige; the guards' legend swatches from the palette, with the rust stripe; the
+  staff map design doc updated. Left: the bites rebuilt each frame (not measured; a cache if a battle late shows it).
+- **Wear: round 2**: severe: the first beige (`#ECE0C2`) was the winter paper's value, an Austrian block's fill gone
+  into it. Fixed (a lighter stone beige, lit style only, as the design doc says), with: the bites chosen by the
+  block's edges on the ground, not on screen, so they stay on their edge as the camera turns; a square's bites as deep
+  as its ring, not its side (it fell apart at 80 %); the bites drawn after the outline, so they break it; a square's
+  four-face smoke placed on the block as drawn (at far zoom it sat inside the symbol); one formed-square test; the
+  legend's guard swatches equal, each with its stripe. The per-frame bite build stays (unmeasured; noted).
+- **Wear: round 3**: moderate and light only, so the review stops (the third round). Fixed: a square's smoke keeps
+  where it fired (a snapshot of the square, not the live unit, which carried it off as the square broke); its
+  painted-world puff sized at its own ground point (it was sized from the square's centre: tiny on one face, double on
+  the other); the face puffs culled behind the camera; the bites' edges by fixed weights (front and back most), so
+  zoom and losses no longer move a bite to another edge; a square's bite depth from each edge's own across length;
+  the bites seeded from the unit's hash; an Austrian guard (none yet) keeps the Austrian edge. Left: the bites and the
+  face puffs rebuilt each frame (unmeasured), and a bite breaking only the inner half of an outline.

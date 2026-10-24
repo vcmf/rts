@@ -150,18 +150,19 @@ Blocks are flat, sharp-cornered, with no shadow, bevel or outline glow.
 ### State
 | State | Reading |
 |---|---|
-| **Losses** | The block shortens as the frontage shrinks |
+| **Losses** | The block shortens as the frontage shrinks; in the lit style it also wears: ragged dark bites out of its edges, more as strength falls (up to ten, some through the block), fixed per unit, kept while it routs |
 | **Morale** | Solid fill above 60%; below it the fill **drains into hatching** that gets sparser as morale falls |
 | **Routing** | **Pulses between the army colour and white** (the colour of surrender, as in Total War; a soft ~1.1 s cycle, never a hard flicker), with a **dashed edge** so its white phase never reads as an Austrian block. It turns its back as it breaks, then flees away from the enemies in reach (closer ones push harder; when pinched, toward its own rear), running along the map edge rather than into it; its escape direction and the drawn block both turn smoothly |
-| Firing | Small pencil smoke curls in front of the block, fading in a few seconds |
+| Firing | Small pencil smoke curls in front of the block, fading in a few seconds (white clouds in the lit style); a formed square fires all round, its smoke from all four faces |
 | Selected | Thin double outline in ink, plus an expanded label (§8) |
 
 ### Colours
 From `docs/art-bible.md` §4: France `#2C4FA8`, Russia `#2F6B3C`, Britain `#B3302A`.
 **Austria** (`#E9E3D3`) would vanish on winter paper, so Austrian blocks are filled a brighter
-white (`#fbfaf6`) and always carry a bold grey-blue edge (`#4f6279`); a routing Austrian block
+white (`#fbfaf6`; a light stone beige `#F4EDDC` in the lit style, at the owner's request) and always carry a bold grey-blue edge (`#4f6279`); a routing Austrian block
 blinks between that grey-blue and white. Every army colour is checked against every
-season's paper.
+season's paper. In the lit style a **guard** (the Garde Impériale, the Russian Imperial Guard) is its army's
+colour, darker and a little warm, with a rust cavalry stripe, never white; no edge.
 
 ### Command
 - Corps and division leaders are **typographic labels**: mono small caps ("IV CORPS · SOULT") on
