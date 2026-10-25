@@ -1,6 +1,6 @@
 ---
-status: active
-last_reviewed: 2026-10-13
+status: done
+last_reviewed: 2026-10-25
 ---
 
 # Plan: Track M's decisions renumbered, and M3's plans done

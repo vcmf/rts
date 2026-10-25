@@ -172,7 +172,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
    ========================================================================= */
 const B=BABYLON,V3=B.Vector3,C3=B.Color3;
 const Q=new URLSearchParams(location.search);
-// ?style=lit: the lit map view's first pass (docs/plans/active/map-view-lit-v1.md); without it, the ink style
+// ?style=lit: the lit map view's first pass (docs/plans/done/map-view-lit-v1.md); without it, the ink style
 const LIT=Q.get('style')==='lit';
 // &relief=layers (with the lit style): the relief as stacked paper sheets (docs/plans/active/paper-layers.md)
 const LAYERS=LIT&&Q.get('relief')==='layers';
@@ -345,7 +345,7 @@ function bakeHachures(){
   paths.forEach((p,b)=>{const w=(b+0.5)/BINS*0.85;gA.lineWidth=Math.max(0.45,w*SP*PX);gA.strokeStyle=`rgba(255,0,0,${clamp(0.35+w,0,1)})`;gA.stroke(p);});
   return n;
 }
-// the lit style's bake (docs/plans/active/map-view-lit-v1.md), once per map: the trees as flat circles with a soft
+// the lit style's bake (docs/plans/done/map-view-lit-v1.md), once per map: the trees as flat circles with a soft
 // shadow, a sparse share of them
 // a crown sprite: a flat disc, its rim a little darker; a soft shadow sprite
 // a slow noise for clumps: the value noise on a 60 m lattice
@@ -687,7 +687,7 @@ void sheets(float D,float hB,vec2 g,float pxPerM,out float lit,out float shad){
   lit=(1.0-smoothstep(0.0,wl,dDn))*max(-cU,0.0);
 }
 #endif
-/* the lit style (docs/plans/active/map-view-lit-v1.md): paper, a baked canopy of flat circles */
+/* the lit style (docs/plans/done/map-view-lit-v1.md): paper, a baked canopy of flat circles */
 #endif
 uniform float uHachK,uRise,uWash,uInk,uMist,uHmin,uHmax,uSunK;uniform vec3 uSun;
 uniform vec3 uCrown,uPaper,uWashC,uWoodW,uWoodInk,uHach,uLine,uWaterW,uGLit,uGMid,uGSh,uRoad,uWater;uniform float uWashA,uWoodWA,uSeason;

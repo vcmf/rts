@@ -1,6 +1,6 @@
 ---
-status: active
-last_reviewed: 2026-10-23
+status: done
+last_reviewed: 2026-10-25
 ---
 
 # Plan: a first lit map view in the staff map prototype (paper, grain, arrows, raised blocks)

@@ -12,7 +12,7 @@ records are open until the owner accepts or rejects them (then their status chan
 recorded here on 2026-10-08.
 
 Track M's records 0053 and 0028–0030 were written on `epic/map-engine` as 0022–0025 and renumbered on 2026-10-13, before
-the epic reached main, because main had taken 0022, 0024 and 0025 (`docs/plans/active/m-decision-numbers.md`). A
+the epic reached main, because main had taken 0022, 0024 and 0025 (`docs/plans/done/m-decision-numbers.md`). A
 renumber of records that have not reached main yet, to keep numbers unique, is the one change allowed to an accepted
 record: its number, its title's number and the citations, nothing else. Merged pull requests #66–#72 and the epic's
 tracking PR #49 cite the old numbers: 0022 is 0027 (now 0053, below), 0023 is 0028, 0024 is 0029, 0025 is 0030. **0023 is retired**:
