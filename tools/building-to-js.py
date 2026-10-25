@@ -24,7 +24,7 @@ import numpy as np
 ROLES = ['wall', 'roof', 'timber', 'opening', 'accent']   # the role ids are the indices (the page's building.frag)
 # the texels' classes: the roles and the shutter, which only an inlay takes (no face is a shutter)
 CLASSES = ROLES + ['shutter']
-HOSTS = [ROLES.index('wall'), ROLES.index('timber')]   # the roles whose faces take inlays (building.frag gates the same)
+HOSTS = [ROLES.index('wall'), ROLES.index('timber')]   # the roles whose faces take inlays (building.frag's host: the same)
 INLAYS = [CLASSES.index('opening'), CLASSES.index('shutter')]   # the inlays' classes, the detail's G and B
 # per model: its height or length in metres (the axis the model is fitted on), and reference colours (sRGB 0-255) per
 # class, picked from the texture's clusters (--analyse); a class may list several. The owner's low-poly regenerations
@@ -72,6 +72,7 @@ LIGHT_MARGIN = 0.018   # the light UVs' islands apart, a share of the square (sm
 LIGHT_TEXELS = 252; LIGHT_MIN_GAP = 5
 BASE_BAND = 0.06   # the base band the model is centred on, a share of its height
 DETAIL_BOX, DETAIL_CLIP = 4, (0.6, 1.5)   # the detail's local mean: a 9-texel box at 512²; its range
+CLOSE = 2   # the inlays' closing, texels at DETAIL_PX (one left a mullioned window's panes ragged)
 DETAIL_PX = 512   # the detail texture's side (the source's mean over blocks: a value detail needs no more)
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -155,7 +156,7 @@ def main():
     print(name, 'tris', nf, 'by role', {ROLES[r]: int((role == r).sum()) for r in range(len(ROLES)) if (role == r).any()},
           'inlay texels', {CLASSES[c]: int(inlay[..., k].sum()) for k, c in enumerate(INLAYS)})
     if '--render' in args:
-        render(obj, role, args[args.index('--render') + 1], img if '--tex' in args else role_image(role, fid, tx, ty, inlay)); return
+        render(obj, args[args.index('--render') + 1], img if '--tex' in args else role_image(role, fid, tx, ty, inlay)); return
     # the fit: Blender's Z up; the model to its height, or its length along x
     co = np.array([v.co[:] for v in me.vertices]); lo, hi = co.min(0), co.max(0)
     axis, size = cfg['fit']; k = size / ((hi[2] - lo[2]) if axis == 'height' else (hi[0] - lo[0]))
@@ -246,27 +247,58 @@ def texels(me, uvl, sw_, sh_):
 def vote(role, fid, tx, ty, tcls, shape, min_share=0.25):
     # the roles from the texels' classes (tcls): a face of at least 4 texels takes their most common role other than
     # opening and the shutter if those other roles are at least min_share of its texels, else the most common class
-    # (a shutter's: the face keeps its first role). In a wall or timber face (HOSTS), the opening's and the shutter's
+    # (a shutter's: its most common role). In a wall or timber face (HOSTS), the opening's and the shutter's
     # texels become inlays: a mask each (G opening, B shutter; 0..1, rows from the bottom as the detail's), each texel
-    # kept only with 4 of its 3 x 3 neighbours the same (no speck of shadow read as a window), closed by two texels (the
-    # darker planks of a shutter, the bars of a window filled), off every texel a face of
-    # another role also covers (an island's edge: the shader gates the role too), and in a part about a rectangle
-    # (boxy: a blotch of shade on a face Tripo textured with its roof's slates is not). Returns the roles and the masks
+    # kept only with 4 of its 3 x 3 neighbours the same (no speck of shadow read as a window), closed by CLOSE texels
+    # within its host island (two windows nearer than that on one island may join: the rectangle test then judges them), off every texel a face of another role also covers (an island's edge: building.frag gates the
+    # role too), in a part about a rectangle with its holes filled (boxy: a blotch of shade on a face Tripo textured
+    # with its roof's slates is not; a shutter's darker planks, a window's bars filled), the opening over the shutter
+    # where both are. Returns the roles and the masks
     nf, nc = len(role), len(CLASSES)
     cnt = np.zeros((nf, nc), int); np.add.at(cnt, (fid, tcls), 1)
     tot = cnt.sum(1); base = cnt.copy(); base[:, INLAYS] = 0
     pick = np.where(base.sum(1) >= min_share * tot, base.argmax(1), cnt.argmax(1))
-    new = np.where((tot >= 4) & (pick < len(ROLES)), pick, role)
+    # (a face mostly of the shutter's texels: its most common role of its own texels, a window's glass greyed like a
+    # shutter an opening; with none, wall: never the first, median role)
+    roles_only = cnt[:, :len(ROLES)]
+    pick = np.where(pick == CLASSES.index('shutter'), np.where(roles_only.sum(1) > 0, roles_only.argmax(1), HOSTS[0]), pick)
+    new = np.where(tot >= 4, pick, role)
     print('vote: faces whose role changed', int((new != role).sum()), 'of', nf)
     role = new; host = np.isin(role[fid], HOSTS)
     other = np.zeros(shape, bool); other[ty[~host], tx[~host]] = True
+    hostcov = np.zeros(shape, bool); hostcov[ty[host], tx[host]] = True; hostcov &= ~other
+    islands = parts(hostcov, diag=False)
     sh_, sw_ = shape; mask = np.zeros((sh_, sw_, len(INLAYS)), np.float32)
     for k, c in enumerate(INLAYS):
-        m = np.zeros(shape, bool); sel = (tcls == c) & host; m[ty[sel], tx[sel]] = True; m &= ~other
+        m = np.zeros(shape, bool); sel = (tcls == c) & host; m[ty[sel], tx[sel]] = True; m &= hostcov
         m &= near(m) >= 5   # (itself and 4 neighbours)
-        m = closed(m, 2) & ~other   # (a shutter's planks, a window's bars filled)
-        mask[..., k] = boxy(m)
+        # closed by CLOSE texels within each host island (no bridge to another island), its parts kept if boxy, their
+        # holes filled, and again only on the host's texels (a filled hole never lands on another role's)
+        cm = np.zeros(shape, bool)
+        for ys, xs in islands:
+            y0, x0, y1, x1 = ys.min(), xs.min(), ys.max() + 1, xs.max() + 1
+            isl = np.zeros((y1 - y0 + 2 * CLOSE, x1 - x0 + 2 * CLOSE), bool); isl[ys - y0 + CLOSE, xs - x0 + CLOSE] = True
+            sub = np.zeros_like(isl); sub[CLOSE:-CLOSE, CLOSE:-CLOSE] = m[y0:y1, x0:x1]; sub &= isl
+            if sub.any(): cm[y0:y1, x0:x1] |= (closed(sub, CLOSE) & isl)[CLOSE:-CLOSE, CLOSE:-CLOSE]
+        mask[..., k] = boxy(cm) * hostcov
+    # (the opening wins where both are: a narrow window between two shutters stays a window)
+    mask[..., 1] *= 1 - mask[..., 0]
     return role, mask
+
+def parts(m, diag=True):
+    # the connected parts of a mask (8-connected, or 4 with diag False), each as its rows and columns
+    seen = np.zeros(m.shape, bool); h, w = m.shape; out = []
+    nb = [(dy, dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1) if (dy or dx) and (diag or not (dy and dx))]
+    for y0, x0 in zip(*np.nonzero(m)):
+        if seen[y0, x0]: continue
+        st = [(y0, x0)]; seen[y0, x0] = True; part = []
+        while st:
+            y, x = st.pop(); part.append((y, x))
+            for dy, dx in nb:
+                yy, xx = y + dy, x + dx
+                if 0 <= yy < h and 0 <= xx < w and m[yy, xx] and not seen[yy, xx]: seen[yy, xx] = True; st.append((yy, xx))
+        p = np.array(part); out.append((p[:, 0], p[:, 1]))
+    return out
 
 def near(m):   # the count of set texels in each texel's 3 x 3 box (itself included; outside the image unset)
     h, w = m.shape; p = np.pad(m, 1).astype(int)
@@ -279,18 +311,11 @@ def closed(m, n):   # m closed by n texels: n dilations, then n erosions (3 x 3 
 
 def boxy(m, fill=0.55):
     # the mask's 8-connected parts kept where they fill at least `fill` of their bounding box (a window, a pane, a
-    # shutter is a rectangle), their holes filled, as 0..1
-    out = np.zeros(m.shape, np.float32); seen = np.zeros(m.shape, bool); h, w = m.shape
-    for y0, x0 in zip(*np.nonzero(m)):
-        if seen[y0, x0]: continue
-        st = [(y0, x0)]; seen[y0, x0] = True; part = []
-        while st:
-            y, x = st.pop(); part.append((y, x))
-            for dy in (-1, 0, 1):
-                for dx in (-1, 0, 1):
-                    yy, xx = y + dy, x + dx
-                    if 0 <= yy < h and 0 <= xx < w and m[yy, xx] and not seen[yy, xx]: seen[yy, xx] = True; st.append((yy, xx))
-        p = np.array(part); box = (np.ptp(p[:, 0]) + 1) * (np.ptp(p[:, 1]) + 1)
+    # shutter is a rectangle), their holes filled, as 0..1 (boxy's 8 neighbours can join two diagonal-touching parts
+    # into one: the plan's open questions)
+    out = np.zeros(m.shape, np.float32)
+    for py, px_ in parts(m):
+        p = np.stack([py, px_], 1); box = (np.ptp(p[:, 0]) + 1) * (np.ptp(p[:, 1]) + 1)
         if len(p) >= fill * box:
             out[p[:, 0], p[:, 1]] = 1
             # its holes filled (the texels of its box no path outside the part reaches from the box's edge: a door's
@@ -319,7 +344,7 @@ def role_image(role, fid, tx, ty, inlay):
     im = bpy.data.images.new('roles', sw_, sh_, alpha=False); im.pixels[:] = np.dstack([c, np.ones((sh_, sw_))]).ravel()
     return im
 
-def render(obj, role, out, img):   # three views textured with img (role_image's, or with --tex the model's own)
+def render(obj, out, img):   # three views textured with img (role_image's, or with --tex the model's own)
     me = obj.data
     tm = bpy.data.materials.new('tex'); tm.use_nodes = True; n = tm.node_tree.nodes.new('ShaderNodeTexImage'); n.image = img
     n.interpolation = 'Closest'; tm.node_tree.nodes.active = n

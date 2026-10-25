@@ -42,12 +42,12 @@ void main(){
   #endif
   #endif
   // (G and B: the openings and shutters a low-poly model paints inside its wall and timber faces, as inlays over the
-  // face's role: tools/building-to-js.py, vote; only on those roles, so a mask's texel at an island's edge or in a
-  // coarser mip never reaches a roof)
+  // face's role: tools/building-to-js.py, vote; only on those roles, the tool's HOSTS, so a mask's texel at an island's
+  // edge or in a coarser mip never reaches a roof; the opening last, over a shutter where both are)
   vec3 dt=texture2D(uDetail,vUV).rgb;
   float d=dt.r*255.0/128.0;
   float host=(vRole<0.5||abs(vRole-2.0)<0.5)?1.0:0.0;
-  vec3 alb=mix(mix(roleCol(vRole),uOpening,dt.g*host),uShutter,dt.b*host)*mix(1.0,d,uDetailAmt);
+  vec3 alb=mix(mix(roleCol(vRole),uShutter,dt.b*host),uOpening,dt.g*host)*mix(1.0,d,uDetailAmt);
   // (the grain breaks the band edges at a third of the ground's: on a flat wall it broke them into pixel specks)
   vec3 c=paint(alb,N,vW,mix(1.0,lm.g,uAO*0.6),0.4,0.3,sh);
   gl_FragColor=lensOut(airOf(c,vW,lm,vH),vW);}

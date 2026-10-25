@@ -22,10 +22,12 @@ at the closest zoom, 15 m).
 
 - **Inspect** each model (triangles, UVs, texture, scale and orientation against today's, open edges and loose parts,
   how it reads) and name the reference image each was made from.
-- **Import** (`tools/building-to-js.py`): a model may skip the cut (`'tris': None`: the mesh kept as Tripo made it,
-  triangulated) and the sails' rebuild (no `'sails'`: the lattice kept). The roles by colour as today, each model's
-  reference colours from its texture's clusters (`--analyse`), checked with `--render`. The light UVs, their gap check
-  and the detail texture as today, so the light bake (#127) and the paving keep working.
+- **Import** (`tools/building-to-js.py`): the models kept as Tripo made them, triangulated: no cut, the windmill's
+  lattice sails kept (the first models' cut and rebuilt sails removed: git history). The roles from each face's texels,
+  each model's reference colours from its texture's clusters (`--analyse`), checked with `--render`; the windows and
+  shutters painted inside wall and timber faces kept as inlays (the detail texture's G and B: an opening class and a
+  shutter class no face takes). The light UVs, their gap check and the detail texture's value as before, so the light
+  bake (#127) and the paving keep working.
 - **Page** (`src/look/buildings.ts`, `src/look/world/buildings.ts`): the new models' palettes, footprints and yards; the
   village's houses as today, two of them turned into the new types where their yards fit (`PAVE_GAP`).
 
@@ -42,6 +44,10 @@ at the closest zoom, 15 m).
 ## Open questions
 
 - The lattice sails at the far zooms: a lattice thinner than a pixel may shimmer (the owner's eye).
+- Left as they are (review round 2): `boxy`'s parts are 8-connected, so two inlays touching at a corner join and are
+  judged as one shape (a rare miss of the rectangle test, not a wrong colour); `classify` holds a distance per texel
+  and reference colour at once (about 150k texels × 25 colours of float64 on the largest model: tens of MB, a tool's
+  run, not the page's).
 
 ## Status (2026-10-25)
 
@@ -53,11 +59,11 @@ at the closest zoom, 15 m).
   (`02-village-farmhouse`: red tiles, shutters, a lean-to); `building-2-low-poly` 1,454, the small country manor
   (`03-small-country-manor`: three gables, mullioned windows). Like the first exports, open meshes of loose parts
   (38-88 parts, 480-600 open edges): nothing seen through at the page's angles.
-- Kept as made (`'tris': None`; the windmill's sails not rebuilt). Fitted as before (the windmill 15 m high, the
+- Kept as made (no cut; the windmill's sails not rebuilt). Fitted as before (the windmill 15 m high, the
   cottage 11 m long) and the new ones at 13 m (the farmhouse) and 15 m (the manor) long.
 - The low-poly models paint their windows and shutters in the texture across larger faces, so a role per face lost
   them (half a window black, half wall). The roles now from each face's texels (the most common other than opening and
-  accent), and a wall's or timber's opening and accent texels kept as inlays in the detail texture's G and B (only
+  shutter), and a wall's or timber's opening and shutter texels kept as inlays in the detail texture's G and B (only
   near-rectangular parts: a blotch of shade on a face Tripo textured as roof was read as a window), which
   `building.frag` paints over the face's role.
 - The village: the farmhouse in place of the house at (208, −30), its door to the road, and the manor in place of the
@@ -84,3 +90,11 @@ at the closest zoom, 15 m).
   rebuild and the shader's sails branch removed (git history keeps them); the vote vectorised. The farmhouse's
   shutters and green door still read mottled at 15 m: the painter's grain on a colour near its band's edge, as the
   roofs (the paint, not the mask: the mask is whole there).
+- Review round 2 (2026-10-25, the last): the closing (`CLOSE`, two texels) confined to each host island and the masks
+  again only on the host's texels after the holes are filled; the opening over the shutter where both are (the tool
+  and `building.frag`); a face voted a shutter takes its most common role of its own texels (a window's greyed glass
+  an opening), never its first median role; the light atlas's comment measured again on these models (363 to 495
+  islands, 19 to 27 cm a texel; the levels' shares labelled as the first models'). The masks' mips onto a neighbouring
+  wall island at the default zoom: no dark or green fringe seen at 55 m on the farmhouse's front or the manor's walls
+  (the main checkout's `output/armies-review/16-tripo-lowpoly/farmhouse-wall-r55-crop.png` and
+  `manor-wall-r55-crop.png`), so left as it is.
