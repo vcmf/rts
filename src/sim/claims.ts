@@ -11,15 +11,36 @@ import { keyedStream, nextU32 } from './rng.ts'
 const MARGIN = 1
 const K_ORDER = 0x434c // the keyed draw that orders the formations in a tick
 
-/** Per terrain cell, up to two claims (owner slot + 1, times 2, plus 1 for its core) and a mark for more. */
+/** Claims per cell: SLOTS entries per terrain cell (owner slot + 1, times 2, plus 1 for its core), and a mark for
+ * a cell claimed by more formations than that. */
 export interface Claims {
-  a: Int16Array
-  b: Int16Array
+  own: Int16Array // cell k's entries at k * SLOTS .. k * SLOTS + SLOTS - 1, 0 for none
   more: Uint8Array
   // per formation, the box of the cells it claims this tick: x0, z0, x1, z1 (empty: x0 > x1)
   box: Float64Array
   ctx: Places
+  // the cells one formation's men stand in, found once each (seen[k] === epoch), and their list
+  seen: Int32Array
+  epoch: number
+  // per formation, the core cells it claimed after its last step (at list[i * maxSlots ..], count[i] of them), the
+  // tick it claimed them at and its generation then: the next tick's rebuild stamps them again instead of placing
+  // every man once more
+  list: Int32Array
+  count: Int32Array
+  at: Int32Array
+  gen: Int32Array
+  own1: Float64Array // per formation, the box of that last claim alone
+  built: number // the tick the grid was last built at (-1: never)
+  // per formation, whether another's claims come near it, found once a tick (nearAt: the build it was found in)
+  near: Uint8Array
+  nearAt: Int32Array
+  // per formation, its pose at its last claim (x, z, heading, then each company's men and each bin's lag): a
+  // formation that has not moved since keeps its claim as it is
+  pose: Float64Array
 }
+
+/** The entries kept per cell before it is marked as claimed by more. */
+export const SLOTS = 4
 
 const ks = new Uint32Array(4)
 const pt = [0, 0, 0]
@@ -27,42 +48,59 @@ const pt = [0, 0, 0]
 function claimsOf(w: World): Claims {
   const n = w.terrain.n * w.terrain.n
   const c = w.scratch.claims
-  if (c && c.a.length === n) return c
+  if (c && c.more.length === n) return c
   return (w.scratch.claims = {
-    a: new Int16Array(n),
-    b: new Int16Array(n),
+    own: new Int16Array(n * SLOTS),
     more: new Uint8Array(n),
     box: new Float64Array(MAX_FORMATIONS * 4),
     ctx: mkPlaces(w),
+    seen: new Int32Array(n),
+    epoch: 0,
+    list: new Int32Array(MAX_FORMATIONS * w.cr.maxSlots),
+    count: new Int32Array(MAX_FORMATIONS),
+    at: new Int32Array(MAX_FORMATIONS).fill(-1),
+    gen: new Int32Array(MAX_FORMATIONS),
+    own1: new Float64Array(MAX_FORMATIONS * 4),
+    built: -1,
+    near: new Uint8Array(MAX_FORMATIONS),
+    nearAt: new Int32Array(MAX_FORMATIONS).fill(-1),
+    pose: new Float64Array(MAX_FORMATIONS * (3 + w.cr.maxC + w.cr.maxNB)).fill(NaN),
   })
 }
 
-// claims cell k for formation i, its core or its halo (a core claim upgrades a halo one)
+// claims cell k for formation i, its core or its margin (a core claim upgrades a margin one)
 function claim(C: Claims, k: number, i: number, core: number): void {
   const e = (i + 1) * 2 + core
-  for (const arr of [C.a, C.b]) {
-    if (arr[k] === 0) {
-      arr[k] = e
+  const o = C.own
+  for (let s = k * SLOTS; s < k * SLOTS + SLOTS; s++) {
+    if (o[s] === 0) {
+      o[s] = e
       return
     }
-    if (arr[k] >> 1 === i + 1) {
-      arr[k] |= core
+    if (o[s] >> 1 === i + 1) {
+      o[s] |= core
       return
     }
   }
   C.more[k] = 1
 }
 
-/** Claims the cells of formation i's places as it stands: their cells as its core, and a margin round them. */
+/** Claims the cells of formation i's places as it stands: the cells its men stand in as its core, a margin round
+ * them; each such cell once, however many men stand in it. */
 export function claimFormation(w: World, i: number): void {
   const C = claimsOf(w)
+  if (C.at[i] === C.built && C.gen[i] === w.f.gen[i] && samePose(w, C, i)) return
   const T = w.terrain
   const f = w.f
   const U = typeOf(w, i)
   const CS = w.cr.maxC
   const F = filledSlots(w, i)
   placesCtx(C.ctx, i, f.x[i], f.z[i], f.heading[i], w.meta[M_TICK] * DT, 0)
-  const B = C.box
+  const B = C.own1
+  B.set([Infinity, Infinity, -Infinity, -Infinity], i * 4)
+  const ep = ++C.epoch
+  const L = i * w.cr.maxSlots
+  let n = 0
   for (let k = F.at[i * (CS + 1)]; k < F.at[i * (CS + 1) + U.C]; k++) {
     placeAtSlot(C.ctx, F.s[k], pt)
     B[i * 4] = Math.min(B[i * 4], pt[0])
@@ -71,6 +109,54 @@ export function claimFormation(w: World, i: number): void {
     B[i * 4 + 3] = Math.max(B[i * 4 + 3], pt[1])
     const gx = Math.round((pt[0] - T.x0) / T.cell)
     const gz = Math.round((pt[1] - T.z0) / T.cell)
+    if (gx < 0 || gz < 0 || gx >= T.n || gz >= T.n) continue
+    const c = gz * T.n + gx
+    if (C.seen[c] === ep) continue
+    C.seen[c] = ep
+    C.list[L + n++] = c
+  }
+  C.count[i] = n
+  C.at[i] = C.built
+  C.gen[i] = f.gen[i]
+  stamp(w, C, i)
+  samePose(w, C, i, true)
+}
+
+// whether formation i stands as it did at its last claim: not changing shape, the same anchor, heading, men and lags
+// (with `set`, records its pose as it stands now)
+function samePose(w: World, C: Claims, i: number, set = false): boolean {
+  const f = w.f
+  const CS = w.cr.maxC
+  const NB = w.cr.maxNB
+  const P = C.pose
+  const o = i * (3 + CS + NB)
+  if (set) {
+    P[o] = f.trans[i] ? NaN : f.x[i]
+    P[o + 1] = f.z[i]
+    P[o + 2] = f.heading[i]
+    for (let c = 0; c < CS; c++) P[o + 3 + c] = f.men[i * CS + c]
+    for (let b = 0; b < NB; b++) P[o + 3 + CS + b] = f.lags[i * NB + b]
+    return true
+  }
+  if (f.trans[i] || P[o] !== f.x[i] || P[o + 1] !== f.z[i] || P[o + 2] !== f.heading[i]) return false
+  for (let c = 0; c < CS; c++) if (P[o + 3 + c] !== f.men[i * CS + c]) return false
+  for (let b = 0; b < NB; b++) if (P[o + 3 + CS + b] !== f.lags[i * NB + b]) return false
+  return true
+}
+
+// stamps formation i's listed core cells, and a margin round each, into the grid, and its box into the tick's
+function stamp(w: World, C: Claims, i: number): void {
+  const T = w.terrain
+  const B = C.box
+  B[i * 4] = Math.min(B[i * 4], C.own1[i * 4])
+  B[i * 4 + 1] = Math.min(B[i * 4 + 1], C.own1[i * 4 + 1])
+  B[i * 4 + 2] = Math.max(B[i * 4 + 2], C.own1[i * 4 + 2])
+  B[i * 4 + 3] = Math.max(B[i * 4 + 3], C.own1[i * 4 + 3])
+  const L = i * w.cr.maxSlots
+  for (let m = 0; m < C.count[i]; m++) {
+    const c = C.list[L + m]
+    const gx = c % T.n
+    const gz = (c - gx) / T.n
     for (let dz = -MARGIN; dz <= MARGIN; dz++) {
       for (let dx = -MARGIN; dx <= MARGIN; dx++) {
         const x = gx + dx
@@ -85,12 +171,17 @@ export function claimFormation(w: World, i: number): void {
 /** Clears the grid and claims every live formation's cells, at the start of the formation step. */
 export function buildClaims(w: World): void {
   const C = claimsOf(w)
-  C.a.fill(0)
-  C.b.fill(0)
+  C.own.fill(0)
   C.more.fill(0)
+  const last = C.built
+  C.built = w.meta[M_TICK]
   for (let i = 0; i < MAX_FORMATIONS; i++) {
     C.box.set([Infinity, Infinity, -Infinity, -Infinity], i * 4)
-    if (w.f.alive[i]) claimFormation(w, i)
+    if (!w.f.alive[i]) continue
+    // claimed after its step in the last tick: its cells again, as they stood after it moved (a man fallen since
+    // keeps his cell for a tick: only ever too much claimed, never too little); else placed afresh
+    if (last >= 0 && C.at[i] === last && C.gen[i] === w.f.gen[i]) stamp(w, C, i)
+    else claimFormation(w, i)
   }
 }
 
@@ -116,10 +207,11 @@ export function claimedAt(w: World, i: number, x: number, z: number): boolean {
   const gz = Math.round((z - T.z0) / T.cell)
   if (gx < 0 || gz < 0 || gx >= T.n || gz >= T.n) return false
   const k = gz * T.n + gx
-  const a = C.a[k]
-  const b = C.b[k]
-  if (a !== 0 && (a >> 1) - 1 !== i && blocks(w, i, (a >> 1) - 1, (a & 1) === 1)) return true
-  if (b !== 0 && (b >> 1) - 1 !== i && blocks(w, i, (b >> 1) - 1, (b & 1) === 1)) return true
+  for (let s = k * SLOTS; s < k * SLOTS + SLOTS; s++) {
+    const e = C.own[s]
+    if (e === 0) break
+    if ((e >> 1) - 1 !== i && blocks(w, i, (e >> 1) - 1, (e & 1) === 1)) return true
+  }
   return C.more[k] === 1
 }
 
@@ -130,6 +222,9 @@ const SLACK = 6
 export function claimsNear(w: World, i: number): boolean {
   const C = w.scratch.claims
   if (!C) return false
+  if (C.nearAt[i] === C.built) return C.near[i] === 1
+  C.nearAt[i] = C.built
+  C.near[i] = 0
   const B = C.box
   for (let j = 0; j < MAX_FORMATIONS; j++) {
     if (j === i || !w.f.alive[j] || B[j * 4] > B[j * 4 + 2]) continue
@@ -139,6 +234,7 @@ export function claimsNear(w: World, i: number): boolean {
       B[j * 4 + 1] - SLACK <= B[i * 4 + 3] + SLACK &&
       B[i * 4 + 1] - SLACK <= B[j * 4 + 3] + SLACK
     ) {
+      C.near[i] = 1
       return true
     }
   }

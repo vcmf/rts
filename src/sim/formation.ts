@@ -61,7 +61,7 @@ const now = (w: World) => w.meta[M_TICK] * DT
 // impassable ground for formation i: the terrain's, and with the claim grid's prototype on, other formations' cells
 // (src/sim/claims.ts)
 const blockedAt = (w: World, i: number, imp: Uint8Array, x: number, z: number): number =>
-  impAt(w.terrain, imp, x, z) || (w.claims && claimedAt(w, i, x, z) ? 1 : 0)
+  impAt(w.terrain, imp, x, z) || (w.claims && claimsNear(w, i) && claimedAt(w, i, x, z) ? 1 : 0)
 // the quick rejects below read the terrain's distance field alone: with claims, they wait while others stand near
 const claimsMatter = (w: World, i: number): boolean => w.claims && claimsNear(w, i)
 

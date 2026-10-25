@@ -96,3 +96,18 @@ geometries) is C2's.
 - charges reach melee (X-01, X-03); the column halts at the friendly line (X-05);
 - three battalions on one point all stop (X-06) and today's stall drops their orders (W1, step 2);
 - cost: 4.6 ms a tick at 40 battalions against 1.55 ms without claims (W5, step 1).
+
+**Step 1, first part** (2026-10-25), X-14, five minutes, 40 battalions crossing (load average about 7):
+
+| Change | ms a tick |
+|---|---|
+| the prototype | 4.64 |
+| each core cell's margin stamped once; four owners a cell (a junction of three no longer blocks its owners) | 3.52 |
+| the next tick's rebuild stamps each formation's cells from its last claim instead of placing its men again | 3.17 |
+| claims looked up only by a formation another's claims come near; a formation that has not moved keeps its claim | 3.00 |
+| without claims | 1.82 |
+
+What is left is the per-man ground tests near other formations (the lag model's look-ahead, the gate and placing
+the men: about 46% of the tick). Bringing it under the 2 ms budget needs claims and tests by bin rectangles instead
+of men, the second part of step 1. Every claim case still passes as before, and the reversed visiting order now gives
+the same state in all of them, X-01 too (#187 does not arise with the keyed order).
