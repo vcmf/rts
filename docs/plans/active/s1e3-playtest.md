@@ -1,19 +1,20 @@
 ---
 status: active
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-25
 ---
 
 # Plan: S1e-3, the playtest
 
 The last part of S1e (`docs/plans/active/s1e1-battlefield.md`, the split), and S1's acceptance
 (`docs/proposals/sim-design.md` §17): **a 20-minute fight of about 6 battalions per side is fun at 2× speed**. Only
-you can judge that, so S1e-3 is your play and the tuning that follows from it, in three PRs:
+you can judge that, so S1e-3 is your play and the tuning that follows from it, in three parts. The first two are
+this PR (#51; S1e-3b was its own PR, #55, merged into this one's branch and squashed with it):
 
 | Part | Scope | Ends with |
 |---|---|---|
 | **S1e-3a** (this PR) | The playtest kit: marking moments while you play, saving the session to a file, and a report that plays a session back and says what happened; a first read of the battle with no orders | You play, mark what feels wrong, and send the file |
-| **S1e-3b** | Tuning before your play: the faults the first read found, fixed without human eyes, measured with the report and scripted defences | With no orders you lose; a defence that uses its arms wins |
-| S1e-3c | Tuning from your sessions: the scenario, the plan, the rules' numbers | S1's acceptance, or a list of what blocks it |
+| **S1e-3b** (this PR) | Tuning before your play: the faults the first read found, fixed without human eyes, measured with the report and scripted defences | With no orders you lose; a defence that uses its arms wins |
+| S1e-3c (next) | Tuning from your sessions: the scenario, the plan, the rules' numbers | S1's acceptance, or a list of what blocks it |
 
 ## The problem
 
@@ -55,7 +56,8 @@ Worth watching:
 - the square against cavalry: how often, and how long, a charge pins your infantry;
 - the firefight: is it decisive, or do lines trade shots until the time limit;
 - the guns: do they matter;
-- the end: is half the men out of the fight the right point (`end.broken`).
+- the end: is a side broken when 35% of its men are out of the fight the right point (`end.broken` 0.65, S1e-3b), and
+  is the quiet after the result (rallied battalions come back into the count, nothing more happens) a problem.
 
 ## A first read: the battle with no orders
 
@@ -80,7 +82,8 @@ These are a standing side's battle, not yours. They are what the playtest tests 
 
 - `test/battle-report.test.ts`: a recorded session with an order and a mark reports the order's change of shape,
   the mark with every formation's place, and the end table; a session whose hashes do not match is refused; with
-  no session, the scenario runs with no orders.
+  no session, the scenario runs with no orders; the reporter sees the first tick played; marks out of order, past
+  the end or without a text note are refused.
 - `npm run check:app`: the battle marks a moment through the page, and the report of the page's session, played in
   Node, has the mark and the result.
 - Lint, typecheck, `check:docs`.
@@ -88,7 +91,7 @@ These are a standing side's battle, not yours. They are what the playtest tests 
 
 ## Non-goals
 
-- Tuning: S1e-3b, from your sessions.
+- Tuning from your sessions: S1e-3c (S1e-3b, below, is the tuning that needed no human eyes).
 - Recording what you saw (the camera, the selection): a session replays the battle, not the screen.
 
 ## Review
@@ -145,7 +148,9 @@ Along the way: with ordinary quality (0.75) attackers and `end.broken` 0.65, a s
 - side 1's plan still does not react: a second wave goes in at 15 minutes whatever has happened.
 
 **The goldens:** every one changed its ruleset hash (`end`; the hash is in every state hash). Only `s1e-battle`
-changed behaviour: with `end.broken` set back to 0.5, the page's charge reproduces `main`'s golden exactly. `SIM_VERSION` is `s1e.3`.
+changed behaviour: with `end.broken` set back to 0.5, the page's charge reproduces `main`'s golden exactly.
+`SIM_VERSION` is `s1e.4`: S1e-3b changes a rule's number, so an older replay must be refused, and `main` had already
+taken `s1e.3` for other rules (#162) while this branch waited.
 
 ### Review (S1e-3b)
 
@@ -198,3 +203,16 @@ winner at 0.5 and 0.65. Fixed:
   locally: every scenario passes, the battle ends in side 1's win at 19.2 minutes, its replay reproduces and the
   report finds the mark and the end.
 
+### Bringing it up to `main` (PR #51)
+
+`main` was merged in by decision 0052's recipe (up to the commit before each formatting commit, the formatting
+commit with `-X ours`, then `npm run format` and long comments rewrapped by hand); the goldens were regenerated for
+`SIM_VERSION` `s1e.4` (above). The review of the merged branch found, and this PR fixes:
+- the report of a session started its reporter inside `play`'s per-tick hook, after the first tick, while the
+  report with no orders starts before it: `play` takes an observer with `start` (the world set up, before the first
+  tick) and `tick`, both read-only (decision 0005), and both paths start before the first tick. With today's
+  scenarios, which spawn every formation in tick 1, no line was lost; a test with a scenario whose setup has
+  already played a tick pins it;
+- a session file edited by hand with a mark out of tick order, past the end or with a note that is not text lost
+  marks silently: the report refuses it with the mark's number (`checkMarks`, tested);
+- this plan's table treated S1e-3b as a PR of its own, and "Worth watching" asked about half the men out.
