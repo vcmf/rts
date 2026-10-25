@@ -49,6 +49,7 @@ designs written before building (frozen once built, their lasting content moves 
 - [`proposals/prepainted-terrain.md`](proposals/prepainted-terrain.md): a painted macro colour bake for the ground; strokes stay at runtime. *(draft)*
 - [`proposals/map-format.md`](proposals/map-format.md): the map format, one schema-checked description of a battlefield that the sim, the 3D battlefield and the staff map compile from. *(draft)*
 - [`proposals/unit-model.md`](proposals/unit-model.md): the unit model: categories, shapes and faces, sectors, engagement, experience levels, fire, the assault, guns taken, collision, pathfinding, counters and bonuses; phases U1–U9. *(draft)*
+- [`proposals/collision-and-orders.md`](proposals/collision-and-orders.md): formed and loose bodies, the clamp on bins with half gaps, the clash's give way, the visual bench, the orders' queue and what suspends or clears it; phases C0–C4. *(draft)*
 - [`proposals/unit-scenarios.md`](proposals/unit-scenarios.md): the situations the unit model must get right, each with its expected outcome and what the sim does today. *(draft)*
 - [`proposals/ai.md`](proposals/ai.md): the enemy AI: layers, influence maps, utility scores, lookahead with the sim, honest difficulty; built after pathfinding. *(draft)*
 - [`proposals/figure-animation.md`](proposals/figure-animation.md): animated figures: the simulation owns timing, clips are fitted to its phases by bindings checked at build time; the figure files and registry. *(accepted)*
@@ -85,6 +86,7 @@ designs written before building (frozen once built, their lasting content moves 
 
 ## Research (background)
 
+- [`research/formation-collision-and-commands.md`](research/formation-collision-and-commands.md): formation collision and command queues: per-soldier games' blobs and breakthroughs, open engines' order-independent contact, the formation literature, bins as bodies, suspend rather than clear.
 - [`research/colour-and-light-review.md`](research/colour-and-light-review.md): the owner's colour and light references, and the coats' colour lost to the warm light, measured.
 - [`research/grass-and-fields.md`](research/grass-and-fields.md): grass and fields at an RTS camera: Tiny Glade, Total War, the techniques (ground pattern, blades, cards, shells) and their pitfalls.
 - [`research/painterly-grass.md`](research/painterly-grass.md): Tiny Glade's grass, the techniques that read as painted, what fits the RTS camera and the budget.
