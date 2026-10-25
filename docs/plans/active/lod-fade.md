@@ -77,11 +77,44 @@ measured small) stays as it is. Not the LODs' own geometry or the tiny's calibra
 - Tests: the fade weight, every pixel of a man drawn by exactly one LOD at every height, the LODs a battalion draws
   covering every man's (`test/lod-fade.test.ts`).
 - The goldens against main: identical without `?armies` (the page's default draws no figures).
-- Metal bench, main against the branch, at zooms inside each band and outside: frame p50 and GPU time.
+- Metal bench, main against the branch, at zooms inside each band and outside: frame p50 and GPU time (`?benchr`, a
+  bench parameter added for it).
 
 ## Outcome
 
-To be filled in with the bench and the after-sweeps.
+Built as above (decision 0066). Measured on this Mac (M1 Pro, Metal, preview builds; estimates for the owner's
+laptop).
+
+**The steps.** The same sweeps on the branch (24 frames, 0.7 to 1.43 × the switch, the block over its projected
+bounds, `?trample=0`): the largest step between two frames, main → branch.
+
+| band | French column (5) | white column (30) | the zoom's own drift elsewhere |
+|---|---|---|---|
+| near ↔ far | 1.35 → 0.56 ΔE (0.56 is the drift at the sweep's close end) | 1.02 → 0.47 | 0.1 to 0.5 |
+| far ↔ tiny | 3.38 → 1.33 | 3.18 → 1.29 | 0.1 |
+
+The near ↔ far step is gone into the drift. The far ↔ tiny change is spread over the band's frames (0.3 to 1.3 ΔE a
+frame over about six frames instead of 3.4 in one): the total difference between the far LOD and the tiny boxes is
+the larger one (above) and is spread, not removed. Frame strips for the owner, main and branch:
+`output/armies-review/17-lod-fade/` (not in git; 1:1 crops of 1280 × 720 frames).
+
+**The goldens** (`node tools/golden.mjs`, main against the branch): the page's default identical; with `?armies=20`
+within tolerance (0.007 % and 0.005 % of the river and far-edge views' pixels differ: battalions inside a band).
+
+**The cost** (`node tools/bench-look.mjs <url>?armies=20&benchr=40,63,125,250 --gpu metal`, 1920 × 1080, two rounds,
+both arms, the three yaws a zoom; frame p50 / GPU frame p50, ms):
+
+| zoom (m) | main | `?lodfade=0` | no `discard` (vertex drop only) | branch |
+|---|---|---|---|---|
+| 40 | 8.78 / 12.81 | 8.88 / 12.93 | 9.00 / 13.15 | 9.04 / 13.21 |
+| 63 (near band) | 9.60 / 13.51 | 9.58 / 13.45 | 9.67 / 13.79 | 9.73 / 13.84 |
+| 125 | 9.81 / 12.94 | 9.78 / 12.88 | 9.95 / 13.15 | 10.10 / 13.29 |
+| 250 (tiny band) | 6.28 / 9.18 | 6.20 / 9.25 | 6.52 / 8.95 | 6.61 / 9.15 |
+
+About +0.15 to +0.35 ms a frame (2 to 5 %), at every zoom: at 20 a side some battalion is in a band at every zoom
+(a column's men span a wide range of heights on screen, and a battalion draws its second LOD while any of them can
+be in the band). `?lodfade=0` is main's cost; the dither's `discard` is about a third of it, the second LOD's vertices
+the rest (triangles drawn +2 % at 40 m to +21 % at 250 m). A narrower band costs less and spreads less.
 
 ## Open questions
 
