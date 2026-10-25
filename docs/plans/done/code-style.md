@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 last_reviewed: 2026-10-24
 ---
 
@@ -124,8 +124,8 @@ files prints exactly what main's tool prints.
 ## Open questions
 
 - `.git-blame-ignore-revs` and squash-merging: decided (2026-10-23, the owner): squash as usual, and a one-line
-  follow-up after each formatting PR lists its squashed commit (PR 1: 8abc1cf; PR 2: 3da1f26; PR 3: after
-  its merge).
+  follow-up after each formatting PR lists its squashed commit (PR 1: 8abc1cf; PR 2: 3da1f26; PR 3:
+  bad4473).
 - Format on save in editors: left to each editor; the check in `npm test` and CI is what holds.
 
 ## Review rounds

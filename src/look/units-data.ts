@@ -16,10 +16,15 @@ export interface UnitLod {
   vertices: number
   triangles: number
 }
+/** the unit data format this page reads: 3, the triangles wound for Babylon (clockwise fronts) and the bones' parents;
+ *  2's were wound inside out (#164) */
+export const UNIT_VERSION = 3
 export interface UnitData {
+  version: number
   fps: number
   mPerUnit: number
   bones: string[]
+  parents: number[] // each bone's parent (its nearest deforming ancestor), -1 for a root
   // nearest first, each lighter than the one before (the page draws the last far, the one before it near, a first of
   // three nearest)
   lods: UnitLod[]
@@ -56,11 +61,12 @@ export function decodeUnits(buf: ArrayBuffer): UnitData {
   if (String.fromCharCode(...new Uint8Array(buf, 0, 4)) !== 'UNIT') throw new Error('unit data: not a UNIT file')
   const version = dv.getUint32(4, true)
   const hl = dv.getUint32(8, true)
-  if (version !== 2) throw new Error(`unit data: version ${version}, this page reads 2 (rebake: tools/bake-figure.py)`)
+  if (version !== UNIT_VERSION) throw new Error(versionError(version))
   const h = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 12, hl))) as {
     fps: number
     mPerUnit: number
     bones: string[]
+    parents: number[]
     lods: UnitLod[]
     ranges: Record<string, UnitRange>
     palette: string[]
@@ -94,9 +100,11 @@ export function decodeUnits(buf: ArrayBuffer): UnitData {
     }
   }
   const data: UnitData = {
+    version,
     fps: h.fps,
     mPerUnit: h.mPerUnit,
     bones: h.bones,
+    parents: h.parents,
     lods: h.lods,
     ranges: h.ranges,
     palette: h.palette,
@@ -107,10 +115,19 @@ export function decodeUnits(buf: ArrayBuffer): UnitData {
   return data
 }
 
+const versionError = (v: number) =>
+  `unit data: version ${v}, this page reads ${UNIT_VERSION}` +
+  (v === 2 ? ' (version 2 was wound inside out, #164)' : '') +
+  ': rebake it with tools/bake-figure.py'
+
 // every size the file states agrees with its buffers; every bone index, colour role and range lies inside its table
 export function checkUnits(d: UnitData): void {
+  if (d.version !== UNIT_VERSION) throw new Error(versionError(d.version))
   const bad: string[] = []
   const nb = d.bones.length
+  if (d.parents?.length !== nb || d.parents.some((p, i) => p < -1 || p >= nb || p === i)) {
+    bad.push(`the bones' parents are not ${nb} bone indices (or -1)`)
+  }
   if (d.vat.width !== (nb + 1) * 4) bad.push(`vat width ${d.vat.width} is not (bones + 1) × 4 = ${(nb + 1) * 4}`)
   if (d.vat.data.length !== d.vat.width * d.vat.height * 4) {
     bad.push(`vat holds ${d.vat.data.length} values, not width × height × 4`)
@@ -221,7 +238,12 @@ export function posedMesh(d: UnitData, m: SkinnedMesh): { width: number; height:
 /** a figure's parts (the shadow proxy's and the tiny LOD's): each bone that carries at least minVerts of a LOD's
  *  vertices (by their heaviest weight) over minLen m long, along the part's long axis (its vertices' principal axis,
  *  end to end, t0 to t1 from its centre c) and as wide as most of it (the 85th percentile of their distance from the
- *  axis, along u and along w). No era names: the parts are wherever the figure's own weights put them */
+ *  axis, along u and along w). No era names: the parts are wherever the figure's own weights put them.
+ *  The figure's contact with the ground (#165): a bone too small to be a part (a foot, its toes) whose vertices come
+ *  within `contact` m of the figure's lowest point lends them to the part up its chain of parents (through other
+ *  small bones: the toes to the foot to the shin), whose axis then runs on to them (t0, t1; not its width) by at most
+ *  `reach` m (a hem or a scabbard hung from the hips does not stretch the hips to the ground): the parts reach the
+ *  ground where the figure stands, so the shadow proxy's shadow starts at the soles, not at the ankles 13 cm up */
 export interface Part {
   bone: number
   vs: number[]
@@ -233,8 +255,9 @@ export interface Part {
   t1: number
   hu: number
   hw: number
+  lent: number[] // the small bones' vertices lent to it at the ground (their colour the tiny LOD's too)
 }
-export function boneParts(d: UnitData, lod: string, minVerts = 8, minLen = 0.14): Part[] {
+export function boneParts(d: UnitData, lod: string, minVerts = 8, minLen = 0.14, contact = 0.15, reach = 0.25): Part[] {
   const m = d.mesh[lod]
   const nv = m.positions.length / 3
   const groups = new Map<number, number[]>()
@@ -279,7 +302,30 @@ export function boneParts(d: UnitData, lod: string, minVerts = 8, minLen = 0.14)
       const q = vs.map(v => Math.abs(proj(v, a))).sort((x, y) => x - y)
       return Math.max(0.02, q[Math.floor(0.85 * (q.length - 1))])
     }
-    out.push({ bone: b, vs, c, ax, u, w, t0, t1, hu: half(u), hw: half(w) })
+    out.push({ bone: b, vs, c, ax, u, w, t0, t1, hu: half(u), hw: half(w), lent: [] })
+  }
+  // the ground contact: each left-out bone with a vertex within `contact` of the lowest, lent to its part (#165)
+  let lowest = Infinity
+  for (let v = 0; v < nv; v++) lowest = Math.min(lowest, P(v, 1))
+  const partOf = new Map(out.map(p => [p.bone, p]))
+  for (const [b, vs] of groups) {
+    if (partOf.has(b) || !vs.some(v => P(v, 1) < lowest + contact)) continue
+    // up its chain, through other left-out bones, to the first that is a part
+    let a = d.parents[b]
+    while (a >= 0 && !partOf.has(a)) a = d.parents[a]
+    const p = partOf.get(a)
+    if (!p) {
+      console.warn(`unit data: ${d.bones[b]} touches the ground but no part is up its chain; its shadow is left out`)
+      continue
+    }
+    const ts = vs.map(v => (P(v, 0) - p.c[0]) * p.ax[0] + (P(v, 1) - p.c[1]) * p.ax[1] + (P(v, 2) - p.c[2]) * p.ax[2])
+    const t0 = Math.min(p.t0, ...ts)
+    const t1 = Math.max(p.t1, ...ts)
+    // a foot under a shin, not a hem or a scabbard hung from the hips: the axis runs on by at most `reach`
+    if (p.t0 - t0 + (t1 - p.t1) > reach) continue
+    p.t0 = t0
+    p.t1 = t1
+    p.lent.push(...vs)
   }
   return out
 }
@@ -420,7 +466,8 @@ export function seenArea(d: UnitData, lod: string, elev = 0.87): Float64Array {
 export const TINY_ROLES = 12
 /** the tiny LOD (docs/plans/active/armies-32k.md, step 3): a LOD's parts (boneParts) as boxes, eight corners each
  *  shared by its faces (their normals from the box's centre), each corner skinned wholly to the part's bone,
- *  outward-wound. A corner's colour is a mix of the roles (`weights`, TINY_ROLES a vertex, summing to 1): their shares
+ *  wound with their fronts out (Babylon's clockwise: a front's right-hand normal into the box, as the bake's figure,
+ *  #164). A corner's colour is a mix of the roles (`weights`, TINY_ROLES a vertex, summing to 1): their shares
  *  of its eighth of the part as a camera `elev` above the horizon sees it from round the figure (seenArea: what the
  *  figure hides counts for nothing), with `own` of the whole part's shares, so a box reads as the mean colour of what
  *  it stands for (a single role spread over a box's face reads louder than on the figure); then `figure` of the whole
@@ -449,7 +496,7 @@ export function tinyMesh(
   const parts = boneParts(d, lod, minVerts, minLen)
   const partOf = new Map<number, number>()
   parts.forEach((p, i) => {
-    for (const v of p.vs) partOf.set(v, i)
+    for (const v of [...p.vs, ...p.lent]) partOf.set(v, i) // (the lent feet too: the shin box's foot takes the shoes)
   })
   // each part's area by role and eighth (index 8: the whole part), seen from above: a triangle's role is its first
   // vertex's (the bake splits by role), its eighth its centroid's side of the part's axis, u and w
@@ -506,13 +553,14 @@ export function tinyMesh(
     }
     const centre = [0, 1, 2].map(i => c[i] + ax[i] * mid)
     for (const f of FACES) {
-      // wound outward: the face's normal (by the right hand) away from the box's centre, else turned
+      // its front outward, for Babylon (left-handed, clockwise fronts): the face's right-hand normal toward the box's
+      // centre, else turned
       const [a, bb, cc] = f.map(k => cs[k])
       const e1 = [0, 1, 2].map(i => bb[i] - a[i])
       const e2 = [0, 1, 2].map(i => cc[i] - a[i])
       const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]
       const out = n[0] * (a[0] - centre[0]) + n[1] * (a[1] - centre[1]) + n[2] * (a[2] - centre[2]) > 0
-      const q = out ? f : [f[0], f[3], f[2], f[1]]
+      const q = out ? [f[0], f[3], f[2], f[1]] : f
       idx.push(base + q[0], base + q[1], base + q[2], base + q[0], base + q[2], base + q[3])
     }
   })
@@ -569,6 +617,7 @@ export interface ShadowShape {
   width: number
   height: number
   data: Uint8Array
+  channels: 1 | 2 // 2 with a soft bake: R the shape, G the same blurred by `soft` (interleaved)
   facings: number
   roles: string[]
   // a cell's texels across and along the shadow, its empty border (texels)
@@ -579,6 +628,9 @@ export interface ShadowShape {
   // m: what a cell holds, from the man's root (the shadow's frame)
   across: [number, number]
   along: [number, number]
+  // m: the box the shape alone fills (its own blur's reach), inside across and along (the soft bake's reach on top,
+  // whole blocks of 8 texels): the far strip's (decalStrip, src/look/shadow-look.ts), decision 0049's own
+  base: { across: [number, number]; along: [number, number] }
   dir: [number, number] // the shadow's direction on the ground (x, z): away from the sun
 }
 
@@ -586,7 +638,9 @@ export interface ShadowShape {
  *  figure: a LOD posed at each step of a role's clip (up to maxSteps of them, evenly), turned to each of `facings`
  *  facings (the figure's own turn, as units.ts writes it), its triangles projected along the sun (sun: toward it,
  *  y > 0) onto the ground at its root and rasterised in the shadow's frame (along it, away from the sun; across it),
- *  averaged over the steps (a marching man's legs are one soft wedge) and blurred (blur: its sigma, m). Every soldier
+ *  averaged over the steps (a marching man's legs are one soft wedge) and blurred (blur: its sigma, m). soft (m,
+ *  0: none): a second channel, the same shape blurred by that sigma instead and brought back to the shape's own darkest
+ *  value in its cell (a softer edge, not a lighter shadow: the close zoom's, decision 0062). Every soldier
  *  of a figure casts it: no era names, the roles are the bake's (decision 0015). posed: the LOD's posedVertices, if
  *  already made */
 export function shadowShape(
@@ -599,9 +653,11 @@ export function shadowShape(
     texel = 0.05,
     blur = 0.06,
     maxSteps = 12,
+    soft = 0,
     posed = null as ReturnType<typeof posedVertices> | null,
   } = {},
 ): ShadowShape {
+  if (!(soft >= 0)) throw new Error(`shadowShape: the soft blur must be 0 or more m, not ${soft}`)
   if (!(sun[1] > 0.05)) throw new Error(`shadowShape: the sun must be above the horizon (y ${sun[1]})`)
   const m = d.mesh[lod]
   if (!m) throw new Error(`shadowShape: no LOD ${lod}`)
@@ -657,31 +713,44 @@ export function shadowShape(
   // the blur's reach to spare either way, and an empty border so the bilinear reads never cross into a neighbour
   // (its mips are read too, the mask's texels coarser than its own: a cell's border and size whole texels of the fourth
   // mip, so no mip up to it bleeds into a neighbour)
+  // (the soft bake's wider reach on top, in whole blocks of 8 texels: the shape's texels and its mips' then fall where
+  // they fall without it, base the box it fills alone, so the far zooms' strip draws as before)
   const pad = 3 * blur
   const margin = 8
+  const ex = soft > 0 ? Math.ceil(Math.max(0, 3 * soft - pad) / texel / 8) * 8 : 0
   c0 -= pad
   c1 += pad
   a0 -= pad
   a1 += pad
-  const iw = Math.ceil((c1 - c0) / texel / 8) * 8
-  const ih = Math.ceil((a1 - a0) / texel / 8) * 8
+  const bw = Math.ceil((c1 - c0) / texel / 8) * 8
+  const bh = Math.ceil((a1 - a0) / texel / 8) * 8
+  const base = { across: [c0, c0 + bw * texel] as [number, number], along: [a0, a0 + bh * texel] as [number, number] }
+  c0 -= ex * texel
+  a0 -= ex * texel
+  const iw = bw + 2 * ex
+  const ih = bh + 2 * ex
   const cellW = iw + 2 * margin
   const cellH = ih + 2 * margin
   const W = cellW * facings
   const H = cellH * roles.length
-  const out = new Uint8Array(W * H)
+  const ch = soft > 0 ? 2 : 1
+  const out = new Uint8Array(W * H * ch)
   const sw = iw
   const sh = ih
   const cov = new Uint8Array(sw * sh)
   const sp = new Float64Array(nv * 2)
   const acc = new Float32Array(iw * ih)
   const tmp = new Float32Array(iw * ih)
-  // the blur's kernel (separable)
-  const sg = blur / texel
-  const R = Math.max(1, Math.ceil(3 * sg))
-  const ker = Array.from({ length: 2 * R + 1 }, (_, i) => Math.exp(-((i - R) ** 2) / (2 * sg * sg)))
-  const ks = ker.reduce((a, b) => a + b, 0)
-  for (let i = 0; i < ker.length; i++) ker[i] /= ks
+  const acc2 = new Float32Array(iw * ih)
+  // the blurs' kernels (separable): the shape's, then the soft one's
+  const kernel = (sigma: number) => {
+    const sg = sigma / texel
+    const R = Math.max(1, Math.ceil(3 * sg))
+    const ker = Array.from({ length: 2 * R + 1 }, (_, i) => Math.exp(-((i - R) ** 2) / (2 * sg * sg)))
+    const ks = ker.reduce((a, b) => a + b, 0)
+    return ker.map(v => v / ks)
+  }
+  const kers = soft > 0 ? [kernel(blur), kernel(soft)] : [kernel(blur)]
   roles.forEach((_, r) => {
     for (let k = 0; k < facings; k++) {
       acc.fill(0)
@@ -730,33 +799,48 @@ export function shadowShape(
         for (let i = 0; i < cov.length; i++) acc[i] += cov[i]
       }
       for (let i = 0; i < acc.length; i++) acc[i] /= steps[r].length
-      // blurred across, then along
-      for (let y = 0; y < ih; y++) {
-        for (let x = 0; x < iw; x++) {
-          let s = 0
-          for (let j = -R; j <= R; j++) {
-            const xx = x + j
-            if (xx >= 0 && xx < iw) s += acc[y * iw + xx] * ker[j + R]
+      // blurred across, then along (each channel by its kernel); the soft one brought to the shape's darkest value
+      let peak = 0
+      kers.forEach((ker, c) => {
+        const R = (ker.length - 1) / 2
+        for (let y = 0; y < ih; y++) {
+          for (let x = 0; x < iw; x++) {
+            let s = 0
+            for (let j = -R; j <= R; j++) {
+              const xx = x + j
+              if (xx >= 0 && xx < iw) s += acc[y * iw + xx] * ker[j + R]
+            }
+            tmp[y * iw + x] = s
           }
-          tmp[y * iw + x] = s
         }
-      }
-      for (let y = 0; y < ih; y++) {
-        for (let x = 0; x < iw; x++) {
-          let s = 0
-          for (let j = -R; j <= R; j++) {
-            const yy = y + j
-            if (yy >= 0 && yy < ih) s += tmp[yy * iw + x] * ker[j + R]
+        let top = 0
+        for (let y = 0; y < ih; y++) {
+          for (let x = 0; x < iw; x++) {
+            let s = 0
+            for (let j = -R; j <= R; j++) {
+              const yy = y + j
+              if (yy >= 0 && yy < ih) s += tmp[yy * iw + x] * ker[j + R]
+            }
+            acc2[y * iw + x] = s
+            top = Math.max(top, s)
           }
-          out[(r * cellH + margin + y) * W + k * cellW + margin + x] = Math.round(255 * Math.min(1, s))
         }
-      }
+        if (c === 0) peak = top
+        const g = c === 0 || top === 0 ? 1 : Math.min(peak, 1) / top
+        for (let y = 0; y < ih; y++) {
+          for (let x = 0; x < iw; x++) {
+            const v = Math.round(255 * Math.min(1, acc2[y * iw + x] * g))
+            out[((r * cellH + margin + y) * W + k * cellW + margin + x) * ch + c] = v
+          }
+        }
+      })
     }
   })
   return {
     width: W,
     height: H,
     data: out,
+    channels: ch,
     facings,
     roles: [...roles],
     cellW,
@@ -765,6 +849,7 @@ export function shadowShape(
     texel,
     across: [c0, c0 + iw * texel],
     along: [a0, a0 + ih * texel],
+    base,
     dir: [A[0], A[1]],
   }
 }

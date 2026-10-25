@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-23
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
-decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod]
+last_reviewed: 2026-10-24
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
+decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom]
 ---
 
 # The look page (Track E, L0)
@@ -580,11 +580,17 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
 - **The figure**: `tools/bake-figure.py` (Blender, `-- <published figure dir>`) bakes the published GLBs into
   `data/figures/<figure>.unitdata` (`src/look/units-data.ts` reads and checks it): its LODs nearest first (here
   three: the full figure, 9,274 triangles, then 1,197 and 243; the page reads two or three), each vertex's colour role (the reds told from the skin by hue, the face's shaded side kept skin, the coat's violet shade kept coat: #133's review, `texel_role`, `tri_role`) (coat, facings, white, dark, skin, leather, pack, wood, metal: from the
-  texture's colour, the musket by its bone, the pack by its place), and the bones' matrices at 12 fps for the clips
+  texture's colour, the musket by its bone, the pack by its place), its triangles in the glTF's order (the reflection
+  into Babylon's left-handed space makes them the clockwise fronts Babylon draws: reversed, every man was drawn inside
+  out, a face on the back of his head, #164; the bake asserts a negative signed volume, `test/armies.test.ts` too;
+  format version 3, the decoder refuses 2), each bone's parent, and the bones' matrices at 12 fps for the clips
   each **role** uses (halt: Stand; march: Walking; run: Running; fire: Present, Aim, Fire, Reload), with the root
   speeds that keep the feet planted. The page names roles, never clips (decision 0015). At load: the far LOD posed at
   every step (`posedVertices`: a place and a normal, two float texels a vertex) and the **shadow proxy** built from it
-  and posed (`shadowProxy`, `posedMesh`: two crossed quads along each part a bone carries, 112 vertices, 56 triangles).
+  and posed (`shadowProxy`, `posedMesh`: two crossed quads along each part a bone carries, 112 vertices, 56 triangles;
+  a bone too small to be a part near the ground, a foot, lends its vertices to the first part up its chain of parents,
+  the shin, whose quads then run down to the soles by at most 25 cm, so the shadow starts at the feet: `boneParts`,
+  #165).
 - **The renderer** (`src/look/units.ts`): a thin-instanced host a battalion for each of the near LOD, the far LOD and
   the proxy; the near LOD skinned from the bones' texture (`texelFetch`), the far LOD and the proxy posed (`VAT_POS`;
   `?uvat=0`: the far LOD skinned); a man's step from his clip's first row, its length and his phase. Materials are
@@ -595,12 +601,14 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   is split, each man whose sphere is in the view and who stands taller than it (±10 %) drawn at the nearest LOD, the rest
   at the near one (`setSplit`, `share`: the next LOD's buffers swapped to the rest's list; the lists written again
   when a man changes LOD or the men move); skinned like the near LOD. A battalion's nearest-LOD mesh and lists are made at its first split (about 1 MB of geometry a battalion otherwise), then disabled while unsplit. Only within about
-  28 m of a man at 1080 lines (the closest zooms: 0 at 45 m); the shadow is still the proxy's. The pose's step is counted on the CPU (`uVATStep`, the clock's
+  28 m of a man at 1080 lines (the closest zooms: 0 at 45 m); its shadow is the simple shadow (with the map, the proxy's). The pose's step is counted on the CPU (`uVATStep`, the clock's
   floor in double precision), so the figures and their shadows never disagree on a step; a battalion's bounds are
   padded by the tallest figure (2.6 m, as tall as the far figures grow) and the farthest reach of the baked poses (as
   wide as they grow), and by the next step's places. The view's corner rays are cast once a frame
-  (`castView`) for the sun's box, the simple shadows' mask and the trodden mask's.
-- **Their shadows up close** (decision 0047, kept at close zoom by 0049; `?unitshadow=0`: none): a 2048² depth-only map (24 bits, a comparison sampler), the
+  (`castView`) for the sun's box (with the map) and the trodden mask's.
+- **The figures' shadow map** (decision 0047; since decision 0062 drawn only behind its switches, `?ushadowclose=map`:
+  up close with the cross-fade below, 0049's default; `?ushadowfar=map`: at every zoom; without them its target, its
+  uniforms and the receivers' reads are never made, `useMap`): a 2048² depth-only map (24 bits, a comparison sampler), the
   sun's box fitted to the ground in view's own heights and centred on what it holds, its near and far fitted along the
   sun. Drawn only when it would change (the poses' step, a battalion's men, the casters, the box; `?ushadowrate=0`:
   every frame), the box held while the view stays inside its slack of 10 % of the view's half-size, 6 m at least
@@ -612,18 +620,45 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   (`UNIT_SHADOWS_VS`, `meadow.vert`; `?ushadowvs=0`: every pixel). The texel at r15 / r45 / r125 / r260: 2.9 × 2.1 (at the most oblique pitch; 1.8 × 1.8 at the steepest), 3.9 × 2.5,
   9.2 × 5.5, 18.4 × 10.4 cm in the sun's view (× 2.2 along the sun on the ground), the slack's 10 % on top while held.
   The merged mass under a battalion is the low sun's: 3.6 m shadows over ranks 0.85 m apart.
-- **Their shadows beyond: the simple shadows** (decision 0049, `docs/plans/active/simple-soldier-shadows.md`;
-  `?ushadowfar=map`: the map at every zoom). Every soldier of a figure looks alike, so one shape: `shadowShape`
-  (`src/look/units-data.ts`, at load, about 85 ms) projects the far LOD, posed at up to 12 steps of each role's clip and
-  turned to 16 facings, along the sun onto the ground, averages the steps (a marching man's legs one soft wedge) and
-  blurs it; an R8 atlas, mipmapped, a cell a facing and a role. Each soldier draws it himself, in the main pass after
+- **Their shadows: the simple shadows, at every zoom** (decisions 0049 and 0062,
+  `docs/plans/active/simple-soldier-shadows.md`, `docs/plans/done/soft-shadows-all.md`; `?unitshadow=0`: none). Every
+  soldier of a figure looks alike, so one shape: `shadowShape` (`src/look/units-data.ts`, at load) projects the far LOD,
+  posed at up to 12 steps of each role's clip and turned to 16 facings, along the sun onto the ground, averages the
+  steps (a marching man's legs one soft wedge) and blurs it; an RG8 atlas, mipmapped, a cell a facing and a role: R the
+  shape, G the same blurred wider (`SOFT_BLUR`) and brought back to R's darkest value in its cell; the soft bake's
+  reach is padded on in whole blocks of 8 texels, so R's texels and mips are where they are without it (`base`, the
+  box R fills). Each soldier draws it himself, in the main pass after
   everything else (`unitdecal.vert`, `unitdecal.frag`): one more mesh a battalion on its own instance buffers, a 1 × 3
   grid a man (2 m a cell: the widest view is bound by its vertices) from his feet along the shadow, each vertex on the
   ground (the meadow map's height, or without one the heightfield's, sampled into a texture at load) and drawn toward
   the camera along its view ray by `?udecallift` (0.6 m, growing from 0 at his feet over 1.5 m so it never covers his
   own shins: over the grass and the legs of the men in it in depth, no shift on screen); his facing picks two cells,
   blended, read through the atlas's mips up to the third (a cell's border holds no further), his clip's first step his
-  role's row, and it grows with the far figures (`FAR_SCALE`). The fragment reads the atlas and the ground's shade:
+  role's row, and it grows with the far figures (`FAR_SCALE`). **Its look a zoom** (decision 0062, `SHADOW_LOOK`):
+  softness (the share of G against R), darkness (the share of the ground's full shadow) and length (along the sun past
+  the soles: the grid's second row lies at the soles, so each triangle lies on one side of them and the feet stay put);
+  along each shadow from the soles like a real one's (contact hardening): over a core (`core`, m) the shape itself at
+  the soles' darkness (`foot`), then to the tip (a man's height over the sun's tangent, times the length) up to
+  `soft` of the blurred bake and down to the tip's darkness (`dark`), fragment arithmetic on the distance along it
+  (`vAlong`, at the shape's own size: the far figures' growth leaves it), no more reads. **The darkness is coverage**:
+  every shadow darkens a sample it covers by the same amount (the look's darkest), covering a share of the samples
+  (darkness ÷ darkest × the shape's value), so overlaps take the darkest whatever the draw order (the stencil still
+  darkens each sample once; review round 1: as a colour, a light tip drawn first bit into the next man's contact, and
+  the battalions' sorted order flipped while panning; `decalFragment` in `src/look/shadow-look.ts` mirrors the rule
+  for its tests). Alpha to coverage with the scene's 4 samples; with fewer (`?msaa=1|2`; two samples would make the
+  gradient one hard step where the driver does not dither) the share darkens the pixel, smooth, the first shadow
+  there winning (overlaps order-dependent there; an empty texel marks none). Checked on Metal
+  (review round 2): no contour bands along the gradient, overlaps no darker than the darker shadow alone.
+  **The strip** (`decalStrip`, `uStrip` and `uRows`, set when the look changes): turned with the look by its far
+  share, from the close one (the full box, the soft bake's reach, with rows at the soles and where the lift's ramp
+  ends, so the lift, linear between rows, is whole there) to decision 0049's (the shape's own box, `base`, rows evenly
+  spaced: the far zooms as main's, a third fewer fragments than the full box); the atlas stays anchored at `uShapeAt`
+  whatever the strip; the decal's bounds padded by the soft bake's reach; up close softer, lighter at the tip, shorter, dark and solid at the feet; far 0049's look
+  (one value end to end), turned from one to the other by a smoothstep of the camera's
+  distance to its focus over `SHADOW_LOOK_BAND` (45 to 85 m; with `?ushadowclose=map` the far look everywhere).
+  `?ushsoft`, `?ushdark`, `?ushlen` (`<close>[,<far>]`), `?ushfoot=<dark>,<core>[,<far dark>,<far core>]` and
+  `?ushband=<r0>,<r1>` tune it live; `Units.lookNow` is
+  this frame's. The fragment reads the atlas and the ground's shade:
   the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
   shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so
   a formation's overlapping shadows darken each sample once, at every distance (with fewer samples, `?msaa=1|2`, the
@@ -637,7 +672,7 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   and no reads in the receivers. Each man's shadow
   moves every frame with smooth places (below: `aNext`, his move to his next step's place, written with his place;
   `uStepFrac`, the share of the step gone, from the CPU's clock), else at
-  the steps with his figure. **The cross-fade**: by the camera's distance to its focus, from the map alone at 60 m to
+  the steps with his figure. **The cross-fade** (only with `?ushadowclose=map`): by the camera's distance to its focus, from the map alone at 60 m to
   the simple shadows alone at 85 m (`SHADOW_SWITCH`, `?ushadowswitch=<r0>,<r1>`; the LOD switch, 48 px at 1080 lines,
   is at 63 m), `uUnitFar` their share: the receivers take 1 − it of the map (`unitShadowMix`), the decals it of their
   darkening; the map is drawn only while its share is over 0, and fitted afresh when it comes back. (First built as a
@@ -657,7 +692,8 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   forces the rule off or on for every uniform.
 - **The tiny LOD** (`docs/plans/active/armies-32k.md`, step 3, experimental; `?tinylod=0`: none, `?tinypx=<px>`: its
   switch): a battalion whose figure falls under 12 px tall (±10 %) draws the far LOD's parts as boxes instead (`tinyMesh`,
-  `src/look/units-data.ts`: the shadow proxy's parts, `boneParts`, 8 shared corners each, 112 vertices), a corner's
+  `src/look/units-data.ts`: the shadow proxy's parts, `boneParts`, 8 shared corners each, 112 vertices, wound with
+  their fronts out as the figure's, #164), a corner's
   colour a mix of the roles (`TINY`: three vec4 weights) calibrated at load so the boxes show each role in the far
   LOD's seen share (`seenArea`: both rasterised from 8 sides), posed as the far LOD and painted by its material (far
   palette, lift, growth, the smooth moves between steps); the coat mask dithered by the coat's weight (a 4 × 4 ordered
