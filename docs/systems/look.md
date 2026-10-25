@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-24
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
-decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom]
+last_reviewed: 2026-10-25
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/lod-fade.ts, test/lod-fade.test.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, test/look-units.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
+decisions: [0066-figures-lod-cross-fade, 0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom]
 ---
 
 # The look page (Track E, L0)
@@ -562,6 +562,8 @@ camera: `l2` (the page) and `l0` (the L0 grain on the terrain); `?bench=dof` `no
 with the blur off unless its URL sets `?dof`, as do the debug views, `?water` and `?river=debug`, which write no
 distance to alpha). `?benchat=<x>,<z>` (within the play area) makes the
 cameras orbit that point instead of the camera's start, and the JSON records it as `focus` (the forest bench).
+`?benchr=<m>[,<m>…]` measures those radii at the start's pitch instead of close, default and wide (the LOD
+cross-fade's bench, `docs/plans/active/lod-fade.md`).
 - **GPU time** comes from our own `EXT_disjoint_timer_query_webgl2` queries (`src/look/gputimer.ts`). Queries
   cannot nest: whole-frame time is taken on alternate frames, the passes (terrain, scatter, water, other,
   post) on the others, each as segments of consecutive draws, only in the camera's own render pass. Frames with
@@ -602,7 +604,9 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   `?uvat=0`: the far LOD skinned); a man's step from his clip's first row, its length and his phase. Materials are
   per uniform and LOD. The figures are painted as the army blocks (`KEEP_HUE`, `BOUNCE`, `NOSNOW`) and blur by their
   depth (decision 0040). A battalion's instances are written when it moves (once a 1/12 s step) or changes phase; its
-  LOD by the figure's height in pixels (48, ±10 %: `drawsNear`, `drawsTiny` in `src/look/units-data.ts`). **The nearest LOD** (a figure with three, decision 0051;
+  LOD by the figure's height in pixels (48; the tiny LOD's 12), **cross-faded per man** (below; `?lodfade=0`: the hard
+  switch, a battalion wholly at one LOD by its centre's height, ±10 %: `drawsNear`, `drawsTiny` in
+  `src/look/units-data.ts`). **The nearest LOD** (a figure with three, decision 0051;
   `?nearestpx=<px>`, 0: none): a battalion whose bounds' nearest point is within 90 % of `nearestPx` (100 px) and in the view
   is split, each man whose sphere is in the view and who stands taller than it (±10 %) drawn at the nearest LOD, the rest
   at the near one (`setSplit`, `share`: the next LOD's buffers swapped to the rest's list; the lists written again
@@ -706,6 +710,18 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   palette, lift, growth, the smooth moves between steps); the coat mask dithered by the coat's weight (a 4 × 4 ordered
   dither); it never casts into the map, and its men keep their simple shadows (decision 0049) as the far LOD's do. A
   host's LODs: the figure's nearest first, the shadow proxy, the simple shadow, then the tiny LOD (built only when on).
+- **The LOD cross-fade** (decision 0066, `docs/plans/active/lod-fade.md`, #188; `src/look/lod-fade.ts`, tested in
+  `test/lod-fade.test.ts`; `?lodfade=0`: the hard switch): in a band round each switch (`NEAR_FADE`, `TINY_FADE`: 0.8
+  to 1.25 × it) a battalion draws both LODs and each man is drawn at his own LOD by his own height on screen (his
+  root's distance, as the far palette's), switching at his own point in the band (`manHash` of his instance) over a
+  fade of his own (`FADE_WIDTH`, 35 % of the band on a log scale) by the 4 × 4 ordered dither: a pixel's threshold
+  picks exactly one LOD (`lodCover`, `lodAt`; `units.vert` and `units.frag` mirror them under `LODFADE`, `LOD_SLOT`), so
+  a man is never hidden and nothing is blended or sorted. A LOD's men outside it are dropped in the vertex shader (off
+  screen). A battalion draws a second LOD only while one of its men can be in a band (`lodsDrawn`, by its bounds'
+  nearest and farthest points, `boxPxRange`); a split battalion's lists are not in its men's order, so its meshes draw
+  every man (`uLodFade` 0, set as each binds the shared material) and it draws as before. Measured on Metal (the plan):
+  the step a switch made in one frame (1.2 to 3.4 ΔE on a battalion's block) spread over the band; the LODs' colours
+  still differ (the far LOD's coverage and facings, the tiny's mix), the fade spreads it.
 - **Far figures larger** (`?farscale=0`: their own size): the far LOD grows as the figure falls from 90 % of the LOD
   switch to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here; `farWidthScale` in
   `src/look/units-data.ts`) and 1.15 tall; render only.

@@ -3,11 +3,19 @@ precision highp float;varying vec3 vW,vN,vCol;varying vec2 vRoot;varying float v
 // the guard's masks (tools/guard.mjs --figures, Units.setMask): off below 0, else flat uMask, or (2) white where the
 // coat shows (uCoatRole), black elsewhere
 uniform float uMask,uCoatRole;
+#if defined(TINY)||defined(LODFADE)
+// an ordered dither (4 × 4 Bayer): a share exact over each 4 × 4 block, at any resolution
+const int BAYER4[16]=int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
+float bayer(){ivec2 q=ivec2(gl_FragCoord.xy)&3;return (float(BAYER4[q.y*4+q.x])+0.5)/16.0;}
+#endif
 #ifdef TINY
 // the tiny LOD's coat weight (units.vert): the coat mask dithered by it, so the guard's coat share means the same
 varying float vCoatW;
-// an ordered dither (4 × 4 Bayer): the mask's share of the coat's weight exact over each 4 × 4 block, at any resolution
-const int BAYER4[16]=int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
+#endif
+#ifdef LODFADE
+// the LOD cross-fade (units.vert, decision 0066): a man's cover, each pixel of him drawn by the one LOD its threshold
+// falls in (lodAt, src/look/lod-fade.ts): the near below vFade.x, the far up to vFade.y, the tiny from it
+varying vec2 vFade;
 #endif
 #ifdef FAR
 // the far figure's lift (?farpal=1), as it shrinks (vFar, units.vert): the trees' and hills' shadow on it halved, and
@@ -22,10 +30,20 @@ varying float vFar;
 // (his root's ground), the units' light (KEEP_HUE: the mood's units tint, mist and grade, decisions 0027, 0035), the
 // air over him, and his lens term (a unit blurs by its depth as everything does, decision 0040)
 void main(){
+  #ifdef LODFADE
+  float q=bayer();
+  #if LOD_SLOT==0
+  if(q>=vFade.x)discard;
+  #elif LOD_SLOT==1
+  if(q<vFade.x||q>=vFade.y)discard;
+  #else
+  if(q<vFade.y)discard;
+  #endif
+  #endif
   if(uMask>-0.5){
     float v=uMask>1.5?step(abs(vRole-uCoatRole),0.5):uMask;
     #ifdef TINY
-    if(uMask>1.5){ivec2 q=ivec2(gl_FragCoord.xy)&3;v=step((float(BAYER4[q.y*4+q.x])+0.5)/16.0,vCoatW);}
+    if(uMask>1.5)v=step(bayer(),vCoatW);
     #endif
     gl_FragColor=lensOut(vec3(v),vW);return;}
   vec3 N=normalize(vN);vec4 lm=LM(vW);

@@ -24,9 +24,21 @@ varying float vD;
 #else
 // a side's colours by role (the bake's palette, src/look/world/armies.ts): a palette swap recolours the side
 uniform vec3 uPal[PAL_N];
-#if defined(FAR)||defined(FAR_SCALE)
+#if defined(FAR)||defined(FAR_SCALE)||defined(LODFADE)
 // the far figure's size on screen: uFarK.x, a figure's height in pixels at 1 m; uFarK.y, the LOD switch's
 uniform vec2 uFarK;uniform vec3 uCamPos;
+#endif
+#ifdef LODFADE
+// the LOD cross-fade (#188, decision 0066; src/look/lod-fade.ts mirrors manHash, fadeShare, lodCover): each man at his
+// own LOD by his own height on screen. uLodBand: the near band's px (x to y) and the tiny's (z to w; 0: none);
+// uLodFade: 1 when this draw's instances are in the battalion's order (gl_InstanceID is the man), 0 (a split
+// battalion's lists) to draw every man; LOD_SLOT: this material's LOD (0 near, 1 far, 2 tiny). vFade: his cover
+// (lodCover: near, far), the dither's thresholds in units.frag; a man with no share here is dropped (off screen)
+uniform vec4 uLodBand;uniform float uLodFade;varying vec2 vFade;
+float manHash(int i){uint x=uint(i)*0x9e3779b9u;x^=x>>16;x*=0x21f0aaadu;x^=x>>15;x*=0x735a2d97u;x^=x>>15;
+  return float(x>>8)/16777216.0;}
+float fadeShare(float px,vec2 b,float h){if(b.y<=0.0)return 1.0;
+  float t=log(max(px,1e-6)/b.x)/log(b.y/b.x);return clamp((t-h*(1.0-LOD_FADE_W))/LOD_FADE_W,0.0,1.0);}
 #endif
 #ifdef FAR
 // the far LOD's palette (its uniform's far rule: farPalette, src/look/world/armies.ts), crossfaded in as the figure
@@ -73,6 +85,14 @@ void main(){
   #endif
   vec4 w=finalWorld*vec4(lp,1.0);
   vec4 p=viewProjection*w;
+  #if defined(LODFADE)&&!defined(DEPTH)
+  vFade=vec2(LOD_SLOT==0?1.0:0.0,LOD_SLOT==2?0.0:1.0);
+  if(uLodFade>0.5){
+    float mh=manHash(gl_InstanceID),mpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz));
+    float fn=fadeShare(mpx,uLodBand.xy,mh);vFade=vec2(fn,max(fn,fadeShare(mpx,uLodBand.zw,mh)));
+    bool none=LOD_SLOT==0?fn<=0.0:LOD_SLOT==1?fn>=1.0||vFade.y<=0.0:vFade.y>=1.0;
+    if(none)p=vec4(0.0,0.0,2.0,1.0);}
+  #endif
   #ifdef DEPTH
   vD=p.z/p.w*0.5+0.5;
   #else
