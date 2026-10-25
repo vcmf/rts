@@ -6,10 +6,14 @@ import { type World, MAX_FORMATIONS, M_TICK, M_SEED, outOfFight, typeOf, formati
 import { DT } from './time.ts'
 import { mkPlaces, placesCtx, placeAtSlot, filledSlots, type Places } from './formation.ts'
 import { keyedStream, nextU32 } from './rng.ts'
+import { sin, cos, PI } from './num.ts'
+import { impAt } from './terrain.ts'
 
 // the margin round a formation's own cells, in cells (a cell is the terrain's: 2 m on the bench field)
 const MARGIN = 1
 const K_ORDER = 0x434c // the keyed draw that orders the formations in a tick
+// a change of shape claims the ground it will sweep until it ends, sampled at this many poses ahead
+const SWEEP = 6
 
 /** Claims per cell: SLOTS entries per terrain cell (owner slot + 1, times 2, plus 1 for its core), and a mark for
  * a cell claimed by more formations than that. */
@@ -58,7 +62,7 @@ function claimsOf(w: World): Claims {
     ctx: mkPlaces(w),
     seen: new Int32Array(n),
     epoch: 0,
-    list: new Int32Array(MAX_FORMATIONS * w.cr.maxSlots),
+    list: new Int32Array(MAX_FORMATIONS * w.cr.maxSlots * (SWEEP + 1)),
     count: new Int32Array(MAX_FORMATIONS),
     at: new Int32Array(MAX_FORMATIONS).fill(-1),
     gen: new Int32Array(MAX_FORMATIONS),
@@ -102,27 +106,44 @@ export function claimFormation(w: World, i: number): void {
   const B = C.own1
   B.set([Infinity, Infinity, -Infinity, -Infinity], i * 4)
   const ep = ++C.epoch
-  const L = i * w.cr.maxSlots
+  const L = i * w.cr.maxSlots * (SWEEP + 1)
+  const now = w.meta[M_TICK] * DT
+  // during a change of shape, the poses still to come (docs/plans/active/c1-claims.md, step 3): the ground it will
+  // sweep is claimed now, so no one walks into a square half formed
+  const end = f.trans[i] ? changeEnd(w, i) : now
+  const poses = end > now ? SWEEP : 0
   let n = 0
-  for (let k = F.at[i * (CS + 1)]; k < F.at[i * (CS + 1) + U.C]; k++) {
-    placeAtSlot(C.ctx, F.s[k], pt)
-    B[i * 4] = Math.min(B[i * 4], pt[0])
-    B[i * 4 + 1] = Math.min(B[i * 4 + 1], pt[1])
-    B[i * 4 + 2] = Math.max(B[i * 4 + 2], pt[0])
-    B[i * 4 + 3] = Math.max(B[i * 4 + 3], pt[1])
-    const gx = Math.round((pt[0] - T.x0) / T.cell)
-    const gz = Math.round((pt[1] - T.z0) / T.cell)
-    if (gx < 0 || gz < 0 || gx >= T.n || gz >= T.n) continue
-    const c = gz * T.n + gx
-    if (C.seen[c] === ep) continue
-    C.seen[c] = ep
-    C.list[L + n++] = c
+  for (let p = 0; p <= poses; p++) {
+    if (p > 0) placesCtx(C.ctx, i, f.x[i], f.z[i], f.heading[i], now + ((end - now) * p) / poses, 0)
+    for (let k = F.at[i * (CS + 1)]; k < F.at[i * (CS + 1) + U.C]; k++) {
+      placeAtSlot(C.ctx, F.s[k], pt)
+      B[i * 4] = Math.min(B[i * 4], pt[0])
+      B[i * 4 + 1] = Math.min(B[i * 4 + 1], pt[1])
+      B[i * 4 + 2] = Math.max(B[i * 4 + 2], pt[0])
+      B[i * 4 + 3] = Math.max(B[i * 4 + 3], pt[1])
+      const gx = Math.round((pt[0] - T.x0) / T.cell)
+      const gz = Math.round((pt[1] - T.z0) / T.cell)
+      if (gx < 0 || gz < 0 || gx >= T.n || gz >= T.n) continue
+      const c = gz * T.n + gx
+      if (C.seen[c] === ep) continue
+      C.seen[c] = ep
+      C.list[L + n++] = c
+    }
   }
   C.count[i] = n
   C.at[i] = C.built
   C.gen[i] = f.gen[i]
   stamp(w, C, i)
   samePose(w, C, i, true)
+}
+
+// when formation i's change of shape ends: its last company's delay and the change's duration past its start
+function changeEnd(w: World, i: number): number {
+  const f = w.f
+  const CS = w.cr.maxC
+  let d = 0
+  for (let c = 0; c < typeOf(w, i).C; c++) d = Math.max(d, f.tDelay[i * CS + c])
+  return f.tStart[i] + d + f.tDur[i]
 }
 
 // whether formation i stands as it did at its last claim: not changing shape, the same anchor, heading, men and lags
@@ -150,12 +171,12 @@ function samePose(w: World, C: Claims, i: number, set = false): boolean {
 // stamps formation i's listed core cells, and a margin round each, into the grid, and its box into the tick's
 function stamp(w: World, C: Claims, i: number): void {
   const T = w.terrain
+  const L = i * w.cr.maxSlots * (SWEEP + 1)
   const B = C.box
   B[i * 4] = Math.min(B[i * 4], C.own1[i * 4])
   B[i * 4 + 1] = Math.min(B[i * 4 + 1], C.own1[i * 4 + 1])
   B[i * 4 + 2] = Math.max(B[i * 4 + 2], C.own1[i * 4 + 2])
   B[i * 4 + 3] = Math.max(B[i * 4 + 3], C.own1[i * 4 + 3])
-  const L = i * w.cr.maxSlots
   for (let m = 0; m < C.count[i]; m++) {
     const c = C.list[L + m]
     const gx = c % T.n
@@ -247,6 +268,58 @@ export function claimsNear(w: World, i: number): boolean {
     }
   }
   return false
+}
+
+/**
+ * Whether formation i, formed, would stand clear of every other formation in the fight with its anchor at (x, z),
+ * heading h: none of its places on a cell another such formation claims, core or margin. A rally asks it before the
+ * router forms again (docs/plans/active/c1-claims.md, step 3), so it never forms inside a friend.
+ */
+export function formedFits(w: World, i: number, x: number, z: number, h: number): boolean {
+  const C = w.scratch.claims
+  if (!C) return true
+  const T = w.terrain
+  const f = w.f
+  const U = typeOf(w, i)
+  const CS = w.cr.maxC
+  const F = filledSlots(w, i)
+  placesCtx(C.ctx, i, x, z, h, w.meta[M_TICK] * DT, 0)
+  for (let k = F.at[i * (CS + 1)]; k < F.at[i * (CS + 1) + U.C]; k++) {
+    placeAtSlot(C.ctx, F.s[k], pt)
+    const gx = Math.round((pt[0] - T.x0) / T.cell)
+    const gz = Math.round((pt[1] - T.z0) / T.cell)
+    if (gx < 0 || gz < 0 || gx >= T.n || gz >= T.n) return false
+    const c = gz * T.n + gx
+    if (C.more[c]) return false
+    for (let q = c * SLOTS; q < c * SLOTS + SLOTS && C.own[q]; q++) {
+      const o = (C.own[q] >> 1) - 1
+      if (o !== i && !outOfFight(f.mstate[o])) return false
+    }
+  }
+  return true
+}
+
+// the rings a router looks for free ground on: their spacing and how many (out to 160 m), the directions on each
+const RING = 20
+const RINGS = 8
+const DIRS = 12
+
+/**
+ * The nearest place where formation i fits formed (`formedFits`), facing as it does: on rings of RING metres round its
+ * anchor, DIRS directions each, nearest first and, on a ring, from straight ahead round clockwise. Null if none.
+ */
+export function freeSpot(w: World, i: number): [number, number] | null {
+  const f = w.f
+  for (let r = 1; r <= RINGS; r++) {
+    for (let d = 0; d < DIRS; d++) {
+      const a = f.heading[i] + (2 * PI * d) / DIRS
+      const x = f.x[i] + sin(a) * r * RING
+      const z = f.z[i] + cos(a) * r * RING
+      if (!w.terrain || impAt(w.terrain, w.terrain.imp[0], x, z)) continue
+      if (formedFits(w, i, x, z, f.heading[i])) return [x, z]
+    }
+  }
+  return null
 }
 
 /** Whether another formation's claim blocked formation i in this tick's step: the stall is theirs, not the ground's */
