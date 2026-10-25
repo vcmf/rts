@@ -28,6 +28,9 @@ uniform sampler2D uMeadow;
 // along the ground, uFarScale.y up): his shadow with him, its footprint about his feet by x, its cast length (what his
 // height throws along the sun, past his feet) by y
 uniform vec2 uFarK,uFarScale;
+#ifndef FAR_FROM
+#define FAR_FROM 0.9
+#endif
 #endif
 varying vec2 vUV0,vUV1,vLM;varying float vT,vAlong;
 void main(){
@@ -38,7 +41,7 @@ void main(){
   vec2 l=uStrip.xy+q*uStrip.zw,l0=l;
   vAlong=l.y*(l.y>0.0?uShLen:1.0);
   #ifdef FAR_SCALE
-  float fpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz)),fg=clamp((0.9*uFarK.y-fpx)/(0.65*uFarK.y),0.0,1.0);
+  float fpx=uFarK.x/max(1.0,distance(uCamPos,finalWorld[3].xyz)),fg=clamp((FAR_FROM*uFarK.y-fpx)/((FAR_FROM-0.25)*uFarK.y),0.0,1.0);
   l*=vec2(mix(1.0,uFarScale.x,fg),mix(1.0,l.y>0.0?uFarScale.y:uFarScale.x,fg));
   #endif
   l.y*=l.y>0.0?uShLen:1.0;

@@ -17,11 +17,14 @@ LOD loses the facings' red and the belts' white, the tiny boxes read lighter and
 ## Decision
 
 - In a band round each switch (0.8 to 1.25 × its height on screen) a battalion draws both LODs and each man is drawn
-  at his own LOD by his own height on screen, switching at his own point in the band (a hash of his instance), over a
+  at his own LOD by his own height on screen, switching at his own point in the band (a hash of his index in his battalion), over a
   short screen-door dither: each pixel of him drawn by exactly one LOD. No alpha blending and no sorting; a man is
   never hidden.
 - A battalion draws a second LOD only while one of its men can be in a band; outside the bands it draws one, as
-  before. A split battalion (the nearest LOD) draws as before.
+  before. A split battalion (its nearest men at the nearest LOD) fades the same way: its men not at the nearest keep
+  their own LODs, so the nearest LOD's switch moves no other man.
+- The far palette, lift and growth start at the band's foot (0.8 × the switch), so across the band the far LOD is as
+  it was at the old switch.
 - `?lodfade=0` restores the hard switch.
 
 ## Consequences

@@ -58,15 +58,17 @@ measured small) stays as it is. Not the LODs' own geometry or the tiny's calibra
 
 - **A band round each switch** (`src/look/lod-fade.ts`): 0.8 to 1.25 × the switch's height, where a battalion draws
   both LODs and **each man is drawn at his own LOD by his own height on screen** (his root's distance, as the far
-  palette's crossfade already measures it), switching at his own point in the band (a hash of his instance), over a
+  palette's crossfade already measures it), switching at his own point in the band (a hash of his index in his battalion), over a
   short fade of his own (35 % of the band, on a log scale) by a **screen-door dither** (the 4 × 4 ordered pattern the
   tiny's coat mask uses): a pixel's threshold picks exactly one LOD for it, so every pixel of a man is drawn once, by
   one LOD. No alpha blending, no sorting, nothing hidden: a man is always drawn whole, part one LOD and part the other.
 - **Cost bounded**: a battalion draws a second LOD only while one of its men can be in a band (its bounds' nearest and
   farthest points' heights on screen, `lodsDrawn`); a LOD's men outside it are dropped in the vertex shader (off
   screen, no fragments). Outside the bands one LOD a battalion, as before.
-- **A split battalion** (its nearest men at the nearest LOD, its lists reordered) draws as before: the near LOD for
-  all its other men (`uLodFade` 0 for its meshes, set as each binds the shared material).
+- **A split battalion** (its nearest men at the nearest LOD, its lists reordered) fades too: each man's index travels
+  with him in his list (`aMan`), so his hash is the same whichever list draws him (review round 1: first built
+  drawing a split battalion's other men all near, which popped its men inside the near band at the split's on and
+  off).
 - `?lodfade=0` restores the hard switch (the A/B).
 
 ## Acceptance
@@ -101,7 +103,8 @@ the larger one (above) and is spread, not removed. Frame strips for the owner, m
 **The goldens** (`node tools/golden.mjs`, main against the branch): the page's default identical; with `?armies=20`
 within tolerance (0.007 % and 0.005 % of the river and far-edge views' pixels differ: battalions inside a band).
 
-**The cost** (`node tools/bench-look.mjs <url>?armies=20&benchr=40,63,125,250 --gpu metal`, 1920 × 1080, two rounds,
+**The cost, first build** (before review round 1; `node tools/bench-look.mjs <url>?armies=20&benchr=40,63,125,250
+--gpu metal`, 1920 × 1080, two rounds,
 both arms, the three yaws a zoom; frame p50 / GPU frame p50, ms):
 
 | zoom (m) | main | `?lodfade=0` | no `discard` (vertex drop only) | branch |
@@ -116,10 +119,42 @@ About +0.15 to +0.35 ms a frame (2 to 5 %), at every zoom: at 20 a side some bat
 be in the band). `?lodfade=0` is main's cost; the dither's `discard` is about a third of it, the second LOD's vertices
 the rest (triangles drawn +2 % at 40 m to +21 % at 250 m). A narrower band costs less and spreads less.
 
+**Review round 1.** A split battalion (the nearest LOD) drew its other men all near, so its men inside the near
+band popped near at the split's on and off: each man's index now travels with him in his list (`aMan`) and is
+hashed instead of his instance, and a split battalion fades as any other (`battalionLods`). A battalion drawing one
+LOD skips the per-man work (`uLodFade` 0). The far palette, lift and growth start at the band's foot (`FAR_FROM`). The
+tiny's coat mask rescales the dither over its share. The cover is snapped to the dither's 16 levels instead of a flat
+varying: flat cost 1.5 to 4 ms of GPU on ANGLE's Metal (measured: GPU p50 13.79 → 17.69 ms at 63 m with flat, 14.11
+without), the snap changes no pixel (tested).
+
+- **The split, fixed camera** (`?trample=0`, the battalion's nearest LOD forced on, `nearestPx` 100, and off, 1000;
+  the frame's difference over the battalion's far third): battalion 5 at 66 px, split with none of its men at the
+  nearest in view and its far end inside the band: the first build moved 0.9 % of those pixels (mean ΔE 0.27), the
+  branch none (0.00), main none. At 26 m: 0.4 % (0.12) against none. Where men at the nearest are in view (15 to 17
+  m), all three builds change the same pixels (the nearest LOD itself), and no man in such a view is under 80 px, so
+  the band is off screen there. Sweeps through the split's on and off points (a deep column, an oblique line, zooming
+  out and in): no step at either point on any build at the block's scale (0.05 to 0.9 ΔE, the zoom's own drift).
+  Strips: `output/armies-review/17-lod-fade/split-ab-T5.jpg` (the difference × 8) and `split-sweep-T5-*.jpg`.
+- **The guard** (`tools/guard.mjs --figures`, summer, Metal): the coat share at the widest view (the tiny band)
+  unchanged (16.3 %, 18.9 %); at the default view 22.5 → 22.2 % and 17.8 → 17.3 % (the far ramps' start), the
+  separations within 0.002.
+- **The goldens**: the default page identical; `?armies=20` differs in the close view (one region, 6 % of its pixels:
+  a line at 0.8 to 0.9 × the switch, now without the far palette and growth and inside the band); with `?lodfade=0`
+  the branch is identical to main in every view.
+- **The cost, final** (the same bench, main and the branch alternated, two rounds; frame p50 / GPU frame p50, ms):
+
+| zoom (m) | main | branch |
+|---|---|---|
+| 40 | 8.93 / 13.10 | 8.82 / 12.84 |
+| 63 (near band) | 9.76 / 13.93 | 9.56 / 13.58 |
+| 125 | 9.86 / 13.00 | 10.05 / 13.48 |
+| 250 (tiny band) | 6.31 / 9.28 | 6.60 / 9.18 |
+
+−0.2 to +0.3 ms a frame, within the runs' spread; the per-man work skipped for single-LOD battalions took most of the
+first build's cost.
+
 ## Open questions
 
 - **Matching the LODs' colours** (the owner's call): the far LOD's facings and coverage (a re-bake with the epaulettes
   kept), the tiny's calibration against the painted far LOD rather than its role areas.
 - **The trodden mask's refit** at about 35 m is a pop of its own (above).
-- A split battalion that stops being split while its far men are inside the near band switches them at once (its
-  lists were not in the battalion's order); rare (a deep battalion near the camera) and small.

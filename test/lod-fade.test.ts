@@ -1,17 +1,27 @@
 // The figures' LOD cross-fade (#188, decision 0066, src/look/lod-fade.ts): a man's share of each LOD by his height on
 // screen, every pixel of him drawn by exactly one LOD, and the LODs a battalion draws covering every man's.
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   FADE_WIDTH,
+  FAR_FROM,
   NEAR_FADE,
   TINY_FADE,
+  battalionLods,
   boxPxRange,
+  dropsMan,
+  drawsPixel,
   fadeShare,
   lodAt,
+  lodCount,
   lodCover,
   lodsDrawn,
   manHash,
+  snapCover,
+  type BattalionAt,
 } from '../src/look/lod-fade.ts'
+
+const shader = (f: string) => readFileSync(new URL(`../src/look/shaders/${f}`, import.meta.url), 'utf8')
 
 const LOD_PX = 48
 const TINY_PX = 12
@@ -70,14 +80,43 @@ describe('fadeShare', () => {
 })
 
 describe('lodCover and lodAt', () => {
-  it('draws every pixel of every man by exactly one LOD at every height (no man hidden)', () => {
+  it("draws every pixel of every man by exactly one LOD's material at every height (no man hidden, none twice)", () => {
     for (const px of PXS) {
       for (const h of HASHES) {
         const c = lodCover(px, near, tiny, h)
-        expect(c.near).toBeGreaterThanOrEqual(0)
-        expect(c.far).toBeGreaterThanOrEqual(c.near)
-        expect(c.far).toBeLessThanOrEqual(1)
-        for (const q of QS) expect(['near', 'far', 'tiny']).toContain(lodAt(q, c))
+        for (const q of QS) {
+          const by = ([0, 1, 2] as const).filter(slot => drawsPixel(slot, q, c))
+          expect(by.length).toBe(1)
+          expect(['near', 'far', 'tiny'][by[0]]).toBe(lodAt(q, c))
+        }
+      }
+    }
+  })
+  it('snaps the cover without changing a pixel, every threshold 1/32 or more from it (interpolation cannot flip one)', () => {
+    for (const px of PXS) {
+      for (const h of HASHES) {
+        const c = lodCover(px, near, tiny, h)
+        const s = snapCover(c)
+        for (const q of QS) {
+          for (const slot of [0, 1, 2] as const) expect(drawsPixel(slot, q, s)).toBe(drawsPixel(slot, q, c))
+          expect(Math.min(Math.abs(q - s.near), Math.abs(q - s.far))).toBeGreaterThanOrEqual(1 / 32 - 1e-12)
+        }
+        // and a man dropped by a LOD has no pixel of it after the snap either
+        for (const slot of [0, 1, 2] as const)
+          {if (dropsMan(slot, c)) expect(QS.some(q => drawsPixel(slot, q, s))).toBe(false)}
+      }
+    }
+  })
+  it('drops a man from a LOD only when that LOD draws no pixel of him, and keeps him where it draws one', () => {
+    for (const px of PXS) {
+      for (const h of HASHES) {
+        const c = lodCover(px, near, tiny, h)
+        for (const slot of [0, 1, 2] as const) {
+          // (any threshold in [0, 1), not only the dither's 16)
+          const draws = Array.from({ length: 257 }, (_, i) => i / 257).some(q => drawsPixel(slot, q, c))
+          if (dropsMan(slot, c)) expect(draws).toBe(false)
+          if (QS.some(q => drawsPixel(slot, q, c))) expect(dropsMan(slot, c)).toBe(false)
+        }
       }
     }
   })
@@ -143,5 +182,81 @@ describe('boxPxRange', () => {
   })
   it('takes a camera inside the box as the nearest, 1 m off', () => {
     expect(boxPxRange({ x: -1, y: -1, z: -1 }, { x: 1, y: 1, z: 1 }, { x: 0, y: 0, z: 0 }, 100)[1]).toBe(100)
+  })
+})
+
+describe('battalionLods', () => {
+  const at = (o: Partial<BattalionAt>): BattalionAt => ({
+    pLo: 30,
+    pHi: 30,
+    px: 30,
+    split: false,
+    wasNear: false,
+    wasTiny: false,
+    ...o,
+  })
+  it('fades a split battalion too: its men inside the near band drawn at the far LOD as well (#188 review)', () => {
+    // a deep column split at its near end (its nearest point 95 px), its far end inside the near band
+    const l = battalionLods(at({ pLo: 45, pHi: 95, px: 60, split: true }), true, LOD_PX, TINY_PX, near, tiny)
+    expect(l).toEqual({ near: true, far: true, tiny: false })
+    expect(lodCount(l)).toBe(2)
+  })
+  it('draws the near LOD while split even with every man above the band (the nearest LOD takes some)', () => {
+    expect(battalionLods(at({ pLo: 80, pHi: 150, split: true }), true, LOD_PX, TINY_PX, near, tiny)).toEqual({
+      near: true,
+      far: false,
+      tiny: false,
+    })
+  })
+  it('draws one LOD outside the bands (lodCount 1: its meshes draw every man, no per-man work)', () => {
+    expect(lodCount(battalionLods(at({ pLo: 20, pHi: 30 }), true, LOD_PX, TINY_PX, near, tiny))).toBe(1)
+    expect(lodCount(battalionLods(at({ pLo: 70, pHi: 90 }), true, LOD_PX, TINY_PX, near, tiny))).toBe(1)
+  })
+  it('keeps the hard switch without the fade: one LOD by the centre, ±10 %, the near alone while split', () => {
+    const hard = (o: Partial<BattalionAt>) => battalionLods(at(o), false, LOD_PX, TINY_PX, near, tiny)
+    expect(hard({ px: 50, wasNear: false })).toEqual({ near: false, far: true, tiny: false })
+    expect(hard({ px: 50, wasNear: true })).toEqual({ near: true, far: false, tiny: false })
+    expect(hard({ px: 11, wasTiny: false })).toEqual({ near: false, far: true, tiny: false })
+    expect(hard({ px: 10, wasTiny: false })).toEqual({ near: false, far: false, tiny: true })
+    expect(hard({ px: 30, pLo: 30, pHi: 120, split: true })).toEqual({ near: true, far: false, tiny: false })
+    expect(battalionLods(at({ px: 5 }), false, LOD_PX, 0, near, null)).toEqual({ near: false, far: true, tiny: false })
+  })
+})
+
+describe('the shaders mirror it', () => {
+  it("hash a man's index as manHash does, with the fade's width", () => {
+    const vert = shader('units.vert')
+    const hash = /float manHash\(float m\)\{(.*?)return/s.exec(vert)?.[1] ?? ''
+    expect(hash.replace(/\s+/g, '')).toBe(
+      'uintx=uint(m+0.5)*0x9e3779b9u;x^=x>>16;x*=0x21f0aaadu;x^=x>>15;x*=0x735a2d97u;x^=x>>15;',
+    )
+    expect(vert).toMatch(/return float\(x>>8\)\/16777216\.0/)
+    expect(vert).toMatch(/\(t-h\*\(1\.0-LOD_FADE_W\)\)\/LOD_FADE_W/)
+    expect(vert).toMatch(/manHash\(aMan\)/)
+    expect(vert).not.toMatch(/gl_InstanceID/)
+    const units = readFileSync(new URL('../src/look/units.ts', import.meta.url), 'utf8')
+    expect(units).toContain('`#define LOD_FADE_W ${FADE_WIDTH.toFixed(4)}`')
+  })
+  it("draw a pixel by drawsPixel's predicates and drop a man by dropsMan's, the cover flat", () => {
+    const frag = shader('units.frag').replace(/\s+/g, '')
+    expect(frag).toContain(
+      '#ifLOD_SLOT==0if(q>=vFade.x)discard;#elifLOD_SLOT==1if(q<vFade.x||q>=vFade.y)discard;#elseif(q<vFade.y)discard;',
+    )
+    expect(frag).toContain('varyingvec2vFade;')
+    const vert = shader('units.vert').replace(/\s+/g, '')
+    expect(vert).toContain('boolnone=LOD_SLOT==0?fn<=0.0:LOD_SLOT==1?fn>=1.0||ff<=0.0:ff>=1.0;')
+    expect(vert).toContain('vFade=floor(vec2(fn,ff)*16.0+0.5)/16.0;')
+  })
+  it("start the far palette, lift and growth at the near band's foot, so they are 0 across the band", () => {
+    expect(FAR_FROM).toBe(NEAR_FADE[0])
+    const vert = shader('units.vert')
+    expect(vert).toContain('fk=clamp((FAR_FROM*uFarK.y-fpx)/((FAR_FROM-0.25)*uFarK.y),0.0,1.0)')
+    expect(vert).toContain('vFar=1.0-smoothstep(uFarK.y*0.35,uFarK.y*FAR_FROM,px)')
+    expect(shader('unitdecal.vert')).toContain('fg=clamp((FAR_FROM*uFarK.y-fpx)/((FAR_FROM-0.25)*uFarK.y),0.0,1.0)')
+    const units = readFileSync(new URL('../src/look/units.ts', import.meta.url), 'utf8')
+    expect(units).toContain('`#define FAR_FROM ${FAR_FROM.toFixed(4)}`')
+  })
+  it("rescale the tiny's coat mask over the share it draws in its band", () => {
+    expect(shader('units.frag').replace(/\s+/g, '')).toContain('v=step((q-vFade.y)/max(1e-6,1.0-vFade.y),vCoatW);')
   })
 })

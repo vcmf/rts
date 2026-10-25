@@ -43,7 +43,12 @@ void main(){
   if(uMask>-0.5){
     float v=uMask>1.5?step(abs(vRole-uCoatRole),0.5):uMask;
     #ifdef TINY
+    #ifdef LODFADE
+    // (the dither's threshold rescaled over the share the tiny draws, so the coat's share holds inside its band)
+    if(uMask>1.5)v=step((q-vFade.y)/max(1e-6,1.0-vFade.y),vCoatW);
+    #else
     if(uMask>1.5)v=step(bayer(),vCoatW);
+    #endif
     #endif
     gl_FragColor=lensOut(vec3(v),vW);return;}
   vec3 N=normalize(vN);vec4 lm=LM(vW);

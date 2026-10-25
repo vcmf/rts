@@ -697,7 +697,7 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   (`Uniform`, `src/sim/ruleset.ts`; the era's in `src/rulesets/napoleonic-uniforms.ts`; the demo's sides' in
   `src/scenarios/armies-demo.ts`) is its colours by the figure's roles, its flag's, and its **far rule**: from above, a
   far figure shows its headgear, pack and leather more than its coat; under 'coat' those roles take the coat a value
-  step down (`farPalette`, `FAR_ROLES`), crossfaded in as the figure shrinks below the LOD switch, with the trees' and
+  step down (`farPalette`, `FAR_ROLES`), crossfaded in as the figure shrinks below the near band (`FAR_FROM`), with the trees' and
   hills' shadow on it halved and a warm rim on what faces up (`FAR`); under 'own' the far figure keeps its own. Unset,
   a coat under luminance 0.18 (Rec. 709 on linear sRGB, a mid grey: `FAR_COAT_BELOW`) takes 'coat'. `?farpal=0|1`
   forces the rule off or on for every uniform.
@@ -713,17 +713,25 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
 - **The LOD cross-fade** (decision 0066, `docs/plans/active/lod-fade.md`, #188; `src/look/lod-fade.ts`, tested in
   `test/lod-fade.test.ts`; `?lodfade=0`: the hard switch): in a band round each switch (`NEAR_FADE`, `TINY_FADE`: 0.8
   to 1.25 × it) a battalion draws both LODs and each man is drawn at his own LOD by his own height on screen (his
-  root's distance, as the far palette's), switching at his own point in the band (`manHash` of his instance) over a
-  fade of his own (`FADE_WIDTH`, 35 % of the band on a log scale) by the 4 × 4 ordered dither: a pixel's threshold
-  picks exactly one LOD (`lodCover`, `lodAt`; `units.vert` and `units.frag` mirror them under `LODFADE`, `LOD_SLOT`), so
-  a man is never hidden and nothing is blended or sorted. A LOD's men outside it are dropped in the vertex shader (off
-  screen). A battalion draws a second LOD only while one of its men can be in a band (`lodsDrawn`, by its bounds'
-  nearest and farthest points, `boxPxRange`); a split battalion's lists are not in its men's order, so its meshes draw
-  every man (`uLodFade` 0, set as each binds the shared material) and it draws as before. Measured on Metal (the plan):
-  the step a switch made in one frame (1.2 to 3.4 ΔE on a battalion's block) spread over the band; the LODs' colours
-  still differ (the far LOD's coverage and facings, the tiny's mix), the fade spreads it.
-- **Far figures larger** (`?farscale=0`: their own size): the far LOD grows as the figure falls from 90 % of the LOD
-  switch to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here; `farWidthScale` in
+  root's distance, as the far palette's), switching at his own point in the band (`manHash` of his index in his
+  battalion, `aMan`: an instance attribute written with each list, so a split battalion's reordered lists hash him
+  alike) over a fade of his own (`FADE_WIDTH`, 35 % of the band on a log scale) by the 4 × 4 ordered dither: a
+  pixel's threshold picks exactly one LOD (`lodCover`, `drawsPixel`, `dropsMan`; `units.vert` and `units.frag` mirror
+  them under `LODFADE`, `LOD_SLOT`; the cover snapped to the dither's 16 levels, `snapCover`, so interpolating it
+  cannot flip a pixel: a flat varying cost 1.5 to 4 ms of GPU on ANGLE's Metal), so a man is never hidden and nothing
+  is blended or sorted. A LOD's men outside it are dropped in the vertex shader (off screen). A battalion draws a second LOD only
+  while one of its men can be in a band (`battalionLods`, `lodsDrawn`, by its bounds' nearest and farthest points,
+  `boxPxRange`); one drawing a single LOD skips the per-man work (`uLodFade` 0, set as each mesh binds the shared
+  material). **A split battalion fades too**: its near LOD draws its men not at the nearest from their own list, each
+  at his own LOD, and its far LOD the band's share of them, so the nearest LOD's switch moves no other man (the
+  review's finding: before, its men inside the near band were forced near while split, a pop at the split's on and
+  off). The far palette, lift and growth start at the band's foot (`FAR_FROM`, 0.8 × the switch; 0.9 with
+  `?lodfade=0`), so they are 0 across the band. The tiny's coat mask rescales the dither's threshold over the share the
+  tiny draws (the guard's coat share unchanged in its band). Measured on Metal (the plan): the step a switch made in
+  one frame (1.2 to 3.4 ΔE on a battalion's block) spread over the band; the LODs' colours still differ (the far LOD's
+  coverage and facings, the tiny's mix), the fade spreads it.
+- **Far figures larger** (`?farscale=0`: their own size): the far LOD grows as the figure falls from the near band's foot
+  (`FAR_FROM`: 80 % of the LOD switch; 90 % with `?lodfade=0`) to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here; `farWidthScale` in
   `src/look/units-data.ts`) and 1.15 tall; render only.
 - **Trodden ground** (`?trample=0`: none): a 256² mask over a box round the ground in view (64 to 1,024 m), drawn on
   the CPU (each man where he stands and up to 3.8 m behind him) when the box moves or at most every 0.25 s while men

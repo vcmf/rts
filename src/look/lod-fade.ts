@@ -1,7 +1,8 @@
 // The figures' LOD cross-fade (#188, docs/plans/active/lod-fade.md, decision 0066): a battalion at a LOD switch draws
 // both LODs, each man at his own LOD by his own height on screen, switching at his own point in a band of heights over
 // a short screen-door dither, so no battalion pops from one LOD to the next at once. Pure: src/look/units.ts draws it,
-// src/look/shaders/units.vert and units.frag mirror fadeShare, manHash and lodCover.
+// src/look/shaders/units.vert and units.frag mirror fadeShare, manHash, lodCover, drawsPixel and dropsMan.
+import { drawsNear, drawsTiny } from './units-data.ts'
 
 /** the band round the near LOD's switch (lodPx), as shares of it: from 0.8 × to 1.25 × the switch a man is drawn at
  *  the far LOD, then the near, at his own height in it (the hard switch's ±10 % and a little more) */
@@ -11,8 +12,12 @@ export const TINY_FADE: readonly [number, number] = [0.8, 1.25]
 /** a man's own cross-fade, a share of the band (the rest spreads the men's switches over it) */
 export const FADE_WIDTH = 0.35
 
-/** A man's hash in [0, 1) from his place in his battalion's instances (lowbias32; units.vert hashes gl_InstanceID
- *  alike), so he switches at the same point in a band every time */
+/** the far LOD's palette, lift and growth start below this share of the near switch (units.vert, unitdecal.vert:
+ *  FAR_FROM), so they are 0 over the whole near band; 0.9 with the hard switch (?lodfade=0), as before */
+export const FAR_FROM = NEAR_FADE[0]
+
+/** A man's hash in [0, 1) from his index in his battalion (lowbias32; units.vert hashes his aMan alike, which holds
+ *  his index whatever list he is drawn from), so he switches at the same point in a band every time */
 export function manHash(i: number): number {
   let x = Math.imul(i >>> 0, 0x9e3779b9) >>> 0
   x ^= x >>> 16
@@ -52,6 +57,26 @@ export function lodAt(q: number, cover: { near: number; far: number }): 'near' |
   return q < cover.near ? 'near' : q < cover.far ? 'far' : 'tiny'
 }
 
+/** A cover snapped to the dither's 16 levels (units.vert): each pixel's LOD as unsnapped (the thresholds are at
+ *  (j + 0.5) / 16), and every threshold 1/32 from it, so the cover interpolated across a man cannot flip a pixel */
+export function snapCover(c: { near: number; far: number }): { near: number; far: number } {
+  return { near: Math.floor(c.near * 16 + 0.5) / 16, far: Math.floor(c.far * 16 + 0.5) / 16 }
+}
+
+/** the LODs' slots in the shaders (LOD_SLOT) */
+export const SLOTS = ['near', 'far', 'tiny'] as const
+
+/** Whether a LOD's material (slot: 0 near, 1 far, 2 tiny) draws a pixel of a man (units.frag's discards): its
+ *  threshold q against his cover */
+export function drawsPixel(slot: 0 | 1 | 2, q: number, cover: { near: number; far: number }): boolean {
+  return slot === 0 ? q < cover.near : slot === 1 ? q >= cover.near && q < cover.far : q >= cover.far
+}
+
+/** Whether a LOD's material drops a man in the vertex shader (units.vert's none: no pixel of him is its) */
+export function dropsMan(slot: 0 | 1 | 2, cover: { near: number; far: number }): boolean {
+  return slot === 0 ? cover.near <= 0 : slot === 1 ? cover.near >= 1 || cover.far <= 0 : cover.far >= 1
+}
+
 /** The LODs a battalion draws, from the heights on screen (px) of its nearest and farthest men (its bounds' nearest
  *  and farthest points: pLo ≤ every man's ≤ pHi): each LOD any of its men has a share of in the bands (near, tiny:
  *  lodCover's; tiny null: no tiny LOD); a battalion wholly outside the bands draws one LOD, as the hard switch did */
@@ -60,12 +85,60 @@ export function lodsDrawn(
   pHi: number,
   near: readonly [number, number],
   tiny: readonly [number, number] | null,
-): { near: boolean; far: boolean; tiny: boolean } {
-  return {
-    near: pHi > near[0],
-    far: pLo < near[1] && (!tiny || pHi > tiny[0]),
-    tiny: !!tiny && pLo < tiny[1],
+  out: Lods = { near: false, far: false, tiny: false },
+): Lods {
+  out.near = pHi > near[0]
+  out.far = pLo < near[1] && (!tiny || pHi > tiny[0])
+  out.tiny = !!tiny && pLo < tiny[1]
+  return out
+}
+
+/** the LODs a battalion draws */
+export interface Lods {
+  near: boolean
+  far: boolean
+  tiny: boolean
+}
+
+/** A battalion's place against the switches this frame: its bounds' heights on screen (pLo, pHi, px: boxPxRange),
+ *  its centre's (px), whether it is split (its nearest men at the nearest LOD) and what it drew last frame (the hard
+ *  switch's hysteresis) */
+export interface BattalionAt {
+  pLo: number
+  pHi: number
+  px: number
+  split: boolean
+  wasNear: boolean
+  wasTiny: boolean
+}
+
+/** The LODs a battalion draws (src/look/units.ts): with the fade (fade) every LOD any of its men has a share of
+ *  (lodsDrawn), the near LOD always while split (its men not at the nearest drawn at their own LODs, as unsplit);
+ *  without it (?lodfade=0) the hard switch: one LOD by its centre's height, ±10 % (drawsNear, drawsTiny; tinyPx 0:
+ *  no tiny LOD), the near alone while split */
+export function battalionLods(
+  b: BattalionAt,
+  fade: boolean,
+  lodPx: number,
+  tinyPx: number,
+  near: readonly [number, number],
+  tiny: readonly [number, number] | null,
+  out: Lods = { near: false, far: false, tiny: false },
+): Lods {
+  if (fade) {
+    lodsDrawn(b.pLo, b.pHi, near, tiny, out)
+    out.near ||= b.split
+    return out
   }
+  out.near = b.split || drawsNear(b.px, b.wasNear, lodPx)
+  out.tiny = !out.near && tinyPx > 0 && drawsTiny(b.px, b.wasTiny, tinyPx)
+  out.far = !out.near && !out.tiny
+  return out
+}
+
+/** How many LODs a battalion draws: with one its meshes draw every man (uLodFade 0: no per-man work) */
+export function lodCount(l: Lods): number {
+  return +l.near + +l.far + +l.tiny
 }
 
 /** The heights on screen (px) of a figure at a box's farthest and nearest points from the camera (cam; lo and hi the
@@ -75,6 +148,7 @@ export function boxPxRange(
   hi: { x: number; y: number; z: number },
   cam: { x: number; y: number; z: number },
   k: number,
+  out: [number, number] = [0, 0],
 ): [number, number] {
   const near = Math.hypot(
     Math.max(lo.x - cam.x, 0, cam.x - hi.x),
@@ -86,5 +160,7 @@ export function boxPxRange(
     Math.max(cam.y - lo.y, hi.y - cam.y),
     Math.max(cam.z - lo.z, hi.z - cam.z),
   )
-  return [k / Math.max(1, far), k / Math.max(1, near)]
+  out[0] = k / Math.max(1, far)
+  out[1] = k / Math.max(1, near)
+  return out
 }
