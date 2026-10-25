@@ -84,6 +84,9 @@ export class LitView {
   private readonly shadowMaterial: ShaderMaterial
   private plane: Mesh | null = null
   private houses: Mesh[] = []
+  private overlay: RawTexture | null = null
+  private readonly noOverlay: RawTexture
+  private grid: { nx: number; nz: number } | null = null
   private light: [number, number] = [-Math.SQRT1_2, Math.SQRT1_2]
   private textures: Texture[] = []
   private viewProj = Matrix.Identity()
@@ -140,8 +143,9 @@ export class LitView {
           'uLine',
           'uBarrier',
           'uInkRange',
+          'uOverlayOn',
         ],
-        samplers: ['uHeight', 'uRelief', 'uMask', 'uInk', 'uPaperT', 'uFlatT'],
+        samplers: ['uHeight', 'uRelief', 'uMask', 'uInk', 'uPaperT', 'uFlatT', 'uOverlay'],
       },
     )
     this.material.backFaceCulling = false
@@ -174,6 +178,19 @@ export class LitView {
     this.material.setVector2('uLambert', new Vector2(RELIEF.lambert[0], RELIEF.lambert[1]))
     this.material.setFloat('uShadeFloor', SHADE_FLOOR)
     this.material.setFloat('uShadeTop', SHADE_TOP)
+    // no overlay: a texel of nothing, so the sampler is always bound to a live texture
+    this.noOverlay = new RawTexture(
+      new Uint8Array(4),
+      1,
+      1,
+      Constants.TEXTUREFORMAT_RGBA,
+      this.scene,
+      false,
+      false,
+      Texture.NEAREST_SAMPLINGMODE,
+    )
+    this.material.setTexture('uOverlay', this.noOverlay)
+    this.material.setFloat('uOverlayOn', 0)
   }
 
   // a canvas's pixels as an RGBA texture (the paper's: kept for the view's life)
@@ -226,6 +243,8 @@ export class LitView {
     this.material.setVector2('uSize', new Vector2(W, H))
     this.material.setVector2('uNodes', new Vector2(m.nx + 1, m.nz + 1))
     this.material.setVector2('uCells', new Vector2(m.nx, m.nz))
+    this.grid = { nx: m.nx, nz: m.nz }
+    this.setOverlay(null) // the last map's overlay is not this one's
     this.material.setFloat('uCell', m.cell)
     this.material.setFloat('uDatum', m.datum)
     const [lx, lz] = lightXZ(m.light)
@@ -265,6 +284,11 @@ export class LitView {
       }
       poll()
     })
+  }
+
+  /** Whether the view can draw now (its shaders compiled, every texture it samples alive). */
+  isReady(): boolean {
+    return this.scene.isReady()
   }
 
   /** Clears the view: no map drawn until the next setMap. */
@@ -362,6 +386,33 @@ export class LitView {
     boxes.renderingGroupId = 2
     this.houses = [shadow, boxes]
     for (const h of this.houses) h.setEnabled(!this.flat)
+  }
+
+  /**
+   * Shows a debug overlay (src/render/lit/overlays.ts: RGBA a cell, the south row first) over the map, or none. The
+   * map's grid is the last setMap's.
+   */
+  setOverlay(rgba: Uint8Array | null): void {
+    // bind the empty texel first: a disposed texture left bound would keep the material from ever being ready
+    this.material.setTexture('uOverlay', this.noOverlay)
+    this.overlay?.dispose()
+    this.overlay = null
+    if (rgba && this.grid) {
+      const t = new RawTexture(
+        rgba,
+        this.grid.nx,
+        this.grid.nz,
+        Constants.TEXTUREFORMAT_RGBA,
+        this.scene,
+        false,
+        false,
+        Texture.NEAREST_SAMPLINGMODE,
+      )
+      t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
+      this.overlay = t
+      this.material.setTexture('uOverlay', t)
+    }
+    this.material.setFloat('uOverlayOn', this.overlay ? 1 : 0)
   }
 
   /** Shows the flat draft's colours instead of the lit map (a debug setting). */

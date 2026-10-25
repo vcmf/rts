@@ -12,6 +12,8 @@ uniform sampler2D uMask;     // R the water's depth (0..1), B the water, A the y
 uniform sampler2D uInk;      // the ink's distance fields on the cells: R ways (their shapes), G water, B barriers, A woods
                              // (their cells), signed m
 uniform sampler2D uPaperT, uFlatT;
+uniform sampler2D uOverlay;  // a debug overlay (src/render/lit/overlays.ts): RGBA a cell, alpha where it shows
+uniform float uOverlayOn;
 uniform vec2 uX0Z0, uSize, uNodes, uCells, uLightXZ, uLambert;
 uniform float uCell, uDatum, uFlat, uShadeFloor, uShadeTop, uInkRange;
 uniform vec3 uPaper, uWaterW, uLine, uBarrier;
@@ -136,5 +138,8 @@ void main() {
   vec3 col = mapC * (0.93 + (g1 - 0.5) * 0.16 + (fine - 0.5) * 0.12);   /* the paper's grain */
   /* the flat draft's colours (a debug setting); its raster runs north row first */
   col = mix(col, texture2D(uFlatT, vec2(cuv.x, 1.0 - cuv.y)).rgb, uFlat * inside);
+  /* a debug overlay over either */
+  vec4 O = texture2D(uOverlay, cuv);
+  col = mix(col, O.rgb, O.a * uOverlayOn * inside);
   gl_FragColor = vec4(col, 1.0);
 }

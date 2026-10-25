@@ -224,3 +224,43 @@ settings (the owner, 2026-10-25).
   roofless; a footprint is triangulated once for its roof and its shadow. Left: the road's field re-derives apply's
   line rule (the per-cell hold keeps the contract wherever the two differ; building it from apply's `nearLine` would
   make them one), the worker's memory for the cells' fields, and a shared exact distance transform.
+
+## M6c: the debug overlays
+
+- `src/render/lit/overlays.ts` (pure, run in the worker on the last compiled layers, which it keeps; the page gets
+  copies): the overlays as RGBA a cell, drawn by the lit shader over the lit map or the flat colours:
+  - **passability** for each of the ruleset's unit kinds (`unitKinds`: the terrain table's, era-generic): the cell's
+    terrain class factor (`classify` on `groundCell`, now `maps/cell.ts`, shared with the sim compiler), times the
+    wading curve at its depth (0 past the kind's limit), times the slope factor uphill; nothing drawn at full speed,
+    a ramp from green to red below it, dark red where impassable;
+  - **water depth**, a ramp of blues to 2 m; **slope**, from 2 % to 30 %;
+  - **sight from a point** (a click on the map with the overlay chosen): rays from the eye (the ruleset's eye height)
+    to every border cell of a 1500 m square; a cell is seen if a figure standing there clears the ground between, and
+    the sight line crosses no more of each terrain class than the ruleset's sight table allows (woods 40 m).
+- **Errors in place:** the features the validator names are outlined in red on the map (from the last good map's
+  shapes), and an error naming one takes the view to it when clicked.
+- `tools/map-page-check.mjs` checks each overlay: chosen, computed by the worker, painting cells.
+- **Results** (two-ridges, 2.4 km, the dev Mac): passability 0.2 s, depth 4 ms, slope 30 ms, sight 0.5 s in the worker;
+  a save to a redraw 0.82 s (the worker now copies the layers it sends, to keep them for the overlays).
+
+### Review rounds (M6c)
+
+- **Round 1** (`/code-review high`): severe. Turning an overlay off disposed a texture still bound to the shader, so
+  the lit map stopped drawing for good; the passability overlay waded the raw water where the sim takes none on a
+  bridge or a go zone and an impassable depth on a no-go zone; sight counted a cell of wood a step on a diagonal line
+  (up to 41 % short); an overlay could be computed on a grid the page was not showing. Fixed: the empty texel is bound
+  before any overlay is disposed, and the page check now turns the overlay off and asks whether the view can still
+  draw; the sim's depth rule is one function (`simDepth`, `maps/cell.ts`) for the sim compiler and the overlay; sight
+  counts the line's length; the worker keeps the overlays' ground only once its compile's reply is sent, and the page
+  drops an overlay of another size. With them: the ground is read once a compile (classes, the sim's depth, the
+  heights) instead of on every request, and the layers go to the page without copies (passability 55 ms, sight 77 ms
+  on two-ridges, from 0.2 s and 0.5 s); an overlay that throws is reported, not a dead worker; the errors' outlines
+  are looked for only when there are errors. Left: the wading and slope factors are the ruleset's formulas written
+  again (the sim's own read its compiled tables, `src/sim/terrain.ts`); a shared pure helper would keep them one.
+- **Round 2**: moderate and light only, so the review stops. Fixed: an overlay names the compile whose map the page
+  shows, and the worker keeps the ground of its last few compiles by compile, so a compile the page dropped is never
+  drawn on; the sight's eye is forgotten on another map; the seen cells are left clear (only the hidden darkened), so
+  the page check's sight test can fail; the ground's read time is in the panel; an overlay's failure shows in the
+  panel, not only the console; the depth overlay says it is the depth as the sim takes it (a no-go zone deep, a bridge
+  dry); `groundCell` has one home (`maps/cell.ts`); doc comments on the new functions. Left: the overlay's wading and
+  slope formulas written again from the ruleset (above), and negative tests for the page check's overlay checks.

@@ -4,8 +4,10 @@ import type { Issue } from '../../map/catalogue.ts'
 import type { Resolved } from '../../map/resolve.ts'
 import type { LAYER_NAMES } from '../../map/apply.ts'
 import type { LightDir } from '../../render/lit/bake.ts'
+import type { OverlaySpec } from '../../render/lit/overlays.ts'
 
 export interface CompileRequest {
+  type?: 'compile'
   seq: number
   mapText: string
   kindsText: string
@@ -30,12 +32,13 @@ export interface Compiled {
   depth: ArrayBuffer // Uint16Array per cell: water depth, mm
   layers: Record<LayerName, ArrayBuffer> // Uint16Array per cell: an index into table (0: none)
   table: Resolved[]
+  units: string[] // the ruleset's unit kinds, for the passability overlay
   // the lit view's bakes (src/render/lit/bake.ts): the relief on the nodes, the masks on the cells, RGBA
   relief: ArrayBuffer
   masks: ArrayBuffer
   ink: ArrayBuffer // the ink's distance field on the cells (bakeInk), RGBA
   light: LightDir // the light the relief was baked for: the shader's water banks take the same
-  ms: { validate: number; apply: number; draw: number; bake: number }
+  ms: { validate: number; apply: number; draw: number; bake: number; ground: number }
 }
 export interface Failed {
   seq: number
@@ -46,3 +49,17 @@ export interface Failed {
   missing?: string[]
 }
 export type CompileReply = Compiled | Failed
+// a debug overlay (src/render/lit/overlays.ts) of the last compiled map, or none
+export interface OverlayRequest {
+  type: 'overlay'
+  seq: number
+  of: number // the compile (its seq) whose map the page shows: the overlay is drawn on that map's ground alone
+  spec: OverlaySpec | null
+}
+export interface OverlayReply {
+  type: 'overlay'
+  seq: number
+  rgba: ArrayBuffer | null // RGBA a cell, the south row first
+  ms: number
+  error?: string
+}

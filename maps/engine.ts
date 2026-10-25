@@ -16,7 +16,8 @@ import { readMapFiles } from './map-files.ts'
 import { expand } from '../src/map/expand.ts'
 import type { Layers } from '../src/map/apply.ts'
 import { apply, CELL, heightOf } from '../src/map/apply.ts'
-import type { GroundCell, Classify } from '../src/rulesets/ground.ts'
+import type { Classify } from '../src/rulesets/ground.ts'
+import { groundCell, simDepth } from './cell.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import type { Ruleset } from '../src/sim/ruleset.ts'
 import { classifyNapoleonic } from '../src/rulesets/napoleonic-ground.ts'
@@ -24,7 +25,6 @@ import { exp } from '../src/sim/num.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const COST_CELL = 4 * CELL // decision 0021
-const NOGO_DEPTH = 10 // m: a no-go cell's depth, past every wading limit
 
 // the map's layers, or the validator's first problems as an error
 export function layersOf(file: string, seed?: number): { map: MapFile; layers: Layers } {
@@ -51,37 +51,6 @@ export function layersOf(file: string, seed?: number): { map: MapFile; layers: L
   const ex = expand(raw as unknown as MapFile, cat)
   if (ex.issues.length) throw new Error(`${file}: ${ex.issues[0].message}`)
   return { map: ex.map, layers: apply(ex.map, cat, files.dems) }
-}
-
-// one cell's attributes, from its layers
-export function groundCell(L: Layers, cell: number): GroundCell {
-  const T = (k: number) => (k ? L.table[k - 1].attrs : undefined)
-  const g = T(L.ground[cell])
-  const v = T(L.veg[cell])
-  const w = T(L.way[cell])
-  const b = T(L.barrier[cell])
-  const bu = L.built[cell] ? L.table[L.built[cell] - 1] : undefined
-  const n = (x: unknown) => (typeof x === 'number' ? x : undefined)
-  const s = (x: unknown) => (typeof x === 'string' ? x : undefined)
-  return {
-    ground: g && { material: s(g.material), moisture: n(g.moisture), stones: n(g.stones), wear: n(g.wear) },
-    veg: v && {
-      growth: s(v.growth),
-      density: L.density[cell] / 255,
-      height: n(v.height),
-      stage: s(v.stage),
-      undergrowth: n(v.undergrowth),
-    },
-    water: L.depth[cell] / 1000,
-    way: w && { surface: s(w.surface), cut: n(w.cut) },
-    barrier: b && { crossing: s(b.crossing), height: n(b.height), porosity: n(b.porosity) },
-    built: bu && {
-      bridge: bu.kind.split('.')[1] === 'bridge',
-      building: bu.attrs.wall !== undefined || bu.attrs.roof !== undefined,
-    },
-    nogo: !!L.zone[cell] && L.table[L.zone[cell] - 1].kind === 'zone.nogo',
-    go: !!L.zone[cell] && L.table[L.zone[cell] - 1].kind === 'zone.go',
-  }
 }
 
 export function engineMap(
@@ -117,7 +86,7 @@ export function engineMap(
       const k = classes.indexOf(c)
       if (k < 0) throw new Error(`${file}: the ground reading gave "${c}", not a class of ${rs.name}`)
       cls[j * n + i] = k
-      depth[j * n + i] = gc.nogo ? NOGO_DEPTH : c === 'bridge' || gc.go ? 0 : gc.water
+      depth[j * n + i] = simDepth(gc, c)
     }
   }
   const cellOf = (x: number, z: number) =>
