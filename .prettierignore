@@ -1,0 +1,27 @@
+# Prettier lays out the TypeScript and JavaScript of the areas decision 0052 has reached
+# (docs/decisions/0052-code-style.md). It also skips what .gitignore lists.
+
+# Never formatted: single-file prototypes, generated data, the lint fixture whose errors are matched by line
+# (test/lint.test.ts), and every file that is not code
+prototypes/
+data/
+assets/
+test/fixtures/
+*.md
+*.json
+*.html
+*.yml
+*.yaml
+*.css
+
+# Not formatted yet: the look (PR 2), the tools, tests and root configs (PR 3). eslint.config.js's `formatted` lists
+# the areas that are; test/format-scope.test.ts checks the two agree.
+app/
+src/look/
+src/render/
+src/app/
+tools/
+test/
+eslint.config.js
+vite.config.ts
+vitest.config.ts
