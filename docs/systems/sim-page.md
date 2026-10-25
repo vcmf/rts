@@ -50,7 +50,8 @@ the tick, not the table. Orders the sim drops show in the readout for 3 s. The c
 line are drawn at the interpolated anchor, as the men are. `Save
 session` downloads `{ replay, hashes, marks }` as `<scenario>-<date>.json`; `play` in `src/sim/replay.ts` checks it,
 and `tools/battle-report.ts` plays it back and prints what happened, with where everyone stood at each mark
-(S1e-3, `docs/plans/active/s1e3-playtest.md`).
+(S1e-3, `docs/plans/active/s1e3-playtest.md`). The report refuses a file whose marks are out of tick order, past
+its end or without a text note (one edited by hand would otherwise lose marks silently).
 
 **Who stands where** (`SoldierLayer.sync`). The sim keeps men per company (decisions 0007, 0018); the layer
 places them. A battalion is matched again only when its signature changes: men per company, shape,

@@ -131,8 +131,31 @@ export function reporter(w: World, marks: Mark[] = []): { tick: () => void; end:
   return { tick, end }
 }
 
-// a session the page saved (a mismatch with its hashes throws), or with none the scenario with no orders for
-// `ticks` at the page's seed
+/**
+ * A session's marks, checked: a list of ticks within the replay, in order, each with a text note. The report prints
+ * a mark when the battle reaches its tick, in the list's order, so a file edited by hand with a mark out of order or
+ * past the end would lose marks silently; it is refused instead.
+ */
+export function checkMarks(session: Session): Mark[] {
+  const marks: unknown = session.marks ?? []
+  if (!Array.isArray(marks)) throw new Error("the session's marks are not a list")
+  let last = 0
+  marks.forEach((m: unknown, k: number) => {
+    const { tick, note } = (typeof m === 'object' && m !== null ? m : {}) as Partial<Record<keyof Mark, unknown>>
+    if (typeof tick !== 'number' || !Number.isInteger(tick) || tick < 0 || tick > session.replay.ticks) {
+      throw new Error(`mark ${k + 1}: its tick is not one of the replay's (0 to ${session.replay.ticks})`)
+    }
+    if (tick < last) throw new Error(`mark ${k + 1}: at tick ${tick}, before the mark ahead of it (tick ${last})`)
+    if (typeof note !== 'string') throw new Error(`mark ${k + 1}: its note is not text`)
+    last = tick
+  })
+  return marks as Mark[]
+}
+
+/**
+ * Reports a session the page saved (a mismatch with its hashes or a bad mark throws, `checkMarks`), or with none
+ * the scenario with no orders for `ticks` at the page's seed. Both start the reporter before the first tick.
+ */
 export function reportSession(
   data: SimData,
   cr: Compiled,
@@ -142,12 +165,14 @@ export function reportSession(
 ): string[] {
   if (session) {
     const n = session.replay.log.length
-    const marks = session.marks ?? []
+    const marks = checkMarks(session)
     const on: { r?: ReturnType<typeof reporter> } = {}
-    // the reporter starts at the first tick, on the world play() set up
-    const bad = play(session.replay, data, cr, scenario, session.hashes, w => {
-      on.r ??= reporter(w, marks)
-      on.r.tick()
+    // the reporter starts on the world play() set up, before the first tick, as with no orders below
+    const bad = play(session.replay, data, cr, scenario, session.hashes, {
+      start: w => {
+        on.r = reporter(w, marks)
+      },
+      tick: () => on.r?.tick(),
     })
     if (bad) throw new Error(`the session does not reproduce: ${JSON.stringify(bad)}`)
     return [

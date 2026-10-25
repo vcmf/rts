@@ -76,16 +76,29 @@ export interface Mismatch {
   section: string
 }
 
-// plays a replay back; returns the first mismatch against `expected`, or null. Hashes are taken every
-// HASH_EVERY ticks, so a divergence is reported at the first hash point after it (within 20 ticks). `after`
-// sees the world after each tick (tools/battle-report.ts), before that tick's hash is checked.
+/**
+ * What `play` shows a caller of the world as it plays (tools/battle-report.ts). The world is read-only there: the
+ * sim changes only through commands (decision 0005), and a write would make the replay diverge from its hashes.
+ */
+export interface PlayObserver {
+  /** the world as the scenario set it up, before the first tick */
+  start?: (w: World) => void
+  /** the world after each tick, before that tick's hash is checked */
+  tick?: (w: World) => void
+}
+
+/**
+ * Plays a replay back; returns the first mismatch against `expected`, or null. Hashes are taken every HASH_EVERY
+ * ticks, so a divergence is reported at the first hash point after it (within 20 ticks). `observe` reads the world
+ * before the first tick and after each one, and must not change it (`PlayObserver`).
+ */
 export function play(
   r: Replay,
   data: SimData,
   cr: Compiled,
   scenario: Scenario,
   expected: HashPoint[],
-  after?: (w: World) => void,
+  observe?: PlayObserver,
 ): Mismatch | null {
   if (r.simVersion !== SIM_VERSION) throw new Error(`replay from sim ${r.simVersion}, this is ${SIM_VERSION}`)
   if (r.dataVersion >>> 0 !== data.version >>> 0) {
@@ -108,6 +121,7 @@ export function play(
   const w = makeWorld(data, cr, r.seed)
   attachScenario(w, scenario)
   scenario.setup(w)
+  observe?.start?.(w)
   let k = 0
   let e = 0
   while (w.meta[M_TICK] < r.ticks) {
@@ -120,7 +134,7 @@ export function play(
       k++
     }
     const res = advanceTick(w)
-    after?.(w)
+    observe?.tick?.(w)
     if (res.hash === null) continue
     const want = expected[e++]
     if (!want || want.tick !== res.tick) {

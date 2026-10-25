@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import { battleData } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { s1eBattle } from '../src/scenarios/s1e-battle.ts'
-import { compileRuleset, record, formationHandle, TICK_HZ } from '../src/sim/index.ts'
+import { compileRuleset, record, formationHandle, advanceTick, TICK_HZ, type Scenario } from '../src/sim/index.ts'
 import { reportSession, type Session } from '../tools/battle-report.ts'
 
 const cr = compileRuleset(napoleonic)
@@ -33,6 +33,38 @@ describe('the battle report', () => {
       hashes: session.hashes.map((h, k) => (k === 3 ? { ...h, hash: h.hash ^ 1 } : h)),
     }
     expect(() => reportSession(battleData, cr, s1eBattle, bad)).toThrow(/does not reproduce/)
+  })
+  it("reports the first played tick's changes, as with no orders: the reporter starts before it", () => {
+    // the scenarios spawn in tick 1, which the report passes over silently; one whose setup has played that tick
+    // already, so an order changes a battalion's shape in the first tick play() plays (tick 2)
+    const begun: Scenario = {
+      ...s1eBattle,
+      setup: w => {
+        s1eBattle.setup(w)
+        advanceTick(w)
+      },
+    }
+    const first = record(battleData, cr, begun, 7, 5 * TICK_HZ, (w, ext) => {
+      if (w.meta[0] === 1) ext({ type: 'form', id: formationHandle(w, 0), shape: 'column' })
+    })
+    expect(first.replay.log.map(e => e.tick)).toEqual([2])
+    const lines = reportSession(battleData, cr, begun, first)
+    expect(lines).toContain('00:00  side 0 #0 infantry: forming column')
+  })
+  it('refuses marks out of tick order, past the end, or with a note that is not text', () => {
+    const marked = (marks: unknown): Session => ({ ...session, marks: marks as Session['marks'] })
+    const run = (marks: unknown) => () => reportSession(battleData, cr, s1eBattle, marked(marks))
+    expect(
+      run([
+        { tick: 90, note: 'b' },
+        { tick: 30, note: 'a' },
+      ]),
+    ).toThrow(/mark 2: at tick 30, before the mark/)
+    expect(run([{ tick: T + 1, note: 'late' }])).toThrow(/mark 1: its tick is not one of the replay's/)
+    expect(run([{ tick: 1.5, note: 'half' }])).toThrow(/mark 1: its tick/)
+    expect(run([{ tick: 30, note: 7 }])).toThrow(/mark 1: its note is not text/)
+    expect(run([{ tick: 30 }])).toThrow(/mark 1: its note is not text/)
+    expect(run({ tick: 30, note: 'a' })).toThrow(/marks are not a list/)
   })
   it('with no session, runs the scenario with no orders', () => {
     const lines = reportSession(battleData, cr, s1eBattle, null, 60 * TICK_HZ)
