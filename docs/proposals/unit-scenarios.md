@@ -36,7 +36,7 @@ Times are battle time; the page plays at 2× by default.
 
 | Id | Situation | Should | Model | Today |
 |---|---|---|---|---|
-| B-01 | Line to square, no enemy near | Takes the full change time (100 s at level 2, today's battalion), with no fire during it | Changes | yes |
+| B-01 | Line to square, no enemy near | Takes the full change time (`changeTime`, level 2), with no fire during it | Changes | yes |
 | B-02 | The same with the Old Guard (level 6) and with recruits (level 1) | The Guard is markedly faster (about 0.7×); recruits slower (about 1.3×) | Changes, experience | no |
 | B-03 | Line to square while under musketry at 100 m | Allowed, but slower and with disorder; the battalion loses the firefight while it forms | Changes, engagement | partly (no extra time or disorder) |
 | B-04 | A change ordered while in melee | Refused: a formation in contact cannot change shape | Engagement | yes |
@@ -51,7 +51,7 @@ Times are battle time; the page plays at 2× by default.
 
 | Id | Situation | Should | Model | Today |
 |---|---|---|---|---|
-| C-01 | Two lines at 100 m, of quality 0.8 and 0.65 | The weaker breaks in 6–10 minutes (the calibration anchor, `docs/proposals/sim-design.md` §8; `tools/calibrate-fire.ts` pits quality 0.8 against 0.65; U2 gives the pair levels that keep the result) | Fire | yes |
+| C-01 | Two lines at 100 m, one steadier than the other (today quality 0.8 against 0.65; with the bar, two level 2 lines with bar maxima set apart) | The weaker breaks in 6–10 minutes (the calibration anchor, `docs/proposals/sim-design.md` §8, `tools/calibrate-fire.ts`) | Fire, morale bar | yes |
 | C-02 | A veteran line (level 3) against a recruit line (level 1) at 100 m | The veteran wins clearly, with about half the losses | Fire, experience | partly (quality is morale only) |
 | C-03 | The same two lines at 50 m | Much bloodier; the recruits break in a few minutes, or refuse to stand at that range | Fire, morale bar | partly |
 | C-04 | A recruit line (level 1) ordered to hold fire while an enemy advances | It cannot hold: it opens fire on its own at long range (about 150 m), wasting its first volley | Fire discipline | no |
@@ -105,7 +105,7 @@ Times are battle time; the page plays at 2× by default.
 |---|---|---|---|---|
 | F-01 | An attack column advances on a steady line without firing | It takes fire; at about 50 m both take a morale test; most often one side breaks before the bayonets cross (the column if the line's fire holds, the line if it wavers) | Infantry assault, closing | no |
 | F-02 | The same column advances on a wavering line | The line breaks; the column takes the ground | Infantry assault | no |
-| F-03 | A recruit battalion (level 1) is ordered to advance to 50 m under fire | Its small bar reaches wavering at about 120 m: the advance is dropped, it opens fire, and falls back if the losses go on | Morale bar, the wavering rule | no |
+| F-03 | A recruit battalion (level 1) is ordered to advance to 50 m under fire | It opens fire on its own at about 150 m (fire discipline) and halts there. Ordered on, it goes until its small bar reaches wavering, and the advance is dropped; it falls back if the losses go on | Fire discipline, morale bar, the wavering rule | no |
 | F-04 | A veteran battalion (level 3 or more) is ordered the same | It closes to 50 m and fires a first volley, or presses on with the bayonet | Morale bar, first volley | no |
 | F-05 | A battalion closes with an enemy on its flank | It is punished: the enemy's fire and charges strike its flank; its own front cannot bear | Closing, sectors | partly |
 | F-06 | A battalion advances on an enemy, then turns its back to retire at 80 m | Its rear is exposed while it goes; the enemy may charge it; a Retire under fire costs disorder | Closing, sectors | partly |
@@ -131,7 +131,7 @@ Times are battle time; the page plays at 2× by default.
 |---|---|---|---|---|
 | H-01 | A recruit battalion survives a firefight it wins | It gains points; a battle or two make it level 2, and each level after takes longer | Experience | no |
 | H-02 | A veteran battalion loses half its men and is filled up between battles (later) | It keeps its level; it is filled more slowly than a recruit battalion would be; experience is never averaged | Experience | no |
-| H-03 | Two battalions of one level, one with a commander near (S2) | The commander's adds to morale; experience does not stack with it beyond a cap | Experience, morale | no |
+| H-03 | Two battalions of one level, one with a commander near (S2) | The one with the commander near recovers its bar faster; the commander does not raise its maximum, which only the level does | Morale bar | no |
 | H-04 | A level 5 battalion against two level 2 battalions | It holds its own for a while and then loses: experience is a large edge, not a doubling | Experience | no |
 | H-05 | A battalion gains a level during a battle | Its bar's maximum rises and the bar is refilled: a visible moment, at most once per battle | Experience | no |
 
