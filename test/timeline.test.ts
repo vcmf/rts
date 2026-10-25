@@ -1,14 +1,25 @@
 // The bench's timeline (src/app/timeline.ts, docs/plans/active/c0-bench.md): going back to a tick and playing on gives
-// the world the first pass gave, orders logged after the tick included; an order given there branches the log, and
-// the session still replays.
+// the world the first pass gave, orders logged after the tick included; the same tick is the same world however it
+// was reached; an order given there branches the timeline, and the session still replays; the saves stay evenly
+// spaced; a tick played again that gives another world is caught, and leaves the timeline as it was.
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { root } from './fx.ts'
+import { root, longIt } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { MAP_VERSIONS } from '../src/scenarios/maps.ts'
 import { BENCH_CASES } from '../src/scenarios/bench.ts'
-import { mkTimeline, order, step, goTo, SNAP_EVERY, MAX_SNAPS, type Timeline } from '../src/app/timeline.ts'
+import {
+  mkTimeline,
+  order,
+  step,
+  mark,
+  goTo,
+  begin,
+  SNAP_EVERY,
+  MAX_SNAPS,
+  type Timeline,
+} from '../src/app/timeline.ts'
 import {
   loadSimData,
   compileRuleset,
@@ -37,88 +48,87 @@ const load = (bytes: Uint8Array): World => {
   attachScenario(w, scenario)
   return w
 }
-// plays to tick T, giving the friendly line a move at tick 1000 (it marches off) when `orders`
-function run(tl: Timeline, w: World, T: number, orders = true): World {
+const move = (x: number) => ({
+  type: 'move' as const,
+  id: unitHandle(0),
+  points: [[x, 40]] as [number, number][],
+  append: false,
+})
+// plays to tick T, giving the friendly line a move as the world stands at each tick of `at`
+function run(tl: Timeline, w: World, T: number, at: number[] = []): World {
   while (w.meta[M_TICK] < T) {
-    if (orders && w.meta[M_TICK] === 1000) {
-      order(tl, w, { type: 'move', id: unitHandle(0), points: [[100, 40]], append: false })
-    }
+    if (at.includes(w.meta[M_TICK])) order(tl, w, move(100))
     step(tl, w)
   }
   return w
 }
-const hashAt = (tl: Timeline, tick: number) => tl.hashes.find(h => h.tick === tick)!.hash
+const back = (tl: Timeline, T: number) => goTo(tl, T, fresh, load).w
 
 describe('timeline', () => {
   it('going back and playing on gives the first pass, with the orders logged after the tick', () => {
     const tl = mkTimeline()
-    const first = run(tl, fresh(), 2400)
-    const end = hashWorld(first)
-    expect(tl.log.length).toBe(1)
-    // back before the order (from a fresh world), and from a save after it
-    for (const T of [700, 1300]) {
-      const w = run(tl, goTo(tl, T, fresh, load), 2400, false)
-      expect(w.meta[M_TICK]).toBe(2400)
-      expect(hashWorld(w)).toBe(end)
-    }
+    const end = hashWorld(run(tl, begin(tl, fresh()), 2400, [1000]))
+    for (const T of [700, 1300]) expect(hashWorld(run(tl, back(tl, T), 2400))).toBe(end)
   })
-  it('a tick back is the tick as first seen', () => {
+  it('the same tick is the same world, stepped to or gone to; an order there keeps what the world holds', () => {
     const tl = mkTimeline()
-    run(tl, fresh(), 2 * SNAP_EVERY + 50)
-    const w = goTo(tl, 2 * SNAP_EVERY + 19, fresh, load)
-    expect(w.meta[M_TICK]).toBe(2 * SNAP_EVERY + 19)
-    const again = run(tl, w, 2 * SNAP_EVERY + 20, false)
-    expect(hashWorld(again)).toBe(hashAt(tl, 2 * SNAP_EVERY + 20))
+    run(tl, begin(tl, fresh()), 2000, [1000])
+    const stepped = run(tl, back(tl, 995), 1000)
+    const steppedNext = tl.next
+    const jumped = back(tl, 1000)
+    expect(hashWorld(stepped)).toBe(hashWorld(jumped))
+    expect(tl.next).toBe(steppedNext)
+    // the order logged for tick 1001 is pending in both: a new order now keeps it
+    order(tl, jumped, move(-100))
+    expect(tl.log.map(s => s.tick)).toEqual([1001, 1001])
   })
-  it('an order on the tick after a save is taken again from that save', () => {
+  it('an order given on a save tick, after the save, is taken again from that save', () => {
     const tl = mkTimeline()
-    const w = run(tl, fresh(), SNAP_EVERY, false)
-    order(tl, w, { type: 'move', id: unitHandle(0), points: [[100, 40]], append: false })
-    const end = hashWorld(run(tl, w, 3 * SNAP_EVERY, false))
-    const back = goTo(tl, SNAP_EVERY + 5, fresh, load)
-    expect(hashWorld(run(tl, back, 3 * SNAP_EVERY, false))).toBe(end)
+    const end = hashWorld(run(tl, begin(tl, fresh()), 3 * SNAP_EVERY, [SNAP_EVERY]))
+    expect(hashWorld(run(tl, back(tl, SNAP_EVERY + 5), 3 * SNAP_EVERY))).toBe(end)
   })
   it('going forward past the furthest tick takes every hash point, with no gap', () => {
     const tl = mkTimeline()
-    run(tl, fresh(), 500)
-    goTo(tl, 1700, fresh, load)
+    run(tl, begin(tl, fresh()), 500)
+    back(tl, 1700)
     const ticks = tl.hashes.map(h => h.tick)
     expect(ticks).toEqual(ticks.map((_, k) => (k + 1) * 20))
     expect(ticks.at(-1)).toBe(1700)
   })
-  it('keeps at most MAX_SNAPS saves, thinning the old ones', () => {
+  longIt(
+    'keeps at most MAX_SNAPS saves, evenly spaced',
+    () => {
+      const tl = mkTimeline()
+      run(tl, begin(tl, fresh()), (MAX_SNAPS + 10) * SNAP_EVERY)
+      expect(tl.snaps.length).toBeLessThanOrEqual(MAX_SNAPS)
+      expect(tl.every).toBe(2 * SNAP_EVERY)
+      expect(tl.snaps.map(s => s.tick)).toEqual(tl.snaps.map((_, k) => (k + 1) * tl.every))
+    },
+    60_000,
+  )
+  it('an order after going back drops the future, its marks too, and the session replays', () => {
     const tl = mkTimeline()
-    run(tl, fresh(), (MAX_SNAPS + 10) * SNAP_EVERY, false)
-    expect(tl.snaps.length).toBeLessThanOrEqual(MAX_SNAPS)
-    expect(tl.snaps.at(-1)!.tick).toBe((MAX_SNAPS + 10) * SNAP_EVERY)
-    expect(tl.snaps[0].tick).toBe(SNAP_EVERY)
-  })
-  it('an order after going back forgets the old future, and the session replays', () => {
-    const tl = mkTimeline()
-    run(tl, fresh(), 2400)
-    const w = goTo(tl, 800, fresh, load)
-    order(tl, w, { type: 'move', id: unitHandle(0), points: [[-100, 40]], append: false })
+    const w0 = run(tl, begin(tl, fresh()), 1800, [1000])
+    mark(tl, w0, 'later')
+    run(tl, w0, 2400)
+    const w = back(tl, 800)
+    order(tl, w, move(-100))
     expect(tl.log.map(s => s.tick)).toEqual([801])
-    expect(tl.hashes.every(h => h.tick <= 800)).toBe(true)
-    run(tl, w, 2000, false)
-    const replay = {
-      simVersion: SIM_VERSION,
-      dataVersion: data.version,
-      ruleset: cr.hash,
-      scenario: scenario.name,
-      seed: 1,
-      ticks: 2000,
-      log: tl.log,
-    }
-    expect(play(replay, data, cr, scenario, tl.hashes)).toBeNull()
+    expect(tl.marks).toEqual([])
+    expect(tl.hashes.every(h => h.tick <= 800) && tl.snaps.every(s => s.tick <= 800)).toBe(true)
+    run(tl, w, 2000)
+    const replay = { simVersion: SIM_VERSION, dataVersion: data.version, ruleset: cr.hash, scenario: scenario.name }
+    expect(play({ ...replay, seed: 1, ticks: 2000, log: tl.log }, data, cr, scenario, tl.hashes)).toBeNull()
+    // going back again plays the branch
+    const end = hashWorld(w)
+    expect(hashWorld(run(tl, back(tl, 1300), 2000))).toBe(end)
   })
-  it('going back after a branch plays the branch, not the old future', () => {
+  it('a tick played again that gives another world throws, and leaves the timeline as it was', () => {
     const tl = mkTimeline()
-    run(tl, fresh(), 2400)
-    const w = goTo(tl, 800, fresh, load)
-    order(tl, w, { type: 'move', id: unitHandle(0), points: [[-100, 40]], append: false })
-    expect(tl.snaps.every(s => s.tick <= 800)).toBe(true)
-    const end = hashWorld(run(tl, w, 2000, false))
-    expect(hashWorld(run(tl, goTo(tl, 1300, fresh, load), 2000, false))).toBe(end)
+    run(tl, begin(tl, fresh()), 900, [300])
+    tl.hashes.find(h => h.tick === 600)!.hash ^= 1
+    const before = JSON.stringify({ ...tl, snaps: tl.snaps.length })
+    expect(() => back(tl, 700)).toThrow(/played again/)
+    expect(JSON.stringify({ ...tl, snaps: tl.snaps.length })).toBe(before)
   })
 })

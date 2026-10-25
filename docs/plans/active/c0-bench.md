@@ -57,11 +57,16 @@ cells get a layer of their own then.
 
 - **Speeds:** ¼× and ½× beside the existing 1×–8×.
 - **A tick at a time:** `.` steps one tick when paused, `,` goes back one. The readout shows the tick number.
-- **Go to a tick:** G asks for a time (`m:ss` or seconds). The page keeps a save of the world every 20 s of play
-  (`src/app/timeline.ts`), restores the last one at or before the time and plays on to it with the commands logged,
-  paused there. The log is kept: playing on from there takes its later orders at their ticks, so the world is the
-  one first seen. An order given after going back forgets the orders the log held past that tick, as a branch, and
-  the session still replays.
+- **Go to a tick:** G asks for a time (`m:ss` or seconds). The timeline (`src/app/timeline.ts`) keeps saves of the
+  world at an even interval, 20 s to start with and doubled when there are more than 24 of them, so going back
+  replays at most one interval. It restores the last save at or before the time and plays on to it with the
+  commands logged, paused there. Its rules:
+  - after every tick, however it was reached, the world holds every logged order stamped for its next tick, so the
+    same tick is the same world, stepped to or gone to;
+  - a tick played again must give the hash it gave the first time, or the timeline says so and the page pauses;
+  - an order given after going back drops the orders, saves, hash points and marks past that tick: a branch. The
+    session still replays;
+  - going to a time works on a copy of the timeline and commits only once the world is reached.
 
 ### 4. The bench map
 

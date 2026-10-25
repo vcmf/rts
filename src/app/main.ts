@@ -46,7 +46,7 @@ import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
 import { Overlay, LAYERS, type Layer } from '../render/overlay.ts'
-import { mkTimeline, order, step, goTo as timelineGoTo } from './timeline.ts'
+import { mkTimeline, order, step, mark as markAt, goTo as timelineGoTo } from './timeline.ts'
 
 // the soldier layer steps once a frame, up to MEN_DT of game time (tested at that step); a longer frame
 // takes more steps, at most MEN_STEPS (then the men fall behind the sim and catch up)
@@ -158,7 +158,17 @@ async function main(): Promise<void> {
     const a = performance.now()
     let n = 0
     while (acc >= DT && n < 20) {
-      tick()
+      // a tick that throws (the timeline found a tick played again giving another world) pauses the page, says so
+      try {
+        tick()
+      } catch (e) {
+        paused = true
+        acc = 0
+        note = String(e)
+        noteT = performance.now()
+        console.error(e)
+        break
+      }
       acc -= DT
       n++
     }
@@ -250,12 +260,24 @@ async function main(): Promise<void> {
   const goTo = (target: number) => {
     // as far as the furthest tick played, or the last order logged
     const T = Math.max(0, Math.min(Math.round(target), Math.max(tl.reached, w.meta[M_TICK], log.at(-1)?.tick ?? 0)))
-    w = timelineGoTo(tl, T, fresh, load)
+    let got: ReturnType<typeof timelineGoTo>
+    try {
+      got = timelineGoTo(tl, T, fresh, load)
+    } catch (e) {
+      // the timeline is left as it was, and the page stays where it is
+      note = String(e)
+      noteT = performance.now()
+      console.error(e)
+      return
+    }
+    w = got.w
     layer = new SoldierLayer(w, scene)
     layer.sync(0, [])
     map.w = w
     over = new Overlay(w)
+    // the orders dropped up to the tick, as the first pass had them
     dropped.length = 0
+    dropped.push(...got.dropped)
     for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
     paused = true
     acc = 0
@@ -263,10 +285,15 @@ async function main(): Promise<void> {
   const askGoTo = () => {
     const said = prompt('Go to a time (m:ss, or seconds)')
     releaseHeld()
-    if (!said) return
-    const [a, b] = said.trim().split(':')
-    const sec = b === undefined ? Number(a) : Number(a) * 60 + Number(b)
-    if (Number.isFinite(sec)) goTo(sec * TICK_HZ)
+    const m = said?.trim().match(/^(?:(\d+):([0-5]?\d)|(\d+(?:\.\d+)?))$/)
+    if (!m) {
+      if (said?.trim()) {
+        note = `not a time: ${said.trim()} (m:ss, or seconds)`
+        noteT = performance.now()
+      }
+      return
+    }
+    goTo((m[3] !== undefined ? Number(m[3]) : Number(m[1]) * 60 + Number(m[2])) * TICK_HZ)
   }
   document.querySelectorAll<HTMLElement>('[data-time]').forEach(el => {
     el.onclick = () =>
@@ -310,7 +337,6 @@ async function main(): Promise<void> {
   // M marks a moment of the playtest (docs/plans/active/s1e3-playtest.md): the prompt holds the page (and the
   // battle) while you say what happened; Cancel marks nothing, and says so on screen (a browser that suppresses
   // dialogs returns at once as if cancelled, so M is never silent). The report prints where everyone stood then
-  const marks: { tick: number; note: string }[] = []
   const mark = (text?: string) => {
     let said = text ?? null
     if (text === undefined) {
@@ -323,8 +349,8 @@ async function main(): Promise<void> {
       noteT = performance.now()
       return
     }
-    marks.push({ tick: w.meta[M_TICK], note: said.trim() })
-    note = `moment ${marks.length} marked`
+    markAt(tl, w, said.trim())
+    note = `moment ${tl.marks.length} marked`
     noteT = performance.now()
   }
 
@@ -589,8 +615,8 @@ async function main(): Promise<void> {
     // after going back, the log and the hash points may hold a future the world has not reached again
     hashes: hashes.filter(h => h.tick <= w.meta[M_TICK]),
   })
-  // the marks the world has reached (after going back, later ones are of a future it has not played again)
-  const session = () => ({ ...replay(), marks: marks.filter(m => m.tick <= w.meta[M_TICK]) })
+  // the marks the world has reached (after going back, later ones wait for it to be played again)
+  const session = () => ({ ...replay(), marks: tl.marks.filter(m => m.tick <= w.meta[M_TICK]) })
 
   // headless hooks (tools/app-check.mjs): orders and time without real time passing
   Object.assign(window, {

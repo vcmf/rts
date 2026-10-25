@@ -126,8 +126,8 @@ formations meet (`src/render/overlay.ts`, from `src/sim/geometry.ts`): each comp
 the fight), each bin's shaded by its lag, the pairs of companies of two formations within 5 m (grey friends, red
 enemies, orange a charge, thick a melee pair; an overlap of two formations in the fight filled red), statuses, and
 each formation's queue. The panel picks its layers. Time: ¼× and ½× besides 1×–8×; `.` a tick on, `,` a tick
-back, G a time to go to: the world is restored from a save taken every 20 s and played on with the commands logged,
-and an order given then forgets the log after it (`src/app/timeline.ts`). The bench's cases (`src/scenarios/bench.ts`, `bench-…`) stand on the
+back, G a time to go to: the world is restored from the last save (evenly spaced, 20 s to start with) and played on
+with the commands logged, and an order given then branches the timeline (`src/app/timeline.ts`). The bench's cases (`src/scenarios/bench.ts`, `bench-…`) stand on the
 flat bench field (`maps/bench.ts`).
 
 **Hooks** (`window.APP`): select, march, charge, form, order, `advance(seconds)` (pauses the clock and steps
