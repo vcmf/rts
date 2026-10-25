@@ -433,7 +433,7 @@ export function apply(map: MapFile, cat: Catalogue, dems: Map<string, Dem> = new
         H[k] += h * rise * smooth(1 - q.over / back)
       })
     } else if (kind === 'dem') {
-      // real relief (docs/plans/active/m5-relief.md): the file's heights, less the datum, set in the piece's area
+      // real relief (docs/plans/done/m5-relief.md): the file's heights, less the datum, set in the piece's area
       // (the whole extent with no shape) and blended into the ground under it over its edge
       const d = dems.get(f.source as string)
       if (!d) throw new Error(`${f.id}: its dem source "${String(f.source)}" was not loaded (checkFiles first)`)

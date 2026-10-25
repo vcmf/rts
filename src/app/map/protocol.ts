@@ -29,7 +29,10 @@ export interface Compiled {
   depth: ArrayBuffer // Uint16Array per cell: water depth, mm
   layers: Record<LayerName, ArrayBuffer> // Uint16Array per cell: an index into table (0: none)
   table: Resolved[]
-  ms: { validate: number; apply: number; draw: number }
+  // the lit view's bakes (src/render/lit/bake.ts): the relief on the nodes, the masks on the cells, RGBA
+  relief: ArrayBuffer
+  masks: ArrayBuffer
+  ms: { validate: number; apply: number; draw: number; bake: number }
 }
 export interface Failed {
   seq: number

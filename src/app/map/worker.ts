@@ -6,6 +6,7 @@ import { checkFiles, validate } from '../../map/validate.ts'
 import { expand } from '../../map/expand.ts'
 import { apply, LAYER_NAMES } from '../../map/apply.ts'
 import { draft } from '../../map/draft.ts'
+import { bakeMasks, bakeRelief } from '../../render/lit/bake.ts'
 import type { CompileReply, CompileRequest, LayerName } from './protocol.ts'
 
 self.onmessage = (e: MessageEvent<CompileRequest>) => {
@@ -85,6 +86,9 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
   const t2 = performance.now()
   const img = draft(L)
   const t3 = performance.now()
+  const relief = bakeRelief(L.height, L.nx + 1, L.nz + 1, L.cell, 'nw')
+  const masks = bakeMasks(L)
+  const t4 = performance.now()
   const layers = Object.fromEntries(LAYER_NAMES.map(n => [n, L[n].buffer as ArrayBuffer])) as Record<
     LayerName,
     ArrayBuffer
@@ -105,7 +109,16 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
     depth: L.depth.buffer as ArrayBuffer,
     layers,
     table: L.table,
-    ms: { validate: t1 - t0, apply: t2 - t1, draw: t3 - t2 },
+    relief: relief.buffer as ArrayBuffer,
+    masks: masks.buffer as ArrayBuffer,
+    ms: { validate: t1 - t0, apply: t2 - t1, draw: t3 - t2, bake: t4 - t3 },
   }
-  ;(self as unknown as Worker).postMessage(reply, [reply.rgba, reply.height, reply.depth, ...Object.values(layers)])
+  ;(self as unknown as Worker).postMessage(reply, [
+    reply.rgba,
+    reply.height,
+    reply.depth,
+    reply.relief,
+    reply.masks,
+    ...Object.values(layers),
+  ])
 }

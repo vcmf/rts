@@ -1,11 +1,11 @@
 ---
 status: current
 last_reviewed: 2026-10-25
-code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces]
+code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, src/render/lit/view.ts, src/render/lit/bake.ts, src/render/lit/paper.ts, src/render/lit/shaders/lit.frag, test/render-lit-bake.test.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces, 0064-lit-view-flat-plane-baked-in-the-worker]
 ---
 
-# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5)
+# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5, M6a)
 
 A map is a strict JSON file (`maps/<id>.map.json`): a list of features, each with an id, a dotted kind from the
 kinds catalogue (`maps/kinds.json`), one shape and attribute overrides. This system checks such a file, resolves
@@ -212,8 +212,16 @@ maps/kinds.json ──► checkCatalogue ─┐
   cobbles, brick, metalled); a tree as a disc of its crown (a radius of at least 2 m, so a poplar reads), darker for columnar
   and conical forms.
 - **The page** (`app/map.html`, `src/app/map/`):
-  - a worker compiles; the page draws with pan and zoom, outlines with ids, the play area, and the cell under
-    the mouse with the feature in each layer;
+  - a worker compiles, draws the flat draft and bakes the lit view's textures; the page draws the map in the **lit
+    view** (`src/render/lit/`, decision 0064, M6a): one flat plane in Babylon, seen 20° off straight down (decision
+    0055, `?tilt=`), its shader ported from the prototype's lit and shaded paths: the paper and its worn border, the
+    woods darkening it, the shaded relief (slope light, cast shadow and exposure baked on the 2 m nodes, the light one
+    of the grid's 8 directions, north-west for now), the water as a wash sunk below its banks, contours every 5 m and
+    25 m from the node heights (a float texture read by `texelFetch`), the paper's grain;
+  - a "view" setting shows the flat draft's colours on the same plane instead (a debug overlay); the outlines, ids
+    and the play area are drawn on a 2D canvas over it, through the same camera (circles and ellipses as rings of
+    ground points, so they lean with the view); pan keeps the ground point under the pointer, zoom keeps the one
+    under the cursor, and the cell under the mouse shows the feature in each layer;
   - errors are listed while the last good drawing stays;
   - a saved map or catalogue reaches the page through a small Vite plugin (`map-changed`, `vite.config.ts`) and
     recompiles.
@@ -273,6 +281,9 @@ same positions and strengths on the valley as on the original battlefield.
 nodes and on a quadratic surface between them, with constant second differences along a 2 m profile (no lattice);
 a whole-extent piece and its shift, an area piece's inside, blend and outside; the same bytes twice; the validator's
 and the file checks' refusals; the test map's real heights and its sim compile.
+
+`test/render-lit-bake.test.ts` (M6a): the relief bake on flat ground, the cast shadow away from the light for each of
+its 8 directions, the exposure of a block's top and foot; the cells' mask.
 
 `test/map-language.test.ts`:
 - the catalogue checks clean, and a broken one is reported;

@@ -1,4 +1,4 @@
-// Real relief (docs/plans/active/m5-relief.md): the `.rdem` heightfield file, its checks against the map's `dem`
+// Real relief (docs/plans/done/m5-relief.md): the `.rdem` heightfield file, its checks against the map's `dem`
 // sources, and its heights read between the source's nodes. Exact maths only (decision 0006): + − × / and integer
 // bit operations, so a map with real relief gives the same bytes in Node and in the page.
 //

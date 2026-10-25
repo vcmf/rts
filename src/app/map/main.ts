@@ -7,6 +7,7 @@ import type { Feature, Pt } from '../../map/schema.ts'
 import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName } from './protocol.ts'
 import { demFileNames } from '../../map/dem.ts'
+import { LitView, TILT } from '../../render/lit/view.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -17,7 +18,7 @@ const KINDS = import.meta.glob('/maps/kinds.json', { query: '?raw', import: 'def
   string,
   () => Promise<string>
 >
-// the heightfields beside them (docs/plans/active/m5-relief.md), as URLs: fetched only when a map's source names one
+// the heightfields beside them (docs/plans/done/m5-relief.md), as URLs: fetched only when a map's source names one
 const RDEMS = import.meta.glob('/maps/*.rdem', { query: '?url', import: 'default' }) as Record<
   string,
   () => Promise<string>
@@ -73,6 +74,11 @@ const errors = $('errors')
 const readout = $('readout')
 const showOutlines = $<HTMLInputElement>('outlines')
 const showIds = $<HTMLInputElement>('ids')
+const mode = $<HTMLSelectElement>('mode')
+// the lit map view under the overlays (docs/plans/active/m6-lit-view.md); ?tilt= degrees off straight down
+const lit = new LitView($<HTMLCanvasElement>('lit'))
+const tiltParam = Number(new URLSearchParams(location.search).get('tilt'))
+const tilt = Number.isFinite(tiltParam) && new URLSearchParams(location.search).has('tilt') ? tiltParam : TILT
 
 const names = Object.keys(MAPS).sort()
 for (const n of names) picker.append(new Option(n.replace('/maps/', '').replace('.map.json', ''), n))
@@ -83,12 +89,12 @@ picker.value =
 // the view: world point at the canvas centre, and pixels per metre; kept across reloads of the same map
 let view = { cx: 0, cz: 0, ppm: 0 }
 let current: Compiled | null = null
-let image: HTMLCanvasElement | null = null
 let issues: Issue[] = []
 let layers: Partial<Record<LayerName, Uint16Array>> = {}
 let height = new Float64Array(0)
 let depth = new Uint16Array(0)
 const log: { reason: string; savedAt?: number; drawnAt: number; ms: number }[] = []
+let frameMs = 0 // the last frame's CPU time in the lit view
 
 let seq = 0
 let pending: { reason: string; t0: number; savedAt?: number } | null = null
@@ -138,10 +144,20 @@ function onReply(e: MessageEvent<CompileReply>): void {
     layers = Object.fromEntries(Object.entries(r.layers).map(([k, b]) => [k, new Uint16Array(b)]))
     height = new Float64Array(r.height)
     depth = new Uint16Array(r.depth)
-    image = document.createElement('canvas')
-    image.width = r.w
-    image.height = r.h
-    image.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(r.rgba), r.w, r.h), 0, 0)
+    lit.setMap({
+      x0: r.x0,
+      z0: r.z0,
+      cell: r.cell,
+      nx: r.nx,
+      nz: r.nz,
+      datum: r.map.datum ?? 0,
+      season: r.map.season,
+      light: 'nw',
+      height,
+      relief: new Uint8Array(r.relief),
+      masks: new Uint8Array(r.masks),
+      flat: { w: r.w, h: r.h, rgba: new Uint8Array(r.rgba) },
+    })
     if (fresh || !view.ppm) fit()
   } else issues = r.issues
   const now = performance.now()
@@ -181,14 +197,10 @@ function fit(): void {
   const h = current.nz * current.cell
   view = { cx: 0, cz: 0, ppm: Math.min(r.width / w, r.height / h) * 0.95 }
 }
-const toScreen = (x: number, z: number): [number, number] => {
-  const r = canvas.getBoundingClientRect()
-  return [r.width / 2 + (x - view.cx) * view.ppm, r.height / 2 - (z - view.cz) * view.ppm]
-}
-const toWorld = (sx: number, sy: number): Pt => {
-  const r = canvas.getBoundingClientRect()
-  return [view.cx + (sx - r.width / 2) / view.ppm, view.cz - (sy - r.height / 2) / view.ppm]
-}
+// the camera follows the view; every point drawn or picked goes through it
+const place = () => lit.setCamera({ ...view, tilt })
+const toScreen = (x: number, z: number): [number, number] => lit.project(x, z)
+const toWorld = (sx: number, sy: number): Pt => lit.unproject(sx, sy) ?? [view.cx, view.cz]
 
 const CATEGORY_INK: Record<string, string> = {
   relief: '#7a5a2a',
@@ -218,19 +230,16 @@ function outline(f: Feature): void {
   }
   if (f.line) path(f.line, false)
   if (f.area) f.area.forEach(r => path(r, true))
-  if (f.circle) {
-    const [x, y] = toScreen(f.circle[0][0], f.circle[0][1])
-    ctx.beginPath()
-    ctx.arc(x, y, f.circle[1] * view.ppm, 0, 2 * Math.PI)
-    ctx.stroke()
-  }
-  if (f.ellipse) {
-    const [[cx, cz], a, b, ang] = f.ellipse
-    const [x, y] = toScreen(cx, cz)
-    ctx.beginPath()
-    ctx.ellipse(x, y, a * view.ppm, b * view.ppm, -ang, 0, 2 * Math.PI)
-    ctx.stroke()
-  }
+  // a circle or an ellipse as a ring of points on the ground, so it leans with the view
+  const ring = (c: Pt, a: number, b: number, ang: number) =>
+    Array.from({ length: 48 }, (_, k): Pt => {
+      const t = (k / 48) * 2 * Math.PI
+      const u = a * Math.cos(t)
+      const v = b * Math.sin(t)
+      return [c[0] + u * Math.cos(ang) - v * Math.sin(ang), c[1] + u * Math.sin(ang) + v * Math.cos(ang)]
+    })
+  if (f.circle) path(ring(f.circle[0], f.circle[1], f.circle[1], 0), true)
+  if (f.ellipse) path(ring(...f.ellipse), true)
   const at = anchor(f)
   if (f.point || f.near) {
     const [x, y] = toScreen(...(f.point ?? f.near!))
@@ -263,18 +272,28 @@ function draw(): void {
     canvas.height = Math.round(r.height * dpr)
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.fillStyle = getComputedStyle(document.body).backgroundColor
-  ctx.fillRect(0, 0, r.width, r.height)
-  if (!current || !image) return
-  const [x0, y0] = toScreen(current.x0, current.z0 + current.nz * current.cell)
-  ctx.imageSmoothingEnabled = view.ppm < 1
-  ctx.drawImage(image, x0, y0, current.nx * current.cell * view.ppm, current.nz * current.cell * view.ppm)
+  ctx.clearRect(0, 0, r.width, r.height)
+  if (!current) return
+  place()
+  frameMs = lit.render()
   // the play area
   const p = current.map.play
-  const [px, py] = toScreen(-p.w / 2, p.h / 2)
+  const corners: Pt[] = [
+    [-p.w / 2, -p.h / 2],
+    [p.w / 2, -p.h / 2],
+    [p.w / 2, p.h / 2],
+    [-p.w / 2, p.h / 2],
+  ]
   ctx.setLineDash([6, 4])
   ctx.strokeStyle = 'rgba(0,0,0,.45)'
-  ctx.strokeRect(px, py, p.w * view.ppm, p.h * view.ppm)
+  ctx.beginPath()
+  corners.forEach((c, k) => {
+    const [x, y] = toScreen(c[0], c[1])
+    if (k) ctx.lineTo(x, y)
+    else ctx.moveTo(x, y)
+  })
+  ctx.closePath()
+  ctx.stroke()
   ctx.setLineDash([])
   if (showOutlines.checked) for (const f of current.map.features) outline(f)
   if (issues.length) {
@@ -286,7 +305,7 @@ function draw(): void {
 function panel(): void {
   const c = current
   status.textContent = c
-    ? `${c.map.name}: ${c.map.features.length} features, ${c.nx}×${c.nz} cells of ${c.cell} m · validate ${c.ms.validate.toFixed(0)} ms, apply ${c.ms.apply.toFixed(0)} ms, draw ${c.ms.draw.toFixed(0)} ms`
+    ? `${c.map.name}: ${c.map.features.length} features, ${c.nx}×${c.nz} cells of ${c.cell} m · validate ${c.ms.validate.toFixed(0)} ms, apply ${c.ms.apply.toFixed(0)} ms, draw ${c.ms.draw.toFixed(0)} ms, bake ${c.ms.bake.toFixed(0)} ms`
     : 'compiling…'
   errors.replaceChildren(
     ...issues.map(i => {
@@ -323,9 +342,10 @@ function hover(sx: number, sy: number): void {
 }
 
 // pan with the mouse, zoom with the wheel about the cursor
-let drag: { x: number; y: number; cx: number; cz: number } | null = null
+// a drag keeps the ground point it started on under the pointer
+let drag: { at: Pt } | null = null
 canvas.addEventListener('pointerdown', e => {
-  drag = { x: e.clientX, y: e.clientY, cx: view.cx, cz: view.cz }
+  drag = { at: toWorld(e.offsetX, e.offsetY) }
   canvas.setPointerCapture(e.pointerId)
 })
 canvas.addEventListener('pointerup', () => {
@@ -333,8 +353,9 @@ canvas.addEventListener('pointerup', () => {
 })
 canvas.addEventListener('pointermove', e => {
   if (drag) {
-    view.cx = drag.cx - (e.clientX - drag.x) / view.ppm
-    view.cz = drag.cz + (e.clientY - drag.y) / view.ppm
+    const now = toWorld(e.offsetX, e.offsetY)
+    view.cx += drag.at[0] - now[0]
+    view.cz += drag.at[1] - now[1]
     draw()
   }
   hover(e.offsetX, e.offsetY)
@@ -345,6 +366,7 @@ canvas.addEventListener(
     e.preventDefault()
     const before = toWorld(e.offsetX, e.offsetY)
     view.ppm = Math.max(0.05, Math.min(40, view.ppm * Math.exp(-e.deltaY * 0.0015)))
+    place()
     const after = toWorld(e.offsetX, e.offsetY)
     view.cx += before[0] - after[0]
     view.cz += before[1] - after[1]
@@ -360,6 +382,10 @@ picker.addEventListener('change', () => {
   void compile('pick')
 })
 showOutlines.addEventListener('change', draw)
+mode.addEventListener('change', () => {
+  lit.setFlat(mode.value === 'flat')
+  draw()
+})
 showIds.addEventListener('change', draw)
 
 // a saved map file, catalogue or heightfield (vite.config.ts sends `map-changed` with the file and the time it was
@@ -396,6 +422,14 @@ window.MAP = {
   get height() {
     return height
   },
+  // the lit view: the last compile's bake time and the last frame's CPU time, ms; draw a frame
+  get bakeMs() {
+    return current?.ms.bake ?? null
+  },
+  get frameMs() {
+    return frameMs
+  },
+  draw,
   compile: () => compile('manual'),
   fit: () => {
     fit()

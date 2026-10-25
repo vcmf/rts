@@ -1,4 +1,4 @@
-// The files a map's dem sources name (docs/plans/active/m5-relief.md), read from beside the map file in Node: for
+// The files a map's dem sources name (docs/plans/done/m5-relief.md), read from beside the map file in Node: for
 // the map CLI (tools/map.ts) and the sim's map loader (maps/engine.ts). The page fetches them (src/app/map/main.ts).
 import fs from 'node:fs'
 import path from 'node:path'
