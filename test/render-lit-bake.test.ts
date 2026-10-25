@@ -80,44 +80,62 @@ describe('M6a: the cell mask', () => {
 
 describe('M6b: the ink distance field', () => {
   const grid = { x0: -20, z0: -20, cell: 2, nx: 20, nz: 20 }
+  const none = new Uint16Array(grid.nx * grid.nz)
   // the signed metres a channel stores at a point (the cell holding it)
   const read = (out: Uint8Array, ch: number, x: number, z: number) => {
     const c = Math.floor((z - grid.z0) / grid.cell) * grid.nx + Math.floor((x - grid.x0) / grid.cell)
     return ((out[c * 4 + ch] - 128) / 127) * INK_RANGE
   }
+  const across: Pt[] = [
+    [-20, 1],
+    [20, 1],
+  ]
+  const sq = (r: number, cx = 0): Pt[] => [
+    [cx - r, -r],
+    [cx + r, -r],
+    [cx + r, r],
+    [cx - r, r],
+  ]
   it("a way's distance is negative inside its width, 0 at its edges, positive beyond", () => {
-    const out = bakeInk(grid, {
-      way: [
-        {
-          line: [
-            [-20, 1],
-            [20, 1],
-          ],
-          half: 3,
-        },
-      ],
-      water: [],
-      barrier: [],
-      wood: [],
-    })
+    const out = bakeInk(grid, { way: [{ line: across, half: 3 }], water: [], wood: [] }, none)
     expect(read(out, 0, 0, 1)).toBeCloseTo(-3, 1) // the cell centred on the line
     expect(read(out, 0, 0, 5)).toBeCloseTo(1, 1) // 4 m from the line, 1 m past its edge
     expect(read(out, 0, 0, 15)).toBeCloseTo(INK_RANGE, 1) // out of reach
     expect(read(out, 1, 0, 1)).toBeCloseTo(INK_RANGE, 1) // no water there
   })
+  it('a line narrower than a cell keeps a cell of half-width, so it never vanishes between cell centres', () => {
+    const between: Pt[] = [
+      [-20, 0],
+      [20, 0],
+    ] // midway between two rows of cell centres
+    const out = bakeInk(grid, { way: [{ line: between, half: 0.75 }], water: [], wood: [] }, none)
+    expect(read(out, 0, 0, 1)).toBeLessThan(0)
+    expect(read(out, 0, 0, -1)).toBeLessThan(0)
+  })
   it("an area's distance is negative inside its ring, positive outside, and keeps out of its holes", () => {
-    const sq = (r: number): Pt[] => [
-      [-r, -r],
-      [r, -r],
-      [r, r],
-      [-r, r],
-    ]
-    const out = bakeInk(grid, { way: [], water: [{ rings: [sq(9), sq(3)], half: 0 }], barrier: [], wood: [] })
+    const out = bakeInk(grid, { way: [], water: [{ rings: [sq(9), sq(3)], half: 0 }], wood: [] }, none)
     expect(read(out, 1, 7, 1)).toBeCloseTo(-2, 1) // in the ring, 2 m from its outer edge
     expect(read(out, 1, 1, 1)).toBeCloseTo(2, 1) // in the hole, 2 m from its edge
     expect(read(out, 1, 13, 1)).toBeCloseTo(4, 1) // outside
   })
-  it("inkOf takes each feature's width from its resolved attributes, a barrier's from its cells", () => {
+  it('a wood keeps clear of the band of a line it clears', () => {
+    const out = bakeInk(
+      grid,
+      { way: [], water: [], wood: [{ rings: [sq(15)], half: 0, cut: [{ line: across, near: 3 }] }] },
+      none,
+    )
+    expect(read(out, 3, 5, 1)).toBeGreaterThan(0) // on the line: out of the wood
+    expect(read(out, 3, 5, 5)).toBeLessThan(0) // 4 m from it: in the wood
+    expect(read(out, 3, 5, 3)).toBeCloseTo(1, 0) // 2 m from it: 1 m inside the band, out of the wood
+  })
+  it("the barriers' field is their cells', so a gap in a hedge stays open", () => {
+    const cells = new Uint16Array(grid.nx * grid.nz)
+    for (let i = 0; i < grid.nx; i++) if (i !== 10) cells[10 * grid.nx + i] = 1 // a row of cells, gap at i = 10
+    const out = bakeInk(grid, { way: [], water: [], wood: [] }, cells)
+    expect(read(out, 2, -5, 1)).toBeLessThan(0) // a barrier cell
+    expect(read(out, 2, 1, 1)).toBeGreaterThan(0) // the gap
+  })
+  it("inkOf takes each feature's width from its resolved attributes, and a wood's cleared lines with their reach", () => {
     const line: Pt[] = [
       [0, 0],
       [10, 0],
@@ -125,22 +143,20 @@ describe('M6b: the ink distance field', () => {
     const features = [
       { id: 'road', line },
       { id: 'brook', line },
-      { id: 'hedge', line },
       { id: 'pond', circle: [[0, 0], 5] as [Pt, number] },
-      { id: 'copse', circle: [[20, 0], 8] as [Pt, number] },
+      { id: 'copse', circle: [[20, 0], 8] as [Pt, number], clear: [{ id: 'road', offset: 1 }] },
     ]
     const table: Resolved[] = [
       { id: 'road', kind: 'way.road', priority: 0, attrs: { width: 6 } },
       { id: 'brook', kind: 'water.stream', priority: 0, attrs: { width: 4 } },
-      { id: 'hedge', kind: 'barrier.hedge', priority: 0, attrs: { thickness: 2 } },
       { id: 'pond', kind: 'water.pond', priority: 0, attrs: {} },
       { id: 'copse', kind: 'veg.wood.broad', priority: 0, attrs: { growth: 'stand' } },
     ]
-    const ink = inkOf(features, table, 2)
+    const ink = inkOf(features, table)
     expect(ink.way.map(i => i.half)).toEqual([3])
     expect(ink.water.map(i => i.half)).toEqual([2, 0])
     expect(ink.water[1].rings).toBeTruthy()
-    expect(ink.barrier.map(i => i.half)).toEqual([2])
     expect(ink.wood.length).toBe(1)
+    expect(ink.wood[0].cut).toEqual([{ line, near: 4 }]) // the road's reach (3 m) and the offset
   })
 })

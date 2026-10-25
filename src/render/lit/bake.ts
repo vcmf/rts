@@ -5,8 +5,9 @@
 import type { Layers } from '../../map/apply.ts'
 import type { Feature, Pt } from '../../map/schema.ts'
 import type { Resolved } from '../../map/resolve.ts'
-import { inRing } from '../../map/geometry.ts'
 import { ringsOf } from '../../map/reach.ts'
+import { lineReach } from '../../map/apply.ts'
+import { listOf, type Clear } from '../../map/util.ts'
 import { sstep } from '../../look/noise.ts'
 
 // the light: toward it, one of the grid's eight directions (x east, z north), and its height
@@ -150,11 +151,15 @@ export function bakeMasks(
 // the ink's distance field (M6b): signed metres to the nearest edge, stored over ±INK_RANGE in a byte
 export const INK_RANGE = 8 // m
 
-/** A line feature drawn as ink: its centreline and half-width; or an area: its rings. */
-interface Inked {
+/**
+ * A feature drawn as ink: a line (its centreline and half-width) or an area (its rings, holes after the outer one),
+ * less the bands of the lines it keeps clear of (`clear`: the line and how far from it the area begins, m).
+ */
+export interface Inked {
   line?: Pt[]
   rings?: Pt[][]
-  half: number // m: a line's half-width (0 for an area)
+  half: number
+  cut?: { line: Pt[]; near: number }[]
 }
 
 /**
@@ -162,73 +167,123 @@ interface Inked {
  * cell's centre to the nearest edge of a kind of feature (negative inside), over ±INK_RANGE m, 128 at the edge:
  * R the ways (their two edges), G the water (a stream's banks, a pond's shore), B the barriers, A the woods. The shader
  * fills the water and the woods from these, not from the cells, so their edges are the shapes'. A distance field
- * reads between its texels as straight as the edge itself, so the hairlines stay crisp at every zoom.
+ * reads between its texels as straight as the edge itself, so the hairlines stay crisp at every zoom. The barriers
+ * are on the grid by design (proposal §3.6): their field is their cells' (`barrier`), gates open.
  */
 export function bakeInk(
   grid: { x0: number; z0: number; cell: number; nx: number; nz: number },
-  layers: { way: Inked[]; water: Inked[]; barrier: Inked[]; wood: Inked[] },
+  layers: { way: Inked[]; water: Inked[]; wood: Inked[] },
+  barrier: Uint16Array,
 ): Uint8Array {
   const { x0, z0, cell, nx, nz } = grid
   const out = new Uint8Array(nx * nz * 4)
+  const cellsOf = (box: number[]) => ({
+    i0: Math.max(0, Math.floor((box[0] - x0) / cell)),
+    i1: Math.min(nx - 1, Math.floor((box[2] - x0) / cell)),
+    j0: Math.max(0, Math.floor((box[1] - z0) / cell)),
+    j1: Math.min(nz - 1, Math.floor((box[3] - z0) / cell)),
+  })
+  // each cell within reach of a segment, with its centre and its distance to the segment
+  const band = (a: Pt, b: Pt, reach: number, fn: (c: number, d: number) => void) => {
+    const r = cellsOf([
+      Math.min(a[0], b[0]) - reach,
+      Math.min(a[1], b[1]) - reach,
+      Math.max(a[0], b[0]) + reach,
+      Math.max(a[1], b[1]) + reach,
+    ])
+    for (let j = r.j0; j <= r.j1; j++) {
+      for (let i = r.i0; i <= r.i1; i++) fn(j * nx + i, segDistance(a, b, x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell))
+    }
+  }
   const field = (items: Inked[], ch: number) => {
     const sd = new Float32Array(nx * nz).fill(INK_RANGE)
-    // the cells within reach of a box, with each one's centre
-    const each = (box: number[], fn: (c: number, x: number, z: number) => void) => {
-      const i0 = Math.max(0, Math.floor((box[0] - x0) / cell))
-      const i1 = Math.min(nx - 1, Math.floor((box[2] - x0) / cell))
-      const j0 = Math.max(0, Math.floor((box[1] - z0) / cell))
-      const j1 = Math.min(nz - 1, Math.floor((box[3] - z0) / cell))
-      for (let j = j0; j <= j1; j++) {
-        for (let i = i0; i <= i1; i++) fn(j * nx + i, x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell)
-      }
-    }
     for (const it of items) {
-      const reach = it.half + INK_RANGE
       if (it.line) {
+        // a line narrower than a cell keeps a cell's half-width, so its field always holds an inside (as apply paints
+        // every line at least a cell wide)
+        const half = Math.max(it.half, cell)
         for (let k = 1; k < it.line.length; k++) {
-          const a = it.line[k - 1]
-          const b = it.line[k]
-          const box = [
-            Math.min(a[0], b[0]) - reach,
-            Math.min(a[1], b[1]) - reach,
-            Math.max(a[0], b[0]) + reach,
-            Math.max(a[1], b[1]) + reach,
-          ]
-          each(box, (c, x, z) => {
-            const v = segDistance(a, b, x, z) - it.half
-            if (v < sd[c]) sd[c] = v
+          band(it.line[k - 1], it.line[k], half + INK_RANGE, (c, d) => {
+            if (d - half < sd[c]) sd[c] = d - half
           })
         }
       }
-      if (it.rings) {
-        const pts = it.rings[0]
-        const box = [
-          Math.min(...pts.map(p => p[0])) - INK_RANGE,
-          Math.min(...pts.map(p => p[1])) - INK_RANGE,
-          Math.max(...pts.map(p => p[0])) + INK_RANGE,
-          Math.max(...pts.map(p => p[1])) + INK_RANGE,
-        ]
-        each(box, (c, x, z) => {
-          let d = Infinity
-          for (const ring of it.rings!) {
-            for (let k = 0; k < ring.length; k++) {
-              d = Math.min(d, segDistance(ring[k], ring[(k + 1) % ring.length], x, z))
-            }
-          }
-          const inside = inRing(it.rings![0], [x, z]) && !it.rings!.slice(1).some(h => inRing(h, [x, z]))
-          const v = inside ? -d : d
-          if (v < sd[c]) sd[c] = v
-        })
-      }
+      if (it.rings) areaField(it, sd)
     }
     for (let c = 0; c < sd.length; c++) {
       out[c * 4 + ch] = Math.round(128 + (Math.max(-INK_RANGE, Math.min(INK_RANGE, sd[c])) / INK_RANGE) * 127)
     }
   }
+  // an area's signed field into sd (a union by min): the distance near its edges, inside or out by a scanline fill of
+  // its rings (even-odd, so holes are out), less the bands it keeps clear of
+  const areaField = (it: Inked, sd: Float32Array) => {
+    const rings = it.rings!
+    const all = rings.flat()
+    const r = cellsOf([
+      Math.min(...all.map(p => p[0])) - INK_RANGE,
+      Math.min(...all.map(p => p[1])) - INK_RANGE,
+      Math.max(...all.map(p => p[0])) + INK_RANGE,
+      Math.max(...all.map(p => p[1])) + INK_RANGE,
+    ])
+    const w = r.i1 - r.i0 + 1
+    const h = r.j1 - r.j0 + 1
+    if (w <= 0 || h <= 0) return
+    const local = (c: number) => (Math.floor(c / nx) - r.j0) * w + ((c % nx) - r.i0)
+    const dist = new Float32Array(w * h).fill(INK_RANGE)
+    for (const ring of rings) {
+      for (let k = 0; k < ring.length; k++) {
+        band(ring[k], ring[(k + 1) % ring.length], INK_RANGE, (c, d) => {
+          const q = local(c)
+          if (d < dist[q]) dist[q] = d
+        })
+      }
+    }
+    const inside = new Uint8Array(w * h)
+    for (let j = 0; j < h; j++) {
+      const z = z0 + (r.j0 + j + 0.5) * cell
+      const xs: number[] = []
+      for (const ring of rings) {
+        for (let k = 0; k < ring.length; k++) {
+          const [ax, az] = ring[k]
+          const [bx, bz] = ring[(k + 1) % ring.length]
+          if (az <= z !== bz <= z) xs.push(ax + ((z - az) / (bz - az)) * (bx - ax))
+        }
+      }
+      xs.sort((u, v) => u - v)
+      for (let q = 0; q + 1 < xs.length; q += 2) {
+        const i0 = Math.max(0, Math.ceil((xs[q] - x0) / cell - 0.5) - r.i0)
+        const i1 = Math.min(w - 1, Math.floor((xs[q + 1] - x0) / cell - 0.5) - r.i0)
+        for (let i = i0; i <= i1; i++) inside[j * w + i] = 1
+      }
+    }
+    const v = new Float32Array(w * h)
+    for (let q = 0; q < v.length; q++) v[q] = inside[q] ? -dist[q] : dist[q]
+    // the bands it keeps clear of: outside the area within `near` of the line
+    for (const cut of it.cut ?? []) {
+      for (let k = 1; k < cut.line.length; k++) {
+        band(cut.line[k - 1], cut.line[k], cut.near + INK_RANGE, (c, d) => {
+          const i = c % nx
+          const j = Math.floor(c / nx)
+          if (i < r.i0 || i > r.i1 || j < r.j0 || j > r.j1) return
+          const q = local(c)
+          if (cut.near - d > v[q]) v[q] = cut.near - d
+        })
+      }
+    }
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) {
+        const c = (r.j0 + j) * nx + r.i0 + i
+        if (v[j * w + i] < sd[c]) sd[c] = v[j * w + i]
+      }
+    }
+  }
   field(layers.way, 0)
   field(layers.water, 1)
-  field(layers.barrier, 2)
   field(layers.wood, 3)
+  // the barriers' cells: half a cell inside or out at each centre, so the edge lies on the cells' sides
+  for (let c = 0; c < nx * nz; c++) {
+    out[c * 4 + 2] = Math.round(128 + ((barrier[c] ? -cell / 2 : cell / 2) / INK_RANGE) * 127)
+  }
   return out
 }
 
@@ -244,12 +299,13 @@ function segDistance(a: Pt, b: Pt, x: number, z: number): number {
 }
 
 /**
- * The ink of a compiled map's features: its ways, water and barriers, each with its shape and half-width from its
- * resolved attributes (a barrier's thickness in cells).
+ * The ink of a compiled map's features: its ways, water and woods, each with its shape and half-width from its resolved
+ * attributes, and a wood's `clear` lines with the reach apply gives them (`lineReach`, a sunken way's cut, the offset).
  */
-export function inkOf(features: Feature[], table: Resolved[], cell: number): Parameters<typeof bakeInk>[1] {
+export function inkOf(features: Feature[], table: Resolved[]): Parameters<typeof bakeInk>[1] {
   const byId = new Map(table.map(r => [r.id, r]))
-  const out: Parameters<typeof bakeInk>[1] = { way: [], water: [], barrier: [], wood: [] }
+  const lines = new Map(features.filter(f => f.line).map(f => [f.id, f.line!]))
+  const out: Parameters<typeof bakeInk>[1] = { way: [], water: [], wood: [] }
   for (const f of features) {
     const r = byId.get(f.id)
     if (!r) continue
@@ -262,10 +318,16 @@ export function inkOf(features: Feature[], table: Resolved[], cell: number): Par
       if (rings) out.water.push({ rings, half: 0 })
     } else if (r.attrs.growth === 'stand') {
       const rings = ringsOf(f)
-      if (rings) out.wood.push({ rings, half: 0 })
-    } else if (cat === 'barrier' && f.line) {
-      const cells = typeof r.attrs.thickness === 'number' ? r.attrs.thickness : 2
-      out.barrier.push({ line: f.line, half: (cells * cell) / 2 })
+      if (!rings) continue
+      const cut = listOf<Clear>(f.clear).flatMap(e => {
+        const lr = byId.get(e.id)
+        const line = lines.get(e.id)
+        if (!lr || !line) return []
+        const sunk = lr.kind.startsWith('way.') && typeof lr.attrs.cut === 'number' && lr.attrs.cut > 0
+        const w = typeof lr.attrs.width === 'number' ? lr.attrs.width : 0
+        return [{ line, near: Math.max(lineReach(lr.kind, lr.attrs), sunk ? w / 2 + 0.5 : 0) + (e.offset ?? 0) }]
+      })
+      out.wood.push({ rings, half: 0, cut })
     }
   }
   return out

@@ -82,7 +82,8 @@ void main() {
       vec3 wash = mix(flatPaper, uWaterW * 0.96, mix(0.62, 0.34, mid));
       float shade = clamp(dot(n, -uLightXZ), 0.0, 1.0) * slope * (1.0 - mid);
       wash *= 1.0 - 0.38 * shade * vec3(1.0, 0.97, 0.92);
-      float lit = clamp(dot(n, uLightXZ), 0.0, 1.0) * slope * smoothstep(0.18, 0.4, D) * (1.0 - water);
+      /* the far bank's light, on the dry cells beside the water (the cells' water, M.b: the shapes' covers them) */
+      float lit = clamp(dot(n, uLightXZ), 0.0, 1.0) * slope * smoothstep(0.18, 0.4, D) * (1.0 - M.b);
       mapC = mix(mapC, min(mapC * 1.1 + 0.02, vec3(1.0)), 0.6 * lit);
       mapC = mix(mapC, wash, water);
     } else {
@@ -95,8 +96,10 @@ void main() {
     float h = heightAt(vW.xz);
     float hc = h / 5.0, fwc = max(fwidth(hc), 1e-4), dc = abs(fract(hc - 0.5) - 0.5) / fwc;
     float hx = h / 25.0, fwx = max(fwidth(hx), 1e-4), dx = abs(fract(hx - 0.5) - 0.5) / fwx;
-    float minorC = (1.0 - smoothstep(0.5, 1.3, dc)) * (1.0 - smoothstep(0.22, 0.5, fwc));
-    float indexC = (1.0 - smoothstep(0.9, 1.9, dx)) * (1.0 - smoothstep(0.3, 0.7, fwx));
+    /* flat ground lying exactly at a contour's height is no line: the line needs the ground to slope on screen */
+    float sloped = smoothstep(0.0005, 0.002, fwidth(hc));
+    float minorC = (1.0 - smoothstep(0.5, 1.3, dc)) * (1.0 - smoothstep(0.22, 0.5, fwc)) * sloped;
+    float indexC = (1.0 - smoothstep(0.9, 1.9, dx)) * (1.0 - smoothstep(0.3, 0.7, fwx)) * sloped;
     mapC = mix(mapC, vec3(0.42, 0.30, 0.16), max(minorC * 0.25, indexC * 0.45) * inside * (1.0 - waterA));
   }
 
@@ -111,11 +114,11 @@ void main() {
     /* a road's ground a little lighter, its two edges in ink */
     mapC = mix(mapC, min(mapC * 1.06 + 0.02, vec3(1.0)), step(I.r, 0.0) * 0.6 * inside);
     mapC = mix(mapC, uLine, hair(I.r) * 0.85 * far * inside);
-    /* the water's banks, and a pond's lining inside its shore */
+    /* the water's banks, and a lining 3 m and 6 m inside a pond's or a wide river's shore */
     mapC = mix(mapC, uLine, hair(I.g) * 0.7 * far * inside);
-    mapC = mix(mapC, uLine, (hair(I.g + 4.0) * 0.28 + hair(I.g + 9.0) * 0.16) * step(I.g, -2.0) * inside);
+    mapC = mix(mapC, uLine, (hair(I.g + 3.0) * 0.28 + hair(I.g + 6.0) * 0.16) * step(I.g, -2.0) * inside);
     /* hedges and walls: solid, dark */
-    mapC = mix(mapC, uBarrier, max(smoothstep(0.0, -0.4, I.b) * 0.75, hair(I.b) * 0.6) * inside);
+    mapC = mix(mapC, uBarrier, max((1.0 - smoothstep(-0.4, 0.0, I.b)) * 0.75, hair(I.b) * 0.6) * inside);
   }
 
   vec3 col = mapC * (0.93 + (g1 - 0.5) * 0.16 + (fine - 0.5) * 0.12);   /* the paper's grain */

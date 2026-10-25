@@ -135,3 +135,23 @@ settings (the owner, 2026-10-25).
 - **Open:** up close, a stream's carved channel still steps in the relief's shading and contours: `apply` carves it
   cell by cell into the heights. A carving that follows the bank's true distance would smooth it (the heights, not
   the view).
+
+### Review rounds (M6b)
+
+- **Round 1** (`/code-review high`): severe. The ink was drawn from the raw shapes where the map engine applies rules
+  to them:
+  - hedges and walls were continuous lines across their gates (`gaps`; the valley's and two-ridges' hedges), so
+    the map showed walls where units pass;
+  - woods filled over the lines they keep clear of (`clear`, as `follow` records it), against the cells the sim reads;
+  - a path or stream narrower than a cell could vanish between the cells' centres;
+  - the far bank's light was lost (the shapes' water covered the cells it lit).
+
+  Fixed: the barriers' field comes from their cells (on the grid by design, §3.6), gates open; a wood's field cuts out
+  each line it clears by the reach apply gives it (`lineReach`, a sunken way's cut, the offset); a line keeps at least
+  a cell of half-width in its field, as apply paints every line at least a cell wide; the far bank's light reads the
+  cells' water again. With them: an area's field by per-segment bands and a scanline fill (no distance to every edge
+  for every cell); the pond's lining at 3 m and 6 m, inside the field's 8 m; the barrier fill in a portable
+  `smoothstep`; the houses hidden in the flat colours; a house's ring from `ringsOf` (circles and ellipses as apply
+  paints them) and its roof by ear clipping (a concave footprint); the names read once a compile. Also found while
+  checking, from M6a: flat ground lying exactly at a contour's height (the valley at 0 m) was drawn all in contour
+  ink; a contour now needs the ground to slope on screen. `MAP.look(x, z, ppm)` aims the page for checks.

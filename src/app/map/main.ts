@@ -8,6 +8,7 @@ import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName } from './protocol.ts'
 import { demFileNames } from '../../map/dem.ts'
 import { LitView, TILT } from '../../render/lit/view.ts'
+import { ringsOf } from '../../map/reach.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -177,6 +178,7 @@ function onReply(e: MessageEvent<CompileReply>): void {
       flat: { w: r.w, h: r.h, rgba: new Uint8Array(r.rgba) },
     })
     lit?.setHouses(housesOf(r))
+    labels = namesOf(r)
     // the bakes live on the GPU now: the page keeps only what it reads (36 MB each at 6 km)
     current = {
       ...r,
@@ -346,36 +348,38 @@ function housesOf(c: Compiled): { ring: Pt[]; height: number; church: boolean }[
   return c.map.features.flatMap(f => {
     const r = byId.get(f.id)
     if (!r || !/^built\.(house|barn|church)(\.|$)/.test(r.kind)) return []
-    const ring = f.area?.[0] ?? (f.circle ? circleRing(f.circle[0], f.circle[1]) : null)
+    const ring = ringsOf(f)?.[0] // the ring apply paints (a circle's or an ellipse's polygon too)
     if (!ring) return []
     const wall = typeof r.attrs.wall === 'number' ? r.attrs.wall : 4
     return [{ ring, height: wall, church: r.kind.startsWith('built.church') }]
   })
 }
-const circleRing = (c: Pt, rad: number): Pt[] =>
-  Array.from({ length: 12 }, (_, k): Pt => [
-    c[0] + rad * Math.cos((k / 12) * 2 * Math.PI),
-    c[1] + rad * Math.sin((k / 12) * 2 * Math.PI),
-  ])
 
 /** The map's names (zone.label features): italic, with a paper halo, at their point or the middle of their line. */
+// the map's names, read once a compile (namesOf), drawn every frame
+let labels: { at: Pt; text: string }[] = []
+function namesOf(c: Compiled): { at: Pt; text: string }[] {
+  const byId = new Map(c.table.map(r => [r.id, r]))
+  return c.map.features.flatMap(f => {
+    const r = byId.get(f.id)
+    if (!r || !r.kind.startsWith('zone.label') || typeof r.attrs.text !== 'string' || !r.attrs.text) return []
+    const at = f.point ?? (f.line ? f.line[Math.floor((f.line.length - 1) / 2)] : null)
+    return at ? [{ at, text: r.attrs.text }] : []
+  })
+}
 function drawNames(): void {
   if (!current) return
-  const byId = new Map(current.table.map(r => [r.id, r]))
   ctx.font = 'italic 15px Georgia, "Times New Roman", serif'
   ctx.textAlign = 'center'
   ctx.lineJoin = 'round'
-  for (const f of current.map.features) {
-    const r = byId.get(f.id)
-    if (!r || !r.kind.startsWith('zone.label') || typeof r.attrs.text !== 'string' || !r.attrs.text) continue
-    const at = f.point ?? (f.line ? f.line[Math.floor((f.line.length - 1) / 2)] : null)
-    const s = at && toScreen(at[0], at[1])
-    if (!s) continue
+  for (const { at, text } of labels) {
+    const p = toScreen(at[0], at[1])
+    if (!p) continue
     ctx.lineWidth = 3
     ctx.strokeStyle = 'rgba(236, 222, 186, 0.85)'
-    ctx.strokeText(r.attrs.text, s[0], s[1])
+    ctx.strokeText(text, p[0], p[1])
     ctx.fillStyle = '#3a3128'
-    ctx.fillText(r.attrs.text, s[0], s[1])
+    ctx.fillText(text, p[0], p[1])
   }
   ctx.textAlign = 'start'
 }
@@ -570,6 +574,11 @@ window.MAP = {
     return frameMs
   },
   draw,
+  // centre the view on a ground point at a zoom (px a metre), for checks
+  look(x: number, z: number, ppm: number) {
+    view = { cx: x, cz: z, ppm }
+    draw()
+  },
   compile: () => compile('manual'),
   fit: () => {
     fit()

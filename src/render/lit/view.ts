@@ -270,7 +270,7 @@ export class LitView {
   }
 
   /**
-   * Stands the map's houses on the paper (M6b): each footprint (a convex ring, m) raised to its wall height as a box,
+   * Stands the map's houses on the paper (M6b): each footprint (a ring, m, convex or not) raised to its wall height,
    * its roof flat, its faces lit by the map's light, and a soft shadow away from the light, as the prototype's bake.
    */
   setHouses(houses: { ring: [number, number][]; height: number; church: boolean }[]): void {
@@ -293,7 +293,7 @@ export class LitView {
         pos.push(x, h.height, z)
         col.push(base[0], base[1], base[2], 1)
       }
-      for (let k = 1; k < n - 1; k++) idx.push(top, top + k + 1, top + k)
+      for (const [a, b, c] of triangulate(ring)) idx.push(top + a, top + c, top + b)
       // the walls: a quad an edge, lit by how much it faces the light
       for (let k = 0; k < n; k++) {
         const [ax, az] = ring[k]
@@ -332,12 +332,14 @@ export class LitView {
     boxes.material = this.houseMaterial
     boxes.renderingGroupId = 2
     this.houses = [shadow, boxes]
+    for (const h of this.houses) h.setEnabled(!this.flat)
   }
 
   /** Shows the flat draft's colours instead of the lit map (a debug setting). */
   setFlat(on: boolean): void {
     this.flat = on ? 1 : 0
     this.material.setFloat('uFlat', this.flat)
+    for (const h of this.houses) h.setEnabled(!on) // the flat colours show what lies under them
   }
 
   /** Places the camera: it looks north, leaning `tilt` degrees off straight down, `ppm` px a metre at the centre. */
@@ -442,4 +444,32 @@ function convexHull(pts: [number, number][]): [number, number][] {
     return h
   }
   return [...half(p), ...half([...p].reverse())]
+}
+
+/** The triangles of a simple counter-clockwise ring, by ear clipping (a footprint has a few corners). */
+function triangulate(ring: [number, number][]): [number, number, number][] {
+  const left = ring.map((_, k) => k)
+  const out: [number, number, number][] = []
+  const area2 = (a: number, b: number, c: number) =>
+    (ring[b][0] - ring[a][0]) * (ring[c][1] - ring[a][1]) - (ring[b][1] - ring[a][1]) * (ring[c][0] - ring[a][0])
+  const inside = (p: number, a: number, b: number, c: number) =>
+    area2(a, b, p) >= 0 && area2(b, c, p) >= 0 && area2(c, a, p) >= 0
+  let guard = ring.length * ring.length
+  while (left.length > 3 && guard-- > 0) {
+    let cut = false
+    for (let k = 0; k < left.length; k++) {
+      const a = left[(k + left.length - 1) % left.length]
+      const b = left[k]
+      const c = left[(k + 1) % left.length]
+      if (area2(a, b, c) <= 0) continue // a reflex corner is no ear
+      if (left.some(p => p !== a && p !== b && p !== c && inside(p, a, b, c))) continue
+      out.push([a, b, c])
+      left.splice(k, 1)
+      cut = true
+      break
+    }
+    if (!cut) break // a ring that is not simple: what is left is fanned
+  }
+  for (let k = 1; k + 1 < left.length; k++) out.push([left[0], left[k], left[k + 1]])
+  return out
 }
