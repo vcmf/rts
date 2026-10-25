@@ -7,7 +7,10 @@ import type { GenSpec } from './generators.ts'
 import { GENERATOR_SPECS, childOf, pinnedParentsOf } from './generators.ts'
 import type { Issue } from './catalogue.ts'
 import { CLEAR_KEYS, FOLLOW_KEYS, KEEPS_OFF } from './follow.ts'
-import { listOf } from './util.ts'
+import { listOf, num } from './util.ts'
+import type { Dem, MapFiles } from './dem.ts'
+import { DEM_FILE, DEM_SOURCE_KEYS, checkDemFiles, demShift } from './dem.ts'
+import { resolve } from './resolve.ts'
 import {
   allowedIn,
   categoryOf,
@@ -18,7 +21,7 @@ import {
   kindMeta,
   kindStates,
 } from './catalogue.ts'
-import { kindMatches } from './reach.ts'
+import { boxOf, kindMatches } from './reach.ts'
 import {
   barrierProblem,
   inRing,
@@ -35,6 +38,7 @@ import {
 export type { Issue }
 const isRadius = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v) && v > 0 && onCentimetres(v)
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+const SOURCE_KEYS = ['id', 'kind', 'ref', 'note', ...DEM_SOURCE_KEYS] as string[]
 const BARRIER_MARGIN = 8 // m: half the thickest barrier (8 cells of 2 m)
 const TOP = [
   'format',
@@ -93,6 +97,7 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
   const play = size('play')
   if (extent && play && (play.w > extent.w || play.h > extent.h)) bad(null, 'play', 'must fit inside the extent')
   const sources = new Set<string>(['invented'])
+  const demSources = new Set<string>()
   if (map.sources !== undefined) {
     if (!Array.isArray(map.sources)) bad(null, 'sources', 'must be an array')
     else {
@@ -101,11 +106,35 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
           !isObj(s) ||
           typeof s.id !== 'string' ||
           typeof s.kind !== 'string' ||
-          Object.keys(s).some(k => !['id', 'kind', 'ref', 'note'].includes(k))
+          Object.keys(s).some(k => !SOURCE_KEYS.includes(k)) ||
+          SOURCE_KEYS.slice(2).some(k => s[k] !== undefined && typeof s[k] !== 'string')
         ) {
-          bad(null, `sources[${i}]`, 'must be { "id", "kind", "ref"?, "note"? }')
+          bad(
+            null,
+            `sources[${i}]`,
+            `must be { "id", "kind", ${SOURCE_KEYS.slice(2)
+              .map(k => `"${k}"?`)
+              .join(', ')} }`,
+          )
         } else if (sources.has(s.id)) bad(null, `sources[${i}].id`, `"${s.id}" is used twice`)
-        else sources.add(s.id)
+        else {
+          sources.add(s.id)
+          if (s.kind !== 'dem' && (s.file !== undefined || s.hash !== undefined)) {
+            bad(null, `sources[${i}]`, '"file" and "hash" belong to dem sources only')
+          }
+          if (s.kind === 'dem') {
+            // real heights (docs/plans/active/m5-relief.md): the file beside the map, pinned, with its credit
+            const missing = DEM_SOURCE_KEYS.filter(k => typeof s[k] !== 'string' || !s[k])
+            if (missing.length) {
+              bad(null, `sources[${i}]`, `a dem source needs ${missing.map(k => `"${k}"`).join(', ')}`)
+            } else if (!/^sha256:[0-9a-f]{64}$/.test(s.hash as string)) {
+              bad(null, `sources[${i}].hash`, 'must be "sha256:" and 64 hex digits (node tools/map.ts hash <file>)')
+            } else if (!DEM_FILE.test(s.file as string)) {
+              bad(null, `sources[${i}].file`, 'must be an .rdem file beside the map (lowercase, no folders)')
+            }
+            demSources.add(s.id)
+          }
+        }
       })
     }
   }
@@ -208,6 +237,14 @@ export function validate(map: unknown, cat: Catalogue): Issue[] {
     }
     if (typeof f.source === 'string' && !sources.has(f.source)) {
       bad(id, `${path}.source`, `"${f.source}" is not one of the map's sources (or "invented")`)
+    }
+    if (isDemKind(kind)) {
+      if (typeof f.source !== 'string' || !demSources.has(f.source)) {
+        bad(id, `${path}.source`, "a relief.dem piece reads its heights from one of the map's dem sources")
+      }
+      if (typeof map.datum !== 'number') {
+        bad(id, `${path}`, 'a map with real relief needs its "datum": the height of its zero above sea level, m')
+      }
     }
     if (
       f.priority !== undefined &&
@@ -728,4 +765,28 @@ export function validateExpanded(map: MapFile, cat: Catalogue): Issue[] {
     }
   })
   return out
+}
+
+const isDemKind = (kind: string): boolean => kind === 'relief.dem' || kind.startsWith('relief.dem.')
+
+/**
+ * The checks that need the map's files (docs/plans/active/m5-relief.md), for a map that `validate` accepts: each dem
+ * source's file is there and matches its hash, and each relief.dem piece lies inside its file with heights in the
+ * catalogue's range above the datum. Also returns the decoded files, by source id, for `apply`.
+ */
+export function checkFiles(map: MapFile, cat: Catalogue, files: MapFiles): { issues: Issue[]; dems: Map<string, Dem> } {
+  const spec = cat.attributes.height
+  const range = { min: spec.min ?? -Infinity, max: spec.max ?? Infinity }
+  if (!(map.sources ?? []).some(s => s.kind === 'dem')) return { issues: [], dems: new Map() }
+  // each piece as apply reads it: its kind, edge and shift resolved (a preset may set them)
+  const pieces = map.features.flatMap((f, i) => {
+    const r = resolve(f, map, cat)
+    if (!isDemKind(r.kind)) return []
+    // an area piece reaches its edge beyond the area; a whole-extent piece only the extent
+    const e = f.area ? num(r.attrs.edge, 0) : 0
+    const b = f.area ? boxOf(f, r.attrs) : [-map.extent.w / 2, -map.extent.h / 2, map.extent.w / 2, map.extent.h / 2]
+    const box: [number, number, number, number] = [b[0] - e, b[1] - e, b[2] + e, b[3] + e]
+    return [{ f, i, box, shift: demShift(r.attrs) }]
+  })
+  return checkDemFiles(map, files, pieces, range)
 }

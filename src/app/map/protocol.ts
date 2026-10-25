@@ -8,6 +8,9 @@ export interface CompileRequest {
   seq: number
   mapText: string
   kindsText: string
+  // the heightfields the map's dem sources name, by name: each with the page's version of it, and its bytes only
+  // when the worker does not hold that version yet (a 10 MB file is sent once, not on every save of the map)
+  files: Record<string, { version: number; bytes?: ArrayBuffer }>
 }
 export type LayerName = (typeof LAYER_NAMES)[number]
 export interface Compiled {
@@ -32,5 +35,8 @@ export interface Failed {
   seq: number
   ok: false
   issues: Issue[]
+  // heightfields the worker was told it holds but does not (it restarted, or never stored them): the page sends
+  // them again and recompiles
+  missing?: string[]
 }
 export type CompileReply = Compiled | Failed

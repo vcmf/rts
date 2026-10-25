@@ -11,7 +11,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { MapDef } from './formation-field.ts'
 import type { Catalogue, MapFile } from '../src/map/schema.ts'
-import { validate } from '../src/map/validate.ts'
+import { checkFiles, validate } from '../src/map/validate.ts'
+import { readMapFiles } from './map-files.ts'
 import { expand } from '../src/map/expand.ts'
 import type { Layers } from '../src/map/apply.ts'
 import { apply, CELL, heightOf } from '../src/map/apply.ts'
@@ -41,9 +42,15 @@ export function layersOf(file: string, seed?: number): { map: MapFile; layers: L
         .join('; ')}`,
     )
   }
+  const files = checkFiles(
+    raw as unknown as MapFile,
+    cat,
+    readMapFiles(path.resolve(ROOT, file), raw as unknown as MapFile),
+  )
+  if (files.issues.length) throw new Error(`${file}: ${files.issues[0].path}: ${files.issues[0].message}`)
   const ex = expand(raw as unknown as MapFile, cat)
   if (ex.issues.length) throw new Error(`${file}: ${ex.issues[0].message}`)
-  return { map: ex.map, layers: apply(ex.map, cat) }
+  return { map: ex.map, layers: apply(ex.map, cat, files.dems) }
 }
 
 // one cell's attributes, from its layers

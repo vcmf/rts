@@ -1,11 +1,11 @@
 ---
 status: current
-last_reviewed: 2026-10-13
-code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts]
-decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line]
+last_reviewed: 2026-10-25
+code: [src/map/street-village.ts, src/map/scatter.ts, src/map/reach.ts, maps/generated.map.json, src/map/seed.ts, src/map/noise.ts, src/map/generators.ts, src/map/meander.ts, src/map/clump.ts, test/map-gen.test.ts, maps/engine.ts, src/rulesets/ground.ts, src/rulesets/napoleonic-ground.ts, src/scenarios/m2-valley.ts, tools/build-sim-data.ts, test/map-sim.test.ts, src/map/schema.ts, src/map/catalogue.ts, src/map/validate.ts, src/map/resolve.ts, src/map/expand.ts, src/map/format.ts, src/map/geometry.ts, src/map/apply.ts, src/map/draft.ts, maps/kinds.json, tools/map.ts, tools/map-page-check.mjs, app/map.html, src/app/map/main.ts, src/app/map/worker.ts, vite.config.ts, test/map-language.test.ts, test/map-apply.test.ts, test/map-trees.test.ts, test/map-follow.test.ts, src/map/follow.ts, src/map/dem.ts, tools/dem-import.ts, tools/dem-tiff.ts, maps/austerlitz.map.json, maps/dem-test.map.json, test/map-dem.test.ts]
+decisions: [0015-era-generic-engine, 0020-track-m-on-an-epic-branch, 0021-two-metre-map-cell, 0028-generators-form-a-chain, 0029-free-standing-trees, 0030-shared-edges-are-the-line, 0063-real-relief-as-placed-pieces]
 ---
 
-# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d)
+# The map engine: the language, the generators, the draft view and the sim compiler (Track M, M1–M3d, M5)
 
 A map is a strict JSON file (`maps/<id>.map.json`): a list of features, each with an id, a dotted kind from the
 kinds catalogue (`maps/kinds.json`), one shape and attribute overrides. This system checks such a file, resolves
@@ -160,6 +160,27 @@ maps/kinds.json ──► checkCatalogue ─┐
   `spacing` belong to trees only.
 - **The base ground** (`relief.base`): seeded value noise (`src/map/noise.ts`), `height` its amplitude and `width`
   its scale, three octaves, filled from per-octave lattice tables (`addFbmGrid`, equal to `fbm` to the bit).
+- **Real relief** (`src/map/dem.ts`, decision 0063): a `dem` source names an `.rdem` heightfield beside the map
+  (`file`, pinned by its SHA-256 `hash`, with its `credit` and `licence`), and each `relief.dem` feature places a
+  piece of it: the whole extent with no shape, or an `area`, moved within the file by `shift` {x, z}, at true scale
+  (decision 0061). A piece sets the height in its area (the other landforms add) and blends into the ground under it
+  over its `edge`; later landforms add on top and the edits apply after, so the 1805 cleanup is `relief.level`,
+  `.lower` and `.cut` over the real ground. Heights are above sea level in the file and taken back to the map's
+  frame by its `datum`, which a map with real relief must set.
+  - The file: a 24-byte header (magic, version, size, cell in mm, base in cm), then u16 centimetres above the base,
+    the south row first, in its own centred frame. It keeps the source's cell (5 m for DMR 4G); `apply` reads each
+    2 m node by bicubic (Catmull-Rom) interpolation, so no 5 m lattice shows in the shading, with + − × / only.
+  - `checkFiles` (in `validate.ts`) runs where the files are: each dem source's file is there and matches its hash,
+    and each piece lies inside its file with heights within the catalogue's range above the datum. It returns the
+    decoded files, which `apply` takes as its third argument. The CLI and `maps/engine.ts` read the files beside the
+    map (`readMapFiles`); the page lists `maps/*.rdem` by a build glob, fetches the ones a map names and hands them
+    to its worker; saving an `.rdem` recompiles the page.
+  - The importer (`tools/dem-import.ts`): ČÚZK's DMR 4G (5 m, the default) or DMR 5G (2 m), asked for in a transverse
+    Mercator at scale 1 centred on the crop, so the file's metres are true and north is up; large crops in tiles
+    under the service's limit. It prints the source entry to paste. `tools/map.ts hash <file>` prints a file's hash.
+  - `maps/austerlitz.map.json` is the field's real relief alone, 6 km square (`maps/austerlitz.rdem`: 13.5 × 9.5 km
+    at 5 m, 10.3 MB); `maps/dem-test.map.json` is a 2 km test of pieces, an edit and a stream on real ground, small
+    enough for the sim.
 - **The layout** (`src/map/format.ts`): one feature per line, so diffs show which features changed.
 - **Apply** (`src/map/apply.ts`): the expanded features into layers on the 2 m grid over the extent, in the
   proposal's fixed order (§4):
@@ -248,6 +269,11 @@ at its pinned version with its cells; ten minutes of the battle on it match a co
 existing golden is unchanged (the ruleset's hash included). Ten minutes of the S1e battle end with nearly the
 same positions and strengths on the valley as on the original battlefield.
 
+`test/map-dem.test.ts` (M5): the `.rdem` round trip and its refusals; SHA-256 against Node's; bicubic exact on the
+nodes and on a quadratic surface between them, with constant second differences along a 2 m profile (no lattice);
+a whole-extent piece and its shift, an area piece's inside, blend and outside; the same bytes twice; the validator's
+and the file checks' refusals; the test map's real heights and its sim compile.
+
 `test/map-language.test.ts`:
 - the catalogue checks clean, and a broken one is reported;
 - the base map and `maps/two-ridges.map.json` validate;
@@ -258,6 +284,13 @@ same positions and strengths on the valley as on the original battlefield.
 - the lint rules on `src/map/`, with a negative fixture.
 
 ## Open questions
+
+- A real-relief piece keeps its own absolute heights, so a piece cut from higher ground stands as a mesa until an edit
+  lowers it (`maps/dem-test.map.json`'s knoll). A `lift` on the piece, or blending its difference to the ground
+  under it, would join pieces without edits; decide when step 4 arranges Austerlitz.
+- Rotating a piece (`turn`), if a designed map needs one.
+- A 6 km map compiles in about 3.5 s and 540 MB in Node (`apply`, float64 heights and the layers); the page's worker
+  holds the same. The sim's compact grids (S-data) are needed before a 6 km map compiles for the sim.
 
 - Which kinds the first catalogue carries beyond today's essentials (proposal §14).
 - Whether references between kinds that can loop (a stream joining a stream) are needed; the loop check is tested

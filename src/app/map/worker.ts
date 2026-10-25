@@ -1,20 +1,27 @@
 // The draft page's compile worker (docs/plans/done/m1-language.md M1b): validate, expand, apply, draw, off the
 // page's thread, with the same code the map CLI runs in Node (src/map/).
 import type { Catalogue, MapFile } from '../../map/schema.ts'
-import { validate } from '../../map/validate.ts'
+import type { MapFiles } from '../../map/dem.ts'
+import { checkFiles, validate } from '../../map/validate.ts'
 import { expand } from '../../map/expand.ts'
 import { apply, LAYER_NAMES } from '../../map/apply.ts'
 import { draft } from '../../map/draft.ts'
 import type { CompileReply, CompileRequest, LayerName } from './protocol.ts'
 
 self.onmessage = (e: MessageEvent<CompileRequest>) => {
-  const { seq, mapText, kindsText } = e.data
+  const { seq, mapText, kindsText, files } = e.data
   const fail = (path: string, message: string) =>
     (self as unknown as Worker).postMessage({
       seq,
       ok: false,
       issues: [{ id: null, path, message }],
     } satisfies CompileReply)
+  // the files first, whatever else fails: the page counts them as held once sent
+  const { files: mine, missing } = held(files ?? {})
+  if (missing.length) {
+    ;(self as unknown as Worker).postMessage({ seq, ok: false, issues: [], missing } satisfies CompileReply)
+    return
+  }
   let map: unknown
   let cat: Catalogue
   try {
@@ -30,17 +37,42 @@ self.onmessage = (e: MessageEvent<CompileRequest>) => {
     return
   }
   try {
-    compile(seq, map, cat)
+    compile(seq, map, cat, mine)
   } catch (err) {
     fail('', `the compiler failed: ${(err as Error).message} (a bug, or a catalogue the validator does not check)`)
   }
 }
 
-function compile(seq: number, map: unknown, cat: Catalogue): void {
+// the heightfields this worker holds, by name: the version it was last sent and its bytes, kept across compiles so a
+// file is hashed and decoded once (checkFiles remembers the bytes it has read)
+const kept = new Map<string, { version: number; bytes: Uint8Array }>()
+/**
+ * Stores the files a request carries, drops those its map no longer names, and returns the map's files with the
+ * names it was told it holds but does not.
+ */
+function held(files: CompileRequest['files']): { files: MapFiles; missing: string[] } {
+  for (const name of [...kept.keys()]) if (!(name in files)) kept.delete(name)
+  const out: MapFiles = new Map()
+  const missing: string[] = []
+  for (const [name, f] of Object.entries(files)) {
+    if (f.bytes) kept.set(name, { version: f.version, bytes: new Uint8Array(f.bytes) })
+    const k = kept.get(name)
+    if (k && k.version === f.version) out.set(name, k.bytes)
+    else missing.push(name)
+  }
+  return { files: out, missing }
+}
+
+function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): void {
   const t0 = performance.now()
   const issues = validate(map, cat)
   if (issues.length) {
     ;(self as unknown as Worker).postMessage({ seq, ok: false, issues } satisfies CompileReply)
+    return
+  }
+  const checked = checkFiles(map as MapFile, cat, files)
+  if (checked.issues.length) {
+    ;(self as unknown as Worker).postMessage({ seq, ok: false, issues: checked.issues } satisfies CompileReply)
     return
   }
   const ex = expand(map as MapFile, cat)
@@ -49,7 +81,7 @@ function compile(seq: number, map: unknown, cat: Catalogue): void {
     return
   }
   const t1 = performance.now()
-  const L = apply(ex.map, cat)
+  const L = apply(ex.map, cat, checked.dems)
   const t2 = performance.now()
   const img = draft(L)
   const t3 = performance.now()

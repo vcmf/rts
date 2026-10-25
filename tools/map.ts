@@ -5,13 +5,17 @@
 //   node tools/map.ts expand <map.json> --check   fail if the committed expanded file differs from a fresh expansion
 //   node tools/map.ts resolve <map.json> <id> [season] [state|none]   print one feature's effective attributes
 //   node tools/map.ts draft <map.json> [out.png]   draw the draft (one pixel per 2 m cell, north up) to a PNG
+//   node tools/map.ts hash <file.rdem>        print a heightfield's hash for its dem source (M5)
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Catalogue, MapFile, Season } from '../src/map/schema.ts'
 import { SEASONS } from '../src/map/schema.ts'
 import type { Issue } from '../src/map/validate.ts'
-import { validate } from '../src/map/validate.ts'
+import { checkFiles, validate } from '../src/map/validate.ts'
+import type { Dem } from '../src/map/dem.ts'
+import { readMapFiles } from '../maps/map-files.ts'
+import { sha256 } from '../src/map/dem.ts'
 import { expand } from '../src/map/expand.ts'
 import { resolve } from '../src/map/resolve.ts'
 import { formatMap } from '../src/map/format.ts'
@@ -30,7 +34,16 @@ const show = (file: string, issues: Issue[]) => {
   for (const i of issues) console.log(`${file}: ${i.id ? `[${i.id}] ` : ''}${i.path || '(map)'}: ${i.message}`)
 }
 
-function load(file: string, cat: Catalogue): MapFile | null {
+// the map, valid with its files, and its decoded heightfields
+function load(file: string, cat: Catalogue): { map: MapFile; dems: Map<string, Dem> } | null {
+  const map = loadJson(file, cat)
+  if (!map) return null
+  const { issues, dems } = checkFiles(map, cat, readMapFiles(file, map))
+  show(file, issues)
+  return issues.length ? null : { map, dems }
+}
+
+function loadJson(file: string, cat: Catalogue): MapFile | null {
   let map: unknown
   let text: string
   try {
@@ -53,12 +66,17 @@ function load(file: string, cat: Catalogue): MapFile | null {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [cmd, file, ...rest] = process.argv.slice(2)
   const cat = loadCatalogue()
+  if (cmd === 'hash' && file) {
+    console.log(sha256(new Uint8Array(fs.readFileSync(file))))
+    process.exit(0)
+  }
   if (!file || !['check', 'expand', 'resolve', 'draft'].includes(cmd)) {
-    console.log('usage: node tools/map.ts check|expand|resolve|draft <map.json> …')
+    console.log('usage: node tools/map.ts check|expand|resolve|draft <map.json> …, or hash <file.rdem>')
     process.exit(2)
   }
-  const map = load(file, cat)
-  if (!map) process.exit(1)
+  const loaded = load(file, cat)
+  if (!loaded) process.exit(1)
+  const { map, dems } = loaded
   if (cmd === 'check') {
     console.log(`${file}: ok (${map.features.length} features)`)
     process.exit(0)
@@ -88,7 +106,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (issues.length) process.exit(1)
   if (cmd === 'draft') {
     const t0 = performance.now()
-    const layers = apply(out, cat)
+    const layers = apply(out, cat, dems)
     const t1 = performance.now()
     const img = draft(layers)
     const t2 = performance.now()

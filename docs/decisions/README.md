@@ -87,3 +87,4 @@ The browser-checks record, written as 0047 and then 0052 on its branch (#129) an
 | [0060](0060-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
 | [0061](0061-square-designed-maps-2-to-6-km.md) | Square maps of 2 to 6 km a side, designed for play, at true local scale | accepted |
 | [0062](0062-simple-shadows-at-every-zoom.md) | The simple shadow at every zoom, softer, lighter and shorter up close | accepted |
+| [0063](0063-real-relief-as-placed-pieces.md) | Real relief is placed pieces of a pinned heightfield, read by bicubic | accepted |

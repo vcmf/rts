@@ -146,7 +146,7 @@ touches no ruleset.
 
 | Category | Kinds (essential) | Bonus, later |
 |---|---|---|
-| `relief` | `base` (seeded value noise: `height` the amplitude, `width` the scale; a landform, not a generator, since a field has no shape to pin), `hill`, `ridge` (along a line), `valley`, `plateau`, `scarp`; edits `raise`, `lower`, `level`, `cut`, `ditch` (a cut along a line, at least 2 cells wide, its cells also marked for the ruleset's crossing rule) | `dem` (an elevation file), `spot` heights, `basin`, `terrace` |
+| `relief` | `base` (seeded value noise: `height` the amplitude, `width` the scale; a landform, not a generator, since a field has no shape to pin), `hill`, `ridge` (along a line), `valley`, `plateau`, `scarp`; edits `raise`, `lower`, `level`, `cut`, `ditch` (a cut along a line, at least 2 cells wide, its cells also marked for the ruleset's crossing rule); `dem`, a placed piece of a real heightfield (M5, decision 0063) | `spot` heights, `basin`, `terrace` |
 | `ground` | `meadow`, `pasture`, `field` (`.wheat`, `.rye`, `.oats`: loam under a crop whose `stage` is standing, stubble or ploughed), `rough`, `marsh`, `yard` (village ground); moisture and snow as season attributes | `heath`, `sand`, `rock`, `bog`, `mud` as a weather state |
 | `veg` | `wood.broad`, `wood.conifer`, `wood.mixed`, `thicket`, `orchard` (rows), `reeds`, `scrub`; free-standing `tree`, `tree.poplar`, `tree.conifer`, `tree.willow` (a point, a row on a line, a `group`; decision 0029) | species presets, `vineyard`, `olive`, `wood.pasture`, `tallgrass` |
 | `water` | `stream`, `river` (lines with width, depth, flow, banks), `pond`, `lake` (areas with a level), `ford` (on a stream) | `canal`, `weir`, `dam`, `millrace`, `flood` (a level over a meadow), breakable ice |

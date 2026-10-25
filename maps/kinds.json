@@ -29,6 +29,7 @@
     "steep": { "layers": ["relief"], "type": "enum", "values": ["none", "left", "right"], "note": "the steeper side, looking along the line from its first point" },
     "to": { "layers": ["relief"], "type": "number", "unit": "m", "min": -100, "max": 400, "note": "a level edit's height above the datum" },
     "edge": { "layers": ["relief"], "type": "number", "unit": "m", "min": 0, "max": 500, "note": "an edit's or a plateau's soft edge; a scarp's back slope, where its high side returns to the ground" },
+    "shift": { "layers": ["relief"], "type": "object", "fields": { "x": { "type": "number", "unit": "m", "min": -50000, "max": 50000 }, "z": { "type": "number", "unit": "m", "min": -50000, "max": 50000 } }, "note": "a relief.dem piece: the offset from a map point to the point of its file it reads, m (file and map both centred, x east, z north)" },
     "depth": { "layers": ["relief", "water"], "type": "number", "unit": "m", "min": 0, "max": 30, "season": true, "ramp": ["along"], "note": "relief: a cut's or a ditch's depth; water: the depth of the channel or pond below its level (a ramp along a stream gives pools)" },
     "material": { "layers": ["ground", "built"], "type": "enum", "values": ["loam", "clay", "sand", "gravel", "rock", "peat", "stone", "brick", "timber", "wattle", "earth"] },
     "moisture": { "layers": ["ground"], "type": "number", "unit": "0..1", "min": 0, "max": 1, "season": true },
@@ -69,6 +70,7 @@
   },
   "kinds": {
     "relief.base": { "shapes": ["none"], "refs": {}, "set": { "height": 0, "width": 400 }, "note": "the gentle ground between the landforms: seeded value noise over the whole extent, ± height at the scale of width (m); flat at the datum with no height" },
+    "relief.dem": { "shapes": ["none", "area"], "refs": {}, "priority": 1, "set": { "edge": 0 }, "note": "real relief (after relief.base, priority 0, so the base's noise never lands on it): a piece of a dem source's heightfield (its file, its credit), placed at true scale and setting the height in its area (the whole extent with no shape), blended into the ground under it over `edge` m; `shift` moves it within the file; the map's datum takes the file's heights above sea level back to the map's frame" },
     "relief.hill": { "shapes": ["point", "circle", "ellipse"], "set": { "height": 10, "width": 120, "profile": "round" } },
     "relief.ridge": { "shapes": ["line"], "set": { "height": 15, "width": 200, "profile": "round", "steep": "none" } },
     "relief.valley": { "shapes": ["line"], "set": { "height": -8, "width": 200, "profile": "round", "steep": "none" } },

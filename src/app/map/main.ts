@@ -6,6 +6,7 @@
 import type { Feature, Pt } from '../../map/schema.ts'
 import type { Issue } from '../../map/catalogue.ts'
 import type { Compiled, CompileReply, CompileRequest, LayerName } from './protocol.ts'
+import { demFileNames } from '../../map/dem.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -16,6 +17,46 @@ const KINDS = import.meta.glob('/maps/kinds.json', { query: '?raw', import: 'def
   string,
   () => Promise<string>
 >
+// the heightfields beside them (docs/plans/active/m5-relief.md), as URLs: fetched only when a map's source names one
+const RDEMS = import.meta.glob('/maps/*.rdem', { query: '?url', import: 'default' }) as Record<
+  string,
+  () => Promise<string>
+>
+// The heightfields a map's dem sources name, read beside it. A file's version goes up when it is saved; the worker
+// keeps the bytes of the version it was last sent, so only a new version is fetched and sent. A file that is missing
+// or fails to load is left out, and the validator reports it against its source.
+const fileVersion = new Map<string, number>()
+const RDEM_SETTLE = 300 // ms after a heightfield's last save before it is read
+let rdemTimer: ReturnType<typeof setTimeout> | undefined
+let sentVersion = new Map<string, number>()
+async function readFiles(mapText: string): Promise<CompileRequest['files']> {
+  let names: string[]
+  try {
+    names = demFileNames(JSON.parse(mapText))
+  } catch {
+    return {}
+  }
+  const out: CompileRequest['files'] = {}
+  await Promise.all(
+    names.map(async name => {
+      const version = fileVersion.get(name) ?? 0
+      if (sentVersion.get(name) === version) {
+        out[name] = { version }
+        return
+      }
+      try {
+        const key = `/maps/${name}`
+        const url = import.meta.env.DEV ? key : await RDEMS[key]?.()
+        if (!url) return
+        const res = await fetch(url, { cache: import.meta.env.DEV ? 'no-store' : 'default' })
+        if (res.ok) out[name] = { version, bytes: await res.arrayBuffer() }
+      } catch {
+        // left out: reported as not found
+      }
+    }),
+  )
+  return out
+}
 async function read(file: string, bundled: Record<string, () => Promise<string>>): Promise<string> {
   if (!import.meta.env.DEV) return bundled[file]()
   const res = await fetch(file, { cache: 'no-store' })
@@ -75,6 +116,7 @@ function makeWorker(): Worker {
   w.onerror = e => {
     e.preventDefault()
     w.terminate()
+    sentVersion = new Map() // the new worker holds no file
     worker = makeWorker()
     failed(`the compile worker failed: ${e.message || 'it did not load'}`)
   }
@@ -83,6 +125,12 @@ function makeWorker(): Worker {
 function onReply(e: MessageEvent<CompileReply>): void {
   const r = e.data
   if (r.seq !== seq || !pending) return // an older compile, overtaken
+  if (!r.ok && r.missing?.length) {
+    // the worker lacks files it was counted as holding: send them again
+    for (const name of r.missing) sentVersion.delete(name)
+    void compile(pending.reason, pending.savedAt)
+    return
+  }
   if (r.ok) {
     const fresh = !current || current.map.id !== r.map.id
     current = r
@@ -110,14 +158,20 @@ async function compile(reason: string, savedAt?: number): Promise<void> {
   pending = { reason, t0, savedAt }
   let mapText: string
   let kindsText: string
+  let files: CompileRequest['files']
   try {
     ;[mapText, kindsText] = await Promise.all([read(picker.value, MAPS), read('/maps/kinds.json', KINDS)])
+    files = await readFiles(mapText)
   } catch (err) {
     if (mine === seq) failed(`cannot read the map: ${(err as Error).message}`)
     return
   }
   if (mine !== seq) return
-  worker.postMessage({ seq: mine, mapText, kindsText } satisfies CompileRequest)
+  for (const [name, f] of Object.entries(files)) if (f.bytes) sentVersion.set(name, f.version)
+  worker.postMessage(
+    { seq: mine, mapText, kindsText, files } satisfies CompileRequest,
+    Object.values(files).flatMap(f => (f.bytes ? [f.bytes] : [])),
+  )
 }
 
 function fit(): void {
@@ -308,10 +362,18 @@ picker.addEventListener('change', () => {
 showOutlines.addEventListener('change', draw)
 showIds.addEventListener('change', draw)
 
-// a saved map file or catalogue (vite.config.ts sends `map-changed` with the file and the time it was seen)
+// a saved map file, catalogue or heightfield (vite.config.ts sends `map-changed` with the file and the time it was
+// seen); any heightfield recompiles, since the map's text alone says which it reads
 if (import.meta.hot) {
   import.meta.hot.on('map-changed', (d: { file: string; at: number }) => {
-    if (d.file === picker.value || d.file === '/maps/kinds.json') void compile('save', d.at)
+    if (d.file.endsWith('.rdem')) {
+      // a heightfield is large and written in one go: wait until the saves stop before reading it, so a file still
+      // being written is not kept as the new version
+      const name = d.file.replace('/maps/', '')
+      fileVersion.set(name, (fileVersion.get(name) ?? 0) + 1)
+      clearTimeout(rdemTimer)
+      rdemTimer = setTimeout(() => void compile('save', d.at), RDEM_SETTLE)
+    } else if (d.file === picker.value || d.file === '/maps/kinds.json') void compile('save', d.at)
   })
 }
 
@@ -329,6 +391,10 @@ window.MAP = {
   },
   get compiled() {
     return current?.map.id ?? null
+  },
+  // the compiled heights, for checks that compare the page's compile with Node's
+  get height() {
+    return height
   },
   compile: () => compile('manual'),
   fit: () => {

@@ -18,13 +18,13 @@ const build = (() => {
     return 'unknown'
   }
 })()
-// the map draft page (app/map.html, docs/plans/done/m1-language.md M1b): a saved map file or the kinds catalogue
-// is sent to the page as `map-changed` (with the time the server saw it), instead of a full reload
+// the map draft page (app/map.html, docs/plans/done/m1-language.md M1b): a saved map file, the kinds catalogue or a
+// heightfield beside them is sent to the page as `map-changed` (with the time the server saw it), not a full reload
 const mapsHot: Plugin = {
   name: 'maps-hot',
   handleHotUpdate({ file, server }) {
     const rel = '/' + path.relative(server.config.root, file).split(path.sep).join('/')
-    if (!/^\/maps\/[^/]+\.json$/.test(rel)) return
+    if (!/^\/maps\/[^/]+\.(json|rdem)$/.test(rel)) return
     server.ws.send({ type: 'custom', event: 'map-changed', data: { file: rel, at: Date.now() } })
     return []
   },
