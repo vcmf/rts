@@ -632,12 +632,13 @@ units they order behave this way. U8 and U9 are Track S's pathfinding and group 
 | **U4** | Guns: the guns' drain, the last salvo, pieces apart from crews, guns taken, gunners sheltering | B-06, D-04 to D-08, G-09, L-03, L-04 |
 | **U5** | Categories: light infantry and skirmish order, heavy and light cavalry, horse artillery, the bonus table | B-07, C-07, D-10, E-06, E-07, E-10, E-11, E-12, K-01 to K-05, L-07 |
 | **U6** | Collision, with the orders and their queue, by its own proposal: enemies, friends, loose bodies, the clash | I-06 to I-09, G-07 |
-| **U7** | Ground with Track M: walls, buildings, barriers' crossings, cover; the 2 m margin bug | C-10, C-11, E-13, E-14, I-13, I-14 |
+| **U7** | Ground with Track M: walls, buildings, barriers' crossings, cover; the 2 m margin bug | C-10, C-11, E-13, E-14, I-13, I-14, M-06 |
 | **U8** | Pathfinding (S1f-3): A*, time-sliced, march column on turns | J-01 to J-04, J-06, J-07 |
 | **U9** | Movement modes; group moves (S1f-4). Fatigue stays in S3 (`docs/proposals/sim-design.md` §17) | I-11, B-10 |
 
 Outside U1–U9, with the systems they wait on: C-12 (ammunition, S3), H-02 (campaigns), H-03 (commanders, S2),
-I-12 (fatigue, S3), J-05 (danger in the path's cost, the AI) and K-06 (vision, S2).
+I-12 (fatigue, S3), J-05 (danger in the path's cost, the AI), K-06 and M-07 (vision, S2), and M-02 to M-04 (whole
+battles, played as scenarios once U1–U7 are in).
 
 U1 and U2 are the base the rest reads. G-09 (fire without reply) waits for U4, since it needs U2's bar, U3's
 "under fire" and U4's guns. U1's flank and rear drains land as drains on today's morale value, and move onto the
@@ -645,6 +646,10 @@ bar in U2. U6 must come before U8, since pathfinding hands moving formations to 
 
 ## Alternatives considered
 
+- **A flat bonus for standing higher** (the higher formation fires and fights better, as in Total War). Rejected (the
+  owner, 2026-10-25): it would make Austerlitz and Wagram, both won against an enemy on the heights, impossible to
+  replay as they went. Height acts through what it does: sight, roundshot that passes over crests and buries in steep
+  ground, and slopes that slow and tire (§ M of the scenarios).
 - **Hit points per unit apart from men.** Rejected: a battalion's men are its strength, and a separate health would
   double-count losses. Toughness by level divides the losses instead (§ A unit's state).
 - **Keeping today's morale machine and scaling each of its terms by level** (its weight of losses, contagion,
