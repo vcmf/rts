@@ -48,8 +48,9 @@ describe('fadeShare', () => {
   })
   it('grows with the height on screen', () => {
     for (const h of HASHES.slice(0, 8)) {
-      for (let i = 1; i < PXS.length; i++)
+      for (let i = 1; i < PXS.length; i++) {
         expect(fadeShare(PXS[i], near, h)).toBeGreaterThanOrEqual(fadeShare(PXS[i - 1], near, h))
+      }
     }
   })
   it('turns a man over his own share of the band, from a point set by his hash', () => {
