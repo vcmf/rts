@@ -9,7 +9,7 @@ import type { Compiled, CompileReply, CompileRequest, LayerName } from './protoc
 import { demFileNames } from '../../map/dem.ts'
 import { LitView, TILT } from '../../render/lit/view.ts'
 import { ringsOf } from '../../map/reach.ts'
-import { lineLength, pointAt } from '../../map/geometry.ts'
+import { inRing, lineLength, pointAt } from '../../map/geometry.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -343,17 +343,41 @@ function outline(f: Feature): void {
     ctx.fillText(f.id, label[0] + 4, label[1] - 4)
   }
 }
-/** The compiled map's buildings as the lit view stands them: each footprint, its wall height, and whether a church. */
+/**
+ * The compiled map's buildings as the lit view stands them: each footprint, its wall height, whether a church and
+ * whether roofed. A building stands only where every cell whose centre lies in its footprint is its own (decision
+ * 0065: a house whose cells another built feature took, or that leaves the grid, is not drawn).
+ */
 function housesOf(c: Compiled): { ring: Pt[]; height: number; church: boolean; roof: boolean }[] {
-  const byId = new Map(c.table.map(r => [r.id, r]))
+  const built = new Uint16Array(c.layers.built)
+  const index = new Map(c.table.map((r, k) => [r.id, k]))
   return c.map.features.flatMap(f => {
-    const r = byId.get(f.id)
-    if (!r || !/^built\.(house|barn|church)(\.|$)/.test(r.kind)) return []
-    const ring = ringsOf(f)?.[0] // the ring apply paints (a circle's or an ellipse's polygon too)
-    if (!ring) return []
+    const k = index.get(f.id)
+    const r = k === undefined ? undefined : c.table[k]
+    if (k === undefined || !r || !/^built\.(house|barn|church)(\.|$)/.test(r.kind)) return []
+    const rings = ringsOf(f) // the rings apply paints (a circle's or an ellipse's polygon too)
+    if (!rings) return []
+    const ring = rings[0]
+    const xs = ring.map(p => p[0])
+    const zs = ring.map(p => p[1])
+    const i0 = Math.floor((Math.min(...xs) - c.x0) / c.cell)
+    const i1 = Math.floor((Math.max(...xs) - c.x0) / c.cell)
+    const j0 = Math.floor((Math.min(...zs) - c.z0) / c.cell)
+    const j1 = Math.floor((Math.max(...zs) - c.z0) / c.cell)
+    let own = 0
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const p: Pt = [c.x0 + (i + 0.5) * c.cell, c.z0 + (j + 0.5) * c.cell]
+        if (!inRing(ring, p) || rings.slice(1).some(h => inRing(h, p))) continue
+        if (i < 0 || j < 0 || i >= c.nx || j >= c.nz || built[j * c.nx + i] !== k + 1) return []
+        own++
+      }
+    }
+    if (!own) return []
     const wall = typeof r.attrs.wall === 'number' ? r.attrs.wall : 4
-    // a house with no roof (burnt: its state lowers its walls) stands as its walls alone
-    return [{ ring, height: wall, church: r.kind.startsWith('built.church'), roof: r.attrs.roof !== 'none' }]
+    // no roof over a burnt house (its state lowers its walls and takes its roof) or over a courtyard
+    const roof = r.attrs.roof !== 'none' && rings.length === 1
+    return [{ ring, height: wall, church: r.kind.startsWith('built.church'), roof }]
   })
 }
 

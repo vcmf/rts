@@ -206,3 +206,13 @@ settings (the owner, 2026-10-25).
   square as apply cuts it; the join writes in place and the gate dilates the way cells once; the road surface is
   anti-aliased like the fills; the lining's fold test reads the field's gradient in any direction; the docs no longer
   say the fields are mipmapped. The review count restarts with the contract.
+- **Contract, round 1**: severe. The road gate overwrote the field beyond a cell of the ways' cells with 8 m, a jump
+  that drew a second hairline about a metre outside a road, and left the cells beside a gap reading as road at their
+  centres; a diagonal hedge's fill pinched to a point at each step (the fill began below −0.4 m, the saddle corner's
+  value); houses stood from their shapes even where another built feature took their cells. Fixed: the road's field
+  keeps the shape's true distance and only holds each way cell inside at its centre and every other cell outside (no
+  jump, the contract met, with a test over every cell); the barriers' fill is anti-aliased at its 0, so a diagonal
+  hedge stays solid; a house stands only where every cell under it is its own, and a courtyard gets no roof; the docs
+  say how far a saddle's cells yield; the decisions index names 0065 as decided; the unused `mips` parameter is gone.
+  Left: the worker's peak memory for the cells' fields at 6 km (five grids a channel) and a shared exact distance
+  transform (`src/look/world/water-data.ts`'s `edt`, generalised) instead of a third one.

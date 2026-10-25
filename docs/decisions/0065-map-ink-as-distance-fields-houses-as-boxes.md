@@ -27,7 +27,8 @@ We will draw the ink and the houses as follows:
   stair-steps, saddles, features one cell wide and diagonals.
 - **Edges smoothed by distance fields on the cells**, baked in the compile worker: per cell, the signed metres to the
   nearest cell of the other kind, smoothed for the water and the woods so their edges run through the cells' steps,
-  each cell held on its own side by at least half its raw distance; square for the barriers (on the grid by design,
+  each cell held on its own side by at least half its raw distance (a saddle's yielding cells by a tenth of a cell);
+  square for the barriers (on the grid by design,
   proposal §3.6). Where two cells of one kind meet only at a corner (a saddle), the corner is given to one kind: the
   water and the barriers join (a stream or a hedge stepping diagonally stays one line), the woods' clearings join (a
   path cut diagonally through a wood stays one clearing). The shader fills them and draws their edges as hairlines of
@@ -36,7 +37,8 @@ We will draw the ink and the houses as follows:
 - **The ways' edges from their shapes**, at the half-width apply paints them (`lineReach`), cut square at their free
   ends: crisp double hairlines at every zoom, drawn only on and beside the ways' cells. Where a way crosses water with
   no bridge, the sim has both (apply keeps the way's cells under the water), and the map draws both.
-- **The houses as boxes on the paper**, raised to their wall height, their faces lit by the map's light in the
+- **The houses as boxes on the paper**, each standing only where all its cells are its own (a house whose cells
+  another built feature took is not drawn), raised to their wall height, their faces lit by the map's light in the
   prototype's colours (the roof's, 0.62 of it away from the light, up to 0.85 toward it), and the footprint swept away
   from the light as its shadow, each pixel darkened once (a stencil); the view's tilt (decision 0055) shows their sides.
 - **The names** (`zone.label`) as text on the overlay, through the view's camera.

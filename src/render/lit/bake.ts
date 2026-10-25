@@ -158,7 +158,7 @@ export interface InkedLine {
  * The ink's distance fields on the cells, as RGBA bytes, the south row first: per channel the signed distance from a
  * cell's centre to the nearest edge (negative inside), over ±INK_RANGE m, 128 at the edge.
  * - R the ways' edges, from their centrelines (crisp hairlines at every zoom), their free ends cut square, as apply
- *   paints them; outside on every cell neither a way's nor beside one;
+ *   paints them, each way cell held inside at its centre and every other cell outside;
  * - G the water, B the barriers, A the woods, from their cells: what the sim reads, whatever rule put them there
  *   (priority, `clear`, a hedge's gates). The contract (decision 0065): every cell reads as its own kind at its
  *   centre, and an edge lies within half a cell of the cells' sides. The water's and the woods' fields are smoothed so
@@ -206,18 +206,12 @@ export function bakeInk(
       }
     }
   }
-  // a way's ink only on its cells and beside them: outside elsewhere (the shape's line never shows where the sim has no
-  // way). Where a way crosses water with no bridge the sim has both, and so does the map
-  const nearWay = new Uint8Array(nx * nz)
-  for (let j = 0; j < nz; j++) {
-    for (let i = 0; i < nx; i++) {
-      if (!L.way[j * nx + i]) continue
-      for (let b = Math.max(0, j - 1); b <= Math.min(nz - 1, j + 1); b++) {
-        for (let a = Math.max(0, i - 1); a <= Math.min(nx - 1, i + 1); a++) nearWay[b * nx + a] = 1
-      }
-    }
-  }
-  for (let c = 0; c < sd.length; c++) if (!nearWay[c]) sd[c] = INK_RANGE
+  // the contract (decision 0065): a cell reads as its own kind at its centre. A cell with no way is lifted just
+  // outside, a way's cell just inside; elsewhere the shape's true distance stays, so the field never jumps (a jump
+  // would draw a second hairline) and the edges stay the shapes' within half a cell. Where a way crosses water with no
+  // bridge the sim has both, and so does the map
+  const hold = cell * 0.1
+  for (let c = 0; c < sd.length; c++) sd[c] = L.way[c] ? Math.min(sd[c], -hold) : Math.max(sd[c], hold)
   store(sd, 0)
   // the water, the barriers and the woods, from their cells
   const wood = L.table.map(r => r.attrs.growth === 'stand')
@@ -257,7 +251,8 @@ function segField(a: Pt, b: Pt, x: number, z: number, ends: [boolean, boolean], 
  * the other kind (a two-pass chamfer, 1 and √2 a step), less half a cell, so the 0 lies on the cells' sides; out to
  * INK_RANGE. `smooth`: blurred by a 5-tap binomial in both directions, so the 0 runs through the steps of a diagonal or
  * curved edge instead of along them, but held on each cell's own side of the edge by at least half its raw distance,
- * so no feature a cell or two wide is blurred away.
+ * so no feature a cell or two wide is blurred away; only the cells joinCorners gives way at a saddle are nearer, a
+ * tenth of a cell from the edge, still on their own side.
  */
 export function cellField(
   mask: Uint8Array,

@@ -126,7 +126,7 @@ describe('M6b: the ink distance fields', () => {
     expect(read(out, 0, 7, 1)).toBeCloseTo(1, 1) // 1 m past its end, beside its cells: outside by 1 m (square)
     expect(read(out, 0, 0, 15)).toBeCloseTo(INK_RANGE, 1) // out of reach
   })
-  it("a way's ink shows only on and beside its cells", () => {
+  it("a way's field keeps the contract: road at its cells' centres, not road at every other cell's", () => {
     const line: Pt[] = [
       [-20, 1],
       [20, 1],
@@ -134,8 +134,11 @@ describe('M6b: the ink distance fields', () => {
     const way = wayCells(0, 19, 9, 11)
     for (let j = 9; j <= 11; j++) for (let i = 8; i <= 12; i++) way[at(i, j)] = 0 // a stretch with no way cells
     const out = bakeInk(layers({ way }), [{ line, half: 3 }])
+    const field = (c: number) => ((out[c * 4] - 128) / 127) * INK_RANGE
+    const wrong = [...way.keys()].filter(c => (way[c] ? field(c) >= 0 : field(c) <= 0))
+    expect(wrong).toEqual([])
     expect(read(out, 0, -10, 1)).toBeLessThan(0) // the road
-    expect(read(out, 0, 1, 1)).toBeCloseTo(INK_RANGE, 1) // two cells from any of its cells: no road drawn
+    expect(read(out, 0, -3, 1)).toBeGreaterThan(0) // the cell beside the gap, on the line: not road
   })
   it('waysOf gives each way the half-width apply paints it at (lineReach: at least just over half a cell)', () => {
     const line: Pt[] = [

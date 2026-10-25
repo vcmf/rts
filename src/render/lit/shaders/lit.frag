@@ -40,7 +40,8 @@ void main() {
   vec2 cuv = clamp(uv, 0.0, 1.0);
   vec4 M = texture2D(uMask, cuv) * inside;
   /* the ink's distance fields (bakeInk), signed metres to the nearest edge; the water and the woods are filled from
-     their cells' fields, smoothed, so their edges run through the cells' steps and never leave the cells the sim reads */
+     their cells' fields, smoothed: every cell reads as its own kind at its centre, an edge within half a cell of the
+     cells' sides (decision 0065) */
   vec4 I = (texture2D(uInk, cuv) * 255.0 - 128.0) / 127.0 * uInkRange;
   float waterA = clamp(0.5 - I.g / max(fwidth(I.g), 1e-5), 0.0, 1.0) * inside;
   float woodA = clamp(0.5 - I.a / max(fwidth(I.a), 1e-5), 0.0, 1.0) * inside;
@@ -128,7 +129,8 @@ void main() {
     float rising = smoothstep(0.3, 0.6, length(vec2(dFdx(I.g), dFdy(I.g))) / max(mpp, 1e-6));   /* any direction */
     mapC = mix(mapC, uLine, (hair(I.g + 4.5) * 0.28 + hair(I.g + 7.5) * 0.16) * step(I.g, -2.0) * rising * inside);
     /* hedges and walls: solid, dark */
-    mapC = mix(mapC, uBarrier, max((1.0 - smoothstep(-0.4, 0.0, I.b)) * 0.75, hair(I.b) * 0.6) * inside);
+    float onBarrier = clamp(0.5 - I.b / max(fwidth(I.b), 1e-5), 0.0, 1.0);   /* solid to its edge, a diagonal's too */
+    mapC = mix(mapC, uBarrier, max(onBarrier * 0.75, hair(I.b) * 0.6) * inside);
   }
 
   vec3 col = mapC * (0.93 + (g1 - 0.5) * 0.16 + (fine - 0.5) * 0.12);   /* the paper's grain */

@@ -196,9 +196,8 @@ export class LitView {
       format: number,
       sampling: number,
       type = Constants.TEXTURETYPE_UNSIGNED_BYTE,
-      mips = false,
     ) => {
-      const t = new RawTexture(data, w, h, format, this.scene, mips, false, sampling, type)
+      const t = new RawTexture(data, w, h, format, this.scene, false, false, sampling, type)
       t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE
       this.textures.push(t)
       return t
