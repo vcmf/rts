@@ -632,5 +632,6 @@ describe('the figure (fr-line-infantry.unitdata)', () => {
       }
     }
     expect(() => shadowShape(d, d.lods[d.lods.length - 1].name, [1, 0, 0], roles)).toThrow(/horizon/)
+    expect(s.channels).toBe(1) // (the soft bake's channel: test/shadow-look.test.ts)
   })
 })
