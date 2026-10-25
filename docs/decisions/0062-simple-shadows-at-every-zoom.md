@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-24
 ---
 
@@ -7,7 +7,7 @@ date: 2026-10-24
 
 Amends 0047 (the figures cast runtime shadows from a map of their own) and 0049 (the map only up close, one simple
 shadow a soldier beyond): the map is no longer drawn by default, at any zoom. The plan:
-`docs/plans/active/soft-shadows-all.md`; as built: `docs/systems/look.md` ("The armies").
+`docs/plans/done/soft-shadows-all.md`; as built: `docs/systems/look.md` ("The armies").
 
 ## Context
 

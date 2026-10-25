@@ -1,4 +1,4 @@
-// The simple shadows' look a zoom (decision 0062, docs/plans/active/soft-shadows-all.md): the close and far looks, how
+// The simple shadows' look a zoom (decision 0062, docs/plans/done/soft-shadows-all.md): the close and far looks, how
 // one turns into the other by the camera's distance, the gradient along each shadow from the soles, the strip each
 // soldier draws it on, and the page's switches for them. Pure: src/look/units.ts gives the results to the decal's
 // material (src/look/shaders/unitdecal.*), test/shadow-look.test.ts checks them.

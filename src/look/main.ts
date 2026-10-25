@@ -556,7 +556,7 @@ if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
 // ?ushadowswitch=<r0>,<r1>, the cross-fade's band (m from the focus); ?smoothmove=0, the figures' places at the 12 fps
 // steps (else every frame; the poses stay stepped);
 // ?udecallift=<m>, how high over the ground the simple shadows cover the grass and the men's legs
-// decision 0062 (docs/plans/active/soft-shadows-all.md): the simple shadows at every zoom; ?ushadowclose=map, the map
+// decision 0062 (docs/plans/done/soft-shadows-all.md): the simple shadows at every zoom; ?ushadowclose=map, the map
 // up close as before (cross-faded to them over ?ushadowswitch); their look up close, ?ushsoft=<0..1> (the soft bake's
 // share at the tip), ?ushdark=<0..1> (the full shadow's share at the tip), ?ushlen=<0.3..1.5> (their length), each
 // <close>[,<far>] (far: decision 0049's unless given); ?ushfoot=<dark>,<core m>[,<far dark>,<far core m>], the contact

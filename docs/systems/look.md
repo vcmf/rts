@@ -621,7 +621,7 @@ and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glo
   9.2 × 5.5, 18.4 × 10.4 cm in the sun's view (× 2.2 along the sun on the ground), the slack's 10 % on top while held.
   The merged mass under a battalion is the low sun's: 3.6 m shadows over ranks 0.85 m apart.
 - **Their shadows: the simple shadows, at every zoom** (decisions 0049 and 0062,
-  `docs/plans/active/simple-soldier-shadows.md`, `docs/plans/active/soft-shadows-all.md`; `?unitshadow=0`: none). Every
+  `docs/plans/active/simple-soldier-shadows.md`, `docs/plans/done/soft-shadows-all.md`; `?unitshadow=0`: none). Every
   soldier of a figure looks alike, so one shape: `shadowShape` (`src/look/units-data.ts`, at load) projects the far LOD,
   posed at up to 12 steps of each role's clip and turned to 16 facings, along the sun onto the ground, averages the
   steps (a marching man's legs one soft wedge) and blurs it; an RG8 atlas, mipmapped, a cell a facing and a role: R the

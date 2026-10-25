@@ -61,4 +61,4 @@ recorded here on 2026-10-08.
 | [0052](0052-code-style.md) | Code style: Prettier formats, ESLint keeps lines short and one statement each | accepted |
 | [0054](0054-readable-code.md) | Readable code: small functions, doc comments in new code, a test for every bug fix | accepted |
 | [0060](0060-browser-checks-are-scripts.md) | Browser checks are scripts over CDP; the DevTools MCP is for exploring | accepted |
-| [0062](0062-simple-shadows-at-every-zoom.md) | The simple shadow at every zoom, softer, lighter and shorter up close | proposed |
+| [0062](0062-simple-shadows-at-every-zoom.md) | The simple shadow at every zoom, softer, lighter and shorter up close | accepted |
