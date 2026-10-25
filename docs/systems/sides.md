@@ -83,10 +83,12 @@ your guns wins it for you (`docs/plans/active/s1e3-playtest.md`).
   - **the end:** a side broken at `end.broken`; a draw on one tick; the limit and its margin; not broken above
     it;
   - **routers breaking ranks (#39);**
-  - **determinism:** ten minutes of `s1e-battle`, a golden with its replay (an empty log) and a save round trip.
+  - **determinism:** ten minutes of `s1e-battle`, a golden with its replay (an empty log) and a save round trip;
+  - **the tuned battle** (a long test, skipped under coverage): with no orders, `s1e-battle` at the page's seed is
+    side 1's, decided in 15–22 minutes.
 - **`npm run check:app`:**
   - the page lets you select only your side;
-  - side 1's first line comes down on its own;
+  - side 1's first line (its four battalions) comes down on its own;
   - the battle runs to a result.
 
 ## Open questions
@@ -95,4 +97,5 @@ your guns wins it for you (`docs/plans/active/s1e3-playtest.md`).
   waiting for it. Whether that is enough for the first playtests is S1e-3's question; a reacting brigade AI is S3.
 - **35% of the men out of the fight ends a battle** (`end.broken` 0.65, S1e-3). At half, a side
   whose first line had routed fought on for 20 minutes with nothing happening: rallied battalions count as in the
-  fight, though they stand at the map's edge. Whether a rallied battalion far from the fight should count is open.
+  fight, though they stand at the map's edge. Whether a rallied battalion far from the fight should count is open
+  (#180: the threshold is every Napoleonic scenario's).

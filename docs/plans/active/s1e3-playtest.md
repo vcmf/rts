@@ -233,3 +233,26 @@ commit with `-X ours`, then `npm run format` and long comments rewrapped by hand
   eight seeds, every formation in the same place for 40 minutes; the plan's hash changes, so the `s1e-battle`
   golden was regenerated.
 
+**Round 2 of PR #51** (`/code-review high`, nothing severe; the review stops here). Fixed:
+- `check:app` read only three of side 1's four first-line battalions: it reads units 8–11 (all at z 70–74 by then);
+- M did nothing, silently, when the browser suppresses dialogs (the prompt returns at once as if cancelled): a
+  cancelled mark says so on screen (Cancel still marks nothing, as round 1 of S1e-3a chose); a held M's repeats are
+  ignored;
+- side 1's battalions are rows of their own type, which carries the x they fight at, instead of a check when the
+  file loads;
+- the tuned-battle test used 20 for the tick rate: `TICK_HZ`;
+- the Verification lists of `docs/systems/sim-page.md` and `docs/systems/sides.md` name the report's tests, the
+  report step of `check:app` and the tuned-battle test.
+
+Filed (see Open questions): #179, #180. Left as they are: `check:app` reads the session from its own `SESSION` line
+(the page's export, beside the replay's); the report builds a few strings per formation each tick (a tool, not the
+game); the two long tests (the report's stop and the tuned battle) each play the same battle.
+
+## Open questions
+
+- **#179:** a melee that ends in a pursuit or a recoil clears a queued plan move; the regiment's ride back is sent
+  three times as a stopgap. The fix belongs in the sim: melee keeps a queued non-charge move, or a plan step retries
+  until carried out.
+- **#180:** `end.broken` 0.65 is every Napoleonic scenario's, making up for rallied battalions far off counting as in
+  the fight; the fix is what counts as in the fight, or a threshold per scenario.
+
