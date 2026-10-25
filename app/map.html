@@ -22,6 +22,12 @@
   #errors { margin: 4px 0 0; padding-left: 16px; max-height: 40vh; overflow: auto; }
   #errors li.at { cursor: pointer; text-decoration: underline dotted; }
   #overlayHint { color: var(--ink-2); font-size: 11px; margin: 4px 0; }
+  #editbox { margin-top: 8px; border-top: 1px solid var(--rule); padding-top: 6px; }
+  #editbox .cap { font-weight: 700; }
+  #editState, #editbox .hint { color: var(--ink-2); font-size: 11px; margin: 4px 0; }
+  #conflict { color: var(--bad); margin: 4px 0; }
+  button { font: inherit; }
+  #selection { max-height: 30vh; overflow: auto; margin: 6px 0 0; font-size: 10px; white-space: pre-wrap; word-break: break-all; }
   #readout { bottom: 16px; left: 16px; white-space: pre; min-width: 260px; }
   #readout:empty { display: none; }
   @media (max-width: 640px) { #panel { left: 8px; right: 8px; width: auto; } }
@@ -39,6 +45,17 @@
   <div id="overlayHint" hidden>click the map to look from a point</div>
   <label><input id="outlines" type="checkbox" checked> outlines</label>
   <label><input id="ids" type="checkbox" checked> ids</label>
+  <div id="editbox">
+    <div class="cap">edit</div>
+    <div id="editState"></div>
+    <button id="save" disabled title="Cmd or Ctrl S">save</button>
+    <button id="undo" disabled title="Cmd or Ctrl Z">undo</button>
+    <button id="redo" disabled title="Shift Cmd Z, Ctrl Y">redo</button>
+    <div id="conflict" hidden>The file changed on disk since it was read.
+      <button id="overwrite">keep my edits, overwrite it</button> <button id="takeDisk">take the file</button></div>
+    <div class="hint">click selects · drag a handle or the shape · double-click adds a point · Delete removes the point under the pointer, or the feature · Esc clears</div>
+    <pre id="selection" hidden></pre>
+  </div>
   <div id="errbox" hidden><div class="cap">The file has errors; the last good drawing stays.</div><ul id="errors"></ul></div>
 </div>
 <div id="readout" class="card"></div>

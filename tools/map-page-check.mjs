@@ -6,7 +6,11 @@
 //   2. a broken file (invalid JSON): the page must show the error and keep the last good drawing;
 //   3. the original back: the page must recompile clean;
 //   4. each debug overlay (passability, depth, slope, sight from the map's centre) computed and painting cells, and
-//      the lit view still able to draw once the overlay is off again.
+//      the lit view still able to draw once the overlay is off again;
+//   5. the editor (M7a): the map's first line (not a barrier) selected, its middle point dragged through pointer
+//      events, compiled from the page's copy, saved through the dev server (the file's diff: that feature's line
+//      alone), undone and saved again (the file byte for byte the original); with the largest area selected, a click
+//      on a line inside it selects the line.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
@@ -106,6 +110,56 @@ try {
       'eval',
       `new Promise(r => { const n = MAP.overlays; MAP.overlay(''); const t = setInterval(() => { if (MAP.overlays > n) { clearInterval(t); setTimeout(() => r('OVnone ' + JSON.stringify({ cells: MAP.overlayCells, ready: MAP.litReady })), 300) } }, 20) })`,
     ],
+    // the editor: drag the middle point of the map's first line, save, undo, save
+    [
+      'eval',
+      `new Promise(r => {
+        const f = JSON.parse(MAP.text).features.find(f => f.line && !String(f.kind).startsWith('barrier.'))
+        const p = f.line[Math.floor(f.line.length / 2)]
+        MAP.select(f.id)
+        MAP.look(p[0], p[1], 2)
+        const c = document.getElementById('map'), b = c.getBoundingClientRect()
+        const [sx, sy] = MAP.project(p[0], p[1])
+        const ev = (type, x) => c.dispatchEvent(new PointerEvent(type,
+          { clientX: b.left + x, clientY: b.top + sy, bubbles: true, pointerId: 1, isPrimary: true }))
+        const n = MAP.log.length
+        ev('pointerdown', sx); ev('pointermove', sx + 20); ev('pointermove', sx + 40); ev('pointerup', sx + 40)
+        const t = setInterval(() => {
+          const last = MAP.log[MAP.log.length - 1]
+          if (MAP.log.length > n && last.reason === 'edit') {
+            clearInterval(t)
+            r('EDITED ' + JSON.stringify({ id: f.id, selected: MAP.selected, dirty: MAP.dirty, issues: MAP.issues.length, ms: last.ms }))
+          }
+        }, 20)
+      })`,
+    ],
+    ['shot', 'edited'],
+    [
+      'eval',
+      `MAP.save().then(async ok => 'SAVEDIT ' + JSON.stringify({ ok, dirty: MAP.dirty,
+        disk: await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text() }))`,
+    ],
+    [
+      'eval',
+      `(async () => { MAP.undo(); const ok = await MAP.save(); return 'UNDONE ' + JSON.stringify({ ok, dirty: MAP.dirty,
+        disk: await (await fetch('/maps/${mapName}.map.json', { cache: 'no-store' })).text() }) })()`,
+    ],
+    [
+      'eval',
+      `(() => {
+        const fs = JSON.parse(MAP.text).features
+        const area = fs.filter(f => f.area).sort((a, b) => JSON.stringify(b.area).length - JSON.stringify(a.area).length)[0]
+        const line = fs.find(f => f.line && f.id !== area.id)
+        const p = line.line[Math.floor(line.line.length / 2)]
+        MAP.select(area.id)
+        MAP.look(p[0], p[1], 2)
+        const c = document.getElementById('map'), b = c.getBoundingClientRect()
+        const [sx, sy] = MAP.project(p[0], p[1])
+        for (const type of ['pointerdown', 'pointerup']) c.dispatchEvent(new PointerEvent(type,
+          { clientX: b.left + sx, clientY: b.top + sy, bubbles: true, pointerId: 1, isPrimary: true }))
+        return 'RESELECT ' + JSON.stringify({ area: area.id, line: line.id, selected: MAP.selected })
+      })()`,
+    ],
   ]
   shot = spawn(
     'node',
@@ -177,6 +231,32 @@ try {
   }
   await until('OVnone')
   check(seen.OVnone.cells === 0 && seen.OVnone.ready, 'with the overlay off again, the lit view still draws')
+  await until('EDITED')
+  check(
+    seen.EDITED.selected === seen.EDITED.id && seen.EDITED.dirty && seen.EDITED.issues === 0,
+    `a drag moved a point of ${seen.EDITED.id}, compiled from the page's copy in ${seen.EDITED.ms.toFixed(0)} ms`,
+  )
+  await until('SAVEDIT')
+  const was = original.split('\n')
+  const diff = seen.SAVEDIT.disk.split('\n').flatMap((l, k) => (l === was[k] ? [] : [l]))
+  check(
+    seen.SAVEDIT.ok &&
+      !seen.SAVEDIT.dirty &&
+      seen.SAVEDIT.disk.split('\n').length === was.length &&
+      diff.length === 1 &&
+      diff[0].includes(`"id":"${seen.EDITED.id}"`),
+    `the save wrote the file with one line changed, ${seen.EDITED.id}'s (${diff.length} changed)`,
+  )
+  await until('UNDONE')
+  check(
+    seen.UNDONE.ok && !seen.UNDONE.dirty && seen.UNDONE.disk === original,
+    'undone and saved, the file is byte for byte the original',
+  )
+  await until('RESELECT')
+  check(
+    seen.RESELECT.selected === seen.RESELECT.line,
+    `with ${seen.RESELECT.area} selected, a click on ${seen.RESELECT.line} inside it selects ${seen.RESELECT.selected}`,
+  )
   const code = await done
   check(code === 0, `the page had no exceptions or console errors (shot.mjs exit ${code})`)
 } catch (e) {

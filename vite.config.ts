@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process'
 import path from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
+import { saveMapFile, type SaveRequest } from './tools/map-save.ts'
 // the S1b page: app/index.html; `npm run dev` serves it at /app/. The look page (Track E): app/look.html; the map
 // draft (Track M): app/map.html
 // __BUILD__: the commit a page was built from (the look bench records it), "-dirty" with uncommitted changes to
@@ -29,8 +30,40 @@ const mapsHot: Plugin = {
     return []
   },
 }
+// the map editor's save (docs/plans/active/m7-editor.md, decision 0066): POST /__map/save with the file, the text the
+// page read and the new text; 409 with the file's text if it changed on disk since. Dev only: the built page does not
+// edit
+const mapsSave: Plugin = {
+  name: 'maps-save',
+  configureServer(server) {
+    server.middlewares.use('/__map/save', (req, res) => {
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.end()
+        return
+      }
+      let body = ''
+      req.setEncoding('utf8')
+      req.on('data', (chunk: string) => (body += chunk))
+      req.on('end', () => {
+        let sent: SaveRequest
+        try {
+          sent = JSON.parse(body) as SaveRequest
+        } catch {
+          res.statusCode = 400
+          res.end('not JSON')
+          return
+        }
+        const r = saveMapFile(server.config.root, sent)
+        res.statusCode = r.ok ? 200 : r.status
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify(r))
+      })
+    })
+  },
+}
 export default defineConfig({
   define: { __BUILD__: JSON.stringify(build) },
-  plugins: [mapsHot],
+  plugins: [mapsHot, mapsSave],
   build: { outDir: 'dist', rollupOptions: { input: ['app/index.html', 'app/look.html', 'app/map.html'] } },
 })

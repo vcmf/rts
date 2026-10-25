@@ -6,7 +6,7 @@
 // `offset` m more), measured by the line's own painting rule. No cell is both, and none between is left out.
 import type { Feature, Pt } from './schema.ts'
 import { nearLine } from './apply.ts'
-import { lineLength, stretch } from './geometry.ts'
+import { isClosedLine, lineLength, stretch } from './geometry.ts'
 import { cm, listOf } from './util.ts'
 
 export interface FollowEdge {
@@ -30,8 +30,7 @@ export function followEdge(line: Pt[], e: FollowEdge): Pt[] {
   const lo = Math.min(a, b)
   const hi = Math.max(a, b)
   const len = lineLength(line)
-  const last = line[line.length - 1]
-  const closed = line.length > 3 && last[0] === line[0][0] && last[1] === line[0][1]
+  const closed = isClosedLine(line)
   // from lo to hi along the line; or, across the first point, from hi to the end and on from the start to lo
   const across = closed && len - (hi - lo) < hi - lo
   const raw = a === b ? [] : across ? [...stretch(line, hi, len), ...stretch(line, 0, lo)] : stretch(line, lo, hi)

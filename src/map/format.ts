@@ -1,19 +1,23 @@
 // The map file's one layout (docs/proposals/map-engine.md §3, strict JSON): the map's own fields two-space
 // indented, one feature, preset or source per line, so a diff shows which features changed. The CLI writes
-// expanded maps with it; hand-written maps may use any layout.
+// expanded maps with it, and the editor's save (src/map/write.ts) writes what it changes with it; hand-written maps
+// may use any layout.
 import type { MapFile } from './schema.ts'
 
+/** One of the map's own fields' value in the layout: lists and presets one entry a line, the rest on one line. */
+export function formatValue(key: string, v: unknown): string {
+  if (key === 'features' || key === 'sources') {
+    return `[\n${(v as unknown[]).map(x => '    ' + JSON.stringify(x)).join(',\n')}\n  ]`
+  }
+  if (key === 'presets') {
+    return `{\n${Object.entries(v as object)
+      .map(([n, p]) => `    ${JSON.stringify(n)}: ${JSON.stringify(p)}`)
+      .join(',\n')}\n  }`
+  }
+  return JSON.stringify(v)
+}
+
 export function formatMap(map: MapFile): string {
-  const lines = Object.entries(map).map(([k, v]) => {
-    if (k === 'features' || k === 'sources') {
-      return `  ${JSON.stringify(k)}: [\n${(v as unknown[]).map(x => '    ' + JSON.stringify(x)).join(',\n')}\n  ]`
-    }
-    if (k === 'presets') {
-      return `  "presets": {\n${Object.entries(v as object)
-        .map(([n, p]) => `    ${JSON.stringify(n)}: ${JSON.stringify(p)}`)
-        .join(',\n')}\n  }`
-    }
-    return `  ${JSON.stringify(k)}: ${JSON.stringify(v)}`
-  })
+  const lines = Object.entries(map).map(([k, v]) => `  ${JSON.stringify(k)}: ${formatValue(k, v)}`)
   return `{\n${lines.join(',\n')}\n}\n`
 }

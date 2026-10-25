@@ -129,6 +129,12 @@ export function inRing(ring: Pt[], p: Pt): boolean {
   return inside
 }
 
+/** Whether a line is closed: its last point is its first, with at least three others (a walled yard, a loop). */
+export function isClosedLine(line: Pt[]): boolean {
+  const last = line[line.length - 1]
+  return line.length > 3 && last[0] === line[0][0] && last[1] === line[0][1]
+}
+
 // a barrier's line (§3.6): points on the lattice, segments along the axes or the diagonals, none of zero length.
 // Returns the index of the first bad point and why, or null.
 export function barrierProblem(line: Pt[]): [number, string] | null {
