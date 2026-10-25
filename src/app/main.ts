@@ -238,7 +238,12 @@ async function main(): Promise<void> {
   // battle) while you say what happened; Cancel marks nothing. The report prints where everyone stood then
   const marks: { tick: number; note: string }[] = []
   const mark = (text?: string) => {
-    const said = text ?? prompt('What happened here? (optional)')
+    let said = text ?? null
+    if (text === undefined) {
+      said = prompt('What happened here? (optional)')
+      // the prompt swallowed the keyup and pointerup of anything held (space, a drag): let go of them
+      releaseHeld()
+    }
     if (said === null) return
     marks.push({ tick: w.meta[M_TICK], note: said.trim() })
     note = `moment ${marks.length} marked`
@@ -398,9 +403,13 @@ async function main(): Promise<void> {
   addEventListener('keyup', e => {
     if (e.code === 'Space') space = false
   })
-  addEventListener('blur', () => {
+  // held input lets go when the page loses the keyboard and mouse (a blur, the mark's prompt): space, and a drag
+  // with no order
+  function releaseHeld(): void {
     space = false
-  })
+    cancel()
+  }
+  addEventListener('blur', releaseHeld)
   addEventListener('keydown', e => {
     // space pans; a focused panel button must not take it as a click (it would repeat the order)
     if (e.code === 'Space') {
