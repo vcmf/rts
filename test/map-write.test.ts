@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { MapFile } from '../src/map/schema.ts'
 import { formatMap } from '../src/map/format.ts'
-import { sameJson, writeMap } from '../src/map/write.ts'
+import { sameJson, writeMap, writerFrom } from '../src/map/write.ts'
 import { root } from './fx.ts'
 
 const files = fs
@@ -140,9 +140,21 @@ describe('M7a: an edit undone after a save', () => {
     const edited = structuredClone(map)
     const f = edited.features.find(x => x.line)!
     f.line![0] = [f.line![0][0] + 2, f.line![0][1]]
-    const saved = writeMap(text, edited, text)
+    const saved = writeMap(text, edited, writerFrom(text))
     expect(saved).not.toBe(text)
-    expect(writeMap(saved, map, text)).toBe(text)
-    expect(writeMap(saved, map, 'not json {"')).not.toBe(text) // an earlier text that is not JSON is ignored
+    expect(writeMap(saved, map, writerFrom(text))).toBe(text)
+    // an earlier text that is not JSON is ignored
+    expect(writeMap(saved, map, writerFrom('not json {"'))).not.toBe(text)
+  })
+})
+
+describe('M7a: a base that is no map yet (a hand edit in progress)', () => {
+  it('writes the map afresh when the base has no list of features, or one with an element that is no feature', () => {
+    const m = JSON.parse(fs.readFileSync(path.join(root, 'maps', 'two-ridges.map.json'), 'utf8')) as MapFile
+    for (const base of ['{"features": null}', '{"features": {}}', '{"features": "x"}', '{"id": "x"}']) {
+      expect(writeMap(base, m)).toBe(formatMap(m))
+    }
+    const out = writeMap('{\n  "features": [\n    null,\n    {"id": 1}\n  ]\n}\n', m)
+    expect(JSON.parse(out)).toEqual(m)
   })
 })

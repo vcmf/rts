@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process'
 import path from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
-import { saveMapFile, type SaveRequest } from './tools/map-save.ts'
+import { mayWrite, saveMapFile, type SaveRequest } from './tools/map-save.ts'
 // the S1b page: app/index.html; `npm run dev` serves it at /app/. The look page (Track E): app/look.html; the map
 // draft (Track M): app/map.html
 // __BUILD__: the commit a page was built from (the look bench records it), "-dirty" with uncommitted changes to
@@ -40,6 +40,11 @@ const mapsSave: Plugin = {
       if (req.method !== 'POST') {
         res.statusCode = 405
         res.end()
+        return
+      }
+      if (!mayWrite(req.headers)) {
+        res.statusCode = 403
+        res.end('only the map page saves, as JSON')
         return
       }
       let body = ''

@@ -101,6 +101,16 @@ tools on top).
   text once. Tests: `test/map-editor.test.ts` drives the editor with a fake page and server; the page check selects a
   line inside the selected area.
 
+- **Round 2**: severe. A base whose `features` was not a list (a hand edit in progress, taken in a conflict) made the
+  writer loop forever and freeze the tab; a drag ending after the file was read in put the old copy back, so the next
+  save reverted the hand edit. Fixed: the writer writes such a map afresh (an element that is no feature too); each
+  replacement of the copy (a load, an edit, undo, redo) ends any drag begun before it, which leaves the new copy. With
+  them: a press must move 4 px to drag (a click on the selection no longer nudges it); a cancelled pointer puts the
+  drag back; a double click on a point adds none; Delete and Escape only with the map focused, not a list or a
+  button; a conflict clears when the file is back to what the page read; the save route takes only JSON from the
+  dev server's own origin (another site's page could have written maps); the editor makes its feature writer when it
+  reads the file (no hidden cache in `src/map/write.ts`); the outlines' ovals are the editor's `ovalRing`.
+
 ## Open questions
 
 1. Editing a generated child moves its parent's handles, not its own: changing one house of a village needs pinning

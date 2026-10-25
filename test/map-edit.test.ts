@@ -199,7 +199,15 @@ describe('M7a: points added to and removed from a barrier keep it valid', () => 
         if (g) expect(barrierProblem(g.line!)).toBe(null)
       }
     }
-    expect(insertPoint(wall, 4.3, -0.2, [4.3, 0.2], project, place)!.line![1]).toEqual([4, 0])
+    // on a longer wall, away from its ends (a click within PICK.handle of a point adds nothing)
+    const long: Feature = {
+      ...wall,
+      line: [
+        [0, 0],
+        [40, 0],
+      ],
+    }
+    expect(insertPoint(long, 20.3, -0.2, [20.3, 0.2], project, place)!.line![1]).toEqual([20, 0])
   })
   it('keeps a point whose neighbours would not join in the 8 directions', () => {
     const step: Feature = {

@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { saveMapFile } from '../tools/map-save.ts'
+import { mayWrite, saveMapFile } from '../tools/map-save.ts'
 
 describe('M7a: the save on the dev server', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'map-save-'))
@@ -55,5 +55,17 @@ describe('M7a: a save that cannot write', () => {
     } finally {
       fs.chmodSync(dir, 0o755)
     }
+  })
+})
+
+describe('M7a: only the map page may save', () => {
+  it("takes JSON from the server's own origin, or with no origin; refuses other sites and other types", () => {
+    const host = 'localhost:5173'
+    expect(mayWrite({ 'content-type': 'application/json', origin: 'http://localhost:5173', host })).toBe(true)
+    expect(mayWrite({ 'content-type': 'application/json; charset=utf-8', host })).toBe(true)
+    expect(mayWrite({ 'content-type': 'application/json', origin: 'https://evil.example', host })).toBe(false)
+    expect(mayWrite({ 'content-type': 'text/plain', origin: 'http://localhost:5173', host })).toBe(false)
+    expect(mayWrite({ origin: 'http://localhost:5173', host })).toBe(false)
+    expect(mayWrite({ 'content-type': 'application/json', origin: 'null', host })).toBe(false)
   })
 })

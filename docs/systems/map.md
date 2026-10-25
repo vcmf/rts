@@ -248,7 +248,8 @@ maps/kinds.json ──► checkCatalogue ─┐
     lattice steps; a point added to a barrier is snapped between its neighbours, and one whose removal would leave a
     bad joint stays. A double click adds a point, Delete removes the line's or ring's point under the pointer or
     else the feature, undo and redo keep 200 edits (a change on disk read in clears them). The save (Cmd or Ctrl S) goes through the dev server (`POST /__map/save`,
-    `tools/map-save.ts`) with the text the page read, and is refused if the file changed on disk since (the page
+    `tools/map-save.ts`, JSON from the page's own origin only) with the text the page read, and is refused if the file
+    changed on disk since (the page
     then offers to overwrite it or take the file). It rewrites only what changed (`writeMap`, `src/map/write.ts`):
     an unchanged feature or field keeps its bytes, a changed one is written on one line in place (or in the file's
     first bytes, when an undo brought it back), a new one appended, a deleted one cut. A change on disk with no

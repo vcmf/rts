@@ -13,6 +13,7 @@ import { LitView, TILT } from '../../render/lit/view.ts'
 import { standing } from '../../render/lit/houses.ts'
 import { lineLength, pointAt } from '../../map/geometry.ts'
 import { Editor } from './editor.ts'
+import { ovalRing } from './edit.ts'
 
 // the maps and the catalogue, bundled for the built page; in dev they are fetched fresh on every save
 const MAPS = import.meta.glob('/maps/*.map.json', { query: '?raw', import: 'default' }) as Record<
@@ -371,15 +372,8 @@ function outline(f: Feature, colour?: string, width = 1): void {
   if (f.line) path(f.line, false)
   if (f.area) f.area.forEach(r => path(r, true))
   // a circle or an ellipse as a ring of points on the ground, so it leans with the view
-  const ring = (c: Pt, a: number, b: number, ang: number) =>
-    Array.from({ length: 48 }, (_, k): Pt => {
-      const t = (k / 48) * 2 * Math.PI
-      const u = a * Math.cos(t)
-      const v = b * Math.sin(t)
-      return [c[0] + u * Math.cos(ang) - v * Math.sin(ang), c[1] + u * Math.sin(ang) + v * Math.cos(ang)]
-    })
-  if (f.circle) path(ring(f.circle[0], f.circle[1], f.circle[1], 0), true)
-  if (f.ellipse) path(ring(...f.ellipse), true)
+  if (f.circle) path(ovalRing(f.circle[0], f.circle[1], f.circle[1], 0), true)
+  if (f.ellipse) path(ovalRing(...f.ellipse), true)
   const at = anchor(f)
   const mark = (f.point || f.near) && toScreen(...(f.point ?? f.near!))
   if (mark) {
@@ -627,6 +621,15 @@ canvas.addEventListener('pointerup', e => {
   } else if (click) editor.click(e.offsetX, e.offsetY)
   drag = null
 })
+// an interrupted press (touch or pen cancelled, the capture lost): a drag of the editor's is undone, a pan ends
+const interrupted = () => {
+  if (drag?.edit) editor.cancel()
+  drag = null
+}
+canvas.addEventListener('pointercancel', interrupted)
+canvas.addEventListener('lostpointercapture', () => {
+  if (drag) interrupted()
+})
 canvas.addEventListener('dblclick', e => {
   if (overlaySelect.value !== 'sight') editor.dblclick(e.offsetX, e.offsetY)
 })
@@ -689,7 +692,10 @@ showIds.addEventListener('change', draw)
 
 // the editor's keys: save, undo, redo, clear the selection, delete; not while typing in a field
 addEventListener('keydown', e => {
-  if ((e.target as HTMLElement).closest?.('input, textarea')) return
+  // not while typing in a field or choosing in a list; Delete and Escape only on the map, not on a focused button
+  const target = e.target as HTMLElement
+  if (target.closest?.('input, textarea, select')) return
+  const onMap = target === document.body || target === canvas
   const mod = e.metaKey || e.ctrlKey
   const key = e.key.toLowerCase()
   if (mod && key === 's') {
@@ -702,8 +708,8 @@ addEventListener('keydown', e => {
   } else if (mod && key === 'y') {
     e.preventDefault()
     editor.redo()
-  } else if (e.key === 'Escape') editor.select(null)
-  else if (e.key === 'Delete' || e.key === 'Backspace') {
+  } else if (e.key === 'Escape' && onMap) editor.select(null)
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && onMap) {
     e.preventDefault()
     editor.remove()
   }

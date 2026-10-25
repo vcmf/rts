@@ -122,8 +122,12 @@ function featurePatches(s: string, open: Span, features: Feature[], write: (f: F
   if (!els.length || !features.length) {
     return [{ ...open, text: features.length ? formatValue('features', features) : '[]' }]
   }
-  const old = els.map(e => JSON.parse(s.slice(e.start, e.end)) as Feature)
-  const ids = old.map(f => f.id)
+  const old = els.map(e => JSON.parse(s.slice(e.start, e.end)) as Feature | null)
+  // an element that is no feature (a hand edit in progress): nothing to match, the list written afresh
+  if (!old.every(f => typeof f === 'object' && f !== null && typeof f.id === 'string')) {
+    return [{ ...open, text: formatValue('features', features) }]
+  }
+  const ids = old.map(f => f!.id)
   const byId = new Map(features.map(f => [f.id, f]))
   const oldIndex = new Map(ids.map((id, k) => [id, k]))
   const unique = new Set(ids).size === ids.length && byId.size === features.length
@@ -162,17 +166,16 @@ function featurePatches(s: string, open: Span, features: Feature[], write: (f: F
   return patches
 }
 
+/** How a changed feature is written into the file. */
+export type FeatureWriter = (f: Feature) => string
+/** A changed feature on one line. */
+const oneLine: FeatureWriter = f => JSON.stringify(f)
+
 /**
- * How a changed feature is written: in an earlier text's own bytes when it is a feature of that text, unchanged (an
- * edit undone after a save), else on one line.
+ * A writer that keeps an earlier text's bytes for a feature equal to one of that text's (an edit undone after a save
+ * comes back as the file first had it), else writes it on one line. The editor makes one when it reads the file.
  */
-let lastWriter: { earlier: string | null; write: (f: Feature) => string } | null = null
-function writer(earlier: string | null): (f: Feature) => string {
-  // the editor writes against the same earlier text on every edit: read it once
-  if (lastWriter?.earlier !== earlier) lastWriter = { earlier, write: makeWriter(earlier) }
-  return lastWriter.write
-}
-function makeWriter(earlier: string | null): (f: Feature) => string {
+export function writerFrom(earlier: string | null): FeatureWriter {
   const known = new Map<string, { value: Feature; text: string }>()
   try {
     if (earlier !== null) JSON.parse(earlier) // the scan below reads valid JSON only
@@ -191,16 +194,16 @@ function makeWriter(earlier: string | null): (f: Feature) => string {
   }
   return f => {
     const k = known.get(f.id)
-    return k && sameJson(k.value, f) ? k.text : JSON.stringify(f)
+    return k && sameJson(k.value, f) ? k.text : oneLine(f)
   }
 }
 
 /**
  * The map's file, written into the text it was read from (`base`): only what changed is rewritten (decision 0066).
- * With no base, or one that is not a JSON object, the map in the file's one layout (`formatMap`). A changed feature
- * equal to one of `earlier` (the file as the editor first read it) is written in that text's bytes.
+ * With no base, or one that is not a JSON object with a list of features, the map in the file's one layout
+ * (`formatMap`). A changed feature is written by `write` (on one line; `writerFrom` keeps an earlier text's bytes).
  */
-export function writeMap(base: string | null, map: MapFile, earlier: string | null = null): string {
+export function writeMap(base: string | null, map: MapFile, write: FeatureWriter = oneLine): string {
   let parsed: unknown
   try {
     parsed = base === null ? null : JSON.parse(base)
@@ -208,7 +211,14 @@ export function writeMap(base: string | null, map: MapFile, earlier: string | nu
     parsed = null
   }
   const start = base === null ? 0 : skipWs(base, 0)
-  if (base === null || typeof parsed !== 'object' || parsed === null || Array.isArray(parsed) || base[start] !== '{') {
+  if (
+    base === null ||
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    Array.isArray(parsed) ||
+    base[start] !== '{' ||
+    !Array.isArray((parsed as { features?: unknown }).features)
+  ) {
     return formatMap(map)
   }
   const s = base
@@ -228,7 +238,7 @@ export function writeMap(base: string | null, map: MapFile, earlier: string | nu
   }
   members.forEach((m, k) => {
     if (m.key === 'features') {
-      patches.push(...featurePatches(s, m.value, map.features, writer(earlier)))
+      patches.push(...featurePatches(s, m.value, map.features, write))
     } else if (gone(m)) {
       if (k < lastKept) patches.push({ start: m.at, end: members[k + 1].at, text: '' }) // with the separator after it
     } else if (!sameJson(old[m.key], now[m.key])) {

@@ -328,6 +328,8 @@ export function insertPoint(
       if (d <= PICK.line && (!best || d < best.d)) best = { ring, index: k + 1, d }
     }
   }
+  // on an existing point, nothing is added (it would repeat it)
+  if (handleAt(f, sx, sy, project)) return null
   if (f.line) consider(f.line, false, -1)
   f.area?.forEach((ring, r) => consider(ring, true, r))
   if (!best) return null

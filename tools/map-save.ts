@@ -15,6 +15,20 @@ export interface SaveRequest {
 export type SaveResult =
   { ok: true } | { ok: false; status: 409; current: string } | { ok: false; status: 400 | 500; error: string }
 
+/**
+ * Whether a request may save: JSON (so a browser asks before another site's page can send it) and, when the browser
+ * names its origin, from the dev server's own host. Any page the browser has open could otherwise write map files.
+ */
+export function mayWrite(headers: { 'content-type'?: string; origin?: string; host?: string }): boolean {
+  if (!/^application\/json(;|$)/.test(headers['content-type'] ?? '')) return false
+  if (headers.origin === undefined) return true
+  try {
+    return new URL(headers.origin).host === headers.host
+  } catch {
+    return false
+  }
+}
+
 const MAP_FILE = /^\/maps\/[a-z0-9]+(-[a-z0-9]+)*\.map\.json$/
 
 /** Writes a map file under `root` if it still holds the text the page read, through a temporary file and a rename. */

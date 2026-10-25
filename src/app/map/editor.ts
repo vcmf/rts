@@ -5,7 +5,7 @@
 // rewritten (src/map/write.ts). The edits themselves are pure (./edit.ts). The built page has no server to save
 // through, so it selects but does not edit.
 import type { Feature, MapFile, Pt } from '../../map/schema.ts'
-import { sameJson, writeMap } from '../../map/write.ts'
+import { sameJson, writeMap, writerFrom, type FeatureWriter } from '../../map/write.ts'
 import {
   handleAt,
   handles,
@@ -47,6 +47,7 @@ function parseDoc(text: string): MapFile | null {
   }
 }
 
+const DRAG_PX = 4 // a press that moves less is a click
 const SNAP_PX = 14 // a barrier's point snaps to a valid place within this many pixels
 const SELECTED = '#d0601a'
 
@@ -56,8 +57,11 @@ export class Editor {
   file: string | null = null
   /** The file's text as last read or saved: the save's base. */
   base: string | null = null
-  /** The file's text as last read from disk: a feature an undo brings back is written in its bytes. */
-  private origin: string | null = null
+  /** Writes a changed feature: in the file's bytes as last read from disk, when an undo brought it back. */
+  private writer: FeatureWriter = writerFrom(null)
+  /** Goes up whenever the copy is replaced other than by a drag (a load, an edit, undo, redo): a drag begun before is
+   * dropped. */
+  private generation = 0
   /** The map's intent as edited, or null when the file is not valid JSON. */
   doc: MapFile | null = null
   selected: string | null = null
@@ -65,7 +69,15 @@ export class Editor {
   conflict: string | null = null
   message = ''
   private history = new History<MapFile>()
-  private drag: { handle: Handle | null; before: MapFile; f0: Feature; from: Pt; moved: boolean } | null = null
+  private drag: {
+    handle: Handle | null
+    before: MapFile
+    f0: Feature
+    from: Pt
+    at: [number, number] // the press, on screen
+    moved: boolean // past DRAG_PX: a drag, not a click
+    generation: number
+  } | null = null
   private hover: Handle | null = null
   private cache: { doc: MapFile; base: string | null; text: string } | null = null
 
@@ -82,9 +94,11 @@ export class Editor {
     if (file !== this.file) this.selected = null
     this.history.clear()
     this.hover = null
+    this.drag = null
+    this.generation++
     this.file = file
     this.base = text
-    this.origin = text
+    this.writer = writerFrom(text)
     this.conflict = null
     this.doc = parseDoc(text)
     if (this.selected && !this.feature(this.selected)) this.selected = null
@@ -95,7 +109,15 @@ export class Editor {
    * unsaved edits it is a conflict, shown until it is settled. Returns whether the copy changed (to recompile).
    */
   onDisk(text: string): boolean {
-    if (text === this.base) return false
+    if (text === this.base) {
+      // our own save; or the file back as we read it, which settles a conflict
+      if (this.conflict !== null) {
+        this.conflict = null
+        this.message = ''
+        this.host.changed()
+      }
+      return false
+    }
     if (!this.dirty) {
       this.load(this.file!, text)
       return true
@@ -111,7 +133,7 @@ export class Editor {
     if (!this.doc) return this.base ?? ''
     const c = this.cache
     if (c && c.doc === this.doc && c.base === this.base) return c.text
-    const text = writeMap(this.base, this.doc, this.origin)
+    const text = writeMap(this.base, this.doc, this.writer)
     this.cache = { doc: this.doc, base: this.base, text }
     return text
   }
@@ -139,6 +161,8 @@ export class Editor {
   /** Makes an edit: the copy before it goes into the history, and the copy is compiled. */
   private commit(doc: MapFile): void {
     this.history.push(this.doc!)
+    this.hover = null // its indices may be the old shape's
+    this.generation++
     this.doc = doc
     this.host.recompile()
     this.host.changed()
@@ -170,7 +194,15 @@ export class Editor {
       const on = pick([f], ids, sx, sy, this.host.toWorld(sx, sy), this.host.project)
       if (on !== f.id) return false
     }
-    this.drag = { handle, before: this.doc, f0: f, from: this.host.toWorld(sx, sy), moved: false }
+    this.drag = {
+      handle,
+      before: this.doc,
+      f0: f,
+      from: this.host.toWorld(sx, sy),
+      at: [sx, sy],
+      moved: false,
+      generation: this.generation,
+    }
     return true
   }
   /** The pointer moved: drags, or notes the handle under it. Returns whether it is dragging. */
@@ -183,6 +215,12 @@ export class Editor {
       this.hover = hover
       return false
     }
+    if (d.generation !== this.generation) {
+      this.drag = null // the copy was replaced under the drag (the file read in, an undo): it is not ours to move
+      return false
+    }
+    // a press that has not gone past DRAG_PX is still a click: nothing moves
+    if (!d.moved && Math.hypot(sx - d.at[0], sy - d.at[1]) < DRAG_PX) return true
     const at = this.host.toWorld(sx, sy)
     const f = d.handle
       ? moveHandle(d.f0, d.handle, at, this.place())
@@ -197,11 +235,21 @@ export class Editor {
     const d = this.drag
     this.drag = null
     if (!d) return false
+    if (d.generation !== this.generation) return true // replaced under the drag: the new copy stays
     const after = this.doc!
     this.doc = d.before
     // a press that did not move, or moved less than the rounding, changes nothing and leaves no step in the history
     if (d.moved && !sameJson(after.features, d.before.features)) this.commit(after)
     return true
+  }
+  /** An interrupted press (the pointer cancelled, its capture lost): the copy goes back to before the drag. */
+  cancel(): void {
+    const d = this.drag
+    this.drag = null
+    if (d && d.generation === this.generation) {
+      this.doc = d.before
+      this.host.redraw()
+    }
   }
   /** A double click on the selected line or ring adds a point there. */
   dblclick(sx: number, sy: number): void {
@@ -235,6 +283,7 @@ export class Editor {
     const d = this.doc && this.history.undo(this.doc)
     if (!d) return
     this.hover = null
+    this.generation++
     this.doc = d
     this.host.recompile()
     this.host.changed()
@@ -243,6 +292,7 @@ export class Editor {
     const d = this.doc && this.history.redo(this.doc)
     if (!d) return
     this.hover = null
+    this.generation++
     this.doc = d
     this.host.recompile()
     this.host.changed()
