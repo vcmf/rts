@@ -352,7 +352,9 @@ function housesOf(c: Compiled): { ring: Pt[]; height: number; church: boolean }[
     const ring = ringsOf(f)?.[0] // the ring apply paints (a circle's or an ellipse's polygon too)
     if (!ring) return []
     const wall = typeof r.attrs.wall === 'number' ? r.attrs.wall : 4
-    return [{ ring, height: wall, church: r.kind.startsWith('built.church') }]
+    // a house with no roof (burnt, a ruin) stands as its broken walls, low
+    const height = r.attrs.roof === 'none' ? wall * 0.4 : wall
+    return [{ ring, height, church: r.kind.startsWith('built.church') }]
   })
 }
 
@@ -373,6 +375,7 @@ function namesOf(c: Compiled): { at: Pt; text: string }[] {
 /** Writes the map's names on the overlay: italic, with a paper halo. */
 function drawNames(): void {
   if (!current) return
+  ctx.save() // its stroke and font stay its own
   ctx.font = 'italic 15px Georgia, "Times New Roman", serif'
   ctx.textAlign = 'center'
   ctx.lineJoin = 'round'
@@ -385,7 +388,7 @@ function drawNames(): void {
     ctx.fillStyle = '#3a3128'
     ctx.fillText(text, p[0], p[1])
   }
-  ctx.textAlign = 'start'
+  ctx.restore()
 }
 
 // where a feature's id is written: its point, the middle of its line, its area's first corner

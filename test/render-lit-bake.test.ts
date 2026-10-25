@@ -153,6 +153,33 @@ describe('M6b: the ink distance fields', () => {
     const edge = [5, 8, 11].map(i => f[at(i, 19 - i)])
     for (const v of edge) expect(v).toBeCloseTo(edge[0], 3)
   })
+  // the width a smoothed field draws across a straight band of cells (columns i0..i1 of row 10's neighbourhood): where
+  // the field, read linearly between the cells' centres, is below 0
+  const drawnWidth = (f: Float32Array, j: number) => {
+    let w = 0
+    for (let i = 0; i + 1 < nx; i++) {
+      const a = f[at(i, j)]
+      const b = f[at(i + 1, j)]
+      if (a < 0 && b < 0) w += cell
+      else if (a < 0 !== b < 0) w += (cell * Math.abs(a < 0 ? a : b)) / Math.abs(a - b)
+    }
+    return w
+  }
+  it('a stream one or two cells wide survives the smoothing, about as wide as its cells', () => {
+    for (const cells of [1, 2]) {
+      const m = new Uint8Array(nx * nz)
+      for (let j = 0; j < nz; j++) for (let i = 9; i < 9 + cells; i++) m[at(i, j)] = 1
+      const f = cellField(m, nx, nz, cell, true)
+      expect(f[at(9, 10)]).toBeLessThan(0)
+      expect(drawnWidth(f, 10)).toBeGreaterThanOrEqual(cells * cell * 0.5)
+    }
+  })
+  it('a clearing one cell wide in a wood stays open after the smoothing', () => {
+    const m = new Uint8Array(nx * nz).fill(1)
+    for (let j = 0; j < nz; j++) m[at(10, j)] = 0
+    const f = cellField(m, nx, nz, cell, true)
+    expect(f[at(10, 10)]).toBeGreaterThan(0)
+  })
   it('the woods come from the cells: a clearing a field took by priority stays open', () => {
     const veg = cells()
     for (let j = 4; j < 16; j++) for (let i = 4; i < 16; i++) veg[at(i, j)] = 1 // the wood

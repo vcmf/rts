@@ -246,9 +246,11 @@ function segField(a: Pt, b: Pt, x: number, z: number, ends: [boolean, boolean], 
  * A cell mask's signed distance field (negative inside), m, at the cells' centres: the distance to the nearest cell of
  * the other kind (a two-pass chamfer, 1 and √2 a step), less half a cell, so the 0 lies on the cells' sides; out to
  * INK_RANGE. `smooth`: blurred by a 5-tap binomial in both directions, so the 0 runs through the steps of a diagonal or
- * curved edge instead of along them.
+ * curved edge instead of along them, but held on each cell's own side of the edge by at least half its raw distance,
+ * so no feature a cell or two wide is blurred away.
  */
 export function cellField(mask: Uint8Array, nx: number, nz: number, cell: number, smooth: boolean): Float32Array {
+  if (!mask.includes(1)) return new Float32Array(nx * nz).fill(INK_RANGE) // nothing of the kind: all outside
   const far = INK_RANGE / cell + 2
   const toOther = (inside: number) => {
     const d = new Float32Array(nx * nz)
@@ -286,25 +288,25 @@ export function cellField(mask: Uint8Array, nx: number, nz: number, cell: number
   }
   const outside = toOther(0) // from each cell outside the mask to the nearest inside
   const inside = toOther(1) // from each cell inside to the nearest outside
-  let f = new Float32Array(nx * nz)
-  for (let c = 0; c < f.length; c++) f[c] = (mask[c] ? -(inside[c] - 0.5) : outside[c] - 0.5) * cell
-  if (!smooth) return f
-  const W = [1, 4, 6, 4, 1]
-  for (const along of [1, nx]) {
-    const g = new Float32Array(f.length)
-    for (let j = 0; j < nz; j++) {
-      for (let i = 0; i < nx; i++) {
-        let s = 0
-        for (let k = -2; k <= 2; k++) {
-          const ii = along === 1 ? Math.min(nx - 1, Math.max(0, i + k)) : i
-          const jj = along === 1 ? j : Math.min(nz - 1, Math.max(0, j + k))
-          s += W[k + 2] * f[jj * nx + ii]
-        }
-        g[j * nx + i] = s / 16
+  const raw = new Float32Array(nx * nz)
+  for (let c = 0; c < raw.length; c++) raw[c] = (mask[c] ? -(inside[c] - 0.5) : outside[c] - 0.5) * cell
+  if (!smooth) return raw
+  // a 5-tap binomial blur along x, then along z; the border cells repeat
+  const blur = (from: Float32Array, step: number, n: number, count: number) => {
+    const to = new Float32Array(from.length)
+    for (let line = 0; line < count; line++) {
+      const base = step === 1 ? line * nx : line
+      for (let k = 0; k < n; k++) {
+        const at = (q: number) => from[base + Math.min(n - 1, Math.max(0, q)) * step]
+        to[base + k * step] = (at(k - 2) + 4 * at(k - 1) + 6 * at(k) + 4 * at(k + 1) + at(k + 2)) / 16
       }
     }
-    f = g
+    return to
   }
+  const f = blur(blur(raw, 1, nx, nz), nx, nz, nx)
+  // the blur may not carry a cell across its edge, nor more than half a cell toward it: a stream one cell wide stays
+  // water a metre wide, a clearing one cell wide stays open, while a wide edge runs smooth through the cells' steps
+  for (let c = 0; c < f.length; c++) f[c] = mask[c] ? Math.min(f[c], raw[c] / 2) : Math.max(f[c], raw[c] / 2)
   return f
 }
 

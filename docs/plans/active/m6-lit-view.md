@@ -176,3 +176,11 @@ settings (the owner, 2026-10-25).
   trick could double-blend), names at a line's true middle, the fields mipmapped against far-zoom dashes, the far fade
   on the metres a pixel spans, the lining kept off the water's middle line, no dead mask channel, one rule for a
   way's width (`lineReach`). The review count restarts with the redesign.
+- **Redesign, round 1**: severe. The smoothing blurred narrow features away: a stream one or two cells wide drew
+  outside its own edge (a 1-cell stream not at all, a 2-cell one 0.4 m wide), and a clearing one cell wide in a wood
+  filled with forest, against the cells. Fixed: after the blur each cell stays on its own side of the edge by at least
+  half its raw distance (a 1-cell stream draws about a metre wide, a 2-cell one about 3 m, a 1-cell clearing stays
+  open), with tests that measure it; the ink's fields are no longer mipmapped (averaged, a hedge or a brook two cells
+  wide vanished from the far view; the cells' mask still is). With them: a house's shadow as long as its wall is high;
+  a roofless house (a ruin) stands low; the names keep their stroke to themselves (`save`/`restore`); `ccw` from
+  `ringArea2`; an empty mask skips its distance transform.

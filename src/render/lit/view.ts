@@ -17,6 +17,7 @@ import { Matrix, Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Season } from '../../map/schema.ts'
 import { INK_RANGE, lightXZ, RELIEF, type LightDir } from './bake.ts'
 import { paperCanvas } from './paper.ts'
+import { ringArea2 } from '../../map/geometry.ts'
 import LIT_VS from './shaders/lit.vert?raw'
 import LIT_FS from './shaders/lit.frag?raw'
 
@@ -38,7 +39,7 @@ const BARRIER = '#3a4528' // hedges and walls, a dark olive
 // the roof, the faces toward it at 0.85; a soft shadow HOUSE_SHADOW m away from the light
 const HOUSE = [0.36, 0.29, 0.23]
 const CHURCH = [0.27, 0.22, 0.19]
-const HOUSE_SHADOW = 4.3
+const HOUSE_SHADOW = 4.3 // m, for a 4 m wall (the prototype's)
 const SHADOW_ALPHA = 0.32
 const SHADOW_Y = 0.05 // m above the paper
 const SEASON_AT: Record<Season, number> = { spring: 0, summer: 0, autumn: 1.5, winter: 3 }
@@ -214,12 +215,12 @@ export class LitView {
     const linear = Texture.BILINEAR_SAMPLINGMODE
     this.material.setTexture('uHeight', height)
     this.material.setTexture('uRelief', tex(m.relief, m.nx + 1, m.nz + 1, rgba, linear))
-    // the cells' mask and the ink's fields mipmapped: zoomed out, a pixel spans several cells, and a road or a bank
-    // read from one of them would break into dashes that crawl as the view moves
+    // the cells' mask mipmapped (its depth, ways, water and yards fade well when averaged)
     const tri = Texture.TRILINEAR_SAMPLINGMODE
     const byte = Constants.TEXTURETYPE_UNSIGNED_BYTE
     this.material.setTexture('uMask', tex(m.masks, m.nx, m.nz, rgba, tri, byte, true))
-    this.material.setTexture('uInk', tex(m.ink, m.nx, m.nz, rgba, tri, byte, true))
+    // the ink's fields are not mipmapped: averaged, a hedge or a brook two cells wide would vanish from the far view
+    this.material.setTexture('uInk', tex(m.ink, m.nx, m.nz, rgba, linear))
     this.material.setFloat('uInkRange', INK_RANGE)
     this.material.setTexture('uFlatT', tex(m.flat.rgba, m.flat.w, m.flat.h, rgba, Texture.NEAREST_SAMPLINGMODE))
     this.material.setVector2('uX0Z0', new Vector2(m.x0, m.z0))
@@ -322,9 +323,11 @@ export class LitView {
         for (let q = 0; q < 4; q++) col.push(base[0] * f, base[1] * f, base[2] * f, 1)
         idx.push(v, v + 2, v + 1, v, v + 3, v + 2)
       }
-      // the shadow: the footprint swept away from the light, as the footprint's copy there and a quad an edge between
-      // them (their union; the stencil keeps any overlap from darkening twice)
-      const away: [number, number][] = ring.map(([x, z]) => [x - lx * HOUSE_SHADOW, z - lz * HOUSE_SHADOW])
+      // the shadow: the footprint swept away from the light, as long as the wall is high (HOUSE_SHADOW for a 4 m
+      // wall), as the footprint's copy there and a quad an edge between them (their union; the stencil keeps any
+      // overlap from darkening twice)
+      const reach = (HOUSE_SHADOW * h.height) / 4
+      const away: [number, number][] = ring.map(([x, z]) => [x - lx * reach, z - lz * reach])
       const s0 = shade.length / 3
       for (const [x, z] of [...ring, ...away]) shade.push(x, SHADOW_Y, z)
       for (const [a, b, c] of triangulate(away)) shadeIdx.push(s0 + n + a, s0 + n + c, s0 + n + b)
@@ -437,15 +440,7 @@ const SHADOW_FS = `precision highp float; uniform float uAlpha;
 void main() { gl_FragColor = vec4(0.204, 0.149, 0.071, uAlpha); }`
 
 /** A ring turned counter-clockwise (seen from above, x east, z north). */
-function ccw(ring: [number, number][]): [number, number][] {
-  let a = 0
-  for (let k = 0; k < ring.length; k++) {
-    const [x0, z0] = ring[k]
-    const [x1, z1] = ring[(k + 1) % ring.length]
-    a += x0 * z1 - x1 * z0
-  }
-  return a < 0 ? [...ring].reverse() : ring
-}
+const ccw = (ring: [number, number][]): [number, number][] => (ringArea2(ring) < 0 ? [...ring].reverse() : ring)
 
 /** The triangles of a simple counter-clockwise ring, by ear clipping (a footprint has a few corners). */
 function triangulate(ring: [number, number][]): [number, number, number][] {
