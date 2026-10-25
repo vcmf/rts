@@ -355,18 +355,19 @@ function housesOf(c: Compiled): { ring: Pt[]; height: number; church: boolean }[
   })
 }
 
-/** The map's names (zone.label features): italic, with a paper halo, at their point or the middle of their line. */
 // the map's names, read once a compile (namesOf), drawn every frame
 let labels: { at: Pt; text: string }[] = []
+/** The map's names: each `zone.label`'s text at its anchor (its point, the middle of its line). */
 function namesOf(c: Compiled): { at: Pt; text: string }[] {
   const byId = new Map(c.table.map(r => [r.id, r]))
   return c.map.features.flatMap(f => {
     const r = byId.get(f.id)
     if (!r || !r.kind.startsWith('zone.label') || typeof r.attrs.text !== 'string' || !r.attrs.text) return []
-    const at = f.point ?? (f.line ? f.line[Math.floor((f.line.length - 1) / 2)] : null)
+    const at = anchor(f)
     return at ? [{ at, text: r.attrs.text }] : []
   })
 }
+/** Writes the map's names on the overlay: italic, with a paper halo. */
 function drawNames(): void {
   if (!current) return
   ctx.font = 'italic 15px Georgia, "Times New Roman", serif'

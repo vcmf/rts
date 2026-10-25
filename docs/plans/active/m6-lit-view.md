@@ -155,3 +155,13 @@ settings (the owner, 2026-10-25).
   paints them) and its roof by ear clipping (a concave footprint); the names read once a compile. Also found while
   checking, from M6a: flat ground lying exactly at a contour's height (the valley at 0 m) was drawn all in contour
   ink; a contour now needs the ground to slope on screen. `MAP.look(x, z, ppm)` aims the page for checks.
+- **Round 2**: severe. The round-1 contour fix judged flatness per screen pixel, so contours on gentle slopes would have
+  vanished zoomed in. Fixed: the gate reads the ground's slope in metres a metre (`fwidth(h)` over the pixel's ground
+  size), the same at every zoom. With it: a narrow line keeps cell·√½ of half-width, not a whole cell (a 1.5 m path no
+  longer inks as 4 m); line fields and a wood's cleared bands end square at a line's free ends, as apply paints them,
+  and the cut bands are clipped to the wood's box; the lining at 4.5 m and 7.5 m, clear of a stream up to 9 m wide;
+  a house's shadow is its footprint swept away from the light (a concave one too), drawn on one plane with a depth
+  test so overlapping shadows darken once; ear clipping ignores corners on a straight edge; the names take the
+  features' `anchor`; the mask's G is unused (the woods come from the ink). Found while checking: the square-end rule
+  first took `max(d − half, over)` everywhere, which emptied every line's inside (roads and streams drawn solid); a
+  test now checks a line's inside and its square ends.

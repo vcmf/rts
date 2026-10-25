@@ -8,7 +8,7 @@ precision highp float;
 varying vec3 vW;
 uniform sampler2D uHeight;   // the node heights, m above the datum: one float a node, read by texelFetch
 uniform sampler2D uRelief;   // R the slope's light, G the cast shadow (1 lit), B the exposure (0.5 even), on the nodes
-uniform sampler2D uMask;     // R the water's depth (0..1), G the woods, B the water, on the cells
+uniform sampler2D uMask;     // R the water's depth (0..1), B the water, A the yards, on the cells (G unused)
 uniform sampler2D uInk;      // the ink's distance fields on the cells: R ways, G water, B barriers, A woods (signed m)
 uniform sampler2D uPaperT, uFlatT;
 uniform vec2 uX0Z0, uSize, uNodes, uCells, uLightXZ, uLambert;
@@ -97,7 +97,8 @@ void main() {
     float hc = h / 5.0, fwc = max(fwidth(hc), 1e-4), dc = abs(fract(hc - 0.5) - 0.5) / fwc;
     float hx = h / 25.0, fwx = max(fwidth(hx), 1e-4), dx = abs(fract(hx - 0.5) - 0.5) / fwx;
     /* flat ground lying exactly at a contour's height is no line: the line needs the ground to slope on screen */
-    float sloped = smoothstep(0.0005, 0.002, fwidth(hc));
+    float grade = fwidth(h) / max(fwidth(vW.x) + fwidth(vW.z), 1e-6);   /* the ground's slope, m a m, at any zoom */
+    float sloped = smoothstep(0.0002, 0.001, grade);
     float minorC = (1.0 - smoothstep(0.5, 1.3, dc)) * (1.0 - smoothstep(0.22, 0.5, fwc)) * sloped;
     float indexC = (1.0 - smoothstep(0.9, 1.9, dx)) * (1.0 - smoothstep(0.3, 0.7, fwx)) * sloped;
     mapC = mix(mapC, vec3(0.42, 0.30, 0.16), max(minorC * 0.25, indexC * 0.45) * inside * (1.0 - waterA));
@@ -114,9 +115,10 @@ void main() {
     /* a road's ground a little lighter, its two edges in ink */
     mapC = mix(mapC, min(mapC * 1.06 + 0.02, vec3(1.0)), step(I.r, 0.0) * 0.6 * inside);
     mapC = mix(mapC, uLine, hair(I.r) * 0.85 * far * inside);
-    /* the water's banks, and a lining 3 m and 6 m inside a pond's or a wide river's shore */
+    /* the water's banks, and a lining 4.5 m and 7.5 m inside a pond's or a river's shore (a stream up to 9 m wide has
+       none: its centreline lies nearer its banks than the first lining) */
     mapC = mix(mapC, uLine, hair(I.g) * 0.7 * far * inside);
-    mapC = mix(mapC, uLine, (hair(I.g + 3.0) * 0.28 + hair(I.g + 6.0) * 0.16) * step(I.g, -2.0) * inside);
+    mapC = mix(mapC, uLine, (hair(I.g + 4.5) * 0.28 + hair(I.g + 7.5) * 0.16) * step(I.g, -2.0) * inside);
     /* hedges and walls: solid, dark */
     mapC = mix(mapC, uBarrier, max((1.0 - smoothstep(-0.4, 0.0, I.b)) * 0.75, hair(I.b) * 0.6) * inside);
   }

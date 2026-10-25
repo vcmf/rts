@@ -128,20 +128,19 @@ export function bakeRelief(heights: Float64Array, nx: number, nz: number, cell: 
 }
 
 /**
- * The cells' mask, as RGBA bytes, the south row first: R the water's depth (0..1 over 0..WATER_FULL m), G the woods
- * (vegetation that grows as a stand), B the water, A the yards (a village's, a farm's, ground.yard).
+ * The cells' mask, as RGBA bytes, the south row first: R the water's depth (0..1 over 0..WATER_FULL m), G unused (the
+ * woods come from the ink's field), B the water, A the yards (a village's, a farm's, ground.yard).
  */
 export function bakeMasks(
   L: Pick<Layers, 'nx' | 'nz' | 'veg' | 'water' | 'depth' | 'table' | 'built' | 'ground'>,
 ): Uint8Array {
   const n = L.nx * L.nz
   const out = new Uint8Array(n * 4)
-  const wood = L.table.map(r => r.attrs.growth === 'stand')
   // a village's or a farm's trodden yard, and a yard of its own
   const yard = L.table.map(r => /^(built\.(village|farm)|ground\.yard)(\.|$)/.test(r.kind))
   for (let c = 0; c < n; c++) {
     out[c * 4] = Math.round(Math.min(1, L.depth[c] / 1000 / WATER_FULL) * 255)
-    out[c * 4 + 1] = L.veg[c] && wood[L.veg[c] - 1] ? 255 : 0
+    out[c * 4 + 1] = 0 // unused: the woods come from the ink's field (M6b)
     out[c * 4 + 2] = L.water[c] ? 255 : 0
     out[c * 4 + 3] = (L.built[c] && yard[L.built[c] - 1]) || (L.ground[c] && yard[L.ground[c] - 1]) ? 255 : 0
   }
@@ -183,28 +182,51 @@ export function bakeInk(
     j0: Math.max(0, Math.floor((box[1] - z0) / cell)),
     j1: Math.min(nz - 1, Math.floor((box[3] - z0) / cell)),
   })
-  // each cell within reach of a segment, with its centre and its distance to the segment
-  const band = (a: Pt, b: Pt, reach: number, fn: (c: number, d: number) => void) => {
-    const r = cellsOf([
+  // each cell within reach of a segment (and inside `clip`, a cell range, if given), with the segment's distance to its
+  // centre: `d` measured to the segment, and `over` how far the centre lies past a free end of the line (0 when it
+  // does not: `ends` says whether the segment's start and end are the line's)
+  const band = (
+    a: Pt,
+    b: Pt,
+    reach: number,
+    ends: [boolean, boolean],
+    fn: (c: number, d: number, over: number) => void,
+    clip?: { i0: number; i1: number; j0: number; j1: number },
+  ) => {
+    let r = cellsOf([
       Math.min(a[0], b[0]) - reach,
       Math.min(a[1], b[1]) - reach,
       Math.max(a[0], b[0]) + reach,
       Math.max(a[1], b[1]) + reach,
     ])
+    if (clip) {
+      r = {
+        i0: Math.max(r.i0, clip.i0),
+        i1: Math.min(r.i1, clip.i1),
+        j0: Math.max(r.j0, clip.j0),
+        j1: Math.min(r.j1, clip.j1),
+      }
+    }
     for (let j = r.j0; j <= r.j1; j++) {
-      for (let i = r.i0; i <= r.i1; i++) fn(j * nx + i, segDistance(a, b, x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell))
+      for (let i = r.i0; i <= r.i1; i++) {
+        const q = segNear(a, b, x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell, ends)
+        fn(j * nx + i, q.d, q.over)
+      }
     }
   }
+  const segEnds = (line: Pt[], k: number): [boolean, boolean] => [k === 1, k === line.length - 1]
   const field = (items: Inked[], ch: number) => {
     const sd = new Float32Array(nx * nz).fill(INK_RANGE)
     for (const it of items) {
       if (it.line) {
-        // a line narrower than a cell keeps a cell's half-width, so its field always holds an inside (as apply paints
-        // every line at least a cell wide)
-        const half = Math.max(it.half, cell)
+        // a line narrower than a cell keeps cell·√½ of half-width, so some cell centre always lies inside it, as
+        // apply paints every line at least a cell wide; its free ends are cut square, as apply paints them
+        const half = Math.max(it.half, cell * Math.SQRT1_2)
         for (let k = 1; k < it.line.length; k++) {
-          band(it.line[k - 1], it.line[k], half + INK_RANGE, (c, d) => {
-            if (d - half < sd[c]) sd[c] = d - half
+          band(it.line[k - 1], it.line[k], half + INK_RANGE, segEnds(it.line, k), (c, d, over) => {
+            // past a free end the line ends square: there the field is the larger of the two distances
+            const v = over > 0 ? Math.max(d - half, over) : d - half
+            if (v < sd[c]) sd[c] = v
           })
         }
       }
@@ -232,7 +254,7 @@ export function bakeInk(
     const dist = new Float32Array(w * h).fill(INK_RANGE)
     for (const ring of rings) {
       for (let k = 0; k < ring.length; k++) {
-        band(ring[k], ring[(k + 1) % ring.length], INK_RANGE, (c, d) => {
+        band(ring[k], ring[(k + 1) % ring.length], INK_RANGE, [false, false], (c, d) => {
           const q = local(c)
           if (d < dist[q]) dist[q] = d
         })
@@ -258,16 +280,23 @@ export function bakeInk(
     }
     const v = new Float32Array(w * h)
     for (let q = 0; q < v.length; q++) v[q] = inside[q] ? -dist[q] : dist[q]
-    // the bands it keeps clear of: outside the area within `near` of the line
+    // the bands it keeps clear of: outside the area within `near` of the line, but not past the line's free ends
+    // (apply clears only the cells the line takes)
     for (const cut of it.cut ?? []) {
       for (let k = 1; k < cut.line.length; k++) {
-        band(cut.line[k - 1], cut.line[k], cut.near + INK_RANGE, (c, d) => {
-          const i = c % nx
-          const j = Math.floor(c / nx)
-          if (i < r.i0 || i > r.i1 || j < r.j0 || j > r.j1) return
-          const q = local(c)
-          if (cut.near - d > v[q]) v[q] = cut.near - d
-        })
+        band(
+          cut.line[k - 1],
+          cut.line[k],
+          cut.near + INK_RANGE,
+          segEnds(cut.line, k),
+          (c, d, over) => {
+            const q = local(c)
+            // inside the band (positive), square at the line's free ends: past one it ends
+            const out = over > 0 ? Math.min(cut.near - d, -over) : cut.near - d
+            if (out > v[q]) v[q] = out
+          },
+          r,
+        )
       }
     }
     for (let j = 0; j < h; j++) {
@@ -287,15 +316,24 @@ export function bakeInk(
   return out
 }
 
-/** The distance from (x, z) to the segment a–b, m. */
-function segDistance(a: Pt, b: Pt, x: number, z: number): number {
+/**
+ * The distance from (x, z) to the segment a–b, m, and how far it lies past a free end (`ends`: whether a and b are the
+ * line's ends; past one, `d` is the distance across the line, so the end is cut square).
+ */
+function segNear(a: Pt, b: Pt, x: number, z: number, ends: [boolean, boolean]): { d: number; over: number } {
   const dx = b[0] - a[0]
   const dz = b[1] - a[1]
   const l2 = dx * dx + dz * dz
-  const t = l2 > 0 ? Math.min(1, Math.max(0, ((x - a[0]) * dx + (z - a[1]) * dz) / l2)) : 0
-  const ex = a[0] + dx * t - x
-  const ez = a[1] + dz * t - z
-  return Math.sqrt(ex * ex + ez * ez)
+  const L = Math.sqrt(l2)
+  const t = l2 > 0 ? ((x - a[0]) * dx + (z - a[1]) * dz) / l2 : 0
+  if ((t < 0 && ends[0]) || (t > 1 && ends[1])) {
+    const across = L > 0 ? Math.abs((x - a[0]) * dz - (z - a[1]) * dx) / L : 0
+    return { d: across, over: (t < 0 ? -t : t - 1) * L }
+  }
+  const u = Math.min(1, Math.max(0, t))
+  const ex = a[0] + dx * u - x
+  const ez = a[1] + dz * u - z
+  return { d: Math.sqrt(ex * ex + ez * ez), over: 0 }
 }
 
 /**

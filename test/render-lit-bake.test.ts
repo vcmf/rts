@@ -54,7 +54,7 @@ describe('M6a: the relief bake', () => {
 })
 
 describe('M6a: the cell mask', () => {
-  it('reads the depth, the woods (a stand), the water and the yards', () => {
+  it('reads the depth, the water and the yards', () => {
     const table: Resolved[] = [
       { id: 'wood', kind: 'veg.wood', priority: 0, attrs: { growth: 'stand' } },
       { id: 'meadow', kind: 'ground.meadow', priority: 0, attrs: { growth: 'low' } },
@@ -72,7 +72,7 @@ describe('M6a: the cell mask', () => {
       table,
     }
     const m = bakeMasks(L)
-    expect([...m.slice(0, 4)]).toEqual([0, 255, 0, 0])
+    expect([...m.slice(0, 4)]).toEqual([0, 0, 0, 0]) // G unused: the woods come from the ink
     expect([...m.slice(4, 8)]).toEqual([0, 0, 0, 255]) // the village's yard
     expect([...m.slice(8, 12)]).toEqual([128, 0, 255, 0])
   })
@@ -111,6 +111,28 @@ describe('M6b: the ink distance field', () => {
     const out = bakeInk(grid, { way: [{ line: between, half: 0.75 }], water: [], wood: [] }, none)
     expect(read(out, 0, 0, 1)).toBeLessThan(0)
     expect(read(out, 0, 0, -1)).toBeLessThan(0)
+  })
+  it("a line's free ends are cut square, as apply paints it, not rounded past them", () => {
+    const short: Pt[] = [
+      [-6, 1],
+      [6, 1],
+    ]
+    const out = bakeInk(grid, { way: [{ line: short, half: 3 }], water: [], wood: [] }, none)
+    expect(read(out, 0, 5, 1)).toBeLessThan(0) // inside, 1 m from the end
+    expect(read(out, 0, 9, 1)).toBeCloseTo(3, 1) // 3 m past the end, on the centreline: outside by 3 m
+  })
+  it("a wood is cleared only beside its line, not past the line's ends", () => {
+    const short: Pt[] = [
+      [-20, 1],
+      [0, 1],
+    ]
+    const out = bakeInk(
+      grid,
+      { way: [], water: [], wood: [{ rings: [sq(15)], half: 0, cut: [{ line: short, near: 3 }] }] },
+      none,
+    )
+    expect(read(out, 3, -5, 1)).toBeGreaterThan(0) // beside the line: cleared
+    expect(read(out, 3, 7, 1)).toBeLessThan(0) // 7 m past its end: wood
   })
   it("an area's distance is negative inside its ring, positive outside, and keeps out of its holes", () => {
     const out = bakeInk(grid, { way: [], water: [{ rings: [sq(9), sq(3)], half: 0 }], wood: [] }, none)

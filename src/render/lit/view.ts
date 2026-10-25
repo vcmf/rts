@@ -40,6 +40,7 @@ const HOUSE = [0.36, 0.29, 0.23]
 const CHURCH = [0.27, 0.22, 0.19]
 const HOUSE_SHADOW = 4.3
 const SHADOW_ALPHA = 0.32
+const SHADOW_Y = 0.05 // m above the paper: one plane, so overlapping shadows meet at one depth
 const SEASON_AT: Record<Season, number> = { spring: 0, summer: 0, autumn: 1.5, winter: 3 }
 
 /** What the view draws: a compiled map's grids and bakes. */
@@ -156,6 +157,8 @@ export class LitView {
       { attributes: ['position'], uniforms: ['world', 'viewProjection', 'uAlpha'], needAlphaBlending: true },
     )
     this.shadowMaterial.setFloat('uAlpha', SHADOW_ALPHA)
+    this.shadowMaterial.forceDepthWrite = true // a blended material writes no depth by default
+    this.shadowMaterial.depthFunction = Constants.LESS
     this.shadowMaterial.backFaceCulling = false
     const paper = paperCanvas()
     const t = this.rgba(paper, Texture.TRILINEAR_SAMPLINGMODE, true)
@@ -309,12 +312,16 @@ export class LitView {
         for (let q = 0; q < 4; q++) col.push(base[0] * f, base[1] * f, base[2] * f, 1)
         idx.push(v, v + 2, v + 1, v, v + 3, v + 2)
       }
-      // the shadow: the footprint and its copy away from the light, as one hull on the ground
+      // the shadow: the footprint swept away from the light, as the footprint's copy there and a quad an edge between
+      // them (their union; the shadows' depth test keeps any overlap from darkening twice)
       const away: [number, number][] = ring.map(([x, z]) => [x - lx * HOUSE_SHADOW, z - lz * HOUSE_SHADOW])
-      const hull = ccw(convexHull([...ring, ...away]))
       const s0 = shade.length / 3
-      for (const [x, z] of hull) shade.push(x, 0, z)
-      for (let k = 1; k < hull.length - 1; k++) shadeIdx.push(s0, s0 + k + 1, s0 + k)
+      for (const [x, z] of [...ring, ...away]) shade.push(x, SHADOW_Y, z)
+      for (const [a, b, c] of triangulate(away)) shadeIdx.push(s0 + n + a, s0 + n + c, s0 + n + b)
+      for (let k = 0; k < n; k++) {
+        const k2 = (k + 1) % n
+        shadeIdx.push(s0 + k, s0 + k2, s0 + n + k2, s0 + k, s0 + n + k2, s0 + n + k)
+      }
     }
     const shadow = new Mesh('house-shadows', this.scene)
     const sd = new VertexData()
@@ -322,7 +329,9 @@ export class LitView {
     sd.indices = shadeIdx
     sd.applyToMesh(shadow)
     shadow.material = this.shadowMaterial
-    shadow.renderingGroupId = 1 // over the paper, with no depth against it
+    // over the paper (a group of its own, its depth cleared); each shadow pixel blends once: the first fragment there
+    // writes the depth and the next ones at the same depth fail the test
+    shadow.renderingGroupId = 1
     const boxes = new Mesh('houses', this.scene)
     const bd = new VertexData()
     bd.positions = pos
@@ -430,30 +439,15 @@ function ccw(ring: [number, number][]): [number, number][] {
   return a < 0 ? [...ring].reverse() : ring
 }
 
-/** The convex hull of points (Andrew's monotone chain). */
-function convexHull(pts: [number, number][]): [number, number][] {
-  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1])
-  const cross = (o: number[], a: number[], b: number[]) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-  const half = (list: [number, number][]) => {
-    const h: [number, number][] = []
-    for (const q of list) {
-      while (h.length >= 2 && cross(h[h.length - 2], h[h.length - 1], q) <= 0) h.pop()
-      h.push(q)
-    }
-    h.pop()
-    return h
-  }
-  return [...half(p), ...half([...p].reverse())]
-}
-
 /** The triangles of a simple counter-clockwise ring, by ear clipping (a footprint has a few corners). */
 function triangulate(ring: [number, number][]): [number, number, number][] {
   const left = ring.map((_, k) => k)
   const out: [number, number, number][] = []
   const area2 = (a: number, b: number, c: number) =>
     (ring[b][0] - ring[a][0]) * (ring[c][1] - ring[a][1]) - (ring[b][1] - ring[a][1]) * (ring[c][0] - ring[a][0])
+  // strictly inside: a corner on an ear's edge (a traced footprint's midpoint) does not block it
   const inside = (p: number, a: number, b: number, c: number) =>
-    area2(a, b, p) >= 0 && area2(b, c, p) >= 0 && area2(c, a, p) >= 0
+    area2(a, b, p) > 0 && area2(b, c, p) > 0 && area2(c, a, p) > 0
   let guard = ring.length * ring.length
   while (left.length > 3 && guard-- > 0) {
     let cut = false
@@ -461,7 +455,12 @@ function triangulate(ring: [number, number][]): [number, number, number][] {
       const a = left[(k + left.length - 1) % left.length]
       const b = left[k]
       const c = left[(k + 1) % left.length]
-      if (area2(a, b, c) <= 0) continue // a reflex corner is no ear
+      if (area2(a, b, c) === 0) {
+        left.splice(k, 1) // a corner on a straight edge: drop it, it bounds nothing
+        cut = true
+        break
+      }
+      if (area2(a, b, c) < 0) continue // a reflex corner is no ear
       if (left.some(p => p !== a && p !== b && p !== c && inside(p, a, b, c))) continue
       out.push([a, b, c])
       left.splice(k, 1)
