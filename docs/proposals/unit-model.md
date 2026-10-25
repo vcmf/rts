@@ -173,7 +173,7 @@ flank from either side and in the rear from behind: never in front but at its he
 own row below. A formation changing shape has no
 front: it is struck as in the flank, or the rear from behind, as today (`quarter` in `src/sim/melee.ts`), and its
 morale drains read it the same way. Its fire exposure is that of the shape its change is nearer to, by progress,
-read as from its flank.
+read as from its flank; a shape with no flank value (the square, skirmish order) uses its front.
 
 ### Exposure by shape
 
@@ -264,9 +264,10 @@ or two and the Old Guard takes a long career.
 - **A scenario sets each formation's level.** The army builder and campaigns, later, buy levels 1 to 4 at a price
   that rises with the level; levels 5 and 6 are only earned.
 - **Level 2 is today's battalion.** A scenario or a test may set a formation's bar maximum apart from its level,
-  as tests set `quality` today. The fire calibration then keeps its shape: two level 2 lines whose bars differ as
-  their qualities do today, so only morale separates them, and U2 tunes `morale.perMan` until the weaker still
-  breaks in 6–10 minutes (C-01). The S1e battle's veterans (#51) become level 3, and the battle is retuned.
+  as tests set `quality` today. The fire calibration then keeps its shape: two level 2 lines whose bars are set so their
+  margins to flight are in today's ratio (quality less the rout: 0.40 against 0.25), so only morale separates them.
+  U2 tunes `morale.perMan` and the burst term for C-01 and G-01 together; if both cannot hold, C-01, the anchor,
+  wins and G-01's share is restated. The S1e battle's veterans (#51) become level 3, and the battle is retuned.
 
 ### What a level changes
 
@@ -276,9 +277,9 @@ First guesses, all ruleset data. A small set on purpose: each row is a stat a pl
 |---|---|---|---|---|---|---|---|
 | Morale bar's maximum | 70 | 100 | 120 | 140 | 160 | 180 | G-01, G-05, G-06, H-04 |
 | Toughness (men lost ÷) | 0.9 | 1 | 1.1 | 1.2 | 1.3 | 1.4 | C-02, H-04 |
-| Reload (× `fire.reload`) | 1.12× | 1× | 0.92× | 0.88× | 0.84× | 0.8× | C-02 |
-| Precision (× hit chance) | 0.85 | 1 | 1.1 | 1.15 | 1.2 | 1.25 | C-02 |
-| Change times (the formation's `drill` factor, which also scales Face about and dressing) | 1.3× | 1× | 0.85× | 0.8× | 0.75× | 0.7× | B-02 |
+| Reload (× `fire.reload`; for guns × `artillery.reload`) | 1.12× | 1× | 0.92× | 0.88× | 0.84× | 0.8× | C-02 |
+| Precision (× hit chance; for guns, the roundshot's `spread` and `short` divided by it) | 0.85 | 1 | 1.1 | 1.15 | 1.2 | 1.25 | C-02 |
+| Change times (the formation's `drill` factor, which also scales Face about; U2 makes it scale dressing too, which today it does not) | 1.3× | 1× | 0.85× | 0.8× | 0.75× | 0.7× | B-02 |
 | Square against cavalry: reaction (× `refuge.react`) | 2.5× | 1× | 1× | 0.5× | 0.5× | 0.5× | E-05 |
 | Fire discipline: opens fire on its own inside | 150 m | holds | holds | holds | holds | holds | C-04 |
 | Cavalry: pursuit, × `charge.pursue` | 2× (out of control) | 1× | 0.8× | 0.7× | 0.7× | 0.7× | E-08, E-09 |
@@ -325,17 +326,24 @@ expected hits = rounds × p(range) × precision(level) × exposure(target shape,
   stronger (about 1.5×), when it is fired inside the first volley's range (about 80 m). A battalion that holds its
   fire until the enemy is close gets it; one that opens at long range wastes it.
 - **Fire discipline** (C-04, F-03): when an enemy in the fight first comes inside its level's distance, in its
-  arc, a formation whose level cannot hold fire opens fire on its own: its fire mode is set to at will, a move
-  order it has is dropped (status "opened fire on its own"), and it halts and fires. It happens once for each enemy
+  arc, a formation whose level cannot hold fire, standing in a shape that fires, opens fire on its own: its fire
+  mode is set to at will, a move toward that enemy (as the wavering rule reads "toward") is dropped (status "opened
+  fire on its own"), and it halts and fires. A move away or across, a Retire, the fall-back and a charge are not
+  dropped. It happens once for each enemy
   that comes inside, not while one stays there, so the player can order it on and it obeys. It wastes its first
   volley at long range.
 - **Skirmish order:** fires while moving, at a lower rate and a better aim, and is a small target.
 - **A square fires** with the face toward its target, or two faces at a corner.
 - **Calibration:** at level 2, line against line from the front, in the open, outside the first volley's range,
   the formula is today's. U2 tunes the morale bar so that the result is too.
-- **Toughness** divides the expected men lost before the draw, so losses stay whole men and no new draw is added:
-  musketry's expected hits, canister's, roundshot's kill per man along the ball's line, and melee's losses
-  (§ A unit's state).
+- **Toughness** divides the expected men lost before the draw, so losses stay whole men (§ A unit's state):
+  - **musketry and melee:** their expected losses, per target;
+  - **canister:** today one draw covers the cone and its hits are spread over the formations in it by men. With
+    toughness, the cone's expected hits are split by men first and each formation's share is divided by its
+    toughness and drawn on its own, keyed by its handle: one draw per formation in the cone;
+  - **roundshot:** each block's expected kill along the ball's line is divided by its toughness. The ball spends
+    energy per man actually struck, so a tough block slows it less and the blocks behind take more. Against deep
+    targets toughness protects less than its factor; the calibrations measure it.
 
 ## Artillery
 
@@ -366,12 +374,14 @@ Roundshot and canister stay as they are (`docs/systems/artillery.md`). The model
 
 One rule, read from the morale state the bar already gives. A wavering formation's move toward an enemy is dropped,
 with the status "wavering: will not advance":
-- **toward an enemy:** the move's step brings it nearer to an enemy in the fight within fire range
-  (`fire.maxRange`); a march across an enemy's front that keeps its distance is not dropped, and is punished by the
-  sectors instead (A-10);
+- **toward an enemy:** the step's direction is within 60° of the direction to an enemy in the fight within fire
+  range (`fire.maxRange`), so at least half the step closes on it. A march across an enemy's front is not dropped,
+  and is punished by the sectors instead (A-10);
 - **then:** it fires if it may, and the wavering fall-back applies to it as today (it has no orders);
 - **dropped, not held:** nothing resumes on its own; the player orders it forward again once it has recovered;
-- **charges and assaults** are not dropped: they have their own test (§ The assault, `docs/systems/melee.md`).
+- **charges and assaults:** a wavering formation cannot be ordered to charge (refused: "wavering"), and a charge it
+  is making is dropped by this rule until it reaches its test distance. From the test on, the test decides
+  (§ The assault, `docs/systems/melee.md`).
 
 The distance is not a number. It follows from the bar: nearer means more fire, recruits have the smallest bar and
 lose the most men, so they reach wavering farther out and a veteran battalion reaches 50 m. Recruits usually stop
@@ -432,8 +442,12 @@ maximum is what makes a veteran stand longer.
   - Like today's rally (which counts losses from its men now, `baseMen`), it writes off what its losses so far have
     cost: its ceiling is its maximum again.
   - `rally.cut` of its maximum is lost for the battle: it is brittle.
-  - Its bar comes back at `rally.share` of that cut maximum. The ruleset is refused unless `rally.share` is above
-    the wavering share, so a rallied battalion is never wavering at once.
+  - Its bar comes back at `rally.share` of that cut maximum.
+  - **Which maximum:** the states, the ceiling and every share in this section read the formation's current
+    maximum, its level's less its cuts. Cuts compound: after n rallies the maximum is the level's × (1 −
+    `rally.cut`)ⁿ, and a level up gives the new level's maximum with the same factor.
+  - The ruleset is refused unless `rally.share` is above the share at which a wavering formation recovers to
+    shaken (the upper edge of the hysteresis), so a rallied battalion is never wavering at once.
   - A battalion that routs more than `rally.max` times, or below half its spawn strength, shatters, as today
     (G-08).
 - **The guard:** the ruleset is refused if one contagion shock together with a minute of every drain at its largest
@@ -463,34 +477,45 @@ tires fastest.
 
 ### Collision
 
-Formations do not overlap unless a rule says they may (I-06 to I-09, G-07). Each formation's blocks
-are rectangles, and the separating-axis gap is already in the sim (`docs/systems/melee.md`).
+Formations do not overlap unless a rule says they may (I-06 to I-09, G-07). This section gives the rules and the
+invariants an implementation must keep. The algorithm is U6's plan, built against tests for each invariant.
 
-- **Enemies never overlap.** A step toward an enemy is cut short where it would bring the gap below
-  `melee.contact`: the two then stand at point-blank range and fire. A charge or an assault may close the gap to its
-  target down to 0, so it reaches contact and the impact and melee follow as today.
-- **Friends do not overlap by default.** A move into a halted friend's blocks halts short of it ("blocked by a
-  friend"). After a few seconds it re-plans around (§ Pathfinding).
-- **Passing through is a rule of its own:**
+**The rules:**
+- **Enemies keep apart.** A formation does not come closer to an enemy than `melee.contact`: the two then stand at
+  point-blank range and fire. A charge or an assault may close on its own target down to a gap of 0, so it reaches
+  contact, and the impact and melee follow as today.
+- **Friends do not overlap by default.** A move into a friend halts short of it ("blocked by a friend"). After a few
+  seconds it re-plans around (§ Pathfinding).
+- **Passing through is a rule of its own,** and a pair it covers is exempt from the rules above:
   - **a passage of lines:** ordered explicitly, the mover passes through a friend. Both lose cohesion, and the
     friend cannot fire while the mover is in front of it;
   - **skirmishers** pass through friends freely, and friends through them;
   - **routers** pass through friends, costing them cohesion and a morale shock (`docs/proposals/sim-design.md` §7).
-- **Exempt pairs:** a pair a rule lets pass (a passage of lines, skirmishers, a router and its friends) is skipped
-  by every test below.
-- **Movers among each other:** each mover's step is proposed from the start-of-step positions; its swept blocks
-  (from where it stands to where the step ends) are what the step occupies. The steps are settled in one total
-  order: by a keyed draw for the tick (the world seed, the tick and its handle), ties by handle.
-  - **The occupied set** starts as every formation's start blocks.
-  - **Each mover in turn** is tested against the set less its own start blocks. If its swept blocks are clear
-    (against enemies, by the contact rule above), they replace its start blocks in the set. If not, its step is cut
-    short by halving, as the footprint gate's is, and the longest clear part is taken. If none is clear, it halts
-    for the tick and its start blocks stay in the set.
-  - So no step can end inside a formation that stays, moves or halts, and the order is total: three or more movers
-    cannot lock each other, and the visiting order changes nothing. No slot is favoured over the ticks
-    (`docs/proposals/sim-design.md` §7).
-- **Cost:** block pairs are culled by reach, as fire's friendly-cover test is. Collision runs on the gate's step, so
-  it adds a test per nearby pair, not per man.
+- **A router stopped by an enemy** is halted, as one stopped by impassable ground is today ("halted: an enemy"), so
+  it tries the next direction of its fan rather than counting as fled.
+
+**The invariants:**
+1. **Every pose change is checked,** not only straight steps: a move's turn and advance, a wheel, a trail shape
+   following its head, Face about, and a change of shape along its whole path. These already all pass through the
+   footprint gate (`gate` and the change-path check, `docs/systems/formations.md`). Collision is a second test in
+   the same places, against other formations' blocks instead of impassable ground, cut short by halving as the gate
+   is. A change of shape whose path would overlap a friend is refused, as one that would wet a man is.
+2. **A pose change never makes a forbidden pair worse.** A pair that starts the tick too close (a recoil from
+   contact, a router whose foe just beat it, a passage of lines just ended, a router that rallied inside a friend)
+   may always move apart: the test refuses only a change that brings a forbidden pair closer or deeper. No pair is
+   frozen.
+3. **No change ends inside a formation that stays, moves or halts.** Changes in one tick are settled in one total
+   order (a keyed draw for the tick on the world seed, the tick and the handle; ties by handle), each tested against
+   the poses already settled and the start poses of those not yet settled. A formation that halts keeps its start
+   pose, which every later one is tested against.
+4. **The order is total and does not depend on the visiting order,** so three or more formations cannot lock each
+   other, the reversed visiting order gives the same state, and no slot is favoured over the ticks
+   (`docs/proposals/sim-design.md` §7).
+5. **No tunnelling:** a tick's step (at most a gallop's 0.33 m) is far below the contact distance and any block's
+   size, so testing the end pose of each halved step is enough.
+
+**Cost:** pairs are culled by reach, as fire's friendly-cover test is. It adds a test per nearby pair at each gate
+step, not per man.
 
 ### Pathfinding
 
