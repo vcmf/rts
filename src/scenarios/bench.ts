@@ -12,7 +12,7 @@ export interface BenchCase {
   scenario: Scenario
   seconds: number
   view: [number, number, number]
-  keys: number[] // seconds
+  keys: number[] // seconds: the moments worth looking at, which the page's readout lists
 }
 
 const N = 0 // headings: compass bearings, 0 north (+z), PI/2 east
@@ -32,7 +32,7 @@ type Spawn = {
 const step = (at: number, unit: number, cmd: PlanCommand): PlanStep => ({ at, unit, cmd })
 const move = (x: number, z: number, append = false): PlanCommand => ({ type: 'move', points: [[x, z]], append })
 
-// a case's setup: each side's rear (north for side 0, south for side 1, so routers run away from the action unless a
+// a case's setup: each side's rear (south for side 0, north for side 1, so routers run away from the action unless a
 // case says otherwise), then its formations in spawn order (the plan's unit numbers), all holding their fire
 function bench(
   id: string,
@@ -162,24 +162,24 @@ export const BENCH_CASES: BenchCase[] = [
     'X-08: a line wheels a quarter turn into a halted friend',
     [
       { side: 0, x: 0, z: 0, heading: N, shape: LINE },
-      { side: 0, x: -70, z: 70, heading: W, shape: COL },
+      { side: 0, x: 0, z: 55, heading: E, shape: COL },
     ],
     [step(1, 0, { type: 'wheel', angle: PI / 2 })],
     240,
-    [-30, 30, 3],
-    [60, 120],
+    [-20, 40, 3],
+    [40, 90],
   ),
   bench(
     'x09-square-forming',
     'X-09: a battalion forms square while a friendly column marches through where it forms',
     [
       { side: 0, x: 0, z: 0, heading: N, shape: LINE },
-      { side: 0, x: -220, z: 10, heading: E, shape: COL },
+      { side: 0, x: -100, z: 10, heading: E, shape: COL },
     ],
     [step(1, 0, { type: 'form', shape: 'square' }), step(1, 1, move(220, 10))],
-    300,
+    240,
     [0, 0, 3],
-    [60, 150, 250],
+    [60, 90, 150],
   ),
   bench(
     'x10-router-through-friends',
@@ -303,12 +303,12 @@ export const BENCH_CASES: BenchCase[] = [
     'Q-03: moves queued; a regiment comes near, the square forms; the regiment rides off',
     [
       { side: 0, x: -100, z: -100, heading: E, shape: COL },
-      { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV },
+      { side: 1, x: 0, z: 150, heading: S, shape: LINE, unit: CAV },
     ],
-    [step(1, 0, move(100, -100)), step(1, 0, move(100, 40, true)), step(60, 1, move(0, 280))],
+    [step(1, 0, move(100, -100)), step(1, 0, move(100, 40, true)), step(1, 1, move(0, 0)), step(70, 1, move(0, 280))],
     700,
     [0, -20, 2.5],
-    [50, 100, 250, 450],
+    [40, 120, 300, 600],
   ),
   bench(
     'q04-rout-in-a-chain',

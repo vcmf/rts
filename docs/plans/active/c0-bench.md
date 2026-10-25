@@ -45,7 +45,7 @@ D toggles the overlay. The panel toggles each layer:
 |---|---|
 | Blocks | each company's places' hull; solid in the fight, dashed out of it (routing, rallying, shattered: the proposal's loose bodies) |
 | Strips | each bin's places' hull, shaded by its lag over the lag limit |
-| Contacts | each pair of companies of two formations within 5 m: a line between their centres, grey for friends, red for enemies, orange for a charge at its target, thick for a melee pair. An overlap of two formations in the fight is filled red |
+| Contacts | each pair of companies of two formations within 5 m: a line between their nearest places, grey for friends, red for enemies, orange for a charge at its target, thick for a melee pair. An overlap of two formations in the fight is filled red |
 | Statuses | each formation's status, and its engagement (charging, in melee, sheltering, routing) |
 | Orders | each formation's queue: a line through its move's waypoints, a label for each order in the queue (form, face, wheel, dress, charge), and the formation's outline at its last destination |
 
@@ -57,9 +57,11 @@ cells get a layer of their own then.
 
 - **Speeds:** ¼× and ½× beside the existing 1×–8×.
 - **A tick at a time:** `.` steps one tick when paused, `,` goes back one. The readout shows the tick number.
-- **Go to a tick:** G asks for a time (`m:ss` or seconds) and rebuilds the world from the scenario, replaying the
-  commands logged so far up to it, paused there. A bench case is a few minutes long, so the replay takes well under
-  a second. Going back keeps the log. An order given after going back replaces what came after it, like a branch.
+- **Go to a tick:** G asks for a time (`m:ss` or seconds). The page keeps a save of the world every 20 s of play
+  (`src/app/timeline.ts`), restores the last one at or before the time and plays on to it with the commands logged,
+  paused there. The log is kept: playing on from there takes its later orders at their ticks, so the world is the
+  one first seen. An order given after going back forgets the orders the log held past that tick, as a branch, and
+  the session still replays.
 
 ### 4. The bench map
 
@@ -101,11 +103,15 @@ can:
   - **Invariant 1** (`formedOverlaps` is empty every tick) and the case's outcome are written as the proposal
     wants them. Those that fail today are marked `it.fails`, with today's behaviour in a comment; C1–C4 turn them
     into plain tests as they land.
-  - **Invariant 4:** the reversed visiting order gives the same hash. This holds today.
-- **`test/geometry.test.ts`:** `placeAll` against the soldier layer's places for every shape; `contacts` against a
+  - **Invariant 4:** every step reversed, the formation step too (`reverseMoves`, a test switch of its own), gives the
+    same state, but for which pool entries the orders took. Today it fails where a charge steers at its target as
+    moved earlier in the formation step (#187).
+- **`test/geometry.test.ts`:** `placeAll` places every filled slot of every shape and type once; `contacts` against a
   scan of every pair of places; `formedOverlaps` for two lines apart, touching, and one through the other.
-- **`npm run check:app`:** a few cases on the page with the overlay on, a screenshot at their key tick, and the
-  go-to-tick round trip (the hash after going back to a tick equals the hash first seen there).
+- **`test/timeline.test.ts`:** going back (from a fresh world and from a save) and playing on gives the first pass's
+  world, orders logged after the tick included; an order after going back branches the log, and the session replays.
+- **`npm run check:app`:** X-09 with the overlay on and an order to the column, a screenshot, then back before the
+  order and on tick by tick: the same hash, and the session replays in Node.
 
 ## What it does not do
 

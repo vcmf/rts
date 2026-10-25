@@ -1,7 +1,7 @@
 ---
 status: current
-last_reviewed: 2026-10-12
-code: [app/index.html, src/app/main.ts, src/render/soldiers.ts, src/render/map.ts, src/render/overlay.ts, src/sim/geometry.ts, src/scenarios/bench.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, tools/app-check.mjs, tools/battle-report.ts]
+last_reviewed: 2026-10-25
+code: [app/index.html, src/app/main.ts, src/render/soldiers.ts, src/render/map.ts, src/render/overlay.ts, src/app/timeline.ts, src/sim/geometry.ts, src/scenarios/bench.ts, src/render/scene.ts, src/render/style.ts, src/scenarios/s1b-field.ts, src/scenarios/s1d-arms.ts, src/scenarios/s1d-charge.ts, src/scenarios/s1d-guns.ts, src/scenarios/s1e-battle.ts, test/soldiers.test.ts, test/battle-report.test.ts, tools/app-check.mjs, tools/battle-report.ts]
 decisions: [0005-sim-render-split, 0006-restricted-float64, 0018-battalion-of-400, 0016-typescript-toolchain]
 ---
 
@@ -126,8 +126,8 @@ formations meet (`src/render/overlay.ts`, from `src/sim/geometry.ts`): each comp
 the fight), each bin's shaded by its lag, the pairs of companies of two formations within 5 m (grey friends, red
 enemies, orange a charge, thick a melee pair; an overlap of two formations in the fight filled red), statuses, and
 each formation's queue. The panel picks its layers. Time: ¼× and ½× besides 1×–8×; `.` a tick on, `,` a tick
-back, G a time to go to: the world is built again from the scenario and the commands logged before that tick, and
-an order given then forgets the log after it. The bench's cases (`src/scenarios/bench.ts`, `bench-…`) stand on the
+back, G a time to go to: the world is restored from a save taken every 20 s and played on with the commands logged,
+and an order given then forgets the log after it (`src/app/timeline.ts`). The bench's cases (`src/scenarios/bench.ts`, `bench-…`) stand on the
 flat bench field (`maps/bench.ts`).
 
 **Hooks** (`window.APP`): select, march, charge, form, order, `advance(seconds)` (pauses the clock and steps

@@ -35,7 +35,10 @@ function play(
   opts: { seconds?: number; reverse?: boolean; every?: number; each?: (w: World) => void } = {},
 ) {
   const w = makeWorld(data, cr, 1)
-  if (opts.reverse) w.scratch.reverse = true
+  if (opts.reverse) {
+    w.scratch.reverse = true
+    w.scratch.reverseMoves = true
+  }
   attachScenario(w, c.scenario)
   c.scenario.setup(w)
   const end = Math.round((opts.seconds ?? c.seconds) * TICK_HZ)
@@ -73,12 +76,13 @@ const near = (w: World, i: number, x: number, z: number, d: number) => Math.hypo
 // today formations pass through each other: these cases overlap (and C1–C3 make them pass)
 const OVERLAP_TODAY = new Set([
   'x02-meet',
-  'x03-brigade-charge', // the charging regiment rides into the one it strikes
+  'x03-brigade-charge', // the charging regiment rides on into the regiments it meets
   'x05-into-friend',
   'x06-three-on-a-gap',
   'x07-threading',
+  'x08-wheel-into-friend',
   'x09-square-forming',
-  'x11-rally-in-a-friend', // the router rallies where it stopped, inside the friend
+  'x11-rally-in-a-friend', // the router runs to the map's edge and rallies there, inside the friend that stands there
   'x13-passage-of-lines',
   'x14-forty-crossing',
 ])
@@ -108,13 +112,14 @@ const stateOf = (w: World) => ({
     return q
   }),
 })
+// every step reversed, the formation step too: a charge steers at its target as moved earlier in that step, so two
+// regiments charging each other depend on their slots today (#187)
+const ORDER_TODAY = new Set(['x01-clash'])
 describe('invariant 4: the visiting order changes nothing', () => {
   for (const c of BENCH_CASES) {
     if (c.id === 'x14-forty-crossing') continue
-    it(`${c.id}`, () => {
-      const s = Math.min(c.seconds, 120)
-      expect(stateOf(play(c, { seconds: s, reverse: true }))).toEqual(stateOf(play(c, { seconds: s })))
-    })
+    const test = ORDER_TODAY.has(c.id) ? it.fails : it
+    test(`${c.id}`, () => expect(stateOf(play(c, { reverse: true }))).toEqual(stateOf(play(c))))
   }
 })
 
@@ -132,7 +137,13 @@ describe('the queue', () => {
     expect(near(w, 0, -180, -150, 15)).toBe(true)
   })
   it('Q-03: the queue resumes after the square', () => {
-    const w = play(caseOf('q03-square-in-a-chain'))
+    let squared = false
+    const w = play(caseOf('q03-square-in-a-chain'), {
+      each: v => {
+        squared ||= typeOf(v, 0).shapes[v.f.shape[0]].name === 'square'
+      },
+    })
+    expect(squared).toBe(true)
     expect(near(w, 0, 100, 40, 10)).toBe(true)
   })
   it('Q-04: a rout clears the queue', () => {

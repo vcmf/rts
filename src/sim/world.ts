@@ -225,7 +225,8 @@ export interface World {
   planHash: number
   planDue: number[]
   debug: boolean
-  // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass)
+  // per-world working buffers, not state (reverse: a test switch, the fire step and the morale pass; reverseMoves:
+  // one for the formation step)
   scratch: {
     places?: Places
     arc?: Arc
@@ -236,6 +237,7 @@ export interface World {
     fireEpoch?: number
     fireCrossed?: Float64Array
     reverse?: boolean
+    reverseMoves?: boolean
     lost?: Int32Array
     mstateBefore?: Uint8Array
     menNow?: Int32Array

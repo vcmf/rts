@@ -10,7 +10,7 @@ import {
   makeWorld,
   typeOf,
   issue,
-  advanceTick,
+  deserialize,
   formationHandle,
   STATUS,
   menOf,
@@ -47,6 +47,7 @@ import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
 import { Overlay, LAYERS, type Layer } from '../render/overlay.ts'
+import { mkTimeline, order, step, goTo as timelineGoTo } from './timeline.ts'
 
 // the soldier layer steps once a frame, up to MEN_DT of game time (tested at that step); a longer frame
 // takes more steps, at most MEN_STEPS (then the men fall behind the sim and catch up)
@@ -75,8 +76,15 @@ async function main(): Promise<void> {
   let w: World = fresh()
   // the side you command (S1e-2): a scenario that names one lets you select only its formations; none, both
   const mine = (i: number): boolean => scenario.player === undefined || w.f.side[i] === scenario.player
-  const log: Stamped[] = []
-  const hashes: HashPoint[] = []
+  // the player's orders, the hash points and the saves going back uses (src/app/timeline.ts)
+  const tl = mkTimeline()
+  const log: Stamped[] = tl.log
+  const hashes: HashPoint[] = tl.hashes
+  const load = (bytes: Uint8Array): World => {
+    const v = deserialize(bytes, data, cr, false, w.terrain)
+    attachScenario(v, scenario)
+    return v
+  }
   const dropped: Dropped[] = []
   const scene = buildScene(w)
   let layer = new SoldierLayer(w, scene)
@@ -94,6 +102,8 @@ async function main(): Promise<void> {
   // a bench case names itself under the panel's title
   const bench = BENCH_CASES.find(c => c.scenario === scenario)
   if (bench) document.getElementById('sub')!.textContent = bench.title
+  const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
+  const lookAt = bench ? `look at ${bench.keys.map(clock).join(' · ')} (G)` : ''
   const mapC = document.getElementById('map') as HTMLCanvasElement
   const unitC = document.getElementById('units') as HTMLCanvasElement
   const mg = mapC.getContext('2d')!
@@ -126,14 +136,9 @@ async function main(): Promise<void> {
   addEventListener('resize', resize)
   resize()
 
-  // commands from the player: stamped, logged, applied at the next tick. After going back to a tick, the log beyond it
-  // is a future that did not happen: an order then forgets it, as a branch
-  const external = (c: Command) => {
-    const t = w.meta[M_TICK]
-    if (log.length && log[log.length - 1].tick > t + 1) log.splice(log.findIndex(s => s.tick > t + 1))
-    while (hashes.length && hashes[hashes.length - 1].tick > t) hashes.pop()
-    return issue(w, c, log)
-  }
+  // commands from the player: stamped, logged, applied at the next tick. After going back to a tick, the orders the log
+  // holds past it are a future that did not happen: an order then forgets them, as a branch
+  const external = (c: Command) => order(tl, w, c)
   // a panel order also disarms a pending charge (C)
   const forSelection = (make: (h: number) => Command) => {
     charging = false
@@ -141,10 +146,9 @@ async function main(): Promise<void> {
   }
   // hash points without section hashes: those would cost a second serialization each time
   const tick = () => {
-    const r = advanceTick(w)
+    const r = step(tl, w)
     layer.sync(0, r.departed)
     dropped.push(...r.dropped)
-    if (r.hash !== null) hashes.push({ tick: r.tick, hash: r.hash, sections: [] })
     for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
   }
 
@@ -249,20 +253,12 @@ async function main(): Promise<void> {
       0,
       Math.min(Math.round(target), log.length ? Math.max(w.meta[M_TICK], log[log.length - 1].tick) : w.meta[M_TICK]),
     )
-    const v = fresh()
-    let k = 0
-    while (v.meta[M_TICK] < T) {
-      while (k < log.length && log[k].tick === v.meta[M_TICK] + 1) issue(v, log[k++].cmd)
-      advanceTick(v)
-    }
-    w = v
+    w = timelineGoTo(tl, T, fresh, load)
     layer = new SoldierLayer(w, scene)
     layer.sync(0, [])
     map.w = w
     over = new Overlay(w)
     dropped.length = 0
-    // the hash points past the tick are of a future that has not happened yet: played again, they are taken again
-    while (hashes.length && hashes[hashes.length - 1].tick > T) hashes.pop()
     for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
     paused = true
     acc = 0
@@ -508,9 +504,11 @@ async function main(): Promise<void> {
       charging = false
     } else if (e.key === 'c' || e.key === 'C') armCharge()
     else if ('1248'.includes(e.key)) setSpeed(+e.key)
+    // the bench's keys, not with Cmd, Ctrl or Alt held; going back once a press, not on a held key's repeats
+    else if (e.metaKey || e.ctrlKey || e.altKey) return
     else if (e.key === 'd' || e.key === 'D') overlay = !overlay
     else if (e.key === '.') stepTick()
-    else if (e.key === ',') goTo(w.meta[M_TICK] - 1)
+    else if (e.key === ',' && !e.repeat) goTo(w.meta[M_TICK] - 1)
     else if ((e.key === 'g' || e.key === 'G') && !e.repeat) askGoTo()
     // not Cmd+M (minimise), nor a held key's repeats
     else if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat) mark()
@@ -576,6 +574,7 @@ async function main(): Promise<void> {
       head.join('\n') +
       '\n' +
       (lines.length ? lines.join('\n') : 'nothing selected') +
+      (lookAt ? '\n' + lookAt : '') +
       `\n\nt ${(w.meta[M_TICK] * DT).toFixed(1)} s · tick ${w.meta[M_TICK]} · ${speed ? speed + '×' : 'paused'}${paused ? ' (P)' : ''}\nsim + men ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms\nfps ${fps.toFixed(0)} · map built in ${buildMs.toFixed(0)} ms`
   }
   // the session as a replay (src/sim/replay.ts) with the hashes it must reproduce, as far as it has run:
@@ -590,7 +589,8 @@ async function main(): Promise<void> {
       ticks: w.meta[M_TICK],
       log: log.filter(s => s.tick <= w.meta[M_TICK]),
     },
-    hashes,
+    // after going back, the log and the hash points may hold a future the world has not reached again
+    hashes: hashes.filter(h => h.tick <= w.meta[M_TICK]),
   })
   const session = () => ({ ...replay(), marks: [...marks] })
 

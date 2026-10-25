@@ -154,19 +154,20 @@ const guns = [
 // column of route and marches over the western ford; every man stands on the map throughout
 const ONMAP =
   '[...APP.layer.units.values()].every(u => u.men.every(m => !m.alive || (Math.abs(m.x) <= 600 && Math.abs(m.z) <= 600)))'
-// the visual bench (docs/plans/active/c0-bench.md): X-09 with the overlay on, the square formed and the column through
-// it (today's overlap, reported), then back to a tick and a tick on: the hash there is the one first seen there
+// the visual bench (docs/plans/active/c0-bench.md): X-09 with the overlay on and an order to the column at 40 s; back
+// to 30 s, before the order, and on tick by tick to a later tick: the log's order is taken again, the hash there is the
+// one first seen, and the session (the order in its log) replays in Node
 const benchCase = [
   ['wait', 1500],
   READY,
   [
     'eval',
-    'APP.overlay(true); APP.advance(100); window.H = [APP.w.meta[0], APP.hash()]; APP.advance(130); APP.view(0, 0, 5); `BENCH overlaps ${APP.overlaps()} at tick ${APP.w.meta[0]}`',
+    'APP.overlay(true); APP.advance(40); APP.select([1]); APP.march(-60, -80, false); APP.advance(60); window.H = [APP.w.meta[0], APP.hash()]; APP.advance(60); APP.view(-40, -20, 4); `BENCH overlaps ${APP.overlaps()} at tick ${APP.w.meta[0]}, ${APP.log.length} orders`',
   ],
   ['shot', 'bench-x09-overlay'],
   [
     'eval',
-    'APP.goTo(window.H[0]); const same = APP.hash() === window.H[1]; APP.stepTick(); `GOTO same ${same}, then a tick on ${APP.w.meta[0] === window.H[0] + 1}`',
+    'APP.goTo(600); while (APP.w.meta[0] < window.H[0]) APP.stepTick(); `GOTO same ${APP.hash() === window.H[1]}, orders ${APP.log.length}`',
   ],
   ['shot', 'bench-x09-back'],
   REPLAY,
@@ -342,7 +343,7 @@ async function run(scenario, steps) {
   }
   if (
     scenario === 'bench-x09-square-forming' &&
-    !(/BENCH overlaps \d+ at tick/.test(text) && /GOTO same true, then a tick on true/.test(text))
+    !(/BENCH overlaps \d+ at tick/.test(text) && /GOTO same true, orders 1/.test(text))
   ) {
     console.log('the bench did not report its overlaps, or going back to a tick did not give the same world')
     return false

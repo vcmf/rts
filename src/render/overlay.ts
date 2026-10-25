@@ -54,14 +54,23 @@ const ORDER_NAME: Record<number, string> = {
 /** The overlay: its buffers, kept between frames. */
 export class Overlay {
   P: Placed
+  // the places and the touching pairs, kept while the world stands at the tick they were found at (the bench is
+  // mostly looked at paused)
+  private at = -1
+  private near: Contact[] = []
   constructor(w: World) {
     this.P = mkPlaced(w)
   }
 
   /** Draws the layers in `on` for the world as it stands at its tick. */
   draw(g: CanvasRenderingContext2D, v: View, w: World, on: Set<Layer>): void {
-    const P = placeAll(w, this.P)
-    const near = contacts(w, P, NEAR)
+    if (this.at !== w.meta[M_TICK]) {
+      placeAll(w, this.P)
+      this.near = on.has('contacts') ? contacts(w, this.P, NEAR) : []
+      this.at = on.has('contacts') ? w.meta[M_TICK] : -1
+    }
+    const P = this.P
+    const near = this.near
     if (on.has('strips')) this.strips(g, v, w, P)
     if (on.has('contacts')) this.overlaps(g, v, w, P, near)
     if (on.has('blocks')) this.blocks(g, v, w, P)

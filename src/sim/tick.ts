@@ -82,7 +82,12 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     standingStep(w)
   })
   step('5–6 formations: orders, changes, movement', () => {
-    for (let i = 0; i < MAX_FORMATIONS; i++) if (w.f.alive[i]) formationTick(w, i)
+    // in slot order, or reversed (a test switch of its own, the bench's: formations step one by one, and none may gain
+    // by its slot; a charge does today, #187)
+    for (let k = 0; k < MAX_FORMATIONS; k++) {
+      const i = w.scratch.reverseMoves ? MAX_FORMATIONS - 1 - k : k
+      if (w.f.alive[i]) formationTick(w, i)
+    }
   })
   // 7 vision: S2
   step('8 fire', () => {
