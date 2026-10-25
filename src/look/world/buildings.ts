@@ -42,7 +42,7 @@ export const BUILDINGS: readonly Building[] = [
   // the village (cover.ts, VILLAGE): an irregular cluster east of the road, the houses turned each a quarter turn of
   // its own (two doors to the road, one gable to it, two side-on, one back to it) and a little more, their paved yards
   // at least PAVE_GAP apart (cover.ts checks it); six fit the village ground with their yards. Four stone cottages, a
-  // farmhouse on the road and a small manor at the far end (docs/plans/active/tripo-lowpoly-buildings.md)
+  // farmhouse on the road and a small manor at the far end (docs/plans/done/tripo-lowpoly-buildings.md)
   { model: 'farmhouse', x: 208, z: -30, yaw: Q + 0.14, scale: 1.0 },
   { model: 'house', x: 232, z: -38, yaw: -0.12, scale: 0.95 },
   { model: 'house', x: 214, z: -6, yaw: 2 * Q + 0.1, scale: 1.04 },

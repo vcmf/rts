@@ -356,7 +356,7 @@ crowns as cards.
 The owner's Tripo models (`assets/buildings`, git-ignored; art bible §10) go through `tools/building-to-js.py`
 (Blender headless; its header has the commands) to `prototypes/buildings.data.js`: metres, normals sharp past 30°, UV0
 and a role per face (0 wall, 1 roof, 2 timber, 3 opening, 4 accent). The models are Tripo's own low-poly exports
-(`docs/plans/active/tripo-lowpoly-buildings.md`: 1,454-1,794 triangles, kept as made, the windmill's lattice sails
+(`docs/plans/done/tripo-lowpoly-buildings.md`: 1,454-1,794 triangles, kept as made, the windmill's lattice sails
 with them; the first models' cut and rebuilt sails are in git history, `docs/plans/done/buildings.md`). The role is the
 most common class of the face's texels other than opening and shutter (each texel's colour nearest in Lab to the
 model's reference colours, with priors on the face's orientation, a roof faces up, a wall and an opening stand, and
