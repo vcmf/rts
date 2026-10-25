@@ -5,7 +5,8 @@
 //      the redraw is measured and must stay under a second;
 //   2. a broken file (invalid JSON): the page must show the error and keep the last good drawing;
 //   3. the original back: the page must recompile clean;
-//   4. each debug overlay (passability, depth, slope, sight from the map's centre) computed and painting cells.
+//   4. each debug overlay (passability, depth, slope, sight from the map's centre) computed and painting cells, and
+//      the lit view still able to draw once the overlay is off again.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
@@ -100,6 +101,11 @@ try {
       `new Promise(r => { const n = MAP.overlays; MAP.overlay('${value}', [0, 0]); const t = setInterval(() => { if (MAP.overlays > n) { clearInterval(t); r('${tag} ' + JSON.stringify({ cells: MAP.overlayCells, ms: MAP.overlayMs })) } }, 20) })`,
     ]),
     ['shot', 'overlay-sight'],
+    // and off again: the lit view must still be able to draw
+    [
+      'eval',
+      `new Promise(r => { const n = MAP.overlays; MAP.overlay(''); const t = setInterval(() => { if (MAP.overlays > n) { clearInterval(t); setTimeout(() => r('OVnone ' + JSON.stringify({ cells: MAP.overlayCells, ready: MAP.litReady })), 300) } }, 20) })`,
+    ],
   ]
   shot = spawn(
     'node',
@@ -169,6 +175,8 @@ try {
       `the ${value} overlay paints ${seen[tag].cells} cells (${seen[tag].ms.toFixed(0)} ms in the worker)`,
     )
   }
+  await until('OVnone')
+  check(seen.OVnone.cells === 0 && seen.OVnone.ready, 'with the overlay off again, the lit view still draws')
   const code = await done
   check(code === 0, `the page had no exceptions or console errors (shot.mjs exit ${code})`)
 } catch (e) {

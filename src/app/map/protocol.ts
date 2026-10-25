@@ -60,4 +60,5 @@ export interface OverlayReply {
   seq: number
   rgba: ArrayBuffer | null // RGBA a cell, the south row first
   ms: number
+  error?: string
 }

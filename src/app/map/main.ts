@@ -387,7 +387,10 @@ function requestOverlay(): void {
 function onOverlay(r: OverlayReply): void {
   if (r.seq !== overlaySeq) return // an older request, overtaken
   overlayMs = r.ms
-  const rgba = r.rgba ? new Uint8Array(r.rgba) : null
+  if (r.error) console.warn(r.error)
+  // an overlay made for another grid than the one shown (a compile that did not reach the page) is dropped
+  const fits = current && r.rgba && r.rgba.byteLength === current.nx * current.nz * 4
+  const rgba = fits ? new Uint8Array(r.rgba!) : null
   overlays++
   overlayCells = 0
   if (rgba) for (let c = 3; c < rgba.length; c += 4) if (rgba[c]) overlayCells++
@@ -477,8 +480,10 @@ function draw(): void {
   if (lit && mode.value !== 'flat') drawNames()
   if (showOutlines.checked) for (const f of current.map.features) outline(f)
   // errors in place: the features the validator names, outlined in red over everything (the last good map's shapes)
-  const wrong = new Set(issues.map(i => i.id).filter((id): id is string => !!id))
-  for (const f of current.map.features) if (wrong.has(f.id)) outline(f, '#c0201a', 3)
+  if (issues.length) {
+    const wrong = new Set(issues.map(i => i.id).filter((id): id is string => !!id))
+    for (const f of current.map.features) if (wrong.has(f.id)) outline(f, '#c0201a', 3)
+  }
   // the sight overlay's eye
   if (overlaySelect.value === 'sight' && sightAt) {
     const p = toScreen(sightAt[0], sightAt[1])
@@ -666,6 +671,10 @@ window.MAP = {
   },
   get overlayCells() {
     return overlayCells
+  },
+  // whether the lit view can draw now (for checks)
+  get litReady() {
+    return lit?.isReady() ?? false
   },
   draw,
   // centre the view on a ground point at a zoom (px a metre), for checks

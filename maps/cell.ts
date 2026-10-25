@@ -34,3 +34,14 @@ export function groundCell(L: Layers, cell: number): GroundCell {
     go: !!L.zone[cell] && L.table[L.zone[cell] - 1].kind === 'zone.go',
   }
 }
+
+// a no-go cell's depth, m: past every wading limit
+export const NOGO_DEPTH = 10
+
+/**
+ * The water's depth the sim takes on a cell (m), given the class its ruleset read there: none on a bridge's deck or
+ * where the map says go, past every limit where it says no-go, else the water's own. Shared by the sim compiler
+ * (engine.ts) and the map page's passability overlay, so the two agree.
+ */
+export const simDepth = (gc: GroundCell, cls: string): number =>
+  gc.nogo ? NOGO_DEPTH : cls === 'bridge' || gc.go ? 0 : gc.water

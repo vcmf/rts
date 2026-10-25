@@ -17,7 +17,7 @@ import { expand } from '../src/map/expand.ts'
 import type { Layers } from '../src/map/apply.ts'
 import { apply, CELL, heightOf } from '../src/map/apply.ts'
 import type { Classify } from '../src/rulesets/ground.ts'
-import { groundCell } from './cell.ts'
+import { groundCell, simDepth } from './cell.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import type { Ruleset } from '../src/sim/ruleset.ts'
 import { classifyNapoleonic } from '../src/rulesets/napoleonic-ground.ts'
@@ -25,7 +25,6 @@ import { exp } from '../src/sim/num.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const COST_CELL = 4 * CELL // decision 0021
-const NOGO_DEPTH = 10 // m: a no-go cell's depth, past every wading limit
 
 // the map's layers, or the validator's first problems as an error
 export function layersOf(file: string, seed?: number): { map: MapFile; layers: Layers } {
@@ -87,7 +86,7 @@ export function engineMap(
       const k = classes.indexOf(c)
       if (k < 0) throw new Error(`${file}: the ground reading gave "${c}", not a class of ${rs.name}`)
       cls[j * n + i] = k
-      depth[j * n + i] = gc.nogo ? NOGO_DEPTH : c === 'bridge' || gc.go ? 0 : gc.water
+      depth[j * n + i] = simDepth(gc, c)
     }
   }
   const cellOf = (x: number, z: number) =>

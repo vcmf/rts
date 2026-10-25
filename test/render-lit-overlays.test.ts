@@ -9,7 +9,8 @@ import { expand } from '../src/map/expand.ts'
 import { apply } from '../src/map/apply.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { classifyNapoleonic } from '../src/rulesets/napoleonic-ground.ts'
-import { overlay, passFactor, sightFrom, unitKinds } from '../src/render/lit/overlays.ts'
+import { groundOf, overlay, passFactor, sightFrom, unitKinds } from '../src/render/lit/overlays.ts'
+import { NOGO_DEPTH, simDepth } from '../maps/cell.ts'
 import { root } from './fx.ts'
 
 const cat = JSON.parse(fs.readFileSync(path.join(root, 'maps/kinds.json'), 'utf8')) as Catalogue
@@ -68,7 +69,7 @@ describe('M6c: passability', () => {
   })
   it("is the terrain class's factor on level open ground and in a wood, 0 past a kind's wading limit", () => {
     for (const unit of unitKinds(napoleonic)) {
-      const g = passFactor(L, napoleonic, classifyNapoleonic, unit)
+      const g = passFactor(groundOf(L, classifyNapoleonic), napoleonic, unit)
       expect(g[cellOf(L, 0, 150)]).toBeCloseTo(napoleonic.terrain.open.g[unit], 6)
       const wood = g[cellOf(L, -100, -100)]
       expect(wood).toBeLessThan(napoleonic.terrain.open.g[unit] + 1e-9)
@@ -76,20 +77,30 @@ describe('M6c: passability', () => {
     }
   })
   it('falls on a slope', () => {
-    const g = passFactor(L, napoleonic, classifyNapoleonic, 'line')
+    const g = passFactor(groundOf(L, classifyNapoleonic), napoleonic, 'line')
     expect(g[cellOf(L, 140, -100)]).toBeLessThan(g[cellOf(L, 0, 150)])
   })
   it('draws nothing where a kind goes at full speed, and something where it does not', () => {
-    const o = overlay(L, napoleonic, classifyNapoleonic, { kind: 'pass', unit: 'line' })
+    const o = overlay(groundOf(L, classifyNapoleonic), napoleonic, { kind: 'pass', unit: 'line' })
     expect(o[cellOf(L, 0, 150) * 4 + 3]).toBe(0)
     expect(o[cellOf(L, -100, -100) * 4 + 3]).toBeGreaterThan(0)
+  })
+})
+
+describe("M6c: the sim's depth, shared", () => {
+  const dry = { water: 1.5, nogo: false, go: false }
+  it('takes none on a bridge or a go zone, past every limit on a no-go one, else the water', () => {
+    expect(simDepth(dry, 'water')).toBe(1.5)
+    expect(simDepth(dry, 'bridge')).toBe(0)
+    expect(simDepth({ ...dry, go: true }, 'water')).toBe(0)
+    expect(simDepth({ ...dry, water: 0, nogo: true }, 'open')).toBe(NOGO_DEPTH)
   })
 })
 
 describe('M6c: sight', () => {
   it('sees the whole flat field within its radius, and nothing beyond', () => {
     const L = compile([])
-    const seen = sightFrom(L, napoleonic, classifyNapoleonic, 0, 0, 150)
+    const seen = sightFrom(groundOf(L, classifyNapoleonic), napoleonic, 0, 0, 150)
     expect(seen[cellOf(L, 100, 100)]).toBe(1)
     expect(seen[cellOf(L, -140, 20)]).toBe(1)
     expect(seen[cellOf(L, 190, 190)]).toBe(0) // 269 m away
@@ -107,9 +118,31 @@ describe('M6c: sight', () => {
         width: 40,
       },
     ] as MapFile['features'])
-    const seen = sightFrom(L, napoleonic, classifyNapoleonic, 0, -100, 400)
+    const seen = sightFrom(groundOf(L, classifyNapoleonic), napoleonic, 0, -100, 400)
     expect(seen[cellOf(L, 0, 50)]).toBe(1) // the crest
     expect(seen[cellOf(L, 0, 100)]).toBe(0) // the far foot, hidden
+  })
+  it('counts the wood a diagonal line crosses at its length, not a cell a step', () => {
+    // a wood beyond x + z = 0: from (−60, −60) along the diagonal, the line enters it 85 m on
+    const L = compile([
+      {
+        id: 'wood',
+        kind: 'veg.wood.broad',
+        area: [
+          [
+            [200, -200],
+            [200, 200],
+            [-200, 200],
+          ],
+        ],
+      },
+    ] as MapFile['features'])
+    const G = groundOf(L, classifyNapoleonic)
+    const reach = napoleonic.fire.sight[G.classes[G.cls[cellOf(L, 100, 100)]]]
+    const seen = sightFrom(G, napoleonic, -60, -60, 400)
+    // past the wood's edge by the reach along the diagonal (x and z each reach / √2 more), plus a margin of a few cells
+    const past = reach / Math.SQRT2 + 6
+    expect(seen[cellOf(L, past, past)]).toBe(0)
   })
   it('sees into a wood as far as the ruleset allows, not through it', () => {
     const L = compile([
@@ -126,7 +159,7 @@ describe('M6c: sight', () => {
         ],
       },
     ] as MapFile['features'])
-    const seen = sightFrom(L, napoleonic, classifyNapoleonic, 0, 0, 400)
+    const seen = sightFrom(groundOf(L, classifyNapoleonic), napoleonic, 0, 0, 400)
     const reach =
       napoleonic.fire.sight[
         classifyNapoleonic({ veg: { growth: 'stand', density: 1 }, water: 0, nogo: false, go: false })

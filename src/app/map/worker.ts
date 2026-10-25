@@ -7,8 +7,7 @@ import { expand } from '../../map/expand.ts'
 import { apply, LAYER_NAMES } from '../../map/apply.ts'
 import { draft } from '../../map/draft.ts'
 import { bakeInk, bakeMasks, bakeRelief, waysOf, type LightDir } from '../../render/lit/bake.ts'
-import { overlay, unitKinds } from '../../render/lit/overlays.ts'
-import type { Layers } from '../../map/apply.ts'
+import { groundOf, overlay, unitKinds, type Ground } from '../../render/lit/overlays.ts'
 import { napoleonic } from '../../rulesets/napoleonic.ts'
 import { classifyNapoleonic } from '../../rulesets/napoleonic-ground.ts'
 import type { CompileReply, CompileRequest, LayerName, OverlayReply, OverlayRequest } from './protocol.ts'
@@ -18,16 +17,22 @@ const LIGHT: LightDir = 'nw'
 // the ruleset the overlays read the ground with (the page's one era for now)
 const RULESET = napoleonic
 const CLASSIFY = classifyNapoleonic
-// the last compiled layers, for the overlays
-let last: Layers | null = null
+// the last compiled map's ground, read once for the overlays (set once its compile's reply is sent: the page's grid)
+let last: Ground | null = null
 
 self.onmessage = (e: MessageEvent<CompileRequest | OverlayRequest>) => {
   if (e.data.type === 'overlay') {
     const { seq, spec } = e.data
     const t0 = performance.now()
-    const rgba = last && spec ? overlay(last, RULESET, CLASSIFY, spec).buffer : null
-    const reply: OverlayReply = { type: 'overlay', seq, rgba: rgba as ArrayBuffer | null, ms: performance.now() - t0 }
-    ;(self as unknown as Worker).postMessage(reply, rgba ? [rgba as ArrayBuffer] : [])
+    let rgba: ArrayBuffer | null = null
+    let error: string | undefined
+    try {
+      rgba = last && spec ? (overlay(last, RULESET, spec).buffer as ArrayBuffer) : null
+    } catch (err) {
+      error = `the overlay failed: ${(err as Error).message}`
+    }
+    const reply: OverlayReply = { type: 'overlay', seq, rgba, ms: performance.now() - t0, error }
+    ;(self as unknown as Worker).postMessage(reply, rgba ? [rgba] : [])
     return
   }
   const { seq, mapText, kindsText, files } = e.data
@@ -103,7 +108,6 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
   }
   const t1 = performance.now()
   const L = apply(ex.map, cat, checked.dems)
-  last = L
   const t2 = performance.now()
   const img = draft(L)
   const t3 = performance.now()
@@ -111,8 +115,9 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
   const masks = bakeMasks(L)
   const ink = bakeInk(L, waysOf(ex.map.features, L.table))
   const t4 = performance.now()
-  // copies go to the page: the worker keeps the layers for the overlays (`last`)
-  const layers = Object.fromEntries(LAYER_NAMES.map(n => [n, L[n].slice().buffer as ArrayBuffer])) as Record<
+  // the overlays' ground, read before the layers go to the page
+  const ground = groundOf(L, CLASSIFY)
+  const layers = Object.fromEntries(LAYER_NAMES.map(n => [n, L[n].buffer as ArrayBuffer])) as Record<
     LayerName,
     ArrayBuffer
   >
@@ -128,8 +133,8 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
     nz: L.nz,
     x0: L.x0,
     z0: L.z0,
-    height: L.height.slice().buffer as ArrayBuffer,
-    depth: L.depth.slice().buffer as ArrayBuffer,
+    height: L.height.buffer as ArrayBuffer,
+    depth: L.depth.buffer as ArrayBuffer,
     layers,
     table: L.table,
     units: unitKinds(RULESET),
@@ -148,4 +153,5 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
     reply.ink,
     ...Object.values(layers),
   ])
+  last = ground
 }

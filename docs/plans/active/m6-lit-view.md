@@ -242,3 +242,18 @@ settings (the owner, 2026-10-25).
 - `tools/map-page-check.mjs` checks each overlay: chosen, computed by the worker, painting cells.
 - **Results** (two-ridges, 2.4 km, the dev Mac): passability 0.2 s, depth 4 ms, slope 30 ms, sight 0.5 s in the worker;
   a save to a redraw 0.82 s (the worker now copies the layers it sends, to keep them for the overlays).
+
+### Review rounds (M6c)
+
+- **Round 1** (`/code-review high`): severe. Turning an overlay off disposed a texture still bound to the shader, so
+  the lit map stopped drawing for good; the passability overlay waded the raw water where the sim takes none on a
+  bridge or a go zone and an impassable depth on a no-go zone; sight counted a cell of wood a step on a diagonal line
+  (up to 41 % short); an overlay could be computed on a grid the page was not showing. Fixed: the empty texel is bound
+  before any overlay is disposed, and the page check now turns the overlay off and asks whether the view can still
+  draw; the sim's depth rule is one function (`simDepth`, `maps/cell.ts`) for the sim compiler and the overlay; sight
+  counts the line's length; the worker keeps the overlays' ground only once its compile's reply is sent, and the page
+  drops an overlay of another size. With them: the ground is read once a compile (classes, the sim's depth, the
+  heights) instead of on every request, and the layers go to the page without copies (passability 55 ms, sight 77 ms
+  on two-ridges, from 0.2 s and 0.5 s); an overlay that throws is reported, not a dead worker; the errors' outlines
+  are looked for only when there are errors. Left: the wading and slope factors are the ruleset's formulas written
+  again (the sim's own read its compiled tables, `src/sim/terrain.ts`); a shared pure helper would keep them one.
