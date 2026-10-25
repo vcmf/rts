@@ -12,7 +12,8 @@ import { HASH_EVERY } from './time.ts'
 import type { Handle } from './handle.ts'
 import { assertFinite } from './num.ts'
 import { formationTick, menOf } from './formation.ts'
-import { hashWorld } from './serialize.ts'
+import { serialize } from './serialize.ts'
+import { fnv1a } from './hash.ts'
 import { fireStep, casualtiesStep } from './fire.ts'
 import { moraleStep } from './morale.ts'
 import { meleeStep, standingStep } from './melee.ts'
@@ -56,6 +57,8 @@ export interface Meter {
 export interface TickResult {
   tick: number
   hash: number | null
+  // on a hash tick, the world as it was hashed (serialize): a save of it at no further cost (the bench's timeline)
+  bytes: Uint8Array | null
   dropped: Dropped[]
   departed: { id: Handle; men: number }[]
 }
@@ -146,8 +149,12 @@ export function advanceTick(w: World, meter?: Meter): TickResult {
     }
   }
   let hash: number | null = null
+  let bytes: Uint8Array | null = null
   step('15 hash', () => {
-    if (t % HASH_EVERY === 0) hash = hashWorld(w)
+    if (t % HASH_EVERY === 0) {
+      bytes = serialize(w)
+      hash = fnv1a(bytes)
+    }
   })
-  return { tick: t, hash, dropped, departed }
+  return { tick: t, hash, bytes, dropped, departed }
 }

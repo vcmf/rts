@@ -140,23 +140,19 @@ async function main(): Promise<void> {
     for (const i of selected) external(make(formationHandle(w, i)))
   }
   // hash points without section hashes: those would cost a second serialization each time
-  // a tick; false when the timeline is broken (a tick played again gave another world), which pauses the page and says
-  // so until it goes to a time
+  // a tick; a warning from the timeline (a tick played again gave another world) pauses the page and says so
   const tick = (): boolean => {
-    try {
-      const r = step(tl, w)
-      layer.sync(0, r.departed)
-    } catch (e) {
-      paused = true
-      acc = 0
-      note = `${e instanceof Error ? e.message : String(e)}: go to a time (G) to go on`
-      noteT = performance.now()
-      console.error(e)
-      return false
-    } finally {
-      for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
-    }
-    return true
+    const was = tl.warning
+    const r = step(tl, w)
+    layer.sync(0, r.departed)
+    for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
+    if (tl.warning === was) return true
+    paused = true
+    acc = 0
+    note = tl.warning
+    noteT = performance.now()
+    console.warn(tl.warning)
+    return false
   }
 
   // the frame: ticks owed at the game speed, then the men (in game time), then the drawing
@@ -255,8 +251,10 @@ async function main(): Promise<void> {
     if (tick()) layer.step(DT, 0)
   }
   const goTo = (target: number) => {
-    // as far as the furthest tick played, or the last order logged
-    const T = Math.max(0, Math.min(Math.round(target), Math.max(tl.reached, w.meta[M_TICK], tl.log.at(-1)?.tick ?? 0)))
+    // back to the start, or on as far as the scenario's time limit (ten minutes past the furthest tick without one)
+    const end = scenario.minutes ? Math.round(scenario.minutes * 60 * TICK_HZ) : tl.reached + 600 * TICK_HZ
+    const T = Math.max(0, Math.min(Math.round(target), end))
+    if (T === w.meta[M_TICK]) return
     let got: World
     try {
       got = timelineGoTo(tl, T, fresh, load, w)
@@ -568,8 +566,9 @@ async function main(): Promise<void> {
     let d: Dropped | undefined
     // the last of yours the world has reached (after going back, later ones wait for it to be played again)
     const dropped = tl.dropped
-    for (let k = dropped.length - 1; k >= 0 && !d; k--)
-      {if (dropped[k].seq >= 0 && dropped[k].tick <= w.meta[M_TICK]) d = dropped[k]}
+    for (let k = dropped.length - 1; k >= 0 && !d; k--) {
+      if (dropped[k].seq >= 0 && dropped[k].tick <= w.meta[M_TICK]) d = dropped[k]
+    }
     if (note && performance.now() - noteT < 3000) lines.push(note)
     // the battle (S1e-2): each side's men in the fight, as a share of those it spawned, and the result once decided
     const shares = fightShares(w)
@@ -664,8 +663,9 @@ async function main(): Promise<void> {
         paused = true
         const sp = speed
         speed = 1
-        // stops where a tick fails, as the page does
-        for (let n = Math.round(sec * 30); n > 0 && !tl.broken; n--) advance(1 / 30)
+        // stops where the timeline warns, as the page does
+        const was = tl.warning
+        for (let n = Math.round(sec * 30); n > 0 && tl.warning === was; n--) advance(1 / 30)
         speed = sp
         draw()
       },
