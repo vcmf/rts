@@ -23,6 +23,7 @@ import {
   M_TICK,
   M_END,
   M_WINNER,
+  TICK_HZ,
   END_SIDE0,
   END_SIDE1,
   END_DRAW,
@@ -419,9 +420,9 @@ describe('the tuned battle (docs/plans/active/s1e3-playtest.md)', () => {
     const w = makeWorld(battleData, compileRuleset(napoleonic), PAGE_SEED, false)
     attachScenario(w, s1eBattle)
     s1eBattle.setup(w)
-    while (!w.meta[M_END] && w.meta[M_TICK] < 22 * 60 * 20) advanceTick(w)
+    while (!w.meta[M_END] && w.meta[M_TICK] < 22 * 60 * TICK_HZ) advanceTick(w)
     expect(w.meta[M_WINNER]).toBe(END_SIDE1)
-    expect(w.meta[M_END] / 20 / 60).toBeGreaterThan(15)
+    expect(w.meta[M_END] / TICK_HZ / 60).toBeGreaterThan(15)
   })
 })
 
