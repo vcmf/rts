@@ -224,3 +224,21 @@ settings (the owner, 2026-10-25).
   roofless; a footprint is triangulated once for its roof and its shadow. Left: the road's field re-derives apply's
   line rule (the per-cell hold keeps the contract wherever the two differ; building it from apply's `nearLine` would
   make them one), the worker's memory for the cells' fields, and a shared exact distance transform.
+
+## M6c: the debug overlays
+
+- `src/render/lit/overlays.ts` (pure, run in the worker on the last compiled layers, which it keeps; the page gets
+  copies): the overlays as RGBA a cell, drawn by the lit shader over the lit map or the flat colours:
+  - **passability** for each of the ruleset's unit kinds (`unitKinds`: the terrain table's, era-generic): the cell's
+    terrain class factor (`classify` on `groundCell`, now `maps/cell.ts`, shared with the sim compiler), times the
+    wading curve at its depth (0 past the kind's limit), times the slope factor uphill; nothing drawn at full speed,
+    a ramp from green to red below it, dark red where impassable;
+  - **water depth**, a ramp of blues to 2 m; **slope**, from 2 % to 30 %;
+  - **sight from a point** (a click on the map with the overlay chosen): rays from the eye (the ruleset's eye height)
+    to every border cell of a 1500 m square; a cell is seen if a figure standing there clears the ground between, and
+    the sight line crosses no more of each terrain class than the ruleset's sight table allows (woods 40 m).
+- **Errors in place:** the features the validator names are outlined in red on the map (from the last good map's
+  shapes), and an error naming one takes the view to it when clicked.
+- `tools/map-page-check.mjs` checks each overlay: chosen, computed by the worker, painting cells.
+- **Results** (two-ridges, 2.4 km, the dev Mac): passability 0.2 s, depth 4 ms, slope 30 ms, sight 0.5 s in the worker;
+  a save to a redraw 0.82 s (the worker now copies the layers it sends, to keep them for the overlays).

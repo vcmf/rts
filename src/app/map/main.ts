@@ -5,7 +5,8 @@
 // drawing stays up while a file is broken. window.MAP exposes the state for headless checks.
 import type { Feature, Pt } from '../../map/schema.ts'
 import type { Issue } from '../../map/catalogue.ts'
-import type { Compiled, CompileReply, CompileRequest, LayerName } from './protocol.ts'
+import type { Compiled, CompileReply, CompileRequest, LayerName, OverlayReply, OverlayRequest } from './protocol.ts'
+import type { OverlaySpec } from '../../render/lit/overlays.ts'
 import { demFileNames } from '../../map/dem.ts'
 import { LitView, TILT } from '../../render/lit/view.ts'
 import { standing } from '../../render/lit/houses.ts'
@@ -76,6 +77,8 @@ const errors = $('errors')
 const readout = $('readout')
 const showOutlines = $<HTMLInputElement>('outlines')
 const showIds = $<HTMLInputElement>('ids')
+const overlaySelect = $<HTMLSelectElement>('overlay')
+const overlayHint = $('overlayHint')
 const mode = $<HTMLSelectElement>('mode')
 // the lit map view under the overlays (docs/plans/active/m6-lit-view.md); ?tilt= degrees off straight down
 // the lit view needs WebGL2 (decision 0046): without it the page still compiles, lists errors and reads cells
@@ -148,8 +151,12 @@ function makeWorker(): Worker {
   }
   return w
 }
-function onReply(e: MessageEvent<CompileReply>): void {
-  const r = e.data
+function onReply(e: MessageEvent<CompileReply | OverlayReply>): void {
+  if ('type' in e.data && e.data.type === 'overlay') {
+    onOverlay(e.data)
+    return
+  }
+  const r = e.data as CompileReply
   if (r.seq !== seq || !pending) return // an older compile, overtaken
   if (!r.ok && r.missing?.length) {
     // the worker lacks files it was counted as holding: send them again
@@ -178,6 +185,8 @@ function onReply(e: MessageEvent<CompileReply>): void {
       ink: new Uint8Array(r.ink),
       flat: { w: r.w, h: r.h, rgba: new Uint8Array(r.rgba) },
     })
+    fillOverlays(r.units)
+    requestOverlay()
     lit?.setHouses(standing(r.map.features, r.table, new Uint16Array(r.layers.built), r))
     labels = namesOf(r)
     // the bakes live on the GPU now: the page keeps only what it reads (36 MB each at 6 km)
@@ -309,11 +318,11 @@ const CATEGORY_INK: Record<string, string> = {
   work: '#5a3a1a',
   zone: '#a01818',
 }
-function outline(f: Feature): void {
-  const ink = CATEGORY_INK[(f.kind ?? '').split('.')[0]] ?? '#333'
+function outline(f: Feature, colour?: string, width = 1): void {
+  const ink = colour ?? CATEGORY_INK[(f.kind ?? '').split('.')[0]] ?? '#333'
   ctx.strokeStyle = ink
   ctx.fillStyle = ink
-  ctx.lineWidth = 1
+  ctx.lineWidth = width
   const path = (pts: Pt[], close: boolean) => {
     groundPath(pts, close)
     ctx.stroke()
@@ -342,6 +351,48 @@ function outline(f: Feature): void {
     ctx.font = '11px ui-monospace, Menlo, monospace'
     ctx.fillText(f.id, label[0] + 4, label[1] - 4)
   }
+}
+
+// The debug overlays (src/render/lit/overlays.ts), computed by the worker on the last compiled map: the setting's
+// choices are the ruleset's unit kinds' passability, the water's depth, the slope, and sight from a clicked point
+const SIGHT_RADIUS = 1500 // m
+let sightAt: Pt | null = null
+let overlaySeq = 0
+let overlayMs = 0
+let overlays = 0 // replies taken, and the cells the last one painted (for checks)
+let overlayCells = 0
+function fillOverlays(units: string[]): void {
+  const keep = overlaySelect.value
+  const options: [string, string][] = [
+    ['', 'none'],
+    ...units.map((u): [string, string] => [`pass:${u}`, `passable: ${u}`]),
+    ['depth', 'water depth'],
+    ['slope', 'slope'],
+    ['sight', 'sight from a point'],
+  ]
+  overlaySelect.replaceChildren(...options.map(([v, t]) => new Option(t, v)))
+  overlaySelect.value = options.some(([v]) => v === keep) ? keep : ''
+}
+function overlaySpec(): OverlaySpec | null {
+  const v = overlaySelect.value
+  if (v.startsWith('pass:')) return { kind: 'pass', unit: v.slice(5) }
+  if (v === 'depth' || v === 'slope') return { kind: v }
+  if (v === 'sight') return sightAt ? { kind: 'sight', x: sightAt[0], z: sightAt[1], radius: SIGHT_RADIUS } : null
+  return null
+}
+function requestOverlay(): void {
+  overlayHint.hidden = !(overlaySelect.value === 'sight' && !sightAt)
+  worker.postMessage({ type: 'overlay', seq: ++overlaySeq, spec: overlaySpec() } satisfies OverlayRequest)
+}
+function onOverlay(r: OverlayReply): void {
+  if (r.seq !== overlaySeq) return // an older request, overtaken
+  overlayMs = r.ms
+  const rgba = r.rgba ? new Uint8Array(r.rgba) : null
+  overlays++
+  overlayCells = 0
+  if (rgba) for (let c = 3; c < rgba.length; c += 4) if (rgba[c]) overlayCells++
+  lit?.setOverlay(rgba)
+  draw()
 }
 
 // the map's names, read once a compile (namesOf), drawn every frame
@@ -425,6 +476,19 @@ function draw(): void {
   ctx.setLineDash([])
   if (lit && mode.value !== 'flat') drawNames()
   if (showOutlines.checked) for (const f of current.map.features) outline(f)
+  // errors in place: the features the validator names, outlined in red over everything (the last good map's shapes)
+  const wrong = new Set(issues.map(i => i.id).filter((id): id is string => !!id))
+  for (const f of current.map.features) if (wrong.has(f.id)) outline(f, '#c0201a', 3)
+  // the sight overlay's eye
+  if (overlaySelect.value === 'sight' && sightAt) {
+    const p = toScreen(sightAt[0], sightAt[1])
+    if (p) {
+      ctx.beginPath()
+      ctx.arc(p[0], p[1], 5, 0, 2 * Math.PI)
+      ctx.fillStyle = '#c0201a'
+      ctx.fill()
+    }
+  }
   tint()
 }
 
@@ -439,6 +503,18 @@ function panel(): void {
     ...issues.map(i => {
       const li = document.createElement('li')
       li.textContent = `${i.id ? `[${i.id}] ` : ''}${i.path || '(map)'}: ${i.message}`
+      // a feature the last good map has: a click takes the view to it
+      const f = i.id ? current?.map.features.find(x => x.id === i.id) : undefined
+      const at = f && anchor(f)
+      if (at) {
+        li.className = 'at'
+        li.onclick = () => {
+          view.cx = at[0]
+          view.cz = at[1]
+          view.ppm = Math.max(view.ppm, 2)
+          draw()
+        }
+      }
       return li
     }),
   )
@@ -471,12 +547,17 @@ function hover(sx: number, sy: number): void {
 
 // pan with the mouse, zoom with the wheel about the cursor
 // a drag keeps the ground point it started on under the pointer
-let drag: { at: Pt } | null = null
+let drag: { at: Pt; sx: number; sy: number } | null = null
 canvas.addEventListener('pointerdown', e => {
-  drag = { at: toWorld(e.offsetX, e.offsetY) }
+  drag = { at: toWorld(e.offsetX, e.offsetY), sx: e.offsetX, sy: e.offsetY }
   canvas.setPointerCapture(e.pointerId)
 })
-canvas.addEventListener('pointerup', () => {
+canvas.addEventListener('pointerup', e => {
+  // a click, not a drag: with the sight overlay, the eye moves there
+  if (drag && overlaySelect.value === 'sight' && Math.hypot(e.offsetX - drag.sx, e.offsetY - drag.sy) < 4) {
+    sightAt = toWorld(e.offsetX, e.offsetY)
+    requestOverlay()
+  }
   drag = null
 })
 canvas.addEventListener('pointermove', e => {
@@ -514,6 +595,10 @@ picker.addEventListener('change', () => {
   void compile('pick')
 })
 showOutlines.addEventListener('change', draw)
+overlaySelect.addEventListener('change', () => {
+  requestOverlay()
+  draw()
+})
 lit?.setFlat(mode.value === 'flat') // a value the browser restored on reload
 lit?.onLost(() => {
   litError = 'the WebGL context was lost: reload the page'
@@ -565,6 +650,22 @@ window.MAP = {
   },
   get frameMs() {
     return frameMs
+  },
+  // the debug overlays: choose one by its setting's value ('pass:line', 'depth', 'slope', 'sight'), the sight's eye,
+  // and the last overlay's time in the worker, ms
+  overlay(value: string, at?: Pt) {
+    overlaySelect.value = value
+    if (at) sightAt = at
+    requestOverlay()
+  },
+  get overlayMs() {
+    return overlayMs
+  },
+  get overlays() {
+    return overlays
+  },
+  get overlayCells() {
+    return overlayCells
   },
   draw,
   // centre the view on a ground point at a zoom (px a metre), for checks

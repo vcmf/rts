@@ -4,7 +4,8 @@
 //   1. a real change (the first height in the file): the page must recompile and redraw; the time from the save to
 //      the redraw is measured and must stay under a second;
 //   2. a broken file (invalid JSON): the page must show the error and keep the last good drawing;
-//   3. the original back: the page must recompile clean.
+//   3. the original back: the page must recompile clean;
+//   4. each debug overlay (passability, depth, slope, sight from the map's centre) computed and painting cells.
 // The map file is always restored, even on failure. Prints every step and exits non-zero on any failure.
 // Usage: node tools/map-page-check.mjs [outDir] [map]   (default: a temporary folder, maps/two-ridges.map.json)
 import { spawn } from 'node:child_process'
@@ -79,6 +80,13 @@ try {
     'eval',
     `new Promise(r => { const t = setInterval(() => { const L = MAP.log, last = L[L.length - 1]; if (${cond}) { clearInterval(t); r('${tag} ' + JSON.stringify({ log: last, issues: MAP.issues.length, compiled: MAP.compiled })) } }, 20) })`,
   ]
+  // the overlays checked, by their setting's value, and the tag each reports under
+  const OVERLAYS = [
+    ['pass:line', 'OVpass'],
+    ['depth', 'OVdepth'],
+    ['slope', 'OVslope'],
+    ['sight', 'OVsight'],
+  ]
   const steps = [
     waitFor('last && last.reason === "load"', 'LOADED'),
     ['shot', 'draft'],
@@ -86,6 +94,12 @@ try {
     waitFor('MAP.issues.length > 0', 'BROKEN'),
     waitFor('last && last.reason === "save" && MAP.issues.length === 0', 'RESTORED'),
     ['shot', 'draft-restored'],
+    // the debug overlays (M6c): each one chosen, computed by the worker, and painting some cells
+    ...OVERLAYS.map(([value, tag]) => [
+      'eval',
+      `new Promise(r => { const n = MAP.overlays; MAP.overlay('${value}', [0, 0]); const t = setInterval(() => { if (MAP.overlays > n) { clearInterval(t); r('${tag} ' + JSON.stringify({ cells: MAP.overlayCells, ms: MAP.overlayMs })) } }, 20) })`,
+    ]),
+    ['shot', 'overlay-sight'],
   ]
   shot = spawn(
     'node',
@@ -148,6 +162,13 @@ try {
   fs.writeFileSync(mapFile, original)
   await until('RESTORED')
   check(seen.RESTORED.issues === 0, 'the restored file compiles clean')
+  for (const [value, tag] of OVERLAYS) {
+    await until(tag)
+    check(
+      seen[tag].cells > 0,
+      `the ${value} overlay paints ${seen[tag].cells} cells (${seen[tag].ms.toFixed(0)} ms in the worker)`,
+    )
+  }
   const code = await done
   check(code === 0, `the page had no exceptions or console errors (shot.mjs exit ${code})`)
 } catch (e) {

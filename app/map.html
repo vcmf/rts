@@ -20,6 +20,8 @@
   #errbox { margin-top: 8px; color: var(--bad); }
   #errbox .cap { font-weight: 700; }
   #errors { margin: 4px 0 0; padding-left: 16px; max-height: 40vh; overflow: auto; }
+  #errors li.at { cursor: pointer; text-decoration: underline dotted; }
+  #overlayHint { color: var(--ink-2); font-size: 11px; margin: 4px 0; }
   #readout { bottom: 16px; left: 16px; white-space: pre; min-width: 260px; }
   #readout:empty { display: none; }
   @media (max-width: 640px) { #panel { left: 8px; right: 8px; width: auto; } }
@@ -33,6 +35,8 @@
   <select id="picker" aria-label="Map"></select>
   <div id="status">compiling…</div>
   <label>view <select id="mode"><option value="lit">lit</option><option value="flat">flat colours</option></select></label>
+  <label>overlay <select id="overlay"><option value="">none</option></select></label>
+  <div id="overlayHint" hidden>click the map to look from a point</div>
   <label><input id="outlines" type="checkbox" checked> outlines</label>
   <label><input id="ids" type="checkbox" checked> ids</label>
   <div id="errbox" hidden><div class="cap">The file has errors; the last good drawing stays.</div><ul id="errors"></ul></div>

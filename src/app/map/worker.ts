@@ -7,12 +7,29 @@ import { expand } from '../../map/expand.ts'
 import { apply, LAYER_NAMES } from '../../map/apply.ts'
 import { draft } from '../../map/draft.ts'
 import { bakeInk, bakeMasks, bakeRelief, waysOf, type LightDir } from '../../render/lit/bake.ts'
+import { overlay, unitKinds } from '../../render/lit/overlays.ts'
+import type { Layers } from '../../map/apply.ts'
+import { napoleonic } from '../../rulesets/napoleonic.ts'
+import { classifyNapoleonic } from '../../rulesets/napoleonic-ground.ts'
+import type { CompileReply, CompileRequest, LayerName, OverlayReply, OverlayRequest } from './protocol.ts'
 
 // the map view's one light, from the north-west for now (docs/plans/active/one-map-austerlitz.md, open question 6)
 const LIGHT: LightDir = 'nw'
-import type { CompileReply, CompileRequest, LayerName } from './protocol.ts'
+// the ruleset the overlays read the ground with (the page's one era for now)
+const RULESET = napoleonic
+const CLASSIFY = classifyNapoleonic
+// the last compiled layers, for the overlays
+let last: Layers | null = null
 
-self.onmessage = (e: MessageEvent<CompileRequest>) => {
+self.onmessage = (e: MessageEvent<CompileRequest | OverlayRequest>) => {
+  if (e.data.type === 'overlay') {
+    const { seq, spec } = e.data
+    const t0 = performance.now()
+    const rgba = last && spec ? overlay(last, RULESET, CLASSIFY, spec).buffer : null
+    const reply: OverlayReply = { type: 'overlay', seq, rgba: rgba as ArrayBuffer | null, ms: performance.now() - t0 }
+    ;(self as unknown as Worker).postMessage(reply, rgba ? [rgba as ArrayBuffer] : [])
+    return
+  }
   const { seq, mapText, kindsText, files } = e.data
   const fail = (path: string, message: string) =>
     (self as unknown as Worker).postMessage({
@@ -86,6 +103,7 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
   }
   const t1 = performance.now()
   const L = apply(ex.map, cat, checked.dems)
+  last = L
   const t2 = performance.now()
   const img = draft(L)
   const t3 = performance.now()
@@ -93,7 +111,8 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
   const masks = bakeMasks(L)
   const ink = bakeInk(L, waysOf(ex.map.features, L.table))
   const t4 = performance.now()
-  const layers = Object.fromEntries(LAYER_NAMES.map(n => [n, L[n].buffer as ArrayBuffer])) as Record<
+  // copies go to the page: the worker keeps the layers for the overlays (`last`)
+  const layers = Object.fromEntries(LAYER_NAMES.map(n => [n, L[n].slice().buffer as ArrayBuffer])) as Record<
     LayerName,
     ArrayBuffer
   >
@@ -109,10 +128,11 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
     nz: L.nz,
     x0: L.x0,
     z0: L.z0,
-    height: L.height.buffer as ArrayBuffer,
-    depth: L.depth.buffer as ArrayBuffer,
+    height: L.height.slice().buffer as ArrayBuffer,
+    depth: L.depth.slice().buffer as ArrayBuffer,
     layers,
     table: L.table,
+    units: unitKinds(RULESET),
     relief: relief.buffer as ArrayBuffer,
     light: LIGHT,
     masks: masks.buffer as ArrayBuffer,
