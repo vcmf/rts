@@ -52,9 +52,10 @@ of it.
 - **Every scenario in `docs/proposals/unit-scenarios.md`** has an answer in the model.
 - **Era-generic (decision 0015):** the engine knows shapes, faces, sectors, tags and levels. The Napoleonic ruleset
   names line infantry, hussars and the square.
-- **Today's calibrations still hold:** a formation with no level set plays exactly as today, so the fire
-  calibration (lines of quality 0.8 and 0.65 at 100 m: the weaker breaks in 6–10 minutes) and the S1e battle keep
-  their results (§ Experience, *Today's numbers*).
+- **Today's numbers stay the reference:** level 2 keeps today's value for every effect that exists today. The new
+  rules (sectors, the nerve test, collision and the rest) do change results, so each phase re-runs the calibrations
+  (`tools/calibrate-fire.ts` and the others) and the S1e battle, and says what moved (§ Experience, *Today's
+  numbers*).
 
 **Non-goals:**
 - command and control: commanders, rally radius and succession (S2, `docs/proposals/sim-design.md` §6);
@@ -117,7 +118,7 @@ sectors.
 
 **Changes** are timed and partial, as today (`docs/systems/formations.md`):
 - changing shape stops fire;
-- a change caught by cavalry is struck as in the flank, at its partial bracing (B-05, E-05);
+- a change caught by cavalry is struck as in the flank (the rear from behind), at its partial bracing (B-05, E-05);
 - experience scales the times (§ Experience);
 - a change while under fire takes longer and costs cohesion (§ A unit's state).
 
@@ -157,28 +158,30 @@ The same sector reading is used everywhere it matters:
 
 | Where | Front | Flank | Rear |
 |---|---|---|---|
-| **Fire taken** (exposure, × hits) | 1 | enfilade: more (a line about 1.8×, a column about 1.2×) | a little more (about 1.1–1.2×) |
+| **Fire taken** (exposure, × hits) | 1 | more, by shape (§ Exposure by shape) | the same or more, by shape |
 | **Fire given** | the face fires | the face cannot fire: it must change front | it must Face about (3 s) |
-| **A charge's threat and impact** (today's `melee.threat`, `melee.impact.shock`) | 0.12 / 0.2 | 0.25 / 0.35 | 0.3 / 0.4 |
+| **A charge's threat and impact** | `melee.threat.front`, `melee.impact.shock.front` | the `flank` values, larger | the `rear` values, larger still |
 | **Morale pressure while the threat stands** (new) | none | a pressure | a larger pressure |
 
-A square, all faces, is always struck in front (A-06). A march column is struck as in the flank from every sector but
-its head. A formation changing shape has no face: it is struck as in the flank, as today.
+A square, all faces, is always struck in front (A-06). For charges and morale, a march column is struck as in the
+flank from every sector but its head; its fire exposure follows its own row below. A formation changing shape has no
+front: it is struck as in the flank, or the rear from behind, as today (`quarter` in `src/sim/melee.ts`).
 
 ### Exposure by shape
 
 A shape's exposure is how many hits a given amount of fire does to it: the shape's base, times its sector's factor.
-It replaces today's depth factor by kind (`fire.depth`), whose values become the bases. First guesses:
+It replaces today's depth factor by kind (`fire.depth`): each shape's base is its kind's value there, so the front is
+today's. First guesses for the sector factors:
 
 | Shape | Base | Front | Flank | Rear | Why |
 |---|---|---|---|---|---|
-| Line | 1.0 | 1 | 1.8 | 1.2 | enfiladed, a shot that misses one file finds the next |
-| Column of attack | 1.6 | 1 | 1.2 | 1.1 | deep from every side; its flank is a little longer than its front |
-| March column | 1.2 | 1 | 1.5 | 1 | long and thin: end-on from front or rear, broadside from a flank |
-| Square | 1.6 | 1 | | | dense, every side a front |
-| Skirmish order | 0.5 | 1 | | | spread, no flank |
-| Cavalry (any shape) | 1.3 | 1 | 1.2 | 1.1 | large targets |
-| Guns | 0.4 | 1 | 1.5 | 1 | the detachment spread round the piece, its flank along the line of pieces |
+| Line | its kind's (`line`) | 1 | 1.8 | 1.2 | enfiladed, a shot that misses one file finds the next |
+| Column of attack | `column` | 1 | 1.2 | 1.1 | from a flank a shot crosses its whole width, about twice its depth |
+| March column | `column` | 1 | 1.5 | 1 | long and thin: end-on from front or rear, broadside from a flank |
+| Square | `column` | 1 | | | dense, every side a front |
+| Skirmish order | `skirmish` | 1 | | | spread, no flank |
+| Cavalry (any shape) | `horse` | 1 | 1.2 | 1.1 | large targets |
+| Guns | `guns` | 1 | 1.5 | 1 | the detachment spread round the piece, its flank along the line of pieces |
 
 A sector's factor is never below the front's, so fire from a flank or the rear never does less than from the front
 (A-07).
@@ -250,11 +253,14 @@ Five levels. Level 2 sets every effect to today's numbers.
 A scenario sets each formation's level; a category can set a starting level (elite infantry starts at 3 or 4).
 
 **Today's numbers.** A level gives a default `quality`, and an explicit `quality` overrides it, as today. A
-formation with no level set takes level 2's effects, which are all today's values, with its own quality. So:
-- the fire calibration's lines (quality 0.8 and 0.65, `tools/calibrate-fire.ts`) and the S1e-3 battle's veterans
-  (quality 0.85, #51) keep their numbers and their results;
+formation with no level set takes level 2's effects, with its own quality. Level 2's value for every effect that
+exists today is today's value:
+- the fire calibration's lines (`tools/calibrate-fire.ts`) and the S1e-3 battle's veterans (#51) keep their
+  qualities;
 - the first volley counts only inside its range (§ Fire), and the calibration's 100 m and 200 m rows open fire
-  outside it. Its 50 m row changes, and is measured again in U3.
+  outside it.
+
+The new rules still change results; § Goals says how each phase handles that.
 
 ### What a level changes
 
@@ -276,29 +282,31 @@ First guesses, all ruleset data:
 | Cavalry: pursuit, × `charge.pursue` | 2.5× (out of control) | 1.6× | 1× | 0.8× | 0.7× | E-08, E-09 |
 | Rally: quality it costs | 0.15 | 0.12 | 0.1 | 0.08 | 0.06 | G-08 |
 
-How the rows fit today's morale thresholds (`morale` in `src/rulesets/napoleonic.ts`: shaken below 0.6 and back
-above 0.65, wavering below 0.5 and back above 0.55, the rout at 0.4):
-- **Every base is above 0.65,** so a shaken battalion of any level can recover to steady.
-- **Every nerve threshold lies between 0.55 and its base,** so:
-  - a steady recruit battalion stalls after a few per cent of losses;
-  - a veteran one closes until it is well shaken;
-  - a wavering battalion of any level never closes, so the nerve test and the wavering fall-back never give
-    opposite orders.
-- **Rallies:** a rally needs its quality less the rally's cost to stay at or above 0.5, where wavering begins
-  (`morale.wavering[0]`; `src/sim/morale.ts`). Recruits rally once (0.66 − 0.15 = 0.51; the second time 0.36
-  fails), so their second rout shatters them (G-08). Every other level rallies up to `rally.max` (2) times.
-- **Contagion:** recruits feel a neighbour's break more through their lower base: the same shock is a larger share
-  of a smaller gap to the rout. The factor only lowers it above level 2. The ruleset's guard (one shock may not
-  take more than 0.6 of the gap from quality to the rout) is checked at every level's base: at level 0,
-  0.15 ≤ 0.6 × (0.66 − 0.4) = 0.156.
+**What the rows must satisfy.** The morale thresholds, the rally rule and the contagion guard are today's
+(`morale` in `src/rulesets/napoleonic.ts`, `src/sim/morale.ts`). U2 sets the rows so that, at every level:
+- **a fresh battalion starts steady:** its base is above `morale.shaken[1]`;
+- **the nerve threshold lies between `morale.wavering[1]` and the base:** a steady recruit battalion stalls after a
+  few per cent of losses, and a veteran one closes until it is well shaken;
+- **the rallies:** a rally needs quality less `rally.cost` at or above `morale.wavering[0]`. Recruits rally once.
+  The levels above rally until `rally.max`, and a battalion shatters when it routs more than `rally.max` times, as
+  today. A router that can no longer rally because of the quality floor is shattered at once (new), so it leaves
+  the field rather than routing for ever (G-08);
+- **the contagion guard holds:** today's guard, one shock may not take more than 0.6 of the gap from quality to the
+  rout, is checked at each level's base, not the default quality alone. Recruits feel a neighbour's break more
+  through their lower base, so the contagion factor only lowers it above level 2;
+- **the pressures' guard holds,** the same way (§ Morale).
 
-**The scale (H-04):** a level 4 battalion against two level 1 battalions, by the table's fire and morale rows:
-- **its fire:** 1.15 / 22 against 0.9 / 27 each, so the two give about 1.3 times its fire;
-- **its break point:** about 45% losses, against about 23% for each of them;
-- **the result:** it lasts about as long as a level 1 battalion does against one other, and then breaks first.
-  One against one, it wins, with about two thirds of the losses it inflicts.
+U2's plan works these out against the ruleset's values and refuses a ruleset that breaks them, as
+`compileRuleset` refuses today's bad values.
 
-U2 checks this by calibration and tunes the rows if it fails.
+**The scale (H-04):** a level 4 battalion against two level 1 battalions. By the table's rows the two give about
+1.3 times its fire, and it breaks at about twice their share of losses. So the result depends on its targets:
+- **its fire split between them:** it lasts about as long as a level 1 battalion against one other, and breaks
+  first;
+- **its fire on one of them:** that one breaks first, and its neighbour takes the contagion.
+
+Today's targeting (each company's nearest enemy in arc) decides which happens. U2 measures it in a calibration case
+with that targeting, and tunes the rows until H-04 holds.
 
 ### Gaining experience
 
@@ -365,8 +373,11 @@ Roundshot and canister stay as they are (`docs/systems/artillery.md`). The model
 
 ### The nerve test (F-03, F-04)
 
-A formation that is closing and under fire takes the advance's test each tick: if its morale is below its level's
-nerve threshold, the advance stalls. It halts, keeps its orders for when it recovers, and fires if it may.
+A formation that is closing takes the advance's test each tick, under fire or not: if its morale is below its
+level's nerve threshold, the advance stalls. It halts and fires if it may. Its advance is held for when it
+recovers, but the wavering fall-back counts a held advance as no orders, so a stalled battalion that wavers falls
+back as today, and its Retire replaces the held advance. A wavering battalion is below every level's nerve
+threshold, so it never closes.
 
 The distance it stalls at is not a number in the table. It follows from the losses: nearer means more fire, more
 fire means lower morale, and recruits start lower and fall faster, so they stall farther out. A veteran battalion
@@ -397,6 +408,8 @@ Charges and melee work as today, with three additions:
 - **By category** (E-06, E-07):
   - heavy cavalry: more impact and melee strength, armour against sabres, more fatigue, a shorter pursuit;
   - light cavalry: less impact, faster paces, a longer pursuit that it controls by level.
+- **Blown cavalry** (E-10): besides being unable to charge, it fights a melee weaker (about 0.6× strength) until
+  it has rested, so a fresh regiment's charge beats it.
 - **The pursuit by level** (E-08, E-09): recruits pursue out of control, longer and farther, and are blown when
   caught; veterans rally after a short pursuit.
 - **Ground** (E-13, E-14): no gallop over woods, villages, marsh or a barrier its kind cannot jump; uphill takes
@@ -450,10 +463,13 @@ are rectangles, and the separating-axis gap is already in the sim (`docs/systems
     friend cannot fire while the mover is in front of it;
   - **skirmishers** pass through friends freely, and friends through them;
   - **routers** pass through friends, costing them cohesion and a morale shock (`docs/proposals/sim-design.md` §7).
-- **Two movers converging:** each reads the other's position at the start of the step. A mover whose step would
-  enter the other's blocks halts for the tick. When both would, both halt, and a keyed draw on the pair decides who
-  goes first next tick. The draw is keyed by the two handles sorted, so it is the same whichever is visited first.
-  No slot is favoured, and the reversed visiting order gives the same state (`docs/proposals/sim-design.md` §7).
+- **Movers among each other:** each mover's step is proposed from the start-of-step positions, and its swept
+  blocks (from where it stands to where the step ends) are tested against the others' swept blocks, so two steps
+  that each clear the other's start cannot end overlapping. Conflicts are settled in one total order: each mover
+  has a keyed draw for the tick (by the world seed, the tick and its handle), and the movers are taken by that draw.
+  Each in turn takes its step if it is clear of the steps already taken, and halts for the tick if it is not. The
+  order does not depend on the visiting order. It is transitive, so three or more movers cannot lock each other.
+  No slot is favoured over the ticks (`docs/proposals/sim-design.md` §7).
 - **Cost:** block pairs are culled by reach, as fire's friendly-cover test is. Collision runs on the gate's step, so
   it adds a test per nearby pair, not per man.
 
@@ -584,17 +600,21 @@ units they order behave this way. U8 and U9 are Track S's pathfinding and group 
 
 | Phase | What | Scenarios |
 |---|---|---|
-| **U1** | Sectors: one reading for fire, charges and morale; exposure by shape and sector; the share that bears; flank and rear pressure | A-01 to A-10, B-08, C-06, G-04, G-09 |
-| **U2** | Experience: levels, their table, points and levels in battle; `quality` becomes the level's base | B-02, C-02, E-08, E-09, G-05, G-06, H-01, H-04, H-05 |
+| **U1** | Sectors: one reading for fire, charges and morale; exposure by shape and sector; the share that bears; flank and rear pressure | A-01 to A-10, B-08, C-06, G-04 |
+| **U2** | Experience: levels, their table, points and levels in battle; `quality` becomes the level's base | B-02, C-02, E-05, E-08, E-09, G-05, G-06, G-08, H-01, H-04, H-05, I-01 |
 | **U3** | Closing: engagement states, changes under fire, the nerve test, fire discipline, the first volley, the assault | B-03, C-03 to C-05, E-15, F-01 to F-07, L-05 |
-| **U4** | Guns: the guns' pressure, the last salvo, pieces apart from crews, guns taken, gunners sheltering | B-06, D-04 to D-08, L-03, L-04 |
-| **U5** | Categories: light infantry and skirmish order, heavy and light cavalry, horse artillery, the bonus table | D-10, E-06, E-07, E-11, E-12, K-01 to K-05, L-07 |
+| **U4** | Guns: the guns' pressure, the last salvo, pieces apart from crews, guns taken, gunners sheltering | B-06, D-04 to D-08, G-09, L-03, L-04 |
+| **U5** | Categories: light infantry and skirmish order, heavy and light cavalry, horse artillery, the bonus table | B-07, C-07, D-10, E-06, E-07, E-10, E-11, E-12, K-01 to K-05, L-07 |
 | **U6** | Collision: enemies, friends, passages of lines, routers | I-06 to I-09, G-07 |
 | **U7** | Ground with Track M: walls, buildings, barriers' crossings, cover; the 2 m margin bug | C-10, C-11, E-13, E-14, I-13, I-14 |
 | **U8** | Pathfinding (S1f-3): A*, time-sliced, march column on turns | J-01 to J-07 |
 | **U9** | Movement modes; group moves (S1f-4). Fatigue stays in S3 (`docs/proposals/sim-design.md` §17) | I-11, B-10 |
 
-U1 and U2 are the base the rest reads. U6 must come before U8, since pathfinding hands moving formations to
+Outside U1–U9, with the systems they wait on: C-12 (ammunition, S3), H-02 (campaigns), H-03 (commanders, S2),
+I-12 (fatigue, S3) and K-06 (vision, S2).
+
+U1 and U2 are the base the rest reads. G-09 (fire without reply) waits for U4, since it needs U2's levels, U3's
+"under fire" and U4's guns. U6 must come before U8, since pathfinding hands moving formations to
 collision. U5 could come before U3 if the playtests want light troops first.
 
 ## Alternatives considered

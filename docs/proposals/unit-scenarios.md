@@ -122,7 +122,7 @@ Times are battle time; the page plays at 2× by default.
 | G-05 | A veteran battalion beside a breaking recruit one | Takes less of the contagion shock | Morale, experience | no |
 | G-06 | Elite infantry (the Guard) watches the army break | Holds longest; it is the last to go, and its break is the army's (later: an army-wide shock) | Morale, experience | no |
 | G-07 | A router passes through a friendly battalion | Costs the friend cohesion and a little morale | Morale, collision | no (formations pass through) |
-| G-08 | A routed battalion rallies | Comes back brittle (worse quality), and shattered after its second rout | Morale | yes |
+| G-08 | A routed battalion rallies | Comes back brittle (worse quality). It shatters when it routs more than `morale.rally.max` times (today the third rout); recruits rally only once and shatter on their second rout | Morale, experience | partly (no levels; a router below the quality floor routs for ever) |
 | G-09 | A battalion stands under artillery fire for 10 minutes with light losses | A slow pressure: being shot at with no reply wears it down, more for recruits | Morale | no (losses only) |
 
 ## H. Experience
