@@ -1,6 +1,6 @@
 ---
 status: current
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-24
 ---
 
 # Conventions
@@ -24,9 +24,35 @@ last_reviewed: 2026-10-08
 
 ## Code
 
-- One short comment on non-obvious code: the why, not the how.
+Decisions 0052 (layout, by tools) and 0054 (what the tools cannot check). They hold in every file, prototypes
+included, whatever the older code around it does.
+
+- **Layout** (decision 0052, `docs/decisions/0052-code-style.md`): Prettier lays code out (120 columns, no
+  semicolons, single quotes; `npm run format` before committing, `format:check` in `npm test` and CI); ESLint keeps
+  every line within 120 columns, comments included, and one statement and one declaration per line. The areas it
+  covers are `formatted` in `eslint.config.js`; the rest is in `.prettierignore` (prototypes, generated data,
+  `test/fixtures/`). GLSL keeps its own rules.
+- **Formatting PRs**: layout only, no change of behaviour. A new area joins `formatted` and leaves `.prettierignore`
+  in the same PR (`test/format-scope.test.ts` checks the two agree). After the squash merge, a one-line follow-up adds
+  the squashed commit to `.git-blame-ignore-revs`.
+- **Functions**: small, one job each, named for what they do or return. When a function needs comments to explain
+  its parts, split it into named functions instead; prefer named intermediate values to long nested expressions.
+- **Comments**: the why, not the how; short, within 120 columns. In new or touched code, every exported or non-trivial
+  function gets a doc comment (`/** */`): what it does, its parameters with units, what it returns when not obvious.
+  Existing `//` comments stay as they are until that code next changes.
 - Reference docs by repo path in comments (`docs/art-bible.md` §6c), never by bare file name.
-- Prototype-only rules: `prototypes/AGENTS.md`.
+- **TypeScript**: game code is strict TypeScript (decision 0016), and so are new Node tools (`tools/*.ts`). The
+  existing `.js`/`.mjs` tools, the generated `*.data.js` files and Blender's Python stay as they are until rewritten.
+  Type-only imports are `import type`. In `src/sim/` and `src/rulesets/`, lint enforces the determinism rules
+  (decision 0006: no inexact `Math`, `Map`, `Set`, wall-clock time or `Float32Array`) and the layer rules (decision
+  0005: the sim imports only the sim; a ruleset only the sim and rulesets), tested by `test/lint.test.ts`.
+- **Tests**: behaviour Vitest can test comes with tests, and **every bug fix comes with a test that fails without the
+  fix**. Logic buried in browser glue is pulled out into a pure function and tested there
+  (`docs/plans/active/test-gaps.md`). Tests are fast, deterministic and check one behaviour each. Cost tests skip
+  when `CI` is set (run them locally); long ones are `longIt`, skipped under coverage (`AGENTS.md`, Commands).
+  Rendering and the look are checked with the page checks (`tools/`), each new check with a negative test
+  (`tools/check-negatives.mjs`).
+- Prototype-only rules: `prototypes/AGENTS.md` (not formatted or linted: these rules are checked in review there).
 
 ## Docs
 

@@ -72,7 +72,8 @@ vec3 foliage(vec3 a,vec3 b,float t,float kind){
 // REAL sun shadow from the depth pass; PCF taps jittered by the paint grain,
 // so shadow edges come out brushy instead of pixel-sharp.
 uniform sampler2D uShadowMap;uniform mat4 uLightVP;uniform vec2 uSMTexel,uSMFade;uniform float uShadowsOn;
-float shadowAt(vec3 wp,vec3 n){
+// (shadowAtRaw: without the panel's switch, uShadowsOn: the buildings' light bake stores it, src/look/building-light.ts)
+float shadowAtRaw(vec3 wp,vec3 n){
   vec4 lp=uLightVP*vec4(wp+n*0.6,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
   if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;   // outside the sun's view (incl. beyond its far plane) = lit
   float d=q.z*0.5+0.5-SBIAS;
@@ -80,7 +81,34 @@ float shadowAt(vec3 wp,vec3 n){
   float s=0.0;
   for(int x=0;x<2;x++)for(int y=0;y<2;y++)s+=step(texture2D(uShadowMap,uv+(vec2(float(x),float(y))*2.0-1.0+j)*uSMTexel).r,d);
   vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,uSMFade.x,e.x)*smoothstep(0.0,uSMFade.y,e.y);   // soft edge: far foliage past the box fades to lit
-  return s/4.0*uShadowsOn*fade;}
+  return s/4.0*fade;}
+float shadowAt(vec3 wp,vec3 n){return shadowAtRaw(wp,n)*uShadowsOn;}
+#ifdef UNIT_SHADOWS
+// THE FIGURES' CAST SHADOWS (decision 0047; src/look/units.ts): their own depth map from the sun (a depth texture with
+// a comparison sampler), fitted to the ground in view (the figures move: only moving things get runtime light), read
+// soft and fading out at the map's border. Only the materials they fall on get UNIT_SHADOWS, only with armies
+uniform highp sampler2DShadow uUnitSM;
+uniform mat4 uUnitVP;uniform vec2 uUnitTexel;uniform float uUnitBias;
+// a bilinear comparison at t (in texels): the hardware's, one read (the share of the four texels round t in shadow)
+float unitPCF(vec2 t,float d){return 1.0-texture(uUnitSM,vec3(t*uUnitTexel,d));}
+// two bilinear comparisons a texel either side of the point along a direction the grain turns, so a texel's step
+// becomes a ramp two texels wide, broken by the grain into a brush edge
+float unitShadowAt(vec3 wp){
+  vec4 lp=uUnitVP*vec4(wp,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
+  if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0||q.z>1.0)return 0.0;
+  float d=q.z*0.5+0.5-uUnitBias;
+  vec2 j=(vec2(texture2D(uGrain,wp.xz*1.7).r,texture2D(uGrain,wp.zx*1.7+0.3).r)-0.5)*1.5;
+  vec2 o=vec2(cos(j.x*4.0),sin(j.x*4.0))*0.75+j*0.5;
+  float s=(unitPCF(uv/uUnitTexel+o,d)+unitPCF(uv/uUnitTexel-o,d))*0.5;
+  vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,8.0*uUnitTexel.x,e.x)*smoothstep(0.0,8.0*uUnitTexel.y,e.y);
+  return s*uShadowsOn*fade;}
+#endif
+#ifdef UNIT_SHADOWS
+// the figures' shadow at a point: the map's, its share of the zoom's cross-fade (uUnitFar: the simple shadows' share,
+// decision 0049; they are drawn over the receivers, src/look/shaders/unitdecal.frag), read only where it counts
+uniform float uUnitFar;
+float unitShadowMix(vec3 wp){return uUnitFar<1.0?unitShadowAt(wp)*(1.0-uUnitFar):0.0;}
+#endif
 // BAKED LIGHT MAP (world XZ): R sun visibility, G occlusion, B valley-mist mask, A the contact under trees (outside the
 // map: 1, no contact). groundOcc: the occlusion of the ground and what grows flat on it, contact included
 uniform sampler2D uLM;uniform mat4 uLMVP;uniform float uAO,uMist,uShafts,uBack;

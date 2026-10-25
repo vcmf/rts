@@ -45,8 +45,10 @@ advanceTick: 1 commands · 3 the plan · 4 standing behaviour · 5–6 formation
 
   `sin`, `cos` and `atan2` are polynomials of exact operations (`num.ts`), within 1e-12 of `Math`.
   `sin` and `cos` are exact for |x| ≤ 1e5 and throw beyond that (a bug: headings stay in (−π, π]).
-  `atan2` returns values in (−π, π] with no −0. Decision 0006 names tables; `docs/proposals/sim-design.md`
-  §2 allows tables or polynomials, and polynomials need no data file.
+  `atan2` returns values in (−π, π] with no −0 (#157: a zero result is made +0 at the return, whatever the sign of
+  `y` or an underflowed ratio); `quantise` and the command angles' 0.1 mrad rounding give +0 for what rounds to
+  zero. Decision 0006 names tables; `docs/proposals/sim-design.md` §2 allows tables or polynomials, and polynomials
+  need no data file.
 - **Order:** every loop runs in slot order.
 - **Budget:** `docs/proposals/sim-design.md` §16 targets ≤ 2 ms per tick. Measured in `test/formations.test.ts`:
   40 battalions of 400 of every shape, moving, about 5 ms per tick on a dev Mac (1.2 ms at 100 men; over
@@ -74,21 +76,38 @@ advanceTick: 1 commands · 3 the plan · 4 standing behaviour · 5–6 formation
     not thrown.
 
   `issue` stamps `tick + 1` and a sequence number, and quantises positions to 1 cm and angles to 0.1 mrad.
+  It never throws. One table per command type (`command-fields.ts`: its fields in save order and the kind of
+  each) drives `normaliseCommand`, `quantiseCommand` and the save. `normaliseCommand` checks each command once
+  against it (a handle or a count: an int32; a number: finite, |v| ≤ 1e9, so quantising stays exact and
+  idempotent; a string; a flag; 1..64 `[x, z]` pairs of such numbers, read by index, the list's length a whole
+  number; optional fields with their defaults), reading each field once, and quantises it: the result is canonical
+  (normalising it again changes nothing) or `{ type: 'refused', reason }` (#155), with `unknown command` (no
+  command, an unknown type, a `refused` with a reason that is not one of these), `malformed command` (a field of the
+  wrong kind or out of bounds: a number given as a string, NaN or ∞, 2.9 men, or a read that throws), `malformed
+  waypoints`, `no waypoints` or `too many waypoints`. Strings are made well-formed (a lone surrogate becomes U+FFFD).
+  So every queued and logged command, `refused` included, is one a save writes and reads back as it was and a JSON
+  log holds, and a replay re-issuing it gets the same command, sequence number and drop.
   `applyCommands` validates at the start of that tick and drops an invalid command with a reason
-  (returned by `advanceTick`), never throwing and changing nothing. It checks: an unknown type, a stale
-  tick, an alive handle, the side, the shape and preset names, the men, inside the map, at most 64
-  waypoints, and order-pool room (checked before a replacing order frees the old ones). Reaping clears
+  (returned by `advanceTick`), never throwing and changing nothing. It trusts the queue's shapes and checks the
+  rules: a `refused` command (its reason), an unknown type (a guard for a command pushed straight into `pending`), a stale
+  tick, an alive handle, the side, the shape and preset names, the men, inside the map, and order-pool room (checked before a replacing order frees the old ones). Reaping clears
   every column of a formation's row and moves its generation on.
 - **RNG** (`rng.ts`): `xoshiro128**` with `Math.imul`, seeded by splitmix32; `sampleCount` draws an
-  integer around an expected value from 12 uniforms (no `log` or `cos`).
+  integer around an expected value from 12 uniforms (no `log` or `cos`); an expected value ≤ 0 gives 0 and a NaN or
+  infinite one gives NaN, both without a draw (#158): a bad value passes through as the sim's maths pass a NaN, for
+  the debug finite-state check to catch where it lands in state.
 - **Serializer** (`serialize.ts`): named sections (meta, RNG, formations, free list, order pool, pending
   commands), little-endian; commands are written field by field from a table per type. A table's columns are written in name order (`columns`), so a new
   column is saved and hashed with no list to update. `hashWorld` is FNV-1a over all of it; `sectionHashes` per section.
   A typed array is copied as its own bytes on a little-endian machine (every target), the same bytes as
   number by number (S1c-5: 0.5 ms for the 1.5 MB world of 40 battalions of 400; the hash itself, 2 ms, is
   FNV-1a's byte loop, kept so the hashes stay).
-  `deserialize` refuses a save made with other data or another ruleset.
-- **Replays** (`replay.ts`):
+  `deserialize` refuses a save made with other data or another ruleset, and checks each pending command again with
+  `normaliseCommand` (one that is not canonical, written by hand or by an older sim, is refused, not applied).
+- **Replays** (`replay.ts`): `SIM_VERSION` is `s1e.3` (from `s1e.2` with #155–#158: a zero that was −0 is +0,
+  other bytes in some states, and a malformed command is stamped as `refused`), so `play` refuses an older replay
+  cleanly rather than reporting a mismatch. `SAVE_FORMAT` is 12 (a pending command may be `refused`); the bump
+  changes only the save's header, which `hashWorld` covers, so the goldens were regenerated with no state changed.
   - `record` runs a scenario (`{ name, setup }`) with external commands and keeps the log and the
     hashes.
   - `play` checks the ruleset, the scenario name and that the log is in tick order within the replay, re-issues it
@@ -125,7 +144,8 @@ the cell sizes in `tools/build-sim-data.ts`.
   next hash point, a log out of order or past its end, another scenario, another ruleset;
 - save in the middle of a shape change with a logged order pending, load, continue: the same hashes;
 - the hash covers every typed array in the world (found by walking it) and the pending commands;
-- bad commands are dropped with a reason and change nothing; a pending command crosses a save unchanged;
+- bad commands are dropped with a reason and change nothing; a malformed one of every type is stamped as `refused`,
+  saves, loads and drops the same (`test/saves.test.ts`); a pending command crosses a save unchanged;
 - lint: `src/sim/` clean, and every construct in `test/fixtures/banned-in-sim.ts` reported on its line;
 - data version: another map gives another version, refused by saves, replays and `loadSimData`;
 - era genericity: `src/sim/` names no shape, pace, preset or class of the Napoleonic ruleset, and a

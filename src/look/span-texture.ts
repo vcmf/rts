@@ -9,8 +9,23 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 import { unpackSpans, type SpanGrid } from './world/data.ts'
 
-export function spanTexture(scene: Scene, g: SpanGrid, fill: [number, number, number, number], name: string): RawTexture {
-  const tex = RawTexture.CreateRGBATexture(unpackSpans(g, fill), g.n, g.n, scene, false, false, Texture.BILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_UNSIGNED_BYTE)
-  tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE; tex.name = name
+export function spanTexture(
+  scene: Scene,
+  g: SpanGrid,
+  fill: [number, number, number, number],
+  name: string,
+): RawTexture {
+  const tex = RawTexture.CreateRGBATexture(
+    unpackSpans(g, fill),
+    g.n,
+    g.n,
+    scene,
+    false,
+    false,
+    Texture.BILINEAR_SAMPLINGMODE,
+    Constants.TEXTURETYPE_UNSIGNED_BYTE,
+  )
+  tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE
+  tex.name = name
   return tex
 }

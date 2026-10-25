@@ -1,0 +1,150 @@
+---
+status: done
+last_reviewed: 2026-10-20
+---
+
+# Plan: the first buildings, a windmill and village houses
+
+The owner (2026-10-20): put a windmill in the wheat field and houses in the village of the demo map, to make the scene
+more complete and to find what new trouble buildings bring (light, shadows, the ground under them, readability, the
+frame's cost). The models are Tripo exports from the owner's concept images (art bible §10): `assets/buildings/
+windmill.zip` (from `10-reference-windmill`) and `house.zip` (from `06-reference-stone-house`), each one mesh of about
+4,500 faces normalised to a unit box, with one baked colour texture. Out of git, as the other asset packs.
+
+The owner's choices (2026-10-20): the sails static (the X pose; turning sails later, with a runtime shadow: only moving
+things get runtime light); the colour by palette roles with the texture's value as fine detail.
+
+## Approach
+
+- **Import** (`tools/building-to-js.py`, Blender headless, as `tools/blend-to-js.py`): the FBX to a JS data file
+  (`prototypes/buildings.data.js`, generated, like `prototypes/nature-pack.data.js`): positions in metres (the model
+  scaled to a set height: the windmill about 14 m to the cap, the house about 11 m long), normals, UV0, and a
+  per-vertex role. The
+  role per face by its texture: the median colour under the face's UV triangle, nearest (in Lab) to a short list of
+  reference colours per model (wall, roof, timber, opening), the list in the script beside the model. The value
+  detail: the texture to greyscale, each role's own mean divided out (so it varies about 1 per role), a small
+  mipmapped texture per model (`data/buildings/<model>-detail.png`, generated).
+- **Material** (`src/look/buildings.ts`, `shaders/building.vert/.frag`): the painter (`withPainter`, as nature.frag):
+  the role's palette colour (new mood-aware role colours: a pale stone wall, an ochre tower, a slate roof, a red tile
+  cap, dark timber, dark openings) times the detail value (its contrast set low: 0.25-0.4, the paint's grain on top),
+  the ramp, the cast shadow and the sky's occlusion from the bakes, the snow on upward faces in winter, the grade.
+  Readable first: the buildings' saturation under the armies' (the guard).
+- **Placement** (`src/look/world/buildings.ts`, authored, deterministic): the windmill in the large wheat field (its
+  north-east part, `rect(50, 48, ...)`), the houses (6-8, the one model turned and scaled ±10 %) in the village
+  ground east of the road, facing the road; none in a formation zone, on the floodplain, on a road or track. Each
+  sits on the heightfield at its footprint's lowest corner, sunk 0.2 m.
+- **The ground under them**: the cover grid's footprints (and their yards, below) as the village's trodden ground
+  (`village`, not `bare`: the scatter keeps its stones off the village, not off bare earth), so nothing grows through
+  a floor (the meadow's and the scatter's own rules read the cover; a hidden placement keeps the scatter's stream).
+- **Light**: in the shadow bake (it takes the scene's meshes: check the name filter), in the light map's occlusion if
+  the trunks' route fits, and in the ground bounce; static, baked once.
+- **Performance**: one draw a model (instanced), about 9k faces in all; the bench before and after.
+
+- **The paving** (the owner, 2026-10-20: "makes more sense"): a paved yard under each building, the owner's seamless
+  painterly cobbles (`data/paving-v1.png`, 1024²; its prompt: "top-down seamless tileable cobblestones and flagstones
+  in packed earth, hand-painted, even flat light, muted grey stone and ochre joints, each stone ~1/30 of the image").
+  The house's footprint grown 2.5 m all round and 6 m at its door (a yard toward the road), the windmill's a ring 3 m
+  round its base; exact shapes (the footprints' centre, half sizes and turn, or a circle) as uniform arrays (≤ 16),
+  its edge ragged into the ground by a noise-wobbled distance (as the roads' edge). Painted in `roadPaint`'s path
+  (shore.glsl, `pavePaint`) only where the cover paints the village's ground worn to nothing: the buildings' cover
+  grows to the paving's reach, so the road split's live material carries it and the rest of the ground pays nothing.
+  Tiled at 4.5 m (stones about 15 cm), mipmapped, read with explicit gradients; its colours kept at 0.8 of their spread
+  round the mean; the season, snow and light the ground's. The macro bake paints the cobbles' mean (at 0.5 m texels
+  the stones average to it). Its level of detail as the roads': the cobbles fade out from a 7 cm to a 22 cm pixel
+  footprint into their mean in a soft blotch (no texture read past it), the bake's look, so the swap is seamless.
+
+## Acceptance
+
+- The windmill and the houses on the map, painted in the look: screenshots at the start view, close, wide, each season,
+  shown to the owner.
+- Nothing grows through a building; no building in the water, on a road or in a formation zone (a check in the
+  placement, failing the page's load as the cover's checks do).
+- Their cast shadows on the ground (baked), no shadow acne on the walls.
+- The guard as main (the armies still the most saturated); the bench against main: the cost stated.
+- `npm test`; the checks as main (#118, #120).
+
+## Open questions
+
+- The light map's sky occlusion near a building (a dark ring at its foot, as under the trees?).
+- The windmill at the field's edge or centre: the owner's eye.
+
+## Status (2026-10-20)
+
+- Built: the import (roles: windmill 727 wall, 144 roof, 6,947 timber, 24 openings of 7,842 faces; house 2,408 wall,
+  1,691 roof, 2,450 timber, 863 openings, 865 accent of 8,277), the material, the placement (the windmill at (78, 66),
+  houses in the village), the footprints in the cover (the look data rebuilt), the shadow bake
+  and the light map's occlusion (a blob at each building's foot, as the trees').
+- The instance yaw: first read wrongly from a screenshot (the yards were then built in the inverse frame, behind the
+  turned houses' doors); review round 1 measured it, with Babylon's Matrix and on the page (house 1 at a yaw of
+  −π/2 + 0.14 had its door, local (0, −3.35), at (+3.32, −0.47) from its centre): a local point (x, z) goes to
+  (x cos + z sin, −x sin + z cos). Now one rule (`toWorld`, `toLocal`) for the footprints, yards, ground samples and
+  the shader's frame, pinned by `test/buildings.test.ts`.
+- The paving built (2026-10-20): `pavePaint`, the cover's footprints grown to the yards (`onPaving`).
+- The owner's second round (2026-10-20): the houses each a quarter turn of its own (doors to the road, gable to it,
+  side-on, back to it) and a little more, in an irregular cluster; six fit the village ground with their yards at
+  least 4 m apart (`PAVE_GAP`, checked by the cover's authoring and `test/buildings.test.ts`). The paving's level of
+  detail as the roads': the cobbles fade out from a 7 cm to a 22 cm pixel footprint into their mean in a soft blotch,
+  no texture read past it; the macro bake paints the same. The windmill's specks (its tower, the slates too): the sun's
+  shadow on the surface itself near the light's grazing angle and the grain at the ground's strength on flat faces:
+  the shadow looked up 15 cm off the surface, the band edges' grain at a third; the detail texture over its local mean
+  (a texel's guessed role flipped on the brown tower); the tower's wall warmer, to the reference's ochre. (The
+  sails' cast shadow stepped across the tower at the shadow map's resolution; the solid blades, below, cast it now.)
+- The triangles cut (the owner, 2026-10-20: about 26 cm a triangle at the source, two or three pixels at the default
+  zoom, under one wide, so likely shaded several times a pixel: an estimate, the bench to measure it): the import dissolves the flat regions (within 4°, never across a role or a UV seam: across
+  one the detail's UVs smeared over the house's back roof) and collapses to 2,300 triangles a model (the windmill
+  7,842 → 2,300, the house 8,277 → 2,299; the data file 1.62 → 0.57 MB). The windmill's lattice sails (2,334 of its
+  triangles), which no cut keeps, are made again in the same X as four solid canvas blades (the accent role, a pale
+  canvas) on timber stocks. Review round 2: the model centred on its base band, not its whole box (the sails, now
+  to one side, had moved the windmill's tower 0.74 m off its origin); the new boxes' faces outward (they faced in);
+  the arms clustered by angle and exactly four required; the sails on a neutral detail texel; the collapse not held at
+  the UV seams (held, it could not cut: Tripo's atlas puts 94-96 % of the vertices on one) but its smear measured and
+  bounded (0.000 for both).
+- Metal (2026-10-20): the paving's sampler, in `roadPaint`'s path, reached the water's materials too, a 17th texture
+  unit, which ANGLE-Metal refuses (16 a fragment shader; SwiftShader allows more, so the checks passed): the page never
+  got ready on the owner's GPU. The paving now under `PAVING` (the tile terrain's live material, 16 units) and
+  `PAVING_FAR` (the macro bake, no texture); the water's 16. `Materials.make` counts each compiled program's samplers
+  and stops the page past 16; `tools/shot.mjs` stops a run at once on a shader that does not compile.
+- Review round 3 (2026-10-20): the guard counts the fragment stage alone (Metal's limit is a stage's) and stops the
+  page from its render loop (Babylon caught the throw in onCompiled and kept the effect drawing); the cobbles packed
+  into the road grit's G and B (`tools/paving-pack.py`: the two principal axes keep 99.7 % of their colours' variance,
+  1/255 rms), so the terrain's live material is at 15 units; the sails built after the cut (a cut after them could
+  flatten their thin boxes), their faces checked then; the generated faces a UV below 0, no detail (Tripo packs its
+  atlas full: a neutral block in a corner overwrote both models' detail); the yards' zone and floodplain check over the
+  yard's cover margin; `tools/shot.mjs` stops only on a compile error no fallback follows; `segD` shared
+  (`world/geom.ts`).
+- The cost at the village's closest (2026-10-21, Metal, interleaved, three rounds): main about 6.6-7.1 ms; the buildings
+  with the paving about 7.9; the buildings hidden, the paving kept, about 7.6; the buildings drawn flat about 7.6; the
+  paving off, the buildings kept, about 7.0. So the paving was most of the +1.2 ms: its code in the live roads'
+  material, which drew every triangle near any road (the road split's lesson: a shader's size costs every pixel it
+  draws), and its shapes' loop run on the whole village's ground, not its yards. The fix, the same pixels (golden
+  against f630fe7: at most 9 pixels of 1/255 a view, the frame readout aside): a third tile material, the live roads
+  with the paving on the triangles near a yard alone (0.7 % of the tile; the roads alone 7.2 %, neither 92.1 %), and
+  the loop gated by a yard marker in the cover (`YARD_MARK` in B on the yards' texels, under the reach the paving
+  paints). To measure again.
+- Ablation at the village's closest (2026-10-21, Metal, three rounds, medians, 48ae609 with temporary switches): the
+  whole 7.80 ms; the paving returning at once 7.10 (its own work about 0.7 ms); the cobbles' texture read off 7.72
+  (about 0.1: not the texture); the yards' pixels skipping the road search after the paving 7.53 (about 0.3); main
+  6.58. So the cost was the paving's arithmetic (its loop over every building's shape and four noises) and the yards
+  running the road search (their texels worn 0, as on a line, passed the roads' gate). The fix, the same pixels (golden
+  against 48ae609: at most 12 pixels of 1/255 a view; the village, the windmill and the winter village identical): a
+  yard's texel names its building (`YARD_BASE` plus its index: one shape a pixel; `YARD_ALL`, every shape, where two
+  yards are within reach of a texel: none on today's map); the edge's two noises only near the edge (the yard's inside
+  is whole: exactly); a yard's texels worn by their distance to the lines, the paving before the roads' gate, so a yard
+  far from a road skips the road search. To measure again.
+- Measured after the fix (cccf70a, Metal, three rounds): the village's closest main 6.55 ms, with the buildings 6.92
+  (48ae609: 7.77): +1.25 down to +0.35 ms; the village's default +0.15; the windmill's view cheaper than main (0.65 ms at
+  the closest, 0.2 at the default: the buildings hide ground and grass). Review (2026-10-21): the encoded index guarded
+  in the shader and checked against BUILDINGS at load (a stale look data stops the page: rebuild it); the edge's
+  constants (PAVE_WOB, PAVE_EDGE, PAVE_INNER) the shader's defines from world/buildings.ts, pinned by a test; a yard's
+  texel turned back to meadow keeps the ring's wear; a test that a yard's A is no more than its distance to a line.
+- To do: the owner's look; the guard and the checks.
+
+## Next
+
+- The ring round each yard (its trodden falloff: the meadow's texels within YARD_PAD and the wear's reach) still
+  passes the roads' gate: there A carries its distance to the yard, the meadow's wear, so a pixel runs the road search
+  (coverWarp, roadAt) for nothing. The fix separates the cover's distance to a line (the roads' gate) from its wear (the
+  trodden look): a format change, its own channel or a second texture, for a follow-up. Its share of the remaining
+  +0.35 ms is an estimate only, perhaps a third (the ring's pixels against the yards' at the village's closest), until
+  measured.
+

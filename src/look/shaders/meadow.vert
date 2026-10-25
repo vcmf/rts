@@ -10,6 +10,29 @@ uniform vec3 uCamPos,uFocus;   // (the zoom: how far the camera stands from the 
 varying vec3 vFlow;   // the combed meadow: the clump hue (a hash), the growth at its root, how far it is from winter (1 to 0)
 #endif
 #include<meadow>
+#ifdef TRAMPLE
+// the grass trodden under the formations (batch C, src/look/units.ts trample): shorter and pressed where they stand and
+// just behind; uTrampleBox: the mask's world corner and 1 / its size
+uniform sampler2D uTrample;uniform vec4 uTrampleBox;varying float vTrample;
+#endif
+#ifdef UNIT_SHADOWS_VS
+// the figures' cast shadow (decision 0047) read once a blade, at its root on the ground, for the whole blade: the
+// fragment's own read (painter.glsl, unitShadowAt) is two comparisons and the grain a pixel over many layers of blades.
+// One bilinear comparison (the depth map's comparison sampler) and the border fade, no jitter (its edge is the blade's).
+// Its share of the zoom's cross-fade with the simple shadows (decision 0049): 1 - uUnitFar, as the ground's
+uniform highp sampler2DShadow uUnitSM;
+uniform mat4 uUnitVP;uniform vec2 uUnitTexel;uniform float uUnitBias;uniform float uShadowsOn,uUnitFar;
+varying float vUSh;
+float unitShadowRoot(vec3 wp){
+  float s=0.0;
+  if(uUnitFar<1.0){
+    vec4 lp=uUnitVP*vec4(wp,1.0);vec3 q=lp.xyz/lp.w;vec2 uv=q.xy*0.5+0.5;
+    if(uv.x>=0.0&&uv.y>=0.0&&uv.x<=1.0&&uv.y<=1.0&&q.z<=1.0){
+      float d=q.z*0.5+0.5-uUnitBias;
+      vec2 e=min(uv,1.0-uv);float fade=smoothstep(0.0,8.0*uUnitTexel.x,e.x)*smoothstep(0.0,8.0*uUnitTexel.y,e.y);
+      s=(1.0-texture(uUnitSM,vec3(uv,d)))*fade*(1.0-uUnitFar);}}
+  return s*uShadowsOn;}
+#endif
 // the meadow map at a point: one bilinear read (half floats filter), its growing area shrunk a texel on the CPU so
 // the blend never crosses a rule (src/look/meadow.ts)
 vec4 meadowAt(vec2 xz){return texture2D(uMeadow,(xz+TILE_HALF)/TILE_W);}
@@ -86,12 +109,22 @@ void main(){
     hgt=min(hgt*mix(1.0,GRASS_TALL,nearK),HEIGHT_MAX);fp*=mix(1.0,GRASS_WIDE,nearK);   // larger blades (the owner): wider clumps, a little taller, never over HEIGHT_MAX
     #endif
   }
+  #ifdef TRAMPLE
+  // (outside the box: none, not its clamped edge smeared outward)
+  vec2 tu=(root-uTrampleBox.xy)*uTrampleBox.z;
+  float trod=tu.x>=0.0&&tu.y>=0.0&&tu.x<=1.0&&tu.y<=1.0?smoothstep(0.1,0.7,texture2D(uTrample,tu).r):0.0;
+  hgt*=1.0-0.8*trod;vTrample=trod;
+  #endif
   if(hgt<0.02){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
   float a=h4*6.2832,ca=cos(a),sa=sin(a);
   vec3 p=vec3(position.x*fp,position.y*hgt,position.z*fp);p.xz=vec2(ca*p.x-sa*p.z,sa*p.x+ca*p.z);
   // a crop's stalks stand straight (docs/plans/done/crop-depth.md): a blade's spread drawn in toward its root's
   // axis as it rises (the grass clump fans out), and barely any lean
-  if(crop)p.xz*=CROP_WIDE/(1.0+CROP_FAN*aV);   // the grass clump's spread grows about 1 + CROP_FAN aV up its blades (measured): undone, the stalks parallel, CROP_WIDE times the root's spread
+  if(crop)p.xz*=CROP_WIDE/(1.0+CROP_FAN*aV);
+  #ifdef TRAMPLE
+  // (pressed: the trodden blades splay out flat)
+  p.xz*=1.0+1.2*trod*aV;
+  #endif   // the grass clump's spread grows about 1 + CROP_FAN aV up its blades (measured): undone, the stalks parallel, CROP_WIDE times the root's spread
   #ifdef GRASS_FLOW
   // combed (docs/plans/done/grass-flow.md): the clump leans with the flow, bending more toward its tips (the
   // offset grows with the height squared), as far as the flow lies it over, the hash a small jitter; not crops
@@ -112,4 +145,7 @@ void main(){
   #endif
   vN=n;vW=w;vV=aV;vShade=c;   // the clump field (the ground colour under it, groundArm, already holds the brush pattern)
   vH=p.y;vRoot=root;vIsCrop=crop?1.0:0.0;vCrop=cr.yzw;
+  #ifdef UNIT_SHADOWS_VS
+  vUSh=unitShadowRoot(vec3(root.x,m.r,root.y));
+  #endif
   gl_Position=viewProjection*vec4(w,1.0);}

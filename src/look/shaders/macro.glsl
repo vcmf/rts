@@ -17,7 +17,8 @@ float lieOf(float a){float d=a-LIE0;return abs(d)<0.003?0.0:d*1.2;}
 uniform sampler2D uMacro,uMacroFar;   // the bakes: the tile at SPEC.macro.texel, the far ring at SPEC.macro.far
 #endif
 // the cover cell at a world point: class (0..9), field id (0 off fields, else a hash in 1..255), furrow direction
-// (rad), wear distance (m, to the nearest road, track or village ground; 25.5 at or past its reach)
+// (rad; on a building's yard, B the building it shows: src/look/world/cover.ts), wear distance (m, to the nearest road,
+// track or village ground; on a yard to the nearest road or track alone; 25.5 at or past its reach)
 // (nearest, no mips: on WebGL2 read with zero derivatives, so a read in a branch the pixels of a quad take differently
 // is defined, as arm 4's strokes do)
 #ifdef WEBGL2
@@ -95,8 +96,9 @@ vec2 coverWarp(vec2 xz){return xz+(vec2(blot(xz,23.0),blot(xz+11.0,23.0))-0.5)*C
 // ground, ploughed land, bare earth, a little on the road, the worn ground by the lines), the dirt texture (the
 // owner's, scratches, drag marks and splats, about DIRT_M m a repeat) in its value, around 1 so the class colour holds
 // on average. Mipmapped: its fine marks average out where a pixel spans them, so they do not flicker
-uniform sampler2D uDirt;uniform float uDirtOn;   // 1 once the dirt texture has loaded (src/look/macro.ts)
-uniform sampler2D uEarth;uniform float uEarthOn;   // the earth's surface (earthOn, below): 1 once its texture has loaded
+// the ground's surfaces, packed (src/look/macro.ts, one texture unit for two: decision 0049): R the dirt, G the earth
+uniform sampler2D uSurf;uniform float uDirtOn;   // 1 once the dirt texture has loaded (src/look/macro.ts)
+uniform float uEarthOn;   // the earth's surface (earthOn, below): 1 once its texture has loaded
 // how far a pixel of macro colour c takes the earth's cracks (earthOn), at footprint px: the colour is the mask (the bake
 // painted the soil where the ground is bare), as far as it reads as bare loam (its red over its green by 1.10 to 1.18:
 // the grass, wheat, stubble and village stay under) and is no saturated colour (a meadow's orange flower is no earth:
@@ -129,7 +131,7 @@ vec3 dirtOn(vec3 c,vec2 xz,float px){
   b=max(b,wearOf(cv))*fade*(1.0-earthWeight(c,px));if(b<=0.0)return c;   // (where the cracks lie, not the dirt too)
   // two reads at unrelated scales and offsets, so the texture's own marks (a dark smear) do not repeat in rows, about
   // its measured mean (0.458), so the class colour holds on average
-  float d=(texM(uDirt,xz/DIRT_M,DIRT_M).r+texM(uDirt,xz/(DIRT_M*1.618)+vec2(0.37,0.61),DIRT_M*1.618).r)*0.5;
+  float d=(texM(uSurf,xz/DIRT_M,DIRT_M).r+texM(uSurf,xz/(DIRT_M*1.618)+vec2(0.37,0.61),DIRT_M*1.618).r)*0.5;
   return c*mix(1.0,clamp(1.0+(d-0.458)*0.8,0.6,1.35),b);}
 // (colour, the snow's lie as LIE0 + lie/1.2). q 1: the bake's, the edges blended over 9 taps a metre apart with a
 // darker margin where classes meet (a headland or a verge); q 0: one tap. px: the footprint, m (the bake's texel, or
@@ -185,11 +187,11 @@ vec3 earthOn(vec3 c,vec2 xz,float px){
   // (the second read turned: its gradients turned with it, for the anisotropic filter)
   mat2 R=mat2(0.8253,-0.5646,0.5646,0.8253);vec2 u2=R*xz/(EARTH_M*1.618)+vec2(0.37,0.61);
   #ifdef WEBGL2
-  float d2=textureGrad(uEarth,u2,R*pMdx/(EARTH_M*1.618),R*pMdy/(EARTH_M*1.618)).r;
+  float d2=textureGrad(uSurf,u2,R*pMdx/(EARTH_M*1.618),R*pMdy/(EARTH_M*1.618)).g;
   #else
-  float d2=texture2D(uEarth,u2).r;
+  float d2=texture2D(uSurf,u2).g;
   #endif
-  float d=texM(uEarth,xz/EARTH_M,EARTH_M).r*0.6+d2*0.4;
+  float d=texM(uSurf,xz/EARTH_M,EARTH_M).g*0.6+d2*0.4;
   return c*mix(1.0,clamp(1.0+(d-0.632)*1.3,0.45,1.4),e);}
 #ifdef MEADOW
 // the meadow pattern (docs/plans/done/l5c-meadow.md) on meadow and pasture (k, the class the ground paints): the

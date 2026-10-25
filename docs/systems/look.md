@@ -1,8 +1,8 @@
 ---
 status: current
-last_reviewed: 2026-10-19
-code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts]
-decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood]
+last_reviewed: 2026-10-24
+code: [app/look.html, src/look/main.ts, src/look/mood.ts, tools/coat-check.mjs, src/look/spec.ts, src/look/heightfield.ts, src/look/world/author.ts, src/look/world/data.ts, data/painted-world.lookdata, tools/build-look-data.ts, tools/look-check.js, test/look-spec.test.ts, src/look/noise.ts, src/look/river.ts, src/look/grain.ts, src/look/materials.ts, src/look/terrain.ts, src/look/water.ts, src/look/nature.ts, src/look/bakes.ts, src/look/post.ts, src/look/shaders/, tools/golden.mjs, tools/check-negatives.mjs, src/look/bench.ts, src/look/gputimer.ts, src/look/lab.ts, tools/bench-look.mjs, tools/guard.mjs, tools/look-page.mjs, tools/detail-check.mjs, src/look/span-texture.ts, src/look/world/water-data.ts, tools/water-check.mjs, test/water-data.test.ts, tools/water-look-check.mjs, src/look/world/cover.ts, src/look/macro.ts, tools/macro-check.mjs, test/cover.test.ts, src/look/meadow.ts, src/look/meadow-spec.ts, data/meadow-grass.json, src/look/canopy.ts, src/look/leaves.ts, data/leaf-clumps-oak-v1.png, prototypes/tree-core.js, src/look/flow.ts, src/look/units.ts, src/look/units-data.ts, src/look/shadow-look.ts, test/shadow-look.test.ts, src/look/world/armies.ts, tools/bake-figure.py, data/figures/fr-line-infantry.unitdata, test/armies.test.ts, tools/guard.mjs, src/rulesets/napoleonic-uniforms.ts, src/scenarios/armies-demo.ts, src/look/trace.ts]
+decisions: [0001-painterly-look-in-materials, 0002-top-down-camera-no-sky, 0024-blur-as-player-option, 0010-locked-camera-staff-map, 0011-scale-and-min-spec, 0012-heightfield-authority, 0016-typescript-toolchain, 0022-soft-ramp-for-foliage, 0026-crops-under-a-soldiers-chest, 0027-units-take-the-lights-value, 0031-generated-trees, 0043-epic-is-the-default-mood, 0047-figures-cast-runtime-shadows, 0049-simple-shadows-beyond-close-zoom, 0051-closer-zoom-nearest-lod, 0062-simple-shadows-at-every-zoom]
 ---
 
 # The look page (Track E, L0)
@@ -35,7 +35,7 @@ world spec and a heightfield built offline. The prototype stays as the reference
 
 | Module | What |
 |---|---|
-| `src/look/spec.ts` | The world SPEC: sizes declared once, the rest derived (cells, the apron band, the camera footprint, the shader macros), and the invariants checked on derive: grids meet exactly, the tile holds play ⊕ margin, the far ring holds every view, no frame corner near the horizon, yaw ≤ ±45°, bakes at their texel targets and within min-spec. The shadow map is sized from its fitted box at the texel target |
+| `src/look/spec.ts` | The world SPEC: sizes declared once, the rest derived (cells, the apron band, the camera footprint, the shader macros), and the invariants checked on derive: grids meet exactly, the tile holds play ⊕ margin, the far ring holds every view, no frame corner near the horizon (the closest zoom, 15 m, held out over high ground until the eye is the camera's clearance, 6 m, above it: `clearRadius`, decision 0051), yaw ≤ ±45°, bakes at their texel targets and within min-spec. The shadow map is sized from its fitted box at the texel target |
 | `src/look/world/author.ts` | The authoring formulas (`baseH`, the meander's generation, the trough and the carve). Run in Node by the build tool; the page uses them only for checks |
 | `tools/build-look-data.ts` | Builds `data/painted-world.lookdata`: the heightfield (tile plus `aoMargin`), the far ring's nodes, the river's samples, the bank normals (W2), the water data (W3, `src/look/world/water-data.ts`) and the cover (L5a, below) (`--check` compares) |
 | `src/look/world/data.ts` | The look data's binary format (version 8): arrays, span grids (a grid's covered texels only) for the bank normals and the water data, the cover's runs, and the roads' segments and grid |
@@ -49,11 +49,12 @@ world spec and a heightfield built offline. The prototype stays as the reference
 | `src/look/terrain.ts` | Tile (1.79 m), far ring (14.3 m) and the apron that stitches them; the far ring's painted river mask; the bank normals' texture (W2, `docs/systems/river.md`; both it and the water data's, W3, from `src/look/span-texture.ts`). Their materials define `DETAIL` (the detail layer, below; on WebGL1 the material factory adds `DETAIL_L0`); the tile's also `BANKN` and `WATERDATA` (the shore band, W4), as do the water's |
 | `src/look/water.ts` | The water ribbon, its materials (the painted water, W4, `docs/systems/river.md`; and the same shader on the tile's ground, for the seam check) and the tree-reflection mask |
 | `src/look/nature.ts` | Role-painted nature pack models, thin instances, and the scatter with its placement rule (and, since L5a, the cover's: what grows on which class) |
+| `src/look/buildings.ts`, `src/look/world/buildings.ts`, `tools/building-to-js.py` | The buildings (`docs/plans/done/buildings.md`): the owner's Tripo models (a windmill, a stone house) to `prototypes/buildings.data.js` with a role per face, painted by role from the palette with the texture's value as detail; placed (authored) in the wheat field and the village; their footprints the village's ground in the cover; in the shadow bake and the light map's occlusion |
 | `src/look/bakes.ts` | Sun shadow depth (once; the card crowns cast through their cards), occlusion and valley mask (CPU, once: the terrain's ring test times the sky each crown and bush hides, `skyOcclusion()`), the top-down light map (once; its shadow edge grows with the distance to the caster): R sun visibility, G occlusion, B valley mask, A the contact under each tree's crown, which only the ground reads (`docs/plans/done/shadow-look.md`, `docs/plans/done/soft-shadows.md`) |
 | `src/look/meadow.ts` | The meadow near the camera (L5c, L5d, below): the meadow map (ground height, the grass's and the crops' growth), three rings of static grass and crop instances around the focus |
 | `src/look/canopy.ts`, `src/look/leaves.ts` | The leaf-card crowns (the default with the generated trees; `?trees=cards` on the pack's; L7a, L7b, below): the card meshes from each pack crown's triangles with the crown's ellipsoid, their material; the leaf-clump atlas (value, coverage, each leaf's tilt) from a picture or drawn |
-| `src/look/post.ts` | A pixel that is not a finite number is left out of the depth of field's downsample, or takes its neighbours' mean in the finishing pass (`?nanmark` shows it magenta, on half floats: `docs/plans/done/nan-guard.md`). The scene renders into a 4× MSAA target of 8 bits a channel, the depth of field's too (`MSAA` in post.ts, `docs/plans/done/wide-perf.md`). The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; frames wider than the checked 16:9 keep its horizontal field of view), with RTS controls (`rtsControls`: the arrows or WASD pan in the ground plane and Q, E turn, faster as it zooms out; a trackpad's two-finger swipe pans and its pinch zooms; a mouse wheel zooms; dragging turns and pans; the panel's Zoom slider follows), and the passes: depth of field (a player option, decision 0024), then one fused finishing pass (bloom, vignette, paper, dither; the grade is in the materials since LC1b). On WebGL2 a last pass, `easu` (decision 0045): the screen from the chain's scale, a copy at 1, FSR 1's edge-adaptive upscale from 0.9 up (Babylon's, its gathers read once each), bilinear at the other scales, upscaled with the paper grain and a dither; the chain's passes sized by objects resized in place. |
-| `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop (and its readout, top right: over the last 120 frames the frame interval's median and slowest 5 %, the render's CPU time, the share of frames that missed their slot (past one and a half of the median); `docs/plans/done/frame-readout.md`), and the debug globals the checks read; `?bloom=0` opens with the bloom off; the render scale defaults to Auto (by zoom: 0.9, then 0.8 and 0.75 as the camera's radius passes 80 and 88 % of its range, 4 m of hysteresis each way: decision 0045, after 0036, which records why it is not driven by missed frames; on WebGL2 the canvas stays at the page's pixels and the finishing chain draws at the scale, resized in place (`post.scale`), its last pass (`easu` in `post.ts`) drawing the screen: FSR 1's EASU from 0.9 up and under 1, bilinear at the other scales, a copy at 1, the paper grain laid after an upscale, the dither before the 8-bit target and after the upscale; on WebGL1 the canvas is drawn smaller and stretched; `?upscale=bilinear` stretches at every scale; the paper grain stays in screen pixels; the check tools pin it to 1: `docs/plans/done/dynamic-scale.md`, `docs/plans/done/render-scale.md`); `?msaa=1|2|4`, `?far=off`, `?rt16`, `?nowide` are the frame-rate A/Bs (`docs/plans/done/wide-perf.md`) |
+| `src/look/post.ts` | A pixel that is not a finite number is left out of the depth of field's downsample, or takes its neighbours' mean in the finishing pass (`?nanmark` shows it magenta, on half floats: `docs/plans/done/nan-guard.md`). The scene renders into a 4× MSAA target of 8 bits a channel, the depth of field's too (`MSAA` in post.ts, `docs/plans/done/wide-perf.md`). The RTS camera, locked to the SPEC (yaw ± 45° around the default, decision 0010; zoom 15 to 260 m, held out where the eye would come within 6 m of the ground under it, which from 41 m out it never does, the player's wanted zoom kept apart (`ZoomHold`: the wheel, the pinch, the slider and the tools set it, `zoomOf`, `__proto.zoom`) so the camera comes back in past a hill: decision 0051; frames wider than the checked 16:9 keep its horizontal field of view), with RTS controls (`rtsControls`: the arrows or WASD pan in the ground plane and Q, E turn, faster as it zooms out; a trackpad's two-finger swipe pans and its pinch zooms; a mouse wheel zooms; dragging turns and pans; the panel's Zoom slider follows), and the passes: depth of field (a player option, decision 0024), then one fused finishing pass (bloom, vignette, paper, dither; the grade is in the materials since LC1b). On WebGL2 a last pass, `easu` (decision 0045): the screen from the chain's scale, a copy at 1, FSR 1's edge-adaptive upscale from 0.9 up (Babylon's, its gathers read once each), bilinear at the other scales, upscaled with the paper grain and a dither; the chain's passes sized by objects resized in place. |
+| `src/look/main.ts` | Loads the look data, checks the ground against the SPEC, builds everything in order, the panel, the frame loop (and its readout, top right: over the last 120 frames the frame interval's median and slowest 5 %, the render's CPU time, the share of frames that missed their slot (past one and a half of the median); `docs/plans/done/frame-readout.md`), and the debug globals the checks read; `?bloom=0` opens with the bloom off; the render scale defaults to Auto (by zoom: 0.9, then 0.8 and 0.75 as the camera's radius passes 80 and 88 % of its range from 45 m (the range it was tuned on: the closer zoom keeps 0.9, decision 0051), 4 m of hysteresis each way: decision 0045, after 0036, which records why it is not driven by missed frames; on WebGL2 the canvas stays at the page's pixels and the finishing chain draws at the scale, resized in place (`post.scale`), its last pass (`easu` in `post.ts`) drawing the screen: FSR 1's EASU from 0.9 up and under 1, bilinear at the other scales, a copy at 1, the paper grain laid after an upscale, the dither before the 8-bit target and after the upscale; on WebGL1 the canvas is drawn smaller and stretched; `?upscale=bilinear` stretches at every scale; the paper grain stays in screen pixels; the check tools pin it to 1: `docs/plans/done/dynamic-scale.md`, `docs/plans/done/render-scale.md`); `?msaa=1|2|4`, `?far=off`, `?rt16`, `?nowide` are the frame-rate A/Bs (`docs/plans/done/wide-perf.md`) |
 | `src/look/bench.ts`, `src/look/gputimer.ts` | `?bench`: fixed cameras, frame times, GPU time per pass, draw calls, triangles, texture memory and the build hash, as JSON (below) |
 | `src/look/lab.ts` | Test objects the tools add: the readability guard's army blocks, the detail check's test hill |
 
@@ -152,7 +153,7 @@ The plan: `docs/plans/active/l5-macro.md`; the design: `docs/proposals/prepainte
   dirt in each road's frame (the nearest road segment, found in the shader from the look data's grid of them: the
   distance across and along, the half width, a junction weight), wheel tracks of pale dust cut into pieces, ragged edges, the owner's grit photo (`roadPaint` in
   `shore.glsl`, `docs/plans/done/roads.md`). Far out the macro bake holds them (tracks a dusting, no grit) and the
-  tile's ground takes its material without the live roads beyond 170 m; nearer they fade in (decision 0039). Nearer too, only the tile's triangles within reach of a road (the cover's distance to a line under the road gate: `ROAD_NEAR`, the cover's warp and slack, `src/look/spec.ts`) take the live roads' material; the rest take the one without, by one `MultiMaterial` made with the terrain's (its place in the opaque draws; `splitByRoad` in `terrain.ts`): the same pixels but for a step of rounding on a few (the two programs), about 1.1 ms a frame less at the default and closest zooms (`docs/plans/done/headroom.md`; `?split=0` draws the whole tile live). Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
+  tile's ground takes its material without the live roads beyond 170 m; nearer they fade in (decision 0039). Nearer too, the tile's ground is three materials by triangle (`splitGround` in `terrain.ts`, one `MultiMaterial` made with the terrain's: its place in the opaque draws): within reach of a building's yard (a yard's cover texel, below) the live roads with the paving (`terrain`); else within reach of a road (the cover's distance to a line under the road gate: `ROAD_NEAR`, the cover's warp and slack, `src/look/spec.ts`) the live roads alone (`terrainRoads`); the rest the material without either (`terrainBaked`): about 0.7 %, 7.2 % and 92.1 % of the tile's triangles. The same pixels but for a step of rounding on a few (the programs differ), each feature's shader only where it can show: the road split about 1.1 ms a frame less at the default and closest zooms (`docs/plans/done/headroom.md`), with the paving's split and its gate the buildings cost about 0.35 ms at the village's closest (main 6.55 ms, 6.92 with them; 7.77 before the split), 0.15 at its default zoom, and the windmill's view comes out cheaper than main (0.65 ms at the closest, 0.2 at the default: the buildings hide ground and grass) (Metal, three rounds: `docs/plans/done/buildings.md`; `?split=0` draws the whole tile live, with the paving). Every read passes the world position's screen derivatives explicitly (`macroDerivs` in `shore.glsl`, taken at the top of each shader's main; `textureGrad` on WebGL2; the meadow's reads too): a read in a branch the pixels of a quad take differently has undefined derivatives, and on the Mac's GPU the bake then differed run to run.
   The class `bare` (10): trodden or dry earth, no grass, no crops, no stripes, not
   a field (`isField`).
 - **The dirt surface** (`dirtOn` in `macro.glsl`, at the terrain's fragment: `docs/plans/done/ground-surface.md`):
@@ -350,6 +351,81 @@ crowns as cards.
   sky each crown hides and its contact core (lighter as a crown loses its leaves). Releasing the season slider re-bakes
   the shadows when what casts them changed since the last bake (`shadowState`); the sky's occlusion stays the one baked on load.
 
+### The buildings
+
+The owner's Tripo models (`assets/buildings`, git-ignored; art bible §10) go through `tools/building-to-js.py`
+(Blender headless; its header has the commands) to `prototypes/buildings.data.js`: metres, normals sharp past 30°, UV0
+and a role per face (0 wall, 1 roof, 2 timber, 3 opening, 4 accent). The import cuts each model to about 2,300 triangles (the
+flat regions dissolved within a role and a UV island, then collapsed); the windmill's lattice sails made again as four
+solid canvas blades on timber stocks (the accent role). The role is the median colour of the texels
+under the face, nearest in Lab to the model's reference colours, with priors on the face's orientation (a roof faces
+up, a wall and an opening stand) and height (the house's terracotta chimney pots). Pack colours are never used: the
+page paints each role from its palette (`src/look/buildings.ts`, `PALETTE`, muted against the armies), and the texture
+keeps only its value over its local mean (a box of texels round each: `data/buildings/<model>-detail.png`, 128 = 1;
+the faces the export makes, the windmill's sails, a UV below 0 and no detail), a third of it showing
+(`DETAIL_AMT`) under the paint's grain (`shaders/building.frag`: the painter's ramp, the cast shadow, the sky's
+occlusion, the ground's bounce, the snow on what faces up, the air). One instanced mesh a model. Placed in
+`src/look/world/buildings.ts` (authored: the windmill in the large wheat field; six houses in an irregular cluster in
+the village, each turned a quarter turn of its own and a little more: doors to the road, a gable to it, side-on, a back
+to it), each on its footprint's lowest ground, sunk 0.2 m. The turn is Babylon's instance yaw, verified against its
+Matrix (`test/buildings.test.ts`) and on the page: a local point (x, z) goes to (x cos + z sin, −x sin + z cos)
+(`toWorld`, `toLocal`: the one rule the footprints, the yards, the ground's samples and `pavePaint`'s frame use); the
+models' fronts face −z before it, so a yaw of π/2 faces west. Each stands in a paved yard (`pavePaint` in `shore.glsl`,
+in `roadPaint`'s path, under `PAVING` on the yards' ground material only, `terrain` above, `PAVING_FAR`, the far look
+without a texture, on the macro bake; only on a yard's cover texel, which names its building in B, the furrows'
+direction, read only where a field's id is (`YARD_BASE` plus the index of the one yard within reach of the texel, so a
+pixel evaluates that shape alone; `YARD_ALL`, every shape, where two yards are that near: `src/look/world/cover.ts`), and
+before the roads' gate: a yard's texels are worn by their distance to the lines (the village's own ground by 0), so a
+yard far from a road skips the road search as the rest of the map does; the yard's edge noise read only near its edge; the cobbles ride in the road grit's G and B, `data/road-grit-v2.png`, made by
+`tools/paving-pack.py` from the grit and `data/paving-v1.png`: their colour along its two principal axes about its mean,
+so the paving binds no texture unit of its own. Metal allows 16 a fragment shader (SwiftShader more: a 17th, the paving's
+own texture on the water, compiled in the checks and kept the page from ever getting ready on the owner's GPU):
+`Materials.make` counts each compiled program's fragment-stage samplers (`MAX_SAMPLERS`; the counts at
+`window.__look.mats.samplers`), logs a material over them and stops the page at its next frame; `tools/shot.mjs` stops a
+run on a shader Babylon cannot compile and has no fallback for): the owner's cobbles (4.5 m a repeat) over its footprint grown by a margin
+(the house's by 2.5 m and by 6 m before its door; the windmill's a 3 m ring), the exact shapes as uniform arrays
+(`paveShape`, ≤ 16), the edge ragged by a noise-wobbled distance (up to `PAVE_WOBBLE`, 1.15 m, past it). The cover
+paints each yard and a margin round it (`PAVE_WOBBLE` + 0.71 of a cover cell + 0.3 m) as the village's ground worn to
+nothing, so no grass, crop, tree or stone grows on it and only the road split's live material reads it (its roads and
+tracks keep their class); past that margin the yard's distance feeds the wear as the village's ring does, so the
+trodden edge fades. The cover's authoring fails if a yard comes within that margin of a road or a track, reaches a
+formation zone or the floodplain (a point every metre over it), or lies within `PAVE_GAP` (4 m) of another yard. The
+paving's level of detail is the roads': the cobbles fade out from a 7 cm to a 22 cm pixel footprint into their mean in
+a soft blotch over a few metres (no texture read past it), which the macro bake paints too. The detail texture is the
+texture's value over its local mean (box-averaged to 512²); the buildings look the sun's shadow up 15 cm off their
+surface and break their band edges with a third of the ground's grain (on flat faces the full grain and the shadow's
+self-test made specks). Static: their shadows go into the sun's bake with the scene's meshes, the sky they hide into
+the light map's occlusion as a blob at their foot (the trees' contact).
+
+The buildings' static light is baked once (`src/look/building-light.ts`, `docs/plans/done/building-light.md`): an
+atlas of one 256² tile an instance, square-ish (⌈√n⌉ tiles a row: seven in 768 × 768 RGBA8, within the GPU's largest
+texture or a clear error; the raw bake 2.4 MB and the atlas the buildings read with its mips 3.1 MB, about 5.5 MB), each building drawn in its light UVs (`aUV2`, a second layer the import makes: Blender's smart
+project; about 20 cm a texel on a house, 27 on the windmill, measured) with the sun's cast shadow (`shadowAtRaw`, 0
+lit to 1 shadowed, the panel's switch applied at runtime), the light map's sky occlusion, mist mask and sun. Each face
+covers a texel however thin: its corners drawn as points and its edges as lines before its faces (only 55 % of the
+faces hold a texel's centre: the timber, the frames, the sails' sides; with the outlines every face has a written texel,
+read back). One pass fills four texels round every island from the nearest written one (rings out from the texel, until
+no nearer can be; at once in an 8² block with no written texel within four, most of a tile: an occupancy pass first)
+and every texel past them a
+neutral light (no cast shadow, open sky, no mist), then the engine builds the mips as the pass unbinds the atlas; the
+atlas is that neutral light until the first bake. Read no coarser than level 1 (`MAX_LOD`): a level-1 read reaches 2
+texels (`REACH`) past the texel it is in, and the islands' texels (all a face touches) are at least 5 apart
+(`MIN_GAP`: the export fails otherwise, and a test checks the data), so no neighbouring island's light comes in (level 2
+would need 9 apart); at the widest zoom 93-98 % of a building's pixels want a level under 2 (720p, measured with the
+finer texels before). A clamp in the shader, not the texture's `TEXTURE_MAX_LEVEL`: Babylon sets that on cube maps
+only, and set by hand it would be lost on a context's restore. A tile's islands keep 2 texels (`INSET`) from its edge,
+so no read reaches a neighbour's tile (without mips the minified reads at the default zoom cost 1.1 ms more than the
+runtime's taps, measured). Rebaked with the light map (after the sun's shadow map: a season's release, the leaves'
+drop), with a new grain and on a context's restore (the atlas neutral until then), once the light map has held for a
+frame (the start's chain of bakes makes one bake) and the buildings are drawn and ready (`__look.terrainOnly` hides
+them; a bake Babylon would draw without a mesh not ready is not used). `building.frag` reads it once (`BLD_BAKED`) in place of
+`shadowAt`, `LM` and `bounceAt`; the ground's bounce at each building's root is baked into a texel an instance
+(rebaked with the ground's bounce map, the same way) and faded with the height at runtime, and now lights the walls
+(`BOUNCE`, the baked path only: the runtime path keeps main's, without it). `?bldlm=0` restores the runtime path, as
+WebGL1 always takes it (the bake's reads are GLSL ES 3's); `?bldbounce=0` drops the bounce (no target, no read). The
+bake's time is read back on the bench only (it waits for the GPU): 28-108 ms on Metal on load (two loads, a busy
+machine), 0.6-0.9 s a rebake in SwiftShader (1.7-2.4 s with the full dilation).
+
 ### The shadows' look
 
 The plan: `docs/plans/done/shadow-look.md`.
@@ -491,6 +567,175 @@ cameras orbit that point instead of the camera's start, and the JSON records it 
   browser the frame time is held at the display's refresh (16.7 ms at 60 Hz) whenever the frame is cheaper.
 - `node tools/bench-look.mjs <url> [out.json] [--hold s] [--gpu metal]` runs it headless (SwiftShader by
   default: slow, and its timer times software rendering), with vsync and the frame-rate limit off. The laptop run is the owner's (`docs/plans/active/track-e-look.md`, "Measuring").
+
+### The armies (`?armies=<n>`, scripted; `docs/plans/active/armies-demo.md`)
+
+`?armies=<1..40>` puts n battalions a side on the demo map (414 men each, the ruleset's drill: 5 about 4,000
+figures, 10 about 8,000, 20 about 16,500, 40 about 33,000: `docs/plans/active/armies-32k.md`); not on the page by default, so the goldens and the look checks never see
+them. WebGL2 only (decision 0046). Each switch below names the A/B it restores; the defaults are the measured best.
+The page names no era (decision 0015): the demo's scenario (`src/scenarios/armies-demo.ts`) names its ruleset, unit
+type, figure and uniforms, resolved through `src/rulesets/index.ts` (`RULESETS`: a ruleset and its uniforms by name)
+and the figures' unit data by file (`data/figures/<figure>.unitdata`, a Vite glob in `src/look/main.ts`).
+
+- **The figure**: `tools/bake-figure.py` (Blender, `-- <published figure dir>`) bakes the published GLBs into
+  `data/figures/<figure>.unitdata` (`src/look/units-data.ts` reads and checks it): its LODs nearest first (here
+  three: the full figure, 9,274 triangles, then 1,197 and 243; the page reads two or three), each vertex's colour role (the reds told from the skin by hue, the face's shaded side kept skin, the coat's violet shade kept coat: #133's review, `texel_role`, `tri_role`) (coat, facings, white, dark, skin, leather, pack, wood, metal: from the
+  texture's colour, the musket by its bone, the pack by its place), its triangles in the glTF's order (the reflection
+  into Babylon's left-handed space makes them the clockwise fronts Babylon draws: reversed, every man was drawn inside
+  out, a face on the back of his head, #164; the bake asserts a negative signed volume, `test/armies.test.ts` too;
+  format version 3, the decoder refuses 2), each bone's parent, and the bones' matrices at 12 fps for the clips
+  each **role** uses (halt: Stand; march: Walking; run: Running; fire: Present, Aim, Fire, Reload), with the root
+  speeds that keep the feet planted. The page names roles, never clips (decision 0015). At load: the far LOD posed at
+  every step (`posedVertices`: a place and a normal, two float texels a vertex) and the **shadow proxy** built from it
+  and posed (`shadowProxy`, `posedMesh`: two crossed quads along each part a bone carries, 112 vertices, 56 triangles;
+  a bone too small to be a part near the ground, a foot, lends its vertices to the first part up its chain of parents,
+  the shin, whose quads then run down to the soles by at most 25 cm, so the shadow starts at the feet: `boneParts`,
+  #165).
+- **The renderer** (`src/look/units.ts`): a thin-instanced host a battalion for each of the near LOD, the far LOD and
+  the proxy; the near LOD skinned from the bones' texture (`texelFetch`), the far LOD and the proxy posed (`VAT_POS`;
+  `?uvat=0`: the far LOD skinned); a man's step from his clip's first row, its length and his phase. Materials are
+  per uniform and LOD. The figures are painted as the army blocks (`KEEP_HUE`, `BOUNCE`, `NOSNOW`) and blur by their
+  depth (decision 0040). A battalion's instances are written when it moves (once a 1/12 s step) or changes phase; its
+  LOD by the figure's height in pixels (48, ±10 %). **The nearest LOD** (a figure with three, decision 0051;
+  `?nearestpx=<px>`, 0: none): a battalion whose bounds' nearest point is within 90 % of `nearestPx` (100 px) and in the view
+  is split, each man whose sphere is in the view and who stands taller than it (±10 %) drawn at the nearest LOD, the rest
+  at the near one (`setSplit`, `share`: the next LOD's buffers swapped to the rest's list; the lists written again
+  when a man changes LOD or the men move); skinned like the near LOD. A battalion's nearest-LOD mesh and lists are made at its first split (about 1 MB of geometry a battalion otherwise), then disabled while unsplit. Only within about
+  28 m of a man at 1080 lines (the closest zooms: 0 at 45 m); its shadow is the simple shadow (with the map, the proxy's). The pose's step is counted on the CPU (`uVATStep`, the clock's
+  floor in double precision), so the figures and their shadows never disagree on a step; a battalion's bounds are
+  padded by the tallest figure (2.6 m, as tall as the far figures grow) and the farthest reach of the baked poses (as
+  wide as they grow), and by the next step's places. The view's corner rays are cast once a frame
+  (`castView`) for the sun's box (with the map) and the trodden mask's.
+- **The figures' shadow map** (decision 0047; since decision 0062 drawn only behind its switches, `?ushadowclose=map`:
+  up close with the cross-fade below, 0049's default; `?ushadowfar=map`: at every zoom; without them its target, its
+  uniforms and the receivers' reads are never made, `useMap`): a 2048² depth-only map (24 bits, a comparison sampler), the
+  sun's box fitted to the ground in view's own heights and centred on what it holds, its near and far fitted along the
+  sun. Drawn only when it would change (the poses' step, a battalion's men, the casters, the box; `?ushadowrate=0`:
+  every frame), the box held while the view stays inside its slack of 10 % of the view's half-size, 6 m at least
+  (`?smhold=fixed`: batch B's box 2 m round the view, which a pan refit nearly every frame; the trodden mask's refit
+  goes with it); an empty map is drawn once and kept. Cast by the proxy (`?shadowlod=far`: the far LOD; `?ushadowlod=1`:
+  the near LOD where drawn), shown to the map alone, from the battalions whose bounds stretched away from the sun by the
+  longest shadow cross the view (`?ucull=0`: all in the box). The ground reads it by two hardware comparisons a texel
+  either side of the point, turned by the grain (`unitShadowAt`: a brush edge); the meadow once a blade at its root
+  (`UNIT_SHADOWS_VS`, `meadow.vert`; `?ushadowvs=0`: every pixel). The texel at r15 / r45 / r125 / r260: 2.9 × 2.1 (at the most oblique pitch; 1.8 × 1.8 at the steepest), 3.9 × 2.5,
+  9.2 × 5.5, 18.4 × 10.4 cm in the sun's view (× 2.2 along the sun on the ground), the slack's 10 % on top while held.
+  The merged mass under a battalion is the low sun's: 3.6 m shadows over ranks 0.85 m apart.
+- **Their shadows: the simple shadows, at every zoom** (decisions 0049 and 0062,
+  `docs/plans/active/simple-soldier-shadows.md`, `docs/plans/done/soft-shadows-all.md`; `?unitshadow=0`: none). Every
+  soldier of a figure looks alike, so one shape: `shadowShape` (`src/look/units-data.ts`, at load) projects the far LOD,
+  posed at up to 12 steps of each role's clip and turned to 16 facings, along the sun onto the ground, averages the
+  steps (a marching man's legs one soft wedge) and blurs it; an RG8 atlas, mipmapped, a cell a facing and a role: R the
+  shape, G the same blurred wider (`SOFT_BLUR`) and brought back to R's darkest value in its cell; the soft bake's
+  reach is padded on in whole blocks of 8 texels, so R's texels and mips are where they are without it (`base`, the
+  box R fills). Each soldier draws it himself, in the main pass after
+  everything else (`unitdecal.vert`, `unitdecal.frag`): one more mesh a battalion on its own instance buffers, a 1 × 3
+  grid a man (2 m a cell: the widest view is bound by its vertices) from his feet along the shadow, each vertex on the
+  ground (the meadow map's height, or without one the heightfield's, sampled into a texture at load) and drawn toward
+  the camera along its view ray by `?udecallift` (0.6 m, growing from 0 at his feet over 1.5 m so it never covers his
+  own shins: over the grass and the legs of the men in it in depth, no shift on screen); his facing picks two cells,
+  blended, read through the atlas's mips up to the third (a cell's border holds no further), his clip's first step his
+  role's row, and it grows with the far figures (`FAR_SCALE`). **Its look a zoom** (decision 0062, `SHADOW_LOOK`):
+  softness (the share of G against R), darkness (the share of the ground's full shadow) and length (along the sun past
+  the soles: the grid's second row lies at the soles, so each triangle lies on one side of them and the feet stay put);
+  along each shadow from the soles like a real one's (contact hardening): over a core (`core`, m) the shape itself at
+  the soles' darkness (`foot`), then to the tip (a man's height over the sun's tangent, times the length) up to
+  `soft` of the blurred bake and down to the tip's darkness (`dark`), fragment arithmetic on the distance along it
+  (`vAlong`, at the shape's own size: the far figures' growth leaves it), no more reads. **The darkness is coverage**:
+  every shadow darkens a sample it covers by the same amount (the look's darkest), covering a share of the samples
+  (darkness ÷ darkest × the shape's value), so overlaps take the darkest whatever the draw order (the stencil still
+  darkens each sample once; review round 1: as a colour, a light tip drawn first bit into the next man's contact, and
+  the battalions' sorted order flipped while panning; `decalFragment` in `src/look/shadow-look.ts` mirrors the rule
+  for its tests). Alpha to coverage with the scene's 4 samples; with fewer (`?msaa=1|2`; two samples would make the
+  gradient one hard step where the driver does not dither) the share darkens the pixel, smooth, the first shadow
+  there winning (overlaps order-dependent there; an empty texel marks none). Checked on Metal
+  (review round 2): no contour bands along the gradient, overlaps no darker than the darker shadow alone.
+  **The strip** (`decalStrip`, `uStrip` and `uRows`, set when the look changes): turned with the look by its far
+  share, from the close one (the full box, the soft bake's reach, with rows at the soles and where the lift's ramp
+  ends, so the lift, linear between rows, is whole there) to decision 0049's (the shape's own box, `base`, rows evenly
+  spaced: the far zooms as main's, a third fewer fragments than the full box); the atlas stays anchored at `uShapeAt`
+  whatever the strip; the decal's bounds padded by the soft bake's reach; up close softer, lighter at the tip, shorter, dark and solid at the feet; far 0049's look
+  (one value end to end), turned from one to the other by a smoothstep of the camera's
+  distance to its focus over `SHADOW_LOOK_BAND` (45 to 85 m; with `?ushadowclose=map` the far look everywhere).
+  `?ushsoft`, `?ushdark`, `?ushlen` (`<close>[,<far>]`), `?ushfoot=<dark>,<core>[,<far dark>,<far core>]` and
+  `?ushband=<r0>,<r1>` tune it live; `Units.lookNow` is
+  this frame's. The fragment reads the atlas and the ground's shade:
+  the shape's value is the pixel's coverage (alpha to coverage, the scene's 4 samples), the stencil lets only the first
+  shadow at a sample through, and the blend (dst · src, the alpha's lens codes kept) darkens it to the shade there: so
+  a formation's overlapping shadows darken each sample once, at every distance (with fewer samples, `?msaa=1|2`, the
+  value scales the darkening and the first shadow at a pixel wins). **The shade** (`src/look/bakes.ts` `unitShade`,
+  `shaders/unitshade.frag`): the ratio of the ground painted in a full cast shadow to it painted as it is (the baked
+  shadows, the occlusion, the bounce, the season), top-down over the tile at the light map's texels, rebaked after the
+  bounce map and when the occlusion's switch changes; so the darkening is the map's on the same ground (the air on top
+  is not in the ratio). **The stencil**: only on the scene's target (the first finishing pass's, `MSAA.stencil` in
+  `src/look/post.ts`) and only when the simple shadows are on: its depth is DEPTH24_STENCIL8 then, else DEPTH32F as
+  before; the canvas has none (`?stencil=all`: the engine's own on every target, the A/B; `0`: none). No render target
+  and no reads in the receivers. Each man's shadow
+  moves every frame with smooth places (below: `aNext`, his move to his next step's place, written with his place;
+  `uStepFrac`, the share of the step gone, from the CPU's clock), else at
+  the steps with his figure. **The cross-fade** (only with `?ushadowclose=map`): by the camera's distance to its focus, from the map alone at 60 m to
+  the simple shadows alone at 85 m (`SHADOW_SWITCH`, `?ushadowswitch=<r0>,<r1>`; the LOD switch, 48 px at 1080 lines,
+  is at 63 m), `uUnitFar` their share: the receivers take 1 − it of the map (`unitShadowMix`), the decals it of their
+  darkening; the map is drawn only while its share is over 0, and fitted afresh when it comes back. (First built as a
+  top-down mask the receivers read; replaced: fill-bound at 40 a side, the plan.) The dirt's and the earth's textures
+  are packed in one (`uSurf`, R and G, `src/look/macro.ts`), built for the mask's texture unit, kept as headroom.
+- **Smooth places** (on by default, measured free: `docs/plans/active/simple-soldier-shadows.md`; `?smoothmove=0`: off):
+  the figures, their flags and the map's casters move by `aNext` × `uStepFrac` too (`SMOOTH`, `units.vert`,
+  `flag.vert`), and the simple shadows with them, the poses still stepped at 12 fps; the map is then drawn every frame
+  the clock moves while a caster's men move. Off, the figures and their simple shadows move at the steps.
+- **Uniforms** (the owner's call 2026-10-22): a battalion wears a uniform by id, whatever its side; a uniform
+  (`Uniform`, `src/sim/ruleset.ts`; the era's in `src/rulesets/napoleonic-uniforms.ts`; the demo's sides' in
+  `src/scenarios/armies-demo.ts`) is its colours by the figure's roles, its flag's, and its **far rule**: from above, a
+  far figure shows its headgear, pack and leather more than its coat; under 'coat' those roles take the coat a value
+  step down (`farPalette`, `FAR_ROLES`), crossfaded in as the figure shrinks below the LOD switch, with the trees' and
+  hills' shadow on it halved and a warm rim on what faces up (`FAR`); under 'own' the far figure keeps its own. Unset,
+  a coat under luminance 0.18 (Rec. 709 on linear sRGB, a mid grey: `FAR_COAT_BELOW`) takes 'coat'. `?farpal=0|1`
+  forces the rule off or on for every uniform.
+- **The tiny LOD** (`docs/plans/active/armies-32k.md`, step 3, experimental; `?tinylod=0`: none, `?tinypx=<px>`: its
+  switch): a battalion whose figure falls under 12 px tall (±10 %) draws the far LOD's parts as boxes instead (`tinyMesh`,
+  `src/look/units-data.ts`: the shadow proxy's parts, `boneParts`, 8 shared corners each, 112 vertices, wound with
+  their fronts out as the figure's, #164), a corner's
+  colour a mix of the roles (`TINY`: three vec4 weights) calibrated at load so the boxes show each role in the far
+  LOD's seen share (`seenArea`: both rasterised from 8 sides), posed as the far LOD and painted by its material (far
+  palette, lift, growth, the smooth moves between steps); the coat mask dithered by the coat's weight (a 4 × 4 ordered
+  dither); it never casts into the map, and its men keep their simple shadows (decision 0049) as the far LOD's do. A
+  host's LODs: the figure's nearest first, the shadow proxy, the simple shadow, then the tiny LOD (built only when on).
+- **Far figures larger** (`?farscale=0`: their own size): the far LOD grows as the figure falls from 90 % of the LOD
+  switch to a quarter of it, across up to 1.35 (capped at 95 % of a file: 1.21 here) and 1.15 tall; render only.
+- **Trodden ground** (`?trample=0`: none): a 256² mask over a box round the ground in view (64 to 1,024 m), drawn on
+  the CPU (each man where he stands and up to 3.8 m behind him) when the box moves or at most every 0.25 s while men
+  move (a view that leaves the box refits it at once; a box grown over twice the view refits by the wall's clock),
+  about 1.1 to 1.6 ms a draw at 16,560 figures (this Mac); the ground and the meadow read it in their vertex shaders
+  (`TRAMPLE`; none outside the mask's box): the grass shorter, splayed and drier, the ground toward a dusty earth in
+  summer and a grey-brown slush in winter, broken by the grain.
+- **Flags** (`?flags=0`: none): one a battalion, its uniform's flag on a 3 m staff with the colour bearer (the line's
+  centre file, second rank), the cloth downwind and waving at 12 fps, never under 12 px tall (up to 5 times its size);
+  one thin-instanced mesh, hidden with the figures (`show`).
+- **The script** (`src/look/world/armies.ts`, deterministic, the sim's stand-in): each battalion in line marches 36 m
+  in column of companies, halts 4 s, deploys into line at the run, pauses 3 s, then fires by ranks (1.4 s apart) until
+  its 110 s cycle starts again; battalions are 9.7 s apart in the cycle. **The layout** keeps every battalion's whole
+  footprint within the camera's play area (±235 m): the lines, up to two footprints deep behind each side's front
+  (110 m apart), the front row and the middle first, each with its approach behind it clear; the rest are reserves in
+  column of companies at least 40 m behind the front, clear of the lines' footprints, the nearest first (5 m grid).
+  Water, trees (bushes are walked through), the buildings' yards are kept clear, and it throws when a side has no room.
+  On the demo map 20 a side is 4 and 3 battalions in line, the rest in column. When the reserves leave a side short
+  (40 a side; never at 20 or fewer on the demo map, whose layout is unchanged: a test hashes it), **close reserves**
+  fill in: more columns on a 2.5 m grid, 6 m apart men to men, taking each line's footprint as its T (its ranks' full
+  width, its approach only as wide as its column) and the trapezoid its companies cross as they deploy (as wide as
+  the line at the ranks' depth, as the column at its rear: four boxes), so they may stand behind a line's flanks,
+  never ahead of a line nor in a deploying company's way (the test checks every man's path at 40 a side).
+- **Measured**: `node tools/guard.mjs <url?armies=n> --figures`: per side, the figures' luma against the ground's at
+  their pixels, the coat role's share of them, the share within ΔE 25 of the coat colour (not gated).
+- **The bench**: `?bench&armies=n` with no `?benchat` orbits the fight's middle (the two sides' nearest battalions in
+  line, `facingAt`). `?benchpan=1` pans each camera as it is measured (20 m either side at 8 m/s). `?benchtrace=1`
+  records every measured frame (version 8): its interval and what happened in it (`src/look/trace.ts`: the figures'
+  shadow map drawn and its casters and triangles, the sun's box refit, the trodden mask drawn and its CPU ms,
+  battalions placed and place()'s and frame()'s CPU ms, thin-instance uploads and their KB and ms, the flags' update,
+  every render target drawn by name and every effect-renderer bake as `fx:<name>`, shader compiles, active meshes, draw
+  calls, the frame's JavaScript ms), and `traceSummary`: per zoom and arm, each event's share of the frames over their
+  run's 90th percentile against its share of all frames (the enrichment), printed by `tools/bench-look.mjs` (and
+  `--print <json>` for a saved run). Timings come from untraced runs; the trace explains them. Off, nothing is hooked;
+  on, it patches no prototype the render loop calls per mesh and looks nothing up by name a draw. Hooks: `__units`
+  (`drawn()`, `figures`, `battalions`, `setMask`, `show`), `__armies` (`blocked`, `focus`, `coats`).
 
 ### The readability guard (L2a)
 
