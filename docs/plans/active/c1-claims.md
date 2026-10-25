@@ -111,3 +111,24 @@ What is left is the per-man ground tests near other formations (the lag model's 
 the men: about 46% of the tick). Bringing it under the 2 ms budget needs claims and tests by bin rectangles instead
 of men, the second part of step 1. Every claim case still passes as before, and the reversed visiting order now gives
 the same state in all of them, X-01 too (#187 does not arise with the keyed order).
+
+**Step 2, jams** (2026-10-25):
+- a stall on another formation's cells is its own status, "blocked by a formation", which keeps the orders (a move
+  and a wheel); only the ground's stall still halts and drops them;
+- a move held near enough its target counts as arrived ("as near as the formations there allow"): within 10 m, plus
+  5 m a second held, at most 60 m. X-06's three battalions now all arrive;
+- the order of a tick: the longest held first, then a keyed draw held for 2 s;
+- a formation held for half a second tries again only every half second, each on its own tick of it: X-14 went from
+  4.95 ms (every held formation trying every tick) to 2.68 ms.
+
+**Step 3, acts that cannot be cut short** (2026-10-25):
+- a change of shape claims, beside its places, the ground its companies will sweep until it ends (six poses ahead),
+  so a friend halts at a square half formed (X-09);
+- a router forms again only where it fits, clear of every formation in the fight; standing on one, it goes first
+  to the nearest place it fits, by rings of 20 m out to 160 m, faced about if the way is behind (X-11: it walks
+  15 m clear and forms);
+- every bench case with claims now has no overlap (19 of 19), and the reversed visiting order gives the same state
+  in all of them. X-14: 2.85 ms a tick (1.84 ms without claims).
+
+Not done yet: Face about's end pose against others (it turns in place; no case shows a problem), a break mid-change
+snapping into a neighbour, and step 4, the clash.

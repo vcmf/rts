@@ -49,6 +49,7 @@ import {
   fillRetire,
   cutChange,
 } from './formation.ts'
+import { formedFits, freeSpot } from './claims.ts'
 import { sin, cos, PI } from './num.ts'
 import { TICK_HZ, DT } from './time.ts'
 
@@ -117,6 +118,34 @@ export function moraleStep(w: World, i: number, lost: number): void {
   }
   if (s === MS_RALLYING) {
     if (now - f.since[i] >= M.rally.time * TICK_HZ) {
+      // with the claim grid's prototype, it forms only where it fits: standing on a formation in the fight, it goes
+      // first to the nearest place it fits (docs/plans/active/c1-claims.md, step 3)
+      if (w.claims && !formedFits(w, i, f.x[i], f.z[i], f.heading[i])) {
+        if (f.ordHead[i] < 0) {
+          const spot = freeSpot(w, i)
+          // a way that lies behind it is walked faced about, as a router's run is: a line cannot turn in place at the
+          // map's edge or among others; it faces back when it gets there
+          const back = !!spot && (spot[0] - f.x[i]) * sin(f.heading[i]) + (spot[1] - f.z[i]) * cos(f.heading[i]) < 0
+          const face = back && !!layoutOf(w, i).turn && !f.trans[i]
+          if (spot && ordersFree(w) >= (face ? 3 : 1)) {
+            if (face) {
+              const k = allocOrder(w, O_FACE)
+              w.ord.optional[k] = 1
+              appendOrder(w, i, k)
+            }
+            const n = allocOrder(w, O_MOVE)
+            setOnMap(w, n, spot[0], spot[1])
+            w.ord.resolved[n] = 1
+            appendOrder(w, i, n)
+            if (face) {
+              const k = allocOrder(w, O_FACE)
+              w.ord.optional[k] = 1
+              appendOrder(w, i, k)
+            }
+          }
+        }
+        return
+      }
       f.mstate[i] = m < M.wavering[0] ? MS_WAVERING : m < M.shaken[0] ? MS_SHAKEN : MS_STEADY
     }
     return
