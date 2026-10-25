@@ -9,7 +9,6 @@ import {
   compileRuleset,
   makeWorld,
   typeOf,
-  issue,
   deserialize,
   formationHandle,
   STATUS,
@@ -249,10 +248,8 @@ async function main(): Promise<void> {
     layer.step(DT, 0)
   }
   const goTo = (target: number) => {
-    const T = Math.max(
-      0,
-      Math.min(Math.round(target), log.length ? Math.max(w.meta[M_TICK], log[log.length - 1].tick) : w.meta[M_TICK]),
-    )
+    // as far as the furthest tick played, or the last order logged
+    const T = Math.max(0, Math.min(Math.round(target), Math.max(tl.reached, w.meta[M_TICK], log.at(-1)?.tick ?? 0)))
     w = timelineGoTo(tl, T, fresh, load)
     layer = new SoldierLayer(w, scene)
     layer.sync(0, [])
@@ -497,6 +494,8 @@ async function main(): Promise<void> {
       space = true
       e.preventDefault()
       if (document.activeElement instanceof HTMLButtonElement) document.activeElement.blur()
+    } else if (e.metaKey || e.ctrlKey || e.altKey) {
+      // the page's keys, not with Cmd, Ctrl or Alt held (copy, print, switching tabs, minimising)
     } else if (e.key === 'p' || e.key === 'P') {
       paused = !paused
     } else if (e.key === 'Escape') {
@@ -504,14 +503,12 @@ async function main(): Promise<void> {
       charging = false
     } else if (e.key === 'c' || e.key === 'C') armCharge()
     else if ('1248'.includes(e.key)) setSpeed(+e.key)
-    // the bench's keys, not with Cmd, Ctrl or Alt held; going back once a press, not on a held key's repeats
-    else if (e.metaKey || e.ctrlKey || e.altKey) return
+    // going back once a press, not on a held key's repeats
     else if (e.key === 'd' || e.key === 'D') overlay = !overlay
     else if (e.key === '.') stepTick()
     else if (e.key === ',' && !e.repeat) goTo(w.meta[M_TICK] - 1)
     else if ((e.key === 'g' || e.key === 'G') && !e.repeat) askGoTo()
-    // not Cmd+M (minimise), nor a held key's repeats
-    else if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat) mark()
+    else if ((e.key === 'm' || e.key === 'M') && !e.repeat) mark()
   })
 
   function drawScale(): void {
@@ -592,7 +589,8 @@ async function main(): Promise<void> {
     // after going back, the log and the hash points may hold a future the world has not reached again
     hashes: hashes.filter(h => h.tick <= w.meta[M_TICK]),
   })
-  const session = () => ({ ...replay(), marks: [...marks] })
+  // the marks the world has reached (after going back, later ones are of a future it has not played again)
+  const session = () => ({ ...replay(), marks: marks.filter(m => m.tick <= w.meta[M_TICK]) })
 
   // headless hooks (tools/app-check.mjs): orders and time without real time passing
   Object.assign(window, {

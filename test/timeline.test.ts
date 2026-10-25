@@ -8,7 +8,7 @@ import { root } from './fx.ts'
 import { napoleonic } from '../src/rulesets/napoleonic.ts'
 import { MAP_VERSIONS } from '../src/scenarios/maps.ts'
 import { BENCH_CASES } from '../src/scenarios/bench.ts'
-import { mkTimeline, order, step, goTo, SNAP_EVERY, type Timeline } from '../src/app/timeline.ts'
+import { mkTimeline, order, step, goTo, SNAP_EVERY, MAX_SNAPS, type Timeline } from '../src/app/timeline.ts'
 import {
   loadSimData,
   compileRuleset,
@@ -40,8 +40,9 @@ const load = (bytes: Uint8Array): World => {
 // plays to tick T, giving the friendly line a move at tick 1000 (it marches off) when `orders`
 function run(tl: Timeline, w: World, T: number, orders = true): World {
   while (w.meta[M_TICK] < T) {
-    if (orders && w.meta[M_TICK] === 1000)
+    if (orders && w.meta[M_TICK] === 1000) {
       order(tl, w, { type: 'move', id: unitHandle(0), points: [[100, 40]], append: false })
+    }
     step(tl, w)
   }
   return w
@@ -60,7 +61,6 @@ describe('timeline', () => {
       expect(w.meta[M_TICK]).toBe(2400)
       expect(hashWorld(w)).toBe(end)
     }
-    expect(tl.snaps.some(s => s.tick === 1200)).toBe(true)
   })
   it('a tick back is the tick as first seen', () => {
     const tl = mkTimeline()
@@ -69,6 +69,29 @@ describe('timeline', () => {
     expect(w.meta[M_TICK]).toBe(2 * SNAP_EVERY + 19)
     const again = run(tl, w, 2 * SNAP_EVERY + 20, false)
     expect(hashWorld(again)).toBe(hashAt(tl, 2 * SNAP_EVERY + 20))
+  })
+  it('an order on the tick after a save is taken again from that save', () => {
+    const tl = mkTimeline()
+    const w = run(tl, fresh(), SNAP_EVERY, false)
+    order(tl, w, { type: 'move', id: unitHandle(0), points: [[100, 40]], append: false })
+    const end = hashWorld(run(tl, w, 3 * SNAP_EVERY, false))
+    const back = goTo(tl, SNAP_EVERY + 5, fresh, load)
+    expect(hashWorld(run(tl, back, 3 * SNAP_EVERY, false))).toBe(end)
+  })
+  it('going forward past the furthest tick takes every hash point, with no gap', () => {
+    const tl = mkTimeline()
+    run(tl, fresh(), 500)
+    goTo(tl, 1700, fresh, load)
+    const ticks = tl.hashes.map(h => h.tick)
+    expect(ticks).toEqual(ticks.map((_, k) => (k + 1) * 20))
+    expect(ticks.at(-1)).toBe(1700)
+  })
+  it('keeps at most MAX_SNAPS saves, thinning the old ones', () => {
+    const tl = mkTimeline()
+    run(tl, fresh(), (MAX_SNAPS + 10) * SNAP_EVERY, false)
+    expect(tl.snaps.length).toBeLessThanOrEqual(MAX_SNAPS)
+    expect(tl.snaps.at(-1)!.tick).toBe((MAX_SNAPS + 10) * SNAP_EVERY)
+    expect(tl.snaps[0].tick).toBe(SNAP_EVERY)
   })
   it('an order after going back forgets the old future, and the session replays', () => {
     const tl = mkTimeline()
@@ -88,5 +111,14 @@ describe('timeline', () => {
       log: tl.log,
     }
     expect(play(replay, data, cr, scenario, tl.hashes)).toBeNull()
+  })
+  it('going back after a branch plays the branch, not the old future', () => {
+    const tl = mkTimeline()
+    run(tl, fresh(), 2400)
+    const w = goTo(tl, 800, fresh, load)
+    order(tl, w, { type: 'move', id: unitHandle(0), points: [[-100, 40]], append: false })
+    expect(tl.snaps.every(s => s.tick <= 800)).toBe(true)
+    const end = hashWorld(run(tl, w, 2000, false))
+    expect(hashWorld(run(tl, goTo(tl, 1300, fresh, load), 2000, false))).toBe(end)
   })
 })

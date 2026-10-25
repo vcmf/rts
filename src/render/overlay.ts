@@ -57,7 +57,7 @@ export class Overlay {
   // the places and the touching pairs, kept while the world stands at the tick they were found at (the bench is
   // mostly looked at paused)
   private at = -1
-  private near: Contact[] = []
+  private near: Contact[] | null = null
   constructor(w: World) {
     this.P = mkPlaced(w)
   }
@@ -66,11 +66,11 @@ export class Overlay {
   draw(g: CanvasRenderingContext2D, v: View, w: World, on: Set<Layer>): void {
     if (this.at !== w.meta[M_TICK]) {
       placeAll(w, this.P)
-      this.near = on.has('contacts') ? contacts(w, this.P, NEAR) : []
-      this.at = on.has('contacts') ? w.meta[M_TICK] : -1
+      this.near = null
+      this.at = w.meta[M_TICK]
     }
     const P = this.P
-    const near = this.near
+    const near = (this.near ??= on.has('contacts') ? contacts(w, P, NEAR) : null) ?? []
     if (on.has('strips')) this.strips(g, v, w, P)
     if (on.has('contacts')) this.overlaps(g, v, w, P, near)
     if (on.has('blocks')) this.blocks(g, v, w, P)
