@@ -68,6 +68,7 @@ designs written before building (frozen once built, their lasting content moves 
   [`plans/active/s1d3-artillery.md`](plans/active/s1d3-artillery.md) (S1d-3: the battery fires roundshot and canister),
   [`plans/active/s1e1-battlefield.md`](plans/active/s1e1-battlefield.md) (S1e-1: the 1.2 km battlefield, the map's edge, leaving the field; the S1e split),
   [`plans/active/s1e2-sides.md`](plans/active/s1e2-sides.md) (S1e-2: your side, the enemy's plan, the end of a battle),
+  [`plans/active/s1e3-playtest.md`](plans/active/s1e3-playtest.md) (S1e-3: the playtest kit and the tuning from your play),
   [`plans/active/l2-detail.md`](plans/active/l2-detail.md) (Track E L2: the bench, the readability guard, the terrain detail layer),
   [`plans/active/l5-macro.md`](plans/active/l5-macro.md) (Track E L5: the ground's cover and macro colour, baked and in the shader, and the ablation),
   [`plans/active/armies-demo.md`](plans/active/armies-demo.md) (the first armies on the demo map, scripted),

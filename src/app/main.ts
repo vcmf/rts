@@ -37,14 +37,13 @@ import {
 } from '../sim/index.ts'
 import { napoleonic } from '../rulesets/napoleonic.ts'
 import { MAP_VERSIONS, DEFAULT_MAP } from '../scenarios/maps.ts'
-import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS } from '../scenarios/page.ts'
+import { PAGE_SCENARIOS, DEFAULT_SCENARIO, PAGE_VIEWS, PAGE_SEED } from '../scenarios/page.ts'
 import { buildScene } from '../render/scene.ts'
 import { SoldierLayer } from '../render/soldiers.ts'
 import { StaffMap, toW, toS, type View } from '../render/map.ts'
 
 // the soldier layer steps once a frame, up to MEN_DT of game time (tested at that step); a longer frame
 // takes more steps, at most MEN_STEPS (then the men fall behind the sim and catch up)
-const SEED = 20261009
 const SPEEDS = [0, 1, 2, 4, 8]
 const MEN_DT = 0.2
 const MEN_STEPS = 4
@@ -60,7 +59,7 @@ async function main(): Promise<void> {
   }
   const data = loadSimData(new Uint8Array(await (await fetch(urls[mapName])).arrayBuffer()), MAP_VERSIONS[mapName])
   const cr = compileRuleset(napoleonic)
-  const w: World = makeWorld(data, cr, SEED, false)
+  const w: World = makeWorld(data, cr, PAGE_SEED, false)
   attachScenario(w, scenario)
   scenario.setup(w)
   // the side you command (S1e-2): a scenario that names one lets you select only its formations; none, both
@@ -219,25 +218,40 @@ async function main(): Promise<void> {
         showSlots = !showSlots
         el.classList.toggle('on', showSlots)
       }
-      if (el.dataset.view === 'replay') copyReplay()
+      if (el.dataset.view === 'replay') saveSession()
     }
   })
-  // to the clipboard, or (no clipboard: plain http, permission refused) as a downloaded file
+  // the session (the replay, its hashes and the moments marked) as a downloaded file, for tools/battle-report.ts
   let note = ''
   let noteT = 0
-  const copyReplay = async () => {
-    const text = JSON.stringify(replay())
-    try {
-      await navigator.clipboard.writeText(text)
-      note = 'replay copied'
-    } catch {
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
-      a.download = `${scenario.name}-replay.json`
-      a.click()
-      URL.revokeObjectURL(a.href)
-      note = 'replay saved as a file'
+  const saveSession = () => {
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(session())], { type: 'application/json' }))
+    a.download = `${scenario.name}-${stamp}.json`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000) // revoked at once, some browsers cancel the download
+    note = 'session saved as a file'
+    noteT = performance.now()
+  }
+  // M marks a moment of the playtest (docs/plans/active/s1e3-playtest.md): the prompt holds the page (and the
+  // battle) while you say what happened; Cancel marks nothing, and says so on screen (a browser that suppresses
+  // dialogs returns at once as if cancelled, so M is never silent). The report prints where everyone stood then
+  const marks: { tick: number; note: string }[] = []
+  const mark = (text?: string) => {
+    let said = text ?? null
+    if (text === undefined) {
+      said = prompt('What happened here? (optional)')
+      // the prompt swallowed the keyup and pointerup of anything held (space, a drag): let go of them
+      releaseHeld()
     }
+    if (said === null) {
+      note = 'mark cancelled: nothing marked'
+      noteT = performance.now()
+      return
+    }
+    marks.push({ tick: w.meta[M_TICK], note: said.trim() })
+    note = `moment ${marks.length} marked`
     noteT = performance.now()
   }
 
@@ -394,9 +408,13 @@ async function main(): Promise<void> {
   addEventListener('keyup', e => {
     if (e.code === 'Space') space = false
   })
-  addEventListener('blur', () => {
+  // held input lets go when the page loses the keyboard and mouse (a blur, the mark's prompt): space, and a drag
+  // with no order
+  function releaseHeld(): void {
     space = false
-  })
+    cancel()
+  }
+  addEventListener('blur', releaseHeld)
   addEventListener('keydown', e => {
     // space pans; a focused panel button must not take it as a click (it would repeat the order)
     if (e.code === 'Space') {
@@ -410,6 +428,8 @@ async function main(): Promise<void> {
       charging = false
     } else if (e.key === 'c' || e.key === 'C') armCharge()
     else if ('1248'.includes(e.key)) setSpeed(+e.key)
+    // not Cmd+M (minimise), nor a held key's repeats
+    else if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat) mark()
   })
 
   function drawScale(): void {
@@ -482,12 +502,13 @@ async function main(): Promise<void> {
       dataVersion: data.version,
       ruleset: cr.hash,
       scenario: scenario.name,
-      seed: SEED,
+      seed: PAGE_SEED,
       ticks: w.meta[M_TICK],
       log: log.filter(s => s.tick <= w.meta[M_TICK]),
     },
     hashes,
   })
+  const session = () => ({ ...replay(), marks: [...marks] })
 
   // headless hooks (tools/app-check.mjs): orders and time without real time passing
   Object.assign(window, {
@@ -540,6 +561,8 @@ async function main(): Promise<void> {
       },
       hash: () => hex(hashWorld(w)),
       replay,
+      session,
+      mark,
       stats: () => ({ simMs, drawMs, fps }),
       toS: (x: number, z: number) => toS(view, x, z),
       buildMs,

@@ -19,6 +19,8 @@ export const PAGE_SCENARIOS: Record<string, Scenario> = {
   ...S1B_SCENARIOS,
 }
 export const DEFAULT_SCENARIO = 's1c-firefight'
+// the seed the page plays every scenario at (tools/battle-report.ts runs a scenario with no orders at it too)
+export const PAGE_SEED = 20261009
 // where the page opens on each: centre x, z and pixels per metre
 export const PAGE_VIEWS: Record<string, [number, number, number]> = {
   's1c-firefight': [-100, 120, 3],
