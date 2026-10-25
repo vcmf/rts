@@ -174,7 +174,10 @@ const battle = [
   ],
   ['shot', 'battle-1-ford'],
   // S1e-2: you command side 0 only; side 1 follows its plan (its first line has come down from its ridge at z 230)
-  ['eval', `APP.select([8, 0]); const sel = [...APP.selected].join(","); APP.select([]); \`SIDES selected \${sel}, enemy first line at z \${[8, 9, 10].map(i => APP.w.f.z[i].toFixed(0)).join(" ")}\``],
+  [
+    'eval',
+    `APP.select([8, 0]); const sel = [...APP.selected].join(","); APP.select([]); \`SIDES selected \${sel}, enemy first line at z \${[8, 9, 10].map(i => APP.w.f.z[i].toFixed(0)).join(" ")}\``,
+  ],
   // S1e-3: a moment marked for the playtest; the report of the session prints it (below)
   ['eval', 'APP.mark("the enemy first line is down"); `MARKS ${APP.session().marks.length}`'],
   // on to the result (at most the scenario's 40 minutes), in 3-minute steps
@@ -243,9 +246,16 @@ async function run(scenario, steps) {
   // the playtest's report (tools/battle-report.ts) of the session, with its mark, reaches the result
   if (scenario === 's1e-battle') {
     const sline = text.split('\n').find(l => l.startsWith('EVAL "SESSION '))
-    if (!sline) { console.log('no session exported'); return false }
+    if (!sline) {
+      console.log('no session exported')
+      return false
+    }
     const marks = JSON.parse(JSON.parse(sline.slice(5)).slice(8))
-    const lines = reportSession(dataOf(PAGE_SCENARIOS[scenario].map ?? DEFAULT_MAP), cr, PAGE_SCENARIOS[scenario], { replay, hashes, marks })
+    const lines = reportSession(dataOf(PAGE_SCENARIOS[scenario].map ?? DEFAULT_MAP), cr, PAGE_SCENARIOS[scenario], {
+      replay,
+      hashes,
+      marks,
+    })
     const ok = lines.some(l => /MARK the enemy first line is down$/.test(l)) && lines.some(l => /THE END: /.test(l))
     console.log(`REPORT ${lines.length} lines, the mark ${ok ? 'and the end found' : 'or the end MISSING'}`)
     if (!ok) return false
