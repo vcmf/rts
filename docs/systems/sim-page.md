@@ -152,10 +152,17 @@ speeds, faster where its pace (or its routers') would leave them behind (trooper
   - the charge: a regiment charges a line, which breaks, then a square, which holds;
   - the guns: a battery fires roundshot on a column, which loses men;
   - the battle: 16 formations deploy on the battlefield, a column of route crosses a ford, and every man stays
-    on the map; you can select only your side, side 1 advances on its own, and the battle runs to a result;
-  - each session's replay played back in Node.
+    on the map; you can select only your side, side 1's first line (all four battalions) advances on its own, and
+    the battle runs to a result;
+  - each session's replay played back in Node; the battle's session through the playtest's report (one checked
+    pass), which must find the mark made on the page and the end.
 
   It fails on any console error or hash mismatch.
+- `test/battle-report.test.ts` (the playtest's report, `tools/battle-report.ts`): a session with an order and a
+  mark, played back with every formation's place at the mark and the end table; a session that does not reproduce,
+  and marks out of order, past the end or without a text note, refused; the first tick played is reported; a
+  formation that leaves the field (with its men) and one destroyed, each by its own side; with no orders, the
+  scenario runs, and stops a minute after the end.
 - Negative runs (results in `docs/plans/done/s1b-sim-page.md`): the relabelling, the signature, the
   slot reassignment and the settled state each break a test when removed.
 

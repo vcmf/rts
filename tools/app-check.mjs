@@ -173,10 +173,11 @@ const battle = [
     `APP.advance(180); APP.view(-260, 0, 1.5); \`FORD column at z \${APP.w.f.z[3].toFixed(0)} on map \${${ONMAP}}\``,
   ],
   ['shot', 'battle-1-ford'],
-  // S1e-2: you command side 0 only; side 1 follows its plan (its first line has come down from its ridge at z 230)
+  // S1e-2: you command side 0 only; side 1 follows its plan (its first line, units 8–11, has come down from its ridge
+  // at z 230 to the stream's north bank, z 70–74 for all four)
   [
     'eval',
-    `APP.select([8, 0]); const sel = [...APP.selected].join(","); APP.select([]); \`SIDES selected \${sel}, enemy first line at z \${[8, 9, 10].map(i => APP.w.f.z[i].toFixed(0)).join(" ")}\``,
+    `APP.select([8, 0]); const sel = [...APP.selected].join(","); APP.select([]); \`SIDES selected \${sel}, enemy first line at z \${[8, 9, 10, 11].map(i => APP.w.f.z[i].toFixed(0)).join(" ")}\``,
   ],
   // S1e-3: a moment marked for the playtest; the report of the session prints it (below)
   ['eval', 'APP.mark("the enemy first line is down"); `MARKS ${APP.session().marks.length}`'],
@@ -311,9 +312,9 @@ async function run(scenario, steps) {
   if (
     scenario === 's1e-battle' &&
     !(
-      /SIDES selected 0, enemy first line at z (-?\d+) (-?\d+) (-?\d+)/.test(text) &&
+      /SIDES selected 0, enemy first line at z (-?\d+) (-?\d+) (-?\d+) (-?\d+)/.test(text) &&
       text
-        .match(/enemy first line at z (-?\d+) (-?\d+) (-?\d+)/)
+        .match(/enemy first line at z (-?\d+) (-?\d+) (-?\d+) (-?\d+)/)
         .slice(1)
         .every(z => +z < 200) &&
       /RESULT (side \d wins|a draw) at/.test(text)
