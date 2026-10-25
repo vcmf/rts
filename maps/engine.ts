@@ -106,5 +106,3 @@ export function engineMap(
     cells: { height: CELL, cost: COST_CELL },
   }
 }
-
-export { groundCell }

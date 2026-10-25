@@ -361,18 +361,21 @@ let overlaySeq = 0
 let overlayMs = 0
 let overlays = 0 // replies taken, and the cells the last one painted (for checks)
 let overlayCells = 0
+let overlayError = '' // the last overlay's failure, shown in the panel
+/** Fills the overlay setting's choices: none, passability for each of the ruleset's unit kinds, depth, slope, sight. */
 function fillOverlays(units: string[]): void {
   const keep = overlaySelect.value
   const options: [string, string][] = [
     ['', 'none'],
     ...units.map((u): [string, string] => [`pass:${u}`, `passable: ${u}`]),
-    ['depth', 'water depth'],
+    ['depth', 'water depth, as the sim takes it'],
     ['slope', 'slope'],
     ['sight', 'sight from a point'],
   ]
   overlaySelect.replaceChildren(...options.map(([v, t]) => new Option(t, v)))
   overlaySelect.value = options.some(([v]) => v === keep) ? keep : ''
 }
+/** The overlay the setting asks for (sight needs its eye: none until the map is clicked). */
 function overlaySpec(): OverlaySpec | null {
   const v = overlaySelect.value
   if (v.startsWith('pass:')) return { kind: 'pass', unit: v.slice(5) }
@@ -380,14 +383,23 @@ function overlaySpec(): OverlaySpec | null {
   if (v === 'sight') return sightAt ? { kind: 'sight', x: sightAt[0], z: sightAt[1], radius: SIGHT_RADIUS } : null
   return null
 }
+/** Asks the worker for the setting's overlay, on the ground of the map the page shows. */
 function requestOverlay(): void {
   overlayHint.hidden = !(overlaySelect.value === 'sight' && !sightAt)
-  worker.postMessage({ type: 'overlay', seq: ++overlaySeq, spec: overlaySpec() } satisfies OverlayRequest)
+  if (!current) return
+  worker.postMessage({
+    type: 'overlay',
+    seq: ++overlaySeq,
+    of: current.seq,
+    spec: overlaySpec(),
+  } satisfies OverlayRequest)
 }
+/** Shows the worker's overlay, if it is the last asked for and fits the map shown. */
 function onOverlay(r: OverlayReply): void {
   if (r.seq !== overlaySeq) return // an older request, overtaken
   overlayMs = r.ms
-  if (r.error) console.warn(r.error)
+  overlayError = r.error ?? ''
+  panel()
   // an overlay made for another grid than the one shown (a compile that did not reach the page) is dropped
   const fits = current && r.rgba && r.rgba.byteLength === current.nx * current.nz * 4
   const rgba = fits ? new Uint8Array(r.rgba!) : null
@@ -502,7 +514,7 @@ function panel(): void {
   status.textContent =
     (litError ? `${litError}: only the panel works. ` : '') +
     (c
-      ? `${c.map.name}: ${c.map.features.length} features, ${c.nx}×${c.nz} cells of ${c.cell} m · validate ${c.ms.validate.toFixed(0)} ms, apply ${c.ms.apply.toFixed(0)} ms, draw ${c.ms.draw.toFixed(0)} ms, bake ${c.ms.bake.toFixed(0)} ms`
+      ? `${c.map.name}: ${c.map.features.length} features, ${c.nx}×${c.nz} cells of ${c.cell} m · validate ${c.ms.validate.toFixed(0)} ms, apply ${c.ms.apply.toFixed(0)} ms, draw ${c.ms.draw.toFixed(0)} ms, bake ${c.ms.bake.toFixed(0)} ms, ground ${c.ms.ground.toFixed(0)} ms${overlayError ? ` · ${overlayError}` : ''}`
       : 'compiling…')
   errors.replaceChildren(
     ...issues.map(i => {
@@ -596,6 +608,7 @@ picker.addEventListener('change', () => {
   current = null
   const q = new URLSearchParams(location.search) // the other settings (?tilt=) stay
   q.set('map', picker.selectedOptions[0].text)
+  sightAt = null // another map: the eye is the old map's
   history.replaceState(null, '', `?${q}`)
   void compile('pick')
 })
@@ -673,6 +686,10 @@ window.MAP = {
     return overlayCells
   },
   // whether the lit view can draw now (for checks)
+  // the map's cells (for checks)
+  get cells() {
+    return current ? current.nx * current.nz : 0
+  },
   get litReady() {
     return lit?.isReady() ?? false
   },

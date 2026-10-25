@@ -257,3 +257,10 @@ settings (the owner, 2026-10-25).
   on two-ridges, from 0.2 s and 0.5 s); an overlay that throws is reported, not a dead worker; the errors' outlines
   are looked for only when there are errors. Left: the wading and slope factors are the ruleset's formulas written
   again (the sim's own read its compiled tables, `src/sim/terrain.ts`); a shared pure helper would keep them one.
+- **Round 2**: moderate and light only, so the review stops. Fixed: an overlay names the compile whose map the page
+  shows, and the worker keeps the ground of its last few compiles by compile, so a compile the page dropped is never
+  drawn on; the sight's eye is forgotten on another map; the seen cells are left clear (only the hidden darkened), so
+  the page check's sight test can fail; the ground's read time is in the panel; an overlay's failure shows in the
+  panel, not only the console; the depth overlay says it is the depth as the sim takes it (a no-go zone deep, a bridge
+  dry); `groundCell` has one home (`maps/cell.ts`); doc comments on the new functions. Left: the overlay's wading and
+  slope formulas written again from the ruleset (above), and negative tests for the page check's overlay checks.

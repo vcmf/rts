@@ -98,7 +98,7 @@ try {
     // the debug overlays (M6c): each one chosen, computed by the worker, and painting some cells
     ...OVERLAYS.map(([value, tag]) => [
       'eval',
-      `new Promise(r => { const n = MAP.overlays; MAP.overlay('${value}', [0, 0]); const t = setInterval(() => { if (MAP.overlays > n) { clearInterval(t); r('${tag} ' + JSON.stringify({ cells: MAP.overlayCells, ms: MAP.overlayMs })) } }, 20) })`,
+      `new Promise(r => { const n = MAP.overlays; MAP.overlay('${value}', [0, 0]); const t = setInterval(() => { if (MAP.overlays > n) { clearInterval(t); r('${tag} ' + JSON.stringify({ cells: MAP.overlayCells, of: MAP.cells, ms: MAP.overlayMs })) } }, 20) })`,
     ]),
     ['shot', 'overlay-sight'],
     // and off again: the lit view must still be able to draw
@@ -171,7 +171,7 @@ try {
   for (const [value, tag] of OVERLAYS) {
     await until(tag)
     check(
-      seen[tag].cells > 0,
+      seen[tag].cells > 0 && (tag !== 'OVsight' || seen[tag].cells < seen[tag].of),
       `the ${value} overlay paints ${seen[tag].cells} cells (${seen[tag].ms.toFixed(0)} ms in the worker)`,
     )
   }

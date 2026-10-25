@@ -66,7 +66,7 @@ export function groundOf(L: Layers, classify: Classify): Ground {
   }
 }
 
-// the ground's slope at a cell's centre, rise over run, from its four nodes
+/** The ground's slope at a cell's centre, rise over run, from its four nodes. */
 function slopeAt(G: Ground, i: number, j: number): number {
   const W = G.nx + 1
   const h = (a: number, b: number) => G.height[b * W + a]
@@ -74,6 +74,7 @@ function slopeAt(G: Ground, i: number, j: number): number {
   const gz = (h(i, j + 1) + h(i + 1, j + 1) - h(i, j) - h(i + 1, j)) / (2 * G.cell)
   return Math.sqrt(gx * gx + gz * gz)
 }
+/** The ground's height at a cell's centre, the mean of its four nodes, m. */
 const heightAt = (G: Ground, i: number, j: number): number => {
   const W = G.nx + 1
   return (G.height[j * W + i] + G.height[j * W + i + 1] + G.height[(j + 1) * W + i] + G.height[(j + 1) * W + i + 1]) / 4
@@ -163,7 +164,7 @@ export function sightFrom(G: Ground, rs: Ruleset, x: number, z: number, radius: 
   return seen
 }
 
-// a colour on a ramp over 0..1, written at out[o..o+2]
+/** Writes the colour at t (0..1) on a ramp of stops at out[o..o+2]. */
 function rampInto(out: Uint8Array, o: number, stops: number[][], t: number): void {
   const x = Math.min(1, Math.max(0, t)) * (stops.length - 1)
   const k = Math.min(stops.length - 2, Math.floor(x))
@@ -217,7 +218,8 @@ export function overlay(G: Ground, rs: Ruleset, spec: OverlaySpec): Uint8Array {
     }
   } else {
     const seen = sightFrom(G, rs, spec.x, spec.z, spec.radius)
-    for (let c = 0; c < n; c++) out.set(seen[c] ? [255, 240, 150, 70] : [20, 20, 40, 140], c * 4)
+    // what the eye sees is left clear, the rest darkened
+    for (let c = 0; c < n; c++) if (!seen[c]) out.set([20, 20, 40, 140], c * 4)
   }
   return out
 }

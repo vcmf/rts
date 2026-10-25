@@ -17,17 +17,20 @@ const LIGHT: LightDir = 'nw'
 // the ruleset the overlays read the ground with (the page's one era for now)
 const RULESET = napoleonic
 const CLASSIFY = classifyNapoleonic
-// the last compiled map's ground, read once for the overlays (set once its compile's reply is sent: the page's grid)
-let last: Ground | null = null
+// the compiled maps' ground, read once each for the overlays, by compile: the page names the one it shows (a compile
+// it dropped as overtaken is never drawn on); the last few are kept
+const grounds = new Map<number, Ground>()
+const KEEP = 3
 
 self.onmessage = (e: MessageEvent<CompileRequest | OverlayRequest>) => {
   if (e.data.type === 'overlay') {
-    const { seq, spec } = e.data
+    const { seq, of, spec } = e.data
     const t0 = performance.now()
     let rgba: ArrayBuffer | null = null
     let error: string | undefined
     try {
-      rgba = last && spec ? (overlay(last, RULESET, spec).buffer as ArrayBuffer) : null
+      const ground = grounds.get(of)
+      rgba = ground && spec ? (overlay(ground, RULESET, spec).buffer as ArrayBuffer) : null
     } catch (err) {
       error = `the overlay failed: ${(err as Error).message}`
     }
@@ -116,7 +119,9 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
   const ink = bakeInk(L, waysOf(ex.map.features, L.table))
   const t4 = performance.now()
   // the overlays' ground, read before the layers go to the page
+  const t4g = performance.now()
   const ground = groundOf(L, CLASSIFY)
+  const tg = performance.now() - t4g
   const layers = Object.fromEntries(LAYER_NAMES.map(n => [n, L[n].buffer as ArrayBuffer])) as Record<
     LayerName,
     ArrayBuffer
@@ -142,7 +147,7 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
     light: LIGHT,
     masks: masks.buffer as ArrayBuffer,
     ink: ink.buffer as ArrayBuffer,
-    ms: { validate: t1 - t0, apply: t2 - t1, draw: t3 - t2, bake: t4 - t3 },
+    ms: { validate: t1 - t0, apply: t2 - t1, draw: t3 - t2, bake: t4 - t3, ground: tg },
   }
   ;(self as unknown as Worker).postMessage(reply, [
     reply.rgba,
@@ -153,5 +158,6 @@ function compile(seq: number, map: unknown, cat: Catalogue, files: MapFiles): vo
     reply.ink,
     ...Object.values(layers),
   ])
-  last = ground
+  grounds.set(seq, ground)
+  for (const k of [...grounds.keys()].slice(0, Math.max(0, grounds.size - KEEP))) grounds.delete(k)
 }

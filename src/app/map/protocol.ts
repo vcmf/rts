@@ -38,7 +38,7 @@ export interface Compiled {
   masks: ArrayBuffer
   ink: ArrayBuffer // the ink's distance field on the cells (bakeInk), RGBA
   light: LightDir // the light the relief was baked for: the shader's water banks take the same
-  ms: { validate: number; apply: number; draw: number; bake: number }
+  ms: { validate: number; apply: number; draw: number; bake: number; ground: number }
 }
 export interface Failed {
   seq: number
@@ -53,6 +53,7 @@ export type CompileReply = Compiled | Failed
 export interface OverlayRequest {
   type: 'overlay'
   seq: number
+  of: number // the compile (its seq) whose map the page shows: the overlay is drawn on that map's ground alone
   spec: OverlaySpec | null
 }
 export interface OverlayReply {
