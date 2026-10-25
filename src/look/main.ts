@@ -54,6 +54,7 @@ import { CARD_DEFAULTS, type CardOptions } from './canopy.ts'
 import { atlasFromPicture, atlasProcedural, loadImage } from './leaves.ts'
 import LEAF_URL from '../../data/leaf-clumps-oak-v1.png?url'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
+import { SHADOW_LOOK, applyLookParams, shadowModes } from './shadow-look.ts'
 
 declare global {
   interface Window {
@@ -551,19 +552,25 @@ if (nearestPx !== null && !(/^\d+$/.test(nearestPx) && +nearestPx <= 2000)) {
   throw new Error(`?nearestpx must be a whole number of pixels, 0 to 2000, not ${nearestPx}`)
 }
 // the simple shadows (decision 0049, docs/plans/active/simple-soldier-shadows.md): ?ushadowfar=map, the map at every
-// zoom (the A/B; else simple: the map up close, a baked shape a man drawn on the ground beyond);
+// zoom (the A/B; else simple: a baked shape a man drawn on the ground, beyond close zoom or at every zoom, below);
 // ?ushadowswitch=<r0>,<r1>, the cross-fade's band (m from the focus); ?smoothmove=0, the figures' places at the 12 fps
 // steps (else every frame; the poses stay stepped);
 // ?udecallift=<m>, how high over the ground the simple shadows cover the grass and the men's legs
-const uShadowFar = params.get('ushadowfar')
+// decision 0062 (docs/plans/done/soft-shadows-all.md): the simple shadows at every zoom; ?ushadowclose=map, the map
+// up close as before (cross-faded to them over ?ushadowswitch); their look up close, ?ushsoft=<0..1> (the soft bake's
+// share at the tip), ?ushdark=<0..1> (the full shadow's share at the tip), ?ushlen=<0.3..1.5> (their length), each
+// <close>[,<far>] (far: decision 0049's unless given); ?ushfoot=<dark>,<core m>[,<far dark>,<far core m>], the contact
+// at the soles (its darkness, a share of the full shadow, and the core it holds over before turning to the tip's);
+// ?ushband=<r0>,<r1>, the band (m from the focus) the close look turns into the far one
+// (src/look/shadow-look.ts parses them, a bad value an error at load)
+const shadowMode = shadowModes(params)
+const shadowLook = { close: { ...SHADOW_LOOK.close }, far: { ...SHADOW_LOOK.far } }
+const ushBand = applyLookParams(params, shadowLook.close, shadowLook.far).band
 const uShadowSwitch = params.get('ushadowswitch')
 const smoothMove = bit('smoothmove')
 const decalLift = params.get('udecallift')
 if (decalLift !== null && !(Number.isFinite(+decalLift) && +decalLift >= 0 && +decalLift <= 3)) {
   throw new Error(`?udecallift must be 0 to 3 m, not ${decalLift}`)
-}
-if (uShadowFar !== null && uShadowFar !== 'map' && uShadowFar !== 'simple') {
-  throw new Error(`?ushadowfar must be map or simple, not ${uShadowFar}`)
 }
 const shadowBand = uShadowSwitch === null ? null : uShadowSwitch.split(',').map(Number)
 if (
@@ -579,6 +586,12 @@ if (armiesParam !== null && !(/^\d+$/.test(armiesParam) && +armiesParam >= 1 && 
 }
 if (unitShadowParam !== null && unitShadowParam !== '0' && unitShadowParam !== '1') {
   throw new Error(`?unitshadow must be 0 or 1, not ${unitShadowParam}`)
+}
+// (the scene's samples before the armies: their simple shadows' material is built for them, src/look/units.ts)
+if (params.has('msaa')) {
+  const n = Number(params.get('msaa'))
+  if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`)
+  MSAA.samples = n
 }
 let units: Units | null = null
 // (the fight's middle: the bench's focus)
@@ -665,7 +678,10 @@ if (armiesParam !== null) {
   units.holdShare = smHold !== 'fixed'
   units.proxyCasters = shadowLod !== 'far'
   if (nearestPx !== null) units.nearestPx = +nearestPx
-  units.simpleFar = uShadowFar !== 'map'
+  units.simpleFar = shadowMode.simpleFar
+  units.simpleClose = shadowMode.simpleClose
+  units.look = shadowLook
+  if (ushBand) units.lookBand = ushBand
   if (shadowBand) units.band = [shadowBand[0], shadowBand[1]]
   units.groundMap = meadow !== null
   if (decalLift !== null) units.decalLift = +decalLift
@@ -692,11 +708,6 @@ if (armiesParam !== null) {
   units.setSmooth(smoothMove ?? true)
   armiesFocus = facingAt(units.battalions)
   Object.assign(window, { __units: units, __armies: { blocked, focus: armiesFocus, coats: units.coats() } })
-}
-if (params.has('msaa')) {
-  const n = Number(params.get('msaa'))
-  if (![1, 2, 4].includes(n)) throw new Error(`?msaa must be 1, 2 or 4, not ${params.get('msaa')}`)
-  MSAA.samples = n
 }
 if (flag('rt16')) MSAA.byte = false
 // half floats: an 8-bit target stores a NaN as 0, which nothing can mark
