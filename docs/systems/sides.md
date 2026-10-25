@@ -69,10 +69,11 @@ A scenario with no player is a sandbox for both sides.
 draw").
 
 **`s1e-battle`** (`src/scenarios/s1e-battle.ts`): you command side 0, on the southern ridge in two lines of three.
-Side 1, veterans four up and two back, follows its plan: its first line comes down to the stream, halts about
-130 m from yours to dress and closes to 70 m, overlapping your line at both ends; its regiment charges your
-battery and rides back; its second line comes up as a second wave. With no orders from you it wins in 17–20
-minutes; saving your guns wins it for you (`docs/plans/active/s1e3-playtest.md`).
+Side 1, veterans four up and two back, follows its plan: its first line comes down to the stream, halts about 130 m from
+yours to dress and closes to 70 m, overlapping your line at both ends; its regiment charges your battery and rides back
+(the order is given three times, at 10:30, 12:30 and 14:30: a melee that ends in a pursuit or a recoil clears a move
+queued behind it); its second line comes up as a second wave. With no orders from you it wins in 17–20 minutes; saving
+your guns wins it for you (`docs/plans/active/s1e3-playtest.md`).
 
 ## Verification
 

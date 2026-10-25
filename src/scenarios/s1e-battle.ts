@@ -91,7 +91,9 @@ const YOUR_BATTERY = units(SOUTH, 0, 'battery')[0].id
 // marsh (z 40), and at 15 minutes wades over and comes up to about 25 m behind the centre's two, the far side of
 // the hedge they crossed, to fill the line as it breaks. Its regiment charges your battery and rides back
 // at a set time (once its rest is over): a charge ends by clearing its orders, so a move queued after it is lost,
-// and a charge still running then is cut short
+// and a charge still running then is cut short. The ride back is given again twice, 2 and 4 minutes later: in
+// melee at the first, the move waits for the melee's end, and a melee that ends in a pursuit or a recoil clears it
+// (melee.ts). Riding back already, the same move again changes nothing (no orders: the same battle on eight seeds)
 const T = { dress: 200, close: 500, charge: 300, back: 630, wave: 900 } // seconds
 const march = (at: number, unit: number, points: [number, number][]): PlanStep => ({
   at,
@@ -103,7 +105,7 @@ const PLAN: PlanStep[] = [
   ...FIRST.map(u => march(T.dress, u.id, [[u.fight, -100]])),
   ...FIRST.map(u => march(T.close, u.id, [[u.fight, -160]])),
   { at: T.charge, unit: REGIMENT, cmd: { type: 'charge', target: YOUR_BATTERY } },
-  march(T.back, REGIMENT, [[260, 120]]),
+  ...[0, 120, 240].map(late => march(T.back + late, REGIMENT, [[260, 120]])),
   ...SECOND.map(u => march(120, u.id, [[u.fight, 120]])),
   ...SECOND.map(u => march(T.dress + 60, u.id, [[u.fight, 40]])),
   ...SECOND.map(u => march(T.wave, u.id, [[u.fight, -120]])), // the second wave, behind the firing line
