@@ -188,3 +188,18 @@ Times are battle time; the page plays at 2× by default.
 | L-05 | A column attack on a line weakened by guns first | The line breaks at the assault's test | Counters, assault | no |
 | L-06 | Cavalry against cavalry to save the guns | The counter-charge wins if fresh, and saves the battery (the S1e result) | Counters | yes |
 | L-07 | Skirmishers ahead of a column | They screen it: the defending line's fire is split, and its skirmishers driven off | Counters, light | no |
+
+## M. High ground
+
+Height is worth what it is used for, not a bonus of its own (the owner, 2026-10-25): it acts through sight,
+roundshot and slope. Austerlitz and Wagram were won against an enemy that held the heights.
+
+| Id | Situation | Should | Model | Today |
+|---|---|---|---|---|
+| M-01 | A line waits behind a crest while a battery fires on it (Wellington's reverse slope) | It is hidden and the roundshot passes over or buries; it suffers only once it stands on the crest | Artillery, ground | yes (D-03) |
+| M-02 | An army holds a height, then comes down off it to attack a weak wing (Austerlitz, the Pratzen) | The height is worth nothing once left: an enemy that takes it then sees the whole field and strikes the descending columns in the flank | Sectors, ground, vision | partly (no vision yet) |
+| M-03 | A column attacks frontally up the slope of a held plateau (Wagram, the first day) | It is slowed and tired by the climb, under fire all the way, and fails against a steady line | Movement, fire, the assault | partly (slope slows; no assault, no fatigue) |
+| M-04 | The same plateau attacked after a grand battery has worn its centre and a corps turns its flank (Wagram, the second day) | It falls, and the defender withdraws in order | Artillery, sectors, morale | partly |
+| M-05 | A battery on a high, steep hill against one on a gentle rise, both firing at a column on the flat | The steep hill's balls plunge and bury; the gentle rise's graze and bounce through the ranks and kill more | Artillery | yes (the ball's flight over the heightfield) |
+| M-06 | Cavalry charges uphill | Less momentum at the impact, more tired after | Charges, ground | partly (E-14) |
+| M-07 | A formation on a height looks over a crest the enemy below cannot see past | It sees what stands behind the crest; the enemy below does not | Vision | no (vision, S2) |
