@@ -29,6 +29,9 @@ import {
   END_DRAW,
   attachScenario,
   fightShares,
+  formedOverlaps,
+  placeAll,
+  mkPlaced,
   type Command,
   type Stamped,
   type World,
@@ -258,6 +261,8 @@ async function main(): Promise<void> {
     map.w = w
     over = new Overlay(w)
     dropped.length = 0
+    // the hash points past the tick are of a future that has not happened yet: played again, they are taken again
+    while (hashes.length && hashes[hashes.length - 1].tick > T) hashes.pop()
     for (const i of [...selected]) if (!w.f.alive[i]) selected.delete(i)
     paused = true
     acc = 0
@@ -600,6 +605,7 @@ async function main(): Promise<void> {
       },
       goTo,
       stepTick,
+      overlaps: () => formedOverlaps(w, placeAll(w, mkPlaced(w))).length,
       overlay: (on: boolean, layers?: Layer[]) => {
         overlay = on
         if (layers) {

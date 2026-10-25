@@ -5,8 +5,8 @@ last_reviewed: 2026-10-25
 
 # Plan: C0, the visual bench
 
-Phase C0 of the collision and orders proposal (`docs/proposals/collision-and-orders.md`, on the branch of its PR
-into `epic/sim-engine`). It is a playground on the sim page, built before any collision code. It shows what the
+Phase C0 of the collision and orders proposal (on its own branch; its PR goes into `epic/sim-engine` after the unit
+model's, #186). It is a playground on the sim page, built before any collision code. It shows what the
 sim holds (blocks, strips, contacts, orders), lets a moment be stepped through and gone back to, and stages the hard
 cases as scenarios with tests. It runs on today's sim, so it first shows today's failures: formations passing
 through each other, and orders lost to a charge (#179).
@@ -24,14 +24,15 @@ touch, and the orders queued. A moment that goes wrong cannot be looked at again
 ### 1. The geometry, from the sim
 
 `src/sim/geometry.ts` (new), read-only:
-- `companyRects(w, i, out)`: each company's rectangle as its filled slots stand, in the places the sim's gate
-  tests (`placesCtx`, `placeAtSlot` in `src/sim/formation.ts`). Each rectangle is a centre, half-extents and an
-  axis, from the extremes of its places in the company's frame, grown by half a file and half a rank.
-- `binRects(w, i, out)`: the same for each bin of each company (the type's slot → bin table), with its lag.
-- `rectGap(a, b)`: the separating-axis gap between two rectangles, below 0 when they overlap. These are exact
-  operations (decision 0006), like `sep` in `src/sim/melee.ts`.
-- `formedOverlaps(w)`: every pair of companies of two different formations, both in the fight, whose rectangles
-  overlap. It is the bench's test of the first invariant (the proposal's § Invariants).
+- `placeAll(w, out)`: every filled slot's place, as the sim's gate places it (`placesCtx`, `placeAtSlot` in
+  `src/sim/formation.ts`, with the bins' lags), with its formation, company and bin. Places, not rectangles: they
+  work the same for every shape, a march column on a bend included.
+- `contacts(w, P, near)`: every pair of companies of two formations with places within `near` metres, with their
+  nearest two places, found through a counting-sort grid.
+- `formedOverlaps(w, P)`: the contacts closer than `TOUCH` (1 m) between two formations both in the fight. Within a
+  block places stand under a metre apart, so two blocks that interpenetrate put places of one within about half a
+  metre of the other's, and two that only touch keep them over a metre apart. It is the bench's test of the first
+  invariant.
 
 The overlay and the tests share these functions, so what the page shows is what the tests check. Nothing in the
 tick calls them, so the hash does not move.
@@ -42,13 +43,15 @@ D toggles the overlay. The panel toggles each layer:
 
 | Layer | Drawn |
 |---|---|
-| Blocks | each company's rectangle; solid in the fight, dashed out of it (routing, rallying, shattered: the proposal's loose bodies) |
-| Strips | each bin's rectangle, shaded by its lag over the lag limit |
+| Blocks | each company's places' hull; solid in the fight, dashed out of it (routing, rallying, shattered: the proposal's loose bodies) |
+| Strips | each bin's places' hull, shaded by its lag over the lag limit |
 | Contacts | each pair of companies of two formations within 5 m: a line between their centres, grey for friends, red for enemies, orange for a charge at its target, thick for a melee pair. An overlap of two formations in the fight is filled red |
 | Statuses | each formation's status, and its engagement (charging, in melee, sheltering, routing) |
 | Orders | each formation's queue: a line through its move's waypoints, a label for each order in the queue (form, face, wheel, dress, charge), and the formation's outline at its last destination |
 
-The clamp and reserved-path layers come with C1, which has clamps and reservations to draw.
+Its collision model changed after the proposal's third review (the owner, 2026-10-25): formations will claim cells
+of a grid each tick instead of clamping their bins' motion. The claim grid is prototyped on this bench next, and its
+cells get a layer of their own then.
 
 ### 3. Time (`src/app/main.ts`)
 
@@ -99,8 +102,8 @@ can:
     wants them. Those that fail today are marked `it.fails`, with today's behaviour in a comment; C1–C4 turn them
     into plain tests as they land.
   - **Invariant 4:** the reversed visiting order gives the same hash. This holds today.
-- **`test/geometry.test.ts`:** `companyRects` against a scan of every man's place, for a line, a column, a square,
-  a march column on a bend and a change halfway; `rectGap` face to face, at an angle and overlapping.
+- **`test/geometry.test.ts`:** `placeAll` against the soldier layer's places for every shape; `contacts` against a
+  scan of every pair of places; `formedOverlaps` for two lines apart, touching, and one through the other.
 - **`npm run check:app`:** a few cases on the page with the overlay on, a screenshot at their key tick, and the
   go-to-tick round trip (the hash after going back to a tick equals the hash first seen there).
 

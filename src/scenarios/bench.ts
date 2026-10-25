@@ -306,7 +306,7 @@ export const BENCH_CASES: BenchCase[] = [
       { side: 1, x: 0, z: 40, heading: S, shape: LINE, unit: CAV },
     ],
     [step(1, 0, move(100, -100)), step(1, 0, move(100, 40, true)), step(60, 1, move(0, 280))],
-    500,
+    700,
     [0, -20, 2.5],
     [50, 100, 250, 450],
   ),

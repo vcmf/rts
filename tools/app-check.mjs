@@ -154,6 +154,23 @@ const guns = [
 // column of route and marches over the western ford; every man stands on the map throughout
 const ONMAP =
   '[...APP.layer.units.values()].every(u => u.men.every(m => !m.alive || (Math.abs(m.x) <= 600 && Math.abs(m.z) <= 600)))'
+// the visual bench (docs/plans/active/c0-bench.md): X-09 with the overlay on, the square formed and the column through
+// it (today's overlap, reported), then back to a tick and a tick on: the hash there is the one first seen there
+const benchCase = [
+  ['wait', 1500],
+  READY,
+  [
+    'eval',
+    'APP.overlay(true); APP.advance(100); window.H = [APP.w.meta[0], APP.hash()]; APP.advance(130); APP.view(0, 0, 5); `BENCH overlaps ${APP.overlaps()} at tick ${APP.w.meta[0]}`',
+  ],
+  ['shot', 'bench-x09-overlay'],
+  [
+    'eval',
+    'APP.goTo(window.H[0]); const same = APP.hash() === window.H[1]; APP.stepTick(); `GOTO same ${same}, then a tick on ${APP.w.meta[0] === window.H[0] + 1}`',
+  ],
+  ['shot', 'bench-x09-back'],
+  REPLAY,
+]
 const battle = [
   ['wait', 1500],
   READY,
@@ -323,6 +340,13 @@ async function run(scenario, steps) {
     console.log('the battle let you select an enemy, side 1 did not advance, or it reached no result')
     return false
   }
+  if (
+    scenario === 'bench-x09-square-forming' &&
+    !(/BENCH overlaps \d+ at tick/.test(text) && /GOTO same true, then a tick on true/.test(text))
+  ) {
+    console.log('the bench did not report its overlaps, or going back to a tick did not give the same world')
+    return false
+  }
   if (scenario === 's1b-field' && (!panel || panel[1] !== panel[2] || panel[1] === '0')) {
     console.log('panel buttons did not each log one command')
     return false
@@ -344,7 +368,8 @@ try {
     (await run('s1d-arms', arms)) &&
     (await run('s1d-charge', charge)) &&
     (await run('s1d-guns', guns)) &&
-    (await run('s1e-battle', battle))
+    (await run('s1e-battle', battle)) &&
+    (await run('bench-x09-square-forming', benchCase))
 } finally {
   preview.kill()
 }
